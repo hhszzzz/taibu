@@ -229,11 +229,17 @@ export function calculateQimenData(input: QimenInput): Promise<QimenOutput> {
     const dunType: 'yang' | 'yin' = round > 0 ? 'yang' : 'yin';
     const juNumber = Math.abs(round);
 
-    // 四柱
-    const yearGan = t.year.cs(true) as string;
-    const yearZhi = t.year.tb(true) as string;
-    const monthGan = t.month.cs(true) as string;
-    const monthZhi = t.month.tb(true) as string;
+    // 四柱：tao_calendar 的子/丑月偏移及按天交节有误，年/月柱复用八字历法。
+    // lunar-javascript 的节气时刻采用北京时间（UTC+8）；先转换输入时区的实际时刻。
+    const beijingTime = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+    const eightChar = Solar.fromYmdHms(
+      beijingTime.getUTCFullYear(), beijingTime.getUTCMonth() + 1, beijingTime.getUTCDate(),
+      beijingTime.getUTCHours(), beijingTime.getUTCMinutes(), beijingTime.getUTCSeconds(),
+    ).getLunar().getEightChar();
+    const yearGan = eightChar.getYearGan();
+    const yearZhi = eightChar.getYearZhi();
+    const monthGan = eightChar.getMonthGan();
+    const monthZhi = eightChar.getMonthZhi();
     const dayGan = t.date.cs(true) as string;
     const dayZhi = t.date.tb(true) as string;
     const hourGan = t.hour.cs(true) as string;

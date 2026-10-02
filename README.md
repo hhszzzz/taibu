@@ -167,7 +167,7 @@ pnpm exec playwright install --only-shell chromium # 首次配置浏览器
 pnpm verify                              # 一次包构建，完整验收（需本地 Docker）
 ```
 
-`pnpm test:db`、`pnpm test:browser` 可独立运行。无法下载 Chromium 且本机已有 Chrome 时，显式使用 `pnpm verify -- --chrome`；不跳过浏览器断言。CI 默认使用固定 Chromium，并强制执行 DB 与浏览器层。
+`pnpm test:db`、`pnpm test:auth`、`pnpm test:browser` 可独立运行。`test:auth` 使用独立临时 Auth/PostgREST/PostgreSQL 栈，不读取生产配置或现有数据。无法下载 Chromium 且本机已有 Chrome 时，显式使用 `pnpm verify -- --chrome`；不跳过浏览器断言。CI 默认使用固定 Chromium，并强制执行 SQL、真实 Auth/REST 与浏览器层。
 
 ---
 

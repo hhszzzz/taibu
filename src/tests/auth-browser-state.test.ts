@@ -200,6 +200,110 @@ test('useFeatureToggles keeps unloaded bootstrap pending without exposing featur
   assert.equal(actual.isFeatureEnabled('chat'), false);
 });
 
+for (const scenario of ['valid', 'bearer-only', 'refreshed', 'update-error', 'refreshed-update-error', 'anonymous', 'session-error'] as const) {
+  test(`auth updateUser ${scenario} uses an isolated caller session`, async (t) => {
+    const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
+    const sessions = require('../lib/auth-session') as typeof import('../lib/auth-session');
+    const { user } = createMockAuthContext({}, `update-${scenario}`);
+    const refreshed = scenario === 'refreshed' || scenario === 'refreshed-update-error';
+    const updateRejected = scenario === 'update-error' || scenario === 'refreshed-update-error';
+    const token = refreshed ? 'rotated-access-token' : `validated-${scenario}`;
+    const session = sessions.buildSessionFromUser(user, token, scenario === 'bearer-only' ? '' : 'rotated-refresh-token');
+    t.mock.method(sessions, 'resolveSessionFromTokens', async () => ({
+      session: scenario === 'anonymous' || scenario === 'session-error' ? null : session,
+      refreshed,
+      error: scenario === 'session-error' ? { message: 'Auth unavailable', status: 503, code: 'auth_unavailable' } : null,
+    }));
+    const attributes = { data: { display_name: 'Local fixture' } };
+    const updatedUser = { ...user, user_metadata: attributes.data };
+    const requests: Array<{ path: string; method: string | undefined; authorization: string | null; body: unknown }> = [];
+    t.mock.method(globalThis, 'fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      requests.push({ path: url.pathname, method: init?.method, authorization: new Headers(init?.headers).get('authorization'), body: JSON.parse(String(init?.body)) });
+      return updateRejected
+        ? Response.json({ msg: 'Update rejected', error_code: 'update_rejected' }, { status: 400 })
+        : Response.json(updatedUser);
+    });
+    t.mock.method(apiUtils, 'getAuthAdminClient', () => assert.fail('user update must not acquire a privileged client'));
+    t.mock.method(apiUtils, 'getSystemAdminClient', () => assert.fail('user update must not acquire a system administrator'));
+    const { POST } = require('../app/api/auth/route') as typeof import('../app/api/auth/route');
+    const response = await POST(new NextRequest('http://localhost/api/auth', {
+      method: 'POST',
+      headers: scenario === 'bearer-only'
+        ? { 'content-type': 'application/json', authorization: 'Bearer original-bearer' }
+        : { 'content-type': 'application/json', cookie: `${sessions.ACCESS_COOKIE}=stale-access; ${sessions.REFRESH_COOKIE}=stale-refresh` },
+      body: JSON.stringify({ action: 'updateUser', attributes, token: 'untrusted-body-token' }),
+    }));
+    assert.equal(response.status, scenario === 'session-error' ? 503 : scenario === 'anonymous' ? 401 : updateRejected ? 400 : 200);
+    assert.deepEqual(requests, scenario === 'anonymous' || scenario === 'session-error' ? [] : [{
+      path: '/auth/v1/user', method: 'PUT', authorization: `Bearer ${token}`,
+      body: { ...attributes, code_challenge: null, code_challenge_method: null },
+    }]);
+    const payload = await response.json();
+    if (scenario === 'anonymous' || scenario === 'session-error' || updateRejected) {
+      assert.equal(payload.data, null);
+      if (updateRejected) assert.equal(payload.error.code, 'update_rejected');
+    } else {
+      assert.deepEqual(payload, { data: { user: updatedUser }, error: null });
+    }
+    if (refreshed) {
+      assert.equal(response.cookies.get(sessions.ACCESS_COOKIE)?.value, token);
+      assert.equal(response.cookies.get(sessions.REFRESH_COOKIE)?.value, session.refresh_token);
+    } else {
+      assert.equal(response.headers.get('set-cookie'), null);
+    }
+  });
+}
+
+for (const scenario of ['valid', 'refreshed', 'revocation-error', 'anonymous', 'session-error'] as const) {
+  test(`auth logout ${scenario} uses token-scoped revocation before clearing cookies`, async (t) => {
+    const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
+    const sessions = require('../lib/auth-session') as typeof import('../lib/auth-session');
+    const { user } = createMockAuthContext({}, 'logout-user');
+    const token = scenario === 'refreshed' ? 'newly-refreshed-token' : 'validated-access-token';
+    const session = sessions.buildSessionFromUser(user, token, 'fixture-refresh-token');
+    t.mock.method(sessions, 'resolveSessionFromTokens', async () => ({
+      session: scenario === 'anonymous' || scenario === 'session-error' ? null : session,
+      refreshed: scenario === 'refreshed',
+      error: scenario === 'session-error' ? { message: 'Invalid session', status: 401, code: 'invalid_token' } : null,
+    }));
+    const requests: Array<{ path: string; method: string | undefined; authorization: string | null }> = [];
+    t.mock.method(globalThis, 'fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      requests.push({ path: url.pathname + url.search, method: init?.method, authorization: new Headers(init?.headers).get('authorization') });
+      return scenario === 'revocation-error'
+        ? Response.json({ msg: 'Logout unavailable', error_code: 'logout_failed' }, { status: 400 })
+        : new Response(null, { status: 204 });
+    });
+    t.mock.method(apiUtils, 'getAuthAdminClient', () => assert.fail('logout must not acquire a privileged client'));
+    t.mock.method(apiUtils, 'getSystemAdminClient', () => assert.fail('logout must not acquire a system administrator'));
+    const { POST } = require('../app/api/auth/route') as typeof import('../app/api/auth/route');
+    const response = await POST(new NextRequest('http://localhost/api/auth', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: `${sessions.ACCESS_COOKIE}=old-request-token; ${sessions.REFRESH_COOKIE}=fixture-refresh-token` },
+      body: JSON.stringify({ action: 'signOut', token: 'untrusted-body-token' }),
+    }));
+    const rejected = scenario === 'session-error' || scenario === 'revocation-error';
+    assert.equal(response.status, scenario === 'session-error' ? 401 : scenario === 'revocation-error' ? 400 : 200);
+    assert.deepEqual(requests, scenario === 'anonymous' || scenario === 'session-error' ? [] : [{
+      path: '/auth/v1/logout?scope=global', method: 'POST', authorization: `Bearer ${token}`,
+    }]);
+    const payload = await response.json();
+    if (rejected) {
+      assert.equal(payload.data, null);
+      assert.equal(payload.error.code, scenario === 'session-error' ? 'invalid_token' : 'logout_failed');
+      assert.equal(response.headers.get('set-cookie'), null, 'failed revocation must not be reported as a completed logout');
+    } else {
+      assert.deepEqual(payload, { data: { signedOut: true }, error: null });
+      for (const name of [sessions.ACCESS_COOKIE, sessions.REFRESH_COOKIE]) {
+        assert.equal(response.cookies.get(name)?.value, '');
+        const expiry = response.cookies.get(name)?.expires;
+        assert.equal(expiry instanceof Date ? expiry.getTime() : expiry, 0);
+      }
+    }
+  });
+}
+
 // Timer grace and auth-event side effects are not exercised by SSR or the synthetic
 // P5 SessionContext fixture, so retain their unique guards until runtime coverage exists.
 test('ClientProviders should revalidate auth state and invalidate auth-bound queries after auth changes', () => {

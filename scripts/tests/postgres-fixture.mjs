@@ -84,10 +84,26 @@ function snapshotTable(snapshot, name) {
   return definition.replace(check, '  source_type $1,');
 }
 
-export async function buildPostgresFixture(repoRoot) {
+// Additional, bounded inputs for actual application adapters. No production
+// metadata is read; table grants and the missing rate-limit index below remain
+// explicit fixture assumptions until the authoritative export is supplied.
+export const AUTH_SQL_SOURCE_MANIFEST = {
+  userSettings: 'supabase/migrations/20260110_add_user_settings_and_fix_notifications_rls.sql',
+  chartDetail: 'supabase/migrations/20260401_add_chart_prompt_detail_level_to_user_settings.sql',
+  appSettings: 'supabase/migrations/20260113_add_app_settings.sql',
+  modelPolicies: 'supabase/migrations/20260128_create_ai_model_tables.sql',
+  gatewayPolicies: 'supabase/migrations/20260318_unify_ai_gateway_sources.sql',
+  rateRpc: 'supabase/migrations/20260409_000100_remaining_atomicity_rpcs.sql',
+  rateAcl: 'supabase/migrations/20260411_111500_restrict_admin_session_rpc_acl.sql',
+};
+
+export async function buildPostgresFixture(repoRoot, { authMode = 'synthetic' } = {}) {
+  if (!['synthetic', 'gotrue'].includes(authMode)) throw new Error('Unknown SQL fixture auth mode');
+  const realAuth = authMode === 'gotrue';
   const sources = {};
   const missing = [];
-  for (const [key, filename] of Object.entries(SQL_SOURCE_MANIFEST)) {
+  const manifest = { ...SQL_SOURCE_MANIFEST, ...(realAuth ? AUTH_SQL_SOURCE_MANIFEST : {}) };
+  for (const [key, filename] of Object.entries(manifest)) {
     try {
       sources[key] = await readFile(path.join(repoRoot, filename), 'utf8');
     } catch (error) {
@@ -107,13 +123,21 @@ export async function buildPostgresFixture(repoRoot) {
   );
 
   return [
-    // Only these bootstrap auth objects/roles are synthetic. Claims are test
-    // session settings, not signed JWTs or evidence of authenticated identity.
+    // Synthetic mode preserves the standalone SQL suite. GoTrue mode requires
+    // migrations from the real Auth container and NEVER creates auth.users.
+    // auth.uid/role are claim accessors, not identity resolvers: in GoTrue mode
+    // only PostgREST's signature-validated request sets these claims.
     `CREATE ROLE taibu_contract_owner NOLOGIN NOSUPERUSER NOBYPASSRLS;
 CREATE ROLE anon NOLOGIN NOSUPERUSER NOBYPASSRLS;
 CREATE ROLE authenticated NOLOGIN NOSUPERUSER NOBYPASSRLS;
 CREATE ROLE service_role NOLOGIN NOSUPERUSER BYPASSRLS;
-CREATE SCHEMA auth AUTHORIZATION taibu_contract_owner;
+${realAuth ? `DO $$ BEGIN
+  IF to_regclass('auth.users') IS NULL OR to_regclass('auth.identities') IS NULL OR to_regclass('auth.sessions') IS NULL THEN
+    RAISE EXCEPTION 'GoTrue must migrate its real auth schema before loading this fixture';
+  END IF;
+END $$;
+GRANT USAGE ON SCHEMA auth TO taibu_contract_owner;
+GRANT REFERENCES ON auth.users TO taibu_contract_owner;` : 'CREATE SCHEMA auth AUTHORIZATION taibu_contract_owner;'}
 CREATE SCHEMA extensions;
 CREATE EXTENSION vector WITH SCHEMA extensions;
 CREATE EXTENSION pg_trgm WITH SCHEMA public;
@@ -122,13 +146,13 @@ GRANT USAGE ON SCHEMA public, auth, extensions TO anon, authenticated, service_r
 GRANT CREATE ON SCHEMA public TO taibu_contract_owner;
 SET ROLE taibu_contract_owner;
 SET search_path = public, extensions;
-CREATE TABLE auth.users (id uuid PRIMARY KEY);
-CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE SET search_path = pg_catalog AS $$
+${realAuth ? '' : 'CREATE TABLE auth.users (id uuid PRIMARY KEY);'}
+${realAuth ? '' : `CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE SET search_path = pg_catalog AS $$
   SELECT NULLIF(NULLIF(current_setting('request.jwt.claims', true), '')::jsonb->>'sub', '')::uuid
 $$;
 CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE SET search_path = pg_catalog AS $$
   SELECT COALESCE(NULLIF(current_setting('request.jwt.claims', true), '')::jsonb->>'role', '')
-$$;`,
+$$;`}`,
     // Five schema slices from the snapshot; no wholesale execution of it.
     ...['users', 'credit_transactions', 'conversations', 'mbti_readings', 'tarot_readings'].map(name => snapshotTable(sources.snapshot, name)),
     policies(sources.usersPolicies, 'users'),
@@ -136,6 +160,20 @@ $$;`,
     policies(sources.conversationPolicies, 'conversations'),
     policies(sources.mbtiPolicies, 'mbti_readings'),
     policies(sources.tarotPolicies, 'tarot_readings'),
+    ...(realAuth ? [
+      before(sources.userSettings, '-- Only server-side code'),
+      sources.chartDetail,
+      sources.appSettings,
+      ...['ai_models', 'ai_gateways', 'ai_model_gateway_bindings'].map(name => snapshotTable(sources.snapshot, name)),
+      policies(sources.modelPolicies, 'ai_models'),
+      policies(sources.gatewayPolicies, 'ai_gateways'),
+      policies(sources.gatewayPolicies, 'ai_model_gateway_bindings'),
+      // Snapshot omits sequences/indexes. This harness-only prerequisite lets
+      // the real ON CONFLICT RPC execute; it is NOT deployed-schema evidence.
+      'CREATE SEQUENCE public.rate_limits_id_seq;',
+      snapshotTable(sources.snapshot, 'rate_limits'),
+      'CREATE UNIQUE INDEX ON public.rate_limits (identifier, endpoint);',
+    ] : []),
     // Keep real vector type, original uniqueness/indexes/RLS, then actual TEXT
     // source-id amendment. The snapshot's USER-DEFINED placeholder is not used.
     sources.knowledge,
@@ -145,6 +183,12 @@ $$;`,
     // Preserve chronology: the February admin-policy block predates the March
     // messages table and July history tables; do not grant them invented policies.
     adminPolicies,
+    ...(realAuth ? [
+      functionDefinition(sources.rateRpc, 'consume_rate_limit_slot_as_admin'),
+      grants(sources.rateAcl, ['consume_rate_limit_slot_as_admin']),
+      // Explicit harness-only grants, constrained by the source RLS policies.
+      'GRANT SELECT ON public.app_settings, public.ai_models, public.ai_gateways, public.ai_model_gateway_bindings, public.user_settings TO authenticated;',
+    ] : []),
     // Empty fixture: no legacy message backfill is being claimed or exercised.
     before(sources.messages, 'INSERT INTO public.conversation_messages'),
     functionDefinition(sources.transactions, 'kb_replace_source_entries'),

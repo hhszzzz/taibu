@@ -41,7 +41,7 @@ export function selectTests(targets = []) {
 export function requiredPackages(files) {
   const required = new Set();
   for (const file of files) {
-    if (file.startsWith('src/tests/') || file.startsWith('packages/') || file.endsWith('/skill-bundle.test.mjs')) required.add('core');
+    if (file.startsWith('src/tests/') || file.startsWith('packages/') || file.endsWith('/skill-bundle.test.mjs') || file.endsWith('/auth-postgrest-acceptance.test.mjs')) required.add('core');
     if (file.startsWith('packages/mcp/tests/')) required.add('mcp');
     if (file.startsWith('packages/mcp-server/tests/')) required.add('mcp-server');
     if (file.endsWith('/npm-package-artifacts.test.mjs') || file.endsWith('/prepare-github-package.test.mjs')) {
@@ -68,6 +68,7 @@ export function verificationSteps(files, complete = false, useInstalledChrome = 
     pnpmStep('Next production build', ['exec', 'next', 'build']),
     nodeStep('Package, license and Skill artifacts', ['--test', ...ARTIFACT_TESTS]),
     nodeStep('Isolated PostgreSQL contracts', ['--test', 'scripts/tests/postgres-contracts.test.mjs']),
+    nodeStep('Real Auth and PostgREST contracts', ['--require', './scripts/ts-register.cjs', '--test', 'scripts/tests/auth-postgrest-acceptance.test.mjs']),
     nodeStep('Offline browser component contracts', ['scripts/tests/p5-browser-fixture.mjs', ...(useInstalledChrome ? ['--chrome'] : [])]),
   ];
 }

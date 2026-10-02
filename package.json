@@ -15,6 +15,7 @@
     "lint:guards": "node scripts/check-architecture-guards.mjs",
     "test:guards": "node --test scripts/tests/architecture-guards.test.mjs",
     "test:db": "node --test scripts/tests/postgres-contracts.test.mjs",
+    "test:auth": "node scripts/test-runner.mjs scripts/tests/auth-postgrest-acceptance.test.mjs",
     "test:npm-packages": "pnpm build:packages && node --test scripts/tests/npm-package-artifacts.test.mjs scripts/tests/skill-bundle.test.mjs",
     "prepare:github-packages": "node scripts/prepare-github-package.mjs --package core --package mcp --output .release/github-packages",
     "test:github-packages": "node --test scripts/tests/prepare-github-package.test.mjs",

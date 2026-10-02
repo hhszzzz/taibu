@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { Session } from '@supabase/supabase-js';
-import { createAnonClient, createAuthedClient } from '@/lib/api-utils';
+import { createAnonClient, createSessionClient } from '@/lib/api-utils';
 import {
   ACCESS_COOKIE,
   REFRESH_COOKIE,
@@ -106,23 +106,36 @@ export async function POST(request: NextRequest) {
         return response;
       }
 
-      const client = createAuthedClient(session.access_token);
-      const { error: signOutError } = await client.auth.signOut();
+      // Header-only clients have no stored SDK session; revoke with the verified user JWT.
+      const { error: signOutError } = await anonymousClient.auth.admin.signOut(session.access_token, 'global');
       if (signOutError) return authFailure(signOutError.message, 400, signOutError.code);
       const response = authSuccess({ signedOut: true });
       setSessionCookies(response, null);
       return response;
     }
     case 'updateUser': {
-      const { session, error: sessionError } = await resolveSession(request);
+      const { session, refreshed, error: sessionError } = await resolveSession(request);
       if (sessionError) return authFailure(sessionError.message, sessionError.status, sessionError.code);
       if (!session?.access_token) return authFailure('Unauthorized', 401);
 
       const attributes = (payload.attributes as Record<string, unknown> | undefined) || {};
-      const client = createAuthedClient(session.access_token);
-      const { data, error: updateUserError } = await client.auth.updateUser(attributes);
-      if (updateUserError) return authFailure(updateUserError.message, 400, updateUserError.code);
-      return authSuccess(data);
+      const client = createSessionClient(session);
+      let currentSession = session;
+      const { data: { subscription } } = client.auth.onAuthStateChange((_event, nextSession) => {
+        if (nextSession) currentSession = nextSession;
+      });
+      try {
+        const { data, error: updateUserError } = await client.auth.updateUser(attributes);
+        const response = updateUserError
+          ? authFailure(updateUserError.message, 400, updateUserError.code)
+          : authSuccess(data);
+        if (refreshed || currentSession.access_token !== session.access_token) {
+          setSessionCookies(response, currentSession);
+        }
+        return response;
+      } finally {
+        subscription.unsubscribe();
+      }
     }
     case 'resetPasswordForEmail': {
       const email = String(payload.email || '');

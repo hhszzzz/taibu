@@ -266,6 +266,32 @@ test('requireAdminContext should surface admin-check backend failures instead of
   });
 });
 
+test('session clients keep SDK mutations private to their request without changing caller objects', async (t) => {
+  const { createSessionClient } = await import('../lib/api-utils');
+  const { buildSessionFromUser } = await import('../lib/auth-session');
+  const { createMockAuthContext } = await import('./helpers/supabase-mock');
+  const sessions = ['first', 'second'].map(id => buildSessionFromUser(createMockAuthContext({}, id).user, `token-${id}`, ''));
+  const clients = sessions.map(createSessionClient);
+  t.mock.method(globalThis, 'fetch', async (_input: RequestInfo | URL, init?: RequestInit) => {
+    const token = new Headers(init?.headers).get('authorization');
+    const original = sessions.find(session => token === `Bearer ${session.access_token}`);
+    assert.ok(original, 'must use this request caller token');
+    return Response.json({ ...original.user, user_metadata: { changed: original.user.id } });
+  });
+  await Promise.all(clients.map(async (client, index) => {
+    const result = await client.auth.updateUser({ data: { changed: sessions[index].user.id } });
+    assert.equal(result.error, null);
+    assert.equal(result.data.user?.id, sessions[index].user.id);
+  }));
+  for (const [index, client] of clients.entries()) {
+    const { data, error } = await client.auth.getSession();
+    assert.equal(error, null);
+    assert.equal(data.session?.access_token, sessions[index].access_token);
+    assert.deepEqual(data.session?.user.user_metadata, { changed: sessions[index].user.id });
+    assert.equal(sessions[index].user.user_metadata.changed, undefined, 'SDK mutation must not modify the verified input');
+  }
+});
+
 test('browser auth client should not expose table query or rpc helpers', async () => {
   const { supabase } = await import('../lib/auth');
 

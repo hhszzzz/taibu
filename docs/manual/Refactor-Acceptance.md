@@ -94,7 +94,7 @@ pnpm test:browser -- --chrome
 - 空结果、部分输出、SDK 中止、后置保存 hook 和财务退款之间仍有历史差异，详见架构矩阵；不承诺跨请求/进程 exactly-once。
 - Query observer 故意不自动抓取；旧 DOM 事件、URL 推断和仍有消费者的 facade 保留，删除条件已记录。
 - 生产前必须另外核对真实数据库函数/ACL/owner/扩展位置和已应用迁移；需要授权后通过 Supabase MCP 执行 migration。当前材料不是完整可部署数据库基线。
-- 真实 OAuth、Supabase Auth/PostgREST、付费供应商、移动端真机、生产迁移、远程 CI 不在本次已验证范围。Docker 生产化和平台替代继续留在后续 F1–F3。
+- 真实 OAuth、邮件、付费供应商、移动端真机、生产迁移仍不在已验证范围。后续已补真实本地 Auth/PostgREST 联调与验收分支 CI，具体范围和精确版本见文末；不能由此推定生产等价。Docker 生产化和平台替代继续留在后续 F1–F3。
 - 用户原有 `AGENTS.md`、`GEMINI.md`、`.codex-deploy/`、`skills/notion-style.md` 未被本轮改写。
 
 可回滚边界按用例、mutation、面板及领域分别保留；安全纠错不应回退到管理员 fallback、被禁用模型来源或宽松 ledger ACL。生产数据库优先采用经审核的前向修复，不提供破坏数据的 down migration。
@@ -144,15 +144,15 @@ pnpm test:browser -- --chrome
 
 已完成代码、文档、包/Skill、隔离 SQL 和受控浏览器的本地交付；这不能替代下列尚未完成的验收门槛。第一轮临时 Next 服务已停止，完成验证的源码副本已清理，测试容器与默认浏览器 fixture 自动清理；没有停止全局 Docker 或修改其他会话的浏览器。第一轮结束时未提交或推送；后续授权范围与进展见文末，生产平台及迁移执行边界不变。
 
-## 未闭环的验收门槛
+## 原验收缺口与当前状态
 
-| 项目 | 当前证据不足之处 | 解除阻塞所需条件与验收结果 |
+| 项目 | 当前证据与边界 | 状态 / 后续条件 |
 |---|---|---|
 | 数据库权威定义核对（P0b 的定义缺口） | 19 项本地 SQL 清单不是线上最终函数、RLS、ACL 与已应用迁移的权威证明 | 获准读取的完整定义/迁移记录导出，或明确授权的只读环境；形成差异清单，核对函数 owner、扩展 schema、策略与 RPC 授权。不得从历史文件推断已经部署 |
-| 真实鉴权与纵向联调（P1/P4） | 浏览器身份/保存为桩，数据库 claim fixture 不验证 JWT、Auth 或 PostgREST | 获准使用的非生产 Supabase 环境及测试身份，或单独授权的完整临时本地栈；验证登录/刷新/退出、跨用户拒绝、塔罗保存/恢复/知识库链路，可继续使用模型桩避免付费 |
-| 候选代码远程 CI（P7） | 本地 Node 24＋显式 Chrome 已通过，但远程 Node 20＋固定 Chromium 尚未执行 | 明确批准当前候选的提交/推送或其他受控上传方式；在确切候选版本运行 quality workflow 并记录成功结果。旧提交的 CI 结果不能代替当前未提交代码 |
+| 真实鉴权与纵向联调（P1/P4） | 已补独立 GoTrue/PostgREST/PG，真实 JWT、Cookie、用户更新、塔罗/BYOK/历史/知识库联调 17/17 通过；模型仍为桩，非完整 Next 浏览器端到端 | 本地授权范围已完成；不代替生产定义、OAuth/邮件或付费供应商验收 |
+| 候选代码远程 CI（P7） | 首个候选 `d959896` 已在 Node 20.20.2＋固定 Chromium 通过；真实平台测试补入后的最终候选仍需再次验证 | 已获提交/推送与草稿验证 PR 授权；每次以确切候选版本的 quality workflow 结果为准，旧提交结果不能代替后续代码 |
 
-这些验收待办没有被标记为完成，不能通过再次运行相同的本地桩测试消除。自动目标提醒不提供环境访问、代码上传或生产操作授权。生产 SQL 应用、上线及 F1–F3 平台迁移另行授权，不与上述非生产验收混为一项任务。
+数据库权威定义仍未标记完成，不能通过再次运行相同的本地测试消除缺口。自动目标提醒不提供环境访问、代码上传或生产操作授权。生产 SQL 应用、上线及 F1–F3 平台迁移另行授权，不与上述非生产验收混为一项任务。
 
 ## 授权续验（进行中）
 
@@ -165,3 +165,36 @@ pnpm test:browser -- --chrome
 验收分支为 `refactor/modular-acceptance-20261002`，先以 fast-forward 纳入远端 `0d188be` 及其已有的奇门、每日聊天修复，没有覆盖这些上游改动。远端仓库为公开仓库；发布前排除用户独立文件并检查敏感内容。
 
 现有 GitHub/Vercel 集成有自动部署记录，因此依据 [Vercel 官方 Git 配置文档](https://vercel.com/docs/project-configuration/git-configuration)，在 `vercel.json` 中仅将该验收分支的 `git.deploymentEnabled` 设为 `false`，未更改其他分支默认部署行为。此分支/PR 仅用于验证，不作为生产发布。远程 CI 与真实平台联调的完成状态必须等待实际运行结果，不能由授权本身推定通过。
+
+首个候选已提交为 `d959896daf9cc8abfb097a8b561ef1146b0ce0ed`，推送到验收分支并建立[草稿 PR #16](https://github.com/hhszzzz/taibu/pull/16)。[quality run 36970663553](https://github.com/hhszzzz/taibu/actions/runs/36970663553) 已成功：Node 20.20.2、固定 Chromium、1139/1139 默认测试、20/20 产物、22/22 隔离 SQL、28/28 浏览器检查，均无失败或跳过；生产构建与类型/lint 通过。该提交的 GitHub deployment 查询为 0，PR 未合并。一次本地 `gh run watch` 的 TLS 超时不代表工作流失败，已用 run conclusion 与实际日志交叉确认。
+
+### 真实平台续验与 Auth 修复
+
+已补 `local-auth-stack.mjs` / `auth-postgrest-acceptance.test.mjs`，复用原 SQL fixture 的显式 GoTrue 模式。17/17 通过；真实 Auth 建立身份、签发 JWT，PostgREST 校验签名并执行 RLS/RPC。实际应用处理器、持久化和鉴权未 Mock，只有模型推理受控。BYOK 通过本地 HTTP adapter 调用实际处理器；这不是完整 Next/UI 端到端，也不含 OAuth、邮件、Storage、Realtime 或 TLS。
+
+本次联调发现并修复两个原有 Auth 缺陷：
+
+1. `createAuthedClient()` 仅设置 Authorization，`auth.signOut()` 因 SDK 会话为空而不发送 `/logout`。旧行为会清 Cookie 却留下可用 refresh token。改为使用已验证调用者 JWT 发起全局 logout，不获取 service-role/管理员客户端。真实测试确认 refresh token 失效，并明确旧 access JWT 在到期前仍可能被 PostgREST 接受。
+2. 同类空会话导致 `auth.updateUser()` 返回 `Auth session missing!`。通过 `api-utils.ts` 的请求独享内存会话客户端修复，支持 Cookie 和仅 Bearer；资料/密码更新失败时仍保留已轮换的 Cookie。补充匿名/错误拒绝、刷新凭据、请求间隔离测试，不使用管理员更新接口。
+
+原有 SQL suite 仍为 22 项；真实模式增加 7 项明确历史输入，其中 5 个首次纳入版本控制。缺失的 rate-limit sequence/unique index 与入口表授权是 fixture 假设，不是生产结构证明，详见 [数据库说明](../../supabase/README.md)。没有整体回放历史迁移。
+
+### 当前候选的完整本地验证
+
+命令：`DOTENV_CONFIG_PATH=/dev/null NEXT_TELEMETRY_DISABLED=1 pnpm verify -- --chrome`。
+
+| 层 | 实际结果 |
+|---|---|
+| 各包构建 / lint / strict | 通过，每个包构建一次 |
+| 默认单元、路由、Core/MCP、守卫 | **1152/1152，0 fail、0 skip** |
+| Next 生产构建 | 通过 |
+| 产物、许可证、Skill | **20/20** |
+| 真实 PostgreSQL/RLS/事务 | **22/22，0 skip** |
+| 真实 Auth/JWT/PostgREST 纵向联调 | **17/17，0 skip** |
+| 离线浏览器组件 | **28/28**，29 个 fixture 请求，无外部请求或运行时异常 |
+
+17 项计数包含外层 suite 和远程 Docker 拒绝检查，并非 17 个独立业务流程。默认测试从上游合入后的 1139 增至 1152，新增 13 项 Auth 安全回归；原测试精简统计保留在前文作为对应版本的历史记录。
+
+真实栈本次主工作区运行 `b63beaf1-0f4f-4988-81ef-1712d3439d04` 清理后，容器/网络/卷均为 0；成功、故意断言失败与 SIGTERM 路径也分别验证清理。不停止全局 Docker，不删除共享镜像缓存，不承诺 SIGKILL/宿主崩溃时自动清理。完整入口和 CI 已强制加入真实 Auth/REST 层，`pnpm test:auth` 可独立复现并自动构建 Core。
+
+**远程证据按 SHA 记录在[草稿 PR #16 的检查与说明](https://github.com/hhszzzz/taibu/pull/16)。** 新候选必须实际通过该提交的 quality workflow，不能沿用 `d959896` 的成功结果；本记录中的本地结论不是预先宣称远程通过。数据库权威导出仍未收到，原计划因此仍不能标记全部验收闭环。

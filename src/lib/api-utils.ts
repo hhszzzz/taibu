@@ -2,7 +2,7 @@ import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { NextResponse, type NextRequest } from 'next/server';
-import type { User } from '@supabase/supabase-js';
+import type { Session, User } from '@supabase/supabase-js';
 import { getAuthAdminClient as getPrivilegedAuthClient, getSystemAdminClient as getPrivilegedSystemAdminClient } from '@/lib/supabase-server';
 import { getSupabaseAnonKey, getSupabaseUrl } from '@/lib/supabase-env';
 import {
@@ -319,6 +319,29 @@ export function createAnonClient() {
             },
         }
     );
+}
+
+/**
+ * Auth mutations need an SDK session, not only an Authorization header.
+ * Accept only a server-verified session; storage is private to this request.
+ */
+export function createSessionClient(session: Session) {
+    const storageKey = 'request-auth-session';
+    const storage = new Map<string, string>([[storageKey, JSON.stringify(session)]]);
+    return createClient(getSupabaseUrl(), getSupabaseAnonKey(), {
+        auth: {
+            storageKey,
+            // Enable the explicit in-memory adapter, never browser or shared storage.
+            persistSession: true,
+            autoRefreshToken: false,
+            detectSessionInUrl: false,
+            storage: {
+                getItem: (key: string) => storage.get(key) ?? null,
+                setItem: (key: string, value: string) => { storage.set(key, value); },
+                removeItem: (key: string) => { storage.delete(key); },
+            },
+        },
+    });
 }
 
 /**

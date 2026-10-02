@@ -62,6 +62,7 @@ Core 通过领域子路径公开规范格式化函数，例如：
 - 新用例接收最小应用身份，而不是 Supabase User、请求对象或凭据。受信任的绕过计费策略只能由服务端入口授予，不能相信请求体中的标志。
 - `getSystemAdminClient()` 实际使用 **anon key + 系统管理员登录会话 JWT**。它不是无限制的 `service_role` 连接，仍受 RLS、管理员 policy 和 RPC 权限约束。旧注释中的“绕过 RLS”不能视为真实权限保证。
 - `getAuthAdminClient()` 是独立的 Auth 管理入口；不能拿它替代用户数据客户端。
+- `createAuthedClient(token)` 只绑定请求头，适合 PostgREST/RLS，不代表 Auth SDK 已保存会话。需要 SDK 会话的用户资料更新使用 `createSessionClient()`，仅接受服务端已验证的会话，每个请求独享内存存储；Cookie 刷新后即使更新被拒绝也保留新凭据。普通登出用匿名客户端的 `auth.admin.signOut(verifiedJwt, 'global')` 发送调用者 JWT，不取得管理员权限；它撤销 refresh session，已签发 access JWT 仍可能有效至到期。
 - 缺失用户态上下文必须失败，不能为了兼容改用系统管理员。鉴权安全纠错和机械提取应独立验证；“接口已经迁到用例”不能证明权限边界已经通过测试。
 
 依据：[API 鉴权入口](../../src/lib/api-utils.ts)、[系统管理员客户端实现](../../src/lib/supabase-server.ts)、[会话鉴权测试](../../src/tests/api-utils-auth-session.test.ts)。
@@ -188,8 +189,9 @@ BYOK 的 prepare/persist 不传供应商密钥。persist 仍需重新鉴权、�
 1. **工程检查**：类型、lint、架构守卫、受影响测试；完整构建/包产物验证另记结果。修复测试类型错误不等于业务流程验证通过，也不能靠排除测试或放宽 strict 获得通过。
 2. **用例/HTTP/SSE**：成功、鉴权/归属拒绝、空输出、部分输出、reasoning-only、中止、保存失败、退款失败，以及最终事件顺序。
 3. **真实隔离数据库**：SQL 函数、RLS、授权、事务、并发和回滚。参见 [数据库复现说明](../../supabase/README.md)。带模拟 claims 的 PostgreSQL/pgvector fixture 是实际 SQL 引擎测试，但不是 Supabase Auth、PostgREST、Cookie/OAuth 或已部署服务测试。
-4. **浏览器旅程**：账号切换、聊天切页/停止/保存失败、历史恢复/归档/检索、设置 hash/返回/keep-alive；API mock 不能替代这些交互验证。
-5. **发布/生产**：本地通过、存在 migration 或 Docker 配置，不代表已经执行生产迁移。`20261002` 的本轮数据库纠错应按各自记录区分“仅本地验证”和“已部署”。
+4. **真实 Auth/REST 链路**：`pnpm test:auth` 在临时 GoTrue/PostgREST/PG 中验证 Cookie/JWT/刷新/登出、用户更新和塔罗/历史/KB 链路；只有模型推理是桩。调用实际路由处理器和受限 HTTP adapter，不代表完整 Next 页面端到端、OAuth、邮件或生产 schema 等价。
+5. **浏览器旅程**：账号切换、聊天切页/停止/保存失败、历史恢复/归档/检索、设置 hash/返回/keep-alive；API mock 不能替代这些交互验证。
+6. **发布/生产**：本地通过、存在 migration 或 Docker 配置，不代表已经执行生产迁移。`20261002` 的本轮数据库纠错应按各自记录区分“仅本地验证”和“已部署”。
 
 仍依赖 Supabase Auth、客户端协议、PostgreSQL/RLS/RPC 及现有存储。将 SDK 移入适配器并不意味着可以直接切换数据库。缺失的完整平台验证、跨进程幂等、流式供应商故障恢复、财务对账和持久任务能力，不能由内存状态或 mock 替代。
 
@@ -203,11 +205,12 @@ Core/MCP 三个包是 MIT；其余 Web、服务端、部署及运行时代码是
 | 共享 HTTP/SSE 适配 | 每种响应映射、各传输模式接线、鉴权与凭据传播 | 在每种模式穷举同一业务组合 |
 | 领域路由 | 参数、资源归属、领域提示词和 source/history 绑定 | 重新证明共享用例的全部状态机 |
 | PostgreSQL | RLS、执行权限、并发、真实原子回滚 | 用 Mock 成功冒充 SQL 原子性 |
+| Auth/PostgREST | 真实登录/JWT/SDK 会话与数据库角色、纵向业务链路 | 生产定义、OAuth/邮件、完整浏览器 UI |
 | 浏览器组件 | hash/Back、保活、账号隔离、流任务、受控表单 | 匹配某个具体变量名或源码表达式 |
 
 移除测试前必须明确保留的覆盖责任方；不能仅以“文件太多”为理由删除安全回归。`route-mock.ts` 只提供显式的单项能力，不再保留无人使用、默认全部成功的旧装配器。模块依赖规则留在架构守卫；需要验证交互的源码拼写断言逐步迁至真实行为测试。
 
-`pnpm test -- <测试文件或目录>` 显式选取测试并构建所需包；不基于 Git 状态猜测影响范围。`pnpm test` 保留完整默认单元/路由/协议层。`pnpm verify` 按顺序构建每个包一次，再执行 lint、strict、默认测试、Next 构建、产物/许可证/Skill、真实 DB 和离线浏览器组件验收，失败立即停止。独立 `build`/`typecheck`/产物命令仍自行构建，防止旧 dist 假通过。
+`pnpm test -- <测试文件或目录>` 显式选取测试并构建所需包；不基于 Git 状态猜测影响范围。`pnpm test` 保留完整默认单元/路由/协议层。`pnpm verify` 按顺序构建每个包一次，再执行 lint、strict、默认测试、Next 构建、产物/许可证/Skill、真实 SQL、Auth/PostgREST 和离线浏览器组件验收，失败立即停止。独立 `build`/`typecheck`/产物命令仍自行构建，防止旧 dist 假通过。
 
 浏览器层使用固定的 Playwright 开发依赖与已有 fixture，不引入第二套断言框架。CI 安装固定 Chromium 并强制运行；本机可以显式 `--chrome` 使用已有 Chrome，但不减少断言或静默跳过该层。组件 fixture 的身份/HTTP/模型仍是桩，不能代替真实登录和 PostgREST 联调。
 

@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SQL_SOURCE_MANIFEST } from './postgres-fixture.mjs';
+import { AUTH_SQL_SOURCE_MANIFEST, SQL_SOURCE_MANIFEST } from './postgres-fixture.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const GUARD_SCRIPT = path.join(REPO_ROOT, 'scripts/check-architecture-guards.mjs');
@@ -34,8 +34,8 @@ test('architecture migration inputs exist and are not hidden by ignore rules', (
   assert.equal(ignored.stdout, '');
 });
 
-test('PostgreSQL fixture source manifest is complete and reproducible', () => {
-  const paths = Object.values(SQL_SOURCE_MANIFEST);
+test('PostgreSQL and real Auth fixture source manifests are complete and reproducible', () => {
+  const paths = [...Object.values(SQL_SOURCE_MANIFEST), ...Object.values(AUTH_SQL_SOURCE_MANIFEST)];
   assert.equal(new Set(paths).size, paths.length);
   for (const relativePath of paths) {
     assert.ok(existsSync(path.join(REPO_ROOT, relativePath)), `Missing ${relativePath}`);

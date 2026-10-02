@@ -9,12 +9,13 @@
 | `tabel_export_from_supabase.sql` | 42 张表、字段及部分约束的上下文 | 可执行建库顺序，完整函数/RLS/索引/授权，生产部署状态 |
 | `migrations/` 显式允许列表 | 对应历史定义的原文、静态检查及隔离契约测试输入 | 完整迁移链，或线上最终定义 |
 | `scripts/check-architecture-guards.mjs` | 声明的源码与 SQL 安全约束没有意外删除 | 实际事务、并发和授权行为 |
-| `scripts/tests/postgres-fixture.mjs` | 19 项 SQL 来源清单及准确的提取、加载顺序 | Supabase Auth、JWT 签名、PostgREST 或全迁移回放 |
-| `pnpm test:db` | 下述隔离 PostgreSQL/RLS/事务契约 | 生产等价性、历史数据回填正确性或完整应用端到端行为 |
+| `scripts/tests/postgres-fixture.mjs` | 原 19 项 SQL 来源清单与真实 Auth 模式的 7 项增量输入及准确的提取、加载顺序 | 生产完整迁移链或已部署定义 |
+| `pnpm test:db` | 下述隔离 PostgreSQL/RLS/事务契约（模拟 claims） | 真实 JWT/Auth、生产等价性、历史数据回填正确性 |
+| `pnpm test:auth` | 真实 GoTrue/PostgREST/JWT 与用户更新、塔罗、历史、知识库链路 | OAuth/邮件、完整 Next 浏览器端到端、生产配置/schema 等价 |
 
 ## 版本控制与来源
 
-`.gitignore` 仅允许静态守卫依赖及 `SQL_SOURCE_MANIFEST` 中明确使用的 SQL；其余本地迁移仍被忽略。`pnpm test:guards` 检查输入存在且未被忽略。纳入允许列表不代表文件已经提交；交付时需连同测试与新增修复一并审核。
+`.gitignore` 仅允许静态守卫依赖及 `SQL_SOURCE_MANIFEST` / `AUTH_SQL_SOURCE_MANIFEST` 中明确使用的 SQL；其余本地迁移仍被忽略。`pnpm test:guards` 检查两个清单的输入存在且未被忽略。纳入允许列表不代表已经部署；历史材料与测试一并审核。
 
 不改写历史 SQL 定义；首次纳入版本控制时，仅规整了 `fix_login_attempts_rls.sql` 一个空白行的尾随空格，函数和策略内容不变。Fixture 从表快照选取 `users`、`credit_transactions`、`conversations`、`mbti_readings`、`tarot_readings`；其余测试表、RPC 和 RLS 取自清单中的历史 SQL。唯一快照语法适配是延后 `conversations.source_type` 的内联 `NOT VALID CHECK`，随后执行原 July ALTER 安装该约束，发生在插入测试数据之前。
 
@@ -51,6 +52,37 @@ pnpm test:db
 
 **身份 fixture 限制：** `auth.users`、`auth.uid()`、`auth.role()` 是明确的最小测试对象，通过事务内 claim settings 模拟已验证身份；不验证 JWT 签名或实际 Supabase Auth。表入口授权为 harness 专用，不能据此推断线上 default privileges。管理员登录会话不是 `service_role`：当前 `getSystemAdminClient()` 使用的是管理员登录 JWT。
 
+## 真实 Auth / PostgREST 纵向验收
+
+```bash
+pnpm test:auth
+```
+
+入口为 `scripts/tests/auth-postgrest-acceptance.test.mjs`，栈装配为 `local-auth-stack.mjs`，复用 `buildPostgresFixture(..., { authMode: 'gotrue' })`。原 SQL suite 默认仍使用 synthetic 模式。真实模式先由 GoTrue 建立 Auth schema，不自行创建模拟 `auth.users`；JWT 由 GoTrue 签发、Auth/PostgREST 校验。
+
+固定组件：`pgvector/pgvector:0.8.6-pg16`、`supabase/gotrue:v2.196.0`、`postgrest/postgrest:v14.17`、`node:24.13.0-alpine3.23`（固定路径 HTTP 转发）。不包含 Studio、Storage、Realtime、邮件发送或 TLS。首次运行需要下载镜像。
+
+- Auth/REST/DB 只连接 internal Docker 网络；转发器另接桥接网络，仅发布随机 `127.0.0.1` 端口，目标固定为 Auth/REST，不参与鉴权。
+- 唯一名称与标签、tmpfs、无 host bind 或已有卷。应用测试进程清除继承的供应商/生产配置，网络仅允许本次 loopback 端口；不读取 `.env`，不调用真实模型。
+- 秘密随机生成，只存在进程/临时容器内，诊断脱敏。成功、失败、SIGINT/SIGTERM 按本次标签清理，清理后验证剩余资源为零。镜像缓存保留，不执行全局 prune；SIGKILL/宿主崩溃仍不保证自动清理。
+- 使用实际应用处理器与 SDK；BYOK 通过本地 HTTP adapter 调用实际处理器。不是完整 Next 服务/UI 端到端验证。只有推理边界是控制桩。
+
+真实模式的 **7 项增量来源**：
+
+| SQL | 选取内容 |
+|---|---|
+| `20260110_add_user_settings_and_fix_notifications_rls.sql` | 用户设置表/策略，不执行无关通知修改 |
+| `20260401_add_chart_prompt_detail_level_to_user_settings.sql` | 已有提示词详细级别 |
+| `20260113_add_app_settings.sql` | 应用设置 |
+| `20260128_create_ai_model_tables.sql` | 模型策略，表结构来自快照 |
+| `20260318_unify_ai_gateway_sources.sql` | 网关/绑定策略；不执行旧清库、数据重建或整份文件 |
+| `20260409_000100_remaining_atomicity_rpcs.sql` | 既有限流原子 RPC |
+| `20260411_111500_restrict_admin_session_rpc_acl.sql` | 该限流 RPC 的授权 |
+
+其中两项已在原静态守卫允许列表中，本次只新增五个历史文件到版本控制。**快照缺少的 `rate_limits_id_seq` 与 `(identifier, endpoint)` 唯一索引，以及表入口授权，均为显式 fixture 假设，不是新生产 migration 或部署证据。** 没有新增业务主表或修改生产结构；不能用这些假设代替用户待提供的权威导出。
+
+2026-10-02 主工作区完整 `pnpm verify -- --chrome` 中 **17/17 通过，0 skip**，原 SQL **22/22** 不变。覆盖登录/刷新/退出、Cookie/Bearer 用户更新、篡改/过期 JWT 拒绝、管理员登录与 service-role 区分、塔罗托管保存/失败退款/跨用户回滚、BYOK 不扣平台积分、历史恢复及调用者 KB 入库/搜索。登出撤销 refresh token，但旧 access JWT 仍可能被无状态 PostgREST 接受到过期；测试明确保留此边界。
+
 ## 两份新增修复（仅在临时实例执行）
 
 | 迁移 | 修复 | 兼容与权限影响 |
@@ -62,6 +94,6 @@ pnpm test:db
 
 ## CI 与生产应用门槛
 
-`quality.yml` 在 GitHub 托管 runner 上执行 `pnpm test:db`，创建相同临时容器；不使用生产凭据、不连接 Supabase、不部署。工作流尚须在提交后由远程 CI 实际执行，不能用本机通过替代远程结果。
+`quality.yml` 在 GitHub 托管 runner 上执行完整 `pnpm verify`，强制包括 `test:db` 的真实 SQL 层和 `test:auth` 的真实 Auth/REST 层；不使用生产凭据、不连接生产 Supabase、不部署。精确提交与远程结果记录在[草稿验收 PR #16](https://github.com/hhszzzz/taibu/pull/16)；本机通过不能替代当前候选的远程 CI 结果。
 
 生产应用必须另行授权，并通过项目规定的 Supabase MCP migration 流程。应用前核对真实函数定义、扩展 schema、owner、ACL/RLS、已应用历史及备份恢复；必要时增补前向兼容修复。**不要直接把整份 fixture 或历史文件列表用于迁移，也不要以恢复不安全 ACL 作为回滚。** 本轮只完成有明确来源和边界的隔离契约验证，不宣称已建立生产权威数据库基线。

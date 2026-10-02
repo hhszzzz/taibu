@@ -167,7 +167,7 @@ pnpm exec playwright install --only-shell chromium # First-time browser setup
 pnpm verify                              # Build each package once; full verification (local Docker required)
 ```
 
-Database and browser checks also run independently with `pnpm test:db` and `pnpm test:browser`. If Chromium downloads are unavailable and Chrome is already installed, explicitly use `pnpm verify -- --chrome`; no browser assertions are skipped. CI uses pinned Chromium and requires both database and browser checks.
+SQL, real Auth/REST, and browser checks also run independently with `pnpm test:db`, `pnpm test:auth`, and `pnpm test:browser`. `test:auth` creates a disposable Auth/PostgREST/PostgreSQL stack without reading production configuration or existing data. If Chromium downloads are unavailable and Chrome is already installed, explicitly use `pnpm verify -- --chrome`; no browser assertions are skipped. CI uses pinned Chromium and requires all three gates.
 
 ---
 

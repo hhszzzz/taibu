@@ -1,4 +1,5 @@
-import type { DataSourceProvider, DataSourceType } from '@/lib/data-sources/types';
+import type { DataSourceType } from '@/lib/data-sources/types';
+import type { DataSourceProvider } from '@/lib/data-sources/provider.server';
 
 export { DATA_SOURCE_TYPES, type DataSourceType } from '@/lib/data-sources/types';
 

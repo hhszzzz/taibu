@@ -77,12 +77,12 @@ test('admin ai source creation should call transactional binding rpc', async (t)
   const originalRequireAdminUser = apiUtilsModule.requireAdminUser;
   const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
 
-  let rpcCall: { fn: string; args: Record<string, unknown> } | null = null;
+  const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
 
   apiUtilsModule.requireAdminUser = async () => ({ user: { id: 'admin-1' } });
   apiUtilsModule.getSystemAdminClient = () => ({
     rpc: async (fn: string, args: Record<string, unknown>) => {
-      rpcCall = { fn, args };
+      rpcCalls.push({ fn, args });
       return {
         data: {
           status: 'ok',
@@ -117,8 +117,11 @@ test('admin ai source creation should call transactional binding rpc', async (t)
 
   assert.equal(response.status, 201);
   assert.equal(body.success, true);
-  assert.equal(rpcCall?.fn, 'admin_create_ai_model_binding');
-  assert.deepEqual(rpcCall?.args, {
+  assert.equal(rpcCalls.length, 1);
+  const [rpcCall] = rpcCalls;
+  assert.ok(rpcCall);
+  assert.equal(rpcCall.fn, 'admin_create_ai_model_binding');
+  assert.deepEqual(rpcCall.args, {
     p_model_id: 'model-1',
     p_source_key: 'newapi',
     p_model_id_override: 'gpt-5.4-chat',

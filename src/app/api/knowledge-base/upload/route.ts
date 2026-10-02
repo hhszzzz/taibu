@@ -2,7 +2,8 @@ import { NextRequest } from 'next/server';
 import { getEffectiveMembershipType, MembershipResolutionError } from '@/lib/user/membership-server';
 import { ingestFileAsService, backfillVectorsAsService } from '@/lib/knowledge-base/ingest';
 import { triggerVectorIndexCreation } from '@/lib/knowledge-base/vector-index';
-import { requireUserContext, jsonError, jsonOk } from '@/lib/api-utils';
+import { requireUserContext, jsonError, jsonOk, resolveRequestDbClient } from '@/lib/api-utils';
+import { createKnowledgeBasePersistence } from '@/lib/knowledge-base/persistence.server';
 import { ensureFeatureRouteEnabled } from '@/lib/feature-gate-utils';
 
 function isAllowedFile(file: File) {
@@ -19,10 +20,12 @@ export async function POST(request: NextRequest) {
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
     const { user } = auth;
+    const db = resolveRequestDbClient(auth);
+    if (!db) return jsonError('知识库不存在或无权限', 500);
 
     let membership;
     try {
-        membership = await getEffectiveMembershipType(user.id, { client: auth.db });
+        membership = await getEffectiveMembershipType(user.id, { client: db });
     } catch (error) {
         if (error instanceof MembershipResolutionError) {
             return jsonError(error.message, 500);
@@ -53,7 +56,7 @@ export async function POST(request: NextRequest) {
         return jsonError('文件过大', 400);
     }
 
-    const { data: kb } = await auth.db
+    const { data: kb } = await db
         .from('knowledge_bases')
         .select('id, user_id')
         .eq('id', kbId)
@@ -66,7 +69,8 @@ export async function POST(request: NextRequest) {
     const ingestResult = await ingestFileAsService(
         kbId,
         { name: file.name, type: file.type || null, content },
-        user.id
+        user.id,
+        { persistence: createKnowledgeBasePersistence(db) },
     );
 
     if (membership === 'pro') {

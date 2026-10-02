@@ -1,5 +1,5 @@
 import { requestBrowserJson, type BrowserApiError } from '@/lib/browser-api';
-import { invalidateQueriesForPath } from '@/lib/query/invalidation';
+import type { MutationEffects } from '@/lib/query/invalidation';
 import {
   normalizeVisualizationSettings,
   type VisualizationSettings,
@@ -279,16 +279,20 @@ export async function getCurrentUserSettings(): Promise<UserSettingsLoadResult> 
   };
 }
 
-export async function updateCurrentUserSettings(input: UserSettingsUpdateInput): Promise<UserSettingsSnapshot | null> {
+export async function updateCurrentUserSettings(
+  input: UserSettingsUpdateInput,
+  mutationEffects?: MutationEffects,
+): Promise<UserSettingsSnapshot | null> {
   const result = await requestBrowserJson<{ settings: UserSettingsSnapshot }>('/api/user/settings', {
     method: 'PATCH',
     body: JSON.stringify(input),
+    mutationEffects,
   });
   if (result.error) {
     return null;
   }
 
-  invalidateQueriesForPath('/api/user/settings');
+  // browser-api owns both declared effects and the legacy inference fallback.
 
   return result.data?.settings ?? null;
 }

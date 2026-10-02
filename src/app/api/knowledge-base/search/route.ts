@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { searchKnowledge } from '@/lib/knowledge-base/search';
+import { KnowledgeSearchContextError, searchKnowledge } from '@/lib/knowledge-base/search';
 import type { RankedResult, SearchCandidate } from '@/lib/knowledge-base/types';
 import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
 import { ensureFeatureRouteEnabled } from '@/lib/feature-gate-utils';
@@ -28,6 +28,9 @@ export async function POST(request: NextRequest) {
             userId: user.id,
         });
     } catch (error) {
+        if (error instanceof KnowledgeSearchContextError) {
+            return jsonError(error.message, 401);
+        }
         if (error instanceof MembershipResolutionError) {
             return jsonError(error.message, 500);
         }

@@ -295,11 +295,11 @@ test('scheduleSolarTermReminder should create reminders through transactional rp
     const supabaseServerModule = require('../lib/supabase-server') as any;
 
     const originalGetServiceClient = supabaseServerModule.getSystemAdminClient;
-    let rpcCall: { fn: string; args: Record<string, unknown> } | null = null;
+    const capture: { rpcCall: { fn: string; args: Record<string, unknown> } | null } = { rpcCall: null };
 
     supabaseServerModule.getSystemAdminClient = () => ({
         rpc: async (fn: string, args: Record<string, unknown>) => {
-            rpcCall = { fn, args };
+            capture.rpcCall = { fn, args };
             return { data: true, error: null };
         },
     });
@@ -312,8 +312,8 @@ test('scheduleSolarTermReminder should create reminders through transactional rp
     const ok = await scheduleSolarTermReminder('user-1', '2026-04-20', '谷雨');
 
     assert.equal(ok, true);
-    assert.equal(rpcCall?.fn, 'schedule_reminder_if_absent_as_service');
-    assert.deepEqual(rpcCall?.args, {
+    assert.equal(capture.rpcCall?.fn, 'schedule_reminder_if_absent_as_service');
+    assert.deepEqual(capture.rpcCall?.args, {
         p_user_id: 'user-1',
         p_reminder_type: 'solar_term',
         p_scheduled_for: '2026-04-20T08:00:00+08:00',
@@ -329,11 +329,11 @@ test('scheduleFortuneReminder should create reminders through transactional rpc'
     const supabaseServerModule = require('../lib/supabase-server') as any;
 
     const originalGetServiceClient = supabaseServerModule.getSystemAdminClient;
-    let rpcCall: { fn: string; args: Record<string, unknown> } | null = null;
+    const capture: { rpcCall: { fn: string; args: Record<string, unknown> } | null } = { rpcCall: null };
 
     supabaseServerModule.getSystemAdminClient = () => ({
         rpc: async (fn: string, args: Record<string, unknown>) => {
-            rpcCall = { fn, args };
+            capture.rpcCall = { fn, args };
             return { data: true, error: null };
         },
     });
@@ -346,8 +346,8 @@ test('scheduleFortuneReminder should create reminders through transactional rpc'
     const ok = await scheduleFortuneReminder('user-1', '2026-04-21', { summary: '好运' });
 
     assert.equal(ok, true);
-    assert.equal(rpcCall?.fn, 'schedule_reminder_if_absent_as_service');
-    assert.deepEqual(rpcCall?.args, {
+    assert.equal(capture.rpcCall?.fn, 'schedule_reminder_if_absent_as_service');
+    assert.deepEqual(capture.rpcCall?.args, {
         p_user_id: 'user-1',
         p_reminder_type: 'fortune',
         p_scheduled_for: '2026-04-21T07:00:00+08:00',

@@ -176,8 +176,11 @@ async function getWritableCookieStore(): Promise<WritableCookieStore | null> {
 // 仅用于必须使用 Bearer Token 的接口
 export async function requireBearerUser(
     request: NextRequest,
-    dependencies: Pick<GetAuthContextDependencies, 'authResolverClient'> = {},
-): Promise<{ user: User } | { error: { message: string; status: number } }> {
+    dependencies: Pick<GetAuthContextDependencies, 'authResolverClient' | 'authedClientFactory'> = {},
+): Promise<
+    | { db: RequestDbClient; supabase: RequestDbClient; accessToken: string; user: User }
+    | { error: { message: string; status: number } }
+> {
     const authHeader = request.headers.get('authorization');
     const token = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
     if (!token) {
@@ -198,7 +201,8 @@ export async function requireBearerUser(
         return { error: { message: '认证失败', status: 401 } };
     }
 
-    return { user: session.user };
+    const db = (dependencies.authedClientFactory ?? createAuthedClient)(session.access_token);
+    return { db, supabase: db, accessToken: session.access_token, user: session.user };
 }
 
 export async function requireUserContext(

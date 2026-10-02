@@ -3,12 +3,31 @@ import { join, resolve } from 'node:path';
 
 const root = process.cwd();
 const failures = [];
+const missingInputs = new Set();
+
+function reportMissingInput(relativePath) {
+  if (!missingInputs.has(relativePath)) {
+    missingInputs.add(relativePath);
+    failures.push(`${relativePath}: required architecture input is missing`);
+  }
+}
 
 function read(relativePath) {
-  return readFileSync(resolve(root, relativePath), 'utf8');
+  try {
+    return readFileSync(resolve(root, relativePath), 'utf8');
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    reportMissingInput(relativePath);
+    return null;
+  }
 }
 
 function walk(relativeDir, files = []) {
+  if (!existsSync(resolve(root, relativeDir))) {
+    reportMissingInput(relativeDir);
+    return files;
+  }
+
   for (const entry of readdirSync(resolve(root, relativeDir), { withFileTypes: true })) {
     if (entry.name.startsWith('.')) {
       continue;
@@ -40,14 +59,14 @@ function mustNotExist(relativePath, reason) {
 
 function mustMatch(relativePath, pattern, reason) {
   const source = read(relativePath);
-  if (!pattern.test(source)) {
+  if (source !== null && !pattern.test(source)) {
     failures.push(`${relativePath}: ${reason}`);
   }
 }
 
 function mustNotMatch(relativePath, pattern, reason) {
   const source = read(relativePath);
-  if (pattern.test(source)) {
+  if (source !== null && pattern.test(source)) {
     failures.push(`${relativePath}: ${reason}`);
   }
 }
@@ -59,11 +78,29 @@ function mustNotMatchInTree(relativeDir, pattern, reason, predicate = () => true
     }
 
     const source = read(file);
-    if (pattern.test(source)) {
+    if (source !== null && pattern.test(source)) {
       failures.push(`${file}: ${reason}`);
     }
   }
 }
+
+mustExist('src/lib/hooks/session-context.tsx', 'session state should have a component-independent context entrypoint');
+mustNotMatchInTree(
+  'src/lib/hooks',
+  /from\s*['"]@\/components\/providers\/ClientProviders['"]/u,
+  'base hooks should depend on session-context instead of the provider composition component',
+  (file) => /\.(ts|tsx)$/u.test(file),
+);
+mustNotMatch(
+  'src/lib/chat/ConversationListContext.tsx',
+  /from\s*['"]@\/components\/providers\/ClientProviders['"]/u,
+  'conversation state should depend on the shared session context, not provider composition',
+);
+mustNotMatch(
+  'src/components/providers/ClientProviders.tsx',
+  /\bcreateContext\b/u,
+  'provider composition should reuse the extracted context instead of declaring another store',
+);
 
 mustExist('src/lib/auth.ts', 'browser auth should converge on the unified auth entrypoint');
 mustNotExist('src/lib/auth-client.ts', 'legacy browser auth client entrypoint should stay removed');
@@ -809,6 +846,42 @@ mustNotMatchInTree(
   /packages\/core\/src\//u,
   'web app code should not import internal packages/core/src paths directly',
   (file) => /\.(?:ts|tsx|mts)$/u.test(file),
+);
+
+// Enforce extracted boundaries without imposing new layering on legacy adapters.
+for (const file of [
+  'src/lib/server/analysis.ts',
+  'src/lib/server/chat/contracts.ts',
+  'src/lib/server/chat/use-case.ts',
+  'src/lib/knowledge-base/source-replacement.ts',
+]) {
+  mustNotMatch(
+    file,
+    /(?:from\s*|import\s*\(|require\s*\()\s*['"](?:next(?:\/|['"])|react(?:\/|['"])|@supabase\/|@\/components\/|[^'"]*(?:api-utils|\.server))|\b(?:SupabaseClient|NextRequest|NextResponse|Postgrest\w*|fetch)\b|\bprocess\.env\b/u,
+    'extracted use cases must keep HTTP, SDK, network and infrastructure dependencies in adapters',
+  );
+}
+for (const file of ['src/lib/data-sources/types.ts', 'src/lib/knowledge-base/types.ts']) {
+  mustNotMatch(
+    file,
+    /@supabase\/|\bSupabaseClient\b|\.server['"]|api-utils|@\/components\//u,
+    'browser-safe data contracts must not import server or SDK contracts',
+  );
+}
+mustNotMatch(
+  'src/lib/api/divination-pipeline.ts',
+  /\bgetSystemAdminClient\b/u,
+  'caller database context must fail closed; privileged persistence stays in its named adapter',
+);
+mustNotMatch(
+  'src/lib/knowledge-base/search.ts',
+  /\bgetSystemAdminClient\b/u,
+  'knowledge search must retain the caller identity for owner-scoped SQL',
+);
+mustNotMatch(
+  'src/lib/chat/ConversationListContext.tsx',
+  /\[conversations,\s*setConversations\]\s*=\s*useState/u,
+  'Query must own the conversation list without a second writable Context copy',
 );
 
 if (failures.length > 0) {

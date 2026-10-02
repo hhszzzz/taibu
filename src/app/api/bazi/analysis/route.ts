@@ -135,7 +135,7 @@ const baziAnalysisConfig: DivinationRouteConfig<BaziAnalysisInput, BaziAnalysisC
             type: request.type,
         };
     },
-    precheck: async (request) => {
+    postAdmissionRateLimit: async (request) => {
         const clientIP = getClientIP(request);
         const rateLimit = await checkRateLimit(clientIP, '/api/bazi/analysis', RATE_LIMIT_CONFIG);
         return rateLimit.allowed ? null : { error: '请求过于频繁，请稍后再试', status: 429 };

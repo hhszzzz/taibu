@@ -15,6 +15,7 @@ import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { SegmentedChoice } from '@/components/settings/SegmentedChoice';
 import { SettingsLoginRequired } from '@/components/settings/SettingsLoginRequired';
 import { loadReminderSubscriptions, type ReminderType, updateReminderSubscriptionClient } from '@/lib/reminders-client';
+import { mutationEffects } from '@/lib/query/invalidation';
 import { getCurrentUserSettings, updateCurrentUserSettings } from '@/lib/user/settings';
 
 interface Settings {
@@ -214,6 +215,7 @@ export default function GeneralSettingsPanel() {
       key === 'notifications'
         ? { notificationsEnabled: value as boolean }
         : { language: value as Settings['language'] },
+      mutationEffects.userSettings(userId),
     );
 
     if (!saved) {

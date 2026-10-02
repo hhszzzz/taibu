@@ -68,6 +68,8 @@ test('web Meihua wrapper reuses core stroke and multi-sentence rules', () => {
 
   assert.equal(first.result.castMeta.inputSnapshot?.selectedText, '甲乙');
   assert.equal(last.result.castMeta.inputSnapshot?.selectedText, '戊己辛');
+  assert.ok(first.canonicalJson.起卦信息.原始输入);
+  assert.ok(last.canonicalJson.起卦信息.原始输入);
   assert.equal(first.canonicalJson.起卦信息.原始输入.取句方式, '首句');
   assert.equal(last.canonicalJson.起卦信息.原始输入.取句方式, '末句');
 });
@@ -123,7 +125,7 @@ test('history restore payloads keep web inputs/results replayable and owner-boun
     input_data: meihua.input,
     result_data: meihua,
     conversation_id: 'conv-mh-1',
-  });
+  }, 'Asia/Shanghai');
   assert.equal(meihuaRestore.sessionKey, 'meihua_result');
   assert.deepEqual(meihuaRestore.sessionData.input, meihua.input);
   assert.equal(meihuaRestore.sessionData.divinationId, 'mh-1');
@@ -134,7 +136,7 @@ test('history restore payloads keep web inputs/results replayable and owner-boun
     id: 'xlr-1',
     result_data: xiaoliuren,
     conversation_id: 'conv-xlr-1',
-  });
+  }, 'Asia/Shanghai');
   assert.equal(xiaoliurenRestore.sessionKey, 'xiaoliuren_result');
   assert.deepEqual(xiaoliurenRestore.sessionData.resultData, xiaoliuren);
   assert.equal(xiaoliurenRestore.sessionData.divinationId, 'xlr-1');

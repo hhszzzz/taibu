@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { mockAIFeatureState } from './helpers/route-mock';
@@ -6,12 +6,23 @@ import { mockAIFeatureState } from './helpers/route-mock';
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon';
 
+beforeEach((t) => {
+    assert.ok('mock' in t);
+    let networkCalls = 0;
+    t.mock.method(globalThis, 'fetch', async () => {
+        networkCalls += 1;
+        throw new Error('Unexpected network request');
+    });
+    t.after(() => assert.equal(networkCalls, 0, 'chart analysis tests must not attempt network access'));
+});
+
 function mockBaziUserContext(
     t: import('node:test').TestContext,
     client: Record<string, unknown>,
+    route: 'bazi' | 'ziwei' = 'bazi',
 ) {
     const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
-    const routePath = require.resolve('../app/api/bazi/analysis/route');
+    const routePath = require.resolve(route === 'bazi' ? '../app/api/bazi/analysis/route' : '../app/api/ziwei/analysis/route');
     const pipelinePath = require.resolve('../lib/api/divination-pipeline');
     const originalRequireUserContext = apiUtils.requireUserContext;
     const originalGetSystemAdminClient = apiUtils.getSystemAdminClient;
@@ -33,6 +44,122 @@ function mockBaziUserContext(
         apiUtils.getSystemAdminClient = originalGetSystemAdminClient;
         delete require.cache[routePath];
         delete require.cache[pipelinePath];
+    });
+}
+
+function setupChartAdmission(t: import('node:test').TestContext, route: 'bazi' | 'ziwei') {
+    mockAIFeatureState(t);
+    const events: string[] = [];
+    const control = { ownsChart: true, memberAllowed: true, hasCredits: true, debitOk: true, limitAllowed: true };
+    const chart = {
+        id: '11111111-1111-1111-1111-111111111111', user_id: 'user-1', name: 'Chart',
+        gender: 'male', birth_date: '1990-01-01', birth_time: '08:00', calendar_type: 'solar', is_leap_month: false,
+    };
+    mockBaziUserContext(t, {
+        from(table: string) {
+            assert.ok(table === `${route}_charts` || table === 'user_settings');
+            return { select() { return { eq() { return {
+                eq(column: string, userId: string) {
+                    assert.equal(column, 'user_id');
+                    assert.equal(userId, 'user-1');
+                    return { single: async () => {
+                        events.push('ownership');
+                        return { data: control.ownsChart ? chart : null, error: null };
+                    } };
+                },
+                maybeSingle: async () => ({ data: null, error: null }),
+            }; } }; } };
+        },
+    }, route);
+    const credits = require('../lib/user/credits') as typeof import('../lib/user/credits');
+    const access = require('../lib/ai/ai-access') as typeof import('../lib/ai/ai-access');
+    const ai = require('../lib/ai/ai') as typeof import('../lib/ai/ai');
+    const persistence = require('../lib/ai/ai-analysis') as typeof import('../lib/ai/ai-analysis');
+    const limits = require('../lib/rate-limit') as typeof import('../lib/rate-limit');
+    const detail = require('../lib/ai/chart-prompt-detail') as typeof import('../lib/ai/chart-prompt-detail');
+    const analysis = require('../lib/server/analysis') as typeof import('../lib/server/analysis');
+    t.mock.method(detail, 'loadResolvedChartPromptDetailLevel', async () => 'full');
+    if (route === 'bazi') {
+        t.mock.method(require('../lib/server/bazi-case-profile'), 'getBaziCaseProfileByChartId', async () => null);
+        t.mock.method(require('../lib/bazi-prompt'), 'formatBaziPromptText', () => 'authorized chart');
+    } else {
+        const ziwei = require('../lib/divination/ziwei');
+        t.mock.method(ziwei, 'calculateZiweiChartBundle', () => ({ output: {}, astrolabe: {} }));
+        t.mock.method(ziwei, 'generateZiweiChartText', () => 'authorized chart');
+    }
+    t.mock.method(credits, 'getUserAuthInfo', async () => {
+        events.push('account');
+        return { effectiveMembership: 'free', hasCredits: control.hasCredits, credits: control.hasCredits ? 1 : 0 };
+    });
+    t.mock.method(access, 'resolveModelAccessAsync', async () => {
+        events.push('membership');
+        return control.memberAllowed ? { modelId: 'test-model', reasoningEnabled: false } : { error: 'membership denied', status: 403 };
+    });
+    t.mock.method(credits, 'attemptCreditUse', async () => {
+        events.push('debit');
+        return control.debitOk ? { ok: true, remaining: 0 } : { ok: false, reason: 'deduction_failed' };
+    });
+    t.mock.method(limits, 'checkRateLimit', async (identifier: string, endpoint: string, config: unknown) => {
+        events.push('limit');
+        assert.equal(identifier, '198.51.100.10');
+        assert.equal(endpoint, `/api/${route}/analysis`);
+        assert.deepEqual(config, { maxRequests: 10, windowMs: 60_000 });
+        return { allowed: control.limitAllowed, remaining: 0, resetAt: new Date() };
+    });
+    t.mock.method(credits, 'refundCreditsOrLog', async () => { events.push('refund'); return true; });
+    const originalPrepare = analysis.prepareAnalysis;
+    t.mock.method(analysis, 'prepareAnalysis', async (...args: Parameters<typeof originalPrepare>) => {
+        events.push('prompt');
+        return originalPrepare(...args);
+    });
+    t.mock.method(ai, 'callAIWithReasoning', async () => { events.push('infer'); return { content: 'analysis', reasoning: null }; });
+    t.mock.method(persistence, 'createAIAnalysisConversation', async () => { events.push('save'); return 'conversation-1'; });
+    const modulePath = route === 'bazi' ? '../app/api/bazi/analysis/route' : '../app/api/ziwei/analysis/route';
+    const { POST } = require(modulePath) as { POST: (request: NextRequest) => Promise<Response> };
+    return {
+        events, control,
+        request: (body: Record<string, unknown> = {}) => POST(new NextRequest(`http://localhost/api/${route}/analysis`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '198.51.100.10' },
+            body: JSON.stringify({ chartId: chart.id, type: 'wuxing', modelId: 'test-model', ...body }),
+        })),
+    };
+}
+
+for (const route of ['bazi', 'ziwei'] as const) {
+    for (const result of ['allowed', 'limited', 'membership', 'balance', 'debit', 'ownership'] as const) {
+        test(`${route} ${result} preserves IP 10/min policy and ownership/member/debit/limit ordering`, async (t) => {
+            const state = setupChartAdmission(t, route);
+            state.control.ownsChart = result !== 'ownership';
+            state.control.memberAllowed = result !== 'membership';
+            state.control.hasCredits = result !== 'balance' && result !== 'membership';
+            state.control.debitOk = result !== 'debit';
+            state.control.limitAllowed = result !== 'limited';
+            const response = await state.request();
+            assert.equal(response.status, { allowed: 200, limited: 429, membership: 403, balance: 402, debit: 500, ownership: 404 }[result]);
+            const expected = ['ownership'];
+            if (result !== 'ownership') expected.push('account', 'membership');
+            if (['debit', 'limited', 'allowed'].includes(result)) expected.push('debit');
+            if (['limited', 'allowed'].includes(result)) expected.push('limit');
+            if (result === 'limited') expected.push('refund');
+            if (result === 'allowed') expected.push('prompt', 'infer', 'save');
+            assert.deepEqual(state.events, expected);
+        });
+    }
+}
+
+for (const limited of [false, true]) {
+    test(`bazi direct prepare ${limited ? 'denied' : 'allowed'} retains IP quota after account and never debits`, async (t) => {
+        const state = setupChartAdmission(t, 'bazi');
+        state.control.hasCredits = false;
+        state.control.memberAllowed = false;
+        state.control.limitAllowed = !limited;
+        const response = await state.request({ action: 'direct_prepare' });
+        assert.equal(response.status, limited ? 429 : 200);
+        assert.deepEqual(state.events, ['ownership', 'account', 'limit', ...(!limited ? ['prompt'] : [])]);
+        state.events.length = 0;
+        const saved = await state.request({ action: 'direct_persist', content: 'browser analysis', customModelId: 'private-model' });
+        assert.equal(saved.status, 200);
+        assert.deepEqual(state.events, ['ownership', 'save']);
     });
 }
 

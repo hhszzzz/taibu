@@ -5,6 +5,20 @@ import { resolve } from 'node:path';
 import { NextRequest } from 'next/server';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { QueryClient, QueryObserver } from '@tanstack/react-query';
+import { SessionContext } from '../lib/hooks/session-context';
+import { EMPTY_APP_BOOTSTRAP, type AppBootstrapData } from '../lib/app/bootstrap';
+import { buildMembershipInfo } from '../lib/user/membership';
+import { createMockAuthContext } from './helpers/supabase-mock';
+
+type BootstrapSnapshot = ReturnType<typeof import('../lib/hooks/useAppBootstrap').useAppBootstrap>;
+
+function bootstrapSnapshot(data: AppBootstrapData, state: Pick<BootstrapSnapshot, 'hasBootstrapData' | 'viewerStateLoaded' | 'viewerStateResolved'>): BootstrapSnapshot {
+  const client = new QueryClient();
+  const result = new QueryObserver(client, { queryKey: ['hook-fixture'], queryFn: async () => data, enabled: false }).getCurrentResult();
+  client.clear();
+  return { ...result, data, ...state, viewerStateError: null, refresh: async () => data, markCreditsExhausted() {} };
+}
 
 process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
@@ -127,16 +141,6 @@ test('browser auth session cache should support explicit invalidate and revalida
   }
 });
 
-test('useSessionMembership should align resolved and loading semantics with viewerStateResolved', () => {
-  const source = readFileSync(resolve(process.cwd(), 'src/lib/hooks/useSessionMembership.ts'), 'utf8');
-
-  assert.match(source, /const membershipResolved = !user \|\| bootstrap\.viewerStateResolved;/u);
-  assert.match(
-    source,
-    /membershipLoading:\s*sessionLoading\s*\|\|\s*\(!!user\s*&&\s*!bootstrap\.viewerStateResolved\)/u,
-  );
-});
-
 test('useAppBootstrap should defer viewer failures briefly before surfacing them', () => {
   const source = readFileSync(resolve(process.cwd(), 'src/lib/hooks/useAppBootstrap.ts'), 'utf8');
 
@@ -145,132 +149,59 @@ test('useAppBootstrap should defer viewer failures briefly before surfacing them
   assert.match(source, /if \(viewerPendingKey && !viewerFailureTimedOut\)/u);
 });
 
-test('useSessionMembership should keep viewer failures in loading state until bootstrap resolves', () => {
-  const clientProvidersModule = require('../components/providers/ClientProviders') as typeof import('../components/providers/ClientProviders');
-  const appBootstrapModule = require('../lib/hooks/useAppBootstrap') as typeof import('../lib/hooks/useAppBootstrap');
-  const hookPath = require.resolve('../lib/hooks/useSessionMembership');
+test('session membership distinguishes anonymous, pending, failed, loaded and refreshing viewer states', async (t) => {
+  const bootstrapModule = require('../lib/hooks/useAppBootstrap') as typeof import('../lib/hooks/useAppBootstrap');
+  const { useSessionMembership } = require('../lib/hooks/useSessionMembership') as typeof import('../lib/hooks/useSessionMembership');
+  const user = createMockAuthContext({}, 'user-1').user;
+  const membership = buildMembershipInfo({ membership: 'pro', ai_chat_count: 12 });
+  const cases = [
+    { name: 'anonymous', user: null, sessionLoading: false, loaded: false, resolved: false, expectedResolved: true, expectedLoading: false },
+    { name: 'initial session', user: null, sessionLoading: true, loaded: false, resolved: false, expectedResolved: true, expectedLoading: true },
+    { name: 'pending viewer failure grace', user, sessionLoading: false, loaded: false, resolved: false, expectedResolved: false, expectedLoading: true },
+    { name: 'settled viewer failure', user, sessionLoading: false, loaded: false, resolved: true, expectedResolved: true, expectedLoading: false },
+    { name: 'loaded membership', user, sessionLoading: false, loaded: true, resolved: true, expectedResolved: true, expectedLoading: false },
+    { name: 'session refreshing', user, sessionLoading: true, loaded: true, resolved: true, expectedResolved: true, expectedLoading: true },
+  ];
+  let snapshot = bootstrapSnapshot(EMPTY_APP_BOOTSTRAP, { hasBootstrapData: false, viewerStateLoaded: false, viewerStateResolved: false });
+  t.mock.method(bootstrapModule, 'useAppBootstrap', () => snapshot);
+  const observed: ReturnType<typeof useSessionMembership>[] = [];
+  function Probe() { observed.push(useSessionMembership()); return null; }
 
-  const originalUseSessionSafe = clientProvidersModule.useSessionSafe;
-  const originalUseAppBootstrap = appBootstrapModule.useAppBootstrap;
-
-  (clientProvidersModule as { useSessionSafe: typeof import('../components/providers/ClientProviders').useSessionSafe }).useSessionSafe = () => ({
-    session: { user: { id: 'user-1' } } as never,
-    user: { id: 'user-1' } as never,
-    loading: false,
-  });
-  (appBootstrapModule as { useAppBootstrap: typeof import('../lib/hooks/useAppBootstrap').useAppBootstrap }).useAppBootstrap = () => ({
-    data: {
-      viewerLoaded: false,
-      viewerSummary: null,
-      viewerErrorMessage: '加载账户状态失败',
-      membership: null,
-      featureToggles: {},
-      featureTogglesLoaded: true,
-      featureTogglesErrorMessage: null,
-      unreadCount: 0,
-      unreadCountLoaded: true,
-    },
-    isLoading: false,
-    hasBootstrapData: true,
-    viewerStateLoaded: false,
-    viewerStateResolved: false,
-    viewerStateError: null,
-    refresh: async () => ({
-      viewerLoaded: false,
-      viewerSummary: null,
-      viewerErrorMessage: '加载账户状态失败',
-      membership: null,
-      featureToggles: {},
-      featureTogglesLoaded: true,
-      featureTogglesErrorMessage: null,
-      unreadCount: 0,
-      unreadCountLoaded: true,
-    }),
-    markCreditsExhausted() {},
-  } as ReturnType<typeof import('../lib/hooks/useAppBootstrap').useAppBootstrap>);
-
-  try {
-    delete require.cache[hookPath];
-    const { useSessionMembership } = require('../lib/hooks/useSessionMembership') as typeof import('../lib/hooks/useSessionMembership');
-
-    function Probe() {
-      const membership = useSessionMembership();
-      return React.createElement('div', {
-        'data-membership-resolved': String(membership.membershipResolved),
-        'data-membership-loading': String(membership.membershipLoading),
-        'data-membership-info-null': String(membership.membershipInfo === null),
-      });
-    }
-
-    const html = renderToStaticMarkup(React.createElement(Probe));
-    assert.match(html, /data-membership-resolved="false"/u);
-    assert.match(html, /data-membership-loading="true"/u);
-    assert.match(html, /data-membership-info-null="true"/u);
-  } finally {
-    (clientProvidersModule as { useSessionSafe: typeof import('../components/providers/ClientProviders').useSessionSafe }).useSessionSafe = originalUseSessionSafe;
-    (appBootstrapModule as { useAppBootstrap: typeof import('../lib/hooks/useAppBootstrap').useAppBootstrap }).useAppBootstrap = originalUseAppBootstrap;
-    delete require.cache[hookPath];
+  for (const scenario of cases) {
+    snapshot = bootstrapSnapshot({ ...EMPTY_APP_BOOTSTRAP, viewerLoaded: scenario.loaded, membership }, {
+      hasBootstrapData: true, viewerStateLoaded: scenario.loaded, viewerStateResolved: scenario.resolved,
+    });
+    renderToStaticMarkup(React.createElement(SessionContext.Provider, {
+      value: { session: null, user: scenario.user, loading: scenario.sessionLoading },
+    }, React.createElement(Probe)));
+    const actual = observed.pop();
+    assert.ok(actual, scenario.name);
+    assert.equal(actual.user, scenario.user, scenario.name);
+    assert.equal(actual.membershipResolved, scenario.expectedResolved, scenario.name);
+    assert.equal(actual.membershipLoading, scenario.expectedLoading, scenario.name);
+    assert.equal(actual.membershipInfo, scenario.loaded ? membership : null, scenario.name);
+    assert.equal(await actual.refreshMembership(), scenario.loaded ? membership : null, scenario.name);
   }
 });
 
-test('useFeatureToggles should keep the app in loading state while bootstrap is still pending', () => {
-  const appBootstrapModule = require('../lib/hooks/useAppBootstrap') as typeof import('../lib/hooks/useAppBootstrap');
-  const hookPath = require.resolve('../lib/hooks/useFeatureToggles');
-
-  const originalUseAppBootstrap = appBootstrapModule.useAppBootstrap;
-
-  (appBootstrapModule as { useAppBootstrap: typeof import('../lib/hooks/useAppBootstrap').useAppBootstrap }).useAppBootstrap = () => ({
-    data: {
-      viewerLoaded: false,
-      viewerSummary: null,
-      viewerErrorMessage: null,
-      membership: null,
-      featureToggles: {},
-      featureTogglesLoaded: false,
-      featureTogglesErrorMessage: null,
-      unreadCount: 0,
-      unreadCountLoaded: false,
-    },
-    error: null,
-    isLoading: false,
-    hasBootstrapData: false,
-    refresh: async () => ({
-      viewerLoaded: true,
-      viewerSummary: null,
-      viewerErrorMessage: null,
-      membership: null,
-      featureToggles: {},
-      featureTogglesLoaded: true,
-      featureTogglesErrorMessage: null,
-      unreadCount: 0,
-      unreadCountLoaded: true,
-    }),
-    markCreditsExhausted() {},
-  } as ReturnType<typeof import('../lib/hooks/useAppBootstrap').useAppBootstrap>);
-
-  try {
-    delete require.cache[hookPath];
-    const { useFeatureToggles } = require('../lib/hooks/useFeatureToggles') as typeof import('../lib/hooks/useFeatureToggles');
-
-    function Probe() {
-      const featureToggles = useFeatureToggles();
-      return React.createElement('div', {
-        'data-loading': String(featureToggles.isLoading),
-        'data-loaded': String(featureToggles.loaded),
-        'data-has-error': String(featureToggles.error instanceof Error),
-      });
-    }
-
-    const html = renderToStaticMarkup(React.createElement(Probe));
-    assert.match(html, /data-loading="true"/u);
-    assert.match(html, /data-loaded="false"/u);
-    assert.match(html, /data-has-error="false"/u);
-  } finally {
-    (appBootstrapModule as { useAppBootstrap: typeof import('../lib/hooks/useAppBootstrap').useAppBootstrap }).useAppBootstrap = originalUseAppBootstrap;
-    delete require.cache[hookPath];
-  }
+test('useFeatureToggles keeps unloaded bootstrap pending without exposing features or an error', (t) => {
+  const bootstrapModule = require('../lib/hooks/useAppBootstrap') as typeof import('../lib/hooks/useAppBootstrap');
+  const { useFeatureToggles } = require('../lib/hooks/useFeatureToggles') as typeof import('../lib/hooks/useFeatureToggles');
+  t.mock.method(bootstrapModule, 'useAppBootstrap', () => bootstrapSnapshot(EMPTY_APP_BOOTSTRAP, {
+    hasBootstrapData: false, viewerStateLoaded: false, viewerStateResolved: false,
+  }));
+  const observed: ReturnType<typeof useFeatureToggles>[] = [];
+  function Probe() { observed.push(useFeatureToggles()); return null; }
+  renderToStaticMarkup(React.createElement(Probe));
+  const actual = observed[0];
+  assert.equal(actual.isLoading, true);
+  assert.equal(actual.loaded, false);
+  assert.equal(actual.error, null);
+  assert.equal(actual.isFeatureEnabled('chat'), false);
 });
 
+// Timer grace and auth-event side effects are not exercised by SSR or the synthetic
+// P5 SessionContext fixture, so retain their unique guards until runtime coverage exists.
 test('ClientProviders should revalidate auth state and invalidate auth-bound queries after auth changes', () => {
   const source = readFileSync(resolve(process.cwd(), 'src/components/providers/ClientProviders.tsx'), 'utf8');
 

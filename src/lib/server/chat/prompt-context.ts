@@ -4,7 +4,8 @@ import { buildPromptWithSources, calculatePromptBudget, resolvePersonalities } f
 import { getSystemAdminClient } from '@/lib/api-utils';
 import { buildKnowledgeHits } from '@/lib/knowledge-base/hits';
 import { parseMentions, resolveMention, stripMentionTokens } from '@/lib/mentions';
-import type { AIMessageMetadata, AIPersonality, ChatMessage } from '@/types';
+import type { ChatMessage } from '@/types';
+import type { ChatPromptContext } from '@/lib/server/chat/contracts';
 import type { Mention } from '@/types/mentions';
 import { buildDreamContextPayload } from '@/lib/chat/chat-context';
 import { extractUserQuestion } from '@/lib/chat/message-utils';
@@ -40,25 +41,7 @@ type UserSettingsContext = {
   visualizationSettings?: VisualizationSettings;
 };
 
-type ChatPromptContextResult = {
-  sanitizedMessages: ChatMessage[];
-  metadata: AIMessageMetadata & {
-    sources?: unknown;
-    kbSearchEnabled: boolean;
-    kbHitCount: number;
-    promptDiagnostics: {
-      modelId: string;
-      layers: unknown;
-      totalTokens: number;
-      budgetTotal: number;
-      userMessageTokens: number;
-    };
-    dreamContext?: { baziChartName?: string; dailyFortune?: string };
-  };
-  fallbackPersonality: AIPersonality;
-  systemPrompt: string;
-  promptKnowledgeBases: Array<{ id: string; name: string }>;
-};
+type ChatPromptContextResult = ChatPromptContext;
 
 type ResolvedMention = Mention & { resolvedContent: string };
 

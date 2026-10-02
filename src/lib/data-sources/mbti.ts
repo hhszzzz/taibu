@@ -1,6 +1,7 @@
 import { getSystemAdminClient } from '@/lib/api-utils';
 import { PERSONALITY_BASICS } from '@/lib/divination/mbti';
-import type { DataSourceProvider, DataSourceQueryContext, DataSourceSummary } from '@/lib/data-sources/types';
+import type { DataSourceSummary } from '@/lib/data-sources/types';
+import type { DataSourceProvider, DataSourceQueryContext } from '@/lib/data-sources/provider.server';
 
 type MbtiRow = {
     id: string;

@@ -21,18 +21,24 @@ Codex will review your code from three dimensions: maintainability, boundary con
 
 ```bash
 pnpm install
-pnpm build          # 构建所有 packages + Next.js
+pnpm build          # 构建 packages/core + Next.js
+pnpm build:packages # 构建 core、mcp、mcp-server
+pnpm typecheck      # 构建三个包后进行根 strict 类型检查
 pnpm lint
-pnpm test           # 自动先构建 packages/core、mcp、mcp-server，再跑全量测试
+pnpm test           # 构建所需 packages 后跑默认单元/路由/协议测试
+pnpm test -- src/tests/chat-route.test.ts # 只运行指定文件，自动构建 Core
+pnpm test:db        # 独立本地 Docker PostgreSQL/RLS 契约；不连接生产
+pnpm test:browser   # 必跑浏览器行为层的独立入口，使用离线 fixture
+pnpm verify         # 完整验收：每个包只构建一次，含类型/测试/Web 构建/产物/DB/浏览器
 ```
 
-> **注意**：`pnpm test` 会先执行 `pnpm -C packages/core build && pnpm -C packages/mcp build && pnpm -C packages/mcp-server build`，修改 `packages/*` 源码后无需手动 build 即可直接跑测试。
+> **注意**：独立 `pnpm test` 会先构建选定测试依赖的包，无需手动 build。完整 `pnpm verify` 要求本地 Docker 已运行，且已执行 `pnpm exec playwright install --only-shell chromium`（Linux CI 加 `--with-deps`）。若本机使用已有 Chrome，可显式运行 `pnpm verify -- --chrome` 或 `pnpm test:browser -- --chrome`，只切换浏览器，不跳过断言；CI 默认仍使用固定 Chromium。不得默认跳过构建或复用旧 dist。
 
 ## 项目最小地图
 
-- `packages/core`（`@mingai/core`）: 占术计算引擎，以及 **`text.ts` 规范文本渲染层以及`json.ts` 规范json输出格式**。
-- `packages/mcp`: MCP 协议层。
-- `packages/mcp-server`: MCP 服务端。
+- `packages/core`（`taibu-core`）: 占术计算引擎；通过领域子路径公开 `to*Text()` / `to*Json()` 规范渲染接口。
+- `packages/mcp`（`taibu-mcp`）: MCP 协议层。
+- `packages/mcp-server`（`taibu-mcp-server`）: MCP 服务端。
 - `supabase/tabel_export_from_supabase.sql`: 当前数据库 schema 导出快照。
 
 ## 强制规范（MUST）
@@ -41,18 +47,18 @@ pnpm test           # 自动先构建 packages/core、mcp、mcp-server，再跑�
 - `管理员接口`必须使用 `requireAdminUser()` 或 `requireAdminContext()`。
 - 需要用户态的接口必须使用 `requireUserContext()`（或等价受控封装），并统一返回 `jsonOk/jsonError`。
 - 涉及会员与积分的功能，必须按顺序执行：会员校验 -> 积分校验/扣减 -> 限流校验。
-- 需要 RLS bypass 时，只能在服务端使用 `getSystemAdminClient()`；严禁暴露 service role 到客户端。`api-utils.ts` 还提供 `getAuthAdminClient()`（Auth 管理）、`createAnonClient()`（匿名）、`createAuthedClient(token)`（带 token）等客户端，按需选用。
+- 系统管理员数据访问只能在服务端通过 `getSystemAdminClient()`；它实际使用管理员登录 JWT，不是真正 `service_role` 或无限制 RLS bypass。用户数据库上下文缺失必须失败，禁止回退到管理员。严禁暴露 service role 到客户端。`api-utils.ts` 还提供 `getAuthAdminClient()`（仅 Auth 管理）、`createAnonClient()`（匿名）、`createAuthedClient(token)`（带 token）等客户端，按权限边界选用。
 - 新增表/字段前，必须先检查 `supabase/tabel_export_from_supabase.sql` ，并说明“为何不能复用现有结构”，必要时可以检查 `mcp supabase migrations`。
 - 未经明确批准，禁止新增核心目录、系统级模块或数据库主表。
 - 新增或修改数据库结构，必须新增 migration；禁止直接改线上表结构。
 - 修改 DB 行为时必须评估并同步：RLS、索引、默认值、回填策略、兼容旧数据。
-- 新增 AI 分析来源时，必须通过 `src/lib/ai/source-contract.ts` 注册来源合约，并在 `src/lib/source-contracts.ts` 中维护映射；持久化统一由 `divination-pipeline.ts` 的 `createAIAnalysisConversation` 完成。
+- 新增 AI 分析来源时，必须在 `src/lib/source-contracts.ts` 中注册来源合约并维护映射（旧 `ai/source-contract.ts` 已合并）；持久化统一通过工厂调用 `src/lib/ai/ai-analysis.ts` 的 `createAIAnalysisConversation` 完成。
 - 新建文件/模块前，必须先检索已有实现并优先复用，避免平行重复实现。
 - 结构归属不明确时，先提问确认后再落盘，禁止猜测目录或表设计。
 - 禁止在客户端使用 `alert`；统一使用 Toast 体系（`useToast` / `ToastProvider`）。
 - TypeScript 保持 strict 通过；禁止引入无必要的 `any`、`@ts-ignore`。
 - 页面层保持轻量，业务逻辑尽量下沉到 `src/lib/*` 或 feature 组件。
-- 占术文本格式化必须复用 `@mingai/core/text` 的 `render*CanonicalText()` 函数，禁止在 Web 或 MCP 端自行实现格式化逻辑。
+- 占术文本/JSON 格式化必须复用 `taibu-core/<领域>` 的 `to*Text()` / `to*Json()` 公开接口（内部 canonical renderer），禁止在 Web 或 MCP 端自行实现格式化逻辑。
 - 改动完成后必须补齐最小验证（见"测试与验收"）。
 
 ## API 路由标准流程
@@ -69,7 +75,7 @@ pnpm test           # 自动先构建 packages/core、mcp、mcp-server，再跑�
 6. 持久化与审计（通过 `createAIAnalysisConversation` 记录 source 与 conversation）。
 7. 返回统一响应（`jsonOk/jsonError` 或 SSE streaming）。
 
-> **占术解读路由**统一使用 `src/lib/api/divination-pipeline.ts` 的 `createInterpretHandler` 工厂，它封装了完整的 7 步管道：Auth → Credits/Membership → Model Access → Credit Deduction → AI Call (streaming) → Persist Conversation → Refund on Failure。新增占术解读路由时必须复用此管道，禁止手动拼装流程。
+> **占术解读路由**统一使用 `src/lib/api/divination-pipeline.ts` 的 `createInterpretHandler` 工厂：鉴权/资源归属 → 会员与模型权限 → 积分校验/扣减 → 限流 → 提示词/AI 调用 → 原子保存，并在失败时补偿。新增占术解读路由必须复用此入口及内部用例，禁止手动拼装流程；BYOK prepare/persist 保持独立生命周期，不扣平台模型积分。
 
 ## 前端实现规范
 
@@ -108,7 +114,7 @@ pnpm test
 ## 提交与变更说明
 
 - Commit message 使用 Conventional Commits：`feat: / fix: / refactor: / chore: / docs:`。
-- MCP / npm 发布默认不发布 `@mingai/mcp-server`，除非用户明确要求。
+- MCP / npm 发布默认不发布 `taibu-mcp-server`，除非用户明确要求。
 - npm 发布优先使用 npm access token，不要依赖 OTP 交互流程。
 - 版本号遵循 `x.y.z`：
   `x`：重大架构变更

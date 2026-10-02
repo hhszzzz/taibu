@@ -2,7 +2,8 @@ import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 
-import { ensureRouteTestEnv } from './helpers/route-mock';
+import { ensureRouteTestEnv, mockAIRateLimit } from './helpers/route-mock';
+import { createMockAuthContext } from './helpers/supabase-mock';
 import { calculateMeihuaBundle } from '../lib/divination/meihua';
 import { calculateXiaoliurenBundle } from '../lib/divination/xiaoliuren';
 import type { FeatureModuleState } from '../lib/app-settings';
@@ -111,14 +112,9 @@ test('Meihua save is owner-scoped and recalculates canonical data on the server'
   tampered.result.mainHexagram.name = '客户端伪造卦名';
   tampered.canonicalText = '客户端伪造文本';
 
-  let inserted: Record<string, unknown> | null = null;
-  const db = createInsertClient('meihua_divinations', 'mh-save-1', (payload) => { inserted = payload; });
-  mockUserContext(t, [MEIHUA_ROUTE], async () => ({
-    user: { id: 'owner-1' },
-    db,
-    supabase: db,
-    accessToken: 'test-token',
-  }) as never);
+  const insertCalls: Record<string, unknown>[] = [];
+  const db = createInsertClient('meihua_divinations', 'mh-save-1', (payload) => { insertCalls.push(payload); });
+  mockUserContext(t, [MEIHUA_ROUTE], async () => createMockAuthContext(db, 'owner-1'));
 
   const { POST } = require(MEIHUA_ROUTE) as { POST: PostHandler };
   const response = await post(POST, 'http://localhost/api/meihua', {
@@ -130,11 +126,15 @@ test('Meihua save is owner-scoped and recalculates canonical data on the server'
 
   assert.equal(response.status, 200);
   assert.equal(payload.data.divinationId, 'mh-save-1');
-  assert.equal(inserted?.user_id, 'owner-1');
+  const inserted = insertCalls.at(-1);
+  assert.ok(inserted);
+  assert.equal(inserted.user_id, 'owner-1');
   assert.equal(inserted?.question, '保存梅花');
   assert.equal(inserted?.main_hexagram, canonical.result.mainHexagram.name);
   assert.deepEqual(inserted?.result_data, canonical);
-  assert.notEqual((inserted?.result_data as typeof tampered).canonicalText, '客户端伪造文本');
+  const resultData = inserted.result_data;
+  assert.ok(resultData && typeof resultData === 'object' && 'canonicalText' in resultData);
+  assert.notEqual(resultData.canonicalText, '客户端伪造文本');
 });
 
 test('Xiaoliuren save is owner-scoped and recalculates canonical data on the server', async (t) => {
@@ -143,14 +143,9 @@ test('Xiaoliuren save is owner-scoped and recalculates canonical data on the ser
   tampered.result.hourStatus = '客户端伪造落宫' as never;
   tampered.canonicalText = '客户端伪造文本';
 
-  let inserted: Record<string, unknown> | null = null;
-  const db = createInsertClient('xiaoliuren_divinations', 'xlr-save-1', (payload) => { inserted = payload; });
-  mockUserContext(t, [XIAOLIUREN_ROUTE], async () => ({
-    user: { id: 'owner-2' },
-    db,
-    supabase: db,
-    accessToken: 'test-token',
-  }) as never);
+  const insertCalls: Record<string, unknown>[] = [];
+  const db = createInsertClient('xiaoliuren_divinations', 'xlr-save-1', (payload) => { insertCalls.push(payload); });
+  mockUserContext(t, [XIAOLIUREN_ROUTE], async () => createMockAuthContext(db, 'owner-2'));
 
   const { POST } = require(XIAOLIUREN_ROUTE) as { POST: PostHandler };
   const response = await post(POST, 'http://localhost/api/xiaoliuren', {
@@ -161,12 +156,16 @@ test('Xiaoliuren save is owner-scoped and recalculates canonical data on the ser
 
   assert.equal(response.status, 200);
   assert.equal(payload.data.divinationId, 'xlr-save-1');
-  assert.equal(inserted?.user_id, 'owner-2');
+  const inserted = insertCalls.at(-1);
+  assert.ok(inserted);
+  assert.equal(inserted.user_id, 'owner-2');
   assert.equal(inserted?.question, '保存小六壬');
   assert.equal(inserted?.final_status, canonical.result.hourStatus);
   assert.equal(inserted?.shichen, '丑时');
   assert.deepEqual(inserted?.result_data, canonical);
-  assert.notEqual((inserted?.result_data as typeof tampered).canonicalText, '客户端伪造文本');
+  const resultData = inserted.result_data;
+  assert.ok(resultData && typeof resultData === 'object' && 'canonicalText' in resultData);
+  assert.notEqual(resultData.canonicalText, '客户端伪造文本');
 });
 
 test('Meihua and Xiaoliuren save actions reject anonymous users before database writes', async (t) => {
@@ -211,7 +210,8 @@ function mockAIFailClosedDependencies(
     callAIUIMessageResult: ai.callAIUIMessageResult,
     createAIAnalysisConversation: aiAnalysis.createAIAnalysisConversation,
   };
-  const calls = { auth: 0, credit: 0, model: 0, ai: 0, persist: 0 };
+  const calls = { auth: 0, credit: 0, model: 0, rate: 0, ai: 0, persist: 0 };
+  mockAIRateLimit(t, async () => { calls.rate += 1; throw new Error('rate admission must not run'); });
 
   appSettings.readFeatureModuleStateFresh = async () => state;
   apiUtils.requireUserContext = async () => { calls.auth += 1; throw new Error('auth must not run'); };
@@ -255,6 +255,6 @@ for (const spec of [
       assert.equal(payload.code, spec.code);
     }
 
-    assert.deepEqual(calls, { auth: 0, credit: 0, model: 0, ai: 0, persist: 0 });
+    assert.deepEqual(calls, { auth: 0, credit: 0, model: 0, rate: 0, ai: 0, persist: 0 });
   });
 }

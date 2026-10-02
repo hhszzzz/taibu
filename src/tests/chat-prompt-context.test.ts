@@ -1,8 +1,18 @@
-import { test } from 'node:test';
+import { beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
+
+beforeEach((t) => {
+  assert.ok('mock' in t);
+  let networkCalls = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    networkCalls += 1;
+    throw new Error('Unexpected network request');
+  });
+  t.after(() => assert.equal(networkCalls, 0, 'prompt tests must not attempt network access'));
+});
 
 test('buildChatPromptContext should load visualization_settings from user_settings', async (t) => {
   const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');

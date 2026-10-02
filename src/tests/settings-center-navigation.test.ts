@@ -2,6 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { SettingsCenterLink } from '../components/settings/SettingsCenterLink';
+import Module from 'node:module';
 
 import {
   getCurrentSettingsCenterRouteTarget,
@@ -10,23 +14,41 @@ import {
   getSettingsCenterRouteTargetForPath,
   getSettingsCenterTabs,
   parseSettingsCenterHash,
+  openSettingsCenter,
+  closeSettingsCenter,
 } from '../lib/settings-center';
 import { DEFAULT_MOBILE_DRAWER_ORDER, DEFAULT_TOOL_ORDER } from '../lib/user/settings';
 
+// These tests exercise real navigation data, not vendor SVG rendering. Isolate
+// Phosphor's browser/ESM entry from the existing CommonJS node:test loader.
+const iconPath = require.resolve('@phosphor-icons/react');
+const originalIcons = require.cache[iconPath];
+const icons = new Module(iconPath);
+icons.exports = Object.fromEntries(['YinYangIcon', 'CheckerboardIcon', 'CompassRoseIcon', 'StarOfDavidIcon', 'FlowerLotusIcon'].map(name => [name, () => null]));
+require.cache[iconPath] = icons;
+const { NAV_REGISTRY, getFeatureModules, getNavItemById, getSidebarToolItems } = (() => {
+  try { return require('../lib/navigation/registry') as typeof import('../lib/navigation/registry'); }
+  finally {
+    if (originalIcons) require.cache[iconPath] = originalIcons;
+    else delete require.cache[iconPath];
+  }
+})();
+
+const ENABLED_FLAGS = {
+  upgradeEnabled: true, chartsEnabled: true, knowledgeBaseEnabled: true,
+  mcpServiceEnabled: true, personalizationEnabled: true, helpEnabled: true, isAdmin: false,
+};
+
+// Mounted-panel identity, close/reopen and per-user loading are behavior-owned by
+// scripts/tests/p5-browser-fixture.mjs, enforced by pnpm test:browser in verify/CI.
+// Unit tests below retain fast route/registry contracts and unique UI/security guards.
+
+
 test('settings center keeps only the merged membership tab and rejects removed legacy credits hash', () => {
-  const tabs = getSettingsCenterTabs({
-    upgradeEnabled: true,
-    chartsEnabled: true,
-    knowledgeBaseEnabled: true,
-    mcpServiceEnabled: true,
-    personalizationEnabled: true,
-    helpEnabled: true,
-    isAdmin: false,
-  });
-  const registrySource = readFileSync(resolve(process.cwd(), 'src/lib/navigation/registry.ts'), 'utf8');
+  const tabs = getSettingsCenterTabs(ENABLED_FLAGS);
 
   assert.equal(tabs.some((tab) => tab.id === 'upgrade' && tab.disabled === false), true);
-  assert.equal(registrySource.includes("id: 'settings-upgrade', href: getSettingsCenterRouteTarget('upgrade')"), true);
+  assert.equal(getNavItemById('settings-upgrade')?.href, getSettingsCenterRouteTarget('upgrade'));
   assert.equal(parseSettingsCenterHash('#settings/credits'), null);
   assert.equal(
     getSettingsCenterRouteTarget('upgrade', { search: '?claim=ok' }),
@@ -45,67 +67,43 @@ test('settings center keeps only the merged membership tab and rejects removed l
   assert.equal(getSettingsCenterRouteTarget('byok'), '/bazi#settings/byok');
 });
 
-test('current-page settings targets preserve the active pathname in the browser', () => {
-  const originalWindow = globalThis.window;
-
-  const mockWindow = {
-    location: {
-      pathname: '/daliuren',
-      search: '?step=2',
+test('settings navigation uses the current path, replaces tabs and closes through browser history', (t) => {
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  const writes: Array<{ method: string; url: string }> = [];
+  let state: unknown = null;
+  let backCalls = 0;
+  const location = new URL('https://fixture.invalid/daliuren?step=2');
+  const change = (method: string, next: unknown, url: string) => { state = next; writes.push({ method, url }); };
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: {
+    location,
+    history: {
+      get state() { return state; },
+      pushState: (next: unknown, _unused: string, url: string) => change('push', next, url),
+      replaceState: (next: unknown, _unused: string, url: string) => change('replace', next, url),
+      back: () => { backCalls++; },
     },
-  } as Window;
+    dispatchEvent: () => true,
+  } });
+  t.after(() => originalWindow
+    ? Object.defineProperty(globalThis, 'window', originalWindow)
+    : Reflect.deleteProperty(globalThis, 'window'));
 
-  // @ts-expect-error test-only window shim
-  globalThis.window = mockWindow;
-
-  assert.equal(
-    getCurrentSettingsCenterRouteTarget('general'),
-    '/daliuren?step=2#settings/general',
-  );
-
-  globalThis.window = originalWindow;
+  assert.equal(getCurrentSettingsCenterRouteTarget('general'), '/daliuren?step=2#settings/general');
+  openSettingsCenter('personalization');
+  openSettingsCenter('byok', { replace: true });
+  closeSettingsCenter();
+  assert.deepEqual(writes, [
+    { method: 'push', url: '/daliuren?step=2#settings/personalization' },
+    { method: 'replace', url: '/daliuren?step=2#settings/byok' },
+  ]);
+  assert.equal(backCalls, 1);
 });
 
-test('settings center exposes disabled state for the merged membership tab', () => {
-  const flags = {
-    upgradeEnabled: false,
-    chartsEnabled: true,
-    knowledgeBaseEnabled: true,
-    mcpServiceEnabled: true,
-    personalizationEnabled: true,
-    helpEnabled: true,
-    isAdmin: false,
-  };
-
+test('disabled membership is unavailable in both tab projection and explanation', () => {
+  const flags = { ...ENABLED_FLAGS, upgradeEnabled: false };
+  assert.equal(getSettingsCenterTabs(flags).find(tab => tab.id === 'upgrade')?.disabled, true);
   assert.deepEqual(getSettingsCenterDisabledState('upgrade', flags), {
-    title: '暂未开放',
-    description: '当前订阅不可用。',
-  });
-});
-
-test('settings center disables merged membership tab when upgrade is disabled', () => {
-  const tabs = getSettingsCenterTabs({
-    upgradeEnabled: false,
-    chartsEnabled: true,
-    knowledgeBaseEnabled: true,
-    mcpServiceEnabled: true,
-    personalizationEnabled: true,
-    helpEnabled: true,
-    isAdmin: false,
-  });
-
-  assert.equal(tabs.some((tab) => tab.id === 'upgrade' && tab.disabled === false), false);
-  assert.deepEqual(getSettingsCenterDisabledState('upgrade', {
-    upgradeEnabled: false,
-    chartsEnabled: true,
-    knowledgeBaseEnabled: true,
-    mcpServiceEnabled: true,
-    personalizationEnabled: true,
-    helpEnabled: true,
-    isAdmin: false,
-  }), {
-    title: '暂未开放',
-    description: '当前订阅不可用。',
+    title: '暂未开放', description: '当前订阅不可用。',
   });
 });
 
@@ -117,55 +115,35 @@ test('checkin is removed from default user-facing tool orders', () => {
   assert.equal(defaultMobileDrawerOrder.includes('checkin'), false);
   assert.equal(defaultMobileDrawerOrder.includes('user/credits'), false);
   assert.equal(defaultMobileDrawerOrder.includes('settings-upgrade'), true);
+  assert.deepEqual(getSidebarToolItems().map(item => item.id), [...DEFAULT_TOOL_ORDER]);
 });
 
-test('shared navigation and admin feature toggles no longer expose legacy credits entry', () => {
-  const registrySource = readFileSync(resolve(process.cwd(), 'src/lib/navigation/registry.ts'), 'utf8');
+test('shared navigation and admin feature toggles do not expose legacy credits entries', () => {
+  assert.equal(NAV_REGISTRY.some(item => item.id === 'user/credits' || item.href === '/user/credits'), false);
+  assert.equal(getFeatureModules().some(item => item.id === 'credits' || item.label === '积分流水'), false);
   const headerSource = readFileSync(resolve(process.cwd(), 'src/components/layout/Header.tsx'), 'utf8');
-
-  assert.equal(registrySource.includes("id: 'user/credits'"), false);
   assert.equal(headerSource.includes("'/user/credits'"), false);
-  assert.equal(registrySource.includes("{ id: 'credits', label: '积分流水' }"), false);
-  assert.equal(registrySource.includes("credits: '积分流水'"), false);
 });
 
-test('help navigation uses canonical settings-center route and removes old help shells', () => {
-  const registrySource = readFileSync(resolve(process.cwd(), 'src/lib/navigation/registry.ts'), 'utf8');
-
-  assert.equal(registrySource.includes("id: 'settings-help', href: getSettingsCenterRouteTarget('help')"), true);
-  assert.equal(registrySource.includes("href: '/help'"), false);
-  assert.equal(registrySource.includes("href: '/user/help'"), false);
+test('help navigation resolves the canonical settings route without legacy shells', () => {
+  assert.equal(getNavItemById('settings-help')?.href, getSettingsCenterRouteTarget('help'));
+  assert.equal(NAV_REGISTRY.some(item => ['/help', '/user/help'].includes(item.href)), false);
 });
 
-test('personalization navigation uses canonical settings-center route and removes legacy alias page', () => {
-  const registrySource = readFileSync(resolve(process.cwd(), 'src/lib/navigation/registry.ts'), 'utf8');
-  const settingsLinkSource = readFileSync(resolve(process.cwd(), 'src/components/settings/SettingsCenterLink.tsx'), 'utf8');
-  const settingsCenterSource = readFileSync(resolve(process.cwd(), 'src/lib/settings-center.ts'), 'utf8');
-
-  assert.equal(registrySource.includes("id: 'settings-personalization', href: getSettingsCenterRouteTarget('personalization')"), true);
-  assert.equal(registrySource.includes("href: '/user/ai-settings'"), false);
-  assert.equal(registrySource.includes("id: 'user/settings/ai'"), false);
-  assert.equal(settingsLinkSource.includes('getSettingsCenterRouteTarget(tab)'), true);
-  assert.equal(settingsCenterSource.includes("window.history[method](nextState, '', getCurrentSettingsCenterRouteTarget(tab,"), true);
+test('personalization registry and rendered link resolve the canonical settings route', () => {
+  assert.equal(getNavItemById('settings-personalization')?.href, getSettingsCenterRouteTarget('personalization'));
+  assert.equal(NAV_REGISTRY.some(item => item.href === '/user/ai-settings' || item.id === 'user/settings/ai'), false);
+  const linkProps = { tab: 'personalization' as const, children: 'Preferences' };
+  const html = renderToStaticMarkup(createElement(SettingsCenterLink, linkProps));
+  assert.match(html, /href="\/bazi#settings\/personalization"/u);
 });
 
-test('settings center host should load standalone panel modules instead of app route pages', () => {
+test('settings panels retain route boundaries, Linux.do claims and private account affordances', () => {
   const hostSource = readFileSync(resolve(process.cwd(), 'src/components/settings/SettingsCenterHost.tsx'), 'utf8');
   const upgradePanelSource = readFileSync(resolve(process.cwd(), 'src/components/settings/panels/UpgradePanel.tsx'), 'utf8');
   const userMenuSource = readFileSync(resolve(process.cwd(), 'src/components/layout/UserMenu.tsx'), 'utf8');
 
-  assert.equal(hostSource.includes("@/components/settings/panels/GeneralSettingsPanel"), true);
-  assert.equal(hostSource.includes("@/components/settings/panels/AISettingsPanel"), true);
-  assert.equal(hostSource.includes("@/components/settings/panels/BYOKPanel"), true);
-  assert.equal(hostSource.includes("@/components/settings/panels/UpgradePanel"), true);
-  assert.equal(hostSource.includes("@/components/settings/panels/ProfilePanel"), true);
-  assert.equal(hostSource.includes("@/components/settings/panels/ChartsPanel"), true);
-  assert.equal(hostSource.includes("@/components/settings/panels/KnowledgeBasePanel"), true);
-  assert.equal(hostSource.includes("@/components/settings/panels/McpServicePanel"), true);
-  assert.equal(hostSource.includes("@/components/settings/panels/HelpPanel"), true);
-  assert.equal(hostSource.includes("import('@/app/user/settings/page')"), false);
-  assert.equal(hostSource.includes("import('@/app/user/profile/page')"), false);
-  assert.equal(hostSource.includes("import('@/app/help/page')"), false);
+  assert.doesNotMatch(hostSource, /import\(['"]@\/app\//u);
   assert.equal(hostSource.includes('SETTINGS_CENTER_GROUP_LABELS[entry.group]'), false);
   assert.equal(upgradePanelSource.includes("const hasLinuxDoLogin = typeof user?.user_metadata?.linuxdo_sub === 'string'"), true);
   assert.equal(upgradePanelSource.includes('{hasLinuxDoLogin ? ('), true);
@@ -193,33 +171,8 @@ test('settings center host renders disabled tabs as locked non-clickable control
   assert.equal(hostSource.includes('rounded-md border border-border px-1.5 py-0.5 text-[10px] text-foreground/50'), false);
 });
 
-test('settings center host keeps mounted panels alive when closed so tabs do not remount on reopen', () => {
-  const hostSource = readFileSync(resolve(process.cwd(), 'src/components/settings/SettingsCenterHost.tsx'), 'utf8');
-
-  assert.equal(hostSource.includes('hidden={!activeTab}'), true);
-  assert.equal(hostSource.includes('setMountedTabs([])'), false);
-  assert.equal(hostSource.includes('if (!mounted || !activeTab) {'), false);
-});
-
-test('general settings panel initializes once per user id instead of refetching on every parent rerender', () => {
-  const panelSource = readFileSync(resolve(process.cwd(), 'src/components/settings/panels/GeneralSettingsPanel.tsx'), 'utf8');
-
-  assert.equal(panelSource.includes('const userId = user?.id ?? null;'), true);
-  assert.equal(panelSource.includes('const [initializedForUserId, setInitializedForUserId] = useState<string | null | undefined>(undefined);'), true);
-  assert.equal(panelSource.includes('if (initializedForUserId === userId) return;'), true);
-  assert.equal(panelSource.includes('}, [load]);'), false);
-});
-
 test('mcp settings tab follows the public service feature toggle', () => {
-  const flags = {
-    upgradeEnabled: true,
-    chartsEnabled: true,
-    knowledgeBaseEnabled: true,
-    mcpServiceEnabled: false,
-    personalizationEnabled: true,
-    helpEnabled: true,
-    isAdmin: false,
-  };
+  const flags = { ...ENABLED_FLAGS, mcpServiceEnabled: false };
 
   const tabs = getSettingsCenterTabs(flags);
 
@@ -232,7 +185,6 @@ test('mcp settings tab follows the public service feature toggle', () => {
 
 test('mcp service panel exposes public remote access without login or api keys', () => {
   const panelSource = readFileSync(resolve(process.cwd(), 'src/components/settings/panels/McpServicePanel.tsx'), 'utf8');
-  const registrySource = readFileSync(resolve(process.cwd(), 'src/lib/navigation/registry.ts'), 'utf8');
   const featureToggleSource = readFileSync(resolve(process.cwd(), 'src/components/admin/FeatureTogglePanel.tsx'), 'utf8');
 
   assert.equal(panelSource.includes("useState<McpConnectionMode>('remote')"), true);
@@ -249,7 +201,7 @@ test('mcp service panel exposes public remote access without login or api keys',
   assert.equal(panelSource.includes('API Key 认证'), false);
   assert.equal(panelSource.includes('/api/user/mcp-key'), false);
   assert.equal(panelSource.includes('OAuth'), false);
-  assert.equal(registrySource.includes("{ id: 'mcp-service', label: 'MCP 服务' }"), true);
+  assert.equal(getFeatureModules().find(item => item.id === 'mcp-service')?.label, 'MCP 服务');
   assert.equal(featureToggleSource.includes('MCP OAuth'), false);
 });
 
@@ -286,10 +238,4 @@ test('header uses canonical settings labels and legal-page back fallback', () =>
   assert.equal(headerSource.includes("isAdminSettingsCenterTab(activeSettingsTab)"), true);
   assert.equal(announcementHostSource.includes("useActiveSettingsCenterTab"), true);
   assert.equal(announcementHostSource.includes("isAdminSettingsCenterTab(activeSettingsTab)"), true);
-});
-
-test('navigation registry no longer carries dead checkin-only tool filtering', () => {
-  const registrySource = readFileSync(resolve(process.cwd(), 'src/lib/navigation/registry.ts'), 'utf8');
-
-  assert.equal(registrySource.includes("n.id !== 'checkin'"), false);
 });

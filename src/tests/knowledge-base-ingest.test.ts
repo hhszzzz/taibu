@@ -6,11 +6,11 @@ const apiUtilsModule = require('../lib/api-utils') as any;
 
 test('ingestChatMessageAsService stores chat_message entries with metadata', async () => {
     const originalGetServiceClient = apiUtilsModule.getSystemAdminClient;
-    let rpcCall: { fn: string; args: Record<string, unknown> } | null = null;
+    const capture: { rpcCall: { fn: string; args: Record<string, unknown> } | null } = { rpcCall: null };
 
     apiUtilsModule.getSystemAdminClient = () => ({
         rpc: (fn: string, args: Record<string, unknown>) => {
-            rpcCall = { fn, args };
+            capture.rpcCall = { fn, args };
             return Promise.resolve({ data: 1, error: null });
         },
         from: (table: string) => {
@@ -90,11 +90,11 @@ test('ingestChatMessageAsService stores chat_message entries with metadata', asy
     try {
         const result = await ingestModule.ingestChatMessageAsService('kb-1', 'conv-1', 'a1', 'user-1');
         assert.equal(result.chunks > 0, true);
-        assert.equal(rpcCall?.fn, 'kb_replace_source_entries');
-        assert.equal(rpcCall?.args.p_source_type, 'chat_message');
-        assert.equal(rpcCall?.args.p_source_id, 'a1');
-        assert.equal(rpcCall?.args.p_archive, true);
-        const entries = (rpcCall?.args.p_entries as Array<Record<string, unknown>>) || [];
+        assert.equal(capture.rpcCall?.fn, 'kb_replace_source_entries');
+        assert.equal(capture.rpcCall?.args.p_source_type, 'chat_message');
+        assert.equal(capture.rpcCall?.args.p_source_id, 'a1');
+        assert.equal(capture.rpcCall?.args.p_archive, true);
+        const entries = (capture.rpcCall?.args.p_entries as Array<{ metadata: Record<string, unknown> }>) || [];
         assert.equal(entries[0]?.metadata?.conversation_id, 'conv-1');
         assert.equal(entries[0]?.metadata?.message_id, 'a1');
         assert.equal(entries[0]?.metadata?.user_message_id, 'u1');
@@ -105,11 +105,11 @@ test('ingestChatMessageAsService stores chat_message entries with metadata', asy
 
 test('ingestRecordAsService stores canonical ming_record source type', async () => {
     const originalGetServiceClient = apiUtilsModule.getSystemAdminClient;
-    let rpcCall: { fn: string; args: Record<string, unknown> } | null = null;
+    const capture: { rpcCall: { fn: string; args: Record<string, unknown> } | null } = { rpcCall: null };
 
     apiUtilsModule.getSystemAdminClient = () => ({
         rpc: (fn: string, args: Record<string, unknown>) => {
-            rpcCall = { fn, args };
+            capture.rpcCall = { fn, args };
             return Promise.resolve({ data: 1, error: null });
         },
         from: (table: string) => {
@@ -141,9 +141,9 @@ test('ingestRecordAsService stores canonical ming_record source type', async () 
     try {
         const result = await ingestModule.ingestRecordAsService('kb-1', 'record-1', 'user-1');
         assert.equal(result.chunks > 0, true);
-        assert.equal(rpcCall?.fn, 'kb_replace_source_entries');
-        assert.equal(rpcCall?.args.p_source_type, 'ming_record');
-        assert.equal(rpcCall?.args.p_source_id, 'record-1');
+        assert.equal(capture.rpcCall?.fn, 'kb_replace_source_entries');
+        assert.equal(capture.rpcCall?.args.p_source_type, 'ming_record');
+        assert.equal(capture.rpcCall?.args.p_source_id, 'record-1');
     } finally {
         apiUtilsModule.getSystemAdminClient = originalGetServiceClient;
     }

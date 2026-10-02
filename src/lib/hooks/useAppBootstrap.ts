@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSessionSafe } from '@/components/providers/ClientProviders';
+import { useSessionSafe } from '@/lib/hooks/session-context';
 import {
   APP_BOOTSTRAP_VIEWER_ERROR_MESSAGE,
   type AppBootstrapData,

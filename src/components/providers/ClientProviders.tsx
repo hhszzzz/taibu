@@ -5,9 +5,9 @@
  */
 'use client';
 
-import { ReactNode, createContext, useContext, useEffect, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
-import type { Session, User } from '@supabase/supabase-js';
+import { SessionContext, type SessionState } from '@/lib/hooks/session-context';
 import { ToastProvider, useToast } from '@/components/ui/Toast';
 import { ChatTaskToastBridge } from '@/components/providers/ChatTaskToastBridge';
 import { AnnouncementPopupHost } from '@/components/providers/AnnouncementPopupHost';
@@ -20,17 +20,8 @@ interface ClientProvidersProps {
     children: ReactNode;
 }
 
-type SessionState = {
-    session: Session | null;
-    user: User | null;
-    loading: boolean;
-};
-
-const SessionContext = createContext<SessionState | undefined>(undefined);
-
-export function useSessionSafe() {
-    return useContext(SessionContext) ?? { session: null, user: null, loading: false };
-}
+// 保留现有 UI 调用方的兼容入口；基础 hooks 直接依赖会话模块。
+export { useSessionSafe } from '@/lib/hooks/session-context';
 
 function AuthCallbackFeedback() {
     const { showToast } = useToast();

@@ -322,7 +322,7 @@ export interface AIModelConfig {
     // 来源信息（用于统计）
     sourceKey?: string;  // 当前活跃来源 key
     transport?: AITransport; // 来源传输协议
-    sources?: AIModelSourceConfig[]; // 运行时可用来源列表（已排序）
+    sources?: AIModelSourceConfig[]; // 非空来源清单为权威配置，可含禁用项；空清单兼容旧顶层配置
 }
 
 /** 自定义Provider (BYOK) 请求配置 */

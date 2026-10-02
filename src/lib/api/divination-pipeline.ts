@@ -1,13 +1,13 @@
 /**
  * 占卜路由工厂
  *
- * 封装 9 条占卜路由共享的 8 步流水线：
- * 1. Auth (requireBearerUser)
- * 2. Route precheck
- * 3. Async prompt-context resolve / request validation
- * 4. Credits + membership check (getUserAuthInfo)
- * 5. Model access resolution (resolveModelAccessAsync)
- * 6. Credit deduction (useCredit)
+ * 共享准入与生成流水线：
+ * 1. Auth (requireBearerUser / requireUserContext)
+ * 2. Ordinary route precheck + owned-resource context validation
+ * 3. Account loading and model membership admission
+ * 4. Credit balance check and actual deduction
+ * 5. Endpoint rate admission (refund a rejected managed debit once)
+ * 6. Final prompt assembly
  * 7. AI call (stream / non-stream, text / vision)
  * 8. Persist conversation + refund on failure
  */
@@ -15,7 +15,6 @@
 import { type NextRequest } from 'next/server';
 import { createUIMessageStream, createUIMessageStreamResponse, type FinishReason } from 'ai';
 import {
-  getSystemAdminClient,
   jsonError,
   jsonOk,
   requireBearerUser,
@@ -37,12 +36,22 @@ import {
   createAIAnalysisConversation,
 } from '@/lib/ai/ai-analysis';
 import { extractAIErrorMessage } from '@/lib/ai/ai-error';
-import type { AIModelConfig } from '@/types';
+import {
+  createManagedAnalysisCompletion,
+  persistDirectAnalysis,
+  prepareAnalysis,
+  prepareAdmittedAnalysis,
+  runManagedAnalysis,
+  type AnalysisAdmissionBilling,
+  type CompleteManagedAnalysis,
+  type ManagedAnalysisOutcome,
+} from '@/lib/server/analysis';
 import type { AIPersonality } from '@/types';
 import type { ChartType } from '@/lib/visualization/chart-types';
 import { buildVisualizationOutputContractPrompt } from '@/lib/visualization/prompt';
 import type { ChartTextDetailLevel } from '@/lib/divination/detail-level';
 import { getGlobalAIFeatureGuardResponse } from '@/lib/api/ai-feature-guard';
+import { AI_RATE_LIMIT_CONFIG, checkRateLimit } from '@/lib/rate-limit';
 
 // ─── Types ───
 
@@ -80,9 +89,7 @@ type SuccessfulDivinationAuthResult = {
   accessToken?: string | null;
 };
 
-type DivinationDbClient =
-  | NonNullable<ReturnType<typeof resolveRequestDbClient>>
-  | ReturnType<typeof getSystemAdminClient>;
+type DivinationDbClient = NonNullable<ReturnType<typeof resolveRequestDbClient>>;
 
 type RouteError = { error: string; status: number };
 
@@ -183,8 +190,13 @@ export async function saveUserOwnedDivinationRecord<
     return jsonError(authResult.error.message, authResult.error.status, { success: false });
   }
 
+  const client = resolveAuthDbClient(authResult);
+  if (isRouteError(client)) {
+    return jsonError(client.error, client.status, { success: false });
+  }
+
   const { id, error } = await persistUserOwnedDivinationRecord({
-    client: resolveAuthDbClient(authResult) as unknown as SaveUserOwnedRecordClient,
+    client: client as unknown as SaveUserOwnedRecordClient,
     tag,
     tableName,
     input,
@@ -217,8 +229,11 @@ export interface DivinationRouteConfig<
   authMethod?: AuthMethod;
   /** Parse & validate the request body. Return parsed input or an error. */
   parseInput: (body: unknown) => T | RouteError;
-  /** Optional async precheck after auth but before AI pipeline continues. */
+  /** Resource/business precheck before account admission; never a rate limiter. */
   precheck?: (request: NextRequest, input: T, userId: string) => Promise<RouteError | null> | RouteError | null;
+  /** Overrides the default user/path 20/min limit after membership and any debit.
+   * Not run for direct persist or ordinary save actions. */
+  postAdmissionRateLimit?: (request: NextRequest, input: T, userId: string) => Promise<RouteError | null> | RouteError | null;
   /** Build system + user prompts from parsed input. */
   buildPrompts: (input: T, context?: TContext) => InterpretPrompts | Promise<InterpretPrompts>;
   /** Optional prompt context resolver (used for user settings such as chart prompt detail level). */
@@ -271,22 +286,84 @@ export interface DivinationRouteConfig<
   ) => Promise<void>;
 }
 
+async function prepareInterpretAnalysis<T extends InterpretInput, TContext extends InterpretPromptContext>(
+  config: DivinationRouteConfig<T, TContext>,
+  input: T,
+  userId: string,
+  context?: TContext,
+) {
+  return prepareAnalysis({ actor: { userId }, input, context }, {
+    buildPrompts: config.buildPrompts,
+    buildOutputContract: (input, context) => {
+      const chartTypes = typeof config.allowedChartTypes === 'function'
+        ? config.allowedChartTypes(input, context)
+        : config.allowedChartTypes;
+      return chartTypes?.length ? buildVisualizationOutputContractPrompt(chartTypes) : undefined;
+    },
+  });
+}
+
+async function prepareAdmittedInterpretAnalysis<T extends InterpretInput, TContext extends InterpretPromptContext>(
+  config: DivinationRouteConfig<T, TContext>,
+  request: NextRequest,
+  input: T,
+  userId: string,
+  context: TContext | undefined,
+  billing: AnalysisAdmissionBilling,
+) {
+  const rejection: { value: RouteError | null } = { value: null };
+  const result = await prepareAdmittedAnalysis(billing, {
+    checkRateLimit: async () => {
+      if (config.postAdmissionRateLimit) {
+        rejection.value = await config.postAdmissionRateLimit(request, input, userId);
+      } else {
+        const limit = await checkRateLimit(userId, request.nextUrl.pathname, AI_RATE_LIMIT_CONFIG);
+        rejection.value = limit.allowed ? null : { error: '请求过于频繁，请稍后再试', status: 429 };
+      }
+      return rejection.value === null;
+    },
+    prepare: () => prepareInterpretAnalysis(config, input, userId, context),
+  });
+  if (result.ok) return result.value;
+
+  if (result.error) console.error(`[${config.tag}] ${result.reason}:`, result.error);
+  if (result.billing === 'refund-failed') {
+    console.error(`[${config.tag}] admission refund failed`, { userId, error: result.refundError });
+    return jsonError('请求未执行，积分退还失败，请联系客服', 500, {
+      success: false, code: 'CREDIT_REFUND_FAILED', refundFailed: true,
+    });
+  }
+  if (result.reason === 'limited') {
+    return jsonError(rejection.value?.error ?? '请求过于频繁，请稍后再试', rejection.value?.status ?? 429, { success: false });
+  }
+  if (result.reason === 'rate-error') {
+    return jsonError('请求限流检查失败，请稍后重试', 500, { success: false, code: 'RATE_LIMIT_FAILED' });
+  }
+  return jsonError(billing.kind === 'not-applicable' ? '生成直连上下文失败，请稍后重试' : '生成分析上下文失败，请稍后重试', 500, {
+    success: false, code: 'PROMPT_PREPARATION_FAILED',
+  });
+}
+
 export interface PersistentStreamResult {
   error?: string | null;
 }
 
 function resolveAuthDbClient(
   authResult: Partial<Pick<UserContextAuthResult, 'db' | 'supabase'>>,
-): DivinationDbClient {
-  return resolveRequestDbClient(authResult) ?? getSystemAdminClient();
+): DivinationDbClient | RouteError {
+  // Missing caller identity must never become an implicit privileged operation.
+  return resolveRequestDbClient(authResult)
+    ?? { error: '用户数据库上下文不可用，请稍后重试', status: 500 };
 }
 
 function toDivinationAuthContext(
   authResult: SuccessfulDivinationAuthResult,
-): DivinationAuthContext {
+): DivinationAuthContext | RouteError {
+  const db = resolveAuthDbClient(authResult);
+  if (isRouteError(db)) return db;
   return {
     userId: authResult.user.id,
-    db: resolveAuthDbClient(authResult),
+    db,
     accessToken: authResult.accessToken ?? null,
   };
 }
@@ -389,13 +466,11 @@ export function createDirectInterpretHandlers<
     authMethod = 'bearer',
     parseInput,
     precheck,
-    buildPrompts,
     resolvePromptContext,
     buildSourceData,
     generateTitle,
     buildHistoryBinding,
     persistRecord,
-    allowedChartTypes,
     emptyResultMessage = 'AI 分析结果为空，请稍后重试',
   } = config;
 
@@ -435,6 +510,9 @@ export function createDirectInterpretHandlers<
       return jsonError(authResult.error.message, authResult.error.status, { success: false });
     }
     const authContext = toDivinationAuthContext(authResult);
+    if (isRouteError(authContext)) {
+      return jsonError(authContext.error, authContext.status, { success: false });
+    }
 
     if (runPrecheck) {
       const precheckResult = precheck ? await precheck(request, input, authResult.user.id) : null;
@@ -459,13 +537,20 @@ export function createDirectInterpretHandlers<
       };
     }
 
-    const { systemPrompt: rawSystemPrompt, userPrompt } = await buildPrompts(input, promptContext);
-    const resolvedAllowedChartTypes = typeof allowedChartTypes === 'function'
-      ? allowedChartTypes(input, promptContext)
-      : allowedChartTypes;
-    const systemPrompt = resolvedAllowedChartTypes?.length
-      ? `${rawSystemPrompt}\n\n${buildVisualizationOutputContractPrompt(resolvedAllowedChartTypes)}`
-      : rawSystemPrompt;
+    // BYOK validates account membership without a platform model/balance gate.
+    try {
+      await getUserAuthInfo(authContext.userId, { client: authContext.db, user: authResult.user });
+    } catch (error) {
+      if (error instanceof UserStateResolutionError) {
+        return jsonError(error.message, 500, { success: false, code: error.code });
+      }
+      throw error;
+    }
+    const prepared = await prepareAdmittedInterpretAnalysis(
+      config, request, input, authContext.userId, promptContext, { kind: 'not-applicable' },
+    );
+    if (prepared instanceof Response) return prepared;
+    const { prompts: { systemPrompt, userPrompt } } = prepared;
 
     return {
       input,
@@ -576,30 +661,23 @@ export function createDirectInterpretHandlers<
           ? body.reasoning
           : null;
 
-      if (!content.trim()) {
-        return jsonError(emptyResultMessage, 400, { success: false });
-      }
-
-      try {
-        const conversationId = await persistPreparedResult({
+      const outcome = await persistDirectAnalysis({ content, reasoning: reasoningText }, (output) =>
+        persistPreparedResult({
           input: prepared.input,
           userId: prepared.userId,
           promptContext: prepared.promptContext,
-          content,
-          reasoningText,
+          content: output.content,
+          reasoningText: output.reasoning ?? null,
           customModelId: resolveDirectPersistModelId(body.customModelId),
-        });
-
-        return jsonOk({
-          success: true,
-          data: {
-            conversationId,
-          },
-        });
-      } catch (error) {
-        console.error(`[${tag}] 直连结果保存失败:`, error);
+        }));
+      if (outcome.status === 'empty') {
+        return jsonError(emptyResultMessage, 400, { success: false });
+      }
+      if (outcome.status === 'failed') {
+        console.error(`[${tag}] 直连结果保存失败:`, outcome.error);
         return jsonError('保存结果失败，请稍后重试', 500, { success: false });
       }
+      return jsonOk({ success: true, data: { conversationId: outcome.conversationId } });
     },
   };
 }
@@ -611,11 +689,11 @@ export function createDirectInterpretHandlers<
  *
  * The returned handler:
  * 1. Authenticates via Bearer token
- * 2. Runs route-specific precheck
- * 3. Resolves async prompt context / validation
- * 4. Checks credits & membership
- * 5. Resolves model access
- * 6. Deducts a credit
+ * 2. Runs ordinary prechecks and validates owned-resource context
+ * 3. Loads account membership and resolves model access
+ * 4. Checks balance and deducts a credit
+ * 5. Applies the endpoint rate policy with debit compensation on rejection
+ * 6. Builds final prompts only after admission
  * 7. Calls AI (stream or non-stream; text or vision)
  * 8. Persists the conversation and refunds on failure
  */
@@ -631,7 +709,6 @@ export function createInterpretHandler<
     authMethod = 'bearer',
     parseInput,
     precheck,
-    buildPrompts,
     resolvePromptContext,
     buildSourceData,
     generateTitle,
@@ -640,7 +717,6 @@ export function createInterpretHandler<
     isVision = false,
     buildVisionOptions,
     modelAccessOptions,
-    allowedChartTypes,
     emptyResultMessage = 'AI 分析结果为空，请稍后重试',
     formatSuccessResponse,
     buildHistoryBinding,
@@ -670,6 +746,9 @@ export function createInterpretHandler<
     }
     const { user } = authResult;
     const authContext = toDivinationAuthContext(authResult);
+    if (isRouteError(authContext)) {
+      return jsonError(authContext.error, authContext.status, { success: false });
+    }
 
     const precheckResult = precheck ? await precheck(request, input, user.id) : null;
     if (precheckResult) {
@@ -697,11 +776,7 @@ export function createInterpretHandler<
       }
       throw error;
     }
-    if (!authInfo.hasCredits) {
-      return jsonError('积分不足，请通过签到、激活码或会员权益获取积分后再使用', 402, { success: false });
-    }
-
-    // 3. Model access
+    // 3. Model membership admission precedes the balance decision.
     const modelId = (body.modelId as string | undefined);
     const reasoning = (body.reasoning as boolean | undefined);
     const stream = (body.stream as boolean | undefined);
@@ -712,18 +787,13 @@ export function createInterpretHandler<
     if ('error' in access) {
       return jsonError(access.error, access.status, { success: false });
     }
-    const { modelId: resolvedModelId, modelConfig, reasoningEnabled } = access;
+    const { modelId: resolvedModelId, reasoningEnabled } = access;
 
-    // Build prompts, optionally appending visualization output contract
-    const { systemPrompt: rawSystemPrompt, userPrompt } = await buildPrompts(input, promptContext);
-    const resolvedAllowedChartTypes = typeof allowedChartTypes === 'function'
-      ? allowedChartTypes(input, promptContext)
-      : allowedChartTypes;
-    const systemPrompt = resolvedAllowedChartTypes?.length
-      ? `${rawSystemPrompt}\n\n${buildVisualizationOutputContractPrompt(resolvedAllowedChartTypes)}`
-      : rawSystemPrompt;
+    if (!authInfo.hasCredits) {
+      return jsonError('积分不足，请通过签到、激活码或会员权益获取积分后再使用', 402, { success: false });
+    }
 
-    // 4. Deduct credit
+    // 4. Deduct credit before rate admission and final prompt assembly.
     const creditUse = await attemptCreditUse(user.id, {
       client: authContext.db,
       user,
@@ -735,73 +805,95 @@ export function createInterpretHandler<
       return jsonError('积分扣减失败，请稍后重试', 500, { success: false });
     }
 
-    // 5 + 6 + 7: AI call, persist, refund on failure
+    const prepared = await prepareAdmittedInterpretAnalysis(
+      config, request, input, user.id, promptContext,
+      { kind: 'charged', refund: () => refundCreditsOrLog(user.id, 1, `${tag} admission`) },
+    );
+    if (prepared instanceof Response) return prepared;
+    const { prompts: { systemPrompt, userPrompt } } = prepared;
+
+    // The use case owns completion/save/refund; SDK and HTTP stay in this adapter.
+    const mode = isVision && buildVisionOptions ? 'vision' : stream ? 'stream' : 'text';
+    const complete = createManagedAnalysisCompletion(mode, {
+      persist: async ({ content, reasoning }) => {
+        const conversationId = await persistConversation(
+          input, user.id, resolvedModelId, reasoningEnabled, content, reasoning ?? null, promptContext,
+        );
+        if (persistRecord) {
+          await persistRecord(input, user.id, conversationId, promptContext);
+        }
+        return conversationId;
+      },
+      refund: (reason) => refundCreditsOrLog(user.id, 1, `${tag} ${reason}`),
+      isPersistenceError: (error) => error instanceof AIAnalysisConversationPersistenceError,
+    });
+
     try {
-      if (isVision && buildVisionOptions) {
-        return await handleVisionCall(
-          input, user.id, resolvedModelId, modelConfig, reasoningEnabled,
-          systemPrompt, userPrompt, promptContext,
-        );
+      if (mode === 'stream') {
+        return await handleStreamCall(resolvedModelId, reasoningEnabled, systemPrompt, userPrompt, complete);
       }
 
-      if (stream) {
-        return await handleStreamCall(
-          input, user.id, resolvedModelId, reasoningEnabled,
-          systemPrompt, userPrompt, promptContext,
+      const outcome = await runManagedAnalysis(async () => {
+        if (mode === 'vision') {
+          const visionOpts = buildVisionOptions!(input);
+          const content = await callAIVision(
+            [{ role: 'user', content: userPrompt }],
+            personality,
+            resolvedModelId,
+            `\n\n${systemPrompt}\n\n`,
+            { reasoning: reasoningEnabled, temperature: 0.7, ...visionOpts },
+          );
+          return { content, reasoning: null };
+        }
+        return callAIWithReasoning(
+          [{ role: 'user', content: userPrompt }],
+          personality,
+          resolvedModelId,
+          `\n\n${systemPrompt}\n\n`,
+          { reasoning: reasoningEnabled, temperature: 0.7 },
         );
-      }
-
-      return await handleNonStreamCall(
-        input, user.id, resolvedModelId, reasoningEnabled,
-        systemPrompt, userPrompt, promptContext,
-      );
+      }, complete);
+      return formatManagedOutcome(outcome, mode === 'vision');
     } catch (aiError) {
+      // Adapter failures (including SDK stream construction or response formatting)
+      // retain the existing compensation boundary, outside normal completion.
       if (aiError instanceof AIAnalysisConversationPersistenceError) {
         await refundCreditsOrLog(user.id, 1, `${tag} persistence`);
         console.error(`[${tag}] 分析结果保存失败:`, aiError);
         return jsonError('保存结果失败，请稍后重试', 500, { success: false });
       }
-
       await refundCreditsOrLog(user.id, 1, `${tag} ai-call`);
       console.error(`[${tag}] AI 调用失败:`, aiError);
       return jsonError(extractAIErrorMessage(aiError), 500, { success: false });
     }
   };
 
-  // ── Vision (non-stream) ──
-  async function handleVisionCall(
-    input: T, userId: string, resolvedModelId: string,
-    _modelConfig: AIModelConfig, reasoningEnabled: boolean,
-    systemPrompt: string, userPrompt: string,
-    promptContext?: TContext,
-  ): Promise<Response> {
-    const visionOpts = buildVisionOptions!(input);
-    const analysisResult = await callAIVision(
-      [{ role: 'user', content: userPrompt }],
-      personality,
-      resolvedModelId,
-      `\n\n${systemPrompt}\n\n`,
-      { reasoning: reasoningEnabled, temperature: 0.7, ...visionOpts },
-    );
-
-    const conversationId = await persistConversation(
-      input, userId, resolvedModelId, reasoningEnabled, analysisResult, null, promptContext,
-    );
-    if (persistRecord) {
-      await persistRecord(input, userId, conversationId, promptContext);
+  function formatManagedOutcome(outcome: ManagedAnalysisOutcome, vision: boolean): Response {
+    if (outcome.status === 'saved') {
+      const { content, reasoning } = outcome.output;
+      const { conversationId } = outcome;
+      if (vision) {
+        return jsonOk({ success: true, data: { analysis: content, conversationId } });
+      }
+      return jsonOk(formatSuccessResponse
+        ? formatSuccessResponse({ content, reasoning: reasoning ?? null, conversationId })
+        : { success: true, data: { analysis: content, reasoning, conversationId } });
     }
-
-    return jsonOk({
-      success: true,
-      data: { analysis: analysisResult, conversationId },
-    });
+    if (outcome.status === 'aborted' || outcome.failure === 'empty') {
+      return jsonError(emptyResultMessage, 500, { success: false });
+    }
+    if (outcome.error instanceof AIAnalysisConversationPersistenceError) {
+      console.error(`[${tag}] 分析结果保存失败:`, outcome.error);
+      return jsonError('保存结果失败，请稍后重试', 500, { success: false });
+    }
+    console.error(`[${tag}] AI 调用失败:`, outcome.error);
+    return jsonError(extractAIErrorMessage(outcome.error), 500, { success: false });
   }
 
-  // ── Stream ──
+  // Streaming transport reports completion only after the use case has saved.
   async function handleStreamCall(
-    input: T, userId: string, resolvedModelId: string,
-    reasoningEnabled: boolean, systemPrompt: string, userPrompt: string,
-    promptContext?: TContext,
+    resolvedModelId: string, reasoningEnabled: boolean,
+    systemPrompt: string, userPrompt: string, complete: CompleteManagedAnalysis,
   ): Promise<Response> {
     const streamResult = await callAIUIMessageResult(
       [{ role: 'user', content: userPrompt }],
@@ -812,61 +904,14 @@ export function createInterpretHandler<
     );
     return createPersistentStreamResponse({
       streamResult,
-      onStreamComplete: async ({ content, reasoning }) => {
-        try {
-          if (!content?.trim()) {
-            await refundCreditsOrLog(userId, 1, `${tag} stream-empty`);
-            return { error: emptyResultMessage };
-          }
-          const conversationId = await persistConversation(
-            input, userId, resolvedModelId, reasoningEnabled, content, reasoning, promptContext,
-          );
-          if (persistRecord) {
-            await persistRecord(input, userId, conversationId, promptContext);
-          }
-          return {};
-        } catch (err) {
-          await refundCreditsOrLog(userId, 1, `${tag} stream-persist`);
-          console.error(`[${tag}] 流式结果保存失败:`, err);
-          return { error: '保存结果失败，请稍后重试' };
-        }
+      onStreamComplete: async (output) => {
+        const outcome = await complete({ kind: 'output', output });
+        if (outcome.status !== 'failed') return {};
+        if (outcome.failure === 'empty') return { error: emptyResultMessage };
+        console.error(`[${tag}] 流式结果保存失败:`, outcome.error);
+        return { error: '保存结果失败，请稍后重试' };
       },
     });
-  }
-
-  // ── Non-stream ──
-  async function handleNonStreamCall(
-    input: T, userId: string, resolvedModelId: string,
-    reasoningEnabled: boolean, systemPrompt: string, userPrompt: string,
-    promptContext?: TContext,
-  ): Promise<Response> {
-    const { content, reasoning: reasoningText } = await callAIWithReasoning(
-      [{ role: 'user', content: userPrompt }],
-      personality,
-      resolvedModelId,
-      `\n\n${systemPrompt}\n\n`,
-      { reasoning: reasoningEnabled, temperature: 0.7 },
-    );
-    if (!content?.trim()) {
-      await refundCreditsOrLog(userId, 1, `${tag} empty-result`);
-      return jsonError(emptyResultMessage, 500, { success: false });
-    }
-
-    const conversationId = await persistConversation(
-      input, userId, resolvedModelId, reasoningEnabled, content, reasoningText ?? null, promptContext,
-    );
-    if (persistRecord) {
-      await persistRecord(input, userId, conversationId, promptContext);
-    }
-
-    return jsonOk(
-      formatSuccessResponse
-        ? formatSuccessResponse({ content, reasoning: reasoningText ?? null, conversationId })
-        : {
-            success: true,
-            data: { analysis: content, reasoning: reasoningText, conversationId },
-          },
-    );
   }
 
   // ── Shared persistence ──

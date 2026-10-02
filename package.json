@@ -7,14 +7,20 @@
     "dev": "node scripts/dev-with-core-watch.mjs",
     "dev:web": "next dev",
     "build": "pnpm -C packages/core build && next build",
+    "build:packages": "pnpm -C packages/core build && pnpm -C packages/mcp build && pnpm -C packages/mcp-server build",
+    "typecheck": "pnpm build:packages && tsc --noEmit --incremental false",
     "start": "next start",
     "lint": "pnpm lint:code && pnpm lint:guards",
     "lint:code": "eslint .",
     "lint:guards": "node scripts/check-architecture-guards.mjs",
-    "test:npm-packages": "pnpm -C packages/core build && pnpm -C packages/mcp build && pnpm -C packages/mcp-server build && node --test scripts/tests/npm-package-artifacts.test.mjs",
+    "test:guards": "node --test scripts/tests/architecture-guards.test.mjs",
+    "test:db": "node --test scripts/tests/postgres-contracts.test.mjs",
+    "test:npm-packages": "pnpm build:packages && node --test scripts/tests/npm-package-artifacts.test.mjs scripts/tests/skill-bundle.test.mjs",
     "prepare:github-packages": "node scripts/prepare-github-package.mjs --package core --package mcp --output .release/github-packages",
     "test:github-packages": "node --test scripts/tests/prepare-github-package.test.mjs",
-    "test": "pnpm -C packages/core build && pnpm -C packages/mcp build && pnpm -C packages/mcp-server build && NODE_OPTIONS=--require=./scripts/ts-register.cjs node --test src/tests/*.test.ts packages/core/tests/*.test.mjs packages/mcp/tests/*.test.mjs packages/mcp-server/tests/*.test.mjs",
+    "test": "node scripts/test-runner.mjs",
+    "test:browser": "pnpm build:core && node scripts/tests/p5-browser-fixture.mjs",
+    "verify": "node scripts/test-runner.mjs --verify",
     "build:core": "pnpm -C packages/core build"
   },
   "dependencies": {
@@ -51,6 +57,7 @@
     "esbuild": "^0.27.2",
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
+    "playwright": "1.63.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

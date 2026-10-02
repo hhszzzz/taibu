@@ -12,13 +12,13 @@ test('admin ai source PATCH should clear modelIdOverride when it matches the mod
   const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
   const originalClearModelCache = serverConfigModule.clearModelCache;
 
-  let rpcCall: { fn: string; args: Record<string, unknown> } | null = null;
+  const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
   let cacheCleared = false;
 
   apiUtilsModule.requireAdminUser = async () => ({ user: { id: 'admin-1' } });
   apiUtilsModule.getSystemAdminClient = () => ({
     rpc: async (fn: string, args: Record<string, unknown>) => {
-      rpcCall = { fn, args };
+      rpcCalls.push({ fn, args });
       return { data: { status: 'ok', binding: { id: 'binding-1' } }, error: null };
     },
   });
@@ -46,8 +46,11 @@ test('admin ai source PATCH should clear modelIdOverride when it matches the mod
   });
 
   assert.equal(response.status, 200);
-  assert.equal(rpcCall?.fn, 'admin_update_ai_model_binding');
-  assert.deepEqual(rpcCall?.args, {
+  assert.equal(rpcCalls.length, 1);
+  const [rpcCall] = rpcCalls;
+  assert.ok(rpcCall);
+  assert.equal(rpcCall.fn, 'admin_update_ai_model_binding');
+  assert.deepEqual(rpcCall.args, {
     p_model_id: 'model-1',
     p_source_id: 'binding-1',
     p_patch: {
@@ -112,12 +115,12 @@ test('admin ai source PATCH should update and activate in one transactional rpc'
   const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
   const originalClearModelCache = serverConfigModule.clearModelCache;
 
-  let rpcCall: { fn: string; args: Record<string, unknown> } | null = null;
+  const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
 
   apiUtilsModule.requireAdminUser = async () => ({ user: { id: 'admin-1' } });
   apiUtilsModule.getSystemAdminClient = () => ({
     rpc: async (fn: string, args: Record<string, unknown>) => {
-      rpcCall = { fn, args };
+      rpcCalls.push({ fn, args });
       return { data: { status: 'ok', binding: { id: 'binding-1' } }, error: null };
     },
   });
@@ -144,8 +147,11 @@ test('admin ai source PATCH should update and activate in one transactional rpc'
   });
 
   assert.equal(response.status, 200);
-  assert.equal(rpcCall?.fn, 'admin_update_ai_model_binding');
-  assert.deepEqual(rpcCall?.args, {
+  assert.equal(rpcCalls.length, 1);
+  const [rpcCall] = rpcCalls;
+  assert.ok(rpcCall);
+  assert.equal(rpcCall.fn, 'admin_update_ai_model_binding');
+  assert.deepEqual(rpcCall.args, {
     p_model_id: 'model-1',
     p_source_id: 'binding-1',
     p_patch: {
@@ -162,13 +168,13 @@ test('admin ai source POST should promote binding through transactional rpc', as
   const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
   const originalClearModelCache = serverConfigModule.clearModelCache;
 
-  let rpcCall: { fn: string; args: Record<string, unknown> } | null = null;
+  const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
   let cacheCleared = false;
 
   apiUtilsModule.requireAdminUser = async () => ({ user: { id: 'admin-1' } });
   apiUtilsModule.getSystemAdminClient = () => ({
     rpc: (fn: string, args: Record<string, unknown>) => {
-      rpcCall = { fn, args };
+      rpcCalls.push({ fn, args });
       return Promise.resolve({
         data: { status: 'ok', binding: { id: 'binding-1' } },
         error: null,
@@ -193,8 +199,11 @@ test('admin ai source POST should promote binding through transactional rpc', as
   });
 
   assert.equal(response.status, 200);
-  assert.equal(rpcCall?.fn, 'admin_update_ai_model_binding');
-  assert.deepEqual(rpcCall?.args, {
+  assert.equal(rpcCalls.length, 1);
+  const [rpcCall] = rpcCalls;
+  assert.ok(rpcCall);
+  assert.equal(rpcCall.fn, 'admin_update_ai_model_binding');
+  assert.deepEqual(rpcCall.args, {
     p_model_id: 'model-1',
     p_source_id: 'binding-1',
     p_patch: {},

@@ -1,5 +1,6 @@
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
+import type { DirectAnalysisFlowOptions } from '../lib/ai/direct-analysis-client';
 
 type MutableModule = Record<string, unknown>;
 
@@ -107,9 +108,9 @@ test('analysis runner should use direct analysis flow when a custom provider is 
     modelId: 'custom-model',
   });
 
-  let directCall: Record<string, unknown> | null = null;
-  directClientModule.runDirectAnalysisFlow = async (options: Record<string, unknown>) => {
-    directCall = options;
+  const capture: { directCall: DirectAnalysisFlowOptions | null } = { directCall: null };
+  directClientModule.runDirectAnalysisFlow = async (options: DirectAnalysisFlowOptions) => {
+    capture.directCall = options;
     return {
       content: 'direct-analysis',
       reasoning: 'direct-reasoning',
@@ -137,10 +138,10 @@ test('analysis runner should use direct analysis flow when a custom provider is 
     streamBody: { action: 'analyze', type: 'INTJ', stream: true },
   });
 
-  assert.ok(directCall, 'runDirectAnalysisFlow should be called');
-  assert.equal(directCall?.endpoint, '/api/mbti');
-  assert.deepEqual(directCall?.prepareBody, { action: 'analyze_prepare', type: 'INTJ' });
-  assert.deepEqual(directCall?.persistBody, { action: 'analyze_persist', type: 'INTJ' });
+  assert.ok(capture.directCall, 'runDirectAnalysisFlow should be called');
+  assert.equal(capture.directCall.endpoint, '/api/mbti');
+  assert.deepEqual(capture.directCall.prepareBody, { action: 'analyze_prepare', type: 'INTJ' });
+  assert.deepEqual(capture.directCall.persistBody, { action: 'analyze_persist', type: 'INTJ' });
   assert.deepEqual(result, {
     content: 'direct-analysis',
     reasoning: 'direct-reasoning',

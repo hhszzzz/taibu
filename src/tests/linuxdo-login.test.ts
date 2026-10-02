@@ -946,7 +946,7 @@ test('linuxdo callback should claim monthly membership and redirect back to memb
   const originalGetServiceRoleClient = apiUtilsModule.getSystemAdminClient;
   const originalSetSessionCookies = authSessionModule.setSessionCookies;
 
-  let rpcCall: { fn: string; args: Record<string, unknown> } | null = null;
+  const capture: { rpcCall: { fn: string; args: Record<string, unknown> } | null } = { rpcCall: null };
 
   linuxdoModule.exchangeCode = async () => ({ access_token: 'access-token' });
   linuxdoModule.fetchUserInfo = async () => ({
@@ -1026,7 +1026,7 @@ test('linuxdo callback should claim monthly membership and redirect back to memb
       throw new Error(`unexpected table: ${table}`);
     },
     rpc: async (fn: string, args: Record<string, unknown>) => {
-      rpcCall = { fn, args };
+      capture.rpcCall = { fn, args };
       return {
         data: { status: 'ok' },
         error: null,
@@ -1066,8 +1066,8 @@ test('linuxdo callback should claim monthly membership and redirect back to memb
 
   assert.equal(response.status, 307);
   assert.equal(response.headers.get('location'), 'http://localhost/bazi?claim=ok#settings/upgrade');
-  assert.equal(rpcCall?.fn, 'claim_linuxdo_membership_as_service');
-  assert.deepEqual(rpcCall?.args, {
+  assert.equal(capture.rpcCall?.fn, 'claim_linuxdo_membership_as_service');
+  assert.deepEqual(capture.rpcCall?.args, {
     p_user_id: 'user-claim',
     p_plan_id: 'plus',
     p_trust_level: 2,

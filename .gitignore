@@ -55,13 +55,46 @@ next-env.d.ts
 # pnpm cache
 .pnpm-store
 
-# migration files (opt in reviewed migrations explicitly)
+# Migration inputs required by repository checks; see supabase/README.md.
+# This allowlist is historical evidence, not a complete deployment baseline.
 supabase/migrations/*
+!supabase/migrations/fix_login_attempts_rls.sql
+!supabase/migrations/create_conversations_table.sql
+!supabase/migrations/20260110_add_mbti_readings_rls.sql
+!supabase/migrations/20260110_add_tarot_readings_rls.sql
+!supabase/migrations/20260118_create_gamification_tables.sql
+!supabase/migrations/20260124_create_knowledge_base_tables.sql
+!supabase/migrations/20260124_search_functions.sql
+!supabase/migrations/20260125_alter_archived_sources_source_id_to_text.sql
+!supabase/migrations/20260126_fix_search_path_and_extensions.sql
+!supabase/migrations/20260211_remove_service_role_key_phase2.sql
+!supabase/migrations/20260316_create_conversation_messages.sql
+!supabase/migrations/20260408_z_remaining_transactional_multi_write_rpcs.sql
+!supabase/migrations/20260409_021500_admin_session_rpc_alignment.sql
+!supabase/migrations/20260409_235900_membership_credit_redesign.sql
+!supabase/migrations/20260212_mcp_guard_internal_updates.sql
+!supabase/migrations/20260212_mcp_unban_reactivate_keys.sql
+!supabase/migrations/20260315_fix_user_oauth_providers_admin_rls.sql
+!supabase/migrations/20260318_drop_community_posts_anonymous_name.sql
+!supabase/migrations/20260328_fix_announcements_admin_rls.sql
+!supabase/migrations/20260328_simplify_announcements_for_unified_center.sql
+!supabase/migrations/20260401_add_chart_prompt_detail_level_to_user_settings.sql
+!supabase/migrations/20260410_103000_fix_linuxdo_claim_concurrency.sql
+!supabase/migrations/20260410_141500_checkin_overcap_drop_user_achievements.sql
+!supabase/migrations/20260411_103500_align_admin_session_service_rpcs.sql
+!supabase/migrations/20260411_104200_restore_batch_update_vectors_as_service.sql
+!supabase/migrations/20260411_111500_restrict_admin_session_rpc_acl.sql
 !supabase/migrations/20260723_100000_create_meihua_xiaoliuren_web.sql
 !supabase/migrations/20260723_110000_drop_mcp_auth_storage.sql
+!supabase/migrations/20261002_100000_fix_knowledge_search_contracts.sql
+!supabase/migrations/20261002_101000_restrict_credit_ledger_rpc.sql
 
 # docs
 docs/*
+!docs/manual/
+docs/manual/*
+!docs/manual/Architecture.md
+!docs/manual/Refactor-Acceptance.md
 
 # AI
 .claude

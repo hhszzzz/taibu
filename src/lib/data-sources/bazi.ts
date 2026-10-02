@@ -1,5 +1,6 @@
 import { getSystemAdminClient } from '@/lib/api-utils';
-import type { DataSourceProvider, DataSourceQueryContext, DataSourceSummary } from '@/lib/data-sources/types';
+import type { DataSourceSummary } from '@/lib/data-sources/types';
+import type { DataSourceProvider, DataSourceQueryContext } from '@/lib/data-sources/provider.server';
 import { type BaziCaseProfile } from '@/lib/bazi-case-profile';
 import { formatBaziPromptText } from '@/lib/bazi-prompt';
 import { getBaziCaseProfileByChartId } from '@/lib/server/bazi-case-profile';

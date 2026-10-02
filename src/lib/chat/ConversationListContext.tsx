@@ -15,9 +15,13 @@ import {
   useState,
   useRef,
   useEffect,
+  useLayoutEffect,
+  useMemo,
   useCallback,
   type ReactNode,
 } from 'react';
+import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query';
+import { createConversationListCache, EMPTY_CONVERSATIONS } from '@/lib/query/conversation-list-cache';
 import type { ConversationListItem } from '@/types';
 import {
   CONVERSATION_PAGE_SIZE,
@@ -31,7 +35,7 @@ import {
   HISTORY_SUMMARY_DELETED_EVENT,
   KNOWLEDGE_BASE_SYNC_EVENT,
 } from '@/lib/browser-api';
-import { useSessionSafe } from '@/components/providers/ClientProviders';
+import { useSessionSafe } from '@/lib/hooks/session-context';
 
 export const CHAT_CONVERSATION_DELETED_EVENT = 'taibu:chat:conversation-deleted';
 export const CHAT_NEW_EVENT = 'taibu:chat:new';
@@ -128,7 +132,32 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
   const { user, loading: sessionLoading } = useSessionSafe();
   const userId = user?.id ?? null;
 
-  const [conversations, setConversations] = useState<ConversationListItem[]>([]);
+  const queryClient = useQueryClient();
+  const accountScope = useMemo(() => ({ userId }), [userId]);
+  const accountScopeRef = useRef<typeof accountScope | null>(accountScope);
+  useLayoutEffect(() => { accountScopeRef.current = accountScope; }, [accountScope]);
+  const conversationCache = useMemo(() => createConversationListCache(
+    queryClient,
+    userId,
+    () => accountScopeRef.current === accountScope,
+  ), [accountScope, queryClient, userId]);
+  // Deliberately disabled: existing idle/window/stream triggers own fetching.
+  const { data } = useQuery<ConversationListItem[]>({
+    queryKey: conversationCache.queryKey,
+    queryFn: skipToken,
+    enabled: false,
+  });
+  const conversations = userId ? data ?? EMPTY_CONVERSATIONS : EMPTY_CONVERSATIONS;
+  const setConversations = conversationCache.update;
+  const conversationsRef = conversationCache.ref;
+  useEffect(() => () => {
+    if (conversationCache.isCurrent()) {
+      accountScopeRef.current = null;
+      activeRequestIdRef.current += 1;
+      requestControllerRef.current?.abort();
+    }
+    conversationCache.clear();
+  }, [conversationCache]);
   const [conversationsLoading, setConversationsLoading] = useState(false);
   const [refreshingConversations, setRefreshingConversations] = useState(false);
   const [loadingMoreConversations, setLoadingMoreConversations] = useState(false);
@@ -138,7 +167,6 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
   const [pendingSidebarTitle, setPendingSidebarTitle] = useState<string | null>(null);
 
   const manualRenamedConversationIdsRef = useRef<Set<string>>(new Set());
-  const conversationsRef = useRef(conversations);
   const hasLoadedRef = useRef(false);
   const userIdRef = useRef<string | null>(userId);
   const nextOffsetRef = useRef<number | null>(null);
@@ -150,9 +178,8 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
   const idleCallbackHandleRef = useRef<number | null>(null);
   const idleTimeoutHandleRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
 
-  useEffect(() => { conversationsRef.current = conversations; }, [conversations]);
   useEffect(() => { hasLoadedRef.current = hasLoadedConversations; }, [hasLoadedConversations]);
-  useEffect(() => { userIdRef.current = userId; }, [userId]);
+  useLayoutEffect(() => { userIdRef.current = userId; }, [userId]);
   useEffect(() => {
     loadingRef.current = conversationsLoading || refreshingConversations;
   }, [conversationsLoading, refreshingConversations]);
@@ -181,6 +208,9 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
     requestControllerRef.current?.abort();
     requestControllerRef.current = null;
     nextOffsetRef.current = null;
+    hasLoadedRef.current = false;
+    loadingRef.current = false;
+    loadingMoreRef.current = false;
     setConversations([]);
     setConversationsLoading(false);
     setRefreshingConversations(false);
@@ -190,7 +220,7 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
     setConversationListError(null);
     setPendingSidebarTitle(null);
     manualRenamedConversationIdsRef.current.clear();
-  }, []);
+  }, [setConversations]);
 
   const requestConversationPage = useCallback(async ({
     targetUserId,
@@ -201,6 +231,7 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
     offset: number;
     append: boolean;
   }) => {
+    if (!conversationCache.isCurrent() || targetUserId !== userIdRef.current) return false;
     const requestId = activeRequestIdRef.current + 1;
     activeRequestIdRef.current = requestId;
     requestControllerRef.current?.abort();
@@ -222,6 +253,7 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
 
       if (
         !payload
+        || !conversationCache.isCurrent()
         || controller.signal.aborted
         || activeRequestIdRef.current !== requestId
         || userIdRef.current !== targetUserId
@@ -241,7 +273,12 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
 
       return true;
     } catch (error) {
-      if (!(error instanceof DOMException && error.name === 'AbortError')) {
+      if (
+        conversationCache.isCurrent()
+        && activeRequestIdRef.current === requestId
+        && !controller.signal.aborted
+        && !(error instanceof DOMException && error.name === 'AbortError')
+      ) {
         console.error('[conversation] 对话列表分页加载失败', error);
         setConversationListError(error instanceof Error ? error.message : '加载对话列表失败');
       }
@@ -251,7 +288,7 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
         requestControllerRef.current = null;
       }
 
-      if (activeRequestIdRef.current === requestId) {
+      if (conversationCache.isCurrent() && activeRequestIdRef.current === requestId) {
         if (append) {
           setLoadingMoreConversations(false);
         } else {
@@ -259,14 +296,14 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
         }
       }
     }
-  }, []);
+  }, [conversationCache, setConversations]);
 
   const refreshConversationList = useCallback(async (
     targetUserId?: string | null,
     options: { targetCount?: number } = {},
   ) => {
     const id = targetUserId ?? userId;
-    if (!id) return;
+    if (!id || !conversationCache.isCurrent() || id !== userIdRef.current) return;
 
     const requestId = activeRequestIdRef.current + 1;
     activeRequestIdRef.current = requestId;
@@ -297,6 +334,7 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
 
       if (
         !payload
+        || !conversationCache.isCurrent()
         || controller.signal.aborted
         || activeRequestIdRef.current !== requestId
         || userIdRef.current !== id
@@ -314,7 +352,12 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
         manualRenamedConversationIdsRef.current,
       ));
     } catch (error) {
-      if (!(error instanceof DOMException && error.name === 'AbortError')) {
+      if (
+        conversationCache.isCurrent()
+        && activeRequestIdRef.current === requestId
+        && !controller.signal.aborted
+        && !(error instanceof DOMException && error.name === 'AbortError')
+      ) {
         console.error('[conversation] 对话列表刷新失败', error);
         setConversationListError(error instanceof Error ? error.message : '加载对话列表失败');
       }
@@ -323,7 +366,7 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
         requestControllerRef.current = null;
       }
 
-      if (activeRequestIdRef.current === requestId) {
+      if (conversationCache.isCurrent() && activeRequestIdRef.current === requestId) {
         if (shouldShowBlockingLoader) {
           setConversationsLoading(false);
         } else {
@@ -331,7 +374,7 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
         }
       }
     }
-  }, [userId]);
+  }, [conversationCache, conversationsRef, setConversations, userId]);
 
   const triggerConversationListLoad = useCallback((targetCount?: number) => {
     if (!userId || loadingRef.current || loadingMoreRef.current) {
@@ -352,7 +395,7 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
     }
 
     void refreshConversationList(userId, { targetCount });
-  }, [hasMoreConversations, refreshConversationList, userId]);
+  }, [conversationsRef, hasMoreConversations, refreshConversationList, userId]);
 
   const retryConversationListLoad = useCallback(async () => {
     if (!userId) return;
@@ -383,14 +426,13 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
     setConversations((current) => {
       const next = current.filter((conversation) => conversation.id !== id);
       removed = next.length !== current.length;
-      conversationsRef.current = next;
       return removed ? next : current;
     });
     if (removed) {
       nextOffsetRef.current = nextOffsetRef.current == null ? null : Math.max(nextOffsetRef.current - 1, 0);
     }
     return removed;
-  }, []);
+  }, [setConversations]);
 
   const broadcastConversationDeleted = useCallback((id: string) => {
     if (typeof window === 'undefined') {
@@ -497,14 +539,15 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
   }, [refreshConversationList]);
 
   const handleDeleteConversation = useCallback(async (id: string) => {
+    if (!conversationCache.isCurrent()) return false;
     const previousConversations = conversationsRef.current;
     const previousNextOffset = nextOffsetRef.current;
     const removed = removeConversationFromList(id);
     const success = await deleteConversation(id);
+    if (!conversationCache.isCurrent()) return success;
     if (!success) {
       if (removed) {
         setConversations(previousConversations);
-        conversationsRef.current = previousConversations;
         nextOffsetRef.current = previousNextOffset;
       }
       return false;
@@ -514,20 +557,22 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
       broadcastConversationDeleted(id);
     }
     return true;
-  }, [broadcastConversationDeleted, removeConversationFromList]);
+  }, [broadcastConversationDeleted, conversationCache, conversationsRef, removeConversationFromList, setConversations]);
 
   const handleRenameConversation = useCallback(async (id: string, title: string) => {
+    if (!conversationCache.isCurrent()) return false;
     manualRenamedConversationIdsRef.current.add(id);
     const previousConversations = conversationsRef.current;
     setConversations(prev => prev.map(c => c.id === id ? { ...c, title } : c));
     const success = await renameConversation(id, title);
+    if (!conversationCache.isCurrent()) return success;
     if (!success) {
       manualRenamedConversationIdsRef.current.delete(id);
       setConversations(previousConversations);
       return false;
     }
     return true;
-  }, []);
+  }, [conversationCache, conversationsRef, setConversations]);
 
   const handleNewChat = useCallback(async () => {
     window.dispatchEvent(new CustomEvent(CHAT_NEW_EVENT));

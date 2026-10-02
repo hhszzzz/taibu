@@ -1,5 +1,6 @@
 import { getSystemAdminClient } from '@/lib/api-utils';
-import type { DataSourceQueryContext, DataSourceSummary } from '@/lib/data-sources/types';
+import type { DataSourceSummary } from '@/lib/data-sources/types';
+import type { DataSourceQueryContext } from '@/lib/data-sources/provider.server';
 import { getProvider } from '@/lib/data-sources';
 import { countTokens, truncateToTokens } from '@/lib/token-utils';
 import type { Mention, MentionTarget, MentionType } from '@/types/mentions';

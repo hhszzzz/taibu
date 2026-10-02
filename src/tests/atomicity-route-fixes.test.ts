@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
+import { createMockAuthContext } from './helpers/supabase-mock';
+import { mockAIRateLimit } from './helpers/route-mock';
 
 process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
@@ -14,13 +16,13 @@ test('knowledge-base POST should create through transactional rpc', async (t) =>
   const originalGetEffectiveMembershipType = membershipModule.getEffectiveMembershipType;
   const originalEnsureFeatureRouteEnabled = featureGateModule.ensureFeatureRouteEnabled;
 
-  let rpcCall: { fn: string; args: Record<string, unknown> } | null = null;
+  const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
     supabase: {
       rpc: async (fn: string, args: Record<string, unknown>) => {
-        rpcCall = { fn, args };
+        rpcCalls.push({ fn, args });
         return {
           data: {
             status: 'ok',
@@ -56,8 +58,11 @@ test('knowledge-base POST should create through transactional rpc', async (t) =>
 
   assert.equal(response.status, 200);
   assert.equal(payload.id, 'kb-1');
-  assert.equal(rpcCall?.fn, 'create_knowledge_base_with_limit');
-  assert.deepEqual(rpcCall?.args, {
+  assert.equal(rpcCalls.length, 1);
+  const [rpcCall] = rpcCalls;
+  assert.ok(rpcCall);
+  assert.equal(rpcCall.fn, 'create_knowledge_base_with_limit');
+  assert.deepEqual(rpcCall.args, {
     p_user_id: 'user-1',
     p_name: 'My KB',
     p_description: 'test',
@@ -109,13 +114,13 @@ test('community votes POST should toggle vote through transactional rpc', async 
   const routePath = require.resolve('../app/api/community/votes/route');
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
 
-  let rpcCall: { fn: string; args: Record<string, unknown> } | null = null;
+  const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
     supabase: {
       rpc: async (fn: string, args: Record<string, unknown>) => {
-        rpcCall = { fn, args };
+        rpcCalls.push({ fn, args });
         return { data: { status: 'ok', vote: 'down' }, error: null };
       },
     },
@@ -141,8 +146,11 @@ test('community votes POST should toggle vote through transactional rpc', async 
 
   assert.equal(response.status, 200);
   assert.equal(payload.vote, 'down');
-  assert.equal(rpcCall?.fn, 'toggle_community_vote');
-  assert.deepEqual(rpcCall?.args, {
+  assert.equal(rpcCalls.length, 1);
+  const [rpcCall] = rpcCalls;
+  assert.ok(rpcCall);
+  assert.equal(rpcCall.fn, 'toggle_community_vote');
+  assert.deepEqual(rpcCall.args, {
     p_target_type: 'post',
     p_target_id: '11111111-1111-1111-1111-111111111111',
     p_vote_type: 'down',
@@ -154,13 +162,13 @@ test('records PUT togglePin should use transactional rpc', async (t) => {
   const routePath = require.resolve('../app/api/records/[id]/route');
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
 
-  let rpcCall: { fn: string; args: Record<string, unknown> } | null = null;
+  const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
     supabase: {
       rpc: async (fn: string, args: Record<string, unknown>) => {
-        rpcCall = { fn, args };
+        rpcCalls.push({ fn, args });
         return {
           data: {
             status: 'ok',
@@ -190,8 +198,11 @@ test('records PUT togglePin should use transactional rpc', async (t) => {
 
   assert.equal(response.status, 200);
   assert.equal(payload.id, 'record-1');
-  assert.equal(rpcCall?.fn, 'toggle_ming_record_pin');
-  assert.deepEqual(rpcCall?.args, {
+  assert.equal(rpcCalls.length, 1);
+  const [rpcCall] = rpcCalls;
+  assert.ok(rpcCall);
+  assert.equal(rpcCall.fn, 'toggle_ming_record_pin');
+  assert.deepEqual(rpcCall.args, {
     p_record_id: 'record-1',
   });
 });
@@ -317,13 +328,13 @@ test('community reports POST should submit and notify via transactional rpc', as
   };
   const originalRequireUserContext = apiUtils.requireUserContext;
 
-  let rpcCall: { fn: string; args: Record<string, unknown> } | null = null;
+  const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
 
   apiUtils.requireUserContext = (async () => ({
     user: { id: 'user-1' },
     supabase: {
       rpc(fn: string, args: Record<string, unknown>) {
-        rpcCall = { fn, args };
+        rpcCalls.push({ fn, args });
         return Promise.resolve({
           data: {
             status: 'ok',
@@ -359,8 +370,11 @@ test('community reports POST should submit and notify via transactional rpc', as
   const payload = await response.json();
 
   assert.equal(response.status, 200);
-  assert.equal(rpcCall?.fn, 'submit_community_report_and_notify');
-  assert.deepEqual(rpcCall?.args, {
+  assert.equal(rpcCalls.length, 1);
+  const [rpcCall] = rpcCalls;
+  assert.ok(rpcCall);
+  assert.equal(rpcCall.fn, 'submit_community_report_and_notify');
+  assert.deepEqual(rpcCall.args, {
     p_target_type: 'comment',
     p_target_id: 'comment-1',
     p_reason: 'spam',
@@ -501,11 +515,11 @@ test('performCheckin should use transactional rpc result', async (t) => {
   const apiUtilsModule = require('../lib/api-utils') as any;
   const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
 
-  let rpcCall: { fn: string; args: Record<string, unknown> } | null = null;
+  const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
 
   apiUtilsModule.getSystemAdminClient = () => ({
     rpc: (fn: string, args: Record<string, unknown>) => {
-      rpcCall = { fn, args };
+      rpcCalls.push({ fn, args });
       return Promise.resolve({
         data: {
           status: 'ok',
@@ -525,8 +539,11 @@ test('performCheckin should use transactional rpc result', async (t) => {
   const { performCheckin } = require('../lib/user/checkin') as typeof import('../lib/user/checkin');
   const result = await performCheckin('user-1');
 
-  assert.equal(rpcCall?.fn, 'perform_daily_checkin_as_service');
-  assert.deepEqual(rpcCall?.args, { p_user_id: 'user-1' });
+  assert.equal(rpcCalls.length, 1);
+  const [rpcCall] = rpcCalls;
+  assert.ok(rpcCall);
+  assert.equal(rpcCall.fn, 'perform_daily_checkin_as_service');
+  assert.deepEqual(rpcCall.args, { p_user_id: 'user-1' });
   assert.deepEqual(result, {
     success: true,
     rewardCredits: 2,
@@ -841,11 +858,11 @@ test('checkRateLimit should use transactional rpc result', async (t) => {
   const rateLimitPath = require.resolve('../lib/rate-limit');
   const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
 
-  let rpcCall: { fn: string; args: Record<string, unknown> } | null = null;
+  const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
 
   apiUtilsModule.getSystemAdminClient = () => ({
     rpc(fn: string, args: Record<string, unknown>) {
-      rpcCall = { fn, args };
+      rpcCalls.push({ fn, args });
       return Promise.resolve({
         data: {
           allowed: false,
@@ -870,8 +887,11 @@ test('checkRateLimit should use transactional rpc result', async (t) => {
     windowMs: 60_000,
   });
 
-  assert.equal(rpcCall?.fn, 'consume_rate_limit_slot_as_admin');
-  assert.deepEqual(rpcCall?.args, {
+  assert.equal(rpcCalls.length, 1);
+  const [rpcCall] = rpcCalls;
+  assert.ok(rpcCall);
+  assert.equal(rpcCall.fn, 'consume_rate_limit_slot_as_admin');
+  assert.deepEqual(rpcCall.args, {
     p_identifier: '127.0.0.1',
     p_endpoint: '/api/chat/direct/prepare',
     p_max_requests: 10,
@@ -914,6 +934,7 @@ test('checkRateLimit should fail open when transactional rpc errors', async (t) 
 });
 
 test('mbti save should persist through shared save helper and return reading id', async (t) => {
+  mockAIRateLimit(t, async () => assert.fail('save must not consume a rate slot'));
   const apiUtilsModule = require('../lib/api-utils') as any;
   const supabaseServerModule = require('../lib/supabase-server') as any;
   const routePath = require.resolve('../app/api/mbti/route');
@@ -922,11 +943,8 @@ test('mbti save should persist through shared save helper and return reading id'
 
   let insertedPayload: Record<string, unknown> | null = null;
 
-  apiUtilsModule.requireUserContext = async () => ({
-    user: { id: 'user-1' },
-    supabase: {},
-  });
-  supabaseServerModule.getSystemAdminClient = () => ({
+  supabaseServerModule.getSystemAdminClient = () => assert.fail('save must use the caller DB client');
+  apiUtilsModule.requireUserContext = async () => createMockAuthContext({
     from: (table: string) => {
       assert.equal(table, 'mbti_readings');
       return {
@@ -986,6 +1004,7 @@ test('mbti save should persist through shared save helper and return reading id'
 });
 
 test('daliuren save should persist through shared save helper and return divination id', async (t) => {
+  mockAIRateLimit(t, async () => assert.fail('save must not consume a rate slot'));
   const apiUtilsModule = require('../lib/api-utils') as any;
   const supabaseServerModule = require('../lib/supabase-server') as any;
   const routePath = require.resolve('../app/api/daliuren/route');
@@ -993,18 +1012,15 @@ test('daliuren save should persist through shared save helper and return divinat
   const originalGetSystemAdminClient = supabaseServerModule.getSystemAdminClient;
   const { calculateDaliuren } = await import('taibu-core');
 
-  let insertedPayload: Record<string, unknown> | null = null;
+  const insertedPayloads: Record<string, unknown>[] = [];
 
-  apiUtilsModule.requireUserContext = async () => ({
-    user: { id: 'user-1' },
-    supabase: {},
-  });
-  supabaseServerModule.getSystemAdminClient = () => ({
+  supabaseServerModule.getSystemAdminClient = () => assert.fail('save must use the caller DB client');
+  apiUtilsModule.requireUserContext = async () => createMockAuthContext({
     from: (table: string) => {
       assert.equal(table, 'daliuren_divinations');
       return {
         insert: (payload: Record<string, unknown>) => {
-          insertedPayload = payload;
+          insertedPayloads.push(payload);
           return {
             select: () => ({
               single: async () => ({
@@ -1051,16 +1067,19 @@ test('daliuren save should persist through shared save helper and return divinat
 
   assert.equal(response.status, 200);
   assert.equal(payload.data.divinationId, 'divination-1');
-  assert.equal(insertedPayload?.user_id, 'user-1');
-  assert.equal(insertedPayload?.question, '测试问题');
-  assert.equal(insertedPayload?.solar_date, '2025-01-15');
-  assert.deepEqual(insertedPayload?.settings, {
+  assert.equal(insertedPayloads.length, 1);
+  const [insertedPayload] = insertedPayloads;
+  assert.ok(insertedPayload);
+  assert.equal(insertedPayload.user_id, 'user-1');
+  assert.equal(insertedPayload.question, '测试问题');
+  assert.equal(insertedPayload.solar_date, '2025-01-15');
+  assert.deepEqual(insertedPayload.settings, {
     hour: 10,
     minute: 30,
     timezone: 'Asia/Shanghai',
   });
   assert.deepEqual(
-    JSON.parse(JSON.stringify(insertedPayload?.result_data)),
+    JSON.parse(JSON.stringify(insertedPayload.result_data)),
     JSON.parse(JSON.stringify(resultData)),
   );
 });

@@ -1,5 +1,6 @@
 import { DATA_SOURCE_LOADERS, DATA_SOURCE_TYPES } from '@/lib/data-sources/manifest';
-import type { DataSourceProvider, DataSourceQueryContext, DataSourceSummary, DataSourceType } from '@/lib/data-sources/types';
+import type { DataSourceSummary, DataSourceType } from '@/lib/data-sources/types';
+import type { DataSourceProvider, DataSourceQueryContext } from '@/lib/data-sources/provider.server';
 
 export async function getProvider(type: DataSourceType): Promise<DataSourceProvider> {
     const loader = DATA_SOURCE_LOADERS[type];

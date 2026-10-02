@@ -65,7 +65,7 @@ test('user settings route PATCH should update only user_settings without touchin
   type RequireUserContextResult = Awaited<ReturnType<typeof apiUtilsModule.requireUserContext>>;
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
   const touchedTables: string[] = [];
-  let upsertPayload: Record<string, unknown> | null = null;
+  const upsertPayloads: Record<string, unknown>[] = [];
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' } as Awaited<ReturnType<typeof import('../lib/api-utils').getAuthContext>>['user'],
@@ -75,7 +75,7 @@ test('user settings route PATCH should update only user_settings without touchin
         assert.equal(table, 'user_settings');
         return {
           upsert: (payload: Record<string, unknown>) => {
-            upsertPayload = payload;
+            upsertPayloads.push(payload);
             return { error: null };
           },
           select: () => ({
@@ -130,7 +130,10 @@ test('user settings route PATCH should update only user_settings without touchin
   assert.equal(payload.settings.notificationsEnabled, false);
   assert.equal(payload.settings.chartPromptDetailLevel, 'full');
   assert.deepEqual(payload.settings.userProfile, { identity: '创业者' });
-  assert.deepEqual(upsertPayload?.user_profile, { identity: '创业者' });
+  assert.equal(upsertPayloads.length, 1);
+  const [upsertPayload] = upsertPayloads;
+  assert.ok(upsertPayload);
+  assert.deepEqual(upsertPayload.user_profile, { identity: '创业者' });
   assert.deepEqual(payload.settings.visualizationSettings, {
     selectedDimensions: ['career', 'health'],
     dayunDisplayCount: 4,

@@ -1,57 +1,31 @@
-import { test } from 'node:test';
+import { beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
-import { ensureRouteTestEnv, mockAIFeatureState } from './helpers/route-mock';
+import { ensureRouteTestEnv, mockAIFeatureState, mockAIRateLimit, mockRouteUserContext, blockRouteNetwork } from './helpers/route-mock';
 import { createMockUIMessageResult } from './helpers/ui-message-result';
+import type { CreateAIAnalysisParams } from '../lib/ai/ai-analysis';
 
 ensureRouteTestEnv();
 
-function mockQimenUserContext(
-    t: import('node:test').TestContext,
-    client: Record<string, unknown> = {},
-) {
-    const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
-    const routePath = require.resolve('../app/api/qimen/route');
-    const pipelinePath = require.resolve('../lib/api/divination-pipeline');
-    const originalRequireUserContext = apiUtilsModule.requireUserContext;
+// The CommonJS test loader keeps imported function lookups live; no cache eviction is needed.
+beforeEach((t) => {
+    assert.ok('mock' in t);
+    blockRouteNetwork(t);
+});
 
-    apiUtilsModule.requireUserContext = async () => ({
-        user: { id: 'user-1' },
-        db: client,
-        supabase: client,
-        accessToken: 'test-token',
-    }) as Awaited<ReturnType<typeof import('../lib/api-utils').requireUserContext>>;
-
-    delete require.cache[routePath];
-    delete require.cache[pipelinePath];
-
-    t.after(() => {
-        apiUtilsModule.requireUserContext = originalRequireUserContext;
-        delete require.cache[routePath];
-        delete require.cache[pipelinePath];
-    });
-}
+const credits = require('../lib/user/credits') as typeof import('../lib/user/credits');
+const aiAccessModule = require('../lib/ai/ai-access') as typeof import('../lib/ai/ai-access');
+const aiModule = require('../lib/ai/ai') as typeof import('../lib/ai/ai');
+const aiAnalysisModule = require('../lib/ai/ai-analysis') as typeof import('../lib/ai/ai-analysis');
+const chartPromptDetailModule = require('../lib/ai/chart-prompt-detail') as typeof import('../lib/ai/chart-prompt-detail');
 
 test('qimen route persists analysis after streaming completes', async (t) => {
   mockAIFeatureState(t);
-    const credits = require('../lib/user/credits') as any;
-    const aiAccessModule = require('../lib/ai/ai-access') as any;
-    const aiModule = require('../lib/ai/ai') as any;
-    const aiAnalysisModule = require('../lib/ai/ai-analysis') as any;
-    const chartPromptDetailModule = require('../lib/ai/chart-prompt-detail') as any;
-    const supabaseModule = require('../lib/auth') as any;
+    mockAIRateLimit(t);
 
-    const originalGetUserAuthInfo = credits.getUserAuthInfo;
-    const originalAttemptCreditUse = credits.attemptCreditUse;
-    const originalResolveModelAccessAsync = aiAccessModule.resolveModelAccessAsync;
-    const originalCallAIUIMessageResult = aiModule.callAIUIMessageResult;
-    const originalCreateConversation = aiAnalysisModule.createAIAnalysisConversation;
-    const originalLoadResolvedChartPromptDetailLevel = chartPromptDetailModule.loadResolvedChartPromptDetailLevel;
-    const originalGetUser = supabaseModule.supabase.auth.getUser;
+    const createCalls: CreateAIAnalysisParams[] = [];
 
-    let createArgs: Record<string, unknown> | null = null;
-
-    mockQimenUserContext(t, {
+    mockRouteUserContext(t, {
         from() {
             throw new Error('qimen history test should not query tables directly');
         },
@@ -59,41 +33,15 @@ test('qimen route persists analysis after streaming completes', async (t) => {
             throw new Error('qimen history test should not call rpc directly');
         },
     });
-    credits.getUserAuthInfo = async () => ({ credits: 10, effectiveMembership: 'pro', hasCredits: true });
-    credits.attemptCreditUse = async () => ({ ok: true, remaining: 9 });
-    aiAccessModule.resolveModelAccessAsync = async () => ({
-        modelId: 'test-model',
-        modelConfig: {
-            id: 'test-model',
-            modelKey: 'test-model',
-            vendor: 'test',
-            usageType: 'chat',
-            supportsReasoning: true,
-            supportsVision: false,
-            requiredTier: 'free',
-        },
-        reasoningEnabled: false,
-    });
-    aiModule.callAIUIMessageResult = async () => createMockUIMessageResult();
-    aiAnalysisModule.createAIAnalysisConversation = async (params: Record<string, unknown>) => {
-        createArgs = params;
+    t.mock.method(credits, 'getUserAuthInfo', async () => ({ credits: 10, effectiveMembership: 'pro', hasCredits: true }));
+    t.mock.method(credits, 'attemptCreditUse', async () => ({ ok: true, remaining: 9 }));
+    t.mock.method(aiAccessModule, 'resolveModelAccessAsync', async () => ({ modelId: 'test-model', reasoningEnabled: false }));
+    t.mock.method(aiModule, 'callAIUIMessageResult', async () => createMockUIMessageResult());
+    t.mock.method(aiAnalysisModule, 'createAIAnalysisConversation', async (params: CreateAIAnalysisParams) => {
+        createCalls.push(params);
         return 'conv-1';
-    };
-    chartPromptDetailModule.loadResolvedChartPromptDetailLevel = async () => 'default';
-    supabaseModule.supabase.auth.getUser = async () => ({
-        data: { user: { id: 'user-1' } },
-        error: null,
     });
-
-    t.after(() => {
-        credits.getUserAuthInfo = originalGetUserAuthInfo;
-        credits.attemptCreditUse = originalAttemptCreditUse;
-        aiAccessModule.resolveModelAccessAsync = originalResolveModelAccessAsync;
-        aiModule.callAIUIMessageResult = originalCallAIUIMessageResult;
-        aiAnalysisModule.createAIAnalysisConversation = originalCreateConversation;
-        chartPromptDetailModule.loadResolvedChartPromptDetailLevel = originalLoadResolvedChartPromptDetailLevel;
-        supabaseModule.supabase.auth.getUser = originalGetUser;
-    });
+    t.mock.method(chartPromptDetailModule, 'loadResolvedChartPromptDetailLevel', async () => 'default');
 
     const { POST } = await import('../app/api/qimen/route');
     const request = new NextRequest('http://localhost/api/qimen', {
@@ -124,30 +72,19 @@ test('qimen route persists analysis after streaming completes', async (t) => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     assert.equal(response.headers.get('x-vercel-ai-ui-message-stream'), 'v1');
+    const createArgs = createCalls.at(-1);
     assert.ok(createArgs);
-    assert.equal((createArgs as Record<string, unknown>).sourceType, 'qimen');
-    assert.equal((createArgs as Record<string, unknown>).historyBinding?.type, 'qimen');
-    assert.equal((createArgs as Record<string, unknown>).historyBinding?.payload?.chart_id, 'chart-1');
+    assert.equal(createArgs.sourceType, 'qimen');
+    assert.equal(createArgs.historyBinding?.type, 'qimen');
+    assert.equal(createArgs.historyBinding?.payload.chart_id, 'chart-1');
 });
 
 test('qimen route surfaces SSE error when stream persistence fails after content generation', async (t) => {
   mockAIFeatureState(t);
-    const credits = require('../lib/user/credits') as any;
-    const aiAccessModule = require('../lib/ai/ai-access') as any;
-    const aiModule = require('../lib/ai/ai') as any;
-    const aiAnalysisModule = require('../lib/ai/ai-analysis') as any;
-    const chartPromptDetailModule = require('../lib/ai/chart-prompt-detail') as any;
-    const supabaseModule = require('../lib/auth') as any;
-    const originalGetUserAuthInfo = credits.getUserAuthInfo;
-    const originalAttemptCreditUse = credits.attemptCreditUse;
-    const originalResolveModelAccessAsync = aiAccessModule.resolveModelAccessAsync;
-    const originalCallAIUIMessageResult = aiModule.callAIUIMessageResult;
-    const originalCreateConversation = aiAnalysisModule.createAIAnalysisConversation;
-    const originalLoadResolvedChartPromptDetailLevel = chartPromptDetailModule.loadResolvedChartPromptDetailLevel;
-    const originalGetUser = supabaseModule.supabase.auth.getUser;
-    const originalConsoleError = console.error;
+    mockAIRateLimit(t);
+    const refundCalls: Array<Parameters<typeof import('../lib/user/credits').addCredits>> = [];
 
-    mockQimenUserContext(t, {
+    mockRouteUserContext(t, {
         from() {
             throw new Error('qimen history test should not query tables directly');
         },
@@ -155,42 +92,19 @@ test('qimen route surfaces SSE error when stream persistence fails after content
             throw new Error('qimen history test should not call rpc directly');
         },
     });
-    credits.getUserAuthInfo = async () => ({ credits: 10, effectiveMembership: 'pro', hasCredits: true });
-    credits.attemptCreditUse = async () => ({ ok: true, remaining: 9 });
-    aiAccessModule.resolveModelAccessAsync = async () => ({
-        modelId: 'test-model',
-        modelConfig: {
-            id: 'test-model',
-            modelKey: 'test-model',
-            vendor: 'test',
-            usageType: 'chat',
-            supportsReasoning: true,
-            supportsVision: false,
-            requiredTier: 'free',
-        },
-        reasoningEnabled: false,
-    });
-    aiModule.callAIUIMessageResult = async () => createMockUIMessageResult();
-    aiAnalysisModule.createAIAnalysisConversation = async () => {
+    t.mock.method(credits, 'getUserAuthInfo', async () => ({ credits: 10, effectiveMembership: 'pro', hasCredits: true }));
+    t.mock.method(credits, 'attemptCreditUse', async () => ({ ok: true, remaining: 9 }));
+    t.mock.method(aiAccessModule, 'resolveModelAccessAsync', async () => ({ modelId: 'test-model', reasoningEnabled: false }));
+    t.mock.method(aiModule, 'callAIUIMessageResult', async () => createMockUIMessageResult());
+    t.mock.method(aiAnalysisModule, 'createAIAnalysisConversation', async () => {
         throw new Error('persist failed');
-    };
-    chartPromptDetailModule.loadResolvedChartPromptDetailLevel = async () => 'default';
-    supabaseModule.supabase.auth.getUser = async () => ({
-        data: { user: { id: 'user-1' } },
-        error: null,
     });
-    console.error = () => {};
-
-    t.after(() => {
-        credits.getUserAuthInfo = originalGetUserAuthInfo;
-        credits.attemptCreditUse = originalAttemptCreditUse;
-        aiAccessModule.resolveModelAccessAsync = originalResolveModelAccessAsync;
-        aiModule.callAIUIMessageResult = originalCallAIUIMessageResult;
-        aiAnalysisModule.createAIAnalysisConversation = originalCreateConversation;
-        chartPromptDetailModule.loadResolvedChartPromptDetailLevel = originalLoadResolvedChartPromptDetailLevel;
-        supabaseModule.supabase.auth.getUser = originalGetUser;
-        console.error = originalConsoleError;
+    t.mock.method(chartPromptDetailModule, 'loadResolvedChartPromptDetailLevel', async () => 'default');
+    t.mock.method(credits, 'addCredits', async (...args: Parameters<typeof import('../lib/user/credits').addCredits>) => {
+        refundCalls.push(args);
+        return 10;
     });
+    t.mock.method(console, 'error', () => {});
 
     const { POST } = await import('../app/api/qimen/route');
     const request = new NextRequest('http://localhost/api/qimen', {
@@ -223,16 +137,17 @@ test('qimen route surfaces SSE error when stream persistence fails after content
     assert.equal(response.headers.get('x-vercel-ai-ui-message-stream'), 'v1');
     assert.match(body, /"type":"text-delta","id":"text-1","delta":"analysis"/u);
     assert.match(body, /"type":"error","errorText":"保存结果失败，请稍后重试"/u);
+    assert.deepEqual(refundCalls, [['user-1', 1]]);
 });
 
 test('qimen save persists base inputs instead of chart_data', async (t) => {
-    let insertedPayload: Record<string, unknown> | null = null;
+    const insertCalls: Record<string, unknown>[] = [];
     const authClient = {
         from: (table: string) => {
             assert.equal(table, 'qimen_charts');
             return {
                 insert: (payload: Record<string, unknown>) => {
-                    insertedPayload = payload;
+                    insertCalls.push(payload);
                     return {
                         select: () => ({
                             single: async () => ({
@@ -246,7 +161,7 @@ test('qimen save persists base inputs instead of chart_data', async (t) => {
         },
     };
 
-    mockQimenUserContext(t, authClient);
+    mockRouteUserContext(t, authClient);
 
     const { POST } = await import('../app/api/qimen/route');
     const request = new NextRequest('http://localhost/api/qimen', {
@@ -275,8 +190,8 @@ test('qimen save persists base inputs instead of chart_data', async (t) => {
 
     assert.equal(response.status, 200);
     assert.equal(payload.data.chartId, 'chart-1');
-    assert.ok(insertedPayload);
-    const insertedRecord = insertedPayload as Record<string, unknown>;
+    const insertedRecord = insertCalls.at(-1);
+    assert.ok(insertedRecord);
     assert.equal(insertedRecord.question, '测试问题');
     assert.equal(insertedRecord.year, 2025);
     assert.equal(insertedRecord.month, 1);

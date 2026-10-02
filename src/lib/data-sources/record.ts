@@ -1,10 +1,6 @@
 import { getSystemAdminClient } from '@/lib/api-utils';
-import {
-    MING_RECORD_SOURCE_TYPE,
-    type DataSourceProvider,
-    type DataSourceQueryContext,
-    type DataSourceSummary,
-} from '@/lib/data-sources/types';
+import { MING_RECORD_SOURCE_TYPE, type DataSourceSummary } from '@/lib/data-sources/types';
+import type { DataSourceProvider, DataSourceQueryContext } from '@/lib/data-sources/provider.server';
 
 type RecordRow = {
     id: string;

@@ -24,6 +24,8 @@ test('buildChatPromptContext should load visualization_settings from user_settin
   const originalGetPromptBudget = promptBuilderModule.calculatePromptBudget;
   const originalFeatureEnabled = appSettingsModule.isFeatureModuleEnabled;
 
+  let budgetCalls = 0;
+  const resolvePersonality = t.mock.method(promptBuilderModule, 'resolvePersonalities');
   let selectedColumns = '';
   let capturedVisualizationSettings: unknown = null;
 
@@ -87,8 +89,10 @@ test('buildChatPromptContext should load visualization_settings from user_settin
     },
   })) as unknown as typeof apiUtilsModule.getSystemAdminClient;
 
-  promptBuilderModule.calculatePromptBudget = (async () => 1024) as typeof promptBuilderModule.calculatePromptBudget;
-  promptBuilderModule.buildPromptWithSources = (async (context) => {
+  promptBuilderModule.calculatePromptBudget = (async () => { budgetCalls++; return 1024; }) as typeof promptBuilderModule.calculatePromptBudget;
+  promptBuilderModule.buildPromptWithSources = (async (context, prepared) => {
+    assert.equal(prepared?.budget, 1024);
+    assert.ok(prepared?.personalityResolution);
     capturedVisualizationSettings = context.userSettings?.visualizationSettings;
     return {
       systemPrompt: '',
@@ -132,6 +136,8 @@ test('buildChatPromptContext should load visualization_settings from user_settin
     creditDeducted: false,
   });
 
+  assert.equal(budgetCalls, 1);
+  assert.equal(resolvePersonality.mock.callCount(), 1);
   assert.match(selectedColumns, /visualization_settings/u);
   assert.deepEqual(capturedVisualizationSettings, {
     selectedDimensions: ['career', 'wealth'],

@@ -9,7 +9,7 @@
  */
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
     RefreshCw,
     ChevronDown,
@@ -23,13 +23,13 @@ import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
 import { getVendorIcon } from '@/lib/ai/vendor-config';
-import { getVendorName } from '@/lib/ai/ai-config';
+import { getVendorName } from '@/lib/ai/vendor-labels';
 import { AIModelCreateForm } from '@/components/admin/AIModelCreateForm';
 import { AIModelSettingsForm } from '@/components/admin/AIModelSettingsForm';
 import { AIModelSources } from '@/components/admin/AIModelSources';
 import {
     TIER_LABELS, USAGE_TYPE_LABELS, ROUTING_MODE_LABELS, createInitialNewModel,
-    createEditModelDraft, createInitialSourceDraft, normalizeSourceModelIdInput,
+    createEditModelDraft, reconcileModelDrafts, createInitialSourceDraft, normalizeSourceModelIdInput,
     resolveDraftVendor, buildCreateModelPayload, buildEditModelPayload, buildSourcePayload,
     createRoutingModeUpdate, createPrimaryGatewayUpdate,
     type AIModel, type ModelSource, type CreateModelDraft, type EditModelDraft,
@@ -45,6 +45,9 @@ export function AIModelPanel() {
     const [updating, setUpdating] = useState<string | null>(null);
     const [showCreateForm, setShowCreateForm] = useState(false);
     const [showCreateAdvanced, setShowCreateAdvanced] = useState(false);
+    const loadedDrafts = useRef<Record<string, EditModelDraft>>({});
+    const mounted = useRef(false);
+    const loadRequest = useRef<AbortController | null>(null);
     const [modelDrafts, setModelDrafts] = useState<Record<string, EditModelDraft>>({});
     const [addingToModel, setAddingToModel] = useState<string | null>(null);
     const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
@@ -71,31 +74,44 @@ export function AIModelPanel() {
 
     // 加载模型列表
     const loadModels = useCallback(async () => {
+        // A late mutation may request a reload after its account panel unmounted.
+        if (!mounted.current) return;
+        loadRequest.current?.abort();
+        const controller = new AbortController();
+        loadRequest.current = controller;
+        const isCurrent = () => mounted.current
+            && loadRequest.current === controller
+            && !controller.signal.aborted;
         setLoading(true);
         setError(null);
 
         try {
             const data = await requestBrowserData<{ models?: AIModel[] }>(
                 '/api/admin/ai-models?includeDisabled=true',
-                { method: 'GET' },
+                { method: 'GET', signal: controller.signal },
                 { fallbackMessage: '获取模型列表失败' },
             );
+            if (!isCurrent()) return;
             const loadedModels = data.models || [];
             setModels(loadedModels);
-            setModelDrafts(
-                Object.fromEntries(
-                    loadedModels.map((model: AIModel) => [model.id, createEditModelDraft(model)])
-                )
-            );
+            const incoming = Object.fromEntries(loadedModels.map(model => [model.id, createEditModelDraft(model)]));
+            const previous = loadedDrafts.current;
+            loadedDrafts.current = incoming;
+            setModelDrafts(current => reconcileModelDrafts(current, previous, incoming));
         } catch (e) {
-            setError(e instanceof Error ? e.message : '获取模型列表失败');
+            if (isCurrent()) setError(e instanceof Error ? e.message : '获取模型列表失败');
         } finally {
-            setLoading(false);
+            if (isCurrent()) setLoading(false);
         }
     }, []);
 
     useEffect(() => {
-        loadModels();
+        mounted.current = true;
+        void loadModels();
+        return () => {
+            mounted.current = false;
+            loadRequest.current?.abort();
+        };
     }, [loadModels]);
 
 

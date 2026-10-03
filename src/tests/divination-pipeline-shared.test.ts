@@ -873,3 +873,109 @@ test('vision retains non-stream response shape and empty-output persistence', as
   assert.equal(createCalls.length, 1);
   assert.equal(createCalls[0]?.aiResponse, '');
 });
+
+for (const scenario of ['saved', 'empty', 'aborted', 'inference', 'persistence', 'refund-false', 'refund-throw'] as const) {
+  test(`request lifecycle ${scenario} has one correlated safe terminal after settlement`, async t => {
+    const state = setupPipelineMocks(t);
+    const logs: unknown[][] = [];
+    for (const method of ['info', 'warn', 'error', 'log'] as const) t.mock.method(console, method, (...args: unknown[]) => { logs.push(args); });
+    if (scenario === 'inference') state.aiModule.callAIWithReasoning = async () => { throw new Error('PRIVATE_PROVIDER_PAYLOAD'); };
+    if (scenario === 'empty') state.aiModule.callAIWithReasoning = async () => ({ content: '' });
+    if (['persistence', 'refund-false', 'refund-throw'].includes(scenario)) state.aiAnalysisModule.createAIAnalysisConversation = async () => { throw new Error('PRIVATE_DATABASE_PAYLOAD'); };
+    let refundSettled = false;
+    state.credits.refundCreditsOrLog = async () => {
+      refundSettled = true;
+      if (scenario === 'refund-throw') throw new Error('PRIVATE_REFUND_PAYLOAD');
+      return scenario !== 'refund-false';
+    };
+    if (scenario === 'aborted') state.aiModule.callAIUIMessageResult = async () => createMockUIMessageResult([], { parts: [] }, { isAborted: true });
+    const handler = createTestHandler(state.loadPipeline().createInterpretHandler);
+    const response = await handler(createTestRequest(), { stream: scenario === 'aborted' });
+    await response.text();
+    const events = logs.filter(log => log[0] === '[ai-request]').map(log => log[1] as import('../lib/server/analysis').RequestObservationEvent);
+    const terminal = events.filter(event => event.phase === 'terminal');
+    assert.equal(terminal.length, 1);
+    assert.ok(events.every(event => event.requestId === terminal[0].requestId && event.durationMs >= 0));
+    assert.notEqual(terminal[0].requestId, 'test-token');
+    assert.ok(!JSON.stringify(logs).includes('PRIVATE_'));
+    assert.equal(terminal[0].billing, scenario.startsWith('refund-') ? 'refund-failed' : ['saved', 'aborted'].includes(scenario) ? 'charged' : 'refunded');
+    assert.equal(refundSettled, !['saved', 'aborted'].includes(scenario));
+    if (scenario === 'refund-throw') assert.equal(terminal[0].refundFailure, 'exception');
+    if (scenario === 'refund-false') assert.equal(terminal[0].refundFailure, 'rejected');
+  });
+}
+
+for (const errorKind of ['generic', 'persistence'] as const) {
+test(`${errorKind} formatter failure preserves saved analysis refund policy and delays terminal until compensation`, async t => {
+  const state = setupPipelineMocks(t);
+  const logs: import('../lib/server/analysis').RequestObservationEvent[] = [];
+  t.mock.method(console, 'info', (_label: string, event: import('../lib/server/analysis').RequestObservationEvent) => { logs.push(event); });
+  let refunds = 0;
+  state.credits.refundCreditsOrLog = async () => {
+    assert.equal(logs.filter(event => event.phase === 'terminal').length, 0);
+    refunds++;
+    return true;
+  };
+  const handler = state.loadPipeline().createInterpretHandler({
+    tag: 'formatter-test', sourceType: 'test_divination', parseInput: () => ({}),
+    buildPrompts: () => ({ systemPrompt: 'system', userPrompt: 'user' }),
+    buildSourceData: () => ({}), generateTitle: () => 'title',
+    formatSuccessResponse: () => {
+      if (errorKind === 'persistence') {
+        const { AIAnalysisConversationPersistenceError } = require('../lib/ai/ai-analysis') as typeof import('../lib/ai/ai-analysis');
+        throw new AIAnalysisConversationPersistenceError('tarot', 'formatter failed');
+      }
+      throw new Error('formatter failed');
+    },
+  });
+  assert.equal((await handler(createTestRequest(), {})).status, 500);
+  assert.equal(refunds, 1);
+  const terminal = logs.filter(event => event.phase === 'terminal');
+  assert.equal(terminal.length, 1);
+  assert.equal(terminal[0].billing, 'refunded');
+  assert.equal(terminal[0].persistence, 'saved');
+});
+}
+
+test('deferred stream conversion failure records terminal without changing legacy billing', async t => {
+  const state = setupPipelineMocks(t);
+  const logs: unknown[][] = [];
+  for (const method of ['info', 'warn', 'error', 'log'] as const) t.mock.method(console, method, (...args: unknown[]) => { logs.push(args); });
+  state.aiModule.callAIUIMessageResult = async () => ({ toUIMessageStream: () => { throw new Error('PRIVATE_CONVERSION'); } });
+  state.credits.refundCreditsOrLog = async () => assert.fail('deferred conversion never entered legacy completion/refund');
+  const handler = createTestHandler(state.loadPipeline().createInterpretHandler);
+  const response = await handler(createTestRequest(), { stream: true });
+  await response.text();
+  assert.equal(state.createCalls.length, 0);
+  const events = logs.filter(log => log[0] === '[ai-request]').map(log => log[1] as import('../lib/server/analysis').RequestObservationEvent);
+  const terminal = events.filter(event => event.phase === 'terminal');
+  assert.equal(terminal.length, 1);
+  assert.equal(terminal[0].billing, 'charged');
+  assert.equal(terminal[0].generation, 'failed');
+  assert.equal(terminal[0].persistence, 'not-needed');
+  assert.equal(terminal[0].failure, 'stream-adapter');
+  assert.ok(!JSON.stringify(logs).includes('PRIVATE_'));
+});
+
+for (const direct of [false, true]) {
+  test(`${direct ? 'direct' : 'managed'} prompt rejection has a bounded diagnostic`, async t => {
+    const state = setupPipelineMocks(t);
+    const events: import('../lib/server/analysis').RequestObservationEvent[] = [];
+    t.mock.method(console, 'info', (_label: string, event: import('../lib/server/analysis').RequestObservationEvent) => { events.push(event); });
+    const pipeline = state.loadPipeline();
+    const config = {
+      tag: 'prompt-failure', sourceType: 'test_divination', parseInput: () => ({}),
+      buildPrompts: () => { throw new Error('PRIVATE_PROMPT'); },
+      buildSourceData: () => ({}), generateTitle: () => 'title',
+    };
+    const response = direct
+      ? await pipeline.createDirectInterpretHandlers(config).handleDirectPrepare(createTestRequest(), {})
+      : await pipeline.createInterpretHandler(config)(createTestRequest(), {});
+    assert.equal(response.status, 500);
+    const terminal = events.filter(event => event.phase === 'terminal');
+    assert.equal(terminal.length, 1);
+    assert.equal(terminal[0].failure, 'prompt');
+    assert.equal(terminal[0].billing, direct ? 'not-applicable' : 'refunded');
+    assert.ok(!JSON.stringify(events).includes('PRIVATE_'));
+  });
+}

@@ -196,11 +196,13 @@ export async function fetchBrowserJson<T>(input: RequestInfo, init?: BrowserRequ
       ...requestInit,
     });
 
+    requestInit.signal?.throwIfAborted();
     const payload = await response.json().catch(() => null) as
       | { data?: T | null; error?: unknown; count?: number | null; status?: number; statusText?: string }
       | T
       | null;
 
+    requestInit.signal?.throwIfAborted();
     const hasEnvelope = !!payload
       && typeof payload === 'object'
       && (

@@ -102,10 +102,10 @@ async function applyKnowledgeBaseWeights(
     if (!effectiveUserId && accessToken) {
         const authed = createAuthedClient(accessToken);
         const { data: { user } } = await authed.auth.getUser();
-        if (!user) return { candidates, highKbIds: [] };
+        if (!user) throw new KnowledgeSearchContextError();
         effectiveUserId = user.id;
     }
-    if (!effectiveUserId) return { candidates, highKbIds: [] };
+    if (!effectiveUserId) throw new KnowledgeSearchContextError();
 
     const kbIds = Array.from(new Set(candidates.map(c => c.kbId).filter(Boolean)));
     if (kbIds.length === 0) return { candidates, highKbIds: [] };
@@ -168,30 +168,30 @@ export async function searchCandidates(query: string, options: SearchOptions): P
     const persistence = createKnowledgeBasePersistence(createAuthedClient(requireSearchAccessToken(accessToken)));
     const config: SearchConfigInternal = { ...DEFAULT_SEARCH_CONFIG, ...options.searchConfig };
 
-    const ftsResults = await searchByFTS(persistence, query, kbIds, limit, config);
-
-    if (config.enableTrigram && ftsResults.length < limit) {
-        const trigramResults = await searchByTrigram(
-            persistence,
-            query,
-            kbIds,
-            limit - ftsResults.length,
-            config
-        );
-        const merged = deduplicateResults([...ftsResults, ...trigramResults]);
-        if (useVector) {
-            const vectorResults = await searchByVector(persistence, query, kbIds, limit, accessToken);
-            return deduplicateResults([...merged, ...vectorResults]);
+    let successfulStages = 0;
+    const stage = async (name: 'fts' | 'trigram' | 'vector', run: () => Promise<SearchCandidate[]>) => {
+        try {
+            const rows = await run();
+            successfulStages++;
+            return rows;
+        } catch (error) {
+            if (error instanceof KnowledgeSearchContextError) throw error;
+            console.warn('[knowledge-base] retrieval stage failed', { stage: name });
+            return [];
         }
-        return merged;
+    };
+    const ftsResults = await stage('fts', () => searchByFTS(persistence, query, kbIds, limit, config));
+    let results = ftsResults;
+    if (config.enableTrigram && ftsResults.length < limit) {
+        const trigram = await stage('trigram', () => searchByTrigram(persistence, query, kbIds, limit - ftsResults.length, config));
+        results = deduplicateResults([...results, ...trigram]);
     }
-
     if (useVector) {
-        const vectorResults = await searchByVector(persistence, query, kbIds, limit, accessToken);
-        return deduplicateResults([...ftsResults, ...vectorResults]);
+        const vector = await stage('vector', () => searchByVector(persistence, query, kbIds, limit, accessToken));
+        results = deduplicateResults([...results, ...vector]);
     }
-
-    return ftsResults;
+    if (successfulStages === 0) throw new Error('Knowledge retrieval failed');
+    return results;
 }
 
 // FTS 精确检索：适合关键字匹配，速度快
@@ -235,10 +235,10 @@ async function searchByVector(
 ): Promise<SearchCandidate[]> {
     const dim = await getEmbeddingDimensionAsync();
     const indexExists = await checkVectorIndexExists(dim, accessToken);
-    if (!indexExists) return [];
+    if (!indexExists) throw new Error('Vector index unavailable');
 
     const queryVector = await generateEmbedding(query);
-    if (!queryVector) return [];
+    if (!queryVector) throw new Error('Query embedding unavailable');
 
     const rows = await persistence.searchVector(queryVector, kbIds, limit, dim);
     return rows.map(({ rawScore, ...row }) => ({
@@ -261,11 +261,24 @@ export async function searchKnowledge(query: string, options: SearchOptions = {}
     requireSearchAccessToken(options.accessToken);
     const membership = options.membershipType ?? await resolveTokenMembership(options.accessToken);
     if (membership === 'free') return [];
+    let userId = options.userId;
+    if (!userId) {
+        const { data: { user } } = await createAuthedClient(requireSearchAccessToken(options.accessToken)).auth.getUser();
+        if (!user) throw new KnowledgeSearchContextError();
+        userId = user.id;
+    }
     const candidates = await searchCandidates(query, {
         ...options,
         useVector: membership === 'pro' && options.useVector !== false
     });
-    const weighted = await applyKnowledgeBaseWeights(candidates, options.accessToken, options.userId);
+    let weighted: { candidates: SearchCandidate[]; highKbIds: string[] };
+    try {
+        weighted = await applyKnowledgeBaseWeights(candidates, options.accessToken, userId);
+    } catch (error) {
+        if (error instanceof KnowledgeSearchContextError) throw error;
+        console.warn('[knowledge-base] enrichment failed', { stage: 'weights' });
+        weighted = { candidates, highKbIds: [] };
+    }
     let weightedCandidates = weighted.candidates;
     const highKbIds = weighted.highKbIds;
 
@@ -279,18 +292,19 @@ export async function searchKnowledge(query: string, options: SearchOptions = {}
                 limit: baseLimit + 10,
                 useVector: options.useVector !== false
             });
-            const weightedExtra = await applyKnowledgeBaseWeights(extraCandidates, options.accessToken, options.userId);
+            const weightedExtra = await applyKnowledgeBaseWeights(extraCandidates, options.accessToken, userId);
             weightedCandidates = deduplicateResults([...weightedCandidates, ...weightedExtra.candidates]);
         } catch (error) {
-            console.warn('[knowledge-base] extra high-weight candidate search failed:', error);
+            if (error instanceof KnowledgeSearchContextError) throw error;
+            console.warn('[knowledge-base] enrichment failed', { stage: 'high-weight' });
         }
     }
 
     if (membership === 'pro' && weightedCandidates.length > Math.max(5, topK)) {
         try {
             return await rerankCandidates(query, weightedCandidates, topK);
-        } catch (error) {
-            console.warn('[knowledge-base] rerank failed, falling back to weighted candidates:', error);
+        } catch {
+            console.warn('[knowledge-base] enrichment failed', { stage: 'rerank' });
             return weightedCandidates;
         }
     }

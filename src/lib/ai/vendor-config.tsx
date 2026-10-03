@@ -3,7 +3,7 @@
  *
  * 'use client' - 包含 React 组件（@lobehub/icons）
  *
- * 仅负责 vendor → 图标映射，名称映射在 ai-config.ts 中（纯数据，测试安全）。
+ * 仅负责 vendor → 图标映射，名称映射在 vendor-labels.ts 中（纯数据，测试安全）。
  */
 'use client';
 

@@ -38,6 +38,9 @@ import {
 import { extractAIErrorMessage } from '@/lib/ai/ai-error';
 import {
   createManagedAnalysisCompletion,
+  createRequestObservation,
+  observeRefund,
+  type RequestObservation,
   persistDirectAnalysis,
   prepareAnalysis,
   prepareAdmittedAnalysis,
@@ -310,9 +313,11 @@ async function prepareAdmittedInterpretAnalysis<T extends InterpretInput, TConte
   userId: string,
   context: TContext | undefined,
   billing: AnalysisAdmissionBilling,
+  observation?: RequestObservation,
 ) {
   const rejection: { value: RouteError | null } = { value: null };
   const result = await prepareAdmittedAnalysis(billing, {
+    observation,
     checkRateLimit: async () => {
       if (config.postAdmissionRateLimit) {
         rejection.value = await config.postAdmissionRateLimit(request, input, userId);
@@ -326,9 +331,8 @@ async function prepareAdmittedInterpretAnalysis<T extends InterpretInput, TConte
   });
   if (result.ok) return result.value;
 
-  if (result.error) console.error(`[${config.tag}] ${result.reason}:`, result.error);
+  observation?.finish({ billing: result.billing });
   if (result.billing === 'refund-failed') {
-    console.error(`[${config.tag}] admission refund failed`, { userId, error: result.refundError });
     return jsonError('请求未执行，积分退还失败，请联系客服', 500, {
       success: false, code: 'CREDIT_REFUND_FAILED', refundFailed: true,
     });
@@ -371,9 +375,13 @@ function toDivinationAuthContext(
 export function createPersistentStreamResponse({
   streamResult,
   onStreamComplete,
+  onStreamAbort,
+  onStreamAdapterFailure,
 }: {
   streamResult: Awaited<ReturnType<typeof callAIUIMessageResult>>;
   onStreamComplete: (result: { content: string; reasoning: string | null }) => Promise<PersistentStreamResult>;
+  onStreamAbort?: () => Promise<unknown>;
+  onStreamAdapterFailure?: () => void;
 }): Response {
   const uiStream = createUIMessageStream({
     execute: async ({ writer }) => {
@@ -389,6 +397,7 @@ export function createPersistentStreamResponse({
         sendFinish: false,
         onFinish: async ({ responseMessage, finishReason, isAborted }) => {
           if (isAborted) {
+            await onStreamAbort?.();
             resolve({ finishReason, aborted: true });
             return;
           }
@@ -426,7 +435,15 @@ export function createPersistentStreamResponse({
       }));
       });
 
-      const finishResult = await finishPromise;
+      let finishResult;
+      try {
+        finishResult = await finishPromise;
+      } catch (error) {
+        // Conversion runs after Response construction: preserve its legacy no-completion
+        // billing path, but do not lose the request terminal observation.
+        onStreamAdapterFailure?.();
+        throw error;
+      }
       if (finishResult.aborted) {
         return;
       }
@@ -491,6 +508,7 @@ export function createDirectInterpretHandlers<
     options: {
       runPrecheck: boolean;
       includePrompts: boolean;
+      observation?: RequestObservation;
     },
   ): Promise<Response | ResolvedPreparedBase | ResolvedPreparedWithPrompts> => {
     const { runPrecheck, includePrompts } = options;
@@ -547,7 +565,7 @@ export function createDirectInterpretHandlers<
       throw error;
     }
     const prepared = await prepareAdmittedInterpretAnalysis(
-      config, request, input, authContext.userId, promptContext, { kind: 'not-applicable' },
+      config, request, input, authContext.userId, promptContext, { kind: 'not-applicable' }, options.observation,
     );
     if (prepared instanceof Response) return prepared;
     const { prompts: { systemPrompt, userPrompt } } = prepared;
@@ -617,15 +635,19 @@ export function createDirectInterpretHandlers<
       request: NextRequest,
       body: Record<string, unknown>,
     ): Promise<Response> {
+      const observation = createRequestObservation(crypto.randomUUID(), `${tag}:direct-prepare`, () => performance.now(), event => console.info('[ai-request]', event));
       try {
         const prepared = await resolvePrepared(request, body, {
           runPrecheck: true,
           includePrompts: true,
+          observation,
         });
         if (prepared instanceof Response) {
+          observation.fail('admission');
           return prepared;
         }
         if (!('systemPrompt' in prepared) || !('userPrompt' in prepared)) {
+          observation.fail('prompt');
           return jsonError('生成直连上下文失败，请稍后重试', 500, { success: false });
         }
 
@@ -636,9 +658,11 @@ export function createDirectInterpretHandlers<
             userPrompt: prepared.userPrompt,
           },
         });
-      } catch (error) {
-        console.error(`[${tag}] 直连 prepare 失败:`, error);
+      } catch {
+        observation.fail();
         return jsonError('生成直连上下文失败，请稍后重试', 500, { success: false });
+      } finally {
+        observation.finish();
       }
     },
 
@@ -646,38 +670,45 @@ export function createDirectInterpretHandlers<
       request: NextRequest,
       body: Record<string, unknown>,
     ): Promise<Response> {
-      const prepared = await resolvePrepared(request, body, {
-        runPrecheck: false,
-        includePrompts: false,
-      });
-      if (prepared instanceof Response) {
-        return prepared;
-      }
+      const observation = createRequestObservation(crypto.randomUUID(), `${tag}:direct-persist`, () => performance.now(), event => console.info('[ai-request]', event));
+      observation.update({ generation: 'external' });
+      try {
+        const prepared = await resolvePrepared(request, body, {
+          runPrecheck: false,
+          includePrompts: false,
+        });
+        if (prepared instanceof Response) {
+          return prepared;
+        }
 
-      const content = typeof body.content === 'string' ? body.content : '';
-      const reasoningText = typeof body.reasoningText === 'string'
-        ? body.reasoningText
-        : typeof body.reasoning === 'string'
-          ? body.reasoning
-          : null;
+        const content = typeof body.content === 'string' ? body.content : '';
+        const reasoningText = typeof body.reasoningText === 'string'
+          ? body.reasoningText
+          : typeof body.reasoning === 'string'
+            ? body.reasoning
+            : null;
 
-      const outcome = await persistDirectAnalysis({ content, reasoning: reasoningText }, (output) =>
-        persistPreparedResult({
-          input: prepared.input,
-          userId: prepared.userId,
-          promptContext: prepared.promptContext,
-          content: output.content,
-          reasoningText: output.reasoning ?? null,
-          customModelId: resolveDirectPersistModelId(body.customModelId),
-        }));
-      if (outcome.status === 'empty') {
-        return jsonError(emptyResultMessage, 400, { success: false });
+        observation.phase('persistence');
+        const outcome = await persistDirectAnalysis({ content, reasoning: reasoningText }, (output) =>
+          persistPreparedResult({
+            input: prepared.input,
+            userId: prepared.userId,
+            promptContext: prepared.promptContext,
+            content: output.content,
+            reasoningText: output.reasoning ?? null,
+            customModelId: resolveDirectPersistModelId(body.customModelId),
+          }));
+        observation.finish(outcome);
+        if (outcome.status === 'empty') {
+          return jsonError(emptyResultMessage, 400, { success: false });
+        }
+        if (outcome.status === 'failed') {
+          return jsonError('保存结果失败，请稍后重试', 500, { success: false });
+        }
+        return jsonOk({ success: true, data: { conversationId: outcome.conversationId } });
+      } finally {
+        observation.finish();
       }
-      if (outcome.status === 'failed') {
-        console.error(`[${tag}] 直连结果保存失败:`, outcome.error);
-        return jsonError('保存结果失败，请稍后重试', 500, { success: false });
-      }
-      return jsonOk({ success: true, data: { conversationId: outcome.conversationId } });
     },
   };
 }
@@ -727,144 +758,173 @@ export function createInterpretHandler<
     request: NextRequest,
     body: Record<string, unknown>,
   ): Promise<Response> {
-    const featureGuardResponse = await getGlobalAIFeatureGuardResponse();
-    if (featureGuardResponse) return featureGuardResponse;
-
-    // Parse input first (fast fail for invalid params)
-    const parsed = parseInput(body);
-    if (isRouteError(parsed)) {
-      return jsonError(parsed.error, parsed.status, { success: false });
-    }
-    const input = parsed as T;
-
-    // 1. Auth
-    const authResult = authMethod === 'userContext'
-      ? await requireUserContext(request)
-      : await requireBearerUser(request);
-    if ('error' in authResult) {
-      return jsonError(authResult.error.message, authResult.error.status, { success: false });
-    }
-    const { user } = authResult;
-    const authContext = toDivinationAuthContext(authResult);
-    if (isRouteError(authContext)) {
-      return jsonError(authContext.error, authContext.status, { success: false });
-    }
-
-    const precheckResult = precheck ? await precheck(request, input, user.id) : null;
-    if (precheckResult) {
-      return jsonError(precheckResult.error, precheckResult.status, { success: false });
-    }
-
-    const promptContextResult = resolvePromptContext
-      ? await resolvePromptContext(input, authContext)
-      : undefined;
-    if (isRouteError(promptContextResult)) {
-      return jsonError(promptContextResult.error, promptContextResult.status, { success: false });
-    }
-    const promptContext = promptContextResult as TContext | undefined;
-
-    // 2. Credits + membership
-    let authInfo;
+    const observation = createRequestObservation(crypto.randomUUID(), tag, () => performance.now(), event => console.info('[ai-request]', event));
+    let completionOwnsTerminal = false;
     try {
-      authInfo = await getUserAuthInfo(user.id, {
+      const featureGuardResponse = await getGlobalAIFeatureGuardResponse();
+      if (featureGuardResponse) {
+        observation.fail('admission');
+        return featureGuardResponse;
+      }
+
+      // Parse input first (fast fail for invalid params)
+      const parsed = parseInput(body);
+      if (isRouteError(parsed)) {
+        observation.fail('admission');
+        return jsonError(parsed.error, parsed.status, { success: false });
+      }
+      const input = parsed as T;
+
+      // 1. Auth
+      const authResult = authMethod === 'userContext'
+        ? await requireUserContext(request)
+        : await requireBearerUser(request);
+      if ('error' in authResult) {
+        observation.fail('admission');
+        return jsonError(authResult.error.message, authResult.error.status, { success: false });
+      }
+      const { user } = authResult;
+      const authContext = toDivinationAuthContext(authResult);
+      if (isRouteError(authContext)) {
+        observation.fail('admission');
+        return jsonError(authContext.error, authContext.status, { success: false });
+      }
+
+      const precheckResult = precheck ? await precheck(request, input, user.id) : null;
+      if (precheckResult) {
+        observation.fail('admission');
+        return jsonError(precheckResult.error, precheckResult.status, { success: false });
+      }
+
+      const promptContextResult = resolvePromptContext
+        ? await resolvePromptContext(input, authContext)
+        : undefined;
+      if (isRouteError(promptContextResult)) {
+        observation.fail('admission');
+        return jsonError(promptContextResult.error, promptContextResult.status, { success: false });
+      }
+      const promptContext = promptContextResult as TContext | undefined;
+
+      // 2. Credits + membership
+      let authInfo;
+      try {
+        authInfo = await getUserAuthInfo(user.id, {
+          client: authContext.db,
+          user,
+        });
+      } catch (error) {
+        if (error instanceof UserStateResolutionError) {
+          observation.fail('admission');
+          return jsonError(error.message, 500, { success: false, code: error.code });
+        }
+        throw error;
+      }
+      // 3. Model membership admission precedes the balance decision.
+      const modelId = (body.modelId as string | undefined);
+      const reasoning = (body.reasoning as boolean | undefined);
+      const stream = (body.stream as boolean | undefined);
+      const membershipType = authInfo.effectiveMembership;
+      const access = await resolveModelAccessAsync(
+        modelId, defaultModelId, membershipType, reasoning, modelAccessOptions,
+      );
+      if ('error' in access) {
+        observation.fail('admission');
+        return jsonError(access.error, access.status, { success: false });
+      }
+      const { modelId: resolvedModelId, reasoningEnabled } = access;
+
+      if (!authInfo.hasCredits) {
+        observation.fail('admission');
+        return jsonError('积分不足，请通过签到、激活码或会员权益获取积分后再使用', 402, { success: false });
+      }
+
+      // 4. Deduct credit before rate admission and final prompt assembly.
+      const creditUse = await attemptCreditUse(user.id, {
         client: authContext.db,
         user,
       });
-    } catch (error) {
-      if (error instanceof UserStateResolutionError) {
-        return jsonError(error.message, 500, { success: false, code: error.code });
-      }
-      throw error;
-    }
-    // 3. Model membership admission precedes the balance decision.
-    const modelId = (body.modelId as string | undefined);
-    const reasoning = (body.reasoning as boolean | undefined);
-    const stream = (body.stream as boolean | undefined);
-    const membershipType = authInfo.effectiveMembership;
-    const access = await resolveModelAccessAsync(
-      modelId, defaultModelId, membershipType, reasoning, modelAccessOptions,
-    );
-    if ('error' in access) {
-      return jsonError(access.error, access.status, { success: false });
-    }
-    const { modelId: resolvedModelId, reasoningEnabled } = access;
-
-    if (!authInfo.hasCredits) {
-      return jsonError('积分不足，请通过签到、激活码或会员权益获取积分后再使用', 402, { success: false });
-    }
-
-    // 4. Deduct credit before rate admission and final prompt assembly.
-    const creditUse = await attemptCreditUse(user.id, {
-      client: authContext.db,
-      user,
-    });
-    if (!creditUse.ok) {
-      if (creditUse.reason === 'insufficient_credits') {
-        return jsonError('积分不足，请通过签到、激活码或会员权益获取积分后再使用', 402, { success: false });
-      }
-      return jsonError('积分扣减失败，请稍后重试', 500, { success: false });
-    }
-
-    const prepared = await prepareAdmittedInterpretAnalysis(
-      config, request, input, user.id, promptContext,
-      { kind: 'charged', refund: () => refundCreditsOrLog(user.id, 1, `${tag} admission`) },
-    );
-    if (prepared instanceof Response) return prepared;
-    const { prompts: { systemPrompt, userPrompt } } = prepared;
-
-    // The use case owns completion/save/refund; SDK and HTTP stay in this adapter.
-    const mode = isVision && buildVisionOptions ? 'vision' : stream ? 'stream' : 'text';
-    const complete = createManagedAnalysisCompletion(mode, {
-      persist: async ({ content, reasoning }) => {
-        const conversationId = await persistConversation(
-          input, user.id, resolvedModelId, reasoningEnabled, content, reasoning ?? null, promptContext,
-        );
-        if (persistRecord) {
-          await persistRecord(input, user.id, conversationId, promptContext);
+      if (!creditUse.ok) {
+        if (creditUse.reason === 'insufficient_credits') {
+          observation.fail('admission');
+          return jsonError('积分不足，请通过签到、激活码或会员权益获取积分后再使用', 402, { success: false });
         }
-        return conversationId;
-      },
-      refund: (reason) => refundCreditsOrLog(user.id, 1, `${tag} ${reason}`),
-      isPersistenceError: (error) => error instanceof AIAnalysisConversationPersistenceError,
-    });
-
-    try {
-      if (mode === 'stream') {
-        return await handleStreamCall(resolvedModelId, reasoningEnabled, systemPrompt, userPrompt, complete);
+        observation.fail('admission');
+        return jsonError('积分扣减失败，请稍后重试', 500, { success: false });
       }
 
-      const outcome = await runManagedAnalysis(async () => {
-        if (mode === 'vision') {
-          const visionOpts = buildVisionOptions!(input);
-          const content = await callAIVision(
+      observation.update({ billing: 'charged' });
+      const prepared = await prepareAdmittedInterpretAnalysis(
+        config, request, input, user.id, promptContext,
+        { kind: 'charged', refund: () => refundCreditsOrLog(user.id, 1, `${tag} admission`) },
+        observation,
+      );
+      if (prepared instanceof Response) return prepared;
+      const { prompts: { systemPrompt, userPrompt } } = prepared;
+
+      // The use case owns completion/save/refund; SDK and HTTP stay in this adapter.
+      const mode = isVision && buildVisionOptions ? 'vision' : stream ? 'stream' : 'text';
+      const complete = createManagedAnalysisCompletion(mode, {
+        // Non-stream response formatting remains inside the legacy compensation boundary.
+        observation: mode === 'stream' ? observation : { ...observation, finish: state => observation.update(state ?? {}) },
+        persist: async ({ content, reasoning }) => {
+          const conversationId = await persistConversation(
+            input, user.id, resolvedModelId, reasoningEnabled, content, reasoning ?? null, promptContext,
+          );
+          if (persistRecord) {
+            await persistRecord(input, user.id, conversationId, promptContext);
+          }
+          return conversationId;
+        },
+        refund: (reason) => refundCreditsOrLog(user.id, 1, `${tag} ${reason}`),
+        isPersistenceError: (error) => error instanceof AIAnalysisConversationPersistenceError,
+      });
+
+      observation.phase('generation');
+      completionOwnsTerminal = mode === 'stream';
+      try {
+        if (mode === 'stream') {
+          return await handleStreamCall(resolvedModelId, reasoningEnabled, systemPrompt, userPrompt, complete, observation);
+        }
+
+        const outcome = await runManagedAnalysis(async () => {
+          if (mode === 'vision') {
+            const visionOpts = buildVisionOptions!(input);
+            const content = await callAIVision(
+              [{ role: 'user', content: userPrompt }],
+              personality,
+              resolvedModelId,
+              `\n\n${systemPrompt}\n\n`,
+              { reasoning: reasoningEnabled, temperature: 0.7, ...visionOpts },
+            );
+            return { content, reasoning: null };
+          }
+          return callAIWithReasoning(
             [{ role: 'user', content: userPrompt }],
             personality,
             resolvedModelId,
             `\n\n${systemPrompt}\n\n`,
-            { reasoning: reasoningEnabled, temperature: 0.7, ...visionOpts },
+            { reasoning: reasoningEnabled, temperature: 0.7 },
           );
-          return { content, reasoning: null };
+        }, complete);
+        return formatManagedOutcome(outcome, mode === 'vision');
+      } catch (aiError) {
+        // SDK setup failures use the completion latch. A response formatter failure
+        // after a successful save retains the existing refund policy.
+        const outcome = await complete({ kind: 'inference-failed', error: aiError });
+        if (outcome.status === 'saved') {
+          const context = aiError instanceof AIAnalysisConversationPersistenceError ? 'persistence' : 'ai-call';
+          await observeRefund(() => refundCreditsOrLog(user.id, 1, `${tag} ${context}`), observation);
         }
-        return callAIWithReasoning(
-          [{ role: 'user', content: userPrompt }],
-          personality,
-          resolvedModelId,
-          `\n\n${systemPrompt}\n\n`,
-          { reasoning: reasoningEnabled, temperature: 0.7 },
-        );
-      }, complete);
-      return formatManagedOutcome(outcome, mode === 'vision');
-    } catch (aiError) {
-      // Adapter failures (including SDK stream construction or response formatting)
-      // retain the existing compensation boundary, outside normal completion.
-      if (aiError instanceof AIAnalysisConversationPersistenceError) {
-        await refundCreditsOrLog(user.id, 1, `${tag} persistence`);
-        console.error(`[${tag}] 分析结果保存失败:`, aiError);
-        return jsonError('保存结果失败，请稍后重试', 500, { success: false });
+        if (aiError instanceof AIAnalysisConversationPersistenceError) {
+          return jsonError('保存结果失败，请稍后重试', 500, { success: false });
+        }
+        return jsonError(extractAIErrorMessage(aiError), 500, { success: false });
       }
-      await refundCreditsOrLog(user.id, 1, `${tag} ai-call`);
-      console.error(`[${tag}] AI 调用失败:`, aiError);
-      return jsonError(extractAIErrorMessage(aiError), 500, { success: false });
+    } catch (error) {
+      observation.fail();
+      throw error;
+    } finally {
+      if (!completionOwnsTerminal) observation.finish();
     }
   };
 
@@ -883,10 +943,8 @@ export function createInterpretHandler<
       return jsonError(emptyResultMessage, 500, { success: false });
     }
     if (outcome.error instanceof AIAnalysisConversationPersistenceError) {
-      console.error(`[${tag}] 分析结果保存失败:`, outcome.error);
       return jsonError('保存结果失败，请稍后重试', 500, { success: false });
     }
-    console.error(`[${tag}] AI 调用失败:`, outcome.error);
     return jsonError(extractAIErrorMessage(outcome.error), 500, { success: false });
   }
 
@@ -894,6 +952,7 @@ export function createInterpretHandler<
   async function handleStreamCall(
     resolvedModelId: string, reasoningEnabled: boolean,
     systemPrompt: string, userPrompt: string, complete: CompleteManagedAnalysis,
+    observation: RequestObservation,
   ): Promise<Response> {
     const streamResult = await callAIUIMessageResult(
       [{ role: 'user', content: userPrompt }],
@@ -904,11 +963,15 @@ export function createInterpretHandler<
     );
     return createPersistentStreamResponse({
       streamResult,
+      onStreamAbort: () => complete({ kind: 'aborted' }),
+      onStreamAdapterFailure: () => {
+        observation.fail('stream-adapter');
+        observation.finish({ generation: 'failed' });
+      },
       onStreamComplete: async (output) => {
         const outcome = await complete({ kind: 'output', output });
         if (outcome.status !== 'failed') return {};
         if (outcome.failure === 'empty') return { error: emptyResultMessage };
-        console.error(`[${tag}] 流式结果保存失败:`, outcome.error);
         return { error: '保存结果失败，请稍后重试' };
       },
     });

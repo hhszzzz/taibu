@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  buildCreateModelPayload, buildEditModelPayload, buildSourcePayload,
+  reconcileModelDrafts, buildCreateModelPayload, buildEditModelPayload, buildSourcePayload,
   createEditModelDraft, createInitialNewModel, createInitialSourceDraft,
   createPrimaryGatewayUpdate, createRoutingModeUpdate, getSourceModelIdState,
   normalizeSourceModelIdInput, parseCustomParametersText, resolveDraftVendor,
@@ -86,4 +86,30 @@ test('routing and primary gateway remain coupled only for fixed routing modes', 
   assert.deepEqual(createRoutingModeUpdate({ ...draft, primaryGatewayKey: 'octopus' }, 'auto'), { routingMode: 'auto', primaryGatewayKey: 'octopus' });
   assert.deepEqual(createPrimaryGatewayUpdate(draft, 'octopus'), { routingMode: 'auto', primaryGatewayKey: 'octopus' });
   assert.deepEqual(createPrimaryGatewayUpdate({ ...draft, routingMode: 'newapi' }, 'octopus'), { routingMode: 'octopus', primaryGatewayKey: 'octopus' });
+});
+
+test('model reload preserves dirty fields and merges clean server fields without resurrecting deleted drafts', () => {
+  const baseline = createEditModelDraft(model());
+  const another = { ...baseline, displayName: 'Other model' };
+  const previous = { one: baseline, two: another, deleted: baseline };
+  const current = { ...previous, two: { ...another, description: 'Unsaved notes' } };
+  const incoming = { one: { ...baseline, displayName: 'Saved model' }, two: { ...another, sortOrder: 99 }, new: baseline };
+  const result = reconcileModelDrafts(current, previous, incoming);
+  assert.equal(result.one.displayName, 'Saved model');
+  assert.equal(result.two.description, 'Unsaved notes');
+  assert.equal(result.two.sortOrder, 99);
+  assert.equal(result.deleted, undefined);
+  assert.deepEqual(result.new, baseline);
+  assert.equal(current.two.sortOrder, another.sortOrder);
+});
+
+test('vendor labels are pure browser data with backward-compatible names and presets', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { resolve } = await import('node:path');
+  const labels = await import('../lib/ai/vendor-labels');
+  assert.equal(labels.getVendorName('deepseek'), 'DeepSeek');
+  assert.equal(labels.getVendorName('private-vendor'), 'private-vendor');
+  assert.deepEqual(labels.VENDOR_PRESETS, Object.keys(labels.VENDOR_NAMES));
+  const source = readFileSync(resolve(process.cwd(), 'src/lib/ai/vendor-labels.ts'), 'utf8');
+  assert.doesNotMatch(source, /process\.env|^import\s|server-only/m);
 });

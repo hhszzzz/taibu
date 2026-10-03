@@ -7,6 +7,7 @@
  * - 返回 JSON / SSE 响应
  */
 
+import { createRequestObservation, observeRefund } from '@/lib/server/analysis';
 import { NextRequest } from 'next/server';
 import { isTextUIPart } from 'ai';
 import {
@@ -23,21 +24,30 @@ import {
 import { getGlobalAIFeatureGuardResponse } from '@/lib/api/ai-feature-guard';
 
 export async function POST(request: NextRequest) {
+  const observation = createRequestObservation(crypto.randomUUID(), 'chat', () => performance.now(), event => console.info('[ai-request]', event));
+  let streaming = false;
+  let generationStarted = false;
+  let streamTerminal: Promise<void> | undefined;
   let creditDeducted = false;
   let userId: string | null = null;
   let canSkipCredit = false;
 
   try {
     const featureGuardResponse = await getGlobalAIFeatureGuardResponse();
-    if (featureGuardResponse) return featureGuardResponse;
+    if (featureGuardResponse) {
+      observation.fail('admission');
+      return featureGuardResponse;
+    }
 
     const body = await parseChatRequestBody(request);
     if (body instanceof Response) {
+      observation.fail('admission');
       return body;
     }
 
-    const preparedRequest = await prepareChatRequest(request, body);
+    const preparedRequest = await prepareChatRequest(request, body, observation);
     if (preparedRequest instanceof Response) {
+      observation.fail('admission');
       return preparedRequest;
     }
 
@@ -57,7 +67,9 @@ export async function POST(request: NextRequest) {
       systemPrompt,
     } = preparedRequest;
 
-    console.log(`[chat-route] personality=${fallbackPersonality} systemPromptLen=${systemPrompt?.length ?? 0} stream=${resolvedBody.stream} model=${requestedModelId}`);
+    observation.update({ billing: creditDeducted ? 'charged' : 'not-applicable' });
+    observation.phase('generation');
+    generationStarted = true;
 
     if (resolvedBody.stream) {
       const streamResult = await callAIUIMessageResult(
@@ -68,7 +80,7 @@ export async function POST(request: NextRequest) {
         { reasoning: reasoningEnabled, systemPromptOverride: systemPrompt }
       );
 
-      return streamResult.toUIMessageStreamResponse({
+      const response = streamResult.toUIMessageStreamResponse({
         headers: {
           'Cache-Control': 'no-cache, no-transform',
           'X-Accel-Buffering': 'no',
@@ -76,20 +88,23 @@ export async function POST(request: NextRequest) {
         sendReasoning: true,
         sendSources: false,
         messageMetadata: ({ part }) => part.type === 'start' ? metadata : undefined,
-        onFinish: async ({ responseMessage }) => {
-          if (!userId || canSkipCredit || !creditDeducted) return;
-          const hasVisibleText = responseMessage.parts.some(
-            (part) => isTextUIPart(part) && part.text.trim().length > 0,
-          );
-
-          if (!hasVisibleText) {
-            const refunded = await refundCreditsOrLog(userId, 1, 'chat stream empty-response');
-            if (refunded) {
-              creditDeducted = false;
+        onFinish: async ({ responseMessage, isAborted, finishReason }) => {
+          streamTerminal ??= (async () => {
+            const hasVisibleText = responseMessage.parts.some(part => isTextUIPart(part) && part.text.trim().length > 0);
+            const generation = isAborted ? 'aborted' : finishReason === 'error' ? 'failed' : hasVisibleText ? 'completed' : 'empty';
+            observation.update({ generation });
+            // Keep the legacy chat policy: lack of visible stream text refunds,
+            // including abort; unlike analysis streams, visible partial text stays charged.
+            if (!hasVisibleText && userId && !canSkipCredit && creditDeducted) {
+              if (await observeRefund(() => refundCreditsOrLog(userId!, 1, 'chat stream empty-response'), observation)) creditDeducted = false;
             }
-          }
+            observation.finish();
+          })();
+          await streamTerminal;
         },
       });
+      streaming = true;
+      return response;
     }
 
     const content = await callAI(
@@ -100,14 +115,18 @@ export async function POST(request: NextRequest) {
       { reasoning: reasoningEnabled, systemPromptOverride: systemPrompt }
     );
 
+    observation.finish({ generation: content?.trim() ? 'completed' : 'empty' });
     return jsonOk({ content, metadata });
   } catch (error) {
+    observation.fail(generationStarted ? 'inference' : undefined);
+    if (generationStarted) observation.update({ generation: 'failed' });
     if (creditDeducted && userId && !canSkipCredit) {
-      await refundCreditsOrLog(userId, 1, 'chat route failure');
+      await observeRefund(() => refundCreditsOrLog(userId!, 1, 'chat route failure'), observation);
     }
 
-    console.error('AI API 错误:', error);
     const errorInfo = extractAIErrorInfo(error);
     return jsonError(errorInfo.message, errorInfo.status, { code: errorInfo.code });
+  } finally {
+    if (!streaming) observation.finish();
   }
 }

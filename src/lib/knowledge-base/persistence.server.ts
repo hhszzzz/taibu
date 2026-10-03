@@ -23,8 +23,8 @@ function searchRows(data: unknown, score: 'rank' | 'similarity' | 'distance'): K
         kbId: row.kb_id,
         content: row.content,
         metadata: row.metadata || {},
-        // Preserve legacy defaults, including the vector distance=0 fallback.
-        rawScore: row[score] || (score === 'distance' ? 2 : 0),
+        // Zero distance is an exact match, not a missing score.
+        rawScore: row[score] ?? (score === 'distance' ? 2 : 0),
     }));
 }
 
@@ -53,38 +53,42 @@ export function createKnowledgeBasePersistence(
             return typeof data === 'number' ? data : null;
         },
         async searchFts(query, kbIds, limit, config) {
-            const { data } = await client.rpc('search_knowledge_fts', {
+            const { data, error } = await client.rpc('search_knowledge_fts', {
                 p_query: query,
                 p_kb_ids: kbIds,
                 p_limit: limit,
                 p_config: config,
             });
+            if (error) throw error;
             return searchRows(data, 'rank');
         },
         async searchTrigram(query, kbIds, limit, threshold) {
-            const { data } = await client.rpc('search_knowledge_trigram', {
+            const { data, error } = await client.rpc('search_knowledge_trigram', {
                 p_query: query,
                 p_kb_ids: kbIds,
                 p_limit: limit,
                 p_threshold: threshold,
             });
+            if (error) throw error;
             return searchRows(data, 'similarity');
         },
         async searchVector(vector, kbIds, limit, dimension) {
-            const { data } = await client.rpc('search_knowledge_vector', {
+            const { data, error } = await client.rpc('search_knowledge_vector', {
                 p_query_vector: vector,
                 p_kb_ids: kbIds,
                 p_limit: limit,
                 p_dim: dimension,
             });
+            if (error) throw error;
             return searchRows(data, 'distance');
         },
         async loadWeights(userId, kbIds) {
-            const { data } = await client
+            const { data, error } = await client
                 .from('knowledge_bases')
                 .select('id, weight')
                 .eq('user_id', userId)
                 .in('id', kbIds);
+            if (error) throw error;
             return (data || []) as Array<{ id: string; weight: string }>;
         },
     };

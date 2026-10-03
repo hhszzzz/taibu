@@ -91,7 +91,7 @@ test('non-numeric RPC counts keep legacy fallback and permission failures propag
     assert.equal(failure.calls.length, 1);
 });
 
-test('search adapter preserves exact RPC args, raw-score defaults, metadata and legacy error handling', async () => {
+test('search adapter preserves exact RPC args, raw-score defaults, metadata and explicit error handling', async () => {
     const { calls, persistence } = rpcAdapter([{ id: 'entry-1', kb_id: 'kb-1', content: 'text', metadata: null, rank: 0.2, similarity: 0.4, distance: 0 }]);
     const fts = await persistence.searchFts('term', ['kb-1'], 20, 'simple');
     const trigram = await persistence.searchTrigram('term', ['kb-1'], 19, 0.3);
@@ -103,9 +103,11 @@ test('search adapter preserves exact RPC args, raw-score defaults, metadata and 
     ]);
     assert.deepEqual(fts[0], { id: 'entry-1', kbId: 'kb-1', content: 'text', metadata: {}, rawScore: 0.2 });
     assert.equal(trigram[0].rawScore, 0.4);
-    assert.equal(vector[0].rawScore, 2);
+    assert.equal(vector[0].rawScore, 0);
     const failure = rpcAdapter(null, { code: '42501' });
-    assert.deepEqual(await failure.persistence.searchFts('term', undefined, 20, 'english'), []);
+    await assert.rejects(failure.persistence.searchFts('term', undefined, 20, 'english'));
+    await assert.rejects(failure.persistence.searchTrigram('term', undefined, 20, 0.3));
+    await assert.rejects(failure.persistence.searchVector([1], undefined, 20, 1));
 });
 
 test('user write facade retains caller authentication and never trusts an overridden userId', async t => {
@@ -153,4 +155,52 @@ test('search orchestration retains RPC order, remaining trigram limit and normal
     assert.deepEqual(result.map(item => [item.id, item.method, item.score]), [
         ['b', 'fts', 0.3 * 3.33], ['a', 'trigram', 0.8], ['v', 'vector', 0.5],
     ]);
+});
+
+for (const failed of [['fts'], ['trigram'], ['fts', 'trigram']]) {
+    test(`search retains successful stages and observes failures: ${failed}`, async t => {
+        const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
+        const search = require('../lib/knowledge-base/search') as typeof import('../lib/knowledge-base/search');
+        const warnings: unknown[][] = [];
+        t.mock.method(console, 'warn', (...args: unknown[]) => warnings.push(args));
+        t.mock.method(apiUtils, 'createAuthedClient', () => ({
+            rpc: async (name: string) => failed.some(stage => name.endsWith(stage))
+                ? { data: null, error: { message: 'PRIVATE_PROVIDER_ERROR' } }
+                : { data: [{ id: 'hit', kb_id: 'kb', content: 'PRIVATE_CONTENT', rank: 0.2, similarity: 0.3 }], error: null },
+        }) as unknown as ReturnType<typeof apiUtils.createAuthedClient>);
+        const promise = search.searchCandidates('PRIVATE_QUERY', { accessToken: 'PRIVATE_TOKEN' });
+        if (failed.length === 2) await assert.rejects(promise, /Knowledge retrieval failed/);
+        else assert.equal((await promise)[0].id, 'hit');
+        assert.equal(warnings.length, failed.length);
+        assert.ok(!JSON.stringify(warnings).includes('PRIVATE'));
+    });
+}
+
+test('hit names reuse only matching request owner, query missing IDs, and retain standalone fallback', async t => {
+    const search = require('../lib/knowledge-base/search') as typeof import('../lib/knowledge-base/search');
+    const { buildKnowledgeHits } = require('../lib/knowledge-base/hits') as typeof import('../lib/knowledge-base/hits');
+    t.mock.method(search, 'searchKnowledge', async () => [
+        { id: 'a', kbId: 'a', content: 'a', score: 0.8, method: 'fts', metadata: {} },
+        { id: 'b', kbId: 'b', content: 'b', score: 0.4, method: 'fts', metadata: {} },
+    ]);
+    const queries: string[][] = [];
+    const supabase = { from: () => ({ select: (fields: string) => {
+        assert.equal(fields, 'id, name');
+        return { eq: (_key: string, owner: string) => { assert.equal(owner, 'owner'); return {
+            in: async (_key: string, ids: string[]) => { queries.push(ids); return { data: ids.map(id => ({ id, name: id })) }; },
+        }; } };
+    } }) } as unknown as Parameters<typeof buildKnowledgeHits>[0]['supabase'];
+    const options = { query: 'question', userId: 'owner', membershipType: 'pro' as const, accessToken: 'token', promptKbIds: ['a', 'b'], supabase };
+    const standalone = await buildKnowledgeHits(options);
+    assert.deepEqual(await buildKnowledgeHits({ ...options, knownNames: { userId: 'owner', names: new Map([['a', 'a'], ['b', 'b']]) } }), standalone);
+    assert.deepEqual(await buildKnowledgeHits({ ...options, knownNames: { userId: 'owner', names: new Map([['a', 'a']]) } }), standalone);
+    assert.deepEqual(await buildKnowledgeHits({ ...options, knownNames: { userId: 'other', names: new Map([['a', 'SECRET_OTHER']]) } }), standalone);
+    assert.deepEqual(queries, [['a', 'b'], ['b'], ['a', 'b']]);
+});
+
+test('missing resolved identity fails closed even with no hits', async t => {
+    const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
+    const search = require('../lib/knowledge-base/search') as typeof import('../lib/knowledge-base/search');
+    t.mock.method(apiUtils, 'createAuthedClient', () => ({ auth: { getUser: async () => ({ data: { user: null } }) } }) as unknown as ReturnType<typeof apiUtils.createAuthedClient>);
+    await assert.rejects(search.searchKnowledge('query', { membershipType: 'plus', accessToken: 'token' }), search.KnowledgeSearchContextError);
 });

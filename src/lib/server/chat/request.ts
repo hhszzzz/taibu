@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { observeRefund, type RequestObservation } from '@/lib/server/analysis';
+
 import type { NextRequest } from 'next/server';
 import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
 import { getDefaultModelConfigAsync, getModelConfigAsync } from '@/lib/server/ai-config';
@@ -65,7 +67,6 @@ export async function parseChatRequestBody(request: NextRequest): Promise<ChatRe
   if (!body.messages || !Array.isArray(body.messages)) {
     return jsonError('无效的消息格式', 400);
   }
-  console.log(`[chat-parse] mentions=${JSON.stringify(body.mentions)} msgCount=${body.messages.length}`);
   body.userProfile = normalizeIdentityUserProfile(body.userProfile);
   body.visualizationSettings = normalizeVisualizationSettings(body.visualizationSettings);
   return body;
@@ -149,7 +150,7 @@ function bindAccountLoader(
   };
 }
 
-async function bindManagedChat(request: NextRequest, body: ChatRequestBody): Promise<{
+async function bindManagedChat(request: NextRequest, body: ChatRequestBody, observation?: RequestObservation): Promise<{
   actor: ChatActor;
   accessTokenForKB: string | null;
   operations: ManagedChatOperations;
@@ -169,7 +170,10 @@ async function bindManagedChat(request: NextRequest, body: ChatRequestBody): Pro
     accessTokenForKB = auth.accessToken ?? null;
   } else {
     const auth = await requireUserContext(request);
-    if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
+    if ('error' in auth) {
+    observation?.fail('admission');
+    return jsonError(auth.error.message, auth.error.status);
+  }
     authUser = auth.user;
     authDb = resolveRequestDbClient(auth);
     actor = { userId: auth.user.id, creditPolicy: 'charge' };
@@ -192,29 +196,29 @@ async function bindManagedChat(request: NextRequest, body: ChatRequestBody): Pro
     loadAccount: bindAccountLoader(userId, authUser, authDb),
     deductCredit: async () => {
       if (!userId) throw new Error('Chat credit deduction requires an authenticated user');
-      return attemptCreditUse(userId, { client: authDb ?? undefined, user: authUser ?? undefined });
+      const result = await attemptCreditUse(userId, { client: authDb ?? undefined, user: authUser ?? undefined });
+      if (result.ok) observation?.update({ billing: 'charged' });
+      return result;
     },
     checkRateLimit: async () => {
       if (!userId) throw new Error('Public chat rate admission requires an authenticated user');
-      try {
-        return (await checkRateLimit(userId, MANAGED_CHAT_RATE_LIMIT_KEY, AI_RATE_LIMIT_CONFIG)).allowed;
-      } catch (error) {
-        console.error('[chat] Rate admission failed:', error);
-        throw error;
-      }
+      return (await checkRateLimit(userId, MANAGED_CHAT_RATE_LIMIT_KEY, AI_RATE_LIMIT_CONFIG)).allowed;
     },
     refundRateLimitFailure: async () => {
       if (!userId) return false;
+      return observeRefund(() => refundCreditsOrLog(userId, 1, 'chat rate-limit admission'), observation);
+    },
+    buildPrompt: async (resolved) => {
+      observation?.phase('prompt');
       try {
-        return await refundCreditsOrLog(userId, 1, 'chat rate-limit admission');
+        return await buildChatPromptContext(withRequestContext(resolved, body, accessTokenForKB));
       } catch (error) {
-        console.error('[chat] Rate admission refund failed:', error);
+        observation?.fail('prompt');
         throw error;
       }
     },
-    buildPrompt: (resolved) => buildChatPromptContext(withRequestContext(resolved, body, accessTokenForKB)),
     refundPromptFailure: async () => {
-      if (userId) await refundCreditsOrLog(userId, 1, 'chat prompt-context');
+      if (userId) await observeRefund(() => refundCreditsOrLog(userId, 1, 'chat prompt-context'), observation);
     },
   };
   return { actor, accessTokenForKB, operations };
@@ -223,9 +227,13 @@ async function bindManagedChat(request: NextRequest, body: ChatRequestBody): Pro
 export async function prepareBrowserDirectChatRequest(
   request: NextRequest,
   body: ChatRequestBody,
+  observation?: RequestObservation,
 ): Promise<PreparedChatRequest | Response> {
   const auth = await requireUserContext(request);
-  if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
+  if ('error' in auth) {
+    observation?.fail('admission');
+    return jsonError(auth.error.message, auth.error.status);
+  }
   const accessTokenForKB = auth.accessToken ?? null;
   const result = await prepareDirectChat({ userId: auth.user.id }, toPreparationInput(body), {
     defaultModelId: DEFAULT_MODEL_ID,
@@ -235,8 +243,17 @@ export async function prepareBrowserDirectChatRequest(
       AI_RATE_LIMIT_CONFIG,
     )).allowed,
     loadAccount: () => bindAccountLoader(auth.user.id, auth.user, resolveRequestDbClient(auth))(),
-    buildPrompt: (resolved) => buildChatPromptContext(withRequestContext(resolved, body, accessTokenForKB)),
+    buildPrompt: async (resolved) => {
+      observation?.phase('prompt');
+      try {
+        return await buildChatPromptContext(withRequestContext(resolved, body, accessTokenForKB));
+      } catch (error) {
+        observation?.fail('prompt');
+        throw error;
+      }
+    },
   });
+  if (!result.ok) observation?.fail('admission');
   return result.ok
     ? withRequestContext(result.value, body, accessTokenForKB)
     : preparationErrorResponse(result.error);
@@ -245,10 +262,15 @@ export async function prepareBrowserDirectChatRequest(
 export async function prepareChatRequest(
   request: NextRequest,
   body: ChatRequestBody,
+  observation?: RequestObservation,
 ): Promise<PreparedChatRequest | Response> {
-  const adapter = await bindManagedChat(request, body);
-  if (adapter instanceof Response) return adapter;
+  const adapter = await bindManagedChat(request, body, observation);
+  if (adapter instanceof Response) {
+    observation?.fail('admission');
+    return adapter;
+  }
   const result = await prepareManagedChat(adapter.actor, toPreparationInput(body), adapter.operations);
+  if (!result.ok) observation?.fail('admission');
   return result.ok
     ? withRequestContext(result.value, body, adapter.accessTokenForKB)
     : preparationErrorResponse(result.error);

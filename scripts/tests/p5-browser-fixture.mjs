@@ -12,7 +12,8 @@
  * Actual components: SettingsCenterHost/GeneralSettingsPanel, AIModelPanel and its
  * controlled views, AnnouncementManagementPanel, ConversationListProvider,
  * Query and ChatStreamManager.
- * Fixture-only boundaries: identity/profile/feature flags, unrelated lazy panels,
+ * Actual root ClientProviders handles focus/session events against synthetic auth I/O.
+ * Fixture-only boundaries: auth I/O/profile/feature flags, unrelated lazy panels,
  * navigation shell, model runner and HTTP responses. No Next router, Supabase,
  * Auth, PostgREST, paid model or CSS/layout acceptance is claimed.
  * No .env loading, listening socket, server process or unhandled network access.
@@ -29,26 +30,31 @@ const origin = 'https://taibu-fixture.invalid';
 const entry = String.raw`
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { SessionContext } from '@/lib/hooks/session-context';
+import { useQueryClient } from '@tanstack/react-query';
+import { ClientProviders, useSessionSafe } from '@/components/providers/ClientProviders';
 import { ThemeProvider } from '@/components/ui/ThemeProvider';
-import { ToastProvider } from '@/components/ui/Toast';
 import { SettingsCenterHost } from '@/components/settings/SettingsCenterHost';
 import { openSettingsCenter } from '@/lib/settings-center';
 import { AIModelPanel } from '@/components/admin/AIModelPanel';
 import { AnnouncementManagementPanel } from '@/components/admin/AnnouncementManagementPanel';
 import { ConversationListProvider, useConversationList } from '@/lib/chat/ConversationListContext';
 import { ChatStreamManager } from '@/lib/chat/chat-stream-manager';
-import { registerBrowserQueryClient } from '@/lib/query/client';
-import { queryKeys } from '@/lib/query/keys';
-const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+let client;
 const manager = new ChatStreamManager();
 const invalidations = [];
-const invalidate = client.invalidateQueries.bind(client);
-client.invalidateQueries = (...args) => { invalidations.push(args[0]); return invalidate(...args); };
-registerBrowserQueryClient(client);
+
 window.fixture = { user: 'alice', invalidations, client, manager };
-function Shell({ setUser }) {
+function Shell() {
+  const queryClient = useQueryClient();
+  const { user } = useSessionSafe();
+  if (client !== queryClient) {
+    client = queryClient;
+    const invalidate = client.invalidateQueries.bind(client);
+    client.invalidateQueries = (...args) => { invalidations.push(args[0]); return invalidate(...args); };
+    window.fixture.client = client;
+  }
+  const setUser = id => window.fixtureAuth.change(id);
+  window.fixture.user = user?.id ?? null;
   const list = useConversationList();
   const [route, setRoute] = useState('/chat');
   const [stream, setStream] = useState(null);
@@ -108,11 +114,7 @@ function Shell({ setUser }) {
   </>;
 }
 function App() {
-  const [id, setId] = useState('alice');
-  const user = id ? { id, email: id + '@fixture.invalid', aud: 'authenticated', role: 'authenticated', app_metadata: {}, user_metadata: {}, created_at: '2026-01-01' } : null;
-  return <QueryClientProvider client={client}><SessionContext.Provider value={{ user, session: null, loading: false }}>
-    <ThemeProvider><ToastProvider><ConversationListProvider><Shell setUser={setId} /></ConversationListProvider></ToastProvider></ThemeProvider>
-  </SessionContext.Provider></QueryClientProvider>;
+  return <ClientProviders><ThemeProvider><ConversationListProvider><Shell /></ConversationListProvider></ThemeProvider></ClientProviders>;
 }
 createRoot(document.getElementById('root')).render(<React.StrictMode><App /></React.StrictMode>);
 `;
@@ -127,12 +129,26 @@ export async function build(outputDirectory) {
     tsconfig: resolve(root, 'tsconfig.json'),
     define: { 'process.env.NODE_ENV': '"development"', 'process.env': '{}' },
     plugins: [{ name: 'explicit-fixture-boundaries', setup(plugin) {
-      plugin.onResolve({ filter: /^@\/components\/providers\/ClientProviders$/ }, () => ({ path: resolve(root, 'src/lib/hooks/session-context.tsx') }));
+      plugin.onResolve({ filter: /^@\/lib\/auth$/ }, args => ({ path: args.path, namespace: 'fixture' }));
+      plugin.onResolve({ filter: /^@\/components\/providers\/(ChatTaskToastBridge|AnnouncementPopupHost)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^@\/lib\/hooks\/(useFeatureToggles|useCurrentUserProfile)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
-      plugin.onResolve({ filter: /^@\/components\/settings\/panels\// }, args => args.path.endsWith('/GeneralSettingsPanel') ? null : ({ path: args.path, namespace: 'fixture' }));
+      plugin.onResolve({ filter: /^@\/components\/settings\/panels\// }, args => /\/(GeneralSettingsPanel|AISettingsPanel)$/.test(args.path) ? null : ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^@\/components\/settings\/AccountAdminPanels$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onLoad({ filter: /.*/, namespace: 'fixture' }, args => {
         let contents = 'export default function UnexercisedPanel() { return null; }';
+        if (args.path === '@/lib/auth') contents = `
+          const listeners = new Set();
+          const session = () => window.fixtureAuth.cookieUser ? { user: { id: window.fixtureAuth.cookieUser, email: window.fixtureAuth.cookieUser + '@fixture.invalid' } } : null;
+          window.fixtureAuth = { cookieUser: 'alice', revalidations: 0, change(id) { this.cookieUser = id; for (const cb of listeners) cb('SIGNED_IN', session()); } };
+          export const authSessionCacheConstants = { SESSION_REVALIDATE_EVENT_COOLDOWN_MS: 0 };
+          export const supabase = { auth: {
+            getSession: async () => ({ data: { session: session() }, error: null }),
+            revalidateSession: async () => { window.fixtureAuth.revalidations++; return { data: { session: session() }, error: null }; },
+            onAuthStateChange: cb => { listeners.add(cb); return { data: { subscription: { unsubscribe: () => listeners.delete(cb) } } }; },
+          } };
+        `;
+        if (args.path.endsWith('/ChatTaskToastBridge')) contents = 'export function ChatTaskToastBridge() { return null; }';
+        if (args.path.endsWith('/AnnouncementPopupHost')) contents = 'export function AnnouncementPopupHost({ children }) { return children; }';
         if (args.path.endsWith('/useFeatureToggles')) contents = 'const enabled = () => true; export function useFeatureToggles() { return { loaded: true, isFeatureEnabled: enabled }; }';
         if (args.path.endsWith('/useCurrentUserProfile')) contents = "import { useSessionSafe } from '@/lib/hooks/session-context'; export function useCurrentUserProfile() { const {user} = useSessionSafe(); return { profile: user ? { is_admin: user.id === 'alice' } : null, loading: false, error: null }; }";
         if (args.path.endsWith('/AccountAdminPanels')) contents = "export { AIModelPanel as AdminAIServicesContent } from '@/components/admin/AIModelPanel'; export const AdminAnnouncementsContent = () => null; export const AdminFeaturesContent = () => null;";
@@ -173,6 +189,17 @@ export async function run(existingPage, bundlePath) {
   const browserErrors = [];
   const queryWarnings = [];
   const checks = [];
+  const controls = [];
+  let holdSettingsReads = false;
+  const holdNext = (pathname, method, fail = false) => {
+    const control = { pathname, method, fail, release: null, intercepted: false };
+    controls.push(control);
+    return control;
+  };
+  const intercepted = async control => {
+    for (let attempt = 0; !control.intercepted && attempt < 200; attempt++) await page.waitForTimeout(10);
+    assert.ok(control.intercepted, 'Controlled request intercepted: ' + control.method + ' ' + control.pathname);
+  };
   let models = [initialModel()];
   let announcements = [];
   let failAnnouncementWrite = false;
@@ -192,6 +219,7 @@ export async function run(existingPage, bundlePath) {
     if (message.text().includes('No queryFn was passed')) queryWarnings.push(message.text());
   });
   const settings = { notificationsEnabled: true, language: 'zh', expressionStyle: 'direct', customInstructions: '', chartPromptDetailLevel: 'default', userProfile: null, promptKbIds: [], notifyEmail: true, notifySite: true, defaultBaziChartId: null, defaultZiweiChartId: null };
+  const settingsByUser = { alice: { ...settings }, bob: { ...settings, customInstructions: 'Bob preferences', notificationsEnabled: false } };
   await context.route('**/*', async route => {
     const request = route.request();
     const url = new URL(request.url());
@@ -201,12 +229,28 @@ export async function run(existingPage, bundlePath) {
     if (url.pathname === '/chat' && method === 'GET') return route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><meta charset="utf-8"><style>[hidden],.hidden{display:none!important}button,input,select,textarea{margin:4px;padding:4px}svg{width:16px;height:16px}body{font-family:sans-serif}</style><div id="root"></div><script src="/fixture.js"></script>' });
     if (url.pathname === '/favicon.ico') return route.fulfill({ status: 204, body: '' });
     const body = request.postDataJSON();
-    requests.push({ method, pathname: url.pathname, search: url.search, body });
-    const ok = data => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data, error: null }) });
+    requests.push({ method, pathname: url.pathname, search: url.search, body, expectedUserId: request.headers()['x-expected-user-id'] });
+    if (holdSettingsReads && url.pathname === '/api/user/settings' && method === 'GET') holdNext(url.pathname, method);
+    const control = controls.find(item => !item.intercepted && item.pathname === url.pathname && item.method === method);
+    const wait = control ? new Promise(done => { control.release = done; control.intercepted = true; }) : Promise.resolve();
+    const ok = async data => {
+      const payload = JSON.stringify({ data: control?.snapshot ?? data, error: null });
+      await wait;
+      if (control?.fail) return denied();
+      return route.fulfill({ status: 200, contentType: 'application/json', body: payload }).catch(() => {});
+    };
     const denied = () => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ data: null, error: { message: 'Controlled fixture failure' } }) });
-    if (url.pathname === '/api/user/settings') {
-      if (method === 'GET') { settingsReads++; return ok({ settings }); }
-      Object.assign(settings, body); return ok({ settings });
+    if (url.pathname === '/api/user/settings' || url.pathname === '/api/reminders') {
+      const cookieUser = await page.evaluate(() => window.fixtureAuth.cookieUser);
+      if (request.headers()['x-expected-user-id'] && request.headers()['x-expected-user-id'] !== cookieUser) {
+        return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: { message: 'Account changed' } }) });
+      }
+      if (url.pathname === '/api/user/settings') {
+        const owned = settingsByUser[cookieUser] ?? settings;
+        if (method === 'GET') { settingsReads++; return ok({ settings: owned }); }
+        if (!control?.fail) Object.assign(owned, body);
+        return ok({ settings: owned });
+      }
     }
     if (url.pathname === '/api/reminders') return ok({ subscriptions: ['solar_term', 'fortune', 'key_date'].map(reminderType => ({ reminderType, enabled: false, notifySite: true, notifyEmail: false })) });
     if (url.pathname === '/api/conversations' && method === 'GET') {
@@ -220,6 +264,7 @@ export async function run(existingPage, bundlePath) {
     }
     const conversation = url.pathname.match(/^\/api\/conversations\/([^/]+)$/);
     if (conversation) {
+      if (control?.fail) return ok({ saved: false });
       if (method === 'DELETE') {
         if (failDelete) { failDelete = false; return denied(); }
         for (const user of Object.keys(rows)) rows[user] = rows[user].filter(row => row.id !== conversation[1]);
@@ -278,7 +323,7 @@ export async function run(existingPage, bundlePath) {
     await page.getByRole('switch').first().click();
     await until(() => window.fixture.invalidations.length === 1);
     check('GeneralSettings mutation invalidates its scoped query exactly once', JSON.stringify(await page.evaluate(() => window.fixture.invalidations)) === JSON.stringify([{ queryKey: ['chat', 'bootstrap', 'alice'] }]));
-    const readsBeforeClose = settingsReads;
+    let readsBeforeClose = settingsReads;
     await page.getByRole('button', { name: '关闭设置中心', exact: true }).click();
     await until(() => location.hash === '');
     await page.getByRole('button', { name: 'Open actual settings', exact: true }).click();
@@ -288,6 +333,18 @@ export async function run(existingPage, bundlePath) {
     await page.goBack();
     await until(() => location.hash === '');
     checks.push('Browser back closes actual hash-addressed settings');
+
+    await page.evaluate(() => { history.replaceState(null, '', '#settings/personalization'); window.dispatchEvent(new HashChangeEvent('hashchange')); });
+    const instructions = page.locator('textarea').filter({ visible: true });
+    await instructions.fill('Dirty same-account draft');
+    const readsBeforeFocus = settingsReads;
+    const focusBefore = await page.evaluate(() => window.fixtureAuth.revalidations);
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await until(before => window.fixtureAuth.revalidations > before, focusBefore);
+    await page.waitForTimeout(50);
+    check('Real ClientProviders focus refresh preserves AI dirty draft and does not reload settings', await instructions.inputValue() === 'Dirty same-account draft' && settingsReads === readsBeforeFocus);
+    await page.getByRole('button', { name: '关闭设置中心', exact: true }).click();
+    readsBeforeClose = settingsReads;
 
     failRename = true;
     await page.getByRole('button', { name: 'Rename actual first', exact: true }).click();
@@ -326,7 +383,8 @@ export async function run(existingPage, bundlePath) {
     await page.getByRole('button', { name: 'Fixture Bob', exact: true }).click();
     await until(() => window.fixture.list().length === 2 && window.fixture.list()[0].id === 'bob-1');
     await (await bobSettings).finished();
-    check('Changing users reloads the retained settings panel exactly once', settingsReads === readsBeforeClose + 1);
+    check('Changing users remounts account-owned settings panels', settingsReads >= readsBeforeClose + 2);
+    const readsAfterBob = settingsReads;
     const lateRenameResponse = page.waitForResponse(response => response.url().endsWith('/api/conversations/alice-1') && response.request().method() === 'PATCH');
     releaseList(); releaseRename();
     await (await lateRenameResponse).finished();
@@ -335,12 +393,12 @@ export async function run(existingPage, bundlePath) {
     await page.getByRole('button', { name: 'Fixture Logout', exact: true }).click();
     await until(() => window.fixture.list().length === 0);
     check('Logout clears previous-user Query data', await page.evaluate(() => window.fixture.client.getQueryData(['chat', 'conversations', 'bob']) === undefined));
-    check('Logout does not load authenticated settings', settingsReads === readsBeforeClose + 1);
+    check('Logout does not load authenticated settings', settingsReads === readsAfterBob);
 
     const aliceSettings = nextSettingsResponse();
     await page.getByRole('button', { name: 'Fixture Alice', exact: true }).click();
     await (await aliceSettings).finished();
-    check('Signing back in reloads settings without remounting the settings host', settingsReads === readsBeforeClose + 2);
+    check('Signing back in reloads account panels without remounting the settings host', settingsReads >= readsAfterBob + 2);
     await page.getByRole('button', { name: 'Fixture Models route', exact: true }).click();
     await page.getByText('Fixture Model', { exact: true }).waitFor();
     await page.getByRole('button', { name: '新增模型', exact: true }).click();
@@ -366,10 +424,12 @@ export async function run(existingPage, bundlePath) {
     await page.getByRole('button', { name: '保存模型设置', exact: true }).click();
     await page.getByText('Edited Fixture Model', { exact: true }).waitFor();
     check('Actual edit form persists controlled model draft', requests.some(item => item.pathname === '/api/admin/ai-models/model-1' && item.method === 'PATCH' && item.body.displayName === 'Edited Fixture Model'));
+    await modelInput.nth(1).fill('Unsaved model while editing source');
     await page.getByRole('button', { name: '添加备用来源', exact: true }).click();
     await page.getByPlaceholder('留空则跟随模型 ID（fixture-model）', { exact: true }).fill(' upstream-fixture ');
     await page.getByRole('button', { name: '保存', exact: true }).click();
     await page.getByText('Octopus', { exact: true }).waitFor();
+    check('Source reload preserves unsaved model settings', await modelInput.nth(1).inputValue() === 'Unsaved model while editing source');
     check('Actual source form submits normalized override and remaining gateway', requests.some(item => item.pathname === '/api/admin/ai-models/model-1/sources' && item.body.sourceKey === 'octopus' && item.body.modelIdOverride === 'upstream-fixture'));
     await page.getByRole('button', { name: '编辑来源', exact: true }).nth(1).click();
     await page.getByPlaceholder('留空则跟随模型 ID（fixture-model）', { exact: true }).fill('fixture-model');
@@ -417,6 +477,136 @@ export async function run(existingPage, bundlePath) {
         check('Announcement DELETE invalidates once', JSON.stringify(await page.evaluate(() => window.fixture.invalidations)) === JSON.stringify([{ queryKey: ['announcements'] }]));
       }
     }
+    // StrictMode starts overlapping real loadModels calls on remount.
+    const oldModelLoad = holdNext('/api/admin/ai-models', 'GET');
+    oldModelLoad.snapshot = { models: models.map(model => model.id === 'model-1' ? { ...model, displayName: 'Stale older reload' } : model) };
+    await page.getByRole('button', { name: 'Fixture Models route', exact: true }).click();
+    await intercepted(oldModelLoad);
+    await page.getByText('Edited Fixture Model', { exact: true }).waitFor();
+    oldModelLoad.release();
+    await page.waitForTimeout(40);
+    check('Older model reload cannot overwrite a newer completed reload', await page.getByText('Stale older reload', { exact: true }).count() === 0 && await page.getByText('Edited Fixture Model', { exact: true }).isVisible());
+    await page.getByRole('button', { name: 'Fixture Announcements route', exact: true }).click();
+
+    // Actual Host/panels and root auth Provider; only auth I/O is synthetic.
+    const aiDraft = page.getByPlaceholder('例如：先给结论，再给依据；避免空话和术语堆叠。');
+    await page.evaluate(() => { history.replaceState(null, '', '#settings/personalization'); window.dispatchEvent(new HashChangeEvent('hashchange')); });
+    await aiDraft.waitFor();
+    await aiDraft.fill('Submitted snapshot');
+    const saveDuringEdit = holdNext('/api/user/settings', 'PATCH');
+    await page.getByRole('button', { name: '保存', exact: true }).click();
+    await intercepted(saveDuringEdit);
+    await aiDraft.fill('Edited while save pending');
+    saveDuringEdit.release();
+    await until(() => [...document.querySelectorAll('button')].some(button => button.textContent.trim() === '保存' && !button.disabled));
+    check('AI save response advances baseline without replacing later edits', await aiDraft.inputValue() === 'Edited while save pending');
+    check('Settings clients send expected account header for reads and writes', requests.filter(item => item.pathname === '/api/user/settings').every(item => item.expectedUserId === 'alice' || item.expectedUserId === 'bob'));
+    await page.evaluate(() => { window.fixtureAuth.cookieUser = 'bob'; });
+    await page.getByRole('button', { name: '保存', exact: true }).click();
+    await page.getByText('保存失败', { exact: true }).first().waitFor();
+    check('Cookie change before Provider sync rejects old account draft', settingsByUser.bob.customInstructions === 'Bob preferences' && await aiDraft.inputValue() === 'Edited while save pending');
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await until(() => window.fixture.user === 'bob');
+    await until(() => document.querySelector('textarea[placeholder^="例如：先给结论"]')?.value === 'Bob preferences');
+    check('Cross-account real focus replaces old settings', await aiDraft.inputValue() === 'Bob preferences');
+    await page.getByRole('button', { name: 'Fixture Logout', exact: true }).click();
+    const readsStart = controls.length;
+    holdSettingsReads = true;
+    const staleRead = holdNext('/api/user/settings', 'GET');
+    await page.getByRole('button', { name: 'Fixture Bob', exact: true }).click();
+    await intercepted(staleRead);
+    await page.waitForTimeout(30);
+    holdSettingsReads = false;
+    const staleReads = controls.splice(readsStart);
+    await page.getByRole('button', { name: 'Fixture Alice', exact: true }).click();
+    await aiDraft.waitFor();
+    await aiDraft.fill('Fresh Alice draft');
+    for (const read of staleReads) read.release?.();
+    await page.waitForTimeout(30);
+    check('Late old-account settings GET cannot overwrite current draft', await aiDraft.inputValue() === 'Fresh Alice draft');
+    const staleSave = holdNext('/api/user/settings', 'PATCH');
+    await page.locator('select').filter({ visible: true }).last().selectOption('dark');
+    await page.getByRole('button', { name: '保存', exact: true }).click();
+    await intercepted(staleSave);
+    await page.getByRole('button', { name: 'Fixture Logout', exact: true }).click();
+    await page.getByRole('button', { name: 'Fixture Alice', exact: true }).click();
+    await aiDraft.waitFor();
+    await aiDraft.fill('New login same Alice');
+    await page.evaluate(() => { localStorage.setItem('chartStyle', 'modern'); window.fixture.invalidations.length = 0; });
+    staleSave.release();
+    await page.waitForTimeout(40);
+    check('Logout/login same-ID stale PATCH cannot reset draft or local preferences', await aiDraft.inputValue() === 'New login same Alice' && await page.evaluate(() => localStorage.getItem('chartStyle')) === 'modern');
+    check('Aborted settings completion does not emit old mutation effects', (await page.evaluate(() => window.fixture.invalidations)).length === 0);
+    await page.getByRole('button', { name: 'Open actual settings', exact: true }).click();
+    await page.getByText('推送通知', { exact: true }).waitFor();
+    const notificationSwitch = page.getByRole('switch').first();
+    const beforeNotification = await notificationSwitch.getAttribute('aria-checked');
+    const generalFail = holdNext('/api/user/settings', 'PATCH', true);
+    await notificationSwitch.click();
+    await intercepted(generalFail);
+    check('General setting serializes same-field operations while saving', await notificationSwitch.isDisabled());
+    const reminderSwitch = page.getByRole('switch').nth(1);
+    await reminderSwitch.click();
+    await until(() => document.querySelectorAll('[role="switch"]')[1]?.getAttribute('aria-checked') === 'true');
+    generalFail.release();
+    await until(() => !document.querySelector('[role="switch"]').disabled);
+    check('Failed preference rolls back only its field and preserves successful reminder', await notificationSwitch.getAttribute('aria-checked') === beforeNotification && await reminderSwitch.getAttribute('aria-checked') === 'true');
+    const reminderFail = holdNext('/api/reminders', 'POST', true);
+    await reminderSwitch.click();
+    await intercepted(reminderFail);
+    await page.getByRole('switch').nth(2).click();
+    reminderFail.release();
+    await until(() => !document.querySelectorAll('[role="switch"]')[1].disabled);
+    check('Failed reminder rolls back only its item', await reminderSwitch.getAttribute('aria-checked') === 'true' && await page.getByRole('switch').nth(2).getAttribute('aria-checked') === 'true');
+    await page.getByRole('button', { name: '关闭设置中心', exact: true }).click();
+
+    // Controlled interleavings invoke real ConversationListProvider actions.
+    rows.alice = Array.from({ length: 12 }, (_, index) => ({ id: 'race-' + (index + 1), user_id: 'alice', title: 'Race ' + (index + 1), personality: 'general', created_at: '2026-01-01', updated_at: '2026-01-01', source_type: 'chat' }));
+    await page.getByRole('button', { name: 'Fixture Bob', exact: true }).click();
+    await until(() => window.fixture.list()[0]?.id === 'bob-1');
+    await page.getByRole('button', { name: 'Fixture Alice', exact: true }).click();
+    await until(() => window.fixture.list().length === 7 && window.fixture.list()[0]?.id === 'race-1');
+    const append = holdNext('/api/conversations', 'GET');
+    await page.getByRole('button', { name: 'Load more actual list', exact: true }).click();
+    await intercepted(append);
+    await page.getByRole('button', { name: 'Refresh actual list', exact: true }).click();
+    await until(() => !window.fixture.context.refreshingConversations);
+    append.release();
+    await page.waitForTimeout(30);
+    check('Refresh preemption clears superseded append loading state', !await page.evaluate(() => window.fixture.context.loadingMoreConversations));
+    await page.getByRole('button', { name: 'Load more actual list', exact: true }).click();
+    await until(() => window.fixture.list().length === 12);
+    checks.push('Pagination can continue after refresh preempts an append');
+    const renameA = holdNext('/api/conversations/race-1', 'PATCH', true);
+    await page.evaluate(() => { window.fixture.ops = {}; window.fixture.context.handleRenameConversation('race-1', 'Pending A').then(result => { window.fixture.ops.a = result; }); });
+    await intercepted(renameA);
+    const overlap = await page.evaluate(() => window.fixture.context.handleRenameConversation('race-1', 'Duplicate A'));
+    check('Same-ID overlapping writes are explicitly rejected', overlap === false);
+    const deleteOverlap = await page.evaluate(() => window.fixture.context.handleDeleteConversation('race-1'));
+    check('Same-ID delete cannot overtake a pending rename', deleteOverlap === false);
+    await page.evaluate(() => window.fixture.context.handleRenameConversation('race-2', 'Successful B'));
+    renameA.release();
+    await until(() => window.fixture.ops.a === false);
+    check('Failed rename A preserves concurrently successful rename B', await page.locator('[data-id="race-2"]').textContent() === 'Successful B');
+    const deleteA = holdNext('/api/conversations/race-1', 'DELETE', true);
+    await page.evaluate(() => { window.fixture.context.handleDeleteConversation('race-1').then(result => { window.fixture.ops.deletedA = result; }); });
+    await intercepted(deleteA);
+    await page.evaluate(() => window.fixture.context.handleDeleteConversation('race-2'));
+    rows.alice.push({ ...rows.alice[0], id: 'race-new', title: 'New page arrival' });
+    await page.evaluate(() => window.fixture.context.refreshConversationList());
+    check('Refresh cannot resurrect a pending deletion', await page.locator('[data-id="race-1"]').count() === 0);
+    deleteA.release();
+    await until(() => window.fixture.ops.deletedA === false);
+    check('Failed delete restores only A, preserving successful B deletion and refreshed rows', await page.locator('[data-id="race-1"]').count() === 1 && await page.locator('[data-id="race-2"]').count() === 0 && await page.locator('[data-id="race-new"]').count() === 1);
+
+    const staleRefresh = holdNext('/api/conversations', 'GET');
+    await page.getByRole('button', { name: 'Refresh actual list', exact: true }).click();
+    await intercepted(staleRefresh);
+    await page.evaluate(() => window.fixture.context.handleDeleteConversation('race-3'));
+    staleRefresh.release();
+    await page.waitForTimeout(40);
+    check('Refresh snapshot captured before successful delete cannot resurrect deleted row', await page.locator('[data-id="race-3"]').count() === 0);
+
     check('No unhandled network requests escaped fixtures', blocked.length === 0);
     check('No browser runtime exceptions', browserErrors.length === 0);
     check('Disabled Query observers emit no missing queryFn warnings, including visitor', queryWarnings.length === 0);
@@ -425,6 +615,7 @@ export async function run(existingPage, bundlePath) {
     throw new Error(JSON.stringify({ message: error.message, checks, blocked, browserErrors, requests, pageText: await page.locator('body').innerText().catch(() => '') }, null, 2), { cause: error });
   } finally {
     releaseList?.(); releaseRename?.();
+    for (const control of controls) control.release?.();
     await context.close();
   }
 }

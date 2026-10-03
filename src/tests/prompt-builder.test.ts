@@ -515,3 +515,18 @@ test('SourceTracker de-duplicates sources by type and id', () => {
     assert.equal(sources.length, 1);
     assert.ok(sources[0].preview.includes('第二次更新'));
 });
+
+test('prepared budget and personality preserve standalone output with one model budget lookup', async t => {
+    const models = require('../lib/server/ai-config') as typeof import('../lib/server/ai-config');
+    const lookup = t.mock.method(models, 'getModelConfigAsync', async () => undefined);
+    const pb = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');
+    const context: import('../lib/ai/prompt-builder').PromptContext = {
+        modelId: 'offline-model', userMessage: 'question', mentions: [], knowledgeHits: [], userSettings: {},
+    };
+    const standalone = await pb.buildPromptWithSources(context);
+    assert.equal(lookup.mock.callCount(), 1);
+    const budget = await pb.calculatePromptBudget(context.modelId);
+    const prepared = await pb.buildPromptWithSources(context, { budget, personalityResolution: pb.resolvePersonalities(context) });
+    assert.equal(lookup.mock.callCount(), 2);
+    assert.deepEqual(prepared, standalone);
+});

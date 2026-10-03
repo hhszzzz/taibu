@@ -343,3 +343,38 @@ test('/api/reminders GET should return 500 when reminder subscriptions cannot be
   assert.equal(response.status, 500);
   assert.equal(payload.error, '获取提醒订阅失败');
 });
+
+test('reminder account preconditions authenticate first, reject before read/write, and retain legacy compatibility', async (t) => {
+  const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
+  const reminders = require('../lib/reminders') as typeof import('../lib/reminders');
+  const originalAuth = api.requireUserContext;
+  const originalRead = reminders.getReminderSubscriptions;
+  const originalWrite = reminders.updateReminderSubscription;
+  const owners: string[] = [];
+  reminders.getReminderSubscriptions = async owner => { owners.push(owner); return []; };
+  reminders.updateReminderSubscription = async owner => { owners.push(owner); return true; };
+  t.after(() => {
+    api.requireUserContext = originalAuth;
+    reminders.getReminderSubscriptions = originalRead;
+    reminders.updateReminderSubscription = originalWrite;
+  });
+  const { GET, POST } = await import('../app/api/reminders/route');
+  for (const authenticated of [false, true]) {
+    api.requireUserContext = async () => authenticated
+      ? { user: { id: 'alice' }, db: {} } as unknown as Awaited<ReturnType<typeof originalAuth>>
+      : { error: { message: 'Unauthorized', status: 401 } };
+    for (const [method, handler] of [['GET', GET], ['POST', POST]] as const) {
+      for (const expected of [undefined, 'alice', 'bob', '']) {
+        const before = owners.length;
+        const response = await handler(new NextRequest('http://localhost/api/reminders', {
+          method, headers: expected === undefined ? {} : { 'X-Expected-User-Id': expected },
+          ...(method === 'POST' ? { body: JSON.stringify({ reminderType: 'fortune', enabled: false, user_id: 'bob' }) } : {}),
+        }));
+        const allowed = expected === undefined || expected === 'alice';
+        assert.equal(response.status, !authenticated ? 401 : allowed ? 200 : 409);
+        assert.equal(owners.length - before, authenticated && allowed ? 1 : 0);
+      }
+    }
+  }
+  assert.ok(owners.every(owner => owner === 'alice'));
+});

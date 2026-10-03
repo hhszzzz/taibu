@@ -75,6 +75,8 @@ Core 通过领域子路径公开规范格式化函数，例如：
 
 SQL 原子性只覆盖该事务，不覆盖模型调用、浏览器传输和所有后置 hook。尤其 `persistRecord` 等兼容回调可能在主事务成功后失败：收到错误并不必然表示数据库没有写入，不能盲目重复保存或重新收费。
 
+AI 请求入口生成可信的请求 ID，并向纯观测器注入时钟及日志接收函数。日志仅记录 source、阶段、耗时、限定失败分类，以及生成/持久化/计费状态；终态在已观察到的保存和补偿结束后记录一次，日志接收函数失败不影响业务。退款返回 false 与抛异常分开标记，不记录原始供应商错误、提示词、输出或凭据。BYOK prepare/persist 分属独立请求，浏览器生成标记为外部、不可由服务器证明；延迟流转换失败只补记录，不借日志改造改变原计费政策。
+
 依据：[分析持久化](../../src/lib/ai/ai-analysis.ts)、[工厂保存装配](../../src/lib/api/divination-pipeline.ts)、[分析保存测试](../../src/tests/conversation-analysis.test.ts)。
 
 ### 3.3 知识库的调用者边界
@@ -86,7 +88,7 @@ SQL 原子性只覆盖该事务，不覆盖模型调用、浏览器传输和所�
 - 用户搜索和权重查询使用调用者 access token。只有 `userId` 不构成读权限；缺少 token 时拒绝搜索，HTTP 搜索入口返回受控错误。免费会员的无读取短路仍保留。
 - 旧内部 service facade 的默认客户端、带归属条件的来源读取，以及显式特权向量回填仍是兼容例外，不能照搬到新增用户请求路径。
 
-以下旧检索行为**尚未在 P6 中修正**：RPC 返回错误但无数据时，适配仍把它当作空结果；向量距离 `0` 仍经过旧 `distance || 2` 默认值，随后归一化为分数 `0`。这些行为可能掩盖错误或影响排序，需要独立纠错及回归，而不能夹带在持久化抽取中。
+检索失败与无命中分开处理：适配器显式传播 RPC 错误，全文/相似/向量阶段可独立降级；成功阶段的候选保留，所有已执行阶段失败则明确报错，不把调用者身份缺失转为空结果。权重扩展与 rerank 失败仍保留已有候选。向量距离 `0` 作为精确命中保留，只有缺失距离才采用默认值。请求内已读取的 KB 名称仅按同一调用者复用，缺失项保留受控回退，不跨账号缓存名称。
 
 依据：[来源替换用例](../../src/lib/knowledge-base/source-replacement.ts)、[适配器](../../src/lib/knowledge-base/persistence.server.ts)、[检索](../../src/lib/knowledge-base/search.ts)、[原子委托测试](../../src/tests/knowledge-base-persistence.test.ts)、[调用者身份测试](../../src/tests/knowledge-base-caller-identity.test.ts)。
 
@@ -106,6 +108,10 @@ SQL 原子性只覆盖该事务，不覆盖模型调用、浏览器传输和所�
 “后台聊天”只指当前浏览器会话中的跨页面任务。关闭页面、浏览器重启或进程故障后继续执行，不是本轮承诺。账号切换既要隔离 Query key，也要防止旧请求写回新账号的列表；不能只清空显示层。
 
 旧 DOM 事件、URL 推断失效仍服务未迁移消费者。新增操作优先使用显式 effects；最后一个消费者迁移并验证后才能移除旧分支，而不是增加新事件总线。
+
+设置保活的边界是“账号＋标签页”。同账号会话刷新不重置草稿，换账号/卸载取消旧请求及副作用；保存成功只推进已保存基线，不覆盖保存期间的新编辑。设置与提醒客户端可携带 `X-Expected-User-Id`，服务器在认证后、访问数据前检查一致性，不匹配返回 `409`。该值不是鉴权凭据，数据库归属仍来自已认证用户；旧客户端不带该值仍兼容。
+
+会话乐观操作由同一 Query 缓存中的按 ID 操作记录协调：同 ID 请求不交错，不同 ID 可并发；失败只回滚目标字段或条目，刷新合并待确认操作。刷新/分页接管时替换整个加载模式，过期响应不得写回或复活已删除条目。模型面板同样保留脏字段，旧重叠读取不能覆盖新结果。
 
 依据：[会话上下文](../../src/lib/hooks/session-context.tsx)、[列表缓存](../../src/lib/query/conversation-list-cache.ts)、[失效策略](../../src/lib/query/invalidation.ts)、[管理面板装配](../../src/components/settings/AccountAdminPanels.tsx)；对应[列表缓存测试](../../src/tests/conversation-list-cache.test.ts)、[mutation 测试](../../src/tests/query-mutation-effects.test.ts)、[聊天任务测试](../../src/tests/chat-stream-manager.test.ts)。
 
@@ -167,6 +173,8 @@ BYOK 的 prepare/persist 不传供应商密钥。persist 仍需重新鉴权、�
 依据：[历史 registry](../../src/lib/history/registry.ts)、[回放特征测试](../../src/tests/history-replay-policy.test.ts)、[结果格式一致性测试](../../src/tests/result-data-source-format-consistency.test.ts)、[奇门计算边界](../../packages/core/src/domains/qimen/calculate.ts)。
 
 ## 7. 保留的 facade 与迁移例外
+
+新增纯用例和 DTO 的依赖守卫使用 TypeScript AST 与模块解析，跟踪别名、相对导入、重导出、类型引用及字面量动态导入的传递路径；不能通过中间模块绕过 HTTP/SDK/Node/环境边界。既有适配器使用明确路径例外，例外只允许其作为装配入口，不允许纯用例引用它。该检查不是任意动态 JavaScript 的完整静态证明，仍需类型、行为测试与代码评审。
 
 例外意味着边界尚未完全迁移，不意味着新增代码可以继续扩散同样依赖。删除兼容层需要证据，不以“已经新建用例文件”为条件。
 

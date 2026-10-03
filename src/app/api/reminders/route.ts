@@ -21,6 +21,10 @@ export async function GET(request: NextRequest) {
         if ('error' in auth) {
             return jsonError(auth.error.message, auth.error.status, { success: false });
         }
+        const expectedUserId = request.headers.get('X-Expected-User-Id');
+        if (expectedUserId !== null && expectedUserId !== auth.user.id) {
+            return jsonError('账号已切换，请重新加载设置', 409, { success: false });
+        }
         const { user } = auth;
         const db = auth.db;
 
@@ -57,6 +61,10 @@ export async function POST(request: NextRequest) {
         const auth = await requireUserContext(request);
         if ('error' in auth) {
             return jsonError(auth.error.message, auth.error.status, { success: false });
+        }
+        const expectedUserId = request.headers.get('X-Expected-User-Id');
+        if (expectedUserId !== null && expectedUserId !== auth.user.id) {
+            return jsonError('账号已切换，请重新加载设置', 409, { success: false });
         }
         const { user } = auth;
         const db = auth.db;

@@ -47,6 +47,53 @@ test('conversation optimistic rename/delete can roll back through the same cache
   } finally { client.clear(); }
 });
 
+test('owned optimistic operations preserve concurrent successes and reject same-id overlap', () => {
+  const client = new QueryClient();
+  try {
+    const cache = createConversationListCache(client, 'alice', () => true);
+    cache.update([item('a'), item('b'), item('c')]);
+    const renameA = cache.beginRename('a', 'pending-a');
+    const renameB = cache.beginRename('b', 'saved-b');
+    assert.ok(renameA && renameB);
+    assert.equal(cache.beginDelete('a'), null, 'same-id writes must not race on the server');
+    assert.equal(cache.settle(renameB, true), true);
+    cache.update(rows => rows.map(row => row.id === 'a' ? { ...row, updatedAt: 'stream-update' } : row));
+    assert.equal(cache.settle(renameA, false), true);
+    assert.equal(cache.read()[0].title, 'a');
+    assert.equal(cache.read()[0].updatedAt, 'stream-update');
+    assert.equal(cache.read()[1].title, 'saved-b');
+    assert.equal(cache.settle(renameA, false), false, 'settlement is owned once');
+
+    const deleteA = cache.beginDelete('a');
+    const deleteB = cache.beginDelete('b');
+    assert.ok(deleteA && deleteB);
+    cache.settle(deleteB, true);
+    cache.update(rows => [...rows, item('page-2')]);
+    cache.settle(deleteA, false);
+    assert.deepEqual(cache.read().map(row => row.id), ['a', 'c', 'page-2']);
+  } finally { client.clear(); }
+});
+
+test('refresh overlays pending mutations and stale settlements cannot resurrect removed or old-account rows', () => {
+  const client = new QueryClient();
+  let active = true;
+  try {
+    const cache = createConversationListCache(client, 'alice', () => active);
+    cache.update([item('a'), item('b'), item('c')]);
+    const renamed = cache.beginRename('a', 'pending');
+    const deleted = cache.beginDelete('b');
+    assert.ok(renamed && deleted);
+    cache.update([item('a', 'server'), item('b'), item('c'), item('d')]);
+    assert.deepEqual(cache.read().map(row => [row.id, row.title]), [['a', 'pending'], ['c', 'c'], ['d', 'd']]);
+    assert.equal(cache.cancelMutation('b'), deleted, 'external deletion can still notify consumers of an optimistically hidden row');
+    assert.equal(cache.settle(deleted, false), false, 'external deletion supersedes a pending rollback');
+    active = false;
+    cache.clear();
+    assert.equal(cache.settle(renamed, false), false);
+    assert.equal(client.getQueryData(cache.queryKey), undefined);
+  } finally { client.clear(); }
+});
+
 test('account scope rejects stale reads, late updater/rollback writes, and old-user cache recreation', () => {
   const client = new QueryClient();
   let scope = 'alice-session-1';

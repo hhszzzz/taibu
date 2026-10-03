@@ -371,7 +371,7 @@ export function SettingsCenterHost() {
             <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-6">
               {renderedTabs.map((tab) => (
                 <div
-                  key={tab}
+                  key={`${user?.id ?? "visitor"}:${tab}`}
                   className={tab === resolvedActiveTab ? 'block' : 'hidden'}
                   aria-hidden={tab === resolvedActiveTab ? undefined : true}
                 >

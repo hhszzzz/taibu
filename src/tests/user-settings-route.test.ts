@@ -5,6 +5,26 @@ import { NextRequest } from 'next/server';
 process.env.SUPABASE_URL = 'http://localhost';
 process.env.SUPABASE_ANON_KEY = 'test-anon';
 
+test('settings account precondition rejects stale cookies before any database access', async (t) => {
+  const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
+  const original = api.requireUserContext;
+  let authenticated = 0;
+  api.requireUserContext = async () => {
+    authenticated++;
+    return { user: { id: 'bob' }, db: { from() { throw new Error('must not access database'); } } } as unknown as Awaited<ReturnType<typeof original>>;
+  };
+  t.after(() => { api.requireUserContext = original; });
+  const { GET, PATCH } = await import('../app/api/user/settings/route');
+  for (const [method, handler] of [['GET', GET], ['PATCH', PATCH]] as const) {
+    const response = await handler(new NextRequest('http://localhost/api/user/settings', {
+      method, headers: { 'X-Expected-User-Id': 'alice' },
+      ...(method === 'PATCH' ? { body: JSON.stringify({ language: 'en' }) } : {}),
+    }));
+    assert.equal(response.status, 409);
+  }
+  assert.equal(authenticated, 2);
+});
+
 test('user settings route should return normalized settings bundle for the current user', async (t) => {
   const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
   type RequireUserContextResult = Awaited<ReturnType<typeof apiUtilsModule.requireUserContext>>;
@@ -140,4 +160,36 @@ test('user settings route PATCH should update only user_settings without touchin
     chartStyle: 'modern',
   });
   assert.deepEqual(touchedTables, ['user_settings', 'user_settings']);
+});
+
+test('settings expected account is only a precondition; authentication and server owner remain authoritative', async (t) => {
+  const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
+  const original = api.requireUserContext;
+  t.after(() => { api.requireUserContext = original; });
+  const { GET, PATCH } = await import('../app/api/user/settings/route');
+  api.requireUserContext = async () => ({ error: { message: 'Unauthorized', status: 401 } });
+  for (const [method, handler] of [['GET', GET], ['PATCH', PATCH]] as const) {
+    assert.equal((await handler(new NextRequest('http://localhost/api/user/settings', {
+      method, headers: { 'X-Expected-User-Id': 'alice' },
+    }))).status, 401);
+  }
+  const owners: string[] = [];
+  api.requireUserContext = async () => ({
+    user: { id: 'alice' }, db: { from: () => ({
+      upsert: async (payload: { user_id: string }) => { owners.push(payload.user_id); return { error: null }; },
+      select: () => ({ eq: (_key: string, owner: string) => {
+        owners.push(owner); return { maybeSingle: async () => ({ data: {}, error: null }) };
+      } }),
+    }) },
+  }) as unknown as Awaited<ReturnType<typeof original>>;
+  for (const [method, handler] of [['GET', GET], ['PATCH', PATCH]] as const) {
+    for (const expected of [undefined, 'alice']) {
+      const response = await handler(new NextRequest('http://localhost/api/user/settings', {
+        method, headers: expected ? { 'X-Expected-User-Id': expected } : {},
+        ...(method === 'PATCH' ? { body: JSON.stringify({ language: 'en', user_id: 'bob' }) } : {}),
+      }));
+      assert.equal(response.status, 200);
+    }
+  }
+  assert.ok(owners.length > 0 && owners.every(owner => owner === 'alice'));
 });

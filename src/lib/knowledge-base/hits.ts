@@ -13,6 +13,7 @@ export interface BuildKnowledgeHitsOptions {
     accessToken: string | null;
     promptKbIds: string[];
     supabase: SupabaseClient;
+    knownNames?: { userId: string; names: ReadonlyMap<string, string> };
 }
 
 /**
@@ -29,6 +30,7 @@ export async function buildKnowledgeHits({
     accessToken,
     promptKbIds,
     supabase,
+    knownNames,
 }: BuildKnowledgeHitsOptions): Promise<KnowledgeHit[]> {
     if (membershipType === 'free') return [];
 
@@ -51,25 +53,28 @@ export async function buildKnowledgeHits({
 
     if (kbIds.length === 0) return [];
 
-    const { data: kbRows } = await supabase
-        .from('knowledge_bases')
-        .select('id, name, weight')
-        .eq('user_id', userId)
-        .in('id', kbIds);
-
-    const kbMap = new Map<string, { name: string; weight: string }>();
-    for (const kb of kbRows || []) {
-        if (typeof kb.id === 'string' && typeof kb.name === 'string') {
-            kbMap.set(kb.id, {
-                name: kb.name,
-                weight: typeof kb.weight === 'string' ? kb.weight : 'normal',
-            });
+    // Only this request's owner-matched names may suppress a lookup.
+    const kbMap = new Map(knownNames?.userId === userId ? knownNames.names : []);
+    const missingIds = kbIds.filter(id => !kbMap.has(id));
+    if (missingIds.length > 0) {
+        try {
+            const { data: kbRows, error } = await supabase
+                .from('knowledge_bases')
+                .select('id, name')
+                .eq('user_id', userId)
+                .in('id', missingIds);
+            if (error) throw error;
+            for (const kb of kbRows || []) {
+                if (typeof kb.id === 'string' && typeof kb.name === 'string') kbMap.set(kb.id, kb.name);
+            }
+        } catch {
+            console.warn('[knowledge-base] enrichment failed', { stage: 'hit-names' });
         }
     }
 
     return candidates.slice(0, 8).map((result): KnowledgeHit => ({
         kbId: result.kbId,
-        kbName: kbMap.get(result.kbId)?.name || '知识库',
+        kbName: kbMap.get(result.kbId) || '知识库',
         content: result.content,
         score: result.score || 0,
     }));

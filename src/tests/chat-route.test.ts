@@ -944,3 +944,59 @@ test('chat direct prepare returns 400 for invalid JSON bodies', async (t) => {
     assert.equal(state.authInfoCalls, 0);
     assert.equal(state.useCreditCalls, 0);
 });
+
+for (const failure of ['prompt', 'inference', 'empty-stream'] as const) {
+  for (const refund of ['false', 'throw'] as const) {
+    test(`chat ${failure} logs exactly one safe terminal after ${refund} compensation`, async t => {
+      setupRouteMocks(t, createUIChunkStream([]));
+      const logs: unknown[][] = [];
+      for (const method of ['info', 'warn', 'error', 'log'] as const) t.mock.method(console, method, (...args: unknown[]) => { logs.push(args); });
+      const credits = require('../lib/user/credits') as typeof import('../lib/user/credits');
+      let refunds = 0;
+      t.mock.method(credits, 'refundCreditsOrLog', async () => { refunds++; if (refund === 'throw') throw new Error('PRIVATE_REFUND'); return false; });
+      if (failure === 'prompt') {
+        const prompts = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');
+        t.mock.method(prompts, 'buildPromptWithSources', async () => { throw new Error('PRIVATE_PROMPT'); });
+      }
+      if (failure === 'inference') {
+        const ai = require('../lib/ai/ai') as typeof import('../lib/ai/ai');
+        t.mock.method(ai, 'callAIUIMessageResult', async () => { throw new Error('PRIVATE_PROVIDER'); });
+      }
+      const { POST } = await import('../app/api/chat/route');
+      const response = await POST(createChatRequest({ mentions: [{ type: 'knowledge_base', name: 'PRIVATE_PROFILE', id: 'kb' }] }));
+      await response.text();
+      const events = logs.filter(log => log[0] === '[ai-request]').map(log => log[1] as import('../lib/server/analysis').RequestObservationEvent);
+      const terminal = events.filter(event => event.phase === 'terminal');
+      assert.equal(terminal.length, 1);
+      assert.equal(refunds, 1);
+      assert.equal(terminal[0].billing, 'refund-failed');
+      assert.equal(terminal[0].refundFailure, refund === 'throw' ? 'exception' : 'rejected');
+      assert.ok(events.every(event => event.requestId === terminal[0].requestId));
+      assert.ok(!JSON.stringify(logs).includes('PRIVATE_'));
+    });
+  }
+}
+
+for (const scenario of ['success', 'prompt', 'admission'] as const) {
+  test(`direct chat ${scenario} has a bounded preparation diagnostic`, async t => {
+    setupRouteMocks(t, createUIChunkStream([]));
+    const events: import('../lib/server/analysis').RequestObservationEvent[] = [];
+    t.mock.method(console, 'info', (_label: string, event: import('../lib/server/analysis').RequestObservationEvent) => { events.push(event); });
+    if (scenario === 'prompt') {
+      const prompts = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');
+      t.mock.method(prompts, 'buildPromptWithSources', async () => { throw new Error('PRIVATE_PROMPT'); });
+    }
+    if (scenario === 'admission') {
+      const rate = require('../lib/rate-limit') as typeof import('../lib/rate-limit');
+      t.mock.method(rate, 'checkRateLimit', async () => ({ allowed: false, remaining: 0, resetAt: new Date() }));
+    }
+    const route = await import('../app/api/chat/direct/prepare/route');
+    const response = await route.POST(createChatRequest({}));
+    assert.equal(response.status, scenario === 'success' ? 200 : scenario === 'prompt' ? 500 : 429);
+    const terminal = events.filter(event => event.phase === 'terminal');
+    assert.equal(terminal.length, 1);
+    assert.equal(terminal[0].failure, scenario === 'success' ? 'none' : scenario);
+    assert.equal(terminal[0].billing, 'not-applicable');
+    assert.ok(!JSON.stringify(events).includes('PRIVATE_'));
+  });
+}

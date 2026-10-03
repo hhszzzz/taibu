@@ -170,6 +170,7 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
   const hasLoadedRef = useRef(false);
   const userIdRef = useRef<string | null>(userId);
   const nextOffsetRef = useRef<number | null>(null);
+  const paginationRevisionRef = useRef(0);
   const activeRequestIdRef = useRef(0);
   const prevUserIdRef = useRef<string | null>(null);
   const loadingRef = useRef(false);
@@ -203,24 +204,38 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
     }
   }, []);
 
+  const setRequestLoading = useCallback((mode: 'initial' | 'refresh' | 'more' | null) => {
+    loadingRef.current = mode === 'initial' || mode === 'refresh';
+    loadingMoreRef.current = mode === 'more';
+    setConversationsLoading(mode === 'initial');
+    setRefreshingConversations(mode === 'refresh');
+    setLoadingMoreConversations(mode === 'more');
+  }, []);
+
+  const startListRequest = useCallback((mode: 'initial' | 'refresh' | 'more') => {
+    const requestId = ++activeRequestIdRef.current;
+    requestControllerRef.current?.abort();
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
+    setRequestLoading(mode);
+    return { requestId, controller };
+  }, [setRequestLoading]);
+
   const resetConversationState = useCallback(() => {
     activeRequestIdRef.current += 1;
     requestControllerRef.current?.abort();
     requestControllerRef.current = null;
     nextOffsetRef.current = null;
+    paginationRevisionRef.current += 1;
     hasLoadedRef.current = false;
-    loadingRef.current = false;
-    loadingMoreRef.current = false;
     setConversations([]);
-    setConversationsLoading(false);
-    setRefreshingConversations(false);
-    setLoadingMoreConversations(false);
+    setRequestLoading(null);
     setHasLoadedConversations(false);
     setHasMoreConversations(false);
     setConversationListError(null);
     setPendingSidebarTitle(null);
     manualRenamedConversationIdsRef.current.clear();
-  }, [setConversations]);
+  }, [setConversations, setRequestLoading]);
 
   const requestConversationPage = useCallback(async ({
     targetUserId,
@@ -232,17 +247,7 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
     append: boolean;
   }) => {
     if (!conversationCache.isCurrent() || targetUserId !== userIdRef.current) return false;
-    const requestId = activeRequestIdRef.current + 1;
-    activeRequestIdRef.current = requestId;
-    requestControllerRef.current?.abort();
-    const controller = new AbortController();
-    requestControllerRef.current = controller;
-
-    if (append) {
-      setLoadingMoreConversations(true);
-    } else {
-      setConversationsLoading(true);
-    }
+    const { requestId, controller } = startListRequest(append ? 'more' : 'initial');
 
     try {
       const payload = await loadConversations({
@@ -262,13 +267,14 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
       }
 
       nextOffsetRef.current = payload.pagination.nextOffset;
+      paginationRevisionRef.current += 1;
       setHasMoreConversations(payload.pagination.hasMore);
       setHasLoadedConversations(true);
       setConversationListError(null);
-      setConversations((current) => (
-        append
-          ? mergeConversations(current, payload.conversations)
-          : payload.conversations
+      setConversations((current) => preserveManualConversationTitles(
+        current,
+        append ? mergeConversations(current, payload.conversations) : payload.conversations,
+        manualRenamedConversationIdsRef.current,
       ));
 
       return true;
@@ -289,14 +295,10 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
       }
 
       if (conversationCache.isCurrent() && activeRequestIdRef.current === requestId) {
-        if (append) {
-          setLoadingMoreConversations(false);
-        } else {
-          setConversationsLoading(false);
-        }
+        setRequestLoading(null);
       }
     }
-  }, [conversationCache, setConversations]);
+  }, [conversationCache, setConversations, setRequestLoading, startListRequest]);
 
   const refreshConversationList = useCallback(async (
     targetUserId?: string | null,
@@ -305,17 +307,8 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
     const id = targetUserId ?? userId;
     if (!id || !conversationCache.isCurrent() || id !== userIdRef.current) return;
 
-    const requestId = activeRequestIdRef.current + 1;
-    activeRequestIdRef.current = requestId;
-    requestControllerRef.current?.abort();
-    const controller = new AbortController();
-    requestControllerRef.current = controller;
     const shouldShowBlockingLoader = !hasLoadedRef.current || conversationsRef.current.length === 0;
-    if (shouldShowBlockingLoader) {
-      setConversationsLoading(true);
-    } else {
-      setRefreshingConversations(true);
-    }
+    const { requestId, controller } = startListRequest(shouldShowBlockingLoader ? 'initial' : 'refresh');
 
     try {
       const loadedCount = conversationsRef.current.length;
@@ -343,6 +336,7 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
       }
 
       nextOffsetRef.current = payload.pagination.nextOffset;
+      paginationRevisionRef.current += 1;
       setHasMoreConversations(payload.pagination.hasMore);
       setHasLoadedConversations(true);
       setConversationListError(null);
@@ -367,14 +361,10 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
       }
 
       if (conversationCache.isCurrent() && activeRequestIdRef.current === requestId) {
-        if (shouldShowBlockingLoader) {
-          setConversationsLoading(false);
-        } else {
-          setRefreshingConversations(false);
-        }
+        setRequestLoading(null);
       }
     }
-  }, [conversationCache, conversationsRef, setConversations, userId]);
+  }, [conversationCache, conversationsRef, setConversations, setRequestLoading, startListRequest, userId]);
 
   const triggerConversationListLoad = useCallback((targetCount?: number) => {
     if (!userId || loadingRef.current || loadingMoreRef.current) {
@@ -422,6 +412,9 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
   }, [hasMoreConversations, requestConversationPage, userId]);
 
   const removeConversationFromList = useCallback((id: string) => {
+    if (!conversationCache.isCurrent()) return false;
+    const cancelled = conversationCache.cancelMutation(id);
+    manualRenamedConversationIdsRef.current.delete(id);
     let removed = false;
     setConversations((current) => {
       const next = current.filter((conversation) => conversation.id !== id);
@@ -431,8 +424,8 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
     if (removed) {
       nextOffsetRef.current = nextOffsetRef.current == null ? null : Math.max(nextOffsetRef.current - 1, 0);
     }
-    return removed;
-  }, [setConversations]);
+    return removed || cancelled?.kind === 'delete';
+  }, [conversationCache, setConversations]);
 
   const broadcastConversationDeleted = useCallback((id: string) => {
     if (typeof window === 'undefined') {
@@ -539,40 +532,44 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
   }, [refreshConversationList]);
 
   const handleDeleteConversation = useCallback(async (id: string) => {
-    if (!conversationCache.isCurrent()) return false;
-    const previousConversations = conversationsRef.current;
-    const previousNextOffset = nextOffsetRef.current;
-    const removed = removeConversationFromList(id);
+    const operation = conversationCache.beginDelete(id);
+    if (!operation) return false;
+    const paginationRevision = paginationRevisionRef.current;
+    const offsetDelta = nextOffsetRef.current == null || nextOffsetRef.current === 0 ? 0 : 1;
+    if (nextOffsetRef.current != null) nextOffsetRef.current -= offsetDelta;
+    const wasManual = manualRenamedConversationIdsRef.current.delete(id);
     const success = await deleteConversation(id);
-    if (!conversationCache.isCurrent()) return success;
+    if (!conversationCache.settle(operation, success)) return success;
     if (!success) {
-      if (removed) {
-        setConversations(previousConversations);
-        nextOffsetRef.current = previousNextOffset;
+      if (wasManual) manualRenamedConversationIdsRef.current.add(id);
+      if (paginationRevisionRef.current === paginationRevision && nextOffsetRef.current != null) {
+        nextOffsetRef.current += offsetDelta;
       }
-      return false;
-    }
-
-    if (removed) {
+    } else {
       broadcastConversationDeleted(id);
     }
-    return true;
-  }, [broadcastConversationDeleted, conversationCache, conversationsRef, removeConversationFromList, setConversations]);
+    // In-flight reads may still contain the deleted row. Supersede them after
+    // settlement, and reconcile any pagination installed during the write.
+    if (requestControllerRef.current || paginationRevisionRef.current !== paginationRevision) {
+      await refreshConversationList();
+    }
+    return success;
+  }, [broadcastConversationDeleted, conversationCache, refreshConversationList]);
 
   const handleRenameConversation = useCallback(async (id: string, title: string) => {
-    if (!conversationCache.isCurrent()) return false;
+    const operation = conversationCache.beginRename(id, title);
+    if (!operation) return false;
+    const wasManual = manualRenamedConversationIdsRef.current.has(id);
     manualRenamedConversationIdsRef.current.add(id);
-    const previousConversations = conversationsRef.current;
-    setConversations(prev => prev.map(c => c.id === id ? { ...c, title } : c));
     const success = await renameConversation(id, title);
-    if (!conversationCache.isCurrent()) return success;
-    if (!success) {
+    if (!conversationCache.settle(operation, success)) return success;
+    if (success || wasManual) {
+      manualRenamedConversationIdsRef.current.add(id);
+    } else {
       manualRenamedConversationIdsRef.current.delete(id);
-      setConversations(previousConversations);
-      return false;
     }
-    return true;
-  }, [conversationCache, conversationsRef, setConversations]);
+    return success;
+  }, [conversationCache]);
 
   const handleNewChat = useCallback(async () => {
     window.dispatchEvent(new CustomEvent(CHAT_NEW_EVENT));

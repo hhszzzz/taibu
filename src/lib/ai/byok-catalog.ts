@@ -1,5 +1,5 @@
 import type { AIVendor } from '@/types';
-import { getVendorName } from '@/lib/ai/ai-config';
+import { getVendorName } from '@/lib/ai/vendor-labels';
 
 export type ByokProviderKey = AIVendor | 'other';
 

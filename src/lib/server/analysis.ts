@@ -2,6 +2,89 @@
  * SDK/HTTP adaptation stays at the existing composition boundary.
  */
 
+/** Request-local allowlisted telemetry; adapters supply the trusted ID, clock and sink. */
+export type RequestPhase = 'admission' | 'prompt' | 'generation' | 'persistence' | 'compensation';
+export type RequestFailure = 'none' | 'admission' | 'prompt' | 'stream-adapter' | 'inference' | 'persistence' | 'empty';
+export interface RequestObservationState {
+  failure: RequestFailure;
+  generation: 'not-started' | 'completed' | 'empty' | 'failed' | 'aborted' | 'external';
+  persistence: 'not-needed' | 'saved' | 'failed';
+  billing: 'not-applicable' | 'charged' | 'refunded' | 'refund-failed';
+  refundFailure?: 'rejected' | 'exception';
+}
+export interface RequestObservationEvent extends RequestObservationState {
+  requestId: string;
+  source: string;
+  phase: RequestPhase | 'terminal';
+  durationMs: number;
+}
+export interface RequestObservation {
+  fail: (failure?: Exclude<RequestFailure, 'none'>) => void;
+  phase: (phase: RequestPhase) => void;
+  update: (state: Partial<RequestObservationState>) => void;
+  finish: (state?: Partial<RequestObservationState>) => void;
+}
+export function createRequestObservation(
+  requestId: string,
+  source: string,
+  now: () => number,
+  sink: (event: RequestObservationEvent) => void | Promise<void>,
+): RequestObservation {
+  const started = now();
+  let phaseStarted = started;
+  let current: RequestPhase = 'admission';
+  let terminal = false;
+  const state: RequestObservationState = { failure: 'none', generation: 'not-started', persistence: 'not-needed', billing: 'not-applicable' };
+  const update = (next: Partial<RequestObservationState>) => {
+    // Project explicitly; output/error objects must never reach the sink.
+    if (next.failure !== undefined) state.failure = next.failure;
+    if (next.generation !== undefined) state.generation = next.generation;
+    if (next.persistence !== undefined) state.persistence = next.persistence;
+    if (next.billing !== undefined) state.billing = next.billing;
+    if (next.refundFailure !== undefined) state.refundFailure = next.refundFailure;
+  };
+  const emit = (phase: RequestPhase | 'terminal', durationMs: number) => {
+    try {
+      const result = sink({ requestId, source, phase, durationMs: Math.max(0, durationMs), ...state });
+      if (result) void Promise.resolve(result).catch(() => undefined);
+    } catch { /* Logging must never change compensation or response semantics. */ }
+  };
+  return {
+    fail: failure => {
+      if (!terminal && state.failure === 'none') state.failure = failure ?? (current === 'prompt' ? 'prompt' : 'admission');
+    },
+    update: next => { if (!terminal) update(next); },
+    phase: next => {
+      if (terminal || current === next) return;
+      const at = now();
+      emit(current, at - phaseStarted);
+      current = next;
+      phaseStarted = at;
+    },
+    finish: next => {
+      if (terminal) return;
+      terminal = true;
+      if (next) update(next);
+      const at = now();
+      emit(current, at - phaseStarted);
+      emit('terminal', at - started);
+    },
+  };
+}
+
+/** False and thrown refunds are distinct safe states, never raw financial errors in logs. */
+export async function observeRefund(refund: () => Promise<boolean>, observation?: RequestObservation): Promise<boolean> {
+  observation?.phase('compensation');
+  try {
+    const refunded = await refund();
+    observation?.update({ billing: refunded ? 'refunded' : 'refund-failed', ...(!refunded ? { refundFailure: 'rejected' as const } : {}) });
+    return refunded;
+  } catch {
+    observation?.update({ billing: 'refund-failed', refundFailure: 'exception' });
+    return false;
+  }
+}
+
 export type AnalysisAdmissionBilling =
   | { kind: 'charged'; refund: () => Promise<boolean> }
   | { kind: 'not-applicable' };
@@ -24,19 +107,24 @@ export async function prepareAdmittedAnalysis<TInput, TContext>(
   operations: {
     checkRateLimit: () => Promise<boolean>;
     prepare: () => Promise<PreparedAnalysis<TInput, TContext>>;
+    observation?: RequestObservation;
   },
 ): Promise<AnalysisAdmissionResult<TInput, TContext>> {
   const fail = async (
     reason: 'limited' | 'rate-error' | 'prompt-error',
     error?: unknown,
   ): Promise<AnalysisAdmissionResult<TInput, TContext>> => {
+    operations.observation?.fail(reason === 'prompt-error' ? 'prompt' : 'admission');
     if (billing.kind === 'not-applicable') {
       return { ok: false, reason, billing: 'not-applicable', error };
     }
+    operations.observation?.phase('compensation');
     try {
       const refunded = await billing.refund();
+      operations.observation?.update({ billing: refunded ? 'refunded' : 'refund-failed', ...(!refunded ? { refundFailure: 'rejected' as const } : {}) });
       return { ok: false, reason, billing: refunded ? 'refunded' : 'refund-failed', error };
     } catch (refundError) {
+      operations.observation?.update({ billing: 'refund-failed', refundFailure: 'exception' });
       return { ok: false, reason, billing: 'refund-failed', error, refundError };
     }
   };
@@ -50,6 +138,7 @@ export async function prepareAdmittedAnalysis<TInput, TContext>(
   if (!allowed) return fail('limited');
 
   try {
+    operations.observation?.phase('prompt');
     return { ok: true, value: await operations.prepare() };
   } catch (error) {
     return fail('prompt-error', error);
@@ -147,6 +236,7 @@ export function createManagedAnalysisCompletion(
     persist: (output: AnalysisOutput) => Promise<string>;
     refund: (reason: AnalysisRefundReason) => Promise<boolean>;
     isPersistenceError: (error: unknown) => boolean;
+    observation?: RequestObservation;
   },
 ): CompleteManagedAnalysis {
   let terminal: Promise<ManagedAnalysisOutcome> | undefined;
@@ -157,14 +247,19 @@ export function createManagedAnalysisCompletion(
     reason: AnalysisRefundReason,
     error?: unknown,
   ): Promise<ManagedAnalysisOutcome> {
+    operations.observation?.update({ generation, persistence: failure === 'persistence' ? 'failed' : 'not-needed' });
+    operations.observation?.phase('compensation');
     let billing: RefundState;
     let refundError: unknown;
+    let refundThrew = false;
     try {
       billing = await operations.refund(reason) ? 'refunded' : 'refund-failed';
     } catch (error) {
       billing = 'refund-failed';
       refundError = error;
+      refundThrew = true;
     }
+    operations.observation?.update({ billing, ...(billing === 'refund-failed' ? { refundFailure: refundThrew ? 'exception' as const : 'rejected' as const } : {}) });
     return {
       status: 'failed',
       failure,
@@ -194,6 +289,8 @@ export function createManagedAnalysisCompletion(
     }
 
     try {
+      operations.observation?.update({ generation });
+      operations.observation?.phase('persistence');
       const conversationId = await operations.persist(output);
       return { status: 'saved', generation, persistence: 'saved', billing: 'charged', output, conversationId };
     } catch (error) {
@@ -207,7 +304,10 @@ export function createManagedAnalysisCompletion(
 
   return (completion) => {
     // Latch before invoking any injected operation, including synchronous stubs.
-    terminal ??= Promise.resolve().then(() => finish(completion));
+    terminal ??= Promise.resolve().then(() => finish(completion)).then(outcome => {
+      operations.observation?.finish(outcome);
+      return outcome;
+    });
     return terminal;
   };
 }

@@ -1,4 +1,4 @@
-import { getVendorName, VENDOR_PRESETS as VENDOR_PRESET_KEYS } from '@/lib/ai/ai-config';
+import { getVendorName, VENDOR_PRESETS as VENDOR_PRESET_KEYS } from '@/lib/ai/vendor-labels';
 
 // 类型定义
 export interface ModelSource {
@@ -102,6 +102,25 @@ export type EditModelDraft = {
     customParametersText: string;
     description: string;
 };
+
+/** Merge refreshed server fields without discarding unrelated in-progress edits. */
+export function reconcileModelDrafts(
+    current: Record<string, EditModelDraft>,
+    previous: Record<string, EditModelDraft>,
+    incoming: Record<string, EditModelDraft>,
+): Record<string, EditModelDraft> {
+    return Object.fromEntries(Object.entries(incoming).map(([id, fresh]) => {
+        const draft = current[id];
+        const baseline = previous[id];
+        if (!draft || !baseline) return [id, fresh];
+        const dirty = Object.fromEntries(
+            (Object.keys(draft) as Array<keyof EditModelDraft>)
+                .filter(key => draft[key] !== baseline[key])
+                .map(key => [key, draft[key]]),
+        );
+        return [id, { ...fresh, ...dirty }];
+    }));
+}
 
 export const TIER_LABELS: Record<string, { label: string; color: string }> = {
     free: { label: 'Free', color: 'text-gray-500 bg-gray-500/10' },

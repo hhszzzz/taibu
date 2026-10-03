@@ -82,6 +82,159 @@ test('extracted use-case and browser DTO dependencies fail closed', (t) => {
   assert.match(result.stderr, /knowledge search must retain the caller identity/);
 });
 
+function runBoundaryFixture(t, files) {
+  const fixture = mkdtempSync(path.join(tmpdir(), 'taibu-guard-graph-'));
+  t.after(() => rmSync(fixture, { recursive: true, force: true }));
+  for (const [relativePath, source] of Object.entries(files)) {
+    const target = path.join(fixture, relativePath);
+    mkdirSync(path.dirname(target), { recursive: true });
+    writeFileSync(target, source);
+  }
+  const result = spawnSync(process.execPath, [GUARD_SCRIPT], {
+    cwd: fixture,
+    env: { ...process.env, NODE_OPTIONS: '' },
+    encoding: 'utf8',
+    timeout: 20_000,
+  });
+  assert.ifError(result.error);
+  assert.equal(result.status, 1, 'incomplete fixtures must still fail old required-input guards');
+  assert.match(result.stderr, /required architecture input is missing/u);
+  assert.doesNotMatch(result.stderr, /ENOENT|RangeError|TypeError/u);
+  return result.stderr.split('\n').filter(line => line.includes('dependency path:')).join('\n');
+}
+
+const ENTRY = 'src/lib/server/chat/use-case.ts';
+const GRAPH_CASES = [
+  ['bare Node filesystem builtin', { [ENTRY]: "import { readFileSync } from 'fs';" }, 'fs (forbidden framework/SDK dependency)'],
+  ['bare Node network builtin', { [ENTRY]: "const http = require('http');" }, 'http (forbidden framework/SDK dependency)'],
+  ['Node builtin subpath', { [ENTRY]: "import { readFile } from 'fs/promises';" }, 'fs/promises (forbidden framework/SDK dependency)'],
+  ['prefixed Node builtin', { [ENTRY]: "import { request } from 'node:http';" }, 'node:http (forbidden framework/SDK dependency)'],
+  ['AI runtime SDK', { [ENTRY]: "import { streamText } from 'ai';" }, 'ai (forbidden framework/SDK dependency)'],
+  ['AI provider SDK', { [ENTRY]: "import { openai } from '@ai-sdk/openai';" }, '@ai-sdk/openai (forbidden framework/SDK dependency)'],
+  ['direct framework', { [ENTRY]: "import { headers } from 'next/headers';" }, 'next/headers'],
+  ['relative indirect network', {
+    [ENTRY]: "import './helper.js';",
+    'src/lib/server/chat/helper.ts': "import '@/lib/graph/network';",
+    'src/lib/graph/network.ts': "export const load = () => fetch('/api');",
+  }, 'src/lib/server/chat/helper.ts -> src/lib/graph/network.ts'],
+  ['barrel and index resolution', {
+    [ENTRY]: "import '@/lib/graph';",
+    'src/lib/graph/index.ts': "export * from './bridge';",
+    'src/lib/graph/bridge.ts': "export { createClient } from '@supabase/supabase-js';",
+  }, 'src/lib/graph/index.ts -> src/lib/graph/bridge.ts -> @supabase/supabase-js'],
+  ['new nested server module', {
+    'src/lib/server/new-use-case/prepare.ts': "import 'react';",
+  }, 'src/lib/server/new-use-case/prepare.ts -> react'],
+  ['new knowledge module', {
+    'src/lib/knowledge-base/new-operation.ts': "const value = process.env.KEY;",
+  }, 'global environment dependency'],
+  ['new server suffix is not an exemption', {
+    'src/lib/server/new-adapter.server.ts': "import 'next/server';",
+  }, 'new-adapter.server.ts -> next/server'],
+  ['literal dynamic import', {
+    [ENTRY]: "const load = () => import(`@/lib/graph/lazy`);",
+    'src/lib/graph/lazy.ts': "import 'react';",
+  }, 'src/lib/graph/lazy.ts -> react'],
+  ['literal require', {
+    [ENTRY]: "const load = require('@/lib/graph/lazy');",
+    'src/lib/graph/lazy.ts': "import 'server-only';",
+  }, 'src/lib/graph/lazy.ts -> server-only'],
+  ['import equals', { [ENTRY]: "import adapter = require('next/server');" }, 'next/server'],
+  ['import type expression', {
+    [ENTRY]: "export type DTO = import('@/lib/graph/dto').DTO;",
+    'src/lib/graph/dto.ts': "export type DTO = import('@supabase/supabase-js').User;",
+  }, 'src/lib/graph/dto.ts -> @supabase/supabase-js'],
+  ['type-only re-export', {
+    [ENTRY]: "import type { DTO } from '@/lib/graph/barrel';",
+    'src/lib/graph/barrel.ts': "export type { User as DTO } from '@supabase/supabase-js';",
+  }, '@supabase/supabase-js'],
+  ['local type export alias', {
+    [ENTRY]: "import type { DTO } from '@/lib/graph/dto';",
+    'src/lib/graph/dto.ts': "import type { User as Internal } from '@supabase/supabase-js'; export type { Internal as DTO };",
+  }, '@supabase/supabase-js'],
+  ['default DTO', {
+    [ENTRY]: "import type DTO from '@/lib/graph/dto';",
+    'src/lib/graph/dto.ts': "import type { User } from '@supabase/supabase-js'; export default interface DTO { user: User }",
+  }, '@supabase/supabase-js'],
+  ['type namespace barrel', {
+    [ENTRY]: "import type { DTO } from '@/lib/graph/barrel';",
+    'src/lib/graph/barrel.ts': "export type * as DTO from './dto';",
+    'src/lib/graph/dto.ts': "export type { User } from '@supabase/supabase-js';",
+  }, '@supabase/supabase-js'],
+  ['DTO entry indirect SDK', {
+    'src/lib/data-sources/types.ts': "export type { User } from '@/lib/graph/dto';",
+    'src/lib/graph/dto.ts': "export type { User } from '@supabase/supabase-js';",
+  }, 'browser-safe data contracts'],
+  ['cycle with forbidden exit', {
+    [ENTRY]: "import '@/lib/graph/a';",
+    'src/lib/graph/a.ts': "export * from './b';",
+    'src/lib/graph/b.ts': "export * from './a'; import 'next/server';",
+  }, 'src/lib/graph/a.ts -> src/lib/graph/b.ts -> next/server'],
+  ['type visit does not hide later runtime visit', {
+    [ENTRY]: "import type { DTO } from '@/lib/graph/mixed'; import '@/lib/graph/mixed';",
+    'src/lib/graph/mixed.ts': "export type DTO = { id: string }; export const load = () => fetch('/api');",
+  }, 'forbidden infrastructure identifier fetch'],
+  ['type-only DTO field dependency', {
+    [ENTRY]: "import type { DTO } from '@/lib/graph/dto';",
+    'src/lib/graph/dto.ts': "import type { User as Account } from '@supabase/supabase-js'; type Nested = { account: Account }; export interface DTO { nested: Nested }",
+  }, '@supabase/supabase-js'],
+  ['missing relative edge', { [ENTRY]: "export * from './missing';" }, 'unresolved local dependency'],
+  ['missing alias edge', { [ENTRY]: "import type { DTO } from '@/lib/missing';" }, 'unresolved local dependency'],
+  ['adapter exception is not a traversal exemption', {
+    [ENTRY]: "import './bootstrap';",
+    'src/lib/server/chat/bootstrap.ts': "export const adapter = 1;",
+  }, 'infrastructure adapter dependency'],
+  ['custom tsconfig alias', {
+    'tsconfig.json': JSON.stringify({ compilerOptions: { baseUrl: '.', paths: { '#graph/*': ['src/lib/graph/*'] } } }),
+    [ENTRY]: "import '#graph/helper';",
+    'src/lib/graph/helper.ts': "import 'react';",
+  }, 'src/lib/graph/helper.ts -> react'],
+];
+for (const [name, files, diagnostic] of GRAPH_CASES) {
+  test(`dependency graph rejects ${name}`, t => {
+    const failures = runBoundaryFixture(t, files);
+    assert.ok(failures.includes(diagnostic), failures);
+  });
+}
+
+test('dependency graph accepts pure DTOs, cycles and unreferenced legacy adapters', t => {
+  const failures = runBoundaryFixture(t, {
+    [ENTRY]: "import type { DTO } from '@/lib/graph/barrel'; import './cycle'; export type Result = DTO;",
+    'src/lib/server/chat/cycle.ts': "export * from './use-case'; export const value = 1;",
+    'src/lib/graph/barrel.ts': "export type { DTO } from './dto';",
+    'src/lib/graph/dto.ts': "export interface DTO { id: string; value: Nested } type Nested = { ok: boolean };",
+    'src/lib/server/chat/bootstrap.ts': "import 'server-only'; import type { User } from '@supabase/supabase-js';",
+    'src/lib/knowledge-base/persistence.server.ts': "import { createClient } from '@supabase/supabase-js';",
+  });
+  assert.equal(failures, '');
+});
+
+test('type-only DTO selection excludes unrelated runtime imports but follows selected fields', t => {
+  const failures = runBoundaryFixture(t, {
+    [ENTRY]: "import { type DTO } from '@/lib/graph/mixed'; export type Output = DTO;",
+    'src/lib/graph/mixed.ts': "import { useState } from 'react'; export type DTO = { id: string }; export function component() { return useState(1); }",
+  });
+  assert.equal(failures, '');
+});
+
+test('comments and ordinary strings are not dependency edges', t => {
+  assert.equal(runBoundaryFixture(t, {
+    [ENTRY]: "// import 'next/server'; fetch process.env\nexport const text = \"require('@supabase/supabase-js')\";",
+  }), '');
+});
+
+test('complete repository retains all architecture guards', () => {
+  const result = spawnSync(process.execPath, [GUARD_SCRIPT], {
+    cwd: REPO_ROOT,
+    env: { ...process.env, NODE_OPTIONS: '' },
+    encoding: 'utf8',
+    timeout: 20_000,
+  });
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Architecture guards passed/u);
+});
+
 test('missing architecture inputs fail with actionable diagnostics, not an uncaught ENOENT', (t) => {
   const fixture = mkdtempSync(path.join(tmpdir(), 'taibu-guards-'));
   t.after(() => rmSync(fixture, { recursive: true, force: true }));

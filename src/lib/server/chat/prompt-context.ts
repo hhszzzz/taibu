@@ -60,13 +60,11 @@ async function resolveMentionsForPrompt(
   chartPromptDetailLevel: 'default' | 'more' | 'full',
 ): Promise<ResolvedMention[]> {
   return await Promise.all(mentions.map(async (mention) => {
-    console.log(`[mention-resolve] type=${mention.type} id=${mention.id ?? 'MISSING'} name=${mention.name}`);
     const resolvedContent = await resolveMention(mention, userId, {
       client: supabase,
       maxTokens,
       chartPromptDetailLevel,
     });
-    console.log(`[mention-resolve] result: type=${mention.type} contentLen=${resolvedContent?.length ?? 0}`);
     return { ...mention, resolvedContent };
   }));
 }
@@ -159,12 +157,16 @@ export async function buildChatPromptContext(
 
   const promptKnowledgeBases = userId && canUsePromptKnowledgeBase && effectiveUserSettings.promptKbIds.length > 0
     ? await (async () => {
-      const { data: kbRows } = await supabase
+      const { data: kbRows, error } = await supabase
         .from('knowledge_bases')
         .select('id, name')
         .eq('user_id', userId)
         .in('id', effectiveUserSettings.promptKbIds);
 
+      if (error) {
+        console.warn('[knowledge-base] enrichment failed', { stage: 'prompt-names' });
+        return [];
+      }
       const kbMap = new Map<string, { id: string; name: string }>();
       ((kbRows || []) as Array<{ id: string; name: string }>).forEach((kb) => {
         kbMap.set(kb.id, kb);
@@ -173,7 +175,10 @@ export async function buildChatPromptContext(
       return effectiveUserSettings.promptKbIds
         .map((kbId) => kbMap.get(kbId))
         .filter((kb): kb is { id: string; name: string } => !!kb);
-    })()
+    })().catch(() => {
+      console.warn('[knowledge-base] enrichment failed', { stage: 'prompt-names' });
+      return [];
+    })
     : [];
 
   const knowledgeHits = userId && canUsePromptKnowledgeBase
@@ -184,6 +189,7 @@ export async function buildChatPromptContext(
         accessToken: accessTokenForKB,
         promptKbIds: effectiveUserSettings.promptKbIds,
         supabase,
+        knownNames: { userId, names: new Map(promptKnowledgeBases.map(kb => [kb.id, kb.name])) },
       })
     : [];
 
@@ -198,6 +204,12 @@ export async function buildChatPromptContext(
       }
     : undefined;
 
+  const personalityResolution = resolvePersonalities({
+    chartContext: promptChartContext,
+    dreamMode: promptDreamMode,
+    mentions: resolvedMentions,
+  });
+
   const promptBuild = await buildPromptWithSources({
     modelId: requestedModelId,
     reasoningEnabled,
@@ -208,7 +220,7 @@ export async function buildChatPromptContext(
     chartContext: promptChartContext,
     dreamMode: promptDreamMode,
     difyContext: body.difyContext,
-  });
+  }, { budget: mentionBudget, personalityResolution });
 
   const processedMessages = promptBuild.userMessagePrefix
     ? injectToLastUserMessage(body.messages, promptBuild.userMessagePrefix)
@@ -235,11 +247,6 @@ export async function buildChatPromptContext(
     return message;
   });
 
-  const personalityResolution = resolvePersonalities({
-    chartContext: promptChartContext,
-    dreamMode: promptDreamMode,
-    mentions: resolvedMentions,
-  });
   const fallbackPersonality = personalityResolution.personalities[0] ?? 'general';
 
   return {

@@ -269,9 +269,13 @@ export function hasEffectiveUserSettingsUpdate(payload: Record<string, unknown>)
   return Object.keys(payload).some((key) => key !== 'user_id' && key !== 'updated_at');
 }
 
-export async function getCurrentUserSettings(): Promise<UserSettingsLoadResult> {
+export type SettingsRequestScope = { expectedUserId?: string; signal?: AbortSignal };
+
+export async function getCurrentUserSettings(scope: SettingsRequestScope = {}): Promise<UserSettingsLoadResult> {
   const result = await requestBrowserJson<{ settings: UserSettingsSnapshot }>('/api/user/settings', {
     method: 'GET',
+    signal: scope.signal,
+    headers: scope.expectedUserId ? { 'X-Expected-User-Id': scope.expectedUserId } : undefined,
   });
   return {
     settings: result.error ? null : result.data?.settings ?? normalizeUserSettings(null),
@@ -282,9 +286,12 @@ export async function getCurrentUserSettings(): Promise<UserSettingsLoadResult> 
 export async function updateCurrentUserSettings(
   input: UserSettingsUpdateInput,
   mutationEffects?: MutationEffects,
+  scope: SettingsRequestScope = {},
 ): Promise<UserSettingsSnapshot | null> {
   const result = await requestBrowserJson<{ settings: UserSettingsSnapshot }>('/api/user/settings', {
     method: 'PATCH',
+    signal: scope.signal,
+    headers: scope.expectedUserId ? { 'Content-Type': 'application/json', 'X-Expected-User-Id': scope.expectedUserId } : undefined,
     body: JSON.stringify(input),
     mutationEffects,
   });

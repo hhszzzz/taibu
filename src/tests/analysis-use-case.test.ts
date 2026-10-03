@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createManagedAnalysisCompletion,
+  createRequestObservation,
+  type RequestObservationEvent,
   persistDirectAnalysis,
   prepareAnalysis,
   prepareAdmittedAnalysis,
@@ -236,4 +238,42 @@ test('direct submissions have separate success, empty and persistence-failed out
   assert.deepEqual(await persistDirectAnalysis(output, async () => { throw error; }), {
     status: 'failed', persistence: 'failed', billing: 'not-applicable', error,
   });
+});
+
+for (const refund of ['false', 'throw'] as const) {
+  test(`request observation settles once after ${refund} refund failure without secrets`, async () => {
+    const events: RequestObservationEvent[] = [];
+    let time = 0;
+    const observation = createRequestObservation('trusted-id', 'chat', () => ++time, event => { events.push(event); });
+    observation.update({ billing: 'charged' });
+    observation.phase('generation');
+    const complete = createManagedAnalysisCompletion('text', {
+      persist: async () => { throw new Error('PRIVATE_CONTENT'); },
+      refund: async () => { if (refund === 'throw') throw new Error('PRIVATE_KEY'); return false; },
+      isPersistenceError: () => true,
+      observation,
+    });
+    const [first, second] = await Promise.all([
+      complete({ kind: 'output', output: { content: 'PRIVATE_PROMPT' } }),
+      complete({ kind: 'aborted' }),
+    ]);
+    assert.equal(first, second);
+    const terminal = events.filter(event => event.phase === 'terminal');
+    assert.equal(terminal.length, 1);
+    assert.equal(terminal[0].billing, 'refund-failed');
+    assert.equal(terminal[0].refundFailure, refund === 'throw' ? 'exception' : 'rejected');
+    assert.equal(terminal[0].persistence, 'failed');
+    assert.ok(events.every(event => event.requestId === 'trusted-id' && event.source === 'chat' && event.durationMs >= 0));
+    assert.ok(!JSON.stringify(events).includes('PRIVATE'));
+    assert.deepEqual(events.map(event => event.phase), ['admission', 'generation', 'persistence', 'compensation', 'terminal']);
+  });
+}
+
+test('observation sink failure never changes completion or billing', async () => {
+  const observation = createRequestObservation('id', 'chat', () => 1, () => { throw new Error('logger down'); });
+  const complete = createManagedAnalysisCompletion('text', {
+    persist: async () => 'conversation', refund: async () => assert.fail('must not refund'),
+    isPersistenceError: () => false, observation,
+  });
+  assert.equal((await complete({ kind: 'output', output: { content: 'ok' } })).status, 'saved');
 });

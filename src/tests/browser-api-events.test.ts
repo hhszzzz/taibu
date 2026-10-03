@@ -158,3 +158,32 @@ test('fetchBrowserJson should rethrow AbortError so callers can treat cancellati
     },
   );
 });
+
+test('cancelled response cannot dispatch effects before or during JSON parsing', async (t) => {
+  const originalFetch = global.fetch;
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  const windowStub = createWindowStub();
+  let effects = 0;
+  windowStub.dispatchEvent = () => { effects++; return true; };
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: windowStub });
+  t.after(() => {
+    global.fetch = originalFetch;
+    if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
+    else Reflect.deleteProperty(globalThis, 'window');
+  });
+  const { fetchBrowserJson } = await import('../lib/browser-api');
+  for (const phase of ['headers', 'body'] as const) {
+    const controller = new AbortController();
+    global.fetch = async () => {
+      if (phase === 'headers') controller.abort();
+      return {
+        ok: true, status: 200, statusText: 'OK',
+        json: async () => { controller.abort(); return { data: { saved: true } }; },
+      } as Response;
+    };
+    await assert.rejects(fetchBrowserJson('/api/knowledge-base/test', {
+      method: 'PATCH', signal: controller.signal,
+    }), { name: 'AbortError' });
+  }
+  assert.equal(effects, 0);
+});

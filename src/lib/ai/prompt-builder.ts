@@ -364,7 +364,7 @@ function resolveDayPillar(chart?: BaziChartInput): string | null {
 }
 
 // 完整构建：返回 systemPrompt + sources + 诊断信息，供 chat 路由使用
-export async function buildPromptWithSources(context: PromptContext): Promise<{
+export async function buildPromptWithSources(context: PromptContext, prepared?: { budget?: number; personalityResolution?: PersonalityResolution }): Promise<{
     systemPrompt: string;
     userMessagePrefix: string;
     userMessageTokens: number;
@@ -373,7 +373,7 @@ export async function buildPromptWithSources(context: PromptContext): Promise<{
     totalTokens: number;
     budgetTotal: number;
 }> {
-    const budget = await calculatePromptBudget(context.modelId, context.reasoningEnabled);
+    const budget = prepared?.budget ?? await calculatePromptBudget(context.modelId, context.reasoningEnabled);
     const tracker = createSourceTracker();
     let remaining = budget;
 
@@ -429,7 +429,7 @@ export async function buildPromptWithSources(context: PromptContext): Promise<{
     // ========== P0 层：必须注入 ==========
     tryInject('base_rules', 'P0', getBaseRulesPrompt());
 
-    const personalityResolution = resolvePersonalities({
+    const personalityResolution = prepared?.personalityResolution ?? resolvePersonalities({
         chartContext: context.chartContext,
         dreamMode: context.dreamMode,
         mentions: context.mentions

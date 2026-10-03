@@ -7,7 +7,7 @@
  */
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Save, X } from 'lucide-react';
 import {
@@ -96,7 +96,14 @@ function FieldLabel({ children }: { children: ReactNode }) {
 }
 
 export default function AISettingsPanel() {
+  const { user } = useSessionSafe();
+  return <AccountAISettingsPanel key={user?.id ?? 'visitor'} />;
+}
+
+function AccountAISettingsPanel() {
   const { user, loading: sessionLoading } = useSessionSafe();
+  const userId = user?.id;
+  const lifecycle = useRef<AbortController | null>(null);
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -125,15 +132,18 @@ export default function AISettingsPanel() {
   };
 
   useEffect(() => {
+    const controller = new AbortController();
+    lifecycle.current = controller;
     const init = async () => {
       if (sessionLoading) return;
-      if (!user) {
+      if (!userId) {
         setSavedSnapshot(null);
         setLoading(false);
         return;
       }
 
-      const { settings, error: loadError } = await getCurrentUserSettings();
+      const { settings, error: loadError } = await getCurrentUserSettings({ expectedUserId: userId, signal: controller.signal });
+      if (controller.signal.aborted) return;
       if (loadError) {
         setSavedSnapshot(null);
         setError(loadError.message || '加载个性化设置失败');
@@ -181,8 +191,14 @@ export default function AISettingsPanel() {
       setLoading(false);
     };
 
-    void init();
-  }, [sessionLoading, user]);
+    void init().catch(() => {
+      if (controller.signal.aborted) return;
+      setError('加载个性化设置失败');
+      setSettingsLoadFailed(true);
+      setLoading(false);
+    });
+    return () => controller.abort();
+  }, [sessionLoading, userId]);
 
   const allDimensions = useMemo(
     () => [...CORE_DIMENSIONS, ...ADVANCED_DIMENSIONS],
@@ -222,7 +238,8 @@ export default function AISettingsPanel() {
   };
 
   const handleSave = async () => {
-    if (!user || settingsLoadFailed) return;
+    const controller = lifecycle.current;
+    if (!userId || settingsLoadFailed || saving || loading || !controller || controller.signal.aborted) return;
 
     setError(null);
     setSaving(true);
@@ -240,7 +257,8 @@ export default function AISettingsPanel() {
         dayunDisplayCount: nextSavedSnapshot.dayunPeriods,
         chartStyle: nextSavedSnapshot.chartStyle,
       },
-    });
+    }, undefined, { expectedUserId: userId, signal: controller.signal }).catch(() => null);
+    if (controller.signal.aborted) return;
 
     setSaving(false);
 
@@ -260,7 +278,7 @@ export default function AISettingsPanel() {
       return;
     }
 
-    applyDraftSnapshot(nextSavedSnapshot);
+    // Advance the saved baseline only; edits made during the request remain dirty.
     setSavedSnapshot(nextSavedSnapshot);
     showToast('success', '个性化设置已保存');
   };

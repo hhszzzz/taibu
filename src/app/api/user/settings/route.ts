@@ -32,6 +32,10 @@ async function loadSettings(auth: Exclude<Awaited<ReturnType<typeof requireUserC
 export async function GET(request: NextRequest) {
   const auth = await requireUserContext(request);
   if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
+  const expectedUserId = request.headers.get('X-Expected-User-Id');
+  if (expectedUserId !== null && expectedUserId !== auth.user.id) {
+    return jsonError('账号已切换，请重新加载设置', 409);
+  }
 
   const { settings, error } = await loadSettings(auth);
   if (error) {
@@ -46,6 +50,10 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const auth = await requireUserContext(request);
   if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
+  const expectedUserId = request.headers.get('X-Expected-User-Id');
+  if (expectedUserId !== null && expectedUserId !== auth.user.id) {
+    return jsonError('账号已切换，请重新加载设置', 409);
+  }
   const db = resolveRequestDbClient(auth);
   if (!db) return jsonError('更新用户设置失败', 500);
 

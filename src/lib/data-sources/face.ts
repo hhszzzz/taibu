@@ -1,6 +1,7 @@
 import { getSystemAdminClient } from '@/lib/api-utils';
 import { FACE_ANALYSIS_TYPES } from '@/lib/divination/face';
-import type { DataSourceProvider, DataSourceQueryContext, DataSourceSummary } from '@/lib/data-sources/types';
+import type { DataSourceSummary } from '@/lib/data-sources/types';
+import type { DataSourceProvider, DataSourceQueryContext } from '@/lib/data-sources/provider.server';
 
 type FaceRow = {
     id: string;

@@ -1,14 +1,35 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, resolve, relative, isAbsolute } from 'node:path';
+import { builtinModules } from 'node:module';
+import ts from 'typescript';
 
 const root = process.cwd();
 const failures = [];
+const missingInputs = new Set();
+
+function reportMissingInput(relativePath) {
+  if (!missingInputs.has(relativePath)) {
+    missingInputs.add(relativePath);
+    failures.push(`${relativePath}: required architecture input is missing`);
+  }
+}
 
 function read(relativePath) {
-  return readFileSync(resolve(root, relativePath), 'utf8');
+  try {
+    return readFileSync(resolve(root, relativePath), 'utf8');
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    reportMissingInput(relativePath);
+    return null;
+  }
 }
 
 function walk(relativeDir, files = []) {
+  if (!existsSync(resolve(root, relativeDir))) {
+    reportMissingInput(relativeDir);
+    return files;
+  }
+
   for (const entry of readdirSync(resolve(root, relativeDir), { withFileTypes: true })) {
     if (entry.name.startsWith('.')) {
       continue;
@@ -40,14 +61,14 @@ function mustNotExist(relativePath, reason) {
 
 function mustMatch(relativePath, pattern, reason) {
   const source = read(relativePath);
-  if (!pattern.test(source)) {
+  if (source !== null && !pattern.test(source)) {
     failures.push(`${relativePath}: ${reason}`);
   }
 }
 
 function mustNotMatch(relativePath, pattern, reason) {
   const source = read(relativePath);
-  if (pattern.test(source)) {
+  if (source !== null && pattern.test(source)) {
     failures.push(`${relativePath}: ${reason}`);
   }
 }
@@ -59,11 +80,29 @@ function mustNotMatchInTree(relativeDir, pattern, reason, predicate = () => true
     }
 
     const source = read(file);
-    if (pattern.test(source)) {
+    if (source !== null && pattern.test(source)) {
       failures.push(`${file}: ${reason}`);
     }
   }
 }
+
+mustExist('src/lib/hooks/session-context.tsx', 'session state should have a component-independent context entrypoint');
+mustNotMatchInTree(
+  'src/lib/hooks',
+  /from\s*['"]@\/components\/providers\/ClientProviders['"]/u,
+  'base hooks should depend on session-context instead of the provider composition component',
+  (file) => /\.(ts|tsx)$/u.test(file),
+);
+mustNotMatch(
+  'src/lib/chat/ConversationListContext.tsx',
+  /from\s*['"]@\/components\/providers\/ClientProviders['"]/u,
+  'conversation state should depend on the shared session context, not provider composition',
+);
+mustNotMatch(
+  'src/components/providers/ClientProviders.tsx',
+  /\bcreateContext\b/u,
+  'provider composition should reuse the extracted context instead of declaring another store',
+);
 
 mustExist('src/lib/auth.ts', 'browser auth should converge on the unified auth entrypoint');
 mustNotExist('src/lib/auth-client.ts', 'legacy browser auth client entrypoint should stay removed');
@@ -809,6 +848,222 @@ mustNotMatchInTree(
   /packages\/core\/src\//u,
   'web app code should not import internal packages/core/src paths directly',
   (file) => /\.(?:ts|tsx|mts)$/u.test(file),
+);
+
+// Discover new extracted modules; only these reviewed legacy adapters are not roots.
+// An exception never permits a protected module to depend on the adapter.
+const adapterEntries = new Set([
+  'src/lib/server/ai-config.ts',
+  'src/lib/server/amap-geocode.ts',
+  'src/lib/server/bazi-case-profile.ts',
+  'src/lib/server/conversation-messages.ts',
+  'src/lib/server/chat/bootstrap.ts',
+  'src/lib/server/chat/prompt-context.ts',
+  'src/lib/server/chat/request.ts',
+  'src/lib/knowledge-base/browser-client.ts',
+  'src/lib/knowledge-base/client.ts',
+  'src/lib/knowledge-base/embedding-config.ts',
+  'src/lib/knowledge-base/hits.ts',
+  'src/lib/knowledge-base/ingest.ts',
+  'src/lib/knowledge-base/persistence.server.ts',
+  'src/lib/knowledge-base/reranker.ts',
+  'src/lib/knowledge-base/search.ts',
+  'src/lib/knowledge-base/vector-index.ts',
+]);
+const contractEntries = ['src/lib/data-sources/types.ts', 'src/lib/knowledge-base/types.ts'];
+const sourceExtension = /\.[cm]?[jt]sx?$/u;
+const pureEntries = new Set([
+  'src/lib/server/analysis.ts',
+  'src/lib/server/chat/contracts.ts',
+  'src/lib/server/chat/use-case.ts',
+  'src/lib/knowledge-base/source-replacement.ts',
+  ...['src/lib/server', 'src/lib/knowledge-base'].flatMap(dir => walk(dir))
+    .filter(file => sourceExtension.test(file) && !adapterEntries.has(file)),
+]);
+const compilerOptions = {
+  moduleResolution: ts.ModuleResolutionKind.Bundler,
+  module: ts.ModuleKind.ESNext,
+  allowJs: true,
+  resolveJsonModule: true,
+  baseUrl: root,
+  paths: { '@/*': ['./src/*'] },
+};
+const configPath = resolve(root, 'tsconfig.json');
+if (existsSync(configPath)) {
+  const config = ts.readConfigFile(configPath, ts.sys.readFile);
+  if (config.error) failures.push('tsconfig.json: invalid architecture module-resolution input');
+  else Object.assign(compilerOptions, ts.parseJsonConfigFileContent(config.config, ts.sys, root).options);
+}
+const resolutionCache = ts.createModuleResolutionCache(root, value => value, compilerOptions);
+const parsedModules = new Map();
+function parseModule(file) {
+  if (!parsedModules.has(file)) {
+    const text = read(file);
+    parsedModules.set(file, text === null ? null : ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true));
+  }
+  return parsedModules.get(file);
+}
+function literalText(node) {
+  return node && ts.isStringLiteralLike(node) ? node.text : null;
+}
+const nodeBuiltins = new Set(builtinModules.map(name => name.replace(/^node:/u, '')));
+function forbiddenModule(name) {
+  return nodeBuiltins.has(name.replace(/^node:/u, ''))
+    || /^(?:next|react|react-dom|ai)(?:\/|$)|^@(?:supabase|ai-sdk)\/|^node:|^(?:server-only|client-only)$/u.test(name);
+}
+function forbiddenFile(file) {
+  return adapterEntries.has(file) || /(?:^|\/)(?:components|app)\/|(?:^|\/)(?:api-utils|supabase[^/]*)(?:\.[cm]?[jt]sx?)?$|\.server\.[cm]?[jt]sx?$/u.test(file);
+}
+function checkDependencyBoundary(entry, reason) {
+  const visited = new Set();
+  function fail(chain, detail) {
+    failures.push(`${entry}: ${reason}; dependency path: ${chain.join(' -> ')} (${detail})`);
+  }
+  function visit(file, names, chain) {
+    const key = `${file}:${names ? [...names].sort().join(',') : '*'}`;
+    if (visited.has(key)) return;
+    visited.add(key);
+    const source = parseModule(file);
+    if (!source) return;
+    if (source.parseDiagnostics.length) {
+      fail(chain, 'invalid dependency source syntax');
+      return;
+    }
+    // Type-only edges follow selected DTO declarations and local references,
+    // not unrelated executable functions in mixed legacy modules. SDK types
+    // still travel through imports/re-exports and receive no exemption.
+    let nodes = source.statements;
+    if (names) {
+      const wanted = new Set(names);
+      const selected = new Set();
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const statement of source.statements) {
+          const declarations = ts.isVariableStatement(statement)
+            ? statement.declarationList.declarations : [statement];
+          if (ts.isExportDeclaration(statement) && !statement.moduleSpecifier && statement.exportClause && ts.isNamedExports(statement.exportClause)) {
+            for (const item of statement.exportClause.elements) {
+              const localName = (item.propertyName || item.name).text;
+              if (wanted.has(item.name.text) && !wanted.has(localName)) {
+                wanted.add(localName);
+                changed = true;
+              }
+            }
+          }
+          const matches = declarations.some(node => node.name && wanted.has(node.name.getText(source)))
+            || (wanted.has('default') && (ts.isExportAssignment(statement)
+              || statement.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.DefaultKeyword)));
+          if (!matches || selected.has(statement)) continue;
+          selected.add(statement);
+          changed = true;
+          function collect(node) {
+            if (ts.isIdentifier(node)) wanted.add(node.text);
+            ts.forEachChild(node, collect);
+          }
+          collect(statement);
+        }
+      }
+      nodes = [...selected, ...source.statements.filter(node =>
+        ts.isImportDeclaration(node) || ts.isExportDeclaration(node) || ts.isImportEqualsDeclaration(node))];
+      names = wanted;
+    }
+    function edge(specifier, importedNames) {
+      if (forbiddenModule(specifier)) {
+        fail([...chain, specifier], 'forbidden framework/SDK dependency');
+        return;
+      }
+      const resolved = ts.resolveModuleName(specifier, resolve(root, file), compilerOptions, ts.sys, resolutionCache).resolvedModule;
+      const local = specifier.startsWith('.') || specifier.startsWith('@/') || isAbsolute(specifier)
+        || Object.keys(compilerOptions.paths || {}).some(pattern => specifier.startsWith(pattern.split('*')[0]));
+      if (!resolved) {
+        if (local) fail([...chain, specifier], 'unresolved local dependency');
+        return;
+      }
+      if (resolved.isExternalLibraryImport) return;
+      const target = relative(root, resolved.resolvedFileName).replaceAll('\\', '/');
+      if (forbiddenFile(target)) {
+        fail([...chain, target], 'infrastructure adapter dependency');
+        return;
+      }
+      if (sourceExtension.test(target)) visit(target, importedNames, [...chain, target]);
+    }
+    function inspect(node) {
+      if (ts.isImportDeclaration(node)) {
+        const clause = node.importClause;
+        const bindings = clause?.namedBindings;
+        let imported = null;
+        if (names || clause?.isTypeOnly || (bindings && ts.isNamedImports(bindings) && !clause.name && bindings.elements.every(e => e.isTypeOnly))) {
+          imported = new Set();
+          if (clause?.name && (!names || names.has(clause.name.text))) imported.add('default');
+          if (bindings && ts.isNamedImports(bindings)) {
+            for (const item of bindings.elements) {
+              if (!names || names.has(item.name.text)) imported.add((item.propertyName || item.name).text);
+            }
+          } else if (bindings && (!names || names.has(bindings.name.text))) imported = null;
+          if (imported?.size === 0) return;
+        }
+        edge(node.moduleSpecifier.text, imported);
+        return;
+      }
+      if (ts.isExportDeclaration(node) && node.moduleSpecifier) {
+        let imported = null;
+        if (node.exportClause && ts.isNamedExports(node.exportClause)) {
+          const items = node.exportClause.elements.filter(item => !names || names.has(item.name.text));
+          if (!items.length) return;
+          if (names || node.isTypeOnly || items.every(item => item.isTypeOnly)) imported = new Set(items.map(item => (item.propertyName || item.name).text));
+        } else if (node.exportClause && ts.isNamespaceExport(node.exportClause)) {
+          if (names && !names.has(node.exportClause.name.text)) return;
+        } else if (names) imported = names;
+        edge(node.moduleSpecifier.text, imported);
+        return;
+      }
+      if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) {
+        const specifier = literalText(node.moduleReference.expression);
+        if (specifier && (!names || names.has(node.name.text))) edge(specifier, null);
+        return;
+      }
+      if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) {
+        const specifier = literalText(node.argument.literal);
+        if (specifier) edge(specifier, node.qualifier ? new Set([node.qualifier.getText(source).split('.')[0]]) : null);
+      }
+      if (ts.isCallExpression(node) && (node.expression.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(node.expression) && node.expression.text === 'require'))) {
+        const specifier = literalText(node.arguments[0]);
+        if (specifier) edge(specifier, null);
+      }
+      if (ts.isIdentifier(node) && /^(?:SupabaseClient|NextRequest|NextResponse|Postgrest\w*|fetch)$/u.test(node.text)) {
+        fail(chain, `forbidden infrastructure identifier ${node.text}`);
+      }
+      if ((ts.isPropertyAccessExpression(node) && node.name.text === 'env' && node.expression.getText(source) === 'process')
+        || (ts.isElementAccessExpression(node) && literalText(node.argumentExpression) === 'env' && node.expression.getText(source) === 'process')) {
+        fail(chain, 'global environment dependency');
+      }
+      ts.forEachChild(node, inspect);
+    }
+    for (const node of nodes) inspect(node);
+  }
+  visit(entry, null, [entry]);
+}
+for (const file of pureEntries) {
+  if (!contractEntries.includes(file)) checkDependencyBoundary(file,
+    'extracted use cases must keep HTTP, SDK, network and infrastructure dependencies in adapters');
+}
+for (const file of contractEntries) checkDependencyBoundary(file,
+  'browser-safe data contracts must not import server or SDK contracts');
+mustNotMatch(
+  'src/lib/api/divination-pipeline.ts',
+  /\bgetSystemAdminClient\b/u,
+  'caller database context must fail closed; privileged persistence stays in its named adapter',
+);
+mustNotMatch(
+  'src/lib/knowledge-base/search.ts',
+  /\bgetSystemAdminClient\b/u,
+  'knowledge search must retain the caller identity for owner-scoped SQL',
+);
+mustNotMatch(
+  'src/lib/chat/ConversationListContext.tsx',
+  /\[conversations,\s*setConversations\]\s*=\s*useState/u,
+  'Query must own the conversation list without a second writable Context copy',
 );
 
 if (failures.length > 0) {

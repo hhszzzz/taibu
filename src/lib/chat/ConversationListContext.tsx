@@ -15,9 +15,13 @@ import {
   useState,
   useRef,
   useEffect,
+  useLayoutEffect,
+  useMemo,
   useCallback,
   type ReactNode,
 } from 'react';
+import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query';
+import { createConversationListCache, EMPTY_CONVERSATIONS } from '@/lib/query/conversation-list-cache';
 import type { ConversationListItem } from '@/types';
 import {
   CONVERSATION_PAGE_SIZE,
@@ -31,7 +35,7 @@ import {
   HISTORY_SUMMARY_DELETED_EVENT,
   KNOWLEDGE_BASE_SYNC_EVENT,
 } from '@/lib/browser-api';
-import { useSessionSafe } from '@/components/providers/ClientProviders';
+import { useSessionSafe } from '@/lib/hooks/session-context';
 
 export const CHAT_CONVERSATION_DELETED_EVENT = 'taibu:chat:conversation-deleted';
 export const CHAT_NEW_EVENT = 'taibu:chat:new';
@@ -128,7 +132,32 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
   const { user, loading: sessionLoading } = useSessionSafe();
   const userId = user?.id ?? null;
 
-  const [conversations, setConversations] = useState<ConversationListItem[]>([]);
+  const queryClient = useQueryClient();
+  const accountScope = useMemo(() => ({ userId }), [userId]);
+  const accountScopeRef = useRef<typeof accountScope | null>(accountScope);
+  useLayoutEffect(() => { accountScopeRef.current = accountScope; }, [accountScope]);
+  const conversationCache = useMemo(() => createConversationListCache(
+    queryClient,
+    userId,
+    () => accountScopeRef.current === accountScope,
+  ), [accountScope, queryClient, userId]);
+  // Deliberately disabled: existing idle/window/stream triggers own fetching.
+  const { data } = useQuery<ConversationListItem[]>({
+    queryKey: conversationCache.queryKey,
+    queryFn: skipToken,
+    enabled: false,
+  });
+  const conversations = userId ? data ?? EMPTY_CONVERSATIONS : EMPTY_CONVERSATIONS;
+  const setConversations = conversationCache.update;
+  const conversationsRef = conversationCache.ref;
+  useEffect(() => () => {
+    if (conversationCache.isCurrent()) {
+      accountScopeRef.current = null;
+      activeRequestIdRef.current += 1;
+      requestControllerRef.current?.abort();
+    }
+    conversationCache.clear();
+  }, [conversationCache]);
   const [conversationsLoading, setConversationsLoading] = useState(false);
   const [refreshingConversations, setRefreshingConversations] = useState(false);
   const [loadingMoreConversations, setLoadingMoreConversations] = useState(false);
@@ -138,10 +167,10 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
   const [pendingSidebarTitle, setPendingSidebarTitle] = useState<string | null>(null);
 
   const manualRenamedConversationIdsRef = useRef<Set<string>>(new Set());
-  const conversationsRef = useRef(conversations);
   const hasLoadedRef = useRef(false);
   const userIdRef = useRef<string | null>(userId);
   const nextOffsetRef = useRef<number | null>(null);
+  const paginationRevisionRef = useRef(0);
   const activeRequestIdRef = useRef(0);
   const prevUserIdRef = useRef<string | null>(null);
   const loadingRef = useRef(false);
@@ -150,9 +179,8 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
   const idleCallbackHandleRef = useRef<number | null>(null);
   const idleTimeoutHandleRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
 
-  useEffect(() => { conversationsRef.current = conversations; }, [conversations]);
   useEffect(() => { hasLoadedRef.current = hasLoadedConversations; }, [hasLoadedConversations]);
-  useEffect(() => { userIdRef.current = userId; }, [userId]);
+  useLayoutEffect(() => { userIdRef.current = userId; }, [userId]);
   useEffect(() => {
     loadingRef.current = conversationsLoading || refreshingConversations;
   }, [conversationsLoading, refreshingConversations]);
@@ -176,21 +204,38 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
     }
   }, []);
 
+  const setRequestLoading = useCallback((mode: 'initial' | 'refresh' | 'more' | null) => {
+    loadingRef.current = mode === 'initial' || mode === 'refresh';
+    loadingMoreRef.current = mode === 'more';
+    setConversationsLoading(mode === 'initial');
+    setRefreshingConversations(mode === 'refresh');
+    setLoadingMoreConversations(mode === 'more');
+  }, []);
+
+  const startListRequest = useCallback((mode: 'initial' | 'refresh' | 'more') => {
+    const requestId = ++activeRequestIdRef.current;
+    requestControllerRef.current?.abort();
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
+    setRequestLoading(mode);
+    return { requestId, controller };
+  }, [setRequestLoading]);
+
   const resetConversationState = useCallback(() => {
     activeRequestIdRef.current += 1;
     requestControllerRef.current?.abort();
     requestControllerRef.current = null;
     nextOffsetRef.current = null;
+    paginationRevisionRef.current += 1;
+    hasLoadedRef.current = false;
     setConversations([]);
-    setConversationsLoading(false);
-    setRefreshingConversations(false);
-    setLoadingMoreConversations(false);
+    setRequestLoading(null);
     setHasLoadedConversations(false);
     setHasMoreConversations(false);
     setConversationListError(null);
     setPendingSidebarTitle(null);
     manualRenamedConversationIdsRef.current.clear();
-  }, []);
+  }, [setConversations, setRequestLoading]);
 
   const requestConversationPage = useCallback(async ({
     targetUserId,
@@ -201,17 +246,8 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
     offset: number;
     append: boolean;
   }) => {
-    const requestId = activeRequestIdRef.current + 1;
-    activeRequestIdRef.current = requestId;
-    requestControllerRef.current?.abort();
-    const controller = new AbortController();
-    requestControllerRef.current = controller;
-
-    if (append) {
-      setLoadingMoreConversations(true);
-    } else {
-      setConversationsLoading(true);
-    }
+    if (!conversationCache.isCurrent() || targetUserId !== userIdRef.current) return false;
+    const { requestId, controller } = startListRequest(append ? 'more' : 'initial');
 
     try {
       const payload = await loadConversations({
@@ -222,6 +258,7 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
 
       if (
         !payload
+        || !conversationCache.isCurrent()
         || controller.signal.aborted
         || activeRequestIdRef.current !== requestId
         || userIdRef.current !== targetUserId
@@ -230,18 +267,24 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
       }
 
       nextOffsetRef.current = payload.pagination.nextOffset;
+      paginationRevisionRef.current += 1;
       setHasMoreConversations(payload.pagination.hasMore);
       setHasLoadedConversations(true);
       setConversationListError(null);
-      setConversations((current) => (
-        append
-          ? mergeConversations(current, payload.conversations)
-          : payload.conversations
+      setConversations((current) => preserveManualConversationTitles(
+        current,
+        append ? mergeConversations(current, payload.conversations) : payload.conversations,
+        manualRenamedConversationIdsRef.current,
       ));
 
       return true;
     } catch (error) {
-      if (!(error instanceof DOMException && error.name === 'AbortError')) {
+      if (
+        conversationCache.isCurrent()
+        && activeRequestIdRef.current === requestId
+        && !controller.signal.aborted
+        && !(error instanceof DOMException && error.name === 'AbortError')
+      ) {
         console.error('[conversation] 对话列表分页加载失败', error);
         setConversationListError(error instanceof Error ? error.message : '加载对话列表失败');
       }
@@ -251,34 +294,21 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
         requestControllerRef.current = null;
       }
 
-      if (activeRequestIdRef.current === requestId) {
-        if (append) {
-          setLoadingMoreConversations(false);
-        } else {
-          setConversationsLoading(false);
-        }
+      if (conversationCache.isCurrent() && activeRequestIdRef.current === requestId) {
+        setRequestLoading(null);
       }
     }
-  }, []);
+  }, [conversationCache, setConversations, setRequestLoading, startListRequest]);
 
   const refreshConversationList = useCallback(async (
     targetUserId?: string | null,
     options: { targetCount?: number } = {},
   ) => {
     const id = targetUserId ?? userId;
-    if (!id) return;
+    if (!id || !conversationCache.isCurrent() || id !== userIdRef.current) return;
 
-    const requestId = activeRequestIdRef.current + 1;
-    activeRequestIdRef.current = requestId;
-    requestControllerRef.current?.abort();
-    const controller = new AbortController();
-    requestControllerRef.current = controller;
     const shouldShowBlockingLoader = !hasLoadedRef.current || conversationsRef.current.length === 0;
-    if (shouldShowBlockingLoader) {
-      setConversationsLoading(true);
-    } else {
-      setRefreshingConversations(true);
-    }
+    const { requestId, controller } = startListRequest(shouldShowBlockingLoader ? 'initial' : 'refresh');
 
     try {
       const loadedCount = conversationsRef.current.length;
@@ -297,6 +327,7 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
 
       if (
         !payload
+        || !conversationCache.isCurrent()
         || controller.signal.aborted
         || activeRequestIdRef.current !== requestId
         || userIdRef.current !== id
@@ -305,6 +336,7 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
       }
 
       nextOffsetRef.current = payload.pagination.nextOffset;
+      paginationRevisionRef.current += 1;
       setHasMoreConversations(payload.pagination.hasMore);
       setHasLoadedConversations(true);
       setConversationListError(null);
@@ -314,7 +346,12 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
         manualRenamedConversationIdsRef.current,
       ));
     } catch (error) {
-      if (!(error instanceof DOMException && error.name === 'AbortError')) {
+      if (
+        conversationCache.isCurrent()
+        && activeRequestIdRef.current === requestId
+        && !controller.signal.aborted
+        && !(error instanceof DOMException && error.name === 'AbortError')
+      ) {
         console.error('[conversation] 对话列表刷新失败', error);
         setConversationListError(error instanceof Error ? error.message : '加载对话列表失败');
       }
@@ -323,15 +360,11 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
         requestControllerRef.current = null;
       }
 
-      if (activeRequestIdRef.current === requestId) {
-        if (shouldShowBlockingLoader) {
-          setConversationsLoading(false);
-        } else {
-          setRefreshingConversations(false);
-        }
+      if (conversationCache.isCurrent() && activeRequestIdRef.current === requestId) {
+        setRequestLoading(null);
       }
     }
-  }, [userId]);
+  }, [conversationCache, conversationsRef, setConversations, setRequestLoading, startListRequest, userId]);
 
   const triggerConversationListLoad = useCallback((targetCount?: number) => {
     if (!userId || loadingRef.current || loadingMoreRef.current) {
@@ -352,7 +385,7 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
     }
 
     void refreshConversationList(userId, { targetCount });
-  }, [hasMoreConversations, refreshConversationList, userId]);
+  }, [conversationsRef, hasMoreConversations, refreshConversationList, userId]);
 
   const retryConversationListLoad = useCallback(async () => {
     if (!userId) return;
@@ -379,18 +412,20 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
   }, [hasMoreConversations, requestConversationPage, userId]);
 
   const removeConversationFromList = useCallback((id: string) => {
+    if (!conversationCache.isCurrent()) return false;
+    const cancelled = conversationCache.cancelMutation(id);
+    manualRenamedConversationIdsRef.current.delete(id);
     let removed = false;
     setConversations((current) => {
       const next = current.filter((conversation) => conversation.id !== id);
       removed = next.length !== current.length;
-      conversationsRef.current = next;
       return removed ? next : current;
     });
     if (removed) {
       nextOffsetRef.current = nextOffsetRef.current == null ? null : Math.max(nextOffsetRef.current - 1, 0);
     }
-    return removed;
-  }, []);
+    return removed || cancelled?.kind === 'delete';
+  }, [conversationCache, setConversations]);
 
   const broadcastConversationDeleted = useCallback((id: string) => {
     if (typeof window === 'undefined') {
@@ -497,37 +532,44 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
   }, [refreshConversationList]);
 
   const handleDeleteConversation = useCallback(async (id: string) => {
-    const previousConversations = conversationsRef.current;
-    const previousNextOffset = nextOffsetRef.current;
-    const removed = removeConversationFromList(id);
+    const operation = conversationCache.beginDelete(id);
+    if (!operation) return false;
+    const paginationRevision = paginationRevisionRef.current;
+    const offsetDelta = nextOffsetRef.current == null || nextOffsetRef.current === 0 ? 0 : 1;
+    if (nextOffsetRef.current != null) nextOffsetRef.current -= offsetDelta;
+    const wasManual = manualRenamedConversationIdsRef.current.delete(id);
     const success = await deleteConversation(id);
+    if (!conversationCache.settle(operation, success)) return success;
     if (!success) {
-      if (removed) {
-        setConversations(previousConversations);
-        conversationsRef.current = previousConversations;
-        nextOffsetRef.current = previousNextOffset;
+      if (wasManual) manualRenamedConversationIdsRef.current.add(id);
+      if (paginationRevisionRef.current === paginationRevision && nextOffsetRef.current != null) {
+        nextOffsetRef.current += offsetDelta;
       }
-      return false;
-    }
-
-    if (removed) {
+    } else {
       broadcastConversationDeleted(id);
     }
-    return true;
-  }, [broadcastConversationDeleted, removeConversationFromList]);
+    // In-flight reads may still contain the deleted row. Supersede them after
+    // settlement, and reconcile any pagination installed during the write.
+    if (requestControllerRef.current || paginationRevisionRef.current !== paginationRevision) {
+      await refreshConversationList();
+    }
+    return success;
+  }, [broadcastConversationDeleted, conversationCache, refreshConversationList]);
 
   const handleRenameConversation = useCallback(async (id: string, title: string) => {
+    const operation = conversationCache.beginRename(id, title);
+    if (!operation) return false;
+    const wasManual = manualRenamedConversationIdsRef.current.has(id);
     manualRenamedConversationIdsRef.current.add(id);
-    const previousConversations = conversationsRef.current;
-    setConversations(prev => prev.map(c => c.id === id ? { ...c, title } : c));
     const success = await renameConversation(id, title);
-    if (!success) {
+    if (!conversationCache.settle(operation, success)) return success;
+    if (success || wasManual) {
+      manualRenamedConversationIdsRef.current.add(id);
+    } else {
       manualRenamedConversationIdsRef.current.delete(id);
-      setConversations(previousConversations);
-      return false;
     }
-    return true;
-  }, []);
+    return success;
+  }, [conversationCache]);
 
   const handleNewChat = useCallback(async () => {
     window.dispatchEvent(new CustomEvent(CHAT_NEW_EVENT));

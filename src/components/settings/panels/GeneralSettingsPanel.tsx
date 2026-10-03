@@ -7,7 +7,7 @@
  */
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useTheme } from '@/components/ui/ThemeProvider';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
@@ -15,6 +15,7 @@ import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { SegmentedChoice } from '@/components/settings/SegmentedChoice';
 import { SettingsLoginRequired } from '@/components/settings/SettingsLoginRequired';
 import { loadReminderSubscriptions, type ReminderType, updateReminderSubscriptionClient } from '@/lib/reminders-client';
+import { mutationEffects } from '@/lib/query/invalidation';
 import { getCurrentUserSettings, updateCurrentUserSettings } from '@/lib/user/settings';
 
 interface Settings {
@@ -115,6 +116,11 @@ function PreferenceSwitch({
 }
 
 export default function GeneralSettingsPanel() {
+  const { user } = useSessionSafe();
+  return <AccountGeneralSettingsPanel key={user?.id ?? 'visitor'} />;
+}
+
+function AccountGeneralSettingsPanel() {
   const { themeMode, setThemeMode } = useTheme();
   const { user, loading: sessionLoading } = useSessionSafe();
   const userId = user?.id ?? null;
@@ -127,6 +133,9 @@ export default function GeneralSettingsPanel() {
   const [remindersLoading, setRemindersLoading] = useState(true);
   const [reminderLoadError, setReminderLoadError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const lifecycle = useRef<AbortController | null>(null);
+  const operations = useRef(new Set<string>());
+  const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
   const [initializedForUserId, setInitializedForUserId] = useState<string | null | undefined>(undefined);
 
   const load = useCallback(async () => {
@@ -139,15 +148,20 @@ export default function GeneralSettingsPanel() {
       return;
     }
 
+    lifecycle.current?.abort();
+    const controller = new AbortController();
+    lifecycle.current = controller;
+    const scope = { expectedUserId: userId, signal: controller.signal };
     setLoading(true);
     setRemindersLoading(true);
 
     try {
       const [settingsResult, remindersResult] = await Promise.allSettled([
-        getCurrentUserSettings(),
-        loadReminderSubscriptions(),
+        getCurrentUserSettings(scope),
+        loadReminderSubscriptions(scope),
       ]);
 
+      if (controller.signal.aborted) return;
       if (settingsResult.status === 'rejected') {
         setLoadError('加载偏好设置失败');
         return;
@@ -187,11 +201,14 @@ export default function GeneralSettingsPanel() {
         setReminders({ ...DEFAULT_REMINDER_SETTINGS });
       }
     } catch (error) {
+      if (controller.signal.aborted) return;
       console.error('加载用户设置失败:', error);
       setLoadError('加载偏好设置失败');
     } finally {
-      setLoading(false);
-      setRemindersLoading(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+        setRemindersLoading(false);
+      }
     }
   }, [sessionLoading, userId]);
 
@@ -203,27 +220,44 @@ export default function GeneralSettingsPanel() {
     void load();
   }, [initializedForUserId, load, sessionLoading, userId]);
 
-  const updateSetting = async <K extends keyof Settings>(key: K, value: Settings[K]) => {
-    if (!userId || loadError) return;
+  useEffect(() => () => lifecycle.current?.abort(), []);
 
-    const previousSettings = settings;
-    const nextSettings = { ...settings, [key]: value };
-    setSettings(nextSettings);
+  const beginOperation = (key: string) => {
+    if (operations.current.has(key)) return false;
+    operations.current.add(key);
+    setPending(new Set(operations.current));
+    return true;
+  };
+  const finishOperation = (key: string) => {
+    operations.current.delete(key);
+    setPending(new Set(operations.current));
+  };
+
+  const updateSetting = async <K extends keyof Settings>(key: K, value: Settings[K]) => {
+    const controller = lifecycle.current;
+    if (!userId || loadError || loading || !controller || controller.signal.aborted || !beginOperation(key)) return;
+    const previousValue = settings[key];
+    setSettings(current => ({ ...current, [key]: value }));
 
     const saved = await updateCurrentUserSettings(
       key === 'notifications'
         ? { notificationsEnabled: value as boolean }
         : { language: value as Settings['language'] },
-    );
+      mutationEffects.userSettings(userId),
+      { expectedUserId: userId, signal: controller.signal },
+    ).catch(() => null);
+    if (controller.signal.aborted) return;
+    finishOperation(key);
 
     if (!saved) {
       console.error('更新偏好设置失败');
-      setSettings(previousSettings);
+      setSettings(current => ({ ...current, [key]: previousValue }));
     }
   };
 
   const updateReminderSetting = async (type: ReminderType) => {
-    if (!userId || loadError) return;
+    const controller = lifecycle.current;
+    if (!userId || loadError || loading || !controller || controller.signal.aborted || !beginOperation(type)) return;
 
     const previousEnabled = reminders[type];
     const nextEnabled = !previousEnabled;
@@ -234,15 +268,19 @@ export default function GeneralSettingsPanel() {
         reminderType: type,
         enabled: nextEnabled,
         notifySite: true,
-      });
+      }, { expectedUserId: userId, signal: controller.signal });
+      if (controller.signal.aborted) return;
 
       if (!result.ok) {
         throw new Error(result.error.message || '更新提醒状态失败');
       }
       setReminderLoadError(null);
     } catch (error) {
+      if (controller.signal.aborted) return;
       console.error('更新提醒状态失败:', error);
       setReminders((prev) => ({ ...prev, [type]: previousEnabled }));
+    } finally {
+      if (!controller.signal.aborted) finishOperation(type);
     }
   };
 
@@ -287,7 +325,7 @@ export default function GeneralSettingsPanel() {
               <select
                 value={settings.language}
                 onChange={(event) => updateSetting('language', event.target.value as 'zh' | 'en')}
-                disabled={Boolean(loadError)}
+                disabled={Boolean(loadError) || pending.has('language')}
                 className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium text-foreground outline-none transition-colors duration-150 focus:ring-2 focus:ring-blue-500/30"
               >
                 <option value="zh">简体中文</option>
@@ -305,6 +343,7 @@ export default function GeneralSettingsPanel() {
             <span className="min-w-0 flex-1">{reminderLoadError}</span>
             <button
               type="button"
+              disabled={pending.size > 0}
               onClick={() => void load()}
               className="shrink-0 rounded-md px-2 py-1 font-medium transition-colors hover:bg-amber-100"
             >
@@ -319,7 +358,7 @@ export default function GeneralSettingsPanel() {
               <PreferenceSwitch
                 checked={settings.notifications}
                 onToggle={() => updateSetting('notifications', !settings.notifications)}
-                disabled={Boolean(loadError)}
+                disabled={Boolean(loadError) || pending.has('notifications')}
               />
             )}
           />
@@ -333,7 +372,7 @@ export default function GeneralSettingsPanel() {
                   <PreferenceSwitch
                     checked={reminders[item.type]}
                     onToggle={() => updateReminderSetting(item.type)}
-                    disabled={Boolean(loadError) || Boolean(reminderLoadError) || remindersLoading}
+                    disabled={Boolean(loadError) || Boolean(reminderLoadError) || remindersLoading || pending.has(item.type)}
                   />
                 )}
               />

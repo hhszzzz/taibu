@@ -154,6 +154,23 @@ Visit [http://localhost:3000](http://localhost:3000) to view the app.
 
 ---
 
+## Developer Documentation
+
+- [Architecture and migration boundaries (Chinese)](docs/manual/Architecture.md): module ownership, AI lifecycle/billing, historical replay, compatibility exceptions, and rollback conditions.
+- [Core public API](packages/core/README.md) · [MCP manual](docs/manual/MCP-Server-Manual.md)
+- [Refactor and test acceptance record (Chinese)](docs/manual/Refactor-Acceptance.md)
+
+```bash
+pnpm test -- src/tests/chat-route.test.ts # Selected tests; builds required packages
+pnpm test                                # Default unit, route, protocol and guard tests
+pnpm exec playwright install --only-shell chromium # First-time browser setup
+pnpm verify                              # Build each package once; full verification (local Docker required)
+```
+
+SQL, real Auth/REST, and browser checks also run independently with `pnpm test:db`, `pnpm test:auth`, and `pnpm test:browser`. `test:auth` creates a disposable Auth/PostgREST/PostgreSQL stack without reading production configuration or existing data. If Chromium downloads are unavailable and Chrome is already installed, explicitly use `pnpm verify -- --chrome`; no browser assertions are skipped. CI uses pinned Chromium and requires all three gates.
+
+---
+
 ## Contributing
 
 Issues and Pull Requests are welcome.

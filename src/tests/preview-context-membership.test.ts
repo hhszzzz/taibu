@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import type { ResolvedChatRequest } from '../lib/server/chat/request';
 
 process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
@@ -11,7 +12,7 @@ test('buildPreviewPromptContext reuses shared prompt builder even with preview-o
     delete require.cache[require.resolve('../lib/chat/preview-context')];
     const { buildPreviewPromptContext } = await import('../lib/chat/preview-context');
 
-    let capturedRequest: Record<string, unknown> | null = null;
+    const capture: { request: ResolvedChatRequest | null } = { request: null };
 
     const result = await buildPreviewPromptContext({
         auth: {
@@ -37,8 +38,8 @@ test('buildPreviewPromptContext reuses shared prompt builder even with preview-o
         membershipType: 'pro',
         knowledgeBaseFeatureEnabled: true,
         accessTokenForKB: 'token-1',
-        sharedPromptContextBuilder: (async (request) => {
-            capturedRequest = request as unknown as Record<string, unknown>;
+        sharedPromptContextBuilder: async (request: ResolvedChatRequest) => {
+            capture.request = request;
             return {
                 sanitizedMessages: [],
                 fallbackPersonality: 'general' as const,
@@ -57,16 +58,17 @@ test('buildPreviewPromptContext reuses shared prompt builder even with preview-o
                     },
                 },
             };
-        }) as never,
+        },
     });
 
+    const capturedRequest = capture.request;
     assert.ok(capturedRequest);
-    assert.equal(capturedRequest?.membershipType, 'pro');
-    assert.equal(capturedRequest?.accessTokenForKB, 'token-1');
-    assert.equal((capturedRequest?.body as Record<string, unknown>).expressionStyle, 'gentle');
-    assert.equal((capturedRequest?.body as Record<string, unknown>).customInstructions, null);
-    assert.deepEqual((capturedRequest?.body as Record<string, unknown>).userProfile, { identity: '创业者' });
-    const messages = (capturedRequest?.body as { messages: Array<{ id: string; role: string; content: string; createdAt: string }> }).messages;
+    assert.equal(capturedRequest.membershipType, 'pro');
+    assert.equal(capturedRequest.accessTokenForKB, 'token-1');
+    assert.equal(capturedRequest.body.expressionStyle, 'gentle');
+    assert.equal(capturedRequest.body.customInstructions, null);
+    assert.deepEqual(capturedRequest.body.userProfile, { identity: '创业者' });
+    const messages = capturedRequest.body.messages;
     assert.equal(messages.length, 2);
     assert.equal(messages[0]?.id, 'a1');
     assert.equal(messages[0]?.role, 'assistant');

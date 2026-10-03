@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback } from 'react';
-import { useSessionSafe } from '@/components/providers/ClientProviders';
+import { useSessionSafe } from '@/lib/hooks/session-context';
 import { useAppBootstrap } from '@/lib/hooks/useAppBootstrap';
 
 export function useSessionMembership() {

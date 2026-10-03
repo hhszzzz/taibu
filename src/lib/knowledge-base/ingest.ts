@@ -8,7 +8,13 @@ import {
 import { getProvider } from '@/lib/data-sources';
 import { getSystemAdminClient } from '@/lib/api-utils';
 import { generateEmbeddings } from '@/lib/knowledge-base/embedding-config';
-import type { IngestResult, KnowledgeBaseWeight } from '@/lib/knowledge-base/types';
+import type {
+    IngestResult, KnowledgeBaseWeight, KnowledgeSourcePersistence,
+    KnowledgeSourceChunk as ChunkData,
+    KnowledgeSourceWriteOptions as UpsertEntriesOptions,
+} from '@/lib/knowledge-base/types';
+import { createKnowledgeBasePersistence } from '@/lib/knowledge-base/persistence.server';
+import { replaceKnowledgeSourceEntries } from '@/lib/knowledge-base/source-replacement';
 import { createKbClient } from '@/lib/knowledge-base/client';
 import { isConversationMessageInfraMissing, type StoredConversationMessageRow } from '@/lib/server/conversation-messages';
 
@@ -26,26 +32,9 @@ const DEFAULT_CHUNK_CONFIG: ChunkConfig = {
 
 export interface IngestOptions {
     chunkConfig?: Partial<ChunkConfig>;
+    /** User-driven service facades receive the authenticated caller's atomic write port. */
+    persistence?: KnowledgeSourcePersistence;
 }
-
-interface ChunkData {
-    content: string;
-    sourceType: 'conversation' | 'record' | 'file' | 'chat_message' | DataSourceType;
-    sourceId: string;
-    chunkIndex: number;
-    metadata: Record<string, unknown>;
-}
-
-type SourceReplaceRef = {
-    sourceType: ChunkData['sourceType'];
-    sourceId: string;
-    archive?: boolean;
-};
-
-type UpsertEntriesOptions = {
-    userId?: string;
-    source?: SourceReplaceRef;
-};
 
 type KnowledgeBaseWriteMode = 'create' | 'update';
 
@@ -300,6 +289,7 @@ export async function ingestConversationAsService(
     }
 
     return await upsertEntriesAsService(kbId, chunks, {
+        persistence: options?.persistence,
         userId,
         source: {
             sourceType: 'conversation',
@@ -409,6 +399,7 @@ export async function ingestChatMessageAsService(
         }));
 
     return await upsertEntriesAsService(kbId, chunks, {
+        persistence: options?.persistence,
         userId,
         source: {
             sourceType: 'chat_message',
@@ -457,6 +448,7 @@ export async function ingestRecordAsService(
     }));
 
     return await upsertEntriesAsService(kbId, chunks, {
+        persistence: options?.persistence,
         userId,
         source: {
             sourceType: MING_RECORD_SOURCE_TYPE,
@@ -494,6 +486,7 @@ export async function ingestFileAsService(
     }));
 
     return await upsertEntriesAsService(kbId, chunks, {
+        persistence: options?.persistence,
         userId,
         source: {
             sourceType: 'file',
@@ -527,6 +520,7 @@ export async function ingestDataSourceAsService(
     }));
 
     return await upsertEntriesAsService(kbId, chunks, {
+        persistence: options?.persistence,
         userId,
         source: {
             sourceType: ref.type,
@@ -618,55 +612,6 @@ function formatMessagePair(pair: { user: ChatMessage; assistant: ChatMessage }):
     return [`用户：${pair.user.content}`, `AI：${pair.assistant.content}`].join('\n\n');
 }
 
-type SupabaseClientLike = ReturnType<typeof getSystemAdminClient>;
-
-async function upsertEntriesWithClient(
-    supabase: SupabaseClientLike,
-    kbId: string,
-    chunks: ChunkData[],
-    options?: UpsertEntriesOptions,
-): Promise<IngestResult> {
-    const source = options?.source || (chunks[0]
-        ? {
-            sourceType: chunks[0].sourceType,
-            sourceId: chunks[0].sourceId,
-            archive: false,
-        }
-        : null);
-
-    if (!source) {
-        throw new Error('缺少知识库来源信息');
-    }
-
-    const sameSource = chunks.every(c => c.sourceType === source.sourceType && c.sourceId === source.sourceId);
-    const contiguous = chunks.every((c, i) => c.chunkIndex === i);
-    if (!sameSource || !contiguous) {
-        throw new Error('知识库条目必须按单一来源顺序写入');
-    }
-
-    const entries = chunks.map(chunk => ({
-        content: chunk.content,
-        chunk_index: chunk.chunkIndex,
-        metadata: chunk.metadata
-    }));
-
-    const { data, error } = await supabase.rpc('kb_replace_source_entries', {
-        p_kb_id: kbId,
-        p_source_type: source.sourceType,
-        p_source_id: source.sourceId,
-        p_entries: entries,
-        p_archive: source.archive === true,
-        p_user_id: options?.userId || null,
-    });
-
-    if (error) throw error;
-
-    return {
-        entriesCreated: typeof data === 'number' ? data : chunks.length,
-        chunks: chunks.length
-    };
-}
-
 export async function upsertEntries(
     kbId: string,
     chunks: ChunkData[],
@@ -675,7 +620,7 @@ export async function upsertEntries(
     const supabase = await createKbClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
-    return upsertEntriesWithClient(supabase, kbId, chunks, {
+    return replaceKnowledgeSourceEntries(createKnowledgeBasePersistence(supabase), kbId, chunks, {
         ...options,
         userId: user.id,
     });
@@ -684,9 +629,10 @@ export async function upsertEntries(
 export async function upsertEntriesAsService(
     kbId: string,
     chunks: ChunkData[],
-    options?: UpsertEntriesOptions,
+    options?: UpsertEntriesOptions & Pick<IngestOptions, 'persistence'>,
 ): Promise<IngestResult> {
-    return upsertEntriesWithClient(getSystemAdminClient(), kbId, chunks, options);
+    const persistence = options?.persistence ?? createKnowledgeBasePersistence(getSystemAdminClient());
+    return replaceKnowledgeSourceEntries(persistence, kbId, chunks, options);
 }
 
 export async function backfillVectors(

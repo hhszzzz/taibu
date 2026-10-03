@@ -63,11 +63,11 @@ test('createAIAnalysisConversation stores model/reasoning in assistant message',
     const aiAnalysisPath = require.resolve('../lib/ai/ai-analysis');
     const supabaseServerModule = require('../lib/supabase-server');
     const originalGetServiceClient = supabaseServerModule.getSystemAdminClient;
-    let capturedRpc: { fn: string; args: Record<string, unknown> } | null = null;
+    const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
 
     supabaseServerModule.getSystemAdminClient = () => ({
         rpc: async (fn: string, args: Record<string, unknown>) => {
-            capturedRpc = { fn, args };
+            rpcCalls.push({ fn, args });
             return { data: 'conv-1', error: null };
         },
     });
@@ -93,7 +93,8 @@ test('createAIAnalysisConversation stores model/reasoning in assistant message',
     });
 
     assert.equal(conversationId, 'conv-1');
-    const rpcCall = capturedRpc as { fn: string; args: Record<string, unknown> } | null;
+    assert.equal(rpcCalls.length, 1);
+    const [rpcCall] = rpcCalls;
     assert.ok(rpcCall);
     assert.equal(rpcCall.fn, 'create_conversation_with_messages');
     assert.equal(rpcCall.args.p_user_id, 'user-1');
@@ -109,21 +110,17 @@ test('createAIAnalysisConversation should use transactional history rpc when his
     const aiAnalysisPath = require.resolve('../lib/ai/ai-analysis');
     const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
     const originalGetServiceClient = apiUtilsModule.getSystemAdminClient;
-    let capturedRpc: { fn: string; args: Record<string, unknown> } | null = null;
+    const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
 
-    (apiUtilsModule as typeof import('../lib/api-utils') & {
-        getSystemAdminClient: typeof import('../lib/api-utils').getSystemAdminClient;
-    }).getSystemAdminClient = (() => ({
+    apiUtilsModule.getSystemAdminClient = () => ({
         rpc: async (fn: string, args: Record<string, unknown>) => {
-            capturedRpc = { fn, args };
+            rpcCalls.push({ fn, args });
             return { data: 'conv-2', error: null };
         },
-    })) as typeof import('../lib/api-utils').getSystemAdminClient;
+    } as unknown as ReturnType<typeof apiUtilsModule.getSystemAdminClient>);
 
     t.after(() => {
-        (apiUtilsModule as typeof import('../lib/api-utils') & {
-            getSystemAdminClient: typeof import('../lib/api-utils').getSystemAdminClient;
-        }).getSystemAdminClient = originalGetServiceClient;
+        apiUtilsModule.getSystemAdminClient = originalGetServiceClient;
         delete require.cache[aiAnalysisPath];
         delete require.cache[apiUtilsPath];
     });
@@ -148,12 +145,15 @@ test('createAIAnalysisConversation should use transactional history rpc when his
     });
 
     assert.equal(conversationId, 'conv-2');
-    assert.equal(capturedRpc?.fn, 'create_analysis_conversation_with_history_as_service');
-    assert.equal(capturedRpc?.args.p_history_type, 'mbti');
-    const rpcMessages = (capturedRpc?.args.p_messages as ChatMessage[]) || [];
+    assert.equal(rpcCalls.length, 1);
+    const [rpcCall] = rpcCalls;
+    assert.ok(rpcCall);
+    assert.equal(rpcCall.fn, 'create_analysis_conversation_with_history_as_service');
+    assert.equal(rpcCall.args.p_history_type, 'mbti');
+    const rpcMessages = (rpcCall.args.p_messages as ChatMessage[]) || [];
     assert.equal(rpcMessages[0]?.content, 'analysis');
     assert.equal(rpcMessages[0]?.model, 'glm-4');
-    assert.equal((capturedRpc?.args.p_history_payload as Record<string, unknown>)?.reading_id, 'reading-1');
+    assert.equal((rpcCall.args.p_history_payload as Record<string, unknown>)?.reading_id, 'reading-1');
 });
 
 test('replaceConversationMessages should return an infra error when rpc is unavailable', async () => {
@@ -229,6 +229,22 @@ test('loadConversationAnalysisSnapshot should throw on non-404 failures', async 
         () => loadConversationAnalysisSnapshot('conv-1'),
         /认证失败/u,
     );
+});
+
+test('analysis snapshot loaders preserve missing data, list errors and cancellation', async (t) => {
+    const { loadConversationAnalysisSnapshot, loadLatestConversationAnalysisSnapshot } = await import('../lib/chat/conversation-analysis');
+    const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(null, { status: 404 }));
+    assert.equal(await loadConversationAnalysisSnapshot('missing'), null);
+
+    fetchMock.mock.mockImplementationOnce(async () => Response.json({ conversations: [] }));
+    const beforeEmptyList = fetchMock.mock.callCount();
+    assert.equal(await loadLatestConversationAnalysisSnapshot({ sourceType: 'tarot' }), null);
+    assert.equal(fetchMock.mock.callCount(), beforeEmptyList + 1, 'an empty list must not load a detail');
+    await assert.rejects(loadLatestConversationAnalysisSnapshot({ sourceType: 'tarot' }), /404/);
+
+    const aborted = new DOMException('Cancelled', 'AbortError');
+    fetchMock.mock.mockImplementationOnce(async () => { throw aborted; });
+    await assert.rejects(loadConversationAnalysisSnapshot('cancelled'), error => error === aborted);
 });
 
 test('loadLatestConversationAnalysisSnapshot should include chartId filter when provided', async (t) => {

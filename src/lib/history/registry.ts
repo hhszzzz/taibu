@@ -36,6 +36,15 @@ export type HistoryRestorePayload = {
   sessionData: Record<string, unknown>;
 };
 
+export type HistoryReplayMode = 'saved-result' | 'input-recompute' | 'stored-fields';
+
+export type HistoryReplayPolicy = {
+  mode: HistoryReplayMode;
+  legacyFallback: 'input-recompute' | 'field-defaults' | 'unavailable';
+};
+
+// This describes history-to-result-page replay, not data providers or AI model sources.
+// Old rows have no inferred engine/version, and metadata never rewrites saved data.
 type HistoryConfig = {
   label: string;
   tableName: string;
@@ -43,11 +52,13 @@ type HistoryConfig = {
   detailPath: string;
   sessionKey: string;
   summarySelect: string;
+  replay: HistoryReplayPolicy;
   useTimestamp?: boolean;
 };
 
 export const HISTORY_CONFIG: Record<HistoryType, HistoryConfig> = {
   tarot: {
+    replay: { mode: 'saved-result', legacyFallback: 'field-defaults' },
     label: '塔罗历史',
     tableName: 'tarot_readings',
     historyPath: '/tarot/history',
@@ -57,6 +68,7 @@ export const HISTORY_CONFIG: Record<HistoryType, HistoryConfig> = {
     useTimestamp: true,
   },
   liuyao: {
+    replay: { mode: 'input-recompute', legacyFallback: 'field-defaults' },
     label: '六爻历史',
     tableName: 'liuyao_divinations',
     historyPath: '/liuyao/history',
@@ -65,6 +77,7 @@ export const HISTORY_CONFIG: Record<HistoryType, HistoryConfig> = {
     summarySelect: 'id, hexagram_code, changed_hexagram_code, changed_lines, question, conversation_id, created_at, conversation:conversations(source_data)',
   },
   mbti: {
+    replay: { mode: 'stored-fields', legacyFallback: 'field-defaults' },
     label: 'MBTI历史',
     tableName: 'mbti_readings',
     historyPath: '/mbti/history',
@@ -73,6 +86,7 @@ export const HISTORY_CONFIG: Record<HistoryType, HistoryConfig> = {
     summarySelect: 'id, mbti_type, scores, percentages, conversation_id, created_at, conversation:conversations(source_data)',
   },
   hepan: {
+    replay: { mode: 'saved-result', legacyFallback: 'input-recompute' },
     label: '合盘历史',
     tableName: 'hepan_charts',
     historyPath: '/hepan/history',
@@ -81,6 +95,7 @@ export const HISTORY_CONFIG: Record<HistoryType, HistoryConfig> = {
     summarySelect: 'id, type, person1_name, person2_name, compatibility_score, conversation_id, created_at, conversation:conversations(source_data)',
   },
   palm: {
+    replay: { mode: 'stored-fields', legacyFallback: 'field-defaults' },
     label: '手相历史',
     tableName: 'palm_readings',
     historyPath: '/palm/history',
@@ -89,6 +104,7 @@ export const HISTORY_CONFIG: Record<HistoryType, HistoryConfig> = {
     summarySelect: 'id, analysis_type, hand_type, conversation_id, created_at, conversation:conversations(source_data)',
   },
   face: {
+    replay: { mode: 'stored-fields', legacyFallback: 'field-defaults' },
     label: '面相历史',
     tableName: 'face_readings',
     historyPath: '/face/history',
@@ -97,6 +113,7 @@ export const HISTORY_CONFIG: Record<HistoryType, HistoryConfig> = {
     summarySelect: 'id, analysis_type, conversation_id, created_at, conversation:conversations(source_data)',
   },
   qimen: {
+    replay: { mode: 'input-recompute', legacyFallback: 'field-defaults' },
     label: '奇门历史',
     tableName: 'qimen_charts',
     historyPath: '/qimen/history',
@@ -105,6 +122,7 @@ export const HISTORY_CONFIG: Record<HistoryType, HistoryConfig> = {
     summarySelect: 'id, dun_type, ju_number, question, conversation_id, created_at, conversation:conversations(source_data)',
   },
   daliuren: {
+    replay: { mode: 'input-recompute', legacyFallback: 'field-defaults' },
     label: '六壬历史',
     tableName: 'daliuren_divinations',
     historyPath: '/daliuren/history',
@@ -114,6 +132,7 @@ export const HISTORY_CONFIG: Record<HistoryType, HistoryConfig> = {
     useTimestamp: true,
   },
   meihua: {
+    replay: { mode: 'saved-result', legacyFallback: 'input-recompute' },
     label: '梅花历史',
     tableName: 'meihua_divinations',
     historyPath: '/meihua/history',
@@ -122,6 +141,7 @@ export const HISTORY_CONFIG: Record<HistoryType, HistoryConfig> = {
     summarySelect: 'id, question, method, cast_datetime, main_hexagram, changed_hexagram, input_data, result_data, conversation_id, created_at, conversation:conversations(source_data)',
   },
   xiaoliuren: {
+    replay: { mode: 'saved-result', legacyFallback: 'unavailable' },
     label: '小六壬历史',
     tableName: 'xiaoliuren_divinations',
     historyPath: '/xiaoliuren/history',
@@ -135,6 +155,26 @@ const HISTORY_TYPE_SET = new Set<string>(HISTORY_TYPES);
 
 export function isHistoryType(value: unknown): value is HistoryType {
   return typeof value === 'string' && HISTORY_TYPE_SET.has(value);
+}
+
+/**
+ * Observe replay without altering its payload or validating legacy rows more strictly.
+ * Qimen/Liuyao reconstruct inputs even when result_data exists. Meihua can fall back
+ * to input_data; Xiaoliuren cannot. Missing results are not assigned a fake version.
+ */
+export function getHistoryReplayMode(
+  type: HistoryType,
+  row: Record<string, unknown>,
+): HistoryReplayMode | 'legacy-input-recompute' | 'unavailable' {
+  if (type === 'hepan' || type === 'meihua' || type === 'xiaoliuren') {
+    if (row.result_data && typeof row.result_data === 'object') return 'saved-result';
+    if (type === 'hepan') return 'legacy-input-recompute';
+    if (type === 'meihua' && row.input_data && typeof row.input_data === 'object') {
+      return 'legacy-input-recompute';
+    }
+    return 'unavailable';
+  }
+  return HISTORY_CONFIG[type].replay.mode;
 }
 
 function getModelNameFromConversation(row: Record<string, unknown>): string | undefined {

@@ -20,16 +20,8 @@ test('bazi case profile GET returns current profile with events for owned chart'
     })) as unknown as typeof apiUtils.requireUserContext;
 
     apiUtils.getSystemAdminClient = (() => ({
-        rpc(fn: string, args: Record<string, unknown>) {
-            assert.equal(fn, 'save_bazi_case_profile_as_service');
-            savedOwnerFeedback = args.p_owner_feedback as Record<string, unknown>;
-            return Promise.resolve({
-                data: {
-                    status: 'ok',
-                    profile_id: 'profile-1',
-                },
-                error: null,
-            });
+        rpc() {
+            throw new Error('bazi case profile GET should not call a write rpc');
         },
         from(table: string) {
             if (table === 'bazi_charts') {
@@ -387,7 +379,7 @@ test('bazi case profile PUT should use the privileged rpc client instead of auth
     const originalRequireUserContext = apiUtils.requireUserContext;
     const originalGetSystemAdminClient = apiUtils.getSystemAdminClient;
 
-    let rpcCall: { fn: string; args: Record<string, unknown> } | null = null;
+    const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
     const authDb = {
         from(table: string) {
             if (table === 'bazi_charts') {
@@ -489,7 +481,7 @@ test('bazi case profile PUT should use the privileged rpc client instead of auth
 
     apiUtils.getSystemAdminClient = (() => ({
         rpc(fn: string, args: Record<string, unknown>) {
-            rpcCall = { fn, args };
+            rpcCalls.push({ fn, args });
             return Promise.resolve({
                 data: {
                     status: 'ok',
@@ -538,8 +530,11 @@ test('bazi case profile PUT should use the privileged rpc client instead of auth
     const payload = await response.json();
 
     assert.equal(response.status, 200);
-    assert.equal(rpcCall?.fn, 'save_bazi_case_profile_as_service');
-    assert.equal(rpcCall?.args.p_user_id, 'user-1');
-    assert.equal(rpcCall?.args.p_chart_id, '11111111-1111-1111-1111-111111111111');
+    assert.equal(rpcCalls.length, 1);
+    const [rpcCall] = rpcCalls;
+    assert.ok(rpcCall);
+    assert.equal(rpcCall.fn, 'save_bazi_case_profile_as_service');
+    assert.equal(rpcCall.args.p_user_id, 'user-1');
+    assert.equal(rpcCall.args.p_chart_id, '11111111-1111-1111-1111-111111111111');
     assert.equal(payload.profile.id, 'profile-1');
 });

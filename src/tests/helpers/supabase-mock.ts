@@ -5,6 +5,35 @@
  * Supports chainable from().select().eq().single() patterns.
  */
 
+import type { AuthContextResult } from '../../lib/api-utils';
+
+type MockAuthenticatedContext = AuthContextResult & {
+    user: NonNullable<AuthContextResult['user']>;
+};
+
+export function createMockAuthContext(client?: Record<string, unknown>, userId?: string): MockAuthenticatedContext;
+export function createMockAuthContext(client: Record<string, unknown>, userId: null): AuthContextResult & { user: null };
+export function createMockAuthContext(
+    client: Record<string, unknown> = {},
+    userId: string | null = 'user-1',
+): AuthContextResult {
+    // Route doubles implement only the SDK methods exercised by each test.
+    const db = client as unknown as AuthContextResult['db'];
+    return {
+        db,
+        supabase: db,
+        accessToken: userId === null ? null : 'test-token',
+        authError: null,
+        user: userId === null ? null : {
+            id: userId,
+            aud: 'authenticated',
+            app_metadata: {},
+            user_metadata: {},
+            created_at: '2026-01-01T00:00:00.000Z',
+        },
+    };
+}
+
 type TableConfig = {
     data?: unknown;
     error?: unknown;

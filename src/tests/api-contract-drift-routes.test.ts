@@ -9,7 +9,7 @@ test('records PUT validates and persists related chart fields', async (t) => {
     const apiUtilsModule = require('../lib/api-utils') as any;
     const routePath = require.resolve('../app/api/records/[id]/route');
     const originalRequireUserContext = apiUtilsModule.requireUserContext;
-    let updatePayload: Record<string, unknown> | null = null;
+    const updatePayloads: Record<string, unknown>[] = [];
 
     apiUtilsModule.requireUserContext = async () => ({
         user: { id: 'user-1' },
@@ -38,7 +38,7 @@ test('records PUT validates and persists related chart fields', async (t) => {
                         };
                     },
                     update(payload: Record<string, unknown>) {
-                        updatePayload = payload;
+                        updatePayloads.push(payload);
                         return {
                             eq() {
                                 return {
@@ -81,8 +81,11 @@ test('records PUT validates and persists related chart fields', async (t) => {
     const payload = await response.json();
 
     assert.equal(response.status, 200);
-    assert.equal(updatePayload?.related_chart_type, 'bazi');
-    assert.equal(updatePayload?.related_chart_id, '11111111-1111-1111-1111-111111111111');
+    assert.equal(updatePayloads.length, 1);
+    const [updatePayload] = updatePayloads;
+    assert.ok(updatePayload);
+    assert.equal(updatePayload.related_chart_type, 'bazi');
+    assert.equal(updatePayload.related_chart_id, '11111111-1111-1111-1111-111111111111');
     assert.equal(payload.related_chart_type, 'bazi');
 });
 

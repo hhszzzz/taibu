@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdir, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const TMP_DIR = path.join(REPO_ROOT, '.tmp-publish', 'npmjs');
 const DEPENDENCY_FIELDS = [
   'dependencies',
   'devDependencies',
@@ -57,17 +57,17 @@ function assertNoWorkspaceProtocols(manifest) {
   }
 }
 
-test('npm package tarballs should rewrite workspace dependencies before publish', async () => {
-  await rm(TMP_DIR, { recursive: true, force: true });
-  await mkdir(TMP_DIR, { recursive: true });
+test('npm package tarballs should rewrite workspace dependencies before publish', async (t) => {
+  const tmpDir = await mkdtemp(path.join(tmpdir(), 'taibu-npm-artifacts-'));
+  t.after(() => rm(tmpDir, { recursive: true, force: true }));
 
   const coreSourceManifest = await readJsonFile(path.join(REPO_ROOT, 'packages/core/package.json'));
   const mcpSourceManifest = await readJsonFile(path.join(REPO_ROOT, 'packages/mcp/package.json'));
   const serverSourceManifest = await readJsonFile(path.join(REPO_ROOT, 'packages/mcp-server/package.json'));
 
-  const coreTarball = path.join(TMP_DIR, `taibu-core-${coreSourceManifest.version}.tgz`);
-  const mcpTarball = path.join(TMP_DIR, `taibu-mcp-${mcpSourceManifest.version}.tgz`);
-  const serverTarball = path.join(TMP_DIR, `taibu-mcp-server-${serverSourceManifest.version}.tgz`);
+  const coreTarball = path.join(tmpDir, `taibu-core-${coreSourceManifest.version}.tgz`);
+  const mcpTarball = path.join(tmpDir, `taibu-mcp-${mcpSourceManifest.version}.tgz`);
+  const serverTarball = path.join(tmpDir, `taibu-mcp-server-${serverSourceManifest.version}.tgz`);
 
   packWorkspacePackage('taibu-core', coreTarball);
   packWorkspacePackage('taibu-mcp', mcpTarball);
@@ -80,6 +80,16 @@ test('npm package tarballs should rewrite workspace dependencies before publish'
   assert.equal(corePackedManifest.version, coreSourceManifest.version);
   assert.equal(mcpPackedManifest.version, mcpSourceManifest.version);
   assert.equal(serverPackedManifest.version, serverSourceManifest.version);
+
+  for (const [directory, source, packed, tarball] of [
+    ['core', coreSourceManifest, corePackedManifest, coreTarball],
+    ['mcp', mcpSourceManifest, mcpPackedManifest, mcpTarball],
+    ['mcp-server', serverSourceManifest, serverPackedManifest, serverTarball],
+  ]) {
+    assert.equal(packed.license, source.license, `${source.name} must preserve its declared license`);
+    const packedLicense = execFileSync('tar', ['-xOf', tarball, 'package/LICENSE'], { encoding: 'utf8' });
+    assert.equal(packedLicense, await readFile(path.join(REPO_ROOT, 'packages', directory, 'LICENSE'), 'utf8'));
+  }
 
   assertNoWorkspaceProtocols(corePackedManifest);
   assertNoWorkspaceProtocols(mcpPackedManifest);

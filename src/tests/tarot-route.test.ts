@@ -1,67 +1,34 @@
-import { test } from 'node:test';
+import { beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
-import { captureConsoleErrors, ensureRouteTestEnv, mockAIFeatureState } from './helpers/route-mock';
+import { captureConsoleErrors, ensureRouteTestEnv, mockAIFeatureState, mockAIRateLimit, mockRouteUserContext, blockRouteNetwork } from './helpers/route-mock';
 import { createMockUIMessageResult } from './helpers/ui-message-result';
+import { createMockAuthContext } from './helpers/supabase-mock';
+import type { CreateAIAnalysisParams } from '../lib/ai/ai-analysis';
 
 ensureRouteTestEnv();
 
-function createTarotAuthContext(
-    client: Record<string, unknown> = {},
-    userId: string | null = 'user-1',
-) {
-    return {
-        user: userId ? { id: userId } : null,
-        db: client,
-        supabase: client,
-        accessToken: userId ? 'test-token' : null,
-        authError: null,
-    };
-}
+// The CommonJS test loader keeps imported function lookups live; no cache eviction is needed.
+beforeEach((t) => {
+    assert.ok('mock' in t);
+    blockRouteNetwork(t);
+});
 
-function mockTarotUserContext(
-    t: import('node:test').TestContext,
-    client: Record<string, unknown> = {},
-    userId = 'user-1',
-) {
-    const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
-    const routePath = require.resolve('../app/api/tarot/route');
-    const pipelinePath = require.resolve('../lib/api/divination-pipeline');
-    const originalRequireUserContext = apiUtilsModule.requireUserContext;
-
-    apiUtilsModule.requireUserContext = async () =>
-        createTarotAuthContext(client, userId) as Awaited<ReturnType<typeof import('../lib/api-utils').requireUserContext>>;
-
-    delete require.cache[routePath];
-    delete require.cache[pipelinePath];
-
-    t.after(() => {
-        apiUtilsModule.requireUserContext = originalRequireUserContext;
-        delete require.cache[routePath];
-        delete require.cache[pipelinePath];
-    });
-}
+const credits = require('../lib/user/credits') as typeof import('../lib/user/credits');
+const aiAccessModule = require('../lib/ai/ai-access') as typeof import('../lib/ai/ai-access');
+const aiModule = require('../lib/ai/ai') as typeof import('../lib/ai/ai');
+const aiAnalysisModule = require('../lib/ai/ai-analysis') as typeof import('../lib/ai/ai-analysis');
+const chartPromptDetailModule = require('../lib/ai/chart-prompt-detail') as typeof import('../lib/ai/chart-prompt-detail');
+const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
 
 test('tarot route uses schema column names when inserting history', async (t) => {
-  mockAIFeatureState(t);
-    const credits = require('../lib/user/credits') as any;
-    const aiAccessModule = require('../lib/ai/ai-access') as any;
-    const aiModule = require('../lib/ai/ai') as any;
-    const aiAnalysisModule = require('../lib/ai/ai-analysis') as any;
-    const chartPromptDetailModule = require('../lib/ai/chart-prompt-detail') as any;
+    mockAIFeatureState(t);
+    mockAIRateLimit(t);
     const consoleCapture = captureConsoleErrors();
 
-    const originalGetUserAuthInfo = credits.getUserAuthInfo;
-    const originalAttemptCreditUse = credits.attemptCreditUse;
-    const originalResolveModelAccessAsync = aiAccessModule.resolveModelAccessAsync;
-    const originalCallAIWithReasoning = aiModule.callAIWithReasoning;
-    const originalCreateConversation = aiAnalysisModule.createAIAnalysisConversation;
-    const originalLoadResolvedChartPromptDetailLevel = chartPromptDetailModule.loadResolvedChartPromptDetailLevel;
-    const originalFetch = global.fetch;
+    const createCalls: CreateAIAnalysisParams[] = [];
 
-    let createArgs: Record<string, unknown> | null = null;
-
-    mockTarotUserContext(t, {
+    mockRouteUserContext(t, {
         from() {
             throw new Error('tarot interpret test should not query tables directly');
         },
@@ -69,36 +36,20 @@ test('tarot route uses schema column names when inserting history', async (t) =>
             throw new Error('tarot interpret test should not call rpc directly');
         },
     });
-    credits.getUserAuthInfo = async () => ({ credits: 10, effectiveMembership: 'free', hasCredits: true });
-    credits.attemptCreditUse = async () => ({ ok: true, remaining: 9 });
-    aiAccessModule.resolveModelAccessAsync = async () => ({
-        modelId: 'test-model',
-        modelConfig: { id: 'test-model' },
-        reasoningEnabled: false,
-    });
-    aiModule.callAIWithReasoning = async () => ({
+    t.mock.method(credits, 'getUserAuthInfo', async () => ({ credits: 10, effectiveMembership: 'free', hasCredits: true }));
+    t.mock.method(credits, 'attemptCreditUse', async () => ({ ok: true, remaining: 9 }));
+    t.mock.method(aiAccessModule, 'resolveModelAccessAsync', async () => ({ modelId: 'test-model', reasoningEnabled: false }));
+    t.mock.method(aiModule, 'callAIWithReasoning', async () => ({
         content: 'analysis',
         reasoning: null,
-    });
-    aiAnalysisModule.createAIAnalysisConversation = async (params: Record<string, unknown>) => {
-        createArgs = params;
+    }));
+    t.mock.method(aiAnalysisModule, 'createAIAnalysisConversation', async (params: CreateAIAnalysisParams) => {
+        createCalls.push(params);
         return 'conv-1';
-    };
-    chartPromptDetailModule.loadResolvedChartPromptDetailLevel = async () => 'default';
-    global.fetch = async () => Response.json({
-        choices: [{ index: 0, message: { content: 'analysis' } }],
     });
+    t.mock.method(chartPromptDetailModule, 'loadResolvedChartPromptDetailLevel', async () => 'default');
 
-    t.after(() => {
-        consoleCapture.restore();
-        credits.getUserAuthInfo = originalGetUserAuthInfo;
-        credits.attemptCreditUse = originalAttemptCreditUse;
-        aiAccessModule.resolveModelAccessAsync = originalResolveModelAccessAsync;
-        aiModule.callAIWithReasoning = originalCallAIWithReasoning;
-        aiAnalysisModule.createAIAnalysisConversation = originalCreateConversation;
-        chartPromptDetailModule.loadResolvedChartPromptDetailLevel = originalLoadResolvedChartPromptDetailLevel;
-        global.fetch = originalFetch;
-    });
+    t.after(() => consoleCapture.restore());
 
     const { POST } = await import('../app/api/tarot/route');
 
@@ -135,32 +86,23 @@ test('tarot route uses schema column names when inserting history', async (t) =>
     assert.equal(hasMembershipWarning, false);
     assert.equal(response.status, 200);
     assert.equal(data.success, true);
+    const createArgs = createCalls.at(-1);
     assert.ok(createArgs);
-    assert.equal((createArgs as Record<string, unknown>).sourceType, 'tarot');
-    assert.equal((createArgs as Record<string, unknown>).historyBinding?.type, 'tarot');
-    assert.equal((createArgs as Record<string, unknown>).historyBinding?.payload?.spread_id, 'single');
-    assert.equal('interpretation' in (((createArgs as Record<string, unknown>).historyBinding?.payload as Record<string, unknown>) || {}), false);
-    assert.equal('spread_type' in (((createArgs as Record<string, unknown>).historyBinding?.payload as Record<string, unknown>) || {}), false);
-    assert.equal('ai_interpretation' in (((createArgs as Record<string, unknown>).historyBinding?.payload as Record<string, unknown>) || {}), false);
+    assert.equal(createArgs.sourceType, 'tarot');
+    assert.equal(createArgs.historyBinding?.type, 'tarot');
+    assert.equal(createArgs.historyBinding?.payload.spread_id, 'single');
+    assert.equal('interpretation' in (createArgs.historyBinding?.payload ?? {}), false);
+    assert.equal('spread_type' in (createArgs.historyBinding?.payload ?? {}), false);
+    assert.equal('ai_interpretation' in (createArgs.historyBinding?.payload ?? {}), false);
 });
 
 test('tarot route persists analysis after streaming completes', async (t) => {
-  mockAIFeatureState(t);
-    const credits = require('../lib/user/credits') as any;
-    const aiAccessModule = require('../lib/ai/ai-access') as any;
-    const aiModule = require('../lib/ai/ai') as any;
-    const aiAnalysisModule = require('../lib/ai/ai-analysis') as any;
-    const chartPromptDetailModule = require('../lib/ai/chart-prompt-detail') as any;
-    const originalGetUserAuthInfo = credits.getUserAuthInfo;
-    const originalAttemptCreditUse = credits.attemptCreditUse;
-    const originalResolveModelAccessAsync = aiAccessModule.resolveModelAccessAsync;
-    const originalCallAIUIMessageResult = aiModule.callAIUIMessageResult;
-    const originalCreateConversation = aiAnalysisModule.createAIAnalysisConversation;
-    const originalLoadResolvedChartPromptDetailLevel = chartPromptDetailModule.loadResolvedChartPromptDetailLevel;
+    mockAIFeatureState(t);
+    mockAIRateLimit(t);
 
-    let createArgs: Record<string, unknown> | null = null;
+    const createCalls: CreateAIAnalysisParams[] = [];
 
-    mockTarotUserContext(t, {
+    mockRouteUserContext(t, {
         from() {
             throw new Error('tarot stream test should not query tables directly');
         },
@@ -168,36 +110,15 @@ test('tarot route persists analysis after streaming completes', async (t) => {
             throw new Error('tarot stream test should not call rpc directly');
         },
     });
-    credits.getUserAuthInfo = async () => ({ credits: 10, effectiveMembership: 'pro', hasCredits: true });
-    credits.attemptCreditUse = async () => ({ ok: true, remaining: 9 });
-    aiAccessModule.resolveModelAccessAsync = async () => ({
-        modelId: 'test-model',
-        modelConfig: {
-            id: 'test-model',
-            modelKey: 'test-model',
-            vendor: 'test',
-            usageType: 'chat',
-            supportsReasoning: true,
-            supportsVision: false,
-            requiredTier: 'free',
-        },
-        reasoningEnabled: false,
-    });
-    aiModule.callAIUIMessageResult = async () => createMockUIMessageResult();
-    aiAnalysisModule.createAIAnalysisConversation = async (params: Record<string, unknown>) => {
-        createArgs = params;
+    t.mock.method(credits, 'getUserAuthInfo', async () => ({ credits: 10, effectiveMembership: 'pro', hasCredits: true }));
+    t.mock.method(credits, 'attemptCreditUse', async () => ({ ok: true, remaining: 9 }));
+    t.mock.method(aiAccessModule, 'resolveModelAccessAsync', async () => ({ modelId: 'test-model', reasoningEnabled: false }));
+    t.mock.method(aiModule, 'callAIUIMessageResult', async () => createMockUIMessageResult());
+    t.mock.method(aiAnalysisModule, 'createAIAnalysisConversation', async (params: CreateAIAnalysisParams) => {
+        createCalls.push(params);
         return 'conv-1';
-    };
-    chartPromptDetailModule.loadResolvedChartPromptDetailLevel = async () => 'default';
-
-    t.after(() => {
-        credits.getUserAuthInfo = originalGetUserAuthInfo;
-        credits.attemptCreditUse = originalAttemptCreditUse;
-        aiAccessModule.resolveModelAccessAsync = originalResolveModelAccessAsync;
-        aiModule.callAIUIMessageResult = originalCallAIUIMessageResult;
-        aiAnalysisModule.createAIAnalysisConversation = originalCreateConversation;
-        chartPromptDetailModule.loadResolvedChartPromptDetailLevel = originalLoadResolvedChartPromptDetailLevel;
     });
+    t.mock.method(chartPromptDetailModule, 'loadResolvedChartPromptDetailLevel', async () => 'default');
 
     const { POST } = await import('../app/api/tarot/route');
 
@@ -230,28 +151,19 @@ test('tarot route persists analysis after streaming completes', async (t) => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     assert.equal(response.headers.get('x-vercel-ai-ui-message-stream'), 'v1');
+    const createArgs = createCalls.at(-1);
     assert.ok(createArgs);
-    assert.equal((createArgs as Record<string, unknown>).sourceType, 'tarot');
-    assert.equal((createArgs as Record<string, unknown>).historyBinding?.type, 'tarot');
-    assert.equal((createArgs as Record<string, unknown>).historyBinding?.payload?.reading_id, 'reading-1');
+    assert.equal(createArgs.sourceType, 'tarot');
+    assert.equal(createArgs.historyBinding?.type, 'tarot');
+    assert.equal(createArgs.historyBinding?.payload.reading_id, 'reading-1');
 });
 
 test('tarot route surfaces SSE error when stream persistence fails after content generation', async (t) => {
-  mockAIFeatureState(t);
-    const credits = require('../lib/user/credits') as any;
-    const aiAccessModule = require('../lib/ai/ai-access') as any;
-    const aiModule = require('../lib/ai/ai') as any;
-    const aiAnalysisModule = require('../lib/ai/ai-analysis') as any;
-    const chartPromptDetailModule = require('../lib/ai/chart-prompt-detail') as any;
-    const originalGetUserAuthInfo = credits.getUserAuthInfo;
-    const originalAttemptCreditUse = credits.attemptCreditUse;
-    const originalResolveModelAccessAsync = aiAccessModule.resolveModelAccessAsync;
-    const originalCallAIUIMessageResult = aiModule.callAIUIMessageResult;
-    const originalCreateConversation = aiAnalysisModule.createAIAnalysisConversation;
-    const originalLoadResolvedChartPromptDetailLevel = chartPromptDetailModule.loadResolvedChartPromptDetailLevel;
-    const originalConsoleError = console.error;
+    mockAIFeatureState(t);
+    mockAIRateLimit(t);
+    const refundCalls: Array<Parameters<typeof import('../lib/user/credits').addCredits>> = [];
 
-    mockTarotUserContext(t, {
+    mockRouteUserContext(t, {
         from() {
             throw new Error('tarot stream test should not query tables directly');
         },
@@ -259,37 +171,19 @@ test('tarot route surfaces SSE error when stream persistence fails after content
             throw new Error('tarot stream test should not call rpc directly');
         },
     });
-    credits.getUserAuthInfo = async () => ({ credits: 10, effectiveMembership: 'pro', hasCredits: true });
-    credits.attemptCreditUse = async () => ({ ok: true, remaining: 9 });
-    aiAccessModule.resolveModelAccessAsync = async () => ({
-        modelId: 'test-model',
-        modelConfig: {
-            id: 'test-model',
-            modelKey: 'test-model',
-            vendor: 'test',
-            usageType: 'chat',
-            supportsReasoning: true,
-            supportsVision: false,
-            requiredTier: 'free',
-        },
-        reasoningEnabled: false,
-    });
-    aiModule.callAIUIMessageResult = async () => createMockUIMessageResult();
-    aiAnalysisModule.createAIAnalysisConversation = async () => {
+    t.mock.method(credits, 'getUserAuthInfo', async () => ({ credits: 10, effectiveMembership: 'pro', hasCredits: true }));
+    t.mock.method(credits, 'attemptCreditUse', async () => ({ ok: true, remaining: 9 }));
+    t.mock.method(aiAccessModule, 'resolveModelAccessAsync', async () => ({ modelId: 'test-model', reasoningEnabled: false }));
+    t.mock.method(aiModule, 'callAIUIMessageResult', async () => createMockUIMessageResult());
+    t.mock.method(aiAnalysisModule, 'createAIAnalysisConversation', async () => {
         throw new Error('persist failed');
-    };
-    chartPromptDetailModule.loadResolvedChartPromptDetailLevel = async () => 'default';
-    console.error = () => {};
-
-    t.after(() => {
-        credits.getUserAuthInfo = originalGetUserAuthInfo;
-        credits.attemptCreditUse = originalAttemptCreditUse;
-        aiAccessModule.resolveModelAccessAsync = originalResolveModelAccessAsync;
-        aiModule.callAIUIMessageResult = originalCallAIUIMessageResult;
-        aiAnalysisModule.createAIAnalysisConversation = originalCreateConversation;
-        chartPromptDetailModule.loadResolvedChartPromptDetailLevel = originalLoadResolvedChartPromptDetailLevel;
-        console.error = originalConsoleError;
     });
+    t.mock.method(chartPromptDetailModule, 'loadResolvedChartPromptDetailLevel', async () => 'default');
+    t.mock.method(credits, 'addCredits', async (...args: Parameters<typeof import('../lib/user/credits').addCredits>) => {
+        refundCalls.push(args);
+        return 10;
+    });
+    t.mock.method(console, 'error', () => {});
 
     const { POST } = await import('../app/api/tarot/route');
     const request = new NextRequest('http://localhost/api/tarot', {
@@ -323,6 +217,7 @@ test('tarot route surfaces SSE error when stream persistence fails after content
     assert.equal(response.headers.get('x-vercel-ai-ui-message-stream'), 'v1');
     assert.match(body, /"type":"text-delta","id":"text-1","delta":"analysis"/u);
     assert.match(body, /"type":"error","errorText":"保存结果失败，请稍后重试"/u);
+    assert.deepEqual(refundCalls, [['user-1', 1]]);
 });
 
 test('tarot route returns 400 for invalid timezone on GET daily requests', async () => {
@@ -338,19 +233,14 @@ test('tarot route returns 400 for invalid timezone on GET daily requests', async
 });
 
 test('tarot route returns numerology on draw-only and persists birth metadata on save', async (t) => {
-    const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
-    const routePath = require.resolve('../app/api/tarot/route');
-    const pipelinePath = require.resolve('../lib/api/divination-pipeline');
-    const originalGetAuthContext = apiUtilsModule.getAuthContext;
-    const originalRequireUserContext = apiUtilsModule.requireUserContext;
 
-    let inserted: Record<string, unknown> | null = null;
+    const insertCalls: Record<string, unknown>[] = [];
     const saveClient = {
         from(table: string) {
             assert.equal(table, 'tarot_readings');
             return {
                 insert(payload: Record<string, unknown>) {
-                    inserted = payload;
+                    insertCalls.push(payload);
                     return {
                         select() {
                             return {
@@ -366,21 +256,11 @@ test('tarot route returns numerology on draw-only and persists birth metadata on
         },
     };
 
-    apiUtilsModule.getAuthContext = async () =>
-        createTarotAuthContext({}, null) as Awaited<ReturnType<typeof import('../lib/api-utils').getAuthContext>>;
+    t.mock.method(apiUtilsModule, 'getAuthContext', async () =>
+        createMockAuthContext({}, null));
 
-    apiUtilsModule.requireUserContext = async () =>
-        createTarotAuthContext(saveClient, 'user-1') as Awaited<ReturnType<typeof import('../lib/api-utils').requireUserContext>>;
-
-    delete require.cache[routePath];
-    delete require.cache[pipelinePath];
-
-    t.after(() => {
-        apiUtilsModule.getAuthContext = originalGetAuthContext;
-        apiUtilsModule.requireUserContext = originalRequireUserContext;
-        delete require.cache[routePath];
-        delete require.cache[pipelinePath];
-    });
+    t.mock.method(apiUtilsModule, 'requireUserContext', async () =>
+        createMockAuthContext(saveClient, 'user-1'));
 
     const { POST } = await import('../app/api/tarot/route');
 
@@ -421,18 +301,15 @@ test('tarot route returns numerology on draw-only and persists birth metadata on
 
     assert.equal(saveResponse.status, 200);
     assert.equal(savePayload.success, true);
+    const inserted = insertCalls.at(-1);
     assert.ok(inserted);
-    assert.deepEqual((inserted as Record<string, unknown>).metadata, {
+    assert.deepEqual(inserted.metadata, {
         birthDate: '1990-01-01',
         numerology: drawOnlyPayload.data?.numerology,
     });
 });
 
 test('tarot save should fail fast when metadata column is missing', async (t) => {
-    const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
-    const routePath = require.resolve('../app/api/tarot/route');
-    const pipelinePath = require.resolve('../lib/api/divination-pipeline');
-    const originalRequireUserContext = apiUtilsModule.requireUserContext;
 
     const inserted: Record<string, unknown>[] = [];
     let insertAttempts = 0;
@@ -463,17 +340,8 @@ test('tarot save should fail fast when metadata column is missing', async (t) =>
         },
     };
 
-    apiUtilsModule.requireUserContext = async () =>
-        createTarotAuthContext(saveClient, 'user-1') as Awaited<ReturnType<typeof import('../lib/api-utils').requireUserContext>>;
-
-    delete require.cache[routePath];
-    delete require.cache[pipelinePath];
-
-    t.after(() => {
-        apiUtilsModule.requireUserContext = originalRequireUserContext;
-        delete require.cache[routePath];
-        delete require.cache[pipelinePath];
-    });
+    t.mock.method(apiUtilsModule, 'requireUserContext', async () =>
+        createMockAuthContext(saveClient, 'user-1'));
 
     const { POST } = await import('../app/api/tarot/route');
 
@@ -512,17 +380,14 @@ test('tarot save should fail fast when metadata column is missing', async (t) =>
 });
 
 test('tarot spread persists reading for cookie-authenticated users without bearer header', async (t) => {
-    const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
-    const routePath = require.resolve('../app/api/tarot/route');
-    const originalGetAuthContext = apiUtilsModule.getAuthContext;
 
-    let inserted: Record<string, unknown> | null = null;
+    const insertCalls: Record<string, unknown>[] = [];
     const persistClient = {
         from(table: string) {
             assert.equal(table, 'tarot_readings');
             return {
                 insert(payload: Record<string, unknown>) {
-                    inserted = payload;
+                    insertCalls.push(payload);
                     return {
                         select() {
                             return {
@@ -538,15 +403,8 @@ test('tarot spread persists reading for cookie-authenticated users without beare
         },
     };
 
-    apiUtilsModule.getAuthContext = async () =>
-        createTarotAuthContext(persistClient, 'user-cookie') as Awaited<ReturnType<typeof import('../lib/api-utils').getAuthContext>>;
-
-    delete require.cache[routePath];
-
-    t.after(() => {
-        apiUtilsModule.getAuthContext = originalGetAuthContext;
-        delete require.cache[routePath];
-    });
+    t.mock.method(apiUtilsModule, 'getAuthContext', async () =>
+        createMockAuthContext(persistClient, 'user-cookie'));
 
     const { POST } = await import('../app/api/tarot/route');
     const response = await POST(new NextRequest('http://localhost/api/tarot', {
@@ -565,5 +423,93 @@ test('tarot spread persists reading for cookie-authenticated users without beare
     assert.equal(response.status, 200);
     assert.equal(payload.success, true);
     assert.equal(payload.data?.readingId, 'reading-cookie');
-    assert.equal((inserted as Record<string, unknown>)?.user_id, 'user-cookie');
+    const inserted = insertCalls.at(-1);
+    assert.ok(inserted);
+    assert.equal(inserted.user_id, 'user-cookie');
+});
+
+test('tarot pilot draws, saves and prepares BYOK before independently authenticated atomic persistence', async (t) => {
+    mockAIFeatureState(t);
+    mockAIRateLimit(t);
+    const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
+    const ai = require('../lib/ai/ai') as typeof import('../lib/ai/ai');
+    const analysis = require('../lib/ai/ai-analysis') as typeof import('../lib/ai/ai-analysis');
+    const chartDetail = require('../lib/ai/chart-prompt-detail') as typeof import('../lib/ai/chart-prompt-detail');
+    const writes: CreateAIAnalysisParams[] = [];
+    let contextLoads = 0;
+    let authCalls = 0;
+    const saveClient = {
+        from(table: string) {
+            assert.equal(table, 'tarot_readings');
+            return { insert: (payload: Record<string, unknown>) => {
+                assert.equal(payload.user_id, 'user-1');
+                return { select: () => ({ single: async () => ({ data: { id: 'reading-pilot' }, error: null }) }) };
+            } };
+        },
+    };
+    mockRouteUserContext(t, saveClient);
+    const authenticate = apiUtils.requireUserContext;
+    t.mock.method(apiUtils, 'requireUserContext', async (...args: Parameters<typeof authenticate>) => {
+        authCalls += 1;
+        return authenticate(...args);
+    });
+    t.mock.method(apiUtils, 'getAuthContext', async () => createMockAuthContext({}, null));
+    const account = t.mock.method(credits, 'getUserAuthInfo', async () => ({
+        credits: 0, effectiveMembership: 'free', hasCredits: false,
+    }));
+    t.mock.method(require('../lib/ai/ai-access'), 'resolveModelAccessAsync', async () => { assert.fail('BYOK must not require a platform model'); });
+    t.mock.method(credits, 'attemptCreditUse', async () => { assert.fail('BYOK must not charge'); });
+    t.mock.method(ai, 'callAIWithReasoning', async () => { assert.fail('BYOK inference belongs to browser'); });
+    t.mock.method(ai, 'callAIUIMessageResult', async () => { assert.fail('BYOK inference belongs to browser'); });
+    t.mock.method(chartDetail, 'loadResolvedChartPromptDetailLevel', async (userId: string) => {
+        assert.equal(userId, 'user-1');
+        contextLoads += 1;
+        return 'default';
+    });
+    t.mock.method(analysis, 'createAIAnalysisConversation', async (params: CreateAIAnalysisParams) => {
+        writes.push(params);
+        return 'conversation-pilot';
+    });
+    const { POST } = await import('../app/api/tarot/route');
+    const post = (body: Record<string, unknown>) => POST(new NextRequest('http://localhost/api/tarot', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    }));
+    const draw = await post({ action: 'draw-only', spreadId: 'single', seed: 'pilot' });
+    const drawn = await draw.json() as { data: { cards: unknown[]; seed: string } };
+    assert.equal(draw.status, 200);
+    assert.equal(drawn.data.cards.length, 1);
+    const input = { spreadId: 'single', cards: drawn.data.cards, seed: drawn.data.seed, question: '今天如何' };
+    const saved = await post({ ...input, action: 'save' });
+    assert.equal(saved.status, 200);
+    assert.equal((await saved.json()).data.readingId, 'reading-pilot');
+    const prepare = await post({ ...input, readingId: 'reading-pilot', action: 'interpret_prepare' });
+    const prepared = await prepare.json();
+    assert.equal(prepare.status, 200);
+    assert.equal(typeof prepared.data.systemPrompt, 'string');
+    assert.equal(typeof prepared.data.userPrompt, 'string');
+    assert.equal(writes.length, 0);
+    const persist = await post({
+        ...input, readingId: 'reading-pilot', action: 'interpret_persist',
+        content: 'browser analysis', reasoningText: 'browser reasoning', customModelId: ' custom-model ',
+    });
+    assert.equal(persist.status, 200);
+    assert.deepEqual(await persist.json(), { success: true, data: { conversationId: 'conversation-pilot' } });
+    assert.equal(authCalls, 3, 'save, prepare and persist must each authenticate');
+    assert.equal(account.mock.callCount(), 1, 'only BYOK prepare validates account membership');
+    assert.equal(contextLoads, 2, 'persist must reload server context independently');
+    assert.equal(writes.length, 1);
+    assert.equal(writes[0].userId, 'user-1');
+    assert.equal(writes[0].sourceType, 'tarot');
+    assert.equal(writes[0].aiResponse, 'browser analysis');
+    assert.equal(writes[0].sourceData.model_id, 'custom:custom-model');
+    assert.equal(writes[0].sourceData.custom_provider, true);
+    assert.equal(writes[0].sourceData.reasoning_text, 'browser reasoning');
+    assert.equal(writes[0].historyBinding?.type, 'tarot');
+    assert.equal(writes[0].historyBinding?.payload.reading_id, 'reading-pilot');
+
+    t.mock.method(apiUtils, 'requireUserContext', async () => ({ error: { message: '请先登录', status: 401 } }));
+    const denied = await post({ ...input, action: 'interpret_persist', content: 'untrusted' });
+    assert.equal(denied.status, 401);
+    assert.equal(contextLoads, 2);
+    assert.equal(writes.length, 1, 'a prior prepare never authorizes a later persist request');
 });

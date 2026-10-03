@@ -154,6 +154,23 @@ pnpm dev
 
 ---
 
+## 开发文档
+
+- [架构与迁移边界](docs/manual/Architecture.md)：模块职责、AI 生命周期与计费、数据回放、兼容例外及回滚条件。
+- [Core 公开 API](packages/core/README.md) · [MCP 使用手册](docs/manual/MCP-Server-Manual.md)
+- [重构与测试验收记录](docs/manual/Refactor-Acceptance.md)
+
+```bash
+pnpm test -- src/tests/chat-route.test.ts # 按文件运行，自动构建所需包
+pnpm test                                # 默认单元、路由、协议与守卫
+pnpm exec playwright install --only-shell chromium # 首次配置浏览器
+pnpm verify                              # 一次包构建，完整验收（需本地 Docker）
+```
+
+`pnpm test:db`、`pnpm test:auth`、`pnpm test:browser` 可独立运行。`test:auth` 使用独立临时 Auth/PostgREST/PostgreSQL 栈，不读取生产配置或现有数据。无法下载 Chromium 且本机已有 Chrome 时，显式使用 `pnpm verify -- --chrome`；不跳过浏览器断言。CI 默认使用固定 Chromium，并强制执行 SQL、真实 Auth/REST 与浏览器层。
+
+---
+
 ## 贡献
 
 欢迎提交 Issue 和 Pull Request！

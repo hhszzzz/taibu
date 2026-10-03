@@ -464,7 +464,7 @@ test('knowledge-base archive DELETE should unarchive through transactional rpc',
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
   const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
 
-  let rpcCall: { fn: string; args: Record<string, unknown> } | null = null;
+  const capture: { rpcCall: { fn: string; args: Record<string, unknown> } | null } = { rpcCall: null };
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
@@ -473,7 +473,7 @@ test('knowledge-base archive DELETE should unarchive through transactional rpc',
   });
   apiUtilsModule.getSystemAdminClient = () => ({
     rpc: (fn: string, args: Record<string, unknown>) => {
-      rpcCall = { fn, args };
+      capture.rpcCall = { fn, args };
       return Promise.resolve({ data: true, error: null });
     },
     from: (table: string) => {
@@ -506,8 +506,8 @@ test('knowledge-base archive DELETE should unarchive through transactional rpc',
   const payload = await response.json();
 
   assert.equal(response.status, 200);
-  assert.equal(rpcCall?.fn, 'kb_unarchive_source_as_service');
-  assert.deepEqual(rpcCall?.args, {
+  assert.equal(capture.rpcCall?.fn, 'kb_unarchive_source_as_service');
+  assert.deepEqual(capture.rpcCall?.args, {
     p_user_id: 'user-1',
     p_kb_id: 'kb-1',
     p_source_type: 'chat_message',
@@ -522,7 +522,7 @@ test('knowledge-base archive DELETE should use the privileged rpc client instead
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
   const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
 
-  let rpcCall: { fn: string; args: Record<string, unknown> } | null = null;
+  const capture: { rpcCall: { fn: string; args: Record<string, unknown> } | null } = { rpcCall: null };
   const authDb = {
     from(table: string) {
       if (table !== 'archived_sources') {
@@ -564,7 +564,7 @@ test('knowledge-base archive DELETE should use the privileged rpc client instead
   });
   apiUtilsModule.getSystemAdminClient = () => ({
     rpc(fn: string, args: Record<string, unknown>) {
-      rpcCall = { fn, args };
+      capture.rpcCall = { fn, args };
       return Promise.resolve({ data: true, error: null });
     },
   });
@@ -586,8 +586,8 @@ test('knowledge-base archive DELETE should use the privileged rpc client instead
   const payload = await response.json();
 
   assert.equal(response.status, 200);
-  assert.equal(rpcCall?.fn, 'kb_unarchive_source_as_service');
-  assert.deepEqual(rpcCall?.args, {
+  assert.equal(capture.rpcCall?.fn, 'kb_unarchive_source_as_service');
+  assert.deepEqual(capture.rpcCall?.args, {
     p_user_id: 'user-1',
     p_kb_id: 'kb-1',
     p_source_type: 'conversation',

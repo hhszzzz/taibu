@@ -1,3 +1,4 @@
+import type { SettingsRequestScope } from '@/lib/user/settings';
 import { requestBrowserJson, type BrowserApiError } from '@/lib/browser-api';
 
 export type ReminderType = 'solar_term' | 'fortune' | 'key_date';
@@ -15,11 +16,13 @@ export type ReminderSubscriptionsResult =
 
 const DEFAULT_REMINDER_ERROR = '加载提醒状态失败';
 
-export async function loadReminderSubscriptions(): Promise<ReminderSubscriptionsResult> {
+export async function loadReminderSubscriptions(scope: SettingsRequestScope = {}): Promise<ReminderSubscriptionsResult> {
   const result = await requestBrowserJson<{
     subscriptions?: ReminderSubscriptionSnapshot[];
   }>('/api/reminders', {
     method: 'GET',
+    signal: scope.signal,
+    headers: scope.expectedUserId ? { 'X-Expected-User-Id': scope.expectedUserId } : undefined,
   });
 
   if (result.error) {
@@ -47,9 +50,11 @@ export async function updateReminderSubscriptionClient(input: {
   enabled: boolean;
   notifySite?: boolean;
   notifyEmail?: boolean;
-}): Promise<{ ok: true } | { ok: false; error: BrowserApiError }> {
+}, scope: SettingsRequestScope = {}): Promise<{ ok: true } | { ok: false; error: BrowserApiError }> {
   const result = await requestBrowserJson<{ scheduled?: number }>('/api/reminders', {
     method: 'POST',
+    signal: scope.signal,
+    headers: scope.expectedUserId ? { 'Content-Type': 'application/json', 'X-Expected-User-Id': scope.expectedUserId } : undefined,
     body: JSON.stringify({
       reminderType: input.reminderType,
       enabled: input.enabled,

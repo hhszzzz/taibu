@@ -4,7 +4,6 @@ import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
 import { isModelAllowedForMembership, isReasoningAllowedForMembership } from '@/lib/ai/ai-access';
 import { isFeatureModuleEnabled } from '@/lib/app-settings';
 import { buildPreviewPromptContext, type PreviewRequestBody } from '@/lib/chat/preview-context';
-import { getChatAccessTokenForKnowledgeBase } from '@/lib/server/chat/request';
 import { buildChatPromptContext } from '@/lib/server/chat/prompt-context';
 import { getDefaultModelConfigAsync, getModelConfigAsync } from '@/lib/server/ai-config';
 import { getEffectiveMembershipType, MembershipResolutionError } from '@/lib/user/membership-server';
@@ -91,7 +90,7 @@ export async function POST(request: NextRequest) {
             reasoningEnabled,
             membershipType,
             knowledgeBaseFeatureEnabled,
-            accessTokenForKB: getChatAccessTokenForKnowledgeBase(request),
+            accessTokenForKB: auth.accessToken ?? null,
             sharedPromptContextBuilder: buildChatPromptContext,
         });
 

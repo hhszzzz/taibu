@@ -79,7 +79,8 @@ export function sortModelSources<T extends AIModelSourceConfig>(sources: T[]): T
 export function getOrderedModelSources(model: AIModelConfig): AIModelSourceConfig[] {
   const routingMode: AIRoutingMode = model.routingMode || 'auto';
 
-  let sources = (model.sources || [])
+  const configuredSources = model.sources || [];
+  let sources = configuredSources
     .filter((source) => source.isEnabled !== false)
     .filter((source) => !!source.apiUrl && !!source.apiKeyEnvVar);
 
@@ -91,7 +92,12 @@ export function getOrderedModelSources(model: AIModelConfig): AIModelSourceConfi
     return sortModelSources(sources);
   }
 
-  if (!model.apiUrl || !model.apiKeyEnvVar) {
+  // A configured list is authoritative, even when every binding is filtered out.
+  // Empty lists are also emitted by legacy environment configurations.
+  if (configuredSources.length > 0 || !model.apiUrl || !model.apiKeyEnvVar) {
+    return [];
+  }
+  if ((routingMode === 'newapi' || routingMode === 'octopus') && model.sourceKey !== routingMode) {
     return [];
   }
 

@@ -1,10 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
-import { mockAIFeatureState } from './helpers/route-mock';
+import { mockAIFeatureState, mockAIRateLimit } from './helpers/route-mock';
 
 test('face route rejects unsupported image mime types before auth', async (t) => {
     mockAIFeatureState(t);
+    mockAIRateLimit(t, async () => assert.fail('invalid image must not consume a rate slot'));
     const { POST } = await import('../app/api/face/route');
 
     const request = new NextRequest('http://localhost/api/face', {
@@ -26,6 +27,7 @@ test('face route rejects unsupported image mime types before auth', async (t) =>
 
 test('face route rejects missing image mime types before auth', async (t) => {
     mockAIFeatureState(t);
+    mockAIRateLimit(t, async () => assert.fail('invalid image must not consume a rate slot'));
     const { POST } = await import('../app/api/face/route');
 
     const request = new NextRequest('http://localhost/api/face', {
@@ -47,6 +49,7 @@ test('face route rejects missing image mime types before auth', async (t) => {
 
 test('palm route rejects unsupported image mime types before auth', async (t) => {
     mockAIFeatureState(t);
+    mockAIRateLimit(t, async () => assert.fail('invalid image must not consume a rate slot'));
     const { POST } = await import('../app/api/palm/route');
 
     const request = new NextRequest('http://localhost/api/palm', {
@@ -68,6 +71,7 @@ test('palm route rejects unsupported image mime types before auth', async (t) =>
 
 test('palm route rejects missing image mime types before auth', async (t) => {
     mockAIFeatureState(t);
+    mockAIRateLimit(t, async () => assert.fail('invalid image must not consume a rate slot'));
     const { POST } = await import('../app/api/palm/route');
 
     const request = new NextRequest('http://localhost/api/palm', {

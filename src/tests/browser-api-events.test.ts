@@ -39,13 +39,22 @@ function createWindowStub() {
 test('fetchBrowserJson should broadcast history summary deletion details', async (t) => {
   const browserApiPath = require.resolve('../lib/browser-api');
   const originalFetch = global.fetch;
-  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
-  const originalCustomEvent = globalThis.CustomEvent;
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  const originalCustomEvent = Object.getOwnPropertyDescriptor(globalThis, 'CustomEvent');
   const windowStub = createWindowStub();
   const historyEvents: Array<Record<string, unknown> | null> = [];
 
-  (globalThis as typeof globalThis & { window?: unknown }).window = windowStub;
-  globalThis.CustomEvent = TestCustomEvent as unknown as typeof CustomEvent;
+  t.after(() => {
+    global.fetch = originalFetch;
+    if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
+    else Reflect.deleteProperty(globalThis, 'window');
+    if (originalCustomEvent) Object.defineProperty(globalThis, 'CustomEvent', originalCustomEvent);
+    else Reflect.deleteProperty(globalThis, 'CustomEvent');
+    delete require.cache[browserApiPath];
+  });
+
+  Object.defineProperty(globalThis, 'window', { configurable: true, writable: true, value: windowStub });
+  Object.defineProperty(globalThis, 'CustomEvent', { configurable: true, writable: true, value: TestCustomEvent });
   global.fetch = (async () => new Response(JSON.stringify({
     success: true,
     type: 'qimen',
@@ -55,13 +64,6 @@ test('fetchBrowserJson should broadcast history summary deletion details', async
     status: 200,
     headers: { 'Content-Type': 'application/json' },
   })) as FetchLike;
-
-  t.after(() => {
-    global.fetch = originalFetch;
-    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
-    globalThis.CustomEvent = originalCustomEvent;
-    delete require.cache[browserApiPath];
-  });
 
   delete require.cache[browserApiPath];
   const browserApi = require('../lib/browser-api') as typeof import('../lib/browser-api');
@@ -83,27 +85,29 @@ test('fetchBrowserJson should broadcast history summary deletion details', async
 test('fetchBrowserJson should broadcast knowledge-base sync and data invalidation details', async (t) => {
   const browserApiPath = require.resolve('../lib/browser-api');
   const originalFetch = global.fetch;
-  const originalWindow = (globalThis as typeof globalThis & { window?: unknown }).window;
-  const originalCustomEvent = globalThis.CustomEvent;
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  const originalCustomEvent = Object.getOwnPropertyDescriptor(globalThis, 'CustomEvent');
   const windowStub = createWindowStub();
   const dataInvalidationEvents: Array<Record<string, unknown> | null> = [];
   const knowledgeBaseSyncEvents: Array<Record<string, unknown> | null> = [];
 
-  (globalThis as typeof globalThis & { window?: unknown }).window = windowStub;
-  globalThis.CustomEvent = TestCustomEvent as unknown as typeof CustomEvent;
+  t.after(() => {
+    global.fetch = originalFetch;
+    if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
+    else Reflect.deleteProperty(globalThis, 'window');
+    if (originalCustomEvent) Object.defineProperty(globalThis, 'CustomEvent', originalCustomEvent);
+    else Reflect.deleteProperty(globalThis, 'CustomEvent');
+    delete require.cache[browserApiPath];
+  });
+
+  Object.defineProperty(globalThis, 'window', { configurable: true, writable: true, value: windowStub });
+  Object.defineProperty(globalThis, 'CustomEvent', { configurable: true, writable: true, value: TestCustomEvent });
   global.fetch = (async () => new Response(JSON.stringify({
     success: true,
   }), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
   })) as FetchLike;
-
-  t.after(() => {
-    global.fetch = originalFetch;
-    (globalThis as typeof globalThis & { window?: unknown }).window = originalWindow;
-    globalThis.CustomEvent = originalCustomEvent;
-    delete require.cache[browserApiPath];
-  });
 
   delete require.cache[browserApiPath];
   const browserApi = require('../lib/browser-api') as typeof import('../lib/browser-api');
@@ -153,4 +157,33 @@ test('fetchBrowserJson should rethrow AbortError so callers can treat cancellati
       return true;
     },
   );
+});
+
+test('cancelled response cannot dispatch effects before or during JSON parsing', async (t) => {
+  const originalFetch = global.fetch;
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  const windowStub = createWindowStub();
+  let effects = 0;
+  windowStub.dispatchEvent = () => { effects++; return true; };
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: windowStub });
+  t.after(() => {
+    global.fetch = originalFetch;
+    if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
+    else Reflect.deleteProperty(globalThis, 'window');
+  });
+  const { fetchBrowserJson } = await import('../lib/browser-api');
+  for (const phase of ['headers', 'body'] as const) {
+    const controller = new AbortController();
+    global.fetch = async () => {
+      if (phase === 'headers') controller.abort();
+      return {
+        ok: true, status: 200, statusText: 'OK',
+        json: async () => { controller.abort(); return { data: { saved: true } }; },
+      } as Response;
+    };
+    await assert.rejects(fetchBrowserJson('/api/knowledge-base/test', {
+      method: 'PATCH', signal: controller.signal,
+    }), { name: 'AbortError' });
+  }
+  assert.equal(effects, 0);
 });

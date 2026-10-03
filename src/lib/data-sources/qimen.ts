@@ -7,7 +7,8 @@ import {
     type QimenInput,
 } from '@/lib/divination/qimen';
 import { resolveChartTextDetailLevel } from '@/lib/divination/detail-level';
-import type { DataSourceProvider, DataSourceQueryContext, DataSourceSummary } from '@/lib/data-sources/types';
+import type { DataSourceSummary } from '@/lib/data-sources/types';
+import type { DataSourceProvider, DataSourceQueryContext } from '@/lib/data-sources/provider.server';
 
 type QimenRow = {
     id: string;

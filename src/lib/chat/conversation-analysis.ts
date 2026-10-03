@@ -7,42 +7,13 @@ export type ConversationAnalysisSnapshot = {
   reasoningEnabled: boolean;
 };
 
-async function requestConversationAnalysisData<T>(
-  url: string,
-  options: {
-    allowNotFound: true;
-  },
-): Promise<T | null>;
-async function requestConversationAnalysisData<T>(
-  url: string,
-  options?: {
-    allowNotFound?: false | undefined;
-  },
-): Promise<T>;
-async function requestConversationAnalysisData<T>(
-  url: string,
-  options: {
-    allowNotFound?: boolean;
-  } = {},
-): Promise<T | null> {
-  if (options.allowNotFound) {
-    return await requestBrowserData<T>(url, { method: 'GET' }, {
-      fallbackMessage: '加载分析快照失败',
-      allowNotFound: true,
-    });
-  }
-
-  return await requestBrowserData<T>(url, { method: 'GET' }, {
-    fallbackMessage: '加载分析快照失败',
-  });
-}
-
 export async function loadConversationAnalysisSnapshot(
   conversationId: string,
 ): Promise<ConversationAnalysisSnapshot | null> {
-  const payload = await requestConversationAnalysisData<{
+  const payload = await requestBrowserData<{
     snapshot?: ConversationAnalysisSnapshot | null;
-  }>(`/api/conversations/${conversationId}?snapshot=analysis`, {
+  }>(`/api/conversations/${conversationId}?snapshot=analysis`, { method: 'GET' }, {
+    fallbackMessage: '加载分析快照失败',
     allowNotFound: true,
   });
 
@@ -62,9 +33,11 @@ export async function loadLatestConversationAnalysisSnapshot(filters: {
     query.set('chartId', filters.chartId);
   }
 
-  const payload = await requestConversationAnalysisData<{
+  const payload = await requestBrowserData<{
     conversations?: Array<{ id?: string | null }>;
-  }>(`/api/conversations?${query.toString()}`);
+  }>(`/api/conversations?${query.toString()}`, { method: 'GET' }, {
+    fallbackMessage: '加载分析快照失败',
+  });
   const conversationId = payload?.conversations?.[0]?.id;
   if (typeof conversationId !== 'string' || !conversationId) {
     return null;

@@ -14,6 +14,7 @@ import {
 import { triggerVectorIndexCreation } from '@/lib/knowledge-base/vector-index';
 import { requireUserContext, jsonError, jsonOk, resolveRequestDbClient } from '@/lib/api-utils';
 import { ensureFeatureRouteEnabled } from '@/lib/feature-gate-utils';
+import { createKnowledgeBasePersistence } from '@/lib/knowledge-base/persistence.server';
 
 export async function POST(request: NextRequest) {
     const featureError = await ensureFeatureRouteEnabled('knowledge-base');
@@ -64,13 +65,14 @@ export async function POST(request: NextRequest) {
         return jsonError('当前会员等级无法使用知识库', 403);
     }
 
+    const options = { persistence: createKnowledgeBasePersistence(db) };
     const ingestResult = normalizedSourceType === 'conversation'
-        ? await ingestConversationAsService(body.kbId, body.sourceId, user.id)
+        ? await ingestConversationAsService(body.kbId, body.sourceId, user.id, options)
         : normalizedSourceType === MING_RECORD_SOURCE_TYPE
-            ? await ingestRecordAsService(body.kbId, body.sourceId, user.id)
+            ? await ingestRecordAsService(body.kbId, body.sourceId, user.id, options)
             : normalizedSourceType === 'chat_message'
-                ? await ingestChatMessageAsService(body.kbId, body.sourceMeta?.conversationId || '', body.sourceId, user.id)
-                : await ingestDataSourceAsService(body.kbId, { type: normalizedSourceType, id: body.sourceId }, user.id);
+                ? await ingestChatMessageAsService(body.kbId, body.sourceMeta?.conversationId || '', body.sourceId, user.id, options)
+                : await ingestDataSourceAsService(body.kbId, { type: normalizedSourceType, id: body.sourceId }, user.id, options);
 
     if (membership === 'pro') {
         try {

@@ -1,6 +1,7 @@
 import { getSystemAdminClient } from '@/lib/api-utils';
 import { buildMeihuaCanonicalText, type MeihuaWebBundle } from '@/lib/divination/meihua';
-import type { DataSourceProvider, DataSourceQueryContext, DataSourceSummary } from '@/lib/data-sources/types';
+import type { DataSourceSummary } from '@/lib/data-sources/types';
+import type { DataSourceProvider, DataSourceQueryContext } from '@/lib/data-sources/provider.server';
 
 type MeihuaRow = {
   id: string;

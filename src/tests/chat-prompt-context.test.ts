@@ -1,8 +1,18 @@
-import { test } from 'node:test';
+import { beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
+
+beforeEach((t) => {
+  assert.ok('mock' in t);
+  let networkCalls = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    networkCalls += 1;
+    throw new Error('Unexpected network request');
+  });
+  t.after(() => assert.equal(networkCalls, 0, 'prompt tests must not attempt network access'));
+});
 
 test('buildChatPromptContext should load visualization_settings from user_settings', async (t) => {
   const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
@@ -14,6 +24,8 @@ test('buildChatPromptContext should load visualization_settings from user_settin
   const originalGetPromptBudget = promptBuilderModule.calculatePromptBudget;
   const originalFeatureEnabled = appSettingsModule.isFeatureModuleEnabled;
 
+  let budgetCalls = 0;
+  const resolvePersonality = t.mock.method(promptBuilderModule, 'resolvePersonalities');
   let selectedColumns = '';
   let capturedVisualizationSettings: unknown = null;
 
@@ -77,8 +89,10 @@ test('buildChatPromptContext should load visualization_settings from user_settin
     },
   })) as unknown as typeof apiUtilsModule.getSystemAdminClient;
 
-  promptBuilderModule.calculatePromptBudget = (async () => 1024) as typeof promptBuilderModule.calculatePromptBudget;
-  promptBuilderModule.buildPromptWithSources = (async (context) => {
+  promptBuilderModule.calculatePromptBudget = (async () => { budgetCalls++; return 1024; }) as typeof promptBuilderModule.calculatePromptBudget;
+  promptBuilderModule.buildPromptWithSources = (async (context, prepared) => {
+    assert.equal(prepared?.budget, 1024);
+    assert.ok(prepared?.personalityResolution);
     capturedVisualizationSettings = context.userSettings?.visualizationSettings;
     return {
       systemPrompt: '',
@@ -122,6 +136,8 @@ test('buildChatPromptContext should load visualization_settings from user_settin
     creditDeducted: false,
   });
 
+  assert.equal(budgetCalls, 1);
+  assert.equal(resolvePersonality.mock.callCount(), 1);
   assert.match(selectedColumns, /visualization_settings/u);
   assert.deepEqual(capturedVisualizationSettings, {
     selectedDimensions: ['career', 'wealth'],

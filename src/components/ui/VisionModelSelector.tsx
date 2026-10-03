@@ -12,7 +12,8 @@ import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { getVendorIcon } from '@/lib/ai/vendor-config';
 import { useAvailableModels } from '@/lib/hooks/useAvailableModels';
 import type { AIVendor } from '@/types';
-import { DEFAULT_VISION_MODEL_ID, getVendorName } from '@/lib/ai/ai-config';
+import { DEFAULT_VISION_MODEL_ID } from '@/lib/ai/ai-config';
+import { getVendorName } from '@/lib/ai/vendor-labels';
 
 interface VisionModelConfig {
     id: string;

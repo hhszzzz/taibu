@@ -3,8 +3,23 @@ import 'server-only';
 import { resolveTokenMembership } from '@/lib/user/membership-server';
 import { callReranker } from '@/lib/knowledge-base/reranker';
 import { checkVectorIndexExists, generateEmbedding, getEmbeddingDimensionAsync } from '@/lib/knowledge-base/embedding-config';
-import type { RankedResult, SearchCandidate, SearchOptions } from '@/lib/knowledge-base/types';
-import { getSystemAdminClient, createAuthedClient } from '@/lib/api-utils';
+import type { KnowledgeSearchPersistence, RankedResult, SearchCandidate, SearchOptions } from '@/lib/knowledge-base/types';
+import { createAuthedClient } from '@/lib/api-utils';
+import { createKnowledgeBasePersistence } from '@/lib/knowledge-base/persistence.server';
+
+export class KnowledgeSearchContextError extends Error {
+    readonly code = 'KNOWLEDGE_READ_CONTEXT_REQUIRED';
+
+    constructor() {
+        super('知识库检索缺少用户身份上下文');
+        this.name = 'KnowledgeSearchContextError';
+    }
+}
+
+function requireSearchAccessToken(accessToken?: string): string {
+    if (!accessToken?.trim()) throw new KnowledgeSearchContextError();
+    return accessToken;
+}
 
 interface SearchConfigInternal {
     ftsConfig: 'simple' | 'english';
@@ -77,21 +92,20 @@ function pruneKbWeightCache(now = Date.now()) {
 async function applyKnowledgeBaseWeights(
     candidates: SearchCandidate[],
     accessToken?: string,
-    _supabaseClient?: unknown,
     userId?: string
 ): Promise<{ candidates: SearchCandidate[]; highKbIds: string[] }> {
     if (candidates.length === 0) return { candidates, highKbIds: [] };
     pruneKbWeightCache();
 
-    const supabase = getSystemAdminClient();
+    const persistence = createKnowledgeBasePersistence(createAuthedClient(requireSearchAccessToken(accessToken)));
     let effectiveUserId = userId;
     if (!effectiveUserId && accessToken) {
         const authed = createAuthedClient(accessToken);
         const { data: { user } } = await authed.auth.getUser();
-        if (!user) return { candidates, highKbIds: [] };
+        if (!user) throw new KnowledgeSearchContextError();
         effectiveUserId = user.id;
     }
-    if (!effectiveUserId) return { candidates, highKbIds: [] };
+    if (!effectiveUserId) throw new KnowledgeSearchContextError();
 
     const kbIds = Array.from(new Set(candidates.map(c => c.kbId).filter(Boolean)));
     if (kbIds.length === 0) return { candidates, highKbIds: [] };
@@ -112,11 +126,7 @@ async function applyKnowledgeBaseWeights(
         weightMap = cached.weights;
     } else if (cacheValid && missingKbIds.length > 0) {
         // 缓存部分命中，补充查询缺失的 kbIds
-        const { data: kbRows } = await supabase
-            .from('knowledge_bases')
-            .select('id, weight')
-            .eq('user_id', effectiveUserId)
-            .in('id', missingKbIds);
+        const kbRows = await persistence.loadWeights(effectiveUserId, missingKbIds);
 
         // 合并到现有缓存
         weightMap = new Map(cached.weights);
@@ -127,11 +137,7 @@ async function applyKnowledgeBaseWeights(
         pruneKbWeightCache();
     } else {
         // 缓存未命中，完整查询
-        const { data: kbRows } = await supabase
-            .from('knowledge_bases')
-            .select('id, weight')
-            .eq('user_id', effectiveUserId)
-            .in('id', kbIds);
+        const kbRows = await persistence.loadWeights(effectiveUserId, kbIds);
 
         weightMap = new Map<string, string>();
         (kbRows || []).forEach((kb: { id: string; weight: string }) => {
@@ -158,90 +164,70 @@ async function applyKnowledgeBaseWeights(
 
 // 知识库检索主入口：FTS -> Trigram -> Vector（可选），并做去重合并
 export async function searchCandidates(query: string, options: SearchOptions): Promise<SearchCandidate[]> {
-    const supabase = getSystemAdminClient();
     const { kbIds, limit = 20, useVector = false, accessToken } = options;
+    const persistence = createKnowledgeBasePersistence(createAuthedClient(requireSearchAccessToken(accessToken)));
     const config: SearchConfigInternal = { ...DEFAULT_SEARCH_CONFIG, ...options.searchConfig };
 
-    const ftsResults = await searchByFTS(supabase, query, kbIds, limit, config);
-
-    if (config.enableTrigram && ftsResults.length < limit) {
-        const trigramResults = await searchByTrigram(
-            supabase,
-            query,
-            kbIds,
-            limit - ftsResults.length,
-            config
-        );
-        const merged = deduplicateResults([...ftsResults, ...trigramResults]);
-        if (useVector) {
-            const vectorResults = await searchByVector(supabase, query, kbIds, limit, accessToken);
-            return deduplicateResults([...merged, ...vectorResults]);
+    let successfulStages = 0;
+    const stage = async (name: 'fts' | 'trigram' | 'vector', run: () => Promise<SearchCandidate[]>) => {
+        try {
+            const rows = await run();
+            successfulStages++;
+            return rows;
+        } catch (error) {
+            if (error instanceof KnowledgeSearchContextError) throw error;
+            console.warn('[knowledge-base] retrieval stage failed', { stage: name });
+            return [];
         }
-        return merged;
+    };
+    const ftsResults = await stage('fts', () => searchByFTS(persistence, query, kbIds, limit, config));
+    let results = ftsResults;
+    if (config.enableTrigram && ftsResults.length < limit) {
+        const trigram = await stage('trigram', () => searchByTrigram(persistence, query, kbIds, limit - ftsResults.length, config));
+        results = deduplicateResults([...results, ...trigram]);
     }
-
     if (useVector) {
-        const vectorResults = await searchByVector(supabase, query, kbIds, limit, accessToken);
-        return deduplicateResults([...ftsResults, ...vectorResults]);
+        const vector = await stage('vector', () => searchByVector(persistence, query, kbIds, limit, accessToken));
+        results = deduplicateResults([...results, ...vector]);
     }
-
-    return ftsResults;
+    if (successfulStages === 0) throw new Error('Knowledge retrieval failed');
+    return results;
 }
 
 // FTS 精确检索：适合关键字匹配，速度快
 async function searchByFTS(
-    supabase: ReturnType<typeof getSystemAdminClient>,
+    persistence: KnowledgeSearchPersistence,
     query: string,
     kbIds: string[] | undefined,
     limit: number,
     config: SearchConfigInternal
 ): Promise<SearchCandidate[]> {
-    const { data } = await supabase.rpc('search_knowledge_fts', {
-        p_query: query,
-        p_kb_ids: kbIds,
-        p_limit: limit,
-        p_config: config.ftsConfig
-    });
-
-    const rows = (data || []) as Array<{ id: string; kb_id: string; content: string; metadata: Record<string, unknown>; rank: number }>;
-    return rows.map(r => ({
-        id: r.id,
-        kbId: r.kb_id,
-        content: r.content,
-        metadata: r.metadata || {},
+    const rows = await persistence.searchFts(query, kbIds, limit, config.ftsConfig);
+    return rows.map(({ rawScore, ...row }) => ({
+        ...row,
         method: 'fts',
-        score: normalizeScore('fts', r.rank || 0)
+        score: normalizeScore('fts', rawScore),
     }));
 }
 
 // Trigram 近似检索：在 FTS 结果不足时补充模糊匹配
 async function searchByTrigram(
-    supabase: ReturnType<typeof getSystemAdminClient>,
+    persistence: KnowledgeSearchPersistence,
     query: string,
     kbIds: string[] | undefined,
     limit: number,
     config: SearchConfigInternal
 ): Promise<SearchCandidate[]> {
-    const { data } = await supabase.rpc('search_knowledge_trigram', {
-        p_query: query,
-        p_kb_ids: kbIds,
-        p_limit: limit,
-        p_threshold: config.trigramThreshold
-    });
-
-    const rows = (data || []) as Array<{ id: string; kb_id: string; content: string; metadata: Record<string, unknown>; similarity: number }>;
-    return rows.map(r => ({
-        id: r.id,
-        kbId: r.kb_id,
-        content: r.content,
-        metadata: r.metadata || {},
+    const rows = await persistence.searchTrigram(query, kbIds, limit, config.trigramThreshold);
+    return rows.map(({ rawScore, ...row }) => ({
+        ...row,
         method: 'trigram',
-        score: normalizeScore('trigram', r.similarity || 0)
+        score: normalizeScore('trigram', rawScore),
     }));
 }
 
 async function searchByVector(
-    supabase: ReturnType<typeof getSystemAdminClient>,
+    persistence: KnowledgeSearchPersistence,
     query: string,
     kbIds: string[] | undefined,
     limit: number,
@@ -249,26 +235,16 @@ async function searchByVector(
 ): Promise<SearchCandidate[]> {
     const dim = await getEmbeddingDimensionAsync();
     const indexExists = await checkVectorIndexExists(dim, accessToken);
-    if (!indexExists) return [];
+    if (!indexExists) throw new Error('Vector index unavailable');
 
     const queryVector = await generateEmbedding(query);
-    if (!queryVector) return [];
+    if (!queryVector) throw new Error('Query embedding unavailable');
 
-    const { data } = await supabase.rpc('search_knowledge_vector', {
-        p_query_vector: queryVector,
-        p_kb_ids: kbIds,
-        p_limit: limit,
-        p_dim: dim
-    });
-
-    const rows = (data || []) as Array<{ id: string; kb_id: string; content: string; metadata: Record<string, unknown>; distance: number }>;
-    return rows.map(r => ({
-        id: r.id,
-        kbId: r.kb_id,
-        content: r.content,
-        metadata: r.metadata || {},
+    const rows = await persistence.searchVector(queryVector, kbIds, limit, dim);
+    return rows.map(({ rawScore, ...row }) => ({
+        ...row,
         method: 'vector',
-        score: normalizeScore('vector', r.distance || 2)
+        score: normalizeScore('vector', rawScore),
     }));
 }
 
@@ -281,13 +257,28 @@ export async function rerankCandidates(
 }
 
 export async function searchKnowledge(query: string, options: SearchOptions = {}): Promise<SearchCandidate[] | RankedResult[]> {
+    if (options.membershipType === 'free') return [];
+    requireSearchAccessToken(options.accessToken);
     const membership = options.membershipType ?? await resolveTokenMembership(options.accessToken);
     if (membership === 'free') return [];
+    let userId = options.userId;
+    if (!userId) {
+        const { data: { user } } = await createAuthedClient(requireSearchAccessToken(options.accessToken)).auth.getUser();
+        if (!user) throw new KnowledgeSearchContextError();
+        userId = user.id;
+    }
     const candidates = await searchCandidates(query, {
         ...options,
         useVector: membership === 'pro' && options.useVector !== false
     });
-    const weighted = await applyKnowledgeBaseWeights(candidates, options.accessToken, undefined, options.userId);
+    let weighted: { candidates: SearchCandidate[]; highKbIds: string[] };
+    try {
+        weighted = await applyKnowledgeBaseWeights(candidates, options.accessToken, userId);
+    } catch (error) {
+        if (error instanceof KnowledgeSearchContextError) throw error;
+        console.warn('[knowledge-base] enrichment failed', { stage: 'weights' });
+        weighted = { candidates, highKbIds: [] };
+    }
     let weightedCandidates = weighted.candidates;
     const highKbIds = weighted.highKbIds;
 
@@ -301,18 +292,19 @@ export async function searchKnowledge(query: string, options: SearchOptions = {}
                 limit: baseLimit + 10,
                 useVector: options.useVector !== false
             });
-            const weightedExtra = await applyKnowledgeBaseWeights(extraCandidates, options.accessToken, undefined, options.userId);
+            const weightedExtra = await applyKnowledgeBaseWeights(extraCandidates, options.accessToken, userId);
             weightedCandidates = deduplicateResults([...weightedCandidates, ...weightedExtra.candidates]);
         } catch (error) {
-            console.warn('[knowledge-base] extra high-weight candidate search failed:', error);
+            if (error instanceof KnowledgeSearchContextError) throw error;
+            console.warn('[knowledge-base] enrichment failed', { stage: 'high-weight' });
         }
     }
 
     if (membership === 'pro' && weightedCandidates.length > Math.max(5, topK)) {
         try {
             return await rerankCandidates(query, weightedCandidates, topK);
-        } catch (error) {
-            console.warn('[knowledge-base] rerank failed, falling back to weighted candidates:', error);
+        } catch {
+            console.warn('[knowledge-base] enrichment failed', { stage: 'rerank' });
             return weightedCandidates;
         }
     }

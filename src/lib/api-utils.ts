@@ -2,7 +2,7 @@ import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { NextResponse, type NextRequest } from 'next/server';
-import type { User } from '@supabase/supabase-js';
+import type { Session, User } from '@supabase/supabase-js';
 import { getAuthAdminClient as getPrivilegedAuthClient, getSystemAdminClient as getPrivilegedSystemAdminClient } from '@/lib/supabase-server';
 import { getSupabaseAnonKey, getSupabaseUrl } from '@/lib/supabase-env';
 import {
@@ -176,8 +176,11 @@ async function getWritableCookieStore(): Promise<WritableCookieStore | null> {
 // 仅用于必须使用 Bearer Token 的接口
 export async function requireBearerUser(
     request: NextRequest,
-    dependencies: Pick<GetAuthContextDependencies, 'authResolverClient'> = {},
-): Promise<{ user: User } | { error: { message: string; status: number } }> {
+    dependencies: Pick<GetAuthContextDependencies, 'authResolverClient' | 'authedClientFactory'> = {},
+): Promise<
+    | { db: RequestDbClient; supabase: RequestDbClient; accessToken: string; user: User }
+    | { error: { message: string; status: number } }
+> {
     const authHeader = request.headers.get('authorization');
     const token = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
     if (!token) {
@@ -198,7 +201,8 @@ export async function requireBearerUser(
         return { error: { message: '认证失败', status: 401 } };
     }
 
-    return { user: session.user };
+    const db = (dependencies.authedClientFactory ?? createAuthedClient)(session.access_token);
+    return { db, supabase: db, accessToken: session.access_token, user: session.user };
 }
 
 export async function requireUserContext(
@@ -315,6 +319,29 @@ export function createAnonClient() {
             },
         }
     );
+}
+
+/**
+ * Auth mutations need an SDK session, not only an Authorization header.
+ * Accept only a server-verified session; storage is private to this request.
+ */
+export function createSessionClient(session: Session) {
+    const storageKey = 'request-auth-session';
+    const storage = new Map<string, string>([[storageKey, JSON.stringify(session)]]);
+    return createClient(getSupabaseUrl(), getSupabaseAnonKey(), {
+        auth: {
+            storageKey,
+            // Enable the explicit in-memory adapter, never browser or shared storage.
+            persistSession: true,
+            autoRefreshToken: false,
+            detectSessionInUrl: false,
+            storage: {
+                getItem: (key: string) => storage.get(key) ?? null,
+                setItem: (key: string, value: string) => { storage.set(key, value); },
+                removeItem: (key: string) => { storage.delete(key); },
+            },
+        },
+    });
 }
 
 /**

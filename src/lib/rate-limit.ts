@@ -20,6 +20,12 @@ interface RateLimitConfig {
     windowMs: number;     // 时间窗口（毫秒）
 }
 
+/** Shared AI admission default; each endpoint retains its own user-scoped bucket. */
+export const AI_RATE_LIMIT_CONFIG = {
+    maxRequests: 20,
+    windowMs: 60_000,
+} as const;
+
 interface RateLimitResult {
     allowed: boolean;
     remaining: number;

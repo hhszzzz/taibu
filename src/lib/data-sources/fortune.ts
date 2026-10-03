@@ -2,7 +2,8 @@ import { calculateDailyFortune, calculateMonthlyFortune, calculateGenericDailyFo
 import { generateFortuneInterpretation } from '@/lib/divination/fortune-interpretations';
 import type { BaziOutput as CoreBaziOutput } from 'taibu-core/bazi';
 import { getSystemAdminClient } from '@/lib/api-utils';
-import type { DataSourceProvider, DataSourceQueryContext, DataSourceSummary } from '@/lib/data-sources/types';
+import type { DataSourceSummary } from '@/lib/data-sources/types';
+import type { DataSourceProvider, DataSourceQueryContext } from '@/lib/data-sources/provider.server';
 import { calculateBaziOutputFromStoredFields } from '@/lib/divination/bazi-record';
 
 type FortuneData = { id: string; name: string; content: string; createdAt: string };

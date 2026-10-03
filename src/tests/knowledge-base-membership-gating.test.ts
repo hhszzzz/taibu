@@ -29,13 +29,13 @@ test('searchKnowledge should honor explicit membershipType without env', async (
   assert.deepEqual(results, []);
 });
 
-test('searchKnowledge should reuse explicit userId for KB weights without auth lookup', async (t) => {
+test('searchKnowledge should bind caller token for RPCs and weights while reusing an authorized userId', async (t) => {
   const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
   const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
   const originalCreateAuthedClient = apiUtilsModule.createAuthedClient;
   const modulePath = require.resolve('../lib/knowledge-base/search');
 
-  apiUtilsModule.getSystemAdminClient = (() => ({
+  const callerClient = {
     rpc(fn: string) {
       if (fn === 'search_knowledge_fts') {
         return Promise.resolve({
@@ -71,11 +71,16 @@ test('searchKnowledge should reuse explicit userId for KB weights without auth l
         },
       };
     },
-  })) as unknown as typeof apiUtilsModule.getSystemAdminClient;
+  } as unknown as ReturnType<typeof apiUtilsModule.createAuthedClient>;
 
-  apiUtilsModule.createAuthedClient = (() => {
-    throw new Error('auth lookup should not be used when userId is provided');
-  }) as unknown as typeof apiUtilsModule.createAuthedClient;
+  const tokens: string[] = [];
+  apiUtilsModule.createAuthedClient = (token) => {
+    tokens.push(token);
+    return callerClient;
+  };
+  apiUtilsModule.getSystemAdminClient = () => {
+    throw new Error('user knowledge search must not fall back to system-admin');
+  };
 
   t.after(() => {
     apiUtilsModule.getSystemAdminClient = originalGetSystemAdminClient;
@@ -88,6 +93,7 @@ test('searchKnowledge should reuse explicit userId for KB weights without auth l
   const results = await searchKnowledge('test', {
     membershipType: 'pro',
     userId: 'user-1',
+    accessToken: 'caller-token',
     useVector: false,
     searchConfig: {
       enableTrigram: false,
@@ -96,4 +102,5 @@ test('searchKnowledge should reuse explicit userId for KB weights without auth l
 
   assert.equal(results.length, 1);
   assert.equal(results[0]?.kbId, 'kb-1');
+  assert.deepEqual(tokens, ['caller-token', 'caller-token']);
 });

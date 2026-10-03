@@ -20,9 +20,15 @@ export const SQL_SOURCE_MANIFEST = {
   conversationAlignment: 'supabase/migrations/20260409_021500_admin_session_rpc_alignment.sql',
   credits: 'supabase/migrations/20260409_235900_membership_credit_redesign.sql',
   creditAlignment: 'supabase/migrations/20260411_103500_align_admin_session_service_rpcs.sql',
+  activationPolicies: 'supabase/migrations/20260123_add_activation_keys_and_purchase_links.sql',
+  providers: 'supabase/migrations/20260313_user_oauth_providers.sql',
+  authBinding: 'supabase/migrations/20260409_140500_full_atomicity_repairs.sql',
+  claimConcurrency: 'supabase/migrations/20260410_103000_fix_linuxdo_claim_concurrency.sql',
+  checkinOverflow: 'supabase/migrations/20260410_141500_checkin_overcap_drop_user_achievements.sql',
   history: 'supabase/migrations/20260723_100000_create_meihua_xiaoliuren_web.sql',
   searchCorrection: 'supabase/migrations/20261002_100000_fix_knowledge_search_contracts.sql',
   ledgerCorrection: 'supabase/migrations/20261002_101000_restrict_credit_ledger_rpc.sql',
+  accountProtection: 'supabase/migrations/20261002_102000_protect_account_and_ledger_writes.sql',
 };
 
 function requireMatch(matches, description) {
@@ -146,7 +152,7 @@ GRANT USAGE ON SCHEMA public, auth, extensions TO anon, authenticated, service_r
 GRANT CREATE ON SCHEMA public TO taibu_contract_owner;
 SET ROLE taibu_contract_owner;
 SET search_path = public, extensions;
-${realAuth ? '' : 'CREATE TABLE auth.users (id uuid PRIMARY KEY);'}
+${realAuth ? '' : "CREATE TABLE auth.users (id uuid PRIMARY KEY, email text, raw_user_meta_data jsonb DEFAULT '{}'::jsonb);"}
 ${realAuth ? '' : `CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE SET search_path = pg_catalog AS $$
   SELECT NULLIF(NULLIF(current_setting('request.jwt.claims', true), '')::jsonb->>'sub', '')::uuid
 $$;
@@ -160,8 +166,19 @@ $$;`}`,
     policies(sources.conversationPolicies, 'conversations'),
     policies(sources.mbtiPolicies, 'mbti_readings'),
     policies(sources.tarotPolicies, 'tarot_readings'),
+    snapshotTable(sources.snapshot, 'activation_keys'),
+    policies(sources.activationPolicies, 'activation_keys'),
+    // Retain the real daily uniqueness constraint, then the current removal of
+    // streak_days; the context snapshot does not export this UNIQUE constraint.
+    before(from(sources.creditPolicies, '-- 签到记录'), '-- 积分交易记录'),
+    requireMatch([...sources.credits.matchAll(/^ALTER TABLE public\.daily_checkins[\s\S]*?;/gm)].map(match => match[0]), 'daily check-in amendment'),
+    policies(sources.creditPolicies, 'daily_checkins'),
+    sources.providers,
     ...(realAuth ? [
-      before(sources.userSettings, '-- Only server-side code'),
+      // Profile PATCH selects the full settings contract. Keep its existing
+      // chart foreign keys; these two empty tables are only FK anchors here.
+      ...['bazi_charts', 'ziwei_charts', 'user_settings'].map(name => snapshotTable(sources.snapshot, name)),
+      policies(sources.userSettings, 'user_settings'),
       sources.chartDetail,
       sources.appSettings,
       ...['ai_models', 'ai_gateways', 'ai_model_gateway_bindings'].map(name => snapshotTable(sources.snapshot, name)),
@@ -198,11 +215,20 @@ $$;`}`,
     // Whole narrowly scoped alignment: exact functions AND dynamic history guard
     // rewrite. Other listed functions are absent from this bounded fixture.
     sources.conversationAlignment,
-    ...['record_credit_transaction', 'decrement_ai_chat_count', 'increment_ai_chat_count']
+    ...['membership_rank', 'membership_credit_limit', 'record_credit_transaction', 'decrement_ai_chat_count', 'increment_ai_chat_count', 'activate_key_as_service', 'handle_auth_user_profile_sync']
       .map(name => functionDefinition(sources.credits, name)),
+    // April 10 replaces the original definitions; April 11 then restores
+    // administrator-session admission on these exact current bodies.
+    sources.claimConcurrency,
+    functionDefinition(sources.checkinOverflow, 'perform_daily_checkin_as_service'),
     grants(sources.credits, ['record_credit_transaction']),
     creditRewrite,
-    grants(sources.creditAlignment, ['record_credit_transaction', 'decrement_ai_chat_count', 'increment_ai_chat_count']),
+    grants(sources.creditAlignment, ['record_credit_transaction', 'decrement_ai_chat_count', 'increment_ai_chat_count', 'activate_key_as_service', 'perform_daily_checkin_as_service', 'claim_linuxdo_membership_as_service']),
+    // Attach the active production Auth sync before any test users are created.
+    // GoTrue owns auth.users; only trigger DDL needs bootstrap privileges.
+    'RESET ROLE;',
+    before(from(sources.authBinding, 'DROP TRIGGER IF EXISTS on_auth_user_created_profile'), 'REVOKE ALL ON FUNCTION public.schedule_reminder_if_absent_as_service'),
+    'SET ROLE taibu_contract_owner;',
     // Preserve extension placement, even when it exposes RPC search_path defects.
     'RESET ROLE;',
     from(sources.extensions, '-- Move pg_trgm out of public schema'),
@@ -212,9 +238,13 @@ $$;`}`,
     // checks, exact legacy rename/wrapper, and all wrapper grants/revocations.
     before(sources.history, '-- Extend authenticated history deletion'),
     from(sources.history, '-- Preserve all existing history creation behavior'),
-    // Explicit harness-only table grants model the exercised entry points. Their
-    // deployed equivalence/default privileges are intentionally not asserted.
-    `GRANT SELECT ON public.users, public.credit_transactions TO authenticated;
+    // Reviewed broad account/ledger privileges are intentional: security tests
+    // must fail because of the guard/RLS, never because table grants are absent.
+    // Other tables remain bounded fixtures, not a deployment metadata replay.
+    `GRANT SELECT, INSERT, UPDATE, DELETE ON public.users, public.credit_transactions TO anon, authenticated;
+GRANT ALL ON public.users, public.credit_transactions TO service_role;
+GRANT EXECUTE ON FUNCTION public.is_admin_user() TO anon, service_role;
+GRANT SELECT ON public.activation_keys, public.daily_checkins, public.user_oauth_providers TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.conversations, public.conversation_messages,
   public.mbti_readings, public.tarot_readings, public.knowledge_bases, public.knowledge_entries, public.archived_sources TO authenticated;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
@@ -223,5 +253,6 @@ RESET ROLE;`,
     // definitions, authorization amendments and extension placement stay intact.
     sources.searchCorrection,
     sources.ledgerCorrection,
+    sources.accountProtection,
   ].join('\n\n');
 }

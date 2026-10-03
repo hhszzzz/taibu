@@ -2,7 +2,9 @@
 
 ## 结论与范围
 
-本轮重构实现、测试精简及下述本地分层验收已完成；**原计划的全部验收门槛尚未闭环，不能标记为 P0–P7 全部验收完成。** 仍保持模块化单体、现有 Web/Core/MCP 包边界和部署平台。生产部署、发布和生产 migration 未执行；后续提交/推送仅限用户另行授权的验收分支与草稿 PR。Docker 测试不代表完成生产容器化或退出 Supabase。
+本轮重构实现、测试精简和本地分层验收已完成；三份数据库修复已于 2026-10-03 经单独授权通过 Supabase MCP 应用并只读复核。**本轮新提交的远程 CI 尚待验证，不能沿用旧 SHA 的结果。** 保持模块化单体、现有 Web/Core/MCP 包边界和部署平台；未合并、部署应用或发布包。Docker 测试不代表完成生产容器化或退出 Supabase。
+
+> 下文按阶段保留历史记录；其中“未应用”“未授权”和旧测试数量均描述当时状态。最新数据库执行结果见文末，候选提交的远程证据见草稿 PR #16。
 
 架构与兼容规则见 [Architecture.md](Architecture.md)，SQL 来源与执行边界见 [supabase/README.md](../../supabase/README.md)。完成表示本记录列出的代码和测试范围通过，不表示已经取得生产 Auth/PostgREST 等价性或线上数据定义完整性证明。
 
@@ -148,18 +150,18 @@ pnpm test:browser -- --chrome
 
 | 项目 | 当前证据与边界 | 状态 / 后续条件 |
 |---|---|---|
-| 数据库权威定义核对（P0b 的定义缺口） | 19 项本地 SQL 清单不是线上最终函数、RLS、ACL 与已应用迁移的权威证明 | 获准读取的完整定义/迁移记录导出，或明确授权的只读环境；形成差异清单，核对函数 owner、扩展 schema、策略与 RPC 授权。不得从历史文件推断已经部署 |
+| 数据库权威定义核对（P0b 的定义缺口） | 2026-10-02 获得真实环境只读授权后，已通过 Supabase MCP 获取实际 catalog 与 121 项迁移记录，并与本地 fixture 核对 | 来源缺口已解除；核对发现权限与部署差异，真实环境安全验收仍被阻断，不能据本地通过认定可上线 |
 | 真实鉴权与纵向联调（P1/P4） | 已补独立 GoTrue/PostgREST/PG，真实 JWT、Cookie、用户更新、塔罗/BYOK/历史/知识库联调 17/17 通过；模型仍为桩，非完整 Next 浏览器端到端 | 本地授权范围已完成；不代替生产定义、OAuth/邮件或付费供应商验收 |
-| 候选代码远程 CI（P7） | 首个候选 `d959896` 已在 Node 20.20.2＋固定 Chromium 通过；真实平台测试补入后的最终候选仍需再次验证 | 已获提交/推送与草稿验证 PR 授权；每次以确切候选版本的 quality workflow 结果为准，旧提交结果不能代替后续代码 |
+| 候选代码远程 CI（P7） | 最终代码候选 `a5858822be783d3c6b5b303c017c6faa9dee774e` 已通过 Node 20.20.2＋固定 Chromium 的 [quality run 36990640973](https://github.com/hhszzzz/taibu/actions/runs/36990640973) | 1152 默认测试、20 产物、22 SQL、17 Auth/REST、28 浏览器检查全部通过；只证明该提交与其 fixture，不证明真实环境权限等价 |
 
-数据库权威定义仍未标记完成，不能通过再次运行相同的本地测试消除缺口。自动目标提醒不提供环境访问、代码上传或生产操作授权。生产 SQL 应用、上线及 F1–F3 平台迁移另行授权，不与上述非生产验收混为一项任务。
+数据库权威来源缺口已通过单独授权的只读核对解除；发现的实际权限差异仍阻断真实环境安全验收。自动目标提醒不提供环境访问、代码上传或生产操作授权。生产 SQL 应用、上线及 F1–F3 平台迁移另行授权，不与上述非生产验收混为一项任务。
 
 ## 授权续验（进行中）
 
 用户随后通过交互明确选择：
 
 - 允许创建完整临时本地 Auth/PostgREST 测试栈，下载必要 Docker 镜像；不挂载已有数据、不连接生产，完成后清理。
-- 数据库权威定义由用户提供最新导出；目前未收到文件或路径，**没有改为授权读取线上元数据**。
+- 最初选择由用户提供数据库导出；后来用户明确改为授权 Supabase MCP 只读核对真实环境。仅读取 catalog/权限/迁移元数据及安全 advisory，不读取业务行、不执行线上写入。
 - 允许创建验收分支，仅提交/推送本轮改动并创建验证 PR；不合并、不部署，不包含用户原有独立改动。
 
 验收分支为 `refactor/modular-acceptance-20261002`，先以 fast-forward 纳入远端 `0d188be` 及其已有的奇门、每日聊天修复，没有覆盖这些上游改动。远端仓库为公开仓库；发布前排除用户独立文件并检查敏感内容。
@@ -197,4 +199,72 @@ pnpm test:browser -- --chrome
 
 真实栈本次主工作区运行 `b63beaf1-0f4f-4988-81ef-1712d3439d04` 清理后，容器/网络/卷均为 0；成功、故意断言失败与 SIGTERM 路径也分别验证清理。不停止全局 Docker，不删除共享镜像缓存，不承诺 SIGKILL/宿主崩溃时自动清理。完整入口和 CI 已强制加入真实 Auth/REST 层，`pnpm test:auth` 可独立复现并自动构建 Core。
 
-**远程证据按 SHA 记录在[草稿 PR #16 的检查与说明](https://github.com/hhszzzz/taibu/pull/16)。** 新候选必须实际通过该提交的 quality workflow，不能沿用 `d959896` 的成功结果；本记录中的本地结论不是预先宣称远程通过。数据库权威导出仍未收到，原计划因此仍不能标记全部验收闭环。
+**远程证据按 SHA 记录在[草稿 PR #16 的检查与说明](https://github.com/hhszzzz/taibu/pull/16)。** `a585882` 的实际远程结果已确认通过；后续代码变化必须另行验证，不能沿用旧结果。
+
+### 真实数据库权威核对（2026-10-02，只读）
+
+用户后续明确授权 Supabase MCP 访问真实环境，原“等待导出”阻塞已解除。本次只读取系统 catalog、权限、迁移记录和安全 advisory；没有读取业务数据、真实账号凭据，也没有执行 DDL、业务 RPC、生产写入或部署。
+
+- 已取得 42 张 public 表的清单、59 个函数的签名/权限、121 项已应用迁移记录；深入比对本轮 fixture 的 17 张表和 14 个应用函数，包括列/默认值/约束、62 条策略、55 个索引及触发器/视图/默认权限。
+- 14 个函数的身份参数、返回类型与 definer 标志一致；11 个正文规范化摘要一致。3 个搜索函数仍为历史定义，本轮两份 October 修复 migration 均未应用。
+- 真实库与 fixture 的引擎/扩展、对象 owner、表入口权限、部分字段及 RLS 存在差异。限流 sequence 和唯一键已在真实 catalog 确认，但这不使整个 fixture 成为生产等价基线。
+- 权限差异进一步在仅有虚构账号的独立本地栈复现了安全缺口。**因此不能把既有 CI 全绿或“核对已完成”写成真实环境安全通过。** 两份现有函数修复也不足以覆盖全部表权限入口。
+
+为避免将未修复环境的具体权限缺口公开到公共 PR，详细证据与修复顺序保存在本地忽略路径 `.claude/database-authority-review-20261002.md`，不自动上传。该轮仅更新本地文档，未执行生产 migration；后续获批本地修复结果如下。
+
+## 权限修复与后续精简（2026-10-03，本地交付）
+
+用户批准仅在本地实现权限修复及验证；随后要求继续寻找简化、优化项。本轮没有提交、推送、合并、部署或执行真实环境 migration，`a585882` 的旧远程 CI 不能代替此次未提交改动的验证。
+
+### 权限补强
+
+- 新增 `20261002_102000_protect_account_and_ledger_writes.sql`：invoker 触发器保护用户身份与权益字段，restrictive policy 限制普通用户直接插入流水，同时保留管理员 JWT、service_role 和可信 SQL owner 执行路径。保留两份既有 October 修复。
+- Fixture 对受影响表使用经核对的宽 CRUD 授权，并确认没有额外 TRUNCATE 能力；拒绝不再依赖缺少表权限。
+- 加载现行 Auth profile-sync 函数/绑定，由真实 Auth 创建 profile；补齐激活、签到、月度会员等既有函数及当前并发/超额修订，不整体回放历史 SQL。
+- 修复前 SQL 红灯为 29 项中 23 通过、6 失败，包含 5 个真实缺少拒绝的测试组及父项；原有 21 个 SQL 子场景通过。新迁移加载后扩展 SQL **34/34**、真实 Auth/REST **21/21** 通过，前置条件故障也验证原子拒绝。
+
+### 已落实的三项小步精简
+
+1. **公告缓存失效去重**：`requestBrowserData()` 已调用公共失效逻辑，删除公告面板保存/删除后的第二次调用。实际组件浏览器回归修复前观测到 2 次失效；修复后 POST/PATCH/DELETE 各一次，创建/删除失败均不失效。保留必要的面板列表重新加载，不宣称所有网络请求减半。
+2. **分析快照请求包装精简**：移除只转发 GET/错误文案的私有重载包装，直接复用 `requestBrowserData()`；详情 404 返回 null、列表失败抛错、空列表不加载详情、AbortError 原样传播都有覆盖。
+3. **删除无调用者的 HTTP facade**：移除 `resolveChatRequest()`，保留仍被使用的 `resolveManagedChat()`、`ResolvedChatRequest` 和实际 `prepareChatRequest()` 流程，不合并托管/BYOK 生命周期。
+
+上述三个业务源文件净减少 **42 行**；不是仓库总行数减少承诺。新增回归放在现有测试文件/浏览器 fixture 中，浏览器检查从 28 增为 33。
+
+### 主工作区完整自验
+
+`DOTENV_CONFIG_PATH=/dev/null NEXT_TELEMETRY_DISABLED=1 pnpm verify -- --chrome` **完整通过**：
+
+| 层 | 结果 |
+|---|---|
+| 包构建、lint/架构守卫、strict | 全部通过 |
+| 默认单元/路由/Core/MCP 测试 | **1153/1153，0 fail、0 skip** |
+| Next 生产构建 | 通过 |
+| 包/许可证/Skill 产物 | **20/20** |
+| PostgreSQL/RLS/事务 | **34/34** |
+| 真实 Auth/JWT/PostgREST | **21/21** |
+| 离线实际浏览器组件 | **33/33**，39 个 fixture 请求，无外部请求或运行时异常 |
+
+主工作区另使用精确 PostgreSQL **17.6** / vector **0.8.0** 运行同一套 Auth/REST 测试，**21/21 通过**，未跳过断言。独立版本断言和测试资源清理均通过。默认 PG16 gate 未被静默替换；精确版本的私有重放入口为 `.claude/verify-pg17-permissions.test.mjs`，先 `pnpm build:core`，再按脚本头部命令运行。镜像缓存保留，不操作其他 Docker 资源。
+
+### 后续候选与明确边界
+
+进一步确认的候选：聊天提示词装配与 KB 命中映射重复读取 KB 名称；提示词预算在同一次装配中重复计算。前者正常命中路径可减少一次元数据查询，但需要保留缺失/失败回退；后者通常只减少一次配置查找，不能说减少数据库请求（现有缓存仍生效）。这两项没有混入本轮改动，后续应单独补查询次数、输出一致性和调用者隔离回归。
+
+**本轮获批的本地修复与自验已完成。** 此阶段结束时尚未应用真实环境迁移或提交新候选；随后独立授权的执行结果如下。历史权限/流水数据可信度未审查，不以修复通过声称历史数据安全。
+
+## 授权数据库修复执行（2026-10-03）
+
+用户单独批准三份修复及验收分支更新/CI。执行前重新核对目标、121 项已应用迁移、函数签名/owner、扩展位置、字段类型/默认值与 RLS 前提，没有发现阻止执行的漂移。仅按以下顺序应用三份原文 SQL，全部成功；没有重放历史清单、读取业务行、回填数据或部署应用。
+
+| 本地迁移 | MCP 实际记录版本 |
+|---|---|
+| `20261002_100000_fix_knowledge_search_contracts.sql` | `20261003004639` |
+| `20261002_101000_restrict_credit_ledger_rpc.sql` | `20261003004844` |
+| `20261002_102000_protect_account_and_ledger_writes.sql` | `20261003005536` |
+
+MCP 分配执行时间版本，表中映射不改变本地文件名。执行后只读 catalog 确认三个搜索函数的正文/路径/执行权限、裸流水 RPC 权限、invoker 保护函数及已启用的 BEFORE INSERT/UPDATE 触发器、authenticated 的 RESTRICTIVE INSERT policy 均符合迁移；表 owner、RLS 开启和 FORCE RLS 关闭状态保持不变。
+
+Supabase advisory 仍列出 11 项 anon、40 项 authenticated 可执行 definer 提示，以及泄露密码保护未开启；不是 51 个已确认漏洞，未在本次授权外批量改权限或 Auth 设置。后续逐项评估可参考 [anon advisory](https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable)、[authenticated advisory](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable) 和 [密码保护](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection)。
+
+这证明指定修复已安装，不证明全库无其他问题或历史权益/流水可信。生产负例未执行，行为证据仍来自上述隔离双版本测试。原始 catalog、项目标识、私有复现证据不上传公共 PR。新候选远程 CI 的确切 SHA、结果和部署状态由 [草稿 PR #16](https://github.com/hhszzzz/taibu/pull/16) 记录，不以本地结果替代。

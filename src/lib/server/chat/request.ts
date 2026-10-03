@@ -6,7 +6,7 @@ import { getDefaultModelConfigAsync, getModelConfigAsync } from '@/lib/server/ai
 import { isModelAllowedForMembership, isReasoningAllowedForMembership } from '@/lib/ai/ai-access';
 import { getAuthContext, jsonError, requireUserContext, resolveRequestDbClient, type AuthContextResult } from '@/lib/api-utils';
 import { buildChatPromptContext } from '@/lib/server/chat/prompt-context';
-import { prepareDirectChat, prepareManagedChat, resolveManagedChat } from '@/lib/server/chat/use-case';
+import { prepareDirectChat, prepareManagedChat } from '@/lib/server/chat/use-case';
 import type {
   ChatActor,
   ChatPreparationInput,
@@ -218,18 +218,6 @@ async function bindManagedChat(request: NextRequest, body: ChatRequestBody): Pro
     },
   };
   return { actor, accessTokenForKB, operations };
-}
-
-export async function resolveChatRequest(
-  request: NextRequest,
-  body: ChatRequestBody,
-): Promise<ResolvedChatRequest | Response> {
-  const adapter = await bindManagedChat(request, body);
-  if (adapter instanceof Response) return adapter;
-  const result = await resolveManagedChat(adapter.actor, toPreparationInput(body), adapter.operations);
-  return result.ok
-    ? withRequestContext(result.value, body, adapter.accessTokenForKB)
-    : preparationErrorResponse(result.error);
 }
 
 export async function prepareBrowserDirectChatRequest(

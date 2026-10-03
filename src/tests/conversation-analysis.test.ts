@@ -231,6 +231,22 @@ test('loadConversationAnalysisSnapshot should throw on non-404 failures', async 
     );
 });
 
+test('analysis snapshot loaders preserve missing data, list errors and cancellation', async (t) => {
+    const { loadConversationAnalysisSnapshot, loadLatestConversationAnalysisSnapshot } = await import('../lib/chat/conversation-analysis');
+    const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(null, { status: 404 }));
+    assert.equal(await loadConversationAnalysisSnapshot('missing'), null);
+
+    fetchMock.mock.mockImplementationOnce(async () => Response.json({ conversations: [] }));
+    const beforeEmptyList = fetchMock.mock.callCount();
+    assert.equal(await loadLatestConversationAnalysisSnapshot({ sourceType: 'tarot' }), null);
+    assert.equal(fetchMock.mock.callCount(), beforeEmptyList + 1, 'an empty list must not load a detail');
+    await assert.rejects(loadLatestConversationAnalysisSnapshot({ sourceType: 'tarot' }), /404/);
+
+    const aborted = new DOMException('Cancelled', 'AbortError');
+    fetchMock.mock.mockImplementationOnce(async () => { throw aborted; });
+    await assert.rejects(loadConversationAnalysisSnapshot('cancelled'), error => error === aborted);
+});
+
 test('loadLatestConversationAnalysisSnapshot should include chartId filter when provided', async (t) => {
     const originalFetch = global.fetch;
     const analysisModulePath = require.resolve('../lib/chat/conversation-analysis');

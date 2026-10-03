@@ -2,9 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { buildPostgresFixture } from './postgres-fixture.mjs';
+import { buildPostgresFixture, SQL_SOURCE_MANIFEST } from './postgres-fixture.mjs';
 
 // Real PostgreSQL/RLS contracts against a disposable local container. This does
 // NOT validate Supabase Auth, JWT signatures, PostgREST, or production parity.
@@ -152,6 +153,12 @@ SET LOCAL request.jwt.claims = ${quote(JSON.stringify({ role, ...(userId ? { sub
 ${statement}
 COMMIT;`);
   };
+  const asOwner = statement => sql(`BEGIN; SET LOCAL ROLE taibu_contract_owner; ${statement} COMMIT;`);
+  const expectDeniedWrite = (actor, statement, role = 'authenticated', claimedRole = role) => assert.rejects(sql(`BEGIN;
+SET LOCAL ROLE ${role};
+SET LOCAL request.jwt.claims = ${quote(JSON.stringify({ role: claimedRole, ...(actor ? { sub: actor } : {}) }))};
+${statement}
+ROLLBACK;`), /42501/);
   const createConversation = (userId, messages = [], title = 'fixture') => asActor(userId,
     `SELECT public.create_conversation_with_messages(${quote(userId)}, ${quote(title)}, 'general', 'chat', '{}'::jsonb, ${json(messages)});`);
   const historyCall = (userId, type, payload) => `SELECT public.create_analysis_conversation_with_history_as_service(
@@ -184,8 +191,9 @@ COMMIT;`);
   await sql(fixture);
   await sql(`
 INSERT INTO auth.users(id) VALUES ${[ids.owner, ids.other, ids.admin, ids.concurrent, ids.rollback].map(id => `(${quote(id)})`).join(',')};
-INSERT INTO public.users(id, is_admin, ai_chat_count)
-SELECT id, id = ${quote(ids.admin)}::uuid, CASE WHEN id = ${quote(ids.concurrent)}::uuid THEN 4 ELSE 10 END FROM auth.users;
+SET ROLE taibu_contract_owner;
+UPDATE public.users SET is_admin = id = ${quote(ids.admin)}::uuid,
+  ai_chat_count = CASE WHEN id = ${quote(ids.concurrent)}::uuid THEN 4 ELSE 10 END;
 INSERT INTO public.knowledge_bases(id, user_id, name) VALUES
   (${quote(ids.kb)}, ${quote(ids.owner)}, 'owner KB'), (${quote(ids.otherKb)}, ${quote(ids.other)}, 'other KB');
 INSERT INTO public.knowledge_entries(kb_id, content, source_type, source_id, content_vector, metadata) VALUES
@@ -198,7 +206,8 @@ INSERT INTO public.tarot_readings(id, user_id, spread_id, question, cards, metad
 INSERT INTO public.meihua_divinations(id, user_id, question, method, cast_datetime, main_hexagram, input_data, result_data)
 VALUES (${quote(ids.meihua)}, ${quote(ids.owner)}, 'fixture', 'time', '2026-01-01', '乾', '{}', '{}');
 INSERT INTO public.xiaoliuren_divinations(id, user_id, solar_datetime, lunar_month, lunar_day, shichen, final_status, input_data, result_data)
-VALUES (${quote(ids.xiaoliuren)}, ${quote(ids.owner)}, '2026-01-01', 1, 1, '子', '大安', '{}', '{}');`);
+VALUES (${quote(ids.xiaoliuren)}, ${quote(ids.owner)}, '2026-01-01', 1, 1, '子', '大安', '{}', '{}');
+RESET ROLE;`);
 
   await t.test('real vector extension, non-owner roles and administrator predicate', async () => {
     const isolation = JSON.parse(await docker(['inspect', '--format',
@@ -218,7 +227,188 @@ VALUES (${quote(ids.xiaoliuren)}, ${quote(ids.owner)}, '2026-01-01', 1, 1, '子'
     assert.equal(await asActor(ids.owner, 'SELECT public.is_admin_user();'), 'f');
     assert.equal(await asActor(ids.other, 'SELECT public.is_admin_user();'), 'f');
     assert.equal(await asActor(ids.admin, 'SELECT public.is_admin_user();'), 't');
-    await assert.rejects(asActor(null, 'SELECT public.is_admin_user();', 'anon'), /42501/);
+    assert.equal(await asActor(null, 'SELECT public.is_admin_user();', 'anon'), 'f');
+  });
+
+  await t.test('account and ledger CRUD grants exist without TRUNCATE before guard denials', async () => {
+    for (const role of ['anon', 'authenticated']) {
+      for (const table of ['users', 'credit_transactions']) {
+        const actual = JSON.parse(await sql(`SELECT json_build_object(
+          'select', has_table_privilege('${role}', 'public.${table}', 'SELECT'),
+          'insert', has_table_privilege('${role}', 'public.${table}', 'INSERT'),
+          'update', has_table_privilege('${role}', 'public.${table}', 'UPDATE'),
+          'delete', has_table_privilege('${role}', 'public.${table}', 'DELETE'),
+          'truncate', has_table_privilege('${role}', 'public.${table}', 'TRUNCATE'),
+          'predicate', has_function_privilege('${role}', 'public.is_admin_user()', 'EXECUTE'));`));
+        assert.deepEqual(actual, { select: true, insert: true, update: true, delete: true, truncate: false, predicate: true });
+      }
+    }
+  });
+
+  await t.test('ordinary sensitive and mixed account updates are rejected atomically despite broad grants', async () => {
+    const before = await asActor(ids.owner, `SELECT row_to_json(u) FROM public.users u WHERE id=${quote(ids.owner)};`);
+    for (const patch of [
+      'is_admin=true', 'is_admin=NULL', "membership='pro'", 'membership=NULL',
+      "membership_expires_at='2099-01-01'", 'ai_chat_count=999', 'ai_chat_count=NULL',
+      `id=${quote(ids.other)}`, "nickname='must-rollback', ai_chat_count=999",
+    ]) {
+      await expectDeniedWrite(ids.owner, `UPDATE public.users SET ${patch} WHERE id=${quote(ids.owner)};`);
+      assert.equal(await asActor(ids.owner, `SELECT row_to_json(u) FROM public.users u WHERE id=${quote(ids.owner)};`), before);
+    }
+    assert.equal(await asActor(ids.owner, 'SELECT public.is_admin_user();'), 'f');
+    // Spoofed claim text is not a new effective SQL role; session_user remains
+    // the privileged connection owner in both cases and must not bypass guard.
+    await expectDeniedWrite(ids.owner, `UPDATE public.users SET is_admin=true WHERE id=${quote(ids.owner)};`, 'authenticated', 'service_role');
+    await expectDeniedWrite(ids.owner, `UPDATE public.users SET is_admin=true WHERE id=${quote(ids.owner)};`, 'authenticated', 'taibu_contract_owner');
+  });
+
+  await t.test('safe inserts and ignore-duplicate upserts preserve existing entitlements; unsafe inserts do not', async () => {
+    const fresh = uuid(501);
+    await sql(`INSERT INTO auth.users(id) VALUES (${quote(fresh)});`);
+    await asOwner(`DELETE FROM public.users WHERE id=${quote(fresh)};`);
+    for (const [columns, values] of [
+      ['is_admin', 'true'], ['is_admin', 'NULL'], ['membership', "'plus'"], ['membership', 'NULL'],
+      ['membership_expires_at', "'2099-01-01'"], ['ai_chat_count', '10'], ['ai_chat_count', 'NULL'],
+    ]) await expectDeniedWrite(fresh, `INSERT INTO public.users(id,${columns}) VALUES (${quote(fresh)},${values});`);
+    assert.equal(await asActor(fresh, `INSERT INTO public.users(id,nickname) VALUES (${quote(fresh)},'safe') RETURNING ai_chat_count;`), '1');
+    await asOwner(`UPDATE public.users SET membership='pro',membership_expires_at='2099-01-01',ai_chat_count=80 WHERE id=${quote(fresh)};`);
+    const before = await asActor(fresh, `SELECT row_to_json(u) FROM public.users u WHERE id=${quote(fresh)};`);
+    await asActor(fresh, `INSERT INTO public.users(id,membership,ai_chat_count) VALUES (${quote(fresh)},'free',1) ON CONFLICT(id) DO NOTHING;`);
+    assert.equal(await asActor(fresh, `SELECT row_to_json(u) FROM public.users u WHERE id=${quote(fresh)};`), before);
+    await expectDeniedWrite(fresh, `INSERT INTO public.users(id,membership,ai_chat_count) VALUES (${quote(fresh)},'free',1)
+      ON CONFLICT(id) DO UPDATE SET membership=excluded.membership,ai_chat_count=excluded.ai_chat_count;`);
+    await expectDeniedWrite(fresh, `INSERT INTO public.users(id,is_admin) VALUES (${quote(fresh)},true) ON CONFLICT(id) DO NOTHING;`);
+  });
+
+  await t.test('paid, expired, over-cap and legacy NULL rows allow ordinary profile-only edits', async () => {
+    for (const [number, values] of [
+      [502, "false,'pro','2099-01-01',80"], [503, "false,'plus','2000-01-01',25"], [504, 'NULL,NULL,NULL,NULL'],
+    ]) {
+      const id = uuid(number);
+      await sql(`INSERT INTO auth.users(id) VALUES (${quote(id)});`);
+      await asOwner(`UPDATE public.users SET (is_admin,membership,membership_expires_at,ai_chat_count)=(${values}) WHERE id=${quote(id)};`);
+      const before = await sql(`SELECT json_build_array(is_admin,membership,membership_expires_at,ai_chat_count) FROM public.users WHERE id=${quote(id)};`);
+      await asActor(id, `UPDATE public.users SET nickname='profile-only',avatar_url=NULL WHERE id=${quote(id)};`);
+      assert.equal(await sql(`SELECT json_build_array(is_admin,membership,membership_expires_at,ai_chat_count) FROM public.users WHERE id=${quote(id)};`), before);
+      await expectDeniedWrite(id, `UPDATE public.users SET ai_chat_count=1 WHERE id=${quote(id)};`);
+    }
+  });
+
+  await t.test('anonymous and cross-user writes cannot delete or recreate protected accounts', async () => {
+    await expectDeniedWrite(null, `INSERT INTO public.users(id) VALUES (${quote(uuid(505))});`, 'anon');
+    assert.equal(await asActor(ids.other, `WITH changed AS (UPDATE public.users SET nickname='cross-user' WHERE id=${quote(ids.owner)} RETURNING id) SELECT count(*) FROM changed;`), '0');
+    assert.equal(await asActor(ids.owner, `WITH deleted AS (DELETE FROM public.users WHERE id=${quote(ids.owner)} RETURNING id) SELECT count(*) FROM deleted;`), '0');
+    await expectDeniedWrite(ids.owner, `INSERT INTO public.users(id) VALUES (${quote(ids.other)});`);
+  });
+
+  await t.test('ordinary direct ledger inserts and mutations are denied while owner admin and service writes work', async () => {
+    const statement = actor => `INSERT INTO public.credit_transactions(user_id,amount,type,source,balance_after) VALUES (${quote(actor)},50,'earn','direct-write-regression',60);`;
+    await expectDeniedWrite(ids.owner, statement(ids.owner));
+    await expectDeniedWrite(ids.other, statement(ids.owner));
+    for (const [actor, role] of [[ids.admin, 'authenticated'], [null, 'service_role']]) {
+      await asActor(actor, statement(ids.rollback), role);
+    }
+    await asOwner(statement(ids.rollback));
+    assert.equal(await asActor(ids.rollback, `SELECT count(*) FROM public.credit_transactions WHERE source='direct-write-regression';`), '3');
+    assert.equal(await asActor(ids.rollback, `WITH changed AS (UPDATE public.credit_transactions SET amount=999 WHERE source='direct-write-regression' RETURNING id) SELECT count(*) FROM changed;`), '0');
+    assert.equal(await asActor(ids.rollback, `WITH deleted AS (DELETE FROM public.credit_transactions WHERE source='direct-write-regression' RETURNING id) SELECT count(*) FROM deleted;`), '0');
+    await asOwner("DELETE FROM public.credit_transactions WHERE source='direct-write-regression';");
+  });
+
+  await t.test('effective table owner and administrator/service contexts retain trusted account writes', async () => {
+    const trusted = uuid(506);
+    await sql(`INSERT INTO auth.users(id) VALUES (${quote(trusted)});`);
+    // Actual owner context is trusted even with a non-admin original JWT claim.
+    await asOwner(`SET LOCAL request.jwt.claims=${quote(JSON.stringify({ role: 'authenticated', sub: ids.owner }))};
+      UPDATE public.users SET ai_chat_count=7,membership='plus' WHERE id=${quote(trusted)};`);
+    for (const [actor, role] of [[ids.admin, 'authenticated'], [null, 'service_role']]) {
+      assert.equal(await asActor(actor, `UPDATE public.users SET ai_chat_count=8 WHERE id=${quote(trusted)} RETURNING ai_chat_count;`, role), '8');
+    }
+    await assert.rejects(sql(`BEGIN; UPDATE public.users SET ai_chat_count=99 WHERE id=${quote(trusted)}; ROLLBACK;`), /42501/, 'bootstrap session_user is not an implicit table-owner capability');
+  });
+
+  await t.test('protection catalog retains invoker trigger restrictive policy and denied helper ACLs', async () => {
+    const catalog = JSON.parse(await sql(`SELECT json_build_object(
+      'definer',(SELECT prosecdef FROM pg_proc WHERE oid='public.guard_user_entitlement_writes()'::regprocedure),
+      'config',(SELECT proconfig FROM pg_proc WHERE oid='public.guard_user_entitlement_writes()'::regprocedure),
+      'trigger',(SELECT tgenabled FROM pg_trigger WHERE tgrelid='public.users'::regclass AND tgname='guard_user_entitlement_writes'),
+      'policy',(SELECT permissive FROM pg_policies WHERE schemaname='public' AND tablename='credit_transactions' AND policyname='credit_transactions_authenticated_insert_guard'),
+      'auth_sync',(SELECT tgenabled FROM pg_trigger WHERE tgrelid='auth.users'::regclass AND tgname='on_auth_user_profile_synced'));`));
+    assert.deepEqual(catalog, { definer: false, config: ['search_path=pg_catalog'], trigger: 'O', policy: 'RESTRICTIVE', auth_sync: 'O' });
+    for (const role of ['anon', 'authenticated', 'service_role']) {
+      assert.equal(await sql(`SELECT has_function_privilege('${role}','public.guard_user_entitlement_writes()','EXECUTE');`), 'f');
+    }
+    await expectDeniedWrite(ids.owner, 'SELECT public.guard_user_entitlement_writes();');
+    await expectDeniedWrite(ids.admin, 'SELECT public.guard_user_entitlement_writes();');
+  });
+
+  await t.test('current activation check-in and monthly RPCs accept admin/service and reject ordinary callers', async () => {
+    for (const [number, actor, role] of [[601, ids.admin, 'authenticated'], [602, null, 'service_role']]) {
+      const id = uuid(number);
+      const code = randomUUID();
+      const membershipCode = randomUUID();
+      await sql(`INSERT INTO auth.users(id) VALUES (${quote(id)});`);
+      await asOwner(`UPDATE public.users SET ai_chat_count=0 WHERE id=${quote(id)};
+        INSERT INTO public.activation_keys(key_code,key_type,credits_amount,created_by) VALUES (${quote(code)},'credits',5,${quote(ids.admin)});
+        INSERT INTO public.activation_keys(key_code,key_type,membership_type,created_by) VALUES (${quote(membershipCode)},'membership','plus',${quote(ids.admin)});`);
+      for (const call of [
+        `SELECT public.activate_key_as_service(${quote(id)},${quote(code)});`,
+        `SELECT public.perform_daily_checkin_as_service(${quote(id)});`,
+        `SELECT public.claim_linuxdo_membership_as_service(${quote(id)},'pro',3,'fixture-provider');`,
+      ]) await expectDeniedWrite(id, call);
+      const activated = JSON.parse(await asActor(actor, `SELECT row_to_json(r) FROM public.activate_key_as_service(${quote(id)},${quote(code)}) r;`, role));
+      assert.equal(activated.success, true);
+      assert.equal(await sql(`SELECT ai_chat_count FROM public.users WHERE id=${quote(id)};`), '5');
+      const duplicate = JSON.parse(await asActor(actor, `SELECT row_to_json(r) FROM public.activate_key_as_service(${quote(id)},${quote(code)}) r;`, role));
+      assert.equal(duplicate.success, false);
+      assert.equal(JSON.parse(await asActor(actor, `SELECT row_to_json(r) FROM public.activate_key_as_service(${quote(id)},${quote(membershipCode)}) r;`, role)).success, true);
+      const checkin = JSON.parse(await asActor(actor, `SELECT public.perform_daily_checkin_as_service(${quote(id)});`, role));
+      assert.equal(checkin.status, 'ok');
+      assert.ok([2,4,6].includes(checkin.reward_credits));
+      assert.equal(checkin.credits, 5 + checkin.reward_credits);
+      assert.equal(JSON.parse(await asActor(actor, `SELECT public.perform_daily_checkin_as_service(${quote(id)});`, role)).status, 'already_checked_in');
+      const monthly = JSON.parse(await asActor(actor, `SELECT public.claim_linuxdo_membership_as_service(${quote(id)},'pro',3,'fixture-provider');`, role));
+      assert.equal(monthly.status, 'ok');
+      assert.equal(monthly.membership, 'pro');
+      assert.equal(JSON.parse(await asActor(actor, `SELECT public.claim_linuxdo_membership_as_service(${quote(id)},'pro',3,'fixture-provider');`, role)).status, 'cooldown');
+      assert.equal(await sql(`SELECT count(*) FROM public.credit_transactions WHERE user_id=${quote(id)};`), '2');
+    }
+  });
+
+  await t.test('April10 concurrency and over-cap check-in amendments remain active', async () => {
+    for (const number of [603, 604, 605]) await sql(`INSERT INTO auth.users(id) VALUES (${quote(uuid(number))});`);
+    const monthlyId = uuid(603);
+    const monthly = await Promise.all([0,1].map(() => asActor(ids.admin, `SELECT public.claim_linuxdo_membership_as_service(${quote(monthlyId)},'plus',2,'concurrent-provider');`)));
+    assert.deepEqual(monthly.map(value => JSON.parse(value).status).sort(), ['cooldown','ok']);
+    assert.equal(await sql(`SELECT count(*) FROM public.activation_keys WHERE used_by=${quote(monthlyId)} AND source='linuxdo_monthly';`), '1');
+    const checkinId = uuid(604);
+    await asOwner(`UPDATE public.users SET membership='plus',membership_expires_at='2099-01-01',ai_chat_count=19 WHERE id=${quote(checkinId)};`);
+    const checkins = (await Promise.all([0,1].map(() => asActor(ids.admin, `SELECT public.perform_daily_checkin_as_service(${quote(checkinId)});`)))).map(JSON.parse);
+    assert.deepEqual(checkins.map(row => row.status).sort(), ['already_checked_in','ok']);
+    assert.ok(checkins.find(row => row.status === 'ok').credits > 20, 'April10 permits the full reward to exceed the cap');
+    assert.equal(await sql(`SELECT count(*) FROM public.daily_checkins WHERE user_id=${quote(checkinId)};`), '1');
+    const cappedId = uuid(605);
+    await asOwner(`UPDATE public.users SET membership='plus',membership_expires_at='2099-01-01',ai_chat_count=20 WHERE id=${quote(cappedId)};`);
+    const capped = JSON.parse(await asActor(ids.admin, `SELECT public.perform_daily_checkin_as_service(${quote(cappedId)});`));
+    assert.equal(capped.status, 'credit_cap_reached');
+    assert.equal(capped.credits, 20);
+    assert.equal(await sql(`SELECT count(*) FROM public.daily_checkins WHERE user_id=${quote(cappedId)};`), '0');
+  });
+
+  await t.test('activation and check-in failures roll back account ledger and usage markers together', async () => {
+    const id = uuid(606);
+    const code = randomUUID();
+    await sql(`INSERT INTO auth.users(id) VALUES (${quote(id)});`);
+    await asOwner(`INSERT INTO public.activation_keys(key_code,key_type,credits_amount,created_by) VALUES (${quote(code)},'credits',5,${quote(ids.admin)});`);
+    await sql(`ALTER TABLE public.credit_transactions ADD CONSTRAINT fixture_reject_membership_ledger CHECK(user_id<>${quote(id)}::uuid) NOT VALID;`);
+    try {
+      await assert.rejects(asActor(ids.admin, `SELECT public.activate_key_as_service(${quote(id)},${quote(code)});`), /23514/);
+      await assert.rejects(asActor(ids.admin, `SELECT public.perform_daily_checkin_as_service(${quote(id)});`), /23514/);
+      assert.equal(await sql(`SELECT ai_chat_count FROM public.users WHERE id=${quote(id)};`), '1');
+      assert.equal(await sql(`SELECT is_used FROM public.activation_keys WHERE key_code=${quote(code)};`), 'f');
+      assert.equal(await sql(`SELECT count(*) FROM public.daily_checkins WHERE user_id=${quote(id)};`), '0');
+      assert.equal(await sql(`SELECT count(*) FROM public.credit_transactions WHERE user_id=${quote(id)};`), '0');
+    } finally { await sql('ALTER TABLE public.credit_transactions DROP CONSTRAINT fixture_reject_membership_ledger;'); }
   });
 
   await t.test('credit mutations deny ordinary users and accept admin/service claims', async () => {
@@ -451,6 +641,32 @@ ROLLBACK;`), /42501/, 'record_credit_transaction must reject direct authenticate
     for (const call of ["search_knowledge_fts('alpha')", "search_knowledge_trigram('alpha')", 'search_knowledge_vector(ARRAY[1,0,0]::float8[], NULL, 10, 3)']) {
       await assert.rejects(asActor(null, `SELECT * FROM public.${call};`, 'anon'), /42501:[\s\S]*permission denied for function search_knowledge_/);
       await assert.rejects(asActor(null, `SELECT * FROM public.${call};`), /P0001:[\s\S]*Not authenticated/);
+    }
+  });
+
+  await t.test('migration preflight failures leave no partially installed guard or restrictive policy', async () => {
+    const migration = await readFile(path.join(repoRoot, SQL_SOURCE_MANIFEST.accountProtection), 'utf8');
+    const helper = 'public.record_credit_transaction(uuid,integer,text,text,integer,text,text,text,jsonb)';
+    for (const [fault, restore, expected] of [
+      ['ALTER TABLE public.users ALTER COLUMN ai_chat_count SET DEFAULT 2;', 'ALTER TABLE public.users ALTER COLUMN ai_chat_count SET DEFAULT 1;', /reviewed identity/],
+      ['ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;', 'ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;', /RLS enabled/],
+      [`GRANT EXECUTE ON FUNCTION ${helper} TO authenticated;`, `REVOKE EXECUTE ON FUNCTION ${helper} FROM authenticated;`, /ledger RPC restriction first/],
+    ]) {
+      await sql(`DROP TRIGGER guard_user_entitlement_writes ON public.users;
+        DROP FUNCTION public.guard_user_entitlement_writes();
+        DROP POLICY credit_transactions_authenticated_insert_guard ON public.credit_transactions;
+        ${fault}`);
+      try {
+        await assert.rejects(sql(migration), expected);
+        const installed = JSON.parse(await sql(`SELECT json_build_object(
+          'function',to_regprocedure('public.guard_user_entitlement_writes()') IS NOT NULL,
+          'trigger',EXISTS(SELECT 1 FROM pg_trigger WHERE tgrelid='public.users'::regclass AND tgname='guard_user_entitlement_writes'),
+          'policy',EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='credit_transactions' AND policyname='credit_transactions_authenticated_insert_guard'));`));
+        assert.deepEqual(installed, { function: false, trigger: false, policy: false });
+      } finally {
+        await sql(restore);
+        await sql(migration);
+      }
     }
   });
 });

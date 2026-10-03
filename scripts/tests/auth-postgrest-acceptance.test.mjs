@@ -78,16 +78,24 @@ test('real local GoTrue/PostgREST application acceptance', { timeout: 300_000 },
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
   const service = createClient(stack.url, stack.serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  const trustedSql = statement => stack.sql(`BEGIN; SET LOCAL ROLE taibu_contract_owner; ${statement} COMMIT;`);
   const identities = {};
   for (const [name, membership, admin] of [['owner', 'plus', false], ['other', 'plus', false], ['admin', 'plus', true], ['free', 'free', false]]) {
     const email = `${name}@acceptance.invalid`;
     const password = `T7-${randomBytes(24).toString('hex')}`;
-    const result = await service.auth.admin.createUser({ email, password, email_confirm: true });
+    const result = await service.auth.admin.createUser({
+      email, password, email_confirm: true,
+      user_metadata: { nickname: `fixture-${name}`, is_admin: true, membership: 'pro', ai_chat_count: 999999 },
+    });
     assert.ok(!result.error, `GoTrue must create fake ${name} identity`);
     assert.ok(result.data.user?.id);
     identities[name] = { email, password, id: result.data.user.id };
-    await stack.sql(`INSERT INTO public.users (id, membership, ai_chat_count, is_admin)
-      VALUES (${quote(result.data.user.id)}, ${quote(membership)}, 10, ${admin});`);
+    const profile = await service.from('users').select('is_admin,membership,membership_expires_at,ai_chat_count,nickname').eq('id', result.data.user.id).single();
+    assert.ok(!profile.error, 'The active Auth trigger must create the public profile');
+    assert.deepEqual(profile.data, { is_admin: false, membership: 'free', membership_expires_at: null, ai_chat_count: 1, nickname: `fixture-${name}` });
+    // Test entitlements are privileged fixture state, not a fabricated Auth INSERT.
+    await trustedSql(`UPDATE public.users SET membership=${quote(membership)},ai_chat_count=10,is_admin=${admin}
+      WHERE id=${quote(result.data.user.id)};`);
   }
   Object.assign(process.env, { SUPABASE_SYSTEM_ADMIN_EMAIL: identities.admin.email, SUPABASE_SYSTEM_ADMIN_PASSWORD: identities.admin.password });
   const api = require('../../src/lib/api-utils.ts');
@@ -277,7 +285,7 @@ test('real local GoTrue/PostgREST application acceptance', { timeout: 300_000 },
   });
 
   await t.test('model membership denial precedes credit denial and neither starts inference or debit', async () => {
-    await stack.sql(`UPDATE public.users SET ai_chat_count = 0 WHERE id = ${quote(identities.free.id)};`);
+    await trustedSql(`UPDATE public.users SET ai_chat_count = 0 WHERE id = ${quote(identities.free.id)};`);
     const start = traffic.length;
     const calls = inferenceCalls;
     const deniedModel = await post(tarot.POST, '/api/tarot', { ...analysisBody(), modelId: 'acceptance-premium' }, sessions.free);
@@ -419,6 +427,158 @@ test('real local GoTrue/PostgREST application acceptance', { timeout: 300_000 },
     assert.ok(traffic.some(entry => entry.path.endsWith('/rpc/kb_replace_source_entries') && entry.sub === identities.owner.id));
     assert.ok(traffic.some(entry => entry.path.endsWith('/rpc/search_knowledge_fts') && entry.sub === identities.owner.id));
     assert.ok((await stack.sql("SELECT extversion FROM pg_extension WHERE extname = 'vector';")).length > 0);
+  });
+
+  const newAccount = async label => {
+    const email = `${label}-${randomBytes(6).toString('hex')}@acceptance.invalid`;
+    const password = randomBytes(24).toString('hex');
+    const created = await service.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { nickname: label } });
+    assert.ok(!created.error, 'Local GoTrue account creation must succeed through the active profile trigger');
+    const signedIn = await post(auth.POST, '/api/auth', { action: 'signInWithPassword', email, password });
+    assert.equal(signedIn.response.status, 200);
+    const session = signedIn.body.data.session;
+    return { id: created.data.user.id, session, db: client(session.access_token), user: session.user };
+  };
+  const accountRow = async account => {
+    const result = await account.db.from('users').select('id,nickname,avatar_url,is_admin,membership,membership_expires_at,ai_chat_count,updated_at').eq('id', account.id).single();
+    assert.ok(!result.error);
+    return result.data;
+  };
+  const protectedFields = row => ({ id: row.id, is_admin: row.is_admin, membership: row.membership, membership_expires_at: row.membership_expires_at, ai_chat_count: row.ai_chat_count });
+
+  await t.test('real caller account and ledger denials are guard-based with broad CRUD and no TRUNCATE', async () => {
+    const account = await newAccount('protected-caller');
+    const privileges = JSON.parse(await stack.sql(`SELECT json_build_object(
+      'user_insert',has_table_privilege('authenticated','public.users','INSERT'),
+      'user_update',has_table_privilege('authenticated','public.users','UPDATE'),
+      'ledger_insert',has_table_privilege('authenticated','public.credit_transactions','INSERT'),
+      'anon_user_insert',has_table_privilege('anon','public.users','INSERT'),
+      'anon_predicate',has_function_privilege('anon','public.is_admin_user()','EXECUTE'),
+      'truncate',has_table_privilege('authenticated','public.users','TRUNCATE'),
+      'invoker',NOT (SELECT prosecdef FROM pg_proc WHERE oid='public.guard_user_entitlement_writes()'::regprocedure),
+      'restrictive',(SELECT permissive='RESTRICTIVE' FROM pg_policies WHERE schemaname='public' AND tablename='credit_transactions' AND policyname='credit_transactions_authenticated_insert_guard'));`));
+    assert.deepEqual(privileges, { user_insert: true, user_update: true, ledger_insert: true, anon_user_insert: true, anon_predicate: true, truncate: false, invoker: true, restrictive: true });
+    const before = await accountRow(account);
+    for (const patch of [
+      { is_admin: true }, { is_admin: null }, { membership: 'pro' }, { membership: null },
+      { membership_expires_at: '2099-01-01T00:00:00Z' }, { ai_chat_count: 999 }, { ai_chat_count: null },
+      { id: identities.other.id }, { nickname: 'atomic-failure', ai_chat_count: 999 },
+    ]) {
+      const denied = await account.db.from('users').update(patch).eq('id', account.id);
+      assert.equal(denied.error?.code, '42501');
+      assert.deepEqual(await accountRow(account), before);
+    }
+    const ledger = await account.db.from('credit_transactions').insert({ user_id: account.id, amount: 999, type: 'earn', source: 'forged-direct' });
+    assert.equal(ledger.error?.code, '42501');
+    assert.equal((await account.db.rpc('is_admin_user')).data, false);
+    const removed = await account.db.from('users').delete().eq('id', account.id).select('id');
+    assert.deepEqual(removed.data, []);
+    const anonymous = await api.createAnonClient().from('users').insert({ id: account.id });
+    assert.equal(anonymous.error?.code, '42501');
+    assert.deepEqual(await accountRow(account), before);
+    // Effective owner, not original ordinary claims, permits internal writes.
+    await trustedSql(`SET LOCAL request.jwt.claims=${quote(JSON.stringify({ role: 'authenticated', sub: account.id }))};
+      UPDATE public.users SET ai_chat_count=2 WHERE id=${quote(account.id)};`);
+    assert.equal((await accountRow(account)).ai_chat_count, 2);
+  });
+
+  await t.test('real safe provisioning paid-profile PATCH and ignoreDuplicates preserve protected fields', async () => {
+    const account = await newAccount('profile-compatibility');
+    await trustedSql(`DELETE FROM public.users WHERE id=${quote(account.id)};`);
+    for (const patch of [{ is_admin: true }, { membership: 'pro' }, { ai_chat_count: null }, { membership_expires_at: '2099-01-01' }]) {
+      const denied = await account.db.from('users').insert({ id: account.id, ...patch });
+      assert.equal(denied.error?.code, '42501');
+    }
+    const { ensureUserRecordRow } = require('../../src/lib/user/profile-record.ts');
+    assert.equal((await ensureUserRecordRow(account.db, account.user)).ok, true);
+    assert.equal((await accountRow(account)).ai_chat_count, 1);
+    await trustedSql(`UPDATE public.users SET membership='pro',membership_expires_at='2099-01-01',ai_chat_count=80 WHERE id=${quote(account.id)};`);
+    const before = protectedFields(await accountRow(account));
+    assert.equal((await ensureUserRecordRow(account.db, account.user)).ok, true);
+    assert.deepEqual(protectedFields(await accountRow(account)), before);
+    const unsafeConflict = await account.db.from('users').upsert({ id: account.id, membership: 'free', ai_chat_count: 1 }, { onConflict: 'id' });
+    assert.equal(unsafeConflict.error?.code, '42501');
+    const profileRoute = require('../../src/app/api/user/profile/route.ts');
+    const response = await profileRoute.PATCH(new NextRequest(`${stack.url}/api/user/profile`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json', authorization: `Bearer ${account.session.access_token}` },
+      body: JSON.stringify({ nickname: 'paid profile edit', avatar_url: null, is_admin: true }),
+    }));
+    assert.equal(response.status, 200);
+    assert.equal((await accountRow(account)).nickname, 'paid profile edit');
+    assert.deepEqual(protectedFields(await accountRow(account)), before);
+    await trustedSql(`UPDATE public.users SET is_admin=NULL,membership=NULL,membership_expires_at=NULL,ai_chat_count=NULL WHERE id=${quote(account.id)};`);
+    const legacy = protectedFields(await accountRow(account));
+    const legacyEdit = await account.db.from('users').update({ nickname: 'legacy null profile edit' }).eq('id', account.id);
+    assert.ok(!legacyEdit.error);
+    assert.deepEqual(protectedFields(await accountRow(account)), legacy);
+    const normalizeNull = await account.db.from('users').update({ ai_chat_count: 1 }).eq('id', account.id);
+    assert.equal(normalizeNull.error?.code, '42501');
+  });
+
+  await t.test('real Auth metadata and email synchronization cannot overwrite entitlements and retains provider uniqueness', async () => {
+    const account = await newAccount('auth-sync');
+    const providerId = `local-provider-${randomBytes(8).toString('hex')}`;
+    await trustedSql(`UPDATE public.users SET membership='plus',membership_expires_at='2099-01-01',ai_chat_count=33 WHERE id=${quote(account.id)};`);
+    const before = protectedFields(await accountRow(account));
+    const synced = await post(auth.POST, '/api/auth', { action: 'updateUser', attributes: { data: {
+      nickname: 'synced nickname', avatar_url: 'https://avatar.invalid/local.png', linuxdo_sub: providerId,
+      is_admin: true, membership: 'pro', membership_expires_at: '2199-01-01', ai_chat_count: 999999,
+    } } }, account.session);
+    assert.equal(synced.response.status, 200);
+    assert.equal((await accountRow(account)).nickname, 'synced nickname');
+    assert.deepEqual(protectedFields(await accountRow(account)), before);
+    const newEmail = `changed-${randomBytes(6).toString('hex')}@acceptance.invalid`;
+    const emailUpdate = await service.auth.admin.updateUserById(account.id, { email: newEmail, email_confirm: true });
+    assert.ok(!emailUpdate.error, 'Trusted Auth email update must fire the real synchronization trigger');
+    const provider = await account.db.from('user_oauth_providers').select('user_id,provider,provider_user_id,provider_email').eq('user_id', account.id).single();
+    assert.ok(!provider.error);
+    assert.deepEqual(provider.data, { user_id: account.id, provider: 'linuxdo', provider_user_id: providerId, provider_email: newEmail });
+    assert.deepEqual(protectedFields(await accountRow(account)), before);
+    const otherAccount = await newAccount('auth-sync-conflict');
+    const conflict = await post(auth.POST, '/api/auth', { action: 'updateUser', attributes: { data: { nickname: 'must-rollback', linuxdo_sub: providerId } } }, otherAccount.session);
+    assert.ok(conflict.response.status >= 400);
+    assert.equal((await accountRow(otherAccount)).nickname, 'auth-sync-conflict');
+    assert.equal((await account.db.from('user_oauth_providers').select('id').eq('provider_user_id', providerId)).data.length, 1);
+  });
+
+  await t.test('real admin and service account ledger and membership RPC writes remain valid; ordinary RPCs stay denied', async () => {
+    for (const privileged of [api.getSystemAdminClient(), service]) {
+      const account = await newAccount('legitimate-rpc');
+      const code = randomBytes(16).toString('hex');
+      const membershipCode = randomBytes(16).toString('hex');
+      await trustedSql(`INSERT INTO public.activation_keys(key_code,key_type,credits_amount,created_by) VALUES (${quote(code)},'credits',5,${quote(identities.admin.id)});
+        INSERT INTO public.activation_keys(key_code,key_type,membership_type,created_by) VALUES (${quote(membershipCode)},'membership','plus',${quote(identities.admin.id)});`);
+      const operations = [
+        ['decrement_ai_chat_count', { user_id: account.id }],
+        ['increment_ai_chat_count', { user_id: account.id, amount: 2 }],
+        ['activate_key_as_service', { p_user_id: account.id, p_key_code: code }],
+        ['perform_daily_checkin_as_service', { p_user_id: account.id }],
+        ['claim_linuxdo_membership_as_service', { p_user_id: account.id, p_plan_id: 'pro', p_trust_level: 3, p_provider_user_id: 'local-provider' }],
+      ];
+      for (const [name, args] of operations) assert.equal((await account.db.rpc(name, args)).error?.code, '42501');
+      assert.equal((await privileged.rpc('decrement_ai_chat_count', { user_id: account.id })).data, 0);
+      assert.equal((await privileged.rpc('increment_ai_chat_count', { user_id: account.id, amount: 2 })).data, 2);
+      const activated = await privileged.rpc('activate_key_as_service', { p_user_id: account.id, p_key_code: code });
+      assert.ok(!activated.error && activated.data[0].success);
+      const membership = await privileged.rpc('activate_key_as_service', { p_user_id: account.id, p_key_code: membershipCode });
+      assert.ok(!membership.error && membership.data[0].success);
+      const checked = await privileged.rpc('perform_daily_checkin_as_service', { p_user_id: account.id });
+      assert.ok(!checked.error && checked.data.status === 'ok');
+      assert.ok([2,4,6].includes(checked.data.reward_credits));
+      const monthlyArgs = { p_user_id: account.id, p_plan_id: 'pro', p_trust_level: 3, p_provider_user_id: 'local-provider' };
+      assert.equal((await privileged.rpc('claim_linuxdo_membership_as_service', monthlyArgs)).data.status, 'ok');
+      assert.equal((await privileged.rpc('claim_linuxdo_membership_as_service', monthlyArgs)).data.status, 'cooldown');
+      const direct = await privileged.from('credit_transactions').insert({ user_id: account.id, amount: 1, type: 'earn', source: 'legitimate-admin-direct' });
+      assert.ok(!direct.error);
+      const directAccount = await privileged.from('users').update({ ai_chat_count: 42 }).eq('id', account.id);
+      assert.ok(!directAccount.error);
+      assert.equal((await accountRow(account)).ai_chat_count, 42);
+      assert.ok((await account.db.from('credit_transactions').select('id').eq('user_id', account.id)).data.length >= 5);
+    }
+    for (const db of [client(sessions.owner.access_token), client(sessions.admin.access_token)]) {
+      const helper = await db.rpc('record_credit_transaction', { p_user_id: identities.owner.id, p_amount: 99, p_type: 'earn', p_source: 'bare-helper-denied', p_balance_after: 999 });
+      assert.equal(helper.error?.code, '42501');
+    }
   });
 
   await t.test('caller-token updateUser persists own metadata via Cookie and Bearer without cross-user mutation', async () => {

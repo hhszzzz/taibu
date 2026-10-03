@@ -88,12 +88,16 @@ supabase/migrations/*
 !supabase/migrations/20260723_110000_drop_mcp_auth_storage.sql
 !supabase/migrations/20261002_100000_fix_knowledge_search_contracts.sql
 !supabase/migrations/20261002_101000_restrict_credit_ledger_rpc.sql
+!supabase/migrations/20261002_102000_protect_account_and_ledger_writes.sql
 # Additional explicit inputs for isolated Auth/PostgREST acceptance only.
 !supabase/migrations/20260110_add_user_settings_and_fix_notifications_rls.sql
 !supabase/migrations/20260113_add_app_settings.sql
 !supabase/migrations/20260128_create_ai_model_tables.sql
 !supabase/migrations/20260318_unify_ai_gateway_sources.sql
 !supabase/migrations/20260409_000100_remaining_atomicity_rpcs.sql
+!supabase/migrations/20260123_add_activation_keys_and_purchase_links.sql
+!supabase/migrations/20260313_user_oauth_providers.sql
+!supabase/migrations/20260409_140500_full_atomicity_repairs.sql
 
 # docs
 docs/*

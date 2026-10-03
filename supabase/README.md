@@ -1,6 +1,6 @@
 # 数据库材料与验证边界
 
-本目录包含表结构快照、经筛选的历史 SQL 及新增修复迁移。**它不是完整、可直接执行的数据库初始化基线。** 当前未连接或更新生产数据库。
+本目录包含表结构快照、经筛选的历史 SQL 及新增修复迁移。**它不是完整、可直接执行的数据库初始化基线。** 2026-10-02 已获准只读核对真实 catalog；2026-10-03 经单独批准，三份修复已通过 Supabase MCP 应用并只读复核。没有读取或回填业务数据，不据此宣称全库或历史数据安全；执行版本映射见验收记录。
 
 ## 材料与可信范围
 
@@ -9,7 +9,7 @@
 | `tabel_export_from_supabase.sql` | 42 张表、字段及部分约束的上下文 | 可执行建库顺序，完整函数/RLS/索引/授权，生产部署状态 |
 | `migrations/` 显式允许列表 | 对应历史定义的原文、静态检查及隔离契约测试输入 | 完整迁移链，或线上最终定义 |
 | `scripts/check-architecture-guards.mjs` | 声明的源码与 SQL 安全约束没有意外删除 | 实际事务、并发和授权行为 |
-| `scripts/tests/postgres-fixture.mjs` | 原 19 项 SQL 来源清单与真实 Auth 模式的 7 项增量输入及准确的提取、加载顺序 | 生产完整迁移链或已部署定义 |
+| `scripts/tests/postgres-fixture.mjs` | 当前 25 项基础 SQL 来源与真实 Auth 模式的 7 项增量输入（共 32 项），以及准确的提取、加载顺序 | 生产完整迁移链或已部署定义 |
 | `pnpm test:db` | 下述隔离 PostgreSQL/RLS/事务契约（模拟 claims） | 真实 JWT/Auth、生产等价性、历史数据回填正确性 |
 | `pnpm test:auth` | 真实 GoTrue/PostgREST/JWT 与用户更新、塔罗、历史、知识库链路 | OAuth/邮件、完整 Next 浏览器端到端、生产配置/schema 等价 |
 
@@ -41,7 +41,7 @@ pnpm test:db
 - 仅在标签匹配本次运行时清理容器；失败、SIGINT、SIGTERM 也尝试清理。
 - 缺 Docker 或 SQL 输入明确失败，不标记 skip。SIGKILL/宿主机崩溃不能保证自动清理；只能核对本次标签后人工清理残留，禁止全局 prune。
 
-已在本机执行 **22/22 测试通过，0 skip**（2026-10-02），覆盖：
+已在主工作区执行 **34/34 测试通过，0 skip**（2026-10-03），覆盖：
 
 - 两个普通用户、管理员登录态与实际 `service_role` 的权限差异。
 - RLS 隔离、匿名/无身份拒绝和 bare ledger RPC 执行权限。
@@ -49,8 +49,10 @@ pnpm test:db
 - 会话 JSON/规范消息行一致性，以及历史绑定的归属检查。
 - 塔罗已有记录绑定、新建记录与会话/消息一致性、跨用户拒绝、注入历史写失败后的完整回滚。
 - 知识块原子替换与归档，以及真实 FTS、trigram、vector 检索。
+- 宽 CRUD 授权下的敏感字段/流水拒绝、普通资料与旧 NULL 数据兼容、upsert、管理员/owner/service 合法写入。
+- 当前激活/签到/月度会员 RPC、重复领取、并发/超额边界、失败回滚及迁移前置检查原子失败。
 
-**身份 fixture 限制：** `auth.users`、`auth.uid()`、`auth.role()` 是明确的最小测试对象，通过事务内 claim settings 模拟已验证身份；不验证 JWT 签名或实际 Supabase Auth。表入口授权为 harness 专用，不能据此推断线上 default privileges。管理员登录会话不是 `service_role`：当前 `getSystemAdminClient()` 使用的是管理员登录 JWT。
+**身份 fixture 限制：** `auth.users`、`auth.uid()`、`auth.role()` 是明确的最小测试对象，通过事务内 claim settings 模拟已验证身份；不验证 JWT 签名或实际 Supabase Auth。`users` / `credit_transactions` 的 anon/authenticated CRUD 与管理员谓词 EXECUTE 已按已核对的真实权限建模，并显式确认没有额外 TRUNCATE 权限；其他表入口授权仍为限定 harness，不能据此推断全库 default privileges。管理员登录会话不是 `service_role`：当前 `getSystemAdminClient()` 使用的是管理员登录 JWT。
 
 ## 真实 Auth / PostgREST 纵向验收
 
@@ -79,16 +81,21 @@ pnpm test:auth
 | `20260409_000100_remaining_atomicity_rpcs.sql` | 既有限流原子 RPC |
 | `20260411_111500_restrict_admin_session_rpc_acl.sql` | 该限流 RPC 的授权 |
 
-其中两项已在原静态守卫允许列表中，本次只新增五个历史文件到版本控制。**快照缺少的 `rate_limits_id_seq` 与 `(identifier, endpoint)` 唯一索引，以及表入口授权，均为显式 fixture 假设，不是新生产 migration 或部署证据。** 没有新增业务主表或修改生产结构；不能用这些假设代替用户待提供的权威导出。
+其中两项已在原静态守卫允许列表中，本次只新增五个历史文件到版本控制。初建 fixture 时，快照缺少的 `rate_limits_id_seq` 与 `(identifier, endpoint)` 唯一索引均为显式假设；后续授权只读核对已确认真实库存在相应 sequence/唯一约束。**表入口授权、部分 RLS、字段类型及扩展版本仍不等价，不能把局部确认推广为完整生产基线。** 没有新增业务主表或修改生产结构。
 
-2026-10-02 主工作区完整 `pnpm verify -- --chrome` 中 **17/17 通过，0 skip**，原 SQL **22/22** 不变。覆盖登录/刷新/退出、Cookie/Bearer 用户更新、篡改/过期 JWT 拒绝、管理员登录与 service-role 区分、塔罗托管保存/失败退款/跨用户回滚、BYOK 不扣平台积分、历史恢复及调用者 KB 入库/搜索。登出撤销 refresh token，但旧 access JWT 仍可能被无状态 PostgREST 接受到过期；测试明确保留此边界。
+权限补强后，基础清单在原 19 项上增加 5 项历史来源与新的保护迁移，共 25 项；加上上述 7 项 Auth 输入，总计 32 项。新增历史来源用于激活策略、provider 表、真实 Auth 触发器绑定、月度领取并发和签到超额规则，均按显式边界提取。Auth 模式使用完整 `user_settings` 快照；空的八字/紫微表仅保留其外键引用，不因此声称验证了这两个领域。
 
-## 两份新增修复（仅在临时实例执行）
+2026-10-03 主工作区完整 `pnpm verify -- --chrome` 中 **21/21 Auth/REST、34/34 SQL 通过，0 skip**。除了原登录/刷新/退出、塔罗/BYOK/历史/知识库链路，还验证真实 Auth 触发器创建 public profile、metadata/email 同步不改变权益、provider 唯一性回滚，以及真实 JWT 下的直接表权限与会员 RPC。登出撤销 refresh token，但旧 access JWT 仍可能被无状态 PostgREST 接受到过期，边界不变。
+
+另在主工作区用精确 PostgreSQL `17.6` / vector `0.8.0` 镜像运行同一套 Auth/REST 验收，**21/21 通过**，并独立断言实际版本。镜像来源为 `pgvector/pgvector@sha256:09c8aaae717baf4412f6efd174f51172c0638720a72a86e804cd698197fc8ba2`（linux/arm64）；默认 gate 仍使用原固定 PG16 镜像。精确版本验证不代表整个生产配置、历史数据或所有领域等价。
+
+## 本轮修复迁移（2026-10-03 已获授权应用并复核）
 
 | 迁移 | 修复 | 兼容与权限影响 |
 |---|---|---|
 | `20261002_100000_fix_knowledge_search_contracts.sql` | FTS 参数使用实际 `regconfig`；固定 `pg_catalog, public, extensions` 搜索路径；修复返回列名歧义 | 保留三个 RPC 签名和 `auth.uid()` owner 条件、`SECURITY INVOKER`；撤销 PUBLIC/anon 执行，仅 authenticated/service_role；非登录上下文仍不能检索 |
-| `20261002_101000_restrict_credit_ledger_rpc.sql` | 禁止普通用户或管理员登录态直接伪造积分流水 | bare `record_credit_transaction` 仅向 service_role 授权，业务 SECURITY DEFINER RPC 继续由函数 owner 执行内部流水写入；固定搜索路径 |
+| `20261002_101000_restrict_credit_ledger_rpc.sql` | 收紧裸积分流水 RPC 的调用权限，不等于收紧直接表写入 | bare `record_credit_transaction` 仅向 service_role 授权，业务 SECURITY DEFINER RPC 继续由函数 owner 执行内部流水写入；固定搜索路径；仍须另外核对表级 ACL/RLS |
+| `20261002_102000_protect_account_and_ledger_writes.sql` | 用户身份/管理员/会员/积分字段的直接写保护，以及普通用户流水 INSERT 限制 | invoker 触发器按有效 SQL 身份区分可信 owner、service_role、管理员与普通调用者；普通插入仅接受安全初始值，更新不得改变受保护值；ledger restrictive policy 不影响自身读取或合法事务内记账；已通过上述本地双版本验收，线上安装状态已只读复核 |
 
 不新增表、字段、索引或默认值，不改余额算法，无数据回填；42 表快照不变。修复是函数/ACL 层变更，因此此文档和 SQL 原文是补充依据。应用未直接调用 bare ledger RPC，但生产应用前仍必须核对外部调用者和部署中的函数 owner/授权。
 

@@ -7,7 +7,6 @@ import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import type { Announcement } from '@/lib/announcement';
-import { invalidateQueriesForPath } from '@/lib/query/invalidation';
 
 type PanelView = 'history' | 'editor';
 type EditorMode = 'create' | 'edit';
@@ -156,7 +155,6 @@ export function AnnouncementManagementPanel() {
       setSelectedId(saved.id);
       setForm(announcementToFormState(saved));
       setPreviewOpen(false);
-      invalidateQueriesForPath('/api/admin/announcements');
       showToast('success', form.id ? '公告已更新' : '公告已发布');
       await loadAnnouncements(saved.id);
     } catch (saveError) {
@@ -182,7 +180,6 @@ export function AnnouncementManagementPanel() {
         resetToHistory();
       }
 
-      invalidateQueriesForPath('/api/admin/announcements');
       showToast('success', '公告已删除');
       await loadAnnouncements(deletingSelected ? null : selectedId);
     } catch (deleteError) {

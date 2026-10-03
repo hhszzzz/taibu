@@ -10,7 +10,8 @@
  *   return run(page, '/tmp/taibu-p5-browser/fixture.js');
  *
  * Actual components: SettingsCenterHost/GeneralSettingsPanel, AIModelPanel and its
- * controlled views, ConversationListProvider, Query and ChatStreamManager.
+ * controlled views, AnnouncementManagementPanel, ConversationListProvider,
+ * Query and ChatStreamManager.
  * Fixture-only boundaries: identity/profile/feature flags, unrelated lazy panels,
  * navigation shell, model runner and HTTP responses. No Next router, Supabase,
  * Auth, PostgREST, paid model or CSS/layout acceptance is claimed.
@@ -35,6 +36,7 @@ import { ToastProvider } from '@/components/ui/Toast';
 import { SettingsCenterHost } from '@/components/settings/SettingsCenterHost';
 import { openSettingsCenter } from '@/lib/settings-center';
 import { AIModelPanel } from '@/components/admin/AIModelPanel';
+import { AnnouncementManagementPanel } from '@/components/admin/AnnouncementManagementPanel';
 import { ConversationListProvider, useConversationList } from '@/lib/chat/ConversationListContext';
 import { ChatStreamManager } from '@/lib/chat/chat-stream-manager';
 import { registerBrowserQueryClient } from '@/lib/query/client';
@@ -78,6 +80,7 @@ function Shell({ setUser }) {
       <button onClick={() => navigate('/chat')}>Fixture Chat route</button>
       <button onClick={() => navigate('/other')}>Fixture Other route</button>
       <button onClick={() => navigate('/models')}>Fixture Models route</button>
+      <button onClick={() => navigate('/announcements')}>Fixture Announcements route</button>
       <button onClick={() => openSettingsCenter('general')}>Open actual settings</button>
       <button onClick={() => { window.fixture.user = 'alice'; setUser('alice'); }}>Fixture Alice</button>
       <button onClick={() => { window.fixture.user = 'bob'; setUser('bob'); }}>Fixture Bob</button>
@@ -100,6 +103,7 @@ function Shell({ setUser }) {
     <button onClick={() => manager.stopTask('alice-1')}>Stop actual stream manager</button>
     <output data-testid="stream">{stream ? stream.status + ':' + stream.content : 'idle'}</output>
     {route === '/models' && <section data-testid="models"><AIModelPanel /></section>}
+    {route === '/announcements' && <section data-testid="announcements"><AnnouncementManagementPanel /></section>}
     <SettingsCenterHost />
   </>;
 }
@@ -170,6 +174,8 @@ export async function run(existingPage, bundlePath) {
   const queryWarnings = [];
   const checks = [];
   let models = [initialModel()];
+  let announcements = [];
+  let failAnnouncementWrite = false;
   let settingsReads = 0;
   let holdList = false;
   let releaseList;
@@ -223,6 +229,14 @@ export async function run(existingPage, bundlePath) {
         for (const user of Object.keys(rows)) rows[user] = rows[user].map(row => row.id === conversation[1] ? { ...row, title: body.title } : row);
       }
       return ok({ saved: true });
+    }
+    if (/^\/api\/admin\/announcements(?:\/[^/]+)?$/.test(url.pathname)) {
+      if (method === 'GET') return ok({ announcements });
+      if (failAnnouncementWrite) { failAnnouncementWrite = false; return denied(); }
+      if (method === 'DELETE') { announcements = []; return ok({ deleted: true }); }
+      const announcement = { id: 'announcement-fixture', content: body.content, publishedAt: '2026-01-01T00:00:00Z' };
+      announcements = [announcement];
+      return ok({ announcement });
     }
     if (url.pathname === '/api/admin/ai-models/cache') return ok({ cleared: true });
     if (url.pathname === '/api/admin/ai-models') {
@@ -367,6 +381,42 @@ export async function run(existingPage, bundlePath) {
     await page.getByRole('button', { name: '保存模型设置', exact: true }).click();
     await page.getByText('自定义参数必须是 JSON 对象', { exact: true }).waitFor();
     check('Invalid model JSON is rejected before HTTP mutation', requests.filter(item => item.pathname === '/api/admin/ai-models/model-1' && item.method === 'PATCH').length === modelWrites);
+    await page.getByRole('button', { name: 'Fixture Announcements route', exact: true }).click();
+    const announcementPanel = page.getByTestId('announcements');
+    await announcementPanel.getByText('还没有任何公告', { exact: true }).waitFor();
+    await announcementPanel.getByRole('button', { name: '新建公告', exact: true }).click();
+    await announcementPanel.locator('textarea').fill('Fixture announcement');
+    await page.evaluate(() => { window.fixture.invalidations.length = 0; });
+    failAnnouncementWrite = true;
+    await announcementPanel.getByRole('button', { name: '发布公告', exact: true }).click();
+    await page.getByText('Controlled fixture failure', { exact: true }).last().waitFor();
+    check('Failed announcement creation does not invalidate queries', (await page.evaluate(() => window.fixture.invalidations)).length === 0);
+    for (const [button, content, toast] of [
+      ['发布公告', 'Fixture announcement', '公告已发布'],
+      ['保存修改', 'Updated fixture announcement', '公告已更新'],
+    ]) {
+      await announcementPanel.locator('textarea').fill(content);
+      await page.evaluate(() => { window.fixture.invalidations.length = 0; });
+      await announcementPanel.getByRole('button', { name: button, exact: true }).click();
+      await page.getByText(toast, { exact: true }).waitFor();
+      const effects = await page.evaluate(() => window.fixture.invalidations);
+      check(`Announcement ${button} invalidates once (observed ${effects.length})`, JSON.stringify(effects) === JSON.stringify([{ queryKey: ['announcements'] }]));
+    }
+    await announcementPanel.getByRole('button', { name: '返回历史', exact: true }).click();
+    for (const rejected of [true, false]) {
+      failAnnouncementWrite = rejected;
+      await page.evaluate(() => { window.fixture.invalidations.length = 0; });
+      const deleted = page.waitForResponse(response => response.url().endsWith('/api/admin/announcements/announcement-fixture') && response.request().method() === 'DELETE');
+      await announcementPanel.getByTitle('删除', { exact: true }).click();
+      await (await deleted).finished();
+      if (rejected) {
+        await until(() => document.querySelector('[data-testid="announcements"] button[title="删除"]')?.disabled === false);
+        check('Failed announcement deletion preserves the row without invalidation', (await page.evaluate(() => window.fixture.invalidations)).length === 0 && await announcementPanel.getByText('Updated fixture announcement', { exact: true }).isVisible());
+      } else {
+        await announcementPanel.getByText('还没有任何公告', { exact: true }).waitFor();
+        check('Announcement DELETE invalidates once', JSON.stringify(await page.evaluate(() => window.fixture.invalidations)) === JSON.stringify([{ queryKey: ['announcements'] }]));
+      }
+    }
     check('No unhandled network requests escaped fixtures', blocked.length === 0);
     check('No browser runtime exceptions', browserErrors.length === 0);
     check('Disabled Query observers emit no missing queryFn warnings, including visitor', queryWarnings.length === 0);

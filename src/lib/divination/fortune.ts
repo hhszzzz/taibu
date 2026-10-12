@@ -105,6 +105,14 @@ function weightToLevel(w: number): FortuneLevel {
     return '凶';
 }
 
+/**
+ * 趋势图数值 → 运势等级。_chart 即内部权重，换算规则与卡片等级相同，
+ * 供图表提示等位置展示等级（数值本身不对用户展示）。
+ */
+export function chartScoreToFortuneLevel(score: number): FortuneLevel {
+    return weightToLevel(score);
+}
+
 /** 运势等级 → 图表数值（仅供趋势图渲染） */
 export function fortuneLevelToChartValue(level: FortuneLevel): number {
     const map: Record<FortuneLevel, number> = {

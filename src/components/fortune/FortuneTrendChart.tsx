@@ -19,7 +19,7 @@ import {
     Legend,
 } from 'recharts';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
-import type { FortuneChartScores } from '@/lib/divination/fortune';
+import { chartScoreToFortuneLevel, type FortuneChartScores } from '@/lib/divination/fortune';
 
 // 运势维度类型
 export type FortuneDimension = 'overall' | 'career' | 'love' | 'wealth' | 'health' | 'social';
@@ -131,7 +131,8 @@ function FortuneTrendTooltip({
                     <span className="text-foreground-secondary">
                         {DIMENSION_CONFIG[entry.dataKey].label}:
                     </span>
-                    <span className="font-medium">{entry.value}</span>
+                    {/* 只展示等级：_chart 数值仅用于绘图 */}
+                    <span className="font-medium">{chartScoreToFortuneLevel(entry.value)}</span>
                 </div>
             ))}
             {dataPoint?.isKeyDate && (
@@ -278,12 +279,12 @@ export function FortuneTrendChart({
                 </div>
             </div>
 
-            {/* 图表 */}
-            <div className="rounded-xl bg-background p-3 sm:p-4">
+            {/* 图表：Recharts 的可访问层让 svg 可聚焦，鼠标点击不显示焦点框，键盘聚焦仍走全局 focus-visible 样式 */}
+            <div className="rounded-xl bg-background p-3 sm:p-4 [&_.recharts-surface:focus:not(:focus-visible)]:outline-none">
                 <ResponsiveContainer width="100%" height={height}>
                     <LineChart
                         data={chartData}
-                        margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                        margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
                         onClick={(e) => {
                             // Recharts onClick provides activePayload at runtime
                             const payload = (e as { activePayload?: Array<{ payload?: { fullDate?: string } }> })?.activePayload?.[0]?.payload;
@@ -306,13 +307,8 @@ export function FortuneTrendChart({
                             dy={10}
                             minTickGap={15}
                         />
-                        <YAxis
-                            domain={[40, 100]}
-                            tick={{ fontSize: 10, fill: 'var(--color-foreground-secondary)' }}
-                            tickLine={false}
-                            axisLine={false}
-                            tickCount={4}
-                        />
+                        {/* 纵轴只定标度不显示刻度：运势以等级呈现，不展示数值分 */}
+                        <YAxis hide domain={[40, 100]} />
                         <Tooltip content={<FortuneTrendTooltip chartData={chartData} />} />
                         {showLegend && <Legend />}
 

@@ -35,6 +35,7 @@ import { AgentWorkspacePanel } from './agent/AgentWorkspacePanel';
 import { AgentResultContext, isSameWorkspaceShown, type AgentWorkspaceShown } from './agent/AgentResultContext';
 import { buildAgentWorkspace, getAgentQuestionAnswers, getAgentWorkspaceAutoOpenEvent } from '@/lib/agent/workspace';
 import { AgentQuestionDock } from './agent/AgentQuestionDock';
+import { useAgentRoundFolds } from './agent/AgentRoundFold';
 import { PromptTemplateMenu } from './composer/ComposerDomainControls';
 import type { ComposerModeControl, ComposerWebControl } from './composer/ComposerToolbar';
 import { applyPromptTemplate } from '@/lib/agent/prompt-templates';
@@ -184,7 +185,9 @@ export function ChatLayout(props: ChatLayoutProps) {
         const hidden = new Set(currentRun?.queue?.filter(command => command.state === 'pending' || command.state === 'cancelled').map(command => command.message.id));
         return orderAgentMessagesForDisplay(messages.filter(message => !hidden.has(message.id)), currentRun);
     }, [messages, currentRun]);
-    const { showJump, jumpToLatest } = useTranscriptScroll({ scrollRef: messageScrollContainerRef, followRef: props.shouldAutoScrollRef, conversationKey: workspaceKey, messages: transcriptMessages, enabled: !conversationLoading && transcriptMessages.length > 0, virtualized: transcriptMessages.length > 20 });
+    // Earlier Agent rounds fold to 上一轮 bars; a jump to one of their messages unfolds it first.
+    const { rounds, reveal: revealMessage } = useAgentRoundFolds(transcriptMessages, workspaceKey);
+    const { showJump, jumpToLatest } = useTranscriptScroll({ scrollRef: messageScrollContainerRef, followRef: props.shouldAutoScrollRef, conversationKey: workspaceKey, messages: transcriptMessages, enabled: !conversationLoading && transcriptMessages.length > 0, virtualized: transcriptMessages.length > 20, reveal: revealMessage });
     const latestAgentData = useMemo(() => [...messages].reverse().find(message => message.agent)?.agent, [messages]);
     const artifacts = useMemo(() => collectAgentArtifacts(messages), [messages]);
     const agentParts = useMemo(() => messages.flatMap(message => message.agent?.parts ?? []), [messages]);
@@ -403,6 +406,7 @@ export function ChatLayout(props: ChatLayoutProps) {
                                     onSwitchVersion={onSwitchVersion}
                                     onArchiveMessage={activeConversationId ? onArchiveMessage : undefined}
                                     disabled={isCreditLocked || props.agent?.restoring || props.agent?.syncing}
+                                    rounds={rounds}
                                 />
                             </div>
                         ) : (
@@ -413,6 +417,7 @@ export function ChatLayout(props: ChatLayoutProps) {
                                     onSwitchVersion={onSwitchVersion}
                                     onArchiveMessage={activeConversationId ? onArchiveMessage : undefined}
                                     disabled={isCreditLocked || props.agent?.restoring || props.agent?.syncing}
+                                    rounds={rounds}
                                 />
                             </div>
                         )}

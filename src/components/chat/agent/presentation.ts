@@ -1,5 +1,5 @@
 import type { ChatMessage } from '@/types';
-import type { AgentMessageData, AgentPart, AgentRunStatus, AgentRuntimeInfo } from '@/lib/agent/types';
+import { isAgentRunTerminal, type AgentMessageData, type AgentPart, type AgentRunStatus, type AgentRuntimeInfo } from '@/lib/agent/types';
 import { getAgentToolFamily, type AgentToolFamily } from '@/lib/agent/tool-catalog';
 import { getAgentAttachmentRead, getAgentChart, getAgentDataResults, getAgentMethod, getAgentSearchResults, getAgentToolArtifactId, getAgentToolQuestions, type AgentChart } from '@/lib/agent/tool-presentation';
 import { getChartFocus, getChartTargets } from '@/lib/agent/chart-interaction';
@@ -241,6 +241,59 @@ export function getAgentTaskDuration(createdAt: string | undefined, data: Pick<A
     const ends = [...data.runtime?.responses ?? [], ...data.parts.flatMap(part => part.type === 'tool' ? [part] : [])]
         .flatMap(timing => typeof timing.endedAt === 'number' && Number.isFinite(timing.endedAt) && timing.endedAt >= started ? [timing.endedAt] : []);
     return ends.length ? Math.max(...ends) - started : null;
+}
+
+/** An ended earlier Agent round as its fold bar shows it: 上一轮 · 问题 · 7 个步骤 · 1 分 46 秒. */
+export interface AgentRoundSummary {
+    /** The run of the reply that ends the round. */
+    id: string;
+    /** 上一轮 just before the latest round, 第 N 轮 further back. */
+    label: string;
+    /** The question that started the round on one line, or empty. */
+    question: string;
+    status: AgentRunStatus;
+    steps: number;
+    durationMs: number | null;
+    /** Results the Agent selected before answering, as 本任务成果 lists them. */
+    results: number;
+}
+export interface AgentRoundFold { round: AgentRoundSummary; /** The round's first row, which carries the bar. */ first: boolean }
+
+const ROUND_QUESTION_LENGTH = 120;
+
+/**
+ * Earlier Agent rounds fold to one bar so the latest round reads on its own.
+ * A round runs from the message after the previous reply through the reply
+ * that ends it. Only rounds an ended Agent reply closes, with a message after
+ * them, fold; plain chat rounds still count toward 第 N 轮. Keyed by message id.
+ */
+export function getAgentRoundFolds(messages: readonly ChatMessage[]): ReadonlyMap<string, AgentRoundFold> {
+    const rounds: ChatMessage[][] = [];
+    let current: ChatMessage[] = [];
+    for (const message of messages) {
+        current.push(message);
+        if (message.role === 'assistant') { rounds.push(current); current = []; }
+    }
+    if (current.length) rounds.push(current);
+    const folds = new Map<string, AgentRoundFold>();
+    rounds.forEach((round, index) => {
+        const reply = round[round.length - 1];
+        const data = reply.role === 'assistant' ? reply.agent : undefined;
+        // Rows are found by id, so a round with an unsaved row stays open.
+        if (!data || index === rounds.length - 1 || !isAgentRunTerminal(data.status) || round.some(message => !message.id)) return;
+        const question = round.find(message => message.role === 'user')?.content.replace(/\s+/gu, ' ').trim() ?? '';
+        const summary: AgentRoundSummary = {
+            id: data.runId,
+            label: index === rounds.length - 2 ? '上一轮' : `第 ${index + 1} 轮`,
+            question: [...question].slice(0, ROUND_QUESTION_LENGTH).join(''),
+            status: data.status,
+            steps: getAgentSteps(data.parts).length,
+            durationMs: getAgentTaskDuration(reply.createdAt, data),
+            results: data.parts.filter(part => part.type === 'artifact' && getAgentArtifactHref(part) !== null).length,
+        };
+        round.forEach((message, position) => folds.set(message.id, { round: summary, first: position === 0 }));
+    });
+    return folds;
 }
 
 export function formatAgentValue(value: unknown): string {

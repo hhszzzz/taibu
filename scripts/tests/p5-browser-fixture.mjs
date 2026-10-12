@@ -29,7 +29,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const origin = 'https://taibu-fixture.invalid';
 
 const entry = String.raw`
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { ClientProviders, useSessionSafe } from '@/components/providers/ClientProviders';
@@ -66,6 +66,11 @@ import { agentMessageContent } from '@/lib/agent/types';
 import { getAgentCitedParagraph } from '@/components/chat/agent/presentation';
 import { ChatSidebar } from '@/components/chat/sidebar/ChatSidebar';
 import { setChatWorkspaceOpen } from '@/lib/chat/chat-sidebar';
+import { ChatMessageList } from '@/components/chat/ChatMessageList';
+import { VirtualizedChatMessageList } from '@/components/chat/VirtualizedChatMessageList';
+import { useAgentRoundFolds } from '@/components/chat/agent/AgentRoundFold';
+import { useTranscriptScroll } from '@/lib/chat/use-transcript-scroll';
+import { scrollToMessageId } from '@/lib/chat/message-navigation';
 const initialToolParts = AGENT_TOOL_FIXTURE_PARTS;
 const familyParts = () => [
   AGENT_DAYUN_FIXTURE_PART,
@@ -150,6 +155,37 @@ function AgentResultsProbe() {
       run={{ billing: 'charged' }} answers={answers} userId={user?.id ?? null} requestedResource={request} onShownChange={setShown} onChartQuestion={text => { window.fixture.chartQuestion = text; }} onClose={() => setOpen(false)}
       citedParagraph={cite => getAgentCitedParagraph([{ agent: data, content: agentMessageContent(parts) }], cite)} />}
   </AgentResultContext.Provider></section>;
+}
+
+// Two Agent rounds as the AgentResearch board shows them: the earlier one folds to a 上一轮 bar.
+const ROUND_START = '2026-10-12T08:00:00.000Z';
+const roundAsk = (id, content) => ({ id, role: 'user', content, createdAt: ROUND_START });
+const roundReply = (id, runId, parts) => ({ id, role: 'assistant', content: '', createdAt: ROUND_START, agent: { version: 1, runId, status: 'completed', parts } });
+const ROUND_MESSAGES = [
+  roundAsk('round-u1', '明年适合换工作吗？'),
+  roundReply('round-a1', 'round-run-1', [
+    { type: 'tool', id: 'round-chart', name: 'bazi', title: '八字排盘', status: 'completed', endedAt: Date.parse(ROUND_START) + 60000 },
+    { type: 'tool', id: 'round-luck', name: 'bazi_dayun', title: '八字大运', status: 'completed', endedAt: Date.parse(ROUND_START) + 106000 },
+    { type: 'artifact', id: 'round-result', title: '已保存八字', chartType: 'bazi', chartId: 'saved-bazi' },
+    { type: 'text', id: 'round-answer-1', text: '2027 丁未年适合变动。' },
+  ]),
+  roundAsk('round-u2', '你说正官克身是主线，古籍里是怎么讲的？'),
+  roundReply('round-a2', 'round-run-2', [{ type: 'text', id: 'round-answer-2', text: Array.from({ length: 40 }, (_, line) => '古籍对庚金的总论，第 ' + (line + 1) + ' 段。').join('\n\n') }]),
+];
+function RoundsProbe() {
+  const scrollRef = useRef(null);
+  const followRef = useRef(true);
+  const endRef = useRef(null);
+  const [messages, setMessages] = useState(ROUND_MESSAGES);
+  const [virtual, setVirtual] = useState(false);
+  window.fixture.rounds = { setVirtual, append: message => setMessages(current => current.concat([message])), locate: id => scrollToMessageId('rounds-fixture', id) };
+  const { rounds, reveal } = useAgentRoundFolds(messages, 'rounds-fixture');
+  useTranscriptScroll({ scrollRef, followRef, conversationKey: 'rounds-fixture', messages, enabled: true, virtualized: virtual, reveal });
+  // The app's layout CSS is not loaded here; the transcript needs a bounded scroller.
+  return <section data-testid="rounds"><style>{'[data-testid=rounds] .chat-virtual-scroller, [data-testid=rounds] [data-scroller] { height: 360px; overflow: auto; }'}</style>
+    {virtual ? <VirtualizedChatMessageList scrollContainerRef={scrollRef} messages={messages} isLoading={false} rounds={rounds} />
+      : <div ref={scrollRef} data-scroller="true"><ChatMessageList messages={messages} isLoading={false} messagesEndRef={endRef} rounds={rounds} /></div>}
+  </section>;
 }
 
 import { calculateZiweiChartBundle, getHoroscope } from '@/lib/divination/ziwei';
@@ -257,11 +293,12 @@ function Shell() {
   const [questionMounted, setQuestionMounted] = useState(false);
   const [resultsMounted, setResultsMounted] = useState(false);
   const [sidebarMounted, setSidebarMounted] = useState(false);
+  const [roundsMounted, setRoundsMounted] = useState(false);
   window.fixture.chatWorkspace = setChatWorkspaceOpen;
   const [modelMountKey, setModelMountKey] = useState(0);
   window.fixture.remountModels = () => setModelMountKey(current => current + 1);
   window.fixture.mount = { composer: setComposerMounted, history: setHistoryMounted, drawer: setDrawerMounted,
-    records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted, agent: setAgentMounted, question: setQuestionMounted, results: setResultsMounted, sidebar: setSidebarMounted };
+    records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted, agent: setAgentMounted, question: setQuestionMounted, results: setResultsMounted, sidebar: setSidebarMounted, rounds: setRoundsMounted };
   window.fixture.chartKey = queryKeys.userCharts;
   window.fixture.chartClient = chartClient;
   window.fixture.deleteHistory = deleteHistorySummary;
@@ -323,6 +360,7 @@ function Shell() {
     {questionMounted && <StructuredQuestionProbe />}
     {resultsMounted && <AgentResultsProbe />}
     {sidebarMounted && <ChatSidebar />}
+    {roundsMounted && <RoundsProbe />}
     {historyMounted && <section data-testid="history-page"><HistoryPageTemplate {...historyConfig} /></section>}
     {drawerMounted && <section data-testid="history-drawer"><HistoryDrawer type="tarot" /></section>}
     {recordsMounted && <section data-testid="records"><RecordsPage /></section>}
@@ -589,6 +627,8 @@ export async function run(existingPage, bundlePath) {
   page.on('pageerror', error => browserErrors.push(error.message));
   page.on('console', message => {
     if (message.text().includes('No queryFn was passed')) queryWarnings.push(message.text());
+    // Unfolding a round before a jump flushes React synchronously; misuse is reported as an error.
+    if (message.type() === 'error' && message.text().includes('flushSync')) browserErrors.push(message.text());
   });
   const settings = { notificationsEnabled: true, language: 'zh', expressionStyle: 'direct', customInstructions: '', chartPromptDetailLevel: 'default', userProfile: null, promptKbIds: [], notifyEmail: true, notifySite: true, defaultBaziChartId: null, defaultZiweiChartId: null, chatPreferences: { width: 700, fontScale: 100, desktopNotifications: false } };
   const settingsByUser = { alice: { ...settings }, bob: { ...settings, customInstructions: 'Bob preferences', notificationsEnabled: false } };
@@ -2019,6 +2059,41 @@ export async function run(existingPage, bundlePath) {
     check('搜索对话 opens the global conversation search', await page.evaluate(() => window.fixture.sidebarSearch === 1));
     await page.keyboard.press('Escape');
     await page.evaluate(() => window.fixture.mount.sidebar(false));
+
+    // Earlier Agent rounds fold to a 上一轮 bar; a jump to one of their messages unfolds it.
+    await page.evaluate(() => window.fixture.mount.rounds(true));
+    const roundsProbe = page.getByTestId('rounds');
+    const roundBar = roundsProbe.getByRole('button', { name: /^上一轮/ });
+    await roundBar.waitFor();
+    const roundRows = () => roundsProbe.evaluate(probe => [...probe.querySelectorAll('[data-message-id]')].map(row => row.dataset.messageId).join());
+    check('An earlier Agent round folds to one bar with its question, steps, time and results', await roundBar.innerText() === '上一轮 · 明年适合换工作吗？ · 2 个步骤 · 1 分 46 秒已选定 1 份成果' &&
+      await roundBar.getAttribute('aria-expanded') === 'false' && await roundRows() === 'round-u2,round-a2');
+    await roundBar.click();
+    const unfoldedRows = await roundRows();
+    await roundBar.click();
+    check('The bar unfolds the round in place and folds it again', unfoldedRows === 'round-u1,round-a1,round-u2,round-a2' && await roundRows() === 'round-u2,round-a2');
+    const located = async id => {
+      const found = await page.evaluate(target => window.fixture.rounds.locate(target), id);
+      await page.waitForTimeout(100);
+      return found && await roundsProbe.evaluate((probe, target) => {
+        const row = probe.querySelector('[data-message-id="' + target + '"]');
+        const scroller = probe.querySelector('.chat-virtual-scroller, [data-scroller]');
+        return Boolean(row && scroller) && Math.abs(row.getBoundingClientRect().top - scroller.getBoundingClientRect().top) < 40;
+      }, id);
+    };
+    check('Jumping to a message in a folded round unfolds it and scrolls to it', await located('round-a1') && await roundBar.getAttribute('aria-expanded') === 'true');
+    await page.evaluate(() => window.fixture.rounds.setVirtual(true));
+    await roundBar.waitFor();
+    await roundBar.click();
+    check('In the long-conversation list the folded rows stay as hidden rows', await roundBar.getAttribute('aria-expanded') === 'false' &&
+      await roundsProbe.evaluate(probe => [...probe.querySelectorAll('[data-index]')].map(row => row.hidden).join()) === 'false,true,false,false');
+    check('The long-conversation list also unfolds a round to jump into it', await located('round-a1') && await roundRows() === 'round-u1,round-a1,round-u2,round-a2');
+    await page.evaluate(() => window.fixture.rounds.append({ id: 'round-u3', role: 'user', content: '那 2028 年呢？', createdAt: '2026-10-12T09:00:00.000Z' }));
+    await until(() => document.querySelectorAll('[data-testid=rounds] .agent-round-fold').length === 2);
+    const roundBars = roundsProbe.locator('.agent-round-fold');
+    check('A new question folds the round before it and numbers the older one', (await roundBars.allInnerTexts()).join('|') === '第 1 轮 · 明年适合换工作吗？ · 2 个步骤 · 1 分 46 秒已选定 1 份成果|上一轮 · 你说正官克身是主线，古籍里是怎么讲的？' &&
+      await roundBars.evaluateAll(bars => bars.map(bar => bar.getAttribute('aria-expanded')).join()) === 'true,false' && await roundRows() === 'round-u1,round-a1,round-u3');
+    await page.evaluate(() => window.fixture.mount.rounds(false));
 
     check('No unhandled network requests escaped fixtures', blocked.length === 0);
     check('No browser runtime exceptions', browserErrors.length === 0);

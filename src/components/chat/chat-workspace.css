@@ -183,6 +183,14 @@
 .agent-compaction summary { cursor: pointer; }
 .agent-compaction[open] summary { margin-bottom: 8px; }
 .agent-activity-group { display: flex; min-width: 0; flex-direction: column; gap: 14px; }
+/* 上一轮: an ended earlier round folded to one line above the latest round. */
+.agent-round-fold { display: flex; width: 100%; min-width: 0; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 12px; color: var(--foreground-secondary); font-size: calc(13 / 16 * 1rem); text-align: left; }
+.agent-round-fold:hover { background: var(--background-secondary); }
+.agent-round-fold[aria-expanded="true"] { margin-bottom: 20px; }
+.agent-round-fold > svg { flex-shrink: 0; }
+.agent-round-fold-text { min-width: 0; flex: 1; overflow: hidden; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.agent-round-fold-results { flex-shrink: 0; padding: 1px 8px; border-radius: 6px; background: var(--background-secondary); font-size: calc(12 / 16 * 1rem); white-space: nowrap; }
+.agent-round-fold:hover .agent-round-fold-results { background: var(--background-tertiary); }
 .agent-process { overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: var(--chat-raised); }
 .agent-process-heading { display: flex; width: 100%; align-items: center; gap: 10px; padding: 11px 14px; color: var(--foreground-secondary); text-align: left; }
 .agent-process.is-open .agent-process-heading { border-bottom: 1px solid var(--border); }

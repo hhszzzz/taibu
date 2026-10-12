@@ -40,7 +40,7 @@ import { PromptTemplateMenu } from './composer/ComposerDomainControls';
 import type { ComposerModeControl, ComposerWebControl } from './composer/ComposerToolbar';
 import { applyPromptTemplate } from '@/lib/agent/prompt-templates';
 import { collaborationProgress } from '@/lib/agent/parallel-results';
-import { composerNote } from '@/lib/chat/composer-copy';
+import { composerNote, isRunningComposerNote, type ComposerNoteState } from '@/lib/chat/composer-copy';
 import { collectAgentArtifacts, getAgentCitedParagraph, getAgentTaskDuration } from './agent/presentation';
 import { isAgentRunTerminal, type AgentPart } from '@/lib/agent/types';
 import { useTranscriptScroll } from '@/lib/chat/use-transcript-scroll';
@@ -289,14 +289,15 @@ export function ChatLayout(props: ChatLayoutProps) {
         title: !agent.capabilities.webAvailable ? '当前环境未配置联网搜索' : membershipType === 'free' ? '联网搜索需要 Plus 会员' : agent.active ? '下个独立任务使用此配置' : 'Agent 会在需要时搜索网络',
         onToggle: () => agent.setWebEnabled(!agent.webEnabled),
     } : undefined;
-    const note = composerNote({
+    const noteState: ComposerNoteState = {
         agentMode: isAgentMode,
         agentUnavailable: !!userId && !!agent && !agent.capabilities.ready,
         reconnecting: agent?.reconnecting,
         awaiting: currentRun?.status === 'awaiting_input',
         running: !!agent?.active && !!currentRun,
         collaborators,
-    });
+    };
+    const note = composerNote(noteState);
     const creditStrip = isCreditLocked ? <CreditStrip /> : undefined;
     // Suggested next questions belong to a finished answer that is still the latest turn.
     const lastAgent = transcriptMessages.at(-1)?.agent;
@@ -324,7 +325,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         knowledgeBaseEnabled,
         modeControl, webControl,
     };
-    const composer = <ChatComposer {...composerProps} continuing note={note} header={composerHeader}
+    const composer = <ChatComposer {...composerProps} continuing note={note} noteOptional={isRunningComposerNote(noteState)} header={composerHeader}
         queue={currentRun && <AgentQueue key={`${workspaceKey}:${currentRun.id}`} run={currentRun} restoreDraft={message => void restoreDraft(message)} />} />;
     const toggleWorkspace = () => {
         if (workspaceOpen) { closeWorkspace(); return; }
@@ -337,20 +338,19 @@ export function ChatLayout(props: ChatLayoutProps) {
 
     return (
         <AgentResultContext.Provider value={resultWorkspace}><div className="chat-workspace flex bg-background" style={{ '--chat-column': `${preferences.width}px` } as CSSProperties}>
-            {/* 移动端对话抽屉 */}
-            <MobileChatDrawer />
-
             {/* data-agent-ready turns true once a restored task has finished syncing. */}
             <div ref={contentRef} className="chat-main flex-1 flex flex-col min-w-0 min-h-0 relative bg-background"
                 data-agent-ready={props.agent ? !props.agent.restoring && !props.agent.syncing : undefined}>
-                {showHeader && <ChatHeader
+                <ChatHeader
+                    navigation={<MobileChatDrawer />}
+                    empty={!showHeader}
                     title={title}
                     conversationId={activeConversationId}
                     badge={isAgentMode ? collaborators ? `Agent · 协作 ${collaborators} 人` : 'Agent' : undefined}
                     status={currentRun ? <AgentHeaderStatus status={currentRun.status} createdAt={currentRun.createdAt} reconnecting={props.agent?.reconnecting} collaboration={collaboration} duration={runDuration} />
                         : isAgentMode && latestAgentData ? <AgentStatus status={latestAgentData.status} /> : null}
                     showExport={!isAgentMode}
-                    workspaceButton={hasWorkspace ? <button type="button" ref={workspaceButtonRef} className="chat-workspace-toggle" aria-label="任务工作区" aria-expanded={workspaceOpen} aria-controls="agent-workspace-panel" onClick={toggleWorkspace}>
+                    workspaceButton={hasWorkspace && showHeader ? <button type="button" ref={workspaceButtonRef} className="chat-workspace-toggle" aria-label="任务工作区" aria-expanded={workspaceOpen} aria-controls="agent-workspace-panel" onClick={toggleWorkspace}>
                         <PanelRight size={16} strokeWidth={1.8} aria-hidden="true" /><span>工作区</span>{resourceCount > 0 && <span className="chat-result-count">{resourceCount}</span>}
                     </button> : undefined}
                     readingWidth={preferences.width}
@@ -358,7 +358,7 @@ export function ChatLayout(props: ChatLayoutProps) {
                     membershipType={membershipType}
                     knowledgeBaseEnabled={knowledgeBaseEnabled}
                     aiPersonalizationEnabled={aiPersonalizationEnabled}
-                />}
+                />
                 {activeConversationId && <ConversationExportDialog conversationId={activeConversationId} />}
 
                 {conversationError ? (

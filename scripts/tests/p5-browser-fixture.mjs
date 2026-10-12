@@ -65,6 +65,8 @@ import { getAgentEvidence } from '@/lib/agent/evidence';
 import { agentMessageContent } from '@/lib/agent/types';
 import { getAgentCitedParagraph } from '@/components/chat/agent/presentation';
 import { ChatSidebar } from '@/components/chat/sidebar/ChatSidebar';
+import { MobileChatDrawer } from '@/components/chat/MobileChatDrawer';
+import { FloatingPanel } from '@/components/ui/FloatingPanel';
 import { setChatWorkspaceOpen } from '@/lib/chat/chat-sidebar';
 import { ChatMessageList } from '@/components/chat/ChatMessageList';
 import { VirtualizedChatMessageList } from '@/components/chat/VirtualizedChatMessageList';
@@ -155,6 +157,20 @@ function AgentResultsProbe() {
       run={{ billing: 'charged' }} answers={answers} userId={user?.id ?? null} requestedResource={request} onShownChange={setShown} onChartQuestion={text => { window.fixture.chartQuestion = text; }} onClose={() => setOpen(false)}
       citedParagraph={cite => getAgentCitedParagraph([{ agent: data, content: agentMessageContent(parts) }], cite)} />}
   </AgentResultContext.Provider></section>;
+}
+
+// A menu with an item hidden at this width, as the + menu's web switch is above phone widths.
+function MenuProbe() {
+  const anchorRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  return <section data-testid="menu-probe">
+    <button ref={anchorRef} type="button" onClick={() => setOpen(true)}>Open fixture menu</button>
+    <FloatingPanel open={open} anchorRef={anchorRef} onClose={() => setOpen(false)} label="Fixture menu">
+      <button type="button" role="menuitem">Visible first</button>
+      <button type="button" role="menuitemcheckbox" aria-checked="true" style={{ display: 'none' }}>Hidden checked</button>
+      <button type="button" role="menuitem">Visible last</button>
+    </FloatingPanel>
+  </section>;
 }
 
 // Two Agent rounds as the AgentResearch board shows them: the earlier one folds to a 上一轮 bar.
@@ -293,12 +309,14 @@ function Shell() {
   const [questionMounted, setQuestionMounted] = useState(false);
   const [resultsMounted, setResultsMounted] = useState(false);
   const [sidebarMounted, setSidebarMounted] = useState(false);
+  const [phoneDrawerMounted, setPhoneDrawerMounted] = useState(false);
+  const [menuMounted, setMenuMounted] = useState(false);
   const [roundsMounted, setRoundsMounted] = useState(false);
   window.fixture.chatWorkspace = setChatWorkspaceOpen;
   const [modelMountKey, setModelMountKey] = useState(0);
   window.fixture.remountModels = () => setModelMountKey(current => current + 1);
   window.fixture.mount = { composer: setComposerMounted, history: setHistoryMounted, drawer: setDrawerMounted,
-    records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted, agent: setAgentMounted, question: setQuestionMounted, results: setResultsMounted, sidebar: setSidebarMounted, rounds: setRoundsMounted };
+    records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted, agent: setAgentMounted, question: setQuestionMounted, results: setResultsMounted, sidebar: setSidebarMounted, phoneDrawer: setPhoneDrawerMounted, menu: setMenuMounted, rounds: setRoundsMounted };
   window.fixture.chartKey = queryKeys.userCharts;
   window.fixture.chartClient = chartClient;
   window.fixture.deleteHistory = deleteHistorySummary;
@@ -360,6 +378,8 @@ function Shell() {
     {questionMounted && <StructuredQuestionProbe />}
     {resultsMounted && <AgentResultsProbe />}
     {sidebarMounted && <ChatSidebar />}
+    {phoneDrawerMounted && <MobileChatDrawer />}
+    {menuMounted && <MenuProbe />}
     {roundsMounted && <RoundsProbe />}
     {historyMounted && <section data-testid="history-page"><HistoryPageTemplate {...historyConfig} /></section>}
     {drawerMounted && <section data-testid="history-drawer"><HistoryDrawer type="tarot" /></section>}
@@ -1877,7 +1897,17 @@ export async function run(existingPage, bundlePath) {
     await results.locator('[data-tool-result="almanac"]').waitFor();
     check('History remount restores all eleven reading cards and the incomplete one without new API operations', resultOperations() === callsBeforeResults &&
       await results.locator('.agent-result-card').count() === 12 && await results.locator('.agent-result-card .agent-primary-button').count() === 12);
+    // Phones fold a running task's process to two lines, the count and what runs now; wider screens open its steps.
+    await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => window.fixture.agentRunStatus('running'));
+    await results.locator('.agent-process-now').waitFor();
+    check('On a phone a running task folds its process to its count and what runs now', await results.getByRole('button', { name: /任务过程/ }).getAttribute('aria-expanded') === 'false' &&
+      /^· \d+ \/ \d+ 完成$/.test(await results.locator('.agent-process-heading.is-live .agent-process-count').innerText()) &&
+      await results.locator('.agent-process-now').innerText() === await results.locator('.agent-live-activity').innerText());
+    await page.setViewportSize({ width: 1200, height: 1000 });
+    await results.locator('.agent-process-hint').waitFor();
+    check('Beside the workspace the running process opens its steps', await results.getByRole('button', { name: /任务过程/ }).getAttribute('aria-expanded') === 'true' &&
+      await results.locator('.agent-process-now').count() === 0);
     await page.evaluate(() => window.fixture.collaborationResults(false));
     const collaboration = results.getByRole('region', { name: '协作分析', exact: true });
     await collaboration.waitFor();
@@ -2059,6 +2089,60 @@ export async function run(existingPage, bundlePath) {
     check('搜索对话 opens the global conversation search', await page.evaluate(() => window.fixture.sidebarSearch === 1));
     await page.keyboard.press('Escape');
     await page.evaluate(() => window.fixture.mount.sidebar(false));
+
+    // Phones: ≡ in the conversation header opens the same sidebar as a drawer in the top layer.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => window.fixture.mount.phoneDrawer(true));
+    const drawerTrigger = page.getByRole('button', { name: '打开聊天列表', exact: true });
+    await drawerTrigger.click();
+    const phoneDrawer = page.getByRole('dialog', { name: '聊天列表', exact: true });
+    await phoneDrawer.getByText('待回答', { exact: true }).waitFor();
+    check('The phone drawer is the sidebar: dated groups, task markers and its entries', (await phoneDrawer.getByRole('heading').allInnerTexts()).join() === '聊天列表,今天,昨天,更早' &&
+      await phoneDrawer.locator('[data-conversation-row]').filter({ hasText: '明年适合换工作吗？' }).getByRole('img', { name: 'Agent 正在执行' }).count() === 1 &&
+      await phoneDrawer.getByRole('link', { name: '新对话' }).count() === 1 && await phoneDrawer.getByRole('button', { name: '关闭聊天列表', exact: true }).count() === 1 &&
+      await phoneDrawer.getByRole('button', { name: '收起侧栏' }).count() === 0);
+    const drawerRowMore = phoneDrawer.getByRole('button', { name: /的更多操作$/ }).first();
+    await drawerRowMore.click();
+    const drawerMenu = phoneDrawer.getByRole('menu', { name: '会话操作', exact: true });
+    await drawerMenu.waitFor();
+    check('Row actions open inside the drawer and keep it open', await drawerMenu.evaluate(element => element.closest('dialog')?.open === true) && await phoneDrawer.isVisible());
+    await page.keyboard.press('Escape');
+    await drawerMenu.waitFor({ state: 'hidden' });
+    check('The first Escape closes only the row menu', await phoneDrawer.isVisible() && await drawerRowMore.evaluate(element => element === document.activeElement));
+    await page.keyboard.press('Escape');
+    await phoneDrawer.waitFor({ state: 'hidden' });
+    check('Closing the drawer returns focus to ≡', await drawerTrigger.evaluate(element => element === document.activeElement));
+    await drawerTrigger.click();
+    await phoneDrawer.locator('[data-conversation-row]').filter({ hasText: '梦见掉牙' }).getByRole('link').click();
+    await phoneDrawer.waitFor({ state: 'hidden' });
+    check('Choosing a conversation navigates and closes the drawer', await page.evaluate(id => new URLSearchParams(location.search).get('id') === id, sidebarIds[3]));
+    await page.evaluate(() => window.fixture.mount.phoneDrawer(false));
+    await page.setViewportSize({ width: 1200, height: 1000 });
+
+    // Focus and arrow keys pass over menu items that are not laid out at this width.
+    await page.evaluate(() => window.fixture.mount.menu(true));
+    await page.getByRole('button', { name: 'Open fixture menu', exact: true }).click();
+    await page.getByRole('menu', { name: 'Fixture menu', exact: true }).waitFor();
+    await until(() => document.activeElement?.textContent === 'Visible first');
+    await page.keyboard.press('ArrowDown');
+    const belowFirst = await page.evaluate(() => document.activeElement?.textContent);
+    await page.keyboard.press('ArrowUp');
+    check('Menus skip items hidden at this width for the first focus and arrow keys', belowFirst === 'Visible last' &&
+      await page.evaluate(() => document.activeElement?.textContent) === 'Visible first');
+    await page.keyboard.press('Escape');
+    // A reopened menu is laid out at once: focus moved into it before its first frame is not taken back.
+    check('Focus moved into a reopened menu before its first frame stays there', await page.evaluate(async () => {
+      document.querySelector('[data-testid="menu-probe"] > button').click();
+      const menu = () => document.querySelector('[role="menu"][aria-label="Fixture menu"]');
+      for (let turn = 0; turn < 20 && !menu(); turn++) await Promise.resolve();
+      const last = [...menu().querySelectorAll('button')].find(button => button.textContent === 'Visible last');
+      last.focus();
+      const moved = document.activeElement === last;
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      return moved && document.activeElement === last;
+    }));
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => window.fixture.mount.menu(false));
 
     // Earlier Agent rounds fold to a 上一轮 bar; a jump to one of their messages unfolds it.
     await page.evaluate(() => window.fixture.mount.rounds(true));

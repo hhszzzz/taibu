@@ -53,6 +53,8 @@ interface ChatComposerProps extends ModelSettingsProps {
     queue?: ReactNode;
     /** One-line note under the input. */
     note?: ReactNode;
+    /** The note repeats the header's task status; phones leave it out. */
+    noteOptional?: boolean;
     modeControl?: ComposerModeControl;
     webControl?: ComposerWebControl;
     agentMode?: boolean;
@@ -97,6 +99,7 @@ export function ChatComposer({
     header,
     queue,
     note,
+    noteOptional = false,
     modeControl,
     webControl,
     agentMode = false,
@@ -594,7 +597,7 @@ export function ChatComposer({
                     </button>)}
                     <Link href="/bazi" className="chat-saved-chart-new">+ 新建命盘</Link>
                 </div>}
-                {note && <p className="chat-composer-note">{note}</p>}
+                {note && <p className="chat-composer-note" data-optional={noteOptional || undefined}>{note}</p>}
             </div>
         </div>
     );

@@ -32,6 +32,8 @@ interface SidebarConversationsProps {
     /** `date`: 今天 / 昨天 / 7 天内 … groups with task markers (chat sidebar); `source`: grouped by divination type. */
     grouping?: 'source' | 'date';
     markers?: ReadonlyMap<string, ConversationAgentMarker>;
+    /** Inside a modal drawer the row menu renders in the dialog's top layer. */
+    withinModal?: boolean;
 }
 
 /** Local midnight of today; changes once a day so the date groups roll over. */
@@ -52,7 +54,7 @@ function getLocalDayStart() {
 const getServerDayStart = () => 0;
 const subscribeToNothing = () => () => {};
 
-export function SidebarConversations({ grouping = 'source', markers }: SidebarConversationsProps = {}) {
+export function SidebarConversations({ grouping = 'source', markers, withinModal = false }: SidebarConversationsProps = {}) {
     const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
@@ -521,7 +523,7 @@ export function SidebarConversations({ grouping = 'source', markers }: SidebarCo
                 </div>
             </div>
 
-            <ConversationActions conversation={actionConv} anchorRef={actionAnchorRef} view={actionView} onViewChange={setActionView} onClose={closeActionSheet} onRename={startInlineRename} onArchive={openArchive} onDelete={confirmDelete} deleting={deleteLoading} knowledgeBaseEnabled={knowledgeBaseEnabled} />
+            <ConversationActions conversation={actionConv} anchorRef={actionAnchorRef} view={actionView} onViewChange={setActionView} onClose={closeActionSheet} onRename={startInlineRename} onArchive={openArchive} onDelete={confirmDelete} deleting={deleteLoading} knowledgeBaseEnabled={knowledgeBaseEnabled} withinModal={withinModal} />
 
             {/* Knowledge base archive modal */}
             {knowledgeBaseEnabled && archiveTarget && (

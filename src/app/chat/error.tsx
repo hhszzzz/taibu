@@ -42,6 +42,10 @@ export default function ChatError({
                         返回对话
                     </Link>
                 </div>
+                {/* Phones show no site navigation on /chat. */}
+                <Link href="/" className="mt-4 inline-block text-sm text-foreground-secondary hover:text-foreground transition-colors">
+                    返回首页
+                </Link>
             </div>
         </div>
     );

@@ -23,3 +23,11 @@ export function composerNote(state: ComposerNoteState): string {
         : '后台执行中，关闭页面也会继续 · 补充内容在下一个安全步骤生效';
     return '解读仅供参考 · 排盘与计算由太卜 Core 完成';
 }
+
+/**
+ * The note while a task runs restates the header's task status, so phones leave it out
+ * (design board "手机 · 任务对话"); notices about an unavailable or reconnecting task stay.
+ */
+export function isRunningComposerNote(state: ComposerNoteState): boolean {
+    return state.agentMode && !state.agentUnavailable && !state.reconnecting && !state.awaiting && !!state.running;
+}

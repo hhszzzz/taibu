@@ -1,11 +1,17 @@
-/* Chat sidebar (design boards "对话与导航" and its 60px rail "主导航"). Desktop only. */
+/* Chat sidebar (design boards "对话与导航" and its 60px rail "主导航"). Desktop shows it beside the page; phones open the same panel as a drawer. */
 .chat-nav { display: none; }
 @media (min-width: 1024px) {
-    .chat-nav { position: sticky; top: 0; z-index: 20; display: flex; flex: 0 0 var(--sidebar-width); width: var(--sidebar-width); height: 100vh; height: 100dvh; flex-direction: column; gap: 2px; padding: 14px 10px; border-right: 1px solid var(--border); background: var(--sidebar-background); color: var(--foreground); }
+    .chat-nav { position: sticky; top: 0; z-index: 20; display: flex; flex: 0 0 var(--sidebar-width); width: var(--sidebar-width); height: 100vh; height: 100dvh; flex-direction: column; border-right: 1px solid var(--border); background: var(--sidebar-background); color: var(--foreground); }
     .chat-nav.is-rail { flex-basis: var(--sidebar-rail-width); width: var(--sidebar-rail-width); align-items: center; gap: 4px; padding: 12px 0 14px; }
 }
-.chat-nav :where(a, button):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.chat-nav :where(a) { text-decoration: none; }
+.chat-nav-panel { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 2px; padding: 14px 10px; color: var(--foreground); }
+:is(.chat-nav, .chat-nav-panel) :where(a, button):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+:is(.chat-nav, .chat-nav-panel) :where(a) { text-decoration: none; }
+
+/* Phone drawer: the panel slides in from the left edge, clear of the notch and home indicator. */
+.app-modal.chat-conversation-drawer { inset: 0 auto 0 0; width: min(300px, calc(100vw - 48px)); height: 100dvh; max-height: 100dvh; margin: 0; border: 0; border-radius: 0 16px 16px 0; background: var(--sidebar-background); overflow: hidden; }
+.app-modal.chat-conversation-drawer[open] { display: flex; flex-direction: column; }
+.chat-conversation-drawer .chat-nav-panel { padding: calc(12px + var(--sat)) 10px calc(12px + var(--sab)); }
 
 /* Brand row */
 .chat-nav-brand { display: flex; align-items: center; gap: 4px; padding: 0 0 12px 6px; }

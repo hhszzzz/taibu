@@ -549,7 +549,7 @@ try {
   await conversationsTrigger.click();
   const conversationsDrawer = page.getByRole('dialog', { name: '聊天列表', exact: true });
   await conversationsDrawer.waitFor();
-  const conversationActionsTrigger = conversationsDrawer.getByRole('button', { name: '更多操作', exact: true }).first();
+  const conversationActionsTrigger = conversationsDrawer.getByRole('button', { name: /的更多操作$/ }).first();
   await conversationActionsTrigger.click();
   const conversationMenu = conversationsDrawer.getByRole('menu', { name: '会话操作', exact: true });
   await conversationMenu.waitFor();

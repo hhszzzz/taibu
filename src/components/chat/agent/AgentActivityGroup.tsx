@@ -7,6 +7,7 @@ import type { AgentMessageData } from '@/lib/agent/types';
 import { getAgentToolFamily } from '@/lib/agent/tool-catalog';
 import { getAgentToolQuestionIds } from '@/lib/agent/workspace';
 import { deduplicateChartResults } from '@/lib/agent/chart-interaction';
+import { useIsDesktopLayout } from '@/lib/hooks/useIsDesktopLayout';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { ThinkingBlock } from '../ThinkingBlock';
 import { AgentToolDetails } from './AgentToolCard';
@@ -83,6 +84,7 @@ export function AgentActivityGroup({ parts, data, active = false }: { parts: Age
     const id = useId();
     const workspace = useAgentResultWorkspace();
     const [disclosed, setDisclosed] = useState<boolean | null>(null);
+    const wide = useIsDesktopLayout();
     const answered = new Set(getAgentToolQuestionIds(parts).values());
     // Plan updates already show as the task list bar; their questions are answered in the question panel.
     const rows = parts.filter(part => part.type === 'tool' ? getAgentToolFamily(part.name) !== 'plan' : part.type === 'reasoning' ? part.text.trim() : !answered.has(part.id));
@@ -99,21 +101,28 @@ export function AgentActivityGroup({ parts, data, active = false }: { parts: Age
     const states = tools.map(tool => describeAgentStep(tool, data.status).status);
     const completed = states.filter(status => status === 'completed').length;
     const failed = states.filter(status => status === 'failed').length;
-    const open = disclosed ?? (active || failed > 0);
-    const count = tools.length
-        ? `${tools.length} 个步骤 · ${completed === tools.length ? '全部完成' : `${completed} 个已完成`}${failed ? ` · ${failed} 处失败` : ''}`
-        : '向你确认信息';
-    const summary = open ? '' : summarizeAgentProcess(tools);
+    // Beside the workspace the live process stays open; narrower screens keep it to two lines,
+    // the second saying what runs now (design board "手机 · 任务对话").
+    const open = disclosed ?? ((active && wide) || failed > 0);
+    const live = !open && streaming ? getAgentLiveLine(data) : null;
+    const count = !tools.length ? '向你确认信息'
+        // Folded while it runs, the card reads 任务过程 · 4 / 5 完成 over that line.
+        : live ? `· ${completed} / ${tools.length} 完成`
+        : `${tools.length} 个步骤 · ${completed === tools.length ? '全部完成' : `${completed} 个已完成`}${failed ? ` · ${failed} 处失败` : ''}`;
+    const summary = open || live ? '' : summarizeAgentProcess(tools);
     // Numbered across the task so a step reads the same here and as 第 N 步 in the workspace.
     const numbers = getAgentStepNumbers(data.parts);
     return <div className="agent-activity-group">
         <section className={`agent-process${open ? ' is-open' : ''}`} aria-label="任务过程">
-            <button type="button" className="agent-process-heading" aria-expanded={open} aria-controls={id} onClick={() => setDisclosed(!open)}>
-                {!open && <ChevronRight size={15} aria-hidden="true" />}
-                <span className="agent-process-title">任务过程</span>
-                <span className="agent-process-count" data-failed={failed > 0 || undefined}>{count}{summary ? ` · ${summary}` : ''}</span>
+            <button type="button" className={`agent-process-heading${live ? ' is-live' : ''}`} aria-expanded={open} aria-controls={id} onClick={() => setDisclosed(!open)}>
+                {open ? null : live ? <LoaderCircle size={15} aria-hidden="true" className="animate-spin motion-reduce:animate-none" /> : <ChevronRight size={15} aria-hidden="true" />}
+                <span className="agent-process-label">
+                    <span className="agent-process-title">任务过程</span>
+                    <span className="agent-process-count" data-failed={failed > 0 || undefined}>{count}{summary ? ` · ${summary}` : ''}</span>
+                    {live && <span className="agent-process-now">{live}</span>}
+                </span>
                 {open && workspace && tools.length > 0 && <span className="agent-process-hint">点击步骤，在工作区查看</span>}
-                {open && <ChevronDown size={15} aria-hidden="true" className="agent-process-chevron" />}
+                {(open || live) && <ChevronDown size={15} aria-hidden="true" className="agent-process-chevron" />}
             </button>
             <ol id={id} className="agent-process-steps" hidden={!open}>
                 {open && rows.map(part => {

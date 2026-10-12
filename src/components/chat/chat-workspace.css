@@ -22,7 +22,8 @@
     --foreground-secondary: var(--chat-muted);
     --foreground-tertiary: var(--chat-subtle);
     --border: var(--chat-border);
-    height: calc(100dvh - var(--mobile-header-height) - 5rem);
+    height: 100vh;
+    height: 100dvh;
     min-height: 0;
     color: var(--foreground);
 }
@@ -152,8 +153,9 @@
 .chat-provider-dialog { width: min(480px, calc(100vw - 24px)); }
 .chat-provider-dialog > div { width: 100%; border: 0; box-shadow: none; padding: 24px; }
 .chat-provider-dialog h3 { padding-right: 20px; }
-.chat-mobile-conversations { position: absolute; top: 16px; left: 8px; z-index: 31; display: flex; align-items: center; justify-content: center; height: 30px; width: 30px; border-radius: 6px; background: var(--background); }
-.chat-conversation-drawer { inset: 0 auto 0 0; margin: 0; width: min(300px, calc(100vw - 48px)); height: 100dvh; max-height: 100dvh; border-radius: 0 14px 14px 0; }
+/* ≡ opens the navigation drawer where the page has no sidebar. */
+.chat-nav-trigger { display: flex; flex-shrink: 0; width: 40px; height: 40px; align-items: center; justify-content: center; margin-left: -8px; border-radius: 10px; color: var(--foreground); }
+.chat-nav-trigger:hover { background: var(--background-secondary); }
 .agent-secondary-button { border: 1px solid var(--border); padding: 5px 9px; border-radius: 6px; font-size: calc(11 / 16 * 1rem); white-space: nowrap; color: var(--foreground-secondary); }
 .agent-secondary-button:hover { background: var(--background-secondary); color: var(--foreground); }
 .agent-secondary-button:disabled { opacity: .4; cursor: not-allowed; }
@@ -196,7 +198,13 @@
 .agent-process.is-open .agent-process-heading { border-bottom: 1px solid var(--border); }
 .agent-process-heading:hover { background: var(--background-secondary); }
 .agent-process-heading > svg { flex-shrink: 0; }
+.agent-process-label { display: flex; min-width: 0; align-items: center; gap: 10px; }
 .agent-process-title { flex-shrink: 0; font-size: calc(13.5 / 16 * 1rem); font-weight: 600; color: var(--foreground); }
+/* Folded while the task runs: 任务过程 · count over what runs now, the spinner beside both lines. */
+.agent-process-heading.is-live > svg:first-child { color: var(--accent); }
+.agent-process-heading.is-live .agent-process-label { display: grid; flex: 1; grid-template-columns: auto minmax(0, 1fr); gap: 0 4px; line-height: 1.4; }
+.agent-process-heading.is-live .agent-process-count { font-size: calc(13.5 / 16 * 1rem); font-weight: 600; color: var(--foreground); }
+.agent-process-now { grid-column: 1 / -1; overflow: hidden; font-size: calc(12.5 / 16 * 1rem); text-overflow: ellipsis; white-space: nowrap; }
 .agent-process-count { min-width: 0; overflow: hidden; font-size: calc(12.5 / 16 * 1rem); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
 .agent-process-hint { flex-shrink: 0; margin-left: auto; font-size: calc(12 / 16 * 1rem); }
 .agent-process-chevron { margin-left: auto; }
@@ -240,6 +248,10 @@
 .agent-live-activity { display: flex; align-items: center; gap: 8px; font-size: calc(13 / 16 * 1rem); color: var(--foreground-secondary); }
 .agent-live-activity > svg { flex-shrink: 0; }
 .agent-live-activity[data-tone="warning"] { color: var(--chat-warning); }
+/* Narrower screens show that line in the folded process card instead; it stays announced. */
+@media (max-width: 1023px) {
+    .agent-message:has(.agent-process-heading.is-live) > .agent-live-activity { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
 .chat-thinking { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: 6px; }
 .chat-thinking-toggle { display: inline-flex; align-items: center; gap: 6px; border-radius: 6px; font-size: calc(13 / 16 * 1rem); color: var(--foreground-secondary); }
 .chat-thinking-toggle:hover { color: var(--foreground); }
@@ -336,19 +348,40 @@ button.agent-evidence-chip:hover { background: var(--background-secondary); }
 .agent-question-dialog-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 20px; }
 .agent-answer-button { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: 7px; background: var(--foreground); color: var(--background); font-size: calc(12 / 16 * 1rem); }
 .agent-answer-button:disabled { opacity: .4; cursor: not-allowed; }
-@media (min-width: 1024px) { .chat-workspace { height: 100dvh; } .chat-mobile-conversations { display: none; } }
+/* Beside the sidebar: no ≡, and a new conversation shows no header at all. */
+@media (min-width: 1024px) { .chat-nav-trigger, .chat-session-header.is-empty { display: none; } }
+/* Below it the page has no site header: the chat header is the top of the screen and clears the status bar. */
+@media (max-width: 1023px) { .chat-session-header { height: calc(56px + var(--sat)); padding-top: var(--sat); } }
+/* Phones (design board "手机 · 任务对话"): ≡ · centered title over its task status · icon-only workspace with a count badge. */
 @media (max-width: 767px) {
-    .chat-session-header { height: 52px; padding: 0 12px 0 16px; }
-    .chat-session-title { padding-left: 30px; }
+    .chat-session-header { display: grid; grid-template: 1fr auto auto 1fr / 44px minmax(0, 1fr) 44px; gap: 0 4px; padding: var(--sat) 6px 0; }
+    .chat-nav-trigger { grid-area: 1 / 1 / 5 / 2; align-self: center; width: 44px; height: 44px; margin: 0; border-radius: 12px; color: var(--foreground-secondary); }
+    .chat-session-title { grid-area: 2 / 2; justify-content: center; font-size: calc(14.5 / 16 * 1rem); line-height: 1.3; }
+    .chat-title-button, .chat-title-text { padding: 2px 6px; }
+    .chat-title-button > svg, .chat-mode-badge, .chat-session-actions > :is(.chat-header-button, .chat-header-icon) { display: none; }
+    .chat-session-actions { display: contents; }
+    .chat-session-status { display: flex; grid-area: 3 / 2; justify-self: center; min-width: 0; max-width: 100%; }
+    .chat-session-status :is(.chat-run-status, .agent-status) { gap: 4px; padding: 0; font-size: calc(12 / 16 * 1rem); }
+    .chat-session-status :is(.chat-run-status, .agent-status) > span { display: inline; overflow: hidden; text-overflow: ellipsis; }
+    .chat-session-status :is(.chat-run-status, .agent-status) > svg { width: 12px; height: 12px; }
+    .chat-workspace-toggle { position: relative; grid-area: 1 / 3 / 5 / 4; align-self: center; width: 44px; height: 44px; justify-content: center; padding: 0; border: 0; border-radius: 12px; background: transparent; }
+    .chat-workspace-toggle[aria-expanded="true"] { background: var(--background-secondary); }
+    .chat-workspace-toggle > svg { width: 20px; height: 20px; }
+    .chat-workspace-toggle > span:not(.chat-result-count) { display: none; }
+    .chat-workspace-toggle > .chat-result-count { position: absolute; top: 7px; right: 6px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: calc(11 / 16 * 1rem); font-weight: 600; line-height: 16px; text-align: center; }
+}
+@media (max-width: 767px) {
     .chat-suggestion-grid { grid-template-columns: minmax(0, 1fr); }
     .chat-transcript-scroll, .chat-transcript-virtual { padding: 16px 16px 0; }
-    .chat-empty-state { padding: 56px 16px 24px; }
+    .chat-empty-state { padding: 56px 16px calc(24px + var(--sab)); }
     .chat-empty-inner { gap: 22px; }
     .chat-empty-intro h1 { font-size: calc(26 / 16 * 1rem); }
     .chat-empty-intro p { font-size: calc(13.5 / 16 * 1rem); }
     .chat-transcript-list { padding-bottom: 12px; }
     .agent-process-hint, .agent-step-tag { display: none; }
     .agent-step-note-body, .agent-step > .agent-tool-details { margin-left: 10px; }
+    /* The header carries a live task's status; its reply keeps the name and timing (board "手机 · 任务对话"). */
+    .agent-message:is([data-agent-status="queued"], [data-agent-status="running"], [data-agent-status="awaiting_input"], [data-agent-status="cancelling"]) > .agent-message-heading > .agent-status { display: none; }
 }
 @media (hover: none), (pointer: coarse) { .chat-message-actions.is-user { opacity: 1; } }
 @media (max-width: 520px) {

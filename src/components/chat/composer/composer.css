@@ -1,7 +1,8 @@
 /* Composer, question dock and their menus. Sizes follow the conversation design boards. */
 
 /* ---- Dock ---- */
-.chat-composer-dock { position: relative; flex-shrink: 0; display: flex; justify-content: center; padding: 0 32px 14px; }
+/* Pages without the site's bottom bar keep the composer clear of the home indicator. */
+.chat-composer-dock { position: relative; flex-shrink: 0; display: flex; justify-content: center; padding: 0 32px calc(14px + var(--sab)); }
 .chat-composer-dock.is-hero { padding: 0; }
 .chat-composer-inner { position: relative; width: 100%; max-width: var(--chat-column); min-width: 0; }
 .chat-composer-header { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
@@ -139,6 +140,8 @@
 .floating-panel :is(.chat-model-action, .chat-template-manage):hover { background: var(--background-secondary); }
 :is(.floating-panel.chat-plus-menu, .floating-panel.chat-template-menu, .chat-model-options) > button:disabled { opacity: .55; cursor: not-allowed; }
 .floating-panel.chat-plus-menu > [aria-checked="true"], .floating-panel.chat-plus-menu > [aria-checked="true"] > svg { background: transparent; color: var(--accent-hover); }
+/* The toolbar carries the Agent web switch except on phones. */
+.floating-panel.chat-plus-menu > .chat-plus-web { display: none; }
 .floating-panel .chat-template-manage { min-height: 36px; margin-top: 2px; font-size: calc(12.5 / 16 * 1rem); color: var(--accent-hover); text-decoration: none; }
 .chat-model-options { display: flex; flex-direction: column; gap: 4px; max-height: 15rem; overflow-y: auto; }
 .floating-panel.chat-model-menu .chat-model-options > [aria-checked="true"] { background: var(--background-secondary); color: var(--foreground); }
@@ -190,7 +193,8 @@
 .chat-context-panel .chat-model-note, .agent-context-panel .chat-model-note { margin-top: 10px; padding: 0; font-size: calc(12.5 / 16 * 1rem); }
 
 /* ---- Question dock: replaces the input while the task waits for answers ---- */
-.chat-question-region { display: flex; flex-shrink: 0; flex-direction: column; align-items: center; padding: 0 32px 14px; }
+.chat-question-region { display: flex; flex-shrink: 0; flex-direction: column; align-items: center; padding: 0 32px calc(14px + var(--sab)); }
+.chat-question-region:has(+ .chat-composer-dock) { padding-bottom: 14px; }
 .chat-question-region > * { width: 100%; max-width: var(--chat-column); }
 .chat-question-region > .chat-composer-note { margin: 10px 0 0; }
 .agent-question-dock { display: flex; flex-direction: column; max-height: min(72dvh, 680px); border: 1.5px solid var(--accent); border-radius: 20px; background: var(--chat-raised); box-shadow: var(--shadow-raised); overflow: hidden; }
@@ -260,24 +264,52 @@ legend.agent-question-title { margin-bottom: 2px; }
 
 /* ---- Narrow columns ---- */
 @media (max-width: 767px) {
-    .chat-composer-dock, .chat-question-region { padding: 0 12px 10px; }
-    .chat-composer-shell { padding: 10px 8px 8px 12px; border-radius: 18px; }
-    .is-hero .chat-composer-shell { padding: 12px 10px 10px 14px; border-radius: 20px; }
+    .chat-composer-dock { padding: 0 12px calc(12px + var(--sab)); }
+    .chat-question-region { padding: 0 12px calc(10px + var(--sab)); }
+    .chat-question-region:has(+ .chat-composer-dock) { padding-bottom: 10px; }
+    /* Design board "手机 · 任务对话": 44px targets, a 16px input (smaller ones zoom on iOS), @ by typing and the web switch in the + menu. */
+    .chat-composer-shell { padding: 10px 8px 8px 14px; border-radius: 22px; }
+    .is-hero .chat-composer-shell { padding: 12px 10px 10px 14px; border-radius: 22px; }
+    .chat-composer-input { font-size: calc(16 / 16 * 1rem); }
+    .chat-composer-toolbar > :is(.is-mention, .is-web) { display: none; }
+    .chat-composer-note[data-optional] { display: none; }
+    .floating-panel.chat-plus-menu > .chat-plus-web { display: flex; }
+    .chat-tool-button, .chat-send-button, .chat-stop-button:not(.is-small) { width: 44px; height: 44px; border-radius: 14px; }
+    .chat-tool-text, .chat-model-trigger, .chat-context-meter { height: 44px; }
     .chat-model-trigger .chat-model-name { max-width: 7.5rem; }
-    .agent-question-dock { max-height: 80dvh; }
-    .agent-question-dock-header { padding: 12px 10px 8px 14px; }
-    .agent-question-dock .agent-question-steps { flex-wrap: nowrap; overflow-x: auto; padding: 0 14px 10px; scrollbar-width: none; }
-    .agent-question-body { padding: 14px; }
-    .agent-question-footer { padding: 10px 10px 10px 14px; }
     .agent-question-options.is-grid { grid-template-columns: minmax(0, 1fr); }
+    /* Design board "手机 · 补充信息": the questions rise from the bottom edge as a sheet with larger targets. */
+    .chat-question-region:has(> .agent-question-dock) { padding: 0; }
+    .chat-question-region > .agent-question-dock + .chat-composer-note { display: none; }
+    .agent-question-dock { max-height: min(80dvh, calc(100dvh - 72px - var(--sat))); border-width: 0; border-radius: 22px 22px 0 0; box-shadow: 0 -8px 40px #0002; }
+    .agent-question-dock::before { content: ''; flex-shrink: 0; align-self: center; width: 40px; height: 5px; margin: 8px 0 2px; border-radius: 999px; background: var(--border-hover); }
+    .agent-question-dock-header { align-items: flex-start; gap: 8px; padding: 10px 8px 6px 20px; }
+    .agent-question-dock-icon { display: none; }
+    .agent-question-dock-header h2 { font-size: calc(16 / 16 * 1rem); }
+    .agent-question-dock-header p { font-size: calc(13 / 16 * 1rem); }
+    .agent-question-later { height: 44px; padding: 0 12px; border-radius: 12px; font-size: calc(13.5 / 16 * 1rem); }
+    .agent-question-dock .agent-question-steps { flex-wrap: nowrap; overflow-x: auto; padding: 6px 20px 12px; scrollbar-width: none; }
+    .agent-question-dock .agent-question-steps button { height: 34px; padding: 0 12px; font-size: calc(13 / 16 * 1rem); }
+    .agent-question-body { gap: 12px; padding: 16px 20px 18px; }
+    .agent-question-title { font-size: calc(16 / 16 * 1rem); }
+    .agent-question-options { gap: 10px; }
+    .agent-question-dock label.agent-question-option { min-height: 56px; gap: 12px; padding: 8px 16px; border-radius: 14px; }
+    .agent-question-option input { width: 20px; height: 20px; }
+    .agent-question-footer { padding: 12px 16px calc(12px + var(--sab)); }
+    .agent-question-footer > span { overflow: hidden; font-size: calc(13 / 16 * 1rem); text-overflow: ellipsis; white-space: nowrap; }
+    .agent-question-footer button { height: 48px; border-radius: 14px; font-size: calc(14.5 / 16 * 1rem); }
+    .agent-question-previous { padding: 0 18px; }
+    .agent-question-next { padding: 0 22px; }
 }
 @media (max-width: 480px) {
     .chat-composer-toolbar { gap: 2px; }
     .chat-tool-text { padding: 0 8px; }
-    .chat-model-hint, .chat-context-meter > span { display: none; }
-    .chat-model-trigger { padding: 0 8px; }
-    .chat-model-trigger .chat-model-name { max-width: 5.5rem; }
+    .chat-context-meter > span { display: none; }
+    /* The model button gives way to keep send in view: the effort label first, then the name. */
+    .chat-model-trigger { flex-shrink: 1; padding: 0 8px; }
+    .chat-model-hint { flex-shrink: 100; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .is-hero .chat-model-hint { display: none; }
     .chat-mode-switch [role="radio"] { padding: 0 8px; }
     .chat-run-secondary, .chat-run-primary { padding: 0 8px; }
-    .agent-question-dock-header p, .agent-question-footer > span { display: none; }
 }
+@media (max-width: 359px) { .agent-question-footer > span, .chat-model-hint { display: none; } }

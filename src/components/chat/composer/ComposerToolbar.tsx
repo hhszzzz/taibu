@@ -124,6 +124,11 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
                 {!agentMode && <button type="button" role="menuitemcheckbox" aria-checked={props.plainWeb.active} disabled={chatMode === 'dream'} onClick={() => { closeMenu(); props.plainWeb.onToggle(); }}>
                     <Globe size={16} aria-hidden="true" />联网搜索{!props.plainWeb.allowed && <small>Plus</small>}
                 </button>}
+                {/* Phones move the Agent web switch here from the toolbar. */}
+                {webControl && <button type="button" role="menuitemcheckbox" className="chat-plus-web" aria-checked={webControl.enabled} disabled={webControl.disabled} title={webControl.title}
+                    onClick={() => { closeMenu(); webControl.onToggle(); }}>
+                    <Globe size={16} aria-hidden="true" />{webControl.label}
+                </button>}
                 {!!userId && props.knowledgeBase.enabled && <button type="button" role="menuitem" onClick={() => { closeMenu(); props.knowledgeBase.onOpen(); }}>
                     <BookOpenText size={16} aria-hidden="true" />知识库{!props.knowledgeBase.allowed && <small>Plus</small>}
                 </button>}
@@ -140,7 +145,7 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
                 accept={agentMode ? '.jpg,.jpeg,.png,.webp,.pdf,.txt,.md,.doc,.docx,.xlsx,.xls,.csv' : '.pdf,.txt,.md,.doc,.docx,.xlsx,.xls,.csv'}
                 multiple={agentMode} onChange={props.onFileChange} />
 
-            {props.onMention && !hero && <button type="button" className="chat-tool-button" aria-label="引用命盘或知识库" title="引用命盘或知识库" disabled={disabled} onClick={props.onMention}>
+            {props.onMention && !hero && <button type="button" className="chat-tool-button is-mention" aria-label="引用命盘或知识库" title="引用命盘或知识库" disabled={disabled} onClick={props.onMention}>
                 <AtSign size={17} strokeWidth={1.9} aria-hidden="true" />
             </button>}
 
@@ -151,7 +156,7 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
                 <button type="button" aria-label={`移除知识库引用：${base.name}`} disabled={disabled} onClick={() => props.knowledgeBase.onRemove(base.id)}><X size={12} aria-hidden="true" /></button>
             </span>)}
 
-            {webControl && <button type="button" className="chat-tool-text" aria-pressed={webControl.enabled} disabled={webControl.disabled} title={webControl.title} onClick={webControl.onToggle}>
+            {webControl && <button type="button" className="chat-tool-text is-web" aria-pressed={webControl.enabled} disabled={webControl.disabled} title={webControl.title} onClick={webControl.onToggle}>
                 <Globe size={16} strokeWidth={1.8} aria-hidden="true" />{webControl.label}
             </button>}
             {!agentMode && props.plainWeb.active && <button type="button" className="chat-tool-text" aria-pressed="true" title="关闭联网搜索" onClick={props.plainWeb.onToggle}>

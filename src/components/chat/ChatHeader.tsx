@@ -18,6 +18,10 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
 
 interface ChatHeaderProps {
+    /** Opens the navigation drawer where the page has no sidebar (phones and tablets). */
+    navigation?: ReactNode;
+    /** A new conversation shows no header beside the sidebar; phones keep it for the drawer. */
+    empty?: boolean;
     title: string;
     /** Saved conversation; new conversations have no rename, delete or export. */
     conversationId: string | null;
@@ -39,6 +43,8 @@ interface ChatHeaderProps {
 const PersonalizationIcon = SETTINGS_CENTER_TAB_ICONS.personalization;
 
 export function ChatHeader({
+    navigation,
+    empty = false,
     title,
     conversationId,
     badge,
@@ -77,7 +83,8 @@ export function ChatHeader({
     };
 
     return (
-        <header className="chat-session-header">
+        <header className={`chat-session-header${empty ? ' is-empty' : ''}`}>
+            {navigation}
             <h1 className="chat-session-title">
                 {conversationId ? <button ref={titleRef} type="button" className="chat-title-button" aria-haspopup="menu" aria-expanded={titleMenu}
                     onClick={() => setTitleMenu(open => !open)} title={title}>
@@ -86,7 +93,7 @@ export function ChatHeader({
             </h1>
             {badge && <span className="chat-mode-badge">{badge}</span>}
             <div className="chat-session-actions">
-                {status}
+                {status && <div className="chat-session-status">{status}</div>}
                 {showExport && conversationId && <button type="button" className="chat-header-button" onClick={requestConversationExport}>
                     <Download size={15} aria-hidden="true" /><span>导出</span>
                 </button>}

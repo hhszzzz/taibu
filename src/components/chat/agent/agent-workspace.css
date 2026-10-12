@@ -269,9 +269,43 @@ button.agent-ws-overview-card:hover { border-color: var(--border-hover); backgro
 .agent-todo-progress details summary { cursor: pointer; color: var(--foreground-secondary); }
 .agent-todo-progress .agent-todo-list { margin-top: 8px; padding: 0; border: 0; }
 @media (max-width: 640px) { .agent-todo-segments { display: none; } }
+/* Phones leave the list to the workspace sheet's 过程 (board "手机 · 任务对话"); without a workspace the bar stays. */
+@media (max-width: 767px) { .agent-todo-progress:has(.agent-todo-open) { display: none; } }
 .agent-step-open { flex-shrink: 0; align-self: flex-start; margin-top: 9px; }
 
 /* Narrow panels stack the two-column grids. */
 @container (max-width: 440px) {
     .agent-ws-overview-grid, .agent-ws-known, .agent-board-relations > ul { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Phones (design board "手机 · 工作区"): a sheet from the bottom edge with pill tabs; a chart's
+   追问 and 只看相关位置 become the sheet's bottom bar. */
+@media (max-width: 767px) {
+    .app-modal.agent-workspace-dialog { inset: auto 0 0; width: 100%; max-width: none; height: calc(100dvh - 64px - var(--sat)); max-height: none; margin: 0; border: 0; border-radius: 22px 22px 0 0; box-shadow: 0 -8px 40px #0003; }
+    .agent-workspace-dialog .agent-panel-content::before { content: ''; flex-shrink: 0; align-self: center; width: 40px; height: 5px; margin: 8px 0 2px; border-radius: 999px; background: var(--border-hover); }
+    .agent-workspace-dialog .agent-panel-header { gap: 6px; height: 52px; padding: 0 6px 0 18px; border-bottom: 0; }
+    .agent-workspace-dialog .agent-panel-header h2 { font-size: calc(17 / 16 * 1rem); }
+    .agent-workspace-dialog :is(.agent-ws-subtitle, .agent-ws-header-actions > [aria-haspopup="menu"]) { display: none; }
+    .agent-workspace-dialog .agent-follow-chart { height: 36px; font-size: calc(13 / 16 * 1rem); }
+    .agent-workspace-dialog .agent-ws-header-actions .agent-icon-button { width: 44px; height: 44px; border-radius: 12px; }
+    .agent-workspace-dialog .agent-ws-tabs { align-items: center; gap: 6px; height: auto; padding: 0 16px 10px; background: transparent; scrollbar-width: none; }
+    .agent-workspace-dialog .agent-ws-tabs [role="tab"] { height: 36px; padding: 0 14px; border: 1px solid var(--border); border-radius: 999px; font-size: calc(13.5 / 16 * 1rem); font-weight: 400; }
+    .agent-workspace-dialog .agent-ws-tabs [role="tab"][aria-selected="true"] { border-color: var(--foreground); background: var(--foreground); color: var(--background); font-weight: 600; }
+    .agent-workspace-dialog .agent-ws-tabs [role="tab"]:focus-visible { outline-offset: 2px; }
+    .agent-workspace-dialog :is(.agent-ws-tabs [role="tab"] > svg, .agent-ws-tab-separator) { display: none; }
+    /* The open resource's pill carries its close button. */
+    .agent-workspace-dialog .agent-ws-resource-tab { position: relative; }
+    .agent-workspace-dialog .agent-ws-resource-tab > [role="tab"] { padding-right: 14px; }
+    .agent-workspace-dialog .agent-ws-resource-tab[data-selected] > [role="tab"] { padding-right: 34px; }
+    .agent-workspace-dialog .agent-ws-tab-close { position: absolute; top: 50%; right: 8px; display: none; width: 22px; height: 22px; margin: 0; transform: translateY(-50%); }
+    .agent-workspace-dialog .agent-ws-resource-tab[data-selected] .agent-ws-tab-close { display: flex; color: var(--background); opacity: 1; }
+    .agent-workspace-dialog .agent-ws-resource-tab[data-selected] .agent-ws-tab-close:hover { background: color-mix(in srgb, var(--background) 22%, transparent); }
+    .agent-workspace-dialog .agent-ws-resource-tab[data-selected] .agent-ws-tab-close:focus-visible { outline-color: var(--background); outline-offset: 0; }
+    /* The sheet, not its scrolling body, is the size container, so the bar below stays put while the view scrolls. */
+    .agent-workspace-dialog .agent-panel-content { container-type: inline-size; }
+    .agent-workspace-dialog .agent-panel-scroll { padding: 16px; container-type: normal; }
+    .agent-workspace-dialog .agent-panel-scroll:has(.agent-board-focus-actions) { padding-bottom: calc(88px + var(--sab)); }
+    .agent-workspace-dialog .agent-board-focus-actions { position: fixed; right: 0; bottom: 0; left: 0; z-index: 30; flex-flow: row-reverse nowrap; gap: 8px; padding: 10px 16px calc(12px + var(--sab)); border-top: 1px solid var(--border); background: var(--chat-raised); }
+    .agent-workspace-dialog .agent-board-focus-actions > button { flex: 1; justify-content: center; height: 48px; border-radius: 14px; font-size: calc(14.5 / 16 * 1rem); }
+    .agent-workspace-dialog .agent-board-ask { font-weight: 600; }
 }

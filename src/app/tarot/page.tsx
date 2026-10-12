@@ -1,40 +1,48 @@
 /**
  * 塔罗牌占卜页面
  *
- * 选择牌阵并跳转到结果页
+ * 写下问题、选择牌阵与是否包含逆位，再「开始洗牌」跳转到结果页抽牌。
  */
-'use client';
+'use client'; // 需要管理问题、牌阵选择与每日一牌弹窗状态，并在开始洗牌时路由跳转
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { Calendar, Layers, ChevronRight } from 'lucide-react';
-import Image from 'next/image';
+import { Plus, X } from 'lucide-react';
 
-import { TAROT_SPREADS, getDailyCard, type DrawnCard, type TarotSpread } from '@/lib/divination/tarot';
+import { TAROT_SPREADS, getDailyCard, type DrawnCard } from '@/lib/divination/tarot';
+import { TarotSpreadPicker } from '@/components/tarot/TarotSpreadPicker';
+import { TarotDailyCardDialog } from '@/components/tarot/TarotDailyCardDialog';
 
 const HistoryDrawer = dynamic(
     () => import('@/components/layout/HistoryDrawer').then(mod => mod.HistoryDrawer),
     { ssr: false }
 );
 
+/** 默认选中三牌阵（设计稿默认态）；牌阵配置缺失时退回第一个。 */
+const DEFAULT_SPREAD_ID = TAROT_SPREADS.some(spread => spread.id === 'three-card') ? 'three-card' : (TAROT_SPREADS[0]?.id ?? '');
+
+const FIELD_CLASS = 'border-[0.5px] border-border-hover bg-surface text-foreground placeholder:text-foreground-tertiary transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15';
+
 export default function TarotPage() {
     const router = useRouter();
+    const spreadTitleId = useId();
     const [question, setQuestion] = useState('');
     const [birthDate, setBirthDate] = useState('');
+    const [showBirthDate, setShowBirthDate] = useState(false);
+    const [spreadId, setSpreadId] = useState(DEFAULT_SPREAD_ID);
+    const [allowReversed, setAllowReversed] = useState(true);
     const [dailyCard, setDailyCard] = useState<DrawnCard | null>(null);
+    const [dailyCardFailed, setDailyCardFailed] = useState(false);
+    const [dailyOpen, setDailyOpen] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
 
         void getDailyCard().then((card) => {
-            if (!cancelled) {
-                setDailyCard(card);
-            }
+            if (!cancelled) setDailyCard(card);
         }).catch(() => {
-            if (!cancelled) {
-                setDailyCard(null);
-            }
+            if (!cancelled) setDailyCardFailed(true);
         });
 
         return () => {
@@ -42,149 +50,116 @@ export default function TarotPage() {
         };
     }, []);
 
-    const handleSelectSpread = (spread: TarotSpread) => {
+    const handleStart = () => {
+        if (!spreadId) return;
         const params = new URLSearchParams();
-        params.set('spreadId', spread.id);
-        if (question.trim()) {
-            params.set('question', question.trim());
-        }
-        if (birthDate) {
-            params.set('birthDate', birthDate);
-        }
+        params.set('spreadId', spreadId);
+        if (question.trim()) params.set('question', question.trim());
+        if (birthDate) params.set('birthDate', birthDate);
+        if (!allowReversed) params.set('reversed', '0');
         router.push(`/tarot/result?${params.toString()}`);
+    };
+
+    const handleRemoveBirthDate = () => {
+        setBirthDate('');
+        setShowBirthDate(false);
     };
 
     return (
         <>
-            <div className="md:min-h-screen bg-background md:pb-12 text-foreground">
-                {/* 页面标题 - 移动端隐藏（顶栏已显示） */}
-                <div className="hidden md:block text-center py-8">
-                    <h1 className="text-2xl lg:text-3xl font-bold">塔罗占卜</h1>
-                    <p className="text-foreground-secondary mt-2">聆听内心的声音，探索命运的指引</p>
-                </div>
+            <div className="min-h-full bg-background text-foreground">
+                <div className="mx-auto flex w-full max-w-[944px] flex-col gap-6 px-4 pt-2 pb-10 lg:gap-8 lg:px-8 lg:pt-14 lg:pb-16">
+                    {/* 页面标题：移动端由顶栏显示标题，这里只保留副标题 */}
+                    <header className="flex flex-col gap-2">
+                        <h1 className="hidden font-display text-[34px] font-normal leading-tight lg:block">塔罗占卜</h1>
+                        <p className="text-center text-[0.8125rem] text-foreground-secondary lg:text-left lg:text-[0.9375rem]">
+                            聆听内心的声音。先写下问题，再选择牌阵。
+                        </p>
+                    </header>
 
-                <div className="max-w-4xl mx-auto px-4 mt-4">
-                    {/* 每日一牌 - 卡片样式增强 */}
-                    {dailyCard && (
-                        <div className="bg-background rounded-lg p-4 md:p-6 shadow-sm border border-border md:mb-10 mb-6 overflow-hidden relative group">
-                            <div className="flex flex-row items-center gap-4 md:gap-6 relative z-10">
-                                <div className="relative w-24 h-36 md:w-32 md:h-48 flex-shrink-0 rounded-md overflow-hidden shadow-md transition-all duration-150">
-                                    <Image
-                                        src={dailyCard.card.image}
-                                        alt={dailyCard.card.nameChinese}
-                                        fill
-                                        className={`object-cover ${dailyCard.orientation === 'reversed' ? 'rotate-180' : ''}`}
-                                    />
-                                    <div className="absolute inset-0 ring-1 ring-black/5 rounded-md" />
-                                </div>
-
-                                <div className="flex-1 text-left">
-                                    <div className="inline-flex items-center gap-1.5 md:gap-2 px-2.5 md:px-3 py-0.5 md:py-1 rounded-md bg-purple-50 text-purple-600 text-[10px] md:text-xs font-bold uppercase tracking-wider mb-2 md:mb-3">
-                                        <Calendar className="w-3 h-3 md:w-3.5 md:h-3.5" />
-                                        今日指引
-                                    </div>
-
-                                    <h3 className="text-lg md:text-2xl font-bold mb-1 md:mb-2 flex items-center justify-start gap-2 md:gap-3">
-                                        {dailyCard.card.nameChinese}
-                                        <span className={`px-1.5 md:px-2 py-0.5 rounded-md text-[10px] md:text-xs font-bold border ${dailyCard.orientation === 'reversed'
-                                            ? 'bg-orange-50 text-orange-600 border-orange-100'
-                                            : 'bg-green-50 text-green-600 border-green-100'
-                                            }`}>
-                                            {dailyCard.orientation === 'reversed' ? '逆位' : '正位'}
-                                        </span>
-                                    </h3>
-
-                                    <p className="text-sm md:text-base text-foreground/70 leading-relaxed mb-2 md:mb-4 line-clamp-3 md:line-clamp-none">
-                                        {dailyCard.orientation === 'reversed'
-                                            ? dailyCard.card.reversedMeaning
-                                            : dailyCard.card.uprightMeaning}
-                                    </p>
-
-                                    <div className="text-[10px] md:text-xs text-foreground-secondary">
-                                        * 每日自动抽取，为您提供当天的运势指引
-                                    </div>
-                                </div>
-                            </div>
+                    {/* 所问之事；出生日期为可选的数秘术参数，默认收起 */}
+                    <div className="flex flex-col gap-2">
+                        <div className="flex items-baseline justify-between gap-3">
+                            <label htmlFor="tarot-question" className="text-sm font-medium">你想问什么？</label>
+                            {!showBirthDate && (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowBirthDate(true)}
+                                    className="inline-flex items-center gap-1 rounded-md text-[13px] text-accent transition-colors hover:text-accent-strong"
+                                >
+                                    <Plus className="h-3.5 w-3.5" aria-hidden="true" />出生日期（数秘术）
+                                </button>
+                            )}
                         </div>
-                    )}
-
-                    {/* 问题输入 */}
-                    <div className="mb-6 md:mb-10 text-center max-w-2xl mx-auto">
-                        <label className="block text-sm font-medium text-foreground-secondary mb-3 uppercase tracking-wider">
-                            心中默念您的问题（选填）
-                        </label>
-                        <div className="relative group">
-                            <input
-                                type="text"
-                                value={question}
-                                onChange={(e) => setQuestion(e.target.value)}
-                                placeholder="例如：我的事业发展会如何？"
-                                className="relative w-full px-4 md:px-6 py-3 md:py-4 bg-background rounded-lg border border-border shadow-sm
-                                    focus:border-accent focus:ring-2 focus:ring-accent/10 focus:outline-none
-                                    text-center text-base md:text-lg text-foreground placeholder:text-foreground-secondary
-                                    transition-all duration-150"
-                            />
-                        </div>
-
-                        <div className="mt-4">
-                            <label className="block text-sm font-medium text-foreground-secondary mb-3 uppercase tracking-wider">
-                                出生日期（选填，用于塔罗数秘术）
-                            </label>
-                            <div className="relative group">
+                        <textarea
+                            id="tarot-question"
+                            rows={2}
+                            value={question}
+                            onChange={(e) => setQuestion(e.target.value)}
+                            placeholder="例如：接下来三个月，我和他的关系会如何发展？"
+                            className={`${FIELD_CLASS} min-h-[80px] w-full resize-none rounded-[14px] px-4 py-3.5 text-base leading-relaxed`}
+                        />
+                        {showBirthDate && (
+                            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-2">
+                                <label htmlFor="tarot-birth-date" className="text-[13px] text-foreground-secondary">出生日期</label>
                                 <input
+                                    id="tarot-birth-date"
                                     type="date"
                                     value={birthDate}
                                     onChange={(e) => setBirthDate(e.target.value)}
-                                    className="relative w-full px-4 md:px-6 py-3 md:py-4 bg-background rounded-lg border border-border shadow-sm focus:border-accent focus:ring-2 focus:ring-accent/10 focus:outline-none text-center text-base md:text-lg text-foreground transition-all duration-150"
+                                    className={`${FIELD_CLASS} h-10 min-w-[180px] rounded-[10px] px-3 text-sm`}
                                 />
+                                <span className="text-xs text-foreground-tertiary">用于塔罗数秘术，选填</span>
+                                <button
+                                    type="button"
+                                    onClick={handleRemoveBirthDate}
+                                    aria-label="移除出生日期"
+                                    className="flex h-7 w-7 items-center justify-center rounded-md text-foreground-tertiary transition-colors hover:bg-background-secondary hover:text-foreground"
+                                >
+                                    <X className="h-3.5 w-3.5" aria-hidden="true" />
+                                </button>
                             </div>
-                        </div>
+                        )}
                     </div>
 
-                    {/* 牌阵选择 - 网格布局 */}
-                    <div>
-                        <div className="flex items-center justify-between mb-4 md:mb-6">
-                            <h2 className="text-lg md:text-xl font-bold flex items-center gap-2">
-                                <Layers className="w-5 h-5 text-accent" />
-                                选择牌阵开始占卜
-                            </h2>
-                        </div>
+                    {/* 牌阵选择 */}
+                    <section className="flex flex-col gap-3">
+                        <h2 id={spreadTitleId} className="font-display text-[1.25rem] font-medium lg:text-[1.375rem]">选择牌阵</h2>
+                        <TarotSpreadPicker spreads={TAROT_SPREADS} selectedId={spreadId} onSelect={setSpreadId} labelledBy={spreadTitleId} />
+                    </section>
 
-                        <div className="grid grid-cols-2 md:grid-cols-2 gap-3 md:gap-4">
-                            {TAROT_SPREADS.map(spread => (
-                                <button
-                                    key={spread.id}
-                                    onClick={() => handleSelectSpread(spread)}
-                                    className="relative flex flex-col p-4 md:p-6 bg-background rounded-lg border border-border hover:bg-background-secondary active:bg-background-tertiary text-left transition-all duration-150 group shadow-sm overflow-hidden"
-                                >
-                                    <div className="relative z-10 w-full">
-                                        <div className="flex items-center justify-between mb-2 md:mb-3">
-                                            <span className="inline-flex items-center justify-center w-8 h-8 md:w-10 md:h-10 rounded-md bg-background text-foreground/70 group-hover:bg-accent group-hover:text-on-accent transition-colors duration-150">
-                                                <Layers className="w-4 h-4 md:w-5 md:h-5" />
-                                            </span>
-                                            <span className="text-[10px] md:text-xs font-bold text-foreground-secondary bg-background px-2 md:px-2.5 py-0.5 md:py-1 rounded-md uppercase tracking-wider group-hover:bg-background group-hover:text-accent transition-colors">
-                                                {spread.cardCount} 张牌
-                                            </span>
-                                        </div>
-
-                                        <h3 className="text-base md:text-lg font-bold mb-1 md:mb-2 group-hover:text-accent transition-colors line-clamp-1">
-                                            {spread.name}
-                                        </h3>
-
-                                        <p className="text-xs md:text-sm text-foreground-secondary leading-relaxed line-clamp-2 mb-2 md:mb-4 h-8 md:h-10">
-                                            {spread.description}
-                                        </p>
-
-                                        <div className="flex items-center text-[10px] md:text-xs font-bold text-accent mt-auto">
-                                            开始占卜 <ChevronRight className="w-3 h-3 ml-1" />
-                                        </div>
-                                    </div>
-                                </button>
-                            ))}
+                    {/* 逆位开关与操作 */}
+                    <div className="flex flex-wrap items-center justify-between gap-4 border-t-[0.5px] border-border pt-3">
+                        <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-foreground">
+                            <input
+                                type="checkbox"
+                                checked={allowReversed}
+                                onChange={(e) => setAllowReversed(e.target.checked)}
+                                className="h-4 w-4 accent-accent"
+                            />
+                            包含逆位
+                        </label>
+                        <div className="flex w-full gap-2 sm:w-auto">
+                            <button
+                                type="button"
+                                onClick={() => setDailyOpen(true)}
+                                className="h-12 rounded-xl border-[0.5px] border-border-hover bg-surface px-[18px] text-[15px] text-foreground transition-colors hover:bg-background-secondary"
+                            >
+                                每日一牌
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleStart}
+                                disabled={!spreadId}
+                                className="h-12 flex-1 rounded-xl bg-accent px-6 text-[15px] font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
+                            >
+                                开始洗牌
+                            </button>
                         </div>
                     </div>
                 </div>
             </div>
+            <TarotDailyCardDialog open={dailyOpen} onClose={() => setDailyOpen(false)} dailyCard={dailyCard} unavailable={dailyCardFailed} />
             <HistoryDrawer type="tarot" />
         </>
     );

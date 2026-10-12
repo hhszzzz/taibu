@@ -10,6 +10,8 @@ const SECONDARY_BUTTON_CLASS = `${BUTTON_BASE_CLASS} text-foreground disabled:op
 const SAVED_BUTTON_CLASS = `${BUTTON_BASE_CLASS} text-success`;
 
 const MOBILE_ASK_CLASS = 'flex h-12 flex-1 items-center justify-center rounded-xl bg-accent text-[15px] font-medium text-on-accent transition-colors duration-150 hover:bg-accent-hover';
+/** 移动端底栏左侧的次要操作按钮（保存、重新洗牌等）。 */
+export const MOBILE_SECONDARY_ACTION_CLASS = 'flex h-12 min-w-[76px] items-center justify-center rounded-xl border-[0.5px] border-border-hover bg-surface px-4 text-[15px] transition-colors duration-150 hover:bg-background-secondary only:flex-1';
 
 /** 打开 AI 对话的入口（与页脚「AI 对话」链接同一目的地）。 */
 export const ASK_TAIBU_HREF = '/chat';
@@ -123,35 +125,17 @@ export function ResultHeader({
 }
 
 /**
- * 移动端底部操作栏：保存 + 问太卜（桌面端由各页标题区承担）。
+ * 移动端底部操作栏容器：左侧次要操作（children）+ 右侧问太卜主操作（桌面端由各页标题区承担）。
  * 固定在底部导航之上；页面容器需在移动端预留约 6rem 的底部留白。
  */
-export function ResultMobileActions({
-    saving,
-    saved,
-    saveDisabled = false,
-    saveLabel = '保存',
-    onSave,
-    ask,
-}: {
-    saving: boolean;
-    saved: boolean;
-    saveDisabled?: boolean;
-    saveLabel?: string;
-    onSave: () => void;
+export function MobileActionBar({ children, ask }: {
+    children: ReactNode;
     /** 页内主操作（如六爻「问太卜解卦」直接发起解读）；缺省时跳转 AI 对话「问太卜」。 */
     ask?: { label: string; onClick: () => void; disabled?: boolean };
 }) {
     return (
         <div className="fixed inset-x-0 bottom-[calc(4rem+var(--sab))] z-30 flex gap-2 border-t-[0.5px] border-border bg-background px-4 py-3 sm:px-6 lg:hidden">
-            <button
-                type="button"
-                onClick={onSave}
-                disabled={saving || saved || saveDisabled}
-                className={`h-12 min-w-[76px] rounded-xl border-[0.5px] border-border-hover bg-surface px-4 text-[15px] transition-colors duration-150 hover:bg-background-secondary disabled:cursor-not-allowed only:flex-1 ${saved ? 'text-success' : 'text-foreground disabled:opacity-50'}`}
-            >
-                {saved ? '已保存' : saving ? '保存中' : saveLabel}
-            </button>
+            {children}
             <AIFeatureGate>
                 {ask ? (
                     <button
@@ -169,5 +153,35 @@ export function ResultMobileActions({
                 )}
             </AIFeatureGate>
         </div>
+    );
+}
+
+/** 移动端底部操作栏：保存 + 问太卜。 */
+export function ResultMobileActions({
+    saving,
+    saved,
+    saveDisabled = false,
+    saveLabel = '保存',
+    onSave,
+    ask,
+}: {
+    saving: boolean;
+    saved: boolean;
+    saveDisabled?: boolean;
+    saveLabel?: string;
+    onSave: () => void;
+    ask?: { label: string; onClick: () => void; disabled?: boolean };
+}) {
+    return (
+        <MobileActionBar ask={ask}>
+            <button
+                type="button"
+                onClick={onSave}
+                disabled={saving || saved || saveDisabled}
+                className={`${MOBILE_SECONDARY_ACTION_CLASS} disabled:cursor-not-allowed ${saved ? 'text-success' : 'text-foreground disabled:opacity-50'}`}
+            >
+                {saved ? '已保存' : saving ? '保存中' : saveLabel}
+            </button>
+        </MobileActionBar>
     );
 }

@@ -21,11 +21,12 @@ interface ResultHeaderActionsProps {
     actions: HeaderMenuItem[];
     actionsLabel: string;
     save: ResultSaveControl;
-    ask: ResultAskControl;
+    /** 标题区主操作；缺省时只有「更多」与「保存」（如塔罗的解读入口在页内卡片）。 */
+    ask?: ResultAskControl;
 }
 
 /**
- * 结果页标题区右侧（桌面端）：更多 · 保存 · 问太卜。
+ * 结果页标题区右侧（桌面端）：更多 · 保存 ·（可选）问太卜。
  * 移动端对应的保存与问太卜在底部操作栏（ResultMobileActions）。
  */
 export function ResultHeaderActions({ actions, actionsLabel, save, ask }: ResultHeaderActionsProps) {
@@ -40,16 +41,18 @@ export function ResultHeaderActions({ actions, actionsLabel, save, ask }: Result
             >
                 {save.saved ? '已保存' : save.saving ? '保存中' : '保存'}
             </button>
-            <AIFeatureGate>
-                <button
-                    type="button"
-                    onClick={ask.onClick}
-                    disabled={ask.disabled}
-                    className="h-10 rounded-[10px] bg-accent px-4 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                    {ask.label}
-                </button>
-            </AIFeatureGate>
+            {ask && (
+                <AIFeatureGate>
+                    <button
+                        type="button"
+                        onClick={ask.onClick}
+                        disabled={ask.disabled}
+                        className="h-10 rounded-[10px] bg-accent px-4 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                        {ask.label}
+                    </button>
+                </AIFeatureGate>
+            )}
         </div>
     );
 }

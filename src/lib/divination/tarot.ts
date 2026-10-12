@@ -156,6 +156,58 @@ const TAROT_SPREAD_DISPLAY_OVERRIDES: Record<string, Omit<TarotSpread, 'cardCoun
             { name: '结果', meaning: '最可能的结果' },
         ],
     },
+    horseshoe: {
+        id: 'horseshoe',
+        name: '马蹄牌阵',
+        description: '七张牌呈马蹄形展开，梳理障碍、外部环境与可能的结果。',
+        positions: [
+            { name: '过去', meaning: '影响当前情况的过去因素' },
+            { name: '现在', meaning: '当前情况的核心' },
+            { name: '潜在影响', meaning: '尚未显现但会起作用的因素' },
+            { name: '障碍', meaning: '需要面对的主要阻碍' },
+            { name: '外部环境', meaning: '周围的人与环境带来的影响' },
+            { name: '建议', meaning: '可以采取的行动' },
+            { name: '可能结果', meaning: '照目前发展最可能的结果' },
+        ],
+    },
+    decision: {
+        id: 'decision',
+        name: '抉择牌阵',
+        description: '在两个选项之间犹豫时，比较各自的走向与结果。',
+        positions: [
+            { name: '当前处境', meaning: '做选择时所处的状况' },
+            { name: '选项A', meaning: '选择 A 时的状态' },
+            { name: '选项B', meaning: '选择 B 时的状态' },
+            { name: '选项A结果', meaning: '选择 A 的可能结果' },
+            { name: '选项B结果', meaning: '选择 B 的可能结果' },
+        ],
+    },
+    'mind-body-spirit': {
+        id: 'mind-body-spirit',
+        name: '身心灵',
+        description: '从心智、身体、灵性三个层面观照当下的自己。',
+        positions: [
+            { name: '心智', meaning: '思绪与心理状态' },
+            { name: '身体', meaning: '身体与现实层面的状态' },
+            { name: '灵性', meaning: '内在成长与精神层面的指引' },
+        ],
+    },
+    situation: {
+        id: 'situation',
+        name: '处境 · 障碍 · 建议',
+        description: '理清卡住的地方：当前处境、阻碍与突破的方向。',
+        positions: [
+            { name: '处境', meaning: '当前所处的状况' },
+            { name: '障碍', meaning: '阻碍你前进的因素' },
+            { name: '建议', meaning: '突破困局的方向' },
+        ],
+    },
+    'yes-no': {
+        id: 'yes-no',
+        name: '是否',
+        description: '针对是非问题，给出一个明确的倾向。',
+        positions: [{ name: '答案', meaning: '对所问之事的倾向' }],
+    },
 };
 
 function parseBirthDateParts(birthDate?: string | null): { birthYear: number; birthMonth: number; birthDay: number } | null {

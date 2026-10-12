@@ -89,6 +89,7 @@ test('tarot route uses schema column names when inserting history', async (t) =>
     const createArgs = createCalls.at(-1);
     assert.ok(createArgs);
     assert.equal(createArgs.sourceType, 'tarot');
+    assert.equal(createArgs.title, '塔罗占卜 - 单牌');
     assert.equal(createArgs.historyBinding?.type, 'tarot');
     assert.equal(createArgs.historyBinding?.payload.spread_id, 'single');
     assert.equal('interpretation' in (createArgs.historyBinding?.payload ?? {}), false);
@@ -307,6 +308,61 @@ test('tarot route returns numerology on draw-only and persists birth metadata on
         birthDate: '1990-01-01',
         numerology: drawOnlyPayload.data?.numerology,
     });
+});
+
+test('tarot route draws and titles the spreads newly exposed to the web layer', async (t) => {
+    mockAIFeatureState(t);
+    mockAIRateLimit(t);
+    const createCalls: CreateAIAnalysisParams[] = [];
+
+    t.mock.method(apiUtilsModule, 'getAuthContext', async () => createMockAuthContext({}, null));
+    mockRouteUserContext(t, {
+        from() {
+            throw new Error('tarot interpret test should not query tables directly');
+        },
+        rpc() {
+            throw new Error('tarot interpret test should not call rpc directly');
+        },
+    });
+    t.mock.method(credits, 'getUserAuthInfo', async () => ({ credits: 10, effectiveMembership: 'free', hasCredits: true }));
+    t.mock.method(credits, 'attemptCreditUse', async () => ({ ok: true, remaining: 9 }));
+    t.mock.method(aiAccessModule, 'resolveModelAccessAsync', async () => ({ modelId: 'test-model', reasoningEnabled: false }));
+    t.mock.method(aiModule, 'callAIWithReasoning', async () => ({ content: 'analysis', reasoning: null }));
+    t.mock.method(aiAnalysisModule, 'createAIAnalysisConversation', async (params: CreateAIAnalysisParams) => {
+        createCalls.push(params);
+        return 'conv-1';
+    });
+    t.mock.method(chartPromptDetailModule, 'loadResolvedChartPromptDetailLevel', async () => 'default');
+
+    const { POST } = await import('../app/api/tarot/route');
+    const post = async (body: Record<string, unknown>, headers: Record<string, string> = {}) => {
+        const response = await POST(new NextRequest('http://localhost/api/tarot', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...headers },
+            body: JSON.stringify(body),
+        }));
+        return { status: response.status, payload: await response.json() };
+    };
+
+    const spreads = await post({ action: 'list-spreads' });
+    assert.equal(spreads.status, 200);
+    assert.ok(spreads.payload.data.spreads.some((spread: { id: string }) => spread.id === 'horseshoe'));
+
+    const draw = await post({ action: 'draw-only', spreadId: 'horseshoe', seed: 'horseshoe-seed', allowReversed: false });
+    assert.equal(draw.status, 200);
+    assert.equal(draw.payload.data.spread.name, '马蹄牌阵');
+    assert.equal(draw.payload.data.cards.length, 7);
+    assert.ok(draw.payload.data.cards.every((card: { orientation: string }) => card.orientation === 'upright'));
+
+    const unknown = await post({ action: 'draw-only', spreadId: 'not-a-spread' });
+    assert.equal(unknown.status, 404);
+
+    const interpret = await post(
+        { action: 'interpret', spreadId: 'decision', question: '要不要换工作', cards: draw.payload.data.cards.slice(0, 5) },
+        { Authorization: 'Bearer test-token' },
+    );
+    assert.equal(interpret.status, 200);
+    assert.equal(createCalls.at(-1)?.title, '要不要换工作 - 抉择牌阵');
 });
 
 test('tarot save should fail fast when metadata column is missing', async (t) => {

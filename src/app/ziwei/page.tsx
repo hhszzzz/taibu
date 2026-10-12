@@ -172,36 +172,33 @@ function ZiweiPageContent() {
     };
 
     return (
-        <div className="min-h-screen bg-background">
-            <div className="max-w-xl mx-auto px-4 pt-8 animate-fade-in text-foreground">
-                {/* 页面标题 - 移动端隐藏（顶栏已显示） */}
-                <div className="hidden md:block text-center mb-8">
-                    <h1 className="text-2xl lg:text-3xl font-bold">紫微斗数排盘</h1>
-                    <p className="text-foreground-secondary mt-2">
-                        请填写您的出生信息，我们将为您生成紫微斗数命盘
+        <div className="min-h-screen bg-background text-foreground">
+            <div className="mx-auto flex w-full max-w-[608px] flex-col gap-6 px-4 py-6 animate-fade-in sm:gap-7 sm:px-6 lg:py-14">
+                <div className="flex flex-col gap-2">
+                    <h1 className="font-display text-[1.625rem] font-normal leading-tight lg:text-[34px]">紫微斗数排盘</h1>
+                    <p className="text-sm leading-relaxed text-foreground-secondary lg:text-[15px]">
+                        填写出生信息，生成十二宫命盘与大限流年。
                     </p>
                 </div>
 
-                <div className="space-y-6">
-                    <UnifiedZiweiForm
-                        formData={formData}
-                        onUpdate={updateField}
-                        onSubmit={handleSubmit}
-                        isSubmitting={isSubmitting}
-                        onBirthTimeConfirm={() => setRequiresBirthTimeConfirmation(false)}
-                    />
+                <UnifiedZiweiForm
+                    formData={formData}
+                    onUpdate={updateField}
+                    onSubmit={handleSubmit}
+                    isSubmitting={isSubmitting}
+                    onBirthTimeConfirm={() => setRequiresBirthTimeConfirmation(false)}
+                />
 
-                    {requiresBirthTimeConfirmation && (
-                        <div className="rounded-md border border-warning/15 bg-warning/5 px-4 py-3 text-sm text-warning">
-                            检测到旧链接或非法参数未提供有效出生时辰。其他信息已恢复，请先明确选择出生时辰后再排盘。
-                        </div>
-                    )}
+                {requiresBirthTimeConfirmation && (
+                    <div role="status" className="rounded-xl border-[0.5px] border-warning/30 bg-earth-soft px-4 py-3 text-sm text-warning">
+                        检测到旧链接或非法参数未提供有效出生时辰。其他信息已恢复，请先明确选择出生时辰后再排盘。
+                    </div>
+                )}
 
-                    {/* 提示信息 */}
-                    <p className="text-center text-xs text-foreground-secondary">
-                        紫微斗数必须提供出生时辰，请尽量填写准确时间以获得可靠命盘
-                    </p>
-                </div>
+                {/* 提示信息 */}
+                <p className="text-center text-xs text-foreground-secondary">
+                    紫微斗数必须提供出生时辰，请尽量填写准确时间以获得可靠命盘
+                </p>
             </div>
         </div>
     );

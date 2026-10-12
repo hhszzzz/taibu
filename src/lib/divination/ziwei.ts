@@ -18,6 +18,8 @@ import {
     type ZiweiHoroscopeCanonicalJSON,
     type ZiweiHoroscopeOutput as CoreZiweiHoroscopeOutput,
 } from 'taibu-core/ziwei-horoscope';
+import { calculateZiweiFlyingStar } from 'taibu-core/ziwei-flying-star';
+import { Lunar, Solar } from 'lunar-javascript';
 import type { Gender, CalendarType } from '@/types';
 import { resolveChartTextDetailLevel, type ChartTextDetailLevel } from '@/lib/divination/detail-level';
 import { resolveBirthTimeOptions, type BirthTimeResolution } from '@/lib/divination/birth-time';
@@ -72,6 +74,33 @@ const PALACE_LAYOUT_ORDER = [
 const PALACE_TEXT_ORDER = ['命宫', '兄弟', '夫妻', '子女', '财帛', '疾厄', '迁移', '交友', '官禄', '田宅', '福德', '父母'];
 
 // ===== 主要导出函数 =====
+
+/**
+ * 按整小时平移出生时间（结果页「时辰微调」定盘用），跨日时按所选历法顺延日期；
+ * 农历会正确进出闰月。日期本身无效时抛错，由调用方与排盘错误一并处理。
+ */
+export function shiftZiweiBirthHour(formData: ZiweiFormData, hourOffset: number): ZiweiFormData {
+    if (!Number.isInteger(hourOffset) || hourOffset === 0) return formData;
+    const totalHours = formData.birthHour + hourOffset;
+    const dayShift = Math.floor(totalHours / 24);
+    const birthHour = totalHours - dayShift * 24;
+    if (dayShift === 0) return { ...formData, birthHour };
+
+    if (formData.calendarType === 'lunar') {
+        const lunarMonth = formData.isLeapMonth ? -formData.birthMonth : formData.birthMonth;
+        const shifted = Lunar.fromYmd(formData.birthYear, lunarMonth, formData.birthDay).getSolar().next(dayShift).getLunar();
+        return {
+            ...formData,
+            birthYear: shifted.getYear(),
+            birthMonth: Math.abs(shifted.getMonth()),
+            birthDay: shifted.getDay(),
+            isLeapMonth: shifted.getMonth() < 0,
+            birthHour,
+        };
+    }
+    const shifted = Solar.fromYmd(formData.birthYear, formData.birthMonth, formData.birthDay).next(dayShift);
+    return { ...formData, birthYear: shifted.getYear(), birthMonth: shifted.getMonth(), birthDay: shifted.getDay(), birthHour };
+}
 
 export function calculateZiweiChartBundle(formData: ZiweiFormData): {
     output: CoreZiweiOutput;
@@ -220,6 +249,128 @@ export function buildZiweiHoroscopeCanonicalJSON(_output: CoreZiweiOutput, astro
         console.error('构建紫微运限 JSON 失败:', error);
         return null;
     }
+}
+
+/** 运限落宫：本命盘宫位索引（与 canonical `十二宫位[].宫位索引` 同一坐标系）及该运限干支。 */
+export interface ZiweiPeriodMarker {
+    index: number;
+    ganZhi: string;
+}
+
+/** 指定日期所处的大限、流年与小限；任一层无法确定时为 null。 */
+export interface ZiweiCurrentPeriods {
+    decadal: (ZiweiPeriodMarker & { startAge: number; endAge: number }) | null;
+    yearly: ZiweiPeriodMarker | null;
+    age: ZiweiPeriodMarker | null;
+}
+
+const NO_CURRENT_PERIODS: ZiweiCurrentPeriods = Object.freeze({ decadal: null, yearly: null, age: null });
+
+/** 阳历出生日（core `solarDate` 形如 "1984-9-27"）的本地零点；无法解析时返回 null。 */
+function parseSolarBirthDate(solarDate: string): Date | null {
+    const [year, month, day] = solarDate.split('-').map(Number);
+    if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+    return new Date(year, month - 1, day);
+}
+
+/**
+ * 指定日期的大限 / 流年 / 小限落宫（用于本命盘标注「当前大限」等）。
+ *
+ * - 只读取运限层的 `宫位索引`：core 的 `落入本命宫位` 取自运限重排后的首个宫名，
+ *   并非该运限实际落入的本命宫，不能用于展示。
+ * - 出生前、或超出末个大限时，core 会给出 -1 索引与未本地化的干支，这些层统一视为无法确定。
+ */
+export function getZiweiCurrentPeriods(output: CoreZiweiOutput, astrolabe: Astrolabe, date: Date = new Date()): ZiweiCurrentPeriods {
+    const birthDate = parseSolarBirthDate(output.solarDate);
+    if (!birthDate || date.getTime() < birthDate.getTime()) return NO_CURRENT_PERIODS;
+
+    const layers = buildZiweiHoroscopeCanonicalJSON(output, astrolabe, date)?.运限叠宫 ?? [];
+    const markerOf = (level: string): ZiweiPeriodMarker | null => {
+        const layer = layers.find((item) => item.层次 === level);
+        if (!layer || !Number.isInteger(layer.宫位索引) || layer.宫位索引 < 0 || layer.宫位索引 > 11) return null;
+        return { index: layer.宫位索引, ganZhi: layer.干支 };
+    };
+    const decadal = markerOf('大限');
+    const range = decadal ? getDecadalList(output).find((item) => item.index === decadal.index) : undefined;
+    return {
+        decadal: decadal && range ? { ...decadal, startAge: range.startAge, endAge: range.endAge } : null,
+        yearly: markerOf('流年'),
+        age: markerOf('小限'),
+    };
+}
+
+/**
+ * 出生日所在的农历年，即虚岁起算年。
+ *
+ * core（iztro 默认配置）按「目标日农历年 − 出生农历年 + 1」计虚岁，
+ * 因此虚岁 N 对应公历年 `农历出生年 + N − 1`（取年中日期，农历年与公历年一致）。
+ * 正月初一前出生者的农历年早于阳历年，不能直接用阳历年推算。
+ */
+export function getZiweiLunarBirthYear(output: CoreZiweiOutput): number | null {
+    const birthDate = parseSolarBirthDate(output.solarDate);
+    if (!birthDate) return null;
+    return Solar.fromYmd(birthDate.getFullYear(), birthDate.getMonth() + 1, birthDate.getDate()).getLunar().getYear();
+}
+
+// ===== 宫干飞化 =====
+
+/** 一条宫干四化飞出：化星与其落入的本命宫名（宫名与 canonical `十二宫位[].宫位` 一致）。 */
+export interface ZiweiPalaceFlight {
+    mutagen: string;
+    starName: string | null;
+    targetPalace: string | null;
+}
+
+/** 某一宫以宫干化出的禄权科忌。 */
+export interface ZiweiPalaceFlights {
+    palace: string;
+    ganZhi: string;
+    flights: ZiweiPalaceFlight[];
+}
+
+/** 命盘上的飞化连线：飞出宫与各化落宫均为本命宫位索引。 */
+export interface ZiweiFlightOverlay {
+    sourceIndex: number;
+    flights: Array<{ mutagen: string; starName: string | null; targetIndex: number }>;
+}
+
+/**
+ * 把一宫的飞化（以宫名表示）解析为命盘宫位索引；飞出宫不在盘上时返回 null，
+ * 无法对应本命宫的单条飞化被跳过。
+ */
+export function resolveZiweiFlightOverlay(
+    palaces: ReadonlyArray<{ 宫位: string; 宫位索引?: number }>,
+    entry: ZiweiPalaceFlights,
+): ZiweiFlightOverlay | null {
+    const indexOf = (name: string | null) => (name ? palaces.find((palace) => palace.宫位 === name)?.宫位索引 : undefined);
+    const sourceIndex = indexOf(entry.palace);
+    if (typeof sourceIndex !== 'number') return null;
+    return {
+        sourceIndex,
+        flights: entry.flights.flatMap((flight) => {
+            const targetIndex = indexOf(flight.targetPalace);
+            return typeof targetIndex === 'number' ? [{ mutagen: flight.mutagen, starName: flight.starName, targetIndex }] : [];
+        }),
+    };
+}
+
+/**
+ * 十二宫各自的宫干四化落宫（飞星盘），按传统宫序返回；计算真源为 core 的飞星引擎。
+ */
+export async function calculateZiweiPalaceFlights(formData: ZiweiFormData): Promise<ZiweiPalaceFlights[]> {
+    const { results } = await calculateZiweiFlyingStar({
+        ...toCoreZiweiInput(formData),
+        queries: PALACE_TEXT_ORDER.map((palace) => ({ type: 'mutagedPlaces' as const, palace })),
+    });
+    return results.map((result, index) => ({
+        palace: result.queryTarget?.palace ?? PALACE_TEXT_ORDER[index],
+        ganZhi: result.sourcePalaceGanZhi ?? '',
+        flights: (result.actualFlights ?? []).map((flight) => ({
+            mutagen: flight.mutagen,
+            starName: flight.starName ?? null,
+            targetPalace: flight.targetPalace,
+        })),
+    }));
 }
 
 /**

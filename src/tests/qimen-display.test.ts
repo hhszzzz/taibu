@@ -5,6 +5,7 @@ import {
     findZhiShiPalaceIndex,
     formatJuLabel,
     getCenterHostNote,
+    getElementTextClass,
     getHostedStarLabel,
     getPalaceCellTags,
     getPalaceDetailTags,
@@ -52,6 +53,13 @@ test('qimen display labels format ju, palace names, directions and stars for the
     assert.equal(getHostedStarLabel(undefined), '');
     assert.equal(getStemTextClass('壬'), 'text-water');
     assert.equal(getStemTextClass('-'), 'text-foreground');
+    assert.equal(getStemTextClass(undefined), 'text-foreground');
+    // canonical 给出的五行优先，非法五行回退到天干本身
+    assert.equal(getStemTextClass('壬', '火'), 'text-fire');
+    assert.equal(getStemTextClass('壬', '未知'), 'text-water');
+    assert.equal(getElementTextClass(palaceAt(6).九星五行), 'text-earth');
+    assert.equal(getElementTextClass('金'), 'text-metal');
+    assert.equal(getElementTextClass('-'), 'text-foreground');
 });
 
 test('qimen display tags put 值符 / 值使 first and keep the detail-only statuses out of the grid cell', async () => {

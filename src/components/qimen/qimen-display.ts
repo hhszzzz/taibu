@@ -5,6 +5,7 @@
  * 九宫格、宫位详情与结果页共用，避免各处各写一套映射。
  */
 import type { QimenPalaceJSON } from 'taibu-core/qimen';
+import { elementTextClass, ganZhiTextClass, isFiveElement } from '@/components/bazi/element-classes';
 
 /** 洛书九宫排列顺序（左上→右下，3x3）：巽4 离9 坤2 / 震3 中5 兑7 / 艮8 坎1 乾6 */
 export const LUOSHU_ORDER = [4, 9, 2, 3, 5, 7, 8, 1, 6] as const;
@@ -16,24 +17,6 @@ const CHINESE_NUMERALS = ['〇', '一', '二', '三', '四', '五', '六', '七'
 /** 后天八卦宫位的固定方位（canonical 默认档不含「方位」字段，此处仅作展示兜底） */
 const PALACE_DIRECTIONS: Record<number, string> = {
     1: '北', 2: '西南', 3: '东', 4: '东南', 5: '中', 6: '西北', 7: '西', 8: '东北', 9: '南',
-};
-
-/** 五行 → 文字色 token */
-const ELEMENT_TEXT_CLASS: Record<string, string> = {
-    木: 'text-wood',
-    火: 'text-fire',
-    土: 'text-earth',
-    金: 'text-metal',
-    水: 'text-water',
-};
-
-/** 天干 → 五行 */
-const STEM_ELEMENT: Record<string, string> = {
-    甲: '木', 乙: '木',
-    丙: '火', 丁: '火',
-    戊: '土', 己: '土',
-    庚: '金', 辛: '金',
-    壬: '水', 癸: '水',
 };
 
 /** 图例使用的五行顺序与色块 */
@@ -82,12 +65,13 @@ export function getPalaceShortName(palace: Pick<QimenPalaceJSON, '宫名' | '宫
 }
 
 export function getElementTextClass(element: string | undefined): string {
-    return (element && ELEMENT_TEXT_CLASS[element]) || 'text-foreground';
+    return elementTextClass(isFiveElement(element) ? element : null);
 }
 
+/** 优先用 canonical 给出的五行；缺失时按天干本身取色（占位「-」为正文色）。 */
 export function getStemTextClass(stem: string | undefined, element?: string): string {
-    if (element && ELEMENT_TEXT_CLASS[element]) return ELEMENT_TEXT_CLASS[element];
-    return getElementTextClass(stem ? STEM_ELEMENT[stem.charAt(0)] : undefined);
+    if (isFiveElement(element)) return elementTextClass(element);
+    return stem ? ganZhiTextClass(stem.charAt(0)) : 'text-foreground';
 }
 
 /** 「天任星」→「天任」，宫格内节省宽度 */

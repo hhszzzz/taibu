@@ -57,7 +57,7 @@ function buildStemTitle(stem: string, monthPhaseMap: Record<string, string> | un
 function TagChip({ tag, className = '' }: { tag: PalaceTag; className?: string }) {
     return (
         <span
-            className={`inline-flex items-center rounded px-1 text-[0.5625rem] leading-[14px] whitespace-nowrap @xl:px-[7px] @xl:py-0.5 @xl:text-[11px] @xl:leading-4 ${
+            className={`inline-flex items-center rounded px-1 text-[0.5625rem] leading-[14px] whitespace-nowrap @xl:px-[7px] @xl:py-0.5 @xl:text-[0.6875rem] @xl:leading-4 ${
                 tag.emphasis ? 'bg-accent text-on-accent' : 'bg-background-secondary text-foreground-secondary'
             } ${className}`}
         >
@@ -85,7 +85,7 @@ function CenterPalace({
                 <ChartTarget interaction={interaction} id={`qimen:palace:${CENTER_PALACE_INDEX}`}>中五宫</ChartTarget>
             </span>
             {stems.length > 0 && (
-                <span className="flex items-baseline gap-1 font-display text-xl leading-none @xl:text-[28px]">
+                <span className="flex items-baseline gap-1 font-display text-xl leading-none @xl:text-[1.75rem]">
                     {stems.map((stem, index) => (
                         <span key={`${stem}-${index}`} className={getStemTextClass(stem)}>{stem}</span>
                     ))}
@@ -126,7 +126,7 @@ function OuterPalace({
         <span className="flex h-full flex-col gap-0.5 px-[7px] py-1.5 @xl:gap-1 @xl:px-4 @xl:py-3.5">
             {/* 左上八神 · 右上宫位 */}
             <span className="flex items-baseline justify-between gap-1">
-                <span className={`truncate text-[0.6875rem] @xl:text-[13px] ${headerTone || 'text-foreground-secondary'} ${isZhiFuPalace(palace) ? 'font-medium' : ''}`}>
+                <span className={`truncate text-[0.6875rem] @xl:text-[0.8125rem] ${headerTone || 'text-foreground-secondary'} ${isZhiFuPalace(palace) ? 'font-medium' : ''}`}>
                     <ChartTarget interaction={interaction} id={`${id}:八神`}>{palace.八神}</ChartTarget>
                 </span>
                 <span className={`shrink-0 text-[0.625rem] @xl:text-xs ${headerTone || 'text-foreground-tertiary'}`}>
@@ -141,16 +141,16 @@ function OuterPalace({
             <span className="grid flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-1 font-display">
                 <span className="flex min-w-0 flex-col @xl:gap-0.5">
                     <span className="flex min-w-0 items-baseline gap-1">
-                        <span className={`text-[0.9375rem] leading-tight @xl:text-[17px] ${getElementTextClass(palace.九星五行)}`}>
+                        <span className={`text-[0.9375rem] leading-tight @xl:text-[1.0625rem] ${getElementTextClass(palace.九星五行)}`}>
                             <ChartTarget interaction={interaction} id={`${id}:九星`}>{getShortStarName(palace.九星)}</ChartTarget>
                         </span>
                         {hostedStar && (
-                            <span className="truncate font-sans text-[0.625rem] text-foreground-secondary @xl:text-[13px]">
+                            <span className="truncate font-sans text-[0.625rem] text-foreground-secondary @xl:text-[0.8125rem]">
                                 <span className="hidden @xl:inline">· </span>{hostedStar}
                             </span>
                         )}
                     </span>
-                    <span className={`text-[0.9375rem] leading-tight @xl:text-[26px] ${getElementTextClass(palace.八门五行)}`}>
+                    <span className={`text-[0.9375rem] leading-tight @xl:text-[1.625rem] ${getElementTextClass(palace.八门五行)}`}>
                         <ChartTarget interaction={interaction} id={`${id}:八门`}>{palace.八门}</ChartTarget>
                     </span>
                 </span>

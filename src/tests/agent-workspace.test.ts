@@ -6,7 +6,10 @@ import type { AgentPart } from '../lib/agent/types';
 import type { ChatMessage } from '../types';
 import { getAgentToolFamily } from '../lib/agent/tool-catalog';
 import { getAgentAttachmentRead, getAgentCalculation, getAgentMemories, getAgentMethod, getAgentMethodCatalog, getAgentToolQuestions, type AgentToolPart } from '../lib/agent/tool-presentation';
-import { buildAgentWorkspace, getAgentQuestionAnswers, getAgentToolQuestionIds, getAgentWorkspaceAutoOpenEvent, getAgentWorkspaceFollowTarget, resolveAgentWorkspaceLocation } from '../lib/agent/workspace';
+import {
+  buildAgentWorkspace, getAgentQuestionAnswers, getAgentToolQuestionIds, getAgentWorkspaceAutoOpenEvent, getAgentWorkspaceFollowTarget, getAgentWorkspaceLocation,
+  getAgentWorkspaceSections, isAgentRunWorking, resolveAgentWorkspaceLocation,
+} from '../lib/agent/workspace';
 import { ANALYSIS_METHODS, loadAnalysisMethod } from '../lib/agent/methods.server';
 
 const tool = (id: string, name: string, extra: Partial<AgentToolPart> = {}): AgentToolPart => ({ type: 'tool', id, name, title: name, status: 'completed', ...extra });
@@ -136,4 +139,25 @@ test('family parsers read real Core and method results and reject incomplete one
   const read = getAgentAttachmentRead(tool('a', 'read_attachment', { output: { id: 'a', name: '长文.txt', kind: 'text', text: '一二三', offset: 8000, total: 9000, nextOffset: null } }));
   assert.deepEqual([read?.readUntil, read?.total, read?.nextOffset], [8003, 9000, null]);
   assert.equal(getAgentAttachmentRead(tool('i', 'read_attachment', { output: { id: 'i', name: '手相.jpg', kind: 'image', note: '图片已通过视觉输入提供' } }))?.readUntil, null);
+});
+
+test('the overview joins the process once the task ends, and following shows the latest call only until then', () => {
+  assert.deepEqual(getAgentWorkspaceSections(null), ['results']);
+  assert.deepEqual(getAgentWorkspaceSections('queued'), ['process']);
+  assert.deepEqual(getAgentWorkspaceSections('awaiting_input'), ['process']);
+  for (const status of ['completed', 'cancelled', 'failed'] as const) assert.deepEqual(getAgentWorkspaceSections(status), ['results', 'process']);
+  assert.deepEqual([null, 'queued', 'running', 'cancelling', 'awaiting_input', 'completed', 'failed'].map(status => isAgentRunWorking(status as Parameters<typeof isAgentRunWorking>[0])),
+    [false, true, true, true, false, false, false], 'a task waiting for an answer is not working');
+
+  const model = workspace([tool('profile', 'read_user_profile'), tool('plan', 'todo_write', { output: { revision: 1, items: [] } }), tool('ask', 'ask_user', { status: 'awaiting_input' })]);
+  const profile = model.locations.get('profile')!, question = model.locations.get('ask')!;
+  const at = (selected: string | null, followModel: boolean, status: Parameters<typeof getAgentWorkspaceLocation>[1]['status']) => getAgentWorkspaceLocation(model, { selected, followModel, status });
+  assert.equal(at(null, true, 'awaiting_input'), question, 'a waiting task keeps its question in view');
+  assert.equal(at('tool:profile', true, 'running'), question, 'following overrides the reader’s last choice');
+  assert.equal(at('tool:profile', false, 'running'), profile);
+  assert.equal(at('process', true, 'completed'), 'results', 'following ends on the overview');
+  assert.equal(at('results', false, 'running'), 'process', 'a section not shown falls back to the first one that is');
+  assert.equal(at('tool:missing', false, 'completed'), 'results', 'a selection that no longer exists falls back');
+  assert.equal(at(null, false, null), 'results', 'without a task only the overview exists');
+  assert.equal(getAgentWorkspaceLocation(workspace([tool('plan', 'todo_write')]), { selected: null, followModel: true, status: 'running' }), 'process', 'nothing to follow yet');
 });

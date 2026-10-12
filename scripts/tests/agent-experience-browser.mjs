@@ -74,19 +74,26 @@ export async function verifyAgentExperience({ page, context, origin, directory, 
   const workspaceToggle = page.getByRole('button', { name: '任务工作区', exact: true });
   if (await workspaceToggle.getAttribute('aria-expanded') !== 'true') await workspaceToggle.click();
   const workspace = page.locator('aside#agent-workspace-panel');
-  await workspace.getByRole('button', { name: /^成果\d+$/ }).click();
-  await workspace.locator('.agent-workspace-chart-link').first().click();
-  const firstTab = await workspace.getByRole('tab').first().textContent();
+  // Views the model opened while followed stay as tabs; start this check from none.
+  await workspace.getByRole('button', { name: '工作区更多操作', exact: true }).click();
+  const closeTabs = page.getByRole('menuitem', { name: '关闭全部标签', exact: true });
+  if (await closeTabs.isEnabled()) await closeTabs.click();
+  else await page.keyboard.press('Escape');
+  const resourceTabs = workspace.locator('.agent-ws-resource-tab [role=tab]');
+  const readings = workspace.locator('[data-overview-result="reading"]');
+  await workspace.getByRole('tab', { name: '概览', exact: true }).click();
+  await readings.first().click();
   await workspace.getByRole('tabpanel').waitFor();
-  await workspace.getByRole('button', { name: /^成果\d+$/ }).click();
-  await workspace.locator('.agent-workspace-chart-link').last().click();
-  assert.equal(await workspace.getByRole('tab').count(), 2);
-  await workspace.getByRole('tab').last().press('ArrowLeft');
+  const firstTab = await workspace.getByRole('tab', { selected: true }).textContent();
+  await workspace.getByRole('tab', { name: '概览', exact: true }).click();
+  await readings.last().click();
+  assert.equal(await resourceTabs.count(), 2);
+  await resourceTabs.last().press('ArrowLeft');
   assert.equal(await workspace.getByRole('tab', { selected: true }).textContent(), firstTab, 'resource tabs have keyboard navigation');
-  await workspace.getByRole('button', { name: '关闭任务工作区', exact: true }).click();
+  await workspace.getByRole('button', { name: '关闭工作区', exact: true }).click();
   await page.getByRole('button', { name: '任务工作区', exact: true }).click();
   assert.equal(await workspace.getByRole('tab', { selected: true }).textContent(), firstTab, 'closing and reopening restores selected resource');
-  await workspace.getByRole('button', { name: '关闭任务工作区', exact: true }).evaluate(button => {
+  await workspace.getByRole('button', { name: '关闭工作区', exact: true }).evaluate(button => {
     button.click();
     document.querySelector('[data-chat-composer] textarea').focus();
   });

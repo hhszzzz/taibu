@@ -1,8 +1,9 @@
 import type { ChatMessage } from '@/types';
 import type { AgentMessageData, AgentPart, AgentRunStatus, AgentRuntimeInfo } from '@/lib/agent/types';
 import { getAgentToolFamily, type AgentToolFamily } from '@/lib/agent/tool-catalog';
-import { getAgentAttachmentRead, getAgentDataResults, getAgentMethod, getAgentSearchResults, getAgentToolArtifactId, getAgentToolQuestions } from '@/lib/agent/tool-presentation';
-import { getChartFocus } from '@/lib/agent/chart-interaction';
+import { getAgentAttachmentRead, getAgentChart, getAgentDataResults, getAgentMethod, getAgentSearchResults, getAgentToolArtifactId, getAgentToolQuestions, type AgentChart } from '@/lib/agent/tool-presentation';
+import { getChartFocus, getChartTargets } from '@/lib/agent/chart-interaction';
+import type { AgentWorkspaceModel } from '@/lib/agent/workspace';
 import { parallelAnalysisResults, type ParallelAnalysisResult } from '@/lib/agent/parallel-results';
 import { countAgentEvidence, getAgentCitationLabels, getAgentEvidence } from '@/lib/agent/evidence';
 import { getCitedParagraphs } from '@/lib/chat/markdown-citations';
@@ -229,6 +230,19 @@ export function getAgentTaskSpan(timing: { startedAt?: number; endedAt?: number 
         ? timing.endedAt - timing.startedAt : null;
 }
 
+/**
+ * How long an ended task took: from its creation to the last measured end of a
+ * model response or call, so queueing and waits for the user's answer count.
+ * Null without a valid creation time or any measured end.
+ */
+export function getAgentTaskDuration(createdAt: string | undefined, data: Pick<AgentMessageData, 'parts' | 'runtime'> | undefined): number | null {
+    const started = createdAt ? Date.parse(createdAt) : NaN;
+    if (!Number.isFinite(started) || !data) return null;
+    const ends = [...data.runtime?.responses ?? [], ...data.parts.flatMap(part => part.type === 'tool' ? [part] : [])]
+        .flatMap(timing => typeof timing.endedAt === 'number' && Number.isFinite(timing.endedAt) && timing.endedAt >= started ? [timing.endedAt] : []);
+    return ends.length ? Math.max(...ends) - started : null;
+}
+
 export function formatAgentValue(value: unknown): string {
     if (value === undefined) return '暂无数据';
     if (typeof value === 'string') return value;
@@ -265,4 +279,94 @@ export function getAgentCitedParagraph(messages: readonly Pick<ChatMessage, 'age
         if (paragraph !== undefined) return paragraph;
     }
     return null;
+}
+
+const pad = (value: number, length = 2) => String(value).padStart(length, '0');
+const toolArgs = (tool: AgentTool) => tool.input && typeof tool.input === 'object' && !Array.isArray(tool.input) ? tool.input as Record<string, unknown> : {};
+
+/**
+ * 男 · 公历 1990-01-15 09:00 · Asia/Shanghai · 日主 庚: whom a bazi reading is
+ * about, from the call's arguments and the rules Core returned. A saved chart
+ * read back has no birth arguments; other kinds keep their summary.
+ */
+export function describeAgentChartSubject(tool: AgentTool, value: AgentChart): string {
+    if (value.kind !== 'bazi') return value.summary;
+    const args = toolArgs(tool);
+    const integer = (key: string) => typeof args[key] === 'number' && Number.isInteger(args[key]) ? args[key] as number : null;
+    const [year, month, day, hour, minute] = ['birthYear', 'birthMonth', 'birthDay', 'birthHour', 'birthMinute'].map(integer);
+    const lunar = args.calendarType === 'lunar';
+    const date = year !== null && month !== null && day !== null
+        ? `${lunar ? '农历' : '公历'} ${pad(year, 4)}-${lunar && args.isLeapMonth === true ? '闰' : ''}${pad(month)}-${pad(day)}${hour !== null ? ` ${pad(hour)}:${pad(minute ?? 0)}` : ''}`
+        : null;
+    const rules = value.chart.计算规则;
+    const zone = typeof rules?.timezone === 'string' ? rules.timezone : typeof args.timezone === 'string' ? args.timezone : null;
+    return [value.chart.基本信息.性别, date, zone, `日主 ${value.chart.基本信息.日主}`].filter(Boolean).join(' · ');
+}
+
+const RULE_ORDER = ['dayBoundary', 'timezone', 'solarTermBasis', 'ruleVersion'] as const;
+const RULE_LABELS: Partial<Record<typeof RULE_ORDER[number], string>> = { dayBoundary: '子时换日', solarTermBasis: '节气' };
+
+/** 子时换日 midnight · Asia/Shanghai · 节气 instant · bazi-2026.10: the rules Core calculated with, as returned. */
+export function describeAgentChartRules(value: AgentChart): string | null {
+    const rules = (value.chart as { 计算规则?: unknown }).计算规则;
+    if (!rules || typeof rules !== 'object' || Array.isArray(rules)) return null;
+    const items = RULE_ORDER.flatMap(key => {
+        const rule = (rules as Record<string, unknown>)[key];
+        return typeof rule === 'string' && rule.trim() ? [RULE_LABELS[key] ? `${RULE_LABELS[key]} ${rule.trim()}` : rule.trim()] : [];
+    });
+    return items.length ? items.join(' · ') : null;
+}
+
+/** Whether a reading is a saved record read back, a task result the final selection saved, or a cached one. */
+export function getAgentReadingState(reading: AgentTool, saved: ReadonlySet<string>): '已存资料' | '已保存' | '暂存成果' {
+    if (reading.name === 'inspect_chart') return '已存资料';
+    const artifactId = getAgentToolArtifactId(reading);
+    return artifactId !== null && saved.has(artifactId) ? '已保存' : '暂存成果';
+}
+
+/**
+ * 第 2 步计算 · 第 5 步定位 · 暂存成果: the latest task's steps behind a chart
+ * tab and what became of its reading. Calls from earlier tasks carry no number.
+ */
+export function describeAgentChartSteps({ reading, focus, numbers, state }: {
+    reading: AgentTool | undefined; focus: AgentTool | undefined; numbers: ReadonlyMap<string, number>; state: string | null;
+}): string {
+    const readingStep = reading && numbers.get(reading.id);
+    const focusStep = focus && numbers.get(focus.id);
+    return [
+        readingStep && `第 ${readingStep} 步${reading.name === 'inspect_chart' ? '读取' : '计算'}`,
+        focusStep && `第 ${focusStep} 步定位`,
+        state,
+    ].filter(Boolean).join(' · ');
+}
+
+/**
+ * 模型定位: the focus calls of the conversation and the chart positions they
+ * marked, by the labels of the chart they name, in first-located order.
+ */
+export function getAgentLocatedPositions(model: AgentWorkspaceModel): { toolIds: string[]; labels: string[] } {
+    const toolIds: string[] = [];
+    const labels = new Set<string>();
+    for (const item of model.evidence) {
+        if (item.kind !== 'chart') continue;
+        toolIds.push(item.toolId);
+        const resource = model.resources.find(entry => entry.id === model.chartResources.get(item.focus.reference));
+        const reading = resource?.toolIds.flatMap(id => model.toolsById.get(id) ?? []).findLast(tool => getAgentChart(tool));
+        const value = reading && getAgentChart(reading);
+        if (value) for (const target of getChartTargets(value)) if (item.focus.targetIds.includes(target.id)) labels.add(target.label);
+    }
+    return { toolIds, labels: [...labels] };
+}
+
+/** A Markdown document without its leading `# Title` when that title is already shown above it. */
+export function stripLeadingTitle(markdown: string, title: string): string {
+    const match = /^\s*#[ \t]+(.+?)[ \t#]*(?:\r?\n|$)/.exec(markdown);
+    return match && match[1].trim() === title.trim() ? markdown.slice(match[0].length).replace(/^(?:[ \t]*\r?\n)+/, '') : markdown;
+}
+
+/** Three luck periods around `year`: the one it falls in with its neighbours, or the first three before the first starts. */
+export function getDayunWindow(periods: readonly { 干支: string; 起运年份: number }[], year: number) {
+    const current = periods.findIndex((period, index) => year >= period.起运年份 && (index === periods.length - 1 || year < periods[index + 1].起运年份));
+    const start = current < 0 ? 0 : Math.max(0, Math.min(current - 1, periods.length - 3));
+    return periods.slice(start, start + 3).map((period, index) => ({ ...period, current: start + index === current }));
 }

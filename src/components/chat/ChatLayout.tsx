@@ -33,17 +33,15 @@ import { AgentStatus } from './agent/AgentStatus';
 import { AgentHeaderStatus } from './agent/AgentHeaderStatus';
 import { AgentWorkspacePanel } from './agent/AgentWorkspacePanel';
 import { AgentResultContext, isSameWorkspaceShown, type AgentWorkspaceShown } from './agent/AgentResultContext';
-import { getAgentUnrepresentedArtifacts } from '@/lib/agent/tool-presentation';
-import { getChartResources } from '@/lib/agent/chart-interaction';
-import { getAgentQuestionAnswers, getAgentWorkspaceAutoOpenEvent } from '@/lib/agent/workspace';
+import { buildAgentWorkspace, getAgentQuestionAnswers, getAgentWorkspaceAutoOpenEvent } from '@/lib/agent/workspace';
 import { AgentQuestionDock } from './agent/AgentQuestionDock';
 import { PromptTemplateMenu } from './composer/ComposerDomainControls';
 import type { ComposerModeControl, ComposerWebControl } from './composer/ComposerToolbar';
 import { applyPromptTemplate } from '@/lib/agent/prompt-templates';
 import { collaborationProgress } from '@/lib/agent/parallel-results';
 import { composerNote } from '@/lib/chat/composer-copy';
-import { collectAgentArtifacts, getAgentCitedParagraph } from './agent/presentation';
-import type { AgentPart } from '@/lib/agent/types';
+import { collectAgentArtifacts, getAgentCitedParagraph, getAgentTaskDuration } from './agent/presentation';
+import { isAgentRunTerminal, type AgentPart } from '@/lib/agent/types';
 import { useTranscriptScroll } from '@/lib/chat/use-transcript-scroll';
 import { orderAgentMessagesForDisplay } from '@/lib/agent/browser-client';
 import { JumpToLatest } from './JumpToLatest';
@@ -188,7 +186,6 @@ export function ChatLayout(props: ChatLayoutProps) {
     const latestAgentData = useMemo(() => [...messages].reverse().find(message => message.agent)?.agent, [messages]);
     const artifacts = useMemo(() => collectAgentArtifacts(messages), [messages]);
     const agentParts = useMemo(() => messages.flatMap(message => message.agent?.parts ?? []), [messages]);
-    const historyTools = useMemo(() => agentParts.filter((part): part is Extract<AgentPart, { type: 'tool' }> => part.type === 'tool'), [agentParts]);
     const questionAnswers = useMemo(() => getAgentQuestionAnswers(messages), [messages]);
     const attachmentIds = useMemo(() => [...new Set(messages.flatMap(message => message.attachments?.ids ?? []))], [messages]);
     const draftScope = useRef(workspaceKey);
@@ -214,8 +211,8 @@ export function ChatLayout(props: ChatLayoutProps) {
     const hasWorkspace = isAgentMode || Boolean(latestAgentData);
     const workspaceOpen = hasWorkspace && openWorkspaceKey === workspaceKey;
     const resultWorkspace = useMemo(() => ({ openResource, shown: workspaceOpen ? workspaceShown : null }), [openResource, workspaceOpen, workspaceShown]);
-    const chartCount = getChartResources(historyTools).length;
-    const resultCount = chartCount + getAgentUnrepresentedArtifacts(historyTools, artifacts).length;
+    // The header counts what the workspace can open: readings, calculations, evidence and other materials.
+    const resourceCount = useMemo(() => buildAgentWorkspace({ parts: agentParts, artifacts, attachmentIds }).resources.length, [agentParts, artifacts, attachmentIds]);
     const closeWorkspace = () => {
         const previous = document.activeElement;
         setOpenWorkspaceKey(null);
@@ -228,7 +225,7 @@ export function ChatLayout(props: ChatLayoutProps) {
     };
     // Chart readings, questions and collaborations open the panel on desktop until it is closed for this task.
     const autoOpenEvent = getAgentWorkspaceAutoOpenEvent(currentRun?.message.agent?.parts ?? []);
-    const workspaceRun = currentRun && currentRun.id === latestAgentData?.runId ? { billing: currentRun.billing, configuration: currentRun.configuration } : undefined;
+    const workspaceRun = currentRun && currentRun.id === latestAgentData?.runId ? { billing: currentRun.billing, configuration: currentRun.configuration, createdAt: currentRun.createdAt } : undefined;
     useEffect(() => {
         const action = autoOpenEvent;
         if (autoWorkspace.current.scope !== workspaceKey) { autoWorkspace.current = { scope: workspaceKey, action }; return; }
@@ -263,6 +260,7 @@ export function ChatLayout(props: ChatLayoutProps) {
     const questionLater = questionKey !== null && laterQuestion === questionKey;
     const collaborators = currentRun?.configuration?.collaborators.length ?? 0;
     const collaboration = useMemo(() => currentRun?.status === 'running' ? collaborationProgress(currentRun.message.agent?.parts ?? [], currentRun.configuration?.collaborators.length) ?? undefined : undefined, [currentRun]);
+    const runDuration = useMemo(() => currentRun && isAgentRunTerminal(currentRun.status) ? getAgentTaskDuration(currentRun.createdAt, currentRun.message.agent) : null, [currentRun]);
     const agent = props.agent;
     const modeControl: ComposerModeControl | undefined = agent ? {
         mode: agent.mode,
@@ -336,11 +334,11 @@ export function ChatLayout(props: ChatLayoutProps) {
                     title={title}
                     conversationId={activeConversationId}
                     badge={isAgentMode ? collaborators ? `Agent · 协作 ${collaborators} 人` : 'Agent' : undefined}
-                    status={currentRun ? <AgentHeaderStatus status={currentRun.status} createdAt={currentRun.createdAt} reconnecting={props.agent?.reconnecting} collaboration={collaboration} />
+                    status={currentRun ? <AgentHeaderStatus status={currentRun.status} createdAt={currentRun.createdAt} reconnecting={props.agent?.reconnecting} collaboration={collaboration} duration={runDuration} />
                         : isAgentMode && latestAgentData ? <AgentStatus status={latestAgentData.status} /> : null}
                     showExport={!isAgentMode}
                     workspaceButton={hasWorkspace ? <button type="button" ref={workspaceButtonRef} className="chat-workspace-toggle" aria-label="任务工作区" aria-expanded={workspaceOpen} aria-controls="agent-workspace-panel" onClick={toggleWorkspace}>
-                        <PanelRight size={16} strokeWidth={1.8} aria-hidden="true" /><span>工作区</span>{resultCount > 0 && <span className="chat-result-count">{resultCount}</span>}
+                        <PanelRight size={16} strokeWidth={1.8} aria-hidden="true" /><span>工作区</span>{resourceCount > 0 && <span className="chat-result-count">{resourceCount}</span>}
                     </button> : undefined}
                     readingWidth={preferences.width}
                     onReadingWidthChange={width => updatePreferences({ width })}
@@ -426,7 +424,7 @@ export function ChatLayout(props: ChatLayoutProps) {
                 )}
             </div>
             {workspaceOpen && <AgentWorkspacePanel key={workspaceKey} workspaceKey={workspaceKey} parts={agentParts} artifacts={artifacts} attachmentIds={attachmentIds}
-                data={latestAgentData} run={workspaceRun} answers={questionAnswers} userId={userId} canExport={Boolean(activeConversationId)}
+                data={latestAgentData} run={workspaceRun} answers={questionAnswers} userId={userId} conversationId={activeConversationId}
                 onClose={closeWorkspace} onChartQuestion={askAboutChart} onShownChange={updateWorkspaceShown} requestedResource={resourceRequest?.scope === workspaceKey ? resourceRequest : undefined}
                 citedParagraph={citedParagraph} />}
 

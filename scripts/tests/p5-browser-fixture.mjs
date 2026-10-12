@@ -1678,33 +1678,36 @@ export async function run(existingPage, bundlePath) {
       await results.locator('[aria-current="true"]').count() === 1 && await results.locator('[data-tool-result="bazi"] .agent-primary-button').innerText() === '正在工作区显示' &&
       await results.locator('[data-tool-result="tarot"] .agent-primary-button').innerText() === '在工作区查看');
     // The process section keeps the opened step: 第 N 步, its call as returned and how it was timed and stored.
-    await page.locator('#agent-workspace-panel').getByRole('button', { name: /^过程\d+$/ }).click();
+    await page.locator('#agent-workspace-panel').getByRole('tab', { name: '过程', exact: true }).click();
     const call = page.locator('#agent-workspace-panel .agent-ws-call');
     const callNumber = await page.locator('#agent-workspace-panel .agent-ws-steps button[aria-current="step"] .agent-ws-step-number').innerText();
     check('The process section shows the opened step with its call, copy actions and a timing note apart from waiting', await call.getByRole('heading').innerText().then(text => text.startsWith(`第 ${callNumber} 步 · 八字命盘`) && text.includes('bazi · 1.5 秒')) &&
       await call.getByRole('button', { name: '复制调用参数', exact: true }).count() === 1 && await call.getByRole('button', { name: '复制规范文本', exact: true }).count() === 1 &&
       await call.locator('.agent-ws-note').innerText().then(text => text.startsWith('执行阶段 1.5 秒（不含等待），连同等待共 5 秒。')) &&
       await results.locator('[aria-current="true"]').count() === 0);
-    await page.getByRole('button', { name: '关闭任务工作区', exact: true }).click();
+    await page.getByRole('button', { name: '关闭工作区', exact: true }).click();
     check('Closing the workspace clears the shown marks', await results.locator('[aria-current="true"]').count() === 0 && await results.locator('[data-tool-result="bazi"] .agent-primary-button').innerText() === '在工作区查看');
     await results.getByRole('button', { name: /任务过程/ }).click();
     check('Folding the process names its steps in one line', await results.getByRole('button', { name: /任务过程/ }).innerText().then(text => text.includes('12 个步骤 · 全部完成 · ') && text.endsWith('等')));
     const baziResult = results.locator('[data-tool-result="bazi"]');
     await baziResult.getByRole('button', { name: '在工作区查看', exact: true }).click();
-    await page.getByRole('dialog', { name: '任务工作区', exact: true }).waitFor();
+    await page.getByRole('dialog', { name: '工作区', exact: true }).waitFor();
     await page.locator('#agent-workspace-panel [data-chart-kind="bazi"]').waitFor();
     check('Pinning opens the corresponding real tool result in the workspace', await page.locator('#agent-workspace-panel [data-chart-kind="bazi"]').count() === 1);
-    check('Workspace counts valid readings once and excludes the incomplete result', await page.locator('#agent-workspace-panel .agent-panel-tabs button').first().innerText() === '成果11');
-    await page.getByRole('button', { name: '关闭任务工作区', exact: true }).click();
+    await page.locator('#agent-workspace-panel').getByRole('tab', { name: '概览', exact: true }).click();
+    const readingCards = page.locator('#agent-workspace-panel [data-overview-result="reading"]');
+    check('The overview shows each valid reading once, marks the saved one and excludes the incomplete result', await readingCards.count() === 11 &&
+      await readingCards.filter({ hasText: '已保存' }).count() === 1 && await page.locator('#agent-workspace-panel [data-overview-result="saved"]').count() === 0);
+    await page.getByRole('button', { name: '关闭工作区', exact: true }).click();
     await results.getByRole('button', { name: '恢复已有成果标签', exact: true }).click();
     await page.locator('#agent-workspace-panel [data-chart-kind="bazi"]').waitFor();
     check('A restored saved-artifact tab uses the same persisted reading without chart loading or recalculation', resultOperations() === callsBeforeResults && await page.getByRole('tab', { name: '已保存八字', exact: true }).count() === 1);
-    await page.getByRole('button', { name: '关闭任务工作区', exact: true }).click();
+    await page.getByRole('button', { name: '关闭工作区', exact: true }).click();
     await results.locator('[data-tool-result="tarot"]').getByRole('button', { name: '在工作区查看', exact: true }).click();
     // The chat no longer previews charts, so each kind's view loads the first time the workspace shows it.
     await page.locator('#agent-workspace-panel [data-chart-kind="tarot"]').waitFor();
     check('Workspace supports multiple pinned readings without replacing their data', await page.getByRole('tab', { name: '八字命盘', exact: true }).count() === 1 && await page.locator('#agent-workspace-panel [data-chart-kind="tarot"]').count() === 1);
-    await page.getByRole('button', { name: '关闭任务工作区', exact: true }).click();
+    await page.getByRole('button', { name: '关闭工作区', exact: true }).click();
     check('Incomplete chart keeps its card and says the data is incomplete instead of generating another reading', await results.locator('[data-tool-result="incomplete"]').innerText().then(text => text.includes('命盘数据不完整')));
 
     // Outside the chat workspace a card expands in place and a step discloses its call details.
@@ -1749,10 +1752,13 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => window.fixture.resultsWithoutWorkspace(false));
     await results.locator('[data-tool-result="bazi"]').getByRole('button', { name: '在工作区查看', exact: true }).click();
     const interactive = page.locator('#agent-workspace-panel');
+    check('An ended task offers no follow control', await interactive.getByRole('button', { name: '跟随模型', exact: true }).count() === 0);
+    // Following is for a working task: the chart checks below run while the fixture task runs.
+    await page.evaluate(() => window.fixture.agentRunStatus('running'));
     await page.evaluate(() => window.fixture.chartFocus('bazi', ['bazi:cell:2:1'], '模型查看日支'));
     await interactive.getByRole('button', { name: '跟随模型', exact: true }).click();
     await interactive.locator('[data-chart-target="bazi:cell:2:1"][aria-pressed=true]').waitFor();
-    check('A native chart action highlights the exact day branch', await interactive.locator('.agent-board-focus').innerText().then(text => text.includes('模型查看日支')));
+    check('A native chart action highlights the exact day branch and says the model is being followed', await interactive.locator('.agent-board-focus').innerText().then(text => text.includes('模型查看日支') && text.includes('模型正在看') && text.includes('跟随中')));
     await interactive.locator('[data-chart-target="bazi:cell:2:0"]').click();
     await page.evaluate(() => window.fixture.chartFocus('bazi', ['bazi:cell:2:1'], '继续查看日支'));
     check('Manual chart exploration pauses model following', await interactive.getByRole('button', { name: '跟随模型', exact: true }).getAttribute('aria-pressed') === 'false' && await interactive.locator('[data-chart-target="bazi:cell:2:0"]').getAttribute('aria-pressed') === 'true');
@@ -1760,8 +1766,13 @@ export async function run(existingPage, bundlePath) {
     await interactive.locator('[data-chart-target="bazi:cell:2:1"][aria-pressed=true]').waitFor();
     const relation = interactive.locator('.agent-board-relations button').first();
     await relation.click();
-    check('Selecting a bazi relation highlights every returned endpoint', await interactive.locator('.chart-cell-button[aria-pressed=true]').count() >= 2 && await interactive.locator('.agent-board-relation-path').count() === 1);
-    await interactive.getByRole('button', { name: '追问当前位置', exact: true }).click();
+    check('Selecting a bazi relation highlights every returned endpoint and names it in the focus box', await interactive.locator('.chart-cell-button[aria-pressed=true]').count() >= 2 &&
+      await interactive.locator('.agent-board-chips li').allInnerTexts().then(texts => texts.length === 1 && texts[0].startsWith('关系 · ')) && await interactive.locator('.agent-board-focus').innerText().then(text => text.includes('已暂停跟随')));
+    await interactive.getByRole('button', { name: '只看相关位置', exact: true }).click();
+    check('Showing only related positions dims the rest of the chart', await interactive.locator('.agent-interactive-chart[data-focus-only]').count() === 1 &&
+      await interactive.getByRole('button', { name: '只看相关位置', exact: true }).getAttribute('aria-pressed') === 'true');
+    await interactive.getByRole('button', { name: '只看相关位置', exact: true }).click();
+    await interactive.getByRole('button', { name: '追问这里', exact: true }).click();
     check('Chart questions carry the real chart reference into a draft', await page.evaluate(() => window.fixture.chartQuestion.includes('artifact:11111111-1111-4111-8111-111111111111')));
     const starId = await page.evaluate(() => window.fixture.chartTargets('ziwei').find(target => target.kind === 'ziwei_star' && target.group === '主星及四化').id);
     await page.evaluate(id => window.fixture.chartFocus('ziwei', [id], '模型查看紫微星曜'), starId);
@@ -1786,7 +1797,7 @@ export async function run(existingPage, bundlePath) {
       await page.evaluate(({ kind, id }) => window.fixture.chartFocus(kind, [id], '模型定位末项'), { kind, id: targets.at(-1).id });
       await interactive.locator('[data-chart-target="' + targets.at(-1).id + '"][aria-pressed=true]').waitFor();
       await interactive.locator('[data-chart-target="' + targets.at(-1).id + '"]').click();
-      await interactive.getByRole('button', { name: '追问当前位置', exact: true }).click();
+      await interactive.getByRole('button', { name: '追问这里', exact: true }).click();
       check(kind + ' supports manual selection and referenced draft questions', await following.getAttribute('aria-pressed') === 'false' && await page.evaluate(() => window.fixture.chartQuestion.includes('artifact:')));
     }
     await page.evaluate(() => window.fixture.traditionalTaiyi());
@@ -1809,7 +1820,7 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => window.fixture.chartInspect(true));
     await renderBarrier();
     check('Edited saved chart data invalidates manual coordinates on the same resource tab', await interactive.locator('.agent-board-focus').getAttribute('data-chart-focus') === '' && await interactive.locator('.chart-cell-button[aria-pressed=true]').count() === 0);
-    await interactive.getByRole('button', { name: '关闭任务工作区', exact: true }).click();
+    await interactive.getByRole('button', { name: '关闭工作区', exact: true }).click();
     await page.evaluate(() => window.fixture.mount.results(false));
     await renderBarrier();
     await page.evaluate(() => window.fixture.mount.results(true));
@@ -1837,7 +1848,7 @@ export async function run(existingPage, bundlePath) {
       await divergence.locator('td[data-empty]').innerText() === '未表态');
     // Close this call's tab so the family section below starts from its own opened views.
     await page.getByRole('button', { name: '关闭协作分析标签', exact: true }).click();
-    await page.getByRole('button', { name: '关闭任务工作区', exact: true }).click();
+    await page.getByRole('button', { name: '关闭工作区', exact: true }).click();
 
     // Tool families: every call reaches its own workspace view from the chat, and following tracks the latest call.
     await page.setViewportSize({ width: 1440, height: 1000 });
@@ -1848,55 +1859,70 @@ export async function run(existingPage, bundlePath) {
     await workspacePanel.locator('[data-workspace-view="calculation"]').waitFor();
     check('A calculation step opens the persisted Core dayun timeline with exactly one current period', await workspacePanel.locator('.agent-ws-timeline > li').count() === 9 &&
       await workspacePanel.locator('.agent-ws-timeline > li[aria-current="step"]').count() === 1 && await workspacePanel.getByText('Core 规范文本', { exact: true }).count() === 1);
-    check('Desktop workspace is a complementary panel rather than a modal', await page.locator('aside#agent-workspace-panel').count() === 1 && await page.getByRole('dialog', { name: '任务工作区' }).count() === 0);
+    check('Desktop workspace is a complementary panel rather than a modal', await page.locator('aside#agent-workspace-panel').count() === 1 && await page.getByRole('dialog', { name: '工作区' }).count() === 0);
+    // Following is for a working task; once it ends the overview is shown.
+    await page.evaluate(() => window.fixture.agentRunStatus('running'));
     await workspacePanel.getByRole('button', { name: '跟随模型', exact: true }).click();
     await workspacePanel.locator('[data-workspace-view="question"]').waitFor();
-    check('Following the model shows the view of its latest tool call', await workspacePanel.locator('.agent-ws-following').innerText() === '模型正在看：补充信息' &&
-      await workspacePanel.locator('.agent-ws-questions').innerText().then(text => text.includes('出生时间？') && text.includes('未回答')));
+    check('Following the model shows the view of its latest tool call', await workspacePanel.getByRole('tab', { name: '补充信息', exact: true }).getAttribute('aria-selected') === 'true' &&
+      await workspacePanel.locator('.agent-ws-questions li[data-state="missing"]').innerText().then(text => text.includes('出生时间') && text.includes('未回答')));
     await page.evaluate(() => window.fixture.answerFamilyQuestion());
-    await workspacePanel.getByText('回答：早上', { exact: true }).waitFor();
-    check('A stored reply is matched to its question through the question ID', await workspacePanel.locator('.agent-ws-chips [data-selected="true"]').innerText() === '早上');
+    const reply = workspacePanel.locator('.agent-ws-questions li[data-state="replied"]');
+    await reply.waitFor();
+    check('A stored reply is matched to its question through the question ID', await reply.innerText().then(text => text.includes('早上') && text.includes('已回答')));
     await page.evaluate(() => window.fixture.workspaceStep('todo_write', 'completed'));
     await renderBarrier();
     check('Plan updates do not pull the followed view away', await workspacePanel.locator('[data-workspace-view="question"]').count() === 1);
     await page.evaluate(() => window.fixture.workspaceStep('web_search', 'running'));
     await workspacePanel.locator('[data-workspace-view="evidence"]').waitFor();
     const evidence = workspacePanel.locator('[data-workspace-view="evidence"]');
-    check('A call left unfinished by an ended task stops spinning', await evidence.innerText().then(text => text.includes('任务结束时这一步仍未完成')) && await evidence.getByRole('status').count() === 0);
-    await page.evaluate(() => window.fixture.agentRunStatus('running'));
     await evidence.getByRole('status').waitFor();
     check('A new search call switches the followed view to the evidence with a live state', await evidence.getByRole('status').innerText().then(text => text.includes('检索「流年」')));
+    check('Each view the model opened while followed stays as a tab, marked while its call runs', await workspacePanel.getByRole('tab', { name: '补充信息', exact: true }).count() === 1 &&
+      await workspacePanel.getByRole('tab', { name: '回答依据', exact: true }).getAttribute('aria-selected') === 'true' &&
+      await workspacePanel.locator('[role=tab][aria-selected=true] .agent-ws-tab-live[data-state="running"]').count() === 1);
+    await workspacePanel.getByRole('tab', { name: '过程', exact: true }).click();
+    check('Opening a section pauses following', await workspacePanel.getByRole('button', { name: '跟随模型', exact: true }).getAttribute('aria-pressed') === 'false' &&
+      await workspacePanel.getByRole('tab', { name: '过程', exact: true }).getAttribute('aria-selected') === 'true');
+    await workspacePanel.getByRole('button', { name: '跟随模型', exact: true }).click();
+    await evidence.waitFor();
     await page.evaluate(() => window.fixture.agentRunStatus('completed'));
+    await workspacePanel.locator('[data-workspace-view="results"]').waitFor();
+    check('When the followed task ends the overview is shown and the follow control goes away', await workspacePanel.getByRole('tab', { name: '概览', exact: true }).getAttribute('aria-selected') === 'true' &&
+      await workspacePanel.getByRole('button', { name: '跟随模型', exact: true }).count() === 0);
+    await workspacePanel.getByRole('tab', { name: '回答依据', exact: true }).click();
+    await evidence.waitFor();
+    check('A call left unfinished by an ended task stops spinning', await evidence.innerText().then(text => text.includes('任务结束时这一步仍未完成')) && await evidence.getByRole('status').count() === 0);
     check('Evidence numbers results, links only HTTP(S) sources and explains an empty search', await evidence.getByRole('link', { name: '庚金论' }).getAttribute('href') === 'https://example.com/gengjin' &&
       await evidence.getByRole('link', { name: '无效链接' }).count() === 0 && await evidence.locator('.agent-ws-source').first().getAttribute('data-evidence') === '1' &&
       await evidence.innerText().then(text => text.includes('知识库没有匹配的段落') && text.includes('检索「不存在的资料」没有找到相关段落')));
-    await workspacePanel.getByRole('button', { name: /^过程\d+$/ }).click();
-    check('Opening a section pauses following', await workspacePanel.getByRole('button', { name: '跟随模型', exact: true }).getAttribute('aria-pressed') === 'false');
+    await workspacePanel.getByRole('tab', { name: '过程', exact: true }).click();
     const steps = workspacePanel.getByRole('list').filter({ has: page.getByText('加载分析方法') });
     await steps.getByRole('button', { name: /加载分析方法/ }).click();
     await workspacePanel.locator('[data-workspace-view="method"]').waitFor();
     check('A process step opens its versioned read-only method guide', await workspacePanel.innerText().then(text => text.includes('版本 1.0.0') && text.includes('不增加任何执行权限') && text.includes('八字命理解读指引')));
-    await workspacePanel.getByRole('button', { name: /^过程\d+$/ }).click();
+    await workspacePanel.getByRole('tab', { name: '过程', exact: true }).click();
     await steps.getByRole('button', { name: /协作分析/ }).last().click();
     await workspacePanel.locator('[data-workspace-view="collaboration"]').waitFor();
     check('Collaboration cards show each member model, effort and focus', await workspacePanel.locator('.agent-ws-member').count() === 2 &&
       await workspacePanel.innerText().then(text => text.includes('推理 高') && text.includes('不推理') && text.includes('子平 · 格局取用')) && await workspacePanel.getByRole('region', { name: /分歧对照/ }).count() === 0);
-    await workspacePanel.getByRole('button', { name: /^过程\d+$/ }).click();
+    await workspacePanel.getByRole('tab', { name: '过程', exact: true }).click();
     await steps.getByRole('button', { name: /档案检索/ }).click();
     await workspacePanel.locator('[data-workspace-view="tool"]').waitFor();
     check('External tools show their arguments and raw result with copy actions', await workspacePanel.getByRole('button', { name: '复制调用参数', exact: true }).count() === 1 && await workspacePanel.getByRole('button', { name: '复制工具结果', exact: true }).count() === 1);
     const memoryDeletes = () => requests.filter(item => item.pathname === '/api/user/agent-memory' && item.method === 'DELETE');
-    await workspacePanel.getByRole('button', { name: /^过程\d+$/ }).click();
+    await workspacePanel.getByRole('tab', { name: '过程', exact: true }).click();
     await steps.getByRole('button', { name: /记住偏好/ }).click();
     await workspacePanel.getByRole('button', { name: '删除记忆：历法偏好', exact: true }).click();
     check('Deleting a memory asks for confirmation before any request', memoryDeletes().length === 0);
     await workspacePanel.getByRole('button', { name: '确认删除', exact: true }).click();
     await workspacePanel.getByText('已删除', { exact: true }).waitFor();
     check('A confirmed memory deletion is scoped to the signed-in account', memoryDeletes().length === 1 && memoryDeletes()[0].expectedUserId === 'alice' && memoryDeletes()[0].body?.id === '33333333-3333-4333-8333-333333333333');
-    await workspacePanel.getByRole('button', { name: /^成果\d+$/ }).click();
-    check('Results summarize evidence, intermediate material and billing', await workspacePanel.innerText().then(text => text.includes('3 次检索 · 2 条结果') && text.includes('过程资料') && text.includes('本任务计费 1 次')));
-    const familyTabs = await Promise.all(['八字大运', '八字命理解读指引', '协作分析', '档案检索', '长期记忆'].map(name => workspacePanel.getByRole('tab', { name, exact: true }).count()));
-    check('Opened family views stay as one tab each; following alone adds no tabs', familyTabs.every(count => count === 1) && await workspacePanel.getByRole('tab', { name: '回答依据', exact: true }).count() === 0);
+    await workspacePanel.getByRole('tab', { name: '概览', exact: true }).click();
+    check('The overview summarizes evidence, intermediate material, measured time and billing', await workspacePanel.locator('[data-overview-card="evidence"]').innerText().then(text => text.includes('联网 2')) &&
+      await workspacePanel.innerText().then(text => text.includes('过程资料') && text.includes('任务摘要') && text.includes('本任务计费 1 次')));
+    const familyTabs = await Promise.all(['八字大运', '八字命理解读指引', '协作分析', '档案检索', '长期记忆', '补充信息', '回答依据'].map(name => workspacePanel.getByRole('tab', { name, exact: true }).count()));
+    check('Opened and followed family views stay as one tab each', familyTabs.every(count => count === 1));
     await results.getByRole('button', { name: /^依据 \d+/ }).click();
     await workspacePanel.locator('[data-workspace-view="evidence"]').waitFor();
     check('The answer evidence chip opens the numbered sources in the workspace', await results.getByRole('button', { name: /^依据 \d+/ }).innerText().then(text => text.includes('联网 2')));
@@ -1918,7 +1944,7 @@ export async function run(existingPage, bundlePath) {
     await workspacePanel.locator('[data-workspace-view="collaboration"]').waitFor();
     check('The compact collaboration card compares its members in the workspace', await workspacePanel.locator('.agent-ws-member').count() === 2 &&
       await results.locator('.agent-collaboration-results').last().innerText().then(text => text.includes('分析模型 · 高') && text.includes('复核模型 · 不推理')));
-    await workspacePanel.getByRole('button', { name: '关闭任务工作区', exact: true }).click();
+    await workspacePanel.getByRole('button', { name: '关闭工作区', exact: true }).click();
     await page.setViewportSize({ width: 1200, height: 1000 });
     await page.evaluate(() => window.fixture.mount.results(false));
 

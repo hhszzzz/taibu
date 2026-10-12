@@ -323,22 +323,22 @@ try {
   // A chat step opens its view; the process section then shows that step's call as returned, ready to copy.
   await page.locator('.agent-message .agent-process-heading').first().click();
   await page.locator('.agent-message .agent-step-row').first().click();
-  await panel.getByRole('button', { name: /^过程\d+$/ }).click();
+  await panel.getByRole('tab', { name: '过程', exact: true }).click();
   const call = panel.locator('.agent-ws-call');
   await call.getByRole('region', { name: '调用参数', exact: true }).waitFor();
   await call.getByRole('region', { name: '工具结果', exact: true }).waitFor();
   await call.getByRole('button', { name: '复制调用参数', exact: true }).click();
   const callId = await call.getAttribute('data-tool-id');
   assert.deepEqual(JSON.parse(await page.evaluate(() => navigator.clipboard.readText())), finished.message.agent.parts.find(part => part.type === 'tool' && part.id === callId).input);
-  await panel.getByRole('button', { name: /^成果\d+$/ }).click();
+  await panel.getByRole('tab', { name: '概览', exact: true }).click();
   const originalPanelWidth = (await panel.boundingBox()).width;
   await panel.getByRole('separator', { name: '调整工作区宽度', exact: true }).press('ArrowRight');
   assert.equal((await panel.boundingBox()).width, originalPanelWidth - 24, 'a constrained workspace shrinks from its actual rendered width');
   await panel.getByRole('separator', { name: '调整工作区宽度', exact: true }).press('ArrowLeft');
-  assert.equal(await panel.locator('.agent-workspace-chart-link').count(), 2, 'workspace counts each actual tool reading once');
-  await panel.getByRole('button', { name: /^过程\d+$/ }).click();
+  assert.equal(await panel.locator('[data-overview-result="reading"]').count(), 2, 'the overview counts each actual tool reading once');
+  await panel.getByRole('tab', { name: '过程', exact: true }).click();
   assert.equal(await panel.locator('.agent-ws-steps > li').count(), 3);
-  await panel.getByRole('button', { name: /^成果\d+$/ }).click();
+  await panel.getByRole('tab', { name: '概览', exact: true }).click();
   await page.screenshot({ path: path.join(directory, 'agent-workspace-acceptance.png'), fullPage: true });
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.locator('html.dark').waitFor();
@@ -348,7 +348,7 @@ try {
   await page.emulateMedia({ colorScheme: 'light' });
   await page.locator('html:not(.dark)').waitFor();
   await delay(350);
-  await panel.getByRole('button', { name: '关闭任务工作区', exact: true }).click();
+  await panel.getByRole('button', { name: '关闭工作区', exact: true }).click();
   await page.screenshot({
     path: path.join(directory, "agent-acceptance.png"),
     fullPage: true,
@@ -537,7 +537,7 @@ try {
     "mobile layout has no horizontal overflow",
   );
   await page.getByRole('button', { name: '任务工作区', exact: true }).click();
-  const drawer = page.getByRole('dialog', { name: '任务工作区', exact: true });
+  const drawer = page.getByRole('dialog', { name: '工作区', exact: true });
   await drawer.waitFor();
   for (let index = 0; index < 12; index++) await page.keyboard.press('Tab');
   assert.ok(await drawer.evaluate(element => element.contains(document.activeElement)), 'native workspace drawer keeps keyboard focus inside');

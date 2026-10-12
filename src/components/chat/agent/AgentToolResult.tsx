@@ -28,16 +28,19 @@ function TextFallback({ tool, incomplete = false }: { tool: AgentToolPart; incom
 }
 
 /** One serif character per reading kind for the compact card; bazi shows its four pillars instead. */
-const CHART_GLYPHS: Record<AgentChartKind, string> = {
+export const CHART_GLYPHS: Record<AgentChartKind, string> = {
   bazi: '八', ziwei: '紫', qimen: '奇', liuyao: '卦', meihua: '梅', daliuren: '课', xiaoliuren: '壬', tarot: '塔', taiyi: '乙', astrology: '星', almanac: '历',
 };
 
-/** Four pillars in element colors with the day pillar marked; `size` picks the card or the final-results variant. */
-export function BaziPillars({ chart, size = 'card' }: { chart: Extract<AgentChart, { kind: 'bazi' }>['chart']; size?: 'card' | 'small' }) {
+/**
+ * Four pillars in element colors. `card` and `overview` mark the day pillar;
+ * `small` is the final-results variant and `overview` fills a workspace card.
+ */
+export function BaziPillars({ chart, size = 'card' }: { chart: Extract<AgentChart, { kind: 'bazi' }>['chart']; size?: 'card' | 'small' | 'overview' }) {
   const color = (element: ReturnType<typeof getStemElement>) => element ? { color: getElementColor(element) } : undefined;
   return <span className="agent-result-pillars" data-size={size} aria-hidden="true">{chart.四柱.map(pillar => {
     const [stem, branch] = [pillar.干支.charAt(0), pillar.干支.charAt(1)];
-    return <span key={pillar.柱} data-day-pillar={size === 'card' && pillar.柱 === '日柱' ? 'true' : undefined}><span style={color(getStemElement(stem))}>{stem}</span><span style={color(getBranchElement(branch))}>{branch}</span></span>;
+    return <span key={pillar.柱} data-day-pillar={size !== 'small' && pillar.柱 === '日柱' ? 'true' : undefined}><span style={color(getStemElement(stem))}>{stem}</span><span style={color(getBranchElement(branch))}>{branch}</span></span>;
   })}</span>;
 }
 

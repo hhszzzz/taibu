@@ -69,6 +69,7 @@ export function ProfessionalTable({
     activeLiuRi,
     highlightedCells,
     onCellSelect,
+    canonicalLabels = false,
 }: {
     canonicalChart: BaziCanonicalJSON;
     isUnknownTime?: boolean;
@@ -78,6 +79,8 @@ export function ProfessionalTable({
     activeLiuRi?: LiuRiInfo;
     highlightedCells?: BaziCellJSON[];
     onCellSelect?: (cell: BaziCellJSON) => void;
+    /** Name rows by the canonical fields (十神, 地势) and the day pillar 日主, as the Agent workspace does. */
+    canonicalLabels?: boolean;
 }) {
     const [shenShaExpanded, setShenShaExpanded] = useState(false);
 
@@ -152,13 +155,15 @@ export function ProfessionalTable({
             pillar,
             stem,
             branch,
-            shiShen: index === 2 ? (canonicalChart.基本信息.性别 === '男' ? '元男' : '元女') : (pillar.天干十神 || ''),
+            shiShen: index === 2 ? (canonicalLabels ? '日主' : canonicalChart.基本信息.性别 === '男' ? '元男' : '元女') : (pillar.天干十神 || ''),
             hidden: isUnknownTime && index === 3,
         };
     });
 
     const hasShenSha = columns.some(col => (col.pillar.神煞 || []).length > 0)
         || fortuneColumns.some(col => col.shenSha.length > 0);
+    // Canonical JSON may leave 纳音 out; an empty row says nothing.
+    const hasNaYin = columns.some(col => col.pillar.纳音) || fortuneColumns.some(col => col.naYin);
     const hasFortuneColumns = fortuneColumns.length > 0;
 
     const getStemColor = (stem: string) => {
@@ -211,7 +216,7 @@ export function ProfessionalTable({
                 <tbody className="divide-y divide-gray-50">
                     {/* 主星行 */}
                     <tr>
-                        <td className="py-3 px-2 text-center text-[10px] font-bold text-foreground-secondary uppercase tracking-widest sticky left-0 z-20 bg-background border-r border-border/60">主星</td>
+                        <td className="py-3 px-2 text-center text-[10px] font-bold text-foreground-secondary uppercase tracking-widest sticky left-0 z-20 bg-background border-r border-border/60">{canonicalLabels ? '十神' : '主星'}</td>
                         {fortuneColumns.map((col) => (
                             <td key={col.key} className="py-3 px-1 text-center text-xs font-semibold text-foreground/70 bg-blue-50/10">
                                 {col.shiShen || '-'}
@@ -287,7 +292,7 @@ export function ProfessionalTable({
                     </tr>
                     {/* 辅助行：星运、纳音 */}
                     <tr>
-                        <td className="py-2.5 px-2 text-center text-[10px] font-bold text-foreground-secondary uppercase tracking-widest sticky left-0 z-20 bg-background border-r border-border/60">星运</td>
+                        <td className="py-2.5 px-2 text-center text-[10px] font-bold text-foreground-secondary uppercase tracking-widest sticky left-0 z-20 bg-background border-r border-border/60">{canonicalLabels ? '地势' : '星运'}</td>
                         {fortuneColumns.map((col) => (
                             <td key={col.key} className="py-2.5 px-1 text-center text-[11px] font-medium text-foreground-secondary bg-blue-50/10">{col.diShi}</td>
                         ))}
@@ -297,7 +302,7 @@ export function ProfessionalTable({
                             </td>
                         ))}
                     </tr>
-                    <tr>
+                    {hasNaYin && <tr>
                         <td className="py-2.5 px-2 text-center text-[10px] font-bold text-foreground-secondary uppercase tracking-widest sticky left-0 z-20 bg-background border-r border-border/60">纳音</td>
                         {fortuneColumns.map((col) => (
                             <td key={col.key} className="py-2.5 px-1 text-center text-[11px] font-medium text-foreground-secondary bg-blue-50/10">{col.naYin}</td>
@@ -307,7 +312,7 @@ export function ProfessionalTable({
                                 {col.hidden ? '?' : col.pillar.纳音}
                             </td>
                         ))}
-                    </tr>
+                    </tr>}
                     {/* 神煞星行 */}
                     {hasShenSha && (
                         <tr>

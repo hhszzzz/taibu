@@ -200,7 +200,10 @@ export function getAgentDataResults(tool: AgentToolPart) {
   return { items: output.items.filter(item => strings(item, ['id', 'type', 'name', 'preview'])).map(item => {
     const row = record(item);
     return { id: String(row.id), name: String(row.name), type: String(row.type), preview: String(row.preview) };
-  }), errors: Array.isArray(output.errors) ? output.errors.filter(item => strings(item, ['message'])).map(item => String(record(item).message)) : [] };
+  }), errors: Array.isArray(output.errors) ? output.errors.filter(item => strings(item, ['message'])).map(item => {
+    const row = record(item);
+    return { type: typeof row.type === 'string' ? row.type : null, message: String(row.message) };
+  }) : [] };
 }
 
 export type AgentCalculation =

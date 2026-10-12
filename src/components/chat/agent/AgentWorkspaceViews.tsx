@@ -1,16 +1,20 @@
 'use client';
-// 需要 useState（删除确认、展开）与浏览器请求（删除长期记忆）
+// 需要 useState（删除确认、展开）、问题草稿同步与浏览器请求（删除长期记忆）
 
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { ArrowUpRight, Check, CircleAlert, Database, Globe, LoaderCircle, Lock, Trash2 } from 'lucide-react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ArrowUpRight, Check, CircleAlert, Database, Globe, LoaderCircle, Trash2, UserRound } from 'lucide-react';
 import type { AgentRunStatus } from '@/lib/agent/types';
-import type { AgentQuestionAnswer, AgentWorkspaceModel } from '@/lib/agent/workspace';
+import type { AgentQuestionAnswer, AgentWorkspaceModel, AgentWorkspaceResource } from '@/lib/agent/workspace';
 import {
     getAgentAttachmentRead, getAgentCalculation, getAgentChart, getAgentDataResults, getAgentMemories, getAgentMethod, getAgentMethodCatalog,
     getAgentProfile, getAgentSearchResults, getAgentToolQuestions, getAgentToolText, type AgentCalculation, type AgentSearchMethod, type AgentToolPart,
 } from '@/lib/agent/tool-presentation';
 import { AGENT_EVIDENCE_KINDS, AGENT_EVIDENCE_LABELS, countAgentEvidence, type AgentEvidence, type AgentEvidenceKind } from '@/lib/agent/evidence';
 import { getChartTargets, parseChartReference, type ChartFocus } from '@/lib/agent/chart-interaction';
+import { isAgentChartTool } from '@/lib/agent/tool-catalog';
+import { questionLabel } from '@/lib/agent/questions';
+import { describeQuestionAnswer, getDraftAnswers } from '@/lib/agent/question-drafts';
+import { useQuestionDraft } from '@/lib/agent/use-question-draft';
 import { getBranchElement, getElementColor, getStemElement } from '@/lib/divination/display-helpers';
 import {
     getParallelDivergence, parallelAnalysisResults, parallelAnalysisTitle, parallelAnalysisTopics,
@@ -22,8 +26,9 @@ import { requestBrowserJson } from '@/lib/browser-api';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { useToast } from '@/components/ui/Toast';
 import { mentionTypeLabels } from '@/components/chat/mentionStyles';
-import { formatAgentToolDuration, getAgentToolState, getParallelMemberState } from './presentation';
+import { describeAgentChartSubject, formatAgentToolDuration, getAgentToolState, getParallelMemberState, stripLeadingTitle } from './presentation';
 import { PrivateAttachmentPreview } from './PrivateAttachments';
+import { BaziPillars, CHART_GLYPHS } from './AgentToolResult';
 import './agent-workspace.css';
 
 type ToolViewProps = { tool: AgentToolPart; runStatus: AgentRunStatus };
@@ -33,6 +38,17 @@ const inputText = (tool: AgentToolPart, key: string) => {
     return typeof value === 'string' ? value : null;
 };
 const latestCompleted = (tools: AgentToolPart[]) => [...tools].reverse().find(tool => tool.status === 'completed');
+/** 第 3 步 · 内置方法 · 只读: a view's step, then what kind of material it is; empty parts are left out. */
+const kickerOf = (step: number | undefined, ...parts: Array<string | false | null | undefined>) => [step && `第 ${step} 步`, ...parts].filter(Boolean).join(' · ');
+
+/** Every view opens the way the boards do: its step and kind, a serif title, then what it holds. */
+export function WorkspaceViewHeading({ id, kicker, title, children }: { id: string; kicker?: string; title: ReactNode; children?: ReactNode }) {
+    return <header className="agent-ws-heading">
+        {kicker && <p>{kicker}</p>}
+        <h2 id={id}>{title}</h2>
+        {children && <p>{children}</p>}
+    </header>;
+}
 
 /** Name, measured duration and state of the call a view is showing. Durations are never estimated. */
 export function WorkspaceToolMeta({ tool, runStatus, children }: ToolViewProps & { children?: ReactNode }) {
@@ -146,10 +162,11 @@ function FlyingStars({ data }: { data: Extract<AgentCalculation, { kind: 'ziwei_
 }
 
 /** 推演: Core results as a timeline, candidate list or table, with Core's canonical text beside it. */
-export function CalculationView({ tool, runStatus }: ToolViewProps) {
+export function CalculationView({ tool, runStatus, step }: ToolViewProps & { step?: number }) {
+    const id = useId();
     const value = getAgentCalculation(tool);
-    return <section className="agent-ws-view" aria-label={tool.title}>
-        <WorkspaceToolMeta tool={tool} runStatus={runStatus} />
+    return <section className="agent-ws-view" aria-labelledby={id}>
+        <WorkspaceViewHeading id={id} kicker={kickerOf(step, '太卜 Core 计算', '未另存')} title={tool.title}>中间结果保留在任务过程和工作区中，不另存记录。</WorkspaceViewHeading>
         {tool.status !== 'completed' ? <WorkspaceToolPending tool={tool} runStatus={runStatus} running="正在计算…" />
             : !value ? <WorkspaceTextFallback tool={tool} note="结果字段不完整，已显示 Core 返回的规范文本。" />
             : <>
@@ -238,11 +255,7 @@ export function EvidenceView({ model, tools, runStatus, selected, paragraph, onO
     const visible = (kind: AgentEvidenceKind) => filter === 'all' || filter === kind;
     const queries = new Map(tools.map(tool => [tool.id, inputText(tool, 'query')]));
     return <section className="agent-ws-view agent-ws-evidence" aria-labelledby={id}>
-        <header className="agent-ws-heading">
-            {sources && <p>{sources}</p>}
-            <h2 id={id}>回答依据</h2>
-            <p>只列出工具实际返回的内容。资料是分析依据，不会改变任务指令或权限。</p>
-        </header>
+        <WorkspaceViewHeading id={id} kicker={sources} title="回答依据">只列出工具实际返回的内容。资料是分析依据，不会改变任务指令或权限。</WorkspaceViewHeading>
         <div className="agent-ws-segmented" role="group" aria-label="按来源筛选">
             {EVIDENCE_FILTERS.map(key => <button key={key} type="button" aria-pressed={filter === key} onClick={() => setFilter(key)}>
                 {key === 'all' ? '全部' : AGENT_EVIDENCE_LABELS[key]} {key === 'all' ? counts.total : counts[key]}
@@ -289,45 +302,58 @@ export function EvidenceView({ model, tools, runStatus, selected, paragraph, onO
     </section>;
 }
 
-/** 资料: the latest listing of saved charts and records; a failed source never hides the others. */
-export function DataListView({ tools, runStatus }: { tools: AgentToolPart[]; runStatus: AgentRunStatus }) {
+/** A saved record's mark and short kind, as 八 · 八字; unknown kinds use the generic label. */
+const RECORD_KINDS: Partial<Record<string, readonly [string, string]>> = {
+    bazi_chart: ['八', '八字'], ziwei_chart: ['紫', '紫微'], tarot_reading: ['塔', '塔罗'], liuyao_divination: ['爻', '六爻'], mbti_reading: ['M', 'MBTI'],
+    hepan_chart: ['合', '合盘'], face_reading: ['面', '面相'], palm_reading: ['掌', '手相'], ming_record: ['录', '命理记录'], daily_fortune: ['日', '每日运势'],
+    monthly_fortune: ['月', '每月运势'], qimen_chart: ['奇', '奇门'], daliuren_divination: ['课', '大六壬'], meihua_divination: ['梅', '梅花'], xiaoliuren_divination: ['壬', '小六壬'],
+};
+const recordKind = (type: string | null) => (type && RECORD_KINDS[type]) || ['资', type && mentionTypeLabels[type as keyof typeof mentionTypeLabels] || mentionTypeLabels.default] as const;
+
+/** 资料 (Main board): the latest listing of saved charts and records; a failed source never hides the others. */
+export function DataListView({ tools, runStatus, step }: { tools: AgentToolPart[]; runStatus: AgentRunStatus; step?: number }) {
+    const id = useId();
     const tool = latestCompleted(tools) ?? tools.at(-1)!;
     const data = getAgentDataResults(tool);
-    return <section className="agent-ws-view" aria-label="个人资料">
-        <WorkspaceToolMeta tool={tool} runStatus={runStatus}><span>只读</span></WorkspaceToolMeta>
-        <p className="agent-ws-note">当前账号已保存的命盘与占卜记录。每次读取前都会重新核对功能开关和会员权限。</p>
+    return <section className="agent-ws-view" aria-labelledby={id}>
+        <WorkspaceViewHeading id={id} kicker={kickerOf(step, '只读')} title="个人资料">当前账号已保存的命盘与占卜记录。每次读取前都会重新核对功能开关和会员权限。</WorkspaceViewHeading>
         {tool.status !== 'completed' ? <WorkspaceToolPending tool={tool} runStatus={runStatus} running="正在读取资料列表…" />
             : !data ? <WorkspaceTextFallback tool={tool} note="资料列表格式无法识别，已显示原始返回。" />
             : <>
-                {data.items.length ? <ul className="agent-ws-list" aria-label="已保存资料">
-                    {data.items.map(item => <li key={`${item.type}:${item.id}`}>
-                        <strong>{item.name}</strong>
-                        <small>{mentionTypeLabels[item.type as keyof typeof mentionTypeLabels] ?? mentionTypeLabels.default} · {item.preview}</small>
-                    </li>)}
+                {data.items.length ? <ul className="agent-ws-records" aria-label="已保存资料">
+                    {data.items.map(item => {
+                        const [glyph, kind] = recordKind(item.type);
+                        return <li key={`${item.type}:${item.id}`}>
+                            <span className="agent-ws-record-glyph" aria-hidden="true">{glyph}</span>
+                            <span className="agent-ws-record-text"><strong>{item.name}</strong><small>{item.preview}</small></span>
+                            <span className="agent-ws-badge">{kind}</span>
+                        </li>;
+                    })}
                 </ul> : <p className="agent-ws-note">当前账号还没有已保存的资料。</p>}
-                {data.errors.map((error, index) => <p key={index} className="agent-ws-warning"><CircleAlert size={13} aria-hidden="true" />{error}</p>)}
+                {data.errors.map((error, index) => <p key={index} role="note" className="agent-ws-warning" title={error.message}>
+                    <CircleAlert size={15} aria-hidden="true" />{error.type ? recordKind(error.type)[1] : '部分资料'}暂时无法读取，其余资料不受影响。
+                </p>)}
             </>}
     </section>;
 }
 
-export function RecordView({ tools, runStatus, onOpenChart }: { tools: AgentToolPart[]; runStatus: AgentRunStatus; onOpenChart?: () => void }) {
+export function RecordView({ tools, runStatus, title, step, onOpenChart }: { tools: AgentToolPart[]; runStatus: AgentRunStatus; title: string; step?: number; onOpenChart?: () => void }) {
+    const id = useId();
     const tool = latestCompleted(tools) ?? tools.at(-1)!;
     const type = inputText(tool, 'type');
-    return <section className="agent-ws-view" aria-label="资料记录">
-        <WorkspaceToolMeta tool={tool} runStatus={runStatus}>
-            {type && <span>{mentionTypeLabels[type as keyof typeof mentionTypeLabels] ?? mentionTypeLabels.default}</span>}
-            <span>只读</span>
-        </WorkspaceToolMeta>
+    return <section className="agent-ws-view" aria-labelledby={id}>
+        <WorkspaceViewHeading id={id} kicker={kickerOf(step, type && recordKind(type)[1], '只读')} title={title}>资料提供方返回的规范文本，Agent 按原文分析。</WorkspaceViewHeading>
         {tool.status !== 'completed' ? <WorkspaceToolPending tool={tool} runStatus={runStatus} running="正在读取资料…" />
             : <WorkspaceTextFallback tool={tool} note="资料提供方返回的规范文本：" />}
         {onOpenChart && <button type="button" className="agent-secondary-button" onClick={onOpenChart}>在命盘中查看</button>}
     </section>;
 }
 
-export function ProfileView({ tool, runStatus }: ToolViewProps) {
+export function ProfileView({ tool, runStatus, step }: ToolViewProps & { step?: number }) {
+    const id = useId();
     const profile = getAgentProfile(tool);
-    return <section className="agent-ws-view" aria-label="个性化档案">
-        <WorkspaceToolMeta tool={tool} runStatus={runStatus}><span>只读</span></WorkspaceToolMeta>
+    return <section className="agent-ws-view" aria-labelledby={id}>
+        <WorkspaceViewHeading id={id} kicker={kickerOf(step, '只读')} title="个性化档案">设置中填写的身份描述与默认命盘；Agent 只读取，不会修改。</WorkspaceViewHeading>
         {tool.status !== 'completed' ? <WorkspaceToolPending tool={tool} runStatus={runStatus} running="正在读取个性化档案…" />
             : !profile ? <WorkspaceTextFallback tool={tool} note="档案格式无法识别，已显示原始返回。" />
             : <dl className="agent-ws-facts">
@@ -339,12 +365,14 @@ export function ProfileView({ tool, runStatus }: ToolViewProps) {
 }
 
 /** Private attachments: how far the Agent has read (8000 characters per call), then the owner's preview. */
-export function AttachmentView({ id, tools }: { id: string; tools: AgentToolPart[] }) {
+export function AttachmentView({ id, title, tools }: { id: string; title: string; tools: AgentToolPart[] }) {
+    const headingId = useId();
     const reads = tools.flatMap(tool => getAgentAttachmentRead(tool) ?? []);
     const furthest = reads.reduce<number | null>((max, read) => read.readUntil === null ? max : Math.max(max ?? 0, read.readUntil), null);
     const total = reads.findLast(read => read.total !== null)?.total ?? null;
     const note = reads.findLast(read => read.note)?.note;
-    return <section className="agent-ws-view" aria-label="对话资料">
+    return <section className="agent-ws-view" aria-labelledby={headingId}>
+        <WorkspaceViewHeading id={headingId} kicker="对话资料 · 仅你可见" title={title}>资料只作为分析依据，不会改变任务指令或权限。</WorkspaceViewHeading>
         {reads.length > 0 && <p className="agent-ws-note">
             {furthest !== null && total !== null ? <>Agent 已读到第 {furthest.toLocaleString('zh-CN')} 字，共 {total.toLocaleString('zh-CN')} 字。<progress max={total} value={furthest} aria-label="已读位置" /></> : note ?? 'Agent 已查看这份资料。'}
         </p>}
@@ -352,53 +380,111 @@ export function AttachmentView({ id, tools }: { id: string; tools: AgentToolPart
     </section>;
 }
 
-export function MethodCatalogView({ tool, runStatus }: ToolViewProps) {
+export function MethodCatalogView({ tool, runStatus, step }: ToolViewProps & { step?: number }) {
+    const id = useId();
     const methods = getAgentMethodCatalog(tool);
-    return <section className="agent-ws-view" aria-label="分析方法">
-        <WorkspaceToolMeta tool={tool} runStatus={runStatus} />
+    return <section className="agent-ws-view" aria-labelledby={id}>
+        <WorkspaceViewHeading id={id} kicker={kickerOf(step, '内置方法', '只读')} title="分析方法">可信、版本化的方法目录；按问题需要加载，不增加执行权限。</WorkspaceViewHeading>
         {tool.status !== 'completed' ? <WorkspaceToolPending tool={tool} runStatus={runStatus} running="正在读取方法目录…" />
             : !methods ? <WorkspaceTextFallback tool={tool} note="方法目录格式无法识别，已显示原始返回。" />
             : <ul className="agent-ws-list">{methods.map(method => <li key={method.id}><strong>{method.title}<code>{method.version}</code></strong><small>{method.description}</small></li>)}</ul>}
     </section>;
 }
 
-/** 解读指引: a built-in, versioned guide. It shapes the reading steps and grants no tools or membership. */
-export function MethodView({ tools, runStatus }: { tools: AgentToolPart[]; runStatus: AgentRunStatus }) {
+/** 解读指引 (Main board): a built-in, versioned guide. It shapes the reading steps and grants no tools or membership. */
+export function MethodView({ tools, runStatus, step }: { tools: AgentToolPart[]; runStatus: AgentRunStatus; step?: number }) {
+    const id = useId();
     const tool = latestCompleted(tools) ?? tools.at(-1)!;
     const guide = getAgentMethod(tool);
-    return <section className="agent-ws-view" aria-label={guide?.title ?? '解读指引'}>
-        <WorkspaceToolMeta tool={tool} runStatus={runStatus}>{guide && <span>版本 {guide.version}</span>}</WorkspaceToolMeta>
-        <p className="agent-ws-callout"><Lock size={13} aria-hidden="true" />方法只规定解读步骤；排盘仍由太卜 Core 计算，不增加任何执行权限。</p>
+    return <section className="agent-ws-view" aria-labelledby={id}>
+        <WorkspaceViewHeading id={id} kicker={kickerOf(step, '内置方法', guide && `版本 ${guide.version}`, '只读')} title={guide?.title ?? inputText(tool, 'id') ?? '解读指引'}>
+            方法只规定解读步骤；排盘仍由太卜 Core 计算，不增加任何执行权限。
+        </WorkspaceViewHeading>
         {tool.status !== 'completed' ? <WorkspaceToolPending tool={tool} runStatus={runStatus} running="正在加载解读指引…" />
             : !guide ? <WorkspaceTextFallback tool={tool} note="指引格式无法识别，已显示原始返回。" />
             : <>
                 {guide.whenToUse && <p className="agent-ws-note">适用：{guide.whenToUse}</p>}
                 {guide.tools.length > 0 && <p className="agent-ws-chips" aria-label="对应工具">{guide.tools.map(name => <code key={name}>{name}</code>)}</p>}
-                <div className="agent-ws-document"><MarkdownContent content={guide.instructions} /></div>
+                <div className="agent-ws-document agent-ws-document-card"><MarkdownContent content={stripLeadingTitle(guide.instructions, guide.title)} /></div>
             </>}
     </section>;
 }
 
-/** 补充信息: the checklist mirrors the answer panel above the composer, including stored replies. */
-export function QuestionView({ tool, runStatus, answer }: ToolViewProps & { answer?: AgentQuestionAnswer }) {
-    const questions = getAgentToolQuestions(tool);
+const KNOWN_READINGS = 3;
+/** Readings the model already had when it asked: the latest of each chart tab from earlier calls. */
+function knownReadings(model: AgentWorkspaceModel, asked: AgentToolPart) {
+    const position = model.tools.findIndex(tool => tool.id === asked.id);
+    const earlier = new Set(model.tools.slice(0, Math.max(position, 0)).map(tool => tool.id));
+    return model.resources.flatMap((resource: AgentWorkspaceResource) => {
+        if (resource.view !== 'chart') return [];
+        const tools = resource.toolIds.filter(id => earlier.has(id)).flatMap(id => model.toolsById.get(id) ?? []);
+        const reading = tools.findLast(tool => getAgentChart(tool));
+        const value = reading && getAgentChart(reading);
+        // The calculation names whom the reading is about; a saved chart read back does not.
+        const source = tools.find(tool => isAgentChartTool(tool.name) && getAgentChart(tool)) ?? reading;
+        return reading && value && source ? [{ resource, reading, value, subject: describeAgentChartSubject(source, value) }] : [];
+    }).slice(-KNOWN_READINGS);
+}
+
+type QuestionState = 'answered' | 'replied' | 'skipped' | 'required' | 'optional' | 'missing';
+const QUESTION_BADGES: Record<QuestionState, string> = { answered: '已填写', replied: '已回答', skipped: '已跳过', required: '必填', optional: '可跳过', missing: '未回答' };
+
+/**
+ * 补充信息 (AgentQuestion board): what the model already has, then each needed
+ * item with the draft being typed in the answer panel, or the stored reply.
+ */
+export function QuestionView({ tool, runStatus, step, model, answer, draftKey }: ToolViewProps & {
+    step?: number; model: AgentWorkspaceModel; answer?: AgentQuestionAnswer;
+    /** The answer panel's draft, mirrored while the task waits for it. */
+    draftKey: string | null;
+}) {
+    const id = useId();
+    const questions = useMemo(() => getAgentToolQuestions(tool), [tool]);
     const waiting = getAgentToolState(tool, runStatus).status === 'awaiting_input' && !answer;
-    return <section className="agent-ws-view" aria-label="补充信息">
-        <p className={waiting ? 'agent-ws-callout' : 'agent-ws-note'}>
-            {waiting ? '任务已暂停，在问题面板中回答后继续。' : answer ? '已收到回答，任务按这些信息继续。' : 'Agent 在这一步向你确认信息。'}
-        </p>
-        <ol className="agent-ws-questions">
-            {questions.map(question => {
-                const reply = answer?.answers?.[question.id];
-                const labels = reply?.map(value => question.options?.find(option => option.id === value)?.label ?? value);
-                return <li key={question.id} data-answered={reply === undefined ? 'false' : 'true'}>
-                    <MarkdownContent content={question.question} className="text-sm" />
-                    {question.options?.length ? <p className="agent-ws-chips">{question.options.map(option => <span key={option.id} data-selected={reply?.includes(option.id) ? 'true' : undefined}>{option.label}</span>)}</p> : null}
-                    <small>{reply === null ? '已跳过' : labels?.length ? `回答：${labels.join('、')}` : answer ? '已回答' : waiting ? '待回答' : '未回答'}</small>
-                </li>;
-            })}
-        </ol>
-        {answer && !answer.answers && <div className="agent-ws-document"><MarkdownContent content={answer.content} /></div>}
+    const { draft } = useQuestionDraft(waiting ? draftKey : null, questions);
+    // Older replies are free text without per-question answers.
+    const structured = !answer || answer.answers !== undefined;
+    const replies = answer?.answers ?? (waiting ? getDraftAnswers(questions, draft) : null);
+    const filled = questions.filter(question => replies?.[question.id] === null || !!replies?.[question.id]?.length);
+    const known = knownReadings(model, tool);
+    return <section className="agent-ws-view agent-ws-question" aria-labelledby={id}>
+        <WorkspaceViewHeading id={id} kicker={kickerOf(step, tool.title)} title={waiting ? `还需要 ${questions.length} 项信息` : answer ? '已补充的信息' : '补充信息'}>
+            {waiting ? '对话中填写的回答会实时同步到这里。任务已暂停，提交后从这一步继续。' : answer ? '已收到回答，任务按这些信息继续。' : 'Agent 在这一步向你确认信息。'}
+        </WorkspaceViewHeading>
+        {(known.length > 0 || waiting) && <div className="agent-ws-known">
+            {known.map(({ resource, reading, value, subject }) => <article key={resource.id} className="agent-ws-known-card" aria-label={`${resource.title}（已就绪）`}>
+                <span className="agent-ws-overview-kicker">{resource.title} · {reading.name === 'inspect_chart' ? '已读取' : '已计算'}<span data-state="ready">已就绪</span></span>
+                {value.kind === 'bazi' ? <BaziPillars chart={value.chart} size="overview" /> : <span className="agent-ws-overview-glyph" aria-hidden="true">{CHART_GLYPHS[value.kind]}</span>}
+                <small>{subject}</small>
+            </article>)}
+            {waiting && <div className="agent-ws-known-pending">
+                <span aria-hidden="true"><UserRound size={18} /></span>
+                <strong>{filled.length === questions.length ? '已填写，等待提交' : `待补充 · ${questions.length - filled.length} 项`}</strong>
+                <small>{filled.flatMap(question => replies?.[question.id]?.length ? [describeQuestionAnswer(question, replies[question.id])] : []).slice(0, 2).join(' · ') || '在问题面板中填写'}</small>
+            </div>}
+        </div>}
+        <section className="agent-ws-needs" aria-labelledby={`${id}-needs`}>
+            <h3 id={`${id}-needs`}>需要的信息</h3>
+            <ul className="agent-ws-questions">
+                {questions.map(question => {
+                    const reply = replies?.[question.id];
+                    const text = describeQuestionAnswer(question, reply);
+                    const state: QuestionState = !structured ? 'replied' : reply === null ? 'skipped' : text ? answer ? 'replied' : 'answered'
+                        : waiting ? question.allowSkip ? 'optional' : 'required' : 'missing';
+                    // A missing answer is said by its badge alone.
+                    const value = !structured ? '见下方回答' : text ?? (waiting ? '尚未填写' : null);
+                    return <li key={question.id} data-state={state}>
+                        <span>
+                            <strong title={question.question}>{questionLabel(question)}</strong>
+                            {value && <small>{value}</small>}
+                        </span>
+                        <span className="agent-ws-badge" data-state={state}>{QUESTION_BADGES[state]}</span>
+                    </li>;
+                })}
+            </ul>
+        </section>
+        {!structured && answer && <div className="agent-ws-document agent-ws-document-card"><MarkdownContent content={answer.content} /></div>}
+        {waiting && <p className="agent-ws-footnote">提交后任务从这一步继续，补充信息不会再次扣费。</p>}
     </section>;
 }
 
@@ -453,11 +539,9 @@ export function CollaborationView({ tool, runStatus, step }: ToolViewProps & { s
     const call = getAgentToolState(tool, runStatus).status;
     const stances = members.some(member => member.positions && Object.keys(member.positions).length);
     return <section className="agent-ws-view agent-ws-collaboration" aria-labelledby={id}>
-        <header className="agent-ws-heading">
-            <p>{[step && `第 ${step} 步`, '协作分析', '子分析只能计算和读取方法'].filter(Boolean).join(' · ')}</p>
-            <h2 id={id}>{parallelAnalysisTitle(tool.output) ?? '协作分析'}</h2>
-            <p>成员不能追问、联网或写记忆。只有完整结束的分析会汇入主回答。</p>
-        </header>
+        <WorkspaceViewHeading id={id} kicker={kickerOf(step, '协作分析', '子分析只能计算和读取方法')} title={parallelAnalysisTitle(tool.output) ?? '协作分析'}>
+            成员不能追问、联网或写记忆。只有完整结束的分析会汇入主回答。
+        </WorkspaceViewHeading>
         {!members.length ? <WorkspaceToolPending tool={tool} runStatus={runStatus} running="正在分派协作成员…" />
             : members.map(member => {
                 const name = member.name ?? member.system;
@@ -492,7 +576,8 @@ export function CollaborationView({ tool, runStatus, step }: ToolViewProps & { s
 }
 
 /** 长期记忆: facts saved from the user's own words, deletable by the owner. */
-export function MemoryView({ tools, runStatus, userId }: { tools: AgentToolPart[]; runStatus: AgentRunStatus; userId: string | null }) {
+export function MemoryView({ tools, runStatus, userId, step }: { tools: AgentToolPart[]; runStatus: AgentRunStatus; userId: string | null; step?: number }) {
+    const id = useId();
     const { showToast } = useToast();
     const [deleted, setDeleted] = useState<ReadonlySet<string>>(() => new Set());
     const [confirming, setConfirming] = useState<string | null>(null);
@@ -515,8 +600,8 @@ export function MemoryView({ tools, runStatus, userId }: { tools: AgentToolPart[
     };
     const failed = tools.filter(tool => getAgentToolState(tool, runStatus).status === 'failed');
     const running = tools.find(tool => ['pending', 'running'].includes(getAgentToolState(tool, runStatus).status));
-    return <section className="agent-ws-view" aria-label="长期记忆">
-        <p className="agent-ws-note">只保存你明确说过的原话，不保存推断。删除后，之后的任务不会再读取它。</p>
+    return <section className="agent-ws-view" aria-labelledby={id}>
+        <WorkspaceViewHeading id={id} kicker={kickerOf(step, '原话依据', '可删除')} title="长期记忆">只保存你明确说过的原话，不保存推断。删除后，之后的任务不会再读取它。</WorkspaceViewHeading>
         {running && <WorkspaceToolPending tool={running} runStatus={runStatus} running="正在读取或保存记忆…" />}
         {entries.size ? <ul className="agent-ws-list" aria-label="记忆">
             {[...entries.values()].map(({ memory, written }) => <li key={memory.id} data-deleted={deleted.has(memory.id) ? 'true' : undefined}>

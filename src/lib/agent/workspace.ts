@@ -9,7 +9,7 @@
  * here calculates, fetches or saves; views only read stored tool results.
  */
 import type { ChatMessage } from '@/types';
-import type { AgentPart } from './types';
+import { isAgentRunTerminal, type AgentPart, type AgentRunStatus } from './types';
 import type { AgentAnswers } from './questions';
 import { AGENT_CHART_NAMES, getAgentToolFamily, isAgentChartTool, type AgentToolFamily } from './tool-catalog';
 import { getAgentChart, getAgentDataResults, getAgentMethod, getAgentAttachmentRead, type AgentToolPart } from './tool-presentation';
@@ -194,6 +194,36 @@ export function getAgentWorkspaceFollowTarget(model: AgentWorkspaceModel): strin
     if (location) return location;
   }
   return null;
+}
+
+/** The model is working; only then can the panel be told to follow it. */
+export function isAgentRunWorking(status: AgentRunStatus | null): boolean {
+  return status === 'queued' || status === 'running' || status === 'cancelling';
+}
+
+/**
+ * Fixed sections before the resource tabs, given the latest task's status (null
+ * without a task): 过程 whenever there is a task, 概览 once nothing runs.
+ */
+export function getAgentWorkspaceSections(status: AgentRunStatus | null): AgentWorkspaceSection[] {
+  if (status === null) return ['results'];
+  return isAgentRunTerminal(status) ? ['results', 'process'] : ['process'];
+}
+
+/**
+ * Where the panel is. Following the model shows its latest call while the task
+ * runs or waits for an answer, and the overview once it has ended; otherwise
+ * the reader's own choice. A section that is not shown falls back to the first one that is.
+ */
+export function getAgentWorkspaceLocation(model: AgentWorkspaceModel, { selected, followModel, status }: {
+  selected: string | null; followModel: boolean; status: AgentRunStatus | null;
+}): string {
+  const sections = getAgentWorkspaceSections(status);
+  const ended = status === null || isAgentRunTerminal(status);
+  const requested = !followModel ? selected : ended ? 'results' : getAgentWorkspaceFollowTarget(model) ?? selected;
+  const location = requested ? resolveAgentWorkspaceLocation(model, requested) : null;
+  if (location === null) return sections[0];
+  return (AGENT_WORKSPACE_SECTIONS as readonly string[]).includes(location) && !(sections as readonly string[]).includes(location) ? sections[0] : location;
 }
 
 /**

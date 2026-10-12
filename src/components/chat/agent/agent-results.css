@@ -8,6 +8,9 @@
 .agent-result-pillars > span[data-day-pillar] { background: var(--accent-light); }
 .agent-result-pillars[data-size="small"] { gap: 3px; font-size: calc(14 / 16 * 1rem); }
 .agent-result-pillars[data-size="small"] > span { padding: 3px 5px; }
+/* Overview and known-data cards (Completed and AgentQuestion boards): four equal pillar tiles across the card. */
+.agent-result-pillars[data-size="overview"] { display: grid; width: 100%; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; font-size: calc(19 / 16 * 1rem); line-height: 1.2; }
+.agent-result-pillars[data-size="overview"] > span { align-items: center; padding: 5px 0; border-radius: 8px; }
 .agent-result-glyph { display: flex; flex-shrink: 0; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 10px; background: var(--background-secondary); color: var(--foreground); font-family: var(--font-display); font-size: calc(20 / 16 * 1rem); font-weight: 600; }
 .agent-primary-button[data-shown] { background: var(--background-secondary); color: var(--foreground-secondary); }
 .agent-primary-button { display: inline-flex; flex-shrink: 0; align-items: center; gap: 6px; height: 36px; padding: 0 12px; border: 1px solid var(--border-hover, var(--border)); border-radius: 10px; background: var(--chat-raised); font-size: calc(13 / 16 * 1rem); color: var(--foreground); white-space: nowrap; }
@@ -18,9 +21,6 @@
 .agent-canonical-chart--qimen, .agent-canonical-chart--daliuren { min-width: 26rem; }
 .agent-canonical-chart--liuyao { min-width: 30rem; }
 .agent-result-full { min-width: 0; }
-.agent-workspace-chart-link { display: grid; grid-template-columns: 1fr auto; text-align: left; gap: .25rem .5rem; border: 1px solid var(--border); border-radius: .75rem; padding: .9rem; background: var(--surface); }
-.agent-workspace-chart-link small { grid-row: 2; color: var(--foreground-secondary); font-size: .75rem; overflow-wrap: anywhere; }
-.agent-workspace-chart-link svg { grid-column: 2; grid-row: 1; color: var(--foreground-secondary); }
 .agent-result-full > .agent-result-summary { margin-bottom: 1rem; }
 .agent-result-fallback { padding: 1rem; }
 .agent-result-text { max-height: 24rem; overflow: auto; overflow-wrap: anywhere; margin-top: .75rem; font-size: .8rem; }
@@ -29,33 +29,63 @@
 .agent-chart-dialog-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); }
 .agent-chart-dialog-header h2 { font-size: 1.25rem; font-family: var(--font-display); }
 .agent-chart-dialog-body { padding: 1rem; overflow: auto; max-height: calc(90dvh - 6rem); }
-.agent-board-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: .75rem; padding-bottom: .9rem; }
-.agent-board-heading h3 { font-family: var(--font-display); font-size: 1.25rem; font-weight: 500; }
-.agent-board-heading p { margin-top: .3rem; color: var(--foreground-secondary); font-size: .8rem; }
-.agent-board-focus { position: sticky; top: 0; z-index: 20; border-left: 3px solid var(--accent); padding: .65rem .85rem; background: var(--accent-light); margin-bottom: 1rem; display: flex; flex-direction: column; gap: .25rem; }
-.agent-board-focus > span { font-size: .7rem; color: var(--foreground-secondary); }
-.agent-board-focus strong { font-size: .85rem; font-weight: 500; overflow-wrap: anywhere; }
+/* 命盘 (Main board): steps and subject, the position being looked at, the chart, relations and Core's rules. */
+.agent-interactive-chart { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.agent-board-heading { display: flex; align-items: flex-start; gap: 16px; }
+.agent-board-heading > div:first-child { flex: 1; min-width: 0; }
+.agent-board-kicker { font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); }
+.agent-board-heading h3 { margin-top: 2px; font-family: var(--font-display); font-size: calc(24 / 16 * 1rem); font-weight: 600; line-height: 1.35; letter-spacing: .02em; overflow-wrap: anywhere; }
+.agent-board-heading h3 + p { margin-top: 4px; font-size: calc(13 / 16 * 1rem); color: var(--foreground-secondary); overflow-wrap: anywhere; }
+.agent-board-tools { display: flex; flex-shrink: 0; gap: 4px; }
+.agent-board-tool { display: flex; width: 36px; height: 36px; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: 10px; color: var(--foreground-secondary); }
+.agent-board-tool:hover { background: var(--background-secondary); color: var(--foreground); }
+.agent-board-focus { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: 14px; background: var(--accent-light); }
+.agent-board-focus[data-chart-focus=""] { background: var(--background-secondary); }
+.agent-board-focus-label { display: flex; align-items: center; gap: 8px; font-size: calc(12.5 / 16 * 1rem); font-weight: 600; color: var(--accent-hover); }
+.agent-board-focus[data-chart-focus=""] .agent-board-focus-label { color: var(--foreground-secondary); }
+.agent-board-follow-state { margin-left: auto; font-weight: 500; white-space: nowrap; }
+.agent-board-caption { font-size: calc(15 / 16 * 1rem); line-height: 1.65; overflow-wrap: anywhere; }
+.agent-board-focus[data-chart-focus=""] .agent-board-caption { font-size: calc(13.5 / 16 * 1rem); color: var(--foreground-secondary); }
+.agent-board-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.agent-board-chips > li { padding: 2px 10px; border-radius: 999px; background: var(--chat-raised); font-size: calc(12.5 / 16 * 1rem); overflow-wrap: anywhere; }
+.agent-board-focus-actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 2px; }
+.agent-board-ask { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: 9px; background: var(--accent); color: var(--on-accent); font-size: calc(13 / 16 * 1rem); font-weight: 500; }
+.agent-board-ask:hover { background: var(--accent-hover); }
+.agent-board-only { height: 34px; padding: 0 12px; border: 1px solid var(--border-hover); border-radius: 9px; background: var(--chat-raised); font-size: calc(13 / 16 * 1rem); color: var(--foreground); }
+.agent-board-only:hover { background: var(--background-secondary); }
+.agent-board-only[aria-pressed="true"] { border-color: var(--accent); color: var(--accent-hover); }
+/* 只看相关位置: other positions recede; the selection and anything inside a selected palace stay. */
+.agent-interactive-chart[data-focus-only] .agent-chart-scroll [data-chart-target]:not([aria-pressed="true"], [data-chart-selected="true"], [data-chart-selected="true"] *) { opacity: .28; }
+.agent-board-rules { font-family: var(--font-mono); font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); overflow-wrap: anywhere; }
+/* 四柱表 as the board draws it: a rounded frame, a header band, serif characters and the located cells boxed. */
+.agent-interactive-chart .agent-canonical-chart--bazi > div { margin: 0; padding: 0; }
+.agent-interactive-chart .agent-canonical-chart--bazi table { width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: var(--background); font-size: calc(13 / 16 * 1rem); }
+.agent-interactive-chart .agent-canonical-chart--bazi thead th { padding: 9px 4px; border: 0; background: var(--background-secondary); font-size: calc(13 / 16 * 1rem); font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--foreground); }
+.agent-interactive-chart .agent-canonical-chart--bazi tbody td { border-top: 1px solid var(--border); }
+.agent-interactive-chart .agent-canonical-chart--bazi tbody td:first-child { padding-left: 10px; border-right: 0; background: var(--background); font-size: calc(13 / 16 * 1rem); font-weight: 500; letter-spacing: 0; text-align: left; text-transform: none; color: var(--foreground-secondary); }
+.agent-interactive-chart .agent-canonical-chart--bazi .chart-cell-button { display: block; width: 100%; min-height: 0; padding: 4px 0; border: 0; border-radius: 10px; font-family: var(--font-display); font-size: calc(28 / 16 * 1rem); font-weight: 600; line-height: 1.2; }
+.agent-interactive-chart .agent-canonical-chart--bazi .chart-cell-button[aria-pressed="true"] { background: var(--accent-light); box-shadow: inset 0 0 0 2px var(--accent); }
 .chart-cell-button { min-width: 2.25rem; min-height: 2.75rem; border: 2px solid transparent; border-radius: .5rem; transition: background .15s, border-color .15s; }
 .chart-cell-button:hover, .chart-star-button:hover { background: var(--background-secondary); }
 .chart-cell-button[aria-pressed=true], .chart-star-button[aria-pressed=true] { border-color: var(--accent); background: var(--accent-light); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent); }
 .chart-star-button { border: 1px solid transparent; border-radius: .35rem; padding: .2rem; }
 .chart-cell-button:focus-visible, .chart-star-button:focus-visible, .chart-palace-button:focus-visible, .agent-board-relations button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .chart-palace-button { padding: .2rem; margin: -.2rem; text-align: left; }
-.agent-board-related { display: flex; align-items: center; gap: .5rem; font-size: .8rem; margin-bottom: .8rem; }
-.agent-board-related input { accent-color: var(--accent); }
-.agent-board-relations { border-top: 1px solid var(--border); margin-top: 1rem; padding-top: .85rem; }
-.agent-board-relations summary { font-size: .85rem; cursor: pointer; }
-.agent-board-relations summary span { color: var(--foreground-secondary); margin-left: .5rem; }
-.agent-board-relations > div { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .75rem; }
-.agent-board-relations button { text-align: left; border: 1px solid var(--border); border-radius: .4rem; padding: .4rem .6rem; font-size: .75rem; background: var(--surface); }
-.agent-board-relations button[aria-pressed=true] { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
-.agent-board-relations p { color: var(--foreground-secondary); font-size: .75rem; margin-top: .6rem; }
-.agent-board-relation-path { padding: .75rem; border: 1px solid var(--accent); border-radius: .4rem; font-size: .8rem; margin-top: .8rem; }
-.agent-board-relation-path p { overflow-wrap: anywhere; }
-.agent-board-relation-path strong { display: inline-block; margin-left: .5rem; color: var(--accent); }
-.agent-board-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .7rem; border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 1rem; }
-.agent-board-actions button { display: inline-flex; align-items: center; gap: .4rem; }
-.agent-board-actions > span { color: var(--foreground-secondary); font-size: .7rem; }
+.agent-board-related { display: flex; align-items: center; gap: 8px; font-size: calc(13 / 16 * 1rem); color: var(--foreground-secondary); }
+.agent-board-related input { width: 16px; height: 16px; accent-color: var(--accent); }
+/* 干支关系: two columns of typed relations; the one the model located says so. */
+.agent-board-relations { display: flex; flex-direction: column; gap: 8px; }
+.agent-board-relations > h4 { font-size: calc(13.5 / 16 * 1rem); font-weight: 600; }
+.agent-board-relations > h4 > span { font-weight: 500; color: var(--foreground-secondary); font-variant-numeric: tabular-nums; }
+.agent-board-relations > ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.agent-board-relations button { display: flex; width: 100%; height: 100%; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 10px; font-size: calc(13 / 16 * 1rem); text-align: left; color: var(--foreground); }
+.agent-board-relations button:hover { background: var(--background-secondary); }
+.agent-board-relations button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-light); font-weight: 500; }
+.agent-board-relation-type { flex-shrink: 0; padding: 0 6px; border-radius: 5px; background: var(--background-secondary); font-size: calc(12 / 16 * 1rem); font-weight: 400; color: var(--foreground-secondary); }
+.agent-board-relations button[aria-pressed="true"] .agent-board-relation-type { background: var(--chat-raised); color: var(--accent-hover); }
+.agent-board-relation-text { min-width: 0; overflow-wrap: anywhere; }
+.agent-board-located { flex-shrink: 0; margin-left: auto; font-size: calc(12 / 16 * 1rem); font-weight: 500; color: var(--accent-hover); }
+.agent-board-relations > p { font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); }
 .agent-board-fallback { white-space: pre-wrap; font-size: .8rem; }
 .agent-focus-receipt { padding: .6rem .8rem; font-size: .8rem; border-left: 2px solid var(--accent); overflow-wrap: anywhere; }
 .agent-focus-receipt span { display: block; color: var(--foreground-secondary); font-size: .7rem; margin-bottom: .2rem; }

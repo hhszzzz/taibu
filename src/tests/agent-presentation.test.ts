@@ -2,7 +2,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ChatMessage } from '../types';
 import type { AgentPart } from '../lib/agent/types';
-import { collectAgentArtifacts, describeAgentCallNote, describeAgentStep, formatAgentToolDuration, getAgentStepNumbers, getAgentSteps, getAgentLiveLine, getAgentArtifactHref, getAgentIntermediateResults, getAgentToolState, getAgentResponseTiming, getAgentTaskSpan, groupAgentParts, getAgentActivityLabel, getAgentEvidenceSummary, summarizeAgentProcess, summarizeAgentTool, AGENT_TOOL_FAMILY_LABELS, type AgentArtifact, type AgentTool } from '../components/chat/agent/presentation';
+import { randomUUID } from 'node:crypto';
+import { executeTool, buildToolSuccessPayload, listToolDefinitions } from 'taibu-core/mcp';
+import { getAgentChart } from '../lib/agent/tool-presentation';
+import { buildAgentWorkspace } from '../lib/agent/workspace';
+import {
+    collectAgentArtifacts, describeAgentCallNote, describeAgentChartRules, describeAgentChartSteps, describeAgentChartSubject, describeAgentStep, formatAgentToolDuration,
+    getAgentStepNumbers, getAgentSteps, getAgentLiveLine, getAgentArtifactHref, getAgentIntermediateResults, getAgentLocatedPositions, getAgentReadingState, getAgentToolState,
+    getAgentResponseTiming, getAgentTaskDuration, getAgentTaskSpan, getDayunWindow, groupAgentParts, getAgentActivityLabel, getAgentEvidenceSummary, stripLeadingTitle,
+    summarizeAgentProcess, summarizeAgentTool, AGENT_TOOL_FAMILY_LABELS, type AgentArtifact, type AgentTool,
+} from '../components/chat/agent/presentation';
 import { formatAgentElapsed } from '../components/chat/agent/AgentHeaderStatus';
 
 const chart: AgentArtifact = { type: 'artifact', id: 'chart-part', title: '命盘', chartType: 'bazi', chartId: 'chart/with?special=字符' };
@@ -199,4 +208,86 @@ test('a call note separates execution from waiting and only claims storage for c
     assert.equal(describeAgentCallNote(tool({ output: { result: 1 } })), '执行阶段 86 毫秒（不含等待）。', 'an uncached result makes no replay claim');
     assert.equal(describeAgentCallNote(tool({ status: 'failed', durationMs: undefined })), null);
     assert.equal(describeAgentCallNote(tool({ durationMs: Number.NaN })), '结果已按任务与调用 ID 暂存，重放不会重新计算或扣费。', 'an unmeasured call never shows an invented time');
+});
+
+/** A completed call of a Core chart tool with its real result, as the projection stores it. */
+async function chartCall(id: string, name: string, input?: Record<string, unknown>): Promise<AgentTool> {
+    const definition = listToolDefinitions().find(item => item.name === name)!;
+    const args = input ?? definition.inputSchema.examples![0] as Record<string, unknown>;
+    const payload = buildToolSuccessPayload(name, await executeTool(name, args));
+    return { type: 'tool', id, name, title: name, status: 'completed', input: args,
+        output: { artifactId: randomUUID(), result: payload.structuredContent }, canonicalText: payload.content.map(part => part.text).join('\n') };
+}
+
+test('a bazi reading names its subject from the call and the rules Core calculated with, as returned', async () => {
+    const calculated = await chartCall('calc', 'bazi', { gender: 'male', birthYear: 1990, birthMonth: 1, birthDay: 15, birthHour: 9 });
+    const value = getAgentChart(calculated)!;
+    assert.equal(describeAgentChartSubject(calculated, value), '男 · 公历 1990-01-15 09:00 · Asia/Shanghai · 日主 庚');
+    assert.equal(describeAgentChartSubject({ ...calculated, input: { calendarType: 'lunar', isLeapMonth: true, birthYear: 1990, birthMonth: 5, birthDay: 3 } }, value),
+        '男 · 农历 1990-闰05-03 · Asia/Shanghai · 日主 庚', 'a lunar date without an hour keeps its leap month');
+    assert.equal(describeAgentChartSubject({ ...calculated, name: 'inspect_chart', input: { reference: 'artifact:x' } }, value), '男 · Asia/Shanghai · 日主 庚', 'a saved chart read back has no birth arguments');
+    assert.equal(describeAgentChartSubject({ ...calculated, input: { birthYear: 1990.5, birthMonth: 1, birthDay: 15 } }, value), '男 · Asia/Shanghai · 日主 庚', 'malformed arguments are left out');
+    assert.equal(describeAgentChartRules(value), '子时换日 midnight · Asia/Shanghai · 节气 instant · bazi-2026.10');
+    assert.equal(describeAgentChartRules({ ...value, chart: { ...value.chart, 计算规则: undefined } } as typeof value), null);
+    assert.equal(describeAgentChartRules({ ...value, chart: { ...value.chart, 计算规则: { timezone: ' ', ruleVersion: 7 } } } as unknown as typeof value), null);
+    const ziwei = await chartCall('ziwei', 'ziwei');
+    const ziweiValue = getAgentChart(ziwei)!;
+    assert.equal(describeAgentChartSubject(ziwei, ziweiValue), ziweiValue.summary, 'other kinds keep their summary');
+});
+
+test('a chart tab names the latest task’s steps behind it and what became of the reading', async () => {
+    const calculated = await chartCall('calc', 'bazi');
+    const artifactId = (calculated.output as { artifactId: string }).artifactId;
+    const inspected: AgentTool = { ...calculated, id: 'inspect', name: 'inspect_chart' };
+    const focus: AgentTool = { type: 'tool', id: 'focus', name: 'focus_chart', title: '定位', status: 'completed',
+        output: { chartFocus: { version: 1, reference: 'artifact:' + artifactId, targetIds: ['bazi:cell:2:0', 'bazi:cell:2:1', 'bazi:cell:2:0'], includeRelated: true, caption: '日柱' } } };
+    assert.equal(getAgentReadingState(calculated, new Set([artifactId])), '已保存');
+    assert.equal(getAgentReadingState(calculated, new Set()), '暂存成果');
+    assert.equal(getAgentReadingState(inspected, new Set([artifactId])), '已存资料', 'a reading of a saved chart is the saved record itself');
+    const numbers = new Map([['calc', 2], ['inspect', 3], ['focus', 5]]);
+    assert.equal(describeAgentChartSteps({ reading: calculated, focus, numbers, state: '暂存成果' }), '第 2 步计算 · 第 5 步定位 · 暂存成果');
+    assert.equal(describeAgentChartSteps({ reading: inspected, focus: undefined, numbers, state: '已存资料' }), '第 3 步读取 · 已存资料');
+    assert.equal(describeAgentChartSteps({ reading: calculated, focus, numbers: new Map(), state: '已保存' }), '已保存', 'calls of earlier tasks carry no number');
+    assert.equal(describeAgentChartSteps({ reading: undefined, focus: undefined, numbers, state: null }), '');
+
+    const model = buildAgentWorkspace({ parts: [calculated, focus, { ...focus, id: 'focus-again' }], artifacts: [], attachmentIds: [] });
+    assert.deepEqual(getAgentLocatedPositions(model), { toolIds: ['focus', 'focus-again'], labels: ['日柱天干 庚', '日柱地支 辰'] }, 'positions are listed once, in first-located order');
+    assert.deepEqual(getAgentLocatedPositions(buildAgentWorkspace({ parts: [calculated], artifacts: [], attachmentIds: [] })), { toolIds: [], labels: [] });
+});
+
+test('the overview shows three luck periods around the year, marking the one it falls in', () => {
+    const periods = [{ 干支: '戊寅', 起运年份: 2000 }, { 干支: '己卯', 起运年份: 2010 }, { 干支: '庚辰', 起运年份: 2020 }, { 干支: '辛巳', 起运年份: 2030 }];
+    const window = (year: number, list = periods) => getDayunWindow(list, year).map(period => period.干支 + (period.current ? '*' : ''));
+    assert.deepEqual(window(2025), ['己卯', '庚辰*', '辛巳']);
+    assert.deepEqual(window(2005), ['戊寅*', '己卯', '庚辰'], 'the first period keeps the next two');
+    assert.deepEqual(window(2045), ['己卯', '庚辰', '辛巳*'], 'the last period keeps the two before it');
+    assert.deepEqual(window(1995), ['戊寅', '己卯', '庚辰'], 'before luck starts nothing is current');
+    assert.deepEqual(window(2015, periods.slice(0, 2)), ['戊寅', '己卯*']);
+    assert.deepEqual(getDayunWindow([], 2025), []);
+});
+
+test('an ended task’s duration runs from its creation to the last measured end, never backwards', () => {
+    const createdAt = '2026-10-12T08:00:00.000Z', started = Date.parse(createdAt);
+    const parts: AgentPart[] = [
+        { type: 'tool', id: 'a', name: 'bazi', title: '八字', status: 'completed', startedAt: started + 1000, endedAt: started + 106_000 },
+        { type: 'tool', id: 'b', name: 'web_search', title: '检索', status: 'failed' },
+    ];
+    const runtime = { model: { id: 'm', name: 'm', contextWindow: null, limitSource: 'unknown' as const },
+        responses: [{ id: 'r1', durationMs: 4000, startedAt: started, endedAt: started + 46_000 }, { id: 'r2', endedAt: Number.NaN }] };
+    assert.equal(getAgentTaskDuration(createdAt, { parts, runtime }), 106_000);
+    assert.equal(getAgentTaskDuration(createdAt, { parts: [], runtime }), 46_000, 'model responses alone measure it');
+    assert.equal(getAgentTaskDuration(createdAt, { parts: [{ ...parts[0], endedAt: started - 1 } as AgentPart] }), null, 'an end before creation is not a measurement');
+    assert.equal(getAgentTaskDuration(createdAt, { parts: [parts[1]] }), null, 'nothing measured, nothing invented');
+    assert.equal(getAgentTaskDuration('not a date', { parts, runtime }), null);
+    assert.equal(getAgentTaskDuration(undefined, { parts, runtime }), null);
+    assert.equal(getAgentTaskDuration(createdAt, undefined), null);
+});
+
+test('a guide shown under its own title drops only a leading heading that repeats it', () => {
+    assert.equal(stripLeadingTitle('# 八字命理解读指引\n\n## 分析框架\n1. 定盘', '八字命理解读指引'), '## 分析框架\n1. 定盘');
+    assert.equal(stripLeadingTitle('  # 八字命理解读指引 #\r\n\r\n正文', ' 八字命理解读指引'), '正文', 'closing hashes, spaces and CRLF are tolerated');
+    assert.equal(stripLeadingTitle('# 八字命理解读指引', '八字命理解读指引'), '');
+    assert.equal(stripLeadingTitle('# 紫微解读指引\n正文', '八字命理解读指引'), '# 紫微解读指引\n正文', 'a different title stays');
+    assert.equal(stripLeadingTitle('## 八字命理解读指引\n正文', '八字命理解读指引'), '## 八字命理解读指引\n正文', 'only a top-level heading repeats the title');
+    assert.equal(stripLeadingTitle('正文\n# 八字命理解读指引', '八字命理解读指引'), '正文\n# 八字命理解读指引', 'a later heading stays');
 });

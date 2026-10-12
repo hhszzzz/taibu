@@ -9,10 +9,12 @@ import { useToast } from '@/components/ui/Toast';
 import { formatAgentToolDuration, formatAgentValue, getAgentTaskSpan, getAgentToolState, type AgentTool } from './presentation';
 import { AgentToolResult } from './AgentToolResult';
 
-function CopyButton({ text, label, name }: { text: string; label: string; name?: string }) {
+/** Copies `text`; an icon-only button is named by `label` and confirms with a check mark. */
+export function CopyButton({ text, label, name, iconOnly = false, className = 'agent-tool-copy' }: { text: string; label: string; name?: string; iconOnly?: boolean; className?: string }) {
     const [copied, setCopied] = useState(false);
     const { showToast } = useToast();
-    return <button type="button" className="agent-tool-copy" aria-label={name} onClick={async () => {
+    const size = iconOnly ? 16 : 12;
+    return <button type="button" className={className} aria-label={name ?? (iconOnly ? label : undefined)} title={iconOnly ? label : undefined} onClick={async () => {
         try {
             await navigator.clipboard.writeText(text);
             setCopied(true);
@@ -20,8 +22,8 @@ function CopyButton({ text, label, name }: { text: string; label: string; name?:
             showToast('error', '复制失败，请重试');
         }
     }}>
-        {copied ? <Check size={12} aria-hidden="true" /> : <Copy size={12} aria-hidden="true" />}
-        {copied ? '已复制' : label}
+        {copied ? <Check size={size} aria-hidden="true" /> : <Copy size={size} aria-hidden="true" />}
+        {!iconOnly && (copied ? '已复制' : label)}
     </button>;
 }
 

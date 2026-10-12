@@ -8,7 +8,7 @@ export function StoppedGlyph() {
 }
 
 /** One status pill per run state; colors follow the component sheet (warning while waiting, danger on failure). */
-export function AgentStatus({ status }: { status: AgentRunStatus }) {
+export function AgentStatus({ status, detail }: { status: AgentRunStatus; /** Follows the label, as 任务完成 · 1 分 46 秒. */ detail?: string | null }) {
     const icon = status === 'running' || status === 'cancelling'
         ? <LoaderCircle size={12} strokeWidth={2.4} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
         : status === 'queued' ? <Clock3 size={12} strokeWidth={2.4} aria-hidden="true" />
@@ -19,7 +19,7 @@ export function AgentStatus({ status }: { status: AgentRunStatus }) {
     return (
         <span className={`agent-status agent-status--${status}`} role="status">
             {icon}
-            <span>{agentStatusLabels[status]}</span>
+            <span>{agentStatusLabels[status]}{detail ? ` · ${detail}` : ''}</span>
         </span>
     );
 }

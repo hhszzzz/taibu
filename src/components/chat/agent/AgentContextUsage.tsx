@@ -90,6 +90,13 @@ export function AgentContextMeter({ runtime }: { runtime?: AgentRuntimeInfo }) {
     </>;
 }
 
+/** 41%（已测）· 未压缩: the latest context reading in one line, or null before the task measured any. */
+export function describeAgentContext(runtime?: AgentRuntimeInfo): string | null {
+    const context = runtime?.context;
+    if (!context) return null;
+    return `${contextValue(context, contextPercent(runtime))}（${SOURCE_LABELS[context.source]}）· ${context.compactions ? `已压缩 ${context.compactions} 次` : '未压缩'}`;
+}
+
 /** Workspace disclosure with the same counters as the composer meter. */
 export function AgentContextDetails({ runtime }: { runtime?: AgentRuntimeInfo }) {
     const context = runtime?.context;

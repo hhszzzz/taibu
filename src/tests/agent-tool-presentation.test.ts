@@ -98,7 +98,9 @@ test('personal-data results preserve partial failures and filter incomplete rows
     items: [{ id: 'chart-id', type: 'bazi_chart', name: '命盘', preview: '真实摘要' }, { id: 'incomplete' }],
     errors: [{ type: 'tarot', message: '查询失败' }],
   } };
-  assert.deepEqual(getAgentDataResults(tool), { items: [{ id: 'chart-id', type: 'bazi_chart', name: '命盘', preview: '真实摘要' }], errors: ['查询失败'] });
+  assert.deepEqual(getAgentDataResults(tool), { items: [{ id: 'chart-id', type: 'bazi_chart', name: '命盘', preview: '真实摘要' }], errors: [{ type: 'tarot', message: '查询失败' }] });
+  assert.deepEqual(getAgentDataResults({ ...tool, output: { items: [], errors: [{ message: '未知来源失败' }, { type: 'tarot' }] } })?.errors, [{ type: null, message: '未知来源失败' }],
+    'an error without a source keeps its message; one without a message is dropped');
   assert.equal(getAgentDataResults({ ...tool, status: 'running' }), null);
 });
 

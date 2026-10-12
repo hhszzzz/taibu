@@ -1,27 +1,17 @@
 'use client';
 // 'use client'：问题面板需要分步状态、本地草稿与附件上传
 
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { CircleHelp, LoaderCircle, Paperclip } from 'lucide-react';
-import { normalizeQuestions, validateAnswers, formatQuestionAnswers, questionLabel, type AgentQuestion, type AgentAnswers } from '@/lib/agent/questions';
+import { normalizeQuestions, validateAnswers, formatQuestionAnswers, questionLabel, type AgentAnswers, type AgentQuestion } from '@/lib/agent/questions';
+import { describeQuestionAnswer, getDraftAnswers, questionDraftKey } from '@/lib/agent/question-drafts';
+import { useQuestionDraft } from '@/lib/agent/use-question-draft';
 import type { AttachmentState } from '@/types';
 import { usePrivateAttachments } from '@/lib/chat/use-private-attachments';
 import { PrivateAttachments } from './PrivateAttachments';
 
-type Draft = { answers: AgentAnswers; custom: Record<string, string> };
-
 /** Two short choices sit side by side; longer or more choices stack. */
 const gridOptions = (question: AgentQuestion) => (question.options?.length ?? 0) === 2 && question.options!.every(option => option.label.length <= 8);
-
-function readDraft(storageKey: string, questions: AgentQuestion[]): Draft {
-    try {
-        const value = JSON.parse(localStorage.getItem(storageKey) ?? '{}');
-        return {
-            answers: Object.fromEntries(questions.map(q => [q.id, value.answers?.[q.id] === null ? null : Array.isArray(value.answers?.[q.id]) ? value.answers[q.id].filter((v: unknown) => typeof v === 'string').slice(0, 31) : []])),
-            custom: Object.fromEntries(questions.map(q => [q.id, typeof value.custom?.[q.id] === 'string' ? value.custom[q.id].slice(0, 8000) : ''])),
-        };
-    } catch { return { answers: {}, custom: {} }; }
-}
 
 /**
  * Answers the Agent's questions in the composer's place. Drafts persist per owner, conversation,
@@ -37,9 +27,9 @@ export function AgentQuestionDock({ question, questions: supplied, questionId, s
     const fileRef = useRef<HTMLInputElement>(null);
     const expandRef = useRef<HTMLButtonElement>(null);
     const laterRef = useRef<HTMLButtonElement>(null);
-    const questions = normalizeQuestions(supplied, question);
-    const storageKey = `taibu.question:${scopeKey}:${questionId}`;
-    const [draft, setDraft] = useState<Draft>(() => readDraft(storageKey, questions));
+    const questions = useMemo(() => normalizeQuestions(supplied, question), [supplied, question]);
+    // The workspace's question view reads the same draft while it is typed.
+    const { draft, update, clear } = useQuestionDraft(questionDraftKey(scopeKey, questionId), questions);
     // Reopening a saved draft lands on the first unanswered question, or the review when all are answered.
     const [step, setStep] = useState(() => {
         const first = questions.findIndex(q => draft.answers[q.id] !== null && !draft.answers[q.id]?.length && !draft.custom[q.id]?.trim());
@@ -48,26 +38,18 @@ export function AgentQuestionDock({ question, questions: supplied, questionId, s
     const [sending, setSending] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const uploads = usePrivateAttachments({ scopeKey, state: attachmentState, change: onAttachmentChange, onError: setError });
-    useEffect(() => {
-        const change = (event: StorageEvent) => { if (event.key === storageKey) setDraft(readDraft(storageKey, questions)); };
-        window.addEventListener('storage', change);
-        return () => window.removeEventListener('storage', change);
-        // Keyed by owner, conversation, run and tool call; the questions are fixed for that key.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [storageKey]);
-    const update = (next: Draft) => { setDraft(next); try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch { /* optional draft cache */ } };
-    const effective: AgentAnswers = Object.fromEntries(questions.map(q => [q.id, draft.answers[q.id] === null ? null : [...draft.answers[q.id] ?? [], ...(draft.custom[q.id]?.trim() ? [draft.custom[q.id].trim()] : [])]]));
+    const effective = getDraftAnswers(questions, draft);
     const answered = (q: AgentQuestion) => effective[q.id] === null || !!effective[q.id]?.length;
     const current = questions[step];
     const summary = step === questions.length;
     let ready = false; try { validateAnswers(questions, effective); ready = true; } catch { /* incomplete */ }
-    const answerText = (q: AgentQuestion) => effective[q.id] === null ? '已跳过' : effective[q.id]?.length ? (effective[q.id] ?? []).map(value => q.options?.find(option => option.id === value)?.label ?? value).join('、') : '尚未回答';
+    const answerText = (q: AgentQuestion) => describeQuestionAnswer(q, effective[q.id]) ?? '尚未回答';
     const submit = async (event: FormEvent) => {
         event.preventDefault();
         if (!summary) { setStep(Math.min(step + 1, questions.length)); return; }
         if (sending || uploads.uploading || disabled || !ready) return;
         setSending(true); setError(null);
-        try { await onAnswer(formatQuestionAnswers(questions, effective), effective); try { localStorage.removeItem(storageKey); } catch { /* optional draft cache */ } }
+        try { await onAnswer(formatQuestionAnswers(questions, effective), effective); clear(); }
         catch (cause) { setError(cause instanceof Error ? cause.message : '回答发送失败，请重试'); }
         finally { setSending(false); }
     };

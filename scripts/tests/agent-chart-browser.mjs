@@ -20,10 +20,15 @@ export async function verifyAgentChartWorkspace({ page, newChat, send, waitForRu
     return [kind, actions.find(tool => tool.output.chartFocus.reference === reference).output.chartFocus];
   }));
   const focus = actions.at(-1).output.chartFocus;
+  const lastKind = Object.keys(focuses).find(kind => focuses[kind] === focus);
   const panel = page.locator('aside#agent-workspace-panel');
   await panel.waitFor();
   const selectedTarget = current => panel.locator('[data-chart-target="' + current.targetIds[0] + '"][aria-pressed=true]');
-  await selectedTarget(focus).waitFor();
+  const readings = panel.locator('[data-overview-result="reading"]');
+  // The task has ended: the workspace it opened shows the overview and has nothing left to follow.
+  await readings.first().waitFor();
+  assert.equal(await panel.getByRole('tab', { name: '概览', exact: true }).getAttribute('aria-selected'), 'true', 'an ended task’s workspace shows its overview');
+  assert.equal(await panel.getByRole('button', { name: '跟随模型', exact: true }).count(), 0);
   assert.equal(await page.locator('.agent-message [data-result-kind]').count(), 11, 'native inspection updates existing charts without duplicating inline cards');
   const initialWidth = (await panel.boundingBox()).width;
   assert.ok(initialWidth >= 640, 'the default workspace fits the complete twelve-palace chart');
@@ -36,7 +41,14 @@ export async function verifyAgentChartWorkspace({ page, newChat, send, waitForRu
   assert.ok((await page.locator('.chat-main').boundingBox()).width >= 360, 'narrow desktop viewports retain space for the chat');
   await page.setViewportSize({ width: 1440, height: 1100 });
   assert.equal(await page.getByRole('button', { name: '任务工作区', exact: true }).getAttribute('aria-expanded'), 'true', 'a new model chart opens the desktop workspace');
-  assert.equal(await panel.getByRole('button', { name: '跟随模型', exact: true }).getAttribute('aria-pressed'), 'true');
+  const openChart = async kind => {
+    await panel.getByRole('tab', { name: '概览', exact: true }).click();
+    assert.equal(await readings.count(), 11, 'inspection and final artifacts are deduplicated');
+    await readings.filter({ hasText: names[kind] }).click();
+    await selectedTarget(focuses[kind]).waitFor();
+    assert.equal(await panel.locator('.agent-board-focus').getAttribute('data-chart-focus'), focuses[kind].targetIds.join(','), kind + ' retains its own native focus when switching readings');
+  };
+  await openChart(lastKind);
   await page.reload();
   await selectedTarget(focus).waitFor();
   const responses = run.message.agent.runtime.responses;
@@ -44,14 +56,6 @@ export async function verifyAgentChartWorkspace({ page, newChat, send, waitForRu
   assert.ok((await page.locator('.agent-message .agent-response-time').innerText()).includes('模型响应'), 'a real history reload displays native assistant time');
   assert.ok(tools.some(tool => Number.isFinite(tool.durationMs) && Number.isFinite(tool.startedAt) && Number.isFinite(tool.endedAt)), 'completed native tools retain execution and wall-clock measurements');
   assert.ok((await panel.locator('.agent-board-focus').innerText()).includes(focus.caption), 'refresh rebuilds the exact native focus');
-  const openChart = async kind => {
-    await panel.getByRole('button', { name: /^成果/ }).click();
-    assert.equal(await panel.locator('.agent-workspace-chart-link').count(), 11, 'inspection and final artifacts are deduplicated');
-    await panel.locator('.agent-workspace-chart-link').filter({ hasText: names[kind] }).click();
-    await selectedTarget(focuses[kind]).waitFor();
-    assert.equal(await panel.locator('.agent-board-focus').getAttribute('data-chart-focus'), focuses[kind].targetIds.join(','), kind + ' retains its own native focus when switching readings');
-    assert.equal(await panel.getByRole('button', { name: '跟随模型', exact: true }).getAttribute('aria-pressed'), 'false');
-  };
   for (const kind of Object.keys(names)) {
     await openChart(kind);
     if (kind === 'bazi') assert.ok(await panel.locator('.chart-cell-button[aria-pressed=true]').count() >= 2, 'actual relation endpoints are highlighted');
@@ -77,15 +81,17 @@ export async function verifyAgentChartWorkspace({ page, newChat, send, waitForRu
     await selectedTarget(focuses[kind]).waitFor();
     assert.equal(await panel.locator('[data-chart-target^="' + prefix + '"]').count(), count, 'pinning the original calculation also uses its latest inspected full snapshot');
   }
-  await panel.getByRole('button', { name: '跟随模型', exact: true }).click();
+  // A focus step in the process opens its chart at the position it marked.
+  await panel.getByRole('tab', { name: '过程', exact: true }).click();
+  await panel.locator('.agent-ws-steps button').filter({ hasText: actions.at(-1).title }).last().click();
   await selectedTarget(focus).waitFor();
-  assert.ok((await panel.locator('.agent-board-focus').innerText()).includes(focus.caption));
+  assert.ok((await panel.locator('.agent-board-focus').innerText()).includes(focus.caption), 'a focus step opens its chart at its position');
   await openChart('ziwei');
   const composer = () => page.locator('[data-chat-composer] textarea').filter({ visible: true }).last();
   const composerFocused = () => page.waitForFunction(() => [...document.querySelectorAll('[data-chat-composer] textarea')].some(input => input === document.activeElement));
   await composer().fill('保留已有追问草稿');
   await panel.locator('[data-chart-target="ziwei:palace:0"]').click();
-  await panel.getByRole('button', { name: '追问当前位置', exact: true }).click();
+  await panel.getByRole('button', { name: '追问这里', exact: true }).click();
   assert.ok((await composer().inputValue()).startsWith('保留已有追问草稿'));
   assert.ok((await composer().inputValue()).includes(focuses.ziwei.reference));
   await composerFocused();
@@ -96,11 +102,11 @@ export async function verifyAgentChartWorkspace({ page, newChat, send, waitForRu
   await page.setViewportSize({ width: 320, height: 740 });
   const timingBounds = await page.locator('.agent-message .agent-response-time').boundingBox();
   assert.ok(timingBounds && timingBounds.x >= 0 && timingBounds.x + timingBounds.width <= 320, 'native timing stays within the mobile message width');
-  const drawer = page.getByRole('dialog', { name: '任务工作区', exact: true });
+  const drawer = page.getByRole('dialog', { name: '工作区', exact: true });
   await drawer.waitFor();
   await drawer.locator('[data-chart-target="bazi:cell:2:1"]').click();
   await page.screenshot({ path: path.join(output, 'agent-chart-mobile.png'), fullPage: true });
-  await drawer.getByRole('button', { name: '追问当前位置', exact: true }).click();
+  await drawer.getByRole('button', { name: '追问这里', exact: true }).click();
   await drawer.waitFor({ state: 'hidden' });
   await composerFocused();
   assert.ok(await composer().evaluate(input => input === document.activeElement), 'mobile chart questions close the drawer and focus the composer');

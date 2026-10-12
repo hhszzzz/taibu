@@ -7,27 +7,36 @@ import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
 import { CONVERSATION_EXPORT_EVENT, downloadConversationExport, type ConversationExportFormat } from '@/lib/chat/conversation-export';
 
-/** Export dialog for the saved conversation, opened by the header, the slash command or the workspace. */
-export function ConversationExportDialog({ conversationId }: { conversationId: string }) {
-    const [open, setOpen] = useState(false);
+/** Download state shared by the export dialog and the workspace overview; failures surface as a toast. */
+export function useConversationExport(conversationId: string) {
     const [tools, setTools] = useState(false);
     const [busy, setBusy] = useState<ConversationExportFormat | null>(null);
     const { showToast } = useToast();
+    /** Resolves true once the file was handed to the browser. */
+    const download = async (format: ConversationExportFormat): Promise<boolean> => {
+        setBusy(format);
+        try {
+            await downloadConversationExport(conversationId, format, tools);
+            return true;
+        } catch (error) {
+            showToast('error', error instanceof Error ? error.message : '导出失败，请重试');
+            return false;
+        } finally { setBusy(null); }
+    };
+    return { tools, setTools, busy, download };
+}
+
+/** Export dialog for the saved conversation, opened by the header, the slash command or the workspace menu. */
+export function ConversationExportDialog({ conversationId }: { conversationId: string }) {
+    const [open, setOpen] = useState(false);
+    const { tools, setTools, busy, download: save } = useConversationExport(conversationId);
     const titleId = useId();
     useEffect(() => {
         const show = () => setOpen(true);
         window.addEventListener(CONVERSATION_EXPORT_EVENT, show);
         return () => window.removeEventListener(CONVERSATION_EXPORT_EVENT, show);
     }, []);
-    const download = async (format: ConversationExportFormat) => {
-        setBusy(format);
-        try {
-            await downloadConversationExport(conversationId, format, tools);
-            setOpen(false);
-        } catch (error) {
-            showToast('error', error instanceof Error ? error.message : '导出失败，请重试');
-        } finally { setBusy(null); }
-    };
+    const download = async (format: ConversationExportFormat) => { if (await save(format)) setOpen(false); };
     return <Modal open={open} onClose={() => setOpen(false)} busy={busy !== null} labelledBy={titleId} className="chat-export-dialog">
         <div className="chat-dialog-heading">
             <h2 id={titleId}>导出对话</h2>

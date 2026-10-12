@@ -1,31 +1,39 @@
 'use client';
 // 需要 useState/useEffect、拖拽调整宽度与 sessionStorage 恢复标签
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, lazy, Suspense, type ReactNode } from 'react';
-import { Files, ListChecks, LoaderCircle, ScanEye, X } from 'lucide-react';
-import type { AgentMessageData, AgentPart } from '@/lib/agent/types';
-import { getAgentChart, getAgentUnrepresentedArtifacts } from '@/lib/agent/tool-presentation';
+import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, lazy, Suspense, type KeyboardEvent, type ReactNode } from 'react';
+import { Ellipsis, ListChecks, LocateFixed, X } from 'lucide-react';
+import { isAgentChartTool } from '@/lib/agent/tool-catalog';
+import { isAgentRunTerminal, type AgentMessageData, type AgentPart } from '@/lib/agent/types';
+import { getAgentChart, getAgentFinalSelection } from '@/lib/agent/tool-presentation';
 import { getAgentChartReference, getChartFocus, getLatestChartFocus, parseChartReference } from '@/lib/agent/chart-interaction';
 import {
-    AGENT_WORKSPACE_SECTIONS, buildAgentWorkspace, getAgentToolQuestionIds, getAgentWorkspaceFollowTarget, parseAgentCitationTarget, resolveAgentWorkspaceLocation,
+    AGENT_WORKSPACE_SECTIONS, buildAgentWorkspace, getAgentToolQuestionIds, getAgentWorkspaceFollowTarget, getAgentWorkspaceLocation, getAgentWorkspaceSections,
+    isAgentRunWorking, parseAgentCitationTarget, resolveAgentWorkspaceLocation,
     type AgentQuestionAnswer, type AgentWorkspaceModel, type AgentWorkspaceResource, type AgentWorkspaceSection,
 } from '@/lib/agent/workspace';
+import { questionDraftKey } from '@/lib/agent/question-drafts';
+import { requestConversationExport } from '@/lib/chat/conversation-export';
 import { ChartErrorBoundary } from '@/components/visualization/ChartRenderer';
+import { FloatingPanel } from '@/components/ui/FloatingPanel';
 import { Modal } from '@/components/ui/Modal';
 import { AgentToolCard } from './AgentToolCard';
-import { getAgentStepNumbers, getAgentSteps, getAgentToolState, type AgentArtifact } from './presentation';
+import { describeAgentChartSteps, describeAgentChartSubject, getAgentReadingState, getAgentStepNumbers, getAgentToolState, type AgentArtifact } from './presentation';
 import type { AgentWorkspaceShown } from './AgentResultContext';
 import {
     AttachmentView, CalculationView, CollaborationView, DataListView, EvidenceView, MemoryView, MethodCatalogView, MethodView,
     ProfileView, QuestionView, RecordView, WorkspaceTextFallback, WorkspaceToolMeta, WorkspaceToolPending,
 } from './AgentWorkspaceViews';
-import { WORKSPACE_ICONS, WorkspaceProcessSection, WorkspaceResultsSection, type WorkspaceRunInfo } from './AgentWorkspaceSections';
+import { WorkspaceOverview, WorkspaceProcessSection, type WorkspaceRunInfo } from './AgentWorkspaceSections';
 const ChartPreview = lazy(() => import('./AgentChartPreview').then(module => ({ default: module.AgentChartPreview })));
 const InteractiveChart = lazy(() => import('./AgentInteractiveChart').then(module => ({ default: module.AgentInteractiveChart })));
 
 const desktopQuery = '(min-width: 1280px)';
 const MAX_TABS = 20;
-const SECTION_LABELS: Record<AgentWorkspaceSection, string> = { results: '成果', process: '过程' };
+const DEFAULT_WIDTH = 660;
+const SECTION_LABELS: Record<AgentWorkspaceSection, string> = { results: '概览', process: '过程' };
+const TAB_KEYS = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
+const LIVE_LABELS = { running: '正在更新', waiting: '等待回答' } as const;
 const isSection = (id: string | null): id is AgentWorkspaceSection => id !== null && (AGENT_WORKSPACE_SECTIONS as readonly string[]).includes(id);
 
 function subscribeToViewport(onChange: () => void) {
@@ -50,18 +58,28 @@ function readSavedWorkspace(workspaceKey: string): Partial<SavedWorkspace> {
 }
 
 /** One resource's view, chosen by its tool family. Any rendering error falls back to the tool's canonical text. */
-function ResourceView({ resource, model, data, answers, questionIds, userId, artifacts, followModel, namedToolId, cite, citedParagraph, onManual, onOpen, onChartQuestion }: {
+function ResourceView({ resource, model, data, answers, questionIds, userId, artifacts, saved, numbers, followModel, live, namedToolId, cite, citedParagraph, draftScope, onManual, onOpen, onChartQuestion }: {
     resource: AgentWorkspaceResource; model: AgentWorkspaceModel; data?: AgentMessageData;
     answers: ReadonlyMap<string, AgentQuestionAnswer>; questionIds: ReadonlyMap<string, string>; userId: string | null;
-    artifacts: AgentArtifact[]; followModel: boolean;
+    artifacts: AgentArtifact[];
+    /** Artifact IDs the conversation saved as final results. */
+    saved: ReadonlySet<string>;
+    /** 第 N 步 of the latest task's calls. */
+    numbers: ReadonlyMap<string, number>;
+    followModel: boolean;
+    /** The model is working, so the view may say whether it is being followed. */
+    live: boolean;
     /** A call of this view the reader opened by name, from its step or a citation, while not following. */
     namedToolId: string | null; cite: number | null;
     citedParagraph?: (cite: number) => number | null;
+    /** Owner and conversation of the answer panel's drafts; the task and question complete the key. */
+    draftScope: string;
     onManual: () => void; onOpen: (id: string) => void; onChartQuestion?: (text: string) => void;
 }) {
     const tools = resource.toolIds.flatMap(id => model.toolsById.get(id) ?? []);
     const latest = tools.at(-1);
     const runStatus = data?.status ?? 'completed';
+    const step = (tool: { id: string } | undefined) => tool ? numbers.get(tool.id) : undefined;
     let body: ReactNode;
     switch (resource.view) {
         case 'chart': {
@@ -72,10 +90,14 @@ function ResourceView({ resource, model, data, answers, questionIds, userId, art
             const named = namedToolId ? model.toolsById.get(namedToolId) : undefined;
             const opened = named && reference ? getChartFocus(named) : null;
             const pinned = opened?.reference === reference ? opened : null;
+            const focus = pinned ?? (reference ? getLatestChartFocus(model.tools, reference) : null);
+            // The calculation that produced the reading, or the saved chart it read back.
+            const source = tools.find(tool => isAgentChartTool(tool.name) && getAgentChart(tool)) ?? reading;
+            const kicker = describeAgentChartSteps({ reading: source, focus: focus ? model.tools.findLast(tool => getChartFocus(tool) === focus) : undefined, numbers, state: source ? getAgentReadingState(source, saved) : null });
             body = value && reading
                 ? <Suspense fallback={<p role="status">加载命盘…</p>}>
                     <InteractiveChart key={`${reference ?? reading.id}:${pinned ? named!.id : ''}`} value={value} tool={reading} reference={reference}
-                        focus={pinned ?? (reference ? getLatestChartFocus(model.tools, reference) : null)} followModel={followModel} pinned={pinned !== null}
+                        focus={focus} followModel={followModel} live={live} pinned={pinned !== null} kicker={kicker} subject={describeAgentChartSubject(source ?? reading, value)}
                         onManual={onManual} onAsk={onChartQuestion} />
                 </Suspense>
                 : latest && latest.status === 'completed' ? <WorkspaceTextFallback tool={latest} note="命盘数据不完整，已保留工具返回内容。" />
@@ -89,38 +111,39 @@ function ResourceView({ resource, model, data, answers, questionIds, userId, art
             </Suspense>;
             break;
         }
-        case 'calculation': body = latest && <CalculationView tool={latest} runStatus={runStatus} />; break;
+        case 'calculation': body = latest && <CalculationView tool={latest} runStatus={runStatus} step={step(latest)} />; break;
         case 'evidence': body = <EvidenceView model={model} tools={tools} runStatus={runStatus} selected={cite}
             paragraph={cite !== null ? citedParagraph?.(cite) ?? null : null} onOpen={onOpen} />; break;
-        case 'data': body = <DataListView tools={tools} runStatus={runStatus} />; break;
+        case 'data': body = <DataListView tools={tools} runStatus={runStatus} step={step(tools.findLast(tool => tool.status === 'completed') ?? latest)} />; break;
         case 'record': {
             const reference = parseChartReference(latest?.output && typeof latest.output === 'object' ? (latest.output as { chartReference?: unknown }).chartReference : undefined);
             const chart = reference ? model.chartResources.get(reference.source + ':' + reference.id) : undefined;
-            body = <RecordView tools={tools} runStatus={runStatus} onOpenChart={chart ? () => onOpen(chart) : undefined} />;
+            body = <RecordView tools={tools} runStatus={runStatus} title={resource.title} step={step(latest)} onOpenChart={chart ? () => onOpen(chart) : undefined} />;
             break;
         }
-        case 'profile': body = latest && <ProfileView tool={latest} runStatus={runStatus} />; break;
-        case 'attachment': body = <AttachmentView id={resource.id.slice('attachment:'.length)} tools={tools} />; break;
-        case 'methods': body = latest && <MethodCatalogView tool={latest} runStatus={runStatus} />; break;
-        case 'method': body = <MethodView tools={tools} runStatus={runStatus} />; break;
+        case 'profile': body = latest && <ProfileView tool={latest} runStatus={runStatus} step={step(latest)} />; break;
+        case 'attachment': body = <AttachmentView id={resource.id.slice('attachment:'.length)} title={resource.title} tools={tools} />; break;
+        case 'methods': body = latest && <MethodCatalogView tool={latest} runStatus={runStatus} step={step(latest)} />; break;
+        case 'method': body = <MethodView tools={tools} runStatus={runStatus} step={step(tools.findLast(tool => tool.status === 'completed') ?? latest)} />; break;
         case 'question': {
             const questionId = latest && questionIds.get(latest.id);
-            body = latest && <QuestionView tool={latest} runStatus={runStatus} answer={questionId ? answers.get(questionId) : undefined} />;
+            body = latest && <QuestionView tool={latest} runStatus={runStatus} step={step(latest)} model={model}
+                answer={questionId ? answers.get(questionId) : undefined} draftKey={questionId && data ? questionDraftKey(`${draftScope}:${data.runId}`, questionId) : null} />;
             break;
         }
         case 'collaboration': {
             // A collaboration opened from its step shows that call; step numbers belong to the latest task.
             const tool = tools.find(item => item.id === namedToolId) ?? latest;
-            body = tool && <CollaborationView tool={tool} runStatus={runStatus} step={data ? getAgentStepNumbers(data.parts).get(tool.id) : undefined} />;
+            body = tool && <CollaborationView tool={tool} runStatus={runStatus} step={step(tool)} />;
             break;
         }
-        case 'memory': body = <MemoryView tools={tools} runStatus={runStatus} userId={userId} />; break;
+        case 'memory': body = <MemoryView tools={tools} runStatus={runStatus} userId={userId} step={step(latest)} />; break;
         case 'tool': body = latest && <AgentToolCard tool={latest} runStatus={runStatus} />; break;
     }
     return latest ? <ChartErrorBoundary resetKey={latest} fallback={<WorkspaceTextFallback tool={latest} note="这个视图暂时无法显示，已改为工具返回的规范文本。" />}>{body}</ChartErrorBoundary> : <>{body}</>;
 }
 
-export function AgentWorkspacePanel({ parts, artifacts, data, run, attachmentIds, answers, userId, canExport = false, onClose, workspaceKey, requestedResource, onChartQuestion, onShownChange, citedParagraph }: {
+export function AgentWorkspacePanel({ parts, artifacts, data, run, attachmentIds, answers, userId, conversationId = null, onClose, workspaceKey, requestedResource, onChartQuestion, onShownChange, citedParagraph }: {
     workspaceKey: string;
     /** Agent parts of the visible conversation branch, in transcript order. */
     parts: AgentPart[];
@@ -130,7 +153,8 @@ export function AgentWorkspacePanel({ parts, artifacts, data, run, attachmentIds
     attachmentIds: string[];
     answers?: ReadonlyMap<string, AgentQuestionAnswer>;
     userId?: string | null;
-    canExport?: boolean;
+    /** The saved conversation, which can be exported; new conversations cannot. */
+    conversationId?: string | null;
     onClose: () => void;
     requestedResource?: { id: string; version: number };
     onChartQuestion?: (text: string) => void;
@@ -143,32 +167,48 @@ export function AgentWorkspacePanel({ parts, artifacts, data, run, attachmentIds
     const panelRef = useRef<HTMLElement>(null);
     const dragRef = useRef<{ start: number; width: number } | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
-    const [width, setWidth] = useState(660);
+    const moreRef = useRef<HTMLButtonElement>(null);
+    const ids = useId();
+    const [moreOpen, setMoreOpen] = useState(false);
+    const [width, setWidth] = useState(DEFAULT_WIDTH);
     const model = useMemo(() => buildAgentWorkspace({ parts, artifacts, attachmentIds }), [parts, artifacts, attachmentIds]);
     const questionIds = useMemo(() => getAgentToolQuestionIds(parts), [parts]);
+    const numbers = useMemo(() => getAgentStepNumbers(data?.parts ?? []), [data]);
+    const saved = useMemo(() => new Set([...artifacts.map(artifact => artifact.id), ...model.tools.flatMap(tool => getAgentFinalSelection(tool) ?? [])]), [artifacts, model]);
     const resolve = (id: string | null | undefined) => id ? resolveAgentWorkspaceLocation(model, id) : null;
     const [followModel, setFollowModel] = useState(() => !requestedResource && readSavedWorkspace(workspaceKey).followModel !== false);
     const [tabs, setTabs] = useState<string[]>(() => readSavedWorkspace(workspaceKey).tabs ?? []);
     const [selected, setSelected] = useState<string | null>(() => requestedResource ? resolve(requestedResource.id) ?? requestedResource.id : readSavedWorkspace(workspaceKey).selected ?? null);
+    const status = data?.status ?? null;
+    const working = isAgentRunWorking(status);
+    const sections = getAgentWorkspaceSections(status);
+    // Following applies while the task runs or waits; once it ends the overview is shown instead.
+    const following = followModel && status !== null && !isAgentRunTerminal(status);
     const followTarget = getAgentWorkspaceFollowTarget(model);
-    const requested = followModel ? followTarget ?? selected : selected;
-    const location = resolve(requested) ?? 'results';
+    const location = getAgentWorkspaceLocation(model, { selected, followModel, status });
     const activeResource = isSection(location) ? undefined : model.resources.find(resource => resource.id === location);
-    const section: AgentWorkspaceSection = isSection(location) ? location : 'results';
+    const section: AgentWorkspaceSection = isSection(location) ? location : sections[0];
+    // Each view the model opens while followed stays as a tab, so the reader can return to what it read.
+    const followedId = following && activeResource ? activeResource.id : null;
+    const [lastFollowed, setLastFollowed] = useState<string | null>(null);
+    if (followedId !== lastFollowed) {
+        setLastFollowed(followedId);
+        if (followedId !== null && !tabs.includes(followedId)) setTabs([...tabs.slice(-(MAX_TABS - 1)), followedId]);
+    }
     const tabIds = [...new Set([...tabs.flatMap(id => resolve(id) ?? []), ...(activeResource ? [activeResource.id] : [])])].filter(id => !isSection(id));
     const visibleTabs = tabIds.flatMap(id => model.resources.find(resource => resource.id === id) ?? []);
-    const followTitle = followTarget ? isSection(followTarget) ? SECTION_LABELS[followTarget] : model.resources.find(resource => resource.id === followTarget)?.title : null;
+    const subtitle = working ? '随任务实时更新' : status === 'awaiting_input' ? '问题与已知资料' : '本对话';
 
     // The step the reader is on: a step they opened, else the newest call of the view (the followed one).
     // The process section keeps showing the call details of the last step a view showed.
     const [openedTool, setOpenedTool] = useState<string | null>(null);
     // Opening a step or a citation names its call; opening a tab or section does not.
     const [namedTool, setNamedTool] = useState<string | null>(null);
-    const inView = (id: string | null) => !followModel && id !== null && activeResource?.toolIds.includes(id) ? id : null;
+    const inView = (id: string | null) => !following && id !== null && activeResource?.toolIds.includes(id) ? id : null;
     const shownToolId = !activeResource ? null : inView(openedTool) ?? activeResource.toolIds.at(-1) ?? null;
     // A citation stays selected while its source is on screen.
     const [cite, setCite] = useState<number | null>(null);
-    const activeCite = cite !== null && !followModel && resolve(`cite:${cite}`) === location ? cite : null;
+    const activeCite = cite !== null && !following && resolve(`cite:${cite}`) === location ? cite : null;
     const shownKey = activeResource ? JSON.stringify([shownToolId, activeResource.toolIds, activeCite]) : null;
     useEffect(() => {
         if (!onShownChange) return;
@@ -213,76 +253,99 @@ export function AgentWorkspacePanel({ parts, artifacts, data, run, attachmentIds
         return () => element.removeEventListener('scroll', remember);
     }, [workspaceKey, location]);
     const adjustWidth = (next: number) => setWidth(Math.max(280, Math.min(next, Math.min(780, (panelRef.current?.parentElement?.clientWidth ?? 1040) - 360))));
-    // Results count readings once per tab plus saved results that have no reading in this branch.
-    const sectionCount = (id: AgentWorkspaceSection) => id === 'process' ? getAgentSteps(model.tools).length
-        : model.resources.filter(resource => resource.view === 'chart' && resource.toolIds.some(toolId => getAgentChart(model.toolsById.get(toolId)!))).length
-            + getAgentUnrepresentedArtifacts(model.tools, artifacts).length;
-    const running = (resource: AgentWorkspaceResource) => resource.toolIds.some(id => {
-        const tool = model.toolsById.get(id);
-        return tool !== undefined && ['pending', 'running', 'awaiting_input'].includes(getAgentToolState(tool, data?.status ?? 'completed').status);
-    });
+    /** A resource whose call is still running, or waiting for the user's answer, is marked on its tab. */
+    const liveState = (resource: AgentWorkspaceResource): keyof typeof LIVE_LABELS | null => {
+        const states = resource.toolIds.flatMap(id => {
+            const tool = model.toolsById.get(id);
+            return tool ? [getAgentToolState(tool, status ?? 'completed').status] : [];
+        });
+        return states.some(state => state === 'pending' || state === 'running') ? 'running' : states.includes('awaiting_input') ? 'waiting' : null;
+    };
+    const closeTab = (resource: AgentWorkspaceResource, index: number) => {
+        setFollowModel(false);
+        setTabs(current => current.filter(item => item !== resource.id));
+        if (activeResource?.id === resource.id) setSelected(visibleTabs[index - 1]?.id ?? visibleTabs[index + 1]?.id ?? section);
+    };
+
+    // One tab list: the sections, then the resources. Arrow keys move along it; Alt+Arrow reorders resources.
+    const tabOrder = [...sections, ...visibleTabs.map(resource => resource.id)];
+    const selectedTab = activeResource?.id ?? section;
+    const tabId = (id: string) => `${ids}-tab-${tabOrder.indexOf(id)}`;
+    const onTabKey = (event: KeyboardEvent<HTMLButtonElement>, id: string) => {
+        const resourceIndex = visibleTabs.findIndex(resource => resource.id === id);
+        if (event.key === 'Delete' && resourceIndex >= 0) {
+            event.preventDefault();
+            const list = event.currentTarget.closest('[role=tablist]');
+            closeTab(visibleTabs[resourceIndex], resourceIndex);
+            // The closed tab took focus with it; the tab shown next receives it.
+            requestAnimationFrame(() => list?.querySelector<HTMLElement>('[role=tab][aria-selected=true]')?.focus());
+            return;
+        }
+        if (!TAB_KEYS.includes(event.key)) return;
+        event.preventDefault();
+        const index = tabOrder.indexOf(id);
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabOrder.length - 1 : (index + (event.key === 'ArrowLeft' ? -1 : 1) + tabOrder.length) % tabOrder.length;
+        if (event.altKey) {
+            if (isSection(id) || isSection(tabOrder[next])) return;
+            setTabs(current => {
+                const result = [...current], from = result.indexOf(id), to = result.indexOf(tabOrder[next]);
+                if (from >= 0 && to >= 0) [result[from], result[to]] = [result[to], result[from]];
+                return result;
+            });
+            return;
+        }
+        open(tabOrder[next]);
+        event.currentTarget.closest('[role=tablist]')?.querySelectorAll<HTMLElement>('[role=tab]')[next]?.focus();
+    };
+    const tab = (id: string, label: ReactNode, extra?: { live?: keyof typeof LIVE_LABELS | null; icon?: ReactNode }) => <button key={id} type="button" role="tab" id={tabId(id)}
+        aria-selected={selectedTab === id} aria-controls={`${ids}-panel`} tabIndex={selectedTab === id ? 0 : -1} aria-describedby={extra?.live ? `${ids}-${extra.live}` : undefined}
+        onClick={() => open(id)} onKeyDown={event => onTabKey(event, id)}>
+        {extra?.icon}{label}{extra?.live && <span className="agent-ws-tab-live" data-state={extra.live} aria-hidden="true" />}
+    </button>;
 
     const content = <div className="agent-panel-content">
         <div className="agent-panel-header">
-            <div>
-                <Files size={16} aria-hidden="true" />
-                <h2 id="agent-workspace-heading">任务工作区</h2>
-                <span className="agent-ws-subtitle">随任务实时更新</span>
-            </div>
+            <h2 id="agent-workspace-heading">工作区</h2>
+            <span className="agent-ws-subtitle">{subtitle}</span>
             <div className="agent-ws-header-actions">
-                <button type="button" className="agent-follow-chart" aria-pressed={followModel} disabled={!followTarget} title={followModel ? '跟随中：显示模型最新调用的工具' : '已暂停跟随'} onClick={() => {
+                {working && <button type="button" className="agent-follow-chart" aria-pressed={followModel} disabled={!followTarget} title={followModel ? '跟随中：显示模型最新调用的工具' : '已暂停跟随'} onClick={() => {
                     if (followModel) setSelected(location);
                     setFollowModel(!followModel);
-                }}><ScanEye size={14} aria-hidden="true" />跟随模型</button>
-                <button type="button" onClick={onClose} aria-label="关闭任务工作区" className="agent-icon-button"><X size={18} /></button>
+                }}><LocateFixed size={15} aria-hidden="true" />跟随模型</button>}
+                <button ref={moreRef} type="button" className="agent-icon-button" aria-label="工作区更多操作" title="工作区更多操作" aria-haspopup="menu" aria-expanded={moreOpen}
+                    onClick={() => setMoreOpen(value => !value)}><Ellipsis size={18} aria-hidden="true" /></button>
+                <button type="button" onClick={onClose} aria-label="关闭工作区" title="关闭工作区" className="agent-icon-button"><X size={18} aria-hidden="true" /></button>
             </div>
         </div>
-        {followModel && followTitle && <p className="agent-ws-following" role="status">模型正在看：{followTitle}</p>}
-        <div className="agent-panel-tabs" role="group" aria-label="工作区内容">
-            {AGENT_WORKSPACE_SECTIONS.map(id => {
-                const Icon = id === 'results' ? Files : ListChecks;
-                return <button key={id} type="button" aria-pressed={!activeResource && section === id} onClick={() => open(id)}>
-                    <Icon size={14} aria-hidden="true" />{SECTION_LABELS[id]}<span>{sectionCount(id)}</span>
-                </button>;
-            })}
-        </div>
-        {visibleTabs.length > 0 && <div className="agent-resource-tabs" role="tablist" aria-label="资源标签页">{visibleTabs.map((resource, index) => {
-            const Icon = WORKSPACE_ICONS[resource.family];
-            const selectedTab = activeResource?.id === resource.id;
-            return <div key={resource.id} draggable onDragStart={event => event.dataTransfer.setData('text/plain', resource.id)} onDragOver={event => event.preventDefault()} onDrop={event => {
-                event.preventDefault();
-                const from = event.dataTransfer.getData('text/plain');
-                if (!tabs.includes(from)) return;
-                setTabs(current => { const next = current.filter(item => item !== from); next.splice(index, 0, from); return next; });
-            }}>
-                <button type="button" role="tab" aria-selected={selectedTab} tabIndex={selectedTab || (!activeResource && index === 0) ? 0 : -1} onClick={() => open(resource.id)} onKeyDown={event => {
-                    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        <FloatingPanel open={moreOpen} anchorRef={moreRef} onClose={() => setMoreOpen(false)} label="工作区更多操作" align="end" className="chat-header-menu">
+            <button type="button" role="menuitem" disabled={!visibleTabs.length} onClick={() => { setMoreOpen(false); setFollowModel(false); setTabs([]); setSelected(sections[0]); }}>关闭全部标签</button>
+            {desktop && <button type="button" role="menuitem" disabled={width === DEFAULT_WIDTH} onClick={() => { setMoreOpen(false); setWidth(DEFAULT_WIDTH); }}>恢复默认宽度</button>}
+            {conversationId && <button type="button" role="menuitem" onClick={() => { setMoreOpen(false); requestConversationExport(); }}>导出对话</button>}
+        </FloatingPanel>
+        <div className="agent-ws-tabs" role="tablist" aria-label="工作区资源">
+            {sections.map(id => tab(id, SECTION_LABELS[id], { icon: id === 'process' ? <ListChecks size={15} aria-hidden="true" /> : undefined }))}
+            {visibleTabs.length > 0 && <span className="agent-ws-tab-separator" aria-hidden="true" />}
+            {visibleTabs.map((resource, index) => <div key={resource.id} role="presentation" className="agent-ws-resource-tab" data-selected={activeResource?.id === resource.id || undefined} draggable
+                onDragStart={event => event.dataTransfer.setData('text/plain', resource.id)} onDragOver={event => event.preventDefault()} onDrop={event => {
                     event.preventDefault();
-                    const next = event.key === 'Home' ? 0 : event.key === 'End' ? visibleTabs.length - 1 : (index + (event.key === 'ArrowLeft' ? -1 : 1) + visibleTabs.length) % visibleTabs.length;
-                    if (event.altKey) setTabs(current => {
-                        const result = [...current], from = result.indexOf(resource.id), to = result.indexOf(visibleTabs[next].id);
-                        if (from >= 0 && to >= 0) [result[from], result[to]] = [result[to], result[from]];
-                        return result;
-                    });
-                    else { open(visibleTabs[next].id); event.currentTarget.closest('[role=tablist]')?.querySelectorAll<HTMLElement>('[role=tab]')[next]?.focus(); }
+                    const from = event.dataTransfer.getData('text/plain');
+                    if (!tabs.includes(from)) return;
+                    setTabs(current => { const next = current.filter(item => item !== from); next.splice(index, 0, from); return next; });
                 }}>
-                    {running(resource) ? <LoaderCircle size={11} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Icon size={11} aria-hidden="true" />}
-                    {resource.title}
-                </button>
-                <button type="button" aria-label={`关闭${resource.title}标签`} onClick={() => {
-                    setFollowModel(false);
-                    setTabs(current => current.filter(item => item !== resource.id));
-                    if (selectedTab) setSelected(visibleTabs[index - 1]?.id ?? visibleTabs[index + 1]?.id ?? section);
-                }}><X size={12} /></button>
-            </div>;
-        })}</div>}
-        <div ref={scrollRef} className="agent-panel-scroll" role={activeResource ? 'tabpanel' : undefined} aria-label={activeResource?.title} data-workspace-view={activeResource?.view ?? section}>
+                {tab(resource.id, resource.title, { live: liveState(resource) })}
+                {/* Only the open tab's close button is in the Tab order; Delete closes the focused tab. */}
+                <button type="button" className="agent-ws-tab-close" aria-label={`关闭${resource.title}标签`} title="关闭标签（Delete）" tabIndex={activeResource?.id === resource.id ? 0 : -1}
+                    onClick={() => closeTab(resource, index)}><X size={12} aria-hidden="true" /></button>
+            </div>)}
+            {Object.entries(LIVE_LABELS).map(([key, text]) => <span key={key} id={`${ids}-${key}`} hidden>{text}</span>)}
+        </div>
+        <div ref={scrollRef} id={`${ids}-panel`} className="agent-panel-scroll" role="tabpanel" aria-labelledby={tabId(selectedTab)} data-workspace-view={activeResource?.view ?? section}>
             {activeResource
                 ? <ResourceView resource={activeResource} model={model} data={data} answers={answers ?? new Map()} questionIds={questionIds} userId={userId ?? null}
-                    artifacts={artifacts} followModel={followModel} namedToolId={inView(namedTool)} cite={activeCite} citedParagraph={citedParagraph}
-                    onManual={() => { setSelected(activeResource.id); setFollowModel(false); }} onOpen={open} onChartQuestion={onChartQuestion} />
+                    artifacts={artifacts} saved={saved} numbers={numbers} followModel={following} live={working} namedToolId={inView(namedTool)} cite={activeCite} citedParagraph={citedParagraph}
+                    draftScope={workspaceKey} onManual={() => { setSelected(activeResource.id); setFollowModel(false); }} onOpen={open} onChartQuestion={onChartQuestion} />
                 : section === 'results'
-                    ? <WorkspaceResultsSection model={model} artifacts={artifacts} data={data} run={run} onOpen={open} canExport={canExport} />
+                    ? <WorkspaceOverview model={model} artifacts={artifacts} saved={saved} data={data} run={run} onOpen={open} conversationId={conversationId} />
                     : <WorkspaceProcessSection model={model} data={data} run={run} stepId={openedTool} onOpen={open} />}
         </div>
     </div>;

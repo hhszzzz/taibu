@@ -68,7 +68,7 @@ const ROUTE_LABELS: Record<string, string> = {
     '/meihua': '梅花易数',
     '/xiaoliuren': '小六壬',
     '/daily': '日运 · 黄历',
-    '/monthly': '每月运势',
+    '/monthly': '月运',
     '/records': '命理记录',
     '/community': '命理社区',
     // 用户子页面

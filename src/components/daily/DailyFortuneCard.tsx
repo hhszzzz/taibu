@@ -1,9 +1,11 @@
 import Link from 'next/link';
-import { ChevronDown, Share2 } from 'lucide-react';
+import { Share2 } from 'lucide-react';
 import { FortuneTrendChart, type FortuneTrendDataPoint } from '@/components/fortune/FortuneTrendChart';
 import { InterpretationModeToggle, type InterpretationMode } from '@/components/fortune/InterpretationModeToggle';
-import { FORTUNE_CARD_CLASS, FORTUNE_SECONDARY_BUTTON_CLASS, getFortuneTone } from '@/components/fortune/fortune-display';
-import { FORTUNE_DIMENSIONS, fortuneLevelToChartValue, type DailyFortune } from '@/lib/divination/fortune';
+import { FortuneChartOwner } from '@/components/fortune/FortuneChartOwner';
+import { FortuneLevelBars } from '@/components/fortune/FortuneLevelBars';
+import { FORTUNE_CARD_CLASS, FORTUNE_SECONDARY_BUTTON_CLASS } from '@/components/fortune/fortune-display';
+import type { DailyFortune } from '@/lib/divination/fortune';
 
 interface DailyFortuneCardProps {
     fortune: DailyFortune;
@@ -19,10 +21,7 @@ interface DailyFortuneCardProps {
     personalizeHref?: string | null;
 }
 
-/**
- * 日运卡：基调标题 + 综合等级 + 五维等级条。
- * 运势只以等级呈现（fortune.ts 约定不对用户展示数值分），条形长度仅为等级的视觉映射。
- */
+/** 日运卡：基调标题 + 综合等级 + 五维等级条。 */
 export function DailyFortuneCard({
     fortune,
     isPersonalized,
@@ -38,25 +37,7 @@ export function DailyFortuneCard({
                 <div className="flex min-w-0 flex-col gap-0.5 lg:gap-1">
                     <p className="flex min-w-0 flex-wrap items-center gap-x-1 text-xs text-foreground-secondary lg:text-[0.8125rem]">
                         <span>{isPersonalized ? '个性化日运' : '通用日运'}</span>
-                        {/* 命主与切换入口仅桌面端显示；移动端由顶栏菜单「切换命盘」承担 */}
-                        {isPersonalized && chartName && (
-                            <span className="hidden items-center gap-x-1 lg:inline-flex">
-                                <span aria-hidden="true">·</span>
-                                {onChartSelect ? (
-                                    <button
-                                        type="button"
-                                        onClick={onChartSelect}
-                                        aria-label={`切换命盘，当前 ${chartName}`}
-                                        className="inline-flex max-w-[9rem] items-center gap-0.5 rounded transition-colors hover:text-foreground"
-                                    >
-                                        <span className="truncate">{chartName}</span>
-                                        <ChevronDown className="size-3 shrink-0" />
-                                    </button>
-                                ) : (
-                                    <span className="max-w-[9rem] truncate">{chartName}</span>
-                                )}
-                            </span>
-                        )}
+                        {isPersonalized && chartName && <FortuneChartOwner chartName={chartName} onChartSelect={onChartSelect} />}
                         {dayGanZhi && <><span aria-hidden="true">·</span><span>流日{dayGanZhi}</span></>}
                     </p>
                     <h2 id="daily-fortune-title" className="font-display text-base leading-snug lg:text-xl lg:font-medium">{headline}</h2>
@@ -68,23 +49,7 @@ export function DailyFortuneCard({
             </div>
 
             {/* 卡片被右侧问答卡撑高时，等级条均匀铺满剩余高度 */}
-            <ul className="flex flex-1 flex-col justify-between gap-3 lg:gap-2.5">
-                {FORTUNE_DIMENSIONS.map((item) => {
-                    const level = fortune[item.key];
-                    return (
-                        <li key={item.key} className="grid grid-cols-[56px_minmax(0,1fr)_28px] items-center gap-2 text-[0.8125rem] lg:gap-3 lg:text-sm">
-                            <span className="text-foreground-secondary lg:text-foreground">{item.label}</span>
-                            <span aria-hidden="true" className="h-1.5 overflow-hidden rounded-full bg-background-secondary">
-                                <span
-                                    className="block h-full rounded-full bg-clay transition-[width] duration-700 ease-out"
-                                    style={{ width: `${fortuneLevelToChartValue(level)}%` }}
-                                />
-                            </span>
-                            <span className={`text-right ${getFortuneTone(level) === 'unfavorable' ? 'text-danger' : 'text-foreground lg:text-foreground-secondary'}`}>{level}</span>
-                        </li>
-                    );
-                })}
-            </ul>
+            <FortuneLevelBars levels={fortune} fill />
 
             {!isPersonalized && personalizeHref && (
                 <Link

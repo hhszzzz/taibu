@@ -10,11 +10,12 @@
 'use client';
 
 import { useMemo, useRef, useState, type ReactNode } from 'react';
-import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar } from 'lucide-react';
 import { getCalendarAlmanac, getZhiShenDesc, isBlackDay, type CalendarAlmanacData } from '@/lib/divination/calendar';
 import { DailyDirectionGrid } from '@/components/daily/DailyDirectionGrid';
 import { DailyHourStrip } from '@/components/daily/DailyHourStrip';
 import { toLocalDateKey, useDailyAlmanacDetail, type DailyAlmanacDetail } from '@/components/daily/useDailyAlmanacDetail';
+import { FortunePeriodNav, PERIOD_NAV_CURRENT_CLASS } from '@/components/fortune/FortunePeriodNav';
 
 interface CalendarAlmanacProps {
     date: Date;
@@ -36,8 +37,6 @@ const YI_JI_COLLAPSE_LIMIT = 12;
 const DATE_MIN = '1901-01-01';
 const DATE_MAX = '2099-12-31';
 const DASH = '—';
-const NAV_BUTTON_CLASS = 'flex size-9 items-center justify-center rounded-[10px] text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground lg:size-10 lg:border-[0.5px] lg:border-border-hover lg:bg-surface';
-const TODAY_BUTTON_CLASS = 'h-9 rounded-[10px] px-2.5 text-[13px] text-accent transition-colors hover:bg-accent-light lg:h-10';
 const MOBILE_CARD_CLASS = 'rounded-2xl border-[0.5px] border-border bg-surface';
 
 /** 黄历文本整理：一处换算，桌面主卡与移动端细项共用。 */
@@ -194,20 +193,22 @@ function DateNav({ date, isToday, onDateChange, onDatePick, onGoToday }: Pick<Ca
     };
 
     return (
-        // 移动端三栏居中（标题在顶栏）；桌面端标题居左、切换居右
-        <header className="grid grid-cols-[1fr_auto_1fr] items-center lg:flex lg:justify-between lg:gap-4">
-            <h1 className="hidden font-display text-[32px] font-normal leading-tight lg:block">日运 · 黄历</h1>
-            <span aria-hidden="true" className="lg:hidden" />
-            <div className="flex items-center gap-1 lg:gap-2">
-                <button type="button" aria-label="前一天" onClick={() => onDateChange(-1)} className={NAV_BUTTON_CLASS}>
-                    <ChevronLeft className="size-4" />
-                </button>
+        <FortunePeriodNav
+            title="日运 · 黄历"
+            prevLabel="前一天"
+            nextLabel="后一天"
+            onPrev={() => onDateChange(-1)}
+            onNext={() => onDateChange(1)}
+            prevDisabled={dateKey <= DATE_MIN}
+            nextDisabled={dateKey >= DATE_MAX}
+            reset={isToday ? null : { label: '回到今天', shortLabel: '今天', onClick: onGoToday }}
+            current={(
                 <span className="relative">
                     <button
                         type="button"
                         onClick={openPicker}
                         aria-label={`选择日期，当前 ${dateKey}`}
-                        className="flex h-9 items-center gap-2 rounded-[10px] px-2.5 text-[0.9375rem] font-medium tabular-nums transition-colors hover:bg-background-secondary lg:h-10 lg:border-[0.5px] lg:border-border-hover lg:bg-surface lg:px-3.5 lg:text-sm lg:font-normal"
+                        className={`${PERIOD_NAV_CURRENT_CLASS} transition-colors hover:bg-background-secondary`}
                     >
                         <Calendar className="hidden size-[15px] text-foreground-secondary lg:block" />
                         {dateKey}
@@ -227,21 +228,8 @@ function DateNav({ date, isToday, onDateChange, onDatePick, onGoToday }: Pick<Ca
                         className="pointer-events-none absolute inset-0 h-full w-full opacity-0"
                     />
                 </span>
-                <button type="button" aria-label="后一天" onClick={() => onDateChange(1)} className={NAV_BUTTON_CLASS}>
-                    <ChevronRight className="size-4" />
-                </button>
-                {!isToday && (
-                    <button type="button" onClick={onGoToday} className={`hidden lg:block ${TODAY_BUTTON_CLASS}`}>
-                        回到今天
-                    </button>
-                )}
-            </div>
-            {!isToday && (
-                <button type="button" onClick={onGoToday} className={`justify-self-end lg:hidden ${TODAY_BUTTON_CLASS}`}>
-                    今天
-                </button>
             )}
-        </header>
+        />
     );
 }
 

@@ -64,6 +64,8 @@ import { ANALYSIS_GUIDES, ANALYSIS_METHODS } from '@/lib/agent/analysis-methods.
 import { getAgentEvidence } from '@/lib/agent/evidence';
 import { agentMessageContent } from '@/lib/agent/types';
 import { getAgentCitedParagraph } from '@/components/chat/agent/presentation';
+import { ChatSidebar } from '@/components/chat/sidebar/ChatSidebar';
+import { setChatWorkspaceOpen } from '@/lib/chat/chat-sidebar';
 const initialToolParts = AGENT_TOOL_FIXTURE_PARTS;
 const familyParts = () => [
   AGENT_DAYUN_FIXTURE_PART,
@@ -254,10 +256,12 @@ function Shell() {
   const [agentMounted, setAgentMounted] = useState(false);
   const [questionMounted, setQuestionMounted] = useState(false);
   const [resultsMounted, setResultsMounted] = useState(false);
+  const [sidebarMounted, setSidebarMounted] = useState(false);
+  window.fixture.chatWorkspace = setChatWorkspaceOpen;
   const [modelMountKey, setModelMountKey] = useState(0);
   window.fixture.remountModels = () => setModelMountKey(current => current + 1);
   window.fixture.mount = { composer: setComposerMounted, history: setHistoryMounted, drawer: setDrawerMounted,
-    records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted, agent: setAgentMounted, question: setQuestionMounted, results: setResultsMounted };
+    records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted, agent: setAgentMounted, question: setQuestionMounted, results: setResultsMounted, sidebar: setSidebarMounted };
   window.fixture.chartKey = queryKeys.userCharts;
   window.fixture.chartClient = chartClient;
   window.fixture.deleteHistory = deleteHistorySummary;
@@ -318,6 +322,7 @@ function Shell() {
     {agentMounted && <AgentChatProbe />}
     {questionMounted && <StructuredQuestionProbe />}
     {resultsMounted && <AgentResultsProbe />}
+    {sidebarMounted && <ChatSidebar />}
     {historyMounted && <section data-testid="history-page"><HistoryPageTemplate {...historyConfig} /></section>}
     {drawerMounted && <section data-testid="history-drawer"><HistoryDrawer type="tarot" /></section>}
     {recordsMounted && <section data-testid="records"><RecordsPage /></section>}
@@ -385,7 +390,7 @@ export async function build(outputDirectory) {
           const subscribe = callback => { window.addEventListener('fixture:navigate', callback); window.addEventListener('popstate', callback); return () => { window.removeEventListener('fixture:navigate', callback); window.removeEventListener('popstate', callback); }; };
           export const useRouter = () => router;
           export const usePathname = () => useSyncExternalStore(subscribe, () => location.pathname, () => '/chat');
-          export const useSearchParams = () => new URLSearchParams(location.search);
+          export const useSearchParams = () => new URLSearchParams(useSyncExternalStore(subscribe, () => location.search, () => ''));
         `;
         if (args.path === 'next/link') contents = `
           import React from 'react';
@@ -401,6 +406,9 @@ export async function build(outputDirectory) {
           const session = () => window.fixtureAuth.cookieUser ? { user: { id: window.fixtureAuth.cookieUser, email: window.fixtureAuth.cookieUser + '@fixture.invalid' } } : null;
           window.fixtureAuth = { cookieUser: 'alice', revalidations: 0, change(id) { this.cookieUser = id; for (const cb of listeners) cb('SIGNED_IN', session()); } };
           export const authSessionCacheConstants = { SESSION_REVALIDATE_EVENT_COOLDOWN_MS: 0 };
+          // Sign-in flows are outside this fixture; the sidebar only mounts their components.
+          const outsideFixture = async () => { throw new Error('Auth flows are outside the browser fixture'); };
+          export const signInWithEmailProtected = outsideFixture, sendOTP = outsideFixture, verifyOTP = outsideFixture, recordLoginAttempt = outsideFixture, resetPasswordWithOTP = outsideFixture, signOut = outsideFixture;
           export const supabase = { auth: {
             getSession: async () => ({ data: { session: session() }, error: null }),
             revalidateSession: async () => { window.fixtureAuth.revalidations++; return { data: { session: session() }, error: null }; },
@@ -408,7 +416,7 @@ export async function build(outputDirectory) {
           } };
         `;
         if (args.path.endsWith('/ChatTaskToastBridge')) contents = 'export function ChatTaskToastBridge() { return null; }';
-        if (args.path.endsWith('/AnnouncementPopupHost')) contents = 'export function AnnouncementPopupHost({ children }) { return children; }';
+        if (args.path.endsWith('/AnnouncementPopupHost')) contents = 'export function AnnouncementPopupHost({ children }) { return children; } export function useAnnouncementCenterSafe() { return { openAnnouncementCenter() { window.fixture.announcementCenter = (window.fixture.announcementCenter ?? 0) + 1; }, closeAnnouncementCenter() {}, announcementPromptCount: 0 }; }';
         if (args.path.endsWith('/useFeatureToggles')) contents = 'const enabled = () => true; export function useFeatureToggles() { return { loaded: true, isLoading: false, isFeatureEnabled: enabled }; }';
         if (args.path.endsWith('/useCurrentUserProfile')) contents = "import { useSessionSafe } from '@/lib/hooks/session-context'; export function useCurrentUserProfile() { const {user} = useSessionSafe(); return { profile: user ? { is_admin: user.id === 'alice' } : null, loading: false, error: null }; }";
         if (args.path.endsWith('/AccountAdminPanels')) contents = "export { AIModelPanel as AdminAIServicesContent } from '@/components/admin/AIModelPanel'; export const AdminAnnouncementsContent = () => null; export const AdminFeaturesContent = () => null;";
@@ -468,6 +476,7 @@ export async function run(existingPage, bundlePath) {
         const method = init?.method ?? 'GET', body = init?.body ? JSON.parse(init.body) : null;
         agentIO.requests.push({ url: url.pathname, search: url.search, method, body });
         if (url.pathname === '/api/agent/status') return Response.json({ enabled: true, ready: true, webAvailable: false, customAvailable: true });
+        if (url.pathname === '/api/agent/activity') return Response.json(agentIO.activity ?? { runs: [], notices: [] });
         if (url.pathname === '/api/agent/runs' && method === 'GET') return Response.json(agentIO.runs[url.searchParams.get('conversationId')] ?? null);
         const events = url.pathname.match(/^\/api\/agent\/runs\/([^/]+)\/events$/);
         if (events) {
@@ -700,6 +709,7 @@ export async function run(existingPage, bundlePath) {
       return ok({ items: all.slice(offset, offset + limit), pagination: { hasMore: offset + limit < all.length, nextOffset: offset + limit < all.length ? offset + limit : null } }, true);
     }
     if (url.pathname === '/api/notes') return ok({ notes: [] }, true);
+    if (url.pathname === '/api/notifications' && method === 'PATCH') return ok({ success: true });
     if (url.pathname === '/api/records') {
       const category = url.searchParams.get('category');
       const filtered = records.filter(item => !category || item.category === category);
@@ -1947,6 +1957,68 @@ export async function run(existingPage, bundlePath) {
     await workspacePanel.getByRole('button', { name: '关闭工作区', exact: true }).click();
     await page.setViewportSize({ width: 1200, height: 1000 });
     await page.evaluate(() => window.fixture.mount.results(false));
+
+    // Chat sidebar: dated conversations with task markers, notices read on open, folding to the rail.
+    const sidebarIds = [1, 2, 3, 4].map(n => '5a1d0000-0000-4000-8000-00000000000' + n);
+    const sidebarNotice = '5a1d0000-0000-4000-8000-0000000000b1';
+    rows.alice = [['明年适合换工作吗？', 0], ['我的日主适合什么颜色', 0], ['和女朋友合盘，明年适合结婚吗', 1], ['梦见掉牙是什么意思', 40]].map(([title, days], index) => {
+      const at = new Date(Date.now() - days * 86400000).toISOString();
+      return { id: sidebarIds[index], user_id: 'alice', personality: 'general', title, created_at: at, updated_at: at, source_type: 'chat' };
+    });
+    await page.getByRole('button', { name: 'Refresh actual list' }).click();
+    await until(id => window.fixture.list().length === 4 && window.fixture.list()[0].id === id, sidebarIds[0]);
+    await page.evaluate(([ids, notice]) => {
+      window.fixtureAgentIO.activity = { runs: [{ runId: '5a1d0000-0000-4000-8000-0000000000a1', conversationId: ids[0], status: 'running' }, { runId: '5a1d0000-0000-4000-8000-0000000000a2', conversationId: ids[2], status: 'awaiting_input' }],
+        notices: [{ id: notice, conversationId: ids[1], status: 'completed' }] };
+      history.pushState(null, '', '/chat'); window.dispatchEvent(new Event('fixture:navigate'));
+      window.fixture.mount.sidebar(true);
+    }, [sidebarIds, sidebarNotice]);
+    const sidebar = page.getByRole('navigation', { name: '对话与导航' });
+    await sidebar.getByText('待回答', { exact: true }).waitFor();
+    const sidebarRow = title => sidebar.locator('[data-conversation-row]').filter({ hasText: title });
+    check('The chat sidebar groups conversations by local day', (await sidebar.getByRole('heading').allInnerTexts()).join() === '今天,昨天,更早');
+    check('Sidebar rows mark a running task, a waiting question and an unread answer', await sidebarRow('明年适合换工作吗？').getByRole('img', { name: 'Agent 正在执行' }).count() === 1 &&
+      await sidebarRow('和女朋友合盘').getByText('待回答', { exact: true }).count() === 1 && await sidebarRow('我的日主适合什么颜色').getByRole('img', { name: '任务已完成，有新回答' }).count() === 1 &&
+      await sidebarRow('梦见掉牙').locator('.chat-nav-marker').count() === 0);
+    check('On the new-chat page 新对话 is the current item', await sidebar.getByRole('link', { name: '新对话' }).getAttribute('aria-current') === 'page' &&
+      await sidebar.getByRole('button', { name: '对话', exact: true }).getAttribute('aria-current') === null);
+    const activityReads = () => page.evaluate(() => window.fixtureAgentIO.requests.filter(item => item.url === '/api/agent/activity').length);
+    const readsBefore = await activityReads();
+    await page.evaluate(() => window.dispatchEvent(new Event('taibu:agent-activity')));
+    await until(count => window.fixtureAgentIO.requests.filter(item => item.url === '/api/agent/activity').length > count, readsBefore);
+    check('A task change on the page re-reads the markers at once', await activityReads() > readsBefore);
+    await sidebarRow('我的日主适合什么颜色').getByRole('link').click();
+    for (let attempt = 0; attempt < 200 && !requests.some(item => item.pathname === '/api/notifications' && item.method === 'PATCH'); attempt++) await page.waitForTimeout(10);
+    const noticeRead = requests.find(item => item.pathname === '/api/notifications' && item.method === 'PATCH');
+    await page.evaluate(() => { window.fixtureAgentIO.activity.notices = []; });
+    check('Opening a conversation reads its unread task notice and clears the dot', noticeRead?.body?.action === 'mark-selected' && noticeRead.body.ids.join() === sidebarNotice &&
+      await sidebarRow('我的日主适合什么颜色').getByRole('img', { name: '任务已完成，有新回答' }).count() === 0 &&
+      await sidebarRow('我的日主适合什么颜色').getByRole('link').getAttribute('aria-current') === 'page' &&
+      await sidebar.getByRole('button', { name: '对话', exact: true }).getAttribute('aria-current') === 'true');
+    await sidebar.getByRole('button', { name: '打开公告中心' }).click();
+    check('The sidebar keeps the announcement center entry', await page.evaluate(() => window.fixture.announcementCenter === 1));
+    await sidebar.getByRole('button', { name: '收起侧栏' }).click();
+    const rail = page.getByRole('navigation', { name: '主导航' });
+    await rail.waitFor();
+    check('Folding the sidebar leaves an icon rail, flags waiting tasks and remembers the choice', await rail.getByRole('button', { name: '展开侧栏' }).count() === 1 &&
+      await rail.getByRole('button', { name: '对话，有任务等待查看' }).count() === 1 && await page.evaluate(() => localStorage.getItem('taibu.chat-sidebar')) === 'collapsed');
+    await rail.getByRole('button', { name: '展开侧栏' }).click();
+    await sidebar.waitFor();
+    await page.evaluate(() => window.fixture.chatWorkspace(true));
+    await rail.waitFor();
+    check('Opening the workspace folds the sidebar without changing the saved choice', await page.evaluate(() => localStorage.getItem('taibu.chat-sidebar')) === 'expanded');
+    await rail.getByRole('button', { name: '展开侧栏' }).click();
+    await sidebar.waitFor();
+    await page.evaluate(() => { window.fixture.chatWorkspace(false); window.fixture.chatWorkspace(true); });
+    await rail.waitFor();
+    await page.evaluate(() => window.fixture.chatWorkspace(false));
+    await sidebar.waitFor();
+    check('The sidebar unfolds beside the workspace on request and folds again on the next opening', await sidebar.count() === 1 && await rail.count() === 0);
+    await page.evaluate(() => { window.fixture.sidebarSearch = 0; window.addEventListener('taibu:search', () => { window.fixture.sidebarSearch++; }); });
+    await sidebar.getByRole('button', { name: /^搜索对话/ }).click();
+    check('搜索对话 opens the global conversation search', await page.evaluate(() => window.fixture.sidebarSearch === 1));
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => window.fixture.mount.sidebar(false));
 
     check('No unhandled network requests escaped fixtures', blocked.length === 0);
     check('No browser runtime exceptions', browserErrors.length === 0);

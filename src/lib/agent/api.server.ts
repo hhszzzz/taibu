@@ -8,6 +8,7 @@ import {
   jsonError,
   jsonOk,
   requireUserContext,
+  resolveRequestDbClient,
 } from "@/lib/api-utils";
 import { getGlobalAIFeatureGuardResponse } from "@/lib/api/ai-feature-guard";
 import { readFeatureModuleStateFresh } from "@/lib/app-settings";
@@ -40,6 +41,7 @@ import { piHistory } from "./history.server";
 import { normalizeQuestions, validateAnswers, formatQuestionAnswers } from './questions';
 import { validateAttachmentIds } from './attachments.server';
 import { getAgentCitationBase } from './evidence';
+import { readAgentActivity } from './activity.server';
 
 class AgentApiError extends Error {
   constructor(
@@ -475,6 +477,14 @@ export async function getAgentTask(request: NextRequest, id?: string) {
   if (!run && id)
     throw new AgentApiError("任务不存在", 404, "AGENT_RUN_NOT_FOUND");
   return jsonOk(run ? await store.view(run) : null);
+}
+
+/** Sidebar markers: the caller's active runs and unread task notices, read under their own RLS. */
+export async function getAgentActivity(request: NextRequest) {
+  const auth = await authenticated(request);
+  const db = resolveRequestDbClient(auth);
+  if (!db) throw new AgentApiError("读取任务状态失败", 500, "AGENT_SERVICE_ERROR");
+  return jsonOk(await readAgentActivity(db, auth.user.id, request.signal));
 }
 
 export async function controlAgentTask(

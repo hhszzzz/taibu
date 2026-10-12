@@ -1252,6 +1252,10 @@
       "status": "defined",
       "callers": [
         {
+          "file": "src/lib/agent/activity.server.ts",
+          "kind": "literal-from"
+        },
+        {
           "file": "src/lib/agent/api.server.ts",
           "kind": "literal-from"
         },
@@ -2125,6 +2129,10 @@
         },
         {
           "file": "src/app/api/notifications/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/agent/activity.server.ts",
           "kind": "literal-from"
         },
         {

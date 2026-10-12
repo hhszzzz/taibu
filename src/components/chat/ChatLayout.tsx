@@ -47,6 +47,8 @@ import { orderAgentMessagesForDisplay } from '@/lib/agent/browser-client';
 import { JumpToLatest } from './JumpToLatest';
 import { ConversationMinimap } from './ConversationMinimap';
 import { useReadingPreferences } from '@/lib/chat/use-reading-preferences';
+import { setChatWorkspaceOpen } from '@/lib/chat/chat-sidebar';
+import { refreshAgentActivity } from '@/lib/agent/use-agent-activity';
 import type { CSSProperties } from 'react';
 import './chat-workspace.css';
 import type { ModelSettingsProps } from '@/lib/chat/model-settings';
@@ -211,6 +213,14 @@ export function ChatLayout(props: ChatLayoutProps) {
     const hasWorkspace = isAgentMode || Boolean(latestAgentData);
     const workspaceOpen = hasWorkspace && openWorkspaceKey === workspaceKey;
     const resultWorkspace = useMemo(() => ({ openResource, shown: workspaceOpen ? workspaceShown : null }), [openResource, workspaceOpen, workspaceShown]);
+    // The chat sidebar folds to its rail while the workspace is open beside the conversation.
+    useEffect(() => {
+        setChatWorkspaceOpen(workspaceOpen);
+        return () => setChatWorkspaceOpen(false);
+    }, [workspaceOpen]);
+    // Task markers in the sidebar follow this page's run without waiting for their next poll.
+    const currentRunStatus = currentRun?.status;
+    useEffect(() => { if (currentRunStatus) refreshAgentActivity(); }, [currentRunStatus]);
     // The header counts what the workspace can open: readings, calculations, evidence and other materials.
     const resourceCount = useMemo(() => buildAgentWorkspace({ parts: agentParts, artifacts, attachmentIds }).resources.length, [agentParts, artifacts, attachmentIds]);
     const closeWorkspace = () => {

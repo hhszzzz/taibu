@@ -1,15 +1,21 @@
 /**
  * 奇门遁甲排盘结果页面
  *
- * 对齐 Notion 风格：极简列表、柔和边框、线性图标、去除渐变
+ * 'use client'：会话缓存读取、宫位选择状态与 AI 流式解读都依赖浏览器端 hooks。
  */
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Sparkles, RotateCw, RefreshCw, Copy, Check, Info } from 'lucide-react';
+import { RotateCw, RefreshCw, Copy, Check, ChevronLeft } from 'lucide-react';
+import { useToast } from '@/components/ui/Toast';
+import { ResultMobileActions } from '@/components/bazi/result/ResultHeader';
+import { ResultHeaderActions } from '@/components/divination/ResultHeaderActions';
 import { QimenGrid } from '@/components/qimen/QimenGrid';
+import { QimenLegend } from '@/components/qimen/QimenLegend';
+import { QimenPalaceDetail } from '@/components/qimen/QimenPalaceDetail';
+import { formatJuLabel } from '@/components/qimen/qimen-display';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { ModelSelector } from '@/components/ui/ModelSelector';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
@@ -18,7 +24,7 @@ import { AuthModal } from '@/components/auth/AuthModal';
 import { CreditsModal } from '@/components/ui/CreditsModal';
 import { AddToKnowledgeBaseModal } from '@/components/knowledge-base/AddToKnowledgeBaseModal';
 import { useKnowledgeBaseFeatureEnabled } from '@/components/knowledge-base/useKnowledgeBaseFeatureEnabled';
-import { useHeaderMenu } from '@/components/layout/HeaderMenuContext';
+import { useHeaderMenu, useHeaderTitle, type HeaderMenuItem } from '@/components/layout/HeaderMenuContext';
 import { useStreamingResponse, isCreditsError } from '@/lib/hooks/useStreamingResponse';
 import { readSessionJSON, updateSessionJSON } from '@/lib/cache/session-storage';
 import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
@@ -38,14 +44,18 @@ import {
     type QimenOutput,
 } from '@/lib/divination/qimen';
 
-/** 五行旺衰图例 */
-const PHASE_LEGEND = [
-    { label: '木旺', color: 'bg-green-500' },
-    { label: '火相', color: 'bg-red-500' },
-    { label: '水休', color: 'bg-blue-500' },
-    { label: '金囚', color: 'bg-amber-500' },
-    { label: '土死', color: 'bg-stone-500' },
-];
+const PILLAR_LABELS = ['年', '月', '日', '时'] as const;
+const MENU_ICON_CLASS = 'h-4 w-4';
+const ASK_LABEL = '问太卜断局';
+
+function pad2(value: number): string {
+    return Number.isFinite(value) ? String(value).padStart(2, '0') : '--';
+}
+
+/** 起局时间（用户输入的民用时间），如 2026-10-10 21:30 */
+function formatInputTime(input: Pick<QimenInput, 'year' | 'month' | 'day' | 'hour' | 'minute'>): string {
+    return `${input.year}-${pad2(input.month)}-${pad2(input.day)} ${pad2(input.hour)}:${pad2(input.minute)}`;
+}
 
 interface QimenSessionData extends QimenInput {
     output?: QimenOutput;
@@ -88,6 +98,7 @@ export default function QimenResultPage() {
     const router = useRouter();
     const { setMenuItems, clearMenuItems } = useHeaderMenu();
     const { knowledgeBaseEnabled } = useKnowledgeBaseFeatureEnabled();
+    const { showToast } = useToast();
     const [result, setResult] = useState<QimenSessionData | null>(null);
     const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL_ID);
     const [reasoningEnabled, setReasoningEnabled] = useState(false);
@@ -101,7 +112,10 @@ export default function QimenResultPage() {
     const [copied, setCopied] = useState(false);
     const [copyDetailLevel, setCopyDetailLevel] = useState<ChartTextDetailLevel>('default');
     const [showCopyModal, setShowCopyModal] = useState(false);
+    const [selectedPalace, setSelectedPalace] = useState<number | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
     const hasSavedRef = useRef(false);
+    const aiSectionRef = useRef<HTMLElement>(null);
     const streaming = useStreamingResponse();
     const { user, membershipInfo, sessionLoading, membershipLoading, membershipResolved } = useSessionMembership();
     const membershipPending = membershipLoading || !membershipResolved;
@@ -113,6 +127,33 @@ export default function QimenResultPage() {
         [qimenOutput],
     );
     const { isAdmin, jsonCopied, copyJson } = useAdminJsonCopy(canonicalResult);
+
+    /** 保存起局记录（进入页面时自动保存与「保存」按钮共用），成功后回写 chartId */
+    const saveChartRecord = useCallback(async (record: QimenSessionData): Promise<boolean> => {
+        setIsSaving(true);
+        try {
+            const saveResult = await saveDivinationAction({
+                endpoint: '/api/qimen',
+                body: buildQimenActionPayload(record),
+                idKey: 'chartId',
+                fallbackMessage: '保存奇门记录失败',
+            });
+            if (!saveResult.ok) {
+                throw new Error(saveResult.error.message || '保存奇门记录失败');
+            }
+            const savedChartId = saveResult.id;
+            if (savedChartId) {
+                updateSessionJSON('qimen_result', (prev) => ({ ...(prev || {}), chartId: savedChartId }));
+                setResult(prev => prev ? { ...prev, chartId: savedChartId } : prev);
+            }
+            return true;
+        } catch (e) {
+            console.error(e);
+            return false;
+        } finally {
+            setIsSaving(false);
+        }
+    }, []);
 
     useEffect(() => {
         if (sessionLoading) return;
@@ -137,35 +178,31 @@ export default function QimenResultPage() {
 
             if (!nextResult.chartId && currentUser && !hasSavedRef.current) {
                 hasSavedRef.current = true;
-                try {
-                    const saveResult = await saveDivinationAction({
-                        endpoint: '/api/qimen',
-                        body: buildQimenActionPayload(nextResult),
-                        idKey: 'chartId',
-                        fallbackMessage: '保存奇门记录失败',
-                    });
-                    if (!saveResult.ok) {
-                        throw new Error(saveResult.error.message || '保存奇门记录失败');
-                    }
-                    const savedChartId = saveResult.id;
-                    if (savedChartId) {
-                        updateSessionJSON('qimen_result', (prev) => ({ ...(prev || {}), chartId: savedChartId }));
-                        setResult(prev => prev ? { ...prev, chartId: savedChartId } : prev);
-                    }
-                } catch (e) { console.error(e); }
+                await saveChartRecord(nextResult);
             }
         };
         void init();
-    }, [currentUser, router, sessionLoading]);
+    }, [currentUser, router, saveChartRecord, sessionLoading]);
+
+    // 次要操作：桌面端收进标题区「更多」，移动端进顶栏三点菜单（另加重新起局）
+    const resultActions = useMemo((): HeaderMenuItem[] => {
+        const items: HeaderMenuItem[] = [
+            { id: 'copy-chart', label: copied ? '排盘已复制' : '复制排盘', icon: copied ? <Check className={MENU_ICON_CLASS} /> : <Copy className={MENU_ICON_CLASS} />, onClick: () => setShowCopyModal(true) },
+        ];
+        if (isAdmin && canonicalResult) items.push({ id: 'copy-json', label: jsonCopied ? 'JSON 已复制' : '复制 JSON', icon: jsonCopied ? <Check className={MENU_ICON_CLASS} /> : <Copy className={MENU_ICON_CLASS} />, onClick: () => { void copyJson(); } });
+        return items;
+    }, [canonicalResult, copied, copyJson, isAdmin, jsonCopied]);
 
     useEffect(() => {
-        const items = [
-            { id: 'restart', label: '重新起课', icon: <RotateCw className="w-4 h-4" />, onClick: () => router.push('/qimen') },
-        ];
-        if (isAdmin && canonicalResult) items.push({ id: 'copy-json', label: jsonCopied ? 'JSON 已复制' : 'JSON', icon: jsonCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />, onClick: () => { void copyJson(); } });
-        setMenuItems(items);
+        setMenuItems([{ id: 'restart', label: '重新起局', icon: <RotateCw className={MENU_ICON_CLASS} />, onClick: () => router.push('/qimen') }, ...resultActions]);
         return () => clearMenuItems();
-    }, [router, isAdmin, canonicalResult, jsonCopied, copyJson, setMenuItems, clearMenuItems]);
+    }, [clearMenuItems, resultActions, router, setMenuItems]);
+
+    const juLabel = qimenOutput
+        ? formatJuLabel(canonicalResult?.基本信息.局式 ?? `${qimenOutput.dunType === 'yang' ? '阳遁' : '阴遁'}${qimenOutput.juNumber}局`)
+        : '';
+    // 移动端顶栏标题：节气 · 阴/阳遁 X 局（桌面端由页内标题承担）
+    useHeaderTitle(qimenOutput ? `${qimenOutput.dateInfo.solarTerm} · ${juLabel}` : null);
 
     useAnalysisSnapshot({
         conversationId: result?.conversationId,
@@ -239,19 +276,44 @@ export default function QimenResultPage() {
         } catch (err) { setError(err instanceof Error ? err.message : '解读失败'); } finally { setIsLoading(false); }
     };
 
-    const handleCopy = async () => {
-        setShowCopyModal(true);
-    };
-
     const handleConfirmCopy = async (level: ChartTextDetailLevel) => {
         if (!result?.output) return;
         setCopyDetailLevel(level);
-        await navigator.clipboard.writeText(generateQimenChartText(result.output, {
-            question: result.question,
-            detailLevel: level,
-        }));
-        setCopied(true); setTimeout(() => setCopied(false), 2000);
+        try {
+            await navigator.clipboard.writeText(generateQimenChartText(result.output, {
+                question: result.question,
+                detailLevel: level,
+            }));
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+            showToast('success', '排盘文本已复制');
+        } catch {
+            showToast('error', '复制失败，请重试');
+        }
         setShowCopyModal(false);
+    };
+
+    /** 「问太卜断局」：滚动到解读区，并沿用解读区主按钮的同一套前置判断 */
+    const handleAskTaibu = () => {
+        aiSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (sessionLoading || membershipPending || isLoading || interpretation) return;
+        if (!currentUser) {
+            setShowAuthModal(true);
+            return;
+        }
+        void handleGetInterpretation();
+    };
+
+    /** 「保存」：未登录先登录（登录后页面自动保存），已登录则手动重试保存 */
+    const handleSave = async () => {
+        if (!result || result.chartId || isSaving || sessionLoading) return;
+        if (!currentUser) {
+            setShowAuthModal(true);
+            return;
+        }
+        hasSavedRef.current = true;
+        const saved = await saveChartRecord(result);
+        showToast(saved ? 'success' : 'error', saved ? '已保存到命理记录' : '保存失败，请重试');
     };
 
     if (!result || !qimenOutput) return (
@@ -260,96 +322,142 @@ export default function QimenResultPage() {
         </div>
     );
 
+    const basicInfo = canonicalResult?.基本信息;
+    const palaces = canonicalResult?.九宫盘 ?? [];
+    const question = basicInfo?.占问 || result.question;
+    const zhiShiGate = basicInfo?.值使 ?? qimenOutput.zhiShi.gate;
+    const activePalaceIndex = selectedPalace ?? qimenOutput.zhiShi.palace;
+    const activePalace = palaces.find(palace => palace.宫位序号 === activePalaceIndex);
+    const activePalaceInfo = qimenOutput.palaces.find(palace => palace.palaceIndex === activePalaceIndex);
+    const pillars = [qimenOutput.siZhu.year, qimenOutput.siZhu.month, qimenOutput.siZhu.day, qimenOutput.siZhu.hour];
+    const ruleLabel = `${qimenOutput.panType}${qimenOutput.juMethod.replace(/法$/u, '')}${result.zhiFuJiGong === 'jiWuGong' ? ' · 寄戊宫' : ''}`;
+    const yuan = basicInfo?.三元 ?? qimenOutput.yuan;
+    const keyChips = [
+        { label: '旬首', value: basicInfo?.旬首 ?? qimenOutput.xunShou },
+        { label: '值符', value: basicInfo?.值符 ?? qimenOutput.zhiFu.star },
+        { label: '值使', value: zhiShiGate },
+    ];
+    const saved = !!result.chartId;
+    const saveState = {
+        saving: isSaving,
+        saved,
+        disabled: saved || isSaving || sessionLoading,
+        onSave: () => { void handleSave(); },
+    };
+
     return (
-        <div className="min-h-screen bg-background">
-            <div className="max-w-4xl mx-auto px-4 py-8 animate-fade-in space-y-8">
-                {/* 头部操作 */}
-                <div className="hidden md:flex items-center justify-between border-b border-border/60 pb-6">
-                    <Link href="/qimen" className="text-sm font-medium text-foreground-secondary hover:text-foreground hover:bg-background-secondary px-2 py-1 rounded-md transition-colors">返回</Link>
-                    <div className="flex items-center gap-2">
-                        <button onClick={() => router.push('/qimen')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border border-border hover:bg-background-secondary transition-colors"><RotateCw className="w-3.5 h-3.5" />重新起课</button>
-                        <button onClick={handleCopy} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border border-border hover:bg-background-secondary transition-colors">{copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}复制排盘</button>
+        <div className="min-h-screen bg-background text-foreground">
+            <div className="mx-auto flex w-full max-w-[1104px] flex-col gap-3 px-4 pb-28 pt-3 animate-fade-in lg:gap-[22px] lg:px-8 lg:pb-16 lg:pt-8">
+                <Link href="/qimen" className="hidden w-fit items-center gap-1.5 text-sm text-foreground-secondary transition-colors hover:text-foreground lg:inline-flex">
+                    <ChevronLeft className="h-4 w-4" />重新起局
+                </Link>
+
+                {/* 标题：节气 · 阴/阳遁 X 局 + 元；移动端标题位于顶栏，此处只保留问事与起局时间 */}
+                <header className="flex flex-wrap items-end justify-between gap-4">
+                    <div className="flex w-full min-w-0 flex-col gap-2 text-center lg:w-auto lg:text-left">
+                        <p className="text-[0.8125rem] leading-normal text-foreground-secondary lg:text-sm">
+                            {question && <span>问：{question}</span>}
+                            {question && <><span className="hidden lg:inline"> · </span><br className="lg:hidden" /></>}
+                            <span>{formatInputTime(result)} · {ruleLabel}</span>
+                        </p>
+                        <h1 className="hidden font-display text-[2.125rem] font-normal leading-tight lg:block">
+                            {qimenOutput.dateInfo.solarTerm} · {juLabel}
+                            <span className="ml-2 text-xl text-foreground-secondary">{yuan}</span>
+                        </h1>
                     </div>
+                    <ResultHeaderActions actions={resultActions} actionsLabel="排盘操作" save={saveState} ask={{ label: ASK_LABEL, onClick: handleAskTaibu }} />
+                </header>
+
+                {/* 四柱与旬首 / 值符 / 值使：桌面为一行信息条，移动端为四柱面板 + 标签 */}
+                <div className="hidden flex-wrap items-baseline gap-x-6 gap-y-2 rounded-xl border-[0.5px] border-border bg-surface px-[18px] py-3.5 text-sm lg:flex">
+                    <span className="font-display text-[17px] tracking-[1px]">{pillars.join('　')}</span>
+                    {keyChips.map(chip => (
+                        <span key={chip.label}><span className="text-foreground-secondary">{chip.label}</span> {chip.value}</span>
+                    ))}
                 </div>
-
-                {/* 占事信息 */}
-                {(canonicalResult?.基本信息.占问 || result.question) && (
-                    <div className="bg-background border border-border rounded-md p-4 flex items-center gap-3">
-                        <Sparkles className="w-4 h-4 text-[#a083ff]" />
-                        <span className="text-xs font-bold text-foreground-secondary uppercase tracking-widest shrink-0">占事</span>
-                        <span className="text-sm font-medium text-foreground">{canonicalResult?.基本信息.占问 || result.question}</span>
-                    </div>
-                )}
-
-                {/* 排盘参数 */}
-                <div className="bg-background-secondary/30 border border-border rounded-md p-6 space-y-4 relative group">
-                    <div className="flex items-center gap-3">
-                        <Info className="w-4 h-4 text-foreground-secondary" />
-                        <h2 className="text-sm font-bold uppercase tracking-widest text-foreground-secondary">排盘参数</h2>
-                    </div>
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                        {[
-                            { label: '公历时间', value: qimenOutput.dateInfo.solarDate },
-                            { label: '农历时间', value: qimenOutput.dateInfo.lunarDate },
-                            { label: '四柱干支', value: canonicalResult?.基本信息.四柱 },
-                            { label: '起局信息', value: canonicalResult ? `${canonicalResult.基本信息.局式} ${canonicalResult.基本信息.旬首}` : '' }
-                        ].map(item => (
-                            <div key={item.label} className="bg-background border border-border/60 rounded-md p-3">
-                                <div className="text-[10px] font-bold text-foreground-secondary uppercase mb-1">{item.label}</div>
-                                <div className="text-xs font-medium text-foreground/80">{item.value}</div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* 图例 */}
-                <div className="flex items-center justify-center gap-4 py-2 border-y border-gray-50">
-                    {PHASE_LEGEND.map(({ label, color }) => (
-                        <div key={label} className="flex items-center gap-1.5">
-                            <span className={`w-2 h-2 rounded-full ${color}`} />
-                            <span className="text-[10px] font-bold text-foreground-secondary uppercase tracking-tighter">{label}</span>
+                <div className="mt-1 grid grid-cols-4 rounded-xl bg-panel px-1 py-2.5 lg:hidden">
+                    {pillars.map((pillar, index) => (
+                        <div key={PILLAR_LABELS[index]} className="flex flex-col items-center gap-px">
+                            <span className="text-[11px] text-foreground-secondary">{PILLAR_LABELS[index]}</span>
+                            <span className="font-display text-[17px]">{pillar}</span>
                         </div>
                     ))}
                 </div>
-
-                {/* 九宫格 */}
-                <div className="bg-background border border-border rounded-md overflow-hidden">
-                    <QimenGrid palaces={canonicalResult?.九宫盘 || []} monthPhaseMap={qimenOutput.monthPhase} ju={canonicalResult?.基本信息.局式 || ''} />
+                <div className="flex flex-wrap gap-1.5 lg:hidden">
+                    {[yuan, ...keyChips.map(chip => `${chip.label} ${chip.value}`)].map(text => (
+                        <span key={text} className="whitespace-nowrap rounded-md bg-background-secondary px-2 py-0.5 text-xs text-foreground-secondary">{text}</span>
+                    ))}
                 </div>
 
-                {/* AI 解读 */}
-                <AIFeatureGate><div className="bg-background border border-border rounded-md p-6 space-y-6">
-                    <div className="flex items-center justify-between border-b border-border/60 pb-4">
-                        <h2 className="text-sm font-bold flex items-center gap-2 uppercase tracking-wider text-foreground-secondary"><Sparkles className="w-4 h-4 text-[#a083ff]" />AI 深度解读</h2>
-                        <div className="flex items-center gap-2">
-                            <ModelSelector compact selectedModel={selectedModel} onModelChange={setSelectedModel} reasoningEnabled={reasoningEnabled} onReasoningChange={setReasoningEnabled} userId={currentUser?.id} membershipType={membershipType} disabled={membershipPending} />
-                            {(interpretation || streaming.isStreaming) && <button onClick={handleGetInterpretation} disabled={isLoading} className="p-1.5 rounded-md hover:bg-background-secondary transition-colors"><RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} /></button>}
-                        </div>
-                    </div>
-                    {error && (
-                        <div className="p-3 bg-red-50 text-danger text-xs rounded-md border border-red-100">
-                            {error}
-                        </div>
-                    )}
+                {/* 九宫格 → 图例 → 选中宫位详情 */}
+                <QimenGrid
+                    palaces={palaces}
+                    monthPhaseMap={qimenOutput.monthPhase}
+                    zhiShi={zhiShiGate}
+                    selectedPalace={activePalaceIndex}
+                    onPalaceSelect={setSelectedPalace}
+                />
+                <QimenLegend />
+                {activePalace && (
+                    <QimenPalaceDetail
+                        palace={activePalace}
+                        palaces={palaces}
+                        zhiShi={zhiShiGate}
+                        monthPhaseMap={qimenOutput.monthPhase}
+                        formations={activePalaceInfo?.formations}
+                        elementState={activePalaceInfo?.elementState}
+                    />
+                )}
 
-                    {interpretation ? (
-                        <div className="prose prose-sm max-w-none">
-                            {interpretationReasoning && <ThinkingBlock content={interpretationReasoning} isStreaming={streaming.isStreaming && !interpretation} startTime={streaming.reasoningStartTime} duration={streaming.reasoningDuration} />}
-                            <MarkdownContent content={interpretation} className="text-sm text-foreground leading-relaxed" />
+                {/* AI 解读入口与结果 */}
+                <AIFeatureGate>
+                    <section ref={aiSectionRef} aria-label="太卜断局" className="flex scroll-mt-24 flex-col gap-4 rounded-2xl border-[0.5px] border-border bg-panel p-4 lg:px-[22px] lg:py-[18px]">
+                        <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+                            <div className="flex min-w-0 flex-[1_1_360px] flex-col gap-1">
+                                <h2 className="hidden font-display text-[17px] font-normal lg:block">点宫位查看门星神仪的旺衰与格局</h2>
+                                <p className="text-sm text-foreground-secondary">
+                                    {question ? `也可以直接问太卜：「${question}」` : '也可以直接问太卜这一局的吉凶。'}
+                                </p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <ModelSelector compact selectedModel={selectedModel} onModelChange={setSelectedModel} reasoningEnabled={reasoningEnabled} onReasoningChange={setReasoningEnabled} userId={currentUser?.id} membershipType={membershipType} disabled={membershipPending} />
+                                {(interpretation || streaming.isStreaming) && (
+                                    <button onClick={handleGetInterpretation} disabled={isLoading} aria-label="重新解读" className="rounded-[10px] p-2 text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground">
+                                        <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                                    </button>
+                                )}
+                                {!interpretation && (
+                                    sessionLoading || membershipPending ? (
+                                        <SoundWaveLoader variant="inline" />
+                                    ) : (
+                                        <button
+                                            onClick={currentUser ? handleGetInterpretation : () => setShowAuthModal(true)}
+                                            disabled={isLoading || membershipPending}
+                                            className="inline-flex h-10 items-center gap-2 rounded-[10px] bg-foreground px-4 text-sm text-background transition-opacity hover:opacity-90 disabled:opacity-50"
+                                        >
+                                            {isLoading && <SoundWaveLoader variant="inline" className="[&_.sound-wave-bar]:bg-background" />}
+                                            让太卜断这一局
+                                        </button>
+                                    )
+                                )}
+                            </div>
                         </div>
-                    ) : (
-                        <div className="py-12 text-center space-y-6">
-                            {sessionLoading || membershipPending ? (
-                                <SoundWaveLoader variant="inline" />
-                            ) : !currentUser ? (
-                                <button onClick={() => setShowAuthModal(true)} className="px-8 py-2.5 bg-accent text-on-accent text-sm font-bold rounded-md hover:bg-accent/90 transition-colors">登录解锁 AI 深度解读</button>
-                            ) : (
-                                <button onClick={handleGetInterpretation} disabled={isLoading || membershipPending} className="inline-flex items-center gap-2 px-8 py-2.5 bg-accent text-on-accent text-sm font-bold rounded-md hover:bg-accent/90 transition-all active:scale-95 disabled:opacity-50"><Sparkles className="w-4 h-4" />获取 AI 解读</button>
-                            )}
-                        </div>
-                    )}
-                </div></AIFeatureGate>
+                        {error && (
+                            <div role="alert" className="rounded-[10px] border-[0.5px] border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
+                                {error}
+                            </div>
+                        )}
+                        {interpretation && (
+                            <div className="prose prose-sm max-w-none rounded-xl border-[0.5px] border-border bg-surface p-4 lg:p-5">
+                                {interpretationReasoning && <ThinkingBlock content={interpretationReasoning} isStreaming={streaming.isStreaming && !interpretation} startTime={streaming.reasoningStartTime} duration={streaming.reasoningDuration} />}
+                                <MarkdownContent content={interpretation} className="text-sm text-foreground leading-relaxed" />
+                            </div>
+                        )}
+                    </section>
+                </AIFeatureGate>
             </div>
+
+            <ResultMobileActions saving={isSaving} saved={saved} saveDisabled={sessionLoading} onSave={saveState.onSave} ask={{ label: ASK_LABEL, onClick: handleAskTaibu }} />
 
             <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
             <CreditsModal isOpen={showCreditsModal} onClose={() => setShowCreditsModal(false)} />

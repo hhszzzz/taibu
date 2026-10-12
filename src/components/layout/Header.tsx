@@ -52,7 +52,7 @@ const ROUTE_LABELS: Record<string, string> = {
     '/daliuren/history': '大六壬历史',
     '/meihua/result': '梅花结果',
     '/meihua/history': '梅花历史',
-    '/xiaoliuren/result': '小六壬结果',
+    '/xiaoliuren/result': '小六壬',
     '/xiaoliuren/history': '小六壬历史',
     // 功能主页面
     '/bazi': '八字排盘',

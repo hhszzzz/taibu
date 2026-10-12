@@ -200,10 +200,14 @@ for (const page of ['src/app/meihua/page.tsx', 'src/app/xiaoliuren/page.tsx']) {
     /router\.push\('\/(?:meihua|xiaoliuren)\/history'\)/u,
     `${page} should not add a second history entry beside the shared drawer`,
   );
+}
+
+// 小六壬起课表单由入口页与结果页（原地重新起课）共用，日期默认值随表单组件下沉。
+for (const form of ['src/app/meihua/page.tsx', 'src/components/xiaoliuren/XiaoliurenForm.tsx']) {
   mustMatch(
-    page,
+    form,
     /import \{ toDateTimeLocalValue \} from '@\/lib\/date-utils';/u,
-    `${page} should reuse the shared local datetime formatter`,
+    `${form} should reuse the shared local datetime formatter`,
   );
 }
 

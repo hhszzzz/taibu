@@ -1,5 +1,4 @@
-import { AIFeatureGate } from '@/components/ai/AIFeatureGate';
-import { ResultMoreActions } from '@/components/divination/ResultMoreActions';
+import { ResultHeaderActions, type ResultSaveControl } from '@/components/divination/ResultHeaderActions';
 import type { HeaderMenuItem } from '@/components/layout/HeaderMenuContext';
 
 interface LiuyaoResultHeaderProps {
@@ -10,7 +9,7 @@ interface LiuyaoResultHeaderProps {
     changedHexagramName?: string;
     /** 桌面端「更多」菜单项；移动端同一组操作由顶栏三点菜单承载。 */
     actions: HeaderMenuItem[];
-    save: { saving: boolean; saved: boolean; disabled: boolean; onSave: () => void };
+    save: ResultSaveControl;
     onAsk: () => void;
     askDisabled: boolean;
 }
@@ -34,27 +33,7 @@ export function LiuyaoResultHeader({ question, yongShenTargets, hexagramName, ch
                     {changedHexagramName && <> <span className="text-[1.375rem] text-foreground-secondary">之</span> {changedHexagramName}</>}
                 </h1>
             </div>
-            <div className="hidden items-center gap-2 lg:flex">
-                <ResultMoreActions actions={actions} label="卦盘操作" />
-                <button
-                    type="button"
-                    onClick={save.onSave}
-                    disabled={save.disabled}
-                    className={`h-10 rounded-[10px] border-[0.5px] border-border-hover bg-surface px-3.5 text-sm transition-colors hover:bg-background-secondary disabled:cursor-not-allowed ${save.saved ? 'text-success' : 'text-foreground disabled:opacity-50'}`}
-                >
-                    {save.saved ? '已保存' : save.saving ? '保存中' : '保存'}
-                </button>
-                <AIFeatureGate>
-                    <button
-                        type="button"
-                        onClick={onAsk}
-                        disabled={askDisabled}
-                        className="h-10 rounded-[10px] bg-accent px-4 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                        问太卜解卦
-                    </button>
-                </AIFeatureGate>
-            </div>
+            <ResultHeaderActions actions={actions} actionsLabel="卦盘操作" save={save} ask={{ label: '问太卜解卦', onClick: onAsk, disabled: askDisabled }} />
         </header>
     );
 }

@@ -6,7 +6,7 @@
  */
 
 import { XUN_KONG_TABLE as CORE_XUN_KONG_TABLE } from 'taibu-core/data/shensha';
-import { HEXAGRAMS as CORE_HEXAGRAMS, type Hexagram } from 'taibu-core/data/hexagrams';
+import { HEXAGRAMS as CORE_HEXAGRAMS, YAO_CI as CORE_YAO_CI, type Hexagram } from 'taibu-core/data/hexagrams';
 import {
     calculateFullYaoInfo as calculateFullYaoInfoCore,
     calculateGanZhiTime as calculateGanZhiTimeCore,
@@ -271,6 +271,8 @@ export function calculateLiuyaoBundle(input: LiuyaoBundleInput): LiuyaoBundle {
     const derived = calculateDerivedHexagrams(hexagramCode);
     const baseCtx = getHexagramContext(hexagramCode);
     const changedCtx = resolvedChangedCode ? getHexagramContext(resolvedChangedCode) : undefined;
+    // 与 core calculateLiuyao 一致：按本卦附上各爻爻辞，canonical JSON/文本据此输出动爻爻辞
+    const baseYaoCi = baseCtx.hexagram ? CORE_YAO_CI[baseCtx.hexagram.name] : undefined;
 
     return {
         output: {
@@ -289,7 +291,7 @@ export function calculateLiuyaoBundle(input: LiuyaoBundleInput): LiuyaoBundle {
             ganZhiTime: analysis.ganZhiTime,
             kongWang: analysis.kongWang,
             kongWangByPillar: analysis.kongWangByPillar,
-            fullYaos: analysis.fullYaos,
+            fullYaos: analysis.fullYaos.map((yao) => ({ ...yao, yaoCi: baseYaoCi?.[yao.position - 1] })),
             yongShen: analysis.yongShen,
             fuShen: analysis.fuShen,
             shenSystemByYongShen: analysis.shenSystemByYongShen,

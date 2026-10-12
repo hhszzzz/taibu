@@ -8,7 +8,7 @@
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Sparkles, Grid3X3, Layers } from 'lucide-react';
+import { ChevronLeft, Sparkles, Grid3X3, Layers } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import { HexagramSelector } from '@/components/liuyao/HexagramSelector';
@@ -26,6 +26,13 @@ import { readSessionJSON, writeSessionJSON } from '@/lib/cache/session-storage';
 import { saveDivinationAction } from '@/lib/divination/save-client';
 
 type SelectMode = 'list' | 'trigram';
+
+const SELECT_MODES = [
+    { mode: 'list', label: '64卦列表', Icon: Grid3X3 },
+    { mode: 'trigram', label: '上下卦组合', Icon: Layers },
+] as const satisfies ReadonlyArray<{ mode: SelectMode; label: string; Icon: typeof Grid3X3 }>;
+const CARD_CLASS = 'rounded-2xl border-[0.5px] border-border bg-surface p-4 sm:p-5';
+const RESULT_CHIP_CLASS = 'flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-xl bg-accent-light px-3.5 py-2.5 text-sm ring-1 ring-inset ring-accent/50';
 type LiuyaoQuestionSession = {
     question: string;
     yongShenTargets: LiuQin[];
@@ -181,148 +188,140 @@ export default function SelectHexagramPage() {
     };
 
     return (
-        <div className="min-h-screen bg-background">
-            <div className="max-w-2xl mx-auto px-4 py-4 md:py-8">
+        <div className="min-h-screen bg-background text-foreground">
+            <div className="mx-auto flex w-full max-w-[720px] flex-col gap-3 px-4 py-4 sm:gap-5 sm:px-8 md:py-10">
                 {/* 返回 - 仅桌面端显示 */}
                 <Link
                     href="/liuyao"
-                    className="hidden md:inline-flex items-center gap-2 text-foreground-secondary hover:text-foreground mb-4 md:mb-6"
+                    className="hidden w-fit items-center gap-1.5 text-sm text-foreground-secondary transition-colors hover:text-foreground lg:inline-flex"
                 >
-                    <ArrowLeft className="w-4 h-4" />
+                    <ChevronLeft className="h-4 w-4" />
                     返回
                 </Link>
 
                 {/* 标题 */}
-                <div className="text-center sm:mb-6 mb-3">
-                    <h1 className="hidden md:block text-xl md:text-2xl font-bold text-foreground">选卦起卦</h1>
-                    <p className="text-foreground-secondary md:mt-1 text-sm">
+                <header className="flex flex-col gap-1.5 text-center lg:text-left">
+                    <h1 className="hidden font-display text-[34px] font-normal leading-tight lg:block">选卦起卦</h1>
+                    <p className="text-sm text-foreground-secondary">
                         选择已知卦象，根据当前时间计算分析
                     </p>
-                </div>
+                </header>
 
-                <div className="sm:space-y-6 space-y-3">
-                    {requiresYongShenTargets && yongShenTargets.length === 0 && (
-                        <div className="bg-background/[0.02] border border-red-500/30 rounded-xl p-4">
-                            <div className="text-sm text-red-500 mb-2">必须先选择分析目标</div>
-                            <YongShenTargetPicker
-                                value={yongShenTargets}
-                                onChange={handleYongShenTargetsChange}
-                                variant="block"
+                {requiresYongShenTargets && yongShenTargets.length === 0 && (
+                    <div className="flex flex-col gap-2">
+                        <div className="text-sm text-danger">必须先选择分析目标</div>
+                        <YongShenTargetPicker
+                            value={yongShenTargets}
+                            onChange={handleYongShenTargetsChange}
+                            variant="block"
+                        />
+                    </div>
+                )}
+
+                {/* 选择方式切换 */}
+                <div className="flex gap-1 rounded-[10px] bg-background-secondary p-1" role="group" aria-label="选卦方式">
+                    {SELECT_MODES.map(({ mode, label, Icon }) => (
+                        <button
+                            key={mode}
+                            type="button"
+                            onClick={() => handleModeChange(mode)}
+                            aria-pressed={selectMode === mode}
+                            className={`flex h-9 flex-1 items-center justify-center gap-2 rounded-lg text-sm transition-colors
+                                ${selectMode === mode
+                                    ? 'bg-surface font-medium text-foreground shadow-sm'
+                                    : 'text-foreground-secondary hover:text-foreground'
+                                }`}
+                        >
+                            <Icon className="h-4 w-4" />
+                            {label}
+                        </button>
+                    ))}
+                </div>
+                <p className="px-1 text-xs text-foreground-secondary">
+                    64 卦列表适合直接选已知卦名；上下卦组合适合按外卦/内卦组合推得本卦。
+                </p>
+
+                {/* 卦选择区域 */}
+                <section className={CARD_CLASS}>
+                    {selectMode === 'list' ? (
+                        <HexagramSelector
+                            value={hexagramCode}
+                            onChange={setHexagramCode}
+                        />
+                    ) : (
+                        <div className="flex flex-col gap-4">
+                            <TrigramSelector
+                                label="上卦（外卦）"
+                                value={upperTrigram}
+                                onChange={setUpperTrigram}
                             />
+                            <TrigramSelector
+                                label="下卦（内卦）"
+                                value={lowerTrigram}
+                                onChange={setLowerTrigram}
+                            />
+
+                            {/* 组合结果 */}
+                            {currentHexagram && (
+                                <div className={RESULT_CHIP_CLASS}>
+                                    <span className="text-foreground-secondary">组合结果：</span>
+                                    <span className="font-display text-base text-accent-strong">{currentHexagram.name}</span>
+                                    <span className="text-foreground-secondary">
+                                        · {currentHexagram.element} · {currentHexagram.nature}
+                                    </span>
+                                </div>
+                            )}
                         </div>
                     )}
+                </section>
 
-                    {/* 选择方式切换 */}
-                    <div className="flex gap-2 p-1 bg-background/5 rounded-lg">
-                        <button
-                            onClick={() => handleModeChange('list')}
-                            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-all
-                                ${selectMode === 'list'
-                                    ? 'bg-accent text-on-accent'
-                                    : 'text-foreground-secondary hover:text-foreground'
-                                }`}
-                        >
-                            <Grid3X3 className="w-4 h-4" />
-                            64卦列表
-                        </button>
-                        <button
-                            onClick={() => handleModeChange('trigram')}
-                            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-all
-                                ${selectMode === 'trigram'
-                                    ? 'bg-accent text-on-accent'
-                                    : 'text-foreground-secondary hover:text-foreground'
-                                }`}
-                        >
-                            <Layers className="w-4 h-4" />
-                            上下卦组合
-                        </button>
-                    </div>
-                    <p className="text-xs text-foreground-secondary px-1">
-                        64 卦列表适合直接选已知卦名；上下卦组合适合按外卦/内卦组合推得本卦。
+                {/* 变爻选择 */}
+                <section className={CARD_CLASS}>
+                    <ChangingLinesSelector
+                        hexagramCode={effectiveCode}
+                        value={changedPositions}
+                        onChange={setChangedPositions}
+                    />
+                    <p className="mt-2 text-xs text-foreground-secondary">
+                        变爻可多选；不选表示静卦，适合仅看当前态势。
                     </p>
 
-                    {/* 卦选择区域 */}
-                    <div className="bg-background/[0.02] border border-white/10 rounded-xl p-4">
-                        {selectMode === 'list' ? (
-                            <HexagramSelector
-                                value={hexagramCode}
-                                onChange={setHexagramCode}
-                            />
-                        ) : (
-                            <div className="space-y-4">
-                                <TrigramSelector
-                                    label="上卦（外卦）"
-                                    value={upperTrigram}
-                                    onChange={setUpperTrigram}
-                                />
-                                <TrigramSelector
-                                    label="下卦（内卦）"
-                                    value={lowerTrigram}
-                                    onChange={setLowerTrigram}
-                                />
+                    {/* 变卦显示 */}
+                    {changedInfo?.changedHexagram && (
+                        <div className={`mt-3 ${RESULT_CHIP_CLASS}`}>
+                            <span className="text-foreground-secondary">变卦：</span>
+                            <span className="font-display text-base text-accent-strong">{changedInfo.changedHexagram.name}</span>
+                            <span className="text-foreground-secondary">
+                                · {changedInfo.changedHexagram.element}
+                            </span>
+                        </div>
+                    )}
+                </section>
 
-                                {/* 组合结果 */}
-                                {currentHexagram && (
-                                    <div className="flex items-center gap-2 px-3 py-2 bg-accent/10 border border-accent/30 rounded-lg text-sm">
-                                        <span className="text-foreground-secondary">组合结果：</span>
-                                        <span className="text-accent font-bold">{currentHexagram.name}</span>
-                                        <span className="text-foreground-secondary">
-                                            · {currentHexagram.element} · {currentHexagram.nature}
-                                        </span>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
+                {/* 生成按钮 */}
+                <button
+                    type="button"
+                    onClick={handleGenerate}
+                    disabled={!effectiveCode || isLoading}
+                    className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-accent font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                    {isLoading ? (
+                        <>
+                            <SoundWaveLoader variant="inline" />
+                            生成中...
+                        </>
+                    ) : (
+                        <>
+                            <Sparkles className="h-5 w-5" />
+                            生成卦象
+                        </>
+                    )}
+                </button>
 
-                    {/* 变爻选择 */}
-                    <div className="bg-background/[0.02] border border-white/10 rounded-xl p-4">
-                        <ChangingLinesSelector
-                            hexagramCode={effectiveCode}
-                            value={changedPositions}
-                            onChange={setChangedPositions}
-                        />
-                        <p className="mt-2 text-xs text-foreground-secondary">
-                            变爻可多选；不选表示静卦，适合仅看当前态势。
-                        </p>
-
-                        {/* 变卦显示 */}
-                        {changedInfo?.changedHexagram && (
-                            <div className="mt-3 flex items-center gap-2 px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg text-sm">
-                                <span className="text-foreground-secondary">变卦：</span>
-                                <span className="text-red-500 font-bold">{changedInfo.changedHexagram.name}</span>
-                                <span className="text-foreground-secondary">
-                                    · {changedInfo.changedHexagram.element}
-                                </span>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* 生成按钮 */}
-                    <button
-                        onClick={handleGenerate}
-                        disabled={!effectiveCode || isLoading}
-                        className="w-full flex items-center justify-center gap-2 py-3 bg-accent text-on-accent rounded-xl font-medium
-                            hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                    >
-                        {isLoading ? (
-                            <>
-                                <SoundWaveLoader variant="inline" />
-                                生成中...
-                            </>
-                        ) : (
-                            <>
-                                <Sparkles className="w-5 h-5" />
-                                生成卦象
-                            </>
-                        )}
-                    </button>
-
-                    {/* 提示 */}
-                    <p className="text-xs text-foreground-secondary text-center">
-                        系统将根据当前时间计算干支、旺衰、空亡等传统分析
-                    </p>
-                </div>
+                {/* 提示 */}
+                <p className="text-center text-xs text-foreground-secondary">
+                    系统将根据当前时间计算干支、旺衰、空亡等传统分析
+                </p>
             </div>
         </div>
     );

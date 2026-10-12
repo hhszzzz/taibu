@@ -5,11 +5,10 @@
  */
 'use client';
 
-import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useRef, type KeyboardEvent, type ReactNode } from 'react';
 import Link from 'next/link';
-import { MoreHorizontal } from 'lucide-react';
-import { FloatingPanel } from '@/components/ui/FloatingPanel';
 import { AIFeatureGate } from '@/components/ai/AIFeatureGate';
+import { ResultMoreActions } from '@/components/divination/ResultMoreActions';
 import { ASK_TAIBU_HREF } from '@/components/bazi/result/ResultHeader';
 import type { HeaderMenuItem } from '@/components/layout/HeaderMenuContext';
 
@@ -87,43 +86,6 @@ function ModeTabs({ mode, onModeChange }: { mode: ZiweiChartMode; onModeChange: 
     );
 }
 
-function MoreActions({ actions }: { actions: HeaderMenuItem[] }) {
-    const anchorRef = useRef<HTMLButtonElement>(null);
-    const [open, setOpen] = useState(false);
-    if (actions.length === 0) return null;
-
-    return (
-        <>
-            <button
-                ref={anchorRef}
-                type="button"
-                aria-label="更多操作"
-                aria-haspopup="menu"
-                aria-expanded={open}
-                onClick={() => setOpen((value) => !value)}
-                className="flex size-10 items-center justify-center rounded-[10px] border-[0.5px] border-border-hover bg-surface text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground"
-            >
-                <MoreHorizontal className="size-[18px]" strokeWidth={1.8} />
-            </button>
-            <FloatingPanel open={open} anchorRef={anchorRef} onClose={() => setOpen(false)} label="命盘操作" align="end" className="w-48">
-                {actions.map((item) => (
-                    <button
-                        key={item.id}
-                        type="button"
-                        role="menuitem"
-                        disabled={item.disabled}
-                        onClick={() => { setOpen(false); item.onClick(); }}
-                        className="flex w-full items-center gap-2.5 px-2.5 py-2 text-left text-sm transition-colors hover:bg-background-secondary disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        {item.icon}
-                        {item.label}
-                    </button>
-                ))}
-            </FloatingPanel>
-        </>
-    );
-}
-
 export function ZiweiResultHeader({ title, summary, desktopSuffix, status, mode, onModeChange, actions }: ZiweiResultHeaderProps) {
     return (
         <header className="flex flex-col gap-3.5 lg:flex-row lg:flex-wrap lg:items-end lg:justify-between lg:gap-4">
@@ -141,7 +103,7 @@ export function ZiweiResultHeader({ title, summary, desktopSuffix, status, mode,
                     <ModeTabs mode={mode} onModeChange={onModeChange} />
                 </div>
                 <div className="hidden items-center gap-2 lg:flex">
-                    <MoreActions actions={actions} />
+                    <ResultMoreActions actions={actions} label="命盘操作" />
                     <AIFeatureGate>
                         <Link
                             href={ASK_TAIBU_HREF}

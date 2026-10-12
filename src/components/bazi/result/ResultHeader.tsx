@@ -9,6 +9,8 @@ const SECONDARY_BUTTON_CLASS = `${BUTTON_BASE_CLASS} text-foreground disabled:op
 /** 已保存态保持可读（成功色、不降透明度） */
 const SAVED_BUTTON_CLASS = `${BUTTON_BASE_CLASS} text-success`;
 
+const MOBILE_ASK_CLASS = 'flex h-12 flex-1 items-center justify-center rounded-xl bg-accent text-[15px] font-medium text-on-accent transition-colors duration-150 hover:bg-accent-hover';
+
 /** 打开 AI 对话的入口（与页脚「AI 对话」链接同一目的地）。 */
 export const ASK_TAIBU_HREF = '/chat';
 
@@ -121,7 +123,7 @@ export function ResultHeader({
 }
 
 /**
- * 移动端底部操作栏：保存 + 问太卜（桌面端由 ResultHeader 承担）。
+ * 移动端底部操作栏：保存 + 问太卜（桌面端由各页标题区承担）。
  * 固定在底部导航之上；页面容器需在移动端预留约 6rem 的底部留白。
  */
 export function ResultMobileActions({
@@ -130,12 +132,15 @@ export function ResultMobileActions({
     saveDisabled = false,
     saveLabel = '保存',
     onSave,
+    ask,
 }: {
     saving: boolean;
     saved: boolean;
     saveDisabled?: boolean;
     saveLabel?: string;
     onSave: () => void;
+    /** 页内主操作（如六爻「问太卜解卦」直接发起解读）；缺省时跳转 AI 对话「问太卜」。 */
+    ask?: { label: string; onClick: () => void; disabled?: boolean };
 }) {
     return (
         <div className="fixed inset-x-0 bottom-[calc(4rem+var(--sab))] z-30 flex gap-2 border-t-[0.5px] border-border bg-background px-4 py-3 sm:px-6 lg:hidden">
@@ -148,12 +153,20 @@ export function ResultMobileActions({
                 {saved ? '已保存' : saving ? '保存中' : saveLabel}
             </button>
             <AIFeatureGate>
-                <Link
-                    href={ASK_TAIBU_HREF}
-                    className="flex h-12 flex-1 items-center justify-center rounded-xl bg-accent text-[15px] font-medium text-on-accent transition-colors duration-150 hover:bg-accent-hover"
-                >
-                    问太卜
-                </Link>
+                {ask ? (
+                    <button
+                        type="button"
+                        onClick={ask.onClick}
+                        disabled={ask.disabled}
+                        className={`${MOBILE_ASK_CLASS} disabled:cursor-not-allowed disabled:opacity-60`}
+                    >
+                        {ask.label}
+                    </button>
+                ) : (
+                    <Link href={ASK_TAIBU_HREF} className={MOBILE_ASK_CLASS}>
+                        问太卜
+                    </Link>
+                )}
             </AIFeatureGate>
         </div>
     );

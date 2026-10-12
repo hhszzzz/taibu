@@ -24,10 +24,12 @@ import { normalizeQuestions } from './questions';
 import { validateTodos } from './todos';
 import { ANALYSIS_METHODS, loadAnalysisMethod } from './methods.server';
 import { attachmentBytes, attachmentDto, validateAttachmentIds } from './attachments.server';
-import { AGENT_MEMORY_SELECT } from './memory';
+import { AGENT_MEMORY_SELECT, publicMemory, type AgentMemory } from './memory';
 import { authorizeChartReference, loadAgentChart, loadInspectedChart } from './chart-tools.server';
 import { CHART_SOURCE_KINDS, getChartTargets, validateChartFocus } from './chart-interaction';
-import { isAgentChartTool } from './tool-presentation';
+import { isAgentChartTool } from './tool-catalog';
+import { nextAgentCitation } from './evidence';
+import { readAgentCite } from './tool-presentation';
 import { searchKnowledgeWithPersistence } from "@/lib/knowledge-base/search";
 import type {
   KnowledgeSearchPersistence,
@@ -269,6 +271,62 @@ export async function createAgentTools(
       }),
     );
   };
+  // Evidence numbers continue the conversation's (evidence.ts) and are stamped on
+  // the returned rows, so the model cites what the reader sees. Each call records
+  // the last number it used: a replayed result records the same number again.
+  // Runs created before numbering have no base and keep unnumbered results.
+  const lastCitation = (except?: string) => Math.max(checkpoint.citations?.base ?? 0,
+    ...Object.entries(checkpoint.citations?.calls ?? {}).flatMap(([callId, last]) => callId === except ? [] : [last]));
+  const stampCitations = <T extends object>(rows: T[]) => {
+    if (!checkpoint.citations) return rows;
+    const first = lastCitation() + 1;
+    return rows.map((row, index) => ({ ...row, cite: first + index }));
+  };
+  const recordCitations = (callId: string, cites: Array<number | null>) => {
+    if (!checkpoint.citations || !cites.length) return;
+    const last = cites.reduce<number>((previous, cite) => nextAgentCitation(previous, cite), lastCitation(callId));
+    checkpoint.citations = { base: checkpoint.citations.base, calls: { ...checkpoint.citations.calls, [callId]: last } };
+  };
+  const citesOf = (rows: unknown) => Array.isArray(rows) ? rows.map(row => readAgentCite((row as { cite?: unknown } | null)?.cite)) : [];
+  // Checkpoint state is derived from a tool's persisted details only. Fresh
+  // results apply it after agent_cache_tool succeeds and cached results replay
+  // the same reducer, so a failed cache write cannot leave a phantom question,
+  // a task-list revision the model never saw, or a stale final selection.
+  const checkpointEffects = new Map<string, (details: unknown, callId: string) => void>([
+    ["ask_user", (details, callId) => {
+      const question = (details as { question: string }).question;
+      checkpoint.question = question;
+      checkpoint.questions = normalizeQuestions((details as { questions?: unknown }).questions, question);
+      checkpoint.questionId = callId;
+      putPart({ type: "question", id: callId, question, questions: checkpoint.questions });
+    }],
+    ["todo_write", (details) => {
+      checkpoint.todos = details as AgentCheckpoint["todos"];
+      putPart({ type: "todo", id: "task-list", ...checkpoint.todos! });
+    }],
+    ["web_search", (details, callId) => {
+      putSources(callId, details as Array<{ title: string; url: string; content: string }>);
+      recordCitations(callId, citesOf(details));
+    }],
+    ["select_final_artifacts", (details) => {
+      checkpoint.finalArtifacts = (details as { artifactIds: string[] }).artifactIds;
+      checkpoint.finalSelectionMade = true;
+    }],
+    ["search_knowledge", (details, callId) => {
+      checkpoint.knowledgeQueries = {
+        ...checkpoint.knowledgeQueries,
+        [callId]: (details as unknown[]).length,
+      };
+      recordCitations(callId, citesOf(details));
+    }],
+    ["focus_chart", (details, callId) =>
+      recordCitations(callId, [readAgentCite((details as { cite?: unknown }).cite)])],
+  ]);
+  const applyResult = (name: string, kind: AgentArtifactRow["kind"], details: unknown, callId: string) => {
+    // A new or replayed calculation requires the final selection to be confirmed again.
+    if (kind === "calculation") checkpoint.finalSelectionMade = false;
+    checkpointEffects.get(name)?.(details, callId);
+  };
   const checkMember = async () =>
     getUserCreditInfo(run.user_id, { client: store.db });
   const wrap = <T extends TSchema>(
@@ -295,44 +353,7 @@ export async function createAgentTools(
       if (cached) {
         if (cached.tool_name !== name || !isDeepStrictEqual(cached.args, args))
           throw new Error("工具调用标识对应了不同参数");
-        if (kind === "calculation") checkpoint.finalSelectionMade = false;
-        if (name === "ask_user") {
-          checkpoint.question = (
-            cached.result.details as { question: string }
-          ).question;
-          checkpoint.questions = normalizeQuestions((cached.result.details as { questions?: unknown }).questions, checkpoint.question);
-          checkpoint.questionId = callId;
-          putPart({
-            type: "question",
-            id: callId,
-            question: checkpoint.question,
-            questions: checkpoint.questions,
-          });
-        }
-        if (name === 'todo_write') {
-          checkpoint.todos = cached.result.details as AgentCheckpoint['todos'];
-          putPart({ type: 'todo', id: 'task-list', ...checkpoint.todos! });
-        }
-        if (name === "web_search")
-          putSources(
-            callId,
-            cached.result.details as Array<{
-              title: string;
-              url: string;
-              content: string;
-            }>,
-          );
-        if (name === "select_final_artifacts") {
-          checkpoint.finalArtifacts = (
-            cached.result.details as { artifactIds: string[] }
-          ).artifactIds;
-          checkpoint.finalSelectionMade = true;
-        }
-        if (name === "search_knowledge")
-          checkpoint.knowledgeQueries = {
-            ...checkpoint.knowledgeQueries,
-            [callId]: (cached.result.details as unknown[]).length,
-          };
+        applyResult(name, kind, cached.result.details, callId);
         return kind === "calculation"
           ? {
               ...cached.result,
@@ -364,7 +385,7 @@ export async function createAgentTools(
               )
             : null,
       });
-      if (kind === "calculation") checkpoint.finalSelectionMade = false;
+      applyResult(name, kind, result.details, callId);
       return kind === "calculation"
         ? {
             ...result,
@@ -422,7 +443,8 @@ export async function createAgentTools(
         includeRelated: Type.Optional(Type.Boolean()), caption: Type.String({ minLength: 1, maxLength: 160 }) }),
       async args => {
         const { reference, value } = await loadInspectedChart(store, run, args.reference);
-        return textResult({ chartFocus: validateChartFocus(value, reference, args.targetIds, args.includeRelated ?? true, args.caption) });
+        const chartFocus = validateChartFocus(value, reference, args.targetIds, args.includeRelated ?? true, args.caption);
+        return textResult(checkpoint.citations ? { chartFocus, cite: lastCitation() + 1 } : { chartFocus });
       }),
   );
   tools.push(
@@ -502,7 +524,7 @@ export async function createAgentTools(
         query: Type.String({ minLength: 1 }),
         kbIds: Type.Optional(Type.Array(Type.String({ format: "uuid" }))),
       }),
-      async (args, callId) => {
+      async (args) => {
         const account = await checkMember();
         const results = await searchKnowledgeWithPersistence(
           args.query,
@@ -518,11 +540,7 @@ export async function createAgentTools(
             topK: 5,
           },
         );
-        checkpoint.knowledgeQueries = {
-          ...checkpoint.knowledgeQueries,
-          [callId]: results.length,
-        };
-        return textResult(results);
+        return textResult(stampCitations(results));
       },
     ),
   );
@@ -536,40 +554,25 @@ export async function createAgentTools(
         "web_search",
         "联网检索公开资料，返回可引用来源；仅发送完成检索必要的信息",
         Type.Object({ query: Type.String({ minLength: 1 }) }),
-        async (args, callId, signal) => {
-          const results = await searchAgentWeb(args.query, signal);
-          putSources(callId, results);
-          return textResult(results);
-        },
+        async (args, _callId, signal) =>
+          textResult(stampCitations(await searchAgentWeb(args.query, signal))),
       ),
     );
   }
   tools.push(
     wrap(
       "ask_user",
-      "缺少必要信息时向用户提出问题并暂停任务；不能猜测出生数据",
-      Type.Object({ question: Type.Optional(Type.String({ minLength: 1 })), questions: Type.Optional(Type.Array(Type.Object({ id: Type.String(), question: Type.String(), options: Type.Optional(Type.Array(Type.Object({ id: Type.String(), label: Type.String() }))), multiple: Type.Optional(Type.Boolean()), allowCustom: Type.Optional(Type.Boolean()), allowSkip: Type.Optional(Type.Boolean()) }), { minItems: 1, maxItems: 10 })) }),
-      async (args, callId) => {
+      "缺少必要信息时向用户提出问题并暂停任务；不能猜测出生数据。每题给 header 短标签（2–6 字，如“出生时间”）；question 首行是问题，其后可写一行填写提示",
+      Type.Object({ question: Type.Optional(Type.String({ minLength: 1 })), questions: Type.Optional(Type.Array(Type.Object({ id: Type.String(), question: Type.String(), header: Type.Optional(Type.String({ description: "问题导航中的短标签，2–6 个字" })), options: Type.Optional(Type.Array(Type.Object({ id: Type.String(), label: Type.String() }))), multiple: Type.Optional(Type.Boolean()), allowCustom: Type.Optional(Type.Boolean()), allowSkip: Type.Optional(Type.Boolean()) }), { minItems: 1, maxItems: 10 })) }),
+      async (args) => {
         const questions = normalizeQuestions(args.questions, args.question);
-        checkpoint.question = questions.map(item => item.question).join('\n\n');
-        checkpoint.questions = questions;
-        checkpoint.questionId = callId;
-        putPart({
-          type: "question",
-          id: callId,
-          question: checkpoint.question,
-          questions,
-        });
-        return textResult({ question: checkpoint.question, questions, awaitingUser: true });
+        return textResult({ question: questions.map(item => item.question).join('\n\n'), questions, awaitingUser: true });
       },
     ),
   );
   tools.push(wrap('todo_write', '复杂任务维护真实步骤；稳定 ID，revision 必须匹配；简单问答无需清单', Type.Object({ revision: Type.Integer({ minimum: 0 }), items: Type.Array(Type.Object({ id: Type.String(), title: Type.String(), status: Type.Union([Type.Literal('pending'), Type.Literal('in_progress'), Type.Literal('completed')]) }), { maxItems: 50 }) }), async args => {
     if (args.revision !== (checkpoint.todos?.revision ?? 0)) throw new Error('任务清单版本冲突，请使用当前 revision');
-    const items = validateTodos(args.items);
-    checkpoint.todos = { revision: args.revision + 1, items };
-    putPart({ type: 'todo', id: 'task-list', ...checkpoint.todos });
-    return textResult(checkpoint.todos);
+    return textResult({ revision: args.revision + 1, items: validateTodos(args.items) });
   }));
   tools.push(wrap('list_analysis_methods', '列出可信、版本化分析方法目录；按问题需要加载', Type.Object({}), async () => textResult(ANALYSIS_METHODS)));
   tools.push(wrap('load_analysis_method', '按需加载分析方法；计算仍使用 Core，执行权限会重新核验', Type.Object({ id: Type.String(), version: Type.Optional(Type.String()) }), async args => textResult(loadAnalysisMethod(args.id, args.version))));
@@ -593,9 +596,7 @@ export async function createAgentTools(
         );
         if (args.artifactIds.some((id) => !available.has(id)))
           throw new Error("最终成果不存在");
-        checkpoint.finalArtifacts = [...new Set(args.artifactIds)];
-        checkpoint.finalSelectionMade = true;
-        return textResult({ artifactIds: checkpoint.finalArtifacts });
+        return textResult({ artifactIds: [...new Set(args.artifactIds)] });
       },
     ),
   );
@@ -605,7 +606,7 @@ export async function createAgentTools(
       if (error) throw new Error('读取记忆失败');
       return textResult(data ?? []);
     }),
-    wrap('remember_user_fact', '摘录用户明确表达的长期偏好或事实，content 必须等于 evidence 的用户原话（去除首尾空白）；不要保存推断、密钥或任务中间结果', Type.Object({ title: Type.String({ minLength: 1, maxLength: 80 }), content: Type.String({ minLength: 8, maxLength: 500 }), kind: Type.Union([Type.Literal('preference'), Type.Literal('context')]), evidence: Type.String({ minLength: 8, maxLength: 500 }) }), async args => textResult(await store.rpc('agent_write_memory', { ...store.lease(run), p_title: args.title, p_content: args.content, p_kind: args.kind, p_evidence: args.evidence }))),
+    wrap('remember_user_fact', '摘录用户明确表达的长期偏好或事实，content 必须等于 evidence 的用户原话（去除首尾空白）；不要保存推断、密钥或任务中间结果', Type.Object({ title: Type.String({ minLength: 1, maxLength: 80 }), content: Type.String({ minLength: 8, maxLength: 500 }), kind: Type.Union([Type.Literal('preference'), Type.Literal('context')]), evidence: Type.String({ minLength: 8, maxLength: 500 }) }), async args => textResult(publicMemory(await store.rpc<AgentMemory>('agent_write_memory', { ...store.lease(run), p_title: args.title, p_content: args.content, p_kind: args.kind, p_evidence: args.evidence })))),
   );
   return tools;
 }

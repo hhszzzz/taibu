@@ -14,16 +14,28 @@
 
 import { memo, useMemo, lazy, Suspense, type HTMLAttributes } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
+import type { PluggableList } from 'unified';
 import { MarkdownBlocks, markdownPlugins, pendingChartFence } from '@/lib/chat/markdown-blocks';
+import { remarkCitations } from '@/lib/chat/markdown-citations';
 import { HighlightedCode, MarkdownTable } from './MarkdownTools';
 import type { ChartData } from '@/lib/visualization/chart-types';
 
 const ChartRenderer = lazy(() => import('@/components/visualization/ChartRenderer'));
 
+/** Answer citations: known numbers become badges that open their source. */
+export interface MarkdownCitations {
+    /** Title of each number the text may cite; any other number stays plain text. */
+    labels: ReadonlyMap<number, string>;
+    /** The number whose source is open, marked on its badges. */
+    active?: number | null;
+    onOpen?: (cite: number) => void;
+}
+
 interface MarkdownContentProps {
     content: string;
     className?: string;
     streaming?: boolean;
+    citations?: MarkdownCitations;
 }
 
 // 静态组件定义，避免每次渲染重新创建
@@ -111,7 +123,7 @@ const staticComponents: Partial<Components> = {
 // remarkPlugins 数组提取到外部，避免每次渲染创建新数组
 const remarkPlugins = markdownPlugins;
 
-const MarkdownBlock = memo(function MarkdownBlock({ content, className, streaming }: MarkdownContentProps) {
+const MarkdownBlock = memo(function MarkdownBlock({ content, className, streaming, citations }: MarkdownContentProps) {
     // 使用 useMemo 缓存 textClass，避免每次渲染重新拼接字符串
     const textClass = useMemo(
         () => `leading-relaxed ${className ?? 'text-sm text-foreground'}`,
@@ -133,7 +145,20 @@ const MarkdownBlock = memo(function MarkdownBlock({ content, className, streamin
             <ol className={`${textClass} list-decimal pl-5 space-y-1`}>{children}</ol>
         ),
         li: ({ children }) => <li className={textClass}>{children}</li>,
-    }), [textClass, streaming, content]);
+        ...(citations ? {
+            sup: ({ node, children }) => {
+                const cite = Number(node?.properties?.dataCite);
+                const label = citations.labels.get(cite);
+                if (label === undefined) return <sup>{children}</sup>;
+                const open = citations.onOpen;
+                // Without a workspace to open the source in, the badge only names it.
+                if (!open) return <sup className="md-cite" data-cite={cite} title={label}>{cite}</sup>;
+                return <button type="button" className="md-cite" data-cite={cite} data-active={citations.active === cite || undefined}
+                    aria-label={`依据 ${cite}：${label}`} title={label} onClick={() => open(cite)}>{cite}</button>;
+            },
+        } satisfies Partial<Components> : {}),
+    }), [textClass, streaming, content, citations]);
+    const plugins = useMemo<PluggableList>(() => citations ? [...remarkPlugins, [remarkCitations, { isKnown: (cite: number) => citations.labels.has(cite) }]] : remarkPlugins, [citations]);
 
     // 合并静态和动态组件
     const components = useMemo<Partial<Components>>(
@@ -142,17 +167,17 @@ const MarkdownBlock = memo(function MarkdownBlock({ content, className, streamin
     );
 
     return (
-        <ReactMarkdown remarkPlugins={remarkPlugins} components={components}>
+        <ReactMarkdown remarkPlugins={plugins} components={components}>
             {content}
         </ReactMarkdown>
     );
 });
 
-function MarkdownContentInner({ content, className, streaming = false }: MarkdownContentProps) {
+function MarkdownContentInner({ content, className, streaming = false, citations }: MarkdownContentProps) {
     const cache = useMemo(() => new MarkdownBlocks(), []);
     const blocks = useMemo(() => cache.advance(content), [cache, content]);
-    return <>{blocks.map((block, index) => <MarkdownBlock key={index} content={block} className={className} streaming={streaming && index === blocks.length - 1} />)}</>;
+    return <>{blocks.map((block, index) => <MarkdownBlock key={index} content={block} className={className} streaming={streaming && index === blocks.length - 1} citations={citations} />)}</>;
 }
 
-// 使用 memo 包装，只在 content 或 className 变化时重渲染
+// 使用 memo 包装，只在 props（content、className、streaming、citations）变化时重渲染
 export const MarkdownContent = memo(MarkdownContentInner);

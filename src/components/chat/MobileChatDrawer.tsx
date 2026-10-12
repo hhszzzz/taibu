@@ -1,385 +1,51 @@
 /**
- * 移动端对话抽屉
- *
- * 在 /chat 页面的移动端显示，提供滑入式侧边栏展示对话列表。
- * 桌面端由全局 Sidebar 的 SidebarConversations 组件负责。
+ * 移动端导航抽屉：对话页标题栏左侧的 ≡ 打开，内容与桌面对话侧栏相同
+ * （新对话、搜索、命盘、命理记录、按日期分组的对话与任务标记、账户）。
  *
  * 'use client' 标记说明：
- * - 使用 React hooks 和交互状态
+ * - 需要抽屉开关状态与任务状态轮询
  */
 'use client';
 
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
-import {
-    Search, SquarePen, PanelLeft, X,
-} from 'lucide-react';
-import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
-import type { ConversationListItem, ConversationSourceType } from '@/types';
-import { useConversationList } from '@/lib/chat/ConversationListContext';
-import { useKnowledgeBaseFeatureEnabled } from '@/components/knowledge-base/useKnowledgeBaseFeatureEnabled';
-import { AddToKnowledgeBaseModal } from '@/components/knowledge-base/AddToKnowledgeBaseModal';
-import { ConversationGroup } from '@/components/chat/sidebar/ConversationGroup';
-import { SOURCE_TYPE_CONFIG, SOURCE_TYPE_ORDER } from '@/lib/chat/conversation-groups';
-import { ConversationActions } from './sidebar/ConversationActions';
+import { Suspense, useCallback, useId, useRef, useState } from 'react';
+import { Menu } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
+import { AuthModal } from '@/components/auth/AuthModal';
 import { Modal } from '@/components/ui/Modal';
+import { ChatSidebarPanel } from '@/components/chat/sidebar/ChatSidebar';
+import { useSessionSafe } from '@/components/providers/ClientProviders';
+import { useConversationList } from '@/lib/chat/ConversationListContext';
+import { useAgentActivity } from '@/lib/agent/use-agent-activity';
 
 export function MobileChatDrawer() {
-    const router = useRouter();
-    const {
-        conversations,
-        conversationsLoading,
-        loadingMoreConversations,
-        hasLoadedConversations,
-        hasMoreConversations,
-        conversationListError,
-        pendingSidebarTitle,
-        retryConversationListLoad,
-        handleDeleteConversation,
-        handleRenameConversation,
-        handleNewChat,
-        triggerConversationListLoad,
-        loadMoreConversations,
-    } = useConversationList();
-    const { knowledgeBaseEnabled } = useKnowledgeBaseFeatureEnabled();
-
-    const [isOpen, setIsOpen] = useState(false);
-    const [isSearching, setIsSearching] = useState(false);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [collapsedGroups, setCollapsedGroups] = useState<Set<ConversationSourceType>>(new Set());
-    const [actionConv, setActionConv] = useState<ConversationListItem | null>(null);
-    const [actionView, setActionView] = useState<'menu' | 'rename' | 'delete'>('menu');
-    const actionAnchorRef = useRef<HTMLElement>(null);
+    const { triggerConversationListLoad } = useConversationList();
+    const [open, setOpen] = useState(false);
+    const [showAuthModal, setShowAuthModal] = useState(false);
     const triggerRef = useRef<HTMLButtonElement>(null);
-    const [editingId, setEditingId] = useState<string | null>(null);
-    const [editTitle, setEditTitle] = useState('');
-    const [archiveTarget, setArchiveTarget] = useState<ConversationListItem | null>(null);
-    const [deleteLoading, setDeleteLoading] = useState(false);
-    const [hasUserScrolled, setHasUserScrolled] = useState(false);
-    const scrollContainerRef = useRef<HTMLDivElement | null>(null);
-    const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
-
-    // Determine active conversation from URL
-    const activeId = useMemo(() => {
-        if (typeof window === 'undefined') return undefined;
-        const url = new URL(window.location.href);
-        return url.searchParams.get('id') ?? undefined;
-    }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps -- re-derive on open/close
-
-    const groupedConversations = useMemo(() => {
-        const query = searchQuery.toLowerCase().trim();
-        const filtered = query
-            ? conversations.filter(conv => (conv.title ?? '').toLowerCase().includes(query))
-            : conversations;
-
-        const groups: Record<ConversationSourceType, ConversationListItem[]> = {
-            chat: [], dream: [], bazi_wuxing: [], bazi_personality: [],
-            tarot: [], liuyao: [], ziwei: [], mbti: [], hepan: [],
-            palm: [], face: [], qimen: [], daliuren: [],
-            meihua: [], xiaoliuren: [],
-        };
-
-        filtered.forEach(conv => {
-            let type = conv.sourceType || 'chat';
-            if (type === 'bazi_personality') type = 'bazi_wuxing';
-            if (groups[type]) groups[type].push(conv);
-            else groups.chat.push(conv);
-        });
-
-        return groups;
-    }, [conversations, searchQuery]);
-
-    const toggleGroup = useCallback((type: ConversationSourceType) => {
-        setCollapsedGroups(prev => {
-            const next = new Set(prev);
-            if (next.has(type)) next.delete(type);
-            else next.add(type);
-            return next;
-        });
-    }, []);
-
-    const handleSelect = useCallback((id: string) => {
-        router.push(`/chat?id=${id}`);
-        setIsOpen(false);
-        setHasUserScrolled(false);
-    }, [router]);
-
-    const handleNew = useCallback(async () => {
-        await handleNewChat();
-        router.push('/chat');
-        setIsOpen(false);
-        setHasUserScrolled(false);
-    }, [handleNewChat, router]);
-
-    const closeDrawer = useCallback(() => {
-        setIsOpen(false);
-        setHasUserScrolled(false);
-    }, []);
-
-    const handleToggle = useCallback(() => {
-        if (isOpen) {
-            setActionConv(null);
-            setActionView('menu');
-            closeDrawer();
-            return;
-        }
-
-        setIsOpen(true);
-        triggerConversationListLoad();
-    }, [closeDrawer, isOpen, triggerConversationListLoad]);
-
-    // Action menu helpers
-    const closeActionSheet = useCallback(() => {
-        setActionConv(null);
-        setActionView('menu');
-    }, []);
-
-    const openActionSheet = useCallback((conv: ConversationListItem, e: React.MouseEvent) => {
-        actionAnchorRef.current = e.currentTarget as HTMLElement;
-        setActionConv(conv);
-        setActionView('menu');
-    }, []);
-
-    const startInlineRename = useCallback(() => {
-        if (!actionConv || actionConv.sourceType !== 'chat') return;
-        setEditingId(actionConv.id);
-        setEditTitle(actionConv.title);
-        closeActionSheet();
-    }, [actionConv, closeActionSheet]);
-
-    const saveRename = useCallback(() => {
-        if (editingId && editTitle.trim()) {
-            handleRenameConversation(editingId, editTitle.trim());
-            setEditingId(null);
-            setEditTitle('');
-        }
-    }, [editingId, editTitle, handleRenameConversation]);
-
-    const cancelRename = useCallback(() => {
-        setEditingId(null);
-        setEditTitle('');
-    }, []);
-
-    const confirmDelete = useCallback(() => {
-        if (!actionConv) return Promise.resolve();
-
-        setDeleteLoading(true);
-        return handleDeleteConversation(actionConv.id).finally(() => {
-            setDeleteLoading(false);
-            closeActionSheet();
-        });
-    }, [actionConv, closeActionSheet, handleDeleteConversation]);
-
-    const openArchive = useCallback(() => {
-        if (!actionConv) return;
-        setArchiveTarget(actionConv);
-        closeActionSheet();
-    }, [actionConv, closeActionSheet]);
-
-    useEffect(() => {
-        const scrollContainer = scrollContainerRef.current;
-        if (!scrollContainer) {
-            return;
-        }
-
-        const handleScroll = () => {
-            setHasUserScrolled(scrollContainer.scrollTop > 0);
-        };
-
-        scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
-        return () => {
-            scrollContainer.removeEventListener('scroll', handleScroll);
-        };
-    }, [isOpen]);
-
-    useEffect(() => {
-        if (
-            !isOpen
-            || !hasLoadedConversations
-            || !hasUserScrolled
-            || !hasMoreConversations
-            || loadingMoreConversations
-            || !loadMoreSentinelRef.current
-            || !scrollContainerRef.current
-        ) {
-            return;
-        }
-
-        const observer = new IntersectionObserver((entries) => {
-            if (entries.some((entry) => entry.isIntersecting)) {
-                void loadMoreConversations();
-            }
-        }, {
-            root: scrollContainerRef.current,
-            rootMargin: '120px 0px',
-        });
-
-        observer.observe(loadMoreSentinelRef.current);
-        return () => observer.disconnect();
-    }, [
-        hasLoadedConversations,
-        hasUserScrolled,
-        hasMoreConversations,
-        isOpen,
-        loadMoreConversations,
-        loadingMoreConversations,
-    ]);
+    const titleId = useId();
+    const close = useCallback(() => setOpen(false), []);
+    const login = useCallback(() => setShowAuthModal(true), []);
 
     return (
         <>
-            <button ref={triggerRef} type="button" onClick={handleToggle} className="chat-mobile-conversations lg:hidden" aria-label="打开聊天列表" aria-haspopup="dialog" aria-expanded={isOpen}><PanelLeft size={18} /></button>
-            <Modal open={isOpen} onClose={() => { setActionConv(null); setActionView('menu'); closeDrawer(); }} returnFocusRef={triggerRef} labelledBy="mobile-chat-drawer-title" className="chat-conversation-drawer">
-                {/* 内容区域 */}
-                <div className="h-full bg-background flex flex-col">
-                    <div className="flex items-center justify-between px-4 pt-4"><h2 id="mobile-chat-drawer-title" className="text-sm font-semibold">聊天列表</h2><button type="button" onClick={() => { closeActionSheet(); closeDrawer(); }} aria-label="关闭聊天列表" className="agent-icon-button"><X size={17} /></button></div>
-                    {/* 操作按钮 */}
-                    <div className="px-2 py-2 space-y-1">
-                        <div className="flex items-center gap-1">
-                            <button
-                                onClick={handleNew}
-                                className="flex items-center gap-3 px-3 py-2.5 h-12 rounded-md hover:bg-background-secondary active:bg-background-tertiary transition-colors duration-150 text-sm flex-1"
-                                title="新聊天"
-                            >
-                                <SquarePen className="w-5 h-5 flex-shrink-0" />
-                                <span className="whitespace-nowrap">新聊天</span>
-                            </button>
-                        </div>
-
-                        <button
-                            onClick={() => setIsSearching(!isSearching)}
-                            className={`flex items-center gap-3 px-3 py-2.5 h-12 rounded-md transition-colors duration-150 text-sm ${isSearching ? 'bg-background-secondary' : 'hover:bg-background-secondary'} w-full`}
-                            title="搜索聊天"
-                        >
-                            <Search className="w-5 h-5 flex-shrink-0" />
-                            <span className="whitespace-nowrap">搜索聊天</span>
-                        </button>
-                    </div>
-
-                    {/* 搜索框 */}
-                    {isSearching && (
-                        <div className="px-3 pb-3">
-                            <input
-                                type="text"
-                                value={searchQuery}
-                                onChange={e => setSearchQuery(e.target.value)}
-                                placeholder="搜索对话标题..."
-                                className="w-full px-3 py-2 text-sm rounded-md bg-background border border-border text-foreground placeholder:text-foreground-secondary focus:outline-none focus:ring-2 focus:ring-accent/10 focus:border-accent"
-                                autoFocus
-                            />
-                        </div>
-                    )}
-
-                    {/* 分组对话列表 */}
-                    <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-2 pb-2">
-                        {conversationListError && !hasLoadedConversations && !conversationsLoading ? (
-                            <div className="rounded-lg border border-[#ead9bf] bg-[#fcf8ee] px-4 py-4 text-sm text-[#946c21]">
-                                <div>{conversationListError}</div>
-                                <button
-                                    type="button"
-                                    onClick={() => { void retryConversationListLoad(); }}
-                                    className="mt-3 rounded-md px-3 py-1.5 font-medium text-[#7c5f1c] transition-colors hover:bg-[#f4ead3]"
-                                >
-                                    重试
-                                </button>
-                            </div>
-                        ) : !hasLoadedConversations || conversationsLoading ? (
-                            <div className="flex flex-col items-center justify-center text-foreground-secondary text-sm py-8 gap-2">
-                                {hasLoadedConversations ? (
-                                    <>
-                                        <SoundWaveLoader variant="inline" />
-                                    </>
-                                ) : (
-                                    <div className="w-full px-3 space-y-3">
-                                        <div className="h-4 w-24 rounded-md bg-background-secondary animate-pulse" />
-                                        <div className="space-y-2">
-                                            <div className="h-9 rounded-md bg-background-secondary animate-pulse" />
-                                            <div className="h-9 rounded-md bg-background-secondary animate-pulse" />
-                                            <div className="h-9 rounded-md bg-background-secondary animate-pulse" />
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        ) : conversations.length === 0 && !pendingSidebarTitle ? (
-                            <div className="text-center text-foreground-secondary text-sm py-8">
-                                暂无对话记录
-                            </div>
-                        ) : (
-                            <>
-                                {conversationListError ? (
-                                    <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-[#ead9bf] bg-[#fcf8ee] px-3 py-2 text-xs text-[#946c21]">
-                                        <span className="min-w-0 flex-1">{conversationListError}</span>
-                                        <button
-                                            type="button"
-                                            onClick={() => { void retryConversationListLoad(); }}
-                                            className="shrink-0 rounded-md px-2 py-1 font-medium text-[#7c5f1c] transition-colors hover:bg-[#f4ead3]"
-                                        >
-                                            重试
-                                        </button>
-                                    </div>
-                                ) : null}
-                                {SOURCE_TYPE_ORDER.map(type => {
-                                    const items = groupedConversations[type];
-                                    const showPendingInGroup = type === 'chat' && !!pendingSidebarTitle;
-                                    if (items.length === 0 && !showPendingInGroup) return null;
-
-                                    const config = SOURCE_TYPE_CONFIG[type];
-                                    const isGroupCollapsed = collapsedGroups.has(type);
-
-                                    return (
-                                        <ConversationGroup
-                                            key={type}
-                                            type={type}
-                                            label={config.label}
-                                            items={items}
-                                            showLabel={type !== 'chat'}
-                                            isGroupCollapsed={isGroupCollapsed}
-                                            onToggleGroup={toggleGroup}
-                                            activeId={activeId}
-                                            actionConvId={actionConv?.id}
-                                            isSidebarCollapsed={false}
-                                            onSelect={handleSelect}
-                                            onOpenAction={openActionSheet}
-                                            editingId={editingId}
-                                            editTitle={editTitle}
-                                            onEditTitleChange={setEditTitle}
-                                            onSaveRename={saveRename}
-                                            onCancelRename={cancelRename}
-                                            pendingTitle={pendingSidebarTitle}
-                                            showPendingInGroup={showPendingInGroup}
-                                        />
-                                    );
-                                })}
-                                {hasLoadedConversations && hasMoreConversations && (
-                                    <div ref={loadMoreSentinelRef} className="py-3">
-                                        {loadingMoreConversations ? (
-                                            <div className="flex items-center justify-center gap-2 text-xs text-foreground-secondary">
-                                                <SoundWaveLoader variant="inline" />
-                                            </div>
-                                        ) : (
-                                            <div className="text-center text-xs text-foreground-secondary">
-                                                上滑加载更多
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </>
-                        )}
-                    </div>
-                </div>
-
-                <ConversationActions conversation={actionConv} anchorRef={actionAnchorRef} view={actionView} onViewChange={setActionView} onClose={closeActionSheet} onRename={startInlineRename} onArchive={openArchive} onDelete={confirmDelete} deleting={deleteLoading} knowledgeBaseEnabled={knowledgeBaseEnabled} withinModal />
+            <button ref={triggerRef} type="button" className="chat-nav-trigger" aria-label="打开聊天列表" aria-haspopup="dialog" aria-expanded={open}
+                onClick={() => { setOpen(true); triggerConversationListLoad(); }}>
+                <Menu size={20} aria-hidden="true" />
+            </button>
+            <Modal open={open} onClose={close} returnFocusRef={triggerRef} labelledBy={titleId} className="chat-conversation-drawer">
+                <Suspense fallback={null}>
+                    <DrawerPanel titleId={titleId} onClose={close} onLogin={login} />
+                </Suspense>
             </Modal>
-
-            {/* Knowledge base archive modal */}
-            {knowledgeBaseEnabled && archiveTarget && (
-                <AddToKnowledgeBaseModal
-                    open={true}
-                    onClose={() => setArchiveTarget(null)}
-                    sourceTitle={archiveTarget.title}
-                    sourceType="conversation"
-                    sourceId={archiveTarget.id}
-                />
-            )}
+            <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
         </>
     );
+}
+
+/** Mounted only while the drawer is open, so task markers are read only then. */
+function DrawerPanel({ titleId, onClose, onLogin }: { titleId: string; onClose: () => void; onLogin: () => void }) {
+    const { user } = useSessionSafe();
+    const conversationId = useSearchParams().get('id');
+    const markers = useAgentActivity(user?.id ?? null, conversationId);
+    return <ChatSidebarPanel markers={markers} onClose={onClose} onLogin={onLogin} heading={<h2 id={titleId} className="sr-only">聊天列表</h2>} />;
 }

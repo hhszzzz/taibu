@@ -1,4 +1,6 @@
 'use client';
+// 'use client'：附件预览需要弹窗状态与浏览器内的私有资料请求
+
 import { useEffect, useState } from 'react';
 import { FileText, ImageIcon, X } from 'lucide-react';
 import type { PrivateAttachment } from '@/types';
@@ -6,13 +8,24 @@ import { Modal } from '@/components/ui/Modal';
 import './attachments.css';
 import Image from 'next/image';
 
+const sizeLabel = (bytes: number) => bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+const typeLabel = (name: string) => name.includes('.') ? name.split('.').pop()!.slice(0, 4).toUpperCase() : 'TXT';
+
 export function PrivateAttachments({ ids, items, onRemove, disabled }: {
     ids?: string[]; items?: PrivateAttachment[]; onRemove?: (id: string) => void; disabled?: boolean;
 }) {
     const [selected, setSelected] = useState<string | null>(null);
-    const all = items ?? (ids ?? []).map(id => ({ id, name: '资料预览', kind: 'text' }));
+    const all: Array<Pick<PrivateAttachment, 'id' | 'name' | 'kind'> & { size?: number }> = items ?? (ids ?? []).map(id => ({ id, name: '资料预览', kind: 'text' as const }));
     if (!all.length) return null;
-    return <div className="agent-attachments">{all.map(item => <div key={item.id} className="agent-attachment-chip"><button type="button" onClick={() => setSelected(item.id)}>{item.kind === 'image' ? <ImageIcon size={16} /> : <FileText size={16} />}<span>{item.name}</span></button>{onRemove && <button type="button" aria-label={`移除 ${item.name}`} disabled={disabled} onClick={() => onRemove(item.id)}><X size={14} /></button>}</div>)}{selected && <PrivateAttachmentPreview key={selected} id={selected} onClose={() => setSelected(null)} />}</div>;
+    return <div className="agent-attachments">{all.map(item => <div key={item.id} className="agent-attachment-chip">
+        <button type="button" onClick={() => setSelected(item.id)} aria-label={`预览 ${item.name}`}>
+            {item.kind === 'image' && items
+                ? <Image unoptimized width={36} height={36} src={`/api/agent/attachments/${item.id}?content=1`} alt="" className="agent-attachment-thumb" />
+                : <span className="agent-attachment-type" aria-hidden="true">{item.kind === 'image' ? <ImageIcon size={16} /> : items ? typeLabel(item.name) : <FileText size={16} />}</span>}
+            <span className="agent-attachment-name">{item.name}{item.size ? <small> · {sizeLabel(item.size)}</small> : null}</span>
+        </button>
+        {onRemove && <button type="button" aria-label={`移除 ${item.name}`} disabled={disabled} onClick={() => onRemove(item.id)}><X size={14} /></button>}
+    </div>)}{selected && <PrivateAttachmentPreview key={selected} id={selected} onClose={() => setSelected(null)} />}</div>;
 }
 export function PrivateAttachmentPreview({ id, onClose, inline = false }: { id: string; onClose?: () => void; inline?: boolean }) {
     const [metadata, setMetadata] = useState<PrivateAttachment | null>(null);

@@ -1,4 +1,5 @@
 'use client';
+// 需要渲染懒加载的交互盘面与工具详情（含复制状态）
 
 import type { AgentToolPart } from '@/lib/agent/tool-presentation';
 import { getAgentChart, getAgentToolArtifactId } from '@/lib/agent/tool-presentation';
@@ -19,7 +20,7 @@ export function AgentChartPreview({ artifact, tools, focus, followModel = false,
     const tool = resource?.tool ?? original;
     const value = resource?.value ?? (tool && getAgentChart(tool));
     if (tool && value) return <AgentInteractiveChart value={value} tool={tool} reference={reference} focus={reference ? getLatestChartFocus(tools, reference) : focus} followModel={followModel} onManual={onManual} onAsk={onAsk} />;
-    if (tool) return <AgentToolCard tool={tool} runStatus="completed" fullResult />;
+    if (tool) return <AgentToolCard tool={tool} runStatus="completed" />;
     return <div className="space-y-3">
         <p className="text-sm text-foreground-secondary">此历史成果未附完整工具结果，请通过保存记录查看。</p>
         <AgentArtifactCard artifact={artifact} />

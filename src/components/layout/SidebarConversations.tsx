@@ -3,13 +3,14 @@
  *
  * 直接渲染在 AI > Chat 导航项下方，与导航共用滚动区域。
  * 初始仅显示少量对话，向下滚动后按需继续加载。
+ * 对话页侧栏使用 `grouping="date"`：按日期分组并显示 Agent 任务标记，搜索交给全局搜索。
  *
  * 'use client' 标记说明：
  * - 使用 React hooks 和交互状态
  */
 'use client';
 
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import {
     Search, X,
@@ -23,8 +24,37 @@ import { ConversationGroup } from '@/components/chat/sidebar/ConversationGroup';
 import { SOURCE_TYPE_CONFIG, SOURCE_TYPE_ORDER } from '@/lib/chat/conversation-groups';
 import { resolveConversationRemainingTargetCount } from '@/lib/chat/conversation-list-window';
 import { ConversationActions } from '@/components/chat/sidebar/ConversationActions';
+import { ConversationMarker, ConversationNavItem } from '@/components/chat/sidebar/ConversationNavItem';
+import { CONVERSATION_DATE_GROUP_LABELS, groupConversationsByDate } from '@/lib/chat/conversation-dates';
+import type { ConversationAgentMarker } from '@/lib/agent/activity';
 
-export function SidebarConversations() {
+interface SidebarConversationsProps {
+    /** `date`: 今天 / 昨天 / 7 天内 … groups with task markers (chat sidebar); `source`: grouped by divination type. */
+    grouping?: 'source' | 'date';
+    markers?: ReadonlyMap<string, ConversationAgentMarker>;
+    /** Inside a modal drawer the row menu renders in the dialog's top layer. */
+    withinModal?: boolean;
+}
+
+/** Local midnight of today; changes once a day so the date groups roll over. */
+function subscribeToDayChange(onChange: () => void) {
+    let timer: number | undefined;
+    const schedule = () => {
+        const now = new Date();
+        const nextDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
+        timer = window.setTimeout(() => { onChange(); schedule(); }, nextDay - now.getTime() + 1000);
+    };
+    schedule();
+    return () => window.clearTimeout(timer);
+}
+function getLocalDayStart() {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+}
+const getServerDayStart = () => 0;
+const subscribeToNothing = () => () => {};
+
+export function SidebarConversations({ grouping = 'source', markers, withinModal = false }: SidebarConversationsProps = {}) {
     const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
@@ -64,6 +94,10 @@ export function SidebarConversations() {
         if (!pathname?.startsWith('/chat')) return undefined;
         return searchParams.get('id') ?? undefined;
     }, [pathname, searchParams]);
+
+    const byDate = grouping === 'date';
+    const dayStart = useSyncExternalStore(byDate ? subscribeToDayChange : subscribeToNothing, getLocalDayStart, getServerDayStart);
+    const dateGroups = useMemo(() => byDate ? groupConversationsByDate(conversations, new Date(dayStart)) : [], [byDate, conversations, dayStart]);
 
     const groupedConversations = useMemo(() => {
         const query = searchQuery.toLowerCase().trim();
@@ -160,7 +194,7 @@ export function SidebarConversations() {
             return null;
         }
 
-        const scrollContainer = listViewport.closest('nav');
+        const scrollContainer = listViewport.closest('[data-conversation-scroll]') ?? listViewport.closest('nav');
         if (!(scrollContainer instanceof HTMLElement)) {
             return null;
         }
@@ -314,9 +348,9 @@ export function SidebarConversations() {
     return (
         <>
             {/* 对话区域 — 紧凑内嵌在 Chat 项下方 */}
-            <div className="mt-1">
-                {/* 搜索区域 — 符合 Notion 风格，搜索时替换按钮 */}
-                <div className="mb-1">
+            <div className={byDate ? undefined : 'mt-1'}>
+                {/* 搜索区域 — 符合 Notion 风格，搜索时替换按钮；对话页侧栏改用全局搜索 */}
+                {!byDate && <div className="mb-1">
                     {isSearching ? (
                         <div className="relative flex items-center">
                             <input
@@ -361,10 +395,10 @@ export function SidebarConversations() {
                             <span className="truncate">搜索聊天</span>
                         </button>
                     )}
-                </div>
+                </div>}
 
                 {/* 分组对话列表 */}
-                <div ref={listViewportRef} className="relative space-y-0.5">
+                <div ref={listViewportRef} className={byDate ? 'chat-nav-conversations' : 'relative space-y-0.5'}>
                     {conversationListError && !hasLoadedConversations && !conversationsLoading ? (
                         <div className="rounded-md border border-[#ead9bf] bg-[#fcf8ee] px-3 py-3 text-xs text-[#946c21]">
                             <div>{conversationListError}</div>
@@ -408,7 +442,36 @@ export function SidebarConversations() {
                                     </button>
                                 </div>
                             ) : null}
-                            {SOURCE_TYPE_ORDER.map(type => {
+                            {byDate ? (pendingSidebarTitle && dateGroups[0]?.key !== 'today'
+                                ? [{ key: 'today' as const, label: CONVERSATION_DATE_GROUP_LABELS.today, items: [] }, ...dateGroups]
+                                : dateGroups).map(group => (
+                                <section key={group.key} className="chat-nav-group" aria-labelledby={`chat-nav-group-${group.key}`}>
+                                    <h3 id={`chat-nav-group-${group.key}`} className="chat-nav-group-label">{group.label}</h3>
+                                    {group.key === 'today' && pendingSidebarTitle ? (
+                                        <div data-conversation-row="true" className="chat-nav-row" data-pending="true">
+                                            <span className="chat-nav-row-link">
+                                                <span className="chat-nav-row-title">{pendingSidebarTitle}</span>
+                                                <ConversationMarker marker="running" />
+                                            </span>
+                                        </div>
+                                    ) : null}
+                                    {group.items.map(conv => (
+                                        <ConversationNavItem
+                                            key={conv.id}
+                                            conv={conv}
+                                            isActive={activeId === conv.id}
+                                            isActionActive={actionConv?.id === conv.id}
+                                            marker={markers?.get(conv.id)}
+                                            onOpenAction={openActionSheet}
+                                            isEditing={editingId === conv.id}
+                                            editTitle={editingId === conv.id ? editTitle : ''}
+                                            onEditTitleChange={editingId === conv.id ? setEditTitle : undefined}
+                                            onSaveRename={editingId === conv.id ? saveRename : undefined}
+                                            onCancelRename={editingId === conv.id ? cancelRename : undefined}
+                                        />
+                                    ))}
+                                </section>
+                            )) : SOURCE_TYPE_ORDER.map(type => {
                                 const allItems = groupedConversations[type];
                                 const showPendingInGroup = type === 'chat' && !!pendingSidebarTitle;
                                 if (allItems.length === 0 && !showPendingInGroup) return null;
@@ -460,7 +523,7 @@ export function SidebarConversations() {
                 </div>
             </div>
 
-            <ConversationActions conversation={actionConv} anchorRef={actionAnchorRef} view={actionView} onViewChange={setActionView} onClose={closeActionSheet} onRename={startInlineRename} onArchive={openArchive} onDelete={confirmDelete} deleting={deleteLoading} knowledgeBaseEnabled={knowledgeBaseEnabled} />
+            <ConversationActions conversation={actionConv} anchorRef={actionAnchorRef} view={actionView} onViewChange={setActionView} onClose={closeActionSheet} onRename={startInlineRename} onArchive={openArchive} onDelete={confirmDelete} deleting={deleteLoading} knowledgeBaseEnabled={knowledgeBaseEnabled} withinModal={withinModal} />
 
             {/* Knowledge base archive modal */}
             {knowledgeBaseEnabled && archiveTarget && (

@@ -1,0 +1,311 @@
+/* Workspace views per tool family. Tokens come from globals.css and .chat-workspace; dark mode follows them. */
+/* Header (boards): serif title, what the panel is showing, the follow pill while the model works, then icon actions. */
+.agent-ws-subtitle { min-width: 0; overflow: hidden; font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); text-overflow: ellipsis; white-space: nowrap; }
+.agent-ws-header-actions { display: flex; flex-shrink: 0; align-items: center; gap: 4px; margin-left: auto; }
+.agent-follow-chart { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border: 1px solid var(--border-hover); border-radius: 999px; font-size: calc(12.5 / 16 * 1rem); font-weight: 500; color: var(--foreground-secondary); white-space: nowrap; }
+.agent-follow-chart:hover:not(:disabled) { color: var(--foreground); }
+.agent-follow-chart[aria-pressed="true"] { border-color: transparent; background: var(--accent-light); color: var(--accent-hover); }
+.agent-follow-chart:disabled { opacity: .45; cursor: not-allowed; }
+/* One tab strip: 概览 and 过程, a divider, then the resources; a dot marks a resource still updating. */
+.agent-ws-tabs { display: flex; flex-shrink: 0; align-items: flex-end; gap: 2px; height: 46px; padding: 0 12px; border-bottom: 1px solid var(--border); background: var(--background); overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+.agent-ws-tabs [role="tab"] { display: inline-flex; flex-shrink: 0; align-items: center; gap: 6px; height: 44px; padding: 0 12px; border-bottom: 2px solid transparent; font-size: calc(13 / 16 * 1rem); font-weight: 500; color: var(--foreground-secondary); white-space: nowrap; }
+.agent-ws-tabs [role="tab"]:hover { color: var(--foreground); }
+.agent-ws-tabs [role="tab"][aria-selected="true"] { border-bottom-color: var(--accent); font-weight: 600; color: var(--foreground); }
+.agent-ws-tabs [role="tab"]:focus-visible, .agent-ws-tab-close:focus-visible { outline-offset: -3px; }
+.agent-ws-tab-separator { flex-shrink: 0; align-self: center; width: 1px; height: 18px; margin: 0 4px; background: var(--border); }
+.agent-ws-tab-live { flex-shrink: 0; width: 6px; height: 6px; border-radius: 999px; background: var(--accent); }
+.agent-ws-tab-live[data-state="waiting"] { background: var(--chat-warning); }
+.agent-ws-resource-tab { display: flex; flex-shrink: 0; align-items: center; }
+.agent-ws-resource-tab > [role="tab"] { padding-right: 4px; }
+.agent-ws-tab-close { display: flex; width: 20px; height: 20px; margin-right: 6px; align-items: center; justify-content: center; border-radius: 6px; color: var(--foreground-tertiary); opacity: 0; }
+.agent-ws-resource-tab:hover .agent-ws-tab-close, .agent-ws-resource-tab[data-selected] .agent-ws-tab-close, .agent-ws-tab-close:focus-visible { opacity: 1; }
+.agent-ws-tab-close:hover { background: var(--background-secondary); color: var(--foreground); }
+@media (hover: none) { .agent-ws-tab-close { opacity: 1; } }
+
+.agent-ws-view { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.agent-ws-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: calc(11 / 16 * 1rem); color: var(--foreground-tertiary); }
+.agent-ws-meta code { font-family: var(--font-mono); font-size: calc(11 / 16 * 1rem); color: var(--foreground-secondary); }
+.agent-ws-meta [data-state="failed"] { color: var(--chat-warning); }
+.agent-ws-meta [data-state="completed"] { color: var(--chat-success); }
+.agent-ws-note { font-size: calc(12 / 16 * 1rem); line-height: 1.8; color: var(--foreground-secondary); }
+.agent-ws-note progress { display: block; width: 100%; height: 4px; margin-top: 6px; accent-color: var(--accent); }
+.agent-ws-warning { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; background: var(--background-secondary); font-size: calc(13 / 16 * 1rem); color: var(--chat-warning); }
+.agent-ws-warning > svg { flex-shrink: 0; }
+.agent-ws-running { display: flex; align-items: center; gap: 8px; font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); }
+.agent-ws-fallback > p { font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); }
+.agent-ws-canonical { border-top: 1px solid var(--border); padding-top: 10px; }
+.agent-ws-canonical summary { cursor: pointer; font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); }
+.agent-ws-document { font-size: calc(14 / 16 * 1rem); line-height: 1.85; overflow-wrap: anywhere; }
+.agent-ws-document-card { padding: 16px 18px; border: 1px solid var(--border); border-radius: 14px; background: var(--background); }
+.agent-ws-badge { flex-shrink: 0; padding: 1px 8px; border-radius: 6px; background: var(--background-secondary); font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); white-space: nowrap; }
+.agent-ws-footnote { padding: 12px 14px; border-radius: 12px; background: var(--background-secondary); font-size: calc(13 / 16 * 1rem); line-height: 1.6; color: var(--foreground-secondary); }
+
+/* 资料 (Main board): one row per saved record with its mark and kind. */
+.agent-ws-records { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: var(--background); }
+.agent-ws-records > li { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 12px 14px; }
+.agent-ws-records > li + li { border-top: 1px solid var(--border); }
+.agent-ws-record-glyph { display: flex; flex-shrink: 0; width: 36px; height: 36px; align-items: center; justify-content: center; border-radius: 10px; background: var(--background-secondary); font-family: var(--font-display); font-size: calc(15 / 16 * 1rem); font-weight: 600; color: var(--foreground-secondary); }
+.agent-ws-record-text { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.agent-ws-record-text > strong { font-size: calc(14 / 16 * 1rem); font-weight: 500; overflow-wrap: anywhere; }
+.agent-ws-record-text > small { font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); overflow-wrap: anywhere; }
+
+.agent-ws-facts { display: grid; gap: 0; border: 1px solid var(--border); border-radius: 10px; background: var(--chat-raised); }
+.agent-ws-facts > div { display: grid; grid-template-columns: minmax(72px, 28%) minmax(0, 1fr); gap: 12px; padding: 9px 12px; font-size: calc(12 / 16 * 1rem); }
+.agent-ws-facts > div + div { border-top: 1px solid var(--border); }
+.agent-ws-facts dt { color: var(--foreground-tertiary); }
+.agent-ws-facts dd { color: var(--foreground); overflow-wrap: anywhere; }
+
+.agent-ws-list { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 10px; background: var(--chat-raised); }
+.agent-ws-list > li { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; min-width: 0; }
+.agent-ws-list > li + li { border-top: 1px solid var(--border); }
+.agent-ws-list strong { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; font-size: calc(13 / 16 * 1rem); font-weight: 550; }
+.agent-ws-list strong code, .agent-ws-chips code { font-family: var(--font-mono); font-size: calc(11 / 16 * 1rem); font-weight: 400; color: var(--foreground-tertiary); }
+.agent-ws-list small { font-size: calc(12 / 16 * 1rem); font-weight: 400; color: var(--foreground-secondary); overflow-wrap: anywhere; }
+.agent-ws-list blockquote { margin: 2px 0; padding-left: 10px; border-left: 2px solid var(--accent); font-size: calc(13 / 16 * 1rem); color: var(--foreground); }
+.agent-ws-list [data-deleted="true"] { opacity: .55; }
+.agent-ws-list [data-deleted="true"] blockquote { text-decoration: line-through; }
+.agent-ws-actions { display: flex; gap: 6px; }
+.agent-ws-list .agent-secondary-button { align-self: flex-start; display: inline-flex; align-items: center; gap: 5px; }
+.agent-ws-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.agent-ws-chips > span { padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px; font-size: calc(11 / 16 * 1rem); color: var(--foreground-secondary); }
+.agent-ws-chips > span[data-selected="true"] { border-color: var(--accent); color: var(--accent-hover); background: var(--accent-light); }
+.agent-ws-chips > code { padding: 1px 7px; border-radius: 6px; background: var(--background-secondary); color: var(--foreground-secondary); }
+
+/* 推演 */
+.agent-ws-timeline { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 10px; background: var(--chat-raised); }
+.agent-ws-timeline > li { display: flex; align-items: center; gap: 14px; padding: 10px 12px; }
+.agent-ws-timeline > li + li { border-top: 1px solid var(--border); }
+.agent-ws-timeline > li[aria-current="step"] { background: var(--accent-light); }
+.agent-ws-glyph { flex-shrink: 0; font-family: var(--font-display); font-size: calc(22 / 16 * 1rem); letter-spacing: .08em; color: var(--foreground); }
+.agent-ws-timeline-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.agent-ws-timeline-body strong { font-size: calc(12 / 16 * 1rem); font-weight: 550; }
+.agent-ws-timeline-body em { margin-left: 8px; font-style: normal; color: var(--accent-hover); }
+.agent-ws-timeline-body small { font-size: calc(11 / 16 * 1rem); color: var(--foreground-secondary); }
+.agent-ws-pillars { display: flex; gap: 10px; }
+.agent-ws-pillars span { padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; font-family: var(--font-display); font-size: calc(18 / 16 * 1rem); }
+.agent-ws-table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+.agent-ws-table { width: 100%; border-collapse: collapse; font-size: calc(12 / 16 * 1rem); }
+.agent-ws-table th, .agent-ws-table td { padding: 8px 10px; text-align: left; white-space: nowrap; border-bottom: 1px solid var(--border); }
+.agent-ws-table thead th { font-weight: 500; color: var(--foreground-tertiary); background: var(--background-secondary); }
+.agent-ws-table tbody tr:last-child > * { border-bottom: 0; }
+
+/* Section heading shared by the evidence, overview and collaboration views (boards: kicker, serif title, note). */
+.agent-ws-heading { display: flex; flex-direction: column; gap: 2px; }
+.agent-ws-heading > p { font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); }
+.agent-ws-heading > h2 { font-family: var(--font-display); font-size: calc(24 / 16 * 1rem); font-weight: 600; line-height: 1.35; color: var(--foreground); }
+.agent-ws-heading > h2 + p { margin-top: 4px; font-size: calc(13 / 16 * 1rem); line-height: 1.6; }
+.agent-ws-heading > h2 { letter-spacing: .02em; overflow-wrap: anywhere; }
+.agent-ws-segmented { display: inline-flex; flex-wrap: wrap; align-self: flex-start; gap: 2px; max-width: 100%; padding: 3px; border-radius: 10px; background: var(--background-secondary); font-size: calc(13 / 16 * 1rem); }
+.agent-ws-segmented > button { height: 30px; padding: 0 12px; border-radius: 8px; color: var(--foreground-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.agent-ws-segmented > button:hover { color: var(--foreground); }
+.agent-ws-segmented > button[aria-pressed="true"] { background: var(--chat-raised); box-shadow: 0 1px 2px rgb(0 0 0 / .06); font-weight: 600; color: var(--foreground); }
+.agent-ws-segmented > button:focus-visible, .agent-ws-text-button:focus-visible, .agent-ws-source :is(a, button):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.agent-ws-text-button { align-self: flex-start; font-size: calc(12.5 / 16 * 1rem); color: var(--accent-hover); }
+.agent-ws-text-button:hover { text-decoration: underline; }
+
+/* 回答依据 */
+.agent-ws-evidence { gap: 18px; }
+.agent-ws-sources { display: flex; flex-direction: column; gap: 14px; }
+.agent-ws-source { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--background); scroll-margin: 16px; }
+/* The selected source keeps its size; a second ring thickens the accent border instead of shifting the layout. */
+.agent-ws-source[data-selected] { border-color: var(--accent); box-shadow: 0 0 0 .5px var(--accent); }
+.agent-ws-source-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.agent-ws-source-head > div { flex: 1; min-width: 0; }
+.agent-ws-source-head h3 { font-size: calc(14 / 16 * 1rem); font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+.agent-ws-source-head h3 a { display: inline; color: inherit; text-decoration: none; }
+.agent-ws-source-head h3 a:hover { color: var(--accent-hover); text-decoration: underline; }
+.agent-ws-source-head h3 a svg { display: inline; margin-left: 3px; vertical-align: -1px; color: var(--foreground-secondary); }
+.agent-ws-source-head p { font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); overflow-wrap: anywhere; }
+.agent-ws-source-number { display: flex; flex-shrink: 0; width: 24px; height: 24px; align-items: center; justify-content: center; border-radius: 7px; background: var(--background-secondary); font-size: calc(12.5 / 16 * 1rem); font-weight: 700; font-variant-numeric: tabular-nums; color: var(--foreground-secondary); }
+.agent-ws-source[data-selected] .agent-ws-source-number { background: var(--accent); color: var(--on-accent); }
+.agent-ws-source-cited { flex-shrink: 0; font-size: calc(12 / 16 * 1rem); color: var(--accent-hover); }
+.agent-ws-source-head > .agent-secondary-button { flex-shrink: 0; height: 32px; padding: 0 10px; border-color: var(--border-hover); border-radius: 8px; background: var(--chat-raised); font-size: calc(12.5 / 16 * 1rem); color: var(--foreground); }
+.agent-ws-quote { margin: 0; padding: 12px 14px; border-radius: 10px; background: var(--chat-raised); font-family: var(--font-display); font-size: calc(15.5 / 16 * 1rem); line-height: 1.9; white-space: pre-line; overflow-wrap: anywhere; }
+.agent-ws-quote[data-folded] { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; overflow: hidden; }
+.agent-ws-quote mark { padding: 0 2px; border-radius: 3px; background: var(--accent-light); color: inherit; }
+.agent-ws-focus-chips { gap: 6px; font-size: calc(13 / 16 * 1rem); }
+.agent-ws-focus-chips > span { padding: 3px 10px; border: 0; border-radius: 8px; background: var(--chat-raised); font-size: inherit; color: var(--foreground); }
+.agent-ws-focus-chips b { font-family: var(--font-display); font-weight: 600; }
+.agent-ws-source-status { padding: 14px 16px; border: 1px solid var(--border); border-radius: 14px; }
+.agent-ws-source-empty { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; border: 1.5px dashed var(--border-hover); border-radius: 14px; color: var(--foreground-secondary); }
+.agent-ws-source-empty > svg { flex-shrink: 0; margin-top: 2px; }
+.agent-ws-source-empty h3 { font-size: calc(13.5 / 16 * 1rem); font-weight: 600; color: var(--foreground); }
+.agent-ws-source-empty p { margin-top: 2px; font-size: calc(13 / 16 * 1rem); line-height: 1.6; }
+
+/* 补充信息 (AgentQuestion board): known readings beside what is still missing, then each needed item. */
+.agent-ws-known { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.agent-ws-known-card { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--background); }
+.agent-ws-known-card .agent-result-pillars { font-size: calc(20 / 16 * 1rem); }
+.agent-ws-known-card .agent-result-pillars > span { padding: 6px 0; }
+.agent-ws-known-card > small { font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); overflow-wrap: anywhere; }
+.agent-ws-known-pending { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-width: 0; padding: 14px; border: 1.5px dashed var(--border-hover); border-radius: 14px; text-align: center; }
+.agent-ws-known-pending > span { display: flex; width: 36px; height: 36px; align-items: center; justify-content: center; border-radius: 999px; background: var(--background-secondary); color: var(--foreground-secondary); }
+.agent-ws-known-pending > strong { font-size: calc(14 / 16 * 1rem); font-weight: 600; }
+.agent-ws-known-pending > small { font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); overflow-wrap: anywhere; }
+.agent-ws-needs { display: flex; flex-direction: column; gap: 8px; }
+.agent-ws-needs > h3 { font-size: calc(13.5 / 16 * 1rem); font-weight: 600; }
+.agent-ws-questions { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: var(--background); }
+.agent-ws-questions > li { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 14px; }
+.agent-ws-questions > li + li { border-top: 1px solid var(--border); }
+.agent-ws-questions > li > span:first-child { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.agent-ws-questions strong { font-size: calc(13.5 / 16 * 1rem); font-weight: 500; overflow-wrap: anywhere; }
+.agent-ws-questions small { overflow: hidden; font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); text-overflow: ellipsis; white-space: nowrap; }
+.agent-ws-badge:is([data-state="answered"], [data-state="replied"]) { color: var(--chat-success); }
+.agent-ws-badge:is([data-state="required"], [data-state="optional"]) { background: var(--accent-light); color: var(--accent-hover); }
+/* 协作 */
+/* 协作分析 (AgentCollab board): one card per member, live calls while it analyses, then the stance table. */
+.agent-ws-collaboration { gap: 18px; }
+.agent-ws-member { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--background); }
+.agent-ws-member[data-state="running"] { border-color: var(--accent); box-shadow: 0 0 0 .5px var(--accent); }
+.agent-ws-member-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.agent-ws-member-head > div { flex: 1; min-width: 0; }
+.agent-ws-member-head h3 { font-size: calc(14 / 16 * 1rem); font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+.agent-ws-member-head p { font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); overflow-wrap: anywhere; }
+.agent-ws-member-head > .agent-member-status { flex-shrink: 0; }
+.agent-ws-member-avatar { display: flex; flex-shrink: 0; width: 32px; height: 32px; align-items: center; justify-content: center; border-radius: 9px; background: var(--background-secondary); font-family: var(--font-display); font-size: calc(15 / 16 * 1rem); font-weight: 700; }
+.agent-ws-member[data-state="running"] .agent-ws-member-avatar { background: var(--accent-light); color: var(--accent-hover); }
+/* The board shows each finished member's conclusion in full; only finished analyses reach the answer. */
+.agent-ws-member-answer { display: flex; flex-direction: column; gap: 8px; font-size: calc(14 / 16 * 1rem); line-height: 1.8; overflow-wrap: anywhere; }
+.agent-ws-member-answer .chat-prose { font-size: inherit; }
+.agent-ws-member-steps { display: flex; flex-direction: column; gap: 6px; font-size: calc(13.5 / 16 * 1rem); }
+.agent-ws-member-steps > li { display: flex; gap: 10px; min-width: 0; overflow-wrap: anywhere; }
+.agent-ws-member-steps > li > span[aria-hidden] { flex-shrink: 0; width: 1em; text-align: center; }
+.agent-ws-member-steps > li[data-state="completed"] > span[aria-hidden] { color: var(--chat-success); }
+.agent-ws-member-steps > li[data-state="running"] { font-weight: 600; }
+.agent-ws-member-steps > li[data-state="running"] > span[aria-hidden] { color: var(--accent); }
+.agent-ws-member-steps > li[data-state="failed"] > span[aria-hidden] { color: var(--danger); }
+.agent-ws-divergence { display: flex; flex-direction: column; gap: 8px; }
+.agent-ws-divergence > h3 { font-size: calc(13.5 / 16 * 1rem); font-weight: 600; }
+.agent-ws-divergence > h3 > span { font-weight: 500; color: var(--foreground-secondary); }
+.agent-ws-divergence > p { font-size: calc(12.5 / 16 * 1rem); line-height: 1.6; color: var(--foreground-secondary); }
+.agent-ws-divergence .agent-ws-table-scroll { border-radius: 12px; }
+.agent-ws-divergence .agent-ws-table { min-width: 420px; table-layout: fixed; font-size: calc(13 / 16 * 1rem); }
+.agent-ws-divergence .agent-ws-table :is(th, td) { padding: 8px 12px; white-space: normal; overflow-wrap: anywhere; }
+.agent-ws-divergence .agent-ws-table thead th { font-weight: 600; color: var(--foreground); }
+.agent-ws-divergence .agent-ws-table thead th:first-child { width: 24%; font-weight: 500; color: var(--foreground-secondary); }
+.agent-ws-divergence .agent-ws-table tbody th { font-weight: 500; color: var(--foreground-secondary); }
+.agent-ws-divergence .agent-ws-table td[data-empty] { color: var(--foreground-secondary); }
+.agent-ws-divergence .agent-ws-table tr[data-divergent] td:not([data-empty]) { background: var(--accent-light); }
+
+/* 概览 (Completed board): result cards, then the task summary and the export. */
+.agent-ws-overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.agent-ws-overview-card { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--background); text-align: left; color: var(--foreground); }
+.agent-ws-overview-card[data-overview-card] { gap: 6px; }
+button.agent-ws-overview-card:hover { border-color: var(--border-hover); background: color-mix(in srgb, var(--background-secondary) 45%, var(--background)); }
+.agent-ws-overview-kicker { display: flex; width: 100%; align-items: center; gap: 8px; font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); }
+.agent-ws-overview-kicker > span { flex-shrink: 0; margin-left: auto; padding: 0 6px; border-radius: 5px; background: var(--background-secondary); }
+.agent-ws-overview-kicker > span:is([data-state="saved"], [data-state="record"], [data-state="ready"]) { color: var(--chat-success); }
+.agent-ws-overview-glyph { display: flex; width: 44px; height: 44px; align-items: center; justify-content: center; border-radius: 10px; background: var(--background-secondary); font-family: var(--font-display); font-size: calc(20 / 16 * 1rem); font-weight: 600; }
+.agent-ws-overview-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; font-size: calc(14 / 16 * 1rem); font-weight: 600; overflow-wrap: anywhere; }
+.agent-ws-overview-title > small { font-size: calc(12.5 / 16 * 1rem); font-weight: 400; color: var(--foreground-secondary); }
+.agent-ws-overview-note { font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); overflow-wrap: anywhere; }
+.agent-ws-overview-periods { display: grid; width: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; text-align: center; }
+.agent-ws-overview-periods > span { padding: 5px 0; border-radius: 8px; background: var(--background-secondary); font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); font-variant-numeric: tabular-nums; }
+.agent-ws-overview-periods b { display: block; font-family: var(--font-display); font-size: calc(17 / 16 * 1rem); font-weight: 600; color: var(--foreground); }
+.agent-ws-overview-periods > span[data-current] { background: var(--accent-light); box-shadow: inset 0 0 0 1.5px var(--accent); color: var(--accent-hover); }
+.agent-ws-overview-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.agent-ws-overview-links, .agent-ws-overview-summary { display: flex; flex-direction: column; gap: 8px; }
+:is(.agent-ws-overview-links, .agent-ws-overview-summary, .agent-ws-overview-export, .agent-ws-todo, .agent-ws-group) > h3 { font-size: calc(13.5 / 16 * 1rem); font-weight: 600; }
+:is(.agent-ws-overview-links, .agent-ws-todo, .agent-ws-group) > h3 > span { font-weight: 500; color: var(--foreground-secondary); font-variant-numeric: tabular-nums; }
+.agent-ws-overview-summary > dl { display: grid; grid-template-columns: 6.5em minmax(0, 1fr); gap: 8px 14px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--background); font-size: calc(13 / 16 * 1rem); }
+.agent-ws-overview-summary dt { color: var(--foreground-secondary); }
+.agent-ws-overview-summary dd { min-width: 0; overflow-wrap: anywhere; }
+.agent-ws-overview-export { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--background); }
+.agent-ws-overview-export > label { display: flex; align-items: center; gap: 8px; font-size: calc(13 / 16 * 1rem); color: var(--foreground-secondary); }
+.agent-ws-overview-export input { width: 16px; height: 16px; accent-color: var(--accent); }
+.agent-ws-overview-export > div { display: flex; flex-wrap: wrap; gap: 8px; }
+:is(.agent-ws-overview-export, .agent-ws-overview-actions) .agent-secondary-button { display: inline-flex; align-items: center; gap: 5px; height: 36px; padding: 0 14px; border-color: var(--border-hover); border-radius: 10px; background: var(--chat-raised); font-size: calc(13 / 16 * 1rem); color: var(--foreground); }
+.agent-ws-links { display: flex; flex-wrap: wrap; gap: 6px; }
+.agent-ws-links .agent-secondary-button { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 10px; border-radius: 8px; font-size: calc(12.5 / 16 * 1rem); }
+
+/* 过程 (Main board): live status strip, the task list, the step being looked at, then every step. */
+.agent-ws-group { display: flex; flex-direction: column; gap: 10px; }
+.agent-ws-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--background); font-size: calc(13 / 16 * 1rem); color: var(--foreground-secondary); }
+.agent-ws-status-main { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; color: var(--foreground); }
+.agent-ws-status-main .agent-status { padding: 0; background: none; font-weight: inherit; }
+.agent-ws-todo > ol { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; font-size: calc(13.5 / 16 * 1rem); }
+.agent-ws-todo li { display: flex; gap: 10px; min-width: 0; overflow-wrap: anywhere; }
+.agent-ws-todo li > span:first-child { flex-shrink: 0; width: 1em; text-align: center; }
+.agent-ws-todo li[data-state="completed"] { color: var(--foreground-secondary); }
+.agent-ws-todo li[data-state="completed"] > span:last-child { text-decoration: line-through; }
+.agent-ws-todo li[data-state="completed"] > span:first-child { color: var(--chat-success); }
+.agent-ws-todo li[data-state="in_progress"] { font-weight: 600; }
+.agent-ws-todo li[data-state="in_progress"] > span:first-child { color: var(--accent); }
+.agent-ws-todo li[data-state="pending"] > span:first-child { color: var(--foreground-tertiary); }
+.agent-ws-steps { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.agent-ws-steps > li + li { border-top: 1px solid var(--border); }
+.agent-ws-steps button { display: flex; align-items: center; gap: 9px; width: 100%; padding: 9px 12px; text-align: left; font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); }
+.agent-ws-steps button:hover:not(:disabled) { background: var(--background-secondary); }
+.agent-ws-steps button[aria-current] { background: var(--accent-light); }
+.agent-ws-steps button > small { flex-shrink: 0; font-size: calc(11 / 16 * 1rem); color: var(--foreground-tertiary); font-variant-numeric: tabular-nums; }
+.agent-ws-steps [data-state="failed"] button > small:last-child { color: var(--chat-warning); }
+.agent-ws-steps [data-state="completed"] button > small:last-child { color: var(--chat-success); }
+.agent-ws-step-number { flex-shrink: 0; width: 18px; font-variant-numeric: tabular-nums; color: var(--foreground-tertiary); }
+.agent-ws-step-label { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; color: var(--foreground); }
+.agent-ws-step-label > span, .agent-ws-step-label > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-ws-step-label > small { font-size: calc(11 / 16 * 1rem); color: var(--foreground-secondary); }
+/* 第 N 步 (Main board, 过程): the step being looked at, its arguments and result as returned, and how it was timed and stored. */
+.agent-ws-call { display: flex; flex-direction: column; gap: 8px; }
+.agent-ws-call > h3 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; font-size: calc(13.5 / 16 * 1rem); font-weight: 600; overflow-wrap: anywhere; }
+.agent-ws-call > h3 > code { font-family: var(--font-mono); font-size: calc(12 / 16 * 1rem); font-weight: 400; color: var(--foreground-secondary); }
+.agent-ws-call .agent-tool-details { padding: 0; border: 0; border-radius: 0; background: none; }
+.agent-ws-call .agent-tool-value { padding: 12px 14px; font-size: calc(12.5 / 16 * 1rem); }
+.agent-ws-call > .agent-ws-note { font-size: calc(12.5 / 16 * 1rem); }
+
+/* 对话中的任务清单进度与“在工作区查看” */
+.agent-todo-progress { padding: 10px 12px 10px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--chat-raised); }
+.agent-todo-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.agent-todo-row > svg { flex-shrink: 0; color: var(--foreground-secondary); }
+.agent-todo-row strong { flex-shrink: 0; font-size: calc(13.5 / 16 * 1rem); font-weight: 600; }
+.agent-todo-count { flex-shrink: 0; font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); font-variant-numeric: tabular-nums; }
+.agent-todo-segments { display: flex; flex-shrink: 0; gap: 3px; }
+.agent-todo-segments > span { width: 18px; height: 4px; border-radius: 2px; background: var(--background-tertiary); }
+.agent-todo-segments > span[data-state="completed"] { background: var(--chat-success); }
+.agent-todo-segments > span[data-state="in_progress"] { background: var(--accent); }
+.agent-todo-current { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(13 / 16 * 1rem); color: var(--foreground-secondary); }
+.agent-todo-open { display: inline-flex; flex-shrink: 0; align-items: center; gap: 4px; height: 30px; padding: 0 8px; border-radius: 8px; font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); }
+.agent-todo-open:hover { background: var(--background-secondary); color: var(--foreground); }
+.agent-todo-progress details { margin-top: 8px; font-size: calc(12 / 16 * 1rem); }
+.agent-todo-progress details summary { cursor: pointer; color: var(--foreground-secondary); }
+.agent-todo-progress .agent-todo-list { margin-top: 8px; padding: 0; border: 0; }
+@media (max-width: 640px) { .agent-todo-segments { display: none; } }
+/* Phones leave the list to the workspace sheet's 过程 (board "手机 · 任务对话"); without a workspace the bar stays. */
+@media (max-width: 767px) { .agent-todo-progress:has(.agent-todo-open) { display: none; } }
+.agent-step-open { flex-shrink: 0; align-self: flex-start; margin-top: 9px; }
+
+/* Narrow panels stack the two-column grids. */
+@container (max-width: 440px) {
+    .agent-ws-overview-grid, .agent-ws-known, .agent-board-relations > ul { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Phones (design board "手机 · 工作区"): a sheet from the bottom edge with pill tabs; a chart's
+   追问 and 只看相关位置 become the sheet's bottom bar. */
+@media (max-width: 767px) {
+    .app-modal.agent-workspace-dialog { inset: auto 0 0; width: 100%; max-width: none; height: calc(100dvh - 64px - var(--sat)); max-height: none; margin: 0; border: 0; border-radius: 22px 22px 0 0; box-shadow: 0 -8px 40px #0003; }
+    .agent-workspace-dialog .agent-panel-content::before { content: ''; flex-shrink: 0; align-self: center; width: 40px; height: 5px; margin: 8px 0 2px; border-radius: 999px; background: var(--border-hover); }
+    .agent-workspace-dialog .agent-panel-header { gap: 6px; height: 52px; padding: 0 6px 0 18px; border-bottom: 0; }
+    .agent-workspace-dialog .agent-panel-header h2 { font-size: calc(17 / 16 * 1rem); }
+    .agent-workspace-dialog :is(.agent-ws-subtitle, .agent-ws-header-actions > [aria-haspopup="menu"]) { display: none; }
+    .agent-workspace-dialog .agent-follow-chart { height: 36px; font-size: calc(13 / 16 * 1rem); }
+    .agent-workspace-dialog .agent-ws-header-actions .agent-icon-button { width: 44px; height: 44px; border-radius: 12px; }
+    .agent-workspace-dialog .agent-ws-tabs { align-items: center; gap: 6px; height: auto; padding: 0 16px 10px; background: transparent; scrollbar-width: none; }
+    .agent-workspace-dialog .agent-ws-tabs [role="tab"] { height: 36px; padding: 0 14px; border: 1px solid var(--border); border-radius: 999px; font-size: calc(13.5 / 16 * 1rem); font-weight: 400; }
+    .agent-workspace-dialog .agent-ws-tabs [role="tab"][aria-selected="true"] { border-color: var(--foreground); background: var(--foreground); color: var(--background); font-weight: 600; }
+    .agent-workspace-dialog .agent-ws-tabs [role="tab"]:focus-visible { outline-offset: 2px; }
+    .agent-workspace-dialog :is(.agent-ws-tabs [role="tab"] > svg, .agent-ws-tab-separator) { display: none; }
+    /* The open resource's pill carries its close button. */
+    .agent-workspace-dialog .agent-ws-resource-tab { position: relative; }
+    .agent-workspace-dialog .agent-ws-resource-tab > [role="tab"] { padding-right: 14px; }
+    .agent-workspace-dialog .agent-ws-resource-tab[data-selected] > [role="tab"] { padding-right: 34px; }
+    .agent-workspace-dialog .agent-ws-tab-close { position: absolute; top: 50%; right: 8px; display: none; width: 22px; height: 22px; margin: 0; transform: translateY(-50%); }
+    .agent-workspace-dialog .agent-ws-resource-tab[data-selected] .agent-ws-tab-close { display: flex; color: var(--background); opacity: 1; }
+    .agent-workspace-dialog .agent-ws-resource-tab[data-selected] .agent-ws-tab-close:hover { background: color-mix(in srgb, var(--background) 22%, transparent); }
+    .agent-workspace-dialog .agent-ws-resource-tab[data-selected] .agent-ws-tab-close:focus-visible { outline-color: var(--background); outline-offset: 0; }
+    /* The sheet, not its scrolling body, is the size container, so the bar below stays put while the view scrolls. */
+    .agent-workspace-dialog .agent-panel-content { container-type: inline-size; }
+    .agent-workspace-dialog .agent-panel-scroll { padding: 16px; container-type: normal; }
+    .agent-workspace-dialog .agent-panel-scroll:has(.agent-board-focus-actions) { padding-bottom: calc(88px + var(--sab)); }
+    .agent-workspace-dialog .agent-board-focus-actions { position: fixed; right: 0; bottom: 0; left: 0; z-index: 30; flex-flow: row-reverse nowrap; gap: 8px; padding: 10px 16px calc(12px + var(--sab)); border-top: 1px solid var(--border); background: var(--chat-raised); }
+    .agent-workspace-dialog .agent-board-focus-actions > button { flex: 1; justify-content: center; height: 48px; border-radius: 14px; font-size: calc(14.5 / 16 * 1rem); }
+    .agent-workspace-dialog .agent-board-ask { font-weight: 600; }
+}

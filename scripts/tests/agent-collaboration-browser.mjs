@@ -45,17 +45,19 @@ export async function verifyAgentCollaboration({ page, newChat, send, waitForRun
   await dialog.getByRole('menuitemradio', { name: fixture.models[0].name, exact: true }).click();
   await trigger.click();
   dialog = page.getByRole('dialog', { name: '模型与分析设置', exact: true });
-  await dialog.getByLabel('推理档位', { exact: true }).selectOption('max');
-  await dialog.locator('.chat-collaboration-settings > summary').click();
+  await dialog.getByRole('radiogroup', { name: '推理档位', exact: true }).getByRole('radio', { name: '最高', exact: true }).click();
   await dialog.getByLabel('启用多模型协作', { exact: true }).check();
   for (const [index, model] of fixture.models.entries()) {
+    // The menu edits one member at a time; its chip toggles the editor.
+    const chip = dialog.getByRole('group', { name: '协作成员', exact: true }).locator('button[aria-pressed]').nth(index);
+    if (await chip.getAttribute('aria-pressed') !== 'true') await chip.click();
     await dialog.getByLabel(`Agent ${index + 1} 模型`, { exact: true }).selectOption(model.key);
     await dialog.getByLabel(`Agent ${index + 1} 推理档位`, { exact: true }).selectOption(index ? 'xhigh' : 'max');
     await dialog.getByLabel(`Agent ${index + 1} 分工`, { exact: true }).fill(index ? '独立核对干支关系与不确定性' : '分析八字天干与日支');
   }
   await page.setViewportSize({ width: 320, height: 740 });
   await page.waitForFunction(() => {
-    const dialog = document.querySelector('.chat-model-settings');
+    const dialog = document.querySelector('.floating-panel.chat-model-menu');
     if (!dialog) return false;
     const bounds = dialog.getBoundingClientRect();
     return bounds.left >= 0 && bounds.right <= window.innerWidth && bounds.top >= 0 && bounds.bottom <= window.innerHeight;
@@ -87,7 +89,6 @@ export async function verifyAgentCollaboration({ page, newChat, send, waitForRun
   await newChat();
   await trigger.click();
   dialog = page.getByRole('dialog', { name: '模型与分析设置', exact: true });
-  await dialog.locator('.chat-collaboration-settings > summary').click();
   await dialog.getByLabel('启用多模型协作', { exact: true }).uncheck();
   await dialog.getByRole('menuitemradio', { name: '本地离线演示', exact: true }).click();
   console.log('多模型协作：两路真实 SDK 请求、max/xhigh、一次计费、历史恢复和 320px 菜单通过。');

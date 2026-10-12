@@ -7,6 +7,8 @@ import type { AgentDurableStorage } from "./durable-storage.server";
 import type { AgentCheckpoint, AgentPart, AgentRuntimeInfo, DomainTool } from "./types";
 import { projectAgentContextUsage } from "./context-usage";
 import { projectAgentUsage } from './usage';
+import { projectsAgentCanonicalText } from './tool-catalog';
+import { splitAgentFollowUps } from './follow-ups';
 
 function taskTiming(task?: { startedAt?: number; endedAt?: number }) {
   return {
@@ -59,6 +61,8 @@ export async function projectDurableConversation(
   const byCall = new Map<string, string>();
   const attached = new Map<string, AgentPart[]>();
   const attachedIds = new Set<string>();
+  // Suggestions come from the latest answer only; an earlier block is no longer current.
+  let latestText = null as string | null;
   const attach = (cardId: string, cacheId: string) => {
     const parts = checkpoint.parts.filter(p =>
       (p.type === "question" && p.id === cacheId) ||
@@ -69,7 +73,12 @@ export async function projectDurableConversation(
   };
   const assistantParts = (message: AssistantMessage, id: string, entryId?: string) => {
     message.content.forEach((part, index) => {
-      if (part.type === "text") native.push({ type: "text", id: `${id}:${index}`, text: part.text });
+      if (part.type === "text") {
+        latestText = part.text;
+        // The follow-up block is not part of the answer; a part that held only the block disappears.
+        const visible = splitAgentFollowUps(part.text).text;
+        if (visible === part.text || visible) native.push({ type: "text", id: `${id}:${index}`, text: visible });
+      }
       if (part.type === "thinking") native.push({ type: "reasoning", id: `${id}:${index}`, text: part.thinking });
       if (part.type === "toolCall" && entryId) {
         const key = `native-tool:${entryId}:${part.id}`;
@@ -106,7 +115,7 @@ export async function projectDurableConversation(
           card.output = message.details ?? message.content;
           Object.assign(card, taskTiming(task));
           if (typeof message.durationMs === 'number' && Number.isFinite(message.durationMs) && message.durationMs >= 0) card.durationMs = message.durationMs;
-          if (['bazi', 'ziwei', 'liuyao', 'meihua', 'tarot', 'qimen', 'daliuren', 'xiaoliuren', 'read_user_data', 'inspect_chart'].includes(card.name)) card.canonicalText = message.content.filter(part => part.type === 'text').map(part => part.type === 'text' ? part.text : '').join('\n');
+          if (projectsAgentCanonicalText(card.name)) card.canonicalText = message.content.filter(part => part.type === 'text').map(part => part.type === 'text' ? part.text : '').join('\n');
           if (entry.byTaskId) attach(card.id, `${entry.byTaskId}:${message.toolCallId}`);
         }
       }
@@ -144,5 +153,7 @@ export async function projectDurableConversation(
     ...native.flatMap(p => [p, ...(p.type === "tool" ? attached.get(p.id) ?? [] : [])]),
   ];
   if (replaceLegacyStreaming && !generation) checkpoint.streamingAssistantId = undefined;
+  const followUps = latestText === null ? [] : splitAgentFollowUps(latestText).followUps;
+  checkpoint.followUps = followUps.length ? followUps : undefined;
   if (checkpoint.runtime) checkpoint.runtime.responses = responses;
 }

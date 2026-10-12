@@ -17,6 +17,8 @@ type AvailableModel = {
   reasoningEffortFormat?: 'reasoning_object' | 'reasoning_effort' | null;
   isReasoningDefault?: boolean;
   allowed?: boolean;
+  /** Lowest membership that can use the model. */
+  tier?: 'free' | 'plus' | 'pro' | null;
   blockedReason?: string | null;
   reasoningAllowed?: boolean;
 };

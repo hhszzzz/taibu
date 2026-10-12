@@ -40,8 +40,13 @@
   --shadow-md: 0 6px 24px rgba(77, 57, 36, 0.07);
   --shadow-lg: 0 16px 48px rgba(77, 57, 36, 0.12);
 
-  /* 侧边栏宽度 */
-  --sidebar-width: 248px;
+  /* 侧边栏宽度与底色；收起后为图标导轨 */
+  --sidebar-width: 260px;
+  --sidebar-rail-width: 60px;
+  --sidebar-background: #f5f2ed;
+  /* 浮起的输入框与问题面板 */
+  --shadow-raised: 0 1px 2px rgba(77, 57, 36, 0.05), 0 6px 20px rgba(77, 57, 36, 0.07);
+  --scrim: rgba(44, 41, 37, 0.32);
   --chat-background: #faf8f5;
   --chat-secondary: #f0ece6;
   --chat-tertiary: #e7e0d7;
@@ -96,6 +101,9 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
+  --sidebar-background: #21211f;
+  --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.25);
+  --scrim: rgba(0, 0, 0, 0.5);
   --chat-background: #262624;
   --chat-secondary: #30302c;
   --chat-tertiary: #3b3a35;

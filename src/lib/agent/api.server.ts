@@ -8,6 +8,7 @@ import {
   jsonError,
   jsonOk,
   requireUserContext,
+  resolveRequestDbClient,
 } from "@/lib/api-utils";
 import { getGlobalAIFeatureGuardResponse } from "@/lib/api/ai-feature-guard";
 import { readFeatureModuleStateFresh } from "@/lib/app-settings";
@@ -39,6 +40,8 @@ import { parseReasoningEffort, parseAgentCollaborators } from '@/lib/chat/model-
 import { piHistory } from "./history.server";
 import { normalizeQuestions, validateAnswers, formatQuestionAnswers } from './questions';
 import { validateAttachmentIds } from './attachments.server';
+import { getAgentCitationBase } from './evidence';
+import { readAgentActivity } from './activity.server';
 
 class AgentApiError extends Error {
   constructor(
@@ -417,6 +420,8 @@ export async function createAgentTask(request: NextRequest) {
       : piHistory(prepared.sanitizedMessages.map(message => ({ ...message, attachments: message.id === userMessage.id ? userMessage.attachments : history.find(item => item.id === message.id)?.attachments }))),
     parts: [],
     finalArtifacts: [],
+    // Evidence numbers continue across the visible branch, so a new answer never reuses one.
+    citations: { base: getAgentCitationBase(history), calls: {} },
   };
   const assistant: ChatMessage = {
     id: `agent:${runId}`,
@@ -472,6 +477,14 @@ export async function getAgentTask(request: NextRequest, id?: string) {
   if (!run && id)
     throw new AgentApiError("任务不存在", 404, "AGENT_RUN_NOT_FOUND");
   return jsonOk(run ? await store.view(run) : null);
+}
+
+/** Sidebar markers: the caller's active runs and unread task notices, read under their own RLS. */
+export async function getAgentActivity(request: NextRequest) {
+  const auth = await authenticated(request);
+  const db = resolveRequestDbClient(auth);
+  if (!db) throw new AgentApiError("读取任务状态失败", 500, "AGENT_SERVICE_ERROR");
+  return jsonOk(await readAgentActivity(db, auth.user.id, request.signal));
 }
 
 export async function controlAgentTask(
@@ -572,17 +585,20 @@ export async function streamAgentTask(request: NextRequest, id: string) {
         while (!closed && !request.signal.aborted) {
           const run = await store.getRun(id, auth.user.id);
           if (!run) break;
-          const view = { ...await store.view(run), epoch: run.fence ?? 0 };
-          let resetReason: AgentResync['reason'] | undefined;
-          const resync = (reason: AgentResync['reason']) => {
-            resetReason = reason;
-            cursor = view.cursor;
-            epoch = view.epoch;
-          };
-          let reset = false;
-          if (epoch !== undefined && epoch !== view.epoch) { resync('epoch'); reset = true; }
-          else if (cursor > view.cursor) { resync('cursor'); reset = true; }
-          if (reset || view.cursor > cursor || isAgentRunTerminal(view.status)) {
+          // The run row decides whether a frame is due. The public view also
+          // reads the command queue, so idle heartbeats never build it.
+          const runCursor = Number(run.event_cursor);
+          const runEpoch = run.fence ?? 0;
+          let resetReason: AgentResync['reason'] | undefined =
+            epoch !== undefined && epoch !== runEpoch ? 'epoch' : cursor > runCursor ? 'cursor' : undefined;
+          if (resetReason || runCursor > cursor || isAgentRunTerminal(run.status)) {
+            const view = { ...await store.view(run), epoch: runEpoch };
+            const resync = (reason: AgentResync['reason']) => {
+              resetReason = reason;
+              cursor = view.cursor;
+              epoch = view.epoch;
+            };
+            if (resetReason) resync(resetReason);
             while (cursor < view.cursor && !closed && !request.signal.aborted) {
               const events = await store.events(id, cursor, view.cursor);
               if (!events.length) { resync('gap'); break; }
@@ -597,7 +613,7 @@ export async function streamAgentTask(request: NextRequest, id: string) {
             if (!send(`${resetFrame}event: snapshot\nid: ${cursor}\ndata: ${JSON.stringify(view)}\n\n`)) break;
             epoch = view.epoch;
           } else if (!send(': heartbeat\n\n')) break;
-          if (isAgentRunTerminal(view.status))
+          if (isAgentRunTerminal(run.status))
             break;
           await new Promise((resolve) => setTimeout(resolve, 1000));
         }

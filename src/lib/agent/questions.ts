@@ -1,4 +1,15 @@
-export interface AgentQuestion { id: string; question: string; options?: { id: string; label: string }[]; multiple?: boolean; allowCustom?: boolean; allowSkip?: boolean }
+export interface AgentQuestion {
+    id: string;
+    question: string;
+    /** Short label for the question navigation, e.g. 出生时间. */
+    header?: string;
+    options?: { id: string; label: string }[];
+    multiple?: boolean;
+    allowCustom?: boolean;
+    allowSkip?: boolean;
+}
+/** Longest navigation label; longer model-written labels are shortened rather than rejected. */
+export const QUESTION_HEADER_MAX = 12;
 export type AgentAnswers = Record<string, string[] | null>;
 export function normalizeQuestions(value: unknown, legacy?: string): AgentQuestion[] {
     if (value === undefined && legacy?.trim()) return [{ id: 'question', question: legacy.trim(), allowCustom: true, allowSkip: false }];
@@ -15,7 +26,8 @@ export function normalizeQuestions(value: unknown, legacy?: string): AgentQuesti
             if (!option || typeof option.id !== 'string' || !option.id.trim() || option.id.length > 80 || optionIds.has(option.id) || typeof option.label !== 'string' || !option.label.trim() || option.label.length > 400) throw new Error('选项无效');
             optionIds.add(option.id); return { id: option.id, label: option.label };
         });
-        return { id: q.id, question: q.question, options, multiple: q.multiple === true, allowCustom: q.allowCustom !== false || !options?.length, allowSkip: q.allowSkip !== false };
+        const header = typeof q.header === 'string' && q.header.trim() ? q.header.trim().slice(0, QUESTION_HEADER_MAX) : undefined;
+        return { id: q.id, question: q.question, ...(header ? { header } : {}), options, multiple: q.multiple === true, allowCustom: q.allowCustom !== false || !options?.length, allowSkip: q.allowSkip !== false };
     });
 }
 export function validateAnswers(questions: AgentQuestion[], value: unknown): AgentAnswers {
@@ -34,4 +46,10 @@ export function validateAnswers(questions: AgentQuestion[], value: unknown): Age
 }
 export function formatQuestionAnswers(questions: AgentQuestion[], answers: AgentAnswers): string {
     return questions.map(question => `${question.question}\n${answers[question.id] === null ? '已跳过' : (answers[question.id] ?? []).map(answer => question.options?.find(option => option.id === answer)?.label ?? answer).join('、')}`).join('\n\n');
+}
+/** Label for a question in the step navigation: its header, or the start of its first line. */
+export function questionLabel(question: AgentQuestion): string {
+    if (question.header) return question.header;
+    const first = question.question.split('\n')[0].replace(/[？?。.：:]+$/u, '').trim();
+    return first.length > QUESTION_HEADER_MAX ? `${first.slice(0, QUESTION_HEADER_MAX - 1)}…` : first;
 }

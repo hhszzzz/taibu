@@ -9,7 +9,7 @@ import { NextRequest } from 'next/server';
 import { getModelsAsync } from '@/lib/server/ai-config';
 import type { MembershipType } from '@/lib/user/membership';
 import { getEffectiveMembershipType, MembershipResolutionError } from '@/lib/user/membership-server';
-import { getModelAccessForMembershipAsync } from '@/lib/ai/ai-access';
+import { getModelAccessForMembershipAsync, getModelRequiredTier } from '@/lib/ai/ai-access';
 import { getAuthContext, jsonError, jsonOk } from '@/lib/api-utils';
 import { getModelUsageType, isUserSelectableUsageType } from '@/lib/ai/source-runtime';
 import { getGlobalAIFeatureGuardResponse } from '@/lib/api/ai-feature-guard';
@@ -69,6 +69,7 @@ export async function GET(request: NextRequest) {
                 reasoningEffortFormat: m.reasoningEffortFormat ?? null,
                 isReasoningDefault: m.isReasoningDefault,
                 allowed: access.allowed,
+                tier: getModelRequiredTier(m),
                 blockedReason: access.blockedReason,
                 reasoningAllowed: access.reasoningAllowed,
             };

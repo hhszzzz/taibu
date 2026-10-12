@@ -1,405 +1,243 @@
 /**
- * Composer 底部工具栏
+ * Composer 底部工具栏：添加资料、引用、对话方式、联网、风格、上下文、模型与发送
  *
  * 'use client' 标记说明：
- * - 需要处理用户交互事件
+ * - 菜单开关、文件选择与模型弹层需要交互状态
  */
 'use client';
 
 import { useRef, useState, type ReactNode } from 'react';
-import {
-    ArrowUp,
-    Atom,
-    AtSign,
-    BookOpenText,
-    Globe,
-    KeyRound,
-    Moon,
-    Orbit,
-    Paperclip,
-    Plus,
-    Square,
-    X,
-} from 'lucide-react';
+import { ArrowUp, AtSign, BookOpenText, ChevronDown, FileText, Globe, KeyRound, Mic, Paperclip, Plus, Square, Undo2, WandSparkles, X } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import type { MembershipType } from '@/lib/user/membership';
 import { ModelSelector } from '@/components/ui/ModelSelector';
-import { PromptPreview } from '@/components/chat/composer/PromptPreview';
 import { CustomProviderPanel } from '@/components/chat/CustomProviderPanel';
-import type { PromptLayerDiagnostic } from '@/types';
-import { getNavItemById } from '@/lib/navigation/registry';
 import type { ChatMode } from '@/lib/chat/use-chat-state';
-import type { AgentRuntimeInfo } from '@/lib/agent/types';
-import { AgentContextDetails } from '../agent/AgentContextUsage';
 import type { ModelSettingsProps } from '@/lib/chat/model-settings';
+import type { AgentPromptTemplate } from '@/lib/agent/prompt-templates';
 import { FloatingPanel } from '@/components/ui/FloatingPanel';
 import { Modal } from '@/components/ui/Modal';
+import { PromptTemplateMenu } from './ComposerDomainControls';
+import type { KnowledgeBaseSummary } from './useComposerState';
+
+/** Agent / plain conversation switch, shown on the empty state and in plain chat. */
+export interface ComposerModeControl {
+    mode: 'agent' | 'plain';
+    onChange: (mode: 'agent' | 'plain') => void;
+    agentDisabled: boolean;
+    plainDisabled: boolean;
+}
+
+/** Agent web search toggle for the next task. */
+export interface ComposerWebControl {
+    enabled: boolean;
+    disabled: boolean;
+    label: string;
+    title: string;
+    onToggle: () => void;
+}
+
+/** Ways to finish a draft: send, stop the run, or split into supplement / follow-up while it runs. */
+export type ComposerSendState =
+    | { kind: 'send'; disabled: boolean }
+    | { kind: 'sending' }
+    | { kind: 'stop' }
+    | { kind: 'split'; disabled: boolean; onSupplement: () => void; onFollowUp?: () => void; onStop?: () => void };
+
+const STYLE_LABELS: Record<ChatMode, string> = { normal: '标准', mangpai: '盲派', dream: '解梦' };
 
 interface ComposerToolbarProps extends ModelSettingsProps {
-    domainControls?: ReactNode;
-    agentMode?: boolean;
-    agentRuntime?: AgentRuntimeInfo;
-    // Menu
-    menuOpen: boolean;
-    setMenuOpen: (open: boolean) => void;
-    // File
+    agentMode: boolean;
+    hero: boolean;
+    disabled: boolean;
+    userId?: string | null;
+    membershipType: MembershipType;
+    modeControl?: ComposerModeControl;
+    webControl?: ComposerWebControl;
+    // Attachments
     fileInputRef: React.RefObject<HTMLInputElement | null>;
     hasFile: boolean;
-    handleFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-    // Web search
-    hasWebSearch: boolean;
-    canUseWeb: boolean;
-    handleWebToggle: () => void;
-    // Charts & Dream (unified mode)
+    onFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+    // Plain chat search and knowledge
+    plainWeb: { active: boolean; allowed: boolean; onToggle: () => void };
+    knowledgeBase: { enabled: boolean; allowed: boolean; onOpen: () => void; selected: KnowledgeBaseSummary[]; onRemove: (id: string) => void };
+    onMention?: () => void;
+    // Analysis style
     chatMode: ChatMode;
     onChatModeChange?: (mode: ChatMode) => void;
-    canUseBazi: boolean;
-    userId?: string | null;
-    // Knowledge base
-    knowledgeBaseEnabled: boolean;
-    canUseKnowledgeBase: boolean;
-    handleKnowledgeBaseOpen: () => void;
-    // Mention
-    textareaRef: React.RefObject<HTMLTextAreaElement | null>;
-    inputValue: string;
-    onInputChange: (value: string) => void;
-    canMentionAnything: boolean;
-    setMentionOpen: (open: boolean) => void;
-    setMentionQuery: (query: string) => void;
-    setMentionStartIndex: (index: number | null) => void;
-    // Prompt preview
-    promptPreviewLoading: boolean;
-    hasPromptDiagnostics: boolean;
-    promptDiagnosticsOpen: boolean;
-    setPromptDiagnosticsOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
-    contextProgressPercent: number;
-    promptProgressPercent: number;
-    promptUsageLabel: string;
-    promptPreviewTokens: number;
-    promptPreviewBudget: number;
-    displayLayers: PromptLayerDiagnostic[];
-    displayUserMessageTokens: number;
-    formatLayerLabel: (layerId: string) => string;
-    // Model
+    styles: ChatMode[];
+    // Drafting helpers
+    onPickTemplate: (template: AgentPromptTemplate) => void;
+    speech: { recording: boolean; toggle: () => void };
+    polish: { available: boolean; busy: boolean; run: () => void; undo?: () => void };
+    // Context and model
+    contextMeter?: ReactNode;
+    promptStatistics?: ReactNode;
     selectedModel: string;
     onModelChange?: (modelId: string) => void;
     reasoningEnabled: boolean;
     onReasoningChange?: (enabled: boolean) => void;
-    membershipType: MembershipType;
     customProviderActive: boolean;
     customProviderLabel: string | null;
     // Send
-    disabled: boolean;
-    isLoading: boolean;
-    isSendingToList: boolean;
-    dreamContextLoading: boolean;
-    handleButtonClick: () => void;
-    sendsDuringRun?: boolean;
+    send: ComposerSendState;
+    onSend: () => void;
+    onStop?: () => void;
 }
 
 export function ComposerToolbar(props: ComposerToolbarProps) {
-    const {
-        agentMode, agentRuntime,
-        menuOpen, setMenuOpen,
-        fileInputRef, hasFile, handleFileChange,
-        hasWebSearch, canUseWeb, handleWebToggle,
-        chatMode, onChatModeChange, canUseBazi,
-        userId,
-        knowledgeBaseEnabled, canUseKnowledgeBase, handleKnowledgeBaseOpen,
-        textareaRef, inputValue, onInputChange, canMentionAnything,
-        setMentionOpen, setMentionQuery, setMentionStartIndex,
-        promptPreviewLoading, hasPromptDiagnostics, promptDiagnosticsOpen,
-        setPromptDiagnosticsOpen, contextProgressPercent, promptProgressPercent,
-        promptUsageLabel, displayLayers, displayUserMessageTokens, formatLayerLabel,
-        promptPreviewTokens, promptPreviewBudget,
-        selectedModel, onModelChange, reasoningEnabled, onReasoningChange, membershipType,
-        customProviderActive, customProviderLabel,
-        disabled, isLoading, isSendingToList, dreamContextLoading, handleButtonClick, sendsDuringRun,
-    } = props;
-    const BaziNavIcon = getNavItemById('bazi')?.icon ?? Orbit;
-    const isDreamMode = chatMode === 'dream';
-    const isMangpaiMode = chatMode === 'mangpai';
-    const [customProviderOpen, setCustomProviderOpen] = useState(false);
-    const toolsRef = useRef<HTMLButtonElement>(null);
-    const providerRef = useRef<HTMLButtonElement>(null);
-    const stopAction = isLoading && !sendsDuringRun;
+    const { agentMode, hero, disabled, userId, modeControl, webControl, chatMode, onChatModeChange, styles, send, fileInputRef } = props;
+    const plusRef = useRef<HTMLButtonElement>(null);
+    const styleRef = useRef<HTMLButtonElement>(null);
+    const providerReturnRef = useRef<HTMLButtonElement>(null);
+    const [menu, setMenu] = useState<'plus' | 'templates' | 'style' | null>(null);
+    const [providerOpen, setProviderOpen] = useState(false);
+    const addLabel = agentMode ? '添加图片或文本资料' : '添加附件';
+    const closeMenu = () => setMenu(null);
+    // Plain chat always shows its style; Agent keeps it in the model menu and only flags a non-standard choice.
+    const showStyleButton = !!onChatModeChange && styles.length > 1 && (!agentMode || chatMode !== 'normal');
+    // The empty state and plain chat show the mode inline; Agent conversations keep it in the model menu.
+    const inlineMode = modeControl && (hero || !agentMode || props.customProviderActive) ? modeControl : undefined;
+    const menuMode = modeControl && !inlineMode ? <>
+        <div className="chat-model-separator" aria-hidden="true" />
+        <div className="chat-model-label">对话方式</div>
+        <ModeSwitch control={modeControl} className="chat-model-segments is-pair" />
+    </> : null;
+    const styleSegments = agentMode && onChatModeChange && styles.length > 1 ? <>
+        <div className="chat-model-separator" aria-hidden="true" />
+        <div className="chat-model-label">分析风格</div>
+        <div role="radiogroup" aria-label="分析风格" className="chat-model-segments" style={{ gridTemplateColumns: `repeat(${styles.length}, minmax(0, 1fr))` }}>
+            {styles.map(style => <button key={style} type="button" role="radio" aria-checked={chatMode === style} disabled={disabled} onClick={() => onChatModeChange(style)}>{STYLE_LABELS[style]}</button>)}
+        </div>
+    </> : null;
 
     return (
-        <div className="chat-composer-toolbar flex items-center justify-between gap-3 border-border/50">
-            {/* 左侧按钮组 */}
-            <div className="chat-composer-tools flex min-w-0 items-center gap-1.5 flex-shrink">
-                {props.domainControls}
-                <div className="relative">
-                    <button
-                        ref={toolsRef}
-                        type="button"
-                        onClick={() => setMenuOpen(!menuOpen)}
-                        className={`h-9 w-9 rounded-xl transition-all flex items-center justify-center ${menuOpen
-                            ? 'bg-background-secondary text-foreground'
-                            : 'text-foreground-secondary hover:bg-background-secondary hover:text-foreground'
-                            }`}
-                        title="更多选项"
-                        aria-label="更多选项"
-                        aria-expanded={menuOpen}
-                        aria-haspopup="menu"
-                    >
-                        <Plus className={`w-5.5 h-5.5 transition-transform duration-200 ${menuOpen ? 'rotate-45' : ''}`} />
-                    </button>
-
-                    <FloatingPanel open={menuOpen} anchorRef={toolsRef} onClose={() => setMenuOpen(false)} label="更多选项" side="top" className="w-48 flex flex-col gap-1" restoreFocus={false}>
-                                {/* 附件选项 */}
-                                <button
-                                    role="menuitem"
-                                    type="button"
-                                    onClick={() => {
-                                        if (isDreamMode) return;
-                                        fileInputRef.current?.click();
-                                        setMenuOpen(false);
-                                    }}
-                                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm rounded-lg transition-all ${hasFile
-                                        ? 'bg-blue-500/10 text-blue-600'
-                                        : isDreamMode
-                                            ? 'opacity-40 text-foreground-secondary cursor-not-allowed'
-                                            : 'hover:bg-background-secondary text-foreground-secondary'
-                                        }`}
-                                    disabled={disabled || isDreamMode}
-                                >
-                                    <Paperclip className="w-4.5 h-4.5" />
-                                    <span>{hasFile ? '更换附件' : '上传附件'}</span>
-                                </button>
-                                {/* 搜索选项 */}
-                                <div className={`flex items-center w-full rounded-lg transition-all ${hasWebSearch
-                                    ? 'bg-green-500/10 text-green-600'
-                                    : (!canUseWeb || isDreamMode)
-                                        ? 'opacity-40 text-foreground-secondary cursor-not-allowed'
-                                        : 'hover:bg-background-secondary text-foreground-secondary'
-                                    }`}>
-                                    <button
-                                        role="menuitemcheckbox"
-                                        aria-checked={hasWebSearch}
-                                        type="button"
-                                        onClick={() => {
-                                            if (isDreamMode) return;
-                                            handleWebToggle();
-                                            setMenuOpen(false);
-                                        }}
-                                        className="flex-1 flex items-center gap-2 px-3 py-2 text-sm"
-                                        disabled={disabled || isDreamMode}
-                                    >
-                                        <Globe className="w-4.5 h-4.5" />
-                                        <span>{!canUseWeb ? '搜索' : '搜索'}</span>
-                                    </button>
-                                </div>
-                                {canUseBazi && !!userId && onChatModeChange && (
-                                    <button
-                                        role="menuitemcheckbox"
-                                        aria-checked={isMangpaiMode}
-                                        type="button"
-                                        onClick={() => {
-                                            if (isDreamMode) return;
-                                            onChatModeChange(isMangpaiMode ? 'normal' : 'mangpai');
-                                            setMenuOpen(false);
-                                            textareaRef.current?.focus();
-                                        }}
-                                        className={`flex items-center gap-2 w-full px-3 py-2 text-sm rounded-lg transition-all ${isMangpaiMode
-                                            ? 'bg-orange-500/10 text-orange-600'
-                                            : isDreamMode
-                                                ? 'opacity-40 text-foreground-secondary cursor-not-allowed'
-                                                : 'hover:bg-background-secondary text-foreground-secondary'
-                                            }`}
-                                        disabled={disabled || isDreamMode}
-                                    >
-                                        <BaziNavIcon className="w-4.5 h-4.5" />
-                                        <span>盲派分析</span>
-                                    </button>
-                                )}
-                                {!!userId && onChatModeChange && (
-                                    <button
-                                        role="menuitemcheckbox"
-                                        aria-checked={isDreamMode}
-                                        type="button"
-                                        onClick={() => {
-                                            onChatModeChange(isDreamMode ? 'normal' : 'dream');
-                                            setMenuOpen(false);
-                                            textareaRef.current?.focus();
-                                        }}
-                                        className={`flex items-center gap-2 w-full px-3 py-2 text-sm rounded-lg transition-all ${isDreamMode
-                                            ? 'bg-purple-500/10 text-purple-600'
-                                            : 'hover:bg-background-secondary text-foreground-secondary'
-                                            }`}
-                                        disabled={disabled}
-                                    >
-                                        <Moon className="w-4.5 h-4.5" />
-                                        <span>周公解梦</span>
-                                    </button>
-                                )}
-                                {!!userId && knowledgeBaseEnabled && (
-                                    <div className={`flex items-center w-full rounded-lg transition-all ${canUseKnowledgeBase
-                                        ? 'hover:bg-background-secondary text-foreground-secondary'
-                                        : 'opacity-50 text-foreground-secondary hover:bg-background-secondary'
-                                        }`}>
-                                        <button
-                                            role="menuitem"
-                                            type="button"
-                                            onClick={handleKnowledgeBaseOpen}
-                                            className="flex-1 flex items-center gap-2 w-full px-3 py-2 text-sm"
-                                            disabled={disabled}
-                                        >
-                                            <BookOpenText className="w-4.5 h-4.5" />
-                                            <span>{canUseKnowledgeBase ? '知识库' : '知识库 (Plus+)'}</span>
-                                        </button>
-                                    </div>
-                                )}
-                                {!!userId && canMentionAnything && (
-                                    <button
-                                        role="menuitem"
-                                        type="button"
-                                        onClick={() => {
-                                            const textarea = textareaRef.current;
-                                            const caret = textarea?.selectionStart ?? inputValue.length;
-                                            const before = inputValue.slice(0, caret);
-                                            const after = inputValue.slice(caret);
-                                            const nextValue = `${before}@${after}`;
-                                            onInputChange(nextValue);
-                                            setMentionOpen(true);
-                                            setMentionQuery('');
-                                            setMentionStartIndex(caret);
-                                            setMenuOpen(false);
-                                            requestAnimationFrame(() => {
-                                                textareaRef.current?.focus();
-                                                textareaRef.current?.setSelectionRange(caret + 1, caret + 1);
-                                            });
-                                        }}
-                                        className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-lg transition-all hover:bg-background-secondary text-foreground-secondary"
-                                        disabled={disabled}
-                                    >
-                                        <AtSign className="w-4.5 h-4.5" />
-                                        <span className="truncate flex flex-col items-start text-left">
-                                            <span className="truncate w-full">提及</span>
-                                        </span>
-                                    </button>
-                                )}
-                    </FloatingPanel>
-
-                    {/* 隐藏的文件输入 */}
-                    <input
-                        ref={fileInputRef}
-                        type="file"
-                        className="hidden"
-                        accept={agentMode ? '.jpg,.jpeg,.png,.webp,.pdf,.txt,.md,.doc,.docx,.xlsx,.xls,.csv' : '.pdf,.txt,.md,.doc,.docx,.xlsx,.xls,.csv'}
-                        multiple={agentMode}
-                        onChange={handleFileChange}
-                    />
-                </div>
-
-            </div>
-            <div className="chat-composer-controls flex min-w-0 items-center gap-1.5 ml-auto">
-                <div className="relative ml-0.5 flex items-center gap-1">
-                    <button
-                        ref={providerRef}
-                        type="button"
-                        onClick={() => setCustomProviderOpen((prev) => !prev)}
-                        className={`flex h-9 w-9 items-center justify-center rounded-xl transition-colors duration-150 ${
-                            customProviderOpen
-                                ? 'bg-background-secondary text-foreground'
-                                : 'text-foreground-secondary hover:bg-background-secondary hover:text-foreground'
-                        }`}
-                        title="自定义模型"
-                        aria-label="自定义模型"
-                        aria-expanded={customProviderOpen}
-                        aria-haspopup="dialog"
-                    >
-                        <KeyRound className="h-4.5 w-4.5" />
-                    </button>
-
-                    <div className="chat-composer-model relative min-h-[36px] min-w-[136px]">
-                        <div
-                            inert={customProviderActive}
-                            className={`transition-opacity duration-150 ${
-                                customProviderActive
-                                    ? 'pointer-events-none absolute inset-0 opacity-0'
-                                    : 'opacity-100'
-                            }`}
-                        >
-                            <ModelSelector
-                                selectedModel={selectedModel}
-                                onModelChange={onModelChange}
-                                reasoningEnabled={reasoningEnabled}
-                                onReasoningChange={onReasoningChange}
-                                reasoningEffort={props.reasoningEffort}
-                                onReasoningEffortChange={props.onReasoningEffortChange}
-                                collaborators={agentMode ? props.collaborators : undefined}
-                                onCollaboratorsChange={agentMode ? props.onCollaboratorsChange : undefined}
-                                contextDetails={agentMode ? <AgentContextDetails runtime={agentRuntime} /> : <PromptPreview embedded
-                                    promptPreviewLoading={promptPreviewLoading} hasPromptDiagnostics={hasPromptDiagnostics}
-                                    promptDiagnosticsOpen={promptDiagnosticsOpen} setPromptDiagnosticsOpen={setPromptDiagnosticsOpen}
-                                    contextProgressPercent={contextProgressPercent} promptProgressPercent={promptProgressPercent}
-                                    promptUsageLabel={promptUsageLabel} promptPreviewTokens={promptPreviewTokens} promptPreviewBudget={promptPreviewBudget}
-                                    displayLayers={displayLayers} displayUserMessageTokens={displayUserMessageTokens} formatLayerLabel={formatLayerLabel} />}
-                                userId={userId}
-                                membershipType={membershipType}
-                                disabled={disabled}
-                                toolbarStyle
-                            />
-                        </div>
-                        <div
-                            inert={!customProviderActive}
-                            className={`transition-opacity duration-150 ${
-                                customProviderActive
-                                    ? 'opacity-100'
-                                    : 'pointer-events-none absolute inset-0 opacity-0'
-                            }`}
-                        >
-                            <button
-                                type="button"
-                                onClick={() => setCustomProviderOpen(true)}
-                                className="chat-model-picker flex min-w-0 items-center gap-2 rounded-xl px-3 py-1.5 text-left text-foreground transition-colors duration-150 hover:bg-background-secondary"
-                                title="查看或修改自定义模型"
-                            >
-                                <span className="flex h-7 w-4.5 flex-shrink-0 items-center justify-center rounded-lg text-foreground-secondary">
-                                    <Atom className="h-4.5 w-4.5" />
-                                </span>
-                                <span className="min-w-0">
-                                    <span className="chat-model-name block max-w-[132px] truncate text-sm font-medium text-foreground">
-                                        {customProviderLabel || '自定义模型'}
-                                    </span>
-                                </span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <Modal open={customProviderOpen} onClose={() => setCustomProviderOpen(false)} returnFocusRef={providerRef} labelledBy="custom-provider-panel-title" className="chat-provider-dialog">
-                        <button type="button" onClick={() => setCustomProviderOpen(false)} aria-label="关闭自定义模型" className="agent-icon-button absolute right-3 top-3 z-10"><X size={17} /></button>
-                        <CustomProviderPanel onClose={() => setCustomProviderOpen(false)} />
-                    </Modal>
-                </div>
-            {/* 发送/停止按钮 */}
-            <button
-                type="button"
-                aria-label={isSendingToList ? '正在发送' : stopAction ? '停止生成' : sendsDuringRun ? '调整任务' : '发送消息'}
-                onClick={handleButtonClick}
-                disabled={disabled || isSendingToList || (!isLoading && (!inputValue.trim() || dreamContextLoading))}
-                className={`
-                    px-2 py-2 rounded-full transition-all duration-200 flex items-center gap-2 flex-shrink-0
-                    ${isSendingToList
-                        ? 'bg-background-tertiary text-foreground-secondary cursor-wait'
-                        : stopAction
-                        ? 'bg-red-500 text-white hover:bg-red-600'
-                        : inputValue.trim() && !disabled && !dreamContextLoading
-                            ? 'bg-foreground text-background hover:bg-foreground/90'
-                            : 'bg-background-tertiary text-foreground-secondary cursor-not-allowed'
-                    }
-                `}
-            >
-                {isSendingToList ? (
-                    <SoundWaveLoader variant="inline" />
-                ) : stopAction ? (
-                    <Square className="w-4.5 h-4.5" strokeWidth={2.5} />
-                ) : (
-                    <ArrowUp className="w-5 h-5" strokeWidth={2.5} />
-                )}
+        <div className="chat-composer-toolbar">
+            <button ref={plusRef} type="button" className="chat-tool-button is-bordered" aria-label={addLabel} title={addLabel}
+                aria-haspopup="menu" aria-expanded={menu === 'plus'} disabled={disabled} onClick={() => setMenu(value => value === 'plus' ? null : 'plus')}>
+                <Plus size={17} strokeWidth={1.9} aria-hidden="true" />
             </button>
-            </div>
+            <FloatingPanel open={menu === 'plus'} anchorRef={plusRef} onClose={closeMenu} label={addLabel} side="top" className="chat-plus-menu" restoreFocus={false}>
+                <button type="button" role="menuitem" disabled={chatMode === 'dream'} onClick={() => { closeMenu(); fileInputRef.current?.click(); }}>
+                    <Paperclip size={16} aria-hidden="true" />{agentMode ? '上传图片或文本资料' : props.hasFile ? '更换附件' : '上传附件'}
+                </button>
+                {!agentMode && <button type="button" role="menuitemcheckbox" aria-checked={props.plainWeb.active} disabled={chatMode === 'dream'} onClick={() => { closeMenu(); props.plainWeb.onToggle(); }}>
+                    <Globe size={16} aria-hidden="true" />联网搜索{!props.plainWeb.allowed && <small>Plus</small>}
+                </button>}
+                {/* Phones move the Agent web switch here from the toolbar. */}
+                {webControl && <button type="button" role="menuitemcheckbox" className="chat-plus-web" aria-checked={webControl.enabled} disabled={webControl.disabled} title={webControl.title}
+                    onClick={() => { closeMenu(); webControl.onToggle(); }}>
+                    <Globe size={16} aria-hidden="true" />{webControl.label}
+                </button>}
+                {!!userId && props.knowledgeBase.enabled && <button type="button" role="menuitem" onClick={() => { closeMenu(); props.knowledgeBase.onOpen(); }}>
+                    <BookOpenText size={16} aria-hidden="true" />知识库{!props.knowledgeBase.allowed && <small>Plus</small>}
+                </button>}
+                {!!userId && <button type="button" role="menuitem" onClick={() => setMenu('templates')}><FileText size={16} aria-hidden="true" />问法模板</button>}
+                <button type="button" role="menuitemcheckbox" aria-checked={props.speech.recording} onClick={() => { closeMenu(); props.speech.toggle(); }}>
+                    <Mic size={16} aria-hidden="true" />{props.speech.recording ? '停止录音' : '语音输入'}
+                </button>
+                <button type="button" role="menuitem" disabled={!props.polish.available || props.polish.busy} onClick={() => { closeMenu(); props.polish.run(); }}>
+                    <WandSparkles size={16} aria-hidden="true" />{props.polish.busy ? '正在润色…' : '润色问题'}
+                </button>
+            </FloatingPanel>
+            <PromptTemplateMenu open={menu === 'templates'} anchorRef={plusRef} onClose={closeMenu} userId={userId} onPick={props.onPickTemplate} />
+            <input ref={fileInputRef} type="file" className="hidden" tabIndex={-1} aria-hidden="true"
+                accept={agentMode ? '.jpg,.jpeg,.png,.webp,.pdf,.txt,.md,.doc,.docx,.xlsx,.xls,.csv' : '.pdf,.txt,.md,.doc,.docx,.xlsx,.xls,.csv'}
+                multiple={agentMode} onChange={props.onFileChange} />
+
+            {props.onMention && !hero && <button type="button" className="chat-tool-button is-mention" aria-label="引用命盘或知识库" title="引用命盘或知识库" disabled={disabled} onClick={props.onMention}>
+                <AtSign size={17} strokeWidth={1.9} aria-hidden="true" />
+            </button>}
+
+            {inlineMode && <ModeSwitch control={inlineMode} className="chat-mode-switch" />}
+
+            {props.knowledgeBase.allowed && props.knowledgeBase.selected.map(base => <span key={base.id} className="chat-kb-chip" title={base.description || base.name}>
+                <span>@ {base.name}</span>
+                <button type="button" aria-label={`移除知识库引用：${base.name}`} disabled={disabled} onClick={() => props.knowledgeBase.onRemove(base.id)}><X size={12} aria-hidden="true" /></button>
+            </span>)}
+
+            {webControl && <button type="button" className="chat-tool-text is-web" aria-pressed={webControl.enabled} disabled={webControl.disabled} title={webControl.title} onClick={webControl.onToggle}>
+                <Globe size={16} strokeWidth={1.8} aria-hidden="true" />{webControl.label}
+            </button>}
+            {!agentMode && props.plainWeb.active && <button type="button" className="chat-tool-text" aria-pressed="true" title="关闭联网搜索" onClick={props.plainWeb.onToggle}>
+                <Globe size={16} aria-hidden="true" />联网搜索
+            </button>}
+
+            {showStyleButton && <>
+                <button ref={styleRef} type="button" className="chat-tool-text is-muted" aria-haspopup="menu" aria-expanded={menu === 'style'} disabled={disabled}
+                    onClick={() => setMenu(value => value === 'style' ? null : 'style')}>
+                    风格 · {STYLE_LABELS[chatMode]}<ChevronDown size={13} aria-hidden="true" />
+                </button>
+                <FloatingPanel open={menu === 'style'} anchorRef={styleRef} onClose={closeMenu} label="回答风格" side="top" className="chat-plus-menu">
+                    {styles.map(style => <button key={style} type="button" role="menuitemradio" aria-checked={chatMode === style} onClick={() => { closeMenu(); onChatModeChange?.(style); }}>
+                        {style === 'normal' ? '标准' : style === 'mangpai' ? '盲派分析' : '周公解梦'}
+                    </button>)}
+                </FloatingPanel>
+            </>}
+
+            {props.speech.recording && <button type="button" className="chat-tool-text is-recording" aria-pressed="true" onClick={props.speech.toggle}>
+                <Mic size={16} aria-hidden="true" />正在录音 · 停止
+            </button>}
+            {props.polish.undo && <button type="button" className="chat-tool-text is-muted" onClick={props.polish.undo}><Undo2 size={15} aria-hidden="true" />撤销润色</button>}
+
+            <div className="chat-toolbar-spacer" />
+
+            {send.kind === 'split' ? <>
+                {send.onFollowUp && <button type="button" className="chat-run-secondary" disabled={send.disabled} onClick={send.onFollowUp}>结束后续问</button>}
+                <button type="button" className="chat-run-primary" disabled={send.disabled} onClick={send.onSupplement}>补充到当前任务</button>
+                {send.onStop && <button type="button" className="chat-stop-button is-small" aria-label="停止任务" title="停止任务" onClick={send.onStop}>
+                    <Square size={11} fill="currentColor" strokeWidth={0} aria-hidden="true" />
+                </button>}
+            </> : <>
+                {props.contextMeter}
+                {props.customProviderActive ? <button ref={providerReturnRef} type="button" className="chat-model-trigger" aria-label={`自定义模型：${props.customProviderLabel || '未命名'}`}
+                    aria-haspopup="dialog" aria-expanded={providerOpen} onClick={() => setProviderOpen(true)}>
+                    <KeyRound size={15} aria-hidden="true" /><span className="chat-model-name">{props.customProviderLabel || '自定义模型'}</span><span className="chat-model-hint">自定义</span><ChevronDown size={14} aria-hidden="true" />
+                </button> : <ModelSelector selectedModel={props.selectedModel} onModelChange={props.onModelChange}
+                    reasoningEnabled={props.reasoningEnabled} onReasoningChange={props.onReasoningChange}
+                    reasoningEffort={props.reasoningEffort} onReasoningEffortChange={props.onReasoningEffortChange}
+                    collaborators={agentMode ? props.collaborators : undefined} onCollaboratorsChange={agentMode ? props.onCollaboratorsChange : undefined}
+                    extra={<>{styleSegments}{menuMode}{props.promptStatistics}</>} onCustomProvider={() => setProviderOpen(true)}
+                    userId={userId} membershipType={props.membershipType} disabled={disabled} toolbarStyle />}
+                <SendButton send={send} agentMode={agentMode} disabled={disabled} onSend={props.onSend} onStop={props.onStop} />
+            </>}
+
+            <Modal open={providerOpen} onClose={() => setProviderOpen(false)} returnFocusRef={props.customProviderActive ? providerReturnRef : plusRef} labelledBy="custom-provider-panel-title" className="chat-provider-dialog">
+                <button type="button" onClick={() => setProviderOpen(false)} aria-label="关闭自定义模型" className="agent-icon-button absolute right-3 top-3 z-10"><X size={17} /></button>
+                <CustomProviderPanel onClose={() => setProviderOpen(false)} />
+            </Modal>
         </div>
     );
+}
+
+/** Agent / plain radio pair; arrow keys switch like a native radio group. */
+function ModeSwitch({ control, className }: { control: ComposerModeControl; className: string }) {
+    return <div role="radiogroup" aria-label="对话方式" className={className}
+        onKeyDown={event => {
+            if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+            event.preventDefault();
+            const group = event.currentTarget;
+            const next = control.mode === 'agent' ? 'plain' : 'agent';
+            if (next === 'agent' ? control.agentDisabled : control.plainDisabled) return;
+            control.onChange(next);
+            requestAnimationFrame(() => group.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus());
+        }}>
+        <button type="button" role="radio" aria-checked={control.mode === 'agent'} tabIndex={control.mode === 'agent' ? 0 : -1}
+            disabled={control.agentDisabled && control.mode !== 'agent'} title="Agent 会排盘、检索并在工作区展示" onClick={() => control.onChange('agent')}>Agent</button>
+        <button type="button" role="radio" aria-checked={control.mode === 'plain'} tabIndex={control.mode === 'plain' ? 0 : -1}
+            disabled={control.plainDisabled && control.mode !== 'plain'} onClick={() => control.onChange('plain')}>对话</button>
+    </div>;
+}
+
+function SendButton({ send, agentMode, disabled, onSend, onStop }: { send: ComposerSendState; agentMode: boolean; disabled: boolean; onSend: () => void; onStop?: () => void }) {
+    if (send.kind === 'sending') return <button type="button" className="chat-send-button" aria-label="正在发送" disabled><SoundWaveLoader variant="inline" /></button>;
+    if (send.kind === 'stop') {
+        const label = agentMode ? '停止任务' : '停止生成';
+        return <button type="button" className="chat-stop-button" aria-label={label} title={label} disabled={!onStop} onClick={onStop}>
+            <Square size={12} fill="currentColor" strokeWidth={0} aria-hidden="true" />
+        </button>;
+    }
+    return <button type="button" className="chat-send-button" aria-label="发送" title="发送（Enter）" disabled={disabled || (send.kind === 'send' && send.disabled)} onClick={onSend}>
+        <ArrowUp size={17} strokeWidth={2.25} aria-hidden="true" />
+    </button>;
 }

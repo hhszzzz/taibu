@@ -65,6 +65,12 @@ function getReasoningTier(model: AIModelConfig): ModelTier {
     return "plus";
 }
 
+/** Lowest membership that can use a model, shown beside it in the model menu; null when no tier can. */
+export function getModelRequiredTier(model: AIModelConfig): Exclude<ModelTier, "none"> | null {
+    const tier = getModelTier(model);
+    return tier === "none" ? null : tier;
+}
+
 export function isModelAllowedForMembership(
     model: AIModelConfig,
     membership: MembershipType

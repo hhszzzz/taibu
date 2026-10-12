@@ -1,7 +1,7 @@
 'use client';
 
-import { createElement, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { Bug, ChevronRight, Github, LogOut } from 'lucide-react';
+import { createElement, useEffect, useRef, useState } from 'react';
+import { Bug, ChevronRight, ChevronsUpDown, Github, LogOut, User } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { signOut } from '@/lib/auth';
 import { buildMembershipInfo } from '@/lib/user/membership';
@@ -11,11 +11,14 @@ import type { User as SupabaseUser } from '@/lib/auth';
 import { SettingsCenterLink } from '@/components/settings/SettingsCenterLink';
 import { SETTINGS_CENTER_TAB_ICONS } from '@/components/settings/settings-center-icons';
 import { useCurrentUserProfile } from '@/lib/hooks/useCurrentUserProfile';
+import { useIsDesktopLayout } from '@/lib/hooks/useIsDesktopLayout';
 import type { SettingsCenterTab } from '@/lib/settings-center';
 
 interface SidebarUserCardProps {
     user: SupabaseUser;
     collapsed?: boolean;
+    /** `account`: the chat sidebar's footer row (membership and credits) or, collapsed, its round rail button. */
+    appearance?: 'card' | 'account';
 }
 
 const membershipLabels: Record<string, string> = {
@@ -24,8 +27,19 @@ const membershipLabels: Record<string, string> = {
   pro: 'Pro',
 };
 
-function Avatar({ src, alt, size = 32 }: { src: string | null; alt: string; size?: number }) {
+function Avatar({ src, alt, size = 32, round = false }: { src: string | null; alt: string; size?: number; round?: boolean }) {
   const [error, setError] = useState(false);
+
+  if (round) {
+    return src && !error ? (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={src} alt="" width={size} height={size} className="flex-shrink-0 rounded-full object-cover" style={{ width: size, height: size }} onError={() => setError(true)} />
+    ) : (
+      <span aria-hidden="true" className="flex flex-shrink-0 items-center justify-center rounded-full bg-background-tertiary text-foreground-secondary" style={{ width: size, height: size }}>
+        <User size={Math.round(size / 2)} />
+      </span>
+    );
+  }
 
   if (!src || error) {
     return (
@@ -49,21 +63,6 @@ function Avatar({ src, alt, size = 32 }: { src: string | null; alt: string; size
       style={{ width: size, height: size }}
       onError={() => setError(true)}
     />
-  );
-}
-
-function useIsDesktopSidebar() {
-  return useSyncExternalStore(
-    (onStoreChange) => {
-      if (typeof window === 'undefined') {
-        return () => {};
-      }
-      const mediaQuery = window.matchMedia('(min-width: 1024px)');
-      mediaQuery.addEventListener('change', onStoreChange);
-      return () => mediaQuery.removeEventListener('change', onStoreChange);
-    },
-    () => (typeof window !== 'undefined' ? window.matchMedia('(min-width: 1024px)').matches : false),
-    () => false,
   );
 }
 
@@ -92,12 +91,12 @@ function UserMenuShortcutLink({
   );
 }
 
-export function SidebarUserCard({ user, collapsed = false }: SidebarUserCardProps) {
+export function SidebarUserCard({ user, collapsed = false, appearance = 'card' }: SidebarUserCardProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isHelpMenuOpen, setIsHelpMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const isDesktopSidebar = useIsDesktopSidebar();
+  const isDesktopSidebar = useIsDesktopLayout();
   const { isFeatureEnabled } = useFeatureToggles();
   const { profile, loading: profileLoading, resolved: profileResolved, error: profileError } = useCurrentUserProfile({ enabled: isDesktopSidebar });
   const personalizationEnabled = isFeatureEnabled('chat') && isFeatureEnabled('ai-personalization');
@@ -113,6 +112,9 @@ export function SidebarUserCard({ user, collapsed = false }: SidebarUserCardProp
     : profileError
       ? '加载失败'
       : membershipLabels[membership?.type || 'free'];
+  const accountSummary = membership
+    ? `${membership.type === 'free' ? '免费用户' : `${membershipLabels[membership.type] ?? membership.type} 会员`} · 积分 ${membership.aiChatCount}`
+    : membershipLabel;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -145,19 +147,44 @@ export function SidebarUserCard({ user, collapsed = false }: SidebarUserCardProp
     ...(chartsEnabled ? [{ tab: 'charts', label: '命盘' } as const] : []),
   ];
 
+  const toggleMenu = () => {
+    setIsMenuOpen((prev) => {
+      const next = !prev;
+      if (!next) {
+        setIsHelpMenuOpen(false);
+      }
+      return next;
+    });
+  };
+
   return (
     <div className="relative" ref={menuRef}>
+      {appearance === 'account' ? (
+        <button
+          type="button"
+          onClick={toggleMenu}
+          aria-expanded={isMenuOpen}
+          aria-label={collapsed ? '账户与设置' : undefined}
+          title={collapsed ? '账户与设置' : undefined}
+          className={collapsed
+            ? `mt-1 flex h-9 w-9 items-center justify-center rounded-full border border-border transition-colors ${isMenuOpen ? 'ring-2 ring-accent/30' : 'hover:border-border-hover'}`
+            : `flex min-h-[52px] w-full items-center gap-2.5 rounded-xl px-2 text-left text-foreground transition-colors ${isMenuOpen ? 'bg-background-tertiary' : 'hover:bg-background-secondary'}`}
+        >
+          <Avatar src={avatarUrl} alt={displayName} size={collapsed ? 34 : 32} round />
+          {!collapsed ? (
+            <>
+              <span className="min-w-0 flex-1 leading-[1.35]">
+                <span className="block truncate text-[13.5px] font-medium">{displayName}</span>
+                <span className="block truncate text-xs text-foreground-secondary">{accountSummary}</span>
+              </span>
+              <ChevronsUpDown size={16} aria-hidden="true" className="flex-shrink-0 text-foreground-secondary" />
+            </>
+          ) : null}
+        </button>
+      ) : (
       <button
         type="button"
-        onClick={() => {
-          setIsMenuOpen((prev) => {
-            const next = !prev;
-            if (!next) {
-              setIsHelpMenuOpen(false);
-            }
-            return next;
-          });
-        }}
+        onClick={toggleMenu}
         className={`flex w-full items-center rounded-2xl transition-colors duration-150 ${
           collapsed ? 'justify-center p-2' : 'px-2.5 py-2'
         } ${
@@ -176,6 +203,7 @@ export function SidebarUserCard({ user, collapsed = false }: SidebarUserCardProp
           ) : null}
         </div>
       </button>
+      )}
 
       {isMenuOpen ? (
         <div className={`${MENU_PANEL_CLASS} ${collapsed ? 'left-2 w-[248px]' : 'left-0 right-0'}`}>

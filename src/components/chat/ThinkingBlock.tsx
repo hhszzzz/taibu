@@ -8,13 +8,16 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { ChevronRight, ChevronDown, Brain } from 'lucide-react';
+import { ChevronRight, ChevronDown, Brain, Clock3, LoaderCircle } from 'lucide-react';
 
 interface ThinkingBlockProps {
     content: string;
     duration?: number;  // 思考时长（秒）- 流式结束后传入
     isStreaming?: boolean;  // 是否正在流式输出
     startTime?: number;  // 开始时间戳（ms），用于实时计时
+    /** 对话页使用设计稿的样式：一行“已思考 N 秒 ›”，流式时显示浅底文本框；其它页面保持原样式。 */
+    variant?: 'default' | 'chat';
+    className?: string;
 }
 
 // 格式化时长显示（提取到组件外部，避免每次渲染重新创建）
@@ -35,7 +38,7 @@ function formatDuration(seconds: number): string {
  * - 流式模式：自动展开，显示实时计时器
  * - 流式结束：自动收起，显示总用时
  */
-export function ThinkingBlock({ content, duration, isStreaming = false, startTime }: ThinkingBlockProps) {
+export function ThinkingBlock({ content, duration, isStreaming = false, startTime, variant = 'default', className }: ThinkingBlockProps) {
     const [isExpanded, setIsExpanded] = useState(isStreaming);
     const [elapsedSeconds, setElapsedSeconds] = useState(0);
     const prevStreamingRef = useRef(isStreaming);
@@ -78,6 +81,22 @@ export function ThinkingBlock({ content, duration, isStreaming = false, startTim
 
     // 显示的时长：流式时使用实时计时，结束后使用传入的 duration
     const displayDuration = isStreaming ? elapsedSeconds : duration;
+
+    if (variant === 'chat') {
+        const timed = displayDuration !== undefined && displayDuration > 0 ? ` ${formatDuration(displayDuration)}` : '';
+        return (
+            <div className={`chat-thinking${isStreaming ? ' is-streaming' : ''}${className ? ` ${className}` : ''}`}>
+                <button type="button" className="chat-thinking-toggle" aria-expanded={isExpanded} onClick={() => setIsExpanded(!isExpanded)}>
+                    {isStreaming
+                        ? <LoaderCircle size={13} strokeWidth={2.4} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                        : <Clock3 size={14} aria-hidden="true" />}
+                    <span>{isStreaming ? `正在思考…${timed}` : `已思考${timed}`}</span>
+                    <ChevronRight size={14} aria-hidden="true" className={isExpanded ? 'rotate-90' : undefined} />
+                </button>
+                {isExpanded && <p className="chat-thinking-text">{content}</p>}
+            </div>
+        );
+    }
 
     return (
         <div className="mb-3">

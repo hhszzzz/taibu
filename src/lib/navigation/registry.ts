@@ -92,7 +92,7 @@ export const NAV_REGISTRY: readonly NavItemDef[] = [
   { id: 'xiaoliuren', href: '/xiaoliuren', label: '小六壬', icon: XiaoliurenIcon, description: '小六壬', category: 'divination', group: 'divine' },
   { id: 'face', href: '/face', label: '面相', icon: FaceIcon, emoji: '👤', description: '面相分析', category: 'divination', group: 'xiang' },
   { id: 'palm', href: '/palm', label: '手相', icon: PalmIcon, emoji: '🖐️', description: '手相分析', category: 'divination', group: 'xiang' },
-  { id: 'mbti', href: '/mbti', label: 'MBTI', icon: MbtiIcon, emoji: '🧩', description: '性格测试', category: 'divination', group: 'xiang' },
+  { id: 'mbti', href: '/mbti', label: 'MBTI 测试', icon: MbtiIcon, emoji: '🧩', description: '性格测试', category: 'divination', group: 'xiang' },
 
   { id: 'daily', href: '/daily', label: '日运', icon: DailyIcon, description: '日运 · 黄历', category: 'divination', group: 'fortune' },
   { id: 'monthly', href: '/monthly', label: '月运', icon: MonthlyIcon, description: '月运', category: 'divination', group: 'fortune' },
@@ -149,18 +149,16 @@ export function groupDivinationItems(items: readonly NavItemDef[]): { id: Divina
     .filter(group => group.items.length > 0);
 }
 
+/** Case-insensitive search over label, description and id; a blank query keeps every item. */
+export function filterNavItems(items: readonly NavItemDef[], query: string): readonly NavItemDef[] {
+  const keyword = query.trim().toLowerCase();
+  if (!keyword) return items;
+  return items.filter(item => `${item.label} ${item.description ?? ''} ${item.id}`.toLowerCase().includes(keyword));
+}
+
 /** Sidebar "工具" items (tool category). */
 export function getSidebarToolItems() {
   return NAV_REGISTRY.filter((n) => n.category === 'tool');
-}
-
-/** MobileNav — all items keyed by id. */
-export function getMobileItemsRecord(): Record<string, { href: string; label: string; icon: NavIcon }> {
-  const record: Record<string, { href: string; label: string; icon: NavIcon }> = {};
-  for (const n of NAV_REGISTRY) {
-    record[n.id] = { href: n.href, label: n.label, icon: n.icon };
-  }
-  return record;
 }
 
 /** FeatureTogglePanel — modules list with admin-specific labels. */

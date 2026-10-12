@@ -22,14 +22,17 @@ export const DEFAULT_TOOL_ORDER = [
   'chat', 'records', 'community',
 ] as const;
 
+/** Fixed bottom-bar entries; the pinned divination slot in front of them lives in `mobile-nav-pins.ts`. */
 export const DEFAULT_MOBILE_MAIN_ITEMS = [
-  'liuyao', 'chat', 'daily',
+  'chat', 'daily',
 ] as const;
 
+/** Mobile "全部占术" sheet order: every divination (grouped, fortune pair as footer), then tools and account entries. */
 export const DEFAULT_MOBILE_DRAWER_ORDER = [
-  'bazi', 'records', 'community', 'hepan', 'ziwei', 'tarot', 'meihua', 'qimen', 'daliuren', 'xiaoliuren',
-  'face', 'palm', 'mbti', 'monthly', 'settings-profile', 'settings-general',
-  'settings-upgrade',
+  'bazi', 'hepan', 'ziwei', 'liuyao', 'meihua', 'xiaoliuren', 'tarot', 'qimen', 'daliuren',
+  'face', 'palm', 'mbti', 'daily', 'monthly',
+  'records', 'community',
+  'settings-profile', 'settings-general', 'settings-upgrade',
   'settings-personalization', 'settings-knowledge-base', 'settings-help',
   'settings-charts',
 ] as const;

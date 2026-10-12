@@ -80,8 +80,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         <ToastContext.Provider value={{ showToast }}>
             {children}
 
-            {/* Toast 容器 */}
-            <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 pointer-events-none">
+            {/* Toast 容器：按内容定宽并以视口为上限，避免 left-1/2 把可用宽度压到半屏导致窄屏折行 */}
+            <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex w-max max-w-[calc(100vw-2rem)] flex-col gap-2 pointer-events-none">
                 {toasts.map(toast => (
                     <ToastItem key={toast.id} toast={toast} onRemove={removeToast} />
                 ))}

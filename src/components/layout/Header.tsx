@@ -13,8 +13,8 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
     User,
     LogIn,
-    ArrowLeft,
-    MoreVertical,
+    ChevronLeft,
+    MoreHorizontal,
     Moon,
     Sun,
     Megaphone,
@@ -150,7 +150,8 @@ export function Header() {
         return '太卜';
     };
 
-    const pageTitle = getPageTitle();
+    // 页面可通过 useHeaderTitle 提供更具体的标题（如命盘主人姓名）
+    const pageTitle = headerMenuContext?.pageTitle || getPageTitle();
 
     // 判断是否是子页面（需要显示返回键的页面）
     const isSubPage = pathname ? SUB_PAGE_PATTERNS.some(pattern => pathname.startsWith(pattern)) : false;
@@ -190,9 +191,8 @@ export function Header() {
             <header
                 className="
                     fixed top-0 left-0 right-0 z-40
-                    safe-top-header px-4
+                    safe-top-header px-2
                     bg-background/95 backdrop-blur-md
-                    border-b border-border
                     flex items-center justify-between
                     lg:hidden
                 "
@@ -201,29 +201,29 @@ export function Header() {
                 {isSubPage ? (
                     <button
                         onClick={handleBack}
-                        className="p-2 -ml-2 rounded-full hover:bg-background-secondary transition-colors lg:hidden"
+                        className="flex h-11 w-11 items-center justify-center rounded-full text-foreground transition-colors hover:bg-background-secondary lg:hidden"
                         type="button"
                         aria-label="返回上一页"
                     >
-                        <ArrowLeft className="w-5 h-5 text-foreground" />
+                        <ChevronLeft className="h-[22px] w-[22px]" strokeWidth={1.8} />
                     </button>
                 ) : (
-                    <div className="w-9 lg:hidden" />
+                    <div className="w-11 lg:hidden" />
                 )}
 
-                <h1 className="font-display text-[17px] text-foreground truncate max-w-[60%] lg:hidden">
+                <h1 className="max-w-[calc(100%-7rem)] truncate font-display text-[17px] font-medium text-foreground lg:hidden">
                     {pageTitle}
                 </h1>
 
                 <div className="relative lg:hidden" ref={menuRef}>
                     <button
                         onClick={() => setMenuOpen(!menuOpen)}
-                        className="p-2 -mr-2 rounded-full hover:bg-background-secondary transition-colors"
+                        className="flex h-11 w-11 items-center justify-center rounded-full text-foreground transition-colors hover:bg-background-secondary"
                         type="button"
                         aria-label="打开菜单"
                         aria-expanded={menuOpen}
                     >
-                        <MoreVertical className="w-5 h-5 text-foreground-secondary" />
+                        <MoreHorizontal className="h-[22px] w-[22px]" strokeWidth={1.8} />
                     </button>
 
                     {menuOpen && (

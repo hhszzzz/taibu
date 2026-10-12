@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { Pin, Search } from 'lucide-react';
-import { groupDivinationItems, type NavItemDef } from '@/lib/navigation/registry';
+import { filterNavItems, groupDivinationItems, type NavItemDef } from '@/lib/navigation/registry';
 
 const isActiveHref = (pathname: string | null, href: string) => pathname === href || !!pathname?.startsWith(`${href}/`);
 
@@ -20,14 +20,11 @@ export function AllDivinationsPanel({ items, pins, pathname, onTogglePin, onNavi
     onNavigate: () => void;
 }) {
     const [query, setQuery] = useState('');
-    const keyword = query.trim().toLowerCase();
 
-    const groups = useMemo(() => {
-        const matched = keyword
-            ? items.filter(item => `${item.label} ${item.description ?? ''} ${item.id}`.toLowerCase().includes(keyword))
-            : items;
-        return groupDivinationItems(matched.filter(item => item.group !== 'fortune'));
-    }, [items, keyword]);
+    const groups = useMemo(
+        () => groupDivinationItems(filterNavItems(items, query).filter(item => item.group !== 'fortune')),
+        [items, query],
+    );
     const fortuneItems = useMemo(() => items.filter(item => item.group === 'fortune'), [items]);
 
     return (

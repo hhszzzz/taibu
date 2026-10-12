@@ -2,6 +2,7 @@
  * 运势趋势图组件
  *
  * 使用 Recharts 展示运势趋势变化
+ * 'use client'：Recharts 依赖浏览器渲染，且有维度切换交互状态。
  */
 'use client';
 
@@ -57,24 +58,31 @@ interface FortuneTrendChartProps {
     title?: React.ReactNode;
 }
 
-// 维度配置
+// 维度配置：颜色取主题 token（CSS 变量），深浅色主题自动切换
 const DIMENSION_CONFIG: Record<FortuneDimension, { label: string; color: string }> = {
-    overall: { label: '综合', color: '#f59e0b' },
-    career: { label: '事业', color: '#3b82f6' },
-    love: { label: '感情', color: '#ec4899' },
-    wealth: { label: '财运', color: '#22c55e' },
-    health: { label: '健康', color: '#ef4444' },
-    social: { label: '人际', color: '#8b5cf6' },
+    overall: { label: '综合', color: 'var(--color-accent)' },
+    career: { label: '事业', color: 'var(--color-water)' },
+    love: { label: '感情', color: 'var(--color-hua-quan)' },
+    wealth: { label: '财运', color: 'var(--color-wood)' },
+    health: { label: '健康', color: 'var(--color-fire)' },
+    social: { label: '人际', color: 'var(--color-earth)' },
 };
 
 // 关键日期颜色
 const KEY_DATE_COLORS: Record<string, string> = {
-    lucky: '#22c55e',
-    warning: '#ef4444',
-    turning: '#f59e0b',
-    peak: '#3b82f6',
-    valley: '#9ca3af',
+    lucky: 'var(--color-success)',
+    warning: 'var(--color-danger)',
+    turning: 'var(--color-warning)',
+    peak: 'var(--color-water)',
+    valley: 'var(--color-foreground-tertiary)',
 };
+
+/** 关键日期点按综合分着色：吉 / 平 / 凶。 */
+function getScoreDotColor(score: number): string {
+    if (score >= 80) return 'var(--color-success)';
+    if (score >= 60) return 'var(--color-foreground-tertiary)';
+    return 'var(--color-danger)';
+}
 
 type TrendChartPoint = {
     date: string;
@@ -109,7 +117,7 @@ function FortuneTrendTooltip({
     const dataPoint = chartData.find((d) => d.date === label);
 
     return (
-        <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
+        <div className="rounded-xl border-[0.5px] border-border bg-surface p-3 shadow-md">
             <div className="text-sm font-medium mb-2">{dataPoint?.fullDate}</div>
             {payload.map((entry) => (
                 <div
@@ -129,7 +137,7 @@ function FortuneTrendTooltip({
             {dataPoint?.isKeyDate && (
                 <div className="mt-2 pt-2 border-t border-border text-xs">
                     <span
-                        className="px-2 py-0.5 rounded-full text-white"
+                        className="px-2 py-0.5 rounded-full text-surface"
                         style={{ backgroundColor: KEY_DATE_COLORS[dataPoint.keyDateType || 'lucky'] }}
                     >
                         {dataPoint.keyDateDesc}
@@ -217,7 +225,7 @@ export function FortuneTrendChart({
                 <div className="flex items-center gap-4">
                     {/* 标题 */}
                     {title && (
-                        <div className="text-foreground font-bold">
+                        <div className="text-foreground">
                             {title}
                         </div>
                     )}
@@ -226,13 +234,13 @@ export function FortuneTrendChart({
                     <div className="flex items-center gap-2">
                         <span className="text-sm text-foreground-secondary">趋势:</span>
                         {trend === 'up' && (
-                            <span className="flex items-center gap-1 text-green-500 text-sm">
+                            <span className="flex items-center gap-1 text-success text-sm">
                                 <TrendingUp className="w-4 h-4" />
                                 上升
                             </span>
                         )}
                         {trend === 'down' && (
-                            <span className="flex items-center gap-1 text-red-500 text-sm">
+                            <span className="flex items-center gap-1 text-danger text-sm">
                                 <TrendingDown className="w-4 h-4" />
                                 下降
                             </span>
@@ -251,18 +259,17 @@ export function FortuneTrendChart({
                     {(Object.keys(DIMENSION_CONFIG) as FortuneDimension[]).map((dim) => (
                         <button
                             key={dim}
+                            type="button"
+                            aria-pressed={activeDimensions.includes(dim)}
                             onClick={() => toggleDimension(dim)}
-                            className={`px-3 py-1 text-xs font-medium rounded-full transition-all duration-200 ${activeDimensions.includes(dim)
-                                ? 'text-white shadow-md transform scale-105'
-                                : 'bg-background-secondary/80 text-foreground-secondary hover:bg-background-tertiary hover:text-foreground'
+                            className={`px-2.5 py-1 text-xs rounded-md transition-colors duration-200 ${activeDimensions.includes(dim)
+                                ? 'text-surface'
+                                : 'bg-background-secondary text-foreground-secondary hover:bg-background-tertiary hover:text-foreground'
                                 }`}
                             style={{
                                 backgroundColor: activeDimensions.includes(dim)
                                     ? DIMENSION_CONFIG[dim].color
                                     : undefined,
-                                boxShadow: activeDimensions.includes(dim)
-                                    ? `0 2px 4px ${DIMENSION_CONFIG[dim].color}40`
-                                    : undefined
                             }}
                         >
                             {DIMENSION_CONFIG[dim].label}
@@ -272,7 +279,7 @@ export function FortuneTrendChart({
             </div>
 
             {/* 图表 */}
-            <div className="bg-background-secondary/30 border border-border/50 rounded-2xl p-4">
+            <div className="rounded-xl bg-background p-3 sm:p-4">
                 <ResponsiveContainer width="100%" height={height}>
                     <LineChart
                         data={chartData}
@@ -288,7 +295,7 @@ export function FortuneTrendChart({
                         <CartesianGrid
                             strokeDasharray="2 2"
                             stroke="var(--color-border)"
-                            opacity={0.3}
+                            opacity={0.6}
                             vertical={false}
                         />
                         <XAxis
@@ -316,7 +323,7 @@ export function FortuneTrendChart({
                                 type="monotone"
                                 dataKey={dim}
                                 stroke={DIMENSION_CONFIG[dim].color}
-                                strokeWidth={dim === 'overall' ? 3.5 : 2.5}
+                                strokeWidth={dim === 'overall' ? 2.5 : 1.75}
                                 dot={chartData.length < 15 ? { r: 3, fill: DIMENSION_CONFIG[dim].color, stroke: 'var(--color-background)', strokeWidth: 1.5 } : false}
                                 activeDot={{
                                     r: 6,
@@ -329,10 +336,9 @@ export function FortuneTrendChart({
 
                         {/* 标记关键日期点 - 使用运势评分颜色 */}
                         {keyDatePoints.map((point, idx) => {
-                            // 根据运势分数决定颜色：吉(绿)、平(灰)、凶(红)
-                            const score = point.overall;
-                            const dotColor = score >= 80 ? '#22c55e' : score >= 60 ? '#9ca3af' : '#ef4444';
-                            
+                            // 根据运势分数决定颜色：吉 / 平 / 凶
+                            const dotColor = getScoreDotColor(point.overall);
+
                             return (
                                 <ReferenceDot
                                     key={idx}
@@ -368,10 +374,10 @@ export function FortuneTrendChart({
                     {keyDatePoints.map((point, idx) => (
                         <div
                             key={idx}
-                            className="flex items-center gap-1.5 text-xs text-foreground-secondary/90 bg-background-secondary/50 px-2 py-1 rounded-md"
+                            className="flex items-center gap-1.5 text-xs text-foreground-secondary bg-background-secondary px-2 py-1 rounded-md"
                         >
                             <div
-                                className="w-2.5 h-2.5 rounded-full ring-2 ring-white dark:ring-white/10"
+                                className="w-2.5 h-2.5 rounded-full ring-2 ring-surface"
                                 style={{ backgroundColor: KEY_DATE_COLORS[point.keyDateType || 'lucky'] }}
                             />
                             <span>

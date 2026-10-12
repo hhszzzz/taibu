@@ -1,471 +1,464 @@
 /**
- * 黄历信息展示组件
+ * 日运 · 黄历页主体
  *
- * 显示完整的黄历数据，包括宜忌、吉神凶煞、冲煞、神位等
- * 支持整合日期选择器、命盘选择器和流日/主神信息
+ * 桌面端：标题 + 日期切换 → 黄历主卡（左栏日期与值日细项，右栏宜忌、冲煞与方位）→ 时辰吉凶 → 运势 | 问答 → 运势详解。
+ * 移动端：日期切换 → 日期摘要 + 宜忌 → 运势 → 时辰吉凶 → 方位 → 当日黄历细项 → 运势详解 → 问答。
+ * 两端板块顺序不同：DOM 顺序与桌面一致，移动端以 order 重排；纯展示的黄历块按断点各渲染一份。
+ *
+ * 'use client'：需要 useState（宜忌展开）、日期选择器与客户端黄历细项计算（core 黄历引擎异步加载）。
  */
 'use client';
 
-import { useMemo, useState, useCallback } from 'react'; // Added useState for expand/collapse state, useCallback for memoized functions
-import {
-    Calendar,
-    CheckCircle,
-    XCircle,
-    MapPin,
-    Clock,
-    ChevronLeft,
-    ChevronRight,
-    ChevronDown,
-    User,
-    Scroll,
-} from 'lucide-react';
-import Link from 'next/link';
-import { SettingsCenterLink } from '@/components/settings/SettingsCenterLink';
-import { getCalendarAlmanac, getZhiShenDesc, isBlackDay } from '@/lib/divination/calendar';
-import { getBranchElement, getElementColor, getStemElement } from '@/lib/divination/display-helpers';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import { getCalendarAlmanac, getZhiShenDesc, isBlackDay, type CalendarAlmanacData } from '@/lib/divination/calendar';
+import { DailyDirectionGrid } from '@/components/daily/DailyDirectionGrid';
+import { DailyHourStrip } from '@/components/daily/DailyHourStrip';
+import { toLocalDateKey, useDailyAlmanacDetail, type DailyAlmanacDetail } from '@/components/daily/useDailyAlmanacDetail';
 
 interface CalendarAlmanacProps {
     date: Date;
-    /** 日期变更回调 */
-    onDateChange?: (days: number) => void;
-    /** 回到今天回调 */
-    onGoToday?: () => void;
-    /** 是否为今天 */
-    isToday?: boolean;
-    /** 命盘名称 */
-    chartName?: string;
-    /** 点击命盘选择器回调 */
-    onChartSelect?: () => void;
-    /** 是否为个性化模式 */
-    isPersonalized?: boolean;
-    /** 流日干支 */
-    dayStem?: string;
-    dayBranch?: string;
-    /** 主神（十神） */
-    tenGod?: string;
+    isToday: boolean;
+    onDateChange: (days: number) => void;
+    onDatePick: (date: Date) => void;
+    onGoToday: () => void;
+    /** 运势卡：移动端位于宜忌之后，桌面端位于时辰吉凶下方左栏。 */
+    fortune: ReactNode;
+    /** 问答卡：移动端置于页尾，桌面端位于运势卡右侧；为空时运势卡占满整行。 */
+    assistant?: ReactNode;
+    /** 运势详解（趋势、指引等），两端均为全宽。 */
+    insights?: ReactNode;
 }
 
-export function CalendarAlmanac({
-    date,
-    onDateChange,
-    onGoToday,
-    isToday = false,
-    chartName,
-    onChartSelect,
-    isPersonalized = false,
-    dayStem,
-    dayBranch,
-    tenGod,
-}: CalendarAlmanacProps) {
-    const data = useMemo(() => getCalendarAlmanac(date), [date]);
-    
-    // State for expanding 宜/忌 lists - needed for user interaction
-    const [yiExpanded, setYiExpanded] = useState(false);
-    const [jiExpanded, setJiExpanded] = useState(false);
+/** 宜忌超过该数量时折叠，避免极端长列表撑高卡片。 */
+const YI_JI_COLLAPSE_LIMIT = 12;
+/** 日期选择器范围（与历法库可靠区间一致）。 */
+const DATE_MIN = '1901-01-01';
+const DATE_MAX = '2099-12-31';
+const DASH = '—';
+const NAV_BUTTON_CLASS = 'flex size-9 items-center justify-center rounded-[10px] text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground lg:size-10 lg:border-[0.5px] lg:border-border-hover lg:bg-surface';
+const TODAY_BUTTON_CLASS = 'h-9 rounded-[10px] px-2.5 text-[13px] text-accent transition-colors hover:bg-accent-light lg:h-10';
+const MOBILE_CARD_CLASS = 'rounded-2xl border-[0.5px] border-border bg-surface';
 
-    // 流日干支颜色 - 使用 useMemo 缓存计算结果
-    const { dayStemColor, dayBranchColor } = useMemo(() => {
-        const stemElement = dayStem ? getStemElement(dayStem) : null;
-        const branchElement = dayBranch ? getBranchElement(dayBranch) : null;
-        return {
-            dayStemColor: stemElement ? getElementColor(stemElement) : undefined,
-            dayBranchColor: branchElement ? getElementColor(branchElement) : undefined,
-        };
-    }, [dayStem, dayBranch]);
+/** 黄历文本整理：一处换算，桌面主卡与移动端细项共用。 */
+interface AlmanacText {
+    weekdayShort: string;
+    ganZhiLine: string;
+    shengXiaoLine: string;
+    naYinLine: string;
+    zhiShen: { name: string; label: string; favorable: boolean } | null;
+    dayOfficer: string;
+    xiu: { text: string; luck: string } | null;
+    nineStar: string;
+    houLine: string;
+    chongSha: string;
+    pengZu: string[];
+    taiShen: string;
+}
 
-    const renderGanZhi = useCallback((value: string) => {
-        const stem = value?.[0] || '';
-        const branch = value?.[1] || '';
-        const stemElement = getStemElement(stem);
-        const branchElement = getBranchElement(branch);
-        const stemColor = stemElement ? getElementColor(stemElement) : undefined;
-        const branchColor = branchElement ? getElementColor(branchElement) : undefined;
+/** lunar-javascript 冲煞描述用半角括号（"(辛亥)猪"），展示统一为全角。 */
+function toFullWidthParens(value: string): string {
+    return value.replace(/\(/gu, '（').replace(/\)/gu, '）');
+}
 
-        return (
-            <span>
-                <span style={{ color: stemColor }}>{stem}</span>
-                <span style={{ color: branchColor }}>{branch}</span>
-            </span>
-        );
-    }, []);
+function buildAlmanacText(data: CalendarAlmanacData, detail: DailyAlmanacDetail | null): AlmanacText {
+    const tianShenLabel = detail?.tianShenType && detail.tianShenLuck
+        ? `${detail.tianShenType} ${detail.tianShenLuck}`
+        : getZhiShenDesc(data.zhiShen).replace(data.zhiShen, '').replace(/[()（）]/gu, '').trim();
+    const chongSha = [
+        data.chongSha.chong ? `冲${toFullWidthParens(data.chongSha.chong)}` : '',
+        data.chongSha.sha ? `煞${data.chongSha.sha}` : '',
+    ].filter(Boolean).join(' · ');
+
+    return {
+        weekdayShort: data.weekday.replace('星期', '周'),
+        ganZhiLine: `${data.ganZhi.year}年 · ${data.ganZhi.month}月 · ${data.ganZhi.day}日`,
+        shengXiaoLine: `${data.shengXiao.year}年 · ${data.shengXiao.month}月 · ${data.shengXiao.day}日`,
+        naYinLine: [data.naYin.year, data.naYin.month, data.naYin.day].filter(Boolean).join(' · '),
+        zhiShen: data.zhiShen ? { name: data.zhiShen, label: tianShenLabel, favorable: !isBlackDay(data.zhiShen) } : null,
+        dayOfficer: detail?.dayOfficer ? `${detail.dayOfficer}日` : '',
+        xiu: data.xiu.name
+            ? { text: [`${data.xiu.name}宿`, data.xiu.animal].filter(Boolean).join(' · '), luck: data.xiu.luck }
+            : null,
+        nineStar: [data.nineStar.name, data.nineStar.position].filter(Boolean).join(' · '),
+        houLine: [data.hou.term, data.hou.phenology].filter(Boolean).join(' · '),
+        chongSha,
+        pengZu: detail?.pengZuBaiJi ? detail.pengZuBaiJi.split(/\s+/u).filter(Boolean) : [],
+        taiShen: data.taiShen ? data.taiShen.replace(/\s+/gu, ' · ') : '',
+    };
+}
+
+function formatJieQi(item: { date: string; time: string }): string {
+    return `${item.date.slice(5)} ${item.time.slice(0, 5)}`;
+}
+
+function LuckBadge({ favorable, children }: { favorable: boolean; children: ReactNode }) {
+    return (
+        <span className={`ml-1.5 rounded px-1.5 py-px text-xs whitespace-nowrap ${favorable ? 'bg-wood-soft text-wood' : 'bg-fire-soft text-fire'}`}>
+            {children}
+        </span>
+    );
+}
+
+function CollapseToggle({ kind, hidden, expanded, onToggle }: { kind: 'yi' | 'ji'; hidden: number; expanded: boolean; onToggle: () => void }) {
+    return (
+        <button
+            type="button"
+            onClick={onToggle}
+            aria-expanded={expanded}
+            className={`text-[13px] underline-offset-2 hover:underline ${kind === 'yi' ? 'text-wood' : 'text-fire'}`}
+        >
+            {expanded ? '收起' : `还有 ${hidden} 项`}
+        </button>
+    );
+}
+
+interface YiJiProps {
+    kind: 'yi' | 'ji';
+    items: string[];
+    expanded: boolean;
+    onToggle: () => void;
+}
+
+/** 宜忌标题：大号衬线「宜 / 忌」+ 项数（桌面主卡为 lg，移动端面板为 md）。 */
+function YiJiHeading({ kind, count, size }: { kind: 'yi' | 'ji'; count: number; size: 'lg' | 'md' }) {
+    const isYi = kind === 'yi';
+    const tone = isYi ? 'text-wood' : 'text-fire';
+    return (
+        <h3 className={`flex items-baseline ${size === 'lg' ? 'gap-2' : 'gap-1.5'}`}>
+            <span className={`font-display leading-none ${size === 'lg' ? 'text-[26px]' : 'text-[22px]'} ${tone}`}>{isYi ? '宜' : '忌'}</span>
+            <span className={size === 'lg' ? 'text-xs text-foreground-secondary' : `text-[11px] ${tone}`}>{count} 项</span>
+        </h3>
+    );
+}
+
+/** 桌面：宜忌以色块标签呈现。 */
+function YiJiChips({ kind, items, expanded, onToggle }: YiJiProps) {
+    const isYi = kind === 'yi';
+    const visible = expanded ? items : items.slice(0, YI_JI_COLLAPSE_LIMIT);
+    return (
+        <div className="flex min-w-0 flex-col gap-2.5">
+            <YiJiHeading kind={kind} count={items.length} size="lg" />
+            {items.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-1.5">
+                    {visible.map((item) => (
+                        <span key={item} className={`rounded-md px-2.5 py-[3px] text-sm leading-5 ${isYi ? 'bg-wood-soft text-wood' : 'bg-fire-soft text-fire'}`}>
+                            {item}
+                        </span>
+                    ))}
+                    {items.length > YI_JI_COLLAPSE_LIMIT && (
+                        <CollapseToggle kind={kind} hidden={items.length - YI_JI_COLLAPSE_LIMIT} expanded={expanded} onToggle={onToggle} />
+                    )}
+                </div>
+            ) : (
+                <span className="text-[13px] text-foreground-secondary">{isYi ? '诸事不宜' : '无'}</span>
+            )}
+        </div>
+    );
+}
+
+/** 移动端：宜忌为整块底色面板，事项以文字排列。 */
+function YiJiPanel({ kind, items, expanded, onToggle }: YiJiProps) {
+    const isYi = kind === 'yi';
+    const visible = expanded ? items : items.slice(0, YI_JI_COLLAPSE_LIMIT);
+    return (
+        <section className={`flex min-w-0 flex-col gap-2 rounded-2xl p-3.5 ${isYi ? 'bg-wood-soft' : 'bg-fire-soft'}`}>
+            <YiJiHeading kind={kind} count={items.length} size="md" />
+            {items.length > 0 ? (
+                <div className="flex flex-wrap gap-x-2.5 gap-y-1 text-sm leading-normal">
+                    {visible.map((item) => <span key={item}>{item}</span>)}
+                    {items.length > YI_JI_COLLAPSE_LIMIT && (
+                        <CollapseToggle kind={kind} hidden={items.length - YI_JI_COLLAPSE_LIMIT} expanded={expanded} onToggle={onToggle} />
+                    )}
+                </div>
+            ) : (
+                <span className="text-[13px] text-foreground-secondary">{isYi ? '诸事不宜' : '无'}</span>
+            )}
+        </section>
+    );
+}
+
+function DateNav({ date, isToday, onDateChange, onDatePick, onGoToday }: Pick<CalendarAlmanacProps, 'date' | 'isToday' | 'onDateChange' | 'onDatePick' | 'onGoToday'>) {
+    const inputRef = useRef<HTMLInputElement>(null);
+    const dateKey = toLocalDateKey(date);
+
+    const openPicker = () => {
+        const input = inputRef.current;
+        if (!input) return;
+        try {
+            input.showPicker();
+        } catch {
+            // 旧浏览器不支持 showPicker：聚焦后由系统控件接管
+            input.focus();
+        }
+    };
 
     return (
-        <section className="bg-background rounded-xl border-border overflow-hidden">
-            {/* 顶部控制栏：日期切换（含日期信息）+ 流日/主神 + 命盘选择 */}
-            {onDateChange && (
-                <div className="px-3 py-4 md:py-8 border-b border-border/50 bg-background">
-                    {/* 移动端：垂直堆叠布局 */}
-                    <div className="md:hidden space-y-3">
-                        {/* 第一行：日期切换 */}
-                        <div className="flex items-center justify-center gap-2">
-                            <button
-                                onClick={() => onDateChange(-1)}
-                                className="p-1.5 rounded-md hover:bg-background border border-transparent hover:border-border transition-all text-foreground-secondary hover:text-foreground active:scale-95"
-                            >
-                                <ChevronLeft className="w-5 h-5" />
-                            </button>
-                            <div className="text-center px-2 min-w-[160px]">
-                                {!isToday && onGoToday && (
-                                    <button
-                                        onClick={onGoToday}
-                                        className="mb-1 inline-flex items-center text-[10px] text-foreground-secondary hover:text-foreground transition-colors"
-                                    >
-                                        返回今日
-                                    </button>
-                                )}
-                                <div className="flex items-baseline justify-center gap-2">
-                                    <span className="text-xl font-bold">{data.solarDateChinese}</span>
-                                    <span className="text-accent font-medium text-sm">{data.weekday}</span>
-                                </div>
-                                <p className="text-foreground-secondary text-xs mt-0.5">
-                                    农历 {data.lunarDate}
-                                </p>
-                            </div>
-                            <button
-                                onClick={() => onDateChange(1)}
-                                className="p-1.5 rounded-md hover:bg-background border border-transparent hover:border-border transition-all text-foreground-secondary hover:text-foreground active:scale-95"
-                            >
-                                <ChevronRight className="w-5 h-5" />
-                            </button>
-                        </div>
-
-                        {/* 第二行：流日/主神 + 命盘选择 */}
-                        <div className="flex items-center justify-between gap-2">
-                            {/* 流日/主神（横向紧凑布局） */}
-                            {isPersonalized && dayStem && tenGod ? (
-                                <div className="flex items-center gap-3 text-xs">
-                                    <div className="flex items-center gap-1">
-                                        <span className="text-foreground-secondary">流日:</span>
-                                        <span className="font-bold">
-                                            <span style={{ color: dayStemColor }}>{dayStem}</span>
-                                            <span style={{ color: dayBranchColor }}>{dayBranch}</span>
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                        <span className="text-foreground-secondary">主神:</span>
-                                        <span className="font-bold">{tenGod}</span>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="flex-1" />
-                            )}
-
-                            {/* 命盘选择（简化版） */}
-                            {isPersonalized && onChartSelect ? (
-                                <button
-                                    onClick={onChartSelect}
-                                    className="flex items-center gap-1 px-2.5 py-1.5 bg-background hover:bg-background-secondary rounded-lg border border-border/60 hover:border-purple-500/30 transition-all text-xs active:scale-95"
-                                >
-                                    <span className="text-foreground-secondary">当前命盘:</span>
-                                    <span className="font-medium text-purple-600 dark:text-purple-400 max-w-[60px] truncate">
-                                        {chartName}
-                                    </span>
-                                    <ChevronDown className="w-3 h-3 text-foreground-secondary flex-shrink-0" />
-                                </button>
-                            ) : !isPersonalized && (
-                                <SettingsCenterLink
-                                    tab="charts"
-                                    className="flex items-center gap-1 px-2.5 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg text-xs text-amber-600 hover:bg-amber-500/20 transition-colors active:scale-95"
-                                >
-                                    <Scroll className="w-3 h-3" />
-                                    <span>设置默认八字命盘以获得个性化运势服务</span>
-                                </SettingsCenterLink>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* 桌面端：原有横向布局 */}
-                    <div className="hidden md:flex items-center justify-between gap-3">
-                        {/* 左侧：← 日期信息 → */}
-                        <div className="flex items-center gap-1">
-                            <button
-                                onClick={() => onDateChange(-1)}
-                                className="p-1.5 rounded-md hover:bg-background border border-transparent hover:border-border transition-all text-foreground-secondary hover:text-foreground"
-                            >
-                                <ChevronLeft className="w-5 h-5" />
-                            </button>
-                            <div className="text-center px-2">
-                                {!isToday && onGoToday && (
-                                    <div className="mb-1">
-                                        <button
-                                            onClick={onGoToday}
-                                            className="inline-flex items-center text-[10px] text-foreground-secondary hover:text-foreground transition-colors"
-                                        >
-                                            返回今日
-                                        </button>
-                                    </div>
-                                )}
-                                <div className="flex items-baseline justify-center gap-2">
-                                    <span className="text-xl font-bold">{data.solarDateChinese}</span>
-                                    <span className="text-accent font-medium">{data.weekday}</span>
-                                </div>
-                                <p className="text-foreground-secondary text-sm">
-                                    农历 {data.lunarDate}
-                                </p>
-                            </div>
-                            <button
-                                onClick={() => onDateChange(1)}
-                                className="p-1.5 rounded-md hover:bg-background border border-transparent hover:border-border transition-all text-foreground-secondary hover:text-foreground"
-                            >
-                                <ChevronRight className="w-5 h-5" />
-                            </button>
-                        </div>
-
-                        {/* 中间：流日/主神（竖排） */}
-                        {isPersonalized && dayStem && tenGod && (
-                            <div className="flex flex-col items-center gap-0.5 text-sm">
-                                <div className="flex items-center gap-1">
-                                    <span className="text-foreground-secondary">流日: </span>
-                                    <span className="font-bold">
-                                        <span style={{ color: dayStemColor }}>{dayStem}</span>
-                                        <span style={{ color: dayBranchColor }}>{dayBranch}</span>
-                                    </span>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                    <span className="text-foreground-secondary">主神: </span>
-                                    <span className="font-bold">{tenGod}</span>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* 右侧：命盘选择 */}
-                        {isPersonalized && onChartSelect ? (
-                            <button
-                                onClick={onChartSelect}
-                                className="flex items-center gap-1 px-2 py-1 bg-background hover:bg-background-secondary rounded-md border border-border/60 hover:border-purple-500/30 transition-all text-sm"
-                            >
-                                命主:
-                                <span className="font-medium text-purple-600 dark:text-purple-400 max-w-[50px] truncate">
-                                    {chartName}
-                                </span>
-                                <ChevronDown className="w-3 h-3 text-foreground-secondary" />
-                            </button>
-                        ) : !isPersonalized && (
-                            <Link
-                                href="/bazi"
-                                className="flex items-center gap-1 px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded-md text-xs text-amber-600 hover:bg-amber-500/20 transition-colors"
-                            >
-                                <User className="w-3 h-3" />
-                                <span>个性化</span>
-                            </Link>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {/* 无控制栏时显示日期标题 */}
-            {!onDateChange && (
-                <div className="p-4 border-b border-border">
-                    <div className="flex items-baseline gap-2 mb-0.5">
-                        <h2 className="text-xl font-bold">{data.solarDateChinese}</h2>
-                        <span className="text-accent font-medium">{data.weekday}</span>
-                    </div>
-                    <p className="text-foreground-secondary text-sm">
-                        农历 {data.lunarDate}
-                    </p>
-                </div>
-            )}
-
-            <div className="p-4 md:p-6 space-y-4 md:space-y-6">
-                {/* 生肖 & 干支 */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 text-xs md:text-sm">
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                        <span className="text-foreground-secondary whitespace-nowrap">生肖：</span>
-                        <span className="whitespace-nowrap">{data.shengXiao.year}年</span>
-                        <span className="whitespace-nowrap">{data.shengXiao.month}月</span>
-                        <span className="whitespace-nowrap">{data.shengXiao.day}日</span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                        <span className="text-foreground-secondary whitespace-nowrap">干支：</span>
-                        <span className="whitespace-nowrap">{renderGanZhi(data.ganZhi.year)}年</span>
-                        <span className="whitespace-nowrap">{renderGanZhi(data.ganZhi.month)}月</span>
-                        <span className="whitespace-nowrap">{renderGanZhi(data.ganZhi.day)}日</span>
-                    </div>
-                </div>
-
-                {/* 纳音 */}
-                <div className="text-xs md:text-sm">
-                    <span className="text-foreground-secondary">纳音：</span>
-                    <span>{data.naYin.year} {data.naYin.month} {data.naYin.day}</span>
-                </div>
-
-                {/* 节气 */}
-                {(data.jieQi.current || data.jieQi.next) && (
-                    <div className="p-2.5 md:p-3 rounded-lg border border-border text-xs md:text-sm space-y-1.5 md:space-y-1">
-                        <div className="text-foreground-secondary font-medium mb-1.5 md:mb-2">节气：</div>
-                        {data.jieQi.current && (
-                            <div className="flex items-center gap-1.5 md:gap-2 flex-wrap">
-                                <Calendar className="w-3 md:w-3.5 h-3 md:h-3.5 text-accent flex-shrink-0" />
-                                <span className="flex-shrink-0">当前节气：{data.jieQi.current.name}</span>
-                                <span className="text-foreground-secondary">({data.jieQi.current.date})</span>
-                                <div className="flex items-center gap-1">
-                                    <Clock className="w-2.5 md:w-3 h-2.5 md:h-3 text-foreground-tertiary" />
-                                    <span className="text-foreground-secondary text-[10px] md:text-xs">{data.jieQi.current.time}</span>
-                                </div>
-                            </div>
-                        )}
-                        {data.jieQi.next && (
-                            <div className="flex items-center gap-1.5 md:gap-2 flex-wrap">
-                                <Calendar className="w-3 md:w-3.5 h-3 md:h-3.5 text-foreground-secondary flex-shrink-0" />
-                                <span className="text-foreground-secondary flex-shrink-0">下一节气：{data.jieQi.next.name}</span>
-                                <span className="text-foreground-secondary">({data.jieQi.next.date})</span>
-                                <div className="flex items-center gap-1">
-                                    <Clock className="w-2.5 md:w-3 h-2.5 md:h-3 text-foreground-tertiary" />
-                                    <span className="text-foreground-tertiary text-[10px] md:text-xs">{data.jieQi.next.time}</span>
-                                </div>
-                            </div>
-                        )}
-                    </div>
+        // 移动端三栏居中（标题在顶栏）；桌面端标题居左、切换居右
+        <header className="grid grid-cols-[1fr_auto_1fr] items-center lg:flex lg:justify-between lg:gap-4">
+            <h1 className="hidden font-display text-[32px] font-normal leading-tight lg:block">日运 · 黄历</h1>
+            <span aria-hidden="true" className="lg:hidden" />
+            <div className="flex items-center gap-1 lg:gap-2">
+                <button type="button" aria-label="前一天" onClick={() => onDateChange(-1)} className={NAV_BUTTON_CLASS}>
+                    <ChevronLeft className="size-4" />
+                </button>
+                <span className="relative">
+                    <button
+                        type="button"
+                        onClick={openPicker}
+                        aria-label={`选择日期，当前 ${dateKey}`}
+                        className="flex h-9 items-center gap-2 rounded-[10px] px-2.5 text-[0.9375rem] font-medium tabular-nums transition-colors hover:bg-background-secondary lg:h-10 lg:border-[0.5px] lg:border-border-hover lg:bg-surface lg:px-3.5 lg:text-sm lg:font-normal"
+                    >
+                        <Calendar className="hidden size-[15px] text-foreground-secondary lg:block" />
+                        {dateKey}
+                    </button>
+                    <input
+                        ref={inputRef}
+                        type="date"
+                        tabIndex={-1}
+                        aria-hidden="true"
+                        min={DATE_MIN}
+                        max={DATE_MAX}
+                        value={dateKey}
+                        onChange={(event) => {
+                            const [year, month, day] = event.target.value.split('-').map(Number);
+                            if (year && month && day) onDatePick(new Date(year, month - 1, day));
+                        }}
+                        className="pointer-events-none absolute inset-0 h-full w-full opacity-0"
+                    />
+                </span>
+                <button type="button" aria-label="后一天" onClick={() => onDateChange(1)} className={NAV_BUTTON_CLASS}>
+                    <ChevronRight className="size-4" />
+                </button>
+                {!isToday && (
+                    <button type="button" onClick={onGoToday} className={`hidden lg:block ${TODAY_BUTTON_CLASS}`}>
+                        回到今天
+                    </button>
                 )}
+            </div>
+            {!isToday && (
+                <button type="button" onClick={onGoToday} className={`justify-self-end lg:hidden ${TODAY_BUTTON_CLASS}`}>
+                    今天
+                </button>
+            )}
+        </header>
+    );
+}
 
-                {/* 宜忌 */}
-                <div className="grid grid-cols-2 gap-3 md:gap-4">
-                    {/* 宜 */}
-                    <div>
-                        <h3 className="text-xs md:text-sm font-medium text-emerald-500 flex items-center gap-1 mb-2">
-                            <CheckCircle className="w-3 md:w-3.5 h-3 md:h-3.5" />
-                            宜
-                        </h3>
-                        <div className="flex flex-wrap gap-1 md:gap-1.5">
-                            {data.yi.length > 0 ? (
-                                <>
-                                    {(yiExpanded ? data.yi : data.yi.slice(0, 4)).map((item, idx) => (
-                                        <span
-                                            key={idx}
-                                            className="px-1.5 md:px-2 py-0.5 text-[10px] md:text-xs rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
-                                        >
-                                            {item}
-                                        </span>
-                                    ))}
-                                    {data.yi.length > 4 && (
-                                        <button
-                                            onClick={() => setYiExpanded(!yiExpanded)}
-                                            className="px-1.5 md:px-2 py-0.5 text-[10px] md:text-xs text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 rounded transition-colors"
-                                        >
-                                            {yiExpanded ? '收起' : `+${data.yi.length - 4} ↓`}
-                                        </button>
-                                    )}
-                                </>
-                            ) : (
-                                <span className="text-[10px] md:text-xs text-foreground-secondary">诸事不宜</span>
-                            )}
-                        </div>
-                    </div>
+export function CalendarAlmanac({ date, isToday, onDateChange, onDatePick, onGoToday, fortune, assistant, insights }: CalendarAlmanacProps) {
+    const data = useMemo(() => getCalendarAlmanac(date), [date]);
+    const detail = useDailyAlmanacDetail(date);
+    const text = useMemo(() => buildAlmanacText(data, detail), [data, detail]);
+    const dateKey = toLocalDateKey(date);
+    const [expanded, setExpanded] = useState<{ key: string; yi: boolean; ji: boolean }>({ key: dateKey, yi: false, ji: false });
+    // 换日后宜忌折叠状态复位
+    const yiExpanded = expanded.key === dateKey && expanded.yi;
+    const jiExpanded = expanded.key === dateKey && expanded.ji;
+    const toggle = (kind: 'yi' | 'ji') => setExpanded({
+        key: dateKey,
+        yi: kind === 'yi' ? !yiExpanded : yiExpanded,
+        ji: kind === 'ji' ? !jiExpanded : jiExpanded,
+    });
 
-                    {/* 忌 */}
-                    <div>
-                        <h3 className="text-xs md:text-sm font-medium text-rose-500 flex items-center gap-1 mb-2">
-                            <XCircle className="w-3 md:w-3.5 h-3 md:h-3.5" />
-                            忌
-                        </h3>
-                        <div className="flex flex-wrap gap-1 md:gap-1.5">
-                            {data.ji.length > 0 ? (
-                                <>
-                                    {(jiExpanded ? data.ji : data.ji.slice(0, 4)).map((item, idx) => (
-                                        <span
-                                            key={idx}
-                                            className="px-1.5 md:px-2 py-0.5 text-[10px] md:text-xs rounded bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
-                                        >
-                                            {item}
-                                        </span>
-                                    ))}
-                                    {data.ji.length > 4 && (
-                                        <button
-                                            onClick={() => setJiExpanded(!jiExpanded)}
-                                            className="px-1.5 md:px-2 py-0.5 text-[10px] md:text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 rounded transition-colors"
-                                        >
-                                            {jiExpanded ? '收起' : `+${data.ji.length - 4}`}
-                                        </button>
-                                    )}
-                                </>
-                            ) : (
-                                <span className="text-[10px] md:text-xs text-foreground-secondary">无</span>
-                            )}
-                        </div>
-                    </div>
-                </div>
+    const directionProps = {
+        dayGanZhi: data.ganZhi.day,
+        caiShen: data.shenWei.caiShen,
+        xiShen: data.shenWei.xiShen,
+        fuShen: data.shenWei.fuShen,
+        yangGui: data.shenWei.yangGuiShen,
+        yinGui: detail?.directions.yinGui,
+        sha: data.chongSha.sha,
+        taiShen: data.taiShen,
+    };
 
-                {/* 吉神凶煞 */}
-                <div className="grid grid-cols-2 gap-3 md:gap-4 text-xs md:text-sm">
-                    <div>
-                        <h3 className="font-medium mb-1">吉神</h3>
-                        <p className="text-emerald-600 dark:text-emerald-400 break-words">
-                            {data.jiShen.length > 0 ? data.jiShen.join('、') : '无'}
-                        </p>
-                    </div>
-                    <div>
-                        <h3 className="font-medium mb-1">凶煞</h3>
-                        <p className="text-rose-600 dark:text-rose-400 break-words">
-                            {data.xiongSha.length > 0 ? data.xiongSha.join('、') : '无'}
-                        </p>
-                    </div>
-                </div>
+    return (
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:gap-x-4 lg:gap-y-[26px]">
+            <div className="lg:col-span-2">
+                <DateNav date={date} isToday={isToday} onDateChange={onDateChange} onDatePick={onDatePick} onGoToday={onGoToday} />
+            </div>
 
-                {/* 冲煞 & 空亡 */}
-                <div className="grid grid-cols-2 gap-3 md:gap-4 text-xs md:text-sm">
-                    <div>
-                        <span className="text-foreground-secondary">冲煞：</span>
-                        <span>{data.chongSha.chong || '-'}</span>
+            {/* 移动端：日期摘要 + 宜忌面板 */}
+            <div className="flex flex-col gap-3 max-lg:order-1 lg:hidden">
+                <section aria-label="黄历" className="flex items-center gap-4 rounded-[18px] border-[0.5px] border-border bg-surface p-[18px]">
+                    <div className="flex w-[74px] shrink-0 flex-col items-center rounded-[14px] bg-accent-soft py-2 text-accent-strong">
+                        <span className="text-[11px]">{date.getMonth() + 1} 月 · {text.weekdayShort}</span>
+                        <span className="font-display text-[40px] leading-[1.1]">{date.getDate()}</span>
                     </div>
-                    <div>
-                        <span className="text-foreground-secondary">空亡：</span>
-                        <span>{data.kongWang || '-'}</span>
-                    </div>
-                </div>
-
-                {/* 胎神 & 天神 */}
-                <div className="grid grid-cols-2 gap-3 md:gap-4 text-xs md:text-sm">
-                    <div>
-                        <span className="text-foreground-secondary">胎神：</span>
-                        <span>{data.taiShen || '-'}</span>
-                    </div>
-                    <div>
-                        <span className="text-foreground-secondary">天神：</span>
-                        <span className={isBlackDay(data.zhiShen) ? 'text-rose-500' : 'text-emerald-500'}>
-                            {getZhiShenDesc(data.zhiShen) || '-'}
+                    <div className="flex min-w-0 flex-col gap-1">
+                        <span className="font-display text-[22px] leading-tight">{data.lunarMonthDay}</span>
+                        <span className="text-[13px] text-foreground/80">{text.ganZhiLine}</span>
+                        <span className="text-xs text-foreground-secondary">
+                            {[text.shengXiaoLine, data.hou.term].filter(Boolean).join(' · ')}
                         </span>
                     </div>
-                </div>
-
-                {/* 神位 */}
-                <div className="grid grid-cols-2 gap-2 md:gap-3 text-xs md:text-sm">
-                    <div className="flex items-center gap-1.5 md:gap-2">
-                        <MapPin className="w-3 md:w-3.5 h-3 md:h-3.5 text-amber-500 flex-shrink-0" />
-                        <span className="text-foreground-secondary whitespace-nowrap">财神位：</span>
-                        <span className="truncate">{data.shenWei.caiShen || '-'}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 md:gap-2">
-                        <MapPin className="w-3 md:w-3.5 h-3 md:h-3.5 text-pink-500 flex-shrink-0" />
-                        <span className="text-foreground-secondary whitespace-nowrap">喜神位：</span>
-                        <span className="truncate">{data.shenWei.xiShen || '-'}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 md:gap-2">
-                        <MapPin className="w-3 md:w-3.5 h-3 md:h-3.5 text-emerald-500 flex-shrink-0" />
-                        <span className="text-foreground-secondary whitespace-nowrap">福神位：</span>
-                        <span className="truncate">{data.shenWei.fuShen || '-'}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 md:gap-2">
-                        <MapPin className="w-3 md:w-3.5 h-3 md:h-3.5 text-purple-500 flex-shrink-0" />
-                        <span className="text-foreground-secondary whitespace-nowrap">阳贵神：</span>
-                        <span className="truncate">{data.shenWei.yangGuiShen || '-'}</span>
-                    </div>
-                </div>
-
-                {/* 扩展信息 */}
-                <div className="pt-4 md:pt-8 border-t border-border text-xs md:text-sm space-y-1.5 md:space-y-2 text-foreground-secondary">
-                    <div className="flex justify-between">
-                        <span>二十八宿：{data.xiu.gong} {data.xiu.name} ({data.xiu.luck})</span>
-                        <span>月相：{data.yueXiang}</span>
-                    </div>
-                    <div className="flex justify-between">
-                        <span>六曜：{data.liuYao}</span>
-                        <span>九星：{data.jiuXing}</span>
-                    </div>
-                    <div>
-                        <span>物候：{data.wuHou}</span>
-                    </div>
+                </section>
+                <div className="grid grid-cols-2 gap-2">
+                    <YiJiPanel kind="yi" items={data.yi} expanded={yiExpanded} onToggle={() => toggle('yi')} />
+                    <YiJiPanel kind="ji" items={data.ji} expanded={jiExpanded} onToggle={() => toggle('ji')} />
                 </div>
             </div>
+
+            {/* 桌面：黄历主卡 */}
+            <section aria-label="黄历" className="hidden overflow-hidden rounded-[18px] border-[0.5px] border-border bg-surface lg:col-span-2 lg:flex">
+                <div className="flex w-[280px] shrink-0 flex-col gap-4 border-r-[0.5px] border-border bg-panel p-7">
+                    <div className="flex flex-col gap-0.5">
+                        <span className="text-sm text-foreground-secondary">{date.getFullYear()} 年 {date.getMonth() + 1} 月 · {data.weekday}</span>
+                        <span className="font-display text-[88px] leading-none">{date.getDate()}</span>
+                        <span className="mt-1.5 font-display text-2xl leading-snug">{data.lunarMonthDay}</span>
+                        <span className="font-display text-base text-foreground/80">{text.ganZhiLine}</span>
+                    </div>
+
+                    <dl className="grid grid-cols-[64px_minmax(0,1fr)] gap-x-2.5 gap-y-[9px] border-t-[0.5px] border-border pt-3.5 text-[13px] leading-[18px]">
+                        <dt className="text-foreground-secondary">生肖</dt>
+                        <dd className="min-w-0">{text.shengXiaoLine}</dd>
+                        <dt className="text-foreground-secondary">纳音</dt>
+                        <dd className="min-w-0">{text.naYinLine || DASH}</dd>
+                        <dt className="text-foreground-secondary">值神</dt>
+                        <dd className="min-w-0">
+                            {text.zhiShen ? <>{text.zhiShen.name}{text.zhiShen.label && <LuckBadge favorable={text.zhiShen.favorable}>{text.zhiShen.label}</LuckBadge>}</> : DASH}
+                        </dd>
+                        <dt className="text-foreground-secondary">建除</dt>
+                        <dd className="min-w-0">{text.dayOfficer || DASH}</dd>
+                        <dt className="text-foreground-secondary">星宿</dt>
+                        <dd className="min-w-0">
+                            {text.xiu ? <>{text.xiu.text}{text.xiu.luck && <LuckBadge favorable={text.xiu.luck === '吉'}>{text.xiu.luck}</LuckBadge>}</> : DASH}
+                        </dd>
+                        <dt className="text-foreground-secondary">日九星</dt>
+                        <dd className="min-w-0">{text.nineStar || DASH}</dd>
+                        <dt className="text-foreground-secondary">月相</dt>
+                        <dd className="min-w-0">{data.yueXiang || DASH}</dd>
+                        <dt className="text-foreground-secondary">物候</dt>
+                        <dd className="min-w-0">{text.houLine || DASH}</dd>
+                    </dl>
+
+                    {(data.jieQi.current || data.jieQi.next) && (
+                        <div className="mt-auto flex flex-col gap-1.5 rounded-xl bg-surface px-3.5 py-3 text-[13px]">
+                            {data.jieQi.current && (
+                                <span className="flex justify-between gap-3">
+                                    <span>{data.jieQi.current.name}</span>
+                                    <span className="tabular-nums text-foreground-secondary">{formatJieQi(data.jieQi.current)}</span>
+                                </span>
+                            )}
+                            {data.jieQi.next && (
+                                <span className="flex justify-between gap-3 text-foreground-secondary">
+                                    <span>下一节气 · {data.jieQi.next.name}</span>
+                                    <span className="tabular-nums">{formatJieQi(data.jieQi.next)}</span>
+                                </span>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                <div className="flex min-w-0 flex-1 flex-col gap-[22px] p-7">
+                    <div className="grid grid-cols-2 gap-5">
+                        <YiJiChips kind="yi" items={data.yi} expanded={yiExpanded} onToggle={() => toggle('yi')} />
+                        <YiJiChips kind="ji" items={data.ji} expanded={jiExpanded} onToggle={() => toggle('ji')} />
+                    </div>
+
+                    <div className="flex gap-6 border-t-[0.5px] border-border pt-5">
+                        <dl className="grid min-w-0 flex-1 grid-cols-[76px_minmax(0,1fr)] content-start gap-3 text-sm leading-normal">
+                            <dt className="text-foreground-secondary">冲煞</dt>
+                            <dd className="min-w-0">{text.chongSha || DASH}</dd>
+                            <dt className="text-foreground-secondary">彭祖百忌</dt>
+                            <dd className="min-w-0">{text.pengZu.length > 0 ? text.pengZu.map((line) => <span key={line} className="block">{line}</span>) : DASH}</dd>
+                            <dt className="text-foreground-secondary">胎神占方</dt>
+                            <dd className="min-w-0">{text.taiShen || DASH}</dd>
+                            <dt className="text-foreground-secondary">空亡</dt>
+                            <dd className="min-w-0">{data.kongWang || DASH}</dd>
+                            <dt className="text-foreground-secondary">吉神宜趋</dt>
+                            <dd className="min-w-0 text-wood">{data.jiShen.length > 0 ? data.jiShen.join('　') : '无'}</dd>
+                            <dt className="text-foreground-secondary">凶煞宜忌</dt>
+                            <dd className="min-w-0 text-fire">{data.xiongSha.length > 0 ? data.xiongSha.join('　') : '无'}</dd>
+                        </dl>
+                        <div className="w-[220px] shrink-0">
+                            <DailyDirectionGrid {...directionProps} />
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <div className="min-w-0 max-lg:order-3 lg:col-span-2">
+                <DailyHourStrip key={dateKey} hours={detail ? detail.hourlyFortune : null} isToday={isToday} />
+            </div>
+
+            <div className={`min-w-0 max-lg:order-2 ${assistant ? '' : 'lg:col-span-2'}`}>{fortune}</div>
+            {assistant && <div className="min-w-0 max-lg:order-7">{assistant}</div>}
+            {insights && <div className="min-w-0 max-lg:order-6 lg:col-span-2">{insights}</div>}
+
+            {/* 移动端：方位 + 当日黄历细项（桌面端已在主卡中） */}
+            <div className="flex flex-col gap-3.5 max-lg:order-4 lg:hidden">
+                <MobileDirections data={data} yinGui={detail?.directions.yinGui} />
+                <section aria-labelledby="daily-almanac-list-title" className={`${MOBILE_CARD_CLASS} flex flex-col gap-1 p-4`}>
+                    <h2 id="daily-almanac-list-title" className="font-display text-[17px]">
+                        {isToday ? '今日黄历' : '当日黄历'}
+                    </h2>
+                    <dl className="text-sm">
+                        <MobileRow label="值神">
+                            {text.zhiShen
+                                ? <span className={text.zhiShen.favorable ? 'text-wood' : 'text-fire'}>{[text.zhiShen.name, text.zhiShen.label.replace(/\s+/gu, '')].filter(Boolean).join(' · ')}</span>
+                                : DASH}
+                        </MobileRow>
+                        <MobileRow label="建除">{text.dayOfficer || DASH}</MobileRow>
+                        <MobileRow label="星宿">
+                            {text.xiu
+                                ? <span className={text.xiu.luck === '凶' ? 'text-fire' : text.xiu.luck === '吉' ? 'text-wood' : ''}>{[text.xiu.text, text.xiu.luck].filter(Boolean).join(' · ')}</span>
+                                : DASH}
+                        </MobileRow>
+                        <MobileRow label="日九星">{text.nineStar || DASH}</MobileRow>
+                        <MobileRow label="冲煞">{text.chongSha || DASH}</MobileRow>
+                        <MobileRow label="彭祖百忌">
+                            {text.pengZu.length > 0 ? text.pengZu.map((line) => <span key={line} className="block">{line}</span>) : DASH}
+                        </MobileRow>
+                        <MobileRow label="胎神占方">{text.taiShen || DASH}</MobileRow>
+                        <MobileRow label="空亡">{data.kongWang || DASH}</MobileRow>
+                        <MobileRow label="吉神宜趋">{data.jiShen.length > 0 ? data.jiShen.join('　') : '无'}</MobileRow>
+                        <MobileRow label="凶煞宜忌">{data.xiongSha.length > 0 ? data.xiongSha.join('　') : '无'}</MobileRow>
+                        <MobileRow label="纳音">{text.naYinLine || DASH}</MobileRow>
+                        <MobileRow label="月相 · 物候">{[data.yueXiang, data.hou.phenology].filter(Boolean).join(' · ') || DASH}</MobileRow>
+                        {(data.jieQi.current || data.jieQi.next) && (
+                            <MobileRow label="节气">
+                                {data.jieQi.current && <span className="block">{data.jieQi.current.name} {formatJieQi(data.jieQi.current)}</span>}
+                                {data.jieQi.next && <span className="block text-foreground-secondary">下一节气 {data.jieQi.next.name} {formatJieQi(data.jieQi.next)}</span>}
+                            </MobileRow>
+                        )}
+                    </dl>
+                </section>
+            </div>
+        </div>
+    );
+}
+
+function MobileRow({ label, children }: { label: string; children: ReactNode }) {
+    return (
+        <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-2.5 border-t-[0.5px] border-border py-2.5">
+            <dt className="leading-[1.6] text-foreground-secondary">{label}</dt>
+            <dd className="min-w-0 break-words leading-[1.6]">{children}</dd>
+        </div>
+    );
+}
+
+const MOBILE_DIRECTION_GODS: ReadonlyArray<{ label: string; pick: (data: CalendarAlmanacData, yinGui?: string) => string | undefined; sha?: boolean }> = [
+    { label: '喜神', pick: (data) => data.shenWei.xiShen },
+    { label: '福神', pick: (data) => data.shenWei.fuShen },
+    { label: '财神', pick: (data) => data.shenWei.caiShen },
+    { label: '阳贵', pick: (data) => data.shenWei.yangGuiShen },
+    { label: '阴贵', pick: (_data, yinGui) => yinGui },
+    { label: '煞', pick: (data) => (data.chongSha.sha ? `正${data.chongSha.sha}` : undefined), sha: true },
+];
+
+/** 移动端方位：神煞 → 方位列表（桌面端为上北下南九宫）。 */
+function MobileDirections({ data, yinGui }: { data: CalendarAlmanacData; yinGui?: string }) {
+    return (
+        <section aria-labelledby="daily-directions-title" className={`${MOBILE_CARD_CLASS} p-4`}>
+            <h2 id="daily-directions-title" className="mb-3 font-display text-[17px]">方位</h2>
+            <ul className="grid grid-cols-3 gap-1.5 text-center">
+                {MOBILE_DIRECTION_GODS.map(({ label, pick, sha }) => (
+                    <li key={label} className={`flex flex-col gap-0.5 rounded-xl py-2.5 ${sha ? 'bg-fire-soft' : 'bg-background'}`}>
+                        <span className="text-[11px] text-foreground-secondary">{label}</span>
+                        <span className={`font-display text-[15px] ${sha ? 'text-fire' : ''}`}>{pick(data, yinGui) || DASH}</span>
+                    </li>
+                ))}
+            </ul>
         </section>
     );
 }

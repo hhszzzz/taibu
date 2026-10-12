@@ -1,7 +1,11 @@
 /**
  * 可分享的运势卡片组件
- * 
+ *
  * 将今日运势渲染为精美的可分享卡片
+ * 'use client'：需要 useRef/useState 与浏览器截图（html2canvas）。
+ *
+ * 截图区域使用固定的浅色"象牙 + 陶土"色板（内联样式），保证导出图片在任何主题下一致，
+ * 且不依赖 html2canvas 对 CSS 变量 / 现代颜色函数的支持。
  */
 'use client';
 
@@ -41,13 +45,29 @@ interface ShareCardProps {
     };
 }
 
+/** 导出图片专用的固定浅色色板（与 globals.css 浅色 token 取值一致）。 */
+const CARD_PALETTE = {
+    paper: '#FAF9F5',
+    hairline: 'rgba(31, 30, 29, 0.12)',
+    track: '#F0EEE6',
+    text: '#141413',
+    textSecondary: '#5E5D59',
+    textTertiary: '#73726C',
+    clay: '#B4532F',
+    favorable: '#44663A',
+    neutral: '#85602A',
+    unfavorable: '#A63D2C',
+} as const;
+
+const DISPLAY_FONT = "'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', Georgia, serif";
+
 const scoreItemsWithColors = [
-    { key: 'overall', label: '综合', icon: Star, iconColor: '#f59e0b', barColor: '#f59e0b' },
-    { key: 'career', label: '事业', icon: Briefcase, iconColor: '#3b82f6', barColor: '#3b82f6' },
-    { key: 'love', label: '感情', icon: Heart, iconColor: '#ec4899', barColor: '#ec4899' },
-    { key: 'wealth', label: '财运', icon: Wallet, iconColor: '#22c55e', barColor: '#22c55e' },
-    { key: 'health', label: '健康', icon: Activity, iconColor: '#ef4444', barColor: '#ef4444' },
-    { key: 'social', label: '人际', icon: Users, iconColor: '#8b5cf6', barColor: '#8b5cf6' },
+    { key: 'overall', label: '综合', icon: Star, iconColor: CARD_PALETTE.clay },
+    { key: 'career', label: '事业', icon: Briefcase, iconColor: '#2F5F86' },
+    { key: 'love', label: '感情', icon: Heart, iconColor: '#6B4D9E' },
+    { key: 'wealth', label: '财运', icon: Wallet, iconColor: CARD_PALETTE.favorable },
+    { key: 'health', label: '健康', icon: Activity, iconColor: CARD_PALETTE.unfavorable },
+    { key: 'social', label: '人际', icon: Users, iconColor: CARD_PALETTE.neutral },
 ];
 
 export function ShareCard({ fortune, date, userName, isPersonalized, almanac }: ShareCardProps) {
@@ -108,15 +128,9 @@ export function ShareCard({ fortune, date, userName, isPersonalized, almanac }: 
     };
 
     const getLevelColor = (level: FortuneLevel): string => {
-        if (isLevelFavorable(level)) return '#16a34a';
-        if (level === '平') return '#d97706';
-        return '#dc2626';
-    };
-
-    const getLevelBarColor = (level: FortuneLevel): string => {
-        if (isLevelFavorable(level)) return '#22c55e';
-        if (level === '平') return '#f59e0b';
-        return '#ef4444';
+        if (isLevelFavorable(level)) return CARD_PALETTE.favorable;
+        if (level === '平') return CARD_PALETTE.neutral;
+        return CARD_PALETTE.unfavorable;
     };
 
     return (
@@ -126,7 +140,7 @@ export function ShareCard({ fortune, date, userName, isPersonalized, almanac }: 
                 <button
                     onClick={handleDownload}
                     disabled={isGenerating}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-background-secondary hover:bg-background-tertiary transition-colors disabled:opacity-50"
+                    className="flex h-10 items-center gap-2 rounded-[10px] border-[0.5px] border-border-hover bg-surface px-4 transition-colors hover:bg-background-secondary disabled:opacity-50"
                 >
                     {isGenerating ? (
                         <SoundWaveLoader variant="inline" />
@@ -138,7 +152,7 @@ export function ShareCard({ fortune, date, userName, isPersonalized, almanac }: 
                 <button
                     onClick={handleShare}
                     disabled={isGenerating}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-on-accent hover:bg-accent/90 transition-colors disabled:opacity-50"
+                    className="flex h-10 items-center gap-2 rounded-[10px] bg-accent px-4 text-on-accent transition-colors hover:bg-accent-hover disabled:opacity-50"
                 >
                     {shareSuccess ? (
                         <Check className="w-4 h-4" />
@@ -155,11 +169,12 @@ export function ShareCard({ fortune, date, userName, isPersonalized, almanac }: 
             <div
                 ref={cardRef}
                 style={{
-                    background: 'linear-gradient(135deg, #fffbeb 0%, #ffffff 50%, #fff7ed 100%)',
+                    background: CARD_PALETTE.paper,
                     borderRadius: '16px',
                     padding: '24px',
-                    boxShadow: '0 10px 25px rgba(0, 0, 0, 0.1)',
-                    border: '1px solid #fde68a',
+                    boxShadow: '0 6px 24px rgba(20, 20, 19, 0.07)',
+                    border: `1px solid ${CARD_PALETTE.hairline}`,
+                    color: CARD_PALETTE.text,
                     minWidth: '320px',
                     maxWidth: '400px',
                     fontFamily: 'system-ui, -apple-system, sans-serif',
@@ -168,11 +183,11 @@ export function ShareCard({ fortune, date, userName, isPersonalized, almanac }: 
                 {/* 卡片头部 */}
                 <div style={{ textAlign: 'center', marginBottom: '24px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '8px' }}>
-                        <Calendar style={{ width: '20px', height: '20px', color: '#d97706' }} />
-                        <span style={{ color: '#92400e', fontWeight: 500, fontSize: '16px' }}>{formatDate(date)}</span>
+                        <Calendar style={{ width: '18px', height: '18px', color: CARD_PALETTE.clay }} />
+                        <span style={{ color: CARD_PALETTE.text, fontFamily: DISPLAY_FONT, fontSize: '17px' }}>{formatDate(date)}</span>
                     </div>
                     {isPersonalized && userName && (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', fontSize: '14px', color: '#d97706' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', fontSize: '14px', color: CARD_PALETTE.clay }}>
                             <Sparkles style={{ width: '16px', height: '16px' }} />
                             <span>{userName} 的个性化运势</span>
                         </div>
@@ -190,19 +205,19 @@ export function ShareCard({ fortune, date, userName, isPersonalized, almanac }: 
                             <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '64px' }}>
                                     <Icon style={{ width: '16px', height: '16px', color: item.iconColor }} />
-                                    <span style={{ fontSize: '14px', color: '#374151' }}>{item.label}</span>
+                                    <span style={{ fontSize: '14px', color: CARD_PALETTE.text }}>{item.label}</span>
                                 </div>
-                                <div style={{ flex: 1, height: '12px', backgroundColor: '#f3f4f6', borderRadius: '9999px', overflow: 'hidden' }}>
+                                <div style={{ flex: 1, height: '8px', backgroundColor: CARD_PALETTE.track, borderRadius: '9999px', overflow: 'hidden' }}>
                                     <div
                                         style={{
                                             height: '100%',
                                             width: `${chartValue}%`,
-                                            backgroundColor: getLevelBarColor(level),
+                                            backgroundColor: getLevelColor(level),
                                             borderRadius: '9999px',
                                         }}
                                     />
                                 </div>
-                                <span style={{ width: '40px', textAlign: 'right', fontWeight: 700, color: getLevelColor(level), fontSize: '16px' }}>
+                                <span style={{ width: '40px', textAlign: 'right', fontWeight: 600, color: getLevelColor(level), fontSize: '15px' }}>
                                     {level}
                                 </span>
                             </div>
@@ -212,18 +227,18 @@ export function ShareCard({ fortune, date, userName, isPersonalized, almanac }: 
 
                 {/* 黄历宜忌 */}
                 {almanac && (almanac.yi?.length || almanac.ji?.length) && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', padding: '16px 0', borderTop: '1px solid #fde68a' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', padding: '16px 0', borderTop: `1px solid ${CARD_PALETTE.hairline}` }}>
                         <div>
-                            <div style={{ color: '#16a34a', fontSize: '12px', fontWeight: 500, marginBottom: '8px' }}>宜</div>
-                            <div style={{ fontSize: '12px', color: '#4b5563' }}>
+                            <div style={{ color: CARD_PALETTE.favorable, fontSize: '16px', fontFamily: DISPLAY_FONT, marginBottom: '8px' }}>宜</div>
+                            <div style={{ fontSize: '12px', color: CARD_PALETTE.textSecondary }}>
                                 {almanac.yi?.slice(0, 3).map((item, i) => (
                                     <div key={i} style={{ marginBottom: '4px' }}>{item}</div>
                                 ))}
                             </div>
                         </div>
                         <div>
-                            <div style={{ color: '#dc2626', fontSize: '12px', fontWeight: 500, marginBottom: '8px' }}>忌</div>
-                            <div style={{ fontSize: '12px', color: '#4b5563' }}>
+                            <div style={{ color: CARD_PALETTE.unfavorable, fontSize: '16px', fontFamily: DISPLAY_FONT, marginBottom: '8px' }}>忌</div>
+                            <div style={{ fontSize: '12px', color: CARD_PALETTE.textSecondary }}>
                                 {almanac.ji?.slice(0, 3).map((item, i) => (
                                     <div key={i} style={{ marginBottom: '4px' }}>{item}</div>
                                 ))}
@@ -234,16 +249,16 @@ export function ShareCard({ fortune, date, userName, isPersonalized, almanac }: 
 
                 {/* 今日建议 */}
                 {fortune.advice && fortune.advice.length > 0 && (
-                    <div style={{ paddingTop: '16px', borderTop: '1px solid #fde68a' }}>
-                        <div style={{ fontSize: '12px', color: '#d97706', marginBottom: '8px', fontWeight: 500 }}>今日建议</div>
-                        <div style={{ fontSize: '14px', color: '#374151' }}>
+                    <div style={{ paddingTop: '16px', borderTop: `1px solid ${CARD_PALETTE.hairline}` }}>
+                        <div style={{ fontSize: '12px', color: CARD_PALETTE.clay, marginBottom: '8px', fontWeight: 500 }}>今日建议</div>
+                        <div style={{ fontSize: '14px', color: CARD_PALETTE.text }}>
                             {fortune.advice[0]}
                         </div>
                     </div>
                 )}
 
                 {/* 水印 */}
-                <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid #fde68a', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: `1px solid ${CARD_PALETTE.hairline}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
@@ -256,9 +271,9 @@ export function ShareCard({ fortune, date, userName, isPersonalized, almanac }: 
                                 objectFit: 'cover',
                             }}
                         />
-                        <span style={{ fontSize: '13px', color: '#d97706', fontWeight: 600 }}>太卜</span>
+                        <span style={{ fontSize: '13px', color: CARD_PALETTE.clay, fontWeight: 600 }}>太卜</span>
                     </div>
-                    <span style={{ fontSize: '12px', color: '#9ca3af' }}>AI智能命理平台</span>
+                    <span style={{ fontSize: '12px', color: CARD_PALETTE.textTertiary }}>AI智能命理平台</span>
                 </div>
             </div>
         </div>

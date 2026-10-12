@@ -26,7 +26,7 @@ export function CanonicalLiuyaoChart({ chart, interaction }: { chart: LiuyaoCano
     return value && code ? [{ key, name: value.卦名, code }] : [];
   });
 
-  return <div className="@container flex flex-col gap-3 @2xl:gap-4">
+  return <div className="@container flex flex-col gap-3">
     <LiuyaoPillars pillars={chart.干支时间} />
     <section aria-label="卦盘" className="rounded-2xl border-[0.5px] border-border bg-surface px-2 pb-3.5 pt-3 @2xl:rounded-[18px] @2xl:px-6 @2xl:pb-4">
       <HexagramDisplay

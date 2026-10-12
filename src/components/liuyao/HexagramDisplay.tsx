@@ -192,7 +192,7 @@ export function HexagramDisplay({
     const narrowRowColumns = showChanged ? NARROW_ROW_COLUMNS.withChanged : NARROW_ROW_COLUMNS.baseOnly;
 
     return (
-        <div className="@container flex flex-col gap-2 @2xl:gap-3">
+        <div className="@container flex flex-col gap-2">
             <div className="overflow-x-auto">
                 <table className={`w-full border-collapse text-sm ${traditional ? 'block @2xl:table' : ''}`} data-hexagram="base" data-chart-selected={isChartTargetSelected(interaction, 'liuyao:hexagram:base') || undefined}>
                     <thead className={traditional ? 'block @2xl:table-header-group' : undefined}>

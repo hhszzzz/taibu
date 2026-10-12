@@ -1,5 +1,5 @@
 /**
- * 八字干支五行着色（Tailwind token 类名）
+ * 干支五行着色（Tailwind token 类名），八字、三式等盘面共用
  *
  * 只做展示映射：五行归属仍由 `@/lib/divination/display-helpers` 计算，
  * 这里把五行转换为主题变量驱动的 `text-wood|fire|earth|metal|water` 等类名，
@@ -23,6 +23,13 @@ const ELEMENT_SOFT_CLASS: Record<FiveElement, string> = {
     金: 'bg-metal-soft text-metal',
     水: 'bg-water-soft text-water',
 };
+
+const FIVE_ELEMENTS = Object.keys(ELEMENT_TEXT_CLASS) as FiveElement[];
+
+/** canonical JSON 的「五行」字段是普通字符串，取色前先收窄。 */
+export function isFiveElement(value: unknown): value is FiveElement {
+    return typeof value === 'string' && (FIVE_ELEMENTS as readonly string[]).includes(value);
+}
 
 /** 天干或地支所属五行；非干支字符返回 null。 */
 export function getGanZhiElement(char: string): FiveElement | null {

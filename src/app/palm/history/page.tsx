@@ -13,13 +13,13 @@ export default function PalmHistoryPage() {
             title="手相分析历史"
             subtitle="查看您的历史手相分析记录"
             icon={Hand}
-            iconColor="text-amber-500"
+            iconColor="text-accent"
             layout="list"
             searchPlaceholder="搜索分析类型..."
             emptyActionLabel="开始手相分析"
             deleteMessage="确定要删除这条手相分析记录吗？此操作无法撤销。"
             kbSourceType="palm_reading"
-            themeColor="amber-500"
+            themeColor="accent"
             invalidateTypes={['palm_reading']}
             kbTitleFn={item => [...(item.badges || []), item.title].filter(Boolean).join(' ')}
         />

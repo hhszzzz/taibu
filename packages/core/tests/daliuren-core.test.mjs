@@ -140,3 +140,43 @@ test('daliuren should correct an昴星 fallback when one four-lesson ke is prese
     null,
   );
 });
+
+test('daliuren names 铸印, 亨通, 蒿矢 and 弹射 as the 六壬大全 examples do', () => {
+  const lesson = (date, hour, monthGeneral) => {
+    const result = calculateDaliuren({ date, hour, minute: 0, monthGeneral });
+    return {
+      day: result.dateInfo.ganZhi.day,
+      sanChuan: result.sanChuan.chu[0] + result.sanChuan.zhong[0] + result.sanChuan.mo[0],
+      subTypes: result.keTi.subTypes,
+      extraTypes: result.keTi.extraTypes,
+    };
+  };
+
+  // 卷八铸印课：「丙子日未时子将，巳加子用，传遇天魁…为铸印课」「三传巳戌卯，巳为炉，戌为印，卯为印模」
+  const zhuYin = lesson('2024-01-13', 14, '子');
+  assert.equal(zhuYin.day, '丙子');
+  assert.equal(zhuYin.sanChuan, '巳戌卯');
+  assert.deepEqual(zhuYin.extraTypes, ['铸印']);
+  // 卷八：「四月壬子日申将卯时占…三传巳戌卯…又巳戌卯为铸印」
+  assert.deepEqual(lesson('2024-02-18', 6, '申').extraTypes, ['铸印']);
+
+  // 卷八亨通课：「丙戌日申时亥将…初传申生中亥，亥生末传寅，寅生日干丙火，为亨通课」
+  const hengTong = lesson('2024-01-23', 16, '亥');
+  assert.equal(hengTong.day, '丙戌');
+  assert.equal(hengTong.sanChuan, '申亥寅');
+  assert.deepEqual(hengTong.extraTypes, ['亨通']);
+  // 「癸丑日三传酉丑巳，末生中、中生初、初生日干也，为递生」
+  const backward = lesson('2024-02-19', 1, '巳');
+  assert.equal(backward.sanChuan, '酉丑巳');
+  assert.ok(backward.extraTypes.includes('亨通'));
+
+  // 卷七遥克课：「壬辰日巳时申将占…以辰上阴神戌土克日干壬水为用，曰蒿矢格」
+  const haoShi = lesson('2024-01-29', 10, '申');
+  assert.equal(haoShi.day, '壬辰');
+  assert.equal(haoShi.sanChuan, '戌丑辰');
+  assert.deepEqual(haoShi.subTypes, ['蒿矢']);
+  // 卷十一：「丙子日弹射，申元加子用」
+  const tanShe = lesson('2024-01-13', 0, '申');
+  assert.equal(tanShe.sanChuan[0], '申');
+  assert.deepEqual(tanShe.subTypes, ['弹射']);
+});

@@ -124,9 +124,9 @@ export interface GongInfo {
 export interface KetiInfo {
   /** 取传课体（贼克/比用/涉害/遥克/昴星/伏吟/返吟/别责/八专） */
   method: string;
-  /** 细分课体名（蒿失/弹射/元首/重审等） */
+  /** 细分课体名（蒿矢/弹射/元首/重审等） */
   subTypes: string[];
-  /** 第二维度课体（三交/六仪/铸印等） */
+  /** 第二维度课体（三交/铸印/亨通/连珠） */
   extraTypes: string[];
 }
 

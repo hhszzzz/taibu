@@ -48,6 +48,19 @@ test('bazi punishment groups require distinct branches unless explicitly self-pu
   assert.ok(analyzePillarRelations('子', '卯', '辰', '酉').some(relation => relation.description === '无礼之刑'));
 });
 
+test('命宫 counts from 子 back to the birth month, then forward from the birth hour to 卯', () => {
+  // 午月申时：子宫起正月逆数，五月落申；申宫起申时顺数，数到卯时落卯宫。甲辰年五虎遁得丁卯
+  assert.equal(mcpCore.calculateBazi({ gender: 'male', birthYear: 2024, birthMonth: 6, birthDay: 20, birthHour: 15, birthMinute: 30 }).mingGong, '丁卯');
+  // 每月 20 日均已过节，覆盖十二个月支；奇数整点覆盖十二个时辰（23 点为子时）
+  for (let month = 1; month <= 12; month++) {
+    for (let hour = 1; hour <= 23; hour += 2) {
+      const chart = mcpCore.calculateBazi({ gender: 'male', birthYear: 2024, birthMonth: month, birthDay: 20, birthHour: hour, birthMinute: 30 });
+      const reference = Solar.fromYmdHms(2024, month, 20, hour, 30, 0).getLunar().getEightChar().getMingGong();
+      assert.equal(chart.mingGong, reference, `${chart.fourPillars.month.branch}月${chart.fourPillars.hour.branch}时`);
+    }
+  }
+});
+
 test('bazi and dayun do not turn repeated Yin branches into punishment', () => {
   const input = { gender: 'male', birthYear: 2022, birthMonth: 2, birthDay: 10, birthHour: 8, timezone: 'Asia/Shanghai' };
   const chart = mcpCore.calculateBazi(input);

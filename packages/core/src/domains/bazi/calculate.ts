@@ -376,10 +376,12 @@ function calculateTaiYuan(monthStem: string, monthBranch: string): string {
 }
 
 // ===== 命宫计算 =====
-// 从卯起正月逆数到生月，再从该位起子时顺数到生时
+// 从子宫起正月逆数到生月，再于生月宫起生时顺数，数到卯时所落之宫为命宫
+// （与 lunar-javascript getMingGong 的「14/26 减月支数与时支数之和」等价）
 // 天干用五虎遁月法：甲己→丙寅, 乙庚→戊寅, 丙辛→庚寅, 丁壬→壬寅, 戊癸→甲寅
 function calculateMingGong(yearStem: string, monthBranch: string, hourBranch: string): string {
-  const maoIdx = DI_ZHI.indexOf('卯'); // 4
+  const ziIdx = DI_ZHI.indexOf('子'); // 0
+  const maoIdx = DI_ZHI.indexOf('卯'); // 3
   const monthIdx = DI_ZHI.indexOf(monthBranch as typeof DI_ZHI[number]);
   const hourIdx = DI_ZHI.indexOf(hourBranch as typeof DI_ZHI[number]);
   if (monthIdx < 0 || hourIdx < 0) return '';
@@ -388,7 +390,9 @@ function calculateMingGong(yearStem: string, monthBranch: string, hourBranch: st
   const yinIdx = DI_ZHI.indexOf('寅'); // 2
   const monthNum = (monthIdx - yinIdx + 12) % 12 + 1;
 
-  const mingBranchIdx = (maoIdx - (monthNum - 1) + hourIdx + 12 * 10) % 12;
+  const monthPalaceIdx = (ziIdx - (monthNum - 1) + 12) % 12;
+  // 生时越晚，数到卯时经过的宫越少：时支每进一位，命宫退一宫
+  const mingBranchIdx = (monthPalaceIdx + maoIdx - hourIdx + 12) % 12;
   const mingBranch = DI_ZHI[mingBranchIdx];
 
   // 五虎遁月法：年干 → 寅月起始天干

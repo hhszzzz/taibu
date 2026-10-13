@@ -78,6 +78,17 @@ test('bazi reports each 半合 once and leaves 生墓 pairs to 拱合', () => {
   assert.deepEqual(analyzePillarRelations('申', '子', '辰', '卯').filter(relation => relation.type === '合').map(relation => relation.description), ['申子辰三合水局']);
 });
 
+test('天德合 pairs a branch 天德 with its 六合 branch', () => {
+  // 卯月天德申合巳、酉月天德寅合亥、子月天德巳合申：只有落在对应地支的时柱才带天德合
+  for (const [month, expected] of [[3, '巳'], [9, '亥'], [12, '申']]) {
+    for (let hour = 1; hour <= 23; hour += 2) {
+      const chart = mcpCore.calculateBazi({ gender: 'male', birthYear: 2024, birthMonth: month, birthDay: 20, birthHour: hour });
+      const { branch, shenSha } = chart.fourPillars.hour;
+      assert.equal(shenSha.includes('天德合'), branch === expected, `${chart.fourPillars.month.branch}月${chart.fourPillars.hour.stem}${branch}时`);
+    }
+  }
+});
+
 test('bazi and dayun do not turn repeated Yin branches into punishment', () => {
   const input = { gender: 'male', birthYear: 2022, birthMonth: 2, birthDay: 10, birthHour: 8, timezone: 'Asia/Shanghai' };
   const chart = mcpCore.calculateBazi(input);

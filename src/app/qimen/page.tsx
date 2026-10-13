@@ -20,13 +20,12 @@ import {
     SanshiSegmented,
     SanshiSubmitButton,
     SanshiTimeFields,
+    useSanshiFormTime,
     type SegmentOption,
-    type TimeFieldKey,
 } from '@/components/divination/SanshiFormControls';
 import { supabase } from '@/lib/auth';
 import { writeSessionJSON } from '@/lib/cache/session-storage';
 
-type TimeMode = 'now' | 'custom';
 type PanType = 'zhuan';
 type JuMethod = 'chaibu' | 'maoshan';
 type ZhiFuJiGong = 'jiLiuYi' | 'jiWuGong';
@@ -46,30 +45,12 @@ const ZHI_FU_JI_GONG_OPTIONS: ReadonlyArray<SegmentOption<ZhiFuJiGong>> = [
     { value: 'jiWuGong', label: '寄戊宫' },
 ];
 
-function getNow() {
-    const d = new Date();
-    return {
-        year: d.getFullYear(),
-        month: d.getMonth() + 1,
-        day: d.getDate(),
-        hour: d.getHours(),
-        minute: d.getMinutes(),
-    };
-}
-
 export default function QimenPage() {
     const router = useRouter();
     const { showToast } = useToast();
-    const now = getNow();
-    const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai';
+    const formTime = useSanshiFormTime();
 
     const [question, setQuestion] = useState('');
-    const [timeMode, setTimeMode] = useState<TimeMode>('now');
-    const [year, setYear] = useState(now.year);
-    const [month, setMonth] = useState(now.month);
-    const [day, setDay] = useState(now.day);
-    const [hour, setHour] = useState(now.hour);
-    const [minute, setMinute] = useState(now.minute);
     const [panType] = useState<PanType>('zhuan');
     const [juMethod, setJuMethod] = useState<JuMethod>('chaibu');
     const [zhiFuJiGong, setZhiFuJiGong] = useState<ZhiFuJiGong>('jiLiuYi');
@@ -78,7 +59,7 @@ export default function QimenPage() {
     const handleSubmit = async () => {
         setIsLoading(true);
         try {
-            const useTime = timeMode === 'now' ? getNow() : { year, month, day, hour, minute };
+            const castTime = formTime.resolveTime();
 
             const { data: { session } } = await supabase.auth.getSession();
             if (!session?.user) {
@@ -94,8 +75,8 @@ export default function QimenPage() {
                 },
                 body: JSON.stringify({
                     action: 'calculate',
-                    ...useTime,
-                    timezone: localTimeZone,
+                    ...castTime,
+                    timezone: formTime.timeZone,
                     question,
                     panType,
                     juMethod,
@@ -110,8 +91,8 @@ export default function QimenPage() {
             }
 
             writeSessionJSON('qimen_result', {
-                ...useTime,
-                timezone: localTimeZone,
+                ...castTime,
+                timezone: formTime.timeZone,
                 question,
                 panType,
                 juMethod,
@@ -126,30 +107,6 @@ export default function QimenPage() {
         } finally {
             setIsLoading(false);
         }
-    };
-
-    const timeSetters: Record<TimeFieldKey, (next: number) => void> = {
-        year: setYear,
-        month: setMonth,
-        day: setDay,
-        hour: setHour,
-        minute: setMinute,
-    };
-
-    /** 编辑任一时间字段即视为活时 */
-    const handleTimeFieldChange = (key: TimeFieldKey, next: number) => {
-        timeSetters[key](next);
-        setTimeMode('custom');
-    };
-
-    const handleUseNow = () => {
-        const current = getNow();
-        setYear(current.year);
-        setMonth(current.month);
-        setDay(current.day);
-        setHour(current.hour);
-        setMinute(current.minute);
-        setTimeMode('now');
     };
 
     return (
@@ -176,10 +133,10 @@ export default function QimenPage() {
 
                         <SanshiTimeFields
                             label="起局时间"
-                            value={{ year, month, day, hour, minute }}
-                            isNow={timeMode === 'now'}
-                            onFieldChange={handleTimeFieldChange}
-                            onUseNow={handleUseNow}
+                            value={formTime.value}
+                            isNow={formTime.isNow}
+                            onFieldChange={formTime.setField}
+                            onUseNow={formTime.resetToNow}
                         />
 
                         <SanshiRuleGroup
@@ -196,7 +153,7 @@ export default function QimenPage() {
 
                     <QimenFormPreview
                         className="flex-[1_1_280px]"
-                        input={{ year, month, day, hour, minute, timezone: localTimeZone, panType, juMethod, zhiFuJiGong }}
+                        input={{ ...formTime.value, timezone: formTime.timeZone, panType, juMethod, zhiFuJiGong }}
                     />
                 </div>
             </div>

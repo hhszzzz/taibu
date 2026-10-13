@@ -6,7 +6,7 @@
  */
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 
 export interface TimeFieldsValue {
@@ -58,8 +58,8 @@ export function SanshiField({ label, htmlFor, children }: { label: string; htmlF
 }
 
 /**
- * 起盘时间：五个数字框 +「用此刻」。
- * isNow 为正时（提交时取当前时刻，「用此刻」呈按下态），任一字段被编辑即由页面切换为活时。
+ * 起盘时间：五个数字框 +「用此刻」，状态由 useSanshiFormTime 提供。
+ * isNow 为正时（提交时取当前时刻，「用此刻」呈按下态），任一字段被编辑即切换为活时。
  */
 export function SanshiTimeFields({
     label,
@@ -113,6 +113,59 @@ export function SanshiTimeFields({
             </div>
         </div>
     );
+}
+
+/** 首次渲染（含服务端渲染与水合）使用的占位时间与时区，挂载后即替换为浏览器本地值 */
+const PLACEHOLDER_FORM_TIME: TimeFieldsValue = { year: 2000, month: 1, day: 1, hour: 0, minute: 0 };
+const FALLBACK_TIME_ZONE = 'Asia/Shanghai';
+
+/** 把时刻拆成表单字段（按浏览器本地时区，月份从 1 开始） */
+export function toSanshiFormTime(date: Date): TimeFieldsValue {
+    return {
+        year: date.getFullYear(),
+        month: date.getMonth() + 1,
+        day: date.getDate(),
+        hour: date.getHours(),
+        minute: date.getMinutes(),
+    };
+}
+
+function readLocalTimeZone(): string {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || FALLBACK_TIME_ZONE;
+}
+
+/**
+ * 起盘时间表单状态，配合 SanshiTimeFields 使用。
+ * 正时显示进入页面时的本地时间，提交时由 resolveTime() 取提交瞬间；编辑任一字段即切换为活时。
+ * 渲染期不读取时钟与时区：首次渲染用固定占位值，保证与服务端标记一致，挂载后在首帧绘制前换成本地值。
+ */
+export function useSanshiFormTime() {
+    const [isNow, setIsNow] = useState(true);
+    const [value, setValue] = useState<TimeFieldsValue>(PLACEHOLDER_FORM_TIME);
+    const [timeZone, setTimeZone] = useState(FALLBACK_TIME_ZONE);
+
+    useLayoutEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- 浏览器时间与时区只能在与服务端一致的首次渲染之后读取
+        setValue(toSanshiFormTime(new Date()));
+        setTimeZone(readLocalTimeZone());
+    }, []);
+
+    const setField = useCallback((key: TimeFieldKey, next: number) => {
+        setValue(prev => ({ ...prev, [key]: next }));
+        setIsNow(false);
+    }, []);
+
+    const resetToNow = useCallback(() => {
+        setValue(toSanshiFormTime(new Date()));
+        setIsNow(true);
+    }, []);
+
+    const resolveTime = useCallback(
+        (): TimeFieldsValue => (isNow ? toSanshiFormTime(new Date()) : value),
+        [isNow, value],
+    );
+
+    return { value, isNow, timeZone, setField, resetToNow, resolveTime };
 }
 
 export interface SegmentOption<T extends string> {

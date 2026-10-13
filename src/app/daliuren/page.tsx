@@ -4,7 +4,7 @@
  */
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/components/ui/Toast';
 import { HistoryDrawer } from '@/components/layout/HistoryDrawer';
@@ -18,12 +18,11 @@ import {
     SanshiSegmented,
     SanshiSubmitButton,
     SanshiTimeFields,
+    useSanshiFormTime,
     type SegmentOption,
-    type TimeFieldKey,
 } from '@/components/divination/SanshiFormControls';
 import { writeSessionJSON } from '@/lib/cache/session-storage';
 
-type TimeMode = 'now' | 'custom';
 type Gender = 'male' | 'female' | '';
 
 const GENDER_OPTIONS: ReadonlyArray<SegmentOption<Gender>> = [
@@ -32,37 +31,12 @@ const GENDER_OPTIONS: ReadonlyArray<SegmentOption<Gender>> = [
     { value: 'female', label: '女' },
 ];
 
-function getNow() {
-    const d = new Date();
-    return {
-        year: d.getFullYear(),
-        month: d.getMonth() + 1,
-        day: d.getDate(),
-        hour: d.getHours(),
-        minute: d.getMinutes(),
-    };
-}
-
-const DEFAULT_FORM_TIME = {
-    year: 2000,
-    month: 1,
-    day: 1,
-    hour: 0,
-    minute: 0,
-};
-
 export default function DaliurenPage() {
     const router = useRouter();
     const { showToast } = useToast();
 
+    const formTime = useSanshiFormTime();
     const [question, setQuestion] = useState('');
-    const [timeMode, setTimeMode] = useState<TimeMode>('now');
-    const [localTimeZone, setLocalTimeZone] = useState('Asia/Shanghai');
-    const [year, setYear] = useState(DEFAULT_FORM_TIME.year);
-    const [month, setMonth] = useState(DEFAULT_FORM_TIME.month);
-    const [day, setDay] = useState(DEFAULT_FORM_TIME.day);
-    const [hour, setHour] = useState(DEFAULT_FORM_TIME.hour);
-    const [minute, setMinute] = useState(DEFAULT_FORM_TIME.minute);
 
     // 高级设置
     const [birthYear, setBirthYear] = useState('');
@@ -70,32 +44,23 @@ export default function DaliurenPage() {
 
     const [isLoading, setIsLoading] = useState(false);
 
-    useEffect(() => {
-        const now = getNow();
-        setYear(now.year);
-        setMonth(now.month);
-        setDay(now.day);
-        setHour(now.hour);
-        setMinute(now.minute);
-        setLocalTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai');
-    }, []);
-
     const birthYearValue = birthYear ? parseInt(birthYear, 10) : undefined;
+    const { year, month, day, hour, minute } = formTime.value;
 
     const handleStartDivination = async () => {
-        const useTime = timeMode === 'now' ? getNow() : { year, month, day, hour, minute };
-        if (!useTime.year || !useTime.month || !useTime.day) {
+        const castTime = formTime.resolveTime();
+        if (!castTime.year || !castTime.month || !castTime.day) {
             showToast('error', '请填写完整的日期');
             return;
         }
         setIsLoading(true);
         try {
-            const date = `${useTime.year}-${String(useTime.month).padStart(2, '0')}-${String(useTime.day).padStart(2, '0')}`;
+            const date = `${castTime.year}-${String(castTime.month).padStart(2, '0')}-${String(castTime.day).padStart(2, '0')}`;
             const params = {
                 date,
-                hour: useTime.hour,
-                minute: useTime.minute,
-                timezone: localTimeZone,
+                hour: castTime.hour,
+                minute: castTime.minute,
+                timezone: formTime.timeZone,
                 question: question.trim() || undefined,
                 birthYear: birthYearValue,
                 gender: gender || undefined,
@@ -107,30 +72,6 @@ export default function DaliurenPage() {
         } finally {
             setIsLoading(false);
         }
-    };
-
-    const timeSetters: Record<TimeFieldKey, (next: number) => void> = {
-        year: setYear,
-        month: setMonth,
-        day: setDay,
-        hour: setHour,
-        minute: setMinute,
-    };
-
-    /** 编辑任一时间字段即视为活时 */
-    const handleTimeFieldChange = (key: TimeFieldKey, next: number) => {
-        timeSetters[key](next);
-        setTimeMode('custom');
-    };
-
-    const handleUseNow = () => {
-        const current = getNow();
-        setYear(current.year);
-        setMonth(current.month);
-        setDay(current.day);
-        setHour(current.hour);
-        setMinute(current.minute);
-        setTimeMode('now');
     };
 
     return (
@@ -158,10 +99,10 @@ export default function DaliurenPage() {
 
                             <SanshiTimeFields
                                 label="起课时间"
-                                value={{ year, month, day, hour, minute }}
-                                isNow={timeMode === 'now'}
-                                onFieldChange={handleTimeFieldChange}
-                                onUseNow={handleUseNow}
+                                value={formTime.value}
+                                isNow={formTime.isNow}
+                                onFieldChange={formTime.setField}
+                                onUseNow={formTime.resetToNow}
                             />
 
                             <SanshiRuleGroup
@@ -194,7 +135,7 @@ export default function DaliurenPage() {
                                 date: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
                                 hour,
                                 minute,
-                                timezone: localTimeZone,
+                                timezone: formTime.timeZone,
                                 birthYear: birthYearValue,
                                 gender: gender || undefined,
                             }}

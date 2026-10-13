@@ -335,10 +335,13 @@ export default function QimenResultPage() {
     const pillars = [qimenOutput.siZhu.year, qimenOutput.siZhu.month, qimenOutput.siZhu.day, qimenOutput.siZhu.hour];
     const ruleLabel = `${qimenOutput.panType}${qimenOutput.juMethod.replace(/法$/u, '')}${result.zhiFuJiGong === 'jiWuGong' ? ' · 寄戊宫' : ''}`;
     const yuan = basicInfo?.三元 ?? qimenOutput.yuan;
+    // 伏吟反吟、五不遇时等全盘格局不属于单宫，随四柱信息条展示
+    const boardFormations = qimenOutput.boardFormations ?? [];
     const keyChips = [
         { label: '旬首', value: basicInfo?.旬首 ?? qimenOutput.xunShou },
         { label: '值符', value: basicInfo?.值符 ?? qimenOutput.zhiFu.star },
         { label: '值使', value: zhiShiGate },
+        ...(boardFormations.length > 0 ? [{ label: '全盘', value: boardFormations.join('、') }] : []),
     ];
     const saved = !!result.chartId;
     const saveState = {

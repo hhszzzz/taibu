@@ -92,14 +92,21 @@ const DOOR_ELEMENTS: Record<string, string> = {
   '开门': '金', '惊门': '金', '生门': '土', '景门': '火',
 };
 
-// 九星原始宫位（用于伏吟/反吟判断）
+// 九星、八门原始宫位（用于伏吟/反吟判断）
 const STAR_ORIGINAL_PALACE: Record<string, number> = {
   '天蓬星': 0, '天芮星': 1, '天冲星': 2, '天辅星': 3, '天禽星': 4,
   '天心星': 5, '天柱星': 6, '天任星': 7, '天英星': 8,
 };
+const GATE_ORIGINAL_PALACE: Record<string, number> = Object.fromEntries(
+  DOOR_NAMES.flatMap((gate, palace) => (gate ? [[gate, palace] as const] : [])),
+);
 
 // 对冲宫位
 const OPPOSITE_PALACE: Record<number, number> = { 0: 8, 8: 0, 1: 7, 7: 1, 2: 6, 6: 2, 3: 5, 5: 3 };
+const OUTER_PALACES = [0, 1, 2, 3, 5, 6, 7, 8];
+
+// 《烟波钓叟歌》“就中伏吟为最凶……八门返伏皆如此”：星与门各论伏吟、反吟
+const FU_FAN_YIN = ['星伏吟', '星反吟', '门伏吟', '门反吟'] as const;
 
 // 地支→宫位映射
 const BRANCH_TO_PALACE: Record<string, number> = {
@@ -107,11 +114,20 @@ const BRANCH_TO_PALACE: Record<string, number> = {
   '午': 8, '未': 1, '申': 1, '酉': 6, '戌': 5, '亥': 5,
 };
 
-// 入墓：天干→墓库地支
+// 入墓：天干→墓库地支（乙从《遁甲演义》“六乙日奇下临二宫”取未）
 const RU_MU_MAP: Record<string, string> = {
   '甲': '未', '乙': '未', '丙': '戌', '丁': '丑',
   '戊': '戌', '己': '丑', '庚': '丑', '辛': '辰', '壬': '辰', '癸': '未',
 };
+
+// 六仪击刑：六仪→所刑宫位（甲子戊震3、甲戌己坤2、甲申庚艮8、甲午辛离9、甲辰壬巽4、甲寅癸巽4）
+const JI_XING_PALACE: Record<string, number> = { 戊: 3, 己: 2, 庚: 8, 辛: 9, 壬: 4, 癸: 4 };
+
+// 时干入墓：《遁甲演义》列丙戌、壬辰、丁丑、癸未、戊戌、己丑六时
+const HOUR_IN_TOMB = new Set(['丙戌', '壬辰', '丁丑', '癸未', '戊戌', '己丑']);
+
+// 三奇得使：“乙逢犬马丙鼠猴，六丁玉女骑龙虎”，即天盘三奇加地盘对应旬首六仪
+const QI_DE_SHI: Record<string, readonly string[]> = { 乙: ['己', '辛'], 丙: ['戊', '庚'], 丁: ['壬', '癸'] };
 
 // 五行旺衰（季节→五行→状态）
 const SEASON_WANG_SHUAI: Record<string, Record<string, string>> = {
@@ -129,8 +145,19 @@ const FORMATION_MAP: Record<string, string> = {
   '庚+丙': '太白入荧', '丙+庚': '荧入太白',
   '辛+乙': '白虎猖狂', '乙+辛': '青龙逃走',
   '丁+癸': '朱雀投江', '癸+丁': '腾蛇夭矫',
-  '庚+癸': '大格',
+  // “庚加癸兮为大格，加己为刑最不宜，加壬之时为上格”（《遁甲演义》称加壬为小格）
+  '庚+癸': '大格', '庚+己': '刑格', '庚+壬': '上格',
 };
+
+/** 天盘干加地盘干时参与比对的盘面干；甲不上盘，一律取其所遁六仪 */
+interface FormationContext {
+  /** 时旬首所遁六仪，即值符 */
+  hiddenJia: string;
+  dayStem: string;
+  yearStem: string;
+  monthStem: string;
+  hourStem: string;
+}
 
 // ===== 辅助函数 =====
 
@@ -155,20 +182,59 @@ function buildMonthPhaseMap(season: string): Record<string, string> {
   return result;
 }
 
-// 格局判断（天盘干+地盘干组合）
-function getFormations(heavenStem: string, earthStem: string, gate: string, deity: string, hiddenJia: string, dutyGate: boolean): string[] {
-  const formations: string[] = [];
-  const key = `${heavenStem}+${earthStem}`;
+/** 柱干上盘的位置：甲遁于本旬六仪 */
+function visibleStem(pillar: string): string {
+  return pillar.startsWith('甲') ? QIMEN_HIDDEN_JIA[pillar] ?? '' : pillar.charAt(0);
+}
 
-  if (FORMATION_MAP[key]) formations.push(FORMATION_MAP[key]);
-  if (deity === '值符' && earthStem === '丙') formations.push('青龙返首');
-  if (heavenStem === '丙' && earthStem === hiddenJia) formations.push('飞鸟跌穴');
-  if (gate === '生门' && heavenStem === '丙' && earthStem === '丁') formations.push('天遁');
-  if (gate === '开门' && heavenStem === '乙' && earthStem === '己') formations.push('地遁');
-  if (gate === '休门' && heavenStem === '丁' && deity === '太阴') formations.push('人遁');
-  if (dutyGate && earthStem === '丁') formations.push('玉女守门');
+// 格局判断：同宫天盘干（含寄干）逐一加于地盘干（含寄干）
+function getFormations(heavenStems: readonly string[], earthStems: readonly string[], gate: string, deity: string, context: FormationContext, dutyGate: boolean): string[] {
+  const formations = new Set<string>();
+  // 星伏吟时寄宫天地两盘同为本宫干与中五干，各干自临本位，不交叉论格
+  const stemsAtHome = heavenStems.length === earthStems.length && heavenStems.every(stem => earthStems.includes(stem));
+  const pairs = stemsAtHome ? [] : heavenStems.flatMap(heaven => earthStems.map(earth => [heaven, earth] as const))
+    .filter(([heaven, earth]) => heaven && earth && heaven !== earth);
+  const has = (predicate: (heaven: string, earth: string) => boolean) => pairs.some(([heaven, earth]) => predicate(heaven, earth));
 
-  return formations;
+  for (const [heaven, earth] of pairs) {
+    const fixed = FORMATION_MAP[`${heaven}+${earth}`];
+    if (fixed) formations.add(fixed);
+  }
+  // “甲加丙兮龙回首”“丙加甲兮鸟跌穴”：甲即值符所带旬首六仪
+  if (has((heaven, earth) => heaven === context.hiddenJia && earth === '丙')) formations.add('青龙返首');
+  if (has((heaven, earth) => heaven === '丙' && earth === context.hiddenJia)) formations.add('飞鸟跌穴');
+  if (gate === '生门' && has((heaven, earth) => heaven === '丙' && earth === '丁')) formations.add('天遁');
+  if (gate === '开门' && has((heaven, earth) => heaven === '乙' && earth === '己')) formations.add('地遁');
+  if (gate === '休门' && deity === '太阴' && heavenStems.includes('丁')) formations.add('人遁');
+  if (dutyGate && earthStems.includes('丁')) formations.add('玉女守门');
+  if (has((heaven, earth) => QI_DE_SHI[heaven]?.includes(earth) ?? false)) formations.add('三奇得使');
+  // “庚加日干为伏干，日干加庚飞干格……庚加值符天乙伏，值符加庚天乙飞……又嫌岁月日时逢”；日格即伏干格
+  if (has((heaven, earth) => heaven === '庚' && earth === context.hiddenJia)) formations.add('伏宫格');
+  if (has((heaven, earth) => heaven === context.hiddenJia && earth === '庚')) formations.add('飞宫格');
+  if (has((heaven, earth) => heaven === '庚' && earth === context.dayStem)) formations.add('伏干格');
+  if (has((heaven, earth) => heaven === context.dayStem && earth === '庚')) formations.add('飞干格');
+  if (has((heaven, earth) => heaven === '庚' && earth === context.yearStem)) formations.add('岁格');
+  if (has((heaven, earth) => heaven === '庚' && earth === context.monthStem)) formations.add('月格');
+  if (has((heaven, earth) => heaven === '庚' && earth === context.hourStem)) formations.add('时格');
+
+  return [...formations];
+}
+
+// 五不遇时：“时干来克日干上”，阳克阳、阴克阴（《遁甲演义》）
+function isWuBuYuShi(dayStem: string, hourStem: string): boolean {
+  const dayIndex = TIAN_GAN.indexOf(dayStem as typeof TIAN_GAN[number]);
+  const hourIndex = TIAN_GAN.indexOf(hourStem as typeof TIAN_GAN[number]);
+  if (dayIndex < 0 || hourIndex < 0 || dayIndex % 2 !== hourIndex % 2) return false;
+  return getElementRelation(GAN_WUXING[hourStem], GAN_WUXING[dayStem]) === 'control';
+}
+
+// 星门伏吟、反吟：转盘九星八门整体旋转，八宫同时成立时只作一条全盘格局
+function getBoardFormations(palaces: readonly QimenPalaceInfo[], dayStem: string, hourPillar: string): string[] {
+  const outer = OUTER_PALACES.map(index => palaces[index]);
+  const board: string[] = FU_FAN_YIN.filter(name => outer.every(palace => palace.formations.includes(name)));
+  if (isWuBuYuShi(dayStem, hourPillar.charAt(0))) board.push('五不遇时');
+  if (HOUR_IN_TOMB.has(hourPillar)) board.push('时干入墓');
+  return board;
 }
 
 // 计算旬首
@@ -324,11 +390,24 @@ export function calculateQimenData(input: QimenInput): Promise<QimenOutput> {
 
     // 构建九宫数据
     const palaces: QimenPalaceInfo[] = [];
-    const globalFormations: string[] = [];
+    const formationContext: FormationContext = {
+      hiddenJia: QIMEN_HIDDEN_JIA[xunShou],
+      dayStem: visibleStem(`${dayGan}${dayZhi}`),
+      yearStem: visibleStem(`${yearGan}${yearZhi}`),
+      monthStem: visibleStem(`${monthGan}${monthZhi}`),
+      hourStem: visibleStem(`${hourGan}${hourZhi}`),
+    };
+
+    // 转盘中五地盘干寄于天禽所随之星的本宫（坤二或艮八）；taobi 只在中宫列出该干
+    const centerHostStar = t?.acquired.map(palace => [palace.getStar(true)].flat())
+      .find((stars, index) => index !== 4 && stars.slice(1).includes('天禽星'))?.[0];
+    const centerHostPalace = centerHostStar ? STAR_ORIGINAL_PALACE[centerHostStar] : -1;
+    const centerEarthStem = t?.acquired[4].getECS(true)[0] ?? '';
 
     for (let i = 0; i < 9; i++) {
       const p = t?.acquired[i];
-      const earthStems = flying ? [flying.earth[i]] : p!.getECS(true);
+      const earthStems = flying ? [flying.earth[i]]
+        : [...p!.getECS(true), ...(i === centerHostPalace && centerEarthStem ? [centerEarthStem] : [])];
       const heavenStems = flying ? [flying.heaven[i]] : p!.getHCS(true);
       const stars = flying ? flying.stars[i] : p!.getStar(true);
       const door = flying ? flying.gates[i] : p!.getDoor(true);
@@ -342,17 +421,16 @@ export function calculateQimenData(input: QimenInput): Promise<QimenOutput> {
       // 格局判断
       const formations: string[] = [];
       if (heavenStem && earthStem && (panType === 'fei' || i !== 4)) {
-        formations.push(...getFormations(heavenStem, earthStem, door, deity, QIMEN_HIDDEN_JIA[xunShou], i + 1 === zhiShiPalace));
+        formations.push(...getFormations(heavenStems, earthStems, door, deity, formationContext, i + 1 === zhiShiPalace));
       }
 
-      // 伏吟判断：天盘星回到原始宫位
-      if (starName && STAR_ORIGINAL_PALACE[starName] === i) {
-        formations.push('伏吟');
-      }
-      // 反吟判断：天盘星到对冲宫位
-      if (starName && OPPOSITE_PALACE[STAR_ORIGINAL_PALACE[starName]] === i) {
-        formations.push('反吟');
-      }
+      // 伏吟：星、门回到原始宫位；反吟：星、门到对冲宫位
+      const starHome = starName ? STAR_ORIGINAL_PALACE[starName] : undefined;
+      const gateHome = door ? GATE_ORIGINAL_PALACE[door] : undefined;
+      if (starHome === i) formations.push('星伏吟');
+      if (starHome !== undefined && OPPOSITE_PALACE[starHome] === i) formations.push('星反吟');
+      if (gateHome === i) formations.push('门伏吟');
+      if (gateHome !== undefined && OPPOSITE_PALACE[gateHome] === i) formations.push('门反吟');
 
       // 旺衰
       const stemElement = GAN_WUXING[heavenStem] || '';
@@ -365,19 +443,12 @@ export function calculateQimenData(input: QimenInput): Promise<QimenOutput> {
       // 驿马
       const isYiMa = yiMaPalace === i;
 
-      // 入墓
-      const muBranch = RU_MU_MAP[heavenStem];
-      const muPalace = muBranch ? BRANCH_TO_PALACE[muBranch] : undefined;
-      const isRuMu = muPalace === i;
+      // 入墓、击刑：寄干随天禽同落本宫，一并参看
+      const isRuMu = heavenStems.some(stem => RU_MU_MAP[stem] !== undefined && BRANCH_TO_PALACE[RU_MU_MAP[stem]] === i);
       const isMenPo = Boolean(door && getElementRelation(DOOR_ELEMENTS[door], PALACE_ELEMENTS[i]) === 'control');
-      const punishment: Record<string, number> = { 戊: 3, 己: 2, 庚: 8, 辛: 9, 壬: 4, 癸: 4 };
-      const isJiXing = punishment[heavenStem] === i + 1;
+      const isJiXing = heavenStems.some(stem => JI_XING_PALACE[stem] === i + 1);
       if (isMenPo) formations.push('门迫');
       if (isJiXing) formations.push('六仪击刑');
-
-      if (formations.length > 0) {
-        globalFormations.push(...formations.map(f => `${palaceName}宫: ${f}`));
-      }
 
       palaces.push({
         palaceIndex: i + 1,
@@ -406,6 +477,15 @@ export function calculateQimenData(input: QimenInput): Promise<QimenOutput> {
         ...(earthStems.length > 1 ? { hostedEarthStems: earthStems.slice(1) } : {}),
       });
     }
+
+    // 全盘格局只列一次，其余按宫列出
+    const boardFormations = getBoardFormations(palaces, dayGan, `${hourGan}${hourZhi}`);
+    const globalFormations = [
+      ...boardFormations.map(name => `全盘: ${name}`),
+      ...palaces.flatMap(palace => palace.formations
+        .filter(name => !boardFormations.includes(name))
+        .map(name => `${palace.palaceName}宫: ${name}`)),
+    ];
 
       return {
       dateInfo: {
@@ -439,6 +519,7 @@ export function calculateQimenData(input: QimenInput): Promise<QimenOutput> {
       },
       yiMa: { branch: yiMaBranch, palace: yiMaPalace >= 0 ? yiMaPalace + 1 : 0 },
       globalFormations,
+      boardFormations,
       panType: panType === 'fei' ? '飞盘' : '转盘',
       juMethod: input.juNumber !== undefined ? '手工定局' : juMethod === 'maoshan' ? '茅山法' : juMethod === 'equal' ? '等时均分法' : '拆补法',
       question: input.question,

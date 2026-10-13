@@ -575,6 +575,86 @@ export async function getDailyCard(
     return mapCoreCardToDrawn(output.cards[0]);
 }
 
+// ===== 结果页抽牌请求与会话 =====
+
+/** 塔罗结果页：入口页带一次性抽牌参数跳转至此；不带参数时从会话恢复 */
+export const TAROT_RESULT_PATH = '/tarot/result';
+
+/** 入口页随跳转携带的一次性抽牌参数 */
+const TAROT_DRAW_PARAM_KEYS = ['spreadId', 'question', 'birthDate', 'reversed'] as const;
+
+export interface TarotDrawRequest {
+    spreadId: string;
+    question: string;
+    birthDate: string;
+    allowReversed: boolean;
+}
+
+/** 结果页会话（sessionStorage `tarot_result`），抽牌、历史恢复与保存/解读回写共用 */
+export interface TarotResultSession {
+    spread?: TarotSpread;
+    spreadId?: string;
+    cards?: DrawnCard[];
+    question?: string;
+    birthDate?: string;
+    numerology?: TarotNumerology | null;
+    seed?: string | null;
+    readingId?: string | null;
+    conversationId?: string | null;
+    createdAt?: string;
+}
+
+/** 入口页「开始抽牌」的跳转地址：问题去掉首尾空白，空的问题与生日不写入，包含逆位时不带 reversed */
+export function buildTarotDrawHref(request: TarotDrawRequest): string {
+    const params = new URLSearchParams();
+    params.set('spreadId', request.spreadId);
+    const question = request.question.trim();
+    if (question) params.set('question', question);
+    if (request.birthDate) params.set('birthDate', request.birthDate);
+    if (!request.allowReversed) params.set('reversed', '0');
+    return `${TAROT_RESULT_PATH}?${params.toString()}`;
+}
+
+/** 读取结果页地址上的抽牌请求；没有 spreadId 时返回 null，表示从会话恢复 */
+export function readTarotDrawRequest(params: Pick<URLSearchParams, 'get'>): TarotDrawRequest | null {
+    const spreadId = params.get('spreadId');
+    if (!spreadId) return null;
+    return {
+        spreadId,
+        question: params.get('question') ?? '',
+        birthDate: params.get('birthDate') ?? '',
+        allowReversed: params.get('reversed') !== '0',
+    };
+}
+
+/** 抽牌完成后结果页应停留的地址：去掉一次性抽牌参数，刷新或前进/后退时从会话恢复同一组牌 */
+export function getTarotResultHrefAfterDraw(params: Pick<URLSearchParams, 'toString'>): string {
+    const rest = new URLSearchParams(params.toString());
+    for (const key of TAROT_DRAW_PARAM_KEYS) rest.delete(key);
+    const query = rest.toString();
+    return query ? `${TAROT_RESULT_PATH}?${query}` : TAROT_RESULT_PATH;
+}
+
+/** 新抽一组牌时的完整会话：整体替换上一轮，不沿用其记录 ID、对话与创建时间 */
+export function createTarotDrawSession(
+    draw: { spread: TarotSpread; cards: DrawnCard[]; numerology?: TarotNumerology | null; seed?: string | null },
+    request: Pick<TarotDrawRequest, 'question' | 'birthDate'>,
+    createdAt: string,
+): TarotResultSession {
+    return {
+        spread: draw.spread,
+        spreadId: draw.spread.id,
+        cards: draw.cards,
+        question: request.question,
+        birthDate: request.birthDate,
+        numerology: draw.numerology ?? null,
+        seed: draw.seed ?? null,
+        readingId: null,
+        conversationId: null,
+        createdAt,
+    };
+}
+
 export function getCardById(id: number): TarotCard | undefined {
     return TAROT_CARDS.find((card) => card.id === id);
 }

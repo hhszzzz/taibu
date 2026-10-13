@@ -10,7 +10,7 @@ import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Plus, X } from 'lucide-react';
 
-import { TAROT_SPREADS, getDailyCard, type DrawnCard } from '@/lib/divination/tarot';
+import { TAROT_SPREADS, buildTarotDrawHref, getDailyCard, type DrawnCard } from '@/lib/divination/tarot';
 import { TarotSpreadPicker } from '@/components/tarot/TarotSpreadPicker';
 import { TarotDailyCardDialog } from '@/components/tarot/TarotDailyCardDialog';
 
@@ -52,12 +52,7 @@ export default function TarotPage() {
 
     const handleStart = () => {
         if (!spreadId) return;
-        const params = new URLSearchParams();
-        params.set('spreadId', spreadId);
-        if (question.trim()) params.set('question', question.trim());
-        if (birthDate) params.set('birthDate', birthDate);
-        if (!allowReversed) params.set('reversed', '0');
-        router.push(`/tarot/result?${params.toString()}`);
+        router.push(buildTarotDrawHref({ spreadId, question, birthDate, allowReversed }));
     };
 
     const handleRemoveBirthDate = () => {

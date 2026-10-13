@@ -16,8 +16,20 @@ import { TarotMeaningGrid, TarotMeaningList, type TarotMeaningEntry } from '@/co
 import { getTarotInterpretCopy, getTarotSpreadGridClass } from '@/components/tarot/tarot-display';
 import { MobileActionBar, MOBILE_SECONDARY_ACTION_CLASS } from '@/components/bazi/result/ResultHeader';
 import { ResultHeaderActions } from '@/components/divination/ResultHeaderActions';
-import { buildTarotCanonicalJSON, findTarotCardByChineseName, generateTarotReadingText, TAROT_SPREADS, type DrawnCard, type TarotNumerology, type TarotSpread } from '@/lib/divination/tarot';
-import { readSessionJSON, updateSessionJSON } from '@/lib/cache/session-storage';
+import {
+    buildTarotCanonicalJSON,
+    createTarotDrawSession,
+    findTarotCardByChineseName,
+    generateTarotReadingText,
+    getTarotResultHrefAfterDraw,
+    readTarotDrawRequest,
+    TAROT_SPREADS,
+    type DrawnCard,
+    type TarotNumerology,
+    type TarotResultSession,
+    type TarotSpread,
+} from '@/lib/divination/tarot';
+import { readSessionJSON, updateSessionJSON, writeSessionJSON } from '@/lib/cache/session-storage';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { ModelSelector } from '@/components/ui/ModelSelector';
 import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
@@ -45,17 +57,10 @@ const NUMEROLOGY_SLOTS = [
     { key: 'yearlyCard', label: '年度牌' },
 ] as const;
 
-type TarotSession = {
-    spread?: TarotSpread;
-    spreadId?: string;
-    cards?: DrawnCard[];
-    question?: string;
-    birthDate?: string;
-    numerology?: TarotNumerology | null;
-    seed?: string | null;
-    readingId?: string | null;
-    conversationId?: string | null;
-    createdAt?: string;
+/** /api/tarot `draw-only` 的响应 */
+type TarotDrawResponse = {
+    success?: boolean;
+    data?: { spread: TarotSpread; cards: DrawnCard[]; numerology?: TarotNumerology | null; seed?: string | null };
 };
 
 function TarotResultContent() {
@@ -65,16 +70,18 @@ function TarotResultContent() {
     const { showToast } = useToast();
     const { knowledgeBaseEnabled } = useKnowledgeBaseFeatureEnabled();
     const historyTimestamp = searchParams.get('t');
-    const spreadId = searchParams.get('spreadId');
-    const questionParam = searchParams.get('question');
-    const birthDateParam = searchParams.get('birthDate');
-    // 入口页取消「包含逆位」时带 reversed=0
-    const allowReversed = searchParams.get('reversed') !== '0';
+    // 入口页发起的一次性抽牌请求（取消「包含逆位」时 allowReversed 为 false）
+    const drawRequest = readTarotDrawRequest(searchParams);
+    const spreadId = drawRequest?.spreadId ?? null;
+    const questionParam = drawRequest?.question ?? '';
+    const birthDateParam = drawRequest?.birthDate ?? '';
+    const allowReversed = drawRequest?.allowReversed ?? true;
+    const hrefAfterDraw = getTarotResultHrefAfterDraw(searchParams);
 
     const [selectedSpread, setSelectedSpread] = useState<TarotSpread | null>(null);
     const [drawnCards, setDrawnCards] = useState<DrawnCard[]>([]);
-    const [question, setQuestion] = useState(questionParam || '');
-    const [birthDate, setBirthDate] = useState(birthDateParam || '');
+    const [question, setQuestion] = useState(questionParam);
+    const [birthDate, setBirthDate] = useState(birthDateParam);
     const [numerology, setNumerology] = useState<TarotNumerology | null>(null);
     const [seed, setSeed] = useState<string | null>(null);
     const [interpretation, setInterpretation] = useState('');
@@ -96,6 +103,8 @@ function TarotResultContent() {
     const [showCopyModal, setShowCopyModal] = useState(false);
     const [saving, setSaving] = useState(false);
     const aiSectionRef = useRef<HTMLElement>(null);
+    /** 本页已抽出牌并换掉了抽牌地址：牌面与翻牌状态都在内存中 */
+    const drawnInPageRef = useRef(false);
     const streaming = useStreamingResponse();
     const { user, userId, sessionLoading, membershipInfo, membershipLoading, membershipResolved } = useSessionMembership();
     const membershipPending = membershipLoading || !membershipResolved;
@@ -120,26 +129,34 @@ function TarotResultContent() {
         }];
     }), [canonicalReading, drawnCards, revealedCards]);
 
-    // 获取抽牌
+    // 抽牌：地址上的抽牌参数是一次性请求。抽到牌后整体替换会话并换成不带这些参数的地址，
+    // 之后刷新、前进或后退都从会话恢复同一组牌，而不是重新抽一组。抽牌失败时保留地址，刷新即重试。
     useEffect(() => {
         if (!spreadId) return;
+        let cancelled = false;
         const drawCards = async () => {
             setIsLoading(true); setRevealedCards([]); setInterpretation(''); setInterpretationReasoning(null);
             try {
                 const res = await fetch('/api/tarot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'draw-only', spreadId, allowReversed, birthDate: birthDateParam || undefined }) });
-                const data = await res.json();
-                if (data.success && data.data?.cards) {
-                    setSelectedSpread(data.data.spread); setDrawnCards(data.data.cards); setNumerology(data.data.numerology || null); setSeed(data.data.seed);
-                }
-            } catch (e) { console.error(e); } finally { setIsLoading(false); }
+                const data: TarotDrawResponse = await res.json();
+                if (cancelled || !data.success || !data.data?.cards) return;
+                const draw = data.data;
+                writeSessionJSON('tarot_result', createTarotDrawSession(draw, { question: questionParam, birthDate: birthDateParam }, new Date().toISOString()));
+                drawnInPageRef.current = true;
+                setSelectedSpread(draw.spread); setDrawnCards(draw.cards); setNumerology(draw.numerology || null); setSeed(draw.seed || null);
+                window.history.replaceState(null, '', hrefAfterDraw);
+            } catch (e) { console.error(e); } finally { if (!cancelled) setIsLoading(false); }
         };
-        drawCards();
-    }, [allowReversed, birthDateParam, spreadId]);
+        void drawCards();
+        return () => { cancelled = true; };
+    }, [allowReversed, birthDateParam, hrefAfterDraw, questionParam, spreadId]);
 
-    // 加载历史
+    // 从会话恢复：刷新、历史记录（带 t）以及抽牌后换掉的地址
     useEffect(() => {
         if (spreadId) return;
-        const parsed = readSessionJSON<TarotSession>('tarot_result');
+        // 本页刚抽的牌已在屏幕上，按会话重置会把未翻开的牌全部翻开；历史记录跳转（带 t）仍照常恢复
+        if (drawnInPageRef.current && !historyTimestamp) return;
+        const parsed = readSessionJSON<TarotResultSession>('tarot_result');
         if (parsed?.cards) {
             const spread = TAROT_SPREADS.find(s => s.id === (parsed.spreadId || parsed.spread?.id)) || null;
             if (spread) {
@@ -156,7 +173,7 @@ function TarotResultContent() {
     useEffect(() => {
         if (!selectedSpread || drawnCards.length === 0) return;
 
-        updateSessionJSON<TarotSession>('tarot_result', (prev) => ({
+        updateSessionJSON<TarotResultSession>('tarot_result', (prev) => ({
             ...(prev || {}),
             spread: selectedSpread,
             spreadId: selectedSpread.id,

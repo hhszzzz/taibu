@@ -345,9 +345,17 @@ export interface ChongHeTransition {
   description?: string;
 }
 
+/** 卦级反伏所在：inner 内卦、outer 外卦、both 内外卦 */
+export type GuaScope = 'inner' | 'outer' | 'both';
+
 export interface GuaFanFuYinInfo {
   isFanYin: boolean;
   isFuYin: boolean;
+  /** 反吟所在之卦（《增删卜易·反伏章》「内卦反伏，内则不安。外卦反伏，外则不宁」） */
+  fanYinScope?: GuaScope;
+  /** 伏吟所在之卦（同章「内卦动变伏吟，内则呻吟，外卦动变伏吟，外则忧郁」） */
+  fuYinScope?: GuaScope;
+  /** 反吟、伏吟的判据与断语；二者并见时合为一段 */
   description?: string;
 }
 

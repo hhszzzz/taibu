@@ -10,6 +10,7 @@ import type {
 } from '../shared/json-types.js';
 import {
   formatGuaLevelLines,
+  GUA_SCOPE_LABELS,
   KONG_WANG_LABELS,
   sortYaosDescending,
   traditionalYaoName,
@@ -392,8 +393,13 @@ function renderLiuyaoJSONBase(
   }
 
   const resonances: LiuyaoJSON['全局互动']['反伏信息'] = [];
-  if (result.guaFanFuYin?.isFuYin) resonances.push({ 类型: '伏吟' });
-  if (result.guaFanFuYin?.isFanYin) resonances.push({ 类型: '反吟' });
+  const fanFuYin = result.guaFanFuYin;
+  if (fanFuYin?.isFanYin) {
+    resonances.push({ 类型: '反吟', ...(fanFuYin.fanYinScope ? { 范围: GUA_SCOPE_LABELS[fanFuYin.fanYinScope] } : {}) });
+  }
+  if (fanFuYin?.isFuYin) {
+    resonances.push({ 类型: '伏吟', ...(fanFuYin.fuYinScope ? { 范围: GUA_SCOPE_LABELS[fanFuYin.fuYinScope] } : {}) });
+  }
 
   const payload: LiuyaoJSON = {
     卦盘: {

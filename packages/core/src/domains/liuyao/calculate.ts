@@ -12,6 +12,8 @@ import type {
   CandidateStrength,
   DerivedHexagramInfo,
   DiZhi,
+  GuaFanFuYinInfo,
+  GuaScope,
   GuaShenInfo,
   KongWangState,
   LiuQinType,
@@ -29,7 +31,7 @@ const HEXAGRAM_BY_NAME = new Map<string, Hexagram>(HEXAGRAMS.map(h => [h.name, h
 
 export type { LiuyaoInput, LiuyaoOutput } from './types.js';
 export type {
-  CandidateStrength, DerivedHexagramInfo, DiZhi, GuaShenInfo, KongWangState, LiuQinType, TianGan, WangShuai, WuXing, YaoMovementState, YaoSpecialStatus, YaoStrengthLevel, YongShenSelectionStatus
+  CandidateStrength, DerivedHexagramInfo, DiZhi, GuaFanFuYinInfo, GuaScope, GuaShenInfo, KongWangState, LiuQinType, TianGan, WangShuai, WuXing, YaoMovementState, YaoSpecialStatus, YaoStrengthLevel, YongShenSelectionStatus
 } from '../shared/types.js';
 export type LiuShen = '青龙' | '朱雀' | '勾陈' | '螣蛇' | '白虎' | '玄武';
 export type YaoType = 0 | 1;
@@ -230,12 +232,6 @@ export interface ChongHeTransition {
   description?: string;
 }
 
-export interface GuaFanFuYinInfo {
-  isFanYin: boolean;
-  isFuYin: boolean;
-  description?: string;
-}
-
 export interface SanHeAnalysis {
   hasFullSanHe: boolean;
   fullSanHe?: {
@@ -394,7 +390,7 @@ export function formatGuaLevelLines(analysis: {
   liuChongGuaInfo?: { isLiuChongGua: boolean; description?: string; };
   liuHeGuaInfo?: { isLiuHeGua: boolean; description?: string; };
   chongHeTransition?: { type: string; description?: string; };
-  guaFanFuYin?: { isFanYin: boolean; isFuYin: boolean; description?: string; };
+  guaFanFuYin?: GuaFanFuYinInfo;
   sanHeAnalysis?: {
     hasFullSanHe: boolean;
     fullSanHe?: { name: string; result: string; description?: string; };
@@ -415,9 +411,8 @@ export function formatGuaLevelLines(analysis: {
   if (chongHeTransition && chongHeTransition.type !== 'none' && chongHeTransition.description) {
     parts.push(`冲合转换：${chongHeTransition.description}`);
   }
-  if (guaFanFuYin) {
-    if (guaFanFuYin.isFanYin) parts.push(`反吟：${guaFanFuYin.description || '是'}`);
-    if (guaFanFuYin.isFuYin) parts.push(`伏吟：${guaFanFuYin.description || '是'}`);
+  if (guaFanFuYin && (guaFanFuYin.isFanYin || guaFanFuYin.isFuYin)) {
+    parts.push(`${formatGuaFanFuYinFlags(guaFanFuYin).join('、')}：${guaFanFuYin.description || '是'}`);
   }
   if (sanHeAnalysis) {
     if (sanHeAnalysis.hasFullSanHe && sanHeAnalysis.fullSanHeList?.length) {
@@ -1541,33 +1536,73 @@ function checkLiuChongGua(fullYaos: FullYaoInfo[]): LiuChongGuaInfo {
   return { isLiuChongGua: false };
 }
 
-function checkGuaFanFuYin(
-  changedCode: string | undefined,
-  baseYaos: FullYaoInfo[]
-): GuaFanFuYinInfo {
-  if (!changedCode) {
+/** 后天八卦方位两两相对之卦（《卜筮正宗·反吟卦定例》乾巽、坎离、艮坤、震兑「两卦相对」） */
+const TRIGRAM_FACING: Record<string, string> = { 乾: '巽', 巽: '乾', 坎: '离', 离: '坎', 艮: '坤', 坤: '艮', 震: '兑', 兑: '震' };
+export const GUA_SCOPE_LABELS = { inner: '内卦', outer: '外卦', both: '内外卦' } as const satisfies Record<GuaScope, string>;
+const FAN_YIN_MEANING: Record<GuaScope, string> = { inner: '内则不安', outer: '外则不宁', both: '内外不宁' };
+const FU_YIN_MEANING: Record<GuaScope, string> = { inner: '内则呻吟', outer: '外则忧郁', both: '内外忧郁呻吟' };
+
+/** 反吟、伏吟标签，带所在之卦（旧数据无范围时只写反吟、伏吟） */
+export function formatGuaFanFuYinFlags(info: GuaFanFuYinInfo): string[] {
+  const scoped = (scope: GuaScope | undefined, name: string) => `${scope ? GUA_SCOPE_LABELS[scope] : ''}${name}`;
+  return [
+    ...(info.isFanYin ? [scoped(info.fanYinScope, '反吟')] : []),
+    ...(info.isFuYin ? [scoped(info.fuYinScope, '伏吟')] : []),
+  ];
+}
+
+/**
+ * 一卦（内卦或外卦）之反伏。只在该卦有爻发动而卦体改变时论，卦中静爻随卦变亦在其内（《增删卜易·反伏章》比之井例，
+ * 内卦坤化巽而初爻未动，仍断「内卦反伏」）：
+ * - 伏吟：三爻纳甲复化原支，惟乾震互变（《卜筮正宗·伏吟卦定例》「伏吟惟乾变震、震变乾，查无他卦无伏吟也」）；
+ * - 爻之反吟：三爻纳甲逐一相冲，惟坤巽互变（反吟卦定例「爻变相冲者，壹卦中惟有坤变巽，巽变坤」；反伏章升之观、观之坤、巽之观）；
+ * - 卦之反吟：两卦后天方位相对（反吟卦定例「卦有反吟，卦变相冲也」）。
+ * 反伏章另有「卦变者…如乾卦变坤卦」一语，未述判法，不据以定反吟。
+ */
+function trigramResonance(from: string, to: string, half: 'lower' | 'upper'): { kind: 'fanYin' | 'fuYin'; note: string; } | undefined {
+  const before = TRIGRAM_NA_JIA[from]?.[half];
+  const after = TRIGRAM_NA_JIA[to]?.[half];
+  if (from === to || !before || !after) return undefined;
+  if (before.every((zhi, index) => zhi === after[index])) {
+    return { kind: 'fuYin', note: `${from}化${to}，${before.join('')}复化${after.join('')}` };
+  }
+  if (before.every((zhi, index) => LIU_CHONG[zhi] === after[index])) {
+    return { kind: 'fanYin', note: `${from}化${to}，${before.join('')}与${after.join('')}逐爻相冲，爻之反吟` };
+  }
+  return TRIGRAM_FACING[from] === to ? { kind: 'fanYin', note: `${from}化${to}，两卦方位相对，卦之反吟` } : undefined;
+}
+
+/** 卦级反伏：内外卦分别论（反伏章「内卦反伏，内则不安…外卦动变伏吟，外则忧郁」），吉凶仍以用神旺衰为主 */
+function checkGuaFanFuYin(hexagramCode: string, changedCode: string | undefined): GuaFanFuYinInfo {
+  const base = getHexagramByCode(hexagramCode);
+  const changed = changedCode ? getHexagramByCode(changedCode) : undefined;
+  if (!base || !changed) {
     return { isFanYin: false, isFuYin: false };
   }
-  // 卦级伏吟：本卦变卦六爻地支全同（含本变同卦的情况）
-  const changedYaos = Array.from({ length: 6 }, (_, i) => getNaJiaByHexagram(changedCode, i + 1));
-  const allSame = baseYaos.every((yao, i) => yao.naJia === changedYaos[i]);
-  if (allSame) {
-    return {
-      isFanYin: false,
-      isFuYin: true,
-      description: '卦变伏吟：本卦与变卦六爻地支全同，主事多拖延、反复不顺、呻吟之象。',
-    };
+  const inner = trigramResonance(base.lowerTrigram, changed.lowerTrigram, 'lower');
+  const outer = trigramResonance(base.upperTrigram, changed.upperTrigram, 'upper');
+  const scopeOf = (kind: 'fanYin' | 'fuYin'): GuaScope | undefined => {
+    const inInner = inner?.kind === kind;
+    const inOuter = outer?.kind === kind;
+    return inInner && inOuter ? 'both' : inInner ? 'inner' : inOuter ? 'outer' : undefined;
+  };
+  const fanYinScope = scopeOf('fanYin');
+  const fuYinScope = scopeOf('fuYin');
+  if (!fanYinScope && !fuYinScope) {
+    return { isFanYin: false, isFuYin: false };
   }
-  // 卦级反吟：本卦变卦六爻地支全冲
-  const allChong = baseYaos.every((yao, i) => LIU_CHONG[yao.naJia] === changedYaos[i]);
-  if (allChong) {
-    return {
-      isFanYin: true,
-      isFuYin: false,
-      description: '卦变反吟：本卦与变卦六爻相冲，主事态大幅反复、来回不定。',
-    };
-  }
-  return { isFanYin: false, isFuYin: false };
+  const evidence = [...(inner ? [`内卦${inner.note}`] : []), ...(outer ? [`外卦${outer.note}`] : [])];
+  const meanings = [
+    ...(fanYinScope ? [`${GUA_SCOPE_LABELS[fanYinScope]}反吟，${FAN_YIN_MEANING[fanYinScope]}，主成而败、败而成，去而复来（《增删卜易·反伏章》）`] : []),
+    ...(fuYinScope ? [`${GUA_SCOPE_LABELS[fuYinScope]}伏吟，${FU_YIN_MEANING[fuYinScope]}，动如不动（《卜筮正宗》第六问）`] : []),
+  ];
+  return {
+    isFanYin: fanYinScope !== undefined,
+    isFuYin: fuYinScope !== undefined,
+    ...(fanYinScope ? { fanYinScope } : {}),
+    ...(fuYinScope ? { fuYinScope } : {}),
+    description: `${evidence.join('；')}。${meanings.join('；')}；吉凶仍以用神旺衰定。`,
+  };
 }
 
 function isLiuHeGuaPattern(yaos: FullYaoInfo[]): boolean {
@@ -2416,10 +2451,7 @@ function timingOf(group: YongShenGroup, context: TimingContext): TimeRecommendat
 
 function buildWarnings(groups: YongShenGroup[], sanHeAnalysis: SanHeAnalysis, guaFanFuYin: GuaFanFuYinInfo, chongHeTransition: ChongHeTransition): string[] {
   const warnings: string[] = [];
-  if (guaFanFuYin.isFuYin && guaFanFuYin.description) {
-    warnings.push(guaFanFuYin.description);
-  }
-  if (guaFanFuYin.isFanYin && guaFanFuYin.description) {
+  if ((guaFanFuYin.isFuYin || guaFanFuYin.isFanYin) && guaFanFuYin.description) {
     warnings.push(guaFanFuYin.description);
   }
   if (chongHeTransition.type !== 'none' && chongHeTransition.description) {
@@ -2572,7 +2604,7 @@ export function performFullAnalysis(
   const liuChongGuaInfo = checkLiuChongGua(baseYaos);
   const liuHeGuaInfo = checkLiuHeGua(baseYaos);
   const chongHeTransition = checkChongHeTransition(baseYaos, changedCode);
-  const guaFanFuYin = checkGuaFanFuYin(changedCode, baseYaos);
+  const guaFanFuYin = checkGuaFanFuYin(hexagramCode, changedCode);
   const timeRecommendations = calculateTimeRecommendations(yongShen, { fullYaos, monthZhi, dayZhi, movingHarmByPosition });
   const globalShenSha = calculateGlobalShenSha(shenShaContext);
   const warnings = buildWarnings(yongShen, sanHeAnalysis, guaFanFuYin, chongHeTransition);

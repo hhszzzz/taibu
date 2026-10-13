@@ -292,3 +292,43 @@ test('liuyao derives 应期 from the 应期总注 and the 病 of the 用神', as
     ['critical', '逢未值或逢午合'], ['favorable', '遇巳午相生或辰戌丑未四季月'], ['unfavorable', '逢寅卯或亥子'],
   ]);
 });
+
+test('liuyao judges 反吟 and 伏吟 per inner and outer trigram', async () => {
+  // 《增删卜易·反伏章》内外分论：「内卦反伏，内则不安。外卦反伏，外则不宁」「内卦动变伏吟，内则呻吟，外卦动变伏吟，外则忧郁」；
+  // 《卜筮正宗·反吟卦定例》卦之反吟为乾巽、坎离、艮坤、震兑两卦相对，爻之反吟「惟有坤变巽，巽变坤」；伏吟卦定例「伏吟惟乾变震、震变乾」
+  const scopes = async (hexagramName, changedHexagramName) => {
+    const { guaFanFuYin } = await cast(hexagramName, '2024-08-04T10:00:00', changedHexagramName ? { changedHexagramName } : {});
+    return { fanYin: guaFanFuYin.fanYinScope ?? null, fuYin: guaFanFuYin.fuYinScope ?? null };
+  };
+
+  // 反伏章例：申月癸巳日占父外任，姤之恒「卦得伏吟」，外卦乾化震
+  assert.deepEqual(await scopes('天风姤', '雷风恒'), { fanYin: null, fuYin: 'outer' });
+  assert.deepEqual(await scopes('天雷无妄', '雷天大壮'), { fanYin: null, fuYin: 'both' });
+  // 外卦乾化坎不成伏吟，内卦乾化震仍是伏吟；旧法只认六爻纳甲全同，会漏判
+  assert.deepEqual(await scopes('乾为天', '水雷屯'), { fanYin: null, fuYin: 'inner' });
+  // 反伏章例：升之观、观之坤、巽之观为爻之反吟；比之井初爻未动，内卦坤化巽仍断「内卦反伏」；临之中孚「外卦反伏」
+  assert.deepEqual(await scopes('地风升', '风地观'), { fanYin: 'both', fuYin: null });
+  assert.deepEqual(await scopes('风地观', '坤为地'), { fanYin: 'outer', fuYin: null });
+  assert.deepEqual(await scopes('巽为风', '风地观'), { fanYin: 'inner', fuYin: null });
+  assert.deepEqual(await scopes('水地比', '水风井'), { fanYin: 'inner', fuYin: null });
+  assert.deepEqual(await scopes('地泽临', '风泽中孚'), { fanYin: 'outer', fuYin: null });
+  // 卦之反吟：两卦后天方位相对，爻支未必相冲
+  assert.deepEqual(await scopes('坎为水', '离为火'), { fanYin: 'both', fuYin: null });
+  assert.deepEqual(await scopes('乾为天', '天风姤'), { fanYin: 'inner', fuYin: null });
+  // 乾化坤既非相对之卦，纳甲也不逐爻相冲，不作反吟；无动爻不论反伏
+  assert.deepEqual(await scopes('乾为天', '坤为地'), { fanYin: null, fuYin: null });
+  assert.deepEqual(await scopes('乾为天'), { fanYin: null, fuYin: null });
+
+  // 内卦反吟与外卦伏吟可以并见，判据与断语合为一条提示，渲染时各带所在之卦
+  const both = await cast('天地否', '2024-08-04T10:00:00', { changedHexagramName: '雷风恒' });
+  assert.deepEqual(await scopes('天地否', '雷风恒'), { fanYin: 'inner', fuYin: 'outer' });
+  const notes = both.warnings.filter((warning) => /反吟|伏吟/u.test(warning));
+  assert.equal(notes.length, 1);
+  assert.match(notes[0], /^内卦坤化巽，未巳卯与丑亥酉逐爻相冲，爻之反吟；外卦乾化震，午申戌复化午申戌。内卦反吟，内则不安.*外卦伏吟，外则忧郁.*吉凶仍以用神旺衰定。$/u);
+  const text = mcpCore.toLiuyaoText(both, { detailLevel: 'full' });
+  assert.ok(text.includes('- 共振: 内卦反吟\n- 共振: 外卦伏吟'));
+  assert.ok(text.includes('- 反吟伏吟: 内卦反吟、外卦伏吟'));
+  assert.deepEqual(mcpCore.toLiuyaoJson(both, { detailLevel: 'full' }).全局互动.反伏信息, [
+    { 类型: '反吟', 范围: '内卦' }, { 类型: '伏吟', 范围: '外卦' },
+  ]);
+});

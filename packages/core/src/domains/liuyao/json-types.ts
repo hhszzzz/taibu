@@ -106,6 +106,8 @@ export interface LiuyaoTransitionJSON {
 
 export interface LiuyaoResonanceJSON {
   类型: '反吟' | '伏吟';
+  /** 所在之卦；旧排盘未记录时省略 */
+  范围?: '内卦' | '外卦' | '内外卦';
 }
 
 export type LiuyaoAISafeJSON = LiuyaoJSON;

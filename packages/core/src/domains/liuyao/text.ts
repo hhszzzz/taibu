@@ -1,5 +1,6 @@
 import { withRulesText } from '../../shared/calculation-rules.js';
 import {
+  formatGuaFanFuYinFlags,
   formatGuaLevelLines,
   KONG_WANG_LABELS,
   sortYaosDescending,
@@ -252,8 +253,9 @@ function buildLiuyaoSafeInteractionText(result: LiuyaoOutput): string[] {
     lines.push('- 转换: 合转冲');
   }
 
-  if (result.guaFanFuYin?.isFuYin) lines.push('- 共振: 伏吟');
-  if (result.guaFanFuYin?.isFanYin) lines.push('- 共振: 反吟');
+  if (result.guaFanFuYin) {
+    for (const flag of formatGuaFanFuYinFlags(result.guaFanFuYin)) lines.push(`- 共振: ${flag}`);
+  }
 
   return lines;
 }
@@ -363,10 +365,7 @@ function renderLiuyaoTextBase(
       if (result.chongHeTransition?.type && result.chongHeTransition.type !== 'none') {
         lines.push(`- 冲合转换: ${result.chongHeTransition.type === 'chong_to_he' ? '冲转合' : '合转冲'}`);
       }
-      const resonanceFlags = [
-        ...(result.guaFanFuYin?.isFanYin ? ['反吟'] : []),
-        ...(result.guaFanFuYin?.isFuYin ? ['伏吟'] : []),
-      ];
+      const resonanceFlags = result.guaFanFuYin ? formatGuaFanFuYinFlags(result.guaFanFuYin) : [];
       if (resonanceFlags.length > 0) {
         lines.push(`- 反吟伏吟: ${resonanceFlags.join('、')}`);
       }

@@ -21,6 +21,7 @@ import {
   getTaoHua,
   getWangShuai,
   resolveSingleKeMisclassifiedAsMaoXing,
+  yearGanZhi,
 } from './supplements.js';
 import type {
   DaliurenDateInfo,
@@ -259,7 +260,9 @@ export function calculateDaliurenData(input: DaliurenInput): DaliurenOutput {
   let benMing: string | undefined;
   let xingNian: string | undefined;
   if (birthYear && gender) {
-    const result = calcBenMingXingNian(birthYear, y, gender);
+    // 行年随岁年而转：年柱以立春换年，立春前的一月仍属上一岁年
+    const suiYear = yearGanZhi(y) === pillars[0] ? y : y - 1;
+    const result = calcBenMingXingNian(birthYear, suiYear, gender);
     benMing = result.benMing;
     xingNian = result.xingNian;
   }

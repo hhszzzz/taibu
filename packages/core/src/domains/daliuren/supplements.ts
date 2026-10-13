@@ -273,21 +273,25 @@ function numToChinese(n: number): string {
 
 // ===== 本命与行年 =====
 
+/** 公历年份对应的干支年（不含立春判断，调用方须先确定岁年） */
+export function yearGanZhi(year: number): string {
+  return TIAN_GAN[((year - 4) % 10 + 10) % 10] + DI_ZHI[((year - 4) % 12 + 12) % 12];
+}
+
 /**
  * 计算本命（出生年干支）和行年
+ * @param suiYear 占时所在岁年，即以立春换年的年柱对应的公历年；一月至立春前仍属上一年。
  */
 export function calcBenMingXingNian(
   birthYear: number,
-  currentYear: number,
+  suiYear: number,
   gender: 'male' | 'female',
 ): { benMing: string; xingNian: string; } {
   // 本命 = 出生年干支
-  const benMingGanIdx = ((birthYear - 4) % 10 + 10) % 10;
-  const benMingZhiIdx = ((birthYear - 4) % 12 + 12) % 12;
-  const benMing = TIAN_GAN[benMingGanIdx] + DI_ZHI[benMingZhiIdx];
+  const benMing = yearGanZhi(birthYear);
 
-  // 行年：男从丙寅顺推，女从壬申逆推
-  const age = currentYear - birthYear;
+  // 行年：一岁起男丙寅顺推、女壬申逆推。占时在立春前、出生年按公历填作本年时，仍是一岁。
+  const age = Math.max(0, suiYear - birthYear);
   let xingNianGanIdx: number;
   let xingNianZhiIdx: number;
 

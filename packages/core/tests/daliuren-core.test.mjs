@@ -180,3 +180,19 @@ test('daliuren names 铸印, 亨通, 蒿矢 and 弹射 as the 六壬大全 examp
   assert.equal(tanShe.sanChuan[0], '申');
   assert.deepEqual(tanShe.subTypes, ['弹射']);
 });
+
+test('daliuren 行年 turns with the 立春 year pillar, not the civil year', () => {
+  const xingNian = (date, gender, birthYear = 1990) => {
+    const result = calculateDaliuren({ date, hour: 10, minute: 0, birthYear, gender });
+    return { year: result.dateInfo.bazi.split(' ')[0], benMing: result.benMing, xingNian: result.xingNian };
+  };
+
+  // 2026 年立春在 2 月 4 日：一月仍是乙巳岁，1990 年生人虚岁三十六；立春后丙午岁，虚岁三十七
+  assert.deepEqual(xingNian('2026-01-20', 'male'), { year: '乙巳', benMing: '庚午', xingNian: '辛丑' });
+  assert.deepEqual(xingNian('2026-02-10', 'male'), { year: '丙午', benMing: '庚午', xingNian: '壬寅' });
+  // 女命一岁起壬申逆行
+  assert.deepEqual(xingNian('2026-01-20', 'female'), { year: '乙巳', benMing: '庚午', xingNian: '丁酉' });
+  assert.deepEqual(xingNian('2026-02-10', 'female'), { year: '丙午', benMing: '庚午', xingNian: '丙申' });
+  // 立春前占、出生年按公历填作本年：仍是一岁，行年丙寅
+  assert.equal(xingNian('2026-01-20', 'male', 2026).xingNian, '丙寅');
+});

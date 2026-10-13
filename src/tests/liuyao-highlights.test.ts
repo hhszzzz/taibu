@@ -59,17 +59,18 @@ test('liuyao highlights list several moving lines bottom-up and keep neutral tra
     assert.deepEqual(highlights.slice(0, 2), ['初九父母巳火发动，化出官鬼午火（化进神）', '上六兄弟酉金发动，化出子孙子水']);
 });
 
-test('liuyao highlights call out static hexagrams, dark movement, day breaks and hidden spirits', () => {
+test('liuyao highlights call out static hexagrams, dark movement, day and month breaks and hidden spirits', () => {
     const highlights = buildLiuyaoHighlights(chart({
         六爻: [
             line('九五', '官鬼', '申', '金', { 动静状态: 'hidden_moving', 伏神: { 六亲: '妻财', 纳甲: '寅', 五行: '木', 关系: '飞克伏' } }),
-            line('六二', '子孙', '亥', '水', { 动静状态: 'day_break' }),
+            line('六二', '子孙', '亥', '水', { 动静状态: 'day_break', 动静: '日破' }),
+            line('初六', '兄弟', '寅', '木', { 动静状态: 'day_break', 动静: '月破' }),
         ],
         干支时间: [{ 柱: '日', 干支: '丁巳', 空亡: [] }],
         卦级分析: ['六冲卦：是'],
     }));
 
-    assert.deepEqual(highlights, ['六爻安静，无动爻', '六二子孙亥水日破', '九五官鬼申金暗动', '日辰丁巳', '六冲卦：是', '妻财寅木伏于九五下']);
+    assert.deepEqual(highlights, ['六爻安静，无动爻', '初六兄弟寅木月破', '六二子孙亥水日破', '九五官鬼申金暗动', '日辰丁巳', '六冲卦：是', '妻财寅木伏于九五下']);
 });
 
 test('liuyao highlights describe where each yongshen sits when it is not on the shi line', () => {

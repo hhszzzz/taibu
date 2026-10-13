@@ -1112,6 +1112,11 @@ function getYaoMovementState(yao: FullYaoInfo, strength: YaoStrength): YaoMoveme
   return 'static';
 }
 
+// day_break 状态同时涵盖日破与月破（状态值保持兼容），标签按实际来源区分
+function getYaoMovementLabel(movementState: YaoMovementState, strength: YaoStrength): string {
+  return movementState === 'day_break' ? SPECIAL_STATUS_LABELS[strength.specialStatus] : MOVEMENT_LABELS[movementState];
+}
+
 function getChangSheng(wuXing: WuXing, diZhi: DiZhi): ShiErChangSheng {
   return WUXING_CHANG_SHENG_TABLE[wuXing][diZhi];
 }
@@ -2079,7 +2084,7 @@ export function performFullAnalysis(
       ...yao,
       isChanging: yao.change === 'changing',
       movementState,
-      movementLabel: MOVEMENT_LABELS[movementState],
+      movementLabel: getYaoMovementLabel(movementState, strength),
       kongWangState,
       influence,
       strength,

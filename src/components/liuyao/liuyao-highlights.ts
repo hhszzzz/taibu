@@ -39,7 +39,7 @@ function describeMovingLines(lines: readonly LiuyaoLine[]): string[] {
 }
 
 /**
- * 盘面要点短句，顺序：用神 → 动爻（自下而上）→ 暗动 / 日破 → 日辰旬空 → 卦级关系 → 伏神。
+ * 盘面要点短句，顺序：用神 → 动爻（自下而上）→ 暗动 / 日破 / 月破 → 日辰旬空 → 卦级关系 → 伏神。
  * 告警（提示）与卦身、全局神煞由调用方单独呈现。
  */
 export function buildLiuyaoHighlights(analysis: LiuyaoCanonicalJSON): string[] {
@@ -50,7 +50,8 @@ export function buildLiuyaoHighlights(analysis: LiuyaoCanonicalJSON): string[] {
     highlights.push(...describeMovingLines(lines));
     for (const line of lines) {
         if (line.动静状态 === 'hidden_moving') highlights.push(`${line.爻位}${ganZhi(line)}暗动`);
-        if (line.动静状态 === 'day_break') highlights.push(`${line.爻位}${ganZhi(line)}日破`);
+        // day_break 涵盖日破与月破，具体是哪一种由 Core 的动静标签给出
+        if (line.动静状态 === 'day_break') highlights.push(`${line.爻位}${ganZhi(line)}${line.动静}`);
     }
     const day = analysis.干支时间.find((pillar) => pillar.柱 === '日');
     if (day) highlights.push(day.空亡.length > 0 ? `日辰${day.干支}，旬空${day.空亡.join('')}` : `日辰${day.干支}`);

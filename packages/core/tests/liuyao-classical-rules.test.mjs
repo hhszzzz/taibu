@@ -192,3 +192,39 @@ test('liuyao picks the main 用神 by 持世、临月日、旺衰、动静、伤
   assert.equal(groupOf(unhurt).selected.position, 1);
   assert.match(groupOf(unhurt).selectionNote, /初六爻无伤，六四爻旬空，「舍其旬空，用其不空」（《增删卜易·两现章》）/u);
 });
+
+test('liuyao judges 伏神 by the six 有用 and five 不得出 conditions of 飞伏神章', async () => {
+  // 《增删卜易·飞伏神章》「伏神有用者有六…伏神终不得出者有五」，各条例俱出本章
+  const fuShenOf = async (hexagramName, date, target) => {
+    const result = await cast(hexagramName, date, { yongShenTargets: [target] });
+    const group = result.yongShen[0];
+    assert.equal(group.selectionStatus, 'from_fushen');
+    return { selected: group.selected, fuShen: result.fuShen[0] };
+  };
+
+  // 贲卦例 卯月壬辰日：午火父母月生而旺相，伏于丑土之下又逢旬空，「许甲午日出空必得」
+  const ben = await fuShenOf('山火贲', '2024-03-29T10:00:00', '父母');
+  assert.equal(ben.fuShen.availabilityStatus, 'available');
+  assert.equal(ben.selected.strengthLabel, '伏神有用');
+  assert.equal(ben.selected.kongWangState, 'kong_supported');
+  assert.ok(ben.selected.evidence.includes('伏于六二爻兄弟丑土之下'));
+
+  // 复卦例 卯月丙辰日：「旺木以生巳火，飞来生伏」
+  const fu = await fuShenOf('地雷复', '2019-03-20T10:00:00', '父母');
+  assert.equal(fu.fuShen.availabilityStatus, 'available');
+  assert.ok(fu.selected.evidence.includes('飞来生伏'));
+
+  // 升卦例 酉月丙辰日：午火休囚无助，而飞神丑土旬空，「空下伏神，易于引拔…许午日子孙出现」
+  const sheng = await fuShenOf('地风升', '2019-09-16T10:00:00', '子孙');
+  assert.equal(sheng.fuShen.availabilityStatus, 'conditional');
+  assert.ok(sheng.selected.evidence.includes('飞神虽有若无（旬空、无气、日墓）'));
+
+  // 遁卦例：辰土飞来克子水伏神。午月飞神旺相，「伏神受制，有用亦无用矣」
+  const dun = await fuShenOf('天山遯', '2024-06-10T10:00:00', '子孙');
+  assert.equal(dun.fuShen.availabilityStatus, 'blocked');
+  assert.equal(dun.selected.evidence.at(-1), '旺相之飞神克伏，伏神受制，有用亦无用');
+  // 卯月甲戌日飞神虽日破，伏神被日辰克而月令无助：黄金策注「用爻休囚又被月建日辰制服，纵遇生扶，亦不济事也」
+  const ruled = await fuShenOf('天山遯', '2024-03-11T10:00:00', '子孙');
+  assert.equal(ruled.fuShen.availabilityStatus, 'blocked');
+  assert.equal(ruled.selected.evidence.at(-1), '伏神被日月冲克，纵遇生扶亦不济事');
+});

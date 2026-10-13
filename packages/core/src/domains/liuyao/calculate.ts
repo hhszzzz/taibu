@@ -1623,15 +1623,129 @@ function checkChongHeTransition(
   return { type: 'none' };
 }
 
+/** 伏神及其判据；判据与空亡只供候选用神，不进入公开的 FuShen */
+interface JudgedFuShen {
+  fuShen: FuShen;
+  evidence: string[];
+  kongWangState: KongWangState;
+}
+
+/**
+ * 伏神有用与否，按《增删卜易·飞伏神章》两列条文判定，不计分：
+ * - 有用者六：得日月生、旺相、得飞神生、得动爻生、日月动爻冲克飞神、飞神空破休囚墓绝；
+ * - 终不得出者五：休囚无气、被日月冲克、被旺相之飞神克、墓绝于日月飞爻、休囚值空月破。
+ * 两列相抵时依次论：
+ * 1. 旺相之飞神（不空不破、未被冲克）克伏，伏神受制，遁卦例「有用亦无用矣」；
+ * 2. 被日月冲克而日月无助者，黄金策「制中弱主难以维持」注「用爻休囚又被月建日辰制服，纵遇生扶，亦不济事也」；
+ * 3. 不旺相、无日月生扶，又无飞神动爻生扶者为休囚无气：飞神空破衰墓或受冲克者，「飞神逢破墓衰空，虽有若无，
+ *    所以伏神易于出现」（升卦例丑土旬空，许午日子孙出现），待值日出露；否则终不得出；
+ * 4. 日月一助一伤者相敌：得飞神动爻生伏或飞神受冲克、空破衰墓者可出，逢克者难出，余者待时；
+ * 5. 其余有气者有用（「虽曰不现亦如现矣」）；只凭飞神动爻生扶而又被动爻克者待时。
+ * 伏神逢日冲论被冲，不论暗动；旬空者有气则出空之日出（野鹤「凡用神旺相而遇旬空，出空之日则出矣」），
+ * 被制者为真空（《卜筮正宗·旬空论》「伏而被克…谓之真空」）。
+ */
+function judgeFuShen(
+  fu: { naJia: DiZhi; wuXing: WuXing; },
+  fei: FullYaoInfoExtended,
+  actors: readonly FullYaoInfo[],
+  monthZhi: DiZhi,
+  dayZhi: DiZhi,
+  kongWang: KongWang,
+): { status: FuShen['availabilityStatus']; evidence: string[]; conclusion: string; kongWangState: KongWangState; } {
+  const month: Judgement = LIU_CHONG[fu.naJia] === monthZhi
+    ? { verdict: 'hurt', notes: ['月破'] }
+    : judgeRelation('月', LIU_HE[monthZhi].partner === fu.naJia, getElementRelation(DIZHI_WUXING[monthZhi], fu.wuXing));
+  const day: Judgement = LIU_CHONG[fu.naJia] === dayZhi
+    ? { verdict: 'hurt', notes: ['日冲'] }
+    : judgeRelation('日', LIU_HE[dayZhi].partner === fu.naJia, getElementRelation(DIZHI_WUXING[dayZhi], fu.wuXing));
+  const helped = month.verdict === 'help' || day.verdict === 'help';
+  const hurt = month.verdict === 'hurt' || day.verdict === 'hurt';
+
+  const describe = (yao: FullYaoInfo) => `${traditionalYaoName(yao.position, yao.type)}${yao.naJia}${yao.wuXing}`;
+  const otherActors = actors.filter((actor) => actor.position !== fei.position);
+  const movingSupport = otherActors.filter((actor) => actor.wuXing === fu.wuXing || WUXING_SHENG[actor.wuXing] === fu.wuXing);
+  const movingHarm = otherActors.filter((actor) => WUXING_KE[actor.wuXing] === fu.wuXing);
+  const feiSheng = WUXING_SHENG[fei.wuXing] === fu.wuXing;
+  const feiKe = WUXING_KE[fei.wuXing] === fu.wuXing;
+  const strikesFei = (zhi: DiZhi) => LIU_CHONG[fei.naJia] === zhi || WUXING_KE[DIZHI_WUXING[zhi]] === fei.wuXing;
+  const feiStrikers = [
+    ...(strikesFei(monthZhi) ? ['月建'] : []),
+    ...(strikesFei(dayZhi) ? ['日辰'] : []),
+    ...otherActors.filter((actor) => strikesFei(actor.naJia)).map(describe),
+  ];
+  const feiSpecial = fei.strength.specialStatus === 'yuePo' || fei.strength.specialStatus === 'riPo' ? SPECIAL_STATUS_LABELS[fei.strength.specialStatus] : '';
+  const feiStage = fei.changSheng?.stage === '墓' || fei.changSheng?.stage === '绝' ? fei.changSheng.stage : undefined;
+  const feiFeeble = [
+    ...(isKongPending(fei.kongWangState) ? ['旬空'] : []),
+    ...(feiSpecial ? [feiSpecial] : fei.strength.level === 'weak' ? ['无气'] : []),
+    ...(feiStage ? [`日${feiStage}`] : []),
+  ];
+  const feiWangShuai = WANG_SHUAI_TABLE[monthZhi][fei.wuXing];
+  const feiSuppresses = feiKe && (feiWangShuai === 'wang' || feiWangShuai === 'xiang') && feiFeeble.length === 0 && feiStrikers.length === 0;
+
+  const wangShuai = WANG_SHUAI_TABLE[monthZhi][fu.wuXing];
+  const supported = feiSheng || movingSupport.length > 0;
+  const rooted = helped || supported;
+  const tombs = ([['月建', monthZhi], ['日辰', dayZhi], ['飞爻', fei.naJia]] as const).flatMap(([label, zhi]) => (
+    WUXING_MU[fu.wuXing] === zhi ? [`墓于${label}`] : WUXING_JUE[fu.wuXing] === zhi ? [`绝于${label}`] : []
+  ));
+
+  const evidence = [`月令${WANG_SHUAI_LABELS[wangShuai]}`, ...month.notes, ...day.notes];
+  if (feiSheng) evidence.push('飞来生伏');
+  if (feiKe) evidence.push('飞来克伏');
+  if (WUXING_SHENG[fu.wuXing] === fei.wuXing) evidence.push('伏去生飞（泄气）');
+  if (movingSupport.length > 0) evidence.push(`动爻生扶（${movingSupport.map(describe).join('、')}）`);
+  if (movingHarm.length > 0) evidence.push(`动爻克制（${movingHarm.map(describe).join('、')}）`);
+  if (feiStrikers.length > 0) evidence.push(`飞神受冲克（${feiStrikers.join('、')}）`);
+  if (feiFeeble.length > 0) evidence.push(`飞神虽有若无（${feiFeeble.join('、')}）`);
+  evidence.push(...tombs);
+
+  const exposed = feiStrikers.length > 0 || feiFeeble.length > 0;
+  let status: FuShen['availabilityStatus'];
+  let conclusion: string;
+  if (feiSuppresses) {
+    status = 'blocked';
+    conclusion = '旺相之飞神克伏，伏神受制，有用亦无用';
+  } else if (hurt && !helped) {
+    status = 'blocked';
+    conclusion = '伏神被日月冲克，纵遇生扶亦不济事';
+  } else if (!rooted) {
+    status = exposed ? 'conditional' : 'blocked';
+    conclusion = exposed ? '伏神休囚，而飞神虽有若无，易于引拔，待值日出露' : '伏神休囚无气，终不得出';
+  } else if (hurt) {
+    const lifted = supported || exposed;
+    const pressed = movingHarm.length > 0 || feiKe;
+    status = lifted && !pressed ? 'available' : pressed && !lifted ? 'blocked' : 'conditional';
+    conclusion = status === 'available' ? '日月相敌，得飞神动爻之助，伏神可出' : status === 'blocked' ? '日月相敌，又逢克制，伏神难出' : '日月相敌，伏神待出';
+  } else if (!helped && movingHarm.length > 0) {
+    status = 'conditional';
+    conclusion = '伏神无日月之助，生扶与克制相抵，伏神待出';
+  } else {
+    status = 'available';
+    conclusion = '伏神有用，虽曰不现亦如现矣';
+  }
+
+  const isKong = kongWang.kongDizhi.includes(fu.naJia);
+  const kongWangState: KongWangState = !isKong
+    ? 'not_kong'
+    : LIU_CHONG[fu.naJia] === dayZhi ? 'kong_ri_chong' : status === 'blocked' ? 'kong_static' : 'kong_supported';
+  if (kongWangState === 'kong_static') evidence.push('真空（伏而被制，到底为空）');
+  if (kongWangState === 'kong_supported') evidence.push('旬空（伏神有气，出空之日则出）');
+  if (kongWangState === 'kong_ri_chong') evidence.push('冲空');
+  return { status, evidence, conclusion, kongWangState };
+}
+
+/** 用神不上卦，取本宫首卦同位之爻为伏神（《增删卜易·飞伏神章》「因本宫首卦，父子财官六亲俱全之故耳」） */
 function calculateFuShen(
   hexagramCode: string,
-  fullYaos: FullYaoInfo[],
+  fullYaos: FullYaoInfoExtended[],
+  actors: readonly FullYaoInfo[],
   target: LiuQinType,
   gongElement: WuXing,
   monthZhi: DiZhi,
   dayZhi: DiZhi,
   kongWang: KongWang
-): FuShen[] {
+): JudgedFuShen[] {
   if (fullYaos.some((yao) => yao.liuQin === target)) {
     return [];
   }
@@ -1641,53 +1755,31 @@ function calculateFuShen(
     return [];
   }
 
-  const fuShenList: FuShen[] = [];
+  const judged: JudgedFuShen[] = [];
   for (let position = 1; position <= 6; position++) {
     const naJia = getNaJiaByHexagram(benGuaCode, position);
     const wuXing = DIZHI_WUXING[naJia];
     const liuQin = getLiuQin(gongElement, wuXing);
-    if (liuQin !== target) {
-      continue;
-    }
     const feiShen = fullYaos.find((item) => item.position === position);
-    if (!feiShen) {
+    if (liuQin !== target || !feiShen) {
       continue;
     }
-    const monthWuXing = DIZHI_WUXING[monthZhi];
-    const dayWuXing = DIZHI_WUXING[dayZhi];
-    let availabilityStatus: FuShen['availabilityStatus'] = 'conditional';
-    let availabilityReason = '伏神可参考，但仍待出伏或得助后方能实用。';
-
-    const fuShenHasMonthDaySupport = WUXING_SHENG[monthWuXing] === wuXing || WUXING_SHENG[dayWuXing] === wuXing
-      || monthWuXing === wuXing || dayWuXing === wuXing;
-
-    if (WUXING_KE[feiShen.wuXing] === wuXing) {
-      if (fuShenHasMonthDaySupport) {
-        availabilityStatus = 'conditional';
-        availabilityReason = '飞神克伏神，但伏神得月日生扶，克力减轻，仍可参看。';
-      } else {
-        availabilityStatus = 'blocked';
-        availabilityReason = '飞神克伏神，又无月日生扶，当前仍伏而难用。';
-      }
-    } else if (kongWang.kongDizhi.includes(naJia)) {
-      availabilityStatus = 'blocked';
-      availabilityReason = '伏神落空，须待冲空填实。';
-    } else if (feiShen.change === 'changing' || WUXING_SHENG[feiShen.wuXing] === wuXing || WUXING_SHENG[monthWuXing] === wuXing || WUXING_SHENG[dayWuXing] === wuXing) {
-      availabilityStatus = 'available';
-      availabilityReason = '伏神得飞神发动或月日生扶，可暂取用。';
-    }
-
-    fuShenList.push({
-      liuQin,
-      wuXing,
-      naJia,
-      feiShenPosition: position,
-      feiShenLiuQin: feiShen.liuQin,
-      availabilityStatus,
-      availabilityReason,
+    const { status, evidence, conclusion, kongWangState } = judgeFuShen({ naJia, wuXing }, feiShen, actors, monthZhi, dayZhi, kongWang);
+    judged.push({
+      fuShen: {
+        liuQin,
+        wuXing,
+        naJia,
+        feiShenPosition: position,
+        feiShenLiuQin: feiShen.liuQin,
+        availabilityStatus: status,
+        availabilityReason: `${conclusion}（${evidence.join('、')}）`,
+      },
+      evidence: [`伏于${traditionalYaoName(position, feiShen.type)}爻${feiShen.liuQin}${feiShen.naJia}${feiShen.wuXing}之下`, ...evidence, conclusion],
+      kongWangState,
     });
   }
-  return fuShenList;
+  return judged;
 }
 
 /**
@@ -1862,11 +1954,15 @@ function buildTemporalCandidates(
   return candidates;
 }
 
-function buildFuShenCandidate(fuShen: FuShen, kongWang: KongWang, attachedYao?: FullYaoInfoExtended): YongShenCandidate {
-  const strength = fuShen.availabilityStatus === 'available' ? 'moderate' : fuShen.availabilityStatus === 'conditional' ? 'weak' : 'unknown';
-  // 伏神自身地支的空亡状态（非飞神所在爻的空亡）
-  const fuShenIsKong = kongWang.kongDizhi.includes(fuShen.naJia);
-  const fuShenKongWangState: KongWangState = fuShenIsKong ? 'kong_static' : 'not_kong';
+/** 伏神之气随有用与否：有用者有气，待出者气平（相敌），难出者无气 */
+const FU_SHEN_STRENGTH: Record<FuShen['availabilityStatus'], { strength: YaoStrengthLevel; label: string; }> = {
+  available: { strength: 'strong', label: '伏神有用' },
+  conditional: { strength: 'moderate', label: '伏神待出' },
+  blocked: { strength: 'weak', label: '伏神难出' },
+};
+
+function buildFuShenCandidate({ fuShen, evidence, kongWangState }: JudgedFuShen, attachedYao?: FullYaoInfoExtended): YongShenCandidate {
+  const { strength, label } = FU_SHEN_STRENGTH[fuShen.availabilityStatus];
   return {
     liuQin: fuShen.liuQin,
     naJia: fuShen.naJia,
@@ -1874,13 +1970,13 @@ function buildFuShenCandidate(fuShen: FuShen, kongWang: KongWang, attachedYao?: 
     position: fuShen.feiShenPosition,
     source: 'fushen',
     strength,
-    strengthLabel: fuShen.availabilityStatus === 'available' ? '伏神可取' : fuShen.availabilityStatus === 'conditional' ? '伏神待出' : '伏神难取',
+    strengthLabel: label,
     movementState: 'static',
-    movementLabel: fuShen.availabilityStatus === 'available' ? '伏中可参' : '伏藏待时',
+    movementLabel: '伏藏',
     isShiYao: attachedYao?.isShiYao ?? false,
     isYingYao: attachedYao?.isYingYao ?? false,
-    kongWangState: fuShenKongWangState,
-    evidence: [`用神${fuShen.liuQin}不上卦`, fuShen.availabilityReason],
+    kongWangState,
+    evidence: [`用神${fuShen.liuQin}不上卦`, ...evidence],
   };
 }
 
@@ -2016,7 +2112,7 @@ function resolveRanked(
 
 interface YongShenContext {
   fullYaos: FullYaoInfoExtended[];
-  fuShenByTarget: Map<LiuQinType, FuShen[]>;
+  fuShenByTarget: Map<LiuQinType, JudgedFuShen[]>;
   gongElement: WuXing;
   monthZhi: DiZhi;
   dayZhi: DiZhi;
@@ -2081,14 +2177,16 @@ function buildYongShenGroups(targets: LiuQinType[], context: YongShenContext): Y
     }
 
     const fuShenCandidates = (fuShenByTarget.get(target) || [])
-      .map((item) => buildFuShenCandidate(item, kongWang, fullYaos.find((yao) => yao.position === item.feiShenPosition)))
+      .map((item) => buildFuShenCandidate(item, fullYaos.find((yao) => yao.position === item.fuShen.feiShenPosition)))
       .sort((a, b) => STRENGTH_ORDER[a.strength] - STRENGTH_ORDER[b.strength] || (a.position ?? 0) - (b.position ?? 0));
     if (fuShenCandidates.length > 0) {
       const [selected, ...candidates] = fuShenCandidates;
+      const feiShen = fullYaos.find((yao) => yao.position === selected.position);
+      const place = feiShen ? `伏于${yaoName(feiShen)}${feiShen.naJia}${feiShen.wuXing}之下` : '伏藏';
       return {
         targetLiuQin: target,
         selectionStatus: 'from_fushen',
-        selectionNote: `飞爻、变爻与月日均未稳取到${target}，转取伏神；当前需结合“出伏/生扶/冲空”条件并看。`,
+        selectionNote: `本卦、变爻与月日皆无${target}，于本宫首卦寻伏神：${target}${selected.naJia}${selected.element}${place}，${selected.strengthLabel}（《增删卜易·飞伏神章》）。`,
         selected,
         candidates,
       };
@@ -2427,9 +2525,9 @@ export function performFullAnalysis(
     }
   }
 
-  const fuShenByTarget = new Map<LiuQinType, FuShen[]>();
+  const fuShenByTarget = new Map<LiuQinType, JudgedFuShen[]>();
   for (const target of targets) {
-    fuShenByTarget.set(target, calculateFuShen(hexagramCode, baseYaos, target, gongElement, monthZhi, dayZhi, kongWang));
+    fuShenByTarget.set(target, calculateFuShen(hexagramCode, fullYaos, actors, target, gongElement, monthZhi, dayZhi, kongWang));
   }
 
   const yongShen = buildYongShenGroups(targets, { fullYaos, fuShenByTarget, gongElement, monthZhi, dayZhi, kongWang, movingHarmByPosition });
@@ -2445,7 +2543,7 @@ export function performFullAnalysis(
   const timeRecommendations = calculateTimeRecommendations(yongShen);
   const globalShenSha = calculateGlobalShenSha(shenShaContext);
   const warnings = buildWarnings(yongShen, sanHeAnalysis, guaFanFuYin, chongHeTransition);
-  const fuShen = Array.from(fuShenByTarget.values()).flat();
+  const fuShen = Array.from(fuShenByTarget.values()).flat().map((item) => item.fuShen);
 
   return {
     ganZhiTime,

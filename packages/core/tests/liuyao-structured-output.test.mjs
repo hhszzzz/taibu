@@ -345,3 +345,38 @@ test('liuyao should preserve multiple full sanhe groups when the same board cont
     ['寅午戌合火局', '申子辰合水局']
   );
 });
+
+test('formatGuaLevelLines labels 半合 types in Chinese and never leaks the internal enum', () => {
+  const lines = mcpCore.formatGuaLevelLines({
+    sanHeAnalysis: {
+      hasFullSanHe: false,
+      hasBanHe: true,
+      banHe: [
+        { branches: ['寅', '午'], result: '火', type: 'sheng' },
+        { branches: ['午', '戌'], result: '火', type: 'mu' },
+        { branches: ['子', '辰'], result: '水', type: 'unknown' },
+      ],
+    },
+  });
+  assert.deepEqual(lines, ['半合：寅午→火（生地半合）', '半合：午戌→火（墓地半合）', '半合：子辰→水']);
+});
+
+test('liuyao canonical JSON and text describe real 半合 cases with Chinese type labels', async () => {
+  for (const [yaoValues, expected] of [
+    [[7, 9, 8, 8, 6, 7], '半合：申子→水（生地半合）'],
+    [[8, 8, 9, 7, 7, 6], '半合：卯未→木（墓地半合）'],
+  ]) {
+    const result = await mcpCore.calculateLiuyao({
+      question: '近期计划是否顺利',
+      yongShenTargets: ['官鬼'],
+      method: 'coins',
+      yaoValues,
+      date: '2026-01-10T12:00:00',
+    });
+    assert.ok(mcpCore.toLiuyaoCanonicalJson(result).卦级分析.includes(expected), expected);
+    assert.match(mcpCore.toLiuyaoCanonicalText(result), new RegExp(`- ${expected}`, 'u'));
+    for (const text of [mcpCore.toLiuyaoCanonicalText(result), mcpCore.toLiuyaoText(result, { detailLevel: 'full' })]) {
+      assert.doesNotMatch(text, /（(?:sheng|mu)）/u);
+    }
+  }
+});

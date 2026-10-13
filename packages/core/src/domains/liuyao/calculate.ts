@@ -363,6 +363,16 @@ export function formatGanZhiTime(gz: { year: { gan: string; zhi: string; }; mont
   return `${gz.year.gan}${gz.year.zhi}年 ${gz.month.gan}${gz.month.zhi}月 ${gz.day.gan}${gz.day.zhi}日 ${gz.hour.gan}${gz.hour.zhi}时`;
 }
 
+/** 半合类型：生地半合（长生 + 帝旺）、墓地半合（帝旺 + 墓库） */
+const BAN_HE_TYPE_LABELS: Record<'sheng' | 'mu', string> = {
+  sheng: '生地半合',
+  mu: '墓地半合',
+};
+
+function formatBanHeType(type: string): string {
+  return Object.hasOwn(BAN_HE_TYPE_LABELS, type) ? `（${BAN_HE_TYPE_LABELS[type as keyof typeof BAN_HE_TYPE_LABELS]}）` : '';
+}
+
 /**
  * 卦级分析行（六冲/六合/冲合转换/反吟伏吟/三合/半合/全局神煞）
  * 返回纯文本行数组，调用方自行决定前缀
@@ -406,7 +416,7 @@ export function formatGuaLevelLines(analysis: {
     }
     if (sanHeAnalysis.hasBanHe && sanHeAnalysis.banHe?.length) {
       for (const bh of sanHeAnalysis.banHe) {
-        parts.push(`半合：${bh.branches.join('')}→${bh.result}（${bh.type}）`);
+        parts.push(`半合：${bh.branches.join('')}→${bh.result}${formatBanHeType(bh.type)}`);
       }
     }
   }

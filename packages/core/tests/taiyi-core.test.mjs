@@ -76,3 +76,19 @@ test('taiyi should validate mode-specific hour and minute requirements', () => {
     /minute/u,
   );
 });
+
+test('taiyi four pillars change year at 立春 like the month pillar and the year star', () => {
+  // 2024-02-06 在立春之后、春节之前；2023-01-25 在春节之后、立春之前
+  for (const [date, pillars, yearStar] of [
+    ['2024-02-06', '甲辰 丙寅', 3],
+    ['2023-01-25', '壬寅 癸丑', 5],
+  ]) {
+    for (const system of ['nine-star', 'traditional']) {
+      const result = calculateTaiyi({ mode: 'year', date, hour: 12, system, timezone: 'Asia/Shanghai' });
+      const json = toTaiyiJson(result);
+      assert.ok(json.问卜与时空底盘.四柱.startsWith(`${pillars} `), `${system} ${date}: ${json.问卜与时空底盘.四柱}`);
+      assert.match(toTaiyiText(result), new RegExp(`${pillars.replace(' ', '年 ')}月`, 'u'));
+      if (system === 'nine-star') assert.equal(result.coreBoard.yearStar.index, yearStar);
+    }
+  }
+});

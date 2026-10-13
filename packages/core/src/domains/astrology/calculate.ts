@@ -502,6 +502,11 @@ function createTransitOrigin(
   return alignOrigin(origin, transit, input, explicitInstant);
 }
 
+// 南交点恒在北交点对面：这组 0° 容许度的对冲是定义而非相位，不应排在本命相位首位
+function isNodeAxis(left: AstrologyFactor, right: AstrologyFactor): boolean {
+  return (left.key === 'northnode' && right.key === 'southnode') || (left.key === 'southnode' && right.key === 'northnode');
+}
+
 function sortAspects(aspects: AstrologyAspect[]): AstrologyAspect[] {
   return [...aspects].sort((left, right) => {
     if (left.orb !== right.orb) return left.orb - right.orb;
@@ -534,6 +539,7 @@ export function calculateAstrology(input: AstrologyInput): AstrologyOutput {
 
   const natalFactors = [...natal.bodies, ...natal.points, ...natal.angles];
   const majorAspects = sortAspects(natalFactors.flatMap((from, index) => natalFactors.slice(index + 1).flatMap(to => {
+    if (isNodeAxis(from, to)) return [];
     const aspect = computeMajorAspect(from, to, aspectOrbs);
     return aspect ? [aspect] : [];
   })));

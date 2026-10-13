@@ -180,15 +180,21 @@ function getXunShou(dayStem: string, dayBranch: string): string {
   return `甲${DI_ZHI[startZhiIdx]}`;
 }
 
+/** 六十甲子序号（甲子为 0） */
+function sexagenaryIndex(stem: string, branch: string): number {
+  const stemIndex = TIAN_GAN.indexOf(stem as typeof TIAN_GAN[number]);
+  const branchIndex = DI_ZHI.indexOf(branch as typeof DI_ZHI[number]);
+  if (stemIndex < 0 || branchIndex < 0 || stemIndex % 2 !== branchIndex % 2) throw new Error('奇门日干支不可用');
+  return stemIndex + ((stemIndex - branchIndex + 12) % 12) * 5;
+}
+
 // taobi cannot accept pillar-only input without its ephemeris side data. A
 // modern Jia-Zi cycle supplies the same day/hour without its pre-1970 offset bug.
-function taobiCalendarDate(dayStem: string, dayBranch: string, hour: number, minute: number): Date {
-  const stemIndex = TIAN_GAN.indexOf(dayStem as typeof TIAN_GAN[number]);
-  const branchIndex = DI_ZHI.indexOf(dayBranch as typeof DI_ZHI[number]);
-  if (stemIndex < 0 || branchIndex < 0 || stemIndex % 2 !== branchIndex % 2) throw new Error('奇门日干支不可用');
-  const dayIndex = stemIndex + ((stemIndex - branchIndex + 12) % 12) * 5;
+function taobiCalendarDate(dayIndex: number, hour: number, minute: number, dayShift = 0): Date {
   // 2024-01-01 is Jia-Zi; this date is used only for rotation with an explicit bureau.
-  return new Date(Date.UTC(2024, 0, 1 + dayIndex, (hour === 23 ? 0 : hour) - 8, minute));
+  // taobi 按运行环境本地钟面取日时柱，浏览器又不能改 TZ：用本地时间构造，任何时区下钟面都是目标日时
+  // （此段日期各时区均无夏令时切换；Node 中 TZ 已设为北京时间，所得时刻与原先一致）。
+  return new Date(2024, 0, 1 + dayIndex + dayShift, hour === 23 ? 0 : hour, minute);
 }
 
 // ===== 核心推演函数 =====
@@ -225,8 +231,13 @@ export function calculateQimenData(input: QimenInput): Promise<QimenOutput> {
       let t: TaobiChartLike | null = null;
       try {
         if (TheArtOfBecomingInvisible) {
-          const backendDate = taobiCalendarDate(clockEightChar.getDayGan(), clockEightChar.getDayZhi(), hour, minute);
-          t = new TheArtOfBecomingInvisible(backendDate, bureau.round, null, followOption, { elements: elementsOption });
+          const dayIndex = sexagenaryIndex(clockEightChar.getDayGan(), clockEightChar.getDayZhi());
+          const build = (dayShift: number) => new TheArtOfBecomingInvisible(
+            taobiCalendarDate(dayIndex, hour, minute, dayShift), bureau.round, null, followOption, { elements: elementsOption });
+          t = build(0);
+          // tao_calendar 的纪日起点按运行时区的历史地方时换算（只为北京时间校正过），浏览器不在北京时间时会整日错位：按差值平移一次
+          const drift = ((dayIndex - sexagenaryIndex(t.date.cs(true), t.date.tb(true))) % 60 + 90) % 60 - 30;
+          if (drift !== 0) t = build(drift);
           if (t.date.cs(true) !== clockEightChar.getDayGan() || t.date.tb(true) !== clockEightChar.getDayZhi()
             || t.hour.cs(true) !== clockEightChar.getTimeGan() || t.hour.tb(true) !== clockEightChar.getTimeZhi()) {
             throw new Error('转盘日时干支与历法不一致');

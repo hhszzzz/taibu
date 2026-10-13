@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { calculateQimen, toQimenJson, toQimenText } from 'taibu-core';
 
 const birth = { year: 2024, month: 1, day: 1, hour: 3, juNumber: 1, dunType: 'yang' };
@@ -47,6 +48,29 @@ test('rotating late Zi uses the displayed next-day pillars without depending on 
     const civilReference = await calculateQimen({ ...birth, year, month, day: day + 1, hour: 0, timezone: 'Etc/GMT-8' });
     assert.equal(late.siZhu.hour, civilReference.siZhu.hour);
     assert.deepEqual(layers(late), layers(civilReference), timezone);
+  }
+});
+
+test('rotating board is identical where process.env.TZ cannot be overridden, as in browsers', async () => {
+  const inputs = [{ ...birth, hour: 12, juNumber: 9 }, { ...birth, hour: 23, minute: 30 }];
+  const layers = chart => chart.palaces.map(palace => [palace.heavenStem, palace.earthStem, palace.star, palace.gate, palace.deity]);
+  const expected = await Promise.all(inputs.map(async input => layers(await calculateQimen(input))));
+  // 浏览器里写 process.env.TZ 不改变本地时区：子进程拦截对 TZ 的写入来模拟
+  const script = `
+    process.env = new Proxy(process.env, {
+      set(target, key, value) { if (key !== 'TZ') target[key] = value; return true; },
+      deleteProperty(target, key) { if (key !== 'TZ') delete target[key]; return true; },
+    });
+    const { calculateQimen } = await import('taibu-core');
+    const charts = [];
+    for (const input of ${JSON.stringify(inputs)}) charts.push(await calculateQimen(input));
+    console.log(JSON.stringify(charts.map(chart => chart.palaces.map(palace => [palace.heavenStem, palace.earthStem, palace.star, palace.gate, palace.deity]))));
+  `;
+  for (const timeZone of ['America/New_York', 'Pacific/Kiritimati', 'UTC']) {
+    const output = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+      cwd: process.cwd(), env: { ...process.env, TZ: timeZone }, encoding: 'utf8',
+    });
+    assert.deepEqual(JSON.parse(output.trim()), expected, timeZone);
   }
 });
 

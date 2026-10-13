@@ -197,13 +197,20 @@ export type YaoMovementState = 'static' | 'changing' | 'hidden_moving' | 'day_br
 
 export type WangShuai = 'wang' | 'xiang' | 'xiu' | 'qiu' | 'si';
 
-export type KongWangState = 'not_kong' | 'kong_static' | 'kong_changing' | 'kong_ri_chong' | 'kong_yue_jian';
+/**
+ * 旬空状态：kong_static 真空（静而无气、无日建动爻生扶）；kong_supported 假空（旺相或得日建、动爻生扶，旬内仍空，出空有用）；
+ * kong_changing 动空；kong_ri_chong 冲空则实；kong_yue_jian 临月建而空（出空有用）。
+ */
+export type KongWangState = 'not_kong' | 'kong_static' | 'kong_supported' | 'kong_changing' | 'kong_ri_chong' | 'kong_yue_jian';
 
 export type YaoSpecialStatus = 'none' | 'anDong' | 'riPo' | 'yuePo';
 
 export type YongShenSelectionStatus = 'resolved' | 'ambiguous' | 'from_changed' | 'from_temporal' | 'from_fushen' | 'missing';
 
-export type CandidateStrength = 'strong' | 'moderate' | 'weak' | 'unknown';
+/** 日月论爻之气：strong 有气 / moderate 气平（日月相敌）/ weak 无气 */
+export type YaoStrengthLevel = 'strong' | 'moderate' | 'weak';
+
+export type CandidateStrength = YaoStrengthLevel | 'unknown';
 
 export interface ChangedYaoDetail {
   type: number;
@@ -225,6 +232,8 @@ export interface GanZhiTime {
 
 export interface YaoStrengthInfo {
   wangShuai: WangShuai;
+  level: YaoStrengthLevel;
+  /** 等同 level === 'strong' */
   isStrong: boolean;
   specialStatus: YaoSpecialStatus;
   evidence: string[];

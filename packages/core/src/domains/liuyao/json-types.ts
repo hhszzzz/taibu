@@ -165,7 +165,7 @@ export interface LiuyaoYaoJSON {
   动静状态?: string;
   动静: string;
   空亡?: string;
-  /** 本爻五行在日辰的长生/帝旺/墓/绝；其余八位六爻不用，不输出 */
+  /** 本爻在日辰实际作用的长生/帝旺/墓/绝（「论生不论墓」等被否定者与其余八位不输出） */
   长生?: string;
   神煞?: string[];
   变爻?: {

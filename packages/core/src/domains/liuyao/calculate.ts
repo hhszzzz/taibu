@@ -17,7 +17,7 @@ import type {
   TianGan,
   WangShuai,
   WuXing,
-  YaoMovementState, YaoSpecialStatus, YongShenSelectionStatus,
+  YaoMovementState, YaoSpecialStatus, YaoStrengthLevel, YongShenSelectionStatus,
 } from '../shared/types.js';
 import { getKongWang as getKongWangByPillarSource } from '../../shared/utils.js';
 export type { Hexagram } from '../../data/hexagrams.js';
@@ -28,7 +28,7 @@ const HEXAGRAM_BY_NAME = new Map<string, Hexagram>(HEXAGRAMS.map(h => [h.name, h
 
 export type { LiuyaoInput, LiuyaoOutput } from './types.js';
 export type {
-  DerivedHexagramInfo, DiZhi, GuaShenInfo, KongWangState, LiuQinType, TianGan, WangShuai, WuXing, YaoMovementState, YaoSpecialStatus, YongShenSelectionStatus
+  DerivedHexagramInfo, DiZhi, GuaShenInfo, KongWangState, LiuQinType, TianGan, WangShuai, WuXing, YaoMovementState, YaoSpecialStatus, YaoStrengthLevel, YongShenSelectionStatus
 } from '../shared/types.js';
 export type LiuShen = '青龙' | '朱雀' | '勾陈' | '螣蛇' | '白虎' | '玄武';
 export type YaoType = 0 | 1;
@@ -89,6 +89,9 @@ export interface YaoInfluence {
 
 export interface YaoStrength {
   wangShuai: WangShuai;
+  /** 日月论爻之气，见 judgeLine */
+  level: YaoStrengthLevel;
+  /** 等同 level === 'strong' */
   isStrong: boolean;
   specialStatus: YaoSpecialStatus;
   evidence: string[];
@@ -303,10 +306,17 @@ export const WANG_SHUAI_LABELS: Record<WangShuai, string> = {
 
 export const KONG_WANG_LABELS: Record<KongWangState, string> = {
   not_kong: '',
-  kong_static: '空',
+  kong_static: '真空',
+  kong_supported: '假空',
   kong_changing: '动空',
   kong_ri_chong: '冲空',
   kong_yue_jian: '临建',
+};
+
+const STRENGTH_LABELS: Record<YaoStrengthLevel, string> = {
+  strong: '有气',
+  moderate: '气平',
+  weak: '无气',
 };
 
 export const SPECIAL_STATUS_LABELS: Record<YaoSpecialStatus, string> = {
@@ -613,9 +623,6 @@ const CHANG_SHENG_STRENGTH: Record<ShiErChangSheng, 'strong' | 'medium' | 'weak'
   胎: 'medium',
   养: 'medium',
 };
-
-// 六爻只验生旺墓绝，且以日辰论：《增删卜易·生旺墓绝章》「只验生旺墓绝，其馀不验」「若在亥日占卦即主事爻长生于亥日」
-const DAY_STAGES_USED = new Set<ShiErChangSheng>(['长生', '帝旺', '墓', '绝']);
 
 export const TRIGRAM_NA_JIA: Record<string, TrigramNaJia> = {
   乾: { element: '金', lower: ['子', '寅', '辰'], upper: ['午', '申', '戌'] },
@@ -973,28 +980,6 @@ export function calculateKongWangByPillar(ganZhiTime: GanZhiTime): KongWangByPil
   };
 }
 
-export function checkYaoKongWang(
-  yaoZhi: DiZhi,
-  kongWang: KongWang,
-  monthZhi: DiZhi,
-  dayZhi: DiZhi,
-  isChanging: boolean
-): KongWangState {
-  if (!kongWang.kongDizhi.includes(yaoZhi)) {
-    return 'not_kong';
-  }
-  if (yaoZhi === monthZhi) {
-    return 'kong_yue_jian';
-  }
-  if (LIU_CHONG[yaoZhi] === dayZhi) {
-    return 'kong_ri_chong';
-  }
-  if (isChanging) {
-    return 'kong_changing';
-  }
-  return 'kong_static';
-}
-
 export function getZhiAction(sourceZhi: DiZhi, targetZhi: DiZhi): YaoAction {
   if (LIU_CHONG[sourceZhi] === targetZhi) {
     return 'chong';
@@ -1033,75 +1018,260 @@ export function getYaoInfluence(yaoZhi: DiZhi, monthZhi: DiZhi, dayZhi: DiZhi): 
   };
 }
 
-function getStrengthLevel(strength: YaoStrength, kongWangState: KongWangState): 'strong' | 'moderate' | 'weak' {
-  if (strength.specialStatus === 'riPo' || strength.specialStatus === 'yuePo' || kongWangState === 'kong_static') {
-    return 'weak';
-  }
-  if (strength.specialStatus === 'anDong') {
-    return 'strong';
-  }
-  if (strength.wangShuai === 'wang' || strength.wangShuai === 'xiang') {
-    return 'strong';
-  }
-  if (strength.wangShuai === 'xiu' || kongWangState === 'kong_changing' || kongWangState === 'kong_ri_chong' || kongWangState === 'kong_yue_jian') {
-    return 'moderate';
-  }
-  return 'weak';
+type Verdict = 'help' | 'neutral' | 'hurt';
+
+interface Judgement {
+  verdict: Verdict;
+  notes: string[];
 }
 
-export function calculateYaoStrength(
+interface DayJudgement extends Judgement {
+  /** 静爻逢日冲：旺相为暗动，休囚为日破 */
+  specialStatus: 'none' | 'anDong' | 'riPo';
+  /** 实际作用的生旺墓绝（被「论生不论墓」等条文否定者不计） */
+  stage?: ShiErChangSheng;
+  /** 日辰之助全凭动爻生扶才成立（如土爻无根逢子日，得动爻生扶方论帝旺），相敌时不再重复计此动爻 */
+  reliesOnMovingSupport?: boolean;
+}
+
+/** source 对 target 的五行作用：生、扶（同类）、克、泄（target 生 source）、耗（target 克 source） */
+type ElementRelation = 'sheng' | 'fu' | 'ke' | 'xie' | 'hao';
+
+function getElementRelation(source: WuXing, target: WuXing): ElementRelation {
+  if (source === target) return 'fu';
+  if (WUXING_SHENG[source] === target) return 'sheng';
+  if (WUXING_KE[source] === target) return 'ke';
+  return WUXING_SHENG[target] === source ? 'xie' : 'hao';
+}
+
+function judgeRelation(prefix: '月' | '日', isHe: boolean, relation: ElementRelation): Judgement {
+  const heNotes = isHe ? [`${prefix}合`] : [];
+  if (relation === 'ke') return { verdict: 'hurt', notes: [isHe ? `${prefix}合带克` : `${prefix}克`] };
+  if (relation === 'fu') return { verdict: 'help', notes: [`${prefix}扶`, ...heNotes] };
+  if (relation === 'sheng') return { verdict: 'help', notes: [`${prefix}生`, ...heNotes] };
+  return { verdict: isHe ? 'help' : 'neutral', notes: heNotes };
+}
+
+/**
+ * 月建论爻（《增删卜易·月将章》）：临月建、月扶（旺）、月生（相）为助；休囚逢月合「衰而亦旺」亦为助；
+ * 月克（死）为伤，合而带克仍是克；其余休囚无助。月破另论，见 judgeLine。
+ */
+function judgeMonth(yaoZhi: DiZhi, yaoWuXing: WuXing, monthZhi: DiZhi): Judgement {
+  if (yaoZhi === monthZhi) return { verdict: 'help', notes: ['临月建'] };
+  return judgeRelation('月', LIU_HE[monthZhi].partner === yaoZhi, getElementRelation(DIZHI_WUXING[monthZhi], yaoWuXing));
+}
+
+/**
+ * 日辰论爻：
+ * - 临日建为助。静爻逢日冲，旺相为暗动（冲而带克仍为伤），休囚为日破（《日辰章》《暗动章》）；
+ *   动爻逢冲不散，冲而带克为伤（《动散章》）；辰戌、丑未虽同类，相冲不作扶，墓逢冲则开不论入墓。
+ * - 只验生旺墓绝，且须看本爻有根无根（《生旺墓绝章》觉子注）：长生、帝旺须日辰本生扶，或月令旺相，或得动爻生扶，
+ *   否则不论（金爻休囚逢巳日「论克不论生」）；日墓为伤，惟日辰本生扶而本爻又旺相或得动爻生扶者论生不论墓；
+ *   日绝为伤，月令当权则逢绝不绝（《月将章》），日辰本生扶而得动爻生扶者论生不论绝。
+ * - 其余：日生、日扶、日合为助，日克、合而带克为伤，泄、耗、相破无助无伤。
+ */
+function judgeDay(
+  yaoZhi: DiZhi,
   yaoWuXing: WuXing,
-  monthZhi: DiZhi,
+  dayZhi: DiZhi,
   isChanging: boolean,
-  kongWangState: KongWangState,
-  influence: YaoInfluence,
-  yaoZhi: DiZhi
-): YaoStrength {
-  const wangShuai = WANG_SHUAI_TABLE[monthZhi][yaoWuXing];
-  const evidence = [`月令${WANG_SHUAI_LABELS[wangShuai]}`];
-  const isWangXiang = wangShuai === 'wang' || wangShuai === 'xiang';
-  let specialStatus: YaoSpecialStatus = 'none';
-
-  if (influence.monthAction === 'sheng') evidence.push('月生');
-  if (influence.monthAction === 'fu') evidence.push('月扶');
-  if (influence.monthAction === 'ke') evidence.push('月克');
-  if (influence.monthAction === 'chong') evidence.push('月冲');
-  if (influence.dayAction === 'sheng') evidence.push('日生');
-  if (influence.dayAction === 'fu') evidence.push('日扶');
-  if (influence.dayAction === 'ke') evidence.push('日克');
-  if (isChanging) evidence.push('明动');
-
-  // 月破：爻的地支被月建冲，不论旺衰，整月无力（比日破更严重）
-  if (LIU_CHONG[yaoZhi] === monthZhi && !isChanging) {
-    specialStatus = 'yuePo';
-    evidence.push('月破（被月建冲，整月无力）');
+  monthHelps: boolean,
+  movingSupport: boolean,
+): DayJudgement {
+  const rawStage = getChangSheng(yaoWuXing, dayZhi);
+  if (yaoZhi === dayZhi) {
+    return { verdict: 'help', notes: ['临日建'], specialStatus: 'none', ...(rawStage === '长生' || rawStage === '帝旺' ? { stage: rawStage } : {}) };
   }
-
-  // 日破/暗动：仅在未被月破时判定
-  if (specialStatus === 'none' && influence.dayAction === 'chong' && !isChanging) {
-    if (isWangXiang) {
-      specialStatus = 'anDong';
-      evidence.push('旺相逢冲为暗动');
-    } else {
-      specialStatus = 'riPo';
-      evidence.push('休囚逢冲为日破');
+  const relation = getElementRelation(DIZHI_WUXING[dayZhi], yaoWuXing);
+  const isChong = LIU_CHONG[yaoZhi] === dayZhi;
+  const stage = isChong && rawStage === '墓' ? undefined : rawStage;
+  if (isChong && !isChanging) {
+    if (!monthHelps) {
+      return stage === '绝'
+        ? { verdict: 'hurt', notes: ['日破（休囚静爻逢日冲）', '日绝'], specialStatus: 'riPo', stage }
+        : { verdict: 'hurt', notes: ['日破（休囚静爻逢日冲）'], specialStatus: 'riPo' };
     }
+    return relation === 'ke'
+      ? { verdict: 'hurt', notes: ['暗动（旺相静爻逢日冲）', '日冲带克'], specialStatus: 'anDong' }
+      : { verdict: 'help', notes: ['暗动（旺相静爻逢日冲，愈得其力）'], specialStatus: 'anDong' };
   }
 
-  if (kongWangState === 'kong_static') evidence.push('静空');
-  if (kongWangState === 'kong_changing') evidence.push('动空');
-  if (kongWangState === 'kong_ri_chong') evidence.push('冲空');
-  if (kongWangState === 'kong_yue_jian') evidence.push('临建不空');
+  const byRelation: Judgement = isChong
+    ? { verdict: relation === 'ke' ? 'hurt' : 'neutral', notes: [relation === 'ke' ? '日冲带克' : '动爻逢日冲不散'] }
+    : judgeRelation('日', LIU_HE[dayZhi].partner === yaoZhi, relation);
+  const rootedByDay = !isChong && (relation === 'sheng' || relation === 'fu');
+  const hurtNotes = byRelation.verdict === 'hurt' ? byRelation.notes : [];
+  const result = (verdict: Verdict, notes: string[], appliedStage?: ShiErChangSheng, reliesOnMovingSupport = false): DayJudgement => ({
+    verdict,
+    notes,
+    specialStatus: 'none',
+    ...(appliedStage ? { stage: appliedStage } : {}),
+    ...(reliesOnMovingSupport ? { reliesOnMovingSupport } : {}),
+  });
 
-  const baseStrong = specialStatus === 'anDong' || isWangXiang || (wangShuai === 'xiu' && influence.dayAction === 'sheng');
-  const isStrong = specialStatus !== 'riPo' && specialStatus !== 'yuePo' && kongWangState !== 'kong_static' && baseStrong;
+  if (stage === '长生' || stage === '帝旺') {
+    if (rootedByDay || monthHelps || movingSupport) {
+      const helpNotes = byRelation.verdict === 'help' ? byRelation.notes : [];
+      const viaMoving = !rootedByDay && !monthHelps && byRelation.verdict !== 'help';
+      const qualifier = viaMoving ? '（得动爻生扶为根）' : hurtNotes.length > 0 ? '，论生不论克' : '';
+      return result('help', [...helpNotes, `日辰${stage}${qualifier}`], stage, viaMoving);
+    }
+    return result(byRelation.verdict, [...byRelation.notes, `日辰${stage}而本爻无根，不论${stage === '帝旺' ? '旺' : '生'}`]);
+  }
+  if (stage === '墓') {
+    if (rootedByDay && (monthHelps || movingSupport)) {
+      return result('help', [...byRelation.notes, '日墓而得生扶，论生不论墓'], undefined, !monthHelps);
+    }
+    return result('hurt', [...hurtNotes, rootedByDay ? '日墓（本爻无气，论墓不论生）' : '日墓'], '墓');
+  }
+  if (stage === '绝') {
+    if (monthHelps) return result(byRelation.verdict, [...byRelation.notes, '月令当权，逢绝不绝']);
+    if (rootedByDay && movingSupport) {
+      return result('help', [...byRelation.notes, '日绝而得动爻生扶，论生不论绝'], undefined, true);
+    }
+    return result('hurt', [...hurtNotes, rootedByDay ? '日绝（本爻无气，论绝不论生）' : '日绝'], '绝');
+  }
+  return result(byRelation.verdict, byRelation.notes);
+}
+
+/**
+ * 日月合论（《增删卜易·月将章》）：得月日之助而无伤为有气；月日一助一伤为相敌（「午月克之，未日生之，可以相敌」），
+ * 相敌之爻以他爻定胜负——「月克日生遇帮而愈旺，月生日克逢他削而亦衰」；无助者休囚无气。
+ */
+function combineMonthDay(month: Verdict, day: Verdict, hasSupport: boolean, hasHarm: boolean): { level: YaoStrengthLevel; note?: string; } {
+  const helped = month === 'help' || day === 'help';
+  const hurt = month === 'hurt' || day === 'hurt';
+  if (helped && !hurt) return { level: 'strong' };
+  if (helped) {
+    if (hasSupport && !hasHarm) return { level: 'strong', note: '日月相敌，得动爻相扶' };
+    if (hasHarm && !hasSupport) return { level: 'weak', note: '日月相敌，又逢动爻克制' };
+    return { level: 'moderate', note: '日月相敌' };
+  }
+  return month === 'neutral' && day === 'neutral' ? { level: 'weak', note: '休囚无气' } : { level: 'weak' };
+}
+
+const KONG_NOTES: Record<KongWangState, string> = {
+  not_kong: '',
+  kong_static: '真空（静而无气，又无日建动爻生扶）',
+  kong_supported: '假空（旬内仍空，出空之日有用）',
+  kong_changing: '动空（动不为空，出空、冲空之日有用）',
+  kong_ri_chong: '冲空则实',
+  kong_yue_jian: '临月建而旬空（旬内仍空，出空之日有用）',
+};
+
+/**
+ * 旬空真假（《增删卜易·旬空章》「旺不为空，动不为空，有日建动爻生扶者不为空」、月将章「在旬内者毕竟为空」；
+ * 《卜筮正宗·旬空论》「休囚安静或日辰克动爻克…静逢月破值此旬空者，谓之真空」）：
+ * 日冲则冲空而实；临月建、动爻、旺相或得日建动爻生扶者旬内仍空而出空有用；其余静而无气者为真空。
+ */
+function classifyKong(yaoZhi: DiZhi, kongWang: KongWang, monthZhi: DiZhi, dayZhi: DiZhi, isChanging: boolean, rooted: boolean): KongWangState {
+  if (!kongWang.kongDizhi.includes(yaoZhi)) return 'not_kong';
+  if (LIU_CHONG[yaoZhi] === dayZhi) return 'kong_ri_chong';
+  if (yaoZhi === monthZhi) return 'kong_yue_jian';
+  if (isChanging) return 'kong_changing';
+  return rooted ? 'kong_supported' : 'kong_static';
+}
+
+interface LineFacts {
+  yaoZhi: DiZhi;
+  yaoWuXing: WuXing;
+  /** moving 明动之爻；changed 动而变出之爻，冲、空、破皆按动论 */
+  motion: 'static' | 'moving' | 'changed';
+  /** 本爻动化之爻回克本爻（「卯爻动化申酉」） */
+  changedKe: boolean;
+  /** 有力之动爻（含暗动）生扶、克制本爻者，名称供判据 */
+  movingSupport: string[];
+  movingHarm: string[];
+}
+
+interface LineJudgement {
+  strength: YaoStrength;
+  kongWangState: KongWangState;
+  monthVerdict: Verdict;
+  dayVerdict: Verdict;
+  /** 本爻有根：得月或日之助，或得动爻生扶（化变墓绝论生、旬空真假据此） */
+  rooted: boolean;
+  dayStage?: ShiErChangSheng;
+}
+
+/**
+ * 一爻之气，按条判定、不计分：
+ * 1. 月破：临日建者逢破不破，惟他爻动来克之或本爻动化回克，寡不敌众，破亦为破（《日辰章》）。破爻月内无功
+ *    （《卜筮正宗·辟易林补遗》「不过在月内不能为吉凶」），一律无气；静而无日辰、动爻生助者为真破，
+ *    其余出月、逢合、实破之日可用（《增删卜易·月破章》）。
+ * 2. 其余按月、日各自的助伤合论，见 combineMonthDay。
+ */
+function judgeLine(facts: LineFacts, monthZhi: DiZhi, dayZhi: DiZhi, kongWang: KongWang): LineJudgement {
+  const { yaoZhi, yaoWuXing, motion, changedKe, movingSupport, movingHarm } = facts;
+  const isChanging = motion !== 'static';
+  const wangShuai = WANG_SHUAI_TABLE[monthZhi][yaoWuXing];
+  const hasSupport = movingSupport.length > 0;
+  const hasHarm = movingHarm.length > 0;
+  const isMonthChong = LIU_CHONG[yaoZhi] === monthZhi;
+  const linDay = yaoZhi === dayZhi;
+  const isYuePo = isMonthChong && !(linDay && !hasHarm && !changedKe);
+
+  const month: Judgement = isMonthChong
+    ? { verdict: isYuePo ? 'hurt' : 'neutral', notes: [] }
+    : judgeMonth(yaoZhi, yaoWuXing, monthZhi);
+  const day = judgeDay(yaoZhi, yaoWuXing, dayZhi, isChanging, month.verdict === 'help', hasSupport);
+
+  const evidence = [`月令${WANG_SHUAI_LABELS[wangShuai]}`, ...month.notes];
+  if (isMonthChong && !isYuePo) {
+    evidence.push('临日建，逢月破而不破');
+  } else {
+    if (isYuePo) {
+      if (linDay) evidence.push('临日建而受克，破亦为破');
+      const rescue = motion === 'changed' ? '化出之爻不为真破' : isChanging ? '动而不为真破' : day.verdict === 'help' ? '得日辰生助' : hasSupport ? '得动爻生助' : '';
+      evidence.push(rescue ? `月破（${rescue}，出月、逢合、实破之日可用）` : '月破（静而无日辰动爻生助，为真破）');
+    }
+    evidence.push(...day.notes);
+  }
+  if (motion === 'moving') evidence.push('明动');
+  if (hasSupport) evidence.push(`动爻生扶（${movingSupport.join('、')}）`);
+  if (hasHarm) evidence.push(`动爻克制（${movingHarm.join('、')}）`);
+
+  const combined = isYuePo
+    ? { level: 'weak' as const }
+    : combineMonthDay(month.verdict, day.verdict, hasSupport && !day.reliesOnMovingSupport, hasHarm);
+  const rooted = month.verdict === 'help' || day.verdict === 'help' || hasSupport;
+  const kongWangState = classifyKong(yaoZhi, kongWang, monthZhi, dayZhi, isChanging, rooted);
+  if (kongWangState !== 'not_kong') evidence.push(motion === 'changed' && kongWangState === 'kong_changing' ? '化空（动而化空不为真空，出空、冲空之日有用）' : KONG_NOTES[kongWangState]);
+  if (combined.note) evidence.push(combined.note);
 
   return {
-    wangShuai,
-    isStrong,
-    specialStatus,
-    evidence,
+    strength: {
+      wangShuai,
+      level: combined.level,
+      isStrong: combined.level === 'strong',
+      specialStatus: isYuePo ? 'yuePo' : day.specialStatus,
+      evidence,
+    },
+    kongWangState,
+    monthVerdict: month.verdict,
+    dayVerdict: day.verdict,
+    rooted,
+    ...(day.stage ? { dayStage: day.stage } : {}),
   };
+}
+
+/**
+ * 他爻能否生克本爻（《增删卜易·元神忌神衰旺章》「元神虽现又有不能生用神者有六」、家人之贲占例「巳火又化回头之克，
+ * 不能生丑土之财」）：只取明动、暗动之爻（「倘得他爻又动相扶」）；动化回头克者无力；无气之爻再逢月破、日月伤克、
+ * 化退、化墓、化绝、化破者亦无力。
+ */
+function canActOnOthers(yao: FullYaoInfo, judgement: LineJudgement, change: YaoChangeAnalysis | undefined, monthZhi: DiZhi): boolean {
+  if (yao.change !== 'changing' && judgement.strength.specialStatus !== 'anDong') return false;
+  if (change && WUXING_KE[DIZHI_WUXING[change.changedZhi]] === yao.wuXing) return false;
+  if (judgement.strength.level !== 'weak') return true;
+  const huaType = change?.huaType;
+  return !(judgement.strength.specialStatus === 'yuePo'
+    || judgement.monthVerdict === 'hurt'
+    || judgement.dayVerdict === 'hurt'
+    || huaType === 'huaTui'
+    || huaType === 'huaMu'
+    || huaType === 'huaJue'
+    || (change !== undefined && LIU_CHONG[change.changedZhi] === monthZhi));
 }
 
 function getYaoMovementState(yao: FullYaoInfo, strength: YaoStrength): YaoMovementState {
@@ -1117,9 +1287,12 @@ function getYaoMovementState(yao: FullYaoInfo, strength: YaoStrength): YaoMoveme
   return 'static';
 }
 
-// day_break 状态同时涵盖日破与月破（状态值保持兼容），标签按实际来源区分
+// day_break 状态同时涵盖日破与月破（状态值保持兼容），标签按实际来源区分；
+// 动爻亦论月破（《增删卜易·月破章》「动则能伤于爻」），动静状态仍为 changing，标签并列「明动·月破」
 function getYaoMovementLabel(movementState: YaoMovementState, strength: YaoStrength): string {
-  return movementState === 'day_break' ? SPECIAL_STATUS_LABELS[strength.specialStatus] : MOVEMENT_LABELS[movementState];
+  if (movementState === 'day_break') return SPECIAL_STATUS_LABELS[strength.specialStatus];
+  if (movementState === 'changing' && strength.specialStatus === 'yuePo') return `${MOVEMENT_LABELS.changing}·${SPECIAL_STATUS_LABELS.yuePo}`;
+  return MOVEMENT_LABELS[movementState];
 }
 
 function getChangSheng(wuXing: WuXing, diZhi: DiZhi): ShiErChangSheng {
@@ -1131,7 +1304,7 @@ function getChangSheng(wuXing: WuXing, diZhi: DiZhi): ShiErChangSheng {
  * 伏吟/反吟（爻象）→ 进退神（配对，《增删卜易》占例「丑土官动化进神」论进不论墓）→ 回头克（本质之伤）
  * → 墓绝与回头生相兼时看本爻有无日月帮比（《卜筮正宗·绝处逢生论》「土化出巳有日月帮比不云化绝，乃云回头生」）
  * → 化墓/化绝 → 回头生 → 化空（时间性条件）。
- * @param originalSupported 本爻是否得日月帮比
+ * @param originalSupported 本爻有根：得月或日之助，或得动爻生扶（觉子注「旺相，或日月动爻生扶…皆谓长生」）
  */
 function analyzeYaoChange(
   originalZhi: DiZhi,
@@ -1571,14 +1744,13 @@ function calculatePerYaoFuShen(
 }
 
 function buildVisibleCandidate(yao: FullYaoInfoExtended): YongShenCandidate {
-  const level = getStrengthLevel(yao.strength, yao.kongWangState);
+  const level = yao.strength.level;
   const evidence = [...yao.strength.evidence];
   if (yao.isShiYao) evidence.push('世位');
   if (yao.isYingYao) evidence.push('应位');
-  if (yao.kongWangState !== 'not_kong') evidence.push(KONG_WANG_LABELS[yao.kongWangState] || '空亡');
-  if (yao.changedYao?.relation) evidence.push(yao.changedYao.relation);
+  if (yao.changeAnalysis?.description) evidence.push(yao.changeAnalysis.description);
 
-  const strengthLabel = level === 'strong' ? '旺相可取' : level === 'moderate' ? '平常可参' : '衰弱受制';
+  const strengthLabel = STRENGTH_LABELS[level];
   return {
     liuQin: yao.liuQin,
     naJia: yao.naJia,
@@ -1610,16 +1782,22 @@ function buildChangedCandidate(
 
   const changedNaJia = yao.changedYao.naJia;
   const changedWuXing = yao.changedYao.wuXing;
-  const influence = getYaoInfluence(changedNaJia, monthZhi, dayZhi);
-  const kongWangState = checkYaoKongWang(changedNaJia, kongWang, monthZhi, dayZhi, false);
-  const strength = calculateYaoStrength(changedWuXing, monthZhi, true, kongWangState, influence, changedNaJia);
-  const level = getStrengthLevel(strength, kongWangState);
+  // 变爻只受日月与本位动爻作用，他爻不能生克变爻（《增删卜易·动变生克冲合章》），故不计他爻生扶克制
+  const { strength, kongWangState } = judgeLine({
+    yaoZhi: changedNaJia,
+    yaoWuXing: changedWuXing,
+    motion: 'changed',
+    changedKe: false,
+    movingSupport: [],
+    movingHarm: [],
+  }, monthZhi, dayZhi, kongWang);
+  const level = strength.level;
   const evidence = [`第${yao.position}爻变出用神`, ...strength.evidence];
   if (yao.isShiYao) evidence.push('世位');
   if (yao.isYingYao) evidence.push('应位');
   if (yao.changeAnalysis?.description) evidence.push(yao.changeAnalysis.description);
 
-  const strengthLabel = level === 'strong' ? '变出得力' : level === 'moderate' ? '变出可参' : '变出待定';
+  const strengthLabel = `变出${STRENGTH_LABELS[level]}`;
   return {
     liuQin: yao.changedYao.liuQin,
     naJia: changedNaJia,
@@ -1760,7 +1938,7 @@ function candidateRank(candidate: YongShenCandidate): number[] {
   const strengthRank = candidate.strength === 'strong' ? 3 : candidate.strength === 'moderate' ? 2 : candidate.strength === 'weak' ? 1 : 0;
   const supportRank = getSupportRank(candidate);
   // 3. 空亡真假
-  const kongRank = candidate.kongWangState === 'not_kong' || candidate.kongWangState === undefined ? 3 : candidate.kongWangState === 'kong_ri_chong' || candidate.kongWangState === 'kong_yue_jian' ? 2 : candidate.kongWangState === 'kong_changing' ? 1 : 0;
+  const kongRank = candidate.kongWangState === 'not_kong' || candidate.kongWangState === undefined ? 3 : candidate.kongWangState === 'kong_ri_chong' || candidate.kongWangState === 'kong_yue_jian' || candidate.kongWangState === 'kong_supported' ? 2 : candidate.kongWangState === 'kong_changing' ? 1 : 0;
   // 4. 动静吉凶（动优于静，但日破/月破降级）
   const movementRank = candidate.movementState === 'changing' ? 3 : candidate.movementState === 'hidden_moving' ? 2 : candidate.movementState === 'static' ? 1 : 0;
   // 5. 化变吉凶：回头生/化进 > 无化 > 化退/回头克/化墓/化绝/化空
@@ -1989,8 +2167,8 @@ function calculateTimeRecommendations(groups: YongShenGroup[]): TimeRecommendati
         type: 'critical',
         earthlyBranch: selected.naJia,
         trigger: `待${LIU_CHONG[selected.naJia]}冲空或逢建填实`,
-        basis: ['用神静空'],
-        description: `用神${group.targetLiuQin}静空，通常先看冲空、填实、临建之后再应。`,
+        basis: ['用神真空'],
+        description: `用神${group.targetLiuQin}静而无气又无生扶，为真空，通常先看冲空、填实之后再应。`,
       });
     }
 
@@ -2005,14 +2183,25 @@ function calculateTimeRecommendations(groups: YongShenGroup[]): TimeRecommendati
       });
     }
 
-    if (selected.kongWangState === 'kong_ri_chong' || selected.kongWangState === 'kong_yue_jian') {
+    if (selected.kongWangState === 'kong_ri_chong') {
       recommendations.push({
         targetLiuQin: group.targetLiuQin,
         type: 'critical',
         earthlyBranch: selected.naJia,
-        trigger: selected.kongWangState === 'kong_ri_chong' ? '冲空转实' : '临建不空',
-        basis: [selected.kongWangState === 'kong_ri_chong' ? '日冲起空' : '月建填实'],
-        description: `用神${group.targetLiuQin}${selected.kongWangState === 'kong_ri_chong' ? '得日冲而空起' : '临月建而不作真空'}，可视作由空转实的重要条件。`,
+        trigger: '冲空转实',
+        basis: ['日冲起空'],
+        description: `用神${group.targetLiuQin}得日冲而空起，可视作由空转实的重要条件。`,
+      });
+    }
+
+    if ((selected.kongWangState === 'kong_supported' || selected.kongWangState === 'kong_yue_jian') && selected.naJia) {
+      recommendations.push({
+        targetLiuQin: group.targetLiuQin,
+        type: 'critical',
+        earthlyBranch: selected.naJia,
+        trigger: '出空之日',
+        basis: [selected.kongWangState === 'kong_yue_jian' ? '临月建而旬空' : '用神假空'],
+        description: `用神${group.targetLiuQin}旬内仍空而有根，出空之日方能应事（《增删卜易·月将章》「在旬内者毕竟为空」）。`,
       });
     }
 
@@ -2066,7 +2255,7 @@ function buildWarnings(groups: YongShenGroup[], sanHeAnalysis: SanHeAnalysis, gu
       warnings.push(`用神${group.targetLiuQin}同类并见，需并看而非强取一爻。`);
     }
     if (group.selected.kongWangState === 'kong_static') {
-      warnings.push(`用神${group.targetLiuQin}静空，须待填实或出空。`);
+      warnings.push(`用神${group.targetLiuQin}真空，到底为空，须待冲空填实。`);
     }
     if (group.selected.movementState === 'day_break') {
       const isYuePo = group.selected.evidence.some(e => e.includes('月破'));
@@ -2106,38 +2295,65 @@ export function performFullAnalysis(
   const gongElement = palace?.element || '土';
 
   const baseYaos = calculateFullYaoInfo(yaos, hexagramCode, ganZhiTime.day.gan);
-  const fullYaos: FullYaoInfoExtended[] = baseYaos.map((yao) => {
-    const influence = getYaoInfluence(yao.naJia, monthZhi, dayZhi);
-    const kongWangState = checkYaoKongWang(yao.naJia, kongWang, monthZhi, dayZhi, yao.change === 'changing');
-    const strength = calculateYaoStrength(yao.wuXing, monthZhi, yao.change === 'changing', kongWangState, influence, yao.naJia);
-    const movementState = getYaoMovementState(yao, strength);
-    const dayStage = getChangSheng(yao.wuXing, dayZhi);
+  const changedBranchOf = (yao: FullYaoInfo): DiZhi | undefined => (
+    changedCode && yao.change === 'changing' ? getNaJiaByHexagram(changedCode, yao.position) : undefined
+  );
+  const factsOf = (yao: FullYaoInfo, movingSupport: string[], movingHarm: string[]): LineFacts => {
+    const changedZhi = changedBranchOf(yao);
     return {
+      yaoZhi: yao.naJia,
+      yaoWuXing: yao.wuXing,
+      motion: yao.change === 'changing' ? 'moving' : 'static',
+      changedKe: changedZhi !== undefined && WUXING_KE[DIZHI_WUXING[changedZhi]] === yao.wuXing,
+      movingSupport,
+      movingHarm,
+    };
+  };
+  const analyzeChange = (yao: FullYaoInfo, judgement: LineJudgement): YaoChangeAnalysis | undefined => {
+    const changedZhi = changedBranchOf(yao);
+    return changedZhi
+      ? analyzeYaoChange(yao.naJia, changedZhi, yao.wuXing, DIZHI_WUXING[changedZhi], kongWang, judgement.rooted)
+      : undefined;
+  };
+
+  // 先只论日月，定暗动、化变，据以判断哪些动爻有力生克他爻；再计入他爻生扶克制，得各爻定论。
+  // 他爻有力与否只按日月论，不再循环回代。
+  const actors = baseYaos.filter((yao) => {
+    const judgement = judgeLine(factsOf(yao, [], []), monthZhi, dayZhi, kongWang);
+    return canActOnOthers(yao, judgement, analyzeChange(yao, judgement), monthZhi);
+  });
+  const describeActor = (yao: FullYaoInfo) => `${traditionalYaoName(yao.position, yao.type)}${yao.naJia}${yao.wuXing}`;
+
+  const changedYaoDetails: ChangedYaoDetail[] = [];
+  const fullYaos: FullYaoInfoExtended[] = baseYaos.map((yao) => {
+    const others = actors.filter((actor) => actor.position !== yao.position);
+    const movingSupport = others
+      .filter((actor) => actor.wuXing === yao.wuXing || WUXING_SHENG[actor.wuXing] === yao.wuXing)
+      .map(describeActor);
+    const movingHarm = others.filter((actor) => WUXING_KE[actor.wuXing] === yao.wuXing).map(describeActor);
+    const judgement = judgeLine(factsOf(yao, movingSupport, movingHarm), monthZhi, dayZhi, kongWang);
+    const { strength, kongWangState, dayStage } = judgement;
+    const movementState = getYaoMovementState(yao, strength);
+    const extended: FullYaoInfoExtended = {
       ...yao,
       isChanging: yao.change === 'changing',
       movementState,
       movementLabel: getYaoMovementLabel(movementState, strength),
       kongWangState,
-      influence,
+      influence: getYaoInfluence(yao.naJia, monthZhi, dayZhi),
       strength,
       changedYao: null,
       shenSha: [],
-      ...(DAY_STAGES_USED.has(dayStage) ? { changSheng: { stage: dayStage, strength: CHANG_SHENG_STRENGTH[dayStage] } } : {}),
+      ...(dayStage ? { changSheng: { stage: dayStage, strength: CHANG_SHENG_STRENGTH[dayStage] } } : {}),
     };
-  });
-
-  const changedYaoDetails: ChangedYaoDetail[] = [];
-  if (changedCode) {
-    for (const yao of fullYaos) {
-      if (!yao.isChanging) {
-        continue;
-      }
-      const changedNaJia = getNaJiaByHexagram(changedCode, yao.position);
-      yao.changeAnalysis = analyzeYaoChange(yao.naJia, changedNaJia, yao.wuXing, DIZHI_WUXING[changedNaJia], kongWang, yao.strength.isStrong);
-      yao.changedYao = calculateChangedYaoDetail(hexagramCode, changedCode, yao.position, gongElement, yao, yao.changeAnalysis);
-      changedYaoDetails.push(yao.changedYao);
+    const changeAnalysis = analyzeChange(yao, judgement);
+    if (changedCode && changeAnalysis) {
+      extended.changeAnalysis = changeAnalysis;
+      extended.changedYao = calculateChangedYaoDetail(hexagramCode, changedCode, yao.position, gongElement, extended, changeAnalysis);
+      changedYaoDetails.push(extended.changedYao);
     }
-  }
+    return extended;
+  });
 
   const shenShaContext = {
     yearStem: ganZhiTime.year.gan,

@@ -51,6 +51,19 @@ test('meihua time casting should reproduce 观梅占的成卦形态', async () =
   assert.equal(result.bodyUseRelation.relation, '用克体');
 });
 
+test('meihua time casting labels its method in simplified Chinese in JSON and text', async () => {
+  const result = await mcpCore.calculateMeihua({
+    question: '起卦方式文案',
+    method: 'time',
+    date: '2026-04-04T10:30:00',
+  });
+
+  assert.equal(result.castMeta.methodLabel, '年月日时起卦');
+  assert.equal(mcpCore.toMeihuaJson(result).起卦信息.方法, '年月日时起卦');
+  assert.match(mcpCore.toMeihuaText(result), /- 方法: 年月日时起卦/u);
+  assert.doesNotMatch(mcpCore.toMeihuaText(result), /時/u);
+});
+
 test('meihua time casting should reproduce 牡丹占的成卦形态', async () => {
   const solar = Lunar.fromYmdHms(2029, 7, 25, 8, 0, 0).getSolar();
   const result = await mcpCore.calculateMeihua({

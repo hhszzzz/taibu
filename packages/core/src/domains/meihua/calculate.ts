@@ -124,7 +124,7 @@ const WUXING_KE: Record<WuXing, WuXing> = {
 };
 
 const METHOD_LABELS: Record<MeihuaMethod, string> = {
-  time: '年月日時起卦',
+  time: '年月日时起卦',
   count_with_time: '物数/声数起卦',
   text_split: '字占',
   measure: '丈尺尺寸占',

@@ -295,13 +295,18 @@ function renderLiuyaoCanonicalJSONBase(result: LiuyaoOutput): LiuyaoCanonicalJSO
     if (selected.kongWangState) entry.已选用神.空亡状态 = selected.kongWangState;
     if (selected.evidence?.length) entry.已选用神.依据 = selected.evidence;
 
-    if (group.selectionNote && group.selectionStatus !== 'resolved') {
+    // 多现时说明写明定主用所据之条与出处
+    if (group.selectionNote && (group.selectionStatus !== 'resolved' || (group.candidates?.length ?? 0) > 0)) {
       entry.取用说明 = group.selectionNote;
     }
 
     if (group.candidates?.length) {
       entry.候选用神 = group.candidates.map((candidate) => {
-        const c: NonNullable<typeof entry.候选用神>[number] = { 六亲: candidate.liuQin };
+        const c: NonNullable<typeof entry.候选用神>[number] = {
+          六亲: candidate.liuQin,
+          强弱: candidate.strengthLabel,
+          动静: candidate.movementLabel,
+        };
         const cPos = posLabel(candidate.position);
         if (cPos) c.爻位 = cPos;
         if (candidate.naJia) c.纳甲 = candidate.naJia;

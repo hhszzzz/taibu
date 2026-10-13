@@ -251,6 +251,8 @@ export interface YongShenCandidateInfo {
   strengthLabel: string;
   movementState: YaoMovementState;
   movementLabel: string;
+  /** 明现、变出之爻的暗动/日破/月破（动爻月破时 movementState 仍为 changing） */
+  specialStatus?: YaoSpecialStatus;
   isShiYao: boolean;
   isYingYao: boolean;
   kongWangState?: KongWangState;

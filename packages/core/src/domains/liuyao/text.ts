@@ -158,17 +158,17 @@ function renderLiuyaoCanonicalTextBase(result: LiuyaoOutput): string {
       const posStr = posLabel(selected.position);
       const mainPrefix = posStr || selected.liuQin;
       lines.push(`- ${mainPrefix}${selected.naJia ? ` ${selected.naJia}` : ''}${selectedExtra ? `（${selectedExtra}）` : ''}，${selected.strengthLabel}，${selected.movementLabel}`);
-      if (group.selectionNote && group.selectionStatus !== 'resolved') lines.push(`- 说明: ${group.selectionNote}`);
+      if (group.selectionNote && (group.selectionStatus !== 'resolved' || (group.candidates?.length ?? 0) > 0)) lines.push(`- 说明: ${group.selectionNote}`);
       if (selected.evidence?.length) lines.push(`- 依据: ${selected.evidence.join('、')}`);
       if (group.candidates?.length) {
-        lines.push(`- 并看: ${group.candidates.map((candidate) => {
+        lines.push(`- ${group.selectionStatus === 'ambiguous' ? '并看' : '同类'}: ${group.candidates.map((candidate) => {
           const candidateExtra = [
             candidate.changedNaJia ? `变出=${candidate.changedNaJia}` : null,
             candidate.huaType ? `化变=${candidate.huaType}` : null,
           ].filter(Boolean).join('，');
           const cPos = posLabel(candidate.position);
           const cPrefix = cPos || candidate.liuQin;
-          return `${cPrefix}${candidate.naJia ? ` ${candidate.naJia}` : ''}${candidateExtra ? `（${candidateExtra}）` : ''}${candidate.evidence?.length ? `：${candidate.evidence.join('、')}` : ''}`;
+          return `${cPrefix}${candidate.naJia ? ` ${candidate.naJia}` : ''}${candidateExtra ? `（${candidateExtra}）` : ''}，${candidate.strengthLabel}，${candidate.movementLabel}${candidate.evidence?.length ? `：${candidate.evidence.join('、')}` : ''}`;
         }).join('；')}`);
       }
       const system = shenSystemMap.get(group.targetLiuQin);

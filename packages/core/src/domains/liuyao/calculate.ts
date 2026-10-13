@@ -9,6 +9,7 @@ import type {
   LiuyaoInput, LiuyaoOutput,
 } from './types.js';
 import type {
+  CandidateStrength,
   DerivedHexagramInfo,
   DiZhi,
   GuaShenInfo,
@@ -28,7 +29,7 @@ const HEXAGRAM_BY_NAME = new Map<string, Hexagram>(HEXAGRAMS.map(h => [h.name, h
 
 export type { LiuyaoInput, LiuyaoOutput } from './types.js';
 export type {
-  DerivedHexagramInfo, DiZhi, GuaShenInfo, KongWangState, LiuQinType, TianGan, WangShuai, WuXing, YaoMovementState, YaoSpecialStatus, YaoStrengthLevel, YongShenSelectionStatus
+  CandidateStrength, DerivedHexagramInfo, DiZhi, GuaShenInfo, KongWangState, LiuQinType, TianGan, WangShuai, WuXing, YaoMovementState, YaoSpecialStatus, YaoStrengthLevel, YongShenSelectionStatus
 } from '../shared/types.js';
 export type LiuShen = '青龙' | '朱雀' | '勾陈' | '螣蛇' | '白虎' | '玄武';
 export type YaoType = 0 | 1;
@@ -185,10 +186,12 @@ export interface YongShenCandidate {
   element: WuXing;
   position?: number;
   source: YongShenCandidateSource;
-  strength: 'strong' | 'moderate' | 'weak' | 'unknown';
+  strength: CandidateStrength;
   strengthLabel: string;
   movementState: YaoMovementState;
   movementLabel: string;
+  /** 明现、变出之爻的暗动/日破/月破（动爻月破时 movementState 仍为 changing） */
+  specialStatus?: YaoSpecialStatus;
   isShiYao: boolean;
   isYingYao: boolean;
   kongWangState?: KongWangState;
@@ -1743,6 +1746,11 @@ function calculatePerYaoFuShen(
   return result;
 }
 
+/** 「舍其旬空」所论之空：冲空则实，不在此列 */
+function isKongPending(state?: KongWangState): boolean {
+  return state !== undefined && state !== 'not_kong' && state !== 'kong_ri_chong';
+}
+
 function buildVisibleCandidate(yao: FullYaoInfoExtended): YongShenCandidate {
   const level = yao.strength.level;
   const evidence = [...yao.strength.evidence];
@@ -1750,7 +1758,6 @@ function buildVisibleCandidate(yao: FullYaoInfoExtended): YongShenCandidate {
   if (yao.isYingYao) evidence.push('应位');
   if (yao.changeAnalysis?.description) evidence.push(yao.changeAnalysis.description);
 
-  const strengthLabel = STRENGTH_LABELS[level];
   return {
     liuQin: yao.liuQin,
     naJia: yao.naJia,
@@ -1760,9 +1767,10 @@ function buildVisibleCandidate(yao: FullYaoInfoExtended): YongShenCandidate {
     position: yao.position,
     source: 'visible',
     strength: level,
-    strengthLabel,
+    strengthLabel: STRENGTH_LABELS[level],
     movementState: yao.movementState,
     movementLabel: yao.movementLabel,
+    specialStatus: yao.strength.specialStatus,
     isShiYao: yao.isShiYao,
     isYingYao: yao.isYingYao,
     kongWangState: yao.kongWangState,
@@ -1797,7 +1805,6 @@ function buildChangedCandidate(
   if (yao.isYingYao) evidence.push('应位');
   if (yao.changeAnalysis?.description) evidence.push(yao.changeAnalysis.description);
 
-  const strengthLabel = `变出${STRENGTH_LABELS[level]}`;
   return {
     liuQin: yao.changedYao.liuQin,
     naJia: changedNaJia,
@@ -1807,9 +1814,10 @@ function buildChangedCandidate(
     position: yao.position,
     source: 'changed',
     strength: level,
-    strengthLabel,
+    strengthLabel: `变出${STRENGTH_LABELS[level]}`,
     movementState: 'changing',
     movementLabel: '变出',
+    specialStatus: strength.specialStatus,
     isShiYao: yao.isShiYao,
     isYingYao: yao.isYingYao,
     kongWangState,
@@ -1817,59 +1825,40 @@ function buildChangedCandidate(
   };
 }
 
+/**
+ * 卦中、变爻皆无用神时以月日为用神：《增删卜易·月将章》「卦无用神即以月建为用神，不必寻伏神也」，
+ * 飞伏神章「如于寅卯月占者，则以日月为用神」。月建先取；日辰为六爻之主宰，与月建同论有气。
+ */
 function buildTemporalCandidates(
   target: LiuQinType,
   gongElement: WuXing,
   monthZhi: DiZhi,
   dayZhi: DiZhi
 ): YongShenCandidate[] {
-  const pushCandidate = (
-    candidates: YongShenCandidate[],
-    branch: DiZhi,
-    label: '月建' | '日辰',
-    strength: YongShenCandidate['strength'],
-    strengthLabel: string
-  ) => {
-    const index = candidates.findIndex((item) => item.naJia === branch);
-    const evidence = [`用神${target}不上卦`, `以${label}${branch}代用`];
-    if (index >= 0) {
-      candidates[index] = {
-        ...candidates[index],
-        strength: candidates[index].strength === 'strong' ? 'strong' : strength,
-        strengthLabel: candidates[index].strength === 'strong' ? candidates[index].strengthLabel : strengthLabel,
-        evidence: Array.from(new Set([...candidates[index].evidence, ...evidence])),
-      };
-      return;
-    }
-
-    const element = DIZHI_WUXING[branch];
-    candidates.push({
-      liuQin: target,
-      naJia: branch,
-      element,
-      source: 'temporal',
-      strength,
-      strengthLabel,
-      movementState: 'static',
-      movementLabel: label,
-      isShiYao: false,
-      isYingYao: false,
-      kongWangState: 'not_kong',
-      evidence,
-    });
-  };
+  const build = (branch: DiZhi, label: '月建' | '日辰', strengthLabel: string): YongShenCandidate => ({
+    liuQin: target,
+    naJia: branch,
+    element: DIZHI_WUXING[branch],
+    source: 'temporal',
+    strength: 'strong',
+    strengthLabel,
+    movementState: 'static',
+    movementLabel: label,
+    isShiYao: false,
+    isYingYao: false,
+    kongWangState: 'not_kong',
+    evidence: [`用神${target}不上卦`, `以${label}${branch}代用`],
+  });
 
   const candidates: YongShenCandidate[] = [];
-  const monthTarget = getLiuQin(gongElement, DIZHI_WUXING[monthZhi]);
-  const dayTarget = getLiuQin(gongElement, DIZHI_WUXING[dayZhi]);
-
-  if (monthTarget === target) {
-    pushCandidate(candidates, monthZhi, '月建', 'strong', '月建代用');
+  const monthMatches = getLiuQin(gongElement, DIZHI_WUXING[monthZhi]) === target;
+  const dayMatches = getLiuQin(gongElement, DIZHI_WUXING[dayZhi]) === target;
+  if (monthMatches) {
+    candidates.push(build(monthZhi, '月建', dayZhi === monthZhi ? '月日同临代用' : '月建代用'));
   }
-  if (dayTarget === target) {
-    pushCandidate(candidates, dayZhi, '日辰', monthTarget === target && dayZhi === monthZhi ? 'strong' : 'moderate', monthTarget === target && dayZhi === monthZhi ? '月日同临代用' : '日辰代用');
+  if (dayMatches && dayZhi !== monthZhi) {
+    candidates.push(build(dayZhi, '日辰', '日辰代用'));
   }
-
   return candidates;
 }
 
@@ -1895,183 +1884,213 @@ function buildFuShenCandidate(fuShen: FuShen, kongWang: KongWang, attachedYao?: 
   };
 }
 
-function getSourceRank(source: YongShenCandidateSource): number {
-  switch (source) {
-    case 'visible':
-      return 3;
-    case 'changed':
-      return 2;
-    case 'temporal':
-      return 1;
-    case 'fushen':
-    default:
-      return 0;
-  }
+/** 用神多现时一爻的取舍条件 */
+interface RankedCandidate {
+  candidate: YongShenCandidate;
+  /** 爻名，如「九三爻」「初九爻变出」 */
+  name: string;
+  /** 临月建或临日建；临日建而破亦为破者无权 */
+  authority?: '临月建' | '临日建';
+  /** 「舍其被伤」之伤：月破、日破、旬空未实、化回头克/化墓/化绝/化破、被有力之动爻克制 */
+  harms: string[];
 }
 
-function getSupportRank(candidate: YongShenCandidate): number {
-  const joined = candidate.evidence.join('、');
-  let rank = 0;
-  if (joined.includes('月令旺')) rank += 4;
-  else if (joined.includes('月令相')) rank += 3;
-  else if (joined.includes('月令休')) rank += 2;
-  else if (joined.includes('月令囚')) rank += 1;
-
-  if (joined.includes('月生')) rank += 3;
-  if (joined.includes('月扶')) rank += 2;
-  if (joined.includes('日生')) rank += 2;
-  if (joined.includes('日扶')) rank += 1;
-  if (joined.includes('月克')) rank -= 3;
-  if (joined.includes('日克')) rank -= 2;
-  if (joined.includes('月冲')) rank -= 2;
-  if (joined.includes('日冲')) rank -= 1;
-  if (joined.includes('月建代用')) rank += 4;
-  if (joined.includes('日辰代用')) rank += 2;
-  return rank;
+interface PrecedenceRule {
+  label: string;
+  /** 本条之内的先后，小者优先；只逐条比较，不相加 */
+  order: (item: RankedCandidate) => number;
+  describe: (item: RankedCandidate) => string;
+  /** 出处原文，按落选之爻引对应之句 */
+  basis: (loser: RankedCandidate) => string;
 }
 
-// Spec 比较顺序：明现/伏藏 > 旺衰(月日生克) > 空亡真假 > 动静吉凶 > 化进退/回头生克 > 世应 > 爻位
-function candidateRank(candidate: YongShenCandidate): number[] {
-  // 1. 明现/变出/月日/伏神优先级
-  const sourceRank = getSourceRank(candidate.source);
-  // 2. 旺衰等级（含月日生克结果）
-  const strengthRank = candidate.strength === 'strong' ? 3 : candidate.strength === 'moderate' ? 2 : candidate.strength === 'weak' ? 1 : 0;
-  const supportRank = getSupportRank(candidate);
-  // 3. 空亡真假
-  const kongRank = candidate.kongWangState === 'not_kong' || candidate.kongWangState === undefined ? 3 : candidate.kongWangState === 'kong_ri_chong' || candidate.kongWangState === 'kong_yue_jian' || candidate.kongWangState === 'kong_supported' ? 2 : candidate.kongWangState === 'kong_changing' ? 1 : 0;
-  // 4. 动静吉凶（动优于静，但日破/月破降级）
-  const movementRank = candidate.movementState === 'changing' ? 3 : candidate.movementState === 'hidden_moving' ? 2 : candidate.movementState === 'static' ? 1 : 0;
-  // 5. 化变吉凶：回头生/化进 > 无化 > 化退/回头克/化墓/化绝/化空
-  const huaRank = getHuaRank(candidate.huaType);
-  // 6. 世应
-  const shiRank = candidate.isShiYao ? 1 : 0;
-  const yingRank = candidate.isYingYao ? 1 : 0;
-  // 7. 爻位兜底
-  const positionRank = typeof candidate.position === 'number' ? 7 - candidate.position : 0;
-  return [sourceRank, strengthRank, supportRank, kongRank, movementRank, huaRank, shiRank, yingRank, positionRank];
+const STRENGTH_ORDER: Record<CandidateStrength, number> = { strong: 0, moderate: 1, weak: 2, unknown: 3 };
+const STRENGTH_TEXT: Record<CandidateStrength, string> = { ...STRENGTH_LABELS, unknown: '旺衰未明' };
+const MOVEMENT_ORDER: Record<YaoMovementState, number> = { changing: 0, hidden_moving: 1, static: 2, day_break: 2 };
+
+/** 两现章古法论伤的三句，按落选之爻所犯依次引出 */
+function citeHarmClauses(harms: readonly string[]): string {
+  const clauses = [
+    harms.includes('月破') ? '舍其月破，而用不破' : '',
+    harms.includes('旬空') ? '舍其旬空，用其不空' : '',
+    harms.some((harm) => harm !== '月破' && harm !== '旬空') ? '舍其被伤，用其不伤' : '',
+  ].filter(Boolean);
+  return `「${clauses.join('，')}」（《增删卜易·两现章》）`;
 }
 
-function candidateBusinessRank(candidate: YongShenCandidate): number[] {
-  return candidateRank(candidate).slice(0, -1);
-}
+/**
+ * 用神多现，依次比较，先分高下者定主用，诸条皆同者并看：
+ * - 持世、临月日：《卜筮正宗·十八问答》第十七问「舍其闲爻而用持世，舍其无权而用月日」；
+ * - 旺衰、动静、伤损：《增删卜易·两现章》古法「舍其休囚，用其旺相，舍其静爻，而用动爻，舍其月破，而用不破，
+ *   舍其旬空，用其不空，舍其被伤，用其不伤」。
+ * 两现章又言「得其验者，应乎旬空月破」，第十七问亦云「舍其不破而用月破…天机尽泄于有病之间」，
+ * 而两书所附小畜、师之涣、豫之归妹三例，都以有权有气之爻断得失，以空破之爻断应期，
+ * 故空破之爻不夺主用，另出应期（见 calculateTimeRecommendations）。
+ */
+const YONG_SHEN_PRECEDENCE: readonly PrecedenceRule[] = [
+  {
+    label: '持世',
+    order: (item) => (item.candidate.isShiYao ? 0 : 1),
+    describe: (item) => (item.candidate.isShiYao ? '持世' : '不持世'),
+    basis: () => '「舍其闲爻而用持世」（《卜筮正宗》）',
+  },
+  {
+    label: '临月日',
+    order: (item) => (item.authority ? 0 : 1),
+    describe: (item) => item.authority ?? '不临月日',
+    basis: () => '「舍其无权而用月日」（《卜筮正宗》）',
+  },
+  {
+    label: '旺衰',
+    order: (item) => STRENGTH_ORDER[item.candidate.strength],
+    describe: (item) => STRENGTH_TEXT[item.candidate.strength],
+    basis: () => '「舍其休囚，用其旺相」（《增删卜易·两现章》）',
+  },
+  {
+    label: '动静',
+    order: (item) => MOVEMENT_ORDER[item.candidate.movementState],
+    describe: (item) => (MOVEMENT_ORDER[item.candidate.movementState] < 2 ? MOVEMENT_LABELS[item.candidate.movementState] : '安静'),
+    basis: () => '「舍其静爻，而用动爻」（《增删卜易·两现章》）',
+  },
+  {
+    label: '伤损',
+    order: (item) => (item.harms.length > 0 ? 1 : 0),
+    describe: (item) => (item.harms.length > 0 ? item.harms.join('、') : '无伤'),
+    basis: (loser) => citeHarmClauses(loser.harms),
+  },
+];
 
-function getHuaRank(huaType?: HuaType): number {
-  if (!huaType || huaType === 'none') return 2; // 无化变，中性
-  switch (huaType) {
-    case 'huiTouSheng': return 4; // 回头生，利
-    case 'huaJin': return 3;      // 化进，利
-    case 'fuYin': return 2;       // 伏吟，中性偏滞
-    case 'huaTui': return 1;      // 化退，不利
-    case 'fanYin': return 1;      // 反吟，不利
-    case 'huiTouKe': return 0;    // 回头克，凶
-    case 'huaKong': return 0;     // 化空，凶
-    case 'huaMu': return 0;       // 化墓，凶
-    case 'huaJue': return 0;      // 化绝，凶
-    default: return 2;
-  }
-}
+const COUNT_TEXT = ['', '一', '两', '三', '四', '五', '六'];
 
-function compareCandidate(a: YongShenCandidate, b: YongShenCandidate): number {
-  const left = candidateRank(a);
-  const right = candidateRank(b);
-  for (let index = 0; index < left.length; index += 1) {
-    if (left[index] !== right[index]) {
-      return right[index] - left[index];
-    }
+function compareRanked(a: RankedCandidate, b: RankedCandidate): number {
+  for (const rule of YONG_SHEN_PRECEDENCE) {
+    const diff = rule.order(a) - rule.order(b);
+    if (diff !== 0) return diff;
   }
   return 0;
 }
 
-function sameRank(a?: YongShenCandidate, b?: YongShenCandidate): boolean {
-  if (!a || !b) return false;
-  // “并看”只在核心业务因子无法分出高下时触发；
-  // 末位爻位仅作兜底排序，不应阻断 ambiguous。
-  const left = candidateBusinessRank(a);
-  const right = candidateBusinessRank(b);
-  return left.every((value, index) => value === right[index]);
+/** 空破之爻不夺主用而主应期，在取用说明中点出 */
+function describeSickCandidates(items: RankedCandidate[]): string {
+  const sick = items.filter((item) => item.candidate.specialStatus === 'yuePo' || isKongPending(item.candidate.kongWangState));
+  if (sick.length === 0) return '';
+  const names = sick.map((item) => `${item.name}${item.candidate.specialStatus === 'yuePo' ? '月破' : '旬空'}`).join('、');
+  return `${names}，另看应期（《增删卜易·两现章》「得其验者，应乎旬空月破」）。`;
 }
 
-function buildYongShenGroups(
-  fullYaos: FullYaoInfoExtended[],
-  fuShenByTarget: Map<LiuQinType, FuShen[]>,
-  targets: LiuQinType[],
-  gongElement: WuXing,
-  monthZhi: DiZhi,
-  dayZhi: DiZhi,
-  kongWang: KongWang
-): YongShenGroup[] {
-  const yaoName = (pos?: number) => {
-    if (!pos) return '';
-    const yao = fullYaos.find((y) => y.position === pos);
-    return yao ? `${traditionalYaoName(pos, yao.type)}爻` : `${pos}爻`;
+/**
+ * 按 YONG_SHEN_PRECEDENCE 定主用；诸条皆同者按爻位自下而上列出，只为输出稳定，不作取舍依据。
+ * @param lead 多现时说明的开头，如「妻财两现」
+ */
+function resolveRanked(
+  target: LiuQinType,
+  ranked: RankedCandidate[],
+  resolvedStatus: YongShenSelectionStatus,
+  lead: string,
+  singleNote: (item: RankedCandidate) => string,
+): YongShenGroup {
+  const [first, ...rest] = [...ranked].sort((a, b) => compareRanked(a, b) || (a.candidate.position ?? 0) - (b.candidate.position ?? 0));
+  const group = { targetLiuQin: target, selected: first.candidate, candidates: rest.map((item) => item.candidate) };
+  const runnerUp = rest[0];
+  if (!runnerUp) {
+    return { ...group, selectionStatus: resolvedStatus, selectionNote: singleNote(first) };
+  }
+
+  const sickNote = describeSickCandidates(rest);
+  const rule = YONG_SHEN_PRECEDENCE.find((item) => item.order(first) !== item.order(runnerUp));
+  if (!rule) {
+    const tied = [first, ...rest.filter((item) => compareRanked(item, first) === 0)];
+    const labels = YONG_SHEN_PRECEDENCE.map((item) => item.label).join('、');
+    return {
+      ...group,
+      selectionStatus: 'ambiguous',
+      selectionNote: `${lead}，${tied.map((item) => item.name).join('、')}${labels}皆同，并看。${sickNote}`,
+    };
+  }
+  return {
+    ...group,
+    selectionStatus: resolvedStatus,
+    selectionNote: `${lead}，以${first.name}为主用神：${first.name}${rule.describe(first)}，${runnerUp.name}${rule.describe(runnerUp)}，${rule.basis(runnerUp)}。${sickNote}`,
   };
-  return targets.map((target) => {
-    const visibleCandidates = fullYaos
-      .filter((yao) => yao.liuQin === target)
-      .map(buildVisibleCandidate)
-      .sort(compareCandidate);
+}
 
-    if (visibleCandidates.length > 0) {
-      const selected = visibleCandidates[0];
-      const candidates = visibleCandidates.slice(1);
-      const ambiguous = sameRank(selected, candidates[0]);
-      return {
-        targetLiuQin: target,
-        selectionStatus: ambiguous ? 'ambiguous' : 'resolved',
-        selectionNote: ambiguous
-          ? `同类${target}并见，当前并看${[selected, candidates[0]].filter(Boolean).map((item) => `${item.strengthLabel}${item.position ? `${yaoName(item.position)}` : ''}`).join(' / ')}。`
-          : `以${selected.position ? yaoName(selected.position) : '当前所见'}${target}为主用神，优先参考其旺衰、动静与空亡。`,
-        selected,
-        candidates,
-      };
+interface YongShenContext {
+  fullYaos: FullYaoInfoExtended[];
+  fuShenByTarget: Map<LiuQinType, FuShen[]>;
+  gongElement: WuXing;
+  monthZhi: DiZhi;
+  dayZhi: DiZhi;
+  kongWang: KongWang;
+  /** 各爻所受有力动爻之克（爻位 → 动爻名） */
+  movingHarmByPosition: ReadonlyMap<number, readonly string[]>;
+}
+
+/** 取用次序：明现 → 变出（《卜筮正宗》「凡卦中用神不出现，查变爻有不必寻伏神矣」）→ 月日 → 伏神 */
+function buildYongShenGroups(targets: LiuQinType[], context: YongShenContext): YongShenGroup[] {
+  const { fullYaos, fuShenByTarget, gongElement, monthZhi, dayZhi, kongWang, movingHarmByPosition } = context;
+  const yaoName = (yao: FullYaoInfo) => `${traditionalYaoName(yao.position, yao.type)}爻`;
+  const authorityOf = (branch: DiZhi, specialStatus?: YaoSpecialStatus): RankedCandidate['authority'] => {
+    if (branch === monthZhi) return '临月建';
+    return branch === dayZhi && specialStatus !== 'yuePo' ? '临日建' : undefined;
+  };
+  const harmsOf = (candidate: YongShenCandidate, extra: string[] = []): string[] => [
+    ...(candidate.specialStatus === 'yuePo' || candidate.specialStatus === 'riPo' ? [SPECIAL_STATUS_LABELS[candidate.specialStatus]] : []),
+    ...(isKongPending(candidate.kongWangState) ? ['旬空'] : []),
+    ...extra,
+  ];
+
+  return targets.map((target): YongShenGroup => {
+    const visible = fullYaos.filter((yao) => yao.liuQin === target).map((yao): RankedCandidate => {
+      const candidate = buildVisibleCandidate(yao);
+      const huaType = yao.changeAnalysis?.huaType;
+      const changeHarms = [
+        ...(huaType === 'huiTouKe' || huaType === 'huaMu' || huaType === 'huaJue' ? [HUA_TYPE_LABELS[huaType]] : []),
+        ...(yao.changedYao && LIU_CHONG[yao.changedYao.naJia] === monthZhi ? ['化破'] : []),
+        ...((movingHarmByPosition.get(yao.position)?.length ?? 0) > 0 ? ['动爻克制'] : []),
+      ];
+      return { candidate, name: yaoName(yao), authority: authorityOf(yao.naJia, candidate.specialStatus), harms: harmsOf(candidate, changeHarms) };
+    });
+    if (visible.length > 0) {
+      return resolveRanked(target, visible, 'resolved', `${target}${COUNT_TEXT[visible.length]}现`,
+        (item) => `以${item.name}${target}为用神，优先参考其旺衰、动静与空亡。`);
     }
 
-    const changedCandidates = fullYaos
-      .filter((yao) => yao.changedYao?.liuQin === target)
-      .map((yao) => buildChangedCandidate(yao, monthZhi, dayZhi, kongWang))
-      .filter((candidate): candidate is YongShenCandidate => Boolean(candidate))
-      .sort(compareCandidate);
-
-    if (changedCandidates.length > 0) {
-      const selected = changedCandidates[0];
-      const candidates = changedCandidates.slice(1);
-      const ambiguous = sameRank(selected, candidates[0]);
-      return {
-        targetLiuQin: target,
-        selectionStatus: ambiguous ? 'ambiguous' : 'from_changed',
-        selectionNote: ambiguous
-          ? `本卦无${target}而多爻变出同类，当前需并看其动变、旺衰与化变去向。`
-          : `本卦无${target}而${yaoName(selected.position) || '变爻'}变出用神，依”变者显也”先取变爻。`,
-        selected,
-        candidates,
-      };
+    const changed = fullYaos.flatMap((yao): RankedCandidate[] => {
+      const candidate = yao.changedYao?.liuQin === target ? buildChangedCandidate(yao, monthZhi, dayZhi, kongWang) : null;
+      if (!candidate?.naJia) return [];
+      return [{ candidate, name: `${yaoName(yao)}变出`, authority: authorityOf(candidate.naJia, candidate.specialStatus), harms: harmsOf(candidate) }];
+    });
+    if (changed.length > 0) {
+      return resolveRanked(target, changed, 'from_changed', `本卦无${target}而${COUNT_TEXT[changed.length]}爻变出`,
+        (item) => `本卦无${target}，${item.name}${target}，取变爻为用神（《卜筮正宗》「凡卦中用神不出现，查变爻有不必寻伏神矣」）。`);
     }
 
-    const temporalCandidates = buildTemporalCandidates(target, gongElement, monthZhi, dayZhi).sort(compareCandidate);
-    if (temporalCandidates.length > 0) {
-      const selected = temporalCandidates[0];
+    const [temporal, ...otherTemporal] = buildTemporalCandidates(target, gongElement, monthZhi, dayZhi);
+    if (temporal) {
+      const source = temporal.movementLabel === '月建'
+        ? '《增删卜易·月将章》「卦无用神即以月建为用神，不必寻伏神也」'
+        : '《增删卜易·飞伏神章》「则以日月为用神」';
+      const alsoDay = otherTemporal[0] ? `；日辰${otherTemporal[0].naJia}亦属${target}，并参` : '';
       return {
         targetLiuQin: target,
         selectionStatus: 'from_temporal',
-        selectionNote: `本卦与变爻未稳见${target}，先以月建/日辰代用，再观卦内后续应机。`,
-        selected,
-        candidates: temporalCandidates.slice(1),
+        selectionNote: `本卦与变爻皆无${target}，以${temporal.movementLabel}${temporal.naJia}为用神（${source}）${alsoDay}。`,
+        selected: temporal,
+        candidates: otherTemporal,
       };
     }
 
-    const fuShenList = fuShenByTarget.get(target) || [];
-    const fuShenCandidates = fuShenList
+    const fuShenCandidates = (fuShenByTarget.get(target) || [])
       .map((item) => buildFuShenCandidate(item, kongWang, fullYaos.find((yao) => yao.position === item.feiShenPosition)))
-      .sort(compareCandidate);
-
+      .sort((a, b) => STRENGTH_ORDER[a.strength] - STRENGTH_ORDER[b.strength] || (a.position ?? 0) - (b.position ?? 0));
     if (fuShenCandidates.length > 0) {
-      const selected = fuShenCandidates[0];
+      const [selected, ...candidates] = fuShenCandidates;
       return {
         targetLiuQin: target,
         selectionStatus: 'from_fushen',
         selectionNote: `飞爻、变爻与月日均未稳取到${target}，转取伏神；当前需结合“出伏/生扶/冲空”条件并看。`,
         selected,
-        candidates: fuShenCandidates.slice(1),
+        candidates,
       };
     }
 
@@ -2235,6 +2254,31 @@ function calculateTimeRecommendations(groups: YongShenGroup[]): TimeRecommendati
         description: `当前${group.targetLiuQin}偏弱或受破，未见生扶、出空、回头生等转机前，不宜过早定成。`,
       });
     }
+
+    // 用神多现，空破之爻另主应期：小畜例「却得于辰土出空之日」、豫之归妹例「两爻巳火逢月破许巳年脱厄」
+    for (const sibling of group.candidates) {
+      if (!sibling.naJia || sibling.naJia === selected.naJia || (sibling.source !== 'visible' && sibling.source !== 'changed')) continue;
+      const label = `${sibling.liuQin}${sibling.naJia}${sibling.element}`;
+      if (sibling.specialStatus === 'yuePo') {
+        recommendations.push({
+          targetLiuQin: group.targetLiuQin,
+          type: 'critical',
+          earthlyBranch: sibling.naJia,
+          trigger: `逢${sibling.naJia}实破或逢${LIU_HE[sibling.naJia].partner}合`,
+          basis: ['用神多现，应乎月破'],
+          description: `同类${label}月破，应期多在实破、逢合之日（《卜筮正宗》「舍其不破而用月破」）。`,
+        });
+      } else if (isKongPending(sibling.kongWangState)) {
+        recommendations.push({
+          targetLiuQin: group.targetLiuQin,
+          type: 'critical',
+          earthlyBranch: sibling.naJia,
+          trigger: sibling.kongWangState === 'kong_static' ? `待${LIU_CHONG[sibling.naJia]}冲空或${sibling.naJia}填实` : `逢${sibling.naJia}出空`,
+          basis: ['用神多现，应乎旬空'],
+          description: `同类${label}旬空，应期多在出空、填实之日（《增删卜易·两现章》「舍其不空，而用旬空」）。`,
+        });
+      }
+    }
   }
   return recommendations;
 }
@@ -2252,18 +2296,16 @@ function buildWarnings(groups: YongShenGroup[], sanHeAnalysis: SanHeAnalysis, gu
   }
   for (const group of groups) {
     if (group.selectionStatus === 'ambiguous') {
-      warnings.push(`用神${group.targetLiuQin}同类并见，需并看而非强取一爻。`);
+      warnings.push(`用神${group.targetLiuQin}多现而取舍条件皆同，需并看而非强取一爻。`);
     }
     if (group.selected.kongWangState === 'kong_static') {
       warnings.push(`用神${group.targetLiuQin}真空，到底为空，须待冲空填实。`);
     }
-    if (group.selected.movementState === 'day_break') {
-      const isYuePo = group.selected.evidence.some(e => e.includes('月破'));
-      if (isYuePo) {
-        warnings.push(`用神${group.targetLiuQin}月破，整月无力，须过月方可论吉凶。`);
-      } else {
-        warnings.push(`用神${group.targetLiuQin}日破，先看能否得助赢救。`);
-      }
+    // 动爻亦论月破，以 specialStatus 为准，不看动静状态
+    if (group.selected.specialStatus === 'yuePo') {
+      warnings.push(`用神${group.targetLiuQin}月破，月内无功，须出月、逢合或实破之日方可论吉凶。`);
+    } else if (group.selected.specialStatus === 'riPo') {
+      warnings.push(`用神${group.targetLiuQin}日破，休囚无力，须得生扶方能有用。`);
     }
   }
   if (sanHeAnalysis.fullSanHeList && sanHeAnalysis.fullSanHeList.length > 0) {
@@ -2325,12 +2367,14 @@ export function performFullAnalysis(
   const describeActor = (yao: FullYaoInfo) => `${traditionalYaoName(yao.position, yao.type)}${yao.naJia}${yao.wuXing}`;
 
   const changedYaoDetails: ChangedYaoDetail[] = [];
+  const movingHarmByPosition = new Map<number, string[]>();
   const fullYaos: FullYaoInfoExtended[] = baseYaos.map((yao) => {
     const others = actors.filter((actor) => actor.position !== yao.position);
     const movingSupport = others
       .filter((actor) => actor.wuXing === yao.wuXing || WUXING_SHENG[actor.wuXing] === yao.wuXing)
       .map(describeActor);
     const movingHarm = others.filter((actor) => WUXING_KE[actor.wuXing] === yao.wuXing).map(describeActor);
+    movingHarmByPosition.set(yao.position, movingHarm);
     const judgement = judgeLine(factsOf(yao, movingSupport, movingHarm), monthZhi, dayZhi, kongWang);
     const { strength, kongWangState, dayStage } = judgement;
     const movementState = getYaoMovementState(yao, strength);
@@ -2388,7 +2432,7 @@ export function performFullAnalysis(
     fuShenByTarget.set(target, calculateFuShen(hexagramCode, baseYaos, target, gongElement, monthZhi, dayZhi, kongWang));
   }
 
-  const yongShen = buildYongShenGroups(fullYaos, fuShenByTarget, targets, gongElement, monthZhi, dayZhi, kongWang);
+  const yongShen = buildYongShenGroups(targets, { fullYaos, fuShenByTarget, gongElement, monthZhi, dayZhi, kongWang, movingHarmByPosition });
   const shenSystemByYongShen = yongShen.map((group) => ({
     targetLiuQin: group.targetLiuQin,
     ...calculateShenSystem(group, fullYaos, gongElement),

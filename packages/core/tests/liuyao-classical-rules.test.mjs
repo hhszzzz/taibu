@@ -144,3 +144,51 @@ test('liuyao separates 真空 from 假空 and lets 动爻生扶 turn 日墓 into
   assert.ok(raised.strength.evidence.includes('日墓而得生扶，论生不论墓'));
   assert.ok(raised.strength.evidence.includes('动爻生扶（六四丑土）'));
 });
+
+test('liuyao picks the main 用神 by 持世、临月日、旺衰、动静、伤损 and leaves 空破 to 应期', async () => {
+  // 《卜筮正宗·十八问答》第十七问「舍其闲爻而用持世，舍其无权而用月日」；《增删卜易·两现章》古法「舍其休囚，用其旺相，
+  // 舍其静爻，而用动爻，舍其月破，而用不破，舍其旬空，用其不空，舍其被伤，用其不伤」。
+  // 两现章「得其验者，应乎旬空月破」所附三例，皆以有权有气之爻断得失、以空破之爻断应期
+  const groupOf = (result) => result.yongShen[0];
+  const triggersOf = (result) => result.timeRecommendations.map((item) => item.trigger);
+
+  // 小畜例 未月庚子日：六四未土临月建为主（「应临月建之财以克世，许之必得」），九三辰土旬空主应期（「却得于辰土出空之日」）
+  const xiaoXu = await cast('风天小畜', '2024-08-04T10:00:00');
+  assert.equal(groupOf(xiaoXu).selectionStatus, 'resolved');
+  assert.equal(groupOf(xiaoXu).selected.naJia, '未');
+  assert.equal(groupOf(xiaoXu).candidates[0].kongWangState, 'kong_supported');
+  assert.match(groupOf(xiaoXu).selectionNote, /六四爻临月建，九三爻不临月日，「舍其无权而用月日」/u);
+  assert.ok(triggersOf(xiaoXu).includes('逢辰出空'));
+  const json = mcpCore.toLiuyaoCanonicalJson(xiaoXu).用神分析[0];
+  assert.equal(json.取用说明, groupOf(xiaoXu).selectionNote);
+  assert.deepEqual([json.候选用神[0].强弱, json.候选用神[0].动静], ['有气', '静']);
+
+  // 师之涣例 未月甲午日：官鬼辰土有气（假空）为主，丑土月破主应期（「一空一破…皆应实空之年」）
+  const shi = await cast('地水师', '2024-07-29T10:00:00', { changedHexagramName: '风水涣', yongShenTargets: ['官鬼'] });
+  assert.equal(groupOf(shi).selected.naJia, '辰');
+  assert.match(groupOf(shi).selectionNote, /「舍其休囚，用其旺相」/u);
+  assert.match(groupOf(shi).selectionNote, /六四爻月破，另看应期/u);
+  assert.ok(triggersOf(shi).includes('逢丑实破或逢子合'));
+
+  // 豫之归妹例 亥月丙午日：九四午火临日建为主，六二巳火动而月破主应期（「许巳年脱厄，乃实破之年也」）
+  const yu = await cast('雷地豫', '2025-12-03T10:00:00', { changedHexagramName: '雷泽归妹', yongShenTargets: ['子孙'] });
+  assert.equal(groupOf(yu).selected.naJia, '午');
+  assert.equal(groupOf(yu).candidates[0].specialStatus, 'yuePo');
+  assert.ok(triggersOf(yu).includes('逢巳实破或逢申合'));
+
+  // 持世先于动静：乾为天九三辰土发动，上九戌土持世
+  const shiYao = await cast('乾为天', '2024-07-10T10:00:00', { changedHexagramName: '天泽履', yongShenTargets: ['父母'] });
+  assert.equal(groupOf(shiYao).selected.naJia, '戌');
+  assert.equal(groupOf(shiYao).candidates[0].movementState, 'changing');
+  assert.match(groupOf(shiYao).selectionNote, /「舍其闲爻而用持世」/u);
+
+  // 旺衰相同则取动：巳月庚午日坤为地初六未土发动，与六四丑土同为有气
+  const moving = await cast('坤为地', '2024-05-06T10:00:00', { changedHexagramName: '地雷复', yongShenTargets: ['兄弟'] });
+  assert.equal(groupOf(moving).selected.position, 1);
+  assert.match(groupOf(moving).selectionNote, /初六爻明动，六四爻安静，「舍其静爻，而用动爻」/u);
+
+  // 余皆相同则取无伤：寅月甲寅日两土同为无气，六四丑土旬空，只引「舍其旬空」之句
+  const unhurt = await cast('坤为地', '2024-02-20T10:00:00', { yongShenTargets: ['兄弟'] });
+  assert.equal(groupOf(unhurt).selected.position, 1);
+  assert.match(groupOf(unhurt).selectionNote, /初六爻无伤，六四爻旬空，「舍其旬空，用其不空」（《增删卜易·两现章》）/u);
+});

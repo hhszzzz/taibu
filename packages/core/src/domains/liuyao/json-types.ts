@@ -214,6 +214,8 @@ export interface LiuyaoYongShenJSON {
     是否世爻?: '是';
     是否应爻?: '是';
     空亡状态?: string;
+    强弱: string;
+    动静: string;
     依据?: string[];
   }>;
   神煞系统?: {

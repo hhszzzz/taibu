@@ -364,7 +364,7 @@ test('formatGuaLevelLines labels 半合 types in Chinese and never leaks the int
 test('liuyao canonical JSON and text describe real 半合 cases with Chinese type labels', async () => {
   for (const [yaoValues, expected] of [
     [[7, 9, 8, 8, 6, 7], '半合：申子→水（生地半合）'],
-    [[8, 8, 9, 7, 7, 6], '半合：卯未→木（墓地半合）'],
+    [[8, 6, 7, 6, 6, 6], '半合：午戌→火（墓地半合）'],
   ]) {
     const result = await mcpCore.calculateLiuyao({
       question: '近期计划是否顺利',

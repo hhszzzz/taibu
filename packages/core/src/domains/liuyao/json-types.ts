@@ -226,6 +226,8 @@ export interface LiuyaoYongShenJSON {
     仇神?: string;
   };
   应期提示?: Array<{
+    /** 应期为关键之期，吉期为转吉之期，忌期为须防之期；旧快照可能缺省 */
+    类型?: '应期' | '吉期' | '忌期';
     触发: string;
     依据: string[];
     说明: string;

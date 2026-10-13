@@ -4,6 +4,7 @@ import {
   formatGuaLevelLines,
   KONG_WANG_LABELS,
   sortYaosDescending,
+  TIME_RECOMMENDATION_LABELS,
   traditionalYaoName,
   WANG_SHUAI_LABELS,
   YONG_SHEN_STATUS_LABELS,
@@ -178,7 +179,7 @@ function renderLiuyaoCanonicalTextBase(result: LiuyaoOutput): string {
       const recs = timeRecMap.get(group.targetLiuQin);
       if (recs?.length) {
         for (const item of recs) {
-          lines.push(`- 应期: ${item.trigger}${item.basis?.length ? `（${item.basis.join('、')}）` : ''}，${item.description}`);
+          lines.push(`- ${TIME_RECOMMENDATION_LABELS[item.type] ?? '应期'}: ${item.trigger}${item.basis?.length ? `（${item.basis.join('、')}）` : ''}，${item.description}`);
         }
       }
       lines.push('');

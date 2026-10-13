@@ -319,16 +319,59 @@ test('liuyao judges 反吟 and 伏吟 per inner and outer trigram', async () => 
   assert.deepEqual(await scopes('乾为天', '坤为地'), { fanYin: null, fuYin: null });
   assert.deepEqual(await scopes('乾为天'), { fanYin: null, fuYin: null });
 
-  // 内卦反吟与外卦伏吟可以并见，判据与断语合为一条提示，渲染时各带所在之卦
+  // 内卦反吟与外卦伏吟可以并见：判据入卦级分析，断语入凶吉警告，两处不重复；渲染时各带所在之卦
   const both = await cast('天地否', '2024-08-04T10:00:00', { changedHexagramName: '雷风恒' });
   assert.deepEqual(await scopes('天地否', '雷风恒'), { fanYin: 'inner', fuYin: 'outer' });
-  const notes = both.warnings.filter((warning) => /反吟|伏吟/u.test(warning));
-  assert.equal(notes.length, 1);
-  assert.match(notes[0], /^内卦坤化巽，未巳卯与丑亥酉逐爻相冲，爻之反吟；外卦乾化震，午申戌复化午申戌。内卦反吟，内则不安.*外卦伏吟，外则忧郁.*吉凶仍以用神旺衰定。$/u);
+  assert.ok(mcpCore.toLiuyaoCanonicalJson(both).卦级分析.includes(
+    '内卦反吟、外卦伏吟：内卦坤化巽，未巳卯与丑亥酉逐爻相冲，爻之反吟；外卦乾化震，午申戌复化午申戌',
+  ));
+  assert.deepEqual(both.warnings.filter((warning) => /反吟|伏吟/u.test(warning)), [
+    '内卦反吟，内则不安，主成而败、败而成，去而复来（《增删卜易·反伏章》）；外卦伏吟，外则忧郁，动如不动（《卜筮正宗》第六问）；吉凶仍以用神旺衰定。',
+  ]);
   const text = mcpCore.toLiuyaoText(both, { detailLevel: 'full' });
   assert.ok(text.includes('- 共振: 内卦反吟\n- 共振: 外卦伏吟'));
   assert.ok(text.includes('- 反吟伏吟: 内卦反吟、外卦伏吟'));
   assert.deepEqual(mcpCore.toLiuyaoJson(both, { detailLevel: 'full' }).全局互动.反伏信息, [
     { 类型: '反吟', 范围: '内卦' }, { 类型: '伏吟', 范围: '外卦' },
   ]);
+});
+
+test('liuyao forms 三合 by the 三合章 and 第四问 conditions, not by 得令', async () => {
+  // 《增删卜易·三合章》「一卦之内，有三爻动而合局者，一也；两爻动，一爻不动，亦成合局者，二也；有内卦初爻、三爻动，
+  // 动而变出之爻成三合者，三也；又有外卦四爻、六爻动，动而变出之爻成三合者，四也」（全学网本；维基文库本「三爻动」
+  // 作「一爻动」，与下文「三爻若有两爻动，不成局」相违，从全学网本），「一爻明动一爻暗动亦作两爻动」；
+  // 《卜筮正宗》第四问「如一爻静二爻发者，待一爻静者值日应事」「不动不成局」。合化五行旺衰不是成局条件
+  const formedOf = async (hexagramName, changedHexagramName, date) => {
+    const { sanHeAnalysis } = await cast(hexagramName, date, { changedHexagramName });
+    return Object.fromEntries((sanHeAnalysis.fullSanHeList ?? []).map((item) => [item.name, item.description]));
+  };
+
+  // 第四问例乾之需「寅午戌三合官局生世…内少寅字发动，须寅日递呈」：寅静、午戌动，两动一静成局，静者值日应事
+  assert.equal((await formedOf('乾为天', '水天需', '2024-06-06T10:00:00')).寅午戌合火局,
+    '九二寅静、九四午动、上九戌动，两动一静亦成局，静者寅值日应事');
+  // 外卦四六爻动而与化出之支合成：午化申、戌化子，与九三辰成申子辰
+  assert.match((await formedOf('乾为天', '水天需', '2024-06-06T10:00:00')).申子辰合水局, /^九四化出申、上九化出子、九三辰静，两动一静亦成局/u);
+  // 第四问例「借寅月建补成三合，本月必选」：寅月时月建补足寅，不待静爻值日
+  assert.equal((await formedOf('乾为天', '水天需', '2024-02-06T10:00:00')).寅午戌合火局,
+    '月建寅、九四午动、上九戌动，借月建补成，本月可应');
+  // 第四问例大畜之乾「寅午戌三合父局，独有寅字日冲又绝于申日，己亥日必归…冲中逢合也」：四爻戌动化午，一爻动而化出亦作两支
+  assert.equal((await formedOf('山天大畜', '乾为天', '2024-09-29T10:00:00')).寅午戌合火局,
+    '九二寅静、六四化出午、六四戌动，两动一静亦成局；寅日破，逢亥合之日成局');
+  // 第四问例睽之鼎「内卦巳酉丑合成金局…丑土系月破…此其破而逢合也」
+  assert.equal((await formedOf('火泽睽', '火风鼎', '2025-08-03T10:00:00')).巳酉丑合金局,
+    '初九巳动、六三化出酉、六三丑动，三支俱动，可论成局；丑月破，逢丑填实或逢子合之日成局');
+  // 第四问例萃之革「内卦亥卯未合财局…因于未土旬空必待未月…未月者实空之月也」
+  assert.equal((await formedOf('泽地萃', '泽火革', '2024-03-21T10:00:00')).亥卯未合木局,
+    '六三化出亥、六三卯动、初六未动，三支俱动，可论成局；未旬空，逢丑冲空或逢未填实之日成局');
+  // 木在丑月囚，旧法以「未得令」不论成局；亥静、卯化出、未动，两动一静仍成局
+  const xianZhiPi = await cast('泽山咸', '2026-01-10T12:00:00', { changedHexagramName: '天地否' });
+  assert.equal(xianZhiPi.sanHeAnalysis.hasFullSanHe, true);
+  assert.match(xianZhiPi.sanHeAnalysis.fullSanHe.description, /^九四亥静、九三化出卯、上六未动，两动一静亦成局/u);
+  assert.ok(mcpCore.toLiuyaoCanonicalJson(xianZhiPi).卦级分析.some((line) => line.startsWith('三合局：亥卯未合木局→木（九四亥静')));
+
+  // 只一爻发动：不成局，入凶吉警告，不进组合关系，也不再拆作半合
+  const gou = await cast('乾为天', '2024-01-01T10:00:00', { changedHexagramName: '天风姤' });
+  assert.equal(gou.sanHeAnalysis.hasFullSanHe, false);
+  assert.ok(gou.warnings.includes('见申子辰合水局三支（九五申静、初九子动、九三辰静）而只一支发动，不成局（《卜筮正宗》第四问「不动不成局」）。'));
+  assert.equal(mcpCore.toLiuyaoJson(gou, { detailLevel: 'full' }).全局互动.组合关系.length, 0);
 });

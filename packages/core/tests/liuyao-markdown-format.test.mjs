@@ -123,10 +123,11 @@ test('liuyao full detail level should expose complete board details and computed
   assert.match(payload.structuredContent.卦盘.本卦.卦辞, /渐/u);
   assert.match(payload.structuredContent.卦盘.变卦.卦辞, /巽/u);
   assert.equal(payload.structuredContent.卦盘.全局神煞[1], '十恶大败');
-  assert.equal(payload.structuredContent.全局互动.组合关系[0].参与者[0].来源, '变爻');
-  assert.equal(payload.structuredContent.全局互动.组合关系[0].参与者[1].来源, '月建');
-  assert.equal(payload.structuredContent.全局互动.组合关系[1].参与者[0].来源, '动爻');
-  assert.equal(payload.structuredContent.全局互动.组合关系[1].参与者[1].来源, '日建');
+  // 亥卯未三支俱见（六二化出亥、月建卯、六四未静）而只一支发动，断为不成局，不再拆成亥卯半合
+  assert.equal(payload.structuredContent.全局互动.组合关系.length, 1);
+  assert.equal(payload.structuredContent.全局互动.组合关系[0].参与者[0].来源, '动爻');
+  assert.equal(payload.structuredContent.全局互动.组合关系[0].参与者[1].来源, '日建');
+  assert.ok(toLiuyaoCanonicalJson(result).提示.some((line) => /亥卯未合木局三支.*只一支发动，不成局/u.test(line)));
   // 午化亥既回头克又化绝：回头克为主名，化绝写入化变说明
   assert.equal(payload.structuredContent.六爻全盘.爻列表[4].化变, '回头克');
   assert.equal(payload.structuredContent.全局互动.是否六冲卦, '否');

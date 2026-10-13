@@ -355,14 +355,17 @@ export interface GuaFanFuYinInfo {
   fanYinScope?: GuaScope;
   /** 伏吟所在之卦（同章「内卦动变伏吟，内则呻吟，外卦动变伏吟，外则忧郁」） */
   fuYinScope?: GuaScope;
-  /** 反吟、伏吟的判据与断语；二者并见时合为一段 */
+  /** 反吟、伏吟的判据（某卦化某卦、纳甲复化或相冲）；断语由范围另行给出 */
   description?: string;
 }
 
 export interface SanHeAnalysisInfo {
   hasFullSanHe: boolean;
   fullSanHe?: { name: string; result: string; positions: number[]; description?: string; };
+  /** 成局之三合（旧数据可能混有未成局者，以 description 为准） */
   fullSanHeList?: Array<{ name: string; result: string; positions: number[]; description?: string; }>;
+  /** 三支俱见而只一支发动、不成局者 */
+  unformedSanHe?: Array<{ name: string; result: string; positions: number[]; description?: string; }>;
   hasBanHe: boolean;
   banHe?: Array<{ branches: string[]; result: string; type: string; positions: number[]; }>;
 }

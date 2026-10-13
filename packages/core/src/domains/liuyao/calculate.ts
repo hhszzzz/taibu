@@ -246,6 +246,13 @@ export interface SanHeAnalysis {
     positions: number[];
     description: string;
   }>;
+  /** 三支俱见而只一支发动、不成局者（「不动不成局」） */
+  unformedSanHe?: Array<{
+    name: string;
+    result: WuXing;
+    positions: number[];
+    description: string;
+  }>;
   hasBanHe: boolean;
   banHe?: Array<{
     branches: [DiZhi, DiZhi];
@@ -409,7 +416,7 @@ export function formatGuaLevelLines(analysis: {
     parts.push(`六合卦：是${liuHeGuaInfo.description ? `（${liuHeGuaInfo.description}）` : ''}`);
   }
   if (chongHeTransition && chongHeTransition.type !== 'none' && chongHeTransition.description) {
-    parts.push(`冲合转换：${chongHeTransition.description}`);
+    parts.push(chongHeTransition.description);
   }
   if (guaFanFuYin && (guaFanFuYin.isFanYin || guaFanFuYin.isFuYin)) {
     parts.push(`${formatGuaFanFuYinFlags(guaFanFuYin).join('、')}：${guaFanFuYin.description || '是'}`);
@@ -1410,94 +1417,143 @@ export function calculateFullYaoInfo(yaos: YaoInput[], hexagramCode: string, day
   });
 }
 
-function analyzeSanHe(
-  fullYaos: FullYaoInfo[],
-  changedYaos: ChangedYaoDetail[],
-  monthZhi: DiZhi,
-  dayZhi: DiZhi
-): SanHeAnalysis {
-  const sources: Array<{ zhi: DiZhi; position: number; source: 'dong' | 'bian' | 'yue' | 'ri'; }> = [];
-  for (const yao of fullYaos) {
-    if (yao.change === 'changing') {
-      sources.push({ zhi: yao.naJia, position: yao.position, source: 'dong' });
+/** 三合局中一支的来处：本爻（明动、暗动、静）、动爻化出之支、月建、日辰 */
+interface SanHeMember {
+  /** 本爻或化出之支所在爻位；月建、日辰为 0 */
+  position: number;
+  /** 明动、暗动之爻，或动爻化出之支 */
+  active: boolean;
+  source: 'line' | 'changed' | 'month' | 'day';
+  label: string;
+  /** 此支之病与成局之期 */
+  sickness?: string;
+}
+
+const SAN_HE_KONG_SICK: ReadonlySet<KongWangState> = new Set(['kong_static', 'kong_supported', 'kong_changing']);
+/** 补足第三支时的取舍：月建补成本月即应，静爻待值日，日辰次之 */
+const SAN_HE_SUPPLEMENT_RANK: Record<SanHeMember['source'], number> = { month: 3, line: 2, changed: 2, day: 1 };
+
+/** 局中本爻之病（第四问「宗其一爻有病关因者断之」）：破待合填、空待出空、墓待冲开、合待冲开 */
+function sanHeLineSickness(yao: FullYaoInfoExtended, monthZhi: DiZhi, dayZhi: DiZhi): string | undefined {
+  const zhi = yao.naJia;
+  const special = yao.strength.specialStatus;
+  if (special === 'yuePo') return `${zhi}月破，逢${zhi}填实或逢${LIU_HE[zhi].partner}合之日成局`;
+  if (special === 'riPo') return `${zhi}日破，逢${LIU_HE[zhi].partner}合之日成局`;
+  if (SAN_HE_KONG_SICK.has(yao.kongWangState)) return `${zhi}旬空，逢${LIU_CHONG[zhi]}冲空或逢${zhi}填实之日成局`;
+  if (yao.changSheng?.stage === '墓') return `${zhi}入墓，逢${LIU_CHONG[dayZhi]}冲开之日成局`;
+  // 日冲之爻（暗动）不论合住
+  if (LIU_CHONG[zhi] === dayZhi) return undefined;
+  if (LIU_HE[zhi].partner === dayZhi) return `${zhi}合日，逢${LIU_CHONG[zhi]}冲开之日成局`;
+  if (LIU_HE[zhi].partner === monthZhi) return `${zhi}合月，逢${LIU_CHONG[zhi]}或${LIU_CHONG[monthZhi]}冲开之日成局`;
+  return undefined;
+}
+
+/** 逐支取来处：发动者最多为先，补足之支依 SAN_HE_SUPPLEMENT_RANK 取舍 */
+function pickSanHeMembers(candidates: readonly SanHeMember[][]): SanHeMember[] {
+  const keyOf = (members: readonly SanHeMember[]) => [
+    members.filter((member) => member.active).length,
+    members.reduce((sum, member) => sum + SAN_HE_SUPPLEMENT_RANK[member.source], 0),
+  ];
+  let best: { members: SanHeMember[]; key: number[]; } | undefined;
+  const visit = (chosen: SanHeMember[]) => {
+    if (chosen.length === candidates.length) {
+      const key = keyOf(chosen);
+      if (!best || key[0] > best.key[0] || (key[0] === best.key[0] && key[1] > best.key[1])) best = { members: chosen, key };
+      return;
+    }
+    for (const member of candidates[chosen.length]) visit([...chosen, member]);
+  };
+  visit([]);
+  return best?.members ?? [];
+}
+
+/**
+ * 三合局（《增删卜易·三合章》、《卜筮正宗》第四问）：
+ * - 成局有四：三爻俱动；两爻动一爻静；内卦初三爻、外卦四六爻动而与化出之支合成。即三支俱全，其中至少两支发动
+ *   （明动、暗动之爻，或动爻化出之支；「一爻明动一爻暗动亦作两爻动」）。第四问例艮天大畜之乾为天，四爻戌动化午、
+ *   静爻寅，亦断「寅午戌三合父局」；例乾之小畜「借寅月建补成三合，本月必选」，月建、日辰可补一支。
+ * - 「不动不成局」：三支虽全而只一支发动者不成局。合化五行的旺衰另论，不作成局条件。
+ * - 局中有病待去病之日：「三合局中若有一空破者，待填满之日月成之；有一爻入墓者待冲开之日成之」，第四问「其冲破也，
+ *   必待相合之期至」「静而逢合…必待冲期至」「化而逢空者，待其出空之期」；无病而一爻静二爻发者，「待一爻静者值日应事」。
+ * 三支只见其二者（虚一待用）不在此列；半合沿用原法，只作辅助。
+ */
+function analyzeSanHe(fullYaos: readonly FullYaoInfoExtended[], monthZhi: DiZhi, dayZhi: DiZhi, kongBranches: readonly DiZhi[]): SanHeAnalysis {
+  const membersOf = (zhi: DiZhi): SanHeMember[] => [
+    ...fullYaos.filter((yao) => yao.naJia === zhi).map((yao): SanHeMember => {
+      const hidden = yao.movementState === 'hidden_moving';
+      const sickness = sanHeLineSickness(yao, monthZhi, dayZhi);
+      return {
+        position: yao.position,
+        active: yao.isChanging || hidden,
+        source: 'line',
+        label: `${traditionalYaoName(yao.position, yao.type)}${zhi}${yao.isChanging ? '动' : hidden ? '暗动' : '静'}`,
+        ...(sickness ? { sickness } : {}),
+      };
+    }),
+    ...fullYaos.filter((yao) => yao.changedYao?.naJia === zhi).map((yao): SanHeMember => ({
+      position: yao.position,
+      active: true,
+      source: 'changed',
+      label: `${traditionalYaoName(yao.position, yao.type)}化出${zhi}`,
+      ...(kongBranches.includes(zhi) ? { sickness: `${zhi}化空，逢${LIU_CHONG[zhi]}冲空或逢${zhi}填实之日成局` } : {}),
+    })),
+    ...(monthZhi === zhi ? [{ position: 0, active: false, source: 'month' as const, label: `月建${zhi}` }] : []),
+    ...(dayZhi === zhi ? [{ position: 0, active: false, source: 'day' as const, label: `日辰${zhi}` }] : []),
+  ];
+
+  const formed: NonNullable<SanHeAnalysis['fullSanHeList']> = [];
+  const unformed: NonNullable<SanHeAnalysis['unformedSanHe']> = [];
+  for (const sanHe of SAN_HE_TABLE) {
+    const candidates = sanHe.branches.map(membersOf);
+    if (candidates.some((list) => list.length === 0)) continue;
+    const members = pickSanHeMembers(candidates);
+    const activeCount = members.filter((member) => member.active).length;
+    const positions = [...new Set(members.filter((member) => member.position > 0).map((member) => member.position))];
+    const labels = members.map((member) => member.label).join('、');
+    if (activeCount >= 2) {
+      const supplementIndex = members.findIndex((member) => !member.active);
+      const supplement = members[supplementIndex];
+      const mode = !supplement
+        ? '三支俱动，可论成局'
+        : supplement.source === 'line'
+          ? '两动一静亦成局'
+          : `借${supplement.source === 'month' ? '月建' : '日辰'}补成`;
+      const sickness = members.flatMap((member) => (member.sickness ? [member.sickness] : []));
+      const timing = sickness.length > 0
+        ? `；${sickness.join('；')}`
+        : supplement?.source === 'line'
+          ? `，静者${sanHe.branches[supplementIndex]}值日应事`
+          : supplement?.source === 'month'
+            ? '，本月可应'
+            : '';
+      formed.push({ name: sanHe.name, result: sanHe.result, positions, description: `${labels}，${mode}${timing}` });
+    } else if (activeCount === 1) {
+      unformed.push({
+        name: sanHe.name,
+        result: sanHe.result,
+        positions,
+        description: `见${sanHe.name}三支（${labels}）而只一支发动，不成局（《卜筮正宗》第四问「不动不成局」）。`,
+      });
     }
   }
-  for (const yao of changedYaos) {
-    sources.push({ zhi: yao.naJia, position: yao.position || 0, source: 'bian' });
-  }
-  sources.push({ zhi: monthZhi, position: 0, source: 'yue' });
-  sources.push({ zhi: dayZhi, position: 0, source: 'ri' });
 
+  // 半合只补三合未及之局：同一局已断成局或不成局者不再重复
+  const judgedResults = new Set<WuXing>([...formed, ...unformed].map((item) => item.result));
+  const sources: Array<{ zhi: DiZhi; position: number; }> = [
+    ...fullYaos.filter((yao) => yao.isChanging).map((yao) => ({ zhi: yao.naJia, position: yao.position })),
+    ...fullYaos.flatMap((yao) => (yao.changedYao ? [{ zhi: yao.changedYao.naJia, position: yao.position }] : [])),
+    { zhi: monthZhi, position: 0 },
+    { zhi: dayZhi, position: 0 },
+  ];
   const allZhi = sources.map((item) => item.zhi);
-  const fullSanHeList = SAN_HE_TABLE.map((sanHe) => {
-    if (!sanHe.branches.every((branch) => allZhi.includes(branch))) {
-      return null;
-    }
-    const matchingSources = sources.filter((item) => sanHe.branches.includes(item.zhi));
-    const positions = matchingSources
-      .filter((item) => item.source !== 'yue' && item.source !== 'ri')
-      .map((item) => item.position)
-      .filter((value, index, arr) => value > 0 && arr.indexOf(value) === index);
-    if (positions.length < 2) {
-      return null;
-    }
-
-    const activeBranches = new Set(
-      matchingSources.filter((s) => s.source === 'dong' || s.source === 'bian').map((s) => s.zhi)
-    );
-    const allThreeActive = sanHe.branches.every((b) => activeBranches.has(b));
-    const resultWangShuai = WANG_SHUAI_TABLE[monthZhi][sanHe.result];
-    const resultIsWang = resultWangShuai === 'wang' || resultWangShuai === 'xiang';
-
-    const conditions: string[] = [];
-    if (!allThreeActive) conditions.push('有支非动爻参与');
-    if (!resultIsWang) conditions.push(`合化${sanHe.result}在月令${WANG_SHUAI_LABELS[resultWangShuai]}，未得令`);
-
-    return {
-      name: sanHe.name,
-      result: sanHe.result,
-      positions,
-      description: conditions.length > 0
-        ? `见${sanHe.name}三支，但${conditions.join('、')}，暂作合局迹象参考，未必成局。`
-        : `${sanHe.name}三支皆动且合化${sanHe.result}得令，可论成局。`,
-      isFull: allThreeActive && resultIsWang,
-    };
-  }).filter((item): item is {
-    name: string;
-    result: WuXing;
-    positions: number[];
-    description: string;
-    isFull: boolean;
-  } => Boolean(item));
-
-  if (fullSanHeList.length > 0) {
-    const primary = fullSanHeList.find((item) => item.isFull) ?? fullSanHeList[0];
-    return {
-      hasFullSanHe: fullSanHeList.some((item) => item.isFull),
-      fullSanHe: {
-        name: primary.name,
-        result: primary.result,
-        positions: primary.positions,
-        description: primary.description,
-      },
-      fullSanHeList: fullSanHeList.map((item) => ({
-        name: item.name,
-        result: item.result,
-        positions: item.positions,
-        description: item.description,
-      })),
-      hasBanHe: false,
-    };
-  }
-
-  const banHe = BAN_HE_TABLE.map((item) => {
+  const banHe = BAN_HE_TABLE.filter((item) => !judgedResults.has(item.result)).map((item) => {
     if (!item.branches.every((branch) => allZhi.includes(branch))) {
       return null;
     }
     const positions = sources
-      .filter((source) => source.source !== 'yue' && source.source !== 'ri' && item.branches.includes(source.zhi))
+      .filter((source) => source.position > 0 && item.branches.includes(source.zhi))
       .map((source) => source.position)
-      .filter((value, index, arr) => value > 0 && arr.indexOf(value) === index);
+      .filter((value, index, arr) => arr.indexOf(value) === index);
     if (positions.length === 0) {
       return null;
     }
@@ -1510,9 +1566,11 @@ function analyzeSanHe(
   }).filter((item): item is NonNullable<SanHeAnalysis['banHe']>[number] => Boolean(item));
 
   return {
-    hasFullSanHe: false,
+    hasFullSanHe: formed.length > 0,
+    ...(formed.length > 0 ? { fullSanHe: formed[0], fullSanHeList: formed } : {}),
+    ...(unformed.length > 0 ? { unformedSanHe: unformed } : {}),
     hasBanHe: banHe.length > 0,
-    banHe: banHe.length > 0 ? banHe : undefined,
+    ...(banHe.length > 0 ? { banHe } : {}),
   };
 }
 
@@ -1592,17 +1650,22 @@ function checkGuaFanFuYin(hexagramCode: string, changedCode: string | undefined)
     return { isFanYin: false, isFuYin: false };
   }
   const evidence = [...(inner ? [`内卦${inner.note}`] : []), ...(outer ? [`外卦${outer.note}`] : [])];
-  const meanings = [
-    ...(fanYinScope ? [`${GUA_SCOPE_LABELS[fanYinScope]}反吟，${FAN_YIN_MEANING[fanYinScope]}，主成而败、败而成，去而复来（《增删卜易·反伏章》）`] : []),
-    ...(fuYinScope ? [`${GUA_SCOPE_LABELS[fuYinScope]}伏吟，${FU_YIN_MEANING[fuYinScope]}，动如不动（《卜筮正宗》第六问）`] : []),
-  ];
   return {
     isFanYin: fanYinScope !== undefined,
     isFuYin: fuYinScope !== undefined,
     ...(fanYinScope ? { fanYinScope } : {}),
     ...(fuYinScope ? { fuYinScope } : {}),
-    description: `${evidence.join('；')}。${meanings.join('；')}；吉凶仍以用神旺衰定。`,
+    description: evidence.join('；'),
   };
+}
+
+/** 反伏断语（入凶吉警告），判据另见卦级分析；无范围的旧数据不出断语 */
+export function formatGuaFanFuYinReading(info: GuaFanFuYinInfo): string | undefined {
+  const meanings = [
+    ...(info.isFanYin && info.fanYinScope ? [`${GUA_SCOPE_LABELS[info.fanYinScope]}反吟，${FAN_YIN_MEANING[info.fanYinScope]}，主成而败、败而成，去而复来（《增删卜易·反伏章》）`] : []),
+    ...(info.isFuYin && info.fuYinScope ? [`${GUA_SCOPE_LABELS[info.fuYinScope]}伏吟，${FU_YIN_MEANING[info.fuYinScope]}，动如不动（《卜筮正宗》第六问）`] : []),
+  ];
+  return meanings.length > 0 ? `${meanings.join('；')}；吉凶仍以用神旺衰定。` : undefined;
 }
 
 function isLiuHeGuaPattern(yaos: FullYaoInfo[]): boolean {
@@ -2277,6 +2340,8 @@ interface TimingContext {
 }
 
 const TIMING_TYPE_ORDER: Record<TimeRecommendation['type'], number> = { critical: 0, favorable: 1, unfavorable: 2 };
+/** 应期提示的性质：关键应期、转吉之期（遇生旺、克去克神）、忌期（化退逢值冲、克者逢生） */
+export const TIME_RECOMMENDATION_LABELS = { critical: '应期', favorable: '吉期', unfavorable: '忌期' } as const satisfies Record<TimeRecommendation['type'], string>;
 const WUXING_SEASON: Record<WuXing, string> = {
   木: '春令寅卯月',
   火: '夏令巳午月',
@@ -2296,7 +2361,7 @@ const WUXING_BRANCHES: Record<WuXing, string> = { 木: '寅卯', 火: '巳午', 
  * 3. 受克者看克神；用神多现时同类空破之爻另主应期。
  * 《增删卜易·囤货卖货章》「财爻太旺旺者得利于墓库之月，休囚者出脱于生旺之时，入墓必待冲开，逢绝当逢生旺，月破者填实之，
  * 被克者冲去克神之秋，伏藏者得价于出现之时，旬空者冲空实空之月，如逢合住亦待冲开」，与上述各条一一相合。
- * 只给相对条件（逢某支），不推算具体历日。每组按 关键 → 有利 → 不利 排列。
+ * 只给相对条件（逢某支），不推算具体历日。每组按 应期 → 吉期 → 忌期 排列。
  */
 function calculateTimeRecommendations(groups: YongShenGroup[], context: TimingContext): TimeRecommendation[] {
   return groups.flatMap((group) => timingOf(group, context)
@@ -2449,14 +2514,11 @@ function timingOf(group: YongShenGroup, context: TimingContext): TimeRecommendat
   return recommendations;
 }
 
-function buildWarnings(groups: YongShenGroup[], sanHeAnalysis: SanHeAnalysis, guaFanFuYin: GuaFanFuYinInfo, chongHeTransition: ChongHeTransition): string[] {
+/** 凶吉警告只列卦级分析未写明的断语与告诫：冲合转换、成局三合已见卦级分析，不再重复 */
+function buildWarnings(groups: YongShenGroup[], sanHeAnalysis: SanHeAnalysis, guaFanFuYin: GuaFanFuYinInfo): string[] {
   const warnings: string[] = [];
-  if ((guaFanFuYin.isFuYin || guaFanFuYin.isFanYin) && guaFanFuYin.description) {
-    warnings.push(guaFanFuYin.description);
-  }
-  if (chongHeTransition.type !== 'none' && chongHeTransition.description) {
-    warnings.push(chongHeTransition.description);
-  }
+  const fanFuYinReading = formatGuaFanFuYinReading(guaFanFuYin);
+  if (fanFuYinReading) warnings.push(fanFuYinReading);
   for (const group of groups) {
     if (group.selectionStatus === 'ambiguous') {
       warnings.push(`用神${group.targetLiuQin}多现而取舍条件皆同，需并看而非强取一爻。`);
@@ -2471,11 +2533,7 @@ function buildWarnings(groups: YongShenGroup[], sanHeAnalysis: SanHeAnalysis, gu
       warnings.push(`用神${group.targetLiuQin}日破，休囚无力，须得生扶方能有用。`);
     }
   }
-  if (sanHeAnalysis.fullSanHeList && sanHeAnalysis.fullSanHeList.length > 0) {
-    warnings.push(...sanHeAnalysis.fullSanHeList.map((item) => item.description));
-  } else if (sanHeAnalysis.fullSanHe) {
-    warnings.push(sanHeAnalysis.fullSanHe.description);
-  }
+  warnings.push(...(sanHeAnalysis.unformedSanHe ?? []).map((item) => item.description));
   if (sanHeAnalysis.hasBanHe) {
     warnings.push('卦中见半合，只能作辅助证据，不能单独代替用神旺衰。');
   }
@@ -2529,7 +2587,6 @@ export function performFullAnalysis(
   });
   const describeActor = (yao: FullYaoInfo) => `${traditionalYaoName(yao.position, yao.type)}${yao.naJia}${yao.wuXing}`;
 
-  const changedYaoDetails: ChangedYaoDetail[] = [];
   const movingHarmByPosition = new Map<number, FullYaoInfo[]>();
   const fullYaos: FullYaoInfoExtended[] = baseYaos.map((yao) => {
     const others = actors.filter((actor) => actor.position !== yao.position);
@@ -2557,7 +2614,6 @@ export function performFullAnalysis(
     if (changedCode && changeAnalysis) {
       extended.changeAnalysis = changeAnalysis;
       extended.changedYao = calculateChangedYaoDetail(hexagramCode, changedCode, yao.position, gongElement, extended, changeAnalysis);
-      changedYaoDetails.push(extended.changedYao);
     }
     return extended;
   });
@@ -2600,14 +2656,14 @@ export function performFullAnalysis(
     targetLiuQin: group.targetLiuQin,
     ...calculateShenSystem(group, fullYaos, gongElement),
   }));
-  const sanHeAnalysis = analyzeSanHe(baseYaos, changedYaoDetails, monthZhi, dayZhi);
+  const sanHeAnalysis = analyzeSanHe(fullYaos, monthZhi, dayZhi, kongWang.kongDizhi);
   const liuChongGuaInfo = checkLiuChongGua(baseYaos);
   const liuHeGuaInfo = checkLiuHeGua(baseYaos);
   const chongHeTransition = checkChongHeTransition(baseYaos, changedCode);
   const guaFanFuYin = checkGuaFanFuYin(hexagramCode, changedCode);
   const timeRecommendations = calculateTimeRecommendations(yongShen, { fullYaos, monthZhi, dayZhi, movingHarmByPosition });
   const globalShenSha = calculateGlobalShenSha(shenShaContext);
-  const warnings = buildWarnings(yongShen, sanHeAnalysis, guaFanFuYin, chongHeTransition);
+  const warnings = buildWarnings(yongShen, sanHeAnalysis, guaFanFuYin);
   const fuShen = Array.from(fuShenByTarget.values()).flat().map((item) => item.fuShen);
 
   return {

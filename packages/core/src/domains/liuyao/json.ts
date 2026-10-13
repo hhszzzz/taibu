@@ -13,6 +13,7 @@ import {
   GUA_SCOPE_LABELS,
   KONG_WANG_LABELS,
   sortYaosDescending,
+  TIME_RECOMMENDATION_LABELS,
   traditionalYaoName,
   WANG_SHUAI_LABELS,
   YONG_SHEN_STATUS_LABELS,
@@ -336,6 +337,7 @@ function renderLiuyaoCanonicalJSONBase(result: LiuyaoOutput): LiuyaoCanonicalJSO
     const recs = timeRecMap.get(group.targetLiuQin);
     if (recs?.length) {
       entry.应期提示 = recs.map((item) => ({
+        类型: TIME_RECOMMENDATION_LABELS[item.type],
         触发: item.trigger,
         依据: item.basis || [],
         说明: item.description,

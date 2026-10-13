@@ -8,7 +8,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { RotateCw, RefreshCw, Copy, Check, ChevronLeft } from 'lucide-react';
+import { RotateCw, RefreshCw, Copy, Check, ChevronLeft, BookOpenText } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { ResultMobileActions } from '@/components/bazi/result/ResultHeader';
 import { ResultHeaderActions } from '@/components/divination/ResultHeaderActions';
@@ -185,13 +185,16 @@ export default function QimenResultPage() {
     }, [currentUser, router, saveChartRecord, sessionLoading]);
 
     // 次要操作：桌面端收进标题区「更多」，移动端进顶栏三点菜单（另加重新起局）
+    // 收藏到知识库依赖已保存的 chartId，保存完成前不出现
+    const chartId = result?.chartId;
     const resultActions = useMemo((): HeaderMenuItem[] => {
         const items: HeaderMenuItem[] = [
             { id: 'copy-chart', label: copied ? '排盘已复制' : '复制排盘', icon: copied ? <Check className={MENU_ICON_CLASS} /> : <Copy className={MENU_ICON_CLASS} />, onClick: () => setShowCopyModal(true) },
         ];
         if (isAdmin && canonicalResult) items.push({ id: 'copy-json', label: jsonCopied ? 'JSON 已复制' : '复制 JSON', icon: jsonCopied ? <Check className={MENU_ICON_CLASS} /> : <Copy className={MENU_ICON_CLASS} />, onClick: () => { void copyJson(); } });
+        if (knowledgeBaseEnabled && chartId) items.push({ id: 'add-to-kb', label: '收藏到知识库', icon: <BookOpenText className={MENU_ICON_CLASS} />, onClick: () => setShowKbModal(true) });
         return items;
-    }, [canonicalResult, copied, copyJson, isAdmin, jsonCopied]);
+    }, [canonicalResult, chartId, copied, copyJson, isAdmin, jsonCopied, knowledgeBaseEnabled]);
 
     useEffect(() => {
         setMenuItems([{ id: 'restart', label: '重新起局', icon: <RotateCw className={MENU_ICON_CLASS} />, onClick: () => router.push('/qimen') }, ...resultActions]);

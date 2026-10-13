@@ -486,10 +486,12 @@ const WUXING_BEI_KE: Record<WuXing, WuXing> = {
   木: '金',
 };
 
+// 六爻土随水论生旺墓绝（水土同宫）：《增删卜易·生旺墓绝章》「土水长生在申 旺在子墓在辰绝在巳」，
+// 《卜筮正宗·四生逐位论》同；火土同宫是八字的取法，不用于六爻
 const WUXING_MU: Record<WuXing, DiZhi> = {
   木: '未',
   火: '戌',
-  土: '戌',
+  土: '辰',
   金: '丑',
   水: '辰',
 };
@@ -497,7 +499,7 @@ const WUXING_MU: Record<WuXing, DiZhi> = {
 const WUXING_JUE: Record<WuXing, DiZhi> = {
   木: '申',
   火: '亥',
-  土: '亥',
+  土: '巳',
   金: '寅',
   水: '巳',
 };
@@ -592,7 +594,7 @@ const BAN_HE_TABLE: Array<{ branches: [DiZhi, DiZhi]; result: WuXing; type: 'she
 const WUXING_CHANG_SHENG_TABLE: Record<WuXing, Record<DiZhi, ShiErChangSheng>> = {
   木: { 亥: '长生', 子: '沐浴', 丑: '冠带', 寅: '临官', 卯: '帝旺', 辰: '衰', 巳: '病', 午: '死', 未: '墓', 申: '绝', 酉: '胎', 戌: '养' },
   火: { 寅: '长生', 卯: '沐浴', 辰: '冠带', 巳: '临官', 午: '帝旺', 未: '衰', 申: '病', 酉: '死', 戌: '墓', 亥: '绝', 子: '胎', 丑: '养' },
-  土: { 寅: '长生', 卯: '沐浴', 辰: '冠带', 巳: '临官', 午: '帝旺', 未: '衰', 申: '病', 酉: '死', 戌: '墓', 亥: '绝', 子: '胎', 丑: '养' },
+  土: { 申: '长生', 酉: '沐浴', 戌: '冠带', 亥: '临官', 子: '帝旺', 丑: '衰', 寅: '病', 卯: '死', 辰: '墓', 巳: '绝', 午: '胎', 未: '养' },
   金: { 巳: '长生', 午: '沐浴', 未: '冠带', 申: '临官', 酉: '帝旺', 戌: '衰', 亥: '病', 子: '死', 丑: '墓', 寅: '绝', 卯: '胎', 辰: '养' },
   水: { 申: '长生', 酉: '沐浴', 戌: '冠带', 亥: '临官', 子: '帝旺', 丑: '衰', 寅: '病', 卯: '死', 辰: '墓', 巳: '绝', 午: '胎', 未: '养' },
 };
@@ -611,6 +613,9 @@ const CHANG_SHENG_STRENGTH: Record<ShiErChangSheng, 'strong' | 'medium' | 'weak'
   胎: 'medium',
   养: 'medium',
 };
+
+// 六爻只验生旺墓绝，且以日辰论：《增删卜易·生旺墓绝章》「只验生旺墓绝，其馀不验」「若在亥日占卦即主事爻长生于亥日」
+const DAY_STAGES_USED = new Set<ShiErChangSheng>(['长生', '帝旺', '墓', '绝']);
 
 export const TRIGRAM_NA_JIA: Record<string, TrigramNaJia> = {
   乾: { element: '金', lower: ['子', '寅', '辰'], upper: ['午', '申', '戌'] },
@@ -1121,42 +1126,71 @@ function getChangSheng(wuXing: WuXing, diZhi: DiZhi): ShiErChangSheng {
   return WUXING_CHANG_SHENG_TABLE[wuXing][diZhi];
 }
 
+/**
+ * 化变定性：一个变化常同时具备几种关系（如亥化辰既回头克又化墓），按以下次序取主名，其余写入说明：
+ * 伏吟/反吟（爻象）→ 进退神（配对，《增删卜易》占例「丑土官动化进神」论进不论墓）→ 回头克（本质之伤）
+ * → 墓绝与回头生相兼时看本爻有无日月帮比（《卜筮正宗·绝处逢生论》「土化出巳有日月帮比不云化绝，乃云回头生」）
+ * → 化墓/化绝 → 回头生 → 化空（时间性条件）。
+ * @param originalSupported 本爻是否得日月帮比
+ */
 function analyzeYaoChange(
   originalZhi: DiZhi,
   changedZhi: DiZhi,
   originalWuXing: WuXing,
   changedWuXing: WuXing,
-  kongWang: KongWang
+  kongWang: KongWang,
+  originalSupported: boolean,
 ): YaoChangeAnalysis {
+  const result = (huaType: HuaType, description: string): YaoChangeAnalysis => ({
+    huaType,
+    originalZhi,
+    changedZhi,
+    description: huaType !== 'huaKong' && kongWang.kongDizhi.includes(changedZhi) ? `${description}；变爻旬空，出空方应` : description,
+  });
+  const isMu = WUXING_MU[originalWuXing] === changedZhi;
+  const isJue = WUXING_JUE[originalWuXing] === changedZhi;
+  const tombNote = isMu ? '（兼化墓）' : isJue ? '（兼化绝）' : '';
+  const isKe = WUXING_KE[changedWuXing] === originalWuXing;
+  const isSheng = WUXING_SHENG[changedWuXing] === originalWuXing;
+
   if (originalZhi === changedZhi) {
-    return { huaType: 'fuYin', originalZhi, changedZhi, description: '伏吟：变爻与本爻同支，事多反复' };
+    return result('fuYin', '伏吟：变爻与本爻同支，事多反复');
   }
   if (LIU_CHONG[originalZhi] === changedZhi) {
-    return { huaType: 'fanYin', originalZhi, changedZhi, description: '反吟：变爻与本爻相冲，事态多反复' };
-  }
-  // 化墓化绝是五行本质关系，优先于化空（时间性条件）
-  if (WUXING_MU[originalWuXing] === changedZhi) {
-    return { huaType: 'huaMu', originalZhi, changedZhi, description: '化墓：变爻入墓，事情受阻' };
-  }
-  if (WUXING_JUE[originalWuXing] === changedZhi) {
-    return { huaType: 'huaJue', originalZhi, changedZhi, description: '化绝：变爻入绝，后劲不足' };
-  }
-  if (kongWang.kongDizhi.includes(changedZhi)) {
-    return { huaType: 'huaKong', originalZhi, changedZhi, description: '化空：变爻落空，需待填实' };
-  }
-  if (WUXING_SHENG[changedWuXing] === originalWuXing) {
-    return { huaType: 'huiTouSheng', originalZhi, changedZhi, description: '回头生：变爻回生本爻' };
-  }
-  if (WUXING_KE[changedWuXing] === originalWuXing) {
-    return { huaType: 'huiTouKe', originalZhi, changedZhi, description: '回头克：变爻回克本爻' };
+    return result('fanYin', isKe
+      ? `反吟：变爻冲本爻又回头克${tombNote}，反复之中受伤`
+      : `反吟：变爻与本爻相冲${tombNote}，事态多反复`);
   }
   if (HUA_JIN_MAP[originalZhi] === changedZhi) {
-    return { huaType: 'huaJin', originalZhi, changedZhi, description: '化进：按进神配对，后势较前推进' };
+    return result('huaJin', '化进：按进神配对，后势较前推进');
   }
   if (HUA_TUI_MAP[originalZhi] === changedZhi) {
-    return { huaType: 'huaTui', originalZhi, changedZhi, description: '化退：按退神配对，后势较前回退' };
+    return result('huaTui', '化退：按退神配对，后势较前回退');
   }
-  return { huaType: 'none', originalZhi, changedZhi, description: '' };
+  if (isKe) {
+    return result('huiTouKe', `回头克：变爻回克本爻${tombNote}`);
+  }
+  if (isSheng && (isMu || isJue)) {
+    if (originalSupported) {
+      return result('huiTouSheng', `回头生：变爻回生本爻；本爻得日月帮比，论生不论${isMu ? '墓' : '绝'}`);
+    }
+    return isMu
+      ? result('huaMu', '化墓：变爻虽生本爻，本爻无日月帮比，论墓不论生')
+      : result('huaJue', '化绝：变爻虽生本爻，本爻无日月帮比，论绝不论生');
+  }
+  if (isMu) {
+    return result('huaMu', '化墓：变爻入墓，事情受阻');
+  }
+  if (isJue) {
+    return result('huaJue', '化绝：变爻入绝，后劲不足');
+  }
+  if (isSheng) {
+    return result('huiTouSheng', '回头生：变爻回生本爻');
+  }
+  if (kongWang.kongDizhi.includes(changedZhi)) {
+    return result('huaKong', '化空：变爻落空，需待填实');
+  }
+  return result('none', '');
 }
 
 function calculateChangedYaoDetail(
@@ -1165,21 +1199,19 @@ function calculateChangedYaoDetail(
   position: number,
   gongElement: WuXing,
   originalYao: FullYaoInfo,
-  kongWang: KongWang
+  changeAnalysis: YaoChangeAnalysis,
 ): ChangedYaoDetail {
-  const changedNaJia = getNaJiaByHexagram(changedCode, position);
+  const changedNaJia = changeAnalysis.changedZhi;
   const changedWuXing = DIZHI_WUXING[changedNaJia];
-  const changedLiuQin = getLiuQin(gongElement, changedWuXing);
-  const relation = analyzeYaoChange(originalYao.naJia, changedNaJia, originalYao.wuXing, changedWuXing, kongWang);
   return {
     position,
     type: parseInt(changedCode[position - 1] || '0', 10) as YaoType,
-    liuQin: changedLiuQin,
+    liuQin: getLiuQin(gongElement, changedWuXing),
     naJia: changedNaJia,
     wuXing: changedWuXing,
     liuShen: originalYao.liuShen,
     yaoCi: YAO_CI[getHexagramByCode(hexagramCode)?.name || '']?.[position - 1],
-    relation: HUA_TYPE_LABELS[relation.huaType] || '平',
+    relation: HUA_TYPE_LABELS[changeAnalysis.huaType] || '平',
   };
 }
 
@@ -2079,7 +2111,7 @@ export function performFullAnalysis(
     const kongWangState = checkYaoKongWang(yao.naJia, kongWang, monthZhi, dayZhi, yao.change === 'changing');
     const strength = calculateYaoStrength(yao.wuXing, monthZhi, yao.change === 'changing', kongWangState, influence, yao.naJia);
     const movementState = getYaoMovementState(yao, strength);
-    const changSheng = getChangSheng(yao.wuXing, monthZhi);
+    const dayStage = getChangSheng(yao.wuXing, dayZhi);
     return {
       ...yao,
       isChanging: yao.change === 'changing',
@@ -2090,26 +2122,20 @@ export function performFullAnalysis(
       strength,
       changedYao: null,
       shenSha: [],
-      changSheng: {
-        stage: changSheng,
-        strength: CHANG_SHENG_STRENGTH[changSheng],
-      },
+      ...(DAY_STAGES_USED.has(dayStage) ? { changSheng: { stage: dayStage, strength: CHANG_SHENG_STRENGTH[dayStage] } } : {}),
     };
   });
 
   const changedYaoDetails: ChangedYaoDetail[] = [];
   if (changedCode) {
-    for (const yao of baseYaos) {
-      if (yao.change !== 'changing') {
+    for (const yao of fullYaos) {
+      if (!yao.isChanging) {
         continue;
       }
-      const changed = calculateChangedYaoDetail(hexagramCode, changedCode, yao.position, gongElement, yao, kongWang);
-      changedYaoDetails.push(changed);
-      const target = fullYaos.find((item) => item.position === yao.position);
-      if (target) {
-        target.changedYao = changed;
-        target.changeAnalysis = analyzeYaoChange(yao.naJia, changed.naJia, yao.wuXing, changed.wuXing, kongWang);
-      }
+      const changedNaJia = getNaJiaByHexagram(changedCode, yao.position);
+      yao.changeAnalysis = analyzeYaoChange(yao.naJia, changedNaJia, yao.wuXing, DIZHI_WUXING[changedNaJia], kongWang, yao.strength.isStrong);
+      yao.changedYao = calculateChangedYaoDetail(hexagramCode, changedCode, yao.position, gongElement, yao, yao.changeAnalysis);
+      changedYaoDetails.push(yao.changedYao);
     }
   }
 

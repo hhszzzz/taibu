@@ -89,7 +89,8 @@ function renderLiuyaoCanonicalTextBase(result: LiuyaoOutput): string {
   const hasFuShenCol = sortedYaos.some((y) => y.fuShen);
   const yaoHeader: string[] = ['爻位', '六亲', '六神', '纳甲', '动静'];
   if (hasKongCol) yaoHeader.push('空亡');
-  if (hasChangShengCol) yaoHeader.push('长生');
+  // 十二长生只取生旺墓绝，按日辰论（见 calculate.ts DAY_STAGES_USED）
+  if (hasChangShengCol) yaoHeader.push('日辰长生');
   if (hasShenShaCol) yaoHeader.push('神煞');
   if (hasBianChuCol) yaoHeader.push('变出');
   if (hasFuShenCol) yaoHeader.push('伏神');

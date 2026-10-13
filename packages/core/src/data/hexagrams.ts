@@ -9,6 +9,7 @@ export interface Hexagram {
   code: string;
   upperTrigram: string;
   lowerTrigram: string;
+  /** 上卦五行，不是卦宫五行；卦宫及其五行用 liuyao 的 getPalaceInfo()。 */
   element: string;
   nature: string;
 }

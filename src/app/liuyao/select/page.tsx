@@ -18,6 +18,7 @@ import { YongShenTargetPicker } from '@/components/liuyao/YongShenTargetPicker';
 import {
     findHexagram,
     calculateChangedHexagram,
+    formatHexagramPalace,
     type Yao,
     type LiuQin,
 } from '@/lib/divination/liuyao';
@@ -267,7 +268,7 @@ export default function SelectHexagramPage() {
                                     <span className="text-foreground-secondary">组合结果：</span>
                                     <span className="font-display text-base text-accent-strong">{currentHexagram.name}</span>
                                     <span className="text-foreground-secondary">
-                                        · {currentHexagram.element} · {currentHexagram.nature}
+                                        · {formatHexagramPalace(currentHexagram.code)} · {currentHexagram.nature}
                                     </span>
                                 </div>
                             )}
@@ -292,7 +293,7 @@ export default function SelectHexagramPage() {
                             <span className="text-foreground-secondary">变卦：</span>
                             <span className="font-display text-base text-accent-strong">{changedInfo.changedHexagram.name}</span>
                             <span className="text-foreground-secondary">
-                                · {changedInfo.changedHexagram.element}
+                                · {formatHexagramPalace(changedInfo.changedHexagram.code)}
                             </span>
                         </div>
                     )}

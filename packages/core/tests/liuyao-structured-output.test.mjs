@@ -380,3 +380,24 @@ test('liuyao canonical JSON and text describe real 半合 cases with Chinese typ
     }
   }
 });
+
+test('liuyao reports the 卦宫 element next to 卦宫 instead of the upper trigram element', async () => {
+  // 天水讼属离宫火而上卦为乾金；地水师属坎宫水而上卦为坤土。六亲按卦宫五行定，输出须一致
+  const result = await mcpCore.calculateLiuyao({
+    question: '卦宫五行核对',
+    yongShenTargets: ['官鬼'],
+    method: 'select',
+    hexagramName: '天水讼',
+    changedHexagramName: '地水师',
+    date: '2026-01-10T12:00:00',
+  });
+  assert.deepEqual(
+    [result.hexagramGong, result.hexagramElement, result.changedHexagramGong, result.changedHexagramElement],
+    ['离', '火', '坎', '水'],
+  );
+  const board = mcpCore.toLiuyaoCanonicalJson(result).卦盘;
+  assert.deepEqual([board.本卦.五行, board.变卦?.五行], ['火', '水']);
+  const text = mcpCore.toLiuyaoCanonicalText(result);
+  assert.match(text, /- 本卦: 天水讼（离宫·火）/u);
+  assert.match(text, /- 变卦: 地水师（坎宫·水）/u);
+});

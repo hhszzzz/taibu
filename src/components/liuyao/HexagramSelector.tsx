@@ -7,7 +7,7 @@
 
 import { useState } from 'react';
 import { Search } from 'lucide-react';
-import { HEXAGRAMS } from '@/lib/divination/liuyao';
+import { HEXAGRAMS, formatHexagramPalace } from '@/lib/divination/liuyao';
 
 interface HexagramSelectorProps {
     value?: string;
@@ -48,7 +48,7 @@ export function HexagramSelector({ value, onChange }: HexagramSelectorProps) {
                 <div className="flex flex-wrap items-baseline gap-2 rounded-xl bg-accent-light px-3.5 py-2.5 text-sm ring-1 ring-inset ring-accent/50">
                     <span className="font-display text-base text-accent-strong">{selectedHexagram.name}</span>
                     <span className="text-foreground-secondary">
-                        {selectedHexagram.upperTrigram}/{selectedHexagram.lowerTrigram} · {selectedHexagram.element}
+                        {selectedHexagram.upperTrigram}/{selectedHexagram.lowerTrigram} · {formatHexagramPalace(selectedHexagram.code)}
                     </span>
                 </div>
             )}

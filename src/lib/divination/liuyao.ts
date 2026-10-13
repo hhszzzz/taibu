@@ -150,6 +150,12 @@ export function findHexagram(input: string): Hexagram | undefined {
     return findHexagramCore(input);
 }
 
+/** 卦宫与卦宫五行，如「离宫火」；卦数据的 element 是上卦五行，不能当作卦的五行展示。 */
+export function formatHexagramPalace(code: string): string {
+    const palace = getHexagramContext(code).palace;
+    return palace ? `${palace.name}宫${palace.element}` : '';
+}
+
 export function tossCoin(): boolean {
     return Math.random() < 0.5;
 }
@@ -279,13 +285,13 @@ export function calculateLiuyaoBundle(input: LiuyaoBundleInput): LiuyaoBundle {
             question: input.question,
             hexagramName: input.hexagram.name,
             hexagramGong: baseCtx.palace?.name || '',
-            hexagramElement: input.hexagram.element,
+            hexagramElement: baseCtx.palace?.element ?? input.hexagram.element,
             hexagramBrief: input.hexagram.nature,
             guaCi: baseCtx.guaCi,
             xiangCi: baseCtx.xiangCi,
             changedHexagramName: input.changedHexagram?.name,
             changedHexagramGong: changedCtx?.palace?.name || '',
-            changedHexagramElement: input.changedHexagram?.element,
+            changedHexagramElement: changedCtx?.palace?.element ?? input.changedHexagram?.element,
             changedGuaCi: changedCtx?.guaCi,
             changedXiangCi: changedCtx?.xiangCi,
             ganZhiTime: analysis.ganZhiTime,

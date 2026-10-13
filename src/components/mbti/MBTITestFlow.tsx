@@ -1,187 +1,109 @@
 /**
- * MBTI 测试流程组件
+ * MBTI 测试流程组件（设计稿 MbtiTest / MobileMbti）
  *
- * 负责题目作答、分页与结果计算
+ * 每页三题，答完本页才能翻页；最后一页答完即可提交，结果写入 sessionStorage 后跳转结果页。
+ * 答题说明直接放在页头，不再弹出说明框；移动端翻页按钮固定在底部导航之上。
  */
-'use client'; // Uses client-side state, scrolling, and navigation.
+'use client'; // 需要作答状态、翻页滚动、保存记录与路由跳转
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { ArrowLeft, ArrowRight, Brain, Check } from 'lucide-react';
+import { Brain } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
-import { saveDivinationAction } from '@/lib/divination/save-client';
-import { QuestionCard } from '@/components/mbti/QuestionCard';
-import { MBTIProgressBar } from '@/components/mbti/MBTIProgressBar';
 import { useToast } from '@/components/ui/Toast';
+import { QuestionCard } from '@/components/mbti/QuestionCard';
+import { saveDivinationAction } from '@/lib/divination/save-client';
+import { writeSessionJSON } from '@/lib/cache/session-storage';
 import {
     loadQuestions,
     calculateResult,
+    getMBTIPageState,
+    toggleMBTIAnswer,
     type MBTIQuestion,
     type TestAnswer,
     type LikertValue,
 } from '@/lib/divination/mbti';
 import { supabase } from '@/lib/auth';
 
-const QUESTIONS_PER_PAGE = 10;
+/** 提交后保留分析动画的时长，避免结果页闪现 */
+const RESULT_REDIRECT_DELAY_MS = 1500;
 
 export function MBTITestFlow() {
     const router = useRouter();
     const { showToast } = useToast();
-    // Tracks test progress and answers on the client.
     const [questions, setQuestions] = useState<MBTIQuestion[]>([]);
+    const [loadState, setLoadState] = useState<'loading' | 'ready' | 'failed'>('loading');
     const [currentPage, setCurrentPage] = useState(0);
     const [answers, setAnswers] = useState<TestAnswer[]>([]);
-    const [highlightedQuestion, setHighlightedQuestion] = useState<number | null>(null);
     const [isCalculating, setIsCalculating] = useState(false);
-    const [isLoading, setIsLoading] = useState(true);
-    // Controls the intro modal before answering.
-    const [showIntroModal, setShowIntroModal] = useState(true);
+    const redirectTimerRef = useRef<number | null>(null);
 
-    // 加载全部题目
+    // 离开页面时取消尚未触发的结果页跳转
+    useEffect(() => () => {
+        if (redirectTimerRef.current !== null) window.clearTimeout(redirectTimerRef.current);
+    }, []);
+
     useEffect(() => {
         let active = true;
         loadQuestions()
             .then((allQuestions) => {
                 if (!active) return;
                 setQuestions(allQuestions);
-                setIsLoading(false);
+                setLoadState(allQuestions.length > 0 ? 'ready' : 'failed');
             })
             .catch(() => {
-                if (!active) return;
-                setQuestions([]);
-                setIsLoading(false);
+                if (active) setLoadState('failed');
             });
-
         return () => {
             active = false;
         };
     }, []);
 
-    // 当前页的题目
-    const currentPageQuestions = useMemo(() => {
-        const start = currentPage * QUESTIONS_PER_PAGE;
-        const end = Math.min(start + QUESTIONS_PER_PAGE, questions.length);
-        return questions.slice(start, end);
-    }, [questions, currentPage]);
+    const answerByIndex = useMemo(
+        () => new Map(answers.map(answer => [answer.questionIndex, answer.likertValue])),
+        [answers],
+    );
+    const answeredIndexes = useMemo(() => new Set(answerByIndex.keys()), [answerByIndex]);
+    const page = useMemo(
+        () => getMBTIPageState(currentPage, questions.length, answeredIndexes),
+        [currentPage, questions.length, answeredIndexes],
+    );
+    const pageQuestions = useMemo(() => questions.slice(page.start, page.end), [questions, page.start, page.end]);
+    const pageComplete = page.firstUnanswered === null;
+    const allAnswered = questions.length > 0 && answeredIndexes.size === questions.length;
 
-    // 总页数
-    const totalPages = Math.ceil(questions.length / QUESTIONS_PER_PAGE);
+    const handleAnswer = useCallback((questionIndex: number, likertValue: LikertValue) => {
+        setAnswers(previous => toggleMBTIAnswer(previous, questionIndex, likertValue));
+    }, []);
 
-    // 已回答的题目索引
-    const answeredIndexes = useMemo(() => {
-        return answers.map(a => a.questionIndex);
-    }, [answers]);
+    const changePage = useCallback((nextPage: number) => {
+        setCurrentPage(nextPage);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, []);
 
-    // 当前页所有题目是否已答完
-    const currentPageAllAnswered = useMemo(() => {
-        const start = currentPage * QUESTIONS_PER_PAGE;
-        const end = Math.min(start + QUESTIONS_PER_PAGE, questions.length);
-        for (let i = start; i < end; i++) {
-            if (!answeredIndexes.includes(i)) {
-                return false;
-            }
-        }
-        return true;
-    }, [currentPage, questions.length, answeredIndexes]);
+    const goToPreviousPage = () => {
+        if (currentPage > 0) changePage(currentPage - 1);
+    };
 
-    // 当前正在做的题目索引（当前页第一道未答题，如果都答完则为该页最后一题）
-    const currentQuestionIndex = useMemo(() => {
-        const start = currentPage * QUESTIONS_PER_PAGE;
-        const end = Math.min(start + QUESTIONS_PER_PAGE, questions.length);
-        for (let i = start; i < end; i++) {
-            if (!answeredIndexes.includes(i)) {
-                return i;
-            }
-        }
-        return end - 1; // 都答完了就高亮最后一题
-    }, [currentPage, questions.length, answeredIndexes]);
-
-    const handleAnswer = useCallback((questionIndex: number, likertValue: LikertValue | null) => {
-        // 如果点击相同选项，取消选择
-        const existingAnswer = answers.find(a => a.questionIndex === questionIndex);
-        if (existingAnswer && existingAnswer.likertValue === likertValue) {
-            setAnswers(answers.filter(a => a.questionIndex !== questionIndex));
-            return;
-        }
-
-        if (likertValue === null) return;
-
-        const newAnswer: TestAnswer = {
-            questionIndex,
-            likertValue,
-        };
-
-        // 更新或添加答案
-        const existingIndex = answers.findIndex(a => a.questionIndex === questionIndex);
-        const newAnswers = existingIndex >= 0
-            ? answers.map((a, i) => i === existingIndex ? newAnswer : a)
-            : [...answers, newAnswer];
-
-        setAnswers(newAnswers);
-
-        // 清除高亮（因为用户已经开始答题）
-        if (highlightedQuestion === questionIndex) {
-            setHighlightedQuestion(null);
-        }
-    }, [answers, highlightedQuestion]);
-
-    const goToPreviousPage = useCallback(() => {
-        if (currentPage > 0) {
-            setCurrentPage(currentPage - 1);
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-    }, [currentPage]);
-
-    const handleJumpToQuestion = useCallback((index: number) => {
-        const targetPage = Math.floor(index / QUESTIONS_PER_PAGE);
-        const needsPageChange = targetPage !== currentPage;
-
-        setCurrentPage(targetPage);
-        setHighlightedQuestion(index);
-
-        // 滚动到指定题目
-        const scrollToQuestion = () => {
-            const questionElement = document.getElementById(`question-${index}`);
-            if (questionElement) {
-                questionElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            } else {
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-            }
-        };
-
-        if (needsPageChange) {
-            // 如果需要切换页面，等待渲染完成
-            setTimeout(scrollToQuestion, 150);
-        } else {
-            scrollToQuestion();
-        }
-    }, [currentPage]);
-
-    const goToNextPage = useCallback(() => {
-        if (!currentPageAllAnswered) {
+    const goToNextPage = () => {
+        if (!pageComplete) {
             showToast('warning', '请完成当前页的所有题目后再翻页');
             return;
         }
-        if (currentPage < totalPages - 1) {
-            const nextIndex = (currentPage + 1) * QUESTIONS_PER_PAGE;
-            handleJumpToQuestion(nextIndex);
-        }
-    }, [currentPageAllAnswered, currentPage, totalPages, handleJumpToQuestion, showToast]);
+        if (!page.isLastPage) changePage(currentPage + 1);
+    };
 
-    const finishTest = useCallback(async () => {
-        if (answers.length < questions.length) {
-            const unanswered = questions.length - answers.length;
-            showToast('warning', `还有 ${unanswered} 道题未完成，请完成所有题目后再提交`);
+    const finishTest = async () => {
+        if (isCalculating) return;
+        if (!allAnswered) {
+            showToast('warning', `还有 ${questions.length - answeredIndexes.size} 道题未完成，请完成所有题目后再提交`);
             return;
         }
 
         setIsCalculating(true);
-
-        // 计算结果
         const result = calculateResult(questions, answers);
 
-        // 保存测试记录到数据库
+        // 已登录时保存测试记录；保存失败不阻断查看结果
         let readingId: string | null = null;
         try {
             const { data: { session } } = await supabase.auth.getSession();
@@ -199,54 +121,49 @@ export function MBTITestFlow() {
                 if (!saveResult.ok) {
                     throw new Error(saveResult.error.message || '保存测试记录失败');
                 }
-                if (saveResult.id) {
-                    readingId = saveResult.id;
-                }
+                readingId = saveResult.id ?? null;
             }
         } catch (error) {
             console.error('保存测试记录失败:', error);
         }
 
-        // 存储结果到 sessionStorage（包含 readingId）
-        sessionStorage.setItem('mbti_result', JSON.stringify({ ...result, readingId }));
-
-        // 延迟跳转
-        setTimeout(() => {
+        writeSessionJSON('mbti_result', { ...result, readingId });
+        redirectTimerRef.current = window.setTimeout(() => {
             router.push('/mbti/result');
-        }, 1500);
-    }, [answers, questions, showToast, router]);
+        }, RESULT_REDIRECT_DELAY_MS);
+    };
 
     if (isCalculating) {
         return (
-            <div className="min-h-screen bg-background flex items-center justify-center">
-                <div className="text-center">
-                    <Brain className="w-16 h-16 text-accent mx-auto mb-4" />
-                    <h2 className="text-xl font-bold text-foreground mb-2">正在分析你的性格类型...</h2>
-                    <p className="text-foreground-secondary font-medium tracking-wide">请稍候</p>
+            <div className="flex min-h-[60vh] items-center justify-center bg-background px-4">
+                <div className="flex flex-col items-center gap-3 text-center">
+                    <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-light text-accent">
+                        <Brain className="h-7 w-7" aria-hidden="true" />
+                    </span>
+                    <h2 className="font-display text-xl font-normal">正在分析你的性格类型</h2>
+                    <SoundWaveLoader variant="block" text="请稍候" />
                 </div>
             </div>
         );
     }
 
-    if (!showIntroModal && isLoading) {
+    if (loadState === 'loading') {
         return (
-            <div className="min-h-screen bg-background flex items-center justify-center">
-                <div className="text-center">
-                    <SoundWaveLoader variant="inline" />
-                    <p className="text-foreground-secondary mt-4 font-medium">正在加载题目...</p>
-                </div>
+            <div className="flex min-h-[60vh] items-center justify-center bg-background">
+                <SoundWaveLoader variant="block" text="正在加载题目" />
             </div>
         );
     }
 
-    if (!showIntroModal && !isLoading && questions.length === 0) {
+    if (loadState === 'failed') {
         return (
-            <div className="min-h-screen bg-background flex items-center justify-center px-4">
-                <div className="text-center">
-                    <p className="text-foreground-secondary font-medium">题库加载失败，请稍后再试</p>
+            <div className="flex min-h-[60vh] items-center justify-center bg-background px-4">
+                <div className="flex flex-col items-center gap-4 text-center">
+                    <p className="text-sm text-foreground-secondary">题库加载失败，请稍后再试</p>
                     <button
+                        type="button"
                         onClick={() => router.push('/mbti')}
-                        className="mt-4 px-6 py-2 rounded-md bg-accent text-on-accent font-bold hover:bg-accent/90 transition-all duration-150"
+                        className="h-11 rounded-xl bg-accent px-6 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
                     >
                         返回首页
                     </button>
@@ -255,158 +172,90 @@ export function MBTITestFlow() {
         );
     }
 
-    const isLastPage = currentPage === totalPages - 1;
-    const allAnswered = answers.length === questions.length;
+    const pageQuestionCount = page.end - page.start;
+    const progressPercent = (answeredIndexes.size / questions.length) * 100;
+    // 翻页受阻时的说明：答完本页才能翻页 / 最后一页答完才能提交
+    const gatingNote = pageComplete
+        ? null
+        : page.isLastPage
+            ? `答完本页 ${pageQuestionCount} 题后即可完成测试`
+            : `答完本页 ${pageQuestionCount} 题后才能翻页`;
 
     return (
-        <div className="min-h-screen bg-background pb-32 text-foreground">
-            {!showIntroModal && !isLoading && questions.length > 0 && (
-                <>
-                    <div className="max-w-2xl mx-auto px-4 py-6">
-                        <Link
-                            href="/mbti"
-                            className="inline-flex items-center gap-2 text-sm font-bold text-foreground-secondary
-                                hover:text-foreground transition-colors mb-4"
-                        >
-                            <ArrowLeft className="w-4 h-4" />
-                            返回首页
-                        </Link>
-                        {/* 页面头部 */}
-                        <div className="flex items-center justify-between mb-6">
-                            <div className="text-xs font-bold uppercase tracking-wider text-foreground-secondary">
-                                第 {currentPage + 1} / {totalPages} 页
-                            </div>
-                            <div className="text-xs font-bold uppercase tracking-wider text-foreground-secondary">
-                                已完成 {answers.length} / {questions.length}
-                            </div>
-                        </div>
-
-                        {/* 题目列表 */}
-                        <div className="space-y-8">
-                            {currentPageQuestions.map((question, idx) => {
-                                const globalIndex = currentPage * QUESTIONS_PER_PAGE + idx;
-                                const currentAnswer = answers.find(a => a.questionIndex === globalIndex);
-                                const isHighlighted = highlightedQuestion === globalIndex;
-
-                                return (
-                                    <div
-                                        key={globalIndex}
-                                        id={`question-${globalIndex}`}
-                                        className={`bg-background rounded-lg border border-border p-6 shadow-sm transition-all duration-150 ${isHighlighted ? 'ring-2 ring-accent ring-offset-4 ring-offset-[#f7f6f3]' : ''}`}
-                                    >
-                                        <QuestionCard
-                                            question={question}
-                                            questionNumber={globalIndex + 1}
-                                            totalQuestions={questions.length}
-                                            onAnswer={(value) => handleAnswer(globalIndex, value)}
-                                            selectedValue={currentAnswer?.likertValue}
-                                        />
-                                    </div>
-                                );
-                            })}
-                        </div>
-
-                        {/* 分页导航 */}
-                        <div className="flex justify-between mt-12">
-                            <button
-                                onClick={goToPreviousPage}
-                                disabled={currentPage === 0}
-                                className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-foreground-secondary
-                                    disabled:opacity-20 hover:bg-background-secondary rounded-md transition-all duration-150"
-                            >
-                                <ArrowLeft className="w-4 h-4" />
-                                上一页
-                            </button>
-
-                            {isLastPage ? (
-                                <button
-                                    onClick={finishTest}
-                                    disabled={!allAnswered}
-                                    className="flex items-center gap-2 px-8 py-2 bg-accent text-on-accent rounded-md font-bold
-                                        disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent/90 active:bg-accent-hover transition-all duration-150"
-                                >
-                                    <Check className="w-4 h-4" />
-                                    完成测试
-                                </button>
-                            ) : (
-                                <button
-                                    onClick={goToNextPage}
-                                    disabled={!currentPageAllAnswered}
-                                    className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-foreground-secondary
-                                        disabled:opacity-20 hover:bg-background-secondary rounded-md transition-all duration-150"
-                                >
-                                    下一页
-                                    <ArrowRight className="w-4 h-4" />
-                                </button>
-                            )}
-                        </div>
+        <div className="min-h-full bg-background text-foreground">
+            <div className="mx-auto flex w-full max-w-[884px] flex-col gap-3 px-4 pt-4 pb-40 sm:px-6 lg:gap-6 lg:px-8 lg:pt-10 lg:pb-16">
+                {/* 标题、进度与说明；移动端标题由顶栏显示 */}
+                <header className="flex flex-col gap-1.5 lg:gap-3.5">
+                    <div className="flex items-baseline justify-between gap-4 text-xs text-foreground-secondary lg:text-sm">
+                        <h1 className="hidden font-display text-[30px] font-normal text-foreground lg:block">MBTI 性格测试</h1>
+                        <span>第 {currentPage + 1} 页 · 已答 {answeredIndexes.size} / {questions.length}</span>
+                        <span className="lg:hidden">共 {page.totalPages} 页</span>
                     </div>
-
-                    {/* 底部进度条 */}
-                    <MBTIProgressBar
-                        totalQuestions={questions.length}
-                        answeredIndexes={answeredIndexes}
-                        currentQuestionIndex={highlightedQuestion ?? currentQuestionIndex}
-                        onJumpToQuestion={handleJumpToQuestion}
-                    />
-                </>
-            )}
-
-            {showIntroModal && (
-                <div
-                    className="fixed inset-0 z-50 flex items-center justify-center p-4"
-                    data-role="mbti-intro-modal"
-                >
-                    <div className="absolute inset-0 bg-foreground/20 backdrop-blur-[2px]" />
-                    <div className="relative w-full max-w-lg rounded-lg bg-background border border-border p-8 shadow-xl text-foreground">
-                        <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
-                            <Brain className="w-5 h-5 text-accent" />
-                            测试说明
-                        </h3>
-                        <ul className="space-y-4 text-sm font-medium text-foreground/70">
-                            <li className="flex items-start gap-3">
-                                <span className="w-1.5 h-1.5 rounded-full bg-accent mt-1.5 flex-shrink-0" />
-                                <span>本测试共 {questions.length || '93'} 道题，每页 {QUESTIONS_PER_PAGE} 题</span>
-                            </li>
-                            <li className="flex items-start gap-3">
-                                <span className="w-1.5 h-1.5 rounded-full bg-accent mt-1.5 flex-shrink-0" />
-                                <span>请根据你的第一反应作答，不要过度思考</span>
-                            </li>
-                            <li className="flex items-start gap-3">
-                                <span className="w-1.5 h-1.5 rounded-full bg-accent mt-1.5 flex-shrink-0" />
-                                <span>用量表选择你的倾向程度（左侧或右侧代表不同选项）</span>
-                            </li>
-                            <li className="flex items-start gap-3">
-                                <span className="w-1.5 h-1.5 rounded-full bg-accent mt-1.5 flex-shrink-0" />
-                                <span>必须完成当前页所有题目才能翻到下一页</span>
-                            </li>
-                        </ul>
-                        {isLoading && (
-                            <div className="mt-6 flex items-center gap-2 text-xs font-bold text-foreground-secondary uppercase tracking-wider">
-                                <SoundWaveLoader variant="inline" />
-                                正在加载题目...
-                            </div>
-                        )}
-                        <div className="mt-10 flex items-center justify-end gap-3">
-                            <button
-                                onClick={() => router.push('/mbti')}
-                                className="px-6 py-2 rounded-md bg-transparent border border-border text-sm font-bold
-                                    hover:bg-background-secondary active:bg-background-tertiary transition-all duration-150"
-                            >
-                                返回首页
-                            </button>
-                            <button
-                                onClick={() => setShowIntroModal(false)}
-                                disabled={isLoading || questions.length === 0}
-                                className="px-8 py-2 rounded-md bg-accent text-on-accent text-sm font-bold hover:bg-accent/90
-                                    active:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-150 shadow-sm"
-                            >
-                                开始测试
-                            </button>
-                        </div>
+                    <div
+                        role="progressbar"
+                        aria-label="答题进度"
+                        aria-valuemin={0}
+                        aria-valuemax={questions.length}
+                        aria-valuenow={answeredIndexes.size}
+                        className="h-1 overflow-hidden rounded-full bg-background-tertiary lg:h-1.5"
+                    >
+                        <div className="h-full rounded-full bg-accent transition-[width] duration-300 lg:bg-clay" style={{ width: `${progressPercent}%` }} />
                     </div>
+                    <p className="mt-1.5 text-[0.8125rem] leading-relaxed text-foreground-secondary lg:mt-0 lg:text-sm lg:leading-normal">
+                        凭第一反应作答，不要过度思考。<span className="hidden lg:inline">用量表选择你的倾向程度，</span>越靠近哪一侧就越倾向那一项。
+                    </p>
+                </header>
+
+                <div className="flex flex-col gap-3 lg:gap-6">
+                    {pageQuestions.map((question, offset) => {
+                        const index = page.start + offset;
+                        return (
+                            <QuestionCard
+                                key={index}
+                                question={question}
+                                questionNumber={index + 1}
+                                selectedValue={answerByIndex.get(index)}
+                                isCurrent={index === page.firstUnanswered}
+                                onAnswer={(value) => handleAnswer(index, value)}
+                            />
+                        );
+                    })}
                 </div>
-            )}
+
+                {/* 翻页：移动端固定在底部导航之上，桌面端跟随题目 */}
+                <div className="fixed inset-x-0 bottom-[calc(4rem+var(--sab))] z-30 flex flex-wrap items-center gap-2 border-t-[0.5px] border-border bg-background px-4 py-3 sm:px-6 lg:static lg:z-auto lg:flex-nowrap lg:justify-between lg:gap-4 lg:border-0 lg:bg-transparent lg:p-0 lg:pt-1">
+                    <p aria-live="polite" className="w-full text-center text-xs text-foreground-secondary empty:hidden lg:order-2 lg:w-auto lg:flex-1 lg:text-[0.8125rem]">
+                        {gatingNote}
+                    </p>
+                    <button
+                        type="button"
+                        onClick={goToPreviousPage}
+                        disabled={currentPage === 0}
+                        className="h-12 shrink-0 rounded-xl border-[0.5px] border-border-hover bg-surface px-[18px] text-[0.9375rem] text-foreground transition-colors hover:bg-background-secondary disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-surface lg:order-1 lg:h-[46px] lg:bg-transparent lg:disabled:hover:bg-transparent"
+                    >
+                        上一页
+                    </button>
+                    {page.isLastPage ? (
+                        <button
+                            type="button"
+                            onClick={() => { void finishTest(); }}
+                            disabled={!allAnswered}
+                            className="h-12 flex-1 rounded-xl bg-accent px-[22px] text-[0.9375rem] font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent lg:order-3 lg:ml-auto lg:h-[46px] lg:flex-none"
+                        >
+                            完成测试
+                        </button>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={goToNextPage}
+                            disabled={!pageComplete}
+                            className="h-12 flex-1 rounded-xl bg-accent px-[22px] text-[0.9375rem] font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent lg:order-3 lg:ml-auto lg:h-[46px] lg:flex-none"
+                        >
+                            下一页
+                        </button>
+                    )}
+                </div>
+            </div>
         </div>
     );
 }

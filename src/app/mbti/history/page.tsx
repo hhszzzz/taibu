@@ -1,7 +1,7 @@
 /**
  * MBTI 历史记录页面 - 使用 HistoryPageTemplate
  */
-'use client';
+'use client'; // HistoryPageTemplate 依赖客户端 hooks，渲染函数需在客户端传入
 
 import { Brain, Calendar, BookOpenText, Trash2 } from 'lucide-react';
 import { HistoryPageTemplate, type CardActions } from '@/components/history/HistoryPageTemplate';
@@ -19,20 +19,20 @@ function MBTIHistoryCard({ item, actions }: { item: HistorySummaryItem; actions:
 
   return (
     <div
-      className="bg-background-secondary rounded-xl p-4 border border-border hover:border-accent/30 transition-colors cursor-pointer"
+      className="cursor-pointer rounded-2xl border-[0.5px] border-border bg-surface p-4 transition-colors hover:border-accent/40 hover:bg-background-secondary"
       onClick={actions.onView}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-2">
-            <span className="px-3 py-1 text-sm font-bold rounded-lg bg-accent/10 text-accent">
+            <span className="rounded-md bg-accent-light px-2.5 py-0.5 font-display text-base tracking-wide text-accent-strong">
               {mbtiType}
             </span>
             <span className="text-sm font-medium text-foreground">
               {item.question || info?.title || item.title}
             </span>
             {item.modelName ? (
-              <span className="text-[10px] text-foreground-secondary px-2 py-0.5 rounded bg-background border border-border">
+              <span className="rounded-md border-[0.5px] border-border bg-background px-2 py-0.5 text-[10px] text-foreground-secondary">
                 {item.modelName}
               </span>
             ) : null}
@@ -46,7 +46,7 @@ function MBTIHistoryCard({ item, actions }: { item: HistorySummaryItem; actions:
           {dimensionBadges.length > 0 ? (
             <div className="flex flex-wrap gap-2 mt-2">
               {dimensionBadges.map((badge) => (
-                <span key={badge} className="text-xs px-2 py-0.5 rounded bg-background text-foreground-secondary">
+                <span key={badge} className="rounded-md bg-background-secondary px-2 py-0.5 text-xs text-foreground-secondary">
                   {badge}
                 </span>
               ))}
@@ -63,8 +63,9 @@ function MBTIHistoryCard({ item, actions }: { item: HistorySummaryItem; actions:
                 event.stopPropagation();
                 actions.onAddToKb();
               }}
-              className="p-2 rounded-lg hover:bg-emerald-500/10 text-foreground-secondary hover:text-emerald-500 transition-colors"
+              className="rounded-lg p-2 text-foreground-secondary transition-colors hover:bg-wood-soft hover:text-wood"
               title="加入知识库"
+              aria-label="加入知识库"
             >
               <BookOpenText className="w-4 h-4" />
             </button>
@@ -75,8 +76,9 @@ function MBTIHistoryCard({ item, actions }: { item: HistorySummaryItem; actions:
               event.stopPropagation();
               actions.onDelete();
             }}
-            className="p-2 rounded-lg hover:bg-red-500/10 text-foreground-secondary hover:text-red-500 transition-colors"
+            className="rounded-lg p-2 text-foreground-secondary transition-colors hover:bg-fire-soft hover:text-danger"
             title="删除"
+            aria-label="删除"
           >
             <Trash2 className="w-4 h-4" />
           </button>

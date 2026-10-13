@@ -3,12 +3,14 @@
  * 
  * 显示特定 MBTI 类型的详细信息（查看模式，无维度分析）
  */
-'use client';
+'use client'; // 需要 useParams 与客户端加载人格详情 JSON
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
+import { PersonalityHero } from '@/components/mbti/PersonalityCard';
+import { useHeaderTitle } from '@/components/layout/HeaderMenuContext';
 import { PERSONALITY_BASICS, type MBTIType } from '@/lib/divination/mbti';
 
 interface PersonalityData {
@@ -24,6 +26,7 @@ export default function PersonalityPage() {
     const [loading, setLoading] = useState(true);
 
     const basic = PERSONALITY_BASICS[type];
+    useHeaderTitle(basic ? `${type} ${basic.title}` : null);
 
     useEffect(() => {
         if (!basic) {
@@ -49,77 +52,61 @@ export default function PersonalityPage() {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-background">
-                <div className="max-w-3xl mx-auto px-4 py-8">
-                    {/* 返回按钮骨架 */}
-                    <div className="h-5 w-16 rounded bg-foreground/5 animate-pulse mb-6" />
+            <div className="min-h-full bg-background">
+                <div className="mx-auto flex w-full max-w-[820px] flex-col gap-5 px-4 py-4 lg:gap-6 lg:px-8 lg:py-8" aria-busy="true">
+                    {/* 返回按钮骨架（移动端返回在顶栏） */}
+                    <div className="hidden h-5 w-16 animate-pulse rounded bg-background-secondary lg:block" />
                     {/* 头部骨架 */}
-                    <div className="text-center mb-8">
-                        <div className="w-16 h-16 mx-auto rounded-full bg-foreground/10 animate-pulse mb-4" />
-                        <div className="h-8 w-24 mx-auto rounded bg-foreground/10 animate-pulse mb-2" />
-                        <div className="h-6 w-32 mx-auto rounded bg-foreground/5 animate-pulse mb-4" />
-                        <div className="h-4 w-64 mx-auto rounded bg-foreground/5 animate-pulse" />
+                    <div className="flex flex-col items-center gap-3 rounded-2xl border-[0.5px] border-border bg-surface px-5 py-10">
+                        <div className="h-16 w-16 animate-pulse rounded-full bg-background-secondary" />
+                        <div className="h-10 w-28 animate-pulse rounded bg-background-secondary" />
+                        <div className="h-6 w-32 animate-pulse rounded bg-background-secondary" />
+                        <div className="h-4 w-64 max-w-full animate-pulse rounded bg-background-secondary" />
                     </div>
                     {/* 内容骨架 */}
-                    <div className="space-y-8">
-                        {[1, 2, 3].map(i => (
-                            <div key={i} className="bg-background-secondary rounded-xl p-6">
-                                <div className="h-5 w-32 rounded bg-foreground/10 animate-pulse mb-4" />
-                                <div className="space-y-2">
-                                    <div className="h-4 w-full rounded bg-foreground/5 animate-pulse" />
-                                    <div className="h-4 w-5/6 rounded bg-foreground/5 animate-pulse" />
-                                    <div className="h-4 w-4/5 rounded bg-foreground/5 animate-pulse" />
-                                </div>
-                            </div>
-                        ))}
-                    </div>
+                    {[1, 2, 3].map(i => (
+                        <div key={i} className="flex flex-col gap-3 rounded-2xl border-[0.5px] border-border bg-surface p-5 lg:p-6">
+                            <div className="h-5 w-32 animate-pulse rounded bg-background-secondary" />
+                            <div className="h-4 w-full animate-pulse rounded bg-background-secondary" />
+                            <div className="h-4 w-5/6 animate-pulse rounded bg-background-secondary" />
+                            <div className="h-4 w-4/5 animate-pulse rounded bg-background-secondary" />
+                        </div>
+                    ))}
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-background">
-            <div className="max-w-3xl mx-auto px-4 py-8">
-                {/* 返回 */}
+        <div className="min-h-full bg-background text-foreground">
+            <div className="mx-auto flex w-full max-w-[820px] animate-fade-in flex-col gap-5 px-4 py-4 lg:gap-6 lg:px-8 lg:py-8">
+                {/* 返回（移动端返回在顶栏） */}
                 <Link
                     href="/mbti"
-                    className="inline-flex items-center gap-2 text-foreground-secondary hover:text-foreground mb-6"
+                    className="hidden w-fit items-center gap-1 text-sm text-foreground-secondary transition-colors hover:text-foreground lg:inline-flex"
                 >
-                    <ArrowLeft className="w-4 h-4" />
+                    <ChevronLeft className="h-4 w-4" aria-hidden="true" />
                     返回
                 </Link>
 
                 {/* 头部 */}
-                <div className="text-center mb-8">
-                    <div className="text-6xl mb-4">{basic.emoji}</div>
-                    <h1 className="text-3xl font-bold text-foreground mb-2">{type}</h1>
-                    <p className="text-xl text-accent">{basic.title}</p>
-                    <p className="text-foreground-secondary mt-4 max-w-xl mx-auto">
-                        {basic.description}
-                    </p>
-                </div>
+                <PersonalityHero type={type} />
 
                 {/* 内容 */}
-                {data && (
-                    <div className="space-y-8">
-                        {Object.entries(data.sections).map(([title, content]) => (
-                            <div key={title} className="bg-background-secondary rounded-xl p-6">
-                                <h2 className="text-lg font-semibold text-foreground mb-4">{title}</h2>
-                                <p className="text-foreground-secondary whitespace-pre-line">
-                                    {content}
-                                </p>
-                            </div>
-                        ))}
-                    </div>
-                )}
+                {data && Object.entries(data.sections).map(([title, content]) => (
+                    <section key={title} className="flex flex-col gap-3 rounded-2xl border-[0.5px] border-border bg-surface p-5 lg:p-6">
+                        <h2 className="font-display text-lg font-medium">{title}</h2>
+                        <p className="whitespace-pre-line text-sm leading-relaxed text-foreground-secondary lg:text-[0.9375rem]">
+                            {content}
+                        </p>
+                    </section>
+                ))}
 
                 {/* 开始测试按钮 */}
-                <div className="text-center mt-10">
+                <div className="flex justify-center pt-4">
                     <Link
-                        href="/mbti"
-                        className="inline-flex items-center gap-2 px-6 py-3 bg-accent text-on-accent rounded-lg
-                            hover:bg-accent/90 transition-all"
+                        href="/mbti/test"
+                        className="inline-flex h-12 items-center gap-2 rounded-xl bg-accent px-7 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
                     >
                         开始 MBTI 测试
                     </Link>

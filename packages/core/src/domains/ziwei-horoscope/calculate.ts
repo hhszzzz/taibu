@@ -133,6 +133,10 @@ function computeTransitStars(
   return result;
 }
 
+/**
+ * @param natalPalaceNames 本命十二宫名，按宫位索引排列；用于回查运限命宫落入的本命宫。
+ *   注意 palaceNames 是该运限重排后的宫名，palaceNames[0] 只是本命索引 0 宫在该运限中的名称，不是落宫。
+ */
 function mapPeriod(item: {
   index?: number;
   name?: string;
@@ -143,13 +147,16 @@ function mapPeriod(item: {
   startAge?: number;
   endAge?: number;
   stars?: NonNullable<HoroscopePeriodInfo['stars']>;
-}): HoroscopePeriodInfo {
+}, natalPalaceNames: readonly string[]): HoroscopePeriodInfo {
+  const index = item.index ?? 0;
+  const natalPalaceName = Number.isInteger(index) && index >= 0 ? natalPalaceNames[index] : undefined;
   return {
-    index: item.index ?? 0,
+    index,
     name: normalizePalaceName(item.name ?? ''),
     heavenlyStem: item.heavenlyStem ?? '',
     earthlyBranch: item.earthlyBranch ?? '',
     palaceNames: (item.palaceNames ?? []).map(normalizePalaceName),
+    ...(natalPalaceName ? { natalPalaceName } : {}),
     mutagen: item.mutagen ?? [],
     ...(typeof item.startAge === 'number' ? { startAge: item.startAge } : {}),
     ...(typeof item.endAge === 'number' ? { endAge: item.endAge } : {}),
@@ -181,6 +188,7 @@ export function calculateZiweiHoroscopeDataWithAstrolabe(
     name: normalizePalaceName(p.name),
     earthlyBranch: p.earthlyBranch,
   }));
+  const natalPalaceNames = palaceList.map(p => p.name);
   const transitStars = (flowYearStem && flowYearBranch)
     ? computeTransitStars(flowYearStem, flowYearBranch, palaceList)
     : undefined;
@@ -215,12 +223,12 @@ export function calculateZiweiHoroscopeDataWithAstrolabe(
       ...(horoscope.decadal ?? {}),
       startAge: decadalAgeRange?.[0],
       endAge: decadalAgeRange?.[1],
-    }),
-    age: { ...mapPeriod(horoscope.age ?? {}), nominalAge: horoscope.age?.nominalAge ?? 0 },
-    yearly: mapPeriod(horoscope.yearly ?? {}),
-    monthly: mapPeriod(horoscope.monthly ?? {}),
-    daily: mapPeriod(horoscope.daily ?? {}),
-    hourly: mapPeriod(horoscope.hourly ?? {}),
+    }, natalPalaceNames),
+    age: { ...mapPeriod(horoscope.age ?? {}, natalPalaceNames), nominalAge: horoscope.age?.nominalAge ?? 0 },
+    yearly: mapPeriod(horoscope.yearly ?? {}, natalPalaceNames),
+    monthly: mapPeriod(horoscope.monthly ?? {}, natalPalaceNames),
+    daily: mapPeriod(horoscope.daily ?? {}, natalPalaceNames),
+    hourly: mapPeriod(horoscope.hourly ?? {}, natalPalaceNames),
     transitStars,
     yearlyDecStar,
     calculationOptions: getZiweiOptions(astrolabe),

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
     buildZiweiCanonicalJSON,
+    buildZiweiHoroscopeCanonicalJSON,
     calculateZiweiChartBundle,
     calculateZiweiPalaceFlights,
     getDecadalList,
@@ -37,6 +38,19 @@ test('getZiweiCurrentPeriods places the current decade, year and small limit on 
     assert.equal(palaceNameAt(3), '子女');
     assert.equal(palaceNameAt(4), '夫妻');
     assert.equal(palaceNameAt(2), '财帛');
+});
+
+test('运限 canonical JSON names the natal palace each layer lands on (panel notes read it directly)', () => {
+    const layers = buildZiweiHoroscopeCanonicalJSON(bundle.output, bundle.astrolabe, new Date(2026, 9, 12))?.运限叠宫 ?? [];
+    const landing = Object.fromEntries(layers.map((layer) => [layer.层次, layer.落入本命宫位]));
+    assert.equal(landing.大限, '子女宫');
+    assert.equal(landing.流年, '夫妻宫');
+    assert.equal(landing.小限, '财帛宫');
+    for (const layer of layers) {
+        const name = palaceNameAt(layer.宫位索引);
+        assert.ok(name, layer.层次);
+        assert.equal(layer.落入本命宫位, name.endsWith('宫') ? name : `${name}宫`, layer.层次);
+    }
 });
 
 test('getZiweiCurrentPeriods drops layers core cannot place instead of leaking -1 indices', () => {

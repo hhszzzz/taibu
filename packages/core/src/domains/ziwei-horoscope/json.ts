@@ -15,6 +15,8 @@ import type {
 
 export const renderZiweiHoroscopeCanonicalJSON = withRulesJSON(renderZiweiHoroscopeCanonicalJSONBase);
 
+const formatPalace = (palaceName: string) => palaceName.endsWith('宫') ? palaceName : `${palaceName}宫`;
+
 function renderZiweiHoroscopeCanonicalJSONBase(
   result: ZiweiHoroscopeOutput,
   options: { detailLevel?: ZiweiHoroscopeCanonicalTextOptions['detailLevel']; } = {},
@@ -70,7 +72,6 @@ function renderZiweiHoroscopeCanonicalJSONBase(
     .filter((value): value is string => !!value);
   const transitGroups = (() => {
     const entries = result.transitStars || [];
-    const formatPalace = (palaceName: string) => palaceName.endsWith('宫') ? palaceName : `${palaceName}宫`;
     const pick = (names: string[]) => entries.filter((entry) => names.includes(entry.starName)).map((entry) => `${entry.starName}(${formatPalace(entry.palaceName)})`);
     return {
       吉星分布: pick(['流禄', '流魁', '流钺', '流马']),
@@ -100,7 +101,7 @@ function renderZiweiHoroscopeCanonicalJSONBase(
         时间段备注: formatTimeNote(layer),
         宫位索引: data.index,
         干支: `${data.heavenlyStem}${data.earthlyBranch}`,
-        落入本命宫位: data.palaceNames[0] ? `${data.palaceNames[0]}宫` : '-',
+        落入本命宫位: data.natalPalaceName ? formatPalace(data.natalPalaceName) : '-',
         运限四化: formatMutagen(data.mutagen),
       };
       if (detailLevel === 'full' && data.palaceNames.length > 0) entry.十二宫重排 = [...data.palaceNames];

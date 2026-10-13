@@ -4,6 +4,7 @@ import {
   normalizeDetailLevelBinary
 } from '../../shared/render-utils.js';
 import type {
+  HoroscopePeriodInfo,
   ZiweiHoroscopeOutput
 } from './types.js';
 import type {
@@ -38,8 +39,13 @@ function formatZiweiHoroscopeMutagen(stars: string[]): string {
     .join(' ');
 }
 
-function formatZiweiHoroscopeLandingPalace(palaceNames: string[]): string {
-  return palaceNames[0] ? `${palaceNames[0]}宫` : '-';
+function formatZiweiHoroscopePalace(palaceName: string): string {
+  return palaceName.endsWith('宫') ? palaceName : `${palaceName}宫`;
+}
+
+/** 运限命宫落入的本命宫（按宫位索引回查本命盘，而非运限重排后的首个宫名） */
+function formatZiweiHoroscopeLandingPalace(period: HoroscopePeriodInfo): string {
+  return period.natalPalaceName ? formatZiweiHoroscopePalace(period.natalPalaceName) : '-';
 }
 
 function formatZiweiHoroscopeTimeNote(
@@ -76,25 +82,24 @@ function formatZiweiHoroscopeTimeNote(
 
 function buildZiweiHoroscopeTransitGroups(result: ZiweiHoroscopeOutput): Array<{ label: string; items: string[]; }> {
   const transitStars = result.transitStars || [];
-  const formatPalace = (palaceName: string) => palaceName.endsWith('宫') ? palaceName : `${palaceName}宫`;
   return [
     {
       label: '吉星分布',
       items: transitStars
         .filter((entry) => ZIWEI_TRANSIT_STAR_GROUPS.吉星分布.includes(entry.starName as never))
-        .map((entry) => `${entry.starName}(${formatPalace(entry.palaceName)})`),
+        .map((entry) => `${entry.starName}(${formatZiweiHoroscopePalace(entry.palaceName)})`),
     },
     {
       label: '煞星分布',
       items: transitStars
         .filter((entry) => ZIWEI_TRANSIT_STAR_GROUPS.煞星分布.includes(entry.starName as never))
-        .map((entry) => `${entry.starName}(${formatPalace(entry.palaceName)})`),
+        .map((entry) => `${entry.starName}(${formatZiweiHoroscopePalace(entry.palaceName)})`),
     },
     {
       label: '桃花/文星',
       items: transitStars
         .filter((entry) => ZIWEI_TRANSIT_STAR_GROUPS['桃花/文星'].includes(entry.starName as never))
-        .map((entry) => `${entry.starName}(${formatPalace(entry.palaceName)})`),
+        .map((entry) => `${entry.starName}(${formatZiweiHoroscopePalace(entry.palaceName)})`),
     },
   ];
 }
@@ -137,7 +142,7 @@ function renderZiweiHoroscopeCanonicalTextBase(result: ZiweiHoroscopeOutput, opt
 
   for (const { layer, data } of periodRows) {
     lines.push(
-      `| ${layer} | ${formatZiweiHoroscopeTimeNote(layer, result, parsedTargetDate)} | ${data.heavenlyStem}${data.earthlyBranch} | ${formatZiweiHoroscopeLandingPalace(data.palaceNames)} | ${formatZiweiHoroscopeMutagen(data.mutagen) || '-'} |`,
+      `| ${layer} | ${formatZiweiHoroscopeTimeNote(layer, result, parsedTargetDate)} | ${data.heavenlyStem}${data.earthlyBranch} | ${formatZiweiHoroscopeLandingPalace(data)} | ${formatZiweiHoroscopeMutagen(data.mutagen) || '-'} |`,
     );
   }
 

@@ -116,6 +116,11 @@ function selectionReducer(state: SelectionState, action: SelectionAction): Selec
     }
 }
 
+/** 运限命宫落入的本命宫（core canonical 字段）；无法确定时 core 给出 '-'，此时不显示 */
+function getLandingPalaceNote(period: ZiweiHoroscopeCanonicalJSON['运限叠宫'][number]): string {
+    return period.落入本命宫位 === '-' ? '' : period.落入本命宫位;
+}
+
 // Fix 1: 模块级缓存，避免重复排盘计算
 const canonicalHoroscopeCacheMap = new WeakMap<object, Map<string, ReturnType<typeof buildZiweiHoroscopeCanonicalJSON>>>();
 
@@ -174,11 +179,6 @@ export function ZiweiHoroscopePanel({ output, astrolabe, canonicalChart, initial
         () => getZiweiLunarBirthYear(output) ?? parseInt(canonicalChart.基本信息.阳历.split('-')[0], 10),
         [output, canonicalChart.基本信息.阳历],
     );
-
-    // 运限所落的本命宫名：按宫位索引回查本命盘（core 的「落入本命宫位」并非实际落宫，不能直接展示）
-    const natalPalaceNameByIndex = useMemo(() => new Map(
-        canonicalChart.十二宫位.flatMap((palace) => typeof palace.宫位索引 === 'number' ? [[palace.宫位索引, palace.宫位] as const] : []),
-    ), [canonicalChart.十二宫位]);
 
     // Fix 4: 去掉 useMemo，直接在 render 中获取当前日期
     const today = new Date();
@@ -291,12 +291,12 @@ export function ZiweiHoroscopePanel({ output, astrolabe, canonicalChart, initial
                     year,
                     stem: yearly.干支.charAt(0),
                     branch: yearly.干支.charAt(1),
-                    palace: natalPalaceNameByIndex.get(yearly.宫位索引) ?? '',
+                    palace: getLandingPalaceNote(yearly),
                 });
             }
         }
         return years;
-    }, [output, astrolabe, displayDecadal, nominalBaseYear, natalPalaceNameByIndex]);
+    }, [output, astrolabe, displayDecadal, nominalBaseYear]);
 
     // 计算当前选中年份的12个月（仅在选中流年后才计算）
     const monthlyList = useMemo(() => {
@@ -311,12 +311,12 @@ export function ZiweiHoroscopePanel({ output, astrolabe, canonicalChart, initial
                     month: m,
                     stem: monthly.干支.charAt(0),
                     branch: monthly.干支.charAt(1),
-                    palace: natalPalaceNameByIndex.get(monthly.宫位索引) ?? '',
+                    palace: getLandingPalaceNote(monthly),
                 });
             }
         }
         return months;
-    }, [output, astrolabe, viewYear, selectedYear, natalPalaceNameByIndex]);
+    }, [output, astrolabe, viewYear, selectedYear]);
 
     // 计算当前选中月份的日期列表（仅在选中流月后才计算）
     const dailyList = useMemo(() => {
@@ -335,12 +335,12 @@ export function ZiweiHoroscopePanel({ output, astrolabe, canonicalChart, initial
                     day: d,
                     stem: daily.干支.charAt(0),
                     branch: daily.干支.charAt(1),
-                    palace: natalPalaceNameByIndex.get(daily.宫位索引) ?? '',
+                    palace: getLandingPalaceNote(daily),
                 });
             }
         }
         return days;
-    }, [output, astrolabe, viewYear, viewMonth, selectedMonth, natalPalaceNameByIndex]);
+    }, [output, astrolabe, viewYear, viewMonth, selectedMonth]);
 
     // 大限选择 - 支持取消，切换大限时清除流年/流月/流日
     const handleDecadalSelect = (d: DecadalInfo) => {

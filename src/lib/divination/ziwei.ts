@@ -276,8 +276,7 @@ function parseSolarBirthDate(solarDate: string): Date | null {
 /**
  * 指定日期的大限 / 流年 / 小限落宫（用于本命盘标注「当前大限」等）。
  *
- * - 只读取运限层的 `宫位索引`：core 的 `落入本命宫位` 取自运限重排后的首个宫名，
- *   并非该运限实际落入的本命宫，不能用于展示。
+ * - 只读取运限层的 `宫位索引`（本命盘标注按索引定位宫格；宫名可直接用 core 的 `落入本命宫位`）。
  * - 出生前、或超出末个大限时，core 会给出 -1 索引与未本地化的干支，这些层统一视为无法确定。
  */
 export function getZiweiCurrentPeriods(output: CoreZiweiOutput, astrolabe: Astrolabe, date: Date = new Date()): ZiweiCurrentPeriods {

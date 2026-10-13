@@ -158,7 +158,8 @@ test('liuyao picks the main 用神 by 持世、临月日、旺衰、动静、伤
   assert.equal(groupOf(xiaoXu).selected.naJia, '未');
   assert.equal(groupOf(xiaoXu).candidates[0].kongWangState, 'kong_supported');
   assert.match(groupOf(xiaoXu).selectionNote, /六四爻临月建，九三爻不临月日，「舍其无权而用月日」/u);
-  assert.ok(triggersOf(xiaoXu).includes('逢辰出空'));
+  // 主用神未土临月建而太旺，野鹤先许「次日辛丑冲动未财日得」，应期正在逢冲、逢墓（辰）之日
+  assert.deepEqual(triggersOf(xiaoXu), ['逢辰入墓或逢丑冲', '逢辰出空']);
   const json = mcpCore.toLiuyaoCanonicalJson(xiaoXu).用神分析[0];
   assert.equal(json.取用说明, groupOf(xiaoXu).selectionNote);
   assert.deepEqual([json.候选用神[0].强弱, json.候选用神[0].动静], ['有气', '静']);
@@ -168,7 +169,7 @@ test('liuyao picks the main 用神 by 持世、临月日、旺衰、动静、伤
   assert.equal(groupOf(shi).selected.naJia, '辰');
   assert.match(groupOf(shi).selectionNote, /「舍其休囚，用其旺相」/u);
   assert.match(groupOf(shi).selectionNote, /六四爻月破，另看应期/u);
-  assert.ok(triggersOf(shi).includes('逢丑实破或逢子合'));
+  assert.deepEqual(triggersOf(shi), ['逢辰出空填实或戌冲空', '逢丑实破或逢子合']);
 
   // 豫之归妹例 亥月丙午日：九四午火临日建为主，六二巳火动而月破主应期（「许巳年脱厄，乃实破之年也」）
   const yu = await cast('雷地豫', '2025-12-03T10:00:00', { changedHexagramName: '雷泽归妹', yongShenTargets: ['子孙'] });
@@ -199,7 +200,7 @@ test('liuyao judges 伏神 by the six 有用 and five 不得出 conditions of �
     const result = await cast(hexagramName, date, { yongShenTargets: [target] });
     const group = result.yongShen[0];
     assert.equal(group.selectionStatus, 'from_fushen');
-    return { selected: group.selected, fuShen: result.fuShen[0] };
+    return { selected: group.selected, fuShen: result.fuShen[0], timing: result.timeRecommendations[0] };
   };
 
   // 贲卦例 卯月壬辰日：午火父母月生而旺相，伏于丑土之下又逢旬空，「许甲午日出空必得」
@@ -207,6 +208,8 @@ test('liuyao judges 伏神 by the six 有用 and five 不得出 conditions of �
   assert.equal(ben.fuShen.availabilityStatus, 'available');
   assert.equal(ben.selected.strengthLabel, '伏神有用');
   assert.equal(ben.selected.kongWangState, 'kong_supported');
+  assert.equal(ben.timing.trigger, '待出伏');
+  assert.match(ben.timing.description, /待午日出露，或未日冲开飞神.*；伏神旬空，出空之日方出/u);
   assert.ok(ben.selected.evidence.includes('伏于六二爻兄弟丑土之下'));
 
   // 复卦例 卯月丙辰日：「旺木以生巳火，飞来生伏」
@@ -218,13 +221,74 @@ test('liuyao judges 伏神 by the six 有用 and five 不得出 conditions of �
   const sheng = await fuShenOf('地风升', '2019-09-16T10:00:00', '子孙');
   assert.equal(sheng.fuShen.availabilityStatus, 'conditional');
   assert.ok(sheng.selected.evidence.includes('飞神虽有若无（旬空、无气、日墓）'));
+  assert.match(sheng.timing.description, /待午日出露/u);
 
   // 遁卦例：辰土飞来克子水伏神。午月飞神旺相，「伏神受制，有用亦无用矣」
   const dun = await fuShenOf('天山遯', '2024-06-10T10:00:00', '子孙');
   assert.equal(dun.fuShen.availabilityStatus, 'blocked');
   assert.equal(dun.selected.evidence.at(-1), '旺相之飞神克伏，伏神受制，有用亦无用');
+  assert.match(dun.timing.description, /不宜强断应期/u);
   // 卯月甲戌日飞神虽日破，伏神被日辰克而月令无助：黄金策注「用爻休囚又被月建日辰制服，纵遇生扶，亦不济事也」
   const ruled = await fuShenOf('天山遯', '2024-03-11T10:00:00', '子孙');
   assert.equal(ruled.fuShen.availabilityStatus, 'blocked');
   assert.equal(ruled.selected.evidence.at(-1), '伏神被日月冲克，纵遇生扶亦不济事');
+});
+
+test('liuyao derives 应期 from the 应期总注 and the 病 of the 用神', async () => {
+  // 《增删卜易·各门类应期总注章》各条原注之例；《卜筮正宗》伏神正传「空要值日、破要填合、伏待出露、冲待合、合待冲」、
+  // 十八问答第四问「宗其一爻有病关因者断之」：病在则应在去病之日，无病再看动静旺衰
+  const timing = async (hexagramName, date, target, changedHexagramName) => {
+    const result = await cast(hexagramName, date, { yongShenTargets: [target], ...(changedHexagramName ? { changedHexagramName } : {}) });
+    return result.timeRecommendations.map((item) => [item.type, item.trigger]);
+  };
+
+  // 「静而逢值逢冲：如主事爻临子水不动，后逢子日午日而应之」——申月乙巳日乾为天初九子水
+  assert.deepEqual(await timing('乾为天', '2024-08-09T10:00:00', '子孙'), [['critical', '逢子值或逢午冲']]);
+  // 「太旺者逢墓逢冲：如主事爻临午火，又遇巳火午月日占卦…后逢亥子日应之，又有戌日应之乃火入墓也」——午月九四午火
+  assert.deepEqual(await timing('乾为天', '2024-06-07T10:00:00', '官鬼'), [['critical', '逢戌入墓或逢子冲']]);
+  // 「月破喜填：如子月占，主事爻临午火，乃为月破。后逢未日应之…又有逢午月应之」
+  assert.deepEqual(await timing('乾为天', '2023-12-09T10:00:00', '官鬼'), [['critical', '逢午填实或逢未合']]);
+  // 「遇六合亦宜相击…即如主象临子，与丑作合，后逢午未日应之是也」
+  assert.deepEqual(await timing('乾为天', '2024-01-09T10:00:00', '子孙'), [['critical', '逢午或未冲开']]);
+  // 月将章例：午月戊辰日火地晋，酉金合辰日，「卯日卯时必生…应卯时者，酉金与辰日相合」，引黄金策「若逢合住，必待冲开」
+  assert.deepEqual(await timing('火地晋', '2024-07-03T10:00:00', '兄弟'), [['critical', '逢卯冲开']]);
+
+  // 「入三墓俱喜冲开：如主事爻临午火，假使火墓于戌，后逢辰日则应之」；三墓即「用爻入日墓、入动墓、动而化墓」
+  assert.deepEqual(await timing('乾为天', '2024-03-11T10:00:00', '官鬼'), [['critical', '逢辰冲开墓库']]);
+  const dongMu = await cast('乾为天', '2024-03-04T10:00:00', { yongShenTargets: ['子孙'], changedHexagramName: '天泽履' });
+  assert.deepEqual(dongMu.timeRecommendations[0].basis, ['用神入动墓', '入三墓俱喜冲开']);
+  assert.match(dongMu.timeRecommendations[0].description, /入动墓（九三辰土发动），墓在辰，逢戌冲开之日方应/u);
+  assert.deepEqual(await timing('天风姤', '2024-03-02T10:00:00', '官鬼', '山风蛊'), [['critical', '逢辰冲开墓库']]);
+  // 辰日冲戌，墓神被冲破，不作化墓（墓库章「墓神破，日月动爻冲破，亦非真也」），回到动而逢值逢合
+  assert.deepEqual(await timing('天风姤', '2024-03-05T10:00:00', '官鬼', '山风蛊'), [['critical', '逢午值或逢未合']]);
+
+  // 「动而逢合逢值：如主事爻临子水发动，后遇丑日子日」，并「问有应于变爻动爻」
+  const moving = await cast('坤为地', '2024-05-08T10:00:00', { yongShenTargets: ['兄弟'], changedHexagramName: '地雷复' });
+  assert.deepEqual(moving.timeRecommendations.map((item) => item.trigger), ['逢未值或逢午合']);
+  assert.match(moving.timeRecommendations[0].description, /变出子，亦有应于子之日/u);
+  // 「化进神、逢值逢合：如申动酉…有应申月日者，有应巳月日者」；「化退神、忌值忌冲：如酉化申…有应申月日者，有应寅日月者」
+  assert.deepEqual(await timing('雷泽归妹', '2024-03-08T10:00:00', '兄弟', '兑为泽'), [['critical', '逢申值或逢巳合']]);
+  assert.deepEqual(await timing('兑为泽', '2024-03-01T10:00:00', '兄弟', '雷泽归妹'), [
+    ['favorable', '遇辰戌丑未相生或秋令申酉月'], ['unfavorable', '逢申或寅'],
+  ]);
+
+  // 冲待合：暗动与冲空之爻俱待逢合（第四问「其冲破也，必待相合之期至」）
+  assert.deepEqual(await timing('坤为地', '2024-08-09T10:00:00', '妻财'), [['critical', '逢寅合']]);
+  assert.deepEqual(await timing('坤为地', '2024-06-04T10:00:00', '父母'), [['critical', '逢申合']]);
+  // 休囚静爻旬空又逢日冲，是日破「愈加无用」，旬空论「休囚安静…谓之真空到底空矣」，不作冲空
+  const zhenKong = await cast('坤为地', '2024-01-06T10:00:00');
+  assert.equal(lineAt(zhenKong, 5).kongWangState, 'kong_static');
+  assert.deepEqual(zhenKong.timeRecommendations.map((item) => item.trigger), ['待巳冲空或亥填实']);
+  // 「衰绝者，遇生遇旺」，第四问「如自化绝或绝于日者，必待期生」
+  const jue = await cast('坤为地', '2024-03-18T10:00:00');
+  assert.deepEqual(jue.timeRecommendations.map((item) => [item.trigger, item.basis]), [['遇申酉相生或冬令亥子月', ['用神日绝', '绝待期生']]]);
+
+  // 「大象吉而受克，须待克神受克：如用神临辰土，得日月动爻生扶…倘被寅卯克害，后逢申酉日冲克克神则吉」
+  assert.deepEqual(await timing('坤为地', '2024-05-07T10:00:00', '兄弟', '地火明夷'), [
+    ['critical', '逢未值或逢午合'], ['favorable', '逢申酉克去克神'],
+  ]);
+  // 「大象凶而受克，须防克者逢生：…既无日月动爻生扶…再逢寅卯克制者，后逢寅卯亥日，则凶」
+  assert.deepEqual(await timing('坤为地', '2024-02-06T10:00:00', '兄弟', '地火明夷'), [
+    ['critical', '逢未值或逢午合'], ['favorable', '遇巳午相生或辰戌丑未四季月'], ['unfavorable', '逢寅卯或亥子'],
+  ]);
 });

@@ -1165,11 +1165,13 @@ const KONG_NOTES: Record<KongWangState, string> = {
 /**
  * 旬空真假（《增删卜易·旬空章》「旺不为空，动不为空，有日建动爻生扶者不为空」、月将章「在旬内者毕竟为空」；
  * 《卜筮正宗·旬空论》「休囚安静或日辰克动爻克…静逢月破值此旬空者，谓之真空」）：
- * 日冲则冲空而实；临月建、动爻、旺相或得日建动爻生扶者旬内仍空而出空有用；其余静而无气者为真空。
+ * 动爻或有根之爻逢日冲则冲空而实（日辰章「爻遇旬空，日辰冲起而有用」）；休囚静爻逢日冲是日破，「愈加无用」，仍为真空
+ * （旬空论：旺相、发动、得生扶之空「到底有用，不过待其出旬、值日、有合空、冲起、冲实、填补」，休囚安静者「真空到底空矣」）；
+ * 临月建、动爻、旺相或得日建动爻生扶者旬内仍空而出空有用；其余静而无气者为真空。
  */
 function classifyKong(yaoZhi: DiZhi, kongWang: KongWang, monthZhi: DiZhi, dayZhi: DiZhi, isChanging: boolean, rooted: boolean): KongWangState {
   if (!kongWang.kongDizhi.includes(yaoZhi)) return 'not_kong';
-  if (LIU_CHONG[yaoZhi] === dayZhi) return 'kong_ri_chong';
+  if (LIU_CHONG[yaoZhi] === dayZhi) return isChanging || rooted ? 'kong_ri_chong' : 'kong_static';
   if (yaoZhi === monthZhi) return 'kong_yue_jian';
   if (isChanging) return 'kong_changing';
   return rooted ? 'kong_supported' : 'kong_static';
@@ -1728,7 +1730,7 @@ function judgeFuShen(
   const isKong = kongWang.kongDizhi.includes(fu.naJia);
   const kongWangState: KongWangState = !isKong
     ? 'not_kong'
-    : LIU_CHONG[fu.naJia] === dayZhi ? 'kong_ri_chong' : status === 'blocked' ? 'kong_static' : 'kong_supported';
+    : status === 'blocked' ? 'kong_static' : LIU_CHONG[fu.naJia] === dayZhi ? 'kong_ri_chong' : 'kong_supported';
   if (kongWangState === 'kong_static') evidence.push('真空（伏而被制，到底为空）');
   if (kongWangState === 'kong_supported') evidence.push('旬空（伏神有气，出空之日则出）');
   if (kongWangState === 'kong_ri_chong') evidence.push('冲空');
@@ -2117,8 +2119,8 @@ interface YongShenContext {
   monthZhi: DiZhi;
   dayZhi: DiZhi;
   kongWang: KongWang;
-  /** 各爻所受有力动爻之克（爻位 → 动爻名） */
-  movingHarmByPosition: ReadonlyMap<number, readonly string[]>;
+  /** 各爻所受有力动爻之克（爻位 → 克之之动爻） */
+  movingHarmByPosition: ReadonlyMap<number, readonly FullYaoInfo[]>;
 }
 
 /** 取用次序：明现 → 变出（《卜筮正宗》「凡卦中用神不出现，查变爻有不必寻伏神矣」）→ 月日 → 伏神 */
@@ -2232,150 +2234,181 @@ function calculateShenSystem(group: YongShenGroup, fullYaos: FullYaoInfoExtended
   };
 }
 
-function calculateTimeRecommendations(groups: YongShenGroup[]): TimeRecommendation[] {
+interface TimingContext {
+  fullYaos: FullYaoInfoExtended[];
+  monthZhi: DiZhi;
+  dayZhi: DiZhi;
+  movingHarmByPosition: ReadonlyMap<number, readonly FullYaoInfo[]>;
+}
+
+const TIMING_TYPE_ORDER: Record<TimeRecommendation['type'], number> = { critical: 0, favorable: 1, unfavorable: 2 };
+const WUXING_SEASON: Record<WuXing, string> = {
+  木: '春令寅卯月',
+  火: '夏令巳午月',
+  土: '辰戌丑未四季月',
+  金: '秋令申酉月',
+  水: '冬令亥子月',
+};
+
+/** 五行所属地支，按习惯写法（如水为「亥子」） */
+const WUXING_BRANCHES: Record<WuXing, string> = { 木: '寅卯', 火: '巳午', 土: '辰戌丑未', 金: '申酉', 水: '亥子' };
+
+/**
+ * 应期，依《增删卜易·各门类应期总注章》（下称总注），参《卜筮正宗·伏神正传》「空要值日、破要填合、伏待出露、冲待合、合待冲」
+ * 与十八问答第四问「宗其一爻有病关因者断之」：
+ * 1. 先看用神之病：旬空、月破、入墓（日墓、动墓、化墓）、合住（月合、日合、化合）、冲（冲空、暗动）、绝、伏藏，病在则应在去病之日；
+ * 2. 无病再按动静旺衰取常期：静逢值冲、动逢值合、太旺逢墓冲、衰绝遇生旺、化进逢值合、化退忌值冲；
+ * 3. 受克者看克神；用神多现时同类空破之爻另主应期。
+ * 《增删卜易·囤货卖货章》「财爻太旺旺者得利于墓库之月，休囚者出脱于生旺之时，入墓必待冲开，逢绝当逢生旺，月破者填实之，
+ * 被克者冲去克神之秋，伏藏者得价于出现之时，旬空者冲空实空之月，如逢合住亦待冲开」，与上述各条一一相合。
+ * 只给相对条件（逢某支），不推算具体历日。每组按 关键 → 有利 → 不利 排列。
+ */
+function calculateTimeRecommendations(groups: YongShenGroup[], context: TimingContext): TimeRecommendation[] {
+  return groups.flatMap((group) => timingOf(group, context)
+    .sort((a, b) => TIMING_TYPE_ORDER[a.type] - TIMING_TYPE_ORDER[b.type]));
+}
+
+function timingOf(group: YongShenGroup, context: TimingContext): TimeRecommendation[] {
+  const { targetLiuQin: target, selected } = group;
+  const { fullYaos, monthZhi, dayZhi, movingHarmByPosition } = context;
   const recommendations: TimeRecommendation[] = [];
-  for (const group of groups) {
-    const selected = group.selected;
-    if (group.selectionStatus === 'missing') {
-      recommendations.push({
-        targetLiuQin: group.targetLiuQin,
-        type: 'critical',
-        trigger: '先明确取用后再断应期',
-        basis: ['目标六亲未能稳定落点'],
-        description: `本卦暂未稳取到${group.targetLiuQin}，此时不宜强断具体应期。`,
-      });
-      continue;
+  const push = (type: TimeRecommendation['type'], trigger: string, basis: string[], description: string, earthlyBranch?: DiZhi) => {
+    recommendations.push({ targetLiuQin: target, type, ...(earthlyBranch ? { earthlyBranch } : {}), trigger, basis, description });
+  };
+
+  if (group.selectionStatus === 'missing') {
+    push('critical', '先明确取用后再断应期', ['目标六亲未能稳定落点'], `本卦暂未稳取到${target}，此时不宜强断具体应期。`);
+    return recommendations;
+  }
+  const x = selected.naJia;
+  if (!x || selected.source === 'temporal') return recommendations;
+
+  if (selected.source === 'fushen') {
+    const fei = fullYaos.find((yao) => yao.position === selected.position);
+    const place = fei ? `伏于${fei.naJia}${fei.wuXing}之下` : '伏藏';
+    const exits = [`${x}日出露`, ...(fei ? [`${LIU_CHONG[fei.naJia]}日冲开飞神`] : [])].join('，或');
+    push('critical', '待出伏', ['用神伏藏', '伏待出露'], selected.strength === 'weak'
+      ? `用神${target}${place}，${selected.strengthLabel}，不宜强断应期；纵有转机，亦待${exits}（《卜筮正宗·伏神正传》「伏待出露」）。`
+      : `用神${target}${place}，${selected.strengthLabel}，待${exits}（《卜筮正宗·伏神正传》「伏待出露」，占例「冲其飞而露其伏」）${selected.kongWangState === 'kong_supported' ? '；伏神旬空，出空之日方出' : ''}。`, x);
+    return recommendations;
+  }
+
+  const element = selected.element;
+  const yao = selected.source === 'visible' ? fullYaos.find((item) => item.position === selected.position) : undefined;
+  const changed = selected.source === 'visible' ? selected.changedNaJia : undefined;
+  const heOf = (zhi: DiZhi) => LIU_HE[zhi].partner;
+
+  // 用神之病
+  const kong = selected.kongWangState;
+  if (kong === 'kong_static') {
+    push('critical', `待${LIU_CHONG[x]}冲空或${x}填实`, ['用神真空', '旬空最爱填冲'],
+      `用神${target}真空，到底为空；纵有应验，亦在冲空、填实之日（总注「旬空最爱填冲」）。`, x);
+  } else if (isKongPending(kong)) {
+    push('critical', `逢${x}出空填实或${LIU_CHONG[x]}冲空`, [`用神${KONG_WANG_LABELS[kong as KongWangState]}`, '旬空最爱填冲'],
+      `用神${target}旬内仍空，出空之日方应（《增删卜易·月将章》「在旬内者毕竟为空」，总注「旬空最爱填冲」）。`, x);
+  } else if (kong === 'kong_ri_chong') {
+    push('critical', `逢${heOf(x)}合`, ['冲空则实', '冲待合'],
+      `用神${target}旬空逢日冲，冲空则实（《增删卜易·日辰章》「爻遇旬空，日辰冲起而有用」）；冲而待合，逢${heOf(x)}合之日应（《卜筮正宗·十八问答》第四问「其冲破也，必待相合之期至而应事之吉凶」）。`, heOf(x));
+  }
+  const isYuePo = selected.specialStatus === 'yuePo';
+  if (isYuePo) {
+    push('critical', `逢${x}填实或逢${heOf(x)}合`, ['用神月破', '月破喜填'],
+      `用神${target}月破，月内无功；出月之后，逢${x}填实或逢${heOf(x)}合之日方应（《增删卜易·月破章》「出月则不破…实破之日则不破，合之日则不破」）。`, x);
+  }
+  // 三墓即「用爻入日墓、入动墓、动而化墓」，墓支同为用神五行之墓；墓神被日月动爻冲破者非真墓（墓库章「墓神破，日月动爻冲破，亦非真也」）
+  const tombZhi = WUXING_MU[element];
+  const movers = fullYaos.filter((item) => item.isChanging);
+  const tombBroken = (byMovers: boolean) => LIU_CHONG[tombZhi] === monthZhi || LIU_CHONG[tombZhi] === dayZhi
+    || (byMovers && movers.some((item) => item.naJia === LIU_CHONG[tombZhi]));
+  const tombMover = yao && x !== tombZhi ? movers.find((item) => item.position !== yao.position && item.naJia === tombZhi) : undefined;
+  const tombs = [
+    ...(yao?.changSheng?.stage === '墓' ? [{ label: '入日墓', detail: '入日墓' }] : []),
+    ...(tombMover && !tombBroken(true)
+      ? [{ label: '入动墓', detail: `入动墓（${traditionalYaoName(tombMover.position, tombMover.type)}${tombMover.naJia}${tombMover.wuXing}发动）` }]
+      : []),
+    ...(changed === tombZhi && (selected.huaType === 'huaMu' || selected.huaType === 'huiTouKe') && !tombBroken(false)
+      ? [{ label: '动而化墓', detail: '动而化墓' }]
+      : []),
+  ];
+  if (tombs.length > 0) {
+    const opener = LIU_CHONG[tombZhi];
+    push('critical', `逢${opener}冲开墓库`, [`用神${tombs.map((tomb) => tomb.label).join('、')}`, '入三墓俱喜冲开'],
+      `用神${target}${tombs.map((tomb) => tomb.detail).join('、')}，墓在${tombZhi}，逢${opener}冲开之日方应（总注「入三墓俱喜冲开」）。`, opener);
+  }
+  // 合住待冲：总注「主事爻与月作合，或动而化合，吉凶必待冲开之月日」；与日合者，《卜筮正宗·十八问答》第四问「如自化合或与日合…必待期冲」，
+  // 《增删卜易·月将章》例酉金合辰日而应卯时，引黄金策「若逢合住，必待冲开」。日辰冲开者合即散（日辰章「逢合住遇日建以冲开，谓之冲合则散」），不再待冲
+  const binder = LIU_CHONG[x] === dayZhi ? undefined
+    : heOf(x) === monthZhi ? { zhi: monthZhi, label: '月合', openers: [LIU_CHONG[x], LIU_CHONG[monthZhi]], source: '总注「遇六合亦宜相击」' }
+      : heOf(x) === dayZhi ? { zhi: dayZhi, label: '日合', openers: [LIU_CHONG[x]], source: '黄金策「若逢合住，必待冲开」，《增删卜易·月将章》《卜筮正宗》俱引' }
+        : changed && heOf(x) === changed && LIU_CHONG[changed] !== dayZhi
+          ? { zhi: changed, label: '动而化合', openers: [LIU_CHONG[x], LIU_CHONG[changed]], source: '总注「遇六合亦宜相击」' }
+          : undefined;
+  if (binder) {
+    const openers = binder.openers.join('或');
+    push('critical', `逢${openers}冲开`, [`用神${binder.label}`, '合待冲'],
+      `用神${target}${binder.label}（${x}${binder.zhi}合），合住待冲，逢${openers}冲开之日应（${binder.source}）。`, LIU_CHONG[x]);
+  }
+  // 绝亦为病（《卜筮正宗·十八问答》第四问「如自化绝或绝于日者，必待期生，亦指一爻有病者而言也」），病在则不取常期
+  // 变出之用神所带 huaType 是本爻的化变，不作用神自身的化绝、化进论
+  const jue = yao?.changSheng?.stage === '绝' ? '日绝' : yao && selected.huaType === 'huaJue' ? '化绝' : undefined;
+  const sick = recommendations.length > 0 || jue !== undefined;
+
+  // 常期：动静旺衰
+  const moving = selected.movementState === 'changing';
+  if (moving && selected.huaType === 'huaTui' && changed) {
+    push('unfavorable', `逢${changed}或${LIU_CHONG[changed]}`, ['化退神，忌值忌冲'],
+      `用神${target}化退神，逢变爻${changed}之值或${LIU_CHONG[changed]}之冲，事多退缩（总注「化退神、忌值忌冲」）。`, changed);
+  } else if (moving && !sick) {
+    const advancing = yao !== undefined && selected.huaType === 'huaJin';
+    const viaChanged = changed && changed !== x ? `；变出${changed}，亦有应于${changed}之日（总注「问有应于变爻动爻」）` : '';
+    push('critical', `逢${x}值或逢${heOf(x)}合`, [advancing ? '化进神，逢值逢合' : '动而逢合逢值'],
+      `用神${target}发动，应期多在逢值、逢合之日（总注「${advancing ? '化进神、逢值逢合' : '动而逢合逢值'}」）${viaChanged}。`, x);
+  } else if (selected.movementState === 'hidden_moving' && !sick) {
+    push('critical', `逢${heOf(x)}合`, ['暗动，冲待合'], `用神${target}暗动，冲而待合，逢${heOf(x)}合之日应（《卜筮正宗·伏神正传》「冲待合」）。`, heOf(x));
+  } else if (!moving && !sick && selected.strength !== 'weak') {
+    const overflowing = selected.strength === 'strong' && (DIZHI_WUXING[monthZhi] === element || DIZHI_WUXING[dayZhi] === element);
+    if (overflowing) {
+      push('critical', `逢${WUXING_MU[element]}入墓或逢${LIU_CHONG[x]}冲`, ['太旺者逢墓逢冲'],
+        `用神${target}得月日帮扶而太旺，应期多在逢${WUXING_MU[element]}入墓、逢${LIU_CHONG[x]}冲之日（总注「太旺者逢墓逢冲」）。`, LIU_CHONG[x]);
+    } else {
+      push('critical', `逢${x}值或逢${LIU_CHONG[x]}冲`, ['静而逢值逢冲'], `用神${target}安静，应期多在逢值、逢冲之日（总注「静而逢值逢冲」）。`, x);
     }
+  }
+  // 衰绝待生旺：总注「衰绝者，遇生遇旺」
+  if ((selected.strength === 'weak' || jue) && !isYuePo && kong !== 'kong_static') {
+    const nourisher = WUXING_BEI_SHENG[element];
+    const state = jue ? `${selected.strength === 'weak' ? '休囚无气，又' : ''}${jue}` : '休囚无气';
+    push('favorable', `遇${WUXING_BRANCHES[nourisher]}相生或${WUXING_SEASON[element]}`, jue ? [`用神${jue}`, '绝待期生'] : ['衰绝者遇生遇旺'],
+      `用神${target}${state}，待遇${nourisher}（${WUXING_BRANCHES[nourisher]}）之月日相生，或至${WUXING_SEASON[element]}${element}旺之时（总注「衰绝者，遇生遇旺」${jue ? '，《卜筮正宗》「自化绝或绝于日者，必待期生」' : ''}）。`);
+  }
 
-    const shouldAddGenericFavorable = Boolean(
-      selected.naJia
-      && group.selectionStatus !== 'from_fushen'
-      && group.selectionStatus !== 'from_temporal'
-      && selected.strength !== 'weak'
-      && selected.strength !== 'unknown'
-      && selected.movementState !== 'day_break'
-      && selected.kongWangState !== 'kong_static'
-    );
-
-    if (shouldAddGenericFavorable && selected.naJia) {
-      recommendations.push({
-        targetLiuQin: group.targetLiuQin,
-        type: 'favorable',
-        earthlyBranch: selected.naJia,
-        trigger: `逢${selected.naJia}日/月`,
-        basis: [`用神纳甲${selected.naJia}`, selected.strengthLabel],
-        description: `用神${group.targetLiuQin}逢${selected.naJia}日/月时更容易显事，应以当时旺衰再复核。`,
-      });
+  // 受克：总注「大象吉而受克，须待克神受克；大象凶而受克，须防克者逢生」
+  const attackers = new Set<WuXing>([
+    ...(selected.huaType === 'huiTouKe' && changed ? [DIZHI_WUXING[changed]] : []),
+    ...(yao ? (movingHarmByPosition.get(yao.position) ?? []).map((actor) => actor.wuXing) : []),
+  ]);
+  for (const attacker of attackers) {
+    if (selected.strength === 'weak') {
+      const feeder = WUXING_BEI_SHENG[attacker];
+      push('unfavorable', `逢${WUXING_BRANCHES[attacker]}或${WUXING_BRANCHES[feeder]}`, ['大象凶而受克，防克者逢生'],
+        `用神${target}无气又受${attacker}克，逢${WUXING_BRANCHES[attacker]}（克神值）或${WUXING_BRANCHES[feeder]}（生克神）之日为凶（总注「大象凶而受克，须防克者逢生」）。`);
+    } else {
+      const breaker = WUXING_BEI_KE[attacker];
+      push('favorable', `逢${WUXING_BRANCHES[breaker]}克去克神`, ['大象吉而受克，待克神受克'],
+        `用神${target}有气而受${attacker}克，逢${WUXING_BRANCHES[breaker]}之日克去克神则吉（总注「大象吉而受克，须待克神受克」）。`);
     }
+  }
 
-    if (selected.source === 'fushen') {
-      recommendations.push({
-        targetLiuQin: group.targetLiuQin,
-        type: 'critical',
-        trigger: '待出伏',
-        basis: ['用神伏藏', group.selectionNote],
-        description: `当前取的是伏神${group.targetLiuQin}，要看其何时出伏、得助或飞神发动。`,
-      });
-    }
-
-    if (selected.kongWangState === 'kong_static' && selected.naJia) {
-      recommendations.push({
-        targetLiuQin: group.targetLiuQin,
-        type: 'critical',
-        earthlyBranch: selected.naJia,
-        trigger: `待${LIU_CHONG[selected.naJia]}冲空或逢建填实`,
-        basis: ['用神真空'],
-        description: `用神${group.targetLiuQin}静而无气又无生扶，为真空，通常先看冲空、填实之后再应。`,
-      });
-    }
-
-    if (selected.kongWangState === 'kong_changing' && selected.naJia) {
-      recommendations.push({
-        targetLiuQin: group.targetLiuQin,
-        type: 'critical',
-        earthlyBranch: selected.naJia,
-        trigger: `动空待${LIU_CHONG[selected.naJia]}冲实或出空`,
-        basis: ['用神动空'],
-        description: `用神${group.targetLiuQin}虽动而仍在空地，宜看冲实、出空或后续得助之机。`,
-      });
-    }
-
-    if (selected.kongWangState === 'kong_ri_chong') {
-      recommendations.push({
-        targetLiuQin: group.targetLiuQin,
-        type: 'critical',
-        earthlyBranch: selected.naJia,
-        trigger: '冲空转实',
-        basis: ['日冲起空'],
-        description: `用神${group.targetLiuQin}得日冲而空起，可视作由空转实的重要条件。`,
-      });
-    }
-
-    if ((selected.kongWangState === 'kong_supported' || selected.kongWangState === 'kong_yue_jian') && selected.naJia) {
-      recommendations.push({
-        targetLiuQin: group.targetLiuQin,
-        type: 'critical',
-        earthlyBranch: selected.naJia,
-        trigger: '出空之日',
-        basis: [selected.kongWangState === 'kong_yue_jian' ? '临月建而旬空' : '用神假空'],
-        description: `用神${group.targetLiuQin}旬内仍空而有根，出空之日方能应事（《增删卜易·月将章》「在旬内者毕竟为空」）。`,
-      });
-    }
-
-    if (selected.movementState === 'changing' || selected.movementState === 'hidden_moving') {
-      const isChanging = selected.movementState === 'changing';
-      const changedBranch = isChanging ? selected.changedNaJia : undefined;
-      const triggerText = isChanging ? '明动发动之期' : '暗动被引发之期';
-      const basis = [selected.movementLabel];
-      let desc = `用神${group.targetLiuQin}${selected.movementLabel}，近期容易出现实际动作或关键转折。`;
-      if (changedBranch) {
-        basis.push(`变爻地支${changedBranch}`);
-        desc += `变爻指向${changedBranch}，逢${changedBranch}日/月可为应期参考。`;
-      }
-      recommendations.push({
-        targetLiuQin: group.targetLiuQin,
-        type: 'critical',
-        earthlyBranch: changedBranch || selected.naJia,
-        trigger: triggerText,
-        basis,
-        description: desc,
-      });
-    }
-
-    if (selected.movementState === 'day_break' || selected.strength === 'weak') {
-      recommendations.push({
-        targetLiuQin: group.targetLiuQin,
-        type: 'unfavorable',
-        earthlyBranch: selected.naJia,
-        trigger: '未得生扶之前',
-        basis: [selected.movementLabel, selected.strengthLabel],
-        description: `当前${group.targetLiuQin}偏弱或受破，未见生扶、出空、回头生等转机前，不宜过早定成。`,
-      });
-    }
-
-    // 用神多现，空破之爻另主应期：小畜例「却得于辰土出空之日」、豫之归妹例「两爻巳火逢月破许巳年脱厄」
-    for (const sibling of group.candidates) {
-      if (!sibling.naJia || sibling.naJia === selected.naJia || (sibling.source !== 'visible' && sibling.source !== 'changed')) continue;
-      const label = `${sibling.liuQin}${sibling.naJia}${sibling.element}`;
-      if (sibling.specialStatus === 'yuePo') {
-        recommendations.push({
-          targetLiuQin: group.targetLiuQin,
-          type: 'critical',
-          earthlyBranch: sibling.naJia,
-          trigger: `逢${sibling.naJia}实破或逢${LIU_HE[sibling.naJia].partner}合`,
-          basis: ['用神多现，应乎月破'],
-          description: `同类${label}月破，应期多在实破、逢合之日（《卜筮正宗》「舍其不破而用月破」）。`,
-        });
-      } else if (isKongPending(sibling.kongWangState)) {
-        recommendations.push({
-          targetLiuQin: group.targetLiuQin,
-          type: 'critical',
-          earthlyBranch: sibling.naJia,
-          trigger: sibling.kongWangState === 'kong_static' ? `待${LIU_CHONG[sibling.naJia]}冲空或${sibling.naJia}填实` : `逢${sibling.naJia}出空`,
-          basis: ['用神多现，应乎旬空'],
-          description: `同类${label}旬空，应期多在出空、填实之日（《增删卜易·两现章》「舍其不空，而用旬空」）。`,
-        });
-      }
+  // 用神多现，空破之爻另主应期：小畜例「却得于辰土出空之日」、豫之归妹例「两爻巳火逢月破许巳年脱厄」
+  for (const sibling of group.candidates) {
+    if (!sibling.naJia || sibling.naJia === x || (sibling.source !== 'visible' && sibling.source !== 'changed')) continue;
+    const label = `${sibling.liuQin}${sibling.naJia}${sibling.element}`;
+    if (sibling.specialStatus === 'yuePo') {
+      push('critical', `逢${sibling.naJia}实破或逢${heOf(sibling.naJia)}合`, ['用神多现，应乎月破'],
+        `同类${label}月破，应期多在实破、逢合之日（《卜筮正宗》「舍其不破而用月破」）。`, sibling.naJia);
+    } else if (isKongPending(sibling.kongWangState)) {
+      push('critical', sibling.kongWangState === 'kong_static' ? `待${LIU_CHONG[sibling.naJia]}冲空或${sibling.naJia}填实` : `逢${sibling.naJia}出空`, ['用神多现，应乎旬空'],
+        `同类${label}旬空，应期多在出空、填实之日（《增删卜易·两现章》「舍其不空，而用旬空」）。`, sibling.naJia);
     }
   }
   return recommendations;
@@ -2465,15 +2498,15 @@ export function performFullAnalysis(
   const describeActor = (yao: FullYaoInfo) => `${traditionalYaoName(yao.position, yao.type)}${yao.naJia}${yao.wuXing}`;
 
   const changedYaoDetails: ChangedYaoDetail[] = [];
-  const movingHarmByPosition = new Map<number, string[]>();
+  const movingHarmByPosition = new Map<number, FullYaoInfo[]>();
   const fullYaos: FullYaoInfoExtended[] = baseYaos.map((yao) => {
     const others = actors.filter((actor) => actor.position !== yao.position);
     const movingSupport = others
       .filter((actor) => actor.wuXing === yao.wuXing || WUXING_SHENG[actor.wuXing] === yao.wuXing)
       .map(describeActor);
-    const movingHarm = others.filter((actor) => WUXING_KE[actor.wuXing] === yao.wuXing).map(describeActor);
+    const movingHarm = others.filter((actor) => WUXING_KE[actor.wuXing] === yao.wuXing);
     movingHarmByPosition.set(yao.position, movingHarm);
-    const judgement = judgeLine(factsOf(yao, movingSupport, movingHarm), monthZhi, dayZhi, kongWang);
+    const judgement = judgeLine(factsOf(yao, movingSupport, movingHarm.map(describeActor)), monthZhi, dayZhi, kongWang);
     const { strength, kongWangState, dayStage } = judgement;
     const movementState = getYaoMovementState(yao, strength);
     const extended: FullYaoInfoExtended = {
@@ -2540,7 +2573,7 @@ export function performFullAnalysis(
   const liuHeGuaInfo = checkLiuHeGua(baseYaos);
   const chongHeTransition = checkChongHeTransition(baseYaos, changedCode);
   const guaFanFuYin = checkGuaFanFuYin(changedCode, baseYaos);
-  const timeRecommendations = calculateTimeRecommendations(yongShen);
+  const timeRecommendations = calculateTimeRecommendations(yongShen, { fullYaos, monthZhi, dayZhi, movingHarmByPosition });
   const globalShenSha = calculateGlobalShenSha(shenShaContext);
   const warnings = buildWarnings(yongShen, sanHeAnalysis, guaFanFuYin, chongHeTransition);
   const fuShen = Array.from(fuShenByTarget.values()).flat().map((item) => item.fuShen);

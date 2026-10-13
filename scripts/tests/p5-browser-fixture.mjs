@@ -776,8 +776,10 @@ export async function run(existingPage, bundlePath) {
     check('Actual settings navigation enters an independent page address', new URL(page.url()).pathname === '/settings/general' && new URL(page.url()).hash === '');
     await page.evaluate(() => { document.querySelector('[role="switch"]').dataset.fixtureIdentity = 'original-node'; window.fixture.invalidations.length = 0; });
     await page.getByRole('switch').first().click();
-    await until(() => window.fixture.invalidations.length === 1);
-    check('GeneralSettings mutation invalidates its scoped query exactly once', JSON.stringify(await page.evaluate(() => window.fixture.invalidations)) === JSON.stringify([{ queryKey: ['chat', 'bootstrap', 'alice'] }]));
+    // 设置写入同时失效聊天引导与任务通知读取的设置缓存，各一次且只限当前账号
+    await until(() => window.fixture.invalidations.length === 2);
+    await renderBarrier();
+    check('GeneralSettings mutation invalidates each scoped settings query exactly once', JSON.stringify(await page.evaluate(() => window.fixture.invalidations)) === JSON.stringify([{ queryKey: ['chat', 'bootstrap', 'alice'] }, { queryKey: ['user', 'settings', 'alice'] }]));
     let readsBeforeClose = settingsReads;
     await page.getByRole('link', { name: '账户', exact: true }).click();
     await until(() => location.pathname === '/settings/profile');

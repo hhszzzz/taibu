@@ -11,7 +11,7 @@
  *
  * Actual components: SettingsCenterPage/SettingsCenterHost/GeneralSettingsPanel/ChartsPanel, AIModelPanel,
  * AnnouncementManagementPanel, ConversationListProvider, ChartPickerModal,
- * useSelectedBaziChart, useComposerState, HistoryDrawer/HistoryPageTemplate and RecordsPage.
+ * useSelectedBaziChart, useComposerState, HistoryDrawer/HistoryPageTemplate, RecordsPage and useAnalysisSnapshot.
  * Actual root ClientProviders owns the shared Query client and handles synthetic auth I/O.
  * Fixture-only boundaries: auth I/O/profile/feature flags, unrelated lazy panels,
  * framework navigation, viewport notifications, held fetch/JSON completion and HTTP responses.
@@ -60,7 +60,22 @@ import { ModelSelector } from '@/components/ui/ModelSelector';
 import { AgentContextDetails } from '@/components/chat/agent/AgentContextUsage';
 import { getAgentChart } from '@/lib/agent/tool-presentation';
 import { getChartTargets } from '@/lib/agent/chart-interaction';
+import { useAnalysisSnapshot } from '@/lib/hooks/useAnalysisSnapshot';
 const initialToolParts = AGENT_TOOL_FIXTURE_PARTS;
+function AnalysisSnapshotProbe() {
+  // Result pages pass a fresh callbacks object on every render; a settled lookup must not start another one.
+  const [analysis, setAnalysis] = useState('');
+  const [settled, setSettled] = useState(0);
+  const loading = useAnalysisSnapshot({
+    conversationId: null,
+    recordId: 'fixture-snapshot-reading',
+    divinationType: 'tarot',
+    sessionKey: 'fixture_snapshot_result',
+    hasExistingAnalysis: Boolean(analysis),
+    callbacks: { onAnalysis: setAnalysis, onComplete: () => setSettled(count => count + 1) },
+  });
+  return <output data-testid="analysis-snapshot">{(loading ? 'loading' : 'idle') + ':' + settled}</output>;
+}
 function AgentResultsProbe() {
   const [open, setOpen] = useState(false);
   const [request, setRequest] = useState(undefined);
@@ -202,10 +217,12 @@ function Shell() {
   const [agentMounted, setAgentMounted] = useState(false);
   const [questionMounted, setQuestionMounted] = useState(false);
   const [resultsMounted, setResultsMounted] = useState(false);
+  const [snapshotMounted, setSnapshotMounted] = useState(false);
   const [modelMountKey, setModelMountKey] = useState(0);
   window.fixture.remountModels = () => setModelMountKey(current => current + 1);
   window.fixture.mount = { composer: setComposerMounted, history: setHistoryMounted, drawer: setDrawerMounted,
-    records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted, agent: setAgentMounted, question: setQuestionMounted, results: setResultsMounted };
+    records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted, agent: setAgentMounted, question: setQuestionMounted, results: setResultsMounted,
+    snapshot: setSnapshotMounted };
   window.fixture.chartKey = queryKeys.userCharts;
   window.fixture.chartClient = chartClient;
   window.fixture.deleteHistory = deleteHistorySummary;
@@ -269,6 +286,7 @@ function Shell() {
     {historyMounted && <section data-testid="history-page"><HistoryPageTemplate {...historyConfig} /></section>}
     {drawerMounted && <section data-testid="history-drawer"><HistoryDrawer type="tarot" /></section>}
     {recordsMounted && <section data-testid="records"><RecordsPage /></section>}
+    {snapshotMounted && <AnalysisSnapshotProbe />}
     <section data-testid="chart-picker"><ChartPickerModal isOpen={pickerOpen} userId={user?.id ?? ''}
       onClose={() => setPickerOpen(false)} onSelect={chart => { window.fixture.pickedChart = chart; }} /></section>
     <BirthRulesProbe />
@@ -1327,6 +1345,20 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => window.fixture.mount.drawer(false));
     await page.getByRole('button', { name: 'Fixture Alice', exact: true }).evaluate(button => button.click());
     await until(() => window.fixture.user === 'alice');
+
+    const snapshotRequestsStart = requests.length;
+    const snapshotLookups = () => requests.slice(snapshotRequestsStart).filter(item =>
+      item.pathname === '/api/history-summaries' && new URLSearchParams(item.search).get('id') === 'fixture-snapshot-reading').length;
+    await page.evaluate(() => window.fixture.mount.snapshot(true));
+    await page.getByTestId('analysis-snapshot').filter({ hasText: /^idle:[1-9]/ }).waitFor();
+    await renderBarrier();
+    const settledSnapshotLookups = snapshotLookups();
+    await page.waitForTimeout(500);
+    // StrictMode replays the mount effect once, so a single mount may look the record up at most twice.
+    check('Analysis snapshot with inline callbacks looks up a record once per mount instead of looping',
+      settledSnapshotLookups >= 1 && settledSnapshotLookups <= 2 && snapshotLookups() === settledSnapshotLookups &&
+      await page.getByTestId('analysis-snapshot').innerText() === 'idle:1');
+    await page.evaluate(() => window.fixture.mount.snapshot(false));
 
     const recordPanel = page.getByTestId('records');
     await page.evaluate(() => window.fixture.mount.records(true));

@@ -26,15 +26,16 @@ function describeYongShen(selected: SelectedYongShen): string {
     return `${subject}居${selected.爻位}`;
 }
 
-/** 动爻：一爻独发 / 多爻发动，并列出化出之爻与化变关系；无动爻时说明为静卦。 */
+/** 动爻：一爻独发 / 多爻发动，并列出化出之爻与化变关系；无动爻时说明为静卦。动爻亦论月破（Core 动静标为「明动·月破」）。 */
 function describeMovingLines(lines: readonly LiuyaoLine[]): string[] {
     const moving = lines.filter((line) => line.动静状态 === 'changing');
     if (moving.length === 0) return ['六爻安静，无动爻'];
     const verb = moving.length === 1 ? '独发' : '发动';
     return moving.map((line) => {
         const changed = line.变爻;
+        const broken = line.动静.includes('月破') ? '（月破）' : '';
         const relation = changed?.关系 && changed.关系 !== NEUTRAL_RELATION ? `（${changed.关系}）` : '';
-        return `${line.爻位}${ganZhi(line)}${verb}${changed ? `，化出${ganZhi(changed)}${relation}` : ''}`;
+        return `${line.爻位}${ganZhi(line)}${verb}${broken}${changed ? `，化出${ganZhi(changed)}${relation}` : ''}`;
     });
 }
 

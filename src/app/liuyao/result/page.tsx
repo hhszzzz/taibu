@@ -45,7 +45,7 @@ import { useHeaderMenu, useHeaderTitle, type HeaderMenuItem } from '@/components
 import { CreditsModal } from '@/components/ui/CreditsModal';
 import { useStreamingResponse, isCreditsError } from '@/lib/hooks/useStreamingResponse';
 import { useAnalysisSnapshot } from '@/lib/hooks/useAnalysisSnapshot';
-import { LIU_QIN_TIPS, SHEN_XI_TIPS, TERM_TIPS } from '@/lib/divination/liuyao-term-tips';
+import { LIUYAO_TERM_GROUPS } from '@/lib/divination/liuyao-term-tips';
 import { useAdminJsonCopy } from '@/lib/admin/useAdminJsonCopy';
 import { runSharedAnalysisFlow } from '@/lib/ai/analysis-runner';
 import { CopyTextModal } from '@/components/divination/CopyTextModal';
@@ -446,7 +446,7 @@ export default function ResultPage() {
                             <button type="button" onClick={() => setShowTermsModal(false)} aria-label="关闭" className="rounded-lg p-1.5 text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground"><X className="h-4 w-4" /></button>
                         </div>
                         <div className="max-h-[60vh] overflow-y-auto p-6 space-y-8">
-                            {[ { label: '六亲', data: LIU_QIN_TIPS }, { label: '神系', data: SHEN_XI_TIPS }, { label: '其他', data: TERM_TIPS } ].map(group => (
+                            {LIUYAO_TERM_GROUPS.map(group => (
                                 <div key={group.label} className="space-y-3">
                                     <h3 className="border-b-[0.5px] border-border pb-1.5 text-xs font-medium text-foreground-secondary">{group.label}</h3>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">

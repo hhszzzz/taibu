@@ -19,7 +19,11 @@ interface TraditionalAnalysisProps {
     highlightAction?: ReactNode;
 }
 
+type YongShenCandidate = NonNullable<LiuyaoCanonicalJSON['用神分析'][number]['候选用神']>[number];
+
 const YAO_NAMES = ['初爻', '二爻', '三爻', '四爻', '五爻', '上爻'];
+/** 应期提示的性质配色：应期为主色，吉期、忌期分别用吉凶色 */
+const TIMING_TONES: Record<string, string> = { '应期': 'text-accent-strong', '吉期': 'text-success', '忌期': 'text-danger' };
 const SCRIPTURE_LABEL = 'font-sans text-xs text-foreground-secondary';
 const SCRIPTURE_TEXT = 'text-[0.9375rem] leading-[1.7] lg:text-base lg:leading-[1.8]';
 /** 卦辞卡分节：手机端纯留白分隔，桌面端加细分隔线。 */
@@ -44,6 +48,17 @@ function getCandidateSourceLabel(source?: string): string | null {
     if (source === 'temporal') return '时空';
     if (source === 'visible') return '显爻';
     return null;
+}
+
+function getKongLabel(state?: string): string {
+    if (!state || state === 'not_kong') return '';
+    return KONG_WANG_LABELS[state as keyof typeof KONG_WANG_LABELS] || state;
+}
+
+/** 候选用神：位置、来源与强弱、动静、旬空，便于对照取用说明里的取舍次第 */
+function describeCandidate(candidate: YongShenCandidate): string {
+    const state = [getCandidateSourceLabel(candidate.来源), candidate.强弱, candidate.动静, getKongLabel(candidate.空亡状态)].filter(Boolean).join('·');
+    return `${candidate.六亲}${candidate.纳甲 ?? ''}@${getPositionLabel(candidate.爻位)}${state ? `（${state}）` : ''}`;
 }
 
 export function TraditionalAnalysis({
@@ -123,10 +138,7 @@ export function TraditionalAnalysis({
                     <div className="divide-y divide-border">
                     {analysis.用神分析.map((group, groupIndex) => {
                         const selectedSourceLabel = getCandidateSourceLabel(group.已选用神.来源);
-                        const selectedKongState = group.已选用神.空亡状态;
-                        const selectedKongLabel = selectedKongState && selectedKongState !== 'not_kong'
-                            ? KONG_WANG_LABELS[selectedKongState as keyof typeof KONG_WANG_LABELS] || selectedKongState
-                            : '';
+                        const selectedKongLabel = getKongLabel(group.已选用神.空亡状态);
                         return (
                             <div key={group.目标六亲} className="px-5 py-4 text-[13px] sm:px-6">
                                 <div className="mb-2.5 flex flex-wrap items-center gap-2">
@@ -183,17 +195,25 @@ export function TraditionalAnalysis({
                                     {group.候选用神 && group.候选用神.length > 0 && (
                                         <div className="md:col-span-2">
                                             <span>{`候选（${group.候选用神.length}）：`}</span>
-                                            {group.候选用神.map((c) => {
-                                                const sourceLabel = getCandidateSourceLabel(c.来源);
-                                                return `${c.六亲}@${getPositionLabel(c.爻位)}${sourceLabel ? `(${sourceLabel})` : ''}`;
-                                            }).join('、')}
+                                            {group.候选用神.map(describeCandidate).join('；')}
                                         </div>
                                     )}
 
                                     {group.应期提示 && group.应期提示.length > 0 && (
                                         <div className="md:col-span-2">
-                                            <span>近期应期：</span>
-                                            {group.应期提示.slice(0, 2).map((rec) => `${rec.触发}${rec.依据.length > 0 ? `（${rec.依据.join('、')}）` : ''} ${rec.说明}`).join('；')}
+                                            <span>应期提示：</span>
+                                            <ul className="mt-1 flex flex-col gap-1">
+                                                {group.应期提示.map((rec, index) => {
+                                                    const kind = rec.类型 ?? '应期';
+                                                    return (
+                                                        <li key={`${kind}-${rec.触发}-${index}`}>
+                                                            <span className={`mr-1.5 ${TIMING_TONES[kind] ?? ''}`}>{kind}</span>
+                                                            <span className="text-foreground">{rec.触发}</span>
+                                                            {`${rec.依据.length > 0 ? `（${rec.依据.join('、')}）` : ''} ${rec.说明}`}
+                                                        </li>
+                                                    );
+                                                })}
+                                            </ul>
                                         </div>
                                     )}
                                 </div>

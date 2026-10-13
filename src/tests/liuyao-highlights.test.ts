@@ -97,3 +97,23 @@ test('liuyao highlights describe where each yongshen sits when it is not on the 
         '用神妻财寅木',
     ]);
 });
+
+test('liuyao highlights mark a moving line that the month breaks', () => {
+    // 午月初九子水发动：动爻亦论月破（Core 动静标为「明动·月破」）
+    const yaos: Yao[] = '111111'.split('').map((value, index) => ({
+        type: value === '1' ? 1 : 0,
+        change: index === 0 ? 'changing' : 'stable',
+        position: index + 1,
+    }));
+    const bundle = calculateLiuyaoBundle({
+        yaos,
+        question: '近期能否回款',
+        date: new Date('2024-06-10T10:00:00+08:00'),
+        yongShenTargets: ['子孙'],
+        hexagram: findHexagram('111111')!,
+        changedHexagram: findHexagram('011111')!,
+    });
+    const highlights = buildLiuyaoHighlights(buildLiuyaoCanonicalJSON(bundle.output));
+
+    assert.ok(highlights.some((item) => item.startsWith('初九子孙子水独发（月破），化出')), highlights.join(' / '));
+});

@@ -1,7 +1,9 @@
+import type { QueryClient } from '@tanstack/react-query';
 import { requestBrowserJson, type BrowserApiError } from '@/lib/browser-api';
 import { normalizeChatPreferences, type ChatPreferences } from '@/lib/chat/preferences';
 import { normalizeBriefingPreferences, validBriefingPreferences, type BriefingPreferences } from '@/lib/briefing-preferences';
 import type { MutationEffects } from '@/lib/query/invalidation';
+import { queryKeys } from '@/lib/query/keys';
 import {
   normalizeVisualizationSettings,
   type VisualizationSettings,
@@ -300,6 +302,30 @@ export async function getCurrentUserSettings(scope: SettingsRequestScope = {}): 
     settings: result.error ? null : result.data?.settings ?? normalizeUserSettings(null),
     error: result.error,
   };
+}
+
+/**
+ * 读取当前用户设置，staleTime 内复用 TanStack 缓存；设置写入经 mutationEffects.userSettings 立即失效。
+ * 读取失败时抛错且不写入缓存，由调用方下一轮重试。
+ */
+export async function fetchCachedUserSettings(
+  queryClient: QueryClient,
+  userId: string,
+  staleTime: number,
+): Promise<UserSettingsSnapshot> {
+  return await queryClient.fetchQuery({
+    queryKey: queryKeys.userSettings(userId),
+    queryFn: async ({ signal }) => {
+      const result = await getCurrentUserSettings({ expectedUserId: userId, signal });
+      if (!result.settings) {
+        throw new Error(result.error?.message || '读取用户设置失败');
+      }
+      return result.settings;
+    },
+    staleTime,
+    // 轮询本身就是重试节奏；再叠加查询重试会在接口故障时成倍放大请求
+    retry: false,
+  });
 }
 
 export async function updateCurrentUserSettings(

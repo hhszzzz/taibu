@@ -11,6 +11,8 @@ import { calculateMeihuaBundle } from '../lib/divination/meihua';
 
 test('meihua relation parser reads directed and balanced core expressions and rejects unknown ones', () => {
     assert.deepEqual(parseMeihuaRelation('用卦(乾金) 克 体卦(巽木)'), { fromLabel: '用卦', from: '乾金', verb: '克', toLabel: '体卦', to: '巽木' });
+    assert.deepEqual(parseMeihuaRelation('变卦(艮土) 生 体卦(兑金)'), { fromLabel: '变卦', from: '艮土', verb: '生', toLabel: '体卦', to: '兑金' });
+    // 旧版保存的结果以「变卦整卦(卦名/五行)」记后段
     assert.deepEqual(parseMeihuaRelation(' 体卦(巽木) 生 变卦整卦(火风鼎/火) '), { fromLabel: '体卦', from: '巽木', verb: '生', toLabel: '变卦整卦', to: '火风鼎/火' });
     assert.deepEqual(parseMeihuaRelation('体卦(坤土) 与 体互(艮土) 比和'), { fromLabel: '体卦', from: '坤土', verb: '比和', toLabel: '体互', to: '艮土' });
     assert.equal(parseMeihuaRelation('体卦(坤土) 与 体互(艮土)'), null);
@@ -41,9 +43,10 @@ test('meihua stage rows read the real canonical chart: the 中段 pair collapses
     assert.deepEqual(rows.map(stageRows => stageRows.map(row => row.description)), [
         ['用卦克体卦'],
         ['体互、用互皆乾金克体'],
-        ['体卦生变卦整卦'],
+        ['体卦生变卦'],
     ]);
-    assert.equal(formatRelationTerm(rows[2][0].relation?.to ?? ''), '鼎 · 火');
+    // 后段取用卦乾金变出的离火（变卦火风鼎中用卦一侧）
+    assert.equal(formatRelationTerm(rows[2][0].relation?.to ?? ''), '离火');
 });
 
 test('meihua short hexagram names drop the trigram images', () => {

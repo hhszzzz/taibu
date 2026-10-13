@@ -32,6 +32,7 @@ export type MeihuaCueCategory = 'direction' | 'color' | 'weather' | 'person' | '
 
 export type MeihuaSeasonState = '旺' | '相' | '休' | '囚' | '死';
 
+/** 现行规则只出吉、凶；平只见于按旧版计分规则保存的结果。 */
 export type MeihuaOutcome = '吉' | '平' | '凶';
 
 export interface MeihuaInput {
@@ -73,6 +74,7 @@ export interface MeihuaHexagramInfo {
   code: string;
   upperTrigram: MeihuaTrigramInfo;
   lowerTrigram: MeihuaTrigramInfo;
+  /** 整卦五行，取所属八宫；体用生克只论经卦，不取此值。 */
   element: WuXing;
   guaCi?: string;
   xiangCi?: string;
@@ -170,6 +172,8 @@ export interface MeihuaOutput {
   useTrigram: MeihuaTrigramInfo;
   bodyMutualTrigram?: MeihuaTrigramInfo;
   useMutualTrigram?: MeihuaTrigramInfo;
+  /** 用卦经动爻变出的经卦，变卦一段的生克以此论；旧版结果没有此字段。 */
+  changedTrigram?: MeihuaTrigramInfo;
   bodyUseRelation: MeihuaBodyUseRelation;
   seasonalState: MeihuaSeasonalState;
   interactionReadings: MeihuaInteractionReading[];

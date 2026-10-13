@@ -586,10 +586,11 @@ test('meihua should apply 乾坤无互 and derive nuclear hexagram from the chan
 });
 
 test('meihua judgement should surface 先凶后吉 with 用党多 basis when the changed phase turns favorable', async () => {
+  // 火地晋初爻：离火为体，坤土泄体，互坎克体、艮泄体，用卦变震木生体；互变中艮土与用卦同为土
   const result = await mcpCore.calculateMeihua({
     question: '先凶后吉测试',
     method: 'select',
-    hexagramName: '000010',
+    hexagramName: '火地晋',
     movingLine: 1,
     date: '2026-04-04T10:30:00',
   });
@@ -613,6 +614,67 @@ test('meihua judgement should surface 先吉后凶 with 体党多 basis when the
   assert.equal(result.judgement.summary, '先吉后凶，初看有利，后势转阻。');
   assert.match(result.judgement.basis.join('\n'), /体党多而体势盛/u);
   assert.match(result.judgement.basis.join('\n'), /用卦吉而变卦凶/u);
+});
+
+// 《梅花易数》卷一占例与卷二「乾上坤下占病」六问；枯枝坠地占按卦名断，不在体用之列，故不收
+const MEIHUA_BOOK_CASES = [
+  ['观梅占', '泽火革', 1, '艮', '吉', '先凶后吉，初段多阻，后势转开。'],
+  ['牡丹占', '天风姤', 5, '离', '凶', '克体而无生气，主事多阻。'],
+  ['西林寺添勾', '山泽损', 5, '巽', '吉', '用卦、变卦俱利体卦，主事有成。'],
+  ['老人有忧色', '天风姤', 4, '巽', '凶', '克体而无生气，主事多阻。'],
+  ['少年有喜色', '山火贲', 5, '巽', '吉', '互变俱生体，主事有成。'],
+  ['牛哀鸣', '地水师', 3, '巽', '凶', '互变俱克体，主事多阻。'],
+  ['鸡悲鸣', '风天小畜', 4, '乾', '凶', '克体而无生气，主事多阻。'],
+  ['乾上坤下初爻', '天地否', 1, '震', '吉', '用卦、变卦俱利体卦，主事有成。'],
+  ['乾上坤下二爻', '天地否', 2, '坎', '凶', '先吉后凶，初看有利，后势转阻。'],
+  ['乾上坤下三爻', '天地否', 3, '艮', '吉', '互变俱生体，主事有成。'],
+  ['乾上坤下四爻', '天地否', 4, '巽', '凶', '互变俱克体，主事多阻。'],
+  ['乾上坤下五爻', '天地否', 5, '离', '吉', '先凶后吉，初段多阻，后势转开。'],
+  ['乾上坤下上爻', '天地否', 6, '兑', '凶', '克体而无生气，主事多阻。'],
+];
+
+test('meihua judges 变卦 by the trigram the moving line changes and follows the book examples', () => {
+  for (const [label, hexagramName, movingLine, changedTrigram, outcome, summary] of MEIHUA_BOOK_CASES) {
+    const result = mcpCore.calculateMeihua({ question: label, method: 'select', hexagramName, movingLine, date: '2026-04-04T10:30:00' });
+    assert.equal(result.changedTrigram?.name, changedTrigram, label);
+    assert.deepEqual([result.judgement.outcome, result.judgement.summary], [outcome, summary], label);
+  }
+
+  // 观梅占「幸变为艮土，兑金得生」：变卦一段论用卦离火变出的艮土，不是变卦泽山咸的上卦兑金
+  const plum = mcpCore.calculateMeihua({ question: '观梅占', method: 'select', hexagramName: '泽火革', movingLine: 1, date: '2026-04-04T10:30:00' });
+  assert.equal(plum.interactionReadings.find((item) => item.stage === 'changed')?.relation, '用生体');
+  assert.equal(plum.seasonalState.changed, '死', '卯月艮土为死');
+  assert.equal(mcpCore.toMeihuaJson(plum).阶段推演[2]?.表达式, '变卦(艮土) 生 体卦(兑金)');
+  assert.match(mcpCore.toMeihuaText(plum, { detailLevel: 'full' }), /- 变卦: 泽山咸（上兑金 \/ 下艮土，用卦离变艮土，初九）/u);
+  // 牛哀鸣占「互变俱克之，并无生气」两条都列入依据
+  const ox = mcpCore.calculateMeihua({ question: '牛哀鸣', method: 'select', hexagramName: '地水师', movingLine: 3, date: '2026-04-04T10:30:00' });
+  assert.ok(ox.judgement.basis.includes('互卦、变卦俱克体，愈见其凶。'));
+  assert.ok(ox.judgement.basis.includes('卦中有克体之卦而无生体之卦，并无生气。'));
+});
+
+test('meihua decides every chart by a named rule without points and reads 衰旺 as degree only', () => {
+  const outcomes = new Set();
+  for (const hexagram of ['乾为天', '坤为地', '水雷屯', '天地否', '泽火革', '火地晋', '山泽损', '雷风恒']) {
+    for (let movingLine = 1; movingLine <= 6; movingLine += 1) {
+      const result = mcpCore.calculateMeihua({ question: '规则覆盖', method: 'select', hexagramName: hexagram, movingLine, date: '2026-04-04T10:30:00' });
+      outcomes.add(result.judgement.outcome);
+      assert.doesNotMatch(result.judgement.basis.join(''), /\d/u, `${hexagram}${movingLine} basis should carry no scores`);
+    }
+  }
+  assert.deepEqual([...outcomes].sort(), ['凶', '吉']);
+
+  // 卯月坤土死：体衰逢克其凶更甚、有生体之卦衰稍解，只写在依据里
+  const weak = mcpCore.calculateMeihua({ question: '体衰', method: 'select', hexagramName: '地天泰', movingLine: 2, date: '2026-04-04T10:30:00' });
+  assert.equal(weak.judgement.outcome, '吉');
+  assert.ok(weak.judgement.basis.includes('体卦月令死，体势衰，逢克则其凶更甚，有生体之卦则衰稍解。'));
+});
+
+test('meihua renderers keep the legacy 变卦整卦 wording for results saved before changedTrigram existed', () => {
+  const result = mcpCore.calculateMeihua({ question: '旧版结果', method: 'select', hexagramName: '泽火革', movingLine: 1, date: '2026-04-04T10:30:00' });
+  const { changedTrigram: omitted, ...legacy } = result;
+  assert.equal(omitted?.name, '艮');
+  assert.match(mcpCore.toMeihuaJson(legacy).阶段推演[2]?.表达式 ?? '', /变卦整卦\(泽山咸\/金\)/u);
+  assert.match(mcpCore.toMeihuaText(legacy), /整卦五行=金，初九/u);
 });
 
 test('meihua number_pair should remain available as extended modern casting and surface warning', async () => {
@@ -691,7 +753,7 @@ test('meihua canonical json should resolve stage expressions by stage name inste
   assert.match(json.阶段推演[1]?.表达式 ?? '', /体互\(巽木\)/u);
   assert.match(json.阶段推演[1]?.表达式 ?? '', /用互\(艮土\)/u);
   assert.equal(json.阶段推演[2]?.阶段, '后段');
-  assert.match(json.阶段推演[2]?.表达式 ?? '', /变卦整卦\(泽水困\/金\)/u);
+  assert.match(json.阶段推演[2]?.表达式 ?? '', /体卦\(兑金\) 生 变卦\(坎水\)/u);
 });
 
 test('meihua full detail should expose extended references and judgement reference', async () => {

@@ -6,7 +6,7 @@ export type MeihuaRelationVerb = '生' | '克' | '比和';
 
 export interface MeihuaRelation {
   fromLabel: string;
-  /** 卦名 + 五行，如「乾金」；变卦整卦为「火风鼎/火」。 */
+  /** 卦名 + 五行，如「乾金」「变卦(艮土)」中的「艮土」；旧版结果的变卦整卦为「火风鼎/火」。 */
   from: string;
   verb: MeihuaRelationVerb;
   toLabel: string;
@@ -84,7 +84,7 @@ export function shortHexagramName(name: string): string {
   return name.length > 2 ? name.slice(2) : name;
 }
 
-/** 关系两端的展示文字：卦名五行原样返回，变卦整卦「火风鼎/火」→「鼎 · 火」。 */
+/** 关系两端的展示文字：卦名五行原样返回，旧版结果的变卦整卦「火风鼎/火」→「鼎 · 火」。 */
 export function formatRelationTerm(term: string): string {
   const [name, element] = term.split('/');
   return element ? `${shortHexagramName(name)} · ${element}` : term;

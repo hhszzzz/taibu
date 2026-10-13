@@ -434,7 +434,8 @@ const ACTION_LABELS: Record<YaoAction, string> = {
   fu: '扶',
   chong: '冲',
   he: '合',
-  po: '破',
+  // 写作「日相破」，避免与日冲休囚的「日破」、月建冲爻的「月破」混称
+  po: '相破',
   none: '',
 };
 
@@ -996,9 +997,6 @@ export function getZhiAction(sourceZhi: DiZhi, targetZhi: DiZhi): YaoAction {
   if (LIU_HE[sourceZhi]?.partner === targetZhi) {
     return 'he';
   }
-  if (XIANG_PO[sourceZhi] === targetZhi) {
-    return 'po';
-  }
   const sourceWuXing = DIZHI_WUXING[sourceZhi];
   const targetWuXing = DIZHI_WUXING[targetZhi];
   if (sourceWuXing === targetWuXing) {
@@ -1009,6 +1007,10 @@ export function getZhiAction(sourceZhi: DiZhi, targetZhi: DiZhi): YaoAction {
   }
   if (WUXING_KE[sourceWuXing] === targetWuXing) {
     return 'ke';
+  }
+  // 六破力弱（「六破不必论」），不能遮住酉生子、卯生午、辰丑戌未比扶这类生扶
+  if (XIANG_PO[sourceZhi] === targetZhi) {
+    return 'po';
   }
   return 'none';
 }

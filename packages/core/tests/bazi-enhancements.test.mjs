@@ -61,6 +61,23 @@ test('命宫 counts from 子 back to the birth month, then forward from the birt
   }
 });
 
+test('bazi reports each 半合 once and leaves 生墓 pairs to 拱合', () => {
+  // 1990-02-04 15:00 → 庚午 戊寅 庚子 甲申：申子、寅午各成半合，且都缺第三支
+  const chart = mcpCore.calculateBazi({ gender: 'male', birthYear: 1990, birthMonth: 2, birthDay: 4, birthHour: 15 });
+  assert.deepEqual(Object.values(chart.fourPillars).map(toPillarString), ['庚午', '戊寅', '庚子', '甲申']);
+  assert.ok(chart.relations.every(relation => !relation.description.includes('半合')), 'relations keep only full 三合');
+  for (const detailLevel of ['default', 'full']) {
+    const json = mcpCore.toBaziJson(chart, { detailLevel });
+    assert.deepEqual(json.干支关系.filter(item => item.includes('半合')), ['申子半合水', '寅午半合火']);
+    assert.deepEqual(json.干支关系明细.filter(item => item.说明.includes('半合')).map(item => item.类型), ['半合', '半合']);
+    const text = mcpCore.toBaziText(chart, { detailLevel });
+    assert.equal(text.match(/半合/gu)?.length, 2, detailLevel);
+  }
+  // 申辰缺子是生墓拱合，不登记为半合；三支俱全才是三合
+  assert.deepEqual(analyzePillarRelations('申', '午', '辰', '卯').filter(relation => relation.type === '合'), []);
+  assert.deepEqual(analyzePillarRelations('申', '子', '辰', '卯').filter(relation => relation.type === '合').map(relation => relation.description), ['申子辰三合水局']);
+});
+
 test('bazi and dayun do not turn repeated Yin branches into punishment', () => {
   const input = { gender: 'male', birthYear: 2022, birthMonth: 2, birthDay: 10, birthHour: 8, timezone: 'Asia/Shanghai' };
   const chart = mcpCore.calculateBazi(input);

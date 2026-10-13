@@ -430,27 +430,19 @@ export function analyzePillarRelations(yearBranch: string, monthBranch: string, 
     }
   }
 
+  // 只登记三支俱全的三合；半合由 analyzeDiZhiBanHe 按生旺/旺墓规则单独给出，
+  // 生墓两支（如申辰）是拱合而非半合，不在这里列出
   for (const sanHe of SAN_HE) {
-    const matchingBranches = branches.filter((b) => sanHe.branches.includes(b));
-    const uniqueBranches = Array.from(new Set(matchingBranches));
-    if (uniqueBranches.length >= 2) {
+    const uniqueBranches = Array.from(new Set(branches.filter((b) => sanHe.branches.includes(b))));
+    if (uniqueBranches.length === 3) {
       const matchingPillars = branches
         .map((b, i) => (sanHe.branches.includes(b) ? normalizePillarPosition(pillarNames[i]) : null))
         .filter(Boolean) as PillarPosition[];
-
-      if (uniqueBranches.length === 3) {
-        relations.push({
-          type: '合',
-          pillars: matchingPillars,
-          description: `${uniqueBranches.join('')}三合${sanHe.element}`,
-        });
-      } else {
-        relations.push({
-          type: '合',
-          pillars: matchingPillars,
-          description: `${uniqueBranches.join('')}半合${sanHe.element}`,
-        });
-      }
+      relations.push({
+        type: '合',
+        pillars: matchingPillars,
+        description: `${uniqueBranches.join('')}三合${sanHe.element}`,
+      });
     }
   }
 

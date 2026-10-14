@@ -40,9 +40,10 @@ const JU_METHOD_OPTIONS: ReadonlyArray<SegmentOption<JuMethod>> = [
     { value: 'maoshan', label: '茅山' },
 ];
 
+// 中五寄宫：默认固定寄坤二；另一种为阳遁寄艮八、阴遁寄坤二（存储值沿用 ji_wugong / ji_liuyi）
 const ZHI_FU_JI_GONG_OPTIONS: ReadonlyArray<SegmentOption<ZhiFuJiGong>> = [
-    { value: 'jiLiuYi', label: '寄六仪' },
-    { value: 'jiWuGong', label: '寄戊宫' },
+    { value: 'jiWuGong', label: '寄坤二' },
+    { value: 'jiLiuYi', label: '阳八阴二' },
 ];
 
 export default function QimenPage() {
@@ -53,7 +54,7 @@ export default function QimenPage() {
     const [question, setQuestion] = useState('');
     const [panType] = useState<PanType>('zhuan');
     const [juMethod, setJuMethod] = useState<JuMethod>('chaibu');
-    const [zhiFuJiGong, setZhiFuJiGong] = useState<ZhiFuJiGong>('jiLiuYi');
+    const [zhiFuJiGong, setZhiFuJiGong] = useState<ZhiFuJiGong>('jiWuGong');
     const [isLoading, setIsLoading] = useState(false);
 
     const handleSubmit = async () => {
@@ -144,7 +145,7 @@ export default function QimenPage() {
                             rows={[
                                 { label: '盘式', control: <SanshiSegmented label="盘式" options={PAN_TYPE_OPTIONS} value={panType} /> },
                                 { label: '定局法', control: <SanshiSegmented label="定局法" options={JU_METHOD_OPTIONS} value={juMethod} onChange={setJuMethod} /> },
-                                { label: '直符寄宫', control: <SanshiSegmented label="直符寄宫" options={ZHI_FU_JI_GONG_OPTIONS} value={zhiFuJiGong} onChange={setZhiFuJiGong} /> },
+                                { label: '中五寄宫', control: <SanshiSegmented label="中五寄宫" options={ZHI_FU_JI_GONG_OPTIONS} value={zhiFuJiGong} onChange={setZhiFuJiGong} /> },
                             ]}
                         />
 

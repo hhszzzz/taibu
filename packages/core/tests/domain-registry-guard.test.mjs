@@ -96,7 +96,7 @@ test('tool schemas should encode runtime defaults and conditional requirements s
   assert.equal(qimen?.inputSchema?.properties?.timezone?.default, 'Asia/Shanghai');
   assert.equal(qimen?.inputSchema?.properties?.panType?.default, 'zhuan');
   assert.equal(qimen?.inputSchema?.properties?.juMethod?.default, 'chaibu');
-  assert.equal(qimen?.inputSchema?.properties?.zhiFuJiGong?.default, 'ji_liuyi');
+  assert.equal(qimen?.inputSchema?.properties?.zhiFuJiGong?.default, 'ji_wugong');
 
   assert.equal(taiyi?.inputSchema?.properties?.hour?.default, 12);
   assert.equal(taiyi?.inputSchema?.properties?.minute?.default, 0);

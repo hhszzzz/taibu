@@ -18,8 +18,8 @@
 | `flyStarMethod` | enum | 否 | — | 飞盘九星：forward=阴阳皆顺，yin-reverse=阳顺阴逆；默认阳顺阴逆；可选值: `forward` / `yin-reverse` |
 | `juNumber` | integer | 否 | — | 手工局数，必须与 dunType 同时提供 |
 | `dunType` | enum | 否 | — | 手工阴阳遁，必须与 juNumber 同时提供；可选值: `yang` / `yin` |
-| `zhiFuJiGong` | enum | 否 | `"ji_liuyi"` | 直符寄宫方式（ji_liuyi=寄六仪，ji_wugong=寄戊宫）；可选值: `ji_liuyi` / `ji_wugong` |
-| `detailLevel` | enum | 否 | `"default"` | 输出详略（default=核心盘面；full=追加历法信息、宫位旺衰与格局、空亡、驿马、十干旺衰及全局格局）；可选值: `default` / `full` |
+| `zhiFuJiGong` | enum | 否 | `"ji_wugong"` | 转盘中五寄宫（ji_wugong=固定寄坤二宫；ji_liuyi=阳遁寄艮八、阴遁寄坤二）；可选值: `ji_wugong` / `ji_liuyi` |
+| `detailLevel` | enum | 否 | `"default"` | 输出详略（default=核心盘面与全局格局；full=追加历法信息、宫位方位旺衰与逐宫格局、空亡、驿马、十干旺衰）；可选值: `default` / `full` |
 
 ## 调用示例
 

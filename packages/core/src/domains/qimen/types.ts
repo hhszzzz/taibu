@@ -37,6 +37,7 @@ export interface QimenPalaceInfo {
   isKongWang?: boolean;       // 是否空亡
   isYiMa?: boolean;           // 是否驿马
   isRuMu?: boolean;           // 是否入墓
+  ruMuStems?: string[];       // 在本宫入墓的天盘干；乙在坤二另标“乙(五行墓)”
   isMenPo?: boolean;
   isJiXing?: boolean;
   hostedStars?: string[];

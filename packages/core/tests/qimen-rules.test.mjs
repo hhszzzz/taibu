@@ -134,8 +134,8 @@ test('a stem hosted with Tian Qin forms Xing Ge, tomb and punishment where it la
   assert.equal(xing.palaces[3].earthStem, '己');
   assert.deepEqual(xing.palaces[3].hostedHeavenStems, ['庚']);
   assert.ok(xing.palaces[3].formations.includes('刑格'));
-  // 寄干壬随天禽落巽四：壬墓在辰、甲辰壬刑在巽，主干丙均不成立
-  const hosted = await calculateQimen({ ...birth, hour: 12 });
+  // 阳遁寄艮八时，寄干壬随天禽落巽四：壬墓在辰、甲辰壬刑在巽，主干丙均不成立
+  const hosted = await calculateQimen({ ...birth, hour: 12, zhiFuJiGong: 'ji_liuyi' });
   assert.equal(hosted.palaces[3].heavenStem, '丙');
   assert.deepEqual(hosted.palaces[3].hostedHeavenStems, ['壬']);
   assert.equal(hosted.palaces[3].isRuMu, true);
@@ -213,10 +213,11 @@ test('Wu Bu Yu follows hour-over-day control of the same polarity and the hour t
   const none = await calculateQimen({ ...birth, hour: 2 });
   assert.equal(none.siZhu.hour, '乙丑');
   assert.ok(!boardOf(none).includes('五不遇时'));
+  // 格局默认档也输出，全盘格局只列一次
   for (const detailLevel of ['default', 'full']) {
-    const json = toQimenJson(both, { detailLevel });
-    if (detailLevel === 'full') assert.ok(json.全局格局.includes('全盘: 五不遇时'));
-    else assert.equal(json.全局格局, undefined);
+    assert.ok(toQimenJson(both, { detailLevel }).全局格局.includes('全盘: 五不遇时'));
+    const text = toQimenText(both, { detailLevel });
+    assert.match(text, /## 全局格局\n\n- 全盘: 五不遇时\n- 全盘: 时干入墓/u);
   }
 });
 
@@ -249,4 +250,68 @@ test('invalid dates and unimplemented profiles never silently produce another ch
   for (const patch of [{ month: 2, day: 31 }, { hour: 24 }, { minute: 60 }, { panType: 'invalid' }, { juMethod: 'zhirun' }]) {
     assert.throws(() => calculateQimen({ ...birth, ...patch }));
   }
+});
+
+test('乙 enters its tomb at 乾六 and is marked 五行墓 at 坤二', async () => {
+  // 十二长生阳顺阴逆：乙木长生午、墓戌（乾六）为正墓；五行同墓之说木墓在未（坤二）
+  const qian = await calculateQimen({ ...birth, hour: 14 });
+  assert.equal(qian.palaces[5].heavenStem, '乙');
+  assert.deepEqual(qian.palaces[5].ruMuStems, ['乙']);
+  assert.equal(qian.palaces[5].isRuMu, true);
+  const kun = await calculateQimen({ ...birth, hour: 4 });
+  assert.equal(kun.palaces[1].heavenStem, '乙');
+  assert.deepEqual(kun.palaces[1].ruMuStems, ['乙(五行墓)']);
+  for (const detailLevel of ['default', 'full']) {
+    assert.ok(toQimenJson(kun, { detailLevel }).九宫盘[1].宫位状态.includes('入墓(乙(五行墓))'));
+    assert.ok(toQimenText(qian, { detailLevel }).split('\n').find(line => line.startsWith('| 乾6(')).includes('入墓(乙)'));
+  }
+  // 旧版结果没有 ruMuStems 时仍只写“入墓”
+  const legacy = { ...kun, palaces: kun.palaces.map(palace => ({ ...palace, ruMuStems: undefined })) };
+  assert.ok(toQimenJson(legacy).九宫盘[1].宫位状态.includes('入墓'));
+});
+
+test('驿马 follows the hour branch', async () => {
+  // 甲子日丙寅时：寅午戌马在申（坤二），不取日支子的马星寅
+  const chart = await calculateQimen({ ...birth, hour: 4 });
+  assert.equal(chart.siZhu.day.charAt(1), '子');
+  assert.equal(chart.siZhu.hour.charAt(1), '寅');
+  assert.deepEqual(chart.yiMa, { branch: '申', palace: 2 });
+  assert.deepEqual(chart.palaces.filter(palace => palace.isYiMa).map(palace => palace.palaceIndex), [2]);
+});
+
+test('the rotating board hosts the centre at 坤二 by default and 阳八阴二 on request', async () => {
+  const defaults = await calculateQimen({ ...birth, hour: 12 });
+  const kun = await calculateQimen({ ...birth, hour: 12, zhiFuJiGong: 'ji_wugong' });
+  assert.deepEqual(defaults.palaces, kun.palaces);
+  assert.equal(defaults.inputSnapshot.zhiFuJiGong, 'ji_wugong');
+  // 中宫只留地盘干；中五地盘干作副干寄坤二，天禽随天芮同落
+  const centre = defaults.palaces[4];
+  assert.deepEqual([centre.star, centre.gate, centre.heavenStem], ['', '', '']);
+  assert.ok(centre.earthStem);
+  assert.deepEqual(defaults.palaces[1].hostedEarthStems, [centre.earthStem]);
+  const rui = defaults.palaces.find(palace => palace.star === '天芮星');
+  assert.deepEqual(rui.hostedStars, ['天禽星']);
+  // 阳遁选 ji_liuyi 时寄艮八
+  const gen = await calculateQimen({ ...birth, hour: 12, zhiFuJiGong: 'ji_liuyi' });
+  assert.deepEqual(gen.palaces[7].hostedEarthStems, [centre.earthStem]);
+  assert.equal(gen.palaces.find(palace => palace.star === '天任星').hostedStars?.[0], '天禽星');
+});
+
+test('the flying board judges Fu Yin star by star', async () => {
+  // 阴遁一局甲子时、九星逆飞：天蓬留坎一自伏吟，其余八星未归本宫，不作全盘星伏吟；八门仍全盘伏吟
+  const chart = await calculateQimen({ ...birth, dunType: 'yin', hour: 0, panType: 'fei' });
+  assert.deepEqual(chart.palaces.filter(palace => palace.formations.includes('星伏吟')).map(palace => palace.palaceIndex), [1]);
+  assert.ok(!chart.boardFormations.includes('星伏吟'));
+  assert.ok(chart.globalFormations.includes('坎宫: 星伏吟'));
+  assert.ok(chart.boardFormations.includes('门伏吟'));
+});
+
+test('六仪击刑 applies to every heaven-plate instrument, not only the chief', async () => {
+  for (let hour = 0; hour < 24; hour += 2) {
+    const chart = await calculateQimen({ ...birth, hour });
+    const chief = chart.palaces.find(palace => palace.deity === '值符')?.heavenStem;
+    const punished = chart.palaces.filter(palace => palace.isJiXing);
+    if (punished.some(palace => palace.heavenStem !== chief)) return;
+  }
+  assert.fail('expected a non-chief instrument to be punished in one of the hours');
 });

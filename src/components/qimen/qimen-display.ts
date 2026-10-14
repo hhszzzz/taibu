@@ -103,9 +103,15 @@ export function getPalaceCellTags(palace: QimenPalaceJSON, zhiShi: string | unde
     if (isZhiFuPalace(palace)) tags.push({ label: '值符', emphasis: true });
     if (isZhiShiPalace(palace, zhiShi)) tags.push({ label: '值使', emphasis: true });
     for (const status of CELL_STATUS_TAGS) {
-        if (palace.宫位状态.includes(status)) tags.push({ label: status, emphasis: false });
+        if (palace.宫位状态.some(value => getStatusBase(value) === status)) tags.push({ label: status, emphasis: false });
     }
     return tags;
+}
+
+/** 「入墓(乙)」等带注的状态归到「入墓」；宫格只放短标签，详情卡展示全文 */
+function getStatusBase(status: string): string {
+    const noteStart = status.indexOf('(');
+    return noteStart > 0 ? status.slice(0, noteStart) : status;
 }
 
 /** 详情卡标签：在宫格标签基础上补齐门迫、击刑等全部宫位状态 */
@@ -116,7 +122,10 @@ export function getPalaceDetailTags(palace: QimenPalaceJSON, zhiShi: string | un
         const label = STATUS_DISPLAY[status] ?? status;
         if (NON_STATUS_MARKERS.has(status) || shown.has(label)) continue;
         shown.add(label);
-        tags.push({ label, emphasis: false });
+        // 带注状态替换宫格里的短标签，不另起一个
+        const short = tags.find(tag => !tag.emphasis && tag.label === getStatusBase(status));
+        if (short) short.label = label;
+        else tags.push({ label, emphasis: false });
     }
     return tags;
 }

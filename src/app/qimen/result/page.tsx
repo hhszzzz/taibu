@@ -333,7 +333,7 @@ export default function QimenResultPage() {
     const activePalace = palaces.find(palace => palace.宫位序号 === activePalaceIndex);
     const activePalaceInfo = qimenOutput.palaces.find(palace => palace.palaceIndex === activePalaceIndex);
     const pillars = [qimenOutput.siZhu.year, qimenOutput.siZhu.month, qimenOutput.siZhu.day, qimenOutput.siZhu.hour];
-    const ruleLabel = `${qimenOutput.panType}${qimenOutput.juMethod.replace(/法$/u, '')}${result.zhiFuJiGong === 'jiWuGong' ? ' · 寄戊宫' : ''}`;
+    const ruleLabel = `${qimenOutput.panType}${qimenOutput.juMethod.replace(/法$/u, '')}${result.zhiFuJiGong === 'jiLiuYi' ? ' · 阳八阴二' : ''}`;
     const yuan = basicInfo?.三元 ?? qimenOutput.yuan;
     // 伏吟反吟、五不遇时等全盘格局不属于单宫，随四柱信息条展示
     const boardFormations = qimenOutput.boardFormations ?? [];

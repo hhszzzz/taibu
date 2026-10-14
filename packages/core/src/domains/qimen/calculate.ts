@@ -114,11 +114,13 @@ const BRANCH_TO_PALACE: Record<string, number> = {
   '午': 8, '未': 1, '申': 1, '酉': 6, '戌': 5, '亥': 5,
 };
 
-// 入墓：天干→墓库地支（乙从《遁甲演义》“六乙日奇下临二宫”取未）
+// 入墓：天干→墓库地支，按十二长生阳顺阴逆取墓（乙木长生午、墓戌，落乾六）
 const RU_MU_MAP: Record<string, string> = {
-  '甲': '未', '乙': '未', '丙': '戌', '丁': '丑',
+  '甲': '未', '乙': '戌', '丙': '戌', '丁': '丑',
   '戊': '戌', '己': '丑', '庚': '丑', '辛': '辰', '壬': '辰', '癸': '未',
 };
+// 五行同墓之说（木墓皆在未）：乙另在坤二标“五行墓”，与乾六“正墓”并列
+const RU_MU_WUXING_MAP: Record<string, string> = { '乙': '未' };
 
 // 六仪击刑：六仪→所刑宫位（甲子戊震3、甲戌己坤2、甲申庚艮8、甲午辛离9、甲辰壬巽4、甲寅癸巽4）
 const JI_XING_PALACE: Record<string, number> = { 戊: 3, 己: 2, 庚: 8, 辛: 9, 壬: 4, 癸: 4 };
@@ -274,7 +276,8 @@ export function calculateQimenData(input: QimenInput): Promise<QimenOutput> {
   assertInteger(year, 'year', 1900, 2100);
   const panType = resolveEnum(input.panType, ['zhuan', 'fei'], 'zhuan', 'panType');
   const juMethod = resolveEnum(input.juMethod, ['chaibu', 'maoshan', 'equal'], 'chaibu', 'juMethod');
-  const zhiFuJiGong = resolveEnum(input.zhiFuJiGong, ['ji_liuyi', 'ji_wugong'], 'ji_liuyi', 'zhiFuJiGong');
+  // 中五寄宫：默认固定寄坤二（ji_wugong）；ji_liuyi 为阳遁寄艮八、阴遁寄坤二
+  const zhiFuJiGong = resolveEnum(input.zhiFuJiGong, ['ji_liuyi', 'ji_wugong'], 'ji_wugong', 'zhiFuJiGong');
   const flyStarMethod = resolveEnum(input.flyStarMethod, ['forward', 'yin-reverse'], 'yin-reverse', 'flyStarMethod');
   if (input.juNumber !== undefined) assertInteger(input.juNumber, 'juNumber', 1, 9);
   if (input.dunType !== undefined) resolveEnum(input.dunType, ['yang', 'yin'], 'yang', 'dunType');
@@ -379,8 +382,8 @@ export function calculateQimenData(input: QimenInput): Promise<QimenOutput> {
     const dayKongPalaces = dayKong.kongZhi.map(b => BRANCH_TO_PALACE[b]).filter(p => p !== undefined);
     const hourKongPalaces = hourKong.kongZhi.map(b => BRANCH_TO_PALACE[b]).filter(p => p !== undefined);
 
-    // 驿马
-    const yiMaBranch = YI_MA_MAP[dayZhi] || '';
+    // 驿马：时家奇门以时支取马（寅午戌马在申、申子辰马在寅、巳酉丑马在亥、亥卯未马在巳）
+    const yiMaBranch = YI_MA_MAP[hourZhi] || '';
     const yiMaPalace = BRANCH_TO_PALACE[yiMaBranch] ?? -1;
 
     // 农历日期
@@ -444,7 +447,12 @@ export function calculateQimenData(input: QimenInput): Promise<QimenOutput> {
       const isYiMa = yiMaPalace === i;
 
       // 入墓、击刑：寄干随天禽同落本宫，一并参看
-      const isRuMu = heavenStems.some(stem => RU_MU_MAP[stem] !== undefined && BRANCH_TO_PALACE[RU_MU_MAP[stem]] === i);
+      const inPalace = (branch: string | undefined) => branch !== undefined && BRANCH_TO_PALACE[branch] === i;
+      const ruMuStems = heavenStems.flatMap(stem => [
+        ...(inPalace(RU_MU_MAP[stem]) ? [stem] : []),
+        ...(inPalace(RU_MU_WUXING_MAP[stem]) ? [`${stem}(五行墓)`] : []),
+      ]);
+      const isRuMu = ruMuStems.length > 0;
       const isMenPo = Boolean(door && getElementRelation(DOOR_ELEMENTS[door], PALACE_ELEMENTS[i]) === 'control');
       const isJiXing = heavenStems.some(stem => JI_XING_PALACE[stem] === i + 1);
       if (isMenPo) formations.push('门迫');
@@ -470,6 +478,7 @@ export function calculateQimenData(input: QimenInput): Promise<QimenOutput> {
         isKongWang,
         isYiMa,
         isRuMu,
+        ...(isRuMu ? { ruMuStems } : {}),
         isMenPo,
         isJiXing,
         ...(Array.isArray(stars) && stars.length > 1 ? { hostedStars: stars.slice(1) } : {}),
@@ -526,7 +535,7 @@ export function calculateQimenData(input: QimenInput): Promise<QimenOutput> {
       monthPhase,
       inputSnapshot: { year, month, day, hour, minute, timezone, panType, juMethod, zhiFuJiGong,
         ...(panType === 'fei' ? { flyStarMethod } : {}),
-        ...(input.juNumber === undefined ? {} : { juNumber: input.juNumber, dunType: input.dunType }), ruleVersion: 'qimen-hour-2026.10' },
+        ...(input.juNumber === undefined ? {} : { juNumber: input.juNumber, dunType: input.dunType }), ruleVersion: 'qimen-hour-2026.10.2' },
       };
     } finally {
       if (previousTimeZone == null) {

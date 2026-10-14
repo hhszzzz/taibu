@@ -68,11 +68,13 @@ test('qimen display tags put 值符 / 值使 first and keep the detail-only stat
 
     assert.equal(findZhiShiPalaceIndex(chart.九宫盘, zhiShi), 7);
     assert.equal(findZhiShiPalaceIndex(chart.九宫盘, undefined), undefined);
+    // 「入墓(丙)」在宫格里只显示短标签，详情卡展示入墓之干；驿马按时支亥取巳（巽四）
     assert.deepEqual(getPalaceCellTags(palaceAt(6), zhiShi), [
         { label: '值符', emphasis: true },
-        { label: '驿马', emphasis: false },
         { label: '入墓', emphasis: false },
     ]);
+    assert.deepEqual(getPalaceDetailTags(palaceAt(6), zhiShi).map(tag => tag.label), ['值符', '入墓(丙)']);
+    assert.deepEqual(getPalaceCellTags(palaceAt(4), zhiShi).map(tag => tag.label), ['驿马']);
     assert.deepEqual(getPalaceCellTags(palaceAt(7), zhiShi).map(tag => tag.label), ['值使']);
     assert.deepEqual(getPalaceCellTags(palaceAt(8), zhiShi).map(tag => tag.label), ['日空', '时空']);
     // 中五宫的寄宫说明不是状态，详情卡不应把它当标签

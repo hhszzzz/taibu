@@ -1064,6 +1064,12 @@ mustNotMatch(
   /\bgetSystemAdminClient\b/u,
   'knowledge search must retain the caller identity for owner-scoped SQL',
 );
+mustNotMatchInTree(
+  'src/app/api',
+  /resolveRequestDbClient\([^)]*\)\s*(?:\?\?|\|\|)\s*getSystemAdminClient\b/u,
+  'a missing caller database context must fail closed, never fall back to the system-admin client',
+  (file) => /\.(ts|tsx)$/u.test(file),
+);
 mustNotMatch(
   'src/lib/chat/ConversationListContext.tsx',
   /\[conversations,\s*setConversations\]\s*=\s*useState/u,

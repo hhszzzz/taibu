@@ -5,7 +5,6 @@
  */
 'use client';
 
-import { Compass } from 'lucide-react';
 import { HistoryPageTemplate } from '@/components/history/HistoryPageTemplate';
 
 export default function QimenHistoryPage() {
@@ -14,14 +13,10 @@ export default function QimenHistoryPage() {
             sourceType="qimen"
             title="奇门遁甲历史"
             subtitle="三式之首，洞察天时地利"
-            icon={Compass}
-            iconColor="text-accent"
-            searchPlaceholder="搜索占事..."
-            emptyActionLabel="开始起局"
-            emptyActionHref="/qimen"
+            searchPlaceholder="搜索占事"
+            actionLabel="开始起局"
             deleteMessage="确定要删除这条排盘记录吗？此操作无法撤销。"
             kbSourceType="qimen_chart"
-            themeColor="accent"
             invalidateTypes={['qimen_chart']}
             kbTitleFn={item => item.question || '奇门遁甲排盘'}
         />

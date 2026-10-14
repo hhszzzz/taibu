@@ -2,17 +2,16 @@
  * 历史页面通用模板
  *
  * 封装: loadHistorySummariesPage, deleteHistorySummary, 搜索过滤, 删除确认弹窗, KB 模态框
- * 各历史页面只需提供配置即可复用全部逻辑。
+ * 各历史页面只需提供配置即可复用全部逻辑；卡片展示见 HistoryCards。
  *
  * 'use client' - 需要 useState/useEffect/useRouter
  */
 'use client';
 
-import { useState, useEffect, useCallback, useLayoutEffect, useRef, type ReactNode } from 'react';
+import { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Calendar, Trash2, Search, BookOpenText, MessageSquare } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { ChevronRight, Search, MessageSquare } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { AddToKnowledgeBaseModal } from '@/components/knowledge-base/AddToKnowledgeBaseModal';
 import { useKnowledgeBaseFeatureEnabled } from '@/components/knowledge-base/useKnowledgeBaseFeatureEnabled';
@@ -30,21 +29,21 @@ import {
     loadHistoryRestore,
 } from '@/lib/history/client';
 import { useHistoryList } from '@/components/history/useHistoryList';
+import {
+    HistoryGridCard,
+    HistoryGridSkeleton,
+    HistoryListRow,
+    HistoryListSkeleton,
+    type CardActions,
+    type HistoryDetailRenderer,
+} from '@/components/history/HistoryCards';
+import { getNavItemById } from '@/lib/navigation/registry';
+import { formatHistoryDate } from '@/lib/history/summary-display';
 import type { HistorySummaryItem, HistoryType } from '@/lib/history/registry';
-
-/* ---------- 公共 formatDate ---------- */
-function formatDate(dateStr: string): string {
-    return new Date(dateStr).toLocaleDateString('zh-CN', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-    });
-}
 
 /* ---------- 类型定义 ---------- */
 export type HistoryLayout = 'list' | 'grid';
+export type { CardActions, HistoryDetailRenderer };
 
 export interface HistoryPageConfig {
     /** 历史类型 key */
@@ -53,20 +52,16 @@ export interface HistoryPageConfig {
     title: string;
     /** 副标题 */
     subtitle?: string;
-    /** 标题图标 */
-    icon?: LucideIcon;
-    /** 图标颜色 class */
-    iconColor?: string;
     /** 搜索框 placeholder */
     searchPlaceholder?: string;
     /** 空状态文案 */
     emptyMessage?: string;
     /** 空状态搜索无结果文案 */
     emptySearchMessage?: string;
-    /** 空状态 CTA 文案 */
-    emptyActionLabel?: string;
-    /** 空状态 CTA 链接 */
-    emptyActionHref?: string;
+    /** 开始新占测的按钮文案，标题右侧与空状态共用 */
+    actionLabel?: string;
+    /** 开始新占测的链接，默认是该占术首页 */
+    actionHref?: string;
     /** 删除确认文案 */
     deleteMessage?: string;
     /** KB sourceType (默认与 sourceType 相同) */
@@ -75,13 +70,13 @@ export interface HistoryPageConfig {
     layout?: HistoryLayout;
     /** 骨架屏数量 */
     skeletonCount?: number;
-    /** 主题色 class (用于 hover border 等) */
-    themeColor?: string;
     /** 自定义搜索过滤 */
     filterFn?: (item: HistorySummaryItem, query: string) => boolean;
     /** 自定义 KB 标题 */
     kbTitleFn?: (item: HistorySummaryItem) => string;
-    /** 自定义卡片渲染 */
+    /** 覆盖默认卡片里的补充信息行（如塔罗的正逆位牌名） */
+    renderDetail?: HistoryDetailRenderer;
+    /** 完全自定义卡片；一般只需 renderDetail */
     renderCard?: (item: HistorySummaryItem, actions: CardActions) => ReactNode;
     /** loadHistoryRestore 的额外参数 (如 timezone) */
     restoreTimezone?: string;
@@ -89,201 +84,23 @@ export interface HistoryPageConfig {
     invalidateTypes?: string[];
 }
 
-export interface CardActions {
-    onView: () => void;
-    onDelete: () => void;
-    onAddToKb: () => void;
-    canAddToKnowledgeBase: boolean;
-    formatDate: (dateStr: string) => string;
-}
-
 const HISTORY_PAGE_BATCH_SIZE = 12;
 
-const HISTORY_THEME_STYLES: Record<string, {
-    cardBorder: string;
-    badge: string;
-}> = {
-    accent: {
-        cardBorder: 'hover:border-accent/30',
-        badge: 'bg-accent/10 text-accent border-accent/10',
-    },
-    'amber-500': {
-        cardBorder: 'hover:border-amber-500/30',
-        badge: 'bg-amber-500/10 text-amber-500 border-amber-500/10',
-    },
-    'indigo-500': {
-        cardBorder: 'hover:border-indigo-500/30',
-        badge: 'bg-indigo-500/10 text-indigo-500 border-indigo-500/10',
-    },
-    'purple-500': {
-        cardBorder: 'hover:border-purple-500/30',
-        badge: 'bg-purple-500/10 text-purple-500 border-purple-500/10',
-    },
-    'emerald-500': {
-        cardBorder: 'hover:border-emerald-500/30',
-        badge: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/10',
-    },
-    'rose-500': {
-        cardBorder: 'hover:border-rose-500/30',
-        badge: 'bg-rose-500/10 text-rose-500 border-rose-500/10',
-    },
-    'cyan-500': {
-        cardBorder: 'hover:border-cyan-500/30',
-        badge: 'bg-cyan-500/10 text-cyan-500 border-cyan-500/10',
-    },
-};
-
-function resolveHistoryTheme(themeColor: string) {
-    return HISTORY_THEME_STYLES[themeColor] || HISTORY_THEME_STYLES.accent;
-}
-
-/* ---------- 默认卡片 (grid 布局) ---------- */
-function DefaultGridCard({ item, actions, themeColor }: { item: HistorySummaryItem; actions: CardActions; themeColor: string }) {
-    const theme = resolveHistoryTheme(themeColor);
-    return (
-        <div
-            className={`group relative bg-background-secondary rounded-2xl p-5 border border-border ${theme.cardBorder} hover:shadow-lg transition-all duration-300 cursor-pointer flex flex-col`}
-            onClick={actions.onView}
-        >
-            <div className="flex items-center justify-between mb-3">
-                <span className={`px-2.5 py-1 text-xs font-medium rounded-lg border ${theme.badge}`}>
-                    {item.title}
-                </span>
-                <span className="text-xs text-foreground-tertiary font-mono">
-                    {actions.formatDate(item.createdAt)}
-                </span>
-            </div>
-            {item.modelName && (
-                <div className="mb-3">
-                    <span className="text-[10px] text-foreground-secondary px-2 py-0.5 rounded-md bg-background border border-border inline-block">
-                        {item.modelName}
-                    </span>
-                </div>
-            )}
-            <div className="flex-1">
-                {item.question && <p className="text-xs text-foreground-secondary line-clamp-2">{item.question}</p>}
-            </div>
-            <div className="pt-3 mt-4 border-t border-border flex items-center justify-between opacity-60 group-hover:opacity-100 transition-opacity">
-                <div className="text-xs text-foreground-secondary flex items-center gap-1">
-                    <Calendar className="w-3 h-3" />查看详情
-                </div>
-                <div className="flex items-center gap-1">
-                    {actions.canAddToKnowledgeBase && (
-                        <button type="button" onClick={e => { e.stopPropagation(); actions.onAddToKb(); }}
-                            className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-foreground-secondary hover:text-emerald-500 transition-colors" title="加入知识库">
-                            <BookOpenText className="w-4 h-4" />
-                        </button>
-                    )}
-                    <button type="button" onClick={e => { e.stopPropagation(); actions.onDelete(); }}
-                        className="p-1.5 rounded-lg hover:bg-red-500/10 text-foreground-secondary hover:text-red-500 transition-colors" title="删除">
-                        <Trash2 className="w-4 h-4" />
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-/* ---------- 默认卡片 (list 布局) ---------- */
-function DefaultListCard({ item, actions, themeColor }: { item: HistorySummaryItem; actions: CardActions; themeColor: string }) {
-    const theme = resolveHistoryTheme(themeColor);
-    return (
-        <div
-            className={`bg-background-secondary rounded-xl p-4 border border-border ${theme.cardBorder} transition-colors cursor-pointer`}
-            onClick={actions.onView}
-        >
-            <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-2">
-                        <span className={`px-2 py-0.5 text-xs rounded-full border ${theme.badge}`}>
-                            {item.badges?.[0] || item.title}
-                        </span>
-                        <div className="flex items-center gap-2 ml-auto">
-                            <span className="flex items-center gap-1 text-xs text-foreground-secondary">
-                                <Calendar className="w-3 h-3" />{actions.formatDate(item.createdAt)}
-                            </span>
-                            {item.modelName && (
-                                <span className="text-xs text-foreground-secondary px-2 py-0.5 rounded bg-background">{item.modelName}</span>
-                            )}
-                        </div>
-                    </div>
-                    <p className="text-sm font-medium">{item.title}</p>
-                </div>
-                <div className="flex items-center gap-1">
-                    {actions.canAddToKnowledgeBase && (
-                        <button type="button" onClick={e => { e.stopPropagation(); actions.onAddToKb(); }}
-                            className="p-2 rounded-lg hover:bg-emerald-500/10 text-foreground-secondary hover:text-emerald-500 transition-colors" title="加入知识库">
-                            <BookOpenText className="w-4 h-4" />
-                        </button>
-                    )}
-                    <button type="button" onClick={e => { e.stopPropagation(); actions.onDelete(); }}
-                        className="p-2 rounded-lg hover:bg-red-500/10 text-foreground-secondary hover:text-red-500 transition-colors" title="删除">
-                        <Trash2 className="w-4 h-4" />
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-/* ---------- 骨架屏 ---------- */
-function SkeletonGrid({ count }: { count: number }) {
-    return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Array.from({ length: count }, (_, i) => (
-                <div key={i} className="bg-background-secondary rounded-2xl p-5 border border-border">
-                    <div className="flex items-center justify-between mb-3">
-                        <div className="h-6 w-20 rounded-lg bg-foreground/10 animate-pulse" />
-                        <div className="h-4 w-24 rounded bg-foreground/5 animate-pulse" />
-                    </div>
-                    <div className="h-3 w-full rounded bg-foreground/5 animate-pulse mb-2" />
-                    <div className="h-3 w-2/3 rounded bg-foreground/5 animate-pulse" />
-                    <div className="pt-3 mt-4 border-t border-border flex justify-between">
-                        <div className="h-3 w-16 rounded bg-foreground/5 animate-pulse" />
-                        <div className="flex gap-1">
-                            <div className="w-7 h-7 rounded-lg bg-foreground/5 animate-pulse" />
-                            <div className="w-7 h-7 rounded-lg bg-foreground/5 animate-pulse" />
-                        </div>
-                    </div>
-                </div>
-            ))}
-        </div>
-    );
-}
-
-function SkeletonList({ count }: { count: number }) {
-    return (
-        <div className="space-y-3">
-            {Array.from({ length: count }, (_, i) => (
-                <div key={i} className="bg-background-secondary rounded-xl p-4 border border-border">
-                    <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-2">
-                                <div className="h-5 w-20 rounded-full bg-foreground/10 animate-pulse" />
-                                <div className="ml-auto h-4 w-28 rounded bg-foreground/5 animate-pulse" />
-                            </div>
-                            <div className="h-5 w-32 rounded bg-foreground/10 animate-pulse" />
-                        </div>
-                        <div className="flex items-center gap-1">
-                            <div className="w-8 h-8 rounded-lg bg-foreground/5 animate-pulse" />
-                            <div className="w-8 h-8 rounded-lg bg-foreground/5 animate-pulse" />
-                        </div>
-                    </div>
-                </div>
-            ))}
-        </div>
-    );
+function defaultHistoryFilter(item: HistorySummaryItem, query: string) {
+    const q = query.toLowerCase();
+    return [item.title, item.changedTitle, item.question, ...(item.badges || [])]
+        .some(value => (value || '').toLowerCase().includes(q));
 }
 
 /* ---------- 主组件 ---------- */
 export function HistoryPageTemplate(config: HistoryPageConfig) {
     const {
-        sourceType, title, subtitle, icon: Icon, iconColor,
-        searchPlaceholder = '搜索...', emptyMessage = '暂无历史记录',
-        emptySearchMessage = '未找到匹配的记录', emptyActionLabel = '开始新的',
-        emptyActionHref, deleteMessage, kbSourceType, layout = 'grid',
-        skeletonCount = layout === 'grid' ? 6 : 4, themeColor = 'accent',
-        filterFn, kbTitleFn, renderCard, restoreTimezone, invalidateTypes,
+        sourceType, title, subtitle,
+        searchPlaceholder = '搜索记录', emptyMessage = '暂无历史记录',
+        emptySearchMessage = '未找到匹配的记录', actionLabel = '开始新的占测',
+        actionHref, deleteMessage, kbSourceType, layout = 'grid',
+        skeletonCount = layout === 'grid' ? 6 : 4,
+        filterFn, kbTitleFn, renderDetail, renderCard, restoreTimezone, invalidateTypes,
     } = config;
 
     const router = useRouter();
@@ -299,15 +116,19 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
     const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
     const [kbModalOpen, setKbModalOpen] = useState(false);
     const [kbTarget, setKbTarget] = useState<HistorySummaryItem | null>(null);
+    const [viewingId, setViewingId] = useState<string | null>(null);
     const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
     const restoreRequestId = useRef(0);
     const basePath = `/${sourceType}`;
     const resolvedKbSourceType = kbSourceType || `${sourceType}_reading`;
+    const navItem = getNavItemById(sourceType);
+    const resolvedActionHref = actionHref || navItem?.href || basePath;
 
     useLayoutEffect(() => {
         setDeleteConfirmId(null);
         setKbModalOpen(false);
         setKbTarget(null);
+        setViewingId(null);
         setSearchQuery('');
     }, [sourceType, user?.id]);
 
@@ -365,6 +186,7 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
         if (!scope) return;
         const requestId = ++restoreRequestId.current;
         const isCurrent = () => scope.isCurrent() && restoreRequestId.current === requestId;
+        setViewingId(item.id);
         try {
             const payload = await loadHistoryRestore(sourceType, item.id, restoreTimezone, { signal: scope.signal });
             if (!isCurrent()) return;
@@ -378,24 +200,20 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
             const message = error instanceof Error ? error.message : '加载历史记录失败';
             setErrorMessage(message);
             showToast('error', message);
+        } finally {
+            if (isCurrent()) setViewingId(null);
         }
     };
 
-    const defaultFilter = (item: HistorySummaryItem, query: string) => {
-        const q = query.toLowerCase();
-        return (item.title || '').toLowerCase().includes(q)
-            || (item.question || '').toLowerCase().includes(q)
-            || (item.badges || []).join(' ').toLowerCase().includes(q);
-    };
-
-    const filteredItems = items.filter(item => {
-        if (!searchQuery.trim()) return true;
-        return (filterFn || defaultFilter)(item, searchQuery);
-    });
+    const trimmedQuery = searchQuery.trim();
+    const filteredItems = useMemo(() => {
+        if (!trimmedQuery) return items;
+        return items.filter(item => (filterFn || defaultHistoryFilter)(item, trimmedQuery));
+    }, [filterFn, items, trimmedQuery]);
 
     useEffect(() => {
         if (
-            !searchQuery.trim()
+            !trimmedQuery
             || loading
             || loadingMore
             || !!appendError
@@ -407,7 +225,7 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
         }
 
         void loadItems({ append: true, offset: nextOffset });
-    }, [appendError, filteredItems.length, hasMore, loadItems, loading, loadingMore, nextOffset, searchQuery]);
+    }, [appendError, filteredItems.length, hasMore, loadItems, loading, loadingMore, nextOffset, trimmedQuery]);
 
     useEffect(() => {
         if (typeof window === 'undefined') {
@@ -456,87 +274,102 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
             setKbModalOpen(true);
         },
         canAddToKnowledgeBase: knowledgeBaseEnabled,
-        formatDate,
+        formatDate: formatHistoryDate,
     });
 
-    const resolvedEmptyHref = emptyActionHref || basePath;
+    const renderItem = (item: HistorySummaryItem) => {
+        const actions = makeActions(item);
+        if (renderCard) return renderCard(item, actions);
+        const Card = layout === 'grid' ? HistoryGridCard : HistoryListRow;
+        return <Card item={item} actions={actions} viewing={viewingId === item.id} renderDetail={renderDetail} />;
+    };
 
     return (
         <div className="min-h-screen bg-background">
-            <div className={`${layout === 'grid' ? 'max-w-6xl' : 'max-w-4xl'} mx-auto px-4 py-4 md:py-8`}>
-                <div className="hidden md:flex items-center justify-between gap-4 mb-8">
-                    <div>
-                        <h1 className="text-2xl font-bold flex items-center gap-2">
-                            {Icon && <Icon className={`w-6 h-6 ${iconColor || ''}`} />}
-                            {title}
-                        </h1>
-                        {subtitle && <p className="text-foreground-secondary text-sm mt-1">{subtitle}</p>}
-                    </div>
+            <div className={`${layout === 'grid' ? 'max-w-[65rem]' : 'max-w-4xl'} mx-auto px-4 py-4 md:py-10`}>
+                {/* 移动端顶栏已显示页面标题，这里只在桌面端显示面包屑和标题区。 */}
+                <div className="hidden md:block">
+                    <nav aria-label="面包屑" className="flex items-center gap-1.5 text-[13px] text-foreground-tertiary">
+                        <Link href={navItem?.href || basePath} className="text-foreground-secondary hover:text-foreground">
+                            {navItem?.label || title}
+                        </Link>
+                        <ChevronRight className="h-3 w-3" aria-hidden="true" />
+                        <span aria-current="page">历史记录</span>
+                    </nav>
+                    <header className="mt-3 flex flex-wrap items-end justify-between gap-4">
+                        <div className="flex min-w-0 flex-col gap-1.5">
+                            <h1 className="font-display text-[2.125rem] leading-tight font-normal text-foreground">{title}</h1>
+                            {subtitle ? <p className="text-[15px] text-foreground-secondary">{subtitle}</p> : null}
+                        </div>
+                        <Link
+                            href={resolvedActionHref}
+                            className="inline-flex h-11 shrink-0 items-center rounded-[10px] bg-accent px-[18px] text-[15px] font-medium text-on-accent transition-colors hover:bg-accent/90"
+                        >
+                            {actionLabel}
+                        </Link>
+                    </header>
                 </div>
 
-                <div className="flex items-center gap-3 mb-6 bg-background-secondary/50 p-2 rounded-2xl border border-border">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-secondary" />
-                        <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                            placeholder={searchPlaceholder}
-                            className="w-full pl-9 pr-4 py-2 rounded-xl bg-background border-none focus:outline-none focus:ring-2 focus:ring-accent/20 text-sm placeholder:text-foreground-tertiary" />
-                    </div>
-                </div>
+                <label className="relative block md:mt-7">
+                    <span className="sr-only">搜索历史记录</span>
+                    <Search className="pointer-events-none absolute top-1/2 left-3.5 h-[18px] w-[18px] -translate-y-1/2 text-foreground-tertiary" aria-hidden="true" />
+                    <input
+                        type="search"
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        placeholder={searchPlaceholder}
+                        className="h-11 w-full rounded-[10px] border-[0.5px] border-border-hover bg-surface pr-3.5 pl-[42px] text-[15px] text-foreground placeholder:text-foreground-tertiary focus:border-accent focus:outline-none"
+                    />
+                </label>
 
-                {errorMessage && !loading && (
-                    <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+                {errorMessage && !loading && filteredItems.length > 0 && (
+                    <div role="alert" className="mt-4 rounded-[10px] border-[0.5px] border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">
                         {errorMessage}
                     </div>
                 )}
 
-                {loading ? (
-                    layout === 'grid' ? <SkeletonGrid count={skeletonCount} /> : <SkeletonList count={skeletonCount} />
-                ) : errorMessage && filteredItems.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center gap-4 py-20 bg-background-secondary/30 rounded-3xl border border-red-200 border-dashed">
-                        <div className="text-sm text-red-600">{errorMessage}</div>
-                        <button
-                            type="button"
-                            onClick={() => { void loadItems(); }}
-                            className="px-5 py-2 rounded-xl bg-accent text-on-accent hover:bg-accent/90 transition-colors text-sm font-medium"
-                        >
-                            重试
-                        </button>
-                    </div>
-                ) : filteredItems.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-20 bg-background-secondary/30 rounded-3xl border border-border border-dashed">
-                        <div className="w-16 h-16 rounded-full bg-background-secondary flex items-center justify-center mb-4">
-                            <MessageSquare className="w-8 h-8 text-foreground-tertiary" />
+                <div className="mt-4 md:mt-5">
+                    {loading ? (
+                        layout === 'grid' ? <HistoryGridSkeleton count={skeletonCount} /> : <HistoryListSkeleton count={skeletonCount} />
+                    ) : errorMessage && filteredItems.length === 0 ? (
+                        <div role="alert" className="flex flex-col items-center justify-center gap-4 rounded-[14px] border-[0.5px] border-dashed border-danger/40 px-6 py-16 text-center">
+                            <p className="text-sm text-danger">{errorMessage}</p>
+                            <button
+                                type="button"
+                                onClick={() => { void loadItems(); }}
+                                className="h-10 rounded-[10px] border-[0.5px] border-border-hover bg-surface px-5 text-sm text-foreground transition-colors hover:bg-background-secondary"
+                            >
+                                重试
+                            </button>
                         </div>
-                        <h3 className="text-lg font-medium mb-1">{searchQuery ? emptySearchMessage : emptyMessage}</h3>
-                        {!searchQuery && (
-                            <Link href={resolvedEmptyHref}
-                                className="mt-6 px-6 py-2.5 bg-accent text-on-accent rounded-xl hover:bg-accent/90 transition-all shadow-lg shadow-accent/20 font-medium text-sm">
-                                {emptyActionLabel}
-                            </Link>
-                        )}
-                    </div>
-                ) : layout === 'grid' ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {filteredItems.map(item => {
-                            const actions = makeActions(item);
-                            return renderCard
-                                ? <div key={item.id}>{renderCard(item, actions)}</div>
-                                : <DefaultGridCard key={item.id} item={item} actions={actions} themeColor={themeColor} />;
-                        })}
-                    </div>
-                ) : (
-                    <div className="space-y-3">
-                        {filteredItems.map(item => {
-                            const actions = makeActions(item);
-                            return renderCard
-                                ? <div key={item.id}>{renderCard(item, actions)}</div>
-                                : <DefaultListCard key={item.id} item={item} actions={actions} themeColor={themeColor} />;
-                        })}
-                    </div>
-                )}
+                    ) : filteredItems.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center rounded-[14px] border-[0.5px] border-dashed border-border-hover px-6 py-16 text-center">
+                            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-background-secondary">
+                                <MessageSquare className="h-6 w-6 text-foreground-tertiary" aria-hidden="true" />
+                            </div>
+                            <p className="font-display text-lg text-foreground">{trimmedQuery ? emptySearchMessage : emptyMessage}</p>
+                            {!trimmedQuery && (
+                                <Link
+                                    href={resolvedActionHref}
+                                    className="mt-6 inline-flex h-10 items-center rounded-[10px] bg-accent px-5 text-sm font-medium text-on-accent transition-colors hover:bg-accent/90"
+                                >
+                                    {actionLabel}
+                                </Link>
+                            )}
+                        </div>
+                    ) : layout === 'grid' ? (
+                        <ul className="grid grid-cols-[repeat(auto-fill,minmax(17.5rem,1fr))] gap-3 md:gap-4">
+                            {filteredItems.map(item => <li key={item.id}>{renderItem(item)}</li>)}
+                        </ul>
+                    ) : (
+                        <ul className={renderCard ? 'flex flex-col gap-3' : 'divide-y-[0.5px] divide-border overflow-hidden rounded-[14px] border-[0.5px] border-border bg-surface'}>
+                            {filteredItems.map(item => <li key={item.id}>{renderItem(item)}</li>)}
+                        </ul>
+                    )}
+                </div>
 
                 {!loading && hasMore && (
-                    <div ref={loadMoreSentinelRef} className="mt-8 py-4 flex justify-center">
+                    <div ref={loadMoreSentinelRef} className="mt-6 flex justify-center py-4">
                         {loadingMore ? (
                             <div className="flex items-center gap-2 text-sm text-foreground-secondary">
                                 <SoundWaveLoader variant="inline" />
@@ -545,12 +378,12 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
                             <button
                                 type="button"
                                 onClick={() => { void loadItems({ append: true, offset: nextOffset ?? 0 }); }}
-                                className="rounded-xl border border-border px-4 py-2 text-sm text-foreground-secondary transition-colors hover:bg-background-secondary"
+                                className="h-10 rounded-[10px] border-[0.5px] border-border-hover px-4 text-sm text-foreground-secondary transition-colors hover:bg-background-secondary"
                             >
                                 重试加载更多
                             </button>
                         ) : (
-                            <div className="text-sm text-foreground-secondary">
+                            <div className="text-sm text-foreground-tertiary">
                                 继续下滑加载更多
                             </div>
                         )}

@@ -134,7 +134,7 @@ function PropertyTags<T extends string>({
     options = [],
     values,
     onChange,
-    colorClass = "bg-gray-800 text-white border-transparent",
+    colorClass = "bg-foreground text-background border-transparent",
     allowCustom = false,
     placeholder = '输入后按回车',
 }: {
@@ -212,7 +212,7 @@ function PropertyTags<T extends string>({
                         }}
                         onBlur={commitDraft}
                         placeholder={placeholder}
-                        className="min-w-[120px] flex-1 bg-transparent border-b border-dashed border-border text-[11px] text-foreground-secondary px-1 py-1 outline-none placeholder:text-foreground/20 focus:border-foreground/30"
+                        className="min-w-[120px] flex-1 bg-transparent border-b border-dashed border-border text-[11px] text-foreground-secondary px-1 py-1 outline-none placeholder:text-foreground-tertiary focus:border-foreground/30"
                     />
                 ) : null}
             </div>
@@ -297,7 +297,7 @@ function ElementsPreferences({ profile, setProfile }: { profile: BaziCaseProfile
     };
 
     return (
-        <div className="space-y-3 pt-4 border-t border-gray-50">
+        <div className="space-y-3 pt-4 border-t-[0.5px] border-border">
              <div className="flex items-center gap-2 px-1 text-[11px] font-bold text-foreground-secondary uppercase tracking-widest">
                  <Sparkles className="w-3.5 h-3.5" />
                  五行喜忌
@@ -325,7 +325,7 @@ function ElementsPreferences({ profile, setProfile }: { profile: BaziCaseProfile
                                      role === 'xiShen' ? 'bg-accent/10 text-accent font-bold' :
                                      role === 'jiShen' ? 'bg-danger/10 text-danger font-bold' :
                                      role === 'xianShen' ? 'bg-warning/10 text-warning font-bold' :
-                                     'bg-transparent text-foreground-secondary hover:bg-black/5'
+                                     'bg-transparent text-foreground-secondary hover:bg-background-secondary'
                                  )}
                                  style={{ textAlignLast: 'center' }}
                              >
@@ -341,7 +341,7 @@ function ElementsPreferences({ profile, setProfile }: { profile: BaziCaseProfile
                                                      type="button"
                                                      onClick={() => setAdvancedOption(el, option, true)}
                                                      className={cx(
-                                                         "rounded px-1.5 py-0.5 text-[10px] text-white transition-opacity hover:opacity-80",
+                                                         "rounded px-1.5 py-0.5 text-[10px] text-on-accent transition-opacity hover:opacity-80",
                                                          role === 'yongShen' ? 'bg-success' :
                                                          role === 'xiShen' ? 'bg-accent' :
                                                          role === 'jiShen' ? 'bg-danger' :
@@ -366,8 +366,8 @@ function ElementsPreferences({ profile, setProfile }: { profile: BaziCaseProfile
                                          className={cx(
                                              "w-full appearance-none rounded border border-dashed px-1 py-0.5 text-center text-[10px] outline-none transition-colors",
                                              availableOptions.length > 0
-                                                 ? 'border-border text-foreground-secondary hover:bg-black/5'
-                                                 : 'cursor-not-allowed border-border text-foreground/20'
+                                                 ? 'border-border text-foreground-secondary hover:bg-background-secondary'
+                                                 : 'cursor-not-allowed border-border text-foreground-tertiary'
                                          )}
                                          style={{ textAlignLast: 'center' }}
                                      >
@@ -416,7 +416,7 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
 
     if (!chartId) {
         return (
-            <div className="rounded-md border border-border bg-background p-12 text-center space-y-4">
+            <div className="px-4 py-12 text-center space-y-4">
                 <BookOpenText className="w-8 h-8 text-foreground/10 mx-auto" />
                 <p className="text-sm text-foreground-secondary">保存当前命盘后即可开启断事笔记</p>
             </div>
@@ -426,7 +426,7 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
     return (
         <div className="space-y-8 animate-fade-in">
             {/* 顶栏操作 */}
-            <div className="flex items-center justify-between gap-4 border-b border-border/60 pb-4">
+            <div className="flex items-center justify-between gap-4 border-b-[0.5px] border-border pb-4">
                 <div className="flex gap-6">
                     {[
                         { id: 'owner', label: '命主真实反馈' },
@@ -437,7 +437,7 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
                             onClick={() => setActiveTab(tab.id as NotesTab)}
                             className={cx(
                                 "text-sm font-bold transition-colors border-b-2 -mb-[18px] pb-4",
-                                activeTab === tab.id ? "border-accent text-foreground" : "border-transparent text-foreground/20 hover:text-foreground-secondary"
+                                activeTab === tab.id ? "border-accent text-foreground" : "border-transparent text-foreground-tertiary hover:text-foreground-secondary"
                             )}
                         >
                             {tab.label}
@@ -447,7 +447,7 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
                 <button
                     onClick={handleSave}
                     disabled={saving}
-                    className="flex items-center gap-1.5 px-3 py-1 bg-accent text-on-accent text-xs font-bold rounded-md hover:bg-accent/90 transition-all disabled:opacity-50"
+                    className="flex h-9 items-center gap-1.5 rounded-[10px] bg-accent px-3.5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:opacity-50"
                 >
                     {saving ? <SoundWaveLoader variant="inline" /> : <Save className="w-3.5 h-3.5" />}
                     保存
@@ -458,7 +458,7 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
                 {/* 左侧：关键事件 */}
                 <div>
                     <div className="space-y-6">
-                        <div className="flex items-center justify-between text-foreground/20">
+                        <div className="flex items-center justify-between text-foreground-tertiary">
                             <div className="flex items-center gap-2">
                                 <CalendarDays className="w-4 h-4" />
                                 <span className="text-xs font-bold uppercase tracking-[0.2em]">关键事件</span>
@@ -476,7 +476,7 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
 
                         <div className="space-y-3">
                             {profile.events.length === 0 ? (
-                                <p className="text-xs text-foreground/20 italic py-4">点击上方“+”号添加重要历史事件，辅助 AI 精准断事</p>
+                                <p className="text-xs text-foreground-tertiary italic py-4">点击上方“+”号添加重要历史事件，辅助 AI 精准断事</p>
                             ) : profile.events.map((ev, idx) => (
                                 <div key={idx} className="group rounded-md border border-border/60 px-3 py-3 hover:bg-background-secondary/40 transition-colors">
                                     <div className="flex items-start gap-4">
@@ -526,7 +526,7 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
                                         </div>
                                         <button
                                             onClick={() => setProfile(prev => ({ ...prev, events: prev.events.filter((_, i) => i !== idx) }))}
-                                            className="opacity-0 group-hover:opacity-100 p-1.5 rounded text-foreground/20 hover:text-danger hover:bg-red-50 transition-all"
+                                            className="opacity-0 group-hover:opacity-100 p-1.5 rounded text-foreground-tertiary hover:text-danger hover:bg-danger/10 transition-all"
                                         >
                                             <Trash2 className="w-3.5 h-3.5" />
                                         </button>
@@ -541,7 +541,7 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
                 <div className="space-y-8 pb-10">
                     {activeTab === 'master' ? (
                         <div className="space-y-2">
-                            <div className="px-1 text-[10px] font-bold text-foreground/20 uppercase tracking-widest mb-4">命理属性</div>
+                            <div className="px-1 text-[10px] font-bold text-foreground-tertiary uppercase tracking-widest mb-4">命理属性</div>
                             <PropertyRow label="旺衰" icon={Sparkles} value={profile.masterReview.strengthLevel} options={BAZI_CASE_STRENGTH_LEVELS} onChange={(v) => setProfile(p => ({ ...p, masterReview: { ...p.masterReview, strengthLevel: v } }))} />
                             
                             <PropertyTags
@@ -557,14 +557,14 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
                         </div>
                     ) : (
                         <div className="space-y-2">
-                            <div className="px-1 text-[10px] font-bold text-foreground/20 uppercase tracking-widest mb-4">基本信息</div>
+                            <div className="px-1 text-[10px] font-bold text-foreground-tertiary uppercase tracking-widest mb-4">基本信息</div>
                             <PropertyRow label="职业" icon={LayoutGrid} value={profile.ownerFeedback.occupation} options={BAZI_CASE_OCCUPATION_OPTIONS} onChange={(v) => setProfile(p => ({ ...p, ownerFeedback: { ...p.ownerFeedback, occupation: v ?? null } }))} />
                             <PropertyRow label="学历" icon={BookOpenText} value={profile.ownerFeedback.education} options={BAZI_CASE_EDUCATION_OPTIONS} onChange={(v) => setProfile(p => ({ ...p, ownerFeedback: { ...p.ownerFeedback, education: v ?? null } }))} />
                             <PropertyRow label="财富" icon={Sparkles} value={profile.ownerFeedback.wealthLevel} options={BAZI_CASE_WEALTH_LEVEL_OPTIONS} onChange={(v) => setProfile(p => ({ ...p, ownerFeedback: { ...p.ownerFeedback, wealthLevel: v ?? null } }))} />
                             <PropertyRow label="婚姻" icon={Tag} value={profile.ownerFeedback.marriageStatus} options={BAZI_CASE_MARRIAGE_STATUS_OPTIONS} onChange={(v) => setProfile(p => ({ ...p, ownerFeedback: { ...p.ownerFeedback, marriageStatus: v ?? null } }))} />
                             <PropertyRow label="健康" icon={Sparkles} value={profile.ownerFeedback.healthStatus} options={BAZI_CASE_HEALTH_STATUS_OPTIONS} onChange={(v) => setProfile(p => ({ ...p, ownerFeedback: { ...p.ownerFeedback, healthStatus: v ?? null } }))} />
                             
-                            <div className="pt-4 border-t border-gray-50">
+                            <div className="pt-4 border-t-[0.5px] border-border">
                                 <PropertyTags
                                     label="六亲反馈"
                                     options={BAZI_CASE_FAMILY_TAG_OPTIONS}

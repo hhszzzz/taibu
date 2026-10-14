@@ -19,7 +19,7 @@ import {
     LIU_CHONG_TABLE,
     SAN_HE_TABLE,
 } from '@/lib/divination/bazi';
-import { parseNumberParam } from '@/lib/divination/bazi-form-utils';
+import { formatLunarDateFromSolar, parseNumberParam } from '@/lib/divination/bazi-form-utils';
 import type { HeavenlyStem, BaziFormData, TenGod } from '@/types';
 
 describe('birth time rule adapters', () => {
@@ -85,6 +85,25 @@ describe('parseNumberParam', () => {
         assert.equal(parseNumberParam(null, 12), 12);
         assert.equal(parseNumberParam('', 12), 12);
         assert.equal(parseNumberParam('not-a-number', 12), 12);
+    });
+});
+
+describe('formatLunarDateFromSolar', () => {
+    it('formats the lunar year ganzhi, month and day for a solar birth date', () => {
+        assert.equal(formatLunarDateFromSolar(1984, 9, 27), '甲子年九月初三');
+        assert.equal(formatLunarDateFromSolar(2024, 2, 10), '甲辰年正月初一');
+    });
+
+    it('marks leap months', () => {
+        assert.equal(formatLunarDateFromSolar(2020, 6, 1), '庚子年闰四月初十');
+    });
+
+    it('returns null for impossible or malformed dates instead of guessing', () => {
+        assert.equal(formatLunarDateFromSolar(2023, 2, 30), null);
+        assert.equal(formatLunarDateFromSolar(2023, 13, 1), null);
+        assert.equal(formatLunarDateFromSolar(0, 1, 1), null);
+        assert.equal(formatLunarDateFromSolar(2023.5, 1, 1), null);
+        assert.equal(formatLunarDateFromSolar(Number.NaN, 1, 1), null);
     });
 });
 

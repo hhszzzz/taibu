@@ -4,8 +4,10 @@ import assert from 'node:assert/strict';
 import { calculateBaziChartBundle, generateBaziChartText } from '@/lib/divination/bazi';
 import { calculateZiweiChartBundle, generateZiweiChartText } from '@/lib/divination/ziwei';
 import {
+    buildLiuyaoCanonicalJSON,
     calculateLiuyaoBundle,
     findHexagram,
+    formatHexagramPalace,
     type Yao,
     calculateDerivedHexagrams,
     calculateGuaShen,
@@ -183,6 +185,62 @@ test('liuyao prompt should include derived hexagrams and gua shen', () => {
     assert.doesNotMatch(text, /错卦：无/u, 'liuyao prompt should resolve opposite hexagram instead of placeholder');
     assert.doesNotMatch(text, /综卦：无/u, 'liuyao prompt should resolve reversed hexagram instead of placeholder');
     assert.doesNotMatch(text, /卦身：无/u, 'liuyao prompt should resolve gua shen instead of placeholder');
+});
+
+test('liuyao bundle should attach 爻辞 so canonical JSON and text carry changing-line texts like core', () => {
+    const hexagram = findHexagram('101111');
+    const changedHexagram = findHexagram('111111');
+    assert.ok(hexagram && changedHexagram, 'hexagrams should exist for testing');
+
+    const yaos: Yao[] = '101111'.split('').map((value, index) => ({
+        type: value === '1' ? 1 : 0,
+        change: index === 1 ? 'changing' : 'stable',
+        position: index + 1,
+    }));
+    const bundle = calculateLiuyaoBundle({
+        yaos,
+        question: '测试问题',
+        date: new Date('2026-01-01T00:00:00Z'),
+        yongShenTargets: ['官鬼'],
+        hexagram: hexagram!,
+        changedHexagram: changedHexagram!,
+    });
+
+    assert.equal(bundle.output.fullYaos[0]?.yaoCi, '初九：同人于门，无咎。', 'every line should carry its base-hexagram text');
+    assert.deepEqual(
+        buildLiuyaoCanonicalJSON(bundle.output).卦盘.变卦?.动爻爻辞,
+        [{ 爻名: '六二', 爻辞: '六二：同人于宗，吝。' }],
+        'canonical JSON should list only the changing line texts',
+    );
+    assert.match(generateLiuyaoChartText(bundle.output), /六二爻辞: 六二：同人于宗，吝。/u, 'shared text should include the changing line text');
+});
+
+test('liuyao bundle reports the 卦宫 element like core instead of the upper trigram element', () => {
+    // 天火同人属离宫火而上卦为乾金；变卦乾为天属乾宫金
+    const yaos: Yao[] = '101111'.split('').map((value, index) => ({
+        type: value === '1' ? 1 : 0,
+        change: index === 1 ? 'changing' : 'stable',
+        position: index + 1,
+    }));
+    const bundle = calculateLiuyaoBundle({
+        yaos,
+        question: '测试问题',
+        date: new Date('2026-01-01T00:00:00Z'),
+        yongShenTargets: ['官鬼'],
+        hexagram: findHexagram('101111')!,
+        changedHexagram: findHexagram('111111')!,
+    });
+
+    const board = buildLiuyaoCanonicalJSON(bundle.output).卦盘;
+    assert.deepEqual([board.本卦.卦宫, board.本卦.五行, board.变卦?.卦宫, board.变卦?.五行], ['离', '火', '乾', '金']);
+    assert.match(generateLiuyaoChartText(bundle.output), /天火同人（离宫·火）/u);
+});
+
+test('liuyao hexagram pickers label the 卦宫 element, not the upper trigram element', () => {
+    assert.equal(formatHexagramPalace('010111'), '离宫火', '天水讼属离宫，上卦乾金不是卦的五行');
+    assert.equal(formatHexagramPalace('010000'), '坎宫水');
+    assert.equal(formatHexagramPalace('111111'), '乾宫金');
+    assert.equal(formatHexagramPalace(''), '');
 });
 
 test('liuyao derived helpers should handle invalid hexagram codes defensively', () => {

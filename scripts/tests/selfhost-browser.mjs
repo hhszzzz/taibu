@@ -18,7 +18,8 @@ async function verifyChartSynchronization(page, context, config) {
     await page.getByRole('heading', { name: '八字命盘', exact: true }).waitFor();
   };
   const closeCharts = () => page.getByRole('link', { name: '返回太卜', exact: true }).click();
-  const chartRow = chart => page.locator(`a[href="/${chart.type}/result?chart=${chart.id}"]`).filter({ visible: true });
+  const chartLink = chart => page.locator(`a[href="/${chart.type}/result?chart=${chart.id}"]`).filter({ visible: true });
+  const chartRow = chart => page.locator('li').filter({ has: chartLink(chart) });
   const expectSameDocument = async () => {
     assert.equal(await page.evaluate(() => window.__chartSyncDocument), marker, 'synchronization must not depend on a full document reload');
   };
@@ -84,7 +85,7 @@ async function verifyChartSynchronization(page, context, config) {
     const ziwei = await createChart('ziwei', `${marker}-ziwei`);
     for (const chart of [first, ziwei]) {
       await openCharts();
-      await chartRow(chart).click();
+      await chartLink(chart).click();
       await page.getByRole('button', { name: '修改', exact: true }).click();
       chart.name += '-edited';
       await page.getByPlaceholder('请输入姓名').fill(chart.name);
@@ -102,7 +103,9 @@ async function verifyChartSynchronization(page, context, config) {
       await closeCharts();
     }
     // Change the default through the overlay while the monthly page remains mounted.
-    await sidebar.getByRole('link', { name: '月运', exact: true }).click();
+    // 月运 is not pinned by default; it lives in the sidebar's "全部占术" flyout.
+    await sidebar.getByRole('button', { name: /全部占术/ }).click();
+    await page.getByRole('dialog', { name: '全部占术' }).getByRole('link', { name: '月运', exact: true }).click();
     await page.getByRole('heading', { name: /月/ }).first().waitFor();
     for (const chart of [first, second]) {
       await openCharts();

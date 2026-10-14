@@ -37,6 +37,7 @@ export interface QimenPalaceInfo {
   isKongWang?: boolean;       // 是否空亡
   isYiMa?: boolean;           // 是否驿马
   isRuMu?: boolean;           // 是否入墓
+  ruMuStems?: string[];       // 在本宫入墓的天盘干；乙在坤二另标“乙(五行墓)”
   isMenPo?: boolean;
   isJiXing?: boolean;
   hostedStars?: string[];
@@ -69,7 +70,10 @@ export interface QimenOutput {
     hourKong: { branches: string[]; palaces: number[]; };
   };
   yiMa: { branch: string; palace: number; };
+  /** 全局格局：全盘格局以“全盘: ”开头列一次，其余为“某宫: 格局” */
   globalFormations: string[];
+  /** 全盘格局（星门伏吟反吟、五不遇时、时干入墓）；旧版本输出可能缺失 */
+  boardFormations?: string[];
   panType: string;
   juMethod: string;
   question?: string;

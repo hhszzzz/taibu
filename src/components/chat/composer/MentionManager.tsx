@@ -62,12 +62,12 @@ export function MentionManager({
             {/* 知识库弹窗 */}
             <Modal open={knowledgeBaseOpen && Boolean(userId)} onClose={() => setKnowledgeBaseOpen(false)} returnFocusRef={textareaRef} labelledBy={id}>
                         <div className="flex flex-col max-h-[75dvh]">
-                            <div className="flex items-center justify-between p-3 px-4 border-b border-border/50 bg-muted/30">
+                            <div className="flex items-center justify-between p-3 px-4 border-b border-border/50 bg-background-secondary/30">
                                 <div className="flex items-center gap-2">
                                     <h2 id={id} className="text-sm font-semibold">启用知识库搜索</h2>
                                     <SettingsCenterLink
                                         tab="knowledge-base"
-                                        className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                                        className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
                                         onClick={() => setKnowledgeBaseOpen(false)}
                                     >
                                         <span>更多设置</span>
@@ -78,19 +78,19 @@ export function MentionManager({
                                     type="button"
                                     aria-label="关闭知识库选择"
                                     onClick={() => setKnowledgeBaseOpen(false)}
-                                    className="p-1.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                                    className="p-1.5 rounded-full hover:bg-background-secondary text-foreground-tertiary hover:text-foreground transition-colors"
                                 >
                                     <X className="w-4 h-4" />
                                 </button>
                             </div>
                             <div className="overflow-y-auto p-2 space-y-1 min-h-[120px]">
                                 {mentionKnowledgeBases.length === 0 ? (
-                                    <div className="flex flex-col items-center justify-center py-8 text-muted-foreground gap-2">
+                                    <div className="flex flex-col items-center justify-center py-8 text-foreground-tertiary gap-2">
                                         <BookOpenText className="w-8 h-8 opacity-20" />
                                         <div className="text-sm">暂无知识库</div>
                                         <SettingsCenterLink
                                             tab="knowledge-base"
-                                            className="text-xs text-primary hover:underline mt-1"
+                                            className="text-xs text-accent hover:underline mt-1"
                                             onClick={() => setKnowledgeBaseOpen(false)}
                                         >
                                             去创建第一个知识库
@@ -109,24 +109,24 @@ export function MentionManager({
                                                 className={`
                                                     group w-full text-left flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer disabled:opacity-60
                                                     ${enabled
-                                                        ? 'bg-primary/5 border-primary/20 hover:bg-primary/10'
-                                                        : 'bg-card border-border hover:border-primary/30 hover:shadow-sm'
+                                                        ? 'bg-accent/5 border-accent/20 hover:bg-accent/10'
+                                                        : 'bg-surface border-border hover:border-accent/30 hover:shadow-sm'
                                                     }
                                                 `}
                                             >
                                                 <div className="min-w-0 flex-1 mr-3">
-                                                    <div className={`text-sm font-medium truncate transition-colors ${enabled ? 'text-primary' : 'text-foreground'}`}>
+                                                    <div className={`text-sm font-medium truncate transition-colors ${enabled ? 'text-accent' : 'text-foreground'}`}>
                                                         {kb.name}
                                                     </div>
-                                                    <div className="text-xs text-muted-foreground truncate mt-0.5">
+                                                    <div className="text-xs text-foreground-tertiary truncate mt-0.5">
                                                         {kb.description || '暂无描述'}
                                                     </div>
                                                 </div>
                                                 <div className={`
                                                     flex-shrink-0 w-5 h-5 rounded-full border flex items-center justify-center transition-all
                                                     ${enabled
-                                                        ? 'bg-primary border-primary text-primary-foreground'
-                                                        : 'border-muted-foreground/30 group-hover:border-primary/50'
+                                                        ? 'bg-accent border-accent text-on-accent'
+                                                        : 'border-foreground-tertiary/30 group-hover:border-accent/50'
                                                     }
                                                 `}>
                                                     {enabled && !knowledgeBaseSavingId && <Check className="w-3 h-3" strokeWidth={3} />}

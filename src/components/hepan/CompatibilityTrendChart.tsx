@@ -2,6 +2,8 @@
  * 合盘兼容性趋势图组件
  *
  * 显示半年/一年的兼容性走势曲线
+ *
+ * 'use client'：recharts 依赖浏览器测量与交互
  */
 'use client';
 
@@ -16,6 +18,7 @@ import {
     AreaChart,
 } from 'recharts';
 import { TrendingUp, CalendarDays } from 'lucide-react';
+import { SegmentedControl, type SegmentedOption } from '@/components/bazi/SegmentedControl';
 
 export interface CompatibilityTrendPoint {
     month: string;           // 月份标签 (e.g., "1月", "2月")
@@ -29,6 +32,19 @@ export interface CompatibilityTrendPoint {
     event?: string;          // 特殊事件提示
 }
 
+/** 图表配色：主序列陶土色，网格线三级文字色（均随主题切换） */
+const CHART_COLORS = {
+    primary: 'var(--clay)',
+    grid: 'var(--foreground-tertiary)',
+    tick: 'var(--foreground-secondary)',
+    dotFill: 'var(--surface)',
+} as const;
+
+const PERIOD_OPTIONS: readonly SegmentedOption<'6' | '12'>[] = [
+    { value: '6', label: '半年' },
+    { value: '12', label: '一年' },
+];
+
 type CompatibilityTooltipProps = {
     active?: boolean;
     payload?: { payload: CompatibilityTrendPoint }[];
@@ -39,14 +55,14 @@ function CompatibilityTrendTooltip({ active, payload }: CompatibilityTooltipProp
 
     const point = payload[0].payload;
     return (
-        <div className="bg-background/95 backdrop-blur-xl border border-border rounded-xl p-4 shadow-xl ring-1 ring-white/10">
-            <div className="flex items-center gap-2 mb-2 pb-2 border-b border-border/50">
+        <div className="rounded-xl border-[0.5px] border-border bg-surface p-3.5 shadow-md">
+            <div className="mb-2 flex items-center gap-2 border-b-[0.5px] border-border pb-2">
                 <CalendarDays className="w-4 h-4 text-foreground-secondary" />
-                <span className="font-medium text-foreground">{point.fullMonth}</span>
+                <span className="text-sm font-medium text-foreground">{point.fullMonth}</span>
             </div>
 
             <div className="flex items-baseline gap-2 mb-3">
-                <span className="text-2xl font-bold text-indigo-500">{point.score}</span>
+                <span className="font-display text-2xl text-accent-strong">{point.score}</span>
                 <span className="text-sm text-foreground-secondary">分</span>
             </div>
 
@@ -67,7 +83,7 @@ function CompatibilityTrendTooltip({ active, payload }: CompatibilityTooltipProp
                 </div>
             )}
             {point.event && (
-                <div className="mt-3 pt-2 border-t border-border/50 text-xs font-medium text-amber-500 flex items-start gap-1">
+                <div className="mt-3 flex items-start gap-1 border-t-[0.5px] border-border pt-2 text-xs font-medium text-warning">
                     <span>⚡</span>
                     {point.event}
                 </div>
@@ -106,63 +122,49 @@ export function CompatibilityTrendChart({
     const trend = secondAvg - firstAvg > 3 ? 'up' : secondAvg - firstAvg < -3 ? 'down' : 'stable';
 
     const trendText = trend === 'up' ? '整体呈上升趋势' : trend === 'down' ? '整体呈下降趋势' : '整体较为平稳';
-    const trendColor = trend === 'up' ? 'text-emerald-500' : trend === 'down' ? 'text-rose-500' : 'text-amber-500';
+    const trendColor = trend === 'up' ? 'text-success' : trend === 'down' ? 'text-danger' : 'text-warning';
 
     return (
-        <div className="bg-background/5 backdrop-blur-md rounded-3xl p-6 border border-white/10">
+        <div className="rounded-2xl border-[0.5px] border-border bg-surface p-5 sm:p-6">
             {/* 标题和时间选择 */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+            <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
                 <div>
-                    <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
-                        <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-500">
-                            <TrendingUp className="w-5 h-5" />
-                        </div>
+                    <h3 className="flex items-center gap-2 font-display text-lg text-foreground sm:text-xl">
+                        <TrendingUp className="h-[18px] w-[18px] text-clay" />
                         兼容性走势
                     </h3>
-                    <p className="text-sm text-foreground-secondary mt-1 ml-9">
+                    <p className="mt-1 text-[13px] text-foreground-secondary">
                         未来{period}个月的感情能量波动预测
                     </p>
                 </div>
 
                 {onPeriodChange && (
-                    <div className="flex items-center bg-background/5 rounded-xl p-1 border border-white/5 self-start sm:self-auto">
-                        <button
-                            onClick={() => onPeriodChange(6)}
-                            className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-all ${period === 6
-                                ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'
-                                : 'text-foreground-secondary hover:text-foreground'
-                                }`}
-                        >
-                            半年
-                        </button>
-                        <button
-                            onClick={() => onPeriodChange(12)}
-                            className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-all ${period === 12
-                                ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'
-                                : 'text-foreground-secondary hover:text-foreground'
-                                }`}
-                        >
-                            一年
-                        </button>
-                    </div>
+                    <SegmentedControl
+                        ariaLabel="走势周期"
+                        size="sm"
+                        options={PERIOD_OPTIONS}
+                        value={String(period) as '6' | '12'}
+                        onChange={(value) => onPeriodChange(value === '12' ? 12 : 6)}
+                        className="w-full sm:w-[180px]"
+                    />
                 )}
             </div>
 
             {/* 趋势概要 */}
-            <div className="grid grid-cols-3 gap-4 mb-8">
-                <div className="bg-background/5 rounded-2xl p-4 border border-white/5 flex flex-col items-center justify-center text-center group hover:bg-background/10 transition-colors">
-                    <span className="text-xs font-medium text-foreground-secondary mb-1">平均分</span>
-                    <span className="text-2xl font-bold text-indigo-500 group-hover:scale-110 transition-transform">{averageScore}</span>
+            <div className="mb-6 grid grid-cols-3 gap-2 sm:gap-3">
+                <div className="flex flex-col items-center justify-center rounded-xl bg-panel p-3 text-center sm:p-4">
+                    <span className="mb-1 text-xs text-foreground-secondary">平均分</span>
+                    <span className="font-display text-2xl text-accent-strong">{averageScore}</span>
                 </div>
-                <div className="bg-background/5 rounded-2xl p-4 border border-white/5 flex flex-col items-center justify-center text-center group hover:bg-background/10 transition-colors">
-                    <span className="text-xs font-medium text-foreground-secondary mb-1">最高点</span>
-                    <span className="text-2xl font-bold text-emerald-500 group-hover:scale-110 transition-transform">{maxPoint?.score}</span>
-                    <span className="text-[10px] text-foreground-secondary mt-1 bg-background/5 px-2 py-0.5 rounded-full">{maxPoint?.month}</span>
+                <div className="flex flex-col items-center justify-center rounded-xl bg-panel p-3 text-center sm:p-4">
+                    <span className="mb-1 text-xs text-foreground-secondary">最高点</span>
+                    <span className="font-display text-2xl text-success">{maxPoint?.score}</span>
+                    <span className="mt-1 text-[11px] text-foreground-tertiary">{maxPoint?.month}</span>
                 </div>
-                <div className="bg-background/5 rounded-2xl p-4 border border-white/5 flex flex-col items-center justify-center text-center group hover:bg-background/10 transition-colors">
-                    <span className="text-xs font-medium text-foreground-secondary mb-1">最低点</span>
-                    <span className="text-2xl font-bold text-rose-500 group-hover:scale-110 transition-transform">{minPoint?.score}</span>
-                    <span className="text-[10px] text-foreground-secondary mt-1 bg-background/5 px-2 py-0.5 rounded-full">{minPoint?.month}</span>
+                <div className="flex flex-col items-center justify-center rounded-xl bg-panel p-3 text-center sm:p-4">
+                    <span className="mb-1 text-xs text-foreground-secondary">最低点</span>
+                    <span className="font-display text-2xl text-danger">{minPoint?.score}</span>
+                    <span className="mt-1 text-[11px] text-foreground-tertiary">{minPoint?.month}</span>
                 </div>
             </div>
 
@@ -175,20 +177,21 @@ export function CompatibilityTrendChart({
                     >
                         <defs>
                             <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                                <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                                <stop offset="5%" stopColor={CHART_COLORS.primary} stopOpacity={0.28} />
+                                <stop offset="95%" stopColor={CHART_COLORS.primary} stopOpacity={0} />
                             </linearGradient>
                         </defs>
                         <CartesianGrid
                             strokeDasharray="3 3"
                             vertical={false}
-                            stroke="rgba(255,255,255,0.05)"
+                            stroke={CHART_COLORS.grid}
+                            strokeOpacity={0.3}
                         />
                         <XAxis
                             dataKey="month"
                             axisLine={false}
                             tickLine={false}
-                            tick={{ fontSize: 12, fill: 'var(--foreground-secondary)' }}
+                            tick={{ fontSize: 12, fill: CHART_COLORS.tick }}
                             interval={period === 12 ? 1 : 0}
                             dy={10}
                         />
@@ -196,37 +199,37 @@ export function CompatibilityTrendChart({
                             domain={[30, 100]}
                             axisLine={false}
                             tickLine={false}
-                            tick={{ fontSize: 12, fill: 'var(--foreground-secondary)' }}
+                            tick={{ fontSize: 12, fill: CHART_COLORS.tick }}
                             ticks={[40, 60, 80, 100]}
                         />
                         <Tooltip
                             content={<CompatibilityTrendTooltip />}
-                            cursor={{ stroke: 'rgba(255,255,255,0.2)', strokeWidth: 1, strokeDasharray: '5 5' }}
+                            cursor={{ stroke: CHART_COLORS.grid, strokeOpacity: 0.5, strokeWidth: 1, strokeDasharray: '5 5' }}
                         />
                         <ReferenceLine
                             y={averageScore}
-                            stroke="#6366f1"
+                            stroke={CHART_COLORS.primary}
                             strokeDasharray="3 3"
-                            strokeOpacity={0.4}
+                            strokeOpacity={0.5}
                             label={{
                                 value: '平均线',
-                                position: 'right',
-                                fill: '#6366f1',
+                                // 右侧外边距很窄，标签放在绘图区内，避免被裁切
+                                position: 'insideTopRight',
+                                fill: CHART_COLORS.tick,
                                 fontSize: 10,
-                                opacity: 0.8
                             }}
                         />
                         <Area
                             type="monotone"
                             dataKey="score"
-                            stroke="#6366f1"
-                            strokeWidth={3}
+                            stroke={CHART_COLORS.primary}
+                            strokeWidth={2.5}
                             fill="url(#colorScore)"
                             activeDot={{
-                                r: 6,
-                                stroke: '#6366f1',
-                                strokeWidth: 4,
-                                fill: '#fff',
+                                r: 5,
+                                stroke: CHART_COLORS.primary,
+                                strokeWidth: 3,
+                                fill: CHART_COLORS.dotFill,
                             }}
                             animationDuration={1500}
                         />
@@ -235,14 +238,14 @@ export function CompatibilityTrendChart({
             </div>
 
             {/* 底部说明 */}
-            <div className="mt-6 flex items-center justify-between text-xs text-foreground-secondary border-t border-white/5 pt-4">
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t-[0.5px] border-border pt-4 text-xs text-foreground-secondary">
                 <div className="flex items-center gap-4">
                     <div className="flex items-center gap-1.5">
-                        <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                        <div className="h-2.5 w-2.5 rounded-full bg-success" />
                         <span>波峰</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                        <div className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+                        <div className="h-2.5 w-2.5 rounded-full bg-danger" />
                         <span>波谷</span>
                     </div>
                 </div>

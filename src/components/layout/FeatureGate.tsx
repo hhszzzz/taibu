@@ -7,10 +7,12 @@
 'use client';
 
 import { useSyncExternalStore } from 'react';
-import { ShieldOff } from 'lucide-react';
+import { CloudOff, PauseCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
+import { getFeatureLabel } from '@/lib/navigation/registry';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { StatePanel, STATE_SECONDARY_ACTION_CLASS } from '@/components/ui/StatePanel';
 
 interface FeatureGateProps {
     featureId: string;
@@ -35,24 +37,18 @@ export function FeatureGate({ featureId, children }: FeatureGateProps) {
 
     if (!loaded && error) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-[60vh] px-4 text-center">
-                <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-                    <ShieldOff className="w-8 h-8 text-muted-foreground" />
-                </div>
-                <h2 className="text-lg font-medium text-foreground mb-2">
-                    功能状态加载失败
-                </h2>
-                <p className="text-sm text-muted-foreground mb-6 max-w-sm">
-                    暂时无法确认该功能是否开放，请稍后重试。
-                </p>
-                <button
-                    type="button"
-                    onClick={() => void refresh()}
-                    className="px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-                >
-                    重试
-                </button>
-            </div>
+            <StatePanel
+                layout="page"
+                titleAs="h2"
+                icon={CloudOff}
+                title="功能状态加载失败"
+                description="暂时无法确认该功能是否开放，请稍后重试。"
+                action={(
+                    <button type="button" onClick={() => void refresh()} className={STATE_SECONDARY_ACTION_CLASS}>
+                        重试
+                    </button>
+                )}
+            />
         );
     }
 
@@ -65,24 +61,16 @@ export function FeatureGate({ featureId, children }: FeatureGateProps) {
     }
 
     if (!isFeatureEnabled(featureId)) {
+        const label = getFeatureLabel(featureId);
         return (
-            <div className="flex flex-col items-center justify-center min-h-[60vh] px-4 text-center">
-                <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-                    <ShieldOff className="w-8 h-8 text-muted-foreground" />
-                </div>
-                <h2 className="text-lg font-medium text-foreground mb-2">
-                    功能暂未开放
-                </h2>
-                <p className="text-sm text-muted-foreground mb-6 max-w-sm">
-                    该功能当前未启用，请联系管理员或稍后再试
-                </p>
-                <Link
-                    href="/"
-                    className="px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-                >
-                    返回首页
-                </Link>
-            </div>
+            <StatePanel
+                layout="page"
+                titleAs="h2"
+                icon={PauseCircle}
+                title="该功能暂时关闭"
+                description={label ? `管理员已暂停「${label}」，稍后再来看看。` : '管理员已暂停这项功能，稍后再来看看。'}
+                action={<Link href="/" className={STATE_SECONDARY_ACTION_CLASS}>返回首页</Link>}
+            />
         );
     }
 

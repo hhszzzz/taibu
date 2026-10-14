@@ -131,10 +131,7 @@ const tarotInterpretConfig: DivinationRouteConfig<TarotInterpretInput> = {
         numerology: input.numerology || null,
     }),
     generateTitle: (input) => {
-        const SPREAD_NAMES: Record<string, string> = {
-            single: '单牌', 'three-card': '三牌阵', love: '爱情牌阵', 'celtic-cross': '凯尔特十字',
-        };
-        const spreadName = SPREAD_NAMES[input.spreadId] || input.spreadId || '自定义';
+        const spreadName = TAROT_SPREADS.find((spread) => spread.id === input.spreadId)?.name || input.spreadId || '自定义';
         if (input.question?.trim()) {
             return `${input.question.trim().substring(0, 20)} - ${spreadName}`;
         }

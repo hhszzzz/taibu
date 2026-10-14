@@ -18,7 +18,7 @@ export async function verifyAgentDomain({ page, context, origin, output }) {
         await panel.getByRole('button',{name:'添加模板',exact:true}).click();
         await panel.getByLabel(`模板 ${count+1} 名称`,{exact:true}).fill(name);
         await panel.getByLabel(`模板 ${count+1} 正文`,{exact:true}).fill('模板验收：{{question}}');
-        await panel.getByRole('checkbox',{name:'允许任务助手读取和保存长期记忆'}).check();
+        await panel.getByRole('switch',{name:'允许任务助手读取和保存长期记忆'}).check();
         const savedSettings=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/user/settings'&&r.request().method()==='PATCH');
         await panel.getByRole('button',{name:'保存任务助手设置',exact:true}).click();
         assert.ok((await savedSettings).ok());

@@ -19,7 +19,8 @@ export function FloatingPanel({ open, anchorRef, onClose, children, label, id, c
     id?: string;
     className?: string;
     role?: 'menu' | 'dialog';
-    side?: 'top' | 'bottom';
+    /** `right` opens beside the anchor (e.g. a sidebar flyout), bottom-aligned to it when space allows. */
+    side?: 'top' | 'bottom' | 'right';
     align?: 'start' | 'end';
     initialFocus?: 'first' | 'none';
     /** Return focus after selecting an item; keyboard dismissal always returns it. */
@@ -56,14 +57,21 @@ export function FloatingPanel({ open, anchorRef, onClose, children, label, id, c
                 if (!anchor.isConnected || rect.bottom <= y || rect.top >= y + height) { close(false); return; }
                 const margin = 8;
                 const maxLeft = Math.max(x + margin, x + width - panel.offsetWidth - margin);
-                const left = Math.max(x + margin, Math.min(align === 'end' ? rect.right - panel.offsetWidth : rect.left, maxLeft));
-                const above = rect.top - panel.offsetHeight - 6;
-                const below = rect.bottom + 6;
                 const maxTop = Math.max(y + margin, y + height - panel.offsetHeight - margin);
-                const preferred = side === 'top' ? above : below;
-                const alternate = side === 'top' ? below : above;
-                const fits = (value: number) => value >= y + margin && value <= maxTop;
-                const top = fits(preferred) ? preferred : fits(alternate) ? alternate : Math.max(y + margin, Math.min(preferred, maxTop));
+                let left: number;
+                let top: number;
+                if (side === 'right') {
+                    left = Math.max(x + margin, Math.min(rect.right + 14, maxLeft));
+                    top = Math.max(y + margin, Math.min(rect.bottom - panel.offsetHeight, maxTop));
+                } else {
+                    left = Math.max(x + margin, Math.min(align === 'end' ? rect.right - panel.offsetWidth : rect.left, maxLeft));
+                    const above = rect.top - panel.offsetHeight - 6;
+                    const below = rect.bottom + 6;
+                    const preferred = side === 'top' ? above : below;
+                    const alternate = side === 'top' ? below : above;
+                    const fits = (value: number) => value >= y + margin && value <= maxTop;
+                    top = fits(preferred) ? preferred : fits(alternate) ? alternate : Math.max(y + margin, Math.min(preferred, maxTop));
+                }
                 setPosition(previous => previous?.left === left && previous.top === top ? previous : { left, top });
                 // Remove hidden before focusing; the first placement runs before paint.
                 panel.style.visibility = 'visible';

@@ -3,16 +3,17 @@
  *
  * 'use client' 标记说明：
  * - 使用 useState 和 useEffect 管理实时更新
- * - 每秒更新当前时间的四柱
+ * - 每分钟更新当前时间的四柱
  */
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Sparkles } from 'lucide-react';
 import { Solar } from 'lunar-javascript';
 import { calculateBazi } from 'taibu-core/bazi';
 import type { BaziFormData } from '@/types';
 import { getEarthlyBranchByHour } from '@/lib/divination/bazi-form-utils';
+import { ganZhiTextClass } from '@/components/bazi/element-classes';
+import { LUNAR_DAY_NAMES, LUNAR_MONTH_NAMES } from '@/components/bazi/form/options';
 
 interface InstantBaziPreviewProps {
     onUseInstant: () => void;
@@ -96,67 +97,44 @@ export function InstantBaziPreview({ onUseInstant }: InstantBaziPreviewProps) {
         return null;
     }
 
-    return (
-        <div className="bg-background rounded-lg md:p-6 p-4 shadow-sm border border-border animate-fade-in">
-            <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold flex items-center gap-2 text-foreground">
-                    <Sparkles className="w-5 h-5 text-accent" />
-                    即时排盘
-                </h2>
-                <button
-                    type="button"
-                    onClick={onUseInstant}
-                    className="px-4 py-2 bg-accent text-on-accent rounded-md text-sm font-semibold
-                        hover:bg-accent/90 active:bg-accent-hover transition-all duration-150"
-                >
-                    使用此时间
-                </button>
-            </div>
+    const solarText = `${currentTime.getFullYear()}-${String(currentTime.getMonth() + 1).padStart(2, '0')}-${String(currentTime.getDate()).padStart(2, '0')} ${String(currentTime.getHours()).padStart(2, '0')}:${String(currentTime.getMinutes()).padStart(2, '0')}`;
+    const lunarText = `农历${LUNAR_MONTH_NAMES[lunarInfo.month] ?? ''}${LUNAR_DAY_NAMES[lunarInfo.day] ?? ''} ${lunarInfo.hourBranch}时`;
+    const pillars = [
+        { label: '年柱', pillar: instantBazi.year },
+        { label: '月柱', pillar: instantBazi.month },
+        { label: '日柱', pillar: instantBazi.day },
+        { label: '时柱', pillar: instantBazi.hour },
+    ];
 
-            {/* 四柱显示 */}
-            <div className="grid grid-cols-4 gap-3 mb-4">
-                {[
-                    { label: '年柱', pillar: instantBazi.year },
-                    { label: '月柱', pillar: instantBazi.month },
-                    { label: '日柱', pillar: instantBazi.day },
-                    { label: '时柱', pillar: instantBazi.hour },
-                ].map(({ label, pillar }) => (
-                    <div
-                        key={label}
-                        className="bg-background rounded-md p-3 text-center border border-border/60"
-                    >
-                        <div className="text-[11px] font-semibold text-foreground-secondary uppercase tracking-wider mb-1">{label}</div>
-                        <div className="text-2xl font-bold text-foreground">
-                            {pillar.stem}
-                        </div>
-                        <div className="text-2xl font-bold text-foreground">
-                            {pillar.branch}
-                        </div>
-                    </div>
+    return (
+        <section
+            aria-label="即时排盘"
+            className="flex flex-wrap items-center gap-x-6 gap-y-4 rounded-2xl border-[0.5px] border-border px-4 py-4 sm:px-6 sm:py-5 animate-fade-in"
+        >
+            <div className="flex min-w-[180px] flex-1 flex-col gap-1">
+                <h2 className="font-display text-lg font-medium text-foreground">此刻的八字</h2>
+                <p className="text-[13px] text-foreground-secondary">
+                    <span className="whitespace-nowrap">{solarText}</span>
+                    <span className="mx-1 text-foreground-tertiary">·</span>
+                    <span className="whitespace-nowrap">{lunarText}</span>
+                </p>
+            </div>
+            <div className="flex items-center gap-4 font-display text-[22px] leading-[1.15]">
+                {pillars.map(({ label, pillar }) => (
+                    <span key={label} className="flex flex-col items-center" aria-label={`${label}${pillar.stem}${pillar.branch}`}>
+                        <span className={ganZhiTextClass(pillar.stem)}>{pillar.stem}</span>
+                        <span className={ganZhiTextClass(pillar.branch)}>{pillar.branch}</span>
+                    </span>
                 ))}
             </div>
-
-            {/* 时间信息 */}
-            <div className="text-sm text-foreground-secondary space-y-1">
-                <div>
-                    农历：{lunarInfo.year}年
-                    {['正月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '冬月', '腊月'][lunarInfo.month - 1]}
-                    {['初一', '初二', '初三', '初四', '初五', '初六', '初七', '初八', '初九', '初十',
-                        '十一', '十二', '十三', '十四', '十五', '十六', '十七', '十八', '十九', '二十',
-                        '廿一', '廿二', '廿三', '廿四', '廿五', '廿六', '廿七', '廿八', '廿九', '三十'][lunarInfo.day - 1]}
-                    {' '}
-                    {lunarInfo.hourBranch}时
-                </div>
-                <div>
-                    公历：{currentTime.getFullYear()}年
-                    {String(currentTime.getMonth() + 1).padStart(2, '0')}月
-                    {String(currentTime.getDate()).padStart(2, '0')}日
-                    {' '}
-                    {String(currentTime.getHours()).padStart(2, '0')}:
-                    {String(currentTime.getMinutes()).padStart(2, '0')}:
-                    {String(currentTime.getSeconds()).padStart(2, '0')}
-                </div>
-            </div>
-        </div>
+            <button
+                type="button"
+                onClick={onUseInstant}
+                className="h-10 rounded-[10px] border-[0.5px] border-border-hover bg-surface px-4 text-sm text-foreground
+                    transition-colors duration-150 hover:bg-background-secondary active:bg-background-tertiary"
+            >
+                即时排盘
+            </button>
+        </section>
     );
 }

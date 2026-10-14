@@ -197,6 +197,56 @@ export function calculateResult(questions: MBTIQuestion[], answers: TestAnswer[]
     };
 }
 
+// ===== 答题分页 =====
+
+/** 每页题数：设计稿 MbtiTest 一屏三题 */
+export const MBTI_QUESTIONS_PER_PAGE = 3;
+
+export interface MBTIPageState {
+    /** 本页题目的全局下标区间 [start, end) */
+    start: number;
+    end: number;
+    totalPages: number;
+    isLastPage: boolean;
+    /** 本页第一道未答题的全局下标；本页已答完时为 null */
+    firstUnanswered: number | null;
+}
+
+/** 某页的题目区间与作答状态；页码越界时夹到有效范围，题库为空时视为只有一页空页。 */
+export function getMBTIPageState(
+    page: number,
+    totalQuestions: number,
+    answered: ReadonlySet<number>,
+    perPage: number = MBTI_QUESTIONS_PER_PAGE,
+): MBTIPageState {
+    const pageSize = Math.max(1, Math.floor(perPage) || 1);
+    const questionCount = Math.max(0, Math.floor(totalQuestions) || 0);
+    const totalPages = Math.max(1, Math.ceil(questionCount / pageSize));
+    const safePage = Math.min(Math.max(0, Math.floor(page) || 0), totalPages - 1);
+    const start = safePage * pageSize;
+    const end = Math.min(start + pageSize, questionCount);
+    let firstUnanswered: number | null = null;
+    for (let index = start; index < end; index += 1) {
+        if (!answered.has(index)) {
+            firstUnanswered = index;
+            break;
+        }
+    }
+    return { start, end, totalPages, isLastPage: safePage === totalPages - 1, firstUnanswered };
+}
+
+/** 记录一道题的作答；再次点选同一档位视为取消作答。返回新数组，不修改入参。 */
+export function toggleMBTIAnswer(answers: readonly TestAnswer[], questionIndex: number, likertValue: LikertValue): TestAnswer[] {
+    const existing = answers.find(answer => answer.questionIndex === questionIndex);
+    if (existing?.likertValue === likertValue) {
+        return answers.filter(answer => answer.questionIndex !== questionIndex);
+    }
+    const next: TestAnswer = { questionIndex, likertValue };
+    return existing
+        ? answers.map(answer => (answer.questionIndex === questionIndex ? next : answer))
+        : [...answers, next];
+}
+
 /**
  * 获取维度描述
  */

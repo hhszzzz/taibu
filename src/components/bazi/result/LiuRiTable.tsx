@@ -1,5 +1,5 @@
 import type { LiuRiInfo } from '@/lib/divination/bazi';
-import { getBranchElement, getElementColor, getStemElement } from '@/lib/divination/display-helpers';
+import { ganZhiTextClass } from '@/components/bazi/element-classes';
 
 export function LiuRiTable({
     liuRi,
@@ -11,43 +11,31 @@ export function LiuRiTable({
     onSelect: (date: string) => void;
 }) {
     return (
-        <div className="overflow-x-auto -mx-2 px-2 scrollbar-thin">
-            <div className="flex gap-2 min-w-max">
+        <div className="-mx-4 overflow-x-auto px-4 pb-1 scrollbar-hide sm:mx-0 sm:px-0">
+            <div className="flex gap-1.5">
                 {liuRi.map((ri) => {
                     const isSelected = ri.date === selectedDate;
-                    const ganElement = getStemElement(ri.gan);
-                    const zhiElement = getBranchElement(ri.zhi);
+                    const [, month, day] = ri.date.split('-');
 
                     return (
                         <button
                             key={ri.date}
                             type="button"
+                            aria-pressed={isSelected}
                             onClick={() => onSelect(ri.date)}
-                            className={`
-                                flex-shrink-0 w-12 text-center p-2 rounded-md border transition-colors
+                            className={`flex min-w-[52px] shrink-0 flex-col items-center gap-1 rounded-[10px] px-1 py-2 transition-colors duration-150
                                 ${isSelected
-                                    ? 'border-accent bg-blue-50/30'
-                                    : 'border-border bg-background hover:bg-background-secondary'
-                                }
-                            `}
+                                    ? 'bg-accent-light ring-[1.5px] ring-inset ring-accent'
+                                    : 'border-[0.5px] border-border bg-surface hover:bg-background-secondary'
+                                }`}
                         >
-                            <div className="text-[10px] font-mono text-foreground-secondary mb-1.5 leading-none">
-                                {ri.date.split('-')[1]}/{ri.date.split('-')[2]}
-                            </div>
-                            <div className="flex flex-col items-center gap-0.5">
-                                <span
-                                    className="text-xs font-bold"
-                                    style={{ color: ganElement ? getElementColor(ganElement) : undefined }}
-                                >
-                                    {ri.gan}
-                                </span>
-                                <span
-                                    className="text-xs font-bold"
-                                    style={{ color: zhiElement ? getElementColor(zhiElement) : undefined }}
-                                >
-                                    {ri.zhi}
-                                </span>
-                            </div>
+                            <span className={`text-[11px] leading-none tabular-nums ${isSelected ? 'text-accent-strong' : 'text-foreground-tertiary'}`}>
+                                {month}/{day}
+                            </span>
+                            <span className="font-display text-[15px] leading-[1.3]">
+                                <span className={ganZhiTextClass(ri.gan)}>{ri.gan}</span>
+                                <span className={ganZhiTextClass(ri.zhi)}>{ri.zhi}</span>
+                            </span>
                         </button>
                     );
                 })}

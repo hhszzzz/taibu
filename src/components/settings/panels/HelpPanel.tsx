@@ -1,3 +1,9 @@
+/**
+ * 帮助：常见问题与联系方式
+ *
+ * 'use client' 标记说明：
+ * - 需要 useState 记录当前展开的问题
+ */
 'use client';
 
 import { useState } from 'react';
@@ -16,7 +22,7 @@ const FAQ_LIST: FAQItem[] = [
   },
   {
     question: 'AI 对话次数有多少？',
-    answer: '每日 10 次对话次数，可在订阅中每天签到获取。后续会根据使用情况和反馈继续调整。',
+    answer: '每次 AI 对话或解读消耗 1 积分，请求失败会退回。积分上限随会员等级为 10 / 20 / 50，可在「订阅」里每日签到（免费用户随机 1–3 积分，Plus 翻倍，Pro 三倍）或用激活码补充。使用自定义模型（自己的 API Key）不消耗积分。',
   },
   {
     question: 'AI 分析结果为什么有时不够准确？',
@@ -24,7 +30,7 @@ const FAQ_LIST: FAQItem[] = [
   },
   {
     question: '为什么我的日运/月运功能缺少了？',
-    answer: '如果没有设置默认命盘，日运/月运将无法使用个性化命盘分析。请先在“我的命盘”中设置默认命盘。',
+    answer: '日运、月运和每日早报都依据默认八字命盘生成。没有设置默认命盘时无法给出个性化分析，请先在「设置 › 命盘」中把一张八字命盘设为默认。',
   },
   {
     question: '为什么真太阳时和出生时间不一致？',
@@ -36,31 +42,37 @@ const FAQ_LIST: FAQItem[] = [
   },
 ];
 
+const SUPPORT_EMAIL = 'support@mingai.fun';
+const PROJECT_REPO_URL = 'https://github.com/hhszzzz/taibu';
+const CONTACT_LINK = 'inline-flex h-10 min-w-0 items-center gap-2 rounded-[10px] border border-border-hover px-3.5 text-sm text-foreground transition-colors duration-150 hover:bg-background-secondary';
+const FOOTER_LINK = 'text-foreground-secondary underline decoration-border-hover underline-offset-4 transition-colors duration-150 hover:text-foreground';
+
 export default function HelpPanel() {
   const [expandedFAQ, setExpandedFAQ] = useState<number | null>(null);
-  const projectRepoUrl = 'https://github.com/hhszzzz/taibu';
 
   return (
-    <div className="space-y-8">
-      <section className="space-y-3">
-        <h2 className="px-1 text-xs font-semibold uppercase tracking-wider text-foreground-secondary">常见问题</h2>
-        <div className="overflow-hidden rounded-md border border-border bg-background divide-y divide-border/60">
+    <div className="flex flex-col gap-9">
+      <section aria-labelledby="help-faq-heading" className="flex flex-col gap-3">
+        <h3 id="help-faq-heading" className="text-[13px] font-medium text-foreground-tertiary">常见问题</h3>
+        <div className="overflow-hidden rounded-[14px] border border-border bg-surface">
           {FAQ_LIST.map((faq, index) => {
             const expanded = expandedFAQ === index;
+            const answerId = `help-faq-answer-${index}`;
             return (
-              <div key={faq.question}>
-                <button
-                  type="button"
-                  onClick={() => setExpandedFAQ(expanded ? null : index)}
-                  className="flex w-full items-center gap-3 px-4 py-4 text-left transition-colors duration-150 hover:bg-background-secondary dark:hover:bg-background-secondary"
-                >
-                  <ChevronDown className={`h-4 w-4 text-foreground-secondary transition-transform duration-150 ${expanded ? 'rotate-0' : '-rotate-90'}`} />
-                  <span className={`text-sm font-medium ${expanded ? 'text-accent' : 'text-foreground'}`}>
+              <div key={faq.question} className="[&+div]:border-t [&+div]:border-border">
+                <h4>
+                  <button
+                    type="button"
+                    aria-expanded={expanded}
+                    aria-controls={answerId}
+                    onClick={() => setExpandedFAQ(expanded ? null : index)}
+                    className={`flex min-h-14 w-full items-center justify-between gap-4 px-5 py-3 text-left text-[15px] text-foreground transition-colors duration-150 hover:bg-background-secondary/60 ${expanded ? 'font-medium' : ''}`}
+                  >
                     {faq.question}
-                  </span>
-                </button>
-
-                <div className={`${expanded ? 'block' : 'hidden'} px-11 pb-4 text-sm leading-relaxed text-foreground-secondary`}>
+                    <ChevronDown aria-hidden="true" className={`h-4 w-4 flex-shrink-0 text-foreground-tertiary transition-transform duration-150 ${expanded ? 'rotate-180' : ''}`} />
+                  </button>
+                </h4>
+                <div id={answerId} hidden={!expanded} className="px-5 pb-5 text-sm leading-[1.75] text-foreground-secondary">
                   {faq.answer}
                 </div>
               </div>
@@ -69,37 +81,26 @@ export default function HelpPanel() {
         </div>
       </section>
 
-      <section className="space-y-3">
-        <h2 className="px-1 text-xs font-semibold uppercase tracking-wider text-foreground-secondary">联系我们</h2>
-        <div className="flex flex-col items-start justify-between gap-4 rounded-md border border-border bg-background p-4">
-          <div className="space-y-1">
-            <h3 className="text-sm font-medium text-foreground">需要更多帮助？</h3>
-            <p className="text-sm text-foreground-secondary">如果你没有找到需要的答案，可以通过邮件或 GitHub 仓库联系我们。</p>
-          </div>
-          <div className="flex w-full flex-col gap-3 sm:flex-row">
-            <div className="inline-flex items-center gap-2 rounded-md border border-border bg-background-secondary px-3 py-2 text-sm text-foreground">
-              <Mail className="h-4 w-4 text-accent" />
-              <span>support@mingai.fun</span>
-            </div>
-            <a
-              href={projectRepoUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-2 rounded-md border border-border bg-background-secondary px-3 py-2 text-sm text-foreground transition-colors hover:bg-background-secondary/70"
-            >
-              <Github className="h-4 w-4 text-accent" />
-              <span>github.com/hhszzzz/taibu</span>
+      <section aria-labelledby="help-contact-heading" className="flex flex-col gap-3">
+        <h3 id="help-contact-heading" className="text-[13px] font-medium text-foreground-tertiary">联系我们</h3>
+        <div className="flex flex-col gap-4 rounded-[14px] border border-border bg-surface p-5">
+          <p className="text-pretty text-sm leading-relaxed text-foreground">没有找到答案？可以发邮件，或在 GitHub 仓库提 Issue。</p>
+          <div className="flex flex-wrap gap-2">
+            <a href={`mailto:${SUPPORT_EMAIL}`} className={CONTACT_LINK}>
+              <Mail aria-hidden="true" className="h-4 w-4 flex-shrink-0 text-foreground-secondary" />
+              <span className="truncate">{SUPPORT_EMAIL}</span>
+            </a>
+            <a href={PROJECT_REPO_URL} target="_blank" rel="noreferrer" className={CONTACT_LINK}>
+              <Github aria-hidden="true" className="h-4 w-4 flex-shrink-0 text-foreground-secondary" />
+              <span className="truncate">github.com/hhszzzz/taibu</span>
             </a>
           </div>
         </div>
       </section>
 
-      <footer className="border-t border-border/60 pt-4">
-        <div className="flex items-center justify-center gap-6 text-xs text-foreground-secondary">
-          <Link href="/privacy" className="hover:text-foreground hover:underline underline-offset-4">隐私政策</Link>
-          <span className="h-1 w-1 rounded-full bg-background-secondary" />
-          <Link href="/terms" className="hover:text-foreground hover:underline underline-offset-4">服务条款</Link>
-        </div>
+      <footer className="flex justify-center gap-6 border-t border-border pt-5 text-[13px]">
+        <Link href="/privacy" className={FOOTER_LINK}>隐私政策</Link>
+        <Link href="/terms" className={FOOTER_LINK}>服务条款</Link>
       </footer>
     </div>
   );

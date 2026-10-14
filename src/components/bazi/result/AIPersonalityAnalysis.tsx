@@ -29,9 +29,9 @@ export function AIPersonalityAnalysis(props: AIPersonalityAnalysisProps) {
             subtitle="MBTI风格深度人格解读"
             lockDescription="消耗1积分，获取基于您命盘的深度人格分析报告"
             loadingText="AI正在分析您的人格特征，请稍候..."
-            icon={<User className="w-5 h-5 text-purple-500" />}
-            iconContainerClass="bg-gradient-to-br from-purple-500/20 to-pink-500/20"
-            headerGradientClass="bg-gradient-to-r from-purple-500/5 to-pink-500/5"
+            icon={<User className="w-5 h-5 text-accent-strong" />}
+            iconContainerClass="bg-accent-soft"
+            headerGradientClass="bg-panel"
         />
     );
 }

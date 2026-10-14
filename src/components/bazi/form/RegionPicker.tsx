@@ -105,14 +105,12 @@ export function RegionPicker({ value, onChange }: RegionPickerProps) {
         <div className="grid grid-cols-3 gap-2">
             {/* 省份选择 */}
             <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-foreground-secondary mb-1">省/直辖市</label>
+                <label className="mb-1.5 block text-[13px] text-foreground-secondary">省/直辖市</label>
                 <div className="relative">
                     <select
                         value={selectedProvince}
                         onChange={(e) => handleProvinceChange(e.target.value)}
-                        className="w-full px-2 py-2 pr-6 border border-border rounded-md bg-background text-sm text-foreground
-                            focus:outline-none focus:ring-2 focus:ring-accent/10 focus:border-accent
-                            appearance-none cursor-pointer"
+                        className="h-11 w-full cursor-pointer appearance-none rounded-[10px] border-[0.5px] border-border-hover bg-surface pl-2.5 pr-7 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15"
                     >
                         <option value="">省份</option>
                         {!loading && regions.map((region) => (
@@ -121,21 +119,19 @@ export function RegionPicker({ value, onChange }: RegionPickerProps) {
                             </option>
                         ))}
                     </select>
-                    <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-secondary pointer-events-none" />
+                    <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground-tertiary" />
                 </div>
             </div>
 
             {/* 城市选择 */}
             <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-foreground-secondary mb-1">市/区</label>
+                <label className="mb-1.5 block text-[13px] text-foreground-secondary">市/区</label>
                 <div className="relative">
                     <select
                         value={selectedCity}
                         onChange={(e) => handleCityChange(e.target.value)}
                         disabled={cities.length === 0}
-                        className="w-full px-2 py-2 pr-6 border border-border rounded-md bg-background text-sm text-foreground
-                            focus:outline-none focus:ring-2 focus:ring-accent/10 focus:border-accent
-                            appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="h-11 w-full cursor-pointer appearance-none rounded-[10px] border-[0.5px] border-border-hover bg-surface pl-2.5 pr-7 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         <option value="">城市</option>
                         {cities.map((city) => (
@@ -144,21 +140,19 @@ export function RegionPicker({ value, onChange }: RegionPickerProps) {
                             </option>
                         ))}
                     </select>
-                    <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-secondary pointer-events-none" />
+                    <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground-tertiary" />
                 </div>
             </div>
 
             {/* 区县选择 */}
             <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-foreground-secondary mb-1">区/县</label>
+                <label className="mb-1.5 block text-[13px] text-foreground-secondary">区/县</label>
                 <div className="relative">
                     <select
                         value={selectedDistrict}
                         onChange={(e) => handleDistrictChange(e.target.value)}
                         disabled={districts.length === 0}
-                        className="w-full px-2 py-2 pr-6 border border-border rounded-md bg-background text-sm text-foreground
-                            focus:outline-none focus:ring-2 focus:ring-accent/10 focus:border-accent
-                            appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="h-11 w-full cursor-pointer appearance-none rounded-[10px] border-[0.5px] border-border-hover bg-surface pl-2.5 pr-7 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         <option value="">区县</option>
                         {districts.map((dist) => (
@@ -167,7 +161,7 @@ export function RegionPicker({ value, onChange }: RegionPickerProps) {
                             </option>
                         ))}
                     </select>
-                    <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-secondary pointer-events-none" />
+                    <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground-tertiary" />
                 </div>
             </div>
         </div>

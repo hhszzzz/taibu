@@ -17,7 +17,7 @@ export const mutationEffects = {
     cancelPending: true,
   }),
   userSettings: (userId: string): MutationEffects => ({
-    queryKeys: [queryKeys.chatBootstrap(userId)],
+    queryKeys: [queryKeys.chatBootstrap(userId), queryKeys.userSettings(userId)],
     storageScopes: ['default_bazi_chart'],
   }),
 };
@@ -52,7 +52,7 @@ function resolveInvalidationKeys(pathname: string): ReadonlyArray<readonly unkno
   }
 
   if (pathname.startsWith('/api/user/settings')) {
-    return [queryKeys.chatBootstrapPrefix()];
+    return [queryKeys.chatBootstrapPrefix(), queryKeys.userSettingsPrefix()];
   }
 
   if (

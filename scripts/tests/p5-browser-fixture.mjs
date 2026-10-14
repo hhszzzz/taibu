@@ -10,8 +10,8 @@
  *   return run(page, '/tmp/taibu-p5-browser/fixture.js');
  *
  * Actual components: SettingsCenterPage/SettingsCenterHost/GeneralSettingsPanel/ChartsPanel, AIModelPanel,
- * AnnouncementManagementPanel, ConversationListProvider, ChartPickerModal,
- * useSelectedBaziChart, useComposerState, HistoryDrawer/HistoryPageTemplate and RecordsPage.
+ * AnnouncementManagementPanel, KeyManagementPanel, ConversationListProvider, ChartPickerModal,
+ * useSelectedBaziChart, useComposerState, HistoryDrawer/HistoryPageTemplate, RecordsPage and useAnalysisSnapshot.
  * Actual root ClientProviders owns the shared Query client and handles synthetic auth I/O.
  * Fixture-only boundaries: auth I/O/profile/feature flags, unrelated lazy panels,
  * framework navigation, viewport notifications, held fetch/JSON completion and HTTP responses.
@@ -40,6 +40,7 @@ import { usePathname } from 'next/navigation';
 import { openSettingsCenter } from '@/lib/settings-center';
 import { AIModelPanel } from '@/components/admin/AIModelPanel';
 import { AnnouncementManagementPanel } from '@/components/admin/AnnouncementManagementPanel';
+import { KeyManagementPanel } from '@/components/admin/KeyManagementPanel';
 import { ConversationListProvider, useConversationList } from '@/lib/chat/ConversationListContext';
 import { useChatState } from '@/lib/chat/use-chat-state';
 import { useChatMessaging } from '@/lib/chat/use-chat-messaging';
@@ -60,7 +61,22 @@ import { ModelSelector } from '@/components/ui/ModelSelector';
 import { AgentContextDetails } from '@/components/chat/agent/AgentContextUsage';
 import { getAgentChart } from '@/lib/agent/tool-presentation';
 import { getChartTargets } from '@/lib/agent/chart-interaction';
+import { useAnalysisSnapshot } from '@/lib/hooks/useAnalysisSnapshot';
 const initialToolParts = AGENT_TOOL_FIXTURE_PARTS;
+function AnalysisSnapshotProbe() {
+  // Result pages pass a fresh callbacks object on every render; a settled lookup must not start another one.
+  const [analysis, setAnalysis] = useState('');
+  const [settled, setSettled] = useState(0);
+  const loading = useAnalysisSnapshot({
+    conversationId: null,
+    recordId: 'fixture-snapshot-reading',
+    divinationType: 'tarot',
+    sessionKey: 'fixture_snapshot_result',
+    hasExistingAnalysis: Boolean(analysis),
+    callbacks: { onAnalysis: setAnalysis, onComplete: () => setSettled(count => count + 1) },
+  });
+  return <output data-testid="analysis-snapshot">{(loading ? 'loading' : 'idle') + ':' + settled}</output>;
+}
 function AgentResultsProbe() {
   const [open, setOpen] = useState(false);
   const [request, setRequest] = useState(undefined);
@@ -202,10 +218,12 @@ function Shell() {
   const [agentMounted, setAgentMounted] = useState(false);
   const [questionMounted, setQuestionMounted] = useState(false);
   const [resultsMounted, setResultsMounted] = useState(false);
+  const [snapshotMounted, setSnapshotMounted] = useState(false);
   const [modelMountKey, setModelMountKey] = useState(0);
   window.fixture.remountModels = () => setModelMountKey(current => current + 1);
   window.fixture.mount = { composer: setComposerMounted, history: setHistoryMounted, drawer: setDrawerMounted,
-    records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted, agent: setAgentMounted, question: setQuestionMounted, results: setResultsMounted };
+    records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted, agent: setAgentMounted, question: setQuestionMounted, results: setResultsMounted,
+    snapshot: setSnapshotMounted };
   window.fixture.chartKey = queryKeys.userCharts;
   window.fixture.chartClient = chartClient;
   window.fixture.deleteHistory = deleteHistorySummary;
@@ -238,6 +256,7 @@ function Shell() {
       <button onClick={() => navigate('/other')}>Fixture Other route</button>
       <button onClick={() => navigate('/models')}>Fixture Models route</button>
       <button onClick={() => navigate('/announcements')}>Fixture Announcements route</button>
+      <button onClick={() => navigate('/keys')}>Fixture Keys route</button>
       <button onClick={() => openSettingsCenter('general')}>Open actual settings</button>
       <button onClick={() => setUser('alice')}>Fixture Alice</button>
       <button onClick={() => setUser('bob')}>Fixture Bob</button>
@@ -261,6 +280,7 @@ function Shell() {
     <output data-testid="stream">{stream ? stream.status + ':' + stream.content : 'idle'}</output>
     {route === '/models' && <section data-testid="models"><AIModelPanel key={modelMountKey} /></section>}
     {route === '/announcements' && <section data-testid="announcements"><AnnouncementManagementPanel /></section>}
+    {route === '/keys' && <section data-testid="activation-keys"><KeyManagementPanel /></section>}
     {composerMounted && <ComposerProbe />}
     {selectedMounted && <SelectedChartProbe />}
     {agentMounted && <AgentChatProbe />}
@@ -269,6 +289,7 @@ function Shell() {
     {historyMounted && <section data-testid="history-page"><HistoryPageTemplate {...historyConfig} /></section>}
     {drawerMounted && <section data-testid="history-drawer"><HistoryDrawer type="tarot" /></section>}
     {recordsMounted && <section data-testid="records"><RecordsPage /></section>}
+    {snapshotMounted && <AnalysisSnapshotProbe />}
     <section data-testid="chart-picker"><ChartPickerModal isOpen={pickerOpen} userId={user?.id ?? ''}
       onClose={() => setPickerOpen(false)} onSelect={chart => { window.fixture.pickedChart = chart; }} /></section>
     <BirthRulesProbe />
@@ -316,6 +337,8 @@ export async function build(outputDirectory) {
       plugin.onResolve({ filter: /^(?:node:)?crypto$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^next\/(navigation|link)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^@\/components\/settings\/AccountAdminPanels$/ }, args => ({ path: args.path, namespace: 'fixture' }));
+      // Signed-out states only need to render their login button; the auth flow itself is outside fixture scope.
+      plugin.onResolve({ filter: /^@\/components\/auth\/AuthModal$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onLoad({ filter: /.*/, namespace: 'fixture' }, args => {
         let contents = 'export default function UnexercisedPanel() { return null; }';
         // Core's unrelated tarot/liuyao random calculators import Node crypto via barrels.
@@ -355,6 +378,7 @@ export async function build(outputDirectory) {
         if (args.path.endsWith('/AnnouncementPopupHost')) contents = 'export function AnnouncementPopupHost({ children }) { return children; }';
         if (args.path.endsWith('/useFeatureToggles')) contents = 'const enabled = () => true; export function useFeatureToggles() { return { loaded: true, isLoading: false, isFeatureEnabled: enabled }; }';
         if (args.path.endsWith('/useCurrentUserProfile')) contents = "import { useSessionSafe } from '@/lib/hooks/session-context'; export function useCurrentUserProfile() { const {user} = useSessionSafe(); return { profile: user ? { is_admin: user.id === 'alice' } : null, loading: false, error: null }; }";
+        if (args.path.endsWith('/AuthModal')) contents = 'export function AuthModal() { return null; }';
         if (args.path.endsWith('/AccountAdminPanels')) contents = "export { AIModelPanel as AdminAIServicesContent } from '@/components/admin/AIModelPanel'; export const AdminAnnouncementsContent = () => null; export const AdminFeaturesContent = () => null;";
         return { contents, loader: 'jsx', resolveDir: root };
       });
@@ -510,6 +534,13 @@ export async function run(existingPage, bundlePath) {
   let models = [initialModel()];
   let announcements = [];
   let failAnnouncementWrite = false;
+  const activationKey = (id, code, extra) => ({ id, key_code: code, key_type: 'membership', membership_type: 'plus', credits_amount: null,
+    is_used: false, used_by: null, used_at: null, created_at: '2026-01-02T00:00:00Z', ...extra });
+  let activationKeys = [
+    activationKey('key-unused', 'sk-fixtureunused001'),
+    activationKey('key-used', 'sk-fixtureused00002', { key_type: 'credits', membership_type: null, credits_amount: 50, is_used: true, used_by: 'alice', used_at: '2026-01-05T00:00:00Z' }),
+  ];
+  let failKeyCreate = false;
   let settingsReads = 0;
   let holdList = false;
   let releaseList;
@@ -642,6 +673,11 @@ export async function run(existingPage, bundlePath) {
       const all = histories[user] ?? [];
       return ok({ items: all.slice(offset, offset + limit), pagination: { hasMore: offset + limit < all.length, nextOffset: offset + limit < all.length ? offset + limit : null } }, true);
     }
+    if (url.pathname === '/api/notes' && method === 'POST') {
+      const body = request.postDataJSON();
+      return ok({ id: 'fixture-note', user_id: 'alice', note_date: body.note_date, content: body.content, mood: body.mood,
+        created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' }, true);
+    }
     if (url.pathname === '/api/notes') return ok({ notes: [] }, true);
     if (url.pathname === '/api/records') {
       const category = url.searchParams.get('category');
@@ -687,6 +723,20 @@ export async function run(existingPage, bundlePath) {
       const announcement = { id: 'announcement-fixture', content: body.content, publishedAt: '2026-01-01T00:00:00Z' };
       announcements = [announcement];
       return ok({ announcement });
+    }
+    // The real route answers with raw payloads: GET { success, data }, POST/DELETE { success, ... }.
+    if (url.pathname === '/api/activation-keys') {
+      if (method === 'GET') return ok({ success: true, data: activationKeys }, true);
+      if (method === 'DELETE') {
+        activationKeys = activationKeys.filter(key => key.id !== url.searchParams.get('id'));
+        return ok({ success: true }, true);
+      }
+      if (failKeyCreate) { failKeyCreate = false; return ok({ success: false, error: 'Fixture key limit' }, true); }
+      const created = Array.from({ length: body.count }, (_, index) => activationKey('key-new-' + index, 'sk-fixturecreated0' + index, {
+        key_type: body.keyType, membership_type: body.membershipType ?? null, credits_amount: body.creditsAmount ?? null, created_at: '2026-01-06T00:00:00Z',
+      }));
+      activationKeys = [...created, ...activationKeys];
+      return ok({ success: true, keys: created.map(key => key.key_code) }, true);
     }
     if (url.pathname === '/api/admin/ai-models/cache') return ok({ cleared: true });
     if (url.pathname === '/api/admin/ai-models') {
@@ -758,8 +808,10 @@ export async function run(existingPage, bundlePath) {
     check('Actual settings navigation enters an independent page address', new URL(page.url()).pathname === '/settings/general' && new URL(page.url()).hash === '');
     await page.evaluate(() => { document.querySelector('[role="switch"]').dataset.fixtureIdentity = 'original-node'; window.fixture.invalidations.length = 0; });
     await page.getByRole('switch').first().click();
-    await until(() => window.fixture.invalidations.length === 1);
-    check('GeneralSettings mutation invalidates its scoped query exactly once', JSON.stringify(await page.evaluate(() => window.fixture.invalidations)) === JSON.stringify([{ queryKey: ['chat', 'bootstrap', 'alice'] }]));
+    // 设置写入同时失效聊天引导与任务通知读取的设置缓存，各一次且只限当前账号
+    await until(() => window.fixture.invalidations.length === 2);
+    await renderBarrier();
+    check('GeneralSettings mutation invalidates each scoped settings query exactly once', JSON.stringify(await page.evaluate(() => window.fixture.invalidations)) === JSON.stringify([{ queryKey: ['chat', 'bootstrap', 'alice'] }, { queryKey: ['user', 'settings', 'alice'] }]));
     let readsBeforeClose = settingsReads;
     await page.getByRole('link', { name: '账户', exact: true }).click();
     await until(() => location.pathname === '/settings/profile');
@@ -925,20 +977,55 @@ export async function run(existingPage, bundlePath) {
       check(`Announcement ${button} invalidates once (observed ${effects.length})`, JSON.stringify(effects) === JSON.stringify([{ queryKey: ['announcements'] }]));
     }
     await announcementPanel.getByRole('button', { name: '返回历史', exact: true }).click();
+    const deleteDialog = page.getByRole('dialog');
+    await announcementPanel.getByTitle('删除', { exact: true }).click();
+    await deleteDialog.getByRole('button', { name: '取消', exact: true }).click();
+    check('Announcement deletion waits for confirmation', !requests.some(item => item.pathname === '/api/admin/announcements/announcement-fixture' && item.method === 'DELETE'));
+    await announcementPanel.getByTitle('删除', { exact: true }).click();
     for (const rejected of [true, false]) {
       failAnnouncementWrite = rejected;
       await page.evaluate(() => { window.fixture.invalidations.length = 0; });
       const deleted = page.waitForResponse(response => response.url().endsWith('/api/admin/announcements/announcement-fixture') && response.request().method() === 'DELETE');
-      await announcementPanel.getByTitle('删除', { exact: true }).click();
+      // A failed deletion keeps the dialog open, so the second pass confirms again.
+      await deleteDialog.getByRole('button', { name: '确认删除', exact: true }).click();
       await (await deleted).finished();
       if (rejected) {
         await until(() => document.querySelector('[data-testid="announcements"] button[title="删除"]')?.disabled === false);
-        check('Failed announcement deletion preserves the row without invalidation', (await page.evaluate(() => window.fixture.invalidations)).length === 0 && await announcementPanel.getByText('Updated fixture announcement', { exact: true }).isVisible());
+        check('Failed announcement deletion preserves the row without invalidation', (await page.evaluate(() => window.fixture.invalidations)).length === 0 && await announcementPanel.getByText('Updated fixture announcement', { exact: true }).isVisible() && await deleteDialog.isVisible());
       } else {
         await announcementPanel.getByText('还没有任何公告', { exact: true }).waitFor();
         check('Announcement DELETE invalidates once', JSON.stringify(await page.evaluate(() => window.fixture.invalidations)) === JSON.stringify([{ queryKey: ['announcements'] }]));
       }
     }
+    await page.getByRole('button', { name: 'Fixture Keys route', exact: true }).click();
+    const keyPanel = page.getByTestId('activation-keys');
+    const keyReads = () => requests.filter(item => item.pathname === '/api/activation-keys' && item.method === 'GET').length;
+    await keyPanel.getByText('sk-fixtureunused001', { exact: true }).waitFor();
+    check('Activation key list renders keys from the { success, data } payload', await keyPanel.getByText('sk-fixtureused00002', { exact: true }).isVisible());
+    const readsBeforeFilter = keyReads();
+    await keyPanel.getByRole('button', { name: '已使用 1', exact: true }).click();
+    check('Activation key filters narrow the loaded list without refetching', await keyPanel.getByText('sk-fixtureunused001', { exact: true }).count() === 0
+      && await keyPanel.getByRole('button', { name: '已使用 1', exact: true }).getAttribute('aria-pressed') === 'true' && keyReads() === readsBeforeFilter);
+    await keyPanel.getByRole('button', { name: '批量创建', exact: true }).click();
+    await keyPanel.getByLabel('类型').selectOption('credits');
+    await keyPanel.getByLabel('每个积分数量').fill('30');
+    await keyPanel.getByLabel('生成数量').fill('1.5');
+    check('Activation key form blocks fractional counts', await keyPanel.getByRole('button', { name: '生成', exact: true }).isDisabled());
+    await keyPanel.getByLabel('生成数量').fill('2');
+    failKeyCreate = true;
+    await keyPanel.getByRole('button', { name: '生成', exact: true }).click();
+    await page.getByText('Fixture key limit', { exact: true }).last().waitFor();
+    check('Activation key creation surfaces the server reason and keeps the form', await keyPanel.getByLabel('生成数量').inputValue() === '2');
+    await keyPanel.getByRole('button', { name: '生成', exact: true }).click();
+    await keyPanel.getByText('sk-fixturecreated01', { exact: true }).waitFor();
+    check('Activation key creation posts the batch, shows all keys and reloads', requests.some(item => item.pathname === '/api/activation-keys' && item.method === 'POST'
+      && item.body.count === 2 && item.body.keyType === 'credits' && item.body.creditsAmount === 30) && await keyPanel.getByText('已生成 2 个激活码', { exact: true }).isVisible()
+      && await keyPanel.getByRole('button', { name: '全部 4', exact: true }).getAttribute('aria-pressed') === 'true');
+    await keyPanel.getByRole('button', { name: '删除激活码 sk-fixtureused00002', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: '确认删除', exact: true }).click();
+    await until(() => !document.querySelector('[data-testid="activation-keys"] table')?.textContent.includes('sk-fixtureused00002'));
+    check('Activation key deletion confirms first and removes only that key', requests.some(item => item.pathname === '/api/activation-keys' && item.method === 'DELETE' && item.search === '?id=key-used')
+      && await keyPanel.getByText('sk-fixtureunused001', { exact: true }).isVisible());
     // Explicitly remount while a real loadModels receipt is held. React's
     // development effect replay count varies for later conditional mounts.
     const oldModelLoad = holdNext('/api/admin/ai-models', 'GET');
@@ -992,7 +1079,7 @@ export async function run(existingPage, bundlePath) {
     await page.waitForTimeout(30);
     check('Late old-account settings GET cannot overwrite current draft', await aiDraft.inputValue() === 'Fresh Alice draft');
     const staleSave = holdNext('/api/user/settings', 'PATCH');
-    await page.locator('select').filter({ visible: true }).last().selectOption('dark');
+    await page.getByRole('radio', { name: '暗色高对比', exact: true }).click();
     await page.getByRole('button', { name: '保存', exact: true }).click();
     await intercepted(staleSave);
     await page.evaluate(() => window.fixtureAuth.change(null));
@@ -1016,19 +1103,20 @@ export async function run(existingPage, bundlePath) {
     await notificationSwitch.click();
     await intercepted(generalFail);
     check('General setting serializes same-field operations while saving', await notificationSwitch.isDisabled());
-    const reminderSwitch = page.getByRole('switch').nth(1);
+    const reminderSwitch = page.getByRole('switch', { name: '节气提醒', exact: true });
     await reminderSwitch.click();
-    await until(() => document.querySelectorAll('[role="switch"]')[1]?.getAttribute('aria-checked') === 'true');
+    await until(() => document.querySelector('[role="switch"][aria-label="节气提醒"]')?.getAttribute('aria-checked') === 'true');
     generalFail.release();
     await until(() => !document.querySelector('[role="switch"]').disabled);
     check('Failed preference rolls back only its field and preserves successful reminder', await notificationSwitch.getAttribute('aria-checked') === beforeNotification && await reminderSwitch.getAttribute('aria-checked') === 'true');
     const reminderFail = holdNext('/api/reminders', 'POST', true);
     await reminderSwitch.click();
     await intercepted(reminderFail);
-    await page.getByRole('switch').nth(2).click();
+    const fortuneSwitch = page.getByRole('switch', { name: '运势提醒', exact: true });
+    await fortuneSwitch.click();
     reminderFail.release();
-    await until(() => !document.querySelectorAll('[role="switch"]')[1].disabled);
-    check('Failed reminder rolls back only its item', await reminderSwitch.getAttribute('aria-checked') === 'true' && await page.getByRole('switch').nth(2).getAttribute('aria-checked') === 'true');
+    await until(() => !document.querySelector('[role="switch"][aria-label="节气提醒"]').disabled);
+    check('Failed reminder rolls back only its item', await reminderSwitch.getAttribute('aria-checked') === 'true' && await fortuneSwitch.getAttribute('aria-checked') === 'true');
     await page.getByRole('link', { name: '返回太卜', exact: true }).click();
 
     // Controlled interleavings invoke real ConversationListProvider actions.
@@ -1146,7 +1234,8 @@ export async function run(existingPage, bundlePath) {
     const openCharts = async () => {
       await page.evaluate(() => { history.replaceState(null, '', '#settings/charts'); window.dispatchEvent(new HashChangeEvent('hashchange')); });
     };
-    const chartRow = id => page.locator('a[href="/bazi/result?chart=' + id + '"]');
+    // 行内操作按钮与跳转链接是同级元素，按包含该链接的列表项定位整行。
+    const chartRow = id => page.locator('li').filter({ has: page.locator('a[href="/bazi/result?chart=' + id + '"]') });
     const createChart = (id, name) => page.evaluate(({ id, name }) =>
       window.fixture.chartClient.createSavedChart('bazi', { id, name, gender: 'male', birth_date: '1990-01-01', birth_time: '12:00',
         fixtureRaw: 'retained raw field' }, { expectedUserId: window.fixture.user }), { id, name });
@@ -1298,7 +1387,7 @@ export async function run(existingPage, bundlePath) {
     check('History deletion event fences an already captured initial refresh snapshot',
       await historyPage.locator('[data-history-id="alice-history-3"]').count() === 0);
     await historyPage.getByRole('button', { name: 'Delete history alice-history-2', exact: true }).click();
-    await page.getByRole('button', { name: '确认删除', exact: true }).click();
+    await page.getByRole('dialog', { name: '删除这条记录？', exact: true }).getByRole('button', { name: '删除', exact: true }).click();
     await historyPage.locator('[data-history-id="alice-history-2"]').waitFor({ state: 'detached' });
     check('Real history card action and confirmation still delete through the production facade',
       requests.some(item => item.pathname === '/api/history-summaries' && item.method === 'DELETE' && new URLSearchParams(item.search).get('id') === 'alice-history-2'));
@@ -1328,17 +1417,33 @@ export async function run(existingPage, bundlePath) {
     await page.getByRole('button', { name: 'Fixture Alice', exact: true }).evaluate(button => button.click());
     await until(() => window.fixture.user === 'alice');
 
+    const snapshotRequestsStart = requests.length;
+    const snapshotLookups = () => requests.slice(snapshotRequestsStart).filter(item =>
+      item.pathname === '/api/history-summaries' && new URLSearchParams(item.search).get('id') === 'fixture-snapshot-reading').length;
+    await page.evaluate(() => window.fixture.mount.snapshot(true));
+    await page.getByTestId('analysis-snapshot').filter({ hasText: /^idle:[1-9]/ }).waitFor();
+    await renderBarrier();
+    const settledSnapshotLookups = snapshotLookups();
+    await page.waitForTimeout(500);
+    // StrictMode replays the mount effect once, so a single mount may look the record up at most twice.
+    check('Analysis snapshot with inline callbacks looks up a record once per mount instead of looping',
+      settledSnapshotLookups >= 1 && settledSnapshotLookups <= 2 && snapshotLookups() === settledSnapshotLookups &&
+      await page.getByTestId('analysis-snapshot').innerText() === 'idle:1');
+    await page.evaluate(() => window.fixture.mount.snapshot(false));
+
     const recordPanel = page.getByTestId('records');
     await page.evaluate(() => window.fixture.mount.records(true));
     await recordPanel.getByRole('heading', { name: 'General saved record', exact: true }).waitFor();
+    const recordCategories = recordPanel.getByRole('group', { name: '分类', exact: true });
     const oldRecordFilter = holdNext('/api/records', 'GET');
-    await recordPanel.locator('select').selectOption('general');
+    await recordCategories.getByRole('button', { name: '通用', exact: true }).click();
     await intercepted(oldRecordFilter);
-    await recordPanel.locator('select').selectOption('event');
+    await recordCategories.getByRole('button', { name: '人生事件', exact: true }).click();
     await recordPanel.getByRole('heading', { name: 'Event saved record', exact: true }).waitFor();
     await release(oldRecordFilter);
     check('Rapid actual record filters cannot render older response under the new filter',
-      await recordPanel.locator('select').inputValue() === 'event' &&
+      await recordCategories.getByRole('button', { name: '人生事件', exact: true }).getAttribute('aria-pressed') === 'true' &&
+      await recordCategories.getByRole('button', { name: '通用', exact: true }).getAttribute('aria-pressed') === 'false' &&
       await recordPanel.getByRole('heading', { name: 'Event saved record', exact: true }).isVisible() &&
       await recordPanel.getByRole('heading', { name: 'General saved record', exact: true }).count() === 0);
     const oldRecordRefresh = holdNext('/api/records', 'GET');
@@ -1351,6 +1456,26 @@ export async function run(existingPage, bundlePath) {
     check('Records archive refresh B survives older refresh A without reloading the page',
       await recordPanel.getByRole('heading', { name: 'Event refreshed record', exact: true }).isVisible() &&
       await recordPanel.getByRole('heading', { name: 'Event saved record', exact: true }).count() === 0);
+    const eventCard = recordPanel.getByRole('listitem').filter({ has: page.getByRole('heading', { name: 'Event refreshed record', exact: true }) });
+    check('Record actions are visible, labelled buttons rather than hover-only icons',
+      await eventCard.getByRole('button', { name: '置顶', exact: true }).getAttribute('aria-pressed') === 'false' &&
+      await eventCard.getByRole('button', { name: '编辑记录', exact: true }).isVisible() &&
+      await eventCard.getByRole('button', { name: '删除记录', exact: true }).isVisible());
+    const noteInput = recordPanel.getByLabel('今日小记内容', { exact: true });
+    const notePosts = () => requests.filter(item => item.pathname === '/api/notes' && item.method === 'POST');
+    await noteInput.fill('拼音');
+    await noteInput.dispatchEvent('keydown', { key: 'Enter', code: 'Enter', isComposing: true, bubbles: true, cancelable: true });
+    await recordPanel.getByRole('button', { name: '焦虑', exact: true }).click();
+    check('Enter that confirms an IME candidate does not send the daily note',
+      notePosts().length === 0 && await noteInput.inputValue() === '拼音' &&
+      await recordPanel.getByRole('button', { name: '焦虑', exact: true }).getAttribute('aria-pressed') === 'true');
+    const noteSaved = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/notes');
+    await noteInput.press('Enter');
+    await noteSaved;
+    const notesDate = new URLSearchParams(requests.filter(item => item.pathname === '/api/notes' && item.method === 'GET').at(-1)?.search).get('date');
+    check('A plain Enter sends the note with the same local date the list reads',
+      notePosts().length === 1 && notePosts()[0].body?.content === '拼音' && notePosts()[0].body?.mood === 'anxious' &&
+      !!notesDate && notePosts()[0].body?.note_date === notesDate);
     await page.evaluate(() => window.fixture.mount.records(false));
 
     await page.evaluate(() => window.fixture.mount.question(true));

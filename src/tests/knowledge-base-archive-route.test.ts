@@ -9,6 +9,7 @@ test('knowledge-base archive route should page merged archive rows and virtual c
   const apiUtilsModule = require('../lib/api-utils') as any;
   const featureUtilsModule = require('../lib/feature-gate-utils') as any;
   const routePath = require.resolve('../app/api/knowledge-base/archive/route');
+  const virtualFilters: Array<[string, string, unknown]> = [];
 
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
   const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
@@ -89,35 +90,35 @@ test('knowledge-base archive route should page merged archive rows and virtual c
         return {
           select(columns: string) {
             if (columns === 'source_type, source_id, created_at') {
-              return {
-                eq() {
-                  return {
-                    eq() {
-                      return {
-                        order() {
-                          return {
-                            range: async () => ({
-                              data: [
-                                {
-                                  source_type: 'chat_message',
-                                  source_id: 'm-1',
-                                  created_at: '2026-03-27T03:00:00.000Z',
-                                },
-                                {
-                                  source_type: 'chat_message',
-                                  source_id: 'm-2',
-                                  created_at: '2026-03-27T02:00:00.000Z',
-                                },
-                              ],
-                              error: null,
-                            }),
-                          };
-                        },
-                      };
-                    },
-                  };
+              const query = {
+                eq(column: string, value: unknown) {
+                  virtualFilters.push(['eq', column, value]);
+                  return query;
                 },
+                in(column: string, values: unknown) {
+                  virtualFilters.push(['in', column, values]);
+                  return query;
+                },
+                order() {
+                  return query;
+                },
+                range: async () => ({
+                  data: [
+                    {
+                      source_type: 'chat_message',
+                      source_id: 'm-1',
+                      created_at: '2026-03-27T03:00:00.000Z',
+                    },
+                    {
+                      source_type: 'chat_message',
+                      source_id: 'm-2',
+                      created_at: '2026-03-27T02:00:00.000Z',
+                    },
+                  ],
+                  error: null,
+                }),
               };
+              return query;
             }
 
             return {
@@ -186,6 +187,12 @@ test('knowledge-base archive route should page merged archive rows and virtual c
   assert.equal(payload.archivedSources[1]?.preview, '虚拟聊天内容');
   assert.equal(payload.pagination.hasMore, true);
   assert.equal(payload.pagination.nextOffset, 2);
+  // 虚拟归档只取每个来源的首块，分页偏移按来源而不是按分块计数。
+  assert.deepEqual(virtualFilters, [
+    ['eq', 'kb_id', 'kb-1'],
+    ['in', 'source_type', ['chat_message', 'file']],
+    ['eq', 'chunk_index', 0],
+  ]);
 });
 
 test('knowledge-base archive route should continue fetching batches for deep offsets', async (t) => {
@@ -285,39 +292,37 @@ test('knowledge-base archive route should continue fetching batches for deep off
         return {
           select(columns: string) {
             if (columns === 'source_type, source_id, created_at') {
-              return {
+              const query = {
                 eq() {
-                  return {
-                    eq() {
-                      return {
-                        order() {
-                          return {
-                            range: async (start: number, end: number) => {
-                              virtualCalls.push([start, end]);
-                              const size = end - start + 1;
-                              if (start === 0) {
-                                return {
-                                  data: Array.from({ length: size }, (_, index) => ({
-                                    source_type: 'chat_message',
-                                    source_id: `m-${index + 1}`,
-                                    created_at: new Date(2026, 2, 27, 10, 0, 0 - (index + 1)).toISOString(),
-                                  })),
-                                  error: null,
-                                };
-                              }
+                  return query;
+                },
+                in() {
+                  return query;
+                },
+                order() {
+                  return query;
+                },
+                range: async (start: number, end: number) => {
+                  virtualCalls.push([start, end]);
+                  const size = end - start + 1;
+                  if (start === 0) {
+                    return {
+                      data: Array.from({ length: size }, (_, index) => ({
+                        source_type: 'chat_message',
+                        source_id: `m-${index + 1}`,
+                        created_at: new Date(2026, 2, 27, 10, 0, 0 - (index + 1)).toISOString(),
+                      })),
+                      error: null,
+                    };
+                  }
 
-                              return {
-                                data: [],
-                                error: null,
-                              };
-                            },
-                          };
-                        },
-                      };
-                    },
+                  return {
+                    data: [],
+                    error: null,
                   };
                 },
               };
+              return query;
             }
 
             return {
@@ -594,4 +599,185 @@ test('knowledge-base archive DELETE should use the privileged rpc client instead
     p_source_id: 'conv-1',
   });
   assert.equal(payload.success, true);
+});
+
+test('knowledge-base archive route should list uploaded files as removable virtual rows', async (t) => {
+  const apiUtilsModule = require('../lib/api-utils') as any;
+  const featureUtilsModule = require('../lib/feature-gate-utils') as any;
+  const routePath = require.resolve('../app/api/knowledge-base/archive/route');
+  const originalRequireUserContext = apiUtilsModule.requireUserContext;
+  const originalJsonOk = apiUtilsModule.jsonOk;
+  const originalJsonError = apiUtilsModule.jsonError;
+  const originalEnsureFeatureRouteEnabled = featureUtilsModule.ensureFeatureRouteEnabled;
+  const fileName = '命理/笔记:v2.md';
+
+  // 只覆盖本路由用到的链式调用；未列出的表直接报错，避免静默走到其他查询。
+  const chain = (result: unknown) => {
+    const query: Record<string, unknown> = {};
+    for (const method of ['select', 'eq', 'in', 'order']) query[method] = () => query;
+    query.maybeSingle = async () => result;
+    query.range = async () => result;
+    query.limit = async () => result;
+    return query;
+  };
+  const db = {
+    from(table: string) {
+      if (table === 'knowledge_bases') return chain({ data: { id: 'kb-1' }, error: null });
+      if (table === 'archived_sources') return chain({ data: [], error: null });
+      if (table === 'knowledge_entries') {
+        return {
+          select(columns: string) {
+            return columns === 'source_type, source_id, created_at'
+              ? chain({ data: [{ source_type: 'file', source_id: fileName, created_at: '2026-03-27T03:00:00.000Z' }], error: null })
+              : chain({ data: [{ source_type: 'file', source_id: fileName, content: '日主甲木生于寅月。\n\n第二段' }], error: null });
+          },
+        };
+      }
+      throw new Error(`Unexpected table: ${table}`);
+    },
+  };
+
+  apiUtilsModule.requireUserContext = async () => ({ user: { id: 'user-1' }, db, supabase: db });
+  featureUtilsModule.ensureFeatureRouteEnabled = async () => null;
+  apiUtilsModule.jsonOk = (payload: unknown, status = 200) => Response.json(payload, { status });
+  apiUtilsModule.jsonError = (message: string, status = 400) => Response.json({ error: message }, { status });
+
+  t.after(() => {
+    apiUtilsModule.requireUserContext = originalRequireUserContext;
+    apiUtilsModule.jsonOk = originalJsonOk;
+    apiUtilsModule.jsonError = originalJsonError;
+    featureUtilsModule.ensureFeatureRouteEnabled = originalEnsureFeatureRouteEnabled;
+    delete require.cache[routePath];
+  });
+
+  delete require.cache[routePath];
+  const routeModule = require('../app/api/knowledge-base/archive/route') as typeof import('../app/api/knowledge-base/archive/route');
+  const response = await routeModule.GET(
+    new NextRequest('http://localhost/api/knowledge-base/archive?kbId=kb-1&limit=20&offset=0'),
+  );
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(payload.archivedSources, [{
+    id: `file:kb-1:${fileName}`,
+    kb_id: 'kb-1',
+    source_type: 'file',
+    source_id: fileName,
+    created_at: '2026-03-27T03:00:00.000Z',
+    preview: '日主甲木生于寅月。',
+  }]);
+  assert.equal(payload.pagination.hasMore, false);
+});
+
+test('knowledge-base archive DELETE should remove an uploaded file whose name contains colons and slashes', async (t) => {
+  const apiUtilsModule = require('../lib/api-utils') as any;
+  const routePath = require.resolve('../app/api/knowledge-base/archive/[id]/route');
+  const originalRequireUserContext = apiUtilsModule.requireUserContext;
+  const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
+  const originalJsonOk = apiUtilsModule.jsonOk;
+  const originalJsonError = apiUtilsModule.jsonError;
+  const rpcCalls: Array<{ fn: string; args: Record<string, unknown> }> = [];
+  const ownerFilters: Array<[string, unknown]> = [];
+
+  const authDb = {
+    from(table: string) {
+      assert.equal(table, 'knowledge_bases');
+      const query = {
+        select: () => query,
+        eq: (column: string, value: unknown) => {
+          ownerFilters.push([column, value]);
+          return query;
+        },
+        maybeSingle: async () => ({ data: { id: 'kb-1' }, error: null }),
+      };
+      return query;
+    },
+  };
+  apiUtilsModule.requireUserContext = async () => ({ user: { id: 'user-1' }, db: authDb, supabase: authDb });
+  apiUtilsModule.getSystemAdminClient = () => ({
+    rpc(fn: string, args: Record<string, unknown>) {
+      rpcCalls.push({ fn, args });
+      return Promise.resolve({ data: true, error: null });
+    },
+  });
+  apiUtilsModule.jsonOk = (payload: unknown, status = 200) => Response.json(payload, { status });
+  apiUtilsModule.jsonError = (message: string, status = 400) => Response.json({ error: message }, { status });
+
+  t.after(() => {
+    apiUtilsModule.requireUserContext = originalRequireUserContext;
+    apiUtilsModule.getSystemAdminClient = originalGetSystemAdminClient;
+    apiUtilsModule.jsonOk = originalJsonOk;
+    apiUtilsModule.jsonError = originalJsonError;
+    delete require.cache[routePath];
+  });
+
+  delete require.cache[routePath];
+  const routeModule = require('../app/api/knowledge-base/archive/[id]/route') as typeof import('../app/api/knowledge-base/archive/[id]/route');
+  const id = 'file:kb-1:命理/笔记:v2.md';
+  const response = await routeModule.DELETE(
+    new NextRequest(`http://localhost/api/knowledge-base/archive/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    { params: Promise.resolve({ id }) },
+  );
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(ownerFilters, [['id', 'kb-1'], ['user_id', 'user-1']]);
+  assert.deepEqual(rpcCalls, [{
+    fn: 'kb_unarchive_source_as_service',
+    args: { p_user_id: 'user-1', p_kb_id: 'kb-1', p_source_type: 'file', p_source_id: '命理/笔记:v2.md' },
+  }]);
+  assert.deepEqual(payload, { success: true, kbId: 'kb-1', sourceType: 'file', sourceId: '命理/笔记:v2.md' });
+});
+
+test('knowledge-base archive DELETE should reject malformed ids before any lookup or rpc', async (t) => {
+  const apiUtilsModule = require('../lib/api-utils') as any;
+  const routePath = require.resolve('../app/api/knowledge-base/archive/[id]/route');
+  const originalRequireUserContext = apiUtilsModule.requireUserContext;
+  const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
+  const originalJsonOk = apiUtilsModule.jsonOk;
+  const originalJsonError = apiUtilsModule.jsonError;
+  const untouchable = {
+    from() { throw new Error('malformed ids must not reach the database'); },
+    rpc() { throw new Error('malformed ids must not reach the rpc'); },
+  };
+
+  apiUtilsModule.requireUserContext = async () => ({ user: { id: 'user-1' }, db: untouchable, supabase: untouchable });
+  apiUtilsModule.getSystemAdminClient = () => untouchable;
+  apiUtilsModule.jsonOk = (payload: unknown, status = 200) => Response.json(payload, { status });
+  apiUtilsModule.jsonError = (message: string, status = 400) => Response.json({ error: message }, { status });
+
+  t.after(() => {
+    apiUtilsModule.requireUserContext = originalRequireUserContext;
+    apiUtilsModule.getSystemAdminClient = originalGetSystemAdminClient;
+    apiUtilsModule.jsonOk = originalJsonOk;
+    apiUtilsModule.jsonError = originalJsonError;
+    delete require.cache[routePath];
+  });
+
+  delete require.cache[routePath];
+  const routeModule = require('../app/api/knowledge-base/archive/[id]/route') as typeof import('../app/api/knowledge-base/archive/[id]/route');
+  for (const id of ['file:kb-1:', 'chat_message:kb-1', 'chat_message::msg-1', 'conversation:conv-1']) {
+    const response = await routeModule.DELETE(
+      new NextRequest(`http://localhost/api/knowledge-base/archive/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+      { params: Promise.resolve({ id }) },
+    );
+    assert.equal(response.status, 400, id);
+  }
+});
+
+test('archive ids round-trip virtual sources and only split on the first two colons', () => {
+  const { buildVirtualArchiveId, parseArchiveId } = require('../lib/knowledge-base/archive-ids') as typeof import('../lib/knowledge-base/archive-ids');
+
+  assert.deepEqual(parseArchiveId(buildVirtualArchiveId('file', 'kb-1', 'a:b:c.md')), {
+    kind: 'virtual', sourceType: 'file', kbId: 'kb-1', sourceId: 'a:b:c.md',
+  });
+  assert.deepEqual(parseArchiveId('chat_message:kb-1:msg-1'), {
+    kind: 'virtual', sourceType: 'chat_message', kbId: 'kb-1', sourceId: 'msg-1',
+  });
+  assert.deepEqual(parseArchiveId('7f0c2b0e-8d4b-4a1e-9c51-2f1d3c4b5a69'), {
+    kind: 'stored', id: '7f0c2b0e-8d4b-4a1e-9c51-2f1d3c4b5a69',
+  });
+  for (const id of ['', 'file:', 'file:kb-1', 'file::name.md', 'file:kb-1:', 'record:kb-1:r-1']) {
+    assert.deepEqual(parseArchiveId(id), { kind: 'malformed' }, id);
+  }
 });

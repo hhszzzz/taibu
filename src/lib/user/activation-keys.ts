@@ -4,6 +4,7 @@
  * 提供激活Key的创建、验证、激活等功能
  */
 
+import { randomInt } from "node:crypto";
 import { getSystemAdminClient } from "@/lib/api-utils";
 import type { MembershipType } from "@/lib/user/membership";
 
@@ -41,14 +42,20 @@ export interface ActivateResult {
     creditsAmount?: number;
 }
 
+const KEY_CODE_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789';
+const KEY_CODE_LENGTH = 16;
+const MAX_KEYS_PER_BATCH = 100;
+
 /**
- * 生成激活Key代码 (格式: sk-xxxx)
+ * 生成激活Key代码 (格式: sk- + 16 位小写字母或数字)
+ *
+ * 激活码可直接兑换会员和积分，必须用密码学安全的随机数：Math.random 的内部状态
+ * 能从已发出的激活码反推，进而预测同批次的其他激活码。
  */
-function generateKeyCode(): string {
-    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+export function generateKeyCode(): string {
     let code = 'sk-';
-    for (let i = 0; i < 16; i++) {
-        code += chars.charAt(Math.floor(Math.random() * chars.length));
+    for (let i = 0; i < KEY_CODE_LENGTH; i++) {
+        code += KEY_CODE_CHARS[randomInt(KEY_CODE_CHARS.length)];
     }
     return code;
 }
@@ -64,13 +71,14 @@ export async function createActivationKeys(
         const supabase = getSystemAdminClient();
 
         // 验证参数
-        if (params.keyType === 'membership' && !params.membershipType) {
+        if (params.keyType === 'membership' && params.membershipType !== 'plus' && params.membershipType !== 'pro') {
             return { success: false, error: '会员类型Key需要指定会员等级' };
         }
-        if (params.keyType === 'credits' && (!params.creditsAmount || params.creditsAmount <= 0)) {
+        // credits_amount 是 integer 列；数量若是小数，下面的循环会多生成一个。
+        if (params.keyType === 'credits' && (!Number.isInteger(params.creditsAmount) || (params.creditsAmount ?? 0) <= 0)) {
             return { success: false, error: '积分类型Key需要指定有效的积分数量' };
         }
-        if (params.count <= 0 || params.count > 100) {
+        if (!Number.isInteger(params.count) || params.count <= 0 || params.count > MAX_KEYS_PER_BATCH) {
             return { success: false, error: '创建数量需在1-100之间' };
         }
 

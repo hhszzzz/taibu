@@ -1,134 +1,100 @@
 /**
- * MBTI 测试题目卡片组件 (7级 Likert 量表)
+ * MBTI 测试题目卡片（7 级量表，设计稿 MbtiTest / MobileMbti）
+ *
+ * 移动端：量表一行铺满，两极文字在下方；桌面端：左文字 · 量表 · 右文字同一行。
+ * 左侧（A）为陶土色；右侧（B）移动端为水色、桌面端为墨色。越靠两端圆越大。
  */
-'use client';
+'use client'; // 量表点击回调来自客户端测试流程
 
+import { useId } from 'react';
 import { type MBTIQuestion, type LikertValue } from '@/lib/divination/mbti';
 
-interface QuestionCardProps {
-    question: MBTIQuestion;
-    questionNumber: number;
-    totalQuestions: number;
-    onAnswer: (likertValue: LikertValue) => void;
-    selectedValue?: LikertValue;
-    showProgress?: boolean;  // 是否显示顶部进度条
-}
+type LikertSide = 'a' | 'neutral' | 'b';
 
-// Likert 量表配置
-const LIKERT_OPTIONS: { value: LikertValue; size: number }[] = [
-    { value: 1, size: 40 },   // 强烈同意 A
-    { value: 2, size: 32 },   // 同意 A
-    { value: 3, size: 26 },   // 略同意 A
-    { value: 4, size: 20 },   // 中立
-    { value: 5, size: 26 },   // 略同意 B
-    { value: 6, size: 32 },   // 同意 B
-    { value: 7, size: 40 },   // 强烈同意 B
+const LIKERT_OPTIONS: ReadonlyArray<{ value: LikertValue; side: LikertSide; degree: string; sizeClass: string }> = [
+    { value: 1, side: 'a', degree: '非常', sizeClass: 'size-[30px] lg:size-10' },
+    { value: 2, side: 'a', degree: '比较', sizeClass: 'size-[25px] lg:size-[34px]' },
+    { value: 3, side: 'a', degree: '略微', sizeClass: 'size-5 lg:size-7' },
+    { value: 4, side: 'neutral', degree: '', sizeClass: 'size-4 lg:size-[22px]' },
+    { value: 5, side: 'b', degree: '略微', sizeClass: 'size-5 lg:size-7' },
+    { value: 6, side: 'b', degree: '比较', sizeClass: 'size-[25px] lg:size-[34px]' },
+    { value: 7, side: 'b', degree: '非常', sizeClass: 'size-[30px] lg:size-10' },
 ];
+
+const SIDE_CLASS: Record<LikertSide, { idle: string; selected: string }> = {
+    a: {
+        idle: 'border-accent group-hover:bg-accent-light',
+        selected: 'border-accent bg-accent',
+    },
+    neutral: {
+        idle: 'border-foreground-secondary group-hover:bg-background-secondary lg:border-foreground-tertiary/70',
+        selected: 'border-foreground-secondary bg-foreground-secondary',
+    },
+    b: {
+        idle: 'border-water group-hover:bg-water-soft lg:border-foreground/80 lg:group-hover:bg-background-secondary',
+        selected: 'border-water bg-water lg:border-foreground/80 lg:bg-foreground/80',
+    },
+};
 
 export function QuestionCard({
     question,
     questionNumber,
-    totalQuestions,
-    onAnswer,
     selectedValue,
-    showProgress = false
-}: QuestionCardProps) {
-    // 获取选项颜色 - 使用 Notion 风格的辅助色
-    const getOptionStyle = (value: LikertValue, isSelected: boolean) => {
-        if (!isSelected) {
-            // 未选中状态：淡灰色边框
-            return {
-                borderColor: '#e2e8f0',
-                backgroundColor: 'transparent',
-            };
-        }
-
-        // 选中状态：Notion 强调色
-        if (value <= 3) {
-            return {
-                borderColor: '#0f7b6c', // green
-                backgroundColor: '#0f7b6c',
-            };
-        } else if (value === 4) {
-            return {
-                borderColor: '#37352f', // dark gray
-                backgroundColor: '#37352f',
-            };
-        } else {
-            return {
-                borderColor: '#a083ff', // purple/violet
-                backgroundColor: '#a083ff',
-            };
-        }
-    };
+    isCurrent = false,
+    onAnswer,
+}: {
+    question: MBTIQuestion;
+    questionNumber: number;
+    selectedValue?: LikertValue;
+    /** 本页第一道未答题，描边提示从这里作答 */
+    isCurrent?: boolean;
+    onAnswer: (likertValue: LikertValue) => void;
+}) {
+    const titleId = useId();
 
     return (
-        <div className="w-full text-foreground">
-            {/* 进度条（可选） */}
-            {showProgress && (
-                <div className="mb-6">
-                    <div className="flex justify-between text-[11px] font-bold uppercase tracking-wider text-foreground-secondary mb-2">
-                        <span>问题 {questionNumber}/{totalQuestions}</span>
-                        <span>{Math.round((questionNumber / totalQuestions) * 100)}%</span>
-                    </div>
-                    <div className="h-1 bg-background-secondary rounded-full overflow-hidden">
-                        <div
-                            className="h-full bg-accent transition-all duration-300"
-                            style={{ width: `${(questionNumber / totalQuestions) * 100}%` }}
-                        />
-                    </div>
-                </div>
-            )}
+        <section
+            aria-labelledby={titleId}
+            className={`flex flex-col gap-3.5 rounded-2xl border-[0.5px] border-border bg-surface p-4 text-foreground transition-shadow duration-150 lg:gap-5 lg:rounded-[18px] lg:px-7 lg:py-[26px] ${isCurrent ? 'ring-[1.5px] ring-inset ring-accent lg:border lg:border-accent/50 lg:ring-0' : ''}`}
+        >
+            <h2 id={titleId} className="font-display text-[1.0625rem] font-normal leading-normal lg:text-xl lg:leading-[1.4]">
+                {questionNumber}. {question.question}
+            </h2>
 
-            {/* 题号 */}
-            <div className="text-[11px] font-bold uppercase tracking-widest text-accent mb-3">QUESTION {questionNumber}</div>
-
-            {/* 问题 */}
-            <div className="bg-background rounded-md p-5 mb-8 border border-border/60">
-                <p className="text-base font-bold text-center leading-relaxed">
-                    {question.question}
-                </p>
-            </div>
-
-            {/* Likert 量表 */}
-            <div className="space-y-4">
-                {/* 圆圈选项 */}
-                <div className="flex items-center justify-between px-2">
-                    {LIKERT_OPTIONS.map(({ value, size }) => {
+            <div className="flex flex-col gap-3.5 lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-center lg:gap-4">
+                {/* 两极文字只作视觉提示，读屏通过每档的 aria-label 获取；移动端触控区 44px，用负外边距保持设计稿间距 */}
+                <span aria-hidden="true" className="hidden text-right text-[0.9375rem] text-accent-strong lg:block">{question.choice_a.text}</span>
+                <div role="radiogroup" aria-labelledby={titleId} className="-mx-[5px] -my-[7px] flex items-center justify-between py-1 lg:m-0 lg:justify-center lg:gap-3 lg:p-0">
+                    {LIKERT_OPTIONS.map(({ value, side, degree, sizeClass }) => {
                         const isSelected = selectedValue === value;
-                        const style = getOptionStyle(value, isSelected);
-
+                        const tone = SIDE_CLASS[side];
+                        const label = side === 'neutral'
+                            ? '中立'
+                            : `${degree}倾向：${side === 'a' ? question.choice_a.text : question.choice_b.text}`;
                         return (
                             <button
                                 key={value}
+                                type="button"
+                                role="radio"
+                                aria-checked={isSelected}
+                                aria-label={label}
                                 onClick={() => onAnswer(value)}
-                                className={`transition-all duration-150 rounded-full border-2 ${isSelected ? '' : 'hover:border-foreground/30'}`}
-                                style={{
-                                    width: size,
-                                    height: size,
-                                    borderColor: style.borderColor,
-                                    backgroundColor: style.backgroundColor,
-                                }}
-                                aria-label={`选择 ${value}`}
-                            />
+                                className="group flex h-11 items-center justify-center rounded-full px-[7px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:h-10 lg:px-0"
+                            >
+                                <span
+                                    aria-hidden="true"
+                                    className={`block rounded-full border-[1.5px] transition-colors duration-150 ${sizeClass} ${isSelected ? tone.selected : `bg-surface ${tone.idle}`}`}
+                                />
+                            </button>
                         );
                     })}
                 </div>
-
-                {/* 选项文字说明 - 使用实际选项文字 */}
-                <div className="flex justify-between gap-4">
-                    <div className="flex-1 text-left">
-                        <p className="text-xs font-bold text-success px-1 line-clamp-2 uppercase tracking-tight">
-                            {question.choice_a.text}
-                        </p>
-                    </div>
-                    <div className="flex-1 text-right">
-                        <p className="text-xs font-bold text-[#a083ff] px-1 line-clamp-2 uppercase tracking-tight">
-                            {question.choice_b.text}
-                        </p>
-                    </div>
+                <span aria-hidden="true" className="hidden text-[0.9375rem] text-foreground/80 lg:block">{question.choice_b.text}</span>
+                <div aria-hidden="true" className="flex justify-between gap-4 text-[0.8125rem] leading-snug lg:hidden">
+                    <span className="max-w-[45%] text-accent-strong">{question.choice_a.text}</span>
+                    <span className="max-w-[45%] text-right text-water">{question.choice_b.text}</span>
                 </div>
             </div>
-        </div>
+        </section>
     );
 }

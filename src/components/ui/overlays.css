@@ -44,3 +44,6 @@
     --foreground-secondary: var(--chat-muted);
     --border: var(--chat-border);
 }
+/* Sidebar "全部占术" flyout: the panel body owns its own spacing and scroll regions. */
+.floating-panel.all-divinations-panel { padding: 0; max-height: min(720px, calc(100dvh - 16px)); overflow: hidden; border-radius: 16px; box-shadow: 0 16px 48px #0000001f; }
+.floating-panel.all-divinations-panel input:focus-visible { outline: none; }

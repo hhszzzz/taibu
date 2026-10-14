@@ -142,3 +142,23 @@ export function getEarthlyBranchByHour(hour: number): EarthlyBranch {
     const match = BRANCH_BY_HOUR.find((item) => normalized >= item.start && normalized <= item.end);
     return match?.branch ?? '子';
 }
+
+/**
+ * 公历日期对应的农历文本，如「甲子年九月初三」（闰月为「闰四月」）。
+ * 日期无效（含不存在的日期）时返回 null，调用方据此省略农历信息。
+ */
+export function formatLunarDateFromSolar(year: number, month: number, day: number): string | null {
+    if (![year, month, day].every(Number.isInteger) || year <= 0 || month < 1 || month > 12 || day < 1 || day > 31) {
+        return null;
+    }
+    const probe = new Date(Date.UTC(year, month - 1, day));
+    if (probe.getUTCFullYear() !== year || probe.getUTCMonth() !== month - 1 || probe.getUTCDate() !== day) {
+        return null;
+    }
+    try {
+        const lunar = Solar.fromYmd(year, month, day).getLunar();
+        return `${lunar.getYearInGanZhi()}年${lunar.getMonthInChinese()}月${lunar.getDayInChinese()}`;
+    } catch {
+        return null;
+    }
+}

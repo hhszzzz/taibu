@@ -194,17 +194,17 @@ export function AIAnalysisSection({
             <div className="flex items-center gap-3">
                 <div className={`p-2 rounded-xl ${iconContainerClass}`}>{icon}</div>
                 <div>
-                    <h4 className="font-bold">{title}</h4>
+                    <h4 className="font-display text-lg">{title}</h4>
                     <p className="text-sm text-foreground-secondary">{subtitle}</p>
                 </div>
             </div>
             <div className="space-y-2">
-                <div className="h-4 bg-foreground/10 rounded w-full" />
-                <div className="h-4 bg-foreground/10 rounded w-4/5" />
-                <div className="h-4 bg-foreground/10 rounded w-3/4" />
-                <div className="h-4 bg-foreground/10 rounded w-5/6" />
-                <div className="h-4 bg-foreground/10 rounded w-2/3" />
-                <div className="h-4 bg-foreground/10 rounded w-4/5" />
+                <div className="h-4 bg-background-tertiary rounded w-full" />
+                <div className="h-4 bg-background-tertiary rounded w-4/5" />
+                <div className="h-4 bg-background-tertiary rounded w-3/4" />
+                <div className="h-4 bg-background-tertiary rounded w-5/6" />
+                <div className="h-4 bg-background-tertiary rounded w-2/3" />
+                <div className="h-4 bg-background-tertiary rounded w-4/5" />
             </div>
         </div>
     );
@@ -227,7 +227,7 @@ export function AIAnalysisSection({
         return (
             <div className="space-y-2">
                 {modelControls}
-                <div className="flex min-h-[280px] items-center justify-center rounded-2xl border border-border bg-background">
+                <div className="flex min-h-[280px] items-center justify-center rounded-2xl border-[0.5px] border-border bg-surface">
                     <SoundWaveLoader variant="inline" />
                 </div>
             </div>
@@ -235,23 +235,23 @@ export function AIAnalysisSection({
     }
 
     const content = (
-        <div className="rounded-2xl border border-border">
-            <div className={`p-4 border-b border-border flex items-center justify-between ${headerGradientClass}`}>
+        <div className="overflow-hidden rounded-2xl border-[0.5px] border-border bg-surface">
+            <div className={`flex flex-wrap items-center justify-between gap-3 border-b-[0.5px] border-border p-4 ${headerGradientClass}`}>
                 <div className="flex items-center gap-3">
                     <div className={`p-2 rounded-xl ${iconContainerClass}`}>{icon}</div>
                     <div>
-                        <h4 className="font-bold">{title}</h4>
+                        <h4 className="font-display text-lg">{title}</h4>
                         <p className="text-sm text-foreground-secondary">{subtitle}</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
                     {analysis && !loading && (
-                        <button onClick={handleCopy} className="p-2 rounded-lg hover:bg-background-secondary transition-colors" title="复制">
-                            {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-foreground-secondary" />}
+                        <button type="button" onClick={handleCopy} className="p-2 rounded-lg hover:bg-background-secondary transition-colors" title="复制" aria-label="复制">
+                            {copied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4 text-foreground-secondary" />}
                         </button>
                     )}
-                    <button onClick={startAnalysis} disabled={loading}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-background-secondary hover:bg-accent hover:text-on-accent transition-colors text-sm disabled:opacity-50">
+                    <button type="button" onClick={startAnalysis} disabled={loading}
+                        className="inline-flex h-9 items-center gap-1.5 rounded-[10px] border-[0.5px] border-border-hover bg-surface px-3 text-sm text-foreground transition-colors hover:bg-background-secondary disabled:opacity-50">
                         {loading ? <SoundWaveLoader variant="inline" /> : <RefreshCw className="w-4 h-4" />}
                         {loading ? '分析中...' : '重新分析'}
                     </button>

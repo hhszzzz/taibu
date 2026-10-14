@@ -1,5 +1,7 @@
 /**
- * 兼容性雷达图组件
+ * 兼容性总分环 + 维度条
+ *
+ * 'use client'：在客户端结果页渲染（数据来自 sessionStorage）
  */
 'use client';
 
@@ -10,75 +12,88 @@ interface CompatibilityChartProps {
     overallScore: number;
 }
 
+/** 等级文案 → 主题色（替代 lib 返回的硬编码调色板类名） */
+const LEVEL_TONE_CLASS: Record<string, { text: string; chip: string }> = {
+    极佳: { text: 'text-success', chip: 'bg-success/10 text-success' },
+    良好: { text: 'text-water', chip: 'bg-water-soft text-water' },
+    一般: { text: 'text-warning', chip: 'bg-warning/10 text-warning' },
+    需注意: { text: 'text-danger', chip: 'bg-danger/10 text-danger' },
+};
+const DEFAULT_TONE = { text: 'text-foreground', chip: 'bg-background-secondary text-foreground-secondary' };
+
+const RING_RADIUS = 70;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
+function clampScore(score: number): number {
+    return Math.min(100, Math.max(0, score));
+}
+
 export function CompatibilityChart({ dimensions, overallScore }: CompatibilityChartProps) {
-    const { level, color } = getCompatibilityLevel(overallScore);
+    const { level } = getCompatibilityLevel(overallScore);
+    const tone = LEVEL_TONE_CLASS[level] ?? DEFAULT_TONE;
+    const progress = (clampScore(overallScore) / 100) * RING_CIRCUMFERENCE;
 
     return (
-        <div className="bg-background/5 backdrop-blur-md border border-white/10 rounded-3xl p-6 sm:p-8">
+        <div className="grid gap-6 rounded-2xl border-[0.5px] border-border bg-surface p-5 sm:p-6 md:grid-cols-[200px_minmax(0,1fr)] md:items-center md:gap-8">
             {/* 总分 */}
-            <div className="text-center mb-8 relative">
+            <div className="flex flex-col items-center text-center">
                 <div className="relative inline-flex items-center justify-center">
-                    {/* 背景光晕 */}
-                    <div className="absolute inset-0 bg-rose-500/20 blur-3xl rounded-full" />
-
-                    <svg className="w-40 h-40 transform -rotate-90 relative z-10">
-                        {/* 轨道 */}
+                    <svg className="h-40 w-40 -rotate-90" viewBox="0 0 160 160" aria-hidden="true">
                         <circle
                             cx="80"
                             cy="80"
-                            r="70"
+                            r={RING_RADIUS}
                             fill="none"
                             stroke="currentColor"
                             strokeWidth="8"
-                            className="text-white/5"
+                            className="text-background-tertiary"
                         />
-                        {/* 进度条 */}
                         <circle
                             cx="80"
                             cy="80"
-                            r="70"
+                            r={RING_RADIUS}
                             fill="none"
                             stroke="currentColor"
                             strokeWidth="8"
-                            strokeDasharray={`${overallScore * 4.4} 440`}
+                            strokeDasharray={`${progress} ${RING_CIRCUMFERENCE}`}
                             strokeLinecap="round"
-                            className="text-rose-500 drop-shadow-[0_0_10px_rgba(244,63,94,0.5)] transition-all duration-1000 ease-out"
+                            className="text-clay transition-all duration-1000 ease-out"
                         />
                     </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
-                        <span className="text-4xl font-bold text-foreground tracking-tight">{overallScore}</span>
-                        <span className={`text-base font-medium mt-1 px-3 py-0.5 rounded-full bg-background/5 border border-white/10 ${color}`}>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="font-display text-[44px] leading-none text-foreground">{overallScore}</span>
+                        <span className={`mt-2 rounded-md px-2 py-0.5 text-sm ${tone.chip}`}>
                             {level}
                         </span>
                     </div>
                 </div>
-                <p className="text-sm font-medium text-foreground-secondary mt-4 uppercase tracking-wider">综合契合度</p>
+                <p className="mt-3 text-[13px] text-foreground-secondary">综合契合度</p>
             </div>
 
             {/* 维度列表 */}
-            <div className="space-y-6">
+            <div className="flex flex-col gap-5">
                 {dimensions.map((dim, index) => {
-                    const { color: dimColor } = getCompatibilityLevel(dim.score);
+                    const dimTone = LEVEL_TONE_CLASS[getCompatibilityLevel(dim.score).level] ?? DEFAULT_TONE;
                     return (
-                        <div key={index} className="relative">
-                            <div className="flex justify-between items-center mb-2">
-                                <span className="text-base font-medium text-foreground flex items-center gap-2">
-                                    {dim.name}
-                                </span>
-                                <span className={`text-sm font-bold ${dimColor}`}>{dim.score}分</span>
+                        <div key={index}>
+                            <div className="mb-2 flex items-center justify-between gap-3">
+                                <span className="text-[15px] text-foreground">{dim.name}</span>
+                                <span className={`text-sm font-medium tabular-nums ${dimTone.text}`}>{dim.score}分</span>
                             </div>
-
-                            {/* 进度条轨道 */}
-                            <div className="h-2.5 bg-background/5 rounded-full overflow-hidden border border-white/5">
+                            <div
+                                className="h-2 overflow-hidden rounded-full bg-background-secondary"
+                                role="progressbar"
+                                aria-label={dim.name}
+                                aria-valuemin={0}
+                                aria-valuemax={100}
+                                aria-valuenow={dim.score}
+                            >
                                 <div
-                                    className="h-full bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)] rounded-full transition-all duration-1000 ease-out relative overflow-hidden"
-                                    style={{ width: `${dim.score}%` }}
-                                >
-                                    <div className="absolute inset-0 bg-background/20" />
-                                </div>
+                                    className="h-full rounded-full bg-clay transition-all duration-1000 ease-out"
+                                    style={{ width: `${clampScore(dim.score)}%` }}
+                                />
                             </div>
-
-                            <p className="text-xs text-foreground-secondary/70 mt-1.5 leading-relaxed">
+                            <p className="mt-1.5 text-xs leading-relaxed text-foreground-secondary">
                                 {dim.description}
                             </p>
                         </div>

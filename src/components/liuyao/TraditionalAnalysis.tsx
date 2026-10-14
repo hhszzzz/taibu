@@ -1,94 +1,38 @@
 /**
  * 传统六爻分析组件（多用神分组版）
+ * 卦辞爻辞（衬线卡）· 盘面要点 · 用神分析；四柱旬空由结果页的干支条展示。
+ * 'use client'：useMemo 汇总盘面要点。
  */
 'use client';
 
-import { useMemo, useState, type CSSProperties } from 'react';
-import { ChevronDown, AlertCircle } from 'lucide-react';
+import { useMemo, type ReactNode } from 'react';
+import { AlertCircle } from 'lucide-react';
 import type { LiuyaoCanonicalJSON } from 'taibu-core/liuyao';
 import { LIU_QIN_TIPS, SHEN_XI_TIPS } from '@/lib/divination/liuyao-term-tips';
 import { KONG_WANG_LABELS } from '@/lib/divination/liuyao';
+import { buildLiuyaoHighlights } from '@/components/liuyao/liuyao-highlights';
+import { wuxingTextClass } from '@/components/liuyao/wuxing-tone';
 
 interface TraditionalAnalysisProps {
     analysis: LiuyaoCanonicalJSON;
+    /** 盘面要点卡底部的操作（如「让太卜断这一卦」），作为卡片纵向 flex 的末项渲染，可用 mt-auto 贴底。 */
+    highlightAction?: ReactNode;
 }
 
-function CollapsibleSection({
-    title,
-    children,
-    defaultOpen = false,
-}: {
-    title: string;
-    children: React.ReactNode;
-    defaultOpen?: boolean;
-}) {
-    const [isOpen, setIsOpen] = useState(defaultOpen);
-
-    return (
-        <div className="border border-border rounded-lg overflow-hidden bg-background">
-            <button
-                onClick={() => setIsOpen(!isOpen)}
-                className="w-full flex items-center justify-between px-4 py-3 bg-surface hover:bg-background-secondary transition-colors duration-150 text-sm"
-            >
-                <span className="font-medium text-foreground">{title}</span>
-                <ChevronDown className={`w-4 h-4 text-foreground-secondary transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
-            </button>
-            <div className={`grid transition-[grid-template-rows] duration-200 ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
-                <div className="overflow-hidden">
-                    <div className="p-4 text-sm bg-background">{children}</div>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-// 天干对应五行
-const tianGanWuXing: Record<string, string> = {
-    '甲': '木', '乙': '木',
-    '丙': '火', '丁': '火',
-    '戊': '土', '己': '土',
-    '庚': '金', '辛': '金',
-    '壬': '水', '癸': '水',
-};
-
-// 地支对应五行
-const diZhiWuXing: Record<string, string> = {
-    '寅': '木', '卯': '木',
-    '巳': '火', '午': '火',
-    '辰': '土', '戌': '土', '丑': '土', '未': '土',
-    '申': '金', '酉': '金',
-    '亥': '水', '子': '水',
-};
-
-const wuXingColorValues: Record<string, string> = {
-    '金': '#FFD700',
-    '木': '#228B22',
-    '水': '#1E90FF',
-    '火': '#FF4500',
-    '土': '#8B4513',
-};
+type YongShenCandidate = NonNullable<LiuyaoCanonicalJSON['用神分析'][number]['候选用神']>[number];
 
 const YAO_NAMES = ['初爻', '二爻', '三爻', '四爻', '五爻', '上爻'];
-
-function getWuXingStyle(wuXing: string | undefined): CSSProperties | undefined {
-    const color = wuXing ? wuXingColorValues[wuXing] : undefined;
-    return color ? { color } : undefined;
-}
-
-function getGanStyle(gan: string): CSSProperties | undefined {
-    const wuXing = tianGanWuXing[gan] || '';
-    return getWuXingStyle(wuXing);
-}
-
-function getZhiStyle(zhi: string): CSSProperties | undefined {
-    const wuXing = diZhiWuXing[zhi] || '';
-    return getWuXingStyle(wuXing);
-}
+/** 应期提示的性质配色：应期为主色，吉期、忌期分别用吉凶色 */
+const TIMING_TONES: Record<string, string> = { '应期': 'text-accent-strong', '吉期': 'text-success', '忌期': 'text-danger' };
+const SCRIPTURE_LABEL = 'font-sans text-xs text-foreground-secondary';
+const SCRIPTURE_TEXT = 'text-[0.9375rem] leading-[1.7] lg:text-base lg:leading-[1.8]';
+/** 卦辞卡分节：手机端纯留白分隔，桌面端加细分隔线。 */
+const SCRIPTURE_SECTION = 'flex flex-col gap-1 lg:gap-0.5 lg:border-t-[0.5px] lg:border-border lg:pt-3';
 
 function getMovementTone(state?: string): string {
-    if (state === 'changing') return 'text-red-500';
-    if (state === 'hidden_moving') return 'text-amber-500';
-    if (state === 'day_break') return 'text-orange-500';
+    if (state === 'changing') return 'text-accent-strong';
+    if (state === 'hidden_moving') return 'text-warning';
+    if (state === 'day_break') return 'text-danger';
     return '';
 }
 
@@ -106,309 +50,179 @@ function getCandidateSourceLabel(source?: string): string | null {
     return null;
 }
 
+function getKongLabel(state?: string): string {
+    if (!state || state === 'not_kong') return '';
+    return KONG_WANG_LABELS[state as keyof typeof KONG_WANG_LABELS] || state;
+}
+
+/** 候选用神：位置、来源与强弱、动静、旬空，便于对照取用说明里的取舍次第 */
+function describeCandidate(candidate: YongShenCandidate): string {
+    const state = [getCandidateSourceLabel(candidate.来源), candidate.强弱, candidate.动静, getKongLabel(candidate.空亡状态)].filter(Boolean).join('·');
+    return `${candidate.六亲}${candidate.纳甲 ?? ''}@${getPositionLabel(candidate.爻位)}${state ? `（${state}）` : ''}`;
+}
+
 export function TraditionalAnalysis({
     analysis,
+    highlightAction,
 }: TraditionalAnalysisProps) {
-    const movementStats = useMemo(() => {
-        let changing = 0;
-        let hiddenMoving = 0;
-        let dayBreak = 0;
-        let staticCount = 0;
-        let withShenSha = 0;
+    const highlights = useMemo(() => buildLiuyaoHighlights(analysis), [analysis]);
 
-        for (const yao of analysis.六爻) {
-            switch (yao.动静状态) {
-                case 'changing':
-                    changing += 1;
-                    break;
-                case 'hidden_moving':
-                    hiddenMoving += 1;
-                    break;
-                case 'day_break':
-                    dayBreak += 1;
-                    break;
-                default:
-                    staticCount += 1;
-                    break;
-            }
-
-            if (Array.isArray(yao.神煞) && yao.神煞.length > 0) {
-                withShenSha += 1;
-            }
-        }
-
-        return { changing, hiddenMoving, dayBreak, staticCount, withShenSha };
-    }, [analysis.六爻]);
-
-    const totalRecommendations = useMemo(
-        () => analysis.用神分析.reduce((sum, group) => sum + (group.应期提示?.length || 0), 0),
-        [analysis.用神分析]
-    );
-
-    const fuShenHints = useMemo(() => {
-        return analysis.六爻
-            .filter((yao) => yao.伏神)
-            .map((yao) => `${yao.伏神?.六亲}伏于${yao.爻位}下`);
-    }, [analysis.六爻]);
+    const baseHexagram = analysis.卦盘.本卦;
+    const changedHexagram = analysis.卦盘.变卦;
+    const movingTexts = changedHexagram?.动爻爻辞 ?? [];
+    const hasScripture = Boolean(baseHexagram.卦辞 || movingTexts.length > 0 || changedHexagram?.卦辞);
+    const guaShen = analysis.卦盘.卦身;
+    const globalShenSha = analysis.全局神煞 ?? [];
 
     return (
-        <div className="mx-auto w-full max-w-3xl space-y-4">
-            {analysis.干支时间.length > 0 && (
-                <div className="space-y-1.5">
-                    <div className="overflow-x-auto">
-                        <div className="min-w-max overflow-hidden rounded-lg border border-border bg-background shadow-sm">
-                            <table className="w-full text-xs text-center">
-                                <tbody className="divide-y divide-gray-200">
-                                    <tr className="divide-x divide-gray-200">
-                                        <td className="px-4 py-2 bg-surface text-accent font-semibold whitespace-nowrap">干支</td>
-                                        {analysis.干支时间.map((pillar) => {
-                                            return (
-                                                <td key={pillar.柱} className="px-4 py-2 whitespace-nowrap">
-                                                    <span className="font-medium">
-                                                        <span style={getGanStyle(pillar.干支.charAt(0))}>{pillar.干支.charAt(0)}</span>
-                                                        <span style={getZhiStyle(pillar.干支.charAt(1))}>{pillar.干支.charAt(1)}</span>
-                                                        <span className="text-foreground-secondary">{pillar.柱}</span>
-                                                    </span>
-                                                </td>
-                                            );
-                                        })}
-                                    </tr>
-                                    <tr className="divide-x divide-gray-200">
-                                        <td className="px-4 py-2 bg-surface text-accent font-semibold whitespace-nowrap">空亡</td>
-                                        {analysis.干支时间.map((pillar) => {
-                                            return (
-                                                <td
-                                                    key={pillar.柱}
-                                                    className="px-4 py-2 whitespace-nowrap"
-                                                >
-                                                    {pillar.空亡.length > 0 ? (
-                                                        <span className="tracking-wide">
-                                                            <span style={getZhiStyle(pillar.空亡[0])}>{pillar.空亡[0]}</span>
-                                                            <span style={getZhiStyle(pillar.空亡[1])}>{pillar.空亡[1]}</span>
-                                                        </span>
-                                                    ) : (
-                                                        <span className="text-foreground-tertiary">-</span>
-                                                    )}
-                                                </td>
-                                            );
-                                        })}
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                    <div className="text-[10px] text-foreground-secondary">
-                        {'注：六爻断卦判空亡以"日旬空"为主，年/月/时旬空供参考。'}
-                    </div>
-                </div>
-            )}
+        <div className="flex w-full flex-col gap-3 lg:gap-4">
+            <div className={`grid gap-3 lg:gap-4 ${hasScripture ? 'lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]' : ''}`}>
+                {hasScripture && (
+                    <section aria-label="卦辞爻辞" className="flex flex-col gap-3.5 rounded-2xl border-[0.5px] border-border bg-surface p-4 font-display lg:px-6 lg:py-[22px]">
+                        {baseHexagram.卦辞 && (
+                            <div className="flex flex-col gap-1 lg:gap-0.5">
+                                <span className={SCRIPTURE_LABEL}>本卦卦辞</span>
+                                <span className={SCRIPTURE_TEXT}>{baseHexagram.卦辞}</span>
+                            </div>
+                        )}
+                        {movingTexts.map((yaoText) => (
+                            <div key={`${yaoText.爻名}-${yaoText.爻辞}`} className={SCRIPTURE_SECTION}>
+                                <span className={`${SCRIPTURE_LABEL} lg:text-accent-strong`}>动爻 · {yaoText.爻名}</span>
+                                <span className={SCRIPTURE_TEXT}>{yaoText.爻辞}</span>
+                            </div>
+                        ))}
+                        {changedHexagram?.卦辞 && (
+                            <div className={SCRIPTURE_SECTION}>
+                                <span className={SCRIPTURE_LABEL}>变卦卦辞</span>
+                                <span className={SCRIPTURE_TEXT}>{changedHexagram.卦辞}</span>
+                            </div>
+                        )}
+                    </section>
+                )}
 
-            <div className="rounded-lg border border-border bg-background px-4 py-4 shadow-sm">
-                <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
-                    <div className="space-y-3">
-                        {(analysis.卦盘.互卦 || analysis.卦盘.错卦 || analysis.卦盘.综卦 || analysis.卦盘.卦身) && (
-                            <div className="space-y-2 text-xs text-foreground-secondary">
-                                <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-foreground-secondary">衍生卦象</div>
-                                <div className="space-y-1">
-                                    <div>互卦：{analysis.卦盘.互卦?.卦名 || '无'}</div>
-                                    <div>错卦：{analysis.卦盘.错卦?.卦名 || '无'}</div>
-                                    <div>综卦：{analysis.卦盘.综卦?.卦名 || '无'}</div>
-                                    <div>
-                                        卦身：
-                                        {analysis.卦盘.卦身
-                                            ? `${analysis.卦盘.卦身.地支}${analysis.卦盘.卦身.位置 ? `（${analysis.卦盘.卦身.位置}）` : ''}${analysis.卦盘.卦身.状态 ? `（${analysis.卦盘.卦身.状态}）` : ''}`
-                                            : '无'}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {analysis.卦级分析.length > 0 && (
-                            <div className="space-y-2 text-xs text-foreground-secondary">
-                                <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-foreground-secondary">卦级分析</div>
-                                <div className="space-y-1.5">
-                                    {analysis.卦级分析.map((line, index) => (
-                                        <div key={`${line}-${index}`}>{line}</div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="space-y-3 border-t border-border/60 pt-3 lg:border-t-0 lg:border-l lg:border-border/60 lg:pl-4 lg:pt-0">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-foreground-secondary">关键信号</div>
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                            {movementStats.changing > 0 && (
-                                <span className="text-red-500 font-medium">明动 {movementStats.changing}</span>
+                <section aria-label="盘面要点" className="flex flex-col gap-2.5 rounded-2xl border-[0.5px] border-border bg-surface p-4 lg:gap-3 lg:bg-panel lg:p-[22px]">
+                    <h2 className="font-display text-[1.0625rem] font-medium lg:text-lg lg:font-normal">盘面要点</h2>
+                    {highlights.length > 0 && (
+                        <ul className="flex list-disc flex-col gap-1.5 pl-[18px] text-sm leading-[1.6] marker:text-foreground-tertiary lg:gap-2 lg:text-foreground-secondary">
+                            {highlights.map((line, index) => <li key={`${line}-${index}`}>{line}</li>)}
+                        </ul>
+                    )}
+                    {analysis.提示.length > 0 && (
+                        <ul className="flex flex-col gap-1.5 text-sm leading-[1.6]">
+                            {analysis.提示.map((line, index) => (
+                                <li key={`tip-${line}-${index}`} className="flex items-start gap-1.5">
+                                    <AlertCircle aria-hidden="true" className="mt-[0.3em] h-3.5 w-3.5 shrink-0 text-danger" />
+                                    <span>{line}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                    {(guaShen || globalShenSha.length > 0) && (
+                        <p className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-foreground-tertiary">
+                            {guaShen && (
+                                <span>
+                                    卦身 <span className="font-display text-foreground-secondary">{guaShen.地支}</span>
+                                    {guaShen.位置 ? `（${guaShen.位置}）` : ''}{guaShen.状态 ? `（${guaShen.状态}）` : ''}
+                                </span>
                             )}
-                            {movementStats.hiddenMoving > 0 && (
-                                <span className="text-amber-500 font-medium">暗动 {movementStats.hiddenMoving}</span>
-                            )}
-                            {movementStats.dayBreak > 0 && (
-                                <span className="text-orange-500 font-medium">日破 {movementStats.dayBreak}</span>
-                            )}
-                            <span className="text-foreground-secondary">静爻 {movementStats.staticCount}</span>
-                            <span className="text-foreground/25">|</span>
-                            <span className="text-foreground-secondary">用神 {analysis.用神分析.length}</span>
-                            <span className="text-foreground-secondary">应期 {totalRecommendations}</span>
-                        </div>
-                        {(analysis.全局神煞?.length || 0) > 0 && (
-                            <div className="text-xs text-foreground-secondary">
-                                全局神煞：{analysis.全局神煞?.join(' ')}
-                            </div>
-                        )}
-                        {fuShenHints.length > 0 && (
-                            <div className="text-xs text-orange-600">
-                                伏神：{fuShenHints.join('；')}
-                            </div>
-                        )}
-                        {analysis.提示.length > 0 && (
-                            <div className="flex items-start gap-1.5 text-xs">
-                                <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
-                                <span className="text-foreground-secondary">{analysis.提示.join('；')}</span>
-                            </div>
-                        )}
-                    </div>
-                </div>
+                            {globalShenSha.length > 0 && <span>全局神煞 {globalShenSha.join('、')}</span>}
+                        </p>
+                    )}
+                    {highlightAction}
+                </section>
             </div>
 
             {analysis.用神分析.length > 0 && (
-                <div className="rounded-lg border border-border bg-background shadow-sm divide-y divide-border/60 overflow-hidden">
+                <section aria-label="用神分析" className="overflow-hidden rounded-2xl border-[0.5px] border-border bg-surface">
+                    <h2 className="px-5 pt-5 font-display text-lg sm:px-6">用神分析</h2>
+                    <div className="divide-y divide-border">
                     {analysis.用神分析.map((group, groupIndex) => {
                         const selectedSourceLabel = getCandidateSourceLabel(group.已选用神.来源);
-                        const selectedKongState = group.已选用神.空亡状态;
-                        const selectedKongLabel = selectedKongState && selectedKongState !== 'not_kong'
-                            ? KONG_WANG_LABELS[selectedKongState as keyof typeof KONG_WANG_LABELS] || selectedKongState
-                            : '';
+                        const selectedKongLabel = getKongLabel(group.已选用神.空亡状态);
                         return (
-                            <div key={group.目标六亲} className="px-4 py-4 text-xs">
-                                <div className="flex flex-wrap items-center gap-2 mb-2">
-                                    <span className="font-bold text-accent text-sm" title={LIU_QIN_TIPS[group.目标六亲]}>{group.目标六亲}</span>
+                            <div key={group.目标六亲} className="px-5 py-4 text-[13px] sm:px-6">
+                                <div className="mb-2.5 flex flex-wrap items-center gap-2">
+                                    <span className="font-display text-base text-accent-strong" title={LIU_QIN_TIPS[group.目标六亲]}>{group.目标六亲}</span>
                                     {groupIndex === 0 && (
-                                        <span className="px-1.5 py-0.5 rounded border border-accent/20 bg-accent/10 text-accent text-[10px] leading-none">主</span>
+                                        <span className="rounded bg-accent px-1.5 py-px text-[11px] text-on-accent">主</span>
                                     )}
                                     <span className="text-foreground-secondary">{group.取用状态}</span>
                                 </div>
 
-                                <div className="grid gap-2 md:grid-cols-2">
-                                    <div className="text-foreground-secondary">
-                                        <span className="text-foreground-secondary">用神：</span>
-                                        <span className="text-foreground font-medium" title={LIU_QIN_TIPS[group.已选用神.六亲]}>{group.已选用神.六亲}</span>
+                                <div className="grid gap-x-6 gap-y-1.5 leading-relaxed text-foreground-secondary md:grid-cols-2">
+                                    <div>
+                                        <span>用神：</span>
+                                        <span className="font-medium text-foreground" title={LIU_QIN_TIPS[group.已选用神.六亲]}>{group.已选用神.六亲}</span>
                                         {group.已选用神.爻位 && <span>{' @'}{getPositionLabel(group.已选用神.爻位)}</span>}
-                                        {group.已选用神.是否世爻 && <span className="text-accent">{' · 世位'}</span>}
-                                        {group.已选用神.是否应爻 && <span className="text-blue-500">{' · 应位'}</span>}
-                                        {selectedSourceLabel && <span className="text-foreground-secondary">{` · ${selectedSourceLabel}`}</span>}
+                                        {group.已选用神.是否世爻 && <span className="text-accent-strong">{' · 世位'}</span>}
+                                        {group.已选用神.是否应爻 && <span className="text-water">{' · 应位'}</span>}
+                                        {selectedSourceLabel && <span>{` · ${selectedSourceLabel}`}</span>}
                                     </div>
 
-                                    <div className="text-foreground-secondary">
-                                        <span className="text-foreground-secondary">状态：</span>
+                                    <div>
+                                        <span>状态：</span>
                                         <span className={getMovementTone(group.已选用神.动静状态)}>{group.已选用神.动静}</span>
                                         <span>{' · '}{group.已选用神.强弱}</span>
-                                        {group.已选用神.纳甲 && group.已选用神.五行 && <span>{` · ${group.已选用神.纳甲}${group.已选用神.五行}`}</span>}
-                                        {selectedKongLabel && <span className="text-orange-500">{` · ${selectedKongLabel}`}</span>}
+                                        {group.已选用神.纳甲 && group.已选用神.五行 && <span>{' · '}<span className={`font-display ${wuxingTextClass(group.已选用神.五行)}`}>{group.已选用神.纳甲}{group.已选用神.五行}</span></span>}
+                                        {selectedKongLabel && <span className="text-warning">{` · ${selectedKongLabel}`}</span>}
                                     </div>
 
                                     {(group.神煞系统?.原神 || group.神煞系统?.忌神 || group.神煞系统?.仇神) && (
-                                        <div className="text-foreground-secondary md:col-span-2">
-                                            <span className="text-foreground-secondary">神系：</span>
+                                        <div className="md:col-span-2">
+                                            <span>神系：</span>
                                             {[
-                                                group.神煞系统?.原神 && <span key="yuan" className="text-green-500" title={SHEN_XI_TIPS['原神']}>{'原神'}{group.神煞系统.原神}</span>,
-                                                group.神煞系统?.忌神 && <span key="ji" className="text-red-500" title={SHEN_XI_TIPS['忌神']}>{'忌神'}{group.神煞系统.忌神}</span>,
-                                                group.神煞系统?.仇神 && <span key="chou" className="text-orange-500" title={SHEN_XI_TIPS['仇神']}>{'仇神'}{group.神煞系统.仇神}</span>,
+                                                group.神煞系统?.原神 && <span key="yuan" className="text-success" title={SHEN_XI_TIPS['原神']}>{'原神'}{group.神煞系统.原神}</span>,
+                                                group.神煞系统?.忌神 && <span key="ji" className="text-danger" title={SHEN_XI_TIPS['忌神']}>{'忌神'}{group.神煞系统.忌神}</span>,
+                                                group.神煞系统?.仇神 && <span key="chou" className="text-warning" title={SHEN_XI_TIPS['仇神']}>{'仇神'}{group.神煞系统.仇神}</span>,
                                             ].filter(Boolean).map((node, i) => <span key={i}>{i > 0 && ' · '}{node}</span>)}
                                         </div>
                                     )}
 
                                     {group.已选用神.依据 && group.已选用神.依据.length > 0 && (
-                                        <div className="text-foreground-secondary md:col-span-2">
-                                            <span className="text-foreground-secondary">判据：</span>
+                                        <div className="md:col-span-2">
+                                            <span>判据：</span>
                                             {group.已选用神.依据.join('、')}
                                         </div>
                                     )}
 
                                     {group.取用说明 && (
-                                        <div className="text-foreground-secondary md:col-span-2">
-                                            <span className="text-foreground-secondary">取用：</span>
+                                        <div className="md:col-span-2">
+                                            <span>取用：</span>
                                             {group.取用说明}
                                         </div>
                                     )}
 
                                     {group.候选用神 && group.候选用神.length > 0 && (
-                                        <div className="text-foreground-secondary md:col-span-2">
-                                            <span className="text-foreground-secondary">{`候选（${group.候选用神.length}）：`}</span>
-                                            {group.候选用神.map((c) => {
-                                                const sourceLabel = getCandidateSourceLabel(c.来源);
-                                                return `${c.六亲}@${getPositionLabel(c.爻位)}${sourceLabel ? `(${sourceLabel})` : ''}`;
-                                            }).join('、')}
+                                        <div className="md:col-span-2">
+                                            <span>{`候选（${group.候选用神.length}）：`}</span>
+                                            {group.候选用神.map(describeCandidate).join('；')}
                                         </div>
                                     )}
 
                                     {group.应期提示 && group.应期提示.length > 0 && (
-                                        <div className="text-foreground-secondary md:col-span-2">
-                                            <span className="text-foreground-secondary">近期应期：</span>
-                                            {group.应期提示.slice(0, 2).map((rec) => `${rec.触发}${rec.依据.length > 0 ? `（${rec.依据.join('、')}）` : ''} ${rec.说明}`).join('；')}
+                                        <div className="md:col-span-2">
+                                            <span>应期提示：</span>
+                                            <ul className="mt-1 flex flex-col gap-1">
+                                                {group.应期提示.map((rec, index) => {
+                                                    const kind = rec.类型 ?? '应期';
+                                                    return (
+                                                        <li key={`${kind}-${rec.触发}-${index}`}>
+                                                            <span className={`mr-1.5 ${TIMING_TONES[kind] ?? ''}`}>{kind}</span>
+                                                            <span className="text-foreground">{rec.触发}</span>
+                                                            {`${rec.依据.length > 0 ? `（${rec.依据.join('、')}）` : ''} ${rec.说明}`}
+                                                        </li>
+                                                    );
+                                                })}
+                                            </ul>
                                         </div>
                                     )}
                                 </div>
                             </div>
                         );
                     })}
-                </div>
-            )}
-
-            {(analysis.卦盘.本卦.卦辞 || analysis.卦盘.本卦.象辞 || analysis.卦盘.变卦?.动爻爻辞?.length) && (
-                <CollapsibleSection title="卦辞象辞" defaultOpen={false}>
-                    <div className="space-y-2">
-                        {analysis.卦盘.本卦.卦辞 && (
-                            <div>
-                                <span className="text-foreground-secondary">卦辞：</span>
-                                <span className="text-foreground">{analysis.卦盘.本卦.卦辞}</span>
-                            </div>
-                        )}
-                        {analysis.卦盘.本卦.象辞 && (
-                            <div>
-                                <span className="text-foreground-secondary">象曰：</span>
-                                <span className="text-foreground italic">{analysis.卦盘.本卦.象辞}</span>
-                            </div>
-                        )}
-
-                        {analysis.卦盘.变卦?.动爻爻辞 && analysis.卦盘.变卦.动爻爻辞.length > 0 && (
-                            <div className="mt-2 pt-2 border-t border-border/60">
-                                <div className="text-foreground-secondary mb-1">变爻爻辞：</div>
-                                {analysis.卦盘.变卦.动爻爻辞.map((yaoText) => {
-                                    return (
-                                        <div
-                                            key={`${yaoText.爻名}-${yaoText.爻辞}`}
-                                            className="p-2 rounded border-l-2 mb-1 border-l-[#2eaadc] bg-sky-50/40"
-                                        >
-                                            <span className="font-medium text-foreground">{yaoText.爻名}：</span>
-                                            <span className="text-foreground-secondary">{yaoText.爻辞}</span>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
-
-                        {analysis.卦盘.变卦 && (
-                            <div className="mt-2 pt-2 border-t border-border/60">
-                                {analysis.卦盘.变卦.卦辞 && (
-                                    <div>
-                                        <span className="text-foreground-secondary">变卦 {analysis.卦盘.变卦.卦名} 卦辞：</span>
-                                        <span className="text-foreground">{analysis.卦盘.变卦.卦辞}</span>
-                                    </div>
-                                )}
-                                {analysis.卦盘.变卦.象辞 && (
-                                    <div className="mt-1">
-                                        <span className="text-foreground-secondary">变卦象曰：</span>
-                                        <span className="text-foreground italic">{analysis.卦盘.变卦.象辞}</span>
-                                    </div>
-                                )}
-                            </div>
-                        )}
                     </div>
-                </CollapsibleSection>
+                </section>
             )}
-
         </div>
     );
 }

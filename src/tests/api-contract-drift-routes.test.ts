@@ -179,9 +179,15 @@ test('knowledge-base PATCH reuses shared validation and rejects invalid weight',
     const originalRequireUserContext = apiUtilsModule.requireUserContext;
     const originalEnsureFeatureRouteEnabled = featureGateModule.ensureFeatureRouteEnabled;
 
+    const userDb = {
+        from() {
+            throw new Error('validation must reject the body before any query');
+        },
+    };
     apiUtilsModule.requireUserContext = async () => ({
         user: { id: 'user-1' },
-        supabase: {},
+        db: userDb,
+        supabase: userDb,
     });
     featureGateModule.ensureFeatureRouteEnabled = async () => null;
     delete require.cache[routePath];

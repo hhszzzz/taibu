@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
     loadConversationAnalysisSnapshot,
     type ConversationAnalysisSnapshot,
@@ -38,7 +38,7 @@ interface UseAnalysisSnapshotOptions {
     hasExistingAnalysis: boolean;
     /** Additional skip condition (e.g. result not loaded yet) */
     skip?: boolean;
-    /** Callbacks for setting state from snapshot */
+    /** Callbacks for setting state from snapshot; the latest ones are used, so callers may pass a fresh object each render */
     callbacks: AnalysisSnapshotCallbacks;
 }
 
@@ -58,6 +58,13 @@ export function useAnalysisSnapshot({
     callbacks,
 }: UseAnalysisSnapshotOptions): boolean {
     const [loading, setLoading] = useState(false);
+    // Callers pass inline callbacks; keeping them out of the load effect's dependencies stops a settled
+    // load from re-rendering, getting a new callbacks object and starting the same lookup again.
+    const callbacksRef = useRef(callbacks);
+
+    useEffect(() => {
+        callbacksRef.current = callbacks;
+    });
 
     useEffect(() => {
         if (skip || hasExistingAnalysis) {
@@ -80,7 +87,7 @@ export function useAnalysisSnapshot({
                     );
                     if (cancelled) return;
                     if (resolvedId) {
-                        callbacks.onConversationIdResolved?.(resolvedId);
+                        callbacksRef.current.onConversationIdResolved?.(resolvedId);
                     }
                 }
 
@@ -91,23 +98,23 @@ export function useAnalysisSnapshot({
                 if (cancelled || !snapshot) return;
 
                 if (snapshot.analysis) {
-                    callbacks.onAnalysis(snapshot.analysis);
+                    callbacksRef.current.onAnalysis(snapshot.analysis);
                 }
                 if (snapshot.reasoning) {
-                    callbacks.onReasoning?.(snapshot.reasoning);
+                    callbacksRef.current.onReasoning?.(snapshot.reasoning);
                 }
                 if (snapshot.modelId) {
-                    callbacks.onModelId?.(snapshot.modelId);
+                    callbacksRef.current.onModelId?.(snapshot.modelId);
                 }
-                callbacks.onReasoningEnabled?.(snapshot.reasoningEnabled);
+                callbacksRef.current.onReasoningEnabled?.(snapshot.reasoningEnabled);
             } catch (error) {
                 const message = error instanceof Error ? error.message : '加载分析快照失败';
                 console.error('[useAnalysisSnapshot] failed to load analysis snapshot:', error);
-                callbacks.onError?.(message);
+                callbacksRef.current.onError?.(message);
             } finally {
                 if (!cancelled) {
                     setLoading(false);
-                    callbacks.onComplete?.();
+                    callbacksRef.current.onComplete?.();
                 }
             }
         };
@@ -116,7 +123,7 @@ export function useAnalysisSnapshot({
         return () => {
             cancelled = true;
         };
-    }, [conversationId, recordId, divinationType, sessionKey, hasExistingAnalysis, skip, callbacks]);
+    }, [conversationId, recordId, divinationType, sessionKey, hasExistingAnalysis, skip]);
 
     return loading;
 }

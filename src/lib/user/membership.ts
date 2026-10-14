@@ -143,6 +143,21 @@ export function getPlanConfig(type: MembershipType): PricingPlan {
     return pricingPlans.find(p => p.id === type) || pricingPlans[0];
 }
 
+/** 会员到期日按浏览器本地日历显示为 YYYY-MM-DD。 */
+export function formatMembershipExpiryDate(expiresAt: Date): string {
+    const pad = (value: number) => String(value).padStart(2, '0');
+    return `${expiresAt.getFullYear()}-${pad(expiresAt.getMonth() + 1)}-${pad(expiresAt.getDate())}`;
+}
+
+/** 会员等级卡片：积分上限与签到奖励合成一行摘要，其余条目作为权益列表。 */
+export function describePricingPlan(plan: PricingPlan): { summary: string; perks: string[] } {
+    const checkin = plan.features.find(feature => feature.includes('签到'));
+    return {
+        summary: [`积分上限 ${plan.creditLimit}`, checkin].filter(Boolean).join(' · '),
+        perks: plan.features.filter(feature => !feature.includes('签到') && !feature.startsWith('积分上限')),
+    };
+}
+
 /**
  * 获取积分上限
  */

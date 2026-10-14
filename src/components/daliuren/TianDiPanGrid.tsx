@@ -1,160 +1,141 @@
 /**
  * 大六壬天地盘宫格组件
- * 4x4 布局，中心显示课名
+ *
+ * 4x4 外圈十二宫（巳午未申 / 辰·酉 / 卯·戌 / 寅丑子亥），中心 2x2 显示课名、日局与月将加时。
+ * 尺寸按容器宽度（@container）切换，结果页与聊天 Agent 窄栏共用。
  */
 import type { DaliurenCanonicalJSON } from 'taibu-core/daliuren';
 import { ChartTarget, isChartTargetSelected, type ChartInteraction } from '@/components/visualization/ChartTarget';
+import {
+    TIANDIPAN_GRID_POSITIONS,
+    getGanZhiTextClass,
+    getHourBranch,
+    getPalaceCornerText,
+    getPalaceTags,
+    parseKeShi,
+    type DaliurenCellTag,
+} from './daliuren-display';
 
-const WANGSUAI_COLORS: Record<string, string> = {
-    旺: 'text-red-500 font-bold',
-    相: 'text-orange-400 font-semibold',
-    休: 'text-blue-400',
-    囚: 'text-gray-400',
-    死: 'text-gray-500',
-};
-
-const TIANJIANG_COLORS: Record<string, string> = {
-    贵人: 'text-yellow-500', 腾蛇: 'text-red-400', 朱雀: 'text-red-500',
-    六合: 'text-green-500', 勾陈: 'text-amber-500', 青龙: 'text-blue-500',
-    天空: 'text-gray-400', 白虎: 'text-slate-600 dark:text-slate-200', 太常: 'text-yellow-400',
-    玄武: 'text-foreground', 太阴: 'text-purple-400', 天后: 'text-pink-400',
-};
-
-// 天地盘 12 宫的布局位置（4x4，中心2x2为课名区域）
-// 顺序：从子位开始逆时针（传统六壬布局，外圈从右到左，上下）
-// 位置索引对应 DI_ZHI 的 0-11（子丑寅卯辰巳午未申酉戌亥）
-const GRID_POSITIONS: Record<number, { row: number; col: number }> = {
-    // 下方（子丑寅）：row=3, col=1,2,3（从左到右：寅丑子）
-    2: { row: 3, col: 0 }, // 寅
-    1: { row: 3, col: 1 }, // 丑
-    0: { row: 3, col: 2 }, // 子
-    11: { row: 3, col: 3 }, // 亥
-    // 右侧（亥戌酉）：col=3, row=2,1（从下到上：戌酉）
-    10: { row: 2, col: 3 }, // 戌
-    9: { row: 1, col: 3 }, // 酉
-    // 上方（酉申未午巳）：row=0, col=3,2,1,0（从右到左：申未午巳）
-    8: { row: 0, col: 3 }, // 申
-    7: { row: 0, col: 2 }, // 未
-    6: { row: 0, col: 1 }, // 午
-    5: { row: 0, col: 0 }, // 巳
-    // 左侧（辰卯寅）：col=0, row=1,2（从上到下：辰卯）
-    4: { row: 1, col: 0 }, // 辰
-    3: { row: 2, col: 0 }, // 卯
-};
-
-interface PalaceCellProps {
-    gong: DaliurenCanonicalJSON['天地盘'][number];
-    isKong: boolean;
-    isSanChuan?: 'chu' | 'zhong' | 'mo';
-    index: number;
-    interaction?: ChartInteraction;
-}
-
-function PalaceCell({ gong, isKong, isSanChuan, index, interaction }: PalaceCellProps) {
-    const id = 'daliuren:palace:' + index;
-    const wangColor = gong.旺衰 ? WANGSUAI_COLORS[gong.旺衰] || 'text-foreground' : 'text-foreground';
-    const jiangColor = gong.天将 ? TIANJIANG_COLORS[gong.天将] || 'text-foreground' : 'text-foreground';
-    const kongStyle = isKong ? 'opacity-50' : '';
-
-    const sanChuanBorder = isSanChuan
-        ? isSanChuan === 'chu' ? 'ring-1 ring-red-400' :
-          isSanChuan === 'zhong' ? 'ring-1 ring-orange-400' :
-          'ring-1 ring-yellow-400'
-        : '';
-
-    return (
-        <div data-chart-selected={isChartTargetSelected(interaction, id) || undefined} className={`flex flex-col items-center justify-center p-1 min-h-[64px] bg-background-secondary/50 rounded-lg border border-border/30 ${sanChuanBorder} ${kongStyle}`}>
-            {interaction && <ChartTarget interaction={interaction} id={id} className="text-[10px]">{gong.地盘}宫</ChartTarget>}
-            {/* 天将 */}
-            <span className={`text-xs leading-tight ${jiangColor}`}><ChartTarget interaction={interaction} id={id + ':天将'}>{gong.天将}</ChartTarget></span>
-            {/* 天盘地支 */}
-            <span className={`text-sm font-bold leading-tight ${wangColor}`}>
-                <ChartTarget interaction={interaction} id={id + ':天盘'}>{gong.天盘}</ChartTarget>{isKong ? '⊙' : ''}
-            </span>
-            {/* 地盘地支 */}
-            <span className="text-xs text-foreground-secondary leading-tight"><ChartTarget interaction={interaction} id={id + ':地盘'}>{gong.地盘}</ChartTarget></span>
-            {/* 十二长生 */}
-            <span className="text-[10px] text-foreground-tertiary leading-tight">{gong.长生十二神}</span>
-        </div>
-    );
-}
+type Palace = DaliurenCanonicalJSON['天地盘'][number];
 
 interface TianDiPanGridProps {
     result: DaliurenCanonicalJSON;
     interaction?: ChartInteraction;
 }
 
-export function TianDiPanGrid({ result, interaction }: TianDiPanGridProps) {
-    const kongSet = new Set(result.基本信息.关键状态.空亡);
-    const chuZhi = result.三传[0]?.地支;
-    const zhongZhi = result.三传[1]?.地支;
-    const moZhi = result.三传[2]?.地支;
-    const [centerTitle, centerSubtitle] = result.基本信息.课式.split(' / ');
+const CELL_TONE = {
+    first: 'bg-accent-soft ring-2 ring-inset ring-accent',
+    transmission: 'bg-accent-soft ring-1 ring-inset ring-accent/60',
+    idle: 'bg-surface',
+} as const;
 
-    // 确定三传所在宫位（天盘地支匹配）
-    const getSanChuanMark = (gong: DaliurenCanonicalJSON['天地盘'][number]): 'chu' | 'zhong' | 'mo' | undefined => {
-        if (gong.天盘 === chuZhi) return 'chu';
-        if (gong.天盘 === zhongZhi) return 'zhong';
-        if (gong.天盘 === moZhi) return 'mo';
-        return undefined;
-    };
+function CellTag({ tag, extra }: { tag: DaliurenCellTag; extra: boolean }) {
+    return (
+        <span
+            className={`${extra ? 'hidden @xl:inline-flex' : 'inline-flex'} items-center rounded px-1 text-[0.5625rem] leading-[14px] whitespace-nowrap @xl:px-[5px] @xl:text-[0.6875rem] @xl:leading-4 ${
+                tag.emphasis ? 'bg-accent text-on-accent' : 'bg-background-tertiary text-foreground-secondary'
+            }`}
+        >
+            {tag.label}
+        </span>
+    );
+}
+
+function PalaceCell({
+    palace,
+    index,
+    row,
+    col,
+    chart,
+    kongSet,
+    interaction,
+}: {
+    palace: Palace;
+    index: number;
+    row: number;
+    col: number;
+    chart: DaliurenCanonicalJSON;
+    kongSet: ReadonlySet<string>;
+    interaction?: ChartInteraction;
+}) {
+    const id = 'daliuren:palace:' + index;
+    const tags = getPalaceTags(palace, chart);
+    const transmissionIndex = chart.三传.findIndex(step => step.地支 === palace.天盘);
+    const tone = transmissionIndex === 0 ? CELL_TONE.first : transmissionIndex > 0 ? CELL_TONE.transmission : CELL_TONE.idle;
+    const corner = getPalaceCornerText(palace, kongSet);
+    const heavenKong = kongSet.has(palace.天盘);
+    const phase = [palace.旺衰, palace.长生十二神 !== '-' ? palace.长生十二神 : ''].filter(Boolean).join(' · ');
 
     return (
-        <div className="w-full max-w-xs mx-auto">
-            <div className="grid grid-cols-4 grid-rows-4 gap-1">
-                {Array.from({ length: 16 }, (_, idx) => {
-                    const row = Math.floor(idx / 4);
-                    const col = idx % 4;
+        <div
+            data-chart-selected={isChartTargetSelected(interaction, id) || undefined}
+            style={{ gridRow: row, gridColumn: col }}
+            className={`grid min-w-0 grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_1fr_auto_auto] gap-x-1 px-[5px] py-1 @xl:grid-rows-[auto_1fr_auto] @xl:px-2.5 @xl:py-2 ${tone}`}
+        >
+            {/* 左上：地盘 · 遁干（旬空标「空」） */}
+            <span className={`min-w-0 truncate text-[0.59375rem] leading-[14px] @xl:text-[0.6875rem] @xl:leading-4 ${corner.isKong ? 'text-accent' : 'text-foreground-tertiary'}`}>
+                <ChartTarget interaction={interaction} id={id + ':地盘'}>{palace.地盘}</ChartTarget>
+                {corner.dunGan && ` · ${corner.dunGan}`}
+            </span>
+            {/* 右上：三传 / 干上 / 支上 / 贵人，紧凑档只显示首个 */}
+            <span className="flex items-start justify-end gap-0.5">
+                {/* ChartTarget 按钮继承父级字号（font: inherit），字号需设在外层 */}
+                {interaction && <span className="text-[10px] leading-[14px] text-foreground-secondary"><ChartTarget interaction={interaction} id={id}>{palace.地盘}宫</ChartTarget></span>}
+                {tags.map((tag, tagIndex) => <CellTag key={tag.label} tag={tag} extra={tagIndex > 0} />)}
+            </span>
+            {/* 天盘 */}
+            <span className={`col-span-2 self-center text-center font-display text-[1.375rem] leading-none @xl:text-[1.875rem] ${getGanZhiTextClass(palace.天盘, palace.五行)}`}>
+                <ChartTarget interaction={interaction} id={id + ':天盘'}>{palace.天盘}</ChartTarget>
+                {heavenKong && <span className="ml-0.5 align-super font-sans text-[9px] text-foreground-tertiary" title="天盘空亡">空</span>}
+            </span>
+            {/* 天将 · 旺衰：紧凑档上下居中，宽松档左右分列 */}
+            <span className="col-span-2 truncate text-center text-[0.6875rem] text-foreground @xl:col-span-1 @xl:text-left">
+                <ChartTarget interaction={interaction} id={id + ':天将'}>{palace.天将}</ChartTarget>
+            </span>
+            <span className="col-span-2 truncate text-center text-[0.59375rem] text-foreground-tertiary @xl:col-span-1 @xl:text-right @xl:text-[0.6875rem]">
+                {phase}
+            </span>
+        </div>
+    );
+}
 
-                    // 中心 2x2
-                    if (row >= 1 && row <= 2 && col >= 1 && col <= 2) {
-                        if (row === 1 && col === 1) {
-                            // 中心格：课名
-                            return (
-                                <div key={idx} className="col-span-2 row-span-2 flex flex-col items-center justify-center bg-gradient-to-br from-cyan-500/10 to-teal-500/10 border border-cyan-500/30 rounded-lg p-2">
-                                    <div className="text-xs text-foreground-secondary mb-1">课式</div>
-                                    <div className="text-sm font-bold text-foreground text-center leading-tight">
-                                        {centerTitle}
-                                    </div>
-                                    {centerSubtitle && (
-                                        <div className="text-xs text-teal-500 text-center">
-                                            {centerSubtitle}
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        }
-                        return null; // 中心其他格被 span 占用
-                    }
+function CenterPanel({ result }: { result: DaliurenCanonicalJSON }) {
+    const info = result.基本信息;
+    const keShi = parseKeShi(info.课式);
+    const hourBranch = getHourBranch(info.四柱);
+    const dayJu = [keShi.day, keShi.ju].filter(Boolean).join(' · ') || keShi.detail;
+    const yueJiang = hourBranch ? `月将${info.月将}加${hourBranch}时` : `月将${info.月将}`;
+    return (
+        <div style={{ gridRow: '2 / span 2', gridColumn: '2 / span 2' }} className="flex flex-col items-center justify-center gap-1 bg-panel p-2 text-center @xl:gap-2">
+            <span className="font-display text-lg leading-tight text-foreground @xl:text-[1.625rem]">{keShi.title}</span>
+            {dayJu && <span className="text-[0.6875rem] text-foreground-secondary @xl:text-[0.8125rem]">{dayJu}</span>}
+            <span className="text-[0.6875rem] text-foreground-secondary @xl:text-[0.8125rem]">{yueJiang} · {info.昼夜}</span>
+        </div>
+    );
+}
 
-                    // 找到对应的地支序号
-                    const zhiIdx = Object.entries(GRID_POSITIONS).find(
-                        ([, pos]) => pos.row === row && pos.col === col
-                    )?.[0];
-
-                    if (zhiIdx === undefined) return <div key={idx} />;
-
-                    const gong = result.天地盘[parseInt(zhiIdx)];
-                    if (!gong) return <div key={idx} />;
-
+export function TianDiPanGrid({ result, interaction }: TianDiPanGridProps) {
+    const kongSet = new Set(result.基本信息.关键状态.空亡);
+    return (
+        <div className="@container w-full">
+            <div className="grid grid-cols-4 grid-rows-[repeat(4,minmax(86px,auto))] gap-px overflow-hidden rounded-[14px] border-[0.5px] border-border bg-border @xl:grid-rows-[repeat(4,minmax(132px,auto))] @xl:rounded-2xl">
+                {TIANDIPAN_GRID_POSITIONS.map(({ index, row, col }) => {
+                    const palace = result.天地盘[index];
+                    if (!palace) return <div key={index} style={{ gridRow: row, gridColumn: col }} className="bg-surface" />;
                     return (
                         <PalaceCell
-                            key={idx}
-                            gong={gong}
-                            index={parseInt(zhiIdx)}
+                            key={index}
+                            palace={palace}
+                            index={index}
+                            row={row}
+                            col={col}
+                            chart={result}
+                            kongSet={kongSet}
                             interaction={interaction}
-                            isKong={kongSet.has(gong.天盘)}
-                            isSanChuan={getSanChuanMark(gong)}
                         />
                     );
                 })}
-            </div>
-            {/* 图例 */}
-            <div className="flex items-center justify-center gap-3 mt-2 text-xs text-foreground-tertiary">
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400"></span>初传</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-orange-400"></span>中传</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-400"></span>末传</span>
-                <span>⊙空亡</span>
+                <CenterPanel result={result} />
             </div>
         </div>
     );

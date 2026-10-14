@@ -4,7 +4,7 @@ import { DEFAULT_DIVINATION_TIMEZONE, zonedWallClockToSystemDate } from '../../s
 import { pinyin as convertToPinyin } from 'pinyin';
 import { MEIHUA_RUSHENG_CHAR_SET } from '../../data/meihua-rusheng.js';
 import { GUA_CI, XIANG_CI } from '../../data/hexagrams.js';
-import { calculateDerivedHexagrams, calculateGanZhiTime, findHexagram } from '../liuyao/calculate.js';
+import { calculateDerivedHexagrams, calculateGanZhiTime, findHexagram, getPalaceInfo } from '../liuyao/calculate.js';
 import type {
   MeihuaBodyUseRelation,
   MeihuaCastMeta,
@@ -17,6 +17,7 @@ import type {
   MeihuaMethod,
   MeihuaMultiSentenceStrategy,
   MeihuaOutput,
+  MeihuaSeasonalState,
   MeihuaSeasonState,
   MeihuaTextSplitMode,
   MeihuaTimingHint,
@@ -124,7 +125,7 @@ const WUXING_KE: Record<WuXing, WuXing> = {
 };
 
 const METHOD_LABELS: Record<MeihuaMethod, string> = {
-  time: '年月日時起卦',
+  time: '年月日时起卦',
   count_with_time: '物数/声数起卦',
   text_split: '字占',
   measure: '丈尺尺寸占',
@@ -263,7 +264,8 @@ function buildHexagramInfo(code: string): MeihuaHexagramInfo {
     code: hexagram.code,
     upperTrigram: TRIGRAMS[hexagram.upperTrigram as MeihuaTrigramName],
     lowerTrigram: TRIGRAMS[hexagram.lowerTrigram as MeihuaTrigramName],
-    element: hexagram.element as WuXing,
+    // 卦数据的 element 是上卦五行；整卦五行取所属八宫（卷一八卦万物属类即按八宫列卦）
+    element: getPalaceInfo(hexagram.code)?.element ?? (hexagram.element as WuXing),
     guaCi: GUA_CI[hexagram.name],
     xiangCi: XIANG_CI[hexagram.name],
   };
@@ -1047,110 +1049,89 @@ function buildTimingHints(readings: MeihuaInteractionReading[]): MeihuaTimingHin
     phase: phaseMap[reading.stage],
     trigger: triggerMap[reading.stage],
     summary: reading.favorable
-      ? `${reading.stageLabel}对体卦有利，主${phaseMap[reading.stage] === 'early' ? '先应' : phaseMap[reading.stage] === 'middle' ? '中程见应' : '后应'}.`
-      : `${reading.stageLabel}对体卦不利，主${phaseMap[reading.stage] === 'early' ? '先阻' : phaseMap[reading.stage] === 'middle' ? '中程受阻' : '后段反复'}.`,
+      ? `${reading.stageLabel}对体卦有利，主${phaseMap[reading.stage] === 'early' ? '先应' : phaseMap[reading.stage] === 'middle' ? '中程见应' : '后应'}。`
+      : `${reading.stageLabel}对体卦不利，主${phaseMap[reading.stage] === 'early' ? '先阻' : phaseMap[reading.stage] === 'middle' ? '中程受阻' : '后段反复'}。`,
   }));
 }
 
+type MeihuaStageReadings = Record<'use' | 'bodyMutual' | 'useMutual' | 'changed', MeihuaInteractionReading>;
+
+type MeihuaVerdict = { outcome: '吉' | '凶'; summary: string; evidence: string[]; };
+
+/**
+ * 吉凶按《梅花易数》体用诸诀的先后判定，不计分：
+ * 1. 卦断遗论「用不生体，互变生之而吉」「用不克体，互变俱克之而凶」：互卦有生体之卦而变卦也生体者吉，互卦有克体之卦而变卦也克体者凶；
+ * 2. 牡丹占「克体之卦多矣，卦中无生意」、老人占「俱是克体，并无生气」：用、互、变中有克体之卦而无生体之卦者凶，比和与体克用都不算生气；
+ * 3. 体用总诀「用吉变凶者，先吉后凶；用凶变吉者，先凶后吉」：其余按用卦与变卦对体卦的利害定始终。
+ * 卷一观梅、牡丹、老人、少年、牛哀鸣、鸡悲鸣、西林寺添勾诸占与卷二乾上坤下占病六问，按体用所断都与此相合。
+ */
+function decideVerdict(stages: MeihuaStageReadings): MeihuaVerdict {
+  const all = [stages.use, stages.bodyMutual, stages.useMutual, stages.changed];
+  const mutual = [stages.bodyMutual, stages.useMutual];
+  const generates = (items: MeihuaInteractionReading[]) => items.some((item) => item.relation === '用生体');
+  const controls = (items: MeihuaInteractionReading[]) => items.some((item) => item.relation === '用克体');
+
+  const mutualAndChangedGenerate = generates(mutual) && stages.changed.relation === '用生体';
+  const mutualAndChangedControl = controls(mutual) && stages.changed.relation === '用克体';
+  const lifeless = controls(all) && !generates(all);
+  const evidence = [
+    ...(mutualAndChangedGenerate ? ['互卦、变卦俱生体，愈见其吉。'] : []),
+    ...(mutualAndChangedControl ? ['互卦、变卦俱克体，愈见其凶。'] : []),
+    ...(lifeless ? ['卦中有克体之卦而无生体之卦，并无生气。'] : []),
+  ];
+
+  if (mutualAndChangedGenerate) return { outcome: '吉', summary: '互变俱生体，主事有成。', evidence };
+  if (mutualAndChangedControl) return { outcome: '凶', summary: '互变俱克体，主事多阻。', evidence };
+  if (lifeless) return { outcome: '凶', summary: '克体而无生气，主事多阻。', evidence };
+
+  if (stages.use.favorable && !stages.changed.favorable) {
+    return { outcome: '凶', summary: '先吉后凶，初看有利，后势转阻。', evidence: ['用卦吉而变卦凶，先吉后凶。'] };
+  }
+  if (!stages.use.favorable && stages.changed.favorable) {
+    return { outcome: '吉', summary: '先凶后吉，初段多阻，后势转开。', evidence: ['用卦凶而变卦吉，先凶后吉。'] };
+  }
+  return stages.use.favorable
+    ? { outcome: '吉', summary: '用卦、变卦俱利体卦，主事有成。', evidence: ['用卦、变卦俱利于体。'] }
+    : { outcome: '凶', summary: '用卦、变卦俱不利体卦，主事多阻。', evidence: ['用卦、变卦俱不利于体。'] };
+}
+
+/** 衰旺论「体卦宜盛旺……若体衰而逢克，则其凶甚矣；体衰而有生体之卦，则衰稍解」：盛衰只论轻重，不改吉凶。 */
+function describeBodySeason(state: MeihuaSeasonState, stages: MeihuaStageReadings): string {
+  if (state === '旺') return '体卦月令旺，体势盛。';
+  if (state !== '死') return `体卦月令${state}。`;
+  const relations = Object.values(stages).map((item) => item.relation);
+  const notes = [
+    ...(relations.includes('用克体') ? ['逢克则其凶更甚'] : []),
+    ...(relations.includes('用生体') ? ['有生体之卦则衰稍解'] : []),
+  ];
+  return `体卦月令死，体势衰${notes.map((note) => `，${note}`).join('')}。`;
+}
+
+/** 体用总诀「体党多而体势盛，用党多则体势衰」：互、变与体卦同五行为体党，与用卦同五行为用党。 */
+function describeParty(party: { body: WuXing; use: WuXing; others: WuXing[]; }): string | null {
+  const bodyCount = party.others.filter((element) => element === party.body).length;
+  const useCount = party.others.filter((element) => element === party.use).length;
+  if (bodyCount > useCount) return '体党多而体势盛。';
+  if (useCount > bodyCount) return '用党多则体势衰。';
+  return null;
+}
+
 function buildJudgement(
-  readings: MeihuaInteractionReading[],
-  seasonalState: MeihuaOutput['seasonalState'],
-  bodyElement: WuXing,
-  useElement: WuXing,
-  bodyMutualElement: WuXing,
-  useMutualElement: WuXing,
-  changedElement: WuXing,
+  stages: MeihuaStageReadings,
+  bodySeason: MeihuaSeasonState,
+  party: { body: WuXing; use: WuXing; others: WuXing[]; },
 ): MeihuaJudgement {
-  let weight = 0;
-  const basis: string[] = [];
-  for (const reading of readings) {
-    const delta = reading.stage === 'use' ? 2 : 1;
-    weight += reading.favorable ? delta : -delta;
-    basis.push(reading.summary);
-  }
-
-  if (seasonalState.body === '旺' || seasonalState.body === '相') {
-    weight += 1;
-    basis.push(`体卦月令${seasonalState.body}。`);
-  } else if (seasonalState.body === '囚' || seasonalState.body === '死') {
-    weight -= 1;
-    basis.push(`体卦月令${seasonalState.body}。`);
-  }
-
-  const partyElements = [bodyMutualElement, useMutualElement, changedElement];
-  const bodyPartyCount = partyElements.filter((element) => element === bodyElement).length;
-  const usePartyCount = partyElements.filter((element) => element === useElement).length;
-  if (bodyPartyCount > usePartyCount) {
-    weight += 1;
-    basis.push('体党多而体势盛。');
-  } else if (usePartyCount > bodyPartyCount) {
-    weight -= 1;
-    basis.push('用党多则体势衰。');
-  }
-
-  const useReading = readings.find((item) => item.stage === 'use');
-  const changedReading = readings.find((item) => item.stage === 'changed');
-
-  const trend =
-    useReading && changedReading && useReading.favorable && !changedReading.favorable
-      ? 'first_good_then_bad'
-      : useReading && changedReading && !useReading.favorable && changedReading.favorable
-        ? 'first_bad_then_good'
-        : 'steady';
-
-  if (trend === 'first_good_then_bad') {
-    basis.push('用卦吉而变卦凶，先吉后凶。');
-  } else if (trend === 'first_bad_then_good') {
-    basis.push('用卦凶而变卦吉，先凶后吉。');
-  }
-
-  const summary =
-    trend === 'first_good_then_bad'
-      ? '先吉后凶，初看有利，后势转阻。'
-      : trend === 'first_bad_then_good'
-        ? '先凶后吉，初段多阻，后势转开。'
-        : weight >= 2
-          ? '体用得势，主事有成。'
-          : weight <= -2
-            ? '体卦受制，主事多阻。'
-            : '吉凶互见，须看后续触发。';
-
-  if (trend === 'first_good_then_bad') {
-    return {
-      outcome: '凶',
-      summary,
-      basis,
-    };
-  }
-
-  if (trend === 'first_bad_then_good') {
-    return {
-      outcome: '吉',
-      summary,
-      basis,
-    };
-  }
-
-  if (weight >= 2) {
-    return {
-      outcome: '吉',
-      summary,
-      basis,
-    };
-  }
-
-  if (weight <= -2) {
-    return {
-      outcome: '凶',
-      summary,
-      basis,
-    };
-  }
-
+  const verdict = decideVerdict(stages);
+  const partyNote = describeParty(party);
   return {
-    outcome: '平',
-    summary,
-    basis,
+    outcome: verdict.outcome,
+    summary: verdict.summary,
+    basis: [
+      ...[stages.use, stages.bodyMutual, stages.useMutual, stages.changed].map((item) => item.summary),
+      ...verdict.evidence,
+      describeBodySeason(bodySeason, stages),
+      ...(partyNote ? [partyNote] : []),
+    ],
   };
 }
 
@@ -1182,35 +1163,34 @@ export function calculateMeihua(input: MeihuaInput): MeihuaOutput {
   const useTrigram = bodyIsUpper ? mainHexagram.lowerTrigram : mainHexagram.upperTrigram;
   const bodyMutualTrigram = bodyIsUpper ? nuclearHexagramFull.upperTrigram : nuclearHexagramFull.lowerTrigram;
   const useMutualTrigram = bodyIsUpper ? nuclearHexagramFull.lowerTrigram : nuclearHexagramFull.upperTrigram;
+  // 动爻在用卦，变卦中体卦一侧不变；体用生克论用卦变出的这一卦（观梅占「幸变为艮土，兑金得生」）
+  const changedTrigram = bodyIsUpper ? changedHexagram.lowerTrigram : changedHexagram.upperTrigram;
 
   const bodyUseRelation = getRelation(bodyTrigram.element, useTrigram.element, '用卦');
-  const interactionReadings: MeihuaInteractionReading[] = [
-    buildInteraction('use', '用卦', bodyTrigram.element, useTrigram.element),
-    buildInteraction('body_mutual', '体互', bodyTrigram.element, bodyMutualTrigram.element),
-    buildInteraction('use_mutual', '用互', bodyTrigram.element, useMutualTrigram.element),
-    buildInteraction('changed', '变卦', bodyTrigram.element, changedHexagram.element),
-  ];
+  const stages: MeihuaStageReadings = {
+    use: buildInteraction('use', '用卦', bodyTrigram.element, useTrigram.element),
+    bodyMutual: buildInteraction('body_mutual', '体互', bodyTrigram.element, bodyMutualTrigram.element),
+    useMutual: buildInteraction('use_mutual', '用互', bodyTrigram.element, useMutualTrigram.element),
+    changed: buildInteraction('changed', '变卦', bodyTrigram.element, changedTrigram.element),
+  };
+  const interactionReadings = [stages.use, stages.bodyMutual, stages.useMutual, stages.changed];
 
   const monthBranch = ganZhiTime.month.zhi as DiZhi;
-  const seasonalState = {
+  const seasonalState: MeihuaSeasonalState = {
     monthBranch,
     body: getSeasonState(monthBranch, bodyTrigram.element),
     use: getSeasonState(monthBranch, useTrigram.element),
     bodyMutual: getSeasonState(monthBranch, bodyMutualTrigram.element),
     useMutual: getSeasonState(monthBranch, useMutualTrigram.element),
-    changed: getSeasonState(monthBranch, changedHexagram.element),
+    changed: getSeasonState(monthBranch, changedTrigram.element),
   };
 
   const timingHints = buildTimingHints(interactionReadings);
-  const judgement = buildJudgement(
-    interactionReadings,
-    seasonalState,
-    bodyTrigram.element,
-    useTrigram.element,
-    bodyMutualTrigram.element,
-    useMutualTrigram.element,
-    changedHexagram.element,
-  );
+  const judgement = buildJudgement(stages, seasonalState.body, {
+    body: bodyTrigram.element,
+    use: useTrigram.element,
+    others: [bodyMutualTrigram.element, useMutualTrigram.element, changedTrigram.element],
+  });
 
   return {
     question,
@@ -1227,6 +1207,7 @@ export function calculateMeihua(input: MeihuaInput): MeihuaOutput {
     useTrigram,
     bodyMutualTrigram,
     useMutualTrigram,
+    changedTrigram,
     bodyUseRelation,
     seasonalState,
     interactionReadings,

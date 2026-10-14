@@ -15,33 +15,51 @@
   --sab: env(safe-area-inset-bottom, 0px);
   --mobile-header-height: calc(4rem + var(--sat));
 
-  /* Warm paper surfaces with a restrained clay accent. */
-  --background: #faf8f5;
-  --background-secondary: #f0ece6;
-  --background-tertiary: #e7e0d7;
-  --surface: #fffdf9;
-  --foreground: #2c2925;
-  --foreground-secondary: #70685f;
-  --foreground-tertiary: #7b7165;
-  --accent: #b65c3e;
-  --accent-hover: #9d4c32;
-  --accent-light: #f5e8df;
+  /* Ivory paper surfaces with a restrained clay accent. */
+  --background: #faf9f5;
+  --background-secondary: #f0eee6;
+  --background-tertiary: #e8e6dc;
+  --surface: #ffffff;
+  --sidebar: #f5f4ed;
+  --panel: #f3f1e9;
+  --foreground: #141413;
+  --foreground-secondary: #5e5d59;
+  --foreground-tertiary: #73726c;
+  --accent: #b4532f;
+  --accent-hover: #9a4526;
+  --accent-light: #fbf1ec;
+  --accent-soft: #fbede4;
+  --accent-strong: #8f3f22;
+  --clay: #d97757;
   --on-accent: #ffffff;
-  --success: #507557;
-  --warning: #946b2d;
-  --danger: #b54f48;
+  --success: #44663a;
+  --warning: #85602a;
+  --danger: #a63d2c;
+
+  /* 五行与四化：命盘着色统一从这里取值 */
+  --wx-wood: #44663a;
+  --wx-fire: #a63d2c;
+  --wx-earth: #85602a;
+  --wx-metal: #6e6551;
+  --wx-water: #2f5f86;
+  --wx-wood-soft: #e4ebdd;
+  --wx-fire-soft: #f6e1da;
+  --wx-earth-soft: #f1e6d3;
+  --wx-metal-soft: #ebe8e1;
+  --wx-water-soft: #dfe8f0;
+  --hua-quan: #6b4d9e;
 
   /* 边框和分隔线 */
-  --border: #e5ded4;
-  --border-hover: #cec4b7;
+  --border: rgba(31, 30, 29, 0.15);
+  --border-hover: rgba(31, 30, 29, 0.3);
 
   /* 阴影 */
-  --shadow-sm: 0 1px 3px rgba(77, 57, 36, 0.04);
-  --shadow-md: 0 6px 24px rgba(77, 57, 36, 0.07);
-  --shadow-lg: 0 16px 48px rgba(77, 57, 36, 0.12);
+  --shadow-sm: 0 1px 2px rgba(20, 20, 19, 0.06);
+  --shadow-md: 0 6px 24px rgba(20, 20, 19, 0.07);
+  --shadow-lg: 0 16px 48px rgba(20, 20, 19, 0.12);
 
   /* 侧边栏宽度 */
-  --sidebar-width: 248px;
+  --sidebar-width: 260px;
   --chat-background: #faf8f5;
   --chat-secondary: #f0ece6;
   --chat-tertiary: #e7e0d7;
@@ -80,16 +98,32 @@
   --background-secondary: #30302c;
   --background-tertiary: #3b3a35;
   --surface: #2c2c29;
+  --sidebar: #1f1e1d;
+  --panel: #2f2e2a;
   --foreground: #f0ede6;
   --foreground-secondary: #b9b1a5;
   --foreground-tertiary: #a2998b;
   --accent: #d99475;
   --accent-hover: #e5a388;
   --accent-light: #44332b;
+  --accent-soft: #4a3329;
+  --accent-strong: #e8ae93;
+  --clay: #d97757;
   --on-accent: #262624;
   --success: #a4bba0;
   --warning: #d5b378;
   --danger: #e39b91;
+  --wx-wood: #9cb98c;
+  --wx-fire: #e5978a;
+  --wx-earth: #d2ad6f;
+  --wx-metal: #bdb4a0;
+  --wx-water: #8fb4d6;
+  --wx-wood-soft: #2f3a2a;
+  --wx-fire-soft: #44302b;
+  --wx-earth-soft: #3d3424;
+  --wx-metal-soft: #36342e;
+  --wx-water-soft: #263443;
+  --hua-quan: #b49ad9;
   --border: #424039;
   --border-hover: #57534a;
 
@@ -126,11 +160,27 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-danger: var(--danger);
+  --color-sidebar: var(--sidebar);
+  --color-panel: var(--panel);
+  --color-clay: var(--clay);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-strong: var(--accent-strong);
+  --color-wood: var(--wx-wood);
+  --color-fire: var(--wx-fire);
+  --color-earth: var(--wx-earth);
+  --color-metal: var(--wx-metal);
+  --color-water: var(--wx-water);
+  --color-wood-soft: var(--wx-wood-soft);
+  --color-fire-soft: var(--wx-fire-soft);
+  --color-earth-soft: var(--wx-earth-soft);
+  --color-metal-soft: var(--wx-metal-soft);
+  --color-water-soft: var(--wx-water-soft);
+  --color-hua-quan: var(--hua-quan);
 
   /* 字体 */
   --font-sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
   --font-mono: "SFMono-Regular", "JetBrains Mono", "Menlo", "Monaco", "Consolas", "Liberation Mono", monospace;
-  --font-display: Georgia, "Songti SC", "STSong", "Noto Serif CJK SC", serif;
+  --font-display: "Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "STSong", Georgia, serif;
   --radius-md: .5rem;
   --radius-lg: .7rem;
   --radius-xl: 1rem;
@@ -157,7 +207,7 @@ body {
 }
 
 @layer base {
-  h1 { font-family: var(--font-display); font-weight: 500; line-height: 1.35; }
+  h1 { font-family: var(--font-display); font-weight: 400; line-height: 1.35; }
   button, a, input, select, textarea, summary { -webkit-tap-highlight-color: transparent; }
   button:not(:disabled), summary { cursor: pointer; }
   button:disabled { cursor: not-allowed; }

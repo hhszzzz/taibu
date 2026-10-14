@@ -376,10 +376,12 @@ function calculateTaiYuan(monthStem: string, monthBranch: string): string {
 }
 
 // ===== 命宫计算 =====
-// 从卯起正月逆数到生月，再从该位起子时顺数到生时
+// 从子宫起正月逆数到生月，再于生月宫起生时顺数，数到卯时所落之宫为命宫
+// （与 lunar-javascript getMingGong 的「14/26 减月支数与时支数之和」等价）
 // 天干用五虎遁月法：甲己→丙寅, 乙庚→戊寅, 丙辛→庚寅, 丁壬→壬寅, 戊癸→甲寅
 function calculateMingGong(yearStem: string, monthBranch: string, hourBranch: string): string {
-  const maoIdx = DI_ZHI.indexOf('卯'); // 4
+  const ziIdx = DI_ZHI.indexOf('子'); // 0
+  const maoIdx = DI_ZHI.indexOf('卯'); // 3
   const monthIdx = DI_ZHI.indexOf(monthBranch as typeof DI_ZHI[number]);
   const hourIdx = DI_ZHI.indexOf(hourBranch as typeof DI_ZHI[number]);
   if (monthIdx < 0 || hourIdx < 0) return '';
@@ -388,7 +390,9 @@ function calculateMingGong(yearStem: string, monthBranch: string, hourBranch: st
   const yinIdx = DI_ZHI.indexOf('寅'); // 2
   const monthNum = (monthIdx - yinIdx + 12) % 12 + 1;
 
-  const mingBranchIdx = (maoIdx - (monthNum - 1) + hourIdx + 12 * 10) % 12;
+  const monthPalaceIdx = (ziIdx - (monthNum - 1) + 12) % 12;
+  // 生时越晚，数到卯时经过的宫越少：时支每进一位，命宫退一宫
+  const mingBranchIdx = (monthPalaceIdx + maoIdx - hourIdx + 12) % 12;
   const mingBranch = DI_ZHI[mingBranchIdx];
 
   // 五虎遁月法：年干 → 寅月起始天干
@@ -426,27 +430,19 @@ export function analyzePillarRelations(yearBranch: string, monthBranch: string, 
     }
   }
 
+  // 只登记三支俱全的三合；半合由 analyzeDiZhiBanHe 按生旺/旺墓规则单独给出，
+  // 生墓两支（如申辰）是拱合而非半合，不在这里列出
   for (const sanHe of SAN_HE) {
-    const matchingBranches = branches.filter((b) => sanHe.branches.includes(b));
-    const uniqueBranches = Array.from(new Set(matchingBranches));
-    if (uniqueBranches.length >= 2) {
+    const uniqueBranches = Array.from(new Set(branches.filter((b) => sanHe.branches.includes(b))));
+    if (uniqueBranches.length === 3) {
       const matchingPillars = branches
         .map((b, i) => (sanHe.branches.includes(b) ? normalizePillarPosition(pillarNames[i]) : null))
         .filter(Boolean) as PillarPosition[];
-
-      if (uniqueBranches.length === 3) {
-        relations.push({
-          type: '合',
-          pillars: matchingPillars,
-          description: `${uniqueBranches.join('')}三合${sanHe.element}`,
-        });
-      } else {
-        relations.push({
-          type: '合',
-          pillars: matchingPillars,
-          description: `${uniqueBranches.join('')}半合${sanHe.element}`,
-        });
-      }
+      relations.push({
+        type: '合',
+        pillars: matchingPillars,
+        description: `${uniqueBranches.join('')}三合${sanHe.element}`,
+      });
     }
   }
 

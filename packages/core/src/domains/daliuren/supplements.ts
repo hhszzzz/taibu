@@ -158,10 +158,9 @@ export function resolveSingleKeMisclassifiedAsMaoXing(
 
 /**
  * 判断课体细分
- * method: 库返回的取传大类
+ * method: 库返回的取传课体（元首、重审、比用/知一、涉害、遥克、昴星、别责、八专、伏吟、反吟）
  * siKe: 四课数据
  * sanChuan: 三传数据
- * tianPan: 天盘
  */
 export function classifyKeTi(
   method: string,
@@ -170,53 +169,20 @@ export function classifyKeTi(
 ): { method: string; subTypes: string[]; extraTypes: string[]; } {
   const subTypes: string[] = [];
   const extraTypes: string[] = [];
+  const ganWx = GAN_WUXING[siKe.gan];
 
   // --- 取传课体子类型 ---
   if (method === '遥克') {
-    // 蒿失：遥克中，上神克日干（从外来克）
-    // 弹射：遥克中，日干克上神（从内向外克）
+    // 《六壬大全》卷七：先取神遥克日为蒿矢，无则取日遥克神为弹射
     const chuWx = ZHI_WUXING[sanChuan.chu];
-    const ganWx = GAN_WUXING[siKe.gan];
     if (chuWx && ganWx) {
       if (keRelation(chuWx, ganWx)) {
-        subTypes.push('蒿失');
+        subTypes.push('蒿矢');
       } else if (keRelation(ganWx, chuWx)) {
         subTypes.push('弹射');
       }
     }
-  } else if (method === '贼克') {
-    // 统计上克下（元首）与下贼上（重审）的数量
-    const keDownPairs = [
-      [siKe.ganYang, GAN_WUXING[siKe.gan]],   // 一课：上神 vs 日干
-      [siKe.zhiYang, ZHI_WUXING[siKe.zhi]],  // 三课：上神 vs 日支
-    ].filter(([shangWx, xiaWx]) => shangWx && xiaWx && keRelation(ZHI_WUXING[shangWx] || '', xiaWx || ''));
-    const keUpPairs = [
-      [siKe.ganYang, GAN_WUXING[siKe.gan]],
-      [siKe.zhiYang, ZHI_WUXING[siKe.zhi]],
-    ].filter(([shangWx, xiaWx]) => shangWx && xiaWx && keRelation(xiaWx || '', ZHI_WUXING[shangWx] || ''));
-    const totalKe = keDownPairs.length + keUpPairs.length;
-    if (totalKe >= 2) {
-      subTypes.push('知一');
-    } else if (keDownPairs.length === 1 && keUpPairs.length === 0) {
-      subTypes.push('元首');
-    } else if (keUpPairs.length === 1 && keDownPairs.length === 0) {
-      subTypes.push('重审');
-    } else {
-      subTypes.push('贼克');
-    }
-  } else if (method === '比用' || method === '涉害') {
-    subTypes.push(method);
-  } else if (method === '昴星') {
-    subTypes.push('昴星');
-  } else if (method === '别责') {
-    subTypes.push('别责');
-  } else if (method === '八专') {
-    subTypes.push('八专');
-  } else if (method === '伏吟') {
-    subTypes.push('伏吟');
-  } else if (method === '返吟') {
-    subTypes.push('返吟');
-  } else {
+  } else if (method) {
     subTypes.push(method);
   }
 
@@ -234,13 +200,20 @@ export function classifyKeTi(
     }
   }
 
-  // 铸印：三传递生
+  // 铸印：三传巳戌卯，巳为炉、戌为印、卯为印模（《六壬大全》卷八）
+  if (sanChuan.chu === '巳' && sanChuan.zhong === '戌' && sanChuan.mo === '卯') {
+    extraTypes.push('铸印');
+  }
+
   const chuWx = ZHI_WUXING[sanChuan.chu];
   const zhongWx = ZHI_WUXING[sanChuan.zhong];
   const moWx = ZHI_WUXING[sanChuan.mo];
   if (chuWx && zhongWx && moWx) {
-    if (shengRelation(chuWx, zhongWx) && shengRelation(zhongWx, moWx)) {
-      extraTypes.push('铸印');
+    // 亨通：三传递生日干，初生中、中生末、末生日干，或末生中、中生初、初生日干（《六壬大全》卷八）
+    const forward = shengRelation(chuWx, zhongWx) && shengRelation(zhongWx, moWx) && shengRelation(moWx, ganWx);
+    const backward = shengRelation(moWx, zhongWx) && shengRelation(zhongWx, chuWx) && shengRelation(chuWx, ganWx);
+    if (ganWx && (forward || backward)) {
+      extraTypes.push('亨通');
     }
     // 连珠：三传相连（地支连续）
     const chuIdx = zhiIndex(sanChuan.chu);
@@ -300,21 +273,25 @@ function numToChinese(n: number): string {
 
 // ===== 本命与行年 =====
 
+/** 公历年份对应的干支年（不含立春判断，调用方须先确定岁年） */
+export function yearGanZhi(year: number): string {
+  return TIAN_GAN[((year - 4) % 10 + 10) % 10] + DI_ZHI[((year - 4) % 12 + 12) % 12];
+}
+
 /**
  * 计算本命（出生年干支）和行年
+ * @param suiYear 占时所在岁年，即以立春换年的年柱对应的公历年；一月至立春前仍属上一年。
  */
 export function calcBenMingXingNian(
   birthYear: number,
-  currentYear: number,
+  suiYear: number,
   gender: 'male' | 'female',
 ): { benMing: string; xingNian: string; } {
   // 本命 = 出生年干支
-  const benMingGanIdx = ((birthYear - 4) % 10 + 10) % 10;
-  const benMingZhiIdx = ((birthYear - 4) % 12 + 12) % 12;
-  const benMing = TIAN_GAN[benMingGanIdx] + DI_ZHI[benMingZhiIdx];
+  const benMing = yearGanZhi(birthYear);
 
-  // 行年：男从丙寅顺推，女从壬申逆推
-  const age = currentYear - birthYear;
+  // 行年：一岁起男丙寅顺推、女壬申逆推。占时在立春前、出生年按公历填作本年时，仍是一岁。
+  const age = Math.max(0, suiYear - birthYear);
   let xingNianGanIdx: number;
   let xingNianZhiIdx: number;
 

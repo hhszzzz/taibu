@@ -106,6 +106,8 @@ export interface LiuyaoTransitionJSON {
 
 export interface LiuyaoResonanceJSON {
   类型: '反吟' | '伏吟';
+  /** 所在之卦；旧排盘未记录时省略 */
+  范围?: '内卦' | '外卦' | '内外卦';
 }
 
 export type LiuyaoAISafeJSON = LiuyaoJSON;
@@ -165,6 +167,7 @@ export interface LiuyaoYaoJSON {
   动静状态?: string;
   动静: string;
   空亡?: string;
+  /** 本爻在日辰实际作用的长生/帝旺/墓/绝（「论生不论墓」等被否定者与其余八位不输出） */
   长生?: string;
   神煞?: string[];
   变爻?: {
@@ -213,6 +216,8 @@ export interface LiuyaoYongShenJSON {
     是否世爻?: '是';
     是否应爻?: '是';
     空亡状态?: string;
+    强弱: string;
+    动静: string;
     依据?: string[];
   }>;
   神煞系统?: {
@@ -221,6 +226,8 @@ export interface LiuyaoYongShenJSON {
     仇神?: string;
   };
   应期提示?: Array<{
+    /** 应期为关键之期，吉期为转吉之期，忌期为须防之期；旧快照可能缺省 */
+    类型?: '应期' | '吉期' | '忌期';
     触发: string;
     依据: string[];
     说明: string;

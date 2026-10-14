@@ -30,23 +30,19 @@ function formatTrigramRole(label: string, trigram: MeihuaTrigramInfo): string {
 function formatHexagramLine(
   label: string,
   hexagram: MeihuaHexagramInfo,
-  options: { movingLineLabel?: string; includeWholeElement?: boolean; },
+  options: { movingLineLabel?: string; note?: string; },
 ): string {
-  const extras: string[] = [];
-  if (options.includeWholeElement) {
-    extras.push(`整卦五行=${hexagram.element}`);
-  }
-  if (options.movingLineLabel) {
-    extras.push(options.movingLineLabel);
-  }
+  const extras = [options.note, options.movingLineLabel].filter((item): item is string => Boolean(item));
   const suffix = extras.length > 0 ? `，${extras.join('，')}` : '';
   return `- ${label}: ${hexagram.name}（上${hexagram.upperTrigram.name}${hexagram.upperTrigram.element} / 下${hexagram.lowerTrigram.name}${hexagram.lowerTrigram.element}${suffix}）`;
 }
 
-function buildRelationExpression(
+type RelationTarget = { label: string; name?: string; element: string; separator?: string; };
+
+export function buildRelationExpression(
   relation: MeihuaInteractionReading['relation'],
   body: { label: string; trigram: MeihuaTrigramInfo; },
-  other: { label: string; name?: string; element: string; separator?: string; },
+  other: RelationTarget,
 ): string {
   const bodyRef = formatTrigramRole(body.label, body.trigram);
   const otherRef = other.name
@@ -67,6 +63,13 @@ function buildRelationExpression(
     default:
       return `${bodyRef} 与 ${otherRef}`;
   }
+}
+
+/** 后段变卦一端：取用卦变出的经卦；旧版结果没有 changedTrigram，按当时「变卦整卦」的口径原样复现。 */
+export function buildChangedStageTarget(result: MeihuaOutput, changedHexagram: MeihuaHexagramInfo): RelationTarget {
+  return result.changedTrigram
+    ? { label: '变卦', name: result.changedTrigram.name, element: result.changedTrigram.element }
+    : { label: '变卦整卦', name: changedHexagram.name, element: changedHexagram.element, separator: '/' };
 }
 
 function buildStageExpressions(result: MeihuaOutput): string[] {
@@ -100,12 +103,7 @@ function buildStageExpressions(result: MeihuaOutput): string[] {
   }
 
   if (changedStage && result.changedHexagram) {
-    lines.push(`- 后段 / 变卦: ${buildRelationExpression(changedStage.relation, body, {
-      label: '变卦整卦',
-      name: result.changedHexagram.name,
-      element: result.changedHexagram.element,
-      separator: '/',
-    })}`);
+    lines.push(`- 后段 / 变卦: ${buildRelationExpression(changedStage.relation, body, buildChangedStageTarget(result, result.changedHexagram))}`);
   }
 
   return lines;
@@ -156,7 +154,9 @@ function renderMeihuaCanonicalTextBase(result: MeihuaOutput, options: MeihuaCano
   if (result.changedHexagram) {
     lines.push(formatHexagramLine('变卦', result.changedHexagram, {
       movingLineLabel,
-      includeWholeElement: true,
+      note: result.changedTrigram
+        ? `用卦${result.useTrigram.name}变${result.changedTrigram.name}${result.changedTrigram.element}`
+        : `整卦五行=${result.changedHexagram.element}`,
     }));
     if (result.changedHexagram.guaCi) lines.push(`- 变卦卦辞: ${result.changedHexagram.guaCi}`);
     if (detailLevel === 'full' && result.changedHexagram.xiangCi) lines.push(`- 变卦象辞: ${result.changedHexagram.xiangCi}`);

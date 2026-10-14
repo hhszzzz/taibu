@@ -18,6 +18,8 @@ const METHOD_OPTIONS: Array<{ id: WebMeihuaMethod; label: string; hint: string }
   { id: 'number_triplet', label: '三数起卦', hint: '输入上下卦与动爻' },
 ];
 
+const INPUT_CLASS = 'h-11 w-full rounded-[10px] border-[0.5px] border-border-hover bg-surface px-3.5 text-[15px] text-foreground placeholder:text-foreground-tertiary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20';
+
 function splitSentences(text: string): string[] {
   return text
     .split(/[。！？!?；;]+/u)
@@ -113,117 +115,119 @@ export default function MeihuaPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground md:pb-12">
-        <div className="max-w-3xl mx-auto px-4 py-8 sm:py-12">
-          <header className="hidden md:block border-b border-border/60 pb-7 mb-8">
-            <h1 className="text-3xl font-bold tracking-tight">梅花易数</h1>
-            <p className="mt-2 text-sm text-foreground-secondary">以时间、文字或报数，观察卦象的体用流转。</p>
-          </header>
+    <div className="min-h-screen bg-background text-foreground">
+      <div className="mx-auto flex w-full max-w-[880px] flex-col gap-5 px-4 py-5 sm:gap-7 sm:px-8 sm:py-12">
+        <header className="hidden flex-col gap-2 lg:flex">
+          <h1 className="font-display text-[34px] font-normal leading-tight">梅花易数</h1>
+          <p className="text-[15px] text-foreground-secondary">以时间、文字或报数起卦，观察体用生克与卦象流转。</p>
+        </header>
 
-          <main className="space-y-6">
-            <section className="bg-background border border-border rounded-md p-5 sm:p-6 space-y-5">
-              <div>
-                <label htmlFor="meihua-question" className="block text-xs font-bold tracking-wider text-foreground-secondary mb-2">占问事项</label>
+        <section className="flex flex-col gap-5 rounded-2xl border-[0.5px] border-border bg-surface p-4 sm:p-6">
+          <div className="flex flex-wrap gap-4">
+            <div className="flex min-w-0 flex-[999_1_320px] flex-col gap-1.5">
+              <label htmlFor="meihua-question" className="text-sm font-medium">占问事项</label>
+              <input
+                id="meihua-question"
+                value={question}
+                onChange={(event) => setQuestion(event.target.value)}
+                placeholder="例如：这次合作能否顺利推进？"
+                className={INPUT_CLASS}
+              />
+            </div>
+            <div className="flex min-w-0 flex-[1_1_250px] flex-col gap-1.5">
+              <label htmlFor="meihua-date" className="text-sm font-medium">起卦时间</label>
+              <div className="relative">
+                <CalendarClock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground-secondary" />
                 <input
-                  id="meihua-question"
-                  value={question}
-                  onChange={(event) => setQuestion(event.target.value)}
-                  placeholder="例如：这次合作能否顺利推进？"
-                  className="w-full px-3 py-3 bg-transparent border border-border rounded-md text-sm focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none"
+                  id="meihua-date"
+                  type="datetime-local"
+                  value={date}
+                  onChange={(event) => setDate(event.target.value)}
+                  className={`${INPUT_CLASS} pl-10`}
                 />
               </div>
+            </div>
+          </div>
 
-              <div>
-                <label htmlFor="meihua-date" className="block text-xs font-bold tracking-wider text-foreground-secondary mb-2">起卦时间</label>
-                <div className="relative">
-                  <CalendarClock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-secondary pointer-events-none" />
-                  <input
-                    id="meihua-date"
-                    type="datetime-local"
-                    value={date}
-                    onChange={(event) => setDate(event.target.value)}
-                    className="w-full pl-10 pr-3 py-3 bg-transparent border border-border rounded-md text-sm focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none"
-                  />
-                </div>
+          <div className="flex flex-col gap-2.5">
+            <div className="text-sm font-medium">起卦方式</div>
+            <div className="grid grid-cols-2 gap-2 lg:grid-cols-4" role="group" aria-label="梅花起卦方式">
+              {METHOD_OPTIONS.map((option) => {
+                const active = method === option.id;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setMethod(option.id)}
+                    aria-pressed={active}
+                    className={`rounded-xl px-3.5 py-3 text-left transition-colors ${active ? 'bg-accent-soft ring-2 ring-inset ring-accent' : 'border-[0.5px] border-border-hover bg-surface hover:bg-background-secondary active:bg-background-tertiary'}`}
+                  >
+                    <span className={`block font-display text-[15px] ${active ? 'text-accent-strong' : ''}`}>{option.label}</span>
+                    <span className="mt-1 block text-xs text-foreground-secondary">{option.hint}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {method === 'text_split' && (
+            <div className="flex flex-col gap-4 border-t-[0.5px] border-border pt-5">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="meihua-text" className="text-sm font-medium">取卦文字</label>
+                <textarea
+                  id="meihua-text"
+                  value={text}
+                  onChange={(event) => setText(event.target.value)}
+                  rows={3}
+                  placeholder="输入一个字、两句文字或一段来意"
+                  className="w-full resize-y rounded-[10px] border-[0.5px] border-border-hover bg-surface px-3.5 py-3 text-[15px] leading-relaxed text-foreground placeholder:text-foreground-tertiary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+                />
               </div>
-
-              <div>
-                <div className="text-xs font-bold tracking-wider text-foreground-secondary mb-2">起卦方式</div>
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2" role="group" aria-label="梅花起卦方式">
-                  {METHOD_OPTIONS.map((option) => (
-                    <button
-                      key={option.id}
-                      type="button"
-                      onClick={() => setMethod(option.id)}
-                      aria-pressed={method === option.id}
-                      className={`text-left px-3 py-3 rounded-md border transition-colors duration-150 ${method === option.id ? 'border-accent bg-accent/8' : 'border-border hover:bg-background-secondary active:bg-background-secondary/80'}`}
-                    >
-                      <span className={`block text-sm font-semibold ${method === option.id ? 'text-accent' : ''}`}>{option.label}</span>
-                      <span className="block mt-1 text-[11px] text-foreground-secondary">{option.hint}</span>
-                    </button>
+              {isSingleCharacter && (
+                <div className="grid grid-cols-2 gap-3">
+                  {[['left-stroke', '左半部笔画', leftStrokeCount, setLeftStrokeCount], ['right-stroke', '右半部笔画', rightStrokeCount, setRightStrokeCount]].map(([id, label, value, setter]) => (
+                    <label key={id as string} htmlFor={id as string} className="flex flex-col gap-1.5 text-[13px] text-foreground-secondary">
+                      <span className="font-medium">{label as string}</span>
+                      <input id={id as string} type="number" min={1} value={value as string} onChange={(event) => (setter as (value: string) => void)(event.target.value)} className={INPUT_CLASS} />
+                    </label>
                   ))}
                 </div>
-              </div>
-
-              {method === 'text_split' && (
-                <div className="space-y-4 border-t border-border/60 pt-5">
-                  <div>
-                    <label htmlFor="meihua-text" className="block text-xs font-bold tracking-wider text-foreground-secondary mb-2">取卦文字</label>
-                    <textarea
-                      id="meihua-text"
-                      value={text}
-                      onChange={(event) => setText(event.target.value)}
-                      rows={3}
-                      placeholder="输入一个字、两句文字或一段来意"
-                      className="w-full resize-y px-3 py-3 bg-transparent border border-border rounded-md text-sm leading-relaxed focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none"
-                    />
-                  </div>
-                  {isSingleCharacter && (
-                    <div className="grid grid-cols-2 gap-3">
-                      {[['left-stroke', '左半部笔画', leftStrokeCount, setLeftStrokeCount], ['right-stroke', '右半部笔画', rightStrokeCount, setRightStrokeCount]].map(([id, label, value, setter]) => (
-                        <label key={id as string} htmlFor={id as string} className="text-xs text-foreground-secondary">
-                          <span className="block mb-2 font-semibold">{label as string}</span>
-                          <input id={id as string} type="number" min={1} value={value as string} onChange={(event) => (setter as (value: string) => void)(event.target.value)} className="w-full px-3 py-2.5 border border-border rounded-md bg-transparent text-sm focus:border-accent focus:outline-none" />
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                  {sentences.length > 2 && !isSingleCharacter && (
-                    <div>
-                      <div className="text-xs font-semibold text-foreground-secondary mb-2">多句取用</div>
-                      <div className="inline-flex border border-border rounded-md overflow-hidden" role="group" aria-label="多句取用方式">
-                        {(['first', 'last'] as const).map((value) => (
-                          <button key={value} type="button" aria-pressed={multiSentenceStrategy === value} onClick={() => setMultiSentenceStrategy(value)} className={`px-3 py-2 text-xs transition-colors ${multiSentenceStrategy === value ? 'bg-accent text-on-accent' : 'hover:bg-background-secondary'}`}>
-                            {value === 'first' ? '取首句' : '取末句'}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
               )}
-
-              {(method === 'number_pair' || method === 'number_triplet') && (
-                <div className="border-t border-border/60 pt-5">
-                  <div className="text-xs font-bold tracking-wider text-foreground-secondary mb-2">报数</div>
-                  <div className={`grid gap-3 ${method === 'number_pair' ? 'grid-cols-2' : 'grid-cols-3'}`}>
-                    {numbers.slice(0, method === 'number_pair' ? 2 : 3).map((value, index) => (
-                      <label key={index} htmlFor={`meihua-number-${index}`} className="text-xs text-foreground-secondary">
-                        <span className="block mb-2 font-semibold">{index === 0 ? '上卦' : index === 1 ? '下卦' : '动爻'}</span>
-                        <input id={`meihua-number-${index}`} type="number" min={1} value={value} onChange={(event) => updateNumber(index, event.target.value)} className="w-full px-3 py-2.5 border border-border rounded-md bg-transparent text-sm focus:border-accent focus:outline-none" />
-                      </label>
+              {sentences.length > 2 && !isSingleCharacter && (
+                <div className="flex flex-col gap-2">
+                  <div className="text-[13px] font-medium text-foreground-secondary">多句取用</div>
+                  <div className="inline-flex w-fit rounded-[10px] bg-background-secondary p-1" role="group" aria-label="多句取用方式">
+                    {(['first', 'last'] as const).map((value) => (
+                      <button key={value} type="button" aria-pressed={multiSentenceStrategy === value} onClick={() => setMultiSentenceStrategy(value)} className={`h-8 rounded-lg px-3.5 text-[13px] transition-colors ${multiSentenceStrategy === value ? 'bg-surface text-foreground shadow-sm' : 'text-foreground-secondary hover:text-foreground'}`}>
+                        {value === 'first' ? '取首句' : '取末句'}
+                      </button>
                     ))}
                   </div>
                 </div>
               )}
-            </section>
+            </div>
+          )}
 
-            <button type="button" onClick={() => void handleCalculate()} disabled={isLoading} className="w-full inline-flex justify-center items-center gap-2 px-5 py-3.5 bg-accent text-on-accent rounded-md font-semibold text-sm hover:bg-accent/90 active:bg-accent-hover transition-colors disabled:opacity-50">
-              {isLoading ? <><SoundWaveLoader variant="inline" /><span>正在起卦</span></> : <><Play className="w-4 h-4" />开始起卦</>}
-            </button>
-          </main>
-        </div>
-        <HistoryDrawer type="meihua" />
+          {(method === 'number_pair' || method === 'number_triplet') && (
+            <div className="flex flex-col gap-2 border-t-[0.5px] border-border pt-5">
+              <div className="text-sm font-medium">报数</div>
+              <div className={`grid gap-3 ${method === 'number_pair' ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                {numbers.slice(0, method === 'number_pair' ? 2 : 3).map((value, index) => (
+                  <label key={index} htmlFor={`meihua-number-${index}`} className="flex flex-col gap-1.5 text-[13px] text-foreground-secondary">
+                    <span className="font-medium">{index === 0 ? '上卦' : index === 1 ? '下卦' : '动爻'}</span>
+                    <input id={`meihua-number-${index}`} type="number" min={1} value={value} onChange={(event) => updateNumber(index, event.target.value)} className={INPUT_CLASS} />
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <button type="button" onClick={() => void handleCalculate()} disabled={isLoading} className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-accent px-5 text-[15px] font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:opacity-50">
+            {isLoading ? <><SoundWaveLoader variant="inline" /><span>正在起卦</span></> : <><Play className="h-4 w-4" />开始起卦</>}
+          </button>
+        </section>
+      </div>
+      <HistoryDrawer type="meihua" />
     </div>
   );
 }

@@ -23,6 +23,21 @@ interface NotificationPagination {
   nextOffset: number | null;
 }
 
+/** 任务通知（Agent 后台任务完成等）的轮询间隔 */
+export const TASK_NOTIFICATION_POLL_MS = 10_000;
+/** 轮询复用用户设置的时长；设置写入会经 mutationEffects.userSettings 立即失效 */
+export const TASK_NOTIFICATION_SETTINGS_STALE_MS = 60_000;
+/** 回到前台时补拉一次，但距上一轮至少间隔此时长，避免来回切换标签页时连发 */
+export const TASK_NOTIFICATION_RESUME_COOLDOWN_MS = 3_000;
+
+/**
+ * 是否拉取任务通知：可见页面照常轮询；隐藏页面只有能弹出系统通知时才继续，
+ * 否则 Toast 无人可见，等回到前台时补拉即可。
+ */
+export function shouldPollTaskNotifications(state: { visible: boolean; desktopNotifications: boolean }): boolean {
+  return state.visible || state.desktopNotifications;
+}
+
 interface NotificationPageResult {
   notifications: Notification[];
   pagination: NotificationPagination;

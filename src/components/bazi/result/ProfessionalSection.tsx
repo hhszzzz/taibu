@@ -1,4 +1,4 @@
-import { Calendar, TrendingUp } from 'lucide-react';
+import type { ReactNode } from 'react';
 import type { BaziCanonicalJSON } from 'taibu-core/bazi';
 import { calculateProfessionalData, type DaYunInfo, type LiuNianInfo, type LiuYueInfo, type LiuRiInfo } from '@/lib/divination/bazi';
 import { DaYunTable } from '@/components/bazi/result/DaYunTable';
@@ -6,6 +6,16 @@ import { LiuNianTable } from '@/components/bazi/result/LiuNianTable';
 import { LiuYueTable } from '@/components/bazi/result/LiuYueTable';
 import { LiuRiTable } from '@/components/bazi/result/LiuRiTable';
 import { ProfessionalTable } from '@/components/bazi/result/ProfessionalTable';
+
+/** 区块标题：衬线标题 + 右侧说明 */
+function SectionHeading({ title, aside }: { title: ReactNode; aside?: ReactNode }) {
+    return (
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h2 className="font-display text-lg font-medium text-foreground sm:text-[22px]">{title}</h2>
+            {aside && <span className="text-xs text-foreground-secondary sm:text-[13px]">{aside}</span>}
+        </div>
+    );
+}
 
 export function ProfessionalSection({
     canonicalChart,
@@ -46,14 +56,16 @@ export function ProfessionalSection({
     const activeLiuRi: LiuRiInfo | undefined = liuRi.find(lr => lr.date === selectedLiuRiDate);
     const relationHighlights = isUnknownTime ? [] : canonicalChart.干支关系;
     const hasGanZhiHighlights = relationHighlights.length > 0;
+    const basicInfo = canonicalChart.基本信息;
+    const chartFacts = [
+        basicInfo.胎元 ? { label: '胎元', value: basicInfo.胎元 } : null,
+        basicInfo.命宫 ? { label: '命宫', value: basicInfo.命宫 } : null,
+        basicInfo.真太阳时 ? { label: '真太阳时', value: `${basicInfo.真太阳时.真太阳时}（钟表 ${basicInfo.真太阳时.钟表时间}）` } : null,
+    ].filter((item): item is { label: string; value: string } => Boolean(item));
 
     return (
-        <div className="space-y-8">
-            <section className="bg-background border border-border rounded-md px-1 pb-4 pt-2">
-                {/* <h2 className="text-sm font-semibold mb-6 flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-accent" />
-                    命盘详情
-                </h2> */}
+        <div className="flex flex-col gap-6 sm:gap-7">
+            <section className="rounded-2xl border-[0.5px] border-border bg-surface px-3 py-2 sm:px-6 sm:py-3">
                 <ProfessionalTable
                     canonicalChart={canonicalChart}
                     isUnknownTime={isUnknownTime}
@@ -63,43 +75,49 @@ export function ProfessionalSection({
                     activeLiuYue={activeLiuYue ?? undefined}
                     activeLiuRi={activeLiuRi}
                 />
-                <div className="px-4 mt-4 border-t border-border/60 space-y-2 text-xs text-foreground-secondary font-medium">
-                        <div>
-                            起运：{proData.startAgeDetail}
-                        {canonicalChart.基本信息.胎元 ? `　胎元：${canonicalChart.基本信息.胎元}` : ''}
-                        {canonicalChart.基本信息.命宫 ? `　命宫：${canonicalChart.基本信息.命宫}` : ''}
-                    </div>
-                    {hasGanZhiHighlights ? (
-                        <div>
-                            干支关系：{relationHighlights.join('、')}
-                        </div>
-                    ) : null}
-                    {canonicalChart.基本信息.真太阳时 ? (
-                        <div>
-                            真太阳时：{canonicalChart.基本信息.真太阳时.真太阳时}（钟表 {canonicalChart.基本信息.真太阳时.钟表时间}）
-                        </div>
-                    ) : null}
-                </div>
+                {(chartFacts.length > 0 || hasGanZhiHighlights) && (
+                    <dl className="mt-2 flex flex-col gap-1.5 border-t-[0.5px] border-border py-3 text-xs text-foreground-secondary sm:text-[13px]">
+                        {chartFacts.length > 0 && (
+                            <div className="flex flex-wrap gap-x-5 gap-y-1">
+                                {chartFacts.map((fact) => (
+                                    <div key={fact.label} className="flex gap-1.5">
+                                        <dt className="text-foreground-tertiary">{fact.label}</dt>
+                                        <dd className="text-foreground">{fact.value}</dd>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {hasGanZhiHighlights && (
+                            <div className="flex gap-1.5">
+                                <dt className="shrink-0 text-foreground-tertiary">干支关系</dt>
+                                <dd className="text-foreground">{relationHighlights.join('、')}</dd>
+                            </div>
+                        )}
+                    </dl>
+                )}
             </section>
 
-            <section className="bg-background border border-border rounded-md p-6 py-4">
-                <h2 className="text-sm font-semibold mb-6 flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-accent" />
-                    大运排布
-                </h2>
+            <section className="flex flex-col gap-3">
+                <SectionHeading
+                    title="大运"
+                    aside={(
+                        <>
+                            <span className="sm:hidden">左右滑动 · </span>
+                            {proData.startAgeDetail}
+                        </>
+                    )}
+                />
                 <DaYunTable
                     daYun={proData.daYun}
                     selectedIndex={selectedDaYunIndex}
                     onSelect={onSelectDaYun}
+                    currentIndex={proData.currentDaYunIndex}
                 />
             </section>
 
             {currentLiuNian.length > 0 && (
-                <section className="bg-background border border-border rounded-md p-6 py-4">
-                    <h2 className="text-sm font-semibold mb-6 flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-accent" />
-                        流年运势
-                    </h2>
+                <section className="flex flex-col gap-3">
+                    <SectionHeading title={activeDaYun ? `流年 · ${activeDaYun.gan}${activeDaYun.zhi}运` : '流年'} />
                     <LiuNianTable
                         liuNian={currentLiuNian}
                         selectedYear={selectedLiuNianYear}
@@ -109,28 +127,19 @@ export function ProfessionalSection({
             )}
 
             {liuYue.length > 0 && (
-                <section className="bg-background border border-border rounded-md p-6 py-4">
-                    <h2 className="text-sm font-semibold mb-6 flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-accent" />
-                        {selectedLiuNianYear}年 流月
-                    </h2>
+                <section className="flex flex-col gap-3">
+                    <SectionHeading title={`${selectedLiuNianYear}年 · 流月`} aside="点击流月展开流日" />
                     <LiuYueTable
                         liuYue={liuYue}
                         selectedMonth={selectedLiuYueMonth}
                         onSelect={onSelectLiuYue}
                     />
-                    <p className="mt-4 text-[11px] text-foreground-secondary font-medium italic">
-                        * 点击特定流月以展开流日详情
-                    </p>
                 </section>
             )}
 
             {liuRi.length > 0 && activeLiuYue && (
-                <section className="bg-background border border-border rounded-md p-6 py-4">
-                    <h2 className="text-sm font-semibold mb-6 flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-accent" />
-                        流日记录（{activeLiuYue.startDate} — {activeLiuYue.endDate}）
-                    </h2>
+                <section className="flex flex-col gap-3">
+                    <SectionHeading title="流日" aside={`${activeLiuYue.startDate} — ${activeLiuYue.endDate}`} />
                     <LiuRiTable
                         liuRi={liuRi}
                         selectedDate={selectedLiuRiDate}

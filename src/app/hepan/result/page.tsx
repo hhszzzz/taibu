@@ -1,12 +1,14 @@
 /**
  * 合盘结果页面
+ *
+ * 'use client'：结果从 sessionStorage 读取，AI 解读为流式交互
  */
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { RotateCw, Sparkles, Lightbulb, RefreshCw, Quote } from 'lucide-react';
+import { ChevronLeft, RotateCw, Sparkles, Lightbulb, RefreshCw, Quote } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { CompatibilityChart } from '@/components/hepan/CompatibilityChart';
 import { ConflictPoints } from '@/components/hepan/ConflictPoints';
@@ -45,7 +47,7 @@ export default function HepanResultPage() {
     const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL_ID);
     const [reasoningEnabled, setReasoningEnabled] = useState(false);
     const errorBanner = error ? (
-        <p data-testid="analysis-error" className="text-red-500 text-sm mb-4 bg-red-500/10 p-3 rounded-lg border border-red-500/20">{error}</p>
+        <p data-testid="analysis-error" role="alert" className="mb-4 rounded-xl bg-danger/10 p-3 text-sm text-danger">{error}</p>
     ) : null;
     const [conversationId, setConversationId] = useState<string | null>(null);
     const [showAuthModal, setShowAuthModal] = useState(false);
@@ -212,30 +214,23 @@ export default function HepanResultPage() {
         );
     }
 
-    const typeConfig = {
-        love: { color: 'text-rose-500', bg: 'bg-rose-500', border: 'border-rose-500/20' },
-        business: { color: 'text-blue-500', bg: 'bg-blue-500', border: 'border-blue-500/20' },
-        family: { color: 'text-emerald-500', bg: 'bg-emerald-500', border: 'border-emerald-500/20' },
-    }[result.type];
-
     return (
         <div className="min-h-screen bg-background">
-            {/* 背景装饰 Removed */}
-
-            <div className="max-w-3xl mx-auto px-4 py-4 md:py-8 relative z-10 animate-fade-in">
+            <div className="mx-auto flex w-full max-w-[860px] flex-col gap-5 px-4 pb-10 pt-4 sm:gap-6 sm:px-6 lg:px-8 lg:pb-16 lg:pt-7 animate-fade-in">
                 {/* 头部导航 - 仅桌面端显示 */}
-                <div className="hidden md:flex items-center justify-between mb-8">
+                <div className="hidden items-center justify-between lg:flex">
                     <Link
                         href="/hepan"
-                        className="inline-flex items-center gap-2 text-foreground-secondary hover:text-foreground transition-colors px-3 py-1.5 rounded-lg hover:bg-background/5"
+                        className="inline-flex items-center gap-1.5 text-sm text-foreground-secondary transition-colors hover:text-foreground"
                     >
-                        <span className="text-sm font-medium">返回列表</span>
+                        <ChevronLeft className="h-4 w-4" />
+                        返回列表
                     </Link>
                     {knowledgeBaseEnabled && !!chartId && (
                         <button
                             type="button"
                             onClick={() => setKbModalOpen(true)}
-                            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-background/5 hover:bg-background/10 border border-white/10 transition-all"
+                            className="inline-flex h-10 items-center rounded-[10px] border-[0.5px] border-border-hover bg-surface px-3.5 text-sm text-foreground transition-colors hover:bg-background-secondary"
                         >
                             加入知识库
                         </button>
@@ -243,74 +238,62 @@ export default function HepanResultPage() {
                 </div>
 
                 {/* 标题 */}
-                <div className="text-center mb-10">
-                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium mb-3 ${typeConfig.bg}/10 ${typeConfig.color} border ${typeConfig.border}`}>
+                <header className="flex flex-col items-center gap-2 text-center lg:items-start lg:text-left">
+                    <span className="rounded-md bg-accent-soft px-2 py-0.5 text-xs text-accent-strong">
                         {getHepanTypeName(result.type)}分析
                     </span>
-                    <h1 className="text-3xl font-bold text-foreground tracking-tight flex items-center justify-center gap-4">
-                        <span className="opacity-80">{result.person1.name}</span>
-                        <span className="text-foreground-secondary/30 font-light">&</span>
-                        <span className="opacity-80">{result.person2.name}</span>
+                    <h1 className="flex flex-wrap items-center justify-center gap-x-3 font-display text-[1.75rem] font-normal leading-tight text-foreground lg:justify-start lg:text-[34px]">
+                        <span>{result.person1.name}</span>
+                        <span className="text-foreground-tertiary">&amp;</span>
+                        <span>{result.person2.name}</span>
                     </h1>
-                </div>
+                </header>
 
                 {/* 兼容性图表 */}
-                <div className="mb-8 bg-background/5 backdrop-blur-md rounded-3xl p-6 border border-white/10 shadow-xl">
-                    <CompatibilityChart
-                        dimensions={result.dimensions}
-                        overallScore={result.overallScore}
-                    />
-                </div>
+                <CompatibilityChart
+                    dimensions={result.dimensions}
+                    overallScore={result.overallScore}
+                />
 
                 {/* 走势曲线 */}
-                <div className="mb-8">
-                    <div className="mt-4 p-6 bg-background/5 backdrop-blur-md rounded-3xl border border-white/10 animate-fade-in-down space-y-6">
-                        <CompatibilityTrendChart
-                            data={trendData}
-                            period={trendPeriod}
-                            onPeriodChange={setTrendPeriod}
-                        />
+                <CompatibilityTrendChart
+                    data={trendData}
+                    period={trendPeriod}
+                    onPeriodChange={setTrendPeriod}
+                />
 
-                        {/* 发展建议 */}
-                        {relationshipAdvice.length > 0 && (
-                            <div className="bg-background/5 rounded-2xl p-5 border border-white/5">
-                                <h4 className="font-medium text-foreground mb-4 flex items-center gap-2">
-                                    <Lightbulb className="w-4 h-4 text-amber-500" />
-                                    发展建议
-                                </h4>
-                                <ul className="space-y-3">
-                                    {relationshipAdvice.map((advice, idx) => (
-                                        <li
-                                            key={idx}
-                                            className="text-sm text-foreground-secondary flex items-start gap-3 leading-relaxed"
-                                        >
-                                            <div className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
-                                            {advice}
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        )}
-                    </div>
-                </div>
+                {/* 发展建议 */}
+                {relationshipAdvice.length > 0 && (
+                    <section className="rounded-2xl border-[0.5px] border-border bg-surface p-5 sm:p-6">
+                        <h2 className="mb-3 flex items-center gap-2 font-display text-lg text-foreground">
+                            <Lightbulb className="h-[18px] w-[18px] text-clay" />
+                            发展建议
+                        </h2>
+                        <ul className="space-y-2.5">
+                            {relationshipAdvice.map((advice, idx) => (
+                                <li
+                                    key={idx}
+                                    className="flex items-start gap-2.5 text-sm leading-relaxed text-foreground-secondary"
+                                >
+                                    <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-clay" />
+                                    {advice}
+                                </li>
+                            ))}
+                        </ul>
+                    </section>
+                )}
 
                 {/* 冲突点 */}
-                <div className="mb-8 bg-background/5 backdrop-blur-md rounded-3xl p-6 border border-white/10">
-                    <ConflictPoints conflicts={result.conflicts} hepanType={result.type} />
-                </div>
+                <ConflictPoints conflicts={result.conflicts} hepanType={result.type} />
 
                 {/* AI 深度分析 */}
-                <AIFeatureGate><div className="bg-background/5 backdrop-blur-xl rounded-3xl p-6 md:p-8 border border-white/10 relative mb-12 group">
-                    {/* Background decorations Removed */}
-
-                    <div className="flex items-center justify-between mb-6 flex-wrap gap-4 relative z-10">
-                        <h3 className="text-xl font-bold text-foreground flex items-center gap-3">
-                            <div className="p-2 rounded-xl bg-accent/20 text-accent">
-                                <Sparkles className="w-5 h-5" />
-                            </div>
+                <AIFeatureGate><section className="rounded-2xl border-[0.5px] border-border bg-surface p-5 sm:p-6">
+                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                        <h2 className="flex items-center gap-2 font-display text-lg text-foreground sm:text-xl">
+                            <Sparkles className="h-[18px] w-[18px] text-clay" />
                             AI 深度洞察
-                        </h3>
-                        <div className="flex items-center gap-3">
+                        </h2>
+                        <div className="flex items-center gap-2">
                             <ModelSelector
                                 compact
                                 selectedModel={selectedModel}
@@ -323,16 +306,18 @@ export default function HepanResultPage() {
                             />
                             {aiAnalysis && (
                                 <button
+                                    type="button"
                                     data-testid="reanalyze-button"
                                     onClick={handleGetAIAnalysis}
                                     disabled={loadingAI || membershipPending}
-                                    className="p-2 rounded-lg bg-background/5 text-foreground-secondary hover:text-foreground hover:bg-background/10 transition-colors disabled:opacity-50"
+                                    className="rounded-lg p-2 text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground disabled:opacity-50"
                                     title="重新分析"
+                                    aria-label="重新分析"
                                 >
                                     {loadingAI ? (
                                         <SoundWaveLoader variant="inline" />
                                     ) : (
-                                        <RefreshCw className="w-4 h-4" />
+                                        <RefreshCw className="h-4 w-4" />
                                     )}
                                 </button>
                             )}
@@ -340,7 +325,7 @@ export default function HepanResultPage() {
                     </div>
 
                     {aiAnalysis ? (
-                        <div className="relative z-10">
+                        <div>
                             {errorBanner}
                             <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-foreground prose-p:text-foreground-secondary prose-strong:text-foreground prose-strong:font-semibold">
                                 {analysisReasoning && (
@@ -351,27 +336,28 @@ export default function HepanResultPage() {
                                         duration={streaming.reasoningDuration}
                                     />
                                 )}
-                                <div className="bg-background/5 rounded-2xl p-6 border border-white/5 shadow-inner">
-                                    <MarkdownContent content={aiAnalysis} className="text-[15px] leading-relaxed text-foreground-secondary/90" />
+                                <div className="rounded-xl bg-panel p-4 sm:p-5">
+                                    <MarkdownContent content={aiAnalysis} className="text-[15px] leading-relaxed text-foreground-secondary" />
                                 </div>
                             </div>
                         </div>
                     ) : (
-                        <div className="text-center py-10 relative z-10">
+                        <div className="py-6 text-center">
                             {errorBanner}
 
                             {!user ? (
-                                <div className="max-w-sm mx-auto p-6 rounded-2xl bg-background/5 border border-white/10 backdrop-blur-sm">
-                                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-accent/10 text-accent mb-4">
-                                        <Quote className="w-6 h-6" />
+                                <div className="mx-auto max-w-sm rounded-2xl bg-panel p-6">
+                                    <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-accent-soft text-accent-strong">
+                                        <Quote className="h-6 w-6" />
                                     </div>
-                                    <h3 className="text-lg font-bold mb-2 text-foreground">解锁深度解读</h3>
-                                    <p className="text-foreground-secondary mb-6 text-sm">
+                                    <h3 className="mb-2 font-display text-lg text-foreground">解锁深度解读</h3>
+                                    <p className="mb-6 text-sm text-foreground-secondary">
                                         登录后获取 AI 对您关系的深度剖析与个性化建议
                                     </p>
                                     <button
+                                        type="button"
                                         onClick={() => setShowAuthModal(true)}
-                                        className="w-full py-3 rounded-xl bg-accent text-on-accent font-medium hover:bg-accent/90 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-accent/20"
+                                        className="h-11 w-full rounded-xl bg-accent font-medium text-on-accent transition-colors hover:bg-accent-hover"
                                     >
                                         登录 / 注册
                                     </button>
@@ -382,11 +368,11 @@ export default function HepanResultPage() {
                                 </div>
                             ) : (
                                 <button
+                                    type="button"
                                     onClick={handleGetAIAnalysis}
                                     disabled={loadingAI || membershipPending}
-                                    className="inline-flex items-center gap-2.5 px-8 py-4 bg-accent text-on-accent rounded-xl font-bold text-lg
-                                        shadow-lg shadow-accent/20 hover:shadow-accent/30 hover:scale-[1.02] active:scale-[0.98]
-                                        disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:shadow-none transition-all"
+                                    className="inline-flex h-12 items-center gap-2 rounded-xl bg-foreground px-7 text-base font-medium text-background
+                                        transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     {loadingAI ? (
                                         <>
@@ -395,7 +381,7 @@ export default function HepanResultPage() {
                                         </>
                                     ) : (
                                         <>
-                                            <Sparkles className="w-5 h-5" />
+                                            <Sparkles className="h-4 w-4" />
                                             获取 AI 深度分析
                                         </>
                                     )}
@@ -403,17 +389,15 @@ export default function HepanResultPage() {
                             )}
                         </div>
                     )}
-                </div></AIFeatureGate>
+                </section></AIFeatureGate>
 
                 {/* 操作按钮 */}
-                <div className="flex justify-center pb-8">
+                <div className="flex justify-center pt-2">
                     <Link
                         href="/hepan"
-                        className="inline-flex items-center gap-2 px-8 py-3 rounded-xl
-                            bg-background/5 text-foreground font-medium border border-white/10
-                            hover:bg-background/10 transition-all"
+                        className="inline-flex h-11 items-center gap-2 rounded-xl border-[0.5px] border-border-hover bg-surface px-6 text-sm font-medium text-foreground transition-colors hover:bg-background-secondary"
                     >
-                        <RotateCw className="w-4 h-4" />
+                        <RotateCw className="h-4 w-4" />
                         重新分析
                     </Link>
                 </div>

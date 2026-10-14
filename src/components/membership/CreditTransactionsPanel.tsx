@@ -110,8 +110,8 @@ export function CreditTransactionsPanel({ pageSize = 5, refreshKey = 0 }: Credit
   });
 
   const getAmountColor = (item: CreditTransaction) => {
-    if (item.type === 'refund') return 'text-[#1f9d6d]';
-    return item.amount < 0 ? 'text-[#b42318]' : 'text-[#a16207]';
+    if (item.type === 'refund') return 'text-success';
+    return item.amount < 0 ? 'text-danger' : 'text-warning';
   };
 
   const getAmountText = (item: CreditTransaction) => (item.amount > 0 ? `+${item.amount}` : String(item.amount));
@@ -121,71 +121,47 @@ export function CreditTransactionsPanel({ pageSize = 5, refreshKey = 0 }: Credit
   }
 
   return (
-    <section className="overflow-hidden rounded-lg border border-border bg-background">
-      <div className="border-b border-border px-4 py-3">
-        <div className="flex items-center justify-between gap-4">
-          <h2 className="text-sm font-medium text-foreground">积分记录</h2>
-          <div className="text-xs text-foreground/48">今日消耗 {todaySpent}</div>
-        </div>
+    <section aria-labelledby="credit-transactions-heading">
+      <div className="flex items-baseline justify-between gap-4 pb-2">
+        <h3 id="credit-transactions-heading" className="text-[13px] font-medium text-foreground-tertiary">积分记录</h3>
+        <span className="text-[13px] text-foreground-secondary">今日消耗 {todaySpent}</span>
       </div>
 
-      {loading ? (
-        <div>
-          {Array.from({ length: Math.min(pageSize, 5) }).map((_, index) => (
-            <div
-              key={index}
-              className={`h-16 bg-foreground/5 animate-pulse ${index > 0 ? 'border-t border-border' : ''}`}
-            />
-          ))}
-        </div>
-      ) : error ? (
-        <div className="px-4 py-8 text-sm text-[#b42318]">
-          {error}
-        </div>
-      ) : transactions.length > 0 ? (
-        <>
-          <div>
+      <div className="overflow-hidden rounded-[14px] border border-border bg-surface">
+        {loading ? (
+          Array.from({ length: Math.min(pageSize, 5) }).map((_, index) => (
+            <div key={index} className={`h-[60px] animate-pulse bg-background-secondary/60 ${index > 0 ? 'border-t border-border' : ''}`} />
+          ))
+        ) : error ? (
+          <p role="alert" className="px-[18px] py-8 text-sm text-danger">{error}</p>
+        ) : transactions.length > 0 ? (
+          <>
             {transactions.map((item, index) => (
               <article
                 key={item.id}
-                className={`px-4 py-3 transition-colors duration-150 hover:bg-background-secondary ${index > 0 ? 'border-t border-border' : ''}`}
+                className={`flex items-center justify-between gap-4 px-[18px] py-3.5 ${index > 0 ? 'border-t border-border' : ''}`}
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-                      <span className="truncate font-medium text-foreground">
-                        {item.description || SOURCE_LABELS[item.source] || item.source}
-                      </span>
-                      <span className="text-xs text-foreground/48">
-                        {formatDate(item.created_at)}
-                      </span>
-                    </div>
-                  </div>
-                  <div className={`text-sm font-semibold ${getAmountColor(item)}`}>
-                    {getAmountText(item)}
-                  </div>
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <span className="truncate text-sm text-foreground">{item.description || SOURCE_LABELS[item.source] || item.source}</span>
+                  <span className="text-xs text-foreground-tertiary">{formatDate(item.created_at)}</span>
                 </div>
+                <span className={`shrink-0 text-sm font-medium ${getAmountColor(item)}`}>{getAmountText(item)}</span>
               </article>
             ))}
-          </div>
-
-          {hasMore ? (
-            <div className="border-t border-border px-4 py-3">
+            {hasMore ? (
               <button
                 type="button"
                 onClick={() => setVisibleCount((count) => count + pageSize)}
-                className="text-sm font-medium text-foreground/68 transition-colors duration-150 hover:text-foreground"
+                className="h-12 w-full border-t border-border text-sm text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-foreground"
               >
                 查看更多
               </button>
-            </div>
-          ) : null}
-        </>
-      ) : (
-        <div className="px-4 py-8 text-sm text-foreground-secondary">
-          暂无积分记录。
-        </div>
-      )}
+            ) : null}
+          </>
+        ) : (
+          <p className="px-[18px] py-8 text-sm text-foreground-secondary">暂无积分记录。</p>
+        )}
+      </div>
     </section>
   );
 }

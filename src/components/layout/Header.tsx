@@ -13,8 +13,8 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
     User,
     LogIn,
-    ArrowLeft,
-    MoreVertical,
+    ChevronLeft,
+    MoreHorizontal,
     Moon,
     Sun,
     Megaphone,
@@ -46,17 +46,29 @@ const ROUTE_LABELS: Record<string, string> = {
     '/palm/history': '手相历史',
     '/mbti/result': 'MBTI 结果',
     '/mbti/history': 'MBTI 历史',
+    '/qimen/result': '奇门结果',
+    '/qimen/history': '奇门历史',
+    '/daliuren/result': '大六壬结果',
+    '/daliuren/history': '大六壬历史',
+    '/meihua/result': '梅花结果',
+    '/meihua/history': '梅花历史',
+    '/xiaoliuren/result': '小六壬',
+    '/xiaoliuren/history': '小六壬历史',
     // 功能主页面
     '/bazi': '八字排盘',
     '/ziwei': '紫微斗数',
     '/tarot': '塔罗占卜',
     '/liuyao': '六爻占卜',
-    '/hepan': '关系合盘',
+    '/hepan': '八字合盘',
     '/face': '面相分析',
     '/palm': '手相分析',
-    '/mbti': 'MBTI',
-    '/daily': '每日运势',
-    '/monthly': '每月运势',
+    '/mbti': 'MBTI 性格测试',
+    '/qimen': '奇门遁甲',
+    '/daliuren': '大六壬',
+    '/meihua': '梅花易数',
+    '/xiaoliuren': '小六壬',
+    '/daily': '日运 · 黄历',
+    '/monthly': '月运',
     '/records': '命理记录',
     '/community': '命理社区',
     // 用户子页面
@@ -96,8 +108,18 @@ const SUB_PAGE_PATTERNS = [
     '/face/history',
     '/palm/result',
     '/palm/history',
+    '/mbti/test',
     '/mbti/result',
     '/mbti/history',
+    '/mbti/personality',
+    '/qimen/result',
+    '/qimen/history',
+    '/daliuren/result',
+    '/daliuren/history',
+    '/meihua/result',
+    '/meihua/history',
+    '/xiaoliuren/result',
+    '/xiaoliuren/history',
     '/privacy',
     '/terms',
 ];
@@ -130,7 +152,8 @@ export function Header() {
         return '太卜';
     };
 
-    const pageTitle = getPageTitle();
+    // 页面可通过 useHeaderTitle 提供更具体的标题（如命盘主人姓名）
+    const pageTitle = headerMenuContext?.pageTitle || getPageTitle();
 
     // 判断是否是子页面（需要显示返回键的页面）
     const isSubPage = pathname ? SUB_PAGE_PATTERNS.some(pattern => pathname.startsWith(pattern)) : false;
@@ -170,9 +193,8 @@ export function Header() {
             <header
                 className="
                     fixed top-0 left-0 right-0 z-40
-                    safe-top-header px-4
+                    safe-top-header px-2
                     bg-background/95 backdrop-blur-md
-                    border-b border-border
                     flex items-center justify-between
                     lg:hidden
                 "
@@ -181,29 +203,29 @@ export function Header() {
                 {isSubPage ? (
                     <button
                         onClick={handleBack}
-                        className="p-2 -ml-2 rounded-full hover:bg-background-secondary transition-colors lg:hidden"
+                        className="flex h-11 w-11 items-center justify-center rounded-full text-foreground transition-colors hover:bg-background-secondary lg:hidden"
                         type="button"
                         aria-label="返回上一页"
                     >
-                        <ArrowLeft className="w-5 h-5 text-foreground" />
+                        <ChevronLeft className="h-[22px] w-[22px]" strokeWidth={1.8} />
                     </button>
                 ) : (
-                    <div className="w-9 lg:hidden" />
+                    <div className="w-11 lg:hidden" />
                 )}
 
-                <h1 className="text-base font-semibold text-foreground truncate max-w-[60%] lg:hidden">
+                <h1 className="max-w-[calc(100%-7rem)] truncate font-display text-[17px] font-medium text-foreground lg:hidden">
                     {pageTitle}
                 </h1>
 
                 <div className="relative lg:hidden" ref={menuRef}>
                     <button
                         onClick={() => setMenuOpen(!menuOpen)}
-                        className="p-2 -mr-2 rounded-full hover:bg-background-secondary transition-colors"
+                        className="flex h-11 w-11 items-center justify-center rounded-full text-foreground transition-colors hover:bg-background-secondary"
                         type="button"
                         aria-label="打开菜单"
                         aria-expanded={menuOpen}
                     >
-                        <MoreVertical className="w-5 h-5 text-foreground-secondary" />
+                        <MoreHorizontal className="h-[22px] w-[22px]" strokeWidth={1.8} />
                     </button>
 
                     {menuOpen && (

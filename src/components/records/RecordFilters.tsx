@@ -8,6 +8,7 @@
 
 import { Search } from 'lucide-react';
 import { RecordCategory, RECORD_CATEGORIES } from '@/lib/records';
+import { FilterChip } from '@/components/ui/FilterChip';
 
 interface RecordFiltersProps {
     search: string;
@@ -20,9 +21,6 @@ const CATEGORY_OPTIONS: { value: RecordCategory | ''; label: string }[] = [
     { value: '', label: '全部' },
     ...RECORD_CATEGORIES.map(({ value, label }) => ({ value, label })),
 ];
-
-/** 胶囊筛选按钮，选中态用 aria-pressed 表达。 */
-export const RECORD_CHIP_CLASS = 'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border-[0.5px] border-border-hover bg-surface px-3 text-[13px] text-foreground-secondary transition-colors hover:text-foreground aria-pressed:border-transparent aria-pressed:bg-foreground aria-pressed:text-background';
 
 export function RecordFilters({
     search,
@@ -46,15 +44,13 @@ export function RecordFilters({
             {/* 手机上分类横向滚动，不换行挤压。 */}
             <div role="group" aria-label="分类" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-0.5 md:mx-0 md:overflow-visible md:px-0 md:pb-0">
                 {CATEGORY_OPTIONS.map(option => (
-                    <button
+                    <FilterChip
                         key={option.value || 'all'}
-                        type="button"
-                        aria-pressed={category === option.value}
+                        pressed={category === option.value}
                         onClick={() => onCategoryChange(option.value)}
-                        className={RECORD_CHIP_CLASS}
                     >
                         {option.label}
-                    </button>
+                    </FilterChip>
                 ))}
             </div>
         </div>

@@ -31,7 +31,7 @@ import { Modal } from '@/components/ui/Modal';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
-import { RECORD_CHIP_CLASS } from '@/components/records/RecordFilters';
+import { FILTER_CHIP_CLASS, FilterChip } from '@/components/ui/FilterChip';
 
 const FIELD_CLASS = 'w-full rounded-[10px] border-[0.5px] border-border-hover bg-surface px-3.5 text-[15px] text-foreground placeholder:text-foreground-tertiary focus:border-accent focus:outline-none';
 const LABEL_CLASS = 'mb-1.5 block text-sm text-foreground-secondary';
@@ -194,7 +194,7 @@ export function RecordFormModal({
                                     onChange={() => setCategory(cat.value)}
                                     className="peer sr-only"
                                 />
-                                <span className={`${RECORD_CHIP_CLASS} peer-checked:border-transparent peer-checked:bg-foreground peer-checked:text-background peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent`}>
+                                <span className={`${FILTER_CHIP_CLASS} peer-checked:border-transparent peer-checked:bg-foreground peer-checked:text-background peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent`}>
                                     {cat.label}
                                 </span>
                             </label>
@@ -320,15 +320,9 @@ export function DailyNotes({
             >
                 <div role="group" aria-label="心情" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-0.5 md:mx-0 md:flex-wrap md:px-0">
                     {NOTE_MOODS.map(m => (
-                        <button
-                            key={m.value}
-                            type="button"
-                            aria-pressed={mood === m.value}
-                            onClick={() => setMood(m.value)}
-                            className={RECORD_CHIP_CLASS}
-                        >
+                        <FilterChip key={m.value} pressed={mood === m.value} onClick={() => setMood(m.value)}>
                             <span aria-hidden="true">{m.icon}</span>{m.label}
-                        </button>
+                        </FilterChip>
                     ))}
                 </div>
 

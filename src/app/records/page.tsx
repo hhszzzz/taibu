@@ -1,12 +1,12 @@
 /**
- * 命理记录页面
+ * 命理记录页面：今日小记 + 全部记录（搜索、分类、分页）
  *
- * 对齐 Notion 风格：极简布局、柔和边框、列表化展示
+ * 'use client'：列表加载、筛选与弹窗状态都在客户端
  */
 'use client';
 
 import { useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react';
-import { Plus, Download } from 'lucide-react';
+import { Plus, ArrowDownUp } from 'lucide-react';
 import { MING_RECORD_SOURCE_TYPE } from '@/lib/data-sources/types';
 import {
     deleteRecord,
@@ -17,6 +17,7 @@ import {
     MingNote,
     RecordCategory,
     toggleRecordPin,
+    toLocalDateKey,
 } from '@/lib/records';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
@@ -50,17 +51,15 @@ function SectionError({
     onRetry: () => void | Promise<void>;
 }) {
     return (
-        <div className="p-6">
-            <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-500 space-y-3">
-                <p>{message}</p>
-                <button
-                    type="button"
-                    onClick={() => { void onRetry(); }}
-                    className="inline-flex rounded-lg border border-red-500/20 px-3 py-1.5 text-xs font-medium text-red-500 transition-colors hover:bg-red-500/10"
-                >
-                    重试
-                </button>
-            </div>
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-[14px] border-[0.5px] border-danger/30 bg-danger/5 px-4 py-3.5 text-sm text-danger">
+            <p>{message}</p>
+            <button
+                type="button"
+                onClick={() => { void onRetry(); }}
+                className="inline-flex h-9 items-center rounded-lg border-[0.5px] border-danger/30 px-3 text-sm text-danger transition-colors hover:bg-danger/10"
+            >
+                重试
+            </button>
         </div>
     );
 }
@@ -173,7 +172,8 @@ export default function RecordsPage() {
         }
         setNotesLoading(true);
         setNotesError(null);
-        const today = new Date().toISOString().split('T')[0];
+        // 按用户本地日期取「今天」，与写入小记时的 note_date 一致。
+        const today = toLocalDateKey();
         try {
             const nextNotes = await getNotesByDate(today, { signal: request.signal });
             if (!isCurrent()) return;
@@ -317,41 +317,45 @@ export default function RecordsPage() {
 
     const totalPages = Math.ceil(total / PAGE_SIZE);
 
+    const sectionTitleClass = 'mb-3 text-[13px] font-medium text-foreground-tertiary';
+
     return (
-        <div className="min-h-screen bg-background text-foreground pb-20 lg:pb-8">
-            <div className="max-w-4xl mx-auto px-4 py-8 animate-fade-in space-y-10">
-                {/* 标题与操作栏 */}
-                <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 pb-6 border-b border-border/60">
-                    <div className="space-y-1">
-                        <h1 className="text-2xl font-bold">命理记录</h1>
-                        <p className="text-sm text-foreground-secondary">追踪运势变化，积累命理智慧</p>
+        <div className="min-h-screen bg-background pb-20 text-foreground lg:pb-8">
+            <div className="mx-auto flex max-w-[52rem] flex-col gap-8 px-4 py-4 md:gap-10 md:py-10">
+                {/* 手机端顶栏已显示「命理记录」，这里只保留操作。 */}
+                <header className="flex flex-wrap items-end justify-between gap-4">
+                    <div className="hidden flex-col gap-1.5 md:flex">
+                        <h1 className="font-display text-[2.125rem] leading-tight font-normal">命理记录</h1>
+                        <p className="text-[15px] text-foreground-secondary">记下断语、应验与感悟，日后对照印证。</p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex w-full items-center justify-end gap-2 md:w-auto">
                         <button
+                            type="button"
                             onClick={() => setShowImportExport(true)}
-                            className="p-2 rounded-md border border-border hover:bg-background-secondary transition-colors text-foreground/70"
-                            title="数据管理"
+                            aria-label="导入 / 导出"
+                            className="inline-flex h-11 items-center gap-2 rounded-[10px] border-[0.5px] border-border-hover bg-surface px-3 text-[15px] text-foreground transition-colors hover:bg-background-secondary md:px-4"
                         >
-                            <Download className="w-4 h-4" />
+                            <ArrowDownUp className="h-4 w-4" aria-hidden="true" />
+                            <span className="hidden md:inline" aria-hidden="true">导入 / 导出</span>
                         </button>
                         <button
+                            type="button"
                             onClick={() => setShowRecordForm(true)}
-                            className="flex items-center gap-2 px-4 py-1.5 bg-accent text-on-accent text-sm font-medium rounded-md hover:bg-accent/90 active:bg-accent-hover transition-colors"
+                            className="inline-flex h-11 items-center gap-2 rounded-[10px] bg-accent px-[18px] text-[15px] font-medium text-on-accent transition-colors hover:bg-accent/90"
                         >
-                            <Plus className="w-4 h-4" />
-                            <span>新建记录</span>
+                            <Plus className="h-4 w-4" aria-hidden="true" />
+                            新建记录
                         </button>
                     </div>
                 </header>
 
-                <div className="space-y-10">
-                    {/* 小记区域 */}
-                    <section className="space-y-4">
-                        <h2 className="text-[11px] font-semibold text-foreground-secondary uppercase tracking-widest px-1">今日小记</h2>
-                        <div className="bg-background border border-border rounded-md overflow-hidden">
-                            {notesError ? (
-                                <SectionError message={notesError} onRetry={loadNotes} />
-                            ) : notesLoading ? (
+                <section aria-labelledby="records-notes-title">
+                    <h2 id="records-notes-title" className={sectionTitleClass}>今日小记</h2>
+                    {notesError ? (
+                        <SectionError message={notesError} onRetry={loadNotes} />
+                    ) : (
+                        <div className="rounded-[14px] border-[0.5px] border-border bg-surface">
+                            {notesLoading ? (
                                 <div className="p-6">
                                     <SoundWaveLoader variant="block" text="加载小记中" />
                                 </div>
@@ -359,40 +363,37 @@ export default function RecordsPage() {
                                 <DailyNotes userId={user?.id ?? null} notes={notes} onRefresh={loadNotes} />
                             )}
                         </div>
-                    </section>
+                    )}
+                </section>
 
-                    {/* 筛选与列表 */}
-                    <section className="space-y-4">
-                        <h2 className="text-[11px] font-semibold text-foreground-secondary uppercase tracking-widest px-1">所有记录</h2>
-                        <div className="space-y-4">
-                            <RecordFilters
-                                search={search}
-                                onSearchChange={(v) => { setSearch(v); setPage(1); }}
-                                category={category}
-                                onCategoryChange={(v) => { setCategory(v); setPage(1); }}
+                <section aria-labelledby="records-list-title">
+                    <h2 id="records-list-title" className={sectionTitleClass}>所有记录</h2>
+                    <div className="flex flex-col gap-4">
+                        <RecordFilters
+                            search={search}
+                            onSearchChange={(v) => { setSearch(v); setPage(1); }}
+                            category={category}
+                            onCategoryChange={(v) => { setCategory(v); setPage(1); }}
+                        />
+
+                        {recordsError && !loading ? (
+                            <SectionError message={recordsError} onRetry={loadRecords} />
+                        ) : (
+                            <RecordsList
+                                loading={loading}
+                                records={records}
+                                page={page}
+                                totalPages={totalPages}
+                                onPageChange={setPage}
+                                onEdit={(record) => { setEditingRecord(record); setShowRecordForm(true); }}
+                                onDelete={(id) => setDeleteRecordId(id)}
+                                onTogglePin={handleTogglePin}
+                                onAddToKnowledgeBase={openAddToKb}
+                                onCreateNew={() => setShowRecordForm(true)}
                             />
-
-                            <div className="bg-background border border-border rounded-md overflow-hidden">
-                                {recordsError && !loading ? (
-                                    <SectionError message={recordsError} onRetry={loadRecords} />
-                                ) : (
-                                    <RecordsList
-                                        loading={loading}
-                                        records={records}
-                                        page={page}
-                                        totalPages={totalPages}
-                                        onPageChange={setPage}
-                                        onEdit={(record) => { setEditingRecord(record); setShowRecordForm(true); }}
-                                        onDelete={(id) => setDeleteRecordId(id)}
-                                        onTogglePin={handleTogglePin}
-                                        onAddToKnowledgeBase={openAddToKb}
-                                        onCreateNew={() => setShowRecordForm(true)}
-                                    />
-                                )}
-                            </div>
-                        </div>
-                    </section>
-                </div>
+                        )}
+                    </div>
+                </section>
 
                 {/* 模态框 */}
                 {showRecordForm && (

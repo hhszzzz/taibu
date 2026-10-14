@@ -670,6 +670,11 @@ export async function run(existingPage, bundlePath) {
       const all = histories[user] ?? [];
       return ok({ items: all.slice(offset, offset + limit), pagination: { hasMore: offset + limit < all.length, nextOffset: offset + limit < all.length ? offset + limit : null } }, true);
     }
+    if (url.pathname === '/api/notes' && method === 'POST') {
+      const body = request.postDataJSON();
+      return ok({ id: 'fixture-note', user_id: 'alice', note_date: body.note_date, content: body.content, mood: body.mood,
+        created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' }, true);
+    }
     if (url.pathname === '/api/notes') return ok({ notes: [] }, true);
     if (url.pathname === '/api/records') {
       const category = url.searchParams.get('category');
@@ -1426,14 +1431,16 @@ export async function run(existingPage, bundlePath) {
     const recordPanel = page.getByTestId('records');
     await page.evaluate(() => window.fixture.mount.records(true));
     await recordPanel.getByRole('heading', { name: 'General saved record', exact: true }).waitFor();
+    const recordCategories = recordPanel.getByRole('group', { name: '分类', exact: true });
     const oldRecordFilter = holdNext('/api/records', 'GET');
-    await recordPanel.locator('select').selectOption('general');
+    await recordCategories.getByRole('button', { name: '通用', exact: true }).click();
     await intercepted(oldRecordFilter);
-    await recordPanel.locator('select').selectOption('event');
+    await recordCategories.getByRole('button', { name: '人生事件', exact: true }).click();
     await recordPanel.getByRole('heading', { name: 'Event saved record', exact: true }).waitFor();
     await release(oldRecordFilter);
     check('Rapid actual record filters cannot render older response under the new filter',
-      await recordPanel.locator('select').inputValue() === 'event' &&
+      await recordCategories.getByRole('button', { name: '人生事件', exact: true }).getAttribute('aria-pressed') === 'true' &&
+      await recordCategories.getByRole('button', { name: '通用', exact: true }).getAttribute('aria-pressed') === 'false' &&
       await recordPanel.getByRole('heading', { name: 'Event saved record', exact: true }).isVisible() &&
       await recordPanel.getByRole('heading', { name: 'General saved record', exact: true }).count() === 0);
     const oldRecordRefresh = holdNext('/api/records', 'GET');
@@ -1446,6 +1453,26 @@ export async function run(existingPage, bundlePath) {
     check('Records archive refresh B survives older refresh A without reloading the page',
       await recordPanel.getByRole('heading', { name: 'Event refreshed record', exact: true }).isVisible() &&
       await recordPanel.getByRole('heading', { name: 'Event saved record', exact: true }).count() === 0);
+    const eventCard = recordPanel.getByRole('listitem').filter({ has: page.getByRole('heading', { name: 'Event refreshed record', exact: true }) });
+    check('Record actions are visible, labelled buttons rather than hover-only icons',
+      await eventCard.getByRole('button', { name: '置顶', exact: true }).getAttribute('aria-pressed') === 'false' &&
+      await eventCard.getByRole('button', { name: '编辑记录', exact: true }).isVisible() &&
+      await eventCard.getByRole('button', { name: '删除记录', exact: true }).isVisible());
+    const noteInput = recordPanel.getByLabel('今日小记内容', { exact: true });
+    const notePosts = () => requests.filter(item => item.pathname === '/api/notes' && item.method === 'POST');
+    await noteInput.fill('拼音');
+    await noteInput.dispatchEvent('keydown', { key: 'Enter', code: 'Enter', isComposing: true, bubbles: true, cancelable: true });
+    await recordPanel.getByRole('button', { name: '焦虑', exact: true }).click();
+    check('Enter that confirms an IME candidate does not send the daily note',
+      notePosts().length === 0 && await noteInput.inputValue() === '拼音' &&
+      await recordPanel.getByRole('button', { name: '焦虑', exact: true }).getAttribute('aria-pressed') === 'true');
+    const noteSaved = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/notes');
+    await noteInput.press('Enter');
+    await noteSaved;
+    const notesDate = new URLSearchParams(requests.filter(item => item.pathname === '/api/notes' && item.method === 'GET').at(-1)?.search).get('date');
+    check('A plain Enter sends the note with the same local date the list reads',
+      notePosts().length === 1 && notePosts()[0].body?.content === '拼音' && notePosts()[0].body?.mood === 'anxious' &&
+      !!notesDate && notePosts()[0].body?.note_date === notesDate);
     await page.evaluate(() => window.fixture.mount.records(false));
 
     await page.evaluate(() => window.fixture.mount.question(true));

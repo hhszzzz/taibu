@@ -1,5 +1,5 @@
 /**
- * 记录列表组件：包含记录卡片、列表网格和分页
+ * 记录列表组件：记录卡片、空状态和分页
  *
  * 'use client' 标记说明：
  * - 使用交互回调（onClick）
@@ -8,8 +8,7 @@
 
 import {
     Pin,
-    Archive,
-    Edit2,
+    Pencil,
     Trash2,
     Calendar,
     FileText,
@@ -20,6 +19,15 @@ import {
 import { MingRecord, RECORD_CATEGORIES } from '@/lib/records';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useKnowledgeBaseFeatureEnabled } from '@/components/knowledge-base/useKnowledgeBaseFeatureEnabled';
+
+const VISIBLE_TAG_COUNT = 3;
+const ICON_BUTTON_CLASS = 'flex h-10 w-10 items-center justify-center rounded-lg text-foreground-tertiary transition-colors hover:bg-background-secondary hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent md:h-8 md:w-8';
+const META_CHIP_CLASS = 'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs';
+
+function getArchiveTitle(record: MingRecord) {
+    const count = Array.isArray(record.archived_kb_ids) ? record.archived_kb_ids.length : 0;
+    return count > 0 ? `已归档到 ${count} 个知识库` : '已归档到知识库';
+}
 
 // =====================================================
 // 记录卡片组件
@@ -39,108 +47,75 @@ function RecordCard({
     onAddToKnowledgeBase: () => void;
     showKnowledgeBaseAction: boolean;
 }) {
-    const categoryInfo = RECORD_CATEGORIES.find(c => c.value === record.category);
+    const categoryLabel = RECORD_CATEGORIES.find(c => c.value === record.category)?.label;
+    const pinLabel = record.is_pinned ? '取消置顶' : '置顶';
 
     return (
-        <div className={`group bg-background-secondary/40 backdrop-blur-sm rounded-xl p-5 border transition-all duration-300 ${record.is_pinned
-            ? 'border-yellow-500/30 bg-yellow-500/5 shadow-[0_0_15px_-3px_rgba(234,179,8,0.1)]'
-            : 'border-border/50 hover:border-emerald-500/30 hover:bg-background-secondary/60 hover:shadow-lg hover:shadow-emerald-500/5'
-            }`}>
-            <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-2">
-                        {record.is_pinned && (
-                            <span className="flex items-center gap-1 text-[10px] uppercase font-bold text-yellow-600 dark:text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded border border-yellow-500/20">
-                                <Pin className="w-3 h-3" /> 置顶
-                            </span>
-                        )}
-                        {record.is_archived && (
-                            <span
-                                className="flex items-center gap-1 text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20"
-                                title={
-                                    Array.isArray(record.archived_kb_ids) && record.archived_kb_ids.length
-                                        ? `已归档到 ${record.archived_kb_ids.length} 个知识库`
-                                        : '已归档到知识库'
-                                }
-                            >
-                                <Archive className="w-3 h-3" /> 归档
-                            </span>
-                        )}
-                        <span className={`text-xs px-2 py-0.5 rounded-full border flex items-center gap-1.5 ${record.is_pinned
-                            ? 'text-yellow-600 dark:text-yellow-500 border-yellow-500/20 bg-yellow-500/5'
-                            : 'text-foreground-secondary border-border/50 bg-background/50'
-                            }`}>
-                            {categoryInfo?.icon} {categoryInfo?.label}
+        <article className={`flex flex-col gap-2 rounded-[14px] border-[0.5px] bg-surface p-4 md:flex-row md:items-start md:gap-4 md:p-5 ${record.is_pinned ? 'border-accent/40' : 'border-border'}`}>
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
+                    {record.is_pinned ? (
+                        <span className={`${META_CHIP_CLASS} bg-accent-soft text-accent-strong`}>
+                            <Pin className="h-3 w-3" aria-hidden="true" />置顶
                         </span>
-                        {record.event_date && (
-                            <span className="text-xs text-foreground-secondary/70 flex items-center gap-1">
-                                <Calendar className="w-3 h-3" />
-                                {record.event_date}
-                            </span>
-                        )}
-                    </div>
-
-                    <h3 className="font-bold text-lg text-foreground mb-2 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors line-clamp-1">
-                        {record.title}
-                    </h3>
-
-                    {record.content && (
-                        <p className="text-sm text-foreground-secondary/80 leading-relaxed line-clamp-2 mb-3">
-                            {record.content}
-                        </p>
-                    )}
-
-                    {record.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 mt-2">
-                            {record.tags.slice(0, 3).map((tag, i) => (
-                                <span key={i} className="text-xs px-2 py-0.5 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 rounded-md border border-emerald-500/10">
-                                    #{tag}
-                                </span>
-                            ))}
-                            {record.tags.length > 3 && (
-                                <span className="text-xs text-foreground-secondary/50 self-center">+{record.tags.length - 3}</span>
-                            )}
-                        </div>
-                    )}
+                    ) : null}
+                    {categoryLabel ? (
+                        <span className={`${META_CHIP_CLASS} bg-background-secondary text-foreground-secondary`}>{categoryLabel}</span>
+                    ) : null}
+                    {record.is_archived ? (
+                        <span className={`${META_CHIP_CLASS} bg-success/10 text-success`} title={getArchiveTitle(record)}>已归档</span>
+                    ) : null}
+                    {record.event_date ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-foreground-tertiary">
+                            <Calendar className="h-3 w-3" aria-hidden="true" />
+                            <time dateTime={record.event_date}>{record.event_date}</time>
+                        </span>
+                    ) : null}
                 </div>
 
-                <div className="flex flex-col gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                    <button
-                        onClick={onTogglePin}
-                        className={`p-2 rounded-lg transition-colors ${record.is_pinned
-                            ? 'text-yellow-500 bg-yellow-500/10 hover:bg-yellow-500/20'
-                            : 'text-foreground-secondary hover:text-yellow-500 hover:bg-yellow-500/10'
-                            }`}
-                        title={record.is_pinned ? '取消置顶' : '置顶'}
-                    >
-                        <Pin className="w-4 h-4" />
-                    </button>
-                    {showKnowledgeBaseAction && (
-                        <button
-                            onClick={onAddToKnowledgeBase}
-                            className="p-2 text-foreground-secondary hover:text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-colors"
-                            title="加入知识库"
-                        >
-                            <BookOpenText className="w-4 h-4" />
-                        </button>
-                    )}
-                    <button
-                        onClick={onEdit}
-                        className="p-2 text-foreground-secondary hover:text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-colors"
-                        title="编辑"
-                    >
-                        <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                        onClick={onDelete}
-                        className="p-2 text-foreground-secondary hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
-                        title="删除"
-                    >
-                        <Trash2 className="w-4 h-4" />
-                    </button>
-                </div>
+                <h3 className="line-clamp-1 text-base font-medium text-foreground md:text-[17px]">{record.title}</h3>
+
+                {record.content ? (
+                    <p className="line-clamp-2 text-sm leading-relaxed text-foreground-secondary">{record.content}</p>
+                ) : null}
+
+                {record.tags.length > 0 ? (
+                    <ul aria-label="标签" className="flex flex-wrap gap-1.5">
+                        {record.tags.slice(0, VISIBLE_TAG_COUNT).map((tag, index) => (
+                            <li key={`${index}-${tag}`} className="text-xs text-accent-strong">#{tag}</li>
+                        ))}
+                        {record.tags.length > VISIBLE_TAG_COUNT ? (
+                            <li className="text-xs text-foreground-tertiary">+{record.tags.length - VISIBLE_TAG_COUNT}</li>
+                        ) : null}
+                    </ul>
+                ) : null}
             </div>
-        </div>
+
+            {/* 操作始终可见：手机端排在卡片底部，桌面端排在右上角。 */}
+            <div className="-mr-2 -mb-2 flex shrink-0 justify-end gap-0.5 md:-mt-1.5 md:mb-0 md:-mr-1.5">
+                <button
+                    type="button"
+                    onClick={onTogglePin}
+                    aria-label={pinLabel}
+                    aria-pressed={!!record.is_pinned}
+                    title={pinLabel}
+                    className={`${ICON_BUTTON_CLASS} aria-pressed:text-accent`}
+                >
+                    <Pin className="h-4 w-4" aria-hidden="true" />
+                </button>
+                {showKnowledgeBaseAction ? (
+                    <button type="button" onClick={onAddToKnowledgeBase} aria-label="加入知识库" title="加入知识库" className={ICON_BUTTON_CLASS}>
+                        <BookOpenText className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                ) : null}
+                <button type="button" onClick={onEdit} aria-label="编辑记录" title="编辑" className={ICON_BUTTON_CLASS}>
+                    <Pencil className="h-4 w-4" aria-hidden="true" />
+                </button>
+                <button type="button" onClick={onDelete} aria-label="删除记录" title="删除" className={`${ICON_BUTTON_CLASS} hover:bg-danger/10 hover:text-danger`}>
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
+                </button>
+            </div>
+        </article>
     );
 }
 
@@ -175,52 +150,61 @@ export function RecordsList({
     const { knowledgeBaseEnabled } = useKnowledgeBaseFeatureEnabled();
 
     const pagination = totalPages > 1 ? (
-        <div className="flex items-center justify-center gap-3 pt-8 pb-4">
+        <nav aria-label="分页" className="mt-6 flex items-center justify-center gap-3">
             <button
+                type="button"
                 onClick={() => onPageChange(Math.max(1, page - 1))}
                 disabled={page === 1}
-                className="p-2 rounded-lg hover:bg-background-secondary disabled:opacity-50 disabled:hover:bg-transparent transition-colors text-foreground-secondary"
+                aria-label="上一页"
+                className={ICON_BUTTON_CLASS}
             >
-                <ChevronLeft className="w-5 h-5" />
+                <ChevronLeft className="h-5 w-5" aria-hidden="true" />
             </button>
-            <span className="text-sm font-medium text-foreground px-4 py-1.5 bg-background-secondary rounded-lg">
+            <span className="min-w-14 text-center text-sm text-foreground-secondary tabular-nums">
                 {page} / {totalPages}
             </span>
             <button
+                type="button"
                 onClick={() => onPageChange(Math.min(totalPages, page + 1))}
                 disabled={page === totalPages}
-                className="p-2 rounded-lg hover:bg-background-secondary disabled:opacity-50 disabled:hover:bg-transparent transition-colors text-foreground-secondary"
+                aria-label="下一页"
+                className={ICON_BUTTON_CLASS}
             >
-                <ChevronRight className="w-5 h-5" />
+                <ChevronRight className="h-5 w-5" aria-hidden="true" />
             </button>
-        </div>
+        </nav>
     ) : null;
 
     if (loading) {
-        return <SoundWaveLoader variant="block" text="加载记录中" />;
+        return (
+            <div className="rounded-[14px] border-[0.5px] border-border bg-surface p-6">
+                <SoundWaveLoader variant="block" text="加载记录中" />
+            </div>
+        );
     }
 
     if (records.length === 0) {
         return (
             <>
-                <div className="py-20 text-center">
-                    <div className="w-24 h-24 bg-background-secondary/50 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <FileText className="w-10 h-10 text-foreground-secondary/50" />
+                <div className="flex flex-col items-center rounded-[14px] border-[0.5px] border-dashed border-border-hover px-6 py-14 text-center">
+                    <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-background-secondary">
+                        <FileText className="h-6 w-6 text-foreground-tertiary" aria-hidden="true" />
                     </div>
-                    <h3 className="text-lg font-medium text-foreground mb-2">
+                    <p className="font-display text-lg text-foreground">
                         {totalPages > 1 ? '当前页暂无记录' : '暂无记录'}
-                    </h3>
-                    <p className="text-foreground-secondary mb-6 max-w-xs mx-auto">
+                    </p>
+                    <p className="mt-1.5 max-w-xs text-sm text-foreground-secondary">
                         {totalPages > 1
                             ? '这一页已经空了，可以切换到上一页继续查看。'
-                            : '还没有添加任何命理记录。开始记录你的第一次感悟吧！'}
+                            : '记下第一条断语或感悟，日后对照印证。'}
                     </p>
                     {totalPages > 1 ? null : (
                         <button
+                            type="button"
                             onClick={onCreateNew}
-                            className="px-6 py-2.5 bg-background border border-border hover:border-emerald-500/50 hover:text-emerald-500 rounded-xl transition-all shadow-sm hover:shadow-md"
+                            className="mt-6 inline-flex h-10 items-center rounded-[10px] border-[0.5px] border-border-hover bg-surface px-5 text-sm text-foreground transition-colors hover:bg-background-secondary"
                         >
-                            立即添加
+                            新建记录
                         </button>
                     )}
                 </div>
@@ -231,19 +215,20 @@ export function RecordsList({
 
     return (
         <>
-            <div className="grid gap-4">
+            <ul className="flex flex-col gap-3">
                 {records.map(record => (
-                    <RecordCard
-                        key={record.id}
-                        record={record}
-                        onEdit={() => onEdit(record)}
-                        onDelete={() => onDelete(record.id)}
-                        onTogglePin={() => onTogglePin(record.id)}
-                        onAddToKnowledgeBase={() => onAddToKnowledgeBase(record)}
-                        showKnowledgeBaseAction={knowledgeBaseEnabled}
-                    />
+                    <li key={record.id}>
+                        <RecordCard
+                            record={record}
+                            onEdit={() => onEdit(record)}
+                            onDelete={() => onDelete(record.id)}
+                            onTogglePin={() => onTogglePin(record.id)}
+                            onAddToKnowledgeBase={() => onAddToKnowledgeBase(record)}
+                            showKnowledgeBaseAction={knowledgeBaseEnabled}
+                        />
+                    </li>
                 ))}
-            </div>
+            </ul>
 
             {pagination}
         </>

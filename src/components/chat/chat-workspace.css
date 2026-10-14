@@ -123,8 +123,7 @@
 .chat-prose pre { min-width: 0; max-width: 100%; overflow: auto; border-radius: 8px; }
 .chat-prose code { font-family: var(--font-mono); }
 .chat-provider-dialog { width: min(480px, calc(100vw - 24px)); }
-.chat-provider-dialog > div { width: 100%; border: 0; box-shadow: none; padding: 24px; }
-.chat-provider-dialog h3 { padding-right: 20px; }
+.chat-provider-dialog > div { width: 100%; border: 0; border-radius: 0; box-shadow: none; padding: 24px; }
 .chat-mobile-conversations { position: absolute; top: 16px; left: 8px; z-index: 31; display: flex; align-items: center; justify-content: center; height: 30px; width: 30px; border-radius: 6px; background: var(--background); }
 .chat-conversation-drawer { inset: 0 auto 0 0; margin: 0; width: min(300px, calc(100vw - 48px)); height: 100dvh; max-height: 100dvh; border-radius: 0 14px 14px 0; }
 .chat-empty-state { display: flex; flex: 1; min-height: 0; flex-direction: column; align-items: center; justify-content: safe center; overflow-y: auto; padding: 32px 24px 56px; }

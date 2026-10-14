@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   buildCustomProviderChatCompletionsUrl,
+  maskCustomProviderApiKey,
   normalizeCustomProviderBaseUrl,
   validateCustomProviderInput,
 } from '../lib/ai/custom-provider-url';
@@ -55,4 +56,15 @@ test('custom provider input validation rejects query strings and fragments', () 
 
   assert.equal(queryErrors.apiUrl, 'API URL 不应包含查询参数或片段');
   assert.equal(hashErrors.apiUrl, 'API URL 不应包含查询参数或片段');
+});
+
+test('custom provider key mask keeps only a recognisable prefix and suffix', () => {
+  assert.equal(maskCustomProviderApiKey('sk-0123456789abcdef3f9a'), 'sk-••••••••3f9a');
+  assert.equal(maskCustomProviderApiKey('  sk-0123456789abcdef3f9a  '), 'sk-••••••••3f9a');
+  // 短 Key 露出首尾会泄露大半内容，完全遮住。
+  assert.equal(maskCustomProviderApiKey('sk-123456'), '••••••••');
+  assert.equal(maskCustomProviderApiKey('sk-1234567'), '••••••••');
+  assert.equal(maskCustomProviderApiKey(''), '••••••••');
+  assert.equal(maskCustomProviderApiKey(null), '••••••••');
+  assert.equal(maskCustomProviderApiKey(undefined), '••••••••');
 });

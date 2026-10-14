@@ -2,14 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
-import { Eye, EyeOff, Lock, Mail, RefreshCw } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { sendOTP, verifyOTP } from '@/lib/auth';
 import { supabase } from '@/lib/auth';
 import { PasswordStrengthIndicator, validatePasswordStrength } from '@/components/auth/PasswordStrengthIndicator';
 import { VerificationCodeInput } from '@/components/auth/VerificationCodeInput';
+import { SettingsRow } from '@/components/settings/SettingsControls';
 
-type PasswordChangeStep = 'idle' | 'send-code' | 'verify' | 'set-password';
+type PasswordChangeStep = 'idle' | 'verify' | 'set-password';
 
 export function PasswordSection({
     email,
@@ -63,7 +64,7 @@ export function PasswordSection({
             if (result.success) {
                 setCountdown(60);
                 setStep('verify');
-                setSuccess('验证码已发送到您的邮箱');
+                setSuccess('');
             } else {
                 setError(result.error?.message || '发送失败');
             }
@@ -142,68 +143,30 @@ export function PasswordSection({
         }
     };
 
+    const sent = step !== 'idle';
+    const message = (error || success) ? (
+        <p role={error ? 'alert' : 'status'} className={`text-sm ${error ? 'text-danger' : 'text-success'}`}>{error || success}</p>
+    ) : null;
+
     return (
-        <div className="space-y-2">
+        <div>
+            <SettingsRow
+                label="修改密码"
+                description="先向绑定邮箱发送 6 位验证码，验证后设置新密码"
+                control={(
+                    <button type="button" onClick={handleSendCode} disabled={loading || sent} className="settings-button">
+                        {loading && !sent ? <SoundWaveLoader variant="inline" /> : null}
+                        {sent ? '已发送' : '发送验证码'}
+                    </button>
+                )}
+            />
+            {step === 'idle' && error ? <div className="pt-2">{message}</div> : null}
 
-            {/* 初始状态 - 显示修改密码按钮 */}
-            {step === 'idle' && (
-                <button
-                    onClick={() => setStep('send-code')}
-                    className="w-full px-4 py-3 rounded-xl bg-background-secondary border border-border text-left flex items-center gap-3 hover:border-accent transition-colors"
-                >
-                    <Lock className="w-5 h-5 text-foreground-secondary" />
-                    <span>修改密码</span>
-                </button>
-            )}
-
-            {/* 发送验证码步骤 */}
-            {step === 'send-code' && (
-                <div className="space-y-4 p-4 rounded-xl bg-background-secondary border border-border">
-                    <p className="text-sm text-foreground-secondary">
-                        为了安全，修改密码需要先验证您的身份
-                    </p>
-
-                    {/* 显示邮箱 */}
-                    <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-foreground-secondary" />
-                        <input
-                            type="email"
-                            value={email}
-                            disabled
-                            className="w-full pl-10 pr-4 py-3 rounded-lg bg-background border border-border text-foreground-secondary"
-                        />
-                    </div>
-
-                    {error && (
-                        <p className="text-sm text-red-500">{error}</p>
-                    )}
-
-                    <div className="flex gap-2">
-                        <button
-                            onClick={resetForm}
-                            className="flex-1 py-2.5 rounded-lg border border-border hover:border-foreground-secondary transition-colors"
-                        >
-                            取消
-                        </button>
-                        <button
-                            onClick={handleSendCode}
-                            disabled={loading}
-                            className="flex-1 py-2.5 rounded-lg bg-accent text-on-accent font-medium hover:bg-accent/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                        >
-                            {loading && <SoundWaveLoader variant="inline" />}
-                            发送验证码
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {/* 验证码验证步骤 */}
             {step === 'verify' && (
-                <div className="space-y-4 p-4 rounded-xl bg-background-secondary border border-border">
-                    <p className="text-sm text-foreground-secondary text-center">
-                        验证码已发送至 <span className="font-medium text-foreground">{email}</span>
+                <div className="settings-card mt-1 space-y-4">
+                    <p className="text-sm text-foreground-secondary">
+                        验证码已发送到 <span className="text-foreground">{email}</span>
                     </p>
-
                     <VerificationCodeInput
                         value={verificationCode}
                         onChange={setVerificationCode}
@@ -211,122 +174,99 @@ export function PasswordSection({
                         length={6}
                         disabled={loading}
                     />
-
-                    {/* 重新发送 */}
-                    <button
-                        onClick={handleResendCode}
-                        disabled={countdown > 0 || loading}
-                        className="w-full flex items-center justify-center gap-2 text-sm text-accent hover:underline disabled:text-foreground-secondary disabled:no-underline disabled:cursor-not-allowed"
-                    >
-                        <RefreshCw className="w-4 h-4" />
-                        {countdown > 0 ? `${countdown}秒后可重新发送` : '重新发送验证码'}
-                    </button>
-
-                    {success && (
-                        <p className="text-sm text-green-500 text-center">{success}</p>
-                    )}
-                    {error && (
-                        <p className="text-sm text-red-500 text-center">{error}</p>
-                    )}
-
-                    <div className="flex gap-2">
+                    {message}
+                    <div className="flex flex-wrap items-center gap-3">
                         <button
-                            onClick={resetForm}
-                            className="flex-1 py-2.5 rounded-lg border border-border hover:border-foreground-secondary transition-colors"
-                        >
-                            取消
-                        </button>
-                        <button
+                            type="button"
                             onClick={handleVerifyCode}
                             disabled={loading || verificationCode.length !== 6}
-                            className="flex-1 py-2.5 rounded-lg bg-accent text-on-accent font-medium hover:bg-accent/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            className="settings-button settings-button-primary"
                         >
                             {loading && <SoundWaveLoader variant="inline" />}
                             验证
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleResendCode}
+                            disabled={countdown > 0 || loading}
+                            className="h-10 px-1 text-[13px] text-accent disabled:cursor-not-allowed disabled:text-foreground-tertiary"
+                        >
+                            {countdown > 0 ? `重新发送（${countdown} 秒）` : '重新发送验证码'}
+                        </button>
+                        <button type="button" onClick={resetForm} className="ml-auto h-10 rounded-[10px] px-3 text-sm text-foreground-secondary hover:bg-background-secondary">
+                            取消
                         </button>
                     </div>
                 </div>
             )}
 
-            {/* 设置新密码步骤 */}
             {step === 'set-password' && (
-                <div className="space-y-4 p-4 rounded-xl bg-background-secondary border border-border">
-                    <p className="text-sm text-foreground-secondary">
-                        身份验证成功，请设置新密码
-                    </p>
+                <div className="settings-card mt-1 space-y-4">
+                    <p className="text-sm text-foreground-secondary">身份验证成功，请设置新密码</p>
 
-                    {/* 新密码 */}
                     <div className="space-y-2">
-                        <label className="text-xs text-foreground-secondary">新密码</label>
+                        <label htmlFor="settings-new-password" className="text-[13px] text-foreground-secondary">新密码</label>
                         <div className="relative">
-                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-foreground-secondary" />
                             <input
+                                id="settings-new-password"
                                 type={showNewPassword ? 'text' : 'password'}
                                 value={newPassword}
                                 onChange={(e) => setNewPassword(e.target.value)}
                                 placeholder="设置新密码"
-                                className="w-full pl-10 pr-10 py-3 rounded-lg bg-background border border-border focus:border-accent focus:outline-none transition-colors"
+                                className="settings-input settings-input-with-action w-full"
                             />
                             <button
                                 type="button"
+                                aria-label={showNewPassword ? '隐藏密码' : '显示密码'}
                                 onClick={() => setShowNewPassword(!showNewPassword)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-secondary hover:text-foreground transition-colors"
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-secondary transition-colors hover:text-foreground"
                             >
-                                {showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                             </button>
                         </div>
                         <PasswordStrengthIndicator password={newPassword} />
                     </div>
 
-                    {/* 确认密码 */}
                     <div className="space-y-2">
-                        <label className="text-xs text-foreground-secondary">确认新密码</label>
+                        <label htmlFor="settings-confirm-password" className="text-[13px] text-foreground-secondary">确认新密码</label>
                         <div className="relative">
-                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-foreground-secondary" />
                             <input
+                                id="settings-confirm-password"
                                 type={showConfirmPassword ? 'text' : 'password'}
                                 value={confirmPassword}
                                 onChange={(e) => setConfirmPassword(e.target.value)}
                                 placeholder="再次输入新密码"
-                                className={`w-full pl-10 pr-10 py-3 rounded-lg bg-background border focus:outline-none transition-colors ${confirmPassword && newPassword !== confirmPassword
-                                    ? 'border-red-500 focus:border-red-500'
-                                    : 'border-border focus:border-accent'
-                                    }`}
+                                aria-invalid={!!confirmPassword && newPassword !== confirmPassword}
+                                className="settings-input settings-input-with-action w-full"
                             />
                             <button
                                 type="button"
+                                aria-label={showConfirmPassword ? '隐藏密码' : '显示密码'}
                                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-secondary hover:text-foreground transition-colors"
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-secondary transition-colors hover:text-foreground"
                             >
-                                {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                             </button>
                         </div>
                         {confirmPassword && newPassword !== confirmPassword && (
-                            <p className="text-xs text-red-500">两次输入的密码不一致</p>
+                            <p className="text-xs text-danger">两次输入的密码不一致</p>
                         )}
                     </div>
 
-                    {success && (
-                        <p className="text-sm text-green-500 text-center">{success}</p>
-                    )}
-                    {error && (
-                        <p className="text-sm text-red-500 text-center">{error}</p>
-                    )}
+                    {message}
 
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap items-center gap-3">
                         <button
-                            onClick={resetForm}
-                            className="flex-1 py-2.5 rounded-lg border border-border hover:border-foreground-secondary transition-colors"
-                        >
-                            取消
-                        </button>
-                        <button
+                            type="button"
                             onClick={handleChangePassword}
                             disabled={loading || !newPassword || !confirmPassword}
-                            className="flex-1 py-2.5 rounded-lg bg-accent text-on-accent font-medium hover:bg-accent/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            className="settings-button settings-button-primary"
                         >
                             {loading && <SoundWaveLoader variant="inline" />}
                             确认修改
+                        </button>
+                        <button type="button" onClick={resetForm} className="ml-auto h-10 rounded-[10px] px-3 text-sm text-foreground-secondary hover:bg-background-secondary">
+                            取消
                         </button>
                     </div>
                 </div>

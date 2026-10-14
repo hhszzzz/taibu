@@ -1012,7 +1012,7 @@ export async function run(existingPage, bundlePath) {
     await page.waitForTimeout(30);
     check('Late old-account settings GET cannot overwrite current draft', await aiDraft.inputValue() === 'Fresh Alice draft');
     const staleSave = holdNext('/api/user/settings', 'PATCH');
-    await page.locator('select').filter({ visible: true }).last().selectOption('dark');
+    await page.getByRole('radio', { name: '暗色高对比', exact: true }).click();
     await page.getByRole('button', { name: '保存', exact: true }).click();
     await intercepted(staleSave);
     await page.evaluate(() => window.fixtureAuth.change(null));
@@ -1036,19 +1036,20 @@ export async function run(existingPage, bundlePath) {
     await notificationSwitch.click();
     await intercepted(generalFail);
     check('General setting serializes same-field operations while saving', await notificationSwitch.isDisabled());
-    const reminderSwitch = page.getByRole('switch').nth(1);
+    const reminderSwitch = page.getByRole('switch', { name: '节气提醒', exact: true });
     await reminderSwitch.click();
-    await until(() => document.querySelectorAll('[role="switch"]')[1]?.getAttribute('aria-checked') === 'true');
+    await until(() => document.querySelector('[role="switch"][aria-label="节气提醒"]')?.getAttribute('aria-checked') === 'true');
     generalFail.release();
     await until(() => !document.querySelector('[role="switch"]').disabled);
     check('Failed preference rolls back only its field and preserves successful reminder', await notificationSwitch.getAttribute('aria-checked') === beforeNotification && await reminderSwitch.getAttribute('aria-checked') === 'true');
     const reminderFail = holdNext('/api/reminders', 'POST', true);
     await reminderSwitch.click();
     await intercepted(reminderFail);
-    await page.getByRole('switch').nth(2).click();
+    const fortuneSwitch = page.getByRole('switch', { name: '运势提醒', exact: true });
+    await fortuneSwitch.click();
     reminderFail.release();
-    await until(() => !document.querySelectorAll('[role="switch"]')[1].disabled);
-    check('Failed reminder rolls back only its item', await reminderSwitch.getAttribute('aria-checked') === 'true' && await page.getByRole('switch').nth(2).getAttribute('aria-checked') === 'true');
+    await until(() => !document.querySelector('[role="switch"][aria-label="节气提醒"]').disabled);
+    check('Failed reminder rolls back only its item', await reminderSwitch.getAttribute('aria-checked') === 'true' && await fortuneSwitch.getAttribute('aria-checked') === 'true');
     await page.getByRole('link', { name: '返回太卜', exact: true }).click();
 
     // Controlled interleavings invoke real ConversationListProvider actions.
@@ -1166,7 +1167,8 @@ export async function run(existingPage, bundlePath) {
     const openCharts = async () => {
       await page.evaluate(() => { history.replaceState(null, '', '#settings/charts'); window.dispatchEvent(new HashChangeEvent('hashchange')); });
     };
-    const chartRow = id => page.locator('a[href="/bazi/result?chart=' + id + '"]');
+    // 行内操作按钮与跳转链接是同级元素，按包含该链接的列表项定位整行。
+    const chartRow = id => page.locator('li').filter({ has: page.locator('a[href="/bazi/result?chart=' + id + '"]') });
     const createChart = (id, name) => page.evaluate(({ id, name }) =>
       window.fixture.chartClient.createSavedChart('bazi', { id, name, gender: 'male', birth_date: '1990-01-01', birth_time: '12:00',
         fixtureRaw: 'retained raw field' }, { expectedUserId: window.fixture.user }), { id, name });

@@ -8,11 +8,11 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
 import { useTheme } from '@/components/ui/ThemeProvider';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { SegmentedChoice } from '@/components/settings/SegmentedChoice';
+import { SettingsRow, SettingsSection, SettingsSwitch } from '@/components/settings/SettingsControls';
 import { SettingsLoginRequired } from '@/components/settings/SettingsLoginRequired';
 import { loadReminderSubscriptions, type ReminderType, updateReminderSubscriptionClient } from '@/lib/reminders-client';
 import { mutationEffects } from '@/lib/query/invalidation';
@@ -39,86 +39,21 @@ const DEFAULT_REMINDER_SETTINGS: ReminderSettings = {
 const REMINDER_ITEMS: Array<{
   type: ReminderType;
   label: string;
+  description: string;
 }> = [
-  {
-    type: 'solar_term',
-    label: '节气提醒',
-  },
-  {
-    type: 'fortune',
-    label: '运势提醒',
-  },
-  {
-    type: 'key_date',
-    label: '关键日提醒',
-  },
+  { type: 'solar_term', label: '节气提醒', description: '交节当天早上提醒，附养生建议' },
+  { type: 'fortune', label: '运势提醒', description: '按默认命盘，遇大吉日或低谷日时提醒' },
+  { type: 'key_date', label: '关键日提醒', description: '按默认命盘排出当月关键日，当天早上提醒' },
 ];
 
 const THEME_MODE_OPTIONS = [
-  { value: 'light', label: '浅色' },
-  { value: 'dark', label: '深色' },
-  { value: 'system', label: '自动' },
+  { value: 'light', label: '浅色', preview: ['is-light is-sidebar', 'is-light'] },
+  { value: 'dark', label: '深色', preview: ['is-dark is-sidebar', 'is-dark'] },
+  { value: 'system', label: '跟随系统', preview: ['is-light', 'is-dark'] },
 ] as const;
 
-function SectionTitle({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  return (
-    <h2 className="flex items-center gap-2 px-1 text-xs font-semibold uppercase tracking-wider text-foreground-secondary">
-      <span>{children}</span>
-    </h2>
-  );
-}
-
-function Row({
-  title,
-  control,
-}: {
-  title: string;
-  control: ReactNode;
-}) {
-  return (
-    <div className="settings-preference-row flex items-center justify-between gap-4 rounded-md border border-border bg-background px-4 py-2">
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-foreground">{title}</p>
-      </div>
-      {control}
-    </div>
-  );
-}
-
-function PreferenceSwitch({
-  checked,
-  onToggle,
-  disabled = false,
-}: {
-  checked: boolean;
-  onToggle: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={onToggle}
-      disabled={disabled}
-      className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full p-1 transition-colors duration-150 ${
-        checked
-          ? 'bg-accent'
-          : 'bg-background-secondary dark:bg-background-tertiary'
-      } ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
-    >
-      <span
-        className={`h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-150 ${
-          checked ? 'translate-x-5' : 'translate-x-0'
-        }`}
-      />
-    </button>
-  );
-}
+const FONT_SCALE_LABELS: Record<FontScale, string> = { 85: '小', 100: '标准', 115: '大', 125: '特大' };
+const FONT_SCALE_OPTIONS = FONT_SCALES.map(scale => ({ value: String(scale), label: FONT_SCALE_LABELS[scale] }));
 
 export default function GeneralSettingsPanel() {
   const { user } = useSessionSafe();
@@ -296,9 +231,37 @@ function AccountGeneralSettingsPanel() {
     }
   };
 
+  const toggleDesktopNotifications = async () => {
+    if (!userId || loadError || loading || !beginOperation('desktopNotifications')) return;
+    setDesktopError('');
+    try {
+      const next = !desktopNotifications;
+      if (next) {
+        if (!('Notification' in window)) { setDesktopError('此浏览器不支持桌面提醒'); return; }
+        const permission = await window.Notification.requestPermission();
+        if (permission !== 'granted') { setDesktopError('桌面提醒需要在浏览器中允许通知'); return; }
+      }
+      const current = await getCurrentUserSettings({ expectedUserId: userId });
+      const saved = current.settings
+        ? await updateCurrentUserSettings({ chatPreferences: { ...current.settings.chatPreferences, desktopNotifications: next } }, mutationEffects.userSettings(userId), { expectedUserId: userId })
+        : null;
+      if (saved) setDesktopNotifications(next);
+      else setDesktopError('保存桌面提醒偏好失败');
+    } finally {
+      finishOperation('desktopNotifications');
+    }
+  };
+
+  const changeFontScale = (value: string) => {
+    const scale = Number(value) as FontScale;
+    setFontScale(scale);
+    if (!userId) return;
+    void getCurrentUserSettings({ expectedUserId: userId }).then(current => current.settings && updateCurrentUserSettings({ chatPreferences: { ...current.settings.chatPreferences, fontScale: scale } }, mutationEffects.userSettings(userId), { expectedUserId: userId }));
+  };
+
   if (loading || sessionLoading) {
     return (
-      <div className="flex min-h-[240px] items-center justify-center rounded-lg border border-border bg-background">
+      <div className="flex min-h-[240px] items-center justify-center">
         <SoundWaveLoader variant="inline" />
       </div>
     );
@@ -309,106 +272,102 @@ function AccountGeneralSettingsPanel() {
   }
 
   return (
-    <div className="space-y-8">
-      {loadError ? (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
-          {loadError}
-        </div>
-      ) : null}
+    <div>
+      {loadError ? <div role="alert" className="settings-alert">{loadError}</div> : null}
 
-      <section className="space-y-3">
-        <SectionTitle>基础偏好</SectionTitle>
-        <div className="space-y-2">
-          <Row title="网页打开时桌面提醒" control={<button type="button" className="text-xs px-3 py-2 border border-border rounded" onClick={async () => {
-            setDesktopError('');
-            if (!desktopNotifications) {
-              if (!('Notification' in window)) { setDesktopError('此浏览器不支持桌面提醒'); return; }
-              const permission = await window.Notification.requestPermission();
-              if (permission !== 'granted') { setDesktopError('桌面提醒需要在浏览器中允许通知'); return; }
-            }
-            const current = await getCurrentUserSettings({ expectedUserId: userId! });
-            if (current.settings && await updateCurrentUserSettings({ chatPreferences: { ...current.settings.chatPreferences, desktopNotifications: !desktopNotifications } }, mutationEffects.userSettings(userId!), { expectedUserId: userId! })) setDesktopNotifications(!desktopNotifications);
-            else setDesktopError('保存桌面提醒偏好失败');
-          }}>{desktopNotifications ? '关闭桌面提醒' : '开启桌面提醒'}</button>} />
-          {desktopError && <p role="alert" className="text-sm text-foreground-secondary">{desktopError}</p>}
-          <Row
-            title="外观界面"
-            control={(
-              <SegmentedChoice
-                ariaLabel="外观界面"
-                value={themeMode}
-                onChange={setThemeMode}
-                options={THEME_MODE_OPTIONS}
-              />
-            )}
-          />
-
-          <Row
-            title="语言设置"
-            control={(
-              <select
-                value={settings.language}
-                onChange={(event) => updateSetting('language', event.target.value as 'zh' | 'en')}
-                disabled={Boolean(loadError) || pending.has('language')}
-                className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium text-foreground outline-none transition-colors duration-150 focus:ring-2 focus:ring-accent/30"
-              >
-                <option value="zh">简体中文</option>
-                <option value="en" disabled>English (即将上线)</option>
-              </select>
-            )}
-          />
-          <Row title="全站字号" control={<select aria-label="全站字号" value={fontScale} onChange={event => {
-            const scale = Number(event.target.value) as FontScale;
-            setFontScale(scale);
-            void getCurrentUserSettings({ expectedUserId: userId! }).then(current => current.settings && updateCurrentUserSettings({ chatPreferences: { ...current.settings.chatPreferences, fontScale: scale } }, mutationEffects.userSettings(userId!), { expectedUserId: userId! }));
-          }} className="rounded-md border border-border bg-background px-3 py-2 text-sm">{FONT_SCALES.map(scale => <option key={scale} value={scale}>{scale}%</option>)}</select>} />
+      <section className="settings-section">
+        <h3 className="settings-section-title">外观</h3>
+        <div role="radiogroup" aria-label="外观" className="settings-choice-cards">
+          {THEME_MODE_OPTIONS.map(option => (
+            <button
+              key={option.value}
+              type="button"
+              role="radio"
+              aria-checked={themeMode === option.value}
+              onClick={() => setThemeMode(option.value)}
+              className="settings-choice-card"
+            >
+              <span aria-hidden="true" className="settings-theme-preview">
+                {option.preview.map(part => <span key={part} className={part} />)}
+              </span>
+              <span>{option.label}</span>
+            </button>
+          ))}
         </div>
       </section>
 
-      <section className="space-y-3">
-        <SectionTitle>通知与提醒</SectionTitle>
-        {reminderLoadError ? (
-          <div className="flex items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-            <span className="min-w-0 flex-1">{reminderLoadError}</span>
-            <button
-              type="button"
-              disabled={pending.size > 0}
-              onClick={() => void load()}
-              className="shrink-0 rounded-md px-2 py-1 font-medium transition-colors hover:bg-amber-100"
+      <SettingsSection title="基础偏好">
+        <SettingsRow
+          label="全站字号"
+          description="页面、命盘与对话文字一起缩放"
+          control={<SegmentedChoice ariaLabel="全站字号" value={String(fontScale)} onChange={changeFontScale} options={FONT_SCALE_OPTIONS} maxWidth={260} />}
+        />
+        <SettingsRow
+          label="语言"
+          description="English 即将上线"
+          controlId="settings-language"
+          control={(
+            <select
+              id="settings-language"
+              value={settings.language}
+              onChange={(event) => updateSetting('language', event.target.value as 'zh' | 'en')}
+              disabled={Boolean(loadError) || pending.has('language')}
+              className="settings-select"
             >
-              重试
-            </button>
+              <option value="zh">简体中文</option>
+              <option value="en" disabled>English (即将上线)</option>
+            </select>
+          )}
+        />
+      </SettingsSection>
+
+      <SettingsSection title="通知与提醒">
+        {reminderLoadError ? (
+          <div role="alert" className="settings-alert">
+            <span className="min-w-0 flex-1">{reminderLoadError}</span>
+            <button type="button" disabled={pending.size > 0} onClick={() => void load()}>重试</button>
           </div>
         ) : null}
-        <div className="space-y-2">
-          <Row
-            title="推送通知"
+        <SettingsRow
+          label="推送通知"
+          description="关闭后，提醒和后台任务完成通知都不再推送"
+          control={(
+            <SettingsSwitch
+              label="推送通知"
+              checked={settings.notifications}
+              onToggle={() => updateSetting('notifications', !settings.notifications)}
+              disabled={Boolean(loadError) || pending.has('notifications')}
+            />
+          )}
+        />
+        <SettingsRow
+          label="网页打开时桌面提醒"
+          description={desktopError ? <span role="alert" className="text-danger">{desktopError}</span> : '后台任务完成时弹出系统通知，需要浏览器授权'}
+          control={(
+            <SettingsSwitch
+              label="网页打开时桌面提醒"
+              checked={desktopNotifications}
+              onToggle={() => void toggleDesktopNotifications()}
+              disabled={Boolean(loadError) || pending.has('desktopNotifications')}
+            />
+          )}
+        />
+        {REMINDER_ITEMS.map((item) => (
+          <SettingsRow
+            key={item.type}
+            label={item.label}
+            description={item.description}
             control={(
-              <PreferenceSwitch
-                checked={settings.notifications}
-                onToggle={() => updateSetting('notifications', !settings.notifications)}
-                disabled={Boolean(loadError) || pending.has('notifications')}
+              <SettingsSwitch
+                label={item.label}
+                checked={reminders[item.type]}
+                onToggle={() => updateReminderSetting(item.type)}
+                disabled={Boolean(loadError) || Boolean(reminderLoadError) || remindersLoading || pending.has(item.type)}
               />
             )}
           />
-
-          {REMINDER_ITEMS.map((item) => {
-            return (
-              <Row
-                key={item.type}
-                title={item.label}
-                control={(
-                  <PreferenceSwitch
-                    checked={reminders[item.type]}
-                    onToggle={() => updateReminderSetting(item.type)}
-                    disabled={Boolean(loadError) || Boolean(reminderLoadError) || remindersLoading || pending.has(item.type)}
-                  />
-                )}
-              />
-            );
-          })}
-        </div>
-      </section>
+        ))}
+      </SettingsSection>
       {!loading && !loadError && <BriefingSettings key={user.id} userId={user.id} initialPreferences={settings.briefingPreferences} initialEnabled={reminders.daily_briefing} />}
     </div>
   );

@@ -214,7 +214,8 @@ export function SettingsCenterPage({ children }: { children: React.ReactNode }) 
     return () => { current = false; };
   }, [resolvedActiveTab]);
   const displayTab = resolvedActiveTab ?? 'general';
-  const activeTabLabel = tabs.find(tab => tab.id === displayTab)?.label ?? '设置';
+  const displayTabState = tabs.find(tab => tab.id === displayTab);
+  const activeTabLabel = displayTabState?.label ?? '设置';
   return <section className="settings-page" aria-labelledby="settings-center-heading">
     <header className="settings-page-header">
       <Link href="/bazi" className="settings-back"><ArrowLeft size={16} /><span>返回太卜</span></Link>
@@ -229,18 +230,20 @@ export function SettingsCenterPage({ children }: { children: React.ReactNode }) 
             if (!items.length) return null;
             return <div className="settings-nav-group" key={group}>
               <h2>{SETTINGS_CENTER_GROUP_LABELS[group]}</h2>
-              {items.map(tab => {
-                const Icon = tab.icon;
-                const content = <><Icon size={SETTINGS_CENTER_ICON_SIZES.sidebar} className="shrink-0" /><span>{tab.label}</span>{tab.disabled ? <LockKeyhole size={13} /> : <ChevronRight size={13} className="settings-nav-chevron" />}</>;
-                return tab.disabled ? <button key={tab.id} type="button" disabled={tab.disabled} aria-disabled={tab.disabled} className="settings-nav-item cursor-not-allowed">{content}</button>
-                  : <Link key={tab.id} href={getSettingsCenterRouteTarget(tab.id)} aria-current={tab.id === displayTab ? 'page' : undefined} className="settings-nav-item" onClick={() => setMobileNavigation(false)}>{content}</Link>;
-              })}
+              <div className="settings-nav-list">
+                {items.map(tab => {
+                  const Icon = tab.icon;
+                  const content = <><Icon size={SETTINGS_CENTER_ICON_SIZES.sidebar} className="shrink-0" /><span>{tab.label}</span>{tab.disabled ? <LockKeyhole size={14} /> : <ChevronRight size={14} className="settings-nav-chevron" />}</>;
+                  return tab.disabled ? <button key={tab.id} type="button" disabled={tab.disabled} aria-disabled={tab.disabled} className="settings-nav-item cursor-not-allowed">{content}</button>
+                    : <Link key={tab.id} href={getSettingsCenterRouteTarget(tab.id)} aria-current={tab.id === displayTab ? 'page' : undefined} className="settings-nav-item" onClick={() => setMobileNavigation(false)}>{content}</Link>;
+                })}
+              </div>
             </div>;
           })}
         </nav>
       </aside>
       <div className={`settings-content${mobileNavigation ? ' mobile-hidden' : ''}`}>
-        <div className="settings-content-heading"><h2>{activeTabLabel}</h2></div>
+        <div className="settings-content-heading"><h2>{activeTabLabel}</h2>{displayTabState?.description && <p>{displayTabState.description}</p>}</div>
         {children}
         {renderedTabs.map(tab => <div key={`${user?.id ?? 'visitor'}:${tab}`} className={tab === resolvedActiveTab ? 'block' : 'hidden'} aria-hidden={tab === resolvedActiveTab ? undefined : true} inert={tab !== resolvedActiveTab}>
           {renderSettingsCenterPanel(tab, flags, { isLoggedIn: !!user, isAdmin, profileLoading, profileError: !!profileError })}

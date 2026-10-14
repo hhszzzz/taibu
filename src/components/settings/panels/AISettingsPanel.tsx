@@ -8,8 +8,6 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
-import { Save, X } from 'lucide-react';
 import {
   ADVANCED_DIMENSIONS,
   CORE_DIMENSIONS,
@@ -40,11 +38,14 @@ type AISettingsDraftSnapshot = {
   userProfile: UserProfileDraft;
 };
 
-const CHART_STYLE_OPTIONS: Array<{ value: VisualizationChartStyle; label: string }> = [
-  { value: 'modern', label: '简约现代' },
-  { value: 'classic-chinese', label: '经典中式' },
-  { value: 'dark', label: '暗色高对比' },
+// 预览色只示意三种风格的观感，实际图表由 AI 按风格描述生成。
+const CHART_STYLE_OPTIONS: Array<{ value: VisualizationChartStyle; label: string; previewClass: string }> = [
+  { value: 'modern', label: '简约现代', previewClass: 'is-modern' },
+  { value: 'classic-chinese', label: '经典中式', previewClass: 'is-classic' },
+  { value: 'dark', label: '暗色高对比', previewClass: 'is-dark' },
 ];
+const CHART_PREVIEW_BARS = ['40%', '75%', '55%', '90%'];
+const DAYUN_PERIOD_OPTIONS = [3, 4, 5, 6, 7, 8, 9, 10];
 const EXPRESSION_STYLE_OPTIONS: Array<{ value: ExpressionStyle; label: string }> = [
   { value: 'direct', label: '直接干练' },
   { value: 'gentle', label: '温和委婉' },
@@ -56,6 +57,8 @@ const CHART_PROMPT_DETAIL_OPTIONS_UI = CHART_TEXT_DETAIL_OPTIONS.map((option) =>
 
 const USER_PROFILE_LIMIT = 120;
 const CUSTOM_INSTRUCTIONS_LIMIT = 4000;
+const MIN_DIMENSIONS = 3;
+const MAX_DIMENSIONS = 12;
 const EMPTY_USER_PROFILE: UserProfileDraft = null;
 
 function normalizeUserProfileDraft(userProfile: UserProfileDraft): UserProfileDraft {
@@ -81,20 +84,6 @@ function buildDraftSnapshot(input: {
     chartStyle: input.chartStyle,
     userProfile: normalizeUserProfileDraft(input.userProfile),
   };
-}
-
-function SectionTitle({ title }: { title: string }) {
-  return (
-    <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-  );
-}
-
-function SectionDescription({ children }: { children: ReactNode }) {
-  return <p className="text-sm text-foreground-secondary">{children}</p>;
-}
-
-function FieldLabel({ children }: { children: ReactNode }) {
-  return <label className="text-xs font-medium text-foreground-secondary">{children}</label>;
 }
 
 export default function AISettingsPanel() {
@@ -223,14 +212,16 @@ function AccountAISettingsPanel() {
   const handleToggleDimension = (key: FortuneDimensionKey) => {
     const alreadySelected = selectedDimensions.includes(key);
     if (alreadySelected) {
-      if (selectedDimensions.length <= 3) {
+      if (selectedDimensions.length <= MIN_DIMENSIONS) {
+        showToast('info', `至少保留 ${MIN_DIMENSIONS} 个维度`);
         return;
       }
       setSelectedDimensions(selectedDimensions.filter((item) => item !== key));
       return;
     }
 
-    if (selectedDimensions.length >= 12) {
+    if (selectedDimensions.length >= MAX_DIMENSIONS) {
+      showToast('info', `最多选择 ${MAX_DIMENSIONS} 个维度`);
       return;
     }
     setSelectedDimensions([...selectedDimensions, key]);
@@ -294,7 +285,7 @@ function AccountAISettingsPanel() {
 
   if (loading || sessionLoading) {
     return (
-      <div className="flex min-h-[240px] items-center justify-center rounded-lg border border-border bg-background">
+      <div className="flex min-h-[240px] items-center justify-center rounded-xl border border-border bg-surface">
         <SoundWaveLoader variant="inline" />
       </div>
     );
@@ -304,163 +295,155 @@ function AccountAISettingsPanel() {
     return <SettingsLoginRequired title="请先登录后配置 AI 个性化" />;
   }
 
+  const identityDraft = userProfile?.identity ?? '';
+
   return (
-    <div className="space-y-6">
-      {error ? (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
-          {error}
-        </div>
-      ) : null}
+    <div>
+      {error ? <div role="alert" className="settings-alert">{error}</div> : null}
 
-      <section className="space-y-4">
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <FieldLabel>身份</FieldLabel>
-            <input
-              value={userProfile?.identity ?? ''}
-              onChange={(event) => {
-                const identity = event.target.value.slice(0, USER_PROFILE_LIMIT).trim();
-                setUserProfile(identity ? { identity } : null);
-              }}
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition-colors duration-150 focus:ring-2 focus:ring-accent/30"
-              placeholder="例如：创业者"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <FieldLabel>表达风格</FieldLabel>
-            <select
-              value={expressionStyle}
-              onChange={(event) => setExpressionStyle(event.target.value as ExpressionStyle)}
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition-colors duration-150 focus:ring-2 focus:ring-accent/30"
-            >
-              {EXPRESSION_STYLE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-          </div>
+      <section className="settings-form-section" aria-labelledby="ai-style-heading">
+        <div className="settings-form-heading">
+          <h3 id="ai-style-heading">解读风格</h3>
         </div>
 
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <FieldLabel>命盘注入详细级别</FieldLabel>
+        <div className="settings-field-block">
+          <div className="settings-label-row">
+            <label htmlFor="ai-identity">身份</label>
+            <span className="settings-counter">{identityDraft.length} / {USER_PROFILE_LIMIT}</span>
+          </div>
+          <input
+            id="ai-identity"
+            value={identityDraft}
+            maxLength={USER_PROFILE_LIMIT}
+            onChange={(event) => {
+              // 输入过程中保留空格，保存快照时再统一去除首尾空白。
+              const identity = event.target.value.slice(0, USER_PROFILE_LIMIT);
+              setUserProfile(identity ? { identity } : null);
+            }}
+            className="settings-input settings-input-lg"
+            placeholder="例如：创业者"
+          />
+        </div>
+
+        <div className="settings-inline-row">
+          <span>表达风格</span>
+          <SegmentedChoice
+            ariaLabel="表达风格"
+            value={expressionStyle}
+            onChange={setExpressionStyle}
+            options={EXPRESSION_STYLE_OPTIONS}
+            maxWidth={200}
+          />
+        </div>
+
+        <div className="settings-field-block">
+          <div className="settings-inline-row">
+            <span>命盘注入详细级别</span>
             <SegmentedChoice
               ariaLabel="命盘注入详细级别"
               value={chartPromptDetailLevel}
               onChange={handleChartPromptDetailLevelChange}
               options={CHART_PROMPT_DETAIL_OPTIONS_UI}
-              maxWidth={320}
+              maxWidth={216}
             />
-            <p className="text-xs text-foreground-secondary">
-              用于聊天命盘注入与结果页 AI 解读 prompt。建议保留默认，默认经过微调能降低噪音。
-            </p>
           </div>
+          <p className="settings-help">
+            用于对话中的命盘注入与结果页解读。默认档噪音更少；完整档附带神煞、纳音、格局等字段。扩展档目前只对六爻单独生效，其余占术按完整档处理。
+          </p>
+        </div>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <FieldLabel>自定义指令</FieldLabel>
-              <span className="text-xs text-foreground-secondary">
-                {customInstructions.length}/{CUSTOM_INSTRUCTIONS_LIMIT}
-              </span>
-            </div>
-            <textarea
-              value={customInstructions}
-              onChange={(event) => setCustomInstructions(event.target.value.slice(0, CUSTOM_INSTRUCTIONS_LIMIT))}
-              className="min-h-[100px] w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition-colors duration-150 focus:ring-2 focus:ring-accent/30"
-              placeholder="例如：先给结论，再给依据；避免空话和术语堆叠。"
-            />
+        <div className="settings-field-block">
+          <div className="settings-label-row">
+            <label htmlFor="ai-custom-instructions">自定义指令</label>
+            <span className="settings-counter">{customInstructions.length} / {CUSTOM_INSTRUCTIONS_LIMIT}</span>
           </div>
+          <textarea
+            id="ai-custom-instructions"
+            rows={3}
+            value={customInstructions}
+            onChange={(event) => setCustomInstructions(event.target.value.slice(0, CUSTOM_INSTRUCTIONS_LIMIT))}
+            className="settings-textarea"
+            placeholder="例如：先给结论，再给依据；避免空话和术语堆叠。"
+          />
         </div>
       </section>
 
-      <section className="space-y-3">
-        <SectionTitle title="运势可视化偏好" />
-        <SectionDescription>控制 AI 输出时默认关注的维度、图表风格和大运展示数量。</SectionDescription>
+      <section className="settings-form-section" aria-labelledby="ai-visualization-heading">
+        <div className="settings-form-heading">
+          <h3 id="ai-visualization-heading">运势可视化</h3>
+          <p>AI 输出运势图表时默认关注的维度、图表风格与大运期数。</p>
+        </div>
 
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <FieldLabel>维度选择（至少 3 个，最多 12 个）</FieldLabel>
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-              {allDimensions.map((dimension) => {
-                const active = selectedDimensions.includes(dimension.key);
-                return (
-                  <button
-                    key={dimension.key}
-                    type="button"
-                    onClick={() => handleToggleDimension(dimension.key)}
-                    className={`flex items-center justify-between rounded-md border px-3 py-2 text-sm transition-colors duration-150 ${
-                      active
-                        ? 'border-[#cfe3f7] bg-blue-50 text-accent'
-                        : 'border-border bg-background text-foreground-secondary hover:bg-background-secondary dark:hover:bg-background-secondary'
-                    }`}
-                  >
-                    <span className="flex items-center gap-2">
-                      <span>{dimension.icon}</span>
-                      <span>{dimension.label}</span>
-                    </span>
-                    {/* <span className="text-xs text-foreground-secondary">{active ? '已选' : '未选'}</span> */}
-                  </button>
-                );
-              })}
-            </div>
+        <div className="settings-field-block">
+          <div className="settings-label-row">
+            <span id="ai-dimensions-label">维度</span>
+            <span className="settings-counter">已选 {selectedDimensions.length} · 至少 {MIN_DIMENSIONS}，最多 {MAX_DIMENSIONS}</span>
           </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <FieldLabel>默认展示大运期数</FieldLabel>
-              <select
-                value={dayunPeriods}
-                onChange={(event) => setDayunPeriods(Number(event.target.value))}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition-colors duration-150 focus:ring-2 focus:ring-accent/30"
+          <div role="group" aria-labelledby="ai-dimensions-label" className="settings-chips">
+            {allDimensions.map((dimension) => (
+              <button
+                key={dimension.key}
+                type="button"
+                aria-pressed={selectedDimensions.includes(dimension.key)}
+                onClick={() => handleToggleDimension(dimension.key)}
+                className="settings-chip"
               >
-                {[3, 4, 5, 6, 7, 8, 9, 10].map((count) => (
-                  <option key={count} value={count}>{count} 期</option>
-                ))}
-              </select>
-            </div>
+                {dimension.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
-            <div className="space-y-2">
-              <FieldLabel>图表风格</FieldLabel>
-              <select
-                value={chartStyle}
-                onChange={(event) => setChartStyle(event.target.value as VisualizationChartStyle)}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition-colors duration-150 focus:ring-2 focus:ring-accent/30"
+        <div className="settings-inline-row">
+          <label htmlFor="ai-dayun-periods">默认展示大运期数</label>
+          <select
+            id="ai-dayun-periods"
+            value={dayunPeriods}
+            onChange={(event) => setDayunPeriods(Number(event.target.value))}
+            className="settings-select settings-select-compact"
+          >
+            {DAYUN_PERIOD_OPTIONS.map((count) => (
+              <option key={count} value={count}>{count} 期</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="settings-field-block">
+          <span id="ai-chart-style-label" className="settings-label">图表风格</span>
+          <div role="radiogroup" aria-labelledby="ai-chart-style-label" className="settings-choice-cards">
+            {CHART_STYLE_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={chartStyle === option.value}
+                onClick={() => setChartStyle(option.value)}
+                className="settings-choice-card"
               >
-                {CHART_STYLE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </div>
+                <span aria-hidden="true" className={`settings-chart-preview ${option.previewClass}`}>
+                  {CHART_PREVIEW_BARS.map((height, index) => <span key={index} style={{ height }} />)}
+                </span>
+                <span>{option.label}</span>
+              </button>
+            ))}
           </div>
         </div>
       </section>
 
       {isDirty ? (
-        <div className="sticky bottom-0 z-20 pb-2">
-          <div className="flex flex-col gap-3 rounded-xl border border-border bg-background/95 px-4 py-3 shadow-sm backdrop-blur md:flex-row md:items-center md:justify-between">
-            <p className="text-sm font-medium text-foreground">个性化设置已修改，保存后生效。</p>
-
-            <div className="flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={handleCancel}
-                disabled={saving}
-                className="inline-flex items-center justify-center gap-2 rounded-md border border-border bg-transparent px-3 py-2 text-sm font-medium text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-background-secondary"
-              >
-                <X className="h-4 w-4" />
-                取消
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={saving || settingsLoadFailed}
-                className="inline-flex items-center justify-center gap-2 rounded-md border border-accent bg-accent px-3 py-2 text-sm font-medium text-on-accent transition-colors duration-150 hover:bg-accent-hover hover:border-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {saving ? <SoundWaveLoader variant="inline" /> : <Save className="h-4 w-4" />}
-                保存
-              </button>
-            </div>
-          </div>
+        <div className="settings-save-bar">
+          <p>个性化设置已修改，保存后生效。</p>
+          <button type="button" onClick={handleCancel} disabled={saving} className="settings-button">
+            取消
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving || settingsLoadFailed}
+            className="settings-button settings-button-primary"
+          >
+            {saving ? '保存中…' : '保存'}
+          </button>
         </div>
       ) : null}
     </div>

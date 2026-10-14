@@ -4,14 +4,14 @@ export function StatusBanner({ error, success }: { error: string; success: strin
     return (
         <>
             {error && (
-                <div className="p-3 rounded-lg bg-red-500/10 text-red-500 text-sm flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <div role="alert" className="mb-4 flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-3 text-sm text-danger">
+                    <AlertCircle className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
                     {error}
                 </div>
             )}
             {success && (
-                <div className="p-3 rounded-lg bg-green-500/10 text-green-500 text-sm flex items-center gap-2">
-                    <Check className="w-4 h-4 flex-shrink-0" />
+                <div role="status" className="mb-4 flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-3 text-sm text-success">
+                    <Check className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
                     {success}
                 </div>
             )}

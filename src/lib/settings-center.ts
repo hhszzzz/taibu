@@ -58,9 +58,9 @@ const SETTINGS_CENTER_TAB_META: Record<SettingsCenterTab, Omit<SettingsCenterTab
   charts: { id: 'charts', label: '命盘', group: 'extensions', description: '保存过的命盘都在这里。默认八字命盘会用于日运、月运和每日早报。' },
   'knowledge-base': { id: 'knowledge-base', label: '知识库', group: 'extensions', description: '把命盘、解读和资料归档到知识库，AI 对话时可以检索引用。' },
   'mcp-service': { id: 'mcp-service', label: 'MCP', group: 'extensions', description: '在支持 MCP 的客户端里直接调用太卜的排盘工具。' },
-  'admin-announcements': { id: 'admin-announcements', label: '公告', group: 'management' },
-  'admin-features': { id: 'admin-features', label: '功能与激活码', group: 'management' },
-  'admin-ai-services': { id: 'admin-ai-services', label: 'AI 服务', group: 'management' },
+  'admin-announcements': { id: 'admin-announcements', label: '公告', group: 'management', description: '发布和编辑站内公告，支持 Markdown，保存后立即生效。' },
+  'admin-features': { id: 'admin-features', label: '功能与激活码', group: 'management', description: '统一管理功能开关与激活码发放。' },
+  'admin-ai-services': { id: 'admin-ai-services', label: 'AI 服务', group: 'management', description: '管理模型配置、来源绑定和网关可用性。' },
 };
 
 function isSettingsCenterTabDisabled(tab: SettingsCenterTab, flags: SettingsCenterFlags) {

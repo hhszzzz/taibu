@@ -10,7 +10,7 @@
  *   return run(page, '/tmp/taibu-p5-browser/fixture.js');
  *
  * Actual components: SettingsCenterPage/SettingsCenterHost/GeneralSettingsPanel/ChartsPanel, AIModelPanel,
- * AnnouncementManagementPanel, ConversationListProvider, ChartPickerModal,
+ * AnnouncementManagementPanel, KeyManagementPanel, ConversationListProvider, ChartPickerModal,
  * useSelectedBaziChart, useComposerState, HistoryDrawer/HistoryPageTemplate, RecordsPage and useAnalysisSnapshot.
  * Actual root ClientProviders owns the shared Query client and handles synthetic auth I/O.
  * Fixture-only boundaries: auth I/O/profile/feature flags, unrelated lazy panels,
@@ -40,6 +40,7 @@ import { usePathname } from 'next/navigation';
 import { openSettingsCenter } from '@/lib/settings-center';
 import { AIModelPanel } from '@/components/admin/AIModelPanel';
 import { AnnouncementManagementPanel } from '@/components/admin/AnnouncementManagementPanel';
+import { KeyManagementPanel } from '@/components/admin/KeyManagementPanel';
 import { ConversationListProvider, useConversationList } from '@/lib/chat/ConversationListContext';
 import { useChatState } from '@/lib/chat/use-chat-state';
 import { useChatMessaging } from '@/lib/chat/use-chat-messaging';
@@ -255,6 +256,7 @@ function Shell() {
       <button onClick={() => navigate('/other')}>Fixture Other route</button>
       <button onClick={() => navigate('/models')}>Fixture Models route</button>
       <button onClick={() => navigate('/announcements')}>Fixture Announcements route</button>
+      <button onClick={() => navigate('/keys')}>Fixture Keys route</button>
       <button onClick={() => openSettingsCenter('general')}>Open actual settings</button>
       <button onClick={() => setUser('alice')}>Fixture Alice</button>
       <button onClick={() => setUser('bob')}>Fixture Bob</button>
@@ -278,6 +280,7 @@ function Shell() {
     <output data-testid="stream">{stream ? stream.status + ':' + stream.content : 'idle'}</output>
     {route === '/models' && <section data-testid="models"><AIModelPanel key={modelMountKey} /></section>}
     {route === '/announcements' && <section data-testid="announcements"><AnnouncementManagementPanel /></section>}
+    {route === '/keys' && <section data-testid="activation-keys"><KeyManagementPanel /></section>}
     {composerMounted && <ComposerProbe />}
     {selectedMounted && <SelectedChartProbe />}
     {agentMounted && <AgentChatProbe />}
@@ -528,6 +531,13 @@ export async function run(existingPage, bundlePath) {
   let models = [initialModel()];
   let announcements = [];
   let failAnnouncementWrite = false;
+  const activationKey = (id, code, extra) => ({ id, key_code: code, key_type: 'membership', membership_type: 'plus', credits_amount: null,
+    is_used: false, used_by: null, used_at: null, created_at: '2026-01-02T00:00:00Z', ...extra });
+  let activationKeys = [
+    activationKey('key-unused', 'sk-fixtureunused001'),
+    activationKey('key-used', 'sk-fixtureused00002', { key_type: 'credits', membership_type: null, credits_amount: 50, is_used: true, used_by: 'alice', used_at: '2026-01-05T00:00:00Z' }),
+  ];
+  let failKeyCreate = false;
   let settingsReads = 0;
   let holdList = false;
   let releaseList;
@@ -705,6 +715,20 @@ export async function run(existingPage, bundlePath) {
       const announcement = { id: 'announcement-fixture', content: body.content, publishedAt: '2026-01-01T00:00:00Z' };
       announcements = [announcement];
       return ok({ announcement });
+    }
+    // The real route answers with raw payloads: GET { success, data }, POST/DELETE { success, ... }.
+    if (url.pathname === '/api/activation-keys') {
+      if (method === 'GET') return ok({ success: true, data: activationKeys }, true);
+      if (method === 'DELETE') {
+        activationKeys = activationKeys.filter(key => key.id !== url.searchParams.get('id'));
+        return ok({ success: true }, true);
+      }
+      if (failKeyCreate) { failKeyCreate = false; return ok({ success: false, error: 'Fixture key limit' }, true); }
+      const created = Array.from({ length: body.count }, (_, index) => activationKey('key-new-' + index, 'sk-fixturecreated0' + index, {
+        key_type: body.keyType, membership_type: body.membershipType ?? null, credits_amount: body.creditsAmount ?? null, created_at: '2026-01-06T00:00:00Z',
+      }));
+      activationKeys = [...created, ...activationKeys];
+      return ok({ success: true, keys: created.map(key => key.key_code) }, true);
     }
     if (url.pathname === '/api/admin/ai-models/cache') return ok({ cleared: true });
     if (url.pathname === '/api/admin/ai-models') {
@@ -945,20 +969,55 @@ export async function run(existingPage, bundlePath) {
       check(`Announcement ${button} invalidates once (observed ${effects.length})`, JSON.stringify(effects) === JSON.stringify([{ queryKey: ['announcements'] }]));
     }
     await announcementPanel.getByRole('button', { name: '返回历史', exact: true }).click();
+    const deleteDialog = page.getByRole('dialog');
+    await announcementPanel.getByTitle('删除', { exact: true }).click();
+    await deleteDialog.getByRole('button', { name: '取消', exact: true }).click();
+    check('Announcement deletion waits for confirmation', !requests.some(item => item.pathname === '/api/admin/announcements/announcement-fixture' && item.method === 'DELETE'));
+    await announcementPanel.getByTitle('删除', { exact: true }).click();
     for (const rejected of [true, false]) {
       failAnnouncementWrite = rejected;
       await page.evaluate(() => { window.fixture.invalidations.length = 0; });
       const deleted = page.waitForResponse(response => response.url().endsWith('/api/admin/announcements/announcement-fixture') && response.request().method() === 'DELETE');
-      await announcementPanel.getByTitle('删除', { exact: true }).click();
+      // A failed deletion keeps the dialog open, so the second pass confirms again.
+      await deleteDialog.getByRole('button', { name: '确认删除', exact: true }).click();
       await (await deleted).finished();
       if (rejected) {
         await until(() => document.querySelector('[data-testid="announcements"] button[title="删除"]')?.disabled === false);
-        check('Failed announcement deletion preserves the row without invalidation', (await page.evaluate(() => window.fixture.invalidations)).length === 0 && await announcementPanel.getByText('Updated fixture announcement', { exact: true }).isVisible());
+        check('Failed announcement deletion preserves the row without invalidation', (await page.evaluate(() => window.fixture.invalidations)).length === 0 && await announcementPanel.getByText('Updated fixture announcement', { exact: true }).isVisible() && await deleteDialog.isVisible());
       } else {
         await announcementPanel.getByText('还没有任何公告', { exact: true }).waitFor();
         check('Announcement DELETE invalidates once', JSON.stringify(await page.evaluate(() => window.fixture.invalidations)) === JSON.stringify([{ queryKey: ['announcements'] }]));
       }
     }
+    await page.getByRole('button', { name: 'Fixture Keys route', exact: true }).click();
+    const keyPanel = page.getByTestId('activation-keys');
+    const keyReads = () => requests.filter(item => item.pathname === '/api/activation-keys' && item.method === 'GET').length;
+    await keyPanel.getByText('sk-fixtureunused001', { exact: true }).waitFor();
+    check('Activation key list renders keys from the { success, data } payload', await keyPanel.getByText('sk-fixtureused00002', { exact: true }).isVisible());
+    const readsBeforeFilter = keyReads();
+    await keyPanel.getByRole('button', { name: '已使用 1', exact: true }).click();
+    check('Activation key filters narrow the loaded list without refetching', await keyPanel.getByText('sk-fixtureunused001', { exact: true }).count() === 0
+      && await keyPanel.getByRole('button', { name: '已使用 1', exact: true }).getAttribute('aria-pressed') === 'true' && keyReads() === readsBeforeFilter);
+    await keyPanel.getByRole('button', { name: '批量创建', exact: true }).click();
+    await keyPanel.getByLabel('类型').selectOption('credits');
+    await keyPanel.getByLabel('每个积分数量').fill('30');
+    await keyPanel.getByLabel('生成数量').fill('1.5');
+    check('Activation key form blocks fractional counts', await keyPanel.getByRole('button', { name: '生成', exact: true }).isDisabled());
+    await keyPanel.getByLabel('生成数量').fill('2');
+    failKeyCreate = true;
+    await keyPanel.getByRole('button', { name: '生成', exact: true }).click();
+    await page.getByText('Fixture key limit', { exact: true }).last().waitFor();
+    check('Activation key creation surfaces the server reason and keeps the form', await keyPanel.getByLabel('生成数量').inputValue() === '2');
+    await keyPanel.getByRole('button', { name: '生成', exact: true }).click();
+    await keyPanel.getByText('sk-fixturecreated01', { exact: true }).waitFor();
+    check('Activation key creation posts the batch, shows all keys and reloads', requests.some(item => item.pathname === '/api/activation-keys' && item.method === 'POST'
+      && item.body.count === 2 && item.body.keyType === 'credits' && item.body.creditsAmount === 30) && await keyPanel.getByText('已生成 2 个激活码', { exact: true }).isVisible()
+      && await keyPanel.getByRole('button', { name: '全部 4', exact: true }).getAttribute('aria-pressed') === 'true');
+    await keyPanel.getByRole('button', { name: '删除激活码 sk-fixtureused00002', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: '确认删除', exact: true }).click();
+    await until(() => !document.querySelector('[data-testid="activation-keys"] table')?.textContent.includes('sk-fixtureused00002'));
+    check('Activation key deletion confirms first and removes only that key', requests.some(item => item.pathname === '/api/activation-keys' && item.method === 'DELETE' && item.search === '?id=key-used')
+      && await keyPanel.getByText('sk-fixtureunused001', { exact: true }).isVisible());
     // Explicitly remount while a real loadModels receipt is held. React's
     // development effect replay count varies for later conditional mounts.
     const oldModelLoad = holdNext('/api/admin/ai-models', 'GET');

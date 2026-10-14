@@ -390,6 +390,8 @@ export default function RecordsPage() {
                                 onTogglePin={handleTogglePin}
                                 onAddToKnowledgeBase={openAddToKb}
                                 onCreateNew={() => setShowRecordForm(true)}
+                                filtered={!!search.trim() || !!category}
+                                onClearFilters={() => { setSearch(''); setCategory(''); setPage(1); }}
                             />
                         )}
                     </div>

@@ -15,9 +15,11 @@ import {
     BookOpenText,
     ChevronLeft,
     ChevronRight,
+    SearchX,
 } from 'lucide-react';
 import { MingRecord, RECORD_CATEGORIES } from '@/lib/records';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { StatePanel, STATE_PRIMARY_ACTION_CLASS, STATE_SECONDARY_ACTION_CLASS } from '@/components/ui/StatePanel';
 import { useKnowledgeBaseFeatureEnabled } from '@/components/knowledge-base/useKnowledgeBaseFeatureEnabled';
 
 const VISIBLE_TAG_COUNT = 3;
@@ -133,6 +135,9 @@ interface RecordsListProps {
     onTogglePin: (id: string) => void;
     onAddToKnowledgeBase: (record: MingRecord) => void;
     onCreateNew: () => void;
+    /** 有搜索词或分类筛选：空结果时提示清除筛选，而不是引导新建。 */
+    filtered: boolean;
+    onClearFilters: () => void;
 }
 
 export function RecordsList({
@@ -146,6 +151,8 @@ export function RecordsList({
     onTogglePin,
     onAddToKnowledgeBase,
     onCreateNew,
+    filtered,
+    onClearFilters,
 }: RecordsListProps) {
     const { knowledgeBaseEnabled } = useKnowledgeBaseFeatureEnabled();
 
@@ -184,30 +191,26 @@ export function RecordsList({
     }
 
     if (records.length === 0) {
+        const pageEmptied = totalPages > 1;
         return (
             <>
-                <div className="flex flex-col items-center rounded-[14px] border-[0.5px] border-dashed border-border-hover px-6 py-14 text-center">
-                    <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-background-secondary">
-                        <FileText className="h-6 w-6 text-foreground-tertiary" aria-hidden="true" />
-                    </div>
-                    <p className="font-display text-lg text-foreground">
-                        {totalPages > 1 ? '当前页暂无记录' : '暂无记录'}
-                    </p>
-                    <p className="mt-1.5 max-w-xs text-sm text-foreground-secondary">
-                        {totalPages > 1
-                            ? '这一页已经空了，可以切换到上一页继续查看。'
-                            : '记下第一条断语或感悟，日后对照印证。'}
-                    </p>
-                    {totalPages > 1 ? null : (
-                        <button
-                            type="button"
-                            onClick={onCreateNew}
-                            className="mt-6 inline-flex h-10 items-center rounded-[10px] border-[0.5px] border-border-hover bg-surface px-5 text-sm text-foreground transition-colors hover:bg-background-secondary"
-                        >
-                            新建记录
-                        </button>
-                    )}
-                </div>
+                {pageEmptied ? (
+                    <StatePanel icon={FileText} title="这一页已经空了" description="可以切换到上一页继续查看。" />
+                ) : filtered ? (
+                    <StatePanel
+                        icon={SearchX}
+                        title="没有符合条件的记录"
+                        description="换个关键词或分类，或清除筛选查看全部。"
+                        action={<button type="button" onClick={onClearFilters} className={STATE_SECONDARY_ACTION_CLASS}>清除筛选</button>}
+                    />
+                ) : (
+                    <StatePanel
+                        icon={FileText}
+                        title="还没有记录"
+                        description="记下第一条断语或感悟，日后对照印证。"
+                        action={<button type="button" onClick={onCreateNew} className={STATE_PRIMARY_ACTION_CLASS}>新建记录</button>}
+                    />
+                )}
                 {pagination}
             </>
         );

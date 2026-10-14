@@ -57,7 +57,7 @@ export function PromptPreview({
                 <span className="truncate text-foreground">P2 · 用户前缀</span><span className="tabular-nums text-foreground-secondary">{displayUserMessageTokens}</span>
             </div>}
             {groupPromptLayers(displayLayers).map(layer => <div key={layer.id} className="flex items-center justify-between gap-2">
-                <span className={`truncate ${layer.included ? 'text-foreground' : 'text-muted-foreground line-through'}`}>
+                <span className={`truncate ${layer.included ? 'text-foreground' : 'text-foreground-tertiary line-through'}`}>
                     {layer.priority ? `${layer.priority} · ` : ''}
                     {!layer.included && layer.reason && <span className="text-xs no-underline mr-1">({layer.reason === 'budget_exceeded' ? '超出' : layer.reason === 'empty' ? '空' : '重复'})</span>}
                     {formatLayerLabel(layer.id)}

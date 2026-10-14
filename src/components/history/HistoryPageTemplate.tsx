@@ -11,12 +11,13 @@
 import { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ChevronRight, Search, MessageSquare } from 'lucide-react';
+import { ChevronRight, Search, MessageSquare, SearchX } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { AddToKnowledgeBaseModal } from '@/components/knowledge-base/AddToKnowledgeBaseModal';
 import { useKnowledgeBaseFeatureEnabled } from '@/components/knowledge-base/useKnowledgeBaseFeatureEnabled';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { ConfirmDeleteModal } from '@/components/common/ConfirmDeleteModal';
+import { StatePanel, STATE_PRIMARY_ACTION_CLASS, STATE_SECONDARY_ACTION_CLASS } from '@/components/ui/StatePanel';
 import { useToast } from '@/components/ui/Toast';
 import {
     DATA_INDEX_INVALIDATED_EVENT,
@@ -54,10 +55,10 @@ export interface HistoryPageConfig {
     subtitle?: string;
     /** 搜索框 placeholder */
     searchPlaceholder?: string;
-    /** 空状态文案 */
+    /** 空状态标题 */
     emptyMessage?: string;
-    /** 空状态搜索无结果文案 */
-    emptySearchMessage?: string;
+    /** 空状态说明 */
+    emptyDescription?: string;
     /** 开始新占测的按钮文案，标题右侧与空状态共用 */
     actionLabel?: string;
     /** 开始新占测的链接，默认是该占术首页 */
@@ -96,8 +97,8 @@ function defaultHistoryFilter(item: HistorySummaryItem, query: string) {
 export function HistoryPageTemplate(config: HistoryPageConfig) {
     const {
         sourceType, title, subtitle,
-        searchPlaceholder = '搜索记录', emptyMessage = '暂无历史记录',
-        emptySearchMessage = '未找到匹配的记录', actionLabel = '开始新的占测',
+        searchPlaceholder = '搜索记录', emptyMessage = '还没有历史记录',
+        emptyDescription = '完成一次占测后，结果会自动保存在这里。', actionLabel = '开始新的占测',
         actionHref, deleteMessage, kbSourceType, layout = 'grid',
         skeletonCount = layout === 'grid' ? 6 : 4,
         filterFn, kbTitleFn, renderDetail, renderCard, restoreTimezone, invalidateTypes,
@@ -114,6 +115,7 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
     } = useHistoryList({ type: sourceType, userId: user?.id, enabled: !sessionLoading, batchSize: HISTORY_PAGE_BATCH_SIZE, onError: reportLoadError });
     const [searchQuery, setSearchQuery] = useState('');
     const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+    const [deleting, setDeleting] = useState(false);
     const [kbModalOpen, setKbModalOpen] = useState(false);
     const [kbTarget, setKbTarget] = useState<HistorySummaryItem | null>(null);
     const [viewingId, setViewingId] = useState<string | null>(null);
@@ -163,6 +165,7 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
     const handleDelete = async (id: string) => {
         const scope = captureScope();
         if (!scope) return;
+        setDeleting(true);
         try {
             await deleteHistorySummary(sourceType, id, { signal: scope.signal });
             if (!scope.isCurrent()) return;
@@ -177,6 +180,7 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
             setErrorMessage(message);
             showToast('error', message);
         } finally {
+            setDeleting(false);
             if (scope.isCurrent()) setDeleteConfirmId(null);
         }
     };
@@ -332,31 +336,28 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
                     {loading ? (
                         layout === 'grid' ? <HistoryGridSkeleton count={skeletonCount} /> : <HistoryListSkeleton count={skeletonCount} />
                     ) : errorMessage && filteredItems.length === 0 ? (
-                        <div role="alert" className="flex flex-col items-center justify-center gap-4 rounded-[14px] border-[0.5px] border-dashed border-danger/40 px-6 py-16 text-center">
-                            <p className="text-sm text-danger">{errorMessage}</p>
-                            <button
-                                type="button"
-                                onClick={() => { void loadItems(); }}
-                                className="h-10 rounded-[10px] border-[0.5px] border-border-hover bg-surface px-5 text-sm text-foreground transition-colors hover:bg-background-secondary"
-                            >
-                                重试
-                            </button>
-                        </div>
+                        <StatePanel
+                            tone="danger"
+                            title="加载历史记录失败"
+                            description={errorMessage}
+                            action={<button type="button" onClick={() => { void loadItems(); }} className={STATE_SECONDARY_ACTION_CLASS}>重试</button>}
+                        />
                     ) : filteredItems.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center rounded-[14px] border-[0.5px] border-dashed border-border-hover px-6 py-16 text-center">
-                            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-background-secondary">
-                                <MessageSquare className="h-6 w-6 text-foreground-tertiary" aria-hidden="true" />
-                            </div>
-                            <p className="font-display text-lg text-foreground">{trimmedQuery ? emptySearchMessage : emptyMessage}</p>
-                            {!trimmedQuery && (
-                                <Link
-                                    href={resolvedActionHref}
-                                    className="mt-6 inline-flex h-10 items-center rounded-[10px] bg-accent px-5 text-sm font-medium text-on-accent transition-colors hover:bg-accent/90"
-                                >
-                                    {actionLabel}
-                                </Link>
-                            )}
-                        </div>
+                        trimmedQuery ? (
+                            <StatePanel
+                                icon={SearchX}
+                                title={`没有找到与「${trimmedQuery}」相关的记录`}
+                                description="换个关键词，或清除搜索查看全部。"
+                                action={<button type="button" onClick={() => setSearchQuery('')} className={STATE_SECONDARY_ACTION_CLASS}>清除搜索</button>}
+                            />
+                        ) : (
+                            <StatePanel
+                                icon={MessageSquare}
+                                title={emptyMessage}
+                                description={emptyDescription}
+                                action={<Link href={resolvedActionHref} className={STATE_PRIMARY_ACTION_CLASS}>{actionLabel}</Link>}
+                            />
+                        )
                     ) : layout === 'grid' ? (
                         <ul className="grid grid-cols-[repeat(auto-fill,minmax(17.5rem,1fr))] gap-3 md:gap-4">
                             {filteredItems.map(item => <li key={item.id}>{renderItem(item)}</li>)}
@@ -392,7 +393,7 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
             </div>
 
             <ConfirmDeleteModal open={!!deleteConfirmId} onClose={() => setDeleteConfirmId(null)}
-                onConfirm={() => deleteConfirmId && handleDelete(deleteConfirmId)} message={deleteMessage} />
+                onConfirm={() => deleteConfirmId && handleDelete(deleteConfirmId)} message={deleteMessage} loading={deleting} />
 
             {knowledgeBaseEnabled && kbTarget && (
                 <AddToKnowledgeBaseModal open={kbModalOpen}

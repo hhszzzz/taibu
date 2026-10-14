@@ -337,6 +337,8 @@ export async function build(outputDirectory) {
       plugin.onResolve({ filter: /^(?:node:)?crypto$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^next\/(navigation|link)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^@\/components\/settings\/AccountAdminPanels$/ }, args => ({ path: args.path, namespace: 'fixture' }));
+      // Signed-out states only need to render their login button; the auth flow itself is outside fixture scope.
+      plugin.onResolve({ filter: /^@\/components\/auth\/AuthModal$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onLoad({ filter: /.*/, namespace: 'fixture' }, args => {
         let contents = 'export default function UnexercisedPanel() { return null; }';
         // Core's unrelated tarot/liuyao random calculators import Node crypto via barrels.
@@ -376,6 +378,7 @@ export async function build(outputDirectory) {
         if (args.path.endsWith('/AnnouncementPopupHost')) contents = 'export function AnnouncementPopupHost({ children }) { return children; }';
         if (args.path.endsWith('/useFeatureToggles')) contents = 'const enabled = () => true; export function useFeatureToggles() { return { loaded: true, isLoading: false, isFeatureEnabled: enabled }; }';
         if (args.path.endsWith('/useCurrentUserProfile')) contents = "import { useSessionSafe } from '@/lib/hooks/session-context'; export function useCurrentUserProfile() { const {user} = useSessionSafe(); return { profile: user ? { is_admin: user.id === 'alice' } : null, loading: false, error: null }; }";
+        if (args.path.endsWith('/AuthModal')) contents = 'export function AuthModal() { return null; }';
         if (args.path.endsWith('/AccountAdminPanels')) contents = "export { AIModelPanel as AdminAIServicesContent } from '@/components/admin/AIModelPanel'; export const AdminAnnouncementsContent = () => null; export const AdminFeaturesContent = () => null;";
         return { contents, loader: 'jsx', resolveDir: root };
       });
@@ -1384,7 +1387,7 @@ export async function run(existingPage, bundlePath) {
     check('History deletion event fences an already captured initial refresh snapshot',
       await historyPage.locator('[data-history-id="alice-history-3"]').count() === 0);
     await historyPage.getByRole('button', { name: 'Delete history alice-history-2', exact: true }).click();
-    await page.getByRole('button', { name: '确认删除', exact: true }).click();
+    await page.getByRole('dialog', { name: '删除这条记录？', exact: true }).getByRole('button', { name: '删除', exact: true }).click();
     await historyPage.locator('[data-history-id="alice-history-2"]').waitFor({ state: 'detached' });
     check('Real history card action and confirmation still delete through the production facade',
       requests.some(item => item.pathname === '/api/history-summaries' && item.method === 'DELETE' && new URLSearchParams(item.search).get('id') === 'alice-history-2'));

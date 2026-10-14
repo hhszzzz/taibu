@@ -124,6 +124,16 @@ export function toFeatureId(navId: string): string {
   return _byId.get(navId)?.featureId ?? navId;
 }
 
+/** 导航名称不适合放进提示语时使用的功能名称（如「新聊天」是动作而非功能名）。 */
+const FEATURE_LABEL_OVERRIDES: Readonly<Record<string, string>> = { chat: 'AI 对话' };
+
+/** Resolve a human-readable feature name for a feature-toggle ID; null when unknown. */
+export function getFeatureLabel(featureId: string): string | null {
+  const override = FEATURE_LABEL_OVERRIDES[featureId];
+  if (override) return override;
+  return NAV_REGISTRY.find(item => (item.featureId ?? item.id) === featureId)?.label ?? null;
+}
+
 // ---------------------------------------------------------------------------
 // Consumer-specific projections
 // ---------------------------------------------------------------------------

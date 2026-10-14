@@ -14,6 +14,7 @@ import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
+import { StatePanel, STATE_SECONDARY_ACTION_CLASS } from '@/components/ui/StatePanel';
 import {
     deleteNotification,
     deleteNotifications,
@@ -187,19 +188,6 @@ function NotificationsSkeleton() {
                     </div>
                 </div>
             ))}
-        </div>
-    );
-}
-
-function EmptyState({ icon = false, children }: { icon?: boolean; children: React.ReactNode }) {
-    return (
-        <div className="flex flex-col items-center rounded-[14px] border-[0.5px] border-dashed border-border-hover px-6 py-16 text-center">
-            {icon ? (
-                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-background-secondary">
-                    <Bell className="h-6 w-6 text-foreground-tertiary" aria-hidden="true" />
-                </div>
-            ) : null}
-            {children}
         </div>
     );
 }
@@ -438,19 +426,18 @@ export default function NotificationsPage() {
                 {isLoading ? (
                     <NotificationsSkeleton />
                 ) : loadError ? (
-                    <EmptyState>
-                        <p role="alert" className="text-sm text-danger">{loadError}</p>
-                        <button type="button" onClick={() => setReloadKey(key => key + 1)} className={`${OUTLINE_BUTTON_CLASS} mt-4`}>重试</button>
-                    </EmptyState>
+                    <StatePanel
+                        tone="danger"
+                        title="加载通知失败"
+                        description={loadError}
+                        action={<button type="button" onClick={() => setReloadKey(key => key + 1)} className={STATE_SECONDARY_ACTION_CLASS}>重试</button>}
+                    />
                 ) : !hasNotifications ? (
-                    <EmptyState icon>
-                        <p className="font-display text-lg text-foreground">暂无通知</p>
-                        <p className="mt-1.5 text-sm text-foreground-secondary">系统提醒和功能更新会出现在这里。</p>
-                    </EmptyState>
+                    <StatePanel icon={Bell} title="暂无通知" description="系统提醒和功能更新会出现在这里。" />
                 ) : visibleNotifications.length === 0 ? (
-                    <EmptyState>
-                        <p className="text-sm text-foreground-secondary">当前筛选下没有通知</p>
-                    </EmptyState>
+                    filters.read === 'unread' && filters.type === 'all'
+                        ? <StatePanel title="没有未读通知" description="所有通知都已读过。" />
+                        : <StatePanel title="当前筛选下没有通知" description="换个分类看看。" />
                 ) : (
                     <div className="flex flex-col gap-6">
                         {groupedNotifications.map((group) => (

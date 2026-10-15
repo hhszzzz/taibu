@@ -1,7 +1,7 @@
 /**
  * ChatComposer 共享状态 hook
  *
- * 集中管理 ChatComposer 内部的 22 个 useState，
+ * 集中管理 ChatComposer 内部的 useState，
  * 按职责分组导出给各子组件使用。
  */
 import { useState, useRef, useMemo, useCallback, useEffect, useLayoutEffect } from 'react';
@@ -78,9 +78,6 @@ export function useComposerState(opts: UseComposerStateOptions) {
     const mentionLifecycle = useRef<{ identity: string; userId: string | null; controller: AbortController } | null>(null);
     const mentionRequest = useRef<AbortController | null>(null);
     const [mentionOwnerIdentity, setMentionOwnerIdentity] = useState<string | null>(null);
-
-    // --- Menu state ---
-    const [menuOpen, setMenuOpen] = useState(false);
 
     // --- Mention state ---
     const [mentionOpen, setMentionOpen] = useState(false);
@@ -335,8 +332,6 @@ export function useComposerState(opts: UseComposerStateOptions) {
     return {
         // Refs
         textareaRef, fileInputRef, overlayRef, previewRequestIdRef,
-        // Menu
-        menuOpen, setMenuOpen,
         // Mention
         mentionOpen, setMentionOpen,
         mentionQuery, setMentionQuery,

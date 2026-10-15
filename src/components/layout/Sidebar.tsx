@@ -13,15 +13,14 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useSearchParams, useRouter } from 'next/navigation';
-import { Bell, LogIn } from 'lucide-react';
-import { useState, useCallback, useMemo, Suspense } from 'react';
+import { LogIn } from 'lucide-react';
+import { useState, useMemo, Suspense } from 'react';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { SidebarUserCard } from '@/components/layout/UserMenu';
 import { SidebarConversations } from '@/components/layout/SidebarConversations';
+import { AnnouncementBellButton } from '@/components/layout/AnnouncementBellButton';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
-import { useAnnouncementCenterSafe } from '@/components/providers/AnnouncementPopupHost';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
-import { useNotificationUnreadCount } from '@/lib/hooks/useNotificationUnreadCount';
 import { getSidebarNavItems, getSidebarToolItems } from '@/lib/navigation/registry';
 import { useConversationList } from '@/lib/chat/ConversationListContext';
 
@@ -95,14 +94,8 @@ function SidebarInner() {
     const { user } = useSessionSafe();
     const { isFeatureEnabled, isLoading: featureLoading, loaded: featureLoaded, error: featureError, refresh: refreshFeatures } = useFeatureToggles();
     const { handleNewChat } = useConversationList();
-    const { openAnnouncementCenter, announcementPromptCount } = useAnnouncementCenterSafe();
     const [showAuthModal, setShowAuthModal] = useState(false);
     const isNavLoading = featureLoading;
-    const notificationsEnabled = isFeatureEnabled('notifications');
-    const unreadCount = useNotificationUnreadCount(user?.id ?? null, {
-        enabled: notificationsEnabled,
-    });
-    const badgeCount = (notificationsEnabled ? (unreadCount ?? 0) : 0) + announcementPromptCount;
 
     // 当前是否在具体某个对话中
     const activeConvId = searchParams.get('id');
@@ -116,12 +109,6 @@ function SidebarInner() {
 
     const filteredToolItems = useMemo(() => toolItems
         .filter((item) => item.id !== 'chat' && isFeatureEnabled(item.id)), [isFeatureEnabled]);
-
-    const toggleAnnouncementCenter = useCallback(() => {
-        openAnnouncementCenter({
-            tab: user && notificationsEnabled ? 'notifications' : 'announcements',
-        });
-    }, [notificationsEnabled, openAnnouncementCenter, user]);
 
     if (isNavLoading) {
         return <SidebarSkeleton />;
@@ -158,18 +145,7 @@ function SidebarInner() {
                             太卜
                         </span>
                     </Link>
-                    <button
-                        onClick={toggleAnnouncementCenter}
-                        className="relative p-1.5 rounded-md flex-shrink-0 transition-all duration-150 text-foreground-secondary dark:text-foreground-secondary hover:bg-background-secondary dark:hover:bg-white/8 hover:text-foreground dark:hover:text-foreground"
-                        aria-label="打开公告中心"
-                    >
-                        <Bell className="w-5 h-5" />
-                        {badgeCount > 0 ? (
-                            <span className="absolute -right-0.5 -top-0.5 min-w-[14px] h-[14px] px-1 rounded-full bg-accent text-on-accent text-[10px] font-bold leading-none flex items-center justify-center">
-                                {badgeCount > 99 ? '99+' : badgeCount}
-                            </span>
-                        ) : null}
-                    </button>
+                    <AnnouncementBellButton className="relative p-1.5 rounded-md flex-shrink-0 transition-all duration-150 text-foreground-secondary dark:text-foreground-secondary hover:bg-background-secondary dark:hover:bg-white/8 hover:text-foreground dark:hover:text-foreground" />
                 </div>
 
                 <div className="flex-1 flex flex-col min-h-0 overflow-hidden">

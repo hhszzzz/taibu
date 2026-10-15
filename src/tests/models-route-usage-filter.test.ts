@@ -91,6 +91,8 @@ test('/api/models should only expose chat and vision models', async (t) => {
     body.models.map((model: { id: string }) => model.id),
     ['deepseek-v3.2', 'qwen-vl-plus'],
   );
+  // The model menu labels each model with the lowest membership that can use it.
+  assert.deepEqual(body.models.map((model: { tier: string | null }) => model.tier), ['free', 'plus']);
 });
 
 test('/api/models?catalog=byok should expose chat models without membership filtering', async (t) => {

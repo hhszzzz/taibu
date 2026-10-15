@@ -9,22 +9,24 @@ import type { TarotCanonicalJSON } from 'taibu-core/tarot';
 import type { TaiyiCanonicalJSON } from 'taibu-core/taiyi';
 import type { AstrologyCanonicalJSON } from 'taibu-core/astrology';
 import type { AlmanacCanonicalJSON } from 'taibu-core/almanac';
+import type { DayunCanonicalJSON } from 'taibu-core/bazi-dayun';
+import type { BaziPillarsResolveCanonicalJSON } from 'taibu-core/bazi-pillars-resolve';
+import type { ZiweiHoroscopeCanonicalJSON } from 'taibu-core/ziwei-horoscope';
+import type { ZiweiFlyingStarCanonicalJSON } from 'taibu-core/ziwei-flying-star';
+import { normalizeQuestions, type AgentQuestion } from './questions';
 import type { AgentPart } from './types';
+import { AGENT_CHART_NAMES, isAgentChartTool, type AgentChartKind } from './tool-catalog';
 
 export type AgentToolPart = Extract<AgentPart, { type: 'tool' }>;
-type ChartTypes = {
+type ChartJson = {
   bazi: BaziCanonicalJSON; ziwei: ZiweiCanonicalJSON; qimen: QimenCanonicalJSON;
   liuyao: LiuyaoCanonicalJSON; meihua: MeihuaCanonicalJSON; daliuren: DaliurenCanonicalJSON;
   xiaoliuren: XiaoliurenCanonicalJSON; tarot: TarotCanonicalJSON;
   taiyi: TaiyiCanonicalJSON; astrology: AstrologyCanonicalJSON; almanac: AlmanacCanonicalJSON;
 };
+/** Keyed by the catalog: a chart kind without a canonical JSON type fails to compile. */
+type ChartTypes = { [K in AgentChartKind]: ChartJson[K] };
 export type AgentChart = { [K in keyof ChartTypes]: { kind: K; chart: ChartTypes[K]; title: string; summary: string } }[keyof ChartTypes];
-
-export const AGENT_CHART_NAMES = {
-  bazi: '八字命盘', ziwei: '紫微命盘', qimen: '奇门九宫盘', liuyao: '六爻卦盘',
-  meihua: '梅花卦盘', daliuren: '大六壬天地盘', xiaoliuren: '小六壬课盘', tarot: '塔罗牌阵',
-  taiyi: '太乙局盘', astrology: '西方占星盘', almanac: '黄历择日',
-} as const;
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -35,10 +37,6 @@ function stringArray(value: unknown) { return Array.isArray(value) && value.ever
 function rows(value: unknown, length: number, keys: string[]) {
   return Array.isArray(value) && value.length === length && arrayRows(value, keys);
 }
-export function isAgentChartTool(name: string): name is keyof ChartTypes {
-  return Object.hasOwn(AGENT_CHART_NAMES, name);
-}
-
 export function getAgentToolArtifactId(tool: AgentToolPart): string | null {
   const id = record(tool.output).artifactId;
   return typeof id === 'string' && id ? id : null;
@@ -147,12 +145,51 @@ export function getAgentToolText(tool: AgentToolPart): string | null {
   return null;
 }
 
-export function getAgentSearchResults(tool: AgentToolPart) {
+/** Evidence number the server stamped on a returned row; anything else is not a citation. */
+export function readAgentCite(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+
+export type AgentSearchMethod = 'fts' | 'trigram' | 'vector';
+const SEARCH_METHODS: readonly string[] = ['fts', 'trigram', 'vector'] satisfies AgentSearchMethod[];
+
+export interface AgentSearchResult {
+  id: string;
+  title: string;
+  /** The returned text, unchanged. */
+  content: string;
+  /** The text to quote: content without the heading already shown as the title. */
+  excerpt: string;
+  url: string | null;
+  /** Number the model was given to cite this row; null for rows saved before numbering. */
+  cite: number | null;
+  /** How a knowledge-base passage matched; null for web pages and older rows. */
+  method: AgentSearchMethod | null;
+  /** The file, category or site the row came from, when it says so. */
+  source: string | null;
+}
+
+const nonEmpty = (value: unknown) => typeof value === 'string' && value.trim() ? value.trim() : null;
+const hostname = (url: string) => { try { return new URL(url).hostname; } catch { return null; } };
+
+export function getAgentSearchResults(tool: AgentToolPart): AgentSearchResult[] | null {
   if (tool.status !== 'completed' || !['web_search', 'search_knowledge'].includes(tool.name) || !Array.isArray(tool.output)) return null;
   return tool.output.filter(item => strings(item, ['content'])).map((item, index) => {
     const row = record(item);
     const metadata = record(row.metadata);
-    return { id: `${tool.id}:${index}`, title: String(row.title ?? metadata.title ?? metadata.sourceTitle ?? `资料 ${index + 1}`), content: String(row.content), url: typeof row.url === 'string' && /^https?:\/\//iu.test(row.url) ? row.url : null };
+    const content = String(row.content);
+    const url = typeof row.url === 'string' && /^https?:\/\//iu.test(row.url) ? row.url : null;
+    // Knowledge records are stored with their title as the first heading of every chunk.
+    const heading = /^\s*#{1,6}[ \t]+([^\n]+?)[ \t#]*(?:\r?\n|$)/u.exec(content);
+    const named = nonEmpty(row.title) ?? nonEmpty(metadata.title) ?? nonEmpty(metadata.sourceTitle);
+    const title = named ?? nonEmpty(heading?.[1]) ?? nonEmpty(metadata.file_name) ?? `资料 ${index + 1}`;
+    const excerpt = !named && heading && content.slice(heading[0].length).trim() ? content.slice(heading[0].length).trim() : content;
+    const file = nonEmpty(metadata.file_name);
+    return {
+      id: `${tool.id}:${index}`, title, content, excerpt, url, cite: readAgentCite(row.cite),
+      method: tool.name === 'search_knowledge' && typeof row.method === 'string' && SEARCH_METHODS.includes(row.method) ? row.method as AgentSearchMethod : null,
+      source: url ? hostname(url) : (file !== title ? file : null) ?? nonEmpty(metadata.category),
+    };
   });
 }
 
@@ -163,5 +200,118 @@ export function getAgentDataResults(tool: AgentToolPart) {
   return { items: output.items.filter(item => strings(item, ['id', 'type', 'name', 'preview'])).map(item => {
     const row = record(item);
     return { id: String(row.id), name: String(row.name), type: String(row.type), preview: String(row.preview) };
-  }), errors: Array.isArray(output.errors) ? output.errors.filter(item => strings(item, ['message'])).map(item => String(record(item).message)) : [] };
+  }), errors: Array.isArray(output.errors) ? output.errors.filter(item => strings(item, ['message'])).map(item => {
+    const row = record(item);
+    return { type: typeof row.type === 'string' ? row.type : null, message: String(row.message) };
+  }) : [] };
+}
+
+export type AgentCalculation =
+  | { kind: 'bazi_dayun'; data: DayunCanonicalJSON }
+  | { kind: 'bazi_pillars_resolve'; data: BaziPillarsResolveCanonicalJSON }
+  | { kind: 'ziwei_horoscope'; data: ZiweiHoroscopeCanonicalJSON }
+  | { kind: 'ziwei_flying_star'; data: ZiweiFlyingStarCanonicalJSON };
+
+/** Core calculation results; anything incomplete falls back to the projected canonical text. */
+export function getAgentCalculation(tool: AgentToolPart): AgentCalculation | null {
+  if (tool.status !== 'completed') return null;
+  const output = record(tool.output);
+  const data = record(Object.hasOwn(output, 'result') ? output.result : output);
+  switch (tool.name) {
+    case 'bazi_dayun': {
+      const start = record(data.起运信息);
+      if (typeof start.起运年龄 !== 'number' || typeof start.起运详情 !== 'string' || !Array.isArray(data.大运列表) || !data.大运列表.length) return null;
+      if (!data.大运列表.every(item => strings(item, ['干支', '十神']) && Number.isInteger(record(item).起运年份) && arrayRows(record(item).藏干, ['天干', '十神']))) return null;
+      return { kind: 'bazi_dayun', data: data as unknown as DayunCanonicalJSON };
+    }
+    case 'bazi_pillars_resolve':
+      if (!strings(data.原始四柱, ['年柱', '月柱', '日柱', '时柱']) || !arrayRows(data.候选列表, ['农历', '公历', '出生时间', '是否闰月'])) return null;
+      return { kind: 'bazi_pillars_resolve', data: data as unknown as BaziPillarsResolveCanonicalJSON };
+    case 'ziwei_horoscope':
+      if (!strings(data.基本信息, ['目标日期', '五行局']) || !arrayRows(data.运限叠宫, ['层次', '时间段备注', '干支', '落入本命宫位']) || !(data.运限叠宫 as unknown[]).every(row => stringArray(record(row).运限四化))) return null;
+      return { kind: 'ziwei_horoscope', data: data as unknown as ZiweiHoroscopeCanonicalJSON };
+    case 'ziwei_flying_star':
+      if (!arrayRows(data.查询结果, ['查询类型']) || !(data.查询结果 as unknown[]).every(row => typeof record(row).查询序号 === 'number')) return null;
+      return { kind: 'ziwei_flying_star', data: data as unknown as ZiweiFlyingStarCanonicalJSON };
+    default:
+      return null;
+  }
+}
+
+export interface AgentMethodGuide { id: string; title: string; version: string; whenToUse: string | null; tools: string[]; instructions: string }
+
+/** load_analysis_method returns a versioned, read-only guide; it never grants tools or membership. */
+export function getAgentMethod(tool: AgentToolPart): AgentMethodGuide | null {
+  if (tool.status !== 'completed' || tool.name !== 'load_analysis_method') return null;
+  const output = record(tool.output);
+  if (!strings(output, ['id', 'title', 'version', 'instructions'])) return null;
+  return {
+    id: String(output.id), title: String(output.title), version: String(output.version),
+    whenToUse: typeof output.whenToUse === 'string' ? output.whenToUse : null,
+    tools: stringArray(output.tools) ? output.tools as string[] : [],
+    instructions: String(output.instructions),
+  };
+}
+
+export function getAgentMethodCatalog(tool: AgentToolPart) {
+  if (tool.status !== 'completed' || tool.name !== 'list_analysis_methods' || !arrayRows(tool.output, ['id', 'title', 'version'])) return null;
+  return (tool.output as unknown[]).map(item => {
+    const row = record(item);
+    return { id: String(row.id), title: String(row.title), version: String(row.version), description: typeof row.description === 'string' ? row.description : typeof row.whenToUse === 'string' ? row.whenToUse : '' };
+  });
+}
+
+export function getAgentProfile(tool: AgentToolPart) {
+  if (tool.status !== 'completed' || tool.name !== 'read_user_profile') return null;
+  const output = record(tool.output);
+  const profile = record(output.profile);
+  return {
+    identity: typeof profile.identity === 'string' && profile.identity.trim() ? profile.identity : null,
+    defaultBaziChartId: typeof output.defaultBaziChartId === 'string' ? output.defaultBaziChartId : null,
+    defaultZiweiChartId: typeof output.defaultZiweiChartId === 'string' ? output.defaultZiweiChartId : null,
+  };
+}
+
+/** Private attachments are read in 8000-character pages; record how far the Agent has read. */
+export function getAgentAttachmentRead(tool: AgentToolPart) {
+  if (tool.status !== 'completed' || tool.name !== 'read_attachment') return null;
+  const output = record(tool.output);
+  if (!strings(output, ['id', 'name', 'kind'])) return null;
+  const count = (value: unknown) => typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null;
+  const text = typeof output.text === 'string' ? output.text : null;
+  const offset = count(output.offset), total = count(output.total);
+  return {
+    id: String(output.id), name: String(output.name), kind: String(output.kind),
+    offset, total, readUntil: offset !== null && text !== null ? offset + text.length : null,
+    nextOffset: count(output.nextOffset), note: typeof output.note === 'string' ? output.note : null,
+  };
+}
+
+export interface AgentMemoryEntry { id: string; title: string; content: string; kind: 'preference' | 'context' }
+
+/** Memories read or written by the Agent; ownership columns of older cached results are ignored. */
+export function getAgentMemories(tool: AgentToolPart): AgentMemoryEntry[] | null {
+  if (tool.status !== 'completed' || !['read_user_memory', 'remember_user_fact'].includes(tool.name)) return null;
+  const rows = tool.name === 'remember_user_fact' ? [tool.output] : tool.output;
+  if (!Array.isArray(rows)) return null;
+  return rows.flatMap(item => {
+    const row = record(item);
+    return strings(row, ['id', 'title', 'content']) && (row.kind === 'preference' || row.kind === 'context')
+      ? [{ id: String(row.id), title: String(row.title), content: String(row.content), kind: row.kind }] : [];
+  });
+}
+
+/** ask_user persists normalized questions; older calls fall back to their arguments. */
+export function getAgentToolQuestions(tool: AgentToolPart): AgentQuestion[] {
+  for (const source of [tool.output, tool.input]) {
+    const value = record(source);
+    try { return normalizeQuestions(value.questions, typeof value.question === 'string' ? value.question : undefined); } catch { /* try the next source */ }
+  }
+  return [];
+}
+
+export function getAgentFinalSelection(tool: AgentToolPart): string[] | null {
+  if (tool.status !== 'completed' || tool.name !== 'select_final_artifacts') return null;
+  const ids = record(tool.output).artifactIds;
+  return stringArray(ids) ? ids as string[] : null;
 }

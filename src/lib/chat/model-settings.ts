@@ -1,7 +1,7 @@
 import { AI_REASONING_EFFORTS, type AIReasoningEffort } from '@/types';
 
 export const REASONING_EFFORT_LABELS: Record<AIReasoningEffort, string> = {
-  minimal: '最小', low: '低', medium: '中', high: '高', xhigh: '很高', max: '最高',
+  minimal: '最低', low: '低', medium: '中', high: '高', xhigh: '很高', max: '最高',
 };
 
 export interface AgentCollaborator {

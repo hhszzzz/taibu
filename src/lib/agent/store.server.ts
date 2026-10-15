@@ -145,6 +145,7 @@ export class AgentStore {
       clientRequestId: run.request_id,
       userMessage: run.input?.userMessage,
       commandMessageIds: commands.filter(command => command.delivery_state !== 'cancelled').map(command => command.message.id),
+      billing: run.billing,
       configuration: run.input ? { model: run.input.model, reasoning: run.input.reasoning, reasoningEffort: run.input.reasoningEffort ?? null, collaborators: run.input.collaborators ?? [], webEnabled: run.input.webEnabled } : undefined,
       queue: commands.map(command => ({ sequence: command.sequence, message: command.message, mode: command.mode, revision: command.revision ?? 1, sortOrder: command.sort_order ?? command.sequence, state: command.delivery_state ?? 'admitted' })),
     };

@@ -284,6 +284,16 @@ export const ChatMessageItem = memo(function ChatMessageItem({
 
     // AI 消息
     const showCheckKeyAction = message.metadata?.customProviderErrorAction === 'check-key';
+    const assistantActions = message.content && !isCurrentStreaming ? (
+        <MessageActions
+            message={message}
+            disabled={disabled}
+            copied={copiedId === message.id}
+            onCopy={handleCopy}
+            onRegenerate={onRegenerateResponse}
+            onArchive={onArchiveMessage}
+        />
+    ) : null;
     return (
         <article className="chat-message-row is-assistant group w-full" data-message-id={message.id} aria-label="助手消息">
             {/* 显示思考过程 */}
@@ -293,6 +303,8 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                     isStreaming={isCurrentStreaming && !message.content}
                     startTime={message.reasoningStartTime}
                     duration={message.reasoningDuration}
+                    variant="chat"
+                    className="mb-3"
                 />
             )}
             {message.dreamInfo && (
@@ -311,7 +323,8 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                     )}
                 </div>
             )}
-            {message.agent ? <AgentMessage data={message.agent} /> : <MarkdownContent content={message.content} className="chat-prose" streaming={isCurrentStreaming} />}
+            {message.agent ? <AgentMessage data={message.agent} actions={assistantActions} />
+                : <div className={`chat-answer${isCurrentStreaming && message.content ? ' is-streaming' : ''}`}><MarkdownContent content={message.content} className="chat-prose" streaming={isCurrentStreaming} /></div>}
             {showCheckKeyAction && !isCurrentStreaming && (
                 <button
                     type="button"
@@ -336,17 +349,8 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                 expandedSources={expandedSources}
                 setExpandedSources={setExpandedSources}
             />
-            {/* 操作按钮 */}
-            {message.content && !isCurrentStreaming && (
-                <MessageActions
-                    message={message}
-                    disabled={disabled}
-                    copied={copiedId === message.id}
-                    onCopy={handleCopy}
-                    onRegenerate={onRegenerateResponse}
-                    onArchive={onArchiveMessage}
-                />
-            )}
+            {/* 操作按钮：Agent 消息放在依据同一行 */}
+            {!message.agent && assistantActions}
         </article>
     );
 });

@@ -6,29 +6,26 @@
  */
 'use client';
 
-import { createElement, useEffect, useState } from 'react';
-import { BookOpenText, RefreshCw } from 'lucide-react';
+import { useState } from 'react';
+import { RefreshCw } from 'lucide-react';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useToast } from '@/components/ui/Toast';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { useAppBootstrap } from '@/lib/hooks/useAppBootstrap';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
-import { useHeaderMenu } from '@/components/layout/HeaderMenuContext';
 import { useChatBootstrap } from '@/lib/chat/use-chat-bootstrap';
 import { useChatState } from '@/lib/chat/use-chat-state';
 import { useChatMessaging } from '@/lib/chat/use-chat-messaging';
 import { ChatLayout } from '@/components/chat/ChatLayout';
+import { MobileChatDrawer } from '@/components/chat/MobileChatDrawer';
 import { AddToKnowledgeBaseModal } from '@/components/knowledge-base/AddToKnowledgeBaseModal';
 import { CreditsModal } from '@/components/ui/CreditsModal';
-import { openSettingsCenter } from '@/lib/settings-center';
-import { SETTINGS_CENTER_TAB_ICONS } from '@/components/settings/settings-center-icons';
 
 export default function ChatPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { showToast } = useToast();
-    const { setMenuItems, clearMenuItems } = useHeaderMenu();
     const { isFeatureEnabled } = useFeatureToggles();
     const { user, loading: sessionLoading } = useSessionSafe();
     const appBootstrap = useAppBootstrap({ enabled: !sessionLoading });
@@ -68,34 +65,15 @@ export default function ChatPage() {
         showToast, router, searchParams,
     });
 
-    // Mobile header menu items
-    useEffect(() => {
-        const menuItems = [];
-        if (aiPersonalizationEnabled) {
-            menuItems.push({
-                id: 'ai-settings', label: '个性化',
-                icon: createElement(SETTINGS_CENTER_TAB_ICONS.personalization, { className: 'w-4 h-4' }),
-                onClick: () => openSettingsCenter('personalization'),
-            });
-        }
-        if (membership?.type !== 'free' && knowledgeBaseEnabled) {
-            menuItems.push({
-                id: 'knowledge-base', label: '知识库',
-                icon: <BookOpenText className="w-4 h-4" />,
-                onClick: () => openSettingsCenter('knowledge-base'),
-            });
-        }
-        setMenuItems(menuItems);
-        return () => clearMenuItems();
-    }, [aiPersonalizationEnabled, clearMenuItems, knowledgeBaseEnabled, membership?.type, router, setMenuItems]);
-
     const isCreditLocked = typeof credits === 'number' && credits <= 0 && !state.customProviderActive && !messaging.agent.active;
     const [showAuthModal, setShowAuthModal] = useState(false);
 
     if (bootstrapLocked) {
         return (
-            <>
-                <div className="flex min-h-[calc(100vh-7rem)] items-center justify-center px-4 py-10">
+            <div className="flex min-h-[100dvh] flex-col">
+                {/* Phones have no site header here: keep the navigation drawer reachable. */}
+                <header className="chat-session-header is-empty"><MobileChatDrawer /></header>
+                <div className="flex flex-1 items-center justify-center px-4 py-10">
                     <div className="w-full max-w-md rounded-2xl border border-[#ead9bf] bg-[#fcf8ee] p-6 text-center shadow-sm">
                         <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#f4ead3] text-[#946c21]">
                             <RefreshCw className="h-5 w-5" />
@@ -119,7 +97,7 @@ export default function ChatPage() {
                     isOpen={showAuthModal}
                     onClose={() => setShowAuthModal(false)}
                 />
-            </>
+            </div>
         );
     }
 

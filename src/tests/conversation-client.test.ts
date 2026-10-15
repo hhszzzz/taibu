@@ -200,6 +200,7 @@ test('chat state no longer caches running task snapshots as canonical conversati
 test('sidebar conversation viewport top-up waits for the first page to finish loading', () => {
   const sidebarSource = readFileSync(resolve(process.cwd(), 'src/components/layout/SidebarConversations.tsx'), 'utf8');
   const mobileDrawerSource = readFileSync(resolve(process.cwd(), 'src/components/chat/MobileChatDrawer.tsx'), 'utf8');
+  const chatSidebarSource = readFileSync(resolve(process.cwd(), 'src/components/chat/sidebar/ChatSidebar.tsx'), 'utf8');
   const conversationItemSource = readFileSync(resolve(process.cwd(), 'src/components/chat/sidebar/ConversationItem.tsx'), 'utf8');
   const conversationSource = readFileSync(resolve(process.cwd(), 'src/lib/chat/conversation.ts'), 'utf8');
   const routeSource = readFileSync(resolve(process.cwd(), 'src/app/api/conversations/route.ts'), 'utf8');
@@ -232,14 +233,15 @@ test('sidebar conversation viewport top-up waits for the first page to finish lo
     sidebarSource,
     /!hasUserScrolled[\s\S]*void loadMoreConversations\(\);/u,
   );
+  // The phone drawer shows the sidebar's own panel, so the same top-up rules apply there.
   assert.match(
-    mobileDrawerSource,
-    /setHasUserScrolled\(scrollContainer\.scrollTop > 0\);/u,
+    chatSidebarSource,
+    /data-conversation-scroll="true">\s*\{user \? <SidebarConversations grouping="date" markers=\{markers\} withinModal=\{Boolean\(onClose\)\} \/>/u,
   );
-  assert.match(
-    mobileDrawerSource,
-    /const closeDrawer = useCallback\(\(\) => \{\s*setIsOpen\(false\);\s*setHasUserScrolled\(false\);\s*\}, \[\]\);/u,
-  );
+  assert.match(mobileDrawerSource, /<ChatSidebarPanel /u);
+  assert.doesNotMatch(mobileDrawerSource, /SidebarConversations|setHasUserScrolled/u);
+  // Unmounted while closed: every opening starts from the top with a fresh scroll state.
+  assert.doesNotMatch(mobileDrawerSource, /keepMounted/u);
   assert.doesNotMatch(
     conversationSource,
     /debugReason/u,

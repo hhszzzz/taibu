@@ -30,5 +30,5 @@ test('table CSV preserves quotes/newlines and neutralizes spreadsheet formulas',
 });
 test('reading preferences clamp width and reject unknown scaling or notification consent', () => {
     assert.deepEqual(normalizeChatPreferences({ width: 99999, fontScale: 125, desktopNotifications: true }), { width: 1200, fontScale: 125, desktopNotifications: true });
-    assert.deepEqual(normalizeChatPreferences({ width: NaN, fontScale: 200, desktopNotifications: 'true' }), { width: 760, fontScale: 100, desktopNotifications: false });
+    assert.deepEqual(normalizeChatPreferences({ width: NaN, fontScale: 200, desktopNotifications: 'true' }), { width: 700, fontScale: 100, desktopNotifications: false });
 });

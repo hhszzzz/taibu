@@ -11,6 +11,7 @@ import { useEffect, type MutableRefObject } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { ChatMessage, Mention } from '@/types';
 import { ChatMessageItem } from '@/components/chat/ChatMessageItem';
+import { AgentRoundRow, isFoldedAway, type AgentRoundFolding } from '@/components/chat/agent/AgentRoundFold';
 
 interface VirtualizedChatMessageListProps {
     scrollContainerRef: MutableRefObject<HTMLDivElement | null>;
@@ -21,6 +22,8 @@ interface VirtualizedChatMessageListProps {
     onSwitchVersion?: (messageId: string, versionIndex: number) => void;
     onArchiveMessage?: (message: ChatMessage) => void;
     disabled?: boolean;
+    /** Earlier Agent rounds fold to one bar each; their other rows stay as empty, hidden rows. */
+    rounds?: AgentRoundFolding;
 }
 
 // 估算消息高度（用于虚拟化初始计算）
@@ -43,6 +46,15 @@ function estimateMessageHeight(message: ChatMessage): number {
     return baseHeight + contentHeight + reasoningHeight + attachmentHeight;
 }
 
+// A folded round shows its 44px bar in a padded row and nothing else; unfolded, the bar keeps 20px from the message.
+function estimateRowHeight(message: ChatMessage, rounds: AgentRoundFolding | undefined): number {
+    const fold = rounds?.folds.get(message.id);
+    if (!fold) return estimateMessageHeight(message);
+    const open = rounds?.unfolded.has(fold.round.id) ?? false;
+    if (!fold.first) return open ? estimateMessageHeight(message) : 0;
+    return open ? 64 + estimateMessageHeight(message) : 68;
+}
+
 export function VirtualizedChatMessageList({
     scrollContainerRef: parentRef,
     messages,
@@ -52,6 +64,7 @@ export function VirtualizedChatMessageList({
     onSwitchVersion,
     onArchiveMessage,
     disabled = false,
+    rounds,
 }: VirtualizedChatMessageListProps) {
 
     // 找到最后一条正在流式输出的AI消息
@@ -62,7 +75,7 @@ export function VirtualizedChatMessageList({
     const virtualizer = useVirtualizer({
         count: messages.length,
         getScrollElement: () => parentRef.current,
-        estimateSize: (index) => estimateMessageHeight(messages[index]),
+        estimateSize: (index) => estimateRowHeight(messages[index], rounds),
         overscan: 5, // 预渲染上下各 5 条消息
         getItemKey: (index) => messages[index]?.id || `msg-${index}`,
     });
@@ -105,6 +118,8 @@ export function VirtualizedChatMessageList({
                     {virtualItems.map((virtualRow) => {
                         const message = messages[virtualRow.index];
                         if (!message) return null;
+                        // Indexes stay one per message, so jumps to a message keep working while its round is folded.
+                        const hidden = isFoldedAway(rounds, message.id);
 
                         return (
                             <div
@@ -112,17 +127,20 @@ export function VirtualizedChatMessageList({
                                 data-index={virtualRow.index}
                                 ref={virtualizer.measureElement}
                                 className="chat-transcript-row"
+                                hidden={hidden}
                             >
-                                <ChatMessageItem
-                                    message={message}
-                                    isStreamingAI={isStreamingAI}
-                                    isLastMessage={virtualRow.index === messages.length - 1}
-                                    disabled={disabled}
-                                    onEditMessage={onEditMessage}
-                                    onRegenerateResponse={onRegenerateResponse}
-                                    onSwitchVersion={onSwitchVersion}
-                                    onArchiveMessage={onArchiveMessage}
-                                />
+                                {hidden ? null : <AgentRoundRow rounds={rounds} messageId={message.id}>
+                                    <ChatMessageItem
+                                        message={message}
+                                        isStreamingAI={isStreamingAI}
+                                        isLastMessage={virtualRow.index === messages.length - 1}
+                                        disabled={disabled}
+                                        onEditMessage={onEditMessage}
+                                        onRegenerateResponse={onRegenerateResponse}
+                                        onSwitchVersion={onSwitchVersion}
+                                        onArchiveMessage={onArchiveMessage}
+                                    />
+                                </AgentRoundRow>}
                             </div>
                         );
                     })}

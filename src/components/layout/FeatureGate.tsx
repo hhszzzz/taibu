@@ -52,6 +52,10 @@ export function FeatureGate({ featureId, children }: FeatureGateProps) {
                 >
                     重试
                 </button>
+                {/* Pages such as /chat show no site navigation on phones. */}
+                <Link href="/" className="mt-3 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                    返回首页
+                </Link>
             </div>
         );
     }

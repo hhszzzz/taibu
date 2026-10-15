@@ -19,7 +19,7 @@ export function CanonicalChartView({ value, targets = [], includeRelated = true,
   let content;
   const interaction = onTargetSelect ? { selectedIds: targets.map(target => target.id), onSelect: onTargetSelect } : undefined;
   switch (value.kind) {
-    case 'bazi': content = <Bazi canonicalChart={value.chart} isUnknownTime={value.chart.四柱[3]?.干支.includes('*')}
+    case 'bazi': content = <Bazi canonicalChart={value.chart} isUnknownTime={value.chart.四柱[3]?.干支.includes('*')} canonicalLabels
       highlightedCells={targets.flatMap(target => target.kind === 'bazi_cell' ? [target.cell] : target.kind === 'bazi_relation' ? target.relation.位置 : [])}
       onCellSelect={onTargetSelect ? cell => {
         const target = getChartTargets(value).find(target => target.kind === 'bazi_cell' && target.cell.柱 === cell.柱 && target.cell.部位 === cell.部位 && target.cell.字 === cell.字);

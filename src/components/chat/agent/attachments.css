@@ -1,4 +1,13 @@
-.agent-attachments{display:flex;flex-wrap:wrap;gap:.4rem;padding:.4rem .7rem;min-width:0}
-.agent-attachment-chip{display:flex;align-items:center;min-width:0;max-width:18rem;border:1px solid var(--border);border-radius:.65rem;background:var(--background-secondary)}
-.agent-attachment-chip button{display:flex;align-items:center;gap:.4rem;padding:.4rem .6rem;min-width:0;font-size:.8rem}
-.agent-attachment-chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Private attachment chips: a 36px thumbnail or type label, the name with its size, and remove. */
+.agent-attachments { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.agent-attachment-chip { display: flex; min-width: 0; max-width: 18rem; height: 44px; align-items: center; border: 1px solid var(--border); border-radius: 12px; background: var(--chat-raised, var(--surface)); font-size: calc(13 / 16 * 1rem); }
+.agent-attachment-chip > button:first-child { display: flex; min-width: 0; height: 100%; align-items: center; gap: 8px; padding: 0 10px 0 4px; border-radius: 11px; }
+.agent-attachment-chip > button:first-child:hover { background: var(--background-secondary); }
+.agent-attachment-thumb { flex-shrink: 0; width: 36px; height: 36px; border-radius: 8px; background: var(--background-tertiary); object-fit: cover; }
+.agent-attachment-type { display: inline-flex; flex-shrink: 0; min-width: 36px; height: 36px; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); }
+.agent-attachment-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-attachment-name small { font-size: inherit; color: var(--foreground-secondary); }
+.agent-attachment-chip > button + button { display: inline-flex; flex-shrink: 0; width: 28px; height: 28px; margin-right: 6px; align-items: center; justify-content: center; border-radius: 8px; color: var(--foreground-secondary); }
+.agent-attachment-chip > button + button:hover:not(:disabled) { background: var(--background-secondary); color: var(--foreground); }
+.agent-attachment-chip > button:disabled { opacity: .5; cursor: not-allowed; }
+.agent-attachment-chip :where(button):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

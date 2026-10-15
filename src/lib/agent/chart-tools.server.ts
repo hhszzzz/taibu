@@ -16,7 +16,8 @@ import { resolveBaziPromptData } from '@/lib/bazi-prompt';
 import { resolveZiweiPromptData } from '@/lib/ziwei-chart-prompt';
 import { resolveBirthTimeOptions } from '@/lib/divination/birth-time';
 import type { AgentStore, AgentRunRow } from './store.server';
-import { getAgentChart, isAgentChartTool } from './tool-presentation';
+import { getAgentChart } from './tool-presentation';
+import { isAgentChartTool } from './tool-catalog';
 import { CHART_SOURCE_KINDS, parseChartReference, type ChartSource } from './chart-interaction';
 
 /** Check ownership on every execution and cache replay, independent of model arguments. */

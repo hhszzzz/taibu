@@ -10,18 +10,21 @@ import { registerTranscript } from './message-navigation';
 const positions = new Map<string, { top: number; follow: boolean }>();
 
 /** The ordinary and virtual transcripts use the same reading/follow rules. */
-export function useTranscriptScroll({ scrollRef, followRef, conversationKey, messages, enabled, virtualized }: {
+export function useTranscriptScroll({ scrollRef, followRef, conversationKey, messages, enabled, virtualized, reveal }: {
     scrollRef: MutableRefObject<HTMLDivElement | null>;
     followRef: MutableRefObject<boolean>;
     conversationKey: string;
     messages: ChatMessage[];
     enabled: boolean;
     virtualized: boolean;
+    /** Puts a message hidden by the list (a folded round) back on the page before it is located. */
+    reveal?: (id: string) => void;
 }) {
     const frameRef = useRef(0);
     const restoreFrameRef = useRef(0);
     const messagesRef = useRef(messages);
-    useLayoutEffect(() => { messagesRef.current = messages; }, [messages]);
+    const revealRef = useRef(reveal);
+    useLayoutEffect(() => { messagesRef.current = messages; revealRef.current = reveal; }, [messages, reveal]);
     const [showJump, setShowJump] = useState(false);
     const jumpToLatest = useCallback(() => {
         const element = scrollRef.current;
@@ -68,6 +71,7 @@ export function useTranscriptScroll({ scrollRef, followRef, conversationKey, mes
         };
         const release = () => { followRef.current = false; cancelAnimationFrame(restoreFrameRef.current); cancelAnimationFrame(frameRef.current); remember(); };
         const unregister = registerTranscript(conversationKey, { release, locate: id => {
+            revealRef.current?.(id);
             const message = Array.from(element.querySelectorAll<HTMLElement>('[data-message-id]')).find(row => row.dataset.messageId === id);
             if (virtualized) { element.dispatchEvent(new CustomEvent('taibu:locate-message', { detail: id })); return messagesRef.current.some(row => row.id === id); }
             message?.scrollIntoView({ block: 'start', behavior: 'auto' });

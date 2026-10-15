@@ -8,7 +8,7 @@
  */
 'use client';
 
-import { useMemo, useRef, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { useMemo, useRef, useState, useEffect, useCallback, useSyncExternalStore, type ReactNode } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { scrollToMessageId } from '@/lib/chat/message-navigation';
 import { requestBrowserJson } from '@/lib/browser-api';
@@ -17,7 +17,7 @@ import { ConversationExportDialog } from './ConversationExportDialog';
 import { AgentQueue } from './agent/AgentQueue';
 import { AnalysisMethodPicker } from './agent/AnalysisMethodPicker';
 import Link from 'next/link';
-import { Files, Globe, Lock, Orbit, Sparkles } from 'lucide-react';
+import { ChevronRight, Lock, PanelRight } from 'lucide-react';
 import type { ChatMessage, AttachmentState, Mention, PrivateAttachment } from '@/types';
 import { ChatMessageList } from '@/components/chat/ChatMessageList';
 import { VirtualizedChatMessageList } from '@/components/chat/VirtualizedChatMessageList';
@@ -30,18 +30,26 @@ import type { MembershipType } from '@/lib/user/membership';
 import type { ChatMode } from '@/lib/chat/use-chat-state';
 import { getSettingsCenterRouteTarget, openSettingsCenter } from '@/lib/settings-center';
 import { AgentStatus } from './agent/AgentStatus';
+import { AgentHeaderStatus } from './agent/AgentHeaderStatus';
 import { AgentWorkspacePanel } from './agent/AgentWorkspacePanel';
-import { AgentResultContext } from './agent/AgentResultContext';
-import { getAgentChart, getAgentUnrepresentedArtifacts } from '@/lib/agent/tool-presentation';
-import { getChartFocus, getChartResources } from '@/lib/agent/chart-interaction';
-import { AgentQuestionDialog } from './agent/AgentQuestionDialog';
-import { collectAgentArtifacts } from './agent/presentation';
-import type { AgentPart } from '@/lib/agent/types';
+import { AgentResultContext, isSameWorkspaceShown, type AgentWorkspaceShown } from './agent/AgentResultContext';
+import { buildAgentWorkspace, getAgentQuestionAnswers, getAgentWorkspaceAutoOpenEvent } from '@/lib/agent/workspace';
+import { AgentQuestionDock } from './agent/AgentQuestionDock';
+import { useAgentRoundFolds } from './agent/AgentRoundFold';
+import { PromptTemplateMenu } from './composer/ComposerDomainControls';
+import type { ComposerModeControl, ComposerWebControl } from './composer/ComposerToolbar';
+import { applyPromptTemplate } from '@/lib/agent/prompt-templates';
+import { collaborationProgress } from '@/lib/agent/parallel-results';
+import { composerNote, isRunningComposerNote, type ComposerNoteState } from '@/lib/chat/composer-copy';
+import { collectAgentArtifacts, getAgentCitedParagraph, getAgentTaskDuration } from './agent/presentation';
+import { isAgentRunTerminal, type AgentPart } from '@/lib/agent/types';
 import { useTranscriptScroll } from '@/lib/chat/use-transcript-scroll';
 import { orderAgentMessagesForDisplay } from '@/lib/agent/browser-client';
 import { JumpToLatest } from './JumpToLatest';
 import { ConversationMinimap } from './ConversationMinimap';
 import { useReadingPreferences } from '@/lib/chat/use-reading-preferences';
+import { setChatWorkspaceOpen } from '@/lib/chat/chat-sidebar';
+import { refreshAgentActivity } from '@/lib/agent/use-agent-activity';
 import type { CSSProperties } from 'react';
 import './chat-workspace.css';
 import type { ModelSettingsProps } from '@/lib/chat/model-settings';
@@ -126,6 +134,7 @@ export function ChatLayout(props: ChatLayoutProps) {
     } = props;
 
     const contentRef = useRef<HTMLDivElement>(null);
+    const greeting = useGreeting();
     const { preferences, update: updatePreferences } = useReadingPreferences(props.userId);
     const workspaceButtonRef = useRef<HTMLButtonElement>(null);
     const [openWorkspaceKey, setOpenWorkspaceKey] = useState<string | null>(null);
@@ -137,7 +146,8 @@ export function ChatLayout(props: ChatLayoutProps) {
         setOpenWorkspaceKey(workspaceKey);
         try { sessionStorage.setItem(`taibu.workspace-open:${workspaceKey}`, '1'); } catch { /* optional */ }
     }, [workspaceKey]);
-    const resultWorkspace = useMemo(() => ({ openResource }), [openResource]);
+    const [workspaceShown, setWorkspaceShown] = useState<AgentWorkspaceShown | null>(null);
+    const updateWorkspaceShown = useCallback((next: AgentWorkspaceShown | null) => setWorkspaceShown(previous => isSameWorkspaceShown(previous, next) ? previous : next), []);
     useEffect(() => {
         let current = true;
         queueMicrotask(() => {
@@ -175,10 +185,13 @@ export function ChatLayout(props: ChatLayoutProps) {
         const hidden = new Set(currentRun?.queue?.filter(command => command.state === 'pending' || command.state === 'cancelled').map(command => command.message.id));
         return orderAgentMessagesForDisplay(messages.filter(message => !hidden.has(message.id)), currentRun);
     }, [messages, currentRun]);
-    const { showJump, jumpToLatest } = useTranscriptScroll({ scrollRef: messageScrollContainerRef, followRef: props.shouldAutoScrollRef, conversationKey: workspaceKey, messages: transcriptMessages, enabled: !conversationLoading && transcriptMessages.length > 0, virtualized: transcriptMessages.length > 20 });
+    // Earlier Agent rounds fold to 上一轮 bars; a jump to one of their messages unfolds it first.
+    const { rounds, reveal: revealMessage } = useAgentRoundFolds(transcriptMessages, workspaceKey);
+    const { showJump, jumpToLatest } = useTranscriptScroll({ scrollRef: messageScrollContainerRef, followRef: props.shouldAutoScrollRef, conversationKey: workspaceKey, messages: transcriptMessages, enabled: !conversationLoading && transcriptMessages.length > 0, virtualized: transcriptMessages.length > 20, reveal: revealMessage });
     const latestAgentData = useMemo(() => [...messages].reverse().find(message => message.agent)?.agent, [messages]);
     const artifacts = useMemo(() => collectAgentArtifacts(messages), [messages]);
-    const historyTools = useMemo(() => messages.flatMap(message => (message.agent?.parts ?? []).filter((part): part is Extract<AgentPart, { type: 'tool' }> => part.type === 'tool')), [messages]);
+    const agentParts = useMemo(() => messages.flatMap(message => message.agent?.parts ?? []), [messages]);
+    const questionAnswers = useMemo(() => getAgentQuestionAnswers(messages), [messages]);
     const attachmentIds = useMemo(() => [...new Set(messages.flatMap(message => message.attachments?.ids ?? []))], [messages]);
     const draftScope = useRef(workspaceKey);
     useEffect(() => { draftScope.current = workspaceKey; }, [workspaceKey]);
@@ -197,20 +210,22 @@ export function ChatLayout(props: ChatLayoutProps) {
         onAttachmentChange({ ...attachmentState, uploaded: merged });
         onInputChange(inputValue.trim() ? `${inputValue}\n\n${message.content}` : message.content);
     };
-    const sources = useMemo(() => {
-        const unique = new Map<string, Extract<AgentPart, { type: 'source' }>>();
-        for (const message of messages) for (const part of message.agent?.parts ?? []) {
-            if (part.type === 'source' && /^https?:\/\//iu.test(part.url)) unique.set(part.url, part);
-        }
-        return [...unique.values()];
-    }, [messages]);
     const isAgentMode = props.agent?.mode === 'agent';
     const waitingQuestion = userId && props.agent?.run?.conversationId === activeConversationId && props.agent.run.status === 'awaiting_input'
         ? [...props.agent.run.message.agent?.parts ?? []].reverse().find((part): part is Extract<AgentPart, { type: 'question' }> => part.type === 'question') : undefined;
     const hasWorkspace = isAgentMode || Boolean(latestAgentData);
     const workspaceOpen = hasWorkspace && openWorkspaceKey === workspaceKey;
-    const chartCount = getChartResources(historyTools).length;
-    const resultCount = chartCount + getAgentUnrepresentedArtifacts(historyTools, artifacts).length;
+    const resultWorkspace = useMemo(() => ({ openResource, shown: workspaceOpen ? workspaceShown : null }), [openResource, workspaceOpen, workspaceShown]);
+    // The chat sidebar folds to its rail while the workspace is open beside the conversation.
+    useEffect(() => {
+        setChatWorkspaceOpen(workspaceOpen);
+        return () => setChatWorkspaceOpen(false);
+    }, [workspaceOpen]);
+    // Task markers in the sidebar follow this page's run without waiting for their next poll.
+    const currentRunStatus = currentRun?.status;
+    useEffect(() => { if (currentRunStatus) refreshAgentActivity(); }, [currentRunStatus]);
+    // The header counts what the workspace can open: readings, calculations, evidence and other materials.
+    const resourceCount = useMemo(() => buildAgentWorkspace({ parts: agentParts, artifacts, attachmentIds }).resources.length, [agentParts, artifacts, attachmentIds]);
     const closeWorkspace = () => {
         const previous = document.activeElement;
         setOpenWorkspaceKey(null);
@@ -221,10 +236,11 @@ export function ChatLayout(props: ChatLayoutProps) {
             if (!active || active === document.body || active === previous) workspaceButtonRef.current?.focus();
         });
     };
-    const currentChartAction = [...currentRun?.message.agent?.parts ?? []].reverse().find(part =>
-        part.type === 'tool' && (getChartFocus(part) || getAgentChart(part)));
+    // Chart readings, questions and collaborations open the panel on desktop until it is closed for this task.
+    const autoOpenEvent = getAgentWorkspaceAutoOpenEvent(currentRun?.message.agent?.parts ?? []);
+    const workspaceRun = currentRun && currentRun.id === latestAgentData?.runId ? { billing: currentRun.billing, configuration: currentRun.configuration, createdAt: currentRun.createdAt } : undefined;
     useEffect(() => {
-        const action = currentChartAction?.id ?? null;
+        const action = autoOpenEvent;
         if (autoWorkspace.current.scope !== workspaceKey) { autoWorkspace.current = { scope: workspaceKey, action }; return; }
         if (!action || autoWorkspace.current.action === action || !currentRun || props.agent?.restoring) return;
         autoWorkspace.current.action = action;
@@ -235,20 +251,59 @@ export function ChatLayout(props: ChatLayoutProps) {
             setOpenWorkspaceKey(workspaceKey);
             try { sessionStorage.setItem('taibu.workspace-open:' + workspaceKey, '1'); } catch { /* optional */ }
         });
-    }, [currentChartAction?.id, currentRun, props.agent?.restoring, workspaceKey]);
+    }, [autoOpenEvent, currentRun, props.agent?.restoring, workspaceKey]);
     const title = props.conversationTitle || messages.find(message => message.role === 'user')?.content.slice(0, 60) || (isAgentMode ? '新任务' : '新对话');
+    const focusComposer = (scope = workspaceKey) => requestAnimationFrame(() => {
+        if (draftScope.current === scope) contentRef.current?.querySelector<HTMLTextAreaElement>('[data-chat-composer] textarea')?.focus();
+    });
     const suggest = (text: string) => {
         onInputChange(text);
-        requestAnimationFrame(() => contentRef.current?.querySelector<HTMLTextAreaElement>('[data-chat-composer] textarea')?.focus());
+        focusComposer();
     };
     const askAboutChart = (text: string) => {
-        const scope = workspaceKey;
         onInputChange(inputValue.trim() ? inputValue + '\n\n' + text : text);
         if (!window.matchMedia('(min-width: 1280px)').matches) closeWorkspace();
-        requestAnimationFrame(() => {
-            if (draftScope.current === scope) contentRef.current?.querySelector<HTMLTextAreaElement>('[data-chat-composer] textarea')?.focus();
-        });
+        focusComposer();
     };
+    const templatesRef = useRef<HTMLButtonElement>(null);
+    const [templatesOpen, setTemplatesOpen] = useState(false);
+    // “稍后回答” folds the dock for this question only; a new question opens it again.
+    const questionKey = waitingQuestion && props.agent?.run ? `${workspaceKey}:${props.agent.run.id}:${waitingQuestion.id}` : null;
+    const [laterQuestion, setLaterQuestion] = useState<string | null>(null);
+    const questionLater = questionKey !== null && laterQuestion === questionKey;
+    const collaborators = currentRun?.configuration?.collaborators.length ?? 0;
+    const collaboration = useMemo(() => currentRun?.status === 'running' ? collaborationProgress(currentRun.message.agent?.parts ?? [], currentRun.configuration?.collaborators.length) ?? undefined : undefined, [currentRun]);
+    const runDuration = useMemo(() => currentRun && isAgentRunTerminal(currentRun.status) ? getAgentTaskDuration(currentRun.createdAt, currentRun.message.agent) : null, [currentRun]);
+    const agent = props.agent;
+    const modeControl: ComposerModeControl | undefined = agent ? {
+        mode: agent.mode,
+        onChange: agent.setMode,
+        agentDisabled: !agent.capabilities.ready || agent.active,
+        plainDisabled: agent.active,
+    } : undefined;
+    const webAllowed = !!agent?.capabilities.webAvailable && membershipType !== 'free';
+    const webControl: ComposerWebControl | undefined = agent && isAgentMode ? {
+        enabled: agent.webEnabled && webAllowed,
+        disabled: !webAllowed,
+        label: agent.active ? '下次联网' : '按需联网',
+        title: !agent.capabilities.webAvailable ? '当前环境未配置联网搜索' : membershipType === 'free' ? '联网搜索需要 Plus 会员' : agent.active ? '下个独立任务使用此配置' : 'Agent 会在需要时搜索网络',
+        onToggle: () => agent.setWebEnabled(!agent.webEnabled),
+    } : undefined;
+    const noteState: ComposerNoteState = {
+        agentMode: isAgentMode,
+        agentUnavailable: !!userId && !!agent && !agent.capabilities.ready,
+        reconnecting: agent?.reconnecting,
+        awaiting: currentRun?.status === 'awaiting_input',
+        running: !!agent?.active && !!currentRun,
+        collaborators,
+    };
+    const note = composerNote(noteState);
+    const creditStrip = isCreditLocked ? <CreditStrip /> : undefined;
+    // Suggested next questions belong to a finished answer that is still the latest turn.
+    const lastAgent = transcriptMessages.at(-1)?.agent;
+    const followUps = lastAgent?.status === 'completed' && lastAgent.followUps?.length && !inputValue.trim() && !agent?.active && !isLoading && !isSendingToList ? lastAgent.followUps : null;
+    const composerHeader = creditStrip || followUps ? <>{creditStrip}{followUps && <FollowUps questions={followUps} disabled={disabled} onPick={suggest} />}</> : undefined;
+    const citedParagraph = useCallback((cite: number) => getAgentCitedParagraph(messages, cite), [messages]);
     const composerProps = {
         draftKey: workspaceKey,
         reasoningEffort: props.reasoningEffort, onReasoningEffortChange: props.onReasoningEffortChange,
@@ -268,79 +323,77 @@ export function ChatLayout(props: ChatLayoutProps) {
         contextMessages: messages,
         dreamContext, dreamContextLoading,
         knowledgeBaseEnabled,
+        modeControl, webControl,
     };
+    const composer = <ChatComposer {...composerProps} continuing note={note} noteOptional={isRunningComposerNote(noteState)} header={composerHeader}
+        queue={currentRun && <AgentQueue key={`${workspaceKey}:${currentRun.id}`} run={currentRun} restoreDraft={message => void restoreDraft(message)} />} />;
+    const toggleWorkspace = () => {
+        if (workspaceOpen) { closeWorkspace(); return; }
+        setOpenWorkspaceKey(workspaceKey);
+        try { sessionStorage.setItem(`taibu.workspace-open:${workspaceKey}`, '1'); sessionStorage.removeItem('taibu.workspace-dismissed:' + workspaceKey); } catch { /* optional */ }
+    };
+    // A new conversation opens on the greeting alone; saved conversations keep their header.
+    const emptyState = !conversationLoading && messages.length === 0;
+    const showHeader = !emptyState || !!activeConversationId || !!conversationError;
 
     return (
         <AgentResultContext.Provider value={resultWorkspace}><div className="chat-workspace flex bg-background" style={{ '--chat-column': `${preferences.width}px` } as CSSProperties}>
-            {/* 移动端对话抽屉 */}
-            <MobileChatDrawer />
-
-            <div ref={contentRef} className="chat-main flex-1 flex flex-col min-w-0 min-h-0 relative bg-background">
+            {/* data-agent-ready turns true once a restored task has finished syncing. */}
+            <div ref={contentRef} className="chat-main flex-1 flex flex-col min-w-0 min-h-0 relative bg-background"
+                data-agent-ready={props.agent ? !props.agent.restoring && !props.agent.syncing : undefined}>
                 <ChatHeader
+                    navigation={<MobileChatDrawer />}
+                    empty={!showHeader}
                     title={title}
+                    conversationId={activeConversationId}
+                    badge={isAgentMode ? collaborators ? `Agent · 协作 ${collaborators} 人` : 'Agent' : undefined}
+                    status={currentRun ? <AgentHeaderStatus status={currentRun.status} createdAt={currentRun.createdAt} reconnecting={props.agent?.reconnecting} collaboration={collaboration} duration={runDuration} />
+                        : isAgentMode && latestAgentData ? <AgentStatus status={latestAgentData.status} /> : null}
+                    showExport={!isAgentMode}
+                    workspaceButton={hasWorkspace && showHeader ? <button type="button" ref={workspaceButtonRef} className="chat-workspace-toggle" aria-label="任务工作区" aria-expanded={workspaceOpen} aria-controls="agent-workspace-panel" onClick={toggleWorkspace}>
+                        <PanelRight size={16} strokeWidth={1.8} aria-hidden="true" /><span>工作区</span>{resourceCount > 0 && <span className="chat-result-count">{resourceCount}</span>}
+                    </button> : undefined}
+                    readingWidth={preferences.width}
+                    onReadingWidthChange={width => updatePreferences({ width })}
                     membershipType={membershipType}
                     knowledgeBaseEnabled={knowledgeBaseEnabled}
                     aiPersonalizationEnabled={aiPersonalizationEnabled}
-                >
-                    {activeConversationId && <ConversationExportDialog conversationId={activeConversationId} />}
-                    <label className="chat-reading-width" title="调整阅读宽度"><span>列宽</span><input type="range" aria-label="阅读列宽" min="560" max="1200" step="20" value={preferences.width} onChange={event => updatePreferences({ width: Number(event.target.value) })} /></label>
-                    {hasWorkspace && <button type="button" ref={workspaceButtonRef} className="chat-workspace-toggle" aria-label="任务工作区" aria-expanded={workspaceOpen} aria-controls="agent-workspace-panel" onClick={() => {
-                        if (workspaceOpen) closeWorkspace();
-                        else { setOpenWorkspaceKey(workspaceKey); try { sessionStorage.setItem(`taibu.workspace-open:${workspaceKey}`, '1'); sessionStorage.removeItem('taibu.workspace-dismissed:' + workspaceKey); } catch { /* optional */ } }
-                    }}>
-                        <Files size={16} aria-hidden="true" /><span>工作区</span>{resultCount > 0 && <span className="chat-result-count">{resultCount}</span>}
-                    </button>}
-                </ChatHeader>
-                {props.agent && (
-                    <div data-agent-ready={!props.agent.restoring && !props.agent.syncing} className="chat-task-toolbar">
-                        <div className="chat-mode-switch" role="group" aria-label="对话方式">
-                            <button type="button" aria-pressed={isAgentMode} disabled={!props.agent.capabilities.ready || props.agent.active} onClick={() => props.agent?.setMode('agent')}>Agent</button>
-                            <button type="button" aria-pressed={props.agent.mode === 'plain'} disabled={props.agent.active} onClick={() => props.agent?.setMode('plain')}>普通对话</button>
-                        </div>
-                        {isAgentMode && <label className="chat-web-switch" title={!props.agent.capabilities.webAvailable ? '当前环境未配置联网搜索' : membershipType === 'free' ? '联网搜索需要 Plus 会员' : props.agent.active ? '下个独立任务使用此配置' : 'Agent 会在需要时搜索网络'}><Globe size={14} aria-hidden="true" /><span>{props.agent.active ? '下次联网' : '按需联网'}</span><input type="checkbox" aria-label="按需联网" checked={props.agent.webEnabled && props.agent.capabilities.webAvailable && membershipType !== 'free'} disabled={!props.agent.capabilities.webAvailable || membershipType === 'free'} onChange={e => props.agent?.setWebEnabled(e.target.checked)} /></label>}
-                        {props.agent.active ? <span className="chat-task-note" role="status">{props.agent.reconnecting ? '正在重新连接任务' : props.agent.run?.status === 'awaiting_input' ? '补充信息后继续同一任务' : '后台执行中，离开页面后仍会继续'}</span> : !props.agent.capabilities.ready && userId ? <span className="chat-task-note">后台任务暂不可用，可使用普通对话</span> : isAgentMode && latestAgentData ? <span className="ml-auto"><AgentStatus status={latestAgentData.status} /></span> : null}
-                    </div>
-                )}
-
-                {waitingQuestion && props.agent && <AgentQuestionDialog key={`${workspaceKey}:${props.agent.run?.id}:${waitingQuestion.id}`} question={waitingQuestion.question} questions={waitingQuestion.questions} questionId={waitingQuestion.id} scopeKey={`${workspaceKey}:${props.agent.run?.id}`} attachmentState={attachmentState} onAttachmentChange={onAttachmentChange} onAnswer={async (answer, answers) => { await props.agent!.sendCommand(answer, false, { questionId: waitingQuestion.id, answers }); onAttachmentChange({ ...attachmentState, uploaded: undefined }); }} onStop={props.agent.stop} disabled={props.agent.restoring || props.agent.syncing} />}
+                />
+                {activeConversationId && <ConversationExportDialog conversationId={activeConversationId} />}
 
                 {conversationError ? (
-                    <div className="border-b border-[#ead9bf] bg-[#fcf8ee] px-4 py-3 text-sm text-[#946c21]">
-                        <div className="flex items-center justify-between gap-3">
-                            <span className="min-w-0 flex-1">{conversationError}</span>
-                            {onRetryConversationLoad ? (
-                                <button
-                                    type="button"
-                                    onClick={() => void onRetryConversationLoad()}
-                                    className="shrink-0 rounded-md px-2 py-1 font-medium text-[#7c5f1c] transition-colors hover:bg-[#f4ead3]"
-                                >
-                                    重试
-                                </button>
-                            ) : null}
-                        </div>
+                    <div className="chat-load-error" role="alert">
+                        <span>{conversationError}</span>
+                        {onRetryConversationLoad ? <button type="button" onClick={() => void onRetryConversationLoad()}>重试</button> : null}
                     </div>
                 ) : null}
 
                 {conversationLoading ? (
                     <SoundWaveLoader variant="block" text="" />
-                ) : messages.length === 0 ? (
+                ) : emptyState ? (
                     <div className="chat-empty-state">
-                        <div className="chat-empty-intro">
-                            <span className="chat-empty-symbol"><Orbit size={26} strokeWidth={1.4} aria-hidden="true" /></span>
-                            <h2>{isAgentMode ? '从一个问题开始' : '今天想了解什么？'}</h2>
-                            <p>{isAgentMode ? '描述你关心的事，让太卜为你排盘、查阅资料并整理分析。' : '聊聊命盘、运势，或最近让你困惑的事。'}</p>
+                        <div className="chat-empty-inner">
+                            <div className="chat-empty-intro">
+                                <span className="chat-empty-symbol" aria-hidden="true">卜</span>
+                                <h1>{greeting}，想问些什么？</h1>
+                                <p>{isAgentMode ? '描述你关心的事，太卜会排盘、查阅资料，并在右侧工作区展示每一步。' : '聊聊命盘、运势，或最近让你困惑的事。'}</p>
+                            </div>
+                            <ChatComposer {...composerProps} variant="hero" header={creditStrip} />
+                            {isAgentMode && <section className="chat-suggestions" aria-labelledby="chat-suggestions-title">
+                                <div className="chat-suggestions-heading">
+                                    <h2 id="chat-suggestions-title">可以这样开始</h2>
+                                    {userId && <button ref={templatesRef} type="button" aria-haspopup="menu" aria-expanded={templatesOpen} onClick={() => setTemplatesOpen(open => !open)}>
+                                        问法模板<ChevronRight size={14} aria-hidden="true" />
+                                    </button>}
+                                </div>
+                                <div className="chat-suggestion-grid">{AGENT_SUGGESTIONS.map(item => <button key={item.title} type="button" disabled={disabled} onClick={() => suggest(item.prompt)}>
+                                    <strong>{item.title}</strong><span>{item.description}</span>
+                                </button>)}</div>
+                                <PromptTemplateMenu open={templatesOpen} anchorRef={templatesRef} onClose={() => setTemplatesOpen(false)} userId={userId} side="bottom" align="end"
+                                    onPick={template => suggest(applyPromptTemplate(template, inputValue))} />
+                            </section>}
+                            {isAgentMode && <p className="chat-empty-note">任务在后台执行，关闭页面不会中断，完成后会提醒你 · 每个任务计 1 次积分</p>}
                         </div>
-                        {isCreditLocked && (
-                            <CreditLockBanner />
-                        )}
-                        <div className="chat-empty-composer">
-                            <ChatComposer {...composerProps} hideDisclaimer />
-                        </div>
-                        {isAgentMode && <div className="chat-suggestions" aria-label="任务建议">
-                            <button type="button" disabled={disabled} onClick={() => suggest('请先查看我保存的命盘，帮我分析性格与优势。资料不足时请向我询问。')}>了解我的命盘</button>
-                            <button type="button" disabled={disabled} onClick={() => suggest('请对比我保存的两份命盘，分析相处中的特点。信息不足时先询问我。')}>对比两份命盘</button>
-                            <button type="button" disabled={disabled} onClick={() => suggest('请结合我的命盘，分析近期的工作方向。需要出生信息时先询问我。')}>看看工作方向</button>
-                        </div>}
                     </div>
                 ) : (
                     <>
@@ -353,6 +406,7 @@ export function ChatLayout(props: ChatLayoutProps) {
                                     onSwitchVersion={onSwitchVersion}
                                     onArchiveMessage={activeConversationId ? onArchiveMessage : undefined}
                                     disabled={isCreditLocked || props.agent?.restoring || props.agent?.syncing}
+                                    rounds={rounds}
                                 />
                             </div>
                         ) : (
@@ -363,20 +417,31 @@ export function ChatLayout(props: ChatLayoutProps) {
                                     onSwitchVersion={onSwitchVersion}
                                     onArchiveMessage={activeConversationId ? onArchiveMessage : undefined}
                                     disabled={isCreditLocked || props.agent?.restoring || props.agent?.syncing}
+                                    rounds={rounds}
                                 />
                             </div>
                         )}
                         {showJump && <div className="chat-jump-dock"><JumpToLatest onClick={jumpToLatest} /></div>}
                         <ConversationMinimap messages={transcriptMessages} conversationKey={workspaceKey} />
-                        {isCreditLocked && (
-                            <CreditLockBanner inline />
-                        )}
-                        {currentRun && <AgentQueue key={`${workspaceKey}:${currentRun.id}`} run={currentRun} restoreDraft={message => void restoreDraft(message)} />}
-                        <ChatComposer {...composerProps} />
+                        {waitingQuestion && agent && questionKey ? <>
+                            {/* The answer panel takes the input's place; folding it hands the input back for a free reply. */}
+                            <div className="chat-question-region">
+                                <AgentQuestionDock key={questionKey} question={waitingQuestion.question} questions={waitingQuestion.questions} questionId={waitingQuestion.id}
+                                    scopeKey={`${workspaceKey}:${agent.run?.id}`} attachmentState={attachmentState} onAttachmentChange={onAttachmentChange}
+                                    onAnswer={async (answer, answers) => { await agent.sendCommand(answer, false, { questionId: waitingQuestion.id, answers }); onAttachmentChange({ ...attachmentState, uploaded: undefined }); }}
+                                    onStop={agent.stop} disabled={agent.restoring || agent.syncing}
+                                    collapsed={questionLater} onCollapsedChange={later => { setLaterQuestion(later ? questionKey : null); if (later) focusComposer(); }} />
+                                {!questionLater && <p className="chat-composer-note">{note}</p>}
+                            </div>
+                            {questionLater && composer}
+                        </> : composer}
                     </>
                 )}
             </div>
-            {workspaceOpen && <AgentWorkspacePanel key={workspaceKey} workspaceKey={workspaceKey} artifacts={artifacts} sources={sources} historyTools={historyTools} attachmentIds={attachmentIds} data={latestAgentData} onClose={closeWorkspace} onChartQuestion={askAboutChart} requestedResource={resourceRequest?.scope === workspaceKey ? resourceRequest : undefined} />}
+            {workspaceOpen && <AgentWorkspacePanel key={workspaceKey} workspaceKey={workspaceKey} parts={agentParts} artifacts={artifacts} attachmentIds={attachmentIds}
+                data={latestAgentData} run={workspaceRun} answers={questionAnswers} userId={userId} conversationId={activeConversationId}
+                onClose={closeWorkspace} onChartQuestion={askAboutChart} onShownChange={updateWorkspaceShown} requestedResource={resourceRequest?.scope === workspaceKey ? resourceRequest : undefined}
+                citedParagraph={citedParagraph} />}
 
             {children}
             <AnalysisMethodPicker onSelect={text => onInputChange(inputValue.trim() ? `${inputValue}\n${text}` : text)} />
@@ -384,29 +449,34 @@ export function ChatLayout(props: ChatLayoutProps) {
     );
 }
 
-function CreditLockBanner({ inline }: { inline?: boolean }) {
-    const wrapperClass = inline
-        ? 'px-4 py-3 bg-amber-500/10 border-t border-amber-500/20'
-        : 'w-full max-w-3xl mb-4 px-4 py-3 bg-amber-500/10 border border-amber-500/20 rounded-xl';
-    return (
-        <div className={wrapperClass}>
-            <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-amber-600">
-                    <Lock className="w-4 h-4" />
-                    <span className="text-sm">积分已用完</span>
-                </div>
-                <Link
-                    href={getSettingsCenterRouteTarget('upgrade')}
-                    onClick={(event) => {
-                        event.preventDefault();
-                        openSettingsCenter('upgrade');
-                    }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-accent text-on-accent rounded-lg text-sm hover:bg-accent/90 transition-colors"
-                >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    获取积分
-                </Link>
-            </div>
-        </div>
-    );
+const AGENT_SUGGESTIONS = [
+    { title: '了解我的命盘', description: '读取已存命盘，分析性格与优势；资料不足会先问你', prompt: '请先查看我保存的命盘，帮我分析性格与优势。资料不足时请向我询问。' },
+    { title: '对比两份命盘', description: '合盘看相处方式与互补，缺对方信息时会询问', prompt: '请对比我保存的两份命盘，分析相处中的特点。信息不足时先询问我。' },
+    { title: '看看明年的工作方向', description: '排大运与流年，判断变动时机', prompt: '请结合我的命盘，排大运与流年，分析明年的工作方向和变动时机。需要出生信息时先询问我。' },
+    { title: '挑一个好日子', description: '结合黄历与你的命盘，选日期和时辰', prompt: '请结合黄历和我的命盘，帮我挑一个适合签约的日子和时辰。需要信息时先询问我。' },
+] as const;
+
+function subscribeToHour(onChange: () => void) {
+    const timer = window.setInterval(onChange, 60_000);
+    return () => window.clearInterval(timer);
+}
+/** Time-of-day greeting; the server renders a neutral one so hydration matches. */
+function useGreeting() {
+    const hour = useSyncExternalStore(subscribeToHour, () => new Date().getHours(), () => -1);
+    return hour < 0 ? '你好' : hour < 5 ? '夜深了' : hour < 11 ? '早上好' : hour < 13 ? '中午好' : hour < 18 ? '下午好' : '晚上好';
+}
+
+/** 继续追问: questions the answer suggested asking next; picking one fills the input to edit or send. */
+function FollowUps({ questions, disabled, onPick }: { questions: readonly string[]; disabled: boolean; onPick: (text: string) => void }) {
+    return <div className="chat-followups" role="group" aria-label="继续追问">
+        {questions.map(question => <button key={question} type="button" title={question} disabled={disabled} onClick={() => onPick(question)}><span>{question}</span></button>)}
+    </div>;
+}
+
+/** Platform credits ran out: hosted models lock, a custom model still works. */
+function CreditStrip() {
+    return <div className="chat-credit-strip" role="status">
+        <Lock size={15} aria-hidden="true" /><span>积分已用完</span>
+        <Link href={getSettingsCenterRouteTarget('upgrade')} onClick={event => { event.preventDefault(); openSettingsCenter('upgrade'); }}>获取积分</Link>
+    </div>;
 }

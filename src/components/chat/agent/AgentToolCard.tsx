@@ -1,75 +1,68 @@
 'use client';
+// 需要复制状态与 Toast 反馈
 
 import { useState } from 'react';
-import { Calculator, Check, ChevronRight, CircleAlert, CircleHelp, Copy, Database, ListChecks, LoaderCircle, Search, Wrench } from 'lucide-react';
+import { Check, Copy } from 'lucide-react';
 import type { AgentRunStatus } from '@/lib/agent/types';
-import { MarkdownContent } from '@/components/ui/MarkdownContent';
+import { getAgentToolText } from '@/lib/agent/tool-presentation';
 import { useToast } from '@/components/ui/Toast';
-import { formatAgentToolDuration, formatAgentValue, getAgentTaskSpan, getAgentToolState, summarizeAgentTool, type AgentTool } from './presentation';
+import { formatAgentToolDuration, formatAgentValue, getAgentTaskSpan, getAgentToolState, type AgentTool } from './presentation';
 import { AgentToolResult } from './AgentToolResult';
 
-function ToolValue({ value }: { value: unknown }) {
-    if (Array.isArray(value) && value.length > 0 && value.every(item => item?.type === 'text' && typeof item.text === 'string')) {
-        return <MarkdownContent content={value.map(item => item.text).join('\n\n')} className="text-sm" />;
-    }
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
-        return <dl className="agent-tool-fields">
-            {Object.entries(value).map(([key, field]) => <div key={key}>
-                <dt>{key}</dt>
-                <dd><pre>{formatAgentValue(field)}</pre></dd>
-            </div>)}
-        </dl>;
-    }
-    return <pre className="agent-tool-raw">{formatAgentValue(value)}</pre>;
-}
-
-function ToolSection({ label, value }: { label: string; value: unknown }) {
+/** Copies `text`; an icon-only button is named by `label` and confirms with a check mark. */
+export function CopyButton({ text, label, name, iconOnly = false, className = 'agent-tool-copy' }: { text: string; label: string; name?: string; iconOnly?: boolean; className?: string }) {
     const [copied, setCopied] = useState(false);
     const { showToast } = useToast();
-    return <section className="agent-tool-section">
-        <div className="agent-tool-section-heading">
-            <h4>{label}</h4>
-            <button type="button" aria-label={`复制${label}`} onClick={async () => {
-                try {
-                    await navigator.clipboard.writeText(formatAgentValue(value));
-                    setCopied(true);
-                } catch {
-                    showToast('error', '复制失败，请重试');
-                }
-            }}>
-                {copied ? <Check size={13} /> : <Copy size={13} />}
-                <span>{copied ? '已复制' : '复制'}</span>
-            </button>
-        </div>
-        <div className="agent-tool-value" tabIndex={0} aria-label={label}><ToolValue value={value} /></div>
-    </section>;
+    const size = iconOnly ? 16 : 12;
+    return <button type="button" className={className} aria-label={name ?? (iconOnly ? label : undefined)} title={iconOnly ? label : undefined} onClick={async () => {
+        try {
+            await navigator.clipboard.writeText(text);
+            setCopied(true);
+        } catch {
+            showToast('error', '复制失败，请重试');
+        }
+    }}>
+        {copied ? <Check size={size} aria-hidden="true" /> : <Copy size={size} aria-hidden="true" />}
+        {!iconOnly && (copied ? '已复制' : label)}
+    </button>;
 }
 
-export function AgentToolCard({ tool, runStatus, showResult = true, fullResult = false }: { tool: AgentTool; runStatus: AgentRunStatus; showResult?: boolean; fullResult?: boolean }) {
-    const [expanded, setExpanded] = useState<boolean | null>(null);
+/** 调用详情: the call's arguments and its stored result as returned, each copyable; nothing is restructured. */
+export function AgentToolDetails({ tool, runStatus, id, heading = true }: {
+    tool: AgentTool; runStatus: AgentRunStatus; id?: string;
+    /** False when the surrounding view already names the step and its timing. */
+    heading?: boolean;
+}) {
     const state = getAgentToolState(tool, runStatus);
-    const summary = summarizeAgentTool(tool);
     const span = getAgentTaskSpan(tool);
-    const ToolIcon = tool.name === 'bazi' || tool.name === 'ziwei' ? Calculator : tool.name === 'ask_user' ? CircleHelp
-        : tool.name.includes('search') ? Search : tool.name === 'select_final_artifacts' ? ListChecks : tool.name.includes('user') ? Database : Wrench;
-    const Icon = state.status === 'running' ? LoaderCircle : state.status === 'failed' ? CircleAlert
-        : state.status === 'completed' ? Check : ToolIcon;
-    const open = expanded ?? state.status === 'failed';
-    return <div><details className={`agent-tool-card agent-tool-card--${state.status}`} open={open}>
-        <summary onClick={event => { event.preventDefault(); setExpanded(!open); }}>
-            <span className="agent-tool-indicator">
-                <Icon size={14} className={state.status === 'running' ? 'animate-spin motion-reduce:animate-none' : undefined} aria-hidden="true" />
-            </span>
-            <span className="agent-tool-label"><span>{tool.title}</span>{summary && <small>{summary}</small>}</span>
-            {['completed', 'failed'].includes(state.status) && typeof tool.durationMs === 'number' && Number.isFinite(tool.durationMs) && tool.durationMs >= 0 && <span className="agent-tool-time" title="本次工具调用的实际执行用时">{formatAgentToolDuration(tool.durationMs)}</span>}
-            <span className="agent-tool-state">{state.label}</span>
-            <ChevronRight size={14} className="agent-tool-chevron" aria-hidden="true" />
-        </summary>
-        {open && <div className="agent-tool-details">
-            {span !== null && <p className="agent-tool-section agent-task-span">执行阶段 {formatAgentToolDuration(span)}（包含等待和恢复）</p>}
-            {tool.input !== undefined && <ToolSection label="调用参数" value={tool.input} />}
-            {tool.output !== undefined && <ToolSection label="工具结果" value={tool.output} />}
-            {tool.input === undefined && tool.output === undefined && <p className="p-3 text-xs text-foreground-secondary">{state.status === 'running' ? '正在等待工具返回结果…' : '该步骤没有返回详情。'}</p>}
+    const measured = typeof tool.durationMs === 'number' && Number.isFinite(tool.durationMs) && tool.durationMs >= 0;
+    // Execution is the measured execute(); the stage span also covers waiting for an answer and recovery.
+    const timing = [measured ? `执行 ${formatAgentToolDuration(tool.durationMs!)}` : null, span !== null ? `阶段 ${formatAgentToolDuration(span)}（含等待）` : null].filter(Boolean).join(' · ');
+    const canonical = tool.canonicalText?.trim() ? tool.canonicalText : null;
+    const input = tool.input === undefined ? null : formatAgentValue(tool.input);
+    const result = tool.output === undefined ? null : canonical ?? getAgentToolText(tool) ?? formatAgentValue(tool.output);
+    return <div id={id} className="agent-tool-details" data-state={state.status}>
+        {heading && <div className="agent-tool-details-heading">
+            <span>{tool.title}</span>
+            <code>{tool.name}</code>
+            {timing && <span className="agent-tool-timing">{timing}</span>}
         </div>}
-    </details>{showResult && <AgentToolResult tool={tool} full={fullResult} />}</div>;
+        {input !== null && <section className="agent-tool-section" aria-label="调用参数">
+            <div className="agent-tool-section-heading">调用参数<CopyButton text={input} label="复制" name="复制调用参数" /></div>
+            <pre className="agent-tool-value" tabIndex={0}>{input}</pre>
+        </section>}
+        {result !== null && <section className="agent-tool-section" aria-label="工具结果">
+            <div className="agent-tool-section-heading">工具结果{canonical ? <CopyButton text={canonical} label="复制规范文本" /> : <CopyButton text={result} label="复制" name="复制工具结果" />}</div>
+            <pre className="agent-tool-value" tabIndex={0}>{result}</pre>
+        </section>}
+        {input === null && result === null && <p className="agent-tool-empty">{state.status === 'running' ? '正在等待工具返回结果…' : '该步骤没有返回详情。'}</p>}
+    </div>;
+}
+
+/** Workspace view of a single call: its details, then the full reading when the call produced one. */
+export function AgentToolCard({ tool, runStatus }: { tool: AgentTool; runStatus: AgentRunStatus }) {
+    return <div className="agent-tool-view">
+        <AgentToolDetails tool={tool} runStatus={runStatus} />
+        <AgentToolResult tool={tool} runStatus={runStatus} full />
+    </div>;
 }

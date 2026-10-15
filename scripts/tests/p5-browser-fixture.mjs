@@ -29,7 +29,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const origin = 'https://taibu-fixture.invalid';
 
 const entry = String.raw`
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { ClientProviders, useSessionSafe } from '@/components/providers/ClientProviders';
@@ -52,33 +52,86 @@ import RecordsPage from '@/app/records/page';
 import * as chartClient from '@/lib/user/charts-client';
 import { useSelectedBaziChart } from '@/lib/hooks/useUserCharts';
 import { TimeInputModal } from '@/components/bazi/form/TimeInputModal';
-import { AgentQuestionDialog } from '@/components/chat/agent/AgentQuestionDialog';
+import { AgentQuestionDock } from '@/components/chat/agent/AgentQuestionDock';
 import { AgentMessage } from '@/components/chat/AgentMessage';
 import { AgentWorkspacePanel } from '@/components/chat/agent/AgentWorkspacePanel';
 import { AgentResultContext } from '@/components/chat/agent/AgentResultContext';
 import { ModelSelector } from '@/components/ui/ModelSelector';
-import { AgentContextDetails } from '@/components/chat/agent/AgentContextUsage';
+import { AgentContextMeter } from '@/components/chat/agent/AgentContextUsage';
 import { getAgentChart } from '@/lib/agent/tool-presentation';
 import { getChartTargets } from '@/lib/agent/chart-interaction';
+import { ANALYSIS_GUIDES, ANALYSIS_METHODS } from '@/lib/agent/analysis-methods.generated';
+import { getAgentEvidence } from '@/lib/agent/evidence';
+import { agentMessageContent } from '@/lib/agent/types';
+import { getAgentCitedParagraph } from '@/components/chat/agent/presentation';
+import { ChatSidebar } from '@/components/chat/sidebar/ChatSidebar';
+import { MobileChatDrawer } from '@/components/chat/MobileChatDrawer';
+import { FloatingPanel } from '@/components/ui/FloatingPanel';
+import { setChatWorkspaceOpen } from '@/lib/chat/chat-sidebar';
+import { ChatMessageList } from '@/components/chat/ChatMessageList';
+import { VirtualizedChatMessageList } from '@/components/chat/VirtualizedChatMessageList';
+import { useAgentRoundFolds } from '@/components/chat/agent/AgentRoundFold';
+import { useTranscriptScroll } from '@/lib/chat/use-transcript-scroll';
+import { scrollToMessageId } from '@/lib/chat/message-navigation';
 const initialToolParts = AGENT_TOOL_FIXTURE_PARTS;
+const familyParts = () => [
+  AGENT_DAYUN_FIXTURE_PART,
+  { type: 'tool', id: 'family-web', name: 'web_search', title: '联网检索', status: 'completed', input: { query: '庚金 月令' }, output: [{ title: '庚金论', url: 'https://example.com/gengjin', content: '庚金带煞，刚健为最。' }, { title: '无效链接', url: 'javascript:alert(1)', content: '不应成为链接' }] },
+  { type: 'tool', id: 'family-kb', name: 'search_knowledge', title: '知识库检索', status: 'completed', input: { query: '不存在的资料' }, output: [] },
+  { type: 'tool', id: 'family-method', name: 'load_analysis_method', title: '加载分析方法', status: 'completed', input: { id: 'bazi' },
+    output: { ...ANALYSIS_METHODS.find(method => method.id === 'bazi'), version: '1.0.0', title: ANALYSIS_GUIDES.bazi.title, tools: ['bazi', 'bazi_dayun'], instructions: ANALYSIS_GUIDES.bazi.body } },
+  { type: 'tool', id: 'family-team', name: 'parallel_analysis', title: '协作分析', status: 'completed', output: { analyses: [
+    { system: 'bazi', conversationId: 21, name: '子平', modelName: '分析模型', reasoningEffort: 'high', focus: '格局取用', status: 'completed', answer: '身强取财官。' },
+    { system: 'bazi', conversationId: 22, name: '盲派', modelName: '复核模型', reasoningEffort: 'off', status: 'completed', answer: '做功看财星。' },
+  ] } },
+  { type: 'tool', id: 'family-memory', name: 'remember_user_fact', title: '记住偏好', status: 'completed', output: { id: '33333333-3333-4333-8333-333333333333', title: '历法偏好', content: '以后都用公历时间', kind: 'preference', updated_at: '2026-10-10T00:00:00Z' } },
+  { type: 'tool', id: 'family-external', name: 'mcp__archive__lookup', title: '档案检索', status: 'completed', input: { keyword: '庚金' }, output: { rows: 1 } },
+  { type: 'tool', id: 'family-ask', name: 'ask_user', title: '补充必要信息', status: 'completed', input: {},
+    output: { question: '出生时间？', questions: [{ id: 'birth', question: '出生时间？', options: [{ id: 'morning', label: '早上' }, { id: 'night', label: '晚上' }], allowCustom: true, allowSkip: false }], awaitingUser: true } },
+  { type: 'question', id: '9:family-ask', question: '出生时间？' },
+];
+const fixtureArtifacts = [{ type: 'artifact', id: 'bazi', title: '已保存八字', chartType: 'bazi', chartId: 'saved-bazi' }];
 function AgentResultsProbe() {
   const [open, setOpen] = useState(false);
   const [request, setRequest] = useState(undefined);
+  const [shown, setShown] = useState(null);
+  const [bare, setBare] = useState(false);
+  window.fixture.resultsWithoutWorkspace = setBare;
   const [parts, setParts] = useState(initialToolParts);
   const [runtime, setRuntime] = useState(undefined);
+  const [answers, setAnswers] = useState(() => new Map());
+  const [status, setStatus] = useState('completed');
   const { user } = useSessionSafe();
-  const data = { version: 1, runId: 'ui-results', status: 'completed', parts, runtime };
+  window.fixture.agentRunStatus = setStatus;
+  window.fixture.workspaceFamilies = () => setParts(previous => [...previous.filter(part => !part.id.includes('family')), ...familyParts()]);
+  window.fixture.workspaceStep = (name, status) => setParts(previous => [...previous, { type: 'tool', id: 'step-' + (window.fixture.stepRevision = (window.fixture.stepRevision ?? 0) + 1), name, title: name, status, input: { query: '流年' } }]);
+  window.fixture.answerFamilyQuestion = () => setAnswers(new Map([['9:family-ask', { content: '出生时间？\n早上', answers: { birth: ['morning'] } }]]));
+  const data = { version: 1, runId: 'ui-results', status, parts, runtime };
   window.fixture.agentTiming = () => {
-    setRuntime(JSON.parse(JSON.stringify({ responses: [{ id: 'reply-1', durationMs: 1500 }, { id: 'reply-2', durationMs: 500 }] })));
+    // The durable runtime always records the model beside its response measurements.
+    setRuntime(JSON.parse(JSON.stringify({ model: { id: 'fixture-model', name: '主模型', contextWindow: null, limitSource: 'unknown' }, responses: [{ id: 'reply-1', durationMs: 1500 }, { id: 'reply-2', durationMs: 500 }] })));
     setParts(previous => JSON.parse(JSON.stringify(previous.map(tool => tool.id === initialToolParts.find(part => part.name === 'bazi').id ? { ...tool, durationMs: 1500, startedAt: 1000, endedAt: 6000 } : tool))));
   };
   window.fixture.collaborationResults = completed => setParts(previous => [...previous.filter(part => part.id !== 'collaboration'), {
     ...initialToolParts[0], id: 'collaboration', name: 'parallel_analysis', title: '协作分析', status: completed ? 'completed' : 'running',
-    output: JSON.parse(JSON.stringify({ analyses: [
-      { system: 'bazi', conversationId: 10, name: '八字分析', modelName: '分析模型', status: 'completed', answer: '已核对天干与日支。' },
-      { system: 'bazi', conversationId: 11, name: '独立复核', modelName: '复核模型', status: completed ? 'completed' : 'running', ...(completed ? { answer: '生克关系复核完成。' } : {}) },
+    output: JSON.parse(JSON.stringify({ title: '两派会诊', topics: [{ title: '是否变动', options: ['先争取权责', '主动变动'] }, { title: '命局主线' }], analyses: [
+      { system: 'bazi', conversationId: 10, name: '八字分析', modelName: '分析模型', status: 'completed', answer: '已核对天干与日支。', positions: { 是否变动: '先争取权责', 命局主线: '正官制身' }, toolCalls: 3, durationMs: 41000 },
+      { system: 'bazi', conversationId: 11, name: '独立复核', modelName: '复核模型', status: completed ? 'completed' : 'running',
+        ...(completed ? { answer: '生克关系复核完成。', positions: { 是否变动: '主动变动' } } : { steps: [{ name: 'bazi', title: '八字排盘', status: 'completed' }, { name: 'read_user_data', title: '读取官禄宫', status: 'running' }] }) },
     ] })),
   }]);
+  // An answer citing the two passages its own search returned, numbered after the evidence already shown.
+  window.fixture.citedAnswer = () => setParts(previous => {
+    const rest = previous.filter(part => !part.id.startsWith('cited-'));
+    const base = getAgentEvidence(rest).at(-1)?.n ?? 0;
+    window.fixture.cited = [base + 1, base + 2];
+    return [...rest,
+      { type: 'tool', id: 'cited-kb', name: 'search_knowledge', title: '知识库检索', status: 'completed', input: { query: '庚金 刚健' }, output: [
+        { content: '# 《滴天髓》天干论 · 庚金\n庚金带煞，刚健为最。', method: 'fts', cite: base + 1, metadata: { category: '命理古籍' } },
+        { content: '# 《子平真诠》论用神\n八字用神，专求月令。', method: 'vector', cite: base + 2, metadata: { category: '命理古籍' } },
+      ] },
+      { type: 'text', id: 'cited-answer', text: '古籍说庚金刚健[' + (base + 1) + ']。\n\n用神专求月令[' + (base + 2) + ']，[' + (base + 9) + '] 不是本任务的依据。' }];
+  });
   window.fixture.chartTargets = kind => getChartTargets(getAgentChart(parts.find(tool => tool.name === kind)));
   window.fixture.chartFocus = (kind, ids, caption, savedReference) => {
     const original = parts.find(tool => tool.name === kind);
@@ -95,11 +148,60 @@ function AgentResultsProbe() {
     setParts(previous => [...previous, inspect]);
   };
   window.fixture.traditionalTaiyi = () => setParts(previous => previous.filter(tool => tool.id !== 'inspect-taiyi').map(tool => tool.name === 'taiyi' ? TRADITIONAL_TAIYI_FIXTURE_PART : tool));
-  return <section data-testid="agent-results"><AgentResultContext.Provider value={{ openResource(id) { setRequest(previous => ({ id, version: (previous?.version ?? 0) + 1 })); setOpen(true); } }}>
+  // Without a provider the message is what a reader sees outside the chat workspace.
+  if (bare) return <section data-testid="agent-results"><AgentMessage data={data} /></section>;
+  return <section data-testid="agent-results"><AgentResultContext.Provider value={{ openResource(id) { setRequest(previous => ({ id, version: (previous?.version ?? 0) + 1 })); setOpen(true); }, shown: open ? shown : null }}>
     <AgentMessage data={data} />
     <button onClick={() => { setRequest(previous => ({ id: 'chart:bazi', version: (previous?.version ?? 0) + 1 })); setOpen(true); }}>恢复已有成果标签</button>
-    {open && <AgentWorkspacePanel workspaceKey={(user?.id ?? 'visitor') + ':ui-fixture'} artifacts={[{ type: 'artifact', id: 'bazi', title: '已保存八字', chartType: 'bazi', chartId: 'saved-bazi' }]} sources={[]} historyTools={parts} attachmentIds={[]} data={data} requestedResource={request} onChartQuestion={text => { window.fixture.chartQuestion = text; }} onClose={() => setOpen(false)} />}
+    {open && <AgentWorkspacePanel workspaceKey={(user?.id ?? 'visitor') + ':ui-fixture'} artifacts={fixtureArtifacts} parts={parts} attachmentIds={[]} data={data}
+      run={{ billing: 'charged' }} answers={answers} userId={user?.id ?? null} requestedResource={request} onShownChange={setShown} onChartQuestion={text => { window.fixture.chartQuestion = text; }} onClose={() => setOpen(false)}
+      citedParagraph={cite => getAgentCitedParagraph([{ agent: data, content: agentMessageContent(parts) }], cite)} />}
   </AgentResultContext.Provider></section>;
+}
+
+// A menu with an item hidden at this width, as the + menu's web switch is above phone widths.
+function MenuProbe() {
+  const anchorRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  return <section data-testid="menu-probe">
+    <button ref={anchorRef} type="button" onClick={() => setOpen(true)}>Open fixture menu</button>
+    <FloatingPanel open={open} anchorRef={anchorRef} onClose={() => setOpen(false)} label="Fixture menu">
+      <button type="button" role="menuitem">Visible first</button>
+      <button type="button" role="menuitemcheckbox" aria-checked="true" style={{ display: 'none' }}>Hidden checked</button>
+      <button type="button" role="menuitem">Visible last</button>
+    </FloatingPanel>
+  </section>;
+}
+
+// Two Agent rounds as the AgentResearch board shows them: the earlier one folds to a 上一轮 bar.
+const ROUND_START = '2026-10-12T08:00:00.000Z';
+const roundAsk = (id, content) => ({ id, role: 'user', content, createdAt: ROUND_START });
+const roundReply = (id, runId, parts) => ({ id, role: 'assistant', content: '', createdAt: ROUND_START, agent: { version: 1, runId, status: 'completed', parts } });
+const ROUND_MESSAGES = [
+  roundAsk('round-u1', '明年适合换工作吗？'),
+  roundReply('round-a1', 'round-run-1', [
+    { type: 'tool', id: 'round-chart', name: 'bazi', title: '八字排盘', status: 'completed', endedAt: Date.parse(ROUND_START) + 60000 },
+    { type: 'tool', id: 'round-luck', name: 'bazi_dayun', title: '八字大运', status: 'completed', endedAt: Date.parse(ROUND_START) + 106000 },
+    { type: 'artifact', id: 'round-result', title: '已保存八字', chartType: 'bazi', chartId: 'saved-bazi' },
+    { type: 'text', id: 'round-answer-1', text: '2027 丁未年适合变动。' },
+  ]),
+  roundAsk('round-u2', '你说正官克身是主线，古籍里是怎么讲的？'),
+  roundReply('round-a2', 'round-run-2', [{ type: 'text', id: 'round-answer-2', text: Array.from({ length: 40 }, (_, line) => '古籍对庚金的总论，第 ' + (line + 1) + ' 段。').join('\n\n') }]),
+];
+function RoundsProbe() {
+  const scrollRef = useRef(null);
+  const followRef = useRef(true);
+  const endRef = useRef(null);
+  const [messages, setMessages] = useState(ROUND_MESSAGES);
+  const [virtual, setVirtual] = useState(false);
+  window.fixture.rounds = { setVirtual, append: message => setMessages(current => current.concat([message])), locate: id => scrollToMessageId('rounds-fixture', id) };
+  const { rounds, reveal } = useAgentRoundFolds(messages, 'rounds-fixture');
+  useTranscriptScroll({ scrollRef, followRef, conversationKey: 'rounds-fixture', messages, enabled: true, virtualized: virtual, reveal });
+  // The app's layout CSS is not loaded here; the transcript needs a bounded scroller.
+  return <section data-testid="rounds"><style>{'[data-testid=rounds] .chat-virtual-scroller, [data-testid=rounds] [data-scroller] { height: 360px; overflow: auto; }'}</style>
+    {virtual ? <VirtualizedChatMessageList scrollContainerRef={scrollRef} messages={messages} isLoading={false} rounds={rounds} />
+      : <div ref={scrollRef} data-scroller="true"><ChatMessageList messages={messages} isLoading={false} messagesEndRef={endRef} rounds={rounds} /></div>}
+  </section>;
 }
 
 import { calculateZiweiChartBundle, getHoroscope } from '@/lib/divination/ziwei';
@@ -129,13 +231,16 @@ const empty = [];
 function StructuredQuestionProbe() {
   const { user } = useSessionSafe();
   const [attachments, setAttachments] = useState({ webSearchEnabled: false });
-  return <AgentQuestionDialog question="选择分析范围" questionId="same-tool-call" scopeKey={(user?.id ?? '') + ':structured'}
+  const [collapsed, setCollapsed] = useState(false);
+  return <AgentQuestionDock question="选择分析范围" questionId="same-tool-call" scopeKey={(user?.id ?? '') + ':structured'} collapsed={collapsed} onCollapsedChange={setCollapsed}
     questions={[
       { id: 'topics', question: '选择分析范围', options: [{ id: 'work', label: '工作' }, { id: 'life', label: '生活' }], multiple: true, allowCustom: true },
       { id: 'optional', question: '补充其他资料', allowCustom: true, allowSkip: true },
     ]} disabled={false} attachmentState={attachments} onAttachmentChange={setAttachments} onStop={() => window.fixture.mount.question(false)}
     onAnswer={async (text, answers) => { window.fixture.structuredAnswers = { text, answers }; window.fixture.mount.question(false); }} />;
 }
+const CONTEXT_FIXTURE_RUNTIME = { model: { id: 'fixture-analysis', name: '分析模型', contextWindow: 200000, limitSource: 'configured' },
+  context: { tokens: 76000, measuredTokens: 70000, estimatedTokens: 6000, source: 'mixed', input: 52000, output: 18000, compactions: 1 } };
 function AgentChatProbe() {
   const { user } = useSessionSafe();
   const router = useMemo(() => ({ replace() {}, push() {} }), []);
@@ -147,7 +252,8 @@ function AgentChatProbe() {
   return <section data-testid="agent-chat"><input aria-label="Agent fixture draft" value={state.inputValue} onChange={event => state.setInputValue(event.target.value)} />
     <ModelSelector selectedModel={state.selectedModel} onModelChange={state.setSelectedModel} reasoningEnabled={state.reasoningEnabled} onReasoningChange={state.setReasoningEnabled}
       reasoningEffort={state.reasoningEffort} onReasoningEffortChange={state.setReasoningEffort} collaborators={state.collaborators} onCollaboratorsChange={state.setCollaborators}
-      userId={user?.id} membershipType="plus" contextDetails={<AgentContextDetails runtime={messaging.agent.run?.message.agent?.runtime} />} toolbarStyle />
+      userId={user?.id} membershipType="plus" toolbarStyle />
+    <AgentContextMeter runtime={CONTEXT_FIXTURE_RUNTIME} />
     <output data-testid="agent-status">{messaging.agent.run?.status ?? 'none'}</output>
     <output data-testid="agent-messages">{JSON.stringify(state.messages)}</output></section>;
 }
@@ -202,10 +308,15 @@ function Shell() {
   const [agentMounted, setAgentMounted] = useState(false);
   const [questionMounted, setQuestionMounted] = useState(false);
   const [resultsMounted, setResultsMounted] = useState(false);
+  const [sidebarMounted, setSidebarMounted] = useState(false);
+  const [phoneDrawerMounted, setPhoneDrawerMounted] = useState(false);
+  const [menuMounted, setMenuMounted] = useState(false);
+  const [roundsMounted, setRoundsMounted] = useState(false);
+  window.fixture.chatWorkspace = setChatWorkspaceOpen;
   const [modelMountKey, setModelMountKey] = useState(0);
   window.fixture.remountModels = () => setModelMountKey(current => current + 1);
   window.fixture.mount = { composer: setComposerMounted, history: setHistoryMounted, drawer: setDrawerMounted,
-    records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted, agent: setAgentMounted, question: setQuestionMounted, results: setResultsMounted };
+    records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted, agent: setAgentMounted, question: setQuestionMounted, results: setResultsMounted, sidebar: setSidebarMounted, phoneDrawer: setPhoneDrawerMounted, menu: setMenuMounted, rounds: setRoundsMounted };
   window.fixture.chartKey = queryKeys.userCharts;
   window.fixture.chartClient = chartClient;
   window.fixture.deleteHistory = deleteHistorySummary;
@@ -266,6 +377,10 @@ function Shell() {
     {agentMounted && <AgentChatProbe />}
     {questionMounted && <StructuredQuestionProbe />}
     {resultsMounted && <AgentResultsProbe />}
+    {sidebarMounted && <ChatSidebar />}
+    {phoneDrawerMounted && <MobileChatDrawer />}
+    {menuMounted && <MenuProbe />}
+    {roundsMounted && <RoundsProbe />}
     {historyMounted && <section data-testid="history-page"><HistoryPageTemplate {...historyConfig} /></section>}
     {drawerMounted && <section data-testid="history-drawer"><HistoryDrawer type="tarot" /></section>}
     {recordsMounted && <section data-testid="records"><RecordsPage /></section>}
@@ -302,9 +417,13 @@ export async function build(outputDirectory) {
   const traditional = buildToolSuccessPayload('taiyi', await executeTool('taiyi', { system: 'traditional', mode: 'hour', date: '2026-04-10', hour: 9, timezone: 'Asia/Shanghai' }));
   const traditionalPart = { ...toolParts.find(tool => tool.name === 'taiyi'), output: { artifactId: 'taiyi', result: traditional.structuredContent }, canonicalText: traditional.content.map(part => part.text).join('\n') };
   const revisedBazi = buildToolSuccessPayload('bazi', await executeTool('bazi', { ...toolParts.find(tool => tool.name === 'bazi').input, birthYear: 2001, birthMonth: 10, birthDay: 1 }));
+  const dayunInput = listToolDefinitions().find(tool => tool.name === 'bazi_dayun').inputSchema.examples[0];
+  const dayun = buildToolSuccessPayload('bazi_dayun', await executeTool('bazi_dayun', dayunInput));
+  const dayunPart = { type: 'tool', id: 'family-dayun', name: 'bazi_dayun', title: '八字大运', status: 'completed', input: dayunInput, durationMs: 12,
+    output: { artifactId: 'family-dayun', result: dayun.structuredContent }, canonicalText: dayun.content.map(part => part.text).join('\n') };
 
   await bundle({
-    stdin: { contents: entry.replace('AGENT_TOOL_FIXTURE_PARTS', JSON.stringify(toolParts)).replace('TRADITIONAL_TAIYI_FIXTURE_PART', JSON.stringify(traditionalPart)).replace('REVISED_BAZI_FIXTURE_RESULT', JSON.stringify(revisedBazi.structuredContent)), loader: 'jsx', resolveDir: root, sourcefile: 'p5-browser-entry.jsx' },
+    stdin: { contents: entry.replace('AGENT_TOOL_FIXTURE_PARTS', JSON.stringify(toolParts)).replace('TRADITIONAL_TAIYI_FIXTURE_PART', JSON.stringify(traditionalPart)).replace('REVISED_BAZI_FIXTURE_RESULT', JSON.stringify(revisedBazi.structuredContent)).replace('AGENT_DAYUN_FIXTURE_PART', JSON.stringify(dayunPart)), loader: 'jsx', resolveDir: root, sourcefile: 'p5-browser-entry.jsx' },
     outfile, bundle: true, format: 'iife', platform: 'browser', jsx: 'automatic',
     tsconfig: resolve(root, 'tsconfig.json'),
     define: { 'process.env.NODE_ENV': '"development"', 'process.env': '{}' },
@@ -329,7 +448,7 @@ export async function build(outputDirectory) {
           const subscribe = callback => { window.addEventListener('fixture:navigate', callback); window.addEventListener('popstate', callback); return () => { window.removeEventListener('fixture:navigate', callback); window.removeEventListener('popstate', callback); }; };
           export const useRouter = () => router;
           export const usePathname = () => useSyncExternalStore(subscribe, () => location.pathname, () => '/chat');
-          export const useSearchParams = () => new URLSearchParams(location.search);
+          export const useSearchParams = () => new URLSearchParams(useSyncExternalStore(subscribe, () => location.search, () => ''));
         `;
         if (args.path === 'next/link') contents = `
           import React from 'react';
@@ -345,6 +464,9 @@ export async function build(outputDirectory) {
           const session = () => window.fixtureAuth.cookieUser ? { user: { id: window.fixtureAuth.cookieUser, email: window.fixtureAuth.cookieUser + '@fixture.invalid' } } : null;
           window.fixtureAuth = { cookieUser: 'alice', revalidations: 0, change(id) { this.cookieUser = id; for (const cb of listeners) cb('SIGNED_IN', session()); } };
           export const authSessionCacheConstants = { SESSION_REVALIDATE_EVENT_COOLDOWN_MS: 0 };
+          // Sign-in flows are outside this fixture; the sidebar only mounts their components.
+          const outsideFixture = async () => { throw new Error('Auth flows are outside the browser fixture'); };
+          export const signInWithEmailProtected = outsideFixture, sendOTP = outsideFixture, verifyOTP = outsideFixture, recordLoginAttempt = outsideFixture, resetPasswordWithOTP = outsideFixture, signOut = outsideFixture;
           export const supabase = { auth: {
             getSession: async () => ({ data: { session: session() }, error: null }),
             revalidateSession: async () => { window.fixtureAuth.revalidations++; return { data: { session: session() }, error: null }; },
@@ -352,7 +474,7 @@ export async function build(outputDirectory) {
           } };
         `;
         if (args.path.endsWith('/ChatTaskToastBridge')) contents = 'export function ChatTaskToastBridge() { return null; }';
-        if (args.path.endsWith('/AnnouncementPopupHost')) contents = 'export function AnnouncementPopupHost({ children }) { return children; }';
+        if (args.path.endsWith('/AnnouncementPopupHost')) contents = 'export function AnnouncementPopupHost({ children }) { return children; } export function useAnnouncementCenterSafe() { return { openAnnouncementCenter() { window.fixture.announcementCenter = (window.fixture.announcementCenter ?? 0) + 1; }, closeAnnouncementCenter() {}, announcementPromptCount: 0 }; }';
         if (args.path.endsWith('/useFeatureToggles')) contents = 'const enabled = () => true; export function useFeatureToggles() { return { loaded: true, isLoading: false, isFeatureEnabled: enabled }; }';
         if (args.path.endsWith('/useCurrentUserProfile')) contents = "import { useSessionSafe } from '@/lib/hooks/session-context'; export function useCurrentUserProfile() { const {user} = useSessionSafe(); return { profile: user ? { is_admin: user.id === 'alice' } : null, loading: false, error: null }; }";
         if (args.path.endsWith('/AccountAdminPanels')) contents = "export { AIModelPanel as AdminAIServicesContent } from '@/components/admin/AIModelPanel'; export const AdminAnnouncementsContent = () => null; export const AdminFeaturesContent = () => null;";
@@ -412,6 +534,7 @@ export async function run(existingPage, bundlePath) {
         const method = init?.method ?? 'GET', body = init?.body ? JSON.parse(init.body) : null;
         agentIO.requests.push({ url: url.pathname, search: url.search, method, body });
         if (url.pathname === '/api/agent/status') return Response.json({ enabled: true, ready: true, webAvailable: false, customAvailable: true });
+        if (url.pathname === '/api/agent/activity') return Response.json(agentIO.activity ?? { runs: [], notices: [] });
         if (url.pathname === '/api/agent/runs' && method === 'GET') return Response.json(agentIO.runs[url.searchParams.get('conversationId')] ?? null);
         const events = url.pathname.match(/^\/api\/agent\/runs\/([^/]+)\/events$/);
         if (events) {
@@ -524,8 +647,10 @@ export async function run(existingPage, bundlePath) {
   page.on('pageerror', error => browserErrors.push(error.message));
   page.on('console', message => {
     if (message.text().includes('No queryFn was passed')) queryWarnings.push(message.text());
+    // Unfolding a round before a jump flushes React synchronously; misuse is reported as an error.
+    if (message.type() === 'error' && message.text().includes('flushSync')) browserErrors.push(message.text());
   });
-  const settings = { notificationsEnabled: true, language: 'zh', expressionStyle: 'direct', customInstructions: '', chartPromptDetailLevel: 'default', userProfile: null, promptKbIds: [], notifyEmail: true, notifySite: true, defaultBaziChartId: null, defaultZiweiChartId: null, chatPreferences: { width: 760, fontScale: 100, desktopNotifications: false } };
+  const settings = { notificationsEnabled: true, language: 'zh', expressionStyle: 'direct', customInstructions: '', chartPromptDetailLevel: 'default', userProfile: null, promptKbIds: [], notifyEmail: true, notifySite: true, defaultBaziChartId: null, defaultZiweiChartId: null, chatPreferences: { width: 700, fontScale: 100, desktopNotifications: false } };
   const settingsByUser = { alice: { ...settings }, bob: { ...settings, customInstructions: 'Bob preferences', notificationsEnabled: false } };
   const chart = (id, name) => ({ id, name, gender: 'male', birth_date: '1990-01-01', birth_time: '12:00',
     birth_place: 'Beijing', longitude: 116.4, calendar_type: 'solar', is_leap_month: false, created_at: '2026-01-01T00:00:00Z' });
@@ -582,6 +707,7 @@ export async function run(existingPage, bundlePath) {
         return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: { message: 'Account changed' } }) });
       }
       if (url.pathname === '/api/user/agent-memory' && method === 'GET') return ok({ memories: [] });
+      if (url.pathname === '/api/user/agent-memory' && method === 'DELETE') return ok({ deleted: true });
       if (url.pathname === '/api/user/settings') {
         const owned = settingsByUser[cookieUser] ?? settings;
         if (method === 'GET') { settingsReads++; return ok({ settings: owned }); }
@@ -643,6 +769,7 @@ export async function run(existingPage, bundlePath) {
       return ok({ items: all.slice(offset, offset + limit), pagination: { hasMore: offset + limit < all.length, nextOffset: offset + limit < all.length ? offset + limit : null } }, true);
     }
     if (url.pathname === '/api/notes') return ok({ notes: [] }, true);
+    if (url.pathname === '/api/notifications' && method === 'PATCH') return ok({ success: true });
     if (url.pathname === '/api/records') {
       const category = url.searchParams.get('category');
       const filtered = records.filter(item => !category || item.category === category);
@@ -1354,25 +1481,40 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => window.fixture.mount.records(false));
 
     await page.evaluate(() => window.fixture.mount.question(true));
-    let structuredDialog = page.getByRole('dialog', { name: '需要你的补充', exact: true });
-    await structuredDialog.getByLabel('工作', { exact: true }).check();
-    await structuredDialog.getByLabel('生活', { exact: true }).check();
-    await structuredDialog.getByLabel('自行填写', { exact: true }).fill('具体项目');
-    await structuredDialog.getByRole('button', { name: '下一步', exact: true }).click();
-    await structuredDialog.getByRole('button', { name: '跳过', exact: true }).click();
-    const answerSummary = page.getByRole('dialog', { name: '确认回答', exact: true });
-    await answerSummary.getByText('已跳过', { exact: true }).waitFor();
-    await answerSummary.getByRole('button', { name: '选择分析范围 · 修改', exact: true }).click();
-    check('Structured question summary returns to stable choices and custom input', await structuredDialog.getByLabel('工作', { exact: true }).isChecked() && await structuredDialog.getByLabel('生活', { exact: true }).isChecked() && await structuredDialog.getByLabel('自行填写', { exact: true }).inputValue() === '具体项目');
+    // Locators resolve lazily, so they also find the remounted dock.
+    const structuredDock = page.getByRole('region', { name: '太卜需要补充 2 项信息', exact: true });
+    const questionSteps = structuredDock.getByRole('navigation', { name: '问题导航', exact: true });
+    const reviewAnswers = () => structuredDock.locator('.agent-question-review dd').allInnerTexts();
+    await structuredDock.getByLabel('工作', { exact: true }).check();
+    await structuredDock.getByLabel('生活', { exact: true }).check();
+    await structuredDock.getByLabel('自行填写', { exact: true }).fill('具体项目');
+    await structuredDock.getByRole('button', { name: '下一题', exact: true }).click();
+    check('The last question leads to a review instead of submitting', await structuredDock.getByRole('button', { name: '检查回答', exact: true }).isVisible() &&
+      await questionSteps.getByRole('button', { name: '补充其他资料', exact: true }).getAttribute('aria-current') === 'step');
+    await structuredDock.getByRole('button', { name: '跳过此题', exact: true }).click();
+    await structuredDock.getByText('提交前检查', { exact: true }).waitFor();
+    check('Question review lists choices, custom text and the explicit skip', JSON.stringify(await reviewAnswers()) === JSON.stringify(['工作、生活、具体项目', '已跳过']));
+    await questionSteps.getByRole('button', { name: '选择分析范围', exact: true }).click();
+    check('Question navigation returns to stable choices and custom input', await structuredDock.getByLabel('工作', { exact: true }).isChecked() && await structuredDock.getByLabel('生活', { exact: true }).isChecked() && await structuredDock.getByLabel('自行填写', { exact: true }).inputValue() === '具体项目');
+    await structuredDock.getByRole('button', { name: '稍后回答', exact: true }).click();
+    const questionStrip = page.getByRole('group', { name: '等待回答', exact: true });
+    const answerLater = questionStrip.getByRole('button', { name: '回答问题', exact: true });
+    await until(() => document.activeElement?.textContent === '回答问题');
+    check('Answering later folds the questions into a strip that keeps stop and answer', await structuredDock.count() === 0 &&
+      await questionStrip.getByRole('button', { name: '停止任务', exact: true }).isEnabled() && await questionStrip.innerText().then(text => text.includes('回答 2 个问题后继续任务')));
+    await answerLater.click();
+    await until(() => document.activeElement?.textContent === '稍后回答');
+    check('Reopening the strip restores the same question and its draft', await structuredDock.getByLabel('自行填写', { exact: true }).inputValue() === '具体项目');
     await page.evaluate(() => window.fixture.mount.question(false));
-    await structuredDialog.waitFor({ state: 'hidden' });
+    await structuredDock.waitFor({ state: 'hidden' });
     await page.evaluate(() => window.fixture.mount.question(true));
-    structuredDialog = page.getByRole('dialog', { name: '需要你的补充', exact: true });
-    check('Remounting the same question restores its choices and draft', await structuredDialog.getByLabel('工作', { exact: true }).isChecked() && await structuredDialog.getByLabel('自行填写', { exact: true }).inputValue() === '具体项目');
-    await structuredDialog.getByRole('button', { name: '下一步', exact: true }).click();
-    await structuredDialog.getByRole('button', { name: '跳过', exact: true }).click();
-    await answerSummary.getByRole('button', { name: '提交并继续', exact: true }).click();
-    await answerSummary.waitFor({ state: 'hidden' });
+    await structuredDock.getByText('提交前检查', { exact: true }).waitFor();
+    check('Remounting a fully answered question resumes at its review with the saved draft', JSON.stringify(await reviewAnswers()) === JSON.stringify(['工作、生活、具体项目', '已跳过']));
+    await questionSteps.getByRole('button', { name: '选择分析范围', exact: true }).click();
+    check('Remounting the same question restores its choices and draft', await structuredDock.getByLabel('工作', { exact: true }).isChecked() && await structuredDock.getByLabel('自行填写', { exact: true }).inputValue() === '具体项目');
+    await questionSteps.getByRole('button', { name: '检查', exact: true }).click();
+    await structuredDock.getByRole('button', { name: '提交并继续', exact: true }).click();
+    await structuredDock.waitFor({ state: 'hidden' });
     check('Structured answer submission binds selected IDs and explicit skip to the tool call', await page.evaluate(() => JSON.stringify(window.fixture.structuredAnswers.answers) === JSON.stringify({ topics: ['work', 'life', '具体项目'], optional: null }) && localStorage.getItem('taibu.question:alice:structured:same-tool-call') === null));
 
     await page.evaluate(() => window.fixture.mount.agent(true));
@@ -1411,23 +1553,39 @@ export async function run(existingPage, bundlePath) {
     check('Model keyboard navigation skips disabled models', await modelSettings.getByRole('menuitemradio', { name: '仅支持推理开关', exact: true }).evaluate(button => button === document.activeElement));
     await modelSettings.getByRole('menuitemradio', { name: '仅支持推理开关', exact: true }).click();
     await settingsTrigger.click();
-    check('Models with only a reasoning switch do not offer unsupported effort levels', await modelSettings.getByLabel('推理档位', { exact: true }).locator('option').count() === 2);
+    const reasoningLevels = modelSettings.getByRole('radiogroup', { name: '推理档位', exact: true });
+    check('Models with only a reasoning switch do not offer unsupported effort levels', JSON.stringify(await reasoningLevels.getByRole('radio').allInnerTexts()) === JSON.stringify(['关闭', '开启']));
     await modelSettings.getByRole('menuitemradio', { name: '分析模型', exact: true }).click();
     await settingsTrigger.click();
-    await modelSettings.getByLabel('推理档位', { exact: true }).selectOption('max');
-    await modelSettings.locator('.chat-collaboration-settings > summary').click();
+    await reasoningLevels.getByRole('radio', { name: '高', exact: true }).focus();
+    await page.keyboard.press('End');
+    check('Reasoning levels select with the arrow, Home and End keys', await reasoningLevels.getByRole('radio', { name: '最高', exact: true }).getAttribute('aria-checked') === 'true' &&
+      await reasoningLevels.getByRole('radio', { name: '最高', exact: true }).evaluate(button => button === document.activeElement && button.tabIndex === 0));
     await modelSettings.getByLabel('启用多模型协作', { exact: true }).check();
+    const collaborationMembers = modelSettings.getByRole('group', { name: '协作成员', exact: true });
+    check('Enabling collaboration adds two members and opens the first for editing', await collaborationMembers.locator('button[aria-pressed]').count() === 2 &&
+      await collaborationMembers.locator('button[aria-pressed="true"]').innerText().then(text => text.startsWith('专项分析 · ')) && await modelSettings.locator('fieldset.chat-collaborator legend').innerText() === 'Agent 1');
     await modelSettings.getByLabel('Agent 1 名称', { exact: true }).fill('八字分析');
     await modelSettings.getByLabel('Agent 1 分工', { exact: true }).fill('核对天干、日支与生克关系');
     await modelSettings.getByLabel('Agent 1 推理档位', { exact: true }).selectOption('high');
+    await collaborationMembers.getByRole('button', { name: /^独立复核 · / }).click();
+    check('Member chips switch the single collaborator editor', await modelSettings.locator('fieldset.chat-collaborator').count() === 1 && await modelSettings.locator('fieldset.chat-collaborator legend').innerText() === 'Agent 2' &&
+      await collaborationMembers.getByRole('button', { name: /^八字分析 · / }).getAttribute('aria-pressed') === 'false');
     await modelSettings.getByLabel('Agent 2 名称', { exact: true }).fill('跨术数复核');
     await modelSettings.getByLabel('Agent 2 模型', { exact: true }).selectOption('fixture-review');
     const settingsSaved = page.waitForResponse(response => response.request().method() === 'PATCH' && new URL(response.url()).pathname === '/api/conversations/agent-settings/configuration' && response.request().postDataJSON()?.collaborators?.[1]?.reasoningEffort === 'xhigh');
     await modelSettings.getByLabel('Agent 2 推理档位', { exact: true }).selectOption('xhigh');
-    await modelSettings.getByLabel('上下文用量', { exact: true }).click();
-    check('Context, reasoning and collaborators share the model dialog', await modelSettings.locator('.agent-context-details[open]').count() === 1 && await modelSettings.getByLabel('推理档位', { exact: true }).inputValue() === 'max');
+    check('Reasoning and collaborators share the model dialog', await reasoningLevels.getByRole('radio', { name: '最高', exact: true }).getAttribute('aria-checked') === 'true' &&
+      await collaborationMembers.getByRole('button', { name: /^跨术数复核 · 复核模型$/ }).getAttribute('aria-pressed') === 'true');
     await page.keyboard.press('Escape');
     check('Closing the combined settings dialog restores model trigger focus', await settingsTrigger.evaluate(button => button === document.activeElement));
+    const contextMeter = page.locator('[data-testid="agent-chat"]').getByRole('button', { name: '上下文用量 38%', exact: true });
+    await contextMeter.click();
+    const contextCounters = page.getByRole('dialog', { name: '上下文用量', exact: true });
+    check('The context meter opens the measured counters against the configured window', await contextMeter.getAttribute('aria-expanded') === 'true' &&
+      await contextCounters.innerText().then(text => text.includes('已测基准 + 后续估算') && text.includes('76,000 / 200,000 tokens · 分析模型') && text.includes('1 次')));
+    await page.keyboard.press('Escape');
+    check('Closing the context counters restores the meter focus', await contextCounters.count() === 0 && await contextMeter.evaluate(button => button === document.activeElement));
     await until(() => window.fixture.agentChat.state.collaborators[1]?.reasoningEffort === 'xhigh');
     assert.ok((await settingsSaved).ok());
     // Switching away and back reloads the saved whole configuration, rather than sharing a mutable running-task config.
@@ -1456,10 +1614,10 @@ export async function run(existingPage, bundlePath) {
     await selectAgentConversation('agent-settings');
     await until(() => window.fixture.agentChat.state.collaborators.length === 2);
     await settingsTrigger.click();
-    await modelSettings.locator('.chat-collaboration-settings > summary').click();
-    await modelSettings.getByRole('button', { name: '添加 Agent', exact: true }).click();
-    await modelSettings.getByRole('button', { name: '添加 Agent', exact: true }).click();
-    check('Collaboration supports four independently configurable members and a bounded limit', await modelSettings.locator('fieldset.chat-collaborator').count() === 4 && await modelSettings.getByRole('button', { name: '添加 Agent', exact: true }).isDisabled());
+    await collaborationMembers.getByRole('button', { name: '添加成员', exact: true }).click();
+    await collaborationMembers.getByRole('button', { name: '添加成员', exact: true }).click();
+    check('Collaboration supports four independently configurable members and a bounded limit', await collaborationMembers.locator('button[aria-pressed]').count() === 4 &&
+      await modelSettings.locator('fieldset.chat-collaborator legend').innerText() === 'Agent 4' && await collaborationMembers.getByRole('button', { name: '添加成员', exact: true }).isDisabled());
     await modelSettings.getByLabel('启用多模型协作', { exact: true }).uncheck();
     await page.keyboard.press('Escape');
     await page.evaluate(() => window.fixture.agentChat.state.setReasoningEffort(null));
@@ -1569,54 +1727,108 @@ export async function run(existingPage, bundlePath) {
     await page.getByRole('button', { name: 'Fixture Alice', exact: true }).focus();
     await page.evaluate(() => window.fixture.mount.results(true));
     const results = page.locator('[data-testid="agent-results"]');
-    await results.locator('[data-chart-kind="tarot"]').waitFor();
-    await results.locator('[data-chart-kind="almanac"]').waitFor();
-    check('All eleven real persisted tool results automatically render with the process folded', await results.locator('[data-chart-kind]').count() === 11 && await results.getByRole('button', { name: /任务过程/ }).getAttribute('aria-expanded') === 'false');
+    await results.locator('[data-tool-result="almanac"]').waitFor();
+    check('All eleven persisted readings and the incomplete one show as compact cards with the process folded', await results.locator('.agent-result-card').count() === 12 &&
+      await results.locator('[data-chart-kind]').count() === 0 && await results.getByRole('button', { name: /任务过程/ }).getAttribute('aria-expanded') === 'false');
+    check('A bazi card shows its four pillars with the day pillar marked; other kinds show their glyph', await results.locator('[data-tool-result="bazi"] .agent-result-pillars > span').count() === 4 &&
+      await results.locator('[data-tool-result="bazi"] [data-day-pillar]').count() === 1 && await results.locator('[data-tool-result="ziwei"] .agent-result-glyph').innerText() === '紫');
     check('Automatic chart previews do not steal focus', await page.getByRole('button', { name: 'Fixture Alice', exact: true }).evaluate(button => button === document.activeElement));
     check('Legacy history with no native measurement does not invent response time', await results.locator('.agent-response-time').count() === 0);
     await page.evaluate(() => window.fixture.agentTiming());
     await results.locator('.agent-response-time').waitFor();
     check('Persisted model response measurements survive a JSON history receipt', await results.locator('.agent-response-time').innerText() === '模型响应 2 秒 · 2 次');
     await results.getByRole('button', { name: /任务过程/ }).click();
-    const timedTool = results.locator('.agent-tool-card').filter({ has: page.locator('.agent-tool-time') });
-    await timedTool.locator('summary').click();
-    check('Tool execution and the wall-clock span remain separately labeled', await timedTool.locator('.agent-tool-time').innerText() === '1.5 秒' && await timedTool.locator('.agent-task-span').innerText() === '执行阶段 5 秒（包含等待和恢复）');
+    const timedStep = results.locator('.agent-step').filter({ has: page.locator('.agent-step-time') });
+    check('A completed step shows its measured execution time, its summary and family tag', await timedStep.count() === 1 && await timedStep.locator('.agent-step-time').innerText() === '1.5 秒' &&
+      await timedStep.locator('.agent-step-tag').innerText() === '命盘' && await results.locator('.agent-tool-details').count() === 0);
+    check('The folded process line is replaced by the step list once opened', await results.locator('.agent-process-hint').innerText() === '点击步骤，在工作区查看' && await results.locator('.agent-step').count() === 12);
+    await timedStep.locator('.agent-step-row').click();
+    await page.locator('#agent-workspace-panel [data-chart-kind="bazi"]').waitFor();
+    check('A step opens its reading in the workspace and both the step and its card mark what is shown', await timedStep.locator('.agent-step-row').getAttribute('aria-current') === 'true' &&
+      await results.locator('[aria-current="true"]').count() === 1 && await results.locator('[data-tool-result="bazi"] .agent-primary-button').innerText() === '正在工作区显示' &&
+      await results.locator('[data-tool-result="tarot"] .agent-primary-button').innerText() === '在工作区查看');
+    // The process section keeps the opened step: 第 N 步, its call as returned and how it was timed and stored.
+    await page.locator('#agent-workspace-panel').getByRole('tab', { name: '过程', exact: true }).click();
+    const call = page.locator('#agent-workspace-panel .agent-ws-call');
+    const callNumber = await page.locator('#agent-workspace-panel .agent-ws-steps button[aria-current="step"] .agent-ws-step-number').innerText();
+    check('The process section shows the opened step with its call, copy actions and a timing note apart from waiting', await call.getByRole('heading').innerText().then(text => text.startsWith(`第 ${callNumber} 步 · 八字命盘`) && text.includes('bazi · 1.5 秒')) &&
+      await call.getByRole('button', { name: '复制调用参数', exact: true }).count() === 1 && await call.getByRole('button', { name: '复制规范文本', exact: true }).count() === 1 &&
+      await call.locator('.agent-ws-note').innerText().then(text => text.startsWith('执行阶段 1.5 秒（不含等待），连同等待共 5 秒。')) &&
+      await results.locator('[aria-current="true"]').count() === 0);
+    await page.getByRole('button', { name: '关闭工作区', exact: true }).click();
+    check('Closing the workspace clears the shown marks', await results.locator('[aria-current="true"]').count() === 0 && await results.locator('[data-tool-result="bazi"] .agent-primary-button').innerText() === '在工作区查看');
     await results.getByRole('button', { name: /任务过程/ }).click();
-    check('Slim Ziwei results render all twelve returned palaces', await results.locator('[data-chart-kind="ziwei"] [role="button"]').count() === 12);
+    check('Folding the process names its steps in one line', await results.getByRole('button', { name: /任务过程/ }).innerText().then(text => text.includes('12 个步骤 · 全部完成 · ') && text.endsWith('等')));
     const baziResult = results.locator('[data-tool-result="bazi"]');
-    await baziResult.getByRole('button', { name: '展开命盘', exact: true }).click();
-    const chartDialog = page.getByRole('dialog', { name: '八字命盘', exact: true });
-    await chartDialog.waitFor();
-    check('Expanded chart shows the same persisted four pillars', await chartDialog.innerText().then(text => text.includes('庚辰') && text.includes('己巳')));
-    await page.keyboard.press('Escape');
-    await chartDialog.waitFor({ state: 'hidden' });
-    check('Closing a chart returns focus to its expand button', await baziResult.getByRole('button', { name: '展开命盘', exact: true }).evaluate(button => button === document.activeElement));
-    await baziResult.getByRole('button', { name: '固定到工作区', exact: true }).click();
-    await page.getByRole('dialog', { name: '任务工作区', exact: true }).waitFor();
+    await baziResult.getByRole('button', { name: '在工作区查看', exact: true }).click();
+    await page.getByRole('dialog', { name: '工作区', exact: true }).waitFor();
     await page.locator('#agent-workspace-panel [data-chart-kind="bazi"]').waitFor();
     check('Pinning opens the corresponding real tool result in the workspace', await page.locator('#agent-workspace-panel [data-chart-kind="bazi"]').count() === 1);
-    check('Workspace counts valid readings once and excludes the incomplete result', await page.locator('#agent-workspace-panel .agent-panel-tabs button').first().innerText() === '命盘11');
-    await page.getByRole('button', { name: '关闭任务工作区', exact: true }).click();
+    await page.locator('#agent-workspace-panel').getByRole('tab', { name: '概览', exact: true }).click();
+    const readingCards = page.locator('#agent-workspace-panel [data-overview-result="reading"]');
+    check('The overview shows each valid reading once, marks the saved one and excludes the incomplete result', await readingCards.count() === 11 &&
+      await readingCards.filter({ hasText: '已保存' }).count() === 1 && await page.locator('#agent-workspace-panel [data-overview-result="saved"]').count() === 0);
+    await page.getByRole('button', { name: '关闭工作区', exact: true }).click();
     await results.getByRole('button', { name: '恢复已有成果标签', exact: true }).click();
     await page.locator('#agent-workspace-panel [data-chart-kind="bazi"]').waitFor();
     check('A restored saved-artifact tab uses the same persisted reading without chart loading or recalculation', resultOperations() === callsBeforeResults && await page.getByRole('tab', { name: '已保存八字', exact: true }).count() === 1);
-    await page.getByRole('button', { name: '关闭任务工作区', exact: true }).click();
-    await results.locator('[data-tool-result="tarot"]').getByRole('button', { name: '固定到工作区', exact: true }).click();
+    await page.getByRole('button', { name: '关闭工作区', exact: true }).click();
+    await results.locator('[data-tool-result="tarot"]').getByRole('button', { name: '在工作区查看', exact: true }).click();
+    // The chat no longer previews charts, so each kind's view loads the first time the workspace shows it.
+    await page.locator('#agent-workspace-panel [data-chart-kind="tarot"]').waitFor();
     check('Workspace supports multiple pinned readings without replacing their data', await page.getByRole('tab', { name: '八字命盘', exact: true }).count() === 1 && await page.locator('#agent-workspace-panel [data-chart-kind="tarot"]').count() === 1);
-    await page.getByRole('button', { name: '关闭任务工作区', exact: true }).click();
+    await page.getByRole('button', { name: '关闭工作区', exact: true }).click();
+    check('Incomplete chart keeps its card and says the data is incomplete instead of generating another reading', await results.locator('[data-tool-result="incomplete"]').innerText().then(text => text.includes('命盘数据不完整')));
+
+    // Outside the chat workspace a card expands in place and a step discloses its call details.
+    await page.evaluate(() => window.fixture.resultsWithoutWorkspace(true));
+    const bareBazi = results.locator('[data-tool-result="bazi"]');
+    await bareBazi.getByRole('button', { name: '展开命盘', exact: true }).click();
+    const chartDialog = page.getByRole('dialog', { name: '八字命盘', exact: true });
+    await chartDialog.locator('[data-chart-kind="bazi"]').waitFor();
+    check('Expanded chart shows the same persisted four pillars', await chartDialog.innerText().then(text => text.includes('庚辰') && text.includes('己巳')));
+    await page.keyboard.press('Escape');
+    await chartDialog.waitFor({ state: 'hidden' });
+    check('Closing a chart returns focus to its expand button', await bareBazi.getByRole('button', { name: '展开命盘', exact: true }).evaluate(button => button === document.activeElement));
+    await results.locator('[data-tool-result="ziwei"]').getByRole('button', { name: '展开命盘', exact: true }).click();
+    const ziweiDialog = page.getByRole('dialog', { name: '紫微命盘', exact: true });
+    await ziweiDialog.locator('[data-chart-kind="ziwei"]').waitFor();
+    check('Slim Ziwei results render all twelve returned palaces', await ziweiDialog.locator('[data-chart-kind="ziwei"] [role="button"]').count() === 12);
+    await page.keyboard.press('Escape');
+    await ziweiDialog.waitFor({ state: 'hidden' });
+    await results.locator('[data-tool-result="incomplete"]').getByRole('button', { name: '展开结果', exact: true }).click();
+    const incompleteDialog = page.getByRole('dialog', { name: '字段不足的命盘', exact: true });
+    await incompleteDialog.waitFor();
+    check('Incomplete chart retains canonical text instead of generating another reading', await incompleteDialog.innerText().then(text => text.includes('命盘数据不完整') && text.includes('规范文本仍可访问')));
+    await page.keyboard.press('Escape');
+    await incompleteDialog.waitFor({ state: 'hidden' });
+    await results.getByRole('button', { name: /任务过程/ }).click();
+    const bareStep = results.locator('.agent-step').filter({ has: page.locator('.agent-step-time') });
+    await bareStep.locator('.agent-step-row').click();
+    const callDetails = bareStep.locator('.agent-tool-details');
+    check('Without a workspace a step discloses its call with execution and stage time labeled apart', await bareStep.locator('.agent-step-row').getAttribute('aria-expanded') === 'true' &&
+      await callDetails.locator('.agent-tool-timing').innerText() === '执行 1.5 秒 · 阶段 5 秒（含等待）' &&
+      await callDetails.getByRole('button', { name: '复制调用参数', exact: true }).count() === 1 && await callDetails.getByRole('button', { name: '复制规范文本', exact: true }).count() === 1);
+    await bareStep.locator('.agent-step-row').click();
+    check('A disclosed call folds back from the same row', await bareStep.locator('.agent-tool-details').count() === 0 && await bareStep.locator('.agent-step-row').getAttribute('aria-expanded') === 'false');
+    await results.getByRole('button', { name: /任务过程/ }).click();
     await page.setViewportSize({ width: 320, height: 740 });
     await results.locator('[data-tool-result="meihua"]').getByRole('button', { name: '展开命盘', exact: true }).click();
-    await page.getByRole('dialog', { name: '梅花卦盘', exact: true }).waitFor();
+    await page.getByRole('dialog', { name: '梅花卦盘', exact: true }).locator('[data-chart-kind="meihua"]').waitFor();
     check('Mobile expansion keeps the returned hexagrams and moving line', await page.getByRole('dialog', { name: '梅花卦盘', exact: true }).innerText().then(text => text.includes('泽地萃') && text.includes('泽水困') && text.includes('动')));
     await page.keyboard.press('Escape');
+    check('Compact cards fit a 320px column without horizontal overflow', await results.evaluate(element => [...element.querySelectorAll('.agent-result-card')].every(card => card.scrollWidth <= card.clientWidth + 1 && card.getBoundingClientRect().right <= window.innerWidth)));
     await page.setViewportSize({ width: 1200, height: 1000 });
-    check('Incomplete chart retains canonical text instead of generating another reading', await results.locator('[data-tool-result="incomplete"]').innerText().then(text => text.includes('命盘数据不完整') && text.includes('规范文本仍可访问')));
-    await results.locator('[data-tool-result="bazi"]').getByRole('button', { name: '固定到工作区', exact: true }).click();
+    await page.evaluate(() => window.fixture.resultsWithoutWorkspace(false));
+    await results.locator('[data-tool-result="bazi"]').getByRole('button', { name: '在工作区查看', exact: true }).click();
     const interactive = page.locator('#agent-workspace-panel');
+    check('An ended task offers no follow control', await interactive.getByRole('button', { name: '跟随模型', exact: true }).count() === 0);
+    // Following is for a working task: the chart checks below run while the fixture task runs.
+    await page.evaluate(() => window.fixture.agentRunStatus('running'));
     await page.evaluate(() => window.fixture.chartFocus('bazi', ['bazi:cell:2:1'], '模型查看日支'));
     await interactive.getByRole('button', { name: '跟随模型', exact: true }).click();
     await interactive.locator('[data-chart-target="bazi:cell:2:1"][aria-pressed=true]').waitFor();
-    check('A native chart action highlights the exact day branch', await interactive.locator('.agent-board-focus').innerText().then(text => text.includes('模型查看日支')));
+    check('A native chart action highlights the exact day branch and says the model is being followed', await interactive.locator('.agent-board-focus').innerText().then(text => text.includes('模型查看日支') && text.includes('模型正在看') && text.includes('跟随中')));
     await interactive.locator('[data-chart-target="bazi:cell:2:0"]').click();
     await page.evaluate(() => window.fixture.chartFocus('bazi', ['bazi:cell:2:1'], '继续查看日支'));
     check('Manual chart exploration pauses model following', await interactive.getByRole('button', { name: '跟随模型', exact: true }).getAttribute('aria-pressed') === 'false' && await interactive.locator('[data-chart-target="bazi:cell:2:0"]').getAttribute('aria-pressed') === 'true');
@@ -1624,17 +1836,22 @@ export async function run(existingPage, bundlePath) {
     await interactive.locator('[data-chart-target="bazi:cell:2:1"][aria-pressed=true]').waitFor();
     const relation = interactive.locator('.agent-board-relations button').first();
     await relation.click();
-    check('Selecting a bazi relation highlights every returned endpoint', await interactive.locator('.chart-cell-button[aria-pressed=true]').count() >= 2 && await interactive.locator('.agent-board-relation-path').count() === 1);
-    await interactive.getByRole('button', { name: '追问当前位置', exact: true }).click();
+    check('Selecting a bazi relation highlights every returned endpoint and names it in the focus box', await interactive.locator('.chart-cell-button[aria-pressed=true]').count() >= 2 &&
+      await interactive.locator('.agent-board-chips li').allInnerTexts().then(texts => texts.length === 1 && texts[0].startsWith('关系 · ')) && await interactive.locator('.agent-board-focus').innerText().then(text => text.includes('已暂停跟随')));
+    await interactive.getByRole('button', { name: '只看相关位置', exact: true }).click();
+    check('Showing only related positions dims the rest of the chart', await interactive.locator('.agent-interactive-chart[data-focus-only]').count() === 1 &&
+      await interactive.getByRole('button', { name: '只看相关位置', exact: true }).getAttribute('aria-pressed') === 'true');
+    await interactive.getByRole('button', { name: '只看相关位置', exact: true }).click();
+    await interactive.getByRole('button', { name: '追问这里', exact: true }).click();
     check('Chart questions carry the real chart reference into a draft', await page.evaluate(() => window.fixture.chartQuestion.includes('artifact:11111111-1111-4111-8111-111111111111')));
     const starId = await page.evaluate(() => window.fixture.chartTargets('ziwei').find(target => target.kind === 'ziwei_star' && target.group === '主星及四化').id);
     await page.evaluate(id => window.fixture.chartFocus('ziwei', [id], '模型查看紫微星曜'), starId);
     await interactive.getByRole('button', { name: '跟随模型', exact: true }).click();
     const star = interactive.locator('[data-chart-target="' + starId + '"]');
     await star.waitFor();
-    check('Ziwei model focus selects the returned palace and its exact star', await star.getAttribute('aria-pressed') === 'true' && await interactive.locator('[data-chart-selected=true]').count() === 1 && await interactive.locator('svg line').count() === 3);
+    check('Ziwei model focus selects the returned palace and its exact star', await star.getAttribute('aria-pressed') === 'true' && await interactive.locator('[data-chart-selected=true]').count() === 1 && await interactive.locator('[data-chart-kind="ziwei"] svg line').count() === 3);
     await interactive.getByRole('checkbox', { name: '三方四正', exact: true }).uncheck();
-    check('Ziwei related-palace visibility is an actual chart interaction', await interactive.locator('svg line').count() === 0);
+    check('Ziwei related-palace visibility is an actual chart interaction', await interactive.locator('[data-chart-kind="ziwei"] svg line').count() === 0);
     await star.focus();
     await page.keyboard.press('Enter');
     check('Star selection works from the keyboard without nested palace activation', await star.getAttribute('aria-pressed') === 'true');
@@ -1650,7 +1867,7 @@ export async function run(existingPage, bundlePath) {
       await page.evaluate(({ kind, id }) => window.fixture.chartFocus(kind, [id], '模型定位末项'), { kind, id: targets.at(-1).id });
       await interactive.locator('[data-chart-target="' + targets.at(-1).id + '"][aria-pressed=true]').waitFor();
       await interactive.locator('[data-chart-target="' + targets.at(-1).id + '"]').click();
-      await interactive.getByRole('button', { name: '追问当前位置', exact: true }).click();
+      await interactive.getByRole('button', { name: '追问这里', exact: true }).click();
       check(kind + ' supports manual selection and referenced draft questions', await following.getAttribute('aria-pressed') === 'false' && await page.evaluate(() => window.fixture.chartQuestion.includes('artifact:')));
     }
     await page.evaluate(() => window.fixture.traditionalTaiyi());
@@ -1673,21 +1890,294 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => window.fixture.chartInspect(true));
     await renderBarrier();
     check('Edited saved chart data invalidates manual coordinates on the same resource tab', await interactive.locator('.agent-board-focus').getAttribute('data-chart-focus') === '' && await interactive.locator('.chart-cell-button[aria-pressed=true]').count() === 0);
-    await interactive.getByRole('button', { name: '关闭任务工作区', exact: true }).click();
+    await interactive.getByRole('button', { name: '关闭工作区', exact: true }).click();
     await page.evaluate(() => window.fixture.mount.results(false));
     await renderBarrier();
     await page.evaluate(() => window.fixture.mount.results(true));
-    await results.locator('[data-chart-kind="tarot"]').waitFor();
-    await results.locator('[data-chart-kind="almanac"]').waitFor();
-    check('History remount restores all eleven UI readings without new API operations', resultOperations() === callsBeforeResults && await results.locator('[data-chart-kind]').count() === 11);
+    await results.locator('[data-tool-result="almanac"]').waitFor();
+    check('History remount restores all eleven reading cards and the incomplete one without new API operations', resultOperations() === callsBeforeResults &&
+      await results.locator('.agent-result-card').count() === 12 && await results.locator('.agent-result-card .agent-primary-button').count() === 12);
+    // Phones fold a running task's process to two lines, the count and what runs now; wider screens open its steps.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => window.fixture.agentRunStatus('running'));
+    await results.locator('.agent-process-now').waitFor();
+    check('On a phone a running task folds its process to its count and what runs now', await results.getByRole('button', { name: /任务过程/ }).getAttribute('aria-expanded') === 'false' &&
+      /^· \d+ \/ \d+ 完成$/.test(await results.locator('.agent-process-heading.is-live .agent-process-count').innerText()) &&
+      await results.locator('.agent-process-now').innerText() === await results.locator('.agent-live-activity').innerText());
+    await page.setViewportSize({ width: 1200, height: 1000 });
+    await results.locator('.agent-process-hint').waitFor();
+    check('Beside the workspace the running process opens its steps', await results.getByRole('button', { name: /任务过程/ }).getAttribute('aria-expanded') === 'true' &&
+      await results.locator('.agent-process-now').count() === 0);
     await page.evaluate(() => window.fixture.collaborationResults(false));
     const collaboration = results.getByRole('region', { name: '协作分析', exact: true });
     await collaboration.waitFor();
-    check('Collaborator models and live progress remain visible when the task process is folded', await results.getByRole('button', { name: /任务过程/ }).getAttribute('aria-expanded') === 'false' && await collaboration.innerText().then(text => text.includes('分析模型') && text.includes('复核模型') && text.includes('分析中')));
+    await results.getByRole('button', { name: /任务过程/ }).click();
+    check('Collaborator models and the call a running member is on remain visible when the task process is folded', await results.getByRole('button', { name: /任务过程/ }).getAttribute('aria-expanded') === 'false' &&
+      await collaboration.innerText().then(text => text.includes('分析模型') && text.includes('复核模型')) && await collaboration.locator('li[data-state="running"]').innerText().then(text => text.includes('读取官禄宫')));
+    check('The live line names the member still analysing', await results.locator('.agent-live-activity').innerText() === '等待协作成员 · 独立复核 正在分析');
+    await page.evaluate(() => window.fixture.agentRunStatus('completed'));
+    check('A member left analysing when the task ended is shown unfinished, not spinning', await collaboration.locator('li[data-state="failed"]').innerText().then(text => text.includes('未完成')) && await collaboration.locator('.animate-spin').count() === 0);
     await page.evaluate(() => window.fixture.collaborationResults(true));
-    await collaboration.locator('details').last().locator('summary').click();
-    check('Completed collaborator analysis survives JSON history and can be expanded', await collaboration.innerText().then(text => !text.includes('分析中') && text.includes('生克关系复核完成。')) && resultOperations() === callsBeforeResults);
+    await collaboration.getByRole('button', { name: /^独立复核/ }).click();
+    await page.locator('#agent-workspace-panel [data-workspace-view="collaboration"]').waitFor();
+    check('Completed collaborator analysis survives JSON history and opens for comparison', await collaboration.innerText().then(text => !text.includes('分析中')) &&
+      await page.locator('#agent-workspace-panel').innerText().then(text => text.includes('生克关系复核完成。') && text.includes('两派会诊') && text.includes('3 次工具 · 41 秒')) && resultOperations() === callsBeforeResults);
+    const divergence = page.locator('#agent-workspace-panel').getByRole('region', { name: /分歧对照/ });
+    check('The divergence table marks only the option topic where finished members disagree', await divergence.locator('tbody tr').count() === 2 &&
+      await divergence.locator('tr[data-divergent]').count() === 1 && await divergence.locator('tr[data-divergent] th').innerText().then(text => text.startsWith('是否变动')) &&
+      await divergence.locator('td[data-empty]').innerText() === '未表态');
+    // Close this call's tab so the family section below starts from its own opened views.
+    await page.getByRole('button', { name: '关闭协作分析标签', exact: true }).click();
+    await page.getByRole('button', { name: '关闭工作区', exact: true }).click();
+
+    // Tool families: every call reaches its own workspace view from the chat, and following tracks the latest call.
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.evaluate(() => window.fixture.workspaceFamilies());
+    await results.getByRole('button', { name: /任务过程/ }).click();
+    await results.getByRole('button', { name: /^八字大运/ }).click();
+    const workspacePanel = page.locator('#agent-workspace-panel');
+    await workspacePanel.locator('[data-workspace-view="calculation"]').waitFor();
+    check('A calculation step opens the persisted Core dayun timeline with exactly one current period', await workspacePanel.locator('.agent-ws-timeline > li').count() === 9 &&
+      await workspacePanel.locator('.agent-ws-timeline > li[aria-current="step"]').count() === 1 && await workspacePanel.getByText('Core 规范文本', { exact: true }).count() === 1);
+    check('Desktop workspace is a complementary panel rather than a modal', await page.locator('aside#agent-workspace-panel').count() === 1 && await page.getByRole('dialog', { name: '工作区' }).count() === 0);
+    // Following is for a working task; once it ends the overview is shown.
+    await page.evaluate(() => window.fixture.agentRunStatus('running'));
+    await workspacePanel.getByRole('button', { name: '跟随模型', exact: true }).click();
+    await workspacePanel.locator('[data-workspace-view="question"]').waitFor();
+    check('Following the model shows the view of its latest tool call', await workspacePanel.getByRole('tab', { name: '补充信息', exact: true }).getAttribute('aria-selected') === 'true' &&
+      await workspacePanel.locator('.agent-ws-questions li[data-state="missing"]').innerText().then(text => text.includes('出生时间') && text.includes('未回答')));
+    await page.evaluate(() => window.fixture.answerFamilyQuestion());
+    const reply = workspacePanel.locator('.agent-ws-questions li[data-state="replied"]');
+    await reply.waitFor();
+    check('A stored reply is matched to its question through the question ID', await reply.innerText().then(text => text.includes('早上') && text.includes('已回答')));
+    await page.evaluate(() => window.fixture.workspaceStep('todo_write', 'completed'));
+    await renderBarrier();
+    check('Plan updates do not pull the followed view away', await workspacePanel.locator('[data-workspace-view="question"]').count() === 1);
+    await page.evaluate(() => window.fixture.workspaceStep('web_search', 'running'));
+    await workspacePanel.locator('[data-workspace-view="evidence"]').waitFor();
+    const evidence = workspacePanel.locator('[data-workspace-view="evidence"]');
+    await evidence.getByRole('status').waitFor();
+    check('A new search call switches the followed view to the evidence with a live state', await evidence.getByRole('status').innerText().then(text => text.includes('检索「流年」')));
+    check('Each view the model opened while followed stays as a tab, marked while its call runs', await workspacePanel.getByRole('tab', { name: '补充信息', exact: true }).count() === 1 &&
+      await workspacePanel.getByRole('tab', { name: '回答依据', exact: true }).getAttribute('aria-selected') === 'true' &&
+      await workspacePanel.locator('[role=tab][aria-selected=true] .agent-ws-tab-live[data-state="running"]').count() === 1);
+    await workspacePanel.getByRole('tab', { name: '过程', exact: true }).click();
+    check('Opening a section pauses following', await workspacePanel.getByRole('button', { name: '跟随模型', exact: true }).getAttribute('aria-pressed') === 'false' &&
+      await workspacePanel.getByRole('tab', { name: '过程', exact: true }).getAttribute('aria-selected') === 'true');
+    await workspacePanel.getByRole('button', { name: '跟随模型', exact: true }).click();
+    await evidence.waitFor();
+    await page.evaluate(() => window.fixture.agentRunStatus('completed'));
+    await workspacePanel.locator('[data-workspace-view="results"]').waitFor();
+    check('When the followed task ends the overview is shown and the follow control goes away', await workspacePanel.getByRole('tab', { name: '概览', exact: true }).getAttribute('aria-selected') === 'true' &&
+      await workspacePanel.getByRole('button', { name: '跟随模型', exact: true }).count() === 0);
+    await workspacePanel.getByRole('tab', { name: '回答依据', exact: true }).click();
+    await evidence.waitFor();
+    check('A call left unfinished by an ended task stops spinning', await evidence.innerText().then(text => text.includes('任务结束时这一步仍未完成')) && await evidence.getByRole('status').count() === 0);
+    check('Evidence numbers results, links only HTTP(S) sources and explains an empty search', await evidence.getByRole('link', { name: '庚金论' }).getAttribute('href') === 'https://example.com/gengjin' &&
+      await evidence.getByRole('link', { name: '无效链接' }).count() === 0 && await evidence.locator('.agent-ws-source').first().getAttribute('data-evidence') === '1' &&
+      await evidence.innerText().then(text => text.includes('知识库没有匹配的段落') && text.includes('检索「不存在的资料」没有找到相关段落')));
+    await workspacePanel.getByRole('tab', { name: '过程', exact: true }).click();
+    const steps = workspacePanel.getByRole('list').filter({ has: page.getByText('加载分析方法') });
+    await steps.getByRole('button', { name: /加载分析方法/ }).click();
+    await workspacePanel.locator('[data-workspace-view="method"]').waitFor();
+    check('A process step opens its versioned read-only method guide', await workspacePanel.innerText().then(text => text.includes('版本 1.0.0') && text.includes('不增加任何执行权限') && text.includes('八字命理解读指引')));
+    await workspacePanel.getByRole('tab', { name: '过程', exact: true }).click();
+    await steps.getByRole('button', { name: /协作分析/ }).last().click();
+    await workspacePanel.locator('[data-workspace-view="collaboration"]').waitFor();
+    check('Collaboration cards show each member model, effort and focus', await workspacePanel.locator('.agent-ws-member').count() === 2 &&
+      await workspacePanel.innerText().then(text => text.includes('推理 高') && text.includes('不推理') && text.includes('子平 · 格局取用')) && await workspacePanel.getByRole('region', { name: /分歧对照/ }).count() === 0);
+    await workspacePanel.getByRole('tab', { name: '过程', exact: true }).click();
+    await steps.getByRole('button', { name: /档案检索/ }).click();
+    await workspacePanel.locator('[data-workspace-view="tool"]').waitFor();
+    check('External tools show their arguments and raw result with copy actions', await workspacePanel.getByRole('button', { name: '复制调用参数', exact: true }).count() === 1 && await workspacePanel.getByRole('button', { name: '复制工具结果', exact: true }).count() === 1);
+    const memoryDeletes = () => requests.filter(item => item.pathname === '/api/user/agent-memory' && item.method === 'DELETE');
+    await workspacePanel.getByRole('tab', { name: '过程', exact: true }).click();
+    await steps.getByRole('button', { name: /记住偏好/ }).click();
+    await workspacePanel.getByRole('button', { name: '删除记忆：历法偏好', exact: true }).click();
+    check('Deleting a memory asks for confirmation before any request', memoryDeletes().length === 0);
+    await workspacePanel.getByRole('button', { name: '确认删除', exact: true }).click();
+    await workspacePanel.getByText('已删除', { exact: true }).waitFor();
+    check('A confirmed memory deletion is scoped to the signed-in account', memoryDeletes().length === 1 && memoryDeletes()[0].expectedUserId === 'alice' && memoryDeletes()[0].body?.id === '33333333-3333-4333-8333-333333333333');
+    await workspacePanel.getByRole('tab', { name: '概览', exact: true }).click();
+    check('The overview summarizes evidence, intermediate material, measured time and billing', await workspacePanel.locator('[data-overview-card="evidence"]').innerText().then(text => text.includes('联网 2')) &&
+      await workspacePanel.innerText().then(text => text.includes('过程资料') && text.includes('任务摘要') && text.includes('本任务计费 1 次')));
+    const familyTabs = await Promise.all(['八字大运', '八字命理解读指引', '协作分析', '档案检索', '长期记忆', '补充信息', '回答依据'].map(name => workspacePanel.getByRole('tab', { name, exact: true }).count()));
+    check('Opened and followed family views stay as one tab each', familyTabs.every(count => count === 1));
+    await results.getByRole('button', { name: /^依据 \d+/ }).click();
+    await workspacePanel.locator('[data-workspace-view="evidence"]').waitFor();
+    check('The answer evidence chip opens the numbered sources in the workspace', await results.getByRole('button', { name: /^依据 \d+/ }).innerText().then(text => text.includes('联网 2')));
+    await page.evaluate(() => window.fixture.citedAnswer());
+    const [firstCite, secondCite] = await page.evaluate(() => window.fixture.cited);
+    const badges = results.locator('.chat-answer .md-cite');
+    await badges.first().waitFor();
+    check('Answer citations become badges only for numbers its own task returned', (await badges.allInnerTexts()).join(',') === firstCite + ',' + secondCite &&
+      await results.locator('.chat-answer').innerText().then(text => text.includes('[' + (secondCite + 7) + ']')));
+    await results.getByRole('button', { name: new RegExp('^依据 ' + secondCite + '：') }).click();
+    await workspacePanel.locator('[data-evidence="' + secondCite + '"][data-selected]').waitFor();
+    check('A citation opens its source selected, with the answer paragraph that cites it', await workspacePanel.locator('[data-evidence="' + secondCite + '"]').innerText()
+      .then(text => text.includes('回答第 2 段引用') && text.includes('《子平真诠》论用神') && text.includes('知识库 · 命理古籍 · 语义检索命中')) &&
+      await results.locator('.md-cite[data-cite="' + secondCite + '"]').getAttribute('data-active') === 'true');
+    await workspacePanel.getByRole('button', { name: /^知识库 \d+$/ }).click();
+    check('Filtering the evidence keeps only one kind of source', await workspacePanel.locator('[data-evidence][data-kind="web"]').count() === 0 &&
+      await workspacePanel.locator('[data-evidence][data-kind="knowledge"]').count() === 2 && await workspacePanel.getByRole('button', { name: /^知识库 \d+$/ }).getAttribute('aria-pressed') === 'true');
+    await results.getByRole('button', { name: '在工作区比较', exact: true }).last().click();
+    await workspacePanel.locator('[data-workspace-view="collaboration"]').waitFor();
+    check('The compact collaboration card compares its members in the workspace', await workspacePanel.locator('.agent-ws-member').count() === 2 &&
+      await results.locator('.agent-collaboration-results').last().innerText().then(text => text.includes('分析模型 · 高') && text.includes('复核模型 · 不推理')));
+    await workspacePanel.getByRole('button', { name: '关闭工作区', exact: true }).click();
+    await page.setViewportSize({ width: 1200, height: 1000 });
     await page.evaluate(() => window.fixture.mount.results(false));
+
+    // Chat sidebar: dated conversations with task markers, notices read on open, folding to the rail.
+    const sidebarIds = [1, 2, 3, 4].map(n => '5a1d0000-0000-4000-8000-00000000000' + n);
+    const sidebarNotice = '5a1d0000-0000-4000-8000-0000000000b1';
+    rows.alice = [['明年适合换工作吗？', 0], ['我的日主适合什么颜色', 0], ['和女朋友合盘，明年适合结婚吗', 1], ['梦见掉牙是什么意思', 40]].map(([title, days], index) => {
+      const at = new Date(Date.now() - days * 86400000).toISOString();
+      return { id: sidebarIds[index], user_id: 'alice', personality: 'general', title, created_at: at, updated_at: at, source_type: 'chat' };
+    });
+    await page.getByRole('button', { name: 'Refresh actual list' }).click();
+    await until(id => window.fixture.list().length === 4 && window.fixture.list()[0].id === id, sidebarIds[0]);
+    await page.evaluate(([ids, notice]) => {
+      window.fixtureAgentIO.activity = { runs: [{ runId: '5a1d0000-0000-4000-8000-0000000000a1', conversationId: ids[0], status: 'running' }, { runId: '5a1d0000-0000-4000-8000-0000000000a2', conversationId: ids[2], status: 'awaiting_input' }],
+        notices: [{ id: notice, conversationId: ids[1], status: 'completed' }] };
+      history.pushState(null, '', '/chat'); window.dispatchEvent(new Event('fixture:navigate'));
+      window.fixture.mount.sidebar(true);
+    }, [sidebarIds, sidebarNotice]);
+    const sidebar = page.getByRole('navigation', { name: '对话与导航' });
+    await sidebar.getByText('待回答', { exact: true }).waitFor();
+    const sidebarRow = title => sidebar.locator('[data-conversation-row]').filter({ hasText: title });
+    check('The chat sidebar groups conversations by local day', (await sidebar.getByRole('heading').allInnerTexts()).join() === '今天,昨天,更早');
+    check('Sidebar rows mark a running task, a waiting question and an unread answer', await sidebarRow('明年适合换工作吗？').getByRole('img', { name: 'Agent 正在执行' }).count() === 1 &&
+      await sidebarRow('和女朋友合盘').getByText('待回答', { exact: true }).count() === 1 && await sidebarRow('我的日主适合什么颜色').getByRole('img', { name: '任务已完成，有新回答' }).count() === 1 &&
+      await sidebarRow('梦见掉牙').locator('.chat-nav-marker').count() === 0);
+    check('On the new-chat page 新对话 is the current item', await sidebar.getByRole('link', { name: '新对话' }).getAttribute('aria-current') === 'page' &&
+      await sidebar.getByRole('button', { name: '对话', exact: true }).getAttribute('aria-current') === null);
+    const activityReads = () => page.evaluate(() => window.fixtureAgentIO.requests.filter(item => item.url === '/api/agent/activity').length);
+    const readsBefore = await activityReads();
+    await page.evaluate(() => window.dispatchEvent(new Event('taibu:agent-activity')));
+    await until(count => window.fixtureAgentIO.requests.filter(item => item.url === '/api/agent/activity').length > count, readsBefore);
+    check('A task change on the page re-reads the markers at once', await activityReads() > readsBefore);
+    await sidebarRow('我的日主适合什么颜色').getByRole('link').click();
+    for (let attempt = 0; attempt < 200 && !requests.some(item => item.pathname === '/api/notifications' && item.method === 'PATCH'); attempt++) await page.waitForTimeout(10);
+    const noticeRead = requests.find(item => item.pathname === '/api/notifications' && item.method === 'PATCH');
+    await page.evaluate(() => { window.fixtureAgentIO.activity.notices = []; });
+    check('Opening a conversation reads its unread task notice and clears the dot', noticeRead?.body?.action === 'mark-selected' && noticeRead.body.ids.join() === sidebarNotice &&
+      await sidebarRow('我的日主适合什么颜色').getByRole('img', { name: '任务已完成，有新回答' }).count() === 0 &&
+      await sidebarRow('我的日主适合什么颜色').getByRole('link').getAttribute('aria-current') === 'page' &&
+      await sidebar.getByRole('button', { name: '对话', exact: true }).getAttribute('aria-current') === 'true');
+    await sidebar.getByRole('button', { name: '打开公告中心' }).click();
+    check('The sidebar keeps the announcement center entry', await page.evaluate(() => window.fixture.announcementCenter === 1));
+    await sidebar.getByRole('button', { name: '收起侧栏' }).click();
+    const rail = page.getByRole('navigation', { name: '主导航' });
+    await rail.waitFor();
+    check('Folding the sidebar leaves an icon rail, flags waiting tasks and remembers the choice', await rail.getByRole('button', { name: '展开侧栏' }).count() === 1 &&
+      await rail.getByRole('button', { name: '对话，有任务等待查看' }).count() === 1 && await page.evaluate(() => localStorage.getItem('taibu.chat-sidebar')) === 'collapsed');
+    await rail.getByRole('button', { name: '展开侧栏' }).click();
+    await sidebar.waitFor();
+    await page.evaluate(() => window.fixture.chatWorkspace(true));
+    await rail.waitFor();
+    check('Opening the workspace folds the sidebar without changing the saved choice', await page.evaluate(() => localStorage.getItem('taibu.chat-sidebar')) === 'expanded');
+    await rail.getByRole('button', { name: '展开侧栏' }).click();
+    await sidebar.waitFor();
+    await page.evaluate(() => { window.fixture.chatWorkspace(false); window.fixture.chatWorkspace(true); });
+    await rail.waitFor();
+    await page.evaluate(() => window.fixture.chatWorkspace(false));
+    await sidebar.waitFor();
+    check('The sidebar unfolds beside the workspace on request and folds again on the next opening', await sidebar.count() === 1 && await rail.count() === 0);
+    await page.evaluate(() => { window.fixture.sidebarSearch = 0; window.addEventListener('taibu:search', () => { window.fixture.sidebarSearch++; }); });
+    await sidebar.getByRole('button', { name: /^搜索对话/ }).click();
+    check('搜索对话 opens the global conversation search', await page.evaluate(() => window.fixture.sidebarSearch === 1));
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => window.fixture.mount.sidebar(false));
+
+    // Phones: ≡ in the conversation header opens the same sidebar as a drawer in the top layer.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => window.fixture.mount.phoneDrawer(true));
+    const drawerTrigger = page.getByRole('button', { name: '打开聊天列表', exact: true });
+    await drawerTrigger.click();
+    const phoneDrawer = page.getByRole('dialog', { name: '聊天列表', exact: true });
+    await phoneDrawer.getByText('待回答', { exact: true }).waitFor();
+    check('The phone drawer is the sidebar: dated groups, task markers and its entries', (await phoneDrawer.getByRole('heading').allInnerTexts()).join() === '聊天列表,今天,昨天,更早' &&
+      await phoneDrawer.locator('[data-conversation-row]').filter({ hasText: '明年适合换工作吗？' }).getByRole('img', { name: 'Agent 正在执行' }).count() === 1 &&
+      await phoneDrawer.getByRole('link', { name: '新对话' }).count() === 1 && await phoneDrawer.getByRole('button', { name: '关闭聊天列表', exact: true }).count() === 1 &&
+      await phoneDrawer.getByRole('button', { name: '收起侧栏' }).count() === 0);
+    const drawerRowMore = phoneDrawer.getByRole('button', { name: /的更多操作$/ }).first();
+    await drawerRowMore.click();
+    const drawerMenu = phoneDrawer.getByRole('menu', { name: '会话操作', exact: true });
+    await drawerMenu.waitFor();
+    check('Row actions open inside the drawer and keep it open', await drawerMenu.evaluate(element => element.closest('dialog')?.open === true) && await phoneDrawer.isVisible());
+    await page.keyboard.press('Escape');
+    await drawerMenu.waitFor({ state: 'hidden' });
+    check('The first Escape closes only the row menu', await phoneDrawer.isVisible() && await drawerRowMore.evaluate(element => element === document.activeElement));
+    await page.keyboard.press('Escape');
+    await phoneDrawer.waitFor({ state: 'hidden' });
+    check('Closing the drawer returns focus to ≡', await drawerTrigger.evaluate(element => element === document.activeElement));
+    await drawerTrigger.click();
+    await phoneDrawer.locator('[data-conversation-row]').filter({ hasText: '梦见掉牙' }).getByRole('link').click();
+    await phoneDrawer.waitFor({ state: 'hidden' });
+    check('Choosing a conversation navigates and closes the drawer', await page.evaluate(id => new URLSearchParams(location.search).get('id') === id, sidebarIds[3]));
+    await page.evaluate(() => window.fixture.mount.phoneDrawer(false));
+    await page.setViewportSize({ width: 1200, height: 1000 });
+
+    // Focus and arrow keys pass over menu items that are not laid out at this width.
+    await page.evaluate(() => window.fixture.mount.menu(true));
+    await page.getByRole('button', { name: 'Open fixture menu', exact: true }).click();
+    await page.getByRole('menu', { name: 'Fixture menu', exact: true }).waitFor();
+    await until(() => document.activeElement?.textContent === 'Visible first');
+    await page.keyboard.press('ArrowDown');
+    const belowFirst = await page.evaluate(() => document.activeElement?.textContent);
+    await page.keyboard.press('ArrowUp');
+    check('Menus skip items hidden at this width for the first focus and arrow keys', belowFirst === 'Visible last' &&
+      await page.evaluate(() => document.activeElement?.textContent) === 'Visible first');
+    await page.keyboard.press('Escape');
+    // A reopened menu is laid out at once: focus moved into it before its first frame is not taken back.
+    check('Focus moved into a reopened menu before its first frame stays there', await page.evaluate(async () => {
+      document.querySelector('[data-testid="menu-probe"] > button').click();
+      const menu = () => document.querySelector('[role="menu"][aria-label="Fixture menu"]');
+      for (let turn = 0; turn < 20 && !menu(); turn++) await Promise.resolve();
+      const last = [...menu().querySelectorAll('button')].find(button => button.textContent === 'Visible last');
+      last.focus();
+      const moved = document.activeElement === last;
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      return moved && document.activeElement === last;
+    }));
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => window.fixture.mount.menu(false));
+
+    // Earlier Agent rounds fold to a 上一轮 bar; a jump to one of their messages unfolds it.
+    await page.evaluate(() => window.fixture.mount.rounds(true));
+    const roundsProbe = page.getByTestId('rounds');
+    const roundBar = roundsProbe.getByRole('button', { name: /^上一轮/ });
+    await roundBar.waitFor();
+    const roundRows = () => roundsProbe.evaluate(probe => [...probe.querySelectorAll('[data-message-id]')].map(row => row.dataset.messageId).join());
+    check('An earlier Agent round folds to one bar with its question, steps, time and results', await roundBar.innerText() === '上一轮 · 明年适合换工作吗？ · 2 个步骤 · 1 分 46 秒已选定 1 份成果' &&
+      await roundBar.getAttribute('aria-expanded') === 'false' && await roundRows() === 'round-u2,round-a2');
+    await roundBar.click();
+    const unfoldedRows = await roundRows();
+    await roundBar.click();
+    check('The bar unfolds the round in place and folds it again', unfoldedRows === 'round-u1,round-a1,round-u2,round-a2' && await roundRows() === 'round-u2,round-a2');
+    const located = async id => {
+      const found = await page.evaluate(target => window.fixture.rounds.locate(target), id);
+      await page.waitForTimeout(100);
+      return found && await roundsProbe.evaluate((probe, target) => {
+        const row = probe.querySelector('[data-message-id="' + target + '"]');
+        const scroller = probe.querySelector('.chat-virtual-scroller, [data-scroller]');
+        return Boolean(row && scroller) && Math.abs(row.getBoundingClientRect().top - scroller.getBoundingClientRect().top) < 40;
+      }, id);
+    };
+    check('Jumping to a message in a folded round unfolds it and scrolls to it', await located('round-a1') && await roundBar.getAttribute('aria-expanded') === 'true');
+    await page.evaluate(() => window.fixture.rounds.setVirtual(true));
+    await roundBar.waitFor();
+    await roundBar.click();
+    check('In the long-conversation list the folded rows stay as hidden rows', await roundBar.getAttribute('aria-expanded') === 'false' &&
+      await roundsProbe.evaluate(probe => [...probe.querySelectorAll('[data-index]')].map(row => row.hidden).join()) === 'false,true,false,false');
+    check('The long-conversation list also unfolds a round to jump into it', await located('round-a1') && await roundRows() === 'round-u1,round-a1,round-u2,round-a2');
+    await page.evaluate(() => window.fixture.rounds.append({ id: 'round-u3', role: 'user', content: '那 2028 年呢？', createdAt: '2026-10-12T09:00:00.000Z' }));
+    await until(() => document.querySelectorAll('[data-testid=rounds] .agent-round-fold').length === 2);
+    const roundBars = roundsProbe.locator('.agent-round-fold');
+    check('A new question folds the round before it and numbers the older one', (await roundBars.allInnerTexts()).join('|') === '第 1 轮 · 明年适合换工作吗？ · 2 个步骤 · 1 分 46 秒已选定 1 份成果|上一轮 · 你说正官克身是主线，古籍里是怎么讲的？' &&
+      await roundBars.evaluateAll(bars => bars.map(bar => bar.getAttribute('aria-expanded')).join()) === 'true,false' && await roundRows() === 'round-u1,round-a1,round-u3');
+    await page.evaluate(() => window.fixture.mount.rounds(false));
 
     check('No unhandled network requests escaped fixtures', blocked.length === 0);
     check('No browser runtime exceptions', browserErrors.length === 0);

@@ -6,7 +6,8 @@ import sharp from 'sharp';
 
 /** Exercise the added UI using the same authenticated fixed-stack session. */
 export async function verifyAgentExperience({ page, context, origin, directory, conversationId }) {
-  const composer = () => page.getByRole('textbox', { name: '消息输入', exact: true });
+  // The input's accessible name follows the conversation state, so locate it by the composer.
+  const composer = () => page.locator('[data-chat-composer] textarea');
   const ready = () => page.locator('[data-agent-ready="true"]').waitFor();
   const read = async route => {
     const response = await context.request.get(`${origin}${route}`);
@@ -60,29 +61,39 @@ export async function verifyAgentExperience({ page, context, origin, directory, 
     }
   }
 
-  const width = page.getByRole('slider', { name: '阅读列宽', exact: true });
+  // The reading width lives in the header's more menu, next to the conversation actions.
+  await page.getByRole('button', { name: '更多对话操作', exact: true }).click();
+  const width = page.getByRole('dialog', { name: '更多对话操作', exact: true }).getByRole('slider', { name: '阅读列宽', exact: true });
   const previousWidth = await width.inputValue();
   await width.press('End');
   assert.equal(await width.inputValue(), '1200');
   await width.press('Home');
   assert.equal(await width.inputValue(), '560');
   for (let value = 560; value < Number(previousWidth); value += 20) await width.press('ArrowRight');
+  await page.keyboard.press('Escape');
   const workspaceToggle = page.getByRole('button', { name: '任务工作区', exact: true });
   if (await workspaceToggle.getAttribute('aria-expanded') !== 'true') await workspaceToggle.click();
   const workspace = page.locator('aside#agent-workspace-panel');
-  await workspace.getByRole('button', { name: /^命盘/ }).click();
-  await workspace.locator('.agent-workspace-chart-link').first().click();
-  const firstTab = await workspace.getByRole('tab').first().textContent();
+  // Views the model opened while followed stay as tabs; start this check from none.
+  await workspace.getByRole('button', { name: '工作区更多操作', exact: true }).click();
+  const closeTabs = page.getByRole('menuitem', { name: '关闭全部标签', exact: true });
+  if (await closeTabs.isEnabled()) await closeTabs.click();
+  else await page.keyboard.press('Escape');
+  const resourceTabs = workspace.locator('.agent-ws-resource-tab [role=tab]');
+  const readings = workspace.locator('[data-overview-result="reading"]');
+  await workspace.getByRole('tab', { name: '概览', exact: true }).click();
+  await readings.first().click();
   await workspace.getByRole('tabpanel').waitFor();
-  await workspace.getByRole('button', { name: '命盘', exact: false }).first().click();
-  await workspace.locator('.agent-workspace-chart-link').last().click();
-  assert.equal(await workspace.getByRole('tab').count(), 2);
-  await workspace.getByRole('tab').last().press('ArrowLeft');
+  const firstTab = await workspace.getByRole('tab', { selected: true }).textContent();
+  await workspace.getByRole('tab', { name: '概览', exact: true }).click();
+  await readings.last().click();
+  assert.equal(await resourceTabs.count(), 2);
+  await resourceTabs.last().press('ArrowLeft');
   assert.equal(await workspace.getByRole('tab', { selected: true }).textContent(), firstTab, 'resource tabs have keyboard navigation');
-  await workspace.getByRole('button', { name: '关闭任务工作区', exact: true }).click();
+  await workspace.getByRole('button', { name: '关闭工作区', exact: true }).click();
   await page.getByRole('button', { name: '任务工作区', exact: true }).click();
   assert.equal(await workspace.getByRole('tab', { selected: true }).textContent(), firstTab, 'closing and reopening restores selected resource');
-  await workspace.getByRole('button', { name: '关闭任务工作区', exact: true }).evaluate(button => {
+  await workspace.getByRole('button', { name: '关闭工作区', exact: true }).evaluate(button => {
     button.click();
     document.querySelector('[data-chat-composer] textarea').focus();
   });
@@ -118,26 +129,26 @@ export async function verifyAgentExperience({ page, context, origin, directory, 
   await page.goto(`${origin}/chat?id=${conversationId}`);
   await ready();
 
-  await composer().fill('/export');
-  await composer().press('Enter');
-  const exportDialog = page.getByRole('dialog', { name: '导出当前对话', exact: true });
-  await exportDialog.waitFor();
+  const exportDialog = page.getByRole('dialog', { name: '导出对话', exact: true });
   for (const [label, format] of [['Markdown', 'md'], ['可打印 HTML', 'html']]) {
+    await composer().fill('/export');
+    await composer().press('Enter');
+    await exportDialog.waitFor();
     const downloading = page.waitForEvent('download');
-    await exportDialog.getByRole('button', { name: label, exact: true }).click();
+    await exportDialog.getByRole('button', { name: new RegExp(`^${label}`) }).click();
     const download = await downloading;
     const filename = path.join(directory, `agent-export-acceptance.${format}`);
     await download.saveAs(filename);
     const content = await readFile(filename, 'utf8');
     assert.ok(content.includes('Agent 离线验收') && content.includes('命盘依据'), 'export includes body and chart basis');
     assert.ok(!/<script\b/iu.test(content), 'HTML exports have no executable scripts');
+    // A finished download closes the dialog.
+    await exportDialog.waitFor({ state: 'hidden' });
   }
-  await page.keyboard.press('Escape');
 
   const beforeFork = (await read('/api/user/membership')).membership.aiChatCount;
   const forkResponse = page.waitForResponse(response => new URL(response.url()).pathname === `/api/conversations/${conversationId}/fork`);
-  await page.getByRole('group', { name: '助手消息操作', exact: true }).last().getByRole('button', { name: '消息更多操作' }).click();
-  await page.getByRole('menuitem', { name: '从此回答分叉', exact: true }).click();
+  await page.getByRole('group', { name: '助手消息操作', exact: true }).last().getByRole('button', { name: '从此回答分叉', exact: true }).click();
   const fork = await (await forkResponse).json();
   await page.waitForURL(url => url.searchParams.get('id') === fork.conversationId);
   await ready();

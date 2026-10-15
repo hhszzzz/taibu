@@ -6,6 +6,8 @@ import './overlays.css';
 
 // Only the foremost surface handles Escape when a picker opens inside a dialog.
 const openPanels: HTMLElement[] = [];
+/** Matching elements that are laid out: an item hidden at this width is skipped by focus and arrow keys. */
+const rendered = (panel: HTMLElement, selector: string) => [...panel.querySelectorAll<HTMLElement>(selector)].filter(element => element.getClientRects().length > 0);
 
 /** Shared viewport-aware surface for model, tool, context and conversation menus. */
 export function FloatingPanel({ open, anchorRef, onClose, children, label, id, className = '',
@@ -68,9 +70,12 @@ export function FloatingPanel({ open, anchorRef, onClose, children, label, id, c
                 // Remove hidden before focusing; the first placement runs before paint.
                 panel.style.visibility = 'visible';
                 if (!focused && initialFocus !== 'none') {
-                    const selected = panel.querySelector<HTMLElement>('[aria-checked="true"]:not(:disabled)');
-                    (selected ?? panel.querySelector<HTMLElement>('input:not(:disabled), button:not(:disabled), [tabindex="0"]'))?.focus();
                     focused = true;
+                    // Focus that reached the panel before this frame (a tap or a script) stays where it is.
+                    if (!panel.contains(document.activeElement)) {
+                        const selected = rendered(panel, '[aria-checked="true"]:not(:disabled)')[0];
+                        (selected ?? rendered(panel, 'input:not(:disabled), button:not(:disabled), [tabindex="0"]')[0])?.focus();
+                    }
                 }
             });
         };
@@ -85,7 +90,7 @@ export function FloatingPanel({ open, anchorRef, onClose, children, label, id, c
             if (event.key === 'Tab') { close(true); return; }
             if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
             event.preventDefault();
-            const items = [...panel.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')];
+            const items = rendered(panel, 'button:not(:disabled)');
             const index = items.indexOf(document.activeElement as HTMLButtonElement);
             const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
             items[next]?.focus();

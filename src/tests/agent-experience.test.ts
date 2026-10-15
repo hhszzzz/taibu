@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeQuestions, validateAnswers, formatQuestionAnswers } from '../lib/agent/questions';
+import { normalizeQuestions, validateAnswers, formatQuestionAnswers, questionLabel } from '../lib/agent/questions';
 import { validateTodos } from '../lib/agent/todos';
 import { forkConversationMessages, conversationHtml, conversationMarkdown } from '../lib/chat/conversation-transfer';
 import { briefingLocalDate, initialBriefingPreferences, validBriefingPreferences } from '../lib/briefing-preferences';
@@ -19,6 +19,24 @@ test('structured questions keep stable IDs, validate choices and skips, and reta
     assert.throws(() => validateAnswers(single,{one:['unknown']}));
     assert.throws(() => validateAnswers(single,{one:['a','a']}));
     assert.throws(() => validateAnswers(single,{one:null}));
+});
+
+test('question navigation labels use the short header, shorten long ones and fall back to the first line', () => {
+    const [labelled, long, plain, blank] = normalizeQuestions([
+        { id: 'birth', question: '她的出生日期和时间？\n尽量精确到分钟。', header: ' 出生时间 ' },
+        { id: 'long', question: '历法', header: '这是一个超过十二个字的很长很长的标签' },
+        { id: 'plain', question: '出生时间准确吗？\n不确定可以跳过。' },
+        { id: 'blank', question: '最想了解哪些方面以及为什么想了解这些内容？', header: '   ' },
+    ]);
+    assert.equal(labelled.header, '出生时间');
+    assert.equal(questionLabel(labelled), '出生时间');
+    assert.equal(long.header?.length, 12);
+    assert.equal(plain.header, undefined);
+    assert.equal(questionLabel(plain), '出生时间准确吗');
+    assert.equal(blank.header, undefined);
+    assert.equal(questionLabel(blank), '最想了解哪些方面以及为…');
+    // Stored questions written before headers existed still normalize unchanged.
+    assert.deepEqual(Object.keys(normalizeQuestions([{ id: 'old', question: '出生地？' }])[0]).sort(), ['allowCustom', 'allowSkip', 'id', 'multiple', 'options', 'question']);
 });
 
 test('task lists reject duplicate IDs, excess items and concurrent in-progress steps', () => {

@@ -29,15 +29,22 @@ export function getBranchElement(branch: string): FiveElement | null {
     return BRANCH_ELEMENTS_MAP[branch as EarthlyBranch] || null;
 }
 
+const ELEMENT_COLOR_TOKENS: Record<FiveElement, { token: string; fallback: string }> = {
+    '金': { token: '--element-metal', fallback: '#FFD700' },
+    '木': { token: '--element-wood', fallback: '#228B22' },
+    '水': { token: '--element-water', fallback: '#1E90FF' },
+    '火': { token: '--element-fire', fallback: '#FF4500' },
+    '土': { token: '--element-earth', fallback: '#8B4513' },
+};
+
+/**
+ * Inline-style color for an element. Surfaces that define the --element-* tokens
+ * (the chat workspace uses an accessible palette with dark variants) override
+ * the historical colors; every other page keeps the fallback.
+ */
 export function getElementColor(element: FiveElement): string {
-    const colors: Record<FiveElement, string> = {
-        '金': '#FFD700',
-        '木': '#228B22',
-        '水': '#1E90FF',
-        '火': '#FF4500',
-        '土': '#8B4513',
-    };
-    return colors[element];
+    const { token, fallback } = ELEMENT_COLOR_TOKENS[element];
+    return `var(${token}, ${fallback})`;
 }
 
 export function getElementLightColor(element: FiveElement): string {

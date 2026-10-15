@@ -43,7 +43,7 @@ function setup(t: TestContext) {
 
 test('settings effect mapping is explicit, typed and user-scoped', () => {
   assert.deepEqual(mutationEffects.userSettings('alice'), {
-    queryKeys: [['chat', 'bootstrap', 'alice']], storageScopes: ['default_bazi_chart'],
+    queryKeys: [['chat', 'bootstrap', 'alice'], ['user', 'settings', 'alice']], storageScopes: ['default_bazi_chart'],
   });
 });
 
@@ -51,6 +51,8 @@ test('real settings facade executes declared effects once and never forwards met
   const { client, removals, invalidations, invalidate } = setup(t);
   client.setQueryData(queryKeys.chatBootstrap('alice'), { settings: 'before' });
   client.setQueryData(queryKeys.chatBootstrap('bob'), { settings: 'other account' });
+  client.setQueryData(queryKeys.userSettings('alice'), { notificationsEnabled: true });
+  client.setQueryData(queryKeys.userSettings('bob'), { notificationsEnabled: true });
   // HTTP JSON omits undefined fields; assert the exact wire representation.
   const expected = Object.fromEntries(Object.entries(normalizeUserSettings(null)).filter(([, value]) => value !== undefined));
   const requests: RequestInit[] = [];
@@ -61,12 +63,14 @@ test('real settings facade executes declared effects once and never forwards met
   const result = await updateCurrentUserSettings({ notificationsEnabled: false }, mutationEffects.userSettings('alice'));
   assert.deepEqual(result, expected);
   assert.equal(requests.length, 1);
-  assert.equal(invalidate.mock.calls.length, 1);
+  // 每个声明的 key 各失效一次：对话引导与轮询复用的设置缓存
+  assert.equal(invalidate.mock.calls.length, 2);
   assert.equal(requests[0].method, 'PATCH');
   assert.equal(requests[0].body, '{"notificationsEnabled":false}');
   assert.equal('mutationEffects' in requests[0], false);
-  assert.deepEqual(invalidations, [JSON.stringify(queryKeys.chatBootstrap('alice'))]);
+  assert.deepEqual(invalidations, [queryKeys.chatBootstrap('alice'), queryKeys.userSettings('alice')].map(key => JSON.stringify(key)));
   assert.equal(client.getQueryState(queryKeys.chatBootstrap('bob'))?.isInvalidated, false);
+  assert.equal(client.getQueryState(queryKeys.userSettings('bob'))?.isInvalidated, false);
   assert.deepEqual(removals, ['taibu.pref.defaultBaziChartId', 'mingai.pref.defaultBaziChartId', 'defaultBaziChartId']);
 });
 
@@ -92,7 +96,8 @@ test('unmigrated settings keep inferred prefix invalidation without a second fac
   await updateCurrentUserSettings({ language: 'zh' });
   assert.deepEqual(invalidations.sort(), ['alice', 'bob'].map(id => JSON.stringify(queryKeys.chatBootstrap(id))).sort());
   assert.equal(removals.length, 3);
-  assert.equal(invalidate.mock.calls.length, 1);
+  // 路径推断出两个前缀（对话引导、设置缓存），各失效一次，不再叠加声明式失效
+  assert.equal(invalidate.mock.calls.length, 2);
 });
 
 test('declared effects replace pathname inference while preserving legacy events once', (t) => {
@@ -108,7 +113,7 @@ test('declared effects replace pathname inference while preserving legacy events
   assert.equal(storage.has('taibu.knowledge_bases.cached'), true);
   assert.equal(invalidations.length, 1);
   assert.equal(removals.length, 3);
-  assert.equal(invalidate.mock.calls.length, 1);
+  assert.equal(invalidate.mock.calls.length, 2);
   assert.deepEqual(events.map(event => event.type), [DATA_INDEX_INVALIDATED_EVENT, KNOWLEDGE_BASE_SYNC_EVENT]);
   assert.deepEqual((events[0] as CustomEvent<{ cacheScopes: string[] }>).detail.cacheScopes, ['default_bazi_chart']);
 });

@@ -68,7 +68,7 @@ export interface RecordFilters {
     isPinned?: boolean;
 }
 
-interface ExportData {
+export interface ExportData {
     version: string;
     exportedAt: string;
     records: MingRecord[];
@@ -533,11 +533,38 @@ export function downloadExportData(data: ExportData, filename?: string): void {
 
     const a = document.createElement('a');
     a.href = url;
-    a.download = filename || `mingai-records-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = filename || `mingai-records-${toLocalDateKey()}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+}
+
+/**
+ * 用户本地的日期（YYYY-MM-DD）。
+ *
+ * 小记按用户当天归档；toISOString() 取的是 UTC 日期，北京时间 0–8 点会落到前一天。
+ */
+export function toLocalDateKey(date: Date = new Date()): string {
+    const pad = (value: number) => String(value).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/**
+ * 解析导入文件内容。只检查导出文件的外层结构，逐条字段由导入接口校验。
+ */
+export function parseImportData(text: string): ExportData {
+    let data: unknown;
+    try {
+        data = JSON.parse(text);
+    } catch {
+        throw new Error('文件解析失败，请确保文件是有效的JSON格式');
+    }
+    if (!isPlainObject(data) || typeof data.version !== 'string' || !data.version
+        || !Array.isArray(data.records) || !Array.isArray(data.notes)) {
+        throw new Error('导入数据格式无效，请选择从命理记录导出的 JSON 文件');
+    }
+    return data as unknown as ExportData;
 }
 
 /**
@@ -548,10 +575,9 @@ export function readImportFile(file: File): Promise<ExportData> {
         const reader = new FileReader();
         reader.onload = (e) => {
             try {
-                const data = JSON.parse(e.target?.result as string);
-                resolve(data);
-            } catch {
-                reject(new Error('文件解析失败，请确保文件是有效的JSON格式'));
+                resolve(parseImportData(String(e.target?.result ?? '')));
+            } catch (error) {
+                reject(error);
             }
         };
         reader.onerror = () => reject(new Error('文件读取失败'));

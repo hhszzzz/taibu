@@ -1,5 +1,8 @@
 'use client';
+// 需要 useState/useEffect 管理模板草稿、记忆列表与请求生命周期
 import { useEffect, useRef, useState } from 'react';
+import { Plus, Trash2 } from 'lucide-react';
+import { SettingsRow, SettingsSwitch } from '@/components/settings/SettingsControls';
 import { useToast } from '@/components/ui/Toast';
 import { getCurrentUserSettings, updateCurrentUserSettings } from '@/lib/user/settings';
 import { requestBrowserJson } from '@/lib/browser-api';
@@ -54,27 +57,46 @@ export function AgentPreferencesPanel({ userId }: { userId: string }) {
         } catch { if (active && !active.signal.aborted) showToast('error', '更新长期记忆失败'); }
         finally { if (active && !active.signal.aborted) setBusy(false); }
     };
-    const field = 'w-full rounded-lg border border-border bg-background p-2 text-sm';
-    return <section className="mt-6 space-y-4 rounded-xl border border-border p-4" aria-label="任务助手设置">
-        <h2 className="text-sm font-semibold">任务助手</h2>
-        {error && <p role="alert" className="text-sm text-red-500">{error}</p>}
-        <div className="space-y-3"><h3 className="text-sm font-medium">问法模板</h3><p className="text-sm text-foreground-secondary">输入框可插入模板。使用 {'{{question}}'} 放置当前问题；每人最多 20 个。</p>
-            {templates.map((template, index) => <div key={template.id} className="space-y-2 rounded-lg border border-border p-3">
-                <input disabled={busy} aria-label={`模板 ${index + 1} 名称`} maxLength={60} className={field} placeholder="模板名称" value={template.name} onChange={event => setTemplates(templates.map(item => item.id === template.id ? { ...item, name: event.target.value } : item))} />
-                <textarea disabled={busy} aria-label={`模板 ${index + 1} 正文`} maxLength={4000} className={field} rows={3} placeholder="请结合实际盘面分析：{{question}}" value={template.content} onChange={event => setTemplates(templates.map(item => item.id === template.id ? { ...item, content: event.target.value } : item))} />
-                <button type="button" disabled={busy} className="text-sm text-foreground-secondary" onClick={() => setTemplates(templates.filter(item => item.id !== template.id))}>删除模板</button>
-            </div>)}
-            <button type="button" disabled={busy || !preferences || templates.length >= 20} className="text-sm text-accent" onClick={() => setTemplates([...templates, { id: crypto.randomUUID(), name: '', content: '' }])}>添加模板</button>
+    const updateTemplate = (id: string, patch: Partial<AgentPromptTemplate>) => setTemplates(templates.map(item => item.id === id ? { ...item, ...patch } : item));
+    return <section className="settings-form-section settings-form-section-divided" aria-label="任务助手设置">
+        <div className="settings-form-heading">
+            <h3>任务助手</h3>
+            <p>问法模板可从输入框插入；用 {'{{question}}'} 标记当前问题的位置，每人最多 20 个。</p>
         </div>
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={memoryEnabled} disabled={busy || !preferences} onChange={event => setMemoryEnabled(event.target.checked)} />允许任务助手读取和保存长期记忆</label>
-        <p className="text-sm text-foreground-secondary">默认关闭。开启后，助手只能依据你明确表达的内容保存长期偏好或事实。关闭不删除已保存内容，你可以随时查看和删除。</p>
-        <button type="button" disabled={busy || !preferences} onClick={() => void save()} className="rounded-lg bg-accent px-3 py-2 text-sm text-on-accent disabled:opacity-50">保存任务助手设置</button>
-        <div className="space-y-3"><h3 className="text-sm font-medium">已保存记忆（{memories.length}/128）</h3>
-            {memories.map(memory => <div key={memory.id} className="rounded-lg border border-border p-3"><div className="flex justify-between gap-3"><strong className="text-sm">{memory.title}</strong><button type="button" disabled={busy} className="text-sm text-accent" onClick={() => void mutateMemory('DELETE', { id: memory.id })} aria-label={`删除记忆 ${memory.title}`}>删除</button></div><p className="mt-1 whitespace-pre-wrap text-sm text-foreground-secondary">{memory.content}</p></div>)}
-            {!memories.length && <p className="text-sm text-foreground-secondary">尚未保存记忆。</p>}
-            <input disabled={busy} className={field} aria-label="新记忆标题" placeholder="记忆标题" maxLength={80} value={title} onChange={event => setTitle(event.target.value)} />
-            <textarea disabled={busy} className={field} aria-label="新记忆正文" placeholder="主动保存希望长期保留的偏好或事实" maxLength={2000} value={content} onChange={event => setContent(event.target.value)} rows={2} />
-            <button type="button" disabled={busy || !preferences || !title.trim() || !content.trim()} className="text-sm text-accent disabled:opacity-50" onClick={() => void mutateMemory('POST', { title, content, kind: 'context' })}>保存这条记忆</button>
+        {error && <p role="alert" className="settings-alert">{error}</p>}
+        <div className="settings-field-block">
+            {templates.map((template, index) => <div key={template.id} className="settings-template-card">
+                <div className="settings-template-head">
+                    <input disabled={busy} aria-label={`模板 ${index + 1} 名称`} maxLength={60} className="settings-input" placeholder="模板名称" value={template.name} onChange={event => updateTemplate(template.id, { name: event.target.value })} />
+                    <button type="button" disabled={busy} aria-label={`删除模板 ${index + 1}`} className="settings-icon-button" onClick={() => setTemplates(templates.filter(item => item.id !== template.id))}><Trash2 aria-hidden="true" size={16} /></button>
+                </div>
+                <textarea disabled={busy} aria-label={`模板 ${index + 1} 正文`} maxLength={4000} className="settings-textarea" rows={2} placeholder="请结合实际盘面分析：{{question}}" value={template.content} onChange={event => updateTemplate(template.id, { content: event.target.value })} />
+            </div>)}
+            <button type="button" disabled={busy || !preferences || templates.length >= 20} className="settings-button settings-button-dashed" onClick={() => setTemplates([...templates, { id: crypto.randomUUID(), name: '', content: '' }])}><Plus aria-hidden="true" size={15} />添加模板</button>
+        </div>
+        <div className="settings-group">
+            <SettingsRow
+                label="长期记忆"
+                description="默认关闭。开启后，助手只依据你明确表达的内容保存长期偏好或事实；关闭不会删除已保存内容，可随时查看和删除。"
+                control={<SettingsSwitch label="允许任务助手读取和保存长期记忆" checked={memoryEnabled} disabled={busy || !preferences} onToggle={() => setMemoryEnabled(enabled => !enabled)} />}
+            />
+        </div>
+        <div className="settings-actions">
+            <button type="button" disabled={busy || !preferences} onClick={() => void save()} className="settings-button settings-button-primary">保存任务助手设置</button>
+        </div>
+        <div className="settings-field-block">
+            <h4 className="settings-label">已保存记忆 <span className="settings-counter">{memories.length} / 128</span></h4>
+            {memories.length > 0
+                ? <ul className="settings-list-card">{memories.map(memory => <li key={memory.id} className="settings-list-item">
+                    <div className="settings-list-item-text"><strong>{memory.title}</strong><p>{memory.content}</p></div>
+                    <button type="button" disabled={busy} className="settings-text-button-danger" onClick={() => void mutateMemory('DELETE', { id: memory.id })} aria-label={`删除记忆 ${memory.title}`}>删除</button>
+                </li>)}</ul>
+                : <p className="settings-help">尚未保存记忆。</p>}
+            <input disabled={busy} className="settings-input" aria-label="新记忆标题" placeholder="记忆标题" maxLength={80} value={title} onChange={event => setTitle(event.target.value)} />
+            <textarea disabled={busy} className="settings-textarea" aria-label="新记忆正文" placeholder="主动保存希望长期保留的偏好或事实" maxLength={2000} value={content} onChange={event => setContent(event.target.value)} rows={2} />
+            <div className="settings-actions">
+                <button type="button" disabled={busy || !preferences || !title.trim() || !content.trim()} className="settings-button" onClick={() => void mutateMemory('POST', { title, content, kind: 'context' })}>保存这条记忆</button>
+            </div>
         </div>
     </section>;
 }

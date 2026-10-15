@@ -7,7 +7,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, AlertCircle } from 'lucide-react';
+import { ChevronLeft, AlertCircle } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import Link from 'next/link';
 import { CoinToss } from '@/components/liuyao/CoinToss';
@@ -111,41 +111,39 @@ export default function DivinePage() {
 
 
     return (
-        <div className="md:min-h-screen bg-background">
-            <div className="max-w-2xl mx-auto px-4 py-4 md:py-8">
+        <div className="bg-background text-foreground md:min-h-screen">
+            <div className="mx-auto flex w-full max-w-[640px] flex-col gap-4 px-4 py-4 sm:gap-6 sm:px-8 md:py-10">
                 {/* 返回 - 仅桌面端显示 */}
                 <Link
                     href="/liuyao"
-                    className="hidden md:inline-flex items-center gap-2 text-foreground-secondary hover:text-foreground mb-4 md:mb-6"
+                    className="hidden w-fit items-center gap-1.5 text-sm text-foreground-secondary transition-colors hover:text-foreground lg:inline-flex"
                 >
-                    <ArrowLeft className="w-4 h-4" />
+                    <ChevronLeft className="h-4 w-4" />
                     返回
                 </Link>
 
                 {/* 标题 */}
-                <div className="text-center mb-4 md:mb-8">
-                    <h1 className="hidden md:block text-xl md:text-2xl font-bold text-foreground">铜钱起卦</h1>
-                    <p className="text-foreground-secondary md:mt-1 md:mt-2 text-sm md:text-base">
+                <header className="flex flex-col gap-1.5 text-center lg:text-left">
+                    <h1 className="hidden font-display text-[34px] font-normal leading-tight lg:block">铜钱起卦</h1>
+                    <p className="text-sm text-foreground-secondary sm:text-[15px]">
                         静心凝神，点击按钮抛掷铜钱
                     </p>
-                </div>
+                </header>
 
                 {/* 问题显示 */}
                 {question && (
-                    <div className="bg-accent/10 border border-accent/30 rounded-xl p-3 md:p-4 mb-4 md:mb-8">
-                        <div className="text-center">
-                            <span className="inline-flex items-center gap-1 text-xs md:text-sm text-accent font-medium">
-                                <AlertCircle className="w-3 h-3 md:w-4 md:h-4" />
-                                所问之事
-                            </span>
-                            <p className="text-foreground font-semibold text-base md:text-lg mt-1 md:mt-2">{question}</p>
-                        </div>
-                    </div>
+                    <section className="rounded-2xl bg-accent-light p-4 ring-1 ring-inset ring-accent/50">
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-accent-strong">
+                            <AlertCircle className="h-3.5 w-3.5" />
+                            所问之事
+                        </span>
+                        <p className="mt-1.5 font-display text-lg text-foreground">{question}</p>
+                    </section>
                 )}
 
                 {requiresYongShenTargets && yongShenTargets.length === 0 && (
-                    <div className="mb-4 md:mb-8">
-                        <div className="text-sm text-red-500 mb-2">必须先选择分析目标</div>
+                    <div className="flex flex-col gap-2">
+                        <div className="text-sm text-danger">必须先选择分析目标</div>
                         <YongShenTargetPicker
                             value={yongShenTargets}
                             onChange={handleYongShenTargetsChange}
@@ -155,18 +153,18 @@ export default function DivinePage() {
                 )}
 
                 {/* 铜钱起卦 */}
-                <div className="bg-background rounded-xl p-0 md:p-8">
+                <section className="rounded-2xl border-[0.5px] border-border bg-surface px-4 py-6 md:p-8">
                     <CoinToss
                         onComplete={handleComplete}
                         disabled={isComplete || (requiresYongShenTargets && yongShenTargets.length === 0)}
                     />
-                </div>
+                </section>
 
                 {/* 完成提示 */}
                 {isComplete && (
-                    <div className="text-center mt-4 md:mt-8">
+                    <div className="flex flex-col items-center gap-2 text-center">
                         <SoundWaveLoader variant="inline" />
-                        <p className="text-accent text-sm md:text-base font-medium mt-2">卦象已成，正在跳转...</p>
+                        <p className="text-sm font-medium text-accent md:text-base">卦象已成，正在跳转...</p>
                     </div>
                 )}
             </div>

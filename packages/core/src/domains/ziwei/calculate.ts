@@ -191,12 +191,23 @@ function buildZiweiOutput(
     };
   });
 
+  // 每次查询都要安装并恢复 iztro 全局配置；同一命盘只有十个宫干，每干只查一次
+  const mutagensByStem = new Map<string, string[]>();
+  const getStemMutagens = (stem: string): string[] => {
+    let stars = mutagensByStem.get(stem);
+    if (!stars) {
+      stars = getAstrolabeMutagens(astrolabe, stem);
+      mutagensByStem.set(stem, stars);
+    }
+    return stars;
+  };
+
   // 宫干自化标注（离心 + 向心）
   for (const palace of palaces) {
     const allStars: StarInfo[] = [...palace.majorStars, ...palace.minorStars, ...(palace.adjStars || [])];
 
     // 离心自化：本宫宫干四化落回本宫
-    const selfMutagenStars = getAstrolabeMutagens(astrolabe, palace.heavenlyStem);
+    const selfMutagenStars = getStemMutagens(palace.heavenlyStem);
     if (selfMutagenStars) {
       for (const star of allStars) {
         const mIdx = selfMutagenStars.indexOf(star.name);
@@ -209,7 +220,7 @@ function buildZiweiOutput(
     const oppositeIdx = (palaceIdx + 6) % 12;
     const oppositePalace = palaces.find(p => (p.index ?? 0) === oppositeIdx);
     if (oppositePalace) {
-      const oppMutagenStars = getAstrolabeMutagens(astrolabe, oppositePalace.heavenlyStem);
+      const oppMutagenStars = getStemMutagens(oppositePalace.heavenlyStem);
       if (oppMutagenStars) {
         for (const star of allStars) {
           const mIdx = oppMutagenStars.indexOf(star.name);

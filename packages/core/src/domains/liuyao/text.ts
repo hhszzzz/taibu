@@ -1,8 +1,10 @@
 import { withRulesText } from '../../shared/calculation-rules.js';
 import {
+  formatGuaFanFuYinFlags,
   formatGuaLevelLines,
   KONG_WANG_LABELS,
   sortYaosDescending,
+  TIME_RECOMMENDATION_LABELS,
   traditionalYaoName,
   WANG_SHUAI_LABELS,
   YONG_SHEN_STATUS_LABELS,
@@ -89,7 +91,8 @@ function renderLiuyaoCanonicalTextBase(result: LiuyaoOutput): string {
   const hasFuShenCol = sortedYaos.some((y) => y.fuShen);
   const yaoHeader: string[] = ['爻位', '六亲', '六神', '纳甲', '动静'];
   if (hasKongCol) yaoHeader.push('空亡');
-  if (hasChangShengCol) yaoHeader.push('长生');
+  // 十二长生只取实际作用的生旺墓绝，按日辰论（见 calculate.ts judgeDay）
+  if (hasChangShengCol) yaoHeader.push('日辰长生');
   if (hasShenShaCol) yaoHeader.push('神煞');
   if (hasBianChuCol) yaoHeader.push('变出');
   if (hasFuShenCol) yaoHeader.push('伏神');
@@ -157,17 +160,17 @@ function renderLiuyaoCanonicalTextBase(result: LiuyaoOutput): string {
       const posStr = posLabel(selected.position);
       const mainPrefix = posStr || selected.liuQin;
       lines.push(`- ${mainPrefix}${selected.naJia ? ` ${selected.naJia}` : ''}${selectedExtra ? `（${selectedExtra}）` : ''}，${selected.strengthLabel}，${selected.movementLabel}`);
-      if (group.selectionNote && group.selectionStatus !== 'resolved') lines.push(`- 说明: ${group.selectionNote}`);
+      if (group.selectionNote && (group.selectionStatus !== 'resolved' || (group.candidates?.length ?? 0) > 0)) lines.push(`- 说明: ${group.selectionNote}`);
       if (selected.evidence?.length) lines.push(`- 依据: ${selected.evidence.join('、')}`);
       if (group.candidates?.length) {
-        lines.push(`- 并看: ${group.candidates.map((candidate) => {
+        lines.push(`- ${group.selectionStatus === 'ambiguous' ? '并看' : '同类'}: ${group.candidates.map((candidate) => {
           const candidateExtra = [
             candidate.changedNaJia ? `变出=${candidate.changedNaJia}` : null,
             candidate.huaType ? `化变=${candidate.huaType}` : null,
           ].filter(Boolean).join('，');
           const cPos = posLabel(candidate.position);
           const cPrefix = cPos || candidate.liuQin;
-          return `${cPrefix}${candidate.naJia ? ` ${candidate.naJia}` : ''}${candidateExtra ? `（${candidateExtra}）` : ''}${candidate.evidence?.length ? `：${candidate.evidence.join('、')}` : ''}`;
+          return `${cPrefix}${candidate.naJia ? ` ${candidate.naJia}` : ''}${candidateExtra ? `（${candidateExtra}）` : ''}，${candidate.strengthLabel}，${candidate.movementLabel}${candidate.evidence?.length ? `：${candidate.evidence.join('、')}` : ''}`;
         }).join('；')}`);
       }
       const system = shenSystemMap.get(group.targetLiuQin);
@@ -176,7 +179,7 @@ function renderLiuyaoCanonicalTextBase(result: LiuyaoOutput): string {
       const recs = timeRecMap.get(group.targetLiuQin);
       if (recs?.length) {
         for (const item of recs) {
-          lines.push(`- 应期: ${item.trigger}${item.basis?.length ? `（${item.basis.join('、')}）` : ''}，${item.description}`);
+          lines.push(`- ${TIME_RECOMMENDATION_LABELS[item.type] ?? '应期'}: ${item.trigger}${item.basis?.length ? `（${item.basis.join('、')}）` : ''}，${item.description}`);
         }
       }
       lines.push('');
@@ -251,8 +254,9 @@ function buildLiuyaoSafeInteractionText(result: LiuyaoOutput): string[] {
     lines.push('- 转换: 合转冲');
   }
 
-  if (result.guaFanFuYin?.isFuYin) lines.push('- 共振: 伏吟');
-  if (result.guaFanFuYin?.isFanYin) lines.push('- 共振: 反吟');
+  if (result.guaFanFuYin) {
+    for (const flag of formatGuaFanFuYinFlags(result.guaFanFuYin)) lines.push(`- 共振: ${flag}`);
+  }
 
   return lines;
 }
@@ -362,10 +366,7 @@ function renderLiuyaoTextBase(
       if (result.chongHeTransition?.type && result.chongHeTransition.type !== 'none') {
         lines.push(`- 冲合转换: ${result.chongHeTransition.type === 'chong_to_he' ? '冲转合' : '合转冲'}`);
       }
-      const resonanceFlags = [
-        ...(result.guaFanFuYin?.isFanYin ? ['反吟'] : []),
-        ...(result.guaFanFuYin?.isFuYin ? ['伏吟'] : []),
-      ];
+      const resonanceFlags = result.guaFanFuYin ? formatGuaFanFuYinFlags(result.guaFanFuYin) : [];
       if (resonanceFlags.length > 0) {
         lines.push(`- 反吟伏吟: ${resonanceFlags.join('、')}`);
       }

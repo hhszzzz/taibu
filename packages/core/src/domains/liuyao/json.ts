@@ -10,8 +10,10 @@ import type {
 } from '../shared/json-types.js';
 import {
   formatGuaLevelLines,
+  GUA_SCOPE_LABELS,
   KONG_WANG_LABELS,
   sortYaosDescending,
+  TIME_RECOMMENDATION_LABELS,
   traditionalYaoName,
   WANG_SHUAI_LABELS,
   YONG_SHEN_STATUS_LABELS,
@@ -295,13 +297,18 @@ function renderLiuyaoCanonicalJSONBase(result: LiuyaoOutput): LiuyaoCanonicalJSO
     if (selected.kongWangState) entry.已选用神.空亡状态 = selected.kongWangState;
     if (selected.evidence?.length) entry.已选用神.依据 = selected.evidence;
 
-    if (group.selectionNote && group.selectionStatus !== 'resolved') {
+    // 多现时说明写明定主用所据之条与出处
+    if (group.selectionNote && (group.selectionStatus !== 'resolved' || (group.candidates?.length ?? 0) > 0)) {
       entry.取用说明 = group.selectionNote;
     }
 
     if (group.candidates?.length) {
       entry.候选用神 = group.candidates.map((candidate) => {
-        const c: NonNullable<typeof entry.候选用神>[number] = { 六亲: candidate.liuQin };
+        const c: NonNullable<typeof entry.候选用神>[number] = {
+          六亲: candidate.liuQin,
+          强弱: candidate.strengthLabel,
+          动静: candidate.movementLabel,
+        };
         const cPos = posLabel(candidate.position);
         if (cPos) c.爻位 = cPos;
         if (candidate.naJia) c.纳甲 = candidate.naJia;
@@ -330,6 +337,7 @@ function renderLiuyaoCanonicalJSONBase(result: LiuyaoOutput): LiuyaoCanonicalJSO
     const recs = timeRecMap.get(group.targetLiuQin);
     if (recs?.length) {
       entry.应期提示 = recs.map((item) => ({
+        类型: TIME_RECOMMENDATION_LABELS[item.type],
         触发: item.trigger,
         依据: item.basis || [],
         说明: item.description,
@@ -387,8 +395,13 @@ function renderLiuyaoJSONBase(
   }
 
   const resonances: LiuyaoJSON['全局互动']['反伏信息'] = [];
-  if (result.guaFanFuYin?.isFuYin) resonances.push({ 类型: '伏吟' });
-  if (result.guaFanFuYin?.isFanYin) resonances.push({ 类型: '反吟' });
+  const fanFuYin = result.guaFanFuYin;
+  if (fanFuYin?.isFanYin) {
+    resonances.push({ 类型: '反吟', ...(fanFuYin.fanYinScope ? { 范围: GUA_SCOPE_LABELS[fanFuYin.fanYinScope] } : {}) });
+  }
+  if (fanFuYin?.isFuYin) {
+    resonances.push({ 类型: '伏吟', ...(fanFuYin.fuYinScope ? { 范围: GUA_SCOPE_LABELS[fanFuYin.fuYinScope] } : {}) });
+  }
 
   const payload: LiuyaoJSON = {
     卦盘: {

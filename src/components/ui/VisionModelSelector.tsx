@@ -1,10 +1,10 @@
 /**
  * 视觉模型选择器
- * 
- * 仅显示 Qwen VL 和 Gemini VL 模型，用于手相/面相分析
- * 支持推理模式切换
+ *
+ * 仅显示视觉模型，用于手相/面相分析；支持推理模式切换。
+ * 移动端为整行表单字段，桌面端为设计稿 Face「视觉模型」行右侧的小胶囊。
  */
-'use client';
+'use client'; // 需要下拉浮层开合状态与模型列表查询
 
 import { useMemo, useState, useEffect, useId, useRef } from 'react';
 import { ChevronDown, Eye, Lightbulb } from 'lucide-react';
@@ -33,7 +33,6 @@ interface VisionModelSelectorProps {
     reasoningEnabled?: boolean;
     onReasoningChange?: (enabled: boolean) => void;
     disabled?: boolean;
-    compact?: boolean;
 }
 
 export function VisionModelSelector({
@@ -42,7 +41,6 @@ export function VisionModelSelector({
     reasoningEnabled = false,
     onReasoningChange,
     disabled = false,
-    compact = false,
 }: VisionModelSelectorProps) {
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const modelButtonRef = useRef<HTMLButtonElement>(null);
@@ -94,20 +92,17 @@ export function VisionModelSelector({
 
     if (!onModelChange && !onReasoningChange) return null;
 
-    const buttonPadding = compact ? 'px-2 py-1' : 'px-2.5 py-1.5';
-    const textSize = compact ? 'text-xs' : 'text-sm';
-
     return (
-        <div className="flex items-center gap-2">
+        <div className="flex w-full items-center gap-2 lg:w-auto">
             {onModelChange && (
-                <div>
+                <div className="min-w-0 flex-1 lg:flex-none">
                     <button
                         ref={modelButtonRef}
                         type="button"
                         onClick={() => setDropdownOpen(!dropdownOpen)}
-                        className={`flex items-center gap-1.5 ${buttonPadding} rounded-lg transition-all ${textSize} ${isDisabled
-                            ? 'opacity-50 cursor-not-allowed text-foreground-secondary'
-                            : 'hover:bg-background-secondary border border-border text-foreground-secondary hover:text-foreground'
+                        className={`flex h-11 w-full items-center gap-1.5 rounded-[10px] border-[0.5px] border-border-hover bg-surface px-3 text-[0.9375rem] transition-colors lg:h-8 lg:w-auto lg:rounded-lg lg:border-0 lg:bg-background-secondary lg:px-2.5 lg:text-[0.8125rem] ${isDisabled
+                            ? 'cursor-not-allowed text-foreground-secondary opacity-60'
+                            : 'text-foreground hover:bg-background-secondary lg:hover:bg-background-tertiary'
                             }`}
                         disabled={isDisabled}
                         aria-haspopup="menu"
@@ -121,14 +116,14 @@ export function VisionModelSelector({
                         ) : (
                             <Eye className="w-4 h-4" />
                         )}
-                        <span className={`${compact ? 'max-w-[80px]' : 'max-w-[100px]'} truncate`}>
+                        <span className="min-w-0 flex-1 truncate text-left lg:max-w-[140px] lg:flex-none">
                             {loading
                                 ? ''
                                 : models.length === 0
                                     ? '无可用模型'
                                     : currentModel?.name || '选择模型'}
                         </span>
-                        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
+                        <ChevronDown className={`h-4 w-4 shrink-0 text-foreground-tertiary transition-transform lg:h-3.5 lg:w-3.5 ${dropdownOpen ? 'rotate-180' : ''}`} />
                     </button>
 
                     <FloatingPanel open={dropdownOpen && !isDisabled} anchorRef={modelButtonRef} onClose={() => setDropdownOpen(false)} id={modelMenuId} label="视觉分析模型" className="w-52 overflow-hidden p-0">
@@ -161,7 +156,7 @@ export function VisionModelSelector({
                                         </div>
                                     </div>
                                     {!isAllowed && model.blockedReason && (
-                                        <span className="text-xs text-amber-600">{model.blockedReason}</span>
+                                        <span className="text-xs text-warning">{model.blockedReason}</span>
                                     )}
                                 </button>
                             );
@@ -169,7 +164,7 @@ export function VisionModelSelector({
                     </FloatingPanel>
 
                     {error && !loading && (
-                        <div className="mt-1 text-xs text-rose-500">{error}</div>
+                        <div className="mt-1 text-xs text-danger">{error}</div>
                     )}
                 </div>
             )}
@@ -180,7 +175,7 @@ export function VisionModelSelector({
                     type="button"
                     onClick={handleReasoningToggle}
                     disabled={disabled || !canToggleReasoning}
-                    className={`flex items-center gap-1.5 ${buttonPadding} rounded-lg transition-all ${textSize} ${disabled || !currentModel?.supportsReasoning || !reasoningAllowed
+                    className={`flex h-11 shrink-0 items-center gap-1.5 rounded-[10px] px-2.5 text-sm transition-colors lg:h-8 lg:rounded-lg lg:text-[0.8125rem] ${disabled || !currentModel?.supportsReasoning || !reasoningAllowed
                         ? 'opacity-30 cursor-not-allowed text-foreground-secondary'
                         : isReasoningForced
                             ? 'text-yellow-600 cursor-default'
@@ -190,10 +185,8 @@ export function VisionModelSelector({
                         }`}
                     title={reasoningTooltip}
                 >
-                    <Lightbulb className={`${compact ? 'w-4 h-4' : 'w-4.5 h-4.5'} ${(reasoningEnabled || isReasoningForced) ? 'fill-yellow-500' : ''}`} />
-                    <span className={compact ? 'hidden sm:inline' : 'hidden md:inline'}>
-                        推理
-                    </span>
+                    <Lightbulb className={`h-4 w-4 ${(reasoningEnabled || isReasoningForced) ? 'fill-yellow-500' : ''}`} />
+                    <span>推理</span>
                 </button>
             )}
         </div>

@@ -1,142 +1,138 @@
+/**
+ * MCP 接入说明
+ *
+ * 'use client' 标记说明：
+ * - 需要 useState 切换接入方式标签页，并调用剪贴板 API 复制配置
+ */
 'use client';
 
-import { useState } from 'react';
-import { AlertTriangle, Check, Cloud, Copy, Terminal } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Check, Cloud, Copy, Terminal } from 'lucide-react';
+import {
+  SettingsTabs,
+  getSettingsTabId,
+  getSettingsTabPanelId,
+  type SettingsTabOption,
+} from '@/components/settings/SettingsControls';
 import {
   MCP_PUBLIC_TOOLS,
   MCP_PUBLIC_URL,
+  MCP_STDIO_PACKAGE_NAME,
   buildMcpPublicHttpConfig,
   buildMcpStdioNpxConfig,
 } from '@/lib/mcp-service-config';
 
 type McpConnectionMode = 'remote' | 'stdio';
 
-function CodeBlock({
-  title,
+const CONNECTION_TABS: SettingsTabOption<McpConnectionMode>[] = [
+  { id: 'remote', label: '远程服务', icon: Cloud },
+  { id: 'stdio', label: '本地 Stdio', icon: Terminal },
+];
+const TAB_ID_PREFIX = 'mcp';
+
+const REMOTE_CONFIG = buildMcpPublicHttpConfig();
+const STDIO_CONFIG = buildMcpStdioNpxConfig();
+const CARD = 'rounded-[14px] border border-border bg-surface';
+const COPIED_RESET_MS = 2000;
+
+function ConfigBlock({
   snippet,
-  snippetId,
-  copiedSnippet,
+  copied,
   onCopy,
 }: {
-  title: string;
   snippet: string;
-  snippetId: string;
-  copiedSnippet: string | null;
-  onCopy: (snippetId: string, content: string) => Promise<void>;
+  copied: boolean;
+  onCopy: () => void;
 }) {
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-medium text-foreground">{title}</h3>
+    <div className={`overflow-hidden ${CARD}`}>
+      <div className="flex items-center justify-between gap-3 border-b border-border py-2 pl-5 pr-2.5">
+        <span className="text-[13px] text-foreground-secondary">客户端配置</span>
         <button
           type="button"
-          onClick={() => onCopy(snippetId, snippet)}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground"
-          aria-label={`复制${title}`}
-          title={`复制${title}`}
+          onClick={onCopy}
+          className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-[13px] transition-colors duration-150 hover:bg-background-secondary ${copied ? 'text-success' : 'text-foreground-secondary hover:text-foreground'}`}
         >
-          {copiedSnippet === snippetId ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+          {copied ? <Check aria-hidden="true" className="h-4 w-4" /> : <Copy aria-hidden="true" className="h-4 w-4" />}
+          {copied ? '已复制' : '复制'}
         </button>
       </div>
-      <pre className="max-w-full overflow-x-auto rounded-md bg-background-secondary p-3 text-xs leading-6 text-foreground">{snippet}</pre>
+      <pre className="max-w-full overflow-x-auto bg-background-secondary/60 px-5 py-4 font-mono text-[13px] leading-relaxed text-foreground">{snippet}</pre>
     </div>
   );
 }
 
 export default function McpServicePanel() {
   const [mode, setMode] = useState<McpConnectionMode>('remote');
-  const [copiedSnippet, setCopiedSnippet] = useState<string | null>(null);
+  const [copiedSnippet, setCopiedSnippet] = useState<McpConnectionMode | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const copiedTimerRef = useRef<number | null>(null);
 
-  const copy = async (snippetId: string, content: string) => {
+  useEffect(() => () => {
+    if (copiedTimerRef.current !== null) window.clearTimeout(copiedTimerRef.current);
+  }, []);
+
+  const copy = async (snippetId: McpConnectionMode, content: string) => {
     try {
       await navigator.clipboard.writeText(content);
       setError(null);
       setCopiedSnippet(snippetId);
-      window.setTimeout(() => setCopiedSnippet((current) => current === snippetId ? null : current), 2000);
+      if (copiedTimerRef.current !== null) window.clearTimeout(copiedTimerRef.current);
+      copiedTimerRef.current = window.setTimeout(() => setCopiedSnippet(null), COPIED_RESET_MS);
     } catch {
       setError('复制失败，请手动选择配置内容。');
     }
   };
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 animate-fade-in">
-      {error ? (
-        <div className="flex items-center gap-2 rounded-md bg-red-500/10 p-3 text-sm text-red-500">
-          <AlertTriangle className="h-4 w-4 shrink-0" />
-          {error}
-        </div>
-      ) : null}
+    <div className="flex flex-col gap-9">
+      <div className="flex flex-col gap-4">
+        {error ? (
+          <div role="alert" className="settings-alert">{error}</div>
+        ) : null}
 
-      <div className="flex rounded-md border border-border bg-background-secondary p-1" role="tablist" aria-label="MCP 接入方式">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === 'remote'}
-          onClick={() => setMode('remote')}
-          className={`flex min-h-10 flex-1 items-center justify-center gap-2 rounded-md px-3 text-sm font-medium transition-colors ${mode === 'remote' ? 'bg-background text-foreground shadow-sm' : 'text-foreground-secondary hover:text-foreground'}`}
-        >
-          <Cloud className="h-4 w-4" />
-          远程服务
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === 'stdio'}
-          onClick={() => setMode('stdio')}
-          className={`flex min-h-10 flex-1 items-center justify-center gap-2 rounded-md px-3 text-sm font-medium transition-colors ${mode === 'stdio' ? 'bg-background text-foreground shadow-sm' : 'text-foreground-secondary hover:text-foreground'}`}
-        >
-          <Terminal className="h-4 w-4" />
-          本地 Stdio
-        </button>
+        <SettingsTabs label="MCP 接入方式" idPrefix={TAB_ID_PREFIX} tabs={CONNECTION_TABS} value={mode} onChange={setMode} />
+
+        {mode === 'remote' ? (
+          <section id={getSettingsTabPanelId(TAB_ID_PREFIX, 'remote')} role="tabpanel" aria-labelledby={getSettingsTabId(TAB_ID_PREFIX, 'remote')} className="flex flex-col gap-4">
+            <div className={`flex flex-wrap items-center justify-between gap-3 px-5 py-4 ${CARD}`}>
+              <div className="flex min-w-0 flex-col gap-1.5">
+                <h3 className="text-[15px] font-medium text-foreground">公开 Streamable HTTP</h3>
+                <code className="break-all font-mono text-[13px] text-foreground-secondary">{MCP_PUBLIC_URL}</code>
+              </div>
+              <span className="rounded-full bg-success/10 px-2.5 py-1 text-xs text-success">无需认证</span>
+            </div>
+            <ConfigBlock snippet={REMOTE_CONFIG} copied={copiedSnippet === 'remote'} onCopy={() => { void copy('remote', REMOTE_CONFIG); }} />
+            <p className="settings-help">
+              支持 Streamable HTTP 的客户端直接填入上面的地址即可；只支持 Stdio 的客户端请切换到「本地 Stdio」。
+            </p>
+          </section>
+        ) : (
+          <section id={getSettingsTabPanelId(TAB_ID_PREFIX, 'stdio')} role="tabpanel" aria-labelledby={getSettingsTabId(TAB_ID_PREFIX, 'stdio')} className="flex flex-col gap-4">
+            <div className={`flex flex-col gap-1.5 px-5 py-4 ${CARD}`}>
+              <h3 className="text-[15px] font-medium text-foreground">本地进程</h3>
+              <p className="text-[13px] leading-relaxed text-foreground-secondary">
+                客户端通过 <code className="font-mono">npx -y {MCP_STDIO_PACKAGE_NAME}</code> 在本机启动服务，需要 Node.js 和支持 Stdio 的 MCP 客户端。
+              </p>
+            </div>
+            <ConfigBlock snippet={STDIO_CONFIG} copied={copiedSnippet === 'stdio'} onCopy={() => { void copy('stdio', STDIO_CONFIG); }} />
+          </section>
+        )}
       </div>
 
-      {mode === 'remote' ? (
-        <section className="space-y-5" aria-labelledby="mcp-remote-heading">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
-            <div>
-              <h2 id="mcp-remote-heading" className="font-semibold text-foreground">公开 Streamable HTTP</h2>
-              <code className="mt-1 block break-all text-xs text-foreground-secondary">{MCP_PUBLIC_URL}</code>
-            </div>
-            <span className="rounded-md bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">无需认证</span>
-          </div>
-          <CodeBlock
-            title="客户端配置"
-            snippet={buildMcpPublicHttpConfig()}
-            snippetId="remote-config"
-            copiedSnippet={copiedSnippet}
-            onCopy={copy}
-          />
-        </section>
-      ) : (
-        <section className="space-y-5" aria-labelledby="mcp-stdio-heading">
-          <div className="border-b border-border pb-4">
-            <h2 id="mcp-stdio-heading" className="font-semibold text-foreground">本地进程</h2>
-            <p className="mt-1 text-sm text-foreground-secondary">需要 Node.js 和支持 Stdio 的 MCP 客户端。</p>
-          </div>
-          <CodeBlock
-            title="客户端配置"
-            snippet={buildMcpStdioNpxConfig()}
-            snippetId="stdio-config"
-            copiedSnippet={copiedSnippet}
-            onCopy={copy}
-          />
-        </section>
-      )}
-
-      <section className="space-y-3 border-t border-border pt-5" aria-labelledby="mcp-tools-heading">
-        <div className="flex items-center gap-2">
-          <h2 id="mcp-tools-heading" className="font-semibold text-foreground">可用工具</h2>
-          <span className="text-xs text-foreground-secondary">{MCP_PUBLIC_TOOLS.length}</span>
-        </div>
-        <div className="grid gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-2">
+      <section aria-labelledby="mcp-tools-heading" className="flex flex-col gap-3">
+        <h3 id="mcp-tools-heading" className="text-[13px] font-medium text-foreground-tertiary">
+          可用工具<span className="ml-1.5 font-normal">{MCP_PUBLIC_TOOLS.length}</span>
+        </h3>
+        {/* 分隔线画在每格右侧和下方，被外框裁掉最外一圈；末行不满时空格保持白底。 */}
+        <ul className="grid grid-cols-[repeat(auto-fill,minmax(13.75rem,1fr))] overflow-hidden rounded-[14px] border border-border bg-surface">
           {MCP_PUBLIC_TOOLS.map((tool) => (
-            <div key={tool.id} className="min-w-0 bg-background px-3 py-2.5">
-              <code className="block truncate text-xs text-foreground">{tool.id}</code>
-              <span className="mt-0.5 block text-xs text-foreground-secondary">{tool.label}</span>
-            </div>
+            <li key={tool.id} className="flex min-w-0 items-baseline justify-between gap-3 px-4 py-2.5 shadow-[1px_0_0_var(--border),0_1px_0_var(--border)] sm:flex-col sm:items-start sm:justify-start sm:gap-1 sm:py-3">
+              <code className="truncate font-mono text-[13px] text-foreground">{tool.id}</code>
+              <span className="flex-shrink-0 text-[13px] text-foreground-secondary">{tool.label}</span>
+            </li>
           ))}
-        </div>
+        </ul>
       </section>
     </div>
   );

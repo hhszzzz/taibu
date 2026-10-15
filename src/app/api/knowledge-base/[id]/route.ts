@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { getSystemAdminClient, requireUserContext, jsonError, jsonOk, resolveRequestDbClient } from '@/lib/api-utils';
+import { requireUserContext, jsonError, jsonOk, resolveRequestDbClient } from '@/lib/api-utils';
 import { ensureFeatureRouteEnabled } from '@/lib/feature-gate-utils';
 import { normalizeKnowledgeBaseInput } from '@/lib/knowledge-base/ingest';
 
@@ -9,7 +9,8 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     const auth = await requireUserContext(_request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
     const { user } = auth;
-    const db = resolveRequestDbClient(auth) ?? getSystemAdminClient();
+    const db = resolveRequestDbClient(auth);
+    if (!db) return jsonError('获取知识库失败', 500);
 
     const { id } = await params;
     const { data, error } = await db
@@ -30,7 +31,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
     const { user } = auth;
-    const db = resolveRequestDbClient(auth) ?? getSystemAdminClient();
+    const db = resolveRequestDbClient(auth);
+    if (!db) return jsonError('更新知识库失败', 500);
 
     const { id } = await params;
     let body: unknown;
@@ -66,7 +68,8 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
     const auth = await requireUserContext(_request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
     const { user } = auth;
-    const db = resolveRequestDbClient(auth) ?? getSystemAdminClient();
+    const db = resolveRequestDbClient(auth);
+    if (!db) return jsonError('删除知识库失败', 500);
 
     const { id } = await params;
     const { data, error } = await db

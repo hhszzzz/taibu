@@ -313,29 +313,25 @@ function BaziPageContent() {
 
     return (
         <div className="min-h-screen bg-background">
-            <div className="max-w-xl mx-auto px-4 md:pt-8 pt-4 animate-fade-in">
-                {/* 页面标题 - 移动端隐藏（顶栏已显示） */}
-                <div className="hidden md:block text-center mb-8">
-                    <h1 className="text-2xl lg:text-3xl font-bold text-foreground">八字排盘</h1>
-                    <p className="text-foreground-secondary mt-2">
-                        请填写您的出生信息，我们将为您生成八字命盘
+            <div className="mx-auto flex w-full max-w-[608px] flex-col gap-5 px-4 pb-10 pt-4 sm:gap-7 sm:px-6 lg:pb-16 lg:pt-14 animate-fade-in">
+                {/* 页面标题 - 移动端顶栏已显示标题，仅保留说明 */}
+                <header className="flex flex-col gap-2 text-center lg:text-left">
+                    <h1 className="hidden font-display text-[34px] font-normal leading-tight text-foreground lg:block">八字排盘</h1>
+                    <p className="text-[0.8125rem] leading-relaxed text-foreground-secondary sm:text-[15px]">
+                        填写出生信息，生成四柱命盘与大运流年。
                     </p>
-                </div>
+                </header>
 
+                <BaziForm
+                    formData={formData}
+                    onUpdate={updateField}
+                    unknownTime={unknownTime}
+                    onToggleUnknownTime={() => setUnknownTime((prev) => !prev)}
+                    onSubmit={handleSubmit}
+                    isSubmitting={isSubmitting}
+                />
 
-
-                <div className="space-y-6">
-                    <BaziForm
-                        formData={formData}
-                        onUpdate={updateField}
-                        unknownTime={unknownTime}
-                        onToggleUnknownTime={() => setUnknownTime((prev) => !prev)}
-                        onSubmit={handleSubmit}
-                        isSubmitting={isSubmitting}
-                    />
-
-                    <InstantBaziPreview onUseInstant={handleUseInstant} />
-                </div>
+                <InstantBaziPreview onUseInstant={handleUseInstant} />
             </div>
         </div>
     );

@@ -18,11 +18,11 @@ export const qimenCalculateDefinition: ToolDefinition = {
       flyStarMethod: { type: 'string', enum: ['forward', 'yin-reverse'], description: '飞盘九星：forward=阴阳皆顺，yin-reverse=阳顺阴逆；默认阳顺阴逆' },
       juNumber: { type: 'integer', minimum: 1, maximum: 9, description: '手工局数，必须与 dunType 同时提供' },
       dunType: { type: 'string', enum: ['yang', 'yin'], description: '手工阴阳遁，必须与 juNumber 同时提供' },
-      zhiFuJiGong: { type: 'string', enum: ['ji_liuyi', 'ji_wugong'], description: '直符寄宫方式（ji_liuyi=寄六仪，ji_wugong=寄戊宫）', default: 'ji_liuyi' },
+      zhiFuJiGong: { type: 'string', enum: ['ji_wugong', 'ji_liuyi'], description: '转盘中五寄宫（ji_wugong=固定寄坤二宫；ji_liuyi=阳遁寄艮八、阴遁寄坤二）', default: 'ji_wugong' },
       detailLevel: {
         type: 'string',
         enum: ['default', 'full'],
-        description: "输出详略（default=核心盘面；full=追加历法信息、宫位旺衰与格局、空亡、驿马、十干旺衰及全局格局）",
+        description: "输出详略（default=核心盘面与全局格局；full=追加历法信息、宫位方位旺衰与逐宫格局、空亡、驿马、十干旺衰）",
         default: 'default',
       },
     },

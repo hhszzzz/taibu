@@ -2,21 +2,13 @@
  * 记录详情相关组件：表单模态框、小记、导入导出
  *
  * 'use client' 标记说明：
- * - 使用 React hooks (useState)
+ * - 使用 React hooks (useState / useId)
  * - 有表单交互和文件上传
  */
 'use client';
 
-import { useState } from 'react';
-import {
-    Plus,
-    Edit2,
-    Trash2,
-    Download,
-    Upload,
-    BookOpen,
-    ChevronRight,
-} from 'lucide-react';
+import { useId, useRef, useState, type KeyboardEvent } from 'react';
+import { ArrowUp, Download, Trash2, Upload, X } from 'lucide-react';
 import {
     createNote,
     createRecord,
@@ -31,14 +23,69 @@ import {
     readImportFile,
     NOTE_MOODS,
     NoteMood,
+    toLocalDateKey,
     updateRecord,
+    type ExportData,
 } from '@/lib/records';
+import { Modal } from '@/components/ui/Modal';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
+import { FILTER_CHIP_CLASS, FilterChip } from '@/components/ui/FilterChip';
+
+const FIELD_CLASS = 'w-full rounded-[10px] border-[0.5px] border-border-hover bg-surface px-3.5 text-[15px] text-foreground placeholder:text-foreground-tertiary focus:border-accent focus:outline-none';
+const LABEL_CLASS = 'mb-1.5 block text-sm text-foreground-secondary';
+const PRIMARY_BUTTON_CLASS = 'inline-flex h-10 items-center justify-center rounded-[10px] bg-accent px-5 text-sm font-medium text-on-accent transition-colors hover:bg-accent/90 disabled:opacity-50';
+const SECONDARY_BUTTON_CLASS = 'inline-flex h-10 items-center justify-center rounded-[10px] border-[0.5px] border-border-hover bg-surface px-5 text-sm text-foreground transition-colors hover:bg-background-secondary disabled:opacity-50';
+const NOTE_TIME_FORMAT = new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
 
 function getErrorMessage(error: unknown, fallback: string) {
     return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function formatNoteTime(value: string) {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? '' : NOTE_TIME_FORMAT.format(date);
+}
+
+/** 中文输入法选词时的回车不算提交。 */
+function isPlainEnter(event: KeyboardEvent<HTMLTextAreaElement>) {
+    return event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229;
+}
+
+function FormError({ message }: { message: string }) {
+    if (!message) return null;
+    return (
+        <div role="alert" className="rounded-[10px] border-[0.5px] border-danger/30 bg-danger/5 px-3.5 py-2.5 text-sm text-danger">
+            {message}
+        </div>
+    );
+}
+
+function DialogHeader({ titleId, title, description, onClose, closeDisabled }: {
+    titleId: string;
+    title: string;
+    description?: string;
+    onClose: () => void;
+    closeDisabled?: boolean;
+}) {
+    return (
+        <div className="flex items-start justify-between gap-4 px-5 pt-5 sm:px-6 sm:pt-6">
+            <div className="min-w-0">
+                <h2 id={titleId} className="font-display text-xl text-foreground">{title}</h2>
+                {description ? <p className="mt-1 text-sm text-foreground-secondary">{description}</p> : null}
+            </div>
+            <button
+                type="button"
+                onClick={onClose}
+                disabled={closeDisabled}
+                aria-label="关闭"
+                className="-mt-1 -mr-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-foreground-tertiary transition-colors hover:bg-background-secondary hover:text-foreground disabled:opacity-40"
+            >
+                <X className="h-[18px] w-[18px]" aria-hidden="true" />
+            </button>
+        </div>
+    );
 }
 
 // =====================================================
@@ -58,11 +105,13 @@ export function RecordFormModal({
     const [title, setTitle] = useState(record?.title || '');
     const [content, setContent] = useState(record?.content || '');
     const [category, setCategory] = useState<RecordCategory>(record?.category || 'general');
-    const [eventDate, setEventDate] = useState(record?.event_date || new Date().toISOString().split('T')[0]);
+    const [eventDate, setEventDate] = useState(record?.event_date || toLocalDateKey());
     const [tagsInput, setTagsInput] = useState(record?.tags.join(', ') || '');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const { showToast } = useToast();
+    const id = useId();
+    const titleInputRef = useRef<HTMLInputElement>(null);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -72,6 +121,7 @@ export function RecordFormModal({
         }
         if (!title.trim()) {
             setError('标题不能为空');
+            titleInputRef.current?.focus();
             return;
         }
 
@@ -105,110 +155,99 @@ export function RecordFormModal({
     };
 
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-            <div className="bg-background/95 backdrop-blur-xl rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto border border-white/10 shadow-2xl animate-in zoom-in-95 duration-200">
-                <div className="p-4 sm:p-6 border-b border-border/50 flex flex-col items-center justify-center bg-gradient-to-r from-emerald-500/5 to-teal-500/5">
-                    <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500 mb-3 shadow-inner">
-                        {record ? <Edit2 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
-                    </div>
-                    <h2 className="text-xl font-bold text-foreground">{record ? '编辑命理记录' : '新增命理感悟'}</h2>
-                    <p className="text-sm text-foreground-secondary mt-1">记录当下的所思所想，积累智慧</p>
+        <Modal open onClose={onClose} busy={loading} labelledBy={`${id}-title`} initialFocusRef={titleInputRef} className="max-w-lg">
+            <DialogHeader
+                titleId={`${id}-title`}
+                title={record ? '编辑记录' : '新建记录'}
+                description="记下断语、应验与感悟，日后对照印证。"
+                onClose={onClose}
+                closeDisabled={loading}
+            />
+
+            <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4 p-5 sm:p-6">
+                <FormError message={error} />
+
+                <div>
+                    <label htmlFor={`${id}-record-title`} className={LABEL_CLASS}>标题</label>
+                    <input
+                        ref={titleInputRef}
+                        id={`${id}-record-title`}
+                        type="text"
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        aria-invalid={error === '标题不能为空' || undefined}
+                        className={`${FIELD_CLASS} h-11`}
+                        placeholder="例如：九月面试结果与卦象一致"
+                    />
                 </div>
 
-                <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-5">
-                    {error && (
-                        <div className="text-red-400 text-sm bg-red-500/10 border border-red-500/20 p-3 rounded-xl flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
-                            {error}
-                        </div>
-                    )}
-
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-foreground-secondary mb-1.5 ml-1">标题</label>
-                            <input
-                                type="text"
-                                value={title}
-                                onChange={(e) => setTitle(e.target.value)}
-                                className="w-full bg-background-secondary/50 border border-border/50 hover:border-emerald-500/50 rounded-xl px-4 py-3 text-foreground placeholder:text-foreground-secondary/30 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 transition-all"
-                                placeholder="例如：今日八字排盘感悟..."
-                            />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-medium text-foreground-secondary mb-1.5 ml-1">分类</label>
-                                <div className="relative">
-                                    <select
-                                        value={category}
-                                        onChange={(e) => setCategory(e.target.value as RecordCategory)}
-                                        className="w-full bg-background-secondary/50 border border-border/50 hover:border-emerald-500/50 rounded-xl px-4 py-2.5 text-foreground focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 transition-all appearance-none cursor-pointer"
-                                    >
-                                        {RECORD_CATEGORIES.map(cat => (
-                                            <option key={cat.value} value={cat.value}>
-                                                {cat.label}
-                                            </option>
-                                        ))}
-                                    </select>
-                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-foreground-secondary">
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-foreground-secondary mb-1.5 ml-1">事件日期</label>
+                <fieldset>
+                    <legend className={LABEL_CLASS}>分类</legend>
+                    <div className="flex flex-wrap gap-2">
+                        {RECORD_CATEGORIES.map(cat => (
+                            <label key={cat.value} className="cursor-pointer">
                                 <input
-                                    type="date"
-                                    value={eventDate}
-                                    onChange={(e) => setEventDate(e.target.value)}
-                                    className="w-full bg-background-secondary/50 border border-border/50 hover:border-emerald-500/50 rounded-xl px-4 py-2.5 text-foreground focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 transition-all font-sans"
+                                    type="radio"
+                                    name={`${id}-category`}
+                                    value={cat.value}
+                                    checked={category === cat.value}
+                                    onChange={() => setCategory(cat.value)}
+                                    className="peer sr-only"
                                 />
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-foreground-secondary mb-1.5 ml-1">标签</label>
-                            <input
-                                type="text"
-                                value={tagsInput}
-                                onChange={(e) => setTagsInput(e.target.value)}
-                                className="w-full bg-background-secondary/50 border border-border/50 hover:border-emerald-500/50 rounded-xl px-4 py-2.5 text-foreground placeholder:text-foreground-secondary/30 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 transition-all"
-                                placeholder="使用逗号分隔，例如：事业, 运势"
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-foreground-secondary mb-1.5 ml-1">详情内容</label>
-                            <textarea
-                                value={content}
-                                onChange={(e) => setContent(e.target.value)}
-                                rows={6}
-                                className="w-full bg-background-secondary/50 border border-border/50 hover:border-emerald-500/50 rounded-xl px-4 py-3 text-foreground placeholder:text-foreground-secondary/30 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 transition-all resize-none leading-relaxed"
-                                placeholder="记录详细的断语、排盘结果或心得体会..."
-                            />
-                        </div>
+                                <span className={`${FILTER_CHIP_CLASS} peer-checked:border-transparent peer-checked:bg-foreground peer-checked:text-background peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent`}>
+                                    {cat.label}
+                                </span>
+                            </label>
+                        ))}
                     </div>
+                </fieldset>
 
-                    <div className="flex gap-3 pt-2">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="flex-1 px-4 py-2.5 rounded-xl border border-border hover:bg-background-secondary/80 text-foreground-secondary hover:text-foreground transition-all"
-                        >
-                            取消
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className="flex-1 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-medium rounded-xl hover:shadow-lg hover:shadow-emerald-500/25 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 disabled:hover:scale-100"
-                        >
-                            {loading ? '保存中...' : '保存记录'}
-                        </button>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                        <label htmlFor={`${id}-event-date`} className={LABEL_CLASS}>事件日期</label>
+                        <input
+                            id={`${id}-event-date`}
+                            type="date"
+                            value={eventDate}
+                            onChange={(e) => setEventDate(e.target.value)}
+                            className={`${FIELD_CLASS} h-11`}
+                        />
                     </div>
-                </form>
-            </div>
-        </div>
+                    <div>
+                        <label htmlFor={`${id}-tags`} className={LABEL_CLASS}>标签</label>
+                        <input
+                            id={`${id}-tags`}
+                            type="text"
+                            value={tagsInput}
+                            onChange={(e) => setTagsInput(e.target.value)}
+                            aria-describedby={`${id}-tags-help`}
+                            className={`${FIELD_CLASS} h-11`}
+                            placeholder="事业, 六爻"
+                        />
+                        <p id={`${id}-tags-help`} className="mt-1 text-xs text-foreground-tertiary">用逗号分隔多个标签</p>
+                    </div>
+                </div>
+
+                <div>
+                    <label htmlFor={`${id}-content`} className={LABEL_CLASS}>内容</label>
+                    <textarea
+                        id={`${id}-content`}
+                        value={content}
+                        onChange={(e) => setContent(e.target.value)}
+                        rows={6}
+                        className={`${FIELD_CLASS} resize-y py-3 leading-relaxed`}
+                        placeholder="断语、排盘结果、实际应验或心得体会"
+                    />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-1">
+                    <button type="button" onClick={onClose} disabled={loading} className={SECONDARY_BUTTON_CLASS}>取消</button>
+                    <button type="submit" disabled={loading} className={PRIMARY_BUTTON_CLASS}>
+                        {loading ? '保存中…' : '保存记录'}
+                    </button>
+                </div>
+            </form>
+        </Modal>
     );
 }
 
@@ -230,10 +269,10 @@ export function DailyNotes({
     const [deleteNoteId, setDeleteNoteId] = useState<string | null>(null);
     const [error, setError] = useState('');
     const { showToast } = useToast();
+    const id = useId();
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!content.trim()) return;
+    const submit = async () => {
+        if (loading || !content.trim()) return;
         if (!userId) {
             const message = '请先登录后再记录小记';
             setError(message);
@@ -244,7 +283,8 @@ export function DailyNotes({
         setLoading(true);
         setError('');
         try {
-            await createNote({ content: content.trim(), mood });
+            // 带上用户本地日期，避免服务端按 UTC 把凌晨的小记归到前一天。
+            await createNote({ content: content.trim(), mood, note_date: toLocalDateKey() });
             setContent('');
             await Promise.resolve(onRefresh());
         } catch (submitError) {
@@ -256,10 +296,10 @@ export function DailyNotes({
         }
     };
 
-    const handleDelete = async (id: string) => {
+    const handleDelete = async (noteId: string) => {
         try {
             setError('');
-            await deleteNote(id);
+            await deleteNote(noteId);
             await Promise.resolve(onRefresh());
         } catch (deleteError) {
             const message = getErrorMessage(deleteError, '删除小记失败');
@@ -271,125 +311,82 @@ export function DailyNotes({
     };
 
     return (
-        <div className="bg-background/50 dark:bg-zinc-900/50 rounded-2xl p-6 border border-border/50 shadow-sm relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:bg-emerald-500/10 transition-colors duration-700" />
+        <div className="flex flex-col gap-4 p-4 md:p-5">
+            <FormError message={error} />
 
-            <div className="flex items-center gap-3 mb-6 relative z-10">
-                <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-xl text-emerald-600 dark:text-emerald-400">
-                    <BookOpen className="w-5 h-5" />
+            <form
+                onSubmit={(e) => { e.preventDefault(); void submit(); }}
+                className="flex flex-col gap-3"
+            >
+                <div role="group" aria-label="心情" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-0.5 md:mx-0 md:flex-wrap md:px-0">
+                    {NOTE_MOODS.map(m => (
+                        <FilterChip key={m.value} pressed={mood === m.value} onClick={() => setMood(m.value)}>
+                            <span aria-hidden="true">{m.icon}</span>{m.label}
+                        </FilterChip>
+                    ))}
                 </div>
-                <div>
-                    <h3 className="font-bold text-foreground">今日小记</h3>
-                    <p className="text-xs text-foreground-secondary">记录当下的心情与感悟</p>
-                </div>
-            </div>
 
-            {error && (
-                <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/5 px-3 py-2 text-sm text-red-500 relative z-10">
-                    {error}
-                </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="mb-6 relative z-10">
-                <div className="flex flex-col gap-3">
-                    <div className="flex gap-2 mb-1 p-1 bg-background-secondary/50 rounded-xl w-fit">
-                        {NOTE_MOODS.map(m => (
-                            <button
-                                key={m.value}
-                                type="button"
-                                onClick={() => setMood(m.value)}
-                                className={`
-                                    relative w-9 h-9 rounded-lg flex items-center justify-center text-lg transition-all
-                                    ${mood === m.value
-                                        ? 'bg-background dark:bg-zinc-800 shadow-sm scale-110 z-10 ring-1 ring-border/50'
-                                        : 'hover:bg-background/50 dark:hover:bg-zinc-800/50 hover:scale-105 opacity-60 hover:opacity-100'
-                                    }
-                                `}
-                                title={m.label}
-                            >
-                                <span className={`transition-transform duration-300 ${mood === m.value ? 'scale-110' : ''}`}>
-                                    {m.icon}
-                                </span>
-                                {mood === m.value && (
-                                    <span className="absolute -bottom-1 w-1 h-1 rounded-full bg-emerald-500" />
-                                )}
-                            </button>
-                        ))}
-                    </div>
-
-                    <div className="relative group/input">
-                        <textarea
-                            value={content}
-                            onChange={(e) => setContent(e.target.value)}
-                            placeholder="写下此刻的想法..."
-                            rows={2}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter' && !e.shiftKey) {
-                                    e.preventDefault();
-                                    handleSubmit(e);
-                                }
-                            }}
-                            className="w-full bg-background border border-border rounded-xl pl-4 pr-12 py-3 text-foreground text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500/30 transition-all placeholder:text-foreground-secondary/40"
-                        />
-                        <button
-                            type="submit"
-                            disabled={loading || !content.trim()}
-                            className="absolute right-3 bottom-3 p-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg shadow-md hover:shadow-lg disabled:opacity-50 disabled:shadow-none transition-all flex items-center justify-center transform active:scale-95"
-                            title="发送 (Enter)"
-                        >
-                            {loading ? (
-                                <SoundWaveLoader variant="inline" />
-                            ) : (
-                                <ChevronRight className="w-4 h-4" />
-                            )}
-                        </button>
-                    </div>
+                <div className="relative">
+                    <label htmlFor={`${id}-note`} className="sr-only">今日小记内容</label>
+                    <textarea
+                        id={`${id}-note`}
+                        value={content}
+                        onChange={(e) => setContent(e.target.value)}
+                        placeholder="写下此刻的想法，Enter 发送，Shift+Enter 换行"
+                        rows={2}
+                        onKeyDown={(e) => {
+                            if (!isPlainEnter(e)) return;
+                            e.preventDefault();
+                            void submit();
+                        }}
+                        className={`${FIELD_CLASS} resize-none py-3 pr-14 text-sm leading-relaxed`}
+                    />
+                    <button
+                        type="submit"
+                        disabled={loading || !content.trim()}
+                        aria-label="保存小记"
+                        title="保存小记 (Enter)"
+                        className="absolute right-2.5 bottom-2.5 flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-on-accent transition-colors hover:bg-accent/90 disabled:bg-background-tertiary disabled:text-foreground-tertiary"
+                    >
+                        {loading ? <SoundWaveLoader variant="inline" /> : <ArrowUp className="h-4 w-4" aria-hidden="true" />}
+                    </button>
                 </div>
             </form>
 
-            <div className="space-y-4 max-h-[18rem] overflow-y-auto pr-1">
-                {notes.length === 0 ? (
-                    <div className="text-center py-6 border-2 border-dashed border-border/50 rounded-xl bg-background-secondary/20">
-                        <p className="text-foreground-secondary/60 text-sm">今天还没有记录，写点什么吧...</p>
-                    </div>
-                ) : (
-                    <div className="relative pl-4 space-y-6 before:absolute before:left-[5px] before:top-2 before:bottom-0 before:w-px before:bg-gradient-to-b before:from-border before:to-transparent">
-                        {notes.map((note, index) => {
-                            const moodInfo = NOTE_MOODS.find(m => m.value === note.mood);
-                            return (
-                                <div key={note.id} className="relative group/item animate-fade-in-up" style={{ animationDelay: `${index * 50}ms` }}>
-                                    <div className="absolute -left-[1.35rem] top-0 w-3 h-3 rounded-full bg-background border-2 border-emerald-500 z-10 shadow-[0_0_0_4px_rgba(var(--background-start-rgb),1)]" />
-
-                                    <div className="bg-background hover:bg-background-secondary/40 border border-border/50 hover:border-emerald-500/20 rounded-xl p-3.5 transition-all duration-300 hover:shadow-sm">
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2 mb-1.5">
-                                                    <span className="text-lg leading-none filter drop-shadow-sm transform group-hover/item:scale-110 transition-transform duration-300" title={moodInfo?.label}>
-                                                        {moodInfo?.icon}
-                                                    </span>
-                                                    <span className="text-[10px] items-center px-1.5 py-0.5 rounded-full bg-background-secondary text-foreground-secondary border border-border/50 hidden group-hover/item:inline-flex">
-                                                        {moodInfo?.label}
-                                                    </span>
-                                                </div>
-                                                <p className="text-sm text-foreground/90 leading-relaxed font-light break-words">
-                                                    {note.content}
-                                                </p>
-                                            </div>
-                                            <button
-                                                onClick={() => setDeleteNoteId(note.id)}
-                                                className="opacity-0 group-hover/item:opacity-100 p-1.5 text-foreground-secondary hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all scale-90 hover:scale-100"
-                                                title="删除"
-                                            >
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </div>
+            {notes.length === 0 ? (
+                <p className="rounded-[10px] bg-background-secondary px-4 py-5 text-center text-sm text-foreground-tertiary">
+                    今天还没有小记，写点什么吧。
+                </p>
+            ) : (
+                <ul className="flex max-h-72 flex-col divide-y-[0.5px] divide-border overflow-y-auto">
+                    {notes.map(note => {
+                        const moodInfo = NOTE_MOODS.find(m => m.value === note.mood);
+                        const time = formatNoteTime(note.created_at);
+                        return (
+                            <li key={note.id} className="flex items-start gap-3 py-2.5 first:pt-0 last:pb-0">
+                                {time ? (
+                                    <time dateTime={note.created_at} className="w-11 shrink-0 pt-0.5 text-xs text-foreground-tertiary tabular-nums">{time}</time>
+                                ) : null}
+                                {moodInfo ? (
+                                    <span role="img" aria-label={moodInfo.label} title={moodInfo.label} className="shrink-0 text-base leading-6">
+                                        {moodInfo.icon}
+                                    </span>
+                                ) : null}
+                                <p className="min-w-0 flex-1 text-sm leading-6 break-words whitespace-pre-wrap text-foreground">{note.content}</p>
+                                <button
+                                    type="button"
+                                    onClick={() => setDeleteNoteId(note.id)}
+                                    aria-label="删除小记"
+                                    title="删除"
+                                    className="-my-1.5 -mr-1.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-foreground-tertiary transition-colors hover:bg-danger/10 hover:text-danger md:h-8 md:w-8"
+                                >
+                                    <Trash2 className="h-4 w-4" aria-hidden="true" />
+                                </button>
+                            </li>
+                        );
+                    })}
+                </ul>
+            )}
             <ConfirmDialog
                 isOpen={!!deleteNoteId}
                 onClose={() => setDeleteNoteId(null)}
@@ -406,6 +403,8 @@ export function DailyNotes({
 // =====================================================
 // 导入导出模态框
 // =====================================================
+type PendingImport = { fileName: string; data: ExportData };
+
 export function ImportExportModal({
     userId,
     onClose,
@@ -419,6 +418,10 @@ export function ImportExportModal({
     const [exporting, setExporting] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    // 导入会覆盖全部数据：先读取并校验文件，用户确认后才提交。
+    const [pendingImport, setPendingImport] = useState<PendingImport | null>(null);
+    const id = useId();
+    const busy = importing || exporting;
 
     const handleExport = async () => {
         if (!userId) {
@@ -431,7 +434,7 @@ export function ImportExportModal({
         try {
             const data = await exportData();
             downloadExportData(data);
-            setSuccess('导出成功！');
+            setSuccess('导出成功，文件已开始下载。');
         } catch (exportError) {
             setError(getErrorMessage(exportError, '导出失败'));
         } finally {
@@ -439,87 +442,101 @@ export function ImportExportModal({
         }
     };
 
-    const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const input = e.target;
+        const file = input.files?.[0];
+        input.value = '';
         if (!file) return;
-        if (!userId) {
-            setError('请先登录后再导入数据');
-            e.target.value = '';
-            return;
-        }
-
-        setImporting(true);
         setError('');
         setSuccess('');
-
+        if (!userId) {
+            setError('请先登录后再导入数据');
+            return;
+        }
         try {
-            const data = await readImportFile(file);
-            const result = await importData(data);
+            setPendingImport({ fileName: file.name, data: await readImportFile(file) });
+        } catch (readError) {
+            setPendingImport(null);
+            setError(getErrorMessage(readError, '文件读取失败'));
+        }
+    };
+
+    const confirmImport = async () => {
+        if (!pendingImport) return;
+        setImporting(true);
+        setError('');
+        try {
+            const result = await importData(pendingImport.data);
+            setPendingImport(null);
             setSuccess(`成功导入 ${result.recordsImported} 条记录和 ${result.notesImported} 条小记`);
             await Promise.resolve(onImport());
         } catch (importError) {
             setError(getErrorMessage(importError, '导入失败'));
         } finally {
             setImporting(false);
-            e.target.value = '';
         }
     };
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-background rounded-xl w-full max-w-md border border-border">
-                <div className="p-4 border-b border-border">
-                    <h2 className="text-lg font-medium text-foreground">数据管理</h2>
-                </div>
-                <div className="p-4 space-y-4">
-                    {error && (
-                        <div className="text-red-400 text-sm bg-red-900/20 p-2 rounded">{error}</div>
-                    )}
-                    {success && (
-                        <div className="text-green-400 text-sm bg-green-900/20 p-2 rounded">{success}</div>
-                    )}
+        <Modal open onClose={onClose} busy={busy} labelledBy={`${id}-title`}>
+            <DialogHeader titleId={`${id}-title`} title="导入 / 导出" onClose={onClose} closeDisabled={busy} />
+            <div className="flex flex-col gap-5 p-5 sm:p-6">
+                <FormError message={error} />
+                {success ? (
+                    <p role="status" className="rounded-[10px] bg-success/10 px-3.5 py-2.5 text-sm text-success">{success}</p>
+                ) : null}
 
-                    <div className="space-y-2">
-                        <h3 className="font-medium text-foreground flex items-center gap-2">
-                            <Download className="w-4 h-4" /> 导出数据
-                        </h3>
-                        <p className="text-sm text-foreground-secondary">将所有记录和小记导出为 JSON 文件</p>
-                        <button
-                            onClick={handleExport}
-                            disabled={exporting}
-                            className="w-full px-4 py-2 bg-accent text-on-accent rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-50"
-                        >
-                            {exporting ? '导出中...' : '导出数据'}
-                        </button>
-                    </div>
-
-                    <div className="border-t border-border pt-4 space-y-2">
-                        <h3 className="font-medium text-foreground flex items-center gap-2">
-                            <Upload className="w-4 h-4" /> 导入数据
-                        </h3>
-                        <div className="bg-yellow-900/20 text-yellow-400 text-sm p-2 rounded">
-                            注意：导入将覆盖所有现有数据！
-                        </div>
-                        <label className="block w-full px-4 py-2 bg-background-secondary text-foreground rounded-lg hover:bg-background-tertiary transition-colors cursor-pointer text-center border border-border">
-                            {importing ? '导入中...' : '选择 JSON 文件'}
-                            <input
-                                type="file"
-                                accept=".json"
-                                onChange={handleImport}
-                                disabled={importing}
-                                className="hidden"
-                            />
-                        </label>
-                    </div>
-
-                    <button
-                        onClick={onClose}
-                        className="w-full px-4 py-2 text-foreground-secondary hover:text-foreground transition-colors"
-                    >
-                        关闭
+                <section aria-labelledby={`${id}-export`} className="flex flex-col gap-2">
+                    <h3 id={`${id}-export`} className="flex items-center gap-2 text-sm font-medium text-foreground">
+                        <Download className="h-4 w-4" aria-hidden="true" />导出数据
+                    </h3>
+                    <p className="text-sm text-foreground-secondary">把全部记录和小记保存为 JSON 文件。</p>
+                    <button type="button" onClick={handleExport} disabled={busy} className={`${SECONDARY_BUTTON_CLASS} self-start`}>
+                        {exporting ? '导出中…' : '导出 JSON'}
                     </button>
-                </div>
+                </section>
+
+                <section aria-labelledby={`${id}-import`} className="flex flex-col gap-2 border-t-[0.5px] border-border pt-5">
+                    <h3 id={`${id}-import`} className="flex items-center gap-2 text-sm font-medium text-foreground">
+                        <Upload className="h-4 w-4" aria-hidden="true" />导入数据
+                    </h3>
+                    {pendingImport ? (
+                        <div role="alert" className="flex flex-col gap-3 rounded-[10px] border-[0.5px] border-danger/30 bg-danger/5 p-3.5">
+                            <p className="text-sm text-foreground">
+                                将用「{pendingImport.fileName}」中的 {pendingImport.data.records.length} 条记录和 {pendingImport.data.notes.length} 条小记
+                                <strong className="font-medium text-danger">替换现有的全部记录和小记</strong>，此操作无法撤销。
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => { void confirmImport(); }}
+                                    disabled={importing}
+                                    className="inline-flex h-10 items-center justify-center rounded-[10px] bg-danger px-4 text-sm font-medium text-white transition-colors hover:bg-danger/90 disabled:opacity-50"
+                                >
+                                    {importing ? '导入中…' : '确认覆盖导入'}
+                                </button>
+                                <button type="button" onClick={() => setPendingImport(null)} disabled={importing} className={SECONDARY_BUTTON_CLASS}>
+                                    取消
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            <p className="text-sm text-foreground-secondary">从导出的 JSON 文件恢复。导入会覆盖现有的全部记录和小记，确认前会再次提示。</p>
+                            <label className={`${SECONDARY_BUTTON_CLASS} cursor-pointer self-start focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent`}>
+                                选择 JSON 文件
+                                <input
+                                    type="file"
+                                    accept=".json,application/json"
+                                    onChange={(e) => { void handleFileChange(e); }}
+                                    disabled={busy}
+                                    className="sr-only"
+                                />
+                            </label>
+                        </>
+                    )}
+                </section>
             </div>
-        </div>
+        </Modal>
     );
 }

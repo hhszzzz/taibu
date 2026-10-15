@@ -88,6 +88,7 @@ export interface CalendarAlmanacData {
         name: string;            // 宿名
         gong: string;            // 宫位
         luck: string;            // 吉凶
+        animal: string;          // 七政 + 禽兽（如 "土獐"，即柳土獐）
     };
 
     // 月相
@@ -99,8 +100,20 @@ export interface CalendarAlmanacData {
     // 九星
     jiuXing: string;
 
+    // 日九星：星名（数 + 色 + 五行，如 "四绿木"）与所在方位（如 "东南"）
+    nineStar: {
+        name: string;
+        position: string;
+    };
+
     // 物候
     wuHou: string;
+
+    // 物候分解：三候序（如 "寒露初候"）与候应（如 "鸿雁来宾"）
+    hou: {
+        term: string;
+        phenology: string;
+    };
 }
 
 // ===== 主要函数 =====
@@ -297,6 +310,7 @@ export function getCalendarAlmanac(date: Date): CalendarAlmanacData {
             name: safeGet(() => lunar.getXiu(), ''),
             gong: safeGet(() => `${lunar.getGong()} ${lunar.getShou()}`, ''),
             luck: safeGet(() => lunar.getXiuLuck(), ''),
+            animal: safeGet(() => `${lunar.getZheng()}${lunar.getAnimal()}`, ''),
         },
 
         // 月相
@@ -307,9 +321,20 @@ export function getCalendarAlmanac(date: Date): CalendarAlmanacData {
 
         // 九星 - getDayNineStar() 返回对象，需要调用 toString()
         jiuXing: safeGet(() => lunar.getDayNineStar().toString(), ''),
+        nineStar: {
+            name: safeGet(() => {
+                const star = lunar.getDayNineStar();
+                return `${star.getNumber()}${star.getColor()}${star.getWuXing()}`;
+            }, ''),
+            position: safeGet(() => lunar.getDayNineStar().getPositionDesc(), ''),
+        },
 
         // 物候
         wuHou: safeGet(() => `${lunar.getWuHou()} ${lunar.getHou()}`, ''),
+        hou: {
+            term: safeGet(() => lunar.getHou().replace(/\s+/gu, ''), ''),
+            phenology: safeGet(() => lunar.getWuHou(), ''),
+        },
     };
 }
 

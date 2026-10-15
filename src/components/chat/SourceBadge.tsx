@@ -62,7 +62,7 @@ export function SourceBadge({ source }: { source: InjectedSource }) {
         >
             {icon}
             <span className="max-w-[200px] truncate">{source.name}</span>
-            {source.truncated && <span className="text-muted-foreground">(部分)</span>}
+            {source.truncated && <span className="text-foreground-tertiary">(部分)</span>}
         </Link>
     );
 }

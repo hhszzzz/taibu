@@ -85,3 +85,10 @@ export function validateCustomProviderInput(config: {
 
     return errors;
 }
+
+/** 展示用的 Key 掩码：只露出前 3 位和后 4 位，过短的 Key 完全遮住。 */
+export function maskCustomProviderApiKey(apiKey: string | null | undefined): string {
+  const secret = apiKey?.trim() ?? '';
+  if (secret.length <= 10) return '••••••••';
+  return `${secret.slice(0, 3)}••••••••${secret.slice(-4)}`;
+}

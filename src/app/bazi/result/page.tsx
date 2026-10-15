@@ -19,7 +19,7 @@ import {
     getDayMasterDescription,
 } from '@/lib/divination/bazi';
 import type { BaziFormData, CalendarType, Gender } from '@/types';
-import { ResultHeader } from '@/components/bazi/result/ResultHeader';
+import { ResultHeader, ResultMobileActions } from '@/components/bazi/result/ResultHeader';
 import { ProfileSummaryCard } from '@/components/bazi/result/ProfileSummaryCard';
 import { ResultTabs, type ResultTab } from '@/components/bazi/result/ResultTabs';
 import { BasicInfoSection } from '@/components/bazi/result/BasicInfoSection';
@@ -536,7 +536,7 @@ function BaziResultContent() {
         return (
             <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 text-center">
                 <p className="text-sm text-foreground-secondary mb-6">未找到对应八字命盘</p>
-                <Link href="/bazi" className="px-4 py-2 bg-accent text-on-accent text-sm font-medium rounded-md hover:bg-accent/90 transition-colors">
+                <Link href="/bazi" className="inline-flex h-11 items-center rounded-xl bg-accent px-5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover">
                     返回重新输入
                 </Link>
             </div>
@@ -547,7 +547,7 @@ function BaziResultContent() {
         return (
             <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 text-center">
                 <p className="text-sm text-foreground-secondary mb-6">{loadError}</p>
-                <Link href="/bazi" className="px-4 py-2 bg-accent text-on-accent text-sm font-medium rounded-md hover:bg-accent/90 transition-colors">
+                <Link href="/bazi" className="inline-flex h-11 items-center rounded-xl bg-accent px-5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover">
                     返回重新输入
                 </Link>
             </div>
@@ -558,7 +558,7 @@ function BaziResultContent() {
         return (
             <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 text-center">
                 <p className="text-sm text-foreground-secondary mb-6">八字计算出错，请返回重新输入</p>
-                <Link href="/bazi" className="px-4 py-2 bg-accent text-on-accent text-sm font-medium rounded-md hover:bg-accent/90 transition-colors">
+                <Link href="/bazi" className="inline-flex h-11 items-center rounded-xl bg-accent px-5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover">
                     返回重新输入
                 </Link>
             </div>
@@ -569,7 +569,7 @@ function BaziResultContent() {
 
     return (
         <div className="min-h-screen bg-background">
-            <div className="max-w-4xl mx-auto px-4 py-8 animate-fade-in">
+            <div className="mx-auto flex w-full max-w-[1104px] flex-col gap-5 px-4 pb-24 pt-4 sm:gap-6 sm:px-6 lg:px-8 lg:pb-0 lg:pt-7 animate-fade-in">
                 <ResultHeader
                     chartId={chartId}
                     saving={saving}
@@ -584,12 +584,12 @@ function BaziResultContent() {
                     onCopy={handleCopy}
                     onCopyJson={() => { void copyJson(); }}
                     onShare={handleShare}
-                />
-
-                <ProfileSummaryCard
-                    meta={baziMeta}
-                    canonicalChart={canonicalBazi}
-                />
+                >
+                    <ProfileSummaryCard
+                        meta={baziMeta}
+                        canonicalChart={canonicalBazi}
+                    />
+                </ResultHeader>
 
                 <ResultTabs activeTab={activeTab} onChange={setActiveTab} />
 
@@ -640,14 +640,22 @@ function BaziResultContent() {
                 )}
 
                 {(hasMountedNotes || activeTab === 'notes') && (
-                    <div className={activeTab === 'notes' ? 'animate-fade-in bg-background border border-border rounded-md p-6 pt-2' : 'hidden'}>
+                    <div className={activeTab === 'notes' ? 'animate-fade-in rounded-2xl border-[0.5px] border-border bg-surface p-4 pt-1 sm:p-6 sm:pt-2' : 'hidden'}>
                         <CaseNotesSection chartId={chartId} />
                     </div>
                 )}
 
-                <div className="mt-12 pt-12 border-t border-border/60">
+                <div className="mt-6 border-t-[0.5px] border-border pb-4 pt-6 lg:mt-10 lg:pb-16">
                     <ResultFooterLinks />
                 </div>
+
+                <ResultMobileActions
+                    saving={saving}
+                    saved={saved}
+                    saveDisabled={isUnknownTime}
+                    saveLabel={isUnknownTime ? '需时辰' : '保存'}
+                    onSave={handleSave}
+                />
             </div>
 
             <CopyTextModal

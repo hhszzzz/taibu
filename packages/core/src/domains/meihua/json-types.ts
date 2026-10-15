@@ -95,6 +95,7 @@ export interface MeihuaCanonicalJSON {
     表达式: string;
   }>;
   判断参考?: {
+    /** 现行规则只出吉、凶；平只见于按旧版计分规则保存的结果。 */
     结果: '吉' | '平' | '凶';
     总结: string;
     依据: string[];

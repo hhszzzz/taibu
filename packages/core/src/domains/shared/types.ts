@@ -197,13 +197,20 @@ export type YaoMovementState = 'static' | 'changing' | 'hidden_moving' | 'day_br
 
 export type WangShuai = 'wang' | 'xiang' | 'xiu' | 'qiu' | 'si';
 
-export type KongWangState = 'not_kong' | 'kong_static' | 'kong_changing' | 'kong_ri_chong' | 'kong_yue_jian';
+/**
+ * 旬空状态：kong_static 真空（静而无气、无日建动爻生扶）；kong_supported 假空（旺相或得日建、动爻生扶，旬内仍空，出空有用）；
+ * kong_changing 动空；kong_ri_chong 冲空则实；kong_yue_jian 临月建而空（出空有用）。
+ */
+export type KongWangState = 'not_kong' | 'kong_static' | 'kong_supported' | 'kong_changing' | 'kong_ri_chong' | 'kong_yue_jian';
 
 export type YaoSpecialStatus = 'none' | 'anDong' | 'riPo' | 'yuePo';
 
 export type YongShenSelectionStatus = 'resolved' | 'ambiguous' | 'from_changed' | 'from_temporal' | 'from_fushen' | 'missing';
 
-export type CandidateStrength = 'strong' | 'moderate' | 'weak' | 'unknown';
+/** 日月论爻之气：strong 有气 / moderate 气平（日月相敌）/ weak 无气 */
+export type YaoStrengthLevel = 'strong' | 'moderate' | 'weak';
+
+export type CandidateStrength = YaoStrengthLevel | 'unknown';
 
 export interface ChangedYaoDetail {
   type: number;
@@ -225,6 +232,8 @@ export interface GanZhiTime {
 
 export interface YaoStrengthInfo {
   wangShuai: WangShuai;
+  level: YaoStrengthLevel;
+  /** 等同 level === 'strong' */
   isStrong: boolean;
   specialStatus: YaoSpecialStatus;
   evidence: string[];
@@ -242,6 +251,8 @@ export interface YongShenCandidateInfo {
   strengthLabel: string;
   movementState: YaoMovementState;
   movementLabel: string;
+  /** 明现、变出之爻的暗动/日破/月破（动爻月破时 movementState 仍为 changing） */
+  specialStatus?: YaoSpecialStatus;
   isShiYao: boolean;
   isYingYao: boolean;
   kongWangState?: KongWangState;
@@ -334,16 +345,27 @@ export interface ChongHeTransition {
   description?: string;
 }
 
+/** 卦级反伏所在：inner 内卦、outer 外卦、both 内外卦 */
+export type GuaScope = 'inner' | 'outer' | 'both';
+
 export interface GuaFanFuYinInfo {
   isFanYin: boolean;
   isFuYin: boolean;
+  /** 反吟所在之卦（《增删卜易·反伏章》「内卦反伏，内则不安。外卦反伏，外则不宁」） */
+  fanYinScope?: GuaScope;
+  /** 伏吟所在之卦（同章「内卦动变伏吟，内则呻吟，外卦动变伏吟，外则忧郁」） */
+  fuYinScope?: GuaScope;
+  /** 反吟、伏吟的判据（某卦化某卦、纳甲复化或相冲）；断语由范围另行给出 */
   description?: string;
 }
 
 export interface SanHeAnalysisInfo {
   hasFullSanHe: boolean;
   fullSanHe?: { name: string; result: string; positions: number[]; description?: string; };
+  /** 成局之三合（旧数据可能混有未成局者，以 description 为准） */
   fullSanHeList?: Array<{ name: string; result: string; positions: number[]; description?: string; }>;
+  /** 三支俱见而只一支发动、不成局者 */
+  unformedSanHe?: Array<{ name: string; result: string; positions: number[]; description?: string; }>;
   hasBanHe: boolean;
   banHe?: Array<{ branches: string[]; result: string; type: string; positions: number[]; }>;
 }

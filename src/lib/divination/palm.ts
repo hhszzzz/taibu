@@ -56,6 +56,17 @@ export const PALM_ANALYSIS_TYPES: PalmAnalysisType[] = [
 /** 手型类型 */
 export type HandType = 'left' | 'right' | 'both';
 
+const PALM_HAND_LABELS: Record<HandType, string> = {
+    left: '左手',
+    right: '右手',
+    both: '双手',
+};
+
+/** 手型中文名；不是已知手型（含历史记录缺失、接口传入的任意字符串）时返回 null。 */
+export function getPalmHandLabel(handType: string | null | undefined): string | null {
+    return handType && Object.hasOwn(PALM_HAND_LABELS, handType) ? PALM_HAND_LABELS[handType as HandType] : null;
+}
+
 // ===== 提示词生成 =====
 
 /**
@@ -156,7 +167,7 @@ export function buildPalmUserPrompt(
     handType: HandType = 'left',
     question?: string
 ): string {
-    const handLabel = handType === 'left' ? '左手' : handType === 'right' ? '右手' : '双手';
+    const handLabel = getPalmHandLabel(handType) ?? '双手';
     const typeInfo = PALM_ANALYSIS_TYPES.find(t => t.id === analysisType);
     const typeName = typeInfo?.name || '综合分析';
 
@@ -177,7 +188,7 @@ export function buildPalmUserPrompt(
 export function generatePalmTitle(analysisType: string = 'full', handType: HandType = 'left'): string {
     const typeInfo = PALM_ANALYSIS_TYPES.find(t => t.id === analysisType);
     const typeName = typeInfo?.name || '综合分析';
-    const handLabel = handType === 'left' ? '左手' : handType === 'right' ? '右手' : '双手';
+    const handLabel = getPalmHandLabel(handType) ?? '双手';
     return `手相分析 - ${handLabel}${typeName}`;
 }
 

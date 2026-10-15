@@ -21,6 +21,7 @@ import {
 import { requestBrowserData } from '@/lib/browser-api';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { SettingsSwitch } from '@/components/settings/SettingsControls';
 import { useToast } from '@/components/ui/Toast';
 import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 import { getVendorIcon } from '@/lib/ai/vendor-config';
@@ -473,21 +474,15 @@ export function AIModelPanel() {
                                 onClick={() => setExpandedModel(isExpanded ? null : model.id)}
                             >
                                 <div className="flex items-center gap-3">
-                                    {/* 启用状态 */}
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            updateModel(model.id, { isEnabled: !model.isEnabled });
-                                        }}
-                                        disabled={isUpdating}
-                                        className={`w-10 h-6 rounded-full relative transition-colors ${model.isEnabled ? 'bg-green-500' : 'bg-background-tertiary'
-                                            }`}
-                                    >
-                                        <span
-                                            className={`absolute top-1 w-4 h-4 rounded-full bg-background transition-transform ${model.isEnabled ? 'left-5' : 'left-1'
-                                                }`}
+                                    {/* 启用状态；点击开关不展开卡片 */}
+                                    <span className="inline-flex" onClick={(e) => e.stopPropagation()}>
+                                        <SettingsSwitch
+                                            label={`启用 ${model.displayName}`}
+                                            checked={model.isEnabled}
+                                            disabled={isUpdating}
+                                            onToggle={() => updateModel(model.id, { isEnabled: !model.isEnabled })}
                                         />
-                                    </button>
+                                    </span>
 
                                     {/* 模型信息 */}
                                     <div>
@@ -526,11 +521,23 @@ export function AIModelPanel() {
 
                                 <div className="flex items-center gap-2">
                                     {isUpdating && <SoundWaveLoader variant="inline" />}
-                                    {isExpanded ? (
-                                        <ChevronUp className="w-5 h-5 text-foreground-secondary" />
-                                    ) : (
-                                        <ChevronDown className="w-5 h-5 text-foreground-secondary" />
-                                    )}
+                                    {/* 整个头部可点击展开；这个按钮给键盘和读屏用户提供同样的入口 */}
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setExpandedModel(isExpanded ? null : model.id);
+                                        }}
+                                        aria-expanded={isExpanded}
+                                        aria-label={`${isExpanded ? '收起' : '展开'} ${model.displayName} 的设置`}
+                                        className="settings-icon-button"
+                                    >
+                                        {isExpanded ? (
+                                            <ChevronUp aria-hidden="true" className="w-5 h-5" />
+                                        ) : (
+                                            <ChevronDown aria-hidden="true" className="w-5 h-5" />
+                                        )}
+                                    </button>
                                 </div>
                             </div>
 

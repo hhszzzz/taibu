@@ -30,7 +30,6 @@ type VendorIconProps = {
 
 type VendorIconComponent = ComponentType<VendorIconProps> & {
     Color?: ComponentType<VendorIconProps>;
-    colorPrimary?: string;
 };
 
 const vendorIcons: Record<string, VendorIconComponent> = {
@@ -46,7 +45,6 @@ const vendorIcons: Record<string, VendorIconComponent> = {
     minimax: Minimax,
 };
 
-const iconColorFallback = 'currentColor';
 const fallbackIcon = (s = 18) => <Sparkles size={s} className="text-foreground-secondary" />;
 
 export function getVendorIcon(vendor: string, size?: number): ReactNode {
@@ -60,12 +58,12 @@ export function getVendorIcon(vendor: string, size?: number): ReactNode {
         return <ColorIcon size={size ?? 18} className="shrink-0" />;
     }
 
-    const monoColor = Icon.colorPrimary ?? iconColorFallback;
-
+    // 只有单色版本的标志（OpenAI、Kimi、xAI）跟随文字颜色：
+    // 它们的品牌主色是纯黑或纯白（xAI 为 #fff），固定取色会在某一主题下看不见。
     return (
         <Icon
             size={size ?? 18}
-            color={monoColor}
+            color="currentColor"
             className="shrink-0"
         />
     );

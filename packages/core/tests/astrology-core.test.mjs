@@ -57,6 +57,16 @@ test('astrology should produce natal chart, transit chart, houses, and aspects',
   assert.equal(foundBelowTargetCase, true);
 });
 
+test('astrology natal aspects leave out the fixed north–south node opposition', () => {
+  for (const birthYear of [1950, 1975, 1990, 2010]) {
+    const result = calculateAstrology({ ...sampleInput, birthYear });
+    const isNodePair = (aspect) => [aspect.from.key, aspect.to.key].sort().join() === 'northnode,southnode';
+    assert.equal(result.majorAspects.some(isNodePair), false, String(birthYear));
+    assert.ok(result.majorAspects.some((aspect) => aspect.from.category === 'point' || aspect.to.category === 'point'), `${birthYear} keeps other point aspects`);
+    assert.doesNotMatch(toAstrologyText(result, { detailLevel: 'full' }), /北交点 对冲 南交点/u);
+  }
+});
+
 test('astrology renderers should keep full-only extensions opt-in', () => {
   const result = calculateAstrology(sampleInput);
 

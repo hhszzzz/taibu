@@ -127,8 +127,9 @@ export async function ingestKnowledgeBaseSource(input: {
 }
 
 export async function removeKnowledgeBaseArchive(id: string): Promise<void> {
+  // 上传文件的虚拟归档 id 含文件名，可能带 `/`、`#`、`?` 等字符，必须整体编码为一个路径段。
   await requestBrowserData<{ success?: boolean }>(
-    `/api/knowledge-base/archive/${id}`,
+    `/api/knowledge-base/archive/${encodeURIComponent(id)}`,
     { method: 'DELETE' },
     { fallbackMessage: '取消归档失败' },
   );

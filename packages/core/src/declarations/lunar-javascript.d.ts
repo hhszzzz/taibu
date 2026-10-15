@@ -58,6 +58,8 @@ declare module 'lunar-javascript' {
     getJieQiList(): string[];
     getDayInGanZhi(): string;
     getYearInGanZhi(): string;
+    /** 以立春日换年的年干支（getMonthInGanZhi 的月干即据此推算） */
+    getYearInGanZhiByLiChun(): string;
     getMonthInGanZhi(): string;
     getTimeInGanZhi(): string;
     getMonthInGanZhiExact(): string;

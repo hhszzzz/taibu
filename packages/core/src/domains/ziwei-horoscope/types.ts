@@ -9,11 +9,15 @@ export interface ZiweiHoroscopeInput extends ZiweiInput {
 }
 
 export interface HoroscopePeriodInfo {
+  /** 该运限命宫所在的本命宫位索引（0–11，与本命盘 palaces 同一坐标系）；无法确定时为 -1 */
   index: number;
   name: string;
   heavenlyStem: string;
   earthlyBranch: string;
+  /** 本命宫位索引 → 该运限重排后的宫名（palaceNames[index] 为该运限的命宫） */
   palaceNames: string[];
+  /** 该运限命宫落入的本命宫名；索引越界时缺省 */
+  natalPalaceName?: string;
   mutagen: string[];
   startAge?: number;
   endAge?: number;

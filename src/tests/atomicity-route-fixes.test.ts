@@ -285,12 +285,7 @@ test('knowledge-base DELETE should return 404 when no user-owned row is deleted'
   const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
   const originalEnsureFeatureRouteEnabled = featureGateModule.ensureFeatureRouteEnabled;
 
-  featureGateModule.ensureFeatureRouteEnabled = async () => null;
-  apiUtilsModule.requireUserContext = async () => ({
-    user: { id: 'user-1' },
-    supabase: {},
-  });
-  apiUtilsModule.getSystemAdminClient = () => ({
+  const userDb = {
     from: () => ({
       delete: () => ({
         eq: () => ({
@@ -300,7 +295,16 @@ test('knowledge-base DELETE should return 404 when no user-owned row is deleted'
         }),
       }),
     }),
+  };
+  featureGateModule.ensureFeatureRouteEnabled = async () => null;
+  apiUtilsModule.requireUserContext = async () => ({
+    user: { id: 'user-1' },
+    db: userDb,
+    supabase: userDb,
   });
+  apiUtilsModule.getSystemAdminClient = () => {
+    throw new Error('knowledge-base DELETE must use the caller database context');
+  };
   delete require.cache[routePath];
 
   t.after(() => {
@@ -320,6 +324,48 @@ test('knowledge-base DELETE should return 404 when no user-owned row is deleted'
 
   assert.equal(response.status, 404);
   assert.equal(payload.error, '知识库不存在');
+});
+
+test('knowledge-base id routes fail closed instead of falling back to the system-admin client', async (t) => {
+  const apiUtilsModule = require('../lib/api-utils') as any;
+  const featureGateModule = require('../lib/feature-gate-utils') as any;
+  const routePath = require.resolve('../app/api/knowledge-base/[id]/route');
+  const originalRequireUserContext = apiUtilsModule.requireUserContext;
+  const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
+  const originalEnsureFeatureRouteEnabled = featureGateModule.ensureFeatureRouteEnabled;
+
+  featureGateModule.ensureFeatureRouteEnabled = async () => null;
+  // 用户态缺少可用的数据库客户端（例如 token 交换失败），路由必须直接失败。
+  apiUtilsModule.requireUserContext = async () => ({ user: { id: 'user-1' }, supabase: {} });
+  apiUtilsModule.getSystemAdminClient = () => {
+    throw new Error('a missing caller context must never reach the system-admin client');
+  };
+  delete require.cache[routePath];
+
+  t.after(() => {
+    featureGateModule.ensureFeatureRouteEnabled = originalEnsureFeatureRouteEnabled;
+    apiUtilsModule.requireUserContext = originalRequireUserContext;
+    apiUtilsModule.getSystemAdminClient = originalGetSystemAdminClient;
+    delete require.cache[routePath];
+  });
+
+  const { GET, PATCH, DELETE } = await import('../app/api/knowledge-base/[id]/route');
+  const context = { params: Promise.resolve({ id: 'kb-1' }) };
+  const responses = [
+    await GET(new NextRequest('http://localhost/api/knowledge-base/kb-1'), context),
+    await PATCH(new NextRequest('http://localhost/api/knowledge-base/kb-1', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: '命理笔记' }),
+    }), context),
+    await DELETE(new NextRequest('http://localhost/api/knowledge-base/kb-1', { method: 'DELETE' }), context),
+  ];
+
+  assert.deepEqual(responses.map(response => response.status), [500, 500, 500]);
+  assert.deepEqual(
+    await Promise.all(responses.map(async response => (await response.json()).error)),
+    ['获取知识库失败', '更新知识库失败', '删除知识库失败'],
+  );
 });
 
 test('community reports POST should submit and notify via transactional rpc', async (t) => {

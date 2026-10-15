@@ -4,6 +4,7 @@ import { getCurrentUserSettings, updateCurrentUserSettings } from '@/lib/user/se
 import { loadReminderSubscriptions, updateReminderSubscriptionClient } from '@/lib/reminders-client';
 import { DEFAULT_BRIEFING_PREFERENCES, initialBriefingPreferences, validBriefingPreferences, type BriefingPreferences } from '@/lib/briefing-preferences';
 import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
+import { SettingsSwitch } from '@/components/settings/SettingsControls';
 export function BriefingSettings({ userId, initialPreferences, initialEnabled = false }: { userId: string; initialPreferences?: BriefingPreferences; initialEnabled?: boolean }) {
     const [preferences, setPreferences] = useState<BriefingPreferences>(initialPreferences ?? DEFAULT_BRIEFING_PREFERENCES);
     const [savedPreferences, setSavedPreferences] = useState<BriefingPreferences>(initialPreferences ?? DEFAULT_BRIEFING_PREFERENCES);
@@ -45,5 +46,19 @@ export function BriefingSettings({ userId, initialPreferences, initialEnabled = 
         finally { setBusy(false); }
     }
     const zones = [...new Set([preferences.timezone, 'Asia/Shanghai', 'UTC', ...Intl.supportedValuesOf('timeZone')])];
-    return <section className="space-y-3"><h2 className="text-sm font-semibold">每日早报</h2><p className="text-sm text-foreground-secondary">默认关闭。成功生成每天消耗 1 积分；余额不足跳过当天，最终失败退回预占积分。早报送入独立对话与站内通知。</p><div className="flex flex-wrap items-center gap-3"><label className="text-sm">投递时间 <input aria-label="早报投递时间" type="time" value={preferences.time} disabled={busy} onChange={event => setPreferences({ ...preferences, time: event.target.value })} className="rounded border border-border bg-background px-2 py-1" /></label><label className="text-sm">时区 <select aria-label="早报时区" value={preferences.timezone} disabled={busy} onChange={event => setPreferences({ ...preferences, timezone: event.target.value })} className="max-w-[200px] rounded border border-border bg-background px-2 py-1">{zones.map(zone => <option key={zone}>{zone}</option>)}</select></label><button type="button" role="switch" aria-label="每日早报" aria-checked={enabled} disabled={busy || !loaded} onClick={() => void save(!enabled)} className="rounded border border-border px-3 py-1.5 text-sm">{enabled ? '已开启 · 关闭' : '开启早报'}</button><button type="button" disabled={busy || !loaded || !validBriefingPreferences(preferences)} onClick={() => void save(enabled)} className="rounded border border-border px-3 py-1.5 text-sm">保存时间</button></div>{error && <p role="alert" className="text-sm text-red-500">{error}{!loaded && <button type="button" className="ml-2 underline" disabled={busy} onClick={() => setRetry(value => value + 1)}>重试加载</button>}</p>}</section>;
+    return <section className="settings-section">
+        <div className="settings-briefing-heading">
+            <div>
+                <h3>每日早报</h3>
+                <p>每天按时生成一份早报，送入独立对话与站内通知。默认关闭；成功生成消耗 1 积分，余额不足当天跳过，最终失败会退回预占积分。</p>
+            </div>
+            <SettingsSwitch label="每日早报" checked={enabled} disabled={busy || !loaded} onToggle={() => void save(!enabled)} />
+        </div>
+        <div className="settings-card settings-briefing-form">
+            <label className="settings-field">投递时间<input aria-label="早报投递时间" type="time" value={preferences.time} disabled={busy} onChange={event => setPreferences({ ...preferences, time: event.target.value })} className="settings-input" /></label>
+            <label className="settings-field min-w-[12rem] flex-1">时区<select aria-label="早报时区" value={preferences.timezone} disabled={busy} onChange={event => setPreferences({ ...preferences, timezone: event.target.value })} className="settings-select w-full">{zones.map(zone => <option key={zone}>{zone}</option>)}</select></label>
+            <button type="button" disabled={busy || !loaded || !validBriefingPreferences(preferences)} onClick={() => void save(enabled)} className="settings-button">保存时间</button>
+        </div>
+        {error && <p role="alert" className="mt-2 text-sm text-danger">{error}{!loaded && <button type="button" className="ml-2 underline" disabled={busy} onClick={() => setRetry(value => value + 1)}>重试加载</button>}</p>}
+    </section>;
 }

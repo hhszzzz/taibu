@@ -41,6 +41,15 @@ export interface FortuneLevels {
     social: FortuneLevel;
 }
 
+/** 综合之外的五个运势维度及中文名（日运 / 月运等级条与问答上下文共用）。 */
+export const FORTUNE_DIMENSIONS = [
+    { key: 'career', label: '事业运' },
+    { key: 'wealth', label: '财运' },
+    { key: 'love', label: '感情运' },
+    { key: 'health', label: '健康运' },
+    { key: 'social', label: '人际运' },
+] as const satisfies ReadonlyArray<{ key: Exclude<keyof FortuneLevels, 'overall'>; label: string }>;
+
 /** 图表数值（仅用于趋势图渲染，不对用户展示） */
 export interface FortuneChartScores {
     overall: number;
@@ -94,6 +103,14 @@ function weightToLevel(w: number): FortuneLevel {
     if (w >= 55) return '平';
     if (w >= 45) return '小凶';
     return '凶';
+}
+
+/**
+ * 趋势图数值 → 运势等级。_chart 即内部权重，换算规则与卡片等级相同，
+ * 供图表提示等位置展示等级（数值本身不对用户展示）。
+ */
+export function chartScoreToFortuneLevel(score: number): FortuneLevel {
+    return weightToLevel(score);
 }
 
 /** 运势等级 → 图表数值（仅供趋势图渲染） */

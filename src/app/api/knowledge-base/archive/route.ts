@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { DataSourceType } from '@/lib/data-sources/types';
 import { requireUserContext, jsonError, jsonOk } from '@/lib/api-utils';
 import { ensureFeatureRouteEnabled } from '@/lib/feature-gate-utils';
+import { VIRTUAL_ARCHIVE_SOURCE_TYPES, buildVirtualArchiveId, isVirtualArchiveSourceType } from '@/lib/knowledge-base/archive-ids';
 
 const DEFAULT_ARCHIVE_LIMIT = 20;
 const MAX_ARCHIVE_LIMIT = 100;
@@ -76,17 +77,20 @@ async function loadArchivedSourceBatch(
         .range(offset, offset + limit - 1);
 }
 
-async function loadVirtualChatArchiveBatch(
+async function loadVirtualArchiveBatch(
     service: KnowledgeBaseArchiveClient,
     kbId: string,
     offset: number,
     limit: number,
 ) {
+    // 每个来源恰有一条 chunk_index = 0 的条目（kb_replace_source_entries 按 0 起连续写入分块），
+    // 只取首块使分页偏移按来源计数，长文件的大量分块不会拖慢翻页。
     return await service
         .from('knowledge_entries')
         .select('source_type, source_id, created_at')
         .eq('kb_id', kbId)
-        .eq('source_type', 'chat_message')
+        .in('source_type', [...VIRTUAL_ARCHIVE_SOURCE_TYPES])
+        .eq('chunk_index', 0)
         .order('created_at', { ascending: false })
         .range(offset, offset + limit - 1);
 }
@@ -152,7 +156,7 @@ export async function GET(request: NextRequest) {
             : loadArchivedSourceBatch(supabase, user.id, kbId, archivedOffset, batchSize) as Promise<{ data: ArchiveRow[]; error: unknown }>;
         const virtualBatchPromise: Promise<{ data: Array<{ source_type: string; source_id: string; created_at: string }>; error: unknown }> = virtualDone
             ? Promise.resolve({ data: [] as Array<{ source_type: string; source_id: string; created_at: string }>, error: null })
-            : loadVirtualChatArchiveBatch(supabase, kbId, virtualOffset, batchSize) as Promise<{ data: Array<{ source_type: string; source_id: string; created_at: string }>; error: unknown }>;
+            : loadVirtualArchiveBatch(supabase, kbId, virtualOffset, batchSize) as Promise<{ data: Array<{ source_type: string; source_id: string; created_at: string }>; error: unknown }>;
 
         const [archivedBatch, virtualBatch] = await Promise.all([
             archivedBatchPromise,
@@ -164,25 +168,30 @@ export async function GET(request: NextRequest) {
         }
 
         const archivedBatchRows = (archivedBatch.data || []) as ArchiveRow[];
-        const virtualBatchRows = (virtualBatch.data || []).map((row: { source_type: string; source_id: string; created_at: string }): ArchiveRow => ({
-            id: `chat_message:${kbId}:${row.source_id}`,
-            kb_id: kbId,
-            source_type: row.source_type,
-            source_id: row.source_id,
-            created_at: row.created_at,
-        }));
+        const virtualBatchData = virtualBatch.data || [];
+        const virtualBatchRows = virtualBatchData.flatMap((row: { source_type: string; source_id: string; created_at: string }): ArchiveRow[] => (
+            isVirtualArchiveSourceType(row.source_type)
+                ? [{
+                    id: buildVirtualArchiveId(row.source_type, kbId, row.source_id),
+                    kb_id: kbId,
+                    source_type: row.source_type,
+                    source_id: row.source_id,
+                    created_at: row.created_at,
+                }]
+                : []
+        ));
 
         archivedRows.push(...archivedBatchRows);
         virtualRows.push(...virtualBatchRows);
 
         archivedOffset += archivedBatchRows.length;
-        virtualOffset += virtualBatchRows.length;
+        virtualOffset += virtualBatchData.length;
         archivedDone = archivedBatchRows.length < batchSize;
-        virtualDone = virtualBatchRows.length < batchSize;
+        virtualDone = virtualBatchData.length < batchSize;
 
         mergedRows = mergeArchiveRows(archivedRows, virtualRows);
 
-        if (archivedBatchRows.length === 0 && virtualBatchRows.length === 0) {
+        if (archivedBatchRows.length === 0 && virtualBatchData.length === 0) {
             break;
         }
 

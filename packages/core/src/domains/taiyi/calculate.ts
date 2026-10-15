@@ -133,7 +133,8 @@ function buildDatetimeContext(
     solarDateTime: formatSolarDateTime(year, month, day, hour, minute),
     lunarDate: lunar.toString(),
     jieQi: lunar.getJieQi() || undefined,
-    yearGanZhi: lunar.getYearInGanZhi(),
+    // 月柱与年、月九星都以立春日换年；年柱若按春节换年，立春到春节之间会出现「癸卯年 丙寅月」
+    yearGanZhi: lunar.getYearInGanZhiByLiChun(),
     monthGanZhi: lunar.getMonthInGanZhi(),
     dayGanZhi: lunar.getDayInGanZhi(),
     hourGanZhi: lunar.getTimeInGanZhi(),

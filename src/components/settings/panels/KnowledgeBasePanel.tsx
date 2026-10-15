@@ -1,24 +1,22 @@
 /**
- * 知识库管理页面
+ * 知识库管理
  *
  * 'use client' 标记说明：
- * - 使用 React hooks (useState, useEffect, useCallback)
- * - 使用 useToast 进行通知
+ * - 管理知识库列表、归档分页（IntersectionObserver）与文件上传状态
+ * - 监听全站知识库同步事件，让其他页面「加入知识库」后这里的归档列表保持一致
  */
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-    BookOpenText, Plus, Trash2,
-    ChevronDown, ChevronUp, Unlink2, Save, Upload,
-    FileText, Database, Sparkles, AlertCircle
-} from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import Link from 'next/link';
+import { ChevronDown, FileText, PencilLine, Plus, Search, Trash2, Unlink2, Upload } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useSessionMembership } from '@/lib/hooks/useSessionMembership';
 import { useToast } from '@/components/ui/Toast';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { SettingsLoginRequired } from '@/components/settings/SettingsLoginRequired';
 import { KNOWLEDGE_BASE_SYNC_EVENT } from '@/lib/browser-api';
+import { formatShortDate } from '@/lib/short-date';
 import { MING_RECORD_SOURCE_TYPE } from '@/lib/data-sources/types';
 import {
     createKnowledgeBase,
@@ -31,11 +29,13 @@ import {
     updateKnowledgeBase,
     uploadKnowledgeBaseFile,
 } from '@/lib/knowledge-base/browser-client';
+import type { KnowledgeBaseWeight } from '@/lib/knowledge-base/types';
+import { KNOWLEDGE_FILE_ACCEPT, KNOWLEDGE_FILE_HINT, validateKnowledgeFile } from '@/lib/knowledge-base/upload-policy';
 import { getCurrentUserSettings, updateCurrentUserSettings } from '@/lib/user/settings';
 import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 
 type KnowledgeBase = KnowledgeBaseSummary & {
-    weight: 'low' | 'normal' | 'high';
+    weight: KnowledgeBaseWeight;
 };
 
 type ArchiveBucket = {
@@ -46,6 +46,12 @@ type ArchiveBucket = {
     loading: boolean;
     error: string | null;
     appendError: string | null;
+};
+
+type KnowledgeBaseDraft = {
+    id: string;
+    name: string;
+    description: string;
 };
 
 const ARCHIVE_PAGE_SIZE = 20;
@@ -71,16 +77,17 @@ function mergeArchivedSources(current: ArchivedSource[], incoming: ArchivedSourc
     return Array.from(merged.values());
 }
 
-const weightLabel: Record<KnowledgeBase['weight'], string> = {
-    low: '低优先级',
-    normal: '默认',
-    high: '高优先级',
-};
+const WEIGHT_OPTIONS: Array<{ value: KnowledgeBaseWeight; label: string }> = [
+    { value: 'high', label: '高优先级' },
+    { value: 'normal', label: '默认' },
+    { value: 'low', label: '低优先级' },
+];
 
 const sourceTypeLabel: Record<string, string> = {
     conversation: '对话',
     record: '命理记录',
     chat_message: '对话回复',
+    file: '上传文件',
     bazi_chart: '八字命盘',
     ziwei_chart: '紫微命盘',
     tarot_reading: '塔罗占卜',
@@ -98,6 +105,15 @@ const sourceTypeLabel: Record<string, string> = {
     xiaoliuren_divination: '小六壬',
 };
 
+// 上传文件没有内容摘要可读，用文件名更好认；其他来源优先显示归档内容的首段。
+function getArchiveTitle(archive: ArchivedSource) {
+    if (archive.source_type === 'file') return archive.source_id;
+    return archive.preview || archive.source_id;
+}
+
+const SECTION_TITLE = 'text-[13px] font-medium text-foreground-tertiary';
+const CARD = 'rounded-[14px] border border-border bg-surface';
+
 export default function KnowledgeBasePanel() {
     const { showToast } = useToast();
     const {
@@ -111,12 +127,13 @@ export default function KnowledgeBasePanel() {
     const [listError, setListError] = useState<string | null>(null);
     const [createError, setCreateError] = useState<string | null>(null);
     const [kbs, setKbs] = useState<KnowledgeBase[]>([]);
-    const [savedKbs, setSavedKbs] = useState<KnowledgeBase[]>([]);
     const [expandedKbId, setExpandedKbId] = useState<string | null>(null);
     const [archives, setArchives] = useState<Record<string, ArchiveBucket>>({});
+    const [createOpen, setCreateOpen] = useState(false);
     const [creating, setCreating] = useState(false);
     const [newName, setNewName] = useState('');
     const [newDescription, setNewDescription] = useState('');
+    const [draft, setDraft] = useState<KnowledgeBaseDraft | null>(null);
     const [savingKbId, setSavingKbId] = useState<string | null>(null);
     const [deletingKbId, setDeletingKbId] = useState<string | null>(null);
     const [removingArchiveId, setRemovingArchiveId] = useState<string | null>(null);
@@ -129,26 +146,37 @@ export default function KnowledgeBasePanel() {
     const [promptSavingId, setPromptSavingId] = useState<string | null>(null);
     const [pendingDeleteKbId, setPendingDeleteKbId] = useState<string | null>(null);
     const archiveLoadMoreRef = useRef<HTMLDivElement | null>(null);
-    useUnsavedSettingsGuard(!!newName || !!newDescription || !!uploadFile || !loading && JSON.stringify(kbs) !== JSON.stringify(savedKbs));
+    const createNameRef = useRef<HTMLInputElement | null>(null);
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
     const initializedUserIdRef = useRef<string | null>(null);
     const archivesRef = useRef<Record<string, ArchiveBucket>>({});
     const archiveRequestKeyRef = useRef<Record<string, string>>({});
     const membershipType = membershipResolved ? (membershipInfo?.type ?? 'free') : null;
+    // 创建、导入与检索都要求 Plus 及以上；会员状态未确定前不锁界面，最终由服务端校验。
+    const membershipLocked = membershipType === 'free';
+    const draftKb = draft ? kbs.find((kb) => kb.id === draft.id) ?? null : null;
+    const draftDirty = !!draft && !!draftKb
+        && (draft.name !== draftKb.name || draft.description !== (draftKb.description ?? ''));
+    // 被选中的知识库删除后回落到第一个，避免把文件传到已不存在的知识库。
+    const targetUploadKbId = kbs.some((kb) => kb.id === uploadKbId) ? uploadKbId : kbs[0]?.id ?? null;
+    useUnsavedSettingsGuard(!!newName.trim() || !!newDescription.trim() || !!uploadFile || draftDirty);
 
     useEffect(() => {
         archivesRef.current = archives;
     }, [archives]);
 
+    useEffect(() => {
+        if (createOpen) createNameRef.current?.focus();
+    }, [createOpen]);
+
     const loadKnowledgeBases = useCallback(async () => {
         setListError(null);
         try {
             const kbList = await listKnowledgeBases();
-            setKbs(kbList as KnowledgeBase[]);
-            setSavedKbs(kbList as KnowledgeBase[]);
+            setKbs(kbList.map((kb) => ({ ...kb, weight: kb.weight ?? 'normal' })));
         } catch (loadError) {
             setListError(loadError instanceof Error ? loadError.message : '获取知识库失败');
             setKbs([]);
-            setSavedKbs([]);
         }
     }, []);
 
@@ -184,12 +212,6 @@ export default function KnowledgeBasePanel() {
         };
         void init();
     }, [loadKnowledgeBases, loadPromptKbIds, sessionLoading, userId]);
-
-    useEffect(() => {
-        if (!uploadKbId && kbs.length > 0) {
-            setUploadKbId(kbs[0].id);
-        }
-    }, [kbs, uploadKbId]);
 
     const invalidateArchiveBucket = useCallback((kbId: string) => {
         setArchives(prev => {
@@ -331,7 +353,15 @@ export default function KnowledgeBasePanel() {
         };
     }, [expandedKbId, invalidateArchiveBucket, loadArchives]);
 
-    const createKb = useCallback(async () => {
+    const closeCreateForm = useCallback(() => {
+        setCreateOpen(false);
+        setNewName('');
+        setNewDescription('');
+        setCreateError(null);
+    }, []);
+
+    const createKb = useCallback(async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
         const name = newName.trim();
         if (!name) {
             setCreateError('请输入知识库名称');
@@ -344,16 +374,15 @@ export default function KnowledgeBasePanel() {
                 name,
                 description: newDescription.trim() ? newDescription.trim() : null,
             });
-            setNewName('');
-            setNewDescription('');
+            closeCreateForm();
             await loadKnowledgeBases();
             showToast('success', '知识库创建成功');
-        } catch (createError) {
-            setCreateError(createError instanceof Error ? createError.message : '创建知识库失败');
+        } catch (createFailure) {
+            setCreateError(createFailure instanceof Error ? createFailure.message : '创建知识库失败');
         } finally {
             setCreating(false);
         }
-    }, [loadKnowledgeBases, newDescription, newName, showToast]);
+    }, [closeCreateForm, loadKnowledgeBases, newDescription, newName, showToast]);
 
     const togglePromptKb = useCallback(async (kbId: string) => {
         if (!userId) return;
@@ -380,28 +409,49 @@ export default function KnowledgeBasePanel() {
         setPromptKbIds(saved.promptKbIds);
     }, [membershipLoading, membershipType, promptKbIds, showToast, userId]);
 
-    const updateKb = useCallback(async (kb: KnowledgeBase) => {
-        setSavingKbId(kb.id);
+    const updateKb = useCallback(async (
+        kbId: string,
+        input: Parameters<typeof updateKnowledgeBase>[1],
+        successMessage: string,
+    ) => {
+        setSavingKbId(kbId);
         try {
-            await updateKnowledgeBase(kb.id, {
-                name: kb.name,
-                description: kb.description,
-                weight: kb.weight,
-            });
+            await updateKnowledgeBase(kbId, input);
             await loadKnowledgeBases();
-            showToast('success', '知识库已更新');
+            showToast('success', successMessage);
+            return true;
         } catch (saveError) {
             showToast('error', saveError instanceof Error ? saveError.message : '更新知识库失败');
+            return false;
         } finally {
             setSavingKbId(null);
         }
     }, [loadKnowledgeBases, showToast]);
+
+    const saveDraft = useCallback(async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        const name = draft?.name.trim();
+        if (!draft || !name) return;
+        const saved = await updateKb(draft.id, {
+            name,
+            description: draft.description.trim() || null,
+        }, '知识库已更新');
+        if (saved) setDraft(null);
+    }, [draft, updateKb]);
+
+    // 优先级即改即存：先更新界面，失败时恢复原值。
+    const changeWeight = useCallback(async (kb: KnowledgeBase, weight: KnowledgeBaseWeight) => {
+        setKbs(prev => prev.map(item => item.id === kb.id ? { ...item, weight } : item));
+        const saved = await updateKb(kb.id, { weight }, '检索优先级已更新');
+        if (!saved) setKbs(prev => prev.map(item => item.id === kb.id ? { ...item, weight: kb.weight } : item));
+    }, [updateKb]);
 
     const deleteKb = useCallback(async (kbId: string) => {
         setDeletingKbId(kbId);
         try {
             await deleteKnowledgeBase(kbId);
             if (expandedKbId === kbId) setExpandedKbId(null);
+            setDraft(current => current?.id === kbId ? null : current);
             invalidateArchiveBucket(kbId);
             await loadKnowledgeBases();
             showToast('success', '知识库已删除');
@@ -422,7 +472,7 @@ export default function KnowledgeBasePanel() {
                 invalidateArchiveBucket(expandedKbId);
                 await loadArchives(expandedKbId);
             }
-            showToast('success', '已取消归档');
+            showToast('success', '已移出知识库');
         } catch (removeError) {
             const message = removeError instanceof Error ? removeError.message : '取消归档失败';
             showToast('error', message);
@@ -431,8 +481,17 @@ export default function KnowledgeBasePanel() {
         }
     }, [expandedKbId, invalidateArchiveBucket, loadArchives, showToast]);
 
+    // 选择文件时就按服务端同一规则校验，不把注定被拒的文件传上去。
+    const selectUploadFile = useCallback((file: File | null) => {
+        const fileError = file ? validateKnowledgeFile(file) : null;
+        setUploadSuccess(null);
+        setUploadError(fileError);
+        setUploadFile(fileError ? null : file);
+        if (fileError && fileInputRef.current) fileInputRef.current.value = '';
+    }, []);
+
     const uploadKnowledgeFile = useCallback(async () => {
-        if (!uploadKbId) {
+        if (!targetUploadKbId) {
             setUploadError('请选择知识库');
             return;
         }
@@ -444,445 +503,403 @@ export default function KnowledgeBasePanel() {
         setUploadError(null);
         setUploadSuccess(null);
         try {
-            await uploadKnowledgeBaseFile(uploadKbId, uploadFile);
+            await uploadKnowledgeBaseFile(targetUploadKbId, uploadFile);
             setUploadFile(null);
-            // Reset file input value
-            const fileInput = document.getElementById('kb-file-upload') as HTMLInputElement;
-            if (fileInput) fileInput.value = '';
+            if (fileInputRef.current) fileInputRef.current.value = '';
 
-            setUploadSuccess('文件上传成功');
-            // Automatically expand the KB to show new content
-            if (uploadKbId !== expandedKbId) {
-                setExpandedKbId(uploadKbId);
+            setUploadSuccess(`已导入「${uploadFile.name}」`);
+            // 展开目标知识库，直接看到刚导入的文件
+            if (targetUploadKbId !== expandedKbId) {
+                setExpandedKbId(targetUploadKbId);
             }
-            invalidateArchiveBucket(uploadKbId);
-            await loadArchives(uploadKbId);
+            invalidateArchiveBucket(targetUploadKbId);
+            await loadArchives(targetUploadKbId);
             showToast('success', '文件上传成功');
         } catch (uploadFailure) {
             setUploadError(uploadFailure instanceof Error ? uploadFailure.message : '上传失败');
         } finally {
             setUploading(false);
         }
-    }, [expandedKbId, invalidateArchiveBucket, loadArchives, showToast, uploadFile, uploadKbId]);
+    }, [expandedKbId, invalidateArchiveBucket, loadArchives, showToast, targetUploadKbId, uploadFile]);
 
     if (!sessionLoading && !userId) {
         return <SettingsLoginRequired title="请先登录后使用知识库" />;
     }
 
-    return (
-        <>
-            <div className="space-y-6">
-                <div className="space-y-6">
-                {/* 桌面端 Header */}
-                <div className="mb-6 flex items-center justify-between gap-4">
-                    <div>
-                        <h1 className="text-xl font-bold flex items-center gap-2 text-foreground">
-                            <BookOpenText className="w-5 h-5 text-emerald-500" />
-                            知识库
-                        </h1>
-                        <p className="text-xs text-foreground-secondary mt-0.5">
-                            构建你的个人命理数据库，让 AI 更精准地为你服务
-                        </p>
-                    </div>
+    const renderArchives = (kb: KnowledgeBase) => {
+        const archiveState = archives[kb.id] ?? EMPTY_ARCHIVE_BUCKET;
+        const retryAppend = () => { void loadArchives(kb.id, { append: true, offset: archiveState.nextOffset ?? 0 }); };
+
+        if (archiveState.loading && !archiveState.loaded) {
+            return (
+                <ul aria-hidden="true">
+                    {[1, 2, 3].map(i => (
+                        <li key={i} className="flex items-center gap-3 py-3 [&+li]:border-t [&+li]:border-border">
+                            <span className="h-5 w-16 rounded-md bg-foreground/10 animate-pulse" />
+                            <span className="h-4 flex-1 rounded bg-foreground/5 animate-pulse" />
+                            <span className="h-4 w-10 rounded bg-foreground/5 animate-pulse" />
+                        </li>
+                    ))}
+                </ul>
+            );
+        }
+
+        if (archiveState.error && archiveState.items.length === 0) {
+            return (
+                <div role="alert" className="flex items-center justify-between gap-3 py-4 text-sm text-danger">
+                    <span>{archiveState.error}</span>
+                    <button type="button" onClick={() => { void loadArchives(kb.id); }} className="flex-shrink-0 font-medium text-foreground">
+                        重试
+                    </button>
                 </div>
+            );
+        }
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-                    {/* 创建新知识库 */}
-                    <div className="bg-background rounded-md p-5 border border-border shadow-sm">
-                        <div className="flex items-center gap-3 mb-4">
-                            <Plus className="w-4 h-4 text-emerald-500" />
-                            <h2 className="text-sm font-semibold text-foreground">新建知识库</h2>
-                        </div>
-                        <div className="space-y-3">
-                            <input
-                                value={newName}
-                                onChange={(e) => setNewName(e.target.value)}
-                                className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500/50 transition-colors duration-150 placeholder:text-foreground-tertiary"
-                                placeholder="给知识库起个名字..."
-                            />
-                            <textarea
-                                value={newDescription}
-                                onChange={(e) => setNewDescription(e.target.value)}
-                                className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500/50 resize-none transition-colors duration-150 placeholder:text-foreground-tertiary"
-                                rows={2}
-                                placeholder="描述一下这个知识库的用途（可选）"
-                            />
-                            <button
-                                type="button"
-                                onClick={createKb}
-                                disabled={creating || !newName.trim()}
-                                className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-md border border-border bg-transparent text-foreground hover:bg-background-secondary active:bg-background-tertiary disabled:opacity-50 transition-colors duration-150 font-medium text-sm"
-                            >
-                                {creating ? <SoundWaveLoader variant="inline" /> : <Plus className="w-3.5 h-3.5" />}
-                                创建知识库
-                            </button>
-                            {createError && <div className="text-[10px] text-red-500 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{createError}</div>}
-                        </div>
-                    </div>
+        if (archiveState.items.length === 0) {
+            return (
+                <div className="py-5 text-center">
+                    <p className="text-sm text-foreground-secondary">暂无归档内容</p>
+                    <p className="mt-1 text-xs text-foreground-tertiary">在对话或结果页点「加入知识库」，或在下方导入文件。</p>
+                </div>
+            );
+        }
 
-                    {/* 上传文件 */}
-                    <div className="bg-background rounded-md p-5 border border-border shadow-sm lg:col-span-2">
-                        <div className="flex items-center gap-3 mb-4">
-                            <Upload className="w-4 h-4 text-blue-500" />
-                            <h2 className="text-sm font-semibold text-foreground">导入外部资料</h2>
-                        </div>
-                        <div className="grid sm:grid-cols-2 gap-5">
-                            <div className="space-y-3">
-                                <div>
-                                    <label className="text-xs font-medium text-foreground mb-1.5 block">选择目标知识库</label>
-                                    <select
-                                        value={uploadKbId ?? ''}
-                                        onChange={(e) => setUploadKbId(e.target.value)}
-                                        className="w-full appearance-none bg-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent/50 transition-colors duration-150"
-                                        disabled={kbs.length === 0}
-                                    >
-                                        {kbs.length === 0 ? (
-                                            <option value="">暂无知识库</option>
-                                        ) : (
-                                            kbs.map(kb => (
-                                                <option key={kb.id} value={kb.id}>{kb.name}</option>
-                                            ))
-                                        )}
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label className="text-xs font-medium text-foreground mb-1.5 block">选择文件</label>
-                                    <input
-                                        id="kb-file-upload"
-                                        type="file"
-                                        onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
-                                        className="w-full text-xs text-foreground-secondary
-                                        file:mr-3 file:py-2 file:px-3
-                                        file:rounded-md file:border file:border-border
-                                        file:text-xs file:font-medium
-                                        file:bg-transparent file:text-foreground
-                                        hover:file:bg-background-secondary
-                                        transition-colors duration-150"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="flex flex-col justify-end space-y-3">
-                                <div className="flex-1 bg-background/50 rounded-md border border-dashed border-border p-3 flex flex-col items-center justify-center text-center">
-                                    <div className="w-8 h-8 rounded-md bg-background-secondary flex items-center justify-center mb-1.5">
-                                        <FileText className="w-4 h-4 text-foreground-secondary" />
-                                    </div>
-                                    <p className="text-[10px] text-foreground-secondary">
-                                        支持 .txt, .md, .pdf 等常见文本格式<br />
-                                        单文件最大支持 10MB
-                                    </p>
-                                </div>
+        return (
+            <>
+                <ul>
+                    {archiveState.items.map(archive => {
+                        const title = getArchiveTitle(archive);
+                        return (
+                            <li key={archive.id} className="flex items-center gap-3 py-1.5 [&+li]:border-t [&+li]:border-border">
+                                <span className="min-w-16 flex-shrink-0 rounded-md bg-background-secondary px-2 py-0.5 text-center text-xs text-foreground-secondary">
+                                    {sourceTypeLabel[archive.source_type] || archive.source_type}
+                                </span>
+                                <span className="min-w-0 flex-1 truncate text-sm text-foreground" title={title}>{title}</span>
+                                <span className="flex-shrink-0 text-xs tabular-nums text-foreground-tertiary">{formatShortDate(archive.created_at)}</span>
                                 <button
                                     type="button"
-                                    onClick={uploadKnowledgeFile}
-                                    disabled={uploading || !uploadKbId || !uploadFile}
-                                    className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-md border border-border bg-transparent text-foreground hover:bg-background-secondary active:bg-background-tertiary disabled:opacity-50 transition-colors duration-150 font-medium text-sm"
+                                    onClick={() => removeArchive(archive)}
+                                    disabled={removingArchiveId === archive.id}
+                                    className="settings-icon-button settings-icon-button-danger -mr-2"
+                                    aria-label={`移出知识库：${title}`}
+                                    title="移出知识库"
                                 >
-                                    {uploading ? <SoundWaveLoader variant="inline" /> : <Upload className="w-3.5 h-3.5" />}
-                                    开始上传
+                                    {removingArchiveId === archive.id ? <SoundWaveLoader variant="inline" /> : <Unlink2 aria-hidden="true" className="h-4 w-4" />}
                                 </button>
-                                {uploadError && <div className="text-[10px] text-red-500 text-center">{uploadError}</div>}
-                                {uploadSuccess && <div className="text-[10px] text-emerald-500 text-center">{uploadSuccess}</div>}
+                            </li>
+                        );
+                    })}
+                </ul>
+                {archiveState.error ? (
+                    <p role="alert" className="pt-2 text-xs text-danger">{archiveState.error}</p>
+                ) : null}
+                {archiveState.appendError ? (
+                    <div role="alert" className="flex items-center justify-between gap-3 pt-2 text-xs text-danger">
+                        <span>{archiveState.appendError}</span>
+                        <button type="button" onClick={retryAppend} className="flex-shrink-0 font-medium text-foreground">
+                            重试加载更多
+                        </button>
+                    </div>
+                ) : null}
+                {archiveState.hasMore && !archiveState.appendError ? (
+                    <div ref={archiveLoadMoreRef} className="flex min-h-8 items-center pt-2 text-xs text-foreground-tertiary">
+                        {archiveState.loading ? <SoundWaveLoader variant="inline" /> : '继续下滑加载更多'}
+                    </div>
+                ) : null}
+            </>
+        );
+    };
+
+    const renderKnowledgeBase = (kb: KnowledgeBase) => {
+        const expanded = expandedKbId === kb.id;
+        const editing = draft?.id === kb.id ? draft : null;
+        const saving = savingKbId === kb.id;
+        const searchEnabled = promptKbIds.includes(kb.id);
+        const archivesId = `kb-archives-${kb.id}`;
+
+        return (
+            <li key={kb.id} className={`overflow-hidden ${CARD}`}>
+                {/* 手机上操作图标与名称同行、优先级与检索换到第二行；桌面端全部排在一行。 */}
+                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-3 py-4 pl-5 pr-3">
+                    {editing ? (
+                        <form onSubmit={saveDraft} className="order-1 flex min-w-0 basis-full flex-col gap-2 sm:mr-3.5 sm:flex-[1_1_280px]" aria-label={`编辑知识库 ${kb.name}`}>
+                            <input
+                                value={editing.name}
+                                onChange={(event) => setDraft({ ...editing, name: event.target.value })}
+                                className="settings-input"
+                                aria-label="知识库名称"
+                                placeholder="知识库名称"
+                            />
+                            <textarea
+                                value={editing.description}
+                                onChange={(event) => setDraft({ ...editing, description: event.target.value })}
+                                className="settings-textarea"
+                                rows={2}
+                                aria-label="用途说明"
+                                placeholder="用途说明（可选）"
+                            />
+                            <div className="flex gap-2">
+                                <button type="submit" disabled={saving || !editing.name.trim() || !draftDirty} className="settings-button settings-button-primary">
+                                    {saving ? '保存中…' : '保存'}
+                                </button>
+                                <button type="button" disabled={saving} onClick={() => setDraft(null)} className="settings-button">
+                                    取消
+                                </button>
                             </div>
+                        </form>
+                    ) : (
+                        <div className="order-1 mr-1.5 flex min-w-0 flex-1 flex-col gap-1 sm:mr-3.5 sm:flex-[1_1_280px]">
+                            <h4 className="truncate text-base font-medium text-foreground">{kb.name}</h4>
+                            {kb.description ? (
+                                <p className="text-[13px] leading-relaxed text-foreground-secondary [overflow-wrap:anywhere]">{kb.description}</p>
+                            ) : null}
                         </div>
+                    )}
+
+                    <div className="order-3 flex w-full flex-wrap items-center gap-1.5 sm:order-2 sm:w-auto">
+                        <span className="relative">
+                            <select
+                                value={kb.weight}
+                                onChange={(event) => { void changeWeight(kb, event.target.value as KnowledgeBaseWeight); }}
+                                disabled={saving}
+                                aria-label={`${kb.name} 的检索优先级`}
+                                className="h-8 cursor-pointer appearance-none rounded-full border border-border-hover bg-surface pl-3 pr-8 text-[13px] text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                {WEIGHT_OPTIONS.map(option => (
+                                    <option key={option.value} value={option.value}>{option.label}</option>
+                                ))}
+                            </select>
+                            <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-foreground-tertiary" />
+                        </span>
+                        <button
+                            type="button"
+                            aria-pressed={searchEnabled}
+                            onClick={() => togglePromptKb(kb.id)}
+                            disabled={membershipLoading || membershipLocked || promptSavingId === kb.id}
+                            title={membershipLocked ? '仅限 Plus 以上会员使用' : '对话时检索这个知识库'}
+                            className="inline-flex h-8 items-center gap-1.5 rounded-full border border-border-hover bg-surface px-3 text-[13px] text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary disabled:cursor-not-allowed disabled:opacity-60 aria-pressed:border-transparent aria-pressed:bg-accent-soft aria-pressed:text-accent-strong"
+                        >
+                            <Search aria-hidden="true" className="h-3.5 w-3.5" />
+                            {searchEnabled ? '已启用检索' : '启用检索'}
+                        </button>
+                    </div>
+                    <div className="order-2 flex items-center gap-1.5 sm:order-3">
+                        <span aria-hidden="true" className="mx-1 hidden h-5 w-px bg-border sm:block" />
+                        <button
+                            type="button"
+                            onClick={() => setDraft({ id: kb.id, name: kb.name, description: kb.description ?? '' })}
+                            disabled={!!editing}
+                            className="settings-icon-button"
+                            aria-label={`编辑 ${kb.name} 的名称与说明`}
+                            title="编辑名称与说明"
+                        >
+                            <PencilLine aria-hidden="true" className="h-4 w-4" />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => toggleExpand(kb.id)}
+                            className="settings-icon-button"
+                            aria-expanded={expanded}
+                            aria-controls={archivesId}
+                            aria-label={`查看 ${kb.name} 的归档`}
+                            title={expanded ? '收起归档' : '查看归档'}
+                        >
+                            <ChevronDown aria-hidden="true" className={`h-4 w-4 transition-transform duration-150 ${expanded ? 'rotate-180' : ''}`} />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setPendingDeleteKbId(kb.id)}
+                            disabled={deletingKbId === kb.id}
+                            className="settings-icon-button settings-icon-button-danger"
+                            aria-label={`删除知识库 ${kb.name}`}
+                            title="删除知识库"
+                        >
+                            {deletingKbId === kb.id ? <SoundWaveLoader variant="inline" /> : <Trash2 aria-hidden="true" className="h-4 w-4" />}
+                        </button>
                     </div>
                 </div>
 
-                <div className="space-y-4">
-                    <h2 className="text-sm font-semibold text-foreground px-1 flex items-center gap-2">
-                        <Database className="w-4 h-4 text-accent" />
-                        我的知识库列表
-                    </h2>
+                {expanded ? (
+                    <div id={archivesId} className="border-t border-border bg-background px-5 py-2">
+                        {renderArchives(kb)}
+                    </div>
+                ) : null}
+            </li>
+        );
+    };
 
-                    {listError && (
-                        <div className="rounded-md border border-red-200/70 bg-red-50/60 px-4 py-3 text-xs text-red-600 flex items-center justify-between gap-3">
-                            <span>{listError}</span>
+    const pendingDeleteKb = kbs.find(kb => kb.id === pendingDeleteKbId) ?? null;
+
+    return (
+        <>
+            <div className="flex flex-col gap-9">
+                {membershipLocked ? (
+                    <div className={`flex flex-wrap items-center justify-between gap-3 px-5 py-4 ${CARD}`}>
+                        <p className="min-w-0 flex-[1_1_16rem] text-sm leading-relaxed text-foreground-secondary">
+                            知识库需要 Plus 及以上会员。升级后可以新建知识库、导入资料，并在对话中检索引用。
+                        </p>
+                        <Link href="/settings/upgrade" className="settings-button">查看订阅</Link>
+                    </div>
+                ) : null}
+
+                <section aria-labelledby="kb-list-heading" className="flex flex-col gap-3">
+                    <div className="flex min-h-10 items-center justify-between gap-3">
+                        <h3 id="kb-list-heading" className={SECTION_TITLE}>
+                            我的知识库
+                            {!loading ? <span className="ml-1.5 font-normal">{kbs.length}</span> : null}
+                        </h3>
+                        {!createOpen ? (
                             <button
                                 type="button"
-                                onClick={() => { void loadKnowledgeBases(); }}
-                                className="rounded-md border border-red-200/70 px-2.5 py-1 text-[11px] font-medium"
+                                onClick={() => setCreateOpen(true)}
+                                disabled={membershipLocked}
+                                className="settings-button settings-button-primary"
                             >
-                                重试
+                                <Plus aria-hidden="true" className="h-4 w-4" />
+                                新建知识库
                             </button>
+                        ) : null}
+                    </div>
+
+                    {createOpen ? (
+                        <form onSubmit={createKb} className={`flex flex-col gap-4 p-5 ${CARD}`} aria-label="新建知识库">
+                            <label className="settings-field-block">
+                                <span className="settings-label">名称</span>
+                                <input
+                                    ref={createNameRef}
+                                    value={newName}
+                                    onChange={(event) => setNewName(event.target.value)}
+                                    className="settings-input settings-input-lg"
+                                    placeholder="例如：家人命盘"
+                                />
+                            </label>
+                            <label className="settings-field-block">
+                                <span className="settings-label">用途说明（可选）</span>
+                                <textarea
+                                    value={newDescription}
+                                    onChange={(event) => setNewDescription(event.target.value)}
+                                    className="settings-textarea"
+                                    rows={2}
+                                    placeholder="收录哪些内容，AI 检索时会参考这段说明"
+                                />
+                            </label>
+                            {createError ? <p role="alert" className="text-sm text-danger">{createError}</p> : null}
+                            <div className="flex gap-2">
+                                <button type="submit" disabled={creating || !newName.trim()} className="settings-button settings-button-primary">
+                                    {creating ? '创建中…' : '创建'}
+                                </button>
+                                <button type="button" disabled={creating} onClick={closeCreateForm} className="settings-button settings-button-ghost">
+                                    取消
+                                </button>
+                            </div>
+                        </form>
+                    ) : null}
+
+                    {listError ? (
+                        <div role="alert" className="settings-alert">
+                            <span className="min-w-0 flex-1">{listError}</span>
+                            <button type="button" onClick={() => { void loadKnowledgeBases(); }}>重试</button>
                         </div>
-                    )}
+                    ) : null}
 
                     {loading ? (
-                        <div className="grid grid-cols-1 gap-3">
-                            {/* 骨架屏 - 模拟知识库卡片 */}
-                            {[1, 2, 3].map(i => (
-                                <div key={i} className="bg-background rounded-md border border-border p-4 sm:p-5">
-                                    <div className="flex flex-col lg:flex-row lg:items-start gap-4">
-                                        <div className="flex-1 space-y-3 min-w-0">
-                                            <div className="flex items-start gap-3">
-                                                <div className="w-5 h-5 rounded bg-foreground/10 animate-pulse" />
-                                                <div className="flex-1 space-y-2">
-                                                    <div className="h-5 w-32 rounded bg-foreground/10 animate-pulse" />
-                                                    <div className="h-4 w-48 rounded bg-foreground/5 animate-pulse" />
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <div className="h-7 w-20 rounded-lg bg-foreground/5 animate-pulse" />
-                                            <div className="h-7 w-24 rounded-lg bg-foreground/5 animate-pulse" />
-                                            <div className="h-7 w-7 rounded-lg bg-foreground/5 animate-pulse" />
-                                            <div className="h-7 w-7 rounded-lg bg-foreground/5 animate-pulse" />
-                                            <div className="h-7 w-7 rounded-lg bg-foreground/5 animate-pulse" />
-                                        </div>
+                        <ul aria-hidden="true" className="flex flex-col gap-3">
+                            {[1, 2].map(i => (
+                                <li key={i} className={`flex flex-wrap items-center gap-x-5 gap-y-3 py-4 pl-5 pr-3 ${CARD}`}>
+                                    <div className="flex min-w-0 flex-[1_1_280px] flex-col gap-2">
+                                        <span className="h-5 w-32 rounded bg-foreground/10 animate-pulse" />
+                                        <span className="h-4 w-56 max-w-full rounded bg-foreground/5 animate-pulse" />
                                     </div>
-                                </div>
-                            ))}
-                        </div>
-                    ) : kbs.length === 0 ? (
-                        <div className="bg-background rounded-md p-10 text-center border border-border border-dashed">
-                            <div className="w-14 h-14 rounded-md bg-background flex items-center justify-center mx-auto mb-3">
-                                <BookOpenText className="w-6 h-6 text-foreground-tertiary" />
-                            </div>
-                            <h3 className="text-sm font-medium text-foreground mb-1">暂无知识库</h3>
-                            <p className="text-foreground-secondary text-xs max-w-xs mx-auto">
-                                创建一个知识库，开始整理你的命理资料，让 AI 更好地理解你的需求
-                            </p>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 gap-3">
-                            {kbs.map(kb => (
-                                (() => {
-                                    const archiveState = archives[kb.id] ?? EMPTY_ARCHIVE_BUCKET;
-                                    return (
-                                <div
-                                    key={kb.id}
-                                    className={`bg-background rounded-md border transition-colors duration-150 overflow-hidden ${expandedKbId === kb.id
-                                            ? 'border-emerald-500/30 bg-background-secondary/40'
-                                            : 'border-border hover:bg-background-secondary dark:hover:bg-background-secondary'
-                                        }`}
-                                >
-                                    <div className="p-4 sm:p-5">
-                                        <div className="flex flex-col lg:flex-row lg:items-start gap-4">
-                                            {/* KB Info & Edit */}
-                                            <div className="flex-1 space-y-3 min-w-0">
-                                                <div className="flex items-start gap-3">
-                                                    <BookOpenText className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                                                    <div className="flex-1 space-y-2 min-w-0">
-                                                        <input
-                                                            value={kb.name}
-                                                            onChange={(e) => setKbs(prev => prev.map(x => x.id === kb.id ? { ...x, name: e.target.value } : x))}
-                                                            className="w-full bg-transparent text-base font-semibold text-foreground focus:outline-none focus:bg-background/50 rounded-md px-2 -ml-2 transition-colors duration-150 placeholder:text-foreground-tertiary"
-                                                            placeholder="知识库名称"
-                                                        />
-                                                        <textarea
-                                                            value={kb.description ?? ''}
-                                                            onChange={(e) => setKbs(prev => prev.map(x => x.id === kb.id ? { ...x, description: e.target.value || null } : x))}
-                                                            className="w-full bg-transparent text-xs text-foreground-secondary focus:outline-none focus:bg-background/50 rounded-md px-2 -ml-2 py-1 transition-colors duration-150 resize-none placeholder:text-foreground-tertiary/50"
-                                                            rows={1}
-                                                            placeholder="添加描述..."
-                                                        />
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Controls Toolbar */}
-                                            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                                                <div className="flex items-center gap-1.5 px-1 rounded-md bg-background border border-border">
-                                                    <select
-                                                        value={kb.weight}
-                                                        onChange={(e) => setKbs(prev => prev.map(x => x.id === kb.id ? { ...x, weight: e.target.value as KnowledgeBase['weight'] } : x))}
-                                                        className="bg-transparent text-xs font-medium pl-1 pr-2 py-1 rounded focus:outline-none hover:bg-background-secondary transition-colors cursor-pointer"
-                                                    >
-                                                        <option value="low">{weightLabel.low}</option>
-                                                        <option value="normal">{weightLabel.normal}</option>
-                                                        <option value="high">{weightLabel.high}</option>
-                                                    </select>
-                                                </div>
-
-                                                <button
-                                                    onClick={() => togglePromptKb(kb.id)}
-                                                    disabled={membershipLoading || membershipType === 'free'}
-                                                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-medium transition-colors duration-150 ${promptKbIds.includes(kb.id)
-                                                            ? 'bg-background-tertiary border-border text-foreground dark:bg-background-tertiary dark:text-foreground'
-                                                            : 'bg-background border-border text-foreground-secondary hover:bg-background-secondary dark:hover:bg-background-secondary'
-                                                        } ${(membershipLoading || membershipType === 'free') ? 'opacity-60 cursor-not-allowed' : ''}`}
-                                                    title={membershipLoading ? '会员状态加载中' : membershipType === 'free' ? '仅限 Plus 以上会员使用' : '启用知识库搜索'}
-                                                >
-                                                    <Sparkles className="w-3 h-3" />
-                                                    {promptKbIds.includes(kb.id) ? '已启用搜索' : '启用搜索'}
-                                                    {promptSavingId === kb.id && <SoundWaveLoader variant="inline" />}
-                                                </button>
-
-                                                <div className="w-px h-6 bg-border mx-1 hidden sm:block" />
-
-                                                <button
-                                                    type="button"
-                                                    onClick={() => updateKb(kb)}
-                                                    disabled={savingKbId === kb.id}
-                                                    className="p-1.5 rounded-md bg-background border border-border text-foreground-secondary hover:bg-background-secondary hover:text-foreground disabled:opacity-50 transition-colors duration-150"
-                                                    title="保存更改"
-                                                >
-                                                    {savingKbId === kb.id ? <SoundWaveLoader variant="inline" /> : <Save className="w-3.5 h-3.5" />}
-                                                </button>
-
-                                                <button
-                                                    type="button"
-                                                    onClick={() => toggleExpand(kb.id)}
-                                                    className={`p-1.5 rounded-md border transition-colors duration-150 ${expandedKbId === kb.id
-                                                            ? 'bg-background-tertiary border-border text-foreground dark:bg-background-tertiary dark:text-foreground'
-                                                            : 'bg-background border-border text-foreground-secondary hover:bg-background-secondary dark:hover:bg-background-secondary'
-                                                        }`}
-                                                    title={expandedKbId === kb.id ? "收起归档" : "查看归档"}
-                                                >
-                                                    {expandedKbId === kb.id ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                                                </button>
-
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setPendingDeleteKbId(kb.id)}
-                                                    disabled={deletingKbId === kb.id}
-                                                    className="p-1.5 rounded-md bg-background border border-border text-foreground-secondary hover:bg-red-50 hover:text-red-500 disabled:opacity-50 transition-colors duration-150"
-                                                    title="删除知识库"
-                                                >
-                                                    {deletingKbId === kb.id ? <SoundWaveLoader variant="inline" /> : <Trash2 className="w-3.5 h-3.5" />}
-                                                </button>
-                                            </div>
-                                        </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="h-8 w-24 rounded-full bg-foreground/5 animate-pulse" />
+                                        <span className="h-8 w-24 rounded-full bg-foreground/5 animate-pulse" />
+                                        <span className="h-9 w-28 rounded-lg bg-foreground/5 animate-pulse" />
                                     </div>
-
-                                    {/* Expanded Archive View */}
-                                    {expandedKbId === kb.id && (
-                                        <div className="border-t border-border bg-background/30 p-4 sm:p-5 animation-slide-down">
-                                            <div className="flex items-center justify-between mb-3">
-                                                <div className="text-xs font-medium text-foreground flex items-center gap-1.5">
-                                                    <Database className="w-3.5 h-3.5 text-emerald-500" />
-                                                    已归档数据源
-                                                    <span className="text-[10px] font-normal text-foreground-secondary bg-background px-1.5 py-0.5 rounded-md border border-border">
-                                                        {archiveState.items.length}
-                                                    </span>
-                                                </div>
-                                            </div>
-
-                                            {archiveState.loading && !archiveState.loaded ? (
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                                    {/* 骨架屏 - 模拟归档数据项 */}
-                                                    {[1, 2, 3, 4].map(i => (
-                                                        <div key={i} className="p-2.5 rounded-md bg-background border border-border">
-                                                            <div className="flex items-center gap-1.5 mb-1.5">
-                                                                <div className="h-4 w-16 rounded bg-foreground/10 animate-pulse" />
-                                                                <div className="h-3 w-20 rounded bg-foreground/5 animate-pulse" />
-                                                            </div>
-                                                            <div className="h-4 w-full rounded bg-foreground/5 animate-pulse" />
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            ) : archiveState.error && archiveState.items.length === 0 ? (
-                                                <div className="text-center py-6 rounded-md border border-dashed border-red-200/70 bg-red-50/60">
-                                                    <p className="text-xs text-red-600">{archiveState.error}</p>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => { void loadArchives(kb.id); }}
-                                                        className="mt-2 text-[10px] font-medium text-red-600"
-                                                    >
-                                                        重试
-                                                    </button>
-                                                </div>
-                                            ) : archiveState.items.length === 0 ? (
-                                                <div className="text-center py-6 rounded-md border border-dashed border-border/50">
-                                                    <p className="text-xs text-foreground-secondary">暂无归档数据</p>
-                                                    <p className="text-[10px] text-foreground-tertiary mt-0.5">
-                                                        在对话或其他功能页面点击「加入知识库」即可添加
-                                                    </p>
-                                                </div>
-                                            ) : (
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                                    {archiveState.items.map(a => (
-                                                        <div key={a.id} className="group flex items-start justify-between gap-2 p-2.5 rounded-md bg-background border border-border hover:bg-background-secondary dark:hover:bg-background-secondary transition-colors duration-150">
-                                                            <div className="min-w-0 flex-1">
-                                                                <div className="flex items-center gap-1.5 mb-0.5">
-                                                                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-background-secondary text-foreground-secondary border border-border">
-                                                                        {sourceTypeLabel[a.source_type] || a.source_type}
-                                                                    </span>
-                                                                    <span className="text-[10px] text-foreground-tertiary font-mono">
-                                                                        {a.created_at ? new Date(a.created_at).toLocaleDateString() : ''}
-                                                                    </span>
-                                                                </div>
-                                                                <div className="text-xs text-foreground-secondary truncate" title={a.preview || a.source_id}>
-                                                                    {a.preview ? a.preview : a.source_id}
-                                                                </div>
-                                                            </div>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => removeArchive(a)}
-                                                                disabled={removingArchiveId === a.id}
-                                                                className="p-1.5 rounded-md text-foreground-tertiary hover:text-red-500 hover:bg-red-50 transition-colors duration-150 opacity-0 group-hover:opacity-100 focus:opacity-100"
-                                                                title="移除归档"
-                                                            >
-                                                                {removingArchiveId === a.id ? <SoundWaveLoader variant="inline" /> : <Unlink2 className="w-3.5 h-3.5" />}
-                                                            </button>
-                                                        </div>
-                                                    ))}
-                                                    {archiveState.error ? (
-                                                        <div className="sm:col-span-2 rounded-md border border-red-200/70 bg-red-50/60 px-3 py-2 text-[10px] text-red-600">
-                                                            {archiveState.error}
-                                                        </div>
-                                                    ) : null}
-                                                    {archiveState.appendError ? (
-                                                        <div className="sm:col-span-2 rounded-md border border-red-200/70 bg-red-50/60 px-3 py-2 text-[10px] text-red-600 flex items-center justify-between gap-3">
-                                                            <span>{archiveState.appendError}</span>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => { void loadArchives(kb.id, { append: true, offset: archiveState.nextOffset ?? 0 }); }}
-                                                                className="rounded-md border border-red-200/70 px-2.5 py-1 text-[11px] font-medium"
-                                                            >
-                                                                重试加载更多
-                                                            </button>
-                                                        </div>
-                                                    ) : null}
-                                                    {archiveState.hasMore && (
-                                                        <div ref={archiveLoadMoreRef} className="sm:col-span-2 py-3 flex justify-center">
-                                                            {archiveState.loading ? (
-                                                                <div className="flex items-center gap-2 text-xs text-foreground-secondary">
-                                                                    <SoundWaveLoader variant="inline" />
-                                                                </div>
-                                                            ) : archiveState.appendError ? (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => { void loadArchives(kb.id, { append: true, offset: archiveState.nextOffset ?? 0 }); }}
-                                                                    className="rounded-md border border-border px-3 py-1.5 text-xs text-foreground-secondary transition-colors hover:bg-background-secondary"
-                                                                >
-                                                                    重试加载更多
-                                                                </button>
-                                                            ) : (
-                                                                <div className="text-xs text-foreground-secondary">
-                                                                    继续下滑加载更多
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                                    );
-                                })()
+                                </li>
                             ))}
+                        </ul>
+                    ) : kbs.length > 0 ? (
+                        <ul className="flex flex-col gap-3">
+                            {kbs.map(renderKnowledgeBase)}
+                        </ul>
+                    ) : listError ? null : (
+                        <div className="rounded-[14px] border border-dashed border-border-hover px-6 py-9 text-center">
+                            <p className="text-sm text-foreground-secondary">还没有知识库</p>
+                            <p className="mt-1 text-xs text-foreground-tertiary">新建一个知识库，把命盘、解读和资料归档进来。</p>
                         </div>
                     )}
-                </div>
 
-                {!!userId && (
-                    <div className="mt-8 p-3 rounded-md bg-background-secondary/50 border border-border/50 text-center">
-                        <p className="text-[10px] text-foreground-secondary">
-                            💡 提示：在对话、命理记录、塔罗/六爻/合盘/面相/手相/MBTI 结果页面，点击「加入知识库」按钮即可将内容快速归档到指定知识库。
-                        </p>
+                    <p className="settings-help">
+                        启用检索需 Plus 及以上会员。在对话、命理记录和各占术结果页点「加入知识库」，即可把内容归档到这里。
+                    </p>
+                </section>
+
+                <section aria-labelledby="kb-import-heading" className="flex flex-col gap-3">
+                    <h3 id="kb-import-heading" className={SECTION_TITLE}>导入外部资料</h3>
+                    <div className={`grid gap-4 p-5 sm:grid-cols-2 ${CARD}`}>
+                        <label className="settings-field-block">
+                            <span className="settings-label">导入到</span>
+                            <select
+                                value={targetUploadKbId ?? ''}
+                                onChange={(event) => setUploadKbId(event.target.value)}
+                                disabled={kbs.length === 0 || membershipLocked}
+                                className="settings-select w-full"
+                            >
+                                {kbs.length === 0 ? (
+                                    <option value="">暂无知识库</option>
+                                ) : (
+                                    kbs.map(kb => (
+                                        <option key={kb.id} value={kb.id}>{kb.name}</option>
+                                    ))
+                                )}
+                            </select>
+                        </label>
+                        <div className="settings-field-block">
+                            <span id="kb-file-label" className="settings-label">文件</span>
+                            <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-[10px] border border-dashed border-border-hover bg-background py-1.5 pl-3.5 pr-1.5 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60 has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent">
+                                <FileText aria-hidden="true" className="h-4 w-4 flex-shrink-0 text-foreground-tertiary" />
+                                <span className={`min-w-0 flex-1 truncate text-sm ${uploadFile ? 'text-foreground' : 'text-foreground-tertiary'}`}>
+                                    {uploadFile?.name ?? '选择要导入的文件'}
+                                </span>
+                                <span aria-hidden="true" className="flex-shrink-0 rounded-lg border border-border bg-surface px-3 py-1.5 text-[13px] text-foreground">
+                                    {uploadFile ? '更换' : '选择'}
+                                </span>
+                                <input
+                                    ref={fileInputRef}
+                                    id="kb-file-upload"
+                                    type="file"
+                                    accept={KNOWLEDGE_FILE_ACCEPT}
+                                    onChange={(event) => selectUploadFile(event.target.files?.[0] ?? null)}
+                                    disabled={uploading || membershipLocked}
+                                    aria-labelledby="kb-file-label"
+                                    aria-describedby="kb-file-hint"
+                                    className="sr-only"
+                                />
+                            </label>
+                        </div>
+                        <div className="flex flex-wrap items-center justify-between gap-3 sm:col-span-2">
+                            <p id="kb-file-hint" className="text-xs text-foreground-tertiary">{KNOWLEDGE_FILE_HINT}</p>
+                            <button
+                                type="button"
+                                onClick={uploadKnowledgeFile}
+                                disabled={uploading || !targetUploadKbId || !uploadFile || membershipLocked}
+                                className="settings-button"
+                            >
+                                <Upload aria-hidden="true" className="h-4 w-4" />
+                                {uploading ? '上传中…' : '开始上传'}
+                            </button>
+                        </div>
+                        {uploadError ? <p role="alert" className="text-sm text-danger sm:col-span-2">{uploadError}</p> : null}
+                        {uploadSuccess ? <p role="status" className="text-sm text-success sm:col-span-2">{uploadSuccess}</p> : null}
                     </div>
-                )}
-                </div>
+                </section>
             </div>
             <ConfirmDialog
                 isOpen={!!pendingDeleteKbId}
                 onClose={() => setPendingDeleteKbId(null)}
                 onConfirm={() => pendingDeleteKbId ? deleteKb(pendingDeleteKbId) : undefined}
                 title="确认删除"
-                description="确定要删除该知识库吗？此操作会移除其下的关联内容。"
+                description={`确定删除${pendingDeleteKb ? `「${pendingDeleteKb.name}」` : '这个知识库'}吗？其中的归档和导入的文件会一并移除（原有的命盘、对话不受影响），此操作无法撤销。`}
                 confirmText="确认删除"
                 variant="danger"
                 loading={!!deletingKbId}

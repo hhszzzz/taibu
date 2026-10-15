@@ -259,6 +259,32 @@ test('getPlanConfig returns correct credit caps for each tier', () => {
     assert.equal(pro.creditLimit, 50);
 });
 
+test('formatMembershipExpiryDate renders the local calendar date with zero padding', () => {
+    const { formatMembershipExpiryDate } = require('../lib/user/membership') as typeof import('../lib/user/membership');
+
+    // 用本地时间构造，避免测试机时区影响日期边界。
+    assert.equal(formatMembershipExpiryDate(new Date(2027, 2, 1, 0, 0, 0)), '2027-03-01');
+    assert.equal(formatMembershipExpiryDate(new Date(2026, 11, 31, 23, 59, 59)), '2026-12-31');
+});
+
+test('describePricingPlan folds credit cap and check-in reward into one summary line', () => {
+    const { describePricingPlan, getPlanConfig } = require('../lib/user/membership') as typeof import('../lib/user/membership');
+
+    assert.deepEqual(describePricingPlan(getPlanConfig('plus')), {
+        summary: '积分上限 20 · 每日签到奖励 x2',
+        perks: ['全部 Free 功能', '更多模型支持', '全部AI分析', '知识库'],
+    });
+    assert.deepEqual(describePricingPlan(getPlanConfig('free')), {
+        summary: '积分上限 10 · 每日签到随机 1-3 积分',
+        perks: ['基础命盘排盘', '每日/月运势预览', '塔罗牌、六爻、MBTI解读'],
+    });
+    // 没有签到条目时摘要只保留积分上限，不出现多余分隔符。
+    assert.deepEqual(describePricingPlan({ ...getPlanConfig('pro'), features: ['积分上限 50', '更精确的知识库'] }), {
+        summary: '积分上限 50',
+        perks: ['更精确的知识库'],
+    });
+});
+
 test('resolveRateLimitResetAt uses earliest window start', () => {
     const rateLimit = require('../lib/rate-limit') as { resolveRateLimitResetAt?: (rows: Array<{ window_start: string }>, windowMs: number) => Date };
 

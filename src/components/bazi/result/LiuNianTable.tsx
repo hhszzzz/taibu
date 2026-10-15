@@ -1,6 +1,9 @@
 import type { LiuNianInfo } from '@/lib/divination/bazi';
-import { getBranchElement, getElementColor, getStemElement } from '@/lib/divination/display-helpers';
+import { ganZhiTextClass } from '@/components/bazi/element-classes';
 
+/**
+ * 流年条：连成一体的分格卡片，选中年份以深色块突出，今年加「今年」标记。
+ */
 export function LiuNianTable({
     liuNian,
     selectedYear,
@@ -10,42 +13,34 @@ export function LiuNianTable({
     selectedYear: number;
     onSelect: (year: number) => void;
 }) {
+    const thisYear = new Date().getFullYear();
     return (
-        <div className="overflow-x-auto -mx-2 px-2 scrollbar-thin">
-            <div className="flex gap-2 min-w-max">
+        <div className="-mx-4 overflow-x-auto px-4 pb-1 scrollbar-hide sm:mx-0 sm:px-0">
+            <div className="flex min-w-full overflow-hidden rounded-xl border-[0.5px] border-border bg-surface">
                 {liuNian.map((ln, index) => {
                     const isSelected = selectedYear === ln.year;
-                    const ganElement = getStemElement(ln.gan);
-                    const zhiElement = getBranchElement(ln.zhi);
-
+                    const isThisYear = ln.year === thisYear;
                     return (
                         <button
                             key={index}
+                            type="button"
+                            aria-pressed={isSelected}
                             onClick={() => onSelect(ln.year)}
-                            className={`
-                                flex-shrink-0 w-14 text-center p-2.5 rounded-md border transition-colors
-                                ${isSelected
-                                    ? 'border-accent bg-blue-50/30'
-                                    : 'border-border bg-background hover:bg-background-secondary'
-                                }
-                            `}
+                            className={`flex min-w-[76px] flex-1 flex-col items-center gap-0.5 px-1 py-2.5 transition-colors duration-150
+                                ${index > 0 ? 'border-l-[0.5px] border-border' : ''}
+                                ${isSelected ? 'bg-foreground text-background' : 'hover:bg-background-secondary'}`}
                         >
-                            <div className="text-[10px] font-bold text-foreground-secondary uppercase tracking-wider">{ln.year}</div>
-                            <div className="flex flex-col items-center gap-0.5 my-1.5">
-                                <span
-                                    className="text-sm font-bold"
-                                    style={{ color: ganElement ? getElementColor(ganElement) : undefined }}
-                                >
-                                    {ln.gan}
-                                </span>
-                                <span
-                                    className="text-sm font-bold"
-                                    style={{ color: zhiElement ? getElementColor(zhiElement) : undefined }}
-                                >
-                                    {ln.zhi}
-                                </span>
-                            </div>
-                            <div className="text-[10px] font-bold text-foreground-secondary">{ln.age}岁</div>
+                            <span className={`whitespace-nowrap text-xs ${isSelected ? 'text-background/80' : 'text-foreground-secondary'}`}>
+                                {ln.year}{isThisYear ? ' · 今年' : ''}
+                            </span>
+                            <span className="font-display text-lg leading-[1.3]">
+                                <span className={isSelected ? '' : ganZhiTextClass(ln.gan)}>{ln.gan}</span>
+                                <span className={isSelected ? '' : ganZhiTextClass(ln.zhi)}>{ln.zhi}</span>
+                            </span>
+                            <span className={`whitespace-nowrap text-xs ${isSelected ? 'text-background/80' : 'text-foreground-secondary'}`}>
+                                {ln.tenGod}
+                                <span className={`ml-1 ${isSelected ? 'text-background/60' : 'text-foreground-tertiary'}`}>{ln.age}岁</span>
+                            </span>
                         </button>
                     );
                 })}

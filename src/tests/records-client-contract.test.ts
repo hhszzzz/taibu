@@ -81,3 +81,21 @@ test('records notes and import-export helpers should not keep fake userId passth
   assert.equal(detailSource.includes('exportData(userId)'), false);
   assert.equal(detailSource.includes('importData(userId,'), false);
 });
+
+test('toLocalDateKey uses the local calendar day instead of the UTC day', () => {
+  const { toLocalDateKey } = require('../lib/records') as typeof import('../lib/records');
+  // 本地时间 1 月 5 日 00:30：UTC 偏东的时区里 toISOString() 会给出 1 月 4 日。
+  assert.equal(toLocalDateKey(new Date(2026, 0, 5, 0, 30)), '2026-01-05');
+  assert.equal(toLocalDateKey(new Date(2026, 11, 31, 23, 59)), '2026-12-31');
+});
+
+test('parseImportData only accepts a records export before anything is overwritten', () => {
+  const { parseImportData } = require('../lib/records') as typeof import('../lib/records');
+  const valid = parseImportData(JSON.stringify({ version: '1.0', exportedAt: '2026-10-01', records: [], notes: [] }));
+
+  assert.deepEqual(valid.records, []);
+  assert.throws(() => parseImportData('{not json'), /文件解析失败/u);
+  for (const invalid of [null, [], {}, { version: '1.0', records: [] }, { version: '', records: [], notes: [] }, { version: '1.0', records: {}, notes: [] }]) {
+    assert.throws(() => parseImportData(JSON.stringify(invalid)), /导入数据格式无效/u, JSON.stringify(invalid));
+  }
+});

@@ -1,13 +1,20 @@
 /**
  * 十神知识库组件
  * 
- * 在八字结果页面侧边栏显示十神的详细解释
+ * 在八字结果页面「基本信息」中显示十神的详细解释
+ *
+ * 'use client'：展开 / 收起需要 useState
  */
 'use client';
 
 import { useState } from 'react';
 import { ChevronDown, ChevronRight, BookOpen, Info } from 'lucide-react';
 import type { TenGod } from '@/types';
+
+const TEN_GOD_LIST: TenGod[] = [
+    '比肩', '劫财', '食神', '伤官', '偏财',
+    '正财', '七杀', '正官', '偏印', '正印',
+];
 
 // 十神详细知识库
 const TEN_GOD_KNOWLEDGE: Record<TenGod, {
@@ -140,22 +147,17 @@ interface TenGodKnowledgeProps {
 export function TenGodKnowledge({ highlightedTenGods = [] }: TenGodKnowledgeProps) {
     const [expandedGod, setExpandedGod] = useState<TenGod | null>(null);
 
-    const tenGodList: TenGod[] = [
-        '比肩', '劫财', '食神', '伤官', '偏财',
-        '正财', '七杀', '正官', '偏印', '正印'
-    ];
-
     return (
-        <div className="bg-background-secondary rounded-xl border border-border overflow-hidden">
+        <div className="overflow-hidden rounded-2xl border-[0.5px] border-border bg-surface">
             {/* 标题 */}
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-background">
-                <BookOpen className="w-4 h-4 text-accent" />
-                <h3 className="font-medium text-sm">十神知识库</h3>
+            <div className="flex items-center gap-2 border-b-[0.5px] border-border px-4 py-3.5 sm:px-5">
+                <BookOpen className="h-4 w-4 text-clay" />
+                <h3 className="font-display text-lg">十神知识库</h3>
             </div>
 
             {/* 十神列表 */}
-            <div className="divide-y divide-border">
-                {tenGodList.map((god) => {
+            <div className="divide-y-[0.5px] divide-border">
+                {TEN_GOD_LIST.map((god) => {
                     const info = TEN_GOD_KNOWLEDGE[god];
                     const isExpanded = expandedGod === god;
                     const isHighlighted = highlightedTenGods.includes(god);
@@ -164,17 +166,19 @@ export function TenGodKnowledge({ highlightedTenGods = [] }: TenGodKnowledgeProp
                         <div key={god}>
                             {/* 标题行 */}
                             <button
+                                type="button"
+                                aria-expanded={isExpanded}
                                 onClick={() => setExpandedGod(isExpanded ? null : god)}
-                                className={`w-full flex items-center justify-between px-4 py-3 text-left transition-colors hover:bg-background ${isHighlighted ? 'bg-accent/5' : ''
+                                className={`flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-background-secondary sm:px-5 ${isHighlighted ? 'bg-accent-light' : ''
                                     }`}
                             >
                                 <div className="flex items-center gap-2">
-                                    <span className={`font-medium ${isHighlighted ? 'text-accent' : ''
+                                    <span className={`font-display text-[15px] ${isHighlighted ? 'text-accent-strong' : 'text-foreground'
                                         }`}>
                                         {god}
                                     </span>
                                     {isHighlighted && (
-                                        <span className="text-xs px-1.5 py-0.5 rounded bg-accent/10 text-accent">
+                                        <span className="rounded-md bg-accent-soft px-1.5 py-0.5 text-xs text-accent-strong">
                                             命盘中有
                                         </span>
                                     )}
@@ -193,10 +197,10 @@ export function TenGodKnowledge({ highlightedTenGods = [] }: TenGodKnowledgeProp
 
                             {/* 展开详情 */}
                             {isExpanded && (
-                                <div className="px-4 pb-4 space-y-3 bg-background text-sm">
+                                <div className="space-y-3 bg-panel px-4 pb-4 pt-3 text-sm sm:px-5">
                                     {/* 五行关系 */}
                                     <div className="flex items-start gap-2">
-                                        <Info className="w-4 h-4 text-accent mt-0.5 flex-shrink-0" />
+                                        <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-clay" />
                                         <div>
                                             <span className="text-foreground-secondary">五行关系：</span>
                                             <span>{info.element}</span>
@@ -221,7 +225,7 @@ export function TenGodKnowledge({ highlightedTenGods = [] }: TenGodKnowledgeProp
                                             {info.character.map((trait, i) => (
                                                 <span
                                                     key={i}
-                                                    className="px-2 py-0.5 text-xs rounded-full bg-background-secondary border border-border"
+                                                    className="rounded-md bg-surface px-2 py-0.5 text-xs"
                                                 >
                                                     {trait}
                                                 </span>

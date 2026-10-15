@@ -18,8 +18,8 @@
 | `flyStarMethod` | enum | 否 | — | 飞盘九星：forward=阴阳皆顺，yin-reverse=阳顺阴逆；默认阳顺阴逆；可选值: `forward` / `yin-reverse` |
 | `juNumber` | integer | 否 | — | 手工局数，必须与 dunType 同时提供 |
 | `dunType` | enum | 否 | — | 手工阴阳遁，必须与 juNumber 同时提供；可选值: `yang` / `yin` |
-| `zhiFuJiGong` | enum | 否 | `"ji_liuyi"` | 直符寄宫方式（ji_liuyi=寄六仪，ji_wugong=寄戊宫）；可选值: `ji_liuyi` / `ji_wugong` |
-| `detailLevel` | enum | 否 | `"default"` | 输出详略（default=核心盘面；full=追加历法信息、宫位旺衰与格局、空亡、驿马、十干旺衰及全局格局）；可选值: `default` / `full` |
+| `zhiFuJiGong` | enum | 否 | `"ji_wugong"` | 转盘中五寄宫（ji_wugong=固定寄坤二宫；ji_liuyi=阳遁寄艮八、阴遁寄坤二）；可选值: `ji_wugong` / `ji_liuyi` |
+| `detailLevel` | enum | 否 | `"default"` | 输出详略（default=核心盘面与全局格局；full=追加历法信息、宫位方位旺衰与逐宫格局、空亡、驿马、十干旺衰）；可选值: `default` / `full` |
 
 ## 调用示例
 
@@ -34,6 +34,6 @@ echo '{"year":2026,"month":3,"day":15,"hour":16,"minute":51,"timezone":"Asia/Sha
 - `空亡信息`：日空与时空信息
 - `驿马`：驿马信息
 - `十干月令旺衰`：十天干在当月月令的旺衰（甲→旺、乙→相等，键为天干，值为旺衰）
-- `全局格局`：全局层级的格局（如"伏吟局"、"反吟局"等）
+- `全局格局`：全局格局："全盘: "开头为整盘格局（星伏吟、门反吟、五不遇时、时干入墓等），只列一次；其余为"某宫: 格局"
 - `计算规则`
 

@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, Eye, EyeOff, PencilLine } from 'lucide-react';
+import { useEffect, useId, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
+import { Eye, EyeOff, KeyRound, LockKeyhole, Monitor, PencilLine } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import type { CustomProviderConfig } from '@/types';
 import {
@@ -11,6 +12,7 @@ import {
     normalizeByokProviderKey,
     type ByokProviderOption,
 } from '@/lib/ai/byok-catalog';
+import { getVendorIcon } from '@/lib/ai/vendor-config';
 import {
     clearCustomProvider,
     CUSTOM_PROVIDER_CHANGED_EVENT,
@@ -20,7 +22,7 @@ import {
 } from '@/lib/chat/custom-provider';
 import { useByokModelCatalog } from '@/lib/hooks/useByokModelCatalog';
 import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
-import { validateCustomProviderInput } from '@/lib/ai/custom-provider-url';
+import { maskCustomProviderApiKey, validateCustomProviderInput } from '@/lib/ai/custom-provider-url';
 
 type CustomProviderDraft = {
     providerKey: string;
@@ -38,12 +40,10 @@ type CustomProviderFormErrors = {
 };
 
 interface CustomProviderPanelProps {
+    /** 嵌入设置页：标题由设置中心渲染，面板改为宽版布局；否则为对话页弹窗。 */
     embedded?: boolean;
     onClose?: () => void;
     onChange?: (config: CustomProviderConfig | null) => void;
-    title?: string;
-    description?: string | null;
-    showByokBadge?: boolean;
 }
 
 const EMPTY_DRAFT: CustomProviderDraft = {
@@ -65,11 +65,6 @@ function draftFromConfig(config: CustomProviderConfig | null): CustomProviderDra
     };
 }
 
-function InputError({ message }: { message?: string }) {
-    if (!message) return null;
-    return <p className="text-xs text-red-500">{message}</p>;
-}
-
 function formatProviderUrl(apiUrl?: string | null) {
     if (!apiUrl) return '未设置';
     try {
@@ -79,57 +74,41 @@ function formatProviderUrl(apiUrl?: string | null) {
     }
 }
 
-function maskSecret(value?: string | null) {
-    if (!value) return '********';
-    return '*'.repeat(Math.max(8, Math.min(value.length, 14)));
+function InputError({ id, message }: { id?: string; message?: string }) {
+    if (!message) return null;
+    return <p id={id} role="alert" className="text-xs text-danger">{message}</p>;
 }
 
-function SummaryField({ label, value }: { label: string; value: string }) {
-    return (
-        <div className="min-w-0 rounded-xl border border-border bg-surface/85 px-3 py-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground-secondary">{label}</p>
-            <p className="mt-1 break-all text-[12px] leading-5 text-foreground-secondary" title={value}>{value}</p>
-        </div>
-    );
+function FieldLabel({ htmlFor, children }: { htmlFor: string; children: ReactNode }) {
+    return <label htmlFor={htmlFor} className="text-[13px] text-foreground-secondary">{children}</label>;
 }
 
-function SelectField({
-    label,
-    value,
-    options,
-    placeholder,
-    onChange,
-    error,
-    disabled = false,
-}: {
-    label: string;
-    value: string;
-    options: Array<{ value: string; label: string }>;
-    placeholder: string;
-    onChange: (value: string) => void;
-    error?: string;
-    disabled?: boolean;
-}) {
+// 设置页（宽版）与对话页弹窗（紧凑版）共用同一结构，只切换控件尺寸。
+function fieldControlClass(compact: boolean) {
+    return `w-full rounded-[10px] border border-border-hover bg-surface text-foreground outline-none transition-colors duration-150 placeholder:text-foreground-tertiary focus:border-accent ${
+        compact ? 'h-10 px-3 text-sm' : 'h-11 px-3.5 text-[15px]'
+    }`;
+}
+
+function StorageNotice({ compact }: { compact: boolean }) {
+    if (compact) {
+        return (
+            <p className="flex items-start gap-2 rounded-[10px] bg-background-secondary px-3 py-2.5 text-xs leading-relaxed text-foreground-secondary">
+                <LockKeyhole aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+                <span>Key 只存在当前标签页，普通对话由浏览器直连供应商；Agent 任务会加密临时保存，结束即删除。</span>
+            </p>
+        );
+    }
     return (
-        <div className="space-y-1">
-            <label className="text-[11px] font-bold text-foreground-secondary uppercase tracking-wider">{label}</label>
-            <div className="relative">
-                <select
-                    value={value}
-                    onChange={(event) => onChange(event.target.value)}
-                    disabled={disabled}
-                    className="w-full appearance-none rounded-xl border border-border bg-surface px-3 py-2 pr-10 text-[13px] outline-none transition-all duration-150 focus:border-accent focus:bg-surface disabled:cursor-not-allowed disabled:bg-background-secondary disabled:text-foreground-secondary"
-                >
-                    <option value="">{placeholder}</option>
-                    {options.map((option) => (
-                        <option key={option.value} value={option.value}>
-                            {option.label}
-                        </option>
-                    ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute inset-y-0 right-3 my-auto h-4 w-4 text-foreground-secondary" />
-            </div>
-            <InputError message={error} />
+        <div className="flex flex-col gap-2.5 rounded-xl bg-background-secondary px-[18px] py-4 text-[13px] leading-relaxed text-foreground">
+            <p className="flex items-start gap-2.5">
+                <Monitor aria-hidden="true" className="mt-0.5 h-4 w-4 flex-shrink-0 text-foreground-secondary" />
+                <span><b className="font-medium">普通对话与解读</b>：Key 只存在当前标签页，由浏览器直连模型供应商，不经过本站服务器；关闭页面即失效。</span>
+            </p>
+            <p className="flex items-start gap-2.5">
+                <LockKeyhole aria-hidden="true" className="mt-0.5 h-4 w-4 flex-shrink-0 text-foreground-secondary" />
+                <span><b className="font-medium">Agent 任务</b>：Key 会加密后临时保存，任务结束即删除。</span>
+            </p>
         </div>
     );
 }
@@ -219,9 +198,6 @@ export function CustomProviderPanel({
     embedded = false,
     onClose,
     onChange,
-    title = '自定义模型',
-    description = '普通对话仅当前标签页使用；Agent任务会临时加密保存Key，结束后清除。均不消耗本站积分。',
-    showByokBadge = true,
 }: CustomProviderPanelProps) {
     const { showToast } = useToast();
     const byokCatalog = useByokModelCatalog();
@@ -235,6 +211,7 @@ export function CustomProviderPanel({
     const [isEditing, setIsEditing] = useState(() => !getCustomProvider());
     const [showApiKey, setShowApiKey] = useState(false);
     const [submitted, setSubmitted] = useState(false);
+    const fieldId = useId();
     useUnsavedSettingsGuard(isEditing && JSON.stringify(draft) !== JSON.stringify(draftFromConfig(activeConfig)));
 
     useEffect(() => {
@@ -267,15 +244,6 @@ export function CustomProviderPanel({
     const activeUrl = formatProviderUrl(activeConfig?.apiUrl);
     const errors = useMemo(() => buildFormErrors(draft, safeProviders), [draft, safeProviders]);
     const hasErrors = Object.keys(errors).length > 0;
-
-    const providerOptions = useMemo(
-        () => safeProviders.map((item) => ({ value: item.key, label: item.label })),
-        [safeProviders],
-    );
-    const modelOptions = useMemo(
-        () => (selectedProvider?.models ?? []).map((item) => ({ value: item.id, label: item.name })),
-        [selectedProvider],
-    );
 
     const handleFieldChange = (field: keyof CustomProviderDraft, value: string) => {
         setDraft((prev) => ({ ...prev, [field]: value }));
@@ -400,215 +368,261 @@ export function CustomProviderPanel({
         }
     };
 
-    const modelSelectDisabled = !selectedProvider || isOtherProvider || modelOptions.length === 0;
+    const compact = !embedded;
+    const fieldClass = fieldControlClass(compact);
+    const monoFieldClass = `${fieldClass} font-mono placeholder:font-sans`;
+    const secondaryButtonClass = `inline-flex items-center justify-center gap-1.5 rounded-[10px] border border-border-hover bg-surface font-medium text-foreground transition-colors duration-150 hover:bg-background-secondary ${
+        compact ? 'h-10 px-3.5 text-sm' : 'h-10 px-4 text-sm'
+    }`;
+    const primaryButtonClass = `inline-flex items-center justify-center rounded-[10px] bg-accent font-medium text-on-accent transition-colors duration-150 hover:bg-accent-hover ${
+        compact ? 'h-10 flex-1 px-4 text-sm' : 'h-11 px-5 text-sm'
+    }`;
+    const sectionTitleClass = embedded ? 'text-[13px] font-medium text-foreground-tertiary' : 'sr-only';
+    const apiKeyToggleLabel = showApiKey ? '隐藏 API Key' : '显示 API Key';
+    const modelSuggestions = !isOtherProvider ? selectedProvider?.models ?? [] : [];
+    const providerError = submitted ? errors.providerKey : undefined;
+    const apiKeyError = submitted ? errors.apiKey : undefined;
+    const apiUrlError = submitted ? errors.apiUrl : undefined;
+    const modelIdError = submitted ? errors.modelId : undefined;
 
-    return (
-        <div className={embedded
-            ? 'rounded-xl border border-border bg-surface px-4 py-4 shadow-[0_1px_2px_rgba(0,0,0,0.06)]'
-            : 'rounded-xl border border-border bg-surface p-4 shadow-[0_10px_30px_rgba(34,30,20,0.12)] md:w-[392px]'
-        }>
-            <div className="space-y-3.5">
-                <div className="space-y-2">
-                    <div className="flex items-start justify-between gap-3">
-                        <div className="space-y-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                                <h3 id={embedded ? undefined : 'custom-provider-panel-title'} className="text-[14px] font-semibold text-foreground-secondary">
-                                    {title}
-                                </h3>
-                                {showByokBadge ? (
-                                    <span className="rounded-full border border-border bg-warning/10 px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em] text-warning">
-                                        BYOK
-                                    </span>
-                                ) : null}
-                            </div>
-                            {description ? (
-                                <p className="text-[12px] leading-tight text-foreground-secondary">
-                                    {description}
-                                </p>
-                            ) : null}
-                        </div>
+    const apiKeyToggle = (
+        <button
+            type="button"
+            onClick={() => setShowApiKey((prev) => !prev)}
+            aria-label={apiKeyToggleLabel}
+            title={apiKeyToggleLabel}
+            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-foreground"
+        >
+            {showApiKey ? <EyeOff aria-hidden="true" className="h-4 w-4" /> : <Eye aria-hidden="true" className="h-4 w-4" />}
+        </button>
+    );
+
+    const summary = activeConfig ? (
+        <section aria-labelledby={`${fieldId}-summary`} className="flex flex-col gap-3">
+            <h3 id={`${fieldId}-summary`} className={sectionTitleClass}>当前启用</h3>
+            <div className="overflow-hidden rounded-[14px] border border-border bg-surface">
+                <div className={`flex items-center gap-3 ${compact ? 'px-4 py-3.5' : 'px-5 py-4'}`}>
+                    <span aria-hidden="true" className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-background-secondary">
+                        {getVendorIcon(normalizeByokProviderKey(activeConfig.providerKey) || 'other', 22)}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                        <p className="truncate text-[15px] font-medium text-foreground">{activeConfig.modelName || activeConfig.modelId}</p>
+                        <p className="truncate text-xs text-foreground-secondary">
+                            {activeProviderLabel} · <code className="font-mono">{activeConfig.modelId}</code>
+                        </p>
                     </div>
+                    <span className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
+                        <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-success" />
+                        已启用
+                    </span>
+                </div>
+                <dl className="border-t border-border text-[13px]">
+                    <div className={`flex items-center gap-4 ${compact ? 'px-4 py-3' : 'px-5 py-3.5'}`}>
+                        <dt className="flex-shrink-0 text-foreground-tertiary">接口地址</dt>
+                        <dd className="min-w-0 flex-1 truncate text-right font-mono text-foreground-secondary" title={activeUrl}>{activeUrl}</dd>
+                    </div>
+                    <div className={`flex items-center gap-4 border-t border-border ${compact ? 'py-1.5 pl-4 pr-2' : 'py-2 pl-5 pr-3'}`}>
+                        <dt className="flex-shrink-0 text-foreground-tertiary">API Key</dt>
+                        <dd className="flex min-w-0 flex-1 items-center justify-end gap-1">
+                            <code className="min-w-0 truncate font-mono text-foreground-secondary">
+                                {showApiKey ? activeConfig.apiKey : maskCustomProviderApiKey(activeConfig.apiKey)}
+                            </code>
+                            {apiKeyToggle}
+                        </dd>
+                    </div>
+                </dl>
+                <div className={`flex items-center justify-between gap-2 border-t border-border bg-background ${compact ? 'px-4 py-3' : 'px-5 py-3.5'}`}>
+                    <button
+                        type="button"
+                        onClick={handleDeactivate}
+                        className="inline-flex h-10 items-center justify-center rounded-[10px] px-3 text-sm text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-danger"
+                    >
+                        停用
+                    </button>
+                    <button type="button" onClick={handleStartEdit} className={secondaryButtonClass}>
+                        <PencilLine aria-hidden="true" className="h-3.5 w-3.5" />
+                        编辑配置
+                    </button>
+                </div>
+            </div>
+        </section>
+    ) : null;
+
+    const form = (
+        <section aria-labelledby={`${fieldId}-form`} className="flex flex-col gap-3">
+            <h3 id={`${fieldId}-form`} className={sectionTitleClass}>{activeConfig ? '编辑配置' : '配置模型'}</h3>
+            <div className={compact
+                ? 'flex flex-col gap-4'
+                : 'flex flex-col gap-5 rounded-[14px] border border-border bg-surface p-5 sm:p-6'
+            }>
+                <div className="flex flex-col gap-2">
+                    <span id={`${fieldId}-provider`} className="text-[13px] text-foreground-secondary">模型供应商</span>
+                    <div role="radiogroup" aria-labelledby={`${fieldId}-provider`} className="flex flex-wrap gap-2">
+                        {safeProviders.map((provider) => {
+                            const selected = draft.providerKey === provider.key;
+                            return (
+                                <button
+                                    key={provider.key}
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={selected}
+                                    onClick={() => handleProviderChange(provider.key)}
+                                    className={`inline-flex h-9 items-center gap-1.5 rounded-full border pl-2 pr-3 text-[13px] transition-colors duration-150 ${
+                                        selected
+                                            ? 'border-accent bg-accent-light font-medium text-accent-strong'
+                                            : 'border-border bg-surface text-foreground hover:border-border-hover'
+                                    }`}
+                                >
+                                    <span aria-hidden="true" className="flex h-5 w-5 items-center justify-center">{getVendorIcon(provider.key, 16)}</span>
+                                    {provider.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                    {selectedProvider?.defaultApiUrl ? (
+                        <p className="min-w-0 truncate text-xs text-foreground-tertiary">
+                            请求直连 <span className="font-mono">{selectedProvider.defaultApiUrl}</span>
+                        </p>
+                    ) : null}
+                    <InputError message={providerError} />
                 </div>
 
-                {activeConfig && !isEditing ? (
-                    <div className="space-y-2.5">
-                        <div className="rounded-xl border border-border bg-background-secondary p-3">
-                            <div className="grid grid-cols-2 gap-2">
-                                <SummaryField label="PROVIDER" value={activeProviderLabel} />
-                                <SummaryField label="URL" value={activeUrl} />
-                                <SummaryField label="MODEL" value={activeConfig.modelId} />
-                                <div className="min-w-0 rounded-xl border border-border bg-surface/85 px-3 py-2">
-                                    <div className="flex items-center justify-between gap-2">
-                                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground-secondary">KEY</p>
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowApiKey((prev) => !prev)}
-                                            className="flex h-5 w-5 items-center justify-center rounded-md text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-foreground-secondary"
-                                            title={showApiKey ? '隐藏 API Key' : '查看 API Key'}
-                                        >
-                                            {showApiKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                                        </button>
-                                    </div>
-                                    <p
-                                        className="mt-1 break-all text-[12px] leading-5 text-foreground-secondary"
-                                        title={showApiKey ? activeConfig.apiKey : maskSecret(activeConfig.apiKey)}
-                                    >
-                                        {showApiKey ? activeConfig.apiKey : maskSecret(activeConfig.apiKey)}
-                                    </p>
-                                </div>
-                                {activeConfig.modelName ? (
-                                    <SummaryField label="NAME" value={activeConfig.modelName} />
-                                ) : null}
-                            </div>
-                        </div>
-
-                        <div className="flex gap-2">
-                            <button
-                                type="button"
-                                onClick={handleStartEdit}
-                                className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-accent text-[12px] font-medium text-on-accent transition-colors duration-150 hover:bg-accent-hover"
-                            >
-                                <PencilLine className="h-3.5 w-3.5" />
-                                编辑
-                            </button>
-                            <button
-                                type="button"
-                                onClick={handleDeactivate}
-                                className="flex h-9 items-center justify-center rounded-xl border border-border bg-surface px-3 text-[12px] font-medium text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-foreground-secondary"
-                            >
-                                停用
-                            </button>
-                        </div>
+                {isOtherProvider ? (
+                    <div className="flex flex-col gap-2">
+                        <FieldLabel htmlFor={`${fieldId}-api-url`}>API URL</FieldLabel>
+                        <input
+                            id={`${fieldId}-api-url`}
+                            value={draft.apiUrl}
+                            onChange={(event) => handleFieldChange('apiUrl', event.target.value)}
+                            aria-invalid={apiUrlError ? true : undefined}
+                            aria-describedby={apiUrlError ? `${fieldId}-api-url-error` : undefined}
+                            className={monoFieldClass}
+                            placeholder="https://api.example.com/v1"
+                            autoComplete="off"
+                            inputMode="url"
+                        />
+                        <InputError id={`${fieldId}-api-url-error`} message={apiUrlError} />
                     </div>
-                ) : (
-                    <div className="space-y-3">
-                        <div className="grid gap-3 md:grid-cols-2">
-                            <SelectField
-                                label="模型供应商"
-                                value={draft.providerKey}
-                                options={providerOptions}
-                                placeholder="选择供应商"
-                                onChange={handleProviderChange}
-                                error={submitted ? errors.providerKey : undefined}
+                ) : null}
+
+                <div className="flex flex-col gap-2">
+                    <FieldLabel htmlFor={`${fieldId}-api-key`}>API Key</FieldLabel>
+                    <div className="relative">
+                        <input
+                            id={`${fieldId}-api-key`}
+                            value={draft.apiKey}
+                            onChange={(event) => handleFieldChange('apiKey', event.target.value)}
+                            type={showApiKey ? 'text' : 'password'}
+                            aria-invalid={apiKeyError ? true : undefined}
+                            aria-describedby={apiKeyError ? `${fieldId}-api-key-error` : undefined}
+                            className={`${monoFieldClass} pr-11`}
+                            placeholder="sk-..."
+                            autoComplete="off"
+                            spellCheck={false}
+                        />
+                        <span className="absolute inset-y-0 right-1.5 flex items-center">{apiKeyToggle}</span>
+                    </div>
+                    <InputError id={`${fieldId}-api-key-error`} message={apiKeyError} />
+                </div>
+
+                <div className={isOtherProvider ? 'grid gap-4 sm:grid-cols-2' : 'flex flex-col gap-2'}>
+                    <div className="flex flex-col gap-2">
+                        <div className="flex items-baseline justify-between gap-3">
+                            <FieldLabel htmlFor={`${fieldId}-model-id`}>Model ID</FieldLabel>
+                            {!isOtherProvider && selectedProvider ? (
+                                <span className="text-xs text-foreground-tertiary">可填写该供应商支持的任意模型</span>
+                            ) : null}
+                        </div>
+                        <input
+                            id={`${fieldId}-model-id`}
+                            value={draft.modelId}
+                            onChange={(event) => (isOtherProvider
+                                ? handleFieldChange('modelId', event.target.value)
+                                : handleManualModelIdChange(event.target.value))}
+                            aria-invalid={modelIdError ? true : undefined}
+                            aria-describedby={modelIdError ? `${fieldId}-model-id-error` : undefined}
+                            className={monoFieldClass}
+                            placeholder={isOtherProvider ? 'gpt-4.1-mini' : selectedProvider?.models[0]?.id ?? '先选择供应商'}
+                            autoComplete="off"
+                            spellCheck={false}
+                        />
+                        <InputError id={`${fieldId}-model-id-error`} message={modelIdError} />
+                    </div>
+                    {isOtherProvider ? (
+                        <div className="flex flex-col gap-2">
+                            <FieldLabel htmlFor={`${fieldId}-model-name`}>显示名称（可选）</FieldLabel>
+                            <input
+                                id={`${fieldId}-model-name`}
+                                value={draft.modelName}
+                                onChange={(event) => handleFieldChange('modelName', event.target.value)}
+                                className={fieldClass}
+                                placeholder="在对话里显示的名字"
+                                autoComplete="off"
                             />
-
-                            {!isOtherProvider ? (
-                                <SelectField
-                                    label="预设模型"
-                                    value={draft.modelId}
-                                    options={modelOptions}
-                                    placeholder={selectedProvider ? '选择模型' : '先选择供应商'}
-                                    onChange={handleModelChange}
-                                    disabled={modelSelectDisabled}
-                                />
-                            ) : null}
-
-                            <div className={isOtherProvider ? '' : 'md:col-span-2'}>
-                                <div className="space-y-1">
-                                    <label className="text-[11px] font-bold text-foreground-secondary uppercase tracking-wider">API Key</label>
-                                    <div className="relative">
-                                        <input
-                                            value={draft.apiKey}
-                                            onChange={(event) => handleFieldChange('apiKey', event.target.value)}
-                                            type={showApiKey ? 'text' : 'password'}
-                                            className="w-full rounded-xl border border-border bg-surface px-3 py-2 pr-10 text-[13px] outline-none transition-all duration-150 focus:border-accent focus:bg-surface"
-                                            placeholder="sk-..."
-                                            autoComplete="off"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowApiKey((prev) => !prev)}
-                                            className="absolute inset-y-0 right-0 flex items-center px-3 text-foreground-secondary hover:text-foreground-secondary"
-                                        >
-                                            {showApiKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                                        </button>
-                                    </div>
-                                    <InputError message={submitted ? errors.apiKey : undefined} />
-                                </div>
-                            </div>
-
-                            {isOtherProvider ? (
-                                <>
-                                    <div className="space-y-1">
-                                        <label className="text-[11px] font-bold text-foreground-secondary uppercase tracking-wider">API URL</label>
-                                        <input
-                                            value={draft.apiUrl}
-                                            onChange={(event) => handleFieldChange('apiUrl', event.target.value)}
-                                            className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-[13px] outline-none transition-all duration-150 focus:border-accent focus:bg-surface"
-                                            placeholder="https://api.example.com/v1"
-                                            autoComplete="off"
-                                        />
-                                        <InputError message={submitted ? errors.apiUrl : undefined} />
-                                    </div>
-
-                                    <div className="space-y-1">
-                                        <label className="text-[11px] font-bold text-foreground-secondary uppercase tracking-wider">Model ID</label>
-                                        <input
-                                            value={draft.modelId}
-                                            onChange={(event) => handleFieldChange('modelId', event.target.value)}
-                                            className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-[13px] outline-none transition-all duration-150 focus:border-accent focus:bg-surface"
-                                            placeholder="gpt-4.1-mini"
-                                            autoComplete="off"
-                                        />
-                                        <InputError message={submitted ? errors.modelId : undefined} />
-                                    </div>
-
-                                    <div className="space-y-1 md:col-span-2">
-                                        <label className="text-[11px] font-bold text-foreground-secondary uppercase tracking-wider">显示名称</label>
-                                        <input
-                                            value={draft.modelName}
-                                            onChange={(event) => handleFieldChange('modelName', event.target.value)}
-                                            className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-[13px] outline-none transition-all duration-150 focus:border-accent focus:bg-surface"
-                                            placeholder="显示名称 (可选)"
-                                            autoComplete="off"
-                                        />
-                                    </div>
-                                </>
-                            ) : (
-                                <div className="space-y-1 md:col-span-2">
-                                    <label className="text-[11px] font-bold text-foreground-secondary uppercase tracking-wider">Model ID</label>
-                                    <input
-                                        value={draft.modelId}
-                                        onChange={(event) => handleManualModelIdChange(event.target.value)}
-                                        className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-[13px] outline-none transition-all duration-150 focus:border-accent focus:bg-surface"
-                                        placeholder={selectedProvider?.models[0]?.id ?? '输入自定义 Model ID'}
-                                        autoComplete="off"
-                                    />
-                                    <InputError message={submitted ? errors.modelId : undefined} />
-                                </div>
-                            )}
                         </div>
-
-                        <div className="flex gap-2 pt-1">
-                            <button
-                                type="button"
-                                onClick={handleActivate}
-                                className="flex h-9 flex-1 items-center justify-center rounded-xl bg-accent text-[12px] font-semibold text-on-accent transition-colors duration-150 hover:bg-accent-hover"
-                            >
-                                {activeConfig ? '保存并启用' : '启用服务'}
-                            </button>
-                            {activeConfig ? (
+                    ) : modelSuggestions.length > 0 ? (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-xs text-foreground-tertiary">推荐</span>
+                            {modelSuggestions.map((model) => (
                                 <button
+                                    key={model.id}
                                     type="button"
-                                    onClick={handleCancelEdit}
-                                    className="flex h-9 items-center justify-center rounded-xl border border-border bg-surface px-3 text-[12px] font-medium text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-foreground-secondary"
+                                    aria-pressed={draft.modelId.trim() === model.id}
+                                    onClick={() => handleModelChange(model.id)}
+                                    className="h-7 rounded-full border border-border bg-surface px-2.5 text-xs text-foreground-secondary transition-colors duration-150 hover:border-border-hover hover:text-foreground aria-pressed:border-accent aria-pressed:bg-accent-light aria-pressed:text-accent-strong"
                                 >
-                                    取消
+                                    {model.name}
                                 </button>
-                            ) : lastConfig ? (
-                                <button
-                                    type="button"
-                                    onClick={handleReactivateLastConfig}
-                                    className="flex h-9 flex-1 items-center justify-center rounded-xl border border-border bg-surface px-3 text-[12px] font-medium text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-foreground-secondary"
-                                >
-                                    上次启用
-                                </button>
-                            ) : null}
+                            ))}
                         </div>
-                    </div>
-                )}
+                    ) : null}
+                </div>
 
+                <div className="flex flex-wrap gap-2 pt-1">
+                    <button type="button" onClick={handleActivate} className={primaryButtonClass}>
+                        {activeConfig ? '保存并启用' : '启用服务'}
+                    </button>
+                    {activeConfig ? (
+                        <button type="button" onClick={handleCancelEdit} className={secondaryButtonClass}>
+                            取消
+                        </button>
+                    ) : lastConfig ? (
+                        <button type="button" onClick={handleReactivateLastConfig} className={secondaryButtonClass}>
+                            恢复上次配置
+                        </button>
+                    ) : null}
+                </div>
             </div>
+        </section>
+    );
+
+    const body = activeConfig && !isEditing ? summary : form;
+
+    if (embedded) {
+        return (
+            <div className="flex flex-col gap-8">
+                <StorageNotice compact={false} />
+                {body}
+            </div>
+        );
+    }
+
+    return (
+        <div className="flex flex-col gap-5 rounded-2xl border border-border bg-surface p-5 shadow-[0_10px_30px_rgba(34,30,20,0.12)] md:w-[420px]">
+            <div className="flex items-start gap-3 pr-8">
+                <span aria-hidden="true" className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-strong">
+                    <KeyRound className="h-[18px] w-[18px]" />
+                </span>
+                <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <h3 id="custom-provider-panel-title" className="font-display text-lg leading-snug text-foreground">自定义模型</h3>
+                        <span className="rounded-full bg-background-secondary px-2 py-0.5 text-[11px] font-medium tracking-wide text-foreground-secondary">BYOK</span>
+                    </div>
+                    <p className="mt-0.5 text-[13px] leading-relaxed text-foreground-secondary">用你自己的 API Key 调用模型，不消耗本站积分。</p>
+                </div>
+            </div>
+            {body}
+            <StorageNotice compact />
         </div>
     );
 }

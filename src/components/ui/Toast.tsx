@@ -6,7 +6,7 @@
 'use client';
 
 import { useState, createContext, useContext, useCallback, ReactNode } from 'react';
-import { CheckCircle, AlertCircle, Info, X, BotMessageSquare } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Info, X, BotMessageSquare, TriangleAlert } from 'lucide-react';
 
 type ToastType = 'success' | 'error' | 'info' | 'warning' | 'chat';
 
@@ -80,8 +80,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         <ToastContext.Provider value={{ showToast }}>
             {children}
 
-            {/* Toast 容器 */}
-            <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 pointer-events-none">
+            {/* Toast 容器：按内容定宽并以视口为上限，避免 left-1/2 把可用宽度压到半屏导致窄屏折行。
+                常驻的 live region 让读屏软件播报新提示；错误提示单独用 role="alert" 立即打断。 */}
+            <div
+                aria-live="polite"
+                className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex w-max max-w-[calc(100vw-2rem)] flex-col items-center gap-2 pointer-events-none"
+            >
                 {toasts.map(toast => (
                     <ToastItem key={toast.id} toast={toast} onRemove={removeToast} />
                 ))}
@@ -90,46 +94,43 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     );
 }
 
-function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) => void }) {
-    const icons = {
-        success: <CheckCircle className="w-5 h-5 text-green-500" />,
-        error: <AlertCircle className="w-5 h-5 text-red-500" />,
-        warning: <AlertCircle className="w-5 h-5 text-yellow-500" />,
-        info: <Info className="w-5 h-5 text-blue-500" />,
-        chat: <BotMessageSquare className="w-5 h-5 text-cyan-500" />,
-    };
+const TOAST_ICONS: Record<ToastType, { icon: typeof CheckCircle2; className: string }> = {
+    success: { icon: CheckCircle2, className: 'text-success' },
+    error: { icon: AlertCircle, className: 'text-danger' },
+    warning: { icon: TriangleAlert, className: 'text-warning' },
+    info: { icon: Info, className: 'text-accent' },
+    chat: { icon: BotMessageSquare, className: 'text-accent' },
+};
 
-    const bgColors = {
-        success: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800',
-        error: 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800',
-        warning: 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800',
-        info: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800',
-        chat: 'bg-cyan-50 dark:bg-cyan-900/20 border-cyan-200 dark:border-cyan-800',
-    };
+function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) => void }) {
+    const { icon: Icon, className: iconClassName } = TOAST_ICONS[toast.type];
 
     return (
         <div
-            className={`flex items-center gap-3 px-4 py-3 rounded-lg border shadow-lg 
-                pointer-events-auto animate-fade-in ${bgColors[toast.type]}`}
+            role={toast.type === 'error' ? 'alert' : undefined}
+            className="pointer-events-auto flex min-h-11 items-center gap-2.5 rounded-xl border-[0.5px] border-border bg-surface py-2 pr-2 pl-3.5 shadow-[0_8px_28px_rgba(31,30,29,0.12)] animate-fade-in dark:shadow-[0_8px_28px_rgba(0,0,0,0.45)]"
         >
-            {icons[toast.type]}
-            <span className="text-sm text-foreground">{toast.message}</span>
+            <Icon className={`h-[18px] w-[18px] shrink-0 ${iconClassName}`} aria-hidden="true" />
+            <span className="text-sm leading-snug text-foreground">{toast.message}</span>
             {toast.action && (
                 <button
+                    type="button"
                     onClick={() => {
                         toast.action?.onClick();
                         onRemove(toast.id);
                     }}
-                    className="px-2 py-1 rounded-md text-xs font-medium bg-background/70 dark:bg-black/20 hover:bg-background dark:hover:bg-black/30 transition-colors"
+                    className="ml-1 h-7 shrink-0 rounded-md px-2 text-[13px] font-medium text-accent transition-colors hover:bg-accent-soft"
                 >
                     {toast.action.label}
                 </button>
             )}
             <button
+                type="button"
                 onClick={() => onRemove(toast.id)}
-                className="p-1 hover:bg-black/5 dark:hover:bg-background/5 rounded-full transition-colors"
+                aria-label="关闭提示"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-foreground-tertiary transition-colors hover:bg-background-secondary hover:text-foreground"
             >
-                <X className="w-4 h-4 text-foreground-secondary" />
+                <X className="h-4 w-4" aria-hidden="true" />
             </button>
         </div>
     );

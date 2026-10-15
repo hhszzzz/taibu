@@ -46,7 +46,7 @@ export function PlaceInputModal({
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4 animate-fade-in">
             {/* 遮罩层 */}
             <div
                 className="absolute inset-0 bg-foreground/20 backdrop-blur-[2px]"
@@ -54,24 +54,25 @@ export function PlaceInputModal({
             />
 
             {/* 模态框内容 */}
-            <div className="relative bg-background rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-border text-foreground">
+            <div className="relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl border-[0.5px] border-border bg-surface text-foreground shadow-lg sm:rounded-2xl">
                 {/* 头部 */}
-                <div className="sticky top-0 bg-background border-b border-border/60 px-6 py-4 flex items-center justify-between z-10">
-                    <h2 className="text-lg font-bold flex items-center gap-2">
-                        <MapPin className="w-5 h-5 text-accent" />
+                <div className="flex items-center justify-between border-b-[0.5px] border-border px-5 py-4 sm:px-6">
+                    <h2 className="flex items-center gap-2 font-display text-lg">
+                        <MapPin className="h-[18px] w-[18px] text-clay" />
                         出生地点
                     </h2>
                     <button
                         type="button"
                         onClick={onClose}
-                        className="text-foreground-secondary hover:text-foreground hover:bg-background-secondary p-1 rounded-md transition-all duration-150"
+                        aria-label="关闭"
+                        className="rounded-lg p-1.5 text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-foreground"
                     >
-                        <X className="w-5 h-5" />
+                        <X className="h-5 w-5" />
                     </button>
                 </div>
 
                 {/* 内容 */}
-                <div className="p-6 space-y-6">
+                <div className="flex-1 space-y-5 overflow-y-auto p-5 sm:p-6">
                     {/* 省市区选择 */}
                     <RegionPicker
                         value={localPlace}
@@ -79,29 +80,29 @@ export function PlaceInputModal({
                     />
 
                     {/* 说明 */}
-                    <div className="bg-blue-50 text-accent p-4 rounded-md text-xs flex items-start gap-3 border border-blue-100">
-                        <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                        <p className="leading-relaxed font-medium">
+                    <div className="flex items-start gap-3 rounded-xl bg-panel p-4 text-xs text-foreground-secondary">
+                        <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-clay" />
+                        <p className="leading-relaxed">
                             出生地点会在提交时通过高德 Web 服务解析经度，用于真太阳时修正。如果无法精确解析到城市或区县，系统会自动回退为北京时间（东八区）排盘。
                         </p>
                     </div>
                 </div>
 
                 {/* 底部按钮 */}
-                <div className="sticky bottom-0 bg-background/80 backdrop-blur-md border-t border-border/60 px-6 py-4 flex gap-3">
+                <div className="flex gap-3 border-t-[0.5px] border-border bg-surface px-5 py-4 pb-[calc(1rem+var(--sab))] sm:px-6 sm:pb-4">
                     <button
                         type="button"
                         onClick={onClose}
-                        className="flex-1 px-4 py-2 bg-background border border-border rounded-md text-sm font-semibold text-foreground
-                            hover:bg-background-secondary active:bg-background-tertiary transition-all duration-150"
+                        className="h-11 flex-1 rounded-xl border-[0.5px] border-border-hover bg-surface text-sm font-medium text-foreground
+                            transition-colors duration-150 hover:bg-background-secondary active:bg-background-tertiary"
                     >
                         取消
                     </button>
                     <button
                         type="button"
                         onClick={handleConfirm}
-                        className="flex-1 px-4 py-2 bg-accent text-on-accent rounded-md text-sm font-semibold
-                            hover:bg-accent/90 active:bg-accent-hover transition-all duration-150"
+                        className="h-11 flex-1 rounded-xl bg-accent text-sm font-medium text-on-accent
+                            transition-colors duration-150 hover:bg-accent-hover"
                     >
                         确定
                     </button>

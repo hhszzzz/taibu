@@ -80,3 +80,19 @@ export function resolveNotificationLink(link: string, origin?: string) {
         return link.startsWith('/') ? link : `/${link}`;
     }
 }
+
+/** 列表里的相对时间：一周内用「N 分钟/小时/天前」，更早显示「M 月 D 日」；无法解析时返回空字符串。 */
+export function formatNotificationTime(dateStr: string, now: Date = new Date()): string {
+    const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) return '';
+    const diffMs = Math.max(0, now.getTime() - date.getTime());
+    const diffMins = Math.floor(diffMs / 60_000);
+    const diffHours = Math.floor(diffMs / 3_600_000);
+    const diffDays = Math.floor(diffMs / 86_400_000);
+
+    if (diffMins < 1) return '刚刚';
+    if (diffMins < 60) return `${diffMins} 分钟前`;
+    if (diffHours < 24) return `${diffHours} 小时前`;
+    if (diffDays < 7) return `${diffDays} 天前`;
+    return `${date.getMonth() + 1} 月 ${date.getDate()} 日`;
+}

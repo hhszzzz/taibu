@@ -6,6 +6,7 @@ import type {
   QimenOutput
 } from './types.js';
 import { GAN_WUXING } from '../../shared/utils.js';
+import { formatQimenRuMuStatus } from './json.js';
 import type {
   QimenCanonicalTextOptions
 } from '../shared/text-options.js';
@@ -16,7 +17,7 @@ function formatQimenPalaceStateText(palace: QimenOutput['palaces'][number], dayK
     dayKongPalaces.has(palace.palaceIndex) ? '日空' : null,
     hourKongPalaces.has(palace.palaceIndex) ? '时空' : null,
     palace.isYiMa ? '驿马' : null,
-    palace.isRuMu ? '入墓' : null,
+    palace.isRuMu ? formatQimenRuMuStatus(palace) : null,
     palace.isMenPo ? '门迫' : null,
     palace.isJiXing ? '六仪击刑' : null,
   ].filter(Boolean).join('、');
@@ -115,13 +116,15 @@ function renderQimenCanonicalTextBase(result: QimenOutput, options: QimenCanonic
       lines.push(monthPhaseLine);
     }
 
-    if (result.globalFormations.length > 0) {
-      lines.push('');
-      lines.push('## 全局格局');
-      lines.push('');
-      for (const formation of result.globalFormations) {
-        lines.push(`- ${formation}`);
-      }
+  }
+
+  // 格局是断盘主要依据，默认档也输出；全盘格局只列一次，不在九宫里逐宫重复
+  if (result.globalFormations.length > 0) {
+    lines.push('');
+    lines.push('## 全局格局');
+    lines.push('');
+    for (const formation of result.globalFormations) {
+      lines.push(`- ${formation}`);
     }
   }
 

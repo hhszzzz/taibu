@@ -87,7 +87,7 @@ function parseQimenInput(body: QimenRequest): QimenInput | RouteError {
         return { error: '定局法无效', status: 400 };
     }
     if (zhiFuJiGong && zhiFuJiGong !== 'jiLiuYi' && zhiFuJiGong !== 'jiWuGong') {
-        return { error: '直符寄宫配置无效', status: 400 };
+        return { error: '中五寄宫配置无效', status: 400 };
     }
 
     const timezone = typeof body.timezone === 'string' && body.timezone.trim()
@@ -107,7 +107,7 @@ function parseQimenInput(body: QimenRequest): QimenInput | RouteError {
         question,
         panType: panType || 'zhuan',
         juMethod: juMethod || 'chaibu',
-        zhiFuJiGong: zhiFuJiGong || 'jiLiuYi',
+        zhiFuJiGong: zhiFuJiGong || 'jiWuGong',
     };
 }
 

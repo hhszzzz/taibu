@@ -31,13 +31,13 @@ export function YaoLine({ yao, size = 'md', showLabel = false }: YaoLineProps) {
     const { line, gap, width, halfWidth, gapWidth } = sizeClasses[size];
 
     const lineColor = isChanging
-        ? 'bg-red-500'
+        ? 'bg-accent'
         : 'bg-foreground';
 
     return (
         <div className={`flex items-center ${gap} ${showLabel ? 'justify-between' : 'justify-center'}`}>
             {showLabel && (
-                <span className={`text-xs text-foreground-secondary w-12 ${isChanging ? 'text-red-500 font-medium' : ''}`}>
+                <span className={`text-xs w-12 ${isChanging ? 'text-accent font-medium' : 'text-foreground-secondary'}`}>
                     {YAO_LABELS[yao.position - 1]}
                     {isChanging && ' ○'}
                 </span>

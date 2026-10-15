@@ -7,7 +7,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Coins, Sparkles, Grid3X3 } from 'lucide-react';
+import { ArrowRight, ChevronRight, Loader } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import { divine, yaosTpCode, findHexagram, calculateChangedHexagram, type LiuQin } from '@/lib/divination/liuyao';
@@ -16,6 +16,17 @@ import { YongShenTargetPicker } from '@/components/liuyao/YongShenTargetPicker';
 import { supabase } from '@/lib/auth';
 import { writeSessionJSON } from '@/lib/cache/session-storage';
 import { saveDivinationAction } from '@/lib/divination/save-client';
+
+const METHOD_CARD_CLASS = 'flex flex-col gap-3 rounded-2xl border-[0.5px] border-border bg-surface p-5 text-left text-foreground transition-colors hover:bg-background-secondary active:bg-background-tertiary sm:p-[22px]';
+const COIN_ICON_KEYS = ['left', 'middle', 'right'] as const;
+/** 图标自上而下：阳、阴、阳、阳、阴。 */
+const HEXAGRAM_ICON_LINES = [true, false, true, true, false] as const;
+const ABOUT_LIUYAO = [
+    { title: '铜钱法', body: '三正为老阳、三反为老阴，均为变爻；二正一反为少阳，一正二反为少阴。' },
+    { title: '变卦', body: '老阳、老阴变化后得到变卦，反映事情的发展趋势。' },
+    { title: '用神', body: '按所问之事取六亲为用神，如问工作取官鬼、问财取妻财。' },
+    { title: '一事一占', body: '同一问题不宜反复起卦，以第一次为准。' },
+] as const;
 
 export default function LiuyaoPage() {
     const router = useRouter();
@@ -109,177 +120,91 @@ export default function LiuyaoPage() {
     };
 
     return (
-        <div className="min-h-screen bg-background md:pb-12 text-foreground">
-            {/* 页面标题 - 移动端隐藏（顶栏已显示） */}
-            <div className="hidden md:block text-center py-8">
-                <h1 className="text-2xl lg:text-3xl font-bold">六爻占卜</h1>
-                <p className="text-foreground-secondary mt-2">源自《易经》的古老智慧，心诚则灵</p>
-            </div>
+        <div className="min-h-screen bg-background text-foreground">
+            <div className="mx-auto flex w-full max-w-[944px] flex-col gap-6 px-4 py-5 sm:gap-8 sm:px-8 sm:py-14">
+                <header className="hidden flex-col gap-2 lg:flex">
+                    <h1 className="font-display text-[34px] font-normal leading-tight">六爻占卜</h1>
+                    <p className="text-[15px] text-foreground-secondary">源自《易经》。一事一占，先想清楚要问什么。</p>
+                </header>
 
-            <div className="max-w-4xl mx-auto px-4">
-                {/* 问题输入 */}
-                <div className="sm:mb-10 mb-4 text-center max-w-2xl mx-auto">
-                    <label className="block text-xs md:text-sm font-medium text-foreground-secondary mb-3 uppercase tracking-wider">
-                        心中默念您的问题（选填）
-                    </label>
-                    <div className="relative group">
-                        <div className="absolute inset-y-0 right-2 z-10 flex items-center">
-                            <YongShenTargetPicker
-                                value={yongShenTargets}
-                                onChange={setYongShenTargets}
-                                variant="inline-right"
-                            />
-                        </div>
+                {/* 问题与分析目标 */}
+                <section className="flex flex-col gap-4 rounded-2xl border-[0.5px] border-border bg-surface p-4 sm:p-6">
+                    <div className="flex flex-col gap-2">
+                        <label htmlFor="liuyao-question" className="text-sm font-medium">
+                            所问之事 <span className="font-normal text-foreground-secondary">选填</span>
+                        </label>
                         <input
+                            id="liuyao-question"
                             type="text"
                             value={question}
                             onChange={(e) => setQuestion(e.target.value)}
-                            placeholder="例如：我近期的事业运势如何？这次合作能否顺利达成？"
-                            className="relative w-full px-6 py-4 bg-background rounded-lg border border-border shadow-sm
-                                focus:border-accent focus:ring-2 focus:ring-accent/10 focus:outline-none
-                                text-center text-lg text-foreground placeholder:text-foreground-secondary pr-44
-                                transition-all duration-150"
+                            placeholder="例如：这次合作能否顺利达成？"
+                            className="h-[52px] w-full rounded-xl border-[0.5px] border-border-hover bg-surface px-4 font-display text-lg text-foreground placeholder:font-sans placeholder:text-[15px] placeholder:text-foreground-tertiary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
                         />
                     </div>
-                </div>
+                    <div className="flex flex-col gap-2.5">
+                        <span className="text-sm font-medium">
+                            分析目标 <span className="font-normal text-foreground-secondary">决定取哪一类用神，可多选</span>
+                        </span>
+                        <YongShenTargetPicker value={yongShenTargets} onChange={setYongShenTargets} variant="chips" />
+                    </div>
+                </section>
 
                 {/* 起卦方式 */}
-                <div className="grid md:grid-cols-3 gap-4 md:gap-6 mb-8 md:mb-12">
-                    {/* 铜钱起卦 */}
-                    <button
-                        onClick={handleCoinDivine}
-                        className="group relative bg-background rounded-lg p-5 md:p-8 text-left border border-border hover:bg-background-secondary active:bg-background-tertiary transition-all duration-150 overflow-hidden shadow-sm"
-                    >
-                        <div className="relative z-10 flex flex-row md:flex-col h-full items-start text-left">
-                            <div className="shrink-0 w-12 h-12 md:w-14 md:h-14 bg-yellow-50 rounded-md flex items-center justify-center mr-4 md:mr-0 md:mb-6">
-                                <Coins className="w-6 h-6 md:w-8 md:h-8 text-warning" />
-                            </div>
+                <section className="flex flex-col gap-3">
+                    <h2 className="font-display text-[22px] font-medium">选择起卦方式</h2>
+                    <div className="grid gap-3 md:grid-cols-3">
+                        <button type="button" onClick={handleCoinDivine} className={METHOD_CARD_CLASS}>
+                            <span className="flex h-10 items-center gap-1.5" aria-hidden="true">
+                                {COIN_ICON_KEYS.map((key) => (
+                                    <span key={key} className="flex h-[30px] w-[30px] items-center justify-center rounded-full border-[1.5px] border-accent">
+                                        <span className="h-2 w-2 border-[1.5px] border-accent" />
+                                    </span>
+                                ))}
+                            </span>
+                            <span className="font-display text-[19px]">铜钱起卦</span>
+                            <span className="text-sm leading-relaxed text-foreground-secondary">三枚铜钱抛掷六次，亲手感应卦象，保留古法的仪式感。</span>
+                            <span className="mt-auto inline-flex items-center gap-1 pt-1 text-sm text-accent">开始抛掷 <ArrowRight className="h-3.5 w-3.5" /></span>
+                        </button>
 
-                            <div className="flex-1 flex flex-col">
-                                <h3 className="text-lg md:text-xl font-bold text-foreground mb-1 md:mb-2">
-                                    铜钱起卦
-                                </h3>
-                                <p className="text-sm text-foreground-secondary leading-relaxed mb-2 md:mb-6 flex-1">
-                                    模拟传统三铜钱起卦法，诚心抛掷六次，亲自感应卦象变化，体验古法占卜的仪式感。
-                                </p>
+                        <button type="button" onClick={handleQuickDivine} disabled={isQuickLoading} className={`${METHOD_CARD_CLASS} disabled:cursor-not-allowed disabled:opacity-70`}>
+                            <span className="flex h-10 items-center text-accent" aria-hidden="true">
+                                {isQuickLoading ? <SoundWaveLoader variant="inline" /> : <Loader className="h-8 w-8" strokeWidth={1.5} />}
+                            </span>
+                            <span className="font-display text-[19px]">{isQuickLoading ? '正在起卦...' : '快速起卦'}</span>
+                            <span className="text-sm leading-relaxed text-foreground-secondary">随机生成卦象，适合不方便手动起卦或想马上得到指引时。</span>
+                            <span className="mt-auto inline-flex items-center gap-1 pt-1 text-sm text-accent">立即生成 <ArrowRight className="h-3.5 w-3.5" /></span>
+                        </button>
 
-                                <div className="flex items-center text-sm font-semibold text-warning mt-auto">
-                                    开始起卦 <span className="ml-1">→</span>
-                                </div>
-                            </div>
-                        </div>
-                    </button>
-
-                    {/* 快速起卦 */}
-                    <button
-                        onClick={handleQuickDivine}
-                        disabled={isQuickLoading}
-                        className="group relative bg-background rounded-lg p-5 md:p-8 text-left border border-border hover:bg-background-secondary active:bg-background-tertiary transition-all duration-150 overflow-hidden shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
-                    >
-                        <div className="relative z-10 flex flex-row md:flex-col h-full items-start text-left">
-                            <div className="shrink-0 w-12 h-12 md:w-14 md:h-14 bg-purple-50 rounded-md flex items-center justify-center mr-4 md:mr-0 md:mb-6">
-                                {isQuickLoading ? (
-                                    <SoundWaveLoader variant="inline" />
-                                ) : (
-                                    <Sparkles className="w-6 h-6 md:w-8 md:h-8 text-[#a083ff]" />
-                                )}
-                            </div>
-
-                            <div className="flex-1 flex flex-col">
-                                <h3 className="text-lg md:text-xl font-bold text-foreground mb-1 md:mb-2">
-                                    {isQuickLoading ? '正在起卦...' : '快速起卦'}
-                                </h3>
-                                <p className="text-sm text-foreground-secondary leading-relaxed mb-2 md:mb-6 flex-1">
-                                    利用计算机随机算法生成卦象，适合想要快速获得指引，或不方便进行手动起卦的场景。
-                                </p>
-
-                                <div className="flex items-center text-sm font-semibold text-[#a083ff] mt-auto">
-                                    立即生成 <span className="ml-1">→</span>
-                                </div>
-                            </div>
-                        </div>
-                    </button>
-
-                    {/* 选卦起卦 */}
-                    <button
-                        onClick={handleSelectDivine}
-                        className="group relative bg-background rounded-lg p-5 md:p-8 text-left border border-border hover:bg-background-secondary active:bg-background-tertiary transition-all duration-150 overflow-hidden shadow-sm"
-                    >
-                        <div className="relative z-10 flex flex-row md:flex-col h-full items-start text-left">
-                            <div className="shrink-0 w-12 h-12 md:w-14 md:h-14 bg-teal-50 rounded-md flex items-center justify-center mr-4 md:mr-0 md:mb-6">
-                                <Grid3X3 className="w-6 h-6 md:w-8 md:h-8 text-success" />
-                            </div>
-
-                            <div className="flex-1 flex flex-col">
-                                <h3 className="text-lg md:text-xl font-bold text-foreground mb-1 md:mb-2">
-                                    选卦起卦
-                                </h3>
-                                <p className="text-sm text-foreground-secondary leading-relaxed mb-2 md:mb-6 flex-1">
-                                    手动选择已知卦象和变爻，适合已有卦象需要详细分析的场景。
-                                </p>
-
-                                <div className="flex items-center text-sm font-semibold text-success mt-auto">
-                                    选择卦象 <span className="ml-1">→</span>
-                                </div>
-                            </div>
-                        </div>
-                    </button>
-                </div>
+                        <button type="button" onClick={handleSelectDivine} className={METHOD_CARD_CLASS}>
+                            <span className="flex h-10 w-10 flex-col justify-center gap-1" aria-hidden="true">
+                                {HEXAGRAM_ICON_LINES.map((yang, index) => (
+                                    yang
+                                        ? <span key={index} className="h-[3px] rounded-sm bg-accent" />
+                                        : <span key={index} className="flex h-[3px] gap-1.5"><span className="flex-1 rounded-sm bg-accent" /><span className="flex-1 rounded-sm bg-accent" /></span>
+                                ))}
+                            </span>
+                            <span className="font-display text-[19px]">选卦起卦</span>
+                            <span className="text-sm leading-relaxed text-foreground-secondary">已有卦象时，手动选择本卦与动爻，直接排盘分析。</span>
+                            <span className="mt-auto inline-flex items-center gap-1 pt-1 text-sm text-accent">选择卦象 <ArrowRight className="h-3.5 w-3.5" /></span>
+                        </button>
+                    </div>
+                </section>
 
                 {/* 说明 */}
-                <div className="bg-background rounded-lg p-5 md:p-8 border border-border shadow-sm">
-                    <h3 className="text-base md:text-lg font-bold text-foreground mb-4 md:mb-6 flex items-center gap-2">
-                        <span className="w-1 h-4 md:h-5 bg-foreground rounded-full" />
-                        六爻占卜说明
-                    </h3>
-                    <div className="grid md:grid-cols-2 gap-6 md:gap-8 text-sm leading-relaxed">
-                        <div className="space-y-4">
-                            <div>
-                                <h4 className="font-bold text-foreground mb-2 flex items-center gap-2 text-sm">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-accent" />
-                                    什么是六爻？
-                                </h4>
-                                <p className="text-xs md:text-sm text-foreground-secondary pl-3.5 border-l border-border/60">
-                                    六爻是《周易》预测学的一个分支，通过铜钱或其他方式起卦，
-                                    得到由六个爻组成的卦象，再根据卦象判断事物吉凶。
-                                </p>
-                            </div>
-                            <div>
-                                <h4 className="font-bold text-foreground mb-2 flex items-center gap-2 text-sm">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-accent" />
-                                    起卦方法
-                                </h4>
-                                <p className="text-xs md:text-sm text-foreground-secondary pl-3.5 border-l border-border/60">
-                                    传统铜钱法：三枚铜钱抛掷六次，
-                                    三正为老阳（变），三反为老阴（变），
-                                    二正一反为少阳，一正二反为少阴。
-                                </p>
-                            </div>
-                        </div>
-                        <div className="space-y-4">
-                            <div>
-                                <h4 className="font-bold text-foreground mb-2 flex items-center gap-2 text-sm">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-accent" />
-                                    什么是变爻？
-                                </h4>
-                                <p className="text-xs md:text-sm text-foreground-secondary pl-3.5 border-l border-border/60">
-                                    老阳和老阴为变爻，会形成变卦。
-                                    变卦代表事物的发展趋势和最终结果，是解卦的重要依据。
-                                </p>
-                            </div>
-                            <div>
-                                <h4 className="font-bold text-foreground mb-2 flex items-center gap-2 text-sm">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-accent" />
-                                    注意事项
-                                </h4>
-                                <p className="text-xs md:text-sm text-foreground-secondary pl-3.5 border-l border-border/60">
-                                    起卦时心诚则灵，专注于问题。
-                                    同一问题不宜反复占卜，以第一次起卦结果为准。
-                                </p>
-                            </div>
-                        </div>
+                <details className="group border-t-[0.5px] border-border pt-[18px]">
+                    <summary className="cursor-pointer list-none text-[15px] text-foreground-secondary transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
+                        <span className="inline-flex items-center gap-2">
+                            <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" />
+                            关于六爻：起卦方法、变爻与注意事项
+                        </span>
+                    </summary>
+                    <div className="grid gap-x-8 gap-y-4 pt-4 text-sm leading-relaxed text-foreground-secondary md:grid-cols-2">
+                        {ABOUT_LIUYAO.map((item) => (
+                            <p key={item.title}><strong className="mr-2 font-medium text-foreground">{item.title}</strong>{item.body}</p>
+                        ))}
                     </div>
-                </div>
+                </details>
             </div>
             {/* 历史记录抽屉 */}
             <HistoryDrawer type="liuyao" />

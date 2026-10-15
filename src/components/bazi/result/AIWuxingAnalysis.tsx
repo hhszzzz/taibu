@@ -29,9 +29,9 @@ export function AIWuxingAnalysis(props: AIWuxingAnalysisProps) {
             subtitle="深度解读五行配置与喜用神"
             lockDescription="消耗1积分，获取基于您命盘的深度五行分析报告"
             loadingText="AI正在分析您的八字，请稍候..."
-            icon={<Sparkles className="w-5 h-5 text-blue-500" />}
-            iconContainerClass="bg-gradient-to-br from-blue-500/20 to-cyan-500/20"
-            headerGradientClass="bg-gradient-to-r from-blue-500/5 to-cyan-500/5"
+            icon={<Sparkles className="w-5 h-5 text-accent-strong" />}
+            iconContainerClass="bg-accent-soft"
+            headerGradientClass="bg-panel"
         />
     );
 }

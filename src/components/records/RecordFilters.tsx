@@ -1,13 +1,14 @@
 /**
- * 记录搜索与筛选栏
+ * 记录搜索与分类筛选
  *
  * 'use client' 标记说明：
- * - 使用受控输入（onChange）
+ * - 使用受控输入（onChange）与分类按钮点击
  */
 'use client';
 
-import { Search, Filter } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { RecordCategory, RECORD_CATEGORIES } from '@/lib/records';
+import { FilterChip } from '@/components/ui/FilterChip';
 
 interface RecordFiltersProps {
     search: string;
@@ -16,6 +17,11 @@ interface RecordFiltersProps {
     onCategoryChange: (value: RecordCategory | '') => void;
 }
 
+const CATEGORY_OPTIONS: { value: RecordCategory | ''; label: string }[] = [
+    { value: '', label: '全部' },
+    ...RECORD_CATEGORIES.map(({ value, label }) => ({ value, label })),
+];
+
 export function RecordFilters({
     search,
     onSearchChange,
@@ -23,35 +29,29 @@ export function RecordFilters({
     onCategoryChange,
 }: RecordFiltersProps) {
     return (
-        <div className="sticky top-4 z-30 bg-background/80 backdrop-blur-md rounded-2xl border border-border shadow-sm p-2 flex flex-col sm:flex-row gap-2">
-            <div className="flex-1 relative group">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-secondary group-focus-within:text-emerald-500 transition-colors" />
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+            <label className="relative block md:flex-1">
+                <span className="sr-only">搜索记录</span>
+                <Search className="pointer-events-none absolute top-1/2 left-3.5 h-[18px] w-[18px] -translate-y-1/2 text-foreground-tertiary" aria-hidden="true" />
                 <input
-                    type="text"
+                    type="search"
                     value={search}
                     onChange={(e) => onSearchChange(e.target.value)}
-                    placeholder="搜索关键词..."
-                    className="w-full bg-transparent hover:bg-background-secondary/50 focus:bg-background border-none rounded-xl pl-10 pr-4 py-2.5 text-foreground placeholder:text-foreground-secondary/50 focus:ring-2 focus:ring-emerald-500/20 transition-all outline-none"
+                    placeholder="搜索标题、内容或标签"
+                    className="h-11 w-full rounded-[10px] border-[0.5px] border-border-hover bg-surface pr-3.5 pl-[42px] text-[15px] text-foreground placeholder:text-foreground-tertiary focus:border-accent focus:outline-none"
                 />
-            </div>
-            <div className="w-px h-8 bg-border hidden sm:block self-center" />
-            <div className="relative min-w-[160px]">
-                <Filter className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-secondary pointer-events-none" />
-                <select
-                    value={category}
-                    onChange={(e) => onCategoryChange(e.target.value as RecordCategory | '')}
-                    className="w-full bg-transparent hover:bg-background-secondary/50 focus:bg-background border-none rounded-xl pl-10 pr-8 py-2.5 text-foreground focus:ring-2 focus:ring-emerald-500/20 transition-all outline-none appearance-none cursor-pointer"
-                >
-                    <option value="">全部分类</option>
-                    {RECORD_CATEGORIES.map(cat => (
-                        <option key={cat.value} value={cat.value}>
-                            {cat.label}
-                        </option>
-                    ))}
-                </select>
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-foreground-secondary">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                </div>
+            </label>
+            {/* 手机上分类横向滚动，不换行挤压。 */}
+            <div role="group" aria-label="分类" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-0.5 md:mx-0 md:overflow-visible md:px-0 md:pb-0">
+                {CATEGORY_OPTIONS.map(option => (
+                    <FilterChip
+                        key={option.value || 'all'}
+                        pressed={category === option.value}
+                        onClick={() => onCategoryChange(option.value)}
+                    >
+                        {option.label}
+                    </FilterChip>
+                ))}
             </div>
         </div>
     );

@@ -2,14 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
-import { ArrowLeft, Eye, EyeOff, PencilLine, Trash2 } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, PencilLine, Plus, Trash2 } from 'lucide-react';
 import { requestBrowserData } from '@/lib/browser-api';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
-import type { Announcement } from '@/lib/announcement';
+import { getAnnouncementExcerpt, type Announcement } from '@/lib/announcement';
 
 type PanelView = 'history' | 'editor';
+
+const CARD = 'rounded-[14px] border border-border bg-surface';
 type EditorMode = 'create' | 'edit';
 
 type AnnouncementFormState = {
@@ -49,6 +52,7 @@ export function AnnouncementManagementPanel() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Announcement | null>(null);
   const [view, setView] = useState<PanelView>('history');
   const [mode, setMode] = useState<EditorMode>('create');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -182,6 +186,7 @@ export function AnnouncementManagementPanel() {
         resetToHistory();
       }
 
+      setDeleteTarget(null);
       showToast('success', '公告已删除');
       await loadAnnouncements(deletingSelected ? null : selectedId);
     } catch (deleteError) {
@@ -193,19 +198,15 @@ export function AnnouncementManagementPanel() {
 
   if (view === 'history') {
     return (
-      <div className="space-y-4">
+      <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="min-w-0 text-lg font-semibold text-foreground">公告历史</h2>
-
-          <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
-              onClick={startCreateAnnouncement}
-              className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-2 text-sm font-medium text-on-accent transition-colors duration-150 hover:bg-accent-hover active:bg-accent-hover"
-            >
-              新建公告
-            </button>
-          </div>
+          <h3 className="text-[13px] font-medium text-foreground-tertiary">
+            公告历史{loading || error ? null : <span className="ml-1.5 font-normal tabular-nums">{announcements.length}</span>}
+          </h3>
+          <button type="button" onClick={startCreateAnnouncement} className="settings-button settings-button-primary">
+            <Plus aria-hidden="true" className="h-4 w-4" />
+            新建公告
+          </button>
         </div>
 
         {loading ? (
@@ -213,161 +214,133 @@ export function AnnouncementManagementPanel() {
             <SoundWaveLoader variant="inline" />
           </div>
         ) : error ? (
-          <div className="py-12 text-center text-sm text-foreground-secondary">{error}</div>
-        ) : announcements.length === 0 ? (
-          <div className="py-12 text-center text-sm text-foreground-secondary">还没有任何公告</div>
-        ) : (
-          <div className="space-y-2">
-            {announcements.map((announcement) => {
-              const isSelected = announcement.id === selectedId;
-
-              return (
-                <div
-                  key={announcement.id}
-                  className={`rounded-xl border px-4 py-3 transition-colors duration-150 ${
-                    isSelected
-                      ? 'border-border bg-background-secondary'
-                      : 'border-border bg-surface hover:bg-surface'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => selectAnnouncement(announcement)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault();
-                          selectAnnouncement(announcement);
-                        }
-                      }}
-                      className="min-w-0 flex-1 cursor-pointer text-left"
-                    >
-                      <div className="text-[11px] font-medium tracking-tight text-foreground/38">
-                        {formatPublishedAt(announcement.publishedAt)}
-                      </div>
-                      {announcement.content.trim() ? (
-                        <div className="mt-1 overflow-hidden text-sm leading-6 text-foreground/82">
-                          <MarkdownContent
-                            content={announcement.content}
-                            className="text-sm leading-6 text-foreground/82"
-                          />
-                        </div>
-                      ) : (
-                        <div className="mt-1 text-sm leading-6 text-foreground-secondary">
-                          暂无内容
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => selectAnnouncement(announcement)}
-                        className="rounded-md p-1.5 text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-accent"
-                        title="编辑"
-                      >
-                        <PencilLine className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void deleteAnnouncement(announcement)}
-                        disabled={deletingId === announcement.id}
-                        className="rounded-md p-1.5 text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-danger disabled:opacity-50"
-                        title="删除"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+          <div role="alert" className="settings-alert">
+            {error}
+            <button type="button" onClick={() => { void loadAnnouncements(); }}>重试</button>
           </div>
+        ) : announcements.length === 0 ? (
+          <div className={`px-6 py-12 text-center text-[15px] text-foreground ${CARD}`}>还没有任何公告</div>
+        ) : (
+          <ul className={`overflow-hidden ${CARD}`}>
+            {announcements.map((announcement) => (
+              // 整行点击进入编辑：编辑按钮的伪元素铺满整行，删除按钮叠在其上。
+              <li
+                key={announcement.id}
+                className="relative flex items-start gap-3 py-3.5 pl-5 pr-2.5 transition-colors duration-150 hover:bg-background-secondary/50 [&+li]:border-t [&+li]:border-border"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs tabular-nums text-foreground-tertiary">{formatPublishedAt(announcement.publishedAt)}</p>
+                  <p className="mt-1 line-clamp-2 text-sm leading-6 text-foreground">
+                    {getAnnouncementExcerpt(announcement.content) || <span className="text-foreground-tertiary">暂无内容</span>}
+                  </p>
+                </div>
+                <div className="flex flex-shrink-0 items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => selectAnnouncement(announcement)}
+                    aria-label={`编辑公告（${formatPublishedAt(announcement.publishedAt)}）`}
+                    title="编辑"
+                    className="settings-icon-button after:absolute after:inset-0 after:content-['']"
+                  >
+                    <PencilLine aria-hidden="true" className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteTarget(announcement)}
+                    disabled={deletingId === announcement.id}
+                    aria-label={`删除公告（${formatPublishedAt(announcement.publishedAt)}）`}
+                    title="删除"
+                    className="settings-icon-button settings-icon-button-danger relative z-10"
+                  >
+                    <Trash2 aria-hidden="true" className="h-4 w-4" />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
         )}
+
+        <ConfirmDialog
+          isOpen={!!deleteTarget}
+          onClose={() => { if (!deletingId) setDeleteTarget(null); }}
+          onConfirm={() => (deleteTarget ? deleteAnnouncement(deleteTarget) : undefined)}
+          title="删除公告"
+          description="删除后用户将不再看到这条公告，此操作无法撤销。"
+          confirmText="确认删除"
+          variant="danger"
+          loading={!!deletingId}
+        />
       </div>
     );
   }
 
   return (
-    <div className="space-y-5">
+    <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={resetToHistory}
-          className="inline-flex items-center gap-1.5 text-sm text-foreground-secondary transition-colors duration-150 hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
+        <button type="button" onClick={resetToHistory} className="settings-button settings-button-ghost -ml-3">
+          <ArrowLeft aria-hidden="true" className="h-4 w-4" />
           返回历史
         </button>
-
         <button
           type="button"
           onClick={() => void saveAnnouncement()}
           disabled={saving}
-          className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-2 text-sm font-medium text-on-accent transition-colors duration-150 hover:bg-accent-hover active:bg-accent-hover disabled:opacity-50"
+          className="settings-button settings-button-primary"
         >
           {saving ? '保存中...' : mode === 'create' ? '发布公告' : '保存修改'}
         </button>
       </div>
 
-      <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-foreground">{mode === 'create' ? '新建公告' : '编辑公告'}</h2>
-
-        <div className="grid gap-3 border-b border-border pb-4 text-sm md:grid-cols-[88px_minmax(0,1fr)]">
-          <span className="text-foreground-secondary">当前状态</span>
-          <span className="leading-6 text-foreground">
+      <section className="flex flex-col gap-5" aria-labelledby="announcement-editor-heading">
+        <div className="flex flex-col gap-1">
+          <h3 id="announcement-editor-heading" className="font-display text-xl font-medium text-foreground">
+            {mode === 'create' ? '新建公告' : '编辑公告'}
+          </h3>
+          <p className="settings-help">
             {selectedAnnouncement
               ? `已发布于 ${formatPublishedAt(selectedAnnouncement.publishedAt)}，保存后即时生效。`
               : '未发布，保存后即时生效。'}
-          </span>
+          </p>
         </div>
 
-        <section className="space-y-2">
-          <div className="space-y-1">
-            <h3 className="text-sm font-semibold text-foreground">公告内容</h3>
-            <p className="text-xs leading-5 text-foreground-secondary">支持 Markdown，建议用标题、列表、加粗、链接等基础语法。</p>
-          </div>
+        <div className="flex flex-col gap-2">
+          <label htmlFor="announcement-content" className="settings-label">公告内容</label>
           <textarea
+            id="announcement-content"
+            aria-describedby="announcement-content-hint"
             value={form.content}
             onChange={(event) => setForm((current) => ({ ...current, content: event.target.value }))}
-            className="min-h-[220px] w-full resize-y rounded-xl border border-border bg-surface px-4 py-3 text-sm leading-7 text-foreground outline-none transition-all duration-150 focus:border-gray-300 focus:ring-2 focus:ring-accent/20"
+            className="settings-textarea min-h-[220px]"
             placeholder="输入公告内容，支持多段文本..."
           />
-        </section>
+          <p id="announcement-content-hint" className="settings-help">支持 Markdown，建议用标题、列表、加粗、链接等基础语法。</p>
+        </div>
 
-        <section className="space-y-2">
+        <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="space-y-1">
-              <h3 className="text-sm font-semibold text-foreground">Markdown 预览</h3>
-              <p className="text-xs leading-5 text-foreground-secondary">默认收起，需要时再展开查看实际展示效果。</p>
-            </div>
+            <h4 className="settings-label">Markdown 预览</h4>
             <button
               type="button"
               onClick={() => setPreviewOpen((current) => !current)}
-              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-xs text-foreground/70 transition-colors duration-150 hover:bg-background-secondary hover:text-foreground"
+              aria-expanded={previewOpen}
+              aria-controls="announcement-preview"
+              className="settings-button settings-button-compact"
             >
-              {previewOpen ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              {previewOpen ? <EyeOff aria-hidden="true" className="h-4 w-4" /> : <Eye aria-hidden="true" className="h-4 w-4" />}
               {previewOpen ? '收起预览' : '展开预览'}
             </button>
           </div>
 
-          {previewOpen ? (
-            <div className="rounded-xl border border-border bg-surface px-4 py-4">
-              {form.content.trim() ? (
-                <MarkdownContent content={form.content} className="text-sm leading-7 text-foreground/85" />
-              ) : (
-                <div className="flex min-h-[120px] items-center justify-center text-sm text-foreground-secondary">
-                  输入公告内容后，这里会显示 Markdown 预览
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="rounded-xl border border-dashed border-border bg-surface px-4 py-4 text-sm text-foreground-secondary">
-              预览已收起。需要确认展示效果时再展开即可。
-            </div>
-          )}
-        </section>
+          <div id="announcement-preview" hidden={!previewOpen} className={`px-5 py-4 ${CARD}`}>
+            {form.content.trim() ? (
+              <MarkdownContent content={form.content} className="text-sm leading-7 text-foreground" />
+            ) : (
+              <div className="flex min-h-[120px] items-center justify-center text-sm text-foreground-secondary">
+                输入公告内容后，这里会显示 Markdown 预览
+              </div>
+            )}
+          </div>
+        </div>
       </section>
     </div>
   );

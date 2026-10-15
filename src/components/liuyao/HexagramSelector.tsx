@@ -7,7 +7,7 @@
 
 import { useState } from 'react';
 import { Search } from 'lucide-react';
-import { HEXAGRAMS } from '@/lib/divination/liuyao';
+import { HEXAGRAMS, formatHexagramPalace } from '@/lib/divination/liuyao';
 
 interface HexagramSelectorProps {
     value?: string;
@@ -38,18 +38,17 @@ export function HexagramSelector({ value, onChange }: HexagramSelectorProps) {
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="搜索卦名、卦象..."
-                    className="w-full pl-9 pr-4 py-2 bg-background border border-border rounded-lg text-sm
-                        focus:border-accent focus:outline-none focus:ring-0
-                        placeholder:text-foreground-tertiary"
+                    className="h-10 w-full rounded-[10px] border-[0.5px] border-border-hover bg-surface pl-9 pr-4 text-sm
+                        placeholder:text-foreground-tertiary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
                 />
             </div>
 
             {/* 已选显示 */}
             {selectedHexagram && (
-                <div className="flex items-center gap-2 px-3 py-2 bg-accent/10 border border-accent/30 rounded-lg text-sm">
-                    <span className="text-accent font-bold">{selectedHexagram.name}</span>
+                <div className="flex flex-wrap items-baseline gap-2 rounded-xl bg-accent-light px-3.5 py-2.5 text-sm ring-1 ring-inset ring-accent/50">
+                    <span className="font-display text-base text-accent-strong">{selectedHexagram.name}</span>
                     <span className="text-foreground-secondary">
-                        {selectedHexagram.upperTrigram}/{selectedHexagram.lowerTrigram} · {selectedHexagram.element}
+                        {selectedHexagram.upperTrigram}/{selectedHexagram.lowerTrigram} · {formatHexagramPalace(selectedHexagram.code)}
                     </span>
                 </div>
             )}
@@ -59,11 +58,13 @@ export function HexagramSelector({ value, onChange }: HexagramSelectorProps) {
                 {filtered.map(h => (
                     <button
                         key={h.code}
+                        type="button"
                         onClick={() => onChange(h.code)}
-                        className={`px-1 py-2 rounded text-xs text-center transition-all
+                        aria-pressed={value === h.code}
+                        className={`rounded-lg px-1 py-2 text-center font-display text-[13px] transition-colors
                             ${value === h.code
-                                ? 'bg-accent text-on-accent font-bold ring-2 ring-accent/50'
-                                : 'bg-background/5 border border-white/10 text-foreground hover:bg-background/10 hover:border-white/20'
+                                ? 'bg-accent-soft text-accent-strong ring-2 ring-inset ring-accent'
+                                : 'border-[0.5px] border-border bg-surface text-foreground hover:bg-background-secondary'
                             }`}
                     >
                         {h.name}

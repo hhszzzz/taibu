@@ -7,8 +7,14 @@
 
 import { useCallback, useId, type ReactNode } from 'react';
 import { Modal } from './Modal';
-import { AlertTriangle } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+
+// 危险/警告色在深色主题下是浅色，用背景色作文字才能保证两种主题的对比度。
+const CONFIRM_BUTTON_CLASS = {
+    danger: 'bg-danger text-background hover:bg-danger/90',
+    warning: 'bg-warning text-background hover:bg-warning/90',
+    default: 'bg-accent text-on-accent hover:bg-accent/90',
+} as const;
 
 interface ConfirmDialogProps {
     isOpen: boolean;
@@ -46,62 +52,33 @@ export function ConfirmDialog({
 
     if (!isOpen) return null;
 
-    const variantStyles = {
-        danger: {
-            icon: 'text-red-500',
-            button: 'bg-red-500 hover:bg-red-600 text-white',
-        },
-        warning: {
-            icon: 'text-yellow-500',
-            button: 'bg-yellow-500 hover:bg-yellow-600 text-white',
-        },
-        default: {
-            icon: 'text-accent',
-            button: 'bg-accent hover:bg-accent/90 text-on-accent',
-        },
-    };
-
-    const styles = variantStyles[variant];
-
     return (
         <Modal open={isOpen} onClose={onClose} busy={loading} labelledBy={`${id}-title`} describedBy={`${id}-description`} className="max-w-sm">
             <div className="p-6">
-                {/* 图标 */}
-                {variant !== 'default' && (
-                    <div className={`flex items-center justify-center w-12 h-12 rounded-full bg-background-secondary mb-4 mx-auto ${styles.icon}`}>
-                        <AlertTriangle className="w-6 h-6" />
-                    </div>
-                )}
-
-                {/* 标题 */}
-                <h3 id={`${id}-title`} className="text-lg font-semibold mb-2 text-center">
+                <h2 id={`${id}-title`} className="font-display text-xl leading-snug text-foreground">
                     {title}
-                </h3>
-
-                {/* 描述 */}
-                <p id={`${id}-description`} className="text-foreground-secondary text-sm mb-6 text-center">
+                </h2>
+                <p id={`${id}-description`} className="mt-2 text-sm leading-relaxed text-foreground-secondary">
                     {description}
                 </p>
 
-                {children ? (
-                    <div className="mb-6">
-                        {children}
-                    </div>
-                ) : null}
+                {children ? <div className="mt-5">{children}</div> : null}
 
                 {showActions ? (
-                    <div className="flex gap-3 justify-center">
+                    <div className="mt-6 flex justify-end gap-2.5">
                         <button
+                            type="button"
                             onClick={onClose}
                             disabled={loading}
-                            className="flex-1 px-4 py-2.5 rounded-lg border border-border hover:bg-background-secondary transition-colors disabled:opacity-50"
+                            className="h-10 rounded-[10px] border-[0.5px] border-border-hover bg-transparent px-4 text-sm text-foreground transition-colors hover:bg-background-secondary disabled:opacity-50"
                         >
                             {cancelText}
                         </button>
                         <button
+                            type="button"
                             onClick={handleConfirm}
                             disabled={loading}
-                            className={`flex-1 px-4 py-2.5 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2 ${styles.button}`}
+                            className={`inline-flex h-10 items-center justify-center gap-2 rounded-[10px] px-4 text-sm font-medium transition-colors disabled:opacity-50 ${CONFIRM_BUTTON_CLASS[variant]}`}
                         >
                             {loading && <SoundWaveLoader variant="inline" />}
                             {confirmText}

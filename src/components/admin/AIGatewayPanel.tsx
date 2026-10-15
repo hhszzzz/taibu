@@ -150,11 +150,11 @@ export function AIGatewayPanel() {
                                             {gateway.gatewayKey}
                                         </span>
                                         {gateway.hasApiKey ? (
-                                            <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/10 text-green-600">
+                                            <span className="text-xs px-2 py-0.5 rounded-full bg-success/10 text-success">
                                                 已检测到 Key
                                             </span>
                                         ) : (
-                                            <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/10 text-red-500">
+                                            <span className="text-xs px-2 py-0.5 rounded-full bg-danger/10 text-danger">
                                                 未检测到 Key
                                             </span>
                                         )}

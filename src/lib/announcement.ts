@@ -52,6 +52,23 @@ export function serializeAnnouncement(row: AnnouncementRow): Announcement {
     };
 }
 
+/**
+ * 管理列表里的公告摘要：去掉基础 Markdown 标记（标题、强调、链接、图片、代码、列表、引用、
+ * 分隔线），合并成一段纯文本，避免整段渲染 Markdown 后在截断处露出半行标题。
+ */
+export function getAnnouncementExcerpt(content: string): string {
+    return content
+        .replace(/```[^\n]*\n?([\s\S]*?)```/gu, '$1')
+        .replace(/!\[([^\]]*)\]\([^)]*\)/gu, '$1')
+        .replace(/\[([^\]]+)\]\([^)]*\)/gu, '$1')
+        .replace(/^ {0,3}(?:[-*_] *){3,}$/gmu, '')
+        .replace(/^ {0,3}(?:#{1,6} +|> ?|[-*+] +|\d+[.)] +)+/gmu, '')
+        .replace(/\*\*|__|~~|`/gu, '')
+        .replace(/\*(\S(?:[^*\n]*\S)?)\*/gu, '$1')
+        .replace(/\s+/gu, ' ')
+        .trim();
+}
+
 export function parseAnnouncementInput(
     body: unknown,
     options: { partial?: boolean } = {},

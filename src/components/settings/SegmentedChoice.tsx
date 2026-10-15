@@ -34,12 +34,12 @@ export function SegmentedChoice<T extends string>({
     <div
       role="radiogroup"
       aria-label={ariaLabel}
-      className="relative grid w-full rounded-full border border-border bg-background p-1"
+      className="relative grid w-full rounded-[10px] bg-background-secondary p-1"
       style={layoutStyle}
     >
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute inset-y-1 left-1 rounded-full bg-accent shadow-sm transition-transform duration-150"
+        className="pointer-events-none absolute inset-y-1 left-1 rounded-[7px] bg-surface shadow-sm transition-transform duration-150 dark:bg-background-tertiary"
         style={indicatorStyle}
       />
       {options.map((option) => {
@@ -52,9 +52,9 @@ export function SegmentedChoice<T extends string>({
             role="radio"
             aria-checked={active}
             onClick={() => onChange(option.value)}
-            className={`relative z-10 rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-150 ${
+            className={`relative z-10 h-8 rounded-[7px] px-3 text-[13px] transition-colors duration-150 ${
               active
-                ? 'text-on-accent'
+                ? 'font-medium text-foreground'
                 : 'text-foreground-secondary hover:text-foreground'
             }`}
           >

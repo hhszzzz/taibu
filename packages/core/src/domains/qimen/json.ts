@@ -18,10 +18,15 @@ function buildQimenPalaceStatusList(palace: QimenOutput['palaces'][number], dayK
     dayKongPalaces.has(palace.palaceIndex) ? '日空' : null,
     hourKongPalaces.has(palace.palaceIndex) ? '时空' : null,
     palace.isYiMa ? '驿马' : null,
-    palace.isRuMu ? '入墓' : null,
+    palace.isRuMu ? formatQimenRuMuStatus(palace) : null,
     palace.isMenPo ? '门迫' : null,
     palace.isJiXing ? '六仪击刑' : null,
   ].filter((value): value is string => !!value);
+}
+
+/** 入墓注明入墓之干；旧版结果没有 ruMuStems 时只写“入墓” */
+export function formatQimenRuMuStatus(palace: QimenOutput['palaces'][number]): string {
+  return palace.ruMuStems?.length ? `入墓(${palace.ruMuStems.join('、')})` : '入墓';
 }
 
 function buildQimenPalaceRef(result: QimenOutput, index: number): string {
@@ -107,9 +112,10 @@ function renderQimenCanonicalJSONBase(result: QimenOutput, options: { detailLeve
     if (result.monthPhase && Object.keys(result.monthPhase).length > 0) {
       json.十干月令旺衰 = { ...result.monthPhase };
     }
-    if (result.globalFormations.length > 0) {
-      json.全局格局 = [...result.globalFormations];
-    }
+  }
+  // 格局是断盘主要依据，默认档也输出；全盘格局只列一次，不在九宫里逐宫重复
+  if (result.globalFormations.length > 0) {
+    json.全局格局 = [...result.globalFormations];
   }
 
   return json;

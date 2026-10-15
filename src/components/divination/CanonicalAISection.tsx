@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { Brain, RefreshCw, Sparkles } from 'lucide-react';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { ThinkingBlock } from '@/components/chat/ThinkingBlock';
@@ -26,12 +26,32 @@ type CanonicalAISectionProps = {
   onConversationId: (conversationId: string) => void;
 };
 
+export interface CanonicalAIController {
+  /** AI 开关已解析且开启；未解析或关闭时一律不展示入口（fail-closed）。 */
+  enabled: boolean;
+  /** 会话或会员信息仍在加载，入口应暂不可点。 */
+  pending: boolean;
+  isLoggedIn: boolean;
+  isStreaming: boolean;
+  content: string | null;
+  reasoning: string | null;
+  error: string | null;
+  /** 登录用户开始解读；未登录时打开登录弹窗。 */
+  start: () => void;
+  requestLogin: () => void;
+  modelSelector: ReactNode;
+  /** 登录 / 积分弹窗，必须始终渲染一次。 */
+  modals: ReactNode;
+  /** 内部使用：区分已落定的解读与流式中的内容。 */
+  interpretation: string | null;
+}
+
 /**
- * Canonical divination result pages share one AI interaction surface. The
- * feature state is intentionally fail-closed in the browser to avoid showing
- * controls while the global AI switch is unresolved or disabled.
+ * Canonical divination result pages share one AI interaction state. Pages can
+ * place several entry buttons (header, CTA card, mobile bar) and one output
+ * panel; the feature state stays fail-closed while the AI switch is unresolved.
  */
-export function CanonicalAISection({
+export function useCanonicalAI({
   endpoint,
   resultData,
   recordId,
@@ -39,7 +59,7 @@ export function CanonicalAISection({
   historyType,
   sessionKey,
   onConversationId,
-}: CanonicalAISectionProps) {
+}: CanonicalAISectionProps): CanonicalAIController {
   const [modelId, setModelId] = useState(DEFAULT_MODEL_ID);
   const [reasoningEnabled, setReasoningEnabled] = useState(false);
   const [interpretation, setInterpretation] = useState<string | null>(null);
@@ -120,79 +140,144 @@ export function CanonicalAISection({
     }
   }, [aiEnabled, endpoint, modelId, onConversationId, reasoningEnabled, recordId, resultData, streaming, userId]);
 
-  if (!featureLoaded || !aiEnabled) return null;
+  const start = useCallback(() => {
+    if (sessionLoading) return;
+    if (!userId) {
+      setShowAuthModal(true);
+      return;
+    }
+    if (streaming.isStreaming || membershipPending) return;
+    void handleInterpret();
+  }, [handleInterpret, membershipPending, sessionLoading, streaming.isStreaming, userId]);
 
-  const content = interpretation || streaming.content;
-  const reasoning = interpretationReasoning || streaming.reasoning;
+  return {
+    enabled: aiEnabled,
+    pending: sessionLoading || (Boolean(userId) && membershipPending),
+    isLoggedIn: Boolean(userId),
+    isStreaming: streaming.isStreaming,
+    content: interpretation || streaming.content || null,
+    reasoning: interpretationReasoning || streaming.reasoning || null,
+    error,
+    interpretation,
+    start,
+    requestLogin: () => setShowAuthModal(true),
+    modelSelector: (
+      <ModelSelector
+        compact
+        selectedModel={modelId}
+        onModelChange={setModelId}
+        reasoningEnabled={reasoningEnabled}
+        onReasoningChange={setReasoningEnabled}
+        userId={userId}
+        membershipType={membershipType}
+        disabled={membershipPending}
+      />
+    ),
+    modals: (
+      <>
+        <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
+        <CreditsModal isOpen={showCreditsModal} onClose={() => setShowCreditsModal(false)} />
+      </>
+    ),
+  };
+}
 
+/** 解读输出面板：仅在已有内容、流式中或出错时出现；弹窗始终挂载。 */
+export function CanonicalAIPanel({ ai, title = 'AI 深度解读' }: { ai: CanonicalAIController; title?: string }) {
+  const visible = ai.enabled && Boolean(ai.content || ai.error || ai.isStreaming);
   return (
-    <section className="bg-background border border-border rounded-md p-5 sm:p-6 space-y-6">
-      <div className="flex items-center justify-between gap-3 border-b border-border/60 pb-4">
-        <h2 className="text-sm font-bold flex items-center gap-2 tracking-wider text-foreground-secondary">
-          <Brain className="w-4 h-4 text-accent" />
-          AI 深度解读
-        </h2>
-        <div className="flex items-center gap-2">
-          <ModelSelector
-            compact
-            selectedModel={modelId}
-            onModelChange={setModelId}
-            reasoningEnabled={reasoningEnabled}
-            onReasoningChange={setReasoningEnabled}
-            userId={userId}
-            membershipType={membershipType}
-            disabled={membershipPending}
-          />
-          {content && (
-            <button
-              type="button"
-              aria-label="重新获取 AI 解读"
-              title="重新获取 AI 解读"
-              onClick={handleInterpret}
-              disabled={streaming.isStreaming}
-              className="p-1.5 rounded-md hover:bg-background-secondary active:bg-background-secondary/80 transition-colors disabled:opacity-50"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${streaming.isStreaming ? 'animate-spin' : ''}`} />
-            </button>
-          )}
-        </div>
-      </div>
+    <>
+      {visible && (
+        <section aria-label={title} className="flex flex-col gap-4 rounded-2xl border-[0.5px] border-border bg-surface p-5 sm:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="flex items-center gap-2 font-display text-lg font-normal">
+              <Brain className="h-4 w-4 text-accent" />
+              {title}
+            </h2>
+            <div className="flex items-center gap-2">
+              {ai.modelSelector}
+              {ai.content && (
+                <button
+                  type="button"
+                  aria-label="重新获取 AI 解读"
+                  title="重新获取 AI 解读"
+                  onClick={ai.start}
+                  disabled={ai.isStreaming}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-[10px] text-foreground-secondary transition-colors hover:bg-background-secondary active:bg-background-tertiary disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${ai.isStreaming ? 'animate-spin' : ''}`} />
+                </button>
+              )}
+            </div>
+          </div>
 
-      {error && <div className="p-3 bg-red-50 text-danger text-xs rounded-md border border-red-100">{error}</div>}
+          {ai.error && <div className="rounded-[10px] bg-fire-soft px-3 py-2.5 text-xs text-danger">{ai.error}</div>}
 
-      {content ? (
-        <div className="prose prose-sm max-w-none">
-          {reasoning && <ThinkingBlock content={reasoning} isStreaming={streaming.isStreaming && !interpretation} />}
-          <MarkdownContent content={content} className="text-sm text-foreground leading-relaxed" />
-        </div>
-      ) : (
-        <div className="py-10 text-center space-y-5">
-          {sessionLoading || membershipPending ? (
+          {ai.content ? (
+            <div className="prose prose-sm max-w-none">
+              {ai.reasoning && <ThinkingBlock content={ai.reasoning} isStreaming={ai.isStreaming && !ai.interpretation} />}
+              <MarkdownContent content={ai.content} className="text-sm leading-relaxed text-foreground" />
+            </div>
+          ) : ai.isStreaming ? (
             <SoundWaveLoader variant="inline" />
-          ) : !userId ? (
-            <button
-              type="button"
-              onClick={() => setShowAuthModal(true)}
-              className="px-6 py-2.5 bg-accent text-on-accent text-sm font-bold rounded-md hover:bg-accent/90 active:bg-accent-hover transition-colors"
-            >
-              登录解锁 AI 解读
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleInterpret}
-              disabled={membershipPending || streaming.isStreaming}
-              className="inline-flex items-center gap-2 px-6 py-2.5 bg-accent text-on-accent text-sm font-bold rounded-md hover:bg-accent/90 active:bg-accent-hover transition-colors disabled:opacity-50"
-            >
-              <Sparkles className="w-4 h-4" />
-              获取 AI 解读
-            </button>
-          )}
-        </div>
+          ) : null}
+        </section>
       )}
+      {ai.modals}
+    </>
+  );
+}
 
-      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
-      <CreditsModal isOpen={showCreditsModal} onClose={() => setShowCreditsModal(false)} />
+interface CanonicalAIEntryCardProps {
+  ai: CanonicalAIController;
+  title: ReactNode;
+  description: string;
+  /** 登录用户的按钮文案；未登录时统一为「登录解锁 AI 解读」。 */
+  actionLabel: string;
+  actionIcon?: ReactNode;
+}
+
+/**
+ * 解读入口卡：标题、说明、模型选择与开始按钮。仅在尚未解读时出现，解读开始后由 CanonicalAIPanel 接替；
+ * 不渲染弹窗，页面需另行挂载 CanonicalAIPanel（或 ai.modals）。
+ */
+export function CanonicalAIEntryCard({ ai, title, description, actionLabel, actionIcon }: CanonicalAIEntryCardProps) {
+  if (!ai.enabled || ai.content || ai.error || ai.isStreaming) return null;
+  return (
+    <section aria-label="AI 解读入口" className="flex flex-wrap items-center gap-x-5 gap-y-3 rounded-2xl border-[0.5px] border-border bg-panel px-5 py-[18px] sm:px-[22px]">
+      <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-1">
+        <h2 className="flex items-center gap-2 font-display text-[17px] font-normal">{title}</h2>
+        <p className="text-sm text-foreground-secondary">{description}</p>
+      </div>
+      <div className="flex items-center gap-2">
+        {ai.modelSelector}
+        <button
+          type="button"
+          onClick={ai.start}
+          disabled={ai.pending}
+          className="inline-flex h-10 items-center gap-2 rounded-[10px] bg-foreground px-4 text-sm text-background transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          {actionIcon}
+          {ai.isLoggedIn ? actionLabel : '登录解锁 AI 解读'}
+        </button>
+      </div>
     </section>
+  );
+}
+
+/** 一体化默认形态：入口卡与输出面板共用一处位置。 */
+export function CanonicalAISection(props: CanonicalAISectionProps) {
+  const ai = useCanonicalAI(props);
+  return (
+    <>
+      <CanonicalAIEntryCard
+        ai={ai}
+        title={<><Brain className="h-4 w-4 text-accent" />AI 深度解读</>}
+        description="让太卜结合所问与盘面，给出定性判断与建议"
+        actionLabel="获取 AI 解读"
+        actionIcon={<Sparkles className="h-4 w-4" />}
+      />
+      <CanonicalAIPanel ai={ai} />
+    </>
   );
 }

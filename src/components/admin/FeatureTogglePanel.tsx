@@ -10,20 +10,24 @@
 import { useState } from "react";
 import { requestBrowserData } from '@/lib/browser-api';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { SettingsSwitch } from '@/components/settings/SettingsControls';
 import { useFeatureToggles } from "@/lib/hooks/useFeatureToggles";
 import { getFeatureModules } from '@/lib/navigation/registry';
 
 const MODULES = getFeatureModules();
 
+type PendingToggle = { featureId: string; enabled: boolean };
+
 export function FeatureTogglePanel() {
-    const { isFeatureEnabled, isLoading, refresh } = useFeatureToggles();
-    const [savingId, setSavingId] = useState<string | null>(null);
+    const { isFeatureEnabled, isLoading, loaded, error: loadError, refresh } = useFeatureToggles();
+    // 保存期间先显示目标状态；失败时清掉，开关回到服务端状态。
+    const [pending, setPending] = useState<PendingToggle | null>(null);
     const [error, setError] = useState("");
 
     const handleToggle = async (featureId: string, currentlyEnabled: boolean) => {
-        if (savingId || isLoading) return;
+        if (pending || isLoading) return;
 
-        setSavingId(featureId);
+        setPending({ featureId, enabled: !currentlyEnabled });
         setError("");
 
         try {
@@ -36,15 +40,14 @@ export function FeatureTogglePanel() {
                     },
                     body: JSON.stringify({ featureId, disabled: currentlyEnabled }),
                 },
-                { fallbackMessage: "更新失败" },
+                { fallbackMessage: "更新失败，请重试" },
             );
 
             await refresh();
         } catch (err) {
-            console.error("[feature-toggles] Update failed:", err);
-            setError("网络错误，请重试");
+            setError(err instanceof Error && err.message ? err.message : "更新失败，请重试");
         } finally {
-            setSavingId(null);
+            setPending(null);
         }
     };
 
@@ -57,50 +60,45 @@ export function FeatureTogglePanel() {
         );
     }
 
+    // 状态没读到时不渲染开关：全部显示为关闭会误导，点击还会写入错误的值。
+    if (!loaded) {
+        return (
+            <div role="alert" className="settings-alert">
+                {loadError?.message || '功能状态加载失败'}
+                <button type="button" onClick={() => { void refresh(); }}>重试</button>
+            </div>
+        );
+    }
+
     return (
-        <div className="space-y-4">
-            <p className="text-sm text-foreground-secondary">
-                关闭某个功能后，用户将无法访问对应页面、入口或接入说明。
-            </p>
+        <div className="flex flex-col gap-3">
+            <p className="settings-help">关闭后，用户将无法访问对应页面、入口或接入说明。</p>
 
-            {error && (
-                <div className="text-sm text-rose-500 bg-rose-500/10 rounded-lg px-3 py-2">{error}</div>
-            )}
+            {error ? (
+                <div role="alert" className="settings-alert">{error}</div>
+            ) : null}
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {/* 分隔线画在每格右侧和下方，被外框裁掉最外一圈。 */}
+            <ul className="grid grid-cols-[repeat(auto-fill,minmax(13.75rem,1fr))] overflow-hidden rounded-[14px] border border-border bg-surface">
                 {MODULES.map(({ id, label }) => {
-                    const enabled = isFeatureEnabled(id);
-                    const isSaving = savingId === id;
+                    const enabled = pending?.featureId === id ? pending.enabled : isFeatureEnabled(id);
 
                     return (
-                        <div
+                        <li
                             key={id}
-                            className="flex items-center justify-between rounded-xl border border-border bg-background p-3"
+                            className="flex min-h-[3.25rem] items-center justify-between gap-3 px-4 shadow-[1px_0_0_var(--border),0_1px_0_var(--border)]"
                         >
-                            <span className="text-sm font-medium truncate mr-2">{label}</span>
-                            <button
-                                onClick={() => handleToggle(id, enabled)}
-                                disabled={!!savingId || isLoading}
-                                className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${
-                                    enabled ? "bg-emerald-500" : "bg-rose-400"
-                                } ${savingId ? "opacity-60 cursor-not-allowed" : ""}`}
-                                aria-pressed={enabled}
-                                aria-label={`${label}功能开关`}
-                            >
-                                {isSaving ? (
-                                    <SoundWaveLoader variant="inline" />
-                                ) : (
-                                    <span
-                                        className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-background shadow transition-transform ${
-                                            enabled ? "translate-x-5" : "translate-x-0"
-                                        }`}
-                                    />
-                                )}
-                            </button>
-                        </div>
+                            <span className={`min-w-0 truncate text-sm ${enabled ? 'text-foreground' : 'text-foreground-tertiary'}`}>{label}</span>
+                            <SettingsSwitch
+                                label={label}
+                                checked={enabled}
+                                disabled={!!pending}
+                                onToggle={() => { void handleToggle(id, isFeatureEnabled(id)); }}
+                            />
+                        </li>
                     );
                 })}
-            </div>
+            </ul>
         </div>
     );
 }

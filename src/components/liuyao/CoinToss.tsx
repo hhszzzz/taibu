@@ -267,21 +267,22 @@ export function CoinToss({ onComplete, disabled = false }: CoinTossProps) {
                 {[0, 1, 2].map((coinIndex) => (
                     <div
                         key={coinIndex}
-                        className={`w-14 h-14 md:w-16 md:h-16 rounded-full border-4 flex items-center justify-center
-                            transition-all duration-500
+                        className={`flex h-14 w-14 items-center justify-center rounded-full border-[3px] transition-all duration-500 md:h-16 md:w-16
                             ${isAnimating
-                                ? 'animate-spin border-accent bg-accent/20'
+                                ? 'animate-spin border-accent bg-accent-soft'
                                 : showCoinResult
                                     ? lastResult!.coins[coinIndex]
-                                        ? 'border-yellow-500 bg-yellow-500/20 text-yellow-600'
-                                        : 'border-gray-400 bg-background-secondary text-gray-600'
-                                    : 'border-border bg-background-secondary'
+                                        ? 'border-earth bg-earth-soft text-earth'
+                                        : 'border-border-hover bg-background-secondary text-foreground-secondary'
+                                    : 'border-border-hover bg-background-secondary'
                             }`}
                     >
-                        {showCoinResult && (
-                            <span className="font-bold text-base md:text-lg">
+                        {showCoinResult ? (
+                            <span className="font-display text-base md:text-lg">
                                 {lastResult!.coins[coinIndex] ? '字' : '花'}
                             </span>
+                        ) : (
+                            <span className="h-3 w-3 border-[1.5px] border-current opacity-40" aria-hidden="true" />
                         )}
                     </div>
                 ))}
@@ -292,7 +293,7 @@ export function CoinToss({ onComplete, disabled = false }: CoinTossProps) {
                 {lastResult ? (
                     <p className={`text-sm text-foreground-secondary ${isAnimating ? 'invisible' : ''}`}>
                         {lastResult.heads}正{3 - lastResult.heads}反 →
-                        <span className={lastResult.isChanging ? 'text-red-500 font-medium' : ''}>
+                        <span className={lastResult.isChanging ? 'font-medium text-accent' : ''}>
                             {lastResult.yaoType === 1 ? '阳爻' : '阴爻'}
                             {lastResult.isChanging && '（变）'}
                         </span>
@@ -310,23 +311,23 @@ export function CoinToss({ onComplete, disabled = false }: CoinTossProps) {
                     return (
                         <div key={position} className="flex items-center gap-2 h-5">
                             <span className={`text-xs w-10 ${yao?.change === 'changing'
-                                ? 'text-red-500'
+                                ? 'text-accent'
                                 : isPlaceholder
                                     ? 'text-foreground-tertiary'
                                     : 'text-foreground-secondary'
                                 }`}>
                                 {YAO_LABELS[position - 1]}
                             </span>
-                            <div className={`flex items-center ${yao?.change === 'changing' ? 'text-red-500' : ''}`}>
+                            <div className={`flex items-center ${yao?.change === 'changing' ? 'text-accent' : ''}`}>
                                 {!yao ? (
-                                    <div className="w-[88px] h-2 rounded-sm bg-foreground/10" />
+                                    <div className="h-2 w-[88px] rounded-[3px] bg-background-tertiary" />
                                 ) : yao.type === 1 ? (
-                                    <div className={`w-[88px] h-2 rounded-sm ${yao.change === 'changing' ? 'bg-red-500' : 'bg-foreground'}`} />
+                                    <div className={`h-2 w-[88px] rounded-[3px] ${yao.change === 'changing' ? 'bg-accent' : 'bg-foreground'}`} />
                                 ) : (
                                     <>
-                                        <div className={`w-[40px] h-2 rounded-sm ${yao.change === 'changing' ? 'bg-red-500' : 'bg-foreground'}`} />
+                                        <div className={`h-2 w-[40px] rounded-[3px] ${yao.change === 'changing' ? 'bg-accent' : 'bg-foreground'}`} />
                                         <div className="w-2" />
-                                        <div className={`w-[40px] h-2 rounded-sm ${yao.change === 'changing' ? 'bg-red-500' : 'bg-foreground'}`} />
+                                        <div className={`h-2 w-[40px] rounded-[3px] ${yao.change === 'changing' ? 'bg-accent' : 'bg-foreground'}`} />
                                     </>
                                 )}
                             </div>
@@ -349,8 +350,7 @@ export function CoinToss({ onComplete, disabled = false }: CoinTossProps) {
                             onClick={goToNextAndToss}
                             disabled={isAnimating}
                             data-shake-next
-                            className="flex items-center gap-2 px-6 py-3 bg-accent text-on-accent rounded-lg
-                                hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                            className="flex h-12 items-center gap-2 rounded-xl bg-accent px-6 font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             <Coins className="w-5 h-5" />
                             继续摇卦
@@ -361,8 +361,7 @@ export function CoinToss({ onComplete, disabled = false }: CoinTossProps) {
                             onClick={toss}
                             disabled={isAnimating || disabled}
                             data-shake-toss
-                            className="flex items-center gap-2 px-6 py-3 bg-accent text-on-accent rounded-lg
-                                hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                            className="flex h-12 items-center gap-2 rounded-xl bg-accent px-6 font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             <Coins className={`w-5 h-5 ${isAnimating ? 'animate-bounce' : ''}`} />
                             {isAnimating ? '抛掷中...' : '抛掷铜钱'}
@@ -371,8 +370,7 @@ export function CoinToss({ onComplete, disabled = false }: CoinTossProps) {
                 ) : (
                     <button
                         onClick={reset}
-                        className="flex items-center gap-2 px-6 py-3 bg-background-secondary text-foreground rounded-lg
-                            hover:bg-background-secondary/80 transition-all"
+                        className="flex h-12 items-center gap-2 rounded-xl border-[0.5px] border-border-hover bg-surface px-6 text-foreground transition-colors hover:bg-background-secondary"
                     >
                         <RotateCw className="w-5 h-5" />
                         重新起卦
@@ -385,14 +383,13 @@ export function CoinToss({ onComplete, disabled = false }: CoinTossProps) {
                 <div className="flex md:hidden items-center gap-1.5 text-foreground-secondary text-xs mt-1">
                     {shakeEnabled ? (
                         <>
-                            <Smartphone className="w-3 h-3 text-green-500" />
-                            <span className="text-green-500">摇动摇卦已启用</span>
+                            <Smartphone className="w-3 h-3 text-success" />
+                            <span className="text-success">摇动摇卦已启用</span>
                         </>
                     ) : (
                         <button
                             onClick={enableShakeDetection}
-                            className="flex items-center gap-[6px] px-3 py-1.5 bg-background/5 hover:bg-background/10
-                                rounded text-foreground-secondary hover:text-foreground transition-all text-xs"
+                            className="flex items-center gap-[6px] rounded-lg px-3 py-1.5 text-xs text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground"
                         >
                             <Smartphone className="w-3 h-3" />
                             点击启用摇动

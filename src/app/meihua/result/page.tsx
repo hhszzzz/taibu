@@ -1,17 +1,27 @@
+/**
+ * 梅花易数结果页
+ *
+ * 标题区以体用关系为题（所问 · 起卦方式 · 时间），桌面端右侧为更多 · 保存 · 问太卜解卦；
+ * 干支月令条、本互变三卦、体用推演，底部为解读入口与页内 AI 解读。
+ * 'use client'：结果来自 sessionStorage，含自动保存与 AI 流式解读等交互状态。
+ */
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Check, Copy, Flower2, RotateCcw } from 'lucide-react';
+import { Check, ChevronLeft, Copy, RotateCcw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { ResultMobileActions } from '@/components/bazi/result/ResultHeader';
+import { CanonicalAIEntryCard, CanonicalAIPanel, useCanonicalAI } from '@/components/divination/CanonicalAISection';
+import { ResultHeaderActions } from '@/components/divination/ResultHeaderActions';
+import { useHeaderMenu, useHeaderTitle, type HeaderMenuItem } from '@/components/layout/HeaderMenuContext';
 import { MeihuaChart } from '@/components/meihua/MeihuaChart';
-import { CanonicalAISection } from '@/components/divination/CanonicalAISection';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import { useAdminJsonCopy } from '@/lib/admin/useAdminJsonCopy';
 import { readSessionJSON, updateSessionJSON } from '@/lib/cache/session-storage';
 import { requestBrowserJson } from '@/lib/browser-api';
-import { buildMeihuaCanonicalText, type MeihuaWebBundle } from '@/lib/divination/meihua';
+import { buildMeihuaCanonicalText, type MeihuaOutput, type MeihuaWebBundle } from '@/lib/divination/meihua';
 import { saveDivinationAction } from '@/lib/divination/save-client';
 import { useSessionMembership } from '@/lib/hooks/useSessionMembership';
 
@@ -22,17 +32,36 @@ type MeihuaSession = {
   conversationId?: string;
 };
 
+const MENU_ICON_CLASS = 'h-4 w-4';
+
+/** 体用关系标题：把体卦/用卦的卦名五行代入关系，如「用乾金克体巽木」。 */
+const RELATION_TITLE: Record<MeihuaOutput['bodyUseRelation']['relation'], (body: string, use: string) => string> = {
+  用克体: (body, use) => `用${use}克体${body}`,
+  体克用: (body, use) => `体${body}克用${use}`,
+  用生体: (body, use) => `用${use}生体${body}`,
+  体生用: (body, use) => `体${body}生用${use}`,
+  比和: (body, use) => `体${body}用${use}比和`,
+};
+
+/** `YYYY-MM-DDTHH:mm[:ss]` → `YYYY-MM-DD HH:mm`（仅展示，不做时区换算）。 */
+function formatWallClock(value: string | undefined): string {
+  return value ? value.replace('T', ' ').slice(0, 16) : '';
+}
+
 export default function MeihuaResultPage() {
   const router = useRouter();
   const { showToast } = useToast();
+  const { setMenuItems, clearMenuItems } = useHeaderMenu();
   const { userId, sessionLoading } = useSessionMembership();
   const [bundle, setBundle] = useState<MeihuaWebBundle | null>(null);
   const [divinationId, setDivinationId] = useState<string>();
   const [conversationId, setConversationId] = useState<string>();
   const [isLoading, setIsLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hasAutoSavedRef = useRef(false);
+  const aiAnchorRef = useRef<HTMLDivElement>(null);
 
   const canonicalJson = useMemo(() => bundle?.canonicalJson ?? null, [bundle]);
   const { isAdmin, jsonCopied, copyJson } = useAdminJsonCopy(canonicalJson);
@@ -41,20 +70,40 @@ export default function MeihuaResultPage() {
     updateSessionJSON<MeihuaSession>('meihua_result', (previous) => ({ ...(previous || {}), ...next }));
   }, []);
 
+  const handleConversationId = useCallback((id: string) => {
+    setConversationId(id);
+    persistSessionIds({ conversationId: id });
+  }, [persistSessionIds]);
+
+  const ai = useCanonicalAI({
+    endpoint: '/api/meihua',
+    resultData: bundle,
+    recordId: divinationId,
+    conversationId,
+    historyType: 'meihua',
+    sessionKey: 'meihua_result',
+    onConversationId: handleConversationId,
+  });
+
   const saveRecord = useCallback(async (nextBundle: MeihuaWebBundle) => {
-    const saved = await saveDivinationAction({
-      endpoint: '/api/meihua',
-      body: { input: nextBundle.input, resultData: nextBundle },
-      idKey: 'divinationId',
-      fallbackMessage: '保存梅花记录失败',
-    });
-    if (saved.ok && saved.id) {
-      setDivinationId(saved.id);
-      persistSessionIds({ divinationId: saved.id });
-      return saved.id;
+    setSaving(true);
+    try {
+      const saved = await saveDivinationAction({
+        endpoint: '/api/meihua',
+        body: { input: nextBundle.input, resultData: nextBundle },
+        idKey: 'divinationId',
+        fallbackMessage: '保存梅花记录失败',
+      });
+      if (saved.ok && saved.id) {
+        setDivinationId(saved.id);
+        persistSessionIds({ divinationId: saved.id });
+        return saved.id;
+      }
+      if (!saved.ok) console.error('[meihua/result] 保存失败:', saved.error.message);
+      return undefined;
+    } finally {
+      setSaving(false);
     }
-    if (!saved.ok) console.error('[meihua/result] 保存失败:', saved.error.message);
-    return undefined;
   }, [persistSessionIds]);
 
   useEffect(() => {
@@ -80,9 +129,10 @@ export default function MeihuaResultPage() {
         setBundle(nextBundle);
         if (session.divinationId) setDivinationId(session.divinationId);
         if (session.conversationId) setConversationId(session.conversationId);
+        // 登录用户自动保存；不阻塞盘面展示，进度体现在「保存」按钮上
         if (!session.divinationId && userId && !hasAutoSavedRef.current) {
           hasAutoSavedRef.current = true;
-          await saveRecord(nextBundle);
+          void saveRecord(nextBundle);
         }
       } catch (caught) {
         if (!cancelled) setError(caught instanceof Error ? caught.message : '排盘失败');
@@ -94,72 +144,101 @@ export default function MeihuaResultPage() {
     return () => { cancelled = true; };
   }, [router, saveRecord, sessionLoading, userId]);
 
-  const handleCopy = async () => {
+  const handleCopy = useCallback(async () => {
     if (!bundle) return;
     try {
       await navigator.clipboard.writeText(buildMeihuaCanonicalText(bundle.result));
       setCopied(true);
-      showToast('success', '规范文本已复制');
+      showToast('success', '卦象文本已复制');
       window.setTimeout(() => setCopied(false), 1800);
     } catch {
       showToast('error', '复制失败，请重试');
     }
+  }, [bundle, showToast]);
+
+  // 次要操作：桌面端收进标题区「更多」，移动端进顶栏三点菜单（另加重新起卦）
+  const resultActions = useMemo((): HeaderMenuItem[] => {
+    if (!bundle) return [];
+    const items: HeaderMenuItem[] = [
+      { id: 'copy', label: copied ? '卦象已复制' : '复制卦象', icon: copied ? <Check className={MENU_ICON_CLASS} /> : <Copy className={MENU_ICON_CLASS} />, onClick: () => { void handleCopy(); } },
+    ];
+    if (isAdmin) items.push({ id: 'copy-json', label: jsonCopied ? 'JSON 已复制' : '复制 JSON', icon: jsonCopied ? <Check className={MENU_ICON_CLASS} /> : <Copy className={MENU_ICON_CLASS} />, onClick: () => { void copyJson(); } });
+    return items;
+  }, [bundle, copied, copyJson, handleCopy, isAdmin, jsonCopied]);
+
+  useEffect(() => {
+    setMenuItems([{ id: 'restart', label: '重新起卦', icon: <RotateCcw className={MENU_ICON_CLASS} />, onClick: () => router.push('/meihua') }, ...resultActions]);
+    return () => clearMenuItems();
+  }, [clearMenuItems, resultActions, router, setMenuItems]);
+
+  const board = bundle?.canonicalJson.卦盘;
+  useHeaderTitle(board ? `${board.本卦.卦名} 之 ${board.变卦.卦名}` : null);
+
+  /** 保存：未登录先登录（登录后页面自动保存），已登录则手动重试保存。 */
+  const handleSave = async () => {
+    if (!bundle || divinationId || saving || sessionLoading) return;
+    if (!userId) {
+      ai.requestLogin();
+      return;
+    }
+    hasAutoSavedRef.current = true;
+    const savedId = await saveRecord(bundle);
+    showToast(savedId ? 'success' : 'error', savedId ? '已保存到命理记录' : '保存失败，请重试');
+  };
+
+  /** 问太卜解卦：定位到页内解读；尚未解读时直接发起（未登录先登录）。 */
+  const handleAsk = () => {
+    aiAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (ai.content || ai.isStreaming) return;
+    ai.start();
   };
 
   if (isLoading) return <div className="min-h-screen bg-background flex items-center justify-center"><SoundWaveLoader variant="block" text="正在排盘" /></div>;
-  if (!bundle) return <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 p-5"><p className="text-sm text-foreground-secondary">{error || '没有找到排盘数据'}</p><button type="button" onClick={() => router.push('/meihua')} className="px-4 py-2 border border-border rounded-md text-sm hover:bg-background-secondary">返回</button></div>;
+  if (!bundle) return <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 p-5"><p className="text-sm text-foreground-secondary">{error || '没有找到排盘数据'}</p><button type="button" onClick={() => router.push('/meihua')} className="h-10 rounded-[10px] border-[0.5px] border-border-hover bg-surface px-4 text-sm hover:bg-background-secondary">返回</button></div>;
 
   const result = bundle.result;
+  const relationTitle = RELATION_TITLE[result.bodyUseRelation.relation](
+    `${result.bodyTrigram.name}${result.bodyTrigram.element}`,
+    `${result.useTrigram.name}${result.useTrigram.element}`,
+  );
+  const castTime = formatWallClock(bundle.input.date);
+  const saveState = {
+    saving,
+    saved: Boolean(divinationId),
+    disabled: saving || Boolean(divinationId) || sessionLoading,
+    onSave: () => { void handleSave(); },
+  };
+  const askDisabled = ai.pending || ai.isStreaming;
+
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 space-y-6">
-        <header className="flex items-center justify-between border-b border-border/60 pb-5">
-          <div className="flex items-center gap-3">
-            <Link href="/meihua" aria-label="返回梅花输入页" title="返回梅花输入页" className="p-2 rounded-md text-foreground-secondary hover:bg-background-secondary active:bg-background-secondary/80 transition-colors"><ArrowLeft className="w-4 h-4" /></Link>
-            <div className="flex items-center gap-2"><Flower2 className="w-4 h-4 text-accent" /><h1 className="text-lg font-bold">梅花易数</h1></div>
+      <div className="mx-auto flex w-full max-w-[1104px] animate-fade-in flex-col gap-3 px-4 pt-0.5 pb-28 sm:px-8 lg:gap-6 lg:pt-8 lg:pb-16">
+        <Link href="/meihua" className="hidden w-fit items-center gap-1.5 text-sm text-foreground-secondary transition-colors hover:text-foreground lg:inline-flex">
+          <ChevronLeft className="h-4 w-4" />重新起卦
+        </Link>
+
+        <header className="flex flex-wrap items-end justify-between gap-4">
+          <div className="flex w-full min-w-0 flex-col items-center gap-4 lg:w-auto lg:items-start lg:gap-2">
+            <p className="px-1 text-center text-[0.8125rem] leading-normal text-foreground-secondary lg:px-0 lg:text-left lg:text-sm">
+              {result.question && <>问：{result.question}<br className="lg:hidden" /><span className="hidden lg:inline"> · </span></>}
+              {result.castMeta.methodLabel}{castTime && ` · ${castTime}`}
+            </p>
+            {/* 移动端标题位于顶栏（本卦 之 变卦），体用关系改为标签 */}
+            <h1 className="hidden font-display text-[2.125rem] font-normal leading-tight lg:block">{relationTitle}</h1>
+            <span className={`rounded-md px-2 py-0.5 text-[0.8125rem] lg:hidden ${result.bodyUseRelation.favorable ? 'bg-wood-soft text-success' : 'bg-fire-soft text-danger'}`}>{relationTitle}</span>
           </div>
-          <div className="flex items-center gap-1">
-            <button type="button" onClick={() => router.push('/meihua')} aria-label="重新起卦" title="重新起卦" className="p-2 rounded-md text-foreground-secondary hover:bg-background-secondary active:bg-background-secondary/80 transition-colors"><RotateCcw className="w-4 h-4" /></button>
-            <button type="button" onClick={() => void handleCopy()} aria-label="复制规范文本" title="复制规范文本" className="p-2 rounded-md text-foreground-secondary hover:bg-background-secondary active:bg-background-secondary/80 transition-colors">{copied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}</button>
-            {isAdmin && <button type="button" onClick={() => void copyJson()} aria-label="复制规范 JSON" title="复制规范 JSON" className="p-2 rounded-md text-foreground-secondary hover:bg-background-secondary active:bg-background-secondary/80 transition-colors">{jsonCopied ? <Check className="w-4 h-4 text-success" /> : <span className="text-[10px] font-mono">JSON</span>}</button>}
-          </div>
+          <ResultHeaderActions actions={resultActions} actionsLabel="卦盘操作" save={saveState} ask={{ label: '问太卜解卦', onClick: handleAsk, disabled: askDisabled }} />
         </header>
 
-        <section className="border border-border rounded-md p-5 sm:p-6 bg-background-secondary/20">
-          <div className="flex flex-wrap items-baseline justify-between gap-3 mb-4">
-            <div><div className="text-xs text-foreground-secondary mb-1">占问</div><h2 className="text-xl font-bold">{result.question}</h2></div>
-            <span className="text-xs text-foreground-secondary">{bundle.input.date}</span>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-            <div><span className="block text-foreground-secondary mb-1">起卦方式</span><b>{result.castMeta.methodLabel}</b></div>
-            <div><span className="block text-foreground-secondary mb-1">动爻</span><b>第 {result.movingLine} 爻</b></div>
-            <div><span className="block text-foreground-secondary mb-1">体卦 / 用卦</span><b>{result.bodyTrigram.name} / {result.useTrigram.name}</b></div>
-            <div><span className="block text-foreground-secondary mb-1">判断</span><b className={result.judgement.outcome === '吉' ? 'text-success' : result.judgement.outcome === '凶' ? 'text-danger' : 'text-warning'}>{result.judgement.outcome}</b></div>
-          </div>
-        </section>
+        <MeihuaChart chart={bundle.canonicalJson} showDerived={false} />
 
-        <MeihuaChart chart={bundle.canonicalJson} />
-
-        <section className="grid gap-3 lg:grid-cols-2">
-          <article className="border border-border rounded-md p-5 space-y-4">
-            <h2 className="text-xs font-bold tracking-widest text-foreground-secondary">体用关系</h2>
-            <div className="flex items-center gap-3"><span className="text-2xl font-bold">{result.bodyUseRelation.relation}</span><span className="text-xs text-foreground-secondary">{result.bodyUseRelation.favorable ? '偏有利' : '需谨慎'}</span></div>
-            <p className="text-sm leading-relaxed text-foreground/70">{result.bodyUseRelation.summary}</p>
-            <div className="grid grid-cols-2 gap-3 text-xs"><div><span className="block text-foreground-secondary mb-1">体卦</span><b>{result.bodyTrigram.name} · {result.bodyTrigram.element}</b></div><div><span className="block text-foreground-secondary mb-1">用卦</span><b>{result.useTrigram.name} · {result.useTrigram.element}</b></div></div>
-          </article>
-          <article className="border border-border rounded-md p-5 space-y-4">
-            <h2 className="text-xs font-bold tracking-widest text-foreground-secondary">判断参考</h2>
-            <p className="text-sm leading-relaxed text-foreground/70">{result.judgement.summary}</p>
-            <ul className="space-y-2 text-xs text-foreground-secondary list-disc pl-4">{result.judgement.basis.map((item) => <li key={item}>{item}</li>)}</ul>
-          </article>
-        </section>
-
-        {result.timingHints.length > 0 && <section className="border border-border rounded-md p-5"><h2 className="text-xs font-bold tracking-widest text-foreground-secondary mb-4">阶段推演</h2><div className="grid gap-2 sm:grid-cols-3">{result.timingHints.map((hint) => <div key={`${hint.phase}:${hint.trigger}`} className="p-3 bg-background-secondary/40 rounded-md"><div className="text-xs font-semibold mb-1">{hint.trigger}</div><p className="text-xs text-foreground-secondary leading-relaxed">{hint.summary}</p></div>)}</div></section>}
-
-        {result.warnings.length > 0 && <div className="text-xs text-warning border-l-2 border-warning/50 pl-3 space-y-1">{result.warnings.map((warning) => <p key={warning}>{warning}</p>)}</div>}
-
-        <CanonicalAISection endpoint="/api/meihua" resultData={bundle} recordId={divinationId} conversationId={conversationId} historyType="meihua" sessionKey="meihua_result" onConversationId={(id) => { setConversationId(id); persistSessionIds({ conversationId: id }); }} />
+        <div ref={aiAnchorRef} className="flex scroll-mt-20 flex-col empty:hidden">
+          <CanonicalAIEntryCard ai={ai} title="外应、方位与应期线索" description="让太卜结合体用生克与月令旺衰，给出定性判断" actionLabel="开始解读" />
+          <CanonicalAIPanel ai={ai} />
+        </div>
       </div>
+
+      <ResultMobileActions saving={saving} saved={Boolean(divinationId)} saveDisabled={sessionLoading} onSave={saveState.onSave} ask={{ label: '问太卜解卦', onClick: handleAsk, disabled: askDisabled }} />
     </div>
   );
 }

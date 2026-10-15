@@ -5,14 +5,7 @@ import { triggerVectorIndexCreation } from '@/lib/knowledge-base/vector-index';
 import { requireUserContext, jsonError, jsonOk, resolveRequestDbClient } from '@/lib/api-utils';
 import { createKnowledgeBasePersistence } from '@/lib/knowledge-base/persistence.server';
 import { ensureFeatureRouteEnabled } from '@/lib/feature-gate-utils';
-
-function isAllowedFile(file: File) {
-    if (file.type.startsWith('text/')) return true;
-    const allowed = new Set(['application/json']);
-    if (allowed.has(file.type)) return true;
-    const lower = file.name.toLowerCase();
-    return ['.txt', '.md', '.markdown', '.csv', '.json'].some(ext => lower.endsWith(ext));
-}
+import { validateKnowledgeFile } from '@/lib/knowledge-base/upload-policy';
 
 export async function POST(request: NextRequest) {
     const featureError = await ensureFeatureRouteEnabled('knowledge-base');
@@ -48,12 +41,9 @@ export async function POST(request: NextRequest) {
         return jsonError('文件不能为空', 400);
     }
 
-    if (!isAllowedFile(file)) {
-        return jsonError('不支持的文件类型', 400);
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-        return jsonError('文件过大', 400);
+    const fileError = validateKnowledgeFile(file);
+    if (fileError) {
+        return jsonError(fileError, 400);
     }
 
     const { data: kb } = await db

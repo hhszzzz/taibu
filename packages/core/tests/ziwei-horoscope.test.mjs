@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  calculateZiwei,
   calculateZiweiHoroscope,
   toZiweiHoroscopeJson,
   toZiweiHoroscopeText,
@@ -132,4 +133,38 @@ test('toZiweiHoroscopeText should return a non-empty markdown string', () => {
 
   assert.ok(typeof text === 'string', 'text output should be a string');
   assert.ok(text.length > 100, 'text output should be substantial');
+});
+
+test('落入本命宫位 names the natal palace at each layer\'s 宫位索引, not the first rearranged palace', () => {
+  const input = { ...BASE_INPUT, targetDate: '2026-04-10', targetTimeIndex: 6 };
+  const natal = calculateZiwei(input);
+  const result = calculateZiweiHoroscope(input);
+  const json = toZiweiHoroscopeJson(result, { detailLevel: 'full' });
+  const text = toZiweiHoroscopeText(result, { detailLevel: 'full' });
+  const natalAt = (index) => natal.palaces.find((palace, position) => (palace.index ?? position) === index);
+  const asPalace = (name) => name.endsWith('宫') ? name : `${name}宫`;
+
+  assert.equal(json.运限叠宫.length, 6);
+  for (const layer of json.运限叠宫) {
+    const palace = natalAt(layer.宫位索引);
+    assert.ok(palace, `${layer.层次} should land on a natal palace`);
+    assert.equal(layer.落入本命宫位, asPalace(palace.name), layer.层次);
+    assert.equal(layer.十二宫重排[layer.宫位索引], '命宫', `${layer.层次} rearranges its own 命宫 onto that palace`);
+    assert.match(text, new RegExp(`\\| ${layer.层次} \\|[^\\n]*\\| ${asPalace(palace.name)} \\|`, 'u'));
+  }
+  // 大限命宫即本命该宫（同干支）；流年命宫落在与流年同支的本命宫
+  const decadal = json.运限叠宫.find((layer) => layer.层次 === '大限');
+  const yearly = json.运限叠宫.find((layer) => layer.层次 === '流年');
+  const decadalPalace = natalAt(decadal.宫位索引);
+  assert.equal(decadal.干支, `${decadalPalace.heavenlyStem}${decadalPalace.earthlyBranch}`);
+  assert.equal(natalAt(yearly.宫位索引).earthlyBranch, yearly.干支.charAt(1));
+  assert.doesNotMatch(text, /宫宫/u);
+});
+
+test('落入本命宫位 falls back to "-" when the layer index is outside the natal chart', () => {
+  const result = calculateZiweiHoroscope({ ...BASE_INPUT, targetDate: '2026-04-10' });
+  const outOfRange = { ...result, decadal: { ...result.decadal, index: -1, natalPalaceName: undefined } };
+  const json = toZiweiHoroscopeJson(outOfRange);
+  assert.equal(json.运限叠宫.find((layer) => layer.层次 === '大限').落入本命宫位, '-');
+  assert.match(toZiweiHoroscopeText(outOfRange), /\| 大限 \|[^\n]*\| - \|/u);
 });

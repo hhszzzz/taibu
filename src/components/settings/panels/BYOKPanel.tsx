@@ -2,13 +2,7 @@
 
 import { CustomProviderPanel } from '@/components/chat/CustomProviderPanel';
 
+// 设置页标题与说明由设置中心统一渲染，面板只负责存储说明、当前配置与编辑表单。
 export default function BYOKPanel() {
-  return (
-    <CustomProviderPanel
-      embedded
-      title="BYOK"
-      description="仅当前标签页生效，不会保存到服务器，关闭页面后自动失效，不消耗本站积分"
-      showByokBadge={false}
-    />
-  );
+  return <CustomProviderPanel embedded />;
 }

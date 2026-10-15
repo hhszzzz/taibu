@@ -79,10 +79,10 @@ function ingestRequest(sourceType = 'record'): NextRequest {
     });
 }
 
-function uploadRequest(): NextRequest {
+function uploadRequest(file = new File(['fixed text'], 'fixture.txt', { type: 'text/plain' })): NextRequest {
     const form = new FormData();
     form.set('kbId', 'kb-1');
-    form.set('file', new File(['fixed text'], 'fixture.txt', { type: 'text/plain' }));
+    form.set('file', file);
     return new NextRequest('http://localhost/api/knowledge-base/upload', { method: 'POST', body: form });
 }
 
@@ -142,6 +142,21 @@ test('free membership prevents ingest and upload replacement', async t => {
     assert.equal((await ingestRoute.POST(ingestRequest())).status, 403);
     assert.equal((await uploadRoute.POST(uploadRequest())).status, 403);
     assert.deepEqual(calls, []);
+});
+
+test('upload rejects files the text ingester cannot read before any knowledge-base read or write', async t => {
+    const { calls, ownerFilters } = setup(t);
+    const rejected: Array<[File, string]> = [
+        [new File(['%PDF-1.7'], 'scan.pdf', { type: 'application/pdf' }), '只支持 .txt、.md、.csv、.json 等纯文本文件'],
+        [new File([], 'empty.txt', { type: 'text/plain' }), '文件内容为空'],
+    ];
+    for (const [file, message] of rejected) {
+        const response = await uploadRoute.POST(uploadRequest(file));
+        assert.equal(response.status, 400, file.name);
+        assert.equal((await response.json()).error, message);
+    }
+    assert.deepEqual(calls, []);
+    assert.deepEqual(ownerFilters, []);
 });
 
 test('source ownership rejection prevents caller-bound persistence', async t => {

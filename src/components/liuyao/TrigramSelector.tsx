@@ -30,7 +30,7 @@ export function TrigramSelector({ label, value, onChange }: TrigramSelectorProps
             <div className="flex items-center justify-between">
                 <h4 className="text-sm font-medium text-foreground">{label}</h4>
                 {selectedTrigram && (
-                    <span className="text-xs text-accent font-medium">
+                    <span className="text-xs font-medium text-accent-strong">
                         {selectedTrigram.symbol} {selectedTrigram.name} ({selectedTrigram.element})
                     </span>
                 )}
@@ -39,15 +39,17 @@ export function TrigramSelector({ label, value, onChange }: TrigramSelectorProps
                 {TRIGRAMS_LIST.map(t => (
                     <button
                         key={t.code}
+                        type="button"
                         onClick={() => onChange(t.code)}
-                        className={`flex flex-col items-center gap-0.5 py-2 px-1 rounded-lg transition-all
+                        aria-pressed={value === t.code}
+                        className={`flex flex-col items-center gap-0.5 rounded-xl px-1 py-2 transition-colors
                             ${value === t.code
-                                ? 'bg-accent text-on-accent ring-2 ring-accent/50'
-                                : 'bg-background/5 border border-white/10 text-foreground hover:bg-background/10'
+                                ? 'bg-accent-soft text-accent-strong ring-2 ring-inset ring-accent'
+                                : 'border-[0.5px] border-border bg-surface text-foreground hover:bg-background-secondary'
                             }`}
                     >
                         <span className="text-xl">{t.symbol}</span>
-                        <span className="text-xs font-medium">{t.name}</span>
+                        <span className="font-display text-sm">{t.name}</span>
                         <span className="text-[10px] text-foreground-secondary">{t.element}</span>
                     </button>
                 ))}

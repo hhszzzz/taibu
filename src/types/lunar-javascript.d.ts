@@ -115,6 +115,11 @@ declare module 'lunar-javascript' {
         getDayInGanZhi(): string;
 
         /**
+         * 获取年干支（以正月初一为界）
+         */
+        getYearInGanZhi(): string;
+
+        /**
          * 获取月干支（精确到节气）
          */
         getMonthInGanZhiExact(): string;
@@ -245,9 +250,14 @@ declare module 'lunar-javascript' {
         getShou(): string;
 
         /**
-         * 获取星宿吉凶
+         * 获取星宿所属七政（如 "土"）
          */
         getZheng(): string;
+
+        /**
+         * 获取星宿禽兽（如 "獐"，与七政合称 "土獐"）
+         */
+        getAnimal(): string;
 
         /**
          * 获取月相
@@ -365,9 +375,9 @@ declare module 'lunar-javascript' {
         toFullString(): string;
 
         /**
-         * 获取数字
+         * 获取数字（中文数字，如 "四"）
          */
-        getNumber(): number;
+        getNumber(): string;
 
         /**
          * 获取颜色

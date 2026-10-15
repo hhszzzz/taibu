@@ -1,80 +1,63 @@
 'use client';
+// 'use client'：起课结果写入 sessionStorage 后跳转结果页（需要 useRouter 与回调）。
 
-import { useState } from 'react';
-import { CalendarClock, Play } from 'lucide-react';
+import { useCallback } from 'react';
+import { Play } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { HistoryDrawer } from '@/components/layout/HistoryDrawer';
-import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
-import { useToast } from '@/components/ui/Toast';
+import { XiaoliurenForm } from '@/components/xiaoliuren/XiaoliurenForm';
+import { XiaoliurenPalm } from '@/components/xiaoliuren/XiaoliurenPalm';
 import { writeSessionJSON } from '@/lib/cache/session-storage';
-import { requestBrowserJson } from '@/lib/browser-api';
-import { toDateTimeLocalValue } from '@/lib/date-utils';
 import type { XiaoliurenWebBundle } from '@/lib/divination/xiaoliuren';
+
+const COUNTING_STEPS = [
+  { title: '月上起', description: '从食指根节「大安」起数，顺时针数到所占农历月。' },
+  { title: '日上落', description: '从月上落宫起数，顺数到所占农历日。' },
+  { title: '时上落', description: '从日上落宫起数，顺数到所占时辰，即为最终落宫。' },
+] as const;
 
 export default function XiaoliurenPage() {
   const router = useRouter();
-  const { showToast } = useToast();
-  const [question, setQuestion] = useState('');
-  const [date, setDate] = useState(() => toDateTimeLocalValue());
-  const [isLoading, setIsLoading] = useState(false);
 
-  const handleCalculate = async () => {
-    if (!question.trim()) {
-      showToast('error', '请填写占问事项');
-      return;
-    }
-    if (!date) {
-      showToast('error', '请选择起课时间');
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const response = await requestBrowserJson<XiaoliurenWebBundle>('/api/xiaoliuren', {
-        method: 'POST',
-        body: JSON.stringify({ action: 'calculate', date, question: question.trim() }),
-      });
-      if (response.error || !response.data) {
-        showToast('error', response.error?.message || '起课失败，请检查输入');
-        return;
-      }
-      writeSessionJSON('xiaoliuren_result', { resultData: response.data });
-      router.push('/xiaoliuren/result');
-    } catch (error) {
-      showToast('error', error instanceof Error ? error.message : '起课失败，请重试');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const handleCalculated = useCallback((bundle: XiaoliurenWebBundle) => {
+    writeSessionJSON('xiaoliuren_result', { resultData: bundle });
+    router.push('/xiaoliuren/result');
+  }, [router]);
 
   return (
-    <div className="min-h-screen bg-background text-foreground md:pb-12">
-        <div className="max-w-3xl mx-auto px-4 py-8 sm:py-12">
-          <header className="hidden md:block border-b border-border/60 pb-7 mb-8">
-            <h1 className="text-3xl font-bold tracking-tight">小六壬</h1>
-            <p className="mt-2 text-sm text-foreground-secondary">从农历月、日到时辰，沿三步落宫看当下趋势。</p>
-          </header>
+    <div className="min-h-screen bg-background text-foreground">
+      <div className="mx-auto flex w-full max-w-[1024px] flex-col gap-3 px-4 pt-4 pb-8 sm:px-8 lg:gap-7 lg:pt-12 lg:pb-16">
+        <header className="hidden flex-col gap-2 lg:flex">
+          <h1 className="font-display text-[34px] font-normal leading-tight">小六壬</h1>
+          <p className="text-[15px] text-foreground-secondary">以左手食、中、无名三指六节为六宫，按农历月、日、时三步掐数落宫。</p>
+        </header>
 
-          <main className="space-y-6">
-            <section className="bg-background border border-border rounded-md p-5 sm:p-6 space-y-5">
-              <div>
-                <label htmlFor="xiaoliuren-question" className="block text-xs font-bold tracking-wider text-foreground-secondary mb-2">占问事项</label>
-                <input id="xiaoliuren-question" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="例如：今天适合签约吗？" className="w-full px-3 py-3 bg-transparent border border-border rounded-md text-sm focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none" />
-              </div>
-              <div>
-                <label htmlFor="xiaoliuren-date" className="block text-xs font-bold tracking-wider text-foreground-secondary mb-2">起课时间</label>
-                <div className="relative">
-                  <CalendarClock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-secondary pointer-events-none" />
-                  <input id="xiaoliuren-date" type="datetime-local" value={date} onChange={(event) => setDate(event.target.value)} className="w-full pl-10 pr-3 py-3 bg-transparent border border-border rounded-md text-sm focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none" />
-                </div>
-                <p className="mt-2 text-xs text-foreground-secondary">按本地墙上时间换算农历；闰月会在结果中明确标注。</p>
-              </div>
-            </section>
-            <button type="button" onClick={() => void handleCalculate()} disabled={isLoading} className="w-full inline-flex justify-center items-center gap-2 px-5 py-3.5 bg-accent text-on-accent rounded-md font-semibold text-sm hover:bg-accent/90 active:bg-accent-hover transition-colors disabled:opacity-50">
-              {isLoading ? <><SoundWaveLoader variant="inline" /><span>正在起课</span></> : <><Play className="w-4 h-4" />开始起课</>}
-            </button>
-          </main>
-        </div>
-        <HistoryDrawer type="xiaoliuren" />
+        <XiaoliurenForm submitLabel="开始起课" submitIcon={<Play className="h-4 w-4" />} onCalculated={handleCalculated} />
+
+        <section aria-label="掌诀说明" className="flex flex-wrap items-center gap-6 rounded-[18px] border-[0.5px] border-border bg-surface px-4 py-5 sm:px-6">
+          <div className="flex min-w-0 flex-[1_1_300px] justify-center">
+            <XiaoliurenPalm className="max-w-[340px]" />
+          </div>
+          <div className="flex min-w-0 flex-[1_1_280px] flex-col gap-4">
+            <h2 className="font-display text-xl">掐指三步</h2>
+            <ol className="flex flex-col gap-3">
+              {COUNTING_STEPS.map((step, index) => (
+                <li key={step.title} className="flex gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-foreground text-xs text-background">{index + 1}</span>
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium">{step.title}</div>
+                    <p className="mt-0.5 text-[13px] leading-relaxed text-foreground-secondary">{step.description}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <p className="border-t-[0.5px] border-border pt-3 text-xs leading-relaxed text-foreground-secondary">
+              左手掌心朝己，食指根节起大安，顺时针经三指指尖至无名指根，回中指根为一周；拇指逐节掐数。
+            </p>
+          </div>
+        </section>
+      </div>
+      <HistoryDrawer type="xiaoliuren" />
     </div>
   );
 }

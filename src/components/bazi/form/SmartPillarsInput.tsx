@@ -4,6 +4,8 @@
  * 月柱：根据年柱计算，选择完整组合
  * 时柱：根据日柱计算，选择完整组合
  * 最后反推出具体时间
+ *
+ * 'use client'：需要 useState/useEffect 管理选择步骤与异步反推请求
  */
 'use client';
 
@@ -19,27 +21,10 @@ import {
     getAvailableBranches,
 } from '@/lib/divination/pillars-calculator';
 import { useToast } from '@/components/ui/Toast';
+import { ganZhiSoftClass } from '@/components/bazi/element-classes';
 
 // 天干选项
 const HEAVENLY_STEMS: HeavenlyStem[] = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸'];
-
-// 五行颜色映射（与结果页面一致）
-// 木-绿色, 火-红色, 土-黄色, 金-金色, 水-蓝色
-const ELEMENT_BG_COLORS: Record<string, string> = {
-    // 天干
-    '甲': 'bg-emerald-50 text-emerald-700', '乙': 'bg-emerald-50 text-emerald-700',  // 木
-    '丙': 'bg-red-50 text-red-600', '丁': 'bg-red-50 text-red-600',                  // 火
-    '戊': 'bg-gray-50 text-[#8B4513]', '己': 'bg-gray-50 text-[#8B4513]',          // 土
-    '庚': 'bg-yellow-50 text-yellow-600', '辛': 'bg-yellow-50 text-yellow-600',      // 金
-    '壬': 'bg-blue-50 text-blue-600', '癸': 'bg-blue-50 text-blue-600',              // 水
-    // 地支
-    '寅': 'bg-emerald-50 text-emerald-700', '卯': 'bg-emerald-50 text-emerald-700',  // 木
-    '巳': 'bg-red-50 text-red-600', '午': 'bg-red-50 text-red-600',                  // 火
-    '辰': 'bg-gray-50 text-[#8B4513]', '戌': 'bg-gray-50 text-[#8B4513]',          // 土
-    '丑': 'bg-gray-50 text-[#8B4513]', '未': 'bg-gray-50 text-[#8B4513]',          // 土
-    '申': 'bg-yellow-50 text-yellow-600', '酉': 'bg-yellow-50 text-yellow-600',      // 金
-    '亥': 'bg-blue-50 text-blue-600', '子': 'bg-blue-50 text-blue-600',              // 水
-};
 
 type PillarType = 'year' | 'month' | 'day' | 'hour';
 // 选择步骤：年天干 -> 年地支 -> 月柱 -> 日天干 -> 日地支 -> 时柱
@@ -330,10 +315,10 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
                     type="button"
                     onClick={() => onSelect(stem)}
                     className={`
-                        py-2.5 rounded-full text-base font-bold
-                        transition-all duration-200 hover:scale-105
-                        ${ELEMENT_BG_COLORS[stem]}
-                        border border-transparent hover:border-accent/50
+                        h-10 rounded-[10px] font-display text-lg
+                        transition-colors duration-150
+                        ${ganZhiSoftClass(stem)}
+                        ring-inset hover:ring-1 hover:ring-accent/50
                     `}
                 >
                     {stem}
@@ -351,10 +336,10 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
                     type="button"
                     onClick={() => onSelect(branch)}
                     className={`
-                        py-2.5 rounded-full text-base font-bold
-                        transition-all duration-200 hover:scale-105
-                        ${ELEMENT_BG_COLORS[branch]}
-                        border border-transparent hover:border-accent/50
+                        h-10 rounded-[10px] font-display text-lg
+                        transition-colors duration-150
+                        ${ganZhiSoftClass(branch)}
+                        ring-inset hover:ring-1 hover:ring-accent/50
                     `}
                 >
                     {branch}
@@ -375,10 +360,10 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
                     type="button"
                     onClick={() => onSelect(p)}
                     className={`
-                        py-2 px-1 rounded-lg text-sm font-bold
-                        transition-all duration-200 hover:scale-105
-                        ${ELEMENT_BG_COLORS[p.stem]}
-                        border border-transparent hover:border-accent/50
+                        h-10 px-1 rounded-[10px] font-display text-base
+                        transition-colors duration-150
+                        ${ganZhiSoftClass(p.stem)}
+                        ring-inset hover:ring-1 hover:ring-accent/50
                     `}
                 >
                     {p.stem}{p.branch}
@@ -421,13 +406,13 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
                                         onClick={() => canClickStem && handleClickToEdit(pillarType, 'stem')}
                                         disabled={!canClickStem}
                                         className={`
-                                            w-12 h-12 rounded-full flex items-center justify-center
-                                            text-base font-bold transition-all mx-auto
+                                            w-12 h-12 rounded-xl flex items-center justify-center
+                                            font-display text-xl transition-colors mx-auto
                                             ${hasStem
-                                                ? `${ELEMENT_BG_COLORS[pillar.stem]} ${canClickStem ? 'cursor-pointer hover:ring-2 hover:ring-accent/50' : ''}`
+                                                ? `${ganZhiSoftClass(pillar.stem)} ${canClickStem ? 'cursor-pointer hover:ring-2 hover:ring-inset hover:ring-accent/50' : ''}`
                                                 : isCurrent
-                                                    ? 'bg-accent/10 border-2 border-dashed border-accent'
-                                                    : 'bg-background-secondary border-2 border-transparent'
+                                                    ? 'bg-accent-light border-[1.5px] border-dashed border-accent'
+                                                    : 'bg-surface border-[0.5px] border-border'
                                             }
                                             disabled:cursor-default
                                         `}
@@ -440,13 +425,13 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
                                         onClick={() => canClickBranch && handleClickToEdit(pillarType, 'branch')}
                                         disabled={!canClickBranch}
                                         className={`
-                                            w-12 h-12 rounded-full flex items-center justify-center
-                                            text-base font-bold transition-all mx-auto
+                                            w-12 h-12 rounded-xl flex items-center justify-center
+                                            font-display text-xl transition-colors mx-auto
                                             ${isComplete
-                                                ? `${ELEMENT_BG_COLORS[pillar.branch]} ${canClickBranch ? 'cursor-pointer hover:ring-2 hover:ring-accent/50' : ''}`
+                                                ? `${ganZhiSoftClass(pillar.branch)} ${canClickBranch ? 'cursor-pointer hover:ring-2 hover:ring-inset hover:ring-accent/50' : ''}`
                                                 : isCurrent && hasStem
-                                                    ? 'bg-accent/10 border-2 border-dashed border-accent'
-                                                    : 'bg-background-secondary border-2 border-transparent'
+                                                    ? 'bg-accent-light border-[1.5px] border-dashed border-accent'
+                                                    : 'bg-surface border-[0.5px] border-border'
                                             }
                                             disabled:cursor-default
                                         `}
@@ -465,7 +450,7 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
                     <button
                         type="button"
                         onClick={handleClear}
-                        className="flex items-center gap-1 text-foreground-secondary hover:text-red-500 transition-colors"
+                        className="flex items-center gap-1 text-foreground-secondary transition-colors hover:text-danger"
                     >
                         <Trash2 className="w-3.5 h-3.5" />
                         清除
@@ -501,7 +486,7 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
 
                 {/* 全部完成提示 */}
                 {currentStep === 'complete' && (
-                    <div className="text-center text-sm text-green-600 py-2">
+                    <div className="py-2 text-center text-sm text-success">
                         四柱选择完成
                     </div>
                 )}
@@ -510,18 +495,19 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
             {/* 时间选择模态框 */}
             {showDateSelector && possibleDates.length > 0 && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
-                    <div className="absolute inset-0 bg-black/50" onClick={() => setShowDateSelector(false)} />
+                    <div className="absolute inset-0 bg-foreground/20 backdrop-blur-[2px]" onClick={() => setShowDateSelector(false)} />
 
-                    <div className="relative bg-background rounded-xl shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-                        <div className="sticky top-0 bg-background border-b border-border px-6 py-4 flex items-center justify-between">
-                            <h2 className="text-lg font-semibold flex items-center gap-2">
-                                <Calendar className="w-5 h-5 text-accent" />
+                    <div className="relative max-h-[80vh] w-full max-w-2xl overflow-y-auto rounded-2xl border-[0.5px] border-border bg-surface shadow-lg">
+                        <div className="sticky top-0 flex items-center justify-between border-b-[0.5px] border-border bg-surface px-6 py-4">
+                            <h2 className="flex items-center gap-2 font-display text-lg">
+                                <Calendar className="h-[18px] w-[18px] text-clay" />
                                 选择具体时间
                             </h2>
                             <button
                                 type="button"
                                 onClick={() => setShowDateSelector(false)}
-                                className="text-foreground-secondary hover:text-foreground transition-colors"
+                                aria-label="关闭"
+                                className="rounded-lg p-1.5 text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground"
                             >
                                 <X className="w-5 h-5" />
                             </button>
@@ -536,7 +522,7 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
                                     key={index}
                                     type="button"
                                     onClick={() => handleDateSelect(date)}
-                                    className="w-full p-4 border border-border rounded-lg hover:border-accent/50 hover:bg-background-secondary transition-all text-left"
+                                    className="w-full rounded-xl border-[0.5px] border-border p-4 text-left transition-colors hover:border-accent/50 hover:bg-background-secondary"
                                 >
                                     <div className="font-medium">{date.solarDate}</div>
                                     <div className="text-sm text-foreground-secondary mt-1">{date.lunarDate}</div>

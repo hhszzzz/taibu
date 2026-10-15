@@ -11,9 +11,9 @@ import {
 import type {
   MeihuaHexagramInfo,
   MeihuaInteractionReading,
-  MeihuaTrigramInfo,
   MeihuaOutput
 } from './types.js';
+import { buildChangedStageTarget, buildRelationExpression } from './text.js';
 import type {
   MeihuaCanonicalTextOptions
 } from '../shared/text-options.js';
@@ -32,36 +32,6 @@ function buildHexagramTrack(
     ...(options.includeGuaCi && hexagram.guaCi ? { 卦辞: hexagram.guaCi } : {}),
     ...(options.detailLevel === 'full' && hexagram.xiangCi ? { 象辞: hexagram.xiangCi } : {}),
   };
-}
-
-function formatTrigramRole(label: string, trigram: MeihuaTrigramInfo): string {
-  return `${label}(${trigram.name}${trigram.element})`;
-}
-
-function buildRelationExpression(
-  relation: MeihuaInteractionReading['relation'],
-  body: { label: string; trigram: MeihuaTrigramInfo; },
-  other: { label: string; name?: string; element: string; separator?: string; },
-): string {
-  const bodyRef = formatTrigramRole(body.label, body.trigram);
-  const otherRef = other.name
-    ? `${other.label}(${other.name}${other.separator ?? ''}${other.element})`
-    : `${other.label}(${other.element})`;
-
-  switch (relation) {
-    case '比和':
-      return `${bodyRef} 与 ${otherRef} 比和`;
-    case '用生体':
-      return `${otherRef} 生 ${bodyRef}`;
-    case '体生用':
-      return `${bodyRef} 生 ${otherRef}`;
-    case '体克用':
-      return `${bodyRef} 克 ${otherRef}`;
-    case '用克体':
-      return `${otherRef} 克 ${bodyRef}`;
-    default:
-      return `${bodyRef} 与 ${otherRef}`;
-  }
 }
 
 function findInteractionReading(result: MeihuaOutput, stage: MeihuaInteractionReading['stage']) {
@@ -236,12 +206,7 @@ function renderMeihuaCanonicalJSONBase(
           表达式: buildRelationExpression(changedStage?.relation ?? '比和', {
             label: '体卦',
             trigram: result.bodyTrigram,
-          }, {
-            label: '变卦整卦',
-            name: result.changedHexagram.name,
-            element: result.changedHexagram.element,
-            separator: '/',
-          }),
+          }, buildChangedStageTarget(result, result.changedHexagram)),
         }]
         : []),
     ],

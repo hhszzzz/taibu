@@ -62,6 +62,25 @@ export const TEN_GOD_INTERPRETATIONS: Record<string, Record<InterpretationMode, 
     },
 };
 
+/** 个性化日运标题：一句话点出流日十神的基调与取舍。 */
+export const DAILY_TEN_GOD_HEADLINES: Record<string, string> = {
+    '比肩': '比肩助身，宜协作，不宜争先',
+    '劫财': '劫财临日，宜守财，不宜冲动',
+    '食神': '食神吐秀，宜创作，宜悦己',
+    '伤官': '食伤当令，宜表达，不宜硬碰',
+    '偏财': '偏财透出，宜把握机缘，不宜贪多',
+    '正财': '正财当令，宜踏实经营，稳中求进',
+    '七杀': '七杀临身，宜果断应对，不宜意气用事',
+    '正官': '正官得位，宜守规矩，利见贵人',
+    '偏印': '偏印主事，宜独处深思，少涉杂务',
+    '正印': '正印护身，宜学习进修，得长辈相助',
+};
+
+/** 流日十神 → 日运标题；十神缺失或无法识别时返回 null，由调用方回退到通用文案。 */
+export function getDailyHeadline(tenGod: string | null | undefined): string | null {
+    return (tenGod && DAILY_TEN_GOD_HEADLINES[tenGod]) || null;
+}
+
 // 运势分数解读
 export const SCORE_INTERPRETATIONS: Record<'high' | 'medium' | 'low', Record<InterpretationMode, string>> = {
     high: {

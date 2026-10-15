@@ -1,282 +1,42 @@
 /**
  * 手相分析结果页
- * 
+ *
  * 显示手相分析结果，支持从历史记录加载
  */
-'use client';
+'use client'; // 需向客户端结果组件传入图标组件与 describe 函数
 
-import { useState, useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
-import { Hand, MessageCircle } from 'lucide-react';
-import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
-import { MarkdownContent } from '@/components/ui/MarkdownContent';
-import { readSessionJSON } from '@/lib/cache/session-storage';
-import { PALM_ANALYSIS_TYPES, type HandType } from '@/lib/divination/palm';
-import { AddToKnowledgeBaseModal } from '@/components/knowledge-base/AddToKnowledgeBaseModal';
-import { useKnowledgeBaseFeatureEnabled } from '@/components/knowledge-base/useKnowledgeBaseFeatureEnabled';
-import { useHeaderMenu } from '@/components/layout/HeaderMenuContext';
-import { useAnalysisSnapshot } from '@/lib/hooks/useAnalysisSnapshot';
-import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
+import { Hand } from 'lucide-react';
+import { PhotoReadingResult, type PhotoReadingSession } from '@/components/divination/PhotoReadingResult';
+import { PALM_ANALYSIS_TYPES, getPalmHandLabel } from '@/lib/divination/palm';
 
-interface PalmResultData {
-    readingId?: string;
-    conversationId?: string | null;
-    analysisType: string;
-    handType?: HandType;
-    analysis?: string;
-    createdAt?: string;
-    isTemporary?: boolean;
+const PALM_NOTICE = '手相分析仅供娱乐参考，不构成医疗、就业或其他专业建议，也不做疾病诊断。';
+
+interface PalmReadingSession extends PhotoReadingSession {
+    handType?: string;
+}
+
+function describePalmReading(result: PalmReadingSession) {
+    const typeName = PALM_ANALYSIS_TYPES.find(type => type.id === result.analysisType)?.name || '手相分析';
+    const handLabel = getPalmHandLabel(result.handType);
+    return {
+        title: handLabel ? `${handLabel} · ${typeName}` : typeName,
+        knowledgeBaseTitle: handLabel ? `${typeName}（${handLabel}）` : typeName,
+    };
 }
 
 export default function PalmResultPage() {
-    const router = useRouter();
-    const { setMenuItems, clearMenuItems } = useHeaderMenu();
-    const { knowledgeBaseEnabled } = useKnowledgeBaseFeatureEnabled();
-    const { loaded: aiFeatureLoaded, isFeatureEnabled } = useFeatureToggles();
-    const aiEnabled = aiFeatureLoaded && isFeatureEnabled('chat');
-    const [loading, setLoading] = useState(true);
-    const [resultData, setResultData] = useState<PalmResultData | null>(null);
-    const [analysis, setAnalysis] = useState<string>('');
-    const [error, setError] = useState<string | null>(null);
-    const [kbModalOpen, setKbModalOpen] = useState(false);
-    const [awaitingSnapshot, setAwaitingSnapshot] = useState(false);
-    const snapshotCallbacks = useMemo(() => ({
-        onAnalysis: (nextAnalysis: string) => setAnalysis(nextAnalysis),
-        onConversationIdResolved: (conversationId: string) => {
-            setResultData((prev) => (prev ? { ...prev, conversationId } : prev));
-        },
-        onComplete: () => setAwaitingSnapshot(false),
-    }), []);
-    const snapshotLoading = useAnalysisSnapshot({
-        conversationId: resultData?.conversationId,
-        recordId: resultData?.readingId,
-        divinationType: 'palm',
-        sessionKey: 'palm_result',
-        hasExistingAnalysis: !!analysis,
-        skip: !resultData || !aiEnabled,
-        callbacks: snapshotCallbacks,
-    });
-
-    // 设置移动端 Header 菜单项
-    useEffect(() => {
-        const items = [];
-        if (!aiEnabled) {
-            clearMenuItems();
-            return;
-        }
-        if (knowledgeBaseEnabled && resultData?.readingId) {
-            items.push({
-                id: 'add-to-kb',
-                label: '加入知识库',
-                onClick: () => setKbModalOpen(true),
-            });
-        }
-        if (resultData?.conversationId) {
-            items.push({
-                id: 'continue-chat',
-                label: '继续对话',
-                icon: <MessageCircle className="w-4 h-4" />,
-                onClick: () => router.push(`/chat?id=${resultData.conversationId}`),
-            });
-        }
-        items.push({
-            id: 'reanalyze',
-            label: '再次分析',
-            icon: <Hand className="w-4 h-4" />,
-            onClick: () => router.push('/palm'),
-        });
-        setMenuItems(items);
-        return () => clearMenuItems();
-    }, [aiEnabled, knowledgeBaseEnabled, resultData?.readingId, resultData?.conversationId, router, setMenuItems, clearMenuItems]);
-
-    useEffect(() => {
-        const loadResult = async () => {
-            setLoading(true);
-            setError(null);
-
-            // 尝试从 sessionStorage 获取
-            const parsed = readSessionJSON<PalmResultData>('palm_result');
-            if (parsed) {
-                try {
-                    setResultData(parsed);
-                    if (parsed.analysis) {
-                        setAnalysis(parsed.analysis);
-                        setAwaitingSnapshot(false);
-                    } else {
-                        setAwaitingSnapshot(Boolean(parsed.conversationId || parsed.readingId));
-                    }
-                    setLoading(false);
-                    return;
-                } catch {
-                }
-            }
-
-            // 没有数据，显示错误
-            setAwaitingSnapshot(false);
-            setError('未找到分析结果，请重新进行分析');
-            setLoading(false);
-        };
-
-        loadResult();
-    }, []);
-
-    const getAnalysisTypeName = (typeId: string) => {
-        const type = PALM_ANALYSIS_TYPES.find(t => t.id === typeId);
-        return type?.name || '手相分析';
-    };
-
-    const getHandTypeName = (handType?: HandType) => {
-        if (handType === 'left') return '左手';
-        if (handType === 'right') return '右手';
-        return '';
-    };
-
-    const handleContinueChat = () => {
-        if (resultData?.conversationId) {
-            router.push(`/chat?id=${resultData.conversationId}`);
-        }
-    };
-
-    if (!aiEnabled) return null;
-
-    if (loading || awaitingSnapshot || snapshotLoading) {
-        return (
-            <div className="min-h-screen bg-background relative overflow-hidden flex items-center justify-center">
-                {/* Background Effects Removed */}
-                <div className="relative z-10 text-center animate-fade-in p-8 rounded-3xl bg-background/5 border border-white/10 backdrop-blur-md">
-                    <div className="relative mb-6 mx-auto w-16 h-16 flex items-center justify-center">
-                        <div className="absolute inset-0 bg-amber-500/20 rounded-full animate-ping opacity-75" />
-                        <div className="relative z-10 bg-amber-500/10 p-4 rounded-full border border-amber-500/20">
-                            <Hand className="w-8 h-8 text-amber-500" />
-                        </div>
-                    </div>
-                    <SoundWaveLoader variant="block" text="正在深度解析您的掌纹" />
-                </div>
-            </div>
-        );
-    }
-
-    if (error || !resultData) {
-        return (
-            <div className="min-h-screen bg-background relative overflow-hidden flex items-center justify-center">
-                {/* Background Effects Removed */}
-                <div className="relative z-10 max-w-md w-full mx-4 text-center p-8 rounded-3xl bg-background/5 border border-white/10 backdrop-blur-md shadow-2xl">
-                    <div className="w-16 h-16 bg-background/5 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-white/10">
-                        <Hand className="w-8 h-8 text-amber-500/50" />
-                    </div>
-                    <h3 className="text-xl font-bold text-foreground mb-2">未找到分析结果</h3>
-                    <p className="text-foreground-secondary mb-8 leading-relaxed">{error || '似乎没有找到刚才的分析记录，请尝试重新分析'}</p>
-                    <button
-                        onClick={() => router.push('/palm')}
-                        className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-lg shadow-amber-500/20 transition-all hover:scale-[1.02] active:scale-95"
-                    >
-                        <Hand className="w-5 h-5" />
-                        开始手相分析
-                    </button>
-                </div>
-            </div>
-        );
-    }
-
     return (
-        <>
-            <div className="min-h-screen bg-background relative overflow-x-hidden">
-                {/* Background Effects */}
-                {/* Background Effects Removed */}
-
-                <div className="max-w-3xl mx-auto px-4 py-4 md:py-8 relative z-10 animate-fade-in">
-                    {/* 返回按钮 - 仅桌面端显示 */}
-                    <button
-                        onClick={() => router.push('/palm')}
-                        className="hidden md:inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-foreground-secondary hover:text-foreground hover:bg-background/5 transition-all mb-6"
-                    >
-                        <span className="text-sm font-medium">返回</span>
-                    </button>
-
-                    {/* 标题 */}
-                    <div className="flex items-center gap-5 mb-8">
-                        <div className="p-4 rounded-2xl bg-amber-500/10 ring-1 ring-amber-500/20 shadow-[0_0_15px_rgba(245,158,11,0.15)] flex items-center justify-center">
-                            <Hand className="w-8 h-8 text-amber-500" />
-                        </div>
-                        <div>
-                            <h1 className="text-2xl font-bold text-foreground mb-1">
-                                {getHandTypeName(resultData.handType)}{getAnalysisTypeName(resultData.analysisType)}
-                            </h1>
-                            {resultData.createdAt && (
-                                <p className="text-sm text-foreground-secondary flex items-center gap-2">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500/50"></span>
-                                    {new Date(resultData.createdAt).toLocaleString('zh-CN')}
-                                </p>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* 临时结果警告 */}
-                    {resultData.isTemporary && (
-                        <div className="mb-6 p-4 bg-amber-500/5 border border-amber-500/20 rounded-xl backdrop-blur-sm">
-                            <div className="flex gap-2 text-sm text-foreground-secondary">
-                                <span className="font-bold text-amber-500 shrink-0">注意：</span>
-                                <p>由于网络原因，本次分析结果未能保存到历史记录，但您仍可在此查看结果。</p>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* 分析结果 */}
-                    <div className="bg-background/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6 md:p-8 mb-8 shadow-xl">
-                        {analysis ? (
-                            <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-foreground prose-p:text-foreground-secondary prose-strong:text-amber-400">
-                                <MarkdownContent
-                                    content={analysis}
-                                />
-                            </div>
-                        ) : (
-                            <div className="text-center py-12">
-                                <Hand className="w-12 h-12 text-white/10 mx-auto mb-4" />
-                                <p className="text-foreground-secondary">暂无分析内容</p>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* 操作按钮 */}
-                    <div className="flex flex-wrap gap-4 justify-center">
-                        {knowledgeBaseEnabled && !!resultData.readingId && (
-                            <button
-                                type="button"
-                                onClick={() => setKbModalOpen(true)}
-                                className="flex items-center gap-2 px-6 py-3 rounded-xl bg-background/5 hover:bg-background/10 border border-white/10 hover:border-white/20 text-foreground transition-all hover:scale-[1.02] active:scale-95"
-                            >
-                                加入知识库
-                            </button>
-                        )}
-                        {resultData.conversationId && (
-                            <button
-                                onClick={handleContinueChat}
-                                className="flex items-center gap-2 px-6 py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-lg shadow-amber-500/20 transition-all hover:scale-[1.02] active:scale-95"
-                            >
-                                <MessageCircle className="w-5 h-5" />
-                                继续对话
-                            </button>
-                        )}
-                        <button
-                            onClick={() => router.push('/palm')}
-                            className="flex items-center gap-2 px-6 py-3 rounded-xl bg-background/5 hover:bg-background/10 border border-white/10 hover:border-white/20 text-foreground transition-all hover:scale-[1.02] active:scale-95"
-                        >
-                            <Hand className="w-5 h-5" />
-                            再次分析
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {knowledgeBaseEnabled && resultData.readingId && (
-                <AddToKnowledgeBaseModal
-                    open={kbModalOpen}
-                    onClose={() => setKbModalOpen(false)}
-                    sourceTitle={`${getAnalysisTypeName(resultData.analysisType)}${getHandTypeName(resultData.handType) ? `（${getHandTypeName(resultData.handType)}）` : ''}`}
-                    sourceType="palm_reading"
-                    sourceId={resultData.readingId}
-                />
-            )}
-        </>
+        <PhotoReadingResult
+            divinationType="palm"
+            sessionKey="palm_result"
+            entryPath="/palm"
+            kindLabel="手相"
+            icon={Hand}
+            loadingText="正在解析你的掌纹"
+            emptyActionLabel="开始手相分析"
+            knowledgeBaseSourceType="palm_reading"
+            notice={PALM_NOTICE}
+            describe={describePalmReading}
+        />
     );
 }

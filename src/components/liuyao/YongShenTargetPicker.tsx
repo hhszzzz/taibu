@@ -10,14 +10,14 @@ export const YONG_SHEN_TARGET_OPTIONS: Array<{
     value: LiuQin;
     description: string;
 }> = [
-    { label: '钱和资源', value: '妻财', description: '钱财/交易/资源/经营；婚恋多见于男问对象或以财为线索时' },
-    { label: '工作与压力', value: '官鬼', description: '功名求官/工作事业/规则/压力/风险/疾病；婚恋多见于女问对象或以官为线索时' },
     { label: '学业与文书', value: '父母', description: '合同文书/证件/学业/房屋车辆/长辈' },
-    { label: '进展与结果', value: '子孙', description: '子女后辈/医药' },
-    { label: '人际与竞争', value: '兄弟', description: '同辈/合作/竞争' },
+    { label: '工作与压力', value: '官鬼', description: '功名求官/工作事业/规则/压力/风险/疾病；婚恋多见于女问对象或以官为线索时' },
+    { label: '钱和资源', value: '妻财', description: '钱财/交易/资源/经营；婚恋多见于男问对象或以财为线索时' },
+    { label: '子女后辈 / 医药', value: '子孙', description: '子女后辈/医药' },
+    { label: '同辈 / 合作 / 竞争', value: '兄弟', description: '同辈/合作/竞争' },
 ];
 
-export type YongShenPickerVariant = 'inline-right' | 'block';
+export type YongShenPickerVariant = 'inline-right' | 'block' | 'chips';
 
 interface YongShenTargetPickerProps {
     value: LiuQin[];
@@ -69,10 +69,37 @@ export function YongShenTargetPicker({
         return () => window.removeEventListener('keydown', onKeydown);
     }, [isOpen]);
 
+    if (variant === 'chips') {
+        return (
+            <div className={`flex flex-wrap gap-2 ${className}`} role="group" aria-label="分析目标">
+                {YONG_SHEN_TARGET_OPTIONS.map((item) => {
+                    const checked = value.includes(item.value);
+                    return (
+                        <button
+                            key={item.value}
+                            type="button"
+                            aria-pressed={checked}
+                            title={item.description}
+                            onClick={() => toggleTarget(item.value)}
+                            className={`inline-flex h-10 items-center gap-1.5 rounded-full px-3.5 text-sm transition-colors ${
+                                checked
+                                    ? 'border-[1.5px] border-accent bg-accent-light text-accent-strong'
+                                    : 'border-[0.5px] border-border-hover bg-surface text-foreground-secondary hover:bg-background-secondary hover:text-foreground'
+                            }`}
+                        >
+                            {checked && <Check className="h-3.5 w-3.5" />}
+                            {item.value} · {item.label}
+                        </button>
+                    );
+                })}
+            </div>
+        );
+    }
+
     if (variant === 'block') {
         return (
-            <div className={`rounded-xl border border-white/10 bg-background/[0.02] p-3 ${className}`}>
-                <div className="text-sm font-medium text-foreground mb-2">请选择六亲</div>
+            <div className={`rounded-2xl border-[0.5px] border-border bg-surface p-4 ${className}`}>
+                <div className="mb-2.5 text-sm font-medium text-foreground">请选择六亲</div>
                 <div className="grid gap-2 sm:grid-cols-2">
                     {YONG_SHEN_TARGET_OPTIONS.map((item) => {
                         const checked = value.includes(item.value);
@@ -80,26 +107,27 @@ export function YongShenTargetPicker({
                             <button
                                 key={item.value}
                                 type="button"
+                                aria-pressed={checked}
                                 onClick={() => toggleTarget(item.value)}
-                                className={`text-left rounded-lg border px-3 py-2 transition-colors ${
+                                className={`rounded-xl px-3 py-2.5 text-left transition-colors ${
                                     checked
-                                        ? 'border-accent/50 bg-accent/10 text-accent'
-                                        : 'border-white/10 bg-background/[0.02] text-foreground-secondary hover:border-white/20 hover:text-foreground'
+                                        ? 'bg-accent-soft text-accent-strong ring-2 ring-inset ring-accent'
+                                        : 'border-[0.5px] border-border-hover bg-surface text-foreground-secondary hover:bg-background-secondary hover:text-foreground'
                                 }`}
                             >
                                 <div className="flex items-start justify-between gap-2">
                                     <div className="flex min-w-0 items-baseline gap-2">
-                                        <span className="font-semibold text-sm">{item.value}</span>
+                                        <span className="font-display text-[15px]">{item.value}</span>
                                         <span className="text-xs opacity-90">{item.label}</span>
                                     </div>
-                                    {checked && <Check className="w-4 h-4" />}
+                                    {checked && <Check className="h-4 w-4" />}
                                 </div>
-                                <div className="mt-1 text-xs opacity-70">{item.description}</div>
+                                <div className="mt-1 text-xs opacity-75">{item.description}</div>
                             </button>
                         );
                     })}
                 </div>
-                <div className="mt-2 text-xs text-foreground-tertiary">
+                <div className="mt-2.5 text-xs text-foreground-tertiary">
                     {renderTargetHint(selectedLabels)}
                 </div>
             </div>
@@ -111,10 +139,10 @@ export function YongShenTargetPicker({
             <button
                 type="button"
                 onClick={() => setIsOpen((prev) => !prev)}
-                className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-xs transition-colors ${
+                className={`inline-flex h-9 items-center gap-1.5 rounded-[10px] px-2.5 text-xs transition-colors ${
                     selectedLabels.length > 0
-                        ? 'border-accent/40 bg-accent/10 text-accent'
-                        : 'border-white/15 bg-background/90 text-foreground-secondary hover:text-foreground'
+                        ? 'border border-accent bg-accent-light text-accent-strong'
+                        : 'border-[0.5px] border-border-hover bg-surface text-foreground-secondary hover:text-foreground'
                 }`}
             >
                 <span className="max-w-[120px] truncate text-sm">
@@ -129,22 +157,23 @@ export function YongShenTargetPicker({
                         type="button"
                         aria-label="关闭分析目标弹窗"
                         onClick={() => setIsOpen(false)}
-                        className="fixed inset-0 z-[70] bg-black/35 backdrop-blur-[1px]"
+                        className="fixed inset-0 z-[70] bg-foreground/30 backdrop-blur-[1px]"
                     />
                     <div className="fixed inset-0 z-[71] flex items-center justify-center p-4 pointer-events-none">
                         <div
                             role="dialog"
                             aria-modal="true"
-                            className="pointer-events-auto w-full max-w-[460px] overflow-hidden rounded-2xl border border-white/10 bg-background/95 shadow-2xl backdrop-blur"
+                            className="pointer-events-auto w-full max-w-[460px] overflow-hidden rounded-2xl border-[0.5px] border-border bg-surface shadow-[var(--shadow-lg)]"
                         >
-                            <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+                            <div className="flex items-center justify-between border-b-[0.5px] border-border px-4 py-3">
                                 <div>
                                     <div className="text-sm font-semibold text-foreground">选择六亲</div>
                                 </div>
                                 <button
                                     type="button"
                                     onClick={() => setIsOpen(false)}
-                                    className="rounded-md border border-white/15 p-1 text-foreground-secondary hover:text-foreground"
+                                    aria-label="关闭"
+                                    className="rounded-lg p-1 text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground"
                                 >
                                     <X className="h-4 w-4" />
                                 </button>
@@ -159,15 +188,16 @@ export function YongShenTargetPicker({
                                                 key={item.value}
                                                 type="button"
                                                 onClick={() => toggleTarget(item.value)}
-                                                className={`w-full rounded-lg border px-3 py-2 text-left transition-colors ${
+                                                aria-pressed={checked}
+                                                className={`w-full rounded-xl px-3 py-2.5 text-left transition-colors ${
                                                     checked
-                                                        ? 'border-accent/40 bg-accent/10 text-accent'
-                                                        : 'border-white/10 bg-background/[0.02] text-foreground-secondary hover:border-white/20 hover:text-foreground'
+                                                        ? 'bg-accent-soft text-accent-strong ring-2 ring-inset ring-accent'
+                                                        : 'border-[0.5px] border-border-hover bg-surface text-foreground-secondary hover:bg-background-secondary hover:text-foreground'
                                                 }`}
                                             >
                                                 <div className="flex items-start justify-between gap-2">
                                                     <div className="flex min-w-0 items-baseline gap-2">
-                                                        <span className="text-base font-semibold">{item.value}</span>
+                                                        <span className="font-display text-base">{item.value}</span>
                                                         <span className="text-sm opacity-90">{item.label}</span>
                                                     </div>
                                                     {checked && <Check className="h-4 w-4" />}
@@ -179,7 +209,7 @@ export function YongShenTargetPicker({
                                 </div>
                             </div>
 
-                            <div className="flex items-center justify-between gap-2 border-t border-white/10 px-4 py-3">
+                            <div className="flex items-center justify-between gap-2 border-t-[0.5px] border-border px-4 py-3">
                                 <div className="text-xs text-foreground-tertiary">
                                     {renderTargetHint(selectedLabels)}
                                 </div>
@@ -187,14 +217,14 @@ export function YongShenTargetPicker({
                                     <button
                                         type="button"
                                         onClick={() => onChange([])}
-                                        className="rounded-md border border-white/15 px-3 py-1.5 text-xs text-foreground-secondary hover:text-foreground"
+                                        className="h-8 rounded-lg border-[0.5px] border-border-hover bg-surface px-3 text-xs text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground"
                                     >
                                         清空
                                     </button>
                                     <button
                                         type="button"
                                         onClick={() => setIsOpen(false)}
-                                        className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-on-accent hover:bg-accent/90"
+                                        className="h-8 rounded-lg bg-accent px-3 text-xs font-medium text-on-accent transition-colors hover:bg-accent-hover"
                                     >
                                         确认
                                     </button>

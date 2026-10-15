@@ -97,22 +97,23 @@ export function AIAnalysisLock({
     // 积分不足时的覆盖层
     if (isCreditsInsufficient) {
         return (
-            <div className="relative rounded-2xl border border-amber-500/30 overflow-hidden">
+            <div className="relative overflow-hidden rounded-2xl border-[0.5px] border-warning/40 bg-surface">
                 <div className="blur-sm pointer-events-none select-none opacity-60 min-h-[280px]">
                     {placeholder}
                 </div>
                 <div className="absolute inset-0 flex items-center justify-center bg-background/70 backdrop-blur-[2px]">
                     <div className="text-center p-6 max-w-md">
-                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-500/20 to-amber-500/10 flex items-center justify-center mx-auto mb-4">
-                            <Coins className="w-7 h-7 text-amber-500" />
+                        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-warning/10">
+                            <Coins className="h-7 w-7 text-warning" />
                         </div>
-                        <h3 className="text-lg font-bold mb-2">积分不足</h3>
+                        <h3 className="mb-2 font-display text-lg">积分不足</h3>
                         <p className="text-sm text-foreground-secondary mb-4">
                             您的积分已用完，请前往订阅页面通过签到、激活码或会员权益继续获取积分
                         </p>
                         <button
                             onClick={() => openSettingsCenter('upgrade')}
-                            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-white font-medium hover:opacity-90 transition-opacity"
+                            type="button"
+                            className="inline-flex h-11 items-center gap-2 rounded-xl bg-foreground px-6 font-medium text-background transition-opacity hover:opacity-90"
                         >
                             <Coins className="w-4 h-4" />
                             前往订阅
@@ -125,7 +126,7 @@ export function AIAnalysisLock({
 
     // 未解锁，显示模糊锁定效果
     return (
-        <div className="relative rounded-2xl border border-border overflow-hidden">
+        <div className="relative overflow-hidden rounded-2xl border-[0.5px] border-border bg-surface">
             {/* 模糊的占位内容 - 增加最小高度 */}
             <div className="blur-sm pointer-events-none select-none opacity-60 min-h-[280px]">
                 {placeholder}
@@ -134,22 +135,23 @@ export function AIAnalysisLock({
             {/* 覆盖层 */}
             <div className="absolute inset-0 flex items-center justify-center bg-background/70 backdrop-blur-[2px]">
                 <div className="text-center p-6 max-w-md">
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-accent/20 to-accent/10 flex items-center justify-center mx-auto mb-4">
-                        <Lock className="w-7 h-7 text-accent" />
+                    <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-soft">
+                        <Lock className="h-7 w-7 text-accent-strong" />
                     </div>
-                    <h3 className="text-lg font-bold mb-2">{title}</h3>
+                    <h3 className="mb-2 font-display text-lg">{title}</h3>
                     <p className="text-sm text-foreground-secondary mb-4">
                         {description}
                     </p>
 
                     {error && (
-                        <p className="text-sm text-red-500 mb-3">{error}</p>
+                        <p role="alert" className="mb-3 text-sm text-danger">{error}</p>
                     )}
 
                     <button
+                        type="button"
                         onClick={handleUnlock}
                         disabled={loading}
-                        className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-accent to-accent/80 text-white font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+                        className="inline-flex h-11 items-center gap-2 rounded-xl bg-accent px-6 font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:opacity-50"
                     >
                         {loading ? (
                             <>

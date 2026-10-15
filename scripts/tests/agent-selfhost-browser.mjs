@@ -221,12 +221,15 @@ try {
   await page.goto(`${config.APP_ORIGIN}/settings`);
   await page.waitForURL('**/settings/general');
   await page.reload();
-  await settingsPage.getByLabel('全站字号').waitFor();
-  const appearanceOption = settingsPage.getByRole('radio', { name: '浅色', exact: true });
+  // The redesign renders the font scale as a segmented radio group; its options
+  // carry the settings transitions the reduced-motion checks measure.
+  const fontScaleGroup = settingsPage.getByRole('radiogroup', { name: '全站字号', exact: true });
+  await fontScaleGroup.waitFor();
+  const animatedControl = fontScaleGroup.getByRole('radio', { checked: true });
   await page.emulateMedia({ reducedMotion: 'no-preference' });
-  assert.ok(await appearanceOption.evaluate(element => parseFloat(getComputedStyle(element).transitionDuration) >= .1), 'appearance control normally uses its visual transition');
+  assert.ok(await animatedControl.evaluate(element => parseFloat(getComputedStyle(element).transitionDuration) >= .1), 'settings controls normally use their visual transition');
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  assert.ok(await appearanceOption.evaluate(element => parseFloat(getComputedStyle(element).transitionDuration) <= .001), 'reduced motion applies to settings controls');
+  assert.ok(await animatedControl.evaluate(element => parseFloat(getComputedStyle(element).transitionDuration) <= .001), 'reduced motion applies to settings controls');
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.goto(chatBeforeSettings);
   await uiReady();

@@ -2132,6 +2132,8 @@ export async function run(existingPage, bundlePath) {
     await workspacePanel.locator('[data-workspace-view="evidence"]').waitFor();
     check('The answer evidence chip opens the numbered sources in the workspace', await results.getByRole('button', { name: /^依据 \d+/ }).innerText().then(text => text.includes('联网 2')));
     await page.evaluate(() => window.fixture.citedAnswer());
+    // The number pair is written by the parts updater; wait for React to commit it.
+    await page.waitForFunction(() => Array.isArray(window.fixture.cited));
     const [firstCite, secondCite] = await page.evaluate(() => window.fixture.cited);
     const badges = results.locator('.chat-answer .md-cite');
     await badges.first().waitFor();

@@ -27,11 +27,14 @@ export async function verifyAgentExperience({ page, context, origin, directory, 
     await openPersonalization();
     const settings = page.locator('.settings-page');
     await settings.getByRole('link', { name: '常规', exact: true }).click();
-    const scale = settings.getByLabel('全站字号');
+    // The redesign renders the font scale as a segmented radio group (小/标准/大/特大).
+    const FONT_SCALE_LABELS = { 85: '小', 100: '标准', 115: '大', 125: '特大' };
+    const scale = settings.getByRole('radiogroup', { name: '全站字号', exact: true });
+    const scaleLabel = async () => (await scale.getByRole('radio', { checked: true }).innerText()).trim();
     for (const value of [85, 100, 115, 125]) {
-      if (await scale.inputValue() !== String(value)) {
+      if (await scaleLabel() !== FONT_SCALE_LABELS[value]) {
         const saved = page.waitForResponse(response => new URL(response.url()).pathname === '/api/user/settings' && response.request().method() === 'PATCH');
-        await scale.selectOption(String(value));
+        await scale.getByRole('radio', { name: FONT_SCALE_LABELS[value], exact: true }).click();
         assert.ok((await saved).ok(), 'font scale persists');
       }
       const rootSize = await page.locator('html').evaluate(element => parseFloat(getComputedStyle(element).fontSize));
@@ -49,9 +52,9 @@ export async function verifyAgentExperience({ page, context, origin, directory, 
     await page.setViewportSize({ width: 1440, height: 1100 });
     await openPersonalization();
     await settings.getByRole('link', { name: '常规', exact: true }).click();
-    if (await scale.inputValue() !== String(originalSettings.chatPreferences.fontScale)) {
+    if (await scaleLabel() !== FONT_SCALE_LABELS[originalSettings.chatPreferences.fontScale]) {
       const restoreScale = page.waitForResponse(response => new URL(response.url()).pathname === '/api/user/settings' && response.request().method() === 'PATCH');
-      await scale.selectOption(String(originalSettings.chatPreferences.fontScale));
+      await scale.getByRole('radio', { name: FONT_SCALE_LABELS[originalSettings.chatPreferences.fontScale], exact: true }).click();
       assert.ok((await restoreScale).ok());
     }
     await page.goto(chatBeforeSettings);

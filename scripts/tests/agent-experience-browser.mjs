@@ -14,11 +14,17 @@ export async function verifyAgentExperience({ page, context, origin, directory, 
     assert.ok(response.ok(), `experience read ${route}: ${response.status()}`);
     return response.json();
   };
+  // The chat redesign moved the personalization entry into the sidebar account
+  // menu (rail avatar or expanded footer), hidden behind the account trigger.
+  const openPersonalization = async () => {
+    await page.locator('.chat-nav-footer button, .chat-nav.is-rail button[aria-label="账户与设置"]').first().click();
+    await page.getByRole('link', { name: '个性化', exact: true }).click();
+  };
   const chatBeforeSettings = page.url();
   const originalSettings = (await read('/api/user/settings')).settings;
   const originalReminders = (await read('/api/reminders')).data.subscriptions;
   try {
-    await page.getByRole('link', { name: '个性化', exact: true }).click();
+    await openPersonalization();
     const settings = page.locator('.settings-page');
     await settings.getByRole('link', { name: '常规', exact: true }).click();
     const scale = settings.getByLabel('全站字号');
@@ -41,7 +47,7 @@ export async function verifyAgentExperience({ page, context, origin, directory, 
     await page.setViewportSize({ width: 320, height: 844 });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), '320px with 125% global fonts stays within viewport');
     await page.setViewportSize({ width: 1440, height: 1100 });
-    await page.getByRole('link', { name: '个性化', exact: true }).click();
+    await openPersonalization();
     await settings.getByRole('link', { name: '常规', exact: true }).click();
     if (await scale.inputValue() !== String(originalSettings.chatPreferences.fontScale)) {
       const restoreScale = page.waitForResponse(response => new URL(response.url()).pathname === '/api/user/settings' && response.request().method() === 'PATCH');

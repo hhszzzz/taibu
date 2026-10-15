@@ -40,13 +40,20 @@ export async function verifyAgentDomain({ page, context, origin, output }) {
             };
         });
         await page.goto(`${origin}/chat`);
+        // The hero's template entry renders in Agent mode only; the previous
+        // section left the persisted mode on plain chat.
+        const agentMode=page.getByRole('radio',{name:'Agent',exact:true});
+        await agentMode.waitFor();
+        if (await agentMode.getAttribute('aria-checked')!=='true') await agentMode.click();
         const composer=page.locator('textarea').filter({visible:true}).last();
         await composer.fill('事业问题');
         await page.getByRole('button',{name:'问法模板',exact:true}).click();
         await page.getByRole('menuitem',{name,exact:true}).click();
         assert.equal(await composer.inputValue(),'模板验收：事业问题');
         assert.equal(await page.evaluate(()=>window.__speechStarts),0,'recording starts only after a user click');
-        await page.getByRole('button',{name:'语音输入',exact:true}).click();
+        // Voice input moved into the composer's add menu as a checkable item.
+        await page.getByRole('button',{name:'添加图片或文本资料',exact:true}).click();
+        await page.getByRole('menuitemcheckbox',{name:'语音输入',exact:true}).click();
         await composer.waitFor();
         await page.waitForFunction(()=>[...document.querySelectorAll('textarea')].some(input=>input.value.includes('语音验收文本')));
         assert.equal(await composer.inputValue(),'模板验收：事业问题\n语音验收文本');

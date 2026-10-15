@@ -155,6 +155,9 @@ try {
   if (!chartOnly && !collaborationOnly) {
   await uiReady();
   const chatBeforeSettings = page.url();
+  // The desktop chat header is hidden on an empty conversation, so the settings
+  // entry comes from the sidebar account menu (rail avatar or expanded footer).
+  await page.locator('.chat-nav-footer button, .chat-nav.is-rail button[aria-label="账户与设置"]').first().click();
   await page.getByRole('link', { name: '个性化', exact: true }).click();
   const settingsPage = page.locator('.settings-page');
   await settingsPage.waitFor();
@@ -228,8 +231,13 @@ try {
   await page.goto(chatBeforeSettings);
   await uiReady();
   console.log('设置页面：分类草稿、取消离开/后退/前进/刷新、直接访问、旧链接、普通账号权限与减少动画通过。');
-  const providerTrigger = page.locator('button[aria-label="自定义模型"]');
+  // The model redesign nests the custom provider entry in the model menu and hands
+  // focus back to the composer's add menu when the dialog closes.
+  const providerTrigger = page.getByRole('button', { name: /^选择模型：/ });
   await providerTrigger.click();
+  const providerModelMenu = page.getByRole('dialog', { name: '模型与分析设置', exact: true });
+  await providerModelMenu.waitFor();
+  await providerModelMenu.getByRole('button', { name: '使用自己的模型 API', exact: true }).click();
   const providerDialog = page.locator('dialog.chat-provider-dialog[open]');
   await providerDialog.waitFor();
   for (const key of ['Tab', 'Shift+Tab']) {
@@ -241,7 +249,8 @@ try {
   }
   await page.keyboard.press('Escape');
   await providerDialog.waitFor({ state: 'hidden' });
-  assert.ok(await providerTrigger.evaluate(element => element === document.activeElement), 'closing custom model settings returns trigger focus');
+  const addMenuTrigger = page.getByRole('button', { name: '添加图片或文本资料', exact: true });
+  assert.ok(await addMenuTrigger.evaluate(element => element === document.activeElement), 'closing custom model settings returns focus to the add menu');
   let composingSubmissions = 0;
   const trackComposingSubmission = request => {
     if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/agent/runs') composingSubmissions++;
@@ -436,12 +445,10 @@ try {
     .filter({ has: page.locator("svg.lucide-pencil") })
     .first()
     .click();
-  await page
-    .locator("textarea")
-    .filter({ visible: true })
-    .first()
-    .fill("Agent验收：编辑消息后跨命盘对比，在聊天中分析。");
-  await page.getByRole("button", { name: "发送", exact: true }).click();
+  // Scope the edit form: the composer's own 发送 button shares the same name.
+  const editBox = page.locator(".chat-user-edit");
+  await editBox.getByRole("textbox", { name: "编辑消息内容", exact: true }).fill("Agent验收：编辑消息后跨命盘对比，在聊天中分析。");
+  await editBox.getByRole("button", { name: "发送", exact: true }).click();
   const editedResponse = await editResponse;
   assert.equal(editedResponse.status(), 201);
   const edited = await editedResponse.json();
@@ -466,6 +473,13 @@ try {
   await questionDock.getByText('请补充出生年月日、出生时刻和性别。').waitFor();
   await questionDock.getByRole('textbox').fill('1990年1月15日9时，男。');
   await page.setViewportSize({ width: 390, height: 844 });
+  // The workspace restored open re-renders as a phone sheet that covers the dock;
+  // close it before measuring and folding the questions.
+  const workspaceDialog = page.locator('#agent-workspace-panel');
+  if (await workspaceDialog.isVisible()) {
+    await workspaceDialog.getByRole('button', { name: '关闭工作区', exact: true }).click();
+    await workspaceDialog.waitFor({ state: 'hidden' });
+  }
   const dockBounds = await questionDock.boundingBox();
   assert.ok(dockBounds && dockBounds.x >= 0 && dockBounds.x + dockBounds.width <= 390, 'the question dock fits a 390px viewport');
   await page.screenshot({ path: path.join(directory, 'agent-question-mobile-acceptance.png'), fullPage: true });
@@ -578,7 +592,7 @@ try {
   await modelMenu.waitFor({ state: 'hidden' });
   assert.ok(await modelTrigger.evaluate(element => element === document.activeElement), 'closing the model menu restores its trigger focus');
   await modelTrigger.click();
-  await modelMenu.getByRole('menuitemradio', { name: '本地离线演示', exact: true }).click();
+  await modelMenu.getByRole('menuitemradio', { name: '本地离线演示' }).click();
   await page.setViewportSize({ width: 1440, height: 1100 });
   console.log("Agent 浏览器：等待补充、刷新后继续同一任务、移动端布局通过。");
 
@@ -726,16 +740,18 @@ try {
       const element = document.querySelector('.chat-transcript-scroll, .chat-virtual-scroller');
       return element && element.scrollHeight - element.clientHeight > 900;
     });
-    const activeTitle = await page.locator('[data-conversation-row] button[aria-current="page"]').first().innerText();
+    const activeTitle = await page.locator('[data-conversation-row] [aria-current="page"]').first().innerText();
     const readingTop = await transcript.evaluate(element => {
       element.scrollTop = 200;
       element.dispatchEvent(new Event('scroll'));
       return element.scrollTop;
     });
     await page.getByRole('button', { name: '回到最新消息', exact: true }).waitFor();
-    await page.getByRole('button', { name: '新建对话', exact: true }).click();
+    // The redesigned sidebar exposes new-chat as a link (panel) or rail entry.
+    await page.locator('.chat-nav-panel a.is-new, .chat-nav.is-rail a[aria-label="新建对话"]').first().click();
     await page.locator('.chat-empty-state').waitFor();
-    await page.locator('[data-conversation-row]').filter({ hasText: activeTitle }).first().getByRole('button').first().click();
+    // The row's selectable target is its link; the first button is the actions menu.
+    await page.locator('[data-conversation-row]').filter({ hasText: activeTitle }).first().getByRole('link').first().click();
     await transcript.waitFor();
     await page.getByRole('button', { name: '回到最新消息', exact: true }).waitFor();
     await page.waitForFunction(({ expected, virtualized }) => {
@@ -778,6 +794,9 @@ try {
     `隔离验收截图：.taibu-local/${project}/${chartOnly ? 'agent-chart-*.png' : 'agent-acceptance.png、agent-mobile-acceptance.png'}；任务数=${created.length}`,
   );
 } catch (error) {
+  // Surface the real failure first: browser.close() in the finally can otherwise
+  // mask it with a pending-response rejection.
+  console.error(error instanceof Error ? error.stack : error);
   console.error(
     JSON.stringify({
       pathname: page ? new URL(page.url()).pathname : null,

@@ -25,6 +25,12 @@ export async function verifyAgentChartWorkspace({ page, newChat, send, waitForRu
   await panel.waitFor();
   const selectedTarget = current => panel.locator('[data-chart-target="' + current.targetIds[0] + '"][aria-pressed=true]');
   const readings = panel.locator('[data-overview-result="reading"]');
+  // The table cells highlight one render after the focus target: the relation
+  // highlight is derived from the parsed chart directory, not the focus alone.
+  const settledHighlights = async minimum => {
+    await panel.locator('.chart-cell-button[aria-pressed="true"]').nth(minimum - 1).waitFor({ timeout: 5000 }).catch(() => {});
+    return panel.locator('.chart-cell-button[aria-pressed=true]').count();
+  };
   // The task has ended: the workspace it opened shows the overview and has nothing left to follow.
   await readings.first().waitFor();
   assert.equal(await panel.getByRole('tab', { name: '概览', exact: true }).getAttribute('aria-selected'), 'true', 'an ended task’s workspace shows its overview');
@@ -58,7 +64,7 @@ export async function verifyAgentChartWorkspace({ page, newChat, send, waitForRu
   assert.ok((await panel.locator('.agent-board-focus').innerText()).includes(focus.caption), 'refresh rebuilds the exact native focus');
   for (const kind of Object.keys(names)) {
     await openChart(kind);
-    if (kind === 'bazi') assert.ok(await panel.locator('.chart-cell-button[aria-pressed=true]').count() >= 2, 'actual relation endpoints are highlighted');
+    if (kind === 'bazi') assert.ok(await settledHighlights(2) >= 2, 'actual relation endpoints are highlighted');
     if (kind === 'ziwei') {
       assert.equal(await panel.locator('[data-chart-selected=true]').count(), 1);
       assert.equal(await panel.locator('[data-chart-kind="ziwei"] svg line').count(), 3, 'existing three-direction links follow the chosen star palace');
@@ -98,7 +104,7 @@ export async function verifyAgentChartWorkspace({ page, newChat, send, waitForRu
   assert.equal(await credits(), before - 1, 'a chart question fills the draft without sending it');
   await openChart('bazi');
   await panel.locator('.agent-board-relations button').first().click();
-  assert.ok(await panel.locator('.chart-cell-button[aria-pressed=true]').count() >= 2);
+  assert.ok(await settledHighlights(2) >= 2);
   await page.setViewportSize({ width: 320, height: 740 });
   const timingBounds = await page.locator('.agent-message .agent-response-time').boundingBox();
   assert.ok(timingBounds && timingBounds.x >= 0 && timingBounds.x + timingBounds.width <= 320, 'native timing stays within the mobile message width');

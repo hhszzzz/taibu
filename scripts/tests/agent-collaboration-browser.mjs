@@ -42,7 +42,7 @@ export async function verifyAgentCollaboration({ page, newChat, send, waitForRun
   const trigger = page.getByRole('button', { name: /^选择模型：/ });
   await trigger.click();
   let dialog = page.getByRole('dialog', { name: '模型与分析设置', exact: true });
-  await dialog.getByRole('menuitemradio', { name: fixture.models[0].name, exact: true }).click();
+  await dialog.getByRole('menuitemradio', { name: fixture.models[0].name }).click();
   await trigger.click();
   dialog = page.getByRole('dialog', { name: '模型与分析设置', exact: true });
   await dialog.getByRole('radiogroup', { name: '推理档位', exact: true }).getByRole('radio', { name: '最高', exact: true }).click();
@@ -90,6 +90,6 @@ export async function verifyAgentCollaboration({ page, newChat, send, waitForRun
   await trigger.click();
   dialog = page.getByRole('dialog', { name: '模型与分析设置', exact: true });
   await dialog.getByLabel('启用多模型协作', { exact: true }).uncheck();
-  await dialog.getByRole('menuitemradio', { name: '本地离线演示', exact: true }).click();
+  await dialog.getByRole('menuitemradio', { name: '本地离线演示' }).click();
   console.log('多模型协作：两路真实 SDK 请求、max/xhigh、一次计费、历史恢复和 320px 菜单通过。');
 }

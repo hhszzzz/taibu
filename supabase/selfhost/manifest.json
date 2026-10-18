@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "baselineRevision": "5725dde",
-  "sourceFingerprint": "4cbd89664d4bd6d11a404ed70c2752a76e3d735262fe5d1243d16891d2d2b56a",
+  "sourceFingerprint": "6b43fed9e848f0a86f65243c37b60497a4b78d3c086fd0aa70160a7f26623121",
   "target": "empty local self-hosted application schema; NOT production parity or a migration replay",
   "bootstrapOrder": [
     "platform roles/extensions",
@@ -202,7 +202,7 @@
     },
     {
       "file": "supabase/selfhost/source-views.sql",
-      "sha256": "3ec59bffedd43530835e728dd9e9fac580ed09bbacb23e64fe460cb2775c6342"
+      "sha256": "65a5ab3f4d78c1c4c291be37e04e747072294ccc834c63a9c71795b11d14432e"
     },
     {
       "file": "src/lib/history/registry.ts",
@@ -1477,6 +1477,10 @@
           "kind": "literal-from"
         },
         {
+          "file": "src/app/api/search/route.ts",
+          "kind": "literal-from"
+        },
+        {
           "file": "src/app/api/user/charts/route.ts",
           "kind": "literal-from"
         },
@@ -1711,6 +1715,10 @@
         },
         {
           "file": "src/app/api/conversations/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/search/route.ts",
           "kind": "literal-from"
         }
       ]
@@ -2489,6 +2497,10 @@
       "status": "defined",
       "callers": [
         {
+          "file": "src/app/api/search/route.ts",
+          "kind": "literal-from"
+        },
+        {
           "file": "src/app/api/user/charts/route.ts",
           "kind": "literal-from"
         },
@@ -2605,7 +2617,7 @@
   "artifacts": [
     {
       "file": "supabase/selfhost/001-application.sql",
-      "sha256": "22ccb19e7aa68c1897d22f004a4d7442b6f1e2ef9244d0fac6d6deae0ac80781"
+      "sha256": "f5415b4e43832c081ed81606f89e798a06fb7635db26fd8439f90050694ac23a"
     },
     {
       "file": "supabase/selfhost/002-storage.sql",

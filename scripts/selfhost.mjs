@@ -320,12 +320,25 @@ const CURRENT_ENGINE_MIGRATIONS = [{
   file: 'supabase/migrations/20261010_100000_agent_current_engine_only.sql',
   sha256: '6d78410e8a10b710bc9d03a28920b6a066ea3c035e29b96d89bd72bac216fa06',
 }];
-const REVIEWED_SCHEMA_UPGRADES = [
+const REVIEWED_CURRENT_ENGINE_SCHEMA_UPGRADES = [
   ...REVIEWED_PRE_CURRENT_ENGINE_SCHEMA_UPGRADES,
   ...REVIEWED_PRE_CURRENT_ENGINE_SCHEMA_UPGRADES.filter(entry => entry.current === REASONING_EFFORT_FINGERPRINT).map(entry => ({
     previous: entry.previous, current: CURRENT_ENGINE_FINGERPRINT, files: [...entry.files, ...CURRENT_ENGINE_MIGRATIONS],
   })),
   { previous: REASONING_EFFORT_FINGERPRINT, current: CURRENT_ENGINE_FINGERPRINT, files: CURRENT_ENGINE_MIGRATIONS },
+];
+// 2026-10-17：会话列表的 Agent 派生列（视图列 has_agent_run）。已存在的本地栈据此就地补这条迁移。
+const CONVERSATION_CATEGORY_MIGRATIONS = [{
+  file: 'supabase/migrations/20261017_100000_conversation_list_agent_flag.sql',
+  sha256: '0072eda3b0ef2520cf5893b275f083b9cca43d6e42f72f7f65e011e6f7da64b7',
+}];
+const CONVERSATION_CATEGORY_FINGERPRINT = 'f4045b14c41f1384c1d3e3b2a5984a42be782e8e5fe46c4cc7a1adb6adba9008';
+const REVIEWED_SCHEMA_UPGRADES = [
+  ...REVIEWED_CURRENT_ENGINE_SCHEMA_UPGRADES,
+  ...REVIEWED_CURRENT_ENGINE_SCHEMA_UPGRADES.filter(entry => entry.current === CURRENT_ENGINE_FINGERPRINT).map(entry => ({
+    previous: entry.previous, current: CONVERSATION_CATEGORY_FINGERPRINT, files: [...entry.files, ...CONVERSATION_CATEGORY_MIGRATIONS],
+  })),
+  { previous: CURRENT_ENGINE_FINGERPRINT, current: CONVERSATION_CATEGORY_FINGERPRINT, files: CONVERSATION_CATEGORY_MIGRATIONS },
 ];
 
 export function reviewedSchemaUpgrade(fingerprint, bundle) {
@@ -381,10 +394,41 @@ async function seed(run, config) {
   }
   if (config.DEMO_ENABLED === 'true') await run.sql(`BEGIN;
 INSERT INTO public.ai_gateways(gateway_key,display_name,base_url,api_key_env_var,is_enabled) VALUES('newapi','本地离线演示','http://demo:8000/v1','NEWAPI_API_KEY',true) ON CONFLICT(gateway_key) DO UPDATE SET base_url=EXCLUDED.base_url,api_key_env_var=EXCLUDED.api_key_env_var,is_enabled=true;
-INSERT INTO public.ai_models(model_key,display_name,vendor,required_tier,usage_type,routing_mode) VALUES('taibu-demo','本地离线演示','local','free','chat','newapi') ON CONFLICT(model_key) DO NOTHING;
+INSERT INTO public.ai_models(model_key,display_name,vendor,required_tier,usage_type,routing_mode,supports_reasoning,reasoning_required_tier,is_reasoning_default,reasoning_effort_format,default_reasoning_effort,default_max_tokens,description)
+VALUES('taibu-demo','本地离线演示','local','free','chat','newapi',true,'free',true,'reasoning_effort','medium',8192,'本地演示模型：支持努力程度档位')
+ON CONFLICT(model_key) DO UPDATE SET supports_reasoning=EXCLUDED.supports_reasoning,reasoning_required_tier=EXCLUDED.reasoning_required_tier,is_reasoning_default=EXCLUDED.is_reasoning_default,reasoning_effort_format=EXCLUDED.reasoning_effort_format,default_reasoning_effort=EXCLUDED.default_reasoning_effort,default_max_tokens=EXCLUDED.default_max_tokens,description=EXCLUDED.description;
 INSERT INTO public.ai_model_gateway_bindings(model_id,gateway_id,model_id_override) SELECT m.id,g.id,'taibu-demo' FROM public.ai_models m CROSS JOIN public.ai_gateways g WHERE m.model_key='taibu-demo' AND g.gateway_key='newapi' AND NOT EXISTS(SELECT 1 FROM public.ai_model_gateway_bindings b WHERE b.model_id=m.id AND b.gateway_id=g.id);
 COMMIT;`);
   await run.sql('UPDATE local_stack.state SET seeded=true');
+}
+/**
+ * 会话类别视图补丁：分叉会话复制了 Agent 消息但没有 agent_runs 记录。
+ * 视图是 CREATE OR REPLACE，可重复执行；只在定义尚未包含消息检测时补一次。
+ */
+async function ensureConversationCategoryView(run) {
+  const applied = (await run.sql("SELECT pg_get_viewdef('public.conversations_with_archive_status'::regclass) LIKE '%jsonb_typeof%'")).trim();
+  if (applied === 't') return;
+  const sql = await readFile(path.join(ROOT, 'supabase/migrations/20261018_090000_conversation_agent_flag_includes_forks.sql'), 'utf8');
+  await run.sql(sql, '会话类别补全（分叉）');
+}
+/**
+ * 本地演示栈的模型档位测试数据：幂等 upsert，重复启动不会重复插入。
+ * 仅在 DEMO_ENABLED=true 的本地栈生效；不进入生产迁移。
+ */
+async function ensureDemoModels(run, config) {
+  if (config.DEMO_ENABLED !== 'true') return;
+  await run.sql(`BEGIN;
+INSERT INTO public.ai_models(model_key,display_name,vendor,required_tier,usage_type,routing_mode,is_enabled,sort_order,supports_reasoning,reasoning_required_tier,is_reasoning_default,reasoning_effort_format,default_reasoning_effort,default_max_tokens,description) VALUES
+ ('taibu-demo','本地离线演示','local','free','chat','newapi',true,1,true,'free',true,'reasoning_effort','medium',8192,'本地演示模型：支持努力程度档位'),
+ ('taibu-demo-effort','本地推理演示','local','free','chat','newapi',true,10,true,'free',true,'reasoning_effort','medium',8192,'测试模型：支持努力程度档位'),
+ ('taibu-demo-deep','本地深度演示','local','free','chat','newapi',true,11,true,'free',false,'reasoning_effort','high',8192,'测试模型：支持努力程度档位'),
+ ('taibu-demo-fast','本地快速演示','local','free','chat','newapi',true,12,false,'free',false,NULL,NULL,4096,'测试模型：不支持推理')
+ON CONFLICT(model_key) DO UPDATE SET display_name=EXCLUDED.display_name,is_enabled=true,sort_order=EXCLUDED.sort_order,supports_reasoning=EXCLUDED.supports_reasoning,reasoning_required_tier=EXCLUDED.reasoning_required_tier,is_reasoning_default=EXCLUDED.is_reasoning_default,reasoning_effort_format=EXCLUDED.reasoning_effort_format,default_reasoning_effort=EXCLUDED.default_reasoning_effort,default_max_tokens=EXCLUDED.default_max_tokens,description=EXCLUDED.description;
+INSERT INTO public.ai_model_gateway_bindings(model_id,gateway_id,model_id_override)
+SELECT m.id,g.id,'taibu-demo' FROM public.ai_models m CROSS JOIN public.ai_gateways g
+WHERE m.model_key IN ('taibu-demo-effort','taibu-demo-deep','taibu-demo-fast') AND g.gateway_key='newapi'
+  AND NOT EXISTS(SELECT 1 FROM public.ai_model_gateway_bindings b WHERE b.model_id=m.id AND b.gateway_id=g.id);
+COMMIT;`);
 }
 export async function withStorageMigrationPrivilege(sql, migrate) {
   try {
@@ -412,6 +456,7 @@ async function up(state, run, build = false) {
   await run.compose(['up', '-d', 'auth', 'gateway'], { phase: '身份服务与网关启动' });
   await wait(() => httpReady(state.config.APP_ORIGIN, '/auth/v1/health'), '身份服务');
   await application(run, bundle);
+  await ensureConversationCategoryView(run);
   await run.compose(['up', '-d', 'rest', 'redis'], { phase: 'REST 与 Redis 启动' });
   // Existing REST containers otherwise retain old column/RPC metadata after an upgrade.
   await refreshRestSchema(run.sql);
@@ -424,6 +469,7 @@ async function up(state, run, build = false) {
   else await withStorageMigrationPrivilege(run.sql, startStorage);
   if (!storageReady) await run.sql(`BEGIN;\n${bundle.storage}\nUPDATE local_stack.state SET storage_ready=true;\nCOMMIT;`, '文件存储策略初始化');
   await seed(run, state.config);
+  await ensureDemoModels(run, state.config);
   await run.compose(['up', '-d', ...(build ? ['--build'] : []), 'functions', 'web', 'worker', ...(state.config.DEMO_ENABLED === 'true' ? ['demo'] : [])], { timeout: 1_200_000 });
   // Reload the bind-mounted offline model after a local code update.
   if (build && state.config.DEMO_ENABLED === 'true') await run.compose(['up', '-d', '--no-deps', '--force-recreate', 'demo']);

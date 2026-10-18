@@ -1,5 +1,6 @@
 -- Reviewed view excerpts supplied for the local baseline; no source data.
 -- Original: supabase/migrations/20260329_optimize_rls_hotspots_and_view_security.sql
+--           + supabase/migrations/20261017_100000_conversation_list_agent_flag.sql (has_agent_run)
 -- Original SHA256: a10f7ca9935b086b851829d067f86dc5e483d4c24db48c6aa58a64142cdf83aa
 CREATE OR REPLACE VIEW public.conversations_with_archive_status AS
 SELECT
@@ -25,7 +26,13 @@ SELECT
         WHERE a.source_type = 'conversation'
           AND a.source_id = c.id::text
           AND a.user_id = c.user_id
-    ) AS archived_kb_ids
+    ) AS archived_kb_ids,
+    EXISTS (
+        SELECT 1
+        FROM public.agent_runs r
+        WHERE r.conversation_id = c.id
+          AND r.user_id = c.user_id
+    ) AS has_agent_run
 FROM public.conversations c;
 ALTER VIEW public.conversations_with_archive_status SET (security_invoker = on);
 

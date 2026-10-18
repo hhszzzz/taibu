@@ -1,16 +1,17 @@
 'use client';
 // 'use client'：模型菜单需要弹层、键盘导航与浏览器内的自定义模型状态
 
-import { useMemo, useEffect, useRef, useState, useId, type KeyboardEvent, type ReactNode } from 'react';
-import { Check, ChevronDown, Cpu, KeyRound, Plus, Trash2, Users } from 'lucide-react';
+import { useMemo, useEffect, useRef, useState, useId, type ReactNode } from 'react';
+import { Check, ChevronDown, ChevronRight, Cpu, KeyRound } from 'lucide-react';
 import { SoundWaveLoader } from './SoundWaveLoader';
 import { FloatingPanel } from './FloatingPanel';
 import { getVendorIcon } from '@/lib/ai/vendor-config';
 import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
 import { useAvailableModels } from '@/lib/hooks/useAvailableModels';
 import { CUSTOM_PROVIDER_CHANGED_EVENT, getCustomProvider, getCustomProviderDisplayName } from '@/lib/chat/custom-provider';
-import { AI_REASONING_EFFORTS, type AIVendor, type AIReasoningEffort } from '@/types';
-import { REASONING_EFFORT_LABELS, type ModelSettingsProps, type AgentCollaborator } from '@/lib/chat/model-settings';
+import type { AIVendor, AIReasoningEffort } from '@/types';
+import { type ModelSettingsProps, type AgentCollaborator } from '@/lib/chat/model-settings';
+import { useCollaborationPreset, writeCollaborationPreset } from '@/lib/chat/collaboration-preset';
 import type { MembershipType } from '@/lib/user/membership';
 
 interface ClientModelConfig {
@@ -18,95 +19,55 @@ interface ClientModelConfig {
     reasoningEffortFormat?: 'reasoning_object' | 'reasoning_effort' | null;
     isReasoningDefault?: boolean; allowed?: boolean; tier?: 'free' | 'plus' | 'pro' | null; blockedReason?: string | null; reasoningAllowed?: boolean;
 }
+/** 多模型协作的成员上限：0–4 个，主模型不占名额。 */
+const MAX_COLLABORATORS = 4;
 interface ModelSelectorProps extends ModelSettingsProps {
     selectedModel?: string; onModelChange?: (modelId: string) => void;
     reasoningEnabled?: boolean; onReasoningChange?: (enabled: boolean) => void;
     userId?: string | null; membershipType?: MembershipType; disabled?: boolean;
     compact?: boolean; toolbarStyle?: boolean;
-    /** Extra sections rendered after reasoning, such as the analysis style or prompt statistics. */
+    /** Extra menu rows rendered after the root items, such as custom-provider shortcuts. */
     extra?: ReactNode;
     /** Offers the bring-your-own-model dialog from the menu. */
     onCustomProvider?: () => void;
 }
 
-type ReasoningChoice = 'off' | 'on' | AIReasoningEffort;
-const TIER_LABELS = { free: '免费', plus: 'Plus', pro: 'Pro' } as const;
+/** claude 努力程度档位（实测四档 + 超高/最高扩展）：低 / 中等 / 高 / 超高 / 最高。 */
+const EFFORT_OPTIONS: Array<{ value: AIReasoningEffort; label: string; badge?: string; tone?: 'warning' }> = [
+    { value: 'low', label: '低' },
+    { value: 'medium', label: '中等', badge: '推荐' },
+    { value: 'high', label: '高' },
+    { value: 'xhigh', label: '超高' },
+    { value: 'max', label: '最高', badge: '3.5× 或更多用量', tone: 'warning' },
+];
 
-function tierLabel(model: ClientModelConfig): string {
-    if (model.allowed === false) return `${model.blockedReason ?? '会员'} 会员可用`;
-    return model.tier ? TIER_LABELS[model.tier] : '';
+function effortLabel(effort: AIReasoningEffort | null | undefined, enabled: boolean): string {
+    if (!enabled) return '关';
+    if (!effort) return '默认';
+    return EFFORT_OPTIONS.find(option => option.value === (effort === 'minimal' ? 'low' : effort))?.label ?? '默认';
 }
 
-/** What the reasoning setting reads as next to the model name, e.g. 推理 高. */
+/** What the reasoning setting reads as next to the model name, e.g. 高（claude 实测只显示档位，不加「推理」前缀）. */
 function reasoningSummary(model: ClientModelConfig | undefined, enabled: boolean, effort: AIReasoningEffort | null | undefined, levels: boolean): string | null {
     if (!model?.supportsReasoning || model.reasoningAllowed === false) return null;
-    if (!enabled) return '推理 关';
-    if (!levels || !model.reasoningEffortFormat) return '推理 开';
-    return effort ? `推理 ${REASONING_EFFORT_LABELS[effort]}` : '推理 默认';
-}
-
-/** Moves focus between enabled buttons of a composite widget with the arrow, Home and End keys. */
-function moveFocus(event: KeyboardEvent<HTMLElement>, keys: string[], select = false) {
-    if (![...keys, 'Home', 'End'].includes(event.key) || !(event.target instanceof HTMLButtonElement)) return;
-    event.preventDefault();
-    const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')];
-    const index = items.indexOf(event.target);
-    const forward = event.key === keys[0] || event.key === keys[2];
-    const next = items[event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (forward ? 1 : -1) + items.length) % items.length];
-    next?.focus();
-    if (select) next?.click();
-}
-
-/** Segmented reasoning control: off, then the model's effort levels or a plain on switch. */
-function ReasoningSegments({ model, reasoning, effort, levels, disabled, onChange }: {
-    model: ClientModelConfig; reasoning: boolean; effort?: AIReasoningEffort | null; levels: boolean; disabled?: boolean;
-    onChange: (enabled: boolean, effort: AIReasoningEffort | null) => void;
-}) {
-    if (!model.supportsReasoning) return <p className="chat-model-note">此模型不支持推理。</p>;
-    if (model.reasoningAllowed === false) return <p className="chat-model-note">当前会员不可使用推理。</p>;
-    const effortSupported = levels && !!model.reasoningEffortFormat;
-    const options: Array<{ value: ReasoningChoice; label: string }> = [
-        ...(model.isReasoningDefault ? [] : [{ value: 'off' as const, label: '关闭' }]),
-        ...(effortSupported ? AI_REASONING_EFFORTS.map(level => ({ value: level, label: REASONING_EFFORT_LABELS[level] })) : [{ value: 'on' as const, label: '开启' }]),
-    ];
-    if (options.length < 2) return <p className="chat-model-note">此模型始终开启推理。</p>;
-    const current: ReasoningChoice | null = !reasoning ? 'off' : effortSupported ? effort ?? null : 'on';
-    const focusable = options.some(option => option.value === current) ? current : options[0].value;
-    return <div role="radiogroup" aria-label="推理档位" className="chat-model-segments" style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
-        onKeyDown={event => moveFocus(event, ['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp'], true)}>
-        {options.map(option => <button key={option.value} type="button" role="radio" aria-checked={current === option.value} disabled={disabled}
-            tabIndex={option.value === focusable ? 0 : -1}
-            onClick={() => onChange(option.value !== 'off', option.value === 'off' || option.value === 'on' ? null : option.value)}>{option.label}</button>)}
-    </div>;
-}
-
-/** Compact select for collaborator reasoning, where a full segment row would not fit. */
-function ReasoningSelect({ model, reasoning, effort, onChange, label, disabled }: {
-    model: ClientModelConfig; reasoning: boolean; effort?: AIReasoningEffort | null;
-    onChange: (enabled: boolean, effort: AIReasoningEffort | null) => void; label: string; disabled?: boolean;
-}) {
-    const allowed = model.supportsReasoning && (model.reasoningAllowed ?? true);
-    const effortSupported = !!model.reasoningEffortFormat;
-    return <label className="chat-model-setting"><span>推理档位</span>
-        <select aria-label={label} disabled={disabled || !allowed} value={allowed && reasoning ? (effortSupported ? effort : null) ?? 'default' : 'off'}
-            onChange={event => onChange(event.target.value !== 'off', event.target.value === 'off' || event.target.value === 'default' ? null : event.target.value as AIReasoningEffort)}>
-            {!model.isReasoningDefault && <option value="off">关闭</option>}
-            {!allowed && model.isReasoningDefault && <option value="off">不可用</option>}
-            <option value="default">{effortSupported ? '模型默认' : '开启'}</option>
-            {effortSupported && AI_REASONING_EFFORTS.map(level => <option key={level} value={level}>{REASONING_EFFORT_LABELS[level]}</option>)}
-        </select>
-    </label>;
+    if (!enabled) return '关';
+    if (!levels || !model.reasoningEffortFormat) return '开';
+    return effortLabel(effort, enabled);
 }
 
 export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange, reasoningEnabled = false, onReasoningChange,
     reasoningEffort, onReasoningEffortChange, collaborators = [], onCollaboratorsChange, extra, onCustomProvider,
     userId, membershipType = 'free', disabled = false, compact = false, toolbarStyle = false }: ModelSelectorProps) {
     const [open, setOpen] = useState(false);
-    const [editing, setEditing] = useState<string | null>(null);
+    const [effortOpen, setEffortOpen] = useState(false);
+    const [collabOpen, setCollabOpen] = useState(false);
     const anchorRef = useRef<HTMLButtonElement>(null);
+    const effortRef = useRef<HTMLButtonElement>(null);
+    const collabRef = useRef<HTMLButtonElement>(null);
     const menuId = useId();
     const query = useAvailableModels(userId ?? null, { enabled: !!onModelChange, membershipType });
     const models = useMemo(() => (query.data ?? []) as ClientModelConfig[], [query.data]);
+    const collaborationPreset = useCollaborationPreset(userId ?? null);
     const [custom, setCustom] = useState<ReturnType<typeof getCustomProvider>>(null);
     useEffect(() => {
         const sync = () => setCustom(getCustomProvider()); sync();
@@ -128,96 +89,135 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
             if (reasoningEffort) onReasoningEffortChange?.(null);
         } else if (current.isReasoningDefault && !reasoningEnabled) onReasoningChange(true);
     }, [current, reasoningAllowed, reasoningEnabled, reasoningEffort, onReasoningChange, onReasoningEffortChange]);
+    // 主模型只负责汇总，不作为协作成员：切换主模型时把旧主模型从成员里剔除。
+    const subCollaborators = useMemo(() => collaborators.filter(member => member.model !== current?.id), [collaborators, current?.id]);
+    useEffect(() => {
+        if (!current || collaborators.length === subCollaborators.length) return;
+        onCollaboratorsChange?.(subCollaborators);
+    }, [current, collaborators, subCollaborators, onCollaboratorsChange]);
     if (!onModelChange && !onReasoningChange) return null;
     if (custom && !toolbarStyle) return <div className="flex items-center gap-2 rounded-lg border border-border px-2 py-1.5 text-sm text-foreground-secondary"><Cpu size={16} /><span>{getCustomProviderDisplayName(custom) || custom.modelId}</span></div>;
     const locked = disabled || query.isLoading || !current;
     const available = models.filter(model => model.allowed !== false);
-    const modelName = (id: string) => models.find(model => model.id === id)?.name ?? '模型已不可用';
-    const update = (index: number, change: Partial<AgentCollaborator>) => onCollaboratorsChange?.(collaborators.map((member, position) => position === index ? { ...member, ...change } : member));
-    const member = (index: number): AgentCollaborator => ({ id: crypto.randomUUID(), name: index === 0 ? '专项分析' : index === 1 ? '独立复核' : `协作 ${index + 1}`,
-        model: available[index % available.length]?.id ?? selectedModel, focus: index === 1 ? '独立核对依据、分歧和不确定性' : '',
-        reasoning: !!available[index % available.length]?.isReasoningDefault && available[index % available.length]?.reasoningAllowed !== false, reasoningEffort: null });
     const summary = reasoningSummary(current, reasoningEnabled, reasoningEffort, !!onReasoningEffortChange);
-    const hint = collaborators.length ? `+ 协作 ${collaborators.length} 人` : summary;
-    const editingIndex = collaborators.findIndex(item => item.id === editing);
-    const editingMember = editingIndex >= 0 ? collaborators[editingIndex] : undefined;
-    const editingModel = editingMember && models.find(model => model.id === editingMember.model);
-    const label = `选择模型：${current?.name ?? '暂无可用模型'}${toolbarStyle && hint ? ` · ${hint}` : ''}`;
+    const label = `选择模型：${current?.name ?? '暂无可用模型'}${toolbarStyle && summary ? ` · ${summary}` : ''}`;
+    const close = () => { setOpen(false); setEffortOpen(false); setCollabOpen(false); };
+    const reasoningSupported = !!current?.supportsReasoning && current.reasoningAllowed !== false;
+    const effortSupported = reasoningSupported && !!current.reasoningEffortFormat && !!onReasoningEffortChange;
+    const effectiveEffort = reasoningEffort === 'minimal' ? 'low' : reasoningEffort;
+    const collaborationEnabled = subCollaborators.length > 0;
+    // 协作成员 0–4 个：满员后未选中的模型不可再加入（主模型不占名额）。
+    const collaborationFull = subCollaborators.length >= MAX_COLLABORATORS;
+    const toggleCollaborator = (model: ClientModelConfig) => {
+        if (!onCollaboratorsChange) return;
+        const existing = collaborators.find(member => member.model === model.id);
+        if (!existing && collaborationFull) return;
+        const next = existing
+            ? collaborators.filter(member => member.model !== model.id)
+            : [...collaborators, {
+                id: crypto.randomUUID(),
+                name: model.name,
+                model: model.id,
+                focus: '',
+                reasoning: !!model.isReasoningDefault && model.reasoningAllowed !== false,
+                reasoningEffort: null,
+            } satisfies AgentCollaborator];
+        onCollaboratorsChange(next);
+        // 菜单开关与设置页共用同一份预设：勾选即开，全部取消即关。
+        if (userId) writeCollaborationPreset(userId, { ...collaborationPreset, enabled: next.length > 0, members: next });
+    };
+    const chooseEffort = (effort: AIReasoningEffort | null) => {
+        onReasoningChange?.(true);
+        onReasoningEffortChange?.(effort);
+        close();
+    };
     return <div className={`flex items-center ${toolbarStyle ? 'chat-model-selector' : ''}`}>
         {toolbarStyle ? <button ref={anchorRef} type="button" onClick={() => setOpen(value => !value)} disabled={locked} className="chat-model-trigger"
             aria-label={label} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? menuId : undefined}>
-            {query.isLoading ? <SoundWaveLoader variant="inline" /> : collaborators.length ? <Users size={16} aria-hidden="true" /> : null}
+            {query.isLoading ? <SoundWaveLoader variant="inline" /> : null}
             <span className="chat-model-name">{current?.name ?? (query.isLoading ? '正在加载模型' : '暂无可用模型')}</span>
-            {hint && <span className="chat-model-hint">{hint}</span>}
+            {summary && <span className="chat-model-hint">{summary}</span>}
             <ChevronDown size={14} aria-hidden="true" />
         </button> : <button ref={anchorRef} type="button" onClick={() => setOpen(value => !value)} disabled={locked}
             className={`chat-model-picker flex items-center gap-1.5 rounded-xl px-2 transition-colors ${compact ? 'py-1 text-xs' : 'h-9 text-sm'} ${locked ? 'cursor-not-allowed opacity-50' : 'text-foreground-secondary hover:bg-background-secondary hover:text-foreground'}`}
             aria-label={label} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? menuId : undefined}>
             {query.isLoading ? <SoundWaveLoader variant="inline" /> : current ? getVendorIcon(current.vendor) : <Cpu size={16} />}
             <span className={`chat-model-name truncate ${compact ? 'max-w-[104px]' : 'max-w-[125px]'}`}>{current?.name ?? '暂无可用模型'}</span>
-            {!!collaborators.length && <Users size={14} aria-label={`${collaborators.length} 个协作 Agent`} />}
             <ChevronDown size={16} className={open ? 'rotate-180' : undefined} />
         </button>}
-        <FloatingPanel open={open && !locked} anchorRef={anchorRef} onClose={() => setOpen(false)} id={menuId}
-            role="dialog" label="模型与分析设置" side="top" align={toolbarStyle ? 'end' : 'start'} className="chat-model-menu">
-            <div className="chat-model-options" role="menu" aria-label="选择模型" onKeyDown={event => moveFocus(event, ['ArrowDown', 'ArrowUp'])}>
+        <FloatingPanel open={open && !locked} anchorRef={anchorRef} onClose={close} id={menuId}
+            role="dialog" label="模型与分析设置" side="top" align={toolbarStyle ? 'end' : 'start'} className="chat-model-menu" arrowNavigation>
+            <div className="chat-model-options" role="menu" aria-label="选择模型">
                 {models.map(model => <button key={model.id} type="button" role="menuitemradio" aria-checked={selectedModel === model.id}
-                    disabled={model.allowed === false} onClick={() => { onModelChange?.(model.id); anchorRef.current?.focus(); setOpen(false); }}>
+                    disabled={model.allowed === false} onClick={() => { onModelChange?.(model.id); anchorRef.current?.focus(); close(); }}>
                     <span className="chat-model-option-name">{model.name}</span>
-                    <span className="chat-model-option-tier">{tierLabel(model)}</span>
                     {selectedModel === model.id && <Check size={14} aria-hidden="true" />}
                 </button>)}
                 {!models.length && !query.isLoading && <p className="chat-model-note">暂无可用模型。</p>}
             </div>
-            {current && onReasoningChange && <>
-                <div className="chat-model-separator" aria-hidden="true" />
-                <div className="chat-model-label">推理档位</div>
-                <ReasoningSegments model={current} reasoning={reasoningEnabled} effort={reasoningEffort} levels={!!onReasoningEffortChange} disabled={disabled}
-                    onChange={(enabled, effort) => { onReasoningChange(enabled); onReasoningEffortChange?.(effort); }} />
-            </>}
+            {reasoningSupported && <div className="chat-model-separator" aria-hidden="true" />}
+            {reasoningSupported && (effortSupported
+                ? <button ref={effortRef} type="button" role="menuitem" className="chat-model-action chat-model-menu-row" aria-haspopup="menu" aria-expanded={effortOpen}
+                    onClick={() => setEffortOpen(value => !value)}>
+                    <span>努力程度</span><span className="chat-model-menu-value">{effortLabel(reasoningEffort, reasoningEnabled)}</span><ChevronRight size={14} aria-hidden="true" />
+                </button>
+                : <button type="button" role="menuitemcheckbox" aria-checked={reasoningEnabled} className="chat-model-action chat-model-menu-row" onClick={() => onReasoningChange?.(!reasoningEnabled)}>
+                    <span>推理</span>{reasoningEnabled && <Check size={14} aria-hidden="true" />}
+                </button>)}
+            {!reasoningSupported && onReasoningEffortChange && <button type="button" role="menuitem" className="chat-model-action chat-model-menu-row" disabled>
+                <span>努力程度</span><span className="chat-model-menu-value">不支持</span>
+            </button>}
+            {onCollaboratorsChange && <button ref={collabRef} type="button" role="menuitem" className="chat-model-action chat-model-menu-row"
+                aria-haspopup="menu" aria-expanded={collabOpen} disabled={disabled || !available.length}
+                onClick={() => setCollabOpen(value => !value)}>
+                <span>多模型协作</span>{collaborationEnabled && <span className="chat-model-menu-value">{subCollaborators.length}</span>}<ChevronRight size={14} aria-hidden="true" />
+            </button>}
             {extra}
-            {onCollaboratorsChange && <>
-                <div className="chat-model-separator" aria-hidden="true" />
-                <label className="chat-model-switch">
-                    <span>多模型协作<small>2–4 名成员，各用独立模型与分工</small></span>
-                    <input type="checkbox" aria-label="启用多模型协作" checked={!!collaborators.length} disabled={disabled || !available.length}
-                        onChange={event => {
-                            const members = event.target.checked ? [member(0), member(1)] : [];
-                            setEditing(members[0]?.id ?? null);
-                            onCollaboratorsChange(members);
-                        }} />
-                </label>
-                {!!collaborators.length && <div className="chat-model-members" role="group" aria-label="协作成员">
-                    {collaborators.map(item => <button key={item.id} type="button" aria-pressed={editing === item.id} onClick={() => setEditing(value => value === item.id ? null : item.id)}>
-                        {item.name || '未命名成员'} · {modelName(item.model)}
-                    </button>)}
-                    <button type="button" disabled={disabled || collaborators.length >= 4} onClick={() => {
-                        const next = member(collaborators.length);
-                        setEditing(next.id);
-                        onCollaboratorsChange([...collaborators, next]);
-                    }}><Plus size={12} aria-hidden="true" />添加成员</button>
-                </div>}
-                {editingMember && <fieldset className="chat-collaborator">
-                    <legend>Agent {editingIndex + 1}</legend>
-                    <div className="chat-collaborator-heading"><input aria-label={`Agent ${editingIndex + 1} 名称`} maxLength={60} value={editingMember.name} disabled={disabled} onChange={event => update(editingIndex, { name: event.target.value })} />
-                        <button type="button" aria-label={`移除 Agent ${editingIndex + 1}`} disabled={disabled} onClick={() => {
-                            setEditing(null);
-                            onCollaboratorsChange(collaborators.length === 2 ? [] : collaborators.filter((_, position) => position !== editingIndex));
-                        }}><Trash2 size={14} /></button></div>
-                    <label className="chat-model-setting"><span>模型</span><select aria-label={`Agent ${editingIndex + 1} 模型`} value={editingMember.model} disabled={disabled} onChange={event => {
-                        const next = models.find(model => model.id === event.target.value);
-                        update(editingIndex, { model: event.target.value, reasoning: !!next?.isReasoningDefault && next.reasoningAllowed !== false, reasoningEffort: null });
-                    }}>{!editingModel && <option value={editingMember.model}>模型已不可用</option>}{models.map(model => <option key={model.id} value={model.id} disabled={model.allowed === false}>{model.name}{model.allowed === false ? '（会员限制）' : ''}</option>)}</select></label>
-                    {editingModel && <ReasoningSelect model={editingModel} reasoning={editingMember.reasoning} effort={editingMember.reasoningEffort} disabled={disabled} label={`Agent ${editingIndex + 1} 推理档位`} onChange={(reasoning, reasoningEffort) => update(editingIndex, { reasoning, reasoningEffort })} />}
-                    <textarea aria-label={`Agent ${editingIndex + 1} 分工`} placeholder="分析角度或复核重点" rows={2} maxLength={1200} disabled={disabled} value={editingMember.focus} onChange={event => update(editingIndex, { focus: event.target.value })} />
-                </fieldset>}
-                {!!collaborators.length && <p className="chat-model-note">主模型汇总各成员的分析，整项任务计一次费用。设置用于下一项任务。</p>}
-            </>}
             {onCustomProvider && <>
                 <div className="chat-model-separator" aria-hidden="true" />
-                <button type="button" className="chat-model-action" onClick={() => { setOpen(false); onCustomProvider(); }}><KeyRound size={15} aria-hidden="true" />使用自己的模型 API</button>
+                <button type="button" className="chat-model-action" onClick={() => { close(); onCustomProvider(); }}><KeyRound size={15} aria-hidden="true" />使用自己的模型 API</button>
             </>}
             {query.error && <p className="chat-model-note" role="alert">{query.error instanceof Error ? query.error.message : '模型列表加载失败'}</p>}
         </FloatingPanel>
+        {/* 努力程度 = 模型菜单右侧的二级浮层（claude 同构），不替换主菜单内容。 */}
+        {effortSupported && <FloatingPanel open={effortOpen && open && !locked} anchorRef={effortRef} onClose={() => setEffortOpen(false)}
+            label="努力程度" side="right-start" className="chat-model-menu chat-effort-menu" arrowNavigation>
+            <p className="chat-model-note chat-model-effort-note">投入程度越高，回复越详尽，但耗时越长，且会更快消耗您的使用限额。</p>
+            <div>
+                {EFFORT_OPTIONS.map(option => <button key={option.value} type="button" role="menuitemradio" aria-checked={reasoningEnabled && effectiveEffort === option.value}
+                    className="chat-model-action chat-model-menu-row" onClick={() => chooseEffort(option.value)}>
+                    <span>{option.label}{option.badge && <span className="chat-model-badge" data-tone={option.tone} aria-hidden="true">{option.badge}</span>}</span>{reasoningEnabled && effectiveEffort === option.value && <Check size={14} aria-hidden="true" />}
+                </button>)}
+                <button type="button" role="menuitemradio" aria-checked={reasoningEnabled && !reasoningEffort}
+                    className="chat-model-action chat-model-menu-row" onClick={() => chooseEffort(null)}>
+                    <span>模型默认</span>{reasoningEnabled && !reasoningEffort && <Check size={14} aria-hidden="true" />}
+                </button>
+                {!current?.isReasoningDefault && <button type="button" role="menuitemradio" aria-checked={!reasoningEnabled}
+                    className="chat-model-action chat-model-menu-row" onClick={() => { onReasoningChange?.(false); close(); }}>
+                    <span>关闭推理</span>{!reasoningEnabled && <Check size={14} aria-hidden="true" />}
+                </button>}
+            </div>
+        </FloatingPanel>}
+        {/* 多模型协作 = 二级浮层：勾选参与协作的模型，不因点击而关闭主菜单。 */}
+        {onCollaboratorsChange && <FloatingPanel open={collabOpen && open && !locked} anchorRef={collabRef} onClose={() => setCollabOpen(false)}
+            label="多模型协作" side="right-start" className="chat-model-menu chat-collab-menu" arrowNavigation>
+            <p className="chat-collab-note">子模型可在个性化设置努力程度</p>
+            <div className="chat-collab-list" role="group" aria-label="协作成员">
+                {available.filter(model => model.id !== current?.id).map(model => {
+                    const checked = collaborators.some(member => member.model === model.id);
+                    // 右侧 = 个性化里为该模型注册的名称（如「专项分析」），未注册时不显示。
+                    const registered = collaborationPreset.members.find(member => member.model === model.id)?.name ?? '';
+                    const full = collaborationFull && !checked;
+                    return <button key={model.id} type="button" role="menuitemcheckbox" aria-checked={checked}
+                        aria-disabled={full || undefined} disabled={full}
+                        className="chat-model-action chat-collab-row" onClick={() => toggleCollaborator(model)}>
+                        <span className="chat-collab-name">{model.name}</span>
+                        {registered && <span className="chat-collab-registered" aria-hidden="true">{registered}</span>}
+                        <span className="chat-model-check" aria-hidden="true">{checked ? <Check size={14} strokeWidth={2.6} /> : null}</span>
+                    </button>;
+                })}
+            </div>
+            {subCollaborators.length > 0 && <p className="chat-collab-foot">已选 {subCollaborators.length} 个协作模型</p>}
+        </FloatingPanel>}
     </div>;
 }

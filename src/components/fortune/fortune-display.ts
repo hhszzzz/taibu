@@ -31,5 +31,5 @@ export function getDailyHref(year: number, month: number, day: number): string {
 }
 
 /** 页面通用卡片外观。 */
-export const FORTUNE_CARD_CLASS = 'rounded-2xl border-[0.5px] border-border bg-surface';
-export const FORTUNE_SECONDARY_BUTTON_CLASS = 'inline-flex items-center justify-center gap-1.5 rounded-[10px] border-[0.5px] border-border-hover bg-surface text-sm text-foreground transition-colors hover:bg-background-secondary';
+export const FORTUNE_CARD_CLASS = 'rounded-xl border-[0.5px] border-border bg-surface';
+export const FORTUNE_SECONDARY_BUTTON_CLASS = 'inline-flex items-center justify-center gap-1.5 rounded-md border-[0.5px] border-border-hover bg-surface text-sm text-foreground transition-colors hover:bg-background-secondary';

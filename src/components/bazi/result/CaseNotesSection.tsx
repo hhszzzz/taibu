@@ -447,7 +447,7 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
                 <button
                     onClick={handleSave}
                     disabled={saving}
-                    className="flex h-9 items-center gap-1.5 rounded-[10px] bg-accent px-3.5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:opacity-50"
+                    className="flex h-9 items-center gap-1.5 rounded-xl bg-accent px-3.5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:opacity-50"
                 >
                     {saving ? <SoundWaveLoader variant="inline" /> : <Save className="w-3.5 h-3.5" />}
                     保存

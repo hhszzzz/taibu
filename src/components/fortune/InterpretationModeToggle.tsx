@@ -54,7 +54,7 @@ export function InterpretationModeToggle({
 
     if (compact) {
         return (
-            <div role="group" aria-label="解读模式" className="flex items-center gap-0.5 rounded-[10px] bg-background-secondary p-1">
+            <div role="group" aria-label="解读模式" className="flex items-center gap-0.5 rounded-xl bg-background-secondary p-1">
                 {modes.map((m) => {
                     const config = MODE_CONFIG[m];
                     const isActive = mode === m;

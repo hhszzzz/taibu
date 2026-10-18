@@ -16,8 +16,9 @@ import { getAgentChart, getAgentDataResults, getAgentMethod, getAgentAttachmentR
 import { CHART_SOURCE_KINDS, getAgentChartReference, getChartFocus, parseChartReference } from './chart-interaction';
 import { getAgentEvidence, type AgentEvidence } from './evidence';
 
-export type AgentWorkspaceSection = 'results' | 'process';
-export const AGENT_WORKSPACE_SECTIONS: readonly AgentWorkspaceSection[] = ['results', 'process'];
+export type AgentWorkspaceSection = 'results';
+/** 工作区只有「概览」：任务执行过程在聊天转录里（claude TurnStatus），不再占一个标签。 */
+export const AGENT_WORKSPACE_SECTIONS: readonly AgentWorkspaceSection[] = ['results'];
 
 export type AgentWorkspaceView =
   | 'chart' | 'saved' | 'calculation' | 'evidence' | 'data' | 'record' | 'profile' | 'attachment'
@@ -140,7 +141,7 @@ export function buildAgentWorkspace({ parts, artifacts, attachmentIds }: { parts
         }
         break;
       case 'plan':
-        locations.set(tool.id, 'process');
+        // 任务清单已经以进度条形式显示在聊天里，不单独开工作区标签。
         break;
       case 'artifacts':
         locations.set(tool.id, 'results');
@@ -202,12 +203,11 @@ export function isAgentRunWorking(status: AgentRunStatus | null): boolean {
 }
 
 /**
- * Fixed sections before the resource tabs, given the latest task's status (null
- * without a task): 过程 whenever there is a task, 概览 once nothing runs.
+ * Fixed sections before the resource tabs: 概览 is the only one; the task's
+ * execution process lives in the chat transcript (claude TurnStatus).
  */
-export function getAgentWorkspaceSections(status: AgentRunStatus | null): AgentWorkspaceSection[] {
-  if (status === null) return ['results'];
-  return isAgentRunTerminal(status) ? ['results', 'process'] : ['process'];
+export function getAgentWorkspaceSections(): AgentWorkspaceSection[] {
+  return ['results'];
 }
 
 /**
@@ -218,7 +218,7 @@ export function getAgentWorkspaceSections(status: AgentRunStatus | null): AgentW
 export function getAgentWorkspaceLocation(model: AgentWorkspaceModel, { selected, followModel, status }: {
   selected: string | null; followModel: boolean; status: AgentRunStatus | null;
 }): string {
-  const sections = getAgentWorkspaceSections(status);
+  const sections = getAgentWorkspaceSections();
   const ended = status === null || isAgentRunTerminal(status);
   const requested = !followModel ? selected : ended ? 'results' : getAgentWorkspaceFollowTarget(model) ?? selected;
   const location = requested ? resolveAgentWorkspaceLocation(model, requested) : null;

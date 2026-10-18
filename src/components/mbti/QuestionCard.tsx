@@ -55,7 +55,7 @@ export function QuestionCard({
     return (
         <section
             aria-labelledby={titleId}
-            className={`flex flex-col gap-3.5 rounded-2xl border-[0.5px] border-border bg-surface p-4 text-foreground transition-shadow duration-150 lg:gap-5 lg:rounded-[18px] lg:px-7 lg:py-[26px] ${isCurrent ? 'ring-[1.5px] ring-inset ring-accent lg:border lg:border-accent/50 lg:ring-0' : ''}`}
+            className={`flex flex-col gap-3.5 rounded-2xl border-[0.5px] border-border bg-surface p-4 text-foreground transition-shadow duration-150 lg:gap-5 lg:rounded-2xl lg:px-7 lg:py-[26px] ${isCurrent ? 'ring-[1.5px] ring-inset ring-accent lg:border lg:border-accent/50 lg:ring-0' : ''}`}
         >
             <h2 id={titleId} className="font-display text-[1.0625rem] font-normal leading-normal lg:text-xl lg:leading-[1.4]">
                 {questionNumber}. {question.question}

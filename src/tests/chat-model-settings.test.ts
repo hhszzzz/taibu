@@ -23,7 +23,10 @@ function database(id: string, owner: string) {
 
 test('model settings validate the whole bounded team and preserve explicit reasoning levels', () => {
   assert.deepEqual(parseNextTaskConfiguration(configuration), configuration);
-  for (const input of [null, [collaborators[0]], [collaborators[0], collaborators[0]], [...collaborators, ...collaborators, { ...collaborators[0], id: 'fifth' }], [{ ...collaborators[0], focus: 'x'.repeat(1201) }, collaborators[1]]]) assert.throws(() => parseAgentCollaborators(input));
+  // 协作成员 0–4 个：空团队与单成员都合法，重复、超员与超长分工不合法。
+  assert.deepEqual(parseAgentCollaborators([]), []);
+  assert.deepEqual(parseAgentCollaborators([collaborators[0]]), [collaborators[0]]);
+  for (const input of [null, [collaborators[0], collaborators[0]], [...collaborators, ...collaborators, { ...collaborators[0], id: 'fifth' }], [{ ...collaborators[0], focus: 'x'.repeat(1201) }, collaborators[1]]]) assert.throws(() => parseAgentCollaborators(input));
   for (const effort of ['', 'unknown', 0]) assert.throws(() => parseNextTaskConfiguration({ ...configuration, reasoningEffort: effort }));
 });
 
@@ -46,7 +49,7 @@ test('invalid or unauthenticated conversation model settings never write', async
   const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
   t.mock.method(api, 'requireUserContext', async () => createMockAuthContext(client, randomUUID()));
   const request = (body: unknown) => new NextRequest('http://localhost/configuration', { method: 'PATCH', body: JSON.stringify(body) });
-  assert.equal((await PATCH(request({ ...configuration, collaborators: [collaborators[0]] }), { params: Promise.resolve({ id }) })).status, 400);
+  assert.equal((await PATCH(request({ ...configuration, collaborators: [...collaborators, ...collaborators, { ...collaborators[0], id: 'fifth' }] }), { params: Promise.resolve({ id }) })).status, 400);
   t.mock.method(api, 'requireUserContext', async () => ({ error: { message: '登录后使用', status: 401 } }));
   assert.equal((await PATCH(request(configuration), { params: Promise.resolve({ id }) })).status, 401);
   assert.equal(updates.length, 0);

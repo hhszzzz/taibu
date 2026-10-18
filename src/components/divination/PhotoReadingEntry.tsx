@@ -30,9 +30,9 @@ const KIND_TABS: ReadonlyArray<{ kind: PhotoReadingKind; label: string; href: st
 ];
 
 const CARD_CLASS = 'rounded-2xl border-[0.5px] border-border bg-surface';
-const OUTLINE_BUTTON_CLASS = 'inline-flex h-11 items-center justify-center gap-1.5 rounded-[10px] border-[0.5px] border-border-hover bg-surface px-4 text-sm text-foreground transition-colors hover:bg-background-secondary';
+const OUTLINE_BUTTON_CLASS = 'inline-flex h-11 items-center justify-center gap-1.5 rounded-xl border-[0.5px] border-border-hover bg-surface px-4 text-sm text-foreground transition-colors hover:bg-background-secondary';
 /** 选项控件：移动端为整行表单字段，桌面端收成设计稿「视觉模型」行右侧的小胶囊。 */
-const OPTION_SELECT_CLASS = 'h-11 w-full cursor-pointer appearance-none rounded-[10px] border-[0.5px] border-border-hover bg-surface pl-3 pr-9 text-[0.9375rem] text-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15 lg:h-8 lg:w-auto lg:rounded-lg lg:border-0 lg:bg-background-secondary lg:pl-2.5 lg:pr-7 lg:text-[0.8125rem]';
+const OPTION_SELECT_CLASS = 'h-11 w-full cursor-pointer appearance-none rounded-xl border-[0.5px] border-border-hover bg-surface pl-3 pr-9 text-[0.9375rem] text-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15 lg:h-8 lg:w-auto lg:rounded-lg lg:border-0 lg:bg-background-secondary lg:pl-2.5 lg:pr-7 lg:text-[0.8125rem]';
 
 export interface PhotoReadingCopy {
     title: string;
@@ -89,7 +89,7 @@ export function PhotoOptionSegmented<T extends string>({ options, value, onChang
     onChange: (value: T) => void;
 }) {
     return (
-        <div className="grid h-11 auto-cols-fr grid-flow-col gap-1 rounded-[10px] bg-background-secondary p-1 lg:h-8 lg:rounded-lg lg:p-0.5">
+        <div className="grid h-11 auto-cols-fr grid-flow-col gap-1 rounded-xl bg-background-secondary p-1 lg:h-8 lg:rounded-lg lg:p-0.5">
             {options.map(option => {
                 const active = option.value === value;
                 return (
@@ -98,7 +98,7 @@ export function PhotoOptionSegmented<T extends string>({ options, value, onChang
                         type="button"
                         aria-pressed={active}
                         onClick={() => onChange(option.value)}
-                        className={`flex items-center justify-center gap-1.5 rounded-[7px] px-3 text-sm transition-colors lg:rounded-md lg:px-2.5 lg:text-[0.8125rem] ${active ? 'bg-surface text-foreground shadow-[0_1px_2px_rgba(20,20,19,0.08)]' : 'text-foreground-secondary hover:text-foreground'}`}
+                        className={`flex items-center justify-center gap-1.5 rounded-[7px] px-3 text-sm transition-colors lg:rounded-md lg:px-2.5 lg:text-[0.8125rem] ${active ? 'bg-surface text-foreground shadow-[0_1px_2px_rgba(11, 11, 11,0.08)]' : 'text-foreground-secondary hover:text-foreground'}`}
                     >
                         {option.label}
                         {option.hint && <span className="text-xs text-foreground-tertiary">{option.hint}</span>}
@@ -290,18 +290,18 @@ export function PhotoReadingEntry({
                     {/* 标题与相学类型切换；移动端标题由顶栏显示 */}
                     <header className="flex flex-col gap-3.5 lg:flex-row lg:flex-wrap lg:items-end lg:justify-between lg:gap-4">
                         <div className="flex flex-col gap-2">
-                            <h1 className="hidden font-display text-[34px] font-normal leading-tight lg:block">{copy.title}</h1>
+                            <h1 className="hidden font-display text-[2rem] font-normal leading-tight lg:block">{copy.title}</h1>
                             <p className="px-1 text-center text-[0.8125rem] leading-normal text-foreground-secondary lg:px-0 lg:text-left lg:text-[0.9375rem]">
                                 {copy.subtitle}
                             </p>
                         </div>
-                        <nav aria-label="相学类型" className="grid h-10 shrink-0 grid-cols-2 gap-1 rounded-[10px] bg-background-secondary p-1 text-sm lg:flex">
+                        <nav aria-label="相学类型" className="grid h-10 shrink-0 grid-cols-2 gap-1 rounded-xl bg-background-secondary p-1 text-sm lg:flex">
                             {KIND_TABS.map(tab => (
                                 <Link
                                     key={tab.kind}
                                     href={tab.href}
                                     aria-current={tab.kind === kind ? 'page' : undefined}
-                                    className={`flex items-center justify-center rounded-[7px] px-4 transition-colors ${tab.kind === kind ? 'bg-surface text-foreground shadow-[0_1px_2px_rgba(20,20,19,0.08)]' : 'text-foreground-secondary hover:text-foreground'}`}
+                                    className={`flex items-center justify-center rounded-[7px] px-4 transition-colors ${tab.kind === kind ? 'bg-surface text-foreground shadow-[0_1px_2px_rgba(11, 11, 11,0.08)]' : 'text-foreground-secondary hover:text-foreground'}`}
                                 >
                                     {tab.label}
                                 </Link>
@@ -316,7 +316,7 @@ export function PhotoReadingEntry({
                             onDragOver={(event) => { event.preventDefault(); setIsDragging(true); }}
                             onDragLeave={handleDragLeave}
                             onDrop={handleDrop}
-                            className={`relative flex flex-col items-center justify-center gap-2.5 rounded-[18px] border border-dashed px-4 py-8 text-center transition-colors lg:min-h-[420px] lg:flex-[1_1_340px] lg:gap-4 lg:rounded-[20px] lg:border-[1.5px] lg:p-8 ${photo || preparing ? '' : 'cursor-pointer'} ${isDragging ? 'border-accent bg-accent-soft' : 'border-accent/50 bg-accent-light lg:border-border-hover lg:bg-surface'}`}
+                            className={`relative flex flex-col items-center justify-center gap-2.5 rounded-2xl border border-dashed px-4 py-8 text-center transition-colors lg:min-h-[420px] lg:flex-[1_1_340px] lg:gap-4 lg:rounded-2xl lg:border-[1.5px] lg:p-8 ${photo || preparing ? '' : 'cursor-pointer'} ${isDragging ? 'border-accent bg-accent-soft' : 'border-accent/50 bg-accent-light lg:border-border-hover lg:bg-surface'}`}
                         >
                             {preparing ? (
                                 <SoundWaveLoader variant="block" text="正在处理照片" />
@@ -355,7 +355,7 @@ export function PhotoReadingEntry({
                                     <button
                                         type="button"
                                         onClick={(event) => { event.stopPropagation(); albumInputRef.current?.click(); }}
-                                        className="hidden h-10 items-center rounded-[10px] bg-background-secondary px-4 text-sm text-foreground transition-colors hover:bg-background-tertiary lg:inline-flex"
+                                        className="hidden h-10 items-center rounded-xl bg-background-secondary px-4 text-sm text-foreground transition-colors hover:bg-background-tertiary lg:inline-flex"
                                     >
                                         选择照片
                                     </button>
@@ -363,7 +363,7 @@ export function PhotoReadingEntry({
                                         <button
                                             type="button"
                                             onClick={(event) => { event.stopPropagation(); cameraInputRef.current?.click(); }}
-                                            className="inline-flex h-11 items-center justify-center gap-1.5 rounded-[10px] bg-accent text-sm text-on-accent transition-colors hover:bg-accent-hover"
+                                            className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl bg-accent text-sm text-on-accent transition-colors hover:bg-accent-hover"
                                         >
                                             <Camera className="h-[18px] w-[18px]" strokeWidth={1.7} aria-hidden="true" />拍照
                                         </button>
@@ -421,7 +421,7 @@ export function PhotoReadingEntry({
                                     value={question}
                                     onChange={(event) => setQuestion(event.target.value)}
                                     placeholder={copy.questionPlaceholder}
-                                    className="min-h-[84px] w-full resize-none rounded-[10px] border-[0.5px] border-border-hover bg-surface p-3 text-[0.9375rem] leading-normal text-foreground placeholder:text-foreground-tertiary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15 lg:min-h-[66px] lg:px-3 lg:py-2.5 lg:text-sm lg:leading-relaxed"
+                                    className="min-h-[84px] w-full resize-none rounded-xl border-[0.5px] border-border-hover bg-surface p-3 text-[0.9375rem] leading-normal text-foreground placeholder:text-foreground-tertiary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15 lg:min-h-[66px] lg:px-3 lg:py-2.5 lg:text-sm lg:leading-relaxed"
                                 />
                             </section>
 
@@ -492,7 +492,7 @@ export function PhotoReadingEntry({
                     <div className="flex flex-col gap-5 p-6">
                         <div className="flex items-start justify-between gap-3">
                             <div className="flex items-center gap-3">
-                                <span className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-accent-light text-accent">
+                                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-light text-accent">
                                     <AlertTriangle className="h-5 w-5" aria-hidden="true" />
                                 </span>
                                 <h3 id={consentTitleId} className="font-display text-lg">{consent.title}</h3>

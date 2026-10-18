@@ -36,7 +36,7 @@ function HistoryMeta({ item, formatDate, className = '' }: { item: HistorySummar
     );
 }
 
-const ACTION_BUTTON_CLASS = 'flex h-10 w-10 items-center justify-center rounded-lg text-foreground-tertiary transition-colors md:h-8 md:w-8';
+const ACTION_BUTTON_CLASS = 'flex h-10 w-10 items-center justify-center rounded-md text-foreground-tertiary transition-colors md:h-8 md:w-8';
 
 export function HistoryCardActionButtons({ actions }: { actions: CardActions }) {
     return (
@@ -77,7 +77,7 @@ type HistoryCardProps = {
 export function HistoryGridCard({ item, actions, viewing, renderDetail }: HistoryCardProps) {
     const detail = resolveDetail(item, renderDetail);
     return (
-        <article className="flex h-full flex-col rounded-[14px] border-[0.5px] border-border bg-surface transition-colors hover:border-border-hover">
+        <article className="flex h-full flex-col rounded-2xl border-[0.5px] border-border bg-surface transition-colors hover:border-border-hover">
             <button
                 type="button"
                 onClick={actions.onView}
@@ -138,7 +138,7 @@ export function HistoryGridSkeleton({ count }: { count: number }) {
     return (
         <div aria-hidden="true" className="grid grid-cols-[repeat(auto-fill,minmax(17.5rem,1fr))] gap-4">
             {Array.from({ length: count }, (_, index) => (
-                <div key={index} className="flex flex-col rounded-[14px] border-[0.5px] border-border bg-surface">
+                <div key={index} className="flex flex-col rounded-2xl border-[0.5px] border-border bg-surface">
                     <div className="flex flex-col gap-3 px-5 pt-5 pb-4">
                         <div className={`${SKELETON_BLOCK} h-6 w-20 rounded-lg bg-foreground/10`} />
                         <div className={`${SKELETON_BLOCK} h-4 w-full`} />
@@ -159,7 +159,7 @@ export function HistoryGridSkeleton({ count }: { count: number }) {
 
 export function HistoryListSkeleton({ count }: { count: number }) {
     return (
-        <div aria-hidden="true" className="divide-y-[0.5px] divide-border overflow-hidden rounded-[14px] border-[0.5px] border-border bg-surface">
+        <div aria-hidden="true" className="divide-y-[0.5px] divide-border overflow-hidden rounded-2xl border-[0.5px] border-border bg-surface">
             {Array.from({ length: count }, (_, index) => (
                 <div key={index} className="flex items-center gap-4 py-3 pr-2 pl-5">
                     <div className={`${SKELETON_BLOCK} h-5 w-16 rounded-full bg-foreground/10`} />

@@ -11,7 +11,7 @@ const rendered = (panel: HTMLElement, selector: string) => [...panel.querySelect
 
 /** Shared viewport-aware surface for model, tool, context and conversation menus. */
 export function FloatingPanel({ open, anchorRef, onClose, children, label, id, className = '',
-    role = 'menu', side = 'bottom', align = 'start', initialFocus = 'first', restoreFocus = true, portaled = true,
+    role = 'menu', side = 'bottom', align = 'start', initialFocus = 'first', restoreFocus = true, portaled = true, arrowNavigation = false,
 }: {
     open: boolean;
     anchorRef: RefObject<HTMLElement | null>;
@@ -21,14 +21,16 @@ export function FloatingPanel({ open, anchorRef, onClose, children, label, id, c
     id?: string;
     className?: string;
     role?: 'menu' | 'dialog';
-    /** `right` opens beside the anchor (e.g. a sidebar flyout), bottom-aligned to it when space allows. */
-    side?: 'top' | 'bottom' | 'right';
+    /** `right` opens beside the anchor, bottom-aligned; `right-start` top-aligns it for submenus. */
+    side?: 'top' | 'bottom' | 'right' | 'right-start';
     align?: 'start' | 'end';
     initialFocus?: 'first' | 'none';
     /** Return focus after selecting an item; keyboard dismissal always returns it. */
     restoreFocus?: boolean;
     /** Keep a picker inside a native dialog's top-layer subtree. */
     portaled?: boolean;
+    /** A dialog whose items are buttons can opt into the menu arrow/Home/End loop. */
+    arrowNavigation?: boolean;
 }) {
     const panelRef = useRef<HTMLDivElement>(null);
     const closeRef = useRef(onClose);
@@ -62,9 +64,14 @@ export function FloatingPanel({ open, anchorRef, onClose, children, label, id, c
                 const maxTop = Math.max(y + margin, y + height - panel.offsetHeight - margin);
                 let left: number;
                 let top: number;
-                if (side === 'right') {
-                    left = Math.max(x + margin, Math.min(rect.right + 14, maxLeft));
-                    top = Math.max(y + margin, Math.min(rect.bottom - panel.offsetHeight, maxTop));
+                if (side === 'right' || side === 'right-start') {
+                    // 子菜单优先在行右侧；锚点在一级菜单里时以该菜单右缘为准，留出 10px 间距。
+                    const host = anchor.closest('.floating-panel')?.getBoundingClientRect();
+                    const right = Math.max(rect.right, host?.right ?? 0) + 10;
+                    const leftSide = (host?.left ?? rect.left) - panel.offsetWidth - 10;
+                    left = right + panel.offsetWidth <= x + width - margin ? right : Math.max(x + margin, leftSide);
+                    const preferredTop = side === 'right-start' ? rect.top : rect.bottom - panel.offsetHeight;
+                    top = Math.max(y + margin, Math.min(preferredTop, maxTop));
                 } else {
                     left = Math.max(x + margin, Math.min(align === 'end' ? rect.right - panel.offsetWidth : rect.left, maxLeft));
                     const above = rect.top - panel.offsetHeight - 6;
@@ -75,6 +82,10 @@ export function FloatingPanel({ open, anchorRef, onClose, children, label, id, c
                     top = fits(preferred) ? preferred : fits(alternate) ? alternate : Math.max(y + margin, Math.min(preferred, maxTop));
                 }
                 setPosition(previous => previous?.left === left && previous.top === top ? previous : { left, top });
+                // Write the spot before showing: the state commit can land after the next
+                // paint, and revealing the panel at the stale spot reads as a flash.
+                panel.style.left = `${left}px`;
+                panel.style.top = `${top}px`;
                 // Remove hidden before focusing; the first placement runs before paint.
                 panel.style.visibility = 'visible';
                 if (!focused && initialFocus !== 'none') {
@@ -94,7 +105,9 @@ export function FloatingPanel({ open, anchorRef, onClose, children, label, id, c
         const keyboard = (event: KeyboardEvent) => {
             if (openPanels.at(-1) !== panel) return;
             if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(true); return; }
-            if (role !== 'menu' || !panel.contains(document.activeElement)) return;
+            if (role !== 'menu' && !arrowNavigation) return;
+            if (!panel.contains(document.activeElement)) return;
+            if (role !== 'menu' && !(document.activeElement instanceof HTMLButtonElement)) return;
             if (event.key === 'Tab') { close(true); return; }
             if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
             event.preventDefault();
@@ -126,7 +139,7 @@ export function FloatingPanel({ open, anchorRef, onClose, children, label, id, c
             window.visualViewport?.removeEventListener('resize', place);
             window.visualViewport?.removeEventListener('scroll', place);
         };
-    }, [open, anchorRef, align, side, role, initialFocus]);
+    }, [open, anchorRef, align, side, role, initialFocus, arrowNavigation]);
 
     if (!open || typeof document === 'undefined') return null;
     const panel = <div ref={panelRef} id={id} role={role} aria-label={label}

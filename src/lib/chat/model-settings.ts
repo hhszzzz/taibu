@@ -36,7 +36,7 @@ export function parseReasoningEffort(value: unknown): AIReasoningEffort | null {
 
 export function parseAgentCollaborators(value: unknown): AgentCollaborator[] {
   if (value === undefined) return [];
-  if (!Array.isArray(value) || (value.length !== 0 && (value.length < 2 || value.length > 4))) throw new Error('协作 Agent 需要 2–4 个成员');
+  if (!Array.isArray(value) || value.length > 4) throw new Error('协作 Agent 最多 4 个成员');
   const ids = new Set<string>();
   return value.map(item => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error('协作 Agent 配置无效');

@@ -177,7 +177,7 @@ export function DailyAIChat({ date, userId, onRequireLogin, personalFortune = nu
                             type="button"
                             onClick={() => { void sendMessage(question); }}
                             disabled={isLoading}
-                            className="flex min-h-10 items-center rounded-[10px] border-[0.5px] border-border-hover bg-surface px-3 py-1.5 text-left text-sm transition-colors hover:bg-background-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                            className="flex min-h-10 items-center rounded-xl border-[0.5px] border-border-hover bg-surface px-3 py-1.5 text-left text-sm transition-colors hover:bg-background-secondary disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             {question}
                         </button>
@@ -188,7 +188,7 @@ export function DailyAIChat({ date, userId, onRequireLogin, personalFortune = nu
             {/* 输入：移动端固定在底部导航之上，桌面端位于卡片内 */}
             <div className="fixed inset-x-0 bottom-[calc(4rem+var(--sab))] z-30 border-t-[0.5px] border-border bg-background px-4 py-2.5 sm:px-6 lg:static lg:z-auto lg:border-0 lg:bg-transparent lg:p-0">
                 {userId ? (
-                    <form onSubmit={handleSubmit} className="flex h-12 items-center gap-2 rounded-[14px] border-[0.5px] border-border-hover bg-surface pr-1.5 pl-3.5 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/15 lg:h-11 lg:rounded-xl lg:pl-3">
+                    <form onSubmit={handleSubmit} className="flex h-12 items-center gap-2 rounded-2xl border-[0.5px] border-border-hover bg-surface pr-1.5 pl-3.5 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/15 lg:h-11 lg:rounded-xl lg:pl-3">
                         <input
                             type="text"
                             value={inputValue}
@@ -203,7 +203,7 @@ export function DailyAIChat({ date, userId, onRequireLogin, personalFortune = nu
                             type="submit"
                             aria-label="发送"
                             disabled={!inputValue.trim() || isLoading}
-                            className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-accent text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 lg:size-8 lg:rounded-lg"
+                            className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-accent text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 lg:size-8 lg:rounded-lg"
                         >
                             <ArrowUp className="size-[18px]" strokeWidth={2} />
                         </button>
@@ -212,10 +212,10 @@ export function DailyAIChat({ date, userId, onRequireLogin, personalFortune = nu
                     <button
                         type="button"
                         onClick={onRequireLogin}
-                        className="flex h-12 w-full items-center justify-between rounded-[14px] border-[0.5px] border-border-hover bg-surface pr-1.5 pl-3.5 text-left text-sm text-foreground-tertiary transition-colors hover:bg-background-secondary lg:h-11 lg:rounded-xl lg:pl-3"
+                        className="flex h-12 w-full items-center justify-between rounded-2xl border-[0.5px] border-border-hover bg-surface pr-1.5 pl-3.5 text-left text-sm text-foreground-tertiary transition-colors hover:bg-background-secondary lg:h-11 lg:rounded-xl lg:pl-3"
                     >
                         登录后问问这一天
-                        <span aria-hidden="true" className="flex size-9 items-center justify-center rounded-[10px] bg-accent text-on-accent lg:size-8 lg:rounded-lg">
+                        <span aria-hidden="true" className="flex size-9 items-center justify-center rounded-xl bg-accent text-on-accent lg:size-8 lg:rounded-lg">
                             <ArrowUp className="size-[18px]" strokeWidth={2} />
                         </span>
                     </button>

@@ -14,7 +14,7 @@ const FACE_STYLE = { backfaceVisibility: 'hidden' } as const;
 const BACK_FACE_STYLE = { backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' } as const;
 
 /** 牌框：窄屏 10px 圆角 + 轻阴影，宽屏 14px 圆角 + 更深的投影（设计稿 TarotResult / MobileTarot）。 */
-const CARD_FRAME_CLASS = 'absolute inset-0 overflow-hidden rounded-[10px] border-[0.5px] border-foreground/20 bg-surface shadow-[0_4px_14px_rgba(20,20,19,0.08)] @2xl:rounded-[14px] @2xl:shadow-[0_10px_30px_rgba(20,20,19,0.08)]';
+const CARD_FRAME_CLASS = 'absolute inset-0 overflow-hidden rounded-xl border-[0.5px] border-foreground/20 bg-surface shadow-[0_4px_14px_rgba(11, 11, 11,0.08)] @2xl:rounded-2xl @2xl:shadow-[0_10px_30px_rgba(11, 11, 11,0.08)]';
 
 export function TarotRevealCard({ index, positionName, name, image, meaning, reversed, isRevealed, isFlipped, onClick, large = false }: {
     index: number;
@@ -41,7 +41,7 @@ export function TarotRevealCard({ index, positionName, name, image, meaning, rev
                     type="button"
                     onClick={onClick}
                     aria-label={actionLabel}
-                    className="relative block aspect-[4/7] w-full rounded-[10px] transition-transform duration-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background @2xl:rounded-[14px]"
+                    className="relative block aspect-[4/7] w-full rounded-xl transition-transform duration-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background @2xl:rounded-2xl"
                     style={{ transformStyle: 'preserve-3d', transform: isFlipped ? 'rotateY(180deg)' : undefined }}
                 >
                     <span className={CARD_FRAME_CLASS} style={FACE_STYLE}>

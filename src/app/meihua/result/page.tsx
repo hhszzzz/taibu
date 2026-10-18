@@ -194,7 +194,7 @@ export default function MeihuaResultPage() {
   };
 
   if (isLoading) return <div className="min-h-screen bg-background flex items-center justify-center"><SoundWaveLoader variant="block" text="正在排盘" /></div>;
-  if (!bundle) return <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 p-5"><p className="text-sm text-foreground-secondary">{error || '没有找到排盘数据'}</p><button type="button" onClick={() => router.push('/meihua')} className="h-10 rounded-[10px] border-[0.5px] border-border-hover bg-surface px-4 text-sm hover:bg-background-secondary">返回</button></div>;
+  if (!bundle) return <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 p-5"><p className="text-sm text-foreground-secondary">{error || '没有找到排盘数据'}</p><button type="button" onClick={() => router.push('/meihua')} className="h-10 rounded-xl border-[0.5px] border-border-hover bg-surface px-4 text-sm hover:bg-background-secondary">返回</button></div>;
 
   const result = bundle.result;
   const relationTitle = RELATION_TITLE[result.bodyUseRelation.relation](
@@ -224,7 +224,7 @@ export default function MeihuaResultPage() {
               {result.castMeta.methodLabel}{castTime && ` · ${castTime}`}
             </p>
             {/* 移动端标题位于顶栏（本卦 之 变卦），体用关系改为标签 */}
-            <h1 className="hidden font-display text-[2.125rem] font-normal leading-tight lg:block">{relationTitle}</h1>
+            <h1 className="hidden font-display text-[1.875rem] font-normal leading-tight lg:block">{relationTitle}</h1>
             <span className={`rounded-md px-2 py-0.5 text-[0.8125rem] lg:hidden ${result.bodyUseRelation.favorable ? 'bg-wood-soft text-success' : 'bg-fire-soft text-danger'}`}>{relationTitle}</span>
           </div>
           <ResultHeaderActions actions={resultActions} actionsLabel="卦盘操作" save={saveState} ask={{ label: '问太卜解卦', onClick: handleAsk, disabled: askDisabled }} />

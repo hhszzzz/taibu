@@ -438,12 +438,12 @@ export async function createAgentTools(
         return { content: [{ type: 'text', text: canonicalText }, { type: 'text', text: JSON.stringify({ reference, title: value.title, summary: value.summary, targets: targets.map(({ id, label }) => ({ id, label })) }) }],
           details: { chartReference: reference, chartKind: value.kind, result: value.chart }, canonicalText };
       }),
-    wrap('focus_chart', '展示当前正在分析的命盘位置。必须先 inspect_chart，targetIds 仅用该盘返回的真实 ID；多个 ID 可同时高亮，空数组清除高亮。includeRelated 控制紫微三方四正、大六壬对应盘位及占星本命相位关联，caption 为面向用户的简短分析主题。',
+    wrap('focus_chart', '展示当前正在分析的命盘位置。必须先 inspect_chart，targetIds 仅用该盘返回的真实 ID；多个 ID 可同时高亮，空数组清除高亮。includeRelated 控制紫微三方四正、大六壬对应盘位及占星本命相位关联（默认 false；确实分析到关联位置时才传 true，盘面随之展开），caption 为面向用户的简短分析主题。',
       Type.Object({ reference: Type.String({ minLength: 1, maxLength: 64 }), targetIds: Type.Array(Type.String({ minLength: 1, maxLength: 100 }), { maxItems: 16 }),
         includeRelated: Type.Optional(Type.Boolean()), caption: Type.String({ minLength: 1, maxLength: 160 }) }),
       async args => {
         const { reference, value } = await loadInspectedChart(store, run, args.reference);
-        const chartFocus = validateChartFocus(value, reference, args.targetIds, args.includeRelated ?? true, args.caption);
+        const chartFocus = validateChartFocus(value, reference, args.targetIds, args.includeRelated ?? false, args.caption);
         return textResult(checkpoint.citations ? { chartFocus, cite: lastCitation() + 1 } : { chartFocus });
       }),
   );

@@ -29,17 +29,15 @@ export function useAgentElapsed(createdAt: string | undefined, active: boolean):
     return active && now > 0 && Number.isFinite(started) && now * 1000 >= started ? formatAgentElapsed(now * 1000 - started) : null;
 }
 
-/** Header status of the conversation's task: live label and wall-clock time since the task was created, or how long it took once ended. */
-export function AgentHeaderStatus({ status, createdAt, reconnecting = false, collaboration, duration = null }: {
-    status: AgentRunStatus; createdAt: string; reconnecting?: boolean;
+/** Header status of the conversation's task: live label while it runs, terminal label once it ends.
+    任务用时（elapsed / duration）只落库，不展示给用户（用户裁定 2026-10-17，对齐 claude）。 */
+export function AgentHeaderStatus({ status, reconnecting = false, collaboration }: {
+    status: AgentRunStatus; reconnecting?: boolean;
     /** Members finished out of the configured collaborators while their analyses run. */
     collaboration?: { completed: number; total: number };
-    /** Measured time an ended task took (getAgentTaskDuration). */
-    duration?: number | null;
 }) {
     const active = !isAgentRunTerminal(status);
-    const elapsed = useAgentElapsed(createdAt, active);
-    if (!active) return <AgentStatus status={status} detail={duration === null ? null : formatAgentElapsed(duration)} />;
+    if (!active) return <AgentStatus status={status} />;
     const waiting = status === 'awaiting_input';
     if (waiting) return <span className="chat-run-status is-waiting" role="status">
         <CirclePause size={14} aria-hidden="true" /><span>等待你回答 · 任务已暂停</span>
@@ -48,6 +46,6 @@ export function AgentHeaderStatus({ status, createdAt, reconnecting = false, col
         : collaboration ? `协作分析 ${collaboration.completed} / ${collaboration.total}` : '后台执行中';
     return <span className="chat-run-status" role="status">
         <LoaderCircle size={14} aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
-        <span>{label}{elapsed && !collaboration ? ` · ${elapsed}` : ''}</span>
+        <span>{label}</span>
     </span>;
 }

@@ -79,7 +79,7 @@ export function FeatureTogglePanel() {
             ) : null}
 
             {/* 分隔线画在每格右侧和下方，被外框裁掉最外一圈。 */}
-            <ul className="grid grid-cols-[repeat(auto-fill,minmax(13.75rem,1fr))] overflow-hidden rounded-[14px] border border-border bg-surface">
+            <ul className="grid grid-cols-[repeat(auto-fill,minmax(13.75rem,1fr))] overflow-hidden rounded-2xl border border-border bg-surface">
                 {MODULES.map(({ id, label }) => {
                     const enabled = pending?.featureId === id ? pending.enabled : isFeatureEnabled(id);
 

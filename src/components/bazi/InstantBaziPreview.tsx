@@ -130,7 +130,7 @@ export function InstantBaziPreview({ onUseInstant }: InstantBaziPreviewProps) {
             <button
                 type="button"
                 onClick={onUseInstant}
-                className="h-10 rounded-[10px] border-[0.5px] border-border-hover bg-surface px-4 text-sm text-foreground
+                className="h-10 rounded-xl border-[0.5px] border-border-hover bg-surface px-4 text-sm text-foreground
                     transition-colors duration-150 hover:bg-background-secondary active:bg-background-tertiary"
             >
                 即时排盘

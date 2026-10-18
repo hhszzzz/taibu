@@ -228,7 +228,7 @@ export function HexagramDisplay({
                             const shenSha = row?.shenSha ?? [];
                             const isShenShaExpanded = expandedShenShaRows.has(yao.position);
                             const rowClass = traditional
-                                ? `grid ${narrowRowColumns} items-center gap-1.5 rounded-[10px] px-2 py-[9px] @2xl:table-row @2xl:h-[58px] @2xl:rounded-none @2xl:border-t-[0.5px] @2xl:border-border @2xl:p-0 ${isShi ? 'bg-accent-light' : ''}`
+                                ? `grid ${narrowRowColumns} items-center gap-1.5 rounded-xl px-2 py-[9px] @2xl:table-row @2xl:h-[58px] @2xl:rounded-none @2xl:border-t-[0.5px] @2xl:border-border @2xl:p-0 ${isShi ? 'bg-accent-light' : ''}`
                                 : 'h-12 border-t-[0.5px] border-border @2xl:h-[58px]';
                             const labelClass = traditional
                                 ? `text-[0.6875rem] text-foreground-tertiary @2xl:pr-2 @2xl:text-sm ${isShi ? '@2xl:pl-2 @2xl:text-accent-strong' : '@2xl:text-foreground-secondary'}`

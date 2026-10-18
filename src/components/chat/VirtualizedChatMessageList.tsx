@@ -127,6 +127,7 @@ export function VirtualizedChatMessageList({
                                 data-index={virtualRow.index}
                                 ref={virtualizer.measureElement}
                                 className="chat-transcript-row"
+                                data-role={message.role}
                                 hidden={hidden}
                             >
                                 {hidden ? null : <AgentRoundRow rounds={rounds} messageId={message.id}>
@@ -136,6 +137,7 @@ export function VirtualizedChatMessageList({
                                         isLastMessage={virtualRow.index === messages.length - 1}
                                         disabled={disabled}
                                         onEditMessage={onEditMessage}
+                                        onRetryMessage={message.role === 'user' && messages[virtualRow.index + 1]?.role === 'assistant' && onRegenerateResponse ? () => onRegenerateResponse(messages[virtualRow.index + 1].id) : undefined}
                                         onRegenerateResponse={onRegenerateResponse}
                                         onSwitchVersion={onSwitchVersion}
                                         onArchiveMessage={onArchiveMessage}

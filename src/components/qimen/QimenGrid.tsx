@@ -197,7 +197,7 @@ export function QimenGrid({ palaces, monthPhaseMap, ju, interaction, zhiShi, sel
 
     return (
         <div className="@container w-full">
-            <div className="grid grid-cols-3 gap-px overflow-hidden rounded-[14px] border-[0.5px] border-border bg-border @xl:rounded-2xl">
+            <div className="grid grid-cols-3 gap-px overflow-hidden rounded-2xl border-[0.5px] border-border bg-border @xl:rounded-2xl">
                 {LUOSHU_ORDER.map((num) => {
                     const palace = palaceMap.get(num);
                     if (!palace) return <div key={num} className={`${CELL_BASE} ${CELL_IDLE}`} />;

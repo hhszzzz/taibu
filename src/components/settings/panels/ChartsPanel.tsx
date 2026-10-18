@@ -169,7 +169,7 @@ function ChartSection({
       </div>
 
       {list.length > 0 ? (
-        <ul className="overflow-hidden rounded-[14px] border border-border bg-surface">
+        <ul className="overflow-hidden rounded-2xl border border-border bg-surface">
           {list.map((chart) => (
             <ChartRow
               key={`${chart.type}-${chart.id}`}
@@ -182,7 +182,7 @@ function ChartSection({
           ))}
         </ul>
       ) : (
-        <div className="flex flex-col items-center gap-3 rounded-[14px] border border-dashed border-border-hover px-6 py-9 text-center">
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border-hover px-6 py-9 text-center">
           <p className="text-sm text-foreground-secondary">还没有保存{title}</p>
           <Link href={createHref} className="settings-button">去排{title}</Link>
         </div>
@@ -234,7 +234,7 @@ export default function ChartsPanel() {
 
   if (chartsQuery.isLoading || sessionLoading) {
     return (
-      <div className="flex min-h-[240px] items-center justify-center rounded-[14px] border border-border bg-surface">
+      <div className="flex min-h-[240px] items-center justify-center rounded-2xl border border-border bg-surface">
         <SoundWaveLoader variant="inline" />
       </div>
     );

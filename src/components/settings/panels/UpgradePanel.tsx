@@ -134,10 +134,10 @@ function ActionCard({
   tone?: 'neutral' | 'success';
 }) {
   return (
-    <div className="flex flex-col gap-2.5 rounded-[14px] border border-border bg-surface p-[18px]">
+    <div className="flex flex-col gap-2.5 rounded-2xl border border-border bg-surface p-[18px]">
       <span
         aria-hidden="true"
-        className={`flex h-9 w-9 items-center justify-center rounded-[10px] ${tone === 'success' ? 'bg-success/10 text-success' : 'bg-background-secondary text-foreground-secondary'}`}
+        className={`flex h-9 w-9 items-center justify-center rounded-xl ${tone === 'success' ? 'bg-success/10 text-success' : 'bg-background-secondary text-foreground-secondary'}`}
       >
         {icon}
       </span>
@@ -513,7 +513,7 @@ export default function UpgradePanel() {
       <div className="space-y-8" aria-busy="true">
         <div className="h-44 animate-pulse rounded-2xl border border-border bg-surface" />
         <div className="grid gap-3 sm:grid-cols-3">
-          {[0, 1, 2].map(index => <div key={index} className="h-40 animate-pulse rounded-[14px] border border-border bg-surface" />)}
+          {[0, 1, 2].map(index => <div key={index} className="h-40 animate-pulse rounded-2xl border border-border bg-surface" />)}
         </div>
       </div>
     );
@@ -588,7 +588,7 @@ export default function UpgradePanel() {
               <div
                 key={plan.id}
                 aria-current={current ? 'true' : undefined}
-                className={`flex flex-col gap-2.5 rounded-[14px] p-[18px] ${current ? 'border-[1.5px] border-accent bg-surface' : 'border border-border'}`}
+                className={`flex flex-col gap-2.5 rounded-2xl p-[18px] ${current ? 'border-[1.5px] border-accent bg-surface' : 'border border-border'}`}
               >
                 <span className="flex items-center justify-between gap-2">
                   <span className="font-display text-xl text-foreground">{plan.name}</span>

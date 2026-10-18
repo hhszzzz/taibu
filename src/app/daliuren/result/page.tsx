@@ -243,7 +243,7 @@ export default function DaliurenResultPage() {
     if (!result) return (
         <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-6 p-4 text-center">
             <p className="text-sm text-foreground-secondary">排盘失败</p>
-            <button onClick={() => router.back()} className="h-10 rounded-[10px] bg-accent px-4 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover">返回重试</button>
+            <button onClick={() => router.back()} className="h-10 rounded-xl bg-accent px-4 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover">返回重试</button>
         </div>
     );
 
@@ -280,7 +280,7 @@ export default function DaliurenResultPage() {
                 <div className="flex flex-wrap items-center gap-2">
                     <ModelSelector compact selectedModel={modelId} onModelChange={setModelId} reasoningEnabled={reasoningEnabled} onReasoningChange={setReasoningEnabled} userId={userId} membershipType={membershipType} disabled={membershipPending} />
                     {interpretation && (
-                        <button onClick={handleInterpret} disabled={streaming.isStreaming} aria-label="重新解读" className="rounded-[10px] p-2 text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground">
+                        <button onClick={handleInterpret} disabled={streaming.isStreaming} aria-label="重新解读" className="rounded-xl p-2 text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground">
                             <RefreshCw className={`h-4 w-4 ${streaming.isStreaming ? 'animate-spin' : ''}`} />
                         </button>
                     )}
@@ -289,9 +289,9 @@ export default function DaliurenResultPage() {
                     sessionLoading || membershipPending ? (
                         <SoundWaveLoader variant="inline" className="self-center py-2" />
                     ) : !userId ? (
-                        <button onClick={() => setShowAuthModal(true)} className="h-[42px] rounded-[10px] bg-foreground text-sm text-background transition-opacity hover:opacity-90">登录解锁 AI 解读</button>
+                        <button onClick={() => setShowAuthModal(true)} className="h-[42px] rounded-xl bg-foreground text-sm text-background transition-opacity hover:opacity-90">登录解锁 AI 解读</button>
                     ) : (
-                        <button onClick={handleInterpret} disabled={membershipPending} className="inline-flex h-[42px] items-center justify-center rounded-[10px] bg-foreground text-sm text-background transition-opacity hover:opacity-90 disabled:opacity-50">
+                        <button onClick={handleInterpret} disabled={membershipPending} className="inline-flex h-[42px] items-center justify-center rounded-xl bg-foreground text-sm text-background transition-opacity hover:opacity-90 disabled:opacity-50">
                             开始解读
                         </button>
                     )
@@ -314,7 +314,7 @@ export default function DaliurenResultPage() {
                             <span className="hidden lg:inline">{desktopMeta}</span>
                             <span className="lg:hidden">{mobileMeta[0]}{mobileMeta[0] && mobileMeta[1] && <br />}{mobileMeta[1]}</span>
                         </p>
-                        <h1 className="hidden font-display text-[2.125rem] font-normal leading-tight lg:block">
+                        <h1 className="hidden font-display text-[1.875rem] font-normal leading-tight lg:block">
                             {keShi.title}
                             {keShiDetail && <span className="ml-2 text-xl text-foreground-secondary">{keShiDetail}</span>}
                         </h1>
@@ -353,7 +353,7 @@ export default function DaliurenResultPage() {
                         <section aria-label="太卜解读" className="flex flex-col gap-4 rounded-2xl border-[0.5px] border-border bg-surface p-5 lg:p-6">
                             <h2 className="font-display text-lg font-normal">太卜解读</h2>
                             {error && (
-                                <div role="alert" className="rounded-[10px] border-[0.5px] border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
+                                <div role="alert" className="rounded-xl border-[0.5px] border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
                                     {error}
                                 </div>
                             )}

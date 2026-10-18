@@ -22,8 +22,8 @@ const THEME_MODE_CACHE_KEY = 'taibu.pref.themeMode';
 const LEGACY_THEME_CACHE_KEY = 'taibu.pref.theme';
 const REMOVED_THEME_CACHE_KEYS = ['mingai.pref.themeMode', 'mingai.pref.theme'];
 const THEME_COLORS: Record<AppliedTheme, string> = {
-  light: '#faf9f5',
-  dark: '#262624',
+  light: '#fcfcfb',
+  dark: '#151515',
 };
 
 interface ThemeContextType {

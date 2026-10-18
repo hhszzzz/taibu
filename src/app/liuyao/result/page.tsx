@@ -354,7 +354,7 @@ export default function ResultPage() {
                         </div>
                         <YongShenTargetPicker value={pendingYongShenTargets} onChange={setPendingYongShenTargets} variant="block" />
                         <div className="flex justify-end">
-                            <button type="button" onClick={handleApplyYongShenTargets} disabled={pendingYongShenTargets.length === 0} className="h-10 rounded-[10px] bg-accent px-5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:opacity-50">确认</button>
+                            <button type="button" onClick={handleApplyYongShenTargets} disabled={pendingYongShenTargets.length === 0} className="h-10 rounded-xl bg-accent px-5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:opacity-50">确认</button>
                         </div>
                     </section>
                 )}
@@ -367,7 +367,7 @@ export default function ResultPage() {
                 )}
 
                 {/* 卦盘 */}
-                <section aria-label="卦盘" className="rounded-2xl border-[0.5px] border-border bg-surface px-2 pb-3.5 pt-3 sm:rounded-[18px] sm:px-6 sm:pb-4">
+                <section aria-label="卦盘" className="rounded-2xl border-[0.5px] border-border bg-surface px-2 pb-3.5 pt-3 sm:rounded-2xl sm:px-6 sm:pb-4">
                     <HexagramDisplay
                         yaos={result.yaos}
                         hexagram={result.hexagram}
@@ -392,7 +392,7 @@ export default function ResultPage() {
                                     type="button"
                                     onClick={handleAskTaibu}
                                     disabled={askDisabled}
-                                    className="mt-auto hidden h-11 w-full items-center justify-center rounded-[10px] bg-foreground text-sm text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 lg:flex"
+                                    className="mt-auto hidden h-11 w-full items-center justify-center rounded-xl bg-foreground text-sm text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 lg:flex"
                                 >
                                     让太卜断这一卦
                                 </button>
@@ -410,11 +410,11 @@ export default function ResultPage() {
                         </div>
                         <div className="flex items-center gap-2">
                             <ModelSelector compact selectedModel={selectedModel} onModelChange={setSelectedModel} reasoningEnabled={reasoningEnabled} onReasoningChange={setReasoningEnabled} userId={userId} membershipType={membershipType} disabled={membershipPending} />
-                            {(interpretation || streaming.isStreaming) && <button type="button" onClick={handleGetInterpretation} disabled={isLoading} aria-label="重新获取 AI 解读" className="inline-flex h-9 w-9 items-center justify-center rounded-[10px] text-foreground-secondary transition-colors hover:bg-background-secondary"><RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} /></button>}
+                            {(interpretation || streaming.isStreaming) && <button type="button" onClick={handleGetInterpretation} disabled={isLoading} aria-label="重新获取 AI 解读" className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-foreground-secondary transition-colors hover:bg-background-secondary"><RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} /></button>}
                         </div>
                     </div>
 
-                    {error && <div className="flex items-center gap-2 rounded-[10px] bg-fire-soft px-3 py-2.5 text-xs text-danger"><AlertCircle className="h-3.5 w-3.5" />{error}</div>}
+                    {error && <div className="flex items-center gap-2 rounded-xl bg-fire-soft px-3 py-2.5 text-xs text-danger"><AlertCircle className="h-3.5 w-3.5" />{error}</div>}
 
                     {(interpretation || streaming.isStreaming) ? (
                         <div className="prose prose-sm max-w-none rounded-xl border-[0.5px] border-border bg-surface p-4 prose-p:leading-relaxed prose-headings:text-foreground sm:p-5">

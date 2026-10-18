@@ -42,7 +42,7 @@ const CALENDAR_OPTIONS: ReadonlyArray<{ value: ZiweiCalendarType; label: string 
 ];
 
 const FIELD_LABEL_CLASS = 'text-sm font-medium text-foreground';
-const BOX_CLASS = 'h-11 w-full rounded-[10px] border-[0.5px] border-border-hover bg-surface text-[15px] text-foreground transition-colors duration-150 focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/15';
+const BOX_CLASS = 'h-11 w-full rounded-xl border-[0.5px] border-border-hover bg-surface text-[15px] text-foreground transition-colors duration-150 focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/15';
 
 /** 两项分段控件：轨道 background-secondary，选中项 surface + 阴影。 */
 function Segmented<T extends string>({
@@ -60,7 +60,7 @@ function Segmented<T extends string>({
         <div
             role="group"
             aria-label={ariaLabel}
-            className="grid h-11 grid-cols-2 gap-1 rounded-[10px] bg-background-secondary p-1"
+            className="grid h-11 grid-cols-2 gap-1 rounded-xl bg-background-secondary p-1"
         >
             {options.map((option) => {
                 const active = option.value === value;

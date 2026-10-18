@@ -25,7 +25,7 @@ function getDimensionRows(percentages: TestResult['percentages']): { left: Dimen
 export function PersonalityHero({ type }: { type: MBTIType }) {
     const basic = PERSONALITY_BASICS[type];
     return (
-        <section className="flex flex-col items-center gap-2 rounded-2xl border-[0.5px] border-border bg-surface px-5 py-8 text-center lg:rounded-[20px] lg:px-10 lg:py-10">
+        <section className="flex flex-col items-center gap-2 rounded-2xl border-[0.5px] border-border bg-surface px-5 py-8 text-center lg:rounded-2xl lg:px-10 lg:py-10">
             <div className="mb-2 text-6xl lg:text-7xl" aria-hidden="true">{basic.emoji}</div>
             <h1 className="font-display text-5xl font-normal tracking-wide lg:text-6xl">{type}</h1>
             <p className="font-display text-xl text-accent-strong lg:text-2xl">{basic.title}</p>

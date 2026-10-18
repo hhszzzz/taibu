@@ -2,14 +2,13 @@
  * MentionPopover 共享类型、常量与工具函数
  */
 import type { ReactNode } from 'react';
-import {
-    ChevronRight, Folder, BookOpenText, BookOpen,
-    Orbit, Sparkles, Gem, Dices, ScanFace, Hand, Brain, Flower2, Waypoints,
-    HeartHandshake, Heart, Briefcase, Users,
-    Calendar, CalendarDays, FileText, Compass,
-} from 'lucide-react';
+import { ChevronRight, Folder } from 'lucide-react';
 import type { MentionType } from '@/types';
-import { getDataSourceNavIcon } from '@/lib/data-sources/icon-catalog';
+import {
+    BaziIcon, DaliurenIcon, DailyIcon, FaceIcon, HepanIcon, KnowledgeIcon, LiuyaoIcon,
+    MbtiIcon, MeihuaIcon, MonthlyIcon, PalmIcon, QimenIcon, RecordsIcon, TarotIcon,
+    XiaoliurenIcon, ZiweiIcon,
+} from '@/lib/navigation/nav-icons';
 import type { DataSourceSummary, DataSourceLoadError } from '@/lib/data-sources/types';
 import type { KnowledgeBaseSummary } from '@/components/chat/composer/useComposerState';
 
@@ -54,28 +53,27 @@ export const TYPE_LABELS: Record<MentionType, string> = {
     xiaoliuren_divination: '小六壬',
 };
 
-const renderDataSourceNavIcon = (type: Exclude<MentionType, 'knowledge_base'>, fallback: ReactNode) => {
-    const Icon = getDataSourceNavIcon(type);
-    return Icon ? <Icon className="w-4 h-4" /> : fallback;
-};
+/** 提及图标 = 侧栏导航同一套单线图标（20px 槽位、24 网格）。 */
+const mentionNavIcon = (Icon: (props: { className?: string; size?: number | string }) => ReactNode) =>
+    <Icon className="w-5 h-5" />;
 
 export const TYPE_ICONS: Record<MentionType, ReactNode> = {
-    knowledge_base: <BookOpenText className="w-4 h-4" />,
-    bazi_chart: renderDataSourceNavIcon('bazi_chart', <Orbit className="w-4 h-4" />),
-    ziwei_chart: renderDataSourceNavIcon('ziwei_chart', <Sparkles className="w-4 h-4" />),
-    tarot_reading: renderDataSourceNavIcon('tarot_reading', <Gem className="w-4 h-4" />),
-    liuyao_divination: renderDataSourceNavIcon('liuyao_divination', <Dices className="w-4 h-4" />),
-    face_reading: renderDataSourceNavIcon('face_reading', <ScanFace className="w-4 h-4" />),
-    palm_reading: renderDataSourceNavIcon('palm_reading', <Hand className="w-4 h-4" />),
-    mbti_reading: renderDataSourceNavIcon('mbti_reading', <Brain className="w-4 h-4" />),
-    hepan_chart: renderDataSourceNavIcon('hepan_chart', <HeartHandshake className="w-4 h-4" />),
-    ming_record: renderDataSourceNavIcon('ming_record', <FileText className="w-4 h-4" />),
-    daily_fortune: renderDataSourceNavIcon('daily_fortune', <Calendar className="w-4 h-4" />),
-    monthly_fortune: renderDataSourceNavIcon('monthly_fortune', <CalendarDays className="w-4 h-4" />),
-    qimen_chart: renderDataSourceNavIcon('qimen_chart', <Compass className="w-4 h-4" />),
-    daliuren_divination: renderDataSourceNavIcon('daliuren_divination', <BookOpen className="w-4 h-4" />),
-    meihua_divination: renderDataSourceNavIcon('meihua_divination', <Flower2 className="w-4 h-4" />),
-    xiaoliuren_divination: renderDataSourceNavIcon('xiaoliuren_divination', <Waypoints className="w-4 h-4" />),
+    knowledge_base: mentionNavIcon(KnowledgeIcon),
+    bazi_chart: mentionNavIcon(BaziIcon),
+    ziwei_chart: mentionNavIcon(ZiweiIcon),
+    tarot_reading: mentionNavIcon(TarotIcon),
+    liuyao_divination: mentionNavIcon(LiuyaoIcon),
+    face_reading: mentionNavIcon(FaceIcon),
+    palm_reading: mentionNavIcon(PalmIcon),
+    mbti_reading: mentionNavIcon(MbtiIcon),
+    hepan_chart: mentionNavIcon(HepanIcon),
+    ming_record: mentionNavIcon(RecordsIcon),
+    daily_fortune: mentionNavIcon(DailyIcon),
+    monthly_fortune: mentionNavIcon(MonthlyIcon),
+    qimen_chart: mentionNavIcon(QimenIcon),
+    daliuren_divination: mentionNavIcon(DaliurenIcon),
+    meihua_divination: mentionNavIcon(MeihuaIcon),
+    xiaoliuren_divination: mentionNavIcon(XiaoliurenIcon),
 };
 
 export const HEPAN_TYPE_LABELS: Record<string, string> = {
@@ -85,13 +83,13 @@ export const HEPAN_TYPE_LABELS: Record<string, string> = {
 };
 
 export const HEPAN_TYPE_ICONS: Record<string, ReactNode> = {
-    love: <Heart className="w-4 h-4" />,
-    business: <Briefcase className="w-4 h-4" />,
-    family: <Users className="w-4 h-4" />,
+    love: mentionNavIcon(HepanIcon),
+    business: mentionNavIcon(HepanIcon),
+    family: mentionNavIcon(HepanIcon),
 };
 
 export const FOLDER_ICON = <Folder className="w-4 h-4" />;
-export const KB_ICON = <BookOpenText className="w-4 h-4" />;
+export const KB_ICON = mentionNavIcon(KnowledgeIcon);
 export const CHEVRON_ICON = <ChevronRight className="w-4 h-4 opacity-50" />;
 
 // ---- Helpers ----

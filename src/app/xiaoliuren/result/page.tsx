@@ -220,7 +220,7 @@ function XiaoliurenResultView({ session, onRecalculated }: { session: LoadedSess
       <div className="mx-auto flex w-full max-w-[1024px] animate-fade-in flex-col gap-3 px-4 pt-4 pb-28 sm:px-8 lg:gap-7 lg:pt-12 lg:pb-16">
         <header className="hidden items-end justify-between gap-4 lg:flex">
           <div className="flex min-w-0 flex-col gap-2">
-            <h1 className="font-display text-[34px] font-normal leading-tight">小六壬</h1>
+            <h1 className="font-display text-[2rem] font-normal leading-tight">小六壬</h1>
             <p className="text-[15px] text-foreground-secondary">以左手食、中、无名三指六节为六宫，按农历月、日、时三步掐数落宫。</p>
           </div>
           <ResultMoreActions actions={desktopActions} label="课盘操作" />
@@ -234,7 +234,7 @@ function XiaoliurenResultView({ session, onRecalculated }: { session: LoadedSess
           onCalculated={onRecalculated}
         />
 
-        <section aria-label="起课信息" className="flex items-center gap-3 rounded-[14px] border-[0.5px] border-border bg-surface px-3.5 py-3 lg:hidden">
+        <section aria-label="起课信息" className="flex items-center gap-3 rounded-2xl border-[0.5px] border-border bg-surface px-3.5 py-3 lg:hidden">
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <h2 className="truncate text-sm font-normal">{result.question || '未填写占问'}</h2>
             <p className="text-xs text-foreground-secondary">{formatWallClock(bundle.solarDateTime)} · {formatLunarDate(bundle)} {result.input.shichen}</p>

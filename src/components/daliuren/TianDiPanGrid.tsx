@@ -118,7 +118,7 @@ export function TianDiPanGrid({ result, interaction }: TianDiPanGridProps) {
     const kongSet = new Set(result.基本信息.关键状态.空亡);
     return (
         <div className="@container w-full">
-            <div className="grid grid-cols-4 grid-rows-[repeat(4,minmax(86px,auto))] gap-px overflow-hidden rounded-[14px] border-[0.5px] border-border bg-border @xl:grid-rows-[repeat(4,minmax(132px,auto))] @xl:rounded-2xl">
+            <div className="grid grid-cols-4 grid-rows-[repeat(4,minmax(86px,auto))] gap-px overflow-hidden rounded-2xl border-[0.5px] border-border bg-border @xl:grid-rows-[repeat(4,minmax(132px,auto))] @xl:rounded-2xl">
                 {TIANDIPAN_GRID_POSITIONS.map(({ index, row, col }) => {
                     const palace = result.天地盘[index];
                     if (!palace) return <div key={index} style={{ gridRow: row, gridColumn: col }} className="bg-surface" />;

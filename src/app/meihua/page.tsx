@@ -18,7 +18,7 @@ const METHOD_OPTIONS: Array<{ id: WebMeihuaMethod; label: string; hint: string }
   { id: 'number_triplet', label: '三数起卦', hint: '输入上下卦与动爻' },
 ];
 
-const INPUT_CLASS = 'h-11 w-full rounded-[10px] border-[0.5px] border-border-hover bg-surface px-3.5 text-[15px] text-foreground placeholder:text-foreground-tertiary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20';
+const INPUT_CLASS = 'h-11 w-full rounded-xl border-[0.5px] border-border-hover bg-surface px-3.5 text-[15px] text-foreground placeholder:text-foreground-tertiary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20';
 
 function splitSentences(text: string): string[] {
   return text
@@ -118,7 +118,7 @@ export default function MeihuaPage() {
     <div className="min-h-screen bg-background text-foreground">
       <div className="mx-auto flex w-full max-w-[880px] flex-col gap-5 px-4 py-5 sm:gap-7 sm:px-8 sm:py-12">
         <header className="hidden flex-col gap-2 lg:flex">
-          <h1 className="font-display text-[34px] font-normal leading-tight">梅花易数</h1>
+          <h1 className="font-display text-[2rem] font-normal leading-tight">梅花易数</h1>
           <p className="text-[15px] text-foreground-secondary">以时间、文字或报数起卦，观察体用生克与卦象流转。</p>
         </header>
 
@@ -180,7 +180,7 @@ export default function MeihuaPage() {
                   onChange={(event) => setText(event.target.value)}
                   rows={3}
                   placeholder="输入一个字、两句文字或一段来意"
-                  className="w-full resize-y rounded-[10px] border-[0.5px] border-border-hover bg-surface px-3.5 py-3 text-[15px] leading-relaxed text-foreground placeholder:text-foreground-tertiary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+                  className="w-full resize-y rounded-xl border-[0.5px] border-border-hover bg-surface px-3.5 py-3 text-[15px] leading-relaxed text-foreground placeholder:text-foreground-tertiary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
                 />
               </div>
               {isSingleCharacter && (
@@ -196,7 +196,7 @@ export default function MeihuaPage() {
               {sentences.length > 2 && !isSingleCharacter && (
                 <div className="flex flex-col gap-2">
                   <div className="text-[13px] font-medium text-foreground-secondary">多句取用</div>
-                  <div className="inline-flex w-fit rounded-[10px] bg-background-secondary p-1" role="group" aria-label="多句取用方式">
+                  <div className="inline-flex w-fit rounded-xl bg-background-secondary p-1" role="group" aria-label="多句取用方式">
                     {(['first', 'last'] as const).map((value) => (
                       <button key={value} type="button" aria-pressed={multiSentenceStrategy === value} onClick={() => setMultiSentenceStrategy(value)} className={`h-8 rounded-lg px-3.5 text-[13px] transition-colors ${multiSentenceStrategy === value ? 'bg-surface text-foreground shadow-sm' : 'text-foreground-secondary hover:text-foreground'}`}>
                         {value === 'first' ? '取首句' : '取末句'}

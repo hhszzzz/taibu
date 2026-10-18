@@ -47,13 +47,13 @@ interface ShareCardProps {
 
 /** 导出图片专用的固定浅色色板（与 globals.css 浅色 token 取值一致）。 */
 const CARD_PALETTE = {
-    paper: '#FAF9F5',
-    hairline: 'rgba(31, 30, 29, 0.12)',
-    track: '#F0EEE6',
-    text: '#141413',
-    textSecondary: '#5E5D59',
-    textTertiary: '#73726C',
-    clay: '#B4532F',
+    paper: '#FCFCFB',
+    hairline: 'rgba(11, 11, 11, 0.12)',
+    track: '#FAFAF9',
+    text: '#0B0B0B',
+    textSecondary: '#52514E',
+    textTertiary: '#898781',
+    clay: '#C6613F',
     favorable: '#44663A',
     neutral: '#85602A',
     unfavorable: '#A63D2C',
@@ -140,7 +140,7 @@ export function ShareCard({ fortune, date, userName, isPersonalized, almanac }: 
                 <button
                     onClick={handleDownload}
                     disabled={isGenerating}
-                    className="flex h-10 items-center gap-2 rounded-[10px] border-[0.5px] border-border-hover bg-surface px-4 transition-colors hover:bg-background-secondary disabled:opacity-50"
+                    className="flex h-10 items-center gap-2 rounded-xl border-[0.5px] border-border-hover bg-surface px-4 transition-colors hover:bg-background-secondary disabled:opacity-50"
                 >
                     {isGenerating ? (
                         <SoundWaveLoader variant="inline" />
@@ -152,7 +152,7 @@ export function ShareCard({ fortune, date, userName, isPersonalized, almanac }: 
                 <button
                     onClick={handleShare}
                     disabled={isGenerating}
-                    className="flex h-10 items-center gap-2 rounded-[10px] bg-accent px-4 text-on-accent transition-colors hover:bg-accent-hover disabled:opacity-50"
+                    className="flex h-10 items-center gap-2 rounded-xl bg-accent px-4 text-on-accent transition-colors hover:bg-accent-hover disabled:opacity-50"
                 >
                     {shareSuccess ? (
                         <Check className="w-4 h-4" />
@@ -172,7 +172,7 @@ export function ShareCard({ fortune, date, userName, isPersonalized, almanac }: 
                     background: CARD_PALETTE.paper,
                     borderRadius: '16px',
                     padding: '24px',
-                    boxShadow: '0 6px 24px rgba(20, 20, 19, 0.07)',
+                    boxShadow: '0 6px 24px rgba(11, 11, 11, 0.07)',
                     border: `1px solid ${CARD_PALETTE.hairline}`,
                     color: CARD_PALETTE.text,
                     minWidth: '320px',

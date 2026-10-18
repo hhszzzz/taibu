@@ -316,7 +316,7 @@ function BaziPageContent() {
             <div className="mx-auto flex w-full max-w-[608px] flex-col gap-5 px-4 pb-10 pt-4 sm:gap-7 sm:px-6 lg:pb-16 lg:pt-14 animate-fade-in">
                 {/* 页面标题 - 移动端顶栏已显示标题，仅保留说明 */}
                 <header className="flex flex-col gap-2 text-center lg:text-left">
-                    <h1 className="hidden font-display text-[34px] font-normal leading-tight text-foreground lg:block">八字排盘</h1>
+                    <h1 className="hidden font-display text-[2rem] font-normal leading-tight text-foreground lg:block">八字排盘</h1>
                     <p className="text-[0.8125rem] leading-relaxed text-foreground-secondary sm:text-[15px]">
                         填写出生信息，生成四柱命盘与大运流年。
                     </p>

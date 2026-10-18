@@ -324,7 +324,7 @@ export function ZiweiChartGrid({
             )}
 
             {/* 4×4 命盘：中宫背景 → 连线 → 中宫文字（z-index 分层） */}
-            <div className="relative grid grid-cols-4 grid-rows-4 gap-px overflow-hidden rounded-xl bg-border p-px @2xl/ziwei:rounded-[18px]">
+            <div className="relative grid grid-cols-4 grid-rows-4 gap-px overflow-hidden rounded-xl bg-border p-px @2xl/ziwei:rounded-2xl">
                 {GRID_SLOTS.map((slot) => {
                     const palace = canonicalChart.十二宫位.find((p) => getBranchIndex(p.干支.slice(-1)) === slot.branch);
                     if (!palace || typeof palace.宫位索引 !== 'number') return null;

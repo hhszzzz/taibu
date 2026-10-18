@@ -4,27 +4,25 @@
  * Every consumer (Sidebar, MobileNav, FeatureTogglePanel) imports helpers from this module instead of maintaining
  * its own duplicated item arrays.
  */
-import {
-  BotMessageSquare,
-  User,
-  Settings,
-  CircleStar,
-  Bell,
-  MessageCircleHeart,
-  BookOpenText,
-  Scroll,
-  CircleQuestionMark,
-  type LucideIcon,
-} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { ComponentType } from 'react';
 import {
+  BellIcon,
   BaziIcon,
+  ChartsIcon,
+  ChatIcon,
   CommunityIcon,
   DailyIcon,
   DaliurenIcon,
   FaceIcon,
   HepanIcon,
   LiuyaoIcon,
+  HelpIcon,
+  KnowledgeIcon,
+  PersonalizationIcon,
+  ProfileIcon,
+  SettingsIcon,
+  UpgradeIcon,
   MbtiIcon,
   MeihuaIcon,
   MonthlyIcon,
@@ -98,19 +96,19 @@ export const NAV_REGISTRY: readonly NavItemDef[] = [
   { id: 'monthly', href: '/monthly', label: '月运', icon: MonthlyIcon, description: '月运', category: 'divination', group: 'fortune' },
 
   // ── Tools ───────────────────────────────────────────────────────────────
-  { id: 'chat', href: '/chat', label: '新聊天', icon: BotMessageSquare, category: 'tool' },
+  { id: 'chat', href: '/chat', label: '新聊天', icon: ChatIcon, category: 'tool' },
   { id: 'records', href: '/records', label: '命理记录', icon: RecordsIcon, category: 'tool' },
   { id: 'community', href: '/community', label: '社区', icon: CommunityIcon, category: 'tool' },
 
   // ── User ────────────────────────────────────────────────────────────────
-  { id: 'settings-profile', href: getSettingsCenterRouteTarget('profile'), label: '我的', icon: User, category: 'user' },
-  { id: 'settings-general', href: getSettingsCenterRouteTarget('general'), label: '设置', icon: Settings, category: 'user' },
-  { id: 'settings-upgrade', href: getSettingsCenterRouteTarget('upgrade'), label: '订阅', icon: CircleStar, featureId: 'upgrade', category: 'user' },
-  { id: 'settings-charts', href: getSettingsCenterRouteTarget('charts'), label: '命盘', icon: Scroll, featureId: 'charts', category: 'user' },
-  { id: 'notifications', href: '/user/notifications', label: '通知', icon: Bell, featureId: 'notifications', category: 'user' },
-  { id: 'settings-personalization', href: getSettingsCenterRouteTarget('personalization'), label: '个性化', icon: MessageCircleHeart, featureId: 'ai-personalization', category: 'user' },
-  { id: 'settings-knowledge-base', href: getSettingsCenterRouteTarget('knowledge-base'), label: '知识库', icon: BookOpenText, featureId: 'knowledge-base', category: 'user' },
-  { id: 'settings-help', href: getSettingsCenterRouteTarget('help'), label: '帮助中心', icon: CircleQuestionMark, featureId: 'help', category: 'user' },
+  { id: 'settings-profile', href: getSettingsCenterRouteTarget('profile'), label: '我的', icon: ProfileIcon, category: 'user' },
+  { id: 'settings-general', href: getSettingsCenterRouteTarget('general'), label: '设置', icon: SettingsIcon, category: 'user' },
+  { id: 'settings-upgrade', href: getSettingsCenterRouteTarget('upgrade'), label: '订阅', icon: UpgradeIcon, featureId: 'upgrade', category: 'user' },
+  { id: 'settings-charts', href: getSettingsCenterRouteTarget('charts'), label: '命盘', icon: ChartsIcon, featureId: 'charts', category: 'user' },
+  { id: 'notifications', href: '/user/notifications', label: '通知', icon: BellIcon, featureId: 'notifications', category: 'user' },
+  { id: 'settings-personalization', href: getSettingsCenterRouteTarget('personalization'), label: '个性化', icon: PersonalizationIcon, featureId: 'ai-personalization', category: 'user' },
+  { id: 'settings-knowledge-base', href: getSettingsCenterRouteTarget('knowledge-base'), label: '知识库', icon: KnowledgeIcon, featureId: 'knowledge-base', category: 'user' },
+  { id: 'settings-help', href: getSettingsCenterRouteTarget('help'), label: '帮助中心', icon: HelpIcon, featureId: 'help', category: 'user' },
 ] as const;
 
 // ---------------------------------------------------------------------------

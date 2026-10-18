@@ -12,7 +12,7 @@ import { getAnnouncementExcerpt, type Announcement } from '@/lib/announcement';
 
 type PanelView = 'history' | 'editor';
 
-const CARD = 'rounded-[14px] border border-border bg-surface';
+const CARD = 'rounded-2xl border border-border bg-surface';
 type EditorMode = 'create' | 'edit';
 
 type AnnouncementFormState = {

@@ -3,9 +3,8 @@
 
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { ChatMessage } from '@/types';
-import { formatAgentElapsed } from './AgentHeaderStatus';
 import { agentStatusLabels, getAgentRoundFolds, type AgentRoundFold, type AgentRoundSummary } from './presentation';
 
 /** What the transcript lists need to fold earlier rounds. */
@@ -35,7 +34,11 @@ export function useAgentRoundFolds(messages: readonly ChatMessage[], scope: stri
     const reveal = useCallback((messageId: string) => {
         const roundId = folds.get(messageId)?.round.id;
         if (!roundId || unfolded.has(roundId)) return;
-        flushSync(() => setState(previous => ({ scope, ids: new Set([...(previous.scope === scope ? previous.ids : NONE), roundId]) })));
+        flushSync(() => setState(previous => {
+            const ids = new Set(previous.scope === scope ? previous.ids : NONE);
+            ids.add(roundId);
+            return { scope, ids };
+        }));
     }, [folds, unfolded, scope]);
     const rounds = useMemo<AgentRoundFolding>(() => ({ folds, unfolded, onToggle }), [folds, unfolded, onToggle]);
     return { rounds, reveal };
@@ -48,11 +51,11 @@ export function isFoldedAway(rounds: AgentRoundFolding | undefined, messageId: s
 }
 
 function describeRound(round: AgentRoundSummary): string {
+    // 轮次用时只落库，不展示（用户裁定 2026-10-17）。
     return [
         round.label,
         round.question,
         round.steps ? `${round.steps} 个步骤` : null,
-        round.durationMs === null ? null : formatAgentElapsed(round.durationMs),
         round.status === 'completed' ? null : agentStatusLabels[round.status],
     ].filter(Boolean).join(' · ');
 }
@@ -61,7 +64,7 @@ function describeRound(round: AgentRoundSummary): string {
 export function AgentRoundBar({ round, open, onToggle }: { round: AgentRoundSummary; open: boolean; onToggle: (roundId: string) => void }) {
     return (
         <button type="button" className="agent-round-fold" aria-expanded={open} data-status={round.status} onClick={() => onToggle(round.id)}>
-            {open ? <ChevronUp size={15} aria-hidden="true" /> : <ChevronDown size={15} aria-hidden="true" />}
+            {open ? <ChevronDown size={15} aria-hidden="true" /> : <ChevronRight size={15} aria-hidden="true" />}
             <span className="agent-round-fold-text">{describeRound(round)}</span>
             {round.results > 0 && <span className="agent-round-fold-results">已选定 {round.results} 份成果</span>}
         </button>

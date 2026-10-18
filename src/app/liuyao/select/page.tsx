@@ -202,7 +202,7 @@ export default function SelectHexagramPage() {
 
                 {/* 标题 */}
                 <header className="flex flex-col gap-1.5 text-center lg:text-left">
-                    <h1 className="hidden font-display text-[34px] font-normal leading-tight lg:block">选卦起卦</h1>
+                    <h1 className="hidden font-display text-[2rem] font-normal leading-tight lg:block">选卦起卦</h1>
                     <p className="text-sm text-foreground-secondary">
                         选择已知卦象，根据当前时间计算分析
                     </p>
@@ -220,7 +220,7 @@ export default function SelectHexagramPage() {
                 )}
 
                 {/* 选择方式切换 */}
-                <div className="flex gap-1 rounded-[10px] bg-background-secondary p-1" role="group" aria-label="选卦方式">
+                <div className="flex gap-1 rounded-xl bg-background-secondary p-1" role="group" aria-label="选卦方式">
                     {SELECT_MODES.map(({ mode, label, Icon }) => (
                         <button
                             key={mode}

@@ -28,8 +28,8 @@ function MBTIPageContent() {
         <div className="min-h-full bg-background text-foreground">
             <div className="mx-auto flex w-full max-w-[960px] flex-col gap-8 px-4 py-5 lg:gap-10 lg:px-8 lg:py-12">
                 {/* 页面标题与开始入口；移动端标题由顶栏显示 */}
-                <section className="flex flex-col items-center gap-4 rounded-2xl border-[0.5px] border-border bg-surface px-5 py-8 text-center lg:rounded-[20px] lg:py-12">
-                    <h1 className="font-display text-[1.625rem] font-normal leading-tight lg:text-[2.125rem]">
+                <section className="flex flex-col items-center gap-4 rounded-2xl border-[0.5px] border-border bg-surface px-5 py-8 text-center lg:rounded-2xl lg:py-12">
+                    <h1 className="font-display text-[1.625rem] font-normal leading-tight lg:text-[1.875rem]">
                         MBTI 性格测试
                     </h1>
                     <p className="max-w-md text-[0.9375rem] leading-relaxed text-foreground-secondary">

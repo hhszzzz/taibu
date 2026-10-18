@@ -112,7 +112,7 @@ function getArchiveTitle(archive: ArchivedSource) {
 }
 
 const SECTION_TITLE = 'text-[13px] font-medium text-foreground-tertiary';
-const CARD = 'rounded-[14px] border border-border bg-surface';
+const CARD = 'rounded-2xl border border-border bg-surface';
 
 export default function KnowledgeBasePanel() {
     const { showToast } = useToast();
@@ -823,7 +823,7 @@ export default function KnowledgeBasePanel() {
                             {kbs.map(renderKnowledgeBase)}
                         </ul>
                     ) : listError ? null : (
-                        <div className="rounded-[14px] border border-dashed border-border-hover px-6 py-9 text-center">
+                        <div className="rounded-2xl border border-dashed border-border-hover px-6 py-9 text-center">
                             <p className="text-sm text-foreground-secondary">还没有知识库</p>
                             <p className="mt-1 text-xs text-foreground-tertiary">新建一个知识库，把命盘、解读和资料归档进来。</p>
                         </div>
@@ -856,7 +856,7 @@ export default function KnowledgeBasePanel() {
                         </label>
                         <div className="settings-field-block">
                             <span id="kb-file-label" className="settings-label">文件</span>
-                            <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-[10px] border border-dashed border-border-hover bg-background py-1.5 pl-3.5 pr-1.5 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60 has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent">
+                            <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-dashed border-border-hover bg-background py-1.5 pl-3.5 pr-1.5 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60 has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent">
                                 <FileText aria-hidden="true" className="h-4 w-4 flex-shrink-0 text-foreground-tertiary" />
                                 <span className={`min-w-0 flex-1 truncate text-sm ${uploadFile ? 'text-foreground' : 'text-foreground-tertiary'}`}>
                                     {uploadFile?.name ?? '选择要导入的文件'}

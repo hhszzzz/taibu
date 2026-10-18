@@ -6,7 +6,7 @@
  * - 需要处理用户交互事件
  */
 'use client';
-import { memo, useState, useMemo, useCallback, useRef } from 'react';
+import { Fragment, memo, useState, useMemo, useCallback, useRef } from 'react';
 import { Check, X, FileText, Globe, KeyRound } from 'lucide-react';
 import type { AIMessageMetadata, ChatMessage, InjectedSource, Mention } from '@/types';
 import { getEnabledDataSourceTypes } from '@/lib/data-sources/catalog';
@@ -19,6 +19,7 @@ import { ThinkingBlock } from '@/components/chat/ThinkingBlock';
 import { AgentMessage } from '@/components/chat/AgentMessage';
 import { SourcePanel } from '@/components/chat/SourcePanel';
 import { buildMentionHighlightedParts } from '@/components/chat/mentionHighlight';
+import { MentionIcon } from '@/components/chat/mention/MentionIcon';
 import { useKnowledgeBaseFeatureEnabled } from '@/components/knowledge-base/useKnowledgeBaseFeatureEnabled';
 import { openSettingsCenter } from '@/lib/settings-center';
 import { MessageActions } from './MessageActions';
@@ -31,6 +32,8 @@ interface ChatMessageItemProps {
     isLastMessage: boolean;
     disabled?: boolean;
     onEditMessage?: (messageId: string, newContent: string, mentions?: Mention[]) => void;
+    /** 用户消息退回：重新生成这条消息之后的回复。 */
+    onRetryMessage?: () => void;
     onRegenerateResponse?: (messageId: string) => void;
     onSwitchVersion?: (messageId: string, versionIndex: number) => void;
     onArchiveMessage?: (message: ChatMessage) => void;
@@ -42,6 +45,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
     isLastMessage,
     disabled = false,
     onEditMessage,
+    onRetryMessage,
     onRegenerateResponse,
     onSwitchVersion,
     onArchiveMessage,
@@ -173,9 +177,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                                 {highlightedEditContentParts.map((part) => (
                                     part.kind === 'mention'
                                         ? (
-                                            <span key={`${part.start}-${part.end}`} className={part.className}>
-                                                {part.value}
-                                            </span>
+                                            <Fragment key={`${part.start}-${part.end}`}><span className="chat-mention-at">@<MentionIcon type={part.type} size={12} /></span>{part.value.slice(1)}</Fragment>
                                         )
                                         : part.value
                                 ))}
@@ -252,16 +254,14 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                             </div>
                         )}
                         <div className={`chat-user-bubble text-foreground ${message.dreamInfo
-                            ? 'bg-purple-500/10 dark:bg-purple-500/15 border border-purple-500/20'
-                            : 'bg-background-secondary'
+                            ? 'is-dream bg-purple-500/10 dark:bg-purple-500/15 border border-purple-500/20'
+                            : ''
                         }`}>
                             <p className="whitespace-pre-wrap text-base leading-relaxed">
                                 {highlightedUserContentParts.map((part) => (
                                     part.kind === 'mention'
                                         ? (
-                                            <span key={`${part.start}-${part.end}`} className={part.className}>
-                                                {part.value}
-                                            </span>
+                                            <span key={`${part.start}-${part.end}`} className="chat-mention-chip" data-type={part.type}><MentionIcon type={part.type} size={13} />{part.value.slice(1)}</span>
                                         )
                                         : part.value
                                 ))}
@@ -274,6 +274,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                                 copied={copiedId === message.id}
                                 onCopy={handleCopy}
                                 onEdit={onEditMessage ? handleStartEdit : undefined}
+                                onRetry={onRetryMessage}
                                 onSwitchVersion={onSwitchVersion}
                             />
                     </div>

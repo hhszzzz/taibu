@@ -5,7 +5,6 @@ import { getCurrentTools, createAssistantMessageEventStream, type AssistantMessa
 import type { JsonRpcMessage, McpTransport, McpTransportMessageListener } from '@earendil-works/pi-mcp';
 import { parseAgentMcpServers, connectAgentMcp } from '../lib/agent/mcp-client.server';
 import { validPromptTemplates, applyPromptTemplate } from '../lib/agent/prompt-templates';
-import { mergeSpeechDraft, speechConstructor } from '../lib/agent/speech';
 import { assertAgentEvaluation } from '../lib/agent/evaluation.server';
 import { executeAgentRun } from '../lib/agent/runtime.server';
 import { emptyPiAssistant } from '../lib/agent/pi-stream.server';
@@ -13,16 +12,13 @@ import { row, config, MemoryStore } from './helpers/agent-runtime-fixture';
 import type { PiStreamFn } from '../lib/agent/types';
 import { collaborationProgress, parallelAnalysisResults } from '../lib/agent/parallel-results';
 
-test('templates are bounded and substitute draft text literally; speech never overwrites a changed draft', () => {
+test('templates are bounded and substitute draft text literally', () => {
     const template = { id: 'career', name: '事业', content: '请分析：{{question}}' };
     assert.ok(validPromptTemplates([template]));
     assert.equal(applyPromptTemplate(template, '$&\n问题'), '请分析：$&\n问题');
     assert.ok(!validPromptTemplates([template, template]));
     assert.ok(!validPromptTemplates([{ ...template, name: '' }]));
     assert.ok(!validPromptTemplates(Array.from({ length: 21 }, (_, i) => ({ ...template, id: String(i) }))));
-    assert.equal(mergeSpeechDraft('原问题', '原问题', '补充'), '原问题\n补充');
-    assert.equal(mergeSpeechDraft('原问题', '手动编辑', '补充'), null);
-    assert.equal(speechConstructor({} as Window), undefined);
 });
 
 test('collaboration progress counts finished members of the running analysis and the configured size', () => {

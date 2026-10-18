@@ -73,7 +73,7 @@ export function XiaoliurenChart({ chart, interaction, action }: {
 
   return (
     <div className="flex flex-wrap items-stretch gap-3 lg:gap-6">
-      <section aria-label="掌诀推演" className="flex min-w-0 flex-[1_1_440px] flex-col gap-1 rounded-2xl border-[0.5px] border-border bg-surface px-3 py-3.5 sm:gap-3 sm:rounded-[18px] sm:px-6 sm:pt-5 sm:pb-[22px]">
+      <section aria-label="掌诀推演" className="flex min-w-0 flex-[1_1_440px] flex-col gap-1 rounded-2xl border-[0.5px] border-border bg-surface px-3 py-3.5 sm:gap-3 sm:rounded-2xl sm:px-6 sm:pt-5 sm:pb-[22px]">
         <div className="flex items-center justify-between gap-3">
           <span className="text-xs text-foreground-secondary sm:text-[0.8125rem]">
             <span className="sm:hidden">{view === 'palm' ? '左手掌诀 · 顺时针掐数' : '六宫圆盘 · 顺时针掐数'}</span>
@@ -123,7 +123,7 @@ export function XiaoliurenChart({ chart, interaction, action }: {
 
       <div className="flex min-w-0 flex-[1_1_340px] flex-col gap-3 lg:gap-4">
         <section
-          className="flex flex-col gap-2.5 rounded-2xl border-[0.5px] border-border bg-surface p-4 sm:gap-3.5 sm:rounded-[18px] sm:p-6"
+          className="flex flex-col gap-2.5 rounded-2xl border-[0.5px] border-border bg-surface p-4 sm:gap-3.5 sm:rounded-2xl sm:p-6"
           data-chart-selected={isChartTargetSelected(interaction, 'xiaoliuren:result') || undefined}
         >
           {/* 窄屏结果页省略小标题（落宫大字即主角）；对话命盘中它是可点目标，始终可见 */}

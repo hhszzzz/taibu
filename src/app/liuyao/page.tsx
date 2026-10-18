@@ -16,6 +16,7 @@ import { YongShenTargetPicker } from '@/components/liuyao/YongShenTargetPicker';
 import { supabase } from '@/lib/auth';
 import { writeSessionJSON } from '@/lib/cache/session-storage';
 import { saveDivinationAction } from '@/lib/divination/save-client';
+import { PageHeader } from '@/components/layout/PageHeader';
 
 const METHOD_CARD_CLASS = 'flex flex-col gap-3 rounded-2xl border-[0.5px] border-border bg-surface p-5 text-left text-foreground transition-colors hover:bg-background-secondary active:bg-background-tertiary sm:p-[22px]';
 const COIN_ICON_KEYS = ['left', 'middle', 'right'] as const;
@@ -122,10 +123,7 @@ export default function LiuyaoPage() {
     return (
         <div className="min-h-screen bg-background text-foreground">
             <div className="mx-auto flex w-full max-w-[944px] flex-col gap-6 px-4 py-5 sm:gap-8 sm:px-8 sm:py-14">
-                <header className="hidden flex-col gap-2 lg:flex">
-                    <h1 className="font-display text-[34px] font-normal leading-tight">六爻占卜</h1>
-                    <p className="text-[15px] text-foreground-secondary">源自《易经》。一事一占，先想清楚要问什么。</p>
-                </header>
+                <PageHeader title="六爻占卜" description="源自《易经》。一事一占，先想清楚要问什么。" />
 
                 {/* 问题与分析目标 */}
                 <section className="flex flex-col gap-4 rounded-2xl border-[0.5px] border-border bg-surface p-4 sm:p-6">

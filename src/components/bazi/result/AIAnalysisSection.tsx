@@ -251,7 +251,7 @@ export function AIAnalysisSection({
                         </button>
                     )}
                     <button type="button" onClick={startAnalysis} disabled={loading}
-                        className="inline-flex h-9 items-center gap-1.5 rounded-[10px] border-[0.5px] border-border-hover bg-surface px-3 text-sm text-foreground transition-colors hover:bg-background-secondary disabled:opacity-50">
+                        className="inline-flex h-9 items-center gap-1.5 rounded-xl border-[0.5px] border-border-hover bg-surface px-3 text-sm text-foreground transition-colors hover:bg-background-secondary disabled:opacity-50">
                         {loading ? <SoundWaveLoader variant="inline" /> : <RefreshCw className="w-4 h-4" />}
                         {loading ? '分析中...' : '重新分析'}
                     </button>

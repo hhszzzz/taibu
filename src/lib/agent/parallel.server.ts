@@ -50,9 +50,9 @@ function pause(ms: number, signals: readonly (AbortSignal | undefined)[]) {
 export function createParallelExtension(registrations: readonly ToolRegistration[], session: () => Harness, collaborators: readonly AgentCollaborator[] = [], models: ReadonlyMap<string, AIModelConfig> = new Map(), titles: ReadonlyMap<string, string> = new Map()): Extension {
     const memberEffort = (member: AgentCollaborator) => member.reasoning ? member.reasoningEffort ?? models.get(member.model)?.defaultReasoningEffort ?? 'medium' : 'off';
     const extension: Extension = { name: 'taibu_parallel', tools: [defineTool({
-        name: 'parallel_analysis', description: `同时进行 2–4 项术数分析，可在同一体系从不同角度分析。先确认每项必要资料完整；子分析只计算和解读，父任务汇总并选择最终成果，整项任务仅计一次费用。${collaborators.length ? `每项必须填写用户配置的 agentId，且包含全部成员：${collaborators.map(member => `${member.id}（${member.name}：${member.focus}）`).join('；')}` : ''}`,
+        name: 'parallel_analysis', description: `同时进行 1–4 项术数分析，可在同一体系从不同角度分析。先确认每项必要资料完整；子分析只计算和解读，父任务汇总并选择最终成果，整项任务仅计一次费用。${collaborators.length ? `每项必须填写用户配置的 agentId，且包含全部成员：${collaborators.map(member => `${member.id}（${member.name}：${member.focus}）`).join('；')}` : ''}`,
         parameters: Type.Object({ tasks: Type.Array(Type.Object({ system: Type.String({ enum: PARALLEL_SYSTEMS }), question: Type.String({ minLength: 1, maxLength: 4000 }),
-          agentId: Type.Optional(Type.String(collaborators.length ? { enum: collaborators.map(member => member.id) } : {})) }), { minItems: 2, maxItems: 4 }),
+          agentId: Type.Optional(Type.String(collaborators.length ? { enum: collaborators.map(member => member.id) } : {})) }), { minItems: 1, maxItems: 4 }),
           title: Type.Optional(Type.String({ ...LABEL, description: '这次协作的简短标题，如“三派会诊”' })),
           topics: Type.Optional(Type.Array(Type.Object({ title: Type.String(LABEL), options: Type.Optional(Type.Array(Type.String(LABEL), { minItems: 2, maxItems: 4 })) }), {
             maxItems: PARALLEL_TOPIC_LIMIT, description: '需要每位成员表态的关键议题；给出 options 时成员只能原样选择一项，用于对照分歧' })) }),

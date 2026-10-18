@@ -8,8 +8,11 @@
 'use client';
 
 import { memo } from 'react';
+import { Tooltip } from '@/components/ui/Tooltip';
 import Link from 'next/link';
-import { Archive, Ellipsis, LoaderCircle } from 'lucide-react';
+import { Archive, Cloud, Ellipsis, LoaderCircle } from 'lucide-react';
+// The shared conversation lists render this row outside the chat page too.
+import './chat-sidebar.css';
 import { formatConversationMenuTitle } from '@/lib/chat/conversation-title-display';
 import { AGENT_MARKER_LABELS, type ConversationAgentMarker } from '@/lib/agent/activity';
 import type { ConversationListItem } from '@/types';
@@ -57,25 +60,32 @@ export const ConversationNavItem = memo(function ConversationNavItem({
     }
     const title = formatConversationMenuTitle(conv);
     return (
-        <div data-conversation-row="true" className="chat-nav-row" data-active={isActive || undefined} data-menu-open={isActionActive || undefined}>
+        <div data-conversation-row="true" className="chat-nav-row" data-active={isActive || undefined} data-menu-open={isActionActive || undefined}
+            draggable
+            onDragStart={event => { event.dataTransfer.setData('application/x-taibu-conversation', conv.id); event.dataTransfer.effectAllowed = 'move'; }}>
             <Link href={`/chat?id=${encodeURIComponent(conv.id)}`} aria-current={isActive ? 'page' : undefined} className="chat-nav-row-link" title={title}>
                 <span className="chat-nav-row-title">{title}</span>
-                {conv.isArchived ? <Archive size={13} className="chat-nav-row-archived" role="img" aria-label="已归档到知识库" /> : null}
-                {marker ? <ConversationMarker marker={marker} /> : null}
+                <span className="chat-nav-row-badges">
+                    {conv.hasAgentRun ? <span className="chat-nav-row-cloud" role="img" aria-label="云端任务"><Cloud size={13} /></span> : null}
+                    {conv.isArchived ? <Archive size={13} className="chat-nav-row-archived" role="img" aria-label="已归档到知识库" /> : null}
+                    {marker ? <ConversationMarker marker={marker} /> : null}
+                </span>
             </Link>
-            <button
-                type="button"
-                onClick={(e) => {
-                    e.stopPropagation();
-                    onOpenAction(conv, e);
-                }}
-                className="chat-nav-row-more"
-                aria-label={`${title} 的更多操作`}
-                aria-haspopup="menu"
-                aria-expanded={isActionActive}
-            >
-                <Ellipsis size={16} aria-hidden="true" />
-            </button>
+            <Tooltip label={`${title} 的更多操作`}>
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenAction(conv, e);
+                    }}
+                    className="chat-nav-row-more"
+                    aria-label={`${title} 的更多操作`}
+                    aria-haspopup="menu"
+                    aria-expanded={isActionActive}
+                >
+                    <Ellipsis size={16} aria-hidden="true" />
+                </button>
+            </Tooltip>
         </div>
     );
 });

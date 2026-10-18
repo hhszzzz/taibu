@@ -111,7 +111,7 @@ export function QimenPalaceDetail({
 
             <div className={`grid gap-1 text-center ${isCenter ? 'grid-cols-1' : 'grid-cols-4'}`}>
                 {cells.map(cell => (
-                    <div key={cell.label} className="flex min-w-0 flex-col gap-0.5 rounded-[10px] bg-background px-1 py-2">
+                    <div key={cell.label} className="flex min-w-0 flex-col gap-0.5 rounded-xl bg-background px-1 py-2">
                         <span className="text-[11px] text-foreground-secondary">{cell.label}</span>
                         <span className={`truncate font-display text-base ${cell.tone}`}>{cell.value}</span>
                     </div>

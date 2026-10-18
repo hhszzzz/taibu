@@ -80,7 +80,7 @@ export default function DaliurenPage() {
                 <div className="mx-auto flex w-full max-w-[1064px] flex-col gap-6 px-4 pb-12 pt-4 lg:gap-7 lg:px-8 lg:pb-16 lg:pt-14">
                     {/* 页面标题 - 移动端隐藏（顶栏已显示） */}
                     <header className="hidden flex-col gap-2 lg:flex">
-                        <h1 className="font-display text-[34px] font-normal leading-tight">大六壬</h1>
+                        <h1 className="font-display text-[2rem] font-normal leading-tight">大六壬</h1>
                         <p className="text-[15px] text-foreground-secondary">三式之一。以起课时刻排出天地盘、四课与三传，推演事态的来龙去脉。</p>
                     </header>
 
@@ -118,7 +118,7 @@ export default function DaliurenPage() {
                                                 onChange={e => setBirthYear(e.target.value)}
                                                 placeholder="如 1990"
                                                 aria-label="出生年份"
-                                                className="h-10 w-full max-w-[320px] rounded-[10px] border-[0.5px] border-border-hover bg-surface px-3 text-sm text-foreground placeholder:text-foreground-tertiary transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/10"
+                                                className="h-10 w-full max-w-[320px] rounded-xl border-[0.5px] border-border-hover bg-surface px-3 text-sm text-foreground placeholder:text-foreground-tertiary transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/10"
                                             />
                                         ),
                                     },

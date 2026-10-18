@@ -20,26 +20,26 @@ interface MentionHeaderProps {
 export function MentionHeader({ title, activeLevel, loadError, dataSourceErrors, onGoBack }: MentionHeaderProps) {
     return (
         <>
-            <div className="px-3 py-2 text-xs text-foreground-secondary border-b border-border/60 flex items-center gap-2">
+            <div className="chat-mention-head">
                 {activeLevel !== 'category' && activeLevel !== 'search' && (
                     <button
                         type="button"
                         onClick={onGoBack}
-                        className="p-1 rounded hover:bg-background-secondary text-foreground-secondary hover:text-foreground"
+                        className="chat-mention-back"
                         aria-label="返回"
                     >
                         <ArrowLeft className="w-4 h-4" />
                     </button>
                 )}
-                <div className="truncate">{title}</div>
+                <div className="chat-mention-head-title">{title}</div>
             </div>
             {!!loadError && (
-                <div className="px-3 py-2 text-xs text-red-500 border-b border-border/60">
+                <div className="chat-mention-alert is-error">
                     {loadError}
                 </div>
             )}
             {!loadError && dataSourceErrors.length > 0 && (
-                <div className="px-3 py-2 text-xs text-amber-500 border-b border-border/60">
+                <div className="chat-mention-alert is-warning">
                     数据源加载部分失败：{dataSourceErrors.slice(0, 2).map(e => e.type).join('、')}{dataSourceErrors.length > 2 ? '…' : ''}
                 </div>
             )}

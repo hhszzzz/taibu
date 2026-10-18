@@ -18,6 +18,14 @@ export interface ChartFocus {
   caption: string;
 }
 
+/** 追问命盘时附在输入框上方的富文本上下文：盘名、盘种与当前查看的位置。 */
+export interface ChartAskContext {
+  reference: string;
+  title: string;
+  kind: AgentChart['kind'];
+  targets: ChartTarget[];
+}
+
 const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 export const CHART_SOURCE_KINDS = { bazi_chart: 'bazi', ziwei_chart: 'ziwei', qimen_chart: 'qimen', liuyao_divination: 'liuyao', meihua_divination: 'meihua', daliuren_divination: 'daliuren', xiaoliuren_divination: 'xiaoliuren', tarot_reading: 'tarot' } as const;
 export type ChartSource = keyof typeof CHART_SOURCE_KINDS;

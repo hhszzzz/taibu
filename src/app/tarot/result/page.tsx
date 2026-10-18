@@ -330,7 +330,7 @@ function TarotResultContent() {
                 </p>
                 <Link
                     href={historyMissing ? '/tarot/history' : '/tarot'}
-                    className="inline-flex h-10 items-center rounded-[10px] bg-accent px-5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
+                    className="inline-flex h-10 items-center rounded-xl bg-accent px-5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
                 >
                     返回
                 </Link>
@@ -367,14 +367,14 @@ function TarotResultContent() {
                         </p>
                         <h1 className="hidden font-display text-[1.875rem] font-normal leading-[1.35] lg:block">{question || selectedSpread.name}</h1>
                         {question && (
-                            <p className="rounded-[14px] bg-panel px-4 py-3.5 text-center font-display text-base leading-relaxed lg:hidden">{question}</p>
+                            <p className="rounded-2xl bg-panel px-4 py-3.5 text-center font-display text-base leading-relaxed lg:hidden">{question}</p>
                         )}
                     </div>
                     <ResultHeaderActions actions={resultActions} actionsLabel="牌阵操作" save={saveState} />
                 </header>
 
                 {/* 牌阵 */}
-                <section aria-label="牌阵" className="@container flex flex-col items-center gap-6 lg:rounded-[20px] lg:bg-panel lg:px-8 lg:py-9">
+                <section aria-label="牌阵" className="@container flex flex-col items-center gap-6 lg:rounded-2xl lg:bg-panel lg:px-8 lg:py-9">
                     <div className={`grid w-full justify-items-center gap-x-2 gap-y-6 lg:gap-x-6 ${getTarotSpreadGridClass(drawnCards.length)}`}>
                         {drawnCards.map((card, index) => {
                             const canonicalCard = canonicalReading?.牌阵展开[index];
@@ -436,7 +436,7 @@ function TarotResultContent() {
                                         type="button"
                                         onClick={() => { void handleInterpret(); }}
                                         disabled={membershipPending}
-                                        className="h-10 rounded-[10px] bg-accent px-4 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+                                        className="h-10 rounded-xl bg-accent px-4 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
                                     >
                                         {userId ? '开始解读' : '登录后解读'}
                                     </button>
@@ -457,7 +457,7 @@ function TarotResultContent() {
                                 return (
                                     <div key={key} className="flex flex-col items-center gap-2.5 text-center">
                                         <span className="text-xs text-foreground-secondary">{label}</span>
-                                        <div className="relative aspect-[4/7] w-full max-w-[100px] overflow-hidden rounded-[10px] border-[0.5px] border-foreground/20 bg-panel shadow-[0_4px_14px_rgba(20,20,19,0.08)]">
+                                        <div className="relative aspect-[4/7] w-full max-w-[100px] overflow-hidden rounded-xl border-[0.5px] border-foreground/20 bg-panel shadow-[0_4px_14px_rgba(11, 11, 11,0.08)]">
                                             {cardImage && card ? (
                                                 <Image src={cardImage} alt={card.nameChinese} fill sizes="100px" className="object-cover" />
                                             ) : null}

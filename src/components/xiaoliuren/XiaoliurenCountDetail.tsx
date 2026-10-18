@@ -63,7 +63,7 @@ function StageDescriptionText({ description }: { description: StageDescription }
 export function XiaoliurenCountDetail({ steps, stages, isLeapMonth, shichen, interaction }: XiaoliurenCountDetailProps) {
   const stageByKey = new Map(stages?.map((stage) => [stage.key, stage]) ?? []);
   return (
-    <section aria-label="掐数明细" className="flex flex-col gap-3.5 rounded-2xl border-[0.5px] border-border bg-surface p-4 sm:gap-4 sm:rounded-[18px] sm:px-6 sm:py-[22px]">
+    <section aria-label="掐数明细" className="flex flex-col gap-3.5 rounded-2xl border-[0.5px] border-border bg-surface p-4 sm:gap-4 sm:rounded-2xl sm:px-6 sm:py-[22px]">
       <span className="text-xs text-foreground-secondary sm:text-[0.8125rem]">掐数明细 · <span className="sm:hidden">每行</span>六宫一周</span>
       {steps.map((step) => {
         const stage = stageByKey.get(step.key);

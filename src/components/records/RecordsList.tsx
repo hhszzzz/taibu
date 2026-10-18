@@ -53,7 +53,7 @@ function RecordCard({
     const pinLabel = record.is_pinned ? '取消置顶' : '置顶';
 
     return (
-        <article className={`flex flex-col gap-2 rounded-[14px] border-[0.5px] bg-surface p-4 md:flex-row md:items-start md:gap-4 md:p-5 ${record.is_pinned ? 'border-accent/40' : 'border-border'}`}>
+        <article className={`flex flex-col gap-2 rounded-2xl border-[0.5px] bg-surface p-4 md:flex-row md:items-start md:gap-4 md:p-5 ${record.is_pinned ? 'border-accent/40' : 'border-border'}`}>
             <div className="flex min-w-0 flex-1 flex-col gap-2">
                 <div className="flex flex-wrap items-center gap-1.5">
                     {record.is_pinned ? (
@@ -184,7 +184,7 @@ export function RecordsList({
 
     if (loading) {
         return (
-            <div className="rounded-[14px] border-[0.5px] border-border bg-surface p-6">
+            <div className="rounded-2xl border-[0.5px] border-border bg-surface p-6">
                 <SoundWaveLoader variant="block" text="加载记录中" />
             </div>
         );

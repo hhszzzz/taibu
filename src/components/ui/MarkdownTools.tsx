@@ -55,7 +55,7 @@ export function MarkdownTable({ children }: { children: ReactNode }) {
     };
     return <div className="markdown-table-container">
         <div className="markdown-table-toolbar"><button type="button" onClick={() => void copy()} aria-label="复制表格"><Copy size={14} />复制</button><button type="button" onClick={csv}><Download size={14} />CSV</button><button type="button" onClick={() => setOpen(true)} aria-label="放大表格"><Expand size={14} /></button></div>
-        <div className="overflow-x-auto"><table ref={ref} className="w-full border-collapse text-sm">{children}</table></div>
-        <Modal open={open} onClose={() => setOpen(false)} labelledBy="table-preview-title" className="markdown-table-dialog"><div className="flex justify-between p-4"><h2 id="table-preview-title">表格预览</h2><button type="button" aria-label="关闭表格预览" onClick={() => setOpen(false)}><X size={18} /></button></div><div className="overflow-auto p-4"><table className="w-full border-collapse text-sm">{children}</table></div></Modal>
+        <div className="overflow-x-auto"><table ref={ref} className="w-full border-collapse">{children}</table></div>
+        <Modal open={open} onClose={() => setOpen(false)} labelledBy="table-preview-title" className="markdown-table-dialog"><div className="flex justify-between p-4"><h2 id="table-preview-title">表格预览</h2><button type="button" aria-label="关闭表格预览" onClick={() => setOpen(false)}><X size={18} /></button></div><div className="overflow-auto p-4"><table className="w-full border-collapse">{children}</table></div></Modal>
     </div>;
 }

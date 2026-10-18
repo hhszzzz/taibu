@@ -5,13 +5,8 @@ import type { ReactNode } from 'react';
 import { Eye, EyeOff, KeyRound, LockKeyhole, Monitor, PencilLine } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import type { CustomProviderConfig } from '@/types';
-import {
-    buildByokProviderOptions,
-    getByokProviderLabel,
-    isOtherByokProviderKey,
-    normalizeByokProviderKey,
-    type ByokProviderOption,
-} from '@/lib/ai/byok-catalog';
+import { getVendorName } from '@/lib/ai/vendor-labels';
+import { matchModelVendor } from '@/lib/ai/vendor-match';
 import { getVendorIcon } from '@/lib/ai/vendor-config';
 import {
     clearCustomProvider,
@@ -20,12 +15,10 @@ import {
     getLastCustomProvider,
     setCustomProvider,
 } from '@/lib/chat/custom-provider';
-import { useByokModelCatalog } from '@/lib/hooks/useByokModelCatalog';
 import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
-import { maskCustomProviderApiKey, validateCustomProviderInput } from '@/lib/ai/custom-provider-url';
+import { CUSTOM_PROVIDER_MAX_MODEL_NAME_LENGTH, hasRedundantVersionSuffix, maskCustomProviderApiKey, validateCustomProviderInput } from '@/lib/ai/custom-provider-url';
 
 type CustomProviderDraft = {
-    providerKey: string;
     apiUrl: string;
     apiKey: string;
     modelId: string;
@@ -33,10 +26,10 @@ type CustomProviderDraft = {
 };
 
 type CustomProviderFormErrors = {
-    providerKey?: string;
     apiUrl?: string;
     apiKey?: string;
     modelId?: string;
+    modelName?: string;
 };
 
 interface CustomProviderPanelProps {
@@ -47,7 +40,6 @@ interface CustomProviderPanelProps {
 }
 
 const EMPTY_DRAFT: CustomProviderDraft = {
-    providerKey: '',
     apiUrl: '',
     apiKey: '',
     modelId: '',
@@ -57,7 +49,6 @@ const EMPTY_DRAFT: CustomProviderDraft = {
 function draftFromConfig(config: CustomProviderConfig | null): CustomProviderDraft {
     if (!config) return EMPTY_DRAFT;
     return {
-        providerKey: normalizeByokProviderKey(config.providerKey) || 'other',
         apiUrl: config.apiUrl,
         apiKey: config.apiKey,
         modelId: config.modelId,
@@ -85,7 +76,7 @@ function FieldLabel({ htmlFor, children }: { htmlFor: string; children: ReactNod
 
 // 设置页（宽版）与对话页弹窗（紧凑版）共用同一结构，只切换控件尺寸。
 function fieldControlClass(compact: boolean) {
-    return `w-full rounded-[10px] border border-border-hover bg-surface text-foreground outline-none transition-colors duration-150 placeholder:text-foreground-tertiary focus:border-accent ${
+    return `w-full rounded-xl border border-border-hover bg-surface text-foreground outline-none transition-colors duration-150 placeholder:text-foreground-tertiary focus:border-accent ${
         compact ? 'h-10 px-3 text-sm' : 'h-11 px-3.5 text-[15px]'
     }`;
 }
@@ -93,7 +84,7 @@ function fieldControlClass(compact: boolean) {
 function StorageNotice({ compact }: { compact: boolean }) {
     if (compact) {
         return (
-            <p className="flex items-start gap-2 rounded-[10px] bg-background-secondary px-3 py-2.5 text-xs leading-relaxed text-foreground-secondary">
+            <p className="flex items-start gap-2 rounded-xl bg-background-secondary px-3 py-2.5 text-xs leading-relaxed text-foreground-secondary">
                 <LockKeyhole aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
                 <span>Key 只存在当前标签页，普通对话由浏览器直连供应商；Agent 任务会加密临时保存，结束即删除。</span>
             </p>
@@ -113,84 +104,28 @@ function StorageNotice({ compact }: { compact: boolean }) {
     );
 }
 
-function resolveDraftConfig(
-    draft: CustomProviderDraft,
-    providers: ByokProviderOption[],
-): CustomProviderConfig | null {
-    const apiKey = draft.apiKey.trim();
-
-    if (isOtherByokProviderKey(draft.providerKey)) {
-        return {
-            providerKey: 'other',
-            providerLabel: '其他',
-            apiUrl: draft.apiUrl.trim(),
-            apiKey,
-            modelId: draft.modelId.trim(),
-            modelName: draft.modelName.trim() || undefined,
-        };
-    }
-
-    const provider = providers.find((item) => item.key === draft.providerKey);
-    if (!provider) {
-        return null;
-    }
-
-    const selectedModel = provider.models.find((item) => item.id === draft.modelId.trim());
+/** 面板不再选择供应商：一律按手工配置保存，厂商标签来自模型 ID 的前缀匹配。 */
+function resolveDraftConfig(draft: CustomProviderDraft): CustomProviderConfig {
+    const vendor = matchModelVendor(draft.modelId);
     return {
-        providerKey: provider.key,
-        providerLabel: provider.label,
-        apiUrl: provider.defaultApiUrl ?? '',
-        apiKey,
+        providerKey: 'other',
+        providerLabel: vendor ? getVendorName(vendor) : '其他',
+        apiUrl: draft.apiUrl.trim(),
+        apiKey: draft.apiKey.trim(),
         modelId: draft.modelId.trim(),
-        modelName: selectedModel?.name || draft.modelName.trim() || undefined,
+        modelName: draft.modelName.trim() || undefined,
     };
 }
 
-function buildFormErrors(
-    draft: CustomProviderDraft,
-    providers: ByokProviderOption[],
-): CustomProviderFormErrors {
-    const errors: CustomProviderFormErrors = {};
-
-    if (isOtherByokProviderKey(draft.providerKey)) {
-        return validateCustomProviderInput({
-            apiUrl: draft.apiUrl,
-            apiKey: draft.apiKey,
-            modelId: draft.modelId,
-        });
-    }
-
-    if (!draft.providerKey) {
-        errors.providerKey = '请选择模型供应商';
-        return errors;
-    }
-
-    const provider = providers.find((item) => item.key === draft.providerKey);
-    if (!provider) {
-        errors.providerKey = '请选择模型供应商';
-        return errors;
-    }
-
-    const validation = validateCustomProviderInput({
-        apiUrl: provider.defaultApiUrl ?? '',
+function buildFormErrors(draft: CustomProviderDraft): CustomProviderFormErrors {
+    const errors: CustomProviderFormErrors = validateCustomProviderInput({
+        apiUrl: draft.apiUrl,
         apiKey: draft.apiKey,
         modelId: draft.modelId,
     });
-
-    if (!draft.modelId.trim()) {
-        errors.modelId = '请选择模型';
-    } else if (validation.modelId) {
-        errors.modelId = validation.modelId;
+    if (draft.modelName.trim().length > CUSTOM_PROVIDER_MAX_MODEL_NAME_LENGTH) {
+        errors.modelName = '显示名称过长';
     }
-
-    if (!provider.defaultApiUrl || validation.apiUrl) {
-        errors.providerKey = '当前供应商预设地址不可用';
-    }
-
-    if (validation.apiKey) {
-        errors.apiKey = validation.apiKey;
-    }
-
     return errors;
 }
 
@@ -200,10 +135,6 @@ export function CustomProviderPanel({
     onChange,
 }: CustomProviderPanelProps) {
     const { showToast } = useToast();
-    const byokCatalog = useByokModelCatalog();
-    const fallbackProviders = useMemo(() => buildByokProviderOptions([]), []);
-    const providers = byokCatalog.providers;
-    const safeProviders = providers.length > 0 ? providers : fallbackProviders;
 
     const [activeConfig, setActiveConfig] = useState<CustomProviderConfig | null>(() => getCustomProvider());
     const [draft, setDraft] = useState<CustomProviderDraft>(() => draftFromConfig(getCustomProvider()));
@@ -235,72 +166,29 @@ export function CustomProviderPanel({
         };
     }, []);
 
-    const selectedProvider = useMemo(
-        () => safeProviders.find((item) => item.key === draft.providerKey) ?? null,
-        [safeProviders, draft.providerKey],
-    );
-    const isOtherProvider = isOtherByokProviderKey(draft.providerKey);
-    const activeProviderLabel = getByokProviderLabel(activeConfig?.providerKey, activeConfig?.providerLabel);
+    // 标签按模型 ID 前缀实时推导：旧配置存过的 providerLabel 只作回退，
+    // 这样改名、改网关后摘要与图标都会自愈。
+    const activeVendor = activeConfig ? matchModelVendor(activeConfig.modelId) : null;
+    const activeProviderLabel = activeVendor ? getVendorName(activeVendor) : activeConfig?.providerLabel ?? '其他';
     const activeUrl = formatProviderUrl(activeConfig?.apiUrl);
-    const errors = useMemo(() => buildFormErrors(draft, safeProviders), [draft, safeProviders]);
+    const matchedVendor = useMemo(() => matchModelVendor(draft.modelId), [draft.modelId]);
+    // 手写了 /v1 或 /chat/completions 时提示不必写（标准化同样能容错）；
+    // 网关自带的版本段（/api/paas/v4、/v1beta/openai）不算冗余。
+    const urlIncludesVersionSuffix = useMemo(() => hasRedundantVersionSuffix(draft.apiUrl), [draft.apiUrl]);
+    const errors = useMemo(() => buildFormErrors(draft), [draft]);
     const hasErrors = Object.keys(errors).length > 0;
 
     const handleFieldChange = (field: keyof CustomProviderDraft, value: string) => {
         setDraft((prev) => ({ ...prev, [field]: value }));
     };
 
-    const handleProviderChange = (providerKey: string) => {
-        setSubmitted(false);
-        if (!providerKey) {
-            setDraft((prev) => ({
-                ...prev,
-                providerKey: '',
-                apiUrl: '',
-                modelId: '',
-                modelName: '',
-            }));
-            return;
-        }
-
-        if (isOtherByokProviderKey(providerKey)) {
-            setDraft((prev) => ({
-                ...prev,
-                providerKey,
-                apiUrl: prev.providerKey === providerKey ? prev.apiUrl : '',
-                modelId: '',
-                modelName: '',
-            }));
-            return;
-        }
-
-        const provider = safeProviders.find((item) => item.key === providerKey);
-        const firstModel = provider?.models[0];
-        setDraft((prev) => ({
-            ...prev,
-            providerKey,
-            apiUrl: provider?.defaultApiUrl ?? '',
-            modelId: firstModel?.id ?? '',
-            modelName: firstModel?.name ?? '',
-        }));
-    };
-
-    const handleModelChange = (modelId: string) => {
-        const selectedModel = selectedProvider?.models.find((item) => item.id === modelId);
+    /** 实际请求模型变化时，显示名称默认跟随；用户改过显示名称后不再覆盖。 */
+    const handleModelIdChange = (modelId: string) => {
         setSubmitted(false);
         setDraft((prev) => ({
             ...prev,
             modelId,
-            modelName: selectedModel?.name ?? '',
-        }));
-    };
-
-    const handleManualModelIdChange = (modelId: string) => {
-        const selectedModel = selectedProvider?.models.find((item) => item.id === modelId.trim());
-        setSubmitted(false);
-        setDraft((prev) => ({
-            ...prev,
-            modelId,
-            modelName: selectedModel?.name ?? '',
+            modelName: !prev.modelName.trim() || prev.modelName === prev.modelId ? modelId : prev.modelName,
         }));
     };
 
@@ -322,8 +210,7 @@ export function CustomProviderPanel({
         setSubmitted(true);
         if (hasErrors) return;
 
-        const nextConfig = resolveDraftConfig(draft, safeProviders);
-        if (!nextConfig) return;
+        const nextConfig = resolveDraftConfig(draft);
 
         setCustomProvider(nextConfig);
         setActiveConfig(nextConfig);
@@ -371,19 +258,18 @@ export function CustomProviderPanel({
     const compact = !embedded;
     const fieldClass = fieldControlClass(compact);
     const monoFieldClass = `${fieldClass} font-mono placeholder:font-sans`;
-    const secondaryButtonClass = `inline-flex items-center justify-center gap-1.5 rounded-[10px] border border-border-hover bg-surface font-medium text-foreground transition-colors duration-150 hover:bg-background-secondary ${
+    const secondaryButtonClass = `inline-flex items-center justify-center gap-1.5 rounded-xl border border-border-hover bg-surface font-medium text-foreground transition-colors duration-150 hover:bg-background-secondary ${
         compact ? 'h-10 px-3.5 text-sm' : 'h-10 px-4 text-sm'
     }`;
-    const primaryButtonClass = `inline-flex items-center justify-center rounded-[10px] bg-accent font-medium text-on-accent transition-colors duration-150 hover:bg-accent-hover ${
+    const primaryButtonClass = `inline-flex items-center justify-center rounded-xl bg-accent font-medium text-on-accent transition-colors duration-150 hover:bg-accent-hover ${
         compact ? 'h-10 flex-1 px-4 text-sm' : 'h-11 px-5 text-sm'
     }`;
     const sectionTitleClass = embedded ? 'text-[13px] font-medium text-foreground-tertiary' : 'sr-only';
     const apiKeyToggleLabel = showApiKey ? '隐藏 API Key' : '显示 API Key';
-    const modelSuggestions = !isOtherProvider ? selectedProvider?.models ?? [] : [];
-    const providerError = submitted ? errors.providerKey : undefined;
     const apiKeyError = submitted ? errors.apiKey : undefined;
     const apiUrlError = submitted ? errors.apiUrl : undefined;
     const modelIdError = submitted ? errors.modelId : undefined;
+    const modelNameError = submitted ? errors.modelName : undefined;
 
     const apiKeyToggle = (
         <button
@@ -400,10 +286,10 @@ export function CustomProviderPanel({
     const summary = activeConfig ? (
         <section aria-labelledby={`${fieldId}-summary`} className="flex flex-col gap-3">
             <h3 id={`${fieldId}-summary`} className={sectionTitleClass}>当前启用</h3>
-            <div className="overflow-hidden rounded-[14px] border border-border bg-surface">
+            <div className="overflow-hidden rounded-2xl border border-border bg-surface">
                 <div className={`flex items-center gap-3 ${compact ? 'px-4 py-3.5' : 'px-5 py-4'}`}>
                     <span aria-hidden="true" className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-background-secondary">
-                        {getVendorIcon(normalizeByokProviderKey(activeConfig.providerKey) || 'other', 22)}
+                        {getVendorIcon(activeVendor ?? 'other', 22)}
                     </span>
                     <div className="min-w-0 flex-1">
                         <p className="truncate text-[15px] font-medium text-foreground">{activeConfig.modelName || activeConfig.modelId}</p>
@@ -435,7 +321,7 @@ export function CustomProviderPanel({
                     <button
                         type="button"
                         onClick={handleDeactivate}
-                        className="inline-flex h-10 items-center justify-center rounded-[10px] px-3 text-sm text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-danger"
+                        className="inline-flex h-10 items-center justify-center rounded-xl px-3 text-sm text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-danger"
                     >
                         停用
                     </button>
@@ -453,57 +339,31 @@ export function CustomProviderPanel({
             <h3 id={`${fieldId}-form`} className={sectionTitleClass}>{activeConfig ? '编辑配置' : '配置模型'}</h3>
             <div className={compact
                 ? 'flex flex-col gap-4'
-                : 'flex flex-col gap-5 rounded-[14px] border border-border bg-surface p-5 sm:p-6'
+                : 'flex flex-col gap-5 rounded-2xl border border-border bg-surface p-5 sm:p-6'
             }>
                 <div className="flex flex-col gap-2">
-                    <span id={`${fieldId}-provider`} className="text-[13px] text-foreground-secondary">模型供应商</span>
-                    <div role="radiogroup" aria-labelledby={`${fieldId}-provider`} className="flex flex-wrap gap-2">
-                        {safeProviders.map((provider) => {
-                            const selected = draft.providerKey === provider.key;
-                            return (
-                                <button
-                                    key={provider.key}
-                                    type="button"
-                                    role="radio"
-                                    aria-checked={selected}
-                                    onClick={() => handleProviderChange(provider.key)}
-                                    className={`inline-flex h-9 items-center gap-1.5 rounded-full border pl-2 pr-3 text-[13px] transition-colors duration-150 ${
-                                        selected
-                                            ? 'border-accent bg-accent-light font-medium text-accent-strong'
-                                            : 'border-border bg-surface text-foreground hover:border-border-hover'
-                                    }`}
-                                >
-                                    <span aria-hidden="true" className="flex h-5 w-5 items-center justify-center">{getVendorIcon(provider.key, 16)}</span>
-                                    {provider.label}
-                                </button>
-                            );
-                        })}
-                    </div>
-                    {selectedProvider?.defaultApiUrl ? (
-                        <p className="min-w-0 truncate text-xs text-foreground-tertiary">
-                            请求直连 <span className="font-mono">{selectedProvider.defaultApiUrl}</span>
+                    <FieldLabel htmlFor={`${fieldId}-api-url`}>API URL</FieldLabel>
+                    <input
+                        id={`${fieldId}-api-url`}
+                        value={draft.apiUrl}
+                        onChange={(event) => handleFieldChange('apiUrl', event.target.value)}
+                        aria-invalid={apiUrlError ? true : undefined}
+                        aria-describedby={`${fieldId}-api-url-hint${apiUrlError ? ` ${fieldId}-api-url-error` : ''}`}
+                        className={monoFieldClass}
+                        placeholder="https://api.deepseek.com"
+                        autoComplete="off"
+                        inputMode="url"
+                    />
+                    <p id={`${fieldId}-api-url-hint`} className="text-xs text-foreground-tertiary">
+                        只填到域名即可，<span className="font-mono">/v1</span> 与 <span className="font-mono">/chat/completions</span> 会按需自动补全。
+                    </p>
+                    {urlIncludesVersionSuffix ? (
+                        <p role="status" className="text-xs text-foreground-secondary">
+                            地址里不用写 <span className="font-mono">/v1</span> 或 <span className="font-mono">/chat/completions</span>，保存时会自动处理。
                         </p>
                     ) : null}
-                    <InputError message={providerError} />
+                    <InputError id={`${fieldId}-api-url-error`} message={apiUrlError} />
                 </div>
-
-                {isOtherProvider ? (
-                    <div className="flex flex-col gap-2">
-                        <FieldLabel htmlFor={`${fieldId}-api-url`}>API URL</FieldLabel>
-                        <input
-                            id={`${fieldId}-api-url`}
-                            value={draft.apiUrl}
-                            onChange={(event) => handleFieldChange('apiUrl', event.target.value)}
-                            aria-invalid={apiUrlError ? true : undefined}
-                            aria-describedby={apiUrlError ? `${fieldId}-api-url-error` : undefined}
-                            className={monoFieldClass}
-                            placeholder="https://api.example.com/v1"
-                            autoComplete="off"
-                            inputMode="url"
-                        />
-                        <InputError id={`${fieldId}-api-url-error`} message={apiUrlError} />
-                    </div>
-                ) : null}
 
                 <div className="flex flex-col gap-2">
                     <FieldLabel htmlFor={`${fieldId}-api-key`}>API Key</FieldLabel>
@@ -525,57 +385,47 @@ export function CustomProviderPanel({
                     <InputError id={`${fieldId}-api-key-error`} message={apiKeyError} />
                 </div>
 
-                <div className={isOtherProvider ? 'grid gap-4 sm:grid-cols-2' : 'flex flex-col gap-2'}>
+                <div className="grid gap-4 sm:grid-cols-2">
                     <div className="flex flex-col gap-2">
-                        <div className="flex items-baseline justify-between gap-3">
-                            <FieldLabel htmlFor={`${fieldId}-model-id`}>Model ID</FieldLabel>
-                            {!isOtherProvider && selectedProvider ? (
-                                <span className="text-xs text-foreground-tertiary">可填写该供应商支持的任意模型</span>
+                        <FieldLabel htmlFor={`${fieldId}-model-id`}>实际请求模型</FieldLabel>
+                        <div className="relative">
+                            <input
+                                id={`${fieldId}-model-id`}
+                                value={draft.modelId}
+                                onChange={(event) => handleModelIdChange(event.target.value)}
+                                aria-invalid={modelIdError ? true : undefined}
+                                aria-describedby={modelIdError ? `${fieldId}-model-id-error` : undefined}
+                                className={`${monoFieldClass} pr-10`}
+                                placeholder="例如 deepseek-chat"
+                                autoComplete="off"
+                                spellCheck={false}
+                            />
+                            {matchedVendor ? (
+                                <span
+                                    aria-hidden="true"
+                                    title={getVendorName(matchedVendor)}
+                                    className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-foreground-secondary"
+                                >
+                                    {getVendorIcon(matchedVendor, 16)}
+                                </span>
                             ) : null}
                         </div>
-                        <input
-                            id={`${fieldId}-model-id`}
-                            value={draft.modelId}
-                            onChange={(event) => (isOtherProvider
-                                ? handleFieldChange('modelId', event.target.value)
-                                : handleManualModelIdChange(event.target.value))}
-                            aria-invalid={modelIdError ? true : undefined}
-                            aria-describedby={modelIdError ? `${fieldId}-model-id-error` : undefined}
-                            className={monoFieldClass}
-                            placeholder={isOtherProvider ? 'gpt-4.1-mini' : selectedProvider?.models[0]?.id ?? '先选择供应商'}
-                            autoComplete="off"
-                            spellCheck={false}
-                        />
                         <InputError id={`${fieldId}-model-id-error`} message={modelIdError} />
                     </div>
-                    {isOtherProvider ? (
-                        <div className="flex flex-col gap-2">
-                            <FieldLabel htmlFor={`${fieldId}-model-name`}>显示名称（可选）</FieldLabel>
-                            <input
-                                id={`${fieldId}-model-name`}
-                                value={draft.modelName}
-                                onChange={(event) => handleFieldChange('modelName', event.target.value)}
-                                className={fieldClass}
-                                placeholder="在对话里显示的名字"
-                                autoComplete="off"
-                            />
-                        </div>
-                    ) : modelSuggestions.length > 0 ? (
-                        <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="text-xs text-foreground-tertiary">推荐</span>
-                            {modelSuggestions.map((model) => (
-                                <button
-                                    key={model.id}
-                                    type="button"
-                                    aria-pressed={draft.modelId.trim() === model.id}
-                                    onClick={() => handleModelChange(model.id)}
-                                    className="h-7 rounded-full border border-border bg-surface px-2.5 text-xs text-foreground-secondary transition-colors duration-150 hover:border-border-hover hover:text-foreground aria-pressed:border-accent aria-pressed:bg-accent-light aria-pressed:text-accent-strong"
-                                >
-                                    {model.name}
-                                </button>
-                            ))}
-                        </div>
-                    ) : null}
+                    <div className="flex flex-col gap-2">
+                        <FieldLabel htmlFor={`${fieldId}-model-name`}>显示名称</FieldLabel>
+                        <input
+                            id={`${fieldId}-model-name`}
+                            value={draft.modelName}
+                            onChange={(event) => handleFieldChange('modelName', event.target.value)}
+                            aria-invalid={modelNameError ? true : undefined}
+                            aria-describedby={modelNameError ? `${fieldId}-model-name-error` : undefined}
+                            className={fieldClass}
+                            placeholder="默认跟随实际请求模型，可修改"
+                            autoComplete="off"
+                        />
+                        <InputError id={`${fieldId}-model-name-error`} message={modelNameError} />
+                    </div>
                 </div>
 
                 <div className="flex flex-wrap gap-2 pt-1">
@@ -608,7 +458,7 @@ export function CustomProviderPanel({
     }
 
     return (
-        <div className="flex flex-col gap-5 rounded-2xl border border-border bg-surface p-5 shadow-[0_10px_30px_rgba(34,30,20,0.12)] md:w-[420px]">
+        <div className="flex flex-col gap-5 rounded-2xl border border-border bg-surface p-5 shadow-[0_10px_30px_rgba(11, 11, 11,0.12)] md:w-[420px]">
             <div className="flex items-start gap-3 pr-8">
                 <span aria-hidden="true" className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-strong">
                     <KeyRound className="h-[18px] w-[18px]" />

@@ -1,0 +1,106 @@
+'use client';
+// 需要读写协作预设与模型列表
+
+import { useMemo } from 'react';
+import { Plus, Trash2 } from 'lucide-react';
+import { SettingsRow, SettingsSwitch } from '@/components/settings/SettingsControls';
+import { useAvailableModels } from '@/lib/hooks/useAvailableModels';
+import { useCollaborationPreset, writeCollaborationPreset } from '@/lib/chat/collaboration-preset';
+import type { AgentCollaborator } from '@/lib/chat/model-settings';
+import type { MembershipType } from '@/lib/user/membership';
+
+/**
+ * 多模型协作设置（claude 把协作成员配置收进设置；模型菜单只保留勾选开关）。
+ * 预设保存在本机（按用户隔离），聊天页的模型菜单读取同一份。
+ */
+export function CollaborationSettings({ userId, membershipType }: { userId: string; membershipType?: MembershipType }) {
+    const preset = useCollaborationPreset(userId);
+    const query = useAvailableModels(userId, { enabled: true, membershipType });
+    const models = useMemo(() => (query.data ?? []).filter(model => model.allowed !== false), [query.data]);
+    const update = (next: typeof preset) => writeCollaborationPreset(userId, next);
+    const member = (index: number): AgentCollaborator => {
+        const model = models[index % Math.max(models.length, 1)];
+        return {
+            id: crypto.randomUUID(),
+            name: index === 0 ? '专项分析' : index === 1 ? '独立复核' : `协作 ${index + 1}`,
+            model: model?.id ?? '',
+            focus: index === 1 ? '独立核对依据、分歧和不确定性' : '',
+            reasoning: !!model?.isReasoningDefault && model.reasoningAllowed !== false,
+            reasoningEffort: null,
+        };
+    };
+    // 成员 0–4 名，默认一个都不选；一个都没有时协作开关自动关闭（主模型单独作答）。
+    const setMembers = (members: AgentCollaborator[]) => update({ ...preset, enabled: members.length > 0 && preset.enabled, members });
+    const patchMember = (index: number, change: Partial<AgentCollaborator>) => setMembers(preset.members.map((item, position) => position === index ? { ...item, ...change } : item));
+    const toggleEnabled = () => {
+        // 开启协作不再预置成员：从 0 开始，由用户自己添加要参与的子模型。
+        update({ ...preset, enabled: !preset.enabled });
+    };
+    return <section className="settings-form-section settings-form-section-divided" aria-label="多模型协作设置">
+        <div className="settings-form-heading">
+            <h3>多模型协作</h3>
+            <p>子模型可在个性化设置努力程度；模型用平台模型或自己的模型 API。主模型不占成员名额，汇总只计一次费用。</p>
+        </div>
+        <div className="settings-group">
+            <SettingsRow
+                label="启用多模型协作"
+                description="模型菜单里也可以随时开关；主模型不占成员名额。"
+                control={<SettingsSwitch label="启用多模型协作" checked={preset.enabled} disabled={!models.length && !preset.members.length} onToggle={toggleEnabled} />}
+            />
+        </div>
+        {preset.members.map((item, index) => <fieldset key={item.id} className="settings-collab-member">
+            <legend>Agent {index + 1}</legend>
+            <div className="settings-collab-grid">
+                <label className="settings-field"><span>名称</span>
+                    <input className="settings-input" maxLength={60} value={item.name} aria-label={`Agent ${index + 1} 名称`}
+                        onChange={event => patchMember(index, { name: event.target.value })} />
+                </label>
+                <label className="settings-field"><span>模型</span>
+                    <select className="settings-select" value={item.model} aria-label={`Agent ${index + 1} 模型`}
+                        onChange={event => {
+                            const model = models.find(candidate => candidate.id === event.target.value);
+                            patchMember(index, { model: event.target.value, reasoning: !!model && model.isReasoningDefault === true && model.reasoningAllowed !== false, reasoningEffort: null });
+                        }}>
+                        {!models.some(model => model.id === item.model) && <option value={item.model}>{query.isLoading ? '加载模型…' : '模型已不可用'}</option>}
+                        {models.map(model => <option key={model.id} value={model.id}>{model.name}</option>)}
+                    </select>
+                </label>
+                <label className="settings-field"><span>努力程度</span>
+                    <select className="settings-select" aria-label={`Agent ${index + 1} 努力程度`}
+                        value={item.reasoning ? item.reasoningEffort ?? 'default' : 'off'}
+                        onChange={event => {
+                            const value = event.target.value;
+                            patchMember(index, value === 'off'
+                                ? { reasoning: false, reasoningEffort: null }
+                                : { reasoning: true, reasoningEffort: value === 'default' ? null : value as AgentCollaborator['reasoningEffort'] });
+                        }}>
+                        <option value="off">关闭推理</option>
+                        <option value="default">模型默认</option>
+                        <option value="low">低</option>
+                        <option value="medium">中</option>
+                        <option value="high">高</option>
+                        <option value="xhigh">超高</option>
+                        <option value="max">最高</option>
+                    </select>
+                </label>
+            </div>
+            <label className="settings-field"><span>分工</span>
+                <textarea className="settings-textarea" rows={2} maxLength={1200} value={item.focus} aria-label={`Agent ${index + 1} 分工`}
+                    placeholder="分析角度或复核重点" onChange={event => patchMember(index, { focus: event.target.value })} />
+            </label>
+            <div className="settings-actions">
+                <button type="button" className="settings-button settings-button-compact settings-button-ghost" aria-label={`移除 Agent ${index + 1}`}
+                    onClick={() => setMembers(preset.members.filter((_, position) => position !== index))}>
+                    <Trash2 size={14} aria-hidden="true" />移除成员
+                </button>
+            </div>
+        </fieldset>)}
+        <div className="settings-actions">
+            <button type="button" className="settings-button" disabled={preset.members.length >= 4}
+                onClick={() => setMembers([...preset.members, member(preset.members.length)])}>
+                <Plus size={14} aria-hidden="true" />添加成员
+            </button>
+        </div>
+        <p className="settings-help">成员会同时收到已确认资料与实际工具结果，不自行猜测。</p>
+    </section>;
+}

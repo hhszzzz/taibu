@@ -1,25 +1,20 @@
 'use client';
 // 需要点击事件在工作区内切换标签，并在概览中直接导出对话
 
-import { useId } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { ArrowUpRight, BookOpen, Calculator, CircleHelp, Database, Files, FileText, Globe, ListChecks, Search, Users, Wrench, type LucideIcon } from 'lucide-react';
-import { isAgentRunTerminal, type AgentMessageData, type AgentPart, type AgentRunView } from '@/lib/agent/types';
-import { getAgentToolFamily } from '@/lib/agent/tool-catalog';
+import { ArrowUpRight, BookOpen, Calculator, ChevronDown, ChevronRight, CircleHelp, Cpu, Database, Files, FileText, Globe, GripVertical, ListChecks, Search, Users, Wrench, type LucideIcon } from 'lucide-react';
+import { type AgentMessageData, type AgentRunView } from '@/lib/agent/types';
 import { getAgentCalculation, getAgentChart, getAgentUnrepresentedArtifacts, type AgentCalculation, type AgentChart, type AgentToolPart } from '@/lib/agent/tool-presentation';
 import { AGENT_EVIDENCE_KINDS, AGENT_EVIDENCE_LABELS, countAgentEvidence } from '@/lib/agent/evidence';
 import type { AgentWorkspaceModel, AgentWorkspaceResource } from '@/lib/agent/workspace';
-import { REASONING_EFFORT_LABELS } from '@/lib/chat/model-settings';
-import { useConversationExport } from '@/components/chat/ConversationExportDialog';
-import { AgentStatus } from './AgentStatus';
-import { AgentActivityIndicator } from './AgentActivityGroup';
-import { AgentContextDetails, describeAgentContext } from './AgentContextUsage';
-import { formatAgentElapsed, useAgentElapsed } from './AgentHeaderStatus';
-import { AgentToolDetails } from './AgentToolCard';
-import { BaziPillars, CHART_GLYPHS } from './AgentToolResult';
+import { resolveClientModelName } from '@/lib/ai/model-name-cache';
+import { AgentContextOverview } from './AgentContextUsage';
+import { ChartMiniPreview } from './chart-preview';
+import { getChartKindMeta } from './chart-registry';
 import {
-    describeAgentCallNote, describeAgentStep, formatAgentToolDuration, getAgentArtifactHref, getAgentLocatedPositions, getAgentReadingState, getAgentResponseTiming,
-    getAgentStepNumbers, getAgentSteps, getAgentTaskDuration, getAgentToolState, getDayunWindow, summarizeAgentTool, type AgentArtifact,
+    getAgentArtifactHref, getAgentLocatedPositions, getAgentReadingState,
+    getDayunWindow, summarizeAgentTool, type AgentArtifact,
 } from './presentation';
 
 export const WORKSPACE_ICONS: Record<AgentWorkspaceResource['family'], LucideIcon> = {
@@ -28,11 +23,6 @@ export const WORKSPACE_ICONS: Record<AgentWorkspaceResource['family'], LucideIco
     saved: Files, attachment: FileText,
 };
 
-const BILLING_LABELS: Record<NonNullable<AgentRunView['billing']>, string> = {
-    charged: '本任务计费 1 次，补充与续问不再扣费',
-    exempt: '使用自定义模型，不扣平台积分',
-    refunded: '未产生内容，已退还积分',
-};
 /** How a reading card names what became of it, and the state its badge is styled by. */
 const READING_BADGES = { 已保存: ['已保存', 'saved'], 暂存成果: ['未另存', 'cached'], 已存资料: ['已存资料', 'record'] } as const;
 const OVERVIEW_LABELS = 4;
@@ -69,58 +59,84 @@ function CalculationPreview({ card }: { card: CalculationCard }) {
         <span key={period.起运年份} data-current={period.current || undefined}><b>{period.干支}</b>{period.起运年份}{period.current ? ' 当前' : ''}</span>)}</span>;
 }
 
-function OverviewExport({ conversationId }: { conversationId: string }) {
-    const id = useId();
-    const { tools, setTools, busy, download } = useConversationExport(conversationId);
-    return <section className="agent-ws-overview-export" aria-labelledby={id}>
-        <h3 id={id}>导出对话</h3>
-        <label><input type="checkbox" checked={tools} disabled={busy !== null} onChange={event => setTools(event.target.checked)} />包含工具调用参数与原始结果</label>
-        <div>
-            <button type="button" className="agent-secondary-button" disabled={busy !== null} onClick={() => void download('md')}>{busy === 'md' ? '正在导出…' : 'Markdown'}</button>
-            <button type="button" className="agent-secondary-button" disabled={busy !== null} onClick={() => void download('html')}>{busy === 'html' ? '正在导出…' : '可打印 HTML'}</button>
+/** 会话栏的模型卡：只展示多模型协作成员（单模型不占右栏空间）。 */
+function ModelsCard({ data, run, grip }: { data?: AgentMessageData; run?: WorkspaceRunInfo; grip?: ReactNode }) {
+    const [open, setOpen] = useState(true);
+    const main = data?.runtime?.model.name ?? '尚未调用模型';
+    const members = run?.configuration?.collaborators ?? [];
+    if (members.length === 0) return null;
+    return <section className="agent-ws-status-card" aria-label="多模型协作">
+        <div className="agent-ws-status-head">
+            <button type="button" className="agent-ws-status-toggle" aria-expanded={open} onClick={() => setOpen(value => !value)}>
+                <span>多模型协作</span>
+                {open ? <ChevronDown size={12} aria-hidden="true" /> : <ChevronRight size={12} aria-hidden="true" />}
+            </button>
+            {grip}
+            <span className="agent-ws-status-count">{members.length}</span>
         </div>
+        {open && <div className="agent-rail-body">
+            <div className="agent-rail-row"><Cpu size={16} aria-hidden="true" /><span>{main}</span><span className="agent-rail-meta">主模型</span></div>
+            {members.map(member => <div key={member.id} className="agent-rail-row">
+                <Cpu size={16} aria-hidden="true" />
+                <span>{member.name || '未命名成员'}</span>
+                <span className="agent-rail-meta">{resolveClientModelName(member.model)}</span>
+            </div>)}
+        </div>}
     </section>;
 }
 
-/** Time since a working task was created, or how long an ended one took; null when neither was measured. */
-function useAgentRunTime(createdAt: string | undefined, data: AgentMessageData | undefined) {
-    const ended = !data || isAgentRunTerminal(data.status);
-    const elapsed = useAgentElapsed(createdAt, !ended);
-    const duration = ended ? getAgentTaskDuration(createdAt, data) : null;
-    return elapsed ?? (duration === null ? null : formatAgentElapsed(duration));
-}
+type RailCardKind = 'models' | 'context' | 'results';
+const RAIL_CARD_LABELS: Record<RailCardKind, string> = { models: '多模型协作', context: '上下文', results: '成果' };
 
-/** 任务摘要: measured times only, the calls made, the latest context reading and how the task was billed. */
-function TaskSummary({ data, run }: { data: AgentMessageData; run?: WorkspaceRunInfo }) {
-    const id = useId();
-    const elapsed = useAgentRunTime(run?.createdAt, data);
-    const timing = getAgentResponseTiming(data.runtime?.responses);
-    const steps = getAgentSteps(data.parts);
-    const failed = steps.filter(tool => getAgentToolState(tool, data.status).status === 'failed').length;
-    const time = [elapsed, timing && `模型响应 ${formatAgentToolDuration(timing.durationMs)} · ${timing.count} 次`].filter(Boolean).join(' · ');
-    const context = describeAgentContext(data.runtime);
-    return <section className="agent-ws-overview-summary" aria-labelledby={id}>
-        <h3 id={id}>任务摘要</h3>
-        <dl>
-            {time && <><dt>用时</dt><dd>{time}</dd></>}
-            <dt>工具</dt><dd>{steps.length} 次调用 · {failed} 次失败</dd>
-            {context && <><dt>上下文</dt><dd>{context}</dd></>}
-            {run?.billing && <><dt>计费</dt><dd>{BILLING_LABELS[run.billing]}</dd></>}
-        </dl>
-    </section>;
+/** 会话状态卡：模型（仅协作时）/ 上下文 / 成果；手柄可拖动排序，Alt+↑↓ 同效。 */
+export function WorkspaceStatusCards({ data, run, afterContext }: { data?: AgentMessageData; run?: WorkspaceRunInfo; afterContext?: (grip: ReactNode) => ReactNode }) {
+    const [order, setOrder] = useState<RailCardKind[]>(['models', 'context', 'results']);
+    if (!data) return null;
+    const available = order.filter(kind => kind === 'models' ? (run?.configuration?.collaborators.length ?? 0) > 0 : kind === 'results' ? afterContext !== undefined : true);
+    const move = (from: RailCardKind, to: RailCardKind) => setOrder(current => {
+        const next = current.filter(kind => kind !== from);
+        next.splice(Math.max(0, next.indexOf(to)), 0, from);
+        return next;
+    });
+    const nudge = (kind: RailCardKind, delta: number) => setOrder(current => {
+        const visible = current.filter(item => item === 'models' ? (run?.configuration?.collaborators.length ?? 0) > 0 : item === 'results' ? afterContext !== undefined : true);
+        const target = visible[visible.indexOf(kind) + delta];
+        if (!target) return current;
+        const next = current.filter(item => item !== kind);
+        next.splice(next.indexOf(target) + (delta > 0 ? 1 : 0), 0, kind);
+        return next;
+    });
+    // 拖动把手 = claude tile 头行的「移动」钮：紧跟标题、悬停显形，拖动排序，Alt+↑↓ 同效。
+    const grip = (kind: RailCardKind) => <button type="button" className="agent-rail-card-grip" aria-label={`移动${RAIL_CARD_LABELS[kind]}卡片`} draggable
+        onDragStart={event => { event.dataTransfer.setData('application/x-taibu-rail-card', kind); event.dataTransfer.effectAllowed = 'move'; }}
+        onKeyDown={event => {
+            if (!event.altKey || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return;
+            event.preventDefault();
+            nudge(kind, event.key === 'ArrowUp' ? -1 : 1);
+        }}><GripVertical size={12} aria-hidden="true" /></button>;
+    return <div className="agent-ws-status-cards">
+        {available.map(kind => <div key={kind} className="agent-rail-card" onDragOver={event => event.preventDefault()} onDrop={event => {
+            event.preventDefault();
+            const from = event.dataTransfer.getData('application/x-taibu-rail-card') as RailCardKind;
+            if (RAIL_CARD_LABELS[from] && from !== kind) move(from, kind);
+        }}>
+            {kind === 'models' ? <ModelsCard data={data} run={run} grip={grip(kind)} />
+                : kind === 'context' ? <AgentContextOverview runtime={data.runtime} working={data.status === 'running'} grip={grip(kind)} />
+                : afterContext?.(grip(kind))}
+        </div>)}
+    </div>;
 }
 
 /**
  * 概览: what the conversation produced — readings with whether they were saved,
  * calculations, the evidence answers can cite and the positions the model
- * located — then the latest task's summary and the export.
+ * located. The task summary and export live in the header, not here.
  */
-export function WorkspaceOverview({ model, artifacts, saved, data, run, onOpen, conversationId }: {
+export function WorkspaceOverview({ model, artifacts, saved, onOpen }: {
     model: AgentWorkspaceModel; artifacts: AgentArtifact[];
     /** Artifact IDs saved as final results. */
     saved: ReadonlySet<string>;
-    data?: AgentMessageData; run?: WorkspaceRunInfo;
-    onOpen: (id: string) => void; conversationId: string | null;
+    onOpen: (id: string) => void;
 }) {
     const id = useId();
     const { readings, calculations } = overviewCards(model, saved);
@@ -130,26 +146,18 @@ export function WorkspaceOverview({ model, artifacts, saved, data, run, onOpen, 
     const positions = getAgentLocatedPositions(model);
     const others = model.resources.filter(resource => !['chart', 'saved', 'calculation', 'evidence', 'attachment'].includes(resource.view));
     const attachments = model.resources.filter(resource => resource.view === 'attachment');
-    const toolResults = readings.filter(card => card.state === '暂存成果').length + calculations.length;
-    const readBack = readings.filter(card => card.state === '已存资料').length;
-    const counts = [
-        artifacts.length && `${artifacts.length} 份已保存`,
-        toolResults && `${toolResults} 份工具结果`,
-        readBack && `${readBack} 份已存资料`,
-        evidence?.total && `${evidence.total} 条回答依据`,
-    ].filter(Boolean).join(' · ');
     const empty = !readings.length && !calculations.length && !savedOnly.length && !evidence && !positions.toolIds.length;
     return <section className="agent-ws-view agent-ws-overview" aria-labelledby={id}>
         <header className="agent-ws-heading">
             <h2 id={id}>本对话的成果</h2>
-            <p>{counts ? `${counts}。关闭标签不会删除成果。` : '任务生成的命盘、计算结果与回答依据会显示在这里。'}</p>
+            <p>任务生成的命盘、计算结果与回答依据会显示在这里。</p>
         </header>
         {empty ? <div className="agent-panel-empty"><Files size={28} aria-hidden="true" /><h3>还没有成果</h3><p>Agent 排盘、计算或检索后，结果会汇总在这里。</p></div>
             : <div className="agent-ws-overview-grid">
                 {readings.map(({ resource, value, state }) => <button key={resource.id} type="button" className="agent-ws-overview-card" data-overview-result="reading" onClick={() => onOpen(resource.id)}>
-                    <span className="agent-ws-overview-kicker">命盘<span data-state={READING_BADGES[state][1]}>{READING_BADGES[state][0]}</span></span>
-                    {value.kind === 'bazi' ? <BaziPillars chart={value.chart} size="overview" /> : <span className="agent-ws-overview-glyph" aria-hidden="true">{CHART_GLYPHS[value.kind]}</span>}
-                    <span className="agent-ws-overview-title">{value.title}{value.kind !== 'bazi' && <small>{value.summary}</small>}</span>
+                    <span className="agent-ws-overview-kicker">{getChartKindMeta(value.kind).label}<span data-state={READING_BADGES[state][1]}>{READING_BADGES[state][0]}</span></span>
+                    <ChartMiniPreview value={value} />
+                    <span className="sr-only">{value.title}</span>
                 </button>)}
                 {savedOnly.map(artifact => <div key={artifact.id} className="agent-ws-overview-card" data-overview-result="saved">
                     <span className="agent-ws-overview-kicker">{artifact.recordId ? '分析记录' : '命盘'}<span data-state="saved">已保存</span></span>
@@ -187,68 +195,5 @@ export function WorkspaceOverview({ model, artifacts, saved, data, run, onOpen, 
             <h3>对话资料 <span>{attachments.length}</span></h3>
             <div className="agent-ws-links">{attachments.map(resource => <button key={resource.id} type="button" className="agent-secondary-button" onClick={() => onOpen(resource.id)}><FileText size={12} aria-hidden="true" />{resource.title}</button>)}</div>
         </section>}
-        {data && <TaskSummary data={data} run={run} />}
-        {conversationId && <OverviewExport conversationId={conversationId} />}
     </section>;
-}
-
-const TODO_GLYPHS = { completed: '✓', in_progress: '●', pending: '○' } as const;
-
-/** 过程: live status, the task list, the call details of the step being looked at, and every step, each opening its view. */
-export function WorkspaceProcessSection({ model, data, run, stepId, onOpen }: {
-    model: AgentWorkspaceModel; data?: AgentMessageData; run?: WorkspaceRunInfo;
-    /** The step last shown in a view; the latest step when none was. */
-    stepId: string | null; onOpen: (id: string) => void;
-}) {
-    const callHeading = useId();
-    const todoHeading = useId();
-    const elapsed = useAgentRunTime(run?.createdAt, data);
-    if (!data) return <div className="agent-panel-empty"><ListChecks size={28} aria-hidden="true" /><h3>尚未开始任务</h3><p>Agent 会根据问题决定需要哪些步骤。</p></div>;
-    const steps: AgentToolPart[] = getAgentSteps(data.parts);
-    const numbers = getAgentStepNumbers(data.parts);
-    const step = steps.find(tool => tool.id === stepId) ?? steps.at(-1);
-    const stepDuration = step && describeAgentStep(step, data.status).duration;
-    const note = step && describeAgentCallNote(step);
-    const todo = data.parts.findLast((part): part is Extract<AgentPart, { type: 'todo' }> => part.type === 'todo');
-    const done = todo?.items.filter(item => item.status === 'completed').length ?? 0;
-    const effort = run?.configuration && (run.configuration.reasoning ? run.configuration.reasoningEffort ? `推理 ${REASONING_EFFORT_LABELS[run.configuration.reasoningEffort]}` : '推理 默认' : '不推理');
-    return <div className="agent-ws-view agent-ws-process">
-        <section className="agent-ws-status" aria-label="任务状态">
-            <span className="agent-ws-status-main"><AgentStatus status={data.status} detail={elapsed} /></span>
-            <span>{data.runtime?.model.name ?? '尚未调用模型'}{effort ? ` · ${effort}` : ''}</span>
-            <AgentContextDetails runtime={data.runtime} />
-            {run?.billing && <span>{BILLING_LABELS[run.billing]}</span>}
-        </section>
-        {todo && <section className="agent-ws-todo" aria-labelledby={todoHeading}>
-            <h3 id={todoHeading}>任务清单 <span>{done} / {todo.items.length}</span></h3>
-            <ol>{todo.items.map(item => <li key={item.id} data-state={item.status}><span aria-hidden="true">{TODO_GLYPHS[item.status]}</span><span>{item.title}</span></li>)}</ol>
-        </section>}
-        {step && <section className="agent-ws-call" aria-labelledby={callHeading} data-tool-id={step.id}>
-            <h3 id={callHeading}>第 {numbers.get(step.id)} 步 · {step.title}<code>{[step.name, stepDuration].filter(Boolean).join(' · ')}</code></h3>
-            <AgentToolDetails tool={step} runStatus={data.status} heading={false} />
-            {note && <p className="agent-ws-note">{note}</p>}
-        </section>}
-        <section className="agent-ws-group" aria-label="任务步骤">
-            <h3>步骤 <span>{steps.length}</span></h3>
-            {steps.length ? <ol className="agent-ws-steps">
-                {steps.map(tool => {
-                    const state = getAgentToolState(tool, data.status);
-                    const location = model.locations.get(tool.id);
-                    const Icon = WORKSPACE_ICONS[getAgentToolFamily(tool.name)];
-                    const summary = summarizeAgentTool(tool);
-                    return <li key={tool.id} data-state={state.status}>
-                        <button type="button" disabled={!location} aria-current={tool.id === step?.id ? 'step' : undefined} onClick={() => location && onOpen(`tool:${tool.id}`)}>
-                            <span className="agent-ws-step-number" aria-hidden="true">{numbers.get(tool.id)}</span>
-                            <Icon size={13} aria-hidden="true" />
-                            <span className="agent-ws-step-label"><span>{tool.title}</span>{summary && <small>{summary}</small>}</span>
-                            {typeof tool.durationMs === 'number' && Number.isFinite(tool.durationMs) && tool.durationMs >= 0 && <small>{formatAgentToolDuration(tool.durationMs)}</small>}
-                            <small>{state.label}</small>
-                        </button>
-                    </li>;
-                })}
-            </ol> : <p className="agent-ws-note">尚未调用工具。</p>}
-        </section>
-        {data.error && <p className="agent-error" role="alert">{data.error}</p>}
-        <AgentActivityIndicator data={data} />
-    </div>;
 }

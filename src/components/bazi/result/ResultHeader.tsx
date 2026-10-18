@@ -4,7 +4,7 @@ import { ChevronLeft, Edit3, Save, Check, Share2, Copy } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { AIFeatureGate } from '@/components/ai/AIFeatureGate';
 
-const BUTTON_BASE_CLASS = 'inline-flex h-10 items-center gap-1.5 rounded-[10px] border-[0.5px] border-border-hover bg-surface px-3.5 text-sm transition-colors duration-150 hover:bg-background-secondary active:bg-background-tertiary disabled:cursor-not-allowed';
+const BUTTON_BASE_CLASS = 'inline-flex h-8 items-center gap-1.5 rounded-md border-[0.5px] border-border-hover bg-surface px-3 text-sm transition-colors duration-150 hover:bg-background-secondary active:bg-background-tertiary disabled:cursor-not-allowed';
 const SECONDARY_BUTTON_CLASS = `${BUTTON_BASE_CLASS} text-foreground disabled:opacity-50`;
 /** 已保存态保持可读（成功色、不降透明度） */
 const SAVED_BUTTON_CLASS = `${BUTTON_BASE_CLASS} text-success`;
@@ -113,7 +113,7 @@ export function ResultHeader({
                     <AIFeatureGate>
                         <Link
                             href={ASK_TAIBU_HREF}
-                            className="inline-flex h-10 items-center rounded-[10px] bg-accent px-4 text-sm font-medium text-on-accent transition-colors duration-150 hover:bg-accent-hover"
+                            className="inline-flex h-10 items-center rounded-xl bg-accent px-4 text-sm font-medium text-on-accent transition-colors duration-150 hover:bg-accent-hover"
                         >
                             问太卜
                         </Link>

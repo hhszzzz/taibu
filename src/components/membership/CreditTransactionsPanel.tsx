@@ -127,7 +127,7 @@ export function CreditTransactionsPanel({ pageSize = 5, refreshKey = 0 }: Credit
         <span className="text-[13px] text-foreground-secondary">今日消耗 {todaySpent}</span>
       </div>
 
-      <div className="overflow-hidden rounded-[14px] border border-border bg-surface">
+      <div className="overflow-hidden rounded-2xl border border-border bg-surface">
         {loading ? (
           Array.from({ length: Math.min(pageSize, 5) }).map((_, index) => (
             <div key={index} className={`h-[60px] animate-pulse bg-background-secondary/60 ${index > 0 ? 'border-t border-border' : ''}`} />

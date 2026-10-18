@@ -38,7 +38,7 @@ export function RecordFilters({
                     value={search}
                     onChange={(e) => onSearchChange(e.target.value)}
                     placeholder="搜索标题、内容或标签"
-                    className="h-11 w-full rounded-[10px] border-[0.5px] border-border-hover bg-surface pr-3.5 pl-[42px] text-[15px] text-foreground placeholder:text-foreground-tertiary focus:border-accent focus:outline-none"
+                    className="h-11 w-full rounded-xl border-[0.5px] border-border-hover bg-surface pr-3.5 pl-[42px] text-[15px] text-foreground placeholder:text-foreground-tertiary focus:border-accent focus:outline-none"
                 />
             </label>
             {/* 手机上分类横向滚动，不换行挤压。 */}

@@ -100,7 +100,7 @@ export function VisionModelSelector({
                         ref={modelButtonRef}
                         type="button"
                         onClick={() => setDropdownOpen(!dropdownOpen)}
-                        className={`flex h-11 w-full items-center gap-1.5 rounded-[10px] border-[0.5px] border-border-hover bg-surface px-3 text-[0.9375rem] transition-colors lg:h-8 lg:w-auto lg:rounded-lg lg:border-0 lg:bg-background-secondary lg:px-2.5 lg:text-[0.8125rem] ${isDisabled
+                        className={`flex h-11 w-full items-center gap-1.5 rounded-xl border-[0.5px] border-border-hover bg-surface px-3 text-[0.9375rem] transition-colors lg:h-8 lg:w-auto lg:rounded-lg lg:border-0 lg:bg-background-secondary lg:px-2.5 lg:text-[0.8125rem] ${isDisabled
                             ? 'cursor-not-allowed text-foreground-secondary opacity-60'
                             : 'text-foreground hover:bg-background-secondary lg:hover:bg-background-tertiary'
                             }`}
@@ -175,7 +175,7 @@ export function VisionModelSelector({
                     type="button"
                     onClick={handleReasoningToggle}
                     disabled={disabled || !canToggleReasoning}
-                    className={`flex h-11 shrink-0 items-center gap-1.5 rounded-[10px] px-2.5 text-sm transition-colors lg:h-8 lg:rounded-lg lg:text-[0.8125rem] ${disabled || !currentModel?.supportsReasoning || !reasoningAllowed
+                    className={`flex h-11 shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-sm transition-colors lg:h-8 lg:rounded-lg lg:text-[0.8125rem] ${disabled || !currentModel?.supportsReasoning || !reasoningAllowed
                         ? 'opacity-30 cursor-not-allowed text-foreground-secondary'
                         : isReasoningForced
                             ? 'text-yellow-600 cursor-default'

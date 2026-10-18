@@ -46,7 +46,7 @@ export function SegmentedControl<T extends string>({
         <div
             role={isTabs ? 'tablist' : 'group'}
             aria-label={ariaLabel}
-            className={`grid ${GRID_COLS_CLASS[options.length] ?? 'grid-flow-col auto-cols-fr'} gap-1 rounded-[10px] bg-background-secondary p-1 ${TRACK_SIZE_CLASS[size]} ${className}`}
+            className={`grid ${GRID_COLS_CLASS[options.length] ?? 'grid-flow-col auto-cols-fr'} gap-1 rounded-xl bg-background-secondary p-1 ${TRACK_SIZE_CLASS[size]} ${className}`}
         >
             {options.map((option) => {
                 const active = option.value === value;

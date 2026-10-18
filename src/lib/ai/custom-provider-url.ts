@@ -1,6 +1,7 @@
 export const CUSTOM_PROVIDER_MAX_API_URL_LENGTH = 256;
 export const CUSTOM_PROVIDER_MAX_API_KEY_LENGTH = 512;
 export const CUSTOM_PROVIDER_MAX_MODEL_ID_LENGTH = 128;
+export const CUSTOM_PROVIDER_MAX_MODEL_NAME_LENGTH = 128;
 
 export interface CustomProviderInputErrors {
     apiUrl?: string;
@@ -13,7 +14,8 @@ export interface CustomProviderInputErrors {
  *
  * - 自动去掉尾部斜杠
  * - 如果用户传入完整 `/chat/completions`，回退到 baseURL
- * - 如果缺少 `/v1` 版本段，则自动补齐
+ * - 路径中不含版本段（如 `/v1`、`/v4`、`/v1beta`）时自动补 `/v1`；
+ *   自带版本段的网关（GLM `/api/paas/v4`、Gemini `/v1beta/openai`）保持原样
  */
 export function normalizeCustomProviderBaseUrl(apiUrl: string): string {
     const parsed = new URL(apiUrl.trim());
@@ -28,7 +30,7 @@ export function normalizeCustomProviderBaseUrl(apiUrl: string): string {
         pathname = pathname.replace(/\/chat\/completions$/u, '');
     }
 
-    if (!/\/v\d+$/u.test(pathname)) {
+    if (!/\/v\d+/u.test(pathname)) {
         pathname = `${pathname || ''}/v1`;
     }
 
@@ -38,6 +40,21 @@ export function normalizeCustomProviderBaseUrl(apiUrl: string): string {
 
 export function buildCustomProviderChatCompletionsUrl(apiUrl: string): string {
     return `${normalizeCustomProviderBaseUrl(apiUrl)}/chat/completions`;
+}
+
+/**
+ * 用户是否手写了由系统补全的后缀（`/v1` 或 `/chat/completions`），用于提示。
+ *
+ * 只认这两种「其实不用写」的形态：GLM `/api/paas/v4`、Gemini `/v1beta/openai`
+ * 这类网关自带版本段是必要路径，不算冗余（这也是该提示存在的意义）。
+ */
+export function hasRedundantVersionSuffix(apiUrl: string): boolean {
+    try {
+        const pathname = new URL(apiUrl.trim()).pathname.replace(/\/+$/u, '');
+        return /\/v1$/iu.test(pathname) || /\/chat\/completions$/iu.test(pathname);
+    } catch {
+        return false;
+    }
 }
 
 export function validateCustomProviderInput(config: {
@@ -78,9 +95,9 @@ export function validateCustomProviderInput(config: {
     }
 
     if (!modelId) {
-        errors.modelId = '请输入 Model ID';
+        errors.modelId = '请输入实际请求模型';
     } else if (modelId.length > CUSTOM_PROVIDER_MAX_MODEL_ID_LENGTH) {
-        errors.modelId = 'Model ID 过长';
+        errors.modelId = '实际请求模型过长';
     }
 
     return errors;

@@ -30,5 +30,8 @@ test('table CSV preserves quotes/newlines and neutralizes spreadsheet formulas',
 });
 test('reading preferences clamp width and reject unknown scaling or notification consent', () => {
     assert.deepEqual(normalizeChatPreferences({ width: 99999, fontScale: 125, desktopNotifications: true }), { width: 1200, fontScale: 125, desktopNotifications: true });
-    assert.deepEqual(normalizeChatPreferences({ width: NaN, fontScale: 200, desktopNotifications: 'true' }), { width: 700, fontScale: 100, desktopNotifications: false });
+    // 缺省/非法宽度回落到 claude 实测的阅读列 768（448–1200，步长 16）。
+    assert.deepEqual(normalizeChatPreferences({ width: NaN, fontScale: 200, desktopNotifications: 'true' }), { width: 768, fontScale: 100, desktopNotifications: false });
+    assert.equal(normalizeChatPreferences({ width: 10 }).width, 448);
+    assert.equal(normalizeChatPreferences({ width: 500.4 }).width, 500);
 });

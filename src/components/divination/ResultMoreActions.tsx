@@ -25,7 +25,7 @@ export function ResultMoreActions({ actions, label }: { actions: HeaderMenuItem[
                 aria-haspopup="menu"
                 aria-expanded={open}
                 onClick={() => setOpen((value) => !value)}
-                className="flex size-10 items-center justify-center rounded-[10px] border-[0.5px] border-border-hover bg-surface text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground"
+                className="flex size-8 items-center justify-center rounded-md border-[0.5px] border-border-hover bg-surface text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground"
             >
                 <MoreHorizontal className="size-[18px]" strokeWidth={1.8} />
             </button>

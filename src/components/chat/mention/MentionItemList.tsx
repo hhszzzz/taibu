@@ -120,18 +120,18 @@ export function MentionItemList({
                 : '没有匹配项';
 
     return (
-        <div ref={listRef} className="max-h-48 overflow-auto">
+        <div ref={listRef} className="chat-mention-list">
             {loading ? (
-                <div className="space-y-1 p-2">
+                <div className="chat-mention-loading">
                     {[1, 2, 3].map(i => (
-                        <div key={i} className="flex items-center gap-2 px-2 py-2">
-                            <div className="w-5 h-5 rounded bg-foreground/10 animate-pulse" />
-                            <div className="h-4 w-24 rounded bg-foreground/10 animate-pulse" />
+                        <div key={i}>
+                            <span />
+                            <span />
                         </div>
                     ))}
                 </div>
             ) : view.items.length === 0 ? (
-                <div className="px-3 py-3 text-sm text-foreground-secondary">
+                <div className="chat-mention-state">
                     {emptyMessage}
                 </div>
             ) : (
@@ -139,17 +139,18 @@ export function MentionItemList({
                     <button
                         key={item.key}
                         type="button"
+                        disabled={item.disabled}
                         data-active={idx === state.activeIndex ? 'true' : 'false'}
-                        className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm ${item.disabled ? 'opacity-60 cursor-not-allowed' : 'hover:bg-background-secondary'} ${idx === state.activeIndex ? 'bg-background-secondary' : ''}`}
+                        className="chat-mention-item"
                         onMouseEnter={() => onActiveIndexChange(idx)}
                         onClick={() => handleItemClick(item)}
                     >
-                        <span className="text-foreground-secondary">{item.icon}</span>
-                        <div className="flex-1 min-w-0">
-                            <div className="truncate">{item.label}</div>
-                            {!!item.hint && <div className="truncate text-xs text-foreground-secondary">{item.hint}</div>}
-                        </div>
-                        {(activeLevel === 'category' || activeLevel === 'subcategory') && <ChevronRight className="w-4 h-4 text-foreground-secondary" />}
+                        <span className="chat-mention-item-icon">{item.icon}</span>
+                        <span className="chat-mention-item-body">
+                            <span className="chat-mention-item-label">{item.label}</span>
+                            {!!item.hint && <span className="chat-mention-item-hint">{item.hint}</span>}
+                        </span>
+                        {(activeLevel === 'category' || activeLevel === 'subcategory') && <ChevronRight className="w-4 h-4 chat-mention-item-tail" />}
                     </button>
                 ))
             )}

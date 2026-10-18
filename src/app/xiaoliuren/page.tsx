@@ -9,6 +9,7 @@ import { XiaoliurenForm } from '@/components/xiaoliuren/XiaoliurenForm';
 import { XiaoliurenPalm } from '@/components/xiaoliuren/XiaoliurenPalm';
 import { writeSessionJSON } from '@/lib/cache/session-storage';
 import type { XiaoliurenWebBundle } from '@/lib/divination/xiaoliuren';
+import { PageHeader } from '@/components/layout/PageHeader';
 
 const COUNTING_STEPS = [
   { title: '月上起', description: '从食指根节「大安」起数，顺时针数到所占农历月。' },
@@ -27,14 +28,11 @@ export default function XiaoliurenPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="mx-auto flex w-full max-w-[1024px] flex-col gap-3 px-4 pt-4 pb-8 sm:px-8 lg:gap-7 lg:pt-12 lg:pb-16">
-        <header className="hidden flex-col gap-2 lg:flex">
-          <h1 className="font-display text-[34px] font-normal leading-tight">小六壬</h1>
-          <p className="text-[15px] text-foreground-secondary">以左手食、中、无名三指六节为六宫，按农历月、日、时三步掐数落宫。</p>
-        </header>
+        <PageHeader title="小六壬" description="以左手食、中、无名三指六节为六宫，按农历月、日、时三步掐数落宫。" />
 
         <XiaoliurenForm submitLabel="开始起课" submitIcon={<Play className="h-4 w-4" />} onCalculated={handleCalculated} />
 
-        <section aria-label="掌诀说明" className="flex flex-wrap items-center gap-6 rounded-[18px] border-[0.5px] border-border bg-surface px-4 py-5 sm:px-6">
+        <section aria-label="掌诀说明" className="flex flex-wrap items-center gap-6 rounded-2xl border-[0.5px] border-border bg-surface px-4 py-5 sm:px-6">
           <div className="flex min-w-0 flex-[1_1_300px] justify-center">
             <XiaoliurenPalm className="max-w-[340px]" />
           </div>

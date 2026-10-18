@@ -203,7 +203,7 @@ export function CanonicalAIPanel({ ai, title = 'AI 深度解读' }: { ai: Canoni
                   title="重新获取 AI 解读"
                   onClick={ai.start}
                   disabled={ai.isStreaming}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-[10px] text-foreground-secondary transition-colors hover:bg-background-secondary active:bg-background-tertiary disabled:opacity-50"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-foreground-secondary transition-colors hover:bg-background-secondary active:bg-background-tertiary disabled:opacity-50"
                 >
                   <RefreshCw className={`h-3.5 w-3.5 ${ai.isStreaming ? 'animate-spin' : ''}`} />
                 </button>
@@ -211,7 +211,7 @@ export function CanonicalAIPanel({ ai, title = 'AI 深度解读' }: { ai: Canoni
             </div>
           </div>
 
-          {ai.error && <div className="rounded-[10px] bg-fire-soft px-3 py-2.5 text-xs text-danger">{ai.error}</div>}
+          {ai.error && <div className="rounded-xl bg-fire-soft px-3 py-2.5 text-xs text-danger">{ai.error}</div>}
 
           {ai.content ? (
             <div className="prose prose-sm max-w-none">
@@ -255,7 +255,7 @@ export function CanonicalAIEntryCard({ ai, title, description, actionLabel, acti
           type="button"
           onClick={ai.start}
           disabled={ai.pending}
-          className="inline-flex h-10 items-center gap-2 rounded-[10px] bg-foreground px-4 text-sm text-background transition-opacity hover:opacity-90 disabled:opacity-50"
+          className="inline-flex h-10 items-center gap-2 rounded-xl bg-foreground px-4 text-sm text-background transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           {actionIcon}
           {ai.isLoggedIn ? actionLabel : '登录解锁 AI 解读'}

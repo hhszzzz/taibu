@@ -47,7 +47,7 @@ export function ProfileSummaryCard({
 
     return (
         <div className="flex min-w-0 flex-col gap-1.5 text-center lg:gap-2 lg:text-left">
-            <h1 className="truncate font-display text-[1.625rem] font-normal leading-tight text-foreground lg:text-[34px]">
+            <h1 className="truncate font-display text-[1.625rem] font-normal leading-tight text-foreground lg:text-[2rem]">
                 {meta.name}的命盘
             </h1>
             <dl className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-[0.8125rem] text-foreground-secondary lg:justify-start lg:text-sm">

@@ -70,7 +70,7 @@ export function ConfirmDialog({
                             type="button"
                             onClick={onClose}
                             disabled={loading}
-                            className="h-10 rounded-[10px] border-[0.5px] border-border-hover bg-transparent px-4 text-sm text-foreground transition-colors hover:bg-background-secondary disabled:opacity-50"
+                            className="h-10 rounded-xl border-[0.5px] border-border-hover bg-transparent px-4 text-sm text-foreground transition-colors hover:bg-background-secondary disabled:opacity-50"
                         >
                             {cancelText}
                         </button>
@@ -78,7 +78,7 @@ export function ConfirmDialog({
                             type="button"
                             onClick={handleConfirm}
                             disabled={loading}
-                            className={`inline-flex h-10 items-center justify-center gap-2 rounded-[10px] px-4 text-sm font-medium transition-colors disabled:opacity-50 ${CONFIRM_BUTTON_CLASS[variant]}`}
+                            className={`inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-sm font-medium transition-colors disabled:opacity-50 ${CONFIRM_BUTTON_CLASS[variant]}`}
                         >
                             {loading && <SoundWaveLoader variant="inline" />}
                             {confirmText}

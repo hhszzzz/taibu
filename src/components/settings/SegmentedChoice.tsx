@@ -34,7 +34,7 @@ export function SegmentedChoice<T extends string>({
     <div
       role="radiogroup"
       aria-label={ariaLabel}
-      className="relative grid w-full rounded-[10px] bg-background-secondary p-1"
+      className="relative grid w-full rounded-xl bg-background-secondary p-1"
       style={layoutStyle}
     >
       <span

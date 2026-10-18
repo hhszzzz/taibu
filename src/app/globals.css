@@ -1,9 +1,20 @@
 @import "tailwindcss";
+@import "./cds-tokens.css";
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* 
+/*
  * TaiBu 全局样式
  * 支持深色/浅色主题切换
+ *
+ * 令牌层（对齐 Claude cds 实测，2026-10；CSS bundle 提取，非猜测）：
+ * - 色板：中性灰底 page=#fcfcfb / sidebar=#fafaf9 / 卡片=#ffffff；文字三级 #0b0b0b · #52514e · #898781。
+ * - 强调色：clay 家族（实心/选中 #c6613f，悬停 #d97757，浅底 = clay 10%/22% wash）。
+ * - 发丝线/描边/填充一律由 --neutral-900 透明度阶梯派生（alpha：5/7.5/10/15/20/35%），不写字面色值。
+ * - 阴影 = 发丝环（浅色外描 1px、深色内描 1px）+ 柔和投影；弹层用 --shadow-panel-*（环 + 投影）。
+ * - 动效刻度 --duration-*（60/120/200/300/450ms）与 --ease-*（cds ease-out/snap/overshoot）。
+ * - 排印：衬线（--font-display）只用于 h1 与品牌/问候类标题；h2-h4 保持无衬线。
+ * - 字号一律用 rem（ThemeProvider 的字号档位依赖 root font-size）。
+ * - 五行着色统一走 --element-*（:root 级，替代历史高饱和 fallback）。
  */
 
 /* ===== 主题变量定义 ===== */
@@ -15,21 +26,23 @@
   --sab: env(safe-area-inset-bottom, 0px);
   --mobile-header-height: calc(4rem + var(--sat));
 
-  /* Ivory paper surfaces with a restrained clay accent. */
-  --background: #faf9f5;
-  --background-secondary: #f0eee6;
-  --background-tertiary: #e8e6dc;
+  --neutral-900: #0b0b0b;
+  --neutral-600: #52514e;
+  --neutral-400: #898781;
+  --background: #fcfcfb;
+  --background-secondary: #fafaf9;
+  --background-tertiary: #f3f3f0;
   --surface: #ffffff;
-  --sidebar: #f5f4ed;
-  --panel: #f3f1e9;
-  --foreground: #141413;
-  --foreground-secondary: #5e5d59;
-  --foreground-tertiary: #73726c;
-  --accent: #b4532f;
-  --accent-hover: #9a4526;
-  --accent-light: #fbf1ec;
-  --accent-soft: #fbede4;
-  --accent-strong: #8f3f22;
+  --sidebar: #fafaf9;
+  --panel: #fafaf9;
+  --foreground: #0b0b0b;
+  --foreground-secondary: #52514e;
+  --foreground-tertiary: #898781;
+  --accent: #c6613f;
+  --accent-hover: #d97757;
+  --accent-light: color-mix(in srgb, var(--clay) 10%, transparent);
+  --accent-soft: color-mix(in srgb, var(--clay) 22%, transparent);
+  --accent-strong: #a84f2f;
   --clay: #d97757;
   --on-accent: #ffffff;
   --success: #44663a;
@@ -49,30 +62,98 @@
   --wx-water-soft: #dfe8f0;
   --hua-quan: #6b4d9e;
 
-  /* 边框和分隔线 */
-  --border: rgba(31, 30, 29, 0.15);
-  --border-hover: rgba(31, 30, 29, 0.3);
+  /* 边框/分隔线 = neutral-900 透明度阶梯（cds-alpha-2 / alpha-3） */
+  --border: hsl(from var(--neutral-900) h s l / 10%);
+  --border-hover: hsl(from var(--neutral-900) h s l / 20%);
+  /* 滚动条滑块：claude 实测 scrollbar-color = hsla(border-300 / 35%) transparent（极淡、轨道透明） */
+  --scrollbar-thumb: color-mix(in srgb, var(--border-hover) 35%, transparent);
 
-  /* 阴影 */
-  --shadow-sm: 0 1px 2px rgba(20, 20, 19, 0.06);
-  --shadow-md: 0 6px 24px rgba(20, 20, 19, 0.07);
-  --shadow-lg: 0 16px 48px rgba(20, 20, 19, 0.12);
+  /* 阴影 = cds 阴影层：发丝环（浅色外描 1px / 深色内描 1px）+ 柔和投影 */
+  --ring-outer: 1px;
+  --ring-inner: 0px;
+  --ring-color: var(--border);
+  --shadow-color: hsl(from var(--neutral-900) h s l / 8%);
+  --shadow-sm: 0 1px 2px 0 hsl(from var(--neutral-900) h s l / 6%), 0 2px 8px 0 var(--shadow-color);
+  --shadow-md: 0 2px 4px 0 hsl(from var(--neutral-900) h s l / 7%), 0 6px 16px 0 var(--shadow-color);
+  --shadow-lg: 0 4px 8px 0 hsl(from var(--neutral-900) h s l / 8%), 0 12px 28px -2px var(--shadow-color);
+  --shadow-popover: 0 8px 24px rgba(0, 0, 0, .12), 0 2px 6px rgba(0, 0, 0, .08);
+  --shadow-panel-sm: inset 0 0 0 var(--ring-inner) var(--ring-color), 0 0 0 var(--ring-outer) var(--ring-color), var(--shadow-sm);
+  --shadow-panel-md: inset 0 0 0 var(--ring-inner) var(--ring-color), 0 0 0 var(--ring-outer) var(--ring-color), var(--shadow-md);
+  --shadow-panel-lg: inset 0 0 0 var(--ring-inner) var(--ring-color), 0 0 0 var(--ring-outer) var(--ring-color), var(--shadow-lg);
+  --shadow-panel-popover: inset 0 0 0 var(--ring-inner) var(--ring-color), 0 0 0 var(--ring-outer) var(--ring-color), var(--shadow-popover);
 
   /* 侧边栏宽度与底色；收起后为图标导轨 */
-  --sidebar-width: 260px;
+  --sidebar-width: 288px;
   --sidebar-rail-width: 60px;
-  --sidebar-background: #f5f2ed;
-  /* 浮起的输入框与问题面板 */
-  --shadow-raised: 0 1px 2px rgba(77, 57, 36, 0.05), 0 6px 20px rgba(77, 57, 36, 0.07);
-  --scrim: rgba(44, 41, 37, 0.32);
-  --chat-background: #faf8f5;
-  --chat-secondary: #f0ece6;
-  --chat-tertiary: #e7e0d7;
-  --chat-foreground: #2c2925;
-  --chat-muted: #70685f;
-  --chat-subtle: #7b7165;
-  --chat-border: #e5ded4;
-  --chat-raised: #fffdf9;
+  --sidebar-background: var(--sidebar);
+
+  /* 密度刻度（对齐 Claude cds 实测：控件 32px、行 32px、抽屉行 40px） */
+  --control-h: 2rem;
+  --row-h: 2rem;
+  --row-h-drawer: 2.5rem;
+
+  /* 发丝线：宽度 + 颜色（Claude 分隔线/chip 边/卡片描边一律 0.5px） */
+  --hairline: .5px;
+  --hairline-color: hsl(from var(--neutral-900) h s l / 10%);
+
+  /* 交互面填色（cds 实测：ghost 悬停 7.5%、选中 15%、字段底 5%、控件底 10%/20%） */
+  --fill-ghost-hover: hsl(from var(--neutral-900) h s l / 7.5%);
+  --fill-ghost-selected: hsl(from var(--neutral-900) h s l / 15%);
+  --fill-field: hsl(from var(--neutral-900) h s l / 5%);
+  --fill-control: hsl(from var(--neutral-900) h s l / 10%);
+  --fill-control-hover: hsl(from var(--neutral-900) h s l / 20%);
+
+  /* 动效刻度（cds：60ms / 120ms / 200ms / 300ms / 450ms） */
+  --duration-fast: 60ms;
+  --duration-snap: .12s;
+  --duration-base: .2s;
+  --duration-sheet: .3s;
+  --duration-slow: .45s;
+  --ease-out: cubic-bezier(.165, .84, .44, 1);
+  --ease-snap: cubic-bezier(.32, .72, 0, 1);
+  --ease-overshoot: cubic-bezier(.34, 1.3, .64, 1);
+
+  /* 侧栏行度量（Claude dframe comfortable 实测，2026-10）：行 32 / 控制键 24 / 间隙 8 / 前导槽 28
+     图标 20 / 行字 14 / 分组字 13 / 行内衬 2 / 行圆角 8 / 新建圆 22 / 分组上距 16 / 底栏键 32 */
+  --df-row-h: 2rem;
+  --df-row-ctl: 1.5rem;
+  --df-row-px: 2px;
+  --df-row-gap: .5rem;
+  --df-leading-slot: 1.75rem;
+  --df-icon-size: 1.25rem;
+  --df-row-font: 14px;
+  --df-group-font: 13px;
+  --df-group-pt: 1rem;
+  --df-radius-pill: .5rem;
+  --df-radius-card: .5rem;
+  --df-new-circle-size: 1.375rem;
+  --df-footer-btn-size: 2rem;
+  --df-footer-gap: 6px;
+  --df-titlebar-h: 2.75rem;
+  --df-hover: #f0efec;
+  --df-selected: #edece8;
+
+  /* 聚焦环：clay 环 + 微光（内衬 1px 取所在卡片底色，可用 --focus-ring-bg 覆盖） */
+  --focus-ring-clay: inset 0 0 0 1px var(--focus-ring-bg, var(--background)), 0 0 0 1px var(--accent), 0 0 6px 1px color-mix(in srgb, var(--accent) 45%, transparent);
+
+  /* 五行着色（可读性 >= 3.9:1；原 chat-workspace 局部覆盖已上移为全局） */
+  --element-metal: #9a7b1f;
+  --element-wood: #3f7a4a;
+  --element-water: #2f6690;
+  --element-fire: #b23a2e;
+  --element-earth: #8a5a2b;
+
+  /* 浮起的输入框与问题面板（= cds shadow-composer：发丝环 + 0 .25rem 1.25rem 3.5% 投影） */
+  --shadow-raised: inset 0 0 0 var(--ring-inner) var(--ring-color), 0 0 0 var(--ring-outer) var(--ring-color), 0 .25rem 1.25rem color-mix(in srgb, #000 3.5%, transparent);
+  --scrim: rgba(0, 0, 0, .45);
+  --chat-background: var(--background);
+  --chat-secondary: var(--background-secondary);
+  --chat-tertiary: var(--background-tertiary);
+  --chat-foreground: var(--foreground);
+  --chat-muted: var(--foreground-secondary);
+  --chat-subtle: var(--foreground-tertiary);
+  --chat-border: var(--border);
+  --chat-raised: var(--surface);
   --chat-success: #507557;
   --chat-warning: #946b2d;
 }
@@ -99,22 +180,25 @@
 .dark {
   color-scheme: dark;
 
-  --background: #262624;
-  --background-secondary: #30302c;
-  --background-tertiary: #3b3a35;
-  --surface: #2c2c29;
-  --sidebar: #1f1e1d;
-  --panel: #2f2e2a;
-  --foreground: #f0ede6;
-  --foreground-secondary: #b9b1a5;
-  --foreground-tertiary: #a2998b;
-  --accent: #d99475;
-  --accent-hover: #e5a388;
-  --accent-light: #44332b;
-  --accent-soft: #4a3329;
-  --accent-strong: #e8ae93;
+  --neutral-900: #ffffff;
+  --neutral-600: #c3c2b7;
+  --neutral-400: #898781;
+  --background: #151515;
+  --background-secondary: #1a1a1a;
+  --background-tertiary: #262626;
+  --surface: #1f201f;
+  --sidebar: #101010;
+  --panel: #1a1a1a;
+  --foreground: #f0efec;
+  --foreground-secondary: #c3c2b7;
+  --foreground-tertiary: #898781;
+  --accent: #d97757;
+  --accent-hover: #e08b6f;
+  --accent-light: color-mix(in srgb, var(--clay) 22%, transparent);
+  --accent-soft: color-mix(in srgb, var(--clay) 30%, transparent);
+  --accent-strong: #efb49c;
   --clay: #d97757;
-  --on-accent: #262624;
+  --on-accent: #1a1a1a;
   --success: #a4bba0;
   --warning: #d5b378;
   --danger: #e39b91;
@@ -129,23 +213,42 @@
   --wx-metal-soft: #36342e;
   --wx-water-soft: #263443;
   --hua-quan: #b49ad9;
-  --border: #424039;
-  --border-hover: #57534a;
+  --border: hsl(from var(--neutral-900) h s l / 10%);
+  --border-hover: hsl(from var(--neutral-900) h s l / 20%);
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
-  --sidebar-background: #21211f;
-  --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.25);
-  --scrim: rgba(0, 0, 0, 0.5);
-  --chat-background: #262624;
-  --chat-secondary: #30302c;
-  --chat-tertiary: #3b3a35;
-  --chat-foreground: #f0ede6;
-  --chat-muted: #b9b1a5;
-  --chat-subtle: #a2998b;
-  --chat-border: #424039;
-  --chat-raised: #2c2c29;
+  /* 深色：发丝环改为内描 1px（cds--ring-inner=1px / ring-outer=0） */
+  --ring-outer: 0px;
+  --ring-inner: 1px;
+  --ring-color: var(--border);
+  --shadow-color: rgba(0, 0, 0, .24);
+  --shadow-sm: 0 1px 2px 0 hsl(from var(--neutral-900) h s l / 6%), 0 2px 8px 0 var(--shadow-color);
+  --shadow-md: 0 2px 4px 0 hsl(from var(--neutral-900) h s l / 7%), 0 6px 16px 0 var(--shadow-color);
+  --shadow-lg: 0 4px 8px 0 hsl(from var(--neutral-900) h s l / 8%), 0 12px 28px -2px var(--shadow-color);
+  --shadow-popover: 0 8px 24px rgba(0, 0, 0, .32), 0 2px 6px rgba(0, 0, 0, .2);
+  --sidebar-background: var(--sidebar);
+  --fill-ghost-hover: hsl(from var(--neutral-900) h s l / 15%);
+  --fill-ghost-selected: hsl(from var(--neutral-900) h s l / 22%);
+  --fill-field: hsl(from var(--neutral-900) h s l / 10%);
+  --fill-control: hsl(from var(--neutral-900) h s l / 12%);
+  --fill-control-hover: hsl(from var(--neutral-900) h s l / 20%);
+  --df-hover: rgb(255 255 255 / 8%);
+  --df-selected: rgb(255 255 255 / 14%);
+  --hairline-color: hsl(from var(--neutral-900) h s l / 10%);
+  --element-metal: #d9b85c;
+  --element-wood: #8fbf8f;
+  --element-water: #86b3d9;
+  --element-fire: #e8907c;
+  --element-earth: #c99a6b;
+  --shadow-raised: inset 0 0 0 var(--ring-inner) var(--ring-color), 0 0 0 var(--ring-outer) var(--ring-color), 0 .25rem 1.25rem color-mix(in srgb, #000 7.5%, transparent);
+  --scrim: rgba(0, 0, 0, .6);
+  --chat-background: var(--background);
+  --chat-secondary: var(--background-secondary);
+  --chat-tertiary: var(--background-tertiary);
+  --chat-foreground: var(--foreground);
+  --chat-muted: var(--foreground-secondary);
+  --chat-subtle: var(--foreground-tertiary);
+  --chat-border: var(--border);
+  --chat-raised: var(--surface);
   --chat-success: #a4bba0;
   --chat-warning: #d5b378;
 }
@@ -186,13 +289,81 @@
   --color-hua-quan: var(--hua-quan);
 
   /* 字体 */
-  --font-sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  /* claude 字体链路：Latin 先落 system-ui（macOS = SF Pro），CJK 回退 PingFang；不把 PingFang 放最前，避免 Latin 也走苹方。 */
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
   --font-mono: "SFMono-Regular", "JetBrains Mono", "Menlo", "Monaco", "Consolas", "Liberation Mono", monospace;
-  --font-display: "Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "STSong", Georgia, serif;
-  --radius-md: .5rem;
-  --radius-lg: .7rem;
-  --radius-xl: 1rem;
-  --radius-2xl: 1.3rem;
+  /* claude 的衬线字体只有 Latin（anthropic-serif）；CJK 实际回退到 PingFang 无衬线。这里按同一行为：Latin Georgia，CJK 回退 sans。 */
+  --font-display: Georgia, "Times New Roman", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  /* 圆角刻度（Claude cds 实测：chip 5 / 控件 6 / 行 8 / 卡片 10 / 输入框 14） */
+  --radius-md: .375rem;
+  --radius-lg: .5rem;
+  --radius-xl: .625rem;
+  --radius-2xl: .875rem;
+  /* 填色与发丝线工具类 */
+  --color-hairline: var(--hairline-color);
+  --color-fill-ghost-hover: var(--fill-ghost-hover);
+  --color-fill-field: var(--fill-field);
+  --color-fill-control: var(--fill-control);
+
+  /* ---- claude cds 别名（自本地克隆站 @theme 平移）：按 claude 源码逐字搬运的组件直接可用 ---- */
+  --color-surface-0: var(--cds-surface-0);
+  --color-surface-1: var(--cds-surface-1);
+  --color-surface-2: var(--cds-surface-2);
+  --color-surface-3: var(--cds-surface-3);
+  --color-surface-popover: var(--cds-surface-popover);
+  --color-surface-panel: var(--cds-surface-panel);
+  --color-page-bg: var(--cds-page-bg);
+  --color-primary: var(--cds-text-primary);
+  --color-secondary: var(--cds-text-secondary);
+  --color-muted: var(--cds-text-muted);
+  --color-disabled: var(--cds-text-disabled);
+  --color-on-primary: var(--cds-on-primary);
+  --color-accent-text: var(--cds-text-accent);
+  --color-accent-bg: var(--cds-bg-accent);
+  --color-danger-text: var(--cds-text-danger);
+  --color-success-text: var(--cds-text-success);
+  --color-warning-text: var(--cds-text-warning);
+  --color-pro: var(--cds-fill-pro);
+  --color-pro-text: var(--cds-text-pro);
+  --color-clay-emphasized: var(--cds-clay-emphasized);
+  --color-border-strong: var(--cds-border-strong);
+  --color-border-stronger: var(--cds-border-stronger);
+  --color-fill-primary: var(--cds-fill-primary);
+  --color-fill-primary-hover: var(--cds-fill-primary-hover);
+  --color-fill-secondary: var(--cds-fill-secondary);
+  --color-fill-secondary-hover: var(--cds-fill-secondary-hover);
+  --color-fill-ghost-selected: var(--cds-fill-ghost-selected);
+  --color-fill-disabled: var(--cds-fill-disabled);
+  --color-fill-control-hover: var(--cds-fill-control-hover);
+  --color-bg-neutral: var(--cds-bg-neutral);
+  --color-bg-neutral-chip: var(--cds-bg-neutral-chip);
+  --color-bg-neutral-chip-hover: var(--cds-bg-neutral-chip-hover);
+  --color-user-message: var(--cds-bg-user-message);
+  --color-segmented-control-track: var(--cds-segmented-control-track);
+  --color-segmented-control-thumb: var(--cds-segmented-control-thumb);
+  --color-git-added: var(--cds-text-git-added);
+  --color-git-removed: var(--cds-text-git-removed);
+  --color-git-modified: var(--cds-text-git-modified);
+  --color-git-merged: var(--cds-text-git-merged);
+  --radius-xs: var(--cds-radius--xs);
+  --radius-sm: var(--cds-radius--sm);
+  --radius-panel: var(--cds-panel-radius);
+  --radius-composer: var(--cds-radius-composer);
+  --spacing-control: var(--cds-h-control);
+  --spacing-nav: 1.75rem;
+  --text-footnote: var(--cds-font-size-footnote);
+  --text-footnote--line-height: var(--cds-leading-footnote);
+  --text-body: var(--cds-font-size-body);
+  --text-body--line-height: var(--cds-leading-body);
+  --text-heading: var(--cds-font-size-heading);
+  --text-heading--line-height: var(--cds-leading-heading);
+  --text-prose: var(--cds-font-size-prose);
+  --text-prose--line-height: var(--cds-leading-prose);
+  --text-title: 1.5rem;
+  --text-title--line-height: var(--cds-leading-title);
+  --shadow-popover: var(--cds-shadow-popover);
+  --shadow-panel: var(--cds-panel-shadow);
+  --shadow-focus: var(--cds-focus-shadow);
 }
 
 /* ===== 基础样式 ===== */
@@ -209,7 +380,7 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans);
   font-size: .9375rem;
-  line-height: 1.65;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -232,23 +403,15 @@ body {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
 
-/* ===== 自定义滚动条 ===== */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* ===== 滚动条（claude 约定：全局 thin + 极淡滑块 / 透明轨道）=====
+   刻意不写 ::-webkit-scrollbar —— 在 Chromium 里自定义该伪元素会强制关闭 overlay 滚动条，
+   让侧栏会话列表等区域常驻一条 6px 的滚动条（claude 没有；用户反馈「聊天记录那里不要有可以上下滑动的东西」）。 */
+* {
+  scrollbar-width: thin;
 }
 
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--border-hover);
+html {
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 /* ===== 隐藏滚动条 ===== */
@@ -262,6 +425,15 @@ body {
 }
 
 /* ===== 动画 ===== */
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(8px) scale(.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.toast-item { animation: toastIn .18s cubic-bezier(.165, .84, .44, 1); }
+/* 手机底部导航占位：提示条整体上移，避免盖住导航。 */
+@media (max-width: 1023px) { .app-toast-stack { bottom: calc(5rem + var(--sab)); } }
+@media (prefers-reduced-motion: reduce) { .toast-item { animation: none; } }
+
 @keyframes fadeIn {
   from {
     opacity: 0;

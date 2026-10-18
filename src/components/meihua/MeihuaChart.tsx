@@ -176,7 +176,7 @@ function HexagramCard({ label, hexagram, upper, lower, emphasisLine, emphasis = 
   return (
     <article
       data-chart-selected={isChartTargetSelected(interaction, id) || undefined}
-      className={`flex min-w-0 flex-col items-center gap-2 rounded-[14px] px-1 py-3 @2xl:gap-3.5 @2xl:rounded-2xl @2xl:border-[0.5px] @2xl:border-border @2xl:bg-surface @2xl:p-[22px] @2xl:ring-0 ${featured ? 'bg-accent-light ring-1 ring-inset ring-accent/50' : 'bg-background'}`}
+      className={`flex min-w-0 flex-col items-center gap-2 rounded-2xl px-1 py-3 @2xl:gap-3.5 @2xl:rounded-2xl @2xl:border-[0.5px] @2xl:border-border @2xl:bg-surface @2xl:p-[22px] @2xl:ring-0 ${featured ? 'bg-accent-light ring-1 ring-inset ring-accent/50' : 'bg-background'}`}
     >
       <span className="text-[0.6875rem] text-foreground-secondary @2xl:text-[0.8125rem]">
         <ChartTarget interaction={interaction} id={id}>{label}</ChartTarget> · {STAGE_NOTE[label]}

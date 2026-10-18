@@ -140,7 +140,7 @@ function MBTIResultContent() {
                 {/* 头部导航（桌面端；移动端由顶栏承载） */}
                 <div className="hidden items-center justify-between lg:flex">
                     <Link href="/mbti" className="inline-flex items-center gap-1 text-sm text-foreground-secondary transition-colors hover:text-foreground"><ChevronLeft className="h-4 w-4" aria-hidden="true" />返回 MBTI 首页</Link>
-                    {isTestMode && <button type="button" onClick={() => router.push('/mbti/test')} className="inline-flex h-10 items-center gap-1.5 rounded-[10px] border-[0.5px] border-border-hover bg-surface px-3.5 text-sm transition-colors hover:bg-background-secondary"><RotateCw className="h-3.5 w-3.5" aria-hidden="true" />重新测试</button>}
+                    {isTestMode && <button type="button" onClick={() => router.push('/mbti/test')} className="inline-flex h-10 items-center gap-1.5 rounded-xl border-[0.5px] border-border-hover bg-surface px-3.5 text-sm transition-colors hover:bg-background-secondary"><RotateCw className="h-3.5 w-3.5" aria-hidden="true" />重新测试</button>}
                 </div>
 
                 {/* 性格卡片 */}

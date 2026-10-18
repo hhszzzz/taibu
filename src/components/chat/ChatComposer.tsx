@@ -7,32 +7,38 @@
  */
 'use client';
 
-import { useEffect, useCallback, useMemo, useRef, type ReactNode } from 'react';
-import Link from 'next/link';
+import { useEffect, useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { AttachmentState, Mention } from '@/types';
 import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
 import type { MembershipType } from '@/lib/user/membership';
 import { useToast } from '@/components/ui/Toast';
 import { buildMentionHighlightedParts } from '@/components/chat/mentionHighlight';
+import { MentionIcon } from '@/components/chat/mention/MentionIcon';
 import { buildMentionToken, extractMentionTokens, filterMentionsByTokens, removeMentionsByTokens, type MentionToken } from '@/lib/mention-tokens';
 import { updateCurrentUserSettings } from '@/lib/user/settings';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import { filterDataSourceItemsByFeature, filterMentionsByFeature, getDataSourceFeatureId, getEnabledDataSourceTypes } from '@/lib/data-sources/catalog';
 import { useComposerState, type KnowledgeBaseSummary } from '@/components/chat/composer/useComposerState';
+import { getChartKindMeta } from '@/components/chat/agent/chart-registry';
+import type { AgentChartKind } from '@/lib/agent/tool-catalog';
+import { getCurrentUserSettings } from '@/lib/user/settings';
+import { useCollaborationPreset } from '@/lib/chat/collaboration-preset';
 import { MentionManager } from '@/components/chat/composer/MentionManager';
 import { AttachmentBar } from '@/components/chat/composer/AttachmentBar';
-import { ComposerToolbar, type ComposerModeControl, type ComposerSendState, type ComposerWebControl } from '@/components/chat/composer/ComposerToolbar';
-import { useSpeechInput } from '@/components/chat/composer/ComposerDomainControls';
-import { PromptPreview } from '@/components/chat/composer/PromptPreview';
+import { ComposerToolbar, ComposerSendCluster, type ComposerSendState, type ComposerWebControl } from '@/components/chat/composer/ComposerToolbar';
+import { ComposerStatusBar } from '@/components/chat/composer/ComposerStatusBar';
 import type { ChatMode } from '@/lib/chat/use-chat-state';
-import type { AgentRuntimeInfo } from '@/lib/agent/types';
-import { applyPromptTemplate } from '@/lib/agent/prompt-templates';
 import { useComposerCommands } from './composer/ComposerCommands';
 import { usePrivateAttachments } from '@/lib/chat/use-private-attachments';
 import { PrivateAttachments } from './agent/PrivateAttachments';
-import { AgentContextMeter } from './agent/AgentContextUsage';
 import type { ModelSettingsProps } from '@/lib/chat/model-settings';
 import './composer/composer.css';
+
+/** 追问 chip 的前导图标 = 该盘种在注册表里的图标（与提及、侧栏同源）。 */
+function ChartAskIcon({ kind }: { kind: AgentChartKind }) {
+    const Icon = getChartKindMeta(kind).icon;
+    return <Icon size={12} />;
+}
 
 const findLastAtOutsideTokens = (value: string, tokens: MentionToken[]): number => {
     for (let i = value.length - 1; i >= 0; i -= 1) {
@@ -49,16 +55,16 @@ interface ChatComposerProps extends ModelSettingsProps {
     variant?: 'dock' | 'hero';
     /** Shown above the input, such as follow-up suggestions or the credit notice. */
     header?: ReactNode;
+    /** 输入框内的追问命盘富文本 token（与提及同构、视觉区分）。 */
+    contextToken?: ReactNode;
     /** Attached to the top edge of the input, such as the follow-up queue. */
     queue?: ReactNode;
     /** One-line note under the input. */
     note?: ReactNode;
     /** The note repeats the header's task status; phones leave it out. */
     noteOptional?: boolean;
-    modeControl?: ComposerModeControl;
     webControl?: ComposerWebControl;
     agentMode?: boolean;
-    agentRuntime?: AgentRuntimeInfo;
     /** The conversation already has messages, so the input continues it. */
     continuing?: boolean;
     awaitingInput?: boolean;
@@ -86,25 +92,27 @@ interface ChatComposerProps extends ModelSettingsProps {
     onAttachmentChange?: (state: AttachmentState) => void;
     mentions?: Mention[];
     onMentionsChange?: (mentions: Mention[]) => void;
+    /** 追问命盘追加的 chip（与提及同形态，但不在资料列表里）。 */
+    chartAsks?: Array<{ token: string; kind: AgentChartKind }>;
     promptKnowledgeBases?: KnowledgeBaseSummary[];
-    contextMessages?: Array<{ content?: string }>;
     dreamContext?: { baziChartName?: string; dailyFortune?: string };
     dreamContextLoading?: boolean;
     knowledgeBaseEnabled?: boolean;
+    /** 平台剩余积分（用量环）。 */
+    credits?: number | null;
 }
 
 export function ChatComposer({
     draftKey,
     variant = 'dock',
     header,
+    contextToken,
     queue,
     note,
     noteOptional = false,
-    modeControl,
     webControl,
     agentMode = false,
     continuing = false,
-    agentRuntime,
     awaitingInput = false,
     allowDuringRun = false,
     onQueueMessage,
@@ -131,11 +139,12 @@ export function ChatComposer({
     onAttachmentChange,
     mentions = [],
     onMentionsChange,
+    chartAsks = [],
     promptKnowledgeBases = [],
-    contextMessages = [],
     dreamContext,
     dreamContextLoading = false,
     knowledgeBaseEnabled = true,
+    credits,
 }: ChatComposerProps) {
     const { showToast } = useToast();
     const { isFeatureEnabled } = useFeatureToggles();
@@ -147,12 +156,12 @@ export function ChatComposer({
 
     // 防止 mention 选中后 state 还未同步就触发发送
     const mentionSettlingRef = useRef(false);
+    // `+` 菜单按钮：自定义模型弹窗关闭后焦点回到这里。
+    const addMenuRef = useRef<HTMLButtonElement>(null);
     const isDreamMode = chatMode === 'dream';
 
     const state = useComposerState({
-        userId, membershipType, selectedModel, reasoningEnabled, agentMode,
-        mentions, contextMessages,
-        isLoading, isSendingToList, chatMode,
+        userId, membershipType,
         knowledgeBaseEnabled, promptKnowledgeBases,
         enabledDataSourceTypes: enabledMentionDataSourceTypes,
     });
@@ -167,19 +176,73 @@ export function ChatComposer({
         mentionLoading, mentionDefaultCategory, setMentionDefaultCategory,
         knowledgeBaseOpen, setKnowledgeBaseOpen,
         knowledgeBaseSavingId,
-        promptDiagnosticsOpen, setPromptDiagnosticsOpen,
         canUseWeb, canUseBoth, canUseKnowledgeBase,
-        promptProgressPercent, contextProgressPercent,
-        hasPromptDiagnostics, displayLayers, displayUserMessageTokens,
-        promptUsageLabel, promptPreviewLoading,
-        promptPreviewTokens, promptPreviewBudget,
         canMentionAnything,
         promptKbIdSet,
-        formatLayerLabel, refreshMentionData,
+        refreshMentionData,
     } = state;
     const commands = useComposerCommands({ userId, draftKey, text: inputValue, change: onInputChange, textarea: textareaRef, mentionsOpen: mentionOpen, model: selectedModel });
     const uploads = usePrivateAttachments({ scopeKey: draftKey ?? userId ?? 'anonymous', state: attachmentState ?? { webSearchEnabled: false }, change: value => onAttachmentChange?.(value), onError: message => showToast('error', message) });
     const submit = () => { if (uploads.uploading) return; commands.remember(); onSend(); };
+
+    // 长期记忆开关（与设置中心「任务助手」同一份用户偏好）：+ 菜单可勾选。
+    const [memoryEnabled, setMemoryEnabled] = useState<boolean | null>(null);
+    const [memoryBusy, setMemoryBusy] = useState(false);
+    const memoryFeatureEnabled = isFeatureEnabled('ai-personalization');
+    useEffect(() => {
+        if (!userId) { setMemoryEnabled(null); return; }
+        let current = true;
+        void getCurrentUserSettings({ expectedUserId: userId }).then(result => {
+            if (current) setMemoryEnabled(result.settings ? result.settings.chatPreferences.memoryEnabled === true : false);
+        }).catch(() => { if (current) setMemoryEnabled(false); });
+        return () => { current = false; };
+    }, [userId]);
+    const toggleMemory = async () => {
+        if (!userId || memoryBusy || !memoryFeatureEnabled) return;
+        const next = memoryEnabled !== true;
+        setMemoryEnabled(next);
+        setMemoryBusy(true);
+        try {
+            const saved = await updateCurrentUserSettings({ chatPreferences: { memoryEnabled: next } }, undefined, { expectedUserId: userId });
+            if (!saved) { setMemoryEnabled(!next); showToast('error', '保存记忆设置失败'); }
+        } catch {
+            setMemoryEnabled(!next);
+            showToast('error', '保存记忆设置失败');
+        } finally {
+            setMemoryBusy(false);
+        }
+    };
+    // 设置页的协作预设：进入对话且当前没有成员时装载；设置页在聊天期间修改则立即同步。
+    const collaborationPreset = useCollaborationPreset(userId ?? null);
+    const collaborationMountedAt = useRef(Date.now());
+    const collaborationAppliedAt = useRef(0);
+    useEffect(() => {
+        if (!agentMode || !onCollaboratorsChange) return;
+        const members = collaborationPreset.members;
+        const editingWhileOpen = collaborationPreset.updatedAt > collaborationMountedAt.current;
+        if (!collaborationPreset.enabled || members.length < 1) {
+            if (editingWhileOpen && (collaborators?.length ?? 0) > 0) onCollaboratorsChange([]);
+            return;
+        }
+        const hasMembers = (collaborators?.length ?? 0) > 0;
+        // 已从服务端恢复本会话配置时，不用预设覆盖；只有设置页刚改过才同步。
+        if (hasMembers && !editingWhileOpen) return;
+        if (collaborationAppliedAt.current >= collaborationPreset.updatedAt && hasMembers) return;
+        if (JSON.stringify(collaborators) === JSON.stringify(members)) { collaborationAppliedAt.current = collaborationPreset.updatedAt; return; }
+        collaborationAppliedAt.current = collaborationPreset.updatedAt;
+        onCollaboratorsChange(members);
+    }, [agentMode, collaborators, collaborationPreset, onCollaboratorsChange]);
+
+    // claude + 菜单的「上传或添加文件 ⌘U」：在会话内任何位置都能唤起文件选择。
+    useEffect(() => {
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'u') return;
+            event.preventDefault();
+            fileInputRef.current?.click();
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [fileInputRef]);
 
     const hasFile = !!attachmentState?.file;
     const hasWebSearch = !!attachmentState?.webSearchEnabled;
@@ -187,9 +250,6 @@ export function ChatComposer({
         () => filterDataSourceItemsByFeature(mentionDataSources, isFeatureEnabled),
         [isFeatureEnabled, mentionDataSources]
     );
-    // The empty state offers the latest saved charts as one-click references.
-    const savedCharts = useMemo(() => filteredMentionDataSources
-        .filter(item => item.type === 'bazi_chart' || item.type === 'ziwei_chart').slice(0, 3), [filteredMentionDataSources]);
     const filteredMentionDataSourceErrors = useMemo(
         () => filterDataSourceItemsByFeature(mentionDataSourceErrors, isFeatureEnabled),
         [isFeatureEnabled, mentionDataSourceErrors]
@@ -293,6 +353,22 @@ export function ChatComposer({
         }
     }, [inputValue, mentions, textareaRef, overlayRef, variant]);
 
+    // 追问 chip 的文本范围：与提及一样，退格时整体删除。
+    const chartTokenRanges = useMemo(() => {
+        const ranges: Array<{ start: number; end: number; token: string; kind: AgentChartKind }> = [];
+        for (const ask of chartAsks) {
+            if (!ask.token) continue;
+            let from = 0;
+            for (;;) {
+                const start = inputValue.indexOf(ask.token, from);
+                if (start < 0) break;
+                ranges.push({ start, end: start + ask.token.length, token: ask.token, kind: ask.kind });
+                from = start + ask.token.length;
+            }
+        }
+        return ranges;
+    }, [chartAsks, inputValue]);
+
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
         if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
         if (commands.keyDown(e)) return;
@@ -300,7 +376,7 @@ export function ChatComposer({
         if (e.key === 'Backspace' || e.key === 'Delete') {
             const textarea = textareaRef.current;
             if (textarea) {
-                const tokens = extractMentionTokens(inputValue, mentions);
+                const tokens = [...extractMentionTokens(inputValue, mentions), ...chartTokenRanges.map(range => ({ start: range.start, end: range.end, name: range.token }))];
                 if (textarea.selectionStart !== textarea.selectionEnd) {
                     const start = textarea.selectionStart;
                     const end = textarea.selectionEnd;
@@ -419,9 +495,29 @@ export function ChatComposer({
         textareaRef.current?.focus();
     };
 
+    // 提及与追问 chip 合并成一条高亮序列（追问 chip 与提及同形态：图标 + 名称）。
     const highlightedInput = useMemo(() => {
-        return buildMentionHighlightedParts(inputValue, mentions);
-    }, [inputValue, mentions]);
+        const base = buildMentionHighlightedParts(inputValue, mentions);
+        if (!chartTokenRanges.length) return base;
+        type Part = (typeof base)[number] | { kind: 'chart'; value: string; start: number; end: number; chartKind: AgentChartKind };
+        const parts: Part[] = [];
+        let offset = 0;
+        for (const part of base) {
+            if (part.kind === 'mention') { parts.push(part); offset = part.end; continue; }
+            const text = part.value;
+            const matches = chartTokenRanges.filter(range => range.start >= offset && range.end <= offset + text.length);
+            let cursor = 0;
+            for (const match of matches) {
+                const local = match.start - offset;
+                if (local > cursor) parts.push({ kind: 'text', value: text.slice(cursor, local) });
+                parts.push({ kind: 'chart', value: match.token, start: match.start, end: match.end, chartKind: match.kind });
+                cursor = local + match.token.length;
+            }
+            if (cursor < text.length) parts.push({ kind: 'text', value: text.slice(cursor) });
+            offset += text.length;
+        }
+        return parts;
+    }, [chartTokenRanges, inputValue, mentions]);
 
     const handleButtonClick = () => {
         if (isSendingToList || mentionSettlingRef.current) return;
@@ -436,7 +532,6 @@ export function ChatComposer({
         }
     };
 
-    const speech = useSpeechInput({ value: inputValue, onChange: handleInputChange, disabled: !!disabled, scopeKey: `${userId ?? 'visitor'}:${draftKey ?? 'draft'}` });
     const hero = variant === 'hero';
     const running = allowDuringRun && isLoading;
     const hasDraft = Boolean(inputValue.trim());
@@ -447,7 +542,7 @@ export function ChatComposer({
     else if (running) { inputPlaceholder = '补充信息或调整方向…'; inputLabel = '补充信息或调整方向'; }
     else if (isDreamMode) { inputPlaceholder = '说说你做了什么梦…'; inputLabel = '描述梦境'; }
     else if (hero) {
-        inputPlaceholder = agentMode ? '例如：我明年适合换工作吗？出生信息可以直接写，也可以 @ 已存命盘' : '问问命盘、运势，或最近困惑的事…';
+        inputPlaceholder = agentMode ? '例如：我明年适合换工作吗？' : '问问命盘、运势，或最近困惑的事…';
         inputLabel = '描述你的问题';
     } else if (agentMode) {
         inputPlaceholder = continuing && canMentionAnything ? '继续追问，或用 @ 引用命盘与知识库…' : continuing ? '继续追问，新任务会接续这次的上下文…' : '描述任务，或输入 @ 引用命盘与资料…';
@@ -459,17 +554,32 @@ export function ChatComposer({
         : isLoading && onStop ? { kind: 'stop' }
         : { kind: 'send', disabled: !hasDraft || dreamContextLoading };
     const styles = useMemo<ChatMode[]>(() => ['normal', ...(canUseBaziChart && userId ? ['mangpai' as const] : []), ...(userId ? ['dream' as const] : [])], [canUseBaziChart, userId]);
-    const insertMention = () => {
-        const textarea = textareaRef.current;
-        const caret = textarea?.selectionStart ?? inputValue.length;
-        onInputChange(`${inputValue.slice(0, caret)}@${inputValue.slice(caret)}`);
-        setMentionOpen(true);
-        setMentionQuery('');
-        setMentionStartIndex(caret);
-        requestAnimationFrame(() => {
-            textareaRef.current?.focus();
-            textareaRef.current?.setSelectionRange(caret + 1, caret + 1);
-        });
+    const toolbarProps = {
+        agentMode,
+        disabled,
+        userId,
+        membershipType,
+        webControl,
+        memory: agentMode ? {
+            enabled: memoryEnabled === true,
+            disabled: !userId || !memoryFeatureEnabled || memoryEnabled === null,
+            busy: memoryBusy,
+            title: !memoryFeatureEnabled ? '个性化功能已关闭' : memoryEnabled === null ? '正在读取记忆设置' : '允许 Agent 读取和保存长期记忆',
+            onToggle: () => void toggleMemory(),
+        } : undefined,
+        fileInputRef,
+        hasFile,
+        onFileChange: handleFileChange,
+        plainWeb: { active: hasWebSearch, allowed: canUseWeb, onToggle: handleWebToggle },
+        knowledgeBase: { enabled: knowledgeBaseEnabled, allowed: canUseKnowledgeBase, onOpen: () => void handleKnowledgeBaseOpen(), selected: promptKnowledgeBases, onRemove: (id: string) => void toggleKnowledgeBaseSearch(id) },
+        chatMode,
+        onChatModeChange: onChatModeChange && ((mode: ChatMode) => { onChatModeChange(mode); textareaRef.current?.focus(); }),
+        styles,
+        addButtonRef: addMenuRef,
+        polish: commands.polish,
+        send,
+        onSend: handleButtonClick,
+        onStop,
     };
 
     return (
@@ -502,6 +612,7 @@ export function ChatComposer({
 
                 <div className="chat-composer-shell">
                     {commands.ui}
+                    {contextToken}
                     <PrivateAttachments items={attachmentState?.uploaded} disabled={uploads.uploading} onRemove={id => onAttachmentChange?.({ ...attachmentState, webSearchEnabled: hasWebSearch, uploaded: attachmentState?.uploaded?.filter(item => item.id !== id) })} />
                     {uploads.uploading && <p className="chat-composer-status" role="status">正在保存资料…</p>}
                     <AttachmentBar
@@ -516,9 +627,15 @@ export function ChatComposer({
 
                     <div className="chat-composer-field">
                         <div ref={overlayRef} className="chat-composer-input chat-composer-overlay" aria-hidden="true">
-                            {inputValue ? highlightedInput.map(part => part.kind === 'mention'
-                                ? <span key={`${part.start}-${part.end}`} className="chat-mention-token">{part.value}</span>
-                                : part.value) : <span className="chat-composer-placeholder">{inputPlaceholder}</span>}
+                            {inputValue ? highlightedInput.map((part, index) => part.kind === 'mention'
+                                ? <span key={`${part.start}-${part.end}`} className="chat-mention-token" data-type={part.type}>
+                                    <span className="chat-mention-at">@<MentionIcon type={part.type} size={12} /></span>{part.value.slice(1)}
+                                </span>
+                                : part.kind === 'chart'
+                                    ? <span key={`chart-${part.start}`} className="chat-mention-token" data-type="chart">
+                                        <span className="chat-mention-at">@<ChartAskIcon kind={part.chartKind} /></span>{part.value.slice(1)}
+                                    </span>
+                                    : <span key={`text-${index}`}>{part.value}</span>) : <span className="chat-composer-placeholder">{inputPlaceholder}</span>}
                         </div>
                         <textarea
                             aria-label={inputLabel}
@@ -541,62 +658,38 @@ export function ChatComposer({
                             placeholder=""
                             className="chat-composer-input chat-composer-textarea"
                             disabled={disabled}
-                            rows={hero ? 3 : 2}
+                            // claude 的 composer 空态只有一行：rows=1 + field-sizing 随内容长高（hero 首屏给两行起步）
+                            rows={hero ? 2 : 1}
                         />
                     </div>
 
-                    <ComposerToolbar
-                        agentMode={agentMode}
-                        hero={hero}
-                        disabled={disabled}
-                        userId={userId}
-                        membershipType={membershipType}
-                        modeControl={modeControl}
-                        webControl={webControl}
-                        fileInputRef={fileInputRef}
-                        hasFile={hasFile}
-                        onFileChange={handleFileChange}
-                        plainWeb={{ active: hasWebSearch, allowed: canUseWeb, onToggle: handleWebToggle }}
-                        knowledgeBase={{ enabled: knowledgeBaseEnabled, allowed: canUseKnowledgeBase, onOpen: () => void handleKnowledgeBaseOpen(), selected: promptKnowledgeBases, onRemove: id => void toggleKnowledgeBaseSearch(id) }}
-                        onMention={userId && canMentionAnything ? insertMention : undefined}
-                        chatMode={chatMode}
-                        onChatModeChange={onChatModeChange && (mode => { onChatModeChange(mode); textareaRef.current?.focus(); })}
-                        styles={styles}
-                        onPickTemplate={template => handleInputChange(applyPromptTemplate(template, inputValue))}
-                        speech={speech}
-                        polish={commands.polish}
-                        contextMeter={agentMode ? <AgentContextMeter runtime={agentRuntime} /> : undefined}
-                        promptStatistics={agentMode ? undefined : <PromptPreview embedded
-                            promptPreviewLoading={promptPreviewLoading} hasPromptDiagnostics={hasPromptDiagnostics}
-                            promptDiagnosticsOpen={promptDiagnosticsOpen} setPromptDiagnosticsOpen={setPromptDiagnosticsOpen}
-                            contextProgressPercent={contextProgressPercent} promptProgressPercent={promptProgressPercent}
-                            promptUsageLabel={promptUsageLabel} promptPreviewTokens={promptPreviewTokens} promptPreviewBudget={promptPreviewBudget}
-                            displayLayers={displayLayers} displayUserMessageTokens={displayUserMessageTokens} formatLayerLabel={formatLayerLabel} />}
-                        selectedModel={selectedModel}
-                        onModelChange={onModelChange}
-                        reasoningEnabled={reasoningEnabled}
-                        onReasoningChange={onReasoningChange}
-                        reasoningEffort={reasoningEffort}
-                        onReasoningEffortChange={onReasoningEffortChange}
-                        collaborators={collaborators}
-                        onCollaboratorsChange={onCollaboratorsChange}
-                        customProviderActive={customProviderActive}
-                        customProviderLabel={customProviderLabel}
-                        send={send}
-                        onSend={handleButtonClick}
-                        onStop={onStop}
-                    />
+                    {/* claude /chat 实测：白壳一行只放「编辑区 + 发送」；工具簇在框外 chin 行左端（见 ComposerStatusBar 的 leading）。
+                       hero（首屏）是两行壳：工具与发送同排在第二行，见 .is-hero 覆盖。 */}
+                    {hero
+                        ? <ComposerToolbar {...toolbarProps} />
+                        : <ComposerSendCluster send={send} agentMode={agentMode} disabled={disabled} onSend={handleButtonClick} onStop={onStop} />}
                 </div>
 
-                {hero && userId && enabledMentionDataSourceTypes.includes('bazi_chart') && <div className="chat-saved-charts" role="group" aria-label="引用已存命盘">
-                    <span aria-hidden="true">{savedCharts.length ? '引用已存命盘' : '还没有已存命盘'}</span>
-                    {savedCharts.map(chart => <button key={`${chart.type}:${chart.id}`} type="button" disabled={disabled} title={chart.preview}
-                        onClick={() => handleSelectMention({ type: chart.type, id: chart.id, name: chart.name, preview: chart.preview })}>
-                        <span className="chat-saved-chart-glyph" data-type={chart.type} aria-hidden="true">{chart.type === 'bazi_chart' ? '八' : '紫'}</span>
-                        <span>{chart.name} · {chart.type === 'bazi_chart' ? '八字命盘' : '紫微命盘'}</span>
-                    </button>)}
-                    <Link href="/bazi" className="chat-saved-chart-new">+ 新建命盘</Link>
-                </div>}
+                <ComposerStatusBar
+                    leading={hero ? undefined : <ComposerToolbar {...toolbarProps} showSend={false} />}
+                    agentMode={agentMode}
+                    disabled={disabled}
+                    userId={userId}
+                    membershipType={membershipType}
+                    selectedModel={selectedModel}
+                    onModelChange={onModelChange}
+                    reasoningEnabled={reasoningEnabled}
+                    onReasoningChange={onReasoningChange}
+                    reasoningEffort={reasoningEffort}
+                    onReasoningEffortChange={onReasoningEffortChange}
+                    collaborators={collaborators}
+                    onCollaboratorsChange={onCollaboratorsChange}
+                    customProviderActive={customProviderActive}
+                    customProviderLabel={customProviderLabel}
+                    usage={typeof credits === 'number' ? { credits, membershipType } : undefined}
+                    providerReturnRef={addMenuRef}
+                />
+
                 {note && <p className="chat-composer-note" data-optional={noteOptional || undefined}>{note}</p>}
             </div>
         </div>

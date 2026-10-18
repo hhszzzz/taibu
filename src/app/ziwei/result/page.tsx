@@ -41,8 +41,8 @@ import { useAdminJsonCopy } from '@/lib/admin/useAdminJsonCopy';
 import { CopyTextModal } from '@/components/divination/CopyTextModal';
 import type { ChartTextDetailLevel } from '@/lib/divination/detail-level';
 
-const PRIMARY_BUTTON_CLASS = 'inline-flex items-center justify-center gap-1.5 rounded-[10px] bg-accent px-4 py-2 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover';
-const HINT_BUTTON_CLASS = 'inline-flex h-10 items-center rounded-[10px] border-[0.5px] border-border-hover bg-surface px-3.5 text-sm text-foreground transition-colors hover:bg-background-secondary aria-pressed:border-accent/40 aria-pressed:bg-accent-light aria-pressed:text-accent-strong';
+const PRIMARY_BUTTON_CLASS = 'inline-flex items-center justify-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover';
+const HINT_BUTTON_CLASS = 'inline-flex h-10 items-center rounded-xl border-[0.5px] border-border-hover bg-surface px-3.5 text-sm text-foreground transition-colors hover:bg-background-secondary aria-pressed:border-accent/40 aria-pressed:bg-accent-light aria-pressed:text-accent-strong';
 const MENU_ICON_CLASS = 'w-4 h-4';
 const EMPTY_HIGHLIGHT: HoroscopeHighlight = Object.freeze({});
 

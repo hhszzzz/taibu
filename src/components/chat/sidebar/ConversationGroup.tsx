@@ -1,15 +1,17 @@
 /**
  * 对话分组组件（按类型分组的一个区块）
  *
+ * 行样式与对话页侧栏共用 `ConversationNavItem`（.chat-nav-row），
+ * 站点侧栏与 /chat 侧栏的对话记录保持同一外观。
+ *
  * 'use client' 标记说明：
  * - 需要处理用户交互事件（折叠/展开）
  */
 'use client';
 
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import type { ConversationListItem, ConversationSourceType } from '@/types';
-import { ConversationItem } from '@/components/chat/sidebar/ConversationItem';
+import { ConversationMarker, ConversationNavItem } from '@/components/chat/sidebar/ConversationNavItem';
 
 interface ConversationGroupProps {
     type: ConversationSourceType;
@@ -20,8 +22,6 @@ interface ConversationGroupProps {
     onToggleGroup: (type: ConversationSourceType) => void;
     activeId?: string;
     actionConvId?: string;
-    isSidebarCollapsed: boolean;
-    onSelect: (id: string) => void;
     onOpenAction: (conv: ConversationListItem, e: React.MouseEvent) => void;
     editingId?: string | null;
     editTitle?: string;
@@ -43,8 +43,6 @@ export function ConversationGroup({
     onToggleGroup,
     activeId,
     actionConvId,
-    isSidebarCollapsed,
-    onSelect,
     onOpenAction,
     editingId,
     editTitle,
@@ -83,30 +81,27 @@ export function ConversationGroup({
 
             {/* 分组内容 */}
             {shouldShowContent && (
-                <div className={compact ? 'space-y-px' : 'space-y-0.5 mt-1'}>
+                <div className="space-y-0.5">
                     {showPendingInGroup && (
-                        <div className={compact ? 'px-3 py-1 rounded-md bg-background-secondary' : 'px-3 py-2 rounded-md bg-background-secondary/70 border border-border/60'}>
-                            <div className="flex items-center gap-1.5">
-                                <SoundWaveLoader variant="inline" />
-                                <span className={`font-medium text-foreground truncate ${compact ? 'text-[13px]' : 'text-sm'}`}>{pendingTitle}</span>
-                            </div>
+                        <div data-conversation-row="true" className="chat-nav-row" data-pending="true">
+                            <span className="chat-nav-row-link">
+                                <span className="chat-nav-row-title">{pendingTitle}</span>
+                                <ConversationMarker marker="running" />
+                            </span>
                         </div>
                     )}
                     {items.map(conv => (
-                        <ConversationItem
+                        <ConversationNavItem
                             key={conv.id}
                             conv={conv}
                             isActive={activeId === conv.id}
                             isActionActive={actionConvId === conv.id}
-                            isSidebarCollapsed={isSidebarCollapsed}
-                            onSelect={onSelect}
                             onOpenAction={onOpenAction}
                             isEditing={editingId === conv.id}
                             editTitle={editingId === conv.id ? editTitle : ''}
                             onEditTitleChange={editingId === conv.id ? onEditTitleChange : undefined}
                             onSaveRename={editingId === conv.id ? onSaveRename : undefined}
                             onCancelRename={editingId === conv.id ? onCancelRename : undefined}
-                            compact={compact}
                         />
                     ))}
                 </div>

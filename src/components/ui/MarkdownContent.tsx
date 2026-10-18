@@ -70,15 +70,15 @@ const staticComponents: Partial<Components> = {
     table: ({ children }) => <MarkdownTable>{children}</MarkdownTable>,
     pre: ({ children }) => <div className="markdown-code-block">{children}</div>,
     thead: ({ children }) => (
-        <thead className="border-b-2 border-border bg-background-secondary/50">{children}</thead>
+        <thead className="border-b border-border">{children}</thead>
     ),
     tbody: ({ children }) => <tbody className="divide-y divide-border">{children}</tbody>,
-    tr: ({ children }) => <tr className="hover:bg-background-secondary/30">{children}</tr>,
+    tr: ({ children }) => <tr>{children}</tr>,
     th: ({ children }) => (
         <th className="px-3 py-2 text-left font-semibold text-foreground">{children}</th>
     ),
     td: ({ children }) => (
-        <td className="px-3 py-2 text-foreground-secondary">{children}</td>
+        <td className="px-3 py-2 text-foreground">{children}</td>
     ),
     strong: ({ children }) => (
         <strong className="font-semibold text-foreground">{children}</strong>

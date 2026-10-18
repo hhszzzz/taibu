@@ -14,10 +14,12 @@ export async function verifyAgentExperience({ page, context, origin, directory, 
     assert.ok(response.ok(), `experience read ${route}: ${response.status()}`);
     return response.json();
   };
-  // The chat redesign moved the personalization entry into the sidebar account
-  // menu (rail avatar or expanded footer), hidden behind the account trigger.
+  // The personalization entry lives in the site sidebar account card at the
+  // bottom, hidden behind the account trigger.
   const openPersonalization = async () => {
-    await page.locator('.chat-nav-footer button, .chat-nav.is-rail button[aria-label="账户与设置"]').first().click();
+    const accountTrigger = page.getByRole('complementary').getByRole('button', { name: /命理爱好者/ });
+    await accountTrigger.waitFor();
+    await accountTrigger.click();
     await page.getByRole('link', { name: '个性化', exact: true }).click();
   };
   const chatBeforeSettings = page.url();
@@ -70,21 +72,12 @@ export async function verifyAgentExperience({ page, context, origin, directory, 
     }
   }
 
-  // The reading width lives in the header's more menu, next to the conversation actions.
-  await page.getByRole('button', { name: '更多对话操作', exact: true }).click();
-  const width = page.getByRole('dialog', { name: '更多对话操作', exact: true }).getByRole('slider', { name: '阅读列宽', exact: true });
-  const previousWidth = await width.inputValue();
-  await width.press('End');
-  assert.equal(await width.inputValue(), '1200');
-  await width.press('Home');
-  assert.equal(await width.inputValue(), '560');
-  for (let value = 560; value < Number(previousWidth); value += 20) await width.press('ArrowRight');
-  await page.keyboard.press('Escape');
+  // 阅读列宽控件已按用户要求从右上角菜单移除；列宽固定为 claude 实测的 768px。
   const workspaceToggle = page.getByRole('button', { name: '任务工作区', exact: true });
   if (await workspaceToggle.getAttribute('aria-expanded') !== 'true') await workspaceToggle.click();
   const workspace = page.locator('aside#agent-workspace-panel');
   // Views the model opened while followed stay as tabs; start this check from none.
-  await workspace.getByRole('button', { name: '工作区更多操作', exact: true }).click();
+  await workspace.getByRole('button', { name: '视图选项', exact: true }).click();
   const closeTabs = page.getByRole('menuitem', { name: '关闭全部标签', exact: true });
   if (await closeTabs.isEnabled()) await closeTabs.click();
   else await page.keyboard.press('Escape');

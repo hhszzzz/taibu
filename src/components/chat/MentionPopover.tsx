@@ -330,8 +330,8 @@ export function MentionPopover({ query, dataSources, knowledgeBases, enabledData
     }, [activeLevel, goBack, knowledgeBaseLocked, onClose, onSelect, effectiveState.activeIndex, effectiveState.selectedCategory, effectiveState.selectedSubcategory, view.items]);
 
     return (
-        <div className="absolute bottom-full mb-2 z-40 left-2 right-2 md:left-0 md:right-auto md:w-[240px] md:max-w-[calc(100vw-2rem)]">
-            <div className="bg-background border border-border rounded-xl shadow-lg overflow-hidden">
+        <div className="absolute bottom-full mb-2 z-40 left-2 right-2 md:left-0 md:right-auto md:w-[min(576px,100%)]">
+            <div className="chat-mention-popover">
                 <MentionHeader
                     title={view.title}
                     activeLevel={activeLevel}

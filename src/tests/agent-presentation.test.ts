@@ -10,7 +10,7 @@ import {
     collectAgentArtifacts, describeAgentCallNote, describeAgentChartRules, describeAgentChartSteps, describeAgentChartSubject, describeAgentStep, formatAgentToolDuration,
     getAgentStepNumbers, getAgentSteps, getAgentLiveLine, getAgentArtifactHref, getAgentIntermediateResults, getAgentLocatedPositions, getAgentReadingState, getAgentToolState,
     getAgentResponseTiming, getAgentRoundFolds, getAgentTaskDuration, getAgentTaskSpan, getDayunWindow, groupAgentParts, getAgentActivityLabel, getAgentEvidenceSummary, stripLeadingTitle,
-    summarizeAgentProcess, summarizeAgentTool, AGENT_TOOL_FAMILY_LABELS, type AgentArtifact, type AgentTool,
+    summarizeAgentProcess, summarizeAgentActivity, summarizeAgentTool, AGENT_TOOL_FAMILY_LABELS, type AgentArtifact, type AgentTool,
 } from '../components/chat/agent/presentation';
 import { formatAgentElapsed } from '../components/chat/agent/AgentHeaderStatus';
 
@@ -138,17 +138,16 @@ test('the evidence chip counts only completed search results and the header cloc
 
 test('a process step pairs its state with the summary and a note only where the state needs one', () => {
     const tool = (extra: Partial<AgentTool> = {}): AgentTool => ({ type: 'tool', id: 'step', name: 'web_search', title: '联网检索', status: 'completed', input: { query: '丑月' }, output: [], ...extra });
-    assert.deepEqual(describeAgentStep(tool({ durationMs: 30_000 }), 'completed'), { status: 'completed', label: '完成', summary: '「丑月」 · 没有可引用的公开来源', note: null, duration: '30 秒' });
+    // 用时只落库、不展示（用户裁定 2026-10-17）：步骤描述里不再带 duration 字段。
+    assert.deepEqual(describeAgentStep(tool({ durationMs: 30_000 }), 'completed'), { status: 'completed', label: '完成', summary: '「丑月」 · 没有可引用的公开来源', note: null });
     const failed = describeAgentStep(tool({ status: 'failed', output: '网络错误', durationMs: 1200 }), 'completed');
     assert.equal(failed.note, '失败');
-    assert.equal(failed.duration, '1.2 秒', 'a failed call keeps its measured execution time');
+    assert.equal('duration' in failed, false, 'a failed call keeps its measured time in storage only');
     const stopped = describeAgentStep(tool({ status: 'running', durationMs: 50 }), 'cancelled');
-    assert.deepEqual([stopped.status, stopped.note, stopped.duration], ['interrupted', '已结束（任务停止时未完成）', null], 'an unfinished call never shows a time');
+    assert.deepEqual([stopped.status, stopped.note], ['interrupted', '已结束（任务停止时未完成）'], 'an unfinished call never shows a time');
     assert.equal(describeAgentStep(tool({ status: 'pending', input: undefined, output: undefined }), 'running').note, '待执行');
     assert.equal(describeAgentStep(tool({ name: 'mcp__x', status: 'running', input: undefined, output: undefined }), 'running').note, '执行中', 'a running call without a summary still says what it is doing');
     assert.equal(describeAgentStep(tool({ status: 'running', output: undefined }), 'running').note, null, 'a running call with a summary needs no note');
-    assert.equal(describeAgentStep(tool({ durationMs: Number.NaN }), 'completed').duration, null);
-    assert.equal(describeAgentStep(tool({ durationMs: -1 }), 'completed').duration, null);
 });
 
 test('the folded process line names steps in first-use order, counts repeats and skips plan updates', () => {
@@ -158,6 +157,16 @@ test('the folded process line names steps in first-use order, counts repeats and
     assert.equal(summarizeAgentProcess([...tools, tool('f', '确定最终成果', 'select_final_artifacts'), tool('g', '联网检索', 'web_search')]), '八字排盘、定位分析位置 3 次、八字大运、确定最终成果等');
     assert.equal(summarizeAgentProcess([]), '');
     assert.equal(summarizeAgentProcess([tool('p', '更新计划', 'todo_write')]), '');
+});
+
+test('the claude-style status line groups tools by effect and names collaboration members', () => {
+    const tool = (id: string, name: string, extra: Partial<AgentTool> = {}): AgentTool => ({ type: 'tool', id, name, title: name, status: 'completed', ...extra });
+    assert.equal(summarizeAgentActivity([tool('a', 'bazi'), tool('b', 'inspect_chart')], 0, 0), '已查看 2 张命盘');
+    assert.equal(summarizeAgentActivity([tool('a', 'web_search'), tool('b', 'read_user_data'), tool('c', 'todo_write')], 0, 0), '已搜索 1 次，已读取 1 份资料');
+    const team = tool('t', 'parallel_analysis', { output: { analyses: [{ system: 'bazi', conversationId: 1, status: 'completed' }, { system: 'ziwei', conversationId: 2, status: 'completed' }] } });
+    assert.equal(summarizeAgentActivity([team], 0, 0), '开启 2 个智能体');
+    assert.equal(summarizeAgentActivity([tool('a', 'bazi', { status: 'failed' })], 2, 1), '已查看 1 张命盘，已确认 2 项信息，1 处失败');
+    assert.equal(summarizeAgentActivity([], 1, 0), '已确认 1 项信息');
 });
 
 test('the live line describes the running call only while tools run', () => {
@@ -200,14 +209,15 @@ test('steps are numbered once across the task and leave plan updates to the task
     assert.equal(getAgentStepNumbers([tool('plan', 'todo_write')]).size, 0);
 });
 
-test('a call note separates execution from waiting and only claims storage for cached results', () => {
+test('a call note only claims storage for cached results and never shows a measured time', () => {
     const tool = (extra: Partial<AgentTool> = {}): AgentTool => ({ type: 'tool', id: 'b', name: 'bazi', title: '八字排盘', status: 'completed', durationMs: 86, output: { artifactId: 'a1' }, ...extra });
-    assert.equal(describeAgentCallNote(tool()), '执行阶段 86 毫秒（不含等待）。结果已按任务与调用 ID 暂存，重放不会重新计算或扣费。');
-    assert.equal(describeAgentCallNote(tool({ startedAt: 1_000, endedAt: 6_000, durationMs: 1_500 })), '执行阶段 1.5 秒（不含等待），连同等待共 5 秒。结果已按任务与调用 ID 暂存，重放不会重新计算或扣费。');
-    assert.equal(describeAgentCallNote(tool({ startedAt: 1_000, endedAt: 1_086 })), '执行阶段 86 毫秒（不含等待）。结果已按任务与调用 ID 暂存，重放不会重新计算或扣费。', 'a span that reads the same is not repeated');
-    assert.equal(describeAgentCallNote(tool({ output: { result: 1 } })), '执行阶段 86 毫秒（不含等待）。', 'an uncached result makes no replay claim');
+    // 用时只落库、不展示（用户裁定 2026-10-17）：备注只说结果是否已暂存。
+    assert.equal(describeAgentCallNote(tool()), '结果已按任务与调用 ID 暂存，重放不会重新计算或扣费。');
+    assert.equal(describeAgentCallNote(tool({ startedAt: 1_000, endedAt: 6_000, durationMs: 1_500 })), '结果已按任务与调用 ID 暂存，重放不会重新计算或扣费。');
+    assert.equal(describeAgentCallNote(tool({ startedAt: 1_000, endedAt: 1_086 })), '结果已按任务与调用 ID 暂存，重放不会重新计算或扣费。');
+    assert.equal(describeAgentCallNote(tool({ output: { result: 1 } })), null, 'an uncached result makes no replay claim');
     assert.equal(describeAgentCallNote(tool({ status: 'failed', durationMs: undefined })), null);
-    assert.equal(describeAgentCallNote(tool({ durationMs: Number.NaN })), '结果已按任务与调用 ID 暂存，重放不会重新计算或扣费。', 'an unmeasured call never shows an invented time');
+    assert.equal(describeAgentCallNote(tool({ durationMs: Number.NaN })), '结果已按任务与调用 ID 暂存，重放不会重新计算或扣费。');
 });
 
 /** A completed call of a Core chart tool with its real result, as the projection stores it. */

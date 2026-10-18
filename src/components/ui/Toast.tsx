@@ -63,7 +63,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         const normalized = normalizeToastOptions(durationOrOptions);
         const duration = normalized.duration ?? 3000;
         const id = `${Date.now()}-${Math.random()}`;
-        setToasts(prev => [...prev, { id, type, message, duration, action: normalized.action }]);
+        // 同屏最多保留 4 条：新提示从底部进入，旧提示按各自真实高度依次上移。
+        setToasts(prev => [...prev, { id, type, message, duration, action: normalized.action }].slice(-4));
 
         if (duration > 0) {
             setTimeout(() => {
@@ -80,11 +81,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         <ToastContext.Provider value={{ showToast }}>
             {children}
 
-            {/* Toast 容器：按内容定宽并以视口为上限，避免 left-1/2 把可用宽度压到半屏导致窄屏折行。
+            {/* Toast 容器：claude 同款右下堆叠（360px 宽、底部 1rem）；新提示依次向上堆。
                 常驻的 live region 让读屏软件播报新提示；错误提示单独用 role="alert" 立即打断。 */}
             <div
                 aria-live="polite"
-                className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex w-max max-w-[calc(100vw-2rem)] flex-col items-center gap-2 pointer-events-none"
+                className="app-toast-stack fixed bottom-4 right-4 z-[100] flex w-[360px] max-w-[calc(100vw-2rem)] flex-col items-stretch gap-2 pointer-events-none"
             >
                 {toasts.map(toast => (
                     <ToastItem key={toast.id} toast={toast} onRemove={removeToast} />
@@ -108,10 +109,10 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
     return (
         <div
             role={toast.type === 'error' ? 'alert' : undefined}
-            className="pointer-events-auto flex min-h-11 items-center gap-2.5 rounded-xl border-[0.5px] border-border bg-surface py-2 pr-2 pl-3.5 shadow-[0_8px_28px_rgba(31,30,29,0.12)] animate-fade-in dark:shadow-[0_8px_28px_rgba(0,0,0,0.45)]"
+            className="toast-item pointer-events-auto flex w-full min-h-11 items-start gap-2.5 rounded-xl border-[0.5px] border-border bg-surface py-2 pr-2 pl-3.5 shadow-[0_8px_28px_rgba(11, 11, 11,0.12)] dark:shadow-[0_8px_28px_rgba(0,0,0,0.45)]"
         >
-            <Icon className={`h-[18px] w-[18px] shrink-0 ${iconClassName}`} aria-hidden="true" />
-            <span className="text-sm leading-snug text-foreground">{toast.message}</span>
+            <Icon className={`mt-px h-[18px] w-[18px] shrink-0 ${iconClassName}`} aria-hidden="true" />
+            <span className="min-w-0 flex-1 break-words text-sm leading-snug text-foreground">{toast.message}</span>
             {toast.action && (
                 <button
                     type="button"
@@ -119,7 +120,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
                         toast.action?.onClick();
                         onRemove(toast.id);
                     }}
-                    className="ml-1 h-7 shrink-0 rounded-md px-2 text-[13px] font-medium text-accent transition-colors hover:bg-accent-soft"
+                    className="mt-px ml-1 h-7 shrink-0 rounded-md px-2 text-[13px] font-medium text-accent transition-colors hover:bg-accent-soft"
                 >
                     {toast.action.label}
                 </button>
@@ -128,7 +129,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
                 type="button"
                 onClick={() => onRemove(toast.id)}
                 aria-label="关闭提示"
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-foreground-tertiary transition-colors hover:bg-background-secondary hover:text-foreground"
+                className="-mt-px flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-foreground-tertiary transition-colors hover:bg-background-secondary hover:text-foreground"
             >
                 <X className="h-4 w-4" aria-hidden="true" />
             </button>

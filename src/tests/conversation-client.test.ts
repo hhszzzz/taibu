@@ -97,6 +97,7 @@ test('loadConversations should map paginated list payloads through the browser a
         questionPreview: '最近怎么样？',
         isArchived: false,
         archivedKbIds: ['kb-1'],
+        hasAgentRun: false,
       }],
       pagination: {
         hasMore: true,
@@ -207,7 +208,7 @@ test('sidebar conversation viewport top-up waits for the first page to finish lo
 
   assert.match(
     sidebarSource,
-    /const shouldAutoTopUp = !isSearching && searchQuery\.trim\(\)\.length === 0 && collapsedGroups\.size === 0;/u,
+    /const shouldAutoTopUp = collapsedGroups\.size === 0;/u,
   );
   assert.match(
     sidebarSource,

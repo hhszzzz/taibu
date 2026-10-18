@@ -1,20 +1,25 @@
 import type { ComponentType } from 'react';
-import { BookOpenText, Bot, KeyRound, Megaphone, Scroll, Wallet } from 'lucide-react';
 import {
-  CurrencyCircleDollarIcon,
-  GearSixIcon,
-  type IconWeight,
-  MetaLogoIcon,
-  QuestionMarkIcon,
+  BotIcon,
+  ChartsIcon,
+  FeatureFlagsIcon,
+  HelpIcon,
+  KeyIcon,
+  KnowledgeIcon,
+  MegaphoneIcon,
+  PersonalizationIcon,
+  ProfileIcon,
   ScribbleIcon,
-  UserIcon,
-} from '@phosphor-icons/react';
+  SettingsIcon,
+  UpgradeIcon,
+} from '@/lib/navigation/nav-icons';
 import type { SettingsCenterTab } from '@/lib/settings-center';
 
 export type SettingsCenterIconProps = {
   className?: string;
   size?: number | string;
-  weight?: IconWeight;
+  /** 保留旧调用签名（此前的 phosphor 图标带字重）；自定义单线图标不使用。 */
+  weight?: string;
 };
 
 export const SETTINGS_CENTER_ICON_SIZES = {
@@ -23,40 +28,31 @@ export const SETTINGS_CENTER_ICON_SIZES = {
   mobile: 14,
 } as const;
 
-const SETTINGS_CENTER_PHOSPHOR_WEIGHT: IconWeight = 'bold';
-
-function withDefaultPhosphorSize(Icon: ComponentType<SettingsCenterIconProps>) {
-  const Wrapped = ({
-    size = SETTINGS_CENTER_ICON_SIZES.sidebar,
-    weight = SETTINGS_CENTER_PHOSPHOR_WEIGHT,
-    className,
-  }: SettingsCenterIconProps) => (
-    <Icon size={size} weight={weight} className={className} />
+/**
+ * 设置中心图标 = 全站统一的自绘单线图标（与占术导航同一套 24 网格语言）。
+ * 这里只把默认尺寸固定成设置侧的 18px，形状与权重完全交给 nav-icons。
+ */
+function withDefaultSize(Icon: ComponentType<{ className?: string; size?: number | string }>) {
+  const Wrapped = ({ size = SETTINGS_CENTER_ICON_SIZES.sidebar, className }: SettingsCenterIconProps) => (
+    <Icon size={size} className={className} />
   );
-  Wrapped.displayName = `WithDefaultPhosphorSize(${Icon.displayName ?? Icon.name ?? 'Icon'})`;
+  Wrapped.displayName = `WithDefaultSize(${Icon.displayName ?? Icon.name ?? 'Icon'})`;
   return Wrapped;
 }
 
-const ProfileIcon = withDefaultPhosphorSize(UserIcon);
-const GeneralIcon = withDefaultPhosphorSize(GearSixIcon);
-const UpgradeIcon = withDefaultPhosphorSize(CurrencyCircleDollarIcon);
-const PersonalizationIcon = withDefaultPhosphorSize(MetaLogoIcon);
-const HelpIcon = withDefaultPhosphorSize(QuestionMarkIcon);
-const McpServiceIcon = withDefaultPhosphorSize(ScribbleIcon);
-
 export const SETTINGS_CENTER_TAB_ICONS: Record<SettingsCenterTab, ComponentType<SettingsCenterIconProps>> = {
-  profile: ProfileIcon,
-  general: GeneralIcon,
-  upgrade: UpgradeIcon,
-  personalization: PersonalizationIcon,
-  byok: KeyRound,
-  help: HelpIcon,
-  charts: Scroll,
-  'knowledge-base': BookOpenText,
-  'mcp-service': McpServiceIcon,
-  'admin-announcements': Megaphone,
-  'admin-features': Wallet,
-  'admin-ai-services': Bot,
+  profile: withDefaultSize(ProfileIcon),
+  general: withDefaultSize(SettingsIcon),
+  upgrade: withDefaultSize(UpgradeIcon),
+  personalization: withDefaultSize(PersonalizationIcon),
+  byok: withDefaultSize(KeyIcon),
+  help: withDefaultSize(HelpIcon),
+  charts: withDefaultSize(ChartsIcon),
+  'knowledge-base': withDefaultSize(KnowledgeIcon),
+  'mcp-service': withDefaultSize(ScribbleIcon),
+  'admin-announcements': withDefaultSize(MegaphoneIcon),
+  'admin-features': withDefaultSize(FeatureFlagsIcon),
+  'admin-ai-services': withDefaultSize(BotIcon),
 };
 
 export function getSettingsCenterTabIcon(tab: SettingsCenterTab) {

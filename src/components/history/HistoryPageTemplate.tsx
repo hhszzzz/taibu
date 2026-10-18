@@ -302,12 +302,12 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
                     </nav>
                     <header className="mt-3 flex flex-wrap items-end justify-between gap-4">
                         <div className="flex min-w-0 flex-col gap-1.5">
-                            <h1 className="font-display text-[2.125rem] leading-tight font-normal text-foreground">{title}</h1>
+                            <h1 className="font-display text-[1.875rem] leading-tight font-normal text-foreground">{title}</h1>
                             {subtitle ? <p className="text-[15px] text-foreground-secondary">{subtitle}</p> : null}
                         </div>
                         <Link
                             href={resolvedActionHref}
-                            className="inline-flex h-11 shrink-0 items-center rounded-[10px] bg-accent px-[18px] text-[15px] font-medium text-on-accent transition-colors hover:bg-accent/90"
+                            className="inline-flex h-9 shrink-0 items-center rounded-md bg-accent px-4 text-[14px] font-medium text-on-accent transition-colors hover:bg-accent/90"
                         >
                             {actionLabel}
                         </Link>
@@ -322,12 +322,12 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
                         placeholder={searchPlaceholder}
-                        className="h-11 w-full rounded-[10px] border-[0.5px] border-border-hover bg-surface pr-3.5 pl-[42px] text-[15px] text-foreground placeholder:text-foreground-tertiary focus:border-accent focus:outline-none"
+                        className="h-10 w-full rounded-lg border-[0.5px] border-border-hover bg-surface pr-3.5 pl-[42px] text-[14.5px] text-foreground placeholder:text-foreground-tertiary focus:border-accent focus:outline-none"
                     />
                 </label>
 
                 {errorMessage && !loading && filteredItems.length > 0 && (
-                    <div role="alert" className="mt-4 rounded-[10px] border-[0.5px] border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">
+                    <div role="alert" className="mt-4 rounded-xl border-[0.5px] border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">
                         {errorMessage}
                     </div>
                 )}
@@ -363,7 +363,7 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
                             {filteredItems.map(item => <li key={item.id}>{renderItem(item)}</li>)}
                         </ul>
                     ) : (
-                        <ul className={renderCard ? 'flex flex-col gap-3' : 'divide-y-[0.5px] divide-border overflow-hidden rounded-[14px] border-[0.5px] border-border bg-surface'}>
+                        <ul className={renderCard ? 'flex flex-col gap-3' : 'divide-y-[0.5px] divide-border overflow-hidden rounded-2xl border-[0.5px] border-border bg-surface'}>
                             {filteredItems.map(item => <li key={item.id}>{renderItem(item)}</li>)}
                         </ul>
                     )}
@@ -379,7 +379,7 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
                             <button
                                 type="button"
                                 onClick={() => { void loadItems({ append: true, offset: nextOffset ?? 0 }); }}
-                                className="h-10 rounded-[10px] border-[0.5px] border-border-hover px-4 text-sm text-foreground-secondary transition-colors hover:bg-background-secondary"
+                                className="h-10 rounded-xl border-[0.5px] border-border-hover px-4 text-sm text-foreground-secondary transition-colors hover:bg-background-secondary"
                             >
                                 重试加载更多
                             </button>

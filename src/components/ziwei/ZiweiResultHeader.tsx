@@ -59,7 +59,7 @@ function ModeTabs({ mode, onModeChange }: { mode: ZiweiChartMode; onModeChange: 
             role="tablist"
             aria-label="命盘视图"
             onKeyDown={handleKeyDown}
-            className="grid h-10 grid-cols-3 gap-1 rounded-[10px] bg-background-secondary p-1 lg:flex"
+            className="grid h-10 grid-cols-3 gap-1 rounded-xl bg-background-secondary p-1 lg:flex"
         >
             {ZIWEI_CHART_MODES.map((item, index) => {
                 const selected = item.id === mode;
@@ -75,7 +75,7 @@ function ModeTabs({ mode, onModeChange }: { mode: ZiweiChartMode; onModeChange: 
                         tabIndex={selected ? 0 : -1}
                         onClick={() => onModeChange(item.id)}
                         className={`rounded-[7px] text-sm transition-colors lg:px-3.5 ${selected
-                            ? 'bg-surface text-foreground shadow-[0_1px_2px_rgba(20,20,19,0.08)]'
+                            ? 'bg-surface text-foreground shadow-[0_1px_2px_rgba(11, 11, 11,0.08)]'
                             : 'text-foreground-secondary hover:text-foreground'}`}
                     >
                         {item.label}
@@ -107,7 +107,7 @@ export function ZiweiResultHeader({ title, summary, desktopSuffix, status, mode,
                     <AIFeatureGate>
                         <Link
                             href={ASK_TAIBU_HREF}
-                            className="inline-flex h-10 items-center rounded-[10px] bg-accent px-4 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
+                            className="inline-flex h-10 items-center rounded-xl bg-accent px-4 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
                         >
                             问太卜
                         </Link>

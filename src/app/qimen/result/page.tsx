@@ -366,7 +366,7 @@ export default function QimenResultPage() {
                             {question && <><span className="hidden lg:inline"> · </span><br className="lg:hidden" /></>}
                             <span>{formatInputTime(result)} · {ruleLabel}</span>
                         </p>
-                        <h1 className="hidden font-display text-[2.125rem] font-normal leading-tight lg:block">
+                        <h1 className="hidden font-display text-[1.875rem] font-normal leading-tight lg:block">
                             {qimenOutput.dateInfo.solarTerm} · {juLabel}
                             <span className="ml-2 text-xl text-foreground-secondary">{yuan}</span>
                         </h1>
@@ -428,7 +428,7 @@ export default function QimenResultPage() {
                             <div className="flex flex-wrap items-center gap-2">
                                 <ModelSelector compact selectedModel={selectedModel} onModelChange={setSelectedModel} reasoningEnabled={reasoningEnabled} onReasoningChange={setReasoningEnabled} userId={currentUser?.id} membershipType={membershipType} disabled={membershipPending} />
                                 {(interpretation || streaming.isStreaming) && (
-                                    <button onClick={handleGetInterpretation} disabled={isLoading} aria-label="重新解读" className="rounded-[10px] p-2 text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground">
+                                    <button onClick={handleGetInterpretation} disabled={isLoading} aria-label="重新解读" className="rounded-xl p-2 text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground">
                                         <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                                     </button>
                                 )}
@@ -439,7 +439,7 @@ export default function QimenResultPage() {
                                         <button
                                             onClick={currentUser ? handleGetInterpretation : () => setShowAuthModal(true)}
                                             disabled={isLoading || membershipPending}
-                                            className="inline-flex h-10 items-center gap-2 rounded-[10px] bg-foreground px-4 text-sm text-background transition-opacity hover:opacity-90 disabled:opacity-50"
+                                            className="inline-flex h-10 items-center gap-2 rounded-xl bg-foreground px-4 text-sm text-background transition-opacity hover:opacity-90 disabled:opacity-50"
                                         >
                                             {isLoading && <SoundWaveLoader variant="inline" className="[&_.sound-wave-bar]:bg-background" />}
                                             让太卜断这一局
@@ -449,7 +449,7 @@ export default function QimenResultPage() {
                             </div>
                         </div>
                         {error && (
-                            <div role="alert" className="rounded-[10px] border-[0.5px] border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
+                            <div role="alert" className="rounded-xl border-[0.5px] border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
                                 {error}
                             </div>
                         )}

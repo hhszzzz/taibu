@@ -49,6 +49,7 @@ export function ChatMessageList({
                 <div
                     key={message.id || `msg-${index}`}
                     className="chat-transcript-row"
+                    data-role={message.role}
                 >
                     <AgentRoundRow rounds={rounds} messageId={message.id}>
                         <ChatMessageItem
@@ -57,6 +58,7 @@ export function ChatMessageList({
                             isLastMessage={index === messages.length - 1}
                             disabled={disabled}
                             onEditMessage={onEditMessage}
+                            onRetryMessage={message.role === 'user' && messages[index + 1]?.role === 'assistant' && onRegenerateResponse ? () => onRegenerateResponse(messages[index + 1].id) : undefined}
                             onRegenerateResponse={onRegenerateResponse}
                             onSwitchVersion={onSwitchVersion}
                             onArchiveMessage={onArchiveMessage}

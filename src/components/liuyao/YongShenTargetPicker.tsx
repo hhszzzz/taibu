@@ -139,7 +139,7 @@ export function YongShenTargetPicker({
             <button
                 type="button"
                 onClick={() => setIsOpen((prev) => !prev)}
-                className={`inline-flex h-9 items-center gap-1.5 rounded-[10px] px-2.5 text-xs transition-colors ${
+                className={`inline-flex h-9 items-center gap-1.5 rounded-xl px-2.5 text-xs transition-colors ${
                     selectedLabels.length > 0
                         ? 'border border-accent bg-accent-light text-accent-strong'
                         : 'border-[0.5px] border-border-hover bg-surface text-foreground-secondary hover:text-foreground'

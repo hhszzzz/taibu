@@ -28,7 +28,7 @@ export function LiuyaoResultHeader({ question, yongShenTargets, hexagramName, ch
                         {yongShenTargets.length > 0 && <> · 用神 {yongShenTargets.join('、')}</>}
                     </p>
                 )}
-                <h1 className="hidden font-display text-[2.125rem] font-normal leading-tight lg:block">
+                <h1 className="hidden font-display text-[1.875rem] font-normal leading-tight lg:block">
                     {hexagramName}
                     {changedHexagramName && <> <span className="text-[1.375rem] text-foreground-secondary">之</span> {changedHexagramName}</>}
                 </h1>

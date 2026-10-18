@@ -81,7 +81,7 @@ function LessonColumns({ chart, interaction }: { chart: DaliurenCanonicalJSON; i
                     <div
                         key={prefix}
                         data-chart-selected={isChartTargetSelected(interaction, 'daliuren:lesson:' + index) || undefined}
-                        className={`flex min-w-0 flex-col items-center gap-1 rounded-xl px-1 py-2.5 text-center @3xl:gap-1.5 @3xl:rounded-[10px] ${isFirst ? 'bg-accent-soft' : 'bg-background'}`}
+                        className={`flex min-w-0 flex-col items-center gap-1 rounded-xl px-1 py-2.5 text-center @3xl:gap-1.5 @3xl:rounded-xl ${isFirst ? 'bg-accent-soft' : 'bg-background'}`}
                     >
                         <span className={`text-[11px] ${isFirst ? 'text-accent-strong' : 'text-foreground-secondary'}`}>
                             {lesson ? <ChartTarget interaction={interaction} id={'daliuren:lesson:' + index}>{name}</ChartTarget> : name}

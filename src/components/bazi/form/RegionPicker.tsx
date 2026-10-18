@@ -110,7 +110,7 @@ export function RegionPicker({ value, onChange }: RegionPickerProps) {
                     <select
                         value={selectedProvince}
                         onChange={(e) => handleProvinceChange(e.target.value)}
-                        className="h-11 w-full cursor-pointer appearance-none rounded-[10px] border-[0.5px] border-border-hover bg-surface pl-2.5 pr-7 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15"
+                        className="h-11 w-full cursor-pointer appearance-none rounded-xl border-[0.5px] border-border-hover bg-surface pl-2.5 pr-7 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15"
                     >
                         <option value="">省份</option>
                         {!loading && regions.map((region) => (
@@ -131,7 +131,7 @@ export function RegionPicker({ value, onChange }: RegionPickerProps) {
                         value={selectedCity}
                         onChange={(e) => handleCityChange(e.target.value)}
                         disabled={cities.length === 0}
-                        className="h-11 w-full cursor-pointer appearance-none rounded-[10px] border-[0.5px] border-border-hover bg-surface pl-2.5 pr-7 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="h-11 w-full cursor-pointer appearance-none rounded-xl border-[0.5px] border-border-hover bg-surface pl-2.5 pr-7 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         <option value="">城市</option>
                         {cities.map((city) => (
@@ -152,7 +152,7 @@ export function RegionPicker({ value, onChange }: RegionPickerProps) {
                         value={selectedDistrict}
                         onChange={(e) => handleDistrictChange(e.target.value)}
                         disabled={districts.length === 0}
-                        className="h-11 w-full cursor-pointer appearance-none rounded-[10px] border-[0.5px] border-border-hover bg-surface pl-2.5 pr-7 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="h-11 w-full cursor-pointer appearance-none rounded-xl border-[0.5px] border-border-hover bg-surface pl-2.5 pr-7 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         <option value="">区县</option>
                         {districts.map((dist) => (

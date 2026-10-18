@@ -2,7 +2,7 @@
 // 需要展开弹窗状态与工作区上下文：卡片打开工作区或就地展开命盘
 
 import { useId, useMemo, useState, type CSSProperties } from 'react';
-import { Check, CircleAlert, LoaderCircle, Maximize2, Orbit, PanelRight, X } from 'lucide-react';
+import { Check, CircleAlert, LoaderCircle, Maximize2, PanelRight, X } from 'lucide-react';
 import { getAgentChart, getAgentToolText, type AgentChart, type AgentToolPart } from '@/lib/agent/tool-presentation';
 import { REASONING_EFFORT_LABELS } from '@/lib/chat/model-settings';
 import { AI_REASONING_EFFORTS, type AIReasoningEffort } from '@/types';
@@ -18,6 +18,7 @@ import { getChartFocus } from '@/lib/agent/chart-interaction';
 import { parallelAnalysisResults, type ParallelAnalysisResult } from '@/lib/agent/parallel-results';
 import type { AgentRunStatus } from '@/lib/agent/types';
 import { getAgentToolState, getParallelMemberState } from './presentation';
+import { getChartKindMeta } from './chart-registry';
 
 function TextFallback({ tool, incomplete = false }: { tool: AgentToolPart; incomplete?: boolean }) {
   const text = getAgentToolText(tool);
@@ -26,11 +27,6 @@ function TextFallback({ tool, incomplete = false }: { tool: AgentToolPart; incom
     <div className="agent-result-text" tabIndex={0} aria-label="工具返回文本">{text ? <MarkdownContent content={text} /> : <pre>{JSON.stringify(tool.output, null, 2) ?? '未返回命盘数据。'}</pre>}</div>
   </div>;
 }
-
-/** One serif character per reading kind for the compact card; bazi shows its four pillars instead. */
-export const CHART_GLYPHS: Record<AgentChartKind, string> = {
-  bazi: '八', ziwei: '紫', qimen: '奇', liuyao: '卦', meihua: '梅', daliuren: '课', xiaoliuren: '壬', tarot: '塔', taiyi: '乙', astrology: '星', almanac: '历',
-};
 
 /**
  * Four pillars in element colors. `card` and `overview` mark the day pillar;
@@ -47,7 +43,8 @@ export function BaziPillars({ chart, size = 'card' }: { chart: Extract<AgentChar
 function ChartGlyph({ value, kind }: { value: AgentChart | null; kind: AgentChartKind | null }) {
   if (value?.kind === 'bazi') return <BaziPillars chart={value.chart} />;
   const glyphKind = value?.kind ?? kind;
-  return <span className="agent-result-glyph" aria-hidden="true">{glyphKind ? CHART_GLYPHS[glyphKind] : <Orbit size={18} />}</span>;
+  const Icon = getChartKindMeta(glyphKind).icon;
+  return <span className="agent-result-glyph" aria-hidden="true"><Icon size={22} /></span>;
 }
 
 const effortLabel = (value?: string) => value === 'off' ? '不推理' : value && (AI_REASONING_EFFORTS as readonly string[]).includes(value) ? REASONING_EFFORT_LABELS[value as AIReasoningEffort] : null;

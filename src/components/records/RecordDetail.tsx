@@ -33,10 +33,10 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
 import { FILTER_CHIP_CLASS, FilterChip } from '@/components/ui/FilterChip';
 
-const FIELD_CLASS = 'w-full rounded-[10px] border-[0.5px] border-border-hover bg-surface px-3.5 text-[15px] text-foreground placeholder:text-foreground-tertiary focus:border-accent focus:outline-none';
+const FIELD_CLASS = 'w-full rounded-xl border-[0.5px] border-border-hover bg-surface px-3.5 text-[15px] text-foreground placeholder:text-foreground-tertiary focus:border-accent focus:outline-none';
 const LABEL_CLASS = 'mb-1.5 block text-sm text-foreground-secondary';
-const PRIMARY_BUTTON_CLASS = 'inline-flex h-10 items-center justify-center rounded-[10px] bg-accent px-5 text-sm font-medium text-on-accent transition-colors hover:bg-accent/90 disabled:opacity-50';
-const SECONDARY_BUTTON_CLASS = 'inline-flex h-10 items-center justify-center rounded-[10px] border-[0.5px] border-border-hover bg-surface px-5 text-sm text-foreground transition-colors hover:bg-background-secondary disabled:opacity-50';
+const PRIMARY_BUTTON_CLASS = 'inline-flex h-10 items-center justify-center rounded-xl bg-accent px-5 text-sm font-medium text-on-accent transition-colors hover:bg-accent/90 disabled:opacity-50';
+const SECONDARY_BUTTON_CLASS = 'inline-flex h-10 items-center justify-center rounded-xl border-[0.5px] border-border-hover bg-surface px-5 text-sm text-foreground transition-colors hover:bg-background-secondary disabled:opacity-50';
 const NOTE_TIME_FORMAT = new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -56,7 +56,7 @@ function isPlainEnter(event: KeyboardEvent<HTMLTextAreaElement>) {
 function FormError({ message }: { message: string }) {
     if (!message) return null;
     return (
-        <div role="alert" className="rounded-[10px] border-[0.5px] border-danger/30 bg-danger/5 px-3.5 py-2.5 text-sm text-danger">
+        <div role="alert" className="rounded-xl border-[0.5px] border-danger/30 bg-danger/5 px-3.5 py-2.5 text-sm text-danger">
             {message}
         </div>
     );
@@ -354,7 +354,7 @@ export function DailyNotes({
             </form>
 
             {notes.length === 0 ? (
-                <p className="rounded-[10px] bg-background-secondary px-4 py-5 text-center text-sm text-foreground-tertiary">
+                <p className="rounded-xl bg-background-secondary px-4 py-5 text-center text-sm text-foreground-tertiary">
                     今天还没有小记，写点什么吧。
                 </p>
             ) : (
@@ -483,7 +483,7 @@ export function ImportExportModal({
             <div className="flex flex-col gap-5 p-5 sm:p-6">
                 <FormError message={error} />
                 {success ? (
-                    <p role="status" className="rounded-[10px] bg-success/10 px-3.5 py-2.5 text-sm text-success">{success}</p>
+                    <p role="status" className="rounded-xl bg-success/10 px-3.5 py-2.5 text-sm text-success">{success}</p>
                 ) : null}
 
                 <section aria-labelledby={`${id}-export`} className="flex flex-col gap-2">
@@ -501,7 +501,7 @@ export function ImportExportModal({
                         <Upload className="h-4 w-4" aria-hidden="true" />导入数据
                     </h3>
                     {pendingImport ? (
-                        <div role="alert" className="flex flex-col gap-3 rounded-[10px] border-[0.5px] border-danger/30 bg-danger/5 p-3.5">
+                        <div role="alert" className="flex flex-col gap-3 rounded-xl border-[0.5px] border-danger/30 bg-danger/5 p-3.5">
                             <p className="text-sm text-foreground">
                                 将用「{pendingImport.fileName}」中的 {pendingImport.data.records.length} 条记录和 {pendingImport.data.notes.length} 条小记
                                 <strong className="font-medium text-danger">替换现有的全部记录和小记</strong>，此操作无法撤销。
@@ -511,7 +511,7 @@ export function ImportExportModal({
                                     type="button"
                                     onClick={() => { void confirmImport(); }}
                                     disabled={importing}
-                                    className="inline-flex h-10 items-center justify-center rounded-[10px] bg-danger px-4 text-sm font-medium text-white transition-colors hover:bg-danger/90 disabled:opacity-50"
+                                    className="inline-flex h-10 items-center justify-center rounded-xl bg-danger px-4 text-sm font-medium text-white transition-colors hover:bg-danger/90 disabled:opacity-50"
                                 >
                                     {importing ? '导入中…' : '确认覆盖导入'}
                                 </button>

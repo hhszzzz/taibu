@@ -142,7 +142,7 @@ export function HepanCreateView() {
                 {/* 标题 - 移动端顶栏已显示标题，仅保留说明 */}
                 <header className="flex flex-wrap items-end justify-between gap-4">
                     <div className="flex w-full flex-col gap-2 text-center sm:w-auto lg:text-left">
-                        <h1 className="hidden font-display text-[34px] font-normal leading-tight text-foreground lg:block">八字合盘</h1>
+                        <h1 className="hidden font-display text-[2rem] font-normal leading-tight text-foreground lg:block">八字合盘</h1>
                         <p className="text-[0.8125rem] leading-relaxed text-foreground-secondary sm:text-[15px]">输入双方的出生信息，看彼此的缘分与相处之道。</p>
                     </div>
                     <Link

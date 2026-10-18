@@ -230,7 +230,7 @@ export default function HepanResultPage() {
                         <button
                             type="button"
                             onClick={() => setKbModalOpen(true)}
-                            className="inline-flex h-10 items-center rounded-[10px] border-[0.5px] border-border-hover bg-surface px-3.5 text-sm text-foreground transition-colors hover:bg-background-secondary"
+                            className="inline-flex h-10 items-center rounded-xl border-[0.5px] border-border-hover bg-surface px-3.5 text-sm text-foreground transition-colors hover:bg-background-secondary"
                         >
                             加入知识库
                         </button>
@@ -242,7 +242,7 @@ export default function HepanResultPage() {
                     <span className="rounded-md bg-accent-soft px-2 py-0.5 text-xs text-accent-strong">
                         {getHepanTypeName(result.type)}分析
                     </span>
-                    <h1 className="flex flex-wrap items-center justify-center gap-x-3 font-display text-[1.75rem] font-normal leading-tight text-foreground lg:justify-start lg:text-[34px]">
+                    <h1 className="flex flex-wrap items-center justify-center gap-x-3 font-display text-[1.75rem] font-normal leading-tight text-foreground lg:justify-start lg:text-[2rem]">
                         <span>{result.person1.name}</span>
                         <span className="text-foreground-tertiary">&amp;</span>
                         <span>{result.person2.name}</span>

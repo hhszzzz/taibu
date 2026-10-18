@@ -51,7 +51,7 @@ function SectionError({
     onRetry: () => void | Promise<void>;
 }) {
     return (
-        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-[14px] border-[0.5px] border-danger/30 bg-danger/5 px-4 py-3.5 text-sm text-danger">
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border-[0.5px] border-danger/30 bg-danger/5 px-4 py-3.5 text-sm text-danger">
             <p>{message}</p>
             <button
                 type="button"
@@ -325,7 +325,7 @@ export default function RecordsPage() {
                 {/* 手机端顶栏已显示「命理记录」，这里只保留操作。 */}
                 <header className="flex flex-wrap items-end justify-between gap-4">
                     <div className="hidden flex-col gap-1.5 md:flex">
-                        <h1 className="font-display text-[2.125rem] leading-tight font-normal">命理记录</h1>
+                        <h1 className="font-display text-[1.875rem] leading-tight font-normal">命理记录</h1>
                         <p className="text-[15px] text-foreground-secondary">记下断语、应验与感悟，日后对照印证。</p>
                     </div>
                     <div className="flex w-full items-center justify-end gap-2 md:w-auto">
@@ -333,7 +333,7 @@ export default function RecordsPage() {
                             type="button"
                             onClick={() => setShowImportExport(true)}
                             aria-label="导入 / 导出"
-                            className="inline-flex h-11 items-center gap-2 rounded-[10px] border-[0.5px] border-border-hover bg-surface px-3 text-[15px] text-foreground transition-colors hover:bg-background-secondary md:px-4"
+                            className="inline-flex h-11 items-center gap-2 rounded-xl border-[0.5px] border-border-hover bg-surface px-3 text-[15px] text-foreground transition-colors hover:bg-background-secondary md:px-4"
                         >
                             <ArrowDownUp className="h-4 w-4" aria-hidden="true" />
                             <span className="hidden md:inline" aria-hidden="true">导入 / 导出</span>
@@ -341,7 +341,7 @@ export default function RecordsPage() {
                         <button
                             type="button"
                             onClick={() => setShowRecordForm(true)}
-                            className="inline-flex h-11 items-center gap-2 rounded-[10px] bg-accent px-[18px] text-[15px] font-medium text-on-accent transition-colors hover:bg-accent/90"
+                            className="inline-flex h-11 items-center gap-2 rounded-xl bg-accent px-[18px] text-[15px] font-medium text-on-accent transition-colors hover:bg-accent/90"
                         >
                             <Plus className="h-4 w-4" aria-hidden="true" />
                             新建记录
@@ -354,7 +354,7 @@ export default function RecordsPage() {
                     {notesError ? (
                         <SectionError message={notesError} onRetry={loadNotes} />
                     ) : (
-                        <div className="rounded-[14px] border-[0.5px] border-border bg-surface">
+                        <div className="rounded-2xl border-[0.5px] border-border bg-surface">
                             {notesLoading ? (
                                 <div className="p-6">
                                     <SoundWaveLoader variant="block" text="加载小记中" />

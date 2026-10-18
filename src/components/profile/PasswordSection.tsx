@@ -193,7 +193,7 @@ export function PasswordSection({
                         >
                             {countdown > 0 ? `重新发送（${countdown} 秒）` : '重新发送验证码'}
                         </button>
-                        <button type="button" onClick={resetForm} className="ml-auto h-10 rounded-[10px] px-3 text-sm text-foreground-secondary hover:bg-background-secondary">
+                        <button type="button" onClick={resetForm} className="ml-auto h-10 rounded-xl px-3 text-sm text-foreground-secondary hover:bg-background-secondary">
                             取消
                         </button>
                     </div>
@@ -265,7 +265,7 @@ export function PasswordSection({
                             {loading && <SoundWaveLoader variant="inline" />}
                             确认修改
                         </button>
-                        <button type="button" onClick={resetForm} className="ml-auto h-10 rounded-[10px] px-3 text-sm text-foreground-secondary hover:bg-background-secondary">
+                        <button type="button" onClick={resetForm} className="ml-auto h-10 rounded-xl px-3 text-sm text-foreground-secondary hover:bg-background-secondary">
                             取消
                         </button>
                     </div>

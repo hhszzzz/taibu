@@ -38,7 +38,7 @@ export function HexagramSelector({ value, onChange }: HexagramSelectorProps) {
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="搜索卦名、卦象..."
-                    className="h-10 w-full rounded-[10px] border-[0.5px] border-border-hover bg-surface pl-9 pr-4 text-sm
+                    className="h-10 w-full rounded-xl border-[0.5px] border-border-hover bg-surface pl-9 pr-4 text-sm
                         placeholder:text-foreground-tertiary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
                 />
             </div>

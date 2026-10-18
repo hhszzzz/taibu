@@ -125,7 +125,7 @@ function useLongPress(onLongPress: (id: string) => void) {
     return { bind, consumeClick };
 }
 
-const TILE_BASE_CLASS = 'relative flex flex-col items-center gap-1.5 rounded-[14px] border-[0.5px] px-0.5 pb-[9px] pt-2.5 transition-colors duration-200';
+const TILE_BASE_CLASS = 'relative flex flex-col items-center gap-1.5 rounded-2xl border-[0.5px] px-0.5 pb-[9px] pt-2.5 transition-colors duration-200';
 
 export function MobileNav() {
     const pathname = usePathname();
@@ -300,7 +300,7 @@ export function MobileNav() {
                 aria-labelledby="mobile-all-divinations-title"
                 aria-hidden={!isDrawerOpen}
                 inert={!isDrawerOpen}
-                className={`fixed inset-x-0 bottom-0 top-[calc(var(--mobile-header-height)+1.5rem)] z-50 mx-auto flex max-w-[640px] flex-col overflow-hidden rounded-t-[22px] bg-surface shadow-[0_-8px_30px_rgba(20,20,19,0.12)] duration-300 ease-out lg:hidden ${isDrawerOpen ? 'visible translate-y-0 transition-transform' : 'invisible translate-y-full transition-[transform,visibility]'}`}
+                className={`fixed inset-x-0 bottom-0 top-[calc(var(--mobile-header-height)+1.5rem)] z-50 mx-auto flex max-w-[640px] flex-col overflow-hidden rounded-t-[22px] bg-surface shadow-[0_-8px_30px_rgba(11, 11, 11,0.12)] duration-300 ease-out lg:hidden ${isDrawerOpen ? 'visible translate-y-0 transition-transform' : 'invisible translate-y-full transition-[transform,visibility]'}`}
             >
                 <span aria-hidden className="mt-2 h-1 w-9 shrink-0 self-center rounded-full bg-foreground/15" />
                 <div className="flex shrink-0 items-center justify-between pl-5 pr-2 pt-2">
@@ -316,14 +316,14 @@ export function MobileNav() {
                         ref={closeButtonRef}
                         type="button"
                         onClick={closeDrawer}
-                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[10px] text-foreground/80 transition-colors hover:bg-background-secondary"
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-foreground/80 transition-colors hover:bg-background-secondary"
                         aria-label="关闭"
                     >
                         <X className="h-5 w-5" strokeWidth={1.7} />
                     </button>
                 </div>
 
-                <div className="mx-4 mt-3 flex h-10 shrink-0 items-center rounded-[10px] bg-background-secondary pl-3 pr-1 text-foreground-tertiary focus-within:ring-2 focus-within:ring-accent/40">
+                <div className="mx-4 mt-3 flex h-10 shrink-0 items-center rounded-xl bg-background-secondary pl-3 pr-1 text-foreground-tertiary focus-within:ring-2 focus-within:ring-accent/40">
                     <label className="flex h-full min-w-0 flex-1 items-center gap-2">
                         <Search className="h-[18px] w-[18px] shrink-0" strokeWidth={1.7} aria-hidden />
                         <span className="sr-only">搜索占术</span>

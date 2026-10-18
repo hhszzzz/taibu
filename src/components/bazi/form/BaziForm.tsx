@@ -43,7 +43,7 @@ const CALENDAR_OPTIONS: readonly SegmentedOption<CalendarType>[] = [
 ];
 
 const FIELD_LABEL_CLASS = 'text-sm font-medium text-foreground';
-const BOX_CLASS = 'h-11 w-full rounded-[10px] border-[0.5px] border-border-hover bg-surface text-[15px] text-foreground transition-colors duration-150 focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/15';
+const BOX_CLASS = 'h-11 w-full rounded-xl border-[0.5px] border-border-hover bg-surface text-[15px] text-foreground transition-colors duration-150 focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/15';
 
 /** 带右侧单位后缀的原生下拉框（保留原生 select，便于键盘与自动化访问）。 */
 function SuffixSelect({

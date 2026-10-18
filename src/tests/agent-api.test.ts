@@ -146,7 +146,7 @@ test('Agent admission freezes reasoning and independently authorized collaborato
 test('invalid reasoning/team input and inaccessible collaborator models fail before creation or debit', async t => {
   const fixture = setup(t);
   const member = { id: 'first', name: '分析', model: 'fixture', focus: '', reasoning: false, reasoningEffort: null };
-  for (const extra of [{ reasoningEffort: 'unknown' }, { reasoningEffort: 0 }, { collaborators: [member] }, { collaborators: [member, member] }]) {
+  for (const extra of [{ reasoningEffort: 'unknown' }, { reasoningEffort: 0 }, { collaborators: [member, member] }]) {
     const response = await agentEndpoint(() => createAgentTask(fixture.request({ ...fixture.body, ...extra })));
     assert.equal(response.status, 400);
   }

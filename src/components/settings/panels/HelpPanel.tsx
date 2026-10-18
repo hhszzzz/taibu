@@ -44,7 +44,7 @@ const FAQ_LIST: FAQItem[] = [
 
 const SUPPORT_EMAIL = 'support@mingai.fun';
 const PROJECT_REPO_URL = 'https://github.com/hhszzzz/taibu';
-const CONTACT_LINK = 'inline-flex h-10 min-w-0 items-center gap-2 rounded-[10px] border border-border-hover px-3.5 text-sm text-foreground transition-colors duration-150 hover:bg-background-secondary';
+const CONTACT_LINK = 'inline-flex h-10 min-w-0 items-center gap-2 rounded-xl border border-border-hover px-3.5 text-sm text-foreground transition-colors duration-150 hover:bg-background-secondary';
 const FOOTER_LINK = 'text-foreground-secondary underline decoration-border-hover underline-offset-4 transition-colors duration-150 hover:text-foreground';
 
 export default function HelpPanel() {
@@ -54,7 +54,7 @@ export default function HelpPanel() {
     <div className="flex flex-col gap-9">
       <section aria-labelledby="help-faq-heading" className="flex flex-col gap-3">
         <h3 id="help-faq-heading" className="text-[13px] font-medium text-foreground-tertiary">常见问题</h3>
-        <div className="overflow-hidden rounded-[14px] border border-border bg-surface">
+        <div className="overflow-hidden rounded-2xl border border-border bg-surface">
           {FAQ_LIST.map((faq, index) => {
             const expanded = expandedFAQ === index;
             const answerId = `help-faq-answer-${index}`;
@@ -83,7 +83,7 @@ export default function HelpPanel() {
 
       <section aria-labelledby="help-contact-heading" className="flex flex-col gap-3">
         <h3 id="help-contact-heading" className="text-[13px] font-medium text-foreground-tertiary">联系我们</h3>
-        <div className="flex flex-col gap-4 rounded-[14px] border border-border bg-surface p-5">
+        <div className="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-5">
           <p className="text-pretty text-sm leading-relaxed text-foreground">没有找到答案？可以发邮件，或在 GitHub 仓库提 Issue。</p>
           <div className="flex flex-wrap gap-2">
             <a href={`mailto:${SUPPORT_EMAIL}`} className={CONTACT_LINK}>

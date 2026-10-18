@@ -17,7 +17,7 @@ import { ConversationExportDialog } from './ConversationExportDialog';
 import { AgentQueue } from './agent/AgentQueue';
 import { AnalysisMethodPicker } from './agent/AnalysisMethodPicker';
 import Link from 'next/link';
-import { ChevronRight, Lock, PanelRight } from 'lucide-react';
+import { Lock, PanelRight } from 'lucide-react';
 import type { ChatMessage, AttachmentState, Mention, PrivateAttachment } from '@/types';
 import { ChatMessageList } from '@/components/chat/ChatMessageList';
 import { VirtualizedChatMessageList } from '@/components/chat/VirtualizedChatMessageList';
@@ -29,25 +29,24 @@ import type { ChatBootstrapKnowledgeBase } from '@/lib/chat/bootstrap';
 import type { MembershipType } from '@/lib/user/membership';
 import type { ChatMode } from '@/lib/chat/use-chat-state';
 import { getSettingsCenterRouteTarget, openSettingsCenter } from '@/lib/settings-center';
-import { AgentStatus } from './agent/AgentStatus';
-import { AgentHeaderStatus } from './agent/AgentHeaderStatus';
 import { AgentWorkspacePanel } from './agent/AgentWorkspacePanel';
+import { SessionDetailsPanel } from './agent/SessionDetailsPanel';
 import { AgentResultContext, isSameWorkspaceShown, type AgentWorkspaceShown } from './agent/AgentResultContext';
-import { buildAgentWorkspace, getAgentQuestionAnswers, getAgentWorkspaceAutoOpenEvent } from '@/lib/agent/workspace';
+import { getAgentQuestionAnswers, getAgentWorkspaceAutoOpenEvent } from '@/lib/agent/workspace';
+import { chartQuestion, type ChartAskContext } from '@/lib/agent/chart-interaction';
 import { AgentQuestionDock } from './agent/AgentQuestionDock';
 import { useAgentRoundFolds } from './agent/AgentRoundFold';
-import { PromptTemplateMenu } from './composer/ComposerDomainControls';
-import type { ComposerModeControl, ComposerWebControl } from './composer/ComposerToolbar';
-import { applyPromptTemplate } from '@/lib/agent/prompt-templates';
-import { collaborationProgress } from '@/lib/agent/parallel-results';
+import type { ComposerWebControl } from './composer/ComposerToolbar';
+import { publishChatModeControl, clearChatModeControl, type ChatModeControl } from '@/lib/chat/mode-control-store';
 import { composerNote, isRunningComposerNote, type ComposerNoteState } from '@/lib/chat/composer-copy';
-import { collectAgentArtifacts, getAgentCitedParagraph, getAgentTaskDuration } from './agent/presentation';
-import { isAgentRunTerminal, type AgentPart } from '@/lib/agent/types';
+import { collectAgentArtifacts, getAgentCitedParagraph } from './agent/presentation';
+import type { AgentPart } from '@/lib/agent/types';
 import { useTranscriptScroll } from '@/lib/chat/use-transcript-scroll';
 import { orderAgentMessagesForDisplay } from '@/lib/agent/browser-client';
 import { JumpToLatest } from './JumpToLatest';
-import { ConversationMinimap } from './ConversationMinimap';
 import { useReadingPreferences } from '@/lib/chat/use-reading-preferences';
+import { useConversationList } from '@/lib/chat/ConversationListContext';
+import { ChatRecordViewContext, useChatRecordView } from '@/lib/chat/chat-record-view';
 import { setChatWorkspaceOpen } from '@/lib/chat/chat-sidebar';
 import { refreshAgentActivity } from '@/lib/agent/use-agent-activity';
 import type { CSSProperties } from 'react';
@@ -76,7 +75,8 @@ interface ChatLayoutProps extends ModelSettingsProps {
     onRegenerateResponse: (messageId: string) => Promise<void>;
     onSwitchVersion: (messageId: string, versionIndex: number) => void;
     onArchiveMessage?: (message: ChatMessage) => void;
-    onSend: () => Promise<void>;
+    /** Sends the composer; the optional context is the rich chart quote attached above it. */
+    onSend: (context?: string) => Promise<void>;
     onStop: () => void;
     onRetryConversationLoad?: () => Promise<void>;
 
@@ -102,10 +102,11 @@ interface ChatLayoutProps extends ModelSettingsProps {
     dreamContext?: { baziChartName?: string; dailyFortune?: string };
     dreamContextLoading: boolean;
     knowledgeBaseEnabled: boolean;
-    aiPersonalizationEnabled: boolean;
 
     // Credit lock
     isCreditLocked: boolean;
+    /** Remaining platform credits for the composer usage ring. */
+    credits?: number | null;
     onAuthRequired?: () => void;
 
     // Modals (rendered by parent)
@@ -127,15 +128,17 @@ export function ChatLayout(props: ChatLayoutProps) {
         userId, membershipType, attachmentState, onAttachmentChange,
         mentions, onMentionsChange, promptKnowledgeBases,
         dreamContext, dreamContextLoading,
-        knowledgeBaseEnabled, aiPersonalizationEnabled,
+        knowledgeBaseEnabled,
         isCreditLocked,
+        credits,
         onAuthRequired,
         children,
     } = props;
 
     const contentRef = useRef<HTMLDivElement>(null);
     const greeting = useGreeting();
-    const { preferences, update: updatePreferences } = useReadingPreferences(props.userId);
+    const { preferences } = useReadingPreferences(props.userId);
+    const recordView = useChatRecordView(userId, activeConversationId);
     const workspaceButtonRef = useRef<HTMLButtonElement>(null);
     const [openWorkspaceKey, setOpenWorkspaceKey] = useState<string | null>(null);
     const workspaceKey = `${userId ?? 'anonymous'}:${activeConversationId ?? 'new'}`;
@@ -160,6 +163,17 @@ export function ChatLayout(props: ChatLayoutProps) {
     const searchParams = useSearchParams();
     const { showToast } = useToast();
     const targetMessageId = searchParams.get('message');
+    // 搜索弹层「撰写」：用查询词预填草稿（只填一次，随后清掉参数避免刷新覆盖）。
+    const draftQuery = searchParams.get('draft');
+    const appliedDraft = useRef<string | null>(null);
+    useEffect(() => {
+        if (!draftQuery || appliedDraft.current === draftQuery) return;
+        appliedDraft.current = draftQuery;
+        onInputChange(draftQuery);
+        // 草稿已落进输入框：把参数从地址里摘掉，刷新或前进后退不会再次覆盖。
+        router.replace('/chat', { scroll: false });
+        requestAnimationFrame(() => contentRef.current?.querySelector<HTMLTextAreaElement>('[data-chat-composer] textarea')?.focus());
+    }, [draftQuery, onInputChange, router]);
     const locatedTarget = useRef('');
     useEffect(() => {
         if (!targetMessageId || conversationLoading || !messages.some(message => message.id === targetMessageId)) return;
@@ -186,6 +200,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         return orderAgentMessagesForDisplay(messages.filter(message => !hidden.has(message.id)), currentRun);
     }, [messages, currentRun]);
     // Earlier Agent rounds fold to 上一轮 bars; a jump to one of their messages unfolds it first.
+    // 记录视图只影响步骤明细的展开，不改变轮次折叠。
     const { rounds, reveal: revealMessage } = useAgentRoundFolds(transcriptMessages, workspaceKey);
     const { showJump, jumpToLatest } = useTranscriptScroll({ scrollRef: messageScrollContainerRef, followRef: props.shouldAutoScrollRef, conversationKey: workspaceKey, messages: transcriptMessages, enabled: !conversationLoading && transcriptMessages.length > 0, virtualized: transcriptMessages.length > 20, reveal: revealMessage });
     const latestAgentData = useMemo(() => [...messages].reverse().find(message => message.agent)?.agent, [messages]);
@@ -211,6 +226,19 @@ export function ChatLayout(props: ChatLayoutProps) {
         onInputChange(inputValue.trim() ? `${inputValue}\n\n${message.content}` : message.content);
     };
     const isAgentMode = props.agent?.mode === 'agent';
+    const { conversations } = useConversationList();
+    // 对话 / Agent 的会话不互通：打开另一类会话（含直接访问链接）时退回新建页，
+    // 避免普通对话里出现 Agent 的标题、工具步骤或工作区数据。
+    useEffect(() => {
+        if (!activeConversationId) return;
+        const current = conversations.find(conversation => conversation.id === activeConversationId);
+        if (!current || current.hasAgentRun === undefined) return;
+        // 新建的 Agent 会话在首轮运行前 hasAgentRun 仍为 false，用消息形态区分，避免误跳。
+        const kind = current.hasAgentRun === true ? 'agent'
+            : messages.length > 0 && messages.every(message => !message.agent) ? 'plain'
+            : undefined;
+        if (kind && (kind === 'agent') !== isAgentMode) router.push('/chat');
+    }, [isAgentMode, activeConversationId, conversations, messages, router]);
     const waitingQuestion = userId && props.agent?.run?.conversationId === activeConversationId && props.agent.run.status === 'awaiting_input'
         ? [...props.agent.run.message.agent?.parts ?? []].reverse().find((part): part is Extract<AgentPart, { type: 'question' }> => part.type === 'question') : undefined;
     const hasWorkspace = isAgentMode || Boolean(latestAgentData);
@@ -224,8 +252,6 @@ export function ChatLayout(props: ChatLayoutProps) {
     // Task markers in the sidebar follow this page's run without waiting for their next poll.
     const currentRunStatus = currentRun?.status;
     useEffect(() => { if (currentRunStatus) refreshAgentActivity(); }, [currentRunStatus]);
-    // The header counts what the workspace can open: readings, calculations, evidence and other materials.
-    const resourceCount = useMemo(() => buildAgentWorkspace({ parts: agentParts, artifacts, attachmentIds }).resources.length, [agentParts, artifacts, attachmentIds]);
     const closeWorkspace = () => {
         const previous = document.activeElement;
         setOpenWorkspaceKey(null);
@@ -249,6 +275,8 @@ export function ChatLayout(props: ChatLayoutProps) {
         queueMicrotask(() => {
             if (autoWorkspace.current.scope !== workspaceKey) return;
             setOpenWorkspaceKey(workspaceKey);
+            // 直接落到产生这次自动打开的资源（命盘 / 协作 / 问题），而不是停在概览。
+            setResourceRequest(previous => ({ scope: workspaceKey, id: `tool:${action}`, version: (previous?.version ?? 0) + 1 }));
             try { sessionStorage.setItem('taibu.workspace-open:' + workspaceKey, '1'); } catch { /* optional */ }
         });
     }, [autoOpenEvent, currentRun, props.agent?.restoring, workspaceKey]);
@@ -260,27 +288,47 @@ export function ChatLayout(props: ChatLayoutProps) {
         onInputChange(text);
         focusComposer();
     };
-    const askAboutChart = (text: string) => {
-        onInputChange(inputValue.trim() ? inputValue + '\n\n' + text : text);
+    // 追问命盘：与提及同一形态——在输入框尾部追加可识别的 chip，可以连续叠加多条。
+    const [chartAsks, setChartAsks] = useState<ChartAskContext[]>([]);
+    const chartAskToken = (ask: ChartAskContext) => `@${ask.title}${ask.targets.length ? ` · ${ask.targets.map(target => target.label).join('、')}` : ' · 整张命盘'}`;
+    const chartAskKey = (ask: ChartAskContext) => `${ask.reference}:${ask.targets.map(target => target.id).join(',')}`;
+    // 输入框里删掉 chip 文本后，对应上下文立即失效（不额外 setState）。
+    const activeChartAsks = useMemo(() => chartAsks.filter(ask => inputValue.includes(chartAskToken(ask))), [chartAsks, inputValue]);
+    const chartAskChips = useMemo(() => activeChartAsks.map(ask => ({ token: chartAskToken(ask), kind: ask.kind })), [activeChartAsks]);
+    const askAboutChart = (ask: ChartAskContext) => {
+        const key = chartAskKey(ask);
+        if (!activeChartAsks.some(item => chartAskKey(item) === key)) {
+            setChartAsks(current => {
+                const kept = current.filter(item => inputValue.includes(chartAskToken(item)));
+                return kept.some(item => chartAskKey(item) === key) ? kept : [...kept, ask];
+            });
+        }
+        const token = chartAskToken(ask);
+        const base = inputValue.replace(/\s*$/, '');
+        if (!base.includes(token)) onInputChange(base ? `${base}\n${token}` : token);
         if (!window.matchMedia('(min-width: 1280px)').matches) closeWorkspace();
         focusComposer();
     };
-    const templatesRef = useRef<HTMLButtonElement>(null);
-    const [templatesOpen, setTemplatesOpen] = useState(false);
+    const sendWithChartAsk = async () => {
+        const context = activeChartAsks.length ? activeChartAsks.map(ask => chartQuestion(ask.reference, ask.targets)).join('\n\n') : undefined;
+        setChartAsks([]);
+        await onSend(context);
+    };
     // “稍后回答” folds the dock for this question only; a new question opens it again.
     const questionKey = waitingQuestion && props.agent?.run ? `${workspaceKey}:${props.agent.run.id}:${waitingQuestion.id}` : null;
     const [laterQuestion, setLaterQuestion] = useState<string | null>(null);
     const questionLater = questionKey !== null && laterQuestion === questionKey;
     const collaborators = currentRun?.configuration?.collaborators.length ?? 0;
-    const collaboration = useMemo(() => currentRun?.status === 'running' ? collaborationProgress(currentRun.message.agent?.parts ?? [], currentRun.configuration?.collaborators.length) ?? undefined : undefined, [currentRun]);
-    const runDuration = useMemo(() => currentRun && isAgentRunTerminal(currentRun.status) ? getAgentTaskDuration(currentRun.createdAt, currentRun.message.agent) : null, [currentRun]);
     const agent = props.agent;
-    const modeControl: ComposerModeControl | undefined = agent ? {
+    const modeControl: ChatModeControl | null = agent ? {
         mode: agent.mode,
         onChange: agent.setMode,
         agentDisabled: !agent.capabilities.ready || agent.active,
         plainDisabled: agent.active,
-    } : undefined;
+    } : null;
+    // 侧栏品牌行与移动抽屉通过 store 共享这一个控件（全页恰好一个「对话方式」单选组）。
+    useEffect(() => { publishChatModeControl(modeControl); });
+    useEffect(() => clearChatModeControl, []);
     const webAllowed = !!agent?.capabilities.webAvailable && membershipType !== 'free';
     const webControl: ComposerWebControl | undefined = agent && isAgentMode ? {
         enabled: agent.webEnabled && webAllowed,
@@ -309,7 +357,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         reasoningEffort: props.reasoningEffort, onReasoningEffortChange: props.onReasoningEffortChange,
         collaborators: props.collaborators, onCollaboratorsChange: props.onCollaboratorsChange,
         agentMode: isAgentMode,
-        agentRuntime: (props.agent?.run?.conversationId === activeConversationId ? props.agent.run.message.agent?.runtime : undefined) ?? latestAgentData?.runtime,
+        credits,
         awaitingInput: props.agent?.run?.status === 'awaiting_input',
         allowDuringRun: props.agent?.active,
         onQueueMessage: props.onQueueMessage,
@@ -320,24 +368,28 @@ export function ChatLayout(props: ChatLayoutProps) {
         customProviderActive, customProviderLabel,
         userId, membershipType, attachmentState, onAttachmentChange,
         mentions, onMentionsChange, promptKnowledgeBases,
-        contextMessages: messages,
+        chartAsks: chartAskChips,
         dreamContext, dreamContextLoading,
         knowledgeBaseEnabled,
-        modeControl, webControl,
+        webControl,
     };
-    const composer = <ChatComposer {...composerProps} continuing note={note} noteOptional={isRunningComposerNote(noteState)} header={composerHeader}
+    const composer = <ChatComposer {...composerProps} onSend={sendWithChartAsk} continuing note={note} noteOptional={isRunningComposerNote(noteState)} header={composerHeader}
         queue={currentRun && <AgentQueue key={`${workspaceKey}:${currentRun.id}`} run={currentRun} restoreDraft={message => void restoreDraft(message)} />} />;
     const toggleWorkspace = () => {
         if (workspaceOpen) { closeWorkspace(); return; }
         setOpenWorkspaceKey(workspaceKey);
         try { sessionStorage.setItem(`taibu.workspace-open:${workspaceKey}`, '1'); sessionStorage.removeItem('taibu.workspace-dismissed:' + workspaceKey); } catch { /* optional */ }
     };
+    // 会话栏的成果行：打开工作区并定位到对应资源。
+    const openWorkspaceResource = (id: string) => { setOpenWorkspaceKey(workspaceKey); openResource(id); };
     // A new conversation opens on the greeting alone; saved conversations keep their header.
     const emptyState = !conversationLoading && messages.length === 0;
     const showHeader = !emptyState || !!activeConversationId || !!conversationError;
+    // 右侧会话栏常驻（claude /code 无开关），仅在打开工作区时让位。
+    const showSessionDetails = isAgentMode && Boolean(latestAgentData) && showHeader && !workspaceOpen;
 
     return (
-        <AgentResultContext.Provider value={resultWorkspace}><div className="chat-workspace flex bg-background" style={{ '--chat-column': `${preferences.width}px` } as CSSProperties}>
+        <AgentResultContext.Provider value={resultWorkspace}><ChatRecordViewContext.Provider value={recordView}><div className="chat-workspace flex bg-background" style={{ '--chat-column': `${preferences.width}px` } as CSSProperties}>
             {/* data-agent-ready turns true once a restored task has finished syncing. */}
             <div ref={contentRef} className="chat-main flex-1 flex flex-col min-w-0 min-h-0 relative bg-background"
                 data-agent-ready={props.agent ? !props.agent.restoring && !props.agent.syncing : undefined}>
@@ -346,20 +398,17 @@ export function ChatLayout(props: ChatLayoutProps) {
                     empty={!showHeader}
                     title={title}
                     conversationId={activeConversationId}
-                    badge={isAgentMode ? collaborators ? `Agent · 协作 ${collaborators} 人` : 'Agent' : undefined}
-                    status={currentRun ? <AgentHeaderStatus status={currentRun.status} createdAt={currentRun.createdAt} reconnecting={props.agent?.reconnecting} collaboration={collaboration} duration={runDuration} />
-                        : isAgentMode && latestAgentData ? <AgentStatus status={latestAgentData.status} /> : null}
-                    showExport={!isAgentMode}
                     workspaceButton={hasWorkspace && showHeader ? <button type="button" ref={workspaceButtonRef} className="chat-workspace-toggle" aria-label="任务工作区" aria-expanded={workspaceOpen} aria-controls="agent-workspace-panel" onClick={toggleWorkspace}>
-                        <PanelRight size={16} strokeWidth={1.8} aria-hidden="true" /><span>工作区</span>{resourceCount > 0 && <span className="chat-result-count">{resourceCount}</span>}
+                        <PanelRight size={17} strokeWidth={1.8} aria-hidden="true" />
                     </button> : undefined}
-                    readingWidth={preferences.width}
-                    onReadingWidthChange={width => updatePreferences({ width })}
                     membershipType={membershipType}
                     knowledgeBaseEnabled={knowledgeBaseEnabled}
-                    aiPersonalizationEnabled={aiPersonalizationEnabled}
+                    userId={userId}
                 />
                 {activeConversationId && <ConversationExportDialog conversationId={activeConversationId} />}
+                {/* 会话列 + 右侧「会话详情」栏（claude /code 停靠栏）：工作区打开时右栏让位。 */}
+                <div className="chat-main-body flex min-h-0 min-w-0 flex-1">
+                    <div className="chat-main-column relative flex min-h-0 min-w-0 flex-1 flex-col">
 
                 {conversationError ? (
                     <div className="chat-load-error" role="alert">
@@ -371,28 +420,14 @@ export function ChatLayout(props: ChatLayoutProps) {
                 {conversationLoading ? (
                     <SoundWaveLoader variant="block" text="" />
                 ) : emptyState ? (
+                    /* claude 空态 = 问候 + composer，别无他物；建议/模板/积分提示一律不放。 */
                     <div className="chat-empty-state">
                         <div className="chat-empty-inner">
                             <div className="chat-empty-intro">
                                 <span className="chat-empty-symbol" aria-hidden="true">卜</span>
-                                <h1>{greeting}，想问些什么？</h1>
-                                <p>{isAgentMode ? '描述你关心的事，太卜会排盘、查阅资料，并在右侧工作区展示每一步。' : '聊聊命盘、运势，或最近让你困惑的事。'}</p>
+                                <h1>{greeting}，想问什么？</h1>
                             </div>
                             <ChatComposer {...composerProps} variant="hero" header={creditStrip} />
-                            {isAgentMode && <section className="chat-suggestions" aria-labelledby="chat-suggestions-title">
-                                <div className="chat-suggestions-heading">
-                                    <h2 id="chat-suggestions-title">可以这样开始</h2>
-                                    {userId && <button ref={templatesRef} type="button" aria-haspopup="menu" aria-expanded={templatesOpen} onClick={() => setTemplatesOpen(open => !open)}>
-                                        问法模板<ChevronRight size={14} aria-hidden="true" />
-                                    </button>}
-                                </div>
-                                <div className="chat-suggestion-grid">{AGENT_SUGGESTIONS.map(item => <button key={item.title} type="button" disabled={disabled} onClick={() => suggest(item.prompt)}>
-                                    <strong>{item.title}</strong><span>{item.description}</span>
-                                </button>)}</div>
-                                <PromptTemplateMenu open={templatesOpen} anchorRef={templatesRef} onClose={() => setTemplatesOpen(false)} userId={userId} side="bottom" align="end"
-                                    onPick={template => suggest(applyPromptTemplate(template, inputValue))} />
-                            </section>}
-                            {isAgentMode && <p className="chat-empty-note">任务在后台执行，关闭页面不会中断，完成后会提醒你 · 每个任务计 1 次积分</p>}
                         </div>
                     </div>
                 ) : (
@@ -422,7 +457,6 @@ export function ChatLayout(props: ChatLayoutProps) {
                             </div>
                         )}
                         {showJump && <div className="chat-jump-dock"><JumpToLatest onClick={jumpToLatest} /></div>}
-                        <ConversationMinimap messages={transcriptMessages} conversationKey={workspaceKey} />
                         {waitingQuestion && agent && questionKey ? <>
                             {/* The answer panel takes the input's place; folding it hands the input back for a free reply. */}
                             <div className="chat-question-region">
@@ -437,24 +471,20 @@ export function ChatLayout(props: ChatLayoutProps) {
                         </> : composer}
                     </>
                 )}
+                    </div>
+                    {showSessionDetails && <SessionDetailsPanel data={latestAgentData} run={workspaceRun} onOpen={openWorkspaceResource} />}
+                </div>
             </div>
             {workspaceOpen && <AgentWorkspacePanel key={workspaceKey} workspaceKey={workspaceKey} parts={agentParts} artifacts={artifacts} attachmentIds={attachmentIds}
-                data={latestAgentData} run={workspaceRun} answers={questionAnswers} userId={userId} conversationId={activeConversationId}
+                data={latestAgentData} answers={questionAnswers} userId={userId}
                 onClose={closeWorkspace} onChartQuestion={askAboutChart} onShownChange={updateWorkspaceShown} requestedResource={resourceRequest?.scope === workspaceKey ? resourceRequest : undefined}
                 citedParagraph={citedParagraph} />}
 
             {children}
             <AnalysisMethodPicker onSelect={text => onInputChange(inputValue.trim() ? `${inputValue}\n${text}` : text)} />
-        </div></AgentResultContext.Provider>
+        </div></ChatRecordViewContext.Provider></AgentResultContext.Provider>
     );
 }
-
-const AGENT_SUGGESTIONS = [
-    { title: '了解我的命盘', description: '读取已存命盘，分析性格与优势；资料不足会先问你', prompt: '请先查看我保存的命盘，帮我分析性格与优势。资料不足时请向我询问。' },
-    { title: '对比两份命盘', description: '合盘看相处方式与互补，缺对方信息时会询问', prompt: '请对比我保存的两份命盘，分析相处中的特点。信息不足时先询问我。' },
-    { title: '看看明年的工作方向', description: '排大运与流年，判断变动时机', prompt: '请结合我的命盘，排大运与流年，分析明年的工作方向和变动时机。需要出生信息时先询问我。' },
-    { title: '挑一个好日子', description: '结合黄历与你的命盘，选日期和时辰', prompt: '请结合黄历和我的命盘，帮我挑一个适合签约的日子和时辰。需要信息时先询问我。' },
-] as const;
 
 function subscribeToHour(onChange: () => void) {
     const timer = window.setInterval(onChange, 60_000);

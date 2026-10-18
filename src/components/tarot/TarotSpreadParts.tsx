@@ -82,7 +82,7 @@ export function TarotMeaningGrid({ entries, className = '' }: { entries: readonl
             {entries.map((entry) => {
                 const elementLine = formatElementLine(entry);
                 return (
-                    <article key={entry.key} className="flex min-w-0 flex-col gap-2 rounded-[14px] border-[0.5px] border-border bg-surface p-[18px]">
+                    <article key={entry.key} className="flex min-w-0 flex-col gap-2 rounded-2xl border-[0.5px] border-border bg-surface p-[18px]">
                         <h3 className="font-display text-[17px] font-normal">{entry.name} · {entry.reversed ? '逆位' : '正位'}</h3>
                         {entry.keywords.length > 0 && <p className="text-sm leading-relaxed text-foreground">{entry.keywords.join('、')}</p>}
                         {elementLine && <p className="text-xs text-foreground-secondary">{elementLine}</p>}

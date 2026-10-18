@@ -30,7 +30,6 @@ export default function ChatPage() {
     const { user, loading: sessionLoading } = useSessionSafe();
     const appBootstrap = useAppBootstrap({ enabled: !sessionLoading });
     const knowledgeBaseEnabled = isFeatureEnabled('knowledge-base');
-    const aiPersonalizationEnabled = isFeatureEnabled('ai-personalization');
 
     const {
         promptKnowledgeBases,
@@ -128,6 +127,7 @@ export default function ChatPage() {
                 inputValue={state.inputValue}
                 onInputChange={state.setInputValue}
                 disabled={isCreditLocked || bootstrapLocked}
+                credits={credits}
                 chatMode={state.chatMode}
                 onChatModeChange={state.setChatMode}
                 selectedModel={state.selectedModel}
@@ -150,7 +150,6 @@ export default function ChatPage() {
                 dreamContext={state.dreamContext}
                 dreamContextLoading={state.dreamContextLoading}
                 knowledgeBaseEnabled={knowledgeBaseEnabled}
-                aiPersonalizationEnabled={aiPersonalizationEnabled}
                 isCreditLocked={isCreditLocked}
             >
                 {state.kbTargetMessage && state.activeConversationId && isFeatureEnabled('knowledge-base') && (

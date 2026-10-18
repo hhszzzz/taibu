@@ -23,7 +23,7 @@ const GENDER_CHOICES: readonly { value: Gender; label: string }[] = [
 ];
 
 const FIELD_LABEL_CLASS = 'text-[13px] font-medium text-foreground sm:font-normal sm:text-foreground-secondary';
-const CONTROL_CLASS = 'h-11 w-full rounded-[10px] border-[0.5px] border-border-hover bg-surface text-[0.9375rem] transition-colors duration-150 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15 sm:h-[42px] sm:text-sm';
+const CONTROL_CLASS = 'h-11 w-full rounded-xl border-[0.5px] border-border-hover bg-surface text-[0.9375rem] transition-colors duration-150 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15 sm:h-[42px] sm:text-sm';
 
 function pad2(value: number): string {
     return String(value).padStart(2, '0');
@@ -169,7 +169,7 @@ export function HepanPersonCard({
                         </div>
                         <div className="flex flex-col gap-1.5">
                             <span className={FIELD_LABEL_CLASS}>性别</span>
-                            <div role="group" aria-label="性别" className="grid grid-cols-2 gap-2 sm:h-[42px] sm:gap-1 sm:rounded-[10px] sm:bg-background-secondary sm:p-1">
+                            <div role="group" aria-label="性别" className="grid grid-cols-2 gap-2 sm:h-[42px] sm:gap-1 sm:rounded-xl sm:bg-background-secondary sm:p-1">
                                 {GENDER_CHOICES.map((choice) => {
                                     const active = value.gender === choice.value;
                                     return (
@@ -179,7 +179,7 @@ export function HepanPersonCard({
                                             aria-pressed={active}
                                             // 再次点击已选项可清空（性别为选填）
                                             onClick={() => onChange({ ...value, gender: active ? undefined : choice.value })}
-                                            className={`h-11 rounded-[10px] text-[0.9375rem] transition-colors duration-150 sm:h-auto sm:rounded-[7px] sm:text-[13px] ${active
+                                            className={`h-11 rounded-xl text-[0.9375rem] transition-colors duration-150 sm:h-auto sm:rounded-[7px] sm:text-[13px] ${active
                                                 ? 'bg-accent-light text-accent-strong ring-[1.5px] ring-inset ring-accent sm:bg-surface sm:text-foreground sm:shadow-sm sm:ring-0'
                                                 : 'border-[0.5px] border-border-hover bg-surface text-foreground hover:bg-background-secondary sm:border-0 sm:bg-transparent sm:text-foreground-secondary sm:hover:bg-transparent sm:hover:text-foreground'
                                                 }`}

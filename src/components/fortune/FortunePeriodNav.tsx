@@ -18,10 +18,10 @@ interface FortunePeriodNavProps {
 }
 
 /** 当前周期块的外观（日运日期按钮在此基础上加 hover）。 */
-export const PERIOD_NAV_CURRENT_CLASS = 'flex h-9 items-center gap-2 rounded-[10px] px-2.5 text-[0.9375rem] font-medium tabular-nums lg:h-10 lg:border-[0.5px] lg:border-border-hover lg:bg-surface lg:px-3.5 lg:text-sm lg:font-normal';
+export const PERIOD_NAV_CURRENT_CLASS = 'flex h-9 items-center gap-2 rounded-xl px-2.5 text-[0.9375rem] font-medium tabular-nums lg:h-10 lg:border-[0.5px] lg:border-border-hover lg:bg-surface lg:px-3.5 lg:text-sm lg:font-normal';
 
-const NAV_BUTTON_CLASS = 'flex size-9 items-center justify-center rounded-[10px] text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent lg:size-10 lg:border-[0.5px] lg:border-border-hover lg:bg-surface';
-const RESET_BUTTON_CLASS = 'h-9 rounded-[10px] px-2.5 text-[13px] text-accent transition-colors hover:bg-accent-light lg:h-10';
+const NAV_BUTTON_CLASS = 'flex size-9 items-center justify-center rounded-xl text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent lg:size-10 lg:border-[0.5px] lg:border-border-hover lg:bg-surface';
+const RESET_BUTTON_CLASS = 'h-9 rounded-xl px-2.5 text-[13px] text-accent transition-colors hover:bg-accent-light lg:h-10';
 
 /**
  * 日运 / 月运页头：桌面端标题居左、周期切换居右；移动端三栏居中（左空位、切换、右侧回到当前）。

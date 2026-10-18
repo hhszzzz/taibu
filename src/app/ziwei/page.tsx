@@ -175,7 +175,7 @@ function ZiweiPageContent() {
         <div className="min-h-screen bg-background text-foreground">
             <div className="mx-auto flex w-full max-w-[608px] flex-col gap-6 px-4 py-6 animate-fade-in sm:gap-7 sm:px-6 lg:py-14">
                 <div className="flex flex-col gap-2">
-                    <h1 className="font-display text-[1.625rem] font-normal leading-tight lg:text-[34px]">紫微斗数排盘</h1>
+                    <h1 className="font-display text-[1.625rem] font-normal leading-tight lg:text-[2rem]">紫微斗数排盘</h1>
                     <p className="text-sm leading-relaxed text-foreground-secondary lg:text-[15px]">
                         填写出生信息，生成十二宫命盘与大限流年。
                     </p>

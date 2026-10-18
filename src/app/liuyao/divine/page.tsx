@@ -124,7 +124,7 @@ export default function DivinePage() {
 
                 {/* 标题 */}
                 <header className="flex flex-col gap-1.5 text-center lg:text-left">
-                    <h1 className="hidden font-display text-[34px] font-normal leading-tight lg:block">铜钱起卦</h1>
+                    <h1 className="hidden font-display text-[2rem] font-normal leading-tight lg:block">铜钱起卦</h1>
                     <p className="text-sm text-foreground-secondary sm:text-[15px]">
                         静心凝神，点击按钮抛掷铜钱
                     </p>

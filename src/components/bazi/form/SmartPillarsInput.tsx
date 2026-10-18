@@ -315,7 +315,7 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
                     type="button"
                     onClick={() => onSelect(stem)}
                     className={`
-                        h-10 rounded-[10px] font-display text-lg
+                        h-10 rounded-xl font-display text-lg
                         transition-colors duration-150
                         ${ganZhiSoftClass(stem)}
                         ring-inset hover:ring-1 hover:ring-accent/50
@@ -336,7 +336,7 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
                     type="button"
                     onClick={() => onSelect(branch)}
                     className={`
-                        h-10 rounded-[10px] font-display text-lg
+                        h-10 rounded-xl font-display text-lg
                         transition-colors duration-150
                         ${ganZhiSoftClass(branch)}
                         ring-inset hover:ring-1 hover:ring-accent/50
@@ -360,7 +360,7 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
                     type="button"
                     onClick={() => onSelect(p)}
                     className={`
-                        h-10 px-1 rounded-[10px] font-display text-base
+                        h-10 px-1 rounded-xl font-display text-base
                         transition-colors duration-150
                         ${ganZhiSoftClass(p.stem)}
                         ring-inset hover:ring-1 hover:ring-accent/50

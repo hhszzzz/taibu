@@ -160,7 +160,7 @@ export function TimeInputModal({
                                     type="time"
                                     value={formatTimeValue()}
                                     onChange={handleTimeChange}
-                                    className="h-11 flex-1 rounded-[10px] border-[0.5px] border-border-hover bg-surface px-4 text-center font-mono text-lg text-foreground
+                                    className="h-11 flex-1 rounded-xl border-[0.5px] border-border-hover bg-surface px-4 text-center font-mono text-lg text-foreground
                                         transition-colors duration-150 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15"
                                 />
                             </div>
@@ -189,7 +189,7 @@ export function TimeInputModal({
                                                     setLocalMinute(0);
                                                 }}
                                                 className={`
-                                                    flex flex-col items-center justify-center gap-0.5 rounded-[10px] px-1 py-2 text-sm transition-colors duration-150
+                                                    flex flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-2 text-sm transition-colors duration-150
                                                     ${isSelected
                                                         ? 'bg-accent-soft text-accent-strong ring-2 ring-inset ring-accent'
                                                         : 'border-[0.5px] border-border bg-surface text-foreground hover:bg-background-secondary'
@@ -218,7 +218,7 @@ export function TimeInputModal({
                                 onChange={event => setLocalTimezone(event.target.value)}
                                 placeholder="Asia/Shanghai"
                                 maxLength={100}
-                                className="mt-2 h-11 w-full rounded-[10px] border-[0.5px] border-border-hover bg-surface px-3 text-sm font-normal text-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15"
+                                className="mt-2 h-11 w-full rounded-xl border-[0.5px] border-border-hover bg-surface px-3 text-sm font-normal text-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15"
                             />
                         </label>
                         <label className="block text-[13px] font-medium text-foreground">
@@ -226,7 +226,7 @@ export function TimeInputModal({
                             <select
                                 value={localDisambiguation}
                                 onChange={event => setLocalDisambiguation(event.target.value)}
-                                className="mt-2 h-11 w-full rounded-[10px] border-[0.5px] border-border-hover bg-surface px-3 text-sm font-normal text-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15"
+                                className="mt-2 h-11 w-full rounded-xl border-[0.5px] border-border-hover bg-surface px-3 text-sm font-normal text-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15"
                             >
                                 <option value="reject">遇到歧义时提示错误（默认）</option>
                                 <option value="earlier">选择较早的瞬间</option>

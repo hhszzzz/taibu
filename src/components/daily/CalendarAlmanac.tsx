@@ -267,8 +267,8 @@ export function CalendarAlmanac({ date, isToday, onDateChange, onDatePick, onGoT
 
             {/* 移动端：日期摘要 + 宜忌面板 */}
             <div className="flex flex-col gap-3 max-lg:order-1 lg:hidden">
-                <section aria-label="黄历" className="flex items-center gap-4 rounded-[18px] border-[0.5px] border-border bg-surface p-[18px]">
-                    <div className="flex w-[74px] shrink-0 flex-col items-center rounded-[14px] bg-accent-soft py-2 text-accent-strong">
+                <section aria-label="黄历" className="flex items-center gap-4 rounded-2xl border-[0.5px] border-border bg-surface p-[18px]">
+                    <div className="flex w-[74px] shrink-0 flex-col items-center rounded-2xl bg-accent-soft py-2 text-accent-strong">
                         <span className="text-[11px]">{date.getMonth() + 1} 月 · {text.weekdayShort}</span>
                         <span className="font-display text-[40px] leading-[1.1]">{date.getDate()}</span>
                     </div>
@@ -287,7 +287,7 @@ export function CalendarAlmanac({ date, isToday, onDateChange, onDatePick, onGoT
             </div>
 
             {/* 桌面：黄历主卡 */}
-            <section aria-label="黄历" className="hidden overflow-hidden rounded-[18px] border-[0.5px] border-border bg-surface lg:col-span-2 lg:flex">
+            <section aria-label="黄历" className="hidden overflow-hidden rounded-2xl border-[0.5px] border-border bg-surface lg:col-span-2 lg:flex">
                 <div className="flex w-[280px] shrink-0 flex-col gap-4 border-r-[0.5px] border-border bg-panel p-7">
                     <div className="flex flex-col gap-0.5">
                         <span className="text-sm text-foreground-secondary">{date.getFullYear()} 年 {date.getMonth() + 1} 月 · {data.weekday}</span>

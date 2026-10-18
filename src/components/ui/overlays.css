@@ -6,35 +6,81 @@
     max-height: min(560px, calc(100dvh - 24px));
     overflow: auto;
     overscroll-behavior: contain;
-    padding: 6px;
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    background: var(--background);
+    padding: 4px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--surface);
     color: var(--foreground);
-    box-shadow: 0 10px 32px #0002;
+    box-shadow: var(--shadow-panel-popover);
 }
 .floating-panel :where(button, input, a):focus-visible, .app-modal :where(button, textarea, input, a, [tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.floating-panel [role^="menuitem"] { border-radius: 7px; }
-.floating-panel [role^="menuitem"]:focus { background: var(--background-secondary); }
-.floating-panel [role^="menuitem"][aria-checked="true"] { color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.floating-panel [role^="menuitem"] { border-radius: 8px; }
+/* compact 菜单（标题/行菜单）= 克隆 ui/menu 的 rounded-xs（6px）；composer 菜单保持 8px。 */
+.floating-panel.chat-header-menu > [role^="menuitem"], .floating-panel.conversation-menu > [role^="menuitem"] { border-radius: 6px; }
+.floating-panel [role^="menuitem"]:focus { background: var(--fill-ghost-hover); }
+/* 选中项 = 克隆站 ui/menu：只以 clay 勾标记，行底不常亮（悬停/聚焦才显底）。 */
+.floating-panel [role^="menuitem"][aria-checked="true"] { color: var(--foreground); }
 .app-modal {
     position: fixed;
     inset: 0;
     margin: auto;
-    width: min(480px, calc(100vw - 32px));
+    width: min(512px, calc(100vw - 32px));
     max-height: calc(100dvh - 32px);
     overflow: auto;
     overscroll-behavior: contain;
     padding: 0;
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    background: var(--background);
+    border: 0;
+    border-radius: 14px;
+    background: var(--surface);
     color: var(--foreground);
-    box-shadow: 0 24px 72px #0004;
+    box-shadow: var(--shadow-panel-lg);
 }
-.app-modal::backdrop { background: #0006; backdrop-filter: blur(3px); }
+/* 遮罩 = cds --cds-backdrop：40% 黑、无模糊（实测 scrim rgba(0,0,0,.4)） */
+.app-modal::backdrop { background: rgba(0, 0, 0, .4); }
+/* 弹层自身被 showModal 聚焦时不画全局焦点框（claude 弹层没有外框）。 */
+.app-modal:focus, .app-modal:focus-visible { outline: none; }
 .app-modal:not([open]) { display: none; }
-.settings-center-dialog { width: min(800px, calc(100vw - 64px)); height: min(660px, calc(100dvh - 64px)); overflow: hidden; }
+/* 搜索弹层 = cds Search palette：672px / radius 20（= composer 14 + 6）/ 0.5px 20% 描边；结果行 32px + 5% 悬停 */
+/* claude ⌘K 弹层实测（B11）：672×≤582 / r20 / 0.5px 20% 描边 / shadow-2xl；
+   头部 20px 图标 + 无边框输入；结果项 r8 gap 12；底部快捷键提示行（keycap h18 r4） */
+.app-modal.search-palette { display: flex; width: min(672px, calc(100vw - 32px)); height: min(582px, calc(100dvh - 32px)); max-height: min(582px, calc(100dvh - 32px)); flex-direction: column; padding: 0; overflow: hidden; border: .5px solid var(--border-hover); border-radius: 20px; background: var(--surface); box-shadow: 0 25px 50px -12px rgb(0 0 0 / .25); }
+/* 用量弹窗（账户菜单 → 用量）：claude 账户菜单实测 360px r10 白底 */
+.app-modal.usage-dialog { width: min(360px, calc(100vw - 32px)); border-radius: 10px; }
+.search-palette-head { display: flex; flex-shrink: 0; align-items: center; gap: 8px; height: 60px; padding: 0 16px 0 24px; color: var(--foreground-secondary); }
+.search-palette-head input { flex: 1; min-width: 0; border: 0; background: transparent; font-size: calc(18 / 16 * 1rem); line-height: calc(26 / 16 * 1rem); color: var(--foreground); outline: none; }
+.search-palette-head input:focus-visible { outline: none; }
+.search-palette-head input::placeholder { color: var(--foreground-tertiary); }
+.search-palette-close { display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center; border-radius: 6px; font-size: calc(18 / 16 * 1rem); line-height: 1; color: var(--foreground-secondary); }
+.search-palette-close:hover { background: var(--fill-ghost-hover); color: var(--foreground); }
+.search-palette-close:focus-visible { outline: none; background: var(--fill-ghost-hover); color: var(--foreground); }
+.search-palette-tabs { display: flex; flex-shrink: 0; gap: 2px; padding: 0 24px 10px; }
+.search-palette-tab { height: 28px; padding: 0 10px; border-radius: 6px; font-size: calc(14 / 16 * 1rem); font-weight: 500; line-height: 1; color: var(--foreground-tertiary); }
+.search-palette-tab:hover { color: var(--foreground-secondary); background: var(--fill-ghost-hover); }
+.search-palette-tab[aria-selected="true"] { color: var(--foreground); }
+.search-palette-body { flex: 1; min-height: 120px; overflow-y: auto; padding: 4px 8px 12px; }
+.search-palette-group-block + .search-palette-group-block { margin-top: 8px; }
+.search-palette-group { margin: 0; padding: 8px 8px 4px; font-size: calc(12 / 16 * 1rem); line-height: calc(17 / 16 * 1rem); color: var(--foreground-tertiary); }
+.search-palette-row { position: relative; display: flex; align-items: center; border-radius: 8px; }
+.search-palette-row[data-active] { background: var(--fill-ghost-hover); }
+.search-palette-item { display: flex; width: 100%; min-height: 36px; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 8px; text-align: left; color: var(--foreground); }
+.search-palette-item > svg { flex-shrink: 0; color: var(--foreground-secondary); }
+.search-palette-item-main { min-width: 0; flex: 1; }
+.search-palette-item-title { display: block; overflow: hidden; font-size: calc(14 / 16 * 1rem); font-weight: 400; line-height: calc(20 / 16 * 1rem); text-overflow: ellipsis; white-space: nowrap; }
+.search-palette-item-preview { display: block; overflow: hidden; font-size: calc(12.5 / 16 * 1rem); line-height: calc(18 / 16 * 1rem); color: var(--foreground-tertiary); text-overflow: ellipsis; white-space: nowrap; }
+.search-palette-item-tag { margin-left: 8px; font-size: calc(12 / 16 * 1rem); color: var(--foreground-tertiary); }
+.search-palette-actions { display: inline-flex; flex-shrink: 0; align-items: center; gap: 2px; padding-right: 8px; }
+.search-palette-action { display: inline-flex; width: 24px; height: 24px; align-items: center; justify-content: center; border-radius: 6px; color: var(--foreground-secondary); }
+.search-palette-state { margin: 0; padding: 24px 12px; font-size: calc(13 / 16 * 1rem); line-height: calc(19 / 16 * 1rem); color: var(--foreground-secondary); text-align: center; }
+.search-palette-foot { display: flex; flex-shrink: 0; height: 48px; align-items: center; gap: 16px; padding: 0 12px; border-top: var(--hairline) solid var(--border); font-size: calc(12 / 16 * 1rem); line-height: calc(18 / 16 * 1rem); color: var(--foreground-tertiary); }
+.search-palette-hint { display: inline-flex; align-items: center; gap: 6px; }
+.search-palette-hint.is-end { margin-left: auto; }
+.search-palette-foot kbd { display: inline-flex; min-width: 28px; height: 18px; align-items: center; justify-content: center; padding: 0 5px; border: 1px solid rgb(0 0 0 / .18); border-radius: 4px; background: transparent; font-family: var(--font-sans); font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); }
+.dark .search-palette-foot kbd { border-color: rgb(255 255 255 / .18); }
+.app-modal:has(#search-title) > div > div > button:hover { background: var(--fill-field); }
+.app-modal:has(#search-title) > div > div > button > strong { font-size: calc(14 / 16 * 1rem); font-weight: 500; }
+.app-modal:has(#search-title) > div > div > button > span { margin-top: 2px; font-size: calc(12 / 16 * 1rem); line-height: calc(17 / 16 * 1rem); }
+/* 大弹层 = cds Dialog(size lg)：上限 1024×800、圆角 12、四周 16px 边距（实测 settings_modal）*/
+.settings-center-dialog { width: min(1024px, calc(100vw - 32px)); height: min(800px, calc(100dvh - 32px)); border-radius: 12px; overflow: hidden; }
 @media (max-width: 767px) { .settings-center-dialog { width: 100vw; height: 100dvh; max-height: 100dvh; border: 0; border-radius: 0; } }
 .app-modal, .floating-panel {
     --background: var(--chat-background);
@@ -45,5 +91,63 @@
     --border: var(--chat-border);
 }
 /* Sidebar "全部占术" flyout: the panel body owns its own spacing and scroll regions. */
-.floating-panel.all-divinations-panel { padding: 0; max-height: min(720px, calc(100dvh - 16px)); overflow: hidden; border-radius: 16px; box-shadow: 0 16px 48px #0000001f; }
+.floating-panel.all-divinations-panel { padding: 0; max-height: min(720px, calc(100dvh - 16px)); overflow: hidden; border-radius: 10px; box-shadow: var(--shadow-panel-popover); }
+/* 账户菜单「帮助」二级：与一级菜单保持间距的独立浮层。 */
+.floating-panel.user-help-menu { min-width: 12rem; max-width: min(16rem, calc(100vw - 2rem)); }
 .floating-panel.all-divinations-panel input:focus-visible { outline: none; }
+/* 全部占术 = claude 菜单族：32px 行 / 28px 前导槽 / 13px 分组标签 / 搜索行白 50% */
+.all-divinations { display: flex; width: min(20rem, calc(100vw - 2rem)); flex-direction: column; }
+.all-divinations-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 10px 4px; }
+.all-divinations-head h2 { font-size: 13px; line-height: 17px; font-weight: 400; color: var(--foreground-tertiary); }
+.all-divinations-head span { font-size: 12px; line-height: 17px; color: var(--foreground-tertiary); }
+.all-divinations-search { display: flex; height: 32px; align-items: center; gap: 8px; margin: 4px; padding: 0 8px; border-radius: 8px; background: rgb(255 255 255 / .5); color: var(--foreground-tertiary); }
+.dark .all-divinations-search { background: rgb(255 255 255 / .05); }
+.all-divinations-search input { min-width: 0; flex: 1; border: 0; background: transparent; font-size: 14px; line-height: 21px; color: var(--foreground); outline: none; }
+.all-divinations-search input::placeholder { color: var(--foreground-tertiary); }
+.all-divinations-scroll { max-height: min(520px, calc(100dvh - 200px)); overflow-y: auto; padding: 0 4px 6px; }
+.all-divinations-group-label { padding: 8px 8px 2px; font-size: 12px; line-height: 17px; font-weight: 400; color: var(--foreground-tertiary); }
+.all-divinations-row { position: relative; }
+.all-divinations-item { display: flex; width: 100%; height: 32px; align-items: center; gap: 8px; padding: 0 2px; border-radius: 8px; font-size: 14px; line-height: 21px; color: var(--foreground-secondary); transition: background-color .12s, color .12s; }
+.all-divinations-item:hover { background: var(--df-hover); color: var(--foreground); }
+.all-divinations-item[aria-current=page] { background: var(--df-selected); color: var(--foreground); }
+.all-divinations-icon { display: flex; width: 28px; flex-shrink: 0; align-items: center; justify-content: center; }
+.all-divinations-pin { position: absolute; top: 50%; right: 4px; display: flex; width: 24px; height: 24px; align-items: center; justify-content: center; border-radius: 6px; color: var(--foreground-tertiary); opacity: 0; transform: translateY(-50%); transition: opacity .12s, background-color .12s; }
+.all-divinations-row:hover .all-divinations-pin, .all-divinations-pin:focus-visible, .all-divinations-pin[data-pinned] { opacity: 1; }
+.all-divinations-pin:hover { background: var(--fill-ghost-hover); color: var(--foreground); }
+.all-divinations-pin[data-pinned] { color: var(--accent); }
+@media (hover: none) { .all-divinations-pin { opacity: .7; } }
+.all-divinations-fortune { display: flex; flex-direction: column; gap: 1px; padding: 4px; border-top: 1px solid var(--fill-field); }
+
+.ui-tip { display: contents; }
+
+/* ===== Tooltip（浅色表面 + 发丝描边；不再使用黑色提示条） ===== */
+.ui-tip-bubble {
+    position: fixed;
+    z-index: 130;
+    max-width: calc(100vw - 16px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 3px 8px;
+    border: var(--hairline) solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    box-shadow: var(--shadow-raised);
+    color: var(--foreground-secondary);
+    font-family: var(--font-sans);
+    font-size: calc(13 / 16 * 1rem);
+    font-weight: 400;
+    line-height: calc(18 / 16 * 1rem);
+    text-align: center;
+    pointer-events: none;
+    transform: translate(-50%, -100%);
+    transform-origin: center bottom;
+    animation: ui-tip-in var(--duration-snap) var(--ease-snap) both;
+}
+.ui-tip-bubble[data-side="bottom"] { transform: translate(-50%, 0); transform-origin: center top; }
+@media (hover: none) { .ui-tip-bubble { display: none; } }
+@keyframes ui-tip-in {
+    from { opacity: 0; scale: 0.94; }
+    to { opacity: 1; scale: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .ui-tip-bubble { animation: none; } }

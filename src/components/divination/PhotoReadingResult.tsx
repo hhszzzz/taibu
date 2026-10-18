@@ -208,20 +208,20 @@ export function PhotoReadingResult<T extends PhotoReadingSession>({
                                 {kindLabel}{createdAt && ` · ${createdAt}`}
                             </p>
                             {/* 移动端标题位于顶栏 */}
-                            <h1 className="hidden font-display text-[2.125rem] font-normal leading-tight lg:block">{description.title}</h1>
+                            <h1 className="hidden font-display text-[1.875rem] font-normal leading-tight lg:block">{description.title}</h1>
                         </div>
                         <div className="hidden items-center gap-2 lg:flex">
                             <ResultMoreActions actions={moreActions} label="结果操作" />
                             <Link
                                 href={entryPath}
-                                className="flex h-10 items-center rounded-[10px] border-[0.5px] border-border-hover bg-surface px-4 text-sm text-foreground transition-colors hover:bg-background-secondary"
+                                className="flex h-10 items-center rounded-xl border-[0.5px] border-border-hover bg-surface px-4 text-sm text-foreground transition-colors hover:bg-background-secondary"
                             >
                                 再次分析
                             </Link>
                             {conversationId && (
                                 <Link
                                     href={`/chat?id=${conversationId}`}
-                                    className="flex h-10 items-center rounded-[10px] bg-accent px-4 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
+                                    className="flex h-10 items-center rounded-xl bg-accent px-4 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
                                 >
                                     继续对话
                                 </Link>

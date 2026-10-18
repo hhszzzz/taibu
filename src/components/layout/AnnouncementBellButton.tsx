@@ -1,7 +1,7 @@
 'use client';
 // Reads the unread notification count and opens the announcement center on click.
 import { useCallback } from 'react';
-import { Bell } from 'lucide-react';
+import { BellIcon } from '@/lib/navigation/nav-icons';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { useAnnouncementCenterSafe } from '@/components/providers/AnnouncementPopupHost';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
@@ -20,7 +20,7 @@ export function AnnouncementBellButton({ className, iconSize = 20 }: { className
     }, [notificationsEnabled, openAnnouncementCenter, user]);
     return (
         <button type="button" onClick={open} className={className} aria-label="打开公告中心" title="公告与通知">
-            <Bell size={iconSize} aria-hidden="true" />
+            <BellIcon size={iconSize} aria-hidden="true" />
             {badgeCount > 0 ? (
                 <span className="absolute -right-0.5 -top-0.5 min-w-[14px] h-[14px] px-1 rounded-full bg-accent text-on-accent text-[10px] font-bold leading-none flex items-center justify-center">
                     {badgeCount > 99 ? '99+' : badgeCount}

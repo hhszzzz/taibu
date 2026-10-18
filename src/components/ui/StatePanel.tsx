@@ -7,9 +7,9 @@
 import type { ComponentType, ReactNode } from 'react';
 
 /** 状态面板里的主操作按钮（登录、开始占测等）。 */
-export const STATE_PRIMARY_ACTION_CLASS = 'inline-flex h-10 items-center justify-center gap-1.5 rounded-[10px] bg-accent px-5 text-sm font-medium text-on-accent transition-colors hover:bg-accent/90 disabled:opacity-50';
+export const STATE_PRIMARY_ACTION_CLASS = 'inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-accent px-4 text-sm font-medium text-on-accent transition-colors hover:bg-accent/90 disabled:opacity-50';
 /** 状态面板里的次操作按钮（重试、清除搜索、返回首页等）。 */
-export const STATE_SECONDARY_ACTION_CLASS = 'inline-flex h-10 items-center justify-center gap-1.5 rounded-[10px] border-[0.5px] border-border-hover bg-surface px-5 text-sm text-foreground transition-colors hover:bg-background-secondary disabled:opacity-50';
+export const STATE_SECONDARY_ACTION_CLASS = 'inline-flex h-8 items-center justify-center gap-1.5 rounded-md border-[0.5px] border-border-hover bg-surface px-4 text-sm text-foreground transition-colors hover:bg-background-secondary disabled:opacity-50';
 
 type StateTone = 'neutral' | 'accent' | 'danger';
 
@@ -47,7 +47,7 @@ export function StatePanel({
     const isDanger = tone === 'danger';
     const containerClass = layout === 'page'
         ? 'min-h-[60vh] justify-center px-4 py-12'
-        : `rounded-[14px] border-[0.5px] px-6 py-14 md:py-16 ${isDanger ? 'border-danger/25 bg-danger/5' : 'border-dashed border-border-hover'}`;
+        : `rounded-2xl border-[0.5px] px-6 py-14 md:py-16 ${isDanger ? 'border-danger/25 bg-danger/5' : 'border-dashed border-border-hover'}`;
 
     return (
         <div role={isDanger ? 'alert' : undefined} className={`flex flex-col items-center text-center ${containerClass} ${className}`}>

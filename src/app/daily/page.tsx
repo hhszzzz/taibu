@@ -203,7 +203,7 @@ function DailyPageContent() {
                                 <button
                                     type="button"
                                     onClick={openChartSelector}
-                                    className="h-9 rounded-[10px] bg-accent px-3 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
+                                    className="h-9 rounded-xl bg-accent px-3 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
                                 >
                                     重新选择命盘
                                 </button>
@@ -324,7 +324,7 @@ function DailyPageSkeleton() {
                     <div className={`${SKELETON_BLOCK_CLASS} h-32 rounded-2xl`} />
                 </div>
             </div>
-            <div className={`${SKELETON_BLOCK_CLASS} h-[72px] rounded-xl lg:h-[100px] lg:rounded-[14px]`} />
+            <div className={`${SKELETON_BLOCK_CLASS} h-[72px] rounded-xl lg:h-[100px] lg:rounded-2xl`} />
             <div className="grid gap-3.5 lg:grid-cols-[minmax(0,1.48fr)_minmax(0,1fr)] lg:gap-[18px]">
                 <div className={`${SKELETON_BLOCK_CLASS} h-60 rounded-2xl`} />
                 <div className={`${SKELETON_BLOCK_CLASS} hidden h-60 rounded-2xl lg:block`} />

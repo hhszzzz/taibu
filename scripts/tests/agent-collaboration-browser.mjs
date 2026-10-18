@@ -38,35 +38,50 @@ export async function createCollaborationFixture(config) {
 }
 
 export async function verifyAgentCollaboration({ page, newChat, send, waitForRun, credits, output, fixture }) {
+  const origin = new URL(page.url()).origin;
   await newChat();
   const trigger = page.getByRole('button', { name: /^选择模型：/ });
   await trigger.click();
   let dialog = page.getByRole('dialog', { name: '模型与分析设置', exact: true });
-  await dialog.getByRole('menuitemradio', { name: fixture.models[0].name }).click();
+  await dialog.getByRole('menuitemradio', { name: '本地离线演示' }).click();
+  // 努力程度是模型菜单的二级页（claude 同构），不再是内嵌单选组。
   await trigger.click();
   dialog = page.getByRole('dialog', { name: '模型与分析设置', exact: true });
-  await dialog.getByRole('radiogroup', { name: '推理档位', exact: true }).getByRole('radio', { name: '最高', exact: true }).click();
-  await dialog.getByLabel('启用多模型协作', { exact: true }).check();
-  for (const [index, model] of fixture.models.entries()) {
-    // The menu edits one member at a time; its chip toggles the editor.
-    const chip = dialog.getByRole('group', { name: '协作成员', exact: true }).locator('button[aria-pressed]').nth(index);
-    if (await chip.getAttribute('aria-pressed') !== 'true') await chip.click();
-    await dialog.getByLabel(`Agent ${index + 1} 模型`, { exact: true }).selectOption(model.key);
-    await dialog.getByLabel(`Agent ${index + 1} 推理档位`, { exact: true }).selectOption(index ? 'xhigh' : 'max');
-    await dialog.getByLabel(`Agent ${index + 1} 分工`, { exact: true }).fill(index ? '独立核对干支关系与不确定性' : '分析八字天干与日支');
-  }
+  await dialog.getByRole('menuitem', { name: /^努力程度/ }).click();
+  await page.getByRole('menu', { name: '努力程度', exact: true }).getByRole('menuitemradio', { name: '最高', exact: true }).click();
   await page.setViewportSize({ width: 320, height: 740 });
+  await trigger.click();
   await page.waitForFunction(() => {
     const dialog = document.querySelector('.floating-panel.chat-model-menu');
     if (!dialog) return false;
     const bounds = dialog.getBoundingClientRect();
     return bounds.left >= 0 && bounds.right <= window.innerWidth && bounds.top >= 0 && bounds.bottom <= window.innerHeight;
   });
+  dialog = page.getByRole('dialog', { name: '模型与分析设置', exact: true });
   const bounds = await dialog.boundingBox();
-  assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= 320 && bounds.y >= 0 && bounds.y + bounds.height <= 740, 'combined collaboration settings fit a 320px viewport');
+  assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= 320 && bounds.y >= 0 && bounds.y + bounds.height <= 740, 'the model menu fits a 320px viewport');
   await page.screenshot({ path: path.join(output, 'agent-collaboration-mobile.png'), fullPage: true });
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 1440, height: 1100 });
+  // 成员配置在设置 › 个性化 › 多模型协作：编辑后回到新对话，预设作为下一项任务配置生效。
+  await page.goto(`${origin}/settings/personalization`);
+  await page.getByRole('switch', { name: '启用多模型协作', exact: true }).click();
+  // 成员默认一个都不选（0–4）：先加两名成员，再逐项配置。
+  for (let index = 0; index < fixture.models.length; index++) await page.getByRole('button', { name: '添加成员', exact: true }).click();
+  for (const [index, model] of fixture.models.entries()) {
+    await page.getByLabel(`Agent ${index + 1} 模型`, { exact: true }).selectOption(model.key);
+    await page.getByLabel(`Agent ${index + 1} 努力程度`, { exact: true }).selectOption(index ? 'xhigh' : 'max');
+    await page.getByLabel(`Agent ${index + 1} 分工`, { exact: true }).fill(index ? '独立核对干支关系与不确定性' : '分析八字天干与日支');
+  }
+  await page.goto(`${origin}/chat`);
+  await page.waitForFunction(() => document.querySelector('[data-agent-ready]'));
+  await trigger.click();
+  dialog = page.getByRole('dialog', { name: '模型与分析设置', exact: true });
+  await dialog.getByRole('menuitem', { name: /多模型协作/ }).click();
+  const collabMenu = page.getByRole('menu', { name: '多模型协作', exact: true });
+  await collabMenu.waitFor();
+  assert.equal(await collabMenu.getByRole('menuitemcheckbox', { checked: true }).count(), 2, 'the settings preset turns collaboration on for the next task');
+  await page.keyboard.press('Escape');
   const before = await credits();
   const submitted = await send('Agent验收：多模型协作，请两位成员独立分析八字，主模型核对并汇总。');
   const run = await waitForRun(submitted.run.id, 'completed', 320);
@@ -82,14 +97,31 @@ export async function verifyAgentCollaboration({ page, newChat, send, waitForRun
     assert.ok(analysis.answer.includes(`实际推理档位：${index ? 'xhigh' : 'max'}`));
   }
   await page.reload();
-  const result = page.locator('.agent-collaboration-results');
-  await result.waitFor();
-  assert.ok((await result.innerText()).includes(fixture.models[0].name) && (await result.innerText()).includes(fixture.models[1].name), 'persisted history retains actual collaborator names and models');
+  const process = page.locator('.agent-process-heading').first();
+  await process.waitFor();
+  assert.ok((await process.innerText()).includes('开启 2 个智能体'), 'the folded process line names the collaborating agents');
+  if (await process.getAttribute('aria-expanded') !== 'true') await process.click();
+  const teamStep = page.locator('.agent-step').filter({ has: page.locator('.agent-step-title', { hasText: '协作分析' }) }).first();
+  await teamStep.locator('.agent-step-row').click();
+  await teamStep.getByRole('button', { name: '在工作区查看', exact: true }).click();
+  const panel = page.locator('aside#agent-workspace-panel, [role="dialog"][aria-label="工作区"]').first();
+  await panel.waitFor();
+  const collaboration = panel.locator('[data-workspace-view="collaboration"]');
+  await collaboration.waitFor();
+  assert.ok((await collaboration.innerText()).includes(fixture.models[0].name) && (await collaboration.innerText()).includes(fixture.models[1].name), 'persisted history retains actual collaborator names and models');
   await page.screenshot({ path: path.join(output, 'agent-collaboration-acceptance.png'), fullPage: true });
   await newChat();
   await trigger.click();
   dialog = page.getByRole('dialog', { name: '模型与分析设置', exact: true });
-  await dialog.getByLabel('启用多模型协作', { exact: true }).uncheck();
+  await dialog.getByRole('menuitem', { name: /多模型协作/ }).click();
+  const clearCollab = page.getByRole('menu', { name: '多模型协作', exact: true });
+  await clearCollab.waitFor();
+  // 逐项按名称取消：按 checked 过滤会在每次重渲染时丢掉目标，导致点击等待超时。
+  for (const model of fixture.models) {
+    const row = clearCollab.getByRole('menuitemcheckbox', { name: model.name, exact: true });
+    if (await row.getAttribute('aria-checked') === 'true') await row.click();
+  }
+  await page.keyboard.press('Escape');
   await dialog.getByRole('menuitemradio', { name: '本地离线演示' }).click();
   console.log('多模型协作：两路真实 SDK 请求、max/xhigh、一次计费、历史恢复和 320px 菜单通过。');
 }

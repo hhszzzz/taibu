@@ -26,9 +26,9 @@ import { requestBrowserJson } from '@/lib/browser-api';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { useToast } from '@/components/ui/Toast';
 import { mentionTypeLabels } from '@/components/chat/mentionStyles';
-import { describeAgentChartSubject, formatAgentToolDuration, getAgentToolState, getParallelMemberState, stripLeadingTitle } from './presentation';
+import { describeAgentChartSubject, getAgentToolState, getParallelMemberState, stripLeadingTitle } from './presentation';
 import { PrivateAttachmentPreview } from './PrivateAttachments';
-import { BaziPillars, CHART_GLYPHS } from './AgentToolResult';
+import { ChartMiniPreview } from './chart-preview';
 import './agent-workspace.css';
 
 type ToolViewProps = { tool: AgentToolPart; runStatus: AgentRunStatus };
@@ -50,13 +50,11 @@ export function WorkspaceViewHeading({ id, kicker, title, children }: { id: stri
     </header>;
 }
 
-/** Name, measured duration and state of the call a view is showing. Durations are never estimated. */
+/** Name and state of the call a view is showing（用时只落库，不展示 — 用户裁定 2026-10-17）。 */
 export function WorkspaceToolMeta({ tool, runStatus, children }: ToolViewProps & { children?: ReactNode }) {
     const state = getAgentToolState(tool, runStatus);
-    const measured = typeof tool.durationMs === 'number' && Number.isFinite(tool.durationMs) && tool.durationMs >= 0;
     return <p className="agent-ws-meta">
         <code>{tool.name}</code>
-        {measured && <span>{formatAgentToolDuration(tool.durationMs!)}</span>}
         <span data-state={state.status}>{state.label}</span>
         {children}
     </p>;
@@ -454,7 +452,7 @@ export function QuestionView({ tool, runStatus, step, model, answer, draftKey }:
         {(known.length > 0 || waiting) && <div className="agent-ws-known">
             {known.map(({ resource, reading, value, subject }) => <article key={resource.id} className="agent-ws-known-card" aria-label={`${resource.title}（已就绪）`}>
                 <span className="agent-ws-overview-kicker">{resource.title} · {reading.name === 'inspect_chart' ? '已读取' : '已计算'}<span data-state="ready">已就绪</span></span>
-                {value.kind === 'bazi' ? <BaziPillars chart={value.chart} size="overview" /> : <span className="agent-ws-overview-glyph" aria-hidden="true">{CHART_GLYPHS[value.kind]}</span>}
+                <ChartMiniPreview value={value} />
                 <small>{subject}</small>
             </article>)}
             {waiting && <div className="agent-ws-known-pending">
@@ -549,7 +547,7 @@ export function CollaborationView({ tool, runStatus, step }: ToolViewProps & { s
                 const titled = member.focus && member.focus.length <= FOCUS_IN_TITLE;
                 const meta = [member.modelName ?? member.model ?? '主模型', effortLabel(member.reasoningEffort),
                     member.toolCalls !== undefined && `${member.toolCalls} 次工具`,
-                    member.durationMs !== undefined ? formatAgentToolDuration(member.durationMs) : state.state === 'running' && '进行中'].filter(Boolean).join(' · ');
+                    state.state === 'running' && '进行中'].filter(Boolean).join(' · ');
                 return <article key={member.conversationId} className="agent-ws-member" data-state={state.state} aria-labelledby={`${id}-${member.conversationId}`}>
                     <div className="agent-ws-member-head">
                         <span className="agent-ws-member-avatar" aria-hidden="true">{memberInitial(name)}</span>

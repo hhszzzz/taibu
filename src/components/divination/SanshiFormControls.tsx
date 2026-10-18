@@ -38,7 +38,7 @@ const PREVIEW_DEBOUNCE_MS = 250;
 const PILLAR_LABELS = ['年', '月', '日', '时'] as const;
 
 /** 文本输入框样式（占问事项等） */
-export const SANSHI_INPUT_CLASS = 'h-12 w-full rounded-[10px] border-[0.5px] border-border-hover bg-surface px-3.5 text-base text-foreground placeholder:text-foreground-tertiary transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/10';
+export const SANSHI_INPUT_CLASS = 'h-12 w-full rounded-xl border-[0.5px] border-border-hover bg-surface px-3.5 text-base text-foreground placeholder:text-foreground-tertiary transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/10';
 
 export function SanshiFormCard({ children, className = '' }: { children: ReactNode; className?: string }) {
     return (
@@ -95,7 +95,7 @@ export function SanshiTimeFields({
                 {TIME_FIELDS.map(field => (
                     <label
                         key={field.key}
-                        className="flex h-11 min-w-0 items-center gap-1 rounded-[10px] border-[0.5px] border-border-hover bg-surface px-3 transition-colors focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/10"
+                        className="flex h-11 min-w-0 items-center gap-1 rounded-xl border-[0.5px] border-border-hover bg-surface px-3 transition-colors focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/10"
                     >
                         <input
                             type="number"
@@ -186,7 +186,7 @@ export function SanshiSegmented<T extends string>({
     onChange?: (next: T) => void;
 }) {
     return (
-        <div role="group" aria-label={label} className={`grid h-10 max-w-[320px] gap-1 rounded-[10px] bg-background-secondary p-1 ${SEGMENT_COLUMNS[options.length] ?? 'grid-cols-2'}`}>
+        <div role="group" aria-label={label} className={`grid h-10 max-w-[320px] gap-1 rounded-xl bg-background-secondary p-1 ${SEGMENT_COLUMNS[options.length] ?? 'grid-cols-2'}`}>
             {options.map(option => {
                 const active = option.value === value;
                 return (

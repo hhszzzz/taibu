@@ -54,8 +54,8 @@ const TYPE_FILTER_OPTIONS: Array<{ value: NotificationFilterState['type']; label
     { value: 'promotion', label: '活动' },
 ];
 
-const OUTLINE_BUTTON_CLASS = 'inline-flex h-9 items-center gap-1.5 rounded-[10px] border-[0.5px] border-border-hover bg-surface px-3 text-sm text-foreground transition-colors hover:bg-background-secondary disabled:opacity-50';
-const QUIET_BUTTON_CLASS = 'inline-flex h-9 items-center gap-1.5 rounded-[10px] px-3 text-sm text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent';
+const OUTLINE_BUTTON_CLASS = 'inline-flex h-9 items-center gap-1.5 rounded-xl border-[0.5px] border-border-hover bg-surface px-3 text-sm text-foreground transition-colors hover:bg-background-secondary disabled:opacity-50';
+const QUIET_BUTTON_CLASS = 'inline-flex h-9 items-center gap-1.5 rounded-xl px-3 text-sm text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent';
 const ROW_ICON_BUTTON_CLASS = 'flex h-9 w-9 items-center justify-center rounded-lg text-foreground-tertiary transition-colors hover:bg-background-tertiary hover:text-foreground md:h-7 md:w-7';
 
 /** 分段控件：一组互斥选项，选中项浮起为白底。 */
@@ -66,14 +66,14 @@ function SegmentedControl<T extends string>({ label, options, value, onChange }:
     onChange: (value: T) => void;
 }) {
     return (
-        <div role="group" aria-label={label} className="inline-flex shrink-0 rounded-[10px] bg-background-secondary p-0.5">
+        <div role="group" aria-label={label} className="inline-flex shrink-0 rounded-xl bg-background-secondary p-0.5">
             {options.map(option => (
                 <button
                     key={option.value}
                     type="button"
                     aria-pressed={value === option.value}
                     onClick={() => onChange(option.value)}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[13px] text-foreground-secondary transition-colors hover:text-foreground aria-pressed:bg-surface aria-pressed:text-foreground aria-pressed:shadow-[0_1px_2px_rgba(20,20,19,0.08)] dark:aria-pressed:bg-background-tertiary"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[13px] text-foreground-secondary transition-colors hover:text-foreground aria-pressed:bg-surface aria-pressed:text-foreground aria-pressed:shadow-[0_1px_2px_rgba(11, 11, 11,0.08)] dark:aria-pressed:bg-background-tertiary"
                 >
                     {option.label}
                     {option.badge ? <span className="text-xs text-accent tabular-nums">{option.badge}</span> : null}
@@ -178,7 +178,7 @@ function NotificationRow({
 
 function NotificationsSkeleton() {
     return (
-        <div aria-hidden="true" className="divide-y-[0.5px] divide-border overflow-hidden rounded-[14px] border-[0.5px] border-border bg-surface">
+        <div aria-hidden="true" className="divide-y-[0.5px] divide-border overflow-hidden rounded-2xl border-[0.5px] border-border bg-surface">
             {[1, 2, 3, 4].map(index => (
                 <div key={index} className="flex animate-pulse gap-4 py-4 pr-3 pl-5">
                     <div className="h-9 w-9 rounded-full bg-foreground/10" />
@@ -380,7 +380,7 @@ export default function NotificationsPage() {
                 <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
                     <div className="flex min-w-0 flex-col gap-1">
                         {/* 手机端顶栏已显示「通知中心」，这里不再重复标题。 */}
-                        <h1 className="hidden font-display text-[2.125rem] leading-tight font-normal md:block">通知</h1>
+                        <h1 className="hidden font-display text-[1.875rem] leading-tight font-normal md:block">通知</h1>
                         <p className="text-[15px] text-foreground-secondary">
                             {isLoading ? '系统提醒、功能上线与活动消息' : hasNotifications ? unreadLabel : '系统提醒、功能上线与活动消息'}
                         </p>
@@ -475,7 +475,7 @@ export default function NotificationsPage() {
 
             {selectMode && visibleNotifications.length > 0 ? (
                 <div className="fixed inset-x-0 bottom-[calc(var(--sab,0px)+5.5rem)] z-40 flex justify-center px-4 lg:bottom-8">
-                    <div role="toolbar" aria-label="批量操作" className="flex w-full max-w-xl items-center gap-2 rounded-[14px] border-[0.5px] border-border bg-surface py-2 pr-2 pl-4 shadow-[0_8px_28px_rgba(20,20,19,0.12)]">
+                    <div role="toolbar" aria-label="批量操作" className="flex w-full max-w-xl items-center gap-2 rounded-2xl border-[0.5px] border-border bg-surface py-2 pr-2 pl-4 shadow-[0_8px_28px_rgba(11, 11, 11,0.12)]">
                         <label className="flex items-center gap-2 text-sm text-foreground">
                             <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="h-4 w-4 accent-accent" />
                             全选

@@ -81,7 +81,7 @@ export function TarotSpreadPicker({ spreads, selectedId, onSelect, labelledBy }:
                         type="button"
                         aria-pressed={selected}
                         onClick={() => onSelect(spread.id)}
-                        className={`flex min-w-0 flex-col gap-3 rounded-[14px] border-[0.5px] p-3.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:gap-3.5 sm:p-[18px] ${
+                        className={`flex min-w-0 flex-col gap-3 rounded-2xl border-[0.5px] p-3.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:gap-3.5 sm:p-[18px] ${
                             selected
                                 ? 'border-accent bg-accent-light ring-1 ring-inset ring-accent'
                                 : 'border-border bg-surface hover:border-border-hover hover:bg-background'

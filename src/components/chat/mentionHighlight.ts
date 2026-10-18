@@ -4,7 +4,7 @@ import { mentionStyleMap } from '@/components/chat/mentionStyles';
 
 export type MentionHighlightedPart =
     | { kind: 'text'; value: string }
-    | { kind: 'mention'; value: string; className: string; start: number; end: number };
+    | { kind: 'mention'; value: string; className: string; type: MentionType; start: number; end: number };
 
 export function buildMentionHighlightedParts(content: string, mentions: Mention[]): MentionHighlightedPart[] {
     if (!content) return [];
@@ -26,6 +26,7 @@ export function buildMentionHighlightedParts(content: string, mentions: Mention[
             kind: 'mention',
             value: content.slice(token.start, token.end),
             className: style.className,
+            type: (match.mention?.type ?? 'knowledge_base') as MentionType,
             start: token.start,
             end: token.end,
         });

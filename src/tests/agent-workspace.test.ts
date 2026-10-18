@@ -23,7 +23,7 @@ async function coreResult(name: string) {
 
 test('every tool family reaches a workspace location, including external and unknown tools', () => {
   const names = [...listToolDefinitions().map(item => item.name), 'inspect_chart', 'web_search', 'search_knowledge', 'list_user_data', 'read_user_data',
-    'read_user_profile', 'read_attachment', 'list_analysis_methods', 'load_analysis_method', 'todo_write', 'ask_user', 'parallel_analysis',
+    'read_user_profile', 'read_attachment', 'list_analysis_methods', 'load_analysis_method', 'ask_user', 'parallel_analysis',
     'read_user_memory', 'remember_user_fact', 'select_final_artifacts', 'mcp__archive__lookup', 'retired_tool'];
   const model = workspace(names.map((name, index) => tool(`call-${index}`, name, { status: 'running', input: name === 'read_attachment' ? { id: randomUUID() } : {} })));
   for (const [index, name] of names.entries()) {
@@ -31,7 +31,9 @@ test('every tool family reaches a workspace location, including external and unk
     assert.ok(location, `${name} has a workspace location`);
     assert.equal(resolveAgentWorkspaceLocation(model, location), location);
   }
-  assert.equal(model.locations.get(`call-${names.indexOf('todo_write')}`), 'process');
+  // 任务清单只显示在聊天的进度条里，不再占用工作区标签。
+  const plan = workspace([tool('plan', 'todo_write')]);
+  assert.equal(plan.locations.get('plan'), undefined);
   assert.equal(model.locations.get(`call-${names.indexOf('select_final_artifacts')}`), 'results');
   const external = model.resources.find(resource => resource.toolIds.includes(`call-${names.indexOf('mcp__archive__lookup')}`))!;
   assert.deepEqual([external.view, external.family], ['tool', 'external']);
@@ -141,11 +143,9 @@ test('family parsers read real Core and method results and reject incomplete one
   assert.equal(getAgentAttachmentRead(tool('i', 'read_attachment', { output: { id: 'i', name: '手相.jpg', kind: 'image', note: '图片已通过视觉输入提供' } }))?.readUntil, null);
 });
 
-test('the overview joins the process once the task ends, and following shows the latest call only until then', () => {
-  assert.deepEqual(getAgentWorkspaceSections(null), ['results']);
-  assert.deepEqual(getAgentWorkspaceSections('queued'), ['process']);
-  assert.deepEqual(getAgentWorkspaceSections('awaiting_input'), ['process']);
-  for (const status of ['completed', 'cancelled', 'failed'] as const) assert.deepEqual(getAgentWorkspaceSections(status), ['results', 'process']);
+test('the overview is the only workspace section; following shows the latest call until the task ends', () => {
+  // 过程标签已移除：执行过程只留在聊天转录里。
+  assert.deepEqual(getAgentWorkspaceSections(), ['results']);
   assert.deepEqual([null, 'queued', 'running', 'cancelling', 'awaiting_input', 'completed', 'failed'].map(status => isAgentRunWorking(status as Parameters<typeof isAgentRunWorking>[0])),
     [false, true, true, true, false, false, false], 'a task waiting for an answer is not working');
 
@@ -155,9 +155,9 @@ test('the overview joins the process once the task ends, and following shows the
   assert.equal(at(null, true, 'awaiting_input'), question, 'a waiting task keeps its question in view');
   assert.equal(at('tool:profile', true, 'running'), question, 'following overrides the reader’s last choice');
   assert.equal(at('tool:profile', false, 'running'), profile);
-  assert.equal(at('process', true, 'completed'), 'results', 'following ends on the overview');
-  assert.equal(at('results', false, 'running'), 'process', 'a section not shown falls back to the first one that is');
+  assert.equal(at('results', true, 'completed'), 'results', 'following ends on the overview');
+  assert.equal(at('results', false, 'running'), 'results', 'the overview is always shown');
   assert.equal(at('tool:missing', false, 'completed'), 'results', 'a selection that no longer exists falls back');
   assert.equal(at(null, false, null), 'results', 'without a task only the overview exists');
-  assert.equal(getAgentWorkspaceLocation(workspace([tool('plan', 'todo_write')]), { selected: null, followModel: true, status: 'running' }), 'process', 'nothing to follow yet');
+  assert.equal(getAgentWorkspaceLocation(workspace([tool('plan', 'todo_write')]), { selected: null, followModel: true, status: 'running' }), 'results', 'nothing to follow falls back to the overview');
 });

@@ -69,7 +69,7 @@ export function DailyHourStrip({ hours, isToday }: DailyHourStripProps) {
 
             {hours && hours.length > 0 ? (
                 <div ref={scrollerRef} className="-mx-4 overflow-x-auto px-4 scrollbar-hide lg:mx-0 lg:overflow-visible lg:px-0">
-                    <div className="flex gap-1.5 lg:grid lg:grid-cols-13 lg:gap-0 lg:overflow-hidden lg:rounded-[14px] lg:border-[0.5px] lg:border-border lg:bg-surface">
+                    <div className="flex gap-1.5 lg:grid lg:grid-cols-13 lg:gap-0 lg:overflow-hidden lg:rounded-2xl lg:border-[0.5px] lg:border-border lg:bg-surface">
                         {hours.map((hour, index) => {
                             const isActive = index === activeIndex;
                             const isCurrent = index === currentIndex;

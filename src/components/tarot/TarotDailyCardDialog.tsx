@@ -39,7 +39,7 @@ export function TarotDailyCardDialog({ open, onClose, dailyCard, unavailable }: 
                 </div>
                 {dailyCard ? (
                     <div className="flex items-start gap-4">
-                        <div className="relative aspect-[4/7] w-24 shrink-0 overflow-hidden rounded-[10px] border-[0.5px] border-foreground/20 bg-surface shadow-[0_4px_14px_rgba(20,20,19,0.08)]">
+                        <div className="relative aspect-[4/7] w-24 shrink-0 overflow-hidden rounded-xl border-[0.5px] border-foreground/20 bg-surface shadow-[0_4px_14px_rgba(11, 11, 11,0.08)]">
                             <TarotCardFace image={dailyCard.card.image} name={dailyCard.card.nameChinese} reversed={reversed} />
                         </div>
                         <div className="flex min-w-0 flex-col gap-2">

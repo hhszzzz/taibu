@@ -18,7 +18,7 @@ export function ResultTabs({
         <div
             role="tablist"
             aria-label="命盘视图"
-            className="grid h-10 grid-cols-3 gap-1 rounded-[10px] bg-background-secondary p-1 lg:flex lg:h-auto lg:gap-6 lg:rounded-none lg:border-b-[0.5px] lg:border-border lg:bg-transparent lg:p-0"
+            className="grid h-10 grid-cols-3 gap-1 rounded-xl bg-background-secondary p-1 lg:flex lg:h-auto lg:gap-6 lg:rounded-none lg:border-b-[0.5px] lg:border-border lg:bg-transparent lg:p-0"
         >
             {RESULT_TAB_OPTIONS.map((option) => {
                 const active = option.value === activeTab;

@@ -32,7 +32,7 @@ const TAB_ID_PREFIX = 'mcp';
 
 const REMOTE_CONFIG = buildMcpPublicHttpConfig();
 const STDIO_CONFIG = buildMcpStdioNpxConfig();
-const CARD = 'rounded-[14px] border border-border bg-surface';
+const CARD = 'rounded-2xl border border-border bg-surface';
 const COPIED_RESET_MS = 2000;
 
 function ConfigBlock({
@@ -125,7 +125,7 @@ export default function McpServicePanel() {
           可用工具<span className="ml-1.5 font-normal">{MCP_PUBLIC_TOOLS.length}</span>
         </h3>
         {/* 分隔线画在每格右侧和下方，被外框裁掉最外一圈；末行不满时空格保持白底。 */}
-        <ul className="grid grid-cols-[repeat(auto-fill,minmax(13.75rem,1fr))] overflow-hidden rounded-[14px] border border-border bg-surface">
+        <ul className="grid grid-cols-[repeat(auto-fill,minmax(13.75rem,1fr))] overflow-hidden rounded-2xl border border-border bg-surface">
           {MCP_PUBLIC_TOOLS.map((tool) => (
             <li key={tool.id} className="flex min-w-0 items-baseline justify-between gap-3 px-4 py-2.5 shadow-[1px_0_0_var(--border),0_1px_0_var(--border)] sm:flex-col sm:items-start sm:justify-start sm:gap-1 sm:py-3">
               <code className="truncate font-mono text-[13px] text-foreground">{tool.id}</code>

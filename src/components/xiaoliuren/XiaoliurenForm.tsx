@@ -8,7 +8,7 @@ import { requestBrowserJson } from '@/lib/browser-api';
 import { toDateTimeLocalValue } from '@/lib/date-utils';
 import type { XiaoliurenWebBundle } from '@/lib/divination/xiaoliuren';
 
-const INPUT_CLASS = 'h-11 w-full rounded-[10px] border-[0.5px] border-border-hover bg-surface px-3.5 text-[15px] text-foreground placeholder:text-foreground-tertiary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20';
+const INPUT_CLASS = 'h-11 w-full rounded-xl border-[0.5px] border-border-hover bg-surface px-3.5 text-[15px] text-foreground placeholder:text-foreground-tertiary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20';
 
 interface XiaoliurenFormProps {
   /** 结果页「重新起课」沿用当前课的所问与时间（`YYYY-MM-DDTHH:mm`）；入口页缺省为空问与当前时间。 */
@@ -90,7 +90,7 @@ export function XiaoliurenForm({ initialQuestion = '', initialDate, submitLabel,
       <button
         type="submit"
         disabled={isSubmitting}
-        className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-[10px] bg-accent px-[22px] text-[15px] font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:opacity-50 sm:w-auto"
+        className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-accent px-[22px] text-[15px] font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:opacity-50 sm:w-auto"
       >
         {isSubmitting ? <><SoundWaveLoader variant="inline" /><span>正在起课</span></> : <>{submitIcon}{submitLabel}</>}
       </button>

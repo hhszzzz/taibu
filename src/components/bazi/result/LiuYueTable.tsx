@@ -23,7 +23,7 @@ export function LiuYueTable({
                             type="button"
                             aria-pressed={isSelected}
                             onClick={() => onSelect(ly.month)}
-                            className={`flex min-w-[60px] flex-1 shrink-0 flex-col items-center gap-0.5 rounded-[10px] px-1 py-2 transition-colors duration-150
+                            className={`flex min-w-[60px] flex-1 shrink-0 flex-col items-center gap-0.5 rounded-xl px-1 py-2 transition-colors duration-150
                                 ${isSelected
                                     ? 'bg-accent-light ring-[1.5px] ring-inset ring-accent'
                                     : 'border-[0.5px] border-border bg-surface hover:bg-background-secondary'

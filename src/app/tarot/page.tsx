@@ -66,7 +66,7 @@ export default function TarotPage() {
                 <div className="mx-auto flex w-full max-w-[944px] flex-col gap-6 px-4 pt-2 pb-10 lg:gap-8 lg:px-8 lg:pt-14 lg:pb-16">
                     {/* 页面标题：移动端由顶栏显示标题，这里只保留副标题 */}
                     <header className="flex flex-col gap-2">
-                        <h1 className="hidden font-display text-[34px] font-normal leading-tight lg:block">塔罗占卜</h1>
+                        <h1 className="hidden font-display text-[2rem] font-normal leading-tight lg:block">塔罗占卜</h1>
                         <p className="text-center text-[0.8125rem] text-foreground-secondary lg:text-left lg:text-[0.9375rem]">
                             聆听内心的声音。先写下问题，再选择牌阵。
                         </p>
@@ -92,7 +92,7 @@ export default function TarotPage() {
                             value={question}
                             onChange={(e) => setQuestion(e.target.value)}
                             placeholder="例如：接下来三个月，我和他的关系会如何发展？"
-                            className={`${FIELD_CLASS} min-h-[80px] w-full resize-none rounded-[14px] px-4 py-3.5 text-base leading-relaxed`}
+                            className={`${FIELD_CLASS} min-h-[80px] w-full resize-none rounded-2xl px-4 py-3.5 text-base leading-relaxed`}
                         />
                         {showBirthDate && (
                             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -102,7 +102,7 @@ export default function TarotPage() {
                                     type="date"
                                     value={birthDate}
                                     onChange={(e) => setBirthDate(e.target.value)}
-                                    className={`${FIELD_CLASS} h-10 min-w-[180px] rounded-[10px] px-3 text-sm`}
+                                    className={`${FIELD_CLASS} h-10 min-w-[180px] rounded-xl px-3 text-sm`}
                                 />
                                 <span className="text-xs text-foreground-tertiary">用于塔罗数秘术，选填</span>
                                 <button

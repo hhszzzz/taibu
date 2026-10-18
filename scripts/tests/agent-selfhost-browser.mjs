@@ -106,9 +106,11 @@ try {
   const selectAgentMode = async () => {
     const mode = page.getByRole("radio", { name: "Agent", exact: true });
     await mode.waitFor();
-    if (await mode.getAttribute('aria-checked') !== 'true') await mode.click();
+    // 总是点击一次：即使偏好已显示 Agent，也要让本页的对话控件发布 Agent 方式，
+    // 避免首帧 fallback 显示选中但 ChatLayout 尚未接管时把任务发到普通对话接口。
+    await mode.click();
     await page.waitForFunction(() =>
-      document.querySelector('[role="radiogroup"][aria-label="对话方式"] [aria-checked="true"]')?.textContent === "Agent",
+      document.querySelector('[role="radiogroup"][aria-label="对话方式"] [aria-checked="true"]')?.getAttribute('aria-label') === "Agent",
     );
   };
   const newChat = async () => {
@@ -156,8 +158,10 @@ try {
   await uiReady();
   const chatBeforeSettings = page.url();
   // The desktop chat header is hidden on an empty conversation, so the settings
-  // entry comes from the sidebar account menu (rail avatar or expanded footer).
-  await page.locator('.chat-nav-footer button, .chat-nav.is-rail button[aria-label="账户与设置"]').first().click();
+  // entry comes from the site sidebar account card at the bottom.
+  const accountTrigger = page.getByRole('complementary').getByRole('button', { name: /命理爱好者/ });
+  await accountTrigger.waitFor();
+  await accountTrigger.click();
   await page.getByRole('link', { name: '个性化', exact: true }).click();
   const settingsPage = page.locator('.settings-page');
   await settingsPage.waitFor();
@@ -294,16 +298,23 @@ try {
   assert.ok(finished.message.content.includes('Agent 离线验收'));
   assert.ok(finished.message.agent.runtime.context.tokens > 0, 'Pi projects the real active transcript');
   assert.equal(finished.message.agent.runtime.model.contextWindow, null, 'unconfigured models have no invented capacity');
-  // The composer meter reads the latest projected context and opens its counters.
-  const contextMeter = page.getByRole('button', { name: /^上下文用量 / });
-  await contextMeter.click();
-  const usagePanel = page.getByRole('dialog', { name: '上下文用量', exact: true });
-  await usagePanel.waitFor();
-  assert.ok((await usagePanel.innerText()).includes('容量未知'));
-  assert.ok(['usage', 'mixed', 'estimated'].includes(await contextMeter.getAttribute('data-context-source')), 'the meter reads the projected context');
+  // Context now lives in the right session panel (claude 会话详情): percentage, segmented bar and per-kind legend.
+  // 任务完成时工作区可能已自动打开（会话详情让位），先收起再检查会话详情。
+  const workspaceToggle = page.getByRole('button', { name: '任务工作区', exact: true });
+  if (await workspaceToggle.getAttribute('aria-expanded') === 'true') await workspaceToggle.click();
+  const sessionPanel = page.locator('aside#agent-session-panel');
+  await sessionPanel.waitFor();
+  const contextCard = sessionPanel.getByRole('region', { name: '上下文', exact: true });
+  await contextCard.waitFor();
+  const contextText = await contextCard.innerText();
+  assert.ok(!contextText.includes('已使用') && /[\d.]+k\b/.test(contextText) && contextText.includes('消息') && contextText.includes('工具'), 'context shows only the compact K total and its message/tool granularity');
+  assert.ok(['usage', 'mixed', 'estimated'].includes(await contextCard.getAttribute('data-context-source')), 'the card reads the projected context');
+  if (await workspaceToggle.getAttribute('aria-expanded') !== 'true') await workspaceToggle.click();
+  const panel = page.locator('aside#agent-workspace-panel');
+  await panel.waitFor();
+  // 打开工作区（artifacts）后会话详情让位并隐藏（claude 同款）。
+  await sessionPanel.waitFor({ state: 'detached' });
   await page.screenshot({ path: path.join(directory, 'agent-context-acceptance.png'), fullPage: true });
-  await page.keyboard.press('Escape');
-  assert.ok(await contextMeter.evaluate(element => element === document.activeElement), 'closing the context counters restores the meter focus');
   const modelTrigger = page.getByRole('button', { name: /^选择模型：/ });
   await modelTrigger.click();
   await page.getByRole('dialog', { name: '模型与分析设置', exact: true }).waitFor();
@@ -328,19 +339,17 @@ try {
     initial - 1,
     "duplicate submission does not debit again",
   );
-  const workspaceToggle = page.getByRole('button', { name: '任务工作区', exact: true });
-  if (await workspaceToggle.getAttribute('aria-expanded') !== 'true') await workspaceToggle.click();
-  const panel = page.locator('aside#agent-workspace-panel');
-  await panel.waitFor();
-  // A chat step opens its view; the process section then shows that step's call as returned, ready to copy.
-  await page.locator('.agent-message .agent-process-heading').first().click();
-  await page.locator('.agent-message .agent-step-row').first().click();
-  await panel.getByRole('tab', { name: '过程', exact: true }).click();
-  const call = panel.locator('.agent-ws-call');
-  await call.getByRole('region', { name: '调用参数', exact: true }).waitFor();
-  await call.getByRole('region', { name: '工具结果', exact: true }).waitFor();
-  await call.getByRole('button', { name: '复制调用参数', exact: true }).click();
+  // A chat step discloses its call in place; the process section shows that step's call as returned, ready to copy.
+  const processHeading = page.locator('.agent-message .agent-process-heading').first();
+  if (await processHeading.getAttribute('aria-expanded') !== 'true') await processHeading.click();
+  const firstStep = page.locator('.agent-message .agent-step-row').first();
+  if (await firstStep.getAttribute('aria-expanded') !== 'true') await firstStep.click();
+  await page.locator('.agent-message .agent-step-workspace').first().click();
+  // 过程标签已移除：调用参数与结果留在聊天步骤里，工作区只显示视图。
+  await page.locator('.agent-message .agent-step-command').first().waitFor();
+  const call = page.locator('.agent-message .agent-step-body').first();
   const callId = await call.getAttribute('data-tool-id');
+  await call.getByRole('button', { name: '复制调用参数', exact: true }).click();
   assert.deepEqual(JSON.parse(await page.evaluate(() => navigator.clipboard.readText())), finished.message.agent.parts.find(part => part.type === 'tool' && part.id === callId).input);
   await panel.getByRole('tab', { name: '概览', exact: true }).click();
   const originalPanelWidth = (await panel.boundingBox()).width;
@@ -348,9 +357,7 @@ try {
   assert.equal((await panel.boundingBox()).width, originalPanelWidth - 24, 'a constrained workspace shrinks from its actual rendered width');
   await panel.getByRole('separator', { name: '调整工作区宽度', exact: true }).press('ArrowLeft');
   assert.equal(await panel.locator('[data-overview-result="reading"]').count(), 2, 'the overview counts each actual tool reading once');
-  await panel.getByRole('tab', { name: '过程', exact: true }).click();
-  assert.equal(await panel.locator('.agent-ws-steps > li').count(), 3);
-  await panel.getByRole('tab', { name: '概览', exact: true }).click();
+  assert.ok(await page.locator('.agent-message .agent-step').count() >= 3, 'the chat process keeps every executed step');
   await page.screenshot({ path: path.join(directory, 'agent-workspace-acceptance.png'), fullPage: true });
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.locator('html.dark').waitFor();
@@ -366,7 +373,8 @@ try {
     fullPage: true,
   });
   const chartArtifact = artifacts.find(part => part.chartId);
-  await page.locator(`a[href="/bazi/result?chart=${encodeURIComponent(chartArtifact.chartId)}"]`).first().click();
+  // 聊天里不再重复展示成果卡片；原生命盘页仍可按成果 id 直接打开。
+  await page.goto(`${config.APP_ORIGIN}/bazi/result?chart=${encodeURIComponent(chartArtifact.chartId)}`);
   await page.waitForURL(
     (url) =>
       url.pathname === "/bazi/result" &&
@@ -438,6 +446,7 @@ try {
   );
   assert.equal(await credits(), initial - 2);
   await uiReady();
+  // 工作区是停靠分栏（不再浮层遮盖），消息操作可直接触达。
   const editResponse = page.waitForResponse(
     (response) =>
       new URL(response.url()).pathname === "/api/agent/runs" &&
@@ -469,7 +478,8 @@ try {
   await waitForRun(second.run.id, "awaiting_input");
   await page.goto(`${config.APP_ORIGIN}/chat?id=${second.run.conversationId}`);
   await page.locator('[data-agent-status="awaiting_input"]').waitFor();
-  await page.getByText("等待你回答 · 任务已暂停", { exact: true }).waitFor();
+  // The header no longer carries task status; the message's waiting pill is the stable indicator.
+  await page.locator('.agent-message .agent-status--awaiting_input').waitFor();
   // The questions take the composer's place until answered or folded away.
   const questionDock = page.getByRole('region', { name: /^太卜需要补充 \d+ 项信息$/ });
   await questionDock.waitFor();
@@ -750,8 +760,8 @@ try {
       return element.scrollTop;
     });
     await page.getByRole('button', { name: '回到最新消息', exact: true }).waitFor();
-    // The redesigned sidebar exposes new-chat as a link (panel) or rail entry.
-    await page.locator('.chat-nav-panel a.is-new, .chat-nav.is-rail a[aria-label="新建对话"]').first().click();
+    // The site sidebar exposes new-chat as the 新聊天 entry.
+    await page.getByRole('complementary').getByRole('link', { name: '新聊天' }).click();
     await page.locator('.chat-empty-state').waitFor();
     // The row's selectable target is its link; the first button is the actions menu.
     await page.locator('[data-conversation-row]').filter({ hasText: activeTitle }).first().getByRole('link').first().click();
@@ -766,18 +776,8 @@ try {
     }, { expected: readingTop, virtualized: count > 20 });
     const renderedRows = await page.locator('[data-message-id]').count();
     if (count > 20) assert.ok(renderedRows < count, 'virtual transcripts keep the DOM smaller than the whole history');
-    // Keep the target away from the tail: at the bottom the jump button rightly hides.
-    const targetIndex = count === 6 ? 2 : 4;
-    await page.getByRole('button', { name: `定位第 ${targetIndex + 1} 条提问`, exact: true }).click();
-    await page.waitForFunction(id => {
-      const element = document.querySelector('.chat-transcript-scroll, .chat-virtual-scroller');
-      const message = element?.querySelector(`[data-message-id="${id}"]`);
-      if (!element || !message) return false;
-      const viewport = element.getBoundingClientRect(), row = message.getBoundingClientRect();
-      return row.top < viewport.bottom - 10 && row.bottom > viewport.top + 4;
-    }, transcriptMessages[targetIndex].id);
     const firstScreen = await page.evaluate(() => performance.getEntriesByType('navigation')[0]?.domContentLoadedEventEnd ?? 0);
-    console.log(`阅读夹具：消息=${count}，DOM 消息=${renderedRows}，DOMContentLoaded=${Math.round(firstScreen)}ms；小地图定位通过。`);
+    console.log(`阅读夹具：消息=${count}，DOM 消息=${renderedRows}，DOMContentLoaded=${Math.round(firstScreen)}ms；阅读位置恢复通过。`);
     await page.getByRole('button', { name: '回到最新消息', exact: true }).click();
     await page.waitForFunction(() => {
       const element = document.querySelector('.chat-transcript-scroll, .chat-virtual-scroller');

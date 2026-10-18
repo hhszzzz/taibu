@@ -336,9 +336,9 @@ export function useChatMessaging({
         finally { setIsSendingToList(false); }
     };
 
-    // Send message
-    const handleSend = async () => {
-        const trimmedInput = inputValue.trim();
+    // Send message; `context` is the rich chart quote attached above the composer.
+    const handleSend = async (context?: string) => {
+        const trimmedInput = [context?.trim(), inputValue.trim()].filter(Boolean).join('\n\n');
         if (agent.active && trimmedInput && !isSendingToList) {
             const clearSubmittedDraft = state.captureSubmittedDraft(true);
             setIsSendingToList(true);

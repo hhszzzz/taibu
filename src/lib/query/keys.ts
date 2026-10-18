@@ -13,5 +13,4 @@ export const queryKeys = {
   chatBootstrapPrefix: () => ['chat', 'bootstrap'] as const,
   models: (userId?: string | null, options?: { vision?: boolean; membershipType?: string | null }) => ['models', userId ?? 'visitor', options?.membershipType ?? 'free', options?.vision === true ? 'vision' : 'chat'] as const,
   modelsPrefix: () => ['models'] as const,
-  byokCatalog: () => ['models', 'byok-catalog'] as const,
 } as const;

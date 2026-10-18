@@ -6,7 +6,7 @@ import { Check, Copy } from 'lucide-react';
 import type { AgentRunStatus } from '@/lib/agent/types';
 import { getAgentToolText } from '@/lib/agent/tool-presentation';
 import { useToast } from '@/components/ui/Toast';
-import { formatAgentToolDuration, formatAgentValue, getAgentTaskSpan, getAgentToolState, type AgentTool } from './presentation';
+import { formatAgentValue, getAgentToolState, type AgentTool } from './presentation';
 import { AgentToolResult } from './AgentToolResult';
 
 /** Copies `text`; an icon-only button is named by `label` and confirms with a check mark. */
@@ -34,10 +34,6 @@ export function AgentToolDetails({ tool, runStatus, id, heading = true }: {
     heading?: boolean;
 }) {
     const state = getAgentToolState(tool, runStatus);
-    const span = getAgentTaskSpan(tool);
-    const measured = typeof tool.durationMs === 'number' && Number.isFinite(tool.durationMs) && tool.durationMs >= 0;
-    // Execution is the measured execute(); the stage span also covers waiting for an answer and recovery.
-    const timing = [measured ? `执行 ${formatAgentToolDuration(tool.durationMs!)}` : null, span !== null ? `阶段 ${formatAgentToolDuration(span)}（含等待）` : null].filter(Boolean).join(' · ');
     const canonical = tool.canonicalText?.trim() ? tool.canonicalText : null;
     const input = tool.input === undefined ? null : formatAgentValue(tool.input);
     const result = tool.output === undefined ? null : canonical ?? getAgentToolText(tool) ?? formatAgentValue(tool.output);
@@ -45,7 +41,6 @@ export function AgentToolDetails({ tool, runStatus, id, heading = true }: {
         {heading && <div className="agent-tool-details-heading">
             <span>{tool.title}</span>
             <code>{tool.name}</code>
-            {timing && <span className="agent-tool-timing">{timing}</span>}
         </div>}
         {input !== null && <section className="agent-tool-section" aria-label="调用参数">
             <div className="agent-tool-section-heading">调用参数<CopyButton text={input} label="复制" name="复制调用参数" /></div>

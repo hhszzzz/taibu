@@ -25,6 +25,7 @@ import {
 } from '@/components/divination/SanshiFormControls';
 import { supabase } from '@/lib/auth';
 import { writeSessionJSON } from '@/lib/cache/session-storage';
+import { PageHeader } from '@/components/layout/PageHeader';
 
 type PanType = 'zhuan';
 type JuMethod = 'chaibu' | 'maoshan';
@@ -114,10 +115,7 @@ export default function QimenPage() {
         <div className="min-h-screen bg-background text-foreground">
             <div className="mx-auto flex w-full max-w-[1064px] flex-col gap-6 px-4 pb-12 pt-4 lg:gap-7 lg:px-8 lg:pb-16 lg:pt-14">
                 {/* 页面标题 - 移动端隐藏（顶栏已显示） */}
-                <header className="hidden flex-col gap-2 lg:flex">
-                    <h1 className="font-display text-[34px] font-normal leading-tight">奇门遁甲</h1>
-                    <p className="text-[15px] text-foreground-secondary">三式之首。以起局时刻排出九宫，看天时、地利与人和。</p>
-                </header>
+                <PageHeader title="奇门遁甲" description="三式之首。以起局时刻排出九宫，看天时、地利与人和。" />
 
                 <div className="flex flex-wrap items-start gap-6">
                     <SanshiFormCard className="flex-[999_1_480px]">

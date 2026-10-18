@@ -67,7 +67,7 @@ const themeInitScript = `
 
   const themeColorMetas = document.querySelectorAll('meta[name="theme-color"]');
   themeColorMetas.forEach((meta) => {
-    meta.setAttribute('content', theme === 'dark' ? '#262624' : '#faf9f5');
+    meta.setAttribute('content', theme === 'dark' ? '#151515' : '#fcfcfb');
   });
 })();
 `;
@@ -121,8 +121,8 @@ export const viewport: Viewport = {
   maximumScale: 1,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#faf9f5" },
-    { media: "(prefers-color-scheme: dark)", color: "#262624" },
+    { media: "(prefers-color-scheme: light)", color: "#fcfcfb" },
+    { media: "(prefers-color-scheme: dark)", color: "#151515" },
   ],
 };
 

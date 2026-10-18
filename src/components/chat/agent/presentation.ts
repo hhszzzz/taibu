@@ -1,6 +1,6 @@
 import type { ChatMessage } from '@/types';
 import { isAgentRunTerminal, type AgentMessageData, type AgentPart, type AgentRunStatus, type AgentRuntimeInfo } from '@/lib/agent/types';
-import { getAgentToolFamily, type AgentToolFamily } from '@/lib/agent/tool-catalog';
+import { getAgentToolFamily, type AgentToolFamily, AGENT_CHART_NAMES, isAgentChartTool } from '@/lib/agent/tool-catalog';
 import { getAgentAttachmentRead, getAgentChart, getAgentDataResults, getAgentMethod, getAgentSearchResults, getAgentToolArtifactId, getAgentToolQuestions, type AgentChart } from '@/lib/agent/tool-presentation';
 import { getChartFocus, getChartTargets } from '@/lib/agent/chart-interaction';
 import type { AgentWorkspaceModel } from '@/lib/agent/workspace';
@@ -60,6 +60,35 @@ export function getAgentLiveLine(data: AgentMessageData): string {
     const head = phase ? label : `正在${tool.title}`;
     const summary = tool.name === 'parallel_analysis' ? null : summarizeAgentTool(tool);
     return summary ? `${head} · ${summary}` : head;
+}
+
+/** A readable step title when the model left the raw tool name as its title. */
+const RAW_TOOL_TITLES: Record<string, string> = {
+    parallel_analysis: '协作分析',
+    select_final_artifacts: '确定最终成果',
+    inspect_chart: '查看命盘',
+    focus_chart: '定位分析位置',
+    web_search: '联网搜索',
+    search_knowledge: '知识库检索',
+    list_user_data: '检索资料',
+    read_user_data: '读取资料',
+    read_attachment: '读取附件',
+    list_analysis_methods: '列出分析方法',
+    load_analysis_method: '加载分析方法',
+    todo_write: '更新计划',
+    ask_user: '向你确认信息',
+    read_user_memory: '读取长期记忆',
+    remember_user_fact: '记住偏好',
+    bazi_dayun: '八字大运',
+    bazi_pillars_resolve: '核对八字四柱',
+    ziwei_horoscope: '紫微运限',
+    ziwei_flying_star: '紫微飞星',
+};
+
+export function getAgentToolTitle(tool: AgentTool): string {
+    if (tool.title && tool.title !== tool.name) return tool.title;
+    if (isAgentChartTool(tool.name)) return AGENT_CHART_NAMES[tool.name];
+    return RAW_TOOL_TITLES[tool.name] ?? tool.title ?? tool.name;
 }
 
 /** One line under a process step, read from its arguments and stored result only. */
@@ -144,6 +173,46 @@ export function summarizeAgentProcess(tools: readonly AgentTool[], limit = 4): s
     return items.length > limit ? `${items.slice(0, limit).join('、')}等` : items.join('、');
 }
 
+/**
+ * claude 状态行词表：按工具家族归并成「已查看 N 张命盘，已读取 N 份资料，开启 N 个智能体」。
+ * 协作成员数来自本次调用实际派出的成员，而不是调用次数。
+ */
+const FAMILY_PHRASES: Partial<Record<AgentToolFamily, (count: number) => string>> = {
+    chart: count => `已查看 ${count} 张命盘`,
+    calculation: count => `已计算 ${count} 次`,
+    search: count => `已搜索 ${count} 次`,
+    data: count => `已读取 ${count} 份资料`,
+    method: count => `已加载 ${count} 套分析方法`,
+    memory: count => `已记忆 ${count} 条`,
+    artifacts: count => `已选定 ${count} 份成果`,
+    external: count => `已调用 ${count} 个外部工具`,
+    other: count => `已运行 ${count} 个工具`,
+};
+
+function collaborationMembers(tool: AgentTool): number {
+    const members = parallelAnalysisResults(tool.output).length;
+    if (members) return members;
+    const input = tool.input && typeof tool.input === 'object' && !Array.isArray(tool.input) ? tool.input as Record<string, unknown> : {};
+    return Array.isArray(input.collaborators) ? input.collaborators.length : 0;
+}
+
+export function summarizeAgentActivity(tools: readonly AgentTool[], questionCount: number, failed: number): string {
+    const counts = new Map<AgentToolFamily, number>();
+    let members = 0;
+    for (const tool of tools) {
+        const family = getAgentToolFamily(tool.name);
+        if (family === 'collaboration') { members += collaborationMembers(tool); continue; }
+        if (family === 'plan') continue;
+        counts.set(family, (counts.get(family) ?? 0) + 1);
+    }
+    const phrases = (Object.keys(FAMILY_PHRASES) as AgentToolFamily[])
+        .flatMap(family => counts.has(family) ? [FAMILY_PHRASES[family]!(counts.get(family)!)] : []);
+    if (questionCount) phrases.push(`已确认 ${questionCount} 项信息`);
+    if (members) phrases.push(`开启 ${members} 个智能体`);
+    const text = phrases.join('，');
+    return `${text || '任务过程'}${failed ? `，${failed} 处失败` : ''}`;
+}
+
 /** Completed results the task did not save: calculations, chart focus and readings left out of the final selection. */
 export function getAgentIntermediateResults(tools: readonly AgentTool[], artifacts: readonly AgentArtifact[]): string | null {
     const selected = new Set(artifacts.map(artifact => artifact.id));
@@ -166,18 +235,11 @@ export function getAgentStepNumbers(parts: readonly AgentPart[]): ReadonlyMap<st
     return new Map(getAgentSteps(parts).map((tool, index) => [tool.id, index + 1]));
 }
 
-const isMeasured = (ms: number | undefined): ms is number => typeof ms === 'number' && Number.isFinite(ms) && ms >= 0;
-
-/** Note under a call's details: execution apart from waiting, and whether a replay reuses the stored result. */
+/** Note under a call's details: whether a replay reuses the stored result（用时只落库，不展示 — 用户裁定 2026-10-17）。 */
 export function describeAgentCallNote(tool: AgentTool): string | null {
-    const execution = isMeasured(tool.durationMs) ? formatAgentToolDuration(tool.durationMs) : null;
-    const span = getAgentTaskSpan(tool);
-    const stage = span === null ? null : formatAgentToolDuration(span);
-    const timing = execution === null ? null
-        : stage !== null && stage !== execution ? `执行阶段 ${execution}（不含等待），连同等待共 ${stage}。` : `执行阶段 ${execution}（不含等待）。`;
     // A calculation's output names the artifact it was cached as under this task and call ID.
     const stored = tool.status === 'completed' && getAgentToolArtifactId(tool) !== null ? '结果已按任务与调用 ID 暂存，重放不会重新计算或扣费。' : null;
-    return timing || stored ? `${timing ?? ''}${stored ?? ''}` : null;
+    return stored;
 }
 
 /** A process step's state, the summary line and a note for states other than a plain completion. */
@@ -189,8 +251,7 @@ export function describeAgentStep(tool: AgentTool, runStatus: AgentRunStatus) {
         : state.status === 'awaiting_input' ? '等待你回答'
         : state.status === 'pending' ? '待执行'
         : state.status === 'running' && !summary ? '执行中' : null;
-    const measured = ['completed', 'failed'].includes(state.status) && isMeasured(tool.durationMs);
-    return { ...state, summary, note, duration: measured ? formatAgentToolDuration(tool.durationMs!) : null };
+    return { ...state, summary, note };
 }
 
 export function getAgentToolState(tool: AgentTool, runStatus: AgentRunStatus) {

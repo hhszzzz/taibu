@@ -50,7 +50,7 @@ const DEFAULT_CREDITS = '10';
 const MAX_COUNT = 100;
 const MAX_CREDITS = 1000;
 const COPIED_RESET_MS = 2000;
-const CARD = 'rounded-[14px] border border-border bg-surface';
+const CARD = 'rounded-2xl border border-border bg-surface';
 const TH = 'px-3 py-3 text-left text-xs font-medium text-foreground-tertiary';
 
 /** 只接受 min–max 之间的整数；空串、小数和超范围都返回 null。 */

@@ -37,6 +37,7 @@ import {
 } from '../../shared/utils.js';
 // 从数据模块导入静态数据
 import {
+  BAN_HE_PAIRS,
   CI_GUAN,
   DE_XIU,
   DI_ZHI,
@@ -60,6 +61,7 @@ import {
   LU_SHEN,
   NA_YIN_TABLE,
   SAN_HE,
+  SAN_HUI,
   SANG_MEN,
   TAI_JI_GUI_REN,
   TAO_HUA,
@@ -67,6 +69,8 @@ import {
   TIAN_DE,
   TIAN_DE_HE,
   TIAN_GAN,
+  TIAN_GAN_CHONG_KE,
+  TIAN_GAN_WU_HE_RESULT,
   TIAN_XI,
   TIAN_YI_GUI_REN,
   WANG_SHEN,
@@ -219,15 +223,7 @@ function normalizePillarPosition(label: string): PillarPosition {
 }
 
 // ===== 天干五合 =====
-const TIAN_GAN_WU_HE_RESULT: Record<string, string> = {
-  '甲己': '土', '己甲': '土',
-  '乙庚': '金', '庚乙': '金',
-  '丙辛': '水', '辛丙': '水',
-  '丁壬': '木', '壬丁': '木',
-  '戊癸': '火', '癸戊': '火',
-};
-
-function analyzeTianGanWuHe(
+export function analyzeTianGanWuHe(
   yearStem: string, monthStem: string, dayStem: string, hourStem: string,
 ): TianGanWuHeItem[] {
   const stems = [yearStem, monthStem, dayStem, hourStem];
@@ -254,22 +250,7 @@ function analyzeTianGanWuHe(
 }
 
 // ===== 地支半合 =====
-const BAN_HE_PAIRS: Array<{
-  pair: [string, string];
-  missing: string;
-  element: string;
-}> = [
-    { pair: ['申', '子'], missing: '辰', element: '水' },
-    { pair: ['子', '辰'], missing: '申', element: '水' },
-    { pair: ['亥', '卯'], missing: '未', element: '木' },
-    { pair: ['卯', '未'], missing: '亥', element: '木' },
-    { pair: ['寅', '午'], missing: '戌', element: '火' },
-    { pair: ['午', '戌'], missing: '寅', element: '火' },
-    { pair: ['巳', '酉'], missing: '丑', element: '金' },
-    { pair: ['酉', '丑'], missing: '巳', element: '金' },
-  ];
-
-function analyzeDiZhiBanHe(
+export function analyzeDiZhiBanHe(
   yearBranch: string, monthBranch: string, dayBranch: string, hourBranch: string,
 ): DiZhiBanHeItem[] {
   const branches = [yearBranch, monthBranch, dayBranch, hourBranch];
@@ -304,11 +285,7 @@ function analyzeDiZhiBanHe(
 }
 
 // ===== 天干冲克 =====
-const TIAN_GAN_CHONG_KE: Array<[string, string]> = [
-  ['甲', '庚'], ['乙', '辛'], ['丙', '壬'], ['丁', '癸'],
-];
-
-function analyzeTianGanChongKe(
+export function analyzeTianGanChongKe(
   yearStem: string, monthStem: string, dayStem: string, hourStem: string,
 ): TianGanChongKeItem[] {
   const stems = [yearStem, monthStem, dayStem, hourStem];
@@ -333,14 +310,7 @@ function analyzeTianGanChongKe(
 }
 
 // ===== 地支三会（方局） =====
-const SAN_HUI: Array<{ branches: [string, string, string]; element: string; }> = [
-  { branches: ['寅', '卯', '辰'], element: '木' },
-  { branches: ['巳', '午', '未'], element: '火' },
-  { branches: ['申', '酉', '戌'], element: '金' },
-  { branches: ['亥', '子', '丑'], element: '水' },
-];
-
-function analyzeDiZhiSanHui(
+export function analyzeDiZhiSanHui(
   yearBranch: string, monthBranch: string, dayBranch: string, hourBranch: string,
 ): DiZhiSanHuiItem[] {
   const branches = [yearBranch, monthBranch, dayBranch, hourBranch];

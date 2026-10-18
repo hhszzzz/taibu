@@ -367,6 +367,53 @@ export const XIANG_XING: Array<{ combination: string[]; name: string; }> = [
   { combination: ['亥'], name: '亥自刑' },
 ];
 
+export const XIANG_PO: Record<string, string> = {
+  '子': '酉', '酉': '子',
+  '丑': '辰', '辰': '丑',
+  '寅': '亥', '亥': '寅',
+  '卯': '午', '午': '卯',
+  '巳': '申', '申': '巳',
+  '未': '戌', '戌': '未',
+};
+
+/** 天干五合：有序干对 -> 合化五行 */
+export const TIAN_GAN_WU_HE_RESULT: Record<string, string> = {
+  '甲己': '土', '己甲': '土',
+  '乙庚': '金', '庚乙': '金',
+  '丙辛': '水', '辛丙': '水',
+  '丁壬': '木', '壬丁': '木',
+  '戊癸': '火', '癸戊': '火',
+};
+
+/** 天干相冲（七冲去戊己） */
+export const TIAN_GAN_CHONG_KE: Array<[string, string]> = [
+  ['甲', '庚'], ['乙', '辛'], ['丙', '壬'], ['丁', '癸'],
+];
+
+/** 地支半合：只收生旺、旺墓两类；生墓两支属拱合，不在此列 */
+export const BAN_HE_PAIRS: Array<{
+  pair: [string, string];
+  missing: string;
+  element: string;
+}> = [
+    { pair: ['申', '子'], missing: '辰', element: '水' },
+    { pair: ['子', '辰'], missing: '申', element: '水' },
+    { pair: ['亥', '卯'], missing: '未', element: '木' },
+    { pair: ['卯', '未'], missing: '亥', element: '木' },
+    { pair: ['寅', '午'], missing: '戌', element: '火' },
+    { pair: ['午', '戌'], missing: '寅', element: '火' },
+    { pair: ['巳', '酉'], missing: '丑', element: '金' },
+    { pair: ['酉', '丑'], missing: '巳', element: '金' },
+  ];
+
+/** 地支三会（方局） */
+export const SAN_HUI: Array<{ branches: [string, string, string]; element: string; }> = [
+  { branches: ['寅', '卯', '辰'], element: '木' },
+  { branches: ['巳', '午', '未'], element: '火' },
+  { branches: ['申', '酉', '戌'], element: '金' },
+  { branches: ['亥', '子', '丑'], element: '水' },
+];
+
 export const XUN_KONG_TABLE: Record<string, [string, string]> = {
   '甲子旬': ['戌', '亥'],
   '甲戌旬': ['申', '酉'],

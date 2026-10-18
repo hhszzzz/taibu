@@ -14,6 +14,7 @@ import {
   NA_YIN_TABLE,
   SAN_HE,
   XIANG_HAI,
+  XIANG_PO,
   XIANG_XING,
 } from '../../data/shensha.js';
 import { calculateBranchShenSha, type ShenShaContext } from '../shared/shensha.js';
@@ -31,16 +32,6 @@ const HIDDEN_STEM_MAIN: Record<string, string> = {
   '子': '癸', '丑': '己', '寅': '甲', '卯': '乙',
   '辰': '戊', '巳': '丙', '午': '丁', '未': '己',
   '申': '庚', '酉': '辛', '戌': '戊', '亥': '壬',
-};
-
-// 相破关系
-const XIANG_PO: Record<string, string> = {
-  '子': '酉', '酉': '子',
-  '丑': '辰', '辰': '丑',
-  '寅': '亥', '亥': '寅',
-  '卯': '午', '午': '卯',
-  '巳': '申', '申': '巳',
-  '未': '戌', '戌': '未',
 };
 
 // 六十甲子顺序表
@@ -64,7 +55,7 @@ function getDaYunTenGods(ganZhi: string, dayStem: string): { tenGod: string; bra
 /**
  * 计算一个地支与一组地支之间的所有关系
  */
-function calculateBranchRelations(targetBranch: string, natalBranches: string[], natalLabels: string[]): BranchRelation[] {
+export function calculateBranchRelations(targetBranch: string, natalBranches: string[], natalLabels: string[]): BranchRelation[] {
   const relations: BranchRelation[] = [];
 
   // 六合
@@ -157,7 +148,7 @@ function calculateBranchRelations(targetBranch: string, natalBranches: string[],
 /**
  * 计算太岁关系（流年地支 vs 年柱地支）
  */
-function calculateTaiSui(liunianBranch: string, yearBranch: string): string[] {
+export function calculateTaiSui(liunianBranch: string, yearBranch: string): string[] {
   const result: string[] = [];
 
   // 值太岁

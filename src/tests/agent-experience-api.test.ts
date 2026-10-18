@@ -5,6 +5,7 @@ import { NextRequest } from 'next/server';
 import sharp from 'sharp';
 import { createMockAuthContext } from './helpers/supabase-mock';
 import { GET as search } from '../app/api/search/route';
+import { GET as conversations } from '../app/api/conversations/route';
 import { POST as enhance } from '../app/api/chat/enhance/route';
 import { POST as upload } from '../app/api/agent/attachments/route';
 import { GET as attachment } from '../app/api/agent/attachments/[id]/route';
@@ -25,10 +26,12 @@ function fixture(t: TestContext) {
             const query = {
                 select: () => query, in: (field: string,value: unknown) => { calls.push({table,field,value}); return query; },
                 eq: (field: string,value: unknown) => { calls.push({table,field,value}); return query; },
+                ilike: (field: string,value: unknown) => { calls.push({table,field,value}); return query; },
+                abortSignal: () => query,
                 insert: (value: unknown) => { inserts[table] = value; return query; },
                 update: (value: unknown) => { inserts[table] = value; return query; },
                 upsert: (value: unknown) => { inserts[table] = value; return query; }, delete: () => query,
-                order: () => query, limit: () => query,
+                order: () => query, limit: () => query, range: () => query,
                 maybeSingle: async () => result(), single: async () => result(),
                 then: (resolve: (value: unknown) => void) => resolve(result()),
             }; return query;
@@ -68,10 +71,41 @@ test('search validates literals, forwards request cancellation and reports bound
     const f=fixture(t); f.rpc([{conversationId:f.id,messageId:'visible',preview:'literal_%'}]);
     const success=await search(request('/api/search?q=literal_%25')); assert.equal(success.status,200);
     assert.deepEqual(f.calls[0].value,{p_query:'literal_%',p_limit:30});
-    assert.equal((await search(request('/api/search?q='))).status,400);
+    // 空词 = 搜索弹层的「最近使用」：列出最近对话，不查命盘。
+    f.rows.conversations_with_archive_status=[{id:f.id,title:'最近对话',updated_at:'2026-10-01'}];
+    const recent=await search(request('/api/search?q=')); assert.equal(recent.status,200);
+    assert.deepEqual((await recent.json()).results.map((row:{title:string})=>row.title),['最近对话']);
     f.rpc(null,{code:'57014'}); assert.equal((await search(request('/api/search?q=query'))).status,504);
     t.mock.method(f.api,'requireUserContext',async()=>({error:{message:'请登录',status:401}}));
     assert.equal((await search(request('/api/search?q=query'))).status,401);
+});
+
+test('search adds owner-scoped chart matches and omits only a failed chart group',async t => {
+    const f=fixture(t); f.rpc([]);
+    f.rows.bazi_charts=[{id:'bazi-1',name:'张三',birth_date:'1990-01-15',birth_time:'09:00'}];
+    f.errors.ziwei_charts={message:'ziwei unavailable'};
+    const response=await search(request('/api/search?q=张')); assert.equal(response.status,200);
+    const body=await response.json() as {charts:Array<{id:string;kind:string}>};
+    assert.deepEqual(body.charts.map(chart=>[chart.id,chart.kind]),[['bazi-1','bazi']]);
+    for (const table of ['bazi_charts','ziwei_charts'])
+        assert.ok(f.calls.some(call=>call.table===table&&call.field==='user_id'&&call.value===f.owner),`${table} must be scoped to the caller`);
+});
+
+test('conversation list filters by Agent mode and rejects unknown modes',async t => {
+    const f=fixture(t);
+    f.rows.conversations_with_archive_status=[{id:f.id,title:'任务会话',has_agent_run:true}];
+    const modeCalls=()=>f.calls.filter(call=>call.table==='conversations_with_archive_status'&&call.field==='has_agent_run').map(call=>call.value);
+    assert.equal((await conversations(request('/api/conversations?mode=agent'))).status,200);
+    assert.deepEqual(modeCalls(),[true]);
+    f.calls.length=0;
+    assert.equal((await conversations(request('/api/conversations?mode=plain'))).status,200);
+    assert.deepEqual(modeCalls(),[false]);
+    f.calls.length=0;
+    assert.equal((await conversations(request('/api/conversations'))).status,200);
+    assert.deepEqual(modeCalls(),[]);
+    assert.equal((await conversations(request('/api/conversations?mode=all'))).status,400);
+    t.mock.method(f.api,'requireUserContext',async()=>({error:{message:'请登录',status:401}}));
+    assert.equal((await conversations(request('/api/conversations?mode=agent'))).status,401);
 });
 
 test('enhancement rejects free users and claims quota before every actual call without a debit',async t => {

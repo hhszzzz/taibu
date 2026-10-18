@@ -14,6 +14,8 @@ const CONVERSATION_LIST_SELECT = [
     'question_preview:source_data->>question',
     'is_archived',
     'archived_kb_ids',
+    // 「Agent 会话 / 普通对话」的派生标记（视图列：该会话是否跑过 Agent 任务，见 20261017_100000 迁移）。
+    'has_agent_run',
 ].join(', ');
 
 function isObjectBody(value: unknown): value is Record<string, unknown> {
@@ -44,6 +46,11 @@ export async function GET(request: NextRequest) {
     const offset = Math.max(Number.parseInt(searchParams.get('offset') || '0', 10) || 0, 0);
     const sourceType = searchParams.get('sourceType');
     const chartId = searchParams.get('chartId');
+    // 会话类别：agent = 跑过 Agent 任务的会话，plain = 普通对话；缺省不过滤。
+    const mode = searchParams.get('mode');
+    if (mode !== null && mode !== 'agent' && mode !== 'plain') {
+        return jsonError('mode 必须是 agent 或 plain', 400);
+    }
 
     let query = db
         .from('conversations_with_archive_status')
@@ -51,6 +58,9 @@ export async function GET(request: NextRequest) {
         .eq('user_id', auth.user.id)
         .order('updated_at', { ascending: false });
 
+    if (mode) {
+        query = query.eq('has_agent_run', mode === 'agent');
+    }
     if (!includeArchived) {
         query = query.eq('is_archived', false);
     }

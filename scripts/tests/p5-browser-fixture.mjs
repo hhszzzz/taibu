@@ -2032,8 +2032,12 @@ export async function run(existingPage, bundlePath) {
     check('A relation also becomes a chart question while the model focus stays authoritative', await interactive.locator('.agent-board-focus').innerText().then(text => text.includes('模型查看日支')) &&
       await interactive.locator('.agent-board-chips li').allInnerTexts().then(texts => texts.length === 1 && texts[0] === '日柱地支 辰'));
     // 关系与五行详查补进盘面：关系模式多出命盘没列的丑辰相破，流通模式改画五行详查的自坐、通根，并可按类型筛选。
+    await board.getByRole('button', { name: /^关系/ }).click();
     await page.evaluate(() => window.fixture.baziDrilldowns());
     await interactive.locator('[data-relation-strip]').waitFor({ state: 'attached' });
+    await renderBarrier();
+    check('While following, the board switches to what the agent just looked at (the wuxing drilldown shows flow)', await board.getAttribute('data-board-mode') === 'flow' &&
+      await board.locator('.agent-board-viewing').innerText().then(text => text.includes('模型正在看五行流通')) && await board.locator('.agent-board-segments [data-viewed]').innerText().then(text => text.startsWith('流通')));
     await board.getByRole('button', { name: /^关系/ }).click();
     check('A relations drilldown adds the clash-free chart its own 原局 relations, drawn on the table', await edges.count() === 1 &&
       await edges.first().getAttribute('data-tone') === 'break' && await interactive.locator('.agent-chart-scroll [data-relation-badge]').first().getAttribute('aria-label').then(label => label.includes('丑辰相破')));
@@ -2068,6 +2072,7 @@ export async function run(existingPage, bundlePath) {
     await star.waitFor();
     check('Ziwei model focus selects the returned palace and its exact star', await star.getAttribute('aria-pressed') === 'true' && await interactive.locator('[data-chart-selected=true]').count() === 1 && await interactive.locator('[data-chart-kind="ziwei"] svg line').count() === 3);
     check('Ziwei related palaces follow the model focus without a user toggle', await interactive.getByRole('checkbox', { name: '三方四正', exact: true }).count() === 0 && await interactive.locator('[data-chart-kind="ziwei"] svg line').count() === 3);
+    check('Ziwei shows its minor stars directly, without a hide toggle', await interactive.getByRole('button', { name: /杂曜/ }).count() === 0);
     await star.focus();
     await page.keyboard.press('Enter');
     check('Star selection works from the keyboard without nested palace activation', await star.getAttribute('aria-pressed') === 'true');
@@ -2086,6 +2091,11 @@ export async function run(existingPage, bundlePath) {
       await interactive.getByRole('button', { name: '追问这里', exact: true }).click();
       check(kind + ' keeps the model focus and builds a referenced chart question', await following.getAttribute('aria-pressed') === 'true' && await page.evaluate(() => window.fixture.chartQuestion.reference.includes(':')));
     }
+    // 黄历：值日并入主卡（含星宿歌诀），日九星原始卡删除；时辰带 13 格，模型定位的时辰直接展开详情条。
+    const almanac = interactive.locator('[data-chart-kind="almanac"]');
+    check('The almanac folds the day card into its main card and shows the located hour in a detail strip', await almanac.locator('[aria-label="值日信息"], [aria-label="日九星"]').count() === 0 &&
+      await almanac.locator('.almanac-hour').count() === 13 && await almanac.locator('.almanac-verse[data-chart-target="almanac:day:星宿歌诀"]').count() === 1 &&
+      await almanac.locator('.almanac-hour-detail').innerText().then(text => text.includes('宜') && text.includes('忌')));
     await page.evaluate(() => window.fixture.traditionalTaiyi());
     await renderBarrier();
     const traditionalTargets = await page.evaluate(() => window.fixture.chartTargets('taiyi'));

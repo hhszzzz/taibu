@@ -78,6 +78,9 @@
 .agent-board-segments > button { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); }
 .agent-board-segments > button > span { font-size: calc(11 / 16 * 1rem); font-variant-numeric: tabular-nums; color: var(--foreground-tertiary); }
 .agent-board-segments > button[aria-pressed="true"] { background: var(--chat-raised, var(--background)); font-weight: 500; color: var(--foreground); box-shadow: 0 0 0 var(--hairline) var(--border); }
+.agent-board-segments > button[data-viewed]::after { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+.agent-board-viewing { display: inline-flex; align-items: center; gap: 4px; font-size: calc(12 / 16 * 1rem); color: var(--foreground-tertiary); }
+.agent-board-viewing[data-live] { color: var(--accent-hover); }
 .agent-board-marks { display: flex; flex-wrap: wrap; gap: 4px; }
 .agent-board-marks > button { height: 22px; padding: 0 8px; border: var(--hairline) solid var(--border); border-radius: 999px; background: transparent; font-size: calc(12 / 16 * 1rem); color: var(--foreground-tertiary); text-decoration: line-through; }
 .agent-board-marks > button[aria-pressed="true"] { color: var(--foreground-secondary); text-decoration: none; }
@@ -114,7 +117,7 @@
 }
 
 /* ---- 黄历工作区视图（与日运页同构：左栏日期大卡 + 右栏宜忌色块与方位 + 值日 + 时辰条） ---- */
-.almanac-view { display: flex; flex-direction: column; gap: 12px; }
+.almanac-view { display: flex; flex-direction: column; gap: 12px; container-type: inline-size; }
 /* 主卡：左 236px 日期栏（面板底）+ 右栏宜忌与细项，圆角 14、发丝边。 */
 .almanac-main { display: flex; overflow: hidden; border: var(--hairline) solid var(--border); border-radius: 14px; background: var(--background); }
 .almanac-date { display: flex; width: 204px; flex-shrink: 0; flex-direction: column; gap: 2px; padding: 18px 16px; border-right: var(--hairline) solid var(--border); background: var(--panel, var(--background-secondary)); }
@@ -164,23 +167,40 @@
 .almanac-hours-card { gap: 10px; }
 .almanac-hours-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .almanac-hours-head > span { font-size: calc(12 / 16 * 1rem); color: var(--foreground-tertiary); }
-/* 时辰条按可用宽度自动换行：每格至少放下「00–01」，窄工作区里不再截断；格线由网格间隙画出 */
-.almanac-hours { display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: var(--hairline); overflow: hidden; border: var(--hairline) solid var(--border); border-radius: 12px; background: var(--border); }
-.almanac-hour { display: flex; min-width: 0; flex-direction: column; align-items: center; gap: 1px; padding: 8px 1px; background: var(--background); font-size: calc(10.5 / 16 * 1rem); }
+/* 时辰带：宽时 13 格一行，窄时每行 7 格、第二行 6 格居中；没有灰色填充格，吉凶用顶边色条加文字标示。 */
+.almanac-hours { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
+.almanac-hour { display: flex; min-width: 0; flex: 0 0 calc((100% - 24px) / 7); flex-direction: column; align-items: center; gap: 1px; padding: 6px 1px 7px; border: var(--hairline) solid var(--border); border-top: 2px solid var(--danger); border-radius: 8px; background: var(--background); font-size: calc(10.5 / 16 * 1rem); }
+.almanac-hour[data-kind="yi"] { border-top-color: var(--chat-success, var(--success)); }
+@container (min-width: 600px) { .almanac-hour { flex-basis: calc((100% - 48px) / 13); } }
 .almanac-hour > small { color: var(--foreground-tertiary); font-size: calc(9.5 / 16 * 1rem); white-space: nowrap; }
 .almanac-hour > strong { font-family: var(--font-display); font-size: calc(15 / 16 * 1rem); }
 .almanac-hour > span { max-width: 100%; overflow: hidden; font-size: calc(9.5 / 16 * 1rem); text-overflow: ellipsis; white-space: nowrap; color: var(--foreground-secondary); }
 .almanac-hour > em { font-style: normal; }
-.almanac-hour[data-kind="yi"] > em { color: var(--chat-success); }
+.almanac-hour[data-kind="yi"] > em { color: var(--chat-success, var(--success)); }
 .almanac-hour[data-kind="ji"] > em { color: var(--danger); }
-.almanac-hour[aria-pressed="true"] { background: var(--fill-ghost-selected); color: var(--foreground); }
-.almanac-hour-detail { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 10px 12px; border-radius: 10px; background: var(--background-secondary); font-size: calc(12.5 / 16 * 1rem); line-height: 1.6; }
-.almanac-hour-detail > span[data-kind="yi"] { color: var(--chat-success); }
-.almanac-hour-detail > span[data-kind="ji"] { color: var(--danger); }
-@media (max-width: 640px) {
+.almanac-hour:hover { background: var(--fill-ghost-hover); }
+.almanac-hour[aria-pressed="true"] { border-color: var(--accent); border-top-color: var(--accent); background: var(--accent-light); color: var(--foreground); }
+/* 选中时辰的详情条：时辰、天神、冲煞一行，宜忌各一行。 */
+.almanac-hour-detail { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 10px; margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--background-secondary); font-size: calc(12.5 / 16 * 1rem); line-height: 1.6; }
+.almanac-hour-detail > div { display: contents; }
+.almanac-hour-detail-head { display: flex !important; grid-column: 1 / -1; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; color: var(--foreground-secondary); }
+.almanac-hour-detail-head > strong { font-family: var(--font-display); font-size: calc(15 / 16 * 1rem); font-weight: 500; color: var(--foreground); }
+.almanac-hour-detail dt { font-family: var(--font-display); }
+.almanac-hour-detail dd { margin: 0; overflow-wrap: anywhere; }
+.almanac-hour-detail > div[data-kind="yi"] dt { color: var(--chat-success, var(--success)); }
+.almanac-hour-detail > div[data-kind="ji"] dt { color: var(--danger); }
+/* 星宿歌诀：收成两行的引文，悬停、聚焦或被模型定位时展开。 */
+.almanac-verse { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: calc(12 / 16 * 1rem); line-height: 1.6; color: var(--foreground-tertiary); quotes: none; }
+.almanac-verse:is(:hover, :focus-visible, [aria-pressed="true"]) { -webkit-line-clamp: unset; }
+/* 窄工作区：日期栏移到上方，值日细项排成两对一行；再窄时方位九宫移到清单下方。 */
+@container (max-width: 640px) {
   .almanac-main { flex-direction: column; }
   .almanac-date { width: auto; border-right: 0; border-bottom: var(--hairline) solid var(--border); }
   .almanac-date-day { font-size: calc(52 / 16 * 1rem); }
+  .almanac-kv-date { grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr); }
+}
+@container (max-width: 440px) {
+  .almanac-kv-date { grid-template-columns: max-content minmax(0, 1fr); }
   .almanac-details { flex-direction: column; }
   .almanac-direction-wrap { width: auto; }
 }

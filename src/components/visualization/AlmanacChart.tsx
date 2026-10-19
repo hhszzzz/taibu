@@ -1,11 +1,10 @@
 'use client';
-// 黄历工作区视图：直接沿用日运页的版面语言（左栏日期大卡 + 右栏宜忌色块 + 冲煞/方位 + 时辰条），
+// 黄历工作区视图：直接沿用日运页的版面语言（左栏日期与值日 + 右栏宜忌色块 + 冲煞/方位，下方时辰带），
 // 数据全部来自已保存的 canonical JSON，不在 Web 端重新排历。
 
 import { useState, type KeyboardEvent } from 'react';
 import type { AlmanacCanonicalJSON } from 'taibu-core/almanac';
 import type { ChartInteraction } from './ChartTarget';
-import { ChartFacts } from './ChartFacts';
 
 const DASH = '—';
 const DIRECTIONS = ['西北', '正北', '东北', '正西', null, '正东', '西南', '正南', '东南'] as const;
@@ -57,16 +56,20 @@ export function AlmanacChart({ chart, interaction }: { chart: AlmanacCanonicalJS
     const base = chart.传统黄历基调;
     const dayInfo = chart.值日信息 ?? {};
     const hours = chart.时辰吉凶 ?? [];
-    const activeHour = hour === null ? null : hours[hour];
     const directions = chart.方位信息;
     const directionEntries = directions
         ? Object.entries(directions).map(([field, value]) => ({ field, label: DIRECTION_FIELDS[field] ?? field, direction: value.trim() }))
         : [];
     const spirits = (['吉神宜趋', '凶煞宜忌'] as const).filter(field => chart.神煞参考[field]?.length);
     const nineStar = base.日九星;
+    // 模型定位到某个时辰时，详情条跟着显示它；用户点选优先。
+    const located = hours.findIndex((_, index) => interaction?.selectedIds.includes(`almanac:hour:${index}`));
+    const shownHour = hour ?? (located >= 0 ? located : null);
+    const activeHour = shownHour === null ? null : hours[shownHour];
+    const dayTarget = (field: keyof NonNullable<typeof chart.值日信息>) => targetProps(interaction, `almanac:day:${field}`);
 
     return <div className="almanac-view">
-        {/* 黄历主卡 = 日运页同构：左栏日期与值日细项，右栏宜忌、冲煞与方位。 */}
+        {/* 黄历主卡 = 日运页同构：左栏日期与值日（含星宿歌诀），右栏宜忌、冲煞与方位。 */}
         <section className="almanac-main" aria-label="黄历">
             <div className="almanac-date" {...targetProps(interaction, 'almanac:date')}>
                 <span className="almanac-date-line">{date.slice(0, 4)} 年 {month} 月 · {weekdayOf(date)}</span>
@@ -75,11 +78,20 @@ export function AlmanacChart({ chart, interaction }: { chart: AlmanacCanonicalJS
                 <span className="almanac-date-ganzhi">{chart.基础与个性化坐标.日干支}</span>
                 <dl className="almanac-kv almanac-kv-date">
                     <div><dt>生肖</dt><dd>{base.生肖 || DASH}</dd></div>
-                    <div><dt>纳音</dt><dd>{dayInfo.日柱纳音 || DASH}</dd></div>
-                    {dayInfo.天神 && <div><dt>值神</dt><dd>{dayInfo.天神}<span className="almanac-badge" data-tone={dayInfo.天神吉凶 === '吉' ? 'yi' : 'ji'}>{[dayInfo.天神类型, dayInfo.天神吉凶].filter(Boolean).join(' ')}</span></dd></div>}
-                    {dayInfo.建除十二值星 && <div><dt>建除</dt><dd>{dayInfo.建除十二值星}日</dd></div>}
-                    {dayInfo.二十八星宿 && <div><dt>星宿</dt><dd>{dayInfo.二十八星宿}宿<span className="almanac-badge" data-tone={dayInfo.星宿吉凶 === '吉' ? 'yi' : 'ji'}>{dayInfo.星宿吉凶}</span></dd></div>}
-                    {nineStar && <div><dt>日九星</dt><dd>{nineStar.方位 ? `${nineStar.方位} · ${nineStar.描述.split(' ')[0]}` : nineStar.描述.split(' ')[0]}</dd></div>}
+                    <div><dt>纳音</dt><dd><span {...dayTarget('日柱纳音')}>{dayInfo.日柱纳音 || DASH}</span></dd></div>
+                    {dayInfo.天神 && <div><dt>值神</dt><dd>
+                        <span {...dayTarget('天神')}>{dayInfo.天神}</span>
+                        {dayInfo.天神类型 && <span className="almanac-badge" data-tone={dayInfo.天神吉凶 === '吉' ? 'yi' : 'ji'} {...dayTarget('天神类型')}>{dayInfo.天神类型}</span>}
+                        {dayInfo.天神吉凶 && <span className="almanac-badge" data-tone={dayInfo.天神吉凶 === '吉' ? 'yi' : 'ji'} {...dayTarget('天神吉凶')}>{dayInfo.天神吉凶}</span>}
+                    </dd></div>}
+                    {dayInfo.建除十二值星 && <div><dt>建除</dt><dd><span {...dayTarget('建除十二值星')}>{dayInfo.建除十二值星}日</span></dd></div>}
+                    {dayInfo.二十八星宿 && <div><dt>星宿</dt><dd>
+                        <span {...dayTarget('二十八星宿')}>{dayInfo.二十八星宿}宿</span>
+                        {dayInfo.星宿吉凶 && <span className="almanac-badge" data-tone={dayInfo.星宿吉凶 === '吉' ? 'yi' : 'ji'} {...dayTarget('星宿吉凶')}>{dayInfo.星宿吉凶}</span>}
+                    </dd></div>}
+                    {/* 歌诀默认收成两行；悬停、聚焦或被定位时展开全文。 */}
+                    {dayInfo.星宿歌诀 && <div data-wide><dd><q className="almanac-verse" title={dayInfo.星宿歌诀} {...dayTarget('星宿歌诀')}>{dayInfo.星宿歌诀}</q></dd></div>}
+                    {nineStar && <div><dt>日九星</dt><dd title={nineStar.描述}>{nineStar.方位 ? `${nineStar.方位} · ${nineStar.描述.split(' ')[0]}` : nineStar.描述.split(' ')[0]}</dd></div>}
                 </dl>
             </div>
 
@@ -117,21 +129,13 @@ export function AlmanacChart({ chart, interaction }: { chart: AlmanacCanonicalJS
             </div>
         </section>
 
-        {/* 值日细项（含星宿歌诀）作为独立卡片，与日运页的「当日黄历」清单同源。 */}
-        <section className="almanac-card" aria-label="值日信息">
-            <h3>值日</h3>
-            <dl className="almanac-kv">
-                {Object.entries(dayInfo).map(([label, value]) => value ?
-                    <div key={label} data-wide={label === '星宿歌诀' || undefined}><dt>{label.replace('十二值星', '')}</dt><dd {...targetProps(interaction, `almanac:day:${label}`)}>{value}</dd></div> : null)}
-            </dl>
-        </section>
-
+        {/* 时辰带：13 个时辰（早子、晚子）宽时一行，窄时 7 + 6 两行居中；顶边色条与文字双重标示吉凶。 */}
         {hours.length > 0 && <section className="almanac-card almanac-hours-card" aria-label="时辰吉凶">
-            <div className="almanac-hours-head"><h3>时辰吉凶</h3><span>点时辰查看宜忌与冲煞</span></div>
+            <div className="almanac-hours-head"><h3>时辰吉凶</h3>{!activeHour && <span>点时辰查看宜忌与冲煞</span>}</div>
             <div className="almanac-hours">
                 {hours.map((item, index) => <button key={`${item.时辰}-${index}`} type="button" className="almanac-hour" data-kind={HOUR_LUCK(item.天神吉凶) ? 'yi' : 'ji'}
                     {...targetProps(interaction, `almanac:hour:${index}`)}
-                    aria-pressed={hour === index || (interaction?.selectedIds.includes(`almanac:hour:${index}`) ?? false)}
+                    aria-pressed={shownHour === index || (interaction?.selectedIds.includes(`almanac:hour:${index}`) ?? false)}
                     onClick={() => { interaction?.onSelect(`almanac:hour:${index}`); setHour(index); }}>
                     <small>{hourRange(item.时间范围)}</small>
                     <strong>{item.时辰}</strong>
@@ -139,17 +143,16 @@ export function AlmanacChart({ chart, interaction }: { chart: AlmanacCanonicalJS
                     <em>{item.天神吉凶 ?? DASH}</em>
                 </button>)}
             </div>
-            {activeHour && <div className="almanac-hour-detail" aria-live="polite">
-                <strong>{activeHour.时辰}时 · {activeHour.天神 ?? ''} {activeHour.天神类型 ?? ''}</strong>
-                <span>{activeHour.冲煞 ? `冲煞 ${activeHour.冲煞}` : ''}</span>
-                <span data-kind="yi">宜 {activeHour.宜?.join(' ') || '诸事不宜'}</span>
-                <span data-kind="ji">忌 {activeHour.忌?.join(' ') || '无'}</span>
-            </div>}
-        </section>}
-
-        {nineStar && <section className="almanac-card" aria-label="日九星">
-            <h3>日九星</h3>
-            <ChartFacts value={nineStar} />
+            {activeHour && <dl className="almanac-hour-detail" aria-live="polite" data-kind={HOUR_LUCK(activeHour.天神吉凶) ? 'yi' : 'ji'}>
+                <div className="almanac-hour-detail-head">
+                    <strong>{activeHour.时辰}时</strong>
+                    <span>{hourRange(activeHour.时间范围)}</span>
+                    <span>{[activeHour.天神, activeHour.天神类型, activeHour.天神吉凶].filter(Boolean).join(' · ')}</span>
+                    {activeHour.冲煞 && <span>冲煞 {activeHour.冲煞}</span>}
+                </div>
+                <div data-kind="yi"><dt>宜</dt><dd>{activeHour.宜?.filter(item => item !== '无').join('　') || '诸事不宜'}</dd></div>
+                <div data-kind="ji"><dt>忌</dt><dd>{activeHour.忌?.filter(item => item !== '无').join('　') || '无'}</dd></div>
+            </dl>}
         </section>}
     </div>;
 }

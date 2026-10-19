@@ -15,7 +15,6 @@ import { ZiweiChartCenter, ZiweiChartLegend } from '@/components/ziwei/ZiweiChar
 import { ZiweiPalaceDetail } from '@/components/ziwei/ZiweiPalaceDetail';
 import { MUTAGEN_BADGE_CLASS, MUTAGEN_STROKE_CLASS, ZIWEI_CONTAINER_CLASS } from '@/components/ziwei/ziwei-display';
 import type { HoroscopeInfo, HoroscopeHighlight } from '@/components/ziwei/ZiweiHoroscopePanel';
-import { Eye, EyeOff } from 'lucide-react';
 
 interface ZiweiChartProps {
     canonicalChart: ZiweiCanonicalJSON;
@@ -30,7 +29,7 @@ interface ZiweiChartProps {
     /** 受控焦点宫（宫位索引，null 为不选）；省略时组件自管并默认选中命宫。 */
     selectedPalace?: number | null;
     onSelectedPalaceChange?: (index: number | null) => void;
-    /** 受控杂曜显隐；提供时由外部（如结果页菜单）切换，不再渲染内置工具栏。 */
+    /** 杂曜显隐，默认显示；结果页菜单可以收起。 */
     showAdjStars?: boolean;
     /** natal：三方四正连线；flying：以焦点宫为飞出宫，绘制宫干四化飞线。 */
     variant?: 'natal' | 'flying';
@@ -117,7 +116,6 @@ function offsetSegment(from: Point, to: Point, offset: number): { from: Point; t
     return { from: { x: from.x + nx, y: from.y + ny }, to: { x: to.x + nx, y: to.y + ny } };
 }
 
-const TOOLBAR_BUTTON_CLASS = 'inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-[13px] text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground';
 
 /**
  * 紫微斗数命盘 12 宫位图
@@ -145,8 +143,8 @@ export function ZiweiChartGrid({
     const lifePalaceIndex = canonicalChart.十二宫位.find(p => p.宫位 === '命宫')?.宫位索引 ?? null;
     // 默认选中命宫，显示三方四正
     const [uncontrolledSelectedPalace, setUncontrolledSelectedPalace] = useState<number | null | undefined>(undefined);
-    const [uncontrolledShowAdjStars, setUncontrolledShowAdjStars] = useState(true); // 默认显示杂曜
-    const showAdjStars = controlledShowAdjStars ?? uncontrolledShowAdjStars;
+    // 杂曜默认直接显示；只有结果页的菜单会受控地收起。
+    const showAdjStars = controlledShowAdjStars ?? true;
     const isFlying = variant === 'flying';
 
     const defaultSelectedPalace = typeof lifePalaceIndex === 'number' && lifePalaceIndex >= 0 ? lifePalaceIndex : null;
@@ -297,21 +295,6 @@ export function ZiweiChartGrid({
 
     return (
         <div className={`${ZIWEI_CONTAINER_CLASS} w-full`}>
-            {/* 工具栏：仅非受控杂曜显隐时显示（如对话嵌入）；结果页由页面菜单接管 */}
-            {controlledShowAdjStars === undefined && (
-                <div className="mb-2 flex justify-end">
-                    <button
-                        type="button"
-                        onClick={() => setUncontrolledShowAdjStars(!uncontrolledShowAdjStars)}
-                        aria-pressed={uncontrolledShowAdjStars}
-                        className={TOOLBAR_BUTTON_CLASS}
-                    >
-                        {uncontrolledShowAdjStars ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                        {uncontrolledShowAdjStars ? '隐藏杂曜' : '显示杂曜'}
-                    </button>
-                </div>
-            )}
-
             {/* 4×4 命盘：中宫背景 → 连线 → 中宫文字（z-index 分层） */}
             <div className="relative grid grid-cols-4 grid-rows-4 gap-px overflow-hidden rounded-xl bg-border p-px @2xl/ziwei:rounded-2xl">
                 {GRID_SLOTS.map((slot) => {

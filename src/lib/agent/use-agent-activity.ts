@@ -70,5 +70,5 @@ export function useAgentActivity(userId: string | null, viewingConversationId: s
         return () => { current = false; };
     }, [noticeKey, userId]);
 
-    return useMemo(() => getConversationAgentMarkers(enabled ? activity : null, viewingConversationId), [activity, enabled, viewingConversationId]);
+    return useMemo(() => getConversationAgentMarkers(enabled ? activity : null), [activity, enabled]);
 }

@@ -20,7 +20,7 @@ test('activity payloads keep only well-formed runs and notices', () => {
     assert.equal(many?.runs.length, 50, 'the list is bounded like the server query');
 });
 
-test('a live task outranks an unread notice and the open conversation shows no unread dot', () => {
+test('only live runs produce sidebar markers; finished notices stay in the notification center', () => {
     const activity: AgentActivity = {
         runs: [{ runId: randomUUID(), conversationId: a, status: 'queued' }, { runId: randomUUID(), conversationId: b, status: 'awaiting_input' }, { runId: randomUUID(), conversationId: c, status: 'cancelling' }],
         notices: [
@@ -29,10 +29,10 @@ test('a live task outranks an unread notice and the open conversation shows no u
             { id: randomUUID(), conversationId: d, status: 'failed' },
         ],
     };
-    assert.deepEqual([...getConversationAgentMarkers(activity)], [[a, 'running'], [d, 'answered'], [b, 'awaiting'], [c, 'running']]);
-    assert.equal(getConversationAgentMarkers(activity, d).has(d), false);
-    assert.equal(getConversationAgentMarkers(activity, b).get(b), 'awaiting', 'a waiting question stays visible while open');
-    assert.equal(getConversationAgentMarkers({ runs: [], notices: [{ id: randomUUID(), conversationId: c, status: 'failed' }] }).size, 0, 'failures are left to the notification center');
+    assert.deepEqual([...getConversationAgentMarkers(activity)], [[a, 'running'], [b, 'awaiting'], [c, 'running']]);
+    assert.equal(getConversationAgentMarkers(activity).has(d), false, 'completed/failed notices never add an in-page marker');
+    assert.equal(getConversationAgentMarkers(activity).get(b), 'awaiting', 'a waiting question stays visible while open');
+    assert.equal(getConversationAgentMarkers({ runs: [], notices: [{ id: randomUUID(), conversationId: c, status: 'failed' }] }).size, 0, 'failures are left to the toast and notification center');
     assert.equal(getConversationAgentMarkers(null).size, 0);
 
     assert.deepEqual(getConversationNoticeIds(activity, d), activity.notices.slice(1).map(notice => notice.id), 'opening reads every task notice of that conversation');

@@ -1,11 +1,15 @@
 /**
  * Sidebar task markers: which conversations have an Agent task running or
- * waiting for an answer, and which finished in the background with an answer
- * the user has not opened yet.
+ * waiting for an answer.
+ *
+ * Completed/failed task notices are delivered as a bottom-right Toast by
+ * AgentNotificationBridge and stay in the notification center; they are not
+ * repeated as an in-page sidebar marker. The unread notice rows are still read
+ * here so opening a conversation clears its notices.
  *
  * GET /api/agent/activity returns the account's active runs and its unread
  * task notices (written by the agent_task_notification trigger); this module
- * validates that payload and turns it into one marker per conversation.
+ * validates that payload and turns the runs into one marker per conversation.
  */
 import { isValidUUID } from '@/lib/validation';
 import type { AgentRunStatus } from './types';
@@ -15,14 +19,13 @@ export type AgentActivityNoticeStatus = 'completed' | 'failed' | 'awaiting_input
 export interface AgentActivityRun { runId: string; conversationId: string; status: AgentActivityRunStatus }
 export interface AgentActivityNotice { id: string; conversationId: string; status: AgentActivityNoticeStatus }
 export interface AgentActivity { runs: AgentActivityRun[]; notices: AgentActivityNotice[] }
-export type ConversationAgentMarker = 'running' | 'awaiting' | 'answered';
+export type ConversationAgentMarker = 'running' | 'awaiting';
 
 /** Rows read per kind; an account rarely has more than a few at once. */
 export const AGENT_ACTIVITY_LIMIT = 50;
 export const AGENT_MARKER_LABELS: Record<ConversationAgentMarker, string> = {
     running: 'Agent 正在执行',
     awaiting: '待回答',
-    answered: '任务已完成，有新回答',
 };
 
 const RUN_STATUSES = new Set<string>(['queued', 'running', 'awaiting_input', 'cancelling'] satisfies AgentActivityRunStatus[]);
@@ -44,15 +47,13 @@ export function parseAgentActivity(value: unknown): AgentActivity | null {
 }
 
 /**
- * A live task outranks an unread notice: a conversation that is running again
- * shows the spinner, not the earlier completion. The conversation on screen
- * never shows the unread dot because opening it is what reads the notice.
+ * Only live runs mark a conversation. A live task outranks any earlier notice:
+ * a conversation that is running again shows the spinner, not the completion.
+ * Completed/failed notices are delivered by the notification bridge instead.
  */
-export function getConversationAgentMarkers(activity: AgentActivity | null, viewingConversationId?: string | null): ReadonlyMap<string, ConversationAgentMarker> {
+export function getConversationAgentMarkers(activity: AgentActivity | null): ReadonlyMap<string, ConversationAgentMarker> {
     const markers = new Map<string, ConversationAgentMarker>();
     if (!activity) return markers;
-    for (const notice of activity.notices)
-        if (notice.status === 'completed' && notice.conversationId !== viewingConversationId) markers.set(notice.conversationId, 'answered');
     for (const run of activity.runs) markers.set(run.conversationId, run.status === 'awaiting_input' ? 'awaiting' : 'running');
     return markers;
 }

@@ -18,6 +18,11 @@ import { loadReminderSubscriptions, type ReminderType, updateReminderSubscriptio
 import { mutationEffects } from '@/lib/query/invalidation';
 import { getCurrentUserSettings, updateCurrentUserSettings } from '@/lib/user/settings';
 import { FONT_SCALES, type FontScale } from '@/lib/chat/preferences';
+import {
+  canEnableBrowserNotifications,
+  getBrowserNotificationAvailability,
+  type BrowserNotificationAvailability,
+} from '@/lib/notification';
 import { BriefingSettings } from '../BriefingSettings';
 import { DEFAULT_BRIEFING_PREFERENCES, initialBriefingPreferences, type BriefingPreferences } from '@/lib/briefing-preferences';
 
@@ -55,6 +60,12 @@ const THEME_MODE_OPTIONS = [
 const FONT_SCALE_LABELS: Record<FontScale, string> = { 85: '小', 100: '标准', 115: '大', 125: '特大' };
 const FONT_SCALE_OPTIONS = FONT_SCALES.map(scale => ({ value: String(scale), label: FONT_SCALE_LABELS[scale] }));
 
+/** 浏览器通知是否可用只取决于浏览器能力与授权状态。 */
+function readBrowserNotificationAvailability(): BrowserNotificationAvailability {
+  if (typeof window === 'undefined' || !('Notification' in window)) return 'unsupported';
+  return getBrowserNotificationAvailability({ supported: true, permission: window.Notification.permission });
+}
+
 export default function GeneralSettingsPanel() {
   const { user } = useSessionSafe();
   return <AccountGeneralSettingsPanel key={user?.id ?? 'visitor'} />;
@@ -67,6 +78,7 @@ function AccountGeneralSettingsPanel() {
   const [loading, setLoading] = useState(true);
   const [desktopNotifications, setDesktopNotifications] = useState(false);
   const [desktopError, setDesktopError] = useState('');
+  const [browserNotificationAvailability, setBrowserNotificationAvailability] = useState<BrowserNotificationAvailability>('unsupported');
   const [settings, setSettings] = useState<Settings>({
     notifications: true,
     language: 'zh',
@@ -80,6 +92,11 @@ function AccountGeneralSettingsPanel() {
   const operations = useRef(new Set<string>());
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
   const [initializedForUserId, setInitializedForUserId] = useState<string | null | undefined>(undefined);
+
+  // 浏览器能力/授权只在客户端可读；设置面板挂载后同步一次。
+  useEffect(() => {
+    setBrowserNotificationAvailability(readBrowserNotificationAvailability());
+  }, [userId]);
 
   const load = useCallback(async () => {
     if (sessionLoading) return;
@@ -237,16 +254,36 @@ function AccountGeneralSettingsPanel() {
     try {
       const next = !desktopNotifications;
       if (next) {
-        if (!('Notification' in window)) { setDesktopError('此浏览器不支持桌面提醒'); return; }
-        const permission = await window.Notification.requestPermission();
-        if (permission !== 'granted') { setDesktopError('桌面提醒需要在浏览器中允许通知'); return; }
+        const availability = readBrowserNotificationAvailability();
+        setBrowserNotificationAvailability(availability);
+        if (!canEnableBrowserNotifications(availability)) {
+          setDesktopError(availability === 'unsupported'
+            ? '当前浏览器不支持系统通知'
+            : '浏览器已拒绝通知权限，请在浏览器设置中允许后重试');
+          return;
+        }
+        if (availability === 'prompt') {
+          let permission: string;
+          try {
+            permission = await window.Notification.requestPermission();
+          } catch {
+            setDesktopError('浏览器通知授权失败，请重试');
+            return;
+          }
+          const resolved = getBrowserNotificationAvailability({ supported: true, permission });
+          setBrowserNotificationAvailability(resolved);
+          if (resolved !== 'granted') {
+            setDesktopError('浏览器通知需要授权才能开启');
+            return;
+          }
+        }
       }
       const current = await getCurrentUserSettings({ expectedUserId: userId });
       const saved = current.settings
         ? await updateCurrentUserSettings({ chatPreferences: { ...current.settings.chatPreferences, desktopNotifications: next } }, mutationEffects.userSettings(userId), { expectedUserId: userId })
         : null;
       if (saved) setDesktopNotifications(next);
-      else setDesktopError('保存桌面提醒偏好失败');
+      else setDesktopError('保存浏览器通知偏好失败');
     } finally {
       finishOperation('desktopNotifications');
     }
@@ -341,14 +378,22 @@ function AccountGeneralSettingsPanel() {
           )}
         />
         <SettingsRow
-          label="网页打开时桌面提醒"
-          description={desktopError ? <span role="alert" className="text-danger">{desktopError}</span> : '后台任务完成时弹出系统通知，需要浏览器授权'}
+          label="浏览器通知"
+          description={desktopError
+            ? <span role="alert" className="text-danger">{desktopError}</span>
+            : browserNotificationAvailability === 'unsupported'
+              ? '当前浏览器不支持系统通知'
+              : browserNotificationAvailability === 'denied'
+                ? '浏览器已拒绝通知权限，请在浏览器设置中允许后重试'
+                : desktopNotifications
+                  ? '任务完成或失败时发送系统通知'
+                  : '开启后，任务完成或失败时发送系统通知；需要浏览器授权'}
           control={(
             <SettingsSwitch
-              label="网页打开时桌面提醒"
+              label="浏览器通知"
               checked={desktopNotifications}
               onToggle={() => void toggleDesktopNotifications()}
-              disabled={Boolean(loadError) || pending.has('desktopNotifications')}
+              disabled={Boolean(loadError) || pending.has('desktopNotifications') || (!desktopNotifications && !canEnableBrowserNotifications(browserNotificationAvailability))}
             />
           )}
         />

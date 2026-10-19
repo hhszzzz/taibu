@@ -137,25 +137,10 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
         if (!userId) return;
         setPinnedIds(current => togglePinnedConversation(userId, conv.id, current));
     }, [userId]);
-    const [dragOver, setDragOver] = useState<'pinned' | 'recents' | null>(null);
     const [pinnedOpen, setPinnedOpen] = useState(true);
     const [recentsOpen, setRecentsOpen] = useState(true);
 
     const pinnedSet = useMemo(() => new Set(pinnedIds), [pinnedIds]);
-    // 拖动排序：拖到「已置顶」组即置顶，拖到「最近使用」组即取消置顶（claude 侧栏同款）。
-    const dropPin = useCallback((event: React.DragEvent, pin: boolean) => {
-        const id = event.dataTransfer.getData('application/x-taibu-conversation');
-        event.preventDefault();
-        setDragOver(null);
-        if (!userId || !id) return;
-        if (pinnedSet.has(id) === pin) return;
-        setPinnedIds(current => togglePinnedConversation(userId, id, current));
-    }, [userId, pinnedSet]);
-    const dragProps = (zone: 'pinned' | 'recents') => ({
-        onDragOver: (event: React.DragEvent) => { event.preventDefault(); setDragOver(zone); },
-        onDragLeave: () => setDragOver(current => current === zone ? null : current),
-        onDrop: (event: React.DragEvent) => dropPin(event, zone === 'pinned'),
-    });
     // 会话按类别分栏（claude 的 Claude|Code 两个列表）：跑过 Agent 任务的归「Agent」，其余归「对话」；
     // 当前打开的会话一律保留，避免新建或跨类会话在列表里凭空消失。
     const chatMode = useStoredChatMode(userId);
@@ -457,20 +442,17 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
                                     </button>
                                 </div>
                             ) : null}
-                            {wantsDate ? (
-                                /* claude Pinned 组：与「最近使用」同一种组头（13px muted + 悬停显形的折叠箭头），空组是可放置的提示区。 */
-                                <section className="chat-nav-group" aria-label="已置顶" data-drop-active={dragOver === 'pinned' || undefined} {...dragProps('pinned')}>
+                            {wantsDate && pinnedConversations.length > 0 ? (
+                                /* claude Pinned 组：与「最近使用」同一种组头（13px muted + 折叠箭头）。没有置顶会话时不显示这一组。 */
+                                <section className="chat-nav-group" aria-label="已置顶">
                                     <div className="chat-recents-head chat-pinned-head">
                                         <button type="button" className="chat-recents-toggle" aria-expanded={pinnedOpen}
-                                            title={pinnedOpen && pinnedConversations.some(conv => conv.id === activeId) ? '当前会话在此组中，先收起会隐藏它' : undefined}
-                                            onClick={() => { if (pinnedOpen && pinnedConversations.some(conv => conv.id === activeId)) return; setPinnedOpen(value => !value); }}>
+                                            onClick={() => setPinnedOpen(value => !value)}>
                                             <span>已置顶</span>
                                             <span className="chat-recents-caret" aria-hidden="true">{pinnedOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</span>
                                         </button>
                                     </div>
-                                    {pinnedOpen && <>
-                                    {pinnedConversations.length === 0 && <div className="chat-nav-pin-drop">拖动到此处以置顶</div>}
-                                    {pinnedConversations.map(conv => (
+                                    {pinnedOpen && pinnedConversations.map(conv => (
                                         <ConversationNavItem
                                             key={conv.id}
                                             conv={conv}
@@ -485,14 +467,13 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
                                             onCancelRename={editingId === conv.id ? cancelRename : undefined}
                                         />
                                     ))}
-                                    </>}
                                 </section>
                             ) : null}
                             {wantsDate ? (
                                 <div className="chat-recents-block">
                                     <RecentsHead userId={userId} recentsOpen={recentsOpen} onToggleRecents={() => setRecentsOpen(value => !value)}
                                         onToggleBlocked={recentsOpen && !!activeId && unpinnedConversations.some(conv => conv.id === activeId) ? true : undefined} />
-                                    <section className="chat-nav-group" aria-label="最近使用" data-drop-active={dragOver === 'recents' || undefined} {...dragProps('recents')}>
+                                    <section className="chat-nav-group" aria-label="最近使用">
                                     {recentsOpen && <>
                                     {pendingSidebarTitle ? (
                                         <div data-conversation-row="true" className="chat-nav-row" data-pending="true">

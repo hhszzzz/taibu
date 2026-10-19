@@ -113,7 +113,6 @@
 .chat-nav-marker { flex-shrink: 0; }
 .chat-nav-marker.is-running { color: var(--accent); animation: chat-nav-spin 1s linear infinite; }
 .chat-nav-marker.is-awaiting { padding: 0 6px; border-radius: 5px; background: var(--accent-light); color: var(--accent-hover); font-size: 12px; font-weight: 400; line-height: 1.65; }
-.chat-nav-marker.is-answered { width: 7px; height: 7px; border-radius: 999px; background: var(--chat-success); }
 @keyframes chat-nav-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .chat-nav-marker.is-running { animation: none; } }
 

@@ -22,7 +22,7 @@ import { AnnouncementBellButton } from '@/components/layout/AnnouncementBellButt
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import { getSidebarNavItems, getSidebarToolItems, type NavItemDef } from '@/lib/navigation/registry';
-import { useSidebarPins } from '@/lib/navigation/sidebar-pins';
+import { resolveSidebarPinnedIds, useSidebarPins } from '@/lib/navigation/sidebar-pins';
 import { FloatingPanel } from '@/components/ui/FloatingPanel';
 import { AllDivinationsPanel } from '@/components/layout/AllDivinationsPanel';
 import { useConversationList } from '@/lib/chat/ConversationListContext';
@@ -186,12 +186,15 @@ function SidebarInner() {
     const filteredNavItems = useMemo(() => navItems
         .filter((item) => isFeatureEnabled(item.id)), [isFeatureEnabled]);
 
-    // 已固定的占术按固定顺序展示；当前页属于未固定占术时临时追加
-    const pinnedNavItems = useMemo(() => pins
+    // 内置固定项（日运 / 月运）+ 用户固定项按 registry 固定顺序展示；
+    // 当前页属于未固定占术时临时追加，不改变其余项的相对顺序。
+    const pinnedIds = useMemo(() => resolveSidebarPinnedIds(pins), [pins]);
+    const pinnedNavItems = useMemo(() => pinnedIds
         .map((id) => filteredNavItems.find((item) => item.id === id))
-        .filter((item): item is NavItemDef => !!item), [filteredNavItems, pins]);
+        .filter((item): item is NavItemDef => !!item), [filteredNavItems, pinnedIds]);
+    const pinnedIdSet = useMemo(() => new Set(pinnedNavItems.map((item) => item.id)), [pinnedNavItems]);
     const transientNavItem = useMemo(() => filteredNavItems
-        .find((item) => !pins.includes(item.id) && isActivePath(pathname, item.href)) ?? null, [filteredNavItems, pathname, pins]);
+        .find((item) => !pinnedIdSet.has(item.id) && isActivePath(pathname, item.href)) ?? null, [filteredNavItems, pathname, pinnedIdSet]);
     const allActive = !!transientNavItem;
     const closeAll = useCallback(() => setAllOpen(false), []);
 

@@ -91,7 +91,8 @@
     --border: var(--chat-border);
 }
 /* Sidebar "全部占术" flyout: the panel body owns its own spacing and scroll regions. */
-.floating-panel.all-divinations-panel { padding: 0; max-height: min(720px, calc(100dvh - 16px)); overflow: hidden; border-radius: 10px; box-shadow: var(--shadow-panel-popover); }
+/* 全部占术浮层：与侧栏右缘留 12px 间距（锚点按钮距侧栏边缘 8px，定位再 +2px，故补 18px）。 */
+.floating-panel.all-divinations-panel { margin-left: 18px; padding: 0; max-height: min(720px, calc(100dvh - 16px)); overflow: hidden; border-radius: 10px; box-shadow: var(--shadow-panel-popover); }
 /* 账户菜单「帮助」二级：与一级菜单保持间距的独立浮层。 */
 .floating-panel.user-help-menu { min-width: 12rem; max-width: min(16rem, calc(100vw - 2rem)); }
 .floating-panel.all-divinations-panel input:focus-visible { outline: none; }
@@ -117,6 +118,7 @@
 .all-divinations-pin[data-pinned] { color: var(--accent); }
 @media (hover: none) { .all-divinations-pin { opacity: .7; } }
 .all-divinations-fortune { display: flex; flex-direction: column; gap: 1px; padding: 4px; border-top: 1px solid var(--fill-field); }
+.all-divinations-fixed { display: flex; margin-left: auto; padding-right: 6px; align-items: center; color: var(--accent); }
 
 .ui-tip { display: contents; }
 

@@ -1,6 +1,6 @@
 /**
- * 对话侧栏中的一行：单行标题 + 任务标记（执行中 / 待回答 / 有新回答）。
- * 标题是指向对话的链接；重命名时沿用 ConversationItem 的紧凑编辑框。
+ * 对话侧栏中的一行：单行标题 + 任务标记（执行中 / 待回答）。
+ * 完成/失败只走右下角 Toast，不再在侧栏重复未读圆点。
  *
  * 'use client' 标记说明：
  * - 需要处理更多操作与重命名的交互事件
@@ -35,8 +35,7 @@ const ignoreSelect = () => {};
 
 export function ConversationMarker({ marker }: { marker: ConversationAgentMarker }) {
     if (marker === 'running') return <LoaderCircle size={13} strokeWidth={2.4} className="chat-nav-marker is-running" role="img" aria-label={AGENT_MARKER_LABELS.running} />;
-    if (marker === 'awaiting') return <span className="chat-nav-marker is-awaiting">{AGENT_MARKER_LABELS.awaiting}</span>;
-    return <span className="chat-nav-marker is-answered" role="img" aria-label={AGENT_MARKER_LABELS.answered} />;
+    return <span className="chat-nav-marker is-awaiting">{AGENT_MARKER_LABELS.awaiting}</span>;
 }
 
 export const ConversationNavItem = memo(function ConversationNavItem({
@@ -60,9 +59,7 @@ export const ConversationNavItem = memo(function ConversationNavItem({
     }
     const title = formatConversationMenuTitle(conv);
     return (
-        <div data-conversation-row="true" className="chat-nav-row" data-active={isActive || undefined} data-menu-open={isActionActive || undefined}
-            draggable
-            onDragStart={event => { event.dataTransfer.setData('application/x-taibu-conversation', conv.id); event.dataTransfer.effectAllowed = 'move'; }}>
+        <div data-conversation-row="true" className="chat-nav-row" data-active={isActive || undefined} data-menu-open={isActionActive || undefined}>
             <Link href={`/chat?id=${encodeURIComponent(conv.id)}`} aria-current={isActive ? 'page' : undefined} className="chat-nav-row-link" title={title}>
                 <span className="chat-nav-row-title">{title}</span>
                 <span className="chat-nav-row-badges">
@@ -71,7 +68,7 @@ export const ConversationNavItem = memo(function ConversationNavItem({
                     {marker ? <ConversationMarker marker={marker} /> : null}
                 </span>
             </Link>
-            <Tooltip label={`${title} 的更多操作`}>
+            <Tooltip label="更多">
                 <button
                     type="button"
                     onClick={(e) => {
@@ -79,7 +76,7 @@ export const ConversationNavItem = memo(function ConversationNavItem({
                         onOpenAction(conv, e);
                     }}
                     className="chat-nav-row-more"
-                    aria-label={`${title} 的更多操作`}
+                    aria-label="更多操作"
                     aria-haspopup="menu"
                     aria-expanded={isActionActive}
                 >

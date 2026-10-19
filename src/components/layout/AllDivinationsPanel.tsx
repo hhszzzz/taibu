@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { Pin, Search } from 'lucide-react';
 import { filterNavItems, groupDivinationItems, type NavItemDef } from '@/lib/navigation/registry';
+import { BUILT_IN_SIDEBAR_PINS } from '@/lib/navigation/sidebar-pins';
 
 const isActiveHref = (pathname: string | null, href: string) => pathname === href || !!pathname?.startsWith(`${href}/`);
 
@@ -89,6 +90,7 @@ export function AllDivinationsPanel({ items, pins, pathname, onTogglePin, onNavi
                     {fortuneItems.map(item => {
                         const Icon = item.icon;
                         const active = isActiveHref(pathname, item.href);
+                        const fixed = BUILT_IN_SIDEBAR_PINS.includes(item.id);
                         return (
                             <Link
                                 key={item.id}
@@ -99,6 +101,12 @@ export function AllDivinationsPanel({ items, pins, pathname, onTogglePin, onNavi
                             >
                                 <span className="all-divinations-icon"><Icon size={18} aria-hidden="true" /></span>
                                 <span>{item.description ?? item.label}</span>
+                                {fixed ? (
+                                    <span className="all-divinations-fixed" title="已固定到侧栏，不可取消">
+                                        <Pin size={13} fill="currentColor" aria-hidden />
+                                        <span className="sr-only">已固定到侧栏，不可取消</span>
+                                    </span>
+                                ) : null}
                             </Link>
                         );
                     })}

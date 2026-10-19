@@ -406,10 +406,28 @@ export function deduplicateChartResults(tools: AgentToolPart[]): AgentToolPart[]
   });
 }
 
+/**
+ * What a drilldown or inspection shows the model looking at: a completed drilldown, the
+ * positions its result touches; while either runs, the chart named in its arguments with
+ * no positions yet. A failed call looked at nothing.
+ */
+function getDrilldownViewFocus(tool: AgentToolPart): ChartFocus | null {
+  const drilldown = getAgentDrilldownBase(tool.name) !== null;
+  if (!drilldown && tool.name !== 'inspect_chart') return null;
+  if (drilldown && tool.status === 'completed') return getDrilldownFocus(tool);
+  if (tool.status !== 'pending' && tool.status !== 'running') return null;
+  // A running inspection reads the whole chart; once done it clears old coordinates (see below).
+  const input = tool.input && typeof tool.input === 'object' ? (tool.input as { reference?: unknown }).reference : undefined;
+  const reference = parseChartReference(input);
+  const caption = drilldown ? '详查中 · ' + tool.title : '读取整张盘';
+  return reference ? { version: 1, reference: reference.source + ':' + reference.id, targetIds: [], includeRelated: false, caption: caption.slice(0, 160) } : null;
+}
+
+/** The model's latest view of a chart: a focus call, or the drilldown it ran after it. */
 export function getLatestChartFocus(tools: AgentToolPart[], reference?: string): ChartFocus | null {
   const reinspected = new Set<string>();
   for (let index = tools.length - 1; index >= 0; index--) {
-    const tool = tools[index], focus = getChartFocus(tool);
+    const tool = tools[index], focus = getChartFocus(tool) ?? getDrilldownViewFocus(tool);
     if (focus && !reinspected.has(focus.reference) && (!reference || focus.reference === reference)) return focus;
     // A fresh inspection may contain edited saved data; previous coordinates and captions no longer apply.
     if (tool.name === 'inspect_chart' && tool.status === 'completed') {

@@ -171,6 +171,7 @@ function AgentResultsProbe() {
   };
   // Real Core relation and wuxing drilldowns of the fixture bazi, attached to the chart it was inspected as.
   window.fixture.baziDrilldownResult = name => BAZI_DRILLDOWN_FIXTURE_PARTS.find(tool => tool.name === name).output.result;
+  window.fixture.baziDrilldownRunning = () => setParts(previous => [...previous, { type: 'tool', id: 'drill-running', name: 'bazi_relations', title: '八字刑冲合害', status: 'running', input: { reference: 'bazi_chart:11111111-1111-4111-8111-111111111111' } }]);
   window.fixture.baziDrilldowns = (on = true) => setParts(previous => [...previous.filter(tool => !tool.id.startsWith('drill-')), ...(on ? BAZI_DRILLDOWN_FIXTURE_PARTS : [])]);
   window.fixture.traditionalTaiyi = () => setParts(previous => previous.filter(tool => tool.id !== 'inspect-taiyi').map(tool => tool.name === 'taiyi' ? TRADITIONAL_TAIYI_FIXTURE_PART : tool));
   // Without a provider the message is what a reader sees outside the chat workspace.
@@ -2057,6 +2058,11 @@ export async function run(existingPage, bundlePath) {
     check('Relation and wuxing drilldowns get their own views: a pillar strip with lines and a five-element cycle', await interactive.locator('[data-relation-strip] th').count() === await page.evaluate(() => window.fixture.baziDrilldownResult('bazi_relations').参与柱位.length) &&
       await interactive.locator('[data-relation-strip] [data-relation-edge]').count() >= 1 && await interactive.locator('.agent-ws-drilldown [data-wuxing-cycle]').count() === 1 &&
       await interactive.locator('.agent-ws-seasons [data-day-master]').count() <= 1);
+    // 详查还在跑时，盘面已经说明模型正在看什么，并切到对应的连线模式。
+    await page.evaluate(() => window.fixture.baziDrilldownRunning());
+    await renderBarrier();
+    check('A running drilldown already shows what the model is looking at and switches the board to it', await interactive.locator('.agent-board-focus').innerText().then(text => text.includes('模型正在看') && text.includes('详查中 · 八字刑冲合害')) &&
+      await board.getAttribute('data-board-mode') === 'relations');
     await page.evaluate(() => window.fixture.baziDrilldowns(false));
     await renderBarrier();
     await interactive.getByRole('button', { name: '只看相关位置', exact: true }).click();

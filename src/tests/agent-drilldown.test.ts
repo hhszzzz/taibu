@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import type { AgentToolPart } from '../lib/agent/tool-presentation';
 import { getAgentChart } from '../lib/agent/tool-presentation';
-import { getAgentChartReference, getChartTargets, getDrilldownFocus, getDrilldownTargets } from '../lib/agent/chart-interaction';
+import { getAgentChartReference, getChartTargets, getDrilldownFocus, getDrilldownTargets, getLatestChartFocus } from '../lib/agent/chart-interaction';
 import { createAgentTools } from '../lib/agent/tools.server';
 import { buildAgentWorkspace } from '../lib/agent/workspace';
 import { describeDrilldownSelection } from '../components/chat/agent/presentation';
@@ -107,6 +107,16 @@ test('the workspace keeps drilldowns under their chart and they never replace it
   assert.equal(focus.reference, reference);
   assert.deepEqual(focus.targetIds, (result.details as DrilldownDetails).targets.map(target => target.id));
   assert.equal(getDrilldownFocus(pending), null);
+  // What the model is looking at follows its drilldowns: running names the step, completed shows its positions,
+  // a failed one changes nothing, and a later focus call takes over.
+  assert.deepEqual(getLatestChartFocus([calculation, pending], reference), { version: 1, reference, targetIds: [], includeRelated: false, caption: '详查中 · 八字刑冲合害' });
+  assert.deepEqual(getLatestChartFocus([calculation, drilldown], reference), focus);
+  assert.deepEqual(getLatestChartFocus([calculation, drilldown, { ...pending, status: 'failed' }], reference), focus);
+  const later: AgentToolPart = { type: 'tool', id: 'focus', name: 'focus_chart', title: '定位', status: 'completed', output: { chartFocus: { version: 1, reference, targetIds: ['bazi:cell:2:1'], includeRelated: false, caption: '日支' } } };
+  assert.equal(getLatestChartFocus([calculation, drilldown, later], reference)?.caption, '日支');
+  assert.deepEqual(getLatestChartFocus([calculation, later, drilldown], reference), focus);
+  const reading: AgentToolPart = { type: 'tool', id: 'read', name: 'inspect_chart', title: '查看命盘', status: 'running', input: { reference } };
+  assert.equal(getLatestChartFocus([calculation, drilldown, reading], reference)?.caption, '读取整张盘');
   // A drilldown of a chart this task never showed opens that chart's tab by itself.
   const alone = buildAgentWorkspace({ parts: [drilldown], artifacts: [], attachmentIds: [] });
   assert.equal(alone.resources[0].title, '八字命盘');

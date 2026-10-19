@@ -1,4 +1,5 @@
 import { withRulesJSON } from '../../shared/calculation-rules.js';
+import { YAO_CI } from '../../data/hexagrams.js';
 import type {
   MeihuaCanonicalJSON
 } from './json-types.js';
@@ -104,6 +105,7 @@ function renderMeihuaCanonicalJSONBase(
     卦盘: {
       本卦: buildHexagramTrack(result.mainHexagram, { detailLevel, includeGuaCi: true }),
       动爻: traditionalYaoName(result.movingLine, Number.parseInt(result.mainHexagram.code[result.movingLine - 1] ?? '0', 10)),
+      动爻爻辞: YAO_CI[result.mainHexagram.name]?.[result.movingLine - 1],
       变卦: result.changedHexagram
         ? buildHexagramTrack(result.changedHexagram, { detailLevel, includeGuaCi: true })
         : {

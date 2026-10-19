@@ -1,4 +1,5 @@
 import { withRulesText } from '../../shared/calculation-rules.js';
+import { YAO_CI } from '../../data/hexagrams.js';
 import {
   traditionalYaoName
 } from '../liuyao/calculate.js';
@@ -145,6 +146,8 @@ function renderMeihuaCanonicalTextBase(result: MeihuaOutput, options: MeihuaCano
   lines.push('## 卦象演变');
   lines.push(formatHexagramLine('本卦', result.mainHexagram, {}));
   if (result.mainHexagram.guaCi) lines.push(`- 本卦卦辞: ${result.mainHexagram.guaCi}`);
+  const movingYaoCi = YAO_CI[result.mainHexagram.name]?.[result.movingLine - 1];
+  if (movingYaoCi) lines.push(`- 动爻爻辞: ${movingYaoCi}`);
   if (detailLevel === 'full' && result.mainHexagram.xiangCi) lines.push(`- 本卦象辞: ${result.mainHexagram.xiangCi}`);
   if (result.nuclearHexagram) {
     lines.push(formatHexagramLine('互卦', result.nuclearHexagram, {}));

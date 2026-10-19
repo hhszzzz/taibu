@@ -703,6 +703,10 @@ test('meihua tool output should stay on meihua semantics instead of liuyao vocab
 
   assert.equal(payload.structuredContent.卦盘.体卦.卦名, '坤');
   assert.equal(payload.structuredContent.卦盘.用卦.卦名, '离');
+  assert.equal(payload.structuredContent.卦盘.本卦.卦名, '火地晋');
+  assert.equal(payload.structuredContent.卦盘.动爻, '六五');
+  assert.equal(payload.structuredContent.卦盘.动爻爻辞, '六五：悔亡，失得勿恤，往吉无不利。');
+  assert.match(payload.content[0].text, /- 动爻爻辞: 六五：悔亡，失得勿恤，往吉无不利。/u);
   assert.equal(payload.structuredContent.起卦信息.实际子方式, 'number_pair');
   assert.equal(payload.structuredContent.起卦信息.方法, '两数报数法');
   assert.equal(payload.structuredContent.卦盘.扩展参考, undefined);

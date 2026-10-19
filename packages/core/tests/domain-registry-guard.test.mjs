@@ -39,6 +39,13 @@ const expectedDerivedTools = [
   { tool: 'ziwei_palace', base: 'ziwei', folder: 'ziwei-palace' },
   { tool: 'qimen_palace', base: 'qimen', folder: 'qimen-palace' },
   { tool: 'daliuren_lessons', base: 'daliuren', folder: 'daliuren-lessons' },
+  { tool: 'astrology_point', base: 'astrology', folder: 'astrology-point' },
+  { tool: 'liuyao_line', base: 'liuyao', folder: 'liuyao-line' },
+];
+
+/** 独立工具：不属于新的公开领域，但必须注册进 MCP 并写入文档 */
+const expectedStandaloneTools = [
+  { tool: 'almanac_select', folder: 'almanac-select' },
 ];
 
 test('public core domains should stay aligned across exports, docs, and MCP registry', () => {
@@ -66,6 +73,14 @@ test('drilldown tools declare their base, are registered and documented', () => 
   assert.deepEqual(derived, expectedDerivedTools.map((item) => item.tool).sort());
 });
 
+test('standalone tools are registered and documented without claiming a base', () => {
+  for (const { tool, folder } of expectedStandaloneTools) {
+    assert.equal(getDerivedToolSource(tool), undefined, `${tool} 不是详查工具`);
+    assert.match(mcpTools, new RegExp(`domains/${folder}/tool\\.js`), `${tool} should be registered in src/mcp/tools.ts`);
+    assert.match(readme, new RegExp(`\\|\\s+\\\`${tool}\\\`\\s+\\|`), `${tool} should be documented in README tool list`);
+  }
+});
+
 test('root core entry should expose canonical json/text option types for newly added domains', () => {
   for (const typeName of [
     'AstrologyAspectJSON',
@@ -83,7 +98,7 @@ test('root core entry should expose canonical json/text option types for newly a
 
 test('MCP tool titles should be present and derived from the canonical description prefix', () => {
   const definitions = listToolDefinitions();
-  assert.equal(definitions.length, expectedDomains.length + expectedDerivedTools.length);
+  assert.equal(definitions.length, expectedDomains.length + expectedDerivedTools.length + expectedStandaloneTools.length);
   assert.equal(definitions.find((tool) => tool.name === 'bazi')?.title, '八字命盘');
   assert.equal(definitions.find((tool) => tool.name === 'xiaoliuren')?.title, '小六壬占测');
   assert.ok(definitions.every((tool) => typeof tool.title === 'string' && tool.title.length > 0));

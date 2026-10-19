@@ -319,7 +319,7 @@ export const KONG_WANG_LABELS: Record<KongWangState, string> = {
   kong_yue_jian: '临建',
 };
 
-const STRENGTH_LABELS: Record<YaoStrengthLevel, string> = {
+export const STRENGTH_LABELS: Record<YaoStrengthLevel, string> = {
   strong: '有气',
   moderate: '气平',
   weak: '无气',
@@ -443,7 +443,7 @@ export function sortYaosDescending<T extends { position: number; }>(yaos: readon
   return [...yaos].sort((a, b) => b.position - a.position);
 }
 
-const ACTION_LABELS: Record<YaoAction, string> = {
+export const ACTION_LABELS: Record<YaoAction, string> = {
   sheng: '生',
   ke: '克',
   fu: '扶',

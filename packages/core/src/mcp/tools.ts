@@ -1,4 +1,6 @@
+import { almanacSelectManifest } from './domains/almanac-select/tool.js';
 import { almanacManifest } from './domains/almanac/tool.js';
+import { astrologyPointManifest } from './domains/astrology-point/tool.js';
 import { astrologyManifest } from './domains/astrology/tool.js';
 import { baziDayunManifest } from './domains/bazi-dayun/tool.js';
 import { baziRelationsManifest } from './domains/bazi-relations/tool.js';
@@ -8,6 +10,7 @@ import { baziPillarsResolveManifest } from './domains/bazi-pillars-resolve/tool.
 import { baziManifest } from './domains/bazi/tool.js';
 import { daliurenLessonsManifest } from './domains/daliuren-lessons/tool.js';
 import { daliurenManifest } from './domains/daliuren/tool.js';
+import { liuyaoLineManifest } from './domains/liuyao-line/tool.js';
 import { liuyaoManifest } from './domains/liuyao/tool.js';
 import { meihuaManifest } from './domains/meihua/tool.js';
 import { qimenPalaceManifest } from './domains/qimen-palace/tool.js';
@@ -47,6 +50,9 @@ export const tools: AnyTool[] = [
   ziweiPalaceManifest,
   qimenPalaceManifest,
   daliurenLessonsManifest,
+  astrologyPointManifest,
+  liuyaoLineManifest,
+  almanacSelectManifest,
 ];
 
 export const toolByName = new Map(tools.map((tool) => [tool.definition.name, tool] as const));

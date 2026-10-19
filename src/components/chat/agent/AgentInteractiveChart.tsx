@@ -117,11 +117,13 @@ export function AgentInteractiveChart({ value, tool, reference, focus, followMod
   const counts = { relations: board.edges.filter(edge => edge.mode === 'relations').length, flow: board.edges.filter(edge => edge.mode === 'flow').length };
   // 打开时停在 Agent 最后看的模式；没看过时，没有合冲刑害的盘直接看流通，不让盘面空着。
   const [boardMode, setBoardMode] = useState<BoardMode>(() => baziViewing?.mode ?? (counts.relations || !counts.flow ? 'relations' : 'flow'));
-  // 跟随模型时，Agent 每换一次查看（关系详查、五行详查、定位某条关系）盘面就切过去。
-  const viewingKey = baziViewing?.key, viewingMode = baziViewing?.mode;
-  useEffect(() => {
-    if (viewingMode && (followModel || pinned)) setBoardMode(viewingMode);
-  }, [viewingKey, viewingMode, followModel, pinned]);
+  // 跟随模型时，Agent 每换一次查看（关系详查、五行详查、定位某条关系）盘面就切过去；重新开启跟随也会对齐一次。
+  const followed = baziViewing && (followModel || pinned) ? baziViewing.key : null;
+  const [appliedViewing, setAppliedViewing] = useState(followed);
+  if (followed !== appliedViewing) {
+    setAppliedViewing(followed);
+    if (baziViewing && followed) setBoardMode(baziViewing.mode);
+  }
   const [hiddenMarks, setHiddenMarks] = useState<ReadonlySet<string>>(new Set());
   const marks = boardMode === 'off' ? [] : [...new Set(board.edges.filter(edge => edge.mode === boardMode).map(edge => edge.mark))];
   // 点徽标 = 追问这条关系：Core 给了关系 id 的直接带上关系，五行详查的事实带上它连着的字。

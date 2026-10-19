@@ -19,7 +19,6 @@
 .agent-chart-scroll { overflow: auto; max-width: 100%; padding: .25rem; overscroll-behavior: contain; }
 .agent-canonical-chart--ziwei { min-width: 38rem; }
 .agent-canonical-chart--qimen, .agent-canonical-chart--daliuren { min-width: 26rem; }
-.agent-canonical-chart--liuyao { min-width: 30rem; }
 .agent-result-full { min-width: 0; }
 .agent-result-full > .agent-result-summary { margin-bottom: 1rem; }
 .agent-result-fallback { padding: 1rem; }

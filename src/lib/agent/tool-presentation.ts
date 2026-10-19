@@ -1,7 +1,7 @@
 import type { BaziCanonicalJSON } from 'taibu-core/bazi';
 import type { ZiweiCanonicalJSON } from 'taibu-core/ziwei';
 import type { QimenCanonicalJSON } from 'taibu-core/qimen';
-import type { LiuyaoCanonicalJSON } from 'taibu-core/liuyao';
+import type { LiuyaoCanonicalJSON, LiuyaoJSON } from 'taibu-core/liuyao';
 import type { MeihuaCanonicalJSON } from 'taibu-core/meihua';
 import type { DaliurenCanonicalJSON } from 'taibu-core/daliuren';
 import type { XiaoliurenCanonicalJSON } from 'taibu-core/xiaoliuren';
@@ -19,9 +19,15 @@ import type { AgentPart } from './types';
 import { AGENT_CHART_NAMES, isAgentChartTool, type AgentChartKind } from './tool-catalog';
 
 export type AgentToolPart = Extract<AgentPart, { type: 'tool' }>;
+/**
+ * The liuyao board the workspace draws: Core's canonical JSON, or MCP's AI-safe board
+ * flattened into it. The AI-safe board's hexagram-level interplay (六冲六合、反伏、合局)
+ * has no canonical counterpart, so it rides along as Core returned it.
+ */
+export type AgentLiuyaoChart = LiuyaoCanonicalJSON & { 全局互动?: LiuyaoJSON['全局互动'] };
 type ChartJson = {
   bazi: BaziCanonicalJSON; ziwei: ZiweiCanonicalJSON; qimen: QimenCanonicalJSON;
-  liuyao: LiuyaoCanonicalJSON; meihua: MeihuaCanonicalJSON; daliuren: DaliurenCanonicalJSON;
+  liuyao: AgentLiuyaoChart; meihua: MeihuaCanonicalJSON; daliuren: DaliurenCanonicalJSON;
   xiaoliuren: XiaoliurenCanonicalJSON; tarot: TarotCanonicalJSON;
   taiyi: TaiyiCanonicalJSON; astrology: AstrologyCanonicalJSON; almanac: AlmanacCanonicalJSON;
 };
@@ -84,7 +90,7 @@ export function getAgentChart(tool: AgentToolPart): AgentChart | null {
         // omitted strength/movement fields remain blank, never inferred.
         const displayedBoard = { ...board };
         for (const key of ['互卦', '错卦', '综卦']) if (strings(record(board.衍生卦)[key], ['卦名'])) displayedBoard[key] = record(board.衍生卦)[key];
-        const display: LiuyaoCanonicalJSON = {
+        const display: AgentLiuyaoChart = {
           卦盘: displayedBoard as unknown as LiuyaoCanonicalJSON['卦盘'],
           干支时间: Array.isArray(board.干支时间) ? board.干支时间 as LiuyaoCanonicalJSON['干支时间'] : [],
           六爻: (lines as unknown[]).map(value => {
@@ -98,6 +104,8 @@ export function getAgentChart(tool: AgentToolPart): AgentChart | null {
               ...(strings(line.伏神, ['六亲', '纳甲', '五行']) ? { 伏神: { ...line.伏神 as { 六亲: string; 纳甲: string; 五行: string }, 关系: '' } } : {}),
             };
           }), 用神分析: [], 卦级分析: [], 提示: [],
+          ...(Array.isArray(board.全局神煞) ? { 全局神煞: board.全局神煞 as string[] } : {}),
+          ...(Array.isArray(record(chart.全局互动).组合关系) ? { 全局互动: chart.全局互动 as unknown as LiuyaoJSON['全局互动'] } : {}),
         };
         return { kind: 'liuyao', chart: display, title, summary: [main.卦名, record(board.变卦).卦名].filter(Boolean).join(' → ') };
       }

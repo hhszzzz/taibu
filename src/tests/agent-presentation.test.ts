@@ -332,3 +332,19 @@ test('rounds fold only once ended and followed, and number back from the latest'
     assert.equal(long.get('u1')?.round.question, '😀'.repeat(120), 'long questions are cut by characters, not UTF-16 units');
     assert.equal(getAgentRoundFolds([reply('a1', 'run-1', 'completed'), ask('u2', '下一问')]).get('a1')?.round.question, '', 'a round can start with the reply');
 });
+
+test('the AI-safe liuyao board keeps its body, global shensha and hexagram interplay for the workspace', async () => {
+  const input = { question: '本月事业运势如何？', yongShenTargets: ['官鬼'], method: 'select', hexagramName: '天火同人', changedHexagramName: '乾为天', date: '2026-02-10T09:30:00' };
+  const rendered = buildToolSuccessPayload('liuyao', await executeTool('liuyao', input), { detailLevel: 'full' });
+  const value = getAgentChart({ type: 'tool', id: 'l', name: 'liuyao', title: '六爻', status: 'completed', output: { result: rendered.structuredContent } });
+  assert.equal(value?.kind, 'liuyao');
+  if (value?.kind !== 'liuyao') return;
+  const board = (rendered.structuredContent as { 卦盘: { 卦身?: unknown; 全局神煞?: string[] }; 全局互动: unknown });
+  assert.deepEqual(value.chart.卦盘.卦身, board.卦盘.卦身);
+  assert.deepEqual(value.chart.全局神煞, board.卦盘.全局神煞);
+  assert.deepEqual(value.chart.全局互动, board.全局互动);
+  // Moving lines come from Core's 动静, not from comparing hexagram codes.
+  assert.deepEqual(value.chart.六爻.filter(line => line.动静.startsWith('明动')).map(line => line.爻位), ['六二']);
+  // The AI-safe contract keeps 用神 and 应期 out of the agent board.
+  assert.deepEqual(value.chart.用神分析, []);
+});

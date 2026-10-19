@@ -153,6 +153,7 @@ function AgentResultsProbe() {
       ] },
       { type: 'text', id: 'cited-answer', text: '古籍说庚金刚健[' + (base + 1) + ']。\n\n用神专求月令[' + (base + 2) + ']，[' + (base + 9) + '] 不是本任务的依据。' }];
   });
+  window.fixture.chartTool = kind => parts.find(tool => tool.name === kind).output.result;
   window.fixture.chartTargets = kind => getChartTargets(getAgentChart(parts.find(tool => tool.name === kind)));
   window.fixture.chartFocus = (kind, ids, caption, savedReference) => {
     const original = parts.find(tool => tool.name === kind);
@@ -2095,6 +2096,15 @@ export async function run(existingPage, bundlePath) {
       await interactive.locator('[data-chart-target="' + targets.at(-1).id + '"][aria-pressed=true]').waitFor();
       await interactive.locator('[data-chart-target="' + targets.at(-1).id + '"]').click();
       await interactive.getByRole('button', { name: '追问这里', exact: true }).click();
+      if (kind === 'liuyao') {
+        // 六爻：窄宽度也保留变卦爻线；动爻取 Core「动静」；卦身、卦级互动与卦辞补齐。
+        const liuyao = await page.evaluate(() => { const tool = window.fixture.chartTool('liuyao'); return { changed: Boolean(tool.卦盘.变卦), moving: tool.六爻全盘.爻列表.filter(line => String(line.动静 ?? '').startsWith('明动')).length, body: Boolean(tool.卦盘.卦身), texts: Boolean(tool.卦盘.本卦.卦辞) }; });
+        const board = interactive.locator('[data-chart-kind="liuyao"]');
+        check('Liuyao keeps both hexagrams drawn, marks moving lines from Core and lists its body, interplay and texts', await board.locator('[data-changed-bar]').count() === (liuyao.changed ? 6 : 0) &&
+          (!liuyao.changed || await board.locator('[data-hexagram="base"] tbody tr').evaluateAll(rows => rows.filter(row => row.querySelector('[title$="动爻"]')).length) === liuyao.moving) &&
+          await board.locator('[aria-label="卦象要点"]').count() === (liuyao.body ? 1 : await board.locator('[aria-label="卦象要点"]').count()) &&
+          await board.getByText('卦辞与爻辞').count() === (liuyao.texts ? 1 : 0));
+      }
       check(kind + ' keeps the model focus and builds a referenced chart question', await following.getAttribute('aria-pressed') === 'true' && await page.evaluate(() => window.fixture.chartQuestion.reference.includes(':')));
     }
     // 黄历：值日并入主卡（含星宿歌诀），日九星原始卡删除；时辰带 13 格，模型定位的时辰直接展开详情条。

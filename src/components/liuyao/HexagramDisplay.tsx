@@ -3,7 +3,7 @@
  *
  * 一行一爻，自上而下：爻位 · 六神 · 六亲干支 · 本卦爻 · 世应 · 动爻标记 · 变卦爻 · 变出 · 神煞。
  * 传统信息（六亲/六神/世应/用神/旺衰/空亡/神煞）按爻位与本卦逐行对齐。
- * 传统视图在窄容器（手机 / 对话命盘）收拢为无表头的逐爻栅格：动爻标记贴在爻线旁，变卦信息并入「变出」。
+ * 传统视图在窄容器（手机 / 对话命盘）收拢为无表头的逐爻栅格：动爻标记贴在爻线旁，变卦爻缩小保留在「变出」左侧。
  * 'use client'：神煞展开需要本地状态，对话命盘中的 ChartTarget 需要点击交互。
  */
 'use client';
@@ -39,11 +39,13 @@ const WIDE_HEAD_CELL = `hidden @2xl:table-cell ${HEAD_CELL}`;
 /** 传统视图窄容器的卦名头：左本卦、右变出，宽容器回到对应爻线列的列头。 */
 const NAME_HEAD_CELL = 'whitespace-nowrap p-0 font-normal @2xl:py-3 @2xl:pr-2 @2xl:text-center @2xl:text-[0.8125rem]';
 const NAME_TEXT = '@2xl:font-display @2xl:text-[0.9375rem] @2xl:text-foreground';
-/** 传统视图窄容器的逐爻栅格列：爻位 · 六神 · 六亲干支 · 爻线 · 世应 ·（变出）。 */
+/** 传统视图窄容器的逐爻栅格列：爻位 · 六神 · 六亲干支 · 爻线 · 世应 ·（变卦爻 · 变出）。 */
 const NARROW_ROW_COLUMNS = {
-    withChanged: 'grid-cols-[30px_28px_minmax(0,1fr)_60px_22px_76px]',
-    baseOnly: 'grid-cols-[30px_28px_minmax(0,1fr)_60px_22px]',
+    withChanged: 'grid-cols-[26px_24px_minmax(0,1fr)_48px_20px_30px_minmax(0,4.5rem)]',
+    baseOnly: 'grid-cols-[26px_24px_minmax(0,1fr)_48px_20px]',
 };
+/** 传统视图的爻线：窄容器本卦 36px、变卦 28px，宽容器两列同宽。 */
+const TRADITIONAL_BAR_WIDTH = { base: 'w-9 @2xl:w-24 @3xl:w-[132px]', changed: 'w-7 @2xl:w-24 @3xl:w-[132px]' };
 
 interface HexagramDisplayProps {
     yaos: Yao[];
@@ -71,6 +73,8 @@ interface RowView {
     shiYing?: '世' | '应';
     wangShuai?: string;
     kongWang?: string;
+    /** 明动以外值得标出的动静：暗动、日破等（Core 的「动静」原文）。 */
+    movement?: string;
     shenSha: string[];
     changedTo?: { liuQin: string; naJia: string; wuXing: string };
 }
@@ -91,6 +95,7 @@ function toRowView(yao: YaoSource): RowView {
             shiYing: yao.世应 === '世' || yao.世应 === '应' ? yao.世应 : undefined,
             wangShuai: yao.旺衰,
             kongWang: yao.空亡,
+            movement: yao.动静 && yao.动静 !== '静' && !yao.动静.startsWith('明动') ? yao.动静 : undefined,
             shenSha: Array.isArray(yao.神煞) ? yao.神煞 : [],
             changedTo: yao.变爻 ? { liuQin: yao.变爻.六亲, naJia: yao.变爻.纳甲, wuXing: yao.变爻.五行 } : undefined,
         };
@@ -127,10 +132,11 @@ function pairByPosition(yaos: Yao[], fullYaos: readonly YaoSource[] | undefined)
 }
 
 function Bar({ yang, tone, width }: { yang: boolean; tone: string; width: string }) {
+    // shrink-0：窄栅格里爻线不被旁边的动爻标记挤窄。
     const segment = `block h-2 rounded-[2px] @2xl:h-2.5 @2xl:rounded-[3px] ${tone}`;
-    if (yang) return <span className={`${segment} ${width}`} />;
+    if (yang) return <span className={`shrink-0 ${segment} ${width}`} />;
     return (
-        <span className={`flex gap-2.5 @2xl:gap-[18px] ${width}`}>
+        <span className={`flex shrink-0 gap-2 @2xl:gap-[18px] ${width}`}>
             <span className={`flex-1 ${segment}`} />
             <span className={`flex-1 ${segment}`} />
         </span>
@@ -174,7 +180,8 @@ export function HexagramDisplay({
     const hasShenSha = traditional && [...rows.values()].some((row) => row.shenSha.length > 0);
     const hasMoving = displayYaos.some((yao) => yao.change === 'changing');
     const [expandedShenShaRows, setExpandedShenShaRows] = useState<Set<number>>(() => new Set());
-    const barWidth = BAR_WIDTH[size];
+    const barWidth = traditional ? TRADITIONAL_BAR_WIDTH.base : BAR_WIDTH[size];
+    const changedBarWidth = traditional ? TRADITIONAL_BAR_WIDTH.changed : BAR_WIDTH[size];
 
     const toggleShenShaRow = (position: number) => {
         setExpandedShenShaRows((prev) => {
@@ -252,12 +259,12 @@ export function HexagramDisplay({
                                                     <span className="whitespace-nowrap">
                                                         <span className={isYongShen ? '@2xl:font-medium' : ''}>{row.liuQin}</span> <GanZhi naJia={row.naJia} wuXing={row.wuXing} className="@2xl:text-foreground" />
                                                     </span>
-                                                    {(isYongShen || row.kongWang || row.wangShuai) && (
-                                                        <span className={`flex-wrap items-center gap-1 text-[0.625rem] leading-tight text-foreground-tertiary @2xl:flex @2xl:text-[0.6875rem] ${isYongShen || row.kongWang ? 'flex' : 'hidden'}`}>
+                                                    {(isYongShen || row.kongWang || row.wangShuai || row.movement) && (
+                                                        <span className="flex flex-wrap items-center gap-1 text-[0.625rem] leading-tight text-foreground-tertiary @2xl:text-[0.6875rem]">
                                                             {isYongShen && <span className="text-accent-strong @2xl:rounded @2xl:bg-accent @2xl:px-[5px] @2xl:py-px @2xl:text-on-accent">用神</span>}
+                                                            {row.wangShuai && <span>{row.wangShuai}</span>}
                                                             {row.kongWang && <span className="@2xl:text-foreground-secondary">{row.kongWang}</span>}
-                                                            {/* 旺衰只在宽容器显示，窄容器保持与设计稿一致的两行以内 */}
-                                                            {row.wangShuai && <span className="hidden @2xl:inline">{row.wangShuai}</span>}
+                                                            {row.movement && <span className="text-accent-strong">{row.movement}</span>}
                                                         </span>
                                                     )}
                                                 </div>
@@ -280,20 +287,19 @@ export function HexagramDisplay({
                                         {isChanging && <MovingMark yang={yao.type === 1} className="font-display text-lg leading-none text-accent" />}
                                     </td>
                                     {showChanged && (
-                                        <td className={`px-1 ${wideOnlyCell}`} data-chart-selected={traditional ? undefined : isChartTargetSelected(interaction, 'liuyao:changed:line:' + yao.position) || undefined}>
+                                        <td className={traditional ? '@2xl:px-1' : 'px-1'} data-changed-bar="" data-chart-selected={traditional ? undefined : isChartTargetSelected(interaction, 'liuyao:changed:line:' + yao.position) || undefined}>
                                             <div className="flex items-center justify-center gap-2">
                                                 {!traditional && interaction && <span className="text-[11px] text-foreground-tertiary"><ChartTarget interaction={interaction} id={'liuyao:changed:line:' + yao.position}>{YAO_LABELS[yao.position - 1]}</ChartTarget></span>}
-                                                <Bar yang={changedType === 1} tone={isChangedLine ? 'bg-accent' : 'bg-border-hover'} width={barWidth} />
+                                                <Bar yang={changedType === 1} tone={isChangedLine ? 'bg-accent' : 'bg-border-hover'} width={changedBarWidth} />
                                             </div>
                                         </td>
                                     )}
                                     {showChanged && traditional && (
-                                        <td className="whitespace-nowrap text-xs @2xl:pr-2 @2xl:text-sm" data-chart-selected={isChartTargetSelected(interaction, 'liuyao:changed:line:' + yao.position) || undefined}>
+                                        <td className="min-w-0 text-xs leading-tight @2xl:whitespace-nowrap @2xl:pr-2 @2xl:text-sm @2xl:leading-normal" data-chart-selected={isChartTargetSelected(interaction, 'liuyao:changed:line:' + yao.position) || undefined}>
                                             <ChartTarget interaction={interaction} id={'liuyao:changed:line:' + yao.position}>
                                                 {isChanging && row?.changedTo ? (
-                                                    <span className="inline-flex items-center gap-[3px] @2xl:text-accent-strong">
-                                                        <span aria-hidden="true" className="text-accent @2xl:hidden">→</span>
-                                                        <span>{row.changedTo.liuQin} <GanZhi naJia={row.changedTo.naJia} wuXing={row.changedTo.wuXing} className="@2xl:text-accent-strong" /></span>
+                                                    <span className="@2xl:text-accent-strong">
+                                                        {row.changedTo.liuQin} <GanZhi naJia={row.changedTo.naJia} wuXing={row.changedTo.wuXing} className="whitespace-nowrap @2xl:text-accent-strong" />
                                                     </span>
                                                 ) : <span className="text-foreground-tertiary @2xl:text-foreground-secondary">—</span>}
                                             </ChartTarget>

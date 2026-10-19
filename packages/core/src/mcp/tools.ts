@@ -4,9 +4,11 @@ import { baziDayunManifest } from './domains/bazi-dayun/tool.js';
 import { baziRelationsManifest } from './domains/bazi-relations/tool.js';
 import { baziPillarsResolveManifest } from './domains/bazi-pillars-resolve/tool.js';
 import { baziManifest } from './domains/bazi/tool.js';
+import { daliurenLessonsManifest } from './domains/daliuren-lessons/tool.js';
 import { daliurenManifest } from './domains/daliuren/tool.js';
 import { liuyaoManifest } from './domains/liuyao/tool.js';
 import { meihuaManifest } from './domains/meihua/tool.js';
+import { qimenPalaceManifest } from './domains/qimen-palace/tool.js';
 import { qimenManifest } from './domains/qimen/tool.js';
 import { tarotManifest } from './domains/tarot/tool.js';
 import { taiyiManifest } from './domains/taiyi/tool.js';
@@ -37,6 +39,8 @@ export const tools: AnyTool[] = [
   daliurenManifest,
   xiaoliurenManifest,
   baziRelationsManifest,
+  qimenPalaceManifest,
+  daliurenLessonsManifest,
 ];
 
 export const toolByName = new Map(tools.map((tool) => [tool.definition.name, tool] as const));

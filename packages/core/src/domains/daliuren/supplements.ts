@@ -42,6 +42,16 @@ const TIAN_JIANG_SHORT: Record<string, string> = {
   太常: '常', 玄武: '玄', 太阴: '阴', 天后: '后',
 };
 
+/**
+ * 十二天将五行：贵人己丑土、腾蛇丁巳火、朱雀丙午火、六合乙卯木、勾陈戊辰土、青龙甲寅木、
+ * 天空戊戌土、白虎庚申金、太常己未土、玄武癸亥水、太阴辛酉金、天后壬子水
+ * （《六壬大全》卷一「同类受克絶，以将而言」：青龙六合属木，朱雀螣蛇属火，贵人太常勾陈属土，白虎太阴属金，玄武天后属水）。
+ */
+export const TIAN_JIANG_WUXING: Record<string, string> = {
+  贵人: '土', 腾蛇: '火', 朱雀: '火', 六合: '木', 勾陈: '土', 青龙: '木',
+  天空: '土', 白虎: '金', 太常: '土', 玄武: '水', 太阴: '金', 天后: '水',
+};
+
 // ===== 十二长生 =====
 
 /**
@@ -232,13 +242,13 @@ export function classifyKeTi(
 
 /** 五行相克：a 克 b */
 const KE_MAP: Record<string, string> = { 木: '土', 土: '水', 水: '火', 火: '金', 金: '木' };
-function keRelation(a: string, b: string): boolean {
+export function keRelation(a: string, b: string): boolean {
   return KE_MAP[a] === b;
 }
 
 /** 五行相生：a 生 b */
 const SHENG_MAP: Record<string, string> = { 木: '火', 火: '土', 土: '金', 金: '水', 水: '木' };
-function shengRelation(a: string, b: string): boolean {
+export function shengRelation(a: string, b: string): boolean {
   return SHENG_MAP[a] === b;
 }
 

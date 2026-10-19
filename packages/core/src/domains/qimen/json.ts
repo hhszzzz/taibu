@@ -12,7 +12,7 @@ import type {
   QimenCanonicalTextOptions
 } from '../shared/text-options.js';
 
-function buildQimenPalaceStatusList(palace: QimenOutput['palaces'][number], dayKongPalaces: Set<number>, hourKongPalaces: Set<number>, panType: QimenOutput['panType']): string[] {
+export function buildQimenPalaceStatusList(palace: QimenOutput['palaces'][number], dayKongPalaces: Set<number>, hourKongPalaces: Set<number>, panType: QimenOutput['panType']): string[] {
   if (palace.palaceIndex === 5 && panType !== 'fei' && panType !== '飞盘') return ['寄宫参看对应宫位'];
   return [
     dayKongPalaces.has(palace.palaceIndex) ? '日空' : null,

@@ -8,6 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { buildPostgresFixture, SQL_SOURCE_MANIFEST } from './postgres-fixture.mjs';
 import { agentDatabaseContracts } from './agent-database-contracts.mjs';
 import { agentExperienceDatabaseContracts } from './agent-experience-database-contracts.mjs';
+import { conversationShareDatabaseContracts } from './conversation-share-database-contracts.mjs';
 
 // Real PostgreSQL/RLS contracts against a disposable local container. This does
 // NOT validate Supabase Auth, JWT signatures, PostgREST, or production parity.
@@ -704,6 +705,7 @@ ROLLBACK;`), /42501/, 'record_credit_transaction must reject direct authenticate
 
   await agentDatabaseContracts(t,{sql,asActor,asOwner,adminId:ids.admin});
   await agentExperienceDatabaseContracts(t,{sql,asActor,asOwner,adminId:ids.admin});
+  await conversationShareDatabaseContracts(t,{sql,asActor});
 
   await t.test('migration preflight failures leave no partially installed guard or restrictive policy', async () => {
     const migration = await readFile(path.join(repoRoot, SQL_SOURCE_MANIFEST.accountProtection), 'utf8');

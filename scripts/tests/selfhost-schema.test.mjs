@@ -24,9 +24,9 @@ test('generated artifacts and caller inventory are deterministic and source-pinn
   assert.match(sql, new RegExp(`COMMENT ON SCHEMA public IS 'taibu-selfhost-v1:${manifest.sourceFingerprint}'`));
 });
 
-test('all 54 application tables retain the reviewed snapshot column inventory', () => {
+test('all 55 application tables retain the reviewed snapshot column inventory', () => {
   const snapshot = read('supabase/tabel_export_from_supabase.sql');
-  assert.equal(names(sql).length, 54);
+  assert.equal(names(sql).length, 55);
   assert.deepEqual(names(sql), names(snapshot));
   for (const match of snapshot.matchAll(/^CREATE TABLE public\.(\w+) \(([\s\S]*?)^\);/gm)) {
     const actual = new RegExp(`CREATE TABLE public\\.${match[1]} \\(([\\s\\S]*?)\\n\\);`).exec(sql)?.[1];
@@ -96,7 +96,7 @@ test('restored transactional uniqueness and message cascade are present', () => 
 });
 
 test('all current literal application RPC references have definitions or explicit blockers', () => {
-  assert.equal(manifest.rpcReferences.length, 58);
+  assert.equal(manifest.rpcReferences.length, 61);
   assert.deepEqual(manifest.rpcReferences.filter(r => r.status === 'missing-source'), []);
   for (const rpc of manifest.rpcReferences) assert.ok(definition(rpc.name) || ['check_login_attempts', 'record_login_attempt'].includes(rpc.name), rpc.name);
   assert.deepEqual(manifest.requiredPostBaselineMigrations, ['supabase/migrations/20261003_100000_fix_rate_limit_admission.sql']);
@@ -124,7 +124,24 @@ test('Agent lifecycle repair is included after Durable without adding tables or 
   // The Durable migration amends the catalog body with pg_get_functiondef;
   // the generated source's last literal definition precedes that amendment.
   assert.match(sql, /new_guard text := .*durable_admitted/);
-  assert.equal(names(sql).length, 54);
+  assert.equal(names(sql).length, 55);
+});
+
+test('public conversation shares install from their migration with owner-only reads and token-only anonymous access', () => {
+  const migration = 'supabase/migrations/20261019_100000_conversation_shares.sql';
+  assert.ok(manifest.sources.some(source => source.file === migration));
+  assert.equal(manifest.tables.find(table => table.name === 'conversation_shares')?.security.startsWith('Feature migration'), true);
+  assert.match(sql, /CREATE POLICY conversation_shares_owner_select ON public.conversation_shares FOR SELECT TO authenticated USING \(user_id = \(SELECT auth.uid\(\)\)\);/);
+  assert.match(sql, /GRANT SELECT ON public.conversation_shares TO authenticated;/);
+  assert.doesNotMatch(sql, /GRANT (?:ALL|INSERT|UPDATE|DELETE)[^;]*ON (?:TABLE )?public.conversation_shares/);
+  assert.match(sql, /GRANT EXECUTE ON FUNCTION public.get_conversation_share\(text\) TO anon, authenticated;/);
+  for (const name of ['upsert_conversation_share', 'revoke_conversation_share']) {
+    assert.match(definition(name), /SECURITY DEFINER SET search_path=public,pg_temp/);
+    assert.match(sql, new RegExp(`REVOKE ALL ON FUNCTION public\\.${name}\\([^)]*\\) FROM public,anon;`));
+  }
+  for (const name of ['get_conversation_share', 'upsert_conversation_share', 'revoke_conversation_share']) {
+    assert.equal(manifest.rpcReferences.find(reference => reference.name === name)?.status, 'defined', name);
+  }
 });
 
 test('storage uses actual flat UID naming, bounded MIME/size and owner-only writes', () => {

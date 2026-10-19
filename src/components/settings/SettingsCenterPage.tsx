@@ -40,6 +40,7 @@ const LazyKnowledgeBaseManageContent = lazy(() => import('@/components/settings/
 const LazyMcpPageContent = lazy(() => import('@/components/settings/panels/McpServicePanel'));
 const LazyProfileContent = lazy(() => import('@/components/settings/panels/ProfilePanel'));
 const LazyHelpContent = lazy(() => import('@/components/settings/panels/HelpPanel'));
+const LazySharedLinksContent = lazy(() => import('@/components/settings/panels/SharedLinksPanel'));
 const LazyAdminAnnouncementsContent = lazy(async () => ({
   default: (await import('@/components/settings/AccountAdminPanels')).AdminAnnouncementsContent,
 }));
@@ -164,6 +165,8 @@ function renderSettingsCenterPanel(
       return renderLazyPanel(<LazyGeneralSettingsContent />);
     case 'upgrade':
       return renderLazyPanel(<LazyUpgradeContent />);
+    case 'shares':
+      return renderLazyPanel(<LazySharedLinksContent />);
     case 'personalization':
       return renderLazyPanel(<LazyAISettingsContent />);
     case 'byok':

@@ -48,6 +48,14 @@ const nextConfig: NextConfig = {
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
         ],
       },
+      {
+        // Public share links carry their capability token in the path: never leak it, never index it.
+        source: '/share/:token*',
+        headers: [
+          { key: 'Referrer-Policy', value: 'no-referrer' },
+          { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
+        ],
+      },
     ];
   },
 };

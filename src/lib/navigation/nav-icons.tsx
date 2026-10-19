@@ -189,6 +189,11 @@ export const KeyIcon = createNavIcon('key', <>
     <path d="M11.6 12H20M17 12v2.6M14.2 12v1.8" />
 </>);
 
+export const ShareLinkIcon = createNavIcon('share-link', <>
+    <path d="M10.2 13.8a3.6 3.6 0 0 0 5.1 0l3-3a3.6 3.6 0 0 0-5.1-5.1l-1.2 1.2" />
+    <path d="M13.8 10.2a3.6 3.6 0 0 0-5.1 0l-3 3a3.6 3.6 0 0 0 5.1 5.1l1.2-1.2" />
+</>);
+
 export const MegaphoneIcon = createNavIcon('megaphone', <>
     <path d="M4.5 10.5l10-4.5v12l-10-4.5z" />
     <path d="M14.5 8.5H19a1.5 1.5 0 0 1 0 7h-1.2M7 14.2l1.2 4.3a1.6 1.6 0 0 0 2 .8l.6-.2" />

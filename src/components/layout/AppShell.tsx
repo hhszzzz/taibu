@@ -6,6 +6,8 @@ import { MobileNav } from './MobileNav';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  // Public share pages are standalone read-only documents: no app navigation around them.
+  if (pathname.startsWith('/share/')) return <main id="main-content">{children}</main>;
   const settings = pathname === '/settings' || pathname.startsWith('/settings/');
   // One sidebar across the app; on /chat its 最近 list switches to dated groups
   // with agent task markers (see Sidebar / ChatSidebarConversations).

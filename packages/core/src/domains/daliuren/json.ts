@@ -10,6 +10,10 @@ import type {
   DaliurenCanonicalTextOptions
 } from '../shared/text-options.js';
 
+/** 课别、传序标签：规范 JSON 与详查工具的位置共用 */
+export const DALIUREN_LESSON_LABELS = ['一课 (干上)', '二课 (干阴)', '三课 (支上)', '四课 (支阴)'] as const;
+export const DALIUREN_TRANSMISSION_LABELS = ['初传 (发端)', '中传 (移易)', '末传 (归计)'] as const;
+
 export const renderDaliurenCanonicalJSON = withRulesJSON(renderDaliurenCanonicalJSONBase);
 
 function renderDaliurenCanonicalJSONBase(result: DaliurenOutput, options: { detailLevel?: DaliurenCanonicalTextOptions['detailLevel']; } = {}): DaliurenCanonicalJSON {
@@ -37,7 +41,7 @@ function renderDaliurenCanonicalJSONBase(result: DaliurenOutput, options: { deta
     if (result.keTi.subTypes.length > 0) basicInfo.细分课体 = [...result.keTi.subTypes];
   }
 
-  const keLabels = ['一课 (干上)', '二课 (干阴)', '三课 (支上)', '四课 (支阴)'] as const;
+  const keLabels = DALIUREN_LESSON_LABELS;
   const keData = [result.siKe.yiKe, result.siKe.erKe, result.siKe.sanKe, result.siKe.siKe];
   const siKe = keLabels.map((label, i) => ({
     课别: label,
@@ -46,7 +50,7 @@ function renderDaliurenCanonicalJSONBase(result: DaliurenOutput, options: { deta
     下神: keData[i][0]?.[1] || '-',
   }));
 
-  const chuanLabels = ['初传 (发端)', '中传 (移易)', '末传 (归计)'] as const;
+  const chuanLabels = DALIUREN_TRANSMISSION_LABELS;
   const chuanData = [result.sanChuan.chu, result.sanChuan.zhong, result.sanChuan.mo];
   const sanChuan = chuanLabels.map((label, i) => ({
     传序: label,

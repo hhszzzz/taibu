@@ -48,10 +48,24 @@ const created = [];
 const chartOnly = process.argv.includes('--chart-only');
 const collaborationOnly = process.argv.includes('--collaboration-only');
 let page;
+let context;
 let collaborationFixture;
+// 验收结束后删除本次新建的对话，演示账号里只留 pnpm local:showcase 的数据；--keep 保留现场。
+const keep = process.argv.includes('--keep');
+let existingConversations = null;
+const listConversations = async () => {
+  const ids = [];
+  for (let offset = 0; ; offset += 100) {
+    const response = await context.request.get(`${config.APP_ORIGIN}/api/conversations?limit=100&offset=${offset}`);
+    if (!response.ok()) throw new Error(`list conversations: ${response.status()}`);
+    const { conversations, pagination } = await response.json();
+    ids.push(...conversations.map(conversation => conversation.id));
+    if (!pagination?.hasMore) return ids;
+  }
+};
 try {
   if (!chartOnly) collaborationFixture = await createCollaborationFixture(config);
-  const context = await browser.newContext({
+  context = await browser.newContext({
     viewport: { width: 1440, height: 1100 },
     timezoneId: 'America/New_York',
     permissions: ['clipboard-read', 'clipboard-write'],
@@ -147,6 +161,7 @@ try {
     .click();
   await page.getByPlaceholder("输入密码").waitFor({ state: "hidden" });
   await selectAgentMode();
+  existingConversations = new Set(await listConversations());
   assert.equal(
     (await get("/api/agent/status")).ready,
     true,
@@ -863,5 +878,15 @@ try {
   throw error;
 } finally {
   collaborationFixture?.dispose();
+  if (!keep && existingConversations) {
+    try {
+      const leftovers = (await listConversations()).filter(id => !existingConversations.has(id));
+      for (const id of leftovers) {
+        const response = await context.request.delete(`${config.APP_ORIGIN}/api/conversations/${id}`);
+        if (!response.ok()) console.warn(`未能删除验收对话 ${id}：${response.status()}`);
+      }
+      console.log(`已删除本次验收创建的 ${leftovers.length} 个对话（--keep 可保留）。`);
+    } catch (error) { console.warn('验收对话清理失败：', error instanceof Error ? error.message : error); }
+  }
   await browser.close();
 }

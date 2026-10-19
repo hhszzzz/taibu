@@ -17,6 +17,7 @@
     "local:update": "pnpm selfhost up --project taibu-agent-1006b --build",
     "local:status": "pnpm selfhost status --project taibu-agent-1006b",
     "local:logs": "pnpm selfhost logs --project taibu-agent-1006b",
+    "local:showcase": "node scripts/selfhost-showcase.mjs --project taibu-agent-1006b",
     "lint": "pnpm lint:code && pnpm lint:guards",
     "lint:code": "eslint .",
     "lint:guards": "node scripts/check-architecture-guards.mjs",

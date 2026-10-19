@@ -47,7 +47,12 @@ pnpm local:update # 重建 Web / worker 等应用服务，在同一个项目更�
 pnpm local:up     # 启动既有服务与镜像
 pnpm local:status
 pnpm local:logs
+pnpm local:showcase # 清空演示账号的对话与 Agent 自动保存的记录，再重建演示对话
 ```
+
+`local:showcase` 只作用于本栈的演示账号（先核对数据库容器的实例标签），需要启用 demo 模型。它取消进行中的任务、逐个走删除对话的正式接口，删除带 Agent 标签的命理记录和未设为默认的「Agent 八字/紫微命盘」，额度不足 60 时在本地库补足，然后按 `scripts/selfhost/demo.mjs` 的 SHOWCASE 场景依次发起真实 Agent 任务：八字多步详查、紫微、奇门、六壬与六爻对照、占星与择日、三名成员（各用一个演示模型）的协作会诊、补充信息（停在等待回答）、合婚对比与一条普通对话。盘面与详查都是真实计算，解读文字是预置示例，结尾注明来源；每步调用前的说明同样只写工具返回里的事实。演示账号里有等待回答的任务时，`agent-selfhost-browser.mjs` 的协作夹具会拒绝运行，先取消该任务，验收后再执行一次 `local:showcase`。验收脚本跑完会删除自己创建的对话，`--keep` 可保留。
+
+对话与 Agent 会话不互通：在普通对话方式下打开 Agent 会话的链接会回到新建页，先切到 Agent 方式再打开。
 
 这些命令包装已有 `selfhost` CLI，继续执行所有权和数据库基线校验。不会重新初始化配置或删除数据卷。凭据位于 `.taibu-local/taibu-agent-1006b/credentials.json`。当前启用了确定性 demo 模型；真实模型与联网搜索需要单独配置，不能用 demo 回复衡量推理质量。
 

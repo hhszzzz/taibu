@@ -437,10 +437,14 @@ INSERT INTO public.ai_models(model_key,display_name,vendor,required_tier,usage_t
  ('taibu-demo-deep','本地深度演示','local','free','chat','newapi',true,11,true,'free',false,'reasoning_effort','high',8192,'测试模型：支持努力程度档位'),
  ('taibu-demo-fast','本地快速演示','local','free','chat','newapi',true,12,false,'free',false,NULL,NULL,4096,'测试模型：不支持推理')
 ON CONFLICT(model_key) DO UPDATE SET display_name=EXCLUDED.display_name,is_enabled=true,sort_order=EXCLUDED.sort_order,supports_reasoning=EXCLUDED.supports_reasoning,reasoning_required_tier=EXCLUDED.reasoning_required_tier,is_reasoning_default=EXCLUDED.is_reasoning_default,reasoning_effort_format=EXCLUDED.reasoning_effort_format,default_reasoning_effort=EXCLUDED.default_reasoning_effort,default_max_tokens=EXCLUDED.default_max_tokens,description=EXCLUDED.description;
+-- 每个演示模型按自己的 model_key 请求离线演示服务：协作成员各自报告实际模型，演示服务不校验模型名。
 INSERT INTO public.ai_model_gateway_bindings(model_id,gateway_id,model_id_override)
-SELECT m.id,g.id,'taibu-demo' FROM public.ai_models m CROSS JOIN public.ai_gateways g
+SELECT m.id,g.id,m.model_key FROM public.ai_models m CROSS JOIN public.ai_gateways g
 WHERE m.model_key IN ('taibu-demo-effort','taibu-demo-deep','taibu-demo-fast') AND g.gateway_key='newapi'
   AND NOT EXISTS(SELECT 1 FROM public.ai_model_gateway_bindings b WHERE b.model_id=m.id AND b.gateway_id=g.id);
+UPDATE public.ai_model_gateway_bindings b SET model_id_override=m.model_key FROM public.ai_models m, public.ai_gateways g
+WHERE b.model_id=m.id AND b.gateway_id=g.id AND g.gateway_key='newapi' AND m.model_key IN ('taibu-demo-effort','taibu-demo-deep','taibu-demo-fast')
+  AND b.model_id_override IS DISTINCT FROM m.model_key;
 COMMIT;`);
 }
 export async function withStorageMigrationPrivilege(sql, migrate) {

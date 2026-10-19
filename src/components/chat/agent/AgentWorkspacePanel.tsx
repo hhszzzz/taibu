@@ -26,7 +26,8 @@ import {
 } from './AgentWorkspaceViews';
 import { getChartKindMeta } from './chart-registry';
 import { WorkspaceOverview } from './AgentWorkspaceSections';
-import { DrilldownList, getLatestBaziFacts } from './AgentDrilldownViews';
+import { DrilldownList } from './AgentDrilldownViews';
+import { getBaziViewing, getLatestBaziFacts } from './bazi-board';
 const ChartPreview = lazy(() => import('./AgentChartPreview').then(module => ({ default: module.AgentChartPreview })));
 const InteractiveChart = lazy(() => import('./AgentInteractiveChart').then(module => ({ default: module.AgentInteractiveChart })));
 
@@ -102,7 +103,10 @@ function ResourceView({ resource, model, data, answers, questionIds, userId, art
                 ? <><Suspense fallback={<p role="status">加载命盘…</p>}>
                     <InteractiveChart key={`${reference ?? reading.id}:${pinned ? named!.id : ''}`} value={value} tool={reading} reference={reference}
                         focus={focus} followModel={followModel} live={live} pinned={pinned !== null} subject={describeAgentChartSubject(source ?? reading, value)}
-                        baziFacts={value.kind === 'bazi' ? getLatestBaziFacts(drilldowns) : undefined} onAsk={onChartQuestion} />
+                        baziFacts={value.kind === 'bazi' ? getLatestBaziFacts(drilldowns) : undefined}
+                        baziViewing={value.kind === 'bazi' ? getBaziViewing(model.tools.filter(tool => tools.includes(tool) || tool.name === 'focus_chart'), reference,
+                            value.chart.干支关系明细 ?? [], pinned ? named : undefined) : null}
+                        onAsk={onChartQuestion} />
                 </Suspense>{drilldownList}</>
                 // A drilldown of a saved chart not read in this task shows its findings without the board.
                 : drilldowns.length ? drilldownList

@@ -104,3 +104,27 @@ test('the board draws Core relations, adds drilldown-only ones, and switches flo
     const pairs = flow.filter(edge => edge.shape === 'arc').map(edge => edge.mark + edge.cells.map(item => item.column).sort().join());
     assert.equal(new Set(pairs).size, pairs.length);
 });
+
+test('the board follows what the agent last looked at: a relations or wuxing drilldown, or a located relation', async () => {
+    const { getBaziViewing, getLatestBaziFacts } = await import('../components/chat/agent/bazi-board');
+    const reference = 'bazi_chart:11111111-1111-4111-8111-111111111111';
+    const relations = [{ id: 'bazi-relation-0', 类型: '六冲', 位置: [] }, { id: 'bazi-relation-1', 类型: '生', 位置: [] }];
+    const tool = (id: string, name: string, output: unknown = {}, status: 'completed' | 'running' = 'completed') => ({ type: 'tool' as const, id, name, title: name, status, input: { reference }, output });
+    const focus = (id: string, targetIds: string[], to = reference) => tool(id, 'focus_chart', { chartFocus: { version: 1, reference: to, targetIds, includeRelated: false, caption: '' } });
+    assert.equal(getBaziViewing([], reference, relations), null);
+    assert.deepEqual(getBaziViewing([tool('a', 'bazi_relations')], reference, relations), { key: 'a', mode: 'relations', label: '干支关系' });
+    // A running wuxing drilldown already switches the board.
+    assert.equal(getBaziViewing([tool('a', 'bazi_relations'), tool('b', 'bazi_wuxing', {}, 'running')], reference, relations)?.mode, 'flow');
+    assert.equal(getBaziViewing([tool('a', 'bazi_wuxing'), focus('f', ['bazi-relation-0'])], reference, relations)?.mode, 'relations');
+    assert.equal(getBaziViewing([tool('a', 'bazi_relations'), focus('f', ['bazi-relation-1'])], reference, relations)?.mode, 'flow');
+    // The latest focus on a cell says nothing about lines; a focus on another chart is ignored.
+    assert.equal(getBaziViewing([tool('a', 'bazi_wuxing'), focus('f', ['bazi:cell:2:1'])], reference, relations), null);
+    assert.equal(getBaziViewing([tool('a', 'bazi_wuxing'), focus('f', ['bazi-relation-0'], 'bazi_chart:22222222-2222-4222-8222-222222222222')], reference, relations)?.mode, 'flow');
+    // A step the reader opened decides what was being looked at then.
+    assert.equal(getBaziViewing([tool('a', 'bazi_relations'), tool('b', 'bazi_wuxing')], reference, relations, tool('a', 'bazi_relations'))?.mode, 'relations');
+    // Only completed, well-formed results feed the board.
+    const wuxing = await structured<BaziWuxingCanonicalJSON>('bazi_wuxing', birth);
+    assert.equal(getLatestBaziFacts([tool('w', 'bazi_wuxing', { result: wuxing }, 'running')]).wuxing, null);
+    assert.equal(getLatestBaziFacts([tool('w', 'bazi_wuxing', { result: { 五行统计: [] } })]).wuxing, null);
+    assert.equal(getLatestBaziFacts([tool('w', 'bazi_wuxing', { result: wuxing })]).wuxing, wuxing);
+});

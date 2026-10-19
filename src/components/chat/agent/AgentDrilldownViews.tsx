@@ -9,6 +9,7 @@ import { getDrilldownFocus } from '@/lib/agent/chart-interaction';
 import { describeDrilldownSelection, getAgentToolTitle } from './presentation';
 import { WorkspaceToolPending } from './AgentWorkspaceViews';
 import { layoutRelations, relationTone, type RelationRow } from '@/lib/divination/ganzhi-relation-layout';
+import { asBaziRelations, asBaziWuxing } from './bazi-board';
 import { GanzhiRelationOverlay, WuxingCycleStrip, relationBandHeight } from '@/components/bazi/result/GanzhiRelationOverlay';
 import { ganZhiTextClass } from '@/components/bazi/element-classes';
 
@@ -79,35 +80,6 @@ export function JsonSectionView({ label, value, depth = 0 }: { label: string; va
 }
 
 const NOTHING: ReadonlySet<string> = new Set();
-const isRelationList = (value: Json | undefined) => Array.isArray(value) && relationRows(value);
-
-function asBaziRelations(result: Json): BaziRelationsCanonicalJSON | null {
-    if (!isRecord(result) || !Array.isArray(result.参与柱位) || !isRelationList(result.原局关系)) return null;
-    if (result.叠加关系 !== undefined && !isRelationList(result.叠加关系)) return null;
-    return result.参与柱位.every(item => isRecord(item) && typeof item.柱 === 'string' && typeof item.干支 === 'string')
-        ? result as unknown as BaziRelationsCanonicalJSON : null;
-}
-
-function asBaziWuxing(result: Json): BaziWuxingCanonicalJSON | null {
-    if (!isRecord(result) || !Array.isArray(result.五行统计) || !isRecord(result.月令) || !isRecord(result.日主) || !isRecord(result.相生链)) return null;
-    return ['通根', '透干', '干支自坐', '相邻天干'].every(key => isRelationList(result[key])) ? result as unknown as BaziWuxingCanonicalJSON : null;
-}
-
-function latestResult<T>(tools: readonly AgentToolPart[], name: string, parse: (result: Json) => T | null): T | null {
-    for (const tool of [...tools].reverse()) {
-        if (tool.name !== name || tool.status !== 'completed') continue;
-        const output = tool.output && typeof tool.output === 'object' ? tool.output as { result?: Json } : {};
-        const parsed = parse(output.result ?? null);
-        if (parsed) return parsed;
-    }
-    return null;
-}
-
-/** 一张八字最近一次完成的关系详查与五行详查；盘面据此补画原局关系、通根与自坐。 */
-export function getLatestBaziFacts(tools: readonly AgentToolPart[]) {
-    return { relations: latestResult(tools, 'bazi_relations', asBaziRelations), wuxing: latestResult(tools, 'bazi_wuxing', asBaziWuxing) };
-}
-
 /** 关系的类型标记与说明，一行一条；标记沿用盘面连线的配色。 */
 function RelationLines({ label, rows }: { label: string; rows: readonly RelationRow[] }) {
     if (!rows.length) return <p className="agent-ws-note">无</p>;

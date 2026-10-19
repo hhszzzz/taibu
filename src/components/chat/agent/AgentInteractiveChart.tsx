@@ -12,6 +12,7 @@ import { BAZI_COLUMNS, baziBoardRows, layoutRelations, visibleRelationEdges, typ
 import { getGanZhiElement } from '@/components/bazi/element-classes';
 import { WuxingCycleStrip } from '@/components/bazi/result/GanzhiRelationOverlay';
 import { CanonicalChartView, type BaziRelationOverlay } from './CanonicalChartView';
+import type { BaziViewing } from './bazi-board';
 import { CopyButton } from './AgentToolCard';
 import './agent-results.css';
 
@@ -45,13 +46,15 @@ function glyphElementCounts(chart: BaziCanonicalJSON) {
  * looked at with its actions, the interactive chart and bazi relations. The
  * title lives on the workspace tab, so the board itself does not repeat it.
  */
-export function AgentInteractiveChart({ value, tool, reference, focus, followModel, live = false, pinned = false, subject, baziFacts, onAsk }: {
+export function AgentInteractiveChart({ value, tool, reference, focus, followModel, live = false, pinned = false, subject, baziFacts, baziViewing, onAsk }: {
   value: AgentChart; tool: AgentToolPart; reference: string | null; focus?: ChartFocus | null; followModel: boolean;
   /**
    * 这张八字最近一次关系详查与五行详查的结果：关系模式补画命盘没列的原局关系（如相破），
    * 流通模式据五行详查画通根、自坐并给出加权五行统计。
    */
   baziFacts?: { relations: BaziRelationsCanonicalJSON | null; wuxing: BaziWuxingCanonicalJSON | null };
+  /** Agent 最近在这张八字上看的是干支关系还是五行流通：跟随时盘面切到对应模式。 */
+  baziViewing?: BaziViewing | null;
   /** The model is still working, so the focus box says whether it is being followed. */
   live?: boolean;
   /** The focus was opened from its step or a citation: show and reveal it even while not following. */
@@ -112,8 +115,13 @@ export function AgentInteractiveChart({ value, tool, reference, focus, followMod
   const detail = value.kind === 'bazi' ? value.chart.干支关系明细 ?? NO_ROWS : NO_ROWS;
   const board = useMemo(() => layoutRelations(baziBoardRows(detail, { relations: drilled, wuxing }, located), BAZI_COLUMNS), [detail, drilled, wuxing, located]);
   const counts = { relations: board.edges.filter(edge => edge.mode === 'relations').length, flow: board.edges.filter(edge => edge.mode === 'flow').length };
-  // 没有合冲刑害的盘一打开就看流通，不让盘面空着。
-  const [boardMode, setBoardMode] = useState<BoardMode>(() => counts.relations || !counts.flow ? 'relations' : 'flow');
+  // 打开时停在 Agent 最后看的模式；没看过时，没有合冲刑害的盘直接看流通，不让盘面空着。
+  const [boardMode, setBoardMode] = useState<BoardMode>(() => baziViewing?.mode ?? (counts.relations || !counts.flow ? 'relations' : 'flow'));
+  // 跟随模型时，Agent 每换一次查看（关系详查、五行详查、定位某条关系）盘面就切过去。
+  const viewingKey = baziViewing?.key, viewingMode = baziViewing?.mode;
+  useEffect(() => {
+    if (viewingMode && (followModel || pinned)) setBoardMode(viewingMode);
+  }, [viewingKey, viewingMode, followModel, pinned]);
   const [hiddenMarks, setHiddenMarks] = useState<ReadonlySet<string>>(new Set());
   const marks = boardMode === 'off' ? [] : [...new Set(board.edges.filter(edge => edge.mode === boardMode).map(edge => edge.mark))];
   // 点徽标 = 追问这条关系：Core 给了关系 id 的直接带上关系，五行详查的事实带上它连着的字。
@@ -163,10 +171,13 @@ export function AgentInteractiveChart({ value, tool, reference, focus, followMod
     {value.kind === 'bazi' && <section className="agent-board-relations" aria-label="干支关系与流通" data-board-mode={boardMode}>
       <div className="agent-board-relation-bar">
         <div className="agent-board-segments" role="group" aria-label="盘面连线">
-          {BOARD_MODES.map(([mode, name]) => <button key={mode} type="button" aria-pressed={boardMode === mode} onClick={() => setBoardMode(mode)}>
+          {BOARD_MODES.map(([mode, name]) => <button key={mode} type="button" aria-pressed={boardMode === mode} data-viewed={baziViewing?.mode === mode || undefined} onClick={() => setBoardMode(mode)}>
             {name}{mode !== 'off' && <span>{counts[mode]}</span>}
           </button>)}
         </div>
+        {baziViewing && <span className="agent-board-viewing" data-live={live && followModel || undefined}>
+          <LocateFixed size={12} aria-hidden="true" />{live && followModel ? '模型正在看' : 'Agent 查看了'}{baziViewing.label}
+        </span>}
         {marks.length > 1 && <div className="agent-board-marks" role="group" aria-label="按类型筛选">
           {marks.map(mark => <button key={mark} type="button" aria-pressed={!hiddenMarks.has(mark)} onClick={() => toggleMark(mark)}>{mark}</button>)}
         </div>}

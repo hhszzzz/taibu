@@ -139,7 +139,7 @@ export function ChatHeader({
                 </button>
             </div>
 
-            {/* 会话标题菜单 = claude 词表：重命名 R / 复制链接 C / 对话记录视图 ▸ / 导出对话 ▸ / 删除 D */}
+            {/* 会话标题菜单 = claude 词表：重命名 R / 复制链接 C / 加入知识库 A / 对话记录视图 ▸ / 删除对话 D（字母键由 FloatingPanel 接线）；导出在「查看选项」里 */}
             <FloatingPanel open={titleMenu} anchorRef={titleRef} onClose={() => { setTitleMenu(false); setRecordOpen(false); setExportOpen(false); }} label="对话操作" className="chat-header-menu">
                 <button type="button" role="menuitem" onClick={() => { setTitleMenu(false); setRenaming(title); }}>重命名<kbd>R</kbd></button>
                 <button type="button" role="menuitem" onClick={() => { setTitleMenu(false); void copyConversationLink(); }}>复制链接<kbd>C</kbd></button>

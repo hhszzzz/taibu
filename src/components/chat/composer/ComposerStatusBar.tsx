@@ -61,8 +61,6 @@ export interface ComposerStatusBarProps extends ModelSettingsProps {
     onModelChange?: (modelId: string) => void;
     reasoningEnabled: boolean;
     onReasoningChange?: (enabled: boolean) => void;
-    /** 预留的额度/用量环（上下文已移入右侧会话栏）。 */
-    contextMeter?: ReactNode;
     /** 平台积分用量环（claude chin 行尾的用量圈）。 */
     usage?: ComposerUsage;
     customProviderActive: boolean;
@@ -74,7 +72,7 @@ export interface ComposerStatusBarProps extends ModelSettingsProps {
 }
 
 export function ComposerStatusBar(props: ComposerStatusBarProps) {
-    const { agentMode, disabled, userId, contextMeter } = props;
+    const { agentMode, disabled, userId } = props;
     const providerReturnRef = useRef<HTMLButtonElement>(null);
     const [providerOpen, setProviderOpen] = useState(false);
 
@@ -99,7 +97,7 @@ export function ComposerStatusBar(props: ComposerStatusBarProps) {
                     userId={userId} membershipType={props.membershipType} disabled={disabled} toolbarStyle />
             )}
             {/* 用量环排在模型键之后（claude /code 实测：模型 → 环收尾在行尾） */}
-            {props.usage ? <UsageRing usage={props.usage} /> : contextMeter}
+            {props.usage && <UsageRing usage={props.usage} />}
 
             <Modal open={providerOpen} onClose={() => setProviderOpen(false)} returnFocusRef={props.customProviderActive ? providerReturnRef : (props.providerReturnRef ?? undefined)} labelledBy="custom-provider-panel-title" className="chat-provider-dialog">
                 <button type="button" onClick={() => setProviderOpen(false)} aria-label="关闭自定义模型" className="agent-icon-button absolute right-3 top-3 z-10"><X size={17} /></button>

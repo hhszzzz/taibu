@@ -9,6 +9,17 @@ const openPanels: HTMLElement[] = [];
 /** Matching elements that are laid out: an item hidden at this width is skipped by focus and arrow keys. */
 const rendered = (panel: HTMLElement, selector: string) => [...panel.querySelectorAll<HTMLElement>(selector)].filter(element => element.getClientRects().length > 0);
 
+/**
+ * claude 菜单的字母键：菜单项内 <kbd> 标注的单个字母，在菜单打开时按下即触发该项。
+ * 只认无修饰键的单字符，输入框里打字不受影响。
+ */
+export function findMenuShortcut(panel: Pick<ParentNode, 'querySelectorAll'>, event: Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'metaKey' | 'altKey'>): HTMLElement | null {
+    if (event.key.length !== 1 || event.ctrlKey || event.metaKey || event.altKey) return null;
+    const letter = event.key.toUpperCase();
+    return [...panel.querySelectorAll<HTMLElement>('[role^="menuitem"]:not(:disabled)')]
+        .find(item => item.querySelector('kbd')?.textContent?.trim().toUpperCase() === letter) ?? null;
+}
+
 /** Shared viewport-aware surface for model, tool, context and conversation menus. */
 export function FloatingPanel({ open, anchorRef, onClose, children, label, id, className = '',
     role = 'menu', side = 'bottom', align = 'start', initialFocus = 'first', restoreFocus = true, portaled = true, arrowNavigation = false,
@@ -108,6 +119,10 @@ export function FloatingPanel({ open, anchorRef, onClose, children, label, id, c
             if (role !== 'menu' && !arrowNavigation) return;
             if (!panel.contains(document.activeElement)) return;
             if (role !== 'menu' && !(document.activeElement instanceof HTMLButtonElement)) return;
+            if (role === 'menu' && !(document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement)) {
+                const shortcut = findMenuShortcut(panel, event);
+                if (shortcut) { event.preventDefault(); shortcut.click(); return; }
+            }
             if (event.key === 'Tab') { close(true); return; }
             if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
             event.preventDefault();

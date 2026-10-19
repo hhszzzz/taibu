@@ -6,7 +6,7 @@
  */
 'use client';
 
-import { memo } from 'react';
+import { memo, useRef } from 'react';
 import { Archive, Check, Ellipsis, X } from 'lucide-react';
 import { getConversationDisplayParts } from '@/lib/chat/conversation-title-display';
 import type { ConversationListItem } from '@/types';
@@ -43,16 +43,27 @@ export const ConversationItem = memo(function ConversationItem({
 }: ConversationItemProps) {
     const { mainTitle, subTitle, changedTitle } = getConversationDisplayParts(conv);
 
+    // Enter / Esc 已经结束编辑时，随后卸载触发的失焦不再重复提交。
+    const settledRef = useRef(false);
     const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
         if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
         if (event.key === 'Enter') {
             event.preventDefault();
+            settledRef.current = true;
             onSaveRename?.();
         }
         if (event.key === 'Escape') {
             event.preventDefault();
+            settledRef.current = true;
             onCancelRename?.();
         }
+    };
+    // 与标题栏一致：失焦即保存；清空或未改动则视为取消。
+    const handleBlur = () => {
+        if (settledRef.current) return;
+        const next = editTitle.trim();
+        if (next && next !== conv.title) onSaveRename?.();
+        else onCancelRename?.();
     };
 
     // Compact: 用于内嵌侧边栏
@@ -69,7 +80,8 @@ export const ConversationItem = memo(function ConversationItem({
                         value={editTitle}
                         onChange={(e) => onEditTitleChange?.(e.target.value)}
                         onClick={(e) => e.stopPropagation()}
-                        onBlur={() => onCancelRename?.()}
+                        onFocus={() => { settledRef.current = false; }}
+                        onBlur={handleBlur}
                         onKeyDown={handleKeyDown}
                         autoFocus
                         className="min-w-0 flex-1 rounded-md bg-background border border-border px-2 py-1.5 text-[13px] text-foreground focus:outline-none focus:ring-2 focus:ring-accent/10 focus:border-accent"
@@ -162,7 +174,8 @@ export const ConversationItem = memo(function ConversationItem({
                     value={editTitle}
                     onChange={(e) => onEditTitleChange?.(e.target.value)}
                     onClick={(e) => e.stopPropagation()}
-                    onBlur={() => onCancelRename?.()}
+                    onFocus={() => { settledRef.current = false; }}
+                    onBlur={handleBlur}
                     onKeyDown={handleKeyDown}
                     autoFocus
                     className="min-w-0 flex-1 rounded-md bg-background border border-border px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent/10 focus:border-accent"

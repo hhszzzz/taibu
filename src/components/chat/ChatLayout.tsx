@@ -17,7 +17,8 @@ import { ConversationExportDialog } from './ConversationExportDialog';
 import { AgentQueue } from './agent/AgentQueue';
 import { AnalysisMethodPicker } from './agent/AnalysisMethodPicker';
 import Link from 'next/link';
-import { Lock, PanelRight } from 'lucide-react';
+import { Lock, PanelRight, X } from 'lucide-react';
+import { Modal } from '@/components/ui/Modal';
 import type { ChatMessage, AttachmentState, Mention, PrivateAttachment } from '@/types';
 import { ChatMessageList } from '@/components/chat/ChatMessageList';
 import { VirtualizedChatMessageList } from '@/components/chat/VirtualizedChatMessageList';
@@ -50,6 +51,8 @@ import { ChatRecordViewContext, useChatRecordView } from '@/lib/chat/chat-record
 import { setChatWorkspaceOpen } from '@/lib/chat/chat-sidebar';
 import { refreshAgentActivity } from '@/lib/agent/use-agent-activity';
 import type { CSSProperties } from 'react';
+import { CHAT_SHORTCUTS, isShortcutSheetKey, modifierLabel, shouldStopOnEscape } from '@/lib/chat/chat-shortcuts';
+import { dispatchComposerFiles, dragHasFiles } from '@/lib/chat/composer-files';
 import './chat-workspace.css';
 import type { ModelSettingsProps } from '@/lib/chat/model-settings';
 
@@ -93,6 +96,8 @@ interface ChatLayoutProps extends ModelSettingsProps {
     customProviderActive: boolean;
     customProviderLabel: string | null;
     userId: string | null;
+    /** Profile nickname for the empty-state greeting. */
+    displayName?: string | null;
     membershipType: MembershipType;
     attachmentState: AttachmentState;
     onAttachmentChange: (state: AttachmentState) => void;
@@ -137,6 +142,7 @@ export function ChatLayout(props: ChatLayoutProps) {
 
     const contentRef = useRef<HTMLDivElement>(null);
     const greeting = useGreeting();
+    const displayName = props.displayName?.trim();
     const { preferences } = useReadingPreferences(props.userId);
     const recordView = useChatRecordView(userId, activeConversationId);
     const workspaceButtonRef = useRef<HTMLButtonElement>(null);
@@ -203,6 +209,19 @@ export function ChatLayout(props: ChatLayoutProps) {
     // 记录视图只影响步骤明细的展开，不改变轮次折叠。
     const { rounds, reveal: revealMessage } = useAgentRoundFolds(transcriptMessages, workspaceKey);
     const { showJump, jumpToLatest } = useTranscriptScroll({ scrollRef: messageScrollContainerRef, followRef: props.shouldAutoScrollRef, conversationKey: workspaceKey, messages: transcriptMessages, enabled: !conversationLoading && transcriptMessages.length > 0, virtualized: transcriptMessages.length > 20, reveal: revealMessage });
+    // Esc 停止生成（菜单、弹窗、行内编辑先消费 Esc）；⌘/ 打开快捷键说明。
+    const [shortcutsOpen, setShortcutsOpen] = useState(false);
+    useEffect(() => {
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (isShortcutSheetKey(event)) { event.preventDefault(); setShortcutsOpen(open => !open); return; }
+            if (shouldStopOnEscape(event, isLoading, document)) { event.preventDefault(); onStop(); }
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [isLoading, onStop]);
+    // 拖放文件到会话区：覆盖层提示，松手后交给输入框现有的附件流程。
+    const [dragging, setDragging] = useState(false);
+    const acceptsDrop = !!userId && !disabled && !conversationLoading;
     const latestAgentData = useMemo(() => [...messages].reverse().find(message => message.agent)?.agent, [messages]);
     const artifacts = useMemo(() => collectAgentArtifacts(messages), [messages]);
     const agentParts = useMemo(() => messages.flatMap(message => message.agent?.parts ?? []), [messages]);
@@ -387,12 +406,24 @@ export function ChatLayout(props: ChatLayoutProps) {
     const showHeader = !emptyState || !!activeConversationId || !!conversationError;
     // 右侧会话栏常驻（claude /code 无开关），仅在打开工作区时让位。
     const showSessionDetails = isAgentMode && Boolean(latestAgentData) && showHeader && !workspaceOpen;
+    // 生成中锁住编辑、重新生成、版本切换与分叉：它们都会改写正在写入的分支。
+    const transcriptLocked = isCreditLocked || isLoading || !!props.agent?.active || !!props.agent?.restoring || !!props.agent?.syncing;
 
     return (
         <AgentResultContext.Provider value={resultWorkspace}><ChatRecordViewContext.Provider value={recordView}><div className="chat-workspace flex bg-background" style={{ '--chat-column': `${preferences.width}px` } as CSSProperties}>
             {/* data-agent-ready turns true once a restored task has finished syncing. */}
             <div ref={contentRef} className="chat-main flex-1 flex flex-col min-w-0 min-h-0 relative bg-background"
-                data-agent-ready={props.agent ? !props.agent.restoring && !props.agent.syncing : undefined}>
+                data-agent-ready={props.agent ? !props.agent.restoring && !props.agent.syncing : undefined}
+                onDragEnter={event => { if (acceptsDrop && dragHasFiles(event.dataTransfer.types)) { event.preventDefault(); setDragging(true); } }}
+                onDragOver={event => { if (acceptsDrop && dragHasFiles(event.dataTransfer.types)) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; } }}
+                onDragLeave={event => { if (!(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))) setDragging(false); }}
+                onDrop={event => {
+                    setDragging(false);
+                    if (!acceptsDrop || !dragHasFiles(event.dataTransfer.types)) return;
+                    event.preventDefault();
+                    dispatchComposerFiles(Array.from(event.dataTransfer.files));
+                }}>
+                {dragging && <div className="chat-drop-overlay" aria-hidden="true"><span>拖放文件以添加到对话</span></div>}
                 <ChatHeader
                     navigation={<MobileChatDrawer />}
                     empty={!showHeader}
@@ -425,7 +456,7 @@ export function ChatLayout(props: ChatLayoutProps) {
                         <div className="chat-empty-inner">
                             <div className="chat-empty-intro">
                                 <span className="chat-empty-symbol" aria-hidden="true">卜</span>
-                                <h1>{greeting}，想问什么？</h1>
+                                <h1>{displayName ? `${greeting}，${displayName}` : `${greeting}，想问什么？`}</h1>
                             </div>
                             <ChatComposer {...composerProps} variant="hero" header={creditStrip} />
                         </div>
@@ -440,7 +471,7 @@ export function ChatLayout(props: ChatLayoutProps) {
                                     onEditMessage={onEditMessage} onRegenerateResponse={onRegenerateResponse}
                                     onSwitchVersion={onSwitchVersion}
                                     onArchiveMessage={activeConversationId ? onArchiveMessage : undefined}
-                                    disabled={isCreditLocked || props.agent?.restoring || props.agent?.syncing}
+                                    disabled={transcriptLocked}
                                     rounds={rounds}
                                 />
                             </div>
@@ -451,7 +482,7 @@ export function ChatLayout(props: ChatLayoutProps) {
                                     onEditMessage={onEditMessage} onRegenerateResponse={onRegenerateResponse}
                                     onSwitchVersion={onSwitchVersion}
                                     onArchiveMessage={activeConversationId ? onArchiveMessage : undefined}
-                                    disabled={isCreditLocked || props.agent?.restoring || props.agent?.syncing}
+                                    disabled={transcriptLocked}
                                     rounds={rounds}
                                 />
                             </div>
@@ -481,6 +512,7 @@ export function ChatLayout(props: ChatLayoutProps) {
                 citedParagraph={citedParagraph} />}
 
             {children}
+            <ShortcutSheet open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
             <AnalysisMethodPicker onSelect={text => onInputChange(inputValue.trim() ? `${inputValue}\n${text}` : text)} />
         </div></ChatRecordViewContext.Provider></AgentResultContext.Provider>
     );
@@ -501,6 +533,24 @@ function FollowUps({ questions, disabled, onPick }: { questions: readonly string
     return <div className="chat-followups" role="group" aria-label="继续追问">
         {questions.map(question => <button key={question} type="button" title={question} disabled={disabled} onClick={() => onPick(question)}><span>{question}</span></button>)}
     </div>;
+}
+
+/** ⌘/ 键盘快捷键说明：只列已接线的快捷键（见 chat-shortcuts）。 */
+function ShortcutSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+    const titleId = 'chat-shortcuts-title';
+    const mod = open ? modifierLabel(navigator.platform) : '⌘';
+    return <Modal open={open} onClose={onClose} labelledBy={titleId} className="chat-shortcuts-dialog">
+        <div className="chat-dialog-heading">
+            <h2 id={titleId}>键盘快捷键</h2>
+            <button type="button" className="chat-header-icon" aria-label="关闭快捷键说明" onClick={onClose}><X size={17} /></button>
+        </div>
+        <dl className="chat-shortcuts-list">
+            {CHAT_SHORTCUTS.map(item => <div key={item.label}>
+                <dt>{item.label}</dt>
+                <dd>{item.keys(mod).map(key => <kbd key={key}>{key}</kbd>)}</dd>
+            </div>)}
+        </dl>
+    </Modal>;
 }
 
 /** Platform credits ran out: hosted models lock, a custom model still works. */

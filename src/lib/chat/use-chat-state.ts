@@ -130,6 +130,11 @@ export interface ChatStateReturn {
     removeConversationDetail: (conversationId: string) => void;
 }
 
+/** A forced reload of the conversation already validated on screen keeps its messages while fetching. */
+export function isInPlaceReload({ forceReload, sameConversation, validated }: { forceReload?: boolean; sameConversation: boolean; validated: boolean }) {
+    return forceReload === true && sameConversation && validated;
+}
+
 export function useChatState({
     userId,
     sessionLoading,
@@ -317,7 +322,11 @@ export function useChatState({
         id: string,
         options?: { updateUrl?: boolean; forceReload?: boolean }
     ) => {
-        shouldAutoScrollRef.current = true;
+        // Refreshing the conversation already on screen (e.g. after an Agent run) keeps the
+        // visible messages until the server copy arrives: the detail cache can still hold
+        // the pre-edit transcript, and a failed reload must not leave that on screen.
+        const inPlace = isInPlaceReload({ forceReload: options?.forceReload, sameConversation: activeConversationIdRef.current === id, validated: conversationValidatedRef.current });
+        if (!inPlace) shouldAutoScrollRef.current = true;
         const requestId = conversationSelectRequestRef.current + 1;
         conversationSelectRequestRef.current = requestId;
 
@@ -325,14 +334,15 @@ export function useChatState({
         activeConversationIdRef.current = id;
         setActiveConversationId(id);
         setConversationError(null);
-        conversationValidatedRef.current = false;
+        conversationValidatedRef.current = inPlace;
 
         const runningMessages = chatStreamManager.getTaskMessages(id);
-        if (runningMessages) {
+        // In-place reloads keep the current transcript; the fetch below replaces it.
+        if (!inPlace && runningMessages) {
             setConversationLoading(false);
             setMessages(runningMessages);
             conversationValidatedRef.current = true;
-        } else {
+        } else if (!inPlace) {
             const cachedConversation = conversationDetailsRef.current.get(id);
             const cachedMessages = cachedConversation?.messages || [];
             // An owned, loaded conversation with zero messages is valid too.

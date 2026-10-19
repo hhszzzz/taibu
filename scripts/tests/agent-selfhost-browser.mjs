@@ -457,10 +457,10 @@ try {
     .filter({ has: page.locator("svg.lucide-pencil") })
     .first()
     .click();
-  // Scope the edit form: the composer's own 发送 button shares the same name.
+  // Inline edit box (claude B10): 取消 ghost + 保存 filled; scoped so no other 保存 button matches.
   const editBox = page.locator(".chat-user-edit");
   await editBox.getByRole("textbox", { name: "编辑消息内容", exact: true }).fill("Agent验收：编辑消息后跨命盘对比，在聊天中分析。");
-  await editBox.getByRole("button", { name: "发送", exact: true }).click();
+  await editBox.getByRole("button", { name: "保存", exact: true }).click();
   const editedResponse = await editResponse;
   assert.equal(editedResponse.status(), 201);
   const edited = await editedResponse.json();
@@ -468,6 +468,42 @@ try {
   await waitForRun(edited.id, "completed");
   await page.locator('[data-agent-status="completed"]').waitFor();
   assert.equal(await credits(), initial - 3);
+
+  // ── Agent 历史版本：首轮 + 重新生成 + 编辑 = 3 个版本，切换与刷新都不丢分支 ──
+  const versionCounter = page.locator(".chat-message-versions [aria-live]");
+  const versionSwitch = (name) => page.locator(".chat-message-versions").getByRole("button", { name, exact: true });
+  const replyId = () => page.locator('.chat-message-row.is-assistant').first().getAttribute("data-message-id");
+  const savedSwitch = () => page.waitForResponse((response) => /^\/api\/conversations\/[^/]+$/.test(new URL(response.url()).pathname) && response.request().method() === "PATCH");
+  await versionCounter.filter({ hasText: "3 / 3" }).waitFor();
+  assert.equal(await replyId(), `agent:${edited.id}`);
+  await versionSwitch("上一版本").click();
+  await versionCounter.filter({ hasText: "2 / 3" }).waitFor();
+  let saved = savedSwitch();
+  await versionSwitch("上一版本").click();
+  await versionCounter.filter({ hasText: "1 / 3" }).waitFor();
+  assert.equal((await saved).ok(), true, "switching versions persists the visible branch");
+  assert.equal(await replyId(), `agent:${first.run.id}`, "an older Agent version keeps its durable message id");
+  await page.reload();
+  await versionCounter.filter({ hasText: "1 / 3" }).waitFor();
+  assert.equal(await replyId(), `agent:${first.run.id}`, "the chosen version survives a reload");
+  await versionSwitch("下一版本").click();
+  await versionCounter.filter({ hasText: "2 / 3" }).waitFor();
+  saved = savedSwitch();
+  await versionSwitch("下一版本").click();
+  await versionCounter.filter({ hasText: "3 / 3" }).waitFor();
+  await saved;
+  assert.equal(await replyId(), `agent:${edited.id}`);
+  // A follow-up written on v3 must come back after switching away and back.
+  const followUp = await send("Agent验收：版本追问，在聊天中分析。");
+  await waitForRun(followUp.run.id, "completed");
+  await page.locator(`[data-message-id="agent:${followUp.run.id}"] [data-agent-status="completed"]`).waitFor();
+  await versionSwitch("上一版本").click();
+  await versionCounter.filter({ hasText: "2 / 3" }).waitFor();
+  assert.equal(await page.locator(`[data-message-id="agent:${followUp.run.id}"]`).count(), 0, "other branches do not show the v3 follow-up");
+  await versionSwitch("下一版本").click();
+  await versionCounter.filter({ hasText: "3 / 3" }).waitFor();
+  await page.locator(`[data-message-id="agent:${followUp.run.id}"]`).waitFor();
+  assert.equal(await credits(), initial - 4);
   console.log(
     "Agent 浏览器：重新生成、编辑后续跑、历史版本保留及原生命盘复用通过。",
   );

@@ -14,6 +14,12 @@
    所以样式落在 .markdown-code，而不是 pre。 */
 .chat-answer .markdown-code-block { margin: 11.25px 0 0; }
 .chat-answer .markdown-code { padding: 14px; border: .5px solid var(--border-hover); border-radius: 12px; background: var(--fill-field); font-size: .875em; line-height: 1.625; }
+/* 代码块头：左语言标签、右复制键（成功后打勾），浮在代码顶部留白里。 */
+.markdown-code-frame { position: relative; min-width: 0; }
+.markdown-code-frame > .markdown-code { padding-top: 36px; }
+.markdown-code-head { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; justify-content: space-between; height: 32px; padding: 4px 6px 0 14px; font-family: var(--font-sans); font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); pointer-events: none; }
+.markdown-code-head > button { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 6px; color: var(--foreground-secondary); pointer-events: auto; }
+.markdown-code-head > button:hover { background: var(--fill-ghost-hover); color: var(--foreground); }
 .markdown-table-container { position: relative; margin: 1rem 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 .chat-answer .markdown-table-container { margin: 11.25px 0 0; }
 .markdown-table-toolbar { display: flex; justify-content: end; gap: .75rem; padding: .4rem .75rem; background: var(--background-secondary); font-size: .7rem; }
@@ -115,6 +121,15 @@
 .chat-dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .chat-dialog-heading h2 { font-size: calc(16 / 16 * 1rem); font-weight: 600; }
 .chat-dialog-description { margin: 6px 0 16px; font-size: calc(13 / 16 * 1rem); line-height: 1.7; color: var(--foreground-secondary); }
+.app-modal.chat-shortcuts-dialog { width: min(400px, calc(100vw - 32px)); padding: 20px; }
+.chat-shortcuts-list { display: grid; gap: 2px; margin-top: 12px; }
+.chat-shortcuts-list > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 32px; }
+.chat-shortcuts-list dt { font-size: calc(14 / 16 * 1rem); color: var(--foreground); }
+.chat-shortcuts-list dd { display: inline-flex; gap: 4px; }
+.chat-shortcuts-list kbd { display: inline-flex; min-width: 22px; height: 20px; align-items: center; justify-content: center; padding: 0 5px; border: 1px solid var(--cds-shortcut-cap-line); border-radius: 4px; background: var(--cds-shortcut-cap-fill); font-family: var(--font-sans); font-size: calc(12 / 16 * 1rem); color: var(--cds-shortcut-cap-ink); }
+/* 拖放文件：覆盖会话区的虚线提示层，不拦截事件（放下由 .chat-main 处理）。 */
+.chat-drop-overlay { position: absolute; inset: 8px; z-index: 50; display: flex; align-items: center; justify-content: center; border: 1.5px dashed var(--border-hover); border-radius: 16px; background: hsl(from var(--background) h s l / 88%); pointer-events: none; }
+.chat-drop-overlay > span { font-size: calc(15 / 16 * 1rem); color: var(--foreground-secondary); }
 .chat-export-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .chat-export-options button { display: flex; align-items: flex-start; gap: 10px; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--chat-raised); text-align: left; }
 .chat-export-options button > svg { flex-shrink: 0; margin-top: 2px; color: var(--foreground-secondary); }
@@ -378,6 +393,31 @@ button.agent-evidence-chip:hover { background: var(--fill-ghost-hover); }
 /* claude 实测：用户气泡底 = alpha-1（5% 前景色），非页色调；解梦气泡保留自己的紫色调 */
 .chat-user-bubble:not(.is-dream) { background: hsl(from var(--neutral-900) h s l / 5%); }
 .chat-user-bubble > p { font-size: calc(15 / 16 * 1rem); line-height: calc(20 / 16 * 1rem); }
+/* claude 内联编辑（B10）：保留气泡外壳 r12 / 12·16，铺满列宽；无边框 textarea 随内容长高；
+   取消 = ghost、保存 = 实心，均 24px r6 13px。 */
+.chat-user-edit { display: flex; width: 100%; justify-content: flex-end; }
+.chat-user-edit-bubble { width: 100%; max-width: 100%; }
+.chat-user-edit-field { display: grid; }
+.chat-user-edit-field > * { grid-area: 1 / 1; min-width: 0; max-height: 40vh; padding: 0; font-size: calc(15 / 16 * 1rem); line-height: calc(20 / 16 * 1rem); white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-user-edit-overlay { pointer-events: none; overflow: hidden; color: var(--foreground); }
+.chat-user-edit-input { field-sizing: content; min-height: calc(20 / 16 * 1rem); overflow-y: auto; resize: none; border: 0; background: transparent; color: transparent; caret-color: var(--foreground); outline: none; }
+.chat-user-edit-input::selection { background: hsl(from var(--accent) h s l / 25%); }
+.chat-user-edit-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.chat-user-edit-error { margin-right: auto; font-size: calc(13 / 16 * 1rem); color: var(--cds-text-danger); }
+.chat-user-edit-cancel, .chat-user-edit-save { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border-radius: 6px; font-size: calc(13 / 16 * 1rem); font-weight: 500; }
+.chat-user-edit-cancel { color: var(--foreground); }
+.chat-user-edit-cancel:hover { background: var(--fill-ghost-hover); }
+.chat-user-edit-save { background: var(--foreground); color: var(--background); }
+.chat-user-edit-save:hover { opacity: .88; }
+.chat-user-edit-cancel:disabled, .chat-user-edit-save:disabled { opacity: .45; cursor: default; }
+/* 用户消息上方的附件 / 联网提示与解梦信息：12px 次要色，无角标。 */
+.chat-user-meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-bottom: 6px; }
+.chat-user-file { display: inline-flex; max-width: 240px; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: .5px solid var(--border-hover); border-radius: 8px; font-size: calc(12 / 16 * 1rem); color: var(--foreground); }
+.chat-user-file > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-user-meta-note { display: inline-flex; align-items: center; gap: 4px; font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); }
+.chat-message-meta { margin-bottom: 6px; font-size: calc(12 / 16 * 1rem); line-height: calc(17 / 16 * 1rem); color: var(--foreground-tertiary); }
+.chat-message-meta.is-assistant { margin-bottom: 10px; }
+.chat-message-meta.is-after { margin: 10px 0 0; }
 .chat-message-actions { display: flex; align-items: center; gap: 2px; min-height: 24px; margin-top: 6px; color: var(--foreground-secondary); opacity: 0; transition: opacity .15s; }
 .chat-message-actions.is-user { margin-top: 0; }
 /* cds MessageActions[data-reveal]：hover 或焦点进入消息行时两侧操作条同步显形；有弹层展开时常显 */

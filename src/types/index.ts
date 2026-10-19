@@ -106,6 +106,12 @@ export interface MessageVersion {
     subsequentMessages?: ChatMessage[];
     aiAgent?: import('@/lib/agent/types').AgentMessageData;
     aiMetadata?: Record<string, unknown>;
+    // 回答的原消息 id 与模型；切回该版本时原样还原（Agent 版本缺省时由 aiAgent.runId 推出）
+    aiMessageId?: string;
+    aiModel?: string;
+    aiModelName?: string;
+    // 客户端乐观占位：回答仍在生成，任务结束重载后由服务端版本替换
+    pending?: boolean;
 }
 
 /** 消息附件信息（仅用户消息） */

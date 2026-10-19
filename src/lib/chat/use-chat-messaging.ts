@@ -26,6 +26,7 @@ import { filterMentionsByFeature, getEnabledDataSourceTypes } from '@/lib/data-s
 import { readLocalVisualizationSettings } from '@/lib/visualization/settings';
 import type { ChatStreamTaskRunner } from '@/lib/chat/chat-stream-manager';
 import { useAgentChat } from '@/lib/agent/use-agent-chat';
+import { captureCurrentBranch, switchToVersion, withPendingVersion } from '@/lib/chat/message-versions';
 
 function shouldShowCheckKeyAction(message?: string): boolean {
     if (!message) return false;
@@ -85,12 +86,13 @@ function createCustomProviderChatRunner(customProvider: NonNullable<ReturnType<t
     };
 }
 
+/** Local-only failure notice: never saved, so it offers no fork. */
+const unavailableReply = (content: string): ChatMessage => ({ id: (Date.now() + 1).toString(), role: 'assistant', content, createdAt: new Date().toISOString(), metadata: { unsaved: true } });
+
 interface UseChatMessagingParams {
     state: ChatStateReturn;
     userId: string | null;
     user: { user_metadata?: { nickname?: string } } | null;
-    membership: { type: string; isActive: boolean } | null;
-    credits: number | null;
     refreshViewerState: () => Promise<unknown>;
     markViewerCreditsExhausted: () => void;
     showToast: ReturnType<typeof import('@/components/ui/Toast').useToast>['showToast'];
@@ -102,8 +104,6 @@ export function useChatMessaging({
     state,
     userId,
     user,
-    membership: _membership, // eslint-disable-line @typescript-eslint/no-unused-vars -- reserved for future credit checks
-    credits: _credits, // eslint-disable-line @typescript-eslint/no-unused-vars -- reserved for future credit checks
     refreshViewerState,
     markViewerCreditsExhausted,
     showToast,
@@ -270,8 +270,8 @@ export function useChatMessaging({
                             ? (customProviderConfig.modelName || customProviderConfig.modelId)
                             : undefined,
                         metadata: customProviderConfig && shouldShowCheckKeyAction(event.errorMessage)
-                            ? { customProviderErrorAction: 'check-key' }
-                            : undefined,
+                            ? { unsaved: true, customProviderErrorAction: 'check-key' }
+                            : { unsaved: true },
                     };
                     setMessages([...event.task.messages, errorMessage]);
                 } else {
@@ -519,7 +519,7 @@ export function useChatMessaging({
         } catch (error) {
             console.error('发送失败:', error);
             if (conversationId === activeConversationIdRef.current) {
-                const errorMessage: ChatMessage = { id: (Date.now() + 1).toString(), role: 'assistant', content: '抱歉，服务暂时不可用。请稍后再试。', createdAt: new Date().toISOString() };
+                const errorMessage = unavailableReply('抱歉，服务暂时不可用。请稍后再试。');
                 setMessages(prev => { const last = prev[prev.length - 1]; return last?.role === 'assistant' && !last.content ? [...prev.slice(0, -1), errorMessage] : [...prev, errorMessage]; });
             }
         } finally {
@@ -540,24 +540,23 @@ export function useChatMessaging({
 
         const originalMessage = messages[messageIndex];
         const originalAiMessage = messages[messageIndex + 1];
-        const originalAiContent = originalAiMessage?.role === 'assistant' ? originalAiMessage.content : '';
         const previousMessages = messages.slice(0, messageIndex);
         const subsequentMessages = messages.slice(messageIndex + 2);
 
-        const existingVersions = [...(originalMessage.versions || [])];
-        if (existingVersions.length === 0 && originalMessage.content) {
-            existingVersions.push({ userContent: originalMessage.content, attachments: originalMessage.attachments, mentions: originalMessage.mentions ? [...originalMessage.mentions] : undefined, aiContent: originalAiContent, aiAgent: originalAiMessage?.agent, aiMetadata: originalAiMessage?.metadata, createdAt: originalMessage.createdAt, subsequentMessages: subsequentMessages.length > 0 ? subsequentMessages : undefined });
-        } else if (existingVersions.length > 0 && subsequentMessages.length > 0) {
-            const idx = originalMessage.currentVersionIndex ?? existingVersions.length - 1;
-            if (existingVersions[idx] && !existingVersions[idx].subsequentMessages) existingVersions[idx] = { ...existingVersions[idx], subsequentMessages };
-        }
+        // The branch being replaced is always re-captured from what is on screen, so later
+        // follow-ups on it survive (same rule as agent_create_run on the server).
+        const branch = captureCurrentBranch(originalMessage, originalAiMessage, subsequentMessages);
+        const existingVersions = branch.versions;
 
         const messageMentions = sanitizeOutgoingMentions(Array.isArray(nextMentions) ? nextMentions : (originalMessage.mentions ?? []));
-        const updatedUserMessage: ChatMessage = { ...originalMessage, content: newContent, mentions: messageMentions.length ? [...messageMentions] : undefined, versions: existingVersions, currentVersionIndex: existingVersions.length - 1 };
+        const updatedUserMessage: ChatMessage = { ...originalMessage, content: newContent, mentions: messageMentions.length ? [...messageMentions] : undefined, versions: existingVersions, currentVersionIndex: branch.index };
         const newMessages = [...previousMessages, updatedUserMessage];
         if (agent.mode === 'agent') {
-            if (isTargetActive()) setMessages(newMessages);
-            try { await agent.start(targetConversationId, updatedUserMessage, { model: selectedModel, reasoning: reasoningEnabled, mentions: messageMentions, provider: getCustomProvider(), replaceFromMessageId: originalMessage.id }); }
+            // Server versions replace this optimistic slot when the run ends and the conversation reloads.
+            const pending = withPendingVersion(branch, newContent, { attachments: originalMessage.attachments, mentions: updatedUserMessage.mentions });
+            const runningUserMessage: ChatMessage = { ...updatedUserMessage, versions: pending.versions, currentVersionIndex: pending.index };
+            if (isTargetActive()) setMessages([...previousMessages, runningUserMessage]);
+            try { await agent.start(targetConversationId, runningUserMessage, { model: selectedModel, reasoning: reasoningEnabled, mentions: messageMentions, provider: getCustomProvider(), replaceFromMessageId: originalMessage.id }); }
             catch (error) { if (isTargetActive()) setMessages(originalSnapshot); showToast('error', error instanceof Error ? error.message : '编辑失败'); }
             return;
         }
@@ -581,7 +580,7 @@ export function useChatMessaging({
             const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
             const onBeforeSave = (finalMessages: ChatMessage[], assistantContent: string): ChatMessage[] => {
-                const newVersion = { userContent: newContent, attachments: updatedUserMessage.attachments, mentions: messageMentions.length ? [...messageMentions] : undefined, aiContent: assistantContent || '抱歉，我暂时无法回答这个问题。', createdAt: new Date().toISOString() };
+                const newVersion = { userContent: newContent, attachments: updatedUserMessage.attachments, mentions: messageMentions.length ? [...messageMentions] : undefined, aiContent: assistantContent || '抱歉，我暂时无法回答这个问题。', aiMessageId: initialAssistantMessage.id, aiModel: initialAssistantMessage.model, aiModelName: initialAssistantMessage.modelName, createdAt: new Date().toISOString() };
                 const updatedVersions = [...existingVersions, newVersion];
                 const finalUserMessage: ChatMessage = { ...updatedUserMessage, versions: updatedVersions, currentVersionIndex: updatedVersions.length - 1 };
                 return finalMessages.map(msg => msg.id === updatedUserMessage.id ? finalUserMessage : msg);
@@ -611,7 +610,7 @@ export function useChatMessaging({
             }
         } catch (error) {
             console.error('编辑发送失败:', error);
-            if (isTargetActive()) setMessages(prev => [...prev.slice(0, -1), { id: (Date.now() + 1).toString(), role: 'assistant', content: '抱歉，服务暂时不可用。', createdAt: new Date().toISOString() }]);
+            if (isTargetActive()) setMessages(prev => [...prev.slice(0, -1), unavailableReply('抱歉，服务暂时不可用。')]);
         }
     };
 
@@ -634,7 +633,10 @@ export function useChatMessaging({
         const lastUserMessage = userMessageIndex >= 0 ? previousMessages[previousMessages.length - 1 - userMessageIndex] : undefined;
         const messageMentions = sanitizeOutgoingMentions(lastUserMessage?.mentions ?? []);
         if (agent.mode === 'agent' && lastUserMessage) {
-            if (isTargetActive()) setMessages(previousMessages);
+            // Keep the replaced reply as a version locally too; previously it vanished until reload.
+            const pending = withPendingVersion(captureCurrentBranch(lastUserMessage, oldAiMessage, subsequentMessages), lastUserMessage.content, { attachments: lastUserMessage.attachments, mentions: lastUserMessage.mentions });
+            const runningUserMessage: ChatMessage = { ...lastUserMessage, versions: pending.versions, currentVersionIndex: pending.index };
+            if (isTargetActive()) setMessages(previousMessages.map(message => message.id === lastUserMessage.id ? runningUserMessage : message));
             try { await agent.start(targetConversationId, lastUserMessage, { model: selectedModel, reasoning: reasoningEnabled, mentions: messageMentions, provider: getCustomProvider(), replaceFromMessageId: lastUserMessage.id }); }
             catch (error) { if (isTargetActive()) setMessages(originalSnapshot); showToast('error', error instanceof Error ? error.message : '重新生成失败'); }
             return;
@@ -643,18 +645,16 @@ export function useChatMessaging({
         let updatedPreviousMessages = previousMessages;
         let existingVersions: NonNullable<ChatMessage['versions']> = [];
         if (lastUserMessage) {
-            existingVersions = [...(lastUserMessage.versions || [])];
-            if (existingVersions.length === 0 && oldAiContent) {
-                existingVersions.push({ userContent: lastUserMessage.content, attachments: lastUserMessage.attachments, mentions: lastUserMessage.mentions ? [...lastUserMessage.mentions] : undefined, aiContent: oldAiContent, aiAgent: oldAiMessage.agent, aiMetadata: oldAiMessage.metadata, createdAt: oldAiMessage.createdAt || new Date().toISOString(), subsequentMessages: subsequentMessages.length > 0 ? subsequentMessages : undefined });
-            } else if (existingVersions.length > 0 && subsequentMessages.length > 0) {
-                const currentVersionIdx = lastUserMessage.currentVersionIndex ?? existingVersions.length - 1;
-                if (existingVersions[currentVersionIdx] && !existingVersions[currentVersionIdx].subsequentMessages) existingVersions[currentVersionIdx] = { ...existingVersions[currentVersionIdx], subsequentMessages };
-            }
+            // An empty failed reply on an unversioned turn is not worth a version of its own.
+            const branch = lastUserMessage.versions?.length || oldAiContent
+                ? captureCurrentBranch(lastUserMessage, oldAiMessage, subsequentMessages)
+                : { versions: [], index: -1 };
+            existingVersions = branch.versions;
             const updatedUserMessage: ChatMessage = {
                 ...lastUserMessage,
                 mentions: messageMentions.length ? [...messageMentions] : undefined,
                 versions: existingVersions,
-                currentVersionIndex: existingVersions.length - 1,
+                currentVersionIndex: branch.index < 0 ? undefined : branch.index,
             };
             updatedPreviousMessages = previousMessages.map(m => m.id === lastUserMessage.id ? updatedUserMessage : m);
         }
@@ -678,7 +678,7 @@ export function useChatMessaging({
 
             const onBeforeSave = lastUserMessage
                 ? (finalMessages: ChatMessage[], assistantContent: string): ChatMessage[] => {
-                    const newVersion = { userContent: lastUserMessage.content, attachments: lastUserMessage.attachments, mentions: messageMentions.length ? [...messageMentions] : undefined, aiContent: assistantContent || '抱歉，我暂时无法回答这个问题。', createdAt: new Date().toISOString() };
+                    const newVersion = { userContent: lastUserMessage.content, attachments: lastUserMessage.attachments, mentions: messageMentions.length ? [...messageMentions] : undefined, aiContent: assistantContent || '抱歉，我暂时无法回答这个问题。', aiMessageId: initialAssistantMessage.id, aiModel: initialAssistantMessage.model, aiModelName: initialAssistantMessage.modelName, createdAt: new Date().toISOString() };
                     const updatedVersions = [...existingVersions, newVersion];
                     const finalUserMessage: ChatMessage = {
                         ...lastUserMessage,
@@ -714,29 +714,21 @@ export function useChatMessaging({
             }
         } catch (error) {
             console.error('重新生成失败:', error);
-            if (isTargetActive()) setMessages(prev => [...prev.slice(0, -1), { id: (Date.now() + 1).toString(), role: 'assistant', content: '抱歉，服务暂时不可用。', createdAt: new Date().toISOString() }]);
+            if (isTargetActive()) setMessages(prev => [...prev.slice(0, -1), unavailableReply('抱歉，服务暂时不可用。')]);
         }
     };
 
     // Switch message version
     const handleSwitchVersion = useCallback((messageId: string, versionIndex: number) => {
-        if (agent.active) return;
+        // A streaming reply would overwrite whichever branch is shown when it finishes.
+        if (agent.active || isLoading) return;
         setMessages(prev => {
-            const messageIndex = prev.findIndex(m => m.id === messageId);
-            if (messageIndex === -1) return prev;
-            const message = prev[messageIndex];
-            if (!message.versions || versionIndex < 0 || versionIndex >= message.versions.length) return prev;
-            const version = message.versions[versionIndex];
-            const previousMessages = prev.slice(0, messageIndex);
-            const versionMentions = sanitizeOutgoingMentions(version.mentions ?? message.mentions);
-            const updatedUserMessage: ChatMessage = { ...message, content: version.userContent, attachments: Object.hasOwn(version, 'attachments') ? version.attachments : message.attachments, mentions: versionMentions ? [...versionMentions] : undefined, currentVersionIndex: versionIndex };
-            const aiMessage: ChatMessage = { id: `ai-version-${versionIndex}-${Date.now()}`, role: 'assistant', content: version.aiContent, createdAt: version.createdAt, agent: version.aiAgent, metadata: version.aiMetadata };
-            let newMessages = [...previousMessages, updatedUserMessage, aiMessage];
-            if (version.subsequentMessages?.length) newMessages = [...newMessages, ...version.subsequentMessages];
-            if (userId && activeConversationId) void saveMessages(activeConversationId, newMessages);
-            return newMessages;
+            const switched = switchToVersion(prev, messageId, versionIndex, sanitizeOutgoingMentions);
+            if (!switched) return prev;
+            if (userId && activeConversationId) void saveMessages(activeConversationId, switched);
+            return switched;
         });
-    }, [activeConversationId, agent.active, sanitizeOutgoingMentions, saveMessages, setMessages, userId]);
+    }, [activeConversationId, agent.active, isLoading, sanitizeOutgoingMentions, saveMessages, setMessages, userId]);
 
     return {
         agent,

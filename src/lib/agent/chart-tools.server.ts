@@ -125,7 +125,8 @@ export async function loadInspectedChart(store: AgentStore, run: AgentRunRow, re
   if (!parsed) throw new Error('命盘引用格式不正确');
   const normalized = parsed.source + ':' + parsed.id;
   const artifact = await store.inspectedChart(run, normalized);
-  const value = artifact ? getAgentChart({ type: 'tool', id: artifact.id, name: 'inspect_chart', title: '命盘', status: 'completed', output: artifact.result.details }) : null;
+  const inspection = artifact?.tool_name === 'inspect_chart' ? artifact.result.details : artifact?.result.inspection;
+  const value = artifact ? getAgentChart({ type: 'tool', id: artifact.id, name: 'inspect_chart', title: '命盘', status: 'completed', output: inspection }) : null;
   if (!value) throw new Error('请先使用 inspect_chart 查看这张命盘');
   return { reference: normalized, value };
 }

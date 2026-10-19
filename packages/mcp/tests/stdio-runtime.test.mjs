@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { listToolDefinitions } from 'taibu-core/mcp';
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 
@@ -99,7 +100,7 @@ test('stdio runtime serves MCP 2026-07-28 discovery, list, and tool calls', asyn
       jsonrpc: '2.0', id: 2, method: 'tools/list', params: { _meta: modernMeta() },
     });
     assert.equal(listed.result.resultType, 'complete');
-    assert.equal(listed.result.tools.length, 15);
+    assert.equal(listed.result.tools.length, listToolDefinitions().length);
     assert.equal(listed.result.tools.find((tool) => tool.name === 'bazi').title, '八字命盘');
 
     const called = await runtime.send({
@@ -136,7 +137,7 @@ test('stdio runtime keeps the legacy initialize flow compatible', async () => {
       jsonrpc: '2.0', id: 2, method: 'tools/list', params: {},
     });
     assert.equal(listed.result.resultType, undefined);
-    assert.equal(listed.result.tools.length, 15, runtime.getStderr());
+    assert.equal(listed.result.tools.length, listToolDefinitions().length, runtime.getStderr());
   } finally {
     await runtime.stop();
   }

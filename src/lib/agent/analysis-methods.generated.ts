@@ -150,6 +150,13 @@ export const ANALYSIS_METHODS = [
     "tool": "xiaoliuren",
     "title": "小六壬占测",
     "whenToUse": "根据农历月日时辰起课，输出起课信息、推演链与结果信息"
+  },
+  {
+    "id": "bazi_relations",
+    "guide": "bazi",
+    "tool": "bazi_relations",
+    "title": "八字刑冲合害",
+    "whenToUse": "在八字命盘上详查干支关系：原局四柱之间，以及叠加大运（起运前为小运）、流年、流月、流日后的天干五合/相冲与地支六合、三合、半合、三会、六冲、刑、害、破，附岁运并临、伏吟、天克地冲与太岁关系"
   }
 ] as const;
 export const ANALYSIS_CONVENTIONS = "- **历法**：生辰类工具默认公历（`calendarType: \"solar\"`）；用户给的是农历生日时改传 `\"lunar\"`，闰月再加 `isLeapMonth: true`。`xiaoliuren` 例外，直接接收农历月、日。\n- **时间**：`birthHour` 传 0-23 的钟表小时，早晚子时由引擎处理，不要自行折算时辰。`xiaoliuren` 的 `hour` 可传时辰序号 1-12（子=1），也可传 0-23 小时。用户未提供的出生信息应当询问，而非代为假设。\n- **占当下**：`qimen`、`daliuren`、`liuyao` 与 `meihua` 的时间起卦需要当前时间时，先取系统时间（如 `date +\"%Y-%m-%dT%H:%M:%S\"`）再填入参数。\n- **日期核实**：用户说「今天/现在」并同时报出农历日期时，先取系统时间、用 `almanac` 核对公农历对应——农历与公历的映射是查历数据，不能凭记忆换算。口述与核实不符时，指出差异并以核实结果起盘，必要时附口述日期的对照结果。出生生肖、未来日期干支也以 Core 对相应日期的计算为准，不能从公历年份或单日盘面补算。\n- **随机性**：`tarot` 可传 `seed` 复现抽牌；`liuyao` 的 `method: \"auto\"` 每次结果随机，需要复现时改用 `select`（指定卦名）或 `number`（数字起卦）。\n- **六爻用神**：`yongShenTargets` 必填，按占问主题选择，可多选：事业官职、官司、疾病忧患取 `官鬼`；财运、男问感情取 `妻财`；文书合同、长辈、房产车辆取 `父母`；子女晚辈、健康平安取 `子孙`；合作竞争、朋友取 `兄弟`。\n- **detailLevel**：默认输出已够解读；需要完整盘面时在参数中加 `\"detailLevel\": \"full\"`（部分工具另有 `\"more\"`）。";

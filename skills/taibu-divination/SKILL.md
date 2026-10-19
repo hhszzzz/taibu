@@ -2,7 +2,7 @@
 name: taibu-divination
 description: >-
   太卜（TaiBu）占术排盘工具集：八字、紫微斗数、六爻、梅花易数、奇门遁甲、大六壬、小六壬、
-  太乙、塔罗、西方占星、黄历等 15 种本地计算引擎。凡涉及算命、排盘、起卦、占卜、运势、命理、
+  太乙、塔罗、西方占星、黄历等 16 个本地计算工具。凡涉及算命、排盘、起卦、占卜、运势、命理、
   择日、宜忌、流年大运、星盘的请求（fortune-telling, divination, birth chart, BaZi, ZiWei,
   tarot, qimen, almanac），即使用户没有点名具体术数体系，也应使用本 skill——盘面必须由工具
   计算，不可凭记忆推算干支、卦象、星曜。
@@ -10,7 +10,7 @@ description: >-
 
 # 太卜占术工具
 
-太卜提供 15 个占术与命理排盘工具，涵盖八字、紫微斗数、六爻、梅花易数、奇门遁甲、大六壬、小六壬、太乙、塔罗、西方占星与黄历。计算引擎已随 skill 打包（`scripts/vendor/taibu-core.bundle.mjs`），本地直接运行，无需安装依赖，只要求环境中有 Node.js 18 或更高版本。
+太卜提供 16 个占术与命理排盘工具，涵盖八字、紫微斗数、六爻、梅花易数、奇门遁甲、大六壬、小六壬、太乙、塔罗、西方占星与黄历。计算引擎已随 skill 打包（`scripts/vendor/taibu-core.bundle.mjs`），本地直接运行，无需安装依赖，只要求环境中有 Node.js 18 或更高版本。
 
 盘面一律由工具计算。干支、卦象、星曜的推算规则繁多，凭记忆手算既容易出错也无法复现；解读时以工具输出为唯一事实来源，不确定的细节回到输出中核对，而不是凭常识补写。
 
@@ -49,6 +49,7 @@ echo '{"gender":"male","birthYear":1990,"birthMonth":5,"birthDay":20,"birthHour"
 | `qimen` | 奇门遁甲排盘 | 根据指定时间排出奇门盘，输出九宫、九星、八门、八神、格局等信息 | [references/qimen.md](references/qimen.md) | [interpretation/qimen.md](interpretation/qimen.md) |
 | `daliuren` | 大六壬排盘 | 根据日期时间起课，输出天地盘、四课、三传、神将、课体与时空信息 | [references/daliuren.md](references/daliuren.md) | [interpretation/daliuren.md](interpretation/daliuren.md) |
 | `xiaoliuren` | 小六壬占测 | 根据农历月日时辰起课，输出起课信息、推演链与结果信息 | [references/xiaoliuren.md](references/xiaoliuren.md) | [interpretation/xiaoliuren.md](interpretation/xiaoliuren.md) |
+| `bazi_relations` | 八字刑冲合害 | 在八字命盘上详查干支关系：原局四柱之间，以及叠加大运（起运前为小运）、流年、流月、流日后的天干五合/相冲与地支六合、三合、半合、三会、六冲、刑、害、破，附岁运并临、伏吟、天克地冲与太岁关系 | [references/bazi_relations.md](references/bazi_relations.md) | [interpretation/bazi.md](interpretation/bazi.md) |
 <!-- TOOLS:END -->
 
 调用前先 `schema <tool>`，或读 `references/<tool>.md`（参数表与可复制的示例）。

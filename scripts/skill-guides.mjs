@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 export const SKILL_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../skills/taibu-divination');
 export const TOOL_GUIDES = Object.freeze({
-  astrology: 'astrology', bazi: 'bazi', bazi_pillars_resolve: 'bazi', bazi_dayun: 'bazi',
+  astrology: 'astrology', bazi: 'bazi', bazi_pillars_resolve: 'bazi', bazi_dayun: 'bazi', bazi_relations: 'bazi',
   ziwei: 'ziwei', ziwei_horoscope: 'ziwei', ziwei_flying_star: 'ziwei',
   liuyao: 'liuyao', meihua: 'meihua', tarot: 'tarot', taiyi: 'taiyi', almanac: 'almanac',
   qimen: 'qimen', daliuren: 'daliuren', xiaoliuren: 'xiaoliuren',

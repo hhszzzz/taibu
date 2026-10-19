@@ -14,6 +14,7 @@ TaiBu 的命理术数算法核心库。
 | `bazi` | 八字排盘 |
 | `bazi_pillars_resolve` | 八字四柱反推出生时间候选 |
 | `bazi_dayun` | 大运、小运、流年链路计算 |
+| `bazi_relations` | 八字刑冲合害详查（原局与大运、流年、流月、流日叠加） |
 | `ziwei` | 紫微斗数排盘 |
 | `ziwei_horoscope` | 紫微运限 |
 | `ziwei_flying_star` | 紫微飞星与四化落宫分析 |

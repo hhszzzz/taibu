@@ -172,6 +172,7 @@ curl -X POST https://mcp.mingai.fun/mcp \
 | `taiyi` | 太乙九星观测 | 时空底盘、九星与核心关系 |
 | `almanac` | 黄历查询 | 宜忌、冲煞、值星、方位与时辰吉凶 |
 | `bazi_dayun` | 八字大运 | 起运、大运、小运与流年链路 |
+| `bazi_relations` | 八字刑冲合害 | 原局与岁运叠加的干支关系、岁运提示与太岁 |
 | `qimen` | 奇门遁甲排盘 | 九宫、九星、八门、八神与格局 |
 | `daliuren` | 大六壬排盘 | 天地盘、四课、三传、神将与课体 |
 | `xiaoliuren` | 小六壬占测 | 起课信息、推演链与落宫结果 |
@@ -184,6 +185,7 @@ curl -X POST https://mcp.mingai.fun/mcp \
 
 - `astrology`：补全经纬度
 - `bazi`、`ziwei`、`ziwei_horoscope`、`ziwei_flying_star`：补全真太阳时所需经度
+- 详查工具（如 `bazi_relations`）沿用其基础工具的解析口径
 
 未配置密钥、解析失败或精度不足时，工具仍按 core 的原始规则执行，并在文本及 `structuredContent.placeResolutionInfo` 中说明回退原因。
 

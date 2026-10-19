@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { toBaziJson, type BaziPillarJSON, type BaziOutput } from 'taibu-core/bazi';
 import { buildToolSuccessPayload, executeTool, listToolDefinitions } from 'taibu-core/mcp';
 import { getAgentChart, type AgentToolPart } from '../lib/agent/tool-presentation';
-import { AGENT_CHART_NAMES } from '../lib/agent/tool-catalog';
+import { AGENT_CHART_NAMES, AGENT_DRILLDOWN_BASES, getAgentDrilldownBase } from '../lib/agent/tool-catalog';
 import { CHART_SOURCE_KINDS, chartQuestion, deduplicateChartResults, getAgentChartReference, getChartFocus, getChartResources, getChartTargets, getLatestChartFocus, parseChartReference, validateChartFocus } from '../lib/agent/chart-interaction';
 import { createAgentTools } from '../lib/agent/tools.server';
 import { authorizeChartReference, loadAgentChart, loadInspectedChart } from '../lib/agent/chart-tools.server';
@@ -29,7 +29,8 @@ class ChartStore extends MemoryStore {
     return [...this.drafts.values()].find(artifact => artifact.kind === 'calculation' && artifact.id === id) ?? null;
   }
   override async inspectedChart(_run: AgentRunRow, reference: string) {
-    return [...this.drafts.values()].reverse().find(artifact => artifact.tool_name === 'inspect_chart' && (artifact.result.details as { chartReference?: string }).chartReference === reference) ?? null;
+    return [...this.drafts.values()].reverse().find(artifact => (artifact.tool_name === 'inspect_chart' || getAgentDrilldownBase(artifact.tool_name))
+      && (artifact.result.details as { chartReference?: string }).chartReference === reference) ?? null;
   }
 }
 
@@ -284,13 +285,14 @@ test('inspection lookup uses native numeric task order and never guesses between
   let rows: Array<{ id: string; result: { inspectionOrder?: number } }> = [newer, older];
   const query = {
     select: () => query, eq: (key: string, value: unknown) => { predicates.push([key, value]); return query; },
+    in: (key: string, value: unknown) => { predicates.push([key, value]); return query; },
     order: (key: string, options: unknown) => { orders.push([key, options]); return query; },
     limit: (value: number) => { assert.equal(value, 2); return query; },
     then: (resolve: (value: unknown) => void) => resolve({ data: rows, error: null }),
   };
   const store = new AgentStore({ from: (table: string) => { assert.equal(table, 'agent_run_artifacts'); return query; } } as never);
   assert.equal((await store.inspectedChart(run, reference))!.id, newer.id);
-  assert.deepEqual(predicates, [['run_id', run.id], ['tool_name', 'inspect_chart'], ['result->details->>chartReference', reference]]);
+  assert.deepEqual(predicates, [['run_id', run.id], ['tool_name', ['inspect_chart', ...Object.keys(AGENT_DRILLDOWN_BASES)]], ['result->details->>chartReference', reference]]);
   assert.deepEqual(orders, [['result->inspectionOrder', { ascending: false, nullsFirst: false }]], 'JSON numeric order, not text ordering or an invented SQL column');
   rows = [{ id: older.id, result: {} }, { id: newer.id, result: {} }];
   await assert.rejects(store.inspectedChart(run, reference), /重新调用 inspect_chart/);

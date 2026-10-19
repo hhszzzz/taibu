@@ -1,6 +1,7 @@
 import type { BaziCellJSON, BaziRelationJSON } from 'taibu-core/bazi';
 import type { AgentChart, AgentToolPart } from './tool-presentation';
 import { getAgentChart, getAgentToolArtifactId } from './tool-presentation';
+import { getAgentDrilldownBase } from './tool-catalog';
 import { parseTraditionalYaoPosition } from '@/lib/divination/liuyao-result-state';
 
 export type ChartTarget =
@@ -37,7 +38,8 @@ export function parseChartReference(value: unknown): { source: 'artifact' | Char
 }
 
 export function getAgentChartReference(tool: AgentToolPart): string | null {
-  if (tool.name === 'inspect_chart' && tool.output && typeof tool.output === 'object') {
+  // Inspections and drilldowns name the chart they read; a calculation is its own chart.
+  if ((tool.name === 'inspect_chart' || getAgentDrilldownBase(tool.name)) && tool.output && typeof tool.output === 'object') {
     const reference = (tool.output as { chartReference?: unknown }).chartReference;
     const parsed = parseChartReference(reference);
     return parsed ? parsed.source + ':' + parsed.id : null;
@@ -168,6 +170,31 @@ export function getChartTargets(value: AgentChart): ChartTarget[] {
   return targets;
 }
 
+/** 详查结果里每行的「位置」；结构与 Core 的干支关系明细一致。 */
+type DrilldownCell = { 柱?: unknown; 部位?: unknown; 字?: unknown };
+
+function drilldownCells(value: unknown, cells: DrilldownCell[] = [], depth = 0): DrilldownCell[] {
+  if (depth > 4 || !value || typeof value !== 'object') return cells;
+  if (Array.isArray(value)) {
+    for (const item of value) drilldownCells(item, cells, depth + 1);
+    return cells;
+  }
+  const row = value as Record<string, unknown>;
+  if (Array.isArray(row.位置)) cells.push(...row.位置.filter((cell): cell is DrilldownCell => !!cell && typeof cell === 'object'));
+  for (const [key, child] of Object.entries(row)) if (key !== '位置' && key !== '计算规则') drilldownCells(child, cells, depth + 1);
+  return cells;
+}
+
+/**
+ * The chart's own targets a drilldown result touches, in board order, at most 16:
+ * a focus call may pass them unchanged. Positions outside the board (大运、流年…) have no target.
+ */
+export function getDrilldownTargets(value: AgentChart, result: unknown): ChartTarget[] {
+  const cells = drilldownCells(result);
+  return getChartTargets(value).filter(target => target.kind === 'bazi_cell'
+    && cells.some(cell => cell.柱 === target.cell.柱 && cell.部位 === target.cell.部位 && cell.字 === target.cell.字)).slice(0, 16);
+}
+
 export function validateChartFocus(value: AgentChart, reference: string, ids: string[], includeRelated: boolean, caption: string): ChartFocus {
   if (!parseChartReference(reference)) throw new Error('命盘引用格式不正确');
   if (ids.length > 16 || caption.length > 160) throw new Error('命盘定位内容过长');
@@ -183,6 +210,19 @@ export function getChartFocus(tool: AgentToolPart): ChartFocus | null {
     focus.targetIds.length > 16 || !focus.targetIds.every(id => typeof id === 'string') ||
     typeof focus.caption !== 'string' || focus.caption.length > 160 || typeof focus.includeRelated !== 'boolean') return null;
   return focus;
+}
+
+/**
+ * A completed drilldown as a focus: its targets on the chart it read, captioned
+ * by the drilldown title. The workspace pins it when the reader asks to locate it.
+ */
+export function getDrilldownFocus(tool: AgentToolPart): ChartFocus | null {
+  if (!getAgentDrilldownBase(tool.name) || tool.status !== 'completed' || !tool.output || typeof tool.output !== 'object') return null;
+  const output = tool.output as { chartReference?: unknown; targets?: unknown };
+  const reference = parseChartReference(output.chartReference);
+  if (!reference || !Array.isArray(output.targets)) return null;
+  const targetIds = output.targets.flatMap(target => target && typeof (target as { id?: unknown }).id === 'string' ? [(target as { id: string }).id] : []).slice(0, 16);
+  return { version: 1, reference: reference.source + ':' + reference.id, targetIds, includeRelated: false, caption: tool.title.slice(0, 160) };
 }
 
 /** One resource per reading, including reinspection in a later task. */

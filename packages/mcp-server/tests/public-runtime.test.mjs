@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { listToolDefinitions } from 'taibu-core/mcp';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
@@ -149,7 +150,8 @@ test('public runtime serves MCP 2026-07-28 and stateless legacy clients', async 
     assert.equal(listed.payload.result.ttlMs, 300_000);
     assert.equal(listed.payload.result.cacheScope, 'public');
     const toolByName = new Map(listed.payload.result.tools.map((tool) => [tool.name, tool]));
-    assert.equal(toolByName.size, 15);
+    assert.equal(toolByName.size, listToolDefinitions().length);
+    assert.ok(toolByName.get('bazi_relations').inputSchema.properties.birthPlace, 'drilldowns resolve places like their base tool');
     assert.equal(toolByName.get('meihua').title, '梅花易数起卦');
     assert.equal(toolByName.get('xiaoliuren').title, '小六壬占测');
 

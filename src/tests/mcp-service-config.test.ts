@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { listToolDefinitions } from 'taibu-core/mcp';
 
 import {
   MCP_PUBLIC_URL,
@@ -54,23 +55,8 @@ test('public config snippet keeps the anonymous remote streamable-http entry', (
 test('public MCP tools list stays aligned with the current package README surface', () => {
   const toolIds = MCP_PUBLIC_TOOLS.map((tool) => tool.id);
 
-  assert.equal(MCP_PUBLIC_TOOLS.length, 15);
-  assert.deepEqual(toolIds, [
-    'bazi',
-    'bazi_pillars_resolve',
-    'bazi_dayun',
-    'ziwei',
-    'ziwei_horoscope',
-    'ziwei_flying_star',
-    'liuyao',
-    'meihua',
-    'tarot',
-    'almanac',
-    'astrology',
-    'qimen',
-    'taiyi',
-    'daliuren',
-    'xiaoliuren',
-  ]);
+  // 公开清单与 Core 注册表一一对应，新增工具时漏写会在这里失败。
+  assert.equal(new Set(toolIds).size, toolIds.length);
+  assert.deepEqual([...toolIds].sort(), listToolDefinitions().map((tool) => tool.name).sort());
   assert.equal(toolIds.includes('fortune'), false);
 });

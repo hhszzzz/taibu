@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { listToolDefinitions } from 'taibu-core/mcp';
+import { getDerivedToolSource, listToolDefinitions } from 'taibu-core/mcp';
 
 const coreRoot = resolve(process.cwd(), 'packages/core');
 const packageJson = JSON.parse(readFileSync(resolve(coreRoot, 'package.json'), 'utf8'));
@@ -31,6 +31,11 @@ const expectedDomains = [
   { domain: 'ziwei-flying-star', tool: 'ziwei_flying_star' },
 ];
 
+/** 详查工具：复用 base 领域的子路径导出，按 base 工具的完整输入加查询参数计算。 */
+const expectedDerivedTools = [
+  { tool: 'bazi_relations', base: 'bazi', folder: 'bazi-relations' },
+];
+
 test('public core domains should stay aligned across exports, docs, and MCP registry', () => {
   const toolNames = new Set(listToolDefinitions().map((item) => item.name));
 
@@ -44,6 +49,16 @@ test('public core domains should stay aligned across exports, docs, and MCP regi
     assert.equal(toolNames.has(tool), true, `${tool} should be exposed via MCP`);
     assert.match(readme, new RegExp(`\\|\\s+\\\`${tool.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\\`\\s+\\|`), `${tool} should be documented in README tool list`);
   }
+});
+
+test('drilldown tools declare their base, are registered and documented', () => {
+  for (const { tool, base, folder } of expectedDerivedTools) {
+    assert.equal(getDerivedToolSource(tool)?.base, base, `${tool} derives from ${base}`);
+    assert.match(mcpTools, new RegExp(`domains/${folder}/tool\\.js`), `${tool} should be registered in src/mcp/tools.ts`);
+    assert.match(readme, new RegExp(`\\|\\s+\\\`${tool}\\\`\\s+\\|`), `${tool} should be documented in README tool list`);
+  }
+  const derived = listToolDefinitions().filter((item) => getDerivedToolSource(item.name)).map((item) => item.name).sort();
+  assert.deepEqual(derived, expectedDerivedTools.map((item) => item.tool).sort());
 });
 
 test('root core entry should expose canonical json/text option types for newly added domains', () => {
@@ -63,7 +78,7 @@ test('root core entry should expose canonical json/text option types for newly a
 
 test('MCP tool titles should be present and derived from the canonical description prefix', () => {
   const definitions = listToolDefinitions();
-  assert.equal(definitions.length, expectedDomains.length);
+  assert.equal(definitions.length, expectedDomains.length + expectedDerivedTools.length);
   assert.equal(definitions.find((tool) => tool.name === 'bazi')?.title, '八字命盘');
   assert.equal(definitions.find((tool) => tool.name === 'xiaoliuren')?.title, '小六壬占测');
   assert.ok(definitions.every((tool) => typeof tool.title === 'string' && tool.title.length > 0));

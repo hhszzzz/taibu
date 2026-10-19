@@ -5,6 +5,7 @@ import type { AgentCollaborator } from '@/lib/chat/model-settings';
 import type { EncryptedAgentCredential } from "./credentials.server";
 import type { AgentCheckpoint, AgentRunStatus, AgentRunView } from "./types";
 import { AGENT_ENGINE } from "./engine";
+import { AGENT_DRILLDOWN_BASES } from "./tool-catalog";
 
 export interface AgentRunRow {
   id: string;
@@ -48,6 +49,8 @@ export interface AgentArtifactRow {
     canonicalText?: string;
     chartSnapshot?: { kind: string; result: unknown; canonicalText: string };
     inspectionOrder?: number;
+    /** Drilldowns keep the chart they read, so they count as an inspection for focus_chart. */
+    inspection?: { chartReference: string; chartKind: string; result: unknown };
   };
   chart_id?: string;
   chart_type?: string;
@@ -212,7 +215,7 @@ export class AgentStore {
   }
   async inspectedChart(run: AgentRunRow, reference: string): Promise<AgentArtifactRow | null> {
     const { data, error } = await this.db.from('agent_run_artifacts').select('*')
-      .eq('run_id', run.id).eq('tool_name', 'inspect_chart')
+      .eq('run_id', run.id).in('tool_name', ['inspect_chart', ...Object.keys(AGENT_DRILLDOWN_BASES)])
       .eq('result->details->>chartReference', reference)
       .order('result->inspectionOrder', { ascending: false, nullsFirst: false }).limit(2);
     if (error) throw new Error(error.message);

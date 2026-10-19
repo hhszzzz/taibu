@@ -7,6 +7,8 @@ import {
   listToolDefinitions,
   executeTool,
   buildToolSuccessPayload,
+  getDerivedToolSource,
+  normalizeTransportDetailLevel,
 } from "taibu-core/mcp";
 import type { BaziCanonicalJSON } from "taibu-core/bazi";
 import { resolveBirthTimeOptions } from "@/lib/divination/birth-time";
@@ -27,7 +29,8 @@ import { attachmentBytes, attachmentDto, validateAttachmentIds } from './attachm
 import { AGENT_MEMORY_SELECT, publicMemory, type AgentMemory } from './memory';
 import { authorizeChartReference, loadAgentChart, loadInspectedChart } from './chart-tools.server';
 import { CHART_SOURCE_KINDS, getChartTargets, validateChartFocus } from './chart-interaction';
-import { isAgentChartTool } from './tool-catalog';
+import { getAgentDrilldownBase, isAgentChartTool } from './tool-catalog';
+import { drilldownParameters, executeDrilldown } from './drilldown.server';
 import { nextAgentCitation } from './evidence';
 import { readAgentCite } from './tool-presentation';
 import { searchKnowledgeWithPersistence } from "@/lib/knowledge-base/search";
@@ -116,7 +119,7 @@ async function featureEnabled(feature: FeatureModuleId) {
 }
 export async function assertAgentToolAccess(store: AgentStore, run: AgentRunRow, name: string, args: Record<string, unknown>) {
   const account = await getUserCreditInfo(run.user_id, { client: store.db });
-  const feature = ['inspect_chart', 'focus_chart'].includes(name) ? await authorizeChartReference(store, run, args.reference)
+  const feature = ['inspect_chart', 'focus_chart'].includes(name) || getAgentDrilldownBase(name) ? await authorizeChartReference(store, run, args.reference)
     : name.startsWith('bazi_') ? 'bazi' : name.startsWith('ziwei_') ? 'ziwei' : name;
   if (FEATURE_MODULE_IDS.includes(feature as FeatureModuleId) && !(await featureEnabled(feature as FeatureModuleId))) throw new Error('该功能已关闭');
   if (name === 'search_knowledge' && (!(await featureEnabled('knowledge-base')) || account.membership === 'free')) throw new Error('当前会员无法使用知识库检索');
@@ -366,7 +369,8 @@ export async function createAgentTools(
       // Pi Durable allocates increasing numeric task IDs; tools execute sequentially.
       // Keep the order in cache JSON rather than relying on a nonexistent timestamp column.
       const taskOrder = Number(callId.split(':', 1)[0]);
-      const result = name === 'inspect_chart' && Number.isSafeInteger(taskOrder) && taskOrder > 0
+      const inspects = name === 'inspect_chart' || getAgentDrilldownBase(name) !== null;
+      const result = inspects && Number.isSafeInteger(taskOrder) && taskOrder > 0
         ? { ...executed, inspectionOrder: taskOrder } : executed;
       signal?.throwIfAborted();
       const a = await store.rpc<AgentArtifactRow>("agent_cache_tool", {
@@ -395,7 +399,8 @@ export async function createAgentTools(
         : result;
     },
   });
-  const tools: AgentTool[] = listToolDefinitions().map((def) =>
+  const definitions = listToolDefinitions();
+  const tools: AgentTool[] = definitions.filter(def => !getDerivedToolSource(def.name)).map((def) =>
     wrap(
       def.name,
       def.description,
@@ -405,7 +410,7 @@ export async function createAgentTools(
         if (def.inputSchema.properties?.seed && stableArgs.seed == null)
           stableArgs.seed = String(stableAgentSeed(run.id, callId));
         const result = await executeTool(def.name, stableArgs);
-        const rendered = buildToolSuccessPayload(def.name, result);
+        const rendered = buildToolSuccessPayload(def.name, result, { detailLevel: normalizeTransportDetailLevel(args.detailLevel) });
         // Keep the full original reading for inspection, without another calculation or draw.
         const snapshot = isAgentChartTool(def.name) ? buildToolSuccessPayload(def.name, result, {
           detailLevel: def.name === 'astrology' && (result as { chartMeta?: { calculationMode?: string } }).chartMeta?.calculationMode === 'approximate' ? 'more' : 'full',
@@ -422,6 +427,14 @@ export async function createAgentTools(
       def.title,
     ),
   );
+  // 详查工具：模型传命盘引用，出生或起卦参数由服务端从成果或已存记录重建。
+  for (const def of definitions) {
+    const source = getDerivedToolSource(def.name);
+    if (!source || !getAgentDrilldownBase(def.name)) continue;
+    tools.push(wrap(def.name, `${def.description} 先排盘或取得命盘引用，再传 reference 与查询参数，不再重复传出生信息；返回的 targets 可直接用于 focus_chart。`,
+      Type.Unsafe<Record<string, unknown>>(drilldownParameters(source.selector)),
+      async args => executeDrilldown(store, run, def.name, args), 'tool', def.title));
+  }
   tools.push(
     wrap('inspect_chart', '在工作区查看任一占术的真实盘面并取得定位目标 ID。reference 使用 artifact:成果ID，或 read_user_data 返回的已存资料 chartReference。紫微不填 palace 时返回宫位目录；填实际宫名可查看该宫星曜目标。不会保存新成果。',
       Type.Object({ reference: Type.String({ minLength: 1, maxLength: 64 }), palace: Type.Optional(Type.String({ minLength: 1, maxLength: 20 })) }),

@@ -16,10 +16,25 @@ export function isAgentChartTool(name: string): name is AgentChartKind {
   return Object.hasOwn(AGENT_CHART_NAMES, name);
 }
 
+/**
+ * 详查工具及其所属盘种：对一张已排好的盘做局部深查，不产生新成果。
+ * 与 Core 工具的 derivesFrom 一一对应（agent-tool-catalog 测试校验）。
+ */
+export const AGENT_DRILLDOWN_BASES = {
+  bazi_relations: 'bazi',
+} as const satisfies Record<string, AgentChartKind>;
+
+export type AgentDrilldownTool = keyof typeof AGENT_DRILLDOWN_BASES;
+
+export function getAgentDrilldownBase(name: string): AgentChartKind | null {
+  return Object.hasOwn(AGENT_DRILLDOWN_BASES, name) ? AGENT_DRILLDOWN_BASES[name as AgentDrilldownTool] : null;
+}
+
 /** Every tool belongs to exactly one family; each family has one result presentation. */
 export type AgentToolFamily =
   | 'chart'
   | 'calculation'
+  | 'drilldown'
   | 'search'
   | 'data'
   | 'method'
@@ -59,6 +74,7 @@ const EXTERNAL_TOOL_PREFIX = 'mcp__';
 
 export function getAgentToolFamily(name: string): AgentToolFamily {
   if (isAgentChartTool(name)) return 'chart';
+  if (getAgentDrilldownBase(name)) return 'drilldown';
   if (name.startsWith(EXTERNAL_TOOL_PREFIX)) return 'external';
   return TOOL_FAMILIES.get(name) ?? 'other';
 }
@@ -69,5 +85,6 @@ export function getAgentToolFamily(name: string): AgentToolFamily {
  * fallbacks and exports never have to re-render or guess from raw JSON.
  */
 export function projectsAgentCanonicalText(name: string): boolean {
-  return isAgentChartTool(name) || TOOL_FAMILIES.get(name) === 'calculation' || name === 'inspect_chart' || name === 'read_user_data';
+  return isAgentChartTool(name) || TOOL_FAMILIES.get(name) === 'calculation' || getAgentDrilldownBase(name) !== null
+    || name === 'inspect_chart' || name === 'read_user_data';
 }

@@ -420,3 +420,20 @@ button.agent-ws-status-head:disabled { cursor: default; }
 .agent-context-legend dd { display: flex; gap: 10px; margin: 0; color: var(--foreground-tertiary); font-variant-numeric: tabular-nums; }
 .agent-context-legend dd em { min-width: 38px; font-style: normal; text-align: right; }
 .agent-context-foot { margin: 8px 0 0; font-size: calc(12 / 16 * 1rem); line-height: 1.6; color: var(--foreground-tertiary); }
+
+/* 命盘标签的「详查」区：每次详查一条，可折叠；表格沿用推演表样式 */
+.agent-ws-drilldowns { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+.agent-ws-drilldowns > h3 { font-size: calc(13 / 16 * 1rem); font-weight: 600; color: var(--foreground); }
+.agent-ws-drilldown { display: flex; flex-direction: column; gap: 10px; padding: 10px 12px; border: var(--hairline) solid var(--hairline-color); border-radius: 12px; background: var(--chat-raised); }
+.agent-ws-drilldown[open] { padding-bottom: 12px; }
+.agent-ws-drilldown > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; cursor: pointer; list-style: none; }
+.agent-ws-drilldown > summary::-webkit-details-marker { display: none; }
+.agent-ws-drilldown > summary strong { font-size: calc(13 / 16 * 1rem); font-weight: 550; }
+.agent-ws-drilldown > summary span { font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); }
+.agent-ws-drilldown[open] > summary { margin-bottom: 10px; }
+.agent-ws-drilldown-locate { align-self: flex-start; display: inline-flex; align-items: center; gap: 5px; margin-bottom: 10px; }
+.agent-ws-drilldown-section { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.agent-ws-drilldown-section > h4 { font-size: calc(12 / 16 * 1rem); font-weight: 500; color: var(--foreground-tertiary); }
+.agent-ws-drilldown-table :is(th, td) { white-space: normal; overflow-wrap: anywhere; }
+.agent-ws-drilldown-table tbody th { font-weight: 500; white-space: nowrap; }
+.agent-ws-drilldown-notes { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; padding-left: 16px; list-style: disc; font-size: calc(12 / 16 * 1rem); line-height: 1.6; color: var(--foreground-secondary); }

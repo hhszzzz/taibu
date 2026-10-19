@@ -1,4 +1,4 @@
-import type { ListedToolDefinition, ToolDefinition } from './contract.js';
+import type { DerivedToolSource, ListedToolDefinition, ToolDefinition } from './contract.js';
 import { toolByName, tools } from './tools.js';
 import { validateInput } from './input-validator.js';
 
@@ -20,6 +20,12 @@ export function listToolDefinitions(): ListedToolDefinition[] {
 
 export function getToolContract(name: string) {
   return toolByName.get(name);
+}
+
+/** 详查工具的 base 工具与查询参数；普通工具返回 undefined */
+export function getDerivedToolSource(name: string): DerivedToolSource | undefined {
+  const source = toolByName.get(name)?.derivesFrom;
+  return source ? structuredClone(source) : undefined;
 }
 
 export async function executeTool(name: string, args: unknown): Promise<unknown> {

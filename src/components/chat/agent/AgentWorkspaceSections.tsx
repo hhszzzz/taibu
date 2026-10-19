@@ -3,7 +3,7 @@
 
 import { useId, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { ArrowUpRight, BookOpen, Calculator, ChevronDown, ChevronRight, CircleHelp, Cpu, Database, Files, FileText, Globe, GripVertical, ListChecks, Search, Users, Wrench, type LucideIcon } from 'lucide-react';
+import { ArrowUpRight, BookOpen, Calculator, ChevronDown, ChevronRight, CircleHelp, Cpu, Database, Files, FileText, Globe, GripVertical, ListChecks, ScanSearch, Search, Users, Wrench, type LucideIcon } from 'lucide-react';
 import { type AgentMessageData, type AgentRunView } from '@/lib/agent/types';
 import { getAgentCalculation, getAgentChart, getAgentUnrepresentedArtifacts, type AgentCalculation, type AgentChart, type AgentToolPart } from '@/lib/agent/tool-presentation';
 import { AGENT_EVIDENCE_KINDS, AGENT_EVIDENCE_LABELS, countAgentEvidence } from '@/lib/agent/evidence';
@@ -18,7 +18,7 @@ import {
 } from './presentation';
 
 export const WORKSPACE_ICONS: Record<AgentWorkspaceResource['family'], LucideIcon> = {
-    chart: Calculator, calculation: Calculator, search: Search, data: Database, method: BookOpen, plan: ListChecks,
+    chart: Calculator, calculation: Calculator, drilldown: ScanSearch, search: Search, data: Database, method: BookOpen, plan: ListChecks,
     question: CircleHelp, collaboration: Users, memory: Database, artifacts: ListChecks, external: Globe, other: Wrench,
     saved: Files, attachment: FileText,
 };

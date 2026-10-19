@@ -11,7 +11,7 @@
 import type { ChatMessage } from '@/types';
 import { isAgentRunTerminal, type AgentPart, type AgentRunStatus } from './types';
 import type { AgentAnswers } from './questions';
-import { AGENT_CHART_NAMES, getAgentToolFamily, isAgentChartTool, type AgentToolFamily } from './tool-catalog';
+import { AGENT_CHART_NAMES, getAgentDrilldownBase, getAgentToolFamily, isAgentChartTool, type AgentToolFamily } from './tool-catalog';
 import { getAgentChart, getAgentDataResults, getAgentMethod, getAgentAttachmentRead, type AgentToolPart } from './tool-presentation';
 import { CHART_SOURCE_KINDS, getAgentChartReference, getChartFocus, parseChartReference } from './chart-interaction';
 import { getAgentEvidence, type AgentEvidence } from './evidence';
@@ -54,8 +54,8 @@ type Artifact = Extract<AgentPart, { type: 'artifact' }>;
 
 function chartReferenceOf(tool: AgentToolPart): string | null {
   const reference = getAgentChartReference(tool);
-  if (reference || (tool.name !== 'inspect_chart' && tool.name !== 'focus_chart')) return reference;
-  // Inspections and focus calls name their chart in the arguments before they finish.
+  if (reference || (tool.name !== 'inspect_chart' && tool.name !== 'focus_chart' && !getAgentDrilldownBase(tool.name))) return reference;
+  // Inspections, drilldowns and focus calls name their chart in the arguments before they finish.
   const parsed = parseChartReference(getChartFocus(tool)?.reference ?? inputText(tool, 'reference'));
   return parsed ? parsed.source + ':' + parsed.id : null;
 }
@@ -63,6 +63,8 @@ function chartReferenceOf(tool: AgentToolPart): string | null {
 /** Saved charts name their kind in the reference, so a pending inspection already has its title. */
 function chartTitle(tool: AgentToolPart, reference: string | null): string {
   if (isAgentChartTool(tool.name)) return AGENT_CHART_NAMES[tool.name];
+  const base = getAgentDrilldownBase(tool.name);
+  if (base) return AGENT_CHART_NAMES[base];
   const source = parseChartReference(reference)?.source;
   return source && source !== 'artifact' ? AGENT_CHART_NAMES[CHART_SOURCE_KINDS[source]] : tool.title;
 }
@@ -114,6 +116,16 @@ export function buildAgentWorkspace({ parts, artifacts, attachmentIds }: { parts
       case 'calculation':
         add('tool:' + tool.id, { view: 'calculation', family, title: tool.title }, tool);
         break;
+      case 'drilldown': {
+        // A drilldown belongs to the chart it read; it never replaces that chart's reading.
+        const reference = chartReferenceOf(tool);
+        const known = reference ? chartResources.get(reference) : undefined;
+        if (known) { attach(known, tool); break; }
+        const id = 'tool:' + tool.id;
+        add(id, { view: 'chart', family: 'chart', title: chartTitle(tool, reference) }, tool);
+        if (reference) chartResources.set(reference, id);
+        break;
+      }
       case 'search':
         add('evidence', { view: 'evidence', family, title: '回答依据' }, tool);
         break;

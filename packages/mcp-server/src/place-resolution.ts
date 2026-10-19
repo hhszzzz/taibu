@@ -1,4 +1,4 @@
-import type { ToolListPayload, ToolSchema } from 'taibu-core/mcp';
+import { getDerivedToolSource, type ToolListPayload, type ToolSchema } from 'taibu-core/mcp';
 
 const AMAP_GEOCODE_ENDPOINT = 'https://restapi.amap.com/v3/geocode/geo';
 const PLACE_RESOLUTION_TOOLS = new Set([
@@ -54,12 +54,17 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
+/** 详查工具沿用 base 工具的地点解析，保证与原盘使用同一经纬度 */
+function placeToolOf(toolName: string): string {
+  return getDerivedToolSource(toolName)?.base ?? toolName;
+}
+
 function isPlaceResolutionTool(toolName: string): boolean {
-  return PLACE_RESOLUTION_TOOLS.has(toolName);
+  return PLACE_RESOLUTION_TOOLS.has(placeToolOf(toolName));
 }
 
 function getPlaceResolutionMode(toolName: string): RuntimePlaceResolutionMode {
-  return toolName === 'astrology' ? 'coordinates' : 'true_solar_time';
+  return placeToolOf(toolName) === 'astrology' ? 'coordinates' : 'true_solar_time';
 }
 
 function parseLongitude(value: unknown): number | undefined {
@@ -327,7 +332,7 @@ export async function preprocessToolArgsForRuntimePlace(
     : undefined;
   const locationMode = getPlaceResolutionMode(toolName);
 
-  if (manualLongitude != null && (toolName !== 'astrology' || manualLatitude != null)) {
+  if (manualLongitude != null && (locationMode !== 'coordinates' || manualLatitude != null)) {
     return {
       toolArgs: {
         ...baseArgs,
@@ -386,7 +391,7 @@ export function decorateToolListPayloadForRuntime(payload: ToolListPayload): Too
         description: buildBirthPlaceInputDescription(),
       };
 
-      const inputSchema = tool.name === 'astrology'
+      const inputSchema = placeToolOf(tool.name) === 'astrology'
         ? buildAstrologyRuntimeInputSchema(tool.inputSchema, inputProperties)
         : { ...tool.inputSchema, properties: inputProperties };
 

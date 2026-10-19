@@ -1,11 +1,11 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { listToolDefinitions } from 'taibu-core/mcp';
+import { getDerivedToolSource, listToolDefinitions } from 'taibu-core/mcp';
 import type { JsonObject } from '@earendil-works/pi-ai';
 import { MockLanguageModelV3 } from 'ai/test';
 import type { AgentRunRow } from '../lib/agent/store.server';
-import { AGENT_CHART_NAMES, getAgentToolFamily, isAgentChartTool, projectsAgentCanonicalText } from '../lib/agent/tool-catalog';
+import { AGENT_CHART_NAMES, AGENT_DRILLDOWN_BASES, getAgentDrilldownBase, getAgentToolFamily, isAgentChartTool, projectsAgentCanonicalText } from '../lib/agent/tool-catalog';
 import { getAgentToolText, type AgentToolPart } from '../lib/agent/tool-presentation';
 import { createAgentTools } from '../lib/agent/tools.server';
 import { createParallelExtension } from '../lib/agent/parallel.server';
@@ -24,8 +24,15 @@ beforeEach((t) => {
 });
 
 test('every Core tool and every registered Agent tool belongs to a presentation family', async () => {
-  for (const definition of listToolDefinitions())
-    assert.ok(['chart', 'calculation'].includes(getAgentToolFamily(definition.name)), definition.name);
+  for (const definition of listToolDefinitions()) {
+    const derived = getDerivedToolSource(definition.name);
+    assert.equal(getAgentToolFamily(definition.name), derived ? 'drilldown' : getAgentToolFamily(definition.name), definition.name);
+    assert.ok(['chart', 'calculation', 'drilldown'].includes(getAgentToolFamily(definition.name)), definition.name);
+    // The browser-safe catalog names the same base as Core's contract.
+    assert.equal(getAgentDrilldownBase(definition.name), derived?.base ?? null, definition.name);
+    if (derived) assert.equal(projectsAgentCanonicalText(definition.name), true, definition.name);
+  }
+  assert.deepEqual(Object.keys(AGENT_DRILLDOWN_BASES).sort(), listToolDefinitions().filter(item => getDerivedToolSource(item.name)).map(item => item.name).sort());
   const previous = process.env.TAVILY_API_KEY;
   process.env.TAVILY_API_KEY = randomUUID();
   try {

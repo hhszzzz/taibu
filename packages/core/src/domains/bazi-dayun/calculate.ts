@@ -191,7 +191,7 @@ export function calculateTaiSui(liunianBranch: string, yearBranch: string): stri
 /**
  * 根据公历年份获取干支
  */
-function getYearGanZhi(year: number): string {
+export function getYearGanZhi(year: number): string {
   // 以1984年甲子年为基准
   const offset = ((year - 1984) % 60 + 60) % 60;
   return JIA_ZI_60[offset];

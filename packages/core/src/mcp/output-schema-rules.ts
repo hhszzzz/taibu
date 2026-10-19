@@ -22,6 +22,7 @@ export const requiredOutputSections: Record<string, string[]> = {
   astrology: ['基础坐标', '命盘锚点', '本命主星', '当前流运触发'],
   bazi: ['基本信息', '四柱', '干支关系'],
   bazi_dayun: ['起运信息', '大运列表'],
+  bazi_relations: ['查询', '参与柱位', '原局关系', '口径'],
   bazi_pillars_resolve: ['原始四柱', '候选数量', '候选列表'],
   ziwei: ['基本信息', '十二宫位'],
   ziwei_horoscope: ['基本信息', '运限叠宫'],

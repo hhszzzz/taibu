@@ -4,10 +4,10 @@
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, lazy, Suspense, type KeyboardEvent, type ReactNode } from 'react';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { Ellipsis, GripVertical, LayoutGrid, LocateFixed, Maximize2, Minimize2, Search, X } from 'lucide-react';
-import { isAgentChartTool } from '@/lib/agent/tool-catalog';
+import { getAgentToolFamily, isAgentChartTool } from '@/lib/agent/tool-catalog';
 import { isAgentRunTerminal, type AgentMessageData, type AgentPart } from '@/lib/agent/types';
 import { getAgentChart, getAgentFinalSelection } from '@/lib/agent/tool-presentation';
-import { getAgentChartReference, getChartFocus, getLatestChartFocus, parseChartReference, type ChartAskContext } from '@/lib/agent/chart-interaction';
+import { getAgentChartReference, getChartFocus, getDrilldownFocus, getLatestChartFocus, parseChartReference, type ChartAskContext } from '@/lib/agent/chart-interaction';
 import {
     AGENT_WORKSPACE_SECTIONS, buildAgentWorkspace, getAgentToolQuestionIds, getAgentWorkspaceFollowTarget, getAgentWorkspaceLocation, getAgentWorkspaceSections,
     isAgentRunWorking, parseAgentCitationTarget, resolveAgentWorkspaceLocation,
@@ -26,6 +26,7 @@ import {
 } from './AgentWorkspaceViews';
 import { getChartKindMeta } from './chart-registry';
 import { WorkspaceOverview } from './AgentWorkspaceSections';
+import { DrilldownList } from './AgentDrilldownViews';
 const ChartPreview = lazy(() => import('./AgentChartPreview').then(module => ({ default: module.AgentChartPreview })));
 const InteractiveChart = lazy(() => import('./AgentInteractiveChart').then(module => ({ default: module.AgentInteractiveChart })));
 
@@ -90,17 +91,21 @@ function ResourceView({ resource, model, data, answers, questionIds, userId, art
             const reference = reading ? getAgentChartReference(reading) : null;
             // A focus step opened from the process list or a citation shows that position, not the latest one.
             const named = namedToolId ? model.toolsById.get(namedToolId) : undefined;
-            const opened = named && reference ? getChartFocus(named) : null;
+            const opened = named && reference ? getChartFocus(named) ?? getDrilldownFocus(named) : null;
             const pinned = opened?.reference === reference ? opened : null;
+            const drilldowns = tools.filter(tool => getAgentToolFamily(tool.name) === 'drilldown');
+            const drilldownList = <DrilldownList tools={drilldowns} runStatus={runStatus} onLocate={tool => onOpen('tool:' + tool.id)} />;
             const focus = pinned ?? (reference ? getLatestChartFocus(model.tools, reference) : null);
             // The calculation that produced the reading, or the saved chart it read back.
             const source = tools.find(tool => isAgentChartTool(tool.name) && getAgentChart(tool)) ?? reading;
             body = value && reading
-                ? <Suspense fallback={<p role="status">加载命盘…</p>}>
+                ? <><Suspense fallback={<p role="status">加载命盘…</p>}>
                     <InteractiveChart key={`${reference ?? reading.id}:${pinned ? named!.id : ''}`} value={value} tool={reading} reference={reference}
                         focus={focus} followModel={followModel} live={live} pinned={pinned !== null} subject={describeAgentChartSubject(source ?? reading, value)}
                         onAsk={onChartQuestion} />
-                </Suspense>
+                </Suspense>{drilldownList}</>
+                // A drilldown of a saved chart not read in this task shows its findings without the board.
+                : drilldowns.length ? drilldownList
                 : latest && latest.status === 'completed' ? <WorkspaceTextFallback tool={latest} note="命盘数据不完整，已保留工具返回内容。" />
                 : latest && <><WorkspaceToolMeta tool={latest} runStatus={runStatus} /><WorkspaceToolPending tool={latest} runStatus={runStatus} running="正在排盘…" /></>;
             break;

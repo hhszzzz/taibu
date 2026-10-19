@@ -91,9 +91,29 @@ export function getAgentToolTitle(tool: AgentTool): string {
     return RAW_TOOL_TITLES[tool.name] ?? tool.title ?? tool.name;
 }
 
+/** 详查参数的读法；其余参数按值原样列出，reference 只是命盘引用，不展示。 */
+const DRILLDOWN_SELECTION_LABELS: Record<string, (value: unknown) => string> = {
+    year: value => `${value} 年`,
+    month: value => `${value} 月（节气月）`,
+    dayun: value => `第 ${value} 步大运`,
+    yunSect: () => '',
+};
+
+/** 「2027 年 · 5 月（节气月）」：详查步骤的副标题；只有命盘本身时为「原局」。 */
+export function describeDrilldownSelection(args: Record<string, unknown>): string {
+    const parts = Object.entries(args).flatMap(([key, value]) => {
+        if (key === 'reference' || value === undefined || value === null || value === '') return [];
+        const label = DRILLDOWN_SELECTION_LABELS[key];
+        const text = label ? label(value) : typeof value === 'object' ? '' : String(value);
+        return text ? [text] : [];
+    });
+    return parts.join(' · ') || '原局';
+}
+
 /** One line under a process step, read from its arguments and stored result only. */
 export function summarizeAgentTool(tool: AgentTool): string | null {
     const args = tool.input && typeof tool.input === 'object' && !Array.isArray(tool.input) ? tool.input as Record<string, unknown> : {};
+    if (getAgentToolFamily(tool.name) === 'drilldown') return describeDrilldownSelection(args);
     if (typeof args.birthYear === 'number' && (tool.name.startsWith('bazi') || tool.name.startsWith('ziwei'))) {
         const date = [args.birthYear, args.birthMonth, args.birthDay].filter(value => typeof value === 'number').join(' / ');
         return [typeof args.name === 'string' ? args.name : '', date, typeof args.birthHour === 'number' ? `${args.birthHour} 时` : ''].filter(Boolean).join(' · ') || null;
@@ -180,6 +200,7 @@ export function summarizeAgentProcess(tools: readonly AgentTool[], limit = 4): s
 const FAMILY_PHRASES: Partial<Record<AgentToolFamily, (count: number) => string>> = {
     chart: count => `已查看 ${count} 张命盘`,
     calculation: count => `已计算 ${count} 次`,
+    drilldown: count => `已详查 ${count} 处`,
     search: count => `已搜索 ${count} 次`,
     data: count => `已读取 ${count} 份资料`,
     method: count => `已加载 ${count} 套分析方法`,
@@ -365,7 +386,7 @@ export function formatAgentValue(value: unknown): string {
 
 /** Short tags shown on process steps, one per tool family. */
 export const AGENT_TOOL_FAMILY_LABELS: Record<AgentToolFamily, string> = {
-    chart: '命盘', calculation: '推演', search: '依据', data: '资料', method: '指引', plan: '计划',
+    chart: '命盘', calculation: '推演', drilldown: '详查', search: '依据', data: '资料', method: '指引', plan: '计划',
     question: '问题', collaboration: '协作', memory: '记忆', artifacts: '成果', external: '外部', other: '工具',
 };
 

@@ -132,6 +132,29 @@ export function getBranchIndex(branch: string): number {
     return EARTHLY_BRANCHES.indexOf(branch);
 }
 
+export interface ZiweiGridSlot {
+    /** 地支序，子=0 */
+    branch: number;
+    row: number;
+    col: number;
+}
+
+/** 标准 4×4 排布（地支序 子=0）：上行 巳午未申，左列 辰卯，右列 酉戌，下行 寅丑子亥。完整命盘与概览小图共用。 */
+export const ZIWEI_GRID_SLOTS: readonly ZiweiGridSlot[] = [
+    { branch: 5, row: 0, col: 0 }, { branch: 6, row: 0, col: 1 }, { branch: 7, row: 0, col: 2 }, { branch: 8, row: 0, col: 3 },
+    { branch: 4, row: 1, col: 0 }, { branch: 9, row: 1, col: 3 },
+    { branch: 3, row: 2, col: 0 }, { branch: 10, row: 2, col: 3 },
+    { branch: 2, row: 3, col: 0 }, { branch: 1, row: 3, col: 1 }, { branch: 0, row: 3, col: 2 }, { branch: 11, row: 3, col: 3 },
+];
+
+/** 按宫位地支落到固定格；地支无法识别的宫不出现，绝不按数组下标猜位置。 */
+export function ziweiRingCells<T extends { 干支: string }>(palaces: readonly T[]): Array<ZiweiGridSlot & { palace: T }> {
+    return ZIWEI_GRID_SLOTS.flatMap(slot => {
+        const palace = palaces.find(item => getBranchIndex(item.干支.slice(-1)) === slot.branch);
+        return palace ? [{ ...slot, palace }] : [];
+    });
+}
+
 // ===== 运限类型定义 =====
 
 /** 运限宫位信息 */

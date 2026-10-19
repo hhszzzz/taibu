@@ -9,6 +9,7 @@ import type { TarotCanonicalJSON } from 'taibu-core/tarot';
 import type { TaiyiCanonicalJSON } from 'taibu-core/taiyi';
 import type { AstrologyCanonicalJSON } from 'taibu-core/astrology';
 import type { AlmanacCanonicalJSON } from 'taibu-core/almanac';
+import type { AlmanacSelectCanonicalJSON } from 'taibu-core/almanac';
 import type { DayunCanonicalJSON } from 'taibu-core/bazi-dayun';
 import type { BaziPillarsResolveCanonicalJSON } from 'taibu-core/bazi-pillars-resolve';
 import type { ZiweiHoroscopeCanonicalJSON } from 'taibu-core/ziwei-horoscope';
@@ -210,7 +211,8 @@ export type AgentCalculation =
   | { kind: 'bazi_dayun'; data: DayunCanonicalJSON }
   | { kind: 'bazi_pillars_resolve'; data: BaziPillarsResolveCanonicalJSON }
   | { kind: 'ziwei_horoscope'; data: ZiweiHoroscopeCanonicalJSON }
-  | { kind: 'ziwei_flying_star'; data: ZiweiFlyingStarCanonicalJSON };
+  | { kind: 'ziwei_flying_star'; data: ZiweiFlyingStarCanonicalJSON }
+  | { kind: 'almanac_select'; data: AlmanacSelectCanonicalJSON };
 
 /** Core calculation results; anything incomplete falls back to the projected canonical text. */
 export function getAgentCalculation(tool: AgentToolPart): AgentCalculation | null {
@@ -221,7 +223,10 @@ export function getAgentCalculation(tool: AgentToolPart): AgentCalculation | nul
     case 'bazi_dayun': {
       const start = record(data.起运信息);
       if (typeof start.起运年龄 !== 'number' || typeof start.起运详情 !== 'string' || !Array.isArray(data.大运列表) || !data.大运列表.length) return null;
-      if (!data.大运列表.every(item => strings(item, ['干支', '十神']) && Number.isInteger(record(item).起运年份) && arrayRows(record(item).藏干, ['天干', '十神']))) return null;
+      // full 档的大运会带流年列表；字段异常时整卡回退到规范文本，避免渲染半截数据。
+      const liunianOk = (value: unknown) => value === undefined || (Array.isArray(value)
+        && value.every(entry => Number.isInteger(record(entry).流年) && typeof record(entry).干支 === 'string' && typeof record(entry).十神 === 'string'));
+      if (!data.大运列表.every(item => strings(item, ['干支', '十神']) && Number.isInteger(record(item).起运年份) && arrayRows(record(item).藏干, ['天干', '十神']) && liunianOk(record(item).流年列表))) return null;
       return { kind: 'bazi_dayun', data: data as unknown as DayunCanonicalJSON };
     }
     case 'bazi_pillars_resolve':
@@ -233,6 +238,14 @@ export function getAgentCalculation(tool: AgentToolPart): AgentCalculation | nul
     case 'ziwei_flying_star':
       if (!arrayRows(data.查询结果, ['查询类型']) || !(data.查询结果 as unknown[]).every(row => typeof record(row).查询序号 === 'number')) return null;
       return { kind: 'ziwei_flying_star', data: data as unknown as ZiweiFlyingStarCanonicalJSON };
+    case 'almanac_select': {
+      const query = record(data.查询);
+      const stats = record(data.排除统计);
+      if (typeof query.起止日期 !== 'string' || typeof query.天数 !== 'number') return null;
+      if (!['候选数', '犯忌', '无对应宜', '冲煞'].every(key => typeof stats[key] === 'number')) return null;
+      if (!arrayRows(data.候选日, ['日期', '日干支', '冲煞']) || !(data.候选日 as unknown[]).every(row => stringArray(record(row).宜) && stringArray(record(row).忌))) return null;
+      return { kind: 'almanac_select', data: data as unknown as AlmanacSelectCanonicalJSON };
+    }
     default:
       return null;
   }

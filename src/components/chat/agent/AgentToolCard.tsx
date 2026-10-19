@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Check, Copy } from 'lucide-react';
 import type { AgentRunStatus } from '@/lib/agent/types';
 import { getAgentToolText } from '@/lib/agent/tool-presentation';
+import { useTranscriptRecordView } from '@/lib/chat/chat-record-view';
 import { useToast } from '@/components/ui/Toast';
 import { formatAgentValue, getAgentToolState, type AgentTool } from './presentation';
 import { AgentToolResult } from './AgentToolResult';
@@ -34,13 +35,14 @@ export function AgentToolDetails({ tool, runStatus, id, heading = true }: {
     heading?: boolean;
 }) {
     const state = getAgentToolState(tool, runStatus);
+    const detailed = useTranscriptRecordView() === 'detailed';
     const canonical = tool.canonicalText?.trim() ? tool.canonicalText : null;
     const input = tool.input === undefined ? null : formatAgentValue(tool.input);
     const result = tool.output === undefined ? null : canonical ?? getAgentToolText(tool) ?? formatAgentValue(tool.output);
     return <div id={id} className="agent-tool-details" data-state={state.status}>
         {heading && <div className="agent-tool-details-heading">
             <span>{tool.title}</span>
-            <code>{tool.name}</code>
+            {detailed && <code>{tool.name}</code>}
         </div>}
         {input !== null && <section className="agent-tool-section" aria-label="调用参数">
             <div className="agent-tool-section-heading">调用参数<CopyButton text={input} label="复制" name="复制调用参数" /></div>
@@ -58,6 +60,6 @@ export function AgentToolDetails({ tool, runStatus, id, heading = true }: {
 export function AgentToolCard({ tool, runStatus }: { tool: AgentTool; runStatus: AgentRunStatus }) {
     return <div className="agent-tool-view">
         <AgentToolDetails tool={tool} runStatus={runStatus} />
-        <AgentToolResult tool={tool} runStatus={runStatus} full />
+        <AgentToolResult tool={tool} runStatus={runStatus} />
     </div>;
 }

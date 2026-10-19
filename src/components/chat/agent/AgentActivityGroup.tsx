@@ -1,5 +1,5 @@
 'use client';
-// 需要折叠状态与工作区上下文：步骤在转录内展开参数与结果，也可在工作区打开
+// 需要折叠状态与工作区上下文：步骤在转录内展开结果（详细视图另含参数），也可在工作区打开
 
 import { useId, useState, type ReactNode } from 'react';
 import { ChevronRight, LoaderCircle, Pause, PanelRight } from 'lucide-react';
@@ -26,29 +26,36 @@ export function AgentActivityIndicator({ data }: { data: AgentMessageData }) {
     </div>;
 }
 
-/** A step's parameters and result, disclosed as claude's key/value lines plus the raw result. */
+/**
+ * A step's result, disclosed in place. The normal record view reads like claude's: the step row already names the call,
+ * so the body shows the Core canonical text; raw arguments and JSON results appear only in the 「详细」 record view.
+ */
 function AgentStepCall({ tool, runStatus }: { tool: AgentTool; runStatus: AgentMessageData['status'] }) {
     const workspace = useAgentResultWorkspace();
+    const detailed = useTranscriptRecordView() === 'detailed';
     const input = tool.input === undefined ? null : formatAgentValue(tool.input);
     const canonical = tool.canonicalText?.trim() ? tool.canonicalText : null;
-    const result = canonical ?? getAgentToolText(tool) ?? (tool.output === undefined ? null : formatAgentValue(tool.output));
+    const text = canonical ?? getAgentToolText(tool);
+    const raw = tool.output === undefined ? null : formatAgentValue(tool.output);
+    const result = text ?? (detailed ? raw : null);
     const state = describeAgentStep(tool, runStatus).status;
     const entries = tool.input && typeof tool.input === 'object' && !Array.isArray(tool.input)
         ? Object.entries(tool.input as Record<string, unknown>)
         : null;
     return <div className="agent-step-call">
-        {/* claude 工具详情 = 逐行 key/value（键等宽半透明）+ 原始结果；工具名已在步骤行里。 */}
-        <div className="agent-step-command" tabIndex={0} aria-label="调用参数">
+        {/* 详细视图 = claude 工具详情：逐行 key/value（键等宽半透明）；普通视图不露参数键名。 */}
+        {detailed && tool.input !== undefined && <div className="agent-step-command" tabIndex={0} aria-label="调用参数">
             {entries ? entries.map(([key, value]) => <div key={key} className="agent-step-detail-line">
                 <span className="agent-step-detail-key">{key}:</span> <span className="agent-step-detail-value">{formatAgentValue(value)}</span>
-            </div>) : tool.input !== undefined && <div className="agent-step-detail-line"><span className="agent-step-detail-key">input:</span> <span>{input}</span></div>}
-        </div>
+            </div>) : <div className="agent-step-detail-line"><span className="agent-step-detail-key">input:</span> <span>{input}</span></div>}
+        </div>}
         {result !== null
-            ? <div className="agent-step-output" tabIndex={0} aria-label="工具结果">{result}</div>
-            : <p className="agent-step-empty">{state === 'running' ? '正在等待工具返回结果…' : '该步骤没有返回详情。'}</p>}
+            ? <div className="agent-step-output" tabIndex={0} aria-label={text ? '规范文本' : '工具结果'}>{result}</div>
+            : <p className="agent-step-empty">{state === 'running' ? '正在等待工具返回结果…'
+                : raw !== null ? '这一步只返回了结构化数据，可在工作区查看；原始内容在「详细」记录视图中显示。' : '该步骤没有返回详情。'}</p>}
         <div className="agent-step-actions">
             {input !== null && <CopyButton text={input} label="复制调用参数" name="复制调用参数" iconOnly className="agent-step-copy" />}
-            {result !== null && <CopyButton text={result} label={canonical ? '复制规范文本' : '复制工具结果'} name={canonical ? '复制规范文本' : '复制工具结果'} iconOnly className="agent-step-copy" />}
+            {(text ?? raw) !== null && <CopyButton text={(text ?? raw)!} label={canonical ? '复制规范文本' : '复制工具结果'} name={canonical ? '复制规范文本' : '复制工具结果'} iconOnly className="agent-step-copy" />}
             {workspace && <button type="button" className="agent-step-workspace" onClick={() => workspace.openResource(`tool:${tool.id}`)}>
                 <PanelRight size={13} aria-hidden="true" />在工作区查看
             </button>}

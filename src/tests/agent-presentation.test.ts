@@ -8,7 +8,7 @@ import { getAgentChart } from '../lib/agent/tool-presentation';
 import { buildAgentWorkspace } from '../lib/agent/workspace';
 import {
     collectAgentArtifacts, describeAgentCallNote, describeAgentChartRules, describeAgentChartSteps, describeAgentChartSubject, describeAgentStep, formatAgentToolDuration,
-    getAgentStepNumbers, getAgentSteps, getAgentLiveLine, getAgentArtifactHref, getAgentIntermediateResults, getAgentLocatedPositions, getAgentReadingState, getAgentToolState,
+    getAgentStepNumbers, getAgentSteps, getAgentLiveLine, getAgentArtifactHref, getAgentLocatedPositions, getAgentReadingState, getAgentToolState,
     getAgentResponseTiming, getAgentRoundFolds, getAgentTaskDuration, getAgentTaskSpan, getDayunWindow, groupAgentParts, getAgentActivityLabel, getAgentEvidenceSummary, stripLeadingTitle,
     summarizeAgentProcess, summarizeAgentActivity, summarizeAgentTool, AGENT_TOOL_FAMILY_LABELS, type AgentArtifact, type AgentTool,
 } from '../components/chat/agent/presentation';
@@ -184,22 +184,6 @@ test('the live line describes the running call only while tools run', () => {
     ] } };
     assert.equal(getAgentLiveLine({ ...data, parts: [focus, team] }), '等待协作成员 · 紫微、bazi 正在分析', 'unnamed members fall back to their system');
     assert.equal(getAgentLiveLine({ ...data, parts: [{ ...team, output: { analyses: [] } }] }), '正在协作分析', 'a collaboration that has not reported members only names itself');
-});
-
-test('intermediate results name what the task computed but did not save', () => {
-    const selected: AgentArtifact = { type: 'artifact', id: 'kept', title: '本人', chartId: 'c', chartType: 'bazi' };
-    const tools: AgentTool[] = [
-        { type: 'tool', id: 'b', name: 'bazi', title: '八字排盘', status: 'completed', output: { artifactId: 'kept' } },
-        { type: 'tool', id: 'b2', name: 'bazi', title: '八字排盘', status: 'completed', output: { artifactId: 'dropped' } },
-        { type: 'tool', id: 'd', name: 'bazi_dayun', title: '八字大运', status: 'completed' },
-        { type: 'tool', id: 'f1', name: 'focus_chart', title: '定位分析位置', status: 'completed' },
-        { type: 'tool', id: 'f2', name: 'focus_chart', title: '定位分析位置', status: 'completed' },
-        { type: 'tool', id: 'x', name: 'bazi_dayun', title: '八字大运', status: 'failed' },
-        { type: 'tool', id: 's', name: 'web_search', title: '联网检索', status: 'completed', output: [] },
-    ];
-    assert.equal(getAgentIntermediateResults(tools, [selected]), '八字排盘、八字大运、定位分析位置 2 次');
-    assert.equal(getAgentIntermediateResults(tools.slice(0, 1), [selected]), null, 'a selected reading is not intermediate');
-    assert.equal(getAgentIntermediateResults([], []), null);
 });
 
 test('steps are numbered once across the task and leave plan updates to the task list', () => {

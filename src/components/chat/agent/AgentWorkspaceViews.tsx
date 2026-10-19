@@ -23,6 +23,7 @@ import {
 import { REASONING_EFFORT_LABELS } from '@/lib/chat/model-settings';
 import { AI_REASONING_EFFORTS, type AIReasoningEffort } from '@/types';
 import { requestBrowserJson } from '@/lib/browser-api';
+import { useTranscriptRecordView } from '@/lib/chat/chat-record-view';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { useToast } from '@/components/ui/Toast';
 import { mentionTypeLabels } from '@/components/chat/mentionStyles';
@@ -50,23 +51,29 @@ export function WorkspaceViewHeading({ id, kicker, title, children }: { id: stri
     </header>;
 }
 
-/** Name and state of the call a view is showing（用时只落库，不展示 — 用户裁定 2026-10-17）。 */
+/** State of the call a view is showing; the raw tool name only in the 「详细」 record view（用时只落库，不展示 — 用户裁定 2026-10-17）。 */
 export function WorkspaceToolMeta({ tool, runStatus, children }: ToolViewProps & { children?: ReactNode }) {
     const state = getAgentToolState(tool, runStatus);
+    const detailed = useTranscriptRecordView() === 'detailed';
     return <p className="agent-ws-meta">
-        <code>{tool.name}</code>
+        {detailed && <code>{tool.name}</code>}
         <span data-state={state.status}>{state.label}</span>
         {children}
     </p>;
 }
 
-/** Canonical text the tool returned; raw JSON only when a call has no text at all. */
+/** Canonical text the tool returned; raw JSON only in the 「详细」 record view when a call has no text at all. */
 export function WorkspaceTextFallback({ tool, note }: { tool: AgentToolPart; note: string }) {
     const text = getAgentToolText(tool);
+    const detailed = useTranscriptRecordView() === 'detailed';
+    const raw = tool.output === undefined ? undefined : JSON.stringify(tool.output, null, 2);
     return <div className="agent-ws-fallback">
         <p>{note}</p>
         <div className="agent-result-text" tabIndex={0} aria-label="工具返回文本">
-            {text ? <MarkdownContent content={text} /> : <pre>{JSON.stringify(tool.output, null, 2) ?? '工具没有返回内容。'}</pre>}
+            {text ? <MarkdownContent content={text} />
+                : !raw ? <p>工具没有返回内容。</p>
+                : detailed ? <pre>{raw}</pre>
+                : <p>工具只返回了结构化数据，原始内容在「详细」记录视图中显示。</p>}
         </div>
     </div>;
 }
@@ -101,11 +108,27 @@ function DayunTimeline({ data }: { data: Extract<AgentCalculation, { kind: 'bazi
             {data.大运列表.map((item, index) => {
                 const next = data.大运列表[index + 1];
                 const current = year >= item.起运年份 && (!next || year < next.起运年份);
+                // full 档才带流年列表；有此数据的大运可逐年在原位展开。
+                const liunian = item.流年列表 ?? [];
+                const notes = (entry: typeof liunian[number]) => [
+                    entry.地势 ? `地势 ${entry.地势}` : null,
+                    entry.太岁关系?.length ? `太岁 ${entry.太岁关系.join('、')}` : null,
+                    entry.原局关系?.length ? entry.原局关系.map(relation => relation.描述).join('；') : null,
+                ].filter(Boolean).join(' · ');
                 return <li key={item.起运年份} aria-current={current ? 'step' : undefined}>
                     <span className="agent-ws-glyph">{item.干支}</span>
                     <span className="agent-ws-timeline-body">
                         <strong>{item.起运年份}{next ? `–${next.起运年份 - 1}` : ' 起'} · {item.起运年龄 !== undefined ? `${item.起运年龄} 岁` : ''}{current && <em>当前</em>}</strong>
                         <small>天干{item.十神} · 藏干 {item.藏干.map(stem => `${stem.天干}${stem.十神}`).join('、') || '无'}</small>
+                        {liunian.length > 0 && <details className="agent-ws-liunian">
+                            <summary>流年 {liunian[0].流年}–{liunian[liunian.length - 1].流年}（{liunian.length} 年）</summary>
+                            <ol className="agent-ws-list" aria-label={`${item.起运年份} 年起大运的流年`}>
+                                {liunian.map(entry => <li key={entry.流年}>
+                                    <strong>{entry.流年} · {entry.干支} · {entry.十神}</strong>
+                                    <small>{notes(entry) || '与该大运、原局无冲合刑害记录'}</small>
+                                </li>)}
+                            </ol>
+                        </details>}
                     </span>
                 </li>;
             })}
@@ -159,6 +182,20 @@ function FlyingStars({ data }: { data: Extract<AgentCalculation, { kind: 'ziwei_
     </ol>;
 }
 
+function AlmanacCandidates({ data }: { data: Extract<AgentCalculation, { kind: 'almanac_select' }>['data'] }) {
+    const query = data.查询;
+    return <>
+        <p className="agent-ws-note">{query.起止日期} · {query.天数} 天{query.事项 ? ` · 事项「${query.事项}」` : ''}{query.排除冲煞 ? ` · 排除 ${query.排除冲煞}` : ''} · 候选 {data.候选日.length} 天</p>
+        {data.候选日.length ? <ol className="agent-ws-list" aria-label="候选日">
+            {data.候选日.map(candidate => <li key={candidate.日期}>
+                <strong>{candidate.日期} · {candidate.日干支}</strong>
+                <small>{candidate.建除} · {candidate.星宿}{candidate.星宿吉凶 ? `（${candidate.星宿吉凶}）` : ''} · 冲煞 {candidate.冲煞}</small>
+                <small>宜 {candidate.宜.join('、') || '无'}；忌 {candidate.忌.join('、') || '无'}</small>
+            </li>)}
+        </ol> : <p className="agent-ws-note">这个区间没有符合筛选条件的日期：犯忌 {data.排除统计.犯忌} 天、无对应宜 {data.排除统计.无对应宜} 天、冲煞 {data.排除统计.冲煞} 天。</p>}
+    </>;
+}
+
 /** 推演: Core results as a timeline, candidate list or table, with Core's canonical text beside it. */
 export function CalculationView({ tool, runStatus, step }: ToolViewProps & { step?: number }) {
     const id = useId();
@@ -172,6 +209,7 @@ export function CalculationView({ tool, runStatus, step }: ToolViewProps & { ste
                 {value.kind === 'bazi_pillars_resolve' && <ResolveCandidates data={value.data} />}
                 {value.kind === 'ziwei_horoscope' && <HoroscopeTable data={value.data} />}
                 {value.kind === 'ziwei_flying_star' && <FlyingStars data={value.data} />}
+                {value.kind === 'almanac_select' && <AlmanacCandidates data={value.data} />}
                 <CanonicalTextDetails tool={tool} />
             </>}
     </section>;

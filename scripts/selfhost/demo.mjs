@@ -36,6 +36,7 @@ function agentReply(body) {
       ['almanac', {birthYear:1990,birthMonth:1,birthDay:15,birthHour:9,date:'2026-02-14'}],
     ];
     const reference = id => 'artifact:' + String(completed.get(id)).match(/成果 ID: ([a-f0-9-]{36})/iu)?.[1];
+    const chartLabels = {bazi:'八字',ziwei:'紫微',qimen:'奇门',liuyao:'六爻',meihua:'梅花易数',daliuren:'大六壬',xiaoliuren:'小六壬',tarot:'塔罗',taiyi:'太乙',astrology:'西方占星',almanac:'黄历'};
     const directory = id => { const text=String(completed.get(id)); return JSON.parse(text.slice(text.lastIndexOf('{"reference":'))); };
     const selectors = {bazi:'bazi-relation-',qimen:':八门',liuyao:'liuyao:line:2',meihua:'meihua:trigram:体卦',daliuren:'daliuren:transmission:1',xiaoliuren:'xiaoliuren:result',tarot:'tarot:card:1',taiyi:':star:',astrology:':aspect:',almanac:'almanac:hour:'};
     for(const [name,args] of plans) {
@@ -48,7 +49,7 @@ function agentReply(body) {
         if(!completed.has(stars))return call(stars,'inspect_chart',{reference:reference(calc),palace:targets.find(target=>target.id==='ziwei:palace:0').label.split(' ')[0]});
         targets=directory(stars).targets.filter(target=>target.id.startsWith('ziwei:star:'));
       }
-      if(!completed.has(focus))return call(focus,'focus_chart',{reference:reference(calc),targetIds:[targets.find(target=>selectors[name]&&target.id.includes(selectors[name]))?.id??targets[0].id],caption:'正在分析'+name+'的实际盘面位置',includeRelated:true});
+      if(!completed.has(focus))return call(focus,'focus_chart',{reference:reference(calc),targetIds:[targets.find(target=>selectors[name]&&target.id.includes(selectors[name]))?.id??targets[0].id],caption:'正在分析'+(chartLabels[name]??name)+'的实际盘面位置',includeRelated:true});
     }
     if(!completed.has('fixture-all-select'))return call('fixture-all-select','select_final_artifacts',{artifactIds:plans.map(([name])=>reference(name==='bazi'?'fixture-bazi':'fixture-all-'+name).slice(9))});
     return {content:'全体系命盘联动离线验收完成。十一种盘面均通过真实工具、原生记录和 SSE 定位；此回复仅用于测试。'};

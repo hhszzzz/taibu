@@ -15,9 +15,10 @@ import { ANALYSIS_METHODS, loadAnalysisMethod } from '../lib/agent/methods.serve
 const tool = (id: string, name: string, extra: Partial<AgentToolPart> = {}): AgentToolPart => ({ type: 'tool', id, name, title: name, status: 'completed', ...extra });
 const workspace = (parts: AgentPart[], attachmentIds: string[] = []) => buildAgentWorkspace({ parts, artifacts: [], attachmentIds });
 
-async function coreResult(name: string) {
+async function coreResult(name: string, extra: Record<string, unknown> = {}) {
   const definition = listToolDefinitions().find(item => item.name === name)!;
-  const payload = buildToolSuccessPayload(name, await executeTool(name, definition.inputSchema.examples![0] as Record<string, unknown>));
+  const payload = buildToolSuccessPayload(name, await executeTool(name, { ...(definition.inputSchema.examples![0] as Record<string, unknown>), ...extra }),
+    extra.detailLevel ? { detailLevel: extra.detailLevel as 'default' | 'more' | 'full' } : undefined);
   return { output: { artifactId: randomUUID(), result: payload.structuredContent }, canonicalText: payload.content.map(part => part.text).join('\n') };
 }
 
@@ -129,6 +130,15 @@ test('family parsers read real Core and method results and reject incomplete one
     assert.equal(getAgentCalculation(tool(name, name, { ...result, status: 'running' })), null);
     assert.equal(getAgentCalculation(tool(name, name, { output: { artifactId: 'x', result: {} } })), null, `${name} falls back to canonical text`);
   }
+  // full 档的大运带流年列表；异常字段整卡回退，不渲染半截数据。
+  const fullDayun = await coreResult('bazi_dayun', { detailLevel: 'full' });
+  const dayun = getAgentCalculation(tool('full', 'bazi_dayun', fullDayun))!;
+  const liunian = dayun.kind === 'bazi_dayun' ? dayun.data.大运列表.find(item => (item.流年列表?.length ?? 0) > 0)?.流年列表 : undefined;
+  assert.ok(liunian?.length, 'full 档大运可展开流年');
+  const broken = structuredClone(fullDayun) as { output: { result: { 大运列表: Array<{ 流年列表?: Array<Record<string, unknown>>; 干支: string }> } } };
+  const brokenDayun = broken.output.result.大运列表.find(item => (item.流年列表?.length ?? 0) > 0)!;
+  brokenDayun.流年列表![0].流年 = '二〇二七';
+  assert.equal(getAgentCalculation(tool('bad', 'bazi_dayun', broken)), null, '异常流年列表回退到规范文本');
   const guide = getAgentMethod(tool('m', 'load_analysis_method', { output: loadAnalysisMethod('bazi') }))!;
   assert.equal(guide.title, '八字命理解读指引');
   assert.equal(guide.version, '1.0.0');

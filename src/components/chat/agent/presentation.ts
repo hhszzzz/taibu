@@ -261,18 +261,6 @@ export function summarizeAgentActivity(tools: readonly AgentTool[], questionCoun
     return `${text || '任务过程'}${failed ? `，${failed} 处失败` : ''}`;
 }
 
-/** Completed results the task did not save: calculations, chart focus and readings left out of the final selection. */
-export function getAgentIntermediateResults(tools: readonly AgentTool[], artifacts: readonly AgentArtifact[]): string | null {
-    const selected = new Set(artifacts.map(artifact => artifact.id));
-    const intermediate = tools.filter(tool => {
-        if (tool.status !== 'completed') return false;
-        if (tool.name === 'focus_chart' || getAgentToolFamily(tool.name) === 'calculation') return true;
-        const artifactId = getAgentToolArtifactId(tool);
-        return artifactId !== null && !selected.has(artifactId);
-    });
-    return intermediate.length ? summarizeAgentProcess(intermediate) : null;
-}
-
 /** Process steps of a task: every call except plan updates, which show as the task list instead. */
 export function getAgentSteps(parts: readonly AgentPart[]): AgentTool[] {
     return parts.filter((part): part is AgentTool => part.type === 'tool' && getAgentToolFamily(part.name) !== 'plan');

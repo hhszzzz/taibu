@@ -95,6 +95,9 @@
 .agent-ws-timeline-body strong { font-size: calc(12 / 16 * 1rem); font-weight: 550; }
 .agent-ws-timeline-body em { margin-left: 8px; font-style: normal; color: var(--accent-hover); }
 .agent-ws-timeline-body small { font-size: calc(11 / 16 * 1rem); color: var(--foreground-secondary); }
+.agent-ws-liunian > summary { cursor: pointer; margin-top: 3px; font-size: calc(11 / 16 * 1rem); color: var(--accent-hover); }
+.agent-ws-liunian > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.agent-ws-liunian[open] > summary { margin-bottom: 6px; }
 .agent-ws-pillars { display: flex; gap: 10px; }
 .agent-ws-pillars span { padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; font-family: var(--font-display); font-size: calc(18 / 16 * 1rem); }
 .agent-ws-table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; }
@@ -228,7 +231,7 @@ button.agent-ws-overview-card:hover { border-color: var(--border-hover); backgro
 .chart-mini-ring-cell small { font-size: calc(9 / 16 * 1rem); color: var(--foreground-tertiary); }
 .chart-mini-ring-cell[data-life] { background: var(--accent-light); color: var(--accent-strong, var(--accent-hover)); }
 .chart-mini-ring-cell[data-life] small { color: inherit; opacity: .8; }
-.chart-mini-ring-center { grid-column: 2 / 4; grid-row: 2 / 4; background: var(--foreground) !important; color: var(--background) !important; font-family: var(--font-display); font-size: calc(13 / 16 * 1rem) !important; }
+.chart-mini-ring > .chart-mini-ring-center { grid-column: 2 / 4; grid-row: 2 / 4; background: var(--fill-field); color: var(--foreground-secondary); font-family: var(--font-display); font-size: calc(13 / 16 * 1rem); }
 /* 大六壬三传：初/中/末 三列。 */
 .chart-mini-transmissions { display: flex; gap: 4px; }
 .chart-mini-transmissions > span { display: flex; min-width: 34px; flex-direction: column; align-items: center; gap: 1px; padding: 3px 4px; border-radius: 6px; background: var(--background-secondary); }
@@ -241,7 +244,8 @@ button.agent-ws-overview-card:hover { border-color: var(--border-hover); backgro
 .chart-mini-cards { display: flex; gap: 4px; }
 .chart-mini-cards > span { display: flex; width: 46px; flex-direction: column; gap: 1px; padding: 4px 5px; border: var(--hairline) solid var(--border); border-radius: 6px; background: var(--background); font-size: calc(10.5 / 16 * 1rem); line-height: 1.3; }
 .chart-mini-cards small { font-size: calc(9 / 16 * 1rem); color: var(--foreground-tertiary); }
-.chart-mini-cards > span[data-reversed] { transform: rotate(180deg); }
+.chart-mini-cards > span[data-reversed] { border-style: dashed; }
+.chart-mini-cards em { font-size: calc(9 / 16 * 1rem); font-style: normal; color: var(--chat-warning, var(--foreground-secondary)); }
 /* 太乙：年/月/日/时四盘星将。 */
 .chart-mini-stars { display: grid; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px; }
 .chart-mini-stars > span { display: flex; align-items: baseline; gap: 4px; padding: 2px 6px; border-radius: 5px; background: var(--background-secondary); font-size: calc(11 / 16 * 1rem); }
@@ -260,13 +264,19 @@ button.agent-ws-overview-card:hover { border-color: var(--border-hover); backgro
 .chart-mini-chip small { flex-shrink: 0; font-size: calc(10.5 / 16 * 1rem); color: var(--foreground-tertiary); }
 .chart-mini-pillars { display: flex; gap: 8px; font-family: var(--font-display); font-size: calc(18 / 16 * 1rem); line-height: 1.2; }
 .chart-mini-pillars > span { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; }
+.chart-mini-pillars small[data-role="god"] { font-family: var(--font-sans, inherit); font-size: calc(10 / 16 * 1rem); color: var(--foreground-tertiary); white-space: nowrap; }
 .chart-mini-grid { display: grid; width: 100%; max-width: 190px; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; }
 .chart-mini-grid > span { display: flex; min-height: 30px; flex-direction: column; align-items: center; justify-content: center; gap: 1px; border-radius: 4px; background: var(--background-secondary); font-size: calc(11 / 16 * 1rem); line-height: 1.2; }
-.chart-mini-grid > span[data-center] { background: var(--foreground); color: var(--background); }
+.chart-mini-grid > span[data-center] { background: var(--fill-control); color: var(--foreground-secondary); }
 .chart-mini-grid small { font-size: calc(9.5 / 16 * 1rem); color: var(--foreground-tertiary); }
 .agent-ws-overview-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; font-size: calc(14 / 16 * 1rem); font-weight: 600; overflow-wrap: anywhere; }
 .agent-ws-overview-title > small { font-size: calc(12.5 / 16 * 1rem); font-weight: 400; color: var(--foreground-secondary); }
 .agent-ws-overview-note { font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); overflow-wrap: anywhere; }
+/* 概览卡：盘种图标 + 盘名，对象最多两行；键盘焦点可见 */
+.agent-ws-overview-kicker > svg { flex-shrink: 0; color: var(--foreground-secondary); }
+.agent-ws-overview-kicker > em { font-size: calc(11.5 / 16 * 1rem); font-style: normal; color: var(--foreground-tertiary); }
+.agent-ws-overview-subject { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+.agent-ws-overview-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .agent-ws-overview-periods { display: grid; width: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; text-align: center; }
 .agent-ws-overview-periods > span { padding: 5px 0; border-radius: 8px; background: var(--background-secondary); font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); font-variant-numeric: tabular-nums; }
 .agent-ws-overview-periods b { display: block; font-family: var(--font-display); font-size: calc(17 / 16 * 1rem); font-weight: 600; color: var(--foreground); }
@@ -349,7 +359,7 @@ button.agent-ws-overview-card:hover { border-color: var(--border-hover); backgro
 /* Phones (design board "手机 · 工作区"): a sheet from the bottom edge with pill tabs; a chart's
    追问 and 只看相关位置 become the sheet's bottom bar. */
 @media (max-width: 767px) {
-    .app-modal.agent-workspace-dialog { inset: auto 0 0; width: 100%; max-width: none; height: calc(100dvh - 64px - var(--sat)); max-height: none; margin: 0; border: 0; border-radius: 22px 22px 0 0; box-shadow: 0 -8px 40px #0003; }
+    .app-modal.agent-workspace-dialog { inset: auto 0 0; width: 100%; max-width: none; height: calc(100dvh - 64px - var(--sat)); max-height: none; margin: 0; border: 0; border-radius: 22px 22px 0 0; box-shadow: var(--shadow-lg); }
     .agent-workspace-dialog .agent-panel-content::before { content: ''; flex-shrink: 0; align-self: center; width: 40px; height: 5px; margin: 8px 0 2px; border-radius: 999px; background: var(--border-hover); }
     .agent-workspace-dialog .agent-panel-header { gap: 6px; height: 52px; padding: 0 6px 0 8px; border-bottom: 0; }
     .agent-workspace-dialog .agent-panel-header h2 { font-size: calc(17 / 16 * 1rem); }

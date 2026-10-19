@@ -9,7 +9,7 @@
 
 import { useMemo, useState } from 'react';
 import type { ZiweiCanonicalJSON } from 'taibu-core/ziwei';
-import { getBranchIndex, getTriangleSquare, type ZiweiFlightOverlay } from '@/lib/divination/ziwei';
+import { getBranchIndex, getTriangleSquare, ZIWEI_GRID_SLOTS, type ZiweiFlightOverlay, type ZiweiGridSlot } from '@/lib/divination/ziwei';
 import { PalaceCard, type PalaceFlightTag } from '@/components/ziwei/PalaceCard';
 import { ZiweiChartCenter, ZiweiChartLegend } from '@/components/ziwei/ZiweiChartCenter';
 import { ZiweiPalaceDetail } from '@/components/ziwei/ZiweiPalaceDetail';
@@ -47,19 +47,8 @@ interface ZiweiChartProps {
     };
 }
 
-interface GridSlot {
-    branch: number;
-    row: number;
-    col: number;
-}
-
-/** 标准 4×4 排布（地支序 子=0）：上行 巳午未申，左列 辰卯，右列 酉戌，下行 寅丑子亥。 */
-const GRID_SLOTS: readonly GridSlot[] = [
-    { branch: 5, row: 0, col: 0 }, { branch: 6, row: 0, col: 1 }, { branch: 7, row: 0, col: 2 }, { branch: 8, row: 0, col: 3 },
-    { branch: 4, row: 1, col: 0 }, { branch: 9, row: 1, col: 3 },
-    { branch: 3, row: 2, col: 0 }, { branch: 10, row: 2, col: 3 },
-    { branch: 2, row: 3, col: 0 }, { branch: 1, row: 3, col: 1 }, { branch: 0, row: 3, col: 2 }, { branch: 11, row: 3, col: 3 },
-];
+type GridSlot = ZiweiGridSlot;
+const GRID_SLOTS = ZIWEI_GRID_SLOTS;
 const SLOT_BY_BRANCH = new Map(GRID_SLOTS.map((slot) => [slot.branch, slot]));
 const ROW_START_CLASS = ['row-start-1', 'row-start-2', 'row-start-3', 'row-start-4'] as const;
 const COL_START_CLASS = ['col-start-1', 'col-start-2', 'col-start-3', 'col-start-4'] as const;

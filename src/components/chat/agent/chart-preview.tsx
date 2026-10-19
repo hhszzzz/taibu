@@ -4,6 +4,8 @@
 import { getStemElement, getBranchElement, getElementColor } from '@/lib/divination/display-helpers';
 import { HEXAGRAMS } from '@/lib/divination/liuyao';
 import type { AgentChart } from '@/lib/agent/tool-presentation';
+import { ziweiRingCells } from '@/lib/divination/ziwei';
+import { parseTraditionalYaoPosition } from '@/lib/divination/liuyao-result-state';
 
 const chip = (key: string, label: string, value: string) =>
     <span key={key} className="chart-mini-chip"><small>{label}</small>{value}</span>;
@@ -27,23 +29,17 @@ function NineGrid({ cells }: { cells: Array<{ 宫位序号: number; 八门: stri
     </span>;
 }
 
-/** 紫微十二宫：4×4 外环，命宫 clay 高亮，中宫写五行局。 */
+/** 紫微十二宫：按宫位地支落到与完整命盘相同的 4×4 外环格，命宫 clay 高亮，中宫写五行局。 */
 function ZiweiRing({ palaces, center }: { palaces: Array<{ 宫位: string; 干支: string; 主星及四化?: Array<{ 星名: string }> }>; center: string }) {
     return <span className="chart-mini-ring" aria-hidden="true">
-        {Array.from({ length: 16 }, (_, index) => {
-            const row = Math.floor(index / 4);
-            const col = index % 4;
-            const isCenter = row > 0 && row < 3 && col > 0 && col < 3;
-            if (isCenter) return index === 5 ? <span key={index} className="chart-mini-ring-center">{center}</span> : <span key={index} />;
-            // 外环顺时针：顶行 → 右列 → 底行 → 左列（与紫微盘十二宫顺序一致）。
-            const position = row === 0 ? col + 1 : col === 3 ? 4 + row : row === 3 ? 10 - col : 13 - row;
-            const palace = palaces[position - 1];
-            if (!palace) return <span key={index} />;
+        {ziweiRingCells(palaces).map(({ palace, row, col }) => {
             const main = (palace.主星及四化 ?? []).map(star => star.星名).slice(0, 2).join('');
-            return <span key={index} className="chart-mini-ring-cell" data-life={palace.宫位 === '命宫' || undefined}>
+            return <span key={palace.干支} className="chart-mini-ring-cell" data-life={palace.宫位 === '命宫' || undefined}
+                style={{ gridRow: row + 1, gridColumn: col + 1 }}>
                 <small>{palace.宫位.replace('宫', '')}</small>{main || palace.干支}
             </span>;
         })}
+        <span className="chart-mini-ring-center">{center}</span>
     </span>;
 }
 
@@ -56,7 +52,8 @@ export function ChartMiniPreview({ value }: { value: AgentChart }) {
             return <span className="chart-mini-pillars" aria-hidden="true">{value.chart.四柱.map((pillar, index) => {
                 const [stem, branch] = [pillar.干支.charAt(0), pillar.干支.charAt(1)];
                 return <span key={pillar.柱}><small>{labels[index] ?? pillar.柱}</small>
-                    <span style={color(getStemElement(stem))}>{stem}</span><span style={color(getBranchElement(branch))}>{branch}</span></span>;
+                    <span style={color(getStemElement(stem))}>{stem}</span><span style={color(getBranchElement(branch))}>{branch}</span>
+                    <small data-role="god">{pillar.天干十神 || ' '}</small></span>;
             })}</span>;
         }
         case 'ziwei': {
@@ -77,13 +74,13 @@ export function ChartMiniPreview({ value }: { value: AgentChart }) {
         case 'liuyao': {
             const board = value.chart.卦盘;
             const hexagram = HEXAGRAMS.find(row => row.name === board.本卦.卦名);
-            const changed = board.变卦 ? HEXAGRAMS.find(row => row.name === board.变卦?.卦名) : undefined;
-            const moving = hexagram && changed ? [...hexagram.code].flatMap((bit, index) => bit !== changed.code[index] ? [index + 1] : []) : [];
+            // 动爻直接读盘面里带「变爻」的爻位，不靠本变卦卦码比对推断。
+            const moving = value.chart.六爻.flatMap(line => line.变爻 ? [parseTraditionalYaoPosition(line.爻位) ?? 0] : []).filter(position => position > 0);
             const shi = value.chart.六爻.find(line => line.世应 === '世');
             return <span className="chart-mini-row">
                 {hexagram && <HexagramLines code={hexagram.code} moving={moving} label={board.本卦.卦名} />}
                 <span className="chart-mini-stack">
-                    {changed ? chip('v', '变卦', board.变卦!.卦名) : null}
+                    {board.变卦 ? chip('v', '变卦', board.变卦.卦名) : null}
                     {shi ? chip('s', '世', `${shi.爻位} ${shi.六亲}`) : null}
                     {chip('m', '动爻', moving.length ? `${moving.length} 爻` : '静卦')}
                 </span>
@@ -131,7 +128,7 @@ export function ChartMiniPreview({ value }: { value: AgentChart }) {
             return <span className="chart-mini-row">
                 <span className="chart-mini-cards" aria-hidden="true">
                     {value.chart.牌阵展开.slice(0, 3).map((card, index) => <span key={index} data-reversed={card.状态 === '逆位' || undefined}>
-                        <small>{card.位置}</small>{card.塔罗牌}
+                        <small>{card.位置}</small>{card.塔罗牌}{card.状态 === '逆位' && <em>逆位</em>}
                     </span>)}
                 </span>
                 {chip('s', '牌阵', value.chart.问卜设定.牌阵)}

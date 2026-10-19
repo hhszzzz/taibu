@@ -57,6 +57,7 @@ import { AgentQuestionDock } from '@/components/chat/agent/AgentQuestionDock';
 import { AgentMessage } from '@/components/chat/AgentMessage';
 import { AgentWorkspacePanel } from '@/components/chat/agent/AgentWorkspacePanel';
 import { AgentResultContext } from '@/components/chat/agent/AgentResultContext';
+import { ChatRecordViewContext } from '@/lib/chat/chat-record-view';
 import { ComposerStatusBar } from '@/components/chat/composer/ComposerStatusBar';
 import { getAgentChart } from '@/lib/agent/tool-presentation';
 import { getChartTargets } from '@/lib/agent/chart-interaction';
@@ -113,6 +114,9 @@ function AgentResultsProbe() {
   const [shown, setShown] = useState(null);
   const [bare, setBare] = useState(false);
   window.fixture.resultsWithoutWorkspace = setBare;
+  // ChatLayout 通过 context 下发对话记录视图；夹具直接切换普通 / 详细。
+  const [recordView, setRecordView] = useState('normal');
+  window.fixture.recordView = setRecordView;
   const [parts, setParts] = useState(initialToolParts);
   const [runtime, setRuntime] = useState(undefined);
   const [answers, setAnswers] = useState(() => new Map());
@@ -167,13 +171,13 @@ function AgentResultsProbe() {
   window.fixture.traditionalTaiyi = () => setParts(previous => previous.filter(tool => tool.id !== 'inspect-taiyi').map(tool => tool.name === 'taiyi' ? TRADITIONAL_TAIYI_FIXTURE_PART : tool));
   // Without a provider the message is what a reader sees outside the chat workspace.
   if (bare) return <section data-testid="agent-results"><AgentMessage data={data} /></section>;
-  return <section data-testid="agent-results"><AgentResultContext.Provider value={{ openResource(id) { setRequest(previous => ({ id, version: (previous?.version ?? 0) + 1 })); setOpen(true); }, shown: open ? shown : null }}>
+  return <section data-testid="agent-results"><ChatRecordViewContext.Provider value={recordView}><AgentResultContext.Provider value={{ openResource(id) { setRequest(previous => ({ id, version: (previous?.version ?? 0) + 1 })); setOpen(true); }, shown: open ? shown : null }}>
     <AgentMessage data={data} />
     <button onClick={() => { setRequest(previous => ({ id: 'chart:bazi', version: (previous?.version ?? 0) + 1 })); setOpen(true); }}>恢复已有成果标签</button>
     {open && <AgentWorkspacePanel workspaceKey={(user?.id ?? 'visitor') + ':ui-fixture'} artifacts={fixtureArtifacts} parts={parts} attachmentIds={[]} data={data}
       answers={answers} userId={user?.id ?? null} requestedResource={request} onShownChange={setShown} onChartQuestion={ask => { window.fixture.chartQuestion = ask; }} onClose={() => setOpen(false)}
       citedParagraph={cite => getAgentCitedParagraph([{ agent: data, content: agentMessageContent(parts) }], cite)} />}
-  </AgentResultContext.Provider></section>;
+  </AgentResultContext.Provider></ChatRecordViewContext.Provider></section>;
 }
 
 // A menu with an item hidden at this width, as the + menu's web switch is above phone widths.
@@ -1934,16 +1938,21 @@ export async function run(existingPage, bundlePath) {
       await results.locator('.agent-step-tag, .agent-step-marker').count() === 0 && await results.locator('.agent-step-time').count() === 0 && await results.locator('.agent-tool-details').count() === 0);
     check('The status line opens into a plain step list', await results.locator('.agent-process-steps').isVisible() && await results.locator('.agent-step').count() === 12);
     await timedStep.locator('.agent-step-row').click();
-    check('A step discloses its command and result', await timedStep.locator('.agent-step-row').getAttribute('aria-expanded') === 'true' &&
-      await timedStep.locator('.agent-step-command').count() === 1 && await timedStep.getByRole('button', { name: '复制调用参数', exact: true }).count() === 1);
+    // 普通记录视图只显示规范文本，不露参数键名；参数仍可复制。
+    check('A step discloses its canonical text without raw argument keys', await timedStep.locator('.agent-step-row').getAttribute('aria-expanded') === 'true' &&
+      await timedStep.locator('.agent-step-command').count() === 0 && await timedStep.locator('.agent-step-output').innerText().then(text => !text.includes('birthYear')) &&
+      await timedStep.getByRole('button', { name: '复制调用参数', exact: true }).count() === 1);
     await timedStep.getByRole('button', { name: '在工作区查看', exact: true }).click();
     await page.locator('#agent-workspace-panel [data-chart-kind="bazi"]').waitFor();
     check('A step opens its reading in the workspace and marks the step', await timedStep.locator('.agent-step-row').getAttribute('aria-current') === 'true' &&
       await results.locator('[aria-current="true"]').count() === 1);
-    // 过程标签已移除：步骤的调用参数与结果就在聊天转录里，工作区只保留视图。
-    check('The opened step keeps its call, copy actions and stored-result note in the transcript', await timedStep.locator('.agent-step-command').innerText().then(text => text.includes('birthYear') && !text.includes('秒')) &&
+    // 「详细」记录视图才逐行显示原始调用参数；切回普通后参数键名再次隐藏。
+    await page.evaluate(() => window.fixture.recordView('detailed'));
+    check('The detailed record view shows the raw call beside copy actions', await timedStep.locator('.agent-step-command').innerText().then(text => text.includes('birthYear') && !text.includes('秒')) &&
       await timedStep.getByRole('button', { name: '复制调用参数', exact: true }).count() === 1 &&
       await timedStep.getByRole('button', { name: '复制规范文本', exact: true }).count() === 1);
+    await page.evaluate(() => window.fixture.recordView('normal'));
+    check('Back in the normal view the raw call is hidden again', await timedStep.locator('.agent-step-command').count() === 0);
     await page.getByRole('button', { name: '关闭工作区', exact: true }).click();
     check('Closing the workspace clears the shown marks', await results.locator('[aria-current="true"]').count() === 0);
     await results.getByRole('button', { name: /任务过程/ }).click();

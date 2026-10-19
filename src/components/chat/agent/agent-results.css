@@ -133,10 +133,11 @@
 .almanac-yiji-block[data-kind="ji"] .almanac-yiji-chips > span { background: var(--fire-soft, var(--background-secondary)); color: var(--fire, var(--danger)); }
 .almanac-yiji-empty { background: none !important; color: var(--foreground-secondary) !important; padding-left: 0 !important; }
 .almanac-details { display: flex; gap: 16px; padding-top: 16px; border-top: var(--hairline) solid var(--border); }
-.almanac-kv { display: flex; flex-direction: column; gap: 8px; margin: 0; font-size: calc(13.5 / 16 * 1rem); line-height: calc(19 / 16 * 1rem); }
-.almanac-kv > div { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 8px; }
-.almanac-kv dt { color: var(--foreground-secondary); }
-.almanac-kv > div[data-wide] { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+/* 标签列按最长标签取宽（如「二十八星宿」），整张清单共用一列，不折行也不错位 */
+.almanac-kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 12px; margin: 0; font-size: calc(13.5 / 16 * 1rem); line-height: calc(19 / 16 * 1rem); }
+.almanac-kv > div { display: contents; }
+.almanac-kv dt { color: var(--foreground-secondary); white-space: nowrap; }
+.almanac-kv > div[data-wide] { display: grid; grid-column: 1 / -1; grid-template-columns: minmax(0, 1fr); gap: 2px; }
 .almanac-kv dd { margin: 0; overflow-wrap: anywhere; }
 .almanac-kv dd[data-kind="yi"] { color: var(--wood, var(--chat-success)); }
 .almanac-kv dd[data-kind="ji"] { color: var(--fire, var(--danger)); }
@@ -152,24 +153,23 @@
 .almanac-direction > small { color: var(--foreground-tertiary); }
 .almanac-direction[data-tone="god"] > small { color: inherit; opacity: .75; }
 .almanac-direction > span { font-family: var(--font-display); font-size: calc(13 / 16 * 1rem); }
-.almanac-direction.is-center { background: var(--foreground); color: var(--background); font-family: var(--font-display); font-size: calc(15 / 16 * 1rem); }
+.almanac-direction.is-center { background: var(--fill-control); color: var(--foreground); font-family: var(--font-display); font-size: calc(15 / 16 * 1rem); }
 .almanac-card { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border: var(--hairline) solid var(--border); border-radius: 14px; background: var(--background); }
 .almanac-card h3 { margin: 0; font-family: var(--font-display); font-size: calc(17 / 16 * 1rem); font-weight: 400; }
 .almanac-card p { margin: 0; font-size: calc(13 / 16 * 1rem); line-height: 1.6; color: var(--foreground-secondary); }
 .almanac-hours-card { gap: 10px; }
 .almanac-hours-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .almanac-hours-head > span { font-size: calc(12 / 16 * 1rem); color: var(--foreground-tertiary); }
-.almanac-hours { display: grid; grid-template-columns: repeat(13, minmax(0, 1fr)); gap: 0; overflow: hidden; border: var(--hairline) solid var(--border); border-radius: 12px; }
-.almanac-hour { display: flex; min-width: 0; flex-direction: column; align-items: center; gap: 1px; padding: 8px 1px; border-right: var(--hairline) solid var(--border); background: var(--background); font-size: calc(10.5 / 16 * 1rem); }
-.almanac-hour:last-child { border-right: 0; }
+/* 时辰条按可用宽度自动换行：每格至少放下「00–01」，窄工作区里不再截断；格线由网格间隙画出 */
+.almanac-hours { display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: var(--hairline); overflow: hidden; border: var(--hairline) solid var(--border); border-radius: 12px; background: var(--border); }
+.almanac-hour { display: flex; min-width: 0; flex-direction: column; align-items: center; gap: 1px; padding: 8px 1px; background: var(--background); font-size: calc(10.5 / 16 * 1rem); }
 .almanac-hour > small { color: var(--foreground-tertiary); font-size: calc(9.5 / 16 * 1rem); white-space: nowrap; }
 .almanac-hour > strong { font-family: var(--font-display); font-size: calc(15 / 16 * 1rem); }
 .almanac-hour > span { max-width: 100%; overflow: hidden; font-size: calc(9.5 / 16 * 1rem); text-overflow: ellipsis; white-space: nowrap; color: var(--foreground-secondary); }
 .almanac-hour > em { font-style: normal; }
 .almanac-hour[data-kind="yi"] > em { color: var(--chat-success); }
 .almanac-hour[data-kind="ji"] > em { color: var(--danger); }
-.almanac-hour[aria-pressed="true"] { border-color: transparent; background: var(--foreground); color: var(--background); }
-.almanac-hour[aria-pressed="true"] > small, .almanac-hour[aria-pressed="true"] > span { color: var(--background); opacity: .72; }
+.almanac-hour[aria-pressed="true"] { background: var(--fill-ghost-selected); color: var(--foreground); }
 .almanac-hour-detail { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 10px 12px; border-radius: 10px; background: var(--background-secondary); font-size: calc(12.5 / 16 * 1rem); line-height: 1.6; }
 .almanac-hour-detail > span[data-kind="yi"] { color: var(--chat-success); }
 .almanac-hour-detail > span[data-kind="ji"] { color: var(--danger); }
@@ -179,6 +179,4 @@
   .almanac-date-day { font-size: calc(52 / 16 * 1rem); }
   .almanac-details { flex-direction: column; }
   .almanac-direction-wrap { width: auto; }
-  .almanac-hours { grid-template-columns: repeat(7, minmax(0, 1fr)); }
-  .almanac-hour { border-bottom: var(--hairline) solid var(--border); }
 }

@@ -345,9 +345,10 @@ try {
   const firstStep = page.locator('.agent-message .agent-step-row').first();
   if (await firstStep.getAttribute('aria-expanded') !== 'true') await firstStep.click();
   await page.locator('.agent-message .agent-step-workspace').first().click();
-  // 过程标签已移除：调用参数与结果留在聊天步骤里，工作区只显示视图。
-  await page.locator('.agent-message .agent-step-command').first().waitFor();
+  // 普通记录视图只显示规范文本；原始参数不展示但可复制。
   const call = page.locator('.agent-message .agent-step-body').first();
+  await call.waitFor();
+  assert.equal(await call.locator('.agent-step-command').count(), 0, 'the normal record view hides raw argument keys');
   const callId = await call.getAttribute('data-tool-id');
   await call.getByRole('button', { name: '复制调用参数', exact: true }).click();
   assert.deepEqual(JSON.parse(await page.evaluate(() => navigator.clipboard.readText())), finished.message.agent.parts.find(part => part.type === 'tool' && part.id === callId).input);

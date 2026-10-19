@@ -91,12 +91,39 @@ export function getAgentToolTitle(tool: AgentTool): string {
     return RAW_TOOL_TITLES[tool.name] ?? tool.title ?? tool.name;
 }
 
+const DRILLDOWN_SCOPES: Record<string, string> = {
+    natal: '本命', decadal: '大限', yearly: '流年', monthly: '流月', daily: '流日', hourly: '流时',
+};
+
+const DRILLDOWN_PLANETS: Record<string, string> = {
+    sun: '太阳', moon: '月亮', mercury: '水星', venus: '金星', mars: '火星', jupiter: '木星', saturn: '土星',
+    uranus: '天王星', neptune: '海王星', pluto: '冥王星', northnode: '北交点', southnode: '南交点',
+    lilith: '莉莉丝', ascendant: '上升点', midheaven: '天顶',
+};
+
 /** 详查参数的读法；其余参数按值原样列出，reference 只是命盘引用，不展示。 */
 const DRILLDOWN_SELECTION_LABELS: Record<string, (value: unknown) => string> = {
     year: value => `${value} 年`,
     month: value => `${value} 月（节气月）`,
     dayun: value => `第 ${value} 步大运`,
     yunSect: () => '',
+    palace: value => typeof value === 'number' ? `第 ${value} 宫` : value === '命宫' ? '命宫' : `${value}宫`,
+    scope: value => DRILLDOWN_SCOPES[String(value)] ?? String(value),
+    targetDate: value => String(value),
+    targetTimeIndex: value => `时辰 ${value}`,
+    fromYear: value => `${value} 年起`,
+    toYear: value => `至 ${value} 年`,
+    focus: value => `只看 ${value}`,
+    leiShen: value => `类神 ${value}`,
+    planet: value => DRILLDOWN_PLANETS[String(value)] ?? String(value),
+    house: value => `第 ${value} 宫`,
+    line: value => `第 ${value} 爻`,
+    locate: value => {
+        const locate = value as { type?: unknown; value?: unknown };
+        if (typeof locate?.type !== 'string') return '';
+        const target = typeof locate.value === 'string' && locate.value ? ` ${locate.value}` : '';
+        return `按${locate.type}${target}定位`;
+    },
 };
 
 /** 「2027 年 · 5 月（节气月）」：详查步骤的副标题；只有命盘本身时为「原局」。 */

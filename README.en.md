@@ -80,17 +80,25 @@ Modern clients automatically perform `server/discover` and supply the per-reques
 | `bazi_pillars_resolve` | Reverse-lookup birth time from Four Pillars (1900-2100) | "My Bazi is 丙午 庚寅 丙辰 癸巳, please analyze it." |
 | `bazi_dayun` | Compute major luck cycles (10-year periods with annual transits, Tai Sui annotations, minor luck) | AI automatically calls this based on your Bazi |
 | `bazi_relations` | Bazi clash/combination drill-down across natal pillars and luck, year, month and day overlays | "Which clashes and combinations does 2027 bring to my chart?" |
+| `bazi_wuxing` | Bazi five-element circulation drill-down (weighted stats, monthly vigor, roots and exposed stems, generating chain; no strength verdicts) | "Does my chart's five-element chain have a break?" |
+| `bazi_liunian_scan` | Scan annual pillars year by year (pillar, luck period, relations to natal and luck, Tai Sui; up to 30 years) | "Scan my annual pillars from 2026 to 2035." |
 | `ziwei` | Generate a Ziwei Doushu chart (Life/Body Master stars, Small Limit, Scholar Stars, San Fang Si Zheng) | "I was born on the 8th day of the 4th lunar month in 1990, please generate my Ziwei chart." |
 | `ziwei_horoscope` | Ziwei fortune periods (decadal/small limit/yearly/monthly/daily/hourly with transit stars) | "What are my Ziwei fortune periods for 2026?" |
 | `ziwei_flying_star` | Flying star analysis (four transformations, mutagen placements, surrounded palaces) | "Analyze the flying stars of my Life Palace." |
+| `ziwei_palace` | Ziwei palace drill-down (stars and transformations of one palace, surrounded palaces, flanking, palace-stem flights, period overlays) | "Show the surrounded palaces of my Life Palace." |
 | `liuyao` | Liuyao divination (auto-casting / custom hexagram / time-based / number-based, with nuclear/opposite/reversed hexagrams) | "I want to divine my career luck this year." |
+| `liuyao_line` | Liuyao line drill-down (one line by position/role/kin: stems, vigor, void, reverse generation, changed line) | "How strong is the Officer line in my hexagram?" |
 | `meihua` | Meihua Yishu divination (time casting, count/sound, text casting, measure casting, classifier cues, modern number casting) | "Cast a Meihua Yishu reading for whether this cooperation will succeed." |
 | `tarot` | Draw Tarot cards (9 spreads, 78 cards with independent reversed keywords, astrological/elemental correspondences) | "Please draw a Tarot card for my recent love fortune." |
 | `almanac` | Daily almanac & calendar query (directions, 12 hourly fortunes, 28 mansions) | "How is today's almanac? Is it suitable for a proposal?" |
+| `almanac_select` | Almanac date screening (candidate days in a range, filter by activity, exclude clash; up to 92 days) | "Pick wedding dates for the coming month." |
 | `astrology` | Western astrology natal and transit charting (Big Three, natal anchors, major transit triggers) | "What are the key astrology transit themes for me right now?" |
+| `astrology_point` | Astrology single-point drill-down (one planet or house: placement, traditional dignity, aspects, transit triggers) | "Where is my Venus and what aspects does it make?" |
 | `qimen` | Qimen Dunjia charting (palaces, gates, stars, gods, dun type, ju number, explicit timezone) | "Use Qimen Dunjia to see whether today's negotiation is favorable." |
+| `qimen_palace` | Qimen palace drill-down (plate stems, star/gate/deity, states, vigor, relations, formations; locate by stem/star/gate/deity) | "Which palace does Zhi Fu land on?" |
 | `taiyi` | Taiyi nine-star observation (external temporal environment, nine-star array, energy interaction) | "Use Taiyi nine-star observation to review this project's momentum." |
 | `daliuren` | Da Liu Ren charting (four lessons, three transmissions, heavenly plate, generals, explicit timezone) | "Use Da Liu Ren to analyze the outcome of this matter." |
+| `daliuren_lessons` | Da Liu Ren lesson drill-down (four lessons and six kins, transmission progression, inner/outer battles, day-stem lodging, classifier) | "Detail the three transmissions of this lesson." |
 | `xiaoliuren` | Xiao Liu Ren divination (result state, palace landing, core interpretive clues) | "Use Xiao Liu Ren to see whether today's trip will go smoothly." |
 
 ### SDK

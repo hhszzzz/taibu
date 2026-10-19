@@ -5,6 +5,7 @@ import { createAssistantMessageEventStream, getCurrentTools, getSystemMessageTex
 import type { StorageWrite } from "@earendil-works/pi-durable";
 import type { PiStreamFn as StreamFn } from "../../lib/agent/types";
 import { AgentStore, type AgentRunRow, type AgentArtifactRow, type AgentCommandRow } from "../../lib/agent/store.server";
+import { getAgentDrilldownBase } from "../../lib/agent/tool-catalog";
 import { emptyPiAssistant } from "../../lib/agent/pi-stream.server";
 import type { AIModelConfig } from "../../types";
 import { countTokens } from "../../lib/token-utils";
@@ -86,6 +87,14 @@ export class MemoryStore extends AgentStore {
   }
   override async artifact(_run: AgentRunRow, callId: string) {
     return this.drafts.get(callId) ?? null;
+  }
+  // 与 runtime 的数据库语义一致：详查按成果 ID 取盘、按 reference 找最近一次查看。
+  override async chartArtifact(_run: AgentRunRow, id: string) {
+    return [...this.drafts.values()].find(artifact => artifact.kind === "calculation" && artifact.id === id) ?? null;
+  }
+  override async inspectedChart(_run: AgentRunRow, reference: string) {
+    return [...this.drafts.values()].reverse().find(artifact => (artifact.tool_name === "inspect_chart" || getAgentDrilldownBase(artifact.tool_name))
+      && (artifact.result.details as { chartReference?: string }).chartReference === reference) ?? null;
   }
   override async artifacts() {
     return [...this.drafts.values()].filter((a) => a.kind === "calculation");

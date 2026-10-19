@@ -157,6 +157,62 @@ export const ANALYSIS_METHODS = [
     "tool": "bazi_relations",
     "title": "八字刑冲合害",
     "whenToUse": "在八字命盘上详查干支关系：原局四柱之间，以及叠加大运（起运前为小运）、流年、流月、流日后的天干五合/相冲与地支六合、三合、半合、三会、六冲、刑、害、破，附岁运并临、伏吟、天克地冲与太岁关系"
+  },
+  {
+    "id": "bazi_wuxing",
+    "guide": "bazi",
+    "tool": "bazi_wuxing",
+    "title": "八字五行流通",
+    "whenToUse": "在八字命盘上详查五行：天干、地支本气与藏干加权统计，月令旺相休囚死，日主通根与透干，干支自坐与相邻天干生克，相生链的连续与中断，以及十神分布"
+  },
+  {
+    "id": "bazi_liunian_scan",
+    "guide": "bazi",
+    "tool": "bazi_liunian_scan",
+    "title": "八字流年扫描",
+    "whenToUse": "在八字命盘上逐年列出一段年份（最多 30 年）的流年干支、所在大运（起运前为小运）、十神，流年与原局、与大运的刑冲合害，以及太岁与岁运提示"
+  },
+  {
+    "id": "ziwei_palace",
+    "guide": "ziwei",
+    "tool": "ziwei_palace",
+    "title": "紫微宫位",
+    "whenToUse": "在紫微命盘上聚焦一宫详查：本宫星曜亮度与生年四化、离心/向心自化，空宫借对宫，三方四正，夹宫，宫干四化飞出与十二宫四化飞入"
+  },
+  {
+    "id": "qimen_palace",
+    "guide": "qimen",
+    "tool": "qimen_palace",
+    "title": "奇门宫位详查",
+    "whenToUse": "在奇门盘上详查一宫：指定宫位，或按年月日时干（取天盘，甲取所遁六仪）、九星、八门、八神定位"
+  },
+  {
+    "id": "daliuren_lessons",
+    "guide": "daliuren",
+    "tool": "daliuren_lessons",
+    "title": "大六壬课传详查",
+    "whenToUse": "在已起的六壬课上详查四课与三传：逐课列上下神的贼克生克、所乘天将、神将与遁干六亲"
+  },
+  {
+    "id": "astrology_point",
+    "guide": "astrology",
+    "tool": "astrology_point",
+    "title": "占星单点详查",
+    "whenToUse": "在西方占星命盘上详查一颗星体（含交点、莉莉丝、上升、天顶）或一个宫位：星座宫位与逆行、托勒密传统尊贵、主管宫位或宫主星落点、本命相位（标入相／出相）、流运触发或流运过境"
+  },
+  {
+    "id": "liuyao_line",
+    "guide": "liuyao",
+    "tool": "liuyao_line",
+    "title": "六爻逐爻详查",
+    "whenToUse": "在六爻卦盘上按爻位或角色（世、应、动爻、六亲）取爻，列纳甲、六亲、六神、世应、动静、旺衰判据、月破日破暗动与空亡、月建日辰作用、化进化退与回头生克、伏神飞伏，以及动爻对本爻的生克冲合"
+  },
+  {
+    "id": "almanac_select",
+    "guide": "almanac",
+    "tool": "almanac_select",
+    "title": "黄历择日筛选",
+    "whenToUse": "在指定区间内逐日取黄历，按事项（宜忌逐条匹配）与冲煞（生肖或地支的六冲）筛选候选日，列出干支、农历、建除、黄黑道、二十八宿、纳音、冲煞与宜忌，并给出排除统计"
   }
 ] as const;
 export const ANALYSIS_CONVENTIONS = "- **历法**：生辰类工具默认公历（`calendarType: \"solar\"`）；用户给的是农历生日时改传 `\"lunar\"`，闰月再加 `isLeapMonth: true`。`xiaoliuren` 例外，直接接收农历月、日。\n- **时间**：`birthHour` 传 0-23 的钟表小时，早晚子时由引擎处理，不要自行折算时辰。`xiaoliuren` 的 `hour` 可传时辰序号 1-12（子=1），也可传 0-23 小时。用户未提供的出生信息应当询问，而非代为假设。\n- **占当下**：`qimen`、`daliuren`、`liuyao` 与 `meihua` 的时间起卦需要当前时间时，先取系统时间（如 `date +\"%Y-%m-%dT%H:%M:%S\"`）再填入参数。\n- **日期核实**：用户说「今天/现在」并同时报出农历日期时，先取系统时间、用 `almanac` 核对公农历对应——农历与公历的映射是查历数据，不能凭记忆换算。口述与核实不符时，指出差异并以核实结果起盘，必要时附口述日期的对照结果。出生生肖、未来日期干支也以 Core 对相应日期的计算为准，不能从公历年份或单日盘面补算。\n- **随机性**：`tarot` 可传 `seed` 复现抽牌；`liuyao` 的 `method: \"auto\"` 每次结果随机，需要复现时改用 `select`（指定卦名）或 `number`（数字起卦）。\n- **六爻用神**：`yongShenTargets` 必填，按占问主题选择，可多选：事业官职、官司、疾病忧患取 `官鬼`；财运、男问感情取 `妻财`；文书合同、长辈、房产车辆取 `父母`；子女晚辈、健康平安取 `子孙`；合作竞争、朋友取 `兄弟`。\n- **detailLevel**：默认输出已够解读；需要完整盘面时在参数中加 `\"detailLevel\": \"full\"`（部分工具另有 `\"more\"`）。";

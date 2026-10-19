@@ -4,10 +4,11 @@ import { fileURLToPath } from 'node:url';
 
 export const SKILL_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../skills/taibu-divination');
 export const TOOL_GUIDES = Object.freeze({
-  astrology: 'astrology', bazi: 'bazi', bazi_pillars_resolve: 'bazi', bazi_dayun: 'bazi', bazi_relations: 'bazi',
-  ziwei: 'ziwei', ziwei_horoscope: 'ziwei', ziwei_flying_star: 'ziwei',
-  liuyao: 'liuyao', meihua: 'meihua', tarot: 'tarot', taiyi: 'taiyi', almanac: 'almanac',
-  qimen: 'qimen', daliuren: 'daliuren', xiaoliuren: 'xiaoliuren',
+  astrology: 'astrology', astrology_point: 'astrology',
+  bazi: 'bazi', bazi_pillars_resolve: 'bazi', bazi_dayun: 'bazi', bazi_relations: 'bazi', bazi_wuxing: 'bazi', bazi_liunian_scan: 'bazi',
+  ziwei: 'ziwei', ziwei_horoscope: 'ziwei', ziwei_flying_star: 'ziwei', ziwei_palace: 'ziwei',
+  liuyao: 'liuyao', liuyao_line: 'liuyao', meihua: 'meihua', tarot: 'tarot', taiyi: 'taiyi', almanac: 'almanac', almanac_select: 'almanac',
+  qimen: 'qimen', qimen_palace: 'qimen', daliuren: 'daliuren', daliuren_lessons: 'daliuren', xiaoliuren: 'xiaoliuren',
 });
 
 export function requireGuide(toolName) {

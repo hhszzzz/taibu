@@ -2,16 +2,18 @@ import 'server-only';
 import assert from 'node:assert/strict';
 import { executeTool, buildToolSuccessPayload, listToolDefinitions } from 'taibu-core/mcp';
 import { stableAgentSeed } from './tools.server';
-import type { AgentRunRow, AgentArtifactRow } from './store.server';
+import { executeDrilldown } from './drilldown.server';
+import { getAgentDrilldownBase } from './tool-catalog';
+import type { AgentRunRow, AgentArtifactRow, AgentStore } from './store.server';
 import { normalizeContext, type Api, type Model } from '@earendil-works/pi-ai';
 import type { AIModelConfig } from '@/types';
 import { createPiSDKStream } from './pi-stream.server';
 import type { PiStreamFn } from './types';
 
 /** Compare the executed arguments with Core, including the server-owned random seed. */
-export async function assertAgentEvaluation(run: AgentRunRow, expectedTool: string, artifacts: AgentArtifactRow[]) {
+export async function assertAgentEvaluation(run: AgentRunRow, expectedTool: string, artifacts: AgentArtifactRow[], store?: AgentStore) {
+    assert.ok(artifacts.some(artifact => artifact.tool_name === expectedTool), `未调用 ${expectedTool}`);
     const calculations = artifacts.filter(artifact => artifact.kind === 'calculation');
-    assert.ok(calculations.some(artifact => artifact.tool_name === expectedTool), `未调用 ${expectedTool}`);
     for (const artifact of calculations) {
         const args = { ...artifact.args };
         const definition = listToolDefinitions().find(tool => tool.name === artifact.tool_name);
@@ -20,6 +22,15 @@ export async function assertAgentEvaluation(run: AgentRunRow, expectedTool: stri
         const expected = buildToolSuccessPayload(artifact.tool_name, await executeTool(artifact.tool_name, args));
         assert.deepEqual(artifact.result.details, expected.structuredContent);
         assert.equal(artifact.result.canonicalText, expected.content.map(part => part.text).join('\n'));
+    }
+    // 详查工具缓存为 kind 'tool'：用同一次运行里的成果重算一遍，逐字段核对。
+    if (getAgentDrilldownBase(expectedTool)) {
+        const drilldown = artifacts.find(artifact => artifact.tool_name === expectedTool && artifact.kind === 'tool');
+        assert.ok(drilldown, `未缓存 ${expectedTool} 的详查结果`);
+        assert.ok(store, `缺少成果存储，无法重算 ${expectedTool}`);
+        const recomputed = await executeDrilldown(store, run, expectedTool, drilldown.args);
+        assert.deepEqual(drilldown.result.details, recomputed.details);
+        assert.equal(drilldown.result.canonicalText, recomputed.canonicalText);
     }
 }
 

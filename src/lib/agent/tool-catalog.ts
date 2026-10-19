@@ -22,6 +22,13 @@ export function isAgentChartTool(name: string): name is AgentChartKind {
  */
 export const AGENT_DRILLDOWN_BASES = {
   bazi_relations: 'bazi',
+  bazi_wuxing: 'bazi',
+  bazi_liunian_scan: 'bazi',
+  ziwei_palace: 'ziwei',
+  qimen_palace: 'qimen',
+  daliuren_lessons: 'daliuren',
+  astrology_point: 'astrology',
+  liuyao_line: 'liuyao',
 } as const satisfies Record<string, AgentChartKind>;
 
 export type AgentDrilldownTool = keyof typeof AGENT_DRILLDOWN_BASES;
@@ -53,6 +60,7 @@ const TOOL_FAMILIES: ReadonlyMap<string, AgentToolFamily> = new Map<string, Agen
   ['bazi_pillars_resolve', 'calculation'],
   ['ziwei_horoscope', 'calculation'],
   ['ziwei_flying_star', 'calculation'],
+  ['almanac_select', 'calculation'],
   ['web_search', 'search'],
   ['search_knowledge', 'search'],
   ['list_user_data', 'data'],

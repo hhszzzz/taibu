@@ -11,7 +11,7 @@ flowchart LR
   DB --> Worker[Node worker: 租约与心跳]
   Worker --> Pi[Pi Durable Harness]
   Pi --> SDK[现有 AI SDK 模型与网关]
-  Pi --> Tools[15 个计算工具 / 用户资料 / 知识库 / Tavily]
+  Pi --> Tools[24 个占术工具（含 8 个详查） / 用户资料 / 知识库 / Tavily]
   Tools --> DB
   Worker --> DB
   DB --> SSE[游标事件补发与状态快照]
@@ -28,7 +28,9 @@ Pi 1.1.0 适配涵盖十一体系命盘、六档推理、时间投影与当前�
 
 ## 工具与成果
 
-15 个计算工具直接复用 `taibu-core/mcp` 的定义、输入校验、引擎及规范 JSON／文本输出。工具结果按业务任务、Durable ToolTask ID 和模型调用 ID 暂存；随机种子从这个稳定标识产生。重启重放同一 ToolTask 会复用结果，模型在不同回合重用调用 ID 会生成不同工具任务。只有具备幂等缓存的业务工具声明安全重放。
+24 个占术工具直接复用 `taibu-core/mcp` 的定义、输入校验、引擎及规范 JSON／文本输出。工具结果按业务任务、Durable ToolTask ID 和模型调用 ID 暂存；随机种子从这个稳定标识产生。重启重放同一 ToolTask 会复用结果，模型在不同回合重用调用 ID 会生成不同工具任务。只有具备幂等缓存的业务工具声明安全重放。
+
+8 个详查工具（`bazi_relations`、`bazi_wuxing`、`bazi_liunian_scan`、`ziwei_palace`、`qimen_palace`、`daliuren_lessons`、`astrology_point`、`liuyao_line`）只接收命盘引用与查询参数：从本任务成果或已存记录重建基础参数后重算，并与成果快照核对盘面身份，不一致时拒绝并提示重新排盘。详查结果挂在原盘下，缓存为工具调用、不生成新成果，返回的 targets 可直接作为 `focus_chart` 的定位。
 
 11 份解读 guide 在构建时嵌入，与 skill 共享唯一映射。模型先看到按当前工具集过滤的简短体系目录，需要时使用 `load_analysis_method` 读取完整指引；工具名或旧 guide ID 均可加载。计算仍由 Core 完成，方法包不增加执行权限。参数准备只归一化确定的表示错误，错误出生时刻和历法会被拒绝。
 
@@ -263,7 +265,7 @@ node scripts/tests/agent-selfhost-browser.mjs --project <独立演示项目> --c
 | 工具名单散落：投影层的规范文本白名单只列了 8 种盘，漏掉太乙、占星、黄历，三者降级时显示原始 JSON；工具卡按名称片段猜图标，9 种盘显示通用扳手 | 新增浏览器安全的 `tool-catalog.ts`，统一盘种身份、工具族（命盘、推演、检索、资料、方法、计划、提问、协作、记忆、成果、外部）与规范文本判定；投影、命盘识别和工具卡图标都从此读取 |
 | SSE 每秒为每个连接构建完整公开视图，空闲心跳也读取命令队列 | 先用任务行判断游标、执行版本和终态，只在需要发送快照时构建视图；帧序列、resync 与终态行为不变 |
 
-新增 `agent-tool-effects`、`agent-tool-catalog` 与 SSE 心跳回归：缓存失败不留状态且同一 revision 可重试；新执行与缓存重放得到相同检查点、且不重复联网或写缓存；15 个 Core 工具与全部注册工具都有工具族；11 种盘经真实 Core 与原生投影后都保留规范文本；空闲心跳不构建视图。三组关键断言在旧实现上失败，在新实现上通过。
+新增 `agent-tool-effects`、`agent-tool-catalog` 与 SSE 心跳回归：缓存失败不留状态且同一 revision 可重试；新执行与缓存重放得到相同检查点、且不重复联网或写缓存；24 个 Core 工具与全部注册工具都有工具族；11 种盘经真实 Core 与原生投影后都保留规范文本；空闲心跳不构建视图。三组关键断言在旧实现上失败，在新实现上通过。
 
 后续建议（本轮未实施）：`executeAgentRun` 仍是约 400 行的闭包，可按模型绑定、钩子、命令投递和结算拆成可单测的工厂；`ChatLayout` 与 `AgentWorkspacePanel` 的工作区状态（打开、自动展开、标签、跟随模型）分散在两个组件和四个 `sessionStorage` 键，宜下沉为一个 hook 并让工作区按工具族渲染视图；分叉与方法选择仍通过 `window` 自定义事件通信；`AgentQueue` 等组件整棵 JSX 写在单行，修改时宜先格式化。SSE 仍是每连接每秒轮询，规模扩大后可改为数据库通知驱动。
 

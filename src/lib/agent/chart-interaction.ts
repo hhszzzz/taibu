@@ -186,13 +186,171 @@ function drilldownCells(value: unknown, cells: DrilldownCell[] = [], depth = 0):
 }
 
 /**
- * The chart's own targets a drilldown result touches, in board order, at most 16:
+ * The chart's own targets a drilldown result touches, in fact order, at most 16:
  * a focus call may pass them unchanged. Positions outside the board (大运、流年…) have no target.
  */
 export function getDrilldownTargets(value: AgentChart, result: unknown): ChartTarget[] {
+  const targets = getChartTargets(value);
+  const byId = new Map(targets.map(target => [target.id, target]));
+  const ids = value.kind === 'bazi' ? baziDrilldownTargetIds(targets, result) : structuredDrilldownTargetIds(value.kind, targets, result);
+  return [...new Set(ids)].map(id => byId.get(id)).filter((target): target is ChartTarget => target !== undefined).slice(0, 16);
+}
+
+/** 八字详查（含五行流通、流年扫描）共用干支位置：只认与盘面完全一致的柱、部位、字。 */
+function baziDrilldownTargetIds(targets: ChartTarget[], result: unknown): string[] {
   const cells = drilldownCells(result);
-  return getChartTargets(value).filter(target => target.kind === 'bazi_cell'
-    && cells.some(cell => cell.柱 === target.cell.柱 && cell.部位 === target.cell.部位 && cell.字 === target.cell.字)).slice(0, 16);
+  return targets.filter(target => target.kind === 'bazi_cell'
+    && cells.some(cell => cell.柱 === target.cell.柱 && cell.部位 === target.cell.部位 && cell.字 === target.cell.字)).map(target => target.id);
+}
+
+/** 递归访问详查结果里的每个对象；只读取 Core 输出里的结构化字段，不解析自然语言。 */
+function walkFactNodes(value: unknown, visit: (node: Record<string, unknown>) => void, depth = 0): void {
+  if (depth > 6 || !value || typeof value !== 'object') return;
+  if (Array.isArray(value)) {
+    for (const item of value) walkFactNodes(item, visit, depth + 1);
+    return;
+  }
+  const node = value as Record<string, unknown>;
+  visit(node);
+  for (const [key, child] of Object.entries(node)) if (key !== '计算规则' && key !== '口径') walkFactNodes(child, visit, depth + 1);
+}
+
+const QIMEN_FIELD_PARTS: readonly string[] = ['八神', '九星', '八门', '天盘天干', '地盘天干'];
+
+type PushTarget = (id: string | undefined) => void;
+
+/** 各盘种详查结果里的位置结构到盘面目标 id 的映射；id 都来自 getChartTargets，找不到的丢弃。 */
+function structuredDrilldownTargetIds(kind: AgentChart['kind'], targets: ChartTarget[], result: unknown): string[] {
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  const push: PushTarget = id => { if (id && !seen.has(id)) { seen.add(id); ids.push(id); } };
+  const visit = kind === 'ziwei' ? ziweiTargetVisitor(targets, push)
+    : kind === 'qimen' ? qimenTargetVisitor(push)
+      : kind === 'daliuren' ? daliurenTargetVisitor(targets, push)
+        : kind === 'astrology' ? astrologyTargetVisitor(targets, push)
+          : kind === 'liuyao' ? liuyaoTargetVisitor(push)
+            : null;
+  if (visit) walkFactNodes(result, visit);
+  return ids;
+}
+
+/** 紫微：宫位名还原成本命宫位；星曜（含四化飞出的落星）还原到本命所在宫位的那颗星。 */
+function ziweiTargetVisitor(targets: ChartTarget[], push: PushTarget) {
+  const palaces = targets.filter((target): target is Extract<ChartTarget, { kind: 'ziwei_palace' }> => target.kind === 'ziwei_palace');
+  const stars = targets.filter((target): target is Extract<ChartTarget, { kind: 'ziwei_star' }> => target.kind === 'ziwei_star');
+  const palaceByName = new Map(palaces.map(target => [target.label.split(' ')[0], target]));
+  return (node: Record<string, unknown>) => {
+    for (const key of ['宫位', '对宫', '落入本命宫位'] as const) {
+      const name = node[key];
+      if (typeof name === 'string') push(palaceByName.get(name)?.id);
+    }
+    const starName = typeof node.星曜 === 'string' ? node.星曜
+      : typeof node.类型 === 'string' && node.类型.startsWith('化') && typeof node.结果 === 'string' ? node.结果 : undefined;
+    if (!starName) return;
+    const cells = Array.isArray(node.位置) ? node.位置 : [];
+    const last = cells.at(-1);
+    const palaceName = last && typeof last === 'object' ? (last as { 宫位?: unknown }).宫位 : undefined;
+    const palace = typeof palaceName === 'string' ? palaceByName.get(palaceName) : undefined;
+    if (!palace) return;
+    push(stars.find(target => target.palaceIndex === palace.palaceIndex
+      && (target.label === palace.label + ' ' + starName || target.label.startsWith(palace.label + ' ' + starName + '（')))?.id);
+  };
+}
+
+/** 奇门：宫位序号直接给出宫与部位；宫名字符串（含同见宫位、中宫寄宫、值符值使落宫）取卦名与序号。 */
+function qimenTargetVisitor(push: PushTarget) {
+  const palaceId = (number: number) => 'qimen:palace:' + number;
+  const pushName = (text: unknown) => {
+    const match = typeof text === 'string' ? /[坎坤震巽中乾兑艮]([1-9])/u.exec(text.trim()) : null;
+    if (match) push(palaceId(Number(match[1])));
+  };
+  return (node: Record<string, unknown>) => {
+    const number = node.宫位序号;
+    if (typeof number === 'number' && Number.isInteger(number) && number >= 1 && number <= 9) {
+      push(palaceId(number));
+      const part = node.部位;
+      if (typeof part === 'string' && QIMEN_FIELD_PARTS.includes(part)) push(palaceId(number) + ':' + part);
+    }
+    pushName(node.宫位);
+    if (Array.isArray(node.同见宫位)) node.同见宫位.forEach(pushName);
+    if (Array.isArray(node.中宫寄宫)) node.中宫寄宫.forEach(pushName);
+    const leaders = node.值符值使;
+    if (leaders && typeof leaders === 'object') for (const text of Object.values(leaders as Record<string, unknown>)) pushName(text);
+  };
+}
+
+/** 大六壬：课别、传序按盘面标签对齐；地盘支还原到天地盘宫位，部位再取该宫的字段目标。 */
+function daliurenTargetVisitor(targets: ChartTarget[], push: PushTarget) {
+  const lessons = targets.filter(target => target.id.startsWith('daliuren:lesson:'));
+  const transmissions = targets.filter(target => target.id.startsWith('daliuren:transmission:'));
+  const palaceByBranch = new Map<string, string>();
+  const fieldIds = new Set<string>();
+  for (const target of targets) {
+    if (/^daliuren:palace:\d+$/u.test(target.id) && target.label.startsWith('地盘')) palaceByBranch.set(target.label.charAt(2), target.id);
+    if (/^daliuren:palace:\d+:(天盘|地盘|天将)$/u.test(target.id)) fieldIds.add(target.id);
+  }
+  return (node: Record<string, unknown>) => {
+    const cells = Array.isArray(node.位置) ? node.位置 : [];
+    for (const cell of cells) {
+      if (!cell || typeof cell !== 'object') continue;
+      const item = cell as Record<string, unknown>;
+      const ke = item.课别, chuan = item.传序, di = item.地盘, part = item.部位;
+      if (typeof ke === 'string') push(lessons.find(target => target.label.startsWith(ke + ' '))?.id);
+      if (typeof chuan === 'string') push(transmissions.find(target => target.label.startsWith(chuan + ' '))?.id);
+      if (typeof di === 'string') {
+        const base = palaceByBranch.get(di);
+        if (base) {
+          push(base);
+          if (part === '天盘' || part === '天将') push(fieldIds.has(base + ':' + part) ? base + ':' + part : undefined);
+        }
+      }
+    }
+  };
+}
+
+/** 占星：位置格按盘面（本命/流运）与因素名对齐星体、附加点目标；宫位信息还原到宫位目标。 */
+function astrologyTargetVisitor(targets: ChartTarget[], push: PushTarget) {
+  const natalByName = new Map<string, string>();
+  const pointByName = new Map<string, string>();
+  const transitByName = new Map<string, string>();
+  const houseIds = new Map<number, string>();
+  for (const target of targets) {
+    if (/^astrology:natal:\d+$/u.test(target.id)) natalByName.set(target.label.split(' ')[0], target.id);
+    if (/^astrology:point:\d+$/u.test(target.id)) pointByName.set(target.label.split(' ')[0], target.id);
+    if (/^astrology:transit:\d+$/u.test(target.id)) transitByName.set(target.label.replace(/^流运 /u, '').split(' ')[0], target.id);
+    const house = /^astrology:house:(\d+)$/u.exec(target.id);
+    if (house) houseIds.set(Number(house[1]) + 1, target.id);
+  }
+  return (node: Record<string, unknown>) => {
+    const cells = Array.isArray(node.位置) ? node.位置 : [];
+    for (const cell of cells) {
+      if (!cell || typeof cell !== 'object') continue;
+      const item = cell as { 盘?: unknown; 因素?: unknown };
+      const board = item.盘, factor = item.因素;
+      if (typeof factor !== 'string') continue;
+      if (board === '本命') push(natalByName.get(factor) ?? pointByName.get(factor));
+      if (board === '流运') push(transitByName.get(factor));
+    }
+    const house = node.宫位信息;
+    if (house && typeof house === 'object') {
+      const number = (house as { 宫位序号?: unknown }).宫位序号;
+      if (typeof number === 'number') push(houseIds.get(number));
+    }
+  };
+}
+
+/** 六爻：爻序号直接还原本爻或变爻目标。 */
+function liuyaoTargetVisitor(push: PushTarget) {
+  return (node: Record<string, unknown>) => {
+    const cells = Array.isArray(node.位置) ? node.位置 : [];
+    for (const cell of cells) {
+      if (!cell || typeof cell !== 'object') continue;
+      const item = cell as { 序号?: unknown; 部位?: unknown };
+      const position = item.序号, part = item.部位;
+      if (typeof position !== 'number' || !Number.isInteger(position)) continue;
+      push((part === '变爻' ? 'liuyao:changed:line:' : 'liuyao:line:') + position);
+    }
+  };
 }
 
 export function validateChartFocus(value: AgentChart, reference: string, ids: string[], includeRelated: boolean, caption: string): ChartFocus {

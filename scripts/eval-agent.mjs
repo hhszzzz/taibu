@@ -11,6 +11,7 @@ require('./ts-register.cjs');
 const { row, config: fixtureConfig, MemoryStore, scripted } = require('../src/tests/helpers/agent-runtime-fixture.ts');
 const { executeAgentRun } = require('../src/lib/agent/runtime.server.ts');
 const { assertAgentEvaluation, judgeAgentEvaluation } = require('../src/lib/agent/evaluation.server.ts');
+const { getAgentDrilldownBase } = require('../src/lib/agent/tool-catalog.ts');
 const cases = JSON.parse(await readFile(path.join(root, 'scripts/evals/agent-cases.json'), 'utf8'));
 const credits = require('../src/lib/user/credits.ts'), features = require('../src/lib/app-settings.ts');
 mock.method(credits, 'getUserCreditInfo', async () => ({ membership: 'plus', credits: 10, expiresAt: null }));
@@ -66,6 +67,8 @@ try {
         run.input.model = config.id; run.input.title = item.id;
         run.input.userMessage.content = item.prompt;
         run.checkpoint.messages[0].content = item.prompt;
+        // 质量评测依据：排盘成果与详查结果都提供规范文本。
+        const coreTexts = () => [...store.drafts.values()].filter(artifact => artifact.kind === 'calculation' || getAgentDrilldownBase(artifact.tool_name)).map(artifact => artifact.result.canonicalText);
         // This private configuration represents an administrator platform model.
         // Resolve its key through the same environment path as the worker.
         const streamFn = live ? createPiSDKStream(config, { reasoning: false, ...(item.visual ? { resolveImages: async messages => {
@@ -73,8 +76,19 @@ try {
             return messages.map((message, index) => index === lastUser ? { role: 'user', content: [{ type: 'text', text: typeof message.content === 'string' ? message.content : item.prompt }, { type: 'image', image: visionBytes, mediaType: 'image/png' }] } : message);
         } } : {}) }) : scripted(index => {
             if (index === 0) return [{ type: 'toolCall', id: 'guide', name: 'load_analysis_method', arguments: { id: item.guide } }];
-            if (index === 1) return [{ type: 'toolCall', id: 'compute', name: item.tool, arguments: item.arguments }];
-            if (index === 2) return [{ type: 'toolCall', id: 'select', name: 'select_final_artifacts', arguments: { artifactIds: [...store.drafts.values()].filter(a => a.kind === 'calculation').map(a => a.id) } }];
+            // 详查用例：先排盘，再用成果引用调用详查工具；其余用例保持单步计算。
+            if (item.chart) {
+                if (index === 1) return [{ type: 'toolCall', id: 'chart', name: item.chart.tool, arguments: item.chart.arguments }];
+                if (index === 2) {
+                    const chart = [...store.drafts.values()].find(artifact => artifact.tool_name === item.chart.tool);
+                    if (!chart) throw new Error('未找到 ' + item.chart.tool + ' 的成果，无法详查');
+                    return [{ type: 'toolCall', id: 'compute', name: item.tool, arguments: { reference: 'artifact:' + chart.id, ...item.arguments } }];
+                }
+                if (index === 3) return [{ type: 'toolCall', id: 'select', name: 'select_final_artifacts', arguments: { artifactIds: [...store.drafts.values()].filter(a => a.kind === 'calculation').map(a => a.id) } }];
+            } else {
+                if (index === 1) return [{ type: 'toolCall', id: 'compute', name: item.tool, arguments: item.arguments }];
+                if (index === 2) return [{ type: 'toolCall', id: 'select', name: 'select_final_artifacts', arguments: { artifactIds: [...store.drafts.values()].filter(a => a.kind === 'calculation').map(a => a.id) } }];
+            }
             return [{ type: 'text', text: '根据实际 Core 盘面给出结论。离线模式只检查结构，不评价解读质量。' }];
         });
         let stage = 'execution', judgeResponse, judgeStatus, guideLoaded = false;
@@ -86,7 +100,7 @@ try {
             if (item.visual) {
                 const answer = finished.args.p_message.content;
                 if (!/红|red/i.test(answer) || !/圆|circle/i.test(answer) || !/蓝|blue/i.test(answer) || !/方|square/i.test(answer) || !/两个|两种|2|two/i.test(answer) || answer.search(/红|red/i) > answer.search(/蓝|blue/i)) throw new Error('视觉推理与图片不一致');
-            } else await assertAgentEvaluation(run, item.tool, [...store.drafts.values()]);
+            } else await assertAgentEvaluation(run, item.tool, [...store.drafts.values()], store);
             stage = 'guide-loading';
             guideLoaded = store.nativeEntries().some(entry => entry.model?.some(message => message.role === 'toolResult' && message.toolName === 'load_analysis_method' && !message.isError));
             if (!live && !guideLoaded) throw new Error('未加载体系解读指引');
@@ -94,21 +108,21 @@ try {
             if (live) {
                 stage = 'quality-judge';
                 console.log(`STRUCTURE ${item.id}: Core consistent; guide=${guideLoaded}`);
-                const input = { question: item.prompt, assertions: item.assertions, answer: finished.args.p_message.content, core: [...store.drafts.values()].filter(a => a.kind === 'calculation').map(a => a.result.canonicalText) };
+                const input = { question: item.prompt, assertions: item.assertions, answer: finished.args.p_message.content, core:     coreTexts() };
                 report.cases.push({ id: item.id, guide: item.guide, tool: item.tool, structural: true, guideLoaded, quality: null, qualityPending: true, passed: false, usage: finished.args.p_checkpoint.runtime?.usage, answer: input.answer, core: input.core });
                 await saveReport(); report.cases.pop();
                 const evaluated = await judgeAgentEvaluation(config, input);
                 quality = evaluated.quality; judgeResponse = evaluated.judgeResponse; judgeStatus = evaluated.judgeStatus;
             }
             const pass = !quality || quality.passed;
-            report.cases.push({ id: item.id, guide: item.guide, tool: item.tool, structural: true, guideLoaded, quality: quality ?? null, passed: pass, usage: finished.args.p_checkpoint.runtime?.usage, ...(live ? { answer: finished.args.p_message.content, core: [...store.drafts.values()].filter(a => a.kind === 'calculation').map(a => a.result.canonicalText) } : {}) });
+            report.cases.push({ id: item.id, guide: item.guide, tool: item.tool, structural: true, guideLoaded, quality: quality ?? null, passed: pass, usage: finished.args.p_checkpoint.runtime?.usage, ...(live ? { answer: finished.args.p_message.content, core:     coreTexts() } : {}) });
             console.log(`${pass ? 'PASS' : 'FAIL'} ${item.id} (${item.tool})${live ? ' structure + model quality judge' : ' structure only'}`);
         } catch (error) {
             const finish = store.writes.findLast(write => write.name === 'agent_finish_run');
             const called = [...new Set(store.nativeEntries().flatMap(entry => entry.model ?? []).filter(message => message.role === 'toolResult').map(message => message.toolName))];
             const diagnostic = { name: error?.name, ...(Number.isInteger(error?.statusCode) ? { statusCode: error.statusCode } : {}), ...((error?.judgeStatus ?? judgeStatus) ? { judgeStatus: error?.judgeStatus ?? judgeStatus } : {}) };
             const requested = [...new Set(store.nativeEntries().flatMap(entry => entry.model ?? []).filter(message => message.role === 'assistant').flatMap(message => message.content.filter(part => part.type === 'toolCall').map(part => part.name)))];
-            report.cases.push({ id: item.id, guide: item.guide, tool: item.tool, structural: ['guide-loading', 'quality-judge'].includes(stage), guideLoaded, passed: false, failedStage: stage, status: finish?.args.p_status, called, requested, error: finish?.args.p_message?.agent?.error, diagnostic, ...(live ? { answer: finish?.args.p_message?.content, judgeResponse: error?.judgeResponse ?? judgeResponse, core: [...store.drafts.values()].filter(a => a.kind === 'calculation').map(a => a.result.canonicalText) } : {}) });
+            report.cases.push({ id: item.id, guide: item.guide, tool: item.tool, structural: ['guide-loading', 'quality-judge'].includes(stage), guideLoaded, passed: false, failedStage: stage, status: finish?.args.p_status, called, requested, error: finish?.args.p_message?.agent?.error, diagnostic, ...(live ? { answer: finish?.args.p_message?.content, judgeResponse: error?.judgeResponse ?? judgeResponse, core:     coreTexts() } : {}) });
             console.log(`FAIL ${item.id} (${stage}; status=${finish?.args.p_status}; tools=${called.join(',')})`);
         }
         await saveReport();

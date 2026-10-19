@@ -290,5 +290,69 @@
       "直接回答谈合作顺不顺利，风格简洁并给出可执行建议"
     ],
     "sourceEvalId": 2
+  },
+  {
+    "id": "bazi_relations",
+    "tool": "bazi_relations",
+    "guide": "bazi",
+    "chart": {
+      "tool": "bazi",
+      "arguments": { "gender": "male", "birthYear": 1990, "birthMonth": 1, "birthDay": 15, "birthHour": 9 }
+    },
+    "arguments": { "year": 2027 },
+    "prompt": "先排我的八字，再用排好的盘细看 2027 流年与原局有哪些刑冲合害。",
+    "assertions": [
+      "先调用 bazi 排盘，再用命盘引用调用 bazi_relations，不重复传出生信息",
+      "引用叠加关系与岁运提示的实际返回内容，不捏造盘面",
+      "说明不确定性，给出可执行建议，避免绝对化预言"
+    ]
+  },
+  {
+    "id": "ziwei_palace",
+    "tool": "ziwei_palace",
+    "guide": "ziwei",
+    "chart": {
+      "tool": "ziwei",
+      "arguments": { "gender": "male", "birthYear": 1990, "birthMonth": 1, "birthDay": 15, "birthHour": 9 }
+    },
+    "arguments": { "palace": "命宫" },
+    "prompt": "排好我的紫微盘后，细看命宫：星曜四化、三方四正与运限叠加。",
+    "assertions": [
+      "先排紫微盘，再用命盘引用调用 ziwei_palace 查询命宫",
+      "引用命宫实际星曜与三方四正，不捏造盘面",
+      "说明不确定性，给出可执行建议，避免绝对化预言"
+    ]
+  },
+  {
+    "id": "liuyao_line",
+    "tool": "liuyao_line",
+    "guide": "liuyao",
+    "chart": {
+      "tool": "liuyao",
+      "arguments": { "question": "财运怎么样？", "yongShenTargets": ["妻财"], "method": "select", "hexagramName": "天火同人", "date": "2026-02-10 14:00:00" }
+    },
+    "arguments": { "role": "世" },
+    "prompt": "用选卦方式起「天火同人」看财运，再细看世爻的旺衰与生克。",
+    "assertions": [
+      "先起卦，再用命盘引用调用 liuyao_line 按世爻查询",
+      "引用世爻实际纳甲、旺衰与空亡，不捏造盘面",
+      "说明不确定性，给出可执行建议，避免绝对化预言"
+    ]
+  },
+  {
+    "id": "qimen_palace",
+    "tool": "qimen_palace",
+    "guide": "qimen",
+    "chart": {
+      "tool": "qimen",
+      "arguments": { "year": 2024, "month": 1, "day": 1, "hour": 3, "juNumber": 1, "dunType": "yang" }
+    },
+    "arguments": { "palace": 1 },
+    "prompt": "按给定时刻排奇门局，再细看第一宫的天地盘、星门神与格局。",
+    "assertions": [
+      "先排奇门局，再用命盘引用调用 qimen_palace 查询第 1 宫",
+      "引用该宫实际星门神与生克，不捏造盘面",
+      "说明不确定性，给出可执行建议，避免绝对化预言"
+    ]
   }
 ]

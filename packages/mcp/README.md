@@ -34,17 +34,25 @@ TaiBu 的本地 `stdio` MCP Server，适合直接接入 Claude Desktop、Cursor�
 | `bazi_pillars_resolve` | 四柱反推 |
 | `bazi_dayun` | 大运、小运、流年链路 |
 | `bazi_relations` | 八字刑冲合害详查 |
+| `bazi_wuxing` | 八字五行流通详查 |
+| `bazi_liunian_scan` | 八字流年扫描 |
 | `ziwei` | 紫微斗数排盘 |
 | `ziwei_horoscope` | 紫微运限 |
 | `ziwei_flying_star` | 紫微飞星 |
+| `ziwei_palace` | 紫微宫位详查 |
 | `liuyao` | 六爻排卦分析 |
+| `liuyao_line` | 六爻逐爻详查 |
 | `meihua` | 梅花易数起卦与断卦 |
 | `tarot` | 塔罗抽牌 |
 | `almanac` | 黄历查询 |
+| `almanac_select` | 黄历择日筛选 |
 | `astrology` | 西方占星命盘与流运 |
+| `astrology_point` | 占星单点详查 |
 | `qimen` | 奇门遁甲排盘 |
+| `qimen_palace` | 奇门宫位详查 |
 | `taiyi` | 太乙九星观测 |
 | `daliuren` | 大六壬排盘 |
+| `daliuren_lessons` | 大六壬课传详查 |
 | `xiaoliuren` | 小六壬占测 |
 
 ## 返回结构

@@ -4,11 +4,9 @@ import { randomUUID } from 'node:crypto';
 import type { AgentToolPart } from '../lib/agent/tool-presentation';
 import { getAgentChart } from '../lib/agent/tool-presentation';
 import { getAgentChartReference, getChartTargets, getDrilldownFocus, getDrilldownTargets } from '../lib/agent/chart-interaction';
-import { getAgentDrilldownBase } from '../lib/agent/tool-catalog';
 import { createAgentTools } from '../lib/agent/tools.server';
 import { buildAgentWorkspace } from '../lib/agent/workspace';
 import { describeDrilldownSelection } from '../components/chat/agent/presentation';
-import type { AgentRunRow } from '../lib/agent/store.server';
 import { MemoryStore, row } from './helpers/agent-runtime-fixture';
 
 const birth = { gender: 'male', birthYear: 1990, birthMonth: 1, birthDay: 15, birthHour: 9 };
@@ -19,18 +17,8 @@ beforeEach(t => {
   t.mock.method(require('../lib/app-settings'), 'readFeatureModuleStateFresh', async () => ({ status: 'enabled' }));
 });
 
-class ChartStore extends MemoryStore {
-  override async chartArtifact(_run: AgentRunRow, id: string) {
-    return [...this.drafts.values()].find(artifact => artifact.kind === 'calculation' && artifact.id === id) ?? null;
-  }
-  override async inspectedChart(_run: AgentRunRow, reference: string) {
-    return [...this.drafts.values()].reverse().find(artifact => (artifact.tool_name === 'inspect_chart' || getAgentDrilldownBase(artifact.tool_name))
-      && (artifact.result.details as { chartReference?: string }).chartReference === reference) ?? null;
-  }
-}
-
 async function setup() {
-  const store = new ChartStore(), run = row();
+  const store = new MemoryStore(), run = row();
   const tools = await createAgentTools(store, run, run.checkpoint);
   const tool = (name: string) => tools.find(item => item.name === name)!;
   await tool('bazi').execute('calculate', birth);
@@ -82,7 +70,7 @@ test('drilldowns reject charts of another system, tampered artifacts and unknown
 });
 
 test('a saved birth record is rebuilt from its stored fields', async t => {
-  const store = new ChartStore(), run = row(), id = randomUUID();
+  const store = new MemoryStore(), run = row(), id = randomUUID();
   const record = { id, gender: 'male', birth_date: '1990-01-15', birth_time: '09:00', timezone: 'Asia/Shanghai', calendar_type: 'solar' };
   const query = { select: () => query, eq: () => query, maybeSingle: async () => ({ data: { id }, error: null }) };
   Object.assign(store.db, { from: () => query });
@@ -127,4 +115,111 @@ test('the workspace keeps drilldowns under their chart and they never replace it
   assert.equal(describeDrilldownSelection({ reference }), '原局');
   const chart = getAgentChart(calculation)!;
   assert.deepEqual(getDrilldownTargets(chart, { 原局关系: [{ 位置: [{ 柱: '月柱', 部位: '地支', 字: '丑' }, { 柱: '流年', 部位: '地支', 字: '未' }] }] }).map(target => target.id), ['bazi:cell:1:1']);
+});
+
+/** 排好一张盘，再对它做详查。 */
+async function chartSetup(name: string, args: Record<string, unknown>) {
+  const store = new MemoryStore(), run = row();
+  const tools = await createAgentTools(store, run, run.checkpoint);
+  await tools.find(item => item.name === name)!.execute('chart', args);
+  return { store, tool: (toolName: string) => tools.find(item => item.name === toolName)!, reference: 'artifact:' + store.draft('chart')!.id };
+}
+
+/** 详查读的是成果里的完整快照（full），定位校验必须用同一张盘。 */
+function chartValue(store: MemoryStore, name: string, callId = 'chart') {
+  const artifact = store.draft(callId)!;
+  const result = artifact.result as { chartSnapshot?: { result: unknown }; details: unknown };
+  return getAgentChart({ type: 'tool', id: callId, name, title: name, status: 'completed', output: result.chartSnapshot?.result ?? result.details })!;
+}
+
+function checkTargets(details: DrilldownDetails, chart: NonNullable<ReturnType<typeof getAgentChart>>) {
+  const known = new Set(getChartTargets(chart).map(target => target.id));
+  assert.ok(details.targets.length > 0 && details.targets.length <= 16, '定位数量在 1–16 之间');
+  assert.ok(details.targets.every(target => known.has(target.id)), '定位都真实存在于盘面');
+}
+
+const QIMEN = { year: 2024, month: 1, day: 1, hour: 3, juNumber: 1, dunType: 'yang' };
+const LIUYAO = { question: '财运怎么样？', yongShenTargets: ['妻财'], method: 'select', hexagramName: '天火同人', date: '2026-02-10 14:00:00' };
+const DALIUREN = { date: '2026-04-10', hour: 14, minute: 30, timezone: 'Asia/Shanghai', birthYear: 1990, gender: 'male' };
+const ASTROLOGY = { birthYear: 1990, birthMonth: 1, birthDay: 1, birthHour: 12, birthMinute: 30, latitude: 40.7128, longitude: -74.006, transitDateTime: '2026-04-10T09:30:00' };
+
+test('紫微、奇门、六壬、占星与六爻的详查都重算自己的盘并给出真实盘位', async () => {
+  const ziwei = await chartSetup('ziwei', birth);
+  const ziweiResult = await ziwei.tool('ziwei_palace').execute('z1', { reference: ziwei.reference, palace: '命宫' });
+  const ziweiDetails = ziweiResult.details as DrilldownDetails;
+  assert.equal(ziweiDetails.chartKind, 'ziwei');
+  assert.equal((ziweiDetails.result.查询 as { 宫位: string }).宫位, '命宫');
+  assert.match(ziweiResult.content[0].text, /# 紫微宫位详查/);
+  assert.ok(ziweiDetails.targets.length && ziweiDetails.targets.every(target => target.id.startsWith('ziwei:')));
+  checkTargets(ziweiDetails, chartValue(ziwei.store, 'ziwei'));
+
+  const qimen = await chartSetup('qimen', QIMEN);
+  const qimenResult = await qimen.tool('qimen_palace').execute('q1', { reference: qimen.reference, palace: 1 });
+  const qimenDetails = qimenResult.details as DrilldownDetails;
+  assert.equal(qimenDetails.chartKind, 'qimen');
+  assert.ok(qimenDetails.targets.some(target => target.id === 'qimen:palace:1'), '所查宫位在定位里');
+  checkTargets(qimenDetails, chartValue(qimen.store, 'qimen'));
+
+  const daliuren = await chartSetup('daliuren', DALIUREN);
+  const daliurenResult = await daliuren.tool('daliuren_lessons').execute('d1', { reference: daliuren.reference });
+  const daliurenDetails = daliurenResult.details as DrilldownDetails;
+  assert.equal(daliurenDetails.chartKind, 'daliuren');
+  assert.ok(daliurenDetails.targets.some(target => target.id.startsWith('daliuren:lesson:')));
+  assert.ok(daliurenDetails.targets.some(target => target.id.startsWith('daliuren:transmission:')));
+  checkTargets(daliurenDetails, chartValue(daliuren.store, 'daliuren'));
+
+  const astrology = await chartSetup('astrology', ASTROLOGY);
+  const venus = astrology.tool('astrology_point').execute('a1', { reference: astrology.reference, planet: 'venus' });
+  const venusDetails = (await venus).details as DrilldownDetails;
+  assert.equal(venusDetails.chartKind, 'astrology');
+  assert.ok(venusDetails.targets.some(target => target.id.startsWith('astrology:natal:')), '金星的本命位置');
+  checkTargets(venusDetails, chartValue(astrology.store, 'astrology'));
+  const house = await astrology.tool('astrology_point').execute('a2', { reference: astrology.reference, house: 7 });
+  const houseDetails = house.details as DrilldownDetails;
+  assert.ok(houseDetails.targets.some(target => target.id === 'astrology:house:6'), '第 7 宫还原为宫位目标');
+  checkTargets(houseDetails, chartValue(astrology.store, 'astrology'));
+
+  const liuyao = await chartSetup('liuyao', LIUYAO);
+  const liuyaoResult = await liuyao.tool('liuyao_line').execute('l1', { reference: liuyao.reference, role: '世' });
+  const liuyaoDetails = liuyaoResult.details as DrilldownDetails;
+  assert.equal(liuyaoDetails.chartKind, 'liuyao');
+  assert.deepEqual(liuyaoDetails.targets.map(target => target.id), ['liuyao:line:3'], '世爻在九三');
+  checkTargets(liuyaoDetails, chartValue(liuyao.store, 'liuyao'));
+});
+
+test('bazi_wuxing 与 bazi_liunian_scan 复用八字成果，紫微与六爻的已存记录可以重建', async t => {
+  const { tool, reference, store } = await setup();
+  const wuxing = await tool('bazi_wuxing').execute('w1', { reference });
+  const liunian = await tool('bazi_liunian_scan').execute('n1', { reference, fromYear: 2026, toYear: 2027 });
+  const liunianDetails = liunian.details as DrilldownDetails;
+  assert.equal((liunianDetails.result.逐年 as unknown[]).length, 2);
+  assert.equal((wuxing.details as DrilldownDetails).chartKind, 'bazi');
+  checkTargets(wuxing.details as DrilldownDetails, chartValue(store, 'bazi', 'calculate'));
+  checkTargets(liunianDetails, chartValue(store, 'bazi', 'calculate'));
+
+  const store2 = new MemoryStore(), run2 = row(), ziweiId = randomUUID(), liuyaoId = randomUUID();
+  const ziweiRow = { id: ziweiId, gender: 'male', birth_date: '1990-01-15', birth_time: '09:00', timezone: 'Asia/Shanghai', calendar_type: 'solar' };
+  const liuyaoRow = { id: liuyaoId, question: '财运怎么样？', hexagram_code: '101111', changed_hexagram_code: null, changed_lines: [], yongshen_targets: ['妻财'], created_at: '2026-02-10T09:30:00.000Z' };
+  const query = { select: () => query, eq: () => query, maybeSingle: async () => ({ data: { id: ziweiId }, error: null }) };
+  Object.assign(store2.db, { from: () => query });
+  t.mock.method(require('../lib/data-sources'), 'getProvider', async () => ({ get: async (id: string) => id === ziweiId ? ziweiRow : liuyaoRow, formatForAI: async () => '' }));
+  const tools2 = await createAgentTools(store2, run2, run2.checkpoint);
+  const ziweiResult = await tools2.find(item => item.name === 'ziwei_palace')!.execute('zs', { reference: 'ziwei_chart:' + ziweiId, palace: '命宫' });
+  const ziweiDetails = ziweiResult.details as DrilldownDetails;
+  assert.equal(ziweiDetails.chartReference, 'ziwei_chart:' + ziweiId);
+  assert.equal((ziweiDetails.result.查询 as { 宫位: string }).宫位, '命宫');
+  const liuyaoResult = await tools2.find(item => item.name === 'liuyao_line')!.execute('ls', { reference: 'liuyao_divination:' + liuyaoId, line: 3 });
+  const liuyaoDetails = liuyaoResult.details as DrilldownDetails;
+  assert.equal((liuyaoDetails.result.爻详情 as unknown[]).length, 1);
+});
+
+test('详查副标题读出新增的查询参数', () => {
+  assert.equal(describeDrilldownSelection({ reference: 'x', palace: '命宫', scope: 'yearly', targetDate: '2026-03-13' }), '命宫 · 流年 · 2026-03-13');
+  assert.equal(describeDrilldownSelection({ reference: 'x', palace: 1 }), '第 1 宫');
+  assert.equal(describeDrilldownSelection({ reference: 'x', locate: { type: '日干' } }), '按日干定位');
+  assert.equal(describeDrilldownSelection({ reference: 'x', planet: 'venus' }), '金星');
+  assert.equal(describeDrilldownSelection({ reference: 'x', house: 7 }), '第 7 宫');
+  assert.equal(describeDrilldownSelection({ reference: 'x', line: 3 }), '第 3 爻');
+  assert.equal(describeDrilldownSelection({ reference: 'x', fromYear: 2026, toYear: 2029 }), '2026 年起 · 至 2029 年');
+  assert.equal(describeDrilldownSelection({ reference: 'x', leiShen: '贵人', focus: '传' }), '类神 贵人 · 只看 传');
 });

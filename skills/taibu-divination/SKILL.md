@@ -50,6 +50,14 @@ echo '{"gender":"male","birthYear":1990,"birthMonth":5,"birthDay":20,"birthHour"
 | `daliuren` | 大六壬排盘 | 根据日期时间起课，输出天地盘、四课、三传、神将、课体与时空信息 | [references/daliuren.md](references/daliuren.md) | [interpretation/daliuren.md](interpretation/daliuren.md) |
 | `xiaoliuren` | 小六壬占测 | 根据农历月日时辰起课，输出起课信息、推演链与结果信息 | [references/xiaoliuren.md](references/xiaoliuren.md) | [interpretation/xiaoliuren.md](interpretation/xiaoliuren.md) |
 | `bazi_relations` | 八字刑冲合害 | 在八字命盘上详查干支关系：原局四柱之间，以及叠加大运（起运前为小运）、流年、流月、流日后的天干五合/相冲与地支六合、三合、半合、三会、六冲、刑、害、破，附岁运并临、伏吟、天克地冲与太岁关系 | [references/bazi_relations.md](references/bazi_relations.md) | [interpretation/bazi.md](interpretation/bazi.md) |
+| `bazi_wuxing` | 八字五行流通 | 在八字命盘上详查五行：天干、地支本气与藏干加权统计，月令旺相休囚死，日主通根与透干，干支自坐与相邻天干生克，相生链的连续与中断，以及十神分布 | [references/bazi_wuxing.md](references/bazi_wuxing.md) | [interpretation/bazi.md](interpretation/bazi.md) |
+| `bazi_liunian_scan` | 八字流年扫描 | 在八字命盘上逐年列出一段年份（最多 30 年）的流年干支、所在大运（起运前为小运）、十神，流年与原局、与大运的刑冲合害，以及太岁与岁运提示 | [references/bazi_liunian_scan.md](references/bazi_liunian_scan.md) | [interpretation/bazi.md](interpretation/bazi.md) |
+| `ziwei_palace` | 紫微宫位 | 在紫微命盘上聚焦一宫详查：本宫星曜亮度与生年四化、离心/向心自化，空宫借对宫，三方四正，夹宫，宫干四化飞出与十二宫四化飞入 | [references/ziwei_palace.md](references/ziwei_palace.md) | [interpretation/ziwei.md](interpretation/ziwei.md) |
+| `qimen_palace` | 奇门宫位详查 | 在奇门盘上详查一宫：指定宫位，或按年月日时干（取天盘，甲取所遁六仪）、九星、八门、八神定位 | [references/qimen_palace.md](references/qimen_palace.md) | [interpretation/qimen.md](interpretation/qimen.md) |
+| `daliuren_lessons` | 大六壬课传详查 | 在已起的六壬课上详查四课与三传：逐课列上下神的贼克生克、所乘天将、神将与遁干六亲 | [references/daliuren_lessons.md](references/daliuren_lessons.md) | [interpretation/daliuren.md](interpretation/daliuren.md) |
+| `astrology_point` | 占星单点详查 | 在西方占星命盘上详查一颗星体（含交点、莉莉丝、上升、天顶）或一个宫位：星座宫位与逆行、托勒密传统尊贵、主管宫位或宫主星落点、本命相位（标入相／出相）、流运触发或流运过境 | [references/astrology_point.md](references/astrology_point.md) | [interpretation/astrology.md](interpretation/astrology.md) |
+| `liuyao_line` | 六爻逐爻详查 | 在六爻卦盘上按爻位或角色（世、应、动爻、六亲）取爻，列纳甲、六亲、六神、世应、动静、旺衰判据、月破日破暗动与空亡、月建日辰作用、化进化退与回头生克、伏神飞伏，以及动爻对本爻的生克冲合 | [references/liuyao_line.md](references/liuyao_line.md) | [interpretation/liuyao.md](interpretation/liuyao.md) |
+| `almanac_select` | 黄历择日筛选 | 在指定区间内逐日取黄历，按事项（宜忌逐条匹配）与冲煞（生肖或地支的六冲）筛选候选日，列出干支、农历、建除、黄黑道、二十八宿、纳音、冲煞与宜忌，并给出排除统计 | [references/almanac_select.md](references/almanac_select.md) | [interpretation/almanac.md](interpretation/almanac.md) |
 <!-- TOOLS:END -->
 
 调用前先 `schema <tool>`，或读 `references/<tool>.md`（参数表与可复制的示例）。

@@ -7,7 +7,8 @@ import { backgroundCompactionTokens } from '../lib/agent/compaction';
 test('method directory advertises only offered tools and keeps a compact eleven-guide catalog', () => {
     const full = renderMethodDirectory(ANALYSIS_METHODS.map(item => item.tool))!;
     assert.equal(full.split('\n').filter(line => /^- \w+（/.test(line)).length, 11);
-    assert.ok(full.length < 1500, `directory length ${full.length}`);
+    // 24 个工具（含 8 个详查）只多出工具名，目录仍是每个指引一行。
+    assert.ok(full.length < 1800, `directory length ${full.length}`);
     for (const label of ['历法', '时间', '占当下', '日期核实', '随机性', '六爻用神', 'detailLevel']) {
         assert.ok(full.includes(`**${label}**`), `missing shared convention: ${label}`);
     }

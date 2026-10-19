@@ -11,15 +11,38 @@ export const PARALLEL_SYSTEMS = [...new Set(ANALYSIS_METHODS.map(method => metho
 /** How often a running member's calls are read for the live card; reads are in memory, reports only on change. */
 const STEP_POLL_MS = 1500;
 const STEP_LIMIT = 12;
+/** Display bounds for a member's process: its calls ride in the card's details, never in the parent model's context. */
+const STEP_NOTE_LIMIT = 400;
+const STEP_INPUT_LIMIT = 800;
+const STEP_OUTPUT_LIMIT = 3000;
 const LABEL = { minLength: 1, maxLength: 12 };
 
-/** The member's tool calls with their outcome, newest last. */
+/**
+ * The member's tool calls with their outcome, newest last: the words it said before each call, the arguments,
+ * and what the tool returned, bounded for display.
+ */
 export function memberSteps(messages: readonly Message[], titles: ReadonlyMap<string, string>): ParallelMemberStep[] {
-    const outcomes = new Map(messages.flatMap(message => message.role === 'toolResult' ? [[message.toolCallId, message.isError] as const] : []));
-    return messages.flatMap(message => message.role !== 'assistant' ? [] : message.content.flatMap(part => part.type !== 'toolCall' ? [] : [{
-        name: part.name, title: titles.get(part.name) ?? part.name,
-        status: !outcomes.has(part.id) ? 'running' as const : outcomes.get(part.id) ? 'failed' as const : 'completed' as const,
-    }])).slice(-STEP_LIMIT);
+    const results = new Map(messages.flatMap(message => message.role === 'toolResult' ? [[message.toolCallId, message] as const] : []));
+    return messages.flatMap(message => {
+        if (message.role !== 'assistant') return [];
+        let said = '';
+        return message.content.flatMap(part => {
+            if (part.type === 'text') said += part.text;
+            if (part.type !== 'toolCall') return [];
+            const note = said.trim().slice(0, STEP_NOTE_LIMIT);
+            said = '';
+            const input = JSON.stringify(part.arguments ?? {});
+            const result = results.get(part.id);
+            const text = result?.content.flatMap(item => item.type === 'text' ? [item.text] : []).join('\n').trim() ?? '';
+            return [{
+                name: part.name, title: titles.get(part.name) ?? part.name,
+                status: !result ? 'running' as const : result.isError ? 'failed' as const : 'completed' as const,
+                ...(note ? { note } : {}),
+                ...(input !== '{}' && input.length <= STEP_INPUT_LIMIT ? { input } : {}),
+                ...(text ? { output: text.slice(0, STEP_OUTPUT_LIMIT), ...(text.length > STEP_OUTPUT_LIMIT ? { truncated: true } : {}) } : {}),
+            }];
+        });
+    }).slice(-STEP_LIMIT);
 }
 
 /** Calls made and time from the member's input to its last message, read from timestamps so a replay reports the same. */
@@ -85,7 +108,7 @@ export function createParallelExtension(registrations: readonly ToolRegistration
                 // The public card shows the configured model, effort and focus that the child actually runs with.
                 return { system: task.system, conversationId: ids[index], status: 'running', ...(member ? { agentId: member.id, name: member.name, model: member.model, modelName: models.get(member.model)?.name ?? member.model, reasoningEffort: memberEffort(member), ...(member.focus.trim() ? { focus: member.focus.trim() } : {}) } : {}) };
             });
-            // Live calls describe a running member only; a finished card shows its answer instead.
+            // Live calls fill in a running member; a finished member carries its own process.
             const live: Array<ParallelMemberStep[] | undefined> = [];
             const report = () => api.details({ ...summary, analyses: progress.map((member, index) => member.status === 'running' && live[index] ? { ...member, steps: live[index] } : member) }, context);
             await report();
@@ -126,7 +149,9 @@ export function createParallelExtension(registrations: readonly ToolRegistration
                     finished.abort();
                     await watching;
                     // A finished member's conclusion and stances show while the others still analyse.
-                    progress[index] = { ...progress[index], status: 'completed', ...memberStats(transcript.messages), answer: parsed.answer.slice(0, 24000), ...(Object.keys(parsed.positions).length ? { positions: parsed.positions } : {}) };
+                    const steps = memberSteps(transcript.messages, titles);
+                    progress[index] = { ...progress[index], status: 'completed', ...memberStats(transcript.messages), answer: parsed.answer.slice(0, 24000),
+                        ...(Object.keys(parsed.positions).length ? { positions: parsed.positions } : {}), ...(steps.length ? { steps } : {}) };
                     await report();
                     return progress[index];
                 } finally {
@@ -134,7 +159,8 @@ export function createParallelExtension(registrations: readonly ToolRegistration
                     await watching;
                 }
             }));
-            return { content: [{ type: 'text', text: JSON.stringify(results) }], details: { ...summary, analyses: results } };
+            // The parent model reads conclusions and stances; each member's process is for the reader's card only.
+            return { content: [{ type: 'text', text: JSON.stringify(results, (key, value) => key === 'steps' ? undefined : value) }], details: { ...summary, analyses: results } };
         },
     })] };
     return extension;

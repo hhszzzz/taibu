@@ -2,7 +2,7 @@
 // 需要 useState（删除确认、展开）、问题草稿同步与浏览器请求（删除长期记忆）
 
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ArrowUpRight, Check, CircleAlert, Database, Globe, LoaderCircle, Trash2, UserRound } from 'lucide-react';
+import { ArrowUpRight, Check, ChevronRight, CircleAlert, Database, Globe, LoaderCircle, Trash2, UserRound } from 'lucide-react';
 import type { AgentRunStatus } from '@/lib/agent/types';
 import type { AgentQuestionAnswer, AgentWorkspaceModel, AgentWorkspaceResource } from '@/lib/agent/workspace';
 import {
@@ -17,7 +17,7 @@ import { describeQuestionAnswer, getDraftAnswers } from '@/lib/agent/question-dr
 import { useQuestionDraft } from '@/lib/agent/use-question-draft';
 import { getBranchElement, getElementColor, getStemElement } from '@/lib/divination/display-helpers';
 import {
-    getParallelDivergence, parallelAnalysisResults, parallelAnalysisTitle, parallelAnalysisTopics,
+    getParallelDivergence, memberAnswerText, parallelAnalysisResults, parallelAnalysisTitle, parallelAnalysisTopics,
     type ParallelAnalysisResult, type ParallelMemberStep, type ParallelTopic,
 } from '@/lib/agent/parallel-results';
 import { REASONING_EFFORT_LABELS } from '@/lib/chat/model-settings';
@@ -27,7 +27,7 @@ import { useTranscriptRecordView } from '@/lib/chat/chat-record-view';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { useToast } from '@/components/ui/Toast';
 import { mentionTypeLabels } from '@/components/chat/mentionStyles';
-import { describeAgentChartSubject, getAgentToolState, getParallelMemberState, stripLeadingTitle } from './presentation';
+import { describeAgentChartSubject, formatAgentToolDuration, formatAgentValue, getAgentToolState, getParallelMemberState, stripLeadingTitle, summarizeAgentTool } from './presentation';
 import { PrivateAttachmentPreview } from './PrivateAttachments';
 import { ChartMiniPreview } from './chart-preview';
 import './agent-workspace.css';
@@ -530,13 +530,67 @@ const effortLabel = (value?: string) => value === 'off' ? '不推理' : value &&
 const memberInitial = (name: string) => Array.from(name.trim())[0] ?? '协';
 /** A configured division of work this short reads as the card's subtitle, as 子平 · 格局与用神. */
 const FOCUS_IN_TITLE = 16;
-const STEP_GLYPHS: Record<ParallelMemberStep['status'], string> = { completed: '✓', running: '●', failed: '×' };
-const STEP_LABELS: Record<ParallelMemberStep['status'], string> = { completed: '已完成', running: '进行中', failed: '失败' };
+type MemberStepState = ParallelMemberStep['status'] | 'interrupted';
+const STEP_GLYPHS: Record<MemberStepState, string> = { completed: '✓', running: '●', failed: '×', interrupted: '–' };
+const STEP_LABELS: Record<MemberStepState, string> = { completed: '已完成', running: '进行中', failed: '失败', interrupted: '未完成' };
 
-function MemberSteps({ steps }: { steps: ParallelMemberStep[] }) {
-    return <ul className="agent-ws-member-steps" aria-label="成员的工具调用">{steps.map((step, index) => <li key={index} data-state={step.status}>
-        <span aria-hidden="true">{STEP_GLYPHS[step.status]}</span>{step.title}<span className="sr-only">（{STEP_LABELS[step.status]}）</span>
-    </li>)}</ul>;
+const parseStepInput = (input?: string): Record<string, unknown> | null => {
+    if (!input) return null;
+    try {
+        const value: unknown = JSON.parse(input);
+        return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+    } catch { return null; }
+};
+
+/** One call a member made: its title and one-line reading, disclosing the arguments and what the tool returned. */
+function MemberStep({ step, live }: { step: ParallelMemberStep; live: boolean }) {
+    const id = useId();
+    // A call still marked running after its member stopped did not finish; it no longer spins.
+    const state = step.status === 'running' && !live ? 'interrupted' : step.status;
+    const [open, setOpen] = useState(false);
+    const input = parseStepInput(step.input);
+    const summary = summarizeAgentTool({ type: 'tool', id, name: step.name, title: step.title, status: step.status, ...(input ? { input } : {}) });
+    const entries = input ? Object.entries(input).filter(([key]) => key !== 'reference') : [];
+    const disclosable = entries.length > 0 || Boolean(step.output);
+    return <li className="agent-ws-member-step" data-state={state}>
+        {step.note && <p className="agent-ws-member-note">{step.note}</p>}
+        <button type="button" className="agent-ws-member-call" aria-expanded={disclosable ? open : undefined} aria-controls={open ? id : undefined}
+            disabled={!disclosable} onClick={() => setOpen(!open)}>
+            <span className="agent-ws-member-glyph" aria-hidden="true">{state === 'running'
+                ? <LoaderCircle size={12} className="animate-spin motion-reduce:animate-none" /> : STEP_GLYPHS[state]}</span>
+            <span className="agent-ws-member-call-text"><strong>{step.title}</strong>{summary && <span>{summary}</span>}</span>
+            <span className="sr-only">（{STEP_LABELS[state]}）</span>
+            {disclosable && <ChevronRight size={12} aria-hidden="true" className={open ? 'rotate-90' : undefined} />}
+        </button>
+        {open && <div id={id} className="agent-ws-member-call-body">
+            {entries.length > 0 && <dl className="agent-ws-member-args" aria-label="调用参数">{entries.map(([key, value]) => <div key={key}>
+                <dt>{key}</dt><dd>{formatAgentValue(value)}</dd>
+            </div>)}</dl>}
+            {step.output && <div className="agent-ws-member-output" tabIndex={0} aria-label="工具返回"><MarkdownContent content={step.output} className="chat-prose" /></div>}
+            {step.truncated && <p className="agent-ws-note">返回内容较长，这里只保留了开头部分。</p>}
+        </div>}
+    </li>;
+}
+
+/**
+ * 成员的过程：与主对话的任务过程同一种读法——成员说的话、每一步调用，点开看参数与工具返回的内容。
+ * 分析中默认展开并随成员推进；完成后收起，先读结论。
+ */
+function MemberProcess({ member, running }: { member: ParallelAnalysisResult; running: boolean }) {
+    const id = useId();
+    const steps = member.steps ?? [];
+    const [disclosed, setDisclosed] = useState<boolean | null>(null);
+    const open = disclosed ?? running;
+    const calls = member.toolCalls ?? steps.length;
+    const label = running ? `正在分析 · 已调用 ${steps.length} 次工具` : `调用了 ${calls} 次工具${member.durationMs !== undefined ? ` · 用时 ${formatAgentToolDuration(member.durationMs)}` : ''}`;
+    return <section className="agent-ws-member-process" aria-label="成员的分析过程">
+        <button type="button" className="agent-ws-member-process-heading" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => setDisclosed(!open)}>
+            {running && <LoaderCircle size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+            <span>{label}</span>
+            <ChevronRight size={12} aria-hidden="true" className={open ? 'rotate-90' : undefined} />
+        </button>
+        {open && <ol id={id} className="agent-ws-member-steps">{steps.map((step, index) => <MemberStep key={index} step={step} live={running} />)}</ol>}
+    </section>;
 }
 
 /**
@@ -583,9 +637,10 @@ export function CollaborationView({ tool, runStatus, step }: ToolViewProps & { s
                 const name = member.name ?? member.system;
                 const state = getParallelMemberState(member, call);
                 const titled = member.focus && member.focus.length <= FOCUS_IN_TITLE;
+                // 有过程的成员在过程行里报调用次数与用时；旧记录只有计数，仍写在模型一行。
                 const meta = [member.modelName ?? member.model ?? '主模型', effortLabel(member.reasoningEffort),
-                    member.toolCalls !== undefined && `${member.toolCalls} 次工具`,
-                    state.state === 'running' && '进行中'].filter(Boolean).join(' · ');
+                    !member.steps?.length && member.toolCalls !== undefined && `${member.toolCalls} 次工具`].filter(Boolean).join(' · ');
+                const answer = member.answer && memberAnswerText(member.answer);
                 return <article key={member.conversationId} className="agent-ws-member" data-state={state.state} aria-labelledby={`${id}-${member.conversationId}`}>
                     <div className="agent-ws-member-head">
                         <span className="agent-ws-member-avatar" aria-hidden="true">{memberInitial(name)}</span>
@@ -599,9 +654,9 @@ export function CollaborationView({ tool, runStatus, step }: ToolViewProps & { s
                         </span>
                     </div>
                     {member.focus && !titled && <p className="agent-ws-note">分工：{member.focus}</p>}
-                    {member.answer ? <div className="agent-ws-member-answer"><MarkdownContent content={member.answer} className="chat-prose" /></div>
-                        : state.state === 'running' ? member.steps?.length ? <MemberSteps steps={member.steps} />
-                            : <p className="agent-ws-running" role="status"><LoaderCircle size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />正在分析</p>
+                    {member.steps?.length ? <MemberProcess member={member} running={state.state === 'running'} />
+                        : state.state === 'running' && <p className="agent-ws-running" role="status"><LoaderCircle size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />正在分析</p>}
+                    {answer ? <div className="agent-ws-member-answer"><MarkdownContent content={answer} className="chat-prose" /></div>
                         : state.state === 'failed' && <p className="agent-ws-note">这位成员没有完成分析，它的结论不会汇入主回答。</p>}
                 </article>;
             })}

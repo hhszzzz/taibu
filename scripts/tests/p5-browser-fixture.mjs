@@ -138,7 +138,10 @@ function AgentResultsProbe() {
     output: JSON.parse(JSON.stringify({ title: '两派会诊', topics: [{ title: '是否变动', options: ['先争取权责', '主动变动'] }, { title: '命局主线' }], analyses: [
       { system: 'bazi', conversationId: 10, name: '八字分析', modelName: '分析模型', status: 'completed', answer: '已核对天干与日支。', positions: { 是否变动: '先争取权责', 命局主线: '正官制身' }, toolCalls: 3, durationMs: 41000 },
       { system: 'bazi', conversationId: 11, name: '独立复核', modelName: '复核模型', status: completed ? 'completed' : 'running',
-        ...(completed ? { answer: '生克关系复核完成。', positions: { 是否变动: '主动变动' } } : { steps: [{ name: 'bazi', title: '八字排盘', status: 'completed' }, { name: 'read_user_data', title: '读取官禄宫', status: 'running' }] }) },
+        ...(completed ? { answer: '生克关系复核完成。成果 ID: 22222222-2222-4222-8222-222222222222', positions: { 是否变动: '主动变动' }, steps: [
+          { name: 'bazi', title: '八字排盘', status: 'completed', note: '先排盘，再逐条复核生克。', input: '{"birthYear":1990,"birthMonth":1,"birthDay":15,"birthHour":9}', output: '# 八字命盘\n- 日主: 庚' },
+          { name: 'bazi_wuxing', title: '八字五行流通', status: 'completed', output: '# 八字五行流通详查', truncated: true },
+        ] } : { steps: [{ name: 'bazi', title: '八字排盘', status: 'completed' }, { name: 'read_user_data', title: '读取官禄宫', status: 'running' }] }) },
     ] })),
   }]);
   // An answer citing the two passages its own search returned, numbered after the evidence already shown.
@@ -2036,7 +2039,7 @@ export async function run(existingPage, bundlePath) {
     // 关系与五行详查补进盘面：关系模式多出命盘没列的丑辰相破，流通模式改画五行详查的自坐、通根，并可按类型筛选。
     await board.getByRole('button', { name: /^关系/ }).click();
     await page.evaluate(() => window.fixture.baziDrilldowns());
-    await interactive.locator('[data-relation-strip]').waitFor({ state: 'attached' });
+    await board.locator('.agent-board-viewing').waitFor();
     await renderBarrier();
     check('While following, the board switches to what the agent just looked at (the wuxing drilldown shows flow)', await board.getAttribute('data-board-mode') === 'flow' &&
       await board.locator('.agent-board-viewing').innerText().then(text => text.includes('模型正在看五行流通')) && await board.locator('.agent-board-segments [data-viewed]').innerText().then(text => text.startsWith('流通')));
@@ -2056,9 +2059,8 @@ export async function run(existingPage, bundlePath) {
     await firstMark.click();
     await board.getByRole('button', { name: '不显示', exact: true }).click();
     check('Lines can be switched off, leaving only what the model located', await edges.count() === 0);
-    check('Relation and wuxing drilldowns get their own views: a pillar strip with lines and a five-element cycle', await interactive.locator('[data-relation-strip] th').count() === await page.evaluate(() => window.fixture.baziDrilldownResult('bazi_relations').参与柱位.length) &&
-      await interactive.locator('[data-relation-strip] [data-relation-edge]').count() >= 1 && await interactive.locator('.agent-ws-drilldown [data-wuxing-cycle]').count() === 1 &&
-      await interactive.locator('.agent-ws-seasons [data-day-master]').count() <= 1);
+    // 详查结果落在盘面上，规范文本在对话步骤里展开；命盘标签不再重复列一遍详查。
+    check('The chart tab does not repeat the drilldowns below the board', await page.locator('#agent-workspace-panel .agent-ws-drilldowns').count() === 0);
     // 详查还在跑时，盘面已经说明模型正在看什么，并切到对应的连线模式。
     await page.evaluate(() => window.fixture.baziDrilldownRunning());
     await renderBarrier();
@@ -2175,6 +2177,20 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => window.fixture.collaborationResults(true));
     check('Completed collaborator analysis survives JSON history and opens for comparison', await collaboration.innerText().then(text => !text.includes('分析中') && text.includes('生克关系复核完成。') && text.includes('两派会诊') && text.includes('3 次工具')) && resultOperations() === callsBeforeResults);
     check('The folded process line summarizes the collaboration as intelligent agents', await results.getByRole('button', { name: /任务过程/ }).innerText().then(text => text.includes('开启 2 个智能体')));
+    // 成员的过程：完成后收起成一行，展开是成员说的话与逐步调用，再点一步看参数与工具返回的内容。
+    const reviewer = collaboration.locator('.agent-ws-member').last();
+    const processLine = reviewer.locator('.agent-ws-member-process-heading');
+    check('A finished member folds its process into one line and keeps the raw artifact ID out of its answer', await processLine.getAttribute('aria-expanded') === 'false' &&
+      await processLine.innerText().then(text => text.includes('调用了 2 次工具')) && await reviewer.locator('.agent-ws-member-answer').innerText().then(text => text.trim() === '生克关系复核完成。'));
+    await processLine.click();
+    const firstCall = reviewer.locator('.agent-ws-member-call').first();
+    check('The member process shows what it said before a call and what each call was', await reviewer.locator('.agent-ws-member-note').innerText() === '先排盘，再逐条复核生克。' &&
+      await firstCall.innerText().then(text => text.includes('八字排盘') && text.includes('1990 / 1 / 15')));
+    await firstCall.click();
+    check('A member call discloses its arguments and the text the tool returned', await reviewer.locator('.agent-ws-member-args').innerText().then(text => text.includes('birthYear')) &&
+      await reviewer.locator('.agent-ws-member-output h1').innerText() === '八字命盘');
+    await reviewer.locator('.agent-ws-member-call').last().click();
+    check('A cut-off return says it was shortened', await reviewer.locator('.agent-ws-member-call-body').last().innerText().then(text => text.includes('只保留了开头部分')));
     const divergence = page.locator('#agent-workspace-panel').getByRole('region', { name: /分歧对照/ });
     check('The divergence table marks only the option topic where finished members disagree', await divergence.locator('tbody tr').count() === 2 &&
       await divergence.locator('tr[data-divergent]').count() === 1 && await divergence.locator('tr[data-divergent] th').innerText().then(text => text.startsWith('是否变动')) &&

@@ -13,7 +13,7 @@ import { CanonicalChartView } from './CanonicalChartView';
 import { useAgentResultWorkspace } from './AgentResultContext';
 import './agent-results.css';
 import { getChartFocus } from '@/lib/agent/chart-interaction';
-import { parallelAnalysisResults, type ParallelAnalysisResult } from '@/lib/agent/parallel-results';
+import { memberAnswerText, parallelAnalysisResults, type ParallelAnalysisResult } from '@/lib/agent/parallel-results';
 import type { AgentRunStatus } from '@/lib/agent/types';
 import { getAgentToolState, getParallelMemberState } from './presentation';
 
@@ -60,7 +60,7 @@ function CollaborationCard({ tool, analyses, runStatus }: { tool: AgentToolPart;
         </li>;
       })}
     </ul>
-    {!workspace && open?.answer && <div className="agent-collaboration-answer"><MarkdownContent content={open.answer} /></div>}
+    {!workspace && open?.answer && <div className="agent-collaboration-answer"><MarkdownContent content={memberAnswerText(open.answer)} /></div>}
   </section>;
 }
 

@@ -1,6 +1,16 @@
 // Type aliases, not interfaces: tool details must stay assignable to Durable's JSON value type.
-/** A tool call a member made, shown while it analyses. */
-export type ParallelMemberStep = { name: string; title: string; status: 'running' | 'completed' | 'failed' };
+/** A tool call a member made: shown live while it analyses and kept as its process once it finishes. */
+export type ParallelMemberStep = {
+  name: string; title: string; status: 'running' | 'completed' | 'failed';
+  /** What the member said right before this call, as the main transcript shows narration between steps. */
+  note?: string;
+  /** The call's arguments as JSON text; left out when too long to show. */
+  input?: string;
+  /** The text the tool returned (the Core canonical text for charts), cut to a display length. */
+  output?: string;
+  /** The returned text was longer than what is kept. */
+  truncated?: boolean;
+};
 
 export type ParallelAnalysisResult = {
   system: string;
@@ -25,6 +35,11 @@ export type ParallelAnalysisResult = {
   steps?: ParallelMemberStep[];
 };
 
+/** Members are told to report the IDs of what they produced for the parent; the reader does not need the raw ID. */
+const ARTIFACT_ID_MENTION = /[，,；;]?\s*成果\s*ID[:：]\s*[0-9a-f-]{36}[。]?/giu;
+/** A member's conclusion as the reader sees it, without the artifact IDs meant for the parent model. */
+export const memberAnswerText = (answer: string) => answer.replace(ARTIFACT_ID_MENTION, '').trim();
+
 /** A question every member answers; with options, members pick one and disagreement can be compared. */
 export type ParallelTopic = { title: string; options?: string[] };
 
@@ -33,6 +48,11 @@ const OPTIONAL_TEXT = ['agentId', 'name', 'modelName', 'model', 'reasoningEffort
 const STEP_STATES: readonly string[] = ['running', 'completed', 'failed'] satisfies ParallelMemberStep['status'][];
 const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const isCount = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+
+const STEP_TEXT = ['note', 'input', 'output'] as const;
+const isMemberStep = (step: unknown): step is ParallelMemberStep => isRecord(step) && typeof step.name === 'string' && typeof step.title === 'string' &&
+  STEP_STATES.includes(step.status as string) && STEP_TEXT.every(key => step[key] === undefined || typeof step[key] === 'string') &&
+  (step.truncated === undefined || typeof step.truncated === 'boolean');
 
 export function parallelAnalysisResults(value: unknown): ParallelAnalysisResult[] {
   if (!isRecord(value)) return [];
@@ -48,7 +68,7 @@ export function parallelAnalysisResults(value: unknown): ParallelAnalysisResult[
       ...(isRecord(positions) && Object.values(positions).every(position => typeof position === 'string') ? { positions: positions as Record<string, string> } : {}),
       ...(isCount(toolCalls) ? { toolCalls } : {}),
       ...(isCount(durationMs) ? { durationMs } : {}),
-      ...(Array.isArray(steps) && steps.every(step => isRecord(step) && typeof step.name === 'string' && typeof step.title === 'string' && STEP_STATES.includes(step.status as string)) ? { steps } : {}),
+      ...(Array.isArray(steps) && steps.every(isMemberStep) ? { steps } : {}),
     }));
 }
 

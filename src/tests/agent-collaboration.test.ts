@@ -5,7 +5,7 @@ import { executeAgentRun } from '../lib/agent/runtime.server';
 import { emptyPiAssistant } from '../lib/agent/pi-stream.server';
 import { memberStats, memberSteps, positionsInstruction } from '../lib/agent/parallel.server';
 import {
-    getParallelDivergence, normalizeParallelTopics, parallelAnalysisResults, parallelAnalysisTitle, parallelAnalysisTopics, splitMemberPositions,
+    getParallelDivergence, memberAnswerText, normalizeParallelTopics, parallelAnalysisResults, parallelAnalysisTitle, parallelAnalysisTopics, splitMemberPositions,
     type ParallelAnalysisResult, type ParallelTopic,
 } from '../lib/agent/parallel-results';
 import type { PiStreamFn } from '../lib/agent/types';
@@ -79,6 +79,28 @@ test('a member reports the calls it made and how long it analysed from its own t
     ]);
     assert.deepEqual(memberStats(messages), { toolCalls: 2, durationMs: 4_000 });
     assert.deepEqual(memberStats([{ role: 'assistant', content: [], timestamp: 5 } as unknown as Message]), { toolCalls: 0 }, 'no input timestamp, no duration');
+});
+
+test('a member step keeps what it said before the call, the arguments and the returned text, bounded for display', () => {
+    const long = '盘'.repeat(3200);
+    const messages = [
+        { role: 'user', content: '分析', timestamp: 1_000 },
+        { role: 'assistant', content: [{ type: 'text', text: '先排盘。' }, { type: 'toolCall', id: 'a', name: 'bazi', arguments: { birthYear: 1988 } }], timestamp: 2_000 },
+        { role: 'toolResult', toolCallId: 'a', toolName: 'bazi', content: [{ type: 'text', text: '# 八字命盘' }, { type: 'text', text: '成果 ID: x' }], isError: false, timestamp: 3_000 },
+        { role: 'assistant', content: [{ type: 'thinking', thinking: '想' }, { type: 'toolCall', id: 'b', name: 'bazi_wuxing', arguments: { reference: 'r'.repeat(900) } }], timestamp: 4_000 },
+        { role: 'toolResult', toolCallId: 'b', toolName: 'bazi_wuxing', content: [{ type: 'text', text: long }], isError: false, timestamp: 5_000 },
+    ] as unknown as Message[];
+    const [first, second] = memberSteps(messages, new Map([['bazi', '八字排盘']]));
+    assert.deepEqual(first, { name: 'bazi', title: '八字排盘', status: 'completed', note: '先排盘。', input: '{"birthYear":1988}', output: '# 八字命盘\n成果 ID: x' });
+    assert.equal(second.note, undefined, 'thinking is not something the member said');
+    assert.equal(second.input, undefined, 'arguments too long to show are left out');
+    assert.equal(second.output?.length, 3000);
+    assert.equal(second.truncated, true);
+    const parsed = parallelAnalysisResults({ analyses: [{ system: 'bazi', conversationId: 1, status: 'completed', steps: [first, second] }] });
+    assert.deepEqual(parsed[0].steps, [first, second], 'the card reads the process back');
+    assert.equal(memberAnswerText('土重金弱。实际模型：m；成果 ID: 2c037b35-cb25-4d74-b463-1bd70b0c91ce。\n\n补充'), '土重金弱。实际模型：m\n\n补充', 'the reader sees no artifact IDs meant for the parent');
+    assert.equal(parallelAnalysisResults({ analyses: [{ system: 'bazi', conversationId: 1, status: 'completed', steps: [{ ...first, output: 1 }] }] })[0].steps, undefined,
+        'a malformed step drops the process, not the member');
 });
 
 test('the collaboration names its topics and shows each finished member with its stances', { timeout: 20000 }, async t => {

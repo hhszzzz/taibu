@@ -171,7 +171,7 @@
 .agent-ws-badge:is([data-state="answered"], [data-state="replied"]) { color: var(--chat-success); }
 .agent-ws-badge:is([data-state="required"], [data-state="optional"]) { background: var(--accent-light); color: var(--accent-hover); }
 /* 协作 */
-/* 协作分析 (AgentCollab board): one card per member, live calls while it analyses, then the stance table. */
+/* 协作分析 (AgentCollab board): one card per member with its process and conclusion, then the stance table. */
 .agent-ws-collaboration { gap: 18px; }
 .agent-ws-member { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--background); }
 .agent-ws-member[data-state="running"] { border-color: var(--accent); box-shadow: 0 0 0 .5px var(--accent); }
@@ -185,13 +185,40 @@
 /* The board shows each finished member's conclusion in full; only finished analyses reach the answer. */
 .agent-ws-member-answer { display: flex; flex-direction: column; gap: 8px; font-size: calc(14 / 16 * 1rem); line-height: 1.8; overflow-wrap: anywhere; }
 .agent-ws-member-answer .chat-prose { font-size: inherit; }
-.agent-ws-member-steps { display: flex; flex-direction: column; gap: 6px; font-size: calc(13.5 / 16 * 1rem); }
-.agent-ws-member-steps > li { display: flex; gap: 10px; min-width: 0; overflow-wrap: anywhere; }
-.agent-ws-member-steps > li > span[aria-hidden] { flex-shrink: 0; width: 1em; text-align: center; }
-.agent-ws-member-steps > li[data-state="completed"] > span[aria-hidden] { color: var(--chat-success); }
-.agent-ws-member-steps > li[data-state="running"] { font-weight: 600; }
-.agent-ws-member-steps > li[data-state="running"] > span[aria-hidden] { color: var(--accent); }
-.agent-ws-member-steps > li[data-state="failed"] > span[aria-hidden] { color: var(--danger); }
+/* 成员的过程：一条可折叠的过程行，展开后是成员说的话与逐步调用，像主对话的任务过程那样读。 */
+.agent-ws-member-process { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 8px 10px; border-radius: 10px; background: var(--background-secondary); }
+.agent-ws-member-process-heading { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); text-align: left; }
+.agent-ws-member-process-heading:hover { color: var(--foreground); }
+.agent-ws-member-process-heading > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-ws-member-process-heading > svg:last-child { flex-shrink: 0; color: var(--foreground-tertiary); transition: transform .15s ease; }
+.agent-ws-member-steps { display: flex; flex-direction: column; gap: 2px; padding-left: 2px; }
+.agent-ws-member-step { display: flex; flex-direction: column; min-width: 0; }
+.agent-ws-member-note { margin: 6px 0 2px 22px; font-size: calc(13 / 16 * 1rem); line-height: 1.65; color: var(--foreground); overflow-wrap: anywhere; }
+.agent-ws-member-call { display: flex; align-items: flex-start; gap: 8px; min-width: 0; padding: 4px 0; font-size: calc(13 / 16 * 1rem); line-height: 1.5; text-align: left; }
+.agent-ws-member-call:disabled { cursor: default; }
+.agent-ws-member-call:not(:disabled):hover .agent-ws-member-call-text > strong { color: var(--foreground); }
+.agent-ws-member-call > svg:last-child { flex-shrink: 0; margin-top: 4px; color: var(--foreground-tertiary); transition: transform .15s ease; }
+.agent-ws-member-glyph { display: inline-flex; flex-shrink: 0; width: 14px; height: 1.5em; align-items: center; justify-content: center; font-size: calc(12 / 16 * 1rem); color: var(--foreground-tertiary); }
+.agent-ws-member-step[data-state="completed"] .agent-ws-member-glyph { color: var(--chat-success); }
+.agent-ws-member-step[data-state="running"] .agent-ws-member-glyph { color: var(--accent); }
+.agent-ws-member-step[data-state="failed"] .agent-ws-member-glyph { color: var(--danger); }
+.agent-ws-member-call-text { display: flex; flex: 1; flex-wrap: wrap; column-gap: 8px; min-width: 0; }
+.agent-ws-member-call-text > strong { font-weight: 500; color: var(--foreground-secondary); }
+.agent-ws-member-step[data-state="running"] .agent-ws-member-call-text > strong { color: var(--foreground); }
+.agent-ws-member-call-text > span { min-width: 0; color: var(--foreground-tertiary); overflow-wrap: anywhere; }
+.agent-ws-member-call-body { display: flex; flex-direction: column; gap: 6px; margin: 2px 0 8px 22px; min-width: 0; }
+.agent-ws-member-args { display: flex; flex-direction: column; gap: 2px; font-family: var(--font-mono); font-size: calc(12 / 16 * 1rem); line-height: 1.6; }
+.agent-ws-member-args > div { display: flex; gap: 6px; min-width: 0; }
+.agent-ws-member-args dt { flex-shrink: 0; color: var(--foreground-tertiary); }
+.agent-ws-member-args dt::after { content: ':'; }
+.agent-ws-member-args dd { min-width: 0; color: var(--foreground-secondary); overflow-wrap: anywhere; }
+.agent-ws-member-output { max-height: 20rem; padding: 10px 12px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--background); font-size: calc(12.5 / 16 * 1rem); line-height: 1.65; overflow-wrap: anywhere; }
+/* 工具返回的是 Core 规范文本（Markdown）：标题降成小节名，表格紧凑，整体比结论小一号。 */
+.agent-ws-member-output .chat-prose { font-size: inherit; }
+.agent-ws-member-output :is(h1, h2, h3, h4) { margin: 10px 0 4px; font-size: calc(13 / 16 * 1rem); font-weight: 600; }
+.agent-ws-member-output > .chat-prose > :first-child, .agent-ws-member-output :is(h1, h2, h3, h4):first-child { margin-top: 0; }
+.agent-ws-member-output table { font-size: calc(12 / 16 * 1rem); }
+.agent-ws-member-output :is(ul, ol) { padding-left: 1.25em; }
 .agent-ws-divergence { display: flex; flex-direction: column; gap: 8px; }
 .agent-ws-divergence > h3 { font-size: calc(13.5 / 16 * 1rem); font-weight: 600; }
 .agent-ws-divergence > h3 > span { font-weight: 500; color: var(--foreground-secondary); }

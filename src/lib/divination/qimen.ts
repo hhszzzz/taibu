@@ -41,7 +41,8 @@ export function fromStoredQimenZhiFuJiGong(value: string | null | undefined): Qi
 }
 
 export function buildQimenCanonicalJSON(output: QimenOutput): QimenCanonicalJSON {
-    return toQimenJson(output);
+    // 结果页展示完整盘面：方位、格局、宫旺衰、空亡/驿马与十干月令旺衰只在完整档输出。
+    return toQimenJson(output, { detailLevel: 'full' });
 }
 
 export function generateQimenChartText(

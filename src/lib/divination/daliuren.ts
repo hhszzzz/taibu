@@ -27,7 +27,8 @@ export function calculateDaliurenBundle(input: DaliurenInput): { output: Daliure
 }
 
 export function buildDaliurenCanonicalJSON(output: DaliurenOutput): DaliurenCanonicalJSON {
-    return toDaliurenJson(output) as DaliurenCanonicalJSON;
+    // 结果页展示完整盘面：建除与神煞只在完整档输出。
+    return toDaliurenJson(output, { detailLevel: 'full' }) as DaliurenCanonicalJSON;
 }
 
 export function generateDaliurenChartText(

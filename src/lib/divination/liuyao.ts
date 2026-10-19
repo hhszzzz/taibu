@@ -113,6 +113,8 @@ export interface LiuyaoBundleInput {
     yongShenTargets: LiuQin[];
     hexagram: Hexagram;
     changedHexagram?: Hexagram;
+    /** 结果页展示传 false：未填写问题或尚未选用神时仍输出完整盘面，不做用神分析。 */
+    requireYongShen?: boolean;
 }
 
 export interface LiuyaoBundle {
@@ -250,7 +252,7 @@ export function performFullAnalysis(
     changedCode: string | undefined,
     question: string,
     date: Date,
-    options?: { yongShenTargets?: LiuQin[] },
+    options?: { yongShenTargets?: LiuQin[]; requireYongShen?: boolean },
 ): LiuYaoFullAnalysis {
     return performFullAnalysisCore(
         yaos,
@@ -258,7 +260,10 @@ export function performFullAnalysis(
         changedCode,
         question,
         date,
-        { yongShenTargets: options?.yongShenTargets ?? [] },
+        {
+            yongShenTargets: options?.yongShenTargets ?? [],
+            requireYongShen: options?.requireYongShen,
+        },
     );
 }
 
@@ -272,7 +277,10 @@ export function calculateLiuyaoBundle(input: LiuyaoBundleInput): LiuyaoBundle {
         resolvedChangedCode,
         input.question,
         input.date,
-        { yongShenTargets: input.yongShenTargets },
+        {
+            yongShenTargets: input.yongShenTargets,
+            requireYongShen: input.requireYongShen,
+        },
     );
     const derived = calculateDerivedHexagrams(hexagramCode);
     const baseCtx = getHexagramContext(hexagramCode);

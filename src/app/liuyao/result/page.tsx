@@ -104,13 +104,15 @@ export default function ResultPage() {
     const missingYongShenTargets = requiresYongShenTargets && appliedYongShenTargets.length === 0;
     const hasAppliedTargets = appliedYongShenTargets.length > 0;
     const canAnalyze = requiresYongShenTargets && hasAppliedTargets;
+    // 盘面展示不依赖 AI 前置条件：未填写问题或尚未选用神时，仍输出完整旺衰/动静/神煞/卦身。
     const liuyaoBundle = useMemo(() => {
-        if (!result || !canAnalyze) return null;
+        if (!result) return null;
         return calculateLiuyaoBundle({
             yaos: result.yaos,
             question: result.question,
             date: result.createdAt,
             yongShenTargets: appliedYongShenTargets,
+            requireYongShen: canAnalyze,
             hexagram: result.hexagram,
             changedHexagram: result.changedHexagram,
         });

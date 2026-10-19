@@ -282,6 +282,11 @@ export interface LiuYaoFullAnalysis {
 
 export interface FullAnalysisOptions {
   yongShenTargets?: readonly unknown[];
+  /**
+   * 是否必须解析用神，默认 true。
+   * 结果页只展示盘面时传 false：无问题或尚未选用神也输出完整旺衰/动静/神煞/卦身。
+   */
+  requireYongShen?: boolean;
 }
 
 type InternalPalace = {
@@ -2548,7 +2553,9 @@ export function performFullAnalysis(
   date: Date,
   options?: FullAnalysisOptions
 ): LiuYaoFullAnalysis {
-  const targets = resolveYongShenTargets(question, options?.yongShenTargets);
+  const targets = options?.requireYongShen === false
+    ? []
+    : resolveYongShenTargets(question, options?.yongShenTargets);
   const ganZhiTime = calculateGanZhiTime(date);
   const monthZhi = ganZhiTime.month.zhi;
   const dayZhi = ganZhiTime.day.zhi;

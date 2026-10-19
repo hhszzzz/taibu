@@ -2,7 +2,7 @@
 // 需要 useState（删除确认、展开）、问题草稿同步与浏览器请求（删除长期记忆）
 
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ArrowUpRight, Check, ChevronRight, CircleAlert, Database, Globe, LoaderCircle, Trash2, UserRound } from 'lucide-react';
+import { ArrowUpRight, Bot, Check, ChevronRight, CircleAlert, Database, Globe, LoaderCircle, Trash2, UserRound } from 'lucide-react';
 import type { AgentRunStatus } from '@/lib/agent/types';
 import type { AgentQuestionAnswer, AgentWorkspaceModel, AgentWorkspaceResource } from '@/lib/agent/workspace';
 import {
@@ -576,7 +576,7 @@ function MemberStep({ step, live }: { step: ParallelMemberStep; live: boolean })
  * 成员的过程：与主对话的任务过程同一种读法——成员说的话、每一步调用，点开看参数与工具返回的内容。
  * 分析中默认展开并随成员推进；完成后收起，先读结论。
  */
-function MemberProcess({ member, running }: { member: ParallelAnalysisResult; running: boolean }) {
+export function MemberProcess({ member, running }: { member: ParallelAnalysisResult; running: boolean }) {
     const id = useId();
     const steps = member.steps ?? [];
     const [disclosed, setDisclosed] = useState<boolean | null>(null);
@@ -590,6 +590,37 @@ function MemberProcess({ member, running }: { member: ParallelAnalysisResult; ru
             <ChevronRight size={12} aria-hidden="true" className={open ? 'rotate-90' : undefined} />
         </button>
         {open && <ol id={id} className="agent-ws-member-steps">{steps.map((step, index) => <MemberStep key={index} step={step} live={running} />)}</ol>}
+    </section>;
+}
+
+/**
+ * 成员页：和命盘页并列的独立页面。标题是模型图标 + 成员名称，正文先是成员的分析过程
+ * （说过的、调用了什么、参数与返回），再是结论与表态。
+ */
+export function MemberView({ tool, member, runStatus, step }: ToolViewProps & { member: ParallelAnalysisResult; step?: number }) {
+    const id = useId();
+    const call = getAgentToolState(tool, runStatus).status;
+    const state = getParallelMemberState(member, call);
+    const name = member.name ?? member.system;
+    const answer = member.answer && memberAnswerText(member.answer);
+    const positions = Object.entries(member.positions ?? {});
+    return <section className="agent-ws-view agent-ws-member-page" aria-labelledby={id}>
+        <WorkspaceViewHeading id={id} kicker={kickerOf(step, '协作成员', '独立分析，结论由主模型汇总')}
+            title={<span className="agent-ws-member-title"><Bot size={17} aria-hidden="true" />{name}</span>}>
+            {[member.modelName ?? member.model ?? '主模型', effortLabel(member.reasoningEffort), member.focus].filter(Boolean).join(' · ')}
+        </WorkspaceViewHeading>
+        <p className="agent-ws-member-page-status" data-state={state.state}>
+            {state.state === 'completed' ? <Check size={13} strokeWidth={2.4} aria-hidden="true" /> : state.state === 'running' ? <LoaderCircle size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <CircleAlert size={13} aria-hidden="true" />}
+            {state.label}{member.toolCalls !== undefined ? ` · 调用了 ${member.toolCalls} 次工具` : ''}{member.durationMs !== undefined && state.state === 'completed' ? ` · 用时 ${formatAgentToolDuration(member.durationMs)}` : ''}
+        </p>
+        {member.steps?.length ? <MemberProcess member={member} running={state.state === 'running'} />
+            : state.state === 'running' ? <p className="agent-ws-running" role="status"><LoaderCircle size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />正在分析</p> : null}
+        {answer ? <div className="agent-ws-member-answer"><MarkdownContent content={answer} className="chat-prose" /></div>
+            : state.state === 'failed' && <p className="agent-ws-note">这位成员没有完成分析，它的结论不会汇入主回答。</p>}
+        {positions.length > 0 && <section className="agent-ws-member-positions" aria-label="这位成员的立场">
+            <h3>立场</h3>
+            <dl>{positions.map(([topic, stance]) => <div key={topic}><dt>{topic}</dt><dd>{stance}</dd></div>)}</dl>
+        </section>}
     </section>;
 }
 
@@ -622,7 +653,7 @@ function DivergenceTable({ topics, members, call }: { topics: ParallelTopic[]; m
  * 协作: each member's actual model, effort and progress, its conclusion once it
  * finishes, and where members disagree. Only finished analyses reach the answer.
  */
-export function CollaborationView({ tool, runStatus, step }: ToolViewProps & { step?: number }) {
+export function CollaborationView({ tool, runStatus, step, onOpenMember }: ToolViewProps & { step?: number; onOpenMember?: (conversationId: number) => void }) {
     const id = useId();
     const members = parallelAnalysisResults(tool.output);
     const topics = parallelAnalysisTopics(tool.output);
@@ -652,9 +683,10 @@ export function CollaborationView({ tool, runStatus, step }: ToolViewProps & { s
                             {state.state === 'completed' ? <Check size={13} strokeWidth={2.4} aria-hidden="true" /> : state.state === 'running' ? <LoaderCircle size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <CircleAlert size={13} aria-hidden="true" />}
                             {state.label}
                         </span>
+                        {onOpenMember && <button type="button" className="agent-secondary-button agent-ws-member-open" onClick={() => onOpenMember(member.conversationId)}>打开分析</button>}
                     </div>
                     {member.focus && !titled && <p className="agent-ws-note">分工：{member.focus}</p>}
-                    {member.steps?.length ? <MemberProcess member={member} running={state.state === 'running'} />
+                    {state.state === 'running' && member.steps?.length ? <MemberProcess member={member} running />
                         : state.state === 'running' && <p className="agent-ws-running" role="status"><LoaderCircle size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />正在分析</p>}
                     {answer ? <div className="agent-ws-member-answer"><MarkdownContent content={answer} className="chat-prose" /></div>
                         : state.state === 'failed' && <p className="agent-ws-note">这位成员没有完成分析，它的结论不会汇入主回答。</p>}

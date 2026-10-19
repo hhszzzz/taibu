@@ -7,18 +7,13 @@
  */
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { WorkspaceStatusCards, type WorkspaceRunInfo } from './AgentWorkspaceSections';
 import { getAgentChart } from '@/lib/agent/tool-presentation';
 import { getAgentChartReference } from '@/lib/agent/chart-interaction';
 import type { AgentMessageData, AgentPart } from '@/lib/agent/types';
 import { getChartKindMeta } from './chart-registry';
-
-const RAIL_MIN = 240;
-const RAIL_MAX = 360;
-const RAIL_KEY = 'taibu.session-rail-width';
-const clampWidth = (value: number) => Math.max(RAIL_MIN, Math.min(RAIL_MAX, Math.round(value)));
 
 export function SessionDetailsPanel({ data, run, onOpen }: {
     data?: AgentMessageData; run?: WorkspaceRunInfo;
@@ -38,36 +33,9 @@ export function SessionDetailsPanel({ data, run, onOpen }: {
             return [{ id: tool.id, chart }];
         });
     }, [data?.parts]);
-    // 会话栏可拖动（claude 右栏同构）：宽度记在本地，双击恢复 280。
-    const [width, setWidth] = useState(() => {
-        try { return clampWidth(Number(localStorage.getItem(RAIL_KEY)) || 280); } catch { return 280; }
-    });
+    // 会话栏固定宽度（280px，见 .agent-session-rail）：不提供拖拽或顶部手柄。
     const [showAll, setShowAll] = useState(false);
-    const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
-    const saveWidth = useCallback((value: number) => {
-        const next = clampWidth(value);
-        setWidth(next);
-        try { localStorage.setItem(RAIL_KEY, String(next)); } catch { /* optional */ }
-    }, []);
-    return <aside id="agent-session-panel" className="agent-session-rail" aria-label="会话详情" style={{ width }}>
-        <div className="agent-rail-resizer" role="separator" aria-orientation="vertical" aria-label="调整会话栏宽度"
-            aria-valuenow={width} aria-valuemin={RAIL_MIN} aria-valuemax={RAIL_MAX} tabIndex={0}
-            onDoubleClick={() => saveWidth(280)}
-            onKeyDown={event => {
-                if (event.key === 'ArrowLeft') { event.preventDefault(); saveWidth(width - 16); }
-                if (event.key === 'ArrowRight') { event.preventDefault(); saveWidth(width + 16); }
-            }}
-            onPointerDown={event => {
-                event.preventDefault();
-                dragRef.current = { startX: event.clientX, startWidth: width };
-                event.currentTarget.setPointerCapture(event.pointerId);
-            }}
-            onPointerMove={event => {
-                const drag = dragRef.current;
-                if (drag) saveWidth(drag.startWidth + drag.startX - event.clientX);
-            }}
-            onPointerUp={() => { dragRef.current = null; }}
-            onPointerCancel={() => { dragRef.current = null; }} />
+    return <aside id="agent-session-panel" className="agent-session-rail" aria-label="会话详情">
         <WorkspaceStatusCards data={data} run={run} afterContext={charts.length > 0 ? (grip => <section className="agent-ws-status-card" aria-label="成果">
             <div className="agent-ws-status-head"><span>成果</span>{grip}</div>
             <div className="agent-rail-body">

@@ -15,6 +15,7 @@ import { AGENT_CHART_NAMES, getAgentDrilldownBase, getAgentToolFamily, isAgentCh
 import { getAgentChart, getAgentDataResults, getAgentMethod, getAgentAttachmentRead, type AgentToolPart } from './tool-presentation';
 import { CHART_SOURCE_KINDS, getAgentChartReference, getChartFocus, parseChartReference } from './chart-interaction';
 import { getAgentEvidence, type AgentEvidence } from './evidence';
+import { parallelAnalysisResults, parallelAnalysisTitle } from './parallel-results';
 
 export type AgentWorkspaceSection = 'results';
 /** 工作区只有「概览」：任务执行过程在聊天转录里（claude TurnStatus），不再占一个标签。 */
@@ -22,7 +23,7 @@ export const AGENT_WORKSPACE_SECTIONS: readonly AgentWorkspaceSection[] = ['resu
 
 export type AgentWorkspaceView =
   | 'chart' | 'saved' | 'calculation' | 'evidence' | 'data' | 'record' | 'profile' | 'attachment'
-  | 'methods' | 'method' | 'question' | 'collaboration' | 'memory' | 'tool';
+  | 'methods' | 'method' | 'question' | 'collaboration' | 'member' | 'memory' | 'tool';
 
 export interface AgentWorkspaceResource {
   id: string;
@@ -31,6 +32,8 @@ export interface AgentWorkspaceResource {
   title: string;
   /** Tool calls shown by this resource in transcript order; the last is the most recent. */
   toolIds: string[];
+  /** A collaboration member's own page: the call that dispatched it and the member's child conversation. */
+  member?: { toolId: string; conversationId: number };
 }
 
 export interface AgentWorkspaceModel {
@@ -161,9 +164,16 @@ export function buildAgentWorkspace({ parts, artifacts, attachmentIds }: { parts
       case 'question':
         add('question:' + tool.id, { view: 'question', family, title: '补充信息' }, tool);
         break;
-      case 'collaboration':
-        add('tool:' + tool.id, { view: 'collaboration', family, title: '协作分析' }, tool);
+      case 'collaboration': {
+        add('tool:' + tool.id, { view: 'collaboration', family, title: parallelAnalysisTitle(tool.output) ?? '协作分析' }, tool);
+        // 每位成员单独一页：点成员名直接打开它的分析过程与结论，和命盘页并列。
+        for (const member of parallelAnalysisResults(tool.output)) {
+          const name = member.name ?? member.system;
+          add('member:' + tool.id + ':' + member.conversationId,
+            { view: 'member', family, title: name, member: { toolId: tool.id, conversationId: member.conversationId } });
+        }
         break;
+      }
       case 'memory':
         add('memory', { view: 'memory', family, title: '长期记忆' }, tool);
         break;

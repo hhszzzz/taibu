@@ -94,14 +94,14 @@ function BaziRelationsView({ result }: { result: BaziRelationsCanonicalJSON }) {
     const columns = result.参与柱位.map(pillar => pillar.柱);
     const rows = [...result.原局关系, ...(result.叠加关系 ?? [])];
     const layout = layoutRelations(rows, columns);
-    const stemBand = relationBandHeight(layout.lanes.stem), branchBand = relationBandHeight(layout.lanes.branch);
+    const stemBand = relationBandHeight(layout.lanes.stem), branchBand = relationBandHeight(layout.lanes.branch), crossBand = relationBandHeight(layout.lanes.cross);
     const notes = [...(result.岁运提示 ?? []), ...(result.太岁关系 ?? [])];
     return <>
         <div className="agent-ws-pillar-strip" data-relation-strip="">
             <table>
                 <thead><tr>{result.参与柱位.map(pillar => <th key={pillar.柱} scope="col" data-layer={pillar.层}>{pillar.柱}{pillar.层 !== '原局' && <small>{pillar.层}</small>}</th>)}</tr></thead>
                 <tbody>
-                    <tr data-row="stem">{result.参与柱位.map(pillar => <td key={pillar.柱} style={{ paddingTop: stemBand + 4 }}>
+                    <tr data-row="stem">{result.参与柱位.map(pillar => <td key={pillar.柱} style={{ paddingTop: stemBand + 4, paddingBottom: crossBand ? crossBand + 4 : undefined }}>
                         <span className={ganZhiTextClass(pillar.干支.charAt(0))} data-relation-cell={pillar.柱 + ':天干'}>{pillar.干支.charAt(0)}</span>
                     </td>)}</tr>
                     <tr data-row="branch">{result.参与柱位.map(pillar => <td key={pillar.柱} style={{ paddingBottom: branchBand + 4 }}>

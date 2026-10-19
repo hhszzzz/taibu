@@ -16,6 +16,14 @@
 .agent-ws-search input { min-width: 0; flex: 1; border: 0; background: transparent; font-size: calc(13 / 16 * 1rem); color: var(--foreground); outline: none; }
 .agent-ws-search > button { display: flex; width: 22px; height: 22px; align-items: center; justify-content: center; border-radius: 5px; color: var(--foreground-tertiary); }
 .agent-ws-search > button:hover { background: var(--fill-ghost-hover); color: var(--foreground); }
+/* 顶部搜索：替换标签行，占满头部剩余宽度（claude 讨论串搜索框同款）。 */
+.agent-panel-header .agent-ws-search-header { flex: 1 1 auto; min-width: 0; height: 32px; margin: 0; padding: 0 10px; border: 1px solid var(--accent); border-radius: 9px; background: var(--background); }
+.agent-panel-header .agent-ws-search-header input { font-size: calc(13.5 / 16 * 1rem); }
+.agent-ws-search-results { display: flex; flex: 1; min-height: 0; flex-direction: column; gap: 2px; padding: 8px; overflow-y: auto; }
+.agent-ws-search-results > button { display: flex; width: 100%; min-width: 0; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; font-size: calc(13.5 / 16 * 1rem); text-align: left; color: var(--foreground); }
+.agent-ws-search-results > button:hover { color: var(--accent-hover); }
+.agent-ws-search-results > button > svg { flex-shrink: 0; color: var(--foreground-tertiary); }
+.agent-ws-search-results > button > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent-ws-tabs [role="tab"]:focus-visible, .agent-ws-tab-close:focus-visible { outline-offset: -3px; }
 .agent-ws-tab-separator { flex-shrink: 0; align-self: center; width: 1px; height: 18px; margin: 0 4px; background: var(--border); }
 .agent-ws-tab-live { flex-shrink: 0; width: 6px; height: 6px; border-radius: 999px; background: var(--accent); }
@@ -54,9 +62,8 @@
 
 /* 资料 (Main board): one row per saved record with its mark and kind. */
 .agent-ws-records { display: flex; flex-direction: column; padding: 2px; border: var(--hairline) solid var(--hairline-color); border-radius: 12px; overflow: hidden; background: var(--background); }
-/* 行 = cds hit-row：最小 40px、内距 6/8、圆角 8、hover 5%、行间发丝分隔 */
+/* 行 = cds hit-row：最小 40px、内距 6/8、圆角 8、行间发丝分隔（不铺 hover 底色） */
 .agent-ws-records > li { display: flex; align-items: center; gap: 12px; min-width: 0; min-height: 40px; padding: 6px 8px; border-radius: 8px; }
-.agent-ws-records > li:hover { background: var(--fill-field); }
 .agent-ws-records > li + li { border-top: var(--hairline) solid var(--hairline-color); border-radius: 0; }
 .agent-ws-record-glyph { display: flex; flex-shrink: 0; width: 36px; height: 36px; align-items: center; justify-content: center; border-radius: 10px; background: var(--background-secondary); font-family: var(--font-display); font-size: calc(15 / 16 * 1rem); font-weight: 600; color: var(--foreground-secondary); }
 .agent-ws-record-text { display: flex; flex: 1; flex-direction: column; min-width: 0; }
@@ -171,6 +178,18 @@
 .agent-ws-badge:is([data-state="answered"], [data-state="replied"]) { color: var(--chat-success); }
 .agent-ws-badge:is([data-state="required"], [data-state="optional"]) { background: var(--accent-light); color: var(--accent-hover); }
 /* 协作 */
+.agent-ws-member-title { display: inline-flex; align-items: center; gap: 8px; }
+.agent-ws-member-title > svg { color: var(--foreground-tertiary); }
+.agent-ws-member-page-status { display: inline-flex; align-items: center; gap: 6px; font-size: calc(13 / 16 * 1rem); color: var(--foreground-secondary); }
+.agent-ws-member-page-status[data-state="completed"] { color: var(--chat-success); }
+.agent-ws-member-page-status[data-state="running"] { color: var(--accent-hover); }
+.agent-ws-member-page-status[data-state="failed"] { color: var(--danger); }
+.agent-ws-member-positions { display: flex; flex-direction: column; gap: 6px; }
+.agent-ws-member-positions > h3 { font-size: calc(13 / 16 * 1rem); font-weight: 600; color: var(--foreground-secondary); }
+.agent-ws-member-positions dl { display: flex; flex-direction: column; gap: 4px; }
+.agent-ws-member-positions dl > div { display: flex; gap: 12px; font-size: calc(13.5 / 16 * 1rem); line-height: 1.6; }
+.agent-ws-member-positions dt { min-width: 7rem; color: var(--foreground-tertiary); }
+.agent-ws-member-positions dd { min-width: 0; overflow-wrap: anywhere; }
 /* 协作分析 (AgentCollab board): one card per member with its process and conclusion, then the stance table. */
 .agent-ws-collaboration { gap: 18px; }
 .agent-ws-member { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--background); }
@@ -180,6 +199,7 @@
 .agent-ws-member-head h3 { font-size: calc(14 / 16 * 1rem); font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
 .agent-ws-member-head p { font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); overflow-wrap: anywhere; }
 .agent-ws-member-head > .agent-member-status { flex-shrink: 0; }
+.agent-ws-member-open { flex-shrink: 0; margin-left: 4px; }
 .agent-ws-member-avatar { display: flex; flex-shrink: 0; width: 32px; height: 32px; align-items: center; justify-content: center; border-radius: 9px; background: var(--background-secondary); font-family: var(--font-display); font-size: calc(15 / 16 * 1rem); font-weight: 700; }
 .agent-ws-member[data-state="running"] .agent-ws-member-avatar { background: var(--accent-light); color: var(--accent-hover); }
 /* The board shows each finished member's conclusion in full; only finished analyses reach the answer. */
@@ -244,7 +264,7 @@
 .agent-ws-rows { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 @container (min-width: 600px) { .agent-ws-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .agent-ws-row { display: flex; height: 88px; min-width: 0; align-items: center; gap: 12px; padding: 8px 12px 8px 8px; border: var(--hairline) solid var(--border-hover, var(--border)); border-radius: 12px; background: var(--background); text-align: left; color: var(--foreground); }
-button.agent-ws-row:hover { border-color: var(--border-hover); background: color-mix(in srgb, var(--fill-ghost-hover) 45%, var(--background)); }
+button.agent-ws-row:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--border-hover)); }
 .agent-ws-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .agent-ws-row-thumb { display: flex; width: 96px; height: 72px; flex-shrink: 0; align-items: center; justify-content: center; overflow: hidden; border-radius: 8px; background: var(--background-secondary); color: var(--foreground-secondary); }
 .agent-ws-row-body { display: flex; min-width: 0; flex: 1; flex-direction: column; justify-content: center; gap: 3px; }

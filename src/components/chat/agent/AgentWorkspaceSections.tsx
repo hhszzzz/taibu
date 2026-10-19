@@ -7,7 +7,6 @@ import { ArrowUpRight, BookOpen, Calculator, ChevronDown, ChevronRight, CircleHe
 import { type AgentMessageData, type AgentRunView } from '@/lib/agent/types';
 import { getAgentCalculation, getAgentChart, getAgentUnrepresentedArtifacts, type AgentCalculation, type AgentChart, type AgentToolPart } from '@/lib/agent/tool-presentation';
 import { getAgentToolFamily } from '@/lib/agent/tool-catalog';
-import { AGENT_EVIDENCE_KINDS, AGENT_EVIDENCE_LABELS, countAgentEvidence } from '@/lib/agent/evidence';
 import type { AgentWorkspaceModel, AgentWorkspaceResource } from '@/lib/agent/workspace';
 import { resolveClientModelName } from '@/lib/ai/model-name-cache';
 import type { NavIcon } from '@/lib/navigation/registry';
@@ -15,7 +14,7 @@ import { AgentContextOverview } from './AgentContextUsage';
 import { ChartThumb } from './chart-preview';
 import { getChartKindMeta } from './chart-registry';
 import {
-    describeOverviewFacts, getAgentArtifactHref, getAgentLocatedPositions, getAgentReadingState,
+    describeOverviewFacts, getAgentArtifactHref, getAgentReadingState,
     getDayunWindow, summarizeAgentTool, type AgentArtifact,
 } from './presentation';
 
@@ -27,7 +26,6 @@ export const WORKSPACE_ICONS: Record<AgentWorkspaceResource['family'], LucideIco
 
 /** How a reading card names what became of it, and the state its badge is styled by. */
 const READING_BADGES = { 已保存: ['已保存', 'saved'], 暂存成果: ['未另存', 'cached'], 已存资料: ['已存资料', 'record'] } as const;
-const OVERVIEW_LABELS = 4;
 
 export type WorkspaceRunInfo = Partial<Pick<AgentRunView, 'billing' | 'configuration' | 'createdAt'>>;
 
@@ -193,14 +191,10 @@ export function WorkspaceOverview({ model, artifacts, saved, onOpen }: {
     const id = useId();
     const { readings, calculations } = overviewCards(model, saved);
     const savedOnly = getAgentUnrepresentedArtifacts(model.tools, artifacts).filter(artifact => getAgentArtifactHref(artifact));
-    const evidence = model.resources.some(resource => resource.id === 'evidence') ? countAgentEvidence(model.evidence) : null;
-    const sources = [...new Set(model.evidence.flatMap(item => item.kind === 'chart' ? [] : [item.result.title]))];
-    const positions = getAgentLocatedPositions(model);
     const located = (resource: AgentWorkspaceResource) => model.evidence.filter(item => item.kind === 'chart' && model.chartResources.get(item.focus.reference) === resource.id).length;
-    const others = model.resources.filter(resource => !['chart', 'saved', 'calculation', 'evidence', 'attachment'].includes(resource.view));
+    const others = model.resources.filter(resource => !['chart', 'saved', 'calculation', 'evidence', 'attachment', 'member'].includes(resource.view));
     const attachments = model.resources.filter(resource => resource.view === 'attachment');
-    const grounded = Boolean(evidence) || positions.toolIds.length > 0;
-    const count = readings.length + calculations.length + savedOnly.length + (grounded ? 1 : 0);
+    const count = readings.length + calculations.length + savedOnly.length;
     return <section className="agent-ws-view agent-ws-overview" aria-labelledby={id}>
         <header className="agent-ws-heading agent-ws-overview-heading">
             <h2 id={id}>本对话的成果</h2>
@@ -231,11 +225,6 @@ export function WorkspaceOverview({ model, artifacts, saved, onOpen }: {
                         {!artifact.recordId && <button type="button" onClick={() => onOpen(`chart:${artifact.id}`)}>预览命盘</button>}
                         <Link href={getAgentArtifactHref(artifact)!}>打开<ArrowUpRight size={12} aria-hidden="true" /></Link>
                     </>} />)}
-                {grounded && <OverviewRow data-overview-card="evidence" icon={BookOpen} thumb={null} title="依据与定位"
-                    facts={[...(evidence ? AGENT_EVIDENCE_KINDS.filter(kind => kind !== 'chart').map(kind => `${AGENT_EVIDENCE_LABELS[kind]} ${evidence[kind]}`) : []), `盘面定位 ${positions.toolIds.length}`].join(' · ')}
-                    tags={<span>{sources.length ? `${sources.slice(0, 2).join('、')}${sources.length > 2 ? ` 等 ${sources.length} 个来源` : ''}`
-                        : positions.labels.length ? `${positions.labels.slice(0, OVERVIEW_LABELS).join(' · ')}${positions.labels.length > OVERVIEW_LABELS ? ' 等' : ''}` : '检索没有返回可引用的内容'}</span>}
-                    onOpen={() => onOpen(evidence ? 'evidence' : `tool:${positions.toolIds.at(-1)}`)} />}
             </div>}
         {others.length > 0 && <section className="agent-ws-overview-links" aria-label="过程资料">
             <h3>过程资料 <span>{others.length}</span></h3>

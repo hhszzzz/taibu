@@ -2,7 +2,7 @@
 // 需要协作成员展开状态与工作区上下文
 
 import { useId, useMemo, useState, type CSSProperties } from 'react';
-import { Check, CircleAlert, LoaderCircle } from 'lucide-react';
+import { Bot, Check, CircleAlert, LoaderCircle } from 'lucide-react';
 import { getAgentChart, getAgentToolText, type AgentToolPart } from '@/lib/agent/tool-presentation';
 import { REASONING_EFFORT_LABELS } from '@/lib/chat/model-settings';
 import { AI_REASONING_EFFORTS, type AIReasoningEffort } from '@/types';
@@ -45,7 +45,7 @@ function CollaborationCard({ tool, analyses, runStatus }: { tool: AgentToolPart;
         const status = getParallelMemberState(analysis, call);
         const current = status.state === 'running' ? analysis.steps?.findLast(step => step.status === 'running')?.title : undefined;
         const content = <>
-          <strong>{analysis.name ?? analysis.system}</strong>
+          <strong><Bot size={13} aria-hidden="true" />{analysis.name ?? analysis.system}</strong>
           <small>{[analysis.modelName ?? analysis.model ?? '主模型', effortLabel(analysis.reasoningEffort)].filter(Boolean).join(' · ')}</small>
           <span className="agent-member-status" data-state={status.state}>
             {status.state === 'completed' ? <Check size={12} strokeWidth={2.6} aria-hidden="true" /> : status.state === 'running' ? <LoaderCircle size={12} strokeWidth={2.6} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <CircleAlert size={12} aria-hidden="true" />}
@@ -54,7 +54,7 @@ function CollaborationCard({ tool, analyses, runStatus }: { tool: AgentToolPart;
         </>;
         // With a workspace the comparison lives there; otherwise a member discloses its own answer here.
         return <li key={analysis.conversationId} data-state={status.state}>
-          {workspace ? <button type="button" onClick={() => workspace.openResource(`tool:${tool.id}`)}>{content}</button>
+          {workspace ? <button type="button" onClick={() => workspace.openResource(`member:${tool.id}:${analysis.conversationId}`)}>{content}</button>
             : analysis.answer ? <button type="button" aria-expanded={opened === analysis.conversationId} onClick={() => setOpened(opened === analysis.conversationId ? null : analysis.conversationId)}>{content}</button>
             : <div>{content}</div>}
         </li>;

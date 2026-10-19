@@ -75,7 +75,8 @@ export function createParallelExtension(registrations: readonly ToolRegistration
     const extension: Extension = { name: 'taibu_parallel', tools: [defineTool({
         name: 'parallel_analysis', description: `同时进行 1–4 项术数分析，可在同一体系从不同角度分析。先确认每项必要资料完整；子分析只计算和解读，父任务汇总并选择最终成果，整项任务仅计一次费用。${collaborators.length ? `每项必须填写用户配置的 agentId，且包含全部成员：${collaborators.map(member => `${member.id}（${member.name}：${member.focus}）`).join('；')}` : ''}`,
         parameters: Type.Object({ tasks: Type.Array(Type.Object({ system: Type.String({ enum: PARALLEL_SYSTEMS }), question: Type.String({ minLength: 1, maxLength: 4000 }),
-          agentId: Type.Optional(Type.String(collaborators.length ? { enum: collaborators.map(member => member.id) } : {})) }), { minItems: 1, maxItems: 4 }),
+          agentId: Type.Optional(Type.String(collaborators.length ? { enum: collaborators.map(member => member.id) } : {})),
+          name: Type.Optional(Type.String({ ...LABEL, description: '这位成员在本任务里的称呼，如“格局派”“应期复核”；未配置协作成员时按分工起名' })) }), { minItems: 1, maxItems: 4 }),
           title: Type.Optional(Type.String({ ...LABEL, description: '这次协作的简短标题，如“三派会诊”' })),
           topics: Type.Optional(Type.Array(Type.Object({ title: Type.String(LABEL), options: Type.Optional(Type.Array(Type.String(LABEL), { minItems: 2, maxItems: 4 })) }), {
             maxItems: PARALLEL_TOPIC_LIMIT, description: '需要每位成员表态的关键议题；给出 options 时成员只能原样选择一项，用于对照分歧' })) }),
@@ -106,7 +107,10 @@ export function createParallelExtension(registrations: readonly ToolRegistration
             const progress: ParallelAnalysisResult[] = args.tasks.map((task, index) => {
                 const member = collaborators.find(item => item.id === task.agentId);
                 // The public card shows the configured model, effort and focus that the child actually runs with.
-                return { system: task.system, conversationId: ids[index], status: 'running', ...(member ? { agentId: member.id, name: member.name, model: member.model, modelName: models.get(member.model)?.name ?? member.model, reasoningEffort: memberEffort(member), ...(member.focus.trim() ? { focus: member.focus.trim() } : {}) } : {}) };
+                const given = task.name?.trim();
+                return { system: task.system, conversationId: ids[index], status: 'running', ...(member
+                  ? { agentId: member.id, name: member.name, model: member.model, modelName: models.get(member.model)?.name ?? member.model, reasoningEffort: memberEffort(member), ...(member.focus.trim() ? { focus: member.focus.trim() } : {}) }
+                  : given ? { name: given } : {}) };
             });
             // Live calls fill in a running member; a finished member carries its own process.
             const live: Array<ParallelMemberStep[] | undefined> = [];

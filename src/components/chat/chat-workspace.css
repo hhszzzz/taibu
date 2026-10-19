@@ -280,10 +280,9 @@
 .agent-process-count { min-width: 0; overflow: hidden; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
 .agent-process-count[data-failed] { color: var(--danger); }
 .agent-process-now { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.agent-process-chevron { flex-shrink: 0; margin-left: 2px; color: var(--foreground-tertiary); transition: transform .15s; }
-.agent-process.is-open .agent-process-chevron { transform: rotate(90deg); }
+.agent-process-chevron { flex-shrink: 0; margin-left: 2px; color: var(--foreground-tertiary); transition: rotate .15s; }
 /* 展开 = claude TurnStatus 卡片：发丝环 + 行间发丝分隔，逐行 20px 步骤。 */
-.agent-process-steps { display: flex; flex-direction: column; margin: 0; padding: 0; overflow: hidden; border-radius: 12px; background: var(--surface); box-shadow: 0 0 0 var(--hairline) var(--hairline-color), var(--shadow-card-ring, 0 1px 2px rgb(0 0 0 / .04)); list-style: none; }
+.agent-process-steps { display: flex; flex-direction: column; margin: 0; padding: 0; overflow: hidden; border-radius: 12px; background: transparent; box-shadow: 0 0 0 var(--hairline) var(--hairline-color); list-style: none; }
 .agent-process-steps[hidden] { display: none; }
 .agent-step { position: relative; min-width: 0; padding: 6px 12px; }
 .agent-step + .agent-step { border-top: var(--hairline) solid var(--hairline-color); }
@@ -297,10 +296,10 @@
 .agent-step-detail { display: inline; min-width: 0; flex: 0 1 auto; overflow: hidden; font-size: inherit; color: var(--foreground-tertiary); text-overflow: ellipsis; white-space: nowrap; }
 .agent-step-note { color: inherit; }
 .agent-step[data-state="failed"] .agent-step-note { color: var(--danger); }
-.agent-step-chevron { flex-shrink: 0; margin-left: 0; color: inherit; transition: transform .15s; }
+.agent-step-chevron { flex-shrink: 0; margin-left: 0; color: inherit; transition: rotate .15s; }
 .agent-step-body { border-top: 0; }
 /* 右侧操作列（复制 ×2 + 在工作区查看 = 76px，自步骤顶 8px 起）绝对定位；普通视图只剩一行结果时，正文至少撑到操作列底部，避免按钮压进下一步。 */
-.agent-step-call { display: flex; min-width: 0; min-height: 52px; max-height: 400px; flex-direction: column; gap: 5px; padding: 6px 32px 6px 0; overflow-y: auto; color: var(--foreground-secondary); font-size: calc(14 / 16 * 1rem); line-height: calc(20 / 16 * 1rem); }
+.agent-step-call { display: flex; min-width: 0; flex-direction: column; gap: 5px; padding: 6px 0; color: var(--foreground-secondary); font-size: calc(14 / 16 * 1rem); line-height: calc(20 / 16 * 1rem); }
 .agent-step-code { position: relative; display: flex; min-width: 0; }
 .agent-step-command { display: flex; width: 100%; flex-direction: column; gap: 3px; margin: 0; padding: 0; color: var(--foreground-secondary); font-size: inherit; line-height: inherit; white-space: pre-wrap; overflow-wrap: anywhere; }
 .agent-step-detail-line { overflow-wrap: anywhere; }
@@ -309,7 +308,7 @@
 .agent-step-prompt { margin-right: 7px; color: var(--foreground-tertiary); user-select: none; }
 .agent-step-copy { display: inline-flex; width: 24px; height: 24px; align-items: center; justify-content: center; border-radius: 5px; color: var(--foreground-tertiary); transition: color .12s; }
 .agent-step-copy:hover { background: var(--fill-ghost-hover); color: var(--foreground); }
-.agent-step-output { max-height: none; margin: 0; padding: 0; color: var(--foreground-secondary); font-family: var(--font-sans); font-size: calc(14 / 16 * 1rem); line-height: calc(20 / 16 * 1rem); white-space: pre-wrap; overflow-wrap: anywhere; }
+.agent-step-output { max-height: 24rem; margin: 0; padding: 0; overflow-y: auto; color: var(--foreground-secondary); font-family: var(--font-sans); font-size: calc(14 / 16 * 1rem); line-height: calc(20 / 16 * 1rem); white-space: pre-wrap; overflow-wrap: anywhere; }
 .agent-step-output-wrap { position: relative; display: flex; min-width: 0; padding-right: 32px; }
 .agent-step-empty { margin: 0; font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-tertiary); }
 .agent-step-actions { position: absolute; top: 8px; right: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; opacity: 0; transition: opacity .12s; }
@@ -317,6 +316,23 @@
 @media (hover: none) { .agent-step-actions { opacity: 1; } }
 .agent-step-workspace { display: inline-flex; height: 24px; align-items: center; gap: 4px; padding: 0 8px; border-radius: 6px; color: var(--foreground-secondary); font-size: calc(12.5 / 16 * 1rem); }
 .agent-step-workspace:hover { background: var(--fill-ghost-hover); color: var(--foreground); }
+.agent-step-structured { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.agent-step-structured-lead { margin: 0; color: var(--foreground); font-size: calc(13.5 / 16 * 1rem); line-height: 1.6; overflow-wrap: anywhere; }
+.agent-step-structured-fact { margin: 0; color: var(--foreground-secondary); font-size: calc(13 / 16 * 1rem); line-height: 1.6; }
+.agent-step-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.agent-step-chips > li { max-width: 100%; padding: 1px 7px; overflow: hidden; border: var(--hairline) solid var(--border); border-radius: 999px; background: var(--background); color: var(--foreground-secondary); font-size: calc(12 / 16 * 1rem); line-height: calc(18 / 16 * 1rem); text-overflow: ellipsis; white-space: nowrap; }
+.agent-step-structured-list { display: flex; flex-direction: column; gap: 3px; margin: 0; padding: 0; list-style: none; }
+.agent-step-structured-list > li { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; color: var(--foreground-secondary); font-size: calc(13 / 16 * 1rem); line-height: 1.6; overflow-wrap: anywhere; }
+.agent-step-structured-list strong { color: var(--foreground); font-weight: 500; }
+.agent-step-structured-open { align-self: flex-start; display: inline-flex; height: 24px; align-items: center; padding: 0 8px; border-radius: 6px; color: var(--foreground-secondary); font-size: calc(12.5 / 16 * 1rem); }
+.agent-step-structured-open:hover { color: var(--accent-hover); }
+.agent-step-members, .agent-step-artifacts { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.agent-step-members button, .agent-step-artifacts button, .agent-step-member-static { display: flex; width: 100%; min-width: 0; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 7px; color: var(--foreground); font-size: calc(13.5 / 16 * 1rem); line-height: calc(19 / 16 * 1rem); text-align: left; transition: color .12s; }
+.agent-step-members button:hover, .agent-step-artifacts button:hover { color: var(--accent-hover); }
+.agent-step-members button > svg, .agent-step-artifacts button > svg, .agent-step-member-static > svg { flex-shrink: 0; color: var(--foreground-tertiary); }
+.agent-step-member-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.agent-step-member-model { min-width: 0; margin-left: auto; overflow: hidden; font-size: calc(12 / 16 * 1rem); color: var(--foreground-tertiary); text-overflow: ellipsis; white-space: nowrap; }
+.agent-step-members li[data-state="failed"] .agent-step-member-model { color: var(--danger); }
 .agent-step-note-body { padding: 8px 12px 12px; border-top: var(--hairline) solid var(--hairline-color); font-size: calc(13 / 16 * 1rem); line-height: 1.7; color: var(--foreground-secondary); }
 .agent-step-reasoning { white-space: pre-wrap; overflow-wrap: anywhere; }
 .agent-step > .agent-tool-details { margin: 8px 0 6px 20px; }
@@ -363,19 +379,20 @@
 .agent-final-text > span { overflow: hidden; font-size: calc(14 / 16 * 1rem); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .agent-final-text > small { font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); }
 .agent-final-open { display: inline-flex; flex-shrink: 0; align-items: center; gap: 4px; height: 34px; padding: 0 12px; border: 1px solid var(--border-hover); border-radius: 9px; font-size: calc(13 / 16 * 1rem); color: var(--foreground); }
-.agent-final-open:hover { background: var(--fill-ghost-hover); }
+.agent-final-open:hover { border-color: var(--accent); color: var(--accent-hover); }
 .agent-collaboration-results { overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: var(--chat-raised); }
 .agent-collaboration-results > header { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 11px 14px; border-bottom: 1px solid var(--border); }
 .agent-collaboration-results > header h3 { font-size: calc(13.5 / 16 * 1rem); font-weight: 600; }
 .agent-collaboration-results > header p { font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); }
 .agent-collaboration-results > header button { margin-left: auto; height: 30px; padding: 0 10px; border: 1px solid var(--border-hover); border-radius: 8px; font-size: calc(12.5 / 16 * 1rem); white-space: nowrap; }
-.agent-collaboration-results > header button:hover { background: var(--fill-ghost-hover); }
+.agent-collaboration-results > header button:hover { border-color: var(--accent); color: var(--accent-hover); }
 .agent-collaboration-results > ul { display: grid; grid-template-columns: repeat(var(--members, 2), minmax(0, 1fr)); }
 .agent-collaboration-results li + li { border-left: 1px solid var(--border); }
 .agent-collaboration-results li[data-state="running"] { background: var(--accent-light); }
 .agent-collaboration-results li > :is(button, div) { display: flex; width: 100%; height: 100%; flex-direction: column; align-items: flex-start; gap: 4px; padding: 12px 14px; text-align: left; }
-.agent-collaboration-results li > button:hover { background: var(--fill-ghost-hover); }
-.agent-collaboration-results li strong { font-size: calc(13.5 / 16 * 1rem); font-weight: 600; }
+.agent-collaboration-results li > button:hover { color: var(--accent-hover); }
+.agent-collaboration-results li strong { display: inline-flex; max-width: 100%; min-width: 0; align-items: center; gap: 6px; overflow: hidden; font-size: calc(13.5 / 16 * 1rem); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.agent-collaboration-results li strong > svg { color: var(--foreground-tertiary); }
 .agent-collaboration-results li small { font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); }
 .agent-member-status { display: inline-flex; align-items: center; gap: 5px; font-size: calc(12.5 / 16 * 1rem); }
 .agent-member-status[data-state="completed"] { color: var(--chat-success); }
@@ -389,7 +406,7 @@
 .agent-message-footer .chat-message-actions { margin-top: 0; }
 .agent-message-footer .agent-evidence-chip + .chat-message-actions { margin-left: auto; }
 .agent-evidence-chip { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--chat-raised); font-size: calc(12.5 / 16 * 1rem); color: var(--foreground); white-space: nowrap; }
-button.agent-evidence-chip:hover { background: var(--fill-ghost-hover); }
+button.agent-evidence-chip:hover { border-color: var(--accent); color: var(--accent-hover); }
 .chat-user-bubble { max-width: 75%; padding: 12px 16px; border-radius: 12px; overflow-wrap: anywhere; }
 /* claude 实测：用户气泡底 = alpha-1（5% 前景色），非页色调；解梦气泡保留自己的紫色调 */
 .chat-user-bubble:not(.is-dream) { background: hsl(from var(--neutral-900) h s l / 5%); }
@@ -435,19 +452,15 @@ button.agent-evidence-chip:hover { background: var(--fill-ghost-hover); }
 .chat-message-model { margin-left: 8px; padding-left: 10px; border-left: 1px solid var(--border); font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); white-space: nowrap; }
 /* 工作区 = 停靠分栏里的悬浮卡片（claude /code 讨论串面板实测：白卡 r12 + 0.5px 发丝描边）。
    上留白 4px：40px 头部的标签行中线落在 24px，与左侧 48px 标题栏同一水平线；下留白 8px。
-   列为 in-flow、挤压对话列而不盖住内容；任务态默认 320，含原生盘面默认 660，拖拽可在 280–780 间调宽，始终给阅读列留 ≥360px。 */
-.agent-workspace-panel { position: relative; display: flex; flex-shrink: 0; flex-direction: column; width: 320px; min-width: 280px; max-width: min(780px, calc(100% - 384px)); margin: 4px 10px 8px; border: var(--hairline) solid var(--hairline-color); border-radius: 12px; background: var(--chat-raised); box-shadow: none; }
-/* 会话详情停靠栏 = 克隆站 SessionRail：280px、与消息列重叠 28px、右留 12px、卡片间隔 8px。 */
-.agent-session-rail { position: relative; z-index: 40; display: flex; flex-shrink: 0; flex-direction: column; width: 280px; min-height: 0; margin-top: 51px; margin-left: -28px; margin-right: 12px; padding: 0 1px 8px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
+   列为 in-flow、挤压对话列而不盖住内容；任务态默认 320，含原生盘面默认 660，拖拽可在 280–780 间调宽，始终给阅读列留 ≥360px。
+   max-width 的保留值必须与 AgentWorkspacePanel 的拖拽上限一致（100% − 360px 阅读列 − 10px 右外边距），否则指针到了面板却停住。 */
+.agent-workspace-panel { position: relative; display: flex; flex-shrink: 0; flex-direction: column; width: 320px; min-width: 280px; max-width: min(780px, calc(100% - 370px)); margin: 4px 10px 8px 0; border: var(--hairline) solid var(--hairline-color); border-radius: 12px; background: var(--chat-raised); box-shadow: none; }
+/* 拖动中：整块面板宽度实时跟随指针，内容不参与 hover/选择，避免图表区域抢事件。 */
+.agent-workspace-panel[data-resizing] { cursor: col-resize; }
+.agent-workspace-panel[data-resizing] .agent-panel-content { pointer-events: none; }
+/* 会话详情停靠栏 = 克隆站 SessionRail：固定 280px、右留 12px、卡片间隔 8px；不参与拖拽。 */
+.agent-session-rail { position: relative; z-index: 40; display: flex; flex-shrink: 0; flex-direction: column; width: 280px; min-height: 0; margin-top: 51px; margin-right: 12px; padding: 0 1px 8px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
 .agent-session-rail::-webkit-scrollbar { display: none; }
-/* 会话栏拖拽热区：左缘 8px，悬停/聚焦时显现 3px 胶囊。 */
-.agent-rail-resizer { position: absolute; top: 0; bottom: 0; left: -4px; z-index: 2; width: 9px; cursor: col-resize; touch-action: none; }
-/* 顶部的拖动手柄（与工作区顶部一致）：悬停显出抓手，拖动调整会话栏宽度。 */
-.agent-session-rail .agent-rail-resizer { top: 2px; bottom: auto; left: 50%; width: 36px; height: 10px; transform: translateX(-50%); cursor: grab; }
-.agent-session-rail .agent-rail-resizer:active { cursor: grabbing; }
-.agent-rail-resizer::after { content: ''; position: absolute; top: 50%; left: 3px; width: 3px; height: 32px; margin-top: -16px; border-radius: 999px; background: var(--border-hover); opacity: 0; transition: opacity .15s; }
-.agent-session-rail .agent-rail-resizer::after { top: 3px; left: 50%; width: 28px; height: 3px; margin: 0; transform: translateX(-50%); background: var(--border-hover); opacity: 1; }
-.agent-rail-resizer:hover::after, .agent-rail-resizer:focus-visible::after { opacity: 1; }
 .agent-session-rail .agent-ws-status-cards { display: flex; flex-direction: column; gap: 8px; }
 .agent-session-rail .agent-rail-card { position: relative; }
 /* 拖动 = claude tile 头行的「移动」钮：紧跟标题，悬停/聚焦显形，拖动排序。 */
@@ -472,7 +485,9 @@ button.agent-evidence-chip:hover { background: var(--fill-ghost-hover); }
 .agent-session-rail .agent-rail-more svg.rotate-180 { transform: rotate(180deg); }
 .agent-session-rail .agent-rail-meta { flex-shrink: 0; color: var(--foreground-tertiary); }
 .agent-session-rail .agent-rail-button { width: 100%; border: 0; background: transparent; padding: 0; border-radius: 6px; text-align: left; cursor: pointer; }
-.agent-session-rail .agent-rail-button:hover { background: var(--fill-ghost-hover); }
+/* 成果行 hover 只换文字与图标颜色，不铺整块灰底。 */
+.agent-session-rail .agent-rail-result:hover > svg { color: var(--accent); }
+.agent-session-rail .agent-rail-result:hover .agent-rail-result-text > span { color: var(--accent-hover); }
 .agent-session-rail .agent-rail-result { height: auto; align-items: flex-start; gap: 12px; padding: 4px 0; }
 .agent-session-rail .agent-rail-result > svg { margin-top: 2px; }
 .agent-session-rail .agent-rail-result-text { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 1px; }
@@ -486,8 +501,9 @@ button.agent-evidence-chip:hover { background: var(--fill-ghost-hover); }
 .agent-session-rail .agent-context-foot { font-size: calc(11 / 16 * 1rem); }
 .agent-session-rail .agent-ws-model-list li { font-size: calc(12 / 16 * 1rem); }
 @media (max-width: 1023px) { .agent-session-rail { display: none; } }
-/* 最大化 = claude 面板「全屏」：铺满会话区，压住转录；恢复后回到停靠宽度。 */
-.agent-workspace-panel.is-maximized { max-width: none; z-index: 25; }
+/* 最大化 = 会话让位，工作区在页内居中放大，上下留白；恢复后回到停靠宽度。 */
+.agent-workspace-panel.is-maximized { width: min(1100px, calc(100% - 32px)); max-width: none; margin: 16px auto; border-radius: 12px; z-index: 25; }
+.chat-workspace:has(.agent-workspace-panel.is-maximized) .chat-main { display: none; }
 .agent-workspace-panel.is-maximized .agent-panel-resizer { display: none; }
 /* 拖拽热区铺在卡片左侧外侧（压在对话区边缘），悬停显示 3px 胶囊（同侧栏拖拽柄）。 */
 .agent-panel-resizer { position: absolute; top: 0; bottom: 0; left: -9px; width: 9px; cursor: col-resize; touch-action: none; z-index: 2; }

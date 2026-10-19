@@ -93,6 +93,18 @@ test('searches share the evidence view; records, attachments, methods and memori
   assert.deepEqual(by('memory')?.toolIds, ['memory-read', 'memory-write']);
 });
 
+test('each collaboration member gets its own workspace page beside the collaboration', () => {
+  const team = tool('team', 'parallel_analysis', { output: { title: '三派会诊', analyses: [
+    { system: 'bazi', conversationId: 10, status: 'completed', name: '格局派', answer: '取流通。' },
+    { system: 'bazi', conversationId: 11, status: 'running', name: '应期派' },
+  ] } });
+  const model = workspace([team]);
+  assert.deepEqual(model.resources.filter(resource => resource.view === 'member').map(resource => [resource.id, resource.title, resource.member]),
+    [['member:team:10', '格局派', { toolId: 'team', conversationId: 10 }], ['member:team:11', '应期派', { toolId: 'team', conversationId: 11 }]]);
+  assert.equal(resolveAgentWorkspaceLocation(model, 'member:team:10'), 'member:team:10');
+  assert.equal(model.locations.get('team'), 'tool:team', 'the member pages do not take the call away from the collaboration');
+});
+
 test('only chart readings, questions and collaborations open the workspace by themselves', async () => {
   const bazi = await coreResult('bazi');
   const running = tool('calc', 'bazi', { status: 'running' });

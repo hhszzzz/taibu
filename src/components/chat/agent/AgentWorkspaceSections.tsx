@@ -10,11 +10,12 @@ import { getAgentToolFamily } from '@/lib/agent/tool-catalog';
 import { AGENT_EVIDENCE_KINDS, AGENT_EVIDENCE_LABELS, countAgentEvidence } from '@/lib/agent/evidence';
 import type { AgentWorkspaceModel, AgentWorkspaceResource } from '@/lib/agent/workspace';
 import { resolveClientModelName } from '@/lib/ai/model-name-cache';
+import type { NavIcon } from '@/lib/navigation/registry';
 import { AgentContextOverview } from './AgentContextUsage';
-import { ChartMiniPreview } from './chart-preview';
+import { ChartThumb } from './chart-preview';
 import { getChartKindMeta } from './chart-registry';
 import {
-    describeAgentChartSubject, getAgentArtifactHref, getAgentLocatedPositions, getAgentReadingState,
+    describeOverviewFacts, getAgentArtifactHref, getAgentLocatedPositions, getAgentReadingState,
     getDayunWindow, summarizeAgentTool, type AgentArtifact,
 } from './presentation';
 
@@ -54,33 +55,60 @@ function overviewCards(model: AgentWorkspaceModel, saved: ReadonlySet<string>) {
     return { readings, calculations };
 }
 
-/** 计算结果的小图：大运取当前前后三步，运限列各层干支，飞星列查询结论，反推列候选时间。 */
-function CalculationPreview({ card }: { card: CalculationCard }) {
-    const fallback = <span className="agent-ws-overview-note">{summarizeAgentTool(card.tool) ?? card.resource.title}</span>;
+/** 计算结果行：缩略区画能一眼认出的形（大运三步、运限三层），第二行给缩略图之外的结论。 */
+function calculationRow(card: CalculationCard): { thumb: ReactNode; facts: string } {
+    const fallback = summarizeAgentTool(card.tool) ?? '';
     switch (card.value.kind) {
         case 'bazi_dayun': {
             const year = new Date().getFullYear();
-            return <span className="agent-ws-overview-periods" aria-hidden="true">{getDayunWindow(card.value.data.大运列表, year).map(period =>
-                <span key={period.起运年份} data-current={period.current || undefined}><b>{period.干支}</b>{period.起运年份}{period.current ? ' 当前' : ''}</span>)}</span>;
+            return {
+                thumb: <span className="chart-thumb-glyphs" aria-hidden="true">{getDayunWindow(card.value.data.大运列表, year).map(period =>
+                    <b key={period.起运年份} data-current={period.current || undefined}>{period.干支}</b>)}</span>,
+                facts: [card.value.data.起运信息.顺逆, card.value.data.起运信息.起运详情].filter(Boolean).join(' · ') || fallback,
+            };
         }
         case 'ziwei_horoscope':
-            return <span className="agent-ws-overview-periods" aria-hidden="true">{card.value.data.运限叠宫.slice(0, 3).map(layer =>
-                <span key={layer.层次}><b>{layer.干支}</b>{layer.层次} · {layer.落入本命宫位}</span>)}</span>;
+            return {
+                thumb: <span className="chart-thumb-glyphs" aria-hidden="true">{card.value.data.运限叠宫.slice(0, 3).map(layer => <b key={layer.层次}>{layer.干支}</b>)}</span>,
+                facts: card.value.data.运限叠宫.slice(0, 3).map(layer => `${layer.层次}${layer.落入本命宫位}`).join(' · ') || fallback,
+            };
         case 'ziwei_flying_star': {
             const rows = card.value.data.查询结果.slice(0, 2);
-            return rows.length ? <span className="agent-ws-overview-note">{rows.map(row => [row.查询类型, row.判断目标, row.结果].filter(Boolean).join(' ')).join('；')}</span> : fallback;
+            return { thumb: null, facts: rows.map(row => [row.查询类型, row.判断目标, row.结果].filter(Boolean).join(' ')).join('；') || fallback };
         }
         case 'bazi_pillars_resolve': {
             const [first] = card.value.data.候选列表;
-            return <span className="agent-ws-overview-note">{first ? `${card.value.data.候选列表.length} 个候选 · 首个 ${first.公历} ${first.出生时间}` : '没有匹配的出生时间'}</span>;
+            return { thumb: null, facts: first ? `${card.value.data.候选列表.length} 个候选 · 首个 ${first.公历} ${first.出生时间}` : '没有匹配的出生时间' };
         }
         case 'almanac_select': {
             const [first] = card.value.data.候选日;
-            return <span className="agent-ws-overview-note">{first ? `${card.value.data.查询.起止日期} · 候选 ${card.value.data.候选日.length} 天 · 首个 ${first.日期}` : `${card.value.data.查询.起止日期} · 没有符合条件的日期`}</span>;
+            return { thumb: null, facts: first ? `${card.value.data.查询.起止日期} · 候选 ${card.value.data.候选日.length} 天 · 首个 ${first.日期}` : `${card.value.data.查询.起止日期} · 没有符合条件的日期` };
         }
         default:
-            return fallback;
+            return { thumb: null, facts: fallback };
     }
+}
+
+/**
+ * 概览的一行：左侧固定 96×72 缩略区，右侧三层——名称与状态、缩略图之外的事实、这件成果上发生过什么。
+ * 所有行同高，缩略区里不写说明文字，避免与第二行重复。
+ */
+function OverviewRow({ thumb, icon: Icon, title, badge, facts, tags, onOpen, label, ...data }: {
+    thumb: ReactNode; icon: LucideIcon | NavIcon; title: string; badge?: { text: string; state?: string };
+    facts: string; tags: ReactNode; onOpen?: () => void; label?: string;
+    'data-overview-result'?: string; 'data-overview-card'?: string;
+}) {
+    const body = <>
+        <span className="agent-ws-row-thumb">{thumb ?? <Icon size={22} aria-hidden="true" />}</span>
+        <span className="agent-ws-row-body">
+            <span className="agent-ws-row-head"><strong>{title}</strong>{badge && <span data-state={badge.state}>{badge.text}</span>}</span>
+            <span className="agent-ws-row-facts">{facts}</span>
+            <span className="agent-ws-row-tags">{tags}</span>
+        </span>
+    </>;
+    return onOpen
+        ? <button type="button" className="agent-ws-row" onClick={onOpen} aria-label={label} {...data}>{body}</button>
+        : <div className="agent-ws-row" {...data}>{body}</div>;
 }
 
 /** 会话栏的模型卡：只展示多模型协作成员（单模型不占右栏空间）。 */
@@ -153,8 +181,8 @@ export function WorkspaceStatusCards({ data, run, afterContext }: { data?: Agent
 
 /**
  * 概览: what the conversation produced — readings with whether they were saved,
- * calculations, the evidence answers can cite and the positions the model
- * located. The task summary and export live in the header, not here.
+ * calculations, and the evidence and chart positions answers rest on, one equal-height
+ * row each. The task summary and export live in the header, not here.
  */
 export function WorkspaceOverview({ model, artifacts, saved, onOpen }: {
     model: AgentWorkspaceModel; artifacts: AgentArtifact[];
@@ -168,52 +196,46 @@ export function WorkspaceOverview({ model, artifacts, saved, onOpen }: {
     const evidence = model.resources.some(resource => resource.id === 'evidence') ? countAgentEvidence(model.evidence) : null;
     const sources = [...new Set(model.evidence.flatMap(item => item.kind === 'chart' ? [] : [item.result.title]))];
     const positions = getAgentLocatedPositions(model);
+    const located = (resource: AgentWorkspaceResource) => model.evidence.filter(item => item.kind === 'chart' && model.chartResources.get(item.focus.reference) === resource.id).length;
     const others = model.resources.filter(resource => !['chart', 'saved', 'calculation', 'evidence', 'attachment'].includes(resource.view));
     const attachments = model.resources.filter(resource => resource.view === 'attachment');
-    const empty = !readings.length && !calculations.length && !savedOnly.length && !evidence && !positions.toolIds.length;
+    const grounded = Boolean(evidence) || positions.toolIds.length > 0;
+    const count = readings.length + calculations.length + savedOnly.length + (grounded ? 1 : 0);
     return <section className="agent-ws-view agent-ws-overview" aria-labelledby={id}>
-        <header className="agent-ws-heading">
+        <header className="agent-ws-heading agent-ws-overview-heading">
             <h2 id={id}>本对话的成果</h2>
-            <p>任务生成的命盘、计算结果与回答依据会显示在这里。</p>
+            {count > 0 && <span>{count} 项</span>}
         </header>
-        {empty ? <div className="agent-panel-empty"><Files size={28} aria-hidden="true" /><h3>还没有成果</h3><p>Agent 排盘、计算或检索后，结果会汇总在这里。</p></div>
-            : <div className="agent-ws-overview-grid">
+        {count === 0 ? <p className="agent-ws-overview-empty"><Files size={16} aria-hidden="true" />Agent 排盘、计算或检索后，成果会汇总在这里。</p>
+            : <div className="agent-ws-rows">
                 {readings.map(({ resource, value, state, source, drilldowns }) => {
                     const meta = getChartKindMeta(value.kind);
-                    const subject = describeAgentChartSubject(source, value);
-                    return <button key={resource.id} type="button" className="agent-ws-overview-card" data-overview-result="reading" onClick={() => onOpen(resource.id)}
-                        aria-label={`${value.title}：${subject}${drilldowns ? `，详查 ${drilldowns} 条` : ''}，${READING_BADGES[state][0]}`}>
-                        <span className="agent-ws-overview-kicker"><meta.icon size={14} aria-hidden="true" />{value.title}
-                            {drilldowns > 0 && <em>详查 {drilldowns}</em>}
-                            <span data-state={READING_BADGES[state][1]}>{READING_BADGES[state][0]}</span></span>
-                        <ChartMiniPreview value={value} />
-                        <span className="agent-ws-overview-note agent-ws-overview-subject">{subject}</span>
-                    </button>;
+                    const facts = describeOverviewFacts(source, value);
+                    const marks = located(resource);
+                    const tags = [drilldowns > 0 && `详查 ${drilldowns}`, marks > 0 && `定位 ${marks}`].filter((tag): tag is string => Boolean(tag));
+                    return <OverviewRow key={resource.id} data-overview-result="reading" icon={meta.icon} thumb={<ChartThumb value={value} />}
+                        title={value.title} badge={{ text: READING_BADGES[state][0], state: READING_BADGES[state][1] }} facts={facts}
+                        tags={tags.length ? tags.map(tag => <em key={tag}>{tag}</em>) : <span>查看完整盘面</span>}
+                        label={`${value.title}：${facts}${tags.length ? `，${tags.join('，')}` : ''}，${READING_BADGES[state][0]}`}
+                        onOpen={() => onOpen(resource.id)} />;
                 })}
-                {savedOnly.map(artifact => <div key={artifact.id} className="agent-ws-overview-card" data-overview-result="saved">
-                    <span className="agent-ws-overview-kicker">{artifact.recordId ? '分析记录' : '命盘'}<span data-state="saved">已保存</span></span>
-                    <span className="agent-ws-overview-title">{artifact.title}</span>
-                    <span className="agent-ws-overview-actions">
-                        {!artifact.recordId && <button type="button" className="agent-secondary-button" onClick={() => onOpen(`chart:${artifact.id}`)}>预览命盘</button>}
-                        <Link className="agent-secondary-button" href={getAgentArtifactHref(artifact)!}>打开<ArrowUpRight size={12} aria-hidden="true" /></Link>
-                    </span>
-                </div>)}
-                {calculations.map(card => <button key={card.resource.id} type="button" className="agent-ws-overview-card" data-overview-result="calculation" onClick={() => onOpen(card.resource.id)}>
-                    <span className="agent-ws-overview-kicker"><Sigma size={14} aria-hidden="true" />计算结果<span>未另存</span></span>
-                    <CalculationPreview card={card} />
-                    <span className="agent-ws-overview-title">{card.resource.title}
-                        {card.value.kind === 'bazi_dayun' && <small>{[card.value.data.起运信息.顺逆, card.value.data.起运信息.起运详情].filter(Boolean).join(' · ')}</small>}</span>
-                </button>)}
-                {evidence && <button type="button" className="agent-ws-overview-card" data-overview-card="evidence" onClick={() => onOpen('evidence')}>
-                    <span className="agent-ws-overview-kicker">回答依据</span>
-                    <span className="agent-ws-overview-title">{AGENT_EVIDENCE_KINDS.map(kind => `${AGENT_EVIDENCE_LABELS[kind]} ${evidence[kind]}`).join(' · ')}</span>
-                    <span className="agent-ws-overview-note">{sources.length ? `${sources.slice(0, 3).join('、')}${sources.length > 3 ? ` 等 ${sources.length} 个来源` : ''}` : '检索没有返回可引用的内容'}</span>
-                </button>}
-                {positions.toolIds.length > 0 && <button type="button" className="agent-ws-overview-card" data-overview-card="positions" onClick={() => onOpen(`tool:${positions.toolIds.at(-1)}`)}>
-                    <span className="agent-ws-overview-kicker">模型定位</span>
-                    <span className="agent-ws-overview-title">{positions.toolIds.length} 个分析位置</span>
-                    {positions.labels.length > 0 && <span className="agent-ws-overview-note">{positions.labels.slice(0, OVERVIEW_LABELS).join(' · ')}{positions.labels.length > OVERVIEW_LABELS ? ' 等' : ''}</span>}
-                </button>}
+                {calculations.map(card => {
+                    const row = calculationRow(card);
+                    return <OverviewRow key={card.resource.id} data-overview-result="calculation" icon={Sigma} thumb={row.thumb}
+                        title={card.resource.title} badge={{ text: '未另存', state: 'cached' }} facts={row.facts}
+                        tags={<span>计算结果 · 查看明细</span>} label={`${card.resource.title}：${row.facts}`} onOpen={() => onOpen(card.resource.id)} />;
+                })}
+                {savedOnly.map(artifact => <OverviewRow key={artifact.id} data-overview-result="saved" icon={Files} thumb={null}
+                    title={artifact.title} badge={{ text: '已保存', state: 'saved' }} facts={artifact.recordId ? '分析记录' : '命盘'}
+                    tags={<>
+                        {!artifact.recordId && <button type="button" onClick={() => onOpen(`chart:${artifact.id}`)}>预览命盘</button>}
+                        <Link href={getAgentArtifactHref(artifact)!}>打开<ArrowUpRight size={12} aria-hidden="true" /></Link>
+                    </>} />)}
+                {grounded && <OverviewRow data-overview-card="evidence" icon={BookOpen} thumb={null} title="依据与定位"
+                    facts={[...(evidence ? AGENT_EVIDENCE_KINDS.filter(kind => kind !== 'chart').map(kind => `${AGENT_EVIDENCE_LABELS[kind]} ${evidence[kind]}`) : []), `盘面定位 ${positions.toolIds.length}`].join(' · ')}
+                    tags={<span>{sources.length ? `${sources.slice(0, 2).join('、')}${sources.length > 2 ? ` 等 ${sources.length} 个来源` : ''}`
+                        : positions.labels.length ? `${positions.labels.slice(0, OVERVIEW_LABELS).join(' · ')}${positions.labels.length > OVERVIEW_LABELS ? ' 等' : ''}` : '检索没有返回可引用的内容'}</span>}
+                    onOpen={() => onOpen(evidence ? 'evidence' : `tool:${positions.toolIds.at(-1)}`)} />}
             </div>}
         {others.length > 0 && <section className="agent-ws-overview-links" aria-label="过程资料">
             <h3>过程资料 <span>{others.length}</span></h3>

@@ -453,6 +453,56 @@ export function describeAgentChartSubject(tool: AgentTool, value: AgentChart): s
     return [value.chart.基本信息.性别, date, zone, `日主 ${value.chart.基本信息.日主}`].filter(Boolean).join(' · ');
 }
 
+/**
+ * 概览行的第二行：只说缩略图里看不到的事实，避免与小图重复。
+ * 八字的缩略图是四柱，这里给性别与出生时间；紫微缩略图只标命宫，这里给五行局与命身主；以此类推。
+ */
+export function describeOverviewFacts(tool: AgentTool, value: AgentChart): string {
+    switch (value.kind) {
+        case 'bazi': {
+            const subject = describeAgentChartSubject(tool, value).split(' · ');
+            // 去掉日主（缩略图的日柱已经写着）与时区，只留性别与出生时间。
+            return subject.filter(part => !part.startsWith('日主 ') && !/^[A-Za-z]+\/[A-Za-z_]+/.test(part)).join(' · ');
+        }
+        case 'ziwei': {
+            const basic = value.chart.基本信息;
+            return [basic.五行局, basic.命主 && `命主 ${basic.命主}`, basic.身主 && `身主 ${basic.身主}`].filter(Boolean).join(' · ');
+        }
+        case 'liuyao': {
+            const board = value.chart.卦盘;
+            return board.变卦 ? `${board.本卦.卦名} → ${board.变卦.卦名}` : `${board.本卦.卦名} · 静卦`;
+        }
+        case 'meihua': {
+            const board = value.chart.卦盘;
+            return `${board.本卦.卦名} → ${board.变卦.卦名} · 体${board.体卦.卦名} 用${board.用卦.卦名}`;
+        }
+        case 'daliuren': {
+            const basic = value.chart.基本信息;
+            return [basic.课式.split(' ')[0], `月将 ${basic.月将}`].join(' · ');
+        }
+        case 'xiaoliuren': {
+            const result = value.chart.结果;
+            return [result.性质, result.五行, result.方位].filter(Boolean).join(' · ');
+        }
+        case 'tarot': {
+            const cards = value.chart.牌阵展开;
+            const reversed = cards.filter(card => card.状态 === '逆位').length;
+            return `${value.chart.问卜设定.牌阵} · ${cards.length} 张${reversed ? ` · ${reversed} 张逆位` : ''}`;
+        }
+        case 'astrology': {
+            const anchors = value.chart.命盘锚点;
+            return [`太阳${anchors.太阳.星座}`, `月亮${anchors.月亮.星座}`, anchors.上升 && `上升${anchors.上升.星座}`].filter(Boolean).join(' · ');
+        }
+        case 'almanac': {
+            const chart = value.chart;
+            const yi = chart.择日宜忌.宜.slice(0, 2).join('、');
+            return [chart.传统黄历基调.农历, yi && `宜 ${yi}`].filter(Boolean).join(' · ');
+        }
+        default:
+            return value.summary;
+    }
+}
+
 const RULE_ORDER = ['dayBoundary', 'timezone', 'solarTermBasis', 'ruleVersion'] as const;
 const RULE_LABELS: Partial<Record<typeof RULE_ORDER[number], string>> = { dayBoundary: '子时换日', solarTermBasis: '节气' };
 

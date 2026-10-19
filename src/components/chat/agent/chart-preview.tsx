@@ -170,3 +170,60 @@ export function ChartMiniPreview({ value }: { value: AgentChart }) {
         }
     }
 }
+
+const QIMEN_LAYOUT = [4, 9, 2, 3, 5, 7, 8, 1, 6];
+
+/**
+ * 概览行左侧的固定尺寸缩略图（96×72）：只画盘面的形，不写说明文字；
+ * 说明由行内第二行给出（describeOverviewFacts），两处互不重复。
+ */
+export function ChartThumb({ value }: { value: AgentChart }) {
+    switch (value.kind) {
+        case 'bazi': {
+            const color = (element: ReturnType<typeof getStemElement>) => element ? { color: getElementColor(element) } : undefined;
+            return <span className="chart-thumb-pillars" aria-hidden="true">{value.chart.四柱.map(pillar => {
+                const [stem, branch] = [pillar.干支.charAt(0), pillar.干支.charAt(1)];
+                return <span key={pillar.柱} data-day={pillar.柱 === '日柱' || undefined}>
+                    <b style={color(getStemElement(stem))}>{stem}</b><b style={color(getBranchElement(branch))}>{branch}</b>
+                </span>;
+            })}</span>;
+        }
+        case 'ziwei':
+            return <span className="chart-thumb-ring" aria-hidden="true">
+                {ziweiRingCells(value.chart.十二宫位).map(({ palace, row, col }) => <span key={palace.干支} data-life={palace.宫位 === '命宫' || undefined}
+                    style={{ gridRow: row + 1, gridColumn: col + 1 }}>{palace.宫位.charAt(0)}</span>)}
+                <span className="chart-thumb-ring-center">{value.chart.基本信息.五行局.slice(0, 1)}</span>
+            </span>;
+        case 'qimen':
+            return <span className="chart-thumb-nine" aria-hidden="true">{QIMEN_LAYOUT.map(order => {
+                const cell = value.chart.九宫盘.find(item => item.宫位序号 === order);
+                return <span key={order} data-center={order === 5 || undefined}>{order === 5 ? value.chart.基本信息.局式.replace(/[遁局\s]/gu, '').slice(0, 3) : cell?.八门.charAt(0) ?? ''}</span>;
+            })}</span>;
+        case 'liuyao':
+        case 'meihua': {
+            const board = value.chart.卦盘;
+            const base = HEXAGRAMS.find(row => row.name === board.本卦.卦名);
+            const changed = board.变卦 ? HEXAGRAMS.find(row => row.name === board.变卦!.卦名) : undefined;
+            const moving = value.kind === 'liuyao'
+                ? value.chart.六爻.flatMap(line => line.变爻 ? [parseTraditionalYaoPosition(line.爻位) ?? 0] : [])
+                : [];
+            return <span className="chart-thumb-hexagrams" aria-hidden="true">
+                {base && <HexagramLines code={base.code} moving={moving} />}
+                {changed && <><i>›</i><HexagramLines code={changed.code} /></>}
+            </span>;
+        }
+        case 'daliuren':
+            return <span className="chart-thumb-glyphs" aria-hidden="true">{value.chart.三传.map(row => <b key={row.传序}>{row.地支}</b>)}</span>;
+        case 'xiaoliuren':
+            return <span className="chart-thumb-word" aria-hidden="true">{value.chart.结果.落宫}</span>;
+        case 'tarot':
+            return <span className="chart-thumb-cards" aria-hidden="true">{value.chart.牌阵展开.slice(0, 3).map((card, index) =>
+                <span key={index} data-reversed={card.状态 === '逆位' || undefined}>{card.塔罗牌.slice(0, 2)}</span>)}</span>;
+        case 'taiyi':
+            return <span className="chart-thumb-word" aria-hidden="true">{value.chart.九星阵列?.[0]?.太乙名 ?? '太乙'}</span>;
+        case 'astrology':
+            return <span className="chart-thumb-wheel" aria-hidden="true"><i /><b /><em /></span>;
+        case 'almanac':
+            return <span className="chart-thumb-word" aria-hidden="true">{value.chart.基础与个性化坐标.日干支}</span>;
+    }
+}

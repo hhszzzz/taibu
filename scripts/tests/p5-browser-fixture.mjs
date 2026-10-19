@@ -1967,6 +1967,10 @@ export async function run(existingPage, bundlePath) {
     const readingCards = page.locator('#agent-workspace-panel [data-overview-result="reading"]');
     check('The overview shows each valid reading once, marks the saved one and excludes the incomplete result', await readingCards.count() === 11 &&
       await readingCards.filter({ hasText: '已保存' }).count() === 1 && await page.locator('#agent-workspace-panel [data-overview-result="saved"]').count() === 0);
+    // 概览改为等高列表行：每行都有缩略图，第二行不重复小图里已有的日主。
+    check('Overview rows share one height, each with a thumbnail and a one-line facts row', await page.locator('#agent-workspace-panel .agent-ws-row').evaluateAll(rows =>
+      rows.length >= 11 && new Set(rows.map(row => Math.round(row.getBoundingClientRect().height))).size === 1 && rows.every(row => row.querySelector('.agent-ws-row-thumb')?.childElementCount === 1)) &&
+      await readingCards.filter({ hasText: '八字命盘' }).first().locator('.agent-ws-row-facts').innerText().then(text => !text.includes('日主')));
     await page.getByRole('button', { name: '关闭工作区', exact: true }).click();
     await results.getByRole('button', { name: '恢复已有成果标签', exact: true }).click();
     await page.locator('#agent-workspace-panel [data-chart-kind="bazi"]').waitFor();

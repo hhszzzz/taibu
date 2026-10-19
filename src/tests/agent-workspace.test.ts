@@ -4,8 +4,9 @@ import { randomUUID } from 'node:crypto';
 import { executeTool, buildToolSuccessPayload, listToolDefinitions } from 'taibu-core/mcp';
 import type { AgentPart } from '../lib/agent/types';
 import type { ChatMessage } from '../types';
-import { getAgentToolFamily } from '../lib/agent/tool-catalog';
-import { getAgentAttachmentRead, getAgentCalculation, getAgentMemories, getAgentMethod, getAgentMethodCatalog, getAgentToolQuestions, type AgentToolPart } from '../lib/agent/tool-presentation';
+import { getAgentToolFamily, isAgentChartTool } from '../lib/agent/tool-catalog';
+import { describeOverviewFacts } from '../components/chat/agent/presentation';
+import { getAgentAttachmentRead, getAgentCalculation, getAgentChart, getAgentMemories, getAgentMethod, getAgentMethodCatalog, getAgentToolQuestions, type AgentToolPart } from '../lib/agent/tool-presentation';
 import {
   buildAgentWorkspace, getAgentQuestionAnswers, getAgentToolQuestionIds, getAgentWorkspaceAutoOpenEvent, getAgentWorkspaceFollowTarget, getAgentWorkspaceLocation,
   getAgentWorkspaceSections, isAgentRunWorking, resolveAgentWorkspaceLocation,
@@ -170,4 +171,21 @@ test('the overview is the only workspace section; following shows the latest cal
   assert.equal(at('tool:missing', false, 'completed'), 'results', 'a selection that no longer exists falls back');
   assert.equal(at(null, false, null), 'results', 'without a task only the overview exists');
   assert.equal(getAgentWorkspaceLocation(workspace([tool('plan', 'todo_write')]), { selected: null, followModel: true, status: 'running' }), 'results', 'nothing to follow falls back to the overview');
+});
+
+test('overview rows state only what the thumbnail does not already show', async () => {
+  for (const name of listToolDefinitions().map(item => item.name).filter(isAgentChartTool)) {
+    const result = await coreResult(name);
+    const part = tool(name, name, result);
+    const value = getAgentChart(part)!;
+    const facts = describeOverviewFacts(part, value);
+    assert.ok(facts.trim(), `${name} has a facts line`);
+    assert.doesNotMatch(facts, /\n/, `${name} facts stay on one line`);
+    if (value.kind === 'bazi') {
+      assert.doesNotMatch(facts, /日主/, 'the day master is already the thumbnail day pillar');
+      assert.doesNotMatch(facts, /Asia\//, 'the timezone is left to the full board');
+    }
+    if (value.kind === 'ziwei') assert.match(facts, /命主 .+ · 身主 /);
+    if (value.kind === 'tarot') assert.doesNotMatch(facts, new RegExp(value.chart.问卜设定.问题 || '^$'), 'the question is not repeated');
+  }
 });

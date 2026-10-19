@@ -206,15 +206,59 @@
 .agent-ws-divergence .agent-ws-table tr[data-divergent] td:not([data-empty]) { background: var(--accent-light); }
 
 /* 概览 (Completed board): result cards, then the task summary and the export. */
-.agent-ws-overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.agent-ws-overview-card { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--background); text-align: left; color: var(--foreground); }
-.agent-ws-overview-card[data-overview-card] { gap: 6px; }
-button.agent-ws-overview-card:hover { border-color: var(--border-hover); background: color-mix(in srgb, var(--fill-ghost-hover) 45%, var(--background)); }
 .agent-ws-overview-kicker { display: flex; width: 100%; align-items: center; gap: 8px; font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); }
 .agent-ws-overview-kicker > span { flex-shrink: 0; margin-left: auto; padding: 0 6px; border-radius: 5px; background: var(--background-secondary); }
 .agent-ws-overview-kicker > span:is([data-state="saved"], [data-state="record"], [data-state="ready"]) { color: var(--chat-success); }
-.agent-ws-overview-glyph { display: flex; width: 44px; height: 44px; align-items: center; justify-content: center; border-radius: 10px; background: var(--background-secondary); font-family: var(--font-display); font-size: calc(20 / 16 * 1rem); font-weight: 600; }
 /* 概览卡的小图：每种占术一个可辨认的简化视图。 */
+/* 概览 = 等高列表行：左 96×72 缩略区，右三层（名称与状态 / 缩略图之外的事实 / 发生过的详查与定位）。 */
+.agent-ws-overview-heading { display: flex; align-items: baseline; gap: 8px; }
+.agent-ws-overview-heading > span { font-size: calc(13 / 16 * 1rem); color: var(--foreground-tertiary); font-variant-numeric: tabular-nums; }
+.agent-ws-overview-empty { display: flex; align-items: center; gap: 8px; margin: 0; font-size: calc(13 / 16 * 1rem); color: var(--foreground-secondary); }
+.agent-ws-rows { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+@container (min-width: 600px) { .agent-ws-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.agent-ws-row { display: flex; height: 88px; min-width: 0; align-items: center; gap: 12px; padding: 8px 12px 8px 8px; border: var(--hairline) solid var(--border-hover, var(--border)); border-radius: 12px; background: var(--background); text-align: left; color: var(--foreground); }
+button.agent-ws-row:hover { border-color: var(--border-hover); background: color-mix(in srgb, var(--fill-ghost-hover) 45%, var(--background)); }
+.agent-ws-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.agent-ws-row-thumb { display: flex; width: 96px; height: 72px; flex-shrink: 0; align-items: center; justify-content: center; overflow: hidden; border-radius: 8px; background: var(--background-secondary); color: var(--foreground-secondary); }
+.agent-ws-row-body { display: flex; min-width: 0; flex: 1; flex-direction: column; justify-content: center; gap: 3px; }
+.agent-ws-row-head { display: flex; min-width: 0; align-items: center; gap: 8px; }
+.agent-ws-row-head > strong { min-width: 0; flex: 1; overflow: hidden; font-size: calc(14 / 16 * 1rem); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.agent-ws-row-head > span { flex-shrink: 0; padding: 0 6px; border-radius: 5px; background: var(--background-secondary); font-size: calc(11.5 / 16 * 1rem); line-height: calc(18 / 16 * 1rem); color: var(--foreground-secondary); }
+.agent-ws-row-head > span:is([data-state="saved"], [data-state="record"]) { color: var(--chat-success); }
+.agent-ws-row-facts { overflow: hidden; font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); text-overflow: ellipsis; white-space: nowrap; }
+.agent-ws-row-tags { display: flex; min-width: 0; align-items: center; gap: 6px; overflow: hidden; font-size: calc(11.5 / 16 * 1rem); color: var(--foreground-tertiary); white-space: nowrap; }
+.agent-ws-row-tags > span { overflow: hidden; text-overflow: ellipsis; }
+.agent-ws-row-tags > em { padding: 0 6px; border-radius: 5px; background: var(--accent-light); font-style: normal; line-height: calc(18 / 16 * 1rem); color: var(--accent-hover); }
+.agent-ws-row-tags > :is(button, a) { display: inline-flex; align-items: center; gap: 3px; height: 22px; padding: 0 8px; border: var(--hairline) solid var(--border-hover, var(--border)); border-radius: 6px; background: var(--chat-raised); font-size: calc(12 / 16 * 1rem); color: var(--foreground); }
+/* 缩略图：只画形，不写说明。 */
+.chart-thumb-pillars { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; padding: 0 4px; }
+.chart-thumb-pillars > span { display: flex; flex-direction: column; align-items: center; padding: 2px 1px; border-radius: 4px; font-family: var(--font-display); font-size: calc(16 / 16 * 1rem); font-weight: 600; line-height: 1.2; }
+.chart-thumb-pillars > span[data-day] { background: var(--accent-light); }
+.chart-thumb-ring { display: grid; width: 84px; height: 62px; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(4, 1fr); gap: 2px; }
+.chart-thumb-ring > span { display: flex; align-items: center; justify-content: center; border-radius: 3px; background: var(--background); font-size: calc(9.5 / 16 * 1rem); line-height: 1; color: var(--foreground-tertiary); }
+.chart-thumb-ring > span[data-life] { background: var(--accent-light); color: var(--accent-hover); font-weight: 600; }
+.chart-thumb-ring > .chart-thumb-ring-center { grid-column: 2 / 4; grid-row: 2 / 4; background: transparent; font-family: var(--font-display); font-size: calc(15 / 16 * 1rem); color: var(--foreground-secondary); }
+.chart-thumb-nine { display: grid; width: 66px; height: 62px; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 2px; }
+.chart-thumb-nine > span { display: flex; align-items: center; justify-content: center; border-radius: 3px; background: var(--background); font-family: var(--font-display); font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); }
+.chart-thumb-nine > span[data-center] { font-family: inherit; font-size: calc(9.5 / 16 * 1rem); color: var(--foreground-tertiary); }
+.chart-thumb-hexagrams { display: flex; align-items: center; gap: 4px; }
+.chart-thumb-hexagrams > i { font-style: normal; color: var(--foreground-tertiary); }
+.chart-thumb-hexagrams .chart-mini-lines { padding: 0; background: transparent; }
+.chart-thumb-glyphs { display: flex; gap: 3px; }
+.chart-thumb-glyphs > b { display: flex; min-width: 24px; height: 40px; align-items: center; justify-content: center; padding: 0 2px; border-radius: 5px; background: var(--background); font-family: var(--font-display); font-size: calc(14 / 16 * 1rem); font-weight: 600; writing-mode: vertical-rl; letter-spacing: 1px; }
+.chart-thumb-glyphs > b[data-current] { background: var(--accent-light); color: var(--accent-hover); }
+.chart-thumb-word { padding: 0 6px; font-family: var(--font-display); font-size: calc(20 / 16 * 1rem); font-weight: 600; text-align: center; color: var(--foreground); }
+.chart-thumb-cards { display: flex; gap: 4px; }
+.chart-thumb-cards > span { display: flex; width: 22px; height: 36px; align-items: center; justify-content: center; border: var(--hairline) solid var(--border-hover, var(--border)); border-radius: 4px; background: var(--background); font-size: calc(9.5 / 16 * 1rem); line-height: 1.1; text-align: center; writing-mode: vertical-rl; }
+.chart-thumb-cards > span[data-reversed] { border-style: dashed; color: var(--chat-warning, var(--foreground-secondary)); }
+.chart-thumb-wheel { position: relative; width: 52px; height: 52px; border: var(--hairline) solid var(--border-hover); border-radius: 999px; background: var(--background); }
+.chart-thumb-wheel::before, .chart-thumb-wheel::after { content: ''; position: absolute; background: var(--border); }
+.chart-thumb-wheel::before { top: 50%; left: 0; width: 100%; height: var(--hairline); }
+.chart-thumb-wheel::after { top: 0; left: 50%; width: var(--hairline); height: 100%; }
+.chart-thumb-wheel > i, .chart-thumb-wheel > b, .chart-thumb-wheel > em { position: absolute; width: 5px; height: 5px; border-radius: 999px; background: var(--accent); }
+.chart-thumb-wheel > i { top: 6px; left: 50%; transform: translateX(-50%); }
+.chart-thumb-wheel > b { bottom: 10px; left: 12px; background: var(--foreground-tertiary); }
+.chart-thumb-wheel > em { top: 40%; right: 6px; background: var(--foreground-tertiary); }
 .chart-mini-row { display: flex; width: 100%; flex-wrap: wrap; align-items: flex-start; gap: 4px; }
 /* 六爻小图：自上而下六条爻线，阳实阴虚，动爻用 accent 加亮。 */
 .chart-mini-lines { display: flex; flex-direction: column; gap: 2px; padding: 3px 6px; border-radius: 6px; background: var(--background-secondary); }
@@ -269,19 +313,9 @@ button.agent-ws-overview-card:hover { border-color: var(--border-hover); backgro
 .chart-mini-grid > span { display: flex; min-height: 30px; flex-direction: column; align-items: center; justify-content: center; gap: 1px; border-radius: 4px; background: var(--background-secondary); font-size: calc(11 / 16 * 1rem); line-height: 1.2; }
 .chart-mini-grid > span[data-center] { background: var(--fill-control); color: var(--foreground-secondary); }
 .chart-mini-grid small { font-size: calc(9.5 / 16 * 1rem); color: var(--foreground-tertiary); }
-.agent-ws-overview-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; font-size: calc(14 / 16 * 1rem); font-weight: 600; overflow-wrap: anywhere; }
-.agent-ws-overview-title > small { font-size: calc(12.5 / 16 * 1rem); font-weight: 400; color: var(--foreground-secondary); }
-.agent-ws-overview-note { font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); overflow-wrap: anywhere; }
 /* 概览卡：盘种图标 + 盘名，对象最多两行；键盘焦点可见 */
 .agent-ws-overview-kicker > svg { flex-shrink: 0; color: var(--foreground-secondary); }
 .agent-ws-overview-kicker > em { font-size: calc(11.5 / 16 * 1rem); font-style: normal; color: var(--foreground-tertiary); }
-.agent-ws-overview-subject { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
-.agent-ws-overview-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.agent-ws-overview-periods { display: grid; width: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; text-align: center; }
-.agent-ws-overview-periods > span { padding: 5px 0; border-radius: 8px; background: var(--background-secondary); font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); font-variant-numeric: tabular-nums; }
-.agent-ws-overview-periods b { display: block; font-family: var(--font-display); font-size: calc(17 / 16 * 1rem); font-weight: 600; color: var(--foreground); }
-.agent-ws-overview-periods > span[data-current] { background: var(--accent-light); box-shadow: inset 0 0 0 1.5px var(--accent); color: var(--accent-hover); }
-.agent-ws-overview-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .agent-ws-overview-links, .agent-ws-overview-summary { display: flex; flex-direction: column; gap: 8px; }
 :is(.agent-ws-overview-links, .agent-ws-overview-summary, .agent-ws-overview-export, .agent-ws-todo, .agent-ws-group) > h3 { font-size: calc(13.5 / 16 * 1rem); font-weight: 600; }
 :is(.agent-ws-overview-links, .agent-ws-todo, .agent-ws-group) > h3 > span { font-weight: 500; color: var(--foreground-secondary); font-variant-numeric: tabular-nums; }
@@ -292,7 +326,7 @@ button.agent-ws-overview-card:hover { border-color: var(--border-hover); backgro
 .agent-ws-overview-export > label { display: flex; align-items: center; gap: 8px; font-size: calc(13 / 16 * 1rem); color: var(--foreground-secondary); }
 .agent-ws-overview-export input { width: 16px; height: 16px; accent-color: var(--accent); }
 .agent-ws-overview-export > div { display: flex; flex-wrap: wrap; gap: 8px; }
-:is(.agent-ws-overview-export, .agent-ws-overview-actions) .agent-secondary-button { display: inline-flex; align-items: center; gap: 5px; height: 36px; padding: 0 14px; border-color: var(--border-hover); border-radius: 10px; background: var(--chat-raised); font-size: calc(13 / 16 * 1rem); color: var(--foreground); }
+.agent-ws-overview-export .agent-secondary-button { display: inline-flex; align-items: center; gap: 5px; height: 36px; padding: 0 14px; border-color: var(--border-hover); border-radius: 10px; background: var(--chat-raised); font-size: calc(13 / 16 * 1rem); color: var(--foreground); }
 .agent-ws-links { display: flex; flex-wrap: wrap; gap: 6px; }
 .agent-ws-links .agent-secondary-button { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 10px; border-radius: 8px; font-size: calc(12.5 / 16 * 1rem); }
 
@@ -353,7 +387,7 @@ button.agent-ws-overview-card:hover { border-color: var(--border-hover); backgro
 
 /* Narrow panels stack the two-column grids. */
 @container (max-width: 440px) {
-    .agent-ws-overview-grid, .agent-ws-known, .agent-board-relations > ul { grid-template-columns: minmax(0, 1fr); }
+    .agent-ws-known, .agent-board-relations > ul { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* Phones (design board "手机 · 工作区"): a sheet from the bottom edge with pill tabs; a chart's

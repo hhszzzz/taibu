@@ -2,11 +2,15 @@
 // 需要按钮事件（定位到盘面）与 details 展开交互
 
 import { LocateFixed } from 'lucide-react';
+import type { BaziRelationsCanonicalJSON, BaziWuxingCanonicalJSON } from 'taibu-core/bazi';
 import type { AgentRunStatus } from '@/lib/agent/types';
 import type { AgentToolPart } from '@/lib/agent/tool-presentation';
 import { getDrilldownFocus } from '@/lib/agent/chart-interaction';
 import { describeDrilldownSelection, getAgentToolTitle } from './presentation';
 import { WorkspaceToolPending } from './AgentWorkspaceViews';
+import { layoutRelations, relationTone, type RelationRow } from '@/lib/divination/ganzhi-relation-layout';
+import { GanzhiRelationOverlay, WuxingCycleStrip, relationBandHeight } from '@/components/bazi/result/GanzhiRelationOverlay';
+import { ganZhiTextClass } from '@/components/bazi/element-classes';
 
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 type Cell = { 柱?: unknown; 部位?: unknown; 字?: unknown };
@@ -74,15 +78,109 @@ export function JsonSectionView({ label, value, depth = 0 }: { label: string; va
     </>;
 }
 
-function DrilldownResult({ result }: { result: Json }) {
+const NOTHING: ReadonlySet<string> = new Set();
+const isRelationList = (value: Json | undefined) => Array.isArray(value) && relationRows(value);
+
+function asBaziRelations(result: Json): BaziRelationsCanonicalJSON | null {
+    if (!isRecord(result) || !Array.isArray(result.参与柱位) || !isRelationList(result.原局关系)) return null;
+    if (result.叠加关系 !== undefined && !isRelationList(result.叠加关系)) return null;
+    return result.参与柱位.every(item => isRecord(item) && typeof item.柱 === 'string' && typeof item.干支 === 'string')
+        ? result as unknown as BaziRelationsCanonicalJSON : null;
+}
+
+function asBaziWuxing(result: Json): BaziWuxingCanonicalJSON | null {
+    if (!isRecord(result) || !Array.isArray(result.五行统计) || !isRecord(result.月令) || !isRecord(result.日主) || !isRecord(result.相生链)) return null;
+    return ['通根', '透干', '干支自坐', '相邻天干'].every(key => isRelationList(result[key])) ? result as unknown as BaziWuxingCanonicalJSON : null;
+}
+
+function latestResult<T>(tools: readonly AgentToolPart[], name: string, parse: (result: Json) => T | null): T | null {
+    for (const tool of [...tools].reverse()) {
+        if (tool.name !== name || tool.status !== 'completed') continue;
+        const output = tool.output && typeof tool.output === 'object' ? tool.output as { result?: Json } : {};
+        const parsed = parse(output.result ?? null);
+        if (parsed) return parsed;
+    }
+    return null;
+}
+
+/** 一张八字最近一次完成的关系详查与五行详查；盘面据此补画原局关系、通根与自坐。 */
+export function getLatestBaziFacts(tools: readonly AgentToolPart[]) {
+    return { relations: latestResult(tools, 'bazi_relations', asBaziRelations), wuxing: latestResult(tools, 'bazi_wuxing', asBaziWuxing) };
+}
+
+/** 关系的类型标记与说明，一行一条；标记沿用盘面连线的配色。 */
+function RelationLines({ label, rows }: { label: string; rows: readonly RelationRow[] }) {
+    if (!rows.length) return <p className="agent-ws-note">无</p>;
+    return <ul className="agent-ws-relation-lines" aria-label={label}>{rows.map((row, index) => {
+        const { tone, mark } = relationTone(row.类型, row.位置.length);
+        return <li key={index}><span data-tone={tone}>{mark}</span>{row.说明}{row.结果 && !row.说明.includes(row.结果) ? `（${row.结果}）` : ''}</li>;
+    })}</ul>;
+}
+
+/** bazi_relations：参与的柱排成一条（原局四柱在前，大运流年等在后），关系画在柱位条上，下面逐条说明。 */
+function BaziRelationsView({ result }: { result: BaziRelationsCanonicalJSON }) {
+    const columns = result.参与柱位.map(pillar => pillar.柱);
+    const rows = [...result.原局关系, ...(result.叠加关系 ?? [])];
+    const layout = layoutRelations(rows, columns);
+    const stemBand = relationBandHeight(layout.lanes.stem), branchBand = relationBandHeight(layout.lanes.branch);
+    const notes = [...(result.岁运提示 ?? []), ...(result.太岁关系 ?? [])];
+    return <>
+        <div className="agent-ws-pillar-strip" data-relation-strip="">
+            <table>
+                <thead><tr>{result.参与柱位.map(pillar => <th key={pillar.柱} scope="col" data-layer={pillar.层}>{pillar.柱}{pillar.层 !== '原局' && <small>{pillar.层}</small>}</th>)}</tr></thead>
+                <tbody>
+                    <tr data-row="stem">{result.参与柱位.map(pillar => <td key={pillar.柱} style={{ paddingTop: stemBand + 4 }}>
+                        <span className={ganZhiTextClass(pillar.干支.charAt(0))} data-relation-cell={pillar.柱 + ':天干'}>{pillar.干支.charAt(0)}</span>
+                    </td>)}</tr>
+                    <tr data-row="branch">{result.参与柱位.map(pillar => <td key={pillar.柱} style={{ paddingBottom: branchBand + 4 }}>
+                        <span className={ganZhiTextClass(pillar.干支.charAt(1))} data-relation-cell={pillar.柱 + ':地支'}>{pillar.干支.charAt(1)}</span>
+                    </td>)}</tr>
+                    <tr data-row="tenGod">{result.参与柱位.map(pillar => <td key={pillar.柱}>{pillar.天干十神} · {pillar.地支主气十神}</td>)}</tr>
+                </tbody>
+            </table>
+            {layout.edges.length > 0 && <GanzhiRelationOverlay layout={layout} located={NOTHING} />}
+        </div>
+        <section className="agent-ws-drilldown-section"><h4>原局关系 · {result.原局关系.length}</h4><RelationLines label="原局关系" rows={result.原局关系} /></section>
+        {result.叠加关系 && <section className="agent-ws-drilldown-section"><h4>岁运叠加 · {result.叠加关系.length}</h4><RelationLines label="岁运叠加" rows={result.叠加关系} /></section>}
+        {notes.length > 0 && <ul className="agent-ws-drilldown-notes" aria-label="岁运提示">{notes.map((note, index) => <li key={index}>{note}</li>)}</ul>}
+    </>;
+}
+
+const SEASONS = ['旺', '相', '休', '囚', '死'] as const;
+
+/** bazi_wuxing：五行相生环与月令旺衰在上，通根、透干、自坐、相邻天干逐组列出，十神分布成表。 */
+function BaziWuxingView({ result }: { result: BaziWuxingCanonicalJSON }) {
+    return <>
+        <WuxingCycleStrip dayElement={result.日主.五行}
+            counts={result.五行统计.map(item => ({ 五行: item.五行, 合计: item.合计, 出现: !result.缺失五行.includes(item.五行) }))}
+            caption={result.相生链.中断.length ? result.相生链.中断.join('；') : `相生链：${result.相生链.连续段.join('；') || '无'}`} />
+        <ol className="agent-ws-seasons" aria-label={`月令${result.月令.月支}旺相休囚死`}>
+            {SEASONS.map(season => <li key={season} data-day-master={result.月令[season] === result.日主.五行 || undefined}>
+                <span>{season}</span><strong>{result.月令[season]}</strong>
+            </li>)}
+            <li className="agent-ws-seasons-note">月令{result.月令.月支}（{result.月令.月令五行}）· 日主{result.日主.天干}{result.日主.五行}{result.月令.日主状态}</li>
+        </ol>
+        {(['通根', '透干', '干支自坐', '相邻天干'] as const).map(key => <section key={key} className="agent-ws-drilldown-section">
+            <h4>{key} · {result[key].length}</h4><RelationLines label={key} rows={result[key]} />
+        </section>)}
+        {result.十神分布.length > 0 && <section className="agent-ws-drilldown-section"><h4>十神分布</h4>
+            <RecordTable label="十神分布" rows={result.十神分布 as unknown as Array<{ [key: string]: Json }>} />
+        </section>}
+    </>;
+}
+
+function DrilldownResult({ result, name }: { result: Json; name: string }) {
     if (!isRecord(result)) return <p className="agent-ws-note">没有可显示的详查结果。</p>;
-    const sections = Object.entries(result).filter(([key]) => !HIDDEN_SECTIONS.has(key));
+    const relations = name === 'bazi_relations' ? asBaziRelations(result) : null;
+    const wuxing = name === 'bazi_wuxing' ? asBaziWuxing(result) : null;
     const notes = Array.isArray(result.口径) ? result.口径.filter(isPrimitive) : [];
     return <>
-        {sections.map(([key, value]) => <section key={key} className="agent-ws-drilldown-section">
-            <h4>{key}</h4>
-            <JsonSectionView label={key} value={value} />
-        </section>)}
+        {relations ? <BaziRelationsView result={relations} />
+            : wuxing ? <BaziWuxingView result={wuxing} />
+            : Object.entries(result).filter(([key]) => !HIDDEN_SECTIONS.has(key)).map(([key, value]) => <section key={key} className="agent-ws-drilldown-section">
+                <h4>{key}</h4>
+                <JsonSectionView label={key} value={value} />
+            </section>)}
         {notes.length > 0 && <details className="agent-ws-canonical">
             <summary>判定口径</summary>
             <ul className="agent-ws-drilldown-notes">{notes.map((note, index) => <li key={index}>{text(note)}</li>)}</ul>
@@ -112,7 +210,7 @@ export function DrilldownList({ tools, runStatus, onLocate }: {
                     <LocateFixed size={13} aria-hidden="true" />在盘面定位 {focus.targetIds.length} 处
                 </button>}
                 {tool.status === 'completed'
-                    ? <DrilldownResult result={output.result ?? null} />
+                    ? <DrilldownResult result={output.result ?? null} name={tool.name} />
                     : <WorkspaceToolPending tool={tool} runStatus={runStatus} running="正在详查…" />}
             </details>;
         })}

@@ -26,7 +26,7 @@ import {
 } from './AgentWorkspaceViews';
 import { getChartKindMeta } from './chart-registry';
 import { WorkspaceOverview } from './AgentWorkspaceSections';
-import { DrilldownList } from './AgentDrilldownViews';
+import { DrilldownList, getLatestBaziFacts } from './AgentDrilldownViews';
 const ChartPreview = lazy(() => import('./AgentChartPreview').then(module => ({ default: module.AgentChartPreview })));
 const InteractiveChart = lazy(() => import('./AgentInteractiveChart').then(module => ({ default: module.AgentInteractiveChart })));
 
@@ -102,7 +102,7 @@ function ResourceView({ resource, model, data, answers, questionIds, userId, art
                 ? <><Suspense fallback={<p role="status">加载命盘…</p>}>
                     <InteractiveChart key={`${reference ?? reading.id}:${pinned ? named!.id : ''}`} value={value} tool={reading} reference={reference}
                         focus={focus} followModel={followModel} live={live} pinned={pinned !== null} subject={describeAgentChartSubject(source ?? reading, value)}
-                        onAsk={onChartQuestion} />
+                        baziFacts={value.kind === 'bazi' ? getLatestBaziFacts(drilldowns) : undefined} onAsk={onChartQuestion} />
                 </Suspense>{drilldownList}</>
                 // A drilldown of a saved chart not read in this task shows its findings without the board.
                 : drilldowns.length ? drilldownList

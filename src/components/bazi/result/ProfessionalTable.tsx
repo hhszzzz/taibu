@@ -10,7 +10,7 @@
  */
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import type { BaziCanonicalJSON, BaziCellJSON } from 'taibu-core/bazi';
 import { getDiShi, getKongWang } from 'taibu-core/utils';
 import {
@@ -138,6 +138,8 @@ export function ProfessionalTable({
     highlightedCells,
     onCellSelect,
     canonicalLabels = false,
+    overlay,
+    relationBands,
 }: {
     canonicalChart: BaziCanonicalJSON;
     isUnknownTime?: boolean;
@@ -149,6 +151,10 @@ export function ProfessionalTable({
     onCellSelect?: (cell: BaziCellJSON) => void;
     /** Name rows by the canonical fields (十神, 地势) and the day pillar 日主, as the Agent workspace does. */
     canonicalLabels?: boolean;
+    /** 画在表上的关系层（GanzhiRelationOverlay）；它按 data-relation-cell 找字形的位置。 */
+    overlay?: ReactNode;
+    /** 天干行上方、地支行下方为连线留出的高度（px）。 */
+    relationBands?: { stem: number; branch: number };
 }) {
     const [shenShaExpanded, setShenShaExpanded] = useState(false);
 
@@ -204,11 +210,11 @@ export function ProfessionalTable({
     const character = (col: PillarColumn, part: BaziCellJSON['部位'], index: number) => {
         const char = part === '天干' ? col.stem : col.branch;
         const colorClass = col.hidden ? 'text-foreground-tertiary' : ganZhiTextClass(char);
-        if (!onCellSelect || col.hidden) return <span className={`${GLYPH_CLASS} ${colorClass}`}>{col.hidden ? '*' : char}</span>;
+        if (!onCellSelect || col.hidden) return <span className={`${GLYPH_CLASS} ${colorClass}`} data-relation-cell={col.hidden ? undefined : col.label + ':' + part}>{col.hidden ? '*' : char}</span>;
         const cell: BaziCellJSON = { 柱: col.label as BaziCellJSON['柱'], 部位: part, 字: char };
         const highlighted = highlightedCells?.some(item => item.柱 === cell.柱 && item.部位 === cell.部位 && item.字 === char) ?? false;
         return <button type="button" className={`chart-cell-button ${GLYPH_CLASS} ${colorClass}`}
-            data-chart-target={'bazi:cell:' + index + ':' + (part === '天干' ? 0 : 1)}
+            data-chart-target={'bazi:cell:' + index + ':' + (part === '天干' ? 0 : 1)} data-relation-cell={col.label + ':' + part}
             aria-label={col.label + part + char} aria-pressed={highlighted} onClick={() => onCellSelect(cell)}>{char}</button>;
     };
 
@@ -220,6 +226,7 @@ export function ProfessionalTable({
         fortune,
         pillar,
         cellClass = TEXT_CELL_CLASS,
+        style,
     }: {
         key: string;
         label: ReactNode;
@@ -227,21 +234,22 @@ export function ProfessionalTable({
         fortune: (col: FortuneColumn) => ReactNode;
         pillar: (col: PillarColumn, idx: number) => ReactNode;
         cellClass?: string;
+        style?: CSSProperties;
     }) => (
-        <tr key={key} className={className}>
-            <th scope="row" className={LABEL_CELL_CLASS}>{label}</th>
+        <tr key={key} className={className} data-row={key}>
+            <th scope="row" className={LABEL_CELL_CLASS} style={style}>{label}</th>
             {fortuneColumns.map((col) => (
-                <td key={col.key} className={`${cellClass} ${FORTUNE_CELL_CLASS}`}>{fortune(col)}</td>
+                <td key={col.key} className={`${cellClass} ${FORTUNE_CELL_CLASS}`} style={style}>{fortune(col)}</td>
             ))}
             {columns.map((col, idx) => (
-                <td key={col.key} className={`${cellClass} ${pillarCellClass(col, idx)}`}>{pillar(col, idx)}</td>
+                <td key={col.key} className={`${cellClass} ${pillarCellClass(col, idx)}`} style={style}>{pillar(col, idx)}</td>
             ))}
         </tr>
     );
 
     return (
         <div className="@container w-full">
-            <div className="overflow-x-auto">
+            <div className="relative overflow-x-auto">
                 <table className="w-full border-collapse text-center">
                     <colgroup>
                         <col style={{ width: `${LABEL_COLUMN_PERCENT}%` }} />
@@ -284,14 +292,16 @@ export function ProfessionalTable({
                             label: <DualLabel short="干" full="天干" />,
                             className: ROW_DIVIDER_CLASS,
                             cellClass: 'px-1 pt-1.5 pb-0 @lg:pt-3',
-                            fortune: (col) => <span className={`${GLYPH_CLASS} ${ganZhiTextClass(col.stem)}`}>{col.stem}</span>,
+                            style: relationBands?.stem ? { paddingTop: `calc(${relationBands.stem}px + 0.375rem)` } : undefined,
+                            fortune: (col) => <span className={`${GLYPH_CLASS} ${ganZhiTextClass(col.stem)}`} data-relation-cell={col.label + ':天干'}>{col.stem}</span>,
                             pillar: (col, idx) => character(col, '天干', idx),
                         })}
                         {renderRow({
                             key: 'branch',
                             label: <DualLabel short="支" full="地支" />,
                             cellClass: 'px-1 pt-0 pb-1.5 @lg:pb-3',
-                            fortune: (col) => <span className={`${GLYPH_CLASS} ${ganZhiTextClass(col.branch)}`}>{col.branch}</span>,
+                            style: relationBands?.branch ? { paddingBottom: `calc(${relationBands.branch}px + 0.375rem)` } : undefined,
+                            fortune: (col) => <span className={`${GLYPH_CLASS} ${ganZhiTextClass(col.branch)}`} data-relation-cell={col.label + ':地支'}>{col.branch}</span>,
                             pillar: (col, idx) => character(col, '地支', idx),
                         })}
                         {renderRow({
@@ -355,6 +365,7 @@ export function ProfessionalTable({
                         })}
                     </tbody>
                 </table>
+                {overlay}
             </div>
             {isUnknownTime && <p className="mt-3 text-xs text-warning">* 时辰未知，时柱数据仅供逻辑参考</p>}
         </div>

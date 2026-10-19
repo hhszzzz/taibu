@@ -54,30 +54,34 @@
 .agent-interactive-chart .agent-canonical-chart--bazi > div { margin: 0; padding: 0; }
 .agent-interactive-chart .agent-canonical-chart--bazi table { width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: var(--background); font-size: calc(13 / 16 * 1rem); }
 .agent-interactive-chart .agent-canonical-chart--bazi thead th { padding: 9px 4px; border: 0; background: var(--background-secondary); font-size: calc(13 / 16 * 1rem); font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--foreground); }
-.agent-interactive-chart .agent-canonical-chart--bazi tbody td { border-top: 1px solid var(--border); }
-.agent-interactive-chart .agent-canonical-chart--bazi tbody td:first-child { padding-left: 10px; border-right: 0; background: var(--background); font-size: calc(13 / 16 * 1rem); font-weight: 500; letter-spacing: 0; text-align: left; text-transform: none; color: var(--foreground-secondary); }
+.agent-interactive-chart .agent-canonical-chart--bazi tbody :is(td, th) { border-top: 1px solid var(--border); }
+/* 行标签是 th：与数据格同底色、同分隔线，左侧留白，垂直居中到本行字形；天干与地支两行之间不画线，读作一柱。 */
+.agent-interactive-chart .agent-canonical-chart--bazi thead th:first-child { padding-left: 12px; }
+.agent-interactive-chart .agent-canonical-chart--bazi tbody th[scope="row"] { padding-left: 12px; padding-right: 6px; vertical-align: middle; background: var(--background); font-size: calc(12.5 / 16 * 1rem); font-weight: 500; letter-spacing: 0; line-height: 1.3; text-align: left; text-transform: none; color: var(--foreground-tertiary); }
+.agent-interactive-chart .agent-canonical-chart--bazi tbody tr[data-row="branch"] > * { border-top: 0; }
+.agent-interactive-chart .agent-canonical-chart--bazi tbody tr[data-row="stem"] > th { vertical-align: bottom; padding-bottom: 10px; }
+.agent-interactive-chart .agent-canonical-chart--bazi tbody tr[data-row="branch"] > th { vertical-align: top; padding-top: 10px; }
 .agent-interactive-chart .agent-canonical-chart--bazi .chart-cell-button { display: block; width: 100%; min-height: 0; padding: 4px 0; border: 0; border-radius: 10px; font-family: var(--font-display); font-size: calc(28 / 16 * 1rem); font-weight: 600; line-height: 1.2; }
 .agent-interactive-chart .agent-canonical-chart--bazi .chart-cell-button[aria-pressed="true"] { background: var(--accent-light); box-shadow: inset 0 0 0 2px var(--accent); }
 .chart-cell-button { min-width: 2.25rem; min-height: 2.75rem; border: 2px solid transparent; border-radius: .5rem; transition: background .15s, border-color .15s; }
 .chart-cell-button:hover, .chart-star-button:hover { background: var(--fill-ghost-hover); }
 .chart-cell-button[aria-pressed=true], .chart-star-button[aria-pressed=true] { border-color: var(--accent); background: var(--accent-light); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent); }
 .chart-star-button { border: 1px solid transparent; border-radius: .35rem; padding: .2rem; }
-.chart-cell-button:focus-visible, .chart-star-button:focus-visible, .chart-palace-button:focus-visible, .agent-board-relations button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.chart-cell-button:focus-visible, .chart-star-button:focus-visible, .chart-palace-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .chart-palace-button { padding: .2rem; margin: -.2rem; text-align: left; }
 .agent-board-related { display: flex; align-items: center; gap: 8px; font-size: calc(13 / 16 * 1rem); color: var(--foreground-secondary); }
 .agent-board-related input { width: 16px; height: 16px; accent-color: var(--accent); }
-/* 干支关系: two columns of typed relations; the one the model located says so. */
-.agent-board-relations { display: flex; flex-direction: column; gap: 8px; }
-.agent-board-relations > h4 { font-size: calc(13.5 / 16 * 1rem); font-weight: 600; }
-.agent-board-relations > h4 > span { font-weight: 500; color: var(--foreground-secondary); font-variant-numeric: tabular-nums; }
-.agent-board-relations > ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
-.agent-board-relations button { display: flex; width: 100%; height: 100%; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 10px; font-size: calc(13 / 16 * 1rem); text-align: left; color: var(--foreground); }
-.agent-board-relations button:hover { background: var(--fill-ghost-hover); }
-.agent-board-relations button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-light); font-weight: 500; }
-.agent-board-relation-type { flex-shrink: 0; padding: 0 6px; border-radius: 5px; background: var(--background-secondary); font-size: calc(12 / 16 * 1rem); font-weight: 400; color: var(--foreground-secondary); }
-.agent-board-relations button[aria-pressed="true"] .agent-board-relation-type { background: var(--chat-raised); color: var(--accent-hover); }
-.agent-board-relation-text { min-width: 0; overflow-wrap: anywhere; }
-.agent-board-located { flex-shrink: 0; margin-left: auto; font-size: calc(12 / 16 * 1rem); font-weight: 500; color: var(--accent-hover); }
+/* 干支关系与流通: the mode switch and type filters under the board; the lines themselves are drawn on the table. */
+.agent-board-relations { display: flex; flex-direction: column; gap: 10px; }
+.agent-board-relation-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.agent-board-segments { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--fill-field, var(--background-secondary)); }
+.agent-board-segments > button { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); }
+.agent-board-segments > button > span { font-size: calc(11 / 16 * 1rem); font-variant-numeric: tabular-nums; color: var(--foreground-tertiary); }
+.agent-board-segments > button[aria-pressed="true"] { background: var(--chat-raised, var(--background)); font-weight: 500; color: var(--foreground); box-shadow: 0 0 0 var(--hairline) var(--border); }
+.agent-board-marks { display: flex; flex-wrap: wrap; gap: 4px; }
+.agent-board-marks > button { height: 22px; padding: 0 8px; border: var(--hairline) solid var(--border); border-radius: 999px; background: transparent; font-size: calc(12 / 16 * 1rem); color: var(--foreground-tertiary); text-decoration: line-through; }
+.agent-board-marks > button[aria-pressed="true"] { color: var(--foreground-secondary); text-decoration: none; }
+.agent-board-segments > button:focus-visible, .agent-board-marks > button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .agent-board-relations > p { font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); }
 .agent-board-fallback { white-space: pre-wrap; font-size: .8rem; }
 .agent-focus-receipt { padding: .6rem .8rem; font-size: .8rem; border-left: 2px solid var(--accent); overflow-wrap: anywhere; }

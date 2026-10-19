@@ -76,6 +76,7 @@ import { useTranscriptScroll } from '@/lib/chat/use-transcript-scroll';
 import { scrollToMessageId } from '@/lib/chat/message-navigation';
 import { ShareConversationMenu } from '@/components/chat/ShareConversationMenu';
 const initialToolParts = AGENT_TOOL_FIXTURE_PARTS;
+const BAZI_DRILLDOWN_FIXTURE_PARTS = BAZI_DRILLDOWN_FIXTURE_PARTS_JSON;
 const familyParts = () => [
   AGENT_DAYUN_FIXTURE_PART,
   { type: 'tool', id: 'family-web', name: 'web_search', title: '联网检索', status: 'completed', input: { query: '庚金 月令' }, output: [{ title: '庚金论', url: 'https://example.com/gengjin', content: '庚金带煞，刚健为最。' }, { title: '无效链接', url: 'javascript:alert(1)', content: '不应成为链接' }] },
@@ -168,6 +169,9 @@ function AgentResultsProbe() {
       output: { chartReference: 'bazi_chart:11111111-1111-4111-8111-111111111111', chartKind: 'bazi', result: changed ? REVISED_BAZI_FIXTURE_RESULT : original.output.result } };
     setParts(previous => [...previous, inspect]);
   };
+  // Real Core relation and wuxing drilldowns of the fixture bazi, attached to the chart it was inspected as.
+  window.fixture.baziDrilldownResult = name => BAZI_DRILLDOWN_FIXTURE_PARTS.find(tool => tool.name === name).output.result;
+  window.fixture.baziDrilldowns = (on = true) => setParts(previous => [...previous.filter(tool => !tool.id.startsWith('drill-')), ...(on ? BAZI_DRILLDOWN_FIXTURE_PARTS : [])]);
   window.fixture.traditionalTaiyi = () => setParts(previous => previous.filter(tool => tool.id !== 'inspect-taiyi').map(tool => tool.name === 'taiyi' ? TRADITIONAL_TAIYI_FIXTURE_PART : tool));
   // Without a provider the message is what a reader sees outside the chat workspace.
   if (bare) return <section data-testid="agent-results"><AgentMessage data={data} /></section>;
@@ -476,11 +480,19 @@ export async function build(outputDirectory) {
   const revisedBazi = buildToolSuccessPayload('bazi', await executeTool('bazi', { ...toolParts.find(tool => tool.name === 'bazi').input, birthYear: 2001, birthMonth: 10, birthDay: 1 }));
   const dayunInput = listToolDefinitions().find(tool => tool.name === 'bazi_dayun').inputSchema.examples[0];
   const dayun = buildToolSuccessPayload('bazi_dayun', await executeTool('bazi_dayun', dayunInput));
+  const drilldownParts = [];
+  for (const [name, title, extra] of [['bazi_relations', '八字干支关系', { year: 2027 }], ['bazi_wuxing', '八字五行流通', {}]]) {
+    const input = { ...toolParts.find(tool => tool.name === 'bazi').input, ...extra };
+    const rendered = buildToolSuccessPayload(name, await executeTool(name, input));
+    drilldownParts.push({ type: 'tool', id: 'drill-' + name, name, title, status: 'completed', input: { reference: 'bazi_chart:11111111-1111-4111-8111-111111111111', ...extra },
+      output: { chartReference: 'bazi_chart:11111111-1111-4111-8111-111111111111', chartKind: 'bazi', selection: extra, result: rendered.structuredContent, targets: [] },
+      canonicalText: rendered.content.map(part => part.text).join('\n') });
+  }
   const dayunPart = { type: 'tool', id: 'family-dayun', name: 'bazi_dayun', title: '八字大运', status: 'completed', input: dayunInput, durationMs: 12,
     output: { artifactId: 'family-dayun', result: dayun.structuredContent }, canonicalText: dayun.content.map(part => part.text).join('\n') };
 
   await bundle({
-    stdin: { contents: entry.replace('AGENT_TOOL_FIXTURE_PARTS', JSON.stringify(toolParts)).replace('TRADITIONAL_TAIYI_FIXTURE_PART', JSON.stringify(traditionalPart)).replace('REVISED_BAZI_FIXTURE_RESULT', JSON.stringify(revisedBazi.structuredContent)).replace('AGENT_DAYUN_FIXTURE_PART', JSON.stringify(dayunPart)), loader: 'jsx', resolveDir: root, sourcefile: 'p5-browser-entry.jsx' },
+    stdin: { contents: entry.replace('AGENT_TOOL_FIXTURE_PARTS', JSON.stringify(toolParts)).replace('TRADITIONAL_TAIYI_FIXTURE_PART', JSON.stringify(traditionalPart)).replace('REVISED_BAZI_FIXTURE_RESULT', JSON.stringify(revisedBazi.structuredContent)).replace('AGENT_DAYUN_FIXTURE_PART', JSON.stringify(dayunPart)).replace('BAZI_DRILLDOWN_FIXTURE_PARTS_JSON', JSON.stringify(drilldownParts)), loader: 'jsx', resolveDir: root, sourcefile: 'p5-browser-entry.jsx' },
     outfile, bundle: true, format: 'iife', platform: 'browser', jsx: 'automatic',
     tsconfig: resolve(root, 'tsconfig.json'),
     define: { 'process.env.NODE_ENV': '"development"', 'process.env': '{}' },
@@ -2003,11 +2015,46 @@ export async function run(existingPage, bundlePath) {
     check('Clicking a chart position asks about it without changing the model-given focus', await interactive.getByRole('button', { name: '跟随模型', exact: true }).getAttribute('aria-pressed') === 'true' &&
       await interactive.locator('[data-chart-target="bazi:cell:2:1"]').getAttribute('aria-pressed') === 'true' &&
       await interactive.locator('[data-chart-target="bazi:cell:2:0"]').getAttribute('aria-pressed') === 'false');
-    const relation = interactive.locator('.agent-board-relations button').first();
+    // 这张盘没有合冲刑害，打开即是「流通」：相邻天干的生克画在天干行上方，文字关系清单不再出现。
+    const board = interactive.locator('.agent-board-relations');
+    const edges = interactive.locator('.agent-chart-scroll [data-relation-overlay] [data-relation-edge]');
+    const adjacentStemFlow = await page.evaluate(() => window.fixture.chartTargets('bazi').filter(target => target.kind === 'bazi_relation' && ['生', '克'].includes(target.relation.类型)
+      && Math.abs(['年柱', '月柱', '日柱', '时柱'].indexOf(target.relation.位置[0].柱) - ['年柱', '月柱', '日柱', '时柱'].indexOf(target.relation.位置[1].柱)) === 1).length);
+    check('Bazi relations are drawn on the table instead of a text list, opening on flow when the chart has no clashes or combinations', await board.getAttribute('data-board-mode') === 'flow' &&
+      await interactive.locator('.agent-board-relations ul, .agent-board-relation-text').count() === 0 && adjacentStemFlow > 0 && await edges.count() === adjacentStemFlow &&
+      await interactive.locator('.agent-chart-scroll [data-relation-overlay] path[marker-end]').count() === adjacentStemFlow && await interactive.locator('[data-wuxing-cycle] [data-element]').count() === 6);
+    // 夹具不加载应用样式表，标签列的视觉由自托管截图验收；这里只验结构：行标签是 th，天干行为连线留出了高度。
+    check('The table reserves a band above the stems for the lines, and its labels are row headers', await interactive.locator('[data-chart-kind="bazi"] tbody th[scope="row"]').count() >= 5 &&
+      await interactive.locator('[data-chart-kind="bazi"] tr[data-row="stem"] > td').evaluateAll(cells => cells.every(cell => cell.style.paddingTop.startsWith('calc('))));
+    const relation = interactive.locator('[data-relation-badge][data-chart-target]').first();
     await relation.click();
     await until(() => window.fixture.chartQuestion?.targets?.[0]?.kind === 'bazi_relation');
     check('A relation also becomes a chart question while the model focus stays authoritative', await interactive.locator('.agent-board-focus').innerText().then(text => text.includes('模型查看日支')) &&
       await interactive.locator('.agent-board-chips li').allInnerTexts().then(texts => texts.length === 1 && texts[0] === '日柱地支 辰'));
+    // 关系与五行详查补进盘面：关系模式多出命盘没列的丑辰相破，流通模式改画五行详查的自坐、通根，并可按类型筛选。
+    await page.evaluate(() => window.fixture.baziDrilldowns());
+    await interactive.locator('[data-relation-strip]').waitFor({ state: 'attached' });
+    await board.getByRole('button', { name: /^关系/ }).click();
+    check('A relations drilldown adds the clash-free chart its own 原局 relations, drawn on the table', await edges.count() === 1 &&
+      await edges.first().getAttribute('data-tone') === 'break' && await interactive.locator('.agent-chart-scroll [data-relation-badge]').first().getAttribute('aria-label').then(label => label.includes('丑辰相破')));
+    await board.getByRole('button', { name: /^流通/ }).click();
+    const wuxingEdges = await page.evaluate(() => { const result = window.fixture.baziDrilldownResult('bazi_wuxing'); return result.干支自坐.length + result.通根.length + result.透干.length + result.相邻天干.length; });
+    check('Flow uses the wuxing drilldown: self-sitting, roots and adjacent stems, with weighted element counts', await edges.count() === wuxingEdges &&
+      await interactive.locator('.agent-chart-scroll [data-relation-edge][data-tone="root"]').count() > 0 &&
+      await board.locator('[data-wuxing-cycle] figcaption').innerText().then(text => text.includes('五行详查')));
+    const firstMark = board.locator('.agent-board-marks button').first();
+    const markText = await firstMark.innerText();
+    const marked = await interactive.locator('.agent-chart-scroll [data-relation-badge]').evaluateAll((badges, mark) => badges.filter(badge => badge.textContent.split('·')[0] === mark).length, markText);
+    await firstMark.click();
+    check('A type filter hides that type of line and lets the others close up', await firstMark.getAttribute('aria-pressed') === 'false' && marked > 0 && await edges.count() === wuxingEdges - marked);
+    await firstMark.click();
+    await board.getByRole('button', { name: '不显示', exact: true }).click();
+    check('Lines can be switched off, leaving only what the model located', await edges.count() === 0);
+    check('Relation and wuxing drilldowns get their own views: a pillar strip with lines and a five-element cycle', await interactive.locator('[data-relation-strip] th').count() === await page.evaluate(() => window.fixture.baziDrilldownResult('bazi_relations').参与柱位.length) &&
+      await interactive.locator('[data-relation-strip] [data-relation-edge]').count() >= 1 && await interactive.locator('.agent-ws-drilldown [data-wuxing-cycle]').count() === 1 &&
+      await interactive.locator('.agent-ws-seasons [data-day-master]').count() <= 1);
+    await page.evaluate(() => window.fixture.baziDrilldowns(false));
+    await renderBarrier();
     await interactive.getByRole('button', { name: '只看相关位置', exact: true }).click();
     check('Showing only related positions dims the rest of the chart', await interactive.locator('.agent-interactive-chart[data-focus-only]').count() === 1 &&
       await interactive.getByRole('button', { name: '只看相关位置', exact: true }).getAttribute('aria-pressed') === 'true');

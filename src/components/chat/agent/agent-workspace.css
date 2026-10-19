@@ -481,3 +481,25 @@ button.agent-ws-status-head:disabled { cursor: default; }
 .agent-ws-drilldown-table :is(th, td) { white-space: normal; overflow-wrap: anywhere; }
 .agent-ws-drilldown-table tbody th { font-weight: 500; white-space: nowrap; }
 .agent-ws-drilldown-notes { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; padding-left: 16px; list-style: disc; font-size: calc(12 / 16 * 1rem); line-height: 1.6; color: var(--foreground-secondary); }
+.agent-ws-pillar-strip { position: relative; overflow-x: auto; }
+.agent-ws-pillar-strip table { width: 100%; border-collapse: separate; border-spacing: 0; border: var(--hairline) solid var(--border); border-radius: 12px; background: var(--background); text-align: center; }
+.agent-ws-pillar-strip th { padding: 6px 4px; background: var(--background-secondary); font-size: calc(12 / 16 * 1rem); font-weight: 500; color: var(--foreground-secondary); white-space: nowrap; }
+.agent-ws-pillar-strip th:first-child { border-top-left-radius: 12px; }
+.agent-ws-pillar-strip th:last-child { border-top-right-radius: 12px; }
+.agent-ws-pillar-strip th[data-layer]:not([data-layer="原局"]) { color: var(--accent-strong); }
+.agent-ws-pillar-strip th > small { margin-left: 3px; font-size: calc(10.5 / 16 * 1rem); font-weight: 400; color: var(--foreground-tertiary); }
+.agent-ws-pillar-strip td { padding: 0 4px; font-family: var(--font-display); font-size: calc(24 / 16 * 1rem); line-height: 1.2; }
+.agent-ws-pillar-strip tr[data-row="tenGod"] td { padding: 4px 4px 6px; border-top: var(--hairline) solid var(--border); font-family: inherit; font-size: calc(11 / 16 * 1rem); color: var(--foreground-tertiary); white-space: nowrap; }
+.agent-ws-relation-lines { display: flex; flex-direction: column; gap: 4px; font-size: calc(12.5 / 16 * 1rem); line-height: 1.55; color: var(--foreground-secondary); }
+.agent-ws-relation-lines > li { display: flex; align-items: baseline; gap: 8px; }
+.agent-ws-relation-lines > li > span { flex-shrink: 0; min-width: 2.25em; padding: 0 5px; border: var(--hairline) solid currentColor; border-radius: 4px; font-size: calc(11 / 16 * 1rem); line-height: 1.5; text-align: center; color: var(--success); }
+.agent-ws-relation-lines > li > span:is([data-tone="clash"], [data-tone="control"]) { color: var(--danger); }
+.agent-ws-relation-lines > li > span[data-tone="punish"] { color: var(--warning); }
+.agent-ws-relation-lines > li > span[data-tone="harm"] { color: var(--accent-strong); }
+.agent-ws-relation-lines > li > span:is([data-tone="break"], [data-tone="same"]) { color: var(--foreground-tertiary); }
+.agent-ws-relation-lines > li > span:is([data-tone="root"], [data-tone="reveal"]) { color: var(--accent); }
+.agent-ws-seasons { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 10px; }
+.agent-ws-seasons > li:not(.agent-ws-seasons-note) { display: flex; flex-direction: column; align-items: center; min-width: 2.5rem; padding: 3px 6px; border: var(--hairline) solid var(--border); border-radius: 8px; font-size: calc(11 / 16 * 1rem); color: var(--foreground-tertiary); }
+.agent-ws-seasons > li > strong { font-family: var(--font-display); font-size: calc(15 / 16 * 1rem); font-weight: 500; color: var(--foreground); }
+.agent-ws-seasons > li[data-day-master] { border-color: var(--accent); background: var(--accent-light); }
+.agent-ws-seasons-note { margin-left: 6px; font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); }

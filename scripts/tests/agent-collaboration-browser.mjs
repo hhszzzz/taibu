@@ -105,9 +105,11 @@ export async function verifyAgentCollaboration({ page, newChat, send, waitForRun
   if (await process.getAttribute('aria-expanded') !== 'true') await process.click();
   const teamStep = page.locator('.agent-step').filter({ has: page.locator('.agent-step-title', { hasText: '协作分析' }) }).first();
   await teamStep.locator('.agent-step-row').click();
-  await teamStep.getByRole('button', { name: '在工作区查看', exact: true }).click();
+  // 协作步骤展开后直接列出成员：点成员打开它自己的页面，再回到协作对照页。
+  await teamStep.locator('.agent-step-members button').first().click();
   const panel = page.locator('aside#agent-workspace-panel, [role="dialog"][aria-label="工作区"]').first();
   await panel.waitFor();
+  await panel.getByRole('tab', { name: /协作分析|会诊/ }).first().click();
   const collaboration = panel.locator('[data-workspace-view="collaboration"]');
   await collaboration.waitFor();
   assert.ok((await collaboration.innerText()).includes(fixture.models[0].name) && (await collaboration.innerText()).includes(fixture.models[1].name), 'persisted history retains actual collaborator names and models');

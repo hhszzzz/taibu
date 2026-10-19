@@ -360,13 +360,11 @@ try {
   const firstStep = page.locator('.agent-message .agent-step-row').first();
   if (await firstStep.getAttribute('aria-expanded') !== 'true') await firstStep.click();
   await page.locator('.agent-message .agent-step-workspace').first().click();
-  // 普通记录视图只显示规范文本；原始参数不展示但可复制。
+  // 普通记录视图只显示规范文本；原始参数不展示，工具调用块也不再带复制按钮。
   const call = page.locator('.agent-message .agent-step-body').first();
   await call.waitFor();
   assert.equal(await call.locator('.agent-step-command').count(), 0, 'the normal record view hides raw argument keys');
-  const callId = await call.getAttribute('data-tool-id');
-  await call.getByRole('button', { name: '复制调用参数', exact: true }).click();
-  assert.deepEqual(JSON.parse(await page.evaluate(() => navigator.clipboard.readText())), finished.message.agent.parts.find(part => part.type === 'tool' && part.id === callId).input);
+  assert.equal(await call.getByRole('button', { name: '复制调用参数', exact: true }).count(), 0, 'tool steps no longer carry copy buttons');
   await panel.getByRole('tab', { name: '概览', exact: true }).click();
   const originalPanelWidth = (await panel.boundingBox()).width;
   await panel.getByRole('separator', { name: '调整工作区宽度', exact: true }).press('ArrowRight');
@@ -399,7 +397,7 @@ try {
   console.log(
     "Agent 浏览器：真实登录、跨命盘工具调用、后台完成、刷新恢复、成果入口和一次扣费通过。",
   );
-  console.log('Agent UI：任务步骤分组、中文输入法、工具详情复制、聊天分析、原生命盘入口、Pi 上下文与右侧控件通过。');
+  console.log('Agent UI：任务步骤分组、中文输入法、聊天分析、原生命盘入口、Pi 上下文与右侧控件通过。');
 
   await page.goto(`${config.APP_ORIGIN}/chat?id=${first.run.conversationId}`);
   await page.locator('[data-agent-status="completed"]').waitFor();
@@ -637,7 +635,7 @@ try {
   await conversationsTrigger.click();
   const conversationsDrawer = page.getByRole('dialog', { name: '聊天列表', exact: true });
   await conversationsDrawer.waitFor();
-  const conversationActionsTrigger = conversationsDrawer.getByRole('button', { name: /的更多操作$/ }).first();
+  const conversationActionsTrigger = conversationsDrawer.getByRole('button', { name: '更多操作', exact: true }).first();
   await conversationActionsTrigger.click();
   const conversationMenu = conversationsDrawer.getByRole('menu', { name: '会话操作', exact: true });
   await conversationMenu.waitFor();

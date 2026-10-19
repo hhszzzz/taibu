@@ -18,6 +18,7 @@ TaiBu 的命理术数算法核心库。
 | `ziwei` | 紫微斗数排盘 |
 | `ziwei_horoscope` | 紫微运限 |
 | `ziwei_flying_star` | 紫微飞星与四化落宫分析 |
+| `ziwei_palace` | 紫微宫位详查（三方四正、夹宫、借对宫、四化飞出飞入与运限叠加） |
 | `liuyao` | 六爻排卦与分析 |
 | `meihua` | 梅花易数起卦与断卦 |
 | `tarot` | 塔罗抽牌 |

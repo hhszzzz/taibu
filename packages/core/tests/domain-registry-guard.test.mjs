@@ -36,6 +36,7 @@ const expectedDerivedTools = [
   { tool: 'bazi_relations', base: 'bazi', folder: 'bazi-relations' },
   { tool: 'bazi_wuxing', base: 'bazi', folder: 'bazi-wuxing' },
   { tool: 'bazi_liunian_scan', base: 'bazi', folder: 'bazi-liunian-scan' },
+  { tool: 'ziwei_palace', base: 'ziwei', folder: 'ziwei-palace' },
 ];
 
 test('public core domains should stay aligned across exports, docs, and MCP registry', () => {

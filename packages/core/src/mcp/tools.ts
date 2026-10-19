@@ -16,6 +16,7 @@ import { xiaoliurenManifest } from './domains/xiaoliuren/tool.js';
 import { ziweiFlyingStarManifest } from './domains/ziwei-flying-star/tool.js';
 import { ziweiHoroscopeManifest } from './domains/ziwei-horoscope/tool.js';
 import { ziweiManifest } from './domains/ziwei/tool.js';
+import { ziweiPalaceManifest } from './domains/ziwei-palace/tool.js';
 import type { ToolContract } from './contract.js';
 
 // Registry only needs the shared runtime surface, not each tool's concrete generic pair.
@@ -41,6 +42,7 @@ export const tools: AnyTool[] = [
   baziRelationsManifest,
   baziWuxingManifest,
   baziLiunianScanManifest,
+  ziweiPalaceManifest,
 ];
 
 export const toolByName = new Map(tools.map((tool) => [tool.definition.name, tool] as const));

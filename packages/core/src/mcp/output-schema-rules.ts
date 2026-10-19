@@ -29,6 +29,7 @@ export const requiredOutputSections: Record<string, string[]> = {
   ziwei: ['基本信息', '十二宫位'],
   ziwei_horoscope: ['基本信息', '运限叠宫'],
   ziwei_flying_star: ['查询结果'],
+  ziwei_palace: ['查询', '宫位概览', '本宫星曜', '三方四正', '夹宫', '宫干四化飞出', '四化飞入', '口径'],
   liuyao: ['卦盘', '六爻全盘', '全局互动', '元信息'],
   meihua: ['起卦信息', '卦盘', '干支时间', '体用分析', '阶段推演'],
   tarot: ['问卜设定', '牌阵展开'],

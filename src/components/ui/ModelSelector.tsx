@@ -11,7 +11,7 @@ import { useAvailableModels } from '@/lib/hooks/useAvailableModels';
 import { CUSTOM_PROVIDER_CHANGED_EVENT, getCustomProvider, getCustomProviderDisplayName } from '@/lib/chat/custom-provider';
 import type { AIVendor, AIReasoningEffort } from '@/types';
 import { type ModelSettingsProps, type AgentCollaborator } from '@/lib/chat/model-settings';
-import { useCollaborationPreset, writeCollaborationPreset } from '@/lib/chat/collaboration-preset';
+import { useCollaborationPreset } from '@/lib/chat/collaboration-preset';
 import type { MembershipType } from '@/lib/user/membership';
 
 interface ClientModelConfig {
@@ -112,19 +112,19 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
         if (!onCollaboratorsChange) return;
         const existing = collaborators.find(member => member.model === model.id);
         if (!existing && collaborationFull) return;
+        // 个性化里为该模型配置过的名称、努力程度与分工作为模板；勾选只影响当前对话，不改设置。
+        const template = collaborationPreset.members.find(member => member.model === model.id);
         const next = existing
             ? collaborators.filter(member => member.model !== model.id)
             : [...collaborators, {
                 id: crypto.randomUUID(),
-                name: model.name,
+                name: template?.name ?? model.name,
                 model: model.id,
-                focus: '',
-                reasoning: !!model.isReasoningDefault && model.reasoningAllowed !== false,
-                reasoningEffort: null,
+                focus: template?.focus ?? '',
+                reasoning: template?.reasoning ?? (!!model.isReasoningDefault && model.reasoningAllowed !== false),
+                reasoningEffort: template?.reasoningEffort ?? null,
             } satisfies AgentCollaborator];
         onCollaboratorsChange(next);
-        // 菜单开关与设置页共用同一份预设：勾选即开，全部取消即关。
-        if (userId) writeCollaborationPreset(userId, { ...collaborationPreset, enabled: next.length > 0, members: next });
     };
     const chooseEffort = (effort: AIReasoningEffort | null) => {
         onReasoningChange?.(true);

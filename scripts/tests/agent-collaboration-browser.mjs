@@ -63,10 +63,10 @@ export async function verifyAgentCollaboration({ page, newChat, send, waitForRun
   await page.screenshot({ path: path.join(output, 'agent-collaboration-mobile.png'), fullPage: true });
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 1440, height: 1100 });
-  // 成员配置在设置 › 个性化 › 多模型协作：编辑后回到新对话，预设作为下一项任务配置生效。
+  // 设置 › 个性化 › 多模型协作只保存成员模板：任何对话都默认不协作，勾选模型后才套用模板。
   await page.goto(`${origin}/settings/personalization`);
-  await page.getByRole('switch', { name: '启用多模型协作', exact: true }).click();
-  // 成员默认一个都不选（0–4）：先加两名成员，再逐项配置。
+  assert.equal(await page.getByRole('switch', { name: '启用多模型协作', exact: true }).count(), 0, 'templates never switch collaboration on by themselves');
+  // 模板默认一个都没有（0–4）：先加两名，再逐项配置。
   for (let index = 0; index < fixture.models.length; index++) await page.getByRole('button', { name: '添加成员', exact: true }).click();
   for (const [index, model] of fixture.models.entries()) {
     await page.getByLabel(`Agent ${index + 1} 模型`, { exact: true }).selectOption(model.key);
@@ -80,7 +80,9 @@ export async function verifyAgentCollaboration({ page, newChat, send, waitForRun
   await dialog.getByRole('menuitem', { name: /多模型协作/ }).click();
   const collabMenu = page.getByRole('menu', { name: '多模型协作', exact: true });
   await collabMenu.waitFor();
-  assert.equal(await collabMenu.getByRole('menuitemcheckbox', { checked: true }).count(), 2, 'the settings preset turns collaboration on for the next task');
+  assert.equal(await collabMenu.getByRole('menuitemcheckbox', { checked: true }).count(), 0, 'a new conversation starts with no collaborators');
+  for (const model of fixture.models) await collabMenu.getByRole('menuitemcheckbox', { name: model.name }).click();
+  assert.equal(await collabMenu.getByRole('menuitemcheckbox', { checked: true }).count(), 2, 'ticking models turns collaboration on for this conversation only');
   await page.keyboard.press('Escape');
   const before = await credits();
   const submitted = await send('Agent验收：多模型协作，请两位成员独立分析八字，主模型核对并汇总。');
@@ -116,10 +118,9 @@ export async function verifyAgentCollaboration({ page, newChat, send, waitForRun
   await dialog.getByRole('menuitem', { name: /多模型协作/ }).click();
   const clearCollab = page.getByRole('menu', { name: '多模型协作', exact: true });
   await clearCollab.waitFor();
-  // 逐项按名称取消：按 checked 过滤会在每次重渲染时丢掉目标，导致点击等待超时。
+  // 协作只属于勾选它的那个对话：新对话重新从 0 个成员开始。
   for (const model of fixture.models) {
-    const row = clearCollab.getByRole('menuitemcheckbox', { name: model.name, exact: true });
-    if (await row.getAttribute('aria-checked') === 'true') await row.click();
+    assert.equal(await clearCollab.getByRole('menuitemcheckbox', { name: model.name, exact: true }).getAttribute('aria-checked'), 'false', 'a new conversation does not inherit collaborators');
   }
   await page.keyboard.press('Escape');
   await dialog.getByRole('menuitemradio', { name: '本地离线演示' }).click();

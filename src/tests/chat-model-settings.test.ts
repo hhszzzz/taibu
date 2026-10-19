@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { randomUUID } from 'node:crypto';
-import { parseNextTaskConfiguration, parseAgentCollaborators } from '../lib/chat/model-settings';
+import { freshTaskConfiguration, parseNextTaskConfiguration, parseAgentCollaborators } from '../lib/chat/model-settings';
 import { PATCH, GET } from '../app/api/conversations/[id]/configuration/route';
 import { createMockAuthContext } from './helpers/supabase-mock';
 
@@ -53,4 +53,10 @@ test('invalid or unauthenticated conversation model settings never write', async
   t.mock.method(api, 'requireUserContext', async () => ({ error: { message: '登录后使用', status: 401 } }));
   assert.equal((await PATCH(request(configuration), { params: Promise.resolve({ id }) })).status, 401);
   assert.equal(updates.length, 0);
+});
+
+test('a new conversation keeps model, reasoning and web choices but never inherits collaborators', () => {
+  const fresh = freshTaskConfiguration(configuration);
+  assert.deepEqual(fresh, { ...configuration, collaborators: [] });
+  assert.equal(configuration.collaborators.length, 2, 'the source configuration is not mutated');
 });

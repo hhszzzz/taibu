@@ -3,15 +3,14 @@
 
 import { useMemo } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
-import { SettingsRow, SettingsSwitch } from '@/components/settings/SettingsControls';
 import { useAvailableModels } from '@/lib/hooks/useAvailableModels';
 import { useCollaborationPreset, writeCollaborationPreset } from '@/lib/chat/collaboration-preset';
 import type { AgentCollaborator } from '@/lib/chat/model-settings';
 import type { MembershipType } from '@/lib/user/membership';
 
 /**
- * 多模型协作设置（claude 把协作成员配置收进设置；模型菜单只保留勾选开关）。
- * 预设保存在本机（按用户隔离），聊天页的模型菜单读取同一份。
+ * 多模型协作成员模板（claude 把协作成员配置收进设置；模型菜单只保留勾选开关）。
+ * 模板保存在本机（按用户隔离）：每个对话默认不协作，在模型菜单勾选某个模型时才套用它在这里的名称、努力程度与分工。
  */
 export function CollaborationSettings({ userId, membershipType }: { userId: string; membershipType?: MembershipType }) {
     const preset = useCollaborationPreset(userId);
@@ -29,24 +28,13 @@ export function CollaborationSettings({ userId, membershipType }: { userId: stri
             reasoningEffort: null,
         };
     };
-    // 成员 0–4 名，默认一个都不选；一个都没有时协作开关自动关闭（主模型单独作答）。
-    const setMembers = (members: AgentCollaborator[]) => update({ ...preset, enabled: members.length > 0 && preset.enabled, members });
+    // 模板 0–4 名；它们只是候选，不会让任何对话自动协作。
+    const setMembers = (members: AgentCollaborator[]) => update({ ...preset, enabled: false, members });
     const patchMember = (index: number, change: Partial<AgentCollaborator>) => setMembers(preset.members.map((item, position) => position === index ? { ...item, ...change } : item));
-    const toggleEnabled = () => {
-        // 开启协作不再预置成员：从 0 开始，由用户自己添加要参与的子模型。
-        update({ ...preset, enabled: !preset.enabled });
-    };
     return <section className="settings-form-section settings-form-section-divided" aria-label="多模型协作设置">
         <div className="settings-form-heading">
             <h3>多模型协作</h3>
-            <p>子模型可在个性化设置努力程度；模型用平台模型或自己的模型 API。主模型不占成员名额，汇总只计一次费用。</p>
-        </div>
-        <div className="settings-group">
-            <SettingsRow
-                label="启用多模型协作"
-                description="模型菜单里也可以随时开关；主模型不占成员名额。"
-                control={<SettingsSwitch label="启用多模型协作" checked={preset.enabled} disabled={!models.length && !preset.members.length} onToggle={toggleEnabled} />}
-            />
+            <p>每个对话默认不协作；在输入框的模型菜单里勾选模型后才会启用。这里为常用模型预设名称、努力程度和分工，勾选时自动套用。主模型不占成员名额，汇总只计一次费用。</p>
         </div>
         {preset.members.map((item, index) => <fieldset key={item.id} className="settings-collab-member">
             <legend>Agent {index + 1}</legend>

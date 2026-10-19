@@ -22,7 +22,6 @@ import { useComposerState, type KnowledgeBaseSummary } from '@/components/chat/c
 import { getChartKindMeta } from '@/components/chat/agent/chart-registry';
 import type { AgentChartKind } from '@/lib/agent/tool-catalog';
 import { getCurrentUserSettings } from '@/lib/user/settings';
-import { useCollaborationPreset } from '@/lib/chat/collaboration-preset';
 import { MentionManager } from '@/components/chat/composer/MentionManager';
 import { AttachmentBar } from '@/components/chat/composer/AttachmentBar';
 import { ComposerToolbar, ComposerSendCluster, type ComposerSendState, type ComposerWebControl } from '@/components/chat/composer/ComposerToolbar';
@@ -213,26 +212,6 @@ export function ChatComposer({
             setMemoryBusy(false);
         }
     };
-    // 设置页的协作预设：进入对话且当前没有成员时装载；设置页在聊天期间修改则立即同步。
-    const collaborationPreset = useCollaborationPreset(userId ?? null);
-    const collaborationMountedAt = useRef(Date.now());
-    const collaborationAppliedAt = useRef(0);
-    useEffect(() => {
-        if (!agentMode || !onCollaboratorsChange) return;
-        const members = collaborationPreset.members;
-        const editingWhileOpen = collaborationPreset.updatedAt > collaborationMountedAt.current;
-        if (!collaborationPreset.enabled || members.length < 1) {
-            if (editingWhileOpen && (collaborators?.length ?? 0) > 0) onCollaboratorsChange([]);
-            return;
-        }
-        const hasMembers = (collaborators?.length ?? 0) > 0;
-        // 已从服务端恢复本会话配置时，不用预设覆盖；只有设置页刚改过才同步。
-        if (hasMembers && !editingWhileOpen) return;
-        if (collaborationAppliedAt.current >= collaborationPreset.updatedAt && hasMembers) return;
-        if (JSON.stringify(collaborators) === JSON.stringify(members)) { collaborationAppliedAt.current = collaborationPreset.updatedAt; return; }
-        collaborationAppliedAt.current = collaborationPreset.updatedAt;
-        onCollaboratorsChange(members);
-    }, [agentMode, collaborators, collaborationPreset, onCollaboratorsChange]);
 
     // claude + 菜单的「上传或添加文件 ⌘U」：在会话内任何位置都能唤起文件选择。
     useEffect(() => {

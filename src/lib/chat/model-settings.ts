@@ -59,3 +59,8 @@ export function parseNextTaskConfiguration(value: unknown): NextTaskConfiguratio
   return { model: input.model.trim(), reasoning: input.reasoning, webEnabled: input.webEnabled,
     reasoningEffort: parseReasoningEffort(input.reasoningEffort), collaborators: parseAgentCollaborators(input.collaborators) };
 }
+
+/** 新对话的初始配置：沿用模型、推理与联网，协作成员一律从 0 开始，只有用户在该对话勾选后才协作。 */
+export function freshTaskConfiguration(base: NextTaskConfiguration): NextTaskConfiguration {
+  return { ...base, collaborators: [] };
+}

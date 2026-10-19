@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { requestBrowserJson } from '@/lib/browser-api';
-import { parseNextTaskConfiguration, type NextTaskConfiguration as Configuration } from './model-settings';
+import { freshTaskConfiguration, parseNextTaskConfiguration, type NextTaskConfiguration as Configuration } from './model-settings';
 export function useNextTaskConfiguration(userId: string | null, conversationId: string | null, configuration: Configuration, apply: (value: Configuration) => void) {
     const key = `${userId ?? 'visitor'}:${conversationId ?? 'new'}`;
     const [loaded, setLoaded] = useState<string | null>(null);
@@ -21,7 +21,9 @@ export function useNextTaskConfiguration(userId: string | null, conversationId: 
                     if (raw) accountDefault = parseNextTaskConfiguration(raw);
                 } catch { /* optional account preference cache */ }
             }
-            const result = conversationId ? await requestBrowserJson<{ configuration: Configuration | null }>(`/api/conversations/${conversationId}/configuration`, { signal: controller.signal }) : { data: { configuration: accountDefault }, error: null };
+            // 新对话从不协作开始：账户默认只带模型、推理与联网，协作成员由用户在本对话里勾选。
+            const fresh = conversationId ? null : freshTaskConfiguration(accountDefault ?? latest.current.configuration);
+            const result = conversationId ? await requestBrowserJson<{ configuration: Configuration | null }>(`/api/conversations/${conversationId}/configuration`, { signal: controller.signal }) : { data: { configuration: fresh }, error: null };
             if (controller.signal.aborted) return;
             if (result?.error) return; // Never overwrite unread persisted settings after a failed load.
             if (result?.data?.configuration && initial === JSON.stringify(latest.current.configuration)) {
@@ -38,7 +40,7 @@ export function useNextTaskConfiguration(userId: string | null, conversationId: 
     useEffect(() => {
         if (!userId || loaded !== key) return;
         if (!conversationId) {
-            try { localStorage.setItem(`taibu.next-task:${userId}`, value); } catch { /* optional account preference cache */ }
+            try { localStorage.setItem(`taibu.next-task:${userId}`, JSON.stringify(freshTaskConfiguration(latest.current.configuration))); } catch { /* optional account preference cache */ }
             return;
         }
         const timer = setTimeout(async () => {

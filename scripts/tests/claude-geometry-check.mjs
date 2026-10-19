@@ -180,13 +180,15 @@ try {
         const q = (s) => document.querySelector(s);
         const g = (s, p) => { const el = q(s); return el ? getComputedStyle(el)[p] : null; };
         const b = q('.agent-panel-header')?.getBoundingClientRect();
+        const chatHeader = q('.chat-session-header')?.getBoundingClientRect();
         const tab = q('.agent-ws-tabs [role="tab"]');
         const ib = q('.agent-icon-button')?.getBoundingClientRect();
         const panel = q('.agent-workspace-panel');
         const pb = panel?.getBoundingClientRect();
         return {
             wide: panel ? Math.round(pb.width) > 400 : null,
-            header: b ? { h: Math.round(b.height), pad: g('.agent-panel-header', 'padding') } : null,
+            header: b ? { h: Math.round(b.height), pad: g('.agent-panel-header', 'padding'), mid: b.top + b.height / 2 } : null,
+            chatHeaderMid: chatHeader ? chatHeader.top + chatHeader.height / 2 : null,
             tab: tab ? { h: Math.round(tab.getBoundingClientRect().height), pad: g('.agent-ws-tabs [role="tab"]', 'padding'), fs: g('.agent-ws-tabs [role="tab"]', 'fontSize') } : null,
             icon: ib ? { w: Math.round(ib.width), h: Math.round(ib.height), r: g('.agent-icon-button', 'borderRadius') } : null,
             resizer: g('.agent-panel-resizer', 'width'),
@@ -237,7 +239,11 @@ try {
         const hairlineDecl = [sample.hairline?.decl?.w, sample.hairline?.decl?.c, sample.hairline?.decl?.s, sample.hairline?.decl?.b].filter(Boolean).join(' ');
         if (!hairlineDecl.includes('var(--hairline)') || !hairlineDecl.includes('var(--hairline-color)')) fails.push(`工作区发丝描边未用 hairline 变量：${hairlineDecl || '未找到声明'}`);
         assertNear('工作区发丝线（--hairline）', parseFloat(sample.hairline?.token ?? ''), 0.5, 0.01);
-        assertNear('工作区卡片上留白（四周 10px）', parseFloat(String(sample.panel?.margin ?? '').split(' ')[0]), 10, 0.5);
+        const [marginTop, marginRight, marginBottom] = String(sample.panel?.margin ?? '').split(' ').map(parseFloat);
+        assertNear('工作区卡片上留白（4px，标签行与标题栏对齐）', marginTop, 4, 0.5);
+        assertNear('工作区卡片右留白（10px）', marginRight, 10, 0.5);
+        assertNear('工作区卡片下留白（8px）', marginBottom, 8, 0.5);
+        assertNear('工作区标签行与左侧标题栏同一水平线', sample.header?.mid, sample.chatHeaderMid, 1);
         if (!(sample.main >= 360)) fails.push(`工作区挤压后阅读列仅 ${Math.round(sample.main ?? 0)}px（应 ≥360）`);
     }
     if (card) assertNear('任务态默认宽（小工作区 = 320）', card.panel?.w, 320);

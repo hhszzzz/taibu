@@ -433,9 +433,10 @@ button.agent-evidence-chip:hover { background: var(--fill-ghost-hover); }
 .chat-message-action:hover { background: var(--fill-ghost-hover); color: var(--foreground); }
 .chat-message-action:disabled { opacity: .35; cursor: default; }
 .chat-message-model { margin-left: 8px; padding-left: 10px; border-left: 1px solid var(--border); font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); white-space: nowrap; }
-/* 工作区 = 停靠分栏里的悬浮卡片（claude /code 讨论串面板实测：白卡 r12 + 0.5px 发丝描边 + 四周留白）。
+/* 工作区 = 停靠分栏里的悬浮卡片（claude /code 讨论串面板实测：白卡 r12 + 0.5px 发丝描边）。
+   上留白 4px：40px 头部的标签行中线落在 24px，与左侧 48px 标题栏同一水平线；下留白 8px。
    列为 in-flow、挤压对话列而不盖住内容；任务态默认 320，含原生盘面默认 660，拖拽可在 280–780 间调宽，始终给阅读列留 ≥360px。 */
-.agent-workspace-panel { position: relative; display: flex; flex-shrink: 0; flex-direction: column; width: 320px; min-width: 280px; max-width: min(780px, calc(100% - 384px)); margin: 10px; border: var(--hairline) solid var(--hairline-color); border-radius: 12px; background: var(--chat-raised); box-shadow: none; }
+.agent-workspace-panel { position: relative; display: flex; flex-shrink: 0; flex-direction: column; width: 320px; min-width: 280px; max-width: min(780px, calc(100% - 384px)); margin: 4px 10px 8px; border: var(--hairline) solid var(--hairline-color); border-radius: 12px; background: var(--chat-raised); box-shadow: none; }
 /* 会话详情停靠栏 = 克隆站 SessionRail：280px、与消息列重叠 28px、右留 12px、卡片间隔 8px。 */
 .agent-session-rail { position: relative; z-index: 40; display: flex; flex-shrink: 0; flex-direction: column; width: 280px; min-height: 0; margin-top: 51px; margin-left: -28px; margin-right: 12px; padding: 0 1px 8px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
 .agent-session-rail::-webkit-scrollbar { display: none; }
@@ -502,7 +503,7 @@ button.agent-evidence-chip:hover { background: var(--fill-ghost-hover); }
 /* 图标键 = cds ghost icon-only：32px 方形 / radius 8 */
 .agent-icon-button { display: flex; flex-shrink: 0; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; color: var(--foreground-secondary); }
 .agent-icon-button:hover { background: var(--fill-ghost-hover); color: var(--foreground); }
-.agent-panel-scroll { flex: 1; min-height: 0; overflow: auto; padding: 16px 16px 20px; overscroll-behavior: contain; container-type: inline-size; }
+.agent-panel-scroll { flex: 1; min-height: 0; overflow: auto; padding: 12px 14px 16px; overscroll-behavior: contain; container-type: inline-size; }
 /* 空态 = claude /code 讨论串面板实测：左上衬线问候（22px/400）+ 剩余空间居中图形 + 居中说明 13px muted */
 .agent-panel-empty { display: flex; flex-direction: column; min-height: 100%; padding: 26px 20px 40px; text-align: left; color: var(--foreground-secondary); }
 .agent-panel-empty h3, .agent-panel-empty > strong { order: 1; font-family: var(--font-display); font-size: calc(22 / 16 * 1rem); font-weight: 400; line-height: 1.3; color: var(--foreground); }

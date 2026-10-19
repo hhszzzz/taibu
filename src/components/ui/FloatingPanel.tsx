@@ -21,6 +21,29 @@ export function findMenuShortcut(panel: Pick<ParentNode, 'querySelectorAll'>, ev
 }
 
 /** Shared viewport-aware surface for model, tool, context and conversation menus. */
+/** 子菜单与父菜单之间的水平间距（claude 子菜单紧贴父菜单）。 */
+export const SUBMENU_GAP = 2;
+
+/**
+ * 子菜单的位置：优先贴在父菜单右缘外 SUBMENU_GAP，放不下时翻到左侧；
+ * right-start 让子菜单第一项与父项同一水平线（减去面板上内边距），right 则底边对齐。
+ */
+export function placeSubmenu({ anchor, host, panel, side, viewport }: {
+    anchor: Pick<DOMRect, 'left' | 'right' | 'top' | 'bottom'>;
+    host?: Pick<DOMRect, 'left' | 'right'> | null;
+    panel: { width: number; height: number; paddingTop: number; paddingBottom: number };
+    side: 'right' | 'right-start';
+    viewport: { x: number; y: number; width: number; height: number; margin: number };
+}): { left: number; top: number } {
+    const { x, y, width, height, margin } = viewport;
+    const right = Math.max(anchor.right, host?.right ?? 0) + SUBMENU_GAP;
+    const leftSide = (host?.left ?? anchor.left) - panel.width - SUBMENU_GAP;
+    const left = right + panel.width <= x + width - margin ? right : Math.max(x + margin, leftSide);
+    const preferredTop = side === 'right-start' ? anchor.top - panel.paddingTop : anchor.bottom - panel.height + panel.paddingBottom;
+    const maxTop = Math.max(y + margin, y + height - panel.height - margin);
+    return { left, top: Math.max(y + margin, Math.min(preferredTop, maxTop)) };
+}
+
 export function FloatingPanel({ open, anchorRef, onClose, children, label, id, className = '',
     role = 'menu', side = 'bottom', align = 'start', initialFocus = 'first', restoreFocus = true, portaled = true, arrowNavigation = false,
 }: {
@@ -76,13 +99,13 @@ export function FloatingPanel({ open, anchorRef, onClose, children, label, id, c
                 let left: number;
                 let top: number;
                 if (side === 'right' || side === 'right-start') {
-                    // 子菜单优先在行右侧；锚点在一级菜单里时以该菜单右缘为准，留出 10px 间距。
-                    const host = anchor.closest('.floating-panel')?.getBoundingClientRect();
-                    const right = Math.max(rect.right, host?.right ?? 0) + 10;
-                    const leftSide = (host?.left ?? rect.left) - panel.offsetWidth - 10;
-                    left = right + panel.offsetWidth <= x + width - margin ? right : Math.max(x + margin, leftSide);
-                    const preferredTop = side === 'right-start' ? rect.top : rect.bottom - panel.offsetHeight;
-                    top = Math.max(y + margin, Math.min(preferredTop, maxTop));
+                    // 子菜单优先在行右侧；锚点在一级菜单里时以该菜单右缘为准。
+                    const style = getComputedStyle(panel);
+                    ({ left, top } = placeSubmenu({
+                        anchor: rect, host: anchor.closest('.floating-panel')?.getBoundingClientRect(), side,
+                        panel: { width: panel.offsetWidth, height: panel.offsetHeight, paddingTop: parseFloat(style.paddingTop) || 0, paddingBottom: parseFloat(style.paddingBottom) || 0 },
+                        viewport: { x, y, width, height, margin },
+                    }));
                 } else {
                     left = Math.max(x + margin, Math.min(align === 'end' ? rect.right - panel.offsetWidth : rect.left, maxLeft));
                     const above = rect.top - panel.offsetHeight - 6;

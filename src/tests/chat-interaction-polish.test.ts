@@ -77,3 +77,18 @@ test('a task completion toast opens its conversation', async () => {
     assert.equal(taskNoticeHref({ link: 'https://evil.example/chat?id=c1', event_data: { conversationId: 'c 2' } }), '/chat?id=c%202', 'only in-app chat links are followed');
     assert.equal(taskNoticeHref({ link: null, event_data: undefined }), null);
 });
+
+test('submenus sit right next to their parent menu and line their first item up with the parent row', async () => {
+    const { placeSubmenu, SUBMENU_GAP } = await import('../components/ui/FloatingPanel');
+    const viewport = { x: 0, y: 0, width: 1440, height: 900, margin: 8 };
+    const panel = { width: 160, height: 120, paddingTop: 4, paddingBottom: 4 };
+    const anchor = { left: 104, right: 296, top: 200, bottom: 232 };
+    const host = { left: 100, right: 300 };
+    assert.equal(SUBMENU_GAP, 2);
+    assert.deepEqual(placeSubmenu({ anchor, host, panel, side: 'right-start', viewport }), { left: 302, top: 196 });
+    assert.deepEqual(placeSubmenu({ anchor, host, panel, side: 'right', viewport }), { left: 302, top: 116 });
+    // 右侧放不下时翻到父菜单左侧，仍保持同样的间距。
+    assert.equal(placeSubmenu({ anchor: { ...anchor, left: 1204, right: 1396 }, host: { left: 1200, right: 1400 }, panel, side: 'right-start', viewport }).left, 1200 - 160 - SUBMENU_GAP);
+    // 贴近视口底部时向上收进可视区。
+    assert.equal(placeSubmenu({ anchor: { ...anchor, top: 860, bottom: 892 }, host, panel, side: 'right-start', viewport }).top, 900 - 120 - 8);
+});

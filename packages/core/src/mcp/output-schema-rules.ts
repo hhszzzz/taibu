@@ -20,6 +20,7 @@ export const calculationRulesSchema = obj({
 /** Mandatory default-level sections. Full-only sections remain optional in the single published schema. */
 export const requiredOutputSections: Record<string, string[]> = {
   astrology: ['基础坐标', '命盘锚点', '本命主星', '当前流运触发'],
+  astrology_point: ['查询', '口径'],
   bazi: ['基本信息', '四柱', '干支关系'],
   bazi_dayun: ['起运信息', '大运列表'],
   bazi_relations: ['查询', '参与柱位', '原局关系', '口径'],
@@ -28,10 +29,12 @@ export const requiredOutputSections: Record<string, string[]> = {
   ziwei_horoscope: ['基本信息', '运限叠宫'],
   ziwei_flying_star: ['查询结果'],
   liuyao: ['卦盘', '六爻全盘', '全局互动', '元信息'],
+  liuyao_line: ['查询', '爻详情', '口径'],
   meihua: ['起卦信息', '卦盘', '干支时间', '体用分析', '阶段推演'],
   tarot: ['问卜设定', '牌阵展开'],
   taiyi: ['问卜与时空底盘', '外部时空环境', '核心物理关系', '九星阵列', '古典参考'],
   almanac: ['基础与个性化坐标', '传统黄历基调', '择日宜忌', '神煞参考'],
+  almanac_select: ['查询', '候选日', '排除统计', '口径'],
   qimen: ['基本信息', '九宫盘'],
   daliuren: ['基本信息', '四课', '三传', '天地盘'],
   xiaoliuren: ['起课信息', '推演链', '结果'],

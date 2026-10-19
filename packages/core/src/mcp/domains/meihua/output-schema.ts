@@ -54,6 +54,7 @@ export const meihuaOutputSchema: OutputSchema = obj({
       象辞: str('本卦象辞'),
     }, '本卦信息'),
     动爻: str('动爻位置（初爻/二爻/.../上爻）'),
+    动爻爻辞: str('动爻的爻辞（《周易》经文）'),
     变卦: obj({
       卦名: str('变卦卦名'),
       上卦: str('上卦卦名'),

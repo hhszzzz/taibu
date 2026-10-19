@@ -23,9 +23,9 @@ export type {
   AstrologyZodiacCusp,
 } from './types.js';
 
-const BODY_KEYS = ['sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto'] as const;
-const POINT_KEYS = ['northnode', 'southnode', 'lilith'] as const;
-const ANGLE_KEYS = ['ascendant', 'midheaven'] as const;
+export const BODY_KEYS = ['sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto'] as const;
+export const POINT_KEYS = ['northnode', 'southnode', 'lilith'] as const;
+export const ANGLE_KEYS = ['ascendant', 'midheaven'] as const;
 const MAJOR_ASPECT_TYPES = ['conjunction', 'opposition', 'trine', 'square', 'sextile'] as const;
 const SUPPORTED_ASPECT_KEYS = [...BODY_KEYS, ...POINT_KEYS, ...ANGLE_KEYS] as const;
 
@@ -47,7 +47,7 @@ const BODY_LABELS: Record<string, string> = {
   midheaven: '天顶',
 };
 
-const SIGN_LABELS: Record<string, { label: string; element: string; modality: string; }> = {
+export const SIGN_LABELS: Record<string, { label: string; element: string; modality: string; }> = {
   aries: { label: '白羊座', element: '火', modality: '本位' },
   taurus: { label: '金牛座', element: '土', modality: '固定' },
   gemini: { label: '双子座', element: '风', modality: '变动' },
@@ -70,7 +70,7 @@ const ASPECT_LABELS: Record<AstrologyAspectType, string> = {
   sextile: '六合',
 };
 
-const ASPECT_ANGLES: Record<AstrologyAspectType, { angle: number; orb: number; }> = {
+export const ASPECT_ANGLES: Record<AstrologyAspectType, { angle: number; orb: number; }> = {
   conjunction: { angle: 0, orb: 8 },
   opposition: { angle: 180, orb: 8 },
   trine: { angle: 120, orb: 8 },
@@ -325,7 +325,7 @@ function buildZodiacCusp(entity: HoroscopeZodiacCuspLike): AstrologyZodiacCusp {
   };
 }
 
-function computeAngularDistance(left: number, right: number): number {
+export function computeAngularDistance(left: number, right: number): number {
   const diffRaw = Math.abs(left - right);
   const diff = diffRaw > 180 ? 360 - diffRaw : diffRaw;
   return Number(diff.toFixed(4));

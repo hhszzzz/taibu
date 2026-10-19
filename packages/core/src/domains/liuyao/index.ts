@@ -21,6 +21,8 @@ export {
   YAO_POSITION_NAMES,
   YONG_SHEN_STATUS_LABELS,
 } from './calculate.js';
+export { deriveLiuyaoLine } from './line.js';
+export { toLiuyaoLineJson, toLiuyaoLineText } from './line-render.js';
 export {
   renderLiuyaoJSON as toLiuyaoJson,
   renderLiuyaoCanonicalJSON as toLiuyaoCanonicalJson,
@@ -38,6 +40,8 @@ export type {
   LiuyaoYaoJSON,
   LiuyaoYongShenJSON,
 } from './json-types.js';
+export type { LiuyaoLineOutput, LiuyaoLineSelector } from './line.js';
+export type { LiuyaoLineCanonicalJSON } from './line-render.js';
 export type { LiuyaoInput, LiuyaoOutput } from './types.js';
 export type {
   ChangedYaoDetail,

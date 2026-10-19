@@ -19,10 +19,13 @@ TaiBu 的命理术数算法核心库。
 | `ziwei_horoscope` | 紫微运限 |
 | `ziwei_flying_star` | 紫微飞星与四化落宫分析 |
 | `liuyao` | 六爻排卦与分析 |
+| `liuyao_line` | 六爻逐爻详查（纳甲六亲六神、日月作用、空破暗动、化变与伏神） |
 | `meihua` | 梅花易数起卦与断卦 |
 | `tarot` | 塔罗抽牌 |
 | `almanac` | 黄历与择日信息 |
+| `almanac_select` | 黄历择日筛选（区间内按宜忌与冲煞筛候选日） |
 | `astrology` | 西方占星命盘与流运 |
+| `astrology_point` | 占星单点详查（位置宫位、传统尊贵、宫主星、相位与流运触发） |
 | `qimen` | 奇门遁甲排盘 |
 | `taiyi` | 太乙九星观测与传统七十二局（现代历法适配） |
 | `daliuren` | 大六壬排盘 |

@@ -55,6 +55,8 @@ export interface MeihuaCanonicalJSON {
   卦盘: {
     本卦: MeihuaHexagramTrackJSON;
     动爻: string;
+    /** 本卦动爻的爻辞（《周易》经文） */
+    动爻爻辞?: string;
     变卦: MeihuaHexagramTrackJSON;
     互卦?: MeihuaHexagramTrackJSON;
     体卦: {

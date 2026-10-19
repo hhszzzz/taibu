@@ -139,7 +139,7 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
             {summary && <span className="chat-model-hint">{summary}</span>}
             <ChevronDown size={14} aria-hidden="true" />
         </button> : <button ref={anchorRef} type="button" onClick={() => setOpen(value => !value)} disabled={locked} data-model-trigger
-            className={`chat-model-picker flex items-center gap-1.5 rounded-xl px-2 transition-colors ${compact ? 'py-1 text-xs' : 'h-9 text-sm'} ${locked ? 'cursor-not-allowed opacity-50' : 'text-foreground-secondary hover:bg-background-secondary hover:text-foreground'}`}
+            className={`chat-model-picker flex items-center gap-1.5 rounded-xl px-2 transition-colors ${compact ? 'py-1 text-xs' : 'h-9 text-sm'} ${locked ? 'cursor-not-allowed opacity-50' : 'text-foreground-secondary hover:text-foreground'}`}
             aria-label={label} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? menuId : undefined}>
             {query.isLoading ? <SoundWaveLoader variant="inline" /> : current ? getVendorIcon(current.vendor) : <Cpu size={16} />}
             <span className={`chat-model-name truncate ${compact ? 'max-w-[104px]' : 'max-w-[125px]'}`}>{current?.name ?? '暂无可用模型'}</span>

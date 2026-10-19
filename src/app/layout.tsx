@@ -97,12 +97,12 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       {
-        url: "/favicon.svg",
+        url: "/Logo.svg",
         type: "image/svg+xml",
         media: "(prefers-color-scheme: light)",
       },
       {
-        url: "/favicon-dark.svg",
+        url: "/Logo-dark.svg",
         type: "image/svg+xml",
         media: "(prefers-color-scheme: dark)",
       },

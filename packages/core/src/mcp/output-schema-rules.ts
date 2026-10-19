@@ -23,6 +23,8 @@ export const requiredOutputSections: Record<string, string[]> = {
   bazi: ['基本信息', '四柱', '干支关系'],
   bazi_dayun: ['起运信息', '大运列表'],
   bazi_relations: ['查询', '参与柱位', '原局关系', '口径'],
+  bazi_wuxing: ['日主', '五行统计', '缺失五行', '月令', '通根', '透干', '干支自坐', '相邻天干', '相生链', '十神分布', '口径'],
+  bazi_liunian_scan: ['扫描范围', '原局四柱', '逐年', '口径'],
   bazi_pillars_resolve: ['原始四柱', '候选数量', '候选列表'],
   ziwei: ['基本信息', '十二宫位'],
   ziwei_horoscope: ['基本信息', '运限叠宫'],

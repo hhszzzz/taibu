@@ -2,6 +2,8 @@ import { almanacManifest } from './domains/almanac/tool.js';
 import { astrologyManifest } from './domains/astrology/tool.js';
 import { baziDayunManifest } from './domains/bazi-dayun/tool.js';
 import { baziRelationsManifest } from './domains/bazi-relations/tool.js';
+import { baziWuxingManifest } from './domains/bazi-wuxing/tool.js';
+import { baziLiunianScanManifest } from './domains/bazi-liunian-scan/tool.js';
 import { baziPillarsResolveManifest } from './domains/bazi-pillars-resolve/tool.js';
 import { baziManifest } from './domains/bazi/tool.js';
 import { daliurenManifest } from './domains/daliuren/tool.js';
@@ -37,6 +39,8 @@ export const tools: AnyTool[] = [
   daliurenManifest,
   xiaoliurenManifest,
   baziRelationsManifest,
+  baziWuxingManifest,
+  baziLiunianScanManifest,
 ];
 
 export const toolByName = new Map(tools.map((tool) => [tool.definition.name, tool] as const));

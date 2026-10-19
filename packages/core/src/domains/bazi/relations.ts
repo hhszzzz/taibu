@@ -70,7 +70,8 @@ function tenGods(dayStem: string, stem: string, branch: string, isDayPillar: boo
   };
 }
 
-function solarYearOfDayun(dayun: DayunOutput): number | undefined {
+/** 公历出生年：首步大运的起运年份减去虚岁起运年龄再加一 */
+export function solarYearOfDayun(dayun: DayunOutput): number | undefined {
   const first = dayun.list[0];
   return first ? first.startYear - first.startAge + 1 : undefined;
 }
@@ -100,6 +101,8 @@ export function deriveBaziRelations(
   chart: BaziOutput,
   selector: BaziRelationsSelector,
   baseInput: BaziInput,
+  /** 逐年扫描时复用同一份大运，避免每年重排 */
+  precomputedDayun?: DayunOutput,
 ): BaziRelationsOutput {
   validateSelector(selector);
   const dayStem = chart.dayMaster;
@@ -115,7 +118,9 @@ export function deriveBaziRelations(
   const day = selector.day === undefined ? undefined : resolveDay(selector.day);
   const flowYear = day?.flowYear ?? selector.year;
   const needsFortune = flowYear !== undefined || selector.dayun !== undefined;
-  const dayun = needsFortune ? calculateDayunData({ ...baseInput, ...(selector.yunSect ? { yunSect: selector.yunSect } : {}) }) : undefined;
+  const dayun = needsFortune
+    ? precomputedDayun ?? calculateDayunData({ ...baseInput, ...(selector.yunSect ? { yunSect: selector.yunSect } : {}) })
+    : undefined;
 
   if (dayun) {
     const birthYear = solarYearOfDayun(dayun);

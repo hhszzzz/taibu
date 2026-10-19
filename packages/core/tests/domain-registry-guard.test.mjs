@@ -34,6 +34,8 @@ const expectedDomains = [
 /** 详查工具：复用 base 领域的子路径导出，按 base 工具的完整输入加查询参数计算。 */
 const expectedDerivedTools = [
   { tool: 'bazi_relations', base: 'bazi', folder: 'bazi-relations' },
+  { tool: 'bazi_wuxing', base: 'bazi', folder: 'bazi-wuxing' },
+  { tool: 'bazi_liunian_scan', base: 'bazi', folder: 'bazi-liunian-scan' },
 ];
 
 test('public core domains should stay aligned across exports, docs, and MCP registry', () => {

@@ -15,6 +15,8 @@ TaiBu 的命理术数算法核心库。
 | `bazi_pillars_resolve` | 八字四柱反推出生时间候选 |
 | `bazi_dayun` | 大运、小运、流年链路计算 |
 | `bazi_relations` | 八字刑冲合害详查（原局与大运、流年、流月、流日叠加） |
+| `bazi_wuxing` | 八字五行流通详查（加权统计、月令旺衰、通根透干、生克与相生链、十神分布） |
+| `bazi_liunian_scan` | 八字流年扫描（逐年干支、所在大运、与原局和大运的刑冲合害、太岁，最多 30 年） |
 | `ziwei` | 紫微斗数排盘 |
 | `ziwei_horoscope` | 紫微运限 |
 | `ziwei_flying_star` | 紫微飞星与四化落宫分析 |

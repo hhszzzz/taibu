@@ -28,8 +28,8 @@ export function CanonicalChartView({ value, targets = [], includeRelated = true,
   const interaction = onTargetSelect ? { selectedIds: targets.map(target => target.id), onSelect: onTargetSelect } : undefined;
   switch (value.kind) {
     case 'bazi': content = <Bazi canonicalChart={value.chart} isUnknownTime={value.chart.四柱[3]?.干支.includes('*')} canonicalLabels
-      overlay={baziOverlay && baziOverlay.layout.edges.length > 0 ? <GanzhiRelationOverlay {...baziOverlay} /> : undefined}
-      relationBands={baziOverlay ? { stem: relationBandHeight(baziOverlay.layout.lanes.stem), branch: relationBandHeight(baziOverlay.layout.lanes.branch) } : undefined}
+      overlay={baziOverlay && (baziOverlay.layout.edges.length > 0 || (baziOverlay.layout.aside?.length ?? 0) > 0) ? <GanzhiRelationOverlay {...baziOverlay} /> : undefined}
+      relationBands={baziOverlay ? { stem: relationBandHeight(baziOverlay.layout.lanes.stem), branch: relationBandHeight(baziOverlay.layout.lanes.branch), cross: relationBandHeight(baziOverlay.layout.lanes.cross) } : undefined}
       highlightedCells={targets.flatMap(target => target.kind === 'bazi_cell' ? [target.cell] : target.kind === 'bazi_relation' ? target.relation.位置 : [])}
       onCellSelect={onTargetSelect ? cell => {
         const target = getChartTargets(value).find(target => target.kind === 'bazi_cell' && target.cell.柱 === cell.柱 && target.cell.部位 === cell.部位 && target.cell.字 === cell.字);

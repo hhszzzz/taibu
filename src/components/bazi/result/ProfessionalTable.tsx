@@ -153,8 +153,8 @@ export function ProfessionalTable({
     canonicalLabels?: boolean;
     /** 画在表上的关系层（GanzhiRelationOverlay）；它按 data-relation-cell 找字形的位置。 */
     overlay?: ReactNode;
-    /** 天干行上方、地支行下方为连线留出的高度（px）。 */
-    relationBands?: { stem: number; branch: number };
+    /** 天干行上方、地支行下方、干支之间为连线留出的高度（px）。 */
+    relationBands?: { stem: number; branch: number; cross?: number };
 }) {
     const [shenShaExpanded, setShenShaExpanded] = useState(false);
 
@@ -292,7 +292,10 @@ export function ProfessionalTable({
                             label: <DualLabel short="干" full="天干" />,
                             className: ROW_DIVIDER_CLASS,
                             cellClass: 'px-1 pt-1.5 pb-0 @lg:pt-3',
-                            style: relationBands?.stem ? { paddingTop: `calc(${relationBands.stem}px + 0.375rem)` } : undefined,
+                            style: relationBands?.stem || relationBands?.cross ? {
+                                ...(relationBands.stem ? { paddingTop: `calc(${relationBands.stem}px + 0.375rem)` } : {}),
+                                ...(relationBands.cross ? { paddingBottom: `calc(${relationBands.cross}px + 0.25rem)` } : {}),
+                            } : undefined,
                             fortune: (col) => <span className={`${GLYPH_CLASS} ${ganZhiTextClass(col.stem)}`} data-relation-cell={col.label + ':天干'}>{col.stem}</span>,
                             pillar: (col, idx) => character(col, '天干', idx),
                         })}

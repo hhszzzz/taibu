@@ -8,8 +8,8 @@ export type RelationPart = '天干' | '地支';
 export type RelationTone = 'combine' | 'meet' | 'clash' | 'punish' | 'harm' | 'break' | 'generate' | 'control' | 'same' | 'root' | 'reveal';
 export type RelationBand = 'stem' | 'branch' | 'cross';
 export type RelationMode = 'relations' | 'flow';
-/** arc：同一带里跨柱的括线；vertical：同一柱干支之间的竖线；marker：只标在一个字旁的徽标（通根、透干）。 */
-export type RelationShape = 'arc' | 'vertical' | 'marker';
+/** arc：同一带里跨柱的括线；vertical：同一柱干支之间的竖线；bridge：跨柱干支之间走行间空档的折线；marker：只标在一个字旁的徽标。 */
+export type RelationShape = 'arc' | 'vertical' | 'bridge' | 'marker';
 
 /** Core 关系行的公共形状：八字命盘的干支关系明细、bazi_relations 与 bazi_wuxing 的各类事实都是它。 */
 export interface RelationRow {
@@ -46,8 +46,10 @@ export interface RelationEdge {
 
 export interface RelationLayout {
     edges: RelationEdge[];
-    /** 每条带需要的层数，用来给表格留出画线的空间。 */
-    lanes: Record<'stem' | 'branch', number>;
+    /** 每条带需要的层数，用来给表格留出画线的空间；cross 是干支之间那一带。 */
+    lanes: Record<'stem' | 'branch' | 'cross', number>;
+    /** 模型定位过、但不属于当前模式的线：不画线，只在结果字旁留一个聚合标记。 */
+    aside?: RelationEdge[];
 }
 
 const TONES: Array<[RegExp, RelationTone, string]> = [
@@ -82,14 +84,25 @@ export function relationMode(tone: RelationTone): RelationMode {
     return FLOW_TONES.has(tone) ? 'flow' : 'relations';
 }
 
-/** 干支自坐与通根等用「结果」说明方向：支生干、支克干时箭头从地支指向天干。 */
+/**
+ * 把两个字的顺序排成「来源 → 结果」，箭头才指得对：
+ * - 干支自坐用「结果」说明方向（支生干 / 支克干时从地支指向天干）；
+ * - 相邻天干（以及命盘里的生 / 克）按说明里动词前的字取来源，如「月干癸水克年干丁火」。
+ */
 function orderedCells(row: RelationRow) {
     const cells = row.位置.map(cell => ({ column: cell.柱, part: cell.部位, char: cell.字 }));
-    if (cells.length === 2 && /^支(生|克)干$/u.test(row.结果 ?? '') && cells[0].part === '天干') return [cells[1], cells[0]];
+    if (cells.length !== 2) return cells;
+    if (/^支(生|克)干$/u.test(row.结果 ?? '') && cells[0].part === '天干') return [cells[1], cells[0]];
+    if (/^(天干)?(生|克)$/u.test(row.类型)) {
+        const verb = row.说明.search(/[生克]/u);
+        const source = verb > 0 ? cells.find(cell => row.说明.slice(0, verb).includes(cell.char)) : undefined;
+        if (source && source !== cells[0]) return [source, cells.find(cell => cell !== source)!];
+    }
     return cells;
 }
 
-const overlaps = (a: [number, number], b: [number, number]) => a[0] <= b[1] && b[0] <= a[1];
+// 只有真正跨过同一列才需要换层；仅在端点相接的两条线可以共用一层，端点处的竖线由 legOffsets 左右错开。
+const overlaps = (a: [number, number], b: [number, number]) => a[0] < b[1] && b[0] < a[1];
 
 /**
  * 把关系行排成连线。`columns` 是盘面从左到右的柱名（年柱…时柱，或带大运、流年的详查柱位条）；
@@ -120,26 +133,21 @@ export function layoutRelations(rows: readonly RelationRow[], columns: readonly 
             edges.push({ ...base, band: parts.has('天干') ? 'stem' : 'branch', shape: 'arc', span: [Math.min(...positions), Math.max(...positions)] });
             return;
         }
-        if (new Set(positions).size === 1) {
-            edges.push({ ...base, band: 'cross', shape: 'vertical', span: [positions[0], positions[0]] });
-            return;
-        }
-        // 跨柱的干支连线会穿过别的字形，改为标在一个字旁：通根标地支，透干标天干，其余标在终点。
-        const anchor = tone === 'root' ? cells.find(cell => cell.part === '地支')!
-            : tone === 'reveal' ? cells.find(cell => cell.part === '天干')!
-            : cells[cells.length - 1];
-        const column = columns.indexOf(anchor.column);
-        edges.push({ ...base, band: anchor.part === '天干' ? 'stem' : 'branch', shape: 'marker', anchor, span: [column, column] });
+        // 干支之间：同一柱画短竖箭头；跨柱的通根 / 透干不画穿行长线，改成目标字旁的聚合标记，
+        // 避免多条线挤在天干与地支之间。箭头方向仍由 cells 的「来源 → 结果」决定。
+        const sameColumn = new Set(positions).size === 1;
+        if (sameColumn) edges.push({ ...base, band: 'cross', shape: 'vertical', span: [positions[0], positions[0]] });
+        else edges.push({ ...base, band: 'cross', shape: 'marker', anchor: cells[cells.length - 1], span: [positions[positions.length - 1], positions[positions.length - 1]] });
     });
     return assignLanes(edges);
 }
 
 /** 同一带里跨度短的先排，与已排的线交叠就往外一层。 */
 function assignLanes(edges: RelationEdge[]): RelationLayout {
-    const lanes = { stem: 0, branch: 0 };
-    for (const band of ['stem', 'branch'] as const) {
+    const lanes = { stem: 0, branch: 0, cross: 0 };
+    for (const band of ['stem', 'branch', 'cross'] as const) {
         const placed: RelationEdge[] = [];
-        const order = edges.filter(edge => edge.band === band)
+        const order = edges.filter(edge => edge.band === band && edge.shape !== 'marker')
             .sort((a, b) => (a.span[1] - a.span[0]) - (b.span[1] - b.span[0]) || a.span[0] - b.span[0]);
         for (const edge of order) {
             let lane = 0;
@@ -149,14 +157,26 @@ function assignLanes(edges: RelationEdge[]): RelationLayout {
             lanes[band] = Math.max(lanes[band], lane + 1);
         }
     }
+    // 通根 / 透干画在干支之间的空档里，即使没有同柱生克也要留出一层放标记。
+    if (edges.some(edge => edge.shape === 'marker')) lanes.cross = Math.max(lanes.cross, 1);
     return { edges, lanes };
 }
 
-/** 只留当前模式与筛选要画的线；模型定位过的线无论模式都保留。 */
+/**
+ * 只留当前模式与筛选要画的线。模型定位过的线在所属模式里始终保留；
+ * 若模型定位的是另一种模式的关系，则在当前模式里收成一个字旁标记（aside），不让两套线叠在一起。
+ * 选择「不显示」时盘面不画线，定位信息仍由盘面上方的说明与位置标签承接。
+ */
 export function visibleRelationEdges(layout: RelationLayout, mode: RelationMode | 'off', hiddenMarks: ReadonlySet<string>, located: ReadonlySet<string>): RelationLayout {
-    const edges = layout.edges.filter(edge => located.has(edge.id) || (mode !== 'off' && edge.mode === mode && !hiddenMarks.has(edge.mark)));
+    if (mode === 'off') return { edges: [], lanes: { stem: 0, branch: 0, cross: 0 }, aside: [] };
+    const edges = layout.edges.filter(edge => edge.mode === mode && (!hiddenMarks.has(edge.mark) || located.has(edge.id)));
+    const aside = layout.edges.filter(edge => edge.mode !== mode && located.has(edge.id));
     // 隐藏一部分线后重新分层，外层不留空档。
-    return assignLanes(edges.map(edge => ({ ...edge, lane: 0 })));
+    const visible = assignLanes(edges.map(edge => ({ ...edge, lane: 0 })));
+    // 旁置标记放在当前模式的最后一层线之外，不与线抢位置。
+    const bands = new Set(aside.map(edge => edge.cells[edge.cells.length - 1].part === '天干' ? 'stem' as const : 'branch' as const));
+    for (const band of bands) visible.lanes[band] += 1;
+    return { ...visible, aside };
 }
 
 export const BAZI_COLUMNS = ['年柱', '月柱', '日柱', '时柱'] as const;

@@ -45,36 +45,63 @@ test('stem and branch arcs take bands, and overlapping spans move out a lane', (
     assert.equal(byId.get('b')!.lane, 0, 'the shortest span sits nearest the glyphs');
     assert.equal(byId.get('d')!.mark, '三合');
     assert.notEqual(byId.get('a')!.lane, byId.get('d')!.lane, 'overlapping spans never share a lane');
-    assert.deepEqual(layout.lanes, { stem: 1, branch: 3 });
+    assert.deepEqual(layout.lanes, { stem: 1, branch: 3, cross: 0 });
 });
 
-test('cross-band facts become vertical lines in one pillar or markers beside a glyph', () => {
+test('cross-band facts stay in one pillar as short arrows and become markers at the result glyph across pillars', () => {
     const rows: RelationRow[] = [
         { 类型: '干支生', 结果: '支生干', 说明: '日柱辰土生庚金', 位置: [cell('日柱', '天干', '庚'), cell('日柱', '地支', '辰')] },
         { 类型: '通根', 结果: '余气', 说明: '日干庚通根年支巳', 位置: [cell('日柱', '天干', '庚'), cell('年柱', '地支', '巳')] },
         { 类型: '透干', 结果: '本气', 说明: '年支巳藏丙透出', 位置: [cell('年柱', '地支', '巳'), cell('月柱', '天干', '丙')] },
+        { 类型: '透干', 结果: '中气', 说明: '年支巳藏戊透出', 位置: [cell('年柱', '地支', '巳'), cell('年柱', '天干', '甲')] },
     ];
-    const [self, root, reveal] = layoutRelations(rows, BAZI_COLUMNS).edges;
+    const layout = layoutRelations(rows, BAZI_COLUMNS);
+    const [self, root, reveal, samePillar] = layout.edges;
     assert.equal(self.shape, 'vertical');
     assert.deepEqual(self.cells.map(item => item.part), ['地支', '天干'], '支生干 points from the branch up to the stem');
+    // 跨柱的通根 / 透干只标在结果字旁：通根标地支、透干标天干，不再画穿行长线。
     assert.equal(root.shape, 'marker');
-    assert.deepEqual([root.band, root.anchor?.column, root.result], ['branch', '年柱', '余气']);
-    assert.deepEqual([reveal.band, reveal.anchor?.column], ['stem', '月柱']);
+    assert.deepEqual([root.band, root.anchor?.column, root.anchor?.part, root.result], ['cross', '年柱', '地支', '余气']);
+    assert.equal(reveal.shape, 'marker');
+    assert.deepEqual([reveal.band, reveal.anchor?.column, reveal.anchor?.part], ['cross', '月柱', '天干']);
+    assert.equal(samePillar.shape, 'vertical', 'a hidden stem surfacing in its own pillar stays a short vertical arrow');
+    assert.equal(layout.lanes.cross, 1, 'markers do not take lanes, so the stem–branch gap stays one row tall');
 });
 
-test('visible edges follow the mode and filters, but a located edge always stays', () => {
+test('adjacent stem 生克 point from the stem the description names first', () => {
+    const rows: RelationRow[] = [
+        { 类型: '天干克', 说明: '月干癸水克年干丁火', 位置: [cell('年柱', '天干', '丁'), cell('月柱', '天干', '癸')] },
+        { 类型: '天干克', 说明: '日干戊土克月干癸水', 位置: [cell('月柱', '天干', '癸'), cell('日柱', '天干', '戊')] },
+        { 类型: '天干生', 说明: '时干己土生年干丁火', 位置: [cell('年柱', '天干', '丁'), cell('时柱', '天干', '己')] },
+    ];
+    const [first, second, third] = layoutRelations(rows, BAZI_COLUMNS).edges;
+    assert.deepEqual(first.cells.map(item => item.char), ['癸', '丁']);
+    assert.deepEqual(second.cells.map(item => item.char), ['戊', '癸']);
+    assert.deepEqual(third.cells.map(item => item.char), ['己', '丁']);
+});
+
+test('visible edges follow the mode and filters, and a located edge of the other mode becomes an aside badge', () => {
     const rows: RelationRow[] = [
         { id: 'clash', 类型: '六冲', 说明: '冲', 位置: [cell('年柱', '地支', '子'), cell('月柱', '地支', '午')] },
         { id: 'harm', 类型: '相害', 说明: '害', 位置: [cell('月柱', '地支', '午'), cell('日柱', '地支', '丑')] },
         { id: 'gen', 类型: '生', 说明: '生', 位置: [cell('年柱', '天干', '甲'), cell('月柱', '天干', '丙')] },
     ];
     const layout = layoutRelations(rows, BAZI_COLUMNS);
-    const ids = (mode: Parameters<typeof visibleRelationEdges>[1], hidden: string[] = [], located: string[] = []) =>
-        visibleRelationEdges(layout, mode, new Set(hidden), new Set(located)).edges.map(edge => edge.id).sort();
+    const visible = (mode: Parameters<typeof visibleRelationEdges>[1], hidden: string[] = [], located: string[] = []) =>
+        visibleRelationEdges(layout, mode, new Set(hidden), new Set(located));
+    const ids = (...args: Parameters<typeof visible>) => visible(...args).edges.map(edge => edge.id).sort();
     assert.deepEqual(ids('relations'), ['clash', 'harm']);
     assert.deepEqual(ids('flow'), ['gen']);
     assert.deepEqual(ids('relations', ['冲']), ['harm']);
-    assert.deepEqual(ids('off', [], ['gen']), ['gen']);
+    // 定位过的线在所属模式里始终保留。
+    assert.deepEqual(ids('relations', ['冲'], ['clash']), ['clash', 'harm']);
+    // 定位的是另一种模式的关系：不画线，收成字旁标记，并给该带留出标记的一层。
+    const aside = visible('flow', [], ['clash']);
+    assert.deepEqual(aside.edges.map(edge => edge.id), ['gen']);
+    assert.deepEqual(aside.aside!.map(edge => edge.id), ['clash']);
+    assert.equal(aside.lanes.branch, 1);
+    // 选择「不显示」时盘面清空。
+    assert.deepEqual(ids('off', [], ['gen']), []);
     assert.deepEqual(visibleRelationEdges(layout, 'relations', new Set(['冲']), new Set()).lanes.branch, 1, 'lanes are recomputed after hiding');
 });
 

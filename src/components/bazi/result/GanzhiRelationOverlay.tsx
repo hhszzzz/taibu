@@ -17,7 +17,7 @@ const TONE_COLOR: Record<RelationTone, string> = {
     combine: 'var(--success)', meet: 'var(--success)', generate: 'var(--success)',
     clash: 'var(--danger)', control: 'var(--danger)',
     punish: 'var(--warning)', harm: 'var(--accent-strong)', break: 'var(--foreground-secondary)',
-    same: 'var(--foreground-tertiary)', root: 'var(--accent)', reveal: 'var(--accent)',
+    same: 'var(--foreground-tertiary)', root: 'var(--accent)', reveal: 'var(--warning)',
 };
 /** 线型区分类型（色弱时也能分辨）：合会生实线，冲克粗线，刑虚线，害点线，破点划线，同气细点线。 */
 const TONE_DASH: Partial<Record<RelationTone, string>> = { punish: '5 3', harm: '1 3', break: '6 2 1 2', same: '1 3' };
@@ -46,32 +46,41 @@ function geometry(edge: RelationEdge, boxes: Map<string, Box>, offsets: Map<stri
     const lineY = (box: Box, part: '天干' | '地支') => part === '天干'
         ? box.top - GLYPH_GAP - edge.lane * RELATION_LANE - RELATION_LANE / 2
         : box.bottom + GLYPH_GAP + edge.lane * RELATION_LANE + RELATION_LANE / 2;
-    if (edge.shape === 'marker') {
-        const box = edge.anchor && at(edge.anchor);
-        if (!box || !edge.anchor) return null;
-        const y = lineY(box, edge.anchor.part);
-        const edgeY = edge.anchor.part === '天干' ? box.top : box.bottom;
-        return { path: `M${box.cx} ${edgeY} V${y}`, badge: { x: box.cx, y } };
-    }
     const cells = edge.cells.map(at);
     if (cells.some(box => !box)) return null;
     const placed = cells as Box[];
-    if (edge.shape === 'vertical') {
-        const x = Math.max(...placed.map(box => box.right)) + 6;
-        const [from, to] = placed;
-        const down = from.cy < to.cy;
-        const y0 = down ? from.cy + 2 : from.cy - 2, y1 = down ? to.cy - 2 : to.cy + 2;
-        return { path: `M${x} ${y0} V${y1}`, badge: { x: x + 1, y: (y0 + y1) / 2 } };
+    const offset = (index: number) => offsets.get(edge.id + '@' + index) ?? 0;
+    // 干支之间：走天干与地支之间的空档，箭头从来源指向结果，不再用贴字的徽标。
+    if (edge.shape === 'vertical' || edge.shape === 'bridge') {
+        const stemIndex = edge.cells.findIndex(cell => cell.part === '天干');
+        const branchIndex = edge.cells.findIndex(cell => cell.part === '地支');
+        if (stemIndex < 0 || branchIndex < 0) return null;
+        const gapTop = placed[stemIndex].bottom + GLYPH_GAP;
+        const gapBottom = placed[branchIndex].top - GLYPH_GAP;
+        // 起点离字 2px；终点留 8px 给箭头，箭头本身不压到字形。
+        const exitY = (index: number, target: boolean) => {
+            const gap = target ? 8 : 2;
+            return edge.cells[index].part === '天干' ? placed[index].bottom + gap : placed[index].top - gap;
+        };
+        const x0 = placed[0].cx + offset(0), x1 = placed[1].cx + offset(1);
+        const y0 = exitY(0, false), y1 = exitY(1, true);
+        if (edge.shape === 'vertical') {
+            // 同一柱的干支：竖线在字形之间；同一柱有多条时按层左右错开。
+            return { path: `M${x0} ${y0} V${y1}`, badge: { x: x0, y: (gapTop + gapBottom) / 2 } };
+        }
+        const y = Math.min(gapTop + edge.lane * RELATION_LANE + RELATION_LANE / 2, Math.max(gapTop + 2, gapBottom - 2));
+        return { path: `M${x0} ${y0} V${y} H${x1} V${y1}`, badge: { x: (x0 + x1) / 2, y } };
     }
     const part = edge.cells[0].part;
     const y = lineY(placed[0], part);
-    const legX = (index: number) => placed[index].cx + (offsets.get(edge.id + '@' + index) ?? 0);
-    const glyphY = (box: Box) => part === '天干' ? box.top + 1 : box.bottom - 1;
-    const xs = placed.map((_, index) => legX(index));
+    // 起点离字 2px；终点留 8px 给箭头，箭头本身不会压到字形。
+    const glyphStart = (box: Box) => part === '天干' ? box.top - 2 : box.bottom + 2;
+    const glyphEnd = (box: Box) => part === '天干' ? box.top - 8 : box.bottom + 8;
+    const xs = placed.map((_, index) => placed[index].cx + offset(index));
     // 有方向的线画成一笔，终点落在被生 / 被克的字上，箭头才指得对。
     const path = edge.directed && placed.length === 2
-        ? `M${xs[0]} ${glyphY(placed[0])} V${y} H${xs[1]} V${glyphY(placed[1])}`
-        : [`M${Math.min(...xs)} ${y} H${Math.max(...xs)}`, ...placed.map((box, index) => `M${xs[index]} ${glyphY(box)} V${y}`)].join(' ');
+        ? `M${xs[0]} ${glyphStart(placed[0])} V${y} H${xs[1]} V${glyphEnd(placed[1])}`
+        : [`M${Math.min(...xs)} ${y} H${Math.max(...xs)}`, ...placed.map((box, index) => `M${xs[index]} ${index === placed.length - 1 ? glyphEnd(box) : glyphStart(box)} V${y}`)].join(' ');
     return { path, badge: { x: (Math.min(...xs) + Math.max(...xs)) / 2, y } };
 }
 
@@ -79,7 +88,13 @@ function geometry(edge: RelationEdge, boxes: Map<string, Box>, offsets: Map<stri
 function legOffsets(edges: RelationEdge[]) {
     const byCell = new Map<string, Array<{ key: string; lane: number }>>();
     for (const edge of edges) {
-        if (edge.shape !== 'arc') continue;
+        if (edge.shape === 'marker') continue;
+        // 同一柱的竖线按柱分组，左右错开；两端共用第一端的偏移，保证是一条直线。
+        if (edge.shape === 'vertical') {
+            const key = edge.cells[0].column + ':vertical';
+            byCell.set(key, [...(byCell.get(key) ?? []), { key: edge.id + '@0', lane: edge.lane }]);
+            continue;
+        }
         edge.cells.forEach((cell, index) => {
             const key = cell.column + ':' + cell.part;
             byCell.set(key, [...(byCell.get(key) ?? []), { key: edge.id + '@' + index, lane: edge.lane }]);
@@ -87,7 +102,7 @@ function legOffsets(edges: RelationEdge[]) {
     }
     const offsets = new Map<string, number>();
     for (const legs of byCell.values()) {
-        legs.sort((a, b) => a.lane - b.lane).forEach((leg, index) => offsets.set(leg.key, (index - (legs.length - 1) / 2) * 5));
+        legs.sort((a, b) => a.lane - b.lane).forEach((leg, index) => offsets.set(leg.key, (index - (legs.length - 1) / 2) * 8));
     }
     return offsets;
 }
@@ -119,10 +134,54 @@ export function GanzhiRelationOverlay({ layout, located, onSelect }: {
         return () => observer.disconnect();
     }, [remeasure, layout]);
     const offsets = legOffsets(layout.edges);
+    // 通根 / 透干不再逐条画引线，改为每柱一个聚合标记（见 markerGroups）。
     const drawn = measured ? layout.edges.flatMap(edge => {
+        if (edge.shape === 'marker') return [];
         const shape = geometry(edge, measured.boxes, offsets);
         return shape ? [{ edge, ...shape }] : [];
     }) : [];
+    // 同一柱的通根 / 透干合成一个标记（如「透2·根」），放在干支之间的空档里；不再一叠徽标互相压住。
+    // 同柱透干本来是一根短竖箭头，也并进这个标记，避免出现「透 根·透」并排两枚。
+    const groupedFlow = (edge: RelationEdge) => edge.shape === 'marker' || (edge.shape === 'vertical' && edge.tone === 'reveal');
+    const markerGroups = measured ? [...layout.edges.reduce((groups, edge) => {
+        if (!groupedFlow(edge)) return groups;
+        const column = edge.shape === 'marker' ? edge.anchor!.column : edge.cells[0].column;
+        groups.set(column, [...(groups.get(column) ?? []), edge]);
+        return groups;
+    }, new Map<string, RelationEdge[]>())].flatMap(([column, edges]) => {
+        const stem = measured.boxes.get(column + ':天干');
+        const branch = measured.boxes.get(column + ':地支');
+        if (!stem && !branch) return [];
+        const y = stem && branch ? (stem.bottom + branch.top) / 2 : stem ? stem.bottom + 12 : branch!.top - 12;
+        const marks = new Map<string, { mark: string; count: number; tone: RelationEdge['tone'] }>();
+        for (const edge of edges) {
+            const item = marks.get(edge.mark);
+            if (item) item.count += 1;
+            else marks.set(edge.mark, { mark: edge.mark, count: 1, tone: edge.tone });
+        }
+        return [{ key: 'group:' + column, edges, x: (stem ?? branch!).cx + 34, y, marks: [...marks.values()] }];
+    }) : [];
+    // 模型定位的另一种模式的关系：不画线，只在结果字旁收成一个标记（如「冲·害·刑」）。
+    const asideGroups = measured ? [...(layout.aside ?? []).reduce((groups, edge) => {
+        const anchor = edge.cells[edge.cells.length - 1];
+        const key = anchor.column + ':' + anchor.part;
+        groups.set(key, [...(groups.get(key) ?? []), edge]);
+        return groups;
+    }, new Map<string, RelationEdge[]>())].flatMap(([key, edges]) => {
+        const box = measured.boxes.get(key);
+        if (!box) return [];
+        const part = edges[0].cells[edges[0].cells.length - 1].part;
+        const band = part === '天干' ? 'stem' : 'branch';
+        // 旁置标记占该带最后一层（visibleRelationEdges 已为它加了一层）。
+        const lane = Math.max(0, layout.lanes[band] - 1);
+        const y = part === '天干'
+            ? box.top - GLYPH_GAP - lane * RELATION_LANE - RELATION_LANE / 2
+            : box.bottom + GLYPH_GAP + lane * RELATION_LANE + RELATION_LANE / 2;
+        return [{ key: 'aside:' + key, edges, x: box.cx, y, marks: [...new Set(edges.map(edge => edge.mark))] }];
+    }) : [];
+    const groupKey = (edge: RelationEdge) => edge.shape === 'marker' && edge.anchor ? 'group:' + edge.anchor.column
+        : edge.shape === 'vertical' && edge.tone === 'reveal' ? 'group:' + edge.cells[0].column : null;
+    const emphasised = (edge: RelationEdge) => located.has(edge.id) || active === edge.id || active === groupKey(edge);
     const tones = [...new Set(layout.edges.filter(edge => edge.directed).map(edge => edge.tone))];
     return <div ref={rootRef} className="pointer-events-none absolute inset-0 z-[5]" data-relation-overlay="">
         {measured && <svg className="absolute left-0 top-0 overflow-visible" width={measured.width} height={measured.height} aria-hidden="true">
@@ -130,19 +189,20 @@ export function GanzhiRelationOverlay({ layout, located, onSelect }: {
                 <path d="M0 0 L8 4 L0 8 z" fill={TONE_COLOR[tone]} />
             </marker>)}</defs>
             {drawn.map(({ edge, path }) => {
-                const emphasised = located.has(edge.id) || active === edge.id;
-                return <path key={edge.id} d={path} data-relation-edge={edge.id} data-tone={edge.tone} data-located={located.has(edge.id) || undefined}
+                const isEmphasised = emphasised(edge);
+                return <path key={edge.id} d={path} data-relation-edge={edge.id} data-relation-mark={edge.mark} data-tone={edge.tone} data-located={located.has(edge.id) || undefined}
                     fill="none" stroke={TONE_COLOR[edge.tone]} strokeLinecap="round" strokeLinejoin="round"
-                    strokeWidth={(edge.tone === 'clash' || edge.tone === 'control' ? 1.75 : 1.25) + (emphasised ? 1 : 0)}
+                    strokeWidth={(edge.tone === 'clash' || edge.tone === 'control' ? 1.6 : edge.tone === 'root' || edge.tone === 'reveal' ? 1.1 : 1.25) + (isEmphasised ? 1 : 0)}
                     strokeDasharray={edge.shape === 'marker' ? '1 2' : TONE_DASH[edge.tone]}
-                    opacity={active && !emphasised ? 0.3 : 0.9}
+                    opacity={active && !isEmphasised ? 0.2 : edge.tone === 'root' || edge.tone === 'reveal' ? 0.75 : 0.9}
                     markerEnd={edge.directed && edge.shape !== 'marker' ? `url(#${uid}-${edge.tone})` : undefined} />;
             })}
         </svg>}
-        {drawn.map(({ edge, badge }) => {
+        {drawn.filter(({ edge }) => !(edge.shape === 'vertical' && edge.tone === 'reveal')).map(({ edge, badge }) => {
             const isLocated = located.has(edge.id);
             const color = TONE_COLOR[edge.tone];
-            const text = edge.shape === 'marker' && edge.result ? `${edge.mark}·${edge.result.charAt(0)}` : edge.mark;
+            // 根 / 透 的「本气、中气」放进悬停说明，徽标只留一个字，避免长标签在行间互相压住。
+            const text = edge.mark;
             const props = {
                 'data-relation-badge': edge.id, 'data-tone': edge.tone, title: edge.description,
                 className: 'pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-[4px] border px-1 text-[0.625rem] font-medium leading-[0.8125rem] transition-opacity focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1',
@@ -155,6 +215,43 @@ export function GanzhiRelationOverlay({ layout, located, onSelect }: {
                     aria-pressed={isLocated} aria-label={`${edge.type}：${edge.description}`}
                     onFocus={() => setActive(edge.id)} onBlur={() => setActive(null)} onClick={() => onSelect(edge)}>{text}</button>
                 : <span key={edge.id} {...props} role="img" aria-label={`${edge.type}：${edge.description}`}>{text}</span>;
+        })}
+        {markerGroups.map(group => {
+            const first = group.edges[0];
+            const isLocated = group.edges.some(edge => located.has(edge.id));
+            const label = group.marks.map(item => item.mark + (item.count > 1 ? item.count : '')).join('·');
+            const props = {
+                'data-relation-badge': first.id, 'data-relation-marker-group': group.edges.length, 'data-relation-marks': group.marks.map(item => item.mark).join(','), 'data-relation-mark-counts': group.marks.map(item => item.mark + ':' + item.count).join(','), 'data-tone': first.tone,
+                title: group.edges.map(edge => edge.description).join('\n'),
+                className: 'pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-[4px] border border-border bg-background px-1 text-[0.625rem] font-medium leading-[0.8125rem] transition-opacity focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1',
+                style: { left: group.x, top: group.y, opacity: active && active !== group.key && !isLocated ? 0.45 : 1, outlineColor: 'var(--accent)' },
+                onMouseEnter: () => setActive(group.key), onMouseLeave: () => setActive(null),
+            };
+            const content = <>{group.marks.map((item, index) => <span key={item.mark} style={{ color: TONE_COLOR[item.tone] }}>
+                {index > 0 && <span className="text-foreground-tertiary">·</span>}{item.mark}{item.count > 1 && <sup className="ml-px text-[0.5rem] tabular-nums">{item.count}</sup>}
+            </span>)}</>;
+            return onSelect
+                ? <button key={group.key} type="button" {...props} aria-label={`${label}：${group.edges.map(edge => edge.description).join('；')}`}
+                    onFocus={() => setActive(group.key)} onBlur={() => setActive(null)} onClick={() => onSelect(first)}>{content}</button>
+                : <span key={group.key} {...props} role="img" aria-label={`${label}：${group.edges.map(edge => edge.description).join('；')}`}>{content}</span>;
+        })}
+        {asideGroups.map(group => {
+            const first = group.edges[0];
+            const isLocated = group.edges.some(edge => located.has(edge.id));
+            const props = {
+                'data-relation-badge': first.id, 'data-relation-aside': group.edges.length, 'data-relation-marks': group.marks.join(','), 'data-tone': first.tone,
+                title: group.edges.map(edge => edge.description).join('\n'),
+                className: 'pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-[4px] border border-dashed px-1 text-[0.625rem] font-medium leading-[0.8125rem] transition-opacity focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1',
+                style: { left: group.x, top: group.y, borderColor: TONE_COLOR[first.tone], background: 'var(--background)', opacity: active && active !== group.key && !isLocated ? 0.45 : 1, outlineColor: TONE_COLOR[first.tone] },
+                onMouseEnter: () => setActive(group.key), onMouseLeave: () => setActive(null),
+            };
+            const content = <>{group.marks.map((mark, index) => <span key={mark} style={{ color: TONE_COLOR[group.edges.find(edge => edge.mark === mark)!.tone] }}>
+                {index > 0 && <span className="text-foreground-tertiary">·</span>}{mark}
+            </span>)}</>;
+            return onSelect
+                ? <button key={group.key} type="button" {...props} aria-label={`定位的关系：${group.edges.map(edge => edge.description).join('；')}`}
+                    onFocus={() => setActive(group.key)} onBlur={() => setActive(null)} onClick={() => onSelect(first)}>{content}</button>
+                : <span key={group.key} {...props} role="img" aria-label={`定位的关系：${group.edges.map(edge => edge.description).join('；')}`}>{content}</span>;
         })}
     </div>;
 }

@@ -248,7 +248,28 @@ export async function loadConversation(conversationId: string): Promise<Conversa
     };
 }
 
-export async function saveConversation(
+/** 每个对话最近一次排队的保存；PATCH 是整份消息覆盖写。 */
+const pendingConversationSaves = new Map<string, Promise<boolean>>();
+
+/**
+ * 同一对话的保存按发起顺序串行：并发的整份覆盖写可能后发先至，
+ * 例如快速连点「上一版本」后刷新，会回到较早点击的那个分支。
+ */
+export function saveConversation(
+    conversationId: string,
+    messages: ChatMessage[],
+    title?: string
+): Promise<boolean> {
+    const previous = pendingConversationSaves.get(conversationId) ?? Promise.resolve(true);
+    const current = previous.then(() => writeConversation(conversationId, messages, title));
+    pendingConversationSaves.set(conversationId, current);
+    void current.then(() => {
+        if (pendingConversationSaves.get(conversationId) === current) pendingConversationSaves.delete(conversationId);
+    });
+    return current;
+}
+
+async function writeConversation(
     conversationId: string,
     messages: ChatMessage[],
     title?: string

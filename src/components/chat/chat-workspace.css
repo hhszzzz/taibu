@@ -299,7 +299,8 @@
 .agent-step[data-state="failed"] .agent-step-note { color: var(--danger); }
 .agent-step-chevron { flex-shrink: 0; margin-left: 0; color: inherit; transition: transform .15s; }
 .agent-step-body { border-top: 0; }
-.agent-step-call { display: flex; min-width: 0; max-height: 400px; flex-direction: column; gap: 5px; padding: 6px 32px 6px 0; overflow-y: auto; color: var(--foreground-secondary); font-size: calc(14 / 16 * 1rem); line-height: calc(20 / 16 * 1rem); }
+/* 右侧操作列（复制 ×2 + 在工作区查看 = 76px，自步骤顶 8px 起）绝对定位；普通视图只剩一行结果时，正文至少撑到操作列底部，避免按钮压进下一步。 */
+.agent-step-call { display: flex; min-width: 0; min-height: 52px; max-height: 400px; flex-direction: column; gap: 5px; padding: 6px 32px 6px 0; overflow-y: auto; color: var(--foreground-secondary); font-size: calc(14 / 16 * 1rem); line-height: calc(20 / 16 * 1rem); }
 .agent-step-code { position: relative; display: flex; min-width: 0; }
 .agent-step-command { display: flex; width: 100%; flex-direction: column; gap: 3px; margin: 0; padding: 0; color: var(--foreground-secondary); font-size: inherit; line-height: inherit; white-space: pre-wrap; overflow-wrap: anywhere; }
 .agent-step-detail-line { overflow-wrap: anywhere; }

@@ -256,3 +256,54 @@ test('sidebar conversation viewport top-up waits for the first page to finish lo
     /data-conversation-row="true"/u,
   );
 });
+
+test('saveConversation writes one conversation in the order the saves were made', async () => {
+  const originalFetch = global.fetch;
+  const started: string[] = [];
+  const finished: string[] = [];
+  const releases: Array<() => void> = [];
+  global.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const label = String(input) + ':' + (JSON.parse(String(init?.body)) as { messages: Array<{ content: string }> }).messages[0].content;
+    started.push(label);
+    await new Promise<void>(resolve => releases.push(resolve));
+    finished.push(label);
+    return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }) as FetchLike;
+  try {
+    const { saveConversation } = await import('../lib/chat/conversation');
+    const message = (content: string) => [{ id: content, role: 'user' as const, content, createdAt: '' }];
+    const first = saveConversation('conv-a', message('v2'));
+    const second = saveConversation('conv-a', message('v1'));
+    const other = saveConversation('conv-b', message('b'));
+    await new Promise(resolve => setImmediate(resolve));
+    // 另一个对话不排队；同一对话的第二次保存要等第一次落库后才发出。
+    assert.deepEqual(started, ['/api/conversations/conv-a:v2', '/api/conversations/conv-b:b']);
+    releases.shift()!();
+    assert.equal(await first, true);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(started.at(-1), '/api/conversations/conv-a:v1');
+    while (releases.length) releases.shift()!();
+    assert.deepEqual(await Promise.all([second, other]), [true, true]);
+    assert.deepEqual(finished.filter(label => label.includes('conv-a')), ['/api/conversations/conv-a:v2', '/api/conversations/conv-a:v1']);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('a failed save does not block the next save of the same conversation', async () => {
+  const originalFetch = global.fetch;
+  let calls = 0;
+  global.fetch = (async () => {
+    calls += 1;
+    return calls === 1
+      ? new Response(JSON.stringify({ error: '保存失败' }), { status: 500, headers: { 'Content-Type': 'application/json' } })
+      : new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }) as FetchLike;
+  try {
+    const { saveConversation } = await import('../lib/chat/conversation');
+    const results = await Promise.all([saveConversation('conv-c', []), saveConversation('conv-c', [])]);
+    assert.deepEqual(results, [false, true]);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});

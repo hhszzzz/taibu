@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation';
 import { BookOpenText, ChevronDown, ChevronRight, Clock3, Ellipsis, Share2 } from 'lucide-react';
 import { useConversationList } from '@/lib/chat/ConversationListContext';
 import { useConversationExport } from '@/components/chat/ConversationExportDialog';
+import { ShareConversationMenu } from '@/components/chat/ShareConversationMenu';
 import { SettingsCenterLink } from '@/components/settings/SettingsCenterLink';
 import { FloatingPanel } from '@/components/ui/FloatingPanel';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -178,10 +179,8 @@ export function ChatHeader({
             </FloatingPanel>}
 
             <FloatingPanel open={shareMenu} anchorRef={shareRef} onClose={() => setShareMenu(false)} label="分享" className="chat-header-menu" align="end">
-                {conversationId && <button type="button" role="menuitem" onClick={() => { setShareMenu(false); void copyConversationLink(); }}>复制链接</button>}
-                {conversationId && <button type="button" role="menuitem" disabled={exportBusy !== null} onClick={() => { setShareMenu(false); void downloadExport('md'); }}>导出 Markdown</button>}
-                {conversationId && <button type="button" role="menuitem" disabled={exportBusy !== null} onClick={() => { setShareMenu(false); void downloadExport('html'); }}>导出 HTML</button>}
-                {!conversationId && <p className="chat-header-menu-note">新对话保存后可以分享。</p>}
+                <ShareConversationMenu conversationId={conversationId} taskActive={backgroundTasks.some(task => task.id === conversationId)}
+                    exportBusy={exportBusy} onExport={format => { void downloadExport(format); }} onClose={() => setShareMenu(false)} />
             </FloatingPanel>
 
             <FloatingPanel open={tasksOpen} anchorRef={tasksRef} onClose={() => setTasksOpen(false)} label="后台任务" role="dialog" className="chat-header-menu chat-tasks-menu" align="end">

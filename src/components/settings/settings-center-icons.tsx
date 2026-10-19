@@ -11,6 +11,7 @@ import {
   ProfileIcon,
   ScribbleIcon,
   SettingsIcon,
+  ShareLinkIcon,
   UpgradeIcon,
 } from '@/lib/navigation/nav-icons';
 import type { SettingsCenterTab } from '@/lib/settings-center';
@@ -44,6 +45,7 @@ export const SETTINGS_CENTER_TAB_ICONS: Record<SettingsCenterTab, ComponentType<
   profile: withDefaultSize(ProfileIcon),
   general: withDefaultSize(SettingsIcon),
   upgrade: withDefaultSize(UpgradeIcon),
+  shares: withDefaultSize(ShareLinkIcon),
   personalization: withDefaultSize(PersonalizationIcon),
   byok: withDefaultSize(KeyIcon),
   help: withDefaultSize(HelpIcon),

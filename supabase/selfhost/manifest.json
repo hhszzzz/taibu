@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "baselineRevision": "5725dde",
-  "sourceFingerprint": "6b43fed9e848f0a86f65243c37b60497a4b78d3c086fd0aa70160a7f26623121",
+  "sourceFingerprint": "50301a969c864a95c5566d05a277e2a72833f5225e1acca7708f7460a9d0188f",
   "target": "empty local self-hosted application schema; NOT production parity or a migration replay",
   "bootstrapOrder": [
     "platform roles/extensions",
@@ -18,7 +18,7 @@
   "sources": [
     {
       "file": "supabase/tabel_export_from_supabase.sql",
-      "sha256": "0580244c2996ea41ee36c20312f76e88c4426a606fcf8363e13315c60d91fa22"
+      "sha256": "1dd23a30813c9cc8f3304bf49f250a8d3e44cd0b9a4f1fc6e686b371125882d8"
     },
     {
       "file": "supabase/migrations/20260118_create_gamification_tables.sql",
@@ -201,6 +201,10 @@
       "sha256": "6d78410e8a10b710bc9d03a28920b6a066ea3c035e29b96d89bd72bac216fa06"
     },
     {
+      "file": "supabase/migrations/20261019_100000_conversation_shares.sql",
+      "sha256": "38998e70bca24541263e54d788ca46c1b0a2537b66cae65b2892658c2a907d43"
+    },
+    {
       "file": "supabase/selfhost/source-views.sql",
       "sha256": "65a5ab3f4d78c1c4c291be37e04e747072294ccc834c63a9c71795b11d14432e"
     },
@@ -222,7 +226,7 @@
     },
     {
       "file": "scripts/selfhost-schema.mjs",
-      "sha256": "35793ad484be00669ffb6303488ca0ea0c33f4eba1b6e751787a84608725dc0f"
+      "sha256": "3bc6ed82ee6c269c1c68f65a4228a369ac72b2b4ecd85c21e977f5b7d1a334ea"
     },
     {
       "file": "src/app/api/supabase/storage/route.ts",
@@ -395,6 +399,12 @@
       "name": "conversation_messages",
       "source": "supabase/tabel_export_from_supabase.sql",
       "security": "owner CRUD through conversations ownership + administrator JWT",
+      "uniqueSource": null
+    },
+    {
+      "name": "conversation_shares",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "Feature migration: owner SELECT when granted; atomic owner or lease-fenced RPC writes",
       "uniqueSource": null
     },
     {
@@ -923,6 +933,15 @@
       "reason": null
     },
     {
+      "name": "get_conversation_share",
+      "callers": [
+        "src/lib/chat/conversation-share.server.ts"
+      ],
+      "source": "supabase/migrations/20261019_100000_conversation_shares.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
       "name": "import_ming_records_and_notes",
       "callers": [
         "src/app/api/records/import/route.ts"
@@ -1001,6 +1020,15 @@
         "src/lib/server/conversation-messages.ts"
       ],
       "source": "supabase/migrations/20260409_021500_admin_session_rpc_alignment.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "revoke_conversation_share",
+      "callers": [
+        "src/app/api/conversations/[id]/share/route.ts"
+      ],
+      "source": "supabase/migrations/20261019_100000_conversation_shares.sql",
       "status": "defined",
       "reason": null
     },
@@ -1100,6 +1128,15 @@
         "src/app/api/conversations/[id]/route.ts"
       ],
       "source": "supabase/migrations/20260409_021500_admin_session_rpc_alignment.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "upsert_conversation_share",
+      "callers": [
+        "src/app/api/conversations/[id]/share/route.ts"
+      ],
+      "source": "supabase/migrations/20261019_100000_conversation_shares.sql",
       "status": "defined",
       "reason": null
     }
@@ -1654,6 +1691,21 @@
       ]
     },
     {
+      "name": "conversation_shares",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/conversations/[id]/share/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/shares/route.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
       "name": "conversations",
       "kind": "table",
       "status": "defined",
@@ -1672,6 +1724,10 @@
         },
         {
           "file": "src/app/api/conversations/[id]/fork/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/conversations/[id]/share/route.ts",
           "kind": "literal-from"
         },
         {
@@ -2617,7 +2673,7 @@
   "artifacts": [
     {
       "file": "supabase/selfhost/001-application.sql",
-      "sha256": "f5415b4e43832c081ed81606f89e798a06fb7635db26fd8439f90050694ac23a"
+      "sha256": "a8501ad58f9e73a2fc839062e4ec63813d05b9144dc66c1efce6996c97da4eae"
     },
     {
       "file": "supabase/selfhost/002-storage.sql",

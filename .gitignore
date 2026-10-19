@@ -112,6 +112,7 @@ supabase/migrations/*
 !supabase/migrations/20261010_100000_agent_current_engine_only.sql
 !supabase/migrations/20261017_100000_conversation_list_agent_flag.sql
 !supabase/migrations/20261018_090000_conversation_agent_flag_includes_forks.sql
+!supabase/migrations/20261019_100000_conversation_shares.sql
 # Additional explicit inputs for isolated Auth/PostgREST acceptance only.
 !supabase/migrations/20260110_add_user_settings_and_fix_notifications_rls.sql
 !supabase/migrations/20260113_add_app_settings.sql

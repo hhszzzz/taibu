@@ -710,3 +710,17 @@ CREATE TABLE public.user_agent_memory (
   updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (user_id,fingerprint)
 );
+
+-- Public read-only conversation shares; maintained by 20261019_100000_conversation_shares.sql
+CREATE TABLE public.conversation_shares (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  token text NOT NULL UNIQUE CHECK (token ~ '^[A-Za-z0-9_-]{43}$'),
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  conversation_id uuid NOT NULL REFERENCES public.conversations(id) ON DELETE CASCADE,
+  title text NOT NULL DEFAULT '' CHECK (char_length(title) <= 200),
+  snapshot jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(snapshot) = 'array'),
+  include_charts boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  revoked_at timestamptz
+);

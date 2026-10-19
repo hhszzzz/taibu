@@ -9,7 +9,7 @@
  *   const { run } = await import('file:///absolute/repo/scripts/tests/p5-browser-fixture.mjs');
  *   return run(page, '/tmp/taibu-p5-browser/fixture.js');
  *
- * Actual components: SettingsCenterPage/SettingsCenterHost/GeneralSettingsPanel/ChartsPanel, AIModelPanel,
+ * Actual components: SettingsCenterPage/SettingsCenterHost/GeneralSettingsPanel/ChartsPanel/SharedLinksPanel, ShareConversationMenu, AIModelPanel,
  * AnnouncementManagementPanel, KeyManagementPanel, ConversationListProvider, ChartPickerModal,
  * useSelectedBaziChart, useComposerState, HistoryDrawer/HistoryPageTemplate, RecordsPage and useAnalysisSnapshot.
  * Actual root ClientProviders owns the shared Query client and handles synthetic auth I/O.
@@ -73,6 +73,7 @@ import { VirtualizedChatMessageList } from '@/components/chat/VirtualizedChatMes
 import { useAgentRoundFolds } from '@/components/chat/agent/AgentRoundFold';
 import { useTranscriptScroll } from '@/lib/chat/use-transcript-scroll';
 import { scrollToMessageId } from '@/lib/chat/message-navigation';
+import { ShareConversationMenu } from '@/components/chat/ShareConversationMenu';
 const initialToolParts = AGENT_TOOL_FIXTURE_PARTS;
 const familyParts = () => [
   AGENT_DAYUN_FIXTURE_PART,
@@ -185,6 +186,19 @@ function MenuProbe() {
       <button type="button" role="menuitem">Visible first</button>
       <button type="button" role="menuitemcheckbox" aria-checked="true" style={{ display: 'none' }}>Hidden checked</button>
       <button type="button" role="menuitem">Visible last</button>
+    </FloatingPanel>
+  </section>;
+}
+
+// Header share menu for one saved conversation; a running task locks link writes.
+function ShareProbe() {
+  const anchorRef = useRef(null);
+  const [busy, setBusy] = useState(false);
+  window.fixture.shareBusy = setBusy;
+  return <section data-testid="share-probe">
+    <button ref={anchorRef} type="button">Share fixture anchor</button>
+    <FloatingPanel open anchorRef={anchorRef} onClose={() => {}} label="分享">
+      <ShareConversationMenu conversationId="share-fixture" taskActive={busy} exportBusy={null} onExport={format => { window.fixture.shareExport = format; }} onClose={() => {}} />
     </FloatingPanel>
   </section>;
 }
@@ -325,6 +339,7 @@ function Shell() {
   const [sidebarMounted, setSidebarMounted] = useState(false);
   const [phoneDrawerMounted, setPhoneDrawerMounted] = useState(false);
   const [menuMounted, setMenuMounted] = useState(false);
+  const [shareMounted, setShareMounted] = useState(false);
   const [roundsMounted, setRoundsMounted] = useState(false);
   const [snapshotMounted, setSnapshotMounted] = useState(false);
   window.fixture.chatWorkspace = setChatWorkspaceOpen;
@@ -332,7 +347,7 @@ function Shell() {
   window.fixture.remountModels = () => setModelMountKey(current => current + 1);
   window.fixture.mount = { composer: setComposerMounted, history: setHistoryMounted, drawer: setDrawerMounted,
     records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted, agent: setAgentMounted, question: setQuestionMounted, results: setResultsMounted, sidebar: setSidebarMounted, phoneDrawer: setPhoneDrawerMounted, menu: setMenuMounted, rounds: setRoundsMounted,
-    snapshot: setSnapshotMounted };
+    snapshot: setSnapshotMounted, share: setShareMounted };
   window.fixture.chartKey = queryKeys.userCharts;
   window.fixture.chartClient = chartClient;
   window.fixture.deleteHistory = deleteHistorySummary;
@@ -398,6 +413,7 @@ function Shell() {
     {sidebarMounted && <Sidebar />}
     {phoneDrawerMounted && <MobileChatDrawer />}
     {menuMounted && <MenuProbe />}
+    {shareMounted && <ShareProbe />}
     {roundsMounted && <RoundsProbe />}
     {historyMounted && <section data-testid="history-page"><HistoryPageTemplate {...historyConfig} /></section>}
     {drawerMounted && <section data-testid="history-drawer"><HistoryDrawer type="tarot" /></section>}
@@ -450,7 +466,7 @@ export async function build(outputDirectory) {
       plugin.onResolve({ filter: /^@\/lib\/auth$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^@\/components\/providers\/(ChatTaskToastBridge|AnnouncementPopupHost)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^@\/lib\/hooks\/(useFeatureToggles|useCurrentUserProfile)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
-      plugin.onResolve({ filter: /^@\/components\/settings\/panels\// }, args => /\/(GeneralSettingsPanel|AISettingsPanel|ChartsPanel)$/.test(args.path) ? null : ({ path: args.path, namespace: 'fixture' }));
+      plugin.onResolve({ filter: /^@\/components\/settings\/panels\// }, args => /\/(GeneralSettingsPanel|AISettingsPanel|ChartsPanel|SharedLinksPanel)$/.test(args.path) ? null : ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^(?:node:)?crypto$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^next\/(navigation|link)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^@\/components\/settings\/AccountAdminPanels$/ }, args => ({ path: args.path, namespace: 'fixture' }));
@@ -697,6 +713,8 @@ export async function run(existingPage, bundlePath) {
   const record = (id, title, category) => ({ id, title, category, user_id: 'alice', content: title, tags: [], event_date: null,
     related_chart_type: null, related_chart_id: null, is_pinned: false, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' });
   const records = [record('record-general', 'General saved record', 'general'), record('record-event', 'Event saved record', 'event')];
+  // Public share link of conversation share-fixture, as /api/conversations/[id]/share and /api/shares return it.
+  let fixtureShare = null;
   await context.route('**/*', async route => {
     const request = route.request();
     const url = new URL(request.url());
@@ -746,6 +764,12 @@ export async function run(existingPage, bundlePath) {
         return ok({ settings: owned });
       }
     }
+    if (url.pathname === '/api/conversations/share-fixture/share') {
+      if (method === 'POST') fixtureShare = { token: fixtureShare?.token ?? 'S'.repeat(43), path: '/share/' + 'S'.repeat(43), includeCharts: body?.includeCharts === true, createdAt: '2026-10-19T08:00:00Z', updatedAt: '2026-10-19T08:0' + (fixtureShare ? '5' : '0') + ':00Z' };
+      if (method === 'DELETE') { const revoked = fixtureShare !== null; fixtureShare = null; return ok({ revoked }, true); }
+      return ok({ share: fixtureShare }, true);
+    }
+    if (url.pathname === '/api/shares' && method === 'GET') return ok({ shares: fixtureShare ? [{ ...fixtureShare, conversationId: 'share-fixture', title: '分享夹具对话' }] : [] }, true);
     if (url.pathname === '/api/reminders') return ok({ subscriptions: ['solar_term', 'fortune', 'key_date'].map(reminderType => ({ reminderType, enabled: false, notifySite: true, notifyEmail: false })) });
     if (url.pathname === '/api/user/charts' || /^\/api\/(bazi|ziwei)\/charts(?:\/update)?$/.test(url.pathname)) {
       const user = await page.evaluate(() => window.fixtureAuth.cookieUser);
@@ -2301,6 +2325,39 @@ export async function run(existingPage, bundlePath) {
     check('A new question folds the round before it and numbers the older one', (await roundBars.allInnerTexts()).join('|') === '第 1 轮 · 明年适合换工作吗？ · 2 个步骤已选定 1 份成果|上一轮 · 你说正官克身是主线，古籍里是怎么讲的？' &&
       await roundBars.evaluateAll(bars => bars.map(bar => bar.getAttribute('aria-expanded')).join()) === 'true,false' && await roundRows() === 'round-u1,round-a1,round-u3');
     await page.evaluate(() => window.fixture.mount.rounds(false));
+
+    // Public share link: create with the chart opt-in, refresh in place, lock during a task, then revoke from settings.
+    await page.evaluate(() => window.fixture.mount.share(true));
+    const shareMenu = page.getByRole('menu', { name: '分享' });
+    const sharePosts = () => requests.filter(entry => entry.pathname === '/api/conversations/share-fixture/share' && entry.method === 'POST');
+    await shareMenu.getByRole('menuitem', { name: '创建公开链接' }).waitFor();
+    check('Without a link the share menu offers creation above the export actions',
+      (await shareMenu.getByRole('menuitem').allInnerTexts()).map(text => text.trim()).join('|') === '创建公开链接|导出 Markdown|导出 HTML');
+    await shareMenu.getByLabel('包含命盘与工具结果').check();
+    await shareMenu.getByRole('menuitem', { name: '创建公开链接' }).click();
+    await shareMenu.getByRole('menuitem', { name: '复制公开链接' }).waitFor();
+    check('Creating posts the chart opt-in once and switches to link management',
+      sharePosts().length === 1 && sharePosts()[0].body?.includeCharts === true &&
+      (await shareMenu.getByRole('menuitem').allInnerTexts()).map(text => text.trim()).join('|') === '复制公开链接|更新链接|删除链接|导出 Markdown|导出 HTML');
+    await shareMenu.getByRole('menuitem', { name: '更新链接' }).click();
+    await until(() => document.body.innerText.includes('公开链接已更新为当前对话'));
+    check('Refreshing re-posts the snapshot and keeps the existing link', sharePosts().length === 2 && await shareMenu.getByRole('menuitem', { name: '复制公开链接' }).isVisible());
+    await page.evaluate(() => window.fixture.shareBusy(true));
+    await until(() => document.body.innerText.includes('任务进行中，完成后可以分享。'));
+    check('A running task locks refreshing while copy stays available',
+      await shareMenu.getByRole('menuitem', { name: '更新链接' }).isDisabled() && !await shareMenu.getByRole('menuitem', { name: '复制公开链接' }).isDisabled());
+    await page.evaluate(() => window.fixture.shareBusy(false));
+    await page.evaluate(() => window.fixture.mount.share(false));
+    await page.evaluate(() => { history.replaceState(null, '', '#settings/shares'); window.dispatchEvent(new HashChangeEvent('hashchange')); });
+    const shareDelete = page.getByRole('button', { name: '删除「分享夹具对话」的公开链接' });
+    await shareDelete.waitFor();
+    check('The settings center lists the active link with its public address',
+      await page.getByRole('link', { name: '打开「分享夹具对话」的公开页面' }).getAttribute('href') === '/share/' + 'S'.repeat(43));
+    await shareDelete.click();
+    await page.getByRole('button', { name: '删除链接', exact: true }).click();
+    await page.getByText('还没有公开分享的对话', { exact: true }).waitFor();
+    check('Deleting from settings revokes the link and shows the empty state',
+      requests.some(entry => entry.pathname === '/api/conversations/share-fixture/share' && entry.method === 'DELETE'));
 
     check('No unhandled network requests escaped fixtures', blocked.length === 0);
     check('No browser runtime exceptions', browserErrors.length === 0);

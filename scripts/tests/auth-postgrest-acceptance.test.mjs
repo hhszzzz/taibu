@@ -670,6 +670,58 @@ test('real local GoTrue/PostgREST application acceptance', { timeout: 300_000 },
     assert.equal(preserved.data.user.id, identities.free.id);
   });
 
+  await t.test('public shares are created by the owner route and readable anonymously only through the token RPC', async () => {
+    const shareRoute = require('../../src/app/api/conversations/[id]/share/route.ts');
+    const shareList = require('../../src/app/api/shares/route.ts');
+    const publicShare = require('../../src/lib/chat/conversation-share.server.ts');
+    const messages = [
+      { id: 'share-u', role: 'user', content: '公开分享问题', createdAt: '2026-10-19T00:00:00.000Z', mentions: [{ type: 'bazi_chart', id: 'private-chart', name: '私密姓名', preview: '' }] },
+      { id: 'share-a', role: 'assistant', content: '公开分享回答', createdAt: '2026-10-19T00:00:01.000Z' },
+    ];
+    const created = await client(sessions.owner.access_token).rpc('create_conversation_with_messages', {
+      p_user_id: identities.owner.id, p_title: '分享验收', p_personality: 'general', p_source_type: 'chat', p_source_data: {}, p_messages: messages,
+    });
+    assert.ok(!created.error && created.data);
+    const params = { params: Promise.resolve({ id: created.data }) };
+    const shareRequest = (method, session, body) => new NextRequest(`${stack.url}/api/conversations/${created.data}/share`, {
+      method,
+      headers: { authorization: `Bearer ${session.access_token}`, ...(body ? { 'content-type': 'application/json' } : {}) },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+
+    const foreign = await shareRoute.POST(shareRequest('POST', sessions.other, {}), params);
+    assert.equal(foreign.status, 404);
+    const first = await shareRoute.POST(shareRequest('POST', sessions.owner, {}), params);
+    assert.equal(first.status, 200);
+    const { share } = await first.json();
+    assert.match(share.token, /^[A-Za-z0-9_-]{43}$/);
+    const refreshed = await (await shareRoute.POST(shareRequest('POST', sessions.owner, { includeCharts: true }), params)).json();
+    assert.equal(refreshed.share.token, share.token, 'refresh keeps the published token');
+
+    const anonymous = createClient(stack.url, stack.anonKey, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+    const rpc = await anonymous.rpc('get_conversation_share', { p_token: share.token });
+    assert.ok(!rpc.error);
+    assert.equal(rpc.data.length, 1);
+    assert.deepEqual(Object.keys(rpc.data[0]).sort(), ['created_at', 'include_charts', 'snapshot', 'title', 'updated_at']);
+    assert.deepEqual(rpc.data[0].snapshot.map(item => item.content), ['公开分享问题', '公开分享回答']);
+    assert.equal(JSON.stringify(rpc.data[0]).includes('私密姓名'), false);
+    assert.equal(JSON.stringify(rpc.data[0]).includes('private-chart'), false);
+    const table = await anonymous.from('conversation_shares').select('token');
+    assert.ok(table.error || table.data.length === 0, 'anonymous visitors never read the share table');
+    assert.deepEqual((await client(sessions.other.access_token).from('conversation_shares').select('token')).data, []);
+    const viaPage = await publicShare.loadPublicShare(share.token);
+    assert.equal(viaPage?.title, '分享验收');
+
+    const listed = await (await shareList.GET(new NextRequest(`${stack.url}/api/shares`, { headers: { authorization: `Bearer ${sessions.owner.access_token}` } }))).json();
+    assert.deepEqual(listed.shares.map(item => item.token), [share.token]);
+    assert.deepEqual((await (await shareList.GET(new NextRequest(`${stack.url}/api/shares`, { headers: { authorization: `Bearer ${sessions.other.access_token}` } }))).json()).shares, []);
+
+    assert.equal((await shareRoute.DELETE(shareRequest('DELETE', sessions.other), params)).status, 404);
+    assert.equal((await shareRoute.DELETE(shareRequest('DELETE', sessions.owner), params)).status, 200);
+    assert.deepEqual((await anonymous.rpc('get_conversation_share', { p_token: share.token })).data, []);
+    assert.equal(await publicShare.loadPublicShare(share.token), null);
+  });
+
   await t.test('logout revokes the real refresh session rather than only clearing cookies', async () => {
     const result = await post(auth.POST, '/api/auth', { action: 'signOut' }, sessions.free, true);
     assert.equal(result.response.status, 200);

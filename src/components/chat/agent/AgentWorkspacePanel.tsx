@@ -100,15 +100,16 @@ function ResourceView({ resource, model, data, answers, questionIds, userId, art
             // The calculation that produced the reading, or the saved chart it read back.
             const source = tools.find(tool => isAgentChartTool(tool.name) && getAgentChart(tool)) ?? reading;
             body = value && reading
-                ? <><Suspense fallback={<p role="status">加载命盘…</p>}>
+                ? <Suspense fallback={<p role="status">加载命盘…</p>}>
                     <InteractiveChart key={`${reference ?? reading.id}:${pinned ? named!.id : ''}`} value={value} tool={reading} reference={reference}
                         focus={focus} followModel={followModel} live={live} pinned={pinned !== null} subject={describeAgentChartSubject(source ?? reading, value)}
                         baziFacts={value.kind === 'bazi' ? getLatestBaziFacts(drilldowns) : undefined}
                         baziViewing={value.kind === 'bazi' ? getBaziViewing(model.tools.filter(tool => tools.includes(tool) || tool.name === 'focus_chart'), reference,
                             value.chart.干支关系明细 ?? [], pinned ? named : undefined) : null}
                         onAsk={onChartQuestion} />
-                </Suspense>{drilldownList}</>
-                // A drilldown of a saved chart not read in this task shows its findings without the board.
+                </Suspense>
+                // 详查的结果已经落在盘面上（定位高亮、八字连线与流通），规范文本在对话的步骤里展开；这里不再重复列出。
+                // A drilldown of a saved chart not read in this task has no board, so its findings show here instead.
                 : drilldowns.length ? drilldownList
                 : latest && latest.status === 'completed' ? <WorkspaceTextFallback tool={latest} note="命盘数据不完整，已保留工具返回内容。" />
                 : latest && <><WorkspaceToolMeta tool={latest} runStatus={runStatus} /><WorkspaceToolPending tool={latest} runStatus={runStatus} running="正在排盘…" /></>;

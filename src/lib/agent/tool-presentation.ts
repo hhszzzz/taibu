@@ -61,8 +61,9 @@ export function getAgentChart(tool: AgentToolPart): AgentChart | null {
   const output = record(tool.output);
   const name = tool.name === 'inspect_chart' && typeof output.chartKind === 'string' ? output.chartKind : tool.name;
   if (!isAgentChartTool(name)) return null;
-  // Durable calculation results carry an artifact envelope; legacy results may be bare canonical JSON.
-  const chart = record(Object.hasOwn(output, 'result') ? output.result : output);
+  // Durable calculation results carry an artifact envelope with the full-detail board; older ones only the model's
+  // default-level result, and legacy results may be bare canonical JSON.
+  const chart = record(Object.hasOwn(output, 'board') ? output.board : Object.hasOwn(output, 'result') ? output.result : output);
   const basic = record(chart.基本信息);
   const board = record(chart.卦盘);
   const main = record(board.本卦);

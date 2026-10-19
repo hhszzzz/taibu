@@ -72,6 +72,8 @@ export function AgentInteractiveChart({ value, tool, reference, focus, followMod
   // 三方四正 / 关联位置完全由模型决定：模型看了就展开，没看就不展开。
   const related = model?.includeRelated ?? false;
   const selected = targets.filter(target => ids.includes(target.id));
+  // 一个位置与它的某一层（六壬的地盘丑与其天盘子）可能同名，同名的位置只列一次。
+  const chips = [...new Map(selected.map(target => [chipLabel(target), target.id])).entries()];
   const [focusOnly, setFocusOnly] = useState(false);
   const dimmed = focusOnly && selected.length > 0;
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -162,7 +164,7 @@ export function AgentInteractiveChart({ value, tool, reference, focus, followMod
         {live && <span className="agent-board-follow-state">{followModel ? '跟随中' : '已暂停跟随'}</span>}
       </span>}
       {caption && <span className="agent-board-caption">{caption}</span>}
-      {selected.length > 0 && <ul className="agent-board-chips" aria-label="盘面位置">{selected.map(target => <li key={target.id}>{chipLabel(target)}</li>)}</ul>}
+      {chips.length > 0 && <ul className="agent-board-chips" aria-label="盘面位置">{chips.map(([label, id]) => <li key={id}>{label}</li>)}</ul>}
       {selected.length > 0 && <button type="button" className="agent-board-only" aria-pressed={focusOnly} onClick={() => setFocusOnly(!focusOnly)}>只看相关位置</button>}
     </div>
     <div ref={viewportRef} className="agent-chart-scroll" tabIndex={0} aria-label={value.title + '内容'}>

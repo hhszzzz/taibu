@@ -88,7 +88,8 @@ export function getChartTargets(value: AgentChart): ChartTarget[] {
   }
   if (value.kind === 'qimen') value.chart.九宫盘.forEach(palace => {
     const id = 'qimen:palace:' + palace.宫位序号;
-    add(id, palace.宫名 + ' ' + palace.宫位);
+    // 宫位已含宫名（坎1），标签写作「坎1宫」，不再重复宫名。
+    add(id, palace.宫位 + '宫');
     if (palace.宫位序号 !== 5) for (const field of ['八神', '九星', '八门', '天盘天干', '地盘天干'] as const) {
       if (palace[field]) add(id + ':' + field, palace.宫名 + ' ' + field + ' ' + palace[field]);
     }

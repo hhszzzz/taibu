@@ -28,7 +28,7 @@ export function AstrologyChart({ chart, interaction, includeRelated = true }: { 
   });
   lines.forEach(line => { activeKeys.add(line.from); activeKeys.add(line.to); });
   const row = (id: string, children: ReactNode, className = '') => <li key={id} className={`rounded-lg px-2.5 py-1.5 data-[chart-selected=true]:bg-accent-light ${className}`} data-chart-selected={isChartTargetSelected(interaction, id) || undefined}>{children}</li>;
-  const tiers = labelTiers(visible);
+  const angles = labelAngles(visible);
   const aspectsOpen = interaction?.selectedIds.some(id => id.startsWith('astrology:aspect:')) || undefined;
   return <div className="@container flex flex-col gap-3">
     {visible.length > 0 && <figure className="chart-astrology-wheel"><svg viewBox="0 0 340 340" role="group" aria-label="原始黄经投影">
@@ -49,11 +49,13 @@ export function AstrologyChart({ chart, interaction, includeRelated = true }: { 
         return <line key={index} x1={a.x} y1={a.y} x2={b.x} y2={b.y} className="chart-aspect-line"><title>{line.label}</title></line>;
       })}
       {visible.map(point => {
-        const spot = polar(point.factor.黄经度!, 103), radius = LABEL_TIERS[tiers.get(point.id) ?? 0], label = polar(point.factor.黄经度!, radius), selected = Boolean(point.factor.标识 && activeKeys.has(point.factor.标识));
-        const tick = polar(point.factor.黄经度!, radius > 103 ? radius - 6 : radius + 6);
+        const degree = point.factor.黄经度!, angle = angles.get(point.id) ?? degree;
+        const spot = polar(degree, 103), label = polar(angle, LABEL_RADIUS), selected = Boolean(point.factor.标识 && activeKeys.has(point.factor.标识));
+        // 名字被推开超过 1° 时，引线从星体连到名字内侧。
+        const moved = Math.abs(((angle - degree + 540) % 360) - 180) > 1, tick = polar(angle, LABEL_RADIUS - 8);
         return <g key={point.id} data-chart-planet={point.id} data-chart-selected={selected || undefined} role={interaction ? 'button' : undefined} tabIndex={interaction ? 0 : undefined}
           aria-label={'盘面 ' + point.label} aria-pressed={interaction ? selected : undefined} onClick={() => interaction?.onSelect(point.id)} onKeyDown={event => { if (interaction && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); interaction.onSelect(point.id); } }}>
-          {Math.abs(radius - 103) > 20 && <line x1={spot.x} y1={spot.y} x2={tick.x} y2={tick.y} stroke="currentColor" opacity=".25" />}
+          {moved && <line x1={spot.x} y1={spot.y} x2={tick.x} y2={tick.y} stroke="currentColor" opacity=".3" />}
           <circle cx={spot.x} cy={spot.y} r={selected ? 6 : 3.5} fill="currentColor" /><text x={label.x} y={label.y} fontSize="10" textAnchor="middle" dominantBaseline="middle" fill="currentColor">{point.label}</text>
         </g>;
       })}
@@ -116,23 +118,55 @@ export function AstrologyChart({ chart, interaction, includeRelated = true }: { 
   </div>;
 }
 
-/** 标签环：从内到外三档半径。黄经相近（不足 10°）的星体依次换档，避免名字叠在一起。 */
-const LABEL_TIERS = [121, 85, 70] as const;
-const LABEL_GAP = 10;
+/**
+ * 标签环：所有名字放在同一圈，按各自在该角度切向上占的长度排开。挤在一起的名字合成一组，
+ * 以组内原黄经的平均值为中心依次排开；被推开的名字用引线连回星体的实际位置。
+ */
+const LABEL_RADIUS = 122;
+const LABEL_FONT = 10;
+const LABEL_PADDING = 3;
 
-function labelTiers(points: Point[]) {
+/** A label's length along the ring's tangent at this longitude, in degrees: wide at the top and bottom, one line tall at the sides. */
+function labelSpan(point: Point) {
+  const theta = point.factor.黄经度! * Math.PI / 180;
+  const width = point.label.length * LABEL_FONT, height = LABEL_FONT + 2;
+  return (Math.abs(Math.cos(theta)) * width + Math.abs(Math.sin(theta)) * height + LABEL_PADDING) / LABEL_RADIUS * 180 / Math.PI;
+}
+
+export function labelAngles(points: Point[]) {
   const sorted = [...points].sort((a, b) => a.factor.黄经度! - b.factor.黄经度!);
-  const last: number[] = LABEL_TIERS.map(() => -Infinity);
-  const first: number[] = LABEL_TIERS.map(() => Infinity);
-  const tiers = new Map<string, number>();
-  for (const point of sorted) {
-    const degree = point.factor.黄经度!;
-    // 末尾的星体还要与环起点的星体比较（359° 与 2° 相邻）。
-    let tier = LABEL_TIERS.findIndex((_, index) => degree - last[index] >= LABEL_GAP && first[index] + 360 - degree >= LABEL_GAP);
-    if (tier < 0) tier = 0;
-    tiers.set(point.id, tier);
-    last[tier] = degree;
-    if (first[tier] === Infinity) first[tier] = degree;
+  type Group = { members: Point[]; start: number; span: number };
+  const place = (members: Point[]): Group => {
+    const spans = members.map(labelSpan);
+    const span = spans.reduce((total, value) => total + value, 0);
+    // 组中心取成员原位置的平均；第一个名字从中心往回半组宽处开始。
+    const center = members.reduce((total, point) => total + point.factor.黄经度!, 0) / members.length;
+    return { members, start: center - span / 2 + spans[0] / 2, span };
+  };
+  const end = (group: Group) => group.start - labelSpan(group.members[0]) / 2 + group.span;
+  let groups = sorted.map(point => place([point]));
+  for (let merged = true; merged && groups.length > 1;) {
+    merged = false;
+    for (let index = 0; index < groups.length; index++) {
+      const current = groups[index], next = groups[(index + 1) % groups.length];
+      const wraps = index === groups.length - 1;
+      // 环尾与环首相邻（359° 与 2°）：比较时把环首加 360°。
+      const nextStart = next.start - labelSpan(next.members[0]) / 2 + (wraps ? 360 : 0);
+      if (end(current) <= nextStart) continue;
+      const members = wraps ? [...current.members, ...next.members.map(point => ({ ...point, factor: { ...point.factor, 黄经度: point.factor.黄经度! + 360 } }))] : [...current.members, ...next.members];
+      const group = place(members);
+      groups = wraps ? [group, ...groups.slice(1, -1)] : [...groups.slice(0, index), group, ...groups.slice(index + 2)];
+      merged = true;
+      break;
+    }
   }
-  return tiers;
+  const angles = new Map<string, number>();
+  for (const group of groups) {
+    let cursor = group.start;
+    group.members.forEach((point, index) => {
+      if (index > 0) cursor += labelSpan(group.members[index - 1]) / 2 + labelSpan(point) / 2;
+      angles.set(point.id, ((cursor % 360) + 360) % 360);
+    });
+  }
+  return angles;
 }

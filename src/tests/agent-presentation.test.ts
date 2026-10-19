@@ -348,3 +348,14 @@ test('the AI-safe liuyao board keeps its body, global shensha and hexagram inter
   // The AI-safe contract keeps 用神 and 应期 out of the agent board.
   assert.deepEqual(value.chart.用神分析, []);
 });
+
+test('the workspace board reads the full-detail reading even when the model only got the default level', async () => {
+  const input = { question: '本月事业运势如何？', yongShenTargets: ['官鬼'], method: 'select', hexagramName: '天火同人', changedHexagramName: '乾为天', date: '2026-02-10T09:30:00' };
+  const result = await executeTool('liuyao', input);
+  const model = buildToolSuccessPayload('liuyao', result, { detailLevel: 'default' }).structuredContent;
+  const full = buildToolSuccessPayload('liuyao', result, { detailLevel: 'full' }).structuredContent;
+  const tool = (output: unknown) => getAgentChart({ type: 'tool', id: 'l', name: 'liuyao', title: '六爻', status: 'completed', output });
+  const strengths = (output: unknown) => { const value = tool(output); return value?.kind === 'liuyao' ? value.chart.六爻.map(line => line.旺衰) : null; };
+  assert.ok(strengths({ result: model })?.every(strength => !strength), 'the default level carries no strength');
+  assert.ok(strengths({ artifactId: 'a', result: model, board: full })?.every(Boolean), 'the board prefers the full-detail reading');
+});

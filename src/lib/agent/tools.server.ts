@@ -330,6 +330,12 @@ export async function createAgentTools(
     if (kind === "calculation") checkpoint.finalSelectionMade = false;
     checkpointEffects.get(name)?.(details, callId);
   };
+  /**
+   * The workspace board reads the full-detail reading (the snapshot inspect_chart also uses), so a chart the model never
+   * inspected still shows strength, movement and the like; the model keeps reading the default-level content.
+   */
+  const boardOf = (name: string, result: Pick<AgentArtifactRow['result'], 'chartSnapshot'>) =>
+    result.chartSnapshot?.kind === name && result.chartSnapshot.result ? { board: result.chartSnapshot.result } : {};
   const checkMember = async () =>
     getUserCreditInfo(run.user_id, { client: store.db });
   const wrap = <T extends TSchema>(
@@ -361,7 +367,7 @@ export async function createAgentTools(
           ? {
               ...cached.result,
               content: cached.result.content,
-              details: { artifactId: cached.id, result: cached.result.details },
+              details: { artifactId: cached.id, result: cached.result.details, ...boardOf(name, cached.result) },
             }
           : cached.result;
       }
@@ -394,7 +400,7 @@ export async function createAgentTools(
         ? {
             ...result,
             content: result.content,
-            details: { artifactId: a.id, result: result.details },
+            details: { artifactId: a.id, result: result.details, ...boardOf(name, result as Pick<AgentArtifactRow['result'], 'chartSnapshot'>) },
           }
         : result;
     },

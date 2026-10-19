@@ -457,10 +457,10 @@ try {
     .filter({ has: page.locator("svg.lucide-pencil") })
     .first()
     .click();
-  // Scope the edit form: the composer's own 发送 button shares the same name.
+  // Inline edit box (claude B10): 取消 ghost + 保存 filled; scoped so no other 保存 button matches.
   const editBox = page.locator(".chat-user-edit");
   await editBox.getByRole("textbox", { name: "编辑消息内容", exact: true }).fill("Agent验收：编辑消息后跨命盘对比，在聊天中分析。");
-  await editBox.getByRole("button", { name: "发送", exact: true }).click();
+  await editBox.getByRole("button", { name: "保存", exact: true }).click();
   const editedResponse = await editResponse;
   assert.equal(editedResponse.status(), 201);
   const edited = await editedResponse.json();

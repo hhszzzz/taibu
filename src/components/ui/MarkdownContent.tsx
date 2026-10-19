@@ -17,7 +17,8 @@ import ReactMarkdown, { type Components } from 'react-markdown';
 import type { PluggableList } from 'unified';
 import { MarkdownBlocks, markdownPlugins, pendingChartFence } from '@/lib/chat/markdown-blocks';
 import { remarkCitations } from '@/lib/chat/markdown-citations';
-import { HighlightedCode, MarkdownTable } from './MarkdownTools';
+import { CodeBlock, MarkdownTable } from './MarkdownTools';
+import { markdownLinkProps } from '@/lib/chat/markdown-links';
 import type { ChartData } from '@/lib/visualization/chart-types';
 
 const ChartRenderer = lazy(() => import('@/components/visualization/ChartRenderer'));
@@ -59,7 +60,7 @@ const staticComponents: Partial<Components> = {
         <h6 className="text-sm font-medium mt-2 mb-1 text-foreground-secondary">{children}</h6>
     ),
     a: ({ href, children }) => (
-        <a href={href} className="text-accent underline underline-offset-2">{children}</a>
+        <a href={href} {...markdownLinkProps(href)} className="text-accent underline underline-offset-2">{children}</a>
     ),
     blockquote: ({ children }) => (
         <blockquote className="border-l-4 border-accent/50 pl-4 py-1 my-3 italic text-foreground-secondary">
@@ -107,7 +108,7 @@ const staticComponents: Partial<Components> = {
             }
         }
 
-        if (!isInline) return <HighlightedCode code={String(children)} language={match?.[1] ?? ''} />;
+        if (!isInline) return <CodeBlock code={String(children)} language={match?.[1] ?? ''} />;
         return (
             <code
                 className={isInline

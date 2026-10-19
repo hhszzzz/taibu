@@ -30,6 +30,7 @@ import { ComposerStatusBar } from '@/components/chat/composer/ComposerStatusBar'
 import type { ChatMode } from '@/lib/chat/use-chat-state';
 import { useComposerCommands } from './composer/ComposerCommands';
 import { usePrivateAttachments } from '@/lib/chat/use-private-attachments';
+import { COMPOSER_FILES_EVENT, pickPlainAttachment } from '@/lib/chat/composer-files';
 import { PrivateAttachments } from './agent/PrivateAttachments';
 import type { ModelSettingsProps } from '@/lib/chat/model-settings';
 import './composer/composer.css';
@@ -283,18 +284,38 @@ export function ChatComposer({
     }, [mentions, normalizedMentions, onMentionsChange]);
 
     // --- Event handlers ---
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (agentMode) { void uploads.upload(Array.from(e.target.files ?? [])); e.target.value = ''; return; }
-        const file = e.target.files?.[0];
-        if (!file || !onAttachmentChange) return;
+    const attachPlainFile = (file: File) => {
+        if (!onAttachmentChange) return;
         if (!canUseBoth && attachmentState?.webSearchEnabled) {
             onAttachmentChange({ file, webSearchEnabled: false });
             showToast('info', '同时使用搜索和附件仅限 Pro 用户，已自动关闭搜索');
         } else {
             onAttachmentChange({ ...attachmentState, file, webSearchEnabled: attachmentState?.webSearchEnabled ?? false });
         }
+    };
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (agentMode) { void uploads.upload(Array.from(e.target.files ?? [])); e.target.value = ''; return; }
+        const file = e.target.files?.[0];
+        if (file) attachPlainFile(file);
         e.target.value = '';
     };
+    /** Files dropped on the conversation or pasted: the same flows as the + menu. */
+    const acceptFiles = (files: File[]) => {
+        if (!files.length || disabled) return;
+        if (!userId) { onAuthRequired?.(); return; }
+        if (isDreamMode) { showToast('info', '解梦模式不支持附件'); return; }
+        if (agentMode) { if (!uploads.uploading) void uploads.upload(files); return; }
+        const { file, notice } = pickPlainAttachment(files);
+        if (notice) showToast('info', notice);
+        if (file) attachPlainFile(file);
+    };
+    const acceptFilesRef = useRef(acceptFiles);
+    useEffect(() => { acceptFilesRef.current = acceptFiles; });
+    useEffect(() => {
+        const onFiles = (event: Event) => acceptFilesRef.current((event as CustomEvent<File[]>).detail);
+        window.addEventListener(COMPOSER_FILES_EVENT, onFiles);
+        return () => window.removeEventListener(COMPOSER_FILES_EVENT, onFiles);
+    }, []);
 
     const handleWebToggle = () => {
         if (!onAttachmentChange) return;
@@ -644,11 +665,11 @@ export function ChatComposer({
                             onChange={(e) => handleInputChange(e.target.value)}
                             onKeyDown={handleKeyDown}
                             onPaste={event => {
-                                if (!agentMode || !userId || uploads.uploading) return;
                                 const files = Array.from(event.clipboardData.files);
+                                if (files.length) { event.preventDefault(); acceptFiles(files); return; }
+                                if (!agentMode || !userId || uploads.uploading) return;
                                 const text = event.clipboardData.getData('text/plain');
-                                if (files.length) { event.preventDefault(); void uploads.upload(files); }
-                                else if (text.length > 8000 && !event.clipboardData.getData('text/html')) { event.preventDefault(); void uploads.upload([new File([text], `粘贴资料-${new Date().toISOString().slice(0,10)}.txt`, { type: 'text/plain' })]); showToast('info', '长文本已转为资料，可预览后再发送'); }
+                                if (text.length > 8000 && !event.clipboardData.getData('text/html')) { event.preventDefault(); void uploads.upload([new File([text], `粘贴资料-${new Date().toISOString().slice(0,10)}.txt`, { type: 'text/plain' })]); showToast('info', '长文本已转为资料，可预览后再发送'); }
                             }}
                             onScroll={(e) => {
                                 if (overlayRef.current) {

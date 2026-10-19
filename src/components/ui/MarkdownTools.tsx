@@ -1,7 +1,7 @@
 'use client';
 
 import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Copy, Download, Expand, X } from 'lucide-react';
+import { Check, Copy, Download, Expand, X } from 'lucide-react';
 import type { ThemedToken } from 'shiki';
 import { Modal } from './Modal';
 import { useTheme } from './ThemeProvider';
@@ -41,6 +41,30 @@ export const HighlightedCode = memo(function HighlightedCode({ code, language }:
     }, [code, language, theme, key]);
     return <code className="markdown-code">{result?.key === key ? result.tokens.map((line, i) => <span key={i}>{line.map((token, j) => <span key={j} style={{ color: token.color }}>{token.content}</span>)}{i < result.tokens.length - 1 ? '\n' : ''}</span>) : code}</code>;
 });
+
+/** Fenced code: language label and a copy button whose icon turns into a check (no toast on success). */
+export function CodeBlock({ code, language }: { code: string; language: string }) {
+    const [copied, setCopied] = useState(false);
+    const { showToast } = useToast();
+    useEffect(() => {
+        if (!copied) return;
+        const timer = setTimeout(() => setCopied(false), 2000);
+        return () => clearTimeout(timer);
+    }, [copied]);
+    const copy = async () => {
+        try { await navigator.clipboard.writeText(code.replace(/\n$/, '')); setCopied(true); }
+        catch { showToast('error', '复制失败'); }
+    };
+    return <div className="markdown-code-frame">
+        <div className="markdown-code-head">
+            <span>{language || '代码'}</span>
+            <button type="button" onClick={() => void copy()} aria-label={copied ? '已复制代码' : '复制代码'}>
+                {copied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+            </button>
+        </div>
+        <HighlightedCode code={code} language={language} />
+    </div>;
+}
 
 export function MarkdownTable({ children }: { children: ReactNode }) {
     const ref = useRef<HTMLTableElement>(null);

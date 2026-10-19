@@ -86,12 +86,13 @@ function createCustomProviderChatRunner(customProvider: NonNullable<ReturnType<t
     };
 }
 
+/** Local-only failure notice: never saved, so it offers no fork. */
+const unavailableReply = (content: string): ChatMessage => ({ id: (Date.now() + 1).toString(), role: 'assistant', content, createdAt: new Date().toISOString(), metadata: { unsaved: true } });
+
 interface UseChatMessagingParams {
     state: ChatStateReturn;
     userId: string | null;
     user: { user_metadata?: { nickname?: string } } | null;
-    membership: { type: string; isActive: boolean } | null;
-    credits: number | null;
     refreshViewerState: () => Promise<unknown>;
     markViewerCreditsExhausted: () => void;
     showToast: ReturnType<typeof import('@/components/ui/Toast').useToast>['showToast'];
@@ -103,8 +104,6 @@ export function useChatMessaging({
     state,
     userId,
     user,
-    membership: _membership, // eslint-disable-line @typescript-eslint/no-unused-vars -- reserved for future credit checks
-    credits: _credits, // eslint-disable-line @typescript-eslint/no-unused-vars -- reserved for future credit checks
     refreshViewerState,
     markViewerCreditsExhausted,
     showToast,
@@ -271,8 +270,8 @@ export function useChatMessaging({
                             ? (customProviderConfig.modelName || customProviderConfig.modelId)
                             : undefined,
                         metadata: customProviderConfig && shouldShowCheckKeyAction(event.errorMessage)
-                            ? { customProviderErrorAction: 'check-key' }
-                            : undefined,
+                            ? { unsaved: true, customProviderErrorAction: 'check-key' }
+                            : { unsaved: true },
                     };
                     setMessages([...event.task.messages, errorMessage]);
                 } else {
@@ -520,7 +519,7 @@ export function useChatMessaging({
         } catch (error) {
             console.error('发送失败:', error);
             if (conversationId === activeConversationIdRef.current) {
-                const errorMessage: ChatMessage = { id: (Date.now() + 1).toString(), role: 'assistant', content: '抱歉，服务暂时不可用。请稍后再试。', createdAt: new Date().toISOString() };
+                const errorMessage = unavailableReply('抱歉，服务暂时不可用。请稍后再试。');
                 setMessages(prev => { const last = prev[prev.length - 1]; return last?.role === 'assistant' && !last.content ? [...prev.slice(0, -1), errorMessage] : [...prev, errorMessage]; });
             }
         } finally {
@@ -611,7 +610,7 @@ export function useChatMessaging({
             }
         } catch (error) {
             console.error('编辑发送失败:', error);
-            if (isTargetActive()) setMessages(prev => [...prev.slice(0, -1), { id: (Date.now() + 1).toString(), role: 'assistant', content: '抱歉，服务暂时不可用。', createdAt: new Date().toISOString() }]);
+            if (isTargetActive()) setMessages(prev => [...prev.slice(0, -1), unavailableReply('抱歉，服务暂时不可用。')]);
         }
     };
 
@@ -715,7 +714,7 @@ export function useChatMessaging({
             }
         } catch (error) {
             console.error('重新生成失败:', error);
-            if (isTargetActive()) setMessages(prev => [...prev.slice(0, -1), { id: (Date.now() + 1).toString(), role: 'assistant', content: '抱歉，服务暂时不可用。', createdAt: new Date().toISOString() }]);
+            if (isTargetActive()) setMessages(prev => [...prev.slice(0, -1), unavailableReply('抱歉，服务暂时不可用。')]);
         }
     };
 

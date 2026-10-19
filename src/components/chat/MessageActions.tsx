@@ -33,7 +33,8 @@ export function MessageActions({ message, disabled = false, copied, onCopy, onEd
         { label: copied ? '已复制' : '复制消息', icon: copied ? Check : Copy, run: onCopy },
         ...(!disabled && !readOnly && isUser && onEdit ? [{ label: '编辑消息', icon: Pencil, run: onEdit }] : []),
         ...(!disabled && !readOnly && !isUser && onRegenerate ? [{ label: '重新生成', icon: RefreshCw, run: () => onRegenerate(message.id) }] : []),
-        ...(!isUser && (!message.agent || message.agent.status === 'completed') ? [{ label: '从此回答分叉', icon: GitFork, run: () => window.dispatchEvent(new CustomEvent('taibu:fork-message', { detail: message.id })) }] : []),
+        // 分叉依赖已保存的回答：生成中不可分叉，仅存在于本地的失败提示也不提供。
+        ...(!disabled && !isUser && message.metadata?.unsaved !== true && (!message.agent || message.agent.status === 'completed') ? [{ label: '从此回答分叉', icon: GitFork, run: () => window.dispatchEvent(new CustomEvent('taibu:fork-message', { detail: message.id })) }] : []),
         ...(!disabled && !isUser && knowledgeBaseEnabled && onArchive ? [{ label: '加入知识库', icon: BookOpenText, run: () => onArchive(message) }] : []),
     ];
     // 用户与助手都把全部操作直接排在行内（claude 同款）；用户行不再有重复的「更多」菜单。

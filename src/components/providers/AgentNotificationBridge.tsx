@@ -2,6 +2,7 @@
 // 需要 useEffect 轮询任务通知，并读写 localStorage 与浏览器通知 API
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import { useToast } from '@/components/ui/Toast';
 import { fetchCachedUserSettings } from '@/lib/user/settings';
 import { requestBrowserJson } from '@/lib/browser-api';
@@ -14,9 +15,16 @@ import {
     type Notification as SiteNotification,
 } from '@/lib/notification';
 type TaskNotification = SiteNotification & { event_key?: string; event_data?: { conversationId?: string; kind?: string } };
+/** In-app target of a task notice: its own /chat link, else the conversation it belongs to. */
+export function taskNoticeHref(notice: Pick<TaskNotification, 'link' | 'event_data'>) {
+    if (notice.link?.startsWith('/chat?')) return notice.link;
+    const id = notice.event_data?.conversationId;
+    return id ? `/chat?id=${encodeURIComponent(id)}` : null;
+}
 export function AgentNotificationBridge({ userId }: { userId: string | null }) {
     const { showToast } = useToast();
     const queryClient = useQueryClient();
+    const router = useRouter();
     useEffect(() => {
         if (!userId) return;
         const controller = new AbortController();
@@ -54,10 +62,11 @@ export function AgentNotificationBridge({ userId }: { userId: string | null }) {
                     if (viewing(notice.event_data?.conversationId)) { await markAsRead(notice.id); continue; }
                     const claim = await requestBrowserJson<{ claimed: boolean }>('/api/notifications/popup', { method:'POST', body:JSON.stringify({ id:notice.id }), signal:controller.signal });
                     if (!claim.data?.claimed || controller.signal.aborted) continue;
-                    showToast('info', `${notice.title} · ${notice.content ?? '可在通知中心打开对话'}`);
+                    const href = taskNoticeHref(notice);
+                    showToast('info', `${notice.title} · ${notice.content ?? '可在通知中心打开对话'}`, href ? { action: { label: '打开', onClick: () => router.push(href) } } : undefined);
                     if (desktop) {
                         const native = new window.Notification(notice.title, { body: notice.content ?? '', tag:notice.event_key });
-                        native.onclick = () => { window.focus(); if (notice.link?.startsWith('/chat?')) window.location.assign(notice.link); native.close(); };
+                        native.onclick = () => { window.focus(); if (href) window.location.assign(href); native.close(); };
                     }
                 }
             } catch { /* polling retries without generating or billing */ } finally { busy=false; lastPolledAt=Date.now(); }
@@ -70,6 +79,6 @@ export function AgentNotificationBridge({ userId }: { userId: string | null }) {
         void poll(); const timer=setInterval(() => void poll(), TASK_NOTIFICATION_POLL_MS);
         window.addEventListener('focus',presence); document.addEventListener('visibilitychange',resume);
         return () => { controller.abort(); clearInterval(timer); window.removeEventListener('focus',presence); document.removeEventListener('visibilitychange',resume); try { localStorage.removeItem(presenceKey); } catch { /* optional */ } };
-    }, [userId,showToast,queryClient]);
+    }, [userId,showToast,queryClient,router]);
     return null;
 }

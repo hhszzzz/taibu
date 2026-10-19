@@ -7,7 +7,7 @@
  */
 'use client';
 import { Fragment, memo, useState, useMemo, useCallback, useRef } from 'react';
-import { Check, X, FileText, Globe, KeyRound } from 'lucide-react';
+import { FileText, Globe, KeyRound } from 'lucide-react';
 import type { AIMessageMetadata, ChatMessage, InjectedSource, Mention } from '@/types';
 import { getEnabledDataSourceTypes } from '@/lib/data-sources/catalog';
 import { formatMentionsForDisplay } from '@/lib/format-mentions';
@@ -87,7 +87,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
             setEditingId(null);
             setEditContent('');
             setEditMentions([]);
-        } catch { setEditError('消息发送失败，请重试'); }
+        } catch { setEditError('保存失败，请重试'); }
         finally { setEditSaving(false); }
     }, [editingId, editContent, editMentions, onEditMessage, editSaving]);
 
@@ -108,8 +108,9 @@ export const ChatMessageItem = memo(function ChatMessageItem({
 
     const handleEditKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
         if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+        // claude 内联编辑：Enter 保存、Shift+Enter 换行、Esc 取消（输入法组字时都不触发）。
         if (e.key === 'Escape' && !editSaving) { e.preventDefault(); handleCancelEdit(); return; }
-        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void handleSaveEdit(); return; }
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleSaveEdit(); return; }
         if (e.key !== 'Backspace' && e.key !== 'Delete') return;
         const textarea = editTextareaRef.current;
         if (!textarea) return;
@@ -168,55 +169,44 @@ export const ChatMessageItem = memo(function ChatMessageItem({
         return (
             <article className="chat-message-row is-user group flex justify-end" data-message-id={message.id} aria-label="用户消息">
                 {editingId === message.id ? (
-                    <div className="chat-user-edit w-full max-w-[85%] space-y-2">
-                        <div className="relative w-full rounded-lg bg-background-secondary border border-border focus-within:ring-2 focus-within:ring-accent/30">
-                            <div
-                                ref={editOverlayRef}
-                                className="pointer-events-none absolute inset-0 px-4 py-3 whitespace-pre-wrap break-words text-base leading-relaxed text-foreground overflow-y-auto"
-                            >
-                                {highlightedEditContentParts.map((part) => (
-                                    part.kind === 'mention'
-                                        ? (
-                                            <Fragment key={`${part.start}-${part.end}`}><span className="chat-mention-at">@<MentionIcon type={part.type} size={12} /></span>{part.value.slice(1)}</Fragment>
-                                        )
-                                        : part.value
-                                ))}
+                    <div className="chat-user-edit">
+                        <div className="chat-user-bubble chat-user-edit-bubble">
+                            <div className="chat-user-edit-field">
+                                <div ref={editOverlayRef} className="chat-user-edit-overlay" aria-hidden="true">
+                                    {highlightedEditContentParts.map((part) => (
+                                        part.kind === 'mention'
+                                            ? (
+                                                <Fragment key={`${part.start}-${part.end}`}><span className="chat-mention-at">@<MentionIcon type={part.type} size={12} /></span>{part.value.slice(1)}</Fragment>
+                                            )
+                                            : part.value
+                                    ))}
+                                    {/* 末尾换行需要一个占位字符才能撑出新行，与 textarea 对齐 */}
+                                    {'\u200b'}
+                                </div>
+                                <textarea
+                                    ref={editTextareaRef}
+                                    value={editContent}
+                                    onChange={(e) => handleEditInputChange(e.target.value)}
+                                    onKeyDown={handleEditKeyDown}
+                                    onScroll={(e) => {
+                                        if (editOverlayRef.current) {
+                                            editOverlayRef.current.scrollTop = e.currentTarget.scrollTop;
+                                        }
+                                    }}
+                                    className="chat-user-edit-input"
+                                    rows={1}
+                                    autoFocus
+                                    aria-label="编辑消息内容"
+                                    disabled={editSaving}
+                                />
                             </div>
-                            <textarea
-                                ref={editTextareaRef}
-                                value={editContent}
-                                onChange={(e) => handleEditInputChange(e.target.value)}
-                                onKeyDown={handleEditKeyDown}
-                                onScroll={(e) => {
-                                    if (editOverlayRef.current) {
-                                        editOverlayRef.current.scrollTop = e.currentTarget.scrollTop;
-                                    }
-                                }}
-                                className="w-full bg-transparent px-4 py-3 rounded-lg text-base leading-relaxed resize-none text-transparent caret-foreground focus:outline-none overflow-y-auto"
-                                rows={3}
-                                autoFocus
-                                aria-label="编辑消息内容"
-                                disabled={editSaving}
-                            />
-                        </div>
-                        {editError && <p className="text-sm text-red-500" role="alert">{editError}</p>}
-                        <div className="flex gap-2 justify-end">
-                            <button
-                                onClick={handleSaveEdit}
-                                disabled={editSaving || !editContent.trim()}
-                                className="flex items-center gap-1.5 px-4 py-1.5 rounded-md bg-accent text-on-accent text-xs font-bold hover:bg-accent/90 active:bg-accent/80 transition-all duration-150"
-                            >
-                                <Check className="w-3.5 h-3.5" />
-                                {editSaving ? '正在发送' : '发送'}
-                            </button>
-                            <button
-                                onClick={handleCancelEdit}
-                                disabled={editSaving}
-                                className="flex items-center gap-1.5 px-4 py-1.5 rounded-md border border-border bg-background text-xs font-bold text-foreground hover:bg-background-secondary active:bg-background-tertiary transition-all duration-150"
-                            >
-                                <X className="w-3.5 h-3.5" />
-                                取消
-                            </button>
+                            <div className="chat-user-edit-actions">
+                                {editError && <p className="chat-user-edit-error" role="alert">{editError}</p>}
+                                <button type="button" className="chat-user-edit-cancel" onClick={handleCancelEdit} disabled={editSaving}>取消</button>
+                                <button type="button" className="chat-user-edit-save" onClick={() => void handleSaveEdit()} disabled={editSaving || !editContent.trim()}>
+                                    {editSaving ? '正在保存' : '保存'}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 ) : (
@@ -224,34 +214,17 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                         <PrivateAttachments ids={message.attachments?.ids} />
                         {/* 附件信息显示 */}
                         {message.attachments && (message.attachments.fileName || message.attachments.webSearchEnabled) && (
-                            <div className="flex items-center gap-2 mb-2">
+                            <div className="chat-user-meta">
                                 {message.attachments.fileName && !message.attachments.ids?.length && (
-                                    <div className="flex items-center gap-3 px-3 py-2 bg-background border border-border rounded-md max-w-[240px] shadow-sm">
-                                        <div className="flex-shrink-0 w-8 h-8 bg-accent/10 rounded flex items-center justify-center border border-accent/10">
-                                            <FileText className="w-4 h-4 text-accent" />
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-xs font-bold text-foreground truncate">
-                                                {message.attachments.fileName}
-                                            </p>
-                                            <p className="text-[10px] font-bold text-foreground-secondary uppercase tracking-tight">文件</p>
-                                        </div>
-                                    </div>
+                                    <span className="chat-user-file"><FileText size={14} aria-hidden="true" /><span>{message.attachments.fileName}</span></span>
                                 )}
                                 {message.attachments.webSearchEnabled && (
-                                    <div className="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 border border-green-500/20 rounded-md text-green-600 shadow-sm">
-                                        <Globe className="w-3.5 h-3.5" />
-                                        <span className="text-xs font-bold uppercase tracking-tight">网络搜索</span>
-                                    </div>
+                                    <span className="chat-user-meta-note"><Globe size={13} aria-hidden="true" />联网搜索</span>
                                 )}
                             </div>
                         )}
                         {message.dreamInfo && (
-                            <div className="flex items-center gap-2 mb-1.5 text-[10px] font-bold uppercase tracking-widest text-purple-500/70 dark:text-purple-400/70">
-                                <span>解梦</span>
-                                <span>·</span>
-                                <span>{new Date(message.dreamInfo.dreamDate).toLocaleDateString('zh-CN')}</span>
-                            </div>
+                            <p className="chat-message-meta">解梦 · {new Date(message.dreamInfo.dreamDate).toLocaleDateString('zh-CN')}</p>
                         )}
                         <div className={`chat-user-bubble text-foreground ${message.dreamInfo
                             ? 'is-dream bg-purple-500/10 dark:bg-purple-500/15 border border-purple-500/20'
@@ -309,20 +282,9 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                 />
             )}
             {message.dreamInfo && (
-                <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-purple-500/70 dark:text-purple-400/70">
-                    <span>🌙</span>
-                    <span>解梦</span>
-                    <span>·</span>
-                    <span>{message.dreamInfo.userName}</span>
-                    <span>·</span>
-                    <span>{new Date(message.dreamInfo.dreamDate).toLocaleDateString('zh-CN')}</span>
-                    {message.dreamInfo.baziChartName && (
-                        <>
-                            <span>·</span>
-                            <span className="text-foreground-secondary">📜 {message.dreamInfo.baziChartName}</span>
-                        </>
-                    )}
-                </div>
+                <p className="chat-message-meta is-assistant">
+                    {['解梦', message.dreamInfo.userName, new Date(message.dreamInfo.dreamDate).toLocaleDateString('zh-CN'), message.dreamInfo.baziChartName && `参考命盘 ${message.dreamInfo.baziChartName}`].filter(Boolean).join(' · ')}
+                </p>
             )}
             {message.agent ? <AgentMessage data={message.agent} actions={assistantActions} />
                 : <div className={`chat-answer${isCurrentStreaming && message.content ? ' is-streaming' : ''}`}><MarkdownContent content={message.content} className="chat-prose" streaming={isCurrentStreaming} /></div>}
@@ -393,9 +355,7 @@ function SourcePanelSection({
     const isExpanded = !!expandedSources[message.id];
     if (showKnowledgeBaseMiss && !isCurrentStreaming) {
         return (
-            <div className="mt-3 border-t border-border/50 pt-2 px-2 text-[10px] font-bold uppercase tracking-wider text-foreground-secondary">
-                本次未命中知识库
-            </div>
+            <p className="chat-message-meta is-assistant is-after">本次未命中知识库</p>
         );
     }
     return (

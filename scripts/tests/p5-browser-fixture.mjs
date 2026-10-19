@@ -185,6 +185,7 @@ function MenuProbe() {
       <button type="button" role="menuitem">Visible first</button>
       <button type="button" role="menuitemcheckbox" aria-checked="true" style={{ display: 'none' }}>Hidden checked</button>
       <button type="button" role="menuitem">Visible last</button>
+      <button type="button" role="menuitem" onClick={() => { window.fixture.menuShortcut = 'rename'; setOpen(false); }}>Rename<kbd>R</kbd></button>
     </FloatingPanel>
   </section>;
 }
@@ -218,6 +219,21 @@ function RoundsProbe() {
     {virtual ? <VirtualizedChatMessageList scrollContainerRef={scrollRef} messages={messages} isLoading={false} rounds={rounds} />
       : <div ref={scrollRef} data-scroller="true"><ChatMessageList messages={messages} isLoading={false} messagesEndRef={endRef} rounds={rounds} /></div>}
   </section>;
+}
+
+// Chat polish (1.A): inline edit box keys, fork guard, code block header and link targets on real ChatMessageList.
+const POLISH_MESSAGES = [
+  { id: 'polish-u1', role: 'user', content: '第一问', createdAt: ROUND_START },
+  { id: 'polish-a1', role: 'assistant', content: '见 [外链](https://example.com/a) 与 [站内](/records)。\n\n\`\`\`ts\nconst answer = 42;\n\`\`\`', createdAt: ROUND_START },
+  { id: 'polish-u2', role: 'user', content: '第二问', createdAt: ROUND_START },
+  { id: 'polish-a2', role: 'assistant', content: '抱歉，服务暂时不可用。', createdAt: ROUND_START, metadata: { unsaved: true } },
+];
+function PolishProbe() {
+  const endRef = useRef(null);
+  const [disabled, setDisabled] = useState(false);
+  window.fixture.polish = { edits: [], setDisabled };
+  return <section data-testid="polish"><ChatMessageList messages={POLISH_MESSAGES} isLoading={false} messagesEndRef={endRef} disabled={disabled}
+    onEditMessage={async (id, content) => { window.fixture.polish.edits.push([id, content]); }} onRegenerateResponse={() => {}} /></section>;
 }
 
 import { calculateZiweiChartBundle, getHoroscope } from '@/lib/divination/ziwei';
@@ -260,7 +276,7 @@ function AgentChatProbe() {
   const router = useMemo(() => ({ replace() {}, push() {} }), []);
   const searchParams = useMemo(() => new URLSearchParams(), []);
   const state = useChatState({ userId: user?.id ?? null, sessionLoading: false, bootstrapLoading: false, router, searchParams });
-  const messaging = useChatMessaging({ state, userId: user?.id ?? null, user, membership: { type: 'plus', isActive: true }, credits: 20,
+  const messaging = useChatMessaging({ state, userId: user?.id ?? null, user,
     refreshViewerState: async () => {}, markViewerCreditsExhausted() {}, showToast: (...args) => { window.fixture.agentToasts.push(args); }, router, searchParams });
   window.fixture.agentChat = { state, messaging };
   return <section data-testid="agent-chat"><input aria-label="Agent fixture draft" value={state.inputValue} onChange={event => state.setInputValue(event.target.value)} />
@@ -326,12 +342,13 @@ function Shell() {
   const [phoneDrawerMounted, setPhoneDrawerMounted] = useState(false);
   const [menuMounted, setMenuMounted] = useState(false);
   const [roundsMounted, setRoundsMounted] = useState(false);
+  const [polishMounted, setPolishMounted] = useState(false);
   const [snapshotMounted, setSnapshotMounted] = useState(false);
   window.fixture.chatWorkspace = setChatWorkspaceOpen;
   const [modelMountKey, setModelMountKey] = useState(0);
   window.fixture.remountModels = () => setModelMountKey(current => current + 1);
   window.fixture.mount = { composer: setComposerMounted, history: setHistoryMounted, drawer: setDrawerMounted,
-    records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted, agent: setAgentMounted, question: setQuestionMounted, results: setResultsMounted, sidebar: setSidebarMounted, phoneDrawer: setPhoneDrawerMounted, menu: setMenuMounted, rounds: setRoundsMounted,
+    records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted, agent: setAgentMounted, question: setQuestionMounted, results: setResultsMounted, sidebar: setSidebarMounted, phoneDrawer: setPhoneDrawerMounted, menu: setMenuMounted, rounds: setRoundsMounted, polish: setPolishMounted,
     snapshot: setSnapshotMounted };
   window.fixture.chartKey = queryKeys.userCharts;
   window.fixture.chartClient = chartClient;
@@ -399,6 +416,7 @@ function Shell() {
     {phoneDrawerMounted && <MobileChatDrawer />}
     {menuMounted && <MenuProbe />}
     {roundsMounted && <RoundsProbe />}
+    {polishMounted && <PolishProbe />}
     {historyMounted && <section data-testid="history-page"><HistoryPageTemplate {...historyConfig} /></section>}
     {drawerMounted && <section data-testid="history-drawer"><HistoryDrawer type="tarot" /></section>}
     {recordsMounted && <section data-testid="records"><RecordsPage /></section>}
@@ -2265,6 +2283,13 @@ export async function run(existingPage, bundlePath) {
       return moved && document.activeElement === last;
     }));
     await page.keyboard.press('Escape');
+    // claude 菜单字母键：菜单项 <kbd> 标注的字母直接执行该项。
+    await page.getByRole('button', { name: 'Open fixture menu', exact: true }).click();
+    await page.getByRole('menu', { name: 'Fixture menu', exact: true }).waitFor();
+    await until(() => document.activeElement?.textContent === 'Visible first');
+    await page.keyboard.press('r');
+    await page.getByRole('menu', { name: 'Fixture menu', exact: true }).waitFor({ state: 'hidden' });
+    check('A letter key runs the menu item whose shortcut it shows', await page.evaluate(() => window.fixture.menuShortcut) === 'rename');
     await page.evaluate(() => window.fixture.mount.menu(false));
 
     // Earlier Agent rounds fold to a 上一轮 bar; a jump to one of their messages unfolds it.
@@ -2301,6 +2326,46 @@ export async function run(existingPage, bundlePath) {
     check('A new question folds the round before it and numbers the older one', (await roundBars.allInnerTexts()).join('|') === '第 1 轮 · 明年适合换工作吗？ · 2 个步骤已选定 1 份成果|上一轮 · 你说正官克身是主线，古籍里是怎么讲的？' &&
       await roundBars.evaluateAll(bars => bars.map(bar => bar.getAttribute('aria-expanded')).join()) === 'true,false' && await roundRows() === 'round-u1,round-a1,round-u3');
     await page.evaluate(() => window.fixture.mount.rounds(false));
+
+    // Chat polish (1.A) on the real message list.
+    await page.evaluate(() => window.fixture.mount.polish(true));
+    const polish = page.getByTestId('polish');
+    await polish.locator('[data-message-id="polish-a1"]').waitFor();
+    const assistantGroups = polish.getByRole('group', { name: '助手消息操作', exact: true });
+    check('Only a saved reply offers a fork; a local failure notice does not', await assistantGroups.nth(0).getByRole('button', { name: '从此回答分叉', exact: true }).count() === 1 &&
+      await assistantGroups.nth(1).getByRole('button', { name: '从此回答分叉', exact: true }).count() === 0);
+    check('Answer links: external opens a new tab without opener, in-app stays', await polish.evaluate(probe => {
+      const external = probe.querySelector('a[href="https://example.com/a"]');
+      const internal = probe.querySelector('a[href="/records"]');
+      return external?.target === '_blank' && external.rel === 'noopener noreferrer' && internal && !internal.hasAttribute('target');
+    }));
+    await page.evaluate(() => { window.fixture.copied = []; Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async text => { window.fixture.copied.push(text); } } }); });
+    const codeHead = polish.locator('.markdown-code-head');
+    await codeHead.getByRole('button', { name: '复制代码', exact: true }).click();
+    await codeHead.getByRole('button', { name: '已复制代码', exact: true }).waitFor();
+    check('Code blocks show their language and copy the code with a check mark', (await codeHead.innerText()).trim() === 'ts' &&
+      JSON.stringify(await page.evaluate(() => window.fixture.copied)) === JSON.stringify(['const answer = 42;']));
+    const firstUser = polish.locator('[data-message-id="polish-u1"]');
+    await firstUser.getByRole('button', { name: '编辑消息', exact: true }).click();
+    const editBox = polish.locator('.chat-user-edit');
+    const editInput = editBox.getByRole('textbox', { name: '编辑消息内容', exact: true });
+    await editInput.press('Escape');
+    check('Esc cancels the inline edit', await editBox.count() === 0);
+    await firstUser.getByRole('button', { name: '编辑消息', exact: true }).click();
+    await editInput.fill('改写');
+    await editInput.press('Shift+Enter');
+    await page.keyboard.insertText('第二行');
+    const editButtons = (await editBox.getByRole('button').allInnerTexts()).map(text => text.trim()).join();
+    const savedBeforeEnter = await page.evaluate(() => window.fixture.polish.edits.length);
+    await editInput.press('Enter');
+    await editBox.waitFor({ state: 'hidden' });
+    check('Inline edit: Shift+Enter adds a line, Enter saves; buttons read 取消 / 保存', editButtons === '取消,保存' && savedBeforeEnter === 0 &&
+      JSON.stringify(await page.evaluate(() => window.fixture.polish.edits)) === JSON.stringify([['polish-u1', '改写\n第二行']]));
+    await page.evaluate(() => window.fixture.polish.setDisabled(true));
+    await until(() => !document.querySelector('[data-testid=polish] [aria-label="编辑消息"]'));
+    check('A locked transcript (answer generating) offers no edit, regenerate or fork', await polish.getByRole('button', { name: /^(编辑消息|重新生成|从此回答分叉|退回)$/ }).count() === 0 &&
+      await polish.getByRole('button', { name: '复制消息', exact: true }).count() === 4);
+    await page.evaluate(() => window.fixture.mount.polish(false));
 
     check('No unhandled network requests escaped fixtures', blocked.length === 0);
     check('No browser runtime exceptions', browserErrors.length === 0);

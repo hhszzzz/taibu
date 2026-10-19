@@ -42,7 +42,7 @@ export function useComposerCommands({ userId, draftKey, text, change, textarea, 
     const commands: Command[] = [
         { id: 'new', label: '新对话', run: () => dispatch(CHAT_NEW_EVENT) },
         { id: 'search', label: '搜索对话', run: () => dispatch('taibu:search') },
-        { id: 'model', label: '选择下次模型', run: () => textarea.current?.closest('[data-chat-composer]')?.querySelector<HTMLButtonElement>('button[aria-label^="选择模型"]')?.click() },
+        { id: 'model', label: '选择下次模型', run: () => textarea.current?.closest('[data-chat-composer]')?.querySelector<HTMLButtonElement>('[data-model-trigger]')?.click() },
         { id: 'export', label: '导出当前对话', run: requestConversationExport },
         { id: 'clear', label: '清空输入草稿', run: () => change('') },
         { id: 'methods', label: '选择分析方法', run: () => dispatch('taibu:methods') },

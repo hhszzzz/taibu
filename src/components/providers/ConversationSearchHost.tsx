@@ -6,7 +6,7 @@
  * 行为：
  * - 空查询时列出最近对话（进入页面即预取），分组标题「最近使用」；
  * - ↑↓ 在结果间移动，←/→ 切换分类，`/` 回到输入框，Tab 用查询词撰写新对话，Enter 打开；
- * - 结果行悬停/选中时右侧出现「⋯ 与 打开」动作；
+ * - 结果行悬停/选中时右侧出现「↵ 打开」提示（行级操作菜单未接入前不展示 ⋯ / ⌥↵ 假提示）；
  * - 对话契约（/api/search）与记录（/api/records）不变，不新增接口。
  */
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
@@ -194,7 +194,6 @@ export function ConversationSearchHost({ userId }: { userId: string | null }) {
                                         </span>
                                     </button>
                                     {isActive && <span className="search-palette-actions" aria-hidden="true">
-                                        <span className="search-palette-action">⋯</span>
                                         <span className="search-palette-action">↵</span>
                                     </span>}
                                 </div>;
@@ -216,7 +215,7 @@ export function ConversationSearchHost({ userId }: { userId: string | null }) {
                 <span className="search-palette-hint">关闭<kbd>Esc</kbd></span>
                 <span className="search-palette-hint">切换类型<kbd>←</kbd><kbd>→</kbd></span>
                 <span className="search-palette-hint">筛选条件<kbd>/</kbd></span>
-                <span className="search-palette-hint">操作<kbd>⌥</kbd><kbd>↵</kbd></span>
+                <span className="search-palette-hint">打开<kbd>↵</kbd></span>
                 <span className="search-palette-hint is-end">撰写<kbd>Tab</kbd></span>
             </div>
         </Modal>

@@ -2096,6 +2096,16 @@ export async function run(existingPage, bundlePath) {
       await interactive.locator('[data-chart-target="' + targets.at(-1).id + '"][aria-pressed=true]').waitFor();
       await interactive.locator('[data-chart-target="' + targets.at(-1).id + '"]').click();
       await interactive.getByRole('button', { name: '追问这里', exact: true }).click();
+      // 其余盘面的信息卡：奇门起局、六壬起课、太乙底盘、梅花起卦与体用；占星锚点压成一行一项。
+      const factCards = { qimen: '起局信息', daliuren: '起课信息', taiyi: '时空底盘', meihua: '起卦与体用' };
+      if (factCards[kind]) check(kind + ' lists its setup facts in one card under the board', await interactive.locator('[data-chart-kind="' + kind + '"] [aria-label="' + factCards[kind] + '"] dt').count() >= 2);
+      if (kind === 'astrology') check('Astrology keeps one compact anchor row each and folds the raw coordinates', await interactive.locator('[data-chart-kind="astrology"] [aria-label="命盘锚点"] li').count() === 4 &&
+        await interactive.locator('[data-chart-kind="astrology"] details [aria-label="基础坐标"]').count() === 1);
+      if (kind === 'tarot') {
+        const { 问题: question, 牌阵: spread } = await page.evaluate(() => window.fixture.chartTool('tarot').问卜设定);
+        check('Tarot shows the spread without repeating the question or the spread name', Boolean(question) && await interactive.locator('[data-chart-kind="tarot"]').getByText(question).count() === 0 &&
+          await interactive.locator('[data-chart-kind="tarot"]').getByRole('heading', { name: spread, exact: true }).count() === 0);
+      }
       if (kind === 'liuyao') {
         // 六爻：窄宽度也保留变卦爻线；动爻取 Core「动静」；卦身、卦级互动与卦辞补齐。
         const liuyao = await page.evaluate(() => { const tool = window.fixture.chartTool('liuyao'); return { changed: Boolean(tool.卦盘.变卦), moving: tool.六爻全盘.爻列表.filter(line => String(line.动静 ?? '').startsWith('明动')).length, body: Boolean(tool.卦盘.卦身), texts: Boolean(tool.卦盘.本卦.卦辞) }; });

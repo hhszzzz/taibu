@@ -8,8 +8,9 @@
  */
 'use client';
 
-import type { QimenPalaceJSON } from 'taibu-core/qimen';
+import type { QimenCanonicalJSON, QimenPalaceJSON } from 'taibu-core/qimen';
 import { ChartTarget, isChartTargetSelected, type ChartInteraction } from '@/components/visualization/ChartTarget';
+import { BoardFacts, FactChips } from '@/components/visualization/BoardFacts';
 import {
     CENTER_PALACE_INDEX,
     LUOSHU_ORDER,
@@ -239,6 +240,25 @@ export function QimenGrid({ palaces, monthPhaseMap, ju, interaction, zhiShi, sel
                     );
                 })}
             </div>
+        </div>
+    );
+}
+
+/** 工作区奇门盘：九宫格标出值符值使宫，下方补四柱、节气三元、旬首、空亡驿马与全局格局（局式与值符值使已在主题行）。 */
+export function QimenCanonicalBoard({ chart, interaction }: { chart: QimenCanonicalJSON; interaction?: ChartInteraction }) {
+    const basic = chart.基本信息;
+    const voids = chart.空亡信息;
+    return (
+        <div className="flex flex-col gap-3">
+            <QimenGrid palaces={chart.九宫盘} monthPhaseMap={chart.十干月令旺衰} ju={basic.局式} zhiShi={basic.值使} interaction={interaction} />
+            <BoardFacts label="起局信息" facts={[
+                { label: '四柱', value: <span className="flex gap-2 font-display">{basic.四柱.split(' ').map((pillar, index) => <span key={index}>{pillar}</span>)}</span> },
+                { label: '节气', value: [basic.节气, basic.三元, basic.节气范围].filter(Boolean).join(' · ') },
+                { label: '旬首', value: basic.旬首 },
+                voids && { label: '空亡', value: `日空 ${voids.日空.地支.join('')}（${voids.日空.宫位.join('、')}） · 时空 ${voids.时空.地支.join('')}（${voids.时空.宫位.join('、')}）` },
+                chart.驿马 && { label: '驿马', value: `${chart.驿马.地支} · ${chart.驿马.宫位}` },
+                (chart.全局格局?.length ?? 0) > 0 && { label: '格局', value: <FactChips items={chart.全局格局!} tone="accent" /> },
+            ]} />
         </div>
     );
 }

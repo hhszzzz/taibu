@@ -9,6 +9,7 @@ import { parseTraditionalYaoPosition } from '@/lib/divination/liuyao-result-stat
 import { wuxingTextClass } from '@/components/liuyao/wuxing-tone';
 import { buildMeihuaStageRows, formatRelationTerm, type MeihuaStageRow } from '@/components/meihua/meihua-display';
 import { ChartTarget, isChartTargetSelected, type ChartInteraction } from '@/components/visualization/ChartTarget';
+import { BoardFacts } from '@/components/visualization/BoardFacts';
 
 type HexagramKey = '本卦' | '互卦' | '变卦';
 type HexagramTrack = MeihuaCanonicalJSON['卦盘']['本卦'];
@@ -247,9 +248,11 @@ interface MeihuaChartProps {
   interaction?: ChartInteraction;
   /** 错卦 / 综卦；结果页按设计稿省略，对话命盘保留以便逐爻指向。 */
   showDerived?: boolean;
+  /** 起卦与体用信息卡；结果页的页头已有起卦信息，省略。 */
+  showFacts?: boolean;
 }
 
-export function MeihuaChart({ chart, interaction, showDerived = true }: MeihuaChartProps) {
+export function MeihuaChart({ chart, interaction, showDerived = true, showFacts = true }: MeihuaChartProps) {
   const board = chart.卦盘;
   const movingLine = parseTraditionalYaoPosition(board.动爻) ?? undefined;
   const bodyIsUpper = board.体卦.所属 === '上卦';
@@ -269,6 +272,10 @@ export function MeihuaChart({ chart, interaction, showDerived = true }: MeihuaCh
     { label: '变卦卦辞', text: board.变卦.卦辞 },
   ].filter((item): item is { label: string; text: string } => Boolean(item.text));
   const warnings = chart.起卦信息.警告 ?? [];
+  const cast = chart.起卦信息;
+  // 起卦取数：文字起卦给取用的句子，数字起卦给数列，其余方法由方法名说明（所问之事留在对话里）。
+  const castInput = cast.取用文本 ?? cast.原始输入?.取用文本 ?? (cast.原始输入?.数字序列?.length ? cast.原始输入.数字序列.join('、') : undefined);
+  const seasonExtras = (['体互', '用互', '变卦'] as const).flatMap(key => season[key] ? [`${key}${season[key]}`] : []);
 
   return (
     // 容器查询只作用于后代，宽屏间距放在内层
@@ -335,6 +342,15 @@ export function MeihuaChart({ chart, interaction, showDerived = true }: MeihuaCh
           />
         </div>
 
+        {showFacts && <BoardFacts label="起卦与体用" facts={[
+          { label: '起卦', value: [cast.方法, cast.实际子方式, cast.方法系 && `${cast.方法系}法`].filter(Boolean).join(' · ') },
+          cast.起卦时间 && { label: '时间', value: cast.起卦时间 },
+          castInput && { label: '取数', value: castInput },
+          { label: '体用', value: <span>{chart.体用分析.关系表达式}<span className="ml-2 text-foreground-secondary">{chart.体用分析.关系}</span></span> },
+          seasonExtras.length > 0 && { label: '月令', value: seasonExtras.join(' · ') },
+          board.动爻爻辞 && { label: '动爻爻辞', value: <span className="font-display">{board.动爻爻辞}</span> },
+        ]} />}
+
         {(chart.阶段推演.length > 0 || chart.判断参考) && (
           <section aria-label="体用推演" className="flex flex-col gap-1 rounded-2xl border-[0.5px] border-border bg-surface p-4 @2xl:gap-4 @2xl:px-6 @2xl:py-[22px]">
             <h2 className="font-display text-[1.0625rem] font-medium @2xl:text-xl">体用推演</h2>
@@ -388,14 +404,14 @@ export function MeihuaChart({ chart, interaction, showDerived = true }: MeihuaCh
               const code = derived && HEXAGRAMS.find((row) => row.name === derived.卦名)?.code;
               const id = 'meihua:derived:' + key;
               return derived && code ? (
-                <article key={key} className="flex min-w-0 flex-col gap-3 rounded-2xl border-[0.5px] border-border bg-surface p-3 @2xl:p-4" data-chart-selected={isChartTargetSelected(interaction, id) || undefined}>
+                <article key={key} className="flex min-w-0 flex-col gap-2 rounded-xl border-[0.5px] border-border bg-surface p-3" data-chart-selected={isChartTargetSelected(interaction, id) || undefined}>
                   <h3 className="flex items-baseline gap-2 text-xs text-foreground-secondary">
                     <ChartTarget interaction={interaction} id={id}>{key}</ChartTarget>
                     <span className="font-display text-base text-foreground">{derived.卦名}</span>
                   </h3>
-                  <div className="flex flex-col gap-3 @2xl:flex-row @2xl:items-center @2xl:gap-5">
-                    <div className="w-full max-w-[160px] shrink-0"><HexagramLines code={code} id={id} interaction={interaction} /></div>
-                    {derived.卦辞 && <p className="min-w-0 font-display text-[13px] leading-relaxed text-foreground-secondary">{derived.卦辞}</p>}
+                  <div className="flex items-center gap-3">
+                    <div className="w-full max-w-[88px] shrink-0"><HexagramLines code={code} id={id} interaction={interaction} /></div>
+                    {derived.卦辞 && <p className="min-w-0 font-display text-xs leading-relaxed text-foreground-secondary">{derived.卦辞}</p>}
                   </div>
                 </article>
               ) : null;

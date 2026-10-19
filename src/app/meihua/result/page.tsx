@@ -230,7 +230,7 @@ export default function MeihuaResultPage() {
           <ResultHeaderActions actions={resultActions} actionsLabel="卦盘操作" save={saveState} ask={{ label: '问太卜解卦', onClick: handleAsk, disabled: askDisabled }} />
         </header>
 
-        <MeihuaChart chart={bundle.canonicalJson} showDerived={false} />
+        <MeihuaChart chart={bundle.canonicalJson} showDerived={false} showFacts={false} />
 
         <div ref={aiAnchorRef} className="flex scroll-mt-20 flex-col empty:hidden">
           <CanonicalAIEntryCard ai={ai} title="外应、方位与应期线索" description="让太卜结合体用生克与月令旺衰，给出定性判断" actionLabel="开始解读" />

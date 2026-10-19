@@ -6,11 +6,10 @@ import { TarotMeaningList, TarotOrientationChip, TarotPositionLabel } from './Ta
 import { getTarotSpreadGridClass } from './tarot-display';
 import { ChartTarget, isChartTargetSelected, type ChartInteraction } from '@/components/visualization/ChartTarget';
 
+/** 工作区牌阵：牌阵名已在盘面主题行，所问之事在对话里，这里只排牌与牌义。 */
 export function TarotChart({ chart, interaction }: { chart: TarotCanonicalJSON; interaction?: ChartInteraction }) {
   const cards = chart.牌阵展开;
   return <section className="@container flex flex-col gap-4">
-    <h2 className="font-display text-lg font-medium">{chart.问卜设定.牌阵}</h2>
-    {chart.问卜设定.问题 && <p className="rounded-xl bg-panel px-4 py-3 text-center font-display text-[15px] leading-relaxed">{chart.问卜设定.问题}</p>}
     <div className={`grid justify-items-center gap-x-2 gap-y-5 ${getTarotSpreadGridClass(cards.length)}`}>{cards.map((card, index) => {
       const artwork = findTarotCardByChineseName(card.塔罗牌);
       const reversed = card.状态 === '逆位';

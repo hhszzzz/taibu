@@ -11,6 +11,7 @@ import type { ReactNode } from 'react';
 import type { DaliurenCanonicalJSON } from 'taibu-core/daliuren';
 import { TianDiPanGrid } from './TianDiPanGrid';
 import { ChartTarget, isChartTargetSelected, type ChartInteraction } from '@/components/visualization/ChartTarget';
+import { BoardFacts, FactChips } from '@/components/visualization/BoardFacts';
 import { getGanZhiTextClass, isPlaceholder, splitLabel } from './daliuren-display';
 
 /** 四课自右向左：四课 → 一课 */
@@ -134,6 +135,27 @@ export function DaliurenChart({ chart, interaction, includeRelated = true, aside
                 </section>
                 {aside && <div className="order-4 min-w-0 @3xl:order-none @3xl:col-start-2 @3xl:row-start-3 @3xl:self-start">{aside}</div>}
             </div>
+        </div>
+    );
+}
+
+/** 工作区六壬盘：课盘之下补起课信息、课体、空亡与马星、神煞（所问之事留在对话里）。 */
+export function DaliurenCanonicalBoard({ chart, interaction, includeRelated }: { chart: DaliurenCanonicalJSON; interaction?: ChartInteraction; includeRelated?: boolean }) {
+    const basic = chart.基本信息;
+    const state = basic.关键状态;
+    const forms = [basic.课式, ...(basic.附加课体 ?? []), ...(basic.细分课体 ?? [])].filter((form, index, all) => form && all.indexOf(form) === index);
+    return (
+        <div className="flex flex-col gap-3">
+            <DaliurenChart chart={chart} interaction={interaction} includeRelated={includeRelated} />
+            <BoardFacts label="起课信息" facts={[
+                { label: '四柱', value: <span className="flex gap-2 font-display">{basic.四柱.split(' ').map((pillar, index) => <span key={index}>{pillar}</span>)}</span> },
+                { label: '时间', value: [basic.占测时间, basic.农历, basic.昼夜].filter(Boolean).join(' · ') },
+                { label: '月将', value: [basic.月将, basic.月将名称].filter(Boolean).join(' · ') },
+                Boolean(basic.本命 || basic.行年) && { label: '本命行年', value: [basic.本命 && `本命 ${basic.本命}`, basic.行年 && `行年 ${basic.行年}`].filter(Boolean).join(' · ') },
+                { label: '课体', value: <FactChips items={forms} tone="accent" /> },
+                { label: '空亡马星', value: [`空亡 ${state.空亡.join('')}`, `驿马 ${state.驿马}`, `丁马 ${state.丁马}`, `天马 ${state.天马}`].join(' · ') },
+                (chart.神煞?.length ?? 0) > 0 && { label: '神煞', value: <FactChips items={chart.神煞!.map(item => `${item.名称} · ${item.落点}`)} /> },
+            ]} />
         </div>
     );
 }

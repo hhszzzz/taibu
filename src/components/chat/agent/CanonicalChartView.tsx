@@ -7,10 +7,10 @@ import { GanzhiRelationOverlay, relationBandHeight } from '@/components/bazi/res
 
 const Bazi = lazy(() => import('@/components/bazi/result/ProfessionalTable').then(module => ({ default: module.ProfessionalTable })));
 const Ziwei = lazy(() => import('@/components/ziwei/ZiweiChartGrid').then(module => ({ default: module.ZiweiChartGrid })));
-const Qimen = lazy(() => import('@/components/qimen/QimenGrid').then(module => ({ default: module.QimenGrid })));
+const Qimen = lazy(() => import('@/components/qimen/QimenGrid').then(module => ({ default: module.QimenCanonicalBoard })));
 const Liuyao = lazy(() => import('@/components/liuyao/CanonicalLiuyaoChart').then(module => ({ default: module.CanonicalLiuyaoChart })));
 const Meihua = lazy(() => import('@/components/meihua/MeihuaChart').then(module => ({ default: module.MeihuaChart })));
-const Daliuren = lazy(() => import('@/components/daliuren/DaliurenChart').then(module => ({ default: module.DaliurenChart })));
+const Daliuren = lazy(() => import('@/components/daliuren/DaliurenChart').then(module => ({ default: module.DaliurenCanonicalBoard })));
 const Xiaoliuren = lazy(() => import('@/components/xiaoliuren/XiaoliurenChart').then(module => ({ default: module.XiaoliurenChart })));
 const Tarot = lazy(() => import('@/components/tarot/TarotChart').then(module => ({ default: module.TarotChart })));
 const Taiyi = lazy(() => import('@/components/visualization/TaiyiChart').then(module => ({ default: module.TaiyiChart })));
@@ -42,7 +42,7 @@ export function CanonicalChartView({ value, targets = [], includeRelated = true,
       onPalaceSelect: index => onTargetSelect('ziwei:palace:' + index),
       onStarSelect: (index, group, starIndex) => onTargetSelect('ziwei:star:' + index + ':' + ['主星及四化', '辅星', '杂曜'].indexOf(group) + ':' + starIndex),
     } : undefined} />; break;
-    case 'qimen': content = <Qimen palaces={value.chart.九宫盘} monthPhaseMap={value.chart.十干月令旺衰} ju={value.chart.基本信息.局式} interaction={interaction} />; break;
+    case 'qimen': content = <Qimen chart={value.chart} interaction={interaction} />; break;
     case 'liuyao': content = <Liuyao chart={value.chart} interaction={interaction} />; break;
     case 'meihua': content = <Meihua chart={value.chart} interaction={interaction} />; break;
     case 'daliuren': content = <Daliuren chart={value.chart} interaction={interaction} includeRelated={includeRelated} />; break;

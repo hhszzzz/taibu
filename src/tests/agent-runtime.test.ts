@@ -578,24 +578,6 @@ test("takeover completes final selection after a committed model response", asyn
   assert.ok((finish.args.p_message as AgentRunRow["public_message"]).content.includes("最终分析"), "final analysis stays in chat history");
 });
 
-test("takeover replaces interrupted assistant parts without duplicating visible output", async () => {
-  const store = new MemoryStore(),
-    run = row();
-  run.checkpoint.streamingAssistantId = "interrupted";
-  run.checkpoint.parts.push(
-    { type: "text", id: "interrupted:0", text: "未完成的旧片段" },
-    { type: "reasoning", id: "interrupted:1", text: "旧推理片段" },
-  );
-  await executeAgentRun(store, run, undefined, {
-    config,
-    streamFn: scripted(() => [{ type: "text", text: "完整恢复结果" }]),
-  });
-  const cp = store.writes.find((w) => w.name === "agent_finish_run")!.args
-    .p_checkpoint as AgentRunRow["checkpoint"];
-  assert.deepEqual(cp.parts.filter(p => p.type === "text").map(p => p.text), ["完整恢复结果"]);
-  assert.equal(cp.streamingAssistantId, undefined);
-});
-
 test("cached web and question results restore their public parts once before continuation", async () => {
   const previous = process.env.TAVILY_API_KEY;
   process.env.TAVILY_API_KEY = randomUUID();

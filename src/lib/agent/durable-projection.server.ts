@@ -50,7 +50,6 @@ export async function projectDurableConversation(
   tools: DomainTool[], context: Context,
 ) {
   const state = await root.viewState(context);
-  const oldStreamingId = checkpoint.streamingAssistantId;
   const live = state.value.docs["pi.live"] as LiveState | undefined;
   const usage = projectAgentUsage(state.value.docs['pi.usage']);
   state.dispose();
@@ -158,9 +157,7 @@ export async function projectDurableConversation(
   if (generation && live?.run) {
     checkpoint.streamingAssistantId = `native-live:${live.run.taskId}`;
     assistantParts(generation, checkpoint.streamingAssistantId);
-  } else if (!oldStreamingId || oldStreamingId.startsWith("native")) {
-    checkpoint.streamingAssistantId = undefined;
-  }
+  } else checkpoint.streamingAssistantId = undefined;
   for (const slot of live?.tools ?? []) {
     const task = slot.taskId ? await storage.task(slot.taskId, context) : undefined;
     const assistant = modelCallEntry(task);
@@ -176,16 +173,11 @@ export async function projectDurableConversation(
       }
     }
   }
-  const replaceLegacyStreaming = oldStreamingId && !oldStreamingId.startsWith("native") &&
-    native.some(p => p.type === "text");
   checkpoint.parts = [
     ...checkpoint.parts.filter(p => !p.id.startsWith("native:") && !p.id.startsWith("native-live:") &&
-      !p.id.startsWith("native-tool:") &&
-      !attachedIds.has(`${p.type}:${p.id}`) &&
-      !(replaceLegacyStreaming && p.id.startsWith(`${oldStreamingId}:`))),
+      !p.id.startsWith("native-tool:") && !attachedIds.has(`${p.type}:${p.id}`)),
     ...native.flatMap(p => [p, ...(p.type === "tool" ? attached.get(p.id) ?? [] : [])]),
   ];
-  if (replaceLegacyStreaming && !generation) checkpoint.streamingAssistantId = undefined;
   const followUps = latestText === null ? [] : splitAgentFollowUps(latestText).followUps;
   checkpoint.followUps = followUps.length ? followUps : undefined;
   if (checkpoint.runtime) checkpoint.runtime.responses = responses;

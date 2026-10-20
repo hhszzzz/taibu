@@ -30,7 +30,7 @@ type DrilldownDetails = { chartReference: string; chartKind: string; selection: 
 test('the Agent schema of a drilldown takes a chart reference and selectors, never birth data', async () => {
   const { tool } = await setup();
   const parameters = tool('bazi_relations').parameters as unknown as { properties: Record<string, unknown>; required: string[]; additionalProperties: boolean };
-  assert.deepEqual(Object.keys(parameters.properties).sort(), ['day', 'dayun', 'month', 'reference', 'year', 'yunSect']);
+  assert.deepEqual(Object.keys(parameters.properties).sort(), ['day', 'dayun', 'detailLevel', 'month', 'pillars', 'reference', 'types', 'year', 'yunSect']);
   assert.deepEqual(parameters.required, ['reference']);
   assert.equal(parameters.additionalProperties, false);
 });
@@ -43,12 +43,14 @@ test('a drilldown recomputes the artifact chart, caches as a tool call and count
   assert.equal(details.chartKind, 'bazi');
   assert.deepEqual(details.selection, { year: 2027 });
   assert.ok(Array.isArray(details.result.叠加关系));
-  assert.match(result.content[0].text, /# 八字刑冲合害详查/);
+  assert.match(result.content[0].text, /# 八字岁运刑冲合害详查/);
   // Targets name only real cells of the chart, at most 16, and the model sees them.
   const chart = getAgentChart({ type: 'tool', id: 'c', name: 'bazi', title: 'bazi', status: 'completed', output: store.draft('calculate')!.result.details })!;
   const known = new Set(getChartTargets(chart).map(target => target.id));
   assert.ok(details.targets.length > 0 && details.targets.length <= 16 && details.targets.every(target => known.has(target.id)));
-  assert.deepEqual(JSON.parse(result.content[1].text).targets, details.targets);
+  // The model reads Core's text alone; the positions go to the workspace, not back to the model as JSON.
+  assert.equal(result.content.length, 1);
+  assert.doesNotMatch(result.content[0].text, /"targets"|artifact:|bazi:cell:/);
   const write = store.writes.find(item => item.name === 'agent_cache_tool' && item.args.p_tool_name === 'bazi_relations')!;
   assert.equal(write.args.p_kind, 'tool', 'a drilldown is not a new result');
   assert.equal(write.args.p_chart, null);
@@ -56,6 +58,27 @@ test('a drilldown recomputes the artifact chart, caches as a tool call and count
   // focus_chart accepts the drilldown's targets without a separate inspect_chart.
   const focus = await tool('focus_chart').execute('6:focus', { reference, targetIds: details.targets.map(target => target.id), caption: '流年关系' });
   assert.deepEqual((focus.details as { chartFocus: { targetIds: string[] } }).chartFocus.targetIds, details.targets.map(target => target.id));
+});
+
+test('drilldown filters reach Core while detailLevel only adds the 口径 to the text the model reads', async () => {
+  const { tool, reference } = await setup();
+  const lean = await tool('bazi_relations').execute('lean', { reference, year: 2027, types: ['六冲'] });
+  const leanDetails = lean.details as DrilldownDetails;
+  assert.deepEqual(leanDetails.selection, { year: 2027, types: ['六冲'] });
+  assert.deepEqual(leanDetails.result.筛选, { 类型: ['六冲'] });
+  assert.ok((leanDetails.result.叠加关系 as Array<{ 类型: string }>).every(row => row.类型 === '六冲'));
+  // The structured result keeps the rules; the default text leaves them out.
+  assert.ok(Array.isArray(leanDetails.result.口径) && leanDetails.result.计算规则);
+  assert.doesNotMatch(lean.content[0].text, /## 口径|## 计算规则/);
+  assert.match(lean.content[0].text, /## 未列出/);
+  const full = await tool('bazi_relations').execute('full', { reference, year: 2027, types: ['六冲'], detailLevel: 'full' });
+  assert.match(full.content[0].text, /## 口径/);
+  // 计算规则 is audit metadata: it stays in the structured result and never reaches the model's text.
+  assert.doesNotMatch(full.content[0].text, /## 计算规则|ruleVersion/);
+  assert.deepEqual((full.details as DrilldownDetails).result.叠加关系, leanDetails.result.叠加关系, 'detailLevel never changes the facts');
+  // 原局关系在命盘里：不给岁运的查询直接拒绝；给了大运却筛流年时说明该补哪个参数。
+  await assert.rejects(tool('bazi_relations').execute('natal', { reference }), /year；day；dayun/);
+  await assert.rejects(tool('bazi_relations').execute('missing', { reference, dayun: 4, pillars: ['流年'] }), /查流年须同时给出 year 或 day/);
 });
 
 test('drilldowns reject charts of another system, tampered artifacts and unknown references', async () => {
@@ -76,9 +99,9 @@ test('a saved birth record is rebuilt from its stored fields', async t => {
   Object.assign(store.db, { from: () => query });
   t.mock.method(require('../lib/data-sources'), 'getProvider', async () => ({ get: async () => record, formatForAI: async () => '' }));
   const tools = await createAgentTools(store, run, run.checkpoint);
-  const result = await tools.find(item => item.name === 'bazi_relations')!.execute('saved', { reference: 'bazi_chart:' + id });
+  const result = await tools.find(item => item.name === 'bazi_relations')!.execute('saved', { reference: 'bazi_chart:' + id, year: 2027 });
   const details = result.details as DrilldownDetails;
-  assert.deepEqual((details.result.参与柱位 as Array<{ 干支: string }>).map(pillar => pillar.干支), ['己巳', '丁丑', '庚辰', '辛巳']);
+  assert.deepEqual((details.result.参与柱位 as Array<{ 干支: string }>).map(pillar => pillar.干支), ['己巳', '丁丑', '庚辰', '辛巳', '癸酉', '丁未']);
   assert.equal(details.chartReference, 'bazi_chart:' + id);
 });
 
@@ -124,7 +147,23 @@ test('the workspace keeps drilldowns under their chart and they never replace it
   assert.equal(describeDrilldownSelection({ reference, year: 2027, month: 5 }), '2027 年 · 5 月（节气月）');
   assert.equal(describeDrilldownSelection({ reference }), '原局');
   const chart = getAgentChart(calculation)!;
-  assert.deepEqual(getDrilldownTargets(chart, { 原局关系: [{ 位置: [{ 柱: '月柱', 部位: '地支', 字: '丑' }, { 柱: '流年', 部位: '地支', 字: '未' }] }] }).map(target => target.id), ['bazi:cell:1:1']);
+  assert.deepEqual(getDrilldownTargets(chart, { 叠加关系: [{ 位置: [{ 柱: '月柱', 部位: '地支', 字: '丑' }, { 柱: '流年', 部位: '地支', 字: '未' }] }] }).map(target => target.id), ['bazi:cell:1:1']);
+});
+
+test('a bazi relations drilldown lights the natal glyphs its overlays touch, never the linked ones', async () => {
+  const { store, tool } = await setup();
+  // 乙丑 辛巳 辛未 戊子，2027 丁未年行丙戌运：丙合两辛，未冲年支丑、害时支子，戌破日支未。
+  const rich = { gender: 'female', birthYear: 1985, birthMonth: 6, birthDay: 1, birthHour: 0 };
+  await tool('bazi').execute('rich', rich);
+  const reference = 'artifact:' + store.draft('rich')!.id;
+  const result = await tool('bazi_relations').execute('rich-relations', { reference, year: 2027 });
+  const details = result.details as DrilldownDetails;
+  assert.deepEqual(details.targets.map(target => target.id).sort(), ['bazi:cell:0:1', 'bazi:cell:1:0', 'bazi:cell:2:0', 'bazi:cell:2:1', 'bazi:cell:3:1']);
+  // 原局之间的关系由命盘给出，详查不再点亮盘面的关系线。
+  assert.ok(details.targets.every(target => target.id.startsWith('bazi:cell:')));
+  // 筛选后的同字牵连只是提示，不点亮：只查六冲时，盘面只亮被冲的年支丑。
+  const filtered = await tool('bazi_relations').execute('rich-clash', { reference, year: 2027, types: ['六冲'] });
+  assert.deepEqual((filtered.details as DrilldownDetails).targets.map(target => target.label), ['年柱地支 丑']);
 });
 
 /** 排好一张盘，再对它做详查。 */
@@ -232,4 +271,9 @@ test('详查副标题读出新增的查询参数', () => {
   assert.equal(describeDrilldownSelection({ reference: 'x', line: 3 }), '第 3 爻');
   assert.equal(describeDrilldownSelection({ reference: 'x', fromYear: 2026, toYear: 2029 }), '2026 年起 · 至 2029 年');
   assert.equal(describeDrilldownSelection({ reference: 'x', leiShen: '贵人', focus: '传' }), '类神 贵人 · 只看 传');
+  assert.equal(describeDrilldownSelection({ reference: 'x', year: 2027, pillars: ['日柱', '流年'], types: ['六冲'] }), '2027 年 · 涉及 日柱、流年 · 只看 六冲');
+  assert.equal(describeDrilldownSelection({ reference: 'x', sections: ['通根', '透干'], detailLevel: 'full' }), '只看 通根、透干 · 含口径');
+  // Defaults read as nothing: the full scope and the lean text are what a bare query gets anyway.
+  assert.equal(describeDrilldownSelection({ reference: 'x', planet: 'saturn', focus: '全部', detailLevel: 'default' }), '土星');
+  assert.equal(describeDrilldownSelection({ reference: 'x', planet: 'saturn', focus: '流运' }), '土星 · 只看 流运');
 });

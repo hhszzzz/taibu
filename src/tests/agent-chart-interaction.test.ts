@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { toBaziJson, type BaziPillarJSON, type BaziOutput } from 'taibu-core/bazi';
 import { buildToolSuccessPayload, executeTool, listToolDefinitions } from 'taibu-core/mcp';
-import { getAgentChart, type AgentToolPart } from '../lib/agent/tool-presentation';
-import { AGENT_CHART_NAMES, AGENT_DRILLDOWN_BASES, getAgentDrilldownBase } from '../lib/agent/tool-catalog';
+import { getAgentChart, getAgentToolText, type AgentToolPart } from '../lib/agent/tool-presentation';
+import { AGENT_CHART_NAMES, AGENT_DRILLDOWN_BASES, CHART_TARGET_DIRECTORY_HEADING, getAgentDrilldownBase } from '../lib/agent/tool-catalog';
 import { CHART_SOURCE_KINDS, chartQuestion, deduplicateChartResults, getAgentChartReference, getChartFocus, getChartResources, getChartTargets, getLatestChartFocus, parseChartReference, validateChartFocus } from '../lib/agent/chart-interaction';
 import { createAgentTools } from '../lib/agent/tools.server';
 import { authorizeChartReference, loadAgentChart, loadInspectedChart } from '../lib/agent/chart-tools.server';
@@ -263,8 +263,25 @@ test('focus requires a real inspected snapshot, validates targets and rechecks d
   await assert.rejects(focus.execute('invalid', { ...args, targetIds: ['fake-palace'] }), /不在这张命盘/);
   const result = await focus.execute('focus', args);
   assert.equal((result.details as { chartFocus: { caption: string } }).chartFocus.caption, '日支');
+  // The model gave the reference, ids and caption itself; it only gets a receipt back, not a JSON echo.
+  assert.deepEqual(result.content.map(part => part.text), ['已在工作区定位。']);
+  const cleared = await focus.execute('clear', { ...args, targetIds: [] });
+  assert.deepEqual(cleared.content.map(part => part.text), ['已清除盘面高亮。']);
   t.mock.method(require('../lib/app-settings'), 'readFeatureModuleStateFresh', async () => ({ status: 'disabled' }));
   await assert.rejects(focus.execute('focus', args), /该功能已关闭/);
+});
+
+test('with numbered evidence the focus receipt tells the model the number it may cite', async () => {
+  const store = new ChartStore(), run = row();
+  run.checkpoint.citations = { base: 4, calls: {} };
+  const tools = await createAgentTools(store, run, run.checkpoint);
+  await tools.find(tool => tool.name === 'bazi')!.execute('calculate', birth);
+  const reference = 'artifact:' + store.draft('calculate')!.id;
+  await tools.find(tool => tool.name === 'inspect_chart')!.execute('inspect', { reference });
+  const result = await tools.find(tool => tool.name === 'focus_chart')!.execute('focus', { reference, targetIds: ['bazi:cell:2:1'], caption: '日支' });
+  assert.deepEqual(result.content.map(part => part.text), ['已在工作区定位，cite 编号 5。']);
+  assert.equal((result.details as { cite?: number }).cite, 5);
+  assert.deepEqual(run.checkpoint.citations, { base: 4, calls: { focus: 5 } });
 });
 
 test('artifact database lookup scopes both owner and conversation rather than trusting an artifact UUID', async () => {
@@ -357,4 +374,42 @@ test('native Pi tools project chart actions and rebuild the exact focus after an
   assert.deepEqual(getLatestChartFocus(restored.agent!.parts.filter((part): part is AgentToolPart => part.type === 'tool')), focus);
   assert.equal(store.writes.filter(write => write.name === 'agent_cache_tool').length, 4);
   assert.ok(store.writes.every(write => write.name !== 'agent_create_run'));
+});
+
+test('reading a saved chart hands the model its reference in a model-only line; other records get none', async t => {
+  const store = new ChartStore(), run = row(), id = randomUUID();
+  t.mock.method(require('../lib/data-sources'), 'getProvider', async () => ({ get: async () => ({ id }), formatForAI: async () => '已保存的规范文本' }));
+  const read = (await createAgentTools(store, run, run.checkpoint)).find(tool => tool.name === 'read_user_data')!;
+  const chart = await read.execute('read-chart', { type: 'bazi_chart', id });
+  // Pi sends only the content to the model, so the reference inspect_chart needs must be in the text.
+  assert.deepEqual(chart.content.map(part => part.text), ['已保存的规范文本', `命盘引用: bazi_chart:${id}。查看、详查或定位这张盘时作为 reference 传入。`]);
+  assert.deepEqual(parseChartReference((chart.details as { chartReference: string }).chartReference), { source: 'bazi_chart', id });
+  const other = await read.execute('read-other', { type: 'mbti_reading', id });
+  assert.deepEqual(other.content.map(part => part.text), ['已保存的规范文本']);
+  assert.equal((other.details as { chartReference?: string }).chartReference, undefined);
+});
+
+test('a public inspection step keeps the chart text but never the target directory, even when filtered by palace', async () => {
+  const store = new ChartStore(), run = row();
+  const streamFn = scripted(index => {
+    if (index === 0) return [{ type: 'toolCall', id: 'calculate', name: 'ziwei', arguments: birth }];
+    const reference = 'artifact:' + store.draft('calculate')!.id;
+    if (index === 1) return [{ type: 'toolCall', id: 'inspect', name: 'inspect_chart', arguments: { reference } }];
+    if (index === 2) return [{ type: 'toolCall', id: 'stars', name: 'inspect_chart', arguments: { reference, palace: '命宫' } }];
+    if (index === 3) return [{ type: 'toolCall', id: 'select', name: 'select_final_artifacts', arguments: { artifactIds: [store.draft('calculate')!.id] } }];
+    return [{ type: 'text', text: '命宫看完了' }];
+  });
+  await executeAgentRun(store, run, undefined, { config, streamFn });
+  const message = store.writes.filter(write => write.name === 'agent_finish_run').at(-1)!.args.p_message as AgentRunRow['public_message'];
+  const [inspect, stars] = message.agent!.parts.filter((part): part is AgentToolPart => part.type === 'tool' && part.name === 'inspect_chart');
+  // The model reads the chart text and then the directory; the public step keeps only the chart text.
+  const [chartText, directory] = store.draft('inspect')!.result.content.map(part => part.text);
+  assert.ok(directory.startsWith(CHART_TARGET_DIRECTORY_HEADING) && directory.includes('ziwei:palace:0｜'));
+  assert.equal(inspect.canonicalText, chartText);
+  assert.doesNotMatch(chartText, /定位目标|ziwei:palace:/);
+  // By palace the model only gets that palace's star directory, so the step has no canonical text to show.
+  const starDirectory = store.draft('stars')!.result.content.map(part => part.text);
+  assert.ok(starDirectory.length === 1 && starDirectory[0].startsWith(CHART_TARGET_DIRECTORY_HEADING) && starDirectory[0].includes('ziwei:star:'));
+  assert.equal(stars.canonicalText, '');
+  assert.equal(getAgentToolText(stars), null);
 });

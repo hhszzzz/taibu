@@ -61,7 +61,7 @@ import { AgentResultContext } from '@/components/chat/agent/AgentResultContext';
 import { ChatRecordViewContext } from '@/lib/chat/chat-record-view';
 import { ComposerStatusBar } from '@/components/chat/composer/ComposerStatusBar';
 import { getAgentChart } from '@/lib/agent/tool-presentation';
-import { getChartTargets } from '@/lib/agent/chart-interaction';
+import { getChartTargets, getDrilldownTargets } from '@/lib/agent/chart-interaction';
 import { ANALYSIS_GUIDES, ANALYSIS_METHODS } from '@/lib/agent/analysis-methods.generated';
 import { getAgentEvidence } from '@/lib/agent/evidence';
 import { agentMessageContent } from '@/lib/agent/types';
@@ -141,7 +141,7 @@ function AgentResultsProbe() {
       { system: 'bazi', conversationId: 11, name: '独立复核', modelName: '复核模型', reasoningEffort: 'off', status: completed ? 'completed' : 'running',
         ...(completed ? { answer: '生克关系复核完成。成果 ID: 22222222-2222-4222-8222-222222222222', positions: { 是否变动: '主动变动' }, steps: [
           { name: 'bazi', title: '八字排盘', status: 'completed', note: '先排盘，再逐条复核生克。', input: '{"birthYear":1990,"birthMonth":1,"birthDay":15,"birthHour":9}', output: '# 八字命盘\n- 日主: 庚' },
-          { name: 'bazi_wuxing', title: '八字五行流通', status: 'completed', output: '# 八字五行流通详查', truncated: true },
+          { name: 'bazi_wuxing', title: '八字五行旺衰', status: 'completed', output: '# 八字五行旺衰详查', truncated: true },
         ] } : { steps: [{ name: 'bazi', title: '八字排盘', status: 'completed' }, { name: 'read_user_data', title: '读取官禄宫', status: 'running' }] }) },
     ] })),
   }]);
@@ -176,8 +176,15 @@ function AgentResultsProbe() {
   };
   // Real Core relation and wuxing drilldowns of the fixture bazi, attached to the chart it was inspected as.
   window.fixture.baziDrilldownResult = name => BAZI_DRILLDOWN_FIXTURE_PARTS.find(tool => tool.name === name).output.result;
-  window.fixture.baziDrilldownRunning = () => setParts(previous => [...previous, { type: 'tool', id: 'drill-running', name: 'bazi_relations', title: '八字刑冲合害', status: 'running', input: { reference: 'bazi_chart:11111111-1111-4111-8111-111111111111' } }]);
-  window.fixture.baziDrilldowns = (on = true) => setParts(previous => [...previous.filter(tool => !tool.id.startsWith('drill-')), ...(on ? BAZI_DRILLDOWN_FIXTURE_PARTS : [])]);
+  window.fixture.baziDrilldownRunning = () => setParts(previous => [...previous, { type: 'tool', id: 'drill-running', name: 'bazi_relations', title: '八字岁运刑冲合害', status: 'running', input: { reference: 'bazi_chart:11111111-1111-4111-8111-111111111111' } }]);
+  // 详查的 targets 由真实入口计算，夹具不手写空数组：盘面随详查点亮字块与关系线。
+  window.fixture.baziDrilldowns = (on = true) => setParts(previous => {
+    const value = getAgentChart(previous.find(tool => tool.name === 'bazi'));
+    const parts = BAZI_DRILLDOWN_FIXTURE_PARTS.map(part => value
+      ? { ...part, output: { ...part.output, targets: getDrilldownTargets(value, part.output.result).map(({ id, label }) => ({ id, label })) } }
+      : part);
+    return [...previous.filter(tool => !tool.id.startsWith('drill-')), ...(on ? parts : [])];
+  });
   window.fixture.traditionalTaiyi = () => setParts(previous => previous.filter(tool => tool.id !== 'inspect-taiyi').map(tool => tool.name === 'taiyi' ? TRADITIONAL_TAIYI_FIXTURE_PART : tool));
   // Without a provider the message is what a reader sees outside the chat workspace.
   if (bare) return <section data-testid="agent-results"><AgentMessage data={data} /></section>;
@@ -490,7 +497,7 @@ export async function build(outputDirectory) {
   const dayunInput = listToolDefinitions().find(tool => tool.name === 'bazi_dayun').inputSchema.examples[0];
   const dayun = buildToolSuccessPayload('bazi_dayun', await executeTool('bazi_dayun', dayunInput));
   const drilldownParts = [];
-  for (const [name, title, extra] of [['bazi_relations', '八字干支关系', { year: 2027 }], ['bazi_wuxing', '八字五行流通', {}]]) {
+  for (const [name, title, extra] of [['bazi_relations', '八字岁运刑冲合害', { year: 2027 }], ['bazi_wuxing', '八字五行旺衰', {}]]) {
     const input = { ...toolParts.find(tool => tool.name === 'bazi').input, ...extra };
     const rendered = buildToolSuccessPayload(name, await executeTool(name, input));
     drilldownParts.push({ type: 'tool', id: 'drill-' + name, name, title, status: 'completed', input: { reference: 'bazi_chart:11111111-1111-4111-8111-111111111111', ...extra },
@@ -2024,85 +2031,80 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => window.fixture.chartFocus('bazi', ['bazi:cell:2:1'], '模型查看日支'));
     await interactive.getByRole('button', { name: '跟随模型', exact: true }).click();
     await interactive.locator('[data-chart-target="bazi:cell:2:1"][aria-pressed=true]').waitFor();
-    check('A native chart action highlights the exact day branch and says the model is being followed', await interactive.locator('.agent-board-focus').innerText().then(text => text.includes('模型查看日支') && text.includes('模型正在看') && text.includes('跟随中')));
+    check('A native chart action highlights the exact day branch and says the model is being followed', await interactive.locator('.agent-board-focus').innerText().then(text => text.includes('模型查看日支') && text.includes('太卜正在查看') && text.includes('跟随中')));
     await interactive.locator('[data-chart-target="bazi:cell:2:0"]').click();
     await until(() => window.fixture.chartQuestion?.targets?.[0]?.id === 'bazi:cell:2:0');
     check('Clicking a chart position asks about it without changing the model-given focus', await interactive.getByRole('button', { name: '跟随模型', exact: true }).getAttribute('aria-pressed') === 'true' &&
       await interactive.locator('[data-chart-target="bazi:cell:2:1"]').getAttribute('aria-pressed') === 'true' &&
       await interactive.locator('[data-chart-target="bazi:cell:2:0"]').getAttribute('aria-pressed') === 'false');
-    // 盘面默认「全部」：这张盘没有合冲刑害，因此只有流通——相邻天干的生克画在天干行上方，文字关系清单不再出现。
-    const board = interactive.locator('.agent-board-relations');
+    // 盘面一直同时画关系与流通：关系取命盘自己的干支关系明细（这张盘只有丑辰相破），流通画相邻天干的生克；
+    // 盘下不再列关系筛选、旺衰因子表或文字关系清单。
     const edges = interactive.locator('.agent-chart-scroll [data-relation-overlay] [data-relation-edge]');
+    const breakEdge = interactive.locator('.agent-chart-scroll [data-relation-edge][data-tone="break"]');
+    const breakBadge = interactive.locator('.agent-chart-scroll [data-relation-badge][data-tone="break"]');
     const adjacentStemFlow = await page.evaluate(() => window.fixture.chartTargets('bazi').filter(target => target.kind === 'bazi_relation' && ['生', '克'].includes(target.relation.类型)
       && Math.abs(['年柱', '月柱', '日柱', '时柱'].indexOf(target.relation.位置[0].柱) - ['年柱', '月柱', '日柱', '时柱'].indexOf(target.relation.位置[1].柱)) === 1).length);
-    check('Bazi relations are drawn on the table instead of a text list, opening with relations and flow together', await board.getAttribute('data-board-mode') === 'all' &&
-      await interactive.locator('.agent-board-relations ul, .agent-board-relation-text').count() === 0 && adjacentStemFlow > 0 && await edges.count() === adjacentStemFlow &&
-      await interactive.locator('.agent-chart-scroll [data-relation-overlay] path[marker-end]').count() === adjacentStemFlow && await interactive.locator('[data-wuxing-cycle] [data-element]').count() === 6);
+    check('Bazi relations and flow are drawn together on the table, with no filters, factor table or text list under it',
+      await interactive.locator('.agent-board-relations, .agent-board-marks, .agent-board-segments, .agent-board-relation-text, [data-wuxing-factors]').count() === 0 &&
+      adjacentStemFlow > 0 && await edges.count() === adjacentStemFlow + 1 &&
+      await interactive.locator('.agent-chart-scroll [data-relation-overlay] path[marker-end]').count() === adjacentStemFlow &&
+      await breakEdge.count() === 1 && await breakBadge.getAttribute('aria-label').then(label => label.includes('丑辰相破')));
     // 夹具不加载应用样式表，标签列的视觉由自托管截图验收；这里只验结构：行标签是 th；
-    // 相邻天干的生克是两字之间的直连线，不占天干上方的连线层，天干行因此不额外留白。
-    check('Adjacent stems are linked directly between the glyphs, so the stem row needs no band, and labels are row headers', await interactive.locator('[data-chart-kind="bazi"] tbody th[scope="row"]').count() >= 5 &&
-      await interactive.locator('.agent-chart-scroll [data-relation-edge][data-relation-shape="inline"]').count() === adjacentStemFlow &&
+    // 相邻天干的生克与相邻地支的相破都是两字之间的直连线，不占连线层，天干行因此不额外留白。
+    check('Adjacent pairs are linked directly between the glyphs, so the stem row needs no band, and labels are row headers', await interactive.locator('[data-chart-kind="bazi"] tbody th[scope="row"]').count() >= 5 &&
+      await interactive.locator('.agent-chart-scroll [data-relation-edge][data-relation-shape="inline"]').count() === adjacentStemFlow + 1 &&
       await interactive.locator('[data-chart-kind="bazi"] tr[data-row="stem"] > td').evaluateAll(cells => cells.every(cell => !cell.style.paddingTop)));
+    // 太卜在看日支：宿主带 data-relation-spotlight，只有日支亮着，没在看的线与字退后（透明度由样式给出，这里验标记）。
+    const lit = () => interactive.locator('.agent-chart-scroll [data-relation-cell][data-relation-lit]').evaluateAll(nodes => nodes.map(node => node.dataset.relationCell).sort());
+    const litEdges = () => edges.evaluateAll(nodes => nodes.filter(node => node.dataset.lit).map(node => node.dataset.relationEdge));
+    check('While the model looks at the day branch, the other lines and glyphs recede', await interactive.locator('.agent-interactive-chart[data-viewing]').count() === 1 &&
+      await interactive.locator('.agent-chart-scroll [data-relation-spotlight]').count() === 1 && JSON.stringify(await lit()) === JSON.stringify(['日柱:地支']) &&
+      (await litEdges()).length === 0 && await edges.evaluateAll(nodes => nodes.every(node => node.getAttribute('opacity') === '0.12')));
+    // 悬停优先：指着丑辰相破时只亮这条线与丑、辰，太卜在看的日支之外的字都退后；移开即回到太卜在看的位置。
+    await breakBadge.hover();
+    check('Pointing at a line lights only it and its glyphs, over what the model is looking at', JSON.stringify(await lit()) === JSON.stringify(['日柱:地支', '月柱:地支']) &&
+      JSON.stringify(await litEdges()) === JSON.stringify([await breakEdge.getAttribute('data-relation-edge')]) && await breakEdge.getAttribute('opacity') === '1');
+    await page.mouse.move(0, 0);
+    await renderBarrier();
+    check('Moving away returns to what the model is looking at', JSON.stringify(await lit()) === JSON.stringify(['日柱:地支']) && (await litEdges()).length === 0);
     const relation = interactive.locator('[data-relation-badge][data-chart-target]').first();
     await relation.click();
     await until(() => window.fixture.chartQuestion?.targets?.[0]?.kind === 'bazi_relation');
     check('A relation also becomes a chart question while the model focus stays authoritative', await interactive.locator('.agent-board-focus').innerText().then(text => text.includes('模型查看日支')) &&
       await interactive.locator('.agent-board-chips li').allInnerTexts().then(texts => texts.length === 1 && texts[0] === '日柱地支 辰'));
-    // 关系与五行详查补进盘面：关系模式多出命盘没列的丑辰相破，流通模式改画五行详查的自坐、通根，并可按类型筛选。
-    await board.getByRole('button', { name: /^关系/ }).click();
-    await page.evaluate(() => window.fixture.baziDrilldowns());
-    await board.locator('.agent-board-viewing').waitFor();
-    await renderBarrier();
-    check('While following, the board switches to what the agent just looked at (the wuxing drilldown shows flow)', await board.getAttribute('data-board-mode') === 'flow' &&
-      await board.locator('.agent-board-viewing').innerText().then(text => text.includes('模型正在看五行流通')) && await board.locator('.agent-board-segments [data-viewed]').innerText().then(text => text.startsWith('流通')));
-    await board.getByRole('button', { name: /^关系/ }).click();
-    check('A relations drilldown adds the clash-free chart its own 原局 relations, drawn on the table', await edges.count() === 1 &&
-      await edges.first().getAttribute('data-tone') === 'break' && await interactive.locator('.agent-chart-scroll [data-relation-badge]').first().getAttribute('aria-label').then(label => label.includes('丑辰相破')));
-    await board.getByRole('button', { name: /^流通/ }).click();
-    // 同柱的通根 / 透干画成短竖线；透干同时也并进该柱的聚合标记，因此两边的计数口径要分开。
-    const flowCounts = await page.evaluate(() => {
+    // 五行详查补进盘面：干支自坐与相邻天干画成线，通根与月令透出标在藏干旁并写出所指的天干。
+    const wuxingFacts = await page.evaluate(() => {
       const result = window.fixture.baziDrilldownResult('bazi_wuxing');
-      // 干支之间每柱只画一支自坐箭头；通根、透干（不论同柱跨柱）都收进每柱的聚合标记。
-      return { lines: result.干支自坐.length + result.相邻天干.length, grouped: result.通根.length + result.透干.length };
+      return { lines: result.干支自坐.length + result.相邻天干.length, roots: new Set(result.通根.map(row => row.位置[1].柱 + ':' + row.藏干)).size,
+        reveals: result.月令.藏干.filter(item => item.透出.length > 0).length, rootless: (result.无根 ?? []).length };
     });
-    const markerGroups = interactive.locator('.agent-chart-scroll [data-relation-marker-group]');
-    const markerCount = () => markerGroups.evaluateAll(nodes => nodes.reduce((sum, node) => sum + Number(node.dataset.relationMarkerGroup), 0));
-    check('Flow uses the wuxing drilldown: self-sitting and adjacent stems as lines, roots and reveals grouped per pillar', await edges.count() === flowCounts.lines &&
-      await markerCount() === flowCounts.grouped &&
-      await interactive.locator('.agent-chart-scroll [data-relation-marker-group][data-relation-marks~="根"]').count() > 0 &&
-      await board.locator('[data-wuxing-cycle] figcaption').innerText().then(text => text.includes('五行详查')));
-    const firstMark = board.locator('.agent-board-marks button').first();
-    const markText = await firstMark.innerText();
-    // 一个聚合标记里可能同时有「透」和「根」：按标记计数拆分，才知道筛选应隐藏多少条。
-    const marked = await interactive.locator('.agent-chart-scroll [data-relation-edge], .agent-chart-scroll [data-relation-marker-group]').evaluateAll((nodes, mark) => nodes.reduce((sum, node) => {
-      if (node.dataset.relationEdge) return sum + (node.dataset.relationMark === mark ? 1 : 0);
-      const counts = Object.fromEntries((node.dataset.relationMarkCounts ?? '').split(',').filter(Boolean).map(pair => pair.split(':')));
-      return sum + Number(counts[mark] ?? 0);
-    }, 0), markText);
-    await firstMark.click();
-    check('A type filter hides that type of line and lets the others close up', await firstMark.getAttribute('aria-pressed') === 'false' && marked > 0 &&
-      await edges.count() + await markerCount() === flowCounts.lines + flowCounts.grouped - marked);
-    await firstMark.click();
-    await board.getByRole('button', { name: '不显示', exact: true }).click();
-    check('Lines can be switched off, leaving only what the model located', await edges.count() === 0);
-    // 「全部」同时画关系与流通（分层由单测覆盖）；Agent 看的是流通时，关系线淡化但仍在盘上。
-    await board.getByRole('button', { name: /^全部/ }).click();
-    check('All draws relations and flow together', await edges.count() === flowCounts.lines + 1 && await markerCount() === flowCounts.grouped &&
-      await interactive.locator('.agent-chart-scroll [data-relation-edge][data-tone="break"]').count() === 1);
-    await board.getByRole('button', { name: '不显示', exact: true }).click();
+    await page.evaluate(() => window.fixture.baziDrilldowns());
+    await renderBarrier();
+    check('While following, the board names the drilldown it is viewing and keeps relations and flow drawn together', await interactive.locator('.agent-board-focus').innerText().then(text => text.includes('太卜正在查看') && text.includes('八字五行旺衰')) &&
+      await edges.count() === wuxingFacts.lines + 1 && await breakEdge.count() === 1);
+    // 紧凑与宽松两种藏干写法都在 DOM 里（样式只显示一种），所以每个标记计两次；无根只写在宽松的十神旁。
+    const tags = kind => interactive.locator('.agent-chart-scroll [data-relation-tag="' + kind + '"]');
+    check('Roots and month reveals are marked beside the hidden stems and name the stems they reach', wuxingFacts.roots > 0 && wuxingFacts.reveals > 0 &&
+      await tags('root').count() === 2 * wuxingFacts.roots && await tags('reveal').count() === 2 * wuxingFacts.reveals && await tags('rootless').count() === wuxingFacts.rootless &&
+      await tags('root').evaluateAll(nodes => nodes.some(node => /^根[年月日时](·[年月日时])*$/u.test(node.textContent ?? '') && /藏.+之根$/u.test(node.getAttribute('aria-label') ?? ''))) &&
+      await tags('reveal').evaluateAll(nodes => nodes.every(node => /^月令.+透出于/u.test(node.getAttribute('aria-label') ?? ''))));
+    const rootTag = tags('root').first();
+    const rootSpot = (await rootTag.getAttribute('data-relation-spot')).split(' ').sort();
+    await rootTag.hover();
+    check('Pointing at a root mark lights its branch and the stems it roots, and no line', JSON.stringify(await lit()) === JSON.stringify(rootSpot) &&
+      await rootTag.getAttribute('data-relation-lit') === '' && (await litEdges()).length === 0);
+    await page.mouse.move(0, 0);
+    await renderBarrier();
     // 详查结果落在盘面上，规范文本在对话步骤里展开；命盘标签不再重复列一遍详查。
     check('The chart tab does not repeat the drilldowns below the board', await page.locator('#agent-workspace-panel .agent-ws-drilldowns').count() === 0);
-    // 详查还在跑时，盘面已经说明模型正在看什么，并切到对应的连线模式。
+    // 详查还在跑时，盘面已经说明太卜正在看什么；关系与流通仍在盘上，不再切换模式。
     await page.evaluate(() => window.fixture.baziDrilldownRunning());
     await renderBarrier();
-    check('A running drilldown already shows what the model is looking at and switches the board to it', await interactive.locator('.agent-board-focus').innerText().then(text => text.includes('模型正在看') && text.includes('详查中 · 八字刑冲合害')) &&
-      await board.getAttribute('data-board-mode') === 'relations');
+    check('A running drilldown already shows what the model is looking at', await interactive.locator('.agent-board-focus').innerText().then(text => text.includes('太卜正在查看') && text.includes('详查中 · 八字岁运刑冲合害')));
     await page.evaluate(() => window.fixture.baziDrilldowns(false));
     await renderBarrier();
-    await interactive.getByRole('button', { name: '只看相关位置', exact: true }).click();
-    check('Showing only related positions dims the rest of the chart', await interactive.locator('.agent-interactive-chart[data-focus-only]').count() === 1 &&
-      await interactive.getByRole('button', { name: '只看相关位置', exact: true }).getAttribute('aria-pressed') === 'true');
-    await interactive.getByRole('button', { name: '只看相关位置', exact: true }).click();
+    check('There is no separate dimming toggle: the board recedes by itself while the model looks', await interactive.getByRole('button', { name: '只看相关位置', exact: true }).count() === 0 &&
+      await interactive.locator('.agent-interactive-chart[data-viewing]').count() === 1);
     await interactive.getByRole('button', { name: '追问这里', exact: true }).click();
     check('Chart questions carry the real chart reference into a draft', await page.evaluate(() => window.fixture.chartQuestion.reference.includes('bazi_chart:11111111-1111-4111-8111-111111111111')));
     const starId = await page.evaluate(() => window.fixture.chartTargets('ziwei').find(target => target.kind === 'ziwei_star' && target.group === '主星及四化').id);
@@ -2125,6 +2127,10 @@ export async function run(existingPage, bundlePath) {
       await interactive.locator('[data-chart-target="' + targets[0].id + '"][aria-pressed=true]').waitFor();
       const missing = await interactive.evaluate((panel, targets) => targets.filter(target => ![...panel.querySelectorAll('[data-chart-target]')].some(node => node.dataset.chartTarget === target.id)).map(target => target.id), targets);
       check(kind + ' exposes every returned target in its real chart and follows model focus', missing.length === 0);
+      // 太卜在看时其余单元退后：交互盘的单元总写出是否在看（样式据此调暗），黄历只有可点的目标。
+      const units = await interactive.locator('[data-chart-kind="' + kind + '"] [data-chart-selected]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-chart-selected')));
+      check(kind + ' marks every unit as looked at or not while the model looks', await interactive.locator('.agent-interactive-chart[data-viewing]').count() === 1 &&
+        units.every(value => value === 'true' || value === 'false') && (kind === 'almanac' || (units.includes('true') && units.includes('false'))));
       await page.evaluate(({ kind, id }) => window.fixture.chartFocus(kind, [id], '模型定位末项'), { kind, id: targets.at(-1).id });
       await interactive.locator('[data-chart-target="' + targets.at(-1).id + '"][aria-pressed=true]').waitFor();
       await interactive.locator('[data-chart-target="' + targets.at(-1).id + '"]').click();

@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { DI_ZHI, getDiShi, STEM_ELEMENTS, TIAN_GAN, ZHI_WUXING as BRANCH_ELEMENTS } from 'taibu-core/utils';
-import { calculateBazi, calculateBaziFiveElementsStats, calculateBaziShenShaData, toBaziText } from 'taibu-core/bazi';
+import { calculateBazi, calculateBaziShenShaData, toBaziText } from 'taibu-core/bazi';
 import { calculateBaziDayun } from 'taibu-core/bazi-dayun';
 import { readBirthTimeOptions, resolveBirthTimeOptions, writeBirthTimeOptions } from '@/lib/divination/birth-time';
 import { buildInitialZiweiFormState } from '@/lib/divination/ziwei-form';
@@ -418,25 +418,6 @@ describe('calculateBaziChartBundle 集成测试', () => {
         }
     });
 
-    it('五行统计不为空且总和大于0', () => {
-        const formData: BaziFormData = {
-            name: '测试',
-            gender: 'male',
-            birthYear: 1990,
-            birthMonth: 1,
-            birthDay: 1,
-            birthHour: 12,
-            birthMinute: 0,
-            calendarType: 'solar',
-            isLeapMonth: false,
-        };
-
-        const { output: result } = calculateBaziChartBundle(formData);
-        const stats = calculateBaziFiveElementsStats(result.fourPillars);
-        const total = stats.金 + stats.木 + stats.水 + stats.火 + stats.土;
-        assert.ok(total > 0, '五行统计总和应大于0');
-    });
-
     it('年月时柱有十神，日柱无十神', () => {
         const formData: BaziFormData = {
             name: '测试',
@@ -537,56 +518,4 @@ describe('地支关系', () => {
         assert.equal(LIU_HE_TABLE['子'].result, '土');
     });
 
-});
-
-// ===== 8. 藏干权重 =====
-
-describe('calculateFiveElements 藏干权重', () => {
-    it('藏干对五行统计有贡献（权重 0.3）', () => {
-        const formData: BaziFormData = {
-            name: '测试',
-            gender: 'male',
-            birthYear: 1990,
-            birthMonth: 1,
-            birthDay: 1,
-            birthHour: 12,
-            birthMinute: 0,
-            calendarType: 'solar',
-            isLeapMonth: false,
-        };
-
-        const { output: result } = calculateBaziChartBundle(formData);
-        const stats = calculateBaziFiveElementsStats(result.fourPillars);
-
-        // 五行统计应包含小数（来自藏干的 0.3 权重）
-        const allValues = [stats.金, stats.木, stats.水, stats.火, stats.土];
-        const hasDecimal = allValues.some(v => v !== Math.floor(v));
-        assert.ok(hasDecimal, '五行统计应包含小数值（藏干权重贡献）');
-    });
-
-    it('纯天干地支贡献为整数，藏干贡献为小数', () => {
-        // 己巳 丙子 庚辰 壬午 的五行统计
-        // 天干：己(土) 丙(火) 庚(金) 壬(水) → 土1 火1 金1 水1
-        // 地支：巳(火) 子(水) 辰(土) 午(火) → 火2 水1 土1
-        // 天干+地支整数部分：金1 木0 水2 火3 土2
-        // 藏干会在此基础上增加 0.3 的倍数
-        const formData: BaziFormData = {
-            name: '测试',
-            gender: 'male',
-            birthYear: 1990,
-            birthMonth: 1,
-            birthDay: 1,
-            birthHour: 12,
-            birthMinute: 0,
-            calendarType: 'solar',
-            isLeapMonth: false,
-        };
-
-        const { output: result } = calculateBaziChartBundle(formData);
-        const stats = calculateBaziFiveElementsStats(result.fourPillars);
-        const total = stats.金 + stats.木 + stats.水 + stats.火 + stats.土;
-
-        // 8个天干地支 + 藏干贡献，总和应大于8
-        assert.ok(total > 8, `五行总和(${total})应大于8（含藏干贡献）`);
-    });
 });

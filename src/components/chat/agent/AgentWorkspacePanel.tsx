@@ -6,7 +6,9 @@ import { Tooltip } from '@/components/ui/Tooltip';
 import { Ellipsis, LayoutGrid, LocateFixed, Maximize2, Minimize2, Search, X } from 'lucide-react';
 import { getAgentToolFamily, isAgentChartTool } from '@/lib/agent/tool-catalog';
 import { isAgentRunTerminal, type AgentMessageData, type AgentPart } from '@/lib/agent/types';
-import { getAgentChart, getAgentFinalSelection, getAgentToolText } from '@/lib/agent/tool-presentation';
+import { getAgentChart, getAgentToolArtifactId, getAgentToolText } from '@/lib/agent/tool-presentation';
+import { findSavedAgentChart, getAgentChartSave } from '@/lib/agent/chart-save';
+import { useUserCharts } from '@/lib/hooks/useUserCharts';
 import { parallelAnalysisResults } from '@/lib/agent/parallel-results';
 import { getAgentChartReference, getChartFocus, getDrilldownFocus, getLatestChartFocus, parseChartReference, type ChartAskContext } from '@/lib/agent/chart-interaction';
 import {
@@ -30,6 +32,7 @@ import { ModelAvatar } from './ModelAvatar';
 import { WorkspaceOverview } from './AgentWorkspaceSections';
 import { DrilldownList } from './AgentDrilldownViews';
 import { getLatestBaziWuxing } from './bazi-board';
+import { AgentChartSave } from './AgentChartSave';
 const ChartPreview = lazy(() => import('./AgentChartPreview').then(module => ({ default: module.AgentChartPreview })));
 const InteractiveChart = lazy(() => import('./AgentInteractiveChart').then(module => ({ default: module.AgentInteractiveChart })));
 
@@ -114,6 +117,7 @@ function ResourceView({ resource, model, data, answers, questionIds, userId, art
                     <InteractiveChart key={`${reference ?? reading.id}:${pinned ? named!.id : ''}`} value={value} tool={textSource ?? reading} reference={reference}
                         focus={focus} followModel={followModel} live={live} pinned={pinned !== null} subject={describeAgentChartSubject(source ?? reading, value)}
                         baziWuxing={value.kind === 'bazi' ? getLatestBaziWuxing(drilldowns) : undefined}
+                        actions={source && <AgentChartSave tool={source} userId={userId} />}
                         onAsk={onChartQuestion} />
                 </Suspense>
                 // 详查的结果已经落在盘面上（定位高亮，八字的自坐、相邻天干连线与根透标记），规范文本在对话的步骤里展开；这里不再重复列出。
@@ -208,7 +212,12 @@ export function AgentWorkspacePanel({ parts, artifacts, data, attachmentIds, ans
     const width = customWidth ?? (board ? BOARD_WIDTH : DEFAULT_WIDTH);
     const questionIds = useMemo(() => getAgentToolQuestionIds(parts), [parts]);
     const numbers = useMemo(() => getAgentStepNumbers(data?.parts ?? []), [data]);
-    const saved = useMemo(() => new Set([...artifacts.map(artifact => artifact.id), ...model.tools.flatMap(tool => getAgentFinalSelection(tool) ?? [])]), [artifacts, model]);
+    const library = useUserCharts(userId, { enabled: model.tools.some(tool => getAgentChartSave(tool) !== null) });
+    // 已保存：旧任务结算时存入的命盘，以及命盘库里有同一张盘的本对话排盘。
+    const saved = useMemo(() => new Set([...artifacts.map(artifact => artifact.id), ...model.tools.flatMap(tool => {
+        const save = getAgentChartSave(tool), id = getAgentToolArtifactId(tool);
+        return save && id && findSavedAgentChart(library.data, save) ? [id] : [];
+    })]), [artifacts, model, library.data]);
     const resolve = (id: string | null | undefined) => id ? resolveAgentWorkspaceLocation(model, id) : null;
     const [followModel, setFollowModel] = useState(() => !requestedResource && readSavedWorkspace(workspaceKey).followModel !== false);
     const [tabs, setTabs] = useState<string[]>(() => readSavedWorkspace(workspaceKey).tabs ?? []);

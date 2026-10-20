@@ -39,7 +39,6 @@ test('a code mode script calls Core tools as nested calls, each a public part un
   let offered: string[] = [];
   const streamFn = scripted(index => {
     if (index === 0) return [{ type: 'toolCall', id: 'script', name: 'codemode', arguments: { code: BAZI_SCAN } }];
-    if (index === 1) return [{ type: 'toolCall', id: 'select', name: 'select_final_artifacts', arguments: { artifactIds: [store.draft('script/c1')!.id] } }];
     return [{ type: 'text', text: '两年的命盘已比较完毕' }];
   }, messages => {
     prompts.push(JSON.stringify(messages.filter(message => message.role === 'system')));
@@ -70,11 +69,10 @@ test('a code mode script calls Core tools as nested calls, each a public part un
     assert.equal(typeof call.startedAt, 'number');
   }
   assert.deepEqual(parts.slice(parts.indexOf(card) + 1, parts.indexOf(card) + 3), calls, 'the calls follow their script');
-  assert.equal((await store.artifacts()).length, 2);
-  assert.deepEqual((finish.args.p_checkpoint as AgentRunRow['checkpoint']).finalArtifacts, [store.draft('script/c1')!.id]);
+  assert.equal(store.calculations().length, 2);
   // The model reads only the script's result; the nested calls never enter the transcript.
   const results = store.nativeEntries().flatMap(entry => entry.model ?? []).filter(message => message.role === 'toolResult');
-  assert.deepEqual(results.map(message => message.toolName), ['codemode', 'select_final_artifacts']);
+  assert.deepEqual(results.map(message => message.toolName), ['codemode']);
   // Details ride on the public parts only: the native log keeps the script's structured result, not the board.
   assert.ok(!JSON.stringify(store.log).includes('"board"'));
 });
@@ -103,7 +101,6 @@ test('a call still running shows under its script and in the activity line', asy
   })();
   await executeAgentRun(store, run, undefined, { config, streamFn: scripted(index => {
     if (index === 0) return [{ type: 'toolCall', id: 'script', name: 'codemode', arguments: { code: `await tools.bazi({ gender: 'female', birthYear: 1992, birthMonth: 3, birthDay: 8, birthHour: 14 }); return 'ok';` } }];
-    if (index === 1) return [{ type: 'toolCall', id: 'select', name: 'select_final_artifacts', arguments: { artifactIds: [] } }];
     return [{ type: 'text', text: '已排盘' }];
   }) });
   assert.equal(finished(store).args.p_status, 'completed');
@@ -128,7 +125,6 @@ test('a script may call a deferred tool the model was not offered', async () => 
 return typeof dayun.text + ':' + dayun.data.大运列表.length;`;
   await executeAgentRun(store, run, undefined, { config, streamFn: scripted(index => {
     if (index === 0) return [{ type: 'toolCall', id: 'script', name: 'codemode', arguments: { code } }];
-    if (index === 1) return [{ type: 'toolCall', id: 'select', name: 'select_final_artifacts', arguments: { artifactIds: [store.draft('script/c1')!.id] } }];
     return [{ type: 'text', text: '大运已排好' }];
   }, messages => {
     if (!offered.length) {
@@ -159,7 +155,6 @@ for (let index = 1; index <= ${AGENT_CODEMODE_CALL_LIMIT + 1}; index++) {
 return errors.join('\\n');`;
   await executeAgentRun(store, run, undefined, { config, streamFn: scripted(index => {
     if (index === 0) return [{ type: 'toolCall', id: 'script', name: 'codemode', arguments: { code } }];
-    if (index === 1) return [{ type: 'toolCall', id: 'select', name: 'select_final_artifacts', arguments: { artifactIds: [] } }];
     return [{ type: 'text', text: '脚本已结束' }];
   }) });
   assert.equal(finished(store).args.p_status, 'completed');
@@ -168,7 +163,7 @@ return errors.join('\\n');`;
   assert.match(output, /^ask:tools\.ask_user does not exist/mu);
   assert.match(output, new RegExp(`^${AGENT_CODEMODE_CALL_LIMIT + 1}:Tool call blocked: 单个脚本最多发起 ${AGENT_CODEMODE_CALL_LIMIT} 次调用`, 'mu'));
   assert.equal(output.split('\n').length, 2, `every call within the limit ran:\n${output.slice(0, 800)}`);
-  assert.equal((await store.artifacts()).length, AGENT_CODEMODE_CALL_LIMIT);
+  assert.equal(store.calculations().length, AGENT_CODEMODE_CALL_LIMIT);
   // A blocked call never ran: it has no part of its own, only the script's row. Asking for a tool that does not
   // exist fails inside the script and is no call at all.
   const calls = toolParts(store).filter(part => part.parentId === card.id);

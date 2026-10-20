@@ -359,12 +359,25 @@ const PI_DURABLE_1_3_MIGRATIONS = [{
   sha256: '654f1445606b17dc14ae84ac34d188698242ad74aa1b82ff6736c89b44031fe9',
 }];
 const PI_DURABLE_1_3_FINGERPRINT = 'a965a7c1177ad5d6aae386fd69ddfc6ea20883d39942b848676a6e1d8d65824e';
-const REVIEWED_SCHEMA_UPGRADES = [
+const REVIEWED_PI_DURABLE_1_3_SCHEMA_UPGRADES = [
   ...REVIEWED_CONVERSATION_SHARE_SCHEMA_UPGRADES,
   ...REVIEWED_CONVERSATION_SHARE_SCHEMA_UPGRADES.filter(entry => entry.current === CONVERSATION_SHARE_FINGERPRINT).map(entry => ({
     previous: entry.previous, current: PI_DURABLE_1_3_FINGERPRINT, files: [...entry.files, ...PI_DURABLE_1_3_MIGRATIONS],
   })),
   { previous: CONVERSATION_SHARE_FINGERPRINT, current: PI_DURABLE_1_3_FINGERPRINT, files: PI_DURABLE_1_3_MIGRATIONS },
+];
+// 2026-10-20：命盘改由用户在盘面上保存；结算不再存盘，去掉 agent_finish_run 的 p_record、agent_cache_tool 的 p_chart 与产物表的三个命盘列。
+const USER_SAVED_CHART_MIGRATIONS = [{
+  file: 'supabase/migrations/20261020_120000_agent_user_saved_charts.sql',
+  sha256: '55ad3521aad922853bd3535a4f87c6e37430498b383ac4b045c366effea43842',
+}];
+const USER_SAVED_CHART_FINGERPRINT = '3835fe3cba2c2df7f8315b8ad7a69b4c50c1c04c14592b81d1abccef92c20a4f';
+const REVIEWED_SCHEMA_UPGRADES = [
+  ...REVIEWED_PI_DURABLE_1_3_SCHEMA_UPGRADES,
+  ...REVIEWED_PI_DURABLE_1_3_SCHEMA_UPGRADES.filter(entry => entry.current === PI_DURABLE_1_3_FINGERPRINT).map(entry => ({
+    previous: entry.previous, current: USER_SAVED_CHART_FINGERPRINT, files: [...entry.files, ...USER_SAVED_CHART_MIGRATIONS],
+  })),
+  { previous: PI_DURABLE_1_3_FINGERPRINT, current: USER_SAVED_CHART_FINGERPRINT, files: USER_SAVED_CHART_MIGRATIONS },
 ];
 
 export function reviewedSchemaUpgrade(fingerprint, bundle) {

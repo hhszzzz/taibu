@@ -114,6 +114,7 @@ supabase/migrations/*
 !supabase/migrations/20261018_090000_conversation_agent_flag_includes_forks.sql
 !supabase/migrations/20261019_100000_conversation_shares.sql
 !supabase/migrations/20261020_100000_agent_pi_durable_1_3.sql
+!supabase/migrations/20261020_120000_agent_user_saved_charts.sql
 # Additional explicit inputs for isolated Auth/PostgREST acceptance only.
 !supabase/migrations/20260110_add_user_settings_and_fix_notifications_rls.sql
 !supabase/migrations/20260113_add_app_settings.sql

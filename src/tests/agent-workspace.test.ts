@@ -36,7 +36,8 @@ test('every tool family reaches a workspace location, including external and unk
   // 任务清单只显示在聊天的进度条里，不再占用工作区标签。
   const plan = workspace([tool('plan', 'todo_write')]);
   assert.equal(plan.locations.get('plan'), undefined);
-  assert.equal(model.locations.get(`call-${names.indexOf('select_final_artifacts')}`), 'results');
+  // A step of a retired tool in an earlier answer opens as a plain tool view.
+  assert.equal(model.resources.find(resource => resource.toolIds.includes(`call-${names.indexOf('select_final_artifacts')}`))?.view, 'tool');
   const external = model.resources.find(resource => resource.toolIds.includes(`call-${names.indexOf('mcp__archive__lookup')}`))!;
   assert.deepEqual([external.view, external.family], ['tool', 'external']);
   assert.equal(model.resources.find(resource => resource.toolIds.includes(`call-${names.indexOf('retired_tool')}`))?.view, 'tool');

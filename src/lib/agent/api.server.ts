@@ -423,7 +423,6 @@ export async function createAgentTask(request: NextRequest) {
       ? [...replay, ...piHistory([userMessage])]
       : piHistory(prepared.sanitizedMessages.map(message => ({ ...message, attachments: message.id === userMessage.id ? userMessage.attachments : history.find(item => item.id === message.id)?.attachments }))),
     parts: [],
-    finalArtifacts: [],
     // Evidence numbers continue across the visible branch, so a new answer never reuses one.
     citations: { base: getAgentCitationBase(history), calls: {} },
   };

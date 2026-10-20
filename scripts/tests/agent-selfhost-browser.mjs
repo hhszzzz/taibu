@@ -45,6 +45,8 @@ const outside = [],
   errors = [],
   failures = [];
 const created = [];
+// 本次验收在盘面上保存进命盘库的命盘，结束时随对话一起删除（--keep 保留）。
+const savedCharts = [];
 const chartOnly = process.argv.includes('--chart-only');
 const collaborationOnly = process.argv.includes('--collaboration-only');
 let page;
@@ -305,11 +307,7 @@ try {
     ).length,
     2,
   );
-  const artifacts = finished.message.agent.parts.filter(
-    (part) => part.type === "artifact",
-  );
-  assert.equal(artifacts.filter((part) => part.chartType === "bazi").length, 2);
-  assert.equal(artifacts.some(part => part.recordId), false, 'completed analysis stays in chat without a separate record');
+  assert.equal(finished.message.agent.parts.some(part => part.type === 'artifact'), false, 'an answer saves no chart or record by itself');
   assert.ok(finished.message.content.includes('Agent 离线验收'));
   assert.ok(finished.message.agent.runtime.context.tokens > 0, 'Pi projects the real active transcript');
   assert.equal(finished.message.agent.runtime.model.contextWindow, null, 'unconfigured models have no invented capacity');
@@ -381,21 +379,36 @@ try {
   await page.emulateMedia({ colorScheme: 'light' });
   await page.locator('html:not(.dark)').waitFor();
   await delay(350);
+  // 存不存盘由用户在盘面上决定：盘面按出生资料认出命盘库里的同一张盘（账号里可能已有），
+  // 没有时保存走结果页同一接口，之后按钮变成命盘页入口。
+  const sameBirth = chart => chart.gender === 'male' && chart.birth_date === '1990-01-15' && String(chart.birth_time).slice(0, 5) === '09:00'
+    && chart.calendar_type !== 'lunar' && chart.is_leap_month !== true && chart.longitude == null
+    && (chart.timezone ?? 'Asia/Shanghai') === 'Asia/Shanghai' && (chart.disambiguation ?? 'reject') === 'reject';
+  const librarySame = async () => (await get('/api/user/charts')).baziCharts.filter(sameBirth);
+  const savedBefore = await librarySame();
+  // 首个步骤是男方八字（与 sameBirth 同一出生资料）。
+  await page.locator('.agent-message .agent-step-workspace').first().click();
+  const savedLink = panel.getByRole('link', { name: '已保存到我的命盘，打开命盘页', exact: true });
+  if (!savedBefore.length) {
+    await panel.getByRole('button', { name: '保存命盘', exact: true }).click();
+    await savedLink.waitFor();
+  }
+  const savedAfter = await librarySame();
+  assert.equal(savedAfter.length, Math.max(savedBefore.length, 1), 'the board saves a chart the library lacks, once');
+  if (!savedBefore.length) savedCharts.push(savedAfter[0].id);
+  const savedHref = await savedLink.getAttribute('href');
+  assert.ok(savedAfter.some(chart => savedHref === `/bazi/result?chart=${encodeURIComponent(chart.id)}`), 'a saved board links to its library chart');
+  assert.equal(await panel.getByRole('button', { name: '保存命盘', exact: true }).count(), 0, 'a saved chart offers no second save');
   await panel.getByRole('button', { name: '关闭工作区', exact: true }).click();
   await page.screenshot({
     path: path.join(directory, "agent-acceptance.png"),
     fullPage: true,
   });
-  const chartArtifact = artifacts.find(part => part.chartId);
-  // 聊天里不再重复展示成果卡片；原生命盘页仍可按成果 id 直接打开。
-  await page.goto(`${config.APP_ORIGIN}/bazi/result?chart=${encodeURIComponent(chartArtifact.chartId)}`);
-  await page.waitForURL(
-    (url) =>
-      url.pathname === "/bazi/result" &&
-      url.searchParams.get("chart") === chartArtifact.chartId,
-  );
+  // 聊天里不展示成果卡片；保存后的命盘在原生命盘页按 id 打开。
+  await page.goto(`${config.APP_ORIGIN}${savedHref}`);
+  await page.waitForURL(url => `${url.pathname}${url.search}` === savedHref);
   console.log(
-    "Agent 浏览器：真实登录、跨命盘工具调用、后台完成、刷新恢复、成果入口和一次扣费通过。",
+    "Agent 浏览器：真实登录、跨命盘工具调用、后台完成、刷新恢复、盘面存入命盘库和一次扣费通过。",
   );
   console.log('Agent UI：任务步骤分组、中文输入法、聊天分析、原生命盘入口、Pi 上下文与右侧控件通过。');
 
@@ -447,17 +460,8 @@ try {
   );
   const regeneratedResult = await waitForRun(regenerated.id, "completed");
   await page.locator('[data-agent-status="completed"]').waitFor();
-  assert.deepEqual(
-    regeneratedResult.message.agent.parts
-      .filter((part) => part.type === "artifact" && part.chartId)
-      .map((part) => part.chartId)
-      .sort(),
-    artifacts
-      .filter((part) => part.chartId)
-      .map((part) => part.chartId)
-      .sort(),
-    "regeneration reuses the existing native charts",
-  );
+  assert.equal(regeneratedResult.message.agent.parts.some(part => part.type === 'artifact'), false, 'regeneration saves nothing by itself');
+  assert.equal((await librarySame()).length, savedAfter.length, 'regeneration adds no library chart');
   assert.equal(await credits(), initial - 2);
   await uiReady();
   // 工作区是停靠分栏（不再浮层遮盖），消息操作可直接触达。
@@ -744,21 +748,14 @@ try {
     1,
     "committed calculation is not executed twice",
   );
-  assert.equal(
-    recovered.message.agent.parts.filter(
-      (part) => part.type === "artifact" && part.recordId,
-    ).length,
-    0,
-    'takeover does not create an analysis record',
-  );
-  assert.equal(recovered.message.agent.parts.filter(part => part.type === 'artifact' && part.chartId).length, 1);
+  assert.equal(recovered.message.agent.parts.some(part => part.type === 'artifact'), false, 'takeover saves no chart or record');
   assert.equal(
     await credits(),
     beforeCrash - 1,
     "worker takeover keeps the original charge",
   );
   console.log(
-    "Agent 浏览器：真实 worker 崩溃、租约接管、刷新重连及成果幂等保存通过。",
+    "Agent 浏览器：真实 worker 崩溃、租约接管、刷新重连及计算不重复执行通过。",
   );
 
   await newChat();
@@ -885,6 +882,10 @@ try {
       }
       console.log(`已删除本次验收创建的 ${leftovers.length} 个对话（--keep 可保留）。`);
     } catch (error) { console.warn('验收对话清理失败：', error instanceof Error ? error.message : error); }
+    for (const id of savedCharts) {
+      const response = await context.request.delete(`${config.APP_ORIGIN}/api/user/charts?type=bazi&id=${encodeURIComponent(id)}`).catch(() => null);
+      if (!response?.ok()) console.warn(`未能删除验收保存的命盘 ${id}：${response?.status() ?? '请求失败'}`);
+    }
   }
   await browser.close();
 }

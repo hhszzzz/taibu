@@ -70,7 +70,6 @@ test('the model loads a deferred tool before it is offered, and the loaded tool 
   await executeAgentRun(store, run, undefined, { config, streamFn: scripted(index => {
     if (index === 0) return [{ type: 'toolCall', id: 'search', name: AGENT_TOOL_SEARCH_TOOL, arguments: { query: '大运' } }];
     if (index === 1) return [{ type: 'toolCall', id: 'dayun', name: 'bazi_dayun', arguments: dayun }];
-    if (index === 2) return [{ type: 'toolCall', id: 'select', name: 'select_final_artifacts', arguments: { artifactIds: [] } }];
     return [{ type: 'text', text: '大运已排好' }];
   }, messages => offered.push(getCurrentTools(messages).map(tool => tool.name))) });
   assert.equal(finished(store).args.p_status, 'completed');
@@ -94,7 +93,6 @@ test('a search with no match says so and loads nothing', async () => {
   let offered: string[] = [];
   await executeAgentRun(store, run, undefined, { config, streamFn: scripted(index => {
     if (index === 0) return [{ type: 'toolCall', id: 'search', name: AGENT_TOOL_SEARCH_TOOL, arguments: { query: '完全不存在的东西' } }];
-    if (index === 1) return [{ type: 'toolCall', id: 'select', name: 'select_final_artifacts', arguments: { artifactIds: [] } }];
     return [{ type: 'text', text: '没有可用工具' }];
   }, messages => { offered = getCurrentTools(messages).map(tool => tool.name); }) });
   const search = toolParts(store).find(part => part.name === AGENT_TOOL_SEARCH_TOOL)!;

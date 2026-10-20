@@ -65,7 +65,6 @@ async function main() {
                   p_status: "failed",
                   p_checkpoint: run.checkpoint,
                   p_message: message,
-                  p_record: null,
                 });
               } catch {
                 console.warn("[agent-worker]", {

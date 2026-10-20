@@ -46,7 +46,6 @@ export async function agentDatabaseContracts(
     durable: { engine: 'pi-durable/1.3.0' },
     messages: [],
     parts: [],
-    finalArtifacts: [],
   };
   const assistant = (id) => ({
     id: `agent:${id}`,
@@ -72,10 +71,9 @@ export async function agentDatabaseContracts(
     status,
     message = assistant(run.id),
     cp = checkpoint,
-    record = null,
   ) =>
     parsed(
-      `SELECT to_jsonb(public.agent_finish_run(${lease(run)},${quote(status)},${json(cp)},${json(message)},${json(record)}));`,
+      `SELECT to_jsonb(public.agent_finish_run(${lease(run)},${quote(status)},${json(cp)},${json(message)}));`,
     );
   const get = (id) =>
     parsed(
@@ -97,9 +95,9 @@ export async function agentDatabaseContracts(
       owner,
       `SELECT to_jsonb(public.agent_submit_command(${quote(run.id)},${quote(request)},${quote(mode)},${json({ id: randomUUID(), role: "user", content, createdAt: new Date().toISOString() })}));`,
     );
-  const saveTool = (run, callId = "chart", chart = null) =>
+  const saveTool = (run, callId = "chart") =>
     parsed(
-      `SELECT to_jsonb(public.agent_cache_tool(${lease(run)},${quote(callId)},'bazi','calculation','{"gender":"male"}',${json({ content: [{ type: "text", text: "规范命盘" }], details: { 真实: true }, canonicalText: "规范命盘" })},${json(chart)}));`,
+      `SELECT to_jsonb(public.agent_cache_tool(${lease(run)},${quote(callId)},'bazi','calculation','{"gender":"male"}',${json({ content: [{ type: "text", text: "规范命盘" }], details: { 真实: true }, canonicalText: "规范命盘" })}));`,
     );
 
   await t.test("repeated Agent edits snapshot each selected version's complete current branch, metadata and new tail", async () => {
@@ -198,11 +196,11 @@ export async function agentDatabaseContracts(
       parsed(`SELECT public.agent_durable_commit(${lease(run)},${sequence},${json(writes)},${json(cp)});`);
     assert.equal(await commit(1, admission), 1);
     assert.equal(await asOwner(`SELECT consumed FROM public.agent_run_commands WHERE run_id=${quote(run.id)};`), "f");
-    const updated = { ...nativeCheckpoint, finalSelectionMade: true };
+    const updated = { ...nativeCheckpoint, planApproved: true };
     assert.equal(await commit(2, placed, updated), 2);
     assert.equal(await asOwner(`SELECT consumed FROM public.agent_run_commands WHERE run_id=${quote(run.id)};`), "t");
     assert.equal(await commit(1, admission), 1, "lost receipt can be retried without overwriting newer metadata");
-    assert.equal((await get(run.id)).checkpoint.finalSelectionMade, true);
+    assert.equal((await get(run.id)).checkpoint.planApproved, true);
     await assert.rejects(commit(2, admission), /AGENT_DURABLE_CONFLICT/);
     await assert.rejects(commit(4, []), /AGENT_DURABLE_CONFLICT/);
     const rows = JSON.parse(await admin(`SELECT public.agent_durable_read(${lease(run)},1);`));
@@ -269,8 +267,12 @@ export async function agentDatabaseContracts(
     await finish(await claim(), 'completed', { ...assistant(historical.id), content: '历史答复保留' });
     await asOwner(`UPDATE public.agent_runs SET checkpoint=${json({ ...checkpoint, durable: { engine: 'pi-durable/1.1.0' } })} WHERE id=${quote(historical.id)};`);
     const current = await create(await createConversation(), { charge: false });
-    // The latest generation migration is the one that must stay replayable.
-    const migration = await readFile(new URL('../../supabase/migrations/20261020_100000_agent_pi_durable_1_3.sql', import.meta.url), 'utf8');
+    // The latest generation migration is the one that must stay replayable. Its retirement settles through
+    // agent_finish_run, which lost the unused p_record argument afterwards (20261020_120000).
+    const source = await readFile(new URL('../../supabase/migrations/20261020_100000_agent_pi_durable_1_3.sql', import.meta.url), 'utf8');
+    const settle = 'PERFORM public.agent_finish_run(r.id,r.worker_id,r.fence,\'failed\',r.checkpoint,message,NULL);';
+    assert.equal(source.split(settle).length, 2);
+    const migration = source.replace(settle, 'PERFORM public.agent_finish_run(r.id,r.worker_id,r.fence,\'failed\',r.checkpoint,message);');
     await sql(migration);
     for (const { run, artifact } of active) {
       const ended = await get(run.id);
@@ -395,7 +397,7 @@ export async function agentDatabaseContracts(
       assert.equal(replay.id, cached.id);
       await assert.rejects(
         admin(
-          `SELECT public.agent_cache_tool(${lease(second)},'chart','bazi','calculation','{"gender":"female"}','{}',NULL);`,
+          `SELECT public.agent_cache_tool(${lease(second)},'chart','bazi','calculation','{"gender":"female"}','{}');`,
         ),
         /AGENT_TOOL_CALL_MISMATCH/,
       );
@@ -410,7 +412,7 @@ export async function agentDatabaseContracts(
   );
 
   await t.test(
-    "Agent input pause/reply retain one debit; charts settle without creating analysis records",
+    "Agent input pause/reply retain one debit; completion saves neither charts nor analysis records",
     async () => {
       const before = await balance();
       const queued = await create(await createConversation());
@@ -441,24 +443,11 @@ export async function agentDatabaseContracts(
       await admin(
         `SELECT public.agent_checkpoint(${lease(run)},${json(checkpoint)},${json(assistant(run.id))},'{}',${a.sequence});`,
       );
-      const chart = {
-        name: "Agent 八字命盘",
-        birth_date: "1990-01-15",
-        birth_time: "09:00",
-        gender: "male",
-        calendar_type: "solar",
-        is_leap_month: false,
-        longitude: null,
-        day_master: "甲",
-        day_branch: "子",
-      };
-      const draft = await saveTool(run, "final-chart", chart);
+      await saveTool(run, "final-chart");
       const result = await finish(
         run,
         "completed",
         { ...assistant(run.id), content: "可见分析" },
-        { ...checkpoint, finalArtifacts: [draft.id] },
-        null,
       );
       assert.equal(result.record_id, null);
       assert.equal(await balance(), before - 1);
@@ -468,7 +457,7 @@ export async function agentDatabaseContracts(
         ),
       );
       assert.equal(durable.records, 0);
-      assert.equal(durable.charts, 1);
+      assert.equal(durable.charts, 0, "saving a chart to the library is the user's action on the board, not settlement");
       assert.equal(durable.credentials, 0);
       assert.equal(Number(result.event_cursor), durable.cursor);
       assert.equal(
@@ -477,47 +466,15 @@ export async function agentDatabaseContracts(
         "completed",
       );
       assert.equal(result.public_message.content, "可见分析");
-      assert.equal(result.public_message.agent.parts.filter(part => part.type === 'artifact' && part.chartId).length, 1);
-      assert.equal(result.public_message.agent.parts.some(part => part.recordId), false);
+      assert.equal(result.public_message.agent.parts.some(part => part.type === 'artifact'), false);
       await assert.rejects(
-        finish(run, "completed", result.public_message, checkpoint, {
-          title: "duplicate",
-          content: "duplicate",
-        }),
+        finish(run, "completed", result.public_message, checkpoint),
         /AGENT_LEASE_LOST/,
       );
-      await create(await createConversation());
-      run = await claim();
-      const next = await saveTool(run, "reuse", chart);
-      await finish(
-        run,
-        "completed",
-        { ...assistant(run.id), content: "另一段分析" },
-        { ...checkpoint, finalArtifacts: [next.id] },
-        { title: "另一段分析", content: "另一段分析" },
-      );
-      assert.equal(await asOwner(`SELECT count(*) FROM public.ming_records WHERE user_id=${quote(owner)};`), '0', 'old workers supplying p_record cannot recreate automatic records');
-      assert.equal(
-        await asOwner(
-          `SELECT count(*) FROM public.bazi_charts WHERE user_id=${quote(owner)};`,
-        ),
-        "1",
-      );
-      assert.equal(await asOwner(`SELECT timezone||'/'||disambiguation FROM public.bazi_charts WHERE user_id=${quote(owner)};`), 'Asia/Shanghai/reject');
-      for (const [timezone, disambiguation, expectedCount] of [
-        ['America/New_York', 'earlier', 2],
-        ['America/New_York', 'later', 3],
-        ['UTC', 'later', 4],
-        ['America/New_York', 'later', 4],
-        ['Asia/Shanghai', 'reject', 4],
-      ]) {
-        await create(await createConversation());
-        const variantRun = await claim();
-        const artifact = await saveTool(variantRun, 'time-rule-identity', { ...chart, timezone, disambiguation });
-        await finish(variantRun, 'completed', { ...assistant(variantRun.id), content: 'Time rule identity' }, { ...checkpoint, finalArtifacts: [artifact.id] }, { title: 'Time rule identity', content: 'Time rule identity' });
-        assert.equal(await asOwner(`SELECT count(*) FROM public.bazi_charts WHERE user_id=${quote(owner)};`), String(expectedCount));
-        assert.equal(await asOwner(`SELECT count(*) FROM public.bazi_charts WHERE user_id=${quote(owner)} AND timezone=${quote(timezone)} AND disambiguation=${quote(disambiguation)};`), '1');
-      }
+      const columns = await asOwner(`SELECT string_agg(column_name,',' ORDER BY column_name) FROM information_schema.columns WHERE table_schema='public' AND table_name='agent_run_artifacts';`);
+      assert.equal(columns, 'args,call_id,id,kind,result,run_id,tool_name');
+      for (const signature of ['agent_finish_run(uuid,text,bigint,text,jsonb,jsonb,jsonb)', 'agent_cache_tool(uuid,text,bigint,text,text,text,jsonb,jsonb,jsonb)'])
+        assert.equal(await asOwner(`SELECT to_regprocedure('public.${signature}') IS NULL;`), 't', `${signature} is gone`);
     },
   );
 
@@ -535,7 +492,6 @@ export async function agentDatabaseContracts(
         "completed",
         { ...assistant(run.id), content: "第一部分" },
         checkpoint,
-        { title: "too early", content: "第一部分" },
       );
       assert.equal(ended.status, "queued");
       assert.equal(ended.record_id, null);
@@ -565,31 +521,17 @@ export async function agentDatabaseContracts(
   );
 
   await t.test(
-    "Agent completion event failure rolls back charts and status; retry commits once without a record",
+    "Agent completion event failure rolls back status and message; retry commits once without a record",
     async () => {
       await create(await createConversation());
       const run = await claim();
-      const draft = await saveTool(run, "atomic", {
-        name: "Agent 八字命盘",
-        birth_date: "1995-06-20",
-        birth_time: "10:30",
-        gender: "female",
-        calendar_type: "solar",
-        is_leap_month: false,
-      });
-      const cp = { ...checkpoint, finalArtifacts: [draft.id] },
-        message = { ...assistant(run.id), content: "atomic analysis" };
+      await saveTool(run, "atomic");
+      const message = { ...assistant(run.id), content: "atomic analysis" };
       await asOwner(
         `CREATE FUNCTION public.fixture_agent_event_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.run_id=${quote(run.id)}::uuid AND NEW.type='completed' THEN RAISE EXCEPTION 'fixture event failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER fixture_agent_event_failure BEFORE INSERT ON public.agent_run_events FOR EACH ROW EXECUTE FUNCTION public.fixture_agent_event_failure();`,
       );
       try {
-        await assert.rejects(
-          finish(run, "completed", message, cp, {
-            title: "atomic analysis",
-            content: "atomic analysis",
-          }),
-          /fixture event failure/,
-        );
+        await assert.rejects(finish(run, "completed", message), /fixture event failure/);
       } finally {
         await asOwner(
           "DROP TRIGGER fixture_agent_event_failure ON public.agent_run_events; DROP FUNCTION public.fixture_agent_event_failure();",
@@ -598,22 +540,9 @@ export async function agentDatabaseContracts(
       const current = await get(run.id);
       assert.equal(current.status, "running");
       assert.equal(current.record_id, null);
-      assert.equal(
-        await asOwner(
-          `SELECT count(*) FROM public.ming_records WHERE title='atomic analysis';`,
-        ),
-        "0",
-      );
-      assert.equal(
-        await asOwner(
-          `SELECT count(*) FROM public.bazi_charts WHERE user_id=${quote(owner)} AND birth_date='1995-06-20';`,
-        ),
-        "0",
-      );
-      const result = await finish(run, "completed", message, cp, {
-        title: "atomic analysis",
-        content: "atomic analysis",
-      });
+      assert.notEqual(current.public_message.content, "atomic analysis");
+      const result = await finish(run, "completed", message);
+      assert.equal(result.status, "completed");
       assert.equal(result.record_id, null);
       assert.equal(
         await asOwner(
@@ -621,7 +550,6 @@ export async function agentDatabaseContracts(
         ),
         "0",
       );
-      assert.equal(await asOwner(`SELECT count(*) FROM public.bazi_charts WHERE user_id=${quote(owner)} AND birth_date='1995-06-20';`), '1');
     },
   );
 

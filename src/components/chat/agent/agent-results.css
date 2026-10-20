@@ -34,7 +34,8 @@
 .agent-board-tools { display: flex; flex-shrink: 0; align-items: center; gap: 2px; }
 .agent-board-tool { display: flex; width: 26px; height: 26px; align-items: center; justify-content: center; border: 0; border-radius: 6px; color: var(--foreground-secondary); }
 .agent-board-tool:hover { background: var(--fill-ghost-hover); color: var(--foreground); }
-.agent-board-tool.is-viewing { color: var(--accent-hover); }
+.agent-board-tool.is-viewing, .agent-board-tool.is-saved { color: var(--accent-hover); }
+.agent-board-tool:disabled { opacity: .5; cursor: default; background: transparent; }
 .agent-board-focus { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0; border-radius: 0; background: transparent; font-size: calc(12.5 / 16 * 1rem); }
 .agent-board-focus.is-empty { display: none; }
 .agent-board-focus-label { display: flex; align-items: center; gap: 6px; font-size: calc(12.5 / 16 * 1rem); font-weight: 500; color: var(--foreground-secondary); white-space: nowrap; }

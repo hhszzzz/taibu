@@ -1,7 +1,7 @@
 'use client';
 // 需要盘面选择状态、跟随定位滚动与全屏弹窗
 
-import { useEffect, useId, useMemo, useRef } from 'react';
+import { useEffect, useId, useMemo, useRef, type ReactNode } from 'react';
 import { LocateFixed, MessageCircleQuestion } from 'lucide-react';
 import type { BaziWuxingCanonicalJSON } from 'taibu-core/bazi';
 import type { AgentChart, AgentToolPart } from '@/lib/agent/tool-presentation';
@@ -21,8 +21,10 @@ const NO_ROWS: never[] = [];
  * looked at with its actions, the interactive chart and bazi relations. The
  * title lives on the workspace tab, so the board itself does not repeat it.
  */
-export function AgentInteractiveChart({ value, tool, reference, focus, followModel, live = false, pinned = false, subject, baziWuxing, onAsk }: {
+export function AgentInteractiveChart({ value, tool, reference, focus, followModel, live = false, pinned = false, subject, baziWuxing, actions, onAsk }: {
   value: AgentChart; tool: AgentToolPart; reference: string | null; focus?: ChartFocus | null; followModel: boolean;
+  /** 工具栏里盘面之外的动作，例如保存命盘。 */
+  actions?: ReactNode;
   /** 这张八字最近的五行详查：盘面画干支自坐与相邻天干，并在藏干旁标出通根与月令透出。 */
   baziWuxing?: BaziWuxingCanonicalJSON | null;
   /** The model is still working, so the focus box says whether it is being followed. */
@@ -115,6 +117,7 @@ export function AgentInteractiveChart({ value, tool, reference, focus, followMod
         {reference && onAsk && <button type="button" className="agent-board-tool" aria-label={selected.length ? '追问这里' : '追问这张命盘'}
           title={selected.length ? '追问这里' : '追问这张命盘'} onClick={() => ask(selected)}><MessageCircleQuestion size={14} aria-hidden="true" /></button>}
         {text && <CopyButton text={text} label="复制规范文本" iconOnly className="agent-board-tool" />}
+        {actions}
       </div>
     </header>
     <div className={`agent-board-focus${hasFocus ? '' : ' is-empty'}`} aria-live="polite" data-chart-focus={selected.map(target => target.id).join(',')} data-source={model ? 'model' : undefined}>

@@ -860,8 +860,9 @@ export async function run(existingPage, bundlePath) {
         if (!control?.fail) Object.assign(owned[listKey].find(item => item.id === body.chartId), body.payload);
         return ok({ success: true }, true);
       }
-      const id = body.payload.id;
-      if (!control?.fail) owned[listKey].push({ ...chart(id, body.payload.name), ...body.payload });
+      // Result pages and the Agent board post no id; the server assigns one, as here.
+      const id = body.payload.id ?? `${type}-saved-${owned[listKey].length + 1}`;
+      if (!control?.fail) owned[listKey].push({ ...chart(id, body.payload.name), ...body.payload, id });
       return ok({ id }, true);
     }
     if (url.pathname === '/api/data-sources') {
@@ -1956,9 +1957,13 @@ export async function run(existingPage, bundlePath) {
 
     await until(() => window.fixture.client.isFetching() === 0);
     await renderBarrier();
-    // Provider focus refreshes may read bootstrap/settings while these local chart interactions run.
-    // Count all writes and other reads so chart loading, recalculation and persistence still fail this check.
-    const resultOperations = () => requests.filter(request => !(request.method === 'GET' && ['/api/app/bootstrap', '/api/user/settings'].includes(request.pathname))).length;
+    // Provider focus refreshes may read bootstrap/settings while these local chart interactions run. A chart board reads
+    // the chart library to show whether its chart is saved, and saves it only when asked (checked on its own below).
+    // Count all other writes and reads so chart loading, recalculation and persistence still fail this check.
+    const chartLibraryOperation = request => (request.method === 'GET' && request.pathname === '/api/user/charts')
+      || (request.method === 'POST' && /^\/api\/(bazi|ziwei)\/charts$/.test(request.pathname));
+    const resultOperations = () => requests.filter(request => !(request.method === 'GET' && ['/api/app/bootstrap', '/api/user/settings'].includes(request.pathname))
+      && !chartLibraryOperation(request)).length;
     const callsBeforeResults = resultOperations();
     await page.getByRole('button', { name: 'Fixture Alice', exact: true }).focus();
     await page.evaluate(() => window.fixture.mount.results(true));
@@ -2039,6 +2044,17 @@ export async function run(existingPage, bundlePath) {
     await page.locator('#agent-workspace-panel [data-chart-kind="bazi"]').waitFor();
     const interactive = page.locator('#agent-workspace-panel');
     check('An ended task offers no follow control', await interactive.getByRole('button', { name: '跟随模型', exact: true }).count() === 0);
+    // 存不存盘由用户在盘面上决定：盘面按出生资料比对命盘库，保存走结果页同一接口，之后变成命盘页入口。
+    const saveChart = interactive.getByRole('button', { name: '保存命盘', exact: true });
+    const savedChart = interactive.getByRole('link', { name: '已保存到我的命盘，打开命盘页', exact: true });
+    const chartSaves = () => requests.filter(item => item.method === 'POST' && item.pathname === '/api/bazi/charts');
+    const savesBefore = chartSaves().length;
+    await saveChart.click();
+    await savedChart.waitFor();
+    const [chartSave, ...extraSaves] = chartSaves().slice(savesBefore);
+    check('Saving an Agent chart posts the result pages\' payload once and turns the action into its chart page link', !extraSaves.length &&
+      chartSave?.expectedUserId === 'alice' && chartSave.body.payload.name === '男命 1990-01-15' && chartSave.body.payload.birth_time === '09:00' &&
+      chartSave.body.payload.timezone === 'Asia/Shanghai' && /^\/bazi\/result\?chart=bazi-saved-\d+$/.test(await savedChart.getAttribute('href')) && await saveChart.count() === 0);
     // Following is for a working task: the chart checks below run while the fixture task runs.
     await page.evaluate(() => window.fixture.agentRunStatus('running'));
     await page.evaluate(() => window.fixture.chartFocus('bazi', ['bazi:cell:2:1'], '模型查看日支'));

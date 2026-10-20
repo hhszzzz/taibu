@@ -26,6 +26,8 @@ const toolParts = (store: MemoryStore) => parts(store).filter((part): part is To
 const results = (store: MemoryStore) => store.nativeEntries().flatMap(entry => entry.model ?? [])
   .filter((message): message is ToolResultMessage => message.role === 'toolResult');
 const text = (message: ToolResultMessage) => message.content.flatMap(part => part.type === 'text' ? [part.text] : []).join('\n');
+/** Writing memory is execution the plan asks about; the user's words are its own evidence. */
+const remember = { type: 'toolCall' as const, id: 'remember', name: 'remember_user_fact', arguments: { title: '回答偏好', content: '我喜欢先看结论再看依据', kind: 'preference', evidence: '我喜欢先看结论再看依据' } };
 
 /** The command the API would have written for a reply in the dock. */
 const reply = (sequence: number, answers: Record<string, string[]>) => ({
@@ -40,16 +42,17 @@ const reply = (sequence: number, answers: Record<string, string[]>) => ({
 test('plan mode blocks execution, submits the plan and continues once the user approves', async () => {
   const store = new MemoryStore(), run = row();
   run.input.planMode = true;
+  run.input.memoryEnabled = true;
   let offered: string[] = [];
   const first = scripted(index => {
-    if (index === 0) return [{ type: 'toolCall', id: 'select', name: 'select_final_artifacts', arguments: { artifactIds: [] } }];
+    if (index === 0) return [remember];
     return [{ type: 'toolCall', id: 'plan', name: 'submit_plan', arguments: { plan: '# 分析计划\n1. 先排八字，再看紫微。' } }];
   }, messages => { if (!offered.length) offered = getCurrentTools(messages).map(tool => tool.name); });
   await executeAgentRun(store, run, undefined, { config, streamFn: first });
 
   assert.ok(offered.includes('submit_plan'), 'plan mode offers the plan tool');
   assert.equal(finished(store).args.p_status, 'awaiting_input');
-  const blocked = results(store).find(message => message.toolName === 'select_final_artifacts')!;
+  const blocked = results(store).find(message => message.toolName === 'remember_user_fact')!;
   assert.match(text(blocked), /计划尚未批准/u, 'a gated tool cannot run before approval');
   const checkpoint = finished(store).args.p_checkpoint as AgentRunRow['checkpoint'];
   assert.equal(checkpoint.question, '是否按这个计划执行？');
@@ -62,7 +65,7 @@ test('plan mode blocks execution, submits the plan and continues once the user a
   run.checkpoint = checkpoint;
   store.pending = [reply(7, { plan: ['approve'] })];
   await executeAgentRun(store, run, undefined, { config, streamFn: scripted(index => {
-    if (index === 0) return [{ type: 'toolCall', id: 'select', name: 'select_final_artifacts', arguments: { artifactIds: [] } }];
+    if (index === 0) return [remember];
     return [{ type: 'text', text: '按计划完成分析' }];
   }) });
   assert.equal(finished(store).args.p_status, 'completed');
@@ -72,9 +75,11 @@ test('plan mode blocks execution, submits the plan and continues once the user a
   assert.equal(plan.status, 'completed');
   assert.equal(summarizeAgentTool(plan), '已批准');
   assert.equal((finished(store).args.p_checkpoint as AgentRunRow['checkpoint']).planApproved, true);
-  // The first attempt is still in the transcript as a blocked call; the one after approval is the last.
-  const select = toolParts(store).filter(part => part.name === 'select_final_artifacts').at(-1);
-  assert.equal(select?.status, 'completed', JSON.stringify(select?.output));
+  // The first attempt is still in the transcript as a blocked call. After approval the plan gate is lifted; the
+  // tool's own policy still applies (this fixture has no settings to read, so the memory check refuses it).
+  const attempts = results(store).filter(message => message.toolName === 'remember_user_fact');
+  assert.equal(attempts.length, 2);
+  assert.doesNotMatch(text(attempts.at(-1)!), /计划尚未批准/u);
 });
 
 test('a revision keeps the task gated until a later plan is approved', async () => {

@@ -6,14 +6,13 @@ import { ChevronRight, LoaderCircle, PanelRight, Pause } from 'lucide-react';
 import type { AgentMessageData, AgentPart } from '@/lib/agent/types';
 import { AGENT_SUBMIT_PLAN_TOOL, getAgentToolFamily } from '@/lib/agent/tool-catalog';
 import { getAgentToolQuestionIds } from '@/lib/agent/workspace';
-import { getAgentAttachmentRead, getAgentChart, getAgentDataResults, getAgentFinalSelection, getAgentMemories, getAgentMethod, getAgentMethodCatalog, getAgentProfile, getAgentScript, getAgentToolQuestions, getAgentToolText } from '@/lib/agent/tool-presentation';
+import { getAgentAttachmentRead, getAgentChart, getAgentDataResults, getAgentMemories, getAgentMethod, getAgentMethodCatalog, getAgentProfile, getAgentScript, getAgentToolQuestions, getAgentToolText } from '@/lib/agent/tool-presentation';
 import { useIsDesktopLayout } from '@/lib/hooks/useIsDesktopLayout';
 import { useTranscriptRecordView } from '@/lib/chat/chat-record-view';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { ThinkingBlock } from '../ThinkingBlock';
-import { describeAgentStep, formatAgentValue, getAgentLiveLine, getAgentScriptCalls, getAgentToolTitle, getFinalArtifactGroups, getParallelMemberState, summarizeAgentActivity, type AgentProcessPart, type AgentTool } from './presentation';
+import { describeAgentStep, formatAgentValue, getAgentLiveLine, getAgentScriptCalls, getAgentToolTitle, getParallelMemberState, summarizeAgentActivity, type AgentProcessPart, type AgentTool } from './presentation';
 import { memberAnswerText, parallelAnalysisResults } from '@/lib/agent/parallel-results';
-import { getChartKindMeta } from './chart-registry';
 import { ModelAvatar } from './ModelAvatar';
 import { getChartFocus, getChartTargets, getAgentChartReference, parseChartReference } from '@/lib/agent/chart-interaction';
 import { useAgentResultWorkspace } from './AgentResultContext';
@@ -162,11 +161,9 @@ function AgentStepCall({ tool, runStatus, parts }: { tool: AgentTool; runStatus:
         ? Object.entries(tool.input as Record<string, unknown>)
         : null;
     const members = tool.name === 'parallel_analysis' ? parallelAnalysisResults(tool.output) : [];
-    const finalIds = getAgentFinalSelection(tool);
-    const finals = finalIds ? getFinalArtifactGroups(parts, finalIds) : [];
     // 结构化结果（定位、提问、记忆、资料…）自己带「查看…」入口，不再重复「在工作区查看」。
-    const structured = members.length === 0 && finals.length === 0 && state !== 'running' ? StepStructured({ tool, parts, workspace }) : null;
-    const selfContained = members.length > 0 || finals.length > 0 || structured !== null;
+    const structured = members.length === 0 && state !== 'running' ? StepStructured({ tool, parts, workspace }) : null;
+    const selfContained = members.length > 0 || structured !== null;
     const family = getAgentToolFamily(tool.name);
     const openLabel = family === 'chart' ? '查看盘面' : family === 'drilldown' ? '查看详查' : '在工作区查看';
     return <div className="agent-step-call">
@@ -198,36 +195,10 @@ function AgentStepCall({ tool, runStatus, parts }: { tool: AgentTool; runStatus:
                 </li>;
             })}
         </ul>}
-        {finals.length > 0 && <ul className="agent-step-entities" aria-label="最终成果">
-            {finals.map(group => {
-                const Icon = getChartKindMeta(group.kind).icon;
-                const content = <>
-                    <span className="agent-step-entity-icon" aria-hidden="true"><Icon size={16} /></span>
-                    <span className="agent-step-entity-main">
-                        <span className="agent-step-entity-line">
-                            <span className="agent-step-entity-name">{group.title}</span>
-                            {group.saved && <span className="agent-step-entity-meta">已保存</span>}
-                        </span>
-                        {group.summary && <span className="agent-step-entity-preview">{group.summary}</span>}
-                        {group.producers.length > 0 && <span className="agent-step-producers" aria-label="排出这张盘的分析者">
-                            {group.producers.map(producer => <span key={producer.key} className="agent-step-producer">
-                                {producer.main ? <span className="agent-avatar agent-avatar--mini" aria-hidden="true">卜</span> : <ModelAvatar member={producer} size={12} />}
-                                {producer.name}
-                            </span>)}
-                        </span>}
-                    </span>
-                </>;
-                return <li key={group.key}>
-                    {workspace ? <button type="button" className="agent-step-entity" aria-label={`打开${group.title}`} onClick={() => workspace.openResource(group.target)}>
-                        {content}<ChevronRight size={14} aria-hidden="true" className="agent-step-entity-go" />
-                    </button> : <span className="agent-step-entity">{content}</span>}
-                </li>;
-            })}
-        </ul>}
-        {result !== null && members.length === 0 && finals.length === 0
+        {result !== null && members.length === 0
             ? text ? <div className="agent-step-output agent-step-markdown" tabIndex={0} aria-label="规范文本"><MarkdownContent content={result} className="chat-prose" /></div>
                 : <div className="agent-step-output" tabIndex={0} aria-label="工具结果">{result}</div>
-            : members.length === 0 && finals.length === 0 && (state === 'running'
+            : members.length === 0 && (state === 'running'
                 ? <p className="agent-step-empty">正在等待工具返回结果…</p>
                 : structured ?? (raw !== null ? <p className="agent-step-empty">已返回结构化结果</p> : <p className="agent-step-empty">该步骤没有返回详情。</p>))}
         {workspace && !selfContained && <div className="agent-step-actions">

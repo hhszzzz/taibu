@@ -83,16 +83,12 @@ export interface AgentCheckpoint {
   /** Initial context seed and completed context; execution history lives in Durable. */
   messages: Message[];
   parts: AgentPart[];
-  finalArtifacts: string[];
   question?: string;
   questions?: AgentQuestion[];
   questionId?: string;
   todos?: { revision: number; items: AgentTodo[] };
   compactions?: AgentMessageData['compactions'];
   summary?: string;
-  finalSelectionMade?: boolean;
-  /** How often the model answered without selecting final artifacts, so the nudge cannot loop forever. */
-  finalNudges?: number;
   /** Plan mode: the user approved the submitted plan; gated tools are available again. */
   planApproved?: boolean;
   /** Plan mode: how often the model answered without submitting a plan, so the nudge cannot loop forever. */

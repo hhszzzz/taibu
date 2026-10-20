@@ -214,7 +214,7 @@ export async function projectDurableConversation(
           card.output = card.name === AGENT_CODEMODE_TOOL ? scriptOutput(message) : message.details ?? message.content;
           Object.assign(card, taskTiming(task));
           if (typeof message.durationMs === 'number' && Number.isFinite(message.durationMs) && message.durationMs >= 0) card.durationMs = message.durationMs;
-          // 第一段是 Core 或资料源的规范文本；其后的成果 ID 与定位目录只写给模型，不进公开文本。
+          // 第一段是 Core 或资料源的规范文本；其后的命盘引用与定位目录只写给模型，不进公开文本。
           const canonicalText = publicCanonicalText(card.name, message.content);
           if (canonicalText !== undefined) card.canonicalText = canonicalText;
           if (entry.byTaskId) attach(card.id, `${entry.byTaskId}:${message.toolCallId}`);

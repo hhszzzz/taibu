@@ -69,7 +69,7 @@ test('every Core tool and every registered Agent tool belongs to a presentation 
   assert.equal(getAgentExtensionToolTitle(AGENT_CODEMODE_TOOL), '运行脚本');
   assert.equal(getAgentExtensionToolTitle(AGENT_TOOL_SEARCH_TOOL), '查找工具');
   assert.equal(getAgentExtensionToolTitle(AGENT_SUBMIT_PLAN_TOOL), '提交计划');
-  assert.deepEqual([...AGENT_PLAN_GATED_TOOLS].sort(), ['parallel_analysis', 'remember_user_fact', 'select_final_artifacts']);
+  assert.deepEqual([...AGENT_PLAN_GATED_TOOLS].sort(), ['parallel_analysis', 'remember_user_fact']);
   // 低频工具按需加载；外部 MCP 工具同样只在检索后提供。
   for (const name of AGENT_DEFERRED_TOOLS) assert.ok(listToolDefinitions().some(definition => definition.name === name), `${name} is a Core tool`);
   assert.equal(isAgentDeferredTool('mcp__archive__search'), true);
@@ -105,7 +105,6 @@ test('the projection keeps canonical text on every Core chart and calculation fo
   ]);
   const streamFn = scripted((index) => {
     if (index < rounds.length) return rounds[index];
-    if (index === rounds.length) return [{ type: 'toolCall', id: 'select', name: 'select_final_artifacts', arguments: { artifactIds: [] } }];
     return [{ type: 'text', text: '已完成全部盘面' }];
   });
   await executeAgentRun(store, run, undefined, { config, streamFn });
@@ -119,5 +118,5 @@ test('the projection keeps canonical text on every Core chart and calculation fo
     assert.ok(part.canonicalText?.trim(), `${name} keeps its canonical text`);
     assert.equal(getAgentToolText(part), part.canonicalText, `${name} falls back to text, never raw JSON`);
   }
-  assert.equal(tools.find((tool) => tool.name === 'select_final_artifacts')?.canonicalText, undefined);
+  assert.equal(tools.find((tool) => tool.name === AGENT_TOOL_SEARCH_TOOL)?.canonicalText, undefined, 'only charts and calculations carry canonical text');
 });

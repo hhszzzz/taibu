@@ -37,8 +37,11 @@ export type ParallelAnalysisResult = {
   steps?: ParallelMemberStep[];
 };
 
-/** Members are told to report the IDs of what they produced for the parent; the reader does not need the raw ID. */
-const ARTIFACT_ID_MENTION = /[，,；;]?\s*成果\s*ID[:：]\s*[0-9a-f-]{36}[。]?/giu;
+/**
+ * Members report the chart references of what they produced for the parent model (earlier answers say 成果 ID); the
+ * reader does not need the raw ID.
+ */
+const ARTIFACT_ID_MENTION = /[，,；;]?\s*(?:成果\s*ID[:：]\s*(?:artifact:)?|(?:命盘)?引用[:：]?\s*artifact:|artifact:)[0-9a-f-]{36}[。]?/giu;
 /** A member's conclusion as the reader sees it, without the artifact IDs meant for the parent model. */
 export const memberAnswerText = (answer: string) => answer.replace(ARTIFACT_ID_MENTION, '').trim();
 

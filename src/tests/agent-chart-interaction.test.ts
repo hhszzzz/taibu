@@ -353,7 +353,6 @@ test('native Pi tools project chart actions and rebuild the exact focus after an
     const reference = 'artifact:' + store.draft('calculate')!.id;
     if (index === 1) return [{ type: 'toolCall', id: 'inspect', name: 'inspect_chart', arguments: { reference } }];
     if (index === 2) return [{ type: 'toolCall', id: 'focus', name: 'focus_chart', arguments: { reference, targetIds: ['bazi:cell:2:1'], caption: '模型正在查看日支' } }];
-    if (index === 3) return [{ type: 'toolCall', id: 'select', name: 'select_final_artifacts', arguments: { artifactIds: [store.draft('calculate')!.id] } }];
     return [{ type: 'text', text: '日支分析完成' }];
   });
   await executeAgentRun(store, run, undefined, { config, streamFn });
@@ -372,7 +371,7 @@ test('native Pi tools project chart actions and rebuild the exact focus after an
   await executeAgentRun(store, run, undefined, { config, streamFn: scripted(() => { assert.fail('completed tools must not execute again'); }) });
   const restored = store.writes.filter(write => write.name === 'agent_finish_run').at(-1)!.args.p_message as AgentRunRow['public_message'];
   assert.deepEqual(getLatestChartFocus(restored.agent!.parts.filter((part): part is AgentToolPart => part.type === 'tool')), focus);
-  assert.equal(store.writes.filter(write => write.name === 'agent_cache_tool').length, 4);
+  assert.equal(store.writes.filter(write => write.name === 'agent_cache_tool').length, 3);
   assert.ok(store.writes.every(write => write.name !== 'agent_create_run'));
 });
 
@@ -396,7 +395,6 @@ test('a public inspection step keeps the chart text but never the target directo
     const reference = 'artifact:' + store.draft('calculate')!.id;
     if (index === 1) return [{ type: 'toolCall', id: 'inspect', name: 'inspect_chart', arguments: { reference } }];
     if (index === 2) return [{ type: 'toolCall', id: 'stars', name: 'inspect_chart', arguments: { reference, palace: '命宫' } }];
-    if (index === 3) return [{ type: 'toolCall', id: 'select', name: 'select_final_artifacts', arguments: { artifactIds: [store.draft('calculate')!.id] } }];
     return [{ type: 'text', text: '命宫看完了' }];
   });
   await executeAgentRun(store, run, undefined, { config, streamFn });

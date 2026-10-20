@@ -49,7 +49,6 @@ export type AgentToolFamily =
   | 'question'
   | 'collaboration'
   | 'memory'
-  | 'artifacts'
   | 'code'
   | 'external'
   | 'other';
@@ -64,12 +63,10 @@ export const AGENT_TOOL_SEARCH_TOOL = 'tool_search';
 export const AGENT_SUBMIT_PLAN_TOOL = 'submit_plan';
 
 /**
- * Tools a plan-mode task may not use until the user approves its plan: writing memory, dispatching members and
- * settling the task are the execution the plan asks about. Research tools stay available, so the plan can be grounded.
+ * Tools a plan-mode task may not use until the user approves its plan: writing memory and dispatching members are the
+ * execution the plan asks about. Research tools stay available, so the plan can be grounded.
  */
-export const AGENT_PLAN_GATED_TOOLS: ReadonlySet<string> = new Set([
-  'remember_user_fact', 'parallel_analysis', 'select_final_artifacts',
-]);
+export const AGENT_PLAN_GATED_TOOLS: ReadonlySet<string> = new Set(['remember_user_fact', 'parallel_analysis']);
 
 /**
  * Tools the model loads on demand instead of being offered every request: the drilldowns and calculations a reading
@@ -102,12 +99,11 @@ export function getAgentExtensionToolTitle(name: string): string | undefined {
 
 /**
  * Tools a code mode script may not call: they ask the user, move the board, search with citations, write memory,
- * load guidance, dispatch members or settle the task, each of which the model must do itself.
+ * load guidance or dispatch members, each of which the model must do itself.
  */
 export const AGENT_MODEL_ONLY_TOOLS: ReadonlySet<string> = new Set([
   'ask_user', 'todo_write', 'inspect_chart', 'focus_chart', 'web_search', 'search_knowledge', 'read_attachment',
   'list_analysis_methods', 'load_analysis_method', 'read_user_memory', 'remember_user_fact', 'parallel_analysis',
-  'select_final_artifacts',
 ]);
 
 /** Charts, calculations and drilldowns give scripts `{ artifactId?, text, data }`; other tools give their text. */
@@ -136,7 +132,6 @@ const TOOL_FAMILIES: ReadonlyMap<string, AgentToolFamily> = new Map<string, Agen
   ['parallel_analysis', 'collaboration'],
   ['read_user_memory', 'memory'],
   ['remember_user_fact', 'memory'],
-  ['select_final_artifacts', 'artifacts'],
   [AGENT_CODEMODE_TOOL, 'code'],
 ]);
 

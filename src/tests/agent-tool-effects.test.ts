@@ -69,15 +69,6 @@ test('a failed tool cache write leaves no checkpoint state, so the model can ret
     store.failNextCache = true;
     await assert.rejects(find(tools, 'web_search').execute('4:web', { query: '庚金' }), /AGENT_CACHE_UNAVAILABLE/);
 
-    const artifactId = randomUUID();
-    store.drafts.set('calculation', {
-      id: artifactId, call_id: 'calculation', tool_name: 'bazi', kind: 'calculation', args: {},
-      result: { content: [], details: {} },
-    });
-    store.failNextCache = true;
-    await assert.rejects(find(tools, 'select_final_artifacts').execute('5:select', { artifactIds: [artifactId] }), /AGENT_CACHE_UNAVAILABLE/);
-    assert.equal(run.checkpoint.finalSelectionMade, undefined, 'the completion hook must still ask for a final selection');
-    assert.deepEqual(run.checkpoint.finalArtifacts, []);
 
     assert.deepEqual(run.checkpoint.parts.map((part) => part.type), ['todo'], 'no question or source part for failed writes');
   } finally {
@@ -89,15 +80,9 @@ test('fresh results and cache replays derive identical checkpoint state without 
   const web = withWebSearch(t);
   try {
     const store = new MemoryStore();
-    const artifactId = randomUUID();
-    store.drafts.set('calculation', {
-      id: artifactId, call_id: 'calculation', tool_name: 'bazi', kind: 'calculation', args: {},
-      result: { content: [], details: {} },
-    });
     const calls: Array<[name: string, callId: string, args: Record<string, unknown>]> = [
       ['todo_write', '1:todo', plan],
       ['web_search', '2:web', { query: '庚金' }],
-      ['select_final_artifacts', '3:select', { artifactIds: [artifactId, artifactId] }],
       ['ask_user', '4:ask', { questions: [{ id: 'birth', question: '她的出生时间？' }, { id: 'calendar', question: '公历还是农历？', options: [{ id: 'solar', label: '公历' }] }] }],
     ];
     const replay = async () => {
@@ -114,12 +99,10 @@ test('fresh results and cache replays derive identical checkpoint state without 
 
     assert.equal(web.fetch.mock.callCount(), 1, 'replay never repeats the network request');
     assert.equal(store.writes.filter((write) => write.name === 'agent_cache_tool').length, writes, 'replay never recaches');
-    assert.deepEqual(fresh.finalArtifacts, [artifactId], 'duplicate selections are stored once');
-    assert.equal(fresh.finalSelectionMade, true);
     assert.equal(fresh.question, '她的出生时间？\n\n公历还是农历？');
     assert.equal(fresh.questionId, '4:ask');
     assert.deepEqual(fresh.parts.map((part) => `${part.type}:${part.id}`), ['todo:task-list', 'source:2:web:0', 'question:4:ask']);
-    for (const key of ['todos', 'question', 'questions', 'questionId', 'finalArtifacts', 'finalSelectionMade', 'parts'] as const)
+    for (const key of ['todos', 'question', 'questions', 'questionId', 'parts'] as const)
       assert.deepEqual(restored[key], fresh[key], key);
   } finally {
     web.restore();

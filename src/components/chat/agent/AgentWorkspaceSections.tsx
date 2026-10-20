@@ -21,7 +21,7 @@ import {
 
 export const WORKSPACE_ICONS: Record<AgentWorkspaceResource['family'], LucideIcon> = {
     chart: Calculator, calculation: Sigma, drilldown: ScanSearch, search: Search, data: Database, method: BookOpen, plan: ListChecks,
-    question: CircleHelp, collaboration: Users, memory: Database, artifacts: ListChecks, code: FileCode2, external: Globe, other: Wrench,
+    question: CircleHelp, collaboration: Users, memory: Database, code: FileCode2, external: Globe, other: Wrench,
     saved: Files, attachment: FileText,
 };
 

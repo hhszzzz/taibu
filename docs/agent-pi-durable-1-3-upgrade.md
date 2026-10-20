@@ -53,8 +53,8 @@
 
 - 工具来自 Pi `createCodemodeTool({ sandbox, models: false })`：脚本只能调用本任务工具，不能直接调用模型。Pi 为编程场景放宽的输出上限（4 MiB）恢复为 Harness 默认上限。
 - 沙箱为 `@earendil-works/pi-codemode` 的 QuickJS：每次执行一个 worker 线程，内存 64 MiB，单 worker 同时最多 4 个脚本，超出时该次调用失败并提示稍后重试；单次运行不超过 120 秒。
-- 可调用范围由工具的 `callers` 决定。`AGENT_MODEL_ONLY_TOOLS`（提问、计划、查看与定位盘面、联网与知识库检索、附件、方法、长期记忆、协作、选择最终成果）与 `parallel_analysis` 声明 `callers: ['model']`，脚本调用时 VM 报「does not exist」。其余工具（排盘、计算、详查、个人资料、外部 MCP）可被脚本调用。
-- 排盘、计算与详查声明 `structuredOutputSchema`，脚本拿到 `{ artifactId?, text, data }`：`text` 为 Core 规范文本，`data` 为规范 JSON，`artifactId` 为暂存成果，仍须经 `select_final_artifacts` 选定。其他工具给脚本有界文本。
+- 可调用范围由工具的 `callers` 决定。`AGENT_MODEL_ONLY_TOOLS`（提问、计划、查看与定位盘面、联网与知识库检索、附件、方法、长期记忆、协作）与 `parallel_analysis` 声明 `callers: ['model']`，脚本调用时 VM 报「does not exist」。其余工具（排盘、计算、详查、个人资料、外部 MCP）可被脚本调用。
+- 排盘、计算与详查声明 `structuredOutputSchema`，脚本拿到 `{ artifactId?, text, data }`：`text` 为 Core 规范文本，`data` 为规范 JSON，`artifactId` 可写作 `artifact:<artifactId>` 交给查看与详查。其他工具给脚本有界文本。
 - 嵌套调用照常经过 `beforeTool` 的策略与权限校验；另按 Pi 嵌套调用 ID（`<脚本调用>/c<n>`，n 为脚本内第 n 次 VM 调用）在第 31 次起阻断。按调用 ID 判断保证重放得出同样结论。
 - 提示词段 `taibu_codemode` 只在本次请求实际提供 `codemode` 时出现，列出脚本可调用的工具（排除延迟加载的工具）；协作成员不提供代码模式。
 
@@ -76,7 +76,7 @@
 | `pnpm lint`、严格类型 | 通过（无新增告警） |
 | `node scripts/build-agent-worker.mjs`、`node .agent/worker.mjs --check` | 通过，沙箱自检通过 |
 
-排查中发现两点，已修复（见下文「阶段四」与「阶段五」）：
+排查中发现两点，已处理（见下文「阶段五」与「阶段六」）：
 
 - 运行时在模型未选定最终成果时以 `onYield` 续跑，没有次数上限；模型若始终不调用 `select_final_artifacts`，任务会持续请求模型。
 - Agent 以公历 `date` 调用 `xiaoliuren` 必然失败：Pi 按 schema 补入 `isLeapMonth: false`、`leapMonthStrategy: 'repeat'` 默认值，Core 将其视为手工农历输入而拒绝。
@@ -104,7 +104,7 @@
 
 开启后运行时注册 `submit_plan`（`callers: ['model']`，脚本不可调用），并加一段计划模式提示：
 
-- 研究照常进行（排盘、详查、检索、读取资料），但写长期记忆、派发协作成员与选定成果被 `beforeTool` 阻断，直到用户批准。阻断发生在工具策略层，模型会收到明确的阻断原因。
+- 研究照常进行（排盘、详查、检索、读取资料），但写长期记忆与派发协作成员被 `beforeTool` 阻断，直到用户批准。阻断发生在工具策略层，模型会收到明确的阻断原因。
 - 模型把计划写成 Markdown 调用 `submit_plan`，工具在原生 ToolTask 中等待用户决定，复用 `ask_user` 的 memo／回复队列与暂停恢复链路：用户批准则写入 `checkpoint.planApproved`，工具返回「用户已批准计划」；选择「要求修改」并填写意见时，意见作为反馈返回，模型修订后再次提交。
 - 等待中的问题复用 `ask_user` 的问题面板：问题为「是否按这个计划执行？」，选项为「批准」「要求修改」，也可自行填写修改意见。计划正文留在工具卡片与工作区，面板只问决定。
 - 模型在批准前直接作答时，`onYield` 以「请先调用 submit_plan」续跑，最多两次，之后正常结束，避免无上限续跑。
@@ -120,15 +120,33 @@
 
 ## 阶段五：两处修复
 
-**最终成果的选定不再无限续跑。** `select_final_artifacts` 决定的是哪些计算成果保存为用户命盘并成为结果卡片（`agent_finish_run` 按 `checkpoint.finalArtifacts` 写入 `bazi_charts`／`ziwei_charts`），不是「任务有没有结果」。此前模型漏选时 `onYield` 会一直追问，且单个命盘也要多一次模型调用。现在：
-
-- 任务只有一个计算成果时直接选定它，不再追问（最常见的单盘任务因此省去一次模型调用）。
-- 有多个成果时最多追问两次；仍未选定时正常结束，成果保留在任务里可查看，但不写入用户命盘。
-- 模型显式选择空数组仍是「本次不保存」的决定，不会被自动覆盖。
+**最终成果的选定不再无限续跑。** 当时的修复：只有一个计算成果时直接选定，有多个时最多追问两次，模型显式的空选择不被覆盖。复核这项修复时确认选定本身没有必要，阶段六随即移除了 `select_final_artifacts`，这些规则随之删除。
 
 **小六壬公历日期可用。** `isLeapMonth` 在输入 schema 里有默认值 `false`，按 schema 补默认值的调用方（MCP 与 Agent 校验）总会带上它，而 Core 把它当作手工农历输入与 `date` 冲突。现在 `date` 只拒绝真正的手工农历字段（`lunarMonth`、`lunarDay`），闰月由日期推出；只有显式 `isLeapMonth: true` 与日期推出的非闰月矛盾时才报错。`packages/core/tests/xiaoliuren-core.test.mjs` 增加对应回归。
 
 | 验证 | 结果 |
 | --- | --- |
-| `pnpm test` | 2017 项通过；新增 `agent-final-selection.test.ts`（单盘自动选定、多盘两次上限、空选择不被覆盖、公历小六壬经 Agent 全链路成功） |
+| `pnpm test` | 2017 项通过；新增公历小六壬经 Agent 全链路回归（现位于 `agent-chart-save.test.ts`）及当时的选定规则用例（阶段六删除） |
 | `node --test packages/core/tests/xiaoliuren-core.test.mjs` | 14 项通过 |
+
+## 阶段六：命盘改由用户保存
+
+复核阶段五时确认 `select_final_artifacts` 没有存在的必要：它唯一的实际效果是结算时把选中的八字、紫微成果写入 `bazi_charts`／`ziwei_charts`，其余九种占术选中后什么也不保存；成果本身随对话保留，`artifact:<id>` 在同一对话的后续回合照常可用，查看、详查与定位都不依赖选定。八字、紫微结果页由用户点「保存命盘」决定是否存入命盘库，Agent 却由模型替用户决定，还要多一次模型调用、一套续跑提醒和结算写入。现在：
+
+- 移除 `select_final_artifacts`、`artifacts` 工具族、检查点的 `finalArtifacts`／`finalSelectionMade`／`finalNudges`、`onYield` 的选定续跑，以及「已选定 N 份成果」与成果归并展示。计划模式只再阻断长期记忆与协作。
+- 排盘结果末尾给模型的引用改为「命盘引用: artifact:<id>。查看、详查或定位这张盘时作为 reference 传入。」，只附在 11 种排盘工具上。协作成员按指令在结论里回报命盘引用，界面不显示（`memberAnswerText`）。
+- 盘面工具栏新增保存按钮（`AgentChartSave`）：已完成的八字、紫微排盘提交与结果页相同的资料（`getAgentChartSave`，`POST /api/bazi|ziwei/charts`，日主等字段由服务端计算）；非午夜换日、带计算选项或日期不是有效公历日期（如农历二月三十）的盘不提供保存。命盘库里已有同一出生身份（性别、日期、时刻、历法、闰月、经度、时区、DST 策略；名称与地点只是标签）的盘即显示为已保存并链接到命盘页，不论在哪一页保存；库里删除后又可保存。工作区概览的「已保存」按同一规则判断。
+- 迁移 `20261020_120000_agent_user_saved_charts.sql`：`agent_finish_run` 去掉命盘保存与自 `20261007_100000` 起不再使用的 `p_record`，`agent_cache_tool` 不再写 `chart_payload`，删除只由这两个函数写入的 `agent_run_artifacts.chart_payload／chart_id／chart_type`。结算、指令、退款与消息规则不变；已有回答里的成果与链接、已保存的命盘不受影响。无 RLS、索引变化，无需回填。
+- 自托管：迁移 SHA256 `55ad3521aad922853bd3535a4f87c6e37430498b383ac4b045c366effea43842`，升级目标指纹 `3835fe3cba2c2df7f8315b8ad7a69b4c50c1c04c14592b81d1abccef92c20a4f`；既有已审查路径（含 1.3.0 目标 `a965a7c1…`）按顺序追加本迁移。
+- 离线演示模型与本地验收不再调用选定工具：演示按「命盘引用」取盘；验收在盘面上保存首张八字（账号里已有同一张盘时只核对链接），并核对重新生成、worker 接管都不保存任何命盘，结束时删除本次保存的命盘（`--keep` 保留）。
+
+### 阶段六验证
+
+| 验证 | 结果 |
+| --- | --- |
+| `pnpm test` | 2016 项通过；`agent-final-selection.test.ts` 改为 `agent-chart-save.test.ts`（结算不再有选定、命盘引用到达模型、保存资料与结果页一致、按出生身份判断已保存） |
+| `pnpm test:db` | 66 项通过；结算与缓存函数的新签名、旧签名删除、三列删除、引擎退役重放 |
+| `pnpm test:browser` | 通过；新增盘面保存一次、提交结果页资料并变成命盘页入口的检查 |
+| selfhost schema／stack | 34 项通过 |
+| `pnpm lint`、严格类型 | 通过（无新增告警） |
+| `node scripts/build-agent-worker.mjs`、`node .agent/worker.mjs --check` | 通过 |

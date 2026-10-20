@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "baselineRevision": "5725dde",
-  "sourceFingerprint": "5312501a231497f2c63ff09b0e8179a6aba5ed66ad7256d8ce10c58d4bc855f9",
+  "sourceFingerprint": "5be3a31e9f8832abe4cf00c319b612968bbf5533bb0bd54ef6ba78b12a39c9b3",
   "target": "empty local self-hosted application schema; NOT production parity or a migration replay",
   "bootstrapOrder": [
     "platform roles/extensions",
@@ -18,7 +18,7 @@
   "sources": [
     {
       "file": "supabase/tabel_export_from_supabase.sql",
-      "sha256": "1dd23a30813c9cc8f3304bf49f250a8d3e44cd0b9a4f1fc6e686b371125882d8"
+      "sha256": "94b07e567d9d27b7a53c1cda822048fbd8360ae6c89da9f4fda9fc32793e0cc1"
     },
     {
       "file": "supabase/migrations/20260118_create_gamification_tables.sql",
@@ -209,6 +209,10 @@
       "sha256": "654f1445606b17dc14ae84ac34d188698242ad74aa1b82ff6736c89b44031fe9"
     },
     {
+      "file": "supabase/migrations/20261020_120000_agent_user_saved_charts.sql",
+      "sha256": "55ad3521aad922853bd3535a4f87c6e37430498b383ac4b045c366effea43842"
+    },
+    {
       "file": "supabase/selfhost/source-views.sql",
       "sha256": "65a5ab3f4d78c1c4c291be37e04e747072294ccc834c63a9c71795b11d14432e"
     },
@@ -230,7 +234,7 @@
     },
     {
       "file": "scripts/selfhost-schema.mjs",
-      "sha256": "d8ba69fa9da4bfbc35adbab7163fa3ff06e9dac54d9a38a800ee1646e75b4b20"
+      "sha256": "a95d9499752137ece571c86c1de5a77d86cfd42d1ca5643590633eed0d7c8566"
     },
     {
       "file": "src/app/api/supabase/storage/route.ts",
@@ -638,7 +642,7 @@
       "callers": [
         "src/lib/agent/tools.server.ts"
       ],
-      "source": "supabase/migrations/20261005_100000_agent_runtime.sql",
+      "source": "supabase/migrations/20261020_120000_agent_user_saved_charts.sql",
       "status": "defined",
       "reason": null
     },
@@ -721,7 +725,7 @@
         "src/lib/agent/runtime.server.ts",
         "src/lib/agent/worker-entry.ts"
       ],
-      "source": "supabase/migrations/20261007_100000_agent_chat_results.sql",
+      "source": "supabase/migrations/20261020_120000_agent_user_saved_charts.sql",
       "status": "defined",
       "reason": null
     },
@@ -1224,10 +1228,6 @@
       "kind": "table",
       "status": "defined",
       "callers": [
-        {
-          "file": "src/lib/agent/store.server.ts",
-          "kind": "literal-from"
-        },
         {
           "file": "src/lib/agent/store.server.ts",
           "kind": "literal-from"
@@ -2677,7 +2677,7 @@
   "artifacts": [
     {
       "file": "supabase/selfhost/001-application.sql",
-      "sha256": "ad4ec7d1d347cbf22cc31326cd67881576af980b0f83d133bb6ccf8b0291941c"
+      "sha256": "5e5af688a63578884551e39427fc32262362b73a912245e18862e37610f4aee3"
     },
     {
       "file": "supabase/selfhost/002-storage.sql",

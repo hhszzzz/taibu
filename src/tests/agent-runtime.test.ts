@@ -19,7 +19,6 @@ import {
 } from "../lib/agent/runtime.server";
 import { emptyPiAssistant } from "../lib/agent/pi-stream.server";
 import {
-  chartPayloadForAgent,
   stableAgentSeed,
   createAgentTools,
   searchAgentWeb,
@@ -67,15 +66,6 @@ test("Pi completes more than common loop defaults using real core tools with no 
           },
         },
       ];
-    if (index === 35)
-      return [
-        {
-          type: "toolCall",
-          id: "select",
-          name: "select_final_artifacts",
-          arguments: { artifactIds: [store.draft("calculation-34")!.id] },
-        },
-      ];
     return [{ type: "text", text: "最终八字分析" }];
   });
   await executeAgentRun(store, run, undefined, { config: { ...config, id: "deepseek-v3.2" }, streamFn });
@@ -85,12 +75,11 @@ test("Pi completes more than common loop defaults using real core tools with no 
     "completed",
     (finish.args.p_message as AgentRunRow["public_message"]).agent?.error,
   );
-  assert.equal(rounds, 37);
-  assert.equal((await store.artifacts()).length, 35);
+  assert.equal(rounds, 36);
+  assert.equal(store.calculations().length, 35);
   const cp = finish.args.p_checkpoint as AgentRunRow["checkpoint"];
-  assert.equal(cp.finalArtifacts.length, 1);
   assert.equal(cp.version, 2);
-  assert.equal(store.nativeEntries().flatMap(e => e.model ?? []).filter(m => m.role === "toolResult").length, 36);
+  assert.equal(store.nativeEntries().flatMap(e => e.model ?? []).filter(m => m.role === "toolResult").length, 35);
   assert.ok(JSON.stringify(store.log).includes("日主"));
   assert.ok(
     store.nativeEntries().some(e => e.kind === "pi.compaction"),
@@ -191,10 +180,7 @@ test("a committed native tool result with a lost receipt is recovered without re
   run.checkpoint = store.writes.filter(w => w.name === "agent_durable_commit").at(-1)!.args.p_checkpoint as AgentRunRow["checkpoint"];
   run.fence++;
   await executeAgentRun(store, run, undefined, {
-    config, streamFn: scripted(index => index === 0 ? [{
-      type: "toolCall", id: "select-recovered", name: "select_final_artifacts",
-      arguments: { artifactIds: [store.draft("cached-before-loss")!.id] },
-    }] : [{ type: "text", text: "工具结果接管后完成" }]),
+    config, streamFn: scripted(() => [{ type: "text", text: "工具结果接管后完成" }]),
   });
   const finish = store.writes.find(w => w.name === "agent_finish_run")!;
   assert.equal(finish.args.p_status, "completed");
@@ -239,11 +225,11 @@ test("repeated model call IDs identify distinct native ToolTasks", async () => {
       type: "toolCall", id: "same-model-id", name: "bazi",
       arguments: { gender: "male", birthYear: 1990, birthMonth: 1, birthDay: 15 + index, birthHour: 9 },
     }];
-    if (index === 2) return [{ type: "toolCall", id: "same-model-id", name: "select_final_artifacts", arguments: { artifactIds: [...store.drafts.values()].filter(d => d.kind === "calculation").map(d => d.id) } }];
+    if (index === 2) return [{ type: "toolCall", id: "same-model-id", name: "todo_write", arguments: { revision: 0, items: [{ id: "compare", title: "比较两个命盘", status: "completed" }] } }];
     return [{ type: "text", text: "两个不同命盘" }];
   }) });
   assert.equal(store.writes.find(w => w.name === "agent_finish_run")!.args.p_status, "completed");
-  assert.equal((await store.artifacts()).length, 2);
+  assert.equal(store.calculations().length, 2);
   assert.equal(new Set([...store.drafts.values()].map(d => d.call_id)).size, 3);
 });
 
@@ -287,7 +273,6 @@ test("an empty new answer cannot succeed by reusing an earlier task's history", 
   await executeAgentRun(store, run, undefined, { config, streamFn: scripted(() => []) });
   const finished = store.writes.find(w => w.name === "agent_finish_run")!;
   assert.equal(finished.args.p_status, "failed");
-  assert.equal(finished.args.p_record, null);
   assert.equal((finished.args.p_message as AgentRunRow["public_message"]).content, "");
 });
 
@@ -328,7 +313,6 @@ test("native Durable settlement fails SDK EOF and timeout, retaining visible tex
     await executeAgentRun(store, row(), undefined, { config });
     const finished = store.writes.find(w => w.name === "agent_finish_run")!;
     assert.equal(finished.args.p_status, "failed", scenario);
-    assert.equal(finished.args.p_record, null);
     assert.match((finished.args.p_message as AgentRunRow["public_message"]).content, /partial interrupted/);
     assert.ok(store.log.flatMap(c => c.writes).some(w => w.type === "submission" && w.value.status === "unanswered"));
     assert.equal(model.doStreamCalls.length, 1);
@@ -346,7 +330,6 @@ test("fresh unavailable or disabled Agent permission blocks every model turn eve
     assert.equal(calls, 0);
     const finish = store.writes.find(w => w.name === "agent_finish_run")!;
     assert.equal(finish.args.p_status, "failed");
-    assert.equal(finish.args.p_record, null);
   }
 });
 
@@ -361,7 +344,6 @@ test("Agent completion depends on chat permissions, independently of records ava
     const finish = store.writes.filter(w => w.name === "agent_finish_run");
     assert.equal(finish.length, 1);
     assert.equal(finish[0].args.p_status, "completed");
-    assert.equal(finish[0].args.p_record, null);
     assert.equal((finish[0].args.p_message as AgentRunRow["public_message"]).content, "visible final text");
   }
 });
@@ -414,15 +396,8 @@ test("recovery reuses a committed calculation result and recreates its missing t
     config,
     streamFn: scripted((index) =>
       index === 0
-        ? [
-            {
-              type: "toolCall",
-              id: "selection",
-              name: "select_final_artifacts",
-              arguments: { artifactIds: [artifact.id] },
-            },
-          ]
-        : [{ type: "text", text: "恢复完成" }],
+        ? [{ type: "text", text: "恢复完成" }]
+        : [],
     ),
   });
   assert.equal(
@@ -491,45 +466,9 @@ test("queued cancellation settles without model invocation; random seeds and nat
     stableAgentSeed(run.id, "call"),
     stableAgentSeed(run.id, "other"),
   );
-  const args = {
-    gender: "male",
-    birthYear: 1990,
-    birthMonth: 1,
-    birthDay: 15,
-    birthHour: 9,
-  };
-  assert.equal(chartPayloadForAgent("bazi", args)?.birth_date, "1990-01-15");
-  assert.equal(
-    chartPayloadForAgent("bazi", { ...args, timezone: "America/New_York", disambiguation: "later" })?.timezone,
-    "America/New_York",
-  );
-  assert.equal(chartPayloadForAgent("bazi", { ...args, disambiguation: "later" })?.disambiguation, "later");
-  assert.equal(chartPayloadForAgent("bazi", { ...args, timezone: "invalid/timezone" }), null);
-  assert.equal(chartPayloadForAgent("bazi", { ...args, disambiguation: "invalid" }), null);
-  assert.equal(chartPayloadForAgent("bazi", { ...args, dayBoundary: "zi" }), null);
-  assert.equal(
-    chartPayloadForAgent("bazi", { ...args, timezone: "UTC" })?.disambiguation,
-    "reject",
-  );
-  assert.equal(
-    chartPayloadForAgent("bazi", {
-      ...args,
-      birthMonth: 2,
-      birthDay: 30,
-      calendarType: "lunar",
-    }),
-    null,
-  );
-  assert.equal(
-    chartPayloadForAgent("ziwei", {
-      ...args,
-      calculationOptions: { algorithm: "zhongzhou" },
-    }),
-    null,
-  );
 });
 
-test("takeover completes final selection after a committed model response", async () => {
+test("takeover continues after a committed model response", async () => {
   const store = new MemoryStore(),
     run = row();
   const assistant = emptyPiAssistant({
@@ -544,37 +483,17 @@ test("takeover completes final selection after a committed model response", asyn
     id: "committed",
     text: "排盘初步分析",
   });
-  const artifact: AgentArtifactRow = {
-    id: randomUUID(),
-    call_id: "saved",
-    tool_name: "bazi",
-    kind: "calculation",
-    args: {},
-    result: { content: [{ type: "text", text: "真实成果" }], details: {} },
-  };
-  store.drafts.set("saved", artifact);
+  const inputs: string[] = [];
   await executeAgentRun(store, run, undefined, {
     config,
-    streamFn: scripted((index) =>
-      index === 0
-        ? [
-            {
-              type: "toolCall",
-              id: "select-after-takeover",
-              name: "select_final_artifacts",
-              arguments: { artifactIds: [artifact.id] },
-            },
-          ]
-        : [{ type: "text", text: "最终分析" }],
-    ),
+    streamFn: scripted(() => [{ type: "text", text: "最终分析" }], messages => {
+      const last = messages.at(-1);
+      if (last?.role === "user") inputs.push(typeof last.content === "string" ? last.content : JSON.stringify(last.content));
+    }),
   });
   const finish = store.writes.find((w) => w.name === "agent_finish_run")!;
   assert.equal(finish.args.p_status, "completed");
-  assert.deepEqual(
-    (finish.args.p_checkpoint as AgentRunRow["checkpoint"]).finalArtifacts,
-    [artifact.id],
-  );
-  assert.equal(finish.args.p_record, null);
+  assert.deepEqual(inputs, ["接续已提交的工具结果完成用户任务。"]);
   assert.ok((finish.args.p_message as AgentRunRow["public_message"]).content.includes("最终分析"), "final analysis stays in chat history");
 });
 
@@ -783,83 +702,21 @@ test("lease renewal failure preserves an interrupted checkpoint for takeover", a
   }
 });
 
-test("new calculations invalidate an earlier selection; selected tool-only results can finish", async () => {
+test("calculations alone do not complete a task: an answer without text fails", async () => {
   const store = new MemoryStore(),
     run = row();
-  const args = {
-    gender: "male",
-    birthYear: 1990,
-    birthMonth: 1,
-    birthDay: 15,
-    birthHour: 9,
-  };
   await executeAgentRun(store, run, undefined, {
-    config,
-    streamFn: scripted((index) => {
-      if (index === 0 || index === 2)
-        return [
-          {
-            type: "toolCall",
-            id: `calc-${index}`,
-            name: "bazi",
-            arguments: { ...args, birthDay: index === 0 ? 15 : 16 },
-          },
-        ];
-      if (index === 1 || index === 4)
-        return [
-          {
-            type: "toolCall",
-            id: `select-${index}`,
-            name: "select_final_artifacts",
-            arguments: {
-              artifactIds: [
-                store.draft(index === 1 ? "calc-0" : "calc-2")!.id,
-              ],
-            },
-          },
-        ];
-      return index === 3
-        ? [{ type: "text", text: "重新计算后需要最终选择" }]
-        : [];
-    }),
-  });
-  const finish = store.writes.find((w) => w.name === "agent_finish_run")!;
-  assert.equal(finish.args.p_status, "completed");
-  assert.deepEqual(
-    (finish.args.p_checkpoint as AgentRunRow["checkpoint"]).finalArtifacts,
-    [store.draft("calc-2")!.id],
-  );
-  const toolOnlyStore = new MemoryStore(),
-    toolOnlyRun = row();
-  await executeAgentRun(toolOnlyStore, toolOnlyRun, undefined, {
     config,
     streamFn: scripted((index) =>
       index === 0
-        ? [{ type: "toolCall", id: "calc", name: "bazi", arguments: args }]
-        : index === 1
-          ? [
-              {
-                type: "toolCall",
-                id: "select",
-                name: "select_final_artifacts",
-                arguments: {
-                  artifactIds: [toolOnlyStore.draft("calc")!.id],
-                },
-              },
-            ]
-          : [],
+        ? [{ type: "toolCall", id: "calc", name: "bazi", arguments: { gender: "male", birthYear: 1990, birthMonth: 1, birthDay: 15, birthHour: 9 } }]
+        : [],
     ),
   });
-  const saved = toolOnlyStore.writes.find(
-    (w) => w.name === "agent_finish_run",
-  )!;
-  assert.equal(saved.args.p_status, "completed");
-  assert.equal(
-    (saved.args.p_message as AgentRunRow["public_message"]).content,
-    "",
-  );
-  assert.equal(saved.args.p_record, null);
-  assert.equal((saved.args.p_checkpoint as AgentRunRow["checkpoint"]).finalArtifacts.length, 1, "selected calculation still settles without prose or a record");
+  const finish = store.writes.find((w) => w.name === "agent_finish_run")!;
+  assert.equal(finish.args.p_status, "failed");
+  assert.equal((finish.args.p_message as AgentRunRow["public_message"]).content, "");
+  assert.equal(store.calculations().length, 1, "the calculation stays in the task");
 });
 
 test("unknown Pi models carry an unknown capacity and expose native context usage in snapshots", async () => {
@@ -880,7 +737,6 @@ test("unknown Pi models carry an unknown capacity and expose native context usag
   assert.ok(data.runtime!.context!.measuredTokens > 0);
   assert.ok(data.runtime!.usage!.models['taibu/fixture'].totalTokens! > 0);
   assert.ok(store.writes.some(w => w.name === "agent_checkpoint" && (w.args.p_message as AgentRunRow["public_message"]).agent?.runtime?.context));
-  assert.equal(finish.args.p_record, null);
 });
 
 test('known contexts start background compaction below the blocking threshold while generation continues', async t => {
@@ -987,13 +843,12 @@ test('Tarot implicit seeds satisfy Core schema and durable hooks block overrides
   await executeAgentRun(store, run, undefined, { config, streamFn: scripted(index => index === 0
     ? [{ type: 'toolCall', id: 'blocked', name: 'tarot', arguments: { seed: 'model-seed' } }]
     : index === 1 ? [{ type: 'toolCall', id: 'draw', name: 'tarot', arguments: { spreadType: 'single', referenceYear: '2026' } }]
-    : index === 2 ? [{ type: 'toolCall', id: 'select', name: 'select_final_artifacts', arguments: { artifactIds: [store.draft('draw')!.id] } }]
     : [{ type: 'text', text: '按实际牌面解读' }]) });
   assert.equal(store.draft('blocked'), undefined);
   assert.ok(store.draft('draw'));
   const results = store.nativeEntries().flatMap(entry => entry.model ?? []).filter(message => message.role === 'toolResult');
   assert.ok(results.some(message => message.role === 'toolResult' && message.toolCallId === 'blocked' && message.isError));
-  assert.ok(results.some(message => message.role === 'toolResult' && message.toolCallId === 'draw' && !message.isError && message.content.some(part => part.type === 'text' && part.text.includes('成果 ID:'))));
+  assert.ok(results.some(message => message.role === 'toolResult' && message.toolCallId === 'draw' && !message.isError && message.content.some(part => part.type === 'text' && part.text.includes(`命盘引用: artifact:${store.draft('draw')!.id}`))));
 });
 
 test("unknown capacity still uses Pi's bounded compaction recovery on a reported overflow", async () => {
@@ -1023,7 +878,6 @@ test("unknown capacity still uses Pi's bounded compaction recovery on a reported
   const finish = store.writes.find(w => w.name === "agent_finish_run")!;
   assert.equal(finish.args.p_status, "completed");
   assert.equal((finish.args.p_message as AgentRunRow["public_message"]).agent?.runtime?.context?.compactions, 1);
-  assert.equal(finish.args.p_record, null);
 });
 
 test('unsupported checkpoint engines are rejected before opening storage or invoking a model or tool', async () => {

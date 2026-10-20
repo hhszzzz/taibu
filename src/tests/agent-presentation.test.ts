@@ -11,7 +11,7 @@ import {
     collectAgentArtifacts, describeAgentCallNote, describeAgentChartRules, describeAgentChartSteps, describeAgentChartSubject, describeAgentStep, formatAgentToolDuration,
     getAgentStepNumbers, getAgentSteps, getAgentScriptCalls, getAgentLiveLine, getAgentArtifactHref, getAgentLocatedPositions, getAgentReadingState, getAgentToolState,
     getAgentResponseTiming, getAgentRoundFolds, getAgentTaskDuration, getAgentTaskSpan, getDayunWindow, groupAgentParts, getAgentActivityLabel, getAgentEvidenceSummary, stripLeadingTitle,
-    summarizeAgentProcess, summarizeAgentActivity, summarizeAgentTool, formatMemberNames, getFinalArtifactGroups, AGENT_TOOL_FAMILY_LABELS, type AgentArtifact, type AgentTool,
+    summarizeAgentProcess, summarizeAgentActivity, summarizeAgentTool, formatMemberNames, AGENT_TOOL_FAMILY_LABELS, type AgentArtifact, type AgentTool,
 } from '../components/chat/agent/presentation';
 import { formatAgentElapsed } from '../components/chat/agent/AgentHeaderStatus';
 
@@ -128,7 +128,7 @@ test('process steps summarize each call from its arguments and stored result onl
     assert.equal(summarizeAgentTool(tool('submit_plan', { input: { plan: '# 计划' }, output: { plan: '# 计划', approved: true } })), '已批准');
     assert.equal(summarizeAgentTool(tool('submit_plan', { input: { plan: '# 计划' }, output: { plan: '# 计划', approved: false } })), '要求修改');
     assert.equal(summarizeAgentTool(tool('submit_plan', { status: 'running', input: { plan: '# 计划' } })), '等待你批准');
-    assert.equal(Object.keys(AGENT_TOOL_FAMILY_LABELS).length, 14, 'every tool family has a step tag');
+    assert.equal(Object.keys(AGENT_TOOL_FAMILY_LABELS).length, 13, 'every tool family has a step tag');
     assert.equal(summarizeAgentTool(tool('bazi_relations', { input: { reference: 'artifact:x', year: 2027, dayun: 4 } })), '2027 年 · 第 4 步大运', 'a drilldown reads its selectors, never the chart reference');
 });
 
@@ -136,8 +136,8 @@ test('a code mode script is one step and its calls stay inside it', () => {
     const script: AgentTool = { type: 'tool', id: 'native-tool:3:script', name: 'codemode', title: '运行脚本', status: 'completed', input: { code: 'return 1' },
         output: { calls: [{ id: 1, name: 'bazi', args: '{}', status: 'ok' }, { id: 2, name: 'bazi', args: '{}', status: 'error', error: 'blocked' }, { id: '3', name: 'bazi', status: 'ok' }], output: '1' } };
     const calls: AgentTool[] = [7, 8].map((task, index) => ({ type: 'tool', id: `nested:${task}`, name: 'bazi', title: '八字排盘', status: 'completed', parentId: script.id, scriptCall: index + 1 }));
-    const parts: AgentPart[] = [script, ...calls, { type: 'tool', id: 'native-tool:4:select', name: 'select_final_artifacts', title: '选定成果', status: 'completed' }];
-    assert.deepEqual(getAgentSteps(parts).map(step => step.id), [script.id, 'native-tool:4:select'], 'the calls are not steps of their own');
+    const parts: AgentPart[] = [script, ...calls, { type: 'tool', id: 'native-tool:4:focus', name: 'focus_chart', title: '定位分析位置', status: 'completed' }];
+    assert.deepEqual(getAgentSteps(parts).map(step => step.id), [script.id, 'native-tool:4:focus'], 'the calls are not steps of their own');
     assert.deepEqual(getAgentScriptCalls(parts).get(script.id)?.map(call => call.id), ['nested:7', 'nested:8']);
     assert.equal(summarizeAgentTool(script), '调用 2 次 · 1 次失败', 'a blocked call counts though it has no part; a row without a call number is not one');
     assert.equal(summarizeAgentTool({ ...script, status: 'running', output: undefined }), null, 'a running script lists no calls yet');
@@ -180,7 +180,7 @@ test('the folded process line names steps in first-use order, counts repeats and
     const tool = (id: string, title: string, name = 'focus_chart'): AgentTool => ({ type: 'tool', id, name, title, status: 'completed' });
     const tools = [tool('a', '八字排盘', 'bazi'), tool('p', '更新计划', 'todo_write'), tool('b', '定位分析位置'), tool('c', '八字大运', 'bazi_dayun'), tool('d', '定位分析位置'), tool('e', '定位分析位置')];
     assert.equal(summarizeAgentProcess(tools), '八字排盘、定位分析位置 3 次、八字大运');
-    assert.equal(summarizeAgentProcess([...tools, tool('f', '确定最终成果', 'select_final_artifacts'), tool('g', '联网检索', 'web_search')]), '八字排盘、定位分析位置 3 次、八字大运、确定最终成果等');
+    assert.equal(summarizeAgentProcess([...tools, tool('f', '读取资料', 'read_user_data'), tool('g', '联网检索', 'web_search')]), '八字排盘、定位分析位置 3 次、八字大运、读取资料等');
     assert.equal(summarizeAgentProcess([]), '');
     assert.equal(summarizeAgentProcess([tool('p', '更新计划', 'todo_write')]), '');
 });
@@ -193,30 +193,7 @@ test('the claude-style status line groups tools by effect and names collaboratio
     assert.equal(summarizeAgentActivity([team], 0, 0), '开启 2 个智能体');
     assert.equal(summarizeAgentActivity([tool('a', 'bazi', { status: 'failed' })], 2, 1), '已查看 1 张命盘，已确认 2 项信息，1 处失败');
     assert.equal(summarizeAgentActivity([], 1, 0), '已确认 1 项信息');
-    assert.equal(summarizeAgentActivity([tool('s', 'select_final_artifacts', { input: { artifactIds: ['a', 'b', 'c'] } })], 0, 0), '已选定 3 份成果', 'final artifacts count by the pieces chosen, not by calls');
-});
-
-test('final artifacts group the same chart and name who produced it', async () => {
-    const chart = buildToolSuccessPayload('bazi', await executeTool('bazi', { gender: 'male', birthYear: 1988, birthMonth: 2, birthDay: 3, birthHour: 13 }));
-    const [own, member, other] = [randomUUID(), randomUUID(), randomUUID()];
-    const parts: AgentPart[] = [
-        { type: 'tool', id: 'team', name: 'parallel_analysis', title: '协作分析', status: 'completed', output: { analyses: [
-            { system: 'bazi', conversationId: 7, status: 'completed', name: '干支关系复核', model: 'deepseek-chat', vendor: 'deepseek', answer: `原局丑未相冲。成果 ID: ${member}` },
-        ] } },
-        { type: 'tool', id: 'own', name: 'bazi', title: '八字命盘', status: 'completed', input: { gender: 'male', birthYear: 1988, birthMonth: 2, birthDay: 3, birthHour: 13 }, output: { result: chart.structuredContent, artifactId: own } },
-        { type: 'artifact', id: own, title: 'Agent 八字命盘', chartId: 'c1', chartType: 'bazi' },
-        { type: 'artifact', id: member, title: 'Agent 八字命盘', chartId: 'c1', chartType: 'bazi' },
-        { type: 'artifact', id: other, title: 'Agent 紫微命盘', chartId: 'c2', chartType: 'ziwei' },
-    ];
-    const groups = getFinalArtifactGroups(parts, [member, own, other]);
-    assert.equal(groups.length, 2, 'two artifacts of one chart are one row');
-    assert.deepEqual(groups[0].ids, [member, own]);
-    assert.equal(groups[0].title, '八字命盘');
-    assert.match(groups[0].summary ?? '', /^男 · 公历 1988-02-03 13:00/u);
-    assert.equal(groups[0].target, 'tool:own', 'the row opens the chart the main model read');
-    assert.deepEqual(groups[0].producers.map(item => [item.name, item.main, item.target]), [['干支关系复核', false, 'member:team:7'], ['太卜', true, null]], 'members first, then the main model');
-    assert.equal(groups[0].producers[0].vendor, 'deepseek');
-    assert.deepEqual([groups[1].title, groups[1].kind, groups[1].target, groups[1].producers.length], ['紫微命盘', 'ziwei', `chart:${other}`, 0], 'an artifact without its call falls back to its own title');
+    assert.equal(summarizeAgentActivity([tool('s', 'select_final_artifacts', { input: { artifactIds: ['a', 'b', 'c'] } })], 0, 0), '已运行 1 个工具', 'a step of a retired tool in an earlier answer still counts as a step');
 });
 
 test('the live line describes the running call only while tools run', () => {

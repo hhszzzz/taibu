@@ -358,8 +358,3 @@ export function getAgentToolQuestions(tool: AgentToolPart): AgentQuestion[] {
   return [];
 }
 
-export function getAgentFinalSelection(tool: AgentToolPart): string[] | null {
-  if (tool.status !== 'completed' || tool.name !== 'select_final_artifacts') return null;
-  const ids = record(tool.output).artifactIds;
-  return stringArray(ids) ? ids as string[] : null;
-}

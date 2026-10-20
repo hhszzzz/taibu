@@ -40,7 +40,6 @@ export const row = (): AgentRunRow => {
         { role: "user", content: "请用工具分析", timestamp: Date.now() },
       ],
       parts: [],
-      finalArtifacts: [],
     },
     public_message: {
       id: `agent:${id}`,
@@ -79,6 +78,9 @@ export class MemoryStore extends AgentStore {
   draft(callId: string) {
     return [...this.drafts.values()].find(d => d.call_id === callId || d.call_id.endsWith(`:${callId}`));
   }
+  calculations() {
+    return [...this.drafts.values()].filter(d => d.kind === "calculation");
+  }
   nativeEntries() {
     return this.log.flatMap(c => c.writes).filter(w => w.type === "entry").map(w => w.value);
   }
@@ -95,9 +97,6 @@ export class MemoryStore extends AgentStore {
   override async inspectedChart(_run: AgentRunRow, reference: string) {
     return [...this.drafts.values()].reverse().find(artifact => (artifact.tool_name === "inspect_chart" || getAgentDrilldownBase(artifact.tool_name))
       && (artifact.result.details as { chartReference?: string }).chartReference === reference) ?? null;
-  }
-  override async artifacts() {
-    return [...this.drafts.values()].filter((a) => a.kind === "calculation");
   }
   override async commands() {
     return this.pending;
@@ -152,7 +151,7 @@ export function scripted(
     if (!summary) { assert.ok(getCurrentTools(context.messages).length); onContext?.(context.messages); }
     const output = createAssistantMessageEventStream(),
       message = emptyPiAssistant(model);
-    message.content = summary ? [{ type: 'text', text: '用户要求八字分析；计算记录、最终成果ID和来源保留在最近回合。' }] : build(round++);
+    message.content = summary ? [{ type: 'text', text: '用户要求八字分析；计算记录、命盘引用和来源保留在最近回合。' }] : build(round++);
     message.usage.input = countTokens(JSON.stringify(context.messages));
     message.usage.totalTokens = message.usage.input;
     message.stopReason = message.content.some((p) => p.type === "toolCall")

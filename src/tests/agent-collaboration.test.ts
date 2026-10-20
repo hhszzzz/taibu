@@ -99,6 +99,8 @@ test('a member step keeps what it said before the call, the arguments and the re
     const parsed = parallelAnalysisResults({ analyses: [{ system: 'bazi', conversationId: 1, status: 'completed', steps: [first, second] }] });
     assert.deepEqual(parsed[0].steps, [first, second], 'the card reads the process back');
     assert.equal(memberAnswerText('土重金弱。实际模型：m；成果 ID: 2c037b35-cb25-4d74-b463-1bd70b0c91ce。\n\n补充'), '土重金弱。实际模型：m\n\n补充', 'the reader sees no artifact IDs meant for the parent');
+    assert.equal(memberAnswerText('财星透出。命盘引用: artifact:2c037b35-cb25-4d74-b463-1bd70b0c91ce。\n补充'), '财星透出。\n补充', 'nor the chart references members report now');
+    assert.equal(memberAnswerText('依据见 artifact:2c037b35-cb25-4d74-b463-1bd70b0c91ce'), '依据见');
     assert.equal(parallelAnalysisResults({ analyses: [{ system: 'bazi', conversationId: 1, status: 'completed', steps: [{ ...first, output: 1 }] }] })[0].steps, undefined,
         'a malformed step drops the process, not the member');
 });

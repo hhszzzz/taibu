@@ -56,8 +56,6 @@ export interface AgentArtifactRow {
     /** Drilldowns keep the chart they read, so they count as an inspection for focus_chart. */
     inspection?: { chartReference: string; chartKind: string; result: unknown };
   };
-  chart_id?: string;
-  chart_type?: string;
 }
 export interface AgentCommandRow {
   sequence: number;
@@ -198,15 +196,6 @@ export class AgentStore {
       .maybeSingle();
     if (error) throw new Error(error.message);
     return data as AgentArtifactRow | null;
-  }
-  async artifacts(run: AgentRunRow) {
-    const { data, error } = await this.db
-      .from("agent_run_artifacts")
-      .select("*")
-      .eq("run_id", run.id)
-      .eq("kind", "calculation");
-    if (error) throw new Error(error.message);
-    return (data ?? []) as AgentArtifactRow[];
   }
   async chartArtifact(run: AgentRunRow, id: string) {
     const { data, error } = await this.db.from('agent_run_artifacts')

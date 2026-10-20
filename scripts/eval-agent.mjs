@@ -84,10 +84,8 @@ try {
                     if (!chart) throw new Error('未找到 ' + item.chart.tool + ' 的成果，无法详查');
                     return [{ type: 'toolCall', id: 'compute', name: item.tool, arguments: { reference: 'artifact:' + chart.id, ...item.arguments } }];
                 }
-                if (index === 3) return [{ type: 'toolCall', id: 'select', name: 'select_final_artifacts', arguments: { artifactIds: [...store.drafts.values()].filter(a => a.kind === 'calculation').map(a => a.id) } }];
             } else {
                 if (index === 1) return [{ type: 'toolCall', id: 'compute', name: item.tool, arguments: item.arguments }];
-                if (index === 2) return [{ type: 'toolCall', id: 'select', name: 'select_final_artifacts', arguments: { artifactIds: [...store.drafts.values()].filter(a => a.kind === 'calculation').map(a => a.id) } }];
             }
             return [{ type: 'text', text: '根据实际 Core 盘面给出结论。离线模式只检查结构，不评价解读质量。' }];
         });

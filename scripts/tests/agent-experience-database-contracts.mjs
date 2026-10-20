@@ -13,7 +13,7 @@ export async function agentExperienceDatabaseContracts(t, { sql, asActor, asOwne
   const conversation = () => asActor(owner,`SELECT public.create_conversation_with_messages(${quote(owner)},'经验契约','general','chat','{}','[]');`);
   const message = (id, content='资料问题') => ({ id, role:'user', content, createdAt:new Date().toISOString() });
   const assistant = (id, content='') => ({ id:`agent:${id}`,role:'assistant',content,createdAt:new Date().toISOString(),agent:{version:1,runId:id,status:'queued',parts:[]} });
-  const cp = {version:2,messages:[],parts:[],finalArtifacts:[],durable:{engine:'pi-durable/1.3.0',seeded:true}};
+  const cp = {version:2,messages:[],parts:[],durable:{engine:'pi-durable/1.3.0',seeded:true}};
   async function run() {
     const id=randomUUID(), cid=await conversation();
     await admin(`SELECT public.agent_create_run(${quote(id)},${quote(owner)},${quote(cid)},${quote(id)},'hash',${json({model:'fixture',reasoning:false,webEnabled:false,systemPrompt:'fixture',userMessage:message(`u:${id}`)})},${json(cp)},${json(assistant(id))},NULL,false);`);
@@ -22,7 +22,7 @@ export async function agentExperienceDatabaseContracts(t, { sql, asActor, asOwne
     assert.equal(claimed.id,id); return claimed;
   }
   const lease = r => `${quote(r.id)},${quote(r.worker_id)},${r.fence}`;
-  const finish = (r,status='cancelled', checkpoint=cp, output=assistant(r.id)) => admin(`SELECT public.agent_finish_run(${lease(r)},${quote(status)},${json(checkpoint)},${json(output)},NULL);`);
+  const finish = (r,status='cancelled', checkpoint=cp, output=assistant(r.id)) => admin(`SELECT public.agent_finish_run(${lease(r)},${quote(status)},${json(checkpoint)},${json(output)});`);
   const submit = async(r, request=randomUUID(), content='待发送',mode='follow_up',attachments,metadata) => JSON.parse(await asActor(owner,`SELECT to_jsonb(public.agent_submit_command(${quote(r.id)},${quote(request)},${quote(mode)},${json({...message(randomUUID(),content),attachments,metadata})}));`));
 
   await t.test('long-term memory is opt-in, owner-isolated, evidence-bound and lease-fenced', async () => {

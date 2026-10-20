@@ -53,7 +53,6 @@ test('a drilldown recomputes the artifact chart, caches as a tool call and count
   assert.doesNotMatch(result.content[0].text, /"targets"|artifact:|bazi:cell:/);
   const write = store.writes.find(item => item.name === 'agent_cache_tool' && item.args.p_tool_name === 'bazi_relations')!;
   assert.equal(write.args.p_kind, 'tool', 'a drilldown is not a new result');
-  assert.equal(write.args.p_chart, null);
   assert.equal((write.args.p_result as { inspectionOrder?: number }).inspectionOrder, 5);
   // focus_chart accepts the drilldown's targets without a separate inspect_chart.
   const focus = await tool('focus_chart').execute('6:focus', { reference, targetIds: details.targets.map(target => target.id), caption: '流年关系' });

@@ -158,9 +158,6 @@ export function buildAgentWorkspace({ parts, artifacts, attachmentIds }: { parts
       case 'plan':
         // 任务清单已经以进度条形式显示在聊天里，不单独开工作区标签。
         break;
-      case 'artifacts':
-        locations.set(tool.id, 'results');
-        break;
       case 'question':
         add('question:' + tool.id, { view: 'question', family, title: '补充信息' }, tool);
         break;

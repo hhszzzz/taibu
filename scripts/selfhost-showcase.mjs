@@ -1,5 +1,5 @@
 // 本地演示数据重建：只作用于本机 Docker 演示栈的演示账号（user@taibu.local）。
-// 先清空该账号的全部对话与 Agent 自动保存的记录，再按离线演示模型的 SHOWCASE 场景
+// 先清空该账号的全部对话与早期 Agent 自动保存的记录，再按离线演示模型的 SHOWCASE 场景
 // 通过真实 API 依次发起 Agent 任务，展示自主多步查看、详查、多模型协作与补充提问。
 // 用法：node scripts/selfhost-showcase.mjs --project taibu-agent-1006b
 import assert from 'node:assert/strict';
@@ -69,7 +69,8 @@ for (;;) {
   if (!conversations.length) break;
   for (const conversation of conversations) { await api(`/api/conversations/${conversation.id}`, { method: 'DELETE' }); deleted++; }
 }
-// Agent 自动保存的分析记录与「Agent 八字/紫微命盘」不随对话删除；被设为默认命盘的保留。
+// 早期 Agent 自动保存的分析记录与「Agent 八字/紫微命盘」不随对话删除，这里一并清掉；被设为默认命盘的保留。
+// 现在 Agent 不再自动保存；用户在盘面上自己存入命盘库的命盘（按出生资料命名）不动。
 const removed = sql(`BEGIN;
 WITH r AS (DELETE FROM public.ming_records WHERE user_id='${userId}' AND tags @> ARRAY['Agent'] RETURNING 1) SELECT 'records', count(*) FROM r;
 WITH b AS (DELETE FROM public.bazi_charts WHERE user_id='${userId}' AND name='Agent 八字命盘'

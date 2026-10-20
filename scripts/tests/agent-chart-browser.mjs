@@ -53,7 +53,7 @@ export async function verifyAgentChartWorkspace({ page, newChat, send, waitForRu
   assert.equal(await page.getByRole('button', { name: '任务工作区', exact: true }).getAttribute('aria-expanded'), 'true', 'a new model chart opens the desktop workspace');
   const openChart = async kind => {
     await panel.getByRole('tab', { name: '概览', exact: true }).click();
-    assert.equal(await readings.count(), 11, 'inspection and final artifacts are deduplicated');
+    assert.equal(await readings.count(), 11, 'each calculation is listed once despite its inspections');
     await readings.filter({ hasText: names[kind] }).click();
     await selectedTarget(focuses[kind]).waitFor();
     assert.equal(await panel.locator('.agent-board-focus').getAttribute('data-chart-focus'), focuses[kind].targetIds.join(','), kind + ' retains its own native focus when switching readings');

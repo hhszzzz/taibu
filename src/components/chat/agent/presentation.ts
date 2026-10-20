@@ -3,6 +3,7 @@ import { isAgentRunTerminal, type AgentMessageData, type AgentPart, type AgentRu
 import { getAgentToolFamily, type AgentToolFamily, AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_SUBMIT_PLAN_TOOL, AGENT_TOOL_SEARCH_TOOL, isAgentChartTool } from '@/lib/agent/tool-catalog';
 import { getAgentAttachmentRead, getAgentChart, getAgentDataResults, getAgentMethod, getAgentScript, getAgentSearchResults, getAgentToolArtifactId, getAgentToolQuestions, type AgentChart } from '@/lib/agent/tool-presentation';
 import { getChartFocus, getChartTargets } from '@/lib/agent/chart-interaction';
+import { getSavedChartHref } from '@/lib/agent/chart-save';
 import type { AgentWorkspaceModel } from '@/lib/agent/workspace';
 import { parallelAnalysisResults, type ParallelAnalysisResult } from '@/lib/agent/parallel-results';
 import { countAgentEvidence, getAgentCitationLabels, getAgentEvidence } from '@/lib/agent/evidence';
@@ -65,7 +66,6 @@ export function getAgentLiveLine(data: AgentMessageData): string {
 /** A readable step title when the model left the raw tool name as its title. */
 const RAW_TOOL_TITLES: Record<string, string> = {
     parallel_analysis: '协作分析',
-    select_final_artifacts: '确定最终成果',
     inspect_chart: '查看命盘',
     focus_chart: '定位分析位置',
     web_search: '联网搜索',
@@ -153,7 +153,6 @@ export function summarizeAgentTool(tool: AgentTool): string | null {
         const date = [args.birthYear, args.birthMonth, args.birthDay].filter(value => typeof value === 'number').join(' / ');
         return [typeof args.name === 'string' ? args.name : '', date, typeof args.birthHour === 'number' ? `${args.birthHour} 时` : ''].filter(Boolean).join(' · ') || null;
     }
-    if (tool.name === 'select_final_artifacts' && Array.isArray(args.artifactIds)) return `选定 ${args.artifactIds.length} 份成果`;
     if (tool.name === 'web_search' || tool.name === 'search_knowledge') {
         const query = typeof args.query === 'string' ? `「${args.query.slice(0, 60)}」` : '';
         const results = getAgentSearchResults(tool);
@@ -234,10 +233,7 @@ export const agentStatusLabels: Record<AgentRunStatus, string> = {
 export function getAgentArtifactHref(artifact: AgentArtifact): string | null {
     if (artifact.recordId) return `/records?id=${encodeURIComponent(artifact.recordId)}`;
     if (!artifact.chartId) return null;
-    if (artifact.chartType === 'bazi' || artifact.chartType === 'ziwei') {
-        return `/${artifact.chartType}/result?chart=${encodeURIComponent(artifact.chartId)}`;
-    }
-    return null;
+    return artifact.chartType === 'bazi' || artifact.chartType === 'ziwei' ? getSavedChartHref(artifact.chartType, artifact.chartId) : null;
 }
 
 /** Only visible messages contribute results; edited-away branches stay hidden. */
@@ -274,7 +270,6 @@ const FAMILY_PHRASES: Partial<Record<AgentToolFamily, (count: number) => string>
     data: count => `已读取 ${count} 份资料`,
     method: count => `已加载 ${count} 套分析方法`,
     memory: count => `已记忆 ${count} 条`,
-    artifacts: count => `已选定 ${count} 份成果`,
     code: count => `已运行 ${count} 个脚本`,
     external: count => `已调用 ${count} 个外部工具`,
     other: count => `已运行 ${count} 个工具`,
@@ -294,9 +289,7 @@ export function summarizeAgentActivity(tools: readonly AgentTool[], questionCoun
         const family = getAgentToolFamily(tool.name);
         if (family === 'collaboration') { members += collaborationMembers(tool); continue; }
         if (family === 'plan') continue;
-        // 选定成果按份数计，而不是调用次数。
-        const ids = family === 'artifacts' ? toolArgs(tool).artifactIds : null;
-        counts.set(family, (counts.get(family) ?? 0) + (Array.isArray(ids) ? ids.length : 1));
+        counts.set(family, (counts.get(family) ?? 0) + 1);
     }
     const phrases = (Object.keys(FAMILY_PHRASES) as AgentToolFamily[])
         .flatMap(family => counts.has(family) ? [FAMILY_PHRASES[family]!(counts.get(family)!)] : []);
@@ -457,7 +450,7 @@ export function formatAgentValue(value: unknown): string {
 /** Short tags shown on process steps, one per tool family. */
 export const AGENT_TOOL_FAMILY_LABELS: Record<AgentToolFamily, string> = {
     chart: '命盘', calculation: '推演', drilldown: '详查', search: '依据', data: '资料', method: '指引', plan: '计划',
-    question: '问题', collaboration: '协作', memory: '记忆', artifacts: '成果', code: '脚本', external: '外部', other: '工具',
+    question: '问题', collaboration: '协作', memory: '记忆', code: '脚本', external: '外部', other: '工具',
 };
 
 /**
@@ -624,52 +617,4 @@ export function getDayunWindow(periods: readonly { 干支: string; 起运年份:
     const current = periods.findIndex((period, index) => year >= period.起运年份 && (index === periods.length - 1 || year < periods[index + 1].起运年份));
     const start = current < 0 ? 0 : Math.max(0, Math.min(current - 1, periods.length - 3));
     return periods.slice(start, start + 3).map((period, index) => ({ ...period, current: start + index === current }));
-}
-
-export type FinalArtifactProducer = { key: string; name: string; main: boolean; vendor?: string; model?: string; target: string | null };
-export type FinalArtifactGroup = {
-    key: string; ids: string[]; title: string; summary: string | null; kind: AgentChart['kind'] | null;
-    saved: boolean; target: string; producers: FinalArtifactProducer[];
-};
-
-/**
- * 最终成果按「同一张盘」归并：成员与主模型常常各排一次同一张命盘，逐条列出只会是几行同名的「八字命盘」。
- * 每组写明盘面与命主，并列出是谁排出的（主模型或哪位成员），点开就是工作区里那张盘。
- */
-export function getFinalArtifactGroups(parts: readonly AgentPart[], ids: readonly string[]): FinalArtifactGroup[] {
-    const tools = parts.filter((part): part is AgentTool => part.type === 'tool');
-    const members = tools.filter(tool => tool.name === 'parallel_analysis')
-        .flatMap(tool => parallelAnalysisResults(tool.output).map(member => ({ tool, member })));
-    const groups = new Map<string, FinalArtifactGroup>();
-    for (const id of ids) {
-        const artifact = parts.find((part): part is AgentArtifact => part.type === 'artifact' && part.id === id);
-        const source = tools.find(tool => getAgentToolArtifactId(tool) === id);
-        const chart = source ? getAgentChart(source) : null;
-        const owner = members.find(({ member }) => member.answer?.includes(id));
-        const key = artifact?.chartId ? `chart:${artifact.chartId}` : artifact?.recordId ? `record:${artifact.recordId}` : id;
-        const group = groups.get(key) ?? {
-            key, ids: [], title: '成果', summary: null, kind: null, saved: false,
-            target: source ? `tool:${source.id}` : `chart:${id}`, producers: [],
-        };
-        group.ids.push(id);
-        if (chart && source) {
-            // 主模型自己排出的那一次有完整盘面，标题、命主与入口都以它为准。
-            group.title = chart.title;
-            group.summary = describeAgentChartSubject(source, chart);
-            group.kind = chart.kind;
-            group.target = `tool:${source.id}`;
-        } else if (group.title === '成果' && artifact) {
-            group.title = artifact.title.replace(/^Agent\s*/u, '') || '成果';
-            group.kind = artifact.chartType === 'bazi' || artifact.chartType === 'ziwei' ? artifact.chartType : null;
-        }
-        if (artifact?.recordId) group.saved = true;
-        const producer: FinalArtifactProducer | null = owner
-            ? { key: `member:${owner.member.conversationId}`, name: owner.member.name ?? owner.member.system, main: false, vendor: owner.member.vendor, model: owner.member.model, target: `member:${owner.tool.id}:${owner.member.conversationId}` }
-            : source ? { key: 'main', name: '太卜', main: true, target: null } : null;
-        if (producer && !group.producers.some(item => item.key === producer.key)) group.producers.push(producer);
-        groups.set(key, group);
-    }
-    // 主模型排在成员之后：先看成员各自的成果，再看主模型的核对。
-    for (const group of groups.values()) group.producers.sort((a, b) => Number(a.main) - Number(b.main));
-    return [...groups.values()];
 }

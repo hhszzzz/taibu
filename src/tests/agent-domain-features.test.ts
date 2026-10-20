@@ -91,7 +91,6 @@ test('parallel children are isolated, all token usage is projected, and interrup
         let content: AssistantMessage['content'];
         if (names.includes('parallel_analysis')) {
             if (!results.some(message => message.toolName === 'parallel_analysis')) content = [{ type: 'toolCall', id: 'parallel', name: 'parallel_analysis', arguments: { tasks: [{ agentId: 'bazi-specialist', system: 'bazi', question: JSON.stringify(bazi) }, { agentId: 'qimen-reviewer', system: 'qimen', question: JSON.stringify(qimen) }] } }];
-            else if (!results.some(message => message.toolName === 'select_final_artifacts')) content = [{ type: 'toolCall', id: 'select', name: 'select_final_artifacts', arguments: { artifactIds: [...store.drafts.values()].filter(item => item.kind === 'calculation').map(item => item.id) } }];
             else content = [{ type: 'text', text: '两个体系的实际盘面已汇总。' }];
         } else {
             requests.push({ model: model.id, effort: options?.reasoning });
@@ -109,15 +108,15 @@ test('parallel children are isolated, all token usage is projected, and interrup
     };
     await executeAgentRun(store, run, abort.signal, { config, configs, streamFn: stream });
     assert.equal(store.writes.filter(write => write.name === 'agent_finish_run').length, 0);
-    assert.equal((await store.artifacts()).length, 2);
+    assert.equal(store.calculations().length, 2);
     run.checkpoint = structuredClone(store.writes.findLast(write => write.name === 'agent_durable_commit')!.args.p_checkpoint) as typeof run.checkpoint;
     await executeAgentRun(store, run, undefined, { config, configs, streamFn: stream });
     const finished = store.writes.findLast(write => write.name === 'agent_finish_run')!;
     assert.equal(finished.args.p_status, 'completed');
     assert.equal(store.writes.filter(write => write.name === 'agent_cache_tool' && write.args.p_kind === 'calculation').length, 2);
     const checkpoint = finished.args.p_checkpoint as typeof run.checkpoint;
-    assert.equal(checkpoint.finalArtifacts.length, 2);
-    assert.ok(checkpoint.runtime!.usage!.totalTokens >= 90, 'child generations count toward task usage');
+    // Two root generations and three per member, ten tokens each.
+    assert.ok(checkpoint.runtime!.usage!.totalTokens >= 80, 'child generations count toward task usage');
     assert.ok(childOffers.some(names => names.includes('qimen') && !names.includes('bazi')));
     assert.ok(childOffers.some(names => names.includes('bazi') && !names.includes('qimen')));
     assert.ok(requests.some(request => request.model === 'bazi-model' && request.effort === 'max'));
@@ -132,7 +131,7 @@ test('parallel children are isolated, all token usage is projected, and interrup
     assert.ok(checkpoint.runtime!.usage!.models['taibu/qimen-model']);
     assert.equal(store.writes.filter(write => /create_run|deduct|charge|credit/.test(write.name)).length, 0);
     await assertAgentEvaluation(run, 'bazi', [...store.drafts.values()]);
-    const artifact = (await store.artifacts())[0];
+    const [artifact] = store.calculations();
     await assert.rejects(assertAgentEvaluation(run, 'tarot', [artifact]));
     await assert.rejects(assertAgentEvaluation(run, artifact.tool_name, [{ ...artifact, result: { ...artifact.result, canonicalText: 'wrong chart' } }]));
 });

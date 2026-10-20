@@ -643,9 +643,6 @@ CREATE TABLE public.agent_run_artifacts (
   kind text NOT NULL CHECK (kind IN ('calculation','tool')),
   args jsonb NOT NULL,
   result jsonb NOT NULL,
-  chart_payload jsonb,
-  chart_id uuid,
-  chart_type text,
   UNIQUE (run_id, call_id)
 );
 CREATE TABLE public.agent_run_credentials (

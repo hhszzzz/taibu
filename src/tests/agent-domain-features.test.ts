@@ -94,7 +94,7 @@ test('parallel children are isolated, all token usage is projected, and interrup
             else content = [{ type: 'text', text: '两个体系的实际盘面已汇总。' }];
         } else {
             requests.push({ model: model.id, effort: options?.reasoning });
-            childOffers.push(names); assert.ok(!names.includes('ask_user') && !names.includes('parallel_analysis') && !names.some(name => name.startsWith('mcp__')));
+            childOffers.push(names); assert.ok(!names.includes('ask_user') && !names.includes('parallel_analysis') && !names.includes('background_agent') && !names.some(name => name.startsWith('mcp__')));
             const tool = names.includes('qimen') ? 'qimen' : 'bazi';
             if (!results.some(message => message.toolName === 'load_analysis_method')) content = [{ type: 'toolCall', id: 'guide', name: 'load_analysis_method', arguments: { id: tool } }];
             else if (!results.some(message => message.toolName === tool)) content = [{ type: 'toolCall', id: 'chart', name: tool, arguments: tool === 'bazi' ? bazi : qimen }];
@@ -119,6 +119,9 @@ test('parallel children are isolated, all token usage is projected, and interrup
     assert.ok(checkpoint.runtime!.usage!.totalTokens >= 80, 'child generations count toward task usage');
     assert.ok(childOffers.some(names => names.includes('qimen') && !names.includes('bazi')));
     assert.ok(childOffers.some(names => names.includes('bazi') && !names.includes('qimen')));
+    // A member has no tool search, so its system's deferred drilldowns and calculations are offered at once.
+    assert.ok(childOffers.some(names => names.includes('bazi') && names.includes('bazi_relations') && names.includes('bazi_dayun')));
+    assert.ok(childOffers.some(names => names.includes('qimen') && names.includes('qimen_palace')));
     assert.ok(requests.some(request => request.model === 'bazi-model' && request.effort === 'max'));
     assert.ok(requests.some(request => request.model === 'qimen-model' && request.effort === 'xhigh'));
     assert.ok(requests.every(request => request.model !== config.id), 'children never silently use the root model');

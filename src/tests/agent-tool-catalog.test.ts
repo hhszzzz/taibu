@@ -7,14 +7,15 @@ import { MockLanguageModelV3 } from 'ai/test';
 import type { AgentRunRow } from '../lib/agent/store.server';
 import { CODEMODE_TOOL_NAME } from '@earendil-works/pi-durable/codemode';
 import {
-  AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_DEFERRED_TOOLS, AGENT_DRILLDOWN_BASES, AGENT_MODEL_ONLY_TOOLS, AGENT_PLAN_GATED_TOOLS,
+  AGENT_BACKGROUND_TOOL, AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_DEFERRED_TOOLS, AGENT_DRILLDOWN_BASES, AGENT_MODEL_ONLY_TOOLS, AGENT_PLAN_GATED_TOOLS,
   AGENT_SUBMIT_PLAN_TOOL, AGENT_TOOL_SEARCH_TOOL,
   getAgentDrilldownBase, getAgentExtensionToolTitle, getAgentToolFamily, isAgentDeferredTool,
-  isAgentChartTool, projectsAgentCanonicalText, returnsAgentScriptResult,
+  isAgentChartTool, isAgentMemberTool, projectsAgentCanonicalText, returnsAgentScriptResult,
 } from '../lib/agent/tool-catalog';
 import { getAgentToolText, type AgentToolPart } from '../lib/agent/tool-presentation';
 import { createAgentTools } from '../lib/agent/tools.server';
 import { createParallelExtension } from '../lib/agent/parallel.server';
+import { createBackgroundAgents } from '../lib/agent/background.server';
 import { executeAgentRun } from '../lib/agent/runtime.server';
 import { config, MemoryStore, row, scripted } from './helpers/agent-runtime-fixture';
 
@@ -47,12 +48,15 @@ test('every Core tool and every registered Agent tool belongs to a presentation 
     run.input.memoryEnabled = true;
     const tools = await createAgentTools(new MemoryStore(), run, run.checkpoint);
     const parallel = createParallelExtension([], () => { throw new Error('the harness is not opened in this test'); });
-    const names = [...tools.map((tool) => tool.name), ...(parallel.tools ?? []).map((tool) => tool.name)];
-    assert.ok(names.includes('web_search') && names.includes('remember_user_fact') && names.includes('parallel_analysis'));
+    const background = createBackgroundAgents([]).extension;
+    const names = [...tools.map((tool) => tool.name), ...[...parallel.tools ?? [], ...background.tools ?? []].map((tool) => tool.name)];
+    assert.ok(names.includes('web_search') && names.includes('remember_user_fact') && names.includes('parallel_analysis') && names.includes(AGENT_BACKGROUND_TOOL));
     for (const name of names) assert.notEqual(getAgentToolFamily(name), 'other', `${name} needs a family in tool-catalog.ts`);
-    // Code mode: the tools a script may not call are real tools, and parallel_analysis says so itself.
+    // Code mode: the tools a script may not call are real tools, and the dispatching tools say so themselves.
     for (const name of AGENT_MODEL_ONLY_TOOLS) assert.ok(names.includes(name), `${name} is not a registered tool`);
     assert.deepEqual(parallel.tools?.find(tool => tool.name === 'parallel_analysis')?.callers, ['model']);
+    assert.deepEqual(background.tools?.find(tool => tool.name === AGENT_BACKGROUND_TOOL)?.callers, ['model']);
+    assert.ok(isAgentMemberTool('parallel_analysis') && isAgentMemberTool(AGENT_BACKGROUND_TOOL) && !isAgentMemberTool('bazi'));
     for (const name of names) assert.equal(returnsAgentScriptResult(name), ['chart', 'calculation', 'drilldown'].includes(getAgentToolFamily(name)) && !AGENT_MODEL_ONLY_TOOLS.has(name), name);
   } finally {
     if (previous === undefined) delete process.env.TAVILY_API_KEY;
@@ -69,7 +73,8 @@ test('every Core tool and every registered Agent tool belongs to a presentation 
   assert.equal(getAgentExtensionToolTitle(AGENT_CODEMODE_TOOL), '运行脚本');
   assert.equal(getAgentExtensionToolTitle(AGENT_TOOL_SEARCH_TOOL), '查找工具');
   assert.equal(getAgentExtensionToolTitle(AGENT_SUBMIT_PLAN_TOOL), '提交计划');
-  assert.deepEqual([...AGENT_PLAN_GATED_TOOLS].sort(), ['parallel_analysis', 'remember_user_fact']);
+  assert.equal(getAgentExtensionToolTitle(AGENT_BACKGROUND_TOOL), '后台子分析');
+  assert.deepEqual([...AGENT_PLAN_GATED_TOOLS].sort(), [AGENT_BACKGROUND_TOOL, 'parallel_analysis', 'remember_user_fact']);
   // 低频工具按需加载；外部 MCP 工具同样只在检索后提供。
   for (const name of AGENT_DEFERRED_TOOLS) assert.ok(listToolDefinitions().some(definition => definition.name === name), `${name} is a Core tool`);
   assert.equal(isAgentDeferredTool('mcp__archive__search'), true);

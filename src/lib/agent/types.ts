@@ -74,8 +74,16 @@ export interface AgentRuntimeInfo {
     reasoning?: number;
     compactions: number;
   };
-  activity?: { phase: "preparing" | "generating" | "thinking" | "responding" | "tools" | "compacting" | "retrying" | "awaiting_input" | "settling"; toolTitle?: string; attempt?: number };
+  /** `background`: the main conversation is idle and the task waits for background subagents to report. */
+  activity?: { phase: "preparing" | "generating" | "thinking" | "responding" | "tools" | "compacting" | "retrying" | "awaiting_input" | "background" | "settling"; toolTitle?: string; attempt?: number };
   usage?: { models: Record<string, Partial<Pick<Usage, 'input' | 'output' | 'cacheRead' | 'cacheWrite' | 'totalTokens' | 'reasoning'>>>; tools: Record<string, Partial<Pick<Usage, 'input' | 'output' | 'cacheRead' | 'cacheWrite' | 'totalTokens' | 'reasoning'>>>; totalTokens: number };
+}
+
+/** A background subagent carried into the next task: its name, system and condensed transcript. */
+export interface AgentBackgroundResident {
+  name: string;
+  system: string;
+  messages: Message[];
 }
 
 export interface AgentCheckpoint {
@@ -103,6 +111,11 @@ export interface AgentCheckpoint {
   citations?: { base: number; calls: Record<string, number> };
   /** Suggestions parsed from the latest answer text; the block itself is not shown. */
   followUps?: string[];
+  /**
+   * The conversation's resident background subagents (background.server.ts): written when the task ends and recreated
+   * by the next task that continues this context, each with its requests and answers but not its tool calls.
+   */
+  background?: AgentBackgroundResident[];
   streamingAssistantId?: string;
   runtime?: AgentRuntimeInfo;
   durable: {

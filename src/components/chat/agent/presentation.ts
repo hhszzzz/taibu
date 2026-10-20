@@ -1,6 +1,6 @@
 import type { ChatMessage } from '@/types';
 import { isAgentRunTerminal, type AgentMessageData, type AgentPart, type AgentRunStatus, type AgentRuntimeInfo } from '@/lib/agent/types';
-import { getAgentToolFamily, type AgentToolFamily, AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_SUBMIT_PLAN_TOOL, AGENT_TOOL_SEARCH_TOOL, isAgentChartTool } from '@/lib/agent/tool-catalog';
+import { getAgentToolFamily, type AgentToolFamily, AGENT_BACKGROUND_TOOL, AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_SUBMIT_PLAN_TOOL, AGENT_TOOL_SEARCH_TOOL, isAgentChartTool, isAgentMemberTool } from '@/lib/agent/tool-catalog';
 import { getAgentAttachmentRead, getAgentChart, getAgentDataResults, getAgentMethod, getAgentScript, getAgentSearchResults, getAgentToolArtifactId, getAgentToolQuestions, type AgentChart } from '@/lib/agent/tool-presentation';
 import { getChartFocus, getChartTargets } from '@/lib/agent/chart-interaction';
 import { getSavedChartHref } from '@/lib/agent/chart-save';
@@ -33,6 +33,7 @@ export function getAgentActivityLabel(data: AgentMessageData) {
     const activity = data.runtime?.activity;
     switch (activity?.phase) {
         case 'compacting': return '正在压缩上下文';
+        case 'background': return '等待后台子分析回报';
         case 'tools': return activity.toolTitle ? `正在${activity.toolTitle}` : '正在执行工具';
         case 'thinking': return '正在思考';
         case 'responding': return '正在整理回答';
@@ -43,29 +44,40 @@ export function getAgentActivityLabel(data: AgentMessageData) {
     }
 }
 
+/** Members still analysing on member cards, by name, each once. */
+function analysingMembers(tools: readonly AgentTool[]): string[] {
+    return [...new Set(tools.flatMap(tool => parallelAnalysisResults(tool.output).filter(member => member.status === 'running').map(member => member.name ?? member.system)))];
+}
+
 /**
  * The live line under a running answer: the phase, and while a tool runs what it works on,
- * e.g. 正在定位分析位置 · 月干丁火. A collaboration names the members still analysing instead.
+ * e.g. 正在定位分析位置 · 月干丁火. A collaboration names the members still analysing instead,
+ * and so does a task that only waits for its background subagents.
  */
 export function getAgentLiveLine(data: AgentMessageData): string {
     const label = getAgentActivityLabel(data);
     const phase = data.runtime?.activity?.phase;
+    if (data.status === 'running' && phase === 'background') {
+        const names = analysingMembers(data.parts.filter((part): part is AgentTool => part.type === 'tool' && part.name === AGENT_BACKGROUND_TOOL && part.status === 'running'));
+        return names.length ? `${label} · ${names.join('、')} 正在分析` : label;
+    }
     // A step left marked running must not describe a thinking or answering phase.
     if (data.status !== 'running' || (phase && phase !== 'tools')) return label;
     const tool = data.parts.findLast((part): part is AgentTool => part.type === 'tool' && part.status === 'running');
     if (!tool) return label;
-    if (tool.name === 'parallel_analysis') {
-        const names = parallelAnalysisResults(tool.output).filter(member => member.status === 'running').map(member => member.name ?? member.system);
-        if (names.length) return `等待协作成员 · ${names.join('、')} 正在分析`;
+    if (isAgentMemberTool(tool.name)) {
+        const names = analysingMembers([tool]);
+        if (names.length) return `${tool.name === 'parallel_analysis' ? '等待协作成员' : '后台子分析'} · ${names.join('、')} 正在分析`;
     }
     const head = phase ? label : `正在${tool.title}`;
-    const summary = tool.name === 'parallel_analysis' ? null : summarizeAgentTool(tool);
+    const summary = isAgentMemberTool(tool.name) ? null : summarizeAgentTool(tool);
     return summary ? `${head} · ${summary}` : head;
 }
 
 /** A readable step title when the model left the raw tool name as its title. */
 const RAW_TOOL_TITLES: Record<string, string> = {
     parallel_analysis: '协作分析',
+    [AGENT_BACKGROUND_TOOL]: '后台子分析',
     inspect_chart: '查看命盘',
     focus_chart: '定位分析位置',
     web_search: '联网搜索',
@@ -172,6 +184,12 @@ export function summarizeAgentTool(tool: AgentTool): string | null {
             : Array.isArray(args.tasks) ? args.tasks.flatMap(task => task && typeof task === 'object' && typeof (task as { name?: unknown }).name === 'string' ? [(task as { name: string }).name] : []) : [];
         return names.length ? formatMemberNames(names) : null;
     }
+    if (tool.name === AGENT_BACKGROUND_TOOL) {
+        const action = typeof args.action === 'string' ? BACKGROUND_ACTION_LABELS[args.action] : undefined;
+        if (args.action === 'status') return action ?? null;
+        const name = typeof args.name === 'string' && args.name.trim() ? args.name.trim() : null;
+        return [name, action].filter(Boolean).join(' · ') || null;
+    }
     if (tool.name === 'ask_user') {
         const count = getAgentToolQuestions(tool).length;
         return count ? `${count} 个问题` : null;
@@ -204,6 +222,20 @@ export function summarizeAgentTool(tool: AgentTool): string | null {
     }
     for (const key of ['query', 'name', 'type']) if (typeof args[key] === 'string') return (args[key] as string).slice(0, 120);
     return null;
+}
+
+const BACKGROUND_ACTION_LABELS: Partial<Record<string, string>> = {
+    spawn: '新建并交给任务', send: '追加任务', stop: '中止当前工作', dismiss: '解散', status: '查看子分析状态',
+};
+
+/**
+ * The line under a member: what it was asked to cover. A collaboration member has the user's configured focus; a
+ * background subagent has the message the main agent sent it.
+ */
+export function getAgentMemberBrief(tool: AgentTool, member: Pick<ParallelAnalysisResult, 'focus'>): string | null {
+    if (member.focus) return member.focus;
+    const message = tool.name === AGENT_BACKGROUND_TOOL ? toolArgs(tool).message : undefined;
+    return typeof message === 'string' && message.trim() ? message.trim() : null;
 }
 
 /** 协作成员名称连成一行；超出字数的名字收成「等 N 位」，免得步骤行被撑开。 */
@@ -285,8 +317,15 @@ function collaborationMembers(tool: AgentTool): number {
 export function summarizeAgentActivity(tools: readonly AgentTool[], questionCount: number, failed: number): string {
     const counts = new Map<AgentToolFamily, number>();
     let members = 0;
+    // A background subagent counts once, when it is started; later messages go to the same one.
+    const subagents = new Set<string>();
     for (const tool of tools) {
         const family = getAgentToolFamily(tool.name);
+        if (tool.name === AGENT_BACKGROUND_TOOL) {
+            const args = toolArgs(tool);
+            if (args.action === 'spawn' && typeof args.name === 'string' && tool.status !== 'failed') subagents.add(args.name);
+            continue;
+        }
         if (family === 'collaboration') { members += collaborationMembers(tool); continue; }
         if (family === 'plan') continue;
         counts.set(family, (counts.get(family) ?? 0) + 1);
@@ -294,7 +333,7 @@ export function summarizeAgentActivity(tools: readonly AgentTool[], questionCoun
     const phrases = (Object.keys(FAMILY_PHRASES) as AgentToolFamily[])
         .flatMap(family => counts.has(family) ? [FAMILY_PHRASES[family]!(counts.get(family)!)] : []);
     if (questionCount) phrases.push(`已确认 ${questionCount} 项信息`);
-    if (members) phrases.push(`开启 ${members} 个智能体`);
+    if (members + subagents.size) phrases.push(`开启 ${members + subagents.size} 个智能体`);
     const text = phrases.join('，');
     return `${text || '任务过程'}${failed ? `，${failed} 处失败` : ''}`;
 }

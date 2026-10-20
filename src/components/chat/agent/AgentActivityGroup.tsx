@@ -4,14 +4,14 @@
 import { useId, useState, type ReactNode } from 'react';
 import { ChevronRight, LoaderCircle, PanelRight, Pause } from 'lucide-react';
 import type { AgentMessageData, AgentPart } from '@/lib/agent/types';
-import { AGENT_SUBMIT_PLAN_TOOL, getAgentToolFamily } from '@/lib/agent/tool-catalog';
+import { AGENT_SUBMIT_PLAN_TOOL, getAgentToolFamily, isAgentMemberTool } from '@/lib/agent/tool-catalog';
 import { getAgentToolQuestionIds } from '@/lib/agent/workspace';
 import { getAgentAttachmentRead, getAgentChart, getAgentDataResults, getAgentMemories, getAgentMethod, getAgentMethodCatalog, getAgentProfile, getAgentScript, getAgentToolQuestions, getAgentToolText } from '@/lib/agent/tool-presentation';
 import { useIsDesktopLayout } from '@/lib/hooks/useIsDesktopLayout';
 import { useTranscriptRecordView } from '@/lib/chat/chat-record-view';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { ThinkingBlock } from '../ThinkingBlock';
-import { describeAgentStep, formatAgentValue, getAgentLiveLine, getAgentScriptCalls, getAgentToolTitle, getParallelMemberState, summarizeAgentActivity, type AgentProcessPart, type AgentTool } from './presentation';
+import { describeAgentStep, formatAgentValue, getAgentLiveLine, getAgentMemberBrief, getAgentScriptCalls, getAgentToolTitle, getParallelMemberState, summarizeAgentActivity, type AgentProcessPart, type AgentTool } from './presentation';
 import { memberAnswerText, parallelAnalysisResults } from '@/lib/agent/parallel-results';
 import { ModelAvatar } from './ModelAvatar';
 import { getChartFocus, getChartTargets, getAgentChartReference, parseChartReference } from '@/lib/agent/chart-interaction';
@@ -160,7 +160,7 @@ function AgentStepCall({ tool, runStatus, parts }: { tool: AgentTool; runStatus:
     const entries = tool.input && typeof tool.input === 'object' && !Array.isArray(tool.input)
         ? Object.entries(tool.input as Record<string, unknown>)
         : null;
-    const members = tool.name === 'parallel_analysis' ? parallelAnalysisResults(tool.output) : [];
+    const members = isAgentMemberTool(tool.name) ? parallelAnalysisResults(tool.output) : [];
     // 结构化结果（定位、提问、记忆、资料…）自己带「查看…」入口，不再重复「在工作区查看」。
     const structured = members.length === 0 && state !== 'running' ? StepStructured({ tool, parts, workspace }) : null;
     const selfContained = members.length > 0 || structured !== null;
@@ -177,7 +177,8 @@ function AgentStepCall({ tool, runStatus, parts }: { tool: AgentTool; runStatus:
             {members.map(member => {
                 const status = getParallelMemberState(member, state);
                 const name = member.name ?? member.system;
-                const preview = member.answer ? previewLine(memberAnswerText(member.answer)) : member.focus ?? null;
+                const brief = getAgentMemberBrief(tool, member);
+                const preview = member.answer ? previewLine(memberAnswerText(member.answer)) : brief && previewLine(brief);
                 const content = <>
                     <ModelAvatar member={member} size={16} className="agent-step-entity-icon" />
                     <span className="agent-step-entity-main">

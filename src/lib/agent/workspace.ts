@@ -11,7 +11,7 @@
 import type { ChatMessage } from '@/types';
 import { isAgentRunTerminal, type AgentPart, type AgentRunStatus } from './types';
 import type { AgentAnswers } from './questions';
-import { AGENT_CHART_NAMES, AGENT_SUBMIT_PLAN_TOOL, getAgentDrilldownBase, getAgentToolFamily, isAgentChartTool, type AgentToolFamily } from './tool-catalog';
+import { AGENT_BACKGROUND_TOOL, AGENT_CHART_NAMES, AGENT_SUBMIT_PLAN_TOOL, getAgentDrilldownBase, getAgentToolFamily, isAgentChartTool, type AgentToolFamily } from './tool-catalog';
 import { getAgentChart, getAgentDataResults, getAgentMethod, getAgentAttachmentRead, type AgentToolPart } from './tool-presentation';
 import { CHART_SOURCE_KINDS, getAgentChartReference, getChartFocus, parseChartReference } from './chart-interaction';
 import { getAgentEvidence, type AgentEvidence } from './evidence';
@@ -162,6 +162,14 @@ export function buildAgentWorkspace({ parts, artifacts, attachmentIds }: { parts
         add('question:' + tool.id, { view: 'question', family, title: '补充信息' }, tool);
         break;
       case 'collaboration': {
+        if (tool.name === AGENT_BACKGROUND_TOOL) {
+          // A message to a background subagent is that subagent's page for this message; status and stop have none.
+          const [member] = parallelAnalysisResults(tool.output);
+          if (member) add('member:' + tool.id + ':' + member.conversationId,
+            { view: 'member', family, title: member.name ?? member.system, member: { toolId: tool.id, conversationId: member.conversationId } }, tool);
+          else add('tool:' + tool.id, { view: 'tool', family, title: tool.title }, tool);
+          break;
+        }
         add('tool:' + tool.id, { view: 'collaboration', family, title: parallelAnalysisTitle(tool.output) ?? '协作分析' }, tool);
         // 每位成员单独一页：点成员名直接打开它的分析过程与结论，和命盘页并列。
         for (const member of parallelAnalysisResults(tool.output)) {
@@ -258,6 +266,8 @@ export function getAgentWorkspaceAutoOpenEvent(parts: AgentPart[]): string | nul
     const part = parts[index];
     if (part.type !== 'tool' || !AGENT_WORKSPACE_AUTO_OPEN.includes(getAgentToolFamily(part.name))) continue;
     if (getAgentToolFamily(part.name) === 'chart' && !getChartFocus(part) && !getAgentChart(part)) continue;
+    // Checking on, stopping or dismissing subagents shows no member to follow.
+    if (part.name === AGENT_BACKGROUND_TOOL && !parallelAnalysisResults(part.output).length) continue;
     return part.id;
   }
   return null;

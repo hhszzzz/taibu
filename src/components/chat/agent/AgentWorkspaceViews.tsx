@@ -11,7 +11,7 @@ import {
 } from '@/lib/agent/tool-presentation';
 import { AGENT_EVIDENCE_KINDS, AGENT_EVIDENCE_LABELS, countAgentEvidence, type AgentEvidence, type AgentEvidenceKind } from '@/lib/agent/evidence';
 import { getChartTargets, parseChartReference, type ChartFocus } from '@/lib/agent/chart-interaction';
-import { isAgentChartTool } from '@/lib/agent/tool-catalog';
+import { AGENT_BACKGROUND_TOOL, isAgentChartTool } from '@/lib/agent/tool-catalog';
 import { questionLabel } from '@/lib/agent/questions';
 import { describeQuestionAnswer, getDraftAnswers } from '@/lib/agent/question-drafts';
 import { useQuestionDraft } from '@/lib/agent/use-question-draft';
@@ -27,7 +27,7 @@ import { useTranscriptRecordView } from '@/lib/chat/chat-record-view';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { useToast } from '@/components/ui/Toast';
 import { mentionTypeLabels } from '@/components/chat/mentionStyles';
-import { describeAgentChartSubject, formatAgentToolDuration, formatAgentValue, getAgentToolState, getAgentToolTitle, getParallelMemberState, stripLeadingTitle, summarizeAgentActivity, summarizeAgentTool } from './presentation';
+import { describeAgentChartSubject, formatAgentToolDuration, formatAgentValue, getAgentMemberBrief, getAgentToolState, getAgentToolTitle, getParallelMemberState, stripLeadingTitle, summarizeAgentActivity, summarizeAgentTool } from './presentation';
 import { CopyButton } from './AgentToolCard';
 import { PrivateAttachmentPreview } from './PrivateAttachments';
 import { ChartMiniPreview } from './chart-preview';
@@ -692,13 +692,16 @@ export function MemberView({ tool, member, runStatus, step }: ToolViewProps & { 
     const name = member.name ?? member.system;
     const answer = member.answer && memberAnswerText(member.answer);
     const positions = Object.entries(member.positions ?? {});
+    // A background subagent works on the message the main agent sent it, and reports back when it is done.
+    const background = tool.name === AGENT_BACKGROUND_TOOL;
+    const brief = getAgentMemberBrief(tool, member);
     const meta = [member.modelName ?? member.model ?? '主模型', effortLabel(member.reasoningEffort),
         member.durationMs !== undefined && state.state === 'completed' ? `用时 ${formatAgentToolDuration(member.durationMs)}` : null].filter(Boolean).join(' · ');
     return <section className="agent-ws-view agent-ws-member-page" aria-labelledby={id}>
         <header className="agent-ws-member-hero">
             <ModelAvatar member={member} size={22} className="agent-ws-member-hero-icon" />
             <div className="agent-ws-member-hero-text">
-                <p className="agent-ws-kicker">{kickerOf(step, '协作成员', '独立分析，结论由主模型汇总')}</p>
+                <p className="agent-ws-kicker">{background ? kickerOf(step, '后台子分析', '在后台独立工作，完成后回报主模型') : kickerOf(step, '协作成员', '独立分析，结论由主模型汇总')}</p>
                 <h2 id={id} className="agent-ws-member-title">{name}</h2>
                 <p className="agent-ws-member-meta">
                     <span>{meta}</span>
@@ -709,13 +712,13 @@ export function MemberView({ tool, member, runStatus, step }: ToolViewProps & { 
                 </p>
             </div>
         </header>
-        {member.focus && <div className="agent-ws-member-brief"><span>分工</span><p>{member.focus}</p></div>}
+        {brief && <div className="agent-ws-member-brief"><span>{background ? '任务' : '分工'}</span><p>{brief}</p></div>}
         <div className="agent-ws-member-transcript">
             {member.steps?.length ? <MemberProcess member={member} running={state.state === 'running'} />
                 : state.state === 'running' ? <p className="agent-ws-running" role="status"><LoaderCircle size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />正在分析</p>
                 : member.toolCalls ? <p className="agent-ws-member-calls">调用了 {member.toolCalls} 次工具</p> : null}
             {answer ? <div className="agent-ws-member-answer"><MarkdownContent content={answer} className="chat-prose" /></div>
-                : state.state === 'failed' && <p className="agent-ws-note">这位成员没有完成分析，它的结论不会汇入主回答。</p>}
+                : state.state === 'failed' && <p className="agent-ws-note">{background ? '这项任务没有完成（可能已被中止），没有回报给主模型。' : '这位成员没有完成分析，它的结论不会汇入主回答。'}</p>}
             {positions.length > 0 && <section className="agent-ws-member-positions" aria-label="这位成员的立场">
                 <h3>立场</h3>
                 <dl>{positions.map(([topic, stance]) => <div key={topic}><dt>{topic}</dt><dd>{stance}</dd></div>)}</dl>

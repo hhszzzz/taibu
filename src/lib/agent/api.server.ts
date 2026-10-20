@@ -441,6 +441,8 @@ export async function createAgentTask(request: NextRequest) {
     parts: [],
     // Evidence numbers continue across the visible branch, so a new answer never reuses one.
     citations: { base: getAgentCitationBase(history), calls: {} },
+    // Background subagents continue with the context they belong to; a rebuilt context starts without them.
+    ...(replay && previous?.checkpoint.background?.length ? { background: previous.checkpoint.background } : {}),
   };
   const assistant: ChatMessage = {
     id: `agent:${runId}`,

@@ -102,12 +102,39 @@ function showcaseReply(body, messages, completed) {
   return {content:(typeof scenario.answer==='function'?scenario.answer(context):scenario.answer)+SHOWCASE_NOTE};
 }
 
+const textOf=message=>typeof message?.content==='string'?message.content:Array.isArray(message?.content)?message.content.map(part=>part?.text??'').join(''):'';
+const BACKGROUND_REPORT='[后台子分析「八字复核」回报]';
+
+/**
+ * 后台子分析验收：主 Agent 派出（追问时改为 send）后先作答，回报作为新一轮输入到达后再整合；
+ * 子分析排一次盘作答，追问时凭记住的上一轮结论作答，不再排盘。
+ */
+function backgroundReply(body, messages, completed) {
+  const users=messages.filter(message=>message.role==='user');
+  const latest=users.findLast(message=>!textOf(message).startsWith('[后台子分析'));
+  if(!textOf(latest).includes('Agent验收：后台子分析'))return null;
+  const followUp=textOf(latest).includes('追问');
+  if(body.tools.some(tool=>tool.function?.name==='background_agent')) {
+    if(textOf(users.at(-1)).startsWith(BACKGROUND_REPORT))return {content:`已整合后台子分析的回报：${followUp?'2028 年的追问':'八字复核'}已核对。此回复仅用于测试。`};
+    const id=followUp?'fixture-background-send':'fixture-background';
+    if(!completed.has(id))return call(id,'background_agent',followUp
+      ?{action:'send',name:'八字复核',message:'Agent验收：后台子分析追问任务，请接着看 2028 年。'}
+      :{action:'spawn',name:'八字复核',system:'bazi',message:'Agent验收：后台子分析任务，男性，1990年1月15日9时，请排盘并返回依据。'});
+    return {content:'主分析先行：八字复核在后台工作，回报到达后整合。此回复仅用于测试。'};
+  }
+  if(followUp)return {content:`后台子分析追问完成；${messages.some(message=>message.role==='assistant'&&textOf(message).includes('后台子分析完成'))?'记得此前的结论':'没有此前的结论'}。此结论仅用于测试。`};
+  if(!completed.has('fixture-background-bazi'))return call('fixture-background-bazi','bazi',{gender:'male',birthYear:1990,birthMonth:1,birthDay:15,birthHour:9});
+  return {content:`后台子分析完成；${String(completed.get('fixture-background-bazi')).match(/命盘引用: artifact:[a-f0-9-]{36}/iu)?.[0]??''}。此结论仅用于测试。`};
+}
+
 function agentReply(body) {
   if(!body.tools?.some(tool=>tool.function?.name==='bazi'))return {content};
   const messages=body.messages??[];
   const completed=new Map(messages.filter(message=>message.role==='tool').map(message=>[message.tool_call_id,message.content]));
   const showcase=showcaseReply(body,messages,completed);
   if(showcase)return showcase;
+  const background=backgroundReply(body,messages,completed);
+  if(background)return background;
   const first=messages.find(message=>message.role==='user'&&String(message.content).includes('Agent验收：'));
   if(!first)return {content};
   const parallel=body.tools.find(tool=>tool.function?.name==='parallel_analysis');

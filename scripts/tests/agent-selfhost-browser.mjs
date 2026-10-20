@@ -771,6 +771,27 @@ try {
   assert.equal(await credits(), beforeCrash - 1, '/compact is free');
   console.log('Agent 浏览器：/compact 命令菜单、免费压缩任务与结果展示通过。');
 
+  // 后台子分析：主 Agent 派出后先作答，任务等回报到达、整合后才结束；下一轮 send 给同一子分析，它记得上一轮的结论。
+  await newChat();
+  const beforeBackground = await credits();
+  const subagentCard = (run) => run.message.agent.parts.find((part) => part.type === 'tool' && part.name === 'background_agent');
+  const background = await send('Agent验收：后台子分析，请派出八字复核后先给出主分析。');
+  const reported = await waitForRun(background.run.id, 'completed', 360);
+  await page.locator(`[data-message-id="agent:${background.run.id}"] [data-agent-status="completed"]`).waitFor();
+  const [spawned] = subagentCard(reported).output.analyses;
+  assert.deepEqual([spawned.name, spawned.status], ['八字复核', 'completed']);
+  assert.match(spawned.answer, /后台子分析完成/u);
+  assert.ok(spawned.steps.some((step) => step.name === 'bazi'), 'the subagent computed with the real tool');
+  assert.match(reported.message.content, /已整合后台子分析的回报：八字复核已核对/u);
+  const continuing = await send('Agent验收：后台子分析追问，请让八字复核接着看 2028 年。');
+  const continued = await waitForRun(continuing.run.id, 'completed', 360);
+  const sent = subagentCard(continued);
+  assert.equal(sent.input.action, 'send');
+  assert.match(sent.output.analyses[0].answer, /记得此前的结论/u, 'the next task recreates the subagent with its memory');
+  assert.match(continued.message.content, /2028 年的追问已核对/u);
+  assert.equal(await credits(), beforeBackground - 2, 'each task with background subagents is charged once');
+  console.log('Agent 浏览器：后台子分析派出、等待回报、整合、跨任务常驻与单次计费通过。');
+
   await newChat();
   await uiReady();
   await page.getByRole("radio", { name: "对话", exact: true }).click();

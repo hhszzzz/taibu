@@ -62,11 +62,19 @@ export const AGENT_TOOL_SEARCH_TOOL = 'tool_search';
 /** The plan-mode tool (`runtime.server.ts`): submits a plan and waits for the user's decision. */
 export const AGENT_SUBMIT_PLAN_TOOL = 'submit_plan';
 
+/** The tool that manages a conversation's background subagents (`background.server.ts`). */
+export const AGENT_BACKGROUND_TOOL = 'background_agent';
+
+/** Tools whose cards list members: a collaboration's, or the one subagent a background message went to. */
+export function isAgentMemberTool(name: string): boolean {
+  return name === 'parallel_analysis' || name === AGENT_BACKGROUND_TOOL;
+}
+
 /**
  * Tools a plan-mode task may not use until the user approves its plan: writing memory and dispatching members are the
  * execution the plan asks about. Research tools stay available, so the plan can be grounded.
  */
-export const AGENT_PLAN_GATED_TOOLS: ReadonlySet<string> = new Set(['remember_user_fact', 'parallel_analysis']);
+export const AGENT_PLAN_GATED_TOOLS: ReadonlySet<string> = new Set(['remember_user_fact', 'parallel_analysis', AGENT_BACKGROUND_TOOL]);
 
 /**
  * Tools the model loads on demand instead of being offered every request: the drilldowns and calculations a reading
@@ -91,6 +99,7 @@ const EXTENSION_TOOL_TITLES: Readonly<Record<string, string>> = {
   [AGENT_CODEMODE_TOOL]: '运行脚本',
   [AGENT_TOOL_SEARCH_TOOL]: '查找工具',
   [AGENT_SUBMIT_PLAN_TOOL]: '提交计划',
+  [AGENT_BACKGROUND_TOOL]: '后台子分析',
 };
 
 export function getAgentExtensionToolTitle(name: string): string | undefined {
@@ -104,6 +113,7 @@ export function getAgentExtensionToolTitle(name: string): string | undefined {
 export const AGENT_MODEL_ONLY_TOOLS: ReadonlySet<string> = new Set([
   'ask_user', 'todo_write', 'inspect_chart', 'focus_chart', 'web_search', 'search_knowledge', 'read_attachment',
   'list_analysis_methods', 'load_analysis_method', 'read_user_memory', 'remember_user_fact', 'parallel_analysis',
+  AGENT_BACKGROUND_TOOL,
 ]);
 
 /** Charts, calculations and drilldowns give scripts `{ artifactId?, text, data }`; other tools give their text. */
@@ -130,6 +140,7 @@ const TOOL_FAMILIES: ReadonlyMap<string, AgentToolFamily> = new Map<string, Agen
   ['todo_write', 'plan'],
   ['ask_user', 'question'],
   ['parallel_analysis', 'collaboration'],
+  [AGENT_BACKGROUND_TOOL, 'collaboration'],
   ['read_user_memory', 'memory'],
   ['remember_user_fact', 'memory'],
   [AGENT_CODEMODE_TOOL, 'code'],

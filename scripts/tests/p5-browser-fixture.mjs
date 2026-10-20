@@ -158,6 +158,18 @@ function AgentResultsProbe() {
         ] } : { steps: [{ name: 'bazi', title: '八字排盘', status: 'completed' }, { name: 'read_user_data', title: '读取官禄宫', status: 'running' }] }) },
     ] })),
   }]);
+  // A background subagent working on, then answering, the message the main agent sent it; null takes it away again.
+  window.fixture.backgroundResults = completed => {
+    setRuntime(completed === null ? undefined : JSON.parse(JSON.stringify({ model: { id: 'fixture-model', name: '主模型', contextWindow: null, limitSource: 'unknown' }, activity: { phase: completed ? 'responding' : 'background' } })));
+    setParts(previous => [...previous.filter(part => part.id !== 'background'), ...(completed === null ? [] : [{
+      type: 'tool', id: 'background', name: 'background_agent', title: '后台子分析', status: completed ? 'completed' : 'running',
+      input: { action: 'spawn', name: '八字复核', system: 'bazi', message: '请排盘并看 2027 年事业。' },
+      output: JSON.parse(JSON.stringify({ action: 'spawn', name: '八字复核', system: 'bazi', conversationId: 21, reporterId: 7, analyses: [
+        { system: 'bazi', conversationId: 21, name: '八字复核', status: completed ? 'completed' : 'running',
+          ...(completed ? { answer: '2027 年事业有变动。', toolCalls: 1, durationMs: 9000, steps: [{ name: 'bazi', title: '八字排盘', status: 'completed' }] } : { steps: [{ name: 'bazi', title: '八字排盘', status: 'running' }] }) },
+      ] })),
+    }])]);
+  };
   // An answer citing the two passages its own search returned, numbered after the evidence already shown.
   window.fixture.citedAnswer = () => setParts(previous => {
     const rest = previous.filter(part => !part.id.startsWith('cited-'));
@@ -2084,6 +2096,9 @@ export async function run(existingPage, bundlePath) {
       await interactive.locator('.agent-chart-scroll [data-relation-edge][data-relation-shape="inline"]').count() === adjacentStemFlow + 1 &&
       await interactive.locator('[data-chart-kind="bazi"] tr[data-row="stem"] > td').evaluateAll(cells => cells.every(cell => !cell.style.paddingTop)));
     // 太卜在看日支：宿主带 data-relation-spotlight，只有日支亮着，没在看的线与字退后（透明度由样式给出，这里验标记）。
+    // 上面点过日干，指针还停在盘上；悬停优先于太卜在看的位置，先把指针移出盘面再看。
+    await page.mouse.move(0, 0);
+    await renderBarrier();
     const lit = () => interactive.locator('.agent-chart-scroll [data-relation-cell][data-relation-lit]').evaluateAll(nodes => nodes.map(node => node.dataset.relationCell).sort());
     const litEdges = () => edges.evaluateAll(nodes => nodes.filter(node => node.dataset.lit).map(node => node.dataset.relationEdge));
     check('While the model looks at the day branch, the other lines and glyphs recede', await interactive.locator('.agent-interactive-chart[data-viewing]').count() === 1 &&
@@ -2275,6 +2290,26 @@ export async function run(existingPage, bundlePath) {
     // Close this call's tab so the family section below starts from its own opened views.
     await page.getByRole('button', { name: '关闭两派会诊标签', exact: true }).click();
     await page.getByRole('button', { name: '关闭工作区', exact: true }).click();
+
+    // A background subagent: the task waits for its report, and its step opens its page with the message it was sent.
+    await page.evaluate(() => { window.fixture.agentRunStatus('running'); window.fixture.backgroundResults(false); });
+    await renderBarrier();
+    check('While only a background subagent works, the live line says what the task waits for', await results.locator('.agent-live-activity').innerText() === '等待后台子分析回报 · 八字复核 正在分析');
+    const processToggle = results.getByRole('button', { name: /任务过程/ });
+    if (await processToggle.getAttribute('aria-expanded') !== 'true') await processToggle.click();
+    const backgroundStep = results.locator('.agent-step').filter({ has: page.locator('.agent-step-title', { hasText: '后台子分析' }) });
+    if (await backgroundStep.locator('.agent-step-row').getAttribute('aria-expanded') !== 'true') await backgroundStep.locator('.agent-step-row').click();
+    await backgroundStep.locator('.agent-step-entities[aria-label="协作成员"] button').filter({ hasText: '八字复核' }).click();
+    const subagentPage = page.locator('#agent-workspace-panel [data-workspace-view="member"]');
+    await subagentPage.waitFor();
+    check('A background step opens the subagent’s page with the task it was given and its calls so far', await subagentPage.innerText().then(text =>
+      text.includes('后台子分析') && text.includes('请排盘并看 2027 年事业。') && text.includes('八字排盘')));
+    await page.evaluate(() => { window.fixture.backgroundResults(true); window.fixture.agentRunStatus('completed'); });
+    await renderBarrier();
+    check('Once it reports, the subagent’s page shows its answer', await subagentPage.innerText().then(text => text.includes('2027 年事业有变动。') && !text.includes('正在分析')));
+    await page.getByRole('button', { name: '关闭工作区', exact: true }).click();
+    await page.evaluate(() => window.fixture.backgroundResults(null));
+    await renderBarrier();
 
     // Tool families: every call reaches its own workspace view from the chat, and following tracks the latest call.
     await page.setViewportSize({ width: 1440, height: 1000 });

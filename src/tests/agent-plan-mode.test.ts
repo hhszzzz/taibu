@@ -110,6 +110,17 @@ test('a revision keeps the task gated until a later plan is approved', async () 
   assert.equal((finished(store).args.p_checkpoint as AgentRunRow['checkpoint']).planApproved, true);
 });
 
+test('plan mode keeps background subagents for after the approval', async () => {
+  const store = new MemoryStore(), run = row();
+  run.input.planMode = true;
+  await executeAgentRun(store, run, undefined, { config, streamFn: scripted(index => index === 0
+    ? [{ type: 'toolCall', id: 'spawn', name: 'background_agent', arguments: { action: 'spawn', name: '八字复核', system: 'bazi', message: '看事业' } }]
+    : [{ type: 'toolCall', id: 'plan', name: 'submit_plan', arguments: { plan: '先排八字，再请八字复核看事业。' } }]) });
+  assert.equal(finished(store).args.p_status, 'awaiting_input');
+  assert.match(text(results(store).find(message => message.toolName === 'background_agent')!), /计划尚未批准/u);
+  assert.equal((finished(store).args.p_checkpoint as AgentRunRow['checkpoint']).background, undefined, 'nothing was started');
+});
+
 test('an answer before the plan is nudged back, at most twice', async () => {
   const store = new MemoryStore(), run = row();
   run.input.planMode = true;

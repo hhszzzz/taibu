@@ -38,6 +38,7 @@ import { commitSummary, generateSummary, readSummary } from './summary-usage.ser
 import { createGuardedAgentModels, type GuardedAgentModel } from './model-registry.server';
 import { parseAgentCollaborators } from '@/lib/chat/model-settings';
 import { createParallelExtension } from './parallel.server';
+import { BACKGROUND_POLL_MS, createBackgroundAgents, pendingBackgroundReports, projectBackgroundAgents, residentBackgroundAgents } from './background.server';
 import { parallelAnalysisResults } from './parallel-results';
 import { connectAgentMcp, parseAgentMcpServers } from './mcp-client.server';
 import { projectAgentUsage } from './usage';
@@ -52,7 +53,7 @@ search_knowledge、web_search 的每条结果和 focus_chart 的结果带 cite �
 分析所有占术时先用 inspect_chart 在右侧工作区查看原盘并取得真实定位目标。计算成果引用 artifact:成果ID，已存资料使用 read_user_data 返回的命盘引用。进入新的分析主题前，用 focus_chart 展示当前分析位置并写简短主题：八字的柱位、日支、生克刑害合冲；紫微的宫位星曜；奇门的宫、门、星、神及天地盘干；六爻的本变卦、爻位与伏神；梅花的本互变卦、体用与阶段；大六壬的四课三传、天地盘及天将；小六壬的推演步骤及落宫；塔罗的具体牌位；太乙的观测层、十六宫及星将；占星的星体、宫头与相位；黄历的宜忌、方位和时辰。紫微星曜先按宫名再次 inspect_chart 获取该宫目标，三方四正及其他关联位置用 includeRelated 控制。只引用该盘实际返回的目标 ID，不猜坐标、不修改排盘数据；旧盘缺少字段时说明边界。工具定位与读取不产生新计算成果。
 排盘后需要局部细节时优先用详查工具（如 bazi_relations 查岁运叠加后的刑冲合害，原局关系看命盘的干支关系），传同一个命盘引用与查询参数，不重复传出生信息；详查只给命盘之外的事实，不重复命盘已有内容。只问某柱、某类关系或某几组事实时用该工具的筛选参数（如 pillars、types、sections、focus）只取所需。筛选结果中的同字牵连须与所列关系一并解读；未列出表示另有事实未展开，确需时去掉筛选再查；默认不附判定口径，要向用户说明规则时再传 detailLevel=full。详查返回的事实可作为解读依据，所查位置会在工作区自动标出，无需再 focus_chart。详查也不产生新成果。
 工具执行失败时如实处理，可调整参数或追问。当前用户身份由服务端确定，不能指定其他用户。
-信息完整且需要交叉分析多个体系时可使用 parallel_analysis，由当前任务汇总；给出简短 title，并用 topics 列出需要每位成员表态的关键议题，判断类议题提供 2–4 个互斥 options，便于对照分歧。长期记忆仅在用户已开启时可用，按需读取；只有用户明确表达值得跨任务保留的偏好或事实才可写回，必须附用户原话依据，不能保存推断、敏感凭据或短期任务结果。
+信息完整且需要交叉分析多个体系时可使用 parallel_analysis，由当前任务汇总；给出简短 title，并用 topics 列出需要每位成员表态的关键议题，判断类议题提供 2–4 个互斥 options，便于对照分歧。可与你并行推进、或要在之后的提问中持续跟进的单一体系专项分析，可用 background_agent 交给常驻后台子分析，回报自动送达，不必等待。长期记忆仅在用户已开启时可用，按需读取；只有用户明确表达值得跨任务保留的偏好或事实才可写回，必须附用户原话依据，不能保存推断、敏感凭据或短期任务结果。
 最终答复的最后另起一行写 <followups>，其后每行一个用户可能接着问的问题（2–3 个，每个不超过 20 字，用用户的口吻），最后一行写 </followups>；向用户提问或任务未完成时不写。`;
 export const AGENT_COMPACTION_FAILED_MESSAGE = "上下文过长且压缩失败，可开启新对话或重新发起任务";
 export const AGENT_MANUAL_COMPACTION_FAILED_MESSAGE = "上下文压缩失败，原上下文仍保留，可稍后再试";
@@ -65,6 +66,10 @@ export { piHistory } from "./history.server";
 
 function waitForCancellation(context: Context): Promise<never> {
   return awaitWithContext(new Promise<never>(() => {}), context);
+}
+
+function delay(ms: number) {
+  return new Promise<"tick">(resolve => setTimeout(() => resolve("tick"), ms));
 }
 
 async function latestSubmission(storage: AgentDurableStorage, root: Conversation, context: Context) {
@@ -124,6 +129,7 @@ export async function executeAgentRun(
   let storage: AgentDurableStorage | undefined, apiKey: string | undefined;
   let mcp: Awaited<ReturnType<typeof connectAgentMcp>> | undefined;
   let heartbeat: ReturnType<typeof setInterval> | undefined;
+  let backgroundRefresh: ReturnType<typeof setInterval> | undefined;
   let controlInFlight: Promise<void> = Promise.resolve();
   let projectionInFlight: Promise<void> = Promise.resolve();
   let pollCommands: (() => Promise<void>) | undefined;
@@ -376,11 +382,14 @@ export async function executeAgentRun(
       }
       return { ...result, details: undefined };
     };
-    /** Plan mode's guidance: research is allowed, the plan is what waits for the user, execution comes after approval. */
+    /**
+     * Plan mode's guidance: research is allowed, the plan is what waits for the user, execution comes after approval.
+     * Only the main agent plans; members and subagents have no submit_plan.
+     */
     const planSection: PromptSection = {
       key: 'taibu_plan',
-      render: () => run.input.planMode ? [
-        '本任务开启了计划模式。先做必要的研究（排盘、详查、检索、读取资料），但不要写长期记忆、不要调用 parallel_analysis。',
+      render: input => run.input.planMode && input.agent.tools.some(tool => tool.name === AGENT_SUBMIT_PLAN_TOOL) ? [
+        '本任务开启了计划模式。先做必要的研究（排盘、详查、检索、读取资料），但不要写长期记忆、不要调用 parallel_analysis 或 background_agent 派出子分析。',
         '研究清楚后，把分析计划写成 Markdown 调用 submit_plan：使用哪些体系与工具、按什么顺序判断、每个体系要回答什么、已知的资料缺口与备选做法。计划要具体到可执行，不要复述问题。',
         '用户批准后才能执行上述被限制的工具并给出最终答复；用户要求修改时按反馈修订后再次提交。',
       ].join('\n') : undefined,
@@ -442,7 +451,9 @@ export async function executeAgentRun(
             await authorizeModel(configs.get(summaryModel.id)!);
             const saved = await readSummary(harness!, api, compactContext);
             const memo = saved ? { summary: saved } : undefined;
+            // The answer shows the main conversation's compactions; a member's or subagent's is its own.
             const record = (summary?: string) => {
+              if (api.conversationId !== root?.id) return;
               const id = String(api.taskId);
               checkpoint.compactions = [...(checkpoint.compactions ?? []).filter(item => item.id !== id), { id, status: summary ? 'completed' as const : 'failed' as const, summary, through: String(range.entries.at(-1)?.id ?? ''), retainedFrom: String(range.firstKept), ...(summary ? {} : { reason: '摘要调用失败；原上下文仍保留' }) }].slice(-50);
             };
@@ -463,8 +474,11 @@ export async function executeAgentRun(
         }),
       ],
     });
-    registry.install(createParallelExtension(registrations, () => harness!, collaborators, configs, new Map(tools.map(tool => [tool.name, tool.label]))));
-    registry.install(createAgentToolSearchExtension(new Map(tools.map(tool => [tool.name, tool.label]))));
+    const titles = new Map(tools.map(tool => [tool.name, tool.label]));
+    registry.install(createParallelExtension(registrations, () => harness!, collaborators, configs, titles));
+    const background = createBackgroundAgents(registrations);
+    registry.install(background.extension);
+    registry.install(createAgentToolSearchExtension(titles));
     if (run.input.codeMode) registry.install(createAgentCodemodeExtension());
     if (run.input.webEnabled && (await getUserCreditInfo(run.user_id, { client: store.db })).membership !== 'free') {
       mcp = await connectAgentMcp(parseAgentMcpServers(), () => assertAgentToolAccess(store, run, 'mcp__external', {}), context.abortSignal!);
@@ -517,19 +531,31 @@ export async function executeAgentRun(
       await root.commit(async tx => {
         for (const message of history) if (message.role !== "system")
           await tx.appendEntry(root!.id, { kind: "taibu.history", model: [message] });
+        // The subagents the conversation kept continue with what they remember.
+        await background.seed(tx, root!.id, checkpoint.background ?? []);
       }, context);
     }
+    let backgroundWorking = false, refreshing = false;
     const project = async () => {
       await projectDurableConversation(root!, storage!, checkpoint, tools, context);
+      backgroundWorking = await projectBackgroundAgents(harness!, storage!, checkpoint, titles, context);
       if (checkpoint.runtime) checkpoint.runtime.usage = projectAgentUsage(await harness!.usage(context));
       await persistProjection();
     };
+    // One projection at a time: the watch and the background refresh share this line.
+    const reproject = () => (projectionInFlight = projectionInFlight.catch(() => {}).then(project));
     watch = await root.watch(context);
     await project();
     watch.start(async () => {
-      projectionInFlight = project();
-      try { await projectionInFlight; } catch { interrupt(); }
+      try { await reproject(); } catch { interrupt(); }
     });
+    // Subagents work in their own conversations, which the watch does not see: refresh their cards while they do.
+    backgroundRefresh = setInterval(() => {
+      if (!backgroundWorking || refreshing || interrupted) return;
+      refreshing = true;
+      reproject().catch(() => interrupt()).finally(() => { refreshing = false; });
+    }, BACKGROUND_POLL_MS);
+    backgroundRefresh.unref();
     let compacted: Awaited<ReturnType<typeof manualCompactionOutcome>> | undefined;
     if (stopping) {
       await root.abort(context, { background: true });
@@ -555,8 +581,14 @@ export async function executeAgentRun(
       while (true) {
         const result = await Promise.race([harness.waitForIdle(context).then(() => 'idle' as const), inputPause, interruption]);
         if (result === 'interrupted' || interrupted) return;
-        if (result !== 'idle' || checkpoint.question || stopping || !(await readCommands(true))) break;
-        harness.resume();
+        if (result !== 'idle' || checkpoint.question || stopping) break;
+        if (await readCommands(true)) { harness.resume(); continue; }
+        // Subagents report as new input to the idle main conversation; the task stays open until every report is in,
+        // and follow-ups the user sends meanwhile are delivered at once.
+        if (!(await pendingBackgroundReports(harness, storage, root.id, context))) break;
+        const waited = await Promise.race([delay(BACKGROUND_POLL_MS), inputPause, interruption]);
+        if (waited === 'interrupted' || interrupted) return;
+        if (waited === 'input') break;
       }
     }
     clearInterval(heartbeat);
@@ -565,9 +597,13 @@ export async function executeAgentRun(
     if (!checkpoint.question && !stopping)
       await Promise.race([harness.waitForIdle(context), inputPause, interruption]);
     if (interrupted) return;
+    clearInterval(backgroundRefresh);
     await watch.stop();
     await projectionInFlight;
     await project();
+    // The next task that continues this context recreates the subagents with what they remember.
+    const residents = await residentBackgroundAgents(harness, root.id, context);
+    checkpoint.background = residents.length ? residents : undefined;
     const transcript = await root.context(context);
     // The next business task can reuse the final compacted model context. The
     // complete original entries and tool pairs remain in this task's native log.
@@ -597,6 +633,7 @@ export async function executeAgentRun(
   } catch (error) {
     if (interrupted || shutdown?.aborted || storage?.isUnavailable) return;
     if (error instanceof Error && /AGENT_LEASE_LOST|AGENT_DURABLE_CONFLICT/.test(error.message)) return;
+    if (backgroundRefresh) clearInterval(backgroundRefresh);
     await watch?.stop();
     await harness?.close(BACKGROUND_CONTEXT).catch(() => {});
     harness = undefined;
@@ -605,6 +642,7 @@ export async function executeAgentRun(
     console.warn("[agent-run]", { runId: run.id, phase: "execution", code: "FAILED" });
   } finally {
     if (heartbeat) clearInterval(heartbeat);
+    if (backgroundRefresh) clearInterval(backgroundRefresh);
     await watch?.stop();
     await harness?.close(BACKGROUND_CONTEXT).catch(() => {});
     await mcp?.close();

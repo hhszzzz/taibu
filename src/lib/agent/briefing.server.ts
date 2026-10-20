@@ -43,7 +43,7 @@ export async function generateBriefingAgent(db: SupabaseClient, job: { user_id: 
                 if (args.date !== undefined && args.date !== job.local_date) throw new Error('早报只查询指定当地日期');
                 const result = buildToolSuccessPayload('almanac', await executeTool('almanac', { ...args, date: job.local_date, timezone: job.timezone }));
                 called.add('almanac');
-                return { content: result.content, details: result.structuredContent as JsonValue };
+                return { output: result.content, details: result.structuredContent as JsonValue };
             } }),
             defineTool({ name: 'read_saved_chart', description: '读取当前用户默认或最近的已存命盘及 Core 当日结果，无命盘时明确返回 unavailable', parameters: Type.Object({}), replay: 'safe', execute: async () => {
                 await authorize();
@@ -51,7 +51,7 @@ export async function generateBriefingAgent(db: SupabaseClient, job: { user_id: 
                 if (state.status === 'unavailable') throw new Error('早报命盘功能暂不可用');
                 if (state.status !== 'enabled') {
                     called.add('read_saved_chart');
-                    return { content: [{ type: 'text', text: JSON.stringify({ available: false, reason: '命盘功能未启用，仅提供一般建议' }) }] };
+                    return { output: [{ type: 'text', text: JSON.stringify({ available: false, reason: '命盘功能未启用，仅提供一般建议' }) }] };
                 }
                 const settings = await db.from('user_settings').select('default_bazi_chart_id').eq('user_id', job.user_id).maybeSingle();
                 if (settings.error) throw new Error('读取命盘设置失败');
@@ -62,9 +62,9 @@ export async function generateBriefingAgent(db: SupabaseClient, job: { user_id: 
                 const bazi = calculateBaziOutputFromStoredFields(chart.data ?? {});
                 const details = { available: !!bazi, chart: bazi, dailyFortune: bazi ? calculateDailyFortune(bazi, new Date(`${job.local_date}T12:00:00Z`)) : null };
                 called.add('read_saved_chart');
-                return { content: [{ type: 'text', text: JSON.stringify(details) }] };
+                return { output: [{ type: 'text', text: JSON.stringify(details) }] };
             } }),
-            defineTool({ name: 'load_analysis_method', description: '加载早报需要的黄历或八字解读指引', parameters: Type.Object({ id: Type.Union([Type.Literal('almanac'), Type.Literal('bazi')]) }), replay: 'safe', execute: async args => ({ content: [{ type: 'text', text: JSON.stringify(loadAnalysisMethod(args.id)) }] }) }),
+            defineTool({ name: 'load_analysis_method', description: '加载早报需要的黄历或八字解读指引', parameters: Type.Object({ id: Type.Union([Type.Literal('almanac'), Type.Literal('bazi')]) }), replay: 'safe', execute: async args => ({ output: [{ type: 'text', text: JSON.stringify(loadAnalysisMethod(args.id)) }] }) }),
         ], hooks: [
             hook(ToolTask, { beforeTool: call => { const block = toolPolicyBlock(call.name, call.arguments); return block ? { block } : undefined; } }),
             hook(GenerationTask, { onYield: answer => answer.stopReason === 'stop' && (!called.has('almanac') || !called.has('read_saved_chart')) && basisRetries++ < 1 ? { continue: '请先调用 almanac 和 read_saved_chart 取得实际依据，再生成早报。' } : undefined }),

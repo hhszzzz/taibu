@@ -49,7 +49,7 @@ export async function connectAgentMcp(servers: AgentMcpServer[], authorize: () =
                     try {
                         const result = await client.callTool(name, args, { signal: context.abortSignal, timeoutMs: 60000 });
                         const text = result.content.filter(part => part.type === 'text').map(part => part.text).join('\n');
-                        return { content: [{ type: 'text', text: scrub(text || '外部工具未返回文本结果').slice(0, 32000) }], isError: result.isError === true };
+                        return { output: [{ type: 'text', text: scrub(text || '外部工具未返回文本结果').slice(0, 32000) }], isError: result.isError === true };
                     } catch { context.abortSignal?.throwIfAborted(); throw new Error('外部 MCP 调用失败，请检查服务配置'); }
                 } }));
             }

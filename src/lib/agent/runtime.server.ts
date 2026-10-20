@@ -49,6 +49,7 @@ search_knowledge、web_search 的每条结果和 focus_chart 的结果带 cite �
 信息完整且需要交叉分析多个体系时可使用 parallel_analysis，由当前任务汇总；给出简短 title，并用 topics 列出需要每位成员表态的关键议题，判断类议题提供 2–4 个互斥 options，便于对照分歧。长期记忆仅在用户已开启时可用，按需读取；只有用户明确表达值得跨任务保留的偏好或事实才可写回，必须附用户原话依据，不能保存推断、敏感凭据或短期任务结果。
 最终答复的最后另起一行写 <followups>，其后每行一个用户可能接着问的问题（2–3 个，每个不超过 20 字，用用户的口吻），最后一行写 </followups>；向用户提问或任务未完成时不写。`;
 const FINAL_SELECTION = "请调用 select_final_artifacts 选择本任务最终成果，随后给出最终答复。";
+export const AGENT_COMPACTION_FAILED_MESSAGE = "上下文过长且压缩失败，可开启新对话或重新发起任务";
 
 export { piHistory } from "./history.server";
 
@@ -59,7 +60,7 @@ function waitForCancellation(context: Context): Promise<never> {
 async function latestSubmission(storage: AgentDurableStorage, root: Conversation, context: Context) {
   let cursor;
   do {
-    // Durable 1.1.0 scans submissions in either order: newest-first finds the
+    // Durable (since 1.1.0) scans submissions in either order: newest-first finds the
     // latest admitted input without paging the whole history.
     const page = await storage.scanSubmissions({ conversationId: root.id, order: "descending" }, 200, cursor, context);
     for (const item of page.items) if (item.type === "input") return item;
@@ -136,10 +137,9 @@ export async function executeAgentRun(
       lastProjection = current;
     } catch (error) { interrupt(); throw error; }
   });
-  const finish = async (status: "completed" | "failed" | "cancelled" | "awaiting_input", unsupportedTools = false) => {
+  const finish = async (status: "completed" | "failed" | "cancelled" | "awaiting_input", error?: string) => {
     const message = publicMessage();
-    if (status === "failed") message.agent!.error = unsupportedTools
-      ? AGENT_UNSUPPORTED_TOOLS_MESSAGE : "任务执行失败，可切换普通对话或重新发起任务";
+    if (status === "failed") message.agent!.error = error ?? "任务执行失败，可切换普通对话或重新发起任务";
     try {
       await store.rpc("agent_finish_run", {
         ...store.lease(run), p_status: status, p_checkpoint: checkpoint, p_message: message,
@@ -254,7 +254,7 @@ export async function executeAgentRun(
       checkpoint.questions = undefined;
       checkpoint.questionId = undefined;
       checkpoint.durable!.waitingToolId = undefined;
-      return { content: [{ type: "text" as const, text: JSON.stringify({ question, reply: reply.content }) }], details: { question, reply: reply.content } };
+      return { output: [{ type: "text" as const, text: JSON.stringify({ question, reply: reply.content }) }], details: { question, reply: reply.content } };
     };
     const registry = createRegistry();
     const registrations = tools.map(tool => defineTool({
@@ -264,7 +264,7 @@ export async function executeAgentRun(
         execute: async (args, api, toolContext) => {
           if (tool.name === "ask_user") return ask(args as Record<string, unknown>, api, toolContext, tool);
           const output = await tool.execute(`${api.taskId}:${api.callId}`, args, toolContext.abortSignal);
-          return { content: output.content, details: output.details as JsonValue, ...(output.usage ? { usage: output.usage } : {}) };
+          return { output: output.content, details: output.details as JsonValue, ...(output.usage ? { usage: output.usage } : {}) };
         },
     }));
     registry.install({
@@ -282,7 +282,7 @@ export async function executeAgentRun(
           afterTool: (_call, result) => {
             const details = result.details as { artifactId?: unknown } | undefined;
             if (typeof details?.artifactId !== 'string' || result.isError) return;
-            return { ...result, content: [...(result.content ?? []), { type: 'text' as const, text: `成果 ID: ${details.artifactId}。完成任务时通过 select_final_artifacts 选择最终成果。` }] };
+            return { ...result, output: [...(result.output ?? []), { type: 'text' as const, text: `成果 ID: ${details.artifactId}。完成任务时通过 select_final_artifacts 选择最终成果。` }] };
           },
         }),
         hook(GenerationTask, {
@@ -327,8 +327,10 @@ export async function executeAgentRun(
               return committed;
             } catch {
               compactContext.abortSignal?.throwIfAborted();
+              // Pi then summarizes with its built-in prompt through the same guarded model; the
+              // projection settles this record from the compaction task's outcome.
               record();
-              throw new Error("上下文摘要失败");
+              return undefined;
             }
           },
         }),
@@ -348,7 +350,8 @@ export async function executeAgentRun(
         progress: { partialIntervalMs: 200, outputIntervalMs: 200 },
         compaction: { enabled: true, reserveTokens: (window?.reserveOutput ?? piModel.maxTokens) + 4000, keepRecentTokens: window ? Math.min(8000, Math.floor(window.maxContext / 4)) : 8000, backgroundTokens: backgroundCompactionTokens(window?.maxContext ?? null, (window?.reserveOutput ?? piModel.maxTokens) + 4000) },
       },
-      onReport: () => console.warn("[agent-durable]", { runId: run.id, code: "EXTENSION_FAILURE" }),
+      // Also receives, once, the error that failed the Session; a storage failure has already interrupted the run.
+      onReport: () => console.warn("[agent-durable]", { runId: run.id, code: storage?.isUnavailable ? "SESSION_FAILED" : "EXTENSION_FAILURE" }),
     }, context);
     root = await harness.root(context, { agent: {
       model: { provider: "taibu", modelId: config.id },
@@ -448,7 +451,11 @@ export async function executeAgentRun(
       submission?.status === "unanswered";
     const status = stopping ? "cancelled" : checkpoint.question ? "awaiting_input" :
       failed ? "failed" : text.trim() || checkpoint.finalArtifacts.length ? "completed" : "failed";
-    await finish(status, last?.errorMessage === AGENT_UNSUPPORTED_TOOLS_MESSAGE);
+    // A blocking compaction that fails leaves the input unanswered with Pi's "Compaction failed: …" detail.
+    const compactionFailed = submission?.status === "unanswered" && typeof submission.detail === "string" &&
+      submission.detail.startsWith("Compaction failed");
+    await finish(status, last?.errorMessage === AGENT_UNSUPPORTED_TOOLS_MESSAGE ? AGENT_UNSUPPORTED_TOOLS_MESSAGE
+      : compactionFailed ? AGENT_COMPACTION_FAILED_MESSAGE : undefined);
   } catch (error) {
     if (interrupted || shutdown?.aborted || storage?.isUnavailable) return;
     if (error instanceof Error && /AGENT_LEASE_LOST|AGENT_DURABLE_CONFLICT/.test(error.message)) return;

@@ -1,7 +1,7 @@
 import "server-only";
 import type { Context } from "@earendil-works/chord";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import type { Conversation, Cursor, EntryRecord, LiveState, ToolTaskInput } from "@earendil-works/pi-durable";
+import type { CompactionResult, Conversation, Cursor, EntryRecord, LiveState, TaskId, ToolTaskInput } from "@earendil-works/pi-durable";
 import { CompactionEntry } from "@earendil-works/pi-durable";
 import type { AgentDurableStorage } from "./durable-storage.server";
 import type { AgentCheckpoint, AgentPart, AgentRuntimeInfo, DomainTool } from "./types";
@@ -9,6 +9,33 @@ import { projectAgentContextUsage } from "./context-usage";
 import { projectAgentUsage } from './usage';
 import { CHART_TARGET_DIRECTORY_HEADING, projectsAgentCanonicalText } from './tool-catalog';
 import { splitAgentFollowUps } from './follow-ups';
+
+/** The assistant entry of a model-issued call; a nested call (a code mode script's) has none. */
+function modelCallEntry(task?: { input: unknown }) {
+  const input = task?.input as ToolTaskInput | undefined;
+  return input?.kind === 'model' ? input.assistant : undefined;
+}
+
+/**
+ * Pi retries a compaction with its built-in summarizer when ours fails. The task's outcome settles the record: a
+ * placed summary completes it; a failure, a declined range or a summary that went stale leaves it failed.
+ */
+async function settleCompactionRetries(storage: AgentDurableStorage, checkpoint: AgentCheckpoint, history: EntryRecord[], context: Context) {
+  for (const record of checkpoint.compactions ?? []) {
+    if (record.status !== 'failed') continue;
+    const task = await storage.task(Number(record.id) as TaskId, context);
+    if (task?.state.status !== 'terminal' || task.state.outcome.status !== 'completed') continue;
+    const result = task.state.outcome.result as CompactionResult;
+    const entryId = result.entryId ?? (result.submissionId === undefined ? undefined : (await storage.submission(result.submissionId, context))?.entry);
+    const message = entryId === undefined ? undefined : history.find(entry => entry.id === entryId)?.model?.[0];
+    if (message?.role !== 'user') continue;
+    const text = typeof message.content === 'string' ? message.content : message.content.find(part => part.type === 'text')?.text;
+    if (!text) continue;
+    record.status = 'completed';
+    record.summary = /<summary>\n?([\s\S]*?)\n?<\/summary>/u.exec(text)?.[1] ?? text;
+    delete record.reason;
+  }
+}
 
 function taskTiming(task?: { startedAt?: number; endedAt?: number }) {
   return {
@@ -36,6 +63,7 @@ export async function projectDurableConversation(
     cursor = page.next;
   } while (cursor);
   history.reverse();
+  await settleCompactionRetries(storage, checkpoint, history, context);
   const title = (name: string) => tools.find(t => t.name === name)?.label ?? name;
   if (checkpoint.runtime) {
     checkpoint.runtime.usage = usage;
@@ -107,7 +135,7 @@ export async function projectDurableConversation(
       }
       if (message.role === "toolResult") {
         const task = entry.byTaskId ? await storage.task(entry.byTaskId, context) : undefined;
-        const assistant = (task?.input as ToolTaskInput | undefined)?.assistant;
+        const assistant = modelCallEntry(task);
         const key = assistant ? `native-tool:${assistant}:${message.toolCallId}` : byCall.get(message.toolCallId);
         const card = key ? cards.get(key) : undefined;
         if (card) {
@@ -135,7 +163,7 @@ export async function projectDurableConversation(
   }
   for (const slot of live?.tools ?? []) {
     const task = slot.taskId ? await storage.task(slot.taskId, context) : undefined;
-    const assistant = (task?.input as ToolTaskInput | undefined)?.assistant;
+    const assistant = modelCallEntry(task);
     const key = assistant ? `native-tool:${assistant}:${slot.callId}` : byCall.get(slot.callId);
     const card = key ? cards.get(key) : undefined;
     if (card) {

@@ -165,7 +165,7 @@ export function createParallelExtension(registrations: readonly ToolRegistration
                 }
             }));
             // The parent model reads conclusions and stances; each member's process is for the reader's card only.
-            return { content: [{ type: 'text', text: JSON.stringify(results, (key, value) => key === 'steps' ? undefined : value) }], details: { ...summary, analyses: results } };
+            return { output: [{ type: 'text', text: JSON.stringify(results, (key, value) => key === 'steps' ? undefined : value) }], details: { ...summary, analyses: results } };
         },
     })] };
     return extension;

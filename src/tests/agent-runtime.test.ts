@@ -1,9 +1,9 @@
-import { test, beforeEach } from "node:test";
+import { test, beforeEach, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  createAssistantMessageEventStream,
+  createAssistantMessageEventStream, getCurrentTools,
 } from "@earendil-works/pi-ai";
 import type { PiStreamFn as StreamFn } from "../lib/agent/types";
 import type { StorageWrite } from "@earendil-works/pi-durable";
@@ -14,6 +14,7 @@ import {
   type AgentCommandRow,
 } from "../lib/agent/store.server";
 import {
+  AGENT_COMPACTION_FAILED_MESSAGE,
   executeAgentRun,
 } from "../lib/agent/runtime.server";
 import { emptyPiAssistant } from "../lib/agent/pi-stream.server";
@@ -941,6 +942,64 @@ test('known contexts start background compaction below the blocking threshold wh
   assert.ok(store.nativeEntries().some(entry => entry.kind === 'pi.compaction'));
 });
 
+// Above the blocking line of a 16k window: every generation compacts first.
+function blockingCompactionRun(t: TestContext) {
+  const windows = require('../lib/ai/model-context') as typeof import('../lib/ai/model-context');
+  t.mock.method(windows, 'resolveKnownModelContextConfig', () => ({ maxContext: 16000, reserveOutput: 4096 }));
+  const run = row();
+  run.checkpoint.messages = Array.from({ length: 6 }, (_, index) => ({ role: 'user' as const, content: `old ${index}: ${'history '.repeat(2000)}`, timestamp: index + 1 }));
+  return run;
+}
+
+function failedStream(model: Parameters<StreamFn>[0]) {
+  const output = createAssistantMessageEventStream(), message = emptyPiAssistant(model);
+  message.stopReason = 'error';
+  message.errorMessage = 'summary provider unavailable';
+  output.push({ type: 'error', reason: 'error', error: message });
+  output.end(message);
+  return output;
+}
+
+test('a failed blocking compaction fails the task with the context message and never calls the main model', async t => {
+  const store = new MemoryStore(), run = blockingCompactionRun(t);
+  let answers = 0, summaries = 0;
+  const streamFn: StreamFn = (model, context) => {
+    // Generations offer tools; summaries do not. Pi's built-in summarizer retries after taibu's fails.
+    if (getCurrentTools(context.messages).length) answers++; else summaries++;
+    return failedStream(model);
+  };
+  await executeAgentRun(store, run, undefined, { config, streamFn });
+  assert.equal(answers, 0, 'the generation waits for its blocking compaction');
+  assert.equal(summaries, 2);
+  const finish = store.writes.find(w => w.name === 'agent_finish_run')!;
+  assert.equal(finish.args.p_status, 'failed');
+  const agent = (finish.args.p_message as AgentRunRow['public_message']).agent!;
+  assert.equal(agent.error, AGENT_COMPACTION_FAILED_MESSAGE);
+  assert.equal(agent.compactions?.length, 1);
+  assert.equal(agent.compactions?.[0].status, 'failed');
+});
+
+test("Pi's built-in summary settles a compaction whose taibu summary failed", async t => {
+  const store = new MemoryStore(), run = blockingCompactionRun(t);
+  const answer = scripted(() => [{ type: 'text', text: '压缩后继续作答' }]);
+  const streamFn: StreamFn = (model, context, options) => {
+    if (isSummaryTranscript(context)) return failedStream(model);
+    if (getCurrentTools(context.messages).length) return answer(model, context, options);
+    const output = createAssistantMessageEventStream(), message = emptyPiAssistant(model);
+    message.content = [{ type: 'text', text: '## Goal\n内置摘要保留用户目标' }];
+    output.push({ type: 'done', reason: 'stop', message });
+    output.end(message);
+    return output;
+  };
+  await executeAgentRun(store, run, undefined, { config, streamFn });
+  const finish = store.writes.find(w => w.name === 'agent_finish_run')!;
+  assert.equal(finish.args.p_status, 'completed');
+  const [record] = (finish.args.p_message as AgentRunRow['public_message']).agent!.compactions!;
+  assert.equal(record.status, 'completed');
+  assert.equal(record.summary, '## Goal\n内置摘要保留用户目标');
+  assert.equal(record.reason, undefined);
+});
+
 test('Tarot implicit seeds satisfy Core schema and durable hooks block overrides before calculation', async () => {
   const store = new MemoryStore(), run = row();
   await executeAgentRun(store, run, undefined, { config, streamFn: scripted(index => index === 0
@@ -986,7 +1045,7 @@ test("unknown capacity still uses Pi's bounded compaction recovery on a reported
 });
 
 test('unsupported checkpoint engines are rejected before opening storage or invoking a model or tool', async () => {
-  for (const checkpoint of [{ version: 1 }, { version: 2 }, { version: 2, durable: { engine: 'pi-durable/1.0.4' } }, { version: 2, durable: { engine: 'pi-durable/9.9.9' } }]) {
+  for (const checkpoint of [{ version: 1 }, { version: 2 }, { version: 2, durable: { engine: 'pi-durable/1.0.4' } }, { version: 2, durable: { engine: 'pi-durable/1.1.0' } }, { version: 2, durable: { engine: 'pi-durable/9.9.9' } }]) {
     const store = new MemoryStore(), run = row();
     run.checkpoint = { ...run.checkpoint, ...checkpoint } as AgentRunRow['checkpoint'];
     if (!('durable' in checkpoint)) delete (run.checkpoint as Partial<AgentRunRow['checkpoint']>).durable;

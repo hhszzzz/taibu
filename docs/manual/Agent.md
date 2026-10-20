@@ -18,13 +18,13 @@ flowchart LR
   SSE --> UI
 ```
 
-执行内核固定为 `@earendil-works/pi-durable@1.1.0`，配套 Pi AI／Chord／MCP 同版本；仅接受 V2／`pi-durable/1.1.0` 检查点，旧 Pi 1.0.4 与 V1 执行兼容已删除。使用原生 Harness、GenerationTask、ToolTask、CompactionTask、请求去重和队列；模型桥接继续经过 `pi-stream.server.ts` 的 AI SDK，复用模型配置、网关排序、来源切换、推理和采样配置。开始输出后不会重新切换来源。模型和摘要权限在服务端重新校验，SDK 错误不会打印上游凭据。Durable 目前是实验接口，版本固定，并用官方存储契约测试检查适配器。
+执行内核固定为 `@earendil-works/pi-durable@1.3.0`，配套 Pi AI／Chord／MCP／Code Mode 同版本；仅接受 V2／`pi-durable/1.3.0` 检查点，旧 1.1.0、1.0.4 与 V1 执行兼容已删除。使用原生 Harness、GenerationTask、ToolTask、CompactionTask、请求去重和队列；模型桥接继续经过 `pi-stream.server.ts` 的 AI SDK，复用模型配置、网关排序、来源切换、推理和采样配置。开始输出后不会重新切换来源。模型和摘要权限在服务端重新校验，SDK 错误不会打印上游凭据。Durable 目前是实验接口，版本固定，并用官方存储契约测试检查适配器。
 
 没有任务步数、检索次数或总运行时长上限。结束条件是模型完成、`ask_user` 等待补充、用户停止或不可恢复错误。外部请求仍有单次超时。Durable 按已配置的模型窗口选择完整工具回合的压缩边界；未知模型使用 Pi 的 `contextWindow: 0`，跳过容量阈值判断，在可识别的供应商超限错误后尝试一次压缩恢复。摘要通过原生 `HookApi.models` 调用同一个受控目录及 AI SDK 网关，保留权限、来源回退、请求超时、最近消息、成果 ID 和实际来源；摘要与真实用量原子保存。完整原始记录保留在 Durable 提交日志中。
 
 管理员模型配置支持 `minimal / low / medium / high / xhigh / max` 六档默认思考等级。兼容网关参数格式沿用 `reasoning.effort` 或 `reasoning_effort`；现有 SDK 适配器负责转发其验证器未接纳的 `max` 和供应商扩展。需要应用 `20261009_120000_ai_reasoning_effort_levels.sql` 扩展数据库约束。模型、消息、工具、流式模式和输出预算由原请求流程管理。
 
-Pi 1.1.0 适配涵盖十一体系命盘、六档推理、时间投影与当前引擎的 worker 崩溃接管。当前引擎策略、协作方式及验收边界见 [Pi 1.1.0 升级说明](../agent-pi-durable-1-1-upgrade.md)。
+Pi 1.1.0 适配涵盖十一体系命盘、六档推理、时间投影与当前引擎的 worker 崩溃接管，协作方式见 [Pi 1.1.0 升级说明](../agent-pi-durable-1-1-upgrade.md)。1.3.0 的不兼容变更、引擎代际迁移与新增能力见 [Pi 1.3.0 升级说明](../agent-pi-durable-1-3-upgrade.md)。阻塞压缩失败时任务提示上下文过长；Taibu 摘要失败后由 Pi 内置摘要器重试，压缩卡片按实际结果显示。
 
 ## 工具与成果
 
@@ -48,7 +48,7 @@ Agent 在最终答复前通过 `select_final_artifacts` 选择成果，支持空
 
 ## 持久化与结算
 
-迁移 `20261005_100000_agent_runtime.sql` 提供六张业务运行表；`20261005_120000_agent_chart_identity.sql` 更新命盘身份与去重；`20261006_100000_agent_pi_durable.sql` 增加 `agent_durable_commits` 和 worker 引擎标识；`20261009_100000_agent_pi_durable_1_1.sql` 升级引擎代际，随后 `20261010_100000_agent_current_engine_only.sql` 收紧为仅接受当前版本。活动旧任务通过原有结算函数终止、撤销租约及清理凭据，依原规则最多退款一次；已完成历史和成果保留。安全对象显式设置 `search_path` 和执行权限。原生日志只由受租约保护的管理员 RPC 读取／提交，普通用户不能直接读取或写入。公开消息修改仍受活动任务保护。
+迁移 `20261005_100000_agent_runtime.sql` 提供六张业务运行表；`20261005_120000_agent_chart_identity.sql` 更新命盘身份与去重；`20261006_100000_agent_pi_durable.sql` 增加 `agent_durable_commits` 和 worker 引擎标识；`20261009_100000_agent_pi_durable_1_1.sql` 升级引擎代际，随后 `20261010_100000_agent_current_engine_only.sql` 收紧为仅接受当前版本，`20261020_100000_agent_pi_durable_1_3.sql` 再将当前版本切换为 1.3.0。活动旧任务通过原有结算函数终止、撤销租约及清理凭据，依原规则最多退款一次；已完成历史和成果保留。安全对象显式设置 `search_path` 和执行权限。原生日志只由受租约保护的管理员 RPC 读取／提交，普通用户不能直接读取或写入。公开消息修改仍受活动任务保护。
 
 任务状态：`queued → running → awaiting_input / completed / cancelled / failed`，停止过程使用 `cancelling`。租约每秒续期，失效窗口为 60 秒；新的 worker 接管时递增执行版本，旧版本不能写入。每个业务任务对应独立的 Durable Storage，只允许当前租约进程推进。RPC 原子保存原生写批次及业务检查点，连续序号和相同批次去重保证丢失响应可重试；指令在原生 submission 进入 placed 状态时才被确认消费。结果不明时暂停当前执行并由新持有者重读日志。
 

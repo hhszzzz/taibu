@@ -23,7 +23,7 @@ export type AgentPart =
       input?: unknown;
       output?: unknown;
       canonicalText?: string;
-      /** Tool execution time (durable 1.1.0), shown on completed cards. */
+      /** Tool execution time (durable since 1.1.0), shown on completed cards. */
       durationMs?: number;
       /** Native task wall-clock timestamps, including waits and takeover. */
       startedAt?: number;

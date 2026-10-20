@@ -50,6 +50,7 @@ export const SQL_SOURCE_MANIFEST = {
   reasoningEffortLevels: 'supabase/migrations/20261009_120000_ai_reasoning_effort_levels.sql',
   agentCurrentEngine: 'supabase/migrations/20261010_100000_agent_current_engine_only.sql',
   conversationShares: 'supabase/migrations/20261019_100000_conversation_shares.sql',
+  agentDurable13: 'supabase/migrations/20261020_100000_agent_pi_durable_1_3.sql',
   userSettings: 'supabase/migrations/20260110_add_user_settings_and_fix_notifications_rls.sql',
   chartTimeResolution: 'supabase/migrations/20261005_110000_chart_time_resolution.sql',
   agentChartIdentity: 'supabase/migrations/20261005_120000_agent_chart_identity.sql',
@@ -307,6 +308,7 @@ RESET ROLE;`,
     sources.reasoningEffortLevels,
     sources.agentCurrentEngine,
     sources.conversationShares,
+    sources.agentDurable13,
     'RESET ROLE;',
   ].join('\n\n');
 }

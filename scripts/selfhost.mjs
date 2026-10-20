@@ -346,12 +346,25 @@ const CONVERSATION_SHARE_MIGRATIONS = [{
   sha256: '38998e70bca24541263e54d788ca46c1b0a2537b66cae65b2892658c2a907d43',
 }];
 const CONVERSATION_SHARE_FINGERPRINT = 'cf8f3676ea50b7cb9f1df6e433a1991b6da8cb54c8ef158331534ea1f08a4b45';
-const REVIEWED_SCHEMA_UPGRADES = [
+const REVIEWED_CONVERSATION_SHARE_SCHEMA_UPGRADES = [
   ...REVIEWED_CONVERSATION_CATEGORY_SCHEMA_UPGRADES,
   ...REVIEWED_CONVERSATION_CATEGORY_SCHEMA_UPGRADES.filter(entry => entry.current === CONVERSATION_CATEGORY_FINGERPRINT).map(entry => ({
     previous: entry.previous, current: CONVERSATION_SHARE_FINGERPRINT, files: [...entry.files, ...CONVERSATION_SHARE_MIGRATIONS],
   })),
   { previous: CONVERSATION_CATEGORY_FINGERPRINT, current: CONVERSATION_SHARE_FINGERPRINT, files: CONVERSATION_SHARE_MIGRATIONS },
+];
+// 2026-10-20：Pi Durable 1.3.0 引擎代际（心跳、创建与认领只认 1.3.0，在途 1.1.0 任务按原规则结算）。
+const PI_DURABLE_1_3_MIGRATIONS = [{
+  file: 'supabase/migrations/20261020_100000_agent_pi_durable_1_3.sql',
+  sha256: '654f1445606b17dc14ae84ac34d188698242ad74aa1b82ff6736c89b44031fe9',
+}];
+const PI_DURABLE_1_3_FINGERPRINT = 'a965a7c1177ad5d6aae386fd69ddfc6ea20883d39942b848676a6e1d8d65824e';
+const REVIEWED_SCHEMA_UPGRADES = [
+  ...REVIEWED_CONVERSATION_SHARE_SCHEMA_UPGRADES,
+  ...REVIEWED_CONVERSATION_SHARE_SCHEMA_UPGRADES.filter(entry => entry.current === CONVERSATION_SHARE_FINGERPRINT).map(entry => ({
+    previous: entry.previous, current: PI_DURABLE_1_3_FINGERPRINT, files: [...entry.files, ...PI_DURABLE_1_3_MIGRATIONS],
+  })),
+  { previous: CONVERSATION_SHARE_FINGERPRINT, current: PI_DURABLE_1_3_FINGERPRINT, files: PI_DURABLE_1_3_MIGRATIONS },
 ];
 
 export function reviewedSchemaUpgrade(fingerprint, bundle) {
@@ -492,7 +505,7 @@ async function up(state, run, build = false) {
   if (build && state.config.DEMO_ENABLED === 'true') await run.compose(['up', '-d', '--no-deps', '--force-recreate', 'demo']);
   await wait(() => httpReady(state.config.APP_ORIGIN, '/api/health'), '应用');
   await wait(() => httpReady(state.config.APP_ORIGIN, '/api/announcements?latest=1'), '应用数据库');
-  await wait(async () => (await run.sql("SELECT EXISTS(SELECT 1 FROM public.agent_workers WHERE engine='pi-durable/1.1.0' AND heartbeat_at > now() - interval '30 seconds')")).trim() === 't', 'Agent worker');
+  await wait(async () => (await run.sql("SELECT EXISTS(SELECT 1 FROM public.agent_workers WHERE engine='pi-durable/1.3.0' AND heartbeat_at > now() - interval '30 seconds')")).trim() === 't', 'Agent worker');
   // The scheduler script is bind-mounted; recreating its stateless process
   // loads updated polling code even when its image/configuration did not change.
   await run.compose(['up', '-d', '--no-deps', '--force-recreate', 'scheduler']);

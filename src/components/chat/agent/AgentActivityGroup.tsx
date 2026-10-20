@@ -4,7 +4,7 @@
 import { useId, useState, type ReactNode } from 'react';
 import { ChevronRight, LoaderCircle, PanelRight, Pause } from 'lucide-react';
 import type { AgentMessageData, AgentPart } from '@/lib/agent/types';
-import { getAgentToolFamily } from '@/lib/agent/tool-catalog';
+import { AGENT_SUBMIT_PLAN_TOOL, getAgentToolFamily } from '@/lib/agent/tool-catalog';
 import { getAgentToolQuestionIds } from '@/lib/agent/workspace';
 import { getAgentAttachmentRead, getAgentChart, getAgentDataResults, getAgentFinalSelection, getAgentMemories, getAgentMethod, getAgentMethodCatalog, getAgentProfile, getAgentScript, getAgentToolQuestions, getAgentToolText } from '@/lib/agent/tool-presentation';
 import { useIsDesktopLayout } from '@/lib/hooks/useIsDesktopLayout';
@@ -134,6 +134,24 @@ function AgentStepCall({ tool, runStatus, parts }: { tool: AgentTool; runStatus:
             </button>
         </div>}
     </div>;
+    // 计划模式：计划正文按 Markdown 展示，决定写在下面；工作区仍是这个调用的详情页。
+    if (tool.name === AGENT_SUBMIT_PLAN_TOOL) {
+        const plan = tool.input && typeof tool.input === 'object' ? (tool.input as { plan?: unknown }).plan : undefined;
+        const summary = describeAgentStep(tool, runStatus).summary;
+        return <div className="agent-step-call">
+            {typeof plan === 'string' && <div className="agent-step-output agent-step-markdown" tabIndex={0} aria-label="计划">
+                <MarkdownContent content={plan} className="chat-prose" />
+            </div>}
+            <p className="agent-step-empty">{summary === '等待你批准' ? '等待你批准后继续。'
+                : summary === '已批准' ? '你已批准，Agent 继续执行。'
+                : summary === '要求修改' ? '你要求修改，Agent 会修订后再次提交。' : '计划已提交。'}</p>
+            {workspace && <div className="agent-step-actions">
+                <button type="button" className="agent-step-workspace" onClick={() => workspace.openResource(`tool:${tool.id}`)}>
+                    <PanelRight size={13} aria-hidden="true" />在工作区查看
+                </button>
+            </div>}
+        </div>;
+    }
     const input = tool.input === undefined ? null : formatAgentValue(tool.input);
     const canonical = tool.canonicalText?.trim() ? tool.canonicalText : null;
     const text = canonical ?? getAgentToolText(tool);

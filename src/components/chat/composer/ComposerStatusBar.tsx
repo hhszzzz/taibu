@@ -94,6 +94,7 @@ export function ComposerStatusBar(props: ComposerStatusBarProps) {
                     reasoningEffort={props.reasoningEffort} onReasoningEffortChange={props.onReasoningEffortChange}
                     collaborators={agentMode ? props.collaborators : undefined} onCollaboratorsChange={agentMode ? props.onCollaboratorsChange : undefined}
                     codeMode={agentMode ? props.codeMode : undefined} onCodeModeChange={agentMode ? props.onCodeModeChange : undefined}
+                    planMode={agentMode ? props.planMode : undefined} onPlanModeChange={agentMode ? props.onPlanModeChange : undefined}
                     onCustomProvider={() => setProviderOpen(true)}
                     userId={userId} membershipType={props.membershipType} disabled={disabled} toolbarStyle />
             )}

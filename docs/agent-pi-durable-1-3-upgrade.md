@@ -76,9 +76,9 @@
 | `pnpm lint`、严格类型 | 通过（无新增告警） |
 | `node scripts/build-agent-worker.mjs`、`node .agent/worker.mjs --check` | 通过，沙箱自检通过 |
 
-排查中发现两点（不属于本阶段）：
+排查中发现两点，已修复（见下文「阶段四」与「阶段五」）：
 
-- 运行时在模型未选定最终成果时以 `onYield` 续跑，没有次数上限；模型若始终不调用 `select_final_artifacts`，任务会持续请求模型。脚本化测试据此先选定成果再作答。
+- 运行时在模型未选定最终成果时以 `onYield` 续跑，没有次数上限；模型若始终不调用 `select_final_artifacts`，任务会持续请求模型。
 - Agent 以公历 `date` 调用 `xiaoliuren` 必然失败：Pi 按 schema 补入 `isLeapMonth: false`、`leapMonthStrategy: 'repeat'` 默认值，Core 将其视为手工农历输入而拒绝。
 
 ## 阶段三：按需加载的工具
@@ -97,3 +97,38 @@
 | --- | --- |
 | `pnpm test` | 2008 项通过；新增 `agent-tool-search.test.ts`（13 个延迟工具、中文排序与无匹配、加载后下一请求提供、未加载的工具仍不提供）与代码模式直接调用延迟工具、目录与展示回归 |
 | `pnpm lint`、严格类型 | 通过（无新增告警） |
+
+## 阶段四：计划模式
+
+输入框模型菜单新增「计划模式」，默认关闭，随对话的下个任务配置保存（`next_task_config.planMode`），任务创建时写入 `agent_runs.input.planMode` 并参与请求哈希；运行中的任务不受切换影响。不新增表或列。
+
+开启后运行时注册 `submit_plan`（`callers: ['model']`，脚本不可调用），并加一段计划模式提示：
+
+- 研究照常进行（排盘、详查、检索、读取资料），但写长期记忆、派发协作成员与选定成果被 `beforeTool` 阻断，直到用户批准。阻断发生在工具策略层，模型会收到明确的阻断原因。
+- 模型把计划写成 Markdown 调用 `submit_plan`，工具在原生 ToolTask 中等待用户决定，复用 `ask_user` 的 memo／回复队列与暂停恢复链路：用户批准则写入 `checkpoint.planApproved`，工具返回「用户已批准计划」；选择「要求修改」并填写意见时，意见作为反馈返回，模型修订后再次提交。
+- 等待中的问题复用 `ask_user` 的问题面板：问题为「是否按这个计划执行？」，选项为「批准」「要求修改」，也可自行填写修改意见。计划正文留在工具卡片与工作区，面板只问决定。
+- 模型在批准前直接作答时，`onYield` 以「请先调用 submit_plan」续跑，最多两次，之后正常结束，避免无上限续跑。
+- 聊天过程把计划按 Markdown 展示，并写明「等待你批准」「你已批准」「你要求修改」。
+
+### 阶段四验证
+
+| 验证 | 结果 |
+| --- | --- |
+| `pnpm test` | 2017 项通过；新增 `agent-plan-mode.test.ts`（批准前阻断、批准后执行、要求修改后再次等待、批准前作答的两次上限）与配置、展示回归 |
+| `pnpm test:browser` | 通过；新增已批准计划按 Markdown 展示的检查 |
+| `pnpm lint`、严格类型 | 通过（无新增告警） |
+
+## 阶段五：两处修复
+
+**最终成果的选定不再无限续跑。** `select_final_artifacts` 决定的是哪些计算成果保存为用户命盘并成为结果卡片（`agent_finish_run` 按 `checkpoint.finalArtifacts` 写入 `bazi_charts`／`ziwei_charts`），不是「任务有没有结果」。此前模型漏选时 `onYield` 会一直追问，且单个命盘也要多一次模型调用。现在：
+
+- 任务只有一个计算成果时直接选定它，不再追问（最常见的单盘任务因此省去一次模型调用）。
+- 有多个成果时最多追问两次；仍未选定时正常结束，成果保留在任务里可查看，但不写入用户命盘。
+- 模型显式选择空数组仍是「本次不保存」的决定，不会被自动覆盖。
+
+**小六壬公历日期可用。** `isLeapMonth` 在输入 schema 里有默认值 `false`，按 schema 补默认值的调用方（MCP 与 Agent 校验）总会带上它，而 Core 把它当作手工农历输入与 `date` 冲突。现在 `date` 只拒绝真正的手工农历字段（`lunarMonth`、`lunarDay`），闰月由日期推出；只有显式 `isLeapMonth: true` 与日期推出的非闰月矛盾时才报错。`packages/core/tests/xiaoliuren-core.test.mjs` 增加对应回归。
+
+| 验证 | 结果 |
+| --- | --- |
+| `pnpm test` | 2017 项通过；新增 `agent-final-selection.test.ts`（单盘自动选定、多盘两次上限、空选择不被覆盖、公历小六壬经 Agent 全链路成功） |
+| `node --test packages/core/tests/xiaoliuren-core.test.mjs` | 14 项通过 |

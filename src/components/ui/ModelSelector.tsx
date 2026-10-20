@@ -56,7 +56,7 @@ function reasoningSummary(model: ClientModelConfig | undefined, enabled: boolean
 }
 
 export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange, reasoningEnabled = false, onReasoningChange,
-    reasoningEffort, onReasoningEffortChange, collaborators = [], onCollaboratorsChange, codeMode = false, onCodeModeChange, extra, onCustomProvider,
+    reasoningEffort, onReasoningEffortChange, collaborators = [], onCollaboratorsChange, codeMode = false, onCodeModeChange, planMode = false, onPlanModeChange, extra, onCustomProvider,
     userId, membershipType = 'free', disabled = false, compact = false, toolbarStyle = false }: ModelSelectorProps) {
     const [open, setOpen] = useState(false);
     const [effortOpen, setEffortOpen] = useState(false);
@@ -176,6 +176,11 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
             {onCodeModeChange && <button type="button" role="menuitemcheckbox" aria-checked={codeMode} className="chat-model-action chat-model-menu-row"
                 disabled={disabled} title="允许 Agent 写脚本批量排盘、逐年扫描与比较参数，下个任务生效" onClick={() => onCodeModeChange(!codeMode)}>
                 <span>代码模式</span>{codeMode && <Check size={14} aria-hidden="true" />}
+            </button>}
+            {/* 计划模式：先提交分析计划，用户批准后再执行；同样在下个任务创建时固定。 */}
+            {onPlanModeChange && <button type="button" role="menuitemcheckbox" aria-checked={planMode} className="chat-model-action chat-model-menu-row"
+                disabled={disabled} title="Agent 先提交分析计划，经你批准后再执行，下个任务生效" onClick={() => onPlanModeChange(!planMode)}>
+                <span>计划模式</span>{planMode && <Check size={14} aria-hidden="true" />}
             </button>}
             {extra}
             {onCustomProvider && <>

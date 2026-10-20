@@ -130,7 +130,7 @@ export function ChatComposer({
     onModelChange,
     reasoningEnabled = false,
     onReasoningChange,
-    reasoningEffort, onReasoningEffortChange, collaborators, onCollaboratorsChange, codeMode, onCodeModeChange,
+    reasoningEffort, onReasoningEffortChange, collaborators, onCollaboratorsChange, codeMode, onCodeModeChange, planMode, onPlanModeChange,
     customProviderActive = false,
     customProviderLabel = null,
     userId,
@@ -686,6 +686,8 @@ export function ChatComposer({
                     onCollaboratorsChange={onCollaboratorsChange}
                     codeMode={codeMode}
                     onCodeModeChange={onCodeModeChange}
+                    planMode={planMode}
+                    onPlanModeChange={onPlanModeChange}
                     customProviderActive={customProviderActive}
                     customProviderLabel={customProviderLabel}
                     usage={typeof credits === 'number' ? { credits, membershipType } : undefined}

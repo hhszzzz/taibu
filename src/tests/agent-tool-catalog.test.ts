@@ -7,7 +7,8 @@ import { MockLanguageModelV3 } from 'ai/test';
 import type { AgentRunRow } from '../lib/agent/store.server';
 import { CODEMODE_TOOL_NAME } from '@earendil-works/pi-durable/codemode';
 import {
-  AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_DEFERRED_TOOLS, AGENT_DRILLDOWN_BASES, AGENT_MODEL_ONLY_TOOLS, AGENT_TOOL_SEARCH_TOOL,
+  AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_DEFERRED_TOOLS, AGENT_DRILLDOWN_BASES, AGENT_MODEL_ONLY_TOOLS, AGENT_PLAN_GATED_TOOLS,
+  AGENT_SUBMIT_PLAN_TOOL, AGENT_TOOL_SEARCH_TOOL,
   getAgentDrilldownBase, getAgentExtensionToolTitle, getAgentToolFamily, isAgentDeferredTool,
   isAgentChartTool, projectsAgentCanonicalText, returnsAgentScriptResult,
 } from '../lib/agent/tool-catalog';
@@ -67,6 +68,8 @@ test('every Core tool and every registered Agent tool belongs to a presentation 
     assert.equal(projectsAgentCanonicalText(name), false, `${name} returns structured data, not canonical text`);
   assert.equal(getAgentExtensionToolTitle(AGENT_CODEMODE_TOOL), '运行脚本');
   assert.equal(getAgentExtensionToolTitle(AGENT_TOOL_SEARCH_TOOL), '查找工具');
+  assert.equal(getAgentExtensionToolTitle(AGENT_SUBMIT_PLAN_TOOL), '提交计划');
+  assert.deepEqual([...AGENT_PLAN_GATED_TOOLS].sort(), ['parallel_analysis', 'remember_user_fact', 'select_final_artifacts']);
   // 低频工具按需加载；外部 MCP 工具同样只在检索后提供。
   for (const name of AGENT_DEFERRED_TOOLS) assert.ok(listToolDefinitions().some(definition => definition.name === name), `${name} is a Core tool`);
   assert.equal(isAgentDeferredTool('mcp__archive__search'), true);

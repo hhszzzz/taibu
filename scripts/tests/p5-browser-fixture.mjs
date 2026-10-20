@@ -128,7 +128,11 @@ function AgentResultsProbe() {
   window.fixture.workspaceFamilies = () => setParts(previous => [...previous.filter(part => !part.id.includes('family')), ...familyParts()]);
   window.fixture.workspaceStep = (name, status) => setParts(previous => [...previous, { type: 'tool', id: 'step-' + (window.fixture.stepRevision = (window.fixture.stepRevision ?? 0) + 1), name, title: name, status, input: { query: '流年' } }]);
   window.fixture.answerFamilyQuestion = () => setAnswers(new Map([['9:family-ask', { content: '出生时间？\n早上', answers: { birth: ['morning'] } }]]));
-  // A code mode script that computed two charts and had its third call blocked, as the projection stores it.
+  // A plan-mode call that the user approved, with the plan the model submitted.
+  window.fixture.planStep = () => setParts(previous => [...previous, {
+    type: 'tool', id: 'native-tool:12:plan', name: 'submit_plan', title: '提交计划', status: 'completed',
+    input: { plan: '## 分析计划\n1. 先排八字，再看紫微。' }, output: { plan: '## 分析计划\n1. 先排八字，再看紫微。', approved: true },
+  }]);
   window.fixture.codemodeScript = () => setParts(previous => {
     const bazi = initialToolParts.find(part => part.name === 'bazi');
     const script = { type: 'tool', id: 'native-tool:9:script', name: 'codemode', title: '运行脚本', status: 'completed', input: { code: 'for (const birthYear of [1990, 1991]) await tools.bazi({ birthYear });' },
@@ -2433,6 +2437,16 @@ export async function run(existingPage, bundlePath) {
     await workspacePanel.locator('[data-workspace-view="chart"]').waitFor();
     check('A call on the script page opens the chart it computed', await workspacePanel.locator('[data-workspace-view="chart"]').count() === 1);
     await workspacePanel.getByRole('button', { name: '关闭工作区', exact: true }).click();
+    // Plan mode: the approved plan reads as Markdown and the step says what the user decided.
+    await page.evaluate(() => window.fixture.planStep());
+    const planGroup = results.locator('.agent-activity-group').filter({ hasText: '提交计划' });
+    const planHeading = planGroup.locator('.agent-process-heading');
+    await planHeading.waitFor();
+    if (await planHeading.getAttribute('aria-expanded') !== 'true') await planHeading.click();
+    const planStep = planGroup.locator('.agent-process-steps > .agent-step').filter({ has: page.locator('.agent-step-title', { hasText: '提交计划' }) });
+    if (await planStep.locator('.agent-step-row').getAttribute('aria-expanded') !== 'true') await planStep.locator('.agent-step-row').click();
+    check('An approved plan shows the plan as Markdown and the decision', await planStep.getByLabel('计划').innerText().then(text => text.includes('分析计划') && text.includes('先排八字')) &&
+      await planStep.innerText().then(text => text.includes('你已批准，Agent 继续执行')));
     await page.setViewportSize({ width: 1200, height: 1000 });
     await page.evaluate(() => window.fixture.mount.results(false));
 

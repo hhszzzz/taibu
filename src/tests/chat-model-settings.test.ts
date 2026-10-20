@@ -7,7 +7,7 @@ import { PATCH, GET } from '../app/api/conversations/[id]/configuration/route';
 import { createMockAuthContext } from './helpers/supabase-mock';
 
 const collaborators = ['first', 'second'].map(id => ({ id, name: id, model: id, focus: '核对盘面', reasoning: true, reasoningEffort: 'max' as const }));
-const configuration = { model: 'root', reasoning: true, reasoningEffort: 'xhigh' as const, webEnabled: false, codeMode: true, collaborators };
+const configuration = { model: 'root', reasoning: true, reasoningEffort: 'xhigh' as const, webEnabled: false, codeMode: true, planMode: true, collaborators };
 
 function database(id: string, owner: string) {
   const updates: unknown[] = [], filters: Array<[string, unknown]> = [];
@@ -28,11 +28,14 @@ test('model settings validate the whole bounded team and preserve explicit reaso
   assert.deepEqual(parseAgentCollaborators([collaborators[0]]), [collaborators[0]]);
   for (const input of [null, [collaborators[0], collaborators[0]], [...collaborators, ...collaborators, { ...collaborators[0], id: 'fifth' }], [{ ...collaborators[0], focus: 'x'.repeat(1201) }, collaborators[1]]]) assert.throws(() => parseAgentCollaborators(input));
   for (const effort of ['', 'unknown', 0]) assert.throws(() => parseNextTaskConfiguration({ ...configuration, reasoningEffort: effort }));
-  // 代码模式缺省为关闭，保存了非布尔值则整份配置无效。
+  // 代码模式与计划模式缺省为关闭，保存了非布尔值则整份配置无效。
   const unsaved: Record<string, unknown> = { ...configuration };
   delete unsaved.codeMode;
+  delete unsaved.planMode;
   assert.equal(parseNextTaskConfiguration(unsaved).codeMode, false);
+  assert.equal(parseNextTaskConfiguration(unsaved).planMode, false);
   for (const codeMode of ['true', 1, null]) assert.throws(() => parseNextTaskConfiguration({ ...configuration, codeMode }));
+  for (const planMode of ['true', 1, null]) assert.throws(() => parseNextTaskConfiguration({ ...configuration, planMode }));
 });
 
 test('conversation model settings persist and read the owner-scoped reasoning and team JSON', async t => {

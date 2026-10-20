@@ -60,6 +60,17 @@ export const AGENT_CODEMODE_TOOL = 'codemode';
 /** The Taibu tool that loads deferred tools (`tool-search.server.ts`). */
 export const AGENT_TOOL_SEARCH_TOOL = 'tool_search';
 
+/** The plan-mode tool (`runtime.server.ts`): submits a plan and waits for the user's decision. */
+export const AGENT_SUBMIT_PLAN_TOOL = 'submit_plan';
+
+/**
+ * Tools a plan-mode task may not use until the user approves its plan: writing memory, dispatching members and
+ * settling the task are the execution the plan asks about. Research tools stay available, so the plan can be grounded.
+ */
+export const AGENT_PLAN_GATED_TOOLS: ReadonlySet<string> = new Set([
+  'remember_user_fact', 'parallel_analysis', 'select_final_artifacts',
+]);
+
 /**
  * Tools the model loads on demand instead of being offered every request: the drilldowns and calculations a reading
  * reaches for once it already has a chart. `tool_search` loads them; scripts may call them without loading.
@@ -82,6 +93,7 @@ export function isAgentDeferredTool(name: string): boolean {
 const EXTENSION_TOOL_TITLES: Readonly<Record<string, string>> = {
   [AGENT_CODEMODE_TOOL]: '运行脚本',
   [AGENT_TOOL_SEARCH_TOOL]: '查找工具',
+  [AGENT_SUBMIT_PLAN_TOOL]: '提交计划',
 };
 
 export function getAgentExtensionToolTitle(name: string): string | undefined {

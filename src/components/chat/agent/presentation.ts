@@ -1,6 +1,6 @@
 import type { ChatMessage } from '@/types';
 import { isAgentRunTerminal, type AgentMessageData, type AgentPart, type AgentRunStatus, type AgentRuntimeInfo } from '@/lib/agent/types';
-import { getAgentToolFamily, type AgentToolFamily, AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_TOOL_SEARCH_TOOL, isAgentChartTool } from '@/lib/agent/tool-catalog';
+import { getAgentToolFamily, type AgentToolFamily, AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_SUBMIT_PLAN_TOOL, AGENT_TOOL_SEARCH_TOOL, isAgentChartTool } from '@/lib/agent/tool-catalog';
 import { getAgentAttachmentRead, getAgentChart, getAgentDataResults, getAgentMethod, getAgentScript, getAgentSearchResults, getAgentToolArtifactId, getAgentToolQuestions, type AgentChart } from '@/lib/agent/tool-presentation';
 import { getChartFocus, getChartTargets } from '@/lib/agent/chart-interaction';
 import type { AgentWorkspaceModel } from '@/lib/agent/workspace';
@@ -191,6 +191,11 @@ export function summarizeAgentTool(tool: AgentTool): string | null {
             ? (tool.output as { loaded: unknown[] }).loaded.filter(name => typeof name === 'string') : [];
         if (!tool.output || tool.status !== 'completed') return query || null;
         return query ? `${query} · 加载 ${loaded.length} 个工具` : `加载 ${loaded.length} 个工具`;
+    }
+    if (tool.name === AGENT_SUBMIT_PLAN_TOOL) {
+        if (tool.status === 'running' || tool.status === 'pending') return '等待你批准';
+        const output = tool.output && typeof tool.output === 'object' ? tool.output as { approved?: unknown } : {};
+        return output.approved === true ? '已批准' : output.approved === false ? '要求修改' : null;
     }
     if (tool.name === AGENT_CODEMODE_TOOL) {
         // Pi lists a script's calls once it settles; while it runs its calls show as steps of their own.

@@ -11,7 +11,7 @@
 import type { ChatMessage } from '@/types';
 import { isAgentRunTerminal, type AgentPart, type AgentRunStatus } from './types';
 import type { AgentAnswers } from './questions';
-import { AGENT_CHART_NAMES, getAgentDrilldownBase, getAgentToolFamily, isAgentChartTool, type AgentToolFamily } from './tool-catalog';
+import { AGENT_CHART_NAMES, AGENT_SUBMIT_PLAN_TOOL, getAgentDrilldownBase, getAgentToolFamily, isAgentChartTool, type AgentToolFamily } from './tool-catalog';
 import { getAgentChart, getAgentDataResults, getAgentMethod, getAgentAttachmentRead, type AgentToolPart } from './tool-presentation';
 import { CHART_SOURCE_KINDS, getAgentChartReference, getChartFocus, parseChartReference } from './chart-interaction';
 import { getAgentEvidence, type AgentEvidence } from './evidence';
@@ -287,7 +287,7 @@ export function getAgentToolQuestionIds(parts: AgentPart[]): ReadonlyMap<string,
   const ids = new Map<string, string>();
   let lastAsk: string | null = null;
   for (const part of parts) {
-    if (part.type === 'tool') lastAsk = part.name === 'ask_user' ? part.id : null;
+    if (part.type === 'tool') lastAsk = part.name === 'ask_user' || part.name === AGENT_SUBMIT_PLAN_TOOL ? part.id : null;
     else if (part.type === 'question' && lastAsk) { ids.set(lastAsk, part.id); lastAsk = null; }
   }
   return ids;

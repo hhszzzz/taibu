@@ -376,6 +376,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         reasoningEffort: props.reasoningEffort, onReasoningEffortChange: props.onReasoningEffortChange,
         collaborators: props.collaborators, onCollaboratorsChange: props.onCollaboratorsChange,
         codeMode: agent?.codeMode, onCodeModeChange: agent?.setCodeMode,
+        planMode: agent?.planMode, onPlanModeChange: agent?.setPlanMode,
         agentMode: isAgentMode,
         credits,
         awaitingInput: props.agent?.run?.status === 'awaiting_input',

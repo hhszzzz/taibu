@@ -20,6 +20,8 @@ export interface NextTaskConfiguration {
   webEnabled: boolean;
   /** Agent 代码模式：模型可写脚本批量调用工具；每个任务创建时固定。 */
   codeMode: boolean;
+  /** Agent 计划模式：模型先提交分析计划，用户批准后再执行；每个任务创建时固定。 */
+  planMode: boolean;
   collaborators: AgentCollaborator[];
 }
 
@@ -30,6 +32,8 @@ export interface ModelSettingsProps {
   onCollaboratorsChange?: (members: AgentCollaborator[]) => void;
   codeMode?: boolean;
   onCodeModeChange?: (enabled: boolean) => void;
+  planMode?: boolean;
+  onPlanModeChange?: (enabled: boolean) => void;
 }
 
 export function parseReasoningEffort(value: unknown): AIReasoningEffort | null {
@@ -60,13 +64,14 @@ export function parseNextTaskConfiguration(value: unknown): NextTaskConfiguratio
   const input = value as Record<string, unknown>;
   if (typeof input.model !== 'string' || !input.model.trim() || input.model.length > 200 ||
     typeof input.reasoning !== 'boolean' || typeof input.webEnabled !== 'boolean' ||
-    (input.codeMode !== undefined && typeof input.codeMode !== 'boolean')) throw new Error('配置无效');
-  // 代码模式与推理档位、协作成员一样有缺省值：缺省为关闭。
-  return { model: input.model.trim(), reasoning: input.reasoning, webEnabled: input.webEnabled, codeMode: input.codeMode === true,
+    (input.codeMode !== undefined && typeof input.codeMode !== 'boolean') ||
+    (input.planMode !== undefined && typeof input.planMode !== 'boolean')) throw new Error('配置无效');
+  // 代码模式与计划模式、推理档位、协作成员一样有缺省值：缺省为关闭。
+  return { model: input.model.trim(), reasoning: input.reasoning, webEnabled: input.webEnabled, codeMode: input.codeMode === true, planMode: input.planMode === true,
     reasoningEffort: parseReasoningEffort(input.reasoningEffort), collaborators: parseAgentCollaborators(input.collaborators) };
 }
 
-/** 新对话的初始配置：沿用模型、推理、联网与代码模式，协作成员一律从 0 开始，只有用户在该对话勾选后才协作。 */
+/** 新对话的初始配置：沿用模型、推理、联网、代码模式与计划模式，协作成员一律从 0 开始，只有用户在该对话勾选后才协作。 */
 export function freshTaskConfiguration(base: NextTaskConfiguration): NextTaskConfiguration {
   return { ...base, collaborators: [] };
 }

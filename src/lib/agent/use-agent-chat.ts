@@ -39,8 +39,9 @@ export function useAgentChat(
   const [syncingRunId, setSyncingRunId] = useState<string | null>(null);
   const [webEnabled, setWebEnabled] = useState(true);
   const [codeMode, setCodeMode] = useState(false);
-  useNextTaskConfiguration(userId, state.activeConversationId, { model: state.selectedModel, reasoning: state.reasoningEnabled, reasoningEffort: state.reasoningEffort, collaborators: state.collaborators, webEnabled, codeMode }, value => {
-    state.setSelectedModel(value.model); state.setReasoningEnabled(value.reasoning); state.setReasoningEffort(value.reasoningEffort); state.setCollaborators(value.collaborators); setWebEnabled(value.webEnabled); setCodeMode(value.codeMode);
+  const [planMode, setPlanMode] = useState(false);
+  useNextTaskConfiguration(userId, state.activeConversationId, { model: state.selectedModel, reasoning: state.reasoningEnabled, reasoningEffort: state.reasoningEffort, collaborators: state.collaborators, webEnabled, codeMode, planMode }, value => {
+    state.setSelectedModel(value.model); state.setReasoningEnabled(value.reasoning); state.setReasoningEffort(value.reasoningEffort); state.setCollaborators(value.collaborators); setWebEnabled(value.webEnabled); setCodeMode(value.codeMode); setPlanMode(value.planMode);
   });
   const identity = useRef({ userId, epoch: 0 });
   if (identity.current.userId !== userId) {
@@ -249,6 +250,7 @@ export function useAgentChat(
         : undefined,
       webEnabled,
       codeMode,
+      planMode,
       dreamMode: state.chatMode === "dream",
       mangpaiMode: state.chatMode === "mangpai",
     };
@@ -374,6 +376,8 @@ export function useAgentChat(
     setWebEnabled,
     codeMode,
     setCodeMode,
+    planMode,
+    setPlanMode,
     running: active && run?.status !== "awaiting_input",
   };
 }

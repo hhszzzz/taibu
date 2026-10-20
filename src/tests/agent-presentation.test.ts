@@ -124,6 +124,10 @@ test('process steps summarize each call from its arguments and stored result onl
     assert.equal(summarizeAgentTool(tool('tool_search', { status: 'running', input: { query: '大运' } })), '「大运」');
     assert.equal(summarizeAgentTool(tool('tool_search', { output: { loaded: [] } })), '加载 0 个工具');
     assert.equal(getAgentToolFamily('tool_search'), 'other');
+    // 计划模式：计划提交后按用户的决定显示。
+    assert.equal(summarizeAgentTool(tool('submit_plan', { input: { plan: '# 计划' }, output: { plan: '# 计划', approved: true } })), '已批准');
+    assert.equal(summarizeAgentTool(tool('submit_plan', { input: { plan: '# 计划' }, output: { plan: '# 计划', approved: false } })), '要求修改');
+    assert.equal(summarizeAgentTool(tool('submit_plan', { status: 'running', input: { plan: '# 计划' } })), '等待你批准');
     assert.equal(Object.keys(AGENT_TOOL_FAMILY_LABELS).length, 14, 'every tool family has a step tag');
     assert.equal(summarizeAgentTool(tool('bazi_relations', { input: { reference: 'artifact:x', year: 2027, dayun: 4 } })), '2027 年 · 第 4 步大运', 'a drilldown reads its selectors, never the chart reference');
 });

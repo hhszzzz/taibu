@@ -79,8 +79,8 @@ Modern clients automatically perform `server/discover` and supply the per-reques
 | `bazi` | Generate a Bazi chart (solar/lunar supported, 51 shensha types, stem combinations, branch half-combinations/three-meetings, Tai Yuan/Ming Gong) | "I was born at 3:00 PM on May 15, 1990. Please generate my chart." |
 | `bazi_pillars_resolve` | Reverse-lookup birth time from Four Pillars (1900-2100) | "My Bazi is 丙午 庚寅 丙辰 癸巳, please analyze it." |
 | `bazi_dayun` | Compute major luck cycles (10-year periods with annual transits, Tai Sui annotations, minor luck) | AI automatically calls this based on your Bazi |
-| `bazi_relations` | Bazi clash/combination drill-down across natal pillars and luck, year, month and day overlays | "Which clashes and combinations does 2027 bring to my chart?" |
-| `bazi_wuxing` | Bazi five-element circulation drill-down (weighted stats, monthly vigor, roots and exposed stems, generating chain; no strength verdicts) | "Does my chart's five-element chain have a break?" |
+| `bazi_relations` | Bazi clash/combination drill-down for luck, year, month and day overlays on the natal pillars (natal-only relations stay in the chart) | "Which clashes and combinations does 2027 bring to my chart?" |
+| `bazi_wuxing` | Bazi five-element strength drill-down (monthly vigor and exposed month stems, roots of every stem, stem–branch and adjacent-stem cycles, missing elements; no strength verdicts) | "Is my day master rooted?" |
 | `bazi_liunian_scan` | Scan annual pillars year by year (pillar, luck period, relations to natal and luck, Tai Sui; up to 30 years) | "Scan my annual pillars from 2026 to 2035." |
 | `ziwei` | Generate a Ziwei Doushu chart (Life/Body Master stars, Small Limit, Scholar Stars, San Fang Si Zheng) | "I was born on the 8th day of the 4th lunar month in 1990, please generate my Ziwei chart." |
 | `ziwei_horoscope` | Ziwei fortune periods (decadal/small limit/yearly/monthly/daily/hourly with transit stars) | "What are my Ziwei fortune periods for 2026?" |

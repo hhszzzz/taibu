@@ -3,7 +3,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, lazy, Suspense, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { Tooltip } from '@/components/ui/Tooltip';
-import { Bot, Ellipsis, LayoutGrid, LocateFixed, Maximize2, Minimize2, Search, X } from 'lucide-react';
+import { Ellipsis, LayoutGrid, LocateFixed, Maximize2, Minimize2, Search, X } from 'lucide-react';
 import { getAgentToolFamily, isAgentChartTool } from '@/lib/agent/tool-catalog';
 import { isAgentRunTerminal, type AgentMessageData, type AgentPart } from '@/lib/agent/types';
 import { getAgentChart, getAgentFinalSelection } from '@/lib/agent/tool-presentation';
@@ -26,6 +26,7 @@ import {
     ProfileView, QuestionView, RecordView, WorkspaceTextFallback, WorkspaceToolMeta, WorkspaceToolPending,
 } from './AgentWorkspaceViews';
 import { getChartKindMeta } from './chart-registry';
+import { ModelAvatar } from './ModelAvatar';
 import { WorkspaceOverview } from './AgentWorkspaceSections';
 import { DrilldownList } from './AgentDrilldownViews';
 import { getBaziViewing, getLatestBaziFacts } from './bazi-board';
@@ -390,7 +391,12 @@ export function AgentWorkspacePanel({ parts, artifacts, data, attachmentIds, ans
     </button>;
     // 命盘标签统一用注册表图标（每种占术一个），与右栏成果行同源。
     const chartIcon = (resource: AgentWorkspaceResource) => {
-        if (resource.view === 'member') return <Bot size={15} aria-hidden="true" />;
+        if (resource.view === 'member') {
+            const memberTool = resource.member ? model.toolsById.get(resource.member.toolId) : undefined;
+            const target = resource.member;
+            const member = memberTool && target ? parallelAnalysisResults(memberTool.output).find(item => item.conversationId === target.conversationId) : undefined;
+            return <ModelAvatar member={member ?? {}} size={14} />;
+        }
         if (resource.view !== 'chart') return undefined;
         const reading = resource.toolIds.flatMap(id => model.toolsById.get(id) ?? []).findLast(tool => getAgentChart(tool));
         const kind = reading && getAgentChart(reading)?.kind;

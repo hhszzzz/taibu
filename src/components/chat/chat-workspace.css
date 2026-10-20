@@ -326,13 +326,34 @@
 .agent-step-structured-list strong { color: var(--foreground); font-weight: 500; }
 .agent-step-structured-open { align-self: flex-start; display: inline-flex; height: 24px; align-items: center; padding: 0 8px; border-radius: 6px; color: var(--foreground-secondary); font-size: calc(12.5 / 16 * 1rem); }
 .agent-step-structured-open:hover { color: var(--accent-hover); }
-.agent-step-members, .agent-step-artifacts { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
-.agent-step-members button, .agent-step-artifacts button, .agent-step-member-static { display: flex; width: 100%; min-width: 0; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 7px; color: var(--foreground); font-size: calc(13.5 / 16 * 1rem); line-height: calc(19 / 16 * 1rem); text-align: left; transition: color .12s; }
-.agent-step-members button:hover, .agent-step-artifacts button:hover { color: var(--accent-hover); }
-.agent-step-members button > svg, .agent-step-artifacts button > svg, .agent-step-member-static > svg { flex-shrink: 0; color: var(--foreground-tertiary); }
-.agent-step-member-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
-.agent-step-member-model { min-width: 0; margin-left: auto; overflow: hidden; font-size: calc(12 / 16 * 1rem); color: var(--foreground-tertiary); text-overflow: ellipsis; white-space: nowrap; }
-.agent-step-members li[data-state="failed"] .agent-step-member-model { color: var(--danger); }
+/* 协作成员 / 最终成果：图标 + 名称 + 一行预览，整行可点，右侧箭头表示会打开对应页面。 */
+.agent-step-entities { display: flex; flex-direction: column; gap: 2px; margin: 0 -6px; padding: 0; list-style: none; }
+.agent-step-entity { display: flex; width: 100%; min-width: 0; align-items: flex-start; gap: 10px; padding: 7px 6px; border-radius: 8px; color: var(--foreground); text-align: left; transition: color .12s; }
+button.agent-step-entity:hover .agent-step-entity-name, button.agent-step-entity:focus-visible .agent-step-entity-name { color: var(--accent-hover); }
+button.agent-step-entity:hover .agent-step-entity-go { color: var(--foreground-secondary); transform: translateX(1px); }
+.agent-step-entity-icon { display: inline-flex; width: 20px; height: 20px; flex-shrink: 0; align-items: center; justify-content: center; margin-top: 0; color: var(--foreground-secondary); }
+.agent-step-entity-main { display: flex; min-width: 0; flex: 1 1 auto; flex-direction: column; gap: 2px; }
+.agent-step-entity-line { display: flex; min-width: 0; align-items: baseline; gap: 8px; line-height: calc(20 / 16 * 1rem); }
+.agent-step-entity-name { min-width: 0; overflow: hidden; font-size: calc(14 / 16 * 1rem); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; transition: color .12s; }
+.agent-step-entity-meta { flex-shrink: 0; margin-left: auto; color: var(--foreground-tertiary); font-size: calc(12 / 16 * 1rem); white-space: nowrap; }
+.agent-step-entity-meta[data-state="failed"] { color: var(--danger); }
+.agent-step-entity-meta[data-state="running"] { color: var(--accent); }
+.agent-step-entity-preview { min-width: 0; overflow: hidden; color: var(--foreground-secondary); font-size: calc(13 / 16 * 1rem); line-height: calc(19 / 16 * 1rem); text-overflow: ellipsis; white-space: nowrap; }
+.agent-step-entity-go { flex-shrink: 0; align-self: center; color: var(--foreground-tertiary); transition: color .12s, transform .12s; }
+.agent-step-producers { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 2px; color: var(--foreground-tertiary); font-size: calc(12 / 16 * 1rem); line-height: calc(18 / 16 * 1rem); }
+.agent-step-producer { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.agent-avatar.agent-avatar--mini { width: 14px; height: 14px; border-radius: 4px; font-size: calc(9 / 16 * 1rem); }
+.agent-model-avatar { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; }
+/* 规范文本按 Markdown 排版（标题、列表、表格），比正文小一级、限高滚动；步骤里不提供表格的复制 / 导出工具条。 */
+.agent-step-output.agent-step-markdown { max-height: 22rem; padding: 2px 2px 4px; white-space: normal; }
+.agent-step-markdown :is(p, ul, ol, li) { margin: 3px 0; color: var(--foreground-secondary); font-size: calc(13 / 16 * 1rem); line-height: 1.65; }
+.agent-step-markdown :is(h1, h2, h3, h4, h5, h6) { margin: 12px 0 4px; color: var(--foreground); font-size: calc(13.5 / 16 * 1rem); font-weight: 600; line-height: 1.5; }
+.agent-step-markdown > :first-child { margin-top: 0; }
+.agent-step-markdown .markdown-table-container { margin: 6px 0; border: var(--hairline) solid var(--hairline-color); border-radius: 8px; overflow: hidden; }
+.agent-step-markdown .markdown-table-toolbar { display: none; }
+.agent-step-markdown table { font-size: calc(12.5 / 16 * 1rem); }
+.agent-step-markdown :is(th, td) { padding: 5px 8px; color: var(--foreground-secondary); line-height: 1.5; white-space: nowrap; }
+.agent-step-markdown th { color: var(--foreground); font-weight: 500; background: transparent; }
 .agent-step-note-body { padding: 8px 12px 12px; border-top: var(--hairline) solid var(--hairline-color); font-size: calc(13 / 16 * 1rem); line-height: 1.7; color: var(--foreground-secondary); }
 .agent-step-reasoning { white-space: pre-wrap; overflow-wrap: anywhere; }
 .agent-step > .agent-tool-details { margin: 8px 0 6px 20px; }
@@ -462,9 +483,13 @@ button.agent-evidence-chip:hover { border-color: var(--accent); color: var(--acc
 .agent-session-rail { position: relative; z-index: 40; display: flex; flex-shrink: 0; flex-direction: column; width: 280px; min-height: 0; margin-top: 51px; margin-right: 12px; padding: 0 1px 8px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
 .agent-session-rail::-webkit-scrollbar { display: none; }
 .agent-session-rail .agent-ws-status-cards { display: flex; flex-direction: column; gap: 8px; }
-.agent-session-rail .agent-rail-card { position: relative; }
+.agent-session-rail .agent-rail-card { position: relative; transition: transform .18s ease; }
+/* 拖动中：被拖的卡整张跟着指针走（不加过渡），浮在其余卡片之上并带阴影；其余卡片带过渡让位。 */
+.agent-session-rail .agent-rail-card[data-dragged] { z-index: 2; transition: none; cursor: grabbing; }
+.agent-session-rail .agent-rail-card[data-dragged] > .agent-ws-status-card { box-shadow: var(--shadow-lg, 0 12px 32px rgb(0 0 0 / .12)); }
+.agent-session-rail .agent-ws-status-cards[data-dragging] { user-select: none; }
 /* 拖动 = claude tile 头行的「移动」钮：紧跟标题，悬停/聚焦显形，拖动排序。 */
-.agent-session-rail .agent-rail-card-grip { display: inline-flex; flex-shrink: 0; width: 16px; height: 18px; align-items: center; justify-content: center; padding: 0; border: 0; background: transparent; color: var(--foreground-tertiary); opacity: 0; cursor: grab; transition: opacity .12s; }
+.agent-session-rail .agent-rail-card-grip { touch-action: none; display: inline-flex; flex-shrink: 0; width: 16px; height: 18px; align-items: center; justify-content: center; padding: 0; border: 0; background: transparent; color: var(--foreground-tertiary); opacity: 0; cursor: grab; transition: opacity .12s; }
 .agent-session-rail .agent-rail-card-grip:active { cursor: grabbing; }
 .agent-session-rail .agent-rail-card:hover .agent-rail-card-grip, .agent-session-rail .agent-rail-card-grip:focus-visible { opacity: 1; }
 @media (hover: none) { .agent-session-rail .agent-rail-card-grip { opacity: 1; } }

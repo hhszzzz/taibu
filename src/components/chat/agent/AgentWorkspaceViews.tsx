@@ -1,8 +1,8 @@
 'use client';
 // 需要 useState（删除确认、展开）、问题草稿同步与浏览器请求（删除长期记忆）
 
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ArrowUpRight, Bot, Check, ChevronRight, CircleAlert, Database, Globe, LoaderCircle, Trash2, UserRound } from 'lucide-react';
+import { Fragment, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ArrowUpRight, Check, ChevronRight, CircleAlert, Database, Globe, LoaderCircle, Trash2, UserRound } from 'lucide-react';
 import type { AgentRunStatus } from '@/lib/agent/types';
 import type { AgentQuestionAnswer, AgentWorkspaceModel, AgentWorkspaceResource } from '@/lib/agent/workspace';
 import {
@@ -27,9 +27,10 @@ import { useTranscriptRecordView } from '@/lib/chat/chat-record-view';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { useToast } from '@/components/ui/Toast';
 import { mentionTypeLabels } from '@/components/chat/mentionStyles';
-import { describeAgentChartSubject, formatAgentToolDuration, formatAgentValue, getAgentToolState, getParallelMemberState, stripLeadingTitle, summarizeAgentTool } from './presentation';
+import { describeAgentChartSubject, formatAgentToolDuration, formatAgentValue, getAgentToolState, getParallelMemberState, stripLeadingTitle, summarizeAgentActivity, summarizeAgentTool } from './presentation';
 import { PrivateAttachmentPreview } from './PrivateAttachments';
 import { ChartMiniPreview } from './chart-preview';
+import { ModelAvatar } from './ModelAvatar';
 import './agent-workspace.css';
 
 type ToolViewProps = { tool: AgentToolPart; runStatus: AgentRunStatus };
@@ -526,12 +527,9 @@ export function QuestionView({ tool, runStatus, step, model, answer, draftKey }:
 
 const effortLabel = (value?: string) => value === 'off' ? '不推理' : value && (AI_REASONING_EFFORTS as readonly string[]).includes(value) ? `推理 ${REASONING_EFFORT_LABELS[value as AIReasoningEffort]}` : null;
 
-/** The first character of a member's name marks its card, as 子 for 子平. */
-const memberInitial = (name: string) => Array.from(name.trim())[0] ?? '协';
 /** A configured division of work this short reads as the card's subtitle, as 子平 · 格局与用神. */
 const FOCUS_IN_TITLE = 16;
 type MemberStepState = ParallelMemberStep['status'] | 'interrupted';
-const STEP_GLYPHS: Record<MemberStepState, string> = { completed: '✓', running: '●', failed: '×', interrupted: '–' };
 const STEP_LABELS: Record<MemberStepState, string> = { completed: '已完成', running: '进行中', failed: '失败', interrupted: '未完成' };
 
 const parseStepInput = (input?: string): Record<string, unknown> | null => {
@@ -542,60 +540,75 @@ const parseStepInput = (input?: string): Record<string, unknown> | null => {
     } catch { return null; }
 };
 
-/** One call a member made: its title and one-line reading, disclosing the arguments and what the tool returned. */
+/** One call a member made, read like a step of the main process: title and one line, disclosing arguments and the return. */
 function MemberStep({ step, live }: { step: ParallelMemberStep; live: boolean }) {
     const id = useId();
     // A call still marked running after its member stopped did not finish; it no longer spins.
     const state = step.status === 'running' && !live ? 'interrupted' : step.status;
-    const [open, setOpen] = useState(false);
+    const [open, setOpen] = useState(state === 'failed');
     const input = parseStepInput(step.input);
     const summary = summarizeAgentTool({ type: 'tool', id, name: step.name, title: step.title, status: step.status, ...(input ? { input } : {}) });
     const entries = input ? Object.entries(input).filter(([key]) => key !== 'reference') : [];
     const disclosable = entries.length > 0 || Boolean(step.output);
-    return <li className="agent-ws-member-step" data-state={state}>
-        {step.note && <p className="agent-ws-member-note">{step.note}</p>}
-        <button type="button" className="agent-ws-member-call" aria-expanded={disclosable ? open : undefined} aria-controls={open ? id : undefined}
+    return <li className="agent-step agent-ws-member-step" data-state={state}>
+        <button type="button" className="agent-step-row agent-ws-member-call" aria-expanded={disclosable ? open : undefined} aria-controls={open ? id : undefined}
             disabled={!disclosable} onClick={() => setOpen(!open)}>
-            <span className="agent-ws-member-glyph" aria-hidden="true">{state === 'running'
-                ? <LoaderCircle size={12} className="animate-spin motion-reduce:animate-none" /> : STEP_GLYPHS[state]}</span>
-            <span className="agent-ws-member-call-text"><strong>{step.title}</strong>{summary && <span>{summary}</span>}</span>
-            <span className="sr-only">（{STEP_LABELS[state]}）</span>
-            {disclosable && <ChevronRight size={12} aria-hidden="true" className={open ? 'rotate-90' : undefined} />}
+            <span className="agent-step-text">
+                {state === 'running' && <LoaderCircle size={13} aria-hidden="true" className="agent-step-icon animate-spin motion-reduce:animate-none" />}
+                <span className="agent-step-title">{step.title}</span>
+                {(summary || state === 'failed' || state === 'interrupted') && <span className="agent-step-detail">
+                    {summary}{summary && (state === 'failed' || state === 'interrupted') ? ' · ' : ''}
+                    {(state === 'failed' || state === 'interrupted') && <span className="agent-step-note">{STEP_LABELS[state]}</span>}
+                </span>}
+                <span className="sr-only">（{STEP_LABELS[state]}）</span>
+                {disclosable && <ChevronRight size={12} aria-hidden="true" className={`agent-step-chevron${open ? ' rotate-90' : ''}`} />}
+            </span>
         </button>
-        {open && <div id={id} className="agent-ws-member-call-body">
+        {open && <div id={id} className="agent-step-call agent-ws-member-call-body">
             {entries.length > 0 && <dl className="agent-ws-member-args" aria-label="调用参数">{entries.map(([key, value]) => <div key={key}>
                 <dt>{key}</dt><dd>{formatAgentValue(value)}</dd>
             </div>)}</dl>}
-            {step.output && <div className="agent-ws-member-output" tabIndex={0} aria-label="工具返回"><MarkdownContent content={step.output} className="chat-prose" /></div>}
+            {step.output && <div className="agent-step-output agent-step-markdown agent-ws-member-output" tabIndex={0} aria-label="工具返回"><MarkdownContent content={step.output} className="chat-prose" /></div>}
             {step.truncated && <p className="agent-ws-note">返回内容较长，这里只保留了开头部分。</p>}
         </div>}
     </li>;
 }
 
 /**
- * 成员的过程：与主对话的任务过程同一种读法——成员说的话、每一步调用，点开看参数与工具返回的内容。
- * 分析中默认展开并随成员推进；完成后收起，先读结论。
+ * 成员的过程：与主对话的任务过程同一种排法——成员说的话是正文，连续的调用收成一组带细边框的步骤，
+ * 点开看参数与工具返回的内容。分析中默认展开并随成员推进；完成后收起，先读结论。
  */
 export function MemberProcess({ member, running }: { member: ParallelAnalysisResult; running: boolean }) {
     const id = useId();
     const steps = member.steps ?? [];
     const [disclosed, setDisclosed] = useState<boolean | null>(null);
     const open = disclosed ?? running;
-    const calls = member.toolCalls ?? steps.length;
-    const label = running ? `正在分析 · 已调用 ${steps.length} 次工具` : `调用了 ${calls} 次工具${member.durationMs !== undefined ? ` · 用时 ${formatAgentToolDuration(member.durationMs)}` : ''}`;
-    return <section className="agent-ws-member-process" aria-label="成员的分析过程">
-        <button type="button" className="agent-ws-member-process-heading" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => setDisclosed(!open)}>
-            {running && <LoaderCircle size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}
-            <span>{label}</span>
-            <ChevronRight size={12} aria-hidden="true" className={open ? 'rotate-90' : undefined} />
+    // 与主对话的过程行同一套说法：已查看 1 张命盘，已详查 1 处。
+    const phrase = summarizeAgentActivity(steps.map((step, index) => ({ type: 'tool' as const, id: String(index), name: step.name, title: step.title, status: step.status })), 0,
+        steps.filter(step => step.status === 'failed').length);
+    const label = running ? `正在分析 · ${phrase}` : phrase;
+    // 成员在调用前说的话断开步骤组，和主对话里「说一句、调几次工具」的节奏一致。
+    const groups: Array<{ note?: string; steps: ParallelMemberStep[] }> = [];
+    for (const step of steps) {
+        if (step.note || !groups.length) groups.push({ ...(step.note ? { note: step.note } : {}), steps: [step] });
+        else groups[groups.length - 1].steps.push(step);
+    }
+    return <section className={`agent-process agent-ws-member-process${open ? ' is-open' : ''}`} aria-label="成员的分析过程">
+        <button type="button" className="agent-process-heading agent-ws-member-process-heading" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => setDisclosed(!open)}>
+            {running && <LoaderCircle size={14} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+            <span className="agent-process-label"><span className="agent-process-count">{label}</span>
+                <ChevronRight size={12} aria-hidden="true" className={`agent-process-chevron${open ? ' rotate-90' : ''}`} /></span>
         </button>
-        {open && <ol id={id} className="agent-ws-member-steps">{steps.map((step, index) => <MemberStep key={index} step={step} live={running} />)}</ol>}
+        {open && <div id={id} className="agent-ws-member-flow">{groups.map((group, index) => <Fragment key={index}>
+            {group.note && <p className="agent-ws-member-note">{group.note}</p>}
+            <ol className="agent-process-steps">{group.steps.map((step, stepIndex) => <MemberStep key={stepIndex} step={step} live={running} />)}</ol>
+        </Fragment>)}</div>}
     </section>;
 }
 
 /**
- * 成员页：和命盘页并列的独立页面。标题是模型图标 + 成员名称，正文先是成员的分析过程
- * （说过的、调用了什么、参数与返回），再是结论与表态。
+ * 成员页：和命盘页并列的独立页面，读法与主对话一致——抬头是模型图标与成员名称，
+ * 其下是分工（相当于这位成员收到的问题），然后是它的过程、结论与表态。
  */
 export function MemberView({ tool, member, runStatus, step }: ToolViewProps & { member: ParallelAnalysisResult; step?: number }) {
     const id = useId();
@@ -604,23 +617,35 @@ export function MemberView({ tool, member, runStatus, step }: ToolViewProps & { 
     const name = member.name ?? member.system;
     const answer = member.answer && memberAnswerText(member.answer);
     const positions = Object.entries(member.positions ?? {});
+    const meta = [member.modelName ?? member.model ?? '主模型', effortLabel(member.reasoningEffort),
+        member.durationMs !== undefined && state.state === 'completed' ? `用时 ${formatAgentToolDuration(member.durationMs)}` : null].filter(Boolean).join(' · ');
     return <section className="agent-ws-view agent-ws-member-page" aria-labelledby={id}>
-        <WorkspaceViewHeading id={id} kicker={kickerOf(step, '协作成员', '独立分析，结论由主模型汇总')}
-            title={<span className="agent-ws-member-title"><Bot size={17} aria-hidden="true" />{name}</span>}>
-            {[member.modelName ?? member.model ?? '主模型', effortLabel(member.reasoningEffort), member.focus].filter(Boolean).join(' · ')}
-        </WorkspaceViewHeading>
-        <p className="agent-ws-member-page-status" data-state={state.state}>
-            {state.state === 'completed' ? <Check size={13} strokeWidth={2.4} aria-hidden="true" /> : state.state === 'running' ? <LoaderCircle size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <CircleAlert size={13} aria-hidden="true" />}
-            {state.label}{member.toolCalls !== undefined ? ` · 调用了 ${member.toolCalls} 次工具` : ''}{member.durationMs !== undefined && state.state === 'completed' ? ` · 用时 ${formatAgentToolDuration(member.durationMs)}` : ''}
-        </p>
-        {member.steps?.length ? <MemberProcess member={member} running={state.state === 'running'} />
-            : state.state === 'running' ? <p className="agent-ws-running" role="status"><LoaderCircle size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />正在分析</p> : null}
-        {answer ? <div className="agent-ws-member-answer"><MarkdownContent content={answer} className="chat-prose" /></div>
-            : state.state === 'failed' && <p className="agent-ws-note">这位成员没有完成分析，它的结论不会汇入主回答。</p>}
-        {positions.length > 0 && <section className="agent-ws-member-positions" aria-label="这位成员的立场">
-            <h3>立场</h3>
-            <dl>{positions.map(([topic, stance]) => <div key={topic}><dt>{topic}</dt><dd>{stance}</dd></div>)}</dl>
-        </section>}
+        <header className="agent-ws-member-hero">
+            <ModelAvatar member={member} size={22} className="agent-ws-member-hero-icon" />
+            <div className="agent-ws-member-hero-text">
+                <p className="agent-ws-kicker">{kickerOf(step, '协作成员', '独立分析，结论由主模型汇总')}</p>
+                <h2 id={id} className="agent-ws-member-title">{name}</h2>
+                <p className="agent-ws-member-meta">
+                    <span>{meta}</span>
+                    <span className="agent-ws-member-page-status" data-state={state.state}>
+                        {state.state === 'completed' ? <Check size={12} strokeWidth={2.6} aria-hidden="true" /> : state.state === 'running' ? <LoaderCircle size={12} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <CircleAlert size={12} aria-hidden="true" />}
+                        {state.label}
+                    </span>
+                </p>
+            </div>
+        </header>
+        {member.focus && <div className="agent-ws-member-brief"><span>分工</span><p>{member.focus}</p></div>}
+        <div className="agent-ws-member-transcript">
+            {member.steps?.length ? <MemberProcess member={member} running={state.state === 'running'} />
+                : state.state === 'running' ? <p className="agent-ws-running" role="status"><LoaderCircle size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />正在分析</p>
+                : member.toolCalls ? <p className="agent-ws-member-calls">调用了 {member.toolCalls} 次工具</p> : null}
+            {answer ? <div className="agent-ws-member-answer"><MarkdownContent content={answer} className="chat-prose" /></div>
+                : state.state === 'failed' && <p className="agent-ws-note">这位成员没有完成分析，它的结论不会汇入主回答。</p>}
+            {positions.length > 0 && <section className="agent-ws-member-positions" aria-label="这位成员的立场">
+                <h3>立场</h3>
+                <dl>{positions.map(([topic, stance]) => <div key={topic}><dt>{topic}</dt><dd>{stance}</dd></div>)}</dl>
+            </section>}
+        </div>
     </section>;
 }
 
@@ -674,7 +699,7 @@ export function CollaborationView({ tool, runStatus, step, onOpenMember }: ToolV
                 const answer = member.answer && memberAnswerText(member.answer);
                 return <article key={member.conversationId} className="agent-ws-member" data-state={state.state} aria-labelledby={`${id}-${member.conversationId}`}>
                     <div className="agent-ws-member-head">
-                        <span className="agent-ws-member-avatar" aria-hidden="true">{memberInitial(name)}</span>
+                        <ModelAvatar member={member} size={18} className="agent-ws-member-avatar" />
                         <div>
                             <h3 id={`${id}-${member.conversationId}`}>{titled ? `${name} · ${member.focus}` : name}</h3>
                             <p>{meta}</p>

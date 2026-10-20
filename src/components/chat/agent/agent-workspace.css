@@ -178,18 +178,31 @@
 .agent-ws-badge:is([data-state="answered"], [data-state="replied"]) { color: var(--chat-success); }
 .agent-ws-badge:is([data-state="required"], [data-state="optional"]) { background: var(--accent-light); color: var(--accent-hover); }
 /* 协作 */
-.agent-ws-member-title { display: inline-flex; align-items: center; gap: 8px; }
-.agent-ws-member-title > svg { color: var(--foreground-tertiary); }
-.agent-ws-member-page-status { display: inline-flex; align-items: center; gap: 6px; font-size: calc(13 / 16 * 1rem); color: var(--foreground-secondary); }
+/* 成员页：抬头 = 模型图标 + 成员名；其下分工、过程、结论，与主对话的读法一致。 */
+.agent-ws-member-page { gap: 18px; }
+.agent-ws-member-hero { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.agent-ws-member-hero-icon { width: 44px; height: 44px; border: 1px solid var(--border); border-radius: 12px; background: var(--background); }
+.agent-ws-member-hero-text { display: flex; min-width: 0; flex-direction: column; gap: 1px; }
+.agent-ws-kicker { font-size: calc(12 / 16 * 1rem); color: var(--foreground-tertiary); }
+.agent-ws-member-title { font-family: var(--font-display); font-size: calc(22 / 16 * 1rem); font-weight: 600; line-height: 1.35; letter-spacing: .02em; color: var(--foreground); overflow-wrap: anywhere; }
+.agent-ws-member-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); }
+.agent-ws-member-page-status { display: inline-flex; align-items: center; gap: 4px; color: var(--foreground-secondary); }
 .agent-ws-member-page-status[data-state="completed"] { color: var(--chat-success); }
 .agent-ws-member-page-status[data-state="running"] { color: var(--accent-hover); }
 .agent-ws-member-page-status[data-state="failed"] { color: var(--danger); }
-.agent-ws-member-positions { display: flex; flex-direction: column; gap: 6px; }
-.agent-ws-member-positions > h3 { font-size: calc(13 / 16 * 1rem); font-weight: 600; color: var(--foreground-secondary); }
-.agent-ws-member-positions dl { display: flex; flex-direction: column; gap: 4px; }
-.agent-ws-member-positions dl > div { display: flex; gap: 12px; font-size: calc(13.5 / 16 * 1rem); line-height: 1.6; }
-.agent-ws-member-positions dt { min-width: 7rem; color: var(--foreground-tertiary); }
-.agent-ws-member-positions dd { min-width: 0; overflow-wrap: anywhere; }
+/* 分工像主对话里用户的提问：右对齐的浅色气泡。 */
+.agent-ws-member-brief { display: flex; max-width: min(85%, 32rem); flex-direction: column; gap: 2px; align-self: flex-end; padding: 10px 14px; border-radius: 14px; background: var(--background-secondary); }
+.agent-ws-member-brief > span { font-size: calc(11.5 / 16 * 1rem); color: var(--foreground-tertiary); }
+.agent-ws-member-brief > p { font-size: calc(14 / 16 * 1rem); line-height: 1.6; color: var(--foreground); overflow-wrap: anywhere; }
+.agent-ws-member-transcript { display: flex; min-width: 0; flex-direction: column; gap: 12px; }
+.agent-ws-member-flow { display: flex; min-width: 0; flex-direction: column; gap: 8px; }
+.agent-ws-member-calls { font-size: calc(14 / 16 * 1rem); color: var(--foreground-tertiary); }
+.agent-ws-member-positions { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: var(--hairline) solid var(--hairline-color); }
+.agent-ws-member-positions > h3 { font-size: calc(12.5 / 16 * 1rem); font-weight: 500; color: var(--foreground-tertiary); }
+.agent-ws-member-positions dl { display: flex; flex-wrap: wrap; gap: 6px; }
+.agent-ws-member-positions dl > div { display: inline-flex; align-items: baseline; gap: 6px; padding: 3px 10px; border: var(--hairline) solid var(--border); border-radius: 999px; font-size: calc(13 / 16 * 1rem); line-height: 1.5; }
+.agent-ws-member-positions dt { color: var(--foreground-tertiary); }
+.agent-ws-member-positions dd { min-width: 0; color: var(--foreground); font-weight: 500; overflow-wrap: anywhere; }
 /* 协作分析 (AgentCollab board): one card per member with its process and conclusion, then the stance table. */
 .agent-ws-collaboration { gap: 18px; }
 .agent-ws-member { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--background); }
@@ -200,44 +213,22 @@
 .agent-ws-member-head p { font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); overflow-wrap: anywhere; }
 .agent-ws-member-head > .agent-member-status { flex-shrink: 0; }
 .agent-ws-member-open { flex-shrink: 0; margin-left: 4px; }
-.agent-ws-member-avatar { display: flex; flex-shrink: 0; width: 32px; height: 32px; align-items: center; justify-content: center; border-radius: 9px; background: var(--background-secondary); font-family: var(--font-display); font-size: calc(15 / 16 * 1rem); font-weight: 700; }
-.agent-ws-member[data-state="running"] .agent-ws-member-avatar { background: var(--accent-light); color: var(--accent-hover); }
+.agent-ws-member-avatar { width: 34px; height: 34px; border: var(--hairline) solid var(--border); border-radius: 10px; background: var(--background); }
+.agent-ws-member[data-state="running"] .agent-ws-member-avatar { border-color: var(--accent); }
 /* The board shows each finished member's conclusion in full; only finished analyses reach the answer. */
 .agent-ws-member-answer { display: flex; flex-direction: column; gap: 8px; font-size: calc(14 / 16 * 1rem); line-height: 1.8; overflow-wrap: anywhere; }
 .agent-ws-member-answer .chat-prose { font-size: inherit; }
 /* 成员的过程：一条可折叠的过程行，展开后是成员说的话与逐步调用，像主对话的任务过程那样读。 */
-.agent-ws-member-process { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 8px 10px; border-radius: 10px; background: var(--background-secondary); }
-.agent-ws-member-process-heading { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); text-align: left; }
-.agent-ws-member-process-heading:hover { color: var(--foreground); }
-.agent-ws-member-process-heading > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.agent-ws-member-process-heading > svg:last-child { flex-shrink: 0; color: var(--foreground-tertiary); transition: transform .15s ease; }
-.agent-ws-member-steps { display: flex; flex-direction: column; gap: 2px; padding-left: 2px; }
-.agent-ws-member-step { display: flex; flex-direction: column; min-width: 0; }
-.agent-ws-member-note { margin: 6px 0 2px 22px; font-size: calc(13 / 16 * 1rem); line-height: 1.65; color: var(--foreground); overflow-wrap: anywhere; }
-.agent-ws-member-call { display: flex; align-items: flex-start; gap: 8px; min-width: 0; padding: 4px 0; font-size: calc(13 / 16 * 1rem); line-height: 1.5; text-align: left; }
+.agent-ws-member-process { margin: 0; }
+.agent-ws-member-note { font-size: calc(14 / 16 * 1rem); line-height: 1.75; color: var(--foreground); overflow-wrap: anywhere; }
 .agent-ws-member-call:disabled { cursor: default; }
-.agent-ws-member-call:not(:disabled):hover .agent-ws-member-call-text > strong { color: var(--foreground); }
-.agent-ws-member-call > svg:last-child { flex-shrink: 0; margin-top: 4px; color: var(--foreground-tertiary); transition: transform .15s ease; }
-.agent-ws-member-glyph { display: inline-flex; flex-shrink: 0; width: 14px; height: 1.5em; align-items: center; justify-content: center; font-size: calc(12 / 16 * 1rem); color: var(--foreground-tertiary); }
-.agent-ws-member-step[data-state="completed"] .agent-ws-member-glyph { color: var(--chat-success); }
-.agent-ws-member-step[data-state="running"] .agent-ws-member-glyph { color: var(--accent); }
-.agent-ws-member-step[data-state="failed"] .agent-ws-member-glyph { color: var(--danger); }
-.agent-ws-member-call-text { display: flex; flex: 1; flex-wrap: wrap; column-gap: 8px; min-width: 0; }
-.agent-ws-member-call-text > strong { font-weight: 500; color: var(--foreground-secondary); }
-.agent-ws-member-step[data-state="running"] .agent-ws-member-call-text > strong { color: var(--foreground); }
-.agent-ws-member-call-text > span { min-width: 0; color: var(--foreground-tertiary); overflow-wrap: anywhere; }
-.agent-ws-member-call-body { display: flex; flex-direction: column; gap: 6px; margin: 2px 0 8px 22px; min-width: 0; }
+.agent-ws-member-step[data-state="failed"] .agent-step-note, .agent-ws-member-step[data-state="interrupted"] .agent-step-note { color: var(--danger); }
+.agent-ws-member-call-body { gap: 8px; }
 .agent-ws-member-args { display: flex; flex-direction: column; gap: 2px; font-family: var(--font-mono); font-size: calc(12 / 16 * 1rem); line-height: 1.6; }
 .agent-ws-member-args > div { display: flex; gap: 6px; min-width: 0; }
 .agent-ws-member-args dt { flex-shrink: 0; color: var(--foreground-tertiary); }
 .agent-ws-member-args dt::after { content: ':'; }
 .agent-ws-member-args dd { min-width: 0; color: var(--foreground-secondary); overflow-wrap: anywhere; }
-.agent-ws-member-output { max-height: 20rem; padding: 10px 12px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--background); font-size: calc(12.5 / 16 * 1rem); line-height: 1.65; overflow-wrap: anywhere; }
-/* 工具返回的是 Core 规范文本（Markdown）：标题降成小节名，表格紧凑，整体比结论小一号。 */
-.agent-ws-member-output .chat-prose { font-size: inherit; }
-.agent-ws-member-output :is(h1, h2, h3, h4) { margin: 10px 0 4px; font-size: calc(13 / 16 * 1rem); font-weight: 600; }
-.agent-ws-member-output > .chat-prose > :first-child, .agent-ws-member-output :is(h1, h2, h3, h4):first-child { margin-top: 0; }
-.agent-ws-member-output table { font-size: calc(12 / 16 * 1rem); }
 .agent-ws-member-output :is(ul, ol) { padding-left: 1.25em; }
 .agent-ws-divergence { display: flex; flex-direction: column; gap: 8px; }
 .agent-ws-divergence > h3 { font-size: calc(13.5 / 16 * 1rem); font-weight: 600; }
@@ -475,7 +466,7 @@ button.agent-ws-row:hover { border-color: color-mix(in srgb, var(--accent) 45%, 
 .agent-ws-status-head > .agent-ws-status-value, .agent-ws-status-head > .agent-ws-status-count { margin-left: auto; }
 .agent-ws-status-head > span:first-child { flex-shrink: 0; white-space: nowrap; }
 button.agent-ws-status-head { cursor: pointer; }
-button.agent-ws-status-head:hover:not(:disabled) { background: var(--fill-ghost-hover); }
+button.agent-ws-status-head:hover:not(:disabled) { background: transparent; color: var(--foreground); }
 button.agent-ws-status-head:disabled { cursor: default; }
 .agent-ws-status-value { display: inline-flex; min-width: 0; align-items: center; gap: 6px; overflow: hidden; font-size: calc(13 / 16 * 1rem); color: var(--foreground-tertiary); white-space: nowrap; text-overflow: ellipsis; }
 .agent-ws-status-value svg { flex-shrink: 0; transition: transform .15s; }

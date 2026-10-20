@@ -2,7 +2,8 @@
 // 需要协作成员展开状态与工作区上下文
 
 import { useId, useMemo, useState, type CSSProperties } from 'react';
-import { Bot, Check, CircleAlert, LoaderCircle } from 'lucide-react';
+import { Check, CircleAlert, LoaderCircle } from 'lucide-react';
+import { ModelAvatar } from './ModelAvatar';
 import { getAgentChart, getAgentToolText, type AgentToolPart } from '@/lib/agent/tool-presentation';
 import { REASONING_EFFORT_LABELS } from '@/lib/chat/model-settings';
 import { AI_REASONING_EFFORTS, type AIReasoningEffort } from '@/types';
@@ -45,7 +46,7 @@ function CollaborationCard({ tool, analyses, runStatus }: { tool: AgentToolPart;
         const status = getParallelMemberState(analysis, call);
         const current = status.state === 'running' ? analysis.steps?.findLast(step => step.status === 'running')?.title : undefined;
         const content = <>
-          <strong><Bot size={13} aria-hidden="true" />{analysis.name ?? analysis.system}</strong>
+          <strong><ModelAvatar member={analysis} size={13} />{analysis.name ?? analysis.system}</strong>
           <small>{[analysis.modelName ?? analysis.model ?? '主模型', effortLabel(analysis.reasoningEffort)].filter(Boolean).join(' · ')}</small>
           <span className="agent-member-status" data-state={status.state}>
             {status.state === 'completed' ? <Check size={12} strokeWidth={2.6} aria-hidden="true" /> : status.state === 'running' ? <LoaderCircle size={12} strokeWidth={2.6} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <CircleAlert size={12} aria-hidden="true" />}

@@ -108,8 +108,9 @@ export function createParallelExtension(registrations: readonly ToolRegistration
                 const member = collaborators.find(item => item.id === task.agentId);
                 // The public card shows the configured model, effort and focus that the child actually runs with.
                 const given = task.name?.trim();
+                const config = member && models.get(member.model);
                 return { system: task.system, conversationId: ids[index], status: 'running', ...(member
-                  ? { agentId: member.id, name: member.name, model: member.model, modelName: models.get(member.model)?.name ?? member.model, reasoningEffort: memberEffort(member), ...(member.focus.trim() ? { focus: member.focus.trim() } : {}) }
+                  ? { agentId: member.id, name: member.name, model: member.model, modelName: config?.name ?? member.model, ...(config?.vendor ? { vendor: config.vendor } : {}), reasoningEffort: memberEffort(member), ...(member.focus.trim() ? { focus: member.focus.trim() } : {}) }
                   : given ? { name: given } : {}) };
             });
             // Live calls fill in a running member; a finished member carries its own process.

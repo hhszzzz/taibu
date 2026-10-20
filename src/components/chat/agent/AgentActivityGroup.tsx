@@ -2,7 +2,7 @@
 // 需要折叠状态与工作区上下文：步骤在转录内展开结果（详细视图另含参数），也可在工作区打开
 
 import { useId, useState, type ReactNode } from 'react';
-import { Bot, ChevronRight, FileCheck2, LoaderCircle, Orbit, PanelRight, Pause } from 'lucide-react';
+import { ChevronRight, LoaderCircle, PanelRight, Pause } from 'lucide-react';
 import type { AgentMessageData, AgentPart } from '@/lib/agent/types';
 import { getAgentToolFamily } from '@/lib/agent/tool-catalog';
 import { getAgentToolQuestionIds } from '@/lib/agent/workspace';
@@ -11,8 +11,10 @@ import { useIsDesktopLayout } from '@/lib/hooks/useIsDesktopLayout';
 import { useTranscriptRecordView } from '@/lib/chat/chat-record-view';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { ThinkingBlock } from '../ThinkingBlock';
-import { describeAgentStep, formatAgentValue, getAgentLiveLine, getAgentToolTitle, getParallelMemberState, summarizeAgentActivity, type AgentProcessPart, type AgentTool } from './presentation';
-import { parallelAnalysisResults } from '@/lib/agent/parallel-results';
+import { describeAgentStep, formatAgentValue, getAgentLiveLine, getAgentToolTitle, getFinalArtifactGroups, getParallelMemberState, summarizeAgentActivity, type AgentProcessPart, type AgentTool } from './presentation';
+import { memberAnswerText, parallelAnalysisResults } from '@/lib/agent/parallel-results';
+import { getChartKindMeta } from './chart-registry';
+import { ModelAvatar } from './ModelAvatar';
 import { getChartFocus, getChartTargets, getAgentChartReference, parseChartReference } from '@/lib/agent/chart-interaction';
 import { useAgentResultWorkspace } from './AgentResultContext';
 
@@ -27,20 +29,8 @@ export function AgentActivityIndicator({ data }: { data: AgentMessageData }) {
     </div>;
 }
 
-/** 最终成果：标题与摘要取自本次任务里产出它的那次调用；点开就是工作区的对应页面。 */
-function finalArtifactItems(parts: AgentPart[], ids: string[]) {
-    return ids.map(id => {
-        const artifact = parts.find((part): part is Extract<AgentPart, { type: 'artifact' }> => part.type === 'artifact' && part.id === id);
-        if (artifact) return { id, title: artifact.title, summary: artifact.recordId ? '已保存的分析' : artifact.chartType === 'ziwei' ? '紫微命盘' : '八字命盘', target: 'chart:' + id };
-        for (const part of parts) {
-            if (part.type !== 'tool' || !part.output || typeof part.output !== 'object') continue;
-            if ((part.output as { artifactId?: unknown }).artifactId !== id) continue;
-            const chart = getAgentChart(part);
-            return { id, title: chart?.title ?? part.title, summary: chart?.summary ?? '', target: 'tool:' + part.id };
-        }
-        return { id, title: '成果', summary: '', target: 'chart:' + id };
-    });
-}
+/** 成员结论的第一句，作为成员行的预览。 */
+const previewLine = (text: string) => text.trim().split('\n', 1)[0].replace(/^#+\s*/u, '');
 
 /** 把只返回结构化数据的工具读成一句话或几行事实，不再统一写「已返回结构化结果」。 */
 function StepStructured({ tool, parts, workspace }: { tool: AgentTool; parts: AgentPart[]; workspace: ReturnType<typeof useAgentResultWorkspace> }): ReactNode {
@@ -142,10 +132,12 @@ function AgentStepCall({ tool, runStatus, parts }: { tool: AgentTool; runStatus:
         : null;
     const members = tool.name === 'parallel_analysis' ? parallelAnalysisResults(tool.output) : [];
     const finalIds = getAgentFinalSelection(tool);
-    const finals = finalIds ? finalArtifactItems(parts, finalIds) : [];
+    const finals = finalIds ? getFinalArtifactGroups(parts, finalIds) : [];
     // 结构化结果（定位、提问、记忆、资料…）自己带「查看…」入口，不再重复「在工作区查看」。
     const structured = members.length === 0 && finals.length === 0 && state !== 'running' ? StepStructured({ tool, parts, workspace }) : null;
     const selfContained = members.length > 0 || finals.length > 0 || structured !== null;
+    const family = getAgentToolFamily(tool.name);
+    const openLabel = family === 'chart' ? '查看盘面' : family === 'drilldown' ? '查看详查' : '在工作区查看';
     return <div className="agent-step-call">
         {/* 详细视图 = claude 工具详情：逐行 key/value（键等宽半透明）；普通视图不露参数键名。 */}
         {detailed && tool.input !== undefined && <div className="agent-step-command" tabIndex={0} aria-label="调用参数">
@@ -153,38 +145,63 @@ function AgentStepCall({ tool, runStatus, parts }: { tool: AgentTool; runStatus:
                 <span className="agent-step-detail-key">{key}:</span> <span className="agent-step-detail-value">{formatAgentValue(value)}</span>
             </div>) : <div className="agent-step-detail-line"><span className="agent-step-detail-key">input:</span> <span>{input}</span></div>}
         </div>}
-        {members.length > 0 && <ul className="agent-step-members" aria-label="协作成员">
+        {members.length > 0 && <ul className="agent-step-entities" aria-label="协作成员">
             {members.map(member => {
                 const status = getParallelMemberState(member, state);
+                const name = member.name ?? member.system;
+                const preview = member.answer ? previewLine(memberAnswerText(member.answer)) : member.focus ?? null;
                 const content = <>
-                    <Bot size={14} aria-hidden="true" />
-                    <span className="agent-step-member-name">{member.name ?? member.system}</span>
-                    <span className="agent-step-member-model">{[member.modelName ?? member.model, status.label].filter(Boolean).join(' · ')}</span>
+                    <ModelAvatar member={member} size={16} className="agent-step-entity-icon" />
+                    <span className="agent-step-entity-main">
+                        <span className="agent-step-entity-line">
+                            <span className="agent-step-entity-name">{name}</span>
+                            <span className="agent-step-entity-meta" data-state={status.state}>{[member.modelName ?? member.model, status.label].filter(Boolean).join(' · ')}</span>
+                        </span>
+                        {preview && <span className="agent-step-entity-preview">{preview}</span>}
+                    </span>
                 </>;
                 return <li key={member.conversationId} data-state={status.state}>
-                    {workspace ? <button type="button" onClick={() => workspace.openResource(`member:${tool.id}:${member.conversationId}`)}>{content}</button> : <span className="agent-step-member-static">{content}</span>}
+                    {workspace ? <button type="button" className="agent-step-entity" aria-label={`打开${name}的分析`} onClick={() => workspace.openResource(`member:${tool.id}:${member.conversationId}`)}>
+                        {content}<ChevronRight size={14} aria-hidden="true" className="agent-step-entity-go" />
+                    </button> : <span className="agent-step-entity">{content}</span>}
                 </li>;
             })}
         </ul>}
-        {finals.length > 0 && <ul className="agent-step-artifacts" aria-label="最终成果">
-            {finals.map(item => {
-                const Icon = item.summary === '已保存的分析' ? FileCheck2 : Orbit;
-                return <li key={item.id}>
-                    {workspace ? <button type="button" onClick={() => workspace.openResource(item.target)}>
-                        <Icon size={14} aria-hidden="true" /><span className="agent-step-member-name">{item.title}</span>
-                        {item.summary && <span className="agent-step-member-model">{item.summary}</span>}
-                    </button> : <span className="agent-step-member-static"><Icon size={14} aria-hidden="true" /><span>{item.title}</span></span>}
+        {finals.length > 0 && <ul className="agent-step-entities" aria-label="最终成果">
+            {finals.map(group => {
+                const Icon = getChartKindMeta(group.kind).icon;
+                const content = <>
+                    <span className="agent-step-entity-icon" aria-hidden="true"><Icon size={16} /></span>
+                    <span className="agent-step-entity-main">
+                        <span className="agent-step-entity-line">
+                            <span className="agent-step-entity-name">{group.title}</span>
+                            {group.saved && <span className="agent-step-entity-meta">已保存</span>}
+                        </span>
+                        {group.summary && <span className="agent-step-entity-preview">{group.summary}</span>}
+                        {group.producers.length > 0 && <span className="agent-step-producers" aria-label="排出这张盘的分析者">
+                            {group.producers.map(producer => <span key={producer.key} className="agent-step-producer">
+                                {producer.main ? <span className="agent-avatar agent-avatar--mini" aria-hidden="true">卜</span> : <ModelAvatar member={producer} size={12} />}
+                                {producer.name}
+                            </span>)}
+                        </span>}
+                    </span>
+                </>;
+                return <li key={group.key}>
+                    {workspace ? <button type="button" className="agent-step-entity" aria-label={`打开${group.title}`} onClick={() => workspace.openResource(group.target)}>
+                        {content}<ChevronRight size={14} aria-hidden="true" className="agent-step-entity-go" />
+                    </button> : <span className="agent-step-entity">{content}</span>}
                 </li>;
             })}
         </ul>}
         {result !== null && members.length === 0 && finals.length === 0
-            ? <div className="agent-step-output" tabIndex={0} aria-label={text ? '规范文本' : '工具结果'}>{result}</div>
+            ? text ? <div className="agent-step-output agent-step-markdown" tabIndex={0} aria-label="规范文本"><MarkdownContent content={result} className="chat-prose" /></div>
+                : <div className="agent-step-output" tabIndex={0} aria-label="工具结果">{result}</div>
             : members.length === 0 && finals.length === 0 && (state === 'running'
                 ? <p className="agent-step-empty">正在等待工具返回结果…</p>
                 : structured ?? (raw !== null ? <p className="agent-step-empty">已返回结构化结果</p> : <p className="agent-step-empty">该步骤没有返回详情。</p>))}
         {workspace && !selfContained && <div className="agent-step-actions">
             <button type="button" className="agent-step-workspace" onClick={() => workspace.openResource(`tool:${tool.id}`)}>
-                <PanelRight size={13} aria-hidden="true" />在工作区查看
+                <PanelRight size={13} aria-hidden="true" />{openLabel}
             </button>
         </div>}
     </div>;

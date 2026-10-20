@@ -1,9 +1,9 @@
 'use client';
 // 需要点击事件在工作区内切换标签，并在概览中直接导出对话
 
-import { useId, useState, type ReactNode } from 'react';
+import { useId, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import Link from 'next/link';
-import { ArrowUpRight, BookOpen, Calculator, ChevronDown, ChevronRight, CircleHelp, Cpu, Database, Files, FileText, Globe, GripVertical, ListChecks, ScanSearch, Search, Sigma, Users, Wrench, type LucideIcon } from 'lucide-react';
+import { ArrowUpRight, BookOpen, Calculator, ChevronDown, ChevronRight, CircleHelp, Database, Files, FileText, Globe, GripVertical, ListChecks, ScanSearch, Search, Sigma, Users, Wrench, type LucideIcon } from 'lucide-react';
 import { type AgentMessageData, type AgentRunView } from '@/lib/agent/types';
 import { getAgentCalculation, getAgentChart, getAgentUnrepresentedArtifacts, type AgentCalculation, type AgentChart, type AgentToolPart } from '@/lib/agent/tool-presentation';
 import { getAgentToolFamily } from '@/lib/agent/tool-catalog';
@@ -12,6 +12,7 @@ import { resolveClientModelName } from '@/lib/ai/model-name-cache';
 import type { NavIcon } from '@/lib/navigation/registry';
 import { AgentContextOverview } from './AgentContextUsage';
 import { ChartThumb } from './chart-preview';
+import { ModelAvatar } from './ModelAvatar';
 import { getChartKindMeta } from './chart-registry';
 import {
     describeOverviewFacts, getAgentArtifactHref, getAgentReadingState,
@@ -125,9 +126,9 @@ function ModelsCard({ data, run, grip }: { data?: AgentMessageData; run?: Worksp
             <span className="agent-ws-status-count">{members.length}</span>
         </div>
         {open && <div className="agent-rail-body">
-            <div className="agent-rail-row"><Cpu size={16} aria-hidden="true" /><span>{main}</span><span className="agent-rail-meta">主模型</span></div>
+            <div className="agent-rail-row"><ModelAvatar member={{ model: data?.runtime?.model.id }} size={15} /><span>{main}</span><span className="agent-rail-meta">主模型</span></div>
             {members.map(member => <div key={member.id} className="agent-rail-row">
-                <Cpu size={16} aria-hidden="true" />
+                <ModelAvatar member={{ model: member.model }} size={15} />
                 <span>{member.name || '未命名成员'}</span>
                 <span className="agent-rail-meta">{resolveClientModelName(member.model)}</span>
             </div>)}
@@ -138,44 +139,81 @@ function ModelsCard({ data, run, grip }: { data?: AgentMessageData; run?: Worksp
 type RailCardKind = 'models' | 'context' | 'results';
 const RAIL_CARD_LABELS: Record<RailCardKind, string> = { models: '多模型协作', context: '上下文', results: '成果' };
 
-/** 会话状态卡：模型（仅协作时）/ 上下文 / 成果；手柄可拖动排序，Alt+↑↓ 同效。 */
+type CardDrag = { kind: RailCardKind; pointer: number; startY: number; dy: number; from: number; to: number; tops: number[]; heights: number[] };
+
+/**
+ * 会话状态卡：模型（仅协作时）/ 上下文 / 成果；按住手柄拖动排序，整张卡跟着指针走，
+ * 其余卡片实时让位，松手落位；Alt+↑↓ 同效。
+ */
 export function WorkspaceStatusCards({ data, run, afterContext }: { data?: AgentMessageData; run?: WorkspaceRunInfo; afterContext?: (grip: ReactNode) => ReactNode }) {
     const [order, setOrder] = useState<RailCardKind[]>(['models', 'context', 'results']);
+    const [drag, setDrag] = useState<CardDrag | null>(null);
+    const cards = useRef(new Map<RailCardKind, HTMLDivElement>());
     if (!data) return null;
-    const available = order.filter(kind => kind === 'models' ? (run?.configuration?.collaborators.length ?? 0) > 0 : kind === 'results' ? afterContext !== undefined : true);
-    const move = (from: RailCardKind, to: RailCardKind) => setOrder(current => {
-        const next = current.filter(kind => kind !== from);
-        next.splice(Math.max(0, next.indexOf(to)), 0, from);
-        return next;
-    });
+    const shown = (kind: RailCardKind) => kind === 'models' ? (run?.configuration?.collaborators.length ?? 0) > 0 : kind === 'results' ? afterContext !== undefined : true;
+    const available = order.filter(shown);
     const nudge = (kind: RailCardKind, delta: number) => setOrder(current => {
-        const visible = current.filter(item => item === 'models' ? (run?.configuration?.collaborators.length ?? 0) > 0 : item === 'results' ? afterContext !== undefined : true);
+        const visible = current.filter(shown);
         const target = visible[visible.indexOf(kind) + delta];
         if (!target) return current;
         const next = current.filter(item => item !== kind);
         next.splice(next.indexOf(target) + (delta > 0 ? 1 : 0), 0, kind);
         return next;
     });
-    // 拖动把手 = claude tile 头行的「移动」钮：紧跟标题、悬停显形，拖动排序，Alt+↑↓ 同效。
-    const grip = (kind: RailCardKind) => <button type="button" className="agent-rail-card-grip" aria-label={`移动${RAIL_CARD_LABELS[kind]}卡片`} draggable
-        onDragStart={event => { event.dataTransfer.setData('application/x-taibu-rail-card', kind); event.dataTransfer.effectAllowed = 'move'; }}
+    const start = (kind: RailCardKind, event: ReactPointerEvent<HTMLButtonElement>) => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        const rects = available.map(item => cards.current.get(item)?.getBoundingClientRect());
+        if (rects.some(rect => !rect)) return;
+        const from = available.indexOf(kind);
+        setDrag({ kind, pointer: event.pointerId, startY: event.clientY, dy: 0, from, to: from, tops: rects.map(rect => rect!.top), heights: rects.map(rect => rect!.height) });
+    };
+    const move = (event: ReactPointerEvent<HTMLButtonElement>) => setDrag(current => {
+        if (!current || current.pointer !== event.pointerId) return current;
+        const dy = event.clientY - current.startY;
+        // 被拖的卡中线越过哪张卡的中线，就落到那张卡的位置。
+        const middle = current.tops[current.from] + current.heights[current.from] / 2 + dy;
+        const to = current.tops.filter((top, index) => index !== current.from && top + current.heights[index] / 2 < middle).length;
+        return { ...current, dy, to };
+    });
+    const end = (event: ReactPointerEvent<HTMLButtonElement>) => {
+        if (!drag || drag.pointer !== event.pointerId) return;
+        if (drag.to !== drag.from) setOrder(current => {
+            const visible = current.filter(shown).filter(item => item !== drag.kind);
+            visible.splice(drag.to, 0, drag.kind);
+            return [...visible, ...current.filter(item => !shown(item))];
+        });
+        setDrag(null);
+    };
+    /** 拖动时其余卡片让出被拖卡片的高度（含间距）。 */
+    const shift = (index: number) => {
+        if (!drag || index === drag.from) return 0;
+        const room = drag.heights[drag.from] + RAIL_CARD_GAP;
+        if (drag.from < index && index <= drag.to) return -room;
+        if (drag.to <= index && index < drag.from) return room;
+        return 0;
+    };
+    // 拖动把手 = claude tile 头行的「移动」钮：紧跟标题、悬停显形。
+    const grip = (kind: RailCardKind) => <button type="button" className="agent-rail-card-grip" aria-label={`移动${RAIL_CARD_LABELS[kind]}卡片`}
+        onPointerDown={event => start(kind, event)} onPointerMove={move} onPointerUp={end} onPointerCancel={() => setDrag(null)}
         onKeyDown={event => {
             if (!event.altKey || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return;
             event.preventDefault();
             nudge(kind, event.key === 'ArrowUp' ? -1 : 1);
         }}><GripVertical size={12} aria-hidden="true" /></button>;
-    return <div className="agent-ws-status-cards">
-        {available.map(kind => <div key={kind} className="agent-rail-card" onDragOver={event => event.preventDefault()} onDrop={event => {
-            event.preventDefault();
-            const from = event.dataTransfer.getData('application/x-taibu-rail-card') as RailCardKind;
-            if (RAIL_CARD_LABELS[from] && from !== kind) move(from, kind);
-        }}>
+    return <div className="agent-ws-status-cards" data-dragging={drag ? 'true' : undefined}>
+        {available.map((kind, index) => <div key={kind} ref={node => { if (node) cards.current.set(kind, node); else cards.current.delete(kind); }}
+            className="agent-rail-card" data-dragged={drag?.kind === kind || undefined}
+            style={drag ? { transform: `translateY(${drag.kind === kind ? drag.dy : shift(index)}px)` } : undefined}>
             {kind === 'models' ? <ModelsCard data={data} run={run} grip={grip(kind)} />
                 : kind === 'context' ? <AgentContextOverview runtime={data.runtime} working={data.status === 'running'} grip={grip(kind)} />
                 : afterContext?.(grip(kind))}
         </div>)}
     </div>;
 }
+/** 与 .agent-ws-status-cards 的 gap 一致。 */
+const RAIL_CARD_GAP = 8;
 
 /**
  * 概览: what the conversation produced — readings with whether they were saved,

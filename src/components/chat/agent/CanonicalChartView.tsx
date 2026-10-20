@@ -2,7 +2,8 @@
 import { lazy, Suspense } from 'react';
 import type { AgentChart } from '@/lib/agent/tool-presentation';
 import { getChartTargets, type ChartTarget } from '@/lib/agent/chart-interaction';
-import type { RelationEdge, RelationLayout, RelationMode } from '@/lib/divination/ganzhi-relation-layout';
+import type { RelationEdge, RelationLayout } from '@/lib/divination/ganzhi-relation-layout';
+import type { GlyphMarks } from '@/components/bazi/result/ProfessionalTable';
 import { GanzhiRelationOverlay, relationBandHeight, relationCrossHeight } from '@/components/bazi/result/GanzhiRelationOverlay';
 
 const Bazi = lazy(() => import('@/components/bazi/result/ProfessionalTable').then(module => ({ default: module.ProfessionalTable })));
@@ -17,8 +18,14 @@ const Taiyi = lazy(() => import('@/components/visualization/TaiyiChart').then(mo
 const Astrology = lazy(() => import('@/components/visualization/AstrologyChart').then(module => ({ default: module.AstrologyChart })));
 const Almanac = lazy(() => import('@/components/visualization/AlmanacChart').then(module => ({ default: module.AlmanacChart })));
 
-/** 八字表上要画的干支关系 / 流通连线（已按模式与筛选取舍）。 */
-export type BaziRelationOverlay = { layout: RelationLayout; located: ReadonlySet<string>; onSelect?: (edge: RelationEdge) => void; muted?: RelationMode };
+/** 八字表上要画的干支关系与流通连线、Agent 定位的线与字，以及藏干旁的根透标记。 */
+export type BaziRelationOverlay = {
+  layout: RelationLayout;
+  located: ReadonlySet<string>;
+  locatedCells?: ReadonlySet<string>;
+  marks?: GlyphMarks;
+  onSelect?: (edge: RelationEdge) => void;
+};
 
 export function CanonicalChartView({ value, targets = [], includeRelated = true, onTargetSelect, baziOverlay }: {
   value: AgentChart; text?: string; targets?: ChartTarget[]; includeRelated?: boolean; onTargetSelect?: (id: string) => void;
@@ -27,9 +34,11 @@ export function CanonicalChartView({ value, targets = [], includeRelated = true,
   let content;
   const interaction = onTargetSelect ? { selectedIds: targets.map(target => target.id), onSelect: onTargetSelect } : undefined;
   switch (value.kind) {
+    // 关系层没有连线时也要挂上：它负责 Agent 在看时让其余字退后，以及根透标记的悬停聚焦。
     case 'bazi': content = <Bazi canonicalChart={value.chart} isUnknownTime={value.chart.四柱[3]?.干支.includes('*')} canonicalLabels
-      overlay={baziOverlay && (baziOverlay.layout.edges.length > 0 || (baziOverlay.layout.aside?.length ?? 0) > 0) ? <GanzhiRelationOverlay {...baziOverlay} /> : undefined}
+      overlay={baziOverlay ? <GanzhiRelationOverlay layout={baziOverlay.layout} located={baziOverlay.located} locatedCells={baziOverlay.locatedCells} onSelect={baziOverlay.onSelect} /> : undefined}
       relationBands={baziOverlay ? { stem: relationBandHeight(baziOverlay.layout.lanes.stem), branch: relationBandHeight(baziOverlay.layout.lanes.branch), cross: relationCrossHeight(baziOverlay.layout.lanes.cross) } : undefined}
+      glyphMarks={baziOverlay?.marks}
       highlightedCells={targets.flatMap(target => target.kind === 'bazi_cell' ? [target.cell] : target.kind === 'bazi_relation' ? target.relation.位置 : [])}
       onCellSelect={onTargetSelect ? cell => {
         const target = getChartTargets(value).find(target => target.kind === 'bazi_cell' && target.cell.柱 === cell.柱 && target.cell.部位 === cell.部位 && target.cell.字 === cell.字);

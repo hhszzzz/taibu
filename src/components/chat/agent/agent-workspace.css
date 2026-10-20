@@ -425,11 +425,10 @@ button.agent-ws-row:hover { border-color: color-mix(in srgb, var(--accent) 45%, 
 
 /* Narrow panels stack the two-column grids. */
 @container (max-width: 440px) {
-    .agent-ws-known, .agent-board-relations > ul { grid-template-columns: minmax(0, 1fr); }
+    .agent-ws-known { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* Phones (design board "手机 · 工作区"): a sheet from the bottom edge with pill tabs; a chart's
-   追问 and 只看相关位置 become the sheet's bottom bar. */
+/* Phones (design board "手机 · 工作区"): a sheet from the bottom edge with pill tabs. */
 @media (max-width: 767px) {
     .app-modal.agent-workspace-dialog { inset: auto 0 0; width: 100%; max-width: none; height: calc(100dvh - 64px - var(--sat)); max-height: none; margin: 0; border: 0; border-radius: 22px 22px 0 0; box-shadow: var(--shadow-lg); }
     .agent-workspace-dialog .agent-panel-content::before { content: ''; flex-shrink: 0; align-self: center; width: 40px; height: 5px; margin: 8px 0 2px; border-radius: 999px; background: var(--border-hover); }
@@ -451,10 +450,6 @@ button.agent-ws-row:hover { border-color: color-mix(in srgb, var(--accent) 45%, 
     /* The sheet, not its scrolling body, is the size container, so the bar below stays put while the view scrolls. */
     .agent-workspace-dialog .agent-panel-content { container-type: inline-size; }
     .agent-workspace-dialog .agent-panel-scroll { padding: 16px; container-type: normal; }
-    .agent-workspace-dialog .agent-panel-scroll:has(.agent-board-focus-actions) { padding-bottom: calc(88px + var(--sab)); }
-    .agent-workspace-dialog .agent-board-focus-actions { position: fixed; right: 0; bottom: 0; left: 0; z-index: 30; flex-flow: row-reverse nowrap; gap: 8px; padding: 10px 16px calc(12px + var(--sab)); border-top: 1px solid var(--border); background: var(--chat-raised); }
-    .agent-workspace-dialog .agent-board-focus-actions > button { flex: 1; justify-content: center; height: 48px; border-radius: 14px; font-size: calc(14.5 / 16 * 1rem); }
-    .agent-workspace-dialog .agent-board-ask { font-weight: 600; }
 }
 
 /* ---- 会话栏状态卡（模型 / 上下文 / 计费）= claude /code 右栏 环境/上下文/更改 ---- */

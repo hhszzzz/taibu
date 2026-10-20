@@ -96,3 +96,9 @@ export function projectsAgentCanonicalText(name: string): boolean {
   return isAgentChartTool(name) || TOOL_FAMILIES.get(name) === 'calculation' || getAgentDrilldownBase(name) !== null
     || name === 'inspect_chart' || name === 'read_user_data';
 }
+
+/**
+ * inspect_chart 写给模型的定位目录（每行「- 目标 ID｜位置」）以此开头。它只是 focus_chart
+ * 可用 ID 的清单，不是规范文本，投影时不进公开步骤；按宫位查看只回这份目录。
+ */
+export const CHART_TARGET_DIRECTORY_HEADING = '## 定位目标（focus_chart 的 targetIds）';

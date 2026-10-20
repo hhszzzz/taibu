@@ -5,7 +5,7 @@
  * 尺寸按容器宽度（@container）切换，结果页与聊天 Agent 窄栏共用。
  */
 import type { DaliurenCanonicalJSON } from 'taibu-core/daliuren';
-import { ChartTarget, isChartTargetSelected, type ChartInteraction } from '@/components/visualization/ChartTarget';
+import { ChartTarget, chartSelected, type ChartInteraction } from '@/components/visualization/ChartTarget';
 import {
     TIANDIPAN_GRID_POSITIONS,
     getGanZhiTextClass,
@@ -68,7 +68,7 @@ function PalaceCell({
 
     return (
         <div
-            data-chart-selected={isChartTargetSelected(interaction, id) || undefined}
+            data-chart-selected={chartSelected(interaction, id)}
             style={{ gridRow: row, gridColumn: col }}
             className={`grid min-w-0 grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_1fr_auto_auto] gap-x-1 px-[5px] py-1 @xl:grid-rows-[auto_1fr_auto] @xl:px-2.5 @xl:py-2 ${tone}`}
         >

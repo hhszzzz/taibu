@@ -1,5 +1,5 @@
 import { LUNAR_DAY_NAMES, LUNAR_MONTH_NAMES } from '@/components/bazi/form/options';
-import { ChartTarget, isChartTargetSelected, type ChartInteraction } from '@/components/visualization/ChartTarget';
+import { ChartTarget, chartSelected, type ChartInteraction } from '@/components/visualization/ChartTarget';
 import type { XiaoliurenCountStage, XiaoliurenStageKey } from '@/components/xiaoliuren/xiaoliuren-count';
 
 const STAGE_TITLE: Record<XiaoliurenStageKey, string> = { month: '① 月上', day: '② 日上', hour: '③ 时上' };
@@ -70,7 +70,7 @@ export function XiaoliurenCountDetail({ steps, stages, isLeapMonth, shichen, int
         const isFinal = step.key === 'hour';
         const targetId = 'xiaoliuren:step:' + STAGE_INDEX[step.key];
         return (
-          <div key={step.key} className="flex flex-col gap-1.5 sm:gap-2" data-chart-selected={isChartTargetSelected(interaction, targetId) || undefined}>
+          <div key={step.key} className="flex flex-col gap-1.5 sm:gap-2" data-chart-selected={chartSelected(interaction, targetId)}>
             <div className="flex items-baseline justify-between gap-3 text-[0.8125rem] sm:text-sm">
               <span className="min-w-0">
                 <span className="font-medium"><ChartTarget interaction={interaction} id={targetId}>{STAGE_TITLE[step.key]}</ChartTarget></span>

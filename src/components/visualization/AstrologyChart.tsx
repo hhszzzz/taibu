@@ -1,7 +1,7 @@
 'use client';
 import type { ReactNode } from 'react';
 import type { AstrologyCanonicalJSON } from 'taibu-core/astrology';
-import { ChartTarget, isChartTargetSelected, type ChartInteraction } from './ChartTarget';
+import { ChartTarget, chartSelected, isChartTargetSelected, type ChartInteraction } from './ChartTarget';
 import { BoardFacts, FactChips } from './BoardFacts';
 
 type Factor = AstrologyCanonicalJSON['命盘锚点']['太阳'];
@@ -27,7 +27,7 @@ export function AstrologyChart({ chart, interaction, includeRelated = true }: { 
     if (interaction?.selectedIds.includes('astrology:aspect:本命:' + index) && aspect.起点标识 && aspect.终点标识) lines.push({ from: aspect.起点标识, to: aspect.终点标识, label: aspect.起点 + aspect.相位 + aspect.终点 });
   });
   lines.forEach(line => { activeKeys.add(line.from); activeKeys.add(line.to); });
-  const row = (id: string, children: ReactNode, className = '') => <li key={id} className={`rounded-lg px-2.5 py-1.5 data-[chart-selected=true]:bg-accent-light ${className}`} data-chart-selected={isChartTargetSelected(interaction, id) || undefined}>{children}</li>;
+  const row = (id: string, children: ReactNode, className = '') => <li key={id} className={`rounded-lg px-2.5 py-1.5 data-[chart-selected=true]:bg-accent-light ${className}`} data-chart-selected={chartSelected(interaction, id)}>{children}</li>;
   const angles = labelAngles(visible);
   const aspectsOpen = interaction?.selectedIds.some(id => id.startsWith('astrology:aspect:')) || undefined;
   return <div className="@container flex flex-col gap-3">
@@ -53,7 +53,7 @@ export function AstrologyChart({ chart, interaction, includeRelated = true }: { 
         const spot = polar(degree, 103), label = polar(angle, LABEL_RADIUS), selected = Boolean(point.factor.标识 && activeKeys.has(point.factor.标识));
         // 名字被推开超过 1° 时，引线从星体连到名字内侧。
         const moved = Math.abs(((angle - degree + 540) % 360) - 180) > 1, tick = polar(angle, LABEL_RADIUS - 8);
-        return <g key={point.id} data-chart-planet={point.id} data-chart-selected={selected || undefined} role={interaction ? 'button' : undefined} tabIndex={interaction ? 0 : undefined}
+        return <g key={point.id} data-chart-planet={point.id} data-chart-selected={interaction ? selected : undefined} role={interaction ? 'button' : undefined} tabIndex={interaction ? 0 : undefined}
           aria-label={'盘面 ' + point.label} aria-pressed={interaction ? selected : undefined} onClick={() => interaction?.onSelect(point.id)} onKeyDown={event => { if (interaction && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); interaction.onSelect(point.id); } }}>
           {moved && <line x1={spot.x} y1={spot.y} x2={tick.x} y2={tick.y} stroke="currentColor" opacity=".3" />}
           <circle cx={spot.x} cy={spot.y} r={selected ? 6 : 3.5} fill="currentColor" /><text x={label.x} y={label.y} fontSize="10" textAnchor="middle" dominantBaseline="middle" fill="currentColor">{point.label}</text>

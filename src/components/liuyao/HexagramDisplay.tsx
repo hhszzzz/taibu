@@ -22,7 +22,7 @@ import {
 import { parseTraditionalYaoPosition } from '@/lib/divination/liuyao-result-state';
 import { YaoLine } from '@/components/liuyao/YaoLine';
 import { wuxingTextClass } from '@/components/liuyao/wuxing-tone';
-import { ChartTarget, isChartTargetSelected, type ChartInteraction } from '@/components/visualization/ChartTarget';
+import { ChartTarget, chartSelected, type ChartInteraction } from '@/components/visualization/ChartTarget';
 
 type YaoSource = FullYaoInfo | FullYaoInfoExtended | LiuyaoYaoJSON;
 
@@ -201,7 +201,7 @@ export function HexagramDisplay({
     return (
         <div className="@container flex flex-col gap-2">
             <div className="overflow-x-auto">
-                <table className={`w-full border-collapse text-sm ${traditional ? 'block @2xl:table' : ''}`} data-hexagram="base" data-chart-selected={isChartTargetSelected(interaction, 'liuyao:hexagram:base') || undefined}>
+                <table className={`w-full border-collapse text-sm ${traditional ? 'block @2xl:table' : ''}`} data-hexagram="base" data-chart-selected={chartSelected(interaction, 'liuyao:hexagram:base')}>
                     <thead className={traditional ? 'block @2xl:table-header-group' : undefined}>
                         <tr className={traditional ? 'flex items-baseline justify-between gap-3 px-2 pb-2 text-xs text-foreground-secondary @2xl:table-row @2xl:p-0' : undefined}>
                             <th scope="col" className={`${traditional ? WIDE_HEAD_CELL : HEAD_CELL} text-left @2xl:w-[60px]`}>爻位</th>
@@ -214,7 +214,7 @@ export function HexagramDisplay({
                             {traditional && <th scope="col" className="hidden @2xl:table-cell @2xl:w-[52px]"><span className="sr-only">世应</span></th>}
                             <th scope="col" className={traditional ? 'hidden @2xl:table-cell @2xl:w-11' : 'w-5 @2xl:w-11'}><span className="sr-only">动爻</span></th>
                             {showChanged && (
-                                <th scope="col" className={traditional ? `${NAME_HEAD_CELL} text-right` : `${HEAD_CELL} text-center`} data-hexagram="changed" data-chart-selected={isChartTargetSelected(interaction, 'liuyao:hexagram:changed') || undefined}>
+                                <th scope="col" className={traditional ? `${NAME_HEAD_CELL} text-right` : `${HEAD_CELL} text-center`} data-hexagram="changed" data-chart-selected={chartSelected(interaction, 'liuyao:hexagram:changed')}>
                                     {traditional && <span className="@2xl:hidden">变出 · </span>}
                                     <span className={traditional ? NAME_TEXT : 'font-display text-foreground @2xl:text-[0.9375rem]'}>{changedName}</span>
                                     {palaces?.changed && <span> · {palaces.changed}宫</span>}
@@ -245,7 +245,7 @@ export function HexagramDisplay({
                             return (
                                 <tr
                                     key={yao.position}
-                                    data-chart-selected={isChartTargetSelected(interaction, 'liuyao:line:' + yao.position) || undefined}
+                                    data-chart-selected={chartSelected(interaction, 'liuyao:line:' + yao.position)}
                                     className={rowClass}
                                 >
                                     <td className={`whitespace-nowrap ${labelClass}`}>
@@ -287,7 +287,7 @@ export function HexagramDisplay({
                                         {isChanging && <MovingMark yang={yao.type === 1} className="font-display text-lg leading-none text-accent" />}
                                     </td>
                                     {showChanged && (
-                                        <td className={traditional ? '@2xl:px-1' : 'px-1'} data-changed-bar="" data-chart-selected={traditional ? undefined : isChartTargetSelected(interaction, 'liuyao:changed:line:' + yao.position) || undefined}>
+                                        <td className={traditional ? '@2xl:px-1' : 'px-1'} data-changed-bar="" data-chart-selected={traditional ? undefined : chartSelected(interaction, 'liuyao:changed:line:' + yao.position)}>
                                             <div className="flex items-center justify-center gap-2">
                                                 {!traditional && interaction && <span className="text-[11px] text-foreground-tertiary"><ChartTarget interaction={interaction} id={'liuyao:changed:line:' + yao.position}>{YAO_LABELS[yao.position - 1]}</ChartTarget></span>}
                                                 <Bar yang={changedType === 1} tone={isChangedLine ? 'bg-accent' : 'bg-border-hover'} width={changedBarWidth} />
@@ -295,7 +295,7 @@ export function HexagramDisplay({
                                         </td>
                                     )}
                                     {showChanged && traditional && (
-                                        <td className="min-w-0 text-xs leading-tight @2xl:whitespace-nowrap @2xl:pr-2 @2xl:text-sm @2xl:leading-normal" data-chart-selected={isChartTargetSelected(interaction, 'liuyao:changed:line:' + yao.position) || undefined}>
+                                        <td className="min-w-0 text-xs leading-tight @2xl:whitespace-nowrap @2xl:pr-2 @2xl:text-sm @2xl:leading-normal" data-chart-selected={chartSelected(interaction, 'liuyao:changed:line:' + yao.position)}>
                                             <ChartTarget interaction={interaction} id={'liuyao:changed:line:' + yao.position}>
                                                 {isChanging && row?.changedTo ? (
                                                     <span className="@2xl:text-accent-strong">

@@ -231,7 +231,7 @@ export function QimenGrid({ palaces, monthPhaseMap, ju, interaction, zhiShi, sel
                     return (
                         <div
                             key={num}
-                            data-chart-selected={chartSelected || undefined}
+                            data-chart-selected={interaction ? chartSelected : undefined}
                             title={title}
                             className={`${CELL_BASE} ${tone}`}
                         >

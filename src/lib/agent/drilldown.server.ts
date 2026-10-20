@@ -1,5 +1,5 @@
 import 'server-only';
-import { buildToolSuccessPayload, executeTool, listToolDefinitions, type ToolInputSchema, type ToolSchema } from 'taibu-core/mcp';
+import { buildToolSuccessPayload, executeTool, listToolDefinitions, normalizeTransportDetailLevel, type ToolInputSchema, type ToolSchema } from 'taibu-core/mcp';
 import { buildBaziInputFromStoredFields } from '@/lib/divination/bazi-record';
 import { getProvider } from '@/lib/data-sources';
 import { qimenInputFromRecord } from '@/lib/data-sources/qimen';
@@ -18,7 +18,7 @@ import type { DomainToolResult } from './types';
 export function drilldownParameters(selector: ToolInputSchema): ToolInputSchema {
   const reference: ToolSchema = {
     type: 'string', minLength: 1, maxLength: 64,
-    description: '要详查的命盘：artifact:成果ID，或 read_user_data 返回的 chartReference',
+    description: '要详查的命盘：artifact:成果ID，或 read_user_data 返回的命盘引用',
   };
   return {
     type: 'object',
@@ -169,11 +169,14 @@ export async function executeDrilldown(
       throw new Error('命盘算法已更新或时间无法还原，请重新排盘后再详查');
     }
   }
-  const rendered = buildToolSuccessPayload(name, await executeTool(name, { ...baseInput, ...selection }));
+  // detailLevel 只决定给模型的文本是否附口径；Core 计算时会把它剥掉
+  const rendered = buildToolSuccessPayload(name, await executeTool(name, { ...baseInput, ...selection }),
+    { detailLevel: normalizeTransportDetailLevel(selection.detailLevel) });
+  // 所查位置由工作区自动标出，不再把引用与定位目标回给模型；模型只读 Core 的规范文本。
   const targets = getDrilldownTargets(value, rendered.structuredContent).map(({ id, label }) => ({ id, label }));
   const text = rendered.content.map(part => part.text).join('\n');
   return {
-    content: [{ type: 'text', text }, { type: 'text', text: JSON.stringify({ reference, targets }) }],
+    content: [{ type: 'text', text }],
     details: { chartReference: reference, chartKind: base, selection, result: rendered.structuredContent, targets },
     canonicalText: text,
     inspection: { chartReference: reference, chartKind: base, result: value.chart },

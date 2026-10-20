@@ -10,7 +10,7 @@
 import type { ReactNode } from 'react';
 import type { DaliurenCanonicalJSON } from 'taibu-core/daliuren';
 import { TianDiPanGrid } from './TianDiPanGrid';
-import { ChartTarget, isChartTargetSelected, type ChartInteraction } from '@/components/visualization/ChartTarget';
+import { ChartTarget, chartSelected, type ChartInteraction } from '@/components/visualization/ChartTarget';
 import { BoardFacts, FactChips } from '@/components/visualization/BoardFacts';
 import { getGanZhiTextClass, isPlaceholder, splitLabel } from './daliuren-display';
 
@@ -42,7 +42,7 @@ function TransmissionTimeline({ chart, interaction }: { chart: DaliurenCanonical
                 return (
                     <li
                         key={index}
-                        data-chart-selected={isChartTargetSelected(interaction, 'daliuren:transmission:' + index) || undefined}
+                        data-chart-selected={chartSelected(interaction, 'daliuren:transmission:' + index)}
                         className="relative grid grid-cols-[44px_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0.5 rounded-xl @3xl:grid-cols-[56px_44px_minmax(0,1fr)_auto]"
                     >
                         {!isLast && <span aria-hidden className="absolute left-[21.5px] top-11 -bottom-3 w-px bg-accent/35 @3xl:hidden" />}
@@ -81,7 +81,7 @@ function LessonColumns({ chart, interaction }: { chart: DaliurenCanonicalJSON; i
                 return (
                     <div
                         key={prefix}
-                        data-chart-selected={isChartTargetSelected(interaction, 'daliuren:lesson:' + index) || undefined}
+                        data-chart-selected={chartSelected(interaction, 'daliuren:lesson:' + index)}
                         className={`flex min-w-0 flex-col items-center gap-1 rounded-xl px-1 py-2.5 text-center @3xl:gap-1.5 @3xl:rounded-xl ${isFirst ? 'bg-accent-soft' : 'bg-background'}`}
                     >
                         <span className={`text-[11px] ${isFirst ? 'text-accent-strong' : 'text-foreground-secondary'}`}>

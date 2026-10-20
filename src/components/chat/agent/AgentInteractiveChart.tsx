@@ -1,60 +1,30 @@
 'use client';
 // 需要盘面选择状态、跟随定位滚动与全屏弹窗
 
-import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef } from 'react';
 import { LocateFixed, MessageCircleQuestion } from 'lucide-react';
-import type { BaziCanonicalJSON, BaziRelationsCanonicalJSON, BaziWuxingCanonicalJSON } from 'taibu-core/bazi';
+import type { BaziWuxingCanonicalJSON } from 'taibu-core/bazi';
 import type { AgentChart, AgentToolPart } from '@/lib/agent/tool-presentation';
 import { getAgentToolText } from '@/lib/agent/tool-presentation';
 import { getChartTargets, type ChartAskContext, type ChartFocus, type ChartTarget } from '@/lib/agent/chart-interaction';
 import { ChartErrorBoundary } from '@/components/visualization/ChartRenderer';
-import { BAZI_COLUMNS, baziBoardRows, layoutRelations, visibleRelationEdges, type RelationEdge, type RelationMode } from '@/lib/divination/ganzhi-relation-layout';
-import { getGanZhiElement } from '@/components/bazi/element-classes';
-import { WuxingCycleStrip } from '@/components/bazi/result/GanzhiRelationOverlay';
+import { BAZI_COLUMNS, baziBoardRows, layoutRelations, type RelationEdge } from '@/lib/divination/ganzhi-relation-layout';
 import { CanonicalChartView, type BaziRelationOverlay } from './CanonicalChartView';
-import type { BaziViewing } from './bazi-board';
+import { baziGlyphMarks } from './bazi-board';
 import { CopyButton } from './AgentToolCard';
 import './agent-results.css';
 
-/** A relation chip names what it links, as 关系 · 月柱丁克日柱庚; cells keep their label, as 月柱天干 丁. */
-const chipLabel = (target: ChartTarget) => target.kind === 'bazi_relation' ? `关系 · ${target.label}` : target.label;
-
-type BoardMode = RelationMode | 'all' | 'off';
-const BOARD_MODES: Array<[BoardMode, string]> = [['all', '全部'], ['relations', '关系'], ['flow', '流通'], ['off', '不显示']];
 const NO_ROWS: never[] = [];
-
-/** 没有五行详查时，五行环按天干地支 8 字计数；藏干只用来判断某五行是否出现，与 Core 相生链同口径。 */
-function glyphElementCounts(chart: BaziCanonicalJSON) {
-  const counts = new Map<string, { 合计: number; 出现: boolean }>();
-  const add = (char: string, weight: number) => {
-    const element = getGanZhiElement(char);
-    if (!element) return;
-    const item = counts.get(element) ?? { 合计: 0, 出现: false };
-    counts.set(element, { 合计: item.合计 + weight, 出现: true });
-  };
-  for (const pillar of chart.四柱) {
-    if (pillar.干支.includes('*')) continue;
-    add(pillar.干支.charAt(0), 1);
-    add(pillar.干支.charAt(1), 1);
-    for (const hidden of pillar.藏干 ?? []) add(hidden.天干, 0);
-  }
-  return [...counts].map(([五行, item]) => ({ 五行, ...item }));
-}
 
 /**
  * 命盘 (Main board): the subject line and compact tools, the position being
  * looked at with its actions, the interactive chart and bazi relations. The
  * title lives on the workspace tab, so the board itself does not repeat it.
  */
-export function AgentInteractiveChart({ value, tool, reference, focus, followModel, live = false, pinned = false, subject, baziFacts, baziViewing, onAsk }: {
+export function AgentInteractiveChart({ value, tool, reference, focus, followModel, live = false, pinned = false, subject, baziWuxing, onAsk }: {
   value: AgentChart; tool: AgentToolPart; reference: string | null; focus?: ChartFocus | null; followModel: boolean;
-  /**
-   * 这张八字最近一次关系详查与五行详查的结果：关系模式补画命盘没列的原局关系（如相破），
-   * 流通模式据五行详查画通根、自坐并给出加权五行统计。
-   */
-  baziFacts?: { relations: BaziRelationsCanonicalJSON | null; wuxing: BaziWuxingCanonicalJSON | null };
-  /** Agent 最近在这张八字上看的是干支关系还是五行流通：跟随时盘面切到对应模式。 */
-  baziViewing?: BaziViewing | null;
+  /** 这张八字最近的五行详查：盘面画干支自坐与相邻天干，并在藏干旁标出通根与月令透出。 */
+  baziWuxing?: BaziWuxingCanonicalJSON | null;
   /** The model is still working, so the focus box says whether it is being followed. */
   live?: boolean;
   /** The focus was opened from its step or a citation: show and reveal it even while not following. */
@@ -68,14 +38,12 @@ export function AgentInteractiveChart({ value, tool, reference, focus, followMod
   const targets = useMemo(() => getChartTargets(value), [value]);
   const model = focus?.reference === reference ? focus : null;
   // 当前查看的位置只来自模型：点击盘面不再改高亮，只把该位置带入追问。
-  const ids = model?.targetIds ?? [];
+  const ids = useMemo(() => model?.targetIds ?? [], [model?.targetIds]);
   // 三方四正 / 关联位置完全由模型决定：模型看了就展开，没看就不展开。
   const related = model?.includeRelated ?? false;
-  const selected = targets.filter(target => ids.includes(target.id));
+  const selected = useMemo(() => targets.filter(target => ids.includes(target.id)), [targets, ids]);
   // 一个位置与它的某一层（六壬的地盘丑与其天盘子）可能同名，同名的位置只列一次。
-  const chips = [...new Map(selected.map(target => [chipLabel(target), target.id])).entries()];
-  const [focusOnly, setFocusOnly] = useState(false);
-  const dimmed = focusOnly && selected.length > 0;
+  const chips = [...new Map(selected.map(target => [target.label, target.id])).entries()];
   const viewportRef = useRef<HTMLDivElement>(null);
   const first = selected[0];
   const scrollTarget = first?.kind === 'bazi_relation'
@@ -111,28 +79,17 @@ export function AgentInteractiveChart({ value, tool, reference, focus, followMod
     const target = targets.find(item => item.id === id);
     ask(target ? [target] : selected);
   };
-  const located = useMemo(() => new Set(model?.targetIds ?? []), [model?.targetIds]);
-  const wuxing = baziFacts?.wuxing ?? null;
-  const drilled = baziFacts?.relations?.原局关系 ?? null;
+  const located = useMemo(() => new Set(ids), [ids]);
+  // Agent 看的字：定位的字块与定位关系的两端，五行详查画的线靠它们认出是否在看。
+  const locatedCells = useMemo(() => new Set(selected.flatMap(target => target.kind === 'bazi_cell' ? [target.cell]
+    : target.kind === 'bazi_relation' ? target.relation.位置 : []).map(cell => cell.柱 + ':' + cell.部位)), [selected]);
+  const wuxing = baziWuxing ?? null;
   const detail = value.kind === 'bazi' ? value.chart.干支关系明细 ?? NO_ROWS : NO_ROWS;
-  const board = useMemo(() => layoutRelations(baziBoardRows(detail, { relations: drilled, wuxing }, located), BAZI_COLUMNS), [detail, drilled, wuxing, located]);
-  const counts = { relations: board.edges.filter(edge => edge.mode === 'relations').length, flow: board.edges.filter(edge => edge.mode === 'flow').length };
-  // 默认「全部」：关系与流通同时画在盘上（流通在内层、关系在外层，见 visibleRelationEdges）。
-  const [boardMode, setBoardMode] = useState<BoardMode>('all');
-  // 跟随模型时，Agent 每换一次查看（关系详查、五行详查、定位某条关系）就对齐一次：
-  // 「全部」下不切模式，只把另一种线淡化；读者选了单一模式时切到 Agent 正在看的那种。
-  const followed = baziViewing && (followModel || pinned) ? baziViewing.key : null;
-  const [appliedViewing, setAppliedViewing] = useState(followed);
-  if (followed !== appliedViewing) {
-    setAppliedViewing(followed);
-    if (baziViewing && followed && boardMode !== 'all') setBoardMode(baziViewing.mode);
-  }
-  const [hiddenMarks, setHiddenMarks] = useState<ReadonlySet<string>>(new Set());
-  // 筛选按「关系 / 流通」分两组；「全部」时两组之间有分隔。
-  const markGroups = boardMode === 'off' ? [] : (['relations', 'flow'] as const).filter(mode => boardMode === 'all' || boardMode === mode)
-    .map(mode => [...new Set(board.edges.filter(edge => edge.mode === mode).map(edge => edge.mark))]).filter(group => group.length > 0);
-  const marks = markGroups.flat();
-  const muted = boardMode === 'all' && baziViewing ? (baziViewing.mode === 'flow' ? 'relations' : 'flow') : undefined;
+  // 相邻关系的直连线画在两字之间；只有可点击的字块留了足够内边距，只读的纯文字列仍走括线，徽标不会压住字形。
+  const inlineRelations = Boolean(onAsk);
+  // 关系与流通同时画在盘上：流通在内层、关系在外层，两套线不交叉。
+  const board = useMemo(() => layoutRelations(baziBoardRows(detail, wuxing, located), BAZI_COLUMNS, { inlineRelations, layered: true }), [detail, wuxing, located, inlineRelations]);
+  const marks = useMemo(() => baziGlyphMarks(wuxing), [wuxing]);
   // 点徽标 = 追问这条关系：Core 给了关系 id 的直接带上关系，五行详查的事实带上它连着的字。
   const askEdge = (edge: RelationEdge) => {
     const relation = targets.find(target => target.id === edge.id);
@@ -140,24 +97,21 @@ export function AgentInteractiveChart({ value, tool, reference, focus, followMod
       && edge.cells.some(cell => cell.column === target.cell.柱 && cell.part === target.cell.部位)));
   };
   const baziOverlay: BaziRelationOverlay | undefined = value.kind === 'bazi'
-    ? { layout: visibleRelationEdges(board, boardMode, hiddenMarks, located), located, onSelect: reference && onAsk ? askEdge : undefined, ...(muted ? { muted } : {}) }
+    ? { layout: board, located, locatedCells, marks, onSelect: reference && onAsk ? askEdge : undefined }
     : undefined;
-  const toggleMark = (mark: string) => setHiddenMarks(current => {
-    const next = new Set(current);
-    if (!next.delete(mark)) next.add(mark);
-    return next;
-  });
   const text = getAgentToolText(tool);
-  const label = model ? (live && followModel ? '模型正在看' : '分析位置') : null;
+  // 详查在盘面上方只留一行「太卜正在查看」；看的是哪一项由紧随其后的详查标题说明。
+  const label = model ? '太卜正在查看' : null;
   const caption = model?.caption ?? null;
   const hasFocus = Boolean(label);
-  return <section className="agent-interactive-chart" aria-labelledby={titleId} data-focus-only={dimmed || undefined}>
+  // Agent 正在看某些位置时，盘面其余位置自动退后；指着任一位置时只亮它（样式见 agent-results.css）。
+  return <section className="agent-interactive-chart" aria-labelledby={titleId} data-viewing={selected.length > 0 || undefined}>
     <header className="agent-board-heading">
       <h3 id={titleId} className="sr-only">{value.title}</h3>
       {subject && <p className="agent-board-subject">{subject}</p>}
       <div className="agent-board-tools">
-        {model && <span className="agent-board-tool is-viewing" role="img" title={live && followModel ? '模型正在看这里' : '模型查看的位置'}
-          aria-label={live && followModel ? '模型正在看这里' : '模型查看的位置'}><LocateFixed size={14} aria-hidden="true" /></span>}
+        {model && <span className="agent-board-tool is-viewing" role="img" title={live && followModel ? '太卜正在查看这里' : '太卜查看的位置'}
+          aria-label={live && followModel ? '太卜正在查看这里' : '太卜查看的位置'}><LocateFixed size={14} aria-hidden="true" /></span>}
         {reference && onAsk && <button type="button" className="agent-board-tool" aria-label={selected.length ? '追问这里' : '追问这张命盘'}
           title={selected.length ? '追问这里' : '追问这张命盘'} onClick={() => ask(selected)}><MessageCircleQuestion size={14} aria-hidden="true" /></button>}
         {text && <CopyButton text={text} label="复制规范文本" iconOnly className="agent-board-tool" />}
@@ -170,35 +124,14 @@ export function AgentInteractiveChart({ value, tool, reference, focus, followMod
       </span>}
       {caption && <span className="agent-board-caption">{caption}</span>}
       {chips.length > 0 && <ul className="agent-board-chips" aria-label="盘面位置">{chips.map(([label, id]) => <li key={id}>{label}</li>)}</ul>}
-      {selected.length > 0 && <button type="button" className="agent-board-only" aria-pressed={focusOnly} onClick={() => setFocusOnly(!focusOnly)}>只看相关位置</button>}
     </div>
     <div ref={viewportRef} className="agent-chart-scroll" tabIndex={0} aria-label={value.title + '内容'}>
       <ChartErrorBoundary resetKey={value.chart} fallback={<pre className="agent-board-fallback">{text ?? '命盘数据暂时无法显示'}</pre>}>
         <CanonicalChartView value={value} targets={selected} includeRelated={related} onTargetSelect={onAsk ? askTarget : undefined} baziOverlay={baziOverlay} />
       </ChartErrorBoundary>
     </div>
-    {value.kind === 'bazi' && <section className="agent-board-relations" aria-label="干支关系与流通" data-board-mode={boardMode}>
-      <div className="agent-board-relation-bar">
-        <div className="agent-board-segments" role="group" aria-label="盘面连线">
-          {BOARD_MODES.map(([mode, name]) => <button key={mode} type="button" aria-pressed={boardMode === mode} data-viewed={baziViewing?.mode === mode || undefined} onClick={() => setBoardMode(mode)}>
-            {name}{mode !== 'off' && <span>{mode === 'all' ? counts.relations + counts.flow : counts[mode]}</span>}
-          </button>)}
-        </div>
-        {baziViewing && <span className="agent-board-viewing" data-live={live && followModel || undefined}>
-          <LocateFixed size={12} aria-hidden="true" />{live && followModel ? '模型正在看' : 'Agent 查看了'}{baziViewing.label}
-        </span>}
-        {marks.length > 1 && <div className="agent-board-marks" role="group" aria-label="按类型筛选">
-          {markGroups.map((group, index) => <Fragment key={index}>
-            {index > 0 && <span className="agent-board-marks-divider" aria-hidden="true" />}
-            {group.map(mark => <button key={mark} type="button" aria-pressed={!hiddenMarks.has(mark)} onClick={() => toggleMark(mark)}>{mark}</button>)}
-          </Fragment>)}
-        </div>}
-      </div>
-      {(boardMode === 'flow' || boardMode === 'all') && <WuxingCycleStrip dayElement={wuxing?.日主.五行 ?? getGanZhiElement(value.chart.基本信息.日主.charAt(0)) ?? undefined}
-        counts={wuxing ? wuxing.五行统计.map(item => ({ 五行: item.五行, 合计: item.合计, 出现: !wuxing.缺失五行.includes(item.五行) })) : glyphElementCounts(value.chart)}
-        caption={wuxing ? `五行详查：天干地支各计 1，藏干按 0.6 / 0.3 / 0.1 加权 · 月令${wuxing.月令.月支} ${wuxing.月令.旺}旺，日主${wuxing.月令.日主状态}`
-          : '按天干地支 8 字计数（藏干只计是否出现）；让 Agent 做五行详查后改为加权统计，并在盘上画出通根与自坐。'} />}
-      {!value.chart.干支关系明细 && <p>{value.chart.干支关系.join('；') || '此盘未返回干支关系。'} 此历史盘仅保留关系文本，可选择天干或地支查看。</p>}
-    </section>}
+    {value.kind === 'bazi' && !value.chart.干支关系明细 && <p className="agent-board-legacy">
+      {value.chart.干支关系.join('；') || '此盘未返回干支关系。'} 此历史盘仅保留关系文本，可选择天干或地支查看。
+    </p>}
   </section>;
 }

@@ -5,7 +5,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import type { XiaoliurenCanonicalJSON } from 'taibu-core/xiaoliuren';
 import { LUNAR_DAY_NAMES, LUNAR_MONTH_NAMES } from '@/components/bazi/form/options';
 import { wuxingChipClass } from '@/components/liuyao/wuxing-tone';
-import { ChartTarget, isChartTargetSelected, type ChartInteraction } from '@/components/visualization/ChartTarget';
+import { ChartTarget, chartSelected, isChartTargetSelected, type ChartInteraction } from '@/components/visualization/ChartTarget';
 import { XiaoliurenCountDetail, type XiaoliurenStageSummary } from '@/components/xiaoliuren/XiaoliurenCountDetail';
 import { XiaoliurenDial } from '@/components/xiaoliuren/XiaoliurenDial';
 import { XiaoliurenPalm } from '@/components/xiaoliuren/XiaoliurenPalm';
@@ -124,7 +124,7 @@ export function XiaoliurenChart({ chart, interaction, action }: {
       <div className="flex min-w-0 flex-[1_1_340px] flex-col gap-3 lg:gap-4">
         <section
           className="flex flex-col gap-2.5 rounded-2xl border-[0.5px] border-border bg-surface p-4 sm:gap-3.5 sm:rounded-2xl sm:p-6"
-          data-chart-selected={isChartTargetSelected(interaction, 'xiaoliuren:result') || undefined}
+          data-chart-selected={chartSelected(interaction, 'xiaoliuren:result')}
         >
           {/* 窄屏结果页省略小标题（落宫大字即主角）；对话命盘中它是可点目标，始终可见 */}
           <h2 className={`text-[0.8125rem] font-normal text-foreground-secondary ${interaction ? '' : 'sr-only sm:not-sr-only'}`}>

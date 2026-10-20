@@ -92,21 +92,53 @@ function DualLabel({ short, full }: { short: string; full: string }) {
     );
 }
 
-function HiddenStemsCell({ stems }: { stems: { stem: string; tenGod: string }[] }) {
+/**
+ * 字旁的根、透、无根标记（来自五行详查）：根写在作根的藏干旁并写出所指的天干（日·时），
+ * 透写在月令透出的藏干旁并写出透到哪一干，无根写在该天干的十神旁。
+ * spot 是悬停时一并点亮的字（「柱:部位」），由画在表上的关系层负责聚焦。
+ */
+export interface GlyphMark {
+    kind: 'root' | 'reveal' | 'rootless';
+    text: string;
+    /** 所指的天干，如「日·时」；无根为空 */
+    detail?: string;
+    title: string;
+    spot: string[];
+}
+
+/** hidden 按「柱:藏干」取，stems 按柱取。 */
+export interface GlyphMarks {
+    hidden: Record<string, GlyphMark[]>;
+    stems: Record<string, GlyphMark[]>;
+}
+
+const MARK_TONE: Record<GlyphMark['kind'], string> = { root: 'text-accent', reveal: 'text-warning', rootless: 'text-foreground-tertiary' };
+
+function GlyphMarkTag({ mark, compact = false }: { mark: GlyphMark; compact?: boolean }) {
+    const className = compact
+        ? `ml-px align-super text-[0.5rem] leading-none ${MARK_TONE[mark.kind]}`
+        : `ml-1 inline-flex items-baseline gap-0.5 rounded-[4px] border border-current px-1 align-middle text-[0.625rem] font-medium leading-[0.875rem] ${MARK_TONE[mark.kind]}`;
+    return <span role="img" aria-label={mark.title} title={mark.title} data-relation-tag={mark.kind} data-relation-spot={mark.spot.join(' ')} className={className}>
+        {mark.text}{!compact && mark.detail && <span className="font-normal text-foreground-secondary">{mark.detail}</span>}
+    </span>;
+}
+
+function HiddenStemsCell({ stems, marksOf }: { stems: { stem: string; tenGod: string }[]; marksOf?: (stem: string) => GlyphMark[] | undefined }) {
     return (
         <>
-            {/* 紧凑：仅干字，同行排列 */}
+            {/* 紧凑：仅干字，同行排列；根、透只留上标 */}
             <span className="inline-flex gap-px @lg:hidden">
                 {stems.map((item, idx) => (
-                    <span key={idx} className={ganZhiTextClass(item.stem)}>{item.stem}</span>
+                    <span key={idx} className={ganZhiTextClass(item.stem)}>{item.stem}{marksOf?.(item.stem)?.map(mark => <GlyphMarkTag key={mark.kind} mark={mark} compact />)}</span>
                 ))}
             </span>
-            {/* 宽松：干字 + 十神，逐行 */}
+            {/* 宽松：干字 + 十神，逐行；根、透写出所指的天干 */}
             <span className="hidden flex-col items-center gap-0.5 leading-[1.6] @lg:inline-flex">
                 {stems.map((item, idx) => (
                     <span key={idx} className="whitespace-nowrap">
                         <span className={ganZhiTextClass(item.stem)}>{item.stem}</span>
                         <span className="ml-1 text-foreground">{item.tenGod}</span>
+                        {marksOf?.(item.stem)?.map(mark => <GlyphMarkTag key={mark.kind} mark={mark} />)}
                     </span>
                 ))}
             </span>
@@ -140,6 +172,7 @@ export function ProfessionalTable({
     canonicalLabels = false,
     overlay,
     relationBands,
+    glyphMarks,
 }: {
     canonicalChart: BaziCanonicalJSON;
     isUnknownTime?: boolean;
@@ -155,6 +188,8 @@ export function ProfessionalTable({
     overlay?: ReactNode;
     /** 天干行上方、地支行下方、干支之间为连线留出的高度（px）。 */
     relationBands?: { stem: number; branch: number; cross?: number };
+    /** 五行详查给出的根、透、无根标记（Agent 盘面）。 */
+    glyphMarks?: GlyphMarks;
 }) {
     const [shenShaExpanded, setShenShaExpanded] = useState(false);
 
@@ -284,7 +319,10 @@ export function ProfessionalTable({
                             className: ROW_DIVIDER_CLASS,
                             fortune: (col) => col.shiShen || '-',
                             pillar: (col) => (
-                                <span className={col.isDay ? 'text-accent' : ''}>{col.hidden ? '?' : col.shiShen}</span>
+                                <>
+                                    <span className={col.isDay ? 'text-accent' : ''}>{col.hidden ? '?' : col.shiShen}</span>
+                                    {!col.hidden && glyphMarks?.stems[col.label]?.map(mark => <GlyphMarkTag key={mark.kind} mark={mark} />)}
+                                </>
                             ),
                         })}
                         {renderRow({
@@ -315,7 +353,8 @@ export function ProfessionalTable({
                                 <HiddenStemsCell stems={col.hiddenStems.map(item => ({ stem: item.stem, tenGod: item.tenGod }))} />
                             ),
                             pillar: (col) => col.hidden ? '*' : (
-                                <HiddenStemsCell stems={(col.pillar.藏干 || []).map(item => ({ stem: item.天干, tenGod: item.十神 }))} />
+                                <HiddenStemsCell stems={(col.pillar.藏干 || []).map(item => ({ stem: item.天干, tenGod: item.十神 }))}
+                                    marksOf={glyphMarks && (stem => glyphMarks.hidden[col.label + ':' + stem])} />
                             ),
                         })}
                         {renderRow({

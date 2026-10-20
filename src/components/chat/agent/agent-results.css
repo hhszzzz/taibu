@@ -27,7 +27,7 @@
 .agent-chart-dialog-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); }
 .agent-chart-dialog-header h2 { font-size: 1.25rem; font-family: var(--font-display); }
 .agent-chart-dialog-body { padding: 1rem; overflow: auto; max-height: calc(90dvh - 6rem); }
-/* 命盘 (Main board): steps and subject, the position being looked at, the chart, relations and Core's rules. */
+/* 命盘 (Main board): the subject and tools, the position being looked at, and the chart with bazi relations drawn on it. */
 .agent-interactive-chart { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .agent-board-heading { display: flex; align-items: center; gap: 12px; min-height: 28px; }
 .agent-board-subject { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(13 / 16 * 1rem); color: var(--foreground-secondary); }
@@ -43,11 +43,19 @@
 .agent-board-caption { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-tertiary); }
 .agent-board-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; padding: 0; list-style: none; }
 .agent-board-chips > li { padding: 1px 6px; border-radius: 4px; background: var(--fill-field); font-size: calc(11.5 / 16 * 1rem); line-height: 18px; color: var(--foreground-secondary); overflow-wrap: anywhere; }
-.agent-board-only { height: 24px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); }
-.agent-board-only:hover { background: var(--fill-ghost-hover); }
-.agent-board-only[aria-pressed="true"] { color: var(--accent-hover); }
-/* 只看相关位置: other positions recede; the selection and anything inside a selected palace stay. */
-.agent-interactive-chart[data-focus-only] .agent-chart-scroll [data-chart-target]:not([aria-pressed="true"], [data-chart-selected="true"], [data-chart-selected="true"] *) { opacity: .28; }
+/* While the model looks at positions the rest recede. A unit (palace, line, card, lesson…) carries
+   data-chart-selected="true|false", a control aria-pressed, and palaces looked at alongside (三方四正)
+   data-chart-related. A unit stays lit when it is looked at, holds something looked at, or sits inside
+   one; units inside a receding unit are not dimmed twice. Pointing at a unit lights only it — the
+   innermost unit under the pointer with everything inside — over what the model is looking at.
+   The bazi board is spotlit by its relation overlay instead (below). */
+.agent-interactive-chart .agent-canonical-chart:not(.agent-canonical-chart--bazi) :is([data-chart-selected], [data-chart-target]) { transition-property: opacity, color, background-color, border-color, box-shadow; transition-duration: .15s; }
+.agent-interactive-chart[data-viewing] .agent-canonical-chart:not(.agent-canonical-chart--bazi):not(:has(:is([data-chart-selected], [data-chart-target]):hover)) :is([data-chart-selected], [data-chart-target]):not([data-chart-selected="true"], [aria-pressed="true"], [data-chart-related], :has([data-chart-selected="true"], [aria-pressed="true"], [data-chart-related]), :is([data-chart-selected="true"], [data-chart-related]) *, :is([data-chart-selected], [data-chart-target]):not([data-chart-selected="true"], [aria-pressed="true"], [data-chart-related], :has([data-chart-selected="true"], [aria-pressed="true"], [data-chart-related])) *) { opacity: .3; }
+.agent-interactive-chart[data-viewing] .agent-canonical-chart:not(.agent-canonical-chart--bazi):has(:is([data-chart-selected], [data-chart-target]):hover) :is([data-chart-selected], [data-chart-target]):not(:hover, :is([data-chart-selected], [data-chart-target]):not(:hover) *, [data-chart-selected]:hover:not(:has([data-chart-selected]:hover)) *) { opacity: .3; }
+/* 八字盘面与详查柱位条：GanzhiRelationOverlay 在 Agent 在看或指着一处时给宿主打 data-relation-spotlight，
+   给亮着的字与根透标记打 data-relation-lit；其余的字与标记退后，连线与徽标的明暗由关系层自己画。 */
+:is([data-relation-cell], [data-relation-tag]) { transition: opacity .15s, background-color .15s, box-shadow .15s; }
+[data-relation-spotlight] :is([data-relation-cell], [data-relation-tag]):not([data-relation-lit]) { opacity: .3; }
 /* 四柱表 as the board draws it: a rounded frame, a header band, serif characters and the located cells boxed. */
 .agent-interactive-chart .agent-canonical-chart--bazi > div { margin: 0; padding: 0; }
 .agent-interactive-chart .agent-canonical-chart--bazi table { width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: var(--background); font-size: calc(13 / 16 * 1rem); }
@@ -62,30 +70,14 @@
 /* 字形按钮贴着字：定位高亮是包住字的小块，相邻两字之间留出直连线的位置。 */
 .agent-interactive-chart .agent-canonical-chart--bazi .chart-cell-button { display: inline-flex; min-width: 3rem; min-height: 0; justify-content: center; padding: 4px 12px; border: 0; border-radius: 10px; font-family: var(--font-display); font-size: calc(28 / 16 * 1rem); font-weight: 600; line-height: 1.2; }
 .agent-interactive-chart .agent-canonical-chart--bazi .chart-cell-button[aria-pressed="true"] { background: var(--accent-light); box-shadow: inset 0 0 0 2px var(--accent); }
-.chart-cell-button { min-width: 2.25rem; min-height: 2.75rem; border: 2px solid transparent; border-radius: .5rem; transition: background .15s, border-color .15s; }
+.chart-cell-button { min-width: 2.25rem; min-height: 2.75rem; border: 2px solid transparent; border-radius: .5rem; transition: background .15s, border-color .15s, opacity .15s; }
 .chart-cell-button:hover, .chart-star-button:hover { background: var(--fill-ghost-hover); }
 .chart-cell-button[aria-pressed=true], .chart-star-button[aria-pressed=true] { border-color: var(--accent); background: var(--accent-light); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent); }
 .chart-star-button { border: 1px solid transparent; border-radius: .35rem; padding: .2rem; }
 .chart-cell-button:focus-visible, .chart-star-button:focus-visible, .chart-palace-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .chart-palace-button { padding: .2rem; margin: -.2rem; text-align: left; }
-.agent-board-related { display: flex; align-items: center; gap: 8px; font-size: calc(13 / 16 * 1rem); color: var(--foreground-secondary); }
-.agent-board-related input { width: 16px; height: 16px; accent-color: var(--accent); }
-/* 干支关系与流通: the mode switch and type filters under the board; the lines themselves are drawn on the table. */
-.agent-board-relations { display: flex; flex-direction: column; gap: 10px; }
-.agent-board-relation-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
-.agent-board-segments { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--fill-field, var(--background-secondary)); }
-.agent-board-segments > button { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); }
-.agent-board-segments > button > span { font-size: calc(11 / 16 * 1rem); font-variant-numeric: tabular-nums; color: var(--foreground-tertiary); }
-.agent-board-segments > button[aria-pressed="true"] { background: var(--chat-raised, var(--background)); font-weight: 500; color: var(--foreground); box-shadow: 0 0 0 var(--hairline) var(--border); }
-.agent-board-segments > button[data-viewed]::after { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
-.agent-board-viewing { display: inline-flex; align-items: center; gap: 4px; font-size: calc(12 / 16 * 1rem); color: var(--foreground-tertiary); }
-.agent-board-viewing[data-live] { color: var(--accent-hover); }
-.agent-board-marks { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
-.agent-board-marks-divider { width: var(--hairline, 1px); height: 14px; margin: 0 4px; background: var(--border); }
-.agent-board-marks > button { height: 22px; padding: 0 8px; border: var(--hairline) solid var(--border); border-radius: 999px; background: transparent; font-size: calc(12 / 16 * 1rem); color: var(--foreground-tertiary); text-decoration: line-through; }
-.agent-board-marks > button[aria-pressed="true"] { color: var(--foreground-secondary); text-decoration: none; }
-.agent-board-segments > button:focus-visible, .agent-board-marks > button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.agent-board-relations > p { font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); }
+/* A saved chart from before relation details keeps only the relation text, under the board. */
+.agent-board-legacy { font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); }
 .agent-board-fallback { white-space: pre-wrap; font-size: .8rem; }
 .agent-focus-receipt { padding: .6rem .8rem; font-size: .8rem; border-left: 2px solid var(--accent); overflow-wrap: anywhere; }
 .agent-focus-receipt span { display: block; color: var(--foreground-secondary); font-size: .7rem; margin-bottom: .2rem; }
@@ -102,7 +94,7 @@
 .chart-astrology-wheel g[data-chart-planet] { cursor: pointer; }
 .chart-astrology-wheel g[data-chart-selected=true] { color: var(--accent); outline: none; }
 .chart-aspect-line { stroke: var(--accent); stroke-width: 1.5; opacity: .7; }
-@media (prefers-reduced-motion: reduce) { .chart-cell-button { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .chart-cell-button, .agent-canonical-chart :is([data-chart-selected], [data-chart-target]), :is([data-relation-cell], [data-relation-tag]) { transition: none; } }
 @media (max-width: 767px) {
   /* Mobile board: the card stacks with a full-width button. */
   .agent-result-card { flex-wrap: wrap; gap: 10px; padding: 12px; }

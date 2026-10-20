@@ -101,6 +101,10 @@ const DRILLDOWN_PLANETS: Record<string, string> = {
     lilith: '莉莉丝', ascendant: '上升点', midheaven: '天顶',
 };
 
+/** 筛选参数是字符串数组：「涉及 日柱、流年」「只看 六冲」 */
+const listLabel = (prefix: string) => (value: unknown) => Array.isArray(value) && value.length && value.every(item => typeof item === 'string')
+    ? `${prefix} ${value.join('、')}` : '';
+
 /** 详查参数的读法；其余参数按值原样列出，reference 只是命盘引用，不展示。 */
 const DRILLDOWN_SELECTION_LABELS: Record<string, (value: unknown) => string> = {
     year: value => `${value} 年`,
@@ -113,7 +117,11 @@ const DRILLDOWN_SELECTION_LABELS: Record<string, (value: unknown) => string> = {
     targetTimeIndex: value => `时辰 ${value}`,
     fromYear: value => `${value} 年起`,
     toYear: value => `至 ${value} 年`,
-    focus: value => `只看 ${value}`,
+    focus: value => value === '全部' ? '' : `只看 ${value}`,
+    pillars: listLabel('涉及'),
+    types: listLabel('只看'),
+    sections: listLabel('只看'),
+    detailLevel: value => value === 'full' ? '含口径' : '',
     leiShen: value => `类神 ${value}`,
     planet: value => DRILLDOWN_PLANETS[String(value)] ?? String(value),
     house: value => `第 ${value} 宫`,

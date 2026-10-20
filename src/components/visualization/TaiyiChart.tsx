@@ -1,7 +1,7 @@
 'use client';
 // 'use client'：对话命盘中的 ChartTarget 需要点击交互。
 import type { TaiyiCanonicalJSON } from 'taibu-core/taiyi';
-import { ChartTarget, isChartTargetSelected, type ChartInteraction } from './ChartTarget';
+import { ChartTarget, chartSelected, type ChartInteraction } from './ChartTarget';
 import { BoardFacts } from './BoardFacts';
 
 const SPIRIT_FIELDS = ['太乙', '文昌', '始击', '计神', '合神', '太岁'] as const;
@@ -31,7 +31,7 @@ export function TaiyiChart({ chart, interaction }: { chart: TaiyiCanonicalJSON; 
             <section aria-label="十六宫" className="grid grid-cols-4 gap-1.5 @2xl:grid-cols-8">{board.十六宫.map((palace, index) => {
                 const id = 'taiyi:palace:' + index;
                 const hasTaiyi = palace.星将.includes('太乙');
-                return <article key={index} data-chart-selected={isChartTargetSelected(interaction, id) || undefined}
+                return <article key={index} data-chart-selected={chartSelected(interaction, id)}
                     className={`${CARD} ${SELECTED} flex min-w-0 flex-col gap-1 px-2 py-1.5 ${hasTaiyi ? 'bg-accent-soft' : ''}`}>
                     <span className="flex items-baseline justify-between gap-1">
                         <ChartTarget interaction={interaction} id={id} className="font-display text-base">{palace.宫位}</ChartTarget>
@@ -45,7 +45,7 @@ export function TaiyiChart({ chart, interaction }: { chart: TaiyiCanonicalJSON; 
             })}</section>
             <div className="grid gap-1.5 @xl:grid-cols-[3fr_2fr]">
                 <section aria-label="神将" className="grid grid-cols-3 gap-1.5 @md:grid-cols-6 @xl:grid-cols-3">{SPIRIT_FIELDS.map(field =>
-                    <div key={field} data-chart-selected={isChartTargetSelected(interaction, 'taiyi:field:' + field) || undefined} className={`${CARD} ${SELECTED} flex flex-col items-center px-2 py-1.5`}>
+                    <div key={field} data-chart-selected={chartSelected(interaction, 'taiyi:field:' + field)} className={`${CARD} ${SELECTED} flex flex-col items-center px-2 py-1.5`}>
                         <ChartTarget interaction={interaction} id={'taiyi:field:' + field} className="text-xs text-foreground-secondary">{field}</ChartTarget>
                         <span className="font-display text-lg">{board[field]}</span>
                     </div>)}</section>
@@ -53,7 +53,7 @@ export function TaiyiChart({ chart, interaction }: { chart: TaiyiCanonicalJSON; 
                     <span />{['算', '大将', '参将'].map(name => <span key={name} className="text-xs text-foreground-tertiary">{name}</span>)}
                     {SIDES.map(side => <div key={side.name} className="contents">
                         <span className="font-display text-sm text-foreground-secondary">{side.name}</span>
-                        {side.fields.map(field => <span key={field} data-chart-selected={isChartTargetSelected(interaction, 'taiyi:field:' + field) || undefined}
+                        {side.fields.map(field => <span key={field} data-chart-selected={chartSelected(interaction, 'taiyi:field:' + field)}
                             className="rounded-md data-[chart-selected=true]:bg-accent-light">
                             <ChartTarget interaction={interaction} id={'taiyi:field:' + field} className="font-display text-lg">{board[field]}</ChartTarget>
                         </span>)}
@@ -62,7 +62,7 @@ export function TaiyiChart({ chart, interaction }: { chart: TaiyiCanonicalJSON; 
             </div>
         </> : <section aria-label="九星阵列" className="grid grid-cols-2 gap-1.5 @2xl:grid-cols-4">{chart.九星阵列.map((star, index) => {
             const id = 'taiyi:star:' + index;
-            return <article key={index} data-chart-selected={isChartTargetSelected(interaction, id) || undefined} className={`${CARD} ${SELECTED} flex min-w-0 flex-col gap-1 px-3 py-2.5`}>
+            return <article key={index} data-chart-selected={chartSelected(interaction, id)} className={`${CARD} ${SELECTED} flex min-w-0 flex-col gap-1 px-3 py-2.5`}>
                 <span className="text-xs text-foreground-tertiary">{star.观测层级}</span>
                 <span className="flex items-baseline gap-1.5">
                     <ChartTarget interaction={interaction} id={id} className="font-display text-lg">{star.太乙名}</ChartTarget>

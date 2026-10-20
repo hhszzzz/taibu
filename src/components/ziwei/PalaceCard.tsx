@@ -166,7 +166,9 @@ export function PalaceCard({
             aria-label={palace.宫位}
             tabIndex={onStarSelect ? -1 : 0}
             data-chart-palace={palace.宫位索引}
-            data-chart-selected={isSelected || undefined}
+            // Agent 盘面（可点星曜）总写出选中与否，并标出它一并在看的三方四正，其余宫位在看时退后
+            data-chart-selected={onStarSelect ? isSelected : isSelected || undefined}
+            data-chart-related={onStarSelect && isSanFangSiZheng ? '' : undefined}
             onClick={onClick}
             onKeyDown={(e) => {
                 if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {

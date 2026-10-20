@@ -7,7 +7,7 @@ import type { AgentDurableStorage } from "./durable-storage.server";
 import type { AgentCheckpoint, AgentPart, AgentRuntimeInfo, DomainTool } from "./types";
 import { projectAgentContextUsage } from "./context-usage";
 import { projectAgentUsage } from './usage';
-import { projectsAgentCanonicalText } from './tool-catalog';
+import { CHART_TARGET_DIRECTORY_HEADING, projectsAgentCanonicalText } from './tool-catalog';
 import { splitAgentFollowUps } from './follow-ups';
 
 function taskTiming(task?: { startedAt?: number; endedAt?: number }) {
@@ -115,7 +115,12 @@ export async function projectDurableConversation(
           card.output = message.details ?? message.content;
           Object.assign(card, taskTiming(task));
           if (typeof message.durationMs === 'number' && Number.isFinite(message.durationMs) && message.durationMs >= 0) card.durationMs = message.durationMs;
-          if (projectsAgentCanonicalText(card.name)) card.canonicalText = message.content.filter(part => part.type === 'text').map(part => part.type === 'text' ? part.text : '').join('\n');
+          // 第一段是 Core 或资料源的规范文本；其后的成果 ID 与定位目录只写给模型，不进公开文本。
+          // 按宫位查看只回定位目录，这一步没有规范文本。
+          if (projectsAgentCanonicalText(card.name)) {
+            const canonical = message.content.find(part => part.type === 'text' && !part.text.startsWith(CHART_TARGET_DIRECTORY_HEADING));
+            card.canonicalText = canonical?.type === 'text' ? canonical.text : '';
+          }
           if (entry.byTaskId) attach(card.id, `${entry.byTaskId}:${message.toolCallId}`);
         }
       }

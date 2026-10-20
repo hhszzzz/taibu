@@ -8,7 +8,7 @@ import { HEXAGRAMS } from '@/lib/divination/liuyao';
 import { parseTraditionalYaoPosition } from '@/lib/divination/liuyao-result-state';
 import { wuxingTextClass } from '@/components/liuyao/wuxing-tone';
 import { buildMeihuaStageRows, formatRelationTerm, type MeihuaStageRow } from '@/components/meihua/meihua-display';
-import { ChartTarget, isChartTargetSelected, type ChartInteraction } from '@/components/visualization/ChartTarget';
+import { ChartTarget, chartSelected, type ChartInteraction } from '@/components/visualization/ChartTarget';
 import { BoardFacts } from '@/components/visualization/BoardFacts';
 
 type HexagramKey = '本卦' | '互卦' | '变卦';
@@ -56,7 +56,7 @@ export function HexagramLines({ code, movingLine, id, interaction }: { code: str
         const yang = code[position - 1] === '1';
         const moving = position === movingLine;
         return (
-          <div key={position} data-chart-selected={isChartTargetSelected(interaction, id + ':line:' + position) || undefined} className="flex min-h-4 items-center gap-2">
+          <div key={position} data-chart-selected={chartSelected(interaction, id + ':line:' + position)} className="flex min-h-4 items-center gap-2">
             <span className={`w-5 text-right text-[10px] tabular-nums ${moving ? 'font-medium text-accent' : 'text-foreground-tertiary'}`}>
               <ChartTarget interaction={interaction} id={id + ':line:' + position}>{position}</ChartTarget>
             </span>
@@ -129,7 +129,7 @@ function TrigramLines({ code, positions, hexagramId, emphasisLine, emphasis, int
   return (
     <span aria-hidden="true" className={`flex flex-col gap-1.5 @2xl:gap-[9px] ${className}`}>
       {positions.map((position) => (
-        <span key={position} data-chart-selected={isChartTargetSelected(interaction, `${hexagramId}:line:${position}`) || undefined}>
+        <span key={position} data-chart-selected={chartSelected(interaction, `${hexagramId}:line:${position}`)}>
           <LineBar yang={code[position - 1] === '1'} emphasis={position === emphasisLine ? emphasis : undefined} />
         </span>
       ))}
@@ -176,7 +176,7 @@ function HexagramCard({ label, hexagram, upper, lower, emphasisLine, emphasis = 
   const notesVisibility = interaction ? 'flex' : 'hidden @2xl:flex';
   return (
     <article
-      data-chart-selected={isChartTargetSelected(interaction, id) || undefined}
+      data-chart-selected={chartSelected(interaction, id)}
       className={`flex min-w-0 flex-col items-center gap-2 rounded-2xl px-1 py-3 @2xl:gap-3.5 @2xl:rounded-2xl @2xl:border-[0.5px] @2xl:border-border @2xl:bg-surface @2xl:p-[22px] @2xl:ring-0 ${featured ? 'bg-accent-light ring-1 ring-inset ring-accent/50' : 'bg-background'}`}
     >
       <span className="text-[0.6875rem] text-foreground-secondary @2xl:text-[0.8125rem]">
@@ -361,7 +361,7 @@ export function MeihuaChart({ chart, interaction, showDerived = true, showFacts 
                   return (
                     <div
                       key={id}
-                      data-chart-selected={isChartTargetSelected(interaction, id) || undefined}
+                      data-chart-selected={chartSelected(interaction, id)}
                       className="grid grid-cols-[40px_minmax(0,1fr)] items-center gap-2.5 border-t-[0.5px] border-border py-2.5 @2xl:flex @2xl:flex-col @2xl:items-stretch @2xl:border-t-0 @2xl:px-5 @2xl:py-0 @2xl:first:pl-0 @2xl:last:pr-0 @2xl:[&+&]:border-l-[0.5px]"
                     >
                       <span className="text-xs text-foreground-secondary">
@@ -404,7 +404,7 @@ export function MeihuaChart({ chart, interaction, showDerived = true, showFacts 
               const code = derived && HEXAGRAMS.find((row) => row.name === derived.卦名)?.code;
               const id = 'meihua:derived:' + key;
               return derived && code ? (
-                <article key={key} className="flex min-w-0 flex-col gap-2 rounded-xl border-[0.5px] border-border bg-surface p-3" data-chart-selected={isChartTargetSelected(interaction, id) || undefined}>
+                <article key={key} className="flex min-w-0 flex-col gap-2 rounded-xl border-[0.5px] border-border bg-surface p-3" data-chart-selected={chartSelected(interaction, id)}>
                   <h3 className="flex items-baseline gap-2 text-xs text-foreground-secondary">
                     <ChartTarget interaction={interaction} id={id}>{key}</ChartTarget>
                     <span className="font-display text-base text-foreground">{derived.卦名}</span>

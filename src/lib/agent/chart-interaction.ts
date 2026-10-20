@@ -174,6 +174,7 @@ export function getChartTargets(value: AgentChart): ChartTarget[] {
 /** 详查结果里每行的「位置」；结构与 Core 的干支关系明细一致。 */
 type DrilldownCell = { 柱?: unknown; 部位?: unknown; 字?: unknown };
 
+/** 同字牵连只是提示「共用同一个字」，不是这次查询的事实；盘面只点亮查到的那些字。 */
 function drilldownCells(value: unknown, cells: DrilldownCell[] = [], depth = 0): DrilldownCell[] {
   if (depth > 4 || !value || typeof value !== 'object') return cells;
   if (Array.isArray(value)) {
@@ -182,13 +183,13 @@ function drilldownCells(value: unknown, cells: DrilldownCell[] = [], depth = 0):
   }
   const row = value as Record<string, unknown>;
   if (Array.isArray(row.位置)) cells.push(...row.位置.filter((cell): cell is DrilldownCell => !!cell && typeof cell === 'object'));
-  for (const [key, child] of Object.entries(row)) if (key !== '位置' && key !== '计算规则') drilldownCells(child, cells, depth + 1);
+  for (const [key, child] of Object.entries(row)) if (key !== '位置' && key !== '计算规则' && key !== '同字牵连') drilldownCells(child, cells, depth + 1);
   return cells;
 }
 
 /**
- * The chart's own targets a drilldown result touches, in fact order, at most 16:
- * a focus call may pass them unchanged. Positions outside the board (大运、流年…) have no target.
+ * The chart's own targets a drilldown result touches, at most 16. Positions outside the
+ * board (大运、流年…) have no target. A focus call may pass them unchanged.
  */
 export function getDrilldownTargets(value: AgentChart, result: unknown): ChartTarget[] {
   const targets = getChartTargets(value);
@@ -197,11 +198,14 @@ export function getDrilldownTargets(value: AgentChart, result: unknown): ChartTa
   return [...new Set(ids)].map(id => byId.get(id)).filter((target): target is ChartTarget => target !== undefined).slice(0, 16);
 }
 
-/** 八字详查（含五行流通、流年扫描）共用干支位置：只认与盘面完全一致的柱、部位、字。 */
+/**
+ * 八字详查（岁运刑冲合害、五行、流年扫描）触及的原局字块。岁运叠加的关系都含大运、流年等盘外的柱，
+ * 原局之间的关系由命盘自己给出，所以详查只点亮它碰到的原局字；详查完成后盘面直接显示，不需要模型再补一次 focus_chart。
+ */
 function baziDrilldownTargetIds(targets: ChartTarget[], result: unknown): string[] {
   const cells = drilldownCells(result);
-  return targets.filter(target => target.kind === 'bazi_cell'
-    && cells.some(cell => cell.柱 === target.cell.柱 && cell.部位 === target.cell.部位 && cell.字 === target.cell.字)).map(target => target.id);
+  return targets.flatMap(target => target.kind === 'bazi_cell'
+    && cells.some(cell => cell.柱 === target.cell.柱 && cell.部位 === target.cell.部位 && cell.字 === target.cell.字) ? [target.id] : []);
 }
 
 /** 递归访问详查结果里的每个对象；只读取 Core 输出里的结构化字段，不解析自然语言。 */

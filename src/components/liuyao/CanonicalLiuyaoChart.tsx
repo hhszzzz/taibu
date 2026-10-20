@@ -6,7 +6,7 @@ import { parseTraditionalYaoPosition } from '@/lib/divination/liuyao-result-stat
 import { HexagramDisplay } from './HexagramDisplay';
 import { LiuyaoPillars } from './LiuyaoPillars';
 import { wuxingTextClass } from './wuxing-tone';
-import { ChartTarget, isChartTargetSelected, type ChartInteraction } from '@/components/visualization/ChartTarget';
+import { ChartTarget, chartSelected, type ChartInteraction } from '@/components/visualization/ChartTarget';
 import { HexagramLines } from '@/components/meihua/MeihuaChart';
 
 const DERIVED_KEYS = ['互卦', '错卦', '综卦'] as const;
@@ -90,7 +90,7 @@ export function CanonicalLiuyaoChart({ chart, interaction }: { chart: LiuyaoCano
     </details>}
     {hiddenLines.length > 0 && <section aria-label="伏神" className="grid gap-2 @md:grid-cols-2">{hiddenLines.map(line => {
       const id = 'liuyao:line:' + parseTraditionalYaoPosition(line.爻位) + ':hidden';
-      return line.伏神 ? <div key={line.爻位} className="flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-xl border-[0.5px] border-border bg-surface px-3.5 py-3" data-chart-selected={isChartTargetSelected(interaction, id) || undefined}>
+      return line.伏神 ? <div key={line.爻位} className="flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-xl border-[0.5px] border-border bg-surface px-3.5 py-3" data-chart-selected={chartSelected(interaction, id)}>
         <span className="text-xs text-foreground-secondary"><ChartTarget interaction={interaction} id={id}>{line.爻位}伏神</ChartTarget></span>
         <span className="text-sm">{line.伏神.六亲} <span className={`font-display ${wuxingTextClass(line.伏神.五行)}`}>{line.伏神.纳甲}{line.伏神.五行}</span></span>
         {line.伏神.关系 && <span className="text-xs text-foreground-tertiary">{line.伏神.关系}</span>}
@@ -98,7 +98,7 @@ export function CanonicalLiuyaoChart({ chart, interaction }: { chart: LiuyaoCano
     })}</section>}
     {derived.length > 0 && <section aria-label="派生卦" className="grid grid-cols-3 gap-1.5 @2xl:gap-3">{derived.map(item => {
       const id = 'liuyao:derived:' + item.key;
-      return <article key={item.key} className="flex min-w-0 flex-col gap-2.5 rounded-2xl border-[0.5px] border-border bg-surface p-2.5 @2xl:p-4" data-chart-selected={isChartTargetSelected(interaction, id) || undefined}>
+      return <article key={item.key} className="flex min-w-0 flex-col gap-2.5 rounded-2xl border-[0.5px] border-border bg-surface p-2.5 @2xl:p-4" data-chart-selected={chartSelected(interaction, id)}>
         <h3 className="flex flex-wrap items-baseline gap-x-1.5 text-xs text-foreground-secondary">
           <ChartTarget interaction={interaction} id={id}>{item.key}</ChartTarget>
           <span className="font-display text-sm text-foreground @2xl:text-base">{item.name}</span>

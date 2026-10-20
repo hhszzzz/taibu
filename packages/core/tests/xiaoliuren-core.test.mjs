@@ -105,3 +105,20 @@ test('xiaoliuren hour conversion from 24h to shichen', () => {
   const result = calculateXiaoliurenData({ lunarMonth: 1, lunarDay: 1, hour: 14 });
   assert.equal(result.input.shichen, '未时');
 });
+
+test('xiaoliuren accepts a Gregorian date with schema defaults filled in', () => {
+  // MCP and Agent callers validate against the tool schema, which declares `isLeapMonth: false` and
+  // `leapMonthStrategy: 'repeat'` as defaults; those must not read as manual lunar input.
+  const dated = calculateXiaoliurenData({ date: '2026-02-14', hour: 9, isLeapMonth: false, leapMonthStrategy: 'repeat' });
+  const lunar = calculateXiaoliurenData({ lunarMonth: dated.input.lunarMonth, lunarDay: dated.input.lunarDay, hour: 9, hourType: 'clock', isLeapMonth: dated.input.isLeapMonth });
+  assert.equal(dated.monthStatus, lunar.monthStatus);
+  assert.equal(dated.dayStatus, lunar.dayStatus);
+  assert.equal(dated.result.name, lunar.result.name);
+  assert.equal(dated.input.isLeapMonth, false);
+});
+
+test('xiaoliuren rejects lunar fields and a contradictory leap flag beside a Gregorian date', () => {
+  assert.throws(() => calculateXiaoliurenData({ date: '2026-02-14', hour: 9, lunarMonth: 1 }), /不能同时提供/);
+  assert.throws(() => calculateXiaoliurenData({ date: '2026-02-14', hour: 9, lunarDay: 1 }), /不能同时提供/);
+  assert.throws(() => calculateXiaoliurenData({ date: '2026-02-14', hour: 9, isLeapMonth: true }), /不是闰月/);
+});

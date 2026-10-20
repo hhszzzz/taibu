@@ -87,7 +87,7 @@ export function calculateXiaoliurenData(input: XiaoliurenInput): XiaoliurenOutpu
   let isLeapMonth = input.isLeapMonth ?? false;
   if (typeof isLeapMonth !== 'boolean') throw new CoreInputError('isLeapMonth', '必须为布尔值');
   if (input.date !== undefined) {
-    if (lunarMonth !== undefined || lunarDay !== undefined || input.isLeapMonth !== undefined) {
+    if (lunarMonth !== undefined || lunarDay !== undefined) {
       throw new CoreInputError('date', '公历日期与手工农历输入不能同时提供');
     }
     const civil = parseCivilDate(input.date);
@@ -95,6 +95,9 @@ export function calculateXiaoliurenData(input: XiaoliurenInput): XiaoliurenOutpu
     lunarMonth = Math.abs(lunar.getMonth());
     lunarDay = lunar.getDay();
     isLeapMonth = lunar.getMonth() < 0;
+    // isLeapMonth 在输入 schema 里有默认值 false，按 schema 补默认值的调用方（如 MCP 与 Agent 校验）总会带上它。
+    // 公历日期自己决定农历月，所以这里只把与日期相反的显式 true 当作矛盾输入，false 视为未指定。
+    if (input.isLeapMonth === true && !isLeapMonth) throw new CoreInputError('isLeapMonth', '公历日期对应的农历月不是闰月');
   }
   assertInteger(lunarMonth, 'lunarMonth', 1, 12);
   assertInteger(lunarDay, 'lunarDay', 1, 30);

@@ -8,7 +8,6 @@ import { CoreInputError, assertInteger, createUtcDateTime, parseCivilDate, resol
 import { DEFAULT_DIVINATION_TIMEZONE, getZonedDateTimeParts, zonedTimeToUtc } from '../../shared/timezone-utils.js';
 import { calculatePillarShenSha as calculateSharedPillarShenSha } from '../shared/shensha.js';
 import type {
-  BaziFiveElementsStats,
   BaziInput,
   BaziLiuRiInfo,
   BaziLiuYueInfo,
@@ -32,8 +31,6 @@ import {
   calculateTenGod,
   getDiShi as getDiShiCore,
   getKongWang,
-  STEM_ELEMENTS,
-  ZHI_WUXING,
 } from '../../shared/utils.js';
 // 从数据模块导入静态数据
 import {
@@ -76,6 +73,7 @@ import {
   WANG_SHEN,
   WEN_CHANG,
   XIANG_HAI,
+  XIANG_PO,
   XIANG_XING,
   YANG_REN,
   YI_MA,
@@ -85,7 +83,6 @@ import {
 } from '../../data/shensha.js';
 
 export type {
-  BaziFiveElementsStats,
   BaziInput,
   BaziLiuRiInfo,
   BaziLiuYueInfo,
@@ -122,41 +119,6 @@ export function getNaYinElement(nayin: string): string {
   if (!nayin) return '';
   const last = nayin.charAt(nayin.length - 1);
   return ['金', '木', '水', '火', '土'].includes(last) ? last : '';
-}
-
-export function calculateBaziFiveElementsStats(
-  fourPillars: BaziOutput['fourPillars'],
-): BaziFiveElementsStats {
-  const stats: BaziFiveElementsStats = { 金: 0, 木: 0, 水: 0, 火: 0, 土: 0 };
-  const hiddenStemWeights = [0.6, 0.3, 0.1];
-  const pillars = [fourPillars.year, fourPillars.month, fourPillars.day, fourPillars.hour];
-
-  for (const pillar of pillars) {
-    const stemElement = STEM_ELEMENTS[pillar.stem];
-    if (stemElement && stemElement in stats) {
-      stats[stemElement as keyof BaziFiveElementsStats] += 1;
-    }
-
-    const branchElement = ZHI_WUXING[pillar.branch];
-    if (branchElement && branchElement in stats) {
-      stats[branchElement as keyof BaziFiveElementsStats] += 1;
-    }
-
-    for (let i = 0; i < pillar.hiddenStems.length; i++) {
-      const hiddenStem = pillar.hiddenStems[i]?.stem;
-      const hiddenElement = hiddenStem ? STEM_ELEMENTS[hiddenStem] : '';
-      const weight = hiddenStemWeights[i] ?? 0.1;
-      if (hiddenElement && hiddenElement in stats) {
-        stats[hiddenElement as keyof BaziFiveElementsStats] += weight;
-      }
-    }
-  }
-
-  for (const key of Object.keys(stats) as Array<keyof BaziFiveElementsStats>) {
-    stats[key] = Math.round(stats[key] * 10) / 10;
-  }
-
-  return stats;
 }
 
 export function buildHiddenStems(branch: string, dayStem: string): HiddenStemInfo[] {
@@ -463,6 +425,19 @@ export function analyzePillarRelations(yearBranch: string, monthBranch: string, 
         pillars: matchingPillars,
         description: xing.name,
       });
+    }
+  }
+
+  // 相破排在最后：命盘文本与关系明细按此顺序列出，已有的合冲害刑次序不变
+  for (let i = 0; i < branches.length; i++) {
+    for (let j = i + 1; j < branches.length; j++) {
+      if (XIANG_PO[branches[i]] === branches[j]) {
+        relations.push({
+          type: '破',
+          pillars: [normalizePillarPosition(pillarNames[i]), normalizePillarPosition(pillarNames[j])],
+          description: `${branches[i]}${branches[j]}相破`,
+        });
+      }
     }
   }
 

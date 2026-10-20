@@ -1,6 +1,6 @@
 # 八字流年扫描（`bazi_liunian_scan`）
 
-八字流年扫描 - 在八字命盘上逐年列出一段年份（最多 30 年）的流年干支、所在大运（起运前为小运）、十神，流年与原局、与大运的刑冲合害，以及太岁与岁运提示；可按柱位或关系类型筛选。只给事实，不下吉凶结论。
+八字流年扫描 - 在八字命盘上逐年列出一段年份（最多 30 年）的流年干支、所在大运（起运前为小运）、十神，流年与原局、与大运的刑冲合害，以及太岁与岁运提示。找「哪些年冲日柱」这类问题时用 pillars、types 筛选，只列命中的年份，同一字上的其他流年关系标为牵连，其余只给「未列出」条数；某一年的完整关系（含大运与原局之间）用 bazi_relations。只给事实，不下吉凶结论。
 
 ## 参数
 
@@ -21,8 +21,10 @@
 | `birthPlace` | string | 否 | — | 出生地点文本 |
 | `fromYear` | integer | 是 | — | 起始流年（公历年份，不早于出生年） |
 | `toYear` | integer | 是 | — | 结束流年（含），与起始年合计不超过 30 年 |
-| `focus` | enum | 否 | — | 只看涉及该柱位（年柱/月柱/日柱/时柱/大运）或该关系类型（如 六冲、相刑）的年份；可选值: `年柱` / `月柱` / `日柱` / `时柱` / `大运` / `天干五合` / `天干相冲` / `六合` / `三合` / `半合` / `三会` / `六冲` / `相刑` / `相害` / `相破` |
+| `pillars` | string[] | 否 | — | 只看流年同时涉及这些柱位的关系，如 ["日柱"]；「大运」在起运前指小运 |
+| `types` | string[] | 否 | — | 只看这些类型的关系，如 ["六冲"]；只列出有该类关系的年份 |
 | `yunSect` | enum | 否 | `1` | 起运换算法1或2（与 bazi_dayun 一致）；可选值: `1` / `2` |
+| `detailLevel` | enum | 否 | `"default"` | 文本详略：default=只列所查事实；full=另附判定口径（结构化结果始终带口径与计算规则）；可选值: `default` / `full` |
 
 ## 调用示例
 
@@ -31,14 +33,20 @@ echo '{"gender":"male","birthYear":1990,"birthMonth":1,"birthDay":15,"birthHour"
 ```
 
 ```bash
-echo '{"gender":"female","birthYear":1995,"birthMonth":6,"birthDay":20,"birthHour":23,"calendarType":"lunar","fromYear":2026,"toYear":2035,"focus":"日柱"}' | node "$TB/scripts/taibu.mjs" call bazi_liunian_scan -
+echo '{"gender":"female","birthYear":1995,"birthMonth":6,"birthDay":20,"birthHour":23,"calendarType":"lunar","fromYear":2026,"toYear":2035,"pillars":["日柱"]}' | node "$TB/scripts/taibu.mjs" call bazi_liunian_scan -
+```
+
+```bash
+echo '{"gender":"male","birthYear":1990,"birthMonth":1,"birthDay":15,"birthHour":9,"fromYear":2024,"toYear":2053,"types":["六冲"]}' | node "$TB/scripts/taibu.mjs" call bazi_liunian_scan -
 ```
 
 ## 输出结构（structuredContent 顶层键）
 
-- `扫描范围`：扫描的年份范围与筛选
+- `扫描范围`：扫描的年份范围
+- `筛选`：本次的筛选条件
 - `原局四柱`：原局四柱
 - `逐年`：逐年事实
+- `未列出`：筛选后没有列出的事实
 - `口径`：判定口径说明
 - `计算规则`
 

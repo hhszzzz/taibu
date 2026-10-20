@@ -41,7 +41,7 @@ const factRowSchema = obj({
 });
 
 export const daliurenLessonsOutputSchema: OutputSchema = obj({
-  查询: obj({ 范围: str('全部、课或传'), 类神: str('本次定位的类神') }, '本次详查的范围'),
+  查询: obj({ 范围: str('全部、课、传或类神'), 类神: str('本次定位的类神') }, '本次详查的范围'),
   基础: obj({
     日干: str('日干'), 日干寄宫: str('日干寄宫的地盘支'), 日支: str('日支'), 月建: str('月建地支'),
     旬: str('日干支所在旬'), 空亡: arr(str(), '日旬空'), 课式: str('课名与取传课体'),
@@ -49,7 +49,7 @@ export const daliurenLessonsOutputSchema: OutputSchema = obj({
   四课: arr(lessonRowSchema, '四课的上下神、天将与神将生克'),
   三传: arr(transmissionRowSchema, '三传的地支、天将、六亲、旺衰与空亡'),
   三传递进: obj({ 初传至中传: str(), 中传至末传: str(), 递进: str('递生、递克或无') }, '三传之间的五行递进'),
-  神将交战: arr(str(), '神克将（内战）与将克神（外战）的课传'),
+  神将交战: arr(str(), '所列课传中神克将（内战）与将克神（外战）者；只看类神时省略'),
   本命行年: arr(factRowSchema, '本命与行年的上神'),
   类神: arr(factRowSchema, '类神的天盘落处与入课入传'),
   口径: arr(str(), '判定口径说明'),

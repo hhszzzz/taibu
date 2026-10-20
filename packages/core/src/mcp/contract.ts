@@ -93,9 +93,22 @@ export function defineToolContract<TInput, TOutput, TOptions extends RenderOptio
   };
 }
 
-/** base 输入里只影响渲染详略的字段；详查工具有自己的输出，不继承 */
-const DERIVED_OMITTED_BASE_FIELDS = new Set(['detailLevel']);
+/** 只影响渲染详略的字段：不继承 base 的取值，也不交给 base 计算或 derive */
+const RENDER_ONLY_FIELDS = new Set(['detailLevel']);
 const ROOT_COMBINATORS = ['anyOf', 'oneOf', 'not', 'if'] as const;
+
+/** 详查工具自己的详略：只决定文本是否附带判定口径，结构化结果不分详略 */
+export const DERIVED_DETAIL_LEVEL_SCHEMA: ToolSchema = {
+  type: 'string',
+  enum: ['default', 'full'],
+  default: 'default',
+  description: '文本详略：default=只列所查事实；full=另附判定口径（结构化结果始终带口径与计算规则）',
+};
+
+function withDerivedDetailLevel(selector: ToolInputSchema): ToolInputSchema {
+  if ('detailLevel' in selector.properties) throw new Error('详查参数不能自定义 detailLevel');
+  return { ...selector, properties: { ...selector.properties, detailLevel: DERIVED_DETAIL_LEVEL_SCHEMA } };
+}
 
 function rootConstraints(schema: ToolSchema): ToolSchema[] {
   const constraints = [...(schema.allOf ?? [])];
@@ -115,7 +128,7 @@ function rootConstraints(schema: ToolSchema): ToolSchema[] {
 export function composeInputSchema(base: ToolInputSchema, selector: ToolInputSchema): ToolInputSchema {
   const properties: Record<string, ToolSchema> = {};
   for (const [key, schema] of Object.entries(base.properties)) {
-    if (!DERIVED_OMITTED_BASE_FIELDS.has(key)) properties[key] = schema;
+    if (!RENDER_ONLY_FIELDS.has(key)) properties[key] = schema;
   }
   for (const [key, schema] of Object.entries(selector.properties)) {
     if (key in properties) throw new Error(`详查参数与基础参数重名: ${key}`);
@@ -152,7 +165,7 @@ export interface DerivedToolSpec<TBaseInput, TBaseOutput, TSelector, TOutput, TO
   outputSchema: ToolOutputSchema;
 }
 
-/** 按 selector 的属性名把详查输入拆回 base 输入与查询参数 */
+/** 按 selector 的属性名把详查输入拆回 base 输入与查询参数；只影响渲染的字段两边都不给 */
 export function splitDerivedInput(selector: ToolInputSchema, input: Record<string, unknown>): {
   baseInput: Record<string, unknown>;
   selection: Record<string, unknown>;
@@ -160,8 +173,9 @@ export function splitDerivedInput(selector: ToolInputSchema, input: Record<strin
   const baseInput: Record<string, unknown> = {};
   const selection: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(input)) {
+    if (RENDER_ONLY_FIELDS.has(key)) continue;
     if (key in selector.properties) selection[key] = value;
-    else if (!DERIVED_OMITTED_BASE_FIELDS.has(key)) baseInput[key] = value;
+    else baseInput[key] = value;
   }
   return { baseInput, selection };
 }
@@ -169,7 +183,9 @@ export function splitDerivedInput(selector: ToolInputSchema, input: Record<strin
 export function defineDerivedToolContract<TBaseInput, TBaseOutput, TSelector, TOutput, TOptions extends RenderOptions = RenderOptions>(
   spec: DerivedToolSpec<TBaseInput, TBaseOutput, TSelector, TOutput, TOptions>,
 ): ToolContract<TBaseInput & TSelector, TOutput, TOptions> {
-  const inputSchema = composeInputSchema(spec.base.definition.inputSchema, spec.selector);
+  // 对外的查询参数 = 详查自己的 selector + 详略；Agent 侧的参数表也取自这里（derivesFrom.selector）
+  const selector = withDerivedDetailLevel(spec.selector);
+  const inputSchema = composeInputSchema(spec.base.definition.inputSchema, selector);
   return defineToolContract<TBaseInput & TSelector, TOutput, TOptions>({
     definition: {
       name: spec.name,
@@ -178,7 +194,7 @@ export function defineDerivedToolContract<TBaseInput, TBaseOutput, TSelector, TO
       ...(spec.base.definition.annotations ? { annotations: spec.base.definition.annotations } : {}),
     },
     execute: async (input) => {
-      const { baseInput, selection } = splitDerivedInput(spec.selector, input as Record<string, unknown>);
+      const { baseInput, selection } = splitDerivedInput(selector, input as Record<string, unknown>);
       const baseOutput = await spec.base.execute(baseInput as TBaseInput);
       return spec.derive(baseOutput, selection as TSelector, baseInput as TBaseInput);
     },
@@ -187,7 +203,7 @@ export function defineDerivedToolContract<TBaseInput, TBaseOutput, TSelector, TO
     outputSchema: spec.outputSchema,
     // 运行时附加信息（如出生地解析）按 base 的口径合并
     ...(spec.base.mergeRuntimeExtras ? { mergeRuntimeExtras: spec.base.mergeRuntimeExtras } : {}),
-    derivesFrom: { base: spec.base.definition.name, selector: spec.selector },
+    derivesFrom: { base: spec.base.definition.name, selector },
   });
 }
 

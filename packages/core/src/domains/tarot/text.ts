@@ -1,4 +1,3 @@
-import { withRulesText } from '../../shared/calculation-rules.js';
 import {
   normalizeDetailLevelBinary
 } from '../../shared/render-utils.js';
@@ -9,9 +8,7 @@ import type {
   TarotCanonicalTextOptions
 } from '../shared/text-options.js';
 
-export const renderTarotCanonicalText = withRulesText(renderTarotCanonicalTextBase);
-
-function renderTarotCanonicalTextBase(result: TarotOutput, options: TarotCanonicalTextOptions = {}): string {
+export function renderTarotCanonicalText(result: TarotOutput, options: TarotCanonicalTextOptions = {}): string {
   const detailLevel = normalizeDetailLevelBinary(options.detailLevel);
   const birthDate = options.birthDate?.trim() || result.birthDate;
   const lines: string[] = ['# 塔罗占卜', '', '## 问卜设定', `- 牌阵: ${result.spreadName}`];

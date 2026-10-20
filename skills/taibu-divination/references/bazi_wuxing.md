@@ -1,6 +1,6 @@
-# 八字五行流通（`bazi_wuxing`）
+# 八字五行旺衰（`bazi_wuxing`）
 
-八字五行流通 - 在八字命盘上详查五行：天干、地支本气与藏干加权统计，月令旺相休囚死，日主通根与透干，干支自坐与相邻天干生克，相生链的连续与中断，以及十神分布。只给事实，不判断身强身弱或喜用神。
+八字五行旺衰 - 在八字命盘上详查旺衰与生克的事实：月令旺相休囚死与日主得失，月令各藏干透出与否（取格看月令），四个天干各自的通根（本气、中气、余气，无根亦列出），干支自坐与相邻天干的生克，以及缺失五行。日主、月令与缺失五行总在，其余事实组可用 sections 只取所需。旺衰不是五行字数相加，本工具只给这些因子，不判身强身弱、格局或喜用。辰戌丑未月以土论。
 
 ## 参数
 
@@ -19,6 +19,8 @@
 | `calendarType` | enum | 否 | `"solar"` | 出生日期的历法（solar=公历，lunar=农历）；可选值: `solar` / `lunar` |
 | `isLeapMonth` | boolean | 否 | `false` | 是否农历闰月（仅 calendarType=lunar 时有效） |
 | `birthPlace` | string | 否 | — | 出生地点文本 |
+| `sections` | string[] | 否 | — | 只取这些事实组，如 ["通根"]；省略时全部给出（日主、月令与缺失五行总在） |
+| `detailLevel` | enum | 否 | `"default"` | 文本详略：default=只列所查事实；full=另附判定口径（结构化结果始终带口径与计算规则）；可选值: `default` / `full` |
 
 ## 调用示例
 
@@ -27,21 +29,19 @@ echo '{"gender":"male","birthYear":1990,"birthMonth":1,"birthDay":15,"birthHour"
 ```
 
 ```bash
-echo '{"gender":"female","birthYear":1995,"birthMonth":6,"birthDay":20,"birthHour":23,"calendarType":"lunar"}' | node "$TB/scripts/taibu.mjs" call bazi_wuxing -
+echo '{"gender":"female","birthYear":1995,"birthMonth":6,"birthDay":20,"birthHour":23,"calendarType":"lunar","sections":["通根"]}' | node "$TB/scripts/taibu.mjs" call bazi_wuxing -
 ```
 
 ## 输出结构（structuredContent 顶层键）
 
 - `日主`：日主天干及其五行
-- `五行统计`：五行加权统计（木火土金水）
-- `缺失五行`：合计为 0 的五行
-- `月令`：月令旺相休囚死
-- `通根`：日主在地支藏干中的同五行之根
-- `透干`：地支藏干原字见于天干
+- `月令`：月令旺相休囚死与藏干透出
+- `缺失五行`：天干、地支本气、藏干都没有出现的五行
+- `筛选`：给出 sections 时所取的事实组
+- `通根`：四个天干在地支藏干中的同五行之根，日主在前
+- `无根`：没有同五行藏干的天干
 - `干支自坐`：各柱天干与地支本气的生克
 - `相邻天干`：年月、月日、日时天干的生克
-- `相生链`：五行相生链
-- `十神分布`：十神在天干与藏干中的分布
 - `口径`：判定口径说明
 - `计算规则`
 

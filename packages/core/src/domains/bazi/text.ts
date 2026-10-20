@@ -1,4 +1,3 @@
-import { withRulesText } from '../../shared/calculation-rules.js';
 import {
   normalizeDetailLevelBinary
 } from '../../shared/render-utils.js';
@@ -6,6 +5,7 @@ import type {
   BaziOutput
 } from './types.js';
 import { GAN_WUXING } from '../../shared/utils.js';
+import { baziBranchRelationText } from './json.js';
 import type {
   BaziCanonicalTextOptions
 } from '../shared/text-options.js';
@@ -45,12 +45,6 @@ function buildBaziCanonicalStemRelations(result: Pick<BaziOutput, 'tianGanChongK
 }
 
 function buildBaziCanonicalBranchRelations(result: Pick<BaziOutput, 'fourPillars' | 'relations' | 'diZhiBanHe' | 'diZhiSanHui'>): string[] {
-  const posBranchMap: Record<string, string> = {
-    '年支': result.fourPillars.year.branch,
-    '月支': result.fourPillars.month.branch,
-    '日支': result.fourPillars.day.branch,
-    '时支': result.fourPillars.hour.branch,
-  };
   const relationParts: string[] = [];
   const seen = new Set<string>();
   const pushUnique = (value: string) => {
@@ -59,14 +53,7 @@ function buildBaziCanonicalBranchRelations(result: Pick<BaziOutput, 'fourPillars
     relationParts.push(value);
   };
 
-  for (const relation of result.relations) {
-    if (relation.type === '刑') {
-      const branches = [...new Set(relation.pillars.map((pillar) => posBranchMap[pillar]))].join('');
-      pushUnique(`${branches}刑（${relation.description}）`);
-    } else {
-      pushUnique(relation.description);
-    }
-  }
+  for (const relation of result.relations) pushUnique(baziBranchRelationText(result, relation));
   for (const item of result.diZhiBanHe) {
     pushUnique(`${item.branches.join('')}半合${item.resultElement}`);
   }
@@ -77,9 +64,7 @@ function buildBaziCanonicalBranchRelations(result: Pick<BaziOutput, 'fourPillars
   return relationParts;
 }
 
-export const renderBaziCanonicalText = withRulesText(renderBaziCanonicalTextBase);
-
-function renderBaziCanonicalTextBase(chart: BaziOutput, options: BaziCanonicalTextOptions = {}): string {
+export function renderBaziCanonicalText(chart: BaziOutput, options: BaziCanonicalTextOptions = {}): string {
   const detailLevel = normalizeDetailLevelBinary(options.detailLevel);
   if (detailLevel === 'full') {
     return renderBaziCanonicalFullText(chart, options);

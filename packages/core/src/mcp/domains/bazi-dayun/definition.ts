@@ -3,7 +3,7 @@ import { baziRuleInputs } from '../../rule-input-schemas.js';
 
 export const baziDayunDefinition: ToolDefinition = {
   name: 'bazi_dayun',
-  description: "八字大运 - 根据出生信息计算起运时间与大运列表，可选输出起运前小运及各步大运的流年。",
+  description: "八字大运 - 根据出生信息计算起运时间与大运列表，可选输出起运前小运及各步大运的流年。full 档输出很长；只问某几年与原局、大运的刑冲合害时，改用 bazi_liunian_scan 或 bazi_relations。",
   inputSchema: {
     type: 'object',
     properties: {

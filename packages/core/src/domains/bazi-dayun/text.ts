@@ -1,4 +1,3 @@
-import { withRulesText } from '../../shared/calculation-rules.js';
 import {
   normalizeDetailLevelBinary
 } from '../../shared/render-utils.js';
@@ -9,9 +8,7 @@ import type {
   DayunCanonicalTextOptions
 } from '../shared/text-options.js';
 
-export const renderDayunCanonicalText = withRulesText(renderDayunCanonicalTextBase);
-
-function renderDayunCanonicalTextBase(result: DayunOutput, options: DayunCanonicalTextOptions = {}): string {
+export function renderDayunCanonicalText(result: DayunOutput, options: DayunCanonicalTextOptions = {}): string {
   const detailLevel = normalizeDetailLevelBinary(options.detailLevel);
   if (detailLevel === 'full') {
     return renderDayunCanonicalFullText(result);

@@ -1,10 +1,11 @@
 /**
  * 占星单点详查：一颗星体（或交点、轴点）或一个宫位的位置、传统尊贵、宫主星、
  * 本命相位（入相／出相）与流运触发。只陈述盘面事实，不下吉凶结论。
+ * focus 可只看本命或只看流运；只看流运时仍给出所查对象在本命盘上的位置作为参照。
  */
 
 import { Body, Ecliptic, GeoVector } from 'astronomy-engine';
-import { CoreInputError, assertInteger } from '../../shared/validation.js';
+import { CoreInputError, assertInteger, resolveEnum } from '../../shared/validation.js';
 import { ANGLE_KEYS, ASPECT_ANGLES, BODY_KEYS, POINT_KEYS, SIGN_LABELS, computeAngularDistance } from './calculate.js';
 import type { AstrologyAspect, AstrologyFactor, AstrologyHouse, AstrologyInput, AstrologyOutput } from './types.js';
 
@@ -12,9 +13,14 @@ export const ASTROLOGY_POINT_RULE_VERSION = 'astrology-point-2026.10';
 export const ASTROLOGY_POINT_KEYS = [...BODY_KEYS, ...POINT_KEYS, ...ANGLE_KEYS] as const;
 export type AstrologyPointKey = typeof ASTROLOGY_POINT_KEYS[number];
 
+/** 全部=本命与流运；本命=不看流运；流运=只看流运触发或过境（附本命位置作参照） */
+export const ASTROLOGY_POINT_FOCUS = ['全部', '本命', '流运'] as const;
+export type AstrologyPointFocus = typeof ASTROLOGY_POINT_FOCUS[number];
+
 export interface AstrologyPointSelector {
   planet?: AstrologyPointKey;
   house?: number;
+  focus?: AstrologyPointFocus;
 }
 
 export interface AstrologyPointRef {
@@ -46,7 +52,7 @@ export interface AstrologyPointPlacement {
 export type AstrologyDignity = '入庙' | '擢升' | '失势' | '落陷';
 
 export interface AstrologyPointOutput {
-  query: { kind: 'planet'; key: AstrologyPointKey; label: string } | { kind: 'house'; house: number; label: string };
+  query: ({ kind: 'planet'; key: AstrologyPointKey; label: string } | { kind: 'house'; house: number; label: string }) & { focus: AstrologyPointFocus };
   placement?: AstrologyPointPlacement;
   /** 只对七颗传统行星给出；现代行星、交点与轴点为 undefined */
   dignities?: AstrologyDignity[];
@@ -55,8 +61,11 @@ export interface AstrologyPointOutput {
   house?: { id: number; sign: string; start: string; end: string; span: number };
   occupants?: AstrologyPointPlacement[];
   ruler?: AstrologyPointPlacement & { dignities: AstrologyDignity[] };
-  aspects: AstrologyPointAspect[];
-  transitAspects: AstrologyPointAspect[];
+  /** 星体本身（或宫主星）的本命相位；只看流运时省略 */
+  aspects?: AstrologyPointAspect[];
+  /** 流运对该星体的相位；只看本命或查宫位时省略 */
+  transitAspects?: AstrologyPointAspect[];
+  /** 流运时刻落在该宫的星体；只看本命时省略 */
   transitOccupants?: AstrologyPointPlacement[];
   calculationOptions: Record<string, unknown> & { ruleVersion: string };
 }
@@ -123,6 +132,8 @@ export function deriveAstrologyPoint(
 ): AstrologyPointOutput {
   const hasPlanet = selector.planet !== undefined, hasHouse = selector.house !== undefined;
   if (hasPlanet === hasHouse) throw new CoreInputError(hasPlanet ? 'house' : 'planet', 'planet 与 house 必须且只能给出一个');
+  const focus = resolveEnum(selector.focus, ASTROLOGY_POINT_FOCUS, '全部', 'focus');
+  const natalPart = focus !== '流运', transitPart = focus !== '本命';
   const isApproximate = chart.chartMeta.calculationMode === 'approximate';
   const natalFactors = [...chart.natal.bodies, ...chart.natal.points, ...chart.natal.angles];
   const natalByKey = new Map(natalFactors.map((factor) => [factor.key, factor]));
@@ -170,12 +181,12 @@ export function deriveAstrologyPoint(
       ? chart.natal.houses.filter((house) => DOMICILE_RULER[house.sign.key] === key).map((house) => house.id)
       : undefined;
     return {
-      query: { kind: 'planet', key, label: factor.label },
+      query: { kind: 'planet', key, label: factor.label, focus },
       placement: placementOf(factor, '本命', isApproximate),
-      ...(TRADITIONAL_PLANETS.has(key) ? { dignities: traditionalDignities(key, factor.sign.key) } : {}),
-      ...(ruledHouses && !isApproximate ? { ruledHouses } : {}),
-      aspects: natalAspectsOf(key),
-      transitAspects: chart.transitToNatalAspects.filter((aspect) => aspect.to.key === key).map((aspect) => aspectRow(aspect, '流运')),
+      ...(natalPart && TRADITIONAL_PLANETS.has(key) ? { dignities: traditionalDignities(key, factor.sign.key) } : {}),
+      ...(natalPart && ruledHouses && !isApproximate ? { ruledHouses } : {}),
+      ...(natalPart ? { aspects: natalAspectsOf(key) } : {}),
+      ...(transitPart ? { transitAspects: chart.transitToNatalAspects.filter((aspect) => aspect.to.key === key).map((aspect) => aspectRow(aspect, '流运')) } : {}),
       calculationOptions,
     };
   }
@@ -187,7 +198,7 @@ export function deriveAstrologyPoint(
   const ruler = natalByKey.get(rulerKey)!;
   const span = Number((((house.end.decimal - house.start.decimal) + 360) % 360).toFixed(4));
   return {
-    query: { kind: 'house', house: house.id, label: house.label },
+    query: { kind: 'house', house: house.id, label: house.label, focus },
     house: {
       id: house.id,
       sign: house.sign.label,
@@ -195,11 +206,12 @@ export function deriveAstrologyPoint(
       end: `${house.end.absolute} / ${house.end.withinSign}`,
       span,
     },
-    occupants: natalFactors.filter((factor) => factor.house === house.id).map((factor) => placementOf(factor, '本命', false)),
-    ruler: { ...placementOf(ruler, '本命', false), dignities: traditionalDignities(rulerKey, ruler.sign.key) },
-    aspects: natalAspectsOf(rulerKey),
-    transitAspects: [],
-    transitOccupants: chart.transit.bodies.filter((factor) => inHouse(factor.position.decimal, house)).map((factor) => placementOf(factor, '流运', true)),
+    ...(natalPart ? {
+      occupants: natalFactors.filter((factor) => factor.house === house.id).map((factor) => placementOf(factor, '本命', false)),
+      ruler: { ...placementOf(ruler, '本命', false), dignities: traditionalDignities(rulerKey, ruler.sign.key) },
+      aspects: natalAspectsOf(rulerKey),
+    } : {}),
+    ...(transitPart ? { transitOccupants: chart.transit.bodies.filter((factor) => inHouse(factor.position.decimal, house)).map((factor) => placementOf(factor, '流运', true)) } : {}),
     calculationOptions,
   };
 }

@@ -1,4 +1,5 @@
-import { withRulesJSON, withRulesText } from '../../shared/calculation-rules.js';
+import { withRulesJSON } from '../../shared/calculation-rules.js';
+import { drilldownText } from '../shared/drilldown-render.js';
 import {
   ZIWEI_SCOPE_LABELS,
   type ZiweiFlankPattern,
@@ -186,8 +187,9 @@ function renderZiweiPalaceTextBase(result: ZiweiPalaceOutput): string {
   if (json.借对宫) {
     lines.push('', '## 借对宫', '', `- ${json.借对宫.说明}：${json.借对宫.主星.map((star) => `${star.星曜}${star.亮度 ? `(${star.亮度})` : ''}${star.生年四化 ? `化${star.生年四化}` : ''}`).join('、') || '无'}`);
   }
-  lines.push('', '## 三方四正', '', '| 角色 | 宫位 | 干支 | 主星 | 辅星 | 生年四化 |', '|------|------|------|------|------|----------|');
-  for (const row of json.三方四正) lines.push(`| ${row.角色} | ${row.宫位} | ${row.干支} | ${row.主星} | ${row.辅星} | ${row.生年四化.join('、') || '-'} |`);
+  // 本宫已在「本宫星曜」，星名已带「化X」，表里不再重复本宫行与生年四化列
+  lines.push('', '## 三方四正', '', '| 角色 | 宫位 | 干支 | 主星 | 辅星 |', '|------|------|------|------|------|');
+  for (const row of json.三方四正.filter((item) => item.角色 !== '本宫')) lines.push(`| ${row.角色} | ${row.宫位} | ${row.干支} | ${row.主星} | ${row.辅星} |`);
   lines.push('', '## 夹宫', '', `- 两邻：${json.夹宫.两邻.join('、')}`, ...(json.夹宫.夹星.length ? json.夹宫.夹星.map(rowLine) : ['- 无成对夹星']));
   lines.push('', '## 宫干四化飞出', '', ...json.宫干四化飞出.map(rowLine));
   lines.push('', '## 四化飞入', '', ...(json.四化飞入.length ? json.四化飞入.map(rowLine) : ['- 无']));
@@ -197,9 +199,8 @@ function renderZiweiPalaceTextBase(result: ZiweiPalaceOutput): string {
     if (overlay.运限命宫落入) lines.push(`- ${overlay.层次}命宫落入本命${overlay.运限命宫落入}`);
     lines.push(...overlay.运限四化.map(rowLine));
   }
-  lines.push('', '## 口径', '', ...NOTES.map((note) => `- ${note}`));
   return lines.join('\n');
 }
 
 export const toZiweiPalaceJson = withRulesJSON(renderZiweiPalaceJSONBase);
-export const toZiweiPalaceText = withRulesText(renderZiweiPalaceTextBase);
+export const toZiweiPalaceText = drilldownText(NOTES, renderZiweiPalaceTextBase);

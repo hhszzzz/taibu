@@ -13,14 +13,14 @@ async function board(input = JIAZI) {
   return renderToolResult('qimen', await executeTool('qimen', input), { detailLevel: 'full' }).structuredContent;
 }
 
-test('qimen_palace schema is the qimen schema plus selectors, without qimen detail levels', () => {
+test('qimen_palace schema is the qimen schema plus selectors and its own detail level', () => {
   const tool = listToolDefinitions().find((item) => item.name === 'qimen_palace');
   const qimen = listToolDefinitions().find((item) => item.name === 'qimen');
   assert.ok(tool && qimen);
   for (const key of Object.keys(qimen.inputSchema.properties).filter((key) => key !== 'detailLevel')) {
     assert.deepEqual(tool.inputSchema.properties[key], qimen.inputSchema.properties[key], key);
   }
-  assert.equal('detailLevel' in tool.inputSchema.properties, false);
+  assert.deepEqual(tool.inputSchema.properties.detailLevel.enum, ['default', 'full'], 'the drilldown has its own text detail level');
   assert.deepEqual(tool.inputSchema.required, qimen.inputSchema.required);
   assert.ok(tool.inputSchema.examples.every((example) => example.year && example.month && example.day));
 });

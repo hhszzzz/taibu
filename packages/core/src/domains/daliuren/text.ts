@@ -1,4 +1,3 @@
-import { withRulesText } from '../../shared/calculation-rules.js';
 import type { DaliurenOutput } from './types.js';
 import {
   normalizeDetailLevelBinary
@@ -16,9 +15,7 @@ function formatDaliurenTianPanLabel(item: DaliurenOutput['gongInfos'][number]): 
   return suffix ? `${item.tianZhi}(${suffix})` : item.tianZhi;
 }
 
-export const renderDaliurenCanonicalText = withRulesText(renderDaliurenCanonicalTextBase);
-
-function renderDaliurenCanonicalTextBase(result: DaliurenOutput, options: DaliurenCanonicalTextOptions = {}): string {
+export function renderDaliurenCanonicalText(result: DaliurenOutput, options: DaliurenCanonicalTextOptions = {}): string {
   const detailLevel = normalizeDetailLevelBinary(options.detailLevel);
   const diurnalLabel = result.dateInfo.diurnal ? '昼占' : '夜占';
   const siKeLabels = ['一课 (干上)', '二课 (干阴)', '三课 (支上)', '四课 (支阴)'] as const;

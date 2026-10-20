@@ -43,14 +43,38 @@ test('the scan agrees with bazi_relations for the same year', async () => {
   assert.deepEqual([...year.原局关系, ...year.大运关系].map((row) => row.说明).sort(), withFlow.map((row) => row.说明).sort());
 });
 
-test('focus keeps only years and relations touching a pillar or a relation type', async () => {
-  const clashes = await scan({ fromYear: 2024, toYear: 2053, focus: '六冲' });
-  assert.equal(clashes.扫描范围.筛选, '六冲');
+const cells = (row) => row.位置.map((p) => `${p.柱}${p.部位}`);
+
+test('types keeps only years with those relations, marks same-character relations and counts the rest', async () => {
+  const clashes = await scan({ fromYear: 2024, toYear: 2053, types: ['六冲'] });
+  assert.deepEqual(clashes.筛选, { 类型: ['六冲'] });
   assert.equal(clashes.扫描范围.列出年数, clashes.逐年.length);
   assert.ok(clashes.逐年.length > 0 && clashes.逐年.every((year) => [...year.原局关系, ...year.大运关系].length > 0
     && [...year.原局关系, ...year.大运关系].every((row) => row.类型 === '六冲')));
-  const dayPillar = await scan({ fromYear: 2024, toYear: 2033, focus: '日柱' });
-  assert.ok(dayPillar.逐年.length > 0 && dayPillar.逐年.every((year) => [...year.原局关系, ...year.大运关系].every((row) => row.位置.some((p) => p.柱 === '日柱'))));
+  // 2027 丑未冲：同一个丑、未上的恃势之刑作为牵连列出
+  const y2027 = clashes.逐年.find((year) => year.流年 === 2027);
+  assert.deepEqual(describe(y2027.同字牵连), ['相刑:流年未·月柱丑']);
+  for (const year of clashes.逐年) {
+    const kept = new Set([...year.原局关系, ...year.大运关系].flatMap(cells));
+    assert.ok((year.同字牵连 ?? []).every((row) => row.类型 !== '六冲' && cells(row).some((cell) => kept.has(cell))));
+  }
+  assert.ok(clashes.未列出.条数 > 0 && clashes.未列出.按类型.every((item) => item.类型 !== '六冲'));
+  assert.match(clashes.未列出.提示, /bazi_relations/);
+});
+
+test('pillars keeps relations touching the listed pillar; 太岁 and 值太岁 years follow 年柱 only', async () => {
+  const dayPillar = await scan({ fromYear: 2024, toYear: 2033, pillars: ['日柱'] });
+  assert.deepEqual(dayPillar.逐年.map((year) => year.流年), [2024, 2025, 2029, 2030, 2032, 2033]);
+  assert.ok(dayPillar.逐年.every((year) => [...year.原局关系, ...year.大运关系].every((row) => row.位置.some((p) => p.柱 === '日柱'))));
+  assert.ok(dayPillar.逐年.every((year) => year.太岁关系 === undefined));
+  const yearPillar = await scan({ fromYear: 2024, toYear: 2053, pillars: ['年柱'] });
+  // 2049 己巳：没有其他关系，只有值太岁与流年伏吟年柱，仍然列出
+  const y2049 = yearPillar.逐年.find((year) => year.流年 === 2049);
+  assert.deepEqual([y2049.原局关系, y2049.太岁关系, y2049.岁运提示], [[], ['值太岁'], ['流年伏吟年柱（同为己巳）']]);
+  const text = renderToolResult('bazi_liunian_scan', await executeTool('bazi_liunian_scan', { ...BIRTH, fromYear: 2024, toYear: 2033, pillars: ['日柱'] })).content[0].text;
+  assert.match(text, /筛选：涉及 日柱，列出 6 年/);
+  assert.match(text, /- 牵连：六合｜大运地支酉·流年地支辰｜酉辰六合化金/);
+  assert.match(text, /## 未列出\n\n- 另有 21 条/);
 });
 
 test('years before 起运 use 小运', async () => {
@@ -64,7 +88,8 @@ test('ranges are bounded, ordered and start no earlier than birth', async () => 
     { fromYear: 2024, toYear: 2054 },
     { fromYear: 2030, toYear: 2029 },
     { fromYear: 1980, toYear: 1995 },
-    { fromYear: 2024, toYear: 2030, focus: '拱合' },
+    { fromYear: 2024, toYear: 2030, types: ['拱合'] },
+    { fromYear: 2024, toYear: 2030, pillars: ['流年'] },
     { fromYear: 2024 },
   ]) {
     await assert.rejects(executeTool('bazi_liunian_scan', { ...BIRTH, ...selector }), JSON.stringify(selector));

@@ -1,4 +1,3 @@
-import { withRulesText } from '../../shared/calculation-rules.js';
 import {
   normalizeDetailLevelBinary
 } from '../../shared/render-utils.js';
@@ -44,9 +43,7 @@ function formatQimenPalaceName(palace: QimenOutput['palaces'][number]): string {
   return `${palace.palaceName}${palace.palaceIndex}(${palace.element || '-'})`;
 }
 
-export const renderQimenCanonicalText = withRulesText(renderQimenCanonicalTextBase);
-
-function renderQimenCanonicalTextBase(result: QimenOutput, options: QimenCanonicalTextOptions = {}): string {
+export function renderQimenCanonicalText(result: QimenOutput, options: QimenCanonicalTextOptions = {}): string {
   const detailLevel = normalizeDetailLevelBinary(options.detailLevel);
   const dunText = result.dunType === 'yang' ? '阳遁' : '阴遁';
   const juLabel = `${dunText}${result.juNumber}局`;

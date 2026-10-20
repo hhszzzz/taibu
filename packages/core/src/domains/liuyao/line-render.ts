@@ -1,4 +1,5 @@
-import { withRulesJSON, withRulesText } from '../../shared/calculation-rules.js';
+import { withRulesJSON } from '../../shared/calculation-rules.js';
+import { drilldownText } from '../shared/drilldown-render.js';
 import type { LiuyaoLineAction, LiuyaoLineFacts, LiuyaoLineOutput, LiuyaoLineRef } from './line.js';
 
 export interface LiuyaoLineCellJSON { 爻位: string; 序号: number; 部位: '本爻' | '伏神' | '变爻'; }
@@ -128,9 +129,8 @@ function renderLiuyaoLineTextBase(result: LiuyaoLineOutput): string {
     lines.push('- 受动爻作用：', ...actionLines(line.受动爻作用));
     if (line.动而作用.length) lines.push('- 动而作用：', ...actionLines(line.动而作用));
   }
-  lines.push('', '## 口径', '', ...json.口径.map((note) => `- ${note}`));
   return lines.join('\n');
 }
 
 export const toLiuyaoLineJson = withRulesJSON(renderLiuyaoLineJSONBase);
-export const toLiuyaoLineText = withRulesText(renderLiuyaoLineTextBase);
+export const toLiuyaoLineText = drilldownText(NOTES, renderLiuyaoLineTextBase);

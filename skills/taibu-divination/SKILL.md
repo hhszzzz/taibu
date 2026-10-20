@@ -49,8 +49,8 @@ echo '{"gender":"male","birthYear":1990,"birthMonth":5,"birthDay":20,"birthHour"
 | `qimen` | 奇门遁甲排盘 | 根据指定时间排出奇门盘，输出九宫、九星、八门、八神、格局等信息 | [references/qimen.md](references/qimen.md) | [interpretation/qimen.md](interpretation/qimen.md) |
 | `daliuren` | 大六壬排盘 | 根据日期时间起课，输出天地盘、四课、三传、神将、课体与时空信息 | [references/daliuren.md](references/daliuren.md) | [interpretation/daliuren.md](interpretation/daliuren.md) |
 | `xiaoliuren` | 小六壬占测 | 根据农历月日时辰起课，输出起课信息、推演链与结果信息 | [references/xiaoliuren.md](references/xiaoliuren.md) | [interpretation/xiaoliuren.md](interpretation/xiaoliuren.md) |
-| `bazi_relations` | 八字刑冲合害 | 在八字命盘上详查干支关系：原局四柱之间，以及叠加大运（起运前为小运）、流年、流月、流日后的天干五合/相冲与地支六合、三合、半合、三会、六冲、刑、害、破，附岁运并临、伏吟、天克地冲与太岁关系 | [references/bazi_relations.md](references/bazi_relations.md) | [interpretation/bazi.md](interpretation/bazi.md) |
-| `bazi_wuxing` | 八字五行流通 | 在八字命盘上详查五行：天干、地支本气与藏干加权统计，月令旺相休囚死，日主通根与透干，干支自坐与相邻天干生克，相生链的连续与中断，以及十神分布 | [references/bazi_wuxing.md](references/bazi_wuxing.md) | [interpretation/bazi.md](interpretation/bazi.md) |
+| `bazi_relations` | 八字岁运刑冲合害 | 在八字命盘上叠加大运（起运前为小运）、流年、流月或流日，详查它们与原局四柱、与彼此之间的天干五合/相冲与地支六合、三合、半合、三会、六冲、刑、害、破，附岁运并临、伏吟、天克地冲与太岁关系 | [references/bazi_relations.md](references/bazi_relations.md) | [interpretation/bazi.md](interpretation/bazi.md) |
+| `bazi_wuxing` | 八字五行旺衰 | 在八字命盘上详查旺衰与生克的事实：月令旺相休囚死与日主得失，月令各藏干透出与否（取格看月令），四个天干各自的通根（本气、中气、余气，无根亦列出），干支自坐与相邻天干的生克，以及缺失五行 | [references/bazi_wuxing.md](references/bazi_wuxing.md) | [interpretation/bazi.md](interpretation/bazi.md) |
 | `bazi_liunian_scan` | 八字流年扫描 | 在八字命盘上逐年列出一段年份（最多 30 年）的流年干支、所在大运（起运前为小运）、十神，流年与原局、与大运的刑冲合害，以及太岁与岁运提示 | [references/bazi_liunian_scan.md](references/bazi_liunian_scan.md) | [interpretation/bazi.md](interpretation/bazi.md) |
 | `ziwei_palace` | 紫微宫位 | 在紫微命盘上聚焦一宫详查：本宫星曜亮度与生年四化、离心/向心自化，空宫借对宫，三方四正，夹宫，宫干四化飞出与十二宫四化飞入 | [references/ziwei_palace.md](references/ziwei_palace.md) | [interpretation/ziwei.md](interpretation/ziwei.md) |
 | `qimen_palace` | 奇门宫位详查 | 在奇门盘上详查一宫：指定宫位，或按年月日时干（取天盘，甲取所遁六仪）、九星、八门、八神定位 | [references/qimen_palace.md](references/qimen_palace.md) | [interpretation/qimen.md](interpretation/qimen.md) |
@@ -61,6 +61,8 @@ echo '{"gender":"male","birthYear":1990,"birthMonth":5,"birthDay":20,"birthHour"
 <!-- TOOLS:END -->
 
 调用前先 `schema <tool>`，或读 `references/<tool>.md`（参数表与可复制的示例）。
+
+详查工具只问某柱、某类关系或某几组事实时，用筛选参数只取所需：`bazi_relations`、`bazi_liunian_scan` 的 `pillars`、`types`，`bazi_wuxing` 的 `sections`，`daliuren_lessons`、`astrology_point` 的 `focus`。「同字牵连」须与所列关系一并解读；「未列出」表示另有事实没有展开，确需时去掉筛选再查。
 
 ## 解读方法
 
@@ -79,7 +81,7 @@ echo '{"gender":"male","birthYear":1990,"birthMonth":5,"birthDay":20,"birthHour"
 - **日期核实**：用户说「今天/现在」并同时报出农历日期时，先取系统时间、用 `almanac` 核对公农历对应——农历与公历的映射是查历数据，不能凭记忆换算。口述与核实不符时，指出差异并以核实结果起盘，必要时附口述日期的对照结果。出生生肖、未来日期干支也以 Core 对相应日期的计算为准，不能从公历年份或单日盘面补算。
 - **随机性**：`tarot` 可传 `seed` 复现抽牌；`liuyao` 的 `method: "auto"` 每次结果随机，需要复现时改用 `select`（指定卦名）或 `number`（数字起卦）。
 - **六爻用神**：`yongShenTargets` 必填，按占问主题选择，可多选：事业官职、官司、疾病忧患取 `官鬼`；财运、男问感情取 `妻财`；文书合同、长辈、房产车辆取 `父母`；子女晚辈、健康平安取 `子孙`；合作竞争、朋友取 `兄弟`。
-- **detailLevel**：默认输出已够解读；需要完整盘面时在参数中加 `"detailLevel": "full"`（部分工具另有 `"more"`）。
+- **detailLevel**：默认输出已够解读；需要完整盘面时在参数中加 `"detailLevel": "full"`（部分工具另有 `"more"`；详查工具的 full 只多附判定口径）。
 
 ## 其他接入方式
 

@@ -1,4 +1,3 @@
-import { withRulesText } from '../../shared/calculation-rules.js';
 import { Solar } from 'lunar-javascript';
 import {
   normalizeDetailLevelBinary
@@ -104,9 +103,7 @@ function buildZiweiHoroscopeTransitGroups(result: ZiweiHoroscopeOutput): Array<{
   ];
 }
 
-export const renderZiweiHoroscopeCanonicalText = withRulesText(renderZiweiHoroscopeCanonicalTextBase);
-
-function renderZiweiHoroscopeCanonicalTextBase(result: ZiweiHoroscopeOutput, options: ZiweiHoroscopeCanonicalTextOptions = {}): string {
+export function renderZiweiHoroscopeCanonicalText(result: ZiweiHoroscopeOutput, options: ZiweiHoroscopeCanonicalTextOptions = {}): string {
   const detailLevel = normalizeDetailLevelBinary(options.detailLevel);
   const parsedTargetDate = parseZiweiHoroscopeTargetDate(result.targetDate);
   const lines: string[] = [

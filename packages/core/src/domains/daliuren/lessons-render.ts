@@ -1,4 +1,5 @@
-import { withRulesJSON, withRulesText } from '../../shared/calculation-rules.js';
+import { withRulesJSON } from '../../shared/calculation-rules.js';
+import { drilldownText } from '../shared/drilldown-render.js';
 import { renderFactSections } from '../shared/fact-sections-text.js';
 import type { DaliurenLessonsOutput, DaliurenLessonsSections } from './lessons.js';
 
@@ -11,16 +12,28 @@ const DALIUREN_LESSONS_NOTES = [
   '六亲以日干为我：生我父母、我生子孙、克我官鬼、我克妻财、同我兄弟',
   '旺衰按月建（月支）论十二支五行；空亡取日旬空',
   '日干寄宫取一课上神所临的地盘支；类神可为十二地支或十二天将',
-  '本命与行年沿用排盘结果，行年按立春换年、男顺女逆',
+  '本命与行年沿用排盘结果，行年按立春换年、男顺女逆；只在范围为全部时列出',
+  '给了类神而未指定范围时只列类神；范围为课或传时同时列出类神',
 ];
 
 function renderDaliurenLessonsJSONBase(result: DaliurenLessonsOutput): DaliurenLessonsCanonicalJSON {
   return { ...structuredClone(result.sections), 口径: [...DALIUREN_LESSONS_NOTES] };
 }
 
-function renderDaliurenLessonsTextBase(result: DaliurenLessonsOutput): string {
-  return renderFactSections('大六壬课传详查', { ...result.sections, 口径: DALIUREN_LESSONS_NOTES });
+/**
+ * 默认文本只写命盘没有的：基础只留日干寄宫、月建与旬（日干支、空亡、课式命盘已有），范围为默认的全部时不写查询；
+ * 神将交战与各课传行的「神将」同源，也留给 full。
+ */
+function renderDaliurenLessonsTextBase(result: DaliurenLessonsOutput, full: boolean): string {
+  if (full) return renderFactSections('大六壬课传详查', { ...result.sections });
+  const { 查询: query, 基础: basis } = result.sections;
+  return renderFactSections('大六壬课传详查', {
+    ...result.sections,
+    查询: query.范围 === '全部' && !query.类神 ? undefined : query,
+    基础: { 日干寄宫: basis.日干寄宫, 月建: basis.月建, 旬: basis.旬 },
+    神将交战: undefined,
+  });
 }
 
 export const toDaliurenLessonsJson = withRulesJSON(renderDaliurenLessonsJSONBase);
-export const toDaliurenLessonsText = withRulesText(renderDaliurenLessonsTextBase);
+export const toDaliurenLessonsText = drilldownText(DALIUREN_LESSONS_NOTES, renderDaliurenLessonsTextBase);

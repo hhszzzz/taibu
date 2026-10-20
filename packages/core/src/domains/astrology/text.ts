@@ -1,4 +1,3 @@
-import { withRulesText } from '../../shared/calculation-rules.js';
 import type { AstrologyCanonicalTextOptions } from '../shared/text-options.js';
 import type { AstrologyAspect, AstrologyFactor, AstrologyOutput } from './types.js';
 import { buildAstrologyRenderModel } from './render-model.js';
@@ -22,9 +21,7 @@ function aspectLine(item: AstrologyAspect): string {
   return `- ${item.from.label} ${item.label} ${item.to.label}（容许度 ${item.orb.toFixed(2)}° / 实际夹角 ${item.actualAngle.toFixed(2)}°）`;
 }
 
-export const renderAstrologyCanonicalText = withRulesText(renderAstrologyCanonicalTextBase);
-
-function renderAstrologyCanonicalTextBase(
+export function renderAstrologyCanonicalText(
   result: AstrologyOutput,
   options: AstrologyCanonicalTextOptions = {},
 ): string {

@@ -31,6 +31,15 @@ export function resolveEnum<T extends string>(value: unknown, choices: readonly 
   return value as T;
 }
 
+/** 非空的枚举数组：去重并保留首次出现的顺序；省略时返回 undefined */
+export function resolveEnumList<T extends string>(value: unknown, choices: readonly T[], path: string): T[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length === 0) throw new CoreInputError(path, '须为非空数组');
+  const invalid = value.findIndex((item) => typeof item !== 'string' || !choices.includes(item as T));
+  if (invalid >= 0) throw new CoreInputError(`${path}[${invalid}]`, `无效值 ${String(value[invalid])}，允许值为 ${choices.join(', ')}`);
+  return [...new Set(value as T[])];
+}
+
 export type CivilDateTime = {
   year: number;
   month: number;

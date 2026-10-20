@@ -22,7 +22,7 @@ const aspectSchema = obj({
 });
 
 export const astrologyPointOutputSchema: OutputSchema = obj({
-  查询: obj({ 对象: str('详查对象'), 类型: str('星体或宫位') }, '本次详查的对象'),
+  查询: obj({ 对象: str('详查对象'), 类型: str('星体或宫位'), 范围: str('只看本命或只看流运时给出') }, '本次详查的对象'),
   位置信息: placementSchema,
   传统尊贵: arr(str(), '托勒密传统尊贵（入庙、擢升、失势、落陷，或无）'),
   主管宫位: arr(str(), '该行星按传统守护主管的宫位'),

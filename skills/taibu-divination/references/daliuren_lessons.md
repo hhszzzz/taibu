@@ -1,6 +1,6 @@
 # 大六壬课传详查（`daliuren_lessons`）
 
-大六壬课传详查 - 在已起的六壬课上详查四课与三传：逐课列上下神的贼克生克、所乘天将、神将与遁干六亲；逐传列地支五行、与日干关系、旺衰、旬空与递生递克；另给日干寄宫、本命行年的上神，以及类神（地支或天将）的天盘落处与入课入传。只给事实，不下吉凶结论。
+大六壬课传详查 - 在已起的六壬课上详查四课与三传：逐课列上下神的贼克生克、所乘天将、神将与遁干六亲；逐传列地支五行、与日干关系、旺衰、旬空与递生递克；另给日干寄宫、本命行年的上神，以及类神（地支或天将）的天盘落处与入课入传。用 focus 只看课、只看传或只看类神；给了 leiShen 而不指定 focus 时只列类神。下克上为贼，神克将为内战、将克神为外战；六亲以日干为我。只给事实，不下吉凶结论。
 
 ## 参数
 
@@ -17,8 +17,9 @@
 | `dayNight` | enum | 否 | `"shichen"` | 卯至申为昼，或强制昼夜，或按太阳高度选择贵人盘；可选值: `shichen` / `day` / `night` / `sunrise` |
 | `latitude` | number | 否 | — | — |
 | `longitude` | number | 否 | — | — |
-| `focus` | enum | 否 | `"全部"` | 只列四课、只列三传，或两者都列；可选值: `全部` / `课` / `传` |
+| `focus` | enum | 否 | — | 全部=四课三传与本命行年；课、传只列其一（给了类神时一并列出）；类神=只列类神，须同时给 leiShen。省略时有 leiShen 取类神，否则取全部；可选值: `全部` / `课` / `传` / `类神` |
 | `leiShen` | string | 否 | — | 类神：十二地支之一或十二天将名（如 卯、贵人），列出其天盘落处与入课入传 |
+| `detailLevel` | enum | 否 | `"default"` | 文本详略：default=只列所查事实；full=另附判定口径（结构化结果始终带口径与计算规则）；可选值: `default` / `full` |
 
 ## 调用示例
 
@@ -34,6 +35,10 @@ echo '{"date":"2026-03-15","hour":16,"timezone":"Asia/Shanghai","birthYear":1990
 echo '{"date":"2026-03-15","hour":16,"minute":53,"timezone":"Asia/Shanghai","question":"今日运势如何","focus":"传","leiShen":"贵人"}' | node "$TB/scripts/taibu.mjs" call daliuren_lessons -
 ```
 
+```bash
+echo '{"date":"2026-03-15","hour":16,"timezone":"Asia/Shanghai","birthYear":1990,"gender":"male","leiShen":"卯"}' | node "$TB/scripts/taibu.mjs" call daliuren_lessons -
+```
+
 ## 输出结构（structuredContent 顶层键）
 
 - `查询`：本次详查的范围
@@ -41,7 +46,7 @@ echo '{"date":"2026-03-15","hour":16,"minute":53,"timezone":"Asia/Shanghai","que
 - `四课`：四课的上下神、天将与神将生克
 - `三传`：三传的地支、天将、六亲、旺衰与空亡
 - `三传递进`：三传之间的五行递进
-- `神将交战`：神克将（内战）与将克神（外战）的课传
+- `神将交战`：所列课传中神克将（内战）与将克神（外战）者；只看类神时省略
 - `本命行年`：本命与行年的上神
 - `类神`：类神的天盘落处与入课入传
 - `口径`：判定口径说明

@@ -1,6 +1,6 @@
-# 八字刑冲合害（`bazi_relations`）
+# 八字岁运刑冲合害（`bazi_relations`）
 
-八字刑冲合害 - 在八字命盘上详查干支关系：原局四柱之间，以及叠加大运（起运前为小运）、流年、流月、流日后的天干五合/相冲与地支六合、三合、半合、三会、六冲、刑、害、破，附岁运并临、伏吟、天克地冲与太岁关系。只给事实，不下吉凶结论。
+八字岁运刑冲合害 - 在八字命盘上叠加大运（起运前为小运）、流年、流月或流日，详查它们与原局四柱、与彼此之间的天干五合/相冲与地支六合、三合、半合、三会、六冲、刑、害、破，附岁运并临、伏吟、天克地冲与太岁关系。原局四柱之间的关系已在八字命盘的「干支关系」中列出，这里不再重复，所以须给出 year、day 或 dayun。只问某柱或某类关系时用 pillars（同时涉及所列各柱）或 types 筛选：与所列关系共用同一字的其他叠加关系照列为「同字牵连」（同一字上合冲刑并见须一并看），其余只给「未列出」条数。不计拱合、暗合、半会；天克地冲取天干相冲且地支六冲，伏吟取干支全同；流年按公历年份取干支。只给事实，不下吉凶结论。
 
 ## 参数
 
@@ -24,15 +24,18 @@
 | `day` | string | 否 | — | 流日 YYYY-MM-DD，与 year/month 互斥；自动叠加当日的流年、流月与所在大运 |
 | `dayun` | integer | 否 | — | 大运序号 1–10；省略时按流年自动选取 |
 | `yunSect` | enum | 否 | `1` | 起运换算法1或2（与 bazi_dayun 一致）；可选值: `1` / `2` |
+| `pillars` | string[] | 否 | — | 只列同时涉及这些柱位的叠加关系：["日柱"] 看日柱与各叠加柱的关系，["日柱","流年"] 只看日柱与流年之间；「大运」在起运前指小运；叠加柱须有对应的 year、month、day 或 dayun |
+| `types` | string[] | 否 | — | 只列这些类型的关系，如 ["六冲","相刑"]；岁运提示与太岁关系不按类型筛 |
+| `detailLevel` | enum | 否 | `"default"` | 文本详略：default=只列所查事实；full=另附判定口径（结构化结果始终带口径与计算规则）；可选值: `default` / `full` |
 
 ## 调用示例
 
 ```bash
-echo '{"gender":"male","birthYear":1990,"birthMonth":1,"birthDay":15,"birthHour":9}' | node "$TB/scripts/taibu.mjs" call bazi_relations -
+echo '{"gender":"male","birthYear":1990,"birthMonth":1,"birthDay":15,"birthHour":9,"year":2027}' | node "$TB/scripts/taibu.mjs" call bazi_relations -
 ```
 
 ```bash
-echo '{"gender":"female","birthYear":1995,"birthMonth":6,"birthDay":20,"birthHour":23,"calendarType":"lunar","year":2027}' | node "$TB/scripts/taibu.mjs" call bazi_relations -
+echo '{"gender":"female","birthYear":1995,"birthMonth":6,"birthDay":20,"birthHour":23,"calendarType":"lunar","dayun":3}' | node "$TB/scripts/taibu.mjs" call bazi_relations -
 ```
 
 ```bash
@@ -43,14 +46,24 @@ echo '{"gender":"male","birthYear":1990,"birthMonth":1,"birthDay":15,"birthHour"
 echo '{"gender":"female","birthYear":1995,"birthMonth":6,"birthDay":20,"birthHour":23,"calendarType":"lunar","day":"2027-06-10"}' | node "$TB/scripts/taibu.mjs" call bazi_relations -
 ```
 
+```bash
+echo '{"gender":"male","birthYear":1990,"birthMonth":1,"birthDay":15,"birthHour":9,"year":2027,"pillars":["日柱"]}' | node "$TB/scripts/taibu.mjs" call bazi_relations -
+```
+
+```bash
+echo '{"gender":"female","birthYear":1995,"birthMonth":6,"birthDay":20,"birthHour":23,"calendarType":"lunar","year":2027,"types":["六冲","相刑"]}' | node "$TB/scripts/taibu.mjs" call bazi_relations -
+```
+
 ## 输出结构（structuredContent 顶层键）
 
-- `查询`：本次叠加的层次；仅原局时为空
-- `参与柱位`：参与判断的全部柱位
-- `原局关系`：原局四柱之间的干支关系
-- `叠加关系`：至少涉及一个叠加柱的干支关系
+- `查询`：本次叠加的层次
+- `筛选`：本次的筛选条件
+- `参与柱位`：参与判断的全部柱位（原局四柱与叠加柱）
+- `叠加关系`：至少涉及一个叠加柱的干支关系（筛选时只含入选者）；原局之间的关系见八字命盘
+- `同字牵连`：不在筛选内、但与所列关系共用同一字（同柱同部位）的叠加关系
 - `岁运提示`：岁运并临、伏吟、天克地冲
 - `太岁关系`：流年地支与年支的值、冲、合、刑、害、破
+- `未列出`：筛选后没有列出的事实
 - `口径`：判定口径说明
 - `计算规则`
 

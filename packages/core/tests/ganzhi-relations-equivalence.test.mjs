@@ -44,6 +44,7 @@ test('peer mode reproduces the natal branch analyzers for every 12^4 combination
         case '六合': case '三合': return [['合', slots, f.description]];
         case '六冲': return [['冲', slots, f.description]];
         case '相害': return [['害', slots, f.description]];
+        case '相破': return [['破', slots, f.description]];
         case '相刑': return [['刑', slots, f.result]];
         default: return [];
       }

@@ -36,7 +36,7 @@ export const baziCalculateOutputSchema: OutputSchema = obj({
     神煞: arr(str()),
     空亡: str("是否落空亡（仅落空时输出“是”）"),
   }), "年、月、日、时四柱"),
-  干支关系: arr(str(), "原局天干与地支之间的合、冲、刑等关系"),
+  干支关系: arr(str(), "原局天干与地支之间的合、冲、刑、害、破等关系"),
   干支关系明细: arr(obj({
     id: str('关系定位 ID'), 类型: str('关系类型'), 说明: str('关系说明'),
     位置: arr(obj({ 柱: str('柱名'), 部位: str('天干或地支'), 字: str('实际干支') }), '关系的实际柱位端点'),

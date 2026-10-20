@@ -1,6 +1,6 @@
 import type { ToolInputSchema } from '../../contract.js';
 
-export const QIMEN_PALACE_DESCRIPTION = '奇门宫位详查 - 在奇门盘上详查一宫：指定宫位，或按年月日时干（取天盘，甲取所遁六仪）、九星、八门、八神定位；列出天地盘干与寄干、星门神、空亡马星入墓击刑门迫、旺衰、门宫星宫干宫生克、值符值使与本宫格局。只给事实，不下吉凶结论。';
+export const QIMEN_PALACE_DESCRIPTION = '奇门宫位详查 - 在奇门盘上详查一宫：指定宫位，或按年月日时干（取天盘，甲取所遁六仪）、九星、八门、八神定位；列出天地盘干与寄干、星门神、空亡马星入墓击刑门迫、旺衰、门宫星宫干宫生克、值符值使与本宫格局。门克宫即门迫；转盘中五只列地盘干与寄宫去向，不计暗干。只给事实，不下吉凶结论。';
 
 export const qimenPalaceSelector: ToolInputSchema = {
   type: 'object',

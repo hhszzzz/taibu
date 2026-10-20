@@ -33,8 +33,8 @@ TaiBu 的本地 `stdio` MCP Server，适合直接接入 Claude Desktop、Cursor�
 | `bazi` | 八字排盘 |
 | `bazi_pillars_resolve` | 四柱反推 |
 | `bazi_dayun` | 大运、小运、流年链路 |
-| `bazi_relations` | 八字刑冲合害详查 |
-| `bazi_wuxing` | 八字五行流通详查 |
+| `bazi_relations` | 八字岁运刑冲合害详查 |
+| `bazi_wuxing` | 八字五行旺衰详查 |
 | `bazi_liunian_scan` | 八字流年扫描 |
 | `ziwei` | 紫微斗数排盘 |
 | `ziwei_horoscope` | 紫微运限 |

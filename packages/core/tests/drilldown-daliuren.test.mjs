@@ -13,14 +13,14 @@ async function board(input = CASE) {
   return renderToolResult('daliuren', await executeTool('daliuren', input), { detailLevel: 'full' }).structuredContent;
 }
 
-test('daliuren_lessons schema is the daliuren schema plus selectors, without daliuren detail levels', () => {
+test('daliuren_lessons schema is the daliuren schema plus selectors and its own detail level', () => {
   const tool = listToolDefinitions().find((item) => item.name === 'daliuren_lessons');
   const daliuren = listToolDefinitions().find((item) => item.name === 'daliuren');
   assert.ok(tool && daliuren);
   for (const key of Object.keys(daliuren.inputSchema.properties).filter((key) => key !== 'detailLevel')) {
     assert.deepEqual(tool.inputSchema.properties[key], daliuren.inputSchema.properties[key], key);
   }
-  assert.equal('detailLevel' in tool.inputSchema.properties, false);
+  assert.deepEqual(tool.inputSchema.properties.detailLevel.enum, ['default', 'full'], 'the drilldown has its own text detail level');
   assert.deepEqual(tool.inputSchema.required, daliuren.inputSchema.required);
   assert.ok(tool.inputSchema.examples.every((example) => example.date && example.hour !== undefined));
 });
@@ -90,6 +90,30 @@ test('本命 and 行年 use the birth data of the base call; 类神 locates a br
   assert.equal(general.类神[0].位置[0].部位, '天将');
   assert.match(general.类神[0].说明, /乘贵人/);
   assert.deepEqual((await lessons({ leiShen: '螣蛇' })).类神, (await lessons({ leiShen: '腾蛇' })).类神, '螣蛇 is an alias of 腾蛇');
+});
+
+test('a 类神 alone lists only where it falls; 全部 keeps the lessons and 本命行年 alongside it', async () => {
+  const only = await lessons({ leiShen: '申' });
+  assert.equal(only.查询.范围, '类神');
+  for (const key of ['四课', '三传', '三传递进', '神将交战', '本命行年']) assert.equal(only[key], undefined, key);
+  // 天盘申临地盘巳（干上巳临寅，天盘顺移三位）；申又为二课、四课上神与初传
+  assert.deepEqual(only.类神.map((row) => `${row.类型}:${row.结果}`), ['天盘落处:巳', '入课:二课', '入课:四课', '入传:初传']);
+  const everything = await lessons({ focus: '全部', leiShen: '申' });
+  assert.deepEqual([everything.四课.length, everything.三传.length, everything.本命行年.length], [4, 3, 2]);
+  assert.deepEqual(everything.类神, only.类神);
+  assert.equal((await lessons({ focus: '课' })).本命行年, undefined, '本命行年 only with 全部');
+  await assert.rejects(executeTool('daliuren_lessons', { ...CASE, focus: '类神' }), /须给出 leiShen/);
+});
+
+test('default text drops the repeated 神将交战 and the fact coordinates; full restores 神将交战 and 口径', async () => {
+  const raw = await executeTool('daliuren_lessons', { ...CASE, focus: '全部', leiShen: '卯' });
+  const lean = renderToolResult('daliuren_lessons', raw).content[0].text;
+  const full = renderToolResult('daliuren_lessons', raw, { detailLevel: 'full' }).content[0].text;
+  assert.match(lean, /## 类神\n\n- 天盘落处｜卯临子上，乘太阴，遁干乙，兄弟/);
+  assert.doesNotMatch(lean, /## 神将交战|## 口径|## 计算规则|地盘子 部位/);
+  assert.match(full, /## 三传递进[\s\S]*## 神将交战[\s\S]*## 本命行年[\s\S]*## 口径/);
+  assert.doesNotMatch(full, /## 计算规则/);
+  assert.ok(renderToolResult('daliuren_lessons', raw).structuredContent.神将交战.length > 0, 'JSON keeps 神将交战');
 });
 
 test('invalid selectors are rejected', async () => {

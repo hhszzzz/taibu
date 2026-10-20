@@ -23,8 +23,9 @@ export const requiredOutputSections: Record<string, string[]> = {
   astrology_point: ['查询', '口径'],
   bazi: ['基本信息', '四柱', '干支关系'],
   bazi_dayun: ['起运信息', '大运列表'],
-  bazi_relations: ['查询', '参与柱位', '原局关系', '口径'],
-  bazi_wuxing: ['日主', '五行统计', '缺失五行', '月令', '通根', '透干', '干支自坐', '相邻天干', '相生链', '十神分布', '口径'],
+  bazi_relations: ['查询', '参与柱位', '叠加关系', '口径'],
+  // 其余事实组按 sections 选取，默认全部给出
+  bazi_wuxing: ['日主', '月令', '缺失五行', '口径'],
   bazi_liunian_scan: ['扫描范围', '原局四柱', '逐年', '口径'],
   bazi_pillars_resolve: ['原始四柱', '候选数量', '候选列表'],
   ziwei: ['基本信息', '十二宫位'],
@@ -41,7 +42,7 @@ export const requiredOutputSections: Record<string, string[]> = {
   qimen: ['基本信息', '九宫盘'],
   qimen_palace: ['查询', '宫位', '天地盘', '星门神', '状态', '柱干落宫', '遁甲', '生克', '值符值使', '格局', '口径'],
   daliuren: ['基本信息', '四课', '三传', '天地盘'],
-  daliuren_lessons: ['查询', '基础', '神将交战', '口径'],
+  daliuren_lessons: ['查询', '基础', '口径'],
   xiaoliuren: ['起课信息', '推演链', '结果'],
 };
 

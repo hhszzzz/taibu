@@ -1,4 +1,3 @@
-import { withRulesText } from '../../shared/calculation-rules.js';
 import {
   formatGuaFanFuYinFlags,
   formatGuaLevelLines,
@@ -28,9 +27,7 @@ function formatShenSystemParts(system: ShenSystemInfo | undefined): string[] {
   return parts;
 }
 
-export const renderLiuyaoCanonicalText = withRulesText(renderLiuyaoCanonicalTextBase);
-
-function renderLiuyaoCanonicalTextBase(result: LiuyaoOutput): string {
+export function renderLiuyaoCanonicalText(result: LiuyaoOutput): string {
   const lines: string[] = ['# 六爻分析', '', '## 卦象信息'];
   if (result.question) lines.push(`- 问题: ${result.question}`);
   lines.push(`- 本卦: ${result.hexagramName}（${result.hexagramGong || '?'}宫·${result.hexagramElement || '?'}）`);
@@ -261,9 +258,7 @@ function buildLiuyaoSafeInteractionText(result: LiuyaoOutput): string[] {
   return lines;
 }
 
-export const renderLiuyaoText = withRulesText(renderLiuyaoTextBase);
-
-function renderLiuyaoTextBase(
+export function renderLiuyaoText(
   result: LiuyaoOutput,
   options?: { detailLevel?: 'default' | 'more' | 'full'; },
 ): string {

@@ -44,7 +44,7 @@ export type PillarPosition = '年支' | '月支' | '日支' | '时支';
 export type StemPosition = '年干' | '月干' | '日干' | '时干';
 
 export interface PillarRelation {
-  type: '合' | '冲' | '刑' | '害';
+  type: '合' | '冲' | '刑' | '害' | '破';
   pillars: PillarPosition[];
   description: string;
 }

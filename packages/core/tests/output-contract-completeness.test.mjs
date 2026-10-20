@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { executeTool, listToolDefinitions, renderToolResult } from 'taibu-core/mcp';
+import { executeTool, getDerivedToolSource, listToolDefinitions, renderToolResult } from 'taibu-core/mcp';
 import { validateOutput } from '../dist/mcp/output-validator.js';
 
 test('every domain and supported detail level satisfies its public output schema', async () => {
@@ -12,13 +12,19 @@ test('every domain and supported detail level satisfies its public output schema
     if(definition.name==='tarot') { input.seed='contract-completeness'; input.referenceYear=2024; }
     if(definition.name==='astrology') input.transitDateTime='2024-06-01T12:00:00Z';
     const result=await executeTool(definition.name,input);
+    // 计算规则只进结构化 JSON（审计、复现、界面），不进给模型读的文本；
+    // 详查工具的文本默认只给所查事实，口径留给 full，JSON 不分详略始终带口径
+    const derived=Boolean(getDerivedToolSource(definition.name));
     for(const detailLevel of ['default','more','full']) {
       const rendered=renderToolResult(definition.name,result,{detailLevel});
       assert.ok(rendered.structuredContent,`${definition.name} ${detailLevel}`);
       assert.ok(rendered.structuredContent.计算规则?.ruleVersion || rendered.structuredContent.计算规则?.规则版本,definition.name);
       assert.doesNotThrow(()=>validateOutput(definition.name,rendered.structuredContent,definition.outputSchema));
       assert.ok(rendered.content[0].text.length>0);
-      if(rendered.structuredContent.计算规则) assert.match(rendered.content[0].text,/计算规则/);
+      if(derived) assert.ok(rendered.structuredContent.口径.length>0,`${definition.name} JSON keeps 口径`);
+      assert.doesNotMatch(rendered.content[0].text,/## 计算规则|ruleVersion/,`${definition.name} ${detailLevel} text leaves 计算规则 to the JSON`);
+      if(derived && detailLevel==='default') assert.doesNotMatch(rendered.content[0].text,/## 口径/,`${definition.name} default text stays lean`);
+      else if(derived) assert.match(rendered.content[0].text,/## 口径/,`${definition.name} ${detailLevel}`);
     }
     assert.throws(()=>validateOutput(definition.name,{},definition.outputSchema),{code:'OUTPUT_SCHEMA_MISMATCH'});
   }

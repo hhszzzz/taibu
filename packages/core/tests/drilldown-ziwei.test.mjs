@@ -17,13 +17,13 @@ async function natalChart(birth = BIRTH) {
   return renderToolResult('ziwei', await executeTool('ziwei', birth), { detailLevel: 'full' }).structuredContent;
 }
 
-test('ziwei_palace schema is the ziwei schema plus selectors, without ziwei detail levels', () => {
+test('ziwei_palace schema is the ziwei schema plus selectors and its own detail level', () => {
   const tool = listToolDefinitions().find((item) => item.name === 'ziwei_palace');
   const ziwei = listToolDefinitions().find((item) => item.name === 'ziwei');
   for (const key of Object.keys(ziwei.inputSchema.properties).filter((key) => key !== 'detailLevel')) {
     assert.deepEqual(tool.inputSchema.properties[key], ziwei.inputSchema.properties[key], key);
   }
-  assert.equal('detailLevel' in tool.inputSchema.properties, false);
+  assert.deepEqual(tool.inputSchema.properties.detailLevel.enum, ['default', 'full'], 'the drilldown has its own text detail level');
   assert.deepEqual(tool.inputSchema.required, [...ziwei.inputSchema.required, 'palace']);
 });
 

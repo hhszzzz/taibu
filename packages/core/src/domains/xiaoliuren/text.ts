@@ -1,4 +1,3 @@
-import { withRulesText } from '../../shared/calculation-rules.js';
 import { normalizeDetailLevelBinary } from '../../shared/render-utils.js';
 import type { DetailLevel } from '../shared/types.js';
 import type { XiaoliurenOutput } from './types.js';
@@ -10,8 +9,7 @@ export interface XiaoliurenCanonicalTextOptions {
   showPoem?: boolean;
 }
 
-export const toXiaoliurenText = withRulesText(toXiaoliurenTextBase);
-function toXiaoliurenTextBase(
+export function toXiaoliurenText(
   output: XiaoliurenOutput,
   options: XiaoliurenCanonicalTextOptions = {},
 ): string {

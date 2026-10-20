@@ -1,27 +1,40 @@
-import { withRulesJSON, withRulesText } from '../../shared/calculation-rules.js';
+import { withRulesJSON } from '../../shared/calculation-rules.js';
+import { drilldownText } from '../shared/drilldown-render.js';
 import type { GanzhiRelationRowJSON } from './relations-render.js';
-import type { BaziWuxingOutput, WuxingFact } from './wuxing.js';
+import type { BaziWuxingOutput, BaziWuxingSection, StemRoots, WuxingFact, WuxingRootFact } from './wuxing.js';
 
+/** 通根行：位置为 [天干, 地支]，藏干是地支里与该天干同五行的那个字，结果为本气、中气或余气 */
+export interface BaziWuxingRootJSON extends GanzhiRelationRowJSON {
+  藏干: string;
+  结果: string;
+}
+
+/** 日主、月令与缺失五行总在；其余事实组只在被选取（或未给 sections）时出现 */
 export interface BaziWuxingCanonicalJSON {
   日主: { 天干: string; 五行: string; };
-  五行统计: Array<{ 五行: string; 天干: number; 地支: number; 藏干: number; 合计: number; }>;
+  月令: {
+    月支: string; 月令五行: string; 旺: string; 相: string; 休: string; 囚: string; 死: string; 日主状态: string;
+    /** 月令各藏干透出到哪些天干（年干、月干、时干）；空数组为不透 */
+    藏干: Array<{ 天干: string; 气性: string; 透出: string[]; }>;
+  };
   缺失五行: string[];
-  月令: { 月支: string; 月令五行: string; 旺: string; 相: string; 休: string; 囚: string; 死: string; 日主状态: string; };
-  通根: GanzhiRelationRowJSON[];
-  透干: GanzhiRelationRowJSON[];
-  干支自坐: GanzhiRelationRowJSON[];
-  相邻天干: GanzhiRelationRowJSON[];
-  相生链: { 顺序: string; 出现: string[]; 连续段: string[]; 中断: string[]; };
-  十神分布: Array<{ 十神: string; 天干: string[]; 藏干: string[]; }>;
+  筛选?: { 事实组: BaziWuxingSection[]; };
+  /** 日主在前，其后年干、月干、时干的根 */
+  通根?: BaziWuxingRootJSON[];
+  /** 没有同五行藏干的天干，如「年干丙火」 */
+  无根?: string[];
+  干支自坐?: GanzhiRelationRowJSON[];
+  相邻天干?: GanzhiRelationRowJSON[];
   口径: string[];
 }
 
 const WUXING_NOTES = [
-  '只列五行与生克事实，不判断身强身弱、格局或喜用神',
-  '五行统计：天干、地支本气各计 1，藏干按顺序计 0.6 / 0.3 / 0.1，与八字命盘五行统计同口径',
+  '只列旺衰与生克的事实，不判断身强身弱、格局或喜用神；旺衰不是五行字数相加，不设权重、不做合计',
   '月令旺衰：同月令五行者旺，月令所生者相，生月令者休，克月令者囚，月令所克者死；辰戌丑未月以土论',
-  '通根取地支藏干中与日主同五行者（本气、中气、余气）；透干取藏干原字见于天干',
-  '相生链按木→火→土→金→水的相生顺序，五行（含藏干）出现即视为在链上，不论多寡与远近',
+  '月令藏干逐个列出透出与否；透出只看年、月、时干，日主本身不算透',
+  '通根取四支藏干中与该天干同五行者，注明本气、中气或余气；没有同五行藏干的天干记为无根',
+  '缺失五行：天干、地支本气、藏干都没有出现的五行',
+  '给出 sections 时只列所选事实组；日主、月令与缺失五行总在',
 ];
 
 function row(fact: WuxingFact): GanzhiRelationRowJSON {
@@ -33,53 +46,55 @@ function row(fact: WuxingFact): GanzhiRelationRowJSON {
   };
 }
 
+const rootRow = (fact: WuxingRootFact): BaziWuxingRootJSON => ({ ...row(fact), 藏干: fact.hidden, 结果: fact.result });
+
 function renderBaziWuxingJSONBase(result: BaziWuxingOutput): BaziWuxingCanonicalJSON {
   const month = result.monthCommand;
   return {
     日主: { 天干: result.dayMaster.stem, 五行: result.dayMaster.element },
-    五行统计: result.elementStats.map((item) => ({ 五行: item.element, 天干: item.stems, 地支: item.branches, 藏干: item.hiddenStems, 合计: item.total })),
-    缺失五行: [...result.missingElements],
-    月令: { 月支: month.branch, 月令五行: month.element, ...month.states, 日主状态: month.dayMasterState },
-    通根: result.roots.map(row),
-    透干: result.revealed.map(row),
-    干支自坐: result.pillarSelf.map(row),
-    相邻天干: result.adjacentStems.map(row),
-    相生链: {
-      顺序: result.generatingChain.order.join('→'),
-      出现: [...result.generatingChain.present],
-      连续段: [...result.generatingChain.segments],
-      中断: [...result.generatingChain.breaks],
+    月令: {
+      月支: month.branch, 月令五行: month.element, ...month.states, 日主状态: month.dayMasterState,
+      藏干: month.hiddenStems.map((hidden) => ({ 天干: hidden.stem, 气性: hidden.qiType, 透出: [...hidden.revealedIn] })),
     },
-    十神分布: result.tenGods.map((item) => ({ 十神: item.tenGod, 天干: [...item.stems], 藏干: [...item.hiddenStems] })),
+    缺失五行: [...result.missingElements],
+    ...(result.sections ? { 筛选: { 事实组: [...result.sections] } } : {}),
+    ...(result.stemRoots ? {
+      通根: result.stemRoots.flatMap((item) => item.roots.map(rootRow)),
+      无根: result.stemRoots.filter((item) => !item.roots.length).map(stemName),
+    } : {}),
+    ...(result.pillarSelf ? { 干支自坐: result.pillarSelf.map(row) } : {}),
+    ...(result.adjacentStems ? { 相邻天干: result.adjacentStems.map(row) } : {}),
     口径: WUXING_NOTES,
   };
 }
 
-const factLines = (facts: WuxingFact[]) => facts.length ? facts.map((fact) => `- ${fact.type}｜${fact.description}${fact.result ? `｜${fact.result}` : ''}`) : ['- 无'];
+const stemName = (item: StemRoots) => `${item.label}${item.stem}${item.element}`;
+const BRANCH_LABELS: Record<string, string> = { 年柱: '年支', 月柱: '月支', 日柱: '日支', 时柱: '时支' };
+
+/** 「日主戊土：月支丑（藏己·本气）、时支未（藏己·本气）」；无根的天干也列出 */
+const rootLine = (item: StemRoots) => `- ${stemName(item)}：${item.roots.length
+  ? item.roots.map((fact) => `${BRANCH_LABELS[fact.cells[1].pillar]}${fact.cells[1].char}（藏${fact.hidden}·${fact.result}）`).join('、')
+  : '无根'}`;
 
 function renderBaziWuxingTextBase(result: BaziWuxingOutput): string {
   const month = result.monthCommand;
+  const hidden = month.hiddenStems.map((item) => `${item.stem}（${item.qiType}）${item.revealedIn.length ? `透${item.revealedIn.join('、')}` : '不透'}`);
+  const facts = (title: string, items: WuxingFact[] | undefined) => items
+    ? ['', `## ${title}`, '', ...(items.length ? items.map((fact) => `- ${fact.description}${fact.result && !fact.description.includes(fact.result) ? `（${fact.result}）` : ''}`) : ['- 无'])]
+    : [];
   const lines = [
-    '# 八字五行流通详查', '',
-    '## 日主', '', `- ${result.dayMaster.stem}${result.dayMaster.element}，于${month.branch}月为${month.dayMasterState}`, '',
-    '## 五行统计', '', '| 五行 | 天干 | 地支本气 | 藏干 | 合计 |', '|------|------|----------|------|------|',
-    ...result.elementStats.map((item) => `| ${item.element} | ${item.stems} | ${item.branches} | ${item.hiddenStems} | ${item.total} |`),
-    ...(result.missingElements.length ? ['', `- 缺失：${result.missingElements.join('、')}`] : []),
-    '', '## 月令', '', `- 月支${month.branch}（${month.element}）：${(['旺', '相', '休', '囚', '死'] as const).map((state) => `${month.states[state]}${state}`).join('，')}`,
-    '', '## 通根', '', ...factLines(result.roots),
-    '', '## 透干', '', ...factLines(result.revealed),
-    '', '## 干支自坐', '', ...factLines(result.pillarSelf),
-    '', '## 相邻天干', '', ...factLines(result.adjacentStems),
-    '', '## 相生链', '',
-    `- 出现：${result.generatingChain.present.join('、') || '无'}`,
-    ...(result.generatingChain.segments.length ? [`- 连续：${result.generatingChain.segments.join('；')}`] : []),
-    ...(result.generatingChain.breaks.length ? [`- 中断：${result.generatingChain.breaks.join('；')}`] : []),
-    '', '## 十神分布', '',
-    ...result.tenGods.map((item) => `- ${item.tenGod}｜天干：${item.stems.join('、') || '无'}｜藏干：${item.hiddenStems.join('、') || '无'}`),
-    '', '## 口径', '', ...WUXING_NOTES.map((note) => `- ${note}`),
+    '# 八字五行旺衰详查',
+    ...(result.sections ? ['', '## 查询', '', `- 只取：${result.sections.join('、')}（去掉 sections 可看全部事实组）`] : []),
+    '', '## 月令', '',
+    `- 月支${month.branch}（${month.element}）：${(['旺', '相', '休', '囚', '死'] as const).map((state) => `${month.states[state]}${state}`).join('、')}；日主${result.dayMaster.stem}${result.dayMaster.element}${month.dayMasterState}`,
+    `- 藏干：${hidden.join('；')}`,
+    ...(result.stemRoots ? ['', '## 通根', '', ...result.stemRoots.map(rootLine)] : []),
+    ...facts('干支自坐', result.pillarSelf),
+    ...facts('相邻天干', result.adjacentStems),
+    '', '## 缺失五行', '', `- ${result.missingElements.join('、') || '无'}`,
   ];
   return lines.join('\n');
 }
 
 export const toBaziWuxingJson = withRulesJSON(renderBaziWuxingJSONBase);
-export const toBaziWuxingText = withRulesText(renderBaziWuxingTextBase);
+export const toBaziWuxingText = drilldownText(WUXING_NOTES, renderBaziWuxingTextBase);

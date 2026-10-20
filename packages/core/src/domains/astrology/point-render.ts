@@ -1,4 +1,5 @@
-import { withRulesJSON, withRulesText } from '../../shared/calculation-rules.js';
+import { withRulesJSON } from '../../shared/calculation-rules.js';
+import { drilldownText } from '../shared/drilldown-render.js';
 import type { AstrologyPointAspect, AstrologyPointOutput, AstrologyPointPlacement, AstrologyPointRef } from './point.js';
 
 export interface AstrologyPointCellJSON { 盘: '本命' | '流运'; 标识: string; 因素: string; }
@@ -25,7 +26,8 @@ export interface AstrologyPointAspectJSON {
 }
 
 export interface AstrologyPointCanonicalJSON {
-  查询: { 对象: string; 类型: '星体' | '宫位' };
+  /** 范围只在只看本命或只看流运时给出 */
+  查询: { 对象: string; 类型: '星体' | '宫位'; 范围?: '本命' | '流运' };
   位置信息?: AstrologyPointPlacementJSON;
   传统尊贵?: string[];
   主管宫位?: string[];
@@ -45,6 +47,7 @@ const NOTES = [
   '宫主星取宫头星座的传统守护星，不用现代守护（天王、海王、冥王）',
   '入相、出相按一小时后的容许度增减判断；交点、莉莉丝与轴点不计速度，相关相位不标相态；流运对本命时本命端视为不动',
   '流运过境取流运星体黄经落在本命宫头之间的情形',
+  'focus 为本命时不列流运；为流运时只列流运触发或流运过境，并附所查对象的本命位置或宫位范围作参照',
 ];
 
 const cell = (ref: AstrologyPointRef): AstrologyPointCellJSON => ({ 盘: ref.chart, 标识: ref.key, 因素: ref.label });
@@ -77,8 +80,9 @@ function aspectJSON(item: AstrologyPointAspect): AstrologyPointAspectJSON {
 
 function renderAstrologyPointJSONBase(result: AstrologyPointOutput): AstrologyPointCanonicalJSON {
   const isPlanet = result.query.kind === 'planet';
+  const focus = result.query.focus;
   return {
-    查询: { 对象: result.query.label, 类型: isPlanet ? '星体' : '宫位' },
+    查询: { 对象: result.query.label, 类型: isPlanet ? '星体' : '宫位', ...(focus !== '全部' ? { 范围: focus } : {}) },
     ...(result.placement ? { 位置信息: placementJSON(result.placement) } : {}),
     ...(result.dignities ? { 传统尊贵: result.dignities.length ? [...result.dignities] : ['无'] } : {}),
     ...(result.ruledHouses ? { 主管宫位: result.ruledHouses.map((id) => `第${id}宫`) } : {}),
@@ -90,9 +94,8 @@ function renderAstrologyPointJSONBase(result: AstrologyPointOutput): AstrologyPo
     } : {}),
     ...(result.occupants ? { 宫内星体: result.occupants.map(placementJSON) } : {}),
     ...(result.ruler ? { 宫主星: { ...placementJSON(result.ruler), 传统尊贵: result.ruler.dignities.length ? [...result.ruler.dignities] : ['无'] } } : {}),
-    ...(isPlanet
-      ? { 本命相位: result.aspects.map(aspectJSON), 流运触发: result.transitAspects.map(aspectJSON) }
-      : { 宫主星相位: result.aspects.map(aspectJSON) }),
+    ...(result.aspects ? (isPlanet ? { 本命相位: result.aspects.map(aspectJSON) } : { 宫主星相位: result.aspects.map(aspectJSON) }) : {}),
+    ...(result.transitAspects ? { 流运触发: result.transitAspects.map(aspectJSON) } : {}),
     ...(result.transitOccupants ? { 流运过境: result.transitOccupants.map(placementJSON) } : {}),
     口径: NOTES,
   };
@@ -108,7 +111,7 @@ function aspectLines(rows: AstrologyPointAspectJSON[]): string[] {
 
 function renderAstrologyPointTextBase(result: AstrologyPointOutput): string {
   const json = renderAstrologyPointJSONBase(result);
-  const lines = ['# 占星单点详查', '', '## 查询', '', `- ${json.查询.类型}：${json.查询.对象}`];
+  const lines = ['# 占星单点详查', '', '## 查询', '', `- ${json.查询.类型}：${json.查询.对象}${json.查询.范围 ? `（只看${json.查询.范围}）` : ''}`];
   if (json.位置信息) {
     const item = json.位置信息;
     lines.push('', '## 位置信息', '', `- 星座：${item.星座}（${item.元素}象，${item.模式}）`, `- 黄经：${item.黄经}`);
@@ -127,9 +130,8 @@ function renderAstrologyPointTextBase(result: AstrologyPointOutput): string {
   if (json.宫主星相位) lines.push('', '## 宫主星相位', '', ...aspectLines(json.宫主星相位));
   if (json.流运触发) lines.push('', '## 流运触发', '', ...aspectLines(json.流运触发));
   if (json.流运过境) lines.push('', '## 流运过境', '', ...(json.流运过境.length ? json.流运过境.map(placementLine) : ['- 无']));
-  lines.push('', '## 口径', '', ...json.口径.map((note) => `- ${note}`));
   return lines.join('\n');
 }
 
 export const toAstrologyPointJson = withRulesJSON(renderAstrologyPointJSONBase);
-export const toAstrologyPointText = withRulesText(renderAstrologyPointTextBase);
+export const toAstrologyPointText = drilldownText(NOTES, renderAstrologyPointTextBase);

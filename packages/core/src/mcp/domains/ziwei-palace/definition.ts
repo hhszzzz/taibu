@@ -1,7 +1,7 @@
 import type { ToolInputSchema } from '../../contract.js';
 import { ZIWEI_PALACE_NAMES, ZIWEI_PALACE_SCOPES } from '../../../domains/ziwei/palace.js';
 
-export const ZIWEI_PALACE_DESCRIPTION = '紫微宫位 - 在紫微命盘上聚焦一宫详查：本宫星曜亮度与生年四化、离心/向心自化，空宫借对宫，三方四正，夹宫，宫干四化飞出与十二宫四化飞入；指定大限、流年、流月、流日或流时时，叠加该运限宫所落的本命宫与运限四化落宫。只给事实，不下吉凶结论。';
+export const ZIWEI_PALACE_DESCRIPTION = '紫微宫位 - 在紫微命盘上聚焦一宫详查：本宫星曜亮度与生年四化、离心/向心自化，空宫借对宫，三方四正，夹宫，宫干四化飞出与十二宫四化飞入；指定大限、流年、流月、流日或流时时，叠加该运限宫所落的本命宫与运限四化落宫。三方四正取本宫、两个三合宫与对宫；空宫只借对宫主星。只问某宫化忌入哪宫、两宫是否相夹这类单点问题时改用 ziwei_flying_star。只给事实，不下吉凶结论。';
 
 const RUNTIME_SCOPES = ZIWEI_PALACE_SCOPES.filter((scope) => scope !== 'natal');
 

@@ -43,14 +43,6 @@ export interface BaziOutput {
   calculationOptions?: { dayBoundary: 'midnight' | 'zi'; timezone: string; solarTermBasis: 'instant'; disambiguation?: BirthTimeInput['disambiguation']; ruleVersion?: string; };
 }
 
-export interface BaziFiveElementsStats {
-  金: number;
-  木: number;
-  水: number;
-  火: number;
-  土: number;
-}
-
 export interface BaziShenShaOutput {
   jiShen: string[];
   xiongSha: string[];

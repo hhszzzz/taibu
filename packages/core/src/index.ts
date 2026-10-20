@@ -41,7 +41,6 @@ export type {
 } from './json-types.js';
 export {
   calculateBazi,
-  calculateBaziFiveElementsStats,
   calculateBaziLiuRiData,
   calculateBaziLiuYueData,
   calculateBaziShenShaData,

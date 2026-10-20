@@ -11,14 +11,14 @@ async function line(selector, input = SELECT) {
   return renderToolResult('liuyao_line', await executeTool('liuyao_line', { ...input, ...selector })).structuredContent;
 }
 
-test('liuyao_line schema is the liuyao schema plus selectors, without liuyao detail levels', () => {
+test('liuyao_line schema is the liuyao schema plus selectors and its own detail level', () => {
   const tool = listToolDefinitions().find((item) => item.name === 'liuyao_line');
   const liuyao = listToolDefinitions().find((item) => item.name === 'liuyao');
   assert.ok(tool && liuyao);
   for (const key of Object.keys(liuyao.inputSchema.properties).filter((key) => key !== 'detailLevel')) {
     assert.deepEqual(tool.inputSchema.properties[key], liuyao.inputSchema.properties[key], key);
   }
-  assert.equal('detailLevel' in tool.inputSchema.properties, false);
+  assert.deepEqual(tool.inputSchema.properties.detailLevel.enum, ['default', 'full'], 'the drilldown has its own text detail level');
   assert.deepEqual(tool.inputSchema.required, liuyao.inputSchema.required);
   assert.ok(tool.inputSchema.examples.every((example) => example.question && (example.line || example.role)));
 });

@@ -1,4 +1,8 @@
-/** Reproducible calculation choices, shared by text and JSON contracts. Optional for historical saved results. */
+/**
+ * Reproducible calculation choices. They travel in the structured JSON (audit, replay, UI);
+ * the model-facing text does not repeat them, since a rule that changes a fact is written as that fact.
+ * Optional for historical saved results.
+ */
 export type CalculationRules = Record<string, unknown>;
 
 export function getCalculationRules(result: object): CalculationRules | undefined {
@@ -22,13 +26,5 @@ export function withRulesJSON<Args extends [object, ...unknown[]], Result extend
     const output = render(...args);
     const rules = getCalculationRules(args[0]);
     return rules ? { ...output, 计算规则: rules } : output;
-  };
-}
-
-export function withRulesText<Args extends [object, ...unknown[]]>(render: (...args: Args) => string) {
-  return (...args: Args): string => {
-    const output = render(...args);
-    const rules = getCalculationRules(args[0]);
-    return rules ? `${output}\n\n## 计算规则\n\n${Object.entries(rules).map(([key, value]) => `- ${key}: ${typeof value === 'object' ? JSON.stringify(value) : String(value)}`).join('\n')}` : output;
   };
 }

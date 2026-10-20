@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { getDerivedToolSource, listToolDefinitions } from 'taibu-core/mcp';
+import { getDerivedToolSource, listToolDefinitions, splitDerivedInput } from 'taibu-core/mcp';
 
 const coreRoot = resolve(process.cwd(), 'packages/core');
 const packageJson = JSON.parse(readFileSync(resolve(coreRoot, 'package.json'), 'utf8'));
@@ -71,6 +71,17 @@ test('drilldown tools declare their base, are registered and documented', () => 
   }
   const derived = listToolDefinitions().filter((item) => getDerivedToolSource(item.name)).map((item) => item.name).sort();
   assert.deepEqual(derived, expectedDerivedTools.map((item) => item.tool).sort());
+});
+
+test('every drilldown shares one text detail level that never reaches the calculation', () => {
+  for (const { tool } of expectedDerivedTools) {
+    const source = getDerivedToolSource(tool);
+    const definition = listToolDefinitions().find((item) => item.name === tool);
+    assert.deepEqual(source.selector.properties.detailLevel.enum, ['default', 'full'], tool);
+    assert.deepEqual(definition.inputSchema.properties.detailLevel, source.selector.properties.detailLevel, tool);
+    const { baseInput, selection } = splitDerivedInput(source.selector, { ...definition.inputSchema.examples[0], detailLevel: 'full' });
+    assert.equal('detailLevel' in baseInput || 'detailLevel' in selection, false, tool);
+  }
 });
 
 test('standalone tools are registered and documented without claiming a base', () => {

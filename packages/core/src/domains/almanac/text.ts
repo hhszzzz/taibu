@@ -1,4 +1,3 @@
-import { withRulesText } from '../../shared/calculation-rules.js';
 import {
   normalizeDetailLevelBinary
 } from '../../shared/render-utils.js';
@@ -9,8 +8,7 @@ import type {
   AlmanacCanonicalTextOptions
 } from '../shared/text-options.js';
 
-export const renderAlmanacCanonicalText = withRulesText(renderAlmanacCanonicalTextBase);
-function renderAlmanacCanonicalTextBase(result: AlmanacOutput, options: AlmanacCanonicalTextOptions = {}): string {
+export function renderAlmanacCanonicalText(result: AlmanacOutput, options: AlmanacCanonicalTextOptions = {}): string {
   const detailLevel = normalizeDetailLevelBinary(options.detailLevel);
   const { date, dayInfo, tenGod, almanac } = result;
   const lines: string[] = [

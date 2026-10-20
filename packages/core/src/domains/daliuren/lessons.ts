@@ -12,12 +12,14 @@ import {
 import type { DaliurenInput, DaliurenOutput } from './types.js';
 
 export const DALIUREN_LESSONS_RULE_VERSION = 'daliuren-lessons-2026.10';
-export const DALIUREN_FOCUS = ['全部', '课', '传'] as const;
+/** 全部=四课三传与本命行年；课 / 传只列其一；类神只列类神的落处与入课入传 */
+export const DALIUREN_FOCUS = ['全部', '课', '传', '类神'] as const;
 export const DALIUREN_GENERALS = Object.keys(TIAN_JIANG_SHORT);
 /** 盘面写作「腾蛇」，也接受常见写法「螣蛇」 */
 const TIAN_JIANG_ALIASES: Record<string, string> = { 螣蛇: '腾蛇' };
 
 export interface DaliurenLessonsSelector {
+  /** 省略时：给了类神取「类神」，否则取「全部」 */
   focus?: typeof DALIUREN_FOCUS[number];
   /** 类神：一个地支或天将名，定位其天盘落处与入课入传 */
   leiShen?: string;
@@ -54,7 +56,8 @@ export interface DaliurenLessonsSections {
   四课?: DaliurenLessonRowJSON[];
   三传?: DaliurenTransmissionRowJSON[];
   三传递进?: { 初传至中传: string; 中传至末传: string; 递进: string };
-  神将交战: string[];
+  /** 所列课传中的神将交战；与各行「神将」同源，只列不看课传时省略 */
+  神将交战?: string[];
   本命行年?: DaliurenFactRowJSON[];
   类神?: DaliurenFactRowJSON[];
 }
@@ -115,12 +118,15 @@ function toDay(branch: string, dayStem: string): string {
 }
 
 export function deriveDaliurenLessons(chart: DaliurenOutput, selector: DaliurenLessonsSelector, _baseInput: DaliurenInput): DaliurenLessonsOutput {
-  const focus = resolveEnum(selector.focus, DALIUREN_FOCUS, '全部', 'focus');
   const typed = selector.leiShen?.trim();
   const leiShen = typed ? TIAN_JIANG_ALIASES[typed] ?? typed : undefined;
   if (leiShen !== undefined && !(DI_ZHI as readonly string[]).includes(leiShen) && !DALIUREN_GENERALS.includes(leiShen)) {
     throw new CoreInputError('leiShen', '类神须为十二地支或十二天将之一');
   }
+  const focus = resolveEnum(selector.focus, DALIUREN_FOCUS, leiShen ? '类神' : '全部', 'focus');
+  if (focus === '类神' && !leiShen) throw new CoreInputError('leiShen', 'focus 为「类神」时须给出 leiShen（十二地支或十二天将，如 卯、贵人）');
+  const showLessons = focus === '全部' || focus === '课';
+  const showTransmissions = focus === '全部' || focus === '传';
 
   const dayStem = chart.dateInfo.ganZhi.day.charAt(0);
   const dayBranch = chart.dateInfo.ganZhi.day.charAt(1);
@@ -171,12 +177,14 @@ export function deriveDaliurenLessons(chart: DaliurenOutput, selector: DaliurenL
       日干: dayStem, 日干寄宫: lodging, 日支: dayBranch, 月建: monthBranch, 旬: chart.dateInfo.xun, 空亡: kong,
       课式: `${chart.keName} / ${chart.keTi.method}课`,
     },
-    ...(focus !== '传' ? { 四课: lessons } : {}),
-    ...(focus !== '课' ? { 三传: transmissions, 三传递进: { 初传至中传: flow(chu, zhong), 中传至末传: flow(zhong, mo), 递进: progression } } : {}),
-    神将交战: [
-      ...(focus !== '传' ? lessons.map(row => [row.课别, row.上神, row.天将, row.神将] as const) : []),
-      ...(focus !== '课' ? transmissions.map(row => [row.传序, row.地支, row.天将, row.神将] as const) : []),
-    ].filter(([, , , relation]) => relation.includes('战')).map(([label, spirit, general, relation]) => `${label.split(' ')[0]} ${spirit}乘${general}：${relation}`),
+    ...(showLessons ? { 四课: lessons } : {}),
+    ...(showTransmissions ? { 三传: transmissions, 三传递进: { 初传至中传: flow(chu, zhong), 中传至末传: flow(zhong, mo), 递进: progression } } : {}),
+    ...(showLessons || showTransmissions ? {
+      神将交战: [
+        ...(showLessons ? lessons.map(row => [row.课别, row.上神, row.天将, row.神将] as const) : []),
+        ...(showTransmissions ? transmissions.map(row => [row.传序, row.地支, row.天将, row.神将] as const) : []),
+      ].filter(([, , , relation]) => relation.includes('战')).map(([label, spirit, general, relation]) => `${label.split(' ')[0]} ${spirit}乘${general}：${relation}`),
+    } : {}),
   };
 
   const destiny: DaliurenFactRowJSON[] = [];
@@ -188,7 +196,7 @@ export function deriveDaliurenLessons(chart: DaliurenOutput, selector: DaliurenL
     destiny.push({ 类型: `${type}上神`, 位置: [{ 地盘: earth, 部位: '天盘' }], 结果: gong.tianZhi,
       说明: `${type}${ganZhi}，${earth}上见${gong.tianZhi}，乘${gong.tianJiang}，${liuQin(dayElement, elementOf(gong.tianZhi))}` });
   }
-  if (destiny.length) sections.本命行年 = destiny;
+  if (focus === '全部' && destiny.length) sections.本命行年 = destiny;
 
   if (leiShen) {
     const gong = DALIUREN_GENERALS.includes(leiShen) ? chart.gongInfos.find(item => item.tianJiang === leiShen) : seatOf(leiShen);

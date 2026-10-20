@@ -1,4 +1,3 @@
-import { withRulesText } from '../../shared/calculation-rules.js';
 import {
   mapZiweiFlyingStarQueryType
 } from '../../shared/render-utils.js';
@@ -56,17 +55,15 @@ function formatZiweiFlyingStarResult(r: FlyingStarResult, lines: string[]): void
 
   if (r.type === 'surroundedPalaces') {
     const s = r.result as SurroundedPalaceInfo;
-    if (r.queryTarget?.palace) lines.push(`- 查询宫位: ${formatPalace(r.queryTarget.palace)}`);
-    lines.push(`- 本宫: ${formatPalace(s.target.name)}`);
+    // 本宫就是查询宫位，只在没有查询宫位时写出
+    lines.push(r.queryTarget?.palace ? `- 查询宫位: ${formatPalace(r.queryTarget.palace)}` : `- 本宫: ${formatPalace(s.target.name)}`);
     lines.push(`- 对宫: ${formatPalace(s.opposite.name)}`);
     lines.push(`- 三合宫 1: ${formatPalace(s.wealth.name)}`);
     lines.push(`- 三合宫 2: ${formatPalace(s.career.name)}`);
   }
 }
 
-export const renderZiweiFlyingStarCanonicalText = withRulesText(renderZiweiFlyingStarCanonicalTextBase);
-
-function renderZiweiFlyingStarCanonicalTextBase(result: ZiweiFlyingStarOutput): string {
+export function renderZiweiFlyingStarCanonicalText(result: ZiweiFlyingStarOutput): string {
   const lines: string[] = ['# 紫微飞星'];
 
   for (const r of result.results) {

@@ -1,4 +1,3 @@
-import { withRulesText } from '../../shared/calculation-rules.js';
 import { YAO_CI } from '../../data/hexagrams.js';
 import {
   traditionalYaoName
@@ -110,8 +109,7 @@ function buildStageExpressions(result: MeihuaOutput): string[] {
   return lines;
 }
 
-export const renderMeihuaCanonicalText = withRulesText(renderMeihuaCanonicalTextBase);
-function renderMeihuaCanonicalTextBase(result: MeihuaOutput, options: MeihuaCanonicalTextOptions = {}): string {
+export function renderMeihuaCanonicalText(result: MeihuaOutput, options: MeihuaCanonicalTextOptions = {}): string {
   const detailLevel = normalizeDetailLevelBinary(options.detailLevel);
   const lines: string[] = ['# 梅花易数主证据', '', '## 起卦与环境'];
   const showResolvedMode = !!(result.castMeta.resolvedMode && (
@@ -169,14 +167,7 @@ function renderMeihuaCanonicalTextBase(result: MeihuaOutput, options: MeihuaCano
   lines.push('## 体用主轴');
   lines.push(`- 体卦: ${result.bodyTrigram.name}${result.bodyTrigram.element}`);
   lines.push(`- 用卦: ${result.useTrigram.name}${result.useTrigram.element}`);
-  lines.push(`- 当前关系: ${buildRelationExpression(result.bodyUseRelation.relation, {
-    label: '体卦',
-    trigram: result.bodyTrigram,
-  }, {
-    label: '用卦',
-    name: result.useTrigram.name,
-    element: result.useTrigram.element,
-  })}`);
+  // 体用当前关系即阶段推演的「初段 / 本卦」，不在这里重复
   if (detailLevel === 'full') {
     if (result.seasonalState.bodyMutual) lines.push(`- 体互月令: ${result.seasonalState.bodyMutual}`);
     if (result.seasonalState.useMutual) lines.push(`- 用互月令: ${result.seasonalState.useMutual}`);

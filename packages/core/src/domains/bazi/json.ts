@@ -134,13 +134,19 @@ function buildBaziCanonicalPillarShenSha(item: { shenSha?: string[]; }): string[
   return item.shenSha?.length ? [...item.shenSha] : [];
 }
 
-function buildBaziCanonicalRelations(result: Pick<BaziOutput, 'fourPillars' | 'relations' | 'tianGanChongKe' | 'tianGanWuHe' | 'diZhiBanHe' | 'diZhiSanHui'>): string[] {
-  const posBranchMap: Record<string, string> = {
-    '年支': result.fourPillars.year.branch,
-    '月支': result.fourPillars.month.branch,
-    '日支': result.fourPillars.day.branch,
-    '时支': result.fourPillars.hour.branch,
+/** 地支关系的说明；刑名不含地支，写出实际参与的地支，如「丑未刑（恃势之刑）」 */
+export function baziBranchRelationText(chart: Pick<BaziOutput, 'fourPillars'>, relation: BaziOutput['relations'][number]): string {
+  if (relation.type !== '刑') return relation.description;
+  const branchOf: Record<string, string> = {
+    '年支': chart.fourPillars.year.branch,
+    '月支': chart.fourPillars.month.branch,
+    '日支': chart.fourPillars.day.branch,
+    '时支': chart.fourPillars.hour.branch,
   };
+  return `${[...new Set(relation.pillars.map((pillar) => branchOf[pillar]))].join('')}刑（${relation.description}）`;
+}
+
+function buildBaziCanonicalRelations(result: Pick<BaziOutput, 'fourPillars' | 'relations' | 'tianGanChongKe' | 'tianGanWuHe' | 'diZhiBanHe' | 'diZhiSanHui'>): string[] {
   const relationParts: string[] = [];
   const seen = new Set<string>();
   const pushUnique = (value: string) => {
@@ -149,14 +155,7 @@ function buildBaziCanonicalRelations(result: Pick<BaziOutput, 'fourPillars' | 'r
     relationParts.push(value);
   };
 
-  for (const relation of result.relations) {
-    if (relation.type === '刑') {
-      const branches = [...new Set(relation.pillars.map((pillar) => posBranchMap[pillar]))].join('');
-      pushUnique(`${branches}刑（${relation.description}）`);
-    } else {
-      pushUnique(relation.description);
-    }
-  }
+  for (const relation of result.relations) pushUnique(baziBranchRelationText(result, relation));
   for (const item of result.tianGanChongKe) {
     pushUnique(`${item.stemA}${item.stemB}冲克`);
   }
@@ -194,7 +193,7 @@ function buildRelationCoordinates(chart: BaziOutput): BaziRelationJSON[] {
     if (cells.length < 2 || cells.some(item => item === null)) return;
     result.push({ id: 'bazi-relation-' + result.length, 类型: type, 说明: description, 位置: cells as BaziCellJSON[] });
   };
-  for (const relation of chart.relations) add(relation.type, relation.description, relation.pillars?.map(position => cell(position, '地支')) ?? []);
+  for (const relation of chart.relations) add(relation.type, baziBranchRelationText(chart, relation), relation.pillars?.map(position => cell(position, '地支')) ?? []);
   for (const relation of chart.tianGanWuHe) add('合', relation.stemA + relation.stemB + '合' + relation.resultElement, relation.positions?.map(position => cell(position, '天干')) ?? []);
   for (const relation of chart.tianGanChongKe) add('冲克', relation.stemA + relation.stemB + '冲克', relation.positions?.map(position => cell(position, '天干')) ?? []);
   for (const relation of chart.diZhiBanHe) add('半合', relation.branches.join('') + '半合' + relation.resultElement, relation.positions?.map(position => cell(position, '地支')) ?? []);

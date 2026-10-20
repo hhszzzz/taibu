@@ -37,8 +37,7 @@ export function renderTaiyiCanonicalText(
       `- 主算: ${board.主算}；主大将: ${board.主大将}；主参将: ${board.主参将}`,
       `- 客算: ${board.客算}；客大将: ${board.客大将}；客参将: ${board.客参将}`, '',
       '| 宫位 | 宫神 | 星将 |', '|---|---|---|', ...board.十六宫.map(palace => `| ${palace.宫位} | ${palace.宫神} | ${palace.星将.join('、') || '-'} |`), '',
-      ...board.采用口径.map(note => `- ${note}`), '', '## 计算规则', '',
-      ...Object.entries(json.计算规则 ?? {}).filter(([, value]) => value !== undefined).map(([key, value]) => `- ${key}: ${value}`),
+      ...board.采用口径.map(note => `- ${note}`),
     ].join('\n');
   }
   if (!result.coreBoard) throw new Error('太乙九星结果缺少 coreBoard');
@@ -82,12 +81,8 @@ export function renderTaiyiCanonicalText(
 
   lines.push('');
   lines.push('## 古典参考');
+  // 「原文仅供意象联想」的使用提示是给读者的说明，留在 JSON 供界面展示，不写进给模型读的文本
   lines.push(`- 主诀原文: ${result.judgementAnchors.primarySong}`);
-  lines.push('- 使用提示: 原文仅供意象联想，需结合前述时空底盘与九星阵列辩证解读。');
-  lines.push('', '## 计算规则', '');
-  for (const [key, value] of Object.entries(renderTaiyiCanonicalJSON(result, options).计算规则 ?? {})) {
-    if (value !== undefined) lines.push(`- ${key}: ${value}`);
-  }
 
   return lines.join('\n');
 }

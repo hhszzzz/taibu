@@ -2,8 +2,8 @@
 import { lazy, Suspense } from 'react';
 import type { AgentChart } from '@/lib/agent/tool-presentation';
 import { getChartTargets, type ChartTarget } from '@/lib/agent/chart-interaction';
-import type { RelationEdge, RelationLayout } from '@/lib/divination/ganzhi-relation-layout';
-import { GanzhiRelationOverlay, relationBandHeight } from '@/components/bazi/result/GanzhiRelationOverlay';
+import type { RelationEdge, RelationLayout, RelationMode } from '@/lib/divination/ganzhi-relation-layout';
+import { GanzhiRelationOverlay, relationBandHeight, relationCrossHeight } from '@/components/bazi/result/GanzhiRelationOverlay';
 
 const Bazi = lazy(() => import('@/components/bazi/result/ProfessionalTable').then(module => ({ default: module.ProfessionalTable })));
 const Ziwei = lazy(() => import('@/components/ziwei/ZiweiChartGrid').then(module => ({ default: module.ZiweiChartGrid })));
@@ -18,7 +18,7 @@ const Astrology = lazy(() => import('@/components/visualization/AstrologyChart')
 const Almanac = lazy(() => import('@/components/visualization/AlmanacChart').then(module => ({ default: module.AlmanacChart })));
 
 /** 八字表上要画的干支关系 / 流通连线（已按模式与筛选取舍）。 */
-export type BaziRelationOverlay = { layout: RelationLayout; located: ReadonlySet<string>; onSelect?: (edge: RelationEdge) => void };
+export type BaziRelationOverlay = { layout: RelationLayout; located: ReadonlySet<string>; onSelect?: (edge: RelationEdge) => void; muted?: RelationMode };
 
 export function CanonicalChartView({ value, targets = [], includeRelated = true, onTargetSelect, baziOverlay }: {
   value: AgentChart; text?: string; targets?: ChartTarget[]; includeRelated?: boolean; onTargetSelect?: (id: string) => void;
@@ -29,7 +29,7 @@ export function CanonicalChartView({ value, targets = [], includeRelated = true,
   switch (value.kind) {
     case 'bazi': content = <Bazi canonicalChart={value.chart} isUnknownTime={value.chart.四柱[3]?.干支.includes('*')} canonicalLabels
       overlay={baziOverlay && (baziOverlay.layout.edges.length > 0 || (baziOverlay.layout.aside?.length ?? 0) > 0) ? <GanzhiRelationOverlay {...baziOverlay} /> : undefined}
-      relationBands={baziOverlay ? { stem: relationBandHeight(baziOverlay.layout.lanes.stem), branch: relationBandHeight(baziOverlay.layout.lanes.branch), cross: relationBandHeight(baziOverlay.layout.lanes.cross) } : undefined}
+      relationBands={baziOverlay ? { stem: relationBandHeight(baziOverlay.layout.lanes.stem), branch: relationBandHeight(baziOverlay.layout.lanes.branch), cross: relationCrossHeight(baziOverlay.layout.lanes.cross) } : undefined}
       highlightedCells={targets.flatMap(target => target.kind === 'bazi_cell' ? [target.cell] : target.kind === 'bazi_relation' ? target.relation.位置 : [])}
       onCellSelect={onTargetSelect ? cell => {
         const target = getChartTargets(value).find(target => target.kind === 'bazi_cell' && target.cell.柱 === cell.柱 && target.cell.部位 === cell.部位 && target.cell.字 === cell.字);

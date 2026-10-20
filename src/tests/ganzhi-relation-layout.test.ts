@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { executeTool, buildToolSuccessPayload } from 'taibu-core/mcp';
 import type { BaziCanonicalJSON, BaziRelationsCanonicalJSON, BaziWuxingCanonicalJSON } from 'taibu-core/bazi';
 import {
-    BAZI_COLUMNS, baziBoardRows, layoutRelations, relationMode, relationTone, visibleRelationEdges, type RelationRow,
+    BAZI_COLUMNS, baziBoardRows, layoutRelations, relationLegSlots, relationMode, relationTone, visibleRelationEdges, type RelationRow,
 } from '../lib/divination/ganzhi-relation-layout';
 
 const cell = (柱: string, 部位: '天干' | '地支', 字: string) => ({ 柱, 部位, 字 });
@@ -100,9 +100,58 @@ test('visible edges follow the mode and filters, and a located edge of the other
     assert.deepEqual(aside.edges.map(edge => edge.id), ['gen']);
     assert.deepEqual(aside.aside!.map(edge => edge.id), ['clash']);
     assert.equal(aside.lanes.branch, 1);
+    // 「全部」同时画两种线，没有旁置标记。
+    assert.deepEqual(ids('all'), ['clash', 'gen', 'harm']);
+    assert.deepEqual(visible('all', [], ['clash']).aside, []);
     // 选择「不显示」时盘面清空。
     assert.deepEqual(ids('off', [], ['gen']), []);
     assert.deepEqual(visibleRelationEdges(layout, 'relations', new Set(['冲']), new Set()).lanes.branch, 1, 'lanes are recomputed after hiding');
+});
+
+test('adjacent flow pairs connect directly between the glyphs, one line per gap; everything else stays a bracket', () => {
+    const rows: RelationRow[] = [
+        { id: 'gen', 类型: '天干生', 说明: '年干甲木生月干丙火', 位置: [cell('年柱', '天干', '甲'), cell('月柱', '天干', '丙')] },
+        { id: 'same', 类型: '天干同气', 说明: '年干甲木与月干丙火（示例）', 位置: [cell('年柱', '天干', '甲'), cell('月柱', '天干', '丙')] },
+        { id: 'far', 类型: '天干克', 说明: '日干庚金克年干甲木', 位置: [cell('年柱', '天干', '甲'), cell('日柱', '天干', '庚')] },
+        { id: 'tie', 类型: '天干五合', 说明: '丙辛合', 位置: [cell('月柱', '天干', '丙'), cell('日柱', '天干', '辛')] },
+    ];
+    const layout = layoutRelations(rows, BAZI_COLUMNS);
+    const shape = (id: string) => layout.edges.find(edge => edge.id === id)!.shape;
+    assert.equal(shape('gen'), 'inline', 'two side-by-side stems are linked directly');
+    assert.equal(shape('same'), 'arc', 'a second line in the same gap falls back to a bracket instead of overlapping');
+    assert.equal(shape('far'), 'arc', 'a pair that skips a pillar is a bracket');
+    assert.equal(shape('tie'), 'arc', '合冲刑害 keep their brackets');
+    // 直连线不占层：只有三条括线分层（同气与丙辛合相接共用内层，隔柱的克在外层）。
+    assert.equal(layout.lanes.stem, 2);
+});
+
+test('showing everything keeps flow brackets inside and relation brackets outside, and line legs never cross', () => {
+    const rows: RelationRow[] = [
+        { id: 'far', 类型: '天干生', 说明: '年干甲木生日干庚金（示例）', 位置: [cell('年柱', '天干', '甲'), cell('日柱', '天干', '庚')] },
+        { id: 'hit', 类型: '天干相冲', 说明: '丙壬冲', 位置: [cell('月柱', '天干', '丙'), cell('时柱', '天干', '壬')] },
+        { id: 'tie', 类型: '天干五合', 说明: '甲己合', 位置: [cell('年柱', '天干', '甲'), cell('月柱', '天干', '己')] },
+    ];
+    const all = visibleRelationEdges(layoutRelations(rows, BAZI_COLUMNS), 'all', new Set(), new Set());
+    const lane = (id: string) => all.edges.find(edge => edge.id === id)!.lane;
+    assert.equal(lane('far'), 0, 'flow brackets take the inner lanes');
+    assert.ok(lane('hit') > lane('far') && lane('tie') > lane('far'), 'relation brackets sit outside every flow bracket');
+    // 关系单独显示时从最内层排起。
+    const relationsOnly = visibleRelationEdges(layoutRelations(rows, BAZI_COLUMNS), 'relations', new Set(), new Set());
+    assert.equal(relationsOnly.edges.find(edge => edge.id === 'tie')!.lane, 0);
+
+    // 线脚次序：往右去的外层在左、内层在右；往左去的内层在左；往左的都在往右的左边。
+    const nested: RelationRow[] = [
+        { id: 'A', 类型: '六合', 说明: '子丑合', 位置: [cell('年柱', '地支', '子'), cell('月柱', '地支', '丑')] },
+        { id: 'B', 类型: '六冲', 说明: '子午冲', 位置: [cell('年柱', '地支', '子'), cell('日柱', '地支', '午')] },
+        { id: 'C', 类型: '相害', 说明: '丑午害', 位置: [cell('月柱', '地支', '丑'), cell('时柱', '地支', '午')] },
+    ];
+    const layout = layoutRelations(nested, BAZI_COLUMNS);
+    const laneOf = (id: string) => layout.edges.find(edge => edge.id === id)!.lane;
+    assert.deepEqual([laneOf('A'), laneOf('B'), laneOf('C')], [0, 1, 0], 'arcs meeting at one glyph share a lane; a crossing one moves out');
+    const slots = relationLegSlots(layout.edges, item => BAZI_COLUMNS.indexOf(item.column as typeof BAZI_COLUMNS[number]));
+    const at = (key: string) => slots.get(key)!;
+    assert.ok(at('B@0') < at('A@0'), 'at 子 the outer 冲 leg stands left of the inner 合 leg, so it never cuts the 合 line');
+    assert.ok(at('A@1') < at('C@0'), 'at 丑 the line arriving from the left stands left of the line leaving to the right');
 });
 
 test('the board draws Core relations, adds drilldown-only ones, and switches flow to the wuxing facts', async () => {

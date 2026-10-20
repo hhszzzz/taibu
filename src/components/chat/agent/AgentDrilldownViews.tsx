@@ -10,7 +10,7 @@ import { describeDrilldownSelection, getAgentToolTitle } from './presentation';
 import { WorkspaceToolPending } from './AgentWorkspaceViews';
 import { layoutRelations, relationTone, type RelationRow } from '@/lib/divination/ganzhi-relation-layout';
 import { asBaziRelations, asBaziWuxing } from './bazi-board';
-import { GanzhiRelationOverlay, WuxingCycleStrip, relationBandHeight } from '@/components/bazi/result/GanzhiRelationOverlay';
+import { GanzhiRelationOverlay, WuxingCycleStrip, relationBandHeight, relationCrossHeight } from '@/components/bazi/result/GanzhiRelationOverlay';
 import { ganZhiTextClass } from '@/components/bazi/element-classes';
 
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
@@ -94,7 +94,7 @@ function BaziRelationsView({ result }: { result: BaziRelationsCanonicalJSON }) {
     const columns = result.参与柱位.map(pillar => pillar.柱);
     const rows = [...result.原局关系, ...(result.叠加关系 ?? [])];
     const layout = layoutRelations(rows, columns);
-    const stemBand = relationBandHeight(layout.lanes.stem), branchBand = relationBandHeight(layout.lanes.branch), crossBand = relationBandHeight(layout.lanes.cross);
+    const stemBand = relationBandHeight(layout.lanes.stem), branchBand = relationBandHeight(layout.lanes.branch), crossBand = relationCrossHeight(layout.lanes.cross);
     const notes = [...(result.岁运提示 ?? []), ...(result.太岁关系 ?? [])];
     return <>
         <div className="agent-ws-pillar-strip" data-relation-strip="">

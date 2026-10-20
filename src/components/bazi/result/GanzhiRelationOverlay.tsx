@@ -2,7 +2,7 @@
 // 需要测量字形位置（ResizeObserver）并保存悬停状态，才能把干支关系画在表上
 
 import { useCallback, useId, useLayoutEffect, useRef, useState } from 'react';
-import type { RelationEdge, RelationLayout, RelationTone } from '@/lib/divination/ganzhi-relation-layout';
+import { relationLegSlots, type RelationEdge, type RelationLayout, type RelationMode, type RelationTone } from '@/lib/divination/ganzhi-relation-layout';
 import { elementTextClass, isFiveElement } from '@/components/bazi/element-classes';
 
 /** 每层连线的高度（px）；表格按层数给天干行上方、地支行下方留白。 */
@@ -11,6 +11,12 @@ const GLYPH_GAP = 3;
 
 export function relationBandHeight(lanes: number) {
     return lanes > 0 ? lanes * RELATION_LANE + GLYPH_GAP : 0;
+}
+
+/** 干支之间的空档：要放下一支完整的竖箭头，左侧是生克徽标、右侧是根 / 透标记，所以固定比连线层高。 */
+const CROSS_BAND = 30;
+export function relationCrossHeight(lanes: number) {
+    return lanes > 0 ? CROSS_BAND : 0;
 }
 
 const TONE_COLOR: Record<RelationTone, string> = {
@@ -65,11 +71,20 @@ function geometry(edge: RelationEdge, boxes: Map<string, Box>, offsets: Map<stri
         const x0 = placed[0].cx + offset(0), x1 = placed[1].cx + offset(1);
         const y0 = exitY(0, false), y1 = exitY(1, true);
         if (edge.shape === 'vertical') {
-            // 同一柱的干支：竖线在字形之间；同一柱有多条时按层左右错开。
-            return { path: `M${x0} ${y0} V${y1}`, badge: { x: x0, y: (gapTop + gapBottom) / 2 } };
+            // 同一柱的干支自坐：一支竖箭头在字形中线上，徽标放在箭头左侧，不压住箭身。
+            return { path: `M${x0} ${y0} V${y1}`, badge: { x: x0 - 6, y: (gapTop + gapBottom) / 2 } };
         }
         const y = Math.min(gapTop + edge.lane * RELATION_LANE + RELATION_LANE / 2, Math.max(gapTop + 2, gapBottom - 2));
         return { path: `M${x0} ${y0} V${y} H${x1} V${y1}`, badge: { x: (x0 + x1) / 2, y } };
+    }
+    // 相邻两字之间直接连一条横线：从来源字的边缘到结果字的边缘，箭头停在结果字前，不压字。
+    if (edge.shape === 'inline') {
+        const [from, to] = placed;
+        const rightward = to.cx > from.cx;
+        const y = (from.cy + to.cy) / 2;
+        const x0 = rightward ? from.right + 4 : from.left - 4;
+        const x1 = rightward ? to.left - (edge.directed ? 6 : 4) : to.right + (edge.directed ? 6 : 4);
+        return { path: `M${x0} ${y} H${x1}`, badge: { x: (x0 + x1) / 2, y } };
     }
     const part = edge.cells[0].part;
     const y = lineY(placed[0], part);
@@ -84,37 +99,19 @@ function geometry(edge: RelationEdge, boxes: Map<string, Box>, offsets: Map<stri
     return { path, badge: { x: (Math.min(...xs) + Math.max(...xs)) / 2, y } };
 }
 
-/** 同一个字上有几条线落脚时，左右错开几像素，避免竖线重叠成一根。 */
-function legOffsets(edges: RelationEdge[]) {
-    const byCell = new Map<string, Array<{ key: string; lane: number }>>();
-    for (const edge of edges) {
-        if (edge.shape === 'marker') continue;
-        // 同一柱的竖线按柱分组，左右错开；两端共用第一端的偏移，保证是一条直线。
-        if (edge.shape === 'vertical') {
-            const key = edge.cells[0].column + ':vertical';
-            byCell.set(key, [...(byCell.get(key) ?? []), { key: edge.id + '@0', lane: edge.lane }]);
-            continue;
-        }
-        edge.cells.forEach((cell, index) => {
-            const key = cell.column + ':' + cell.part;
-            byCell.set(key, [...(byCell.get(key) ?? []), { key: edge.id + '@' + index, lane: edge.lane }]);
-        });
-    }
-    const offsets = new Map<string, number>();
-    for (const legs of byCell.values()) {
-        legs.sort((a, b) => a.lane - b.lane).forEach((leg, index) => offsets.set(leg.key, (index - (legs.length - 1) / 2) * 8));
-    }
-    return offsets;
-}
+/** 同一个字上相邻两条线脚的间距（px）。 */
+const LEG_GAP = 7;
 
 /**
  * 画在八字表（或详查柱位条）上的干支关系层：天干之间的线在天干行上方，地支之间的在地支行下方，
  * 同柱干支的生克画在字形右侧，通根 / 透干标在字旁。点徽标交给 onSelect（Agent 里是追问这条关系）。
  */
-export function GanzhiRelationOverlay({ layout, located, onSelect }: {
+export function GanzhiRelationOverlay({ layout, located, onSelect, muted }: {
     layout: RelationLayout;
     located: ReadonlySet<string>;
     onSelect?: (edge: RelationEdge) => void;
+    /** 关系与流通同时显示、而 Agent 正在看其中一种时，另一种整体淡一些。 */
+    muted?: RelationMode;
 }) {
     const rootRef = useRef<HTMLDivElement>(null);
     const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
@@ -133,16 +130,18 @@ export function GanzhiRelationOverlay({ layout, located, onSelect }: {
         void document.fonts?.ready.then(remeasure);
         return () => observer.disconnect();
     }, [remeasure, layout]);
-    const offsets = legOffsets(layout.edges);
+    // 线脚按方向与层次排开（见 relationLegSlots），嵌套的括线互不穿过。
+    const offsets = new Map([...relationLegSlots(layout.edges, cell => measured?.boxes.get(cell.column + ':' + cell.part)?.cx)].map(([key, slot]) => [key, slot * LEG_GAP]));
     // 通根 / 透干不再逐条画引线，改为每柱一个聚合标记（见 markerGroups）。
     const drawn = measured ? layout.edges.flatMap(edge => {
-        if (edge.shape === 'marker') return [];
+        // 根 / 透只进每柱的聚合标记，不再画竖线，干支之间每柱最多一支自坐箭头。
+        if (edge.shape === 'marker' || (edge.shape === 'vertical' && (edge.tone === 'root' || edge.tone === 'reveal'))) return [];
         const shape = geometry(edge, measured.boxes, offsets);
         return shape ? [{ edge, ...shape }] : [];
     }) : [];
     // 同一柱的通根 / 透干合成一个标记（如「透2·根」），放在干支之间的空档里；不再一叠徽标互相压住。
     // 同柱透干本来是一根短竖箭头，也并进这个标记，避免出现「透 根·透」并排两枚。
-    const groupedFlow = (edge: RelationEdge) => edge.shape === 'marker' || (edge.shape === 'vertical' && edge.tone === 'reveal');
+    const groupedFlow = (edge: RelationEdge) => edge.shape === 'marker' || (edge.shape === 'vertical' && (edge.tone === 'reveal' || edge.tone === 'root'));
     const markerGroups = measured ? [...layout.edges.reduce((groups, edge) => {
         if (!groupedFlow(edge)) return groups;
         const column = edge.shape === 'marker' ? edge.anchor!.column : edge.cells[0].column;
@@ -152,14 +151,15 @@ export function GanzhiRelationOverlay({ layout, located, onSelect }: {
         const stem = measured.boxes.get(column + ':天干');
         const branch = measured.boxes.get(column + ':地支');
         if (!stem && !branch) return [];
-        const y = stem && branch ? (stem.bottom + branch.top) / 2 : stem ? stem.bottom + 12 : branch!.top - 12;
+        const y = stem && branch ? (stem.bottom + branch.top) / 2 : stem ? stem.bottom + CROSS_BAND / 2 : branch!.top - CROSS_BAND / 2;
         const marks = new Map<string, { mark: string; count: number; tone: RelationEdge['tone'] }>();
         for (const edge of edges) {
             const item = marks.get(edge.mark);
             if (item) item.count += 1;
             else marks.set(edge.mark, { mark: edge.mark, count: 1, tone: edge.tone });
         }
-        return [{ key: 'group:' + column, edges, x: (stem ?? branch!).cx + 34, y, marks: [...marks.values()] }];
+        // 标记贴在自坐箭头右侧（左缘对齐），与左侧的生克徽标隔着箭身。
+        return [{ key: 'group:' + column, edges, x: (stem ?? branch!).cx + 6, y, marks: [...marks.values()] }];
     }) : [];
     // 模型定位的另一种模式的关系：不画线，只在结果字旁收成一个标记（如「冲·害·刑」）。
     const asideGroups = measured ? [...(layout.aside ?? []).reduce((groups, edge) => {
@@ -180,33 +180,33 @@ export function GanzhiRelationOverlay({ layout, located, onSelect }: {
         return [{ key: 'aside:' + key, edges, x: box.cx, y, marks: [...new Set(edges.map(edge => edge.mark))] }];
     }) : [];
     const groupKey = (edge: RelationEdge) => edge.shape === 'marker' && edge.anchor ? 'group:' + edge.anchor.column
-        : edge.shape === 'vertical' && edge.tone === 'reveal' ? 'group:' + edge.cells[0].column : null;
+        : edge.shape === 'vertical' && (edge.tone === 'reveal' || edge.tone === 'root') ? 'group:' + edge.cells[0].column : null;
     const emphasised = (edge: RelationEdge) => located.has(edge.id) || active === edge.id || active === groupKey(edge);
     const tones = [...new Set(layout.edges.filter(edge => edge.directed).map(edge => edge.tone))];
     return <div ref={rootRef} className="pointer-events-none absolute inset-0 z-[5]" data-relation-overlay="">
         {measured && <svg className="absolute left-0 top-0 overflow-visible" width={measured.width} height={measured.height} aria-hidden="true">
-            <defs>{tones.map(tone => <marker key={tone} id={`${uid}-${tone}`} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <defs>{tones.map(tone => <marker key={tone} id={`${uid}-${tone}`} viewBox="0 0 8 8" refX="7" refY="4" markerUnits="userSpaceOnUse" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
                 <path d="M0 0 L8 4 L0 8 z" fill={TONE_COLOR[tone]} />
             </marker>)}</defs>
             {drawn.map(({ edge, path }) => {
                 const isEmphasised = emphasised(edge);
-                return <path key={edge.id} d={path} data-relation-edge={edge.id} data-relation-mark={edge.mark} data-tone={edge.tone} data-located={located.has(edge.id) || undefined}
+                return <path key={edge.id} d={path} data-relation-edge={edge.id} data-relation-mark={edge.mark} data-relation-shape={edge.shape} data-tone={edge.tone} data-located={located.has(edge.id) || undefined}
                     fill="none" stroke={TONE_COLOR[edge.tone]} strokeLinecap="round" strokeLinejoin="round"
                     strokeWidth={(edge.tone === 'clash' || edge.tone === 'control' ? 1.6 : edge.tone === 'root' || edge.tone === 'reveal' ? 1.1 : 1.25) + (isEmphasised ? 1 : 0)}
                     strokeDasharray={edge.shape === 'marker' ? '1 2' : TONE_DASH[edge.tone]}
-                    opacity={active && !isEmphasised ? 0.2 : edge.tone === 'root' || edge.tone === 'reveal' ? 0.75 : 0.9}
+                    opacity={(active && !isEmphasised ? 0.2 : edge.tone === 'root' || edge.tone === 'reveal' ? 0.75 : 0.9) * (edge.mode === muted && !isEmphasised ? 0.4 : 1)}
                     markerEnd={edge.directed && edge.shape !== 'marker' ? `url(#${uid}-${edge.tone})` : undefined} />;
             })}
         </svg>}
-        {drawn.filter(({ edge }) => !(edge.shape === 'vertical' && edge.tone === 'reveal')).map(({ edge, badge }) => {
+        {drawn.map(({ edge, badge }) => {
             const isLocated = located.has(edge.id);
             const color = TONE_COLOR[edge.tone];
             // 根 / 透 的「本气、中气」放进悬停说明，徽标只留一个字，避免长标签在行间互相压住。
             const text = edge.mark;
             const props = {
                 'data-relation-badge': edge.id, 'data-tone': edge.tone, title: edge.description,
-                className: 'pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-[4px] border px-1 text-[0.625rem] font-medium leading-[0.8125rem] transition-opacity focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1',
-                style: { left: badge.x, top: badge.y, color: isLocated ? 'var(--background)' : color, borderColor: color, background: isLocated ? color : 'var(--background)', opacity: active && active !== edge.id && !isLocated ? 0.45 : 1, outlineColor: color },
+                className: `pointer-events-auto absolute ${edge.shape === 'vertical' ? '-translate-x-full' : '-translate-x-1/2'} -translate-y-1/2 whitespace-nowrap rounded-[4px] border px-1 text-[0.625rem] font-medium leading-[0.8125rem] transition-opacity focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1`,
+                style: { left: badge.x, top: badge.y, color: isLocated ? 'var(--background)' : color, borderColor: color, background: isLocated ? color : 'var(--background)', opacity: (active && active !== edge.id && !isLocated ? 0.45 : 1) * (edge.mode === muted && !isLocated && active !== edge.id ? 0.5 : 1), outlineColor: color },
                 onMouseEnter: () => setActive(edge.id), onMouseLeave: () => setActive(null),
             };
             // 能追问时是按钮；只读的柱位条里是带说明的标记，悬停仍会突出这条线。
@@ -223,8 +223,8 @@ export function GanzhiRelationOverlay({ layout, located, onSelect }: {
             const props = {
                 'data-relation-badge': first.id, 'data-relation-marker-group': group.edges.length, 'data-relation-marks': group.marks.map(item => item.mark).join(','), 'data-relation-mark-counts': group.marks.map(item => item.mark + ':' + item.count).join(','), 'data-tone': first.tone,
                 title: group.edges.map(edge => edge.description).join('\n'),
-                className: 'pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-[4px] border border-border bg-background px-1 text-[0.625rem] font-medium leading-[0.8125rem] transition-opacity focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1',
-                style: { left: group.x, top: group.y, opacity: active && active !== group.key && !isLocated ? 0.45 : 1, outlineColor: 'var(--accent)' },
+                className: 'pointer-events-auto absolute -translate-y-1/2 whitespace-nowrap rounded-[4px] border border-border bg-background px-1 text-[0.625rem] font-medium leading-[0.8125rem] transition-opacity focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1',
+                style: { left: group.x, top: group.y, opacity: (active && active !== group.key && !isLocated ? 0.45 : 1) * (muted === 'flow' && !isLocated && active !== group.key ? 0.5 : 1), outlineColor: 'var(--accent)' },
                 onMouseEnter: () => setActive(group.key), onMouseLeave: () => setActive(null),
             };
             const content = <>{group.marks.map((item, index) => <span key={item.mark} style={{ color: TONE_COLOR[item.tone] }}>

@@ -1,7 +1,7 @@
 'use client';
 // 需要盘面选择状态、跟随定位滚动与全屏弹窗
 
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { LocateFixed, MessageCircleQuestion } from 'lucide-react';
 import type { BaziCanonicalJSON, BaziRelationsCanonicalJSON, BaziWuxingCanonicalJSON } from 'taibu-core/bazi';
 import type { AgentChart, AgentToolPart } from '@/lib/agent/tool-presentation';
@@ -19,8 +19,8 @@ import './agent-results.css';
 /** A relation chip names what it links, as 关系 · 月柱丁克日柱庚; cells keep their label, as 月柱天干 丁. */
 const chipLabel = (target: ChartTarget) => target.kind === 'bazi_relation' ? `关系 · ${target.label}` : target.label;
 
-type BoardMode = RelationMode | 'off';
-const BOARD_MODES: Array<[BoardMode, string]> = [['relations', '关系'], ['flow', '流通'], ['off', '不显示']];
+type BoardMode = RelationMode | 'all' | 'off';
+const BOARD_MODES: Array<[BoardMode, string]> = [['all', '全部'], ['relations', '关系'], ['flow', '流通'], ['off', '不显示']];
 const NO_ROWS: never[] = [];
 
 /** 没有五行详查时，五行环按天干地支 8 字计数；藏干只用来判断某五行是否出现，与 Core 相生链同口径。 */
@@ -117,17 +117,22 @@ export function AgentInteractiveChart({ value, tool, reference, focus, followMod
   const detail = value.kind === 'bazi' ? value.chart.干支关系明细 ?? NO_ROWS : NO_ROWS;
   const board = useMemo(() => layoutRelations(baziBoardRows(detail, { relations: drilled, wuxing }, located), BAZI_COLUMNS), [detail, drilled, wuxing, located]);
   const counts = { relations: board.edges.filter(edge => edge.mode === 'relations').length, flow: board.edges.filter(edge => edge.mode === 'flow').length };
-  // 打开时停在 Agent 最后看的模式；没看过时，没有合冲刑害的盘直接看流通，不让盘面空着。
-  const [boardMode, setBoardMode] = useState<BoardMode>(() => baziViewing?.mode ?? (counts.relations || !counts.flow ? 'relations' : 'flow'));
-  // 跟随模型时，Agent 每换一次查看（关系详查、五行详查、定位某条关系）盘面就切过去；重新开启跟随也会对齐一次。
+  // 默认「全部」：关系与流通同时画在盘上（流通在内层、关系在外层，见 visibleRelationEdges）。
+  const [boardMode, setBoardMode] = useState<BoardMode>('all');
+  // 跟随模型时，Agent 每换一次查看（关系详查、五行详查、定位某条关系）就对齐一次：
+  // 「全部」下不切模式，只把另一种线淡化；读者选了单一模式时切到 Agent 正在看的那种。
   const followed = baziViewing && (followModel || pinned) ? baziViewing.key : null;
   const [appliedViewing, setAppliedViewing] = useState(followed);
   if (followed !== appliedViewing) {
     setAppliedViewing(followed);
-    if (baziViewing && followed) setBoardMode(baziViewing.mode);
+    if (baziViewing && followed && boardMode !== 'all') setBoardMode(baziViewing.mode);
   }
   const [hiddenMarks, setHiddenMarks] = useState<ReadonlySet<string>>(new Set());
-  const marks = boardMode === 'off' ? [] : [...new Set(board.edges.filter(edge => edge.mode === boardMode).map(edge => edge.mark))];
+  // 筛选按「关系 / 流通」分两组；「全部」时两组之间有分隔。
+  const markGroups = boardMode === 'off' ? [] : (['relations', 'flow'] as const).filter(mode => boardMode === 'all' || boardMode === mode)
+    .map(mode => [...new Set(board.edges.filter(edge => edge.mode === mode).map(edge => edge.mark))]).filter(group => group.length > 0);
+  const marks = markGroups.flat();
+  const muted = boardMode === 'all' && baziViewing ? (baziViewing.mode === 'flow' ? 'relations' : 'flow') : undefined;
   // 点徽标 = 追问这条关系：Core 给了关系 id 的直接带上关系，五行详查的事实带上它连着的字。
   const askEdge = (edge: RelationEdge) => {
     const relation = targets.find(target => target.id === edge.id);
@@ -135,7 +140,7 @@ export function AgentInteractiveChart({ value, tool, reference, focus, followMod
       && edge.cells.some(cell => cell.column === target.cell.柱 && cell.part === target.cell.部位)));
   };
   const baziOverlay: BaziRelationOverlay | undefined = value.kind === 'bazi'
-    ? { layout: visibleRelationEdges(board, boardMode, hiddenMarks, located), located, onSelect: reference && onAsk ? askEdge : undefined }
+    ? { layout: visibleRelationEdges(board, boardMode, hiddenMarks, located), located, onSelect: reference && onAsk ? askEdge : undefined, ...(muted ? { muted } : {}) }
     : undefined;
   const toggleMark = (mark: string) => setHiddenMarks(current => {
     const next = new Set(current);
@@ -176,17 +181,20 @@ export function AgentInteractiveChart({ value, tool, reference, focus, followMod
       <div className="agent-board-relation-bar">
         <div className="agent-board-segments" role="group" aria-label="盘面连线">
           {BOARD_MODES.map(([mode, name]) => <button key={mode} type="button" aria-pressed={boardMode === mode} data-viewed={baziViewing?.mode === mode || undefined} onClick={() => setBoardMode(mode)}>
-            {name}{mode !== 'off' && <span>{counts[mode]}</span>}
+            {name}{mode !== 'off' && <span>{mode === 'all' ? counts.relations + counts.flow : counts[mode]}</span>}
           </button>)}
         </div>
         {baziViewing && <span className="agent-board-viewing" data-live={live && followModel || undefined}>
           <LocateFixed size={12} aria-hidden="true" />{live && followModel ? '模型正在看' : 'Agent 查看了'}{baziViewing.label}
         </span>}
         {marks.length > 1 && <div className="agent-board-marks" role="group" aria-label="按类型筛选">
-          {marks.map(mark => <button key={mark} type="button" aria-pressed={!hiddenMarks.has(mark)} onClick={() => toggleMark(mark)}>{mark}</button>)}
+          {markGroups.map((group, index) => <Fragment key={index}>
+            {index > 0 && <span className="agent-board-marks-divider" aria-hidden="true" />}
+            {group.map(mark => <button key={mark} type="button" aria-pressed={!hiddenMarks.has(mark)} onClick={() => toggleMark(mark)}>{mark}</button>)}
+          </Fragment>)}
         </div>}
       </div>
-      {boardMode === 'flow' && <WuxingCycleStrip dayElement={wuxing?.日主.五行 ?? getGanZhiElement(value.chart.基本信息.日主.charAt(0)) ?? undefined}
+      {(boardMode === 'flow' || boardMode === 'all') && <WuxingCycleStrip dayElement={wuxing?.日主.五行 ?? getGanZhiElement(value.chart.基本信息.日主.charAt(0)) ?? undefined}
         counts={wuxing ? wuxing.五行统计.map(item => ({ 五行: item.五行, 合计: item.合计, 出现: !wuxing.缺失五行.includes(item.五行) })) : glyphElementCounts(value.chart)}
         caption={wuxing ? `五行详查：天干地支各计 1，藏干按 0.6 / 0.3 / 0.1 加权 · 月令${wuxing.月令.月支} ${wuxing.月令.旺}旺，日主${wuxing.月令.日主状态}`
           : '按天干地支 8 字计数（藏干只计是否出现）；让 Agent 做五行详查后改为加权统计，并在盘上画出通根与自坐。'} />}

@@ -8,8 +8,11 @@ export type RelationPart = '天干' | '地支';
 export type RelationTone = 'combine' | 'meet' | 'clash' | 'punish' | 'harm' | 'break' | 'generate' | 'control' | 'same' | 'root' | 'reveal';
 export type RelationBand = 'stem' | 'branch' | 'cross';
 export type RelationMode = 'relations' | 'flow';
-/** arc：同一带里跨柱的括线；vertical：同一柱干支之间的竖线；bridge：跨柱干支之间走行间空档的折线；marker：只标在一个字旁的徽标。 */
-export type RelationShape = 'arc' | 'vertical' | 'bridge' | 'marker';
+/**
+ * arc：同一带里跨柱的括线；inline：相邻两柱同一行的两个字之间直接连线（流通的生克同气）；
+ * vertical：同一柱干支之间的竖线；bridge：跨柱干支之间走行间空档的折线；marker：只标在一个字旁的徽标。
+ */
+export type RelationShape = 'arc' | 'inline' | 'vertical' | 'bridge' | 'marker';
 
 /** Core 关系行的公共形状：八字命盘的干支关系明细、bazi_relations 与 bazi_wuxing 的各类事实都是它。 */
 export interface RelationRow {
@@ -110,6 +113,8 @@ const overlaps = (a: [number, number], b: [number, number]) => a[0] < b[1] && b[
  */
 export function layoutRelations(rows: readonly RelationRow[], columns: readonly string[]): RelationLayout {
     const edges: RelationEdge[] = [];
+    // 两个字之间的空档只放一条直连线；同一空档再有一条就退回括线，免得叠在一起。
+    const inlineSlots = new Set<string>();
     rows.forEach((row, index) => {
         const cells = orderedCells(row);
         if (cells.length < 2) return;
@@ -130,7 +135,13 @@ export function layoutRelations(rows: readonly RelationRow[], columns: readonly 
             lane: 0,
         };
         if (parts.size === 1) {
-            edges.push({ ...base, band: parts.has('天干') ? 'stem' : 'branch', shape: 'arc', span: [Math.min(...positions), Math.max(...positions)] });
+            const band = parts.has('天干') ? 'stem' : 'branch';
+            const span: [number, number] = [Math.min(...positions), Math.max(...positions)];
+            // 相邻两柱的生克同气：两个字并排，直接连一条横线；合冲刑害与隔柱的线仍走括线。
+            const slot = band + ':' + span[0];
+            const inline = base.mode === 'flow' && cells.length === 2 && span[1] - span[0] === 1 && !inlineSlots.has(slot);
+            if (inline) inlineSlots.add(slot);
+            edges.push({ ...base, band, shape: inline ? 'inline' : 'arc', span });
             return;
         }
         // 干支之间：同一柱画短竖箭头；跨柱的通根 / 透干不画穿行长线，改成目标字旁的聚合标记，
@@ -142,19 +153,27 @@ export function layoutRelations(rows: readonly RelationRow[], columns: readonly 
     return assignLanes(edges);
 }
 
-/** 同一带里跨度短的先排，与已排的线交叠就往外一层。 */
-function assignLanes(edges: RelationEdge[]): RelationLayout {
+/**
+ * 同一带里跨度短的先排，与已排的线交叠就往外一层。
+ * `layered` 时（关系与流通同时显示）流通线占靠近字形的内层，关系线整体排在流通线之外，两套线不共层、不交叉。
+ */
+function assignLanes(edges: RelationEdge[], layered = false): RelationLayout {
     const lanes = { stem: 0, branch: 0, cross: 0 };
+    const groups: Array<(edge: RelationEdge) => boolean> = layered ? [edge => edge.mode === 'flow', edge => edge.mode === 'relations'] : [() => true];
     for (const band of ['stem', 'branch', 'cross'] as const) {
-        const placed: RelationEdge[] = [];
-        const order = edges.filter(edge => edge.band === band && edge.shape !== 'marker')
-            .sort((a, b) => (a.span[1] - a.span[0]) - (b.span[1] - b.span[0]) || a.span[0] - b.span[0]);
-        for (const edge of order) {
-            let lane = 0;
-            while (placed.some(other => other.lane === lane && overlaps(other.span, edge.span))) lane++;
-            edge.lane = lane;
-            placed.push(edge);
-            lanes[band] = Math.max(lanes[band], lane + 1);
+        for (const inGroup of groups) {
+            const base = lanes[band];
+            const placed: RelationEdge[] = [];
+            // 字旁标记与字间直连线都不占层。
+            const order = edges.filter(edge => edge.band === band && edge.shape !== 'marker' && edge.shape !== 'inline' && inGroup(edge))
+                .sort((a, b) => (a.span[1] - a.span[0]) - (b.span[1] - b.span[0]) || a.span[0] - b.span[0]);
+            for (const edge of order) {
+                let lane = base;
+                while (placed.some(other => other.lane === lane && overlaps(other.span, edge.span))) lane++;
+                edge.lane = lane;
+                placed.push(edge);
+                lanes[band] = Math.max(lanes[band], lane + 1);
+            }
         }
     }
     // 通根 / 透干画在干支之间的空档里，即使没有同柱生克也要留出一层放标记。
@@ -163,12 +182,16 @@ function assignLanes(edges: RelationEdge[]): RelationLayout {
 }
 
 /**
- * 只留当前模式与筛选要画的线。模型定位过的线在所属模式里始终保留；
+ * 只留当前模式与筛选要画的线。「全部」同时画关系与流通（分层见 assignLanes）。模型定位过的线在所属模式里始终保留；
  * 若模型定位的是另一种模式的关系，则在当前模式里收成一个字旁标记（aside），不让两套线叠在一起。
  * 选择「不显示」时盘面不画线，定位信息仍由盘面上方的说明与位置标签承接。
  */
-export function visibleRelationEdges(layout: RelationLayout, mode: RelationMode | 'off', hiddenMarks: ReadonlySet<string>, located: ReadonlySet<string>): RelationLayout {
+export function visibleRelationEdges(layout: RelationLayout, mode: RelationMode | 'all' | 'off', hiddenMarks: ReadonlySet<string>, located: ReadonlySet<string>): RelationLayout {
     if (mode === 'off') return { edges: [], lanes: { stem: 0, branch: 0, cross: 0 }, aside: [] };
+    if (mode === 'all') {
+        const edges = layout.edges.filter(edge => !hiddenMarks.has(edge.mark) || located.has(edge.id));
+        return { ...assignLanes(edges.map(edge => ({ ...edge, lane: 0 })), true), aside: [] };
+    }
     const edges = layout.edges.filter(edge => edge.mode === mode && (!hiddenMarks.has(edge.mark) || located.has(edge.id)));
     const aside = layout.edges.filter(edge => edge.mode !== mode && located.has(edge.id));
     // 隐藏一部分线后重新分层，外层不留空档。
@@ -177,6 +200,39 @@ export function visibleRelationEdges(layout: RelationLayout, mode: RelationMode 
     const bands = new Set(aside.map(edge => edge.cells[edge.cells.length - 1].part === '天干' ? 'stem' as const : 'branch' as const));
     for (const band of bands) visible.lanes[band] += 1;
     return { ...visible, aside };
+}
+
+/**
+ * 一个字上落着几条线时，各条线脚的左右次序（「edge.id@cell 序号」→ 槽位，以一个间距为单位、以 0 为中）。
+ * 往左去的线在左、往右去的在右；往左的内层靠左外层靠右，往右的外层靠左内层靠右。
+ * 这样嵌套的括线在字的上方（或下方）互不交叉，关系与流通同时显示也不会互相穿过。
+ * 同柱的干支竖线按柱单独成组；`x` 给出字的横坐标（盘面上量得的中心，或测试里的列序）。
+ */
+export function relationLegSlots(edges: readonly RelationEdge[], x: (cell: RelationEdge['cells'][number]) => number | undefined): Map<string, number> {
+    type Leg = { key: string; lane: number; side: number };
+    const byCell = new Map<string, Leg[]>();
+    const push = (cell: string, leg: Leg) => byCell.set(cell, [...(byCell.get(cell) ?? []), leg]);
+    for (const edge of edges) {
+        // 根 / 透只进字旁的聚合标记，字间直连线也没有竖脚。
+        if (edge.shape === 'marker' || edge.shape === 'inline' || (edge.shape === 'vertical' && (edge.tone === 'root' || edge.tone === 'reveal'))) continue;
+        if (edge.shape === 'vertical') {
+            push(edge.cells[0].column + ':vertical', { key: edge.id + '@0', lane: edge.lane, side: 0 });
+            continue;
+        }
+        const xs = edge.cells.map(x);
+        edge.cells.forEach((cell, index) => {
+            const own = xs[index];
+            const others = xs.filter((value, other): value is number => other !== index && value !== undefined);
+            const side = own === undefined || !others.length ? 0 : others.every(value => value < own) ? -1 : others.every(value => value > own) ? 1 : 0;
+            push(cell.column + ':' + cell.part, { key: edge.id + '@' + index, lane: edge.lane, side });
+        });
+    }
+    const slots = new Map<string, number>();
+    for (const legs of byCell.values()) {
+        legs.sort((a, b) => a.side - b.side || (a.side > 0 ? b.lane - a.lane : a.lane - b.lane))
+            .forEach((leg, index) => slots.set(leg.key, index - (legs.length - 1) / 2));
+    }
+    return slots;
 }
 
 export const BAZI_COLUMNS = ['年柱', '月柱', '日柱', '时柱'] as const;

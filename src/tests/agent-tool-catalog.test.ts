@@ -7,7 +7,8 @@ import { MockLanguageModelV3 } from 'ai/test';
 import type { AgentRunRow } from '../lib/agent/store.server';
 import { CODEMODE_TOOL_NAME } from '@earendil-works/pi-durable/codemode';
 import {
-  AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_DRILLDOWN_BASES, AGENT_MODEL_ONLY_TOOLS, getAgentDrilldownBase, getAgentExtensionToolTitle, getAgentToolFamily,
+  AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_DEFERRED_TOOLS, AGENT_DRILLDOWN_BASES, AGENT_MODEL_ONLY_TOOLS, AGENT_TOOL_SEARCH_TOOL,
+  getAgentDrilldownBase, getAgentExtensionToolTitle, getAgentToolFamily, isAgentDeferredTool,
   isAgentChartTool, projectsAgentCanonicalText, returnsAgentScriptResult,
 } from '../lib/agent/tool-catalog';
 import { getAgentToolText, type AgentToolPart } from '../lib/agent/tool-presentation';
@@ -65,12 +66,19 @@ test('every Core tool and every registered Agent tool belongs to a presentation 
   for (const name of ['focus_chart', 'web_search', 'todo_write', 'mcp__archive__search'])
     assert.equal(projectsAgentCanonicalText(name), false, `${name} returns structured data, not canonical text`);
   assert.equal(getAgentExtensionToolTitle(AGENT_CODEMODE_TOOL), '运行脚本');
+  assert.equal(getAgentExtensionToolTitle(AGENT_TOOL_SEARCH_TOOL), '查找工具');
+  // 低频工具按需加载；外部 MCP 工具同样只在检索后提供。
+  for (const name of AGENT_DEFERRED_TOOLS) assert.ok(listToolDefinitions().some(definition => definition.name === name), `${name} is a Core tool`);
+  assert.equal(isAgentDeferredTool('mcp__archive__search'), true);
+  assert.equal(isAgentDeferredTool('bazi'), false);
+  assert.equal(projectsAgentCanonicalText(AGENT_TOOL_SEARCH_TOOL), false);
   for (const name of ['unknown', '__proto__', 'constructor', 'toString', '']) {
     assert.equal(getAgentToolFamily(name), 'other', JSON.stringify(name));
     assert.equal(isAgentChartTool(name), false);
     assert.equal(projectsAgentCanonicalText(name), false);
     assert.equal(returnsAgentScriptResult(name), false);
     assert.equal(getAgentExtensionToolTitle(name), undefined, JSON.stringify(name));
+    assert.equal(isAgentDeferredTool(name), false, JSON.stringify(name));
   }
 });
 
@@ -87,9 +95,14 @@ test('the projection keeps canonical text on every Core chart and calculation fo
     return { name, args: args as JsonObject };
   });
   const store = new MemoryStore(), run = row();
+  // Calculations are deferred: the model loads each one by name before calling it, as a reading would.
+  const rounds = charts.flatMap((chart, index) => [
+    ...(isAgentDeferredTool(chart.name) ? [[{ type: 'toolCall' as const, id: `search-${index}`, name: AGENT_TOOL_SEARCH_TOOL, arguments: { query: chart.name } }]] : []),
+    [{ type: 'toolCall' as const, id: `chart-${index}`, name: chart.name, arguments: chart.args }],
+  ]);
   const streamFn = scripted((index) => {
-    if (index < charts.length) return [{ type: 'toolCall', id: `chart-${index}`, name: charts[index].name, arguments: charts[index].args }];
-    if (index === charts.length) return [{ type: 'toolCall', id: 'select', name: 'select_final_artifacts', arguments: { artifactIds: [] } }];
+    if (index < rounds.length) return rounds[index];
+    if (index === rounds.length) return [{ type: 'toolCall', id: 'select', name: 'select_final_artifacts', arguments: { artifactIds: [] } }];
     return [{ type: 'text', text: '已完成全部盘面' }];
   });
   await executeAgentRun(store, run, undefined, { config, streamFn });

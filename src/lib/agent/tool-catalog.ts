@@ -57,8 +57,32 @@ export type AgentToolFamily =
 /** Pi's code mode tool (`CODEMODE_TOOL_NAME`); its scripts' calls are parts with `parentId`. */
 export const AGENT_CODEMODE_TOOL = 'codemode';
 
+/** The Taibu tool that loads deferred tools (`tool-search.server.ts`). */
+export const AGENT_TOOL_SEARCH_TOOL = 'tool_search';
+
+/**
+ * Tools the model loads on demand instead of being offered every request: the drilldowns and calculations a reading
+ * reaches for once it already has a chart. `tool_search` loads them; scripts may call them without loading.
+ */
+export const AGENT_DEFERRED_TOOLS: ReadonlySet<string> = new Set([
+  'bazi_relations', 'bazi_wuxing', 'bazi_liunian_scan', 'ziwei_palace', 'qimen_palace', 'daliuren_lessons',
+  'astrology_point', 'liuyao_line',
+  'bazi_dayun', 'bazi_pillars_resolve', 'ziwei_horoscope', 'ziwei_flying_star', 'almanac_select',
+]);
+
+/** Administrator-configured MCP tools are registered as `mcp__<server>__<tool>`. */
+const EXTERNAL_TOOL_PREFIX = 'mcp__';
+
+/** Whether a tool is deferred: the low-frequency Taibu tools and every external MCP tool. */
+export function isAgentDeferredTool(name: string): boolean {
+  return AGENT_DEFERRED_TOOLS.has(name) || name.startsWith(EXTERNAL_TOOL_PREFIX);
+}
+
 /** Titles of tools that Pi extensions define, which have no Taibu label. */
-const EXTENSION_TOOL_TITLES: Readonly<Record<string, string>> = { [AGENT_CODEMODE_TOOL]: '运行脚本' };
+const EXTENSION_TOOL_TITLES: Readonly<Record<string, string>> = {
+  [AGENT_CODEMODE_TOOL]: '运行脚本',
+  [AGENT_TOOL_SEARCH_TOOL]: '查找工具',
+};
 
 export function getAgentExtensionToolTitle(name: string): string | undefined {
   return Object.hasOwn(EXTENSION_TOOL_TITLES, name) ? EXTENSION_TOOL_TITLES[name] : undefined;
@@ -103,9 +127,6 @@ const TOOL_FAMILIES: ReadonlyMap<string, AgentToolFamily> = new Map<string, Agen
   ['select_final_artifacts', 'artifacts'],
   [AGENT_CODEMODE_TOOL, 'code'],
 ]);
-
-/** Administrator-configured MCP tools are registered as `mcp__<server>__<tool>`. */
-const EXTERNAL_TOOL_PREFIX = 'mcp__';
 
 export function getAgentToolFamily(name: string): AgentToolFamily {
   if (isAgentChartTool(name)) return 'chart';

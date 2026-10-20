@@ -5,6 +5,7 @@ import type { AgentPart, AgentRunStatus } from '../lib/agent/types';
 import { randomUUID } from 'node:crypto';
 import { executeTool, buildToolSuccessPayload, listToolDefinitions } from 'taibu-core/mcp';
 import { getAgentChart } from '../lib/agent/tool-presentation';
+import { getAgentToolFamily } from '../lib/agent/tool-catalog';
 import { buildAgentWorkspace } from '../lib/agent/workspace';
 import {
     collectAgentArtifacts, describeAgentCallNote, describeAgentChartRules, describeAgentChartSteps, describeAgentChartSubject, describeAgentStep, formatAgentToolDuration,
@@ -118,6 +119,11 @@ test('process steps summarize each call from its arguments and stored result onl
     assert.equal(summarizeAgentTool(tool('focus_chart', { output: { chartFocus: { version: 1, reference: 'artifact:11111111-1111-4111-8111-111111111111', targetIds: [], includeRelated: true, caption: '月干丁火' } } })), '月干丁火');
     assert.equal(summarizeAgentTool(tool('read_attachment', { output: { id: 'a', name: '长文.txt', kind: 'text', text: '一二', offset: 0, total: 9, nextOffset: 2 } })), '长文.txt · 读到 2 / 9 字');
     assert.equal(summarizeAgentTool(tool('mcp__archive__lookup', { input: { keyword: 1 } })), null);
+    // 按需加载的工具：检索一行写清关键词与加载数量。
+    assert.equal(summarizeAgentTool(tool('tool_search', { input: { query: '大运' }, output: { loaded: ['bazi_dayun', 'bazi_relations'] } })), '「大运」 · 加载 2 个工具');
+    assert.equal(summarizeAgentTool(tool('tool_search', { status: 'running', input: { query: '大运' } })), '「大运」');
+    assert.equal(summarizeAgentTool(tool('tool_search', { output: { loaded: [] } })), '加载 0 个工具');
+    assert.equal(getAgentToolFamily('tool_search'), 'other');
     assert.equal(Object.keys(AGENT_TOOL_FAMILY_LABELS).length, 14, 'every tool family has a step tag');
     assert.equal(summarizeAgentTool(tool('bazi_relations', { input: { reference: 'artifact:x', year: 2027, dayun: 4 } })), '2027 年 · 第 4 步大运', 'a drilldown reads its selectors, never the chart reference');
 });

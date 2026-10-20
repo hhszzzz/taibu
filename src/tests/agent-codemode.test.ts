@@ -120,6 +120,34 @@ test('a call still running shows under its script and in the activity line', asy
   assert.deepEqual(calls.map(call => [call.id, call.status]), [[seen.call.id, 'completed']]);
 });
 
+test('a script may call a deferred tool the model was not offered', async () => {
+  const store = new MemoryStore(), run = row();
+  run.input.codeMode = true;
+  let offered: string[] = [], prompt = '';
+  const code = `const dayun = await tools.bazi_dayun({ gender: 'male', birthYear: 1990, birthMonth: 1, birthDay: 15, birthHour: 9 });
+return typeof dayun.text + ':' + dayun.data.大运列表.length;`;
+  await executeAgentRun(store, run, undefined, { config, streamFn: scripted(index => {
+    if (index === 0) return [{ type: 'toolCall', id: 'script', name: 'codemode', arguments: { code } }];
+    if (index === 1) return [{ type: 'toolCall', id: 'select', name: 'select_final_artifacts', arguments: { artifactIds: [store.draft('script/c1')!.id] } }];
+    return [{ type: 'text', text: '大运已排好' }];
+  }, messages => {
+    if (!offered.length) {
+      offered = getCurrentTools(messages).map(tool => tool.name);
+      prompt = JSON.stringify(messages.filter(message => message.role === 'system'));
+    }
+  }) });
+  assert.equal(finished(store).args.p_status, 'completed');
+  assert.ok(offered.includes('codemode') && offered.includes('bazi'));
+  assert.ok(!offered.includes('bazi_dayun'), 'the calculation is deferred for the model');
+  assert.ok(prompt.includes('bazi_dayun'), 'the script section names it among the callable tools');
+  const card = toolParts(store).find(part => part.name === 'codemode')!;
+  assert.match(getAgentScript(card)?.output ?? '', /^string:\d+$/u);
+  const call = toolParts(store).find(part => part.parentId === card.id)!;
+  assert.equal(call.name, 'bazi_dayun');
+  assert.equal(call.status, 'completed');
+  assert.ok(call.canonicalText?.includes('大运'), 'a deferred calculation keeps its canonical text like a direct call');
+});
+
 test('scripts cannot call model-only tools and stop at the call limit', async () => {
   const store = new MemoryStore(), run = row();
   run.input.codeMode = true;

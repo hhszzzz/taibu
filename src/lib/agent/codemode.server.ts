@@ -86,13 +86,13 @@ const codemodeSection: PromptSection = {
   render: input => {
     // Members of a parallel analysis keep the extension but are not offered the tool.
     if (!input.agent.tools.some(tool => tool.name === CODEMODE_TOOL_NAME)) return undefined;
-    const callable = input.agent.callable.filter(tool => tool.deferred !== true).map(tool => toCodemodeIdentifier(tool.name));
+    const callable = input.agent.callable.map(tool => toCodemodeIdentifier(tool.name));
     if (!callable.length) return undefined;
     return [
       '本任务开启了代码模式。需要批量排盘、逐年逐月扫描、比较多组出生时间或参数、筛选择日时，用 codemode 写一段 JavaScript 调用工具，只输出汇总后的结论，减少来回调用；单次简单调用仍直接调用工具。',
       '脚本中 await tools.<名称>(参数) 的参数与直接调用相同。排盘、计算与详查返回 { artifactId?, text, data }：text 是规范文本，data 是 Core 规范 JSON（中文键，不确定结构时先打印键名再取值），artifactId 与直接排盘一样是暂存成果，最终答复前同样通过 select_final_artifacts 选择。其他工具返回文本。',
-      `脚本可调用：${callable.join(', ')}。`,
-      `提问、查看与定位盘面、联网与知识库检索、长期记忆、加载方法、协作分析和选择最终成果只能直接调用。单个脚本最多发起 ${AGENT_CODEMODE_CALL_LIMIT} 次调用、运行不超过 ${AGENT_CODEMODE_TIMEOUT_MS / 1000} 秒，不要打印整张盘；脚本输出是给你的资料，向用户解读时仍以工具结果为准。`,
+      `脚本可调用本任务全部工具（包括需 tool_search 加载的低频工具）：${callable.join(', ')}。`,
+      `提问、查看与定位盘面、联网与知识库检索、长期记忆、加载方法、查找工具、协作分析和选择最终成果只能直接调用。单个脚本最多发起 ${AGENT_CODEMODE_CALL_LIMIT} 次调用、运行不超过 ${AGENT_CODEMODE_TIMEOUT_MS / 1000} 秒，不要打印整张盘；脚本输出是给你的资料，向用户解读时仍以工具结果为准。`,
     ].join('\n');
   },
 };

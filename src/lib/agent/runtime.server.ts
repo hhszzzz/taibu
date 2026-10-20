@@ -26,7 +26,8 @@ import { agentToolCardId, modelCallEntry, projectDurableConversation, publicCano
 import {
   AGENT_CODEMODE_CALL_LIMIT, AGENT_SCRIPT_RESULT_SCHEMA, agentScriptCallNumber, agentScriptResult, createAgentCodemodeExtension,
 } from './codemode.server';
-import { AGENT_MODEL_ONLY_TOOLS, getAgentExtensionToolTitle, returnsAgentScriptResult } from './tool-catalog';
+import { AGENT_MODEL_ONLY_TOOLS, getAgentExtensionToolTitle, isAgentDeferredTool, returnsAgentScriptResult } from './tool-catalog';
+import { createAgentToolSearchExtension } from './tool-search.server';
 import { agentInputContent } from './attachment-input';
 import { resolveAttachmentImages } from './attachments.server';
 import { taibuMethodSection } from './method-section.server';
@@ -268,6 +269,7 @@ export async function executeAgentRun(
         prepareArguments: args => prepareToolArguments(tool.parameters, args),
         replay: tool.replay ?? "unsafe", executionMode: "sequential",
         ...(AGENT_MODEL_ONLY_TOOLS.has(tool.name) ? { callers: ["model"] as const } : {}),
+        ...(isAgentDeferredTool(tool.name) ? { deferred: true as const } : {}),
         ...(structured ? { structuredOutputSchema: AGENT_SCRIPT_RESULT_SCHEMA } : {}),
         execute: async (args, api, toolContext) => {
           if (tool.name === "ask_user") return ask(args as Record<string, unknown>, api, toolContext, tool);
@@ -373,6 +375,7 @@ export async function executeAgentRun(
       ],
     });
     registry.install(createParallelExtension(registrations, () => harness!, collaborators, configs, new Map(tools.map(tool => [tool.name, tool.label]))));
+    registry.install(createAgentToolSearchExtension(new Map(tools.map(tool => [tool.name, tool.label]))));
     if (run.input.codeMode) registry.install(createAgentCodemodeExtension());
     if (run.input.webEnabled && (await getUserCreditInfo(run.user_id, { client: store.db })).membership !== 'free') {
       mcp = await connectAgentMcp(parseAgentMcpServers(), () => assertAgentToolAccess(store, run, 'mcp__external', {}), context.abortSignal!);

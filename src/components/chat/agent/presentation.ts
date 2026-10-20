@@ -1,6 +1,6 @@
 import type { ChatMessage } from '@/types';
 import { isAgentRunTerminal, type AgentMessageData, type AgentPart, type AgentRunStatus, type AgentRuntimeInfo } from '@/lib/agent/types';
-import { getAgentToolFamily, type AgentToolFamily, AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, isAgentChartTool } from '@/lib/agent/tool-catalog';
+import { getAgentToolFamily, type AgentToolFamily, AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_TOOL_SEARCH_TOOL, isAgentChartTool } from '@/lib/agent/tool-catalog';
 import { getAgentAttachmentRead, getAgentChart, getAgentDataResults, getAgentMethod, getAgentScript, getAgentSearchResults, getAgentToolArtifactId, getAgentToolQuestions, type AgentChart } from '@/lib/agent/tool-presentation';
 import { getChartFocus, getChartTargets } from '@/lib/agent/chart-interaction';
 import type { AgentWorkspaceModel } from '@/lib/agent/workspace';
@@ -185,6 +185,13 @@ export function summarizeAgentTool(tool: AgentTool): string | null {
         return read ? `${read.name}${read.readUntil !== null && read.total !== null ? ` · 读到 ${read.readUntil} / ${read.total} 字` : ''}` : null;
     }
     if (tool.name === 'remember_user_fact' && typeof args.title === 'string') return args.title;
+    if (tool.name === AGENT_TOOL_SEARCH_TOOL) {
+        const query = typeof args.query === 'string' ? `「${args.query.slice(0, 60)}」` : '';
+        const loaded = tool.output && typeof tool.output === 'object' && Array.isArray((tool.output as { loaded?: unknown }).loaded)
+            ? (tool.output as { loaded: unknown[] }).loaded.filter(name => typeof name === 'string') : [];
+        if (!tool.output || tool.status !== 'completed') return query || null;
+        return query ? `${query} · 加载 ${loaded.length} 个工具` : `加载 ${loaded.length} 个工具`;
+    }
     if (tool.name === AGENT_CODEMODE_TOOL) {
         // Pi lists a script's calls once it settles; while it runs its calls show as steps of their own.
         const calls = getAgentScript(tool)?.calls ?? [];

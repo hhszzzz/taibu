@@ -26,6 +26,7 @@ import { filterMentionsByFeature, getEnabledDataSourceTypes } from '@/lib/data-s
 import { readLocalVisualizationSettings } from '@/lib/visualization/settings';
 import type { ChatStreamTaskRunner } from '@/lib/chat/chat-stream-manager';
 import { useAgentChat } from '@/lib/agent/use-agent-chat';
+import { parseAgentCompactCommand } from '@/lib/agent/compaction';
 import { captureCurrentBranch, switchToVersion, withPendingVersion } from '@/lib/chat/message-versions';
 
 function shouldShowCheckKeyAction(message?: string): boolean {
@@ -339,6 +340,14 @@ export function useChatMessaging({
     // Send message; `context` is the rich chart quote attached above the composer.
     const handleSend = async (context?: string) => {
         const trimmedInput = [context?.trim(), inputValue.trim()].filter(Boolean).join('\n\n');
+        // `/compact` compacts an idle Agent conversation; it is never sent to a model as a question or instruction.
+        if (parseAgentCompactCommand(inputValue)) {
+            const blocked = agent.mode !== 'agent' ? '压缩上下文用于 Agent 对话'
+                : agent.active ? '任务进行中，结束后再压缩上下文'
+                : !activeConversationId || !messages.length ? '当前对话还没有可压缩的内容'
+                : context?.trim() || mentions.length || attachmentState.file || attachmentState.uploaded?.length ? '压缩上下文时不能附带资料或引用' : null;
+            if (blocked) { showToast('info', blocked); return; }
+        }
         if (agent.active && trimmedInput && !isSendingToList) {
             const clearSubmittedDraft = state.captureSubmittedDraft(true);
             setIsSendingToList(true);

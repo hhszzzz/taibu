@@ -181,7 +181,7 @@ export function ChatComposer({
         promptKbIdSet,
         refreshMentionData,
     } = state;
-    const commands = useComposerCommands({ userId, draftKey, text: inputValue, change: onInputChange, textarea: textareaRef, mentionsOpen: mentionOpen, model: selectedModel });
+    const commands = useComposerCommands({ userId, draftKey, text: inputValue, change: onInputChange, textarea: textareaRef, mentionsOpen: mentionOpen, model: selectedModel, agentMode });
     const uploads = usePrivateAttachments({ scopeKey: draftKey ?? userId ?? 'anonymous', state: attachmentState ?? { webSearchEnabled: false }, change: value => onAttachmentChange?.(value), onError: message => showToast('error', message) });
     const submit = () => { if (uploads.uploading) return; commands.remember(); onSend(); };
 

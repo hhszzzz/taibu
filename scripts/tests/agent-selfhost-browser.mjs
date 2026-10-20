@@ -757,6 +757,19 @@ try {
   console.log(
     "Agent 浏览器：真实 worker 崩溃、租约接管、刷新重连及计算不重复执行通过。",
   );
+  // `/compact` 压缩空闲 Agent 对话的上下文：命令菜单填入指令，任务免费、不调用工具，也不把命令当作问题。
+  await uiReady();
+  await composer().fill('/comp');
+  await page.getByRole('listbox', { name: '输入命令' }).getByRole('option', { name: /压缩上下文/ }).click();
+  await page.waitForFunction(() => [...document.querySelectorAll('textarea')].some(element => element.value === '/compact '));
+  const compact = await send('/compact 保留八字结论');
+  const compacted = await waitForRun(compact.run.id, 'completed');
+  await page.locator(`[data-message-id="agent:${compact.run.id}"] [data-agent-status="completed"]`).waitFor();
+  assert.match(compacted.message.content, /^(已压缩上下文|当前上下文还不长)/u);
+  assert.equal(compacted.billing, 'exempt');
+  assert.equal(compacted.message.agent.parts.some(part => part.type === 'tool'), false, 'compaction calls no tool');
+  assert.equal(await credits(), beforeCrash - 1, '/compact is free');
+  console.log('Agent 浏览器：/compact 命令菜单、免费压缩任务与结果展示通过。');
 
   await newChat();
   await uiReady();

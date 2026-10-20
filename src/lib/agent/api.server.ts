@@ -42,6 +42,7 @@ import { normalizeQuestions, validateAnswers, formatQuestionAnswers } from './qu
 import { validateAttachmentIds } from './attachments.server';
 import { getAgentCitationBase } from './evidence';
 import { readAgentActivity } from './activity.server';
+import { AGENT_COMPACT_INSTRUCTIONS_MAX, parseAgentCompactCommand } from './compaction';
 
 class AgentApiError extends Error {
   constructor(
@@ -52,6 +53,8 @@ class AgentApiError extends Error {
     super(message);
   }
 }
+/** `/compact` is free, so it has its own, stricter bucket instead of the shared chat admission. */
+export const AGENT_COMPACT_RATE_LIMIT = { maxRequests: 10, windowMs: 3_600_000 } as const;
 export function hashAgentRequest(value: unknown) {
   const canonical = (input: unknown): unknown =>
     Array.isArray(input)
@@ -245,6 +248,14 @@ export async function createAgentTask(request: NextRequest) {
   if ((await readFeatureModuleStateFresh("agent")).status !== "enabled")
     throw new AgentApiError("Agent 功能未启用", 403, "FEATURE_DISABLED");
   const body = createBody(await requestBody(request));
+  // `/compact` compacts the idle conversation for the next task instead of asking the model.
+  const compact = parseAgentCompactCommand(body.message.content);
+  if (compact) {
+    if ((compact.instructions?.length ?? 0) > AGENT_COMPACT_INSTRUCTIONS_MAX)
+      throw new AgentApiError(`压缩说明最多 ${AGENT_COMPACT_INSTRUCTIONS_MAX} 字`);
+    if ((Array.isArray(body.message.attachments.ids) && body.message.attachments.ids.length) || body.message.attachments.fileName || body.mentions.length || body.fileContent !== undefined)
+      throw new AgentApiError("压缩上下文时不能附带资料或引用");
+  }
   const store = new AgentStore(getSystemAdminClient());
   const custom: CustomProviderRequest | undefined = body.customProvider
     ? {
@@ -328,6 +339,7 @@ export async function createAgentTask(request: NextRequest) {
     if (history[index].metadata?.forkHistory === true) throw new AgentApiError('分叉历史只读，请发送新问题', 409);
     history = history.slice(0, index);
   }
+  if (compact && !history.length) throw new AgentApiError("当前对话还没有可压缩的内容");
   const account = await getUserAuthInfo(auth.user.id, {
     client: auth.db,
     user: auth.user,
@@ -349,19 +361,23 @@ export async function createAgentTask(request: NextRequest) {
       403,
       "MEMBERSHIP_REQUIRED",
     );
-  if (!custom && !account.hasCredits)
+  // Compaction is free and has its own rate limit, so it needs no credits; it uses no collaborators either.
+  if (!custom && !compact && !account.hasCredits)
     throw new AgentApiError("积分不足", 402, "INSUFFICIENT_CREDITS");
-  if (custom && body.collaborators.length) throw new AgentApiError('多模型协作需要使用平台模型；可在模型菜单中关闭协作');
-  for (const member of body.collaborators) {
+  const collaborators = compact ? [] : body.collaborators;
+  if (custom && collaborators.length) throw new AgentApiError('多模型协作需要使用平台模型；可在模型菜单中关闭协作');
+  for (const member of collaborators) {
     const selected = await getModelConfigAsync(member.model);
     if (!selected) throw new AgentApiError(`协作模型不存在：${member.name}`);
     if (!isModelAllowedForMembership(selected, account.effectiveMembership) ||
       (member.reasoning && !isReasoningAllowedForMembership(selected, account.effectiveMembership)))
       throw new AgentApiError(`当前会员不能使用 ${member.name} 的模型或推理配置`, 403, 'MEMBERSHIP_REQUIRED');
   }
-  const limit = await checkRateLimit(auth.user.id, "/api/chat", AI_RATE_LIMIT_CONFIG);
+  const limit = compact
+    ? await checkRateLimit(auth.user.id, "/api/agent/compact", AGENT_COMPACT_RATE_LIMIT)
+    : await checkRateLimit(auth.user.id, "/api/chat", AI_RATE_LIMIT_CONFIG);
   if (!limit.allowed)
-    throw new AgentApiError("请求过于频繁，请稍后再试", 429, "RATE_LIMITED");
+    throw new AgentApiError(compact ? "压缩上下文过于频繁，请稍后再试" : "请求过于频繁，请稍后再试", 429, "RATE_LIMITED");
   const modelId = config?.id ?? custom!.modelId;
   const reasoning =
     !!config &&
@@ -440,10 +456,12 @@ export async function createAgentTask(request: NextRequest) {
     model: modelId,
     reasoning,
     reasoningEffort: reasoning ? body.reasoningEffort : null,
-    collaborators: body.collaborators,
-    webEnabled: body.webEnabled !== false,
-    codeMode: body.codeMode,
-    planMode: body.planMode,
+    collaborators,
+    // A compaction calls no tools: it only summarizes the context.
+    webEnabled: !compact && body.webEnabled !== false,
+    codeMode: !compact && body.codeMode,
+    planMode: !compact && body.planMode,
+    ...(compact ? { compact } : {}),
     systemPrompt: prepared.systemPrompt,
     memoryEnabled: prepared.agentMemoryEnabled === true,
     knowledgeBaseIds: prepared.promptKnowledgeBases.map((kb) => kb.id),
@@ -464,7 +482,7 @@ export async function createAgentTask(request: NextRequest) {
     p_checkpoint: checkpoint,
     p_message: assistant,
     p_credential: credential,
-    p_charge: !custom,
+    p_charge: !custom && !compact,
   });
   return jsonOk(await store.view(run), 201);
 }

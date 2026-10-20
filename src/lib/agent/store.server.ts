@@ -26,6 +26,8 @@ export interface AgentRunRow {
     codeMode?: boolean;
     /** Whether the model must submit a plan for approval before executing; fixed when the task is created. */
     planMode?: boolean;
+    /** A `/compact` task: it compacts the conversation's context for the next task and answers nothing. */
+    compact?: { instructions: string | null };
     systemPrompt: string;
     customProvider?: Omit<CustomProviderRequest, "apiKey">;
     userMessage: ChatMessage;

@@ -138,7 +138,8 @@ export async function projectDurableConversation(
     const scriptCall = live?.nestedTools?.findLast(slot => slot.status === "running");
     const content = live?.generation?.message?.content;
     checkpoint.runtime.activity = checkpoint.question ? { phase: "awaiting_input" }
-      : live?.compactions?.some(slot => slot.blocking) ? { phase: "compacting" }
+      // A generation waits for a blocking compaction; a `/compact` task waits for its manual one.
+      : live?.compactions?.some(slot => slot.blocking || slot.reason === "manual") ? { phase: "compacting" }
       : live?.generation?.retry ? { phase: "retrying", attempt: live.generation.attempt }
       : runningTool ? { phase: "tools", toolTitle: scriptCall ? `${title(runningTool.name)} · ${title(scriptCall.name)}` : title(runningTool.name) }
       : live?.generation ? { phase: content?.at(-1)?.type === "thinking" ? "thinking" : content?.some(part => part.type === "text") ? "responding" : "generating" }

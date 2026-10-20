@@ -3,8 +3,8 @@ import { BACKGROUND_CONTEXT, awaitWithContext, withCancel } from "@earendil-work
 import type { Context, JsonValue } from "@earendil-works/chord";
 import {
   CompactionTask, GenerationTask, ToolTask, Harness, createRegistry, defineTool, hook,
-  type Conversation, type ConversationWatch, type PromptSection, type StorageWrite,
-  type ToolExecutionApi, type ToolExecutionResult, type ToolHookCall, type UserInput,
+  type CompactionResult, type Conversation, type ConversationWatch, type PromptSection, type SettledTask, type StorageWrite,
+  type TaskId, type ToolExecutionApi, type ToolExecutionResult, type ToolHookCall, type UserInput,
 } from "@earendil-works/pi-durable";
 import {
   Type, type Api, type AssistantMessage, type Message, type Model,
@@ -55,6 +55,11 @@ search_knowledge、web_search 的每条结果和 focus_chart 的结果带 cite �
 信息完整且需要交叉分析多个体系时可使用 parallel_analysis，由当前任务汇总；给出简短 title，并用 topics 列出需要每位成员表态的关键议题，判断类议题提供 2–4 个互斥 options，便于对照分歧。长期记忆仅在用户已开启时可用，按需读取；只有用户明确表达值得跨任务保留的偏好或事实才可写回，必须附用户原话依据，不能保存推断、敏感凭据或短期任务结果。
 最终答复的最后另起一行写 <followups>，其后每行一个用户可能接着问的问题（2–3 个，每个不超过 20 字，用用户的口吻），最后一行写 </followups>；向用户提问或任务未完成时不写。`;
 export const AGENT_COMPACTION_FAILED_MESSAGE = "上下文过长且压缩失败，可开启新对话或重新发起任务";
+export const AGENT_MANUAL_COMPACTION_FAILED_MESSAGE = "上下文压缩失败，原上下文仍保留，可稍后再试";
+const MANUAL_COMPACTION_TEXT = {
+  compacted: "已压缩上下文：较早的内容整理成了摘要（可展开查看），最近的内容原样保留。接下来的提问会在压缩后的上下文上继续。",
+  unchanged: "当前上下文还不长，没有需要压缩的内容，接下来的提问照常继续。",
+} as const;
 
 export { piHistory } from "./history.server";
 
@@ -72,6 +77,25 @@ async function latestSubmission(storage: AgentDurableStorage, root: Conversation
     cursor = page.next;
   } while (cursor);
   return undefined;
+}
+
+/**
+ * The task's manual compaction: a takeover finds the one the previous worker admitted instead of admitting a second.
+ * A `/compact` task runs no generation, so its root conversation has no other compaction.
+ */
+async function manualCompaction(storage: AgentDurableStorage, root: Conversation, instructions: string | null, context: Context) {
+  const page = await storage.scanTasks({ conversationId: root.id, kind: CompactionTask.definition.name }, 1, undefined, context);
+  return (page.items[0]?.id as TaskId<CompactionResult> | undefined) ?? root.compact(instructions ?? undefined, context);
+}
+
+/** A manual compaction placed its summary, found nothing old enough to summarize, or failed (the context is kept). */
+async function manualCompactionOutcome(harness: Harness, task: SettledTask<CompactionResult>, context: Context) {
+  const outcome = task.state.outcome;
+  if (outcome.status !== "completed") return "failed" as const;
+  if (outcome.result.entryId !== undefined) return "compacted" as const;
+  if (outcome.result.submissionId === undefined) return "unchanged" as const;
+  const write = await (await harness.submission(outcome.result.submissionId, context))?.wait(context);
+  return write?.status === "done" ? "compacted" as const : "failed" as const;
 }
 
 async function latestAssistant(root: Conversation, context: Context) {
@@ -424,7 +448,7 @@ export async function executeAgentRun(
             };
             if (memo) { record(memo.summary); return memo; }
             try {
-              const result = await generateSummary(api, summaryModel, range.messages, compactContext);
+              const result = await generateSummary(api, summaryModel, range.messages, compactContext, range.instructions);
               const committed = await commitSummary(harness!, api, compactContext, `taibu/${summaryModel.id}`, result.summary, result.usage);
               record(committed.summary);
               return committed;
@@ -506,8 +530,16 @@ export async function executeAgentRun(
       projectionInFlight = project();
       try { await projectionInFlight; } catch { interrupt(); }
     });
+    let compacted: Awaited<ReturnType<typeof manualCompactionOutcome>> | undefined;
     if (stopping) {
       await root.abort(context, { background: true });
+    } else if (run.input.compact) {
+      // `/compact` answers nothing: it compacts the context it continues, which the next task then reuses.
+      const task = await manualCompaction(storage, root, run.input.compact.instructions, context);
+      harness.resume();
+      const settled = await Promise.race([harness.waitForTask(task, context), interruption]);
+      if (settled === "interrupted" || interrupted) return;
+      compacted = await manualCompactionOutcome(harness, settled, context);
     } else {
       // If a crash followed admission, the native receipt wins over the outer flag.
       const admitted = await latestSubmission(storage, root, context);
@@ -551,12 +583,16 @@ export async function executeAgentRun(
     if (interrupted) return;
     const failed = (last !== undefined && last.stopReason !== "stop" && last.stopReason !== "toolUse") ||
       submission?.status === "unanswered";
+    if (compacted && compacted !== "failed" && !stopping)
+      putAgentPart(checkpoint.parts, { type: "text", id: "compact:result", text: MANUAL_COMPACTION_TEXT[compacted] });
     const status = stopping ? "cancelled" : checkpoint.question ? "awaiting_input" :
+      compacted ? (compacted === "failed" ? "failed" : "completed") :
       failed || !text.trim() ? "failed" : "completed";
     // A blocking compaction that fails leaves the input unanswered with Pi's "Compaction failed: …" detail.
     const compactionFailed = submission?.status === "unanswered" && typeof submission.detail === "string" &&
       submission.detail.startsWith("Compaction failed");
-    await finish(status, last?.errorMessage === AGENT_UNSUPPORTED_TOOLS_MESSAGE ? AGENT_UNSUPPORTED_TOOLS_MESSAGE
+    await finish(status, compacted ? AGENT_MANUAL_COMPACTION_FAILED_MESSAGE
+      : last?.errorMessage === AGENT_UNSUPPORTED_TOOLS_MESSAGE ? AGENT_UNSUPPORTED_TOOLS_MESSAGE
       : compactionFailed ? AGENT_COMPACTION_FAILED_MESSAGE : undefined);
   } catch (error) {
     if (interrupted || shutdown?.aborted || storage?.isUnavailable) return;

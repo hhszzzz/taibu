@@ -29,7 +29,7 @@ const model: AIModelConfig = {
   supportsReasoning: true,
   requiredTier: "free",
 };
-function setup(t: TestContext) {
+function setup(t: TestContext, messages: unknown[] = []) {
   const owner = randomUUID(),
     conversation = randomUUID(),
     writes: Array<{ name: string; args: Record<string, unknown> }> = [];
@@ -37,7 +37,7 @@ function setup(t: TestContext) {
     tables: {
       agent_run_commands: { data: null },
       conversations: {
-        data: { id: conversation, messages: [], title: "fixture" },
+        data: { id: conversation, messages, title: "fixture" },
       },
     },
   });
@@ -169,6 +169,57 @@ test("Agent admission honors a denied rate-limit result for platform and BYOK wi
     assert.equal((await response.json()).code, "RATE_LIMITED");
   }
   assert.equal(fixture.writes.length, 0);
+});
+
+const earlierTurn = [
+  { id: 'asked', role: 'user', content: '帮我看看八字', createdAt: '2026-10-20T00:00:00Z' },
+  { id: 'answered', role: 'assistant', content: '日主庚金。', createdAt: '2026-10-20T00:01:00Z' },
+];
+
+test('/compact creates a free, tool-less task in its own rate-limit bucket, even without credits', async t => {
+  const fixture = setup(t, earlierTurn);
+  t.mock.method(fixture.credits, 'getUserAuthInfo', async () => ({ credits: 0, hasCredits: false, effectiveMembership: 'plus' }));
+  const buckets: string[] = [];
+  t.mock.method(fixture.rate, 'checkRateLimit', async (_owner: string, endpoint: string) => {
+    buckets.push(endpoint);
+    return { allowed: true, remaining: 9, resetAt: new Date(Date.now() + 60000) };
+  });
+  const member = { id: 'first', name: '分析', model: 'fixture', focus: '', reasoning: false, reasoningEffort: null };
+  const response = await agentEndpoint(() => createAgentTask(fixture.request({
+    ...fixture.body, message: { id: 'compact', content: '/compact  保留八字结论 ' }, webEnabled: true, codeMode: true, planMode: true, collaborators: [member],
+  })));
+  assert.equal(response.status, 201);
+  assert.deepEqual(buckets, ['/api/agent/compact']);
+  const write = fixture.writes[0];
+  assert.equal(write.args.p_charge, false);
+  const input = write.args.p_input as AgentRunRow['input'];
+  assert.deepEqual(input.compact, { instructions: '保留八字结论' });
+  assert.deepEqual([input.webEnabled, input.codeMode, input.planMode, input.collaborators], [false, false, false, []]);
+  assert.deepEqual((write.args.p_checkpoint as AgentRunRow['checkpoint']).messages.map(message => message.role), ['user', 'assistant', 'user'], 'it compacts the conversation it continues');
+});
+
+test('/compact on a conversation without history fails before creation', async t => {
+  const fixture = setup(t);
+  const response = await agentEndpoint(() => createAgentTask(fixture.request({ ...fixture.body, message: { id: 'compact', content: '/compact' } })));
+  assert.equal(response.status, 400); assert.match((await response.json()).error, /没有可压缩/);
+  assert.equal(fixture.writes.length, 0);
+});
+
+test('/compact refuses attached material and long instructions, and honors its own rate limit', async t => {
+  const fixture = setup(t, earlierTurn);
+  for (const extra of [
+    { message: { id: 'compact', content: '/compact', attachments: { ids: [randomUUID()] } } },
+    { message: { id: 'compact', content: '/compact' }, mentions: [{ type: 'knowledge_base', name: '资料', preview: '' }] },
+    { message: { id: 'compact', content: '/compact' }, fileContent: '附件正文' },
+    { message: { id: 'compact', content: `/compact ${'重点'.repeat(251)}` } },
+  ]) assert.equal((await agentEndpoint(() => createAgentTask(fixture.request({ ...fixture.body, ...extra })))).status, 400, JSON.stringify(extra).slice(0, 80));
+  t.mock.method(fixture.rate, 'checkRateLimit', async () => ({ allowed: false, remaining: 0, resetAt: new Date(Date.now() + 60000) }));
+  const limited = await agentEndpoint(() => createAgentTask(fixture.request({ ...fixture.body, message: { id: 'compact', content: '/compact' } })));
+  assert.equal(limited.status, 429); assert.match((await limited.json()).error, /压缩上下文过于频繁/);
+  assert.equal(fixture.writes.length, 0);
+  const ordinary = await agentEndpoint(() => createAgentTask(fixture.request({ ...fixture.body, message: { id: 'question', content: '/compactness 是什么' } })));
+  assert.equal(ordinary.status, 429);
+  assert.match((await ordinary.json()).error, /请求过于频繁/, 'any other message is an ordinary task in the shared bucket');
 });
 
 test("Agent feature admission fails closed when fresh configuration cannot be read", async (t) => {

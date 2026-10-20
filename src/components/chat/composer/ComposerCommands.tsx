@@ -8,9 +8,10 @@ import { requestBrowserJson } from '@/lib/browser-api';
 import { CHAT_NEW_EVENT } from '@/lib/chat/ConversationListContext';
 import { requestConversationExport } from '@/lib/chat/conversation-export';
 type Command = { id: string; label: string; run: () => void };
-export function useComposerCommands({ userId, draftKey, text, change, textarea, mentionsOpen, model }: {
+export function useComposerCommands({ userId, draftKey, text, change, textarea, mentionsOpen, model, agentMode = false }: {
     draftKey?: string;
     userId?: string | null; text: string; change: (value: string) => void; textarea: RefObject<HTMLTextAreaElement | null>; mentionsOpen: boolean; model: string;
+    agentMode?: boolean;
 }) {
     const { showToast } = useToast();
     const [selected, setSelected] = useState(0);
@@ -46,6 +47,8 @@ export function useComposerCommands({ userId, draftKey, text, change, textarea, 
         { id: 'export', label: '导出当前对话', run: requestConversationExport },
         { id: 'clear', label: '清空输入草稿', run: () => change('') },
         { id: 'methods', label: '选择分析方法', run: () => dispatch('taibu:methods') },
+        // 压缩是 Agent 对话的指令：填入 `/compact `，可接着写想保留的重点，回车发送。
+        ...(agentMode ? [{ id: 'compact', label: '压缩上下文', run: () => { change('/compact '); textarea.current?.focus(); } }] : []),
     ];
     const prefix = /^[\/、]([^\s]*)$/u.exec(text);
     const matches = prefix ? commands.filter(command => command.id.includes(prefix[1].toLowerCase()) || command.label.includes(prefix[1])) : [];

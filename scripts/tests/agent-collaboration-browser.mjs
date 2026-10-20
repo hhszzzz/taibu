@@ -106,7 +106,7 @@ export async function verifyAgentCollaboration({ page, newChat, send, waitForRun
   const teamStep = page.locator('.agent-step').filter({ has: page.locator('.agent-step-title', { hasText: '协作分析' }) }).first();
   await teamStep.locator('.agent-step-row').click();
   // 协作步骤展开后直接列出成员：点成员打开它自己的页面，再回到协作对照页。
-  await teamStep.locator('.agent-step-members button').first().click();
+  await teamStep.locator('.agent-step-entities[aria-label="协作成员"] button').first().click();
   const panel = page.locator('aside#agent-workspace-panel, [role="dialog"][aria-label="工作区"]').first();
   await panel.waitFor();
   await panel.getByRole('tab', { name: /协作分析|会诊/ }).first().click();

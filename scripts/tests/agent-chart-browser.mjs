@@ -102,7 +102,7 @@ export async function verifyAgentChartWorkspace({ page, newChat, send, waitForRu
   const focusStep = page.locator('.agent-message .agent-step').filter({ hasText: actions.at(-1).title }).last();
   if (await focusStep.locator('.agent-step-row').getAttribute('aria-expanded') !== 'true') await focusStep.locator('.agent-step-row').click();
   // 定位步骤的结构化结果自带「查看盘面」入口，不再重复「在工作区查看」。
-  const openFocus = focusStep.getByRole('button', { name: '在工作区查看', exact: true });
+  const openFocus = focusStep.getByRole('button', { name: /^(在工作区查看|查看盘面|查看详查)$/ });
   if (await openFocus.count()) await openFocus.click();
   else await focusStep.getByRole('button', { name: '查看盘面', exact: true }).click();
   await selectedTarget(focus).waitFor();

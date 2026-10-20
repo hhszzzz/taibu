@@ -1969,7 +1969,7 @@ export async function run(existingPage, bundlePath) {
     check('A step discloses its canonical text without raw argument keys', await timedStep.locator('.agent-step-row').getAttribute('aria-expanded') === 'true' &&
       await timedStep.locator('.agent-step-command').count() === 0 && await timedStep.locator('.agent-step-output').innerText().then(text => !text.includes('birthYear')) &&
       await timedStep.getByRole('button', { name: '复制调用参数', exact: true }).count() === 0);
-    await timedStep.getByRole('button', { name: '在工作区查看', exact: true }).click();
+    await timedStep.getByRole('button', { name: /^(在工作区查看|查看盘面|查看详查)$/ }).click();
     await page.locator('#agent-workspace-panel [data-chart-kind="bazi"]').waitFor();
     check('A step opens its reading in the workspace and marks the step', await timedStep.locator('.agent-step-row').getAttribute('aria-current') === 'true' &&
       await results.locator('[aria-current="true"]').count() === 1);
@@ -1987,7 +1987,7 @@ export async function run(existingPage, bundlePath) {
     // 工作区再次从步骤打开；概览列出全部成果。
     await results.getByRole('button', { name: /任务过程/ }).click();
     if (await timedStep.locator('.agent-step-row').getAttribute('aria-expanded') !== 'true') await timedStep.locator('.agent-step-row').click();
-    await timedStep.getByRole('button', { name: '在工作区查看', exact: true }).click();
+    await timedStep.getByRole('button', { name: /^(在工作区查看|查看盘面|查看详查)$/ }).click();
     await page.locator('#agent-workspace-panel [data-chart-kind="bazi"]').waitFor();
     check('The workspace opens on the reading', await page.locator('#agent-workspace-panel [data-chart-kind="bazi"]').count() === 1);
     await page.locator('#agent-workspace-panel').getByRole('tab', { name: '概览', exact: true }).click();
@@ -2007,7 +2007,7 @@ export async function run(existingPage, bundlePath) {
     if (await results.getByRole('button', { name: /任务过程/ }).getAttribute('aria-expanded') !== 'true') await results.getByRole('button', { name: /任务过程/ }).click();
     const tarotStep = results.locator('.agent-step').filter({ has: page.locator('.agent-step-title', { hasText: '塔罗抽牌' }) });
     await tarotStep.locator('.agent-step-row').click();
-    await tarotStep.getByRole('button', { name: '在工作区查看', exact: true }).click();
+    await tarotStep.getByRole('button', { name: /^(在工作区查看|查看盘面|查看详查)$/ }).click();
     await page.locator('#agent-workspace-panel [data-chart-kind="tarot"]').waitFor();
     check('Workspace supports multiple pinned readings without replacing their data', await page.getByRole('tab', { name: '八字命盘', exact: true }).count() === 1 && await page.locator('#agent-workspace-panel [data-chart-kind="tarot"]').count() === 1);
     await page.getByRole('button', { name: '关闭工作区', exact: true }).click();
@@ -2015,7 +2015,7 @@ export async function run(existingPage, bundlePath) {
     // 步骤行 = 打开对应命盘的入口（聊天里不再有卡片，夹具也不渲染会话栏）。
     if (await results.getByRole('button', { name: /任务过程/ }).getAttribute('aria-expanded') !== 'true') await results.getByRole('button', { name: /任务过程/ }).click();
     if (await timedStep.locator('.agent-step-row').getAttribute('aria-expanded') !== 'true') await timedStep.locator('.agent-step-row').click();
-    await timedStep.getByRole('button', { name: '在工作区查看', exact: true }).click();
+    await timedStep.getByRole('button', { name: /^(在工作区查看|查看盘面|查看详查)$/ }).click();
     await page.locator('#agent-workspace-panel [data-chart-kind="bazi"]').waitFor();
     const interactive = page.locator('#agent-workspace-panel');
     check('An ended task offers no follow control', await interactive.getByRole('button', { name: '跟随模型', exact: true }).count() === 0);
@@ -2030,17 +2030,19 @@ export async function run(existingPage, bundlePath) {
     check('Clicking a chart position asks about it without changing the model-given focus', await interactive.getByRole('button', { name: '跟随模型', exact: true }).getAttribute('aria-pressed') === 'true' &&
       await interactive.locator('[data-chart-target="bazi:cell:2:1"]').getAttribute('aria-pressed') === 'true' &&
       await interactive.locator('[data-chart-target="bazi:cell:2:0"]').getAttribute('aria-pressed') === 'false');
-    // 这张盘没有合冲刑害，打开即是「流通」：相邻天干的生克画在天干行上方，文字关系清单不再出现。
+    // 盘面默认「全部」：这张盘没有合冲刑害，因此只有流通——相邻天干的生克画在天干行上方，文字关系清单不再出现。
     const board = interactive.locator('.agent-board-relations');
     const edges = interactive.locator('.agent-chart-scroll [data-relation-overlay] [data-relation-edge]');
     const adjacentStemFlow = await page.evaluate(() => window.fixture.chartTargets('bazi').filter(target => target.kind === 'bazi_relation' && ['生', '克'].includes(target.relation.类型)
       && Math.abs(['年柱', '月柱', '日柱', '时柱'].indexOf(target.relation.位置[0].柱) - ['年柱', '月柱', '日柱', '时柱'].indexOf(target.relation.位置[1].柱)) === 1).length);
-    check('Bazi relations are drawn on the table instead of a text list, opening on flow when the chart has no clashes or combinations', await board.getAttribute('data-board-mode') === 'flow' &&
+    check('Bazi relations are drawn on the table instead of a text list, opening with relations and flow together', await board.getAttribute('data-board-mode') === 'all' &&
       await interactive.locator('.agent-board-relations ul, .agent-board-relation-text').count() === 0 && adjacentStemFlow > 0 && await edges.count() === adjacentStemFlow &&
       await interactive.locator('.agent-chart-scroll [data-relation-overlay] path[marker-end]').count() === adjacentStemFlow && await interactive.locator('[data-wuxing-cycle] [data-element]').count() === 6);
-    // 夹具不加载应用样式表，标签列的视觉由自托管截图验收；这里只验结构：行标签是 th，天干行为连线留出了高度。
-    check('The table reserves a band above the stems for the lines, and its labels are row headers', await interactive.locator('[data-chart-kind="bazi"] tbody th[scope="row"]').count() >= 5 &&
-      await interactive.locator('[data-chart-kind="bazi"] tr[data-row="stem"] > td').evaluateAll(cells => cells.every(cell => cell.style.paddingTop.startsWith('calc('))));
+    // 夹具不加载应用样式表，标签列的视觉由自托管截图验收；这里只验结构：行标签是 th；
+    // 相邻天干的生克是两字之间的直连线，不占天干上方的连线层，天干行因此不额外留白。
+    check('Adjacent stems are linked directly between the glyphs, so the stem row needs no band, and labels are row headers', await interactive.locator('[data-chart-kind="bazi"] tbody th[scope="row"]').count() >= 5 &&
+      await interactive.locator('.agent-chart-scroll [data-relation-edge][data-relation-shape="inline"]').count() === adjacentStemFlow &&
+      await interactive.locator('[data-chart-kind="bazi"] tr[data-row="stem"] > td').evaluateAll(cells => cells.every(cell => !cell.style.paddingTop)));
     const relation = interactive.locator('[data-relation-badge][data-chart-target]').first();
     await relation.click();
     await until(() => window.fixture.chartQuestion?.targets?.[0]?.kind === 'bazi_relation');
@@ -2060,13 +2062,8 @@ export async function run(existingPage, bundlePath) {
     // 同柱的通根 / 透干画成短竖线；透干同时也并进该柱的聚合标记，因此两边的计数口径要分开。
     const flowCounts = await page.evaluate(() => {
       const result = window.fixture.baziDrilldownResult('bazi_wuxing');
-      const samePillar = row => row.位置[0].柱 === row.位置[1].柱;
-      const verticalRoots = result.通根.filter(samePillar).length;
-      const verticalReveals = result.透干.filter(samePillar).length;
-      return {
-        lines: result.干支自坐.length + result.相邻天干.length + verticalRoots + verticalReveals,
-        grouped: result.通根.length - verticalRoots + result.透干.length,
-      };
+      // 干支之间每柱只画一支自坐箭头；通根、透干（不论同柱跨柱）都收进每柱的聚合标记。
+      return { lines: result.干支自坐.length + result.相邻天干.length, grouped: result.通根.length + result.透干.length };
     });
     const markerGroups = interactive.locator('.agent-chart-scroll [data-relation-marker-group]');
     const markerCount = () => markerGroups.evaluateAll(nodes => nodes.reduce((sum, node) => sum + Number(node.dataset.relationMarkerGroup), 0));
@@ -2088,6 +2085,11 @@ export async function run(existingPage, bundlePath) {
     await firstMark.click();
     await board.getByRole('button', { name: '不显示', exact: true }).click();
     check('Lines can be switched off, leaving only what the model located', await edges.count() === 0);
+    // 「全部」同时画关系与流通（分层由单测覆盖）；Agent 看的是流通时，关系线淡化但仍在盘上。
+    await board.getByRole('button', { name: /^全部/ }).click();
+    check('All draws relations and flow together', await edges.count() === flowCounts.lines + 1 && await markerCount() === flowCounts.grouped &&
+      await interactive.locator('.agent-chart-scroll [data-relation-edge][data-tone="break"]').count() === 1);
+    await board.getByRole('button', { name: '不显示', exact: true }).click();
     // 详查结果落在盘面上，规范文本在对话步骤里展开；命盘标签不再重复列一遍详查。
     check('The chart tab does not repeat the drilldowns below the board', await page.locator('#agent-workspace-panel .agent-ws-drilldowns').count() === 0);
     // 详查还在跑时，盘面已经说明模型正在看什么，并切到对应的连线模式。
@@ -2197,11 +2199,11 @@ export async function run(existingPage, bundlePath) {
     const teamStep = results.locator('.agent-step').filter({ has: page.locator('.agent-step-title', { hasText: '协作分析' }) });
     await teamStep.locator('.agent-step-row').click();
     // 展开的协作步骤列出成员，点成员直接打开它的独立页面。
-    await teamStep.locator('.agent-step-members button').first().click();
+    await teamStep.locator('.agent-step-entities[aria-label="协作成员"] button').first().click();
     const memberPage = page.locator('#agent-workspace-panel [data-workspace-view="member"]');
     await memberPage.waitFor();
-    check('A collaboration step names its members and opens each one’s own page', await teamStep.locator('.agent-step-members button').count() === 2 &&
-      await teamStep.locator('.agent-step-members').innerText().then(text => text.includes('八字分析') && text.includes('独立复核')) &&
+    check('A collaboration step names its members and opens each one’s own page', await teamStep.locator('.agent-step-entities[aria-label="协作成员"] button').count() === 2 &&
+      await teamStep.locator('.agent-step-entities[aria-label="协作成员"]').innerText().then(text => text.includes('八字分析') && text.includes('独立复核')) &&
       await memberPage.innerText().then(text => text.includes('八字分析') && text.includes('调用了 3 次工具')));
     await page.locator('#agent-workspace-panel').getByRole('tab', { name: '两派会诊', exact: true }).click();
     const collaboration = page.locator('#agent-workspace-panel [data-workspace-view="collaboration"]');
@@ -2220,7 +2222,7 @@ export async function run(existingPage, bundlePath) {
     await reviewerPage.waitFor();
     const processLine = reviewerPage.locator('.agent-ws-member-process-heading');
     check('A finished member folds its process into one line on its own page and keeps the raw artifact ID out of its answer', await processLine.getAttribute('aria-expanded') === 'false' &&
-      await processLine.innerText().then(text => text.includes('调用了 2 次工具')) && await reviewerPage.locator('.agent-ws-member-answer').innerText().then(text => text.trim() === '生克关系复核完成。'));
+      await processLine.innerText().then(text => text.includes('已查看 1 张命盘')) && await reviewerPage.locator('.agent-ws-member-answer').innerText().then(text => text.trim() === '生克关系复核完成。'));
     await processLine.click();
     const firstCall = reviewerPage.locator('.agent-ws-member-call').first();
     check('The member process shows what it said before a call and what each call was', await reviewerPage.locator('.agent-ws-member-note').innerText() === '先排盘，再逐条复核生克。' &&
@@ -2245,7 +2247,7 @@ export async function run(existingPage, bundlePath) {
     if (await results.getByRole('button', { name: /任务过程/ }).getAttribute('aria-expanded') !== 'true') await results.getByRole('button', { name: /任务过程/ }).click();
     const dayunStep = results.locator('.agent-step').filter({ has: page.locator('.agent-step-title', { hasText: '八字大运' }) });
     await dayunStep.locator('.agent-step-row').click();
-    await dayunStep.getByRole('button', { name: '在工作区查看', exact: true }).click();
+    await dayunStep.getByRole('button', { name: /^(在工作区查看|查看盘面|查看详查)$/ }).click();
     const workspacePanel = page.locator('#agent-workspace-panel');
     // 过程标签已移除：从聊天转录的步骤行打开同一个工作区视图。
     const openProcessStep = async (name, tabName) => {
@@ -2256,7 +2258,7 @@ export async function run(existingPage, bundlePath) {
       // 协作步骤展开后列出成员，不再有「在工作区查看」；协作总览从它自己的标签进入。
       if (tabName) { await workspacePanel.getByRole('tab', { name: tabName, exact: true }).click(); return; }
       // 结构化结果（方法、记忆、资料…）就在步骤里，入口改成「查看…」；其余调用仍是「在工作区查看」。
-      const open = step.getByRole('button', { name: '在工作区查看', exact: true });
+      const open = step.getByRole('button', { name: /^(在工作区查看|查看盘面|查看详查)$/ });
       if (await open.count()) await open.click();
       else await step.locator('.agent-step-structured-open').first().click();
     };
@@ -2265,7 +2267,7 @@ export async function run(existingPage, bundlePath) {
       if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
       const step = results.locator('.agent-step').filter({ has: page.locator('.agent-step-title', { hasText: name }) }).last();
       if (await step.locator('.agent-step-row').getAttribute('aria-expanded') !== 'true') await step.locator('.agent-step-row').click();
-      await step.locator('.agent-step-members button').filter({ hasText: memberName }).click();
+      await step.locator('.agent-step-entities[aria-label="协作成员"] button').filter({ hasText: memberName }).click();
     };
     await workspacePanel.locator('[data-workspace-view="calculation"]').waitFor();
     check('A calculation step opens the persisted Core dayun timeline with exactly one current period', await workspacePanel.locator('.agent-ws-timeline > li').count() === 9 &&

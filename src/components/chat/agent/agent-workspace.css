@@ -498,6 +498,22 @@ button.agent-ws-status-head:disabled { cursor: default; }
 .agent-context-legend dd em { min-width: 38px; font-style: normal; text-align: right; }
 .agent-context-foot { margin: 8px 0 0; font-size: calc(12 / 16 * 1rem); line-height: 1.6; color: var(--foreground-tertiary); }
 
+/* 代码模式「运行脚本」页：脚本与输出等宽限高；调用逐行可点，打开该次调用所在的页面。 */
+.agent-ws-script { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+.agent-ws-script > h3 { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: calc(13.5 / 16 * 1rem); font-weight: 600; }
+.agent-ws-code { max-height: 22rem; margin: 0; padding: 10px 12px; overflow: auto; border: var(--hairline) solid var(--hairline-color); border-radius: 12px; background: var(--background-secondary); color: var(--foreground-secondary); font-family: var(--font-mono); font-size: calc(12.5 / 16 * 1rem); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 2; }
+.agent-ws-script-calls { display: flex; flex-direction: column; border: var(--hairline) solid var(--hairline-color); border-radius: 12px; background: var(--chat-raised); }
+.agent-ws-script-calls > li + li { border-top: 1px solid var(--border); }
+.agent-ws-script-calls button, .agent-ws-script-call { display: flex; width: 100%; min-width: 0; align-items: center; gap: 8px; padding: 9px 12px; text-align: left; }
+/* 没有执行的调用（被阻断、参数无效、不存在）没有自己的页面：整行不可点，说明原因。 */
+.agent-ws-script-call small { white-space: normal; overflow-wrap: anywhere; }
+.agent-ws-script-calls strong { flex-shrink: 0; font-size: calc(13 / 16 * 1rem); font-weight: 550; }
+.agent-ws-script-calls small { min-width: 0; flex: 1 1 auto; overflow: hidden; font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); text-overflow: ellipsis; white-space: nowrap; }
+.agent-ws-script-calls .agent-ws-badge { margin-left: auto; }
+.agent-ws-script-calls .agent-ws-badge[data-state="failed"] { color: var(--danger); }
+.agent-ws-script-calls svg { flex-shrink: 0; color: var(--foreground-tertiary); }
+.agent-ws-script-calls button:hover strong { color: var(--accent-hover); }
+
 /* 命盘标签的「详查」区：每次详查一条，可折叠；表格沿用推演表样式 */
 .agent-ws-drilldowns { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
 .agent-ws-drilldowns > h3 { font-size: calc(13 / 16 * 1rem); font-weight: 600; color: var(--foreground); }

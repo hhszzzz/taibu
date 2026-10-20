@@ -5,7 +5,11 @@ import { getDerivedToolSource, listToolDefinitions } from 'taibu-core/mcp';
 import type { JsonObject } from '@earendil-works/pi-ai';
 import { MockLanguageModelV3 } from 'ai/test';
 import type { AgentRunRow } from '../lib/agent/store.server';
-import { AGENT_CHART_NAMES, AGENT_DRILLDOWN_BASES, getAgentDrilldownBase, getAgentToolFamily, isAgentChartTool, projectsAgentCanonicalText } from '../lib/agent/tool-catalog';
+import { CODEMODE_TOOL_NAME } from '@earendil-works/pi-durable/codemode';
+import {
+  AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_DRILLDOWN_BASES, AGENT_MODEL_ONLY_TOOLS, getAgentDrilldownBase, getAgentExtensionToolTitle, getAgentToolFamily,
+  isAgentChartTool, projectsAgentCanonicalText, returnsAgentScriptResult,
+} from '../lib/agent/tool-catalog';
 import { getAgentToolText, type AgentToolPart } from '../lib/agent/tool-presentation';
 import { createAgentTools } from '../lib/agent/tools.server';
 import { createParallelExtension } from '../lib/agent/parallel.server';
@@ -44,20 +48,29 @@ test('every Core tool and every registered Agent tool belongs to a presentation 
     const names = [...tools.map((tool) => tool.name), ...(parallel.tools ?? []).map((tool) => tool.name)];
     assert.ok(names.includes('web_search') && names.includes('remember_user_fact') && names.includes('parallel_analysis'));
     for (const name of names) assert.notEqual(getAgentToolFamily(name), 'other', `${name} needs a family in tool-catalog.ts`);
+    // Code mode: the tools a script may not call are real tools, and parallel_analysis says so itself.
+    for (const name of AGENT_MODEL_ONLY_TOOLS) assert.ok(names.includes(name), `${name} is not a registered tool`);
+    assert.deepEqual(parallel.tools?.find(tool => tool.name === 'parallel_analysis')?.callers, ['model']);
+    for (const name of names) assert.equal(returnsAgentScriptResult(name), ['chart', 'calculation', 'drilldown'].includes(getAgentToolFamily(name)) && !AGENT_MODEL_ONLY_TOOLS.has(name), name);
   } finally {
     if (previous === undefined) delete process.env.TAVILY_API_KEY;
     else process.env.TAVILY_API_KEY = previous;
   }
   assert.equal(getAgentToolFamily('mcp__archive__search'), 'external');
   assert.equal(getAgentToolFamily('focus_chart'), 'chart');
+  assert.equal(AGENT_CODEMODE_TOOL, CODEMODE_TOOL_NAME, 'the catalog names Pi’s code mode tool');
+  assert.equal(getAgentToolFamily(AGENT_CODEMODE_TOOL), 'code');
   for (const name of ['bazi_dayun', 'bazi_pillars_resolve', 'ziwei_horoscope', 'ziwei_flying_star', 'inspect_chart', 'read_user_data'])
     assert.equal(projectsAgentCanonicalText(name), true, name);
   for (const name of ['focus_chart', 'web_search', 'todo_write', 'mcp__archive__search'])
     assert.equal(projectsAgentCanonicalText(name), false, `${name} returns structured data, not canonical text`);
+  assert.equal(getAgentExtensionToolTitle(AGENT_CODEMODE_TOOL), '运行脚本');
   for (const name of ['unknown', '__proto__', 'constructor', 'toString', '']) {
     assert.equal(getAgentToolFamily(name), 'other', JSON.stringify(name));
     assert.equal(isAgentChartTool(name), false);
     assert.equal(projectsAgentCanonicalText(name), false);
+    assert.equal(returnsAgentScriptResult(name), false);
+    assert.equal(getAgentExtensionToolTitle(name), undefined, JSON.stringify(name));
   }
 });
 

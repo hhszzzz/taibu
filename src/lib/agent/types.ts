@@ -28,6 +28,10 @@ export type AgentPart =
       /** Native task wall-clock timestamps, including waits and takeover. */
       startedAt?: number;
       endedAt?: number;
+      /** The card of the call that made this one: a code mode script's tool calls are nested under it. */
+      parentId?: string;
+      /** Which of its script's calls this is: the number of the row the script's card lists for it. */
+      scriptCall?: number;
     }
   | { type: "source"; id: string; title: string; url: string; content?: string }
   | { type: "question"; id: string; question: string; questions?: AgentQuestion[] }
@@ -156,6 +160,13 @@ export function isAgentRunTerminal(status: AgentRunStatus) {
   return (
     status === "completed" || status === "cancelled" || status === "failed"
   );
+}
+
+/** Replace the part with the same type and ID in place, or append it. */
+export function putAgentPart(parts: AgentPart[], part: AgentPart) {
+  const index = parts.findIndex(item => item.type === part.type && item.id === part.id);
+  if (index < 0) parts.push(part);
+  else parts[index] = part;
 }
 
 export function agentMessageContent(parts: AgentPart[]) {

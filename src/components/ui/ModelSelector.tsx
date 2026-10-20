@@ -56,7 +56,7 @@ function reasoningSummary(model: ClientModelConfig | undefined, enabled: boolean
 }
 
 export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange, reasoningEnabled = false, onReasoningChange,
-    reasoningEffort, onReasoningEffortChange, collaborators = [], onCollaboratorsChange, extra, onCustomProvider,
+    reasoningEffort, onReasoningEffortChange, collaborators = [], onCollaboratorsChange, codeMode = false, onCodeModeChange, extra, onCustomProvider,
     userId, membershipType = 'free', disabled = false, compact = false, toolbarStyle = false }: ModelSelectorProps) {
     const [open, setOpen] = useState(false);
     const [effortOpen, setEffortOpen] = useState(false);
@@ -171,6 +171,11 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
                 aria-haspopup="menu" aria-expanded={collabOpen} disabled={disabled || !available.length}
                 onClick={() => setCollabOpen(value => !value)}>
                 <span>多模型协作</span>{collaborationEnabled && <span className="chat-model-menu-value">{subCollaborators.length}</span>}<ChevronRight size={14} aria-hidden="true" />
+            </button>}
+            {/* 代码模式：Agent 可写脚本批量排盘、逐年扫描；与联网一样在下个任务创建时固定。 */}
+            {onCodeModeChange && <button type="button" role="menuitemcheckbox" aria-checked={codeMode} className="chat-model-action chat-model-menu-row"
+                disabled={disabled} title="允许 Agent 写脚本批量排盘、逐年扫描与比较参数，下个任务生效" onClick={() => onCodeModeChange(!codeMode)}>
+                <span>代码模式</span>{codeMode && <Check size={14} aria-hidden="true" />}
             </button>}
             {extra}
             {onCustomProvider && <>

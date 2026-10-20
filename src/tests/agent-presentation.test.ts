@@ -8,7 +8,7 @@ import { getAgentChart } from '../lib/agent/tool-presentation';
 import { buildAgentWorkspace } from '../lib/agent/workspace';
 import {
     collectAgentArtifacts, describeAgentCallNote, describeAgentChartRules, describeAgentChartSteps, describeAgentChartSubject, describeAgentStep, formatAgentToolDuration,
-    getAgentStepNumbers, getAgentSteps, getAgentLiveLine, getAgentArtifactHref, getAgentLocatedPositions, getAgentReadingState, getAgentToolState,
+    getAgentStepNumbers, getAgentSteps, getAgentScriptCalls, getAgentLiveLine, getAgentArtifactHref, getAgentLocatedPositions, getAgentReadingState, getAgentToolState,
     getAgentResponseTiming, getAgentRoundFolds, getAgentTaskDuration, getAgentTaskSpan, getDayunWindow, groupAgentParts, getAgentActivityLabel, getAgentEvidenceSummary, stripLeadingTitle,
     summarizeAgentProcess, summarizeAgentActivity, summarizeAgentTool, formatMemberNames, getFinalArtifactGroups, AGENT_TOOL_FAMILY_LABELS, type AgentArtifact, type AgentTool,
 } from '../components/chat/agent/presentation';
@@ -118,8 +118,20 @@ test('process steps summarize each call from its arguments and stored result onl
     assert.equal(summarizeAgentTool(tool('focus_chart', { output: { chartFocus: { version: 1, reference: 'artifact:11111111-1111-4111-8111-111111111111', targetIds: [], includeRelated: true, caption: '月干丁火' } } })), '月干丁火');
     assert.equal(summarizeAgentTool(tool('read_attachment', { output: { id: 'a', name: '长文.txt', kind: 'text', text: '一二', offset: 0, total: 9, nextOffset: 2 } })), '长文.txt · 读到 2 / 9 字');
     assert.equal(summarizeAgentTool(tool('mcp__archive__lookup', { input: { keyword: 1 } })), null);
-    assert.equal(Object.keys(AGENT_TOOL_FAMILY_LABELS).length, 13, 'every tool family has a step tag');
+    assert.equal(Object.keys(AGENT_TOOL_FAMILY_LABELS).length, 14, 'every tool family has a step tag');
     assert.equal(summarizeAgentTool(tool('bazi_relations', { input: { reference: 'artifact:x', year: 2027, dayun: 4 } })), '2027 年 · 第 4 步大运', 'a drilldown reads its selectors, never the chart reference');
+});
+
+test('a code mode script is one step and its calls stay inside it', () => {
+    const script: AgentTool = { type: 'tool', id: 'native-tool:3:script', name: 'codemode', title: '运行脚本', status: 'completed', input: { code: 'return 1' },
+        output: { calls: [{ id: 1, name: 'bazi', args: '{}', status: 'ok' }, { id: 2, name: 'bazi', args: '{}', status: 'error', error: 'blocked' }, { id: '3', name: 'bazi', status: 'ok' }], output: '1' } };
+    const calls: AgentTool[] = [7, 8].map((task, index) => ({ type: 'tool', id: `nested:${task}`, name: 'bazi', title: '八字排盘', status: 'completed', parentId: script.id, scriptCall: index + 1 }));
+    const parts: AgentPart[] = [script, ...calls, { type: 'tool', id: 'native-tool:4:select', name: 'select_final_artifacts', title: '选定成果', status: 'completed' }];
+    assert.deepEqual(getAgentSteps(parts).map(step => step.id), [script.id, 'native-tool:4:select'], 'the calls are not steps of their own');
+    assert.deepEqual(getAgentScriptCalls(parts).get(script.id)?.map(call => call.id), ['nested:7', 'nested:8']);
+    assert.equal(summarizeAgentTool(script), '调用 2 次 · 1 次失败', 'a blocked call counts though it has no part; a row without a call number is not one');
+    assert.equal(summarizeAgentTool({ ...script, status: 'running', output: undefined }), null, 'a running script lists no calls yet');
+    assert.equal(summarizeAgentActivity([script, ...calls], 0, 0), '已查看 2 张命盘，已运行 1 个脚本');
 });
 
 test('the evidence chip counts only completed search results and the header clock never runs backwards', () => {

@@ -4,7 +4,7 @@ import type { Context, JsonValue } from "@earendil-works/chord";
 import {
   CompactionTask, GenerationTask, ToolTask, Harness, createRegistry, defineTool, hook,
   type Conversation, type ConversationWatch, type StorageWrite,
-  type ToolExecutionApi, type UserInput,
+  type ToolExecutionApi, type ToolExecutionResult, type ToolHookCall, type UserInput,
 } from "@earendil-works/pi-durable";
 import {
   type Api, type AssistantMessage, type Message, type Model,
@@ -16,13 +16,17 @@ import { resolveKnownModelContextConfig } from "@/lib/ai/model-context";
 import { readFeatureModuleStateFresh } from "@/lib/app-settings";
 import { getUserCreditInfo } from "@/lib/user/credits";
 import { AgentStore, type AgentRunRow, type AgentCommandRow } from "./store.server";
-import { agentMessageContent, type AgentCheckpoint, type DomainTool, type PiStreamFn } from "./types";
+import { agentMessageContent, putAgentPart, type AgentCheckpoint, type DomainTool, type PiStreamFn } from "./types";
 import { decryptAgentCredential } from "./credentials.server";
 import { AGENT_UNSUPPORTED_TOOLS_MESSAGE, createPiSDKStream } from "./pi-stream.server";
 import { createAgentTools, assertAgentToolAccess } from "./tools.server";
 import { isCurrentAgentCheckpoint } from "./engine";
 import { AgentDurableStorage, agentDurablePersistence } from "./durable-storage.server";
-import { projectDurableConversation } from "./durable-projection.server";
+import { agentToolCardId, modelCallEntry, projectDurableConversation, publicCanonicalText, scriptCallPartId } from "./durable-projection.server";
+import {
+  AGENT_CODEMODE_CALL_LIMIT, AGENT_SCRIPT_RESULT_SCHEMA, agentScriptCallNumber, agentScriptResult, createAgentCodemodeExtension,
+} from './codemode.server';
+import { AGENT_MODEL_ONLY_TOOLS, getAgentExtensionToolTitle, returnsAgentScriptResult } from './tool-catalog';
 import { agentInputContent } from './attachment-input';
 import { resolveAttachmentImages } from './attachments.server';
 import { taibuMethodSection } from './method-section.server';
@@ -257,16 +261,45 @@ export async function executeAgentRun(
       return { output: [{ type: "text" as const, text: JSON.stringify({ question, reply: reply.content }) }], details: { question, reply: reply.content } };
     };
     const registry = createRegistry();
-    const registrations = tools.map(tool => defineTool({
+    const registrations = tools.map(tool => {
+      const structured = returnsAgentScriptResult(tool.name);
+      return defineTool({
         name: tool.name, description: tool.description, parameters: tool.parameters,
         prepareArguments: args => prepareToolArguments(tool.parameters, args),
         replay: tool.replay ?? "unsafe", executionMode: "sequential",
+        ...(AGENT_MODEL_ONLY_TOOLS.has(tool.name) ? { callers: ["model"] as const } : {}),
+        ...(structured ? { structuredOutputSchema: AGENT_SCRIPT_RESULT_SCHEMA } : {}),
         execute: async (args, api, toolContext) => {
           if (tool.name === "ask_user") return ask(args as Record<string, unknown>, api, toolContext, tool);
           const output = await tool.execute(`${api.taskId}:${api.callId}`, args, toolContext.abortSignal);
-          return { output: output.content, details: output.details as JsonValue, ...(output.usage ? { usage: output.usage } : {}) };
+          // Pi drops structured output on a model-issued call; a script reads it instead of the text.
+          return { output: output.content, details: output.details as JsonValue, ...(output.usage ? { usage: output.usage } : {}),
+            ...(structured ? { structuredOutput: agentScriptResult(output) as JsonValue } : {}) };
         },
-    }));
+      });
+    });
+    const toolTitle = (name: string) => tools.find(tool => tool.name === name)?.label ?? getAgentExtensionToolTitle(name) ?? name;
+    /**
+     * A code mode script's call becomes a public part under the script's card, committed with the call's result. The
+     * script reads the structured output, so the details stay only on the part and the native log keeps one copy.
+     */
+    const settleScriptCall = async (call: ToolHookCall, parent: NonNullable<ToolHookCall["parent"]>, result: ToolExecutionResult, taskId: number, hookContext: Context) => {
+      const assistant = modelCallEntry(await storage!.task(parent.taskId, hookContext));
+      if (assistant !== undefined) {
+        const canonicalText = publicCanonicalText(call.name, result.output ?? []);
+        const error = result.diagnostics?.filter(diagnostic => diagnostic.severity === "error").map(diagnostic => diagnostic.message).join("\n");
+        const number = agentScriptCallNumber(call.id);
+        putAgentPart(checkpoint.parts, {
+          type: "tool", id: scriptCallPartId(taskId), name: call.name, title: toolTitle(call.name),
+          status: result.isError ? "failed" : "completed", input: call.arguments,
+          output: result.details ?? (result.isError && error ? error : result.output),
+          ...(canonicalText === undefined ? {} : { canonicalText }),
+          parentId: agentToolCardId(assistant, parent.callId),
+          ...(number === undefined ? {} : { scriptCall: number }),
+        });
+      }
+      return { ...result, details: undefined };
+    };
     registry.install({
       name: "taibu",
       sections: [taibuMethodSection],
@@ -274,12 +307,15 @@ export async function executeAgentRun(
       hooks: [
         hook(ToolTask, {
           beforeTool: async call => {
+            if (call.parent && (agentScriptCallNumber(call.id) ?? 0) > AGENT_CODEMODE_CALL_LIMIT)
+              return { block: `单个脚本最多发起 ${AGENT_CODEMODE_CALL_LIMIT} 次调用，请合并参数或分多次运行脚本。` };
             const block = toolPolicyBlock(call.name, call.arguments);
             if (block) return { block };
             try { await assertAgentToolAccess(store, run, call.name, call.arguments); }
             catch { return { block: '当前权限或工具策略不允许此调用，请检查任务配置。' }; }
           },
-          afterTool: (_call, result) => {
+          afterTool: (call, result, api, hookContext) => {
+            if (call.parent) return settleScriptCall(call, call.parent, result, api.taskId, hookContext);
             const details = result.details as { artifactId?: unknown } | undefined;
             if (typeof details?.artifactId !== 'string' || result.isError) return;
             return { ...result, output: [...(result.output ?? []), { type: 'text' as const, text: `成果 ID: ${details.artifactId}。完成任务时通过 select_final_artifacts 选择最终成果。` }] };
@@ -337,6 +373,7 @@ export async function executeAgentRun(
       ],
     });
     registry.install(createParallelExtension(registrations, () => harness!, collaborators, configs, new Map(tools.map(tool => [tool.name, tool.label]))));
+    if (run.input.codeMode) registry.install(createAgentCodemodeExtension());
     if (run.input.webEnabled && (await getUserCreditInfo(run.user_id, { client: store.db })).membership !== 'free') {
       mcp = await connectAgentMcp(parseAgentMcpServers(), () => assertAgentToolAccess(store, run, 'mcp__external', {}), context.abortSignal!);
       if (mcp.tools.length) registry.install({ name: 'taibu_mcp', tools: mcp.tools });

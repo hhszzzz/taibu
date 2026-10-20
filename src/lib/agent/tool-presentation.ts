@@ -16,7 +16,7 @@ import type { ZiweiHoroscopeCanonicalJSON } from 'taibu-core/ziwei-horoscope';
 import type { ZiweiFlyingStarCanonicalJSON } from 'taibu-core/ziwei-flying-star';
 import { normalizeQuestions, type AgentQuestion } from './questions';
 import type { AgentPart } from './types';
-import { AGENT_CHART_NAMES, isAgentChartTool, type AgentChartKind } from './tool-catalog';
+import { AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, isAgentChartTool, type AgentChartKind } from './tool-catalog';
 
 export type AgentToolPart = Extract<AgentPart, { type: 'tool' }>;
 /**
@@ -146,6 +146,32 @@ export function getAgentChart(tool: AgentToolPart): AgentChart | null {
       return { kind: 'almanac', chart: chart as unknown as AlmanacCanonicalJSON, title, summary: `${record(chart.基础与个性化坐标).日期} · ${record(chart.基础与个性化坐标).日干支} · ${record(chart.传统黄历基调).农历}` };
     }
   }
+}
+
+export type AgentScriptCallStatus = 'running' | 'ok' | 'error' | 'cancelled';
+/** A row of a script's call list; `id` is the call's number, which the part of a call that ran keeps as `scriptCall`. */
+export interface AgentScriptCall { id: number; name: string; args: string; status: AgentScriptCallStatus; error: string | null }
+export interface AgentScript { code: string; output: string | null; calls: AgentScriptCall[] }
+const SCRIPT_CALL_STATUSES: readonly string[] = ['running', 'ok', 'error', 'cancelled'] satisfies AgentScriptCallStatus[];
+
+/**
+ * A code mode script: the code the model wrote, what it printed for the model, and once it settled every call it made
+ * as Pi listed them, including calls that never ran. The calls that ran are also parts of their own (`parentId`).
+ */
+export function getAgentScript(tool: AgentToolPart): AgentScript | null {
+  const code = record(tool.input).code;
+  if (tool.name !== AGENT_CODEMODE_TOOL || typeof code !== 'string') return null;
+  const output = record(tool.output);
+  return {
+    code,
+    output: typeof output.output === 'string' ? output.output : null,
+    calls: Array.isArray(output.calls) ? output.calls.flatMap(item => {
+      const row = record(item);
+      return Number.isSafeInteger(row.id) && typeof row.name === 'string' && typeof row.status === 'string' && SCRIPT_CALL_STATUSES.includes(row.status)
+        ? [{ id: row.id as number, name: row.name, args: typeof row.args === 'string' ? row.args : '', status: row.status as AgentScriptCallStatus, error: typeof row.error === 'string' ? row.error : null }]
+        : [];
+    }) : [],
+  };
 }
 
 export function getAgentToolText(tool: AgentToolPart): string | null {

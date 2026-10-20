@@ -1,12 +1,25 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
+import { fileURLToPath } from "node:url";
+import { loadQuickJSWasm } from "@earendil-works/pi-codemode";
 import { getSystemAdminClient } from "@/lib/supabase-server";
 import { AgentStore, type AgentRunRow } from "./store.server";
 import { executeAgentRun } from "./runtime.server";
 import { AGENT_ENGINE } from "./engine";
+import { checkAgentCodemode, configureAgentCodemode } from "./codemode.server";
+
+/** The build ships code mode's VM worker and QuickJS binary beside this bundle; a missing one fails startup. */
+async function configureCodemode() {
+  configureAgentCodemode({
+    wasm: await loadQuickJSWasm(fileURLToPath(new URL("./quickjs.wasm", import.meta.url))),
+    workerUrl: new URL("./codemode-worker.mjs", import.meta.url),
+  });
+}
 
 async function main() {
   if (process.argv.includes("--check")) {
+    await configureCodemode();
+    await checkAgentCodemode();
     console.info("Agent worker build OK");
     return;
   }
@@ -16,6 +29,7 @@ async function main() {
     process.exitCode = (await store.workerReady()) ? 0 : 1;
     return;
   }
+  await configureCodemode();
   const shutdown = new AbortController();
   const active = new Set<Promise<void>>();
   const concurrency = Number(process.env.AGENT_WORKER_CONCURRENCY ?? 2);

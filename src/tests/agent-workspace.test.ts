@@ -26,7 +26,7 @@ async function coreResult(name: string, extra: Record<string, unknown> = {}) {
 test('every tool family reaches a workspace location, including external and unknown tools', () => {
   const names = [...listToolDefinitions().map(item => item.name), 'inspect_chart', 'web_search', 'search_knowledge', 'list_user_data', 'read_user_data',
     'read_user_profile', 'read_attachment', 'list_analysis_methods', 'load_analysis_method', 'ask_user', 'parallel_analysis',
-    'read_user_memory', 'remember_user_fact', 'select_final_artifacts', 'mcp__archive__lookup', 'retired_tool'];
+    'read_user_memory', 'remember_user_fact', 'select_final_artifacts', 'codemode', 'mcp__archive__lookup', 'retired_tool'];
   const model = workspace(names.map((name, index) => tool(`call-${index}`, name, { status: 'running', input: name === 'read_attachment' ? { id: randomUUID() } : {} })));
   for (const [index, name] of names.entries()) {
     const location = model.locations.get(`call-${index}`);
@@ -103,6 +103,16 @@ test('each collaboration member gets its own workspace page beside the collabora
     [['member:team:10', '格局派', { toolId: 'team', conversationId: 10 }], ['member:team:11', '应期派', { toolId: 'team', conversationId: 11 }]]);
   assert.equal(resolveAgentWorkspaceLocation(model, 'member:team:10'), 'member:team:10');
   assert.equal(model.locations.get('team'), 'tool:team', 'the member pages do not take the call away from the collaboration');
+});
+
+test('a script has a code page and each chart it reads opens where a direct call would', async () => {
+  const bazi = await coreResult('bazi');
+  const script = tool('native-tool:1:script', 'codemode', { title: '运行脚本', input: { code: 'return 1' }, output: { calls: [], output: '' } });
+  const call = tool('nested:5', 'bazi', { ...bazi, title: '八字排盘', parentId: script.id });
+  const model = workspace([script, call]);
+  assert.deepEqual(model.resources.map(resource => [resource.id, resource.view]), [['tool:native-tool:1:script', 'code'], ['tool:nested:5', 'chart']]);
+  assert.equal(getAgentWorkspaceFollowTarget(model), 'tool:nested:5', 'the chart a script reads is what the model is looking at');
+  assert.equal(getAgentWorkspaceAutoOpenEvent([script, call]), 'nested:5');
 });
 
 test('only chart readings, questions and collaborations open the workspace by themselves', async () => {

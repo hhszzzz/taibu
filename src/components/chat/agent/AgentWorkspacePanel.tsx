@@ -23,7 +23,7 @@ import { describeAgentChartSubject, getAgentStepNumbers, getAgentToolState, type
 import type { AgentWorkspaceShown } from './AgentResultContext';
 import {
     AttachmentView, CalculationView, CollaborationView, DataListView, EvidenceView, MemberView, MemoryView, MethodCatalogView, MethodView,
-    ProfileView, QuestionView, RecordView, WorkspaceTextFallback, WorkspaceToolMeta, WorkspaceToolPending,
+    ProfileView, QuestionView, RecordView, ScriptView, WorkspaceTextFallback, WorkspaceToolMeta, WorkspaceToolPending,
 } from './AgentWorkspaceViews';
 import { getChartKindMeta } from './chart-registry';
 import { ModelAvatar } from './ModelAvatar';
@@ -164,6 +164,7 @@ function ResourceView({ resource, model, data, answers, questionIds, userId, art
             break;
         }
         case 'memory': body = <MemoryView tools={tools} runStatus={runStatus} userId={userId} step={step(latest)} />; break;
+        case 'code': body = latest && <ScriptView tool={latest} runStatus={runStatus} step={step(latest)} calls={model.tools.filter(tool => tool.parentId === latest.id)} onOpen={onOpen} />; break;
         case 'tool': body = latest && <AgentToolCard tool={latest} runStatus={runStatus} />; break;
     }
     return latest ? <ChartErrorBoundary resetKey={latest} fallback={<WorkspaceTextFallback tool={latest} note="这个视图暂时无法显示，已改为工具返回的规范文本。" />}>{body}</ChartErrorBoundary> : <>{body}</>;

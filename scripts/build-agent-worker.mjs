@@ -8,7 +8,9 @@ import {
   copyFile,
 } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 await mkdir(".agent", { recursive: true });
 // Next's standalone trace omits workspace packages it bundled into Web chunks.
 // Keep the public Core package and its production dependencies beside the worker.
@@ -95,6 +97,34 @@ await copyFile(
   "node_modules/ipaddr.js/LICENSE",
   ".agent/licenses/ipaddr.js.LICENSE",
 );
+// Code mode runs each script in a worker thread with its own QuickJS VM. Bundling
+// moves the package's worker file and binary away from its code, so both ship
+// beside the worker bundle, which passes them to the sandbox (worker-entry.ts).
+const codemode = createRequire(
+  fileURLToPath(import.meta.resolve("@earendil-works/pi-codemode")),
+);
+await copyFile(
+  codemode.resolve("quickjs-wasi/quickjs.wasm"),
+  ".agent/quickjs.wasm",
+);
+await copyFile(
+  path.join(path.dirname(codemode.resolve("quickjs-wasi/package.json")), "LICENSE"),
+  ".agent/licenses/quickjs-wasi.LICENSE",
+);
+await build({
+  stdin: {
+    contents: 'import "@earendil-works/pi-codemode/worker";',
+    resolveDir: process.cwd(),
+    sourcefile: "codemode-worker.mjs",
+    loader: "js",
+  },
+  outfile: ".agent/codemode-worker.mjs",
+  bundle: true,
+  platform: "node",
+  target: "node24",
+  format: "esm",
+  logLevel: "warning",
+});
 await build({
   entryPoints: ["src/lib/agent/worker-entry.ts"],
   outfile: ".agent/worker.mjs",

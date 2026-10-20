@@ -7,7 +7,7 @@ import type { AgentRunStatus } from '@/lib/agent/types';
 import type { AgentQuestionAnswer, AgentWorkspaceModel, AgentWorkspaceResource } from '@/lib/agent/workspace';
 import {
     getAgentAttachmentRead, getAgentCalculation, getAgentChart, getAgentDataResults, getAgentMemories, getAgentMethod, getAgentMethodCatalog,
-    getAgentProfile, getAgentSearchResults, getAgentToolQuestions, getAgentToolText, type AgentCalculation, type AgentSearchMethod, type AgentToolPart,
+    getAgentProfile, getAgentScript, getAgentSearchResults, getAgentToolQuestions, getAgentToolText, type AgentCalculation, type AgentScript, type AgentScriptCall, type AgentSearchMethod, type AgentToolPart,
 } from '@/lib/agent/tool-presentation';
 import { AGENT_EVIDENCE_KINDS, AGENT_EVIDENCE_LABELS, countAgentEvidence, type AgentEvidence, type AgentEvidenceKind } from '@/lib/agent/evidence';
 import { getChartTargets, parseChartReference, type ChartFocus } from '@/lib/agent/chart-interaction';
@@ -27,7 +27,8 @@ import { useTranscriptRecordView } from '@/lib/chat/chat-record-view';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { useToast } from '@/components/ui/Toast';
 import { mentionTypeLabels } from '@/components/chat/mentionStyles';
-import { describeAgentChartSubject, formatAgentToolDuration, formatAgentValue, getAgentToolState, getParallelMemberState, stripLeadingTitle, summarizeAgentActivity, summarizeAgentTool } from './presentation';
+import { describeAgentChartSubject, formatAgentToolDuration, formatAgentValue, getAgentToolState, getAgentToolTitle, getParallelMemberState, stripLeadingTitle, summarizeAgentActivity, summarizeAgentTool } from './presentation';
+import { CopyButton } from './AgentToolCard';
 import { PrivateAttachmentPreview } from './PrivateAttachments';
 import { ChartMiniPreview } from './chart-preview';
 import { ModelAvatar } from './ModelAvatar';
@@ -383,6 +384,80 @@ export function RecordView({ tools, runStatus, title, step, onOpenChart }: { too
         {tool.status !== 'completed' ? <WorkspaceToolPending tool={tool} runStatus={runStatus} running="正在读取资料…" />
             : <WorkspaceTextFallback tool={tool} note="资料提供方返回的规范文本：" />}
         {onOpenChart && <button type="button" className="agent-secondary-button" onClick={onOpenChart}>在命盘中查看</button>}
+    </section>;
+}
+
+/**
+ * 运行脚本: the script the model wrote, each call it made that ran, opening where that call's result shows, the calls
+ * that did not finish as Pi listed them, and what the script printed for the model.
+ */
+/**
+ * A script's calls in the order it made them. Once it settles Pi lists every call, and the calls that ran link to their
+ * parts by number; until then the calls that started are all there is.
+ */
+type ScriptCallRow = { key: string; part: AgentToolPart } | { key: string; row: AgentScriptCall };
+
+function scriptCallRows(script: AgentScript | null, calls: AgentToolPart[]): ScriptCallRow[] {
+    if (!script?.calls.length) return calls.map(part => ({ key: part.id, part }));
+    const byNumber = new Map(calls.flatMap(part => part.scriptCall === undefined ? [] : [[part.scriptCall, part] as const]));
+    const rows = script.calls.map((row): ScriptCallRow => {
+        const part = byNumber.get(row.id);
+        return part ? { key: `call:${row.id}`, part } : { key: `call:${row.id}`, row };
+    });
+    const listed = new Set(rows.flatMap(entry => 'part' in entry ? [entry.part.id] : []));
+    return [...rows, ...calls.filter(part => !listed.has(part.id)).map(part => ({ key: part.id, part }))];
+}
+
+const SCRIPT_CALL_LABELS: Record<AgentScriptCall['status'], string> = { ok: '完成', error: '未执行', cancelled: '已取消', running: '已取消' };
+
+export function ScriptView({ tool, runStatus, step, calls, onOpen }: ToolViewProps & { step?: number; calls: AgentToolPart[]; onOpen: (id: string) => void }) {
+    const id = useId();
+    const script = getAgentScript(tool);
+    const state = getAgentToolState(tool, runStatus);
+    const rows = scriptCallRows(script, calls);
+    return <section className="agent-ws-view" aria-labelledby={id}>
+        <WorkspaceViewHeading id={id} kicker={kickerOf(step, '代码模式')} title={tool.title}>
+            脚本在隔离沙箱中调用本任务的工具，汇总后只把输出交给 Agent；每次调用的结果在它自己的页面中。
+        </WorkspaceViewHeading>
+        <WorkspaceToolMeta tool={tool} runStatus={runStatus}>{summarizeAgentTool(tool) && <span>{summarizeAgentTool(tool)}</span>}</WorkspaceToolMeta>
+        {script && <section className="agent-ws-script" aria-label="脚本">
+            <h3>脚本<CopyButton text={script.code} label="复制" name="复制脚本" /></h3>
+            <pre className="agent-ws-code" tabIndex={0}><code>{script.code}</code></pre>
+        </section>}
+        {rows.length > 0 && <section className="agent-ws-script" aria-labelledby={`${id}-calls`}>
+            <h3 id={`${id}-calls`}>调用</h3>
+            <ol className="agent-ws-script-calls">
+                {rows.map(entry => {
+                    if ('part' in entry) {
+                        const { key, part } = entry;
+                        const callState = getAgentToolState(part, runStatus);
+                        const summary = summarizeAgentTool(part);
+                        return <li key={key}>
+                            <button type="button" onClick={() => onOpen('tool:' + part.id)}>
+                                <strong>{getAgentToolTitle(part)}</strong>
+                                {summary && <small>{summary}</small>}
+                                <span className="agent-ws-badge" data-state={callState.status}>{callState.label}</span>
+                                <ChevronRight size={14} aria-hidden="true" />
+                            </button>
+                        </li>;
+                    }
+                    // A call that never ran (blocked, invalid, unknown) has no page; its row says why.
+                    const call = entry.row;
+                    return <li key={entry.key} className="agent-ws-script-call" data-state={call.status}>
+                        <strong>{calls.find(item => item.name === call.name)?.title ?? call.name}</strong>
+                        <small>{call.error ?? call.args}</small>
+                        <span className="agent-ws-badge" data-state={call.status === 'ok' ? 'completed' : 'failed'}>{SCRIPT_CALL_LABELS[call.status]}</span>
+                    </li>;
+                })}
+            </ol>
+        </section>}
+        {script?.output?.trim()
+            ? <section className="agent-ws-script" aria-label="脚本输出">
+                <h3>输出</h3>
+                <pre className="agent-ws-code" tabIndex={0}>{script.output}</pre>
+            </section>
+            : state.status === 'completed' ? <p className="agent-ws-note">脚本没有输出。</p>
+            : <WorkspaceToolPending tool={tool} runStatus={runStatus} running="脚本运行中…" />}
     </section>;
 }
 

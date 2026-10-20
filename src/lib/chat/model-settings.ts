@@ -18,6 +18,8 @@ export interface NextTaskConfiguration {
   reasoning: boolean;
   reasoningEffort: AIReasoningEffort | null;
   webEnabled: boolean;
+  /** Agent 代码模式：模型可写脚本批量调用工具；每个任务创建时固定。 */
+  codeMode: boolean;
   collaborators: AgentCollaborator[];
 }
 
@@ -26,6 +28,8 @@ export interface ModelSettingsProps {
   onReasoningEffortChange?: (effort: AIReasoningEffort | null) => void;
   collaborators?: AgentCollaborator[];
   onCollaboratorsChange?: (members: AgentCollaborator[]) => void;
+  codeMode?: boolean;
+  onCodeModeChange?: (enabled: boolean) => void;
 }
 
 export function parseReasoningEffort(value: unknown): AIReasoningEffort | null {
@@ -55,12 +59,14 @@ export function parseNextTaskConfiguration(value: unknown): NextTaskConfiguratio
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('配置无效');
   const input = value as Record<string, unknown>;
   if (typeof input.model !== 'string' || !input.model.trim() || input.model.length > 200 ||
-    typeof input.reasoning !== 'boolean' || typeof input.webEnabled !== 'boolean') throw new Error('配置无效');
-  return { model: input.model.trim(), reasoning: input.reasoning, webEnabled: input.webEnabled,
+    typeof input.reasoning !== 'boolean' || typeof input.webEnabled !== 'boolean' ||
+    (input.codeMode !== undefined && typeof input.codeMode !== 'boolean')) throw new Error('配置无效');
+  // 代码模式与推理档位、协作成员一样有缺省值：缺省为关闭。
+  return { model: input.model.trim(), reasoning: input.reasoning, webEnabled: input.webEnabled, codeMode: input.codeMode === true,
     reasoningEffort: parseReasoningEffort(input.reasoningEffort), collaborators: parseAgentCollaborators(input.collaborators) };
 }
 
-/** 新对话的初始配置：沿用模型、推理与联网，协作成员一律从 0 开始，只有用户在该对话勾选后才协作。 */
+/** 新对话的初始配置：沿用模型、推理、联网与代码模式，协作成员一律从 0 开始，只有用户在该对话勾选后才协作。 */
 export function freshTaskConfiguration(base: NextTaskConfiguration): NextTaskConfiguration {
   return { ...base, collaborators: [] };
 }

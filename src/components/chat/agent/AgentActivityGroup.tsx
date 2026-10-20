@@ -6,12 +6,12 @@ import { ChevronRight, LoaderCircle, PanelRight, Pause } from 'lucide-react';
 import type { AgentMessageData, AgentPart } from '@/lib/agent/types';
 import { getAgentToolFamily } from '@/lib/agent/tool-catalog';
 import { getAgentToolQuestionIds } from '@/lib/agent/workspace';
-import { getAgentAttachmentRead, getAgentChart, getAgentDataResults, getAgentFinalSelection, getAgentMemories, getAgentMethod, getAgentMethodCatalog, getAgentProfile, getAgentToolQuestions, getAgentToolText } from '@/lib/agent/tool-presentation';
+import { getAgentAttachmentRead, getAgentChart, getAgentDataResults, getAgentFinalSelection, getAgentMemories, getAgentMethod, getAgentMethodCatalog, getAgentProfile, getAgentScript, getAgentToolQuestions, getAgentToolText } from '@/lib/agent/tool-presentation';
 import { useIsDesktopLayout } from '@/lib/hooks/useIsDesktopLayout';
 import { useTranscriptRecordView } from '@/lib/chat/chat-record-view';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { ThinkingBlock } from '../ThinkingBlock';
-import { describeAgentStep, formatAgentValue, getAgentLiveLine, getAgentToolTitle, getFinalArtifactGroups, getParallelMemberState, summarizeAgentActivity, type AgentProcessPart, type AgentTool } from './presentation';
+import { describeAgentStep, formatAgentValue, getAgentLiveLine, getAgentScriptCalls, getAgentToolTitle, getFinalArtifactGroups, getParallelMemberState, summarizeAgentActivity, type AgentProcessPart, type AgentTool } from './presentation';
 import { memberAnswerText, parallelAnalysisResults } from '@/lib/agent/parallel-results';
 import { getChartKindMeta } from './chart-registry';
 import { ModelAvatar } from './ModelAvatar';
@@ -121,6 +121,19 @@ function StepStructured({ tool, parts, workspace }: { tool: AgentTool; parts: Ag
 function AgentStepCall({ tool, runStatus, parts }: { tool: AgentTool; runStatus: AgentMessageData['status']; parts: AgentPart[] }) {
     const workspace = useAgentResultWorkspace();
     const detailed = useTranscriptRecordView() === 'detailed';
+    const script = getAgentScript(tool);
+    // 脚本即调用参数：普通视图也给出脚本与它打印给模型的输出；脚本的各次调用在下方逐条列出。
+    if (script) return <div className="agent-step-call">
+        <pre className="agent-step-script" tabIndex={0} aria-label="脚本"><code>{script.code}</code></pre>
+        {script.output?.trim()
+            ? <div className="agent-step-output" tabIndex={0} aria-label="脚本输出">{script.output}</div>
+            : <p className="agent-step-empty">{describeAgentStep(tool, runStatus).status === 'running' ? '脚本运行中…' : '脚本没有输出。'}</p>}
+        {workspace && <div className="agent-step-actions">
+            <button type="button" className="agent-step-workspace" onClick={() => workspace.openResource(`tool:${tool.id}`)}>
+                <PanelRight size={13} aria-hidden="true" />在工作区查看
+            </button>
+        </div>}
+    </div>;
     const input = tool.input === undefined ? null : formatAgentValue(tool.input);
     const canonical = tool.canonicalText?.trim() ? tool.canonicalText : null;
     const text = canonical ?? getAgentToolText(tool);
@@ -207,7 +220,7 @@ function AgentStepCall({ tool, runStatus, parts }: { tool: AgentTool; runStatus:
     </div>;
 }
 
-function ToolStep({ tool, data, current }: { tool: AgentTool; data: AgentMessageData; current: boolean }) {
+function ToolStep({ tool, data, shownId, calls = [] }: { tool: AgentTool; data: AgentMessageData; shownId?: string; calls?: AgentTool[] }) {
     const id = useId();
     const detailed = useTranscriptRecordView() === 'detailed';
     const step = describeAgentStep(tool, data.status);
@@ -215,7 +228,7 @@ function ToolStep({ tool, data, current }: { tool: AgentTool; data: AgentMessage
     // 详细视图默认展开每一步的调用参数与结果；普通视图点击行才展开。
     const details = disclosed ?? (detailed || step.status === 'failed');
     return <li className="agent-step" data-state={step.status}>
-        <button type="button" className="agent-step-row" aria-current={current || undefined}
+        <button type="button" className="agent-step-row" aria-current={shownId === tool.id || undefined}
             aria-expanded={details} aria-controls={details ? id : undefined}
             onClick={() => setDisclosed(!details)}>
             <span className="agent-step-text">
@@ -228,6 +241,9 @@ function ToolStep({ tool, data, current }: { tool: AgentTool; data: AgentMessage
         </button>
         {details && <div id={id} className="agent-step-body" data-tool-id={tool.id}>
             <AgentStepCall tool={tool} runStatus={data.status} parts={data.parts} />
+            {calls.length > 0 && <ol className="agent-step-children" aria-label="脚本调用">
+                {calls.map(call => <ToolStep key={call.id} tool={call} data={data} shownId={shownId} />)}
+            </ol>}
         </div>}
     </li>;
 }
@@ -255,8 +271,11 @@ export function AgentActivityGroup({ parts, data, active = false }: { parts: Age
     const [disclosed, setDisclosed] = useState<boolean | null>(null);
     const wide = useIsDesktopLayout();
     const answered = new Set(getAgentToolQuestionIds(parts).values());
+    // A code mode script's calls are listed under the script's step, read from the whole message so a call whose
+    // part has not moved under its script yet still shows there.
+    const scriptCalls = getAgentScriptCalls(data.parts);
     // Plan updates already show as the task list bar; their questions are answered in the question panel.
-    const rows = parts.filter(part => part.type === 'tool' ? getAgentToolFamily(part.name) !== 'plan' : part.type === 'reasoning' ? part.text.trim() : !answered.has(part.id));
+    const rows = parts.filter(part => part.type === 'tool' ? !part.parentId && getAgentToolFamily(part.name) !== 'plan' : part.type === 'reasoning' ? part.text.trim() : !answered.has(part.id));
     const tools = rows.filter((part): part is AgentTool => part.type === 'tool');
     const streaming = active && data.status === 'running';
     // Reasoning alone is not a process: it shows as the thinking line, as in plain chat.
@@ -265,7 +284,9 @@ export function AgentActivityGroup({ parts, data, active = false }: { parts: Age
     </>;
     const states = tools.map(tool => describeAgentStep(tool, data.status).status);
     const completed = states.filter(status => status === 'completed').length;
-    const failed = states.filter(status => status === 'failed').length;
+    // The summary counts what scripts did too: the charts a script computed are charts the task looked at.
+    const done = [...tools, ...tools.flatMap(tool => scriptCalls.get(tool.id) ?? [])];
+    const failed = done.filter(tool => describeAgentStep(tool, data.status).status === 'failed').length;
     const questions = rows.filter(part => part.type === 'question').length;
     // Beside the workspace the live process stays open; narrower screens keep it to two lines.
     // 详细记录视图默认展开每一步（参数与结果）。
@@ -273,7 +294,7 @@ export function AgentActivityGroup({ parts, data, active = false }: { parts: Age
     const live = !open && streaming ? getAgentLiveLine(data) : null;
     const count = !tools.length ? '向你确认信息'
         : live ? `· ${completed} / ${tools.length} 完成`
-        : summarizeAgentActivity(tools, questions, failed);
+        : summarizeAgentActivity(done, questions, failed);
     return <div className="agent-activity-group">
         <section className={`agent-process${open ? ' is-open' : ''}`} aria-label="任务过程">
             <button type="button" className={`agent-process-heading${live ? ' is-live' : ''}`} aria-expanded={open} aria-controls={id} onClick={() => setDisclosed(!open)}>
@@ -287,7 +308,7 @@ export function AgentActivityGroup({ parts, data, active = false }: { parts: Age
             </button>
             <ol id={id} className="agent-process-steps" hidden={!open}>
                 {open && rows.map(part => {
-                    if (part.type === 'tool') return <ToolStep key={part.id} tool={part} data={data} current={workspace?.shown?.toolId === part.id} />;
+                    if (part.type === 'tool') return <ToolStep key={part.id} tool={part} data={data} shownId={workspace?.shown?.toolId ?? undefined} calls={scriptCalls.get(part.id)} />;
                     if (part.type === 'reasoning') return <NoteStep key={part.id} title="思考" text={firstLine(part.text)}>
                         <p className="agent-step-reasoning">{part.text}</p>
                     </NoteStep>;

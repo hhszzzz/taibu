@@ -80,7 +80,8 @@ export function createParallelExtension(registrations: readonly ToolRegistration
           title: Type.Optional(Type.String({ ...LABEL, description: '这次协作的简短标题，如“三派会诊”' })),
           topics: Type.Optional(Type.Array(Type.Object({ title: Type.String(LABEL), options: Type.Optional(Type.Array(Type.String(LABEL), { minItems: 2, maxItems: 4 })) }), {
             maxItems: PARALLEL_TOPIC_LIMIT, description: '需要每位成员表态的关键议题；给出 options 时成员只能原样选择一项，用于对照分歧' })) }),
-        replay: 'safe', executionMode: 'sequential',
+        // Only the model dispatches members; a code mode script cannot.
+        replay: 'safe', executionMode: 'sequential', callers: ['model'],
         execute: async (args, api, context) => {
             if (collaborators.length && (args.tasks.length !== collaborators.length || new Set(args.tasks.map(task => task.agentId)).size !== collaborators.length || args.tasks.some(task => !collaborators.some(member => member.id === task.agentId)))) throw new Error('协作分析必须包含全部已配置的 Agent，不能重复或使用未配置的模型');
             if (!collaborators.length && args.tasks.some(task => task.agentId !== undefined)) throw new Error('未配置协作 Agent');

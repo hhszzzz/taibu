@@ -22,6 +22,8 @@ export interface AgentRunRow {
     reasoningEffort?: AIReasoningEffort | null;
     collaborators?: AgentCollaborator[];
     webEnabled: boolean;
+    /** Whether the model may run code mode scripts; fixed when the task is created. Absent means off. */
+    codeMode?: boolean;
     systemPrompt: string;
     customProvider?: Omit<CustomProviderRequest, "apiKey">;
     userMessage: ChatMessage;
@@ -149,7 +151,7 @@ export class AgentStore {
       userMessage: run.input?.userMessage,
       commandMessageIds: commands.filter(command => command.delivery_state !== 'cancelled').map(command => command.message.id),
       billing: run.billing,
-      configuration: run.input ? { model: run.input.model, reasoning: run.input.reasoning, reasoningEffort: run.input.reasoningEffort ?? null, collaborators: run.input.collaborators ?? [], webEnabled: run.input.webEnabled } : undefined,
+      configuration: run.input ? { model: run.input.model, reasoning: run.input.reasoning, reasoningEffort: run.input.reasoningEffort ?? null, collaborators: run.input.collaborators ?? [], webEnabled: run.input.webEnabled, codeMode: run.input.codeMode === true } : undefined,
       queue: commands.map(command => ({ sequence: command.sequence, message: command.message, mode: command.mode, revision: command.revision ?? 1, sortOrder: command.sort_order ?? command.sequence, state: command.delivery_state ?? 'admitted' })),
     };
   }

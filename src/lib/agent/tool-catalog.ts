@@ -50,8 +50,34 @@ export type AgentToolFamily =
   | 'collaboration'
   | 'memory'
   | 'artifacts'
+  | 'code'
   | 'external'
   | 'other';
+
+/** Pi's code mode tool (`CODEMODE_TOOL_NAME`); its scripts' calls are parts with `parentId`. */
+export const AGENT_CODEMODE_TOOL = 'codemode';
+
+/** Titles of tools that Pi extensions define, which have no Taibu label. */
+const EXTENSION_TOOL_TITLES: Readonly<Record<string, string>> = { [AGENT_CODEMODE_TOOL]: '运行脚本' };
+
+export function getAgentExtensionToolTitle(name: string): string | undefined {
+  return Object.hasOwn(EXTENSION_TOOL_TITLES, name) ? EXTENSION_TOOL_TITLES[name] : undefined;
+}
+
+/**
+ * Tools a code mode script may not call: they ask the user, move the board, search with citations, write memory,
+ * load guidance, dispatch members or settle the task, each of which the model must do itself.
+ */
+export const AGENT_MODEL_ONLY_TOOLS: ReadonlySet<string> = new Set([
+  'ask_user', 'todo_write', 'inspect_chart', 'focus_chart', 'web_search', 'search_knowledge', 'read_attachment',
+  'list_analysis_methods', 'load_analysis_method', 'read_user_memory', 'remember_user_fact', 'parallel_analysis',
+  'select_final_artifacts',
+]);
+
+/** Charts, calculations and drilldowns give scripts `{ artifactId?, text, data }`; other tools give their text. */
+export function returnsAgentScriptResult(name: string): boolean {
+  return isAgentChartTool(name) || getAgentDrilldownBase(name) !== null || TOOL_FAMILIES.get(name) === 'calculation';
+}
 
 const TOOL_FAMILIES: ReadonlyMap<string, AgentToolFamily> = new Map<string, AgentToolFamily>([
   ['inspect_chart', 'chart'],
@@ -75,6 +101,7 @@ const TOOL_FAMILIES: ReadonlyMap<string, AgentToolFamily> = new Map<string, Agen
   ['read_user_memory', 'memory'],
   ['remember_user_fact', 'memory'],
   ['select_final_artifacts', 'artifacts'],
+  [AGENT_CODEMODE_TOOL, 'code'],
 ]);
 
 /** Administrator-configured MCP tools are registered as `mcp__<server>__<tool>`. */

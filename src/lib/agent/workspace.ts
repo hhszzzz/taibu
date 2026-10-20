@@ -23,7 +23,7 @@ export const AGENT_WORKSPACE_SECTIONS: readonly AgentWorkspaceSection[] = ['resu
 
 export type AgentWorkspaceView =
   | 'chart' | 'saved' | 'calculation' | 'evidence' | 'data' | 'record' | 'profile' | 'attachment'
-  | 'methods' | 'method' | 'question' | 'collaboration' | 'member' | 'memory' | 'tool';
+  | 'methods' | 'method' | 'question' | 'collaboration' | 'member' | 'memory' | 'code' | 'tool';
 
 export interface AgentWorkspaceResource {
   id: string;
@@ -176,6 +176,10 @@ export function buildAgentWorkspace({ parts, artifacts, attachmentIds }: { parts
       }
       case 'memory':
         add('memory', { view: 'memory', family, title: '长期记忆' }, tool);
+        break;
+      case 'code':
+        // A script's page lists its calls; each call shows where its family belongs, as the model's own calls do.
+        add('tool:' + tool.id, { view: 'code', family, title: tool.title }, tool);
         break;
       default:
         add('tool:' + tool.id, { view: 'tool', family, title: tool.title }, tool);

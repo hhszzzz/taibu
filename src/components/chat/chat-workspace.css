@@ -354,6 +354,11 @@ button.agent-step-entity:hover .agent-step-entity-go { color: var(--foreground-s
 .agent-step-markdown table { font-size: calc(12.5 / 16 * 1rem); }
 .agent-step-markdown :is(th, td) { padding: 5px 8px; color: var(--foreground-secondary); line-height: 1.5; white-space: nowrap; }
 .agent-step-markdown th { color: var(--foreground); font-weight: 500; background: transparent; }
+/* 代码模式：脚本等宽限高；脚本的各次调用是缩进的子步骤，沿用步骤行，左侧一条发丝线表示归属。 */
+.agent-step-script { max-height: 16rem; margin: 0; padding: 8px 10px; overflow: auto; border-radius: 8px; background: var(--background-secondary); color: var(--foreground-secondary); font-family: var(--font-mono); font-size: calc(12.5 / 16 * 1rem); line-height: 1.6; white-space: pre; tab-size: 2; }
+.agent-step-children { display: flex; flex-direction: column; margin: 2px 0 4px 6px; padding: 0 0 0 8px; border-left: var(--hairline) solid var(--hairline-color); list-style: none; }
+.agent-step-children > .agent-step { padding: 4px 0 4px 4px; }
+.agent-step-children > .agent-step + .agent-step { border-top: 0; }
 .agent-step-note-body { padding: 8px 12px 12px; border-top: var(--hairline) solid var(--hairline-color); font-size: calc(13 / 16 * 1rem); line-height: 1.7; color: var(--foreground-secondary); }
 .agent-step-reasoning { white-space: pre-wrap; overflow-wrap: anywhere; }
 .agent-step > .agent-tool-details { margin: 8px 0 6px 20px; }

@@ -128,6 +128,15 @@ function AgentResultsProbe() {
   window.fixture.workspaceFamilies = () => setParts(previous => [...previous.filter(part => !part.id.includes('family')), ...familyParts()]);
   window.fixture.workspaceStep = (name, status) => setParts(previous => [...previous, { type: 'tool', id: 'step-' + (window.fixture.stepRevision = (window.fixture.stepRevision ?? 0) + 1), name, title: name, status, input: { query: '流年' } }]);
   window.fixture.answerFamilyQuestion = () => setAnswers(new Map([['9:family-ask', { content: '出生时间？\n早上', answers: { birth: ['morning'] } }]]));
+  // A code mode script that computed two charts and had its third call blocked, as the projection stores it.
+  window.fixture.codemodeScript = () => setParts(previous => {
+    const bazi = initialToolParts.find(part => part.name === 'bazi');
+    const script = { type: 'tool', id: 'native-tool:9:script', name: 'codemode', title: '运行脚本', status: 'completed', input: { code: 'for (const birthYear of [1990, 1991]) await tools.bazi({ birthYear });' },
+      output: { calls: [{ id: 1, name: 'bazi', args: '{"birthYear":1990}', status: 'ok' }, { id: 2, name: 'bazi', args: '{"birthYear":1991}', status: 'ok' },
+        { id: 3, name: 'bazi', args: '{}', status: 'error', error: 'Tool call blocked: 单个脚本最多发起 30 次调用' }], output: '1990: 己巳\n1991: 庚午' } };
+    const calls = [1, 2].map(number => ({ ...bazi, id: 'nested:' + (20 + number), parentId: script.id, scriptCall: number }));
+    return [...previous.filter(part => part.id !== script.id && !part.id.startsWith('nested:')), script, ...calls];
+  });
   const data = { version: 1, runId: 'ui-results', status, parts, runtime };
   window.fixture.agentTiming = () => {
     // The durable runtime always records the model beside its response measurements.
@@ -2398,6 +2407,31 @@ export async function run(existingPage, bundlePath) {
     check('The collaboration view compares its members in the workspace', await workspacePanel.locator('.agent-ws-member').count() === 2 &&
       await workspacePanel.locator('.agent-ws-member').first().innerText().then(text => text.includes('分析模型') && text.includes('推理 高')) &&
       await workspacePanel.locator('.agent-ws-member').last().innerText().then(text => text.includes('复核模型') && text.includes('不推理')));
+    // Code mode: a script is one step whose calls are its sub-steps; its page lists every call in order.
+    await page.evaluate(() => window.fixture.codemodeScript());
+    // The script follows the answer, so it opens a process group of its own; a settled task leaves it folded.
+    const scriptGroup = results.locator('.agent-activity-group').filter({ hasText: '已运行 1 个脚本' });
+    const scriptHeading = scriptGroup.locator('.agent-process-heading');
+    await scriptHeading.waitFor();
+    if (await scriptHeading.getAttribute('aria-expanded') !== 'true') await scriptHeading.click();
+    const scriptStep = scriptGroup.locator('.agent-process-steps > .agent-step').filter({ has: page.locator('.agent-step-title', { hasText: '运行脚本' }) });
+    await scriptStep.waitFor();
+    check('A script is one process step that counts its calls and its failures', await scriptStep.locator('.agent-step-row').innerText().then(text => text.includes('调用 3 次 · 1 次失败')) &&
+      await scriptGroup.locator('.agent-process-steps > .agent-step').count() === 1);
+    if (await scriptStep.locator('.agent-step-row').first().getAttribute('aria-expanded') !== 'true') await scriptStep.locator('.agent-step-row').first().click();
+    check('An opened script step shows the code the model wrote', await scriptStep.locator('.agent-step-script').innerText() === 'for (const birthYear of [1990, 1991]) await tools.bazi({ birthYear });');
+    check('An opened script step shows what the script printed', await scriptStep.getByLabel('脚本输出').innerText().then(text => text.includes('1990: 己巳') && text.includes('1991: 庚午')));
+    check('An opened script step lists its calls as sub-steps', await scriptStep.locator('ol[aria-label="脚本调用"] > .agent-step').count() === 2);
+    await scriptStep.locator('.agent-step-workspace').first().click();
+    const scriptPage = workspacePanel.locator('[data-workspace-view="code"]');
+    await scriptPage.waitFor();
+    const scriptCalls = scriptPage.locator('.agent-ws-script-calls > li');
+    check('The script page lists every call in order; a call that never ran says why and opens nothing', await scriptCalls.count() === 3 &&
+      await scriptCalls.locator('button').count() === 2 && await scriptCalls.nth(2).innerText().then(text => text.includes('未执行') && text.includes('Tool call blocked')) &&
+      await scriptPage.getByRole('button', { name: '复制脚本', exact: true }).count() === 1);
+    await scriptCalls.first().locator('button').click();
+    await workspacePanel.locator('[data-workspace-view="chart"]').waitFor();
+    check('A call on the script page opens the chart it computed', await workspacePanel.locator('[data-workspace-view="chart"]').count() === 1);
     await workspacePanel.getByRole('button', { name: '关闭工作区', exact: true }).click();
     await page.setViewportSize({ width: 1200, height: 1000 });
     await page.evaluate(() => window.fixture.mount.results(false));

@@ -163,6 +163,7 @@ function createBody(value: Record<string, unknown>) {
     mentions,
     customProvider,
     webEnabled: value.webEnabled !== false,
+    codeMode: value.codeMode === true,
     reasoning: value.reasoning === true,
     reasoningEffort,
     collaborators,
@@ -276,6 +277,7 @@ export async function createAgentTask(request: NextRequest) {
       ? { ...custom, apiKey: hashAgentRequest(custom.apiKey) }
       : null,
     webEnabled: body.webEnabled !== false,
+    codeMode: body.codeMode,
     reasoning: body.reasoning === true,
     reasoningEffort: body.reasoningEffort,
     collaborators: body.collaborators,
@@ -439,6 +441,7 @@ export async function createAgentTask(request: NextRequest) {
     reasoningEffort: reasoning ? body.reasoningEffort : null,
     collaborators: body.collaborators,
     webEnabled: body.webEnabled !== false,
+    codeMode: body.codeMode,
     systemPrompt: prepared.systemPrompt,
     memoryEnabled: prepared.agentMemoryEnabled === true,
     knowledgeBaseIds: prepared.promptKnowledgeBases.map((kb) => kb.id),

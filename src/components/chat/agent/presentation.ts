@@ -1,7 +1,7 @@
 import type { ChatMessage } from '@/types';
 import { isAgentRunTerminal, type AgentMessageData, type AgentPart, type AgentRunStatus, type AgentRuntimeInfo } from '@/lib/agent/types';
-import { getAgentToolFamily, type AgentToolFamily, AGENT_CHART_NAMES, isAgentChartTool } from '@/lib/agent/tool-catalog';
-import { getAgentAttachmentRead, getAgentChart, getAgentDataResults, getAgentMethod, getAgentSearchResults, getAgentToolArtifactId, getAgentToolQuestions, type AgentChart } from '@/lib/agent/tool-presentation';
+import { getAgentToolFamily, type AgentToolFamily, AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, isAgentChartTool } from '@/lib/agent/tool-catalog';
+import { getAgentAttachmentRead, getAgentChart, getAgentDataResults, getAgentMethod, getAgentScript, getAgentSearchResults, getAgentToolArtifactId, getAgentToolQuestions, type AgentChart } from '@/lib/agent/tool-presentation';
 import { getChartFocus, getChartTargets } from '@/lib/agent/chart-interaction';
 import type { AgentWorkspaceModel } from '@/lib/agent/workspace';
 import { parallelAnalysisResults, type ParallelAnalysisResult } from '@/lib/agent/parallel-results';
@@ -185,6 +185,12 @@ export function summarizeAgentTool(tool: AgentTool): string | null {
         return read ? `${read.name}${read.readUntil !== null && read.total !== null ? ` · 读到 ${read.readUntil} / ${read.total} 字` : ''}` : null;
     }
     if (tool.name === 'remember_user_fact' && typeof args.title === 'string') return args.title;
+    if (tool.name === AGENT_CODEMODE_TOOL) {
+        // Pi lists a script's calls once it settles; while it runs its calls show as steps of their own.
+        const calls = getAgentScript(tool)?.calls ?? [];
+        const failed = calls.filter(call => call.status === 'error').length;
+        return calls.length ? `调用 ${calls.length} 次${failed ? ` · ${failed} 次失败` : ''}` : null;
+    }
     for (const key of ['query', 'name', 'type']) if (typeof args[key] === 'string') return (args[key] as string).slice(0, 120);
     return null;
 }
@@ -257,6 +263,7 @@ const FAMILY_PHRASES: Partial<Record<AgentToolFamily, (count: number) => string>
     method: count => `已加载 ${count} 套分析方法`,
     memory: count => `已记忆 ${count} 条`,
     artifacts: count => `已选定 ${count} 份成果`,
+    code: count => `已运行 ${count} 个脚本`,
     external: count => `已调用 ${count} 个外部工具`,
     other: count => `已运行 ${count} 个工具`,
 };
@@ -287,9 +294,19 @@ export function summarizeAgentActivity(tools: readonly AgentTool[], questionCoun
     return `${text || '任务过程'}${failed ? `，${failed} 处失败` : ''}`;
 }
 
-/** Process steps of a task: every call except plan updates, which show as the task list instead. */
+/**
+ * Process steps of a task: every call the model made except plan updates, which show as the task list instead. A code
+ * mode script's calls are part of the script's step.
+ */
 export function getAgentSteps(parts: readonly AgentPart[]): AgentTool[] {
-    return parts.filter((part): part is AgentTool => part.type === 'tool' && getAgentToolFamily(part.name) !== 'plan');
+    return parts.filter((part): part is AgentTool => part.type === 'tool' && !part.parentId && getAgentToolFamily(part.name) !== 'plan');
+}
+
+/** The calls a code mode script made, keyed by the script's card, in transcript order (the order it made them). */
+export function getAgentScriptCalls(parts: readonly AgentPart[]): ReadonlyMap<string, AgentTool[]> {
+    const calls = new Map<string, AgentTool[]>();
+    for (const part of parts) if (part.type === 'tool' && part.parentId) calls.set(part.parentId, [...calls.get(part.parentId) ?? [], part]);
+    return calls;
 }
 
 /** 第 N 步: one numbering across the whole task, shared by the chat process card and the workspace. */
@@ -428,7 +445,7 @@ export function formatAgentValue(value: unknown): string {
 /** Short tags shown on process steps, one per tool family. */
 export const AGENT_TOOL_FAMILY_LABELS: Record<AgentToolFamily, string> = {
     chart: '命盘', calculation: '推演', drilldown: '详查', search: '依据', data: '资料', method: '指引', plan: '计划',
-    question: '问题', collaboration: '协作', memory: '记忆', artifacts: '成果', external: '外部', other: '工具',
+    question: '问题', collaboration: '协作', memory: '记忆', artifacts: '成果', code: '脚本', external: '外部', other: '工具',
 };
 
 /**

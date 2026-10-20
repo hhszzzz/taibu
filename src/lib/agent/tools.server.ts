@@ -38,7 +38,7 @@ import type {
   KnowledgeSearchPersistence,
   KnowledgeSearchRow,
 } from "@/lib/knowledge-base/types";
-import type { AgentCheckpoint, AgentPart } from "./types";
+import { putAgentPart, type AgentCheckpoint, type AgentPart } from "./types";
 import {
   AgentStore,
   type AgentArtifactRow,
@@ -253,13 +253,7 @@ export async function createAgentTools(
   run: AgentRunRow,
   checkpoint: AgentCheckpoint,
 ): Promise<AgentTool[]> {
-  const putPart = (part: AgentPart) => {
-    const index = checkpoint.parts.findIndex(
-      (item) => item.type === part.type && item.id === part.id,
-    );
-    if (index < 0) checkpoint.parts.push(part);
-    else checkpoint.parts[index] = part;
-  };
+  const putPart = (part: AgentPart) => putAgentPart(checkpoint.parts, part);
   const putSources = (
     callId: string,
     results: Array<{ title: string; url: string; content: string }>,

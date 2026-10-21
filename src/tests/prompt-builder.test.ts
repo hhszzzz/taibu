@@ -510,6 +510,32 @@ test('buildPersonalityPrompt composes single and multi roles', () => {
     assert.ok(!multi.includes('你同时具备以下专业能力'));
 });
 
+test('personas fall back to their brief form when the whole prompt would crowd out the chart', async () => {
+    const pb = require('../lib/ai/prompt-builder') as any;
+    const { AI_PERSONALITIES } = require('../lib/ai/ai') as any;
+    const { countTokens } = require('../lib/token-utils') as any;
+    const full = pb.buildPersonalityPrompt(['bazi', 'ziwei']);
+    assert.ok(full.includes('## 断法'));
+    assert.equal(pb.buildPersonalityPrompt(['bazi', 'ziwei'], countTokens(full)), full, 'a prompt within the limit stays whole');
+    const brief = pb.buildPersonalityPrompt(['bazi', 'ziwei'], countTokens(full) - 1);
+    assert.ok(brief.includes('【八字宗师】') && brief.includes('【紫微斗数】') && brief.includes('## 输出要求') && brief.includes('## 安全红线'));
+    assert.ok(!brief.includes('## 断法'));
+    assert.equal(pb.buildPersonalityPrompt(['general'], 1), AI_PERSONALITIES.general.systemPrompt, 'a persona without a brief form stays as written');
+
+    // At the smallest budget the whole 盲派 card would be clipped and push the chart out; its brief form leaves room.
+    const res = await pb.buildPromptWithSources({
+        modelId: 'deepseek-chat',
+        userMessage: '看看事业',
+        mentions: [],
+        knowledgeHits: [],
+        userSettings: {},
+        chartContext: { baziChart: buildMinimalBaziChart(), analysisMode: 'mangpai' },
+    }, { budget: 1000 });
+    assert.ok(res.systemPrompt.includes('盲派') && !res.systemPrompt.includes('## 断法'));
+    assert.ok(res.diagnostics.some((layer: { id: string; included: boolean; truncated: boolean }) => layer.id.startsWith('personality_role') && layer.included && !layer.truncated));
+    assert.ok(res.diagnostics.some((layer: { id: string; included: boolean }) => layer.id === 'chart_context' && layer.included));
+});
+
 test('countTokens estimates Chinese heavier than Latin', () => {
     const utils = require('../lib/token-utils') as any;
     const cn = '你'.repeat(60);

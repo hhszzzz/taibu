@@ -146,7 +146,7 @@ test('the next task recreates a kept subagent, which continues from what it reme
   const streamFn: PiStreamFn = (model, context) => {
     const transcript = JSON.stringify(context.messages);
     if (isMain(context.messages)) {
-      listed ||= transcript.includes('本对话的常驻后台子分析（可用 send 继续交给它们）：八字复核（八字命理）');
+      listed ||= transcript.includes('本对话的常驻后台子分析（可用 send 继续交给它们）：八字复核（子平八字）');
       if (reportTurn(context.messages)) return respond(model, say('整合八字复核：2028 年财星透出。'));
       if (!results(context.messages, 'background_agent').length) return respond(model, [manage('send', { action: 'send', name: '八字复核', message: '接着看 2028 年' })]);
       return respond(model, say('已请八字复核接着看 2028 年。'));

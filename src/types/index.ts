@@ -86,6 +86,7 @@ export interface AIPersonalityConfig {
     description: string; // 风格描述
     emoji: string;       // 图标
     systemPrompt: string; // 系统提示词
+    briefPrompt?: string; // 精简提示词：多体系同问而完整提示词超出预算时替代 systemPrompt
     // 扩展字段（可选）
     color?: string;      // 主题色
     greeting?: string;   // 欢迎语

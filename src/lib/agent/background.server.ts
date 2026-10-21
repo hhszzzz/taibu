@@ -145,7 +145,7 @@ export function createBackgroundAgents(registrations: readonly ToolRegistration[
         parameters: Type.Object({
             action: Type.String({ enum: [...ACTIONS] }),
             name: Type.Optional(Type.String({ ...LABEL, description: '子分析的称呼，如“紫微复核”“应期推演”；status 不填' })),
-            system: Type.Optional(Type.String({ enum: PARALLEL_SYSTEMS, description: 'spawn 必填：它专攻的术数体系' })),
+            system: Type.Optional(Type.String({ enum: PARALLEL_SYSTEMS, description: 'spawn 必填：它专攻的方法卡 id（体系或流派，如 bazi-mangpai）' })),
             message: Type.Optional(Type.String({ minLength: 1, maxLength: 4000, description: 'spawn 与 send 必填：交给它的任务，附上已确认的资料或命盘引用，不让它猜测' })),
             followUp: Type.Optional(Type.Boolean({ description: 'send 时它正在分析：true 排在当前任务之后，默认在它下一步插入' })),
         }),

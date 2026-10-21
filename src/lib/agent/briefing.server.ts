@@ -13,7 +13,7 @@ import { calculateBaziOutputFromStoredFields } from '@/lib/divination/bazi-recor
 import { calculateDailyFortune } from '@/lib/divination/fortune';
 import { createGuardedAgentModels } from './model-registry.server';
 import { createPiSDKStream } from './pi-stream.server';
-import { taibuMethodSection } from './method-section.server';
+import { methodSection } from './method-section.server';
 import { loadAnalysisMethod } from './methods.server';
 import { prepareToolArguments, toolPolicyBlock } from './tool-arguments';
 import { backgroundCompactionTokens } from './compaction';
@@ -37,7 +37,7 @@ export async function generateBriefingAgent(db: SupabaseClient, job: { user_id: 
         const called = new Set<string>();
         let basisRetries = 0;
         const registry = createRegistry();
-        registry.install({ name: 'taibu_briefing', sections: [taibuMethodSection], tools: [
+        registry.install({ name: 'taibu_briefing', sections: [methodSection(false)], tools: [
             defineTool({ name: 'almanac', description: definition.description, parameters: Type.Unsafe<Record<string, unknown>>(definition.inputSchema), prepareArguments: args => prepareToolArguments(definition.inputSchema, args) as Record<string, unknown>, replay: 'safe', execute: async args => {
                 await authorize();
                 if (args.date !== undefined && args.date !== job.local_date) throw new Error('早报只查询指定当地日期');
@@ -64,7 +64,7 @@ export async function generateBriefingAgent(db: SupabaseClient, job: { user_id: 
                 called.add('read_saved_chart');
                 return { output: [{ type: 'text', text: JSON.stringify(details) }] };
             } }),
-            defineTool({ name: 'load_analysis_method', description: '加载早报需要的黄历或八字解读指引', parameters: Type.Object({ id: Type.Union([Type.Literal('almanac'), Type.Literal('bazi')]) }), replay: 'safe', execute: async args => ({ output: [{ type: 'text', text: JSON.stringify(loadAnalysisMethod(args.id)) }] }) }),
+            defineTool({ name: 'load_analysis_method', description: '加载早报需要的黄历或八字方法卡', parameters: Type.Object({ id: Type.Union([Type.Literal('almanac'), Type.Literal('bazi')]) }), replay: 'safe', execute: async args => ({ output: [{ type: 'text', text: JSON.stringify(loadAnalysisMethod(args.id)) }] }) }),
         ], hooks: [
             hook(ToolTask, { beforeTool: call => { const block = toolPolicyBlock(call.name, call.arguments); return block ? { block } : undefined; } }),
             hook(GenerationTask, { onYield: answer => answer.stopReason === 'stop' && (!called.has('almanac') || !called.has('read_saved_chart')) && basisRetries++ < 1 ? { continue: '请先调用 almanac 和 read_saved_chart 取得实际依据，再生成早报。' } : undefined }),

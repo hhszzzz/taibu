@@ -1,5 +1,5 @@
 import type { Mention } from '@/types/mentions';
-import type { AIPersonality, DifyContext, PromptLayerPriority, PromptLayerDiagnostic } from '@/types';
+import type { AIPersonality, AIPersonalityConfig, DifyContext, PromptLayerPriority, PromptLayerDiagnostic } from '@/types';
 import { AI_PERSONALITIES } from './ai';
 import type { KnowledgeHit } from '@/lib/knowledge-base/types';
 import type { InjectedSource } from '@/lib/source-tracker';
@@ -162,16 +162,19 @@ export function resolvePersonalities(context: {
     };
 }
 
-export function buildPersonalityPrompt(personalities: AIPersonality[]): string {
-    if (personalities.length === 1) {
-        return AI_PERSONALITIES[personalities[0]].systemPrompt;
-    }
+/** 人格层最多占提示词预算的一半，其余留给盘面与用户引用的数据。 */
+const PERSONALITY_BUDGET_SHARE = 0.5;
 
-    // 多人格场景：直接拼接各分析师提示词
-    return personalities.map(personality => {
-        const config = AI_PERSONALITIES[personality];
-        return `【${config.name}】\n${config.systemPrompt}`;
-    }).join('\n\n');
+/**
+ * 单人格直接用其提示词；多人格直接拼接各分析师提示词。
+ * 拼接结果超过 maxTokens 时改用各人格的精简提示词（无精简版的保持原样）。
+ */
+export function buildPersonalityPrompt(personalities: AIPersonality[], maxTokens = Number.POSITIVE_INFINITY): string {
+    const compose = (prompt: (config: AIPersonalityConfig) => string) => personalities.length === 1
+        ? prompt(AI_PERSONALITIES[personalities[0]])
+        : personalities.map(personality => `【${AI_PERSONALITIES[personality].name}】\n${prompt(AI_PERSONALITIES[personality])}`).join('\n\n');
+    const full = compose(config => config.systemPrompt);
+    return countTokens(full) <= maxTokens ? full : compose(config => config.briefPrompt ?? config.systemPrompt);
 }
 
 export function buildMinimalChatSystemPrompt(input: {
@@ -394,7 +397,7 @@ export async function buildPromptWithSources(context: PromptContext, prepared?: 
     });
     // 层级 ID 编码人格名称，便于客户端显示具体分析师类型
     const personalityTag = personalityResolution.personalities.join('+');
-    tryInject(`personality_role:${personalityTag}`, 'P0', buildPersonalityPrompt(personalityResolution.personalities));
+    tryInject(`personality_role:${personalityTag}`, 'P0', buildPersonalityPrompt(personalityResolution.personalities, Math.floor(budget * PERSONALITY_BUDGET_SHARE)));
 
     if (context.chartContext && (context.chartContext.baziChart || context.chartContext.ziweiChart)) {
         const chartPrompt = formatChartContextPrompt(context.chartContext, context.userSettings?.chartPromptDetailLevel);

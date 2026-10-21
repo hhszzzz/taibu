@@ -214,3 +214,26 @@
 | `pnpm test` | 2037 项通过 |
 | `pnpm lint`、严格类型 | 通过（无新增告警） |
 | 本地验收脚本 | 新增：普通用户读管理员接口得 403；管理员在「Agent 任务」按对话 ID 找到后台子分析任务，任务树列出主会话、`background_agent` 调用、子分析会话与回报，且没有失败 |
+
+## 阶段十：方法卡
+
+此前解读知识分三处各写一套：Agent 读 11 份 `interpretation/*.md` 解读指引，普通对话的人格各有手写提示词，盲派与周公解梦只存在于对话人格；经 MCP 或 skill 调用太卜的其他 AI 只拿到盘面，不知道该怎样断。本阶段把解读知识收拢为一套方法卡，一处书写，多处使用。
+
+- 来源：`skills/taibu-divination/methods/<id>.md`，共 13 张。每个体系一张与体系同名的默认卡（子平八字、紫微斗数、六爻、梅花易数、奇门遁甲、大六壬、小六壬、太乙神数、塔罗、西方占星、黄历择日），另有流派卡「盲派八字」（`bazi-mangpai`）与不需排盘的「周公解梦」（`dream`）。每张卡由 frontmatter（name、title、system、version、description）与固定四节组成：角色、断法、工具流程、输出要求；description 同时写「是什么」与「何时用」，供目录路由。SKILL.md 的「约定」与新增的「解读通则」为各卡共用。
+- 内容按经典与流派资料重写，断法写成可执行的判断次序：子平卡以《子平真诠》月令定格、顺用逆用为纲，再论扶抑、调候、通关、病药，用神、喜神、忌神分开写；盲派卡按段建业一系的宾主、体用、做功方式与效率、五种结构、象法与应期「到位」，不以日主旺衰定喜忌，并注明 Core 盘面不列拱合、暗合与墓库，用到时须说明取法；解梦卡以《周礼》六梦、《潜夫论》十梦辨梦之类，按梦书取象、多说并存，落到做梦者自身处境，参照弗洛伊德、荣格的心理学视角，不渲染恐惧，噩梦反复、失眠或与创伤相关时建议就医或心理咨询。
+- 生成：`scripts/build-methods.mjs`（`pnpm build:methods`；`pnpm check:methods` 只检查漂移）严格解析每张卡：字段齐全且不重复、name 与文件名一致、体系已登记、版本为 semver、一级标题与 title 一致、四节按序且非空、排版可逐字还原。它写出 `packages/core/src/mcp/methods.generated.ts` 与 SKILL.md 的方法卡目录。体系登记表（每个体系的 Core 工具，排盘工具在前）也在这里；测试保证 24 个 Core 工具各属一个体系、每个体系都有默认卡。
+- Core（`taibu-core/mcp`）：`listAnalysisMethods`、`findAnalysisMethod`（卡 ID 或该体系任一工具名，后者得到默认卡；`__proto__` 之类的继承键不会命中）、`getToolSystem`、`renderMethodGuide`（整张卡）、`renderMethodPersona`（去掉工具流程；`brief` 只留角色与输出要求）、`listMethodPrompts`／`renderMethodPrompt`（阶段十一的 MCP prompts）。
+- skill：工具表最后一列改为各工具所属体系的默认方法卡，「方法卡」一节列出全部卡及适用场景；skill bundle 随之重新生成。
+- Agent：方法目录按当前提供的工具列出可加载的卡及其工具，主 Agent 另列周公解梦（早报只列需要排盘的卡）。每个体系首次解读前须用 `load_analysis_method` 加载对应卡；同一体系有多张卡时按用户点名的流派选，未点名用默认卡。协作分析与后台子分析的 `system` 改为卡 ID，子平与盲派可以各开一个成员；成员只拿到卡所属体系的工具，周公解梦不需要工具，不能作为成员。工作区把「解读指引」改称「方法卡」。
+- 普通对话：有卡的 10 个人格（八字、盲派、紫微、解梦、塔罗、六爻、奇门、大六壬、梅花、小六壬）直接用卡的角色、断法与输出要求，再加原有的安全红线；通用、MBTI 与合盘没有卡，保留原提示词。完整卡比原手写提示词长 2–5 倍（约 215–870 token），对话提示词预算却多为 4000 token（推理模型可低至 2400，下限 1000），人格属于必注入层，过长会挤掉盘面和用户 @ 的资料。因此人格层最多占预算的一半：多人格拼接或小预算下超出时改用各卡的精简版（角色与输出要求，约 75–210 token）。盲派人格仍注入日柱口诀数据；删除未被调用的 `generateMangpaiPrompt`。
+- 不兼容：删除 `skills/taibu-divination/interpretation/`、`scripts/skill-guides.mjs`、`scripts/build-analysis-methods.mjs` 与 `src/lib/agent/analysis-methods.generated.ts`。`list_analysis_methods` 与 `/api/agent/methods` 由每个工具一条改为每张卡一条（带 `system` 与 `tools`）；`load_analysis_method` 返回卡 ID（按工具名加载时返回所属体系的卡 ID）、新标题（如「子平八字」）与新版本（重写的卡为 2.0.0，新卡为 1.0.0），指定旧版本 1.0.0 加载会被拒绝。历史消息中已加载的指引按当时存下的结果显示。
+
+### 阶段十验证
+
+| 验证 | 结果 |
+| --- | --- |
+| 方法卡测试 | `scripts/tests/method-cards.test.mjs`：卡的解析与 CRLF、各类格式错误被拒并指明文件与原因、共用段落提取、产物与 SKILL.md 目录无漂移；`packages/core/tests/method-cards.test.mjs`：工具归属唯一、默认卡齐全、按 ID／工具名查找与继承键拒绝、整卡与人格（不含工具名）及精简版、MCP prompts 的参数与正文 |
+| Agent 与对话测试 | 方法卡逐张加载与版本校验、工具名得到默认卡；目录按工具过滤、流派卡与解梦的列出规则、早报不列解梦；协作与后台成员用卡 ID（含盲派）；人格超出预算时改用精简版，最小预算下盘面仍注入 |
+| `pnpm test:browser` | 307 项通过（工作区方法卡视图改由 Core 方法卡生成） |
+| `pnpm test` | 2046 项通过 |
+| `pnpm lint`、严格类型 | 通过（无新增告警） |

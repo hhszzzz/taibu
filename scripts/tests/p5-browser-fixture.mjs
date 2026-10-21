@@ -63,7 +63,6 @@ import { ChatRecordViewContext } from '@/lib/chat/chat-record-view';
 import { ComposerStatusBar } from '@/components/chat/composer/ComposerStatusBar';
 import { getAgentChart } from '@/lib/agent/tool-presentation';
 import { getChartTargets, getDrilldownTargets } from '@/lib/agent/chart-interaction';
-import { ANALYSIS_GUIDES, ANALYSIS_METHODS } from '@/lib/agent/analysis-methods.generated';
 import { getAgentEvidence } from '@/lib/agent/evidence';
 import { agentMessageContent } from '@/lib/agent/types';
 import { getAgentCitedParagraph } from '@/components/chat/agent/presentation';
@@ -84,7 +83,7 @@ const familyParts = () => [
   { type: 'tool', id: 'family-web', name: 'web_search', title: '联网检索', status: 'completed', input: { query: '庚金 月令' }, output: [{ title: '庚金论', url: 'https://example.com/gengjin', content: '庚金带煞，刚健为最。' }, { title: '无效链接', url: 'javascript:alert(1)', content: '不应成为链接' }] },
   { type: 'tool', id: 'family-kb', name: 'search_knowledge', title: '知识库检索', status: 'completed', input: { query: '不存在的资料' }, output: [] },
   { type: 'tool', id: 'family-method', name: 'load_analysis_method', title: '加载分析方法', status: 'completed', input: { id: 'bazi' },
-    output: { ...ANALYSIS_METHODS.find(method => method.id === 'bazi'), version: '1.0.0', title: ANALYSIS_GUIDES.bazi.title, tools: ['bazi', 'bazi_dayun'], instructions: ANALYSIS_GUIDES.bazi.body } },
+    output: { ...BAZI_METHOD_FIXTURE, tools: ['bazi', 'bazi_dayun'] } },
   { type: 'tool', id: 'family-team', name: 'parallel_analysis', title: '协作分析', status: 'completed', output: { analyses: [
     { system: 'bazi', conversationId: 21, name: '子平', modelName: '分析模型', reasoningEffort: 'high', focus: '格局取用', status: 'completed', answer: '身强取财官。' },
     { system: 'bazi', conversationId: 22, name: '盲派', modelName: '复核模型', reasoningEffort: 'off', status: 'completed', answer: '做功看财星。' },
@@ -506,7 +505,8 @@ export async function build(outputDirectory) {
   const { build: bundle } = await import('esbuild');
   await mkdir(outputDirectory, { recursive: true });
   const outfile = resolve(outputDirectory, 'fixture.js');
-  const { executeTool, buildToolSuccessPayload, listToolDefinitions } = await import('taibu-core/mcp');
+  const { executeTool, buildToolSuccessPayload, findAnalysisMethod, listToolDefinitions, renderMethodGuide } = await import('taibu-core/mcp');
+  const baziMethod = findAnalysisMethod('bazi');
   const toolParts = [];
   for (const name of ['bazi', 'ziwei', 'qimen', 'liuyao', 'meihua', 'daliuren', 'xiaoliuren', 'tarot', 'taiyi', 'astrology', 'almanac']) {
     const definition = listToolDefinitions().find(tool => tool.name === name);
@@ -536,7 +536,7 @@ export async function build(outputDirectory) {
     output: { artifactId: 'family-dayun', result: dayun.structuredContent }, canonicalText: dayun.content.map(part => part.text).join('\n') };
 
   await bundle({
-    stdin: { contents: entry.replace('AGENT_TOOL_FIXTURE_PARTS', JSON.stringify(toolParts)).replace('TRADITIONAL_TAIYI_FIXTURE_PART', JSON.stringify(traditionalPart)).replace('REVISED_BAZI_FIXTURE_RESULT', JSON.stringify(revisedBazi.structuredContent)).replace('AGENT_DAYUN_FIXTURE_PART', JSON.stringify(dayunPart)).replace('BAZI_DRILLDOWN_FIXTURE_PARTS_JSON', JSON.stringify(drilldownParts)), loader: 'jsx', resolveDir: root, sourcefile: 'p5-browser-entry.jsx' },
+    stdin: { contents: entry.replace('AGENT_TOOL_FIXTURE_PARTS', JSON.stringify(toolParts)).replace('TRADITIONAL_TAIYI_FIXTURE_PART', JSON.stringify(traditionalPart)).replace('REVISED_BAZI_FIXTURE_RESULT', JSON.stringify(revisedBazi.structuredContent)).replace('AGENT_DAYUN_FIXTURE_PART', JSON.stringify(dayunPart)).replace('BAZI_DRILLDOWN_FIXTURE_PARTS_JSON', JSON.stringify(drilldownParts)).replace('BAZI_METHOD_FIXTURE', JSON.stringify({ ...baziMethod, whenToUse: baziMethod.description, instructions: renderMethodGuide('bazi') })), loader: 'jsx', resolveDir: root, sourcefile: 'p5-browser-entry.jsx' },
     outfile, bundle: true, format: 'iife', platform: 'browser', jsx: 'automatic',
     tsconfig: resolve(root, 'tsconfig.json'),
     define: { 'process.env.NODE_ENV': '"development"', 'process.env': '{}' },
@@ -2474,7 +2474,7 @@ export async function run(existingPage, bundlePath) {
       await evidence.innerText().then(text => text.includes('知识库没有匹配的段落') && text.includes('检索「不存在的资料」没有找到相关段落')));
     await openProcessStep('加载分析方法');
     await workspacePanel.locator('[data-workspace-view="method"]').waitFor();
-    check('A process step opens its versioned read-only method guide', await workspacePanel.innerText().then(text => text.includes('版本 1.0.0') && text.includes('不增加任何执行权限') && text.includes('八字命理解读指引')));
+    check('A process step opens its versioned read-only method guide', await workspacePanel.innerText().then(text => /版本 \d+\.\d+\.\d+/.test(text) && text.includes('不增加任何执行权限') && text.includes('子平八字')));
     await openTeamMember('协作分析', '子平');
     await workspacePanel.locator('[data-workspace-view="member"]').waitFor();
     check('Each collaboration member opens its own page with model, effort and focus', await workspacePanel.innerText().then(text => text.includes('子平') && text.includes('推理 高') && text.includes('格局取用')) &&
@@ -2496,7 +2496,7 @@ export async function run(existingPage, bundlePath) {
     await workspacePanel.getByRole('tab', { name: '概览', exact: true }).click();
     check('The overview keeps results and intermediate material without an evidence card or task summary', await workspacePanel.locator('[data-overview-card="evidence"]').count() === 0 &&
       await workspacePanel.innerText().then(text => text.includes('过程资料') && !text.includes('依据与定位') && !text.includes('任务摘要') && !text.includes('本任务计费')));
-    const familyTabs = await Promise.all(['八字大运', '八字命理解读指引', '两派会诊', '子平', '盲派', '档案检索', '长期记忆', '补充信息', '回答依据'].map(name => workspacePanel.getByRole('tab', { name, exact: true }).count()));
+    const familyTabs = await Promise.all(['八字大运', '子平八字', '两派会诊', '子平', '盲派', '档案检索', '长期记忆', '补充信息', '回答依据'].map(name => workspacePanel.getByRole('tab', { name, exact: true }).count()));
     check('Opened and followed family views stay as one tab each', familyTabs.every(count => count === 1));
     await results.getByRole('button', { name: /^依据 \d+/ }).click();
     await workspacePanel.locator('[data-workspace-view="evidence"]').waitFor();

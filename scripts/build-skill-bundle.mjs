@@ -3,8 +3,9 @@
  * 构建 taibu-divination skill 的自包含产物（维护工具，最终用户/agent 不需要运行）：
  *   1. 用 esbuild 把 packages/core/dist/mcp 打成单文件 ESM bundle（零安装的来源）
  *   2. 从 bundle 的 listToolDefinitions() 生成 references/<tool>.md
- *   3. 把工具选择表注入 SKILL.md 的 TOOLS 标记之间
+ *   3. 把工具选择表注入 SKILL.md 的 TOOLS 标记之间（最后一列链接该体系的默认方法卡）
  *
+ * 方法卡与 SKILL.md 的方法卡目录由 scripts/build-methods.mjs 生成。
  * 用法：pnpm -C packages/core build && node scripts/build-skill-bundle.mjs
  * 升级 core 版本后重跑本脚本并提交 bundle + references 的变更。
  */
@@ -13,7 +14,7 @@ import { readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { SKILL_DIR, requireGuide, shortDescription } from './skill-guides.mjs';
+import { SKILL_DIR } from './build-methods.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
@@ -151,15 +152,22 @@ function renderReference(tool) {
   return lines.join('\n');
 }
 
-function guideLink(toolName) {
-  const guide = requireGuide(toolName);
-  return `[interpretation/${guide}.md](interpretation/${guide}.md)`;
+/** 「八字命盘 - 根据出生信息排四柱命盘，…。」 → the purpose after the title, up to the first full stop. */
+function shortDescription(description) {
+  const [, afterDash] = description.split(/\s+-\s+/, 2);
+  const text = (afterDash ?? description).replace(/\n+/g, ' ');
+  return text.split(/[。；]/, 1)[0] || text;
 }
 
 async function generateDocs() {
   const bundleUrl = `${pathToFileURL(bundlePath).href}?v=${Date.now()}`;
-  const { listToolDefinitions } = await import(bundleUrl);
+  const { getToolSystem, listToolDefinitions } = await import(bundleUrl);
   const tools = listToolDefinitions();
+  const methodLink = (toolName) => {
+    const system = getToolSystem(toolName);
+    if (!system) throw new Error(`工具 ${toolName} 未登记所属体系，请更新 scripts/build-methods.mjs 的 SYSTEM_TOOLS`);
+    return `[methods/${system}.md](methods/${system}.md)`;
+  };
 
   mkdirSync(referencesDir, { recursive: true });
   for (const tool of tools) {
@@ -168,11 +176,11 @@ async function generateDocs() {
   console.log(`references: ${tools.length} files -> ${path.relative(repoRoot, referencesDir)}`);
 
   const tableLines = [
-    '| 工具名 | 名称 | 用途 | 参数文档 | 解读指引 |',
+    '| 工具名 | 名称 | 用途 | 参数文档 | 方法卡 |',
     '| --- | --- | --- | --- | --- |',
     ...tools.map(
       (tool) =>
-        `| \`${tool.name}\` | ${tool.title} | ${shortDescription(tool.description)} | [references/${tool.name}.md](references/${tool.name}.md) | ${guideLink(tool.name)} |`,
+        `| \`${tool.name}\` | ${tool.title} | ${shortDescription(tool.description)} | [references/${tool.name}.md](references/${tool.name}.md) | ${methodLink(tool.name)} |`,
     ),
   ];
   const skillMd = readFileSync(skillMdPath, 'utf8');

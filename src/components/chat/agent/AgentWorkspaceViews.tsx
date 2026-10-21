@@ -503,17 +503,17 @@ export function MethodCatalogView({ tool, runStatus, step }: ToolViewProps & { s
     </section>;
 }
 
-/** 解读指引 (Main board): a built-in, versioned guide. It shapes the reading steps and grants no tools or membership. */
+/** 方法卡 (Main board): a built-in, versioned card. It shapes the reading steps and grants no tools or membership. */
 export function MethodView({ tools, runStatus, step }: { tools: AgentToolPart[]; runStatus: AgentRunStatus; step?: number }) {
     const id = useId();
     const tool = latestCompleted(tools) ?? tools.at(-1)!;
     const guide = getAgentMethod(tool);
     return <section className="agent-ws-view" aria-labelledby={id}>
-        <WorkspaceViewHeading id={id} kicker={kickerOf(step, '内置方法', guide && `版本 ${guide.version}`, '只读')} title={guide?.title ?? inputText(tool, 'id') ?? '解读指引'}>
+        <WorkspaceViewHeading id={id} kicker={kickerOf(step, '内置方法', guide && `版本 ${guide.version}`, '只读')} title={guide?.title ?? inputText(tool, 'id') ?? '方法卡'}>
             方法只规定解读步骤；排盘仍由太卜 Core 计算，不增加任何执行权限。
         </WorkspaceViewHeading>
-        {tool.status !== 'completed' ? <WorkspaceToolPending tool={tool} runStatus={runStatus} running="正在加载解读指引…" />
-            : !guide ? <WorkspaceTextFallback tool={tool} note="指引格式无法识别，已显示原始返回。" />
+        {tool.status !== 'completed' ? <WorkspaceToolPending tool={tool} runStatus={runStatus} running="正在加载方法卡…" />
+            : !guide ? <WorkspaceTextFallback tool={tool} note="方法卡格式无法识别，已显示原始返回。" />
             : <>
                 {guide.whenToUse && <p className="agent-ws-note">适用：{guide.whenToUse}</p>}
                 {guide.tools.length > 0 && <p className="agent-ws-chips" aria-label="对应工具">{guide.tools.map(name => <code key={name}>{name}</code>)}</p>}

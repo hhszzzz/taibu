@@ -2,20 +2,36 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { listToolDefinitions } from 'taibu-core/mcp';
-import { ANALYSIS_GUIDES } from '../lib/agent/analysis-methods.generated';
 import { ANALYSIS_METHODS, loadAnalysisMethod } from '../lib/agent/methods.server';
+import { PARALLEL_SYSTEMS, memberInstructions, systemTitle } from '../lib/agent/parallel.server';
 
-test('every Core tool loads the original guide and shared tools keep their aliases', () => {
-    assert.equal(Object.keys(ANALYSIS_GUIDES).length, 11);
-    assert.deepEqual(ANALYSIS_METHODS.map(item => item.id).sort(), listToolDefinitions().map(item => item.name).sort());
+const LIMIT = '\n计算必须调用 Core 工具；方法包不授予工具、联网或会员权限。';
+
+test('every card loads its own text by id, and every Core tool loads its system default card', () => {
+    assert.equal(ANALYSIS_METHODS.length, 13);
     for (const method of ANALYSIS_METHODS) {
         const loaded = loadAnalysisMethod(method.id);
-        const source = readFileSync(`skills/taibu-divination/interpretation/${method.guide}.md`, 'utf8');
-        assert.equal(ANALYSIS_GUIDES[method.guide].body, source);
-        assert.equal(loaded.instructions, source + '\n计算必须调用 Core 工具；方法包不授予工具、联网或会员权限。');
-        assert.ok(loaded.tools.includes(method.id));
-        assert.equal(loadAnalysisMethod(method.guide).guide, method.guide);
+        const source = readFileSync(`skills/taibu-divination/methods/${method.id}.md`, 'utf8');
+        assert.equal(loaded.instructions, source.slice(source.indexOf('---\n\n') + 5) + LIMIT, method.id);
+        assert.deepEqual({ id: loaded.id, version: loaded.version, whenToUse: loaded.whenToUse }, { id: method.id, version: method.version, whenToUse: method.description });
     }
-    assert.throws(() => loadAnalysisMethod('__proto__'));
-    assert.throws(() => loadAnalysisMethod('bazi', 'unknown'));
+    for (const tool of listToolDefinitions()) {
+        const loaded = loadAnalysisMethod(tool.name);
+        assert.ok(loaded.tools.includes(tool.name) && loaded.id === loaded.system, tool.name);
+    }
+    assert.equal(loadAnalysisMethod('bazi-mangpai').title, '盲派八字');
+    assert.deepEqual(loadAnalysisMethod('bazi-mangpai').tools, loadAnalysisMethod('bazi').tools);
+    assert.deepEqual(loadAnalysisMethod('dream').tools, []);
+    assert.equal(loadAnalysisMethod('bazi', '2.0.0').version, '2.0.0');
+    assert.throws(() => loadAnalysisMethod('__proto__'), /分析方法或版本不存在/);
+    assert.throws(() => loadAnalysisMethod('bazi', '1.0.0'), /分析方法或版本不存在/);
+});
+
+test('collaboration members work with a chart-reading card, a school as well as a system', () => {
+    assert.ok(PARALLEL_SYSTEMS.includes('bazi') && PARALLEL_SYSTEMS.includes('bazi-mangpai'));
+    assert.ok(!PARALLEL_SYSTEMS.includes('dream'), 'a card that reads no chart has no member tools');
+    assert.equal(systemTitle('bazi-mangpai'), '盲派八字');
+    assert.equal(systemTitle('unknown'), 'unknown');
+    // A school member loads its own card, not the system default.
+    assert.match(memberInstructions('你是盲派专项分析助手。', 'bazi-mangpai'), /加载 bazi-mangpai（盲派八字）方法卡/);
 });

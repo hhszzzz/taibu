@@ -9,7 +9,7 @@
 | 2 | 有界 SSE 队列、空闲断线、epoch/resync；15 工具/11 体系独立评测；受限早报 Agent；问法模板及长期记忆管理 |
 | 3 | task-owned 并行子会话、稳定提交收据恢复、禁止嵌套、整任务一次计费；白名单 MCP；视觉能力门控、真实图片评测入口；浏览器语音输入 |
 
-知识正文唯一来源是 `skills/taibu-divination/interpretation/*.md`，共同约定取自 `skills/taibu-divination/SKILL.md`。生成器与 skill 打包器共享 `scripts/skill-guides.mjs`；生成文件逐字检查源内容。SDK 桥接使用 Pi 原生系统分区重放与渲染，确保方法目录、行为指令和最新分区更新进入真实模型请求，已删除分区不会残留。修改知识或 Core 工具定义后运行 `pnpm build:methods`。
+知识正文唯一来源是 `skills/taibu-divination/interpretation/*.md`，共同约定取自 `skills/taibu-divination/SKILL.md`。生成器与 skill 打包器共享 `scripts/skill-guides.mjs`；生成文件逐字检查源内容。（这套 guide 已由方法卡取代：来源改为 `skills/taibu-divination/methods/*.md`，生成器为 `scripts/build-methods.mjs`，产物进入 `taibu-core/mcp`，见 [Pi 1.3.0 升级说明 · 阶段十](agent-pi-durable-1-3-upgrade.md#阶段十方法卡)。）SDK 桥接使用 Pi 原生系统分区重放与渲染，确保方法目录、行为指令和最新分区更新进入真实模型请求，已删除分区不会残留。修改知识或 Core 工具定义后运行 `pnpm build:methods`。
 
 共享约定按完整章节提取，保留历法、时间、占当下、日期核实、随机性、六爻用神及 detailLevel 七项；独立按源文件行边界比对，防止多行正则把首条误当成整章。目录仅省略 Core 描述里已由工具 schema 承载的输出字段说明，完整约定与十一组路由仍保持在 1500 字符以内。
 

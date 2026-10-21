@@ -150,7 +150,7 @@ export function buildAgentWorkspace({ parts, artifacts, attachmentIds }: { parts
       case 'method':
         if (tool.name === 'list_analysis_methods') add('methods', { view: 'methods', family, title: '分析方法' }, tool);
         else {
-          const resource = add('method:' + (inputText(tool, 'id') ?? tool.id), { view: 'method', family, title: '解读指引' }, tool);
+          const resource = add('method:' + (inputText(tool, 'id') ?? tool.id), { view: 'method', family, title: '方法卡' }, tool);
           const guide = getAgentMethod(tool);
           if (guide) resource.title = guide.title;
         }

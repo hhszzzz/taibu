@@ -90,7 +90,7 @@ test('searches share the evidence view; records, attachments, methods and memori
   assert.deepEqual([by('record:bazi_chart:' + record)?.title, by('record:bazi_chart:' + record)?.toolIds], ['本人', ['read-1', 'read-2']]);
   assert.deepEqual([by('attachment:' + attachment)?.title, by('attachment:' + attachment)?.toolIds], ['手相说明.txt', ['attachment']]);
   assert.equal(model.resources.filter(resource => resource.id.startsWith('attachment:')).length, 1);
-  assert.deepEqual([by('method:bazi')?.title, by('method:bazi')?.toolIds], ['八字命理解读指引', ['method-1', 'method-2']]);
+  assert.deepEqual([by('method:bazi')?.title, by('method:bazi')?.toolIds], ['子平八字', ['method-1', 'method-2']]);
   assert.deepEqual(by('memory')?.toolIds, ['memory-read', 'memory-write']);
 });
 
@@ -163,9 +163,9 @@ test('family parsers read real Core and method results and reject incomplete one
   const brokenDayun = broken.output.result.大运列表.find(item => (item.流年列表?.length ?? 0) > 0)!;
   brokenDayun.流年列表![0].流年 = '二〇二七';
   assert.equal(getAgentCalculation(tool('bad', 'bazi_dayun', broken)), null, '异常流年列表回退到规范文本');
-  const guide = getAgentMethod(tool('m', 'load_analysis_method', { output: loadAnalysisMethod('bazi') }))!;
-  assert.equal(guide.title, '八字命理解读指引');
-  assert.equal(guide.version, '1.0.0');
+  const method = loadAnalysisMethod('bazi');
+  const guide = getAgentMethod(tool('m', 'load_analysis_method', { output: method }))!;
+  assert.deepEqual([guide.title, guide.version], ['子平八字', method.version]);
   assert.ok(guide.tools.includes('bazi') && guide.instructions.includes('不授予工具'));
   assert.equal(getAgentMethod(tool('m', 'load_analysis_method', { output: { id: 'bazi' } })), null);
   assert.equal(getAgentMethodCatalog(tool('l', 'list_analysis_methods', { output: ANALYSIS_METHODS }))?.length, ANALYSIS_METHODS.length);

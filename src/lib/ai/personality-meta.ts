@@ -23,7 +23,7 @@ export const AI_PERSONALITY_META: Record<AIPersonality, AIPersonalityMeta> = {
         id: 'bazi',
         name: '八字宗师',
         title: '八字命理分析',
-        description: '说话直接、一针见血、引用古籍，给出明确答案',
+        description: '以月令格局与用神喜忌为纲，结论明确并讲清依据',
         emoji: '🧙‍♂️',
     },
     ziwei: {
@@ -37,14 +37,14 @@ export const AI_PERSONALITY_META: Record<AIPersonality, AIPersonalityMeta> = {
         id: 'dream',
         name: '周公解梦',
         title: '周公解梦分析',
-        description: '温和洞察，结合梦境与命盘给出情绪疏导建议',
+        description: '辨梦类、取梦象，落到个人处境，兼顾心理视角',
         emoji: '🌙',
     },
     mangpai: {
         id: 'mangpai',
         name: '盲派分析',
         title: '盲派命理分析',
-        description: '严格基于盲派口诀与日柱称号进行解析',
+        description: '以宾主、体用与做功为纲，取象直断事件',
         emoji: '🧿',
     },
     general: {

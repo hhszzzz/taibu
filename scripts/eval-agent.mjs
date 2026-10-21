@@ -11,7 +11,7 @@ require('./ts-register.cjs');
 const { row, config: fixtureConfig, MemoryStore, scripted } = require('../src/tests/helpers/agent-runtime-fixture.ts');
 const { executeAgentRun } = require('../src/lib/agent/runtime.server.ts');
 const { assertAgentEvaluation, judgeAgentEvaluation } = require('../src/lib/agent/evaluation.server.ts');
-const { getAgentDrilldownBase } = require('../src/lib/agent/tool-catalog.ts');
+const { AGENT_TOOL_SEARCH_TOOL, getAgentDrilldownBase, isAgentDeferredTool } = require('../src/lib/agent/tool-catalog.ts');
 const cases = JSON.parse(await readFile(path.join(root, 'scripts/evals/agent-cases.json'), 'utf8'));
 const credits = require('../src/lib/user/credits.ts'), features = require('../src/lib/app-settings.ts');
 mock.method(credits, 'getUserCreditInfo', async () => ({ membership: 'plus', credits: 10, expiresAt: null }));
@@ -75,18 +75,19 @@ try {
             const lastUser = messages.findLastIndex(message => message.role === 'user');
             return messages.map((message, index) => index === lastUser ? { role: 'user', content: [{ type: 'text', text: typeof message.content === 'string' ? message.content : item.prompt }, { type: 'image', image: visionBytes, mediaType: 'image/png' }] } : message);
         } } : {}) }) : scripted(index => {
-            if (index === 0) return [{ type: 'toolCall', id: 'guide', name: 'load_analysis_method', arguments: { id: item.guide } }];
-            // 详查用例：先排盘，再用成果引用调用详查工具；其余用例保持单步计算。
-            if (item.chart) {
-                if (index === 1) return [{ type: 'toolCall', id: 'chart', name: item.chart.tool, arguments: item.chart.arguments }];
-                if (index === 2) {
+            // 详查用例先排盘，再用成果引用调用详查工具；低频工具与真实模型一样先经 tool_search 加载。
+            const steps = [
+                { id: 'guide', name: 'load_analysis_method', arguments: () => ({ id: item.guide }) },
+                ...(item.chart ? [{ id: 'chart', name: item.chart.tool, arguments: () => item.chart.arguments }] : []),
+                ...(isAgentDeferredTool(item.tool) ? [{ id: 'search', name: AGENT_TOOL_SEARCH_TOOL, arguments: () => ({ query: item.tool }) }] : []),
+                { id: 'compute', name: item.tool, arguments: () => {
+                    if (!item.chart) return item.arguments;
                     const chart = [...store.drafts.values()].find(artifact => artifact.tool_name === item.chart.tool);
                     if (!chart) throw new Error('未找到 ' + item.chart.tool + ' 的成果，无法详查');
-                    return [{ type: 'toolCall', id: 'compute', name: item.tool, arguments: { reference: 'artifact:' + chart.id, ...item.arguments } }];
-                }
-            } else {
-                if (index === 1) return [{ type: 'toolCall', id: 'compute', name: item.tool, arguments: item.arguments }];
-            }
+                    return { reference: 'artifact:' + chart.id, ...item.arguments };
+                } },
+            ];
+            if (index < steps.length) return [{ type: 'toolCall', id: steps[index].id, name: steps[index].name, arguments: steps[index].arguments() }];
             return [{ type: 'text', text: '根据实际 Core 盘面给出结论。离线模式只检查结构，不评价解读质量。' }];
         });
         let stage = 'execution', judgeResponse, judgeStatus, guideLoaded = false;
@@ -101,7 +102,7 @@ try {
             } else await assertAgentEvaluation(run, item.tool, [...store.drafts.values()], store);
             stage = 'guide-loading';
             guideLoaded = store.nativeEntries().some(entry => entry.model?.some(message => message.role === 'toolResult' && message.toolName === 'load_analysis_method' && !message.isError));
-            if (!live && !guideLoaded) throw new Error('未加载体系解读指引');
+            if (!live && !guideLoaded) throw new Error('未加载体系方法卡');
             let quality;
             if (live) {
                 stage = 'quality-judge';

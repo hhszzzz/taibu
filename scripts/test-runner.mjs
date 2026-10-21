@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TEST_DIRECTORIES = ['src/tests', 'packages/core/tests', 'packages/mcp/tests', 'packages/mcp-server/tests'];
-const SCRIPT_TESTS = ['scripts/tests/architecture-guards.test.mjs', 'scripts/tests/test-runner.test.mjs', 'scripts/tests/selfhost-schema.test.mjs', 'scripts/tests/selfhost-stack.test.mjs', 'scripts/tests/analysis-methods.test.mjs'];
+const SCRIPT_TESTS = ['scripts/tests/architecture-guards.test.mjs', 'scripts/tests/test-runner.test.mjs', 'scripts/tests/selfhost-schema.test.mjs', 'scripts/tests/selfhost-stack.test.mjs', 'scripts/tests/method-cards.test.mjs'];
 const ARTIFACT_TESTS = [
   'scripts/tests/npm-package-artifacts.test.mjs',
   'scripts/tests/skill-bundle.test.mjs',
@@ -42,7 +42,6 @@ export function requiredPackages(files) {
   const required = new Set();
   for (const file of files) {
     if (file.startsWith('src/tests/') || file.startsWith('packages/') || file.endsWith('/skill-bundle.test.mjs') || file.endsWith('/auth-postgrest-acceptance.test.mjs')) required.add('core');
-    if (file.endsWith('/analysis-methods.test.mjs')) required.add('core');
     if (file.startsWith('packages/mcp/tests/')) required.add('mcp');
     if (file.startsWith('packages/mcp-server/tests/')) required.add('mcp-server');
     if (file.endsWith('/npm-package-artifacts.test.mjs') || file.endsWith('/prepare-github-package.test.mjs')) {

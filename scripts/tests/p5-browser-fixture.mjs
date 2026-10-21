@@ -296,9 +296,15 @@ function RoundsProbe() {
 // Chat polish (1.A): inline edit box keys, fork guard, code block header and link targets on real ChatMessageList.
 const POLISH_MESSAGES = [
   { id: 'polish-u1', role: 'user', content: '第一问', createdAt: ROUND_START },
-  { id: 'polish-a1', role: 'assistant', content: '见 [外链](https://example.com/a) 与 [站内](/records)。\n\n\`\`\`ts\nconst answer = 42;\n\`\`\`', createdAt: ROUND_START },
+  { id: 'polish-a1', role: 'assistant', content: '见 [外链](https://example.com/a) 与 [站内](/records)。\n\n\`\`\`ts\nconst answer = 42;\n\`\`\`', createdAt: ROUND_START,
+    metadata: { sources: [], webSearch: { status: 'ok', sources: [
+      { title: '  黄历\n说明  ', url: 'https://example.com/almanac' },
+      { title: '重复', url: 'https://example.com/almanac' },
+      { title: '脚本', url: 'javascript:alert(1)' },
+      { title: '', url: 'http://example.org/x' },
+    ] } } },
   { id: 'polish-u2', role: 'user', content: '第二问', createdAt: ROUND_START },
-  { id: 'polish-a2', role: 'assistant', content: '抱歉，服务暂时不可用。', createdAt: ROUND_START, metadata: { unsaved: true } },
+  { id: 'polish-a2', role: 'assistant', content: '抱歉，服务暂时不可用。', createdAt: ROUND_START, metadata: { unsaved: true, webSearch: { status: 'failed', sources: [] } } },
 ];
 function PolishProbe() {
   const endRef = useRef(null);
@@ -2781,6 +2787,16 @@ export async function run(existingPage, bundlePath) {
       const internal = probe.querySelector('a[href="/records"]');
       return external?.target === '_blank' && external.rel === 'noopener noreferrer' && internal && !internal.hasAttribute('target');
     }));
+    const webToggle = polish.getByRole('button', { name: '联网搜索参考了 2 个网页', exact: true });
+    check('A plain chat answer folds the pages its web search returned behind their count', await webToggle.getAttribute('aria-expanded') === 'false' &&
+      await polish.locator('a[href="https://example.com/almanac"]').count() === 0);
+    await webToggle.click();
+    check('Unfolded, each web page links out once in a new tab; a script address is dropped', await polish.evaluate(probe => {
+      const links = [...probe.querySelectorAll('[data-message-id="polish-a1"] ol a')];
+      return links.length === 2 && links.every(link => link.target === '_blank' && link.rel === 'noopener noreferrer') &&
+        links[0].textContent === '黄历 说明example.com' && links[1].getAttribute('href') === 'http://example.org/x' && !probe.querySelector('a[href^="javascript:"]');
+    }) && await webToggle.getAttribute('aria-expanded') === 'true');
+    check('A web search that failed is stated under its answer', (await polish.locator('[data-message-id="polish-a2"]').innerText()).includes('联网搜索未能完成，本次回答没有参考网页'));
     await page.evaluate(() => { window.fixture.copied = []; Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async text => { window.fixture.copied.push(text); } } }); });
     const codeHead = polish.locator('.markdown-code-head');
     await codeHead.getByRole('button', { name: '复制代码', exact: true }).click();

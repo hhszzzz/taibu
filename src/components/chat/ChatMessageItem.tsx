@@ -11,13 +11,14 @@ import { FileText, Globe, KeyRound } from 'lucide-react';
 import type { AIMessageMetadata, ChatMessage, InjectedSource, Mention } from '@/types';
 import { getEnabledDataSourceTypes } from '@/lib/data-sources/catalog';
 import { formatMentionsForDisplay } from '@/lib/format-mentions';
-import { getVisibleSourcePanelState } from '@/lib/chat/feature-normalization';
+import { getVisibleSourcePanelState, getVisibleWebSearch } from '@/lib/chat/feature-normalization';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import { extractMentionTokens, filterMentionsByTokens, removeMentionsByTokens } from '@/lib/mention-tokens';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { ThinkingBlock } from '@/components/chat/ThinkingBlock';
 import { AgentMessage } from '@/components/chat/AgentMessage';
 import { SourcePanel } from '@/components/chat/SourcePanel';
+import { WebSearchSources } from '@/components/chat/WebSearchSources';
 import { buildMentionHighlightedParts } from '@/components/chat/mentionHighlight';
 import { MentionIcon } from '@/components/chat/mention/MentionIcon';
 import { useKnowledgeBaseFeatureEnabled } from '@/components/knowledge-base/useKnowledgeBaseFeatureEnabled';
@@ -312,11 +313,20 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                 expandedSources={expandedSources}
                 setExpandedSources={setExpandedSources}
             />
+            <WebSearchSection message={message} isCurrentStreaming={isCurrentStreaming} />
             {/* 操作按钮：Agent 消息放在依据同一行 */}
             {!message.agent && assistantActions}
         </article>
     );
 });
+
+// 普通对话的联网搜索来源；Agent 消息在自己的依据中展示网页
+function WebSearchSection({ message, isCurrentStreaming }: { message: ChatMessage; isCurrentStreaming: boolean }) {
+    const search = useMemo(() => getVisibleWebSearch(message.metadata as AIMessageMetadata | undefined), [message.metadata]);
+    // 与来源面板一样，回复结束后再展示
+    if (isCurrentStreaming || message.agent || !search) return null;
+    return <WebSearchSources search={search} />;
+}
 
 // 来源面板区域
 interface SourcePanelSectionProps {

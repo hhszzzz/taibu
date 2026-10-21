@@ -75,6 +75,18 @@ test('chart basis is opt-in and only carries the canonical text, never raw tool 
     assert.equal(serialized.includes('private-output'), false);
 });
 
+test('a plain chat answer shares the pages its web search returned, never a non-web address', () => {
+    const answer = {
+        id: 'w1', role: 'assistant', content: '参考网页的回答', createdAt: '2026-10-19T00:00:03.000Z',
+        metadata: { sources: [], webSearch: { status: 'ok', sources: [
+            { title: '黄历说明', url: 'https://example.com/almanac' },
+            { title: '重复', url: 'https://example.com/almanac' },
+            { title: '脚本', url: 'javascript:alert(1)' },
+        ] } },
+    } as ChatMessage;
+    assert.deepEqual(buildShareSnapshot([answer], { includeCharts: false })[0].sources, [{ title: '黄历说明', url: 'https://example.com/almanac' }]);
+});
+
 test('empty turns are dropped and oversized snapshots are rejected before reaching the database', () => {
     const empty: ChatMessage = { id: 'e', role: 'assistant', content: '   ', createdAt: '2026-10-19T00:00:00.000Z' };
     assert.deepEqual(buildShareSnapshot([empty], { includeCharts: false }), []);

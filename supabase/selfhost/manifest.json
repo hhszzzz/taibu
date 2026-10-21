@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "baselineRevision": "5725dde",
-  "sourceFingerprint": "5be3a31e9f8832abe4cf00c319b612968bbf5533bb0bd54ef6ba78b12a39c9b3",
+  "sourceFingerprint": "16e02ba176507abbb6e9b9f4a27d794d1db954d91342b73ad35f82e79e8c1233",
   "target": "empty local self-hosted application schema; NOT production parity or a migration replay",
   "bootstrapOrder": [
     "platform roles/extensions",
@@ -18,7 +18,7 @@
   "sources": [
     {
       "file": "supabase/tabel_export_from_supabase.sql",
-      "sha256": "94b07e567d9d27b7a53c1cda822048fbd8360ae6c89da9f4fda9fc32793e0cc1"
+      "sha256": "5ef973fa5bf6047a678d0765fd070ceb82147e428ef3bafd3b38d2e061a83d1e"
     },
     {
       "file": "supabase/migrations/20260118_create_gamification_tables.sql",
@@ -213,6 +213,10 @@
       "sha256": "55ad3521aad922853bd3535a4f87c6e37430498b383ac4b045c366effea43842"
     },
     {
+      "file": "supabase/migrations/20261021_100000_agent_admin_task_log.sql",
+      "sha256": "e8047ae94b905454941103ffb354e96dd793a9955981d188ebf0c25b744f39cc"
+    },
+    {
       "file": "supabase/selfhost/source-views.sql",
       "sha256": "65a5ab3f4d78c1c4c291be37e04e747072294ccc834c63a9c71795b11d14432e"
     },
@@ -234,7 +238,7 @@
     },
     {
       "file": "scripts/selfhost-schema.mjs",
-      "sha256": "a95d9499752137ece571c86c1de5a77d86cfd42d1ca5643590633eed0d7c8566"
+      "sha256": "8fb1fa9b1d66d59f7ea5004c4774bfef521e461b35042366dd1615f6abb996eb"
     },
     {
       "file": "src/app/api/supabase/storage/route.ts",
@@ -619,6 +623,15 @@
       "reason": null
     },
     {
+      "name": "admin_get_auth_user_emails",
+      "callers": [
+        "src/lib/agent/admin-tasks.server.ts"
+      ],
+      "source": "supabase/migrations/20260211_remove_service_role_key_phase2.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
       "name": "admin_update_ai_model_and_cleanup_bindings",
       "callers": [
         "src/app/api/admin/ai-models/[id]/route.ts"
@@ -634,6 +647,15 @@
         "src/app/api/admin/ai-models/[id]/sources/[sourceId]/route.ts"
       ],
       "source": "supabase/migrations/20260409_140500_full_atomicity_repairs.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "agent_admin_task_log",
+      "callers": [
+        "src/lib/agent/admin-tasks.server.ts"
+      ],
+      "source": "supabase/migrations/20261021_100000_agent_admin_task_log.sql",
       "status": "defined",
       "reason": null
     },
@@ -1294,6 +1316,14 @@
       "callers": [
         {
           "file": "src/lib/agent/activity.server.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/agent/admin-tasks.server.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/agent/admin-tasks.server.ts",
           "kind": "literal-from"
         },
         {
@@ -2677,7 +2707,7 @@
   "artifacts": [
     {
       "file": "supabase/selfhost/001-application.sql",
-      "sha256": "5e5af688a63578884551e39427fc32262362b73a912245e18862e37610f4aee3"
+      "sha256": "732817b9bb35154a99ae5f6ea6421cf5e4f19da150fabc580d4d5de1c1a7c88c"
     },
     {
       "file": "supabase/selfhost/002-storage.sql",

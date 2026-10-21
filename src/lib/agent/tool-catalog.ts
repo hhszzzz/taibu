@@ -65,6 +65,9 @@ export const AGENT_SUBMIT_PLAN_TOOL = 'submit_plan';
 /** The tool that manages a conversation's background subagents (`background.server.ts`). */
 export const AGENT_BACKGROUND_TOOL = 'background_agent';
 
+/** Task kinds of the background subagents: the task owning a subagent's conversation, and one message's delivery and report. */
+export const AGENT_BACKGROUND_TASKS = { anchor: 'taibu.background-anchor', reporter: 'taibu.background-reporter' } as const;
+
 /** Tools whose cards list members: a collaboration's, or the one subagent a background message went to. */
 export function isAgentMemberTool(name: string): boolean {
   return name === 'parallel_analysis' || name === AGENT_BACKGROUND_TOOL;

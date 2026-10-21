@@ -792,6 +792,42 @@ try {
   assert.equal(await credits(), beforeBackground - 2, 'each task with background subagents is charged once');
   console.log('Agent 浏览器：后台子分析派出、等待回报、整合、跨任务常驻与单次计费通过。');
 
+  // 任务树排障：普通用户读不到管理员接口；管理员在设置中心「Agent 任务」按对话 ID 找到这项任务，任务树由提交日志重建。
+  assert.equal((await context.request.get(`${config.APP_ORIGIN}/api/admin/agent-runs`)).status(), 403, 'regular users cannot read the task log');
+  const adminContext = await browser.newContext({ viewport: { width: 1440, height: 1100 } });
+  try {
+    await adminContext.route('**/*', (route) => {
+      const origin = new URL(route.request().url()).origin;
+      if (origin === config.APP_ORIGIN) return route.continue();
+      outside.push(origin);
+      return route.abort();
+    });
+    const admin = await adminContext.newPage();
+    admin.setDefaultTimeout(20_000);
+    admin.on('pageerror', (error) => errors.push(`admin ${new URL(admin.url()).pathname}: ${error.name}: ${error.message.slice(0, 2000)}`));
+    admin.on('response', (response) => { if (response.status() >= 500) failures.push(new URL(response.url()).pathname); });
+    await admin.goto(`${config.APP_ORIGIN}/chat`);
+    await admin.getByRole('button', { name: '登录', exact: true }).click();
+    await admin.getByPlaceholder('邮箱前缀').fill(config.ADMIN_EMAIL);
+    await admin.getByPlaceholder('输入密码').fill(config.ADMIN_PASSWORD);
+    await admin.locator('form').getByRole('button', { name: '登录', exact: true }).click();
+    await admin.getByPlaceholder('输入密码').waitFor({ state: 'hidden' });
+    await admin.goto(`${config.APP_ORIGIN}/settings/admin-ai-services/agent-tasks`);
+    const taskPanel = admin.getByRole('tabpanel', { name: 'Agent 任务' });
+    await taskPanel.getByLabel('按任务、对话或用户 ID 查找').fill(background.run.conversationId);
+    await taskPanel.getByRole('button', { name: '查找', exact: true }).click();
+    await taskPanel.getByRole('button', { name: new RegExp(background.run.id.slice(0, 8)) }).click();
+    const taskTree = taskPanel.getByRole('list', { name: '任务树' });
+    await taskTree.getByText('主会话', { exact: true }).waitFor();
+    assert.ok(await taskTree.getByText('工具 background_agent', { exact: true }).first().isVisible(), 'the spawn call sits in the tree');
+    assert.ok(await taskTree.getByText('后台子分析「八字复核」', { exact: true }).isVisible(), "the subagent's conversation is named");
+    assert.ok(await taskTree.getByText('后台回报 · 八字复核', { exact: true }).first().isVisible(), 'the report task is listed');
+    assert.equal(await taskTree.locator('.text-danger').count(), 0, 'nothing failed');
+    console.log('Agent 浏览器：管理员任务树按提交日志重建主会话、后台子分析与回报；普通用户无权读取。');
+  } finally {
+    await adminContext.close();
+  }
+
   await newChat();
   await uiReady();
   await page.getByRole("radio", { name: "对话", exact: true }).click();

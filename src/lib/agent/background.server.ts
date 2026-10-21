@@ -8,7 +8,7 @@ import { Type, type AssistantMessage, type Message } from '@earendil-works/pi-ai
 import type { AgentDurableStorage } from './durable-storage.server';
 import { PARALLEL_SYSTEMS, memberAgentChange, memberInstructions, memberStats, memberSteps, memberTools, systemTitle } from './parallel.server';
 import type { ParallelAnalysisResult } from './parallel-results';
-import { AGENT_BACKGROUND_TOOL } from './tool-catalog';
+import { AGENT_BACKGROUND_TASKS, AGENT_BACKGROUND_TOOL } from './tool-catalog';
 import type { AgentBackgroundResident, AgentCheckpoint } from './types';
 
 /** Subagents a conversation keeps, and messages one task may send them. */
@@ -45,7 +45,7 @@ const BACKGROUND = { ownership: { kind: 'conversation' }, background: true } as 
  * main agent's turns; stopping the whole task (`abort({ background: true })`) still reaches it.
  */
 const Anchor = defineTask<null, { phase: 'done' }, null>({
-    name: 'taibu.background-anchor', version: 1,
+    name: AGENT_BACKGROUND_TASKS.anchor, version: 1,
     initial: () => ({ phase: 'done' }),
     phases: { done: (_anchor, runtime, context) => runtime.commit(() => ({ status: 'terminal', outcome: { status: 'completed', result: null } }), context) },
     abort: (_anchor, runtime, context) => runtime.commit(() => ({ status: 'terminal', outcome: { status: 'aborted' } }), context),
@@ -76,7 +76,7 @@ function answerReport(name: string, answer: AssistantMessage | undefined): strin
  * deduplicate, so after a restart the subagent gets the message once and the main agent the report once.
  */
 const Reporter = defineTask<ReporterInput, ReporterState, null>({
-    name: 'taibu.background-reporter', version: 1,
+    name: AGENT_BACKGROUND_TASKS.reporter, version: 1,
     initial: () => ({ phase: 'deliver' }),
     phases: {
         deliver: async (reporter, runtime, context) => {

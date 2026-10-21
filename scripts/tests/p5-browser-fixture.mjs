@@ -10,7 +10,7 @@
  *   return run(page, '/tmp/taibu-p5-browser/fixture.js');
  *
  * Actual components: SettingsCenterPage/SettingsCenterHost/GeneralSettingsPanel/ChartsPanel/SharedLinksPanel, ShareConversationMenu, AIModelPanel,
- * AnnouncementManagementPanel, KeyManagementPanel, ConversationListProvider, ChartPickerModal,
+ * AnnouncementManagementPanel, KeyManagementPanel, AgentTaskPanel, ConversationListProvider, ChartPickerModal,
  * useSelectedBaziChart, useComposerState, HistoryDrawer/HistoryPageTemplate, RecordsPage and useAnalysisSnapshot.
  * Actual root ClientProviders owns the shared Query client and handles synthetic auth I/O.
  * Fixture-only boundaries: auth I/O/profile/feature flags, unrelated lazy panels,
@@ -41,6 +41,7 @@ import { openSettingsCenter } from '@/lib/settings-center';
 import { AIModelPanel } from '@/components/admin/AIModelPanel';
 import { AnnouncementManagementPanel } from '@/components/admin/AnnouncementManagementPanel';
 import { KeyManagementPanel } from '@/components/admin/KeyManagementPanel';
+import { AgentTaskPanel } from '@/components/admin/AgentTaskPanel';
 import { ConversationListProvider, useConversationList } from '@/lib/chat/ConversationListContext';
 import { useChatState } from '@/lib/chat/use-chat-state';
 import { useChatMessaging } from '@/lib/chat/use-chat-messaging';
@@ -447,6 +448,7 @@ function Shell() {
       <button onClick={() => navigate('/models')}>Fixture Models route</button>
       <button onClick={() => navigate('/announcements')}>Fixture Announcements route</button>
       <button onClick={() => navigate('/keys')}>Fixture Keys route</button>
+      <button onClick={() => navigate('/agent-tasks')}>Fixture Agent tasks route</button>
       <button onClick={() => openSettingsCenter('general')}>Open actual settings</button>
       <button onClick={() => setUser('alice')}>Fixture Alice</button>
       <button onClick={() => setUser('bob')}>Fixture Bob</button>
@@ -471,6 +473,7 @@ function Shell() {
     {route === '/models' && <section data-testid="models"><AIModelPanel key={modelMountKey} /></section>}
     {route === '/announcements' && <section data-testid="announcements"><AnnouncementManagementPanel /></section>}
     {route === '/keys' && <section data-testid="activation-keys"><KeyManagementPanel /></section>}
+    {route === '/agent-tasks' && <section data-testid="agent-tasks"><AgentTaskPanel /></section>}
     {composerMounted && <ComposerProbe />}
     {selectedMounted && <SelectedChartProbe />}
     {agentMounted && <AgentChatProbe />}
@@ -753,6 +756,25 @@ export async function run(existingPage, bundlePath) {
     activationKey('key-used', 'sk-fixtureused00002', { key_type: 'credits', membership_type: null, credits_amount: 50, is_used: true, used_by: 'alice', used_at: '2026-01-05T00:00:00Z' }),
   ];
   let failKeyCreate = false;
+  // The admin Agent task routes answer raw payloads: { runs } and { run, tree }.
+  const agentTaskRun = { id: '7b1d4c3e-2f6a-4b8c-9d0e-1a2b3c4d5e6f', conversationId: '0c9b8a7d-6e5f-4a3b-8c2d-1e0f9a8b7c6d', userId: '5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d',
+    userEmail: 'alice@example.com', status: 'running', billing: 'charged', title: '看事业', model: 'fixture-analysis',
+    modes: { codeMode: false, planMode: false, compact: false, web: false, collaborators: 1 }, workerId: 'worker-fixture', fence: 2,
+    leaseUntil: '2026-10-21T00:01:00.000Z', cancelRequested: false, createdAt: '2026-10-21T00:00:00.000Z', updatedAt: '2026-10-21T00:00:30.000Z' };
+  const agentTaskStart = Date.parse('2026-10-21T00:00:00.000Z');
+  const agentTask = (id, role, status, extra = {}) => ({ id, kind: { generation: 'pi.generation', tool: 'pi.tool', subagent: 'taibu.background-anchor', report: 'taibu.background-reporter' }[role],
+    role, status, changedAt: '2026-10-21T00:00:30.000Z', tasks: [], conversations: [], ...extra });
+  const agentTaskTree = () => ({ commits: 42, lastCommitAt: '2026-10-21T00:00:30.000Z', truncated: false, counts: { live: 4, completed: 2, failed: 1, aborted: 0 }, conversations: [{
+    id: 1, role: 'main', submissions: [{ id: 1, type: 'input', status: 'done', requestId: 'initial' }, { id: 9, type: 'input', status: 'unanswered', requestId: 'command:3', reason: 'model_error' }], tasks: [
+      agentTask(3, 'generation', 'waiting', { phase: 'tools', waitingOn: [4, 5], policy: 'failFast', startedAt: agentTaskStart, tasks: [
+        agentTask(4, 'tool', 'terminal', { tool: 'bazi', outcome: 'completed', startedAt: agentTaskStart, endedAt: agentTaskStart + 400 }),
+        agentTask(5, 'tool', 'running', { tool: 'parallel_analysis', phase: 'execute', startedAt: agentTaskStart + 500, conversations: [{ id: 2, role: 'member',
+          submissions: [{ id: 2, type: 'input', status: 'placed', requestId: 'analysis:5:0' }], tasks: [agentTask(6, 'generation', 'running', { phase: 'request', model: 'fixture-review', startedAt: agentTaskStart + 600 })] }] }),
+      ] }),
+      agentTask(7, 'subagent', 'terminal', { background: true, outcome: 'completed', startedAt: agentTaskStart, endedAt: agentTaskStart + 10, conversations: [{ id: 3, role: 'subagent', name: '八字复核', submissions: [],
+        tasks: [agentTask(8, 'generation', 'terminal', { outcome: 'failed', reason: '模型调用失败：超时', startedAt: agentTaskStart + 20, endedAt: agentTaskStart + 2020 })] }] }),
+      agentTask(10, 'report', 'running', { subagent: '八字复核', background: true, phase: 'deliver', startedAt: agentTaskStart + 30 }),
+    ] }] });
   let settingsReads = 0;
   let holdList = false;
   let releaseList;
@@ -966,6 +988,8 @@ export async function run(existingPage, bundlePath) {
       activationKeys = [...created, ...activationKeys];
       return ok({ success: true, keys: created.map(key => key.key_code) }, true);
     }
+    if (url.pathname === '/api/admin/agent-runs' && method === 'GET') return ok({ runs: [agentTaskRun] }, true);
+    if (url.pathname === `/api/admin/agent-runs/${agentTaskRun.id}` && method === 'GET') return ok({ run: agentTaskRun, tree: agentTaskTree() }, true);
     if (url.pathname === '/api/admin/ai-models/cache') return ok({ cleared: true });
     if (url.pathname === '/api/admin/ai-models') {
       if (method === 'GET') return ok({ models });
@@ -1254,6 +1278,44 @@ export async function run(existingPage, bundlePath) {
     await until(() => !document.querySelector('[data-testid="activation-keys"] table')?.textContent.includes('sk-fixtureused00002'));
     check('Activation key deletion confirms first and removes only that key', requests.some(item => item.pathname === '/api/activation-keys' && item.method === 'DELETE' && item.search === '?id=key-used')
       && await keyPanel.getByText('sk-fixtureunused001', { exact: true }).isVisible());
+    await page.getByRole('button', { name: 'Fixture Agent tasks route', exact: true }).click();
+    const taskPanel = page.getByTestId('agent-tasks');
+    const taskListReads = () => requests.filter(item => item.pathname === '/api/admin/agent-runs');
+    const taskTreeReads = () => requests.filter(item => item.pathname === `/api/admin/agent-runs/${agentTaskRun.id}`).length;
+    const waitForRequest = async predicate => { for (let attempt = 0; attempt < 80 && !predicate(); attempt++) await page.waitForTimeout(100); return predicate(); };
+    await taskPanel.getByRole('button', { name: /看事业/ }).waitFor();
+    check('Agent task list reads active tasks with their status and user', taskListReads().some(item => item.search === '?scope=active')
+      && await taskPanel.getByText('alice@example.com', { exact: true }).isVisible() && await taskPanel.locator('tbody').getByText('执行中', { exact: true }).isVisible());
+    await taskPanel.getByRole('button', { name: /看事业/ }).click();
+    const taskTree = taskPanel.getByRole('list', { name: '任务树' });
+    await taskTree.waitFor();
+    check('Agent task tree nests tool calls under the model call that waits on them', await taskTree.locator('[data-agent-task="3"]').getByText('等待 #4 #5 · tools', { exact: true }).first().isVisible()
+      && await taskTree.locator('[data-agent-task="3"] [data-agent-task="4"]').getByText('工具 bazi', { exact: true }).isVisible()
+      && await taskTree.locator('[data-agent-task="4"]').getByText('400 毫秒', { exact: true }).isVisible());
+    check("Agent task tree shows a member's and a subagent's conversations under the tasks owning them", await taskTree.locator('[data-agent-task="5"] [data-agent-conversation="2"]').getByText('协作成员会话', { exact: true }).isVisible()
+      && await taskTree.locator('[data-agent-task="7"] [data-agent-conversation="3"]').getByText('后台子分析「八字复核」', { exact: true }).isVisible()
+      && await taskTree.getByText('后台回报 · 八字复核', { exact: true }).isVisible());
+    check('Agent task tree shows why a task failed and which input went unanswered', await taskTree.locator('[data-agent-task="8"]').getByText('模型调用失败：超时', { exact: true }).isVisible()
+      && await taskTree.getByText('command:3', { exact: true }).isVisible() && await taskTree.getByText('2.0 秒', { exact: true }).isVisible());
+    await taskPanel.getByLabel('只看未结束').check();
+    check('Only-unfinished keeps the live graph: ended branches without live work drop out', await taskTree.locator('[data-agent-task="4"]').count() === 0
+      && await taskTree.locator('[data-agent-task="7"]').count() === 0 && await taskTree.locator('[data-agent-task="6"]').isVisible() && await taskTree.locator('[data-agent-task="10"]').isVisible());
+    const treeReadsBefore = taskTreeReads();
+    check("A running task's tree refreshes on its own", await waitForRequest(() => taskTreeReads() > treeReadsBefore));
+    agentTaskRun.status = 'completed';
+    const treeReadsRunning = taskTreeReads();
+    await waitForRequest(() => taskTreeReads() > treeReadsRunning);
+    await taskPanel.getByRole('region', { name: '任务详情' }).getByText('已完成', { exact: true }).waitFor();
+    const treeReadsFinished = taskTreeReads();
+    await page.waitForTimeout(3500);
+    check("A finished task's tree stops refreshing", taskTreeReads() === treeReadsFinished);
+    await taskPanel.getByLabel('按任务、对话或用户 ID 查找').fill('7b1d');
+    await taskPanel.getByRole('button', { name: '查找', exact: true }).click();
+    check('A partial ID is refused before any search request', (await taskPanel.getByRole('alert').textContent()).includes('请输入完整的任务、对话或用户 ID')
+      && !taskListReads().some(item => item.search.includes('q=')));
+    await taskPanel.getByLabel('按任务、对话或用户 ID 查找').fill(agentTaskRun.conversationId);
+    await taskPanel.getByRole('button', { name: '查找', exact: true }).click();
+    check('A full ID searches tasks in every state', await waitForRequest(() => taskListReads().some(item => item.search === `?scope=active&q=${agentTaskRun.conversationId}`)));
     // Explicitly remount while a real loadModels receipt is held. React's
     // development effect replay count varies for later conditional mounts.
     const oldModelLoad = holdNext('/api/admin/ai-models', 'GET');

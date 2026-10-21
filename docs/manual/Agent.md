@@ -64,6 +64,8 @@ Tavily 工具按需检索，返回标题、摘要和 URL；来源卡片仅使用
 
 存储适配复用 Pi MemoryStorage 的提交校验、索引、文档历史和分叉语义，先提交 PostgreSQL 日志，再应用已确认批次。重启分页重放日志后由 Harness 接续原生任务。这与官方 JSONL 后端一样会把当前任务的索引和历史保存在进程内存中，日志随任务长度增长；上下文压缩不会删除原始记录。大规模部署应监测单任务内存及日志增长，后续可替换为通过相同契约的 SQL 查询后端。
 
+管理员排障：设置中心 › AI 服务 › Agent 任务（`/settings/admin-ai-services/agent-tasks`）列出进行中或最近的任务，按任务、对话或用户的完整 ID 查找时不限状态。选中任务后按原生日志重建任务树：会话（主会话、协作成员、后台子分析、分支）在上，每个任务挂在持有它的任务或会话下，含已结束的任务、耗时、等待关系（`等待 #id`）、失败或中止原因、未答复输入的原因，以及后台、已请求中止、重启后放弃等标记；「只看未结束」相当于 Pi 的实时 `taskGraph`。进行中的列表每 5 秒、任务树每 3 秒刷新，面板不可见时不轮询。读取经迁移 `20261021_100000_agent_admin_task_log.sql` 的 `agent_admin_task_log`：只有管理员可调用，每页 200 次提交，一次最多读 1 万次；只返回会话、去掉 memos 的任务、提交状态，以及助手条目里工具调用的 ID 与名称，正文、工具结果、推理与文档状态（含排队中的输入）不出库。不改表、列与策略。
+
 当前 V2 检查点由同版本 Durable worker 恢复；拒绝旧版本、缺失代际和未知引擎。历史聊天消息仍可阅读，但不能恢复旧执行日志。回滚应用前应停用新任务入口并完成当前任务，保留新增表与列。
 
 业务任务状态、最终消息及完成事件由同一结算事务提交，提交成功而响应未到时重试不会重复结算。`20261007_100000_agent_chat_results.sql` 将选定命盘保存与 MingRecord 分开；`20261020_120000_agent_user_saved_charts.sql` 去掉结算中的命盘保存与已不使用的 `p_record` 参数，`agent_cache_tool` 不再写命盘载荷，并删除只由这两处写入的 `agent_run_artifacts.chart_payload／chart_id／chart_type`。SDK 必须提供有效结束事件；异常 EOF、超时或 abort 会进入失败／停止路径，保留已显示正文。worker 退出及租约故障仍保留原生待恢复任务。
@@ -124,6 +126,8 @@ Docker runner 同时包含 Web 和 worker 构建，可使用同一镜像的两�
 | `POST /api/agent/runs/:id/messages` | `reply / steer / follow_up`，指令也使用 `clientRequestId` 去重 |
 | `POST /api/agent/runs/:id/cancel` | 请求停止；等待 worker 安全结算 |
 | `GET /api/agent/activity` | 对话侧栏的任务标记：本人执行中／等待回答的任务与未读任务通知 |
+| `GET /api/admin/agent-runs?scope=active\|recent&q=…` | 管理员：进行中或最近的任务（新的在前，最多 50 条）；`q` 为完整的任务、对话或用户 ID，查找时不限状态 |
+| `GET /api/admin/agent-runs/:id` | 管理员：任务概况与按原生日志重建的任务树 |
 
 公开快照包含任务状态、`cursor` 和版本 1 的聊天消息。消息包含有序正文、推理、工具、问题、来源、成果部分，并生成普通消息可读的 `content`。原生模型响应测量保存在 `runtime.responses`，工具部分保留 `durationMs / startedAt / endedAt`，历史字段缺失时不补造数据。SSE `history` 事件重放持久化事件，`snapshot` 提供当前完整公开状态；连接中断、刷新或浏览器关闭均不会取消任务。
 

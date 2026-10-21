@@ -96,7 +96,7 @@ test('restored transactional uniqueness and message cascade are present', () => 
 });
 
 test('all current literal application RPC references have definitions or explicit blockers', () => {
-  assert.equal(manifest.rpcReferences.length, 61);
+  assert.equal(manifest.rpcReferences.length, 63);
   assert.deepEqual(manifest.rpcReferences.filter(r => r.status === 'missing-source'), []);
   for (const rpc of manifest.rpcReferences) assert.ok(definition(rpc.name) || ['check_login_attempts', 'record_login_attempt'].includes(rpc.name), rpc.name);
   assert.deepEqual(manifest.requiredPostBaselineMigrations, ['supabase/migrations/20261003_100000_fix_rate_limit_admission.sql']);

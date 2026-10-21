@@ -656,6 +656,8 @@ CREATE TABLE public.agent_workers (
 );
 
 -- Pi Durable storage and ownership from 20261006_100000_agent_pi_durable.sql.
+-- Closed to clients: the worker reads it through its lease (agent_durable_read); administrators read task and
+-- conversation records without transcript content through agent_admin_task_log (20261021_100000_agent_admin_task_log.sql).
 CREATE TABLE public.agent_durable_commits (
   run_id uuid NOT NULL REFERENCES public.agent_runs(id) ON DELETE CASCADE,
   sequence bigint NOT NULL CHECK(sequence > 0),

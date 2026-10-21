@@ -1,5 +1,5 @@
 /**
- * 设置中心的管理页：公告、功能与激活码、AI 服务
+ * 设置中心的管理页：公告、功能与激活码、AI 服务（含 Agent 任务排障）
  *
  * 'use client' 标记说明：
  * - 子页跟随路由切换，需要 useState / useEffect 记住访问过的子页并保留其状态
@@ -33,10 +33,13 @@ const LazyAIModelPanel = lazy(async () => ({
 const LazyAIGatewayPanel = lazy(async () => ({
   default: (await import('@/components/admin/AIGatewayPanel')).AIGatewayPanel,
 }));
+const LazyAgentTaskPanel = lazy(async () => ({
+  default: (await import('@/components/admin/AgentTaskPanel')).AgentTaskPanel,
+}));
 
 type AdminSubtabOwner = 'admin-features' | 'admin-ai-services';
 type AdminFeatureTab = 'toggles' | 'keys';
-type AdminAITab = 'models' | 'gateways';
+type AdminAITab = 'models' | 'gateways' | 'agent-tasks';
 
 const FEATURE_TABS: SettingsTabOption<AdminFeatureTab>[] = [
   { id: 'toggles', label: '功能开关' },
@@ -46,6 +49,7 @@ const FEATURE_TABS: SettingsTabOption<AdminFeatureTab>[] = [
 const AI_TABS: SettingsTabOption<AdminAITab>[] = [
   { id: 'models', label: '模型管理' },
   { id: 'gateways', label: '网关管理' },
+  { id: 'agent-tasks', label: 'Agent 任务' },
 ];
 
 function PanelFallback() {
@@ -61,7 +65,7 @@ function resolveAdminFeatureTab(value: string | null | undefined): AdminFeatureT
 }
 
 function resolveAdminAITab(value: string | null | undefined): AdminAITab {
-  return value === 'gateways' ? 'gateways' : 'models';
+  return value === 'gateways' || value === 'agent-tasks' ? value : 'models';
 }
 
 function useResolvedSettingsCenterSubtab<T extends string>(
@@ -102,7 +106,8 @@ function AdminSubtabs<T extends string>({
   label: string;
   tabs: readonly SettingsTabOption<T>[];
   resolveTab: (value: string | null | undefined) => T;
-  renderPanel: (tab: T) => ReactNode;
+  /** `active` is false for a visited tab kept mounted behind the current one. */
+  renderPanel: (tab: T, active: boolean) => ReactNode;
 }) {
   const activeTab = useResolvedSettingsCenterSubtab(owner, resolveTab);
   const visited = useVisitedSubtabs(activeTab);
@@ -126,7 +131,7 @@ function AdminSubtabs<T extends string>({
             hidden={tab !== activeTab}
             inert={tab !== activeTab}
           >
-            {renderPanel(tab)}
+            {renderPanel(tab, tab === activeTab)}
           </div>
         ))}
       </Suspense>
@@ -135,7 +140,9 @@ function AdminSubtabs<T extends string>({
 }
 
 const renderFeaturePanel = (tab: AdminFeatureTab) => (tab === 'toggles' ? <LazyFeatureTogglePanel /> : <LazyKeyManagementPanel />);
-const renderAIPanel = (tab: AdminAITab) => (tab === 'models' ? <LazyAIModelPanel /> : <LazyAIGatewayPanel />);
+const renderAIPanel = (tab: AdminAITab, active: boolean) => (
+  tab === 'models' ? <LazyAIModelPanel /> : tab === 'gateways' ? <LazyAIGatewayPanel /> : <LazyAgentTaskPanel active={active} />
+);
 
 export function AdminAnnouncementsContent() {
   return (

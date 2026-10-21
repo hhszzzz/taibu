@@ -372,12 +372,25 @@ const USER_SAVED_CHART_MIGRATIONS = [{
   sha256: '55ad3521aad922853bd3535a4f87c6e37430498b383ac4b045c366effea43842',
 }];
 const USER_SAVED_CHART_FINGERPRINT = '3835fe3cba2c2df7f8315b8ad7a69b4c50c1c04c14592b81d1abccef92c20a4f';
-const REVIEWED_SCHEMA_UPGRADES = [
+const REVIEWED_USER_SAVED_CHART_SCHEMA_UPGRADES = [
   ...REVIEWED_PI_DURABLE_1_3_SCHEMA_UPGRADES,
   ...REVIEWED_PI_DURABLE_1_3_SCHEMA_UPGRADES.filter(entry => entry.current === PI_DURABLE_1_3_FINGERPRINT).map(entry => ({
     previous: entry.previous, current: USER_SAVED_CHART_FINGERPRINT, files: [...entry.files, ...USER_SAVED_CHART_MIGRATIONS],
   })),
   { previous: PI_DURABLE_1_3_FINGERPRINT, current: USER_SAVED_CHART_FINGERPRINT, files: USER_SAVED_CHART_MIGRATIONS },
+];
+// 2026-10-21：管理员只读的任务日志（设置中心「Agent 任务」重建任务树）；不改表、列与策略。
+const ADMIN_TASK_LOG_MIGRATIONS = [{
+  file: 'supabase/migrations/20261021_100000_agent_admin_task_log.sql',
+  sha256: 'e8047ae94b905454941103ffb354e96dd793a9955981d188ebf0c25b744f39cc',
+}];
+const ADMIN_TASK_LOG_FINGERPRINT = '2e4f0aa1231713b4e40f2662ad5bc4068b4aa190526533ed15174004cf64b388';
+const REVIEWED_SCHEMA_UPGRADES = [
+  ...REVIEWED_USER_SAVED_CHART_SCHEMA_UPGRADES,
+  ...REVIEWED_USER_SAVED_CHART_SCHEMA_UPGRADES.filter(entry => entry.current === USER_SAVED_CHART_FINGERPRINT).map(entry => ({
+    previous: entry.previous, current: ADMIN_TASK_LOG_FINGERPRINT, files: [...entry.files, ...ADMIN_TASK_LOG_MIGRATIONS],
+  })),
+  { previous: USER_SAVED_CHART_FINGERPRINT, current: ADMIN_TASK_LOG_FINGERPRINT, files: ADMIN_TASK_LOG_MIGRATIONS },
 ];
 
 export function reviewedSchemaUpgrade(fingerprint, bundle) {

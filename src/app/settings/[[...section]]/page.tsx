@@ -9,7 +9,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ secti
   if (tab === 'admin-ai-services' && !subpath) redirect('/settings/admin-ai-services/models');
   if (!isSettingsCenterTab(tab) || extra.length || (subpath && !(
     (tab === 'admin-features' && ['toggles', 'keys'].includes(subpath)) ||
-    (tab === 'admin-ai-services' && ['models', 'gateways'].includes(subpath))
+    (tab === 'admin-ai-services' && ['models', 'gateways', 'agent-tasks'].includes(subpath))
   ))) notFound();
   return null;
 }

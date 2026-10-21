@@ -218,6 +218,46 @@ export async function agentDatabaseContracts(
     await finish(replacement, "failed");
   });
 
+  await t.test("admins read a run's task log without its content, after the run ends too; nobody else can", async () => {
+    const cp = { ...checkpoint, version: 2, durable: { engine: "pi-durable/1.3.0", seeded: true } };
+    const queued = await create(await createConversation(), { checkpoint: cp });
+    const run = await claim("durable-worker");
+    assert.equal(run.id, queued.id);
+    const conversation = { type: "conversation", value: { id: 1 } };
+    const question = { type: "entry", value: { id: 2, conversationId: 1, kind: "pi.input", model: [{ role: "user", content: "1990年1月15日9点，男性", timestamp: 1 }] } };
+    const calls = { type: "entry", value: { id: 3, conversationId: 1, kind: "pi.assistant", model: [{ role: "assistant", content: [
+      { type: "thinking", thinking: "先排盘" }, { type: "text", text: "我来排盘" },
+      { type: "toolCall", id: "call-1", name: "bazi", arguments: { birthYear: 1990 } }, { type: "toolCall", id: "call-2", name: "bazi_dayun", arguments: {} },
+    ] }] } };
+    const result = { type: "entry", value: { id: 4, conversationId: 1, kind: "pi.tool-result", model: [{ role: "toolResult", toolCallId: "call-1", toolName: "bazi", content: [{ type: "text", text: "四柱" }], isError: false }] } };
+    const task = { type: "task", value: { id: 5, conversationId: 1, kind: "pi.tool", version: 2, owner: 6, background: false, abortRequested: false,
+      input: { kind: "model", assistant: 3, callId: "call-1" }, state: { status: "running", checkpoint: { phase: "call" } }, memos: { asked: { question: "出生时间？" } } } };
+    const submission = { type: "submission", value: { id: 7, conversationId: 1, type: "input", status: "placed", entry: 2, requestId: "initial" } };
+    const doc = { type: "document.change", id: 8, content: { kind: "base", value: { private: true } } };
+    await admin(`SELECT public.agent_durable_commit(${lease(run)},1,${json([conversation, question, calls])},${json(cp)});`);
+    await admin(`SELECT public.agent_durable_commit(${lease(run)},2,${json([result, task, submission, doc])},${json(cp)});`);
+    const log = async (after = 0, actor = admin) => JSON.parse(await actor(`SELECT public.agent_admin_task_log(${quote(run.id)},${after});`));
+    const read = await log();
+    assert.deepEqual(read.map(commit => commit.sequence), [1, 2]);
+    assert.ok(read.every(commit => !Number.isNaN(Date.parse(commit.at))), "each commit carries its time");
+    assert.deepEqual(read[0].writes, [conversation, { type: "entry", value: { id: 3, conversationId: 1, kind: "pi.assistant",
+      model: [{ role: "assistant", content: [{ type: "toolCall", id: "call-1", name: "bazi" }, { type: "toolCall", id: "call-2", name: "bazi_dayun" }] }] } }],
+      "an entry keeps only its tool calls' ids and names, and one without calls is left out");
+    const kept = { ...task.value };
+    delete kept.memos;
+    assert.deepEqual(read[1].writes, [{ type: "task", value: kept }, submission], "no memos, tool results or documents");
+    assert.deepEqual((await log(1)).map(commit => commit.sequence), [2]);
+    await assert.rejects(log(-1), /AGENT_DURABLE_CURSOR_INVALID/);
+    await assert.rejects(log(0, statement => asActor(owner, statement)), /AGENT_ADMIN_REQUIRED/);
+    await assert.rejects(asActor(owner, `SELECT * FROM public.agent_durable_commits WHERE run_id=${quote(run.id)};`), /42501/);
+    await finish(run, "failed");
+    assert.equal((await log()).length, 2, "a finished run's log stays readable");
+    await asOwner(`INSERT INTO public.agent_durable_commits(run_id,sequence,writes) SELECT ${quote(run.id)},s,'[]' FROM generate_series(3,202) s;`);
+    const page = await log();
+    assert.deepEqual([page.length, page[0].sequence, page.at(-1).sequence], [200, 1, 200], "pages of 200 in sequence order");
+    assert.deepEqual((await log(200)).map(commit => [commit.sequence, commit.writes]), [[201, []], [202, []]]);
+  });
+
   await t.test("Pi Durable admitted input stays awaiting a human reply instead of spinning queued leases", async () => {
     const before = await balance();
     const cp = { ...checkpoint, version: 2, question: "补充信息？", durable: { engine: "pi-durable/1.3.0", seeded: true } };

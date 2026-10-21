@@ -369,7 +369,8 @@ try {
   assert.equal((await panel.boundingBox()).width, originalPanelWidth - 24, 'a constrained workspace shrinks from its actual rendered width');
   await panel.getByRole('separator', { name: '调整工作区宽度', exact: true }).press('ArrowLeft');
   assert.equal(await panel.locator('[data-overview-result="reading"]').count(), 2, 'the overview counts each actual tool reading once');
-  assert.ok(await page.locator('.agent-message .agent-step').count() >= 3, 'the chat process keeps every executed step');
+  // The comparison casts two charts and saves nothing at the end, so the process is exactly those two steps.
+  assert.equal(await page.locator('.agent-message .agent-step').count(), 2, 'the chat process keeps every executed step');
   await page.screenshot({ path: path.join(directory, 'agent-workspace-acceptance.png'), fullPage: true });
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.locator('html.dark').waitFor();

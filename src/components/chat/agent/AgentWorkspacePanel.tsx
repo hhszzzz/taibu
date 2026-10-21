@@ -24,8 +24,8 @@ import { AgentToolCard } from './AgentToolCard';
 import { describeAgentChartSubject, getAgentStepNumbers, getAgentToolState, type AgentArtifact } from './presentation';
 import type { AgentWorkspaceShown } from './AgentResultContext';
 import {
-    AttachmentView, CalculationView, CollaborationView, DataListView, EvidenceView, MemberView, MemoryView, MethodCatalogView, MethodView,
-    ProfileView, QuestionView, RecordView, ScriptView, WorkspaceTextFallback, WorkspaceToolMeta, WorkspaceToolPending,
+    ArchiveView, AttachmentView, CalculationView, CollaborationView, DataListView, EvidenceView, HistoryView, MemberView, MemoryView, MethodCatalogView, MethodView,
+    NotesView, ProfileView, QuestionView, RecordView, ScriptView, WorkspaceTextFallback, WorkspaceToolMeta, WorkspaceToolPending,
 } from './AgentWorkspaceViews';
 import { getChartKindMeta } from './chart-registry';
 import { ModelAvatar } from './ModelAvatar';
@@ -145,6 +145,9 @@ function ResourceView({ resource, model, data, answers, questionIds, userId, art
             break;
         }
         case 'profile': body = latest && <ProfileView tool={latest} runStatus={runStatus} step={step(latest)} />; break;
+        case 'notes': body = <NotesView tools={tools} runStatus={runStatus} step={step(tools.findLast(tool => tool.status === 'completed') ?? latest)} />; break;
+        case 'history': body = <HistoryView tools={tools} runStatus={runStatus} step={step(tools.findLast(tool => tool.status === 'completed') ?? latest)} />; break;
+        case 'archive': body = <ArchiveView tools={tools} runStatus={runStatus} step={step(latest)} />; break;
         case 'attachment': body = <AttachmentView id={resource.id.slice('attachment:'.length)} title={resource.title} tools={tools} />; break;
         case 'methods': body = latest && <MethodCatalogView tool={latest} runStatus={runStatus} step={step(latest)} />; break;
         case 'method': body = <MethodView tools={tools} runStatus={runStatus} step={step(tools.findLast(tool => tool.status === 'completed') ?? latest)} />; break;

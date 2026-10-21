@@ -163,6 +163,12 @@ export interface BaziCaseOwnerFeedback {
     summary: string;
 }
 
+/** The Agent task that wrote an entry and the conversation it ran in, read back for display only. */
+export interface BaziCaseSource {
+    runId: string;
+    conversationId: string | null;
+}
+
 export interface BaziCaseEvent {
     id?: string;
     eventDate: string;
@@ -171,6 +177,8 @@ export interface BaziCaseEvent {
     detail: string;
     createdAt?: string;
     updatedAt?: string;
+    /** Recorded by the Agent from the user's own words; kept while the event keeps its ID. */
+    source?: BaziCaseSource | null;
 }
 
 export interface BaziCaseProfile {
@@ -182,6 +190,8 @@ export interface BaziCaseProfile {
     events: BaziCaseEvent[];
     createdAt?: string;
     updatedAt?: string;
+    /** The Agent task whose proposal filled the master review, until the review is changed. */
+    masterReviewSource?: BaziCaseSource | null;
 }
 
 type ObjectLike = Record<string, unknown>;

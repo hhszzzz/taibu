@@ -564,7 +564,7 @@ export function ChatComposer({
             enabled: memoryEnabled === true,
             disabled: !userId || !memoryFeatureEnabled || memoryEnabled === null,
             busy: memoryBusy,
-            title: !memoryFeatureEnabled ? '个性化功能已关闭' : memoryEnabled === null ? '正在读取记忆设置' : '允许 Agent 读取和保存长期记忆',
+            title: !memoryFeatureEnabled ? '个性化功能已关闭' : memoryEnabled === null ? '正在读取记忆设置' : '允许 Agent 使用长期记忆：记住你说过的偏好、检索以往对话、按原话记录你讲述的经历',
             onToggle: () => void toggleMemory(),
         } : undefined,
         fileInputRef,

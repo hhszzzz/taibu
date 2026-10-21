@@ -120,6 +120,7 @@ CREATE TABLE public.bazi_case_events (
   detail text,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  source_run_id uuid, -- agent_runs(id) ON DELETE SET NULL; 20261021_120000_agent_user_archive.sql
   CONSTRAINT bazi_case_events_pkey PRIMARY KEY (id),
   CONSTRAINT bazi_case_events_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES public.bazi_case_profiles(id),
   CONSTRAINT bazi_case_events_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
@@ -133,6 +134,7 @@ CREATE TABLE public.bazi_case_profiles (
   owner_feedback jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  source_run_id uuid, -- agent_runs(id) ON DELETE SET NULL; 20261021_120000_agent_user_archive.sql
   CONSTRAINT bazi_case_profiles_pkey PRIMARY KEY (id),
   CONSTRAINT bazi_case_profiles_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
   CONSTRAINT bazi_case_profiles_bazi_chart_id_fkey FOREIGN KEY (bazi_chart_id) REFERENCES public.bazi_charts(id)
@@ -407,6 +409,7 @@ CREATE TABLE public.ming_records (
   is_pinned boolean DEFAULT false,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
+  source_run_id uuid, -- agent_runs(id) ON DELETE SET NULL; 20261021_120000_agent_user_archive.sql
   CONSTRAINT ming_records_pkey PRIMARY KEY (id),
   CONSTRAINT ming_records_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );

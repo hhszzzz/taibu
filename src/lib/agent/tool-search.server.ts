@@ -22,14 +22,18 @@ function loadedText(loaded: readonly string[], candidates: readonly ToolSearchCa
   return `已加载 ${loaded.length} 个工具，从下一次模型调用起可用：\n${lines.join('\n')}`;
 }
 
+/** The user's own material among the deferred tools, named only when this task has it (search needs long-term memory). */
+const DATA_TOOL_NAMES: ReadonlyArray<readonly [string, string]> = [['read_user_notes', '用户的每日笔记与心情'], ['search_conversations', '用户以往对话中的提问与结论']];
+
 const toolSearchSection: PromptSection = {
   key: 'taibu_tool_search',
   render: input => {
     const deferred = input.agent.deferred;
     if (!deferred.length) return undefined;
+    const data = DATA_TOOL_NAMES.filter(([name]) => deferred.some(tool => tool.name === name)).map(([, label]) => label);
     return [
-      `还有 ${deferred.length} 个低频工具没有直接提供：八字的关系、五行、流年扫描详查，大运与四柱反推，紫微大限与飞星，择日，奇门／大六壬／占星／六爻的局部详查，以及外部 MCP 工具。`,
-      '需要其中某个工具时，先调用 tool_search 用中文关键词检索（例如「大运」「流年扫描」「飞星四化」「择日」「宫位」「六爻动爻」「档案」）。命中的工具从下一次模型调用起可用；同一对话内加载过的工具保持可用，压缩上下文后仍可用。已直接提供的排盘工具不必检索。',
+      `还有 ${deferred.length} 个低频工具没有直接提供：八字的关系、五行、流年扫描详查，大运与四柱反推，紫微大限与飞星，择日，奇门／大六壬／占星／六爻的局部详查，${data.length ? `读取${data.join('、')}，` : ''}以及外部 MCP 工具。`,
+      `需要其中某个工具时，先调用 tool_search 用中文关键词检索（例如「大运」「流年扫描」「飞星四化」「择日」「宫位」「六爻动爻」${data.length ? '「笔记」「以往对话」' : ''}）。命中的工具从下一次模型调用起可用；同一对话内加载过的工具保持可用，压缩上下文后仍可用。已直接提供的排盘工具不必检索。`,
       ...(input.agent.tools.some(tool => tool.name === AGENT_CODEMODE_TOOL)
         ? ['代码模式脚本可以直接调用全部工具（包括尚未加载的），不必先检索。']
         : []),

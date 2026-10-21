@@ -38,6 +38,8 @@ import { validateAttachmentIds } from './attachments.server';
 import { getAgentCitationBase } from './evidence';
 import { readAgentActivity } from './activity.server';
 import { AGENT_COMPACT_INSTRUCTIONS_MAX, parseAgentCompactCommand } from './compaction';
+import { getAgentArchiveProposal } from './archive';
+import { readAgentArchiveStatus } from './archive.server';
 
 class AgentApiError extends Error {
   constructor(
@@ -656,4 +658,49 @@ export async function streamAgentTask(request: NextRequest, id: string) {
       "X-Accel-Buffering": "no",
     },
   });
+}
+
+/** A proposal card of the caller's own task: the propose_archive_entry result cached under that call. */
+async function archiveCard(store: AgentStore, userId: string, id: string, callId: unknown) {
+  if (!isValidUUID(id)) throw new AgentApiError("任务标识无效");
+  if (typeof callId !== "string" || !callId || callId.length > 200) throw new AgentApiError("保存卡片标识无效");
+  const run = await store.getRun(id, userId);
+  if (!run) throw new AgentApiError("任务不存在", 404, "AGENT_RUN_NOT_FOUND");
+  const artifact = await store.artifact(run, callId);
+  const card = artifact?.kind === "tool" ? getAgentArchiveProposal({ name: artifact.tool_name, status: "completed", output: artifact.result.details }) : null;
+  if (!card) throw new AgentApiError("保存卡片不存在", 404, "AGENT_ARCHIVE_PROPOSAL_NOT_FOUND");
+  return { run, callId, proposal: card.proposal };
+}
+
+/** Whether a proposal card is saved, can still be saved, or has nothing left to fill. */
+export async function getAgentArchiveEntry(request: NextRequest, id: string) {
+  const auth = await authenticated(request);
+  const store = new AgentStore(systemDb());
+  const { run, callId, proposal } = await archiveCard(store, auth.user.id, id, request.nextUrl.searchParams.get("callId"));
+  return jsonOk(await readAgentArchiveStatus(auth.db, auth.user.id, run.id, callId, proposal));
+}
+
+/**
+ * The owner saves a proposal card. The entry is the task's cached result, never the request's; the database writes it
+ * under the caller's own scoped context and gives a replayed click the same entry.
+ */
+export async function saveAgentArchiveEntry(request: NextRequest, id: string) {
+  const auth = await authenticated(request);
+  const body = await requestBody(request);
+  const store = new AgentStore(systemDb());
+  const { run, callId, proposal } = await archiveCard(store, auth.user.id, id, body.callId);
+  const feature = proposal.kind === "master_review" || (proposal.kind === "event" && proposal.chart?.type === "bazi_chart") ? "bazi" : "records";
+  const state = await readFeatureModuleStateFresh(feature);
+  if (state.status === "unavailable") throw new AgentApiError("功能状态暂不可用，请稍后再试", 503, "FEATURE_STATE_UNAVAILABLE");
+  if (state.status !== "enabled") throw new AgentApiError(feature === "bazi" ? "命盘功能已关闭" : "命理记录功能已关闭", 403, "FEATURE_DISABLED");
+  try {
+    await auth.db.rpc("agent_save_archive_proposal", { p_run_id: run.id, p_call_id: callId });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("AGENT_ARCHIVE_CHART_NOT_FOUND")) throw new AgentApiError("关联的资料已删除，无法保存", 409, "AGENT_ARCHIVE_CHART_NOT_FOUND");
+    if (message.includes("AGENT_RUN_NOT_FOUND") || message.includes("AGENT_ARCHIVE_PROPOSAL_NOT_FOUND"))
+      throw new AgentApiError("保存卡片不存在", 404, "AGENT_ARCHIVE_PROPOSAL_NOT_FOUND");
+    throw error;
+  }
+  return jsonOk(await readAgentArchiveStatus(auth.db, auth.user.id, run.id, callId, proposal));
 }

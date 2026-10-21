@@ -410,12 +410,26 @@ const ADMIN_TASK_LOG_MIGRATIONS = [{
   sha256: 'e8047ae94b905454941103ffb354e96dd793a9955981d188ebf0c25b744f39cc',
 }];
 const ADMIN_TASK_LOG_FINGERPRINT = '2e4f0aa1231713b4e40f2662ad5bc4068b4aa190526533ed15174004cf64b388';
-const REVIEWED_SCHEMA_UPGRADES = [
+const REVIEWED_ADMIN_TASK_LOG_SCHEMA_UPGRADES = [
   ...REVIEWED_USER_SAVED_CHART_SCHEMA_UPGRADES,
   ...REVIEWED_USER_SAVED_CHART_SCHEMA_UPGRADES.filter(entry => entry.current === USER_SAVED_CHART_FINGERPRINT).map(entry => ({
     previous: entry.previous, current: ADMIN_TASK_LOG_FINGERPRINT, files: [...entry.files, ...ADMIN_TASK_LOG_MIGRATIONS],
   })),
   { previous: USER_SAVED_CHART_FINGERPRINT, current: ADMIN_TASK_LOG_FINGERPRINT, files: ADMIN_TASK_LOG_MIGRATIONS },
+];
+// 2026-10-21：Agent 档案。命理记录、断事笔记事件与命理师判断各加 source_run_id，记录视图加来源对话；
+// 长期记忆开启时按用户原话记事件、检索以往对话，结论卡片由用户保存。
+const AGENT_ARCHIVE_MIGRATIONS = [{
+  file: 'supabase/migrations/20261021_120000_agent_user_archive.sql',
+  sha256: '670d4a9465e93fc3d8c376b283def59ad23056f3ebdf3b5971592e0ac232ffa5',
+}];
+const AGENT_ARCHIVE_FINGERPRINT = '5fe5fdf8c499d09ce0d0bda7e94a252d939291a90c771f90e09396533ea9af17';
+const REVIEWED_SCHEMA_UPGRADES = [
+  ...REVIEWED_ADMIN_TASK_LOG_SCHEMA_UPGRADES,
+  ...REVIEWED_ADMIN_TASK_LOG_SCHEMA_UPGRADES.filter(entry => entry.current === ADMIN_TASK_LOG_FINGERPRINT).map(entry => ({
+    previous: entry.previous, current: AGENT_ARCHIVE_FINGERPRINT, files: [...entry.files, ...AGENT_ARCHIVE_MIGRATIONS],
+  })),
+  { previous: ADMIN_TASK_LOG_FINGERPRINT, current: AGENT_ARCHIVE_FINGERPRINT, files: AGENT_ARCHIVE_MIGRATIONS },
 ];
 
 export function reviewedSchemaUpgrade(fingerprint, bundle) {

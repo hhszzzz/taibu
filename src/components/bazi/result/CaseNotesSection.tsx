@@ -9,6 +9,7 @@
 'use client';
 
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
+import Link from 'next/link';
 import { BookOpenText, CalendarDays, Plus, Save, Trash2, Sparkles, Tag, LayoutGrid, type LucideIcon } from 'lucide-react';
 import {
     BAZI_CASE_BASIC_ELEMENTS,
@@ -27,6 +28,7 @@ import {
     type BaziCaseBasicElement,
     type BaziCaseEvent,
     type BaziCaseProfile,
+    type BaziCaseSource,
 } from '@/lib/bazi-case-profile';
 import { loadBaziCaseProfile, saveBaziCaseProfile } from '@/lib/bazi-case-profile-client';
 import { useToast } from '@/components/ui/Toast';
@@ -388,6 +390,14 @@ function ElementsPreferences({ profile, setProfile }: { profile: BaziCaseProfile
     );
 }
 
+/** An entry the Agent wrote, linked to the conversation it came from when that conversation is still there. */
+function AgentSourceBadge({ source, label, title }: { source: BaziCaseSource; label: string; title: string }) {
+    const className = 'shrink-0 rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-accent';
+    return source.conversationId
+        ? <Link href={`/chat?id=${encodeURIComponent(source.conversationId)}`} className={`${className} hover:bg-accent/20`} title={title}>{label}</Link>
+        : <span className={className}>{label}</span>;
+}
+
 export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
     const { showToast } = useToast();
     const [activeTab, setActiveTab] = useState<NotesTab>('owner');
@@ -407,7 +417,8 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
         if (!chartId) return;
         setSaving(true);
         try {
-            await saveBaziCaseProfile({ chartId, ...profile });
+            // The saved profile gives new events their IDs and drops the Agent mark from entries the user changed.
+            setProfile(await saveBaziCaseProfile({ chartId, ...profile }));
             showToast('success', '笔记已更新');
         } catch { showToast('error', '保存失败'); } finally { setSaving(false); }
     };
@@ -512,6 +523,7 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
                                                     placeholder="事件标题..."
                                                     className="w-full bg-transparent text-sm font-bold text-foreground/80 outline-none placeholder:text-foreground/15"
                                                 />
+                                                {ev.source && <AgentSourceBadge source={ev.source} label="Agent 记录" title="由 Agent 在对话中记入，打开那次对话；改动后不再标记" />}
                                             </div>
                                             <textarea
                                                 value={ev.detail}
@@ -541,7 +553,10 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
                 <div className="space-y-8 pb-10">
                     {activeTab === 'master' ? (
                         <div className="space-y-2">
-                            <div className="px-1 text-[10px] font-bold text-foreground-tertiary uppercase tracking-widest mb-4">命理属性</div>
+                            <div className="mb-4 flex items-center justify-between gap-2 px-1">
+                                <span className="text-[10px] font-bold text-foreground-tertiary uppercase tracking-widest">命理属性</span>
+                                {profile.masterReviewSource && <AgentSourceBadge source={profile.masterReviewSource} label="Agent 补填" title="你在对话中保存了 Agent 的判断，打开那次对话；改动后不再标记" />}
+                            </div>
                             <PropertyRow label="旺衰" icon={Sparkles} value={profile.masterReview.strengthLevel} options={BAZI_CASE_STRENGTH_LEVELS} onChange={(v) => setProfile(p => ({ ...p, masterReview: { ...p.masterReview, strengthLevel: v } }))} />
                             
                             <PropertyTags

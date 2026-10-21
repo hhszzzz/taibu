@@ -49,6 +49,7 @@ export type AgentToolFamily =
   | 'question'
   | 'collaboration'
   | 'memory'
+  | 'archive'
   | 'code'
   | 'external'
   | 'other';
@@ -73,22 +74,33 @@ export function isAgentMemberTool(name: string): boolean {
   return name === 'parallel_analysis' || name === AGENT_BACKGROUND_TOOL;
 }
 
-/**
- * Tools a plan-mode task may not use until the user approves its plan: writing memory and dispatching members are the
- * execution the plan asks about. Research tools stay available, so the plan can be grounded.
- */
-export const AGENT_PLAN_GATED_TOOLS: ReadonlySet<string> = new Set(['remember_user_fact', 'parallel_analysis', AGENT_BACKGROUND_TOOL]);
+/** The archive tools (archive.ts): an event recorded from the user's own words, and a card the user saves. */
+export const AGENT_ARCHIVE_TOOLS = { record: 'record_user_event', propose: 'propose_archive_entry' } as const;
 
 /**
- * Tools the model loads on demand instead of being offered every request: the drilldowns and calculations a reading
- * reaches for once it already has a chart. `tool_search` loads them; scripts may call them without loading.
- * The same list as Core's `DEFERRED_TOOL_NAMES` (a test holds them equal), copied so this module stays browser-safe.
+ * Tools a plan-mode task may not use until the user approves its plan: writing memory or the archive and dispatching
+ * members are the execution the plan asks about. Research tools stay available, so the plan can be grounded.
  */
-export const AGENT_DEFERRED_TOOLS: ReadonlySet<string> = new Set([
+export const AGENT_PLAN_GATED_TOOLS: ReadonlySet<string> = new Set(['remember_user_fact', AGENT_ARCHIVE_TOOLS.record, 'parallel_analysis', AGENT_BACKGROUND_TOOL]);
+
+/**
+ * The Core tools the model loads on demand: the drilldowns and calculations a reading reaches for once it already has
+ * a chart. The same list as Core's `DEFERRED_TOOL_NAMES` (a test holds them equal), copied so this module stays browser-safe.
+ */
+export const AGENT_CORE_DEFERRED_TOOLS: readonly string[] = [
   'bazi_relations', 'bazi_wuxing', 'bazi_liunian_scan', 'ziwei_palace', 'qimen_palace', 'daliuren_lessons',
   'astrology_point', 'liuyao_line',
   'bazi_dayun', 'bazi_pillars_resolve', 'ziwei_horoscope', 'ziwei_flying_star', 'almanac_select',
-]);
+];
+
+/** The user's own material a reading rarely needs: daily notes, and other conversations (with long-term memory on). */
+export const AGENT_DATA_DEFERRED_TOOLS: readonly string[] = ['read_user_notes', 'search_conversations'];
+
+/**
+ * Tools the model loads on demand instead of being offered every request. `tool_search` loads them; scripts may
+ * call them without loading.
+ */
+export const AGENT_DEFERRED_TOOLS: ReadonlySet<string> = new Set([...AGENT_CORE_DEFERRED_TOOLS, ...AGENT_DATA_DEFERRED_TOOLS]);
 
 /** Administrator-configured MCP tools are registered as `mcp__<server>__<tool>`. */
 const EXTERNAL_TOOL_PREFIX = 'mcp__';
@@ -111,13 +123,13 @@ export function getAgentExtensionToolTitle(name: string): string | undefined {
 }
 
 /**
- * Tools a code mode script may not call: they ask the user, move the board, search with citations, write memory,
- * load guidance or dispatch members, each of which the model must do itself.
+ * Tools a code mode script may not call: they ask the user, move the board, search with citations, write memory or
+ * the archive, load guidance or dispatch members, each of which the model must do itself.
  */
 export const AGENT_MODEL_ONLY_TOOLS: ReadonlySet<string> = new Set([
   'ask_user', 'todo_write', 'inspect_chart', 'focus_chart', 'web_search', 'search_knowledge', 'read_attachment',
-  'list_analysis_methods', 'load_analysis_method', 'read_user_memory', 'remember_user_fact', 'parallel_analysis',
-  AGENT_BACKGROUND_TOOL,
+  'list_analysis_methods', 'load_analysis_method', 'read_user_memory', 'remember_user_fact',
+  AGENT_ARCHIVE_TOOLS.record, AGENT_ARCHIVE_TOOLS.propose, 'parallel_analysis', AGENT_BACKGROUND_TOOL,
 ]);
 
 /** Charts, calculations and drilldowns give scripts `{ artifactId?, text, data }`; other tools give their text. */
@@ -137,6 +149,8 @@ const TOOL_FAMILIES: ReadonlyMap<string, AgentToolFamily> = new Map<string, Agen
   ['search_knowledge', 'search'],
   ['list_user_data', 'data'],
   ['read_user_data', 'data'],
+  ['read_user_notes', 'data'],
+  ['search_conversations', 'data'],
   ['read_user_profile', 'data'],
   ['read_attachment', 'data'],
   ['list_analysis_methods', 'method'],
@@ -147,6 +161,8 @@ const TOOL_FAMILIES: ReadonlyMap<string, AgentToolFamily> = new Map<string, Agen
   [AGENT_BACKGROUND_TOOL, 'collaboration'],
   ['read_user_memory', 'memory'],
   ['remember_user_fact', 'memory'],
+  [AGENT_ARCHIVE_TOOLS.record, 'archive'],
+  [AGENT_ARCHIVE_TOOLS.propose, 'archive'],
   [AGENT_CODEMODE_TOOL, 'code'],
 ]);
 

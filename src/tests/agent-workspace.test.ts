@@ -23,6 +23,19 @@ async function coreResult(name: string, extra: Record<string, unknown> = {}) {
   return { output: { artifactId: randomUUID(), result: payload.structuredContent }, canonicalText: payload.content.map(part => part.text).join('\n') };
 }
 
+test('notes, earlier conversations and the archive each open one page that keeps every call of its kind', () => {
+  const model = workspace([
+    tool('n1', 'read_user_notes'), tool('h1', 'search_conversations'), tool('n2', 'read_user_notes'),
+    tool('e1', 'record_user_event'), tool('p1', 'propose_archive_entry'),
+  ]);
+  const page = (id: string) => model.resources.find(resource => resource.toolIds.includes(id));
+  assert.deepEqual([page('n1')?.view, page('n1')?.title, page('n1')?.toolIds], ['notes', '每日笔记', ['n1', 'n2']], 'a later read opens the same page');
+  assert.deepEqual([page('h1')?.view, page('h1')?.title], ['history', '以往对话']);
+  assert.deepEqual([page('e1')?.view, page('e1')?.title, page('e1')?.family], ['archive', '档案', 'archive']);
+  assert.equal(page('p1'), page('e1'), 'recorded events and proposed cards share the archive page, where the cards are saved');
+  for (const id of ['n1', 'h1', 'e1', 'p1']) assert.equal(model.locations.get(id), page(id)?.id, id);
+});
+
 test('every tool family reaches a workspace location, including external and unknown tools', () => {
   const names = [...listToolDefinitions().map(item => item.name), 'inspect_chart', 'web_search', 'search_knowledge', 'list_user_data', 'read_user_data',
     'read_user_profile', 'read_attachment', 'list_analysis_methods', 'load_analysis_method', 'ask_user', 'parallel_analysis',

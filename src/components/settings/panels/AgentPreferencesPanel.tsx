@@ -59,14 +59,14 @@ export function AgentPreferencesPanel({ userId }: { userId: string }) {
     return <><section className="settings-form-section settings-form-section-divided" aria-label="任务助手设置">
         <div className="settings-form-heading">
             <h3>任务助手</h3>
-            <p>长期记忆让助手记住你明确表达的偏好或事实；默认关闭，关闭不会删除已保存内容。</p>
+            <p>长期记忆让助手记住你明确表达的偏好或事实、检索你以往的对话，并把你讲述的经历记入档案；默认关闭，关闭不会删除已保存内容。</p>
         </div>
         {error && <p role="alert" className="settings-alert">{error}</p>}
         <div className="settings-group">
             <SettingsRow
                 label="长期记忆"
-                description="默认关闭。开启后，助手只依据你明确表达的内容保存长期偏好或事实；关闭不会删除已保存内容，可随时查看和删除。"
-                control={<SettingsSwitch label="允许任务助手读取和保存长期记忆" checked={memoryEnabled} disabled={busy || !preferences} onToggle={() => setMemoryEnabled(enabled => !enabled)} />}
+                description="默认关闭。开启后，助手只依据你明确表达的内容保存长期偏好或事实，可检索你的其他对话，并把你讲述的过往经历按原话记入命理记录或八字断事笔记；关闭不会删除已保存内容，可随时查看和删除。"
+                control={<SettingsSwitch label="允许任务助手使用长期记忆" checked={memoryEnabled} disabled={busy || !preferences} onToggle={() => setMemoryEnabled(enabled => !enabled)} />}
             />
         </div>
         <div className="settings-actions">

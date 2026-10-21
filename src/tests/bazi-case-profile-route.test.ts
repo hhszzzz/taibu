@@ -299,3 +299,103 @@ test('bazi case profile PUT should use the privileged rpc client instead of auth
     assert.equal(saveCalls[0]?.args.p_chart_id, CHART_ID);
     assert.equal(payload.profile.id, 'profile-1');
 });
+
+/** A query double: every filter returns itself; the read resolves to the given rows. */
+function rows(data: unknown, calls: Array<[string, ...unknown[]]> = []) {
+    const query: Record<string, unknown> = {};
+    for (const method of ['select', 'eq', 'in', 'order']) query[method] = (...args: unknown[]) => { calls.push([method, ...args]); return query; };
+    query.maybeSingle = async () => ({ data, error: null });
+    query.then = (resolve: (value: unknown) => void) => resolve({ data, error: null });
+    return query;
+}
+
+const CHART = '11111111-1111-1111-1111-111111111111';
+const RUN = '22222222-2222-4222-8222-222222222222', HIDDEN_RUN = '33333333-3333-4333-8333-333333333333';
+const CONVERSATION = '44444444-4444-4444-8444-444444444444';
+
+test('bazi case profile PUT sends each kept event ID once, lowercased, so the save keeps its source and creation time', async (t) => {
+    const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
+    const rpcCalls: Array<Record<string, unknown>> = [];
+    const authDb = {
+        from(table: string) {
+            if (table === 'bazi_charts') return rows({ id: CHART });
+            if (table === 'bazi_case_profiles') return rows({ id: 'profile-1', user_id: 'user-1', bazi_chart_id: CHART, master_review: {}, owner_feedback: {}, source_run_id: null, created_at: '2026-03-20T00:00:00.000Z', updated_at: '2026-03-20T00:00:00.000Z' });
+            if (table === 'bazi_case_events') return rows([]);
+            throw new Error(`Unexpected table: ${table}`);
+        },
+    };
+    t.mock.method(apiUtils, 'requireUserContext', async () => ({ user: { id: 'user-1' }, db: authDb, supabase: authDb }) as unknown as Awaited<ReturnType<typeof apiUtils.requireUserContext>>);
+    t.mock.method(apiUtils, 'getSystemAdminClient', () => ({
+        rpc: async (_fn: string, args: Record<string, unknown>) => { rpcCalls.push(args); return { data: { status: 'ok', profile_id: 'profile-1' }, error: null }; },
+    }) as unknown as ReturnType<typeof apiUtils.getSystemAdminClient>);
+
+    const kept = 'AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA';
+    const event = (id: string | undefined, title: string) => ({ ...(id === undefined ? {} : { id }), eventDate: '2024-03-01', category: '事业', title, detail: '' });
+    const { PUT } = await import('../app/api/bazi/case-profile/route');
+    const response = await PUT(new NextRequest('http://localhost/api/bazi/case-profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chartId: CHART, masterReview: {}, ownerFeedback: {}, events: [event(kept, '换到新公司'), event(kept, '同一 ID 的第二条'), event('event-1', '旧格式 ID'), event(undefined, '新事件')] }),
+    }));
+
+    assert.equal(response.status, 200);
+    const sent = rpcCalls[0]?.p_events as Array<Record<string, unknown>>;
+    assert.deepEqual(sent.map(item => item.id ?? null), [kept.toLowerCase(), null, null, null], 'an ID given twice stays with the first event; a malformed ID is a new event');
+    assert.deepEqual(sent[0], { id: kept.toLowerCase(), event_date: '2024-03-01', category: '事业', title: '换到新公司', detail: null });
+});
+
+test('bazi case profile GET says which entries the Agent wrote and the conversation it wrote them in', async (t) => {
+    const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
+    const runCalls: Array<[string, ...unknown[]]> = [];
+    const event = (id: string, eventDate: string, category: string, title: string, source: string | null) =>
+        ({ id, profile_id: 'profile-1', event_date: eventDate, category, title, detail: null, source_run_id: source, created_at: '2026-10-21T00:00:00.000Z', updated_at: '2026-10-21T00:00:00.000Z' });
+    const authDb = {
+        from(table: string) {
+            if (table === 'bazi_charts') return rows({ id: CHART });
+            if (table === 'bazi_case_profiles') return rows({ id: 'profile-1', user_id: 'user-1', bazi_chart_id: CHART, master_review: { strengthLevel: '偏弱' }, owner_feedback: {}, source_run_id: RUN, created_at: '2026-03-20T00:00:00.000Z', updated_at: '2026-03-20T00:00:00.000Z' });
+            if (table === 'bazi_case_events') return rows([
+                event('event-1', '2024-03-01', '事业', '换到新公司', RUN),
+                event('event-2', '2019-07-01', '婚姻', '结婚', HIDDEN_RUN),
+                event('event-3', '2015-09-01', '学业', '读研', null),
+            ]);
+            // The reader's own tasks only: a task it cannot see keeps its ID and no conversation.
+            if (table === 'agent_runs') return rows([{ id: RUN, conversation_id: CONVERSATION }], runCalls);
+            throw new Error(`Unexpected table: ${table}`);
+        },
+    };
+    t.mock.method(apiUtils, 'requireUserContext', async () => ({ user: { id: 'user-1' }, db: authDb, supabase: authDb }) as unknown as Awaited<ReturnType<typeof apiUtils.requireUserContext>>);
+
+    const { GET } = await import('../app/api/bazi/case-profile/route');
+    const payload = await (await GET(new NextRequest(`http://localhost/api/bazi/case-profile?chartId=${CHART}`))).json();
+
+    assert.deepEqual(runCalls.find(call => call[0] === 'in'), ['in', 'id', [RUN, HIDDEN_RUN]], 'each task is read once');
+    assert.deepEqual(payload.profile.masterReviewSource, { runId: RUN, conversationId: CONVERSATION });
+    assert.deepEqual(payload.profile.events.map((item: { source: unknown }) => item.source), [
+        { runId: RUN, conversationId: CONVERSATION },
+        { runId: HIDDEN_RUN, conversationId: null },
+        null,
+    ]);
+});
+
+test('the case notes client reads each source back for display and keeps the IDs the next save sends', async (t) => {
+    const originalFetch = global.fetch;
+    t.after(() => { global.fetch = originalFetch; });
+    const profile = {
+        id: 'profile-1', chartId: CHART, masterReview: { strengthLevel: '偏弱' }, ownerFeedback: {}, masterReviewSource: { runId: RUN, conversationId: CONVERSATION },
+        events: [
+            { id: 'event-1', eventDate: '2024-03-01', category: '事业', title: '换到新公司', detail: '', source: { runId: RUN, conversationId: CONVERSATION } },
+            { id: 'event-2', eventDate: '2019-07-01', category: '婚姻', title: '结婚', detail: '', source: { runId: 42 } },
+            { id: 'event-3', eventDate: '2015-09-01', category: '学业', title: '读研', detail: '' },
+        ],
+    };
+    global.fetch = async () => new Response(JSON.stringify({ profile }), { headers: { 'Content-Type': 'application/json' } });
+    const { loadBaziCaseProfile } = require('../lib/bazi-case-profile-client') as typeof import('../lib/bazi-case-profile-client');
+    const loaded = await loadBaziCaseProfile(CHART);
+    assert.ok(loaded);
+    assert.deepEqual(loaded.masterReviewSource, { runId: RUN, conversationId: CONVERSATION });
+    assert.deepEqual(loaded.events.map(item => [item.id, item.source]), [
+        ['event-1', { runId: RUN, conversationId: CONVERSATION }],
+        ['event-2', null],
+        ['event-3', null],
+    ]);
+});

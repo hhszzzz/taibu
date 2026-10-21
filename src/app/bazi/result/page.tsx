@@ -50,7 +50,8 @@ function BaziResultContent() {
         const params = ['name', 'gender', 'year', 'month', 'day', 'hour', 'minute', 'calendar', 'leap', 'place'];
         return params.some((key) => searchParams.has(key));
     }, [searchParams]);
-    const [activeTab, setActiveTab] = useState<ResultTab>('professional');
+    // ?tab=notes opens the case notes, as the Agent's archive cards link to them.
+    const [activeTab, setActiveTab] = useState<ResultTab>(() => searchParams.get('tab') === 'notes' ? 'notes' : 'professional');
     const [savedState, setSaved] = useState(false);
     const saved = savedState && !searchParams.has('timezone') && !searchParams.has('disambiguation');
     const [loading, setLoading] = useState(() => Boolean(chartId) && !hasFormParams);

@@ -239,7 +239,7 @@ for (const m of functions(source(agentLifecycleMigration))) { active.add(m[1]); 
 const agentChatResultsMigration = '20261007_100000_agent_chat_results';
 sql.push(source(agentChatResultsMigration).replace(/^BEGIN;\s*$/gm, '').replace(/^COMMIT;\s*$/gm, ''));
 for (const m of functions(source(agentChatResultsMigration))) { active.add(m[1]); rpcSources[m[1]] = `supabase/migrations/${agentChatResultsMigration}.sql`; }
-for (const name of ['20261007_110000_agent_reading_preferences','20261007_120000_agent_search','20261007_130000_agent_input_preferences','20261007_140000_agent_queue','20261007_150000_agent_notifications','20261007_160000_agent_attachments','20261007_170000_daily_briefing','20261007_180000_conversation_fork','20261007_190000_agent_backend_access','20261008_100000_agent_question_dedupe','20261008_180000_agent_competence','20261009_100000_agent_pi_durable_1_1','20261009_120000_ai_reasoning_effort_levels','20261010_100000_agent_current_engine_only','20261019_100000_conversation_shares','20261020_100000_agent_pi_durable_1_3','20261020_120000_agent_user_saved_charts','20261021_100000_agent_admin_task_log']) {
+for (const name of ['20261007_110000_agent_reading_preferences','20261007_120000_agent_search','20261007_130000_agent_input_preferences','20261007_140000_agent_queue','20261007_150000_agent_notifications','20261007_160000_agent_attachments','20261007_170000_daily_briefing','20261007_180000_conversation_fork','20261007_190000_agent_backend_access','20261008_100000_agent_question_dedupe','20261008_180000_agent_competence','20261009_100000_agent_pi_durable_1_1','20261009_120000_ai_reasoning_effort_levels','20261010_100000_agent_current_engine_only','20261019_100000_conversation_shares','20261020_100000_agent_pi_durable_1_3','20261020_120000_agent_user_saved_charts','20261021_100000_agent_admin_task_log','20261021_120000_agent_user_archive']) {
   sql.push(source(name).replace(/^BEGIN;\s*$/gm, '').replace(/^COMMIT;\s*$/gm, ''));
   for (const m of functions(source(name))) { active.add(m[1]); rpcSources[m[1]] = `supabase/migrations/${name}.sql`; }
 }
@@ -308,7 +308,8 @@ function scan(directory) {
             : expression === 'tableName' && file === 'src/lib/api/chart-crud.ts' ? 'typed birth-update chart table catalog'
               : expression === 'tableName' && file === 'src/lib/api/divination-pipeline.ts' ? 'tableName factory configuration'
               : expression === 'table' && ['src/app/api/chat/preview/route.ts', 'src/lib/chat/chat-context.ts', 'src/lib/user/membership-server.ts'].includes(file) ? 'typed from(table) adapter'
-                : expression.startsWith('getChartTable(') && file === 'src/app/api/user/charts/route.ts' ? 'getChartTable return catalog' : null;
+                : expression.startsWith('getChartTable(') && file === 'src/app/api/user/charts/route.ts' ? 'getChartTable return catalog'
+                  : expression === 'CHART_TABLES[type]' && file === 'src/lib/agent/archive.server.ts' ? 'typed archive chart table catalog' : null;
           if (!contract) throw new Error(`Unreviewed dynamic relation ${file}: ${expression}`);
           dynamicRelationSites.push({ file, expression, contract });
         }
@@ -337,6 +338,12 @@ function scan(directory) {
         const chartNames = [...body.matchAll(/['"]([^'"]+_charts)['"]/g)].map(m => m[1]);
         if (chartNames.length !== 2) throw new Error('Review changed chart relation factory');
         for (const name of chartNames) relation(name, file, 'chart-return-catalog');
+      }
+      if (file === 'src/lib/agent/archive.server.ts') {
+        const body = one([...text.matchAll(/const CHART_TABLES = \{([^}]+)\}/g)].map(m => m[1]), 'archive chart table catalog');
+        const chartTables = [...body.matchAll(/:\s*['"]([a-z_]+)['"]/g)].map(m => m[1]);
+        if (chartTables.length !== 12) throw new Error('Review changed archive chart table catalog');
+        for (const name of chartTables) relation(name, file, 'archive-chart-catalog');
       }
     }
   }

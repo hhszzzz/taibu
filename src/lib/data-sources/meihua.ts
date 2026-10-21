@@ -1,6 +1,7 @@
 import { buildMeihuaCanonicalText, type MeihuaWebBundle } from '@/lib/divination/meihua';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
 import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
+import { applyListFilters } from '@/lib/data-sources/list-filters';
 
 type MeihuaRow = {
   id: string;
@@ -22,13 +23,14 @@ export const meihuaProvider: DataSourceProvider<MeihuaRow> = {
 
   async list(userId: string, ctx?: DataSourceQueryContext): Promise<DataSourceSummary[]> {
     const db = requireQueryDb(ctx);
-    const data = await db.tx((trx) => trx
+    const data = await db.tx(async (trx) => {
+      const query = applyListFilters(trx
         .selectFrom('meihua_divinations')
         .select(['id', 'question', 'method', 'cast_datetime', 'main_hexagram', 'changed_hexagram', 'created_at'])
-        .where('user_id', '=', userId)
-        .orderBy('created_at', 'desc')
-        .limit(ctx?.limit ?? 50)
-        .execute());
+        .where('user_id', '=', userId), ctx, ['question']);
+      if (!query) return [];
+      return query.orderBy('created_at', 'desc').limit(ctx?.limit ?? 50).execute();
+    });
     return (data || []).map((row: Record<string, unknown>) => ({
       id: String(row.id),
       type: 'meihua_divination' as const,

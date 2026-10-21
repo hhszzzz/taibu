@@ -1,6 +1,7 @@
 import { formatZiweiPromptText } from '@/lib/ziwei-chart-prompt';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
 import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
+import { applyListFilters } from '@/lib/data-sources/list-filters';
 import type { BirthTimeResolution } from '@/lib/divination/birth-time';
 
 type ZiweiRow = BirthTimeResolution & {
@@ -24,13 +25,14 @@ export const ziweiProvider: DataSourceProvider<ZiweiRow> = {
     async list(userId: string, ctx?: DataSourceQueryContext): Promise<DataSourceSummary[]> {
         const db = requireQueryDb(ctx);
         const limit = ctx?.limit ?? 50;
-        const data = await db.tx((trx) => trx
-        .selectFrom('ziwei_charts')
-        .select(['id', 'name', 'birth_date', 'created_at'])
-        .where('user_id', '=', userId)
-        .orderBy('created_at', 'desc')
-        .limit(limit)
-        .execute());
+        const data = await db.tx(async (trx) => {
+            const query = applyListFilters(trx
+                .selectFrom('ziwei_charts')
+                .select(['id', 'name', 'birth_date', 'created_at'])
+                .where('user_id', '=', userId), ctx, ['name']);
+            if (!query) return [];
+            return query.orderBy('created_at', 'desc').limit(limit).execute();
+        });
         return (data || []).map((chart) => ({
             id: chart.id,
             type: 'ziwei_chart',

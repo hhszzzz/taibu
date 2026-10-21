@@ -128,7 +128,20 @@ test('process steps summarize each call from its arguments and stored result onl
     assert.equal(summarizeAgentTool(tool('submit_plan', { input: { plan: '# 计划' }, output: { plan: '# 计划', approved: true } })), '已批准');
     assert.equal(summarizeAgentTool(tool('submit_plan', { input: { plan: '# 计划' }, output: { plan: '# 计划', approved: false } })), '要求修改');
     assert.equal(summarizeAgentTool(tool('submit_plan', { status: 'running', input: { plan: '# 计划' } })), '等待你批准');
-    assert.equal(Object.keys(AGENT_TOOL_FAMILY_LABELS).length, 13, 'every tool family has a step tag');
+    assert.equal(Object.keys(AGENT_TOOL_FAMILY_LABELS).length, 14, 'every tool family has a step tag');
+    // 个人资料检索：条件、笔记、以往对话与档案各写一行。
+    assert.equal(summarizeAgentTool(tool('list_user_data', { input: { keyword: '换工作', since: '2026-01-01', until: '2026-03-31' }, output: { items: [], errors: [] } })),
+        '「换工作」 · 2026-01-01 至 2026-03-31 · 找到 0 份资料');
+    assert.equal(summarizeAgentTool(tool('read_user_notes', { input: { since: '2026-10-01' }, output: { notes: [{ date: '2026-10-20', mood: '平静', content: '复盘' }], more: true } })), '2026-10-01 起 · 1+ 条笔记');
+    assert.equal(summarizeAgentTool(tool('search_conversations', { input: { query: '跳槽 2024' }, output: [] })), '「跳槽 2024」 · 没有找到');
+    assert.equal(summarizeAgentTool(tool('search_conversations', { status: 'running', input: { query: '跳槽' } })), '「跳槽」');
+    assert.equal(summarizeAgentTool(tool('record_user_event', { input: { title: '换到新公司' } , status: 'running' })), '换到新公司');
+    assert.equal(summarizeAgentTool(tool('record_user_event', { output: { target: 'record', id: 'r', event: { date: '2024-03-01', category: '事业', title: '换到新公司', detail: '我去年三月换了工作', chart: null } } })),
+        '2024-03-01 · 换到新公司');
+    assert.equal(summarizeAgentTool(tool('propose_archive_entry', { output: { runId: 'run', callId: 'call', proposal: { kind: 'conclusion', category: 'prediction', title: '明年换岗', content: '流年见官', date: '2027-01-01', tags: [], chart: null } } })),
+        '保存结论 · 明年换岗');
+    assert.equal(getAgentToolFamily('record_user_event'), 'archive');
+    assert.equal(getAgentToolFamily('read_user_notes'), 'data');
     assert.equal(summarizeAgentTool(tool('bazi_relations', { input: { reference: 'artifact:x', year: 2027, dayun: 4 } })), '2027 年 · 第 4 步大运', 'a drilldown reads its selectors, never the chart reference');
 });
 

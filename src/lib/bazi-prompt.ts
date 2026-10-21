@@ -72,6 +72,7 @@ export function formatBaziPromptText(
     chart: BaziPromptInput,
     profile?: Pick<BaziCaseProfile, 'masterReview' | 'ownerFeedback' | 'events'> | null,
     detailLevel?: ChartTextDetailLevel,
+    caseEventLimit?: number,
 ): string {
     const resolvedLevel = resolveChartTextDetailLevel('bazi', detailLevel);
     const resolvedSource = resolveBaziPromptData(chart);
@@ -82,6 +83,6 @@ export function formatBaziPromptText(
             meta: resolvedSource.meta,
         })
         : formatBaziFallback(chart);
-    const caseText = formatBaziCaseProfileForAI(profile);
+    const caseText = formatBaziCaseProfileForAI(profile, caseEventLimit);
     return caseText ? `${chartText}\n\n${caseText}` : chartText;
 }

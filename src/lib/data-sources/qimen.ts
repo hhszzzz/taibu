@@ -8,6 +8,7 @@ import {
 import { resolveChartTextDetailLevel } from '@/lib/divination/detail-level';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
 import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
+import { applyListFilters } from '@/lib/data-sources/list-filters';
 
 type QimenRow = {
     id: string;
@@ -46,13 +47,14 @@ export const qimenProvider: DataSourceProvider<QimenRow> = {
     async list(userId: string, ctx?: DataSourceQueryContext): Promise<DataSourceSummary[]> {
         const db = requireQueryDb(ctx);
         const limit = ctx?.limit ?? 50;
-        const data = await db.tx((trx) => trx
-        .selectFrom('qimen_charts')
-        .select(['id', 'question', 'dun_type', 'ju_number', 'created_at'])
-        .where('user_id', '=', userId)
-        .orderBy('created_at', 'desc')
-        .limit(limit)
-        .execute());
+        const data = await db.tx(async (trx) => {
+            const query = applyListFilters(trx
+                .selectFrom('qimen_charts')
+                .select(['id', 'question', 'dun_type', 'ju_number', 'created_at'])
+                .where('user_id', '=', userId), ctx, ['question']);
+            if (!query) return [];
+            return query.orderBy('created_at', 'desc').limit(limit).execute();
+        });
         return (data || []).map((row: { id: string; question: string | null; dun_type: string; ju_number: number; created_at: string }) => {
             const dunLabel = DUN_LABEL[row.dun_type] || row.dun_type;
             return {

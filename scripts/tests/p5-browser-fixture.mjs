@@ -90,6 +90,15 @@ const familyParts = () => [
   ] } },
   { type: 'tool', id: 'family-memory', name: 'remember_user_fact', title: '记住偏好', status: 'completed', output: { id: '33333333-3333-4333-8333-333333333333', title: '历法偏好', content: '以后都用公历时间', kind: 'preference', updated_at: '2026-10-10T00:00:00Z' } },
   { type: 'tool', id: 'family-external', name: 'mcp__archive__lookup', title: '档案检索', status: 'completed', input: { keyword: '庚金' }, output: { rows: 1 } },
+  // The user's archive: notes and earlier conversations read, an event recorded from their words, a conclusion to save.
+  { type: 'tool', id: 'family-notes', name: 'read_user_notes', title: '读取每日笔记', status: 'completed', input: { since: '2026-10-01' },
+    output: { notes: [{ date: '2026-10-02', mood: '开心', content: '面试顺利，下周入职。' }], more: true } },
+  { type: 'tool', id: 'family-history', name: 'search_conversations', title: '检索以往对话', status: 'completed', input: { query: '跳槽' },
+    output: [{ conversationId: 'conversation-earlier', messageId: 'earlier-question', title: '跳槽的事', updatedAt: '2026-09-01T08:00:00Z', role: 'user', excerpt: '2024年我跳槽去了上海，前途如何？', reply: '从流年看，这次跳槽顺利。', question: null }] },
+  { type: 'tool', id: 'family-record', name: 'record_user_event', title: '记入档案', status: 'completed', input: { date: '2024-03', category: '事业', title: '换到新公司', evidence: '2024年3月从老东家离职' },
+    output: { target: 'record', id: '44444444-4444-4444-8444-444444444444', event: { date: '2024-03-01', category: '事业', title: '换到新公司', detail: '2024年3月从老东家离职', chart: null } } },
+  { type: 'tool', id: 'family-propose', name: 'propose_archive_entry', title: '生成保存卡片', status: 'completed', input: { kind: 'conclusion', title: '明年换岗' },
+    output: { runId: 'run-family', callId: 'family-propose', proposal: { kind: 'conclusion', category: 'prediction', title: '明年换岗', content: '官星透出，宜在下半年调整岗位。', date: '2027-06-01', tags: ['事业'], chart: null } } },
   { type: 'tool', id: 'family-ask', name: 'ask_user', title: '补充必要信息', status: 'completed', input: {},
     output: { question: '出生时间？', questions: [{ id: 'birth', question: '出生时间？', options: [{ id: 'morning', label: '早上' }, { id: 'night', label: '晚上' }], allowCustom: true, allowSkip: false }], awaitingUser: true } },
   { type: 'question', id: '9:family-ask', question: '出生时间？' },
@@ -663,6 +672,14 @@ export async function run(existingPage, bundlePath) {
               if (view) controller.enqueue(new TextEncoder().encode('event: snapshot\ndata: ' + JSON.stringify(view) + '\n\n'));
             }, cancel() { stream.closed = true; },
           }), { headers: { 'Content-Type': 'text/event-stream' } });
+        }
+        // A save card reads its state and saves by its call; what is written comes from the task, never the request.
+        const archive = url.pathname.match(/^\/api\/agent\/runs\/([^/]+)\/archive$/);
+        if (archive) {
+          const saved = agentIO.archive ??= {};
+          const key = archive[1] + ':' + (method === 'POST' ? body.callId : url.searchParams.get('callId'));
+          if (method === 'POST') saved[key] = { state: 'saved', target: 'record', id: '55555555-5555-4555-8555-555555555555', href: '/records?id=55555555-5555-4555-8555-555555555555' };
+          return Response.json(saved[key] ?? { state: 'pending' });
         }
         let payload;
         if (url.pathname === '/api/agent/runs' && method === 'POST') {
@@ -2524,6 +2541,39 @@ export async function run(existingPage, bundlePath) {
     check('The collaboration view compares its members in the workspace', await workspacePanel.locator('.agent-ws-member').count() === 2 &&
       await workspacePanel.locator('.agent-ws-member').first().innerText().then(text => text.includes('分析模型') && text.includes('推理 高')) &&
       await workspacePanel.locator('.agent-ws-member').last().innerText().then(text => text.includes('复核模型') && text.includes('不推理')));
+    // The archive: notes and earlier conversations open their pages; a recorded event and a save card stay under the answer.
+    await openProcessStep('读取每日笔记');
+    const notesPage = workspacePanel.locator('[data-workspace-view="notes"]');
+    await notesPage.waitFor();
+    check('Daily notes open their own page with date, mood and text, and say that older notes were not read', await notesPage.innerText().then(text =>
+      text.includes('2026-10-02') && text.includes('开心') && text.includes('面试顺利，下周入职。') && text.includes('更早的笔记没有读取。')));
+    await openProcessStep('检索以往对话');
+    const conversationsPage = workspacePanel.locator('[data-workspace-view="history"]');
+    await conversationsPage.waitFor();
+    check('An earlier conversation opens at the message the search matched, with the answer it got',
+      await conversationsPage.getByRole('link', { name: '跳槽的事', exact: true }).getAttribute('href') === '/chat?id=conversation-earlier&message=earlier-question' &&
+      await conversationsPage.innerText().then(text => text.includes('你的提问') && text.includes('2024年我跳槽去了上海') && text.includes('回答：从流年看，这次跳槽顺利。')));
+    const archiveCard = results.locator('.agent-archive-card');
+    const eventReceipt = results.locator('.agent-archive-receipt');
+    check('A save card and a recorded event stay under the answer, outside the folded steps', await archiveCard.count() === 1 &&
+      await eventReceipt.innerText().then(text => text.includes('已按你的原话记入命理记录：2024-03-01 · 事业 · 换到新公司')) &&
+      await eventReceipt.getByRole('link', { name: '查看', exact: true }).getAttribute('href') === '/records?id=44444444-4444-4444-8444-444444444444');
+    const saveButton = archiveCard.getByRole('button', { name: '保存', exact: true });
+    await saveButton.waitFor();
+    check('A pending card names what it would save and where', await archiveCard.innerText().then(text =>
+      text.includes('保存结论') && text.includes('命理记录') && text.includes('明年换岗 · 待验证（2027-06-01）') && text.includes('官星透出')));
+    await saveButton.click();
+    const savedLink = archiveCard.getByRole('link', { name: '已保存 · 查看', exact: true });
+    await savedLink.waitFor();
+    const archiveSaves = await page.evaluate(() => window.fixtureAgentIO.requests.filter(item => item.url === '/api/agent/runs/run-family/archive' && item.method === 'POST').map(item => item.body));
+    check('Saving posts only the call ID and turns the card into a link to what was saved', JSON.stringify(archiveSaves) === JSON.stringify([{ callId: 'family-propose' }]) &&
+      await savedLink.getAttribute('href') === '/records?id=55555555-5555-4555-8555-555555555555');
+    await openProcessStep('生成保存卡片');
+    const archivePage = workspacePanel.locator('[data-workspace-view="archive"]');
+    await archivePage.waitFor();
+    check('The archive page lists the recorded event and the card in call order, the card already saved', await archivePage.locator('.agent-archive-list > *').count() === 2 &&
+      await archivePage.locator('.agent-archive-list > :first-child').evaluate(node => node.classList.contains('agent-archive-receipt')) &&
+      await archivePage.getByRole('link', { name: '已保存 · 查看', exact: true }).count() === 1);
     // Code mode: a script is one step whose calls are its sub-steps; its page lists every call in order.
     await page.evaluate(() => window.fixture.codemodeScript());
     // The script follows the answer, so it opens a process group of its own; a settled task leaves it folded.

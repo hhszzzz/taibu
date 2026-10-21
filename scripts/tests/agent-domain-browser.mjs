@@ -12,7 +12,7 @@ export async function verifyAgentDomain({ page, context, origin, output }) {
     try {
         await page.goto(`${origin}/settings/personalization`);
         const panel=page.getByRole('region',{name:'任务助手设置'});
-        await panel.getByRole('switch',{name:'允许任务助手读取和保存长期记忆'}).check();
+        await panel.getByRole('switch',{name:'允许任务助手使用长期记忆'}).check();
         const savedSettings=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/user/settings'&&r.request().method()==='PATCH');
         await panel.getByRole('button',{name:'保存任务助手设置',exact:true}).click();
         assert.ok((await savedSettings).ok());

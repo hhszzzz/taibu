@@ -96,7 +96,7 @@ test('restored transactional uniqueness and message cascade are present', () => 
 });
 
 test('all current literal application RPC references have definitions or explicit blockers', () => {
-  assert.equal(manifest.rpcReferences.length, 63);
+  assert.equal(manifest.rpcReferences.length, 66);
   assert.deepEqual(manifest.rpcReferences.filter(r => r.status === 'missing-source'), []);
   for (const rpc of manifest.rpcReferences) assert.ok(definition(rpc.name) || ['check_login_attempts', 'record_login_attempt'].includes(rpc.name), rpc.name);
   assert.deepEqual(manifest.requiredPostBaselineMigrations, ['supabase/migrations/20261003_100000_fix_rate_limit_admission.sql']);
@@ -140,6 +140,26 @@ test('public conversation shares install from their migration with owner-only re
     assert.match(sql, new RegExp(`REVOKE ALL ON FUNCTION public\\.${name}\\([^)]*\\) FROM public,anon;`));
   }
   for (const name of ['get_conversation_share', 'upsert_conversation_share', 'revoke_conversation_share']) {
+    assert.equal(manifest.rpcReferences.find(reference => reference.name === name)?.status, 'defined', name);
+  }
+});
+
+test('the Agent archive installs from its migration: a source on three snapshot tables, owner saves and leased writes', () => {
+  const migration = 'supabase/migrations/20261021_120000_agent_user_archive.sql';
+  assert.ok(manifest.sources.some(source => source.file === migration));
+  assert.equal(names(sql).length, 55, 'no table is added');
+  for (const table of ['ming_records', 'bazi_case_events', 'bazi_case_profiles']) {
+    // The snapshot creates the column with the table; the reference waits for the Agent tables.
+    assert.match(new RegExp(`CREATE TABLE public\\.${table} \\(([\\s\\S]*?)\\n\\);`).exec(sql)?.[1] ?? '', /^  source_run_id uuid,/m, table);
+    assert.match(sql, new RegExp(`ALTER TABLE public\\.${table} ADD CONSTRAINT ${table}_source_run_id_fkey\\s+FOREIGN KEY \\(source_run_id\\) REFERENCES public\\.agent_runs\\(id\\) ON DELETE SET NULL;`), table);
+  }
+  assert.ok(sql.indexOf(`ADD CONSTRAINT ming_records_source_run_id_fkey`) > sql.indexOf('CREATE TABLE public.agent_runs'));
+  assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.agent_save_archive_proposal\(uuid,text\) TO authenticated;/);
+  for (const name of ['agent_record_user_event', 'agent_search_conversations']) {
+    assert.match(definition(name), /r:=public\.agent_require_lease\(p_run_id,p_worker_id,p_fence\);/, name);
+    assert.match(definition(name), /chat_preferences->>'memoryEnabled'='true'/, name);
+  }
+  for (const name of ['agent_record_user_event', 'agent_save_archive_proposal', 'agent_search_conversations']) {
     assert.equal(manifest.rpcReferences.find(reference => reference.name === name)?.status, 'defined', name);
   }
 });

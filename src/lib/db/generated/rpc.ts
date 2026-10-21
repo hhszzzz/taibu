@@ -20,7 +20,10 @@ export interface RpcRegistry {
   "agent_durable_commit": { args: { "p_run_id": string | null; "p_worker_id": string | null; "p_fence": number | null; "p_sequence": number | null; "p_writes": unknown | null; "p_checkpoint": unknown | null; }; result: number };
   "agent_durable_read": { args: { "p_run_id": string | null; "p_worker_id": string | null; "p_fence": number | null; "p_after"?: number | null; }; result: Json };
   "agent_finish_run": { args: { "p_run_id": string | null; "p_worker_id": string | null; "p_fence": number | null; "p_status": string | null; "p_checkpoint": unknown | null; "p_message": unknown | null; }; result: Record<string, unknown> };
+  "agent_record_user_event": { args: { "p_run_id": string | null; "p_worker_id": string | null; "p_fence": number | null; "p_call_id": string | null; "p_chart_type": string | null; "p_chart_id": string | null; "p_event_date": string | null; "p_category": string | null; "p_title": string | null; "p_evidence": string | null; }; result: Json };
   "agent_renew_lease": { args: { "p_run_id": string | null; "p_worker_id": string | null; "p_fence": number | null; }; result: boolean };
+  "agent_save_archive_proposal": { args: { "p_run_id": string | null; "p_call_id": string | null; }; result: Json };
+  "agent_search_conversations": { args: { "p_run_id": string | null; "p_worker_id": string | null; "p_fence": number | null; "p_query": string | null; "p_limit": number | null; }; result: Json };
   "agent_search_knowledge": { args: { "p_run_id": string | null; "p_worker_id": string | null; "p_fence": number | null; "p_method": string | null; "p_args": unknown | null; }; result: Json };
   "agent_submit_command": { args: { "p_run_id": string | null; "p_request_id": string | null; "p_mode": string | null; "p_message": unknown | null; }; result: Record<string, unknown> };
   "agent_worker_heartbeat": { args: { "p_worker_id": string | null; "p_engine"?: string | null; }; result: null };
@@ -90,7 +93,10 @@ export const RPC_SPECS = {
   "agent_durable_commit": { args: [["p_run_id", "uuid", false], ["p_worker_id", "text", false], ["p_fence", "bigint", false], ["p_sequence", "bigint", false], ["p_writes", "jsonb", false], ["p_checkpoint", "jsonb", false]], returns: "scalar" },
   "agent_durable_read": { args: [["p_run_id", "uuid", false], ["p_worker_id", "text", false], ["p_fence", "bigint", false], ["p_after", "bigint", true]], returns: "scalar" },
   "agent_finish_run": { args: [["p_run_id", "uuid", false], ["p_worker_id", "text", false], ["p_fence", "bigint", false], ["p_status", "text", false], ["p_checkpoint", "jsonb", false], ["p_message", "jsonb", false]], returns: "row" },
+  "agent_record_user_event": { args: [["p_run_id", "uuid", false], ["p_worker_id", "text", false], ["p_fence", "bigint", false], ["p_call_id", "text", false], ["p_chart_type", "text", false], ["p_chart_id", "uuid", false], ["p_event_date", "date", false], ["p_category", "text", false], ["p_title", "text", false], ["p_evidence", "text", false]], returns: "scalar" },
   "agent_renew_lease": { args: [["p_run_id", "uuid", false], ["p_worker_id", "text", false], ["p_fence", "bigint", false]], returns: "scalar" },
+  "agent_save_archive_proposal": { args: [["p_run_id", "uuid", false], ["p_call_id", "text", false]], returns: "scalar" },
+  "agent_search_conversations": { args: [["p_run_id", "uuid", false], ["p_worker_id", "text", false], ["p_fence", "bigint", false], ["p_query", "text", false], ["p_limit", "integer", false]], returns: "scalar" },
   "agent_search_knowledge": { args: [["p_run_id", "uuid", false], ["p_worker_id", "text", false], ["p_fence", "bigint", false], ["p_method", "text", false], ["p_args", "jsonb", false]], returns: "scalar" },
   "agent_submit_command": { args: [["p_run_id", "uuid", false], ["p_request_id", "text", false], ["p_mode", "text", false], ["p_message", "jsonb", false]], returns: "row" },
   "agent_worker_heartbeat": { args: [["p_worker_id", "text", false], ["p_engine", "text", true]], returns: "void" },

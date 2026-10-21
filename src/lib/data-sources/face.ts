@@ -1,6 +1,7 @@
 import { FACE_ANALYSIS_TYPES } from '@/lib/divination/face';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
 import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
+import { applyListFilters } from '@/lib/data-sources/list-filters';
 
 type FaceRow = {
     id: string;
@@ -28,13 +29,15 @@ export const faceProvider: DataSourceProvider<FaceRow> = {
     async list(userId: string, ctx?: DataSourceQueryContext): Promise<DataSourceSummary[]> {
         const db = requireQueryDb(ctx);
         const limit = ctx?.limit ?? 50;
-        const data = await db.tx((trx) => trx
-            .selectFrom('face_readings')
-            .select(['id', 'analysis_type', 'created_at'])
-            .where('user_id', '=', userId)
-            .orderBy('created_at', 'desc')
-            .limit(limit)
-            .execute());
+        // A face reading has no text of its own: a keyword lists none.
+        const data = await db.tx(async (trx) => {
+            const query = applyListFilters(trx
+                .selectFrom('face_readings')
+                .select(['id', 'analysis_type', 'created_at'])
+                .where('user_id', '=', userId), ctx, []);
+            if (!query) return [];
+            return query.orderBy('created_at', 'desc').limit(limit).execute();
+        });
         return (data || []).map((row) => {
             const typeName = FACE_ANALYSIS_TYPES.find(t => t.id === row.analysis_type)?.name || row.analysis_type || '面相分析';
             return {

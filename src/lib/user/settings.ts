@@ -1,4 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
+import type { ScopedDb } from '@/lib/db/context.server';
 import { requestBrowserJson, type BrowserApiError } from '@/lib/browser-api';
 import { normalizeChatPreferences, type ChatPreferences } from '@/lib/chat/preferences';
 import { normalizeBriefingPreferences, validBriefingPreferences, type BriefingPreferences } from '@/lib/briefing-preferences';
@@ -56,21 +57,6 @@ type UserSettingsRow = {
   default_ziwei_chart_id?: unknown;
 };
 
-type UserSettingsQueryResult = PromiseLike<{
-  data: UserSettingsRow | null;
-  error: unknown;
-}>;
-
-type UserSettingsReader = {
-  from(table: 'user_settings'): {
-    select(columns: string): {
-      eq(column: 'user_id', userId: string): {
-        maybeSingle(): UserSettingsQueryResult;
-      };
-    };
-  };
-};
-
 export type UserSettingsSnapshot = {
   briefingConfigured?: boolean;
   briefingPreferences: BriefingPreferences;
@@ -114,22 +100,25 @@ export type UserSettingsUpdateInput = Partial<{
   defaultZiweiChartId: string | null;
 }>;
 
-export const USER_SETTINGS_SELECT = `
-  daily_briefing_settings,
-  chat_preferences,
-  expression_style,
-  custom_instructions,
-  chart_prompt_detail_level,
-  user_profile,
-  prompt_kb_ids,
-  visualization_settings,
-  notifications_enabled,
-  notify_email,
-  notify_site,
-  language,
-  default_bazi_chart_id,
-  default_ziwei_chart_id
-`;
+export const USER_SETTINGS_COLUMNS = [
+  'daily_briefing_settings',
+  'chat_preferences',
+  'expression_style',
+  'custom_instructions',
+  'chart_prompt_detail_level',
+  'user_profile',
+  'prompt_kb_ids',
+  'visualization_settings',
+  'notifications_enabled',
+  'notify_email',
+  'notify_site',
+  'language',
+  'default_bazi_chart_id',
+  'default_ziwei_chart_id',
+] as const;
+
+/** Legacy PostgREST projection; removed once B3 finishes migrating its readers. */
+export const USER_SETTINGS_SELECT = USER_SETTINGS_COLUMNS.join(', ');
 
 export function normalizeIdentityUserProfile(raw: unknown): UserIdentityProfile | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -200,33 +189,39 @@ export function buildDefaultChartSettingsPayload(
     : { defaultZiweiChartId: chartId });
 }
 
-export function getUserSettingsRow(
-  client: unknown,
+export async function getUserSettingsRow(
+  db: ScopedDb,
   userId: string,
-): UserSettingsQueryResult {
-  return (client as UserSettingsReader)
-    .from('user_settings')
-    .select(USER_SETTINGS_SELECT)
-    .eq('user_id', userId)
-    .maybeSingle();
+): Promise<UserSettingsRow | null> {
+  return db.tx(async (trx) => (await trx
+    .selectFrom('user_settings')
+    .select([...USER_SETTINGS_COLUMNS])
+    .where('user_id', '=', userId)
+    .executeTakeFirst()) as UserSettingsRow | undefined ?? null);
 }
 
 export async function getUserSettingsSnapshot(
-  client: unknown,
+  db: ScopedDb,
   userId: string,
 ): Promise<{ settings: UserSettingsSnapshot; error: unknown }> {
-  const result = await getUserSettingsRow(client, userId);
-  return {
-    settings: normalizeUserSettings(result.data),
-    error: result.error,
-  };
+  try {
+    return {
+      settings: normalizeUserSettings(await getUserSettingsRow(db, userId)),
+      error: null,
+    };
+  } catch (error) {
+    return {
+      settings: normalizeUserSettings(null),
+      error,
+    };
+  }
 }
 
 export async function getChartPromptDetailLevel(
-  client: UserSettingsReader,
+  db: ScopedDb,
   userId: string,
 ): Promise<ChartPromptDetailLevel> {
-  const { settings } = await getUserSettingsSnapshot(client, userId);
+  const { settings } = await getUserSettingsSnapshot(db, userId);
   return settings.chartPromptDetailLevel;
 }
 

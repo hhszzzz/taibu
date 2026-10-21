@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createMockScopedDb } from './helpers/db-mock';
 
 process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
@@ -64,6 +65,13 @@ function setupDreamContext(t: import('node:test').TestContext) {
       };
     },
   };
+  const contextModule = require('../lib/db/context.server') as any;
+  t.mock.method(contextModule, 'systemDb', () => createMockScopedDb({
+    tx: async () => {
+      state.settingsReads += 1;
+      return { default_bazi_chart_id: state.defaultChartId };
+    },
+  }));
   t.mock.method(apiUtilsModule, 'getSystemAdminClient', () => client);
   t.mock.method(baziModule.baziProvider, 'formatForAI', (chart: BaziRow) => {
     state.formattedRows.push(chart);

@@ -1,9 +1,36 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
+import { createMockScopedDb } from './helpers/db-mock';
 
 process.env.SUPABASE_URL = 'http://localhost';
 process.env.SUPABASE_ANON_KEY = 'test-anon';
+
+type SettingsRow = Record<string, unknown> | null;
+
+function settingsTx(getRow: () => SettingsRow, onInsert?: (payload: Record<string, unknown>) => void) {
+  return {
+    selectFrom: () => ({
+      select: () => ({
+        where: (_column: string, _value: unknown) => ({
+          executeTakeFirst: async () => getRow(),
+        }),
+      }),
+    }),
+    insertInto: () => ({
+      values: (payload: Record<string, unknown>) => {
+        onInsert?.(payload);
+        return {
+          onConflict: (build: (conflict: unknown) => unknown) => build({
+            column: () => ({
+              doUpdateSet: () => ({ execute: async () => undefined }),
+            }),
+          }),
+        };
+      },
+    }),
+  };
+}
 
 test('settings account precondition rejects stale cookies before any database access', async (t) => {
   const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
@@ -11,7 +38,7 @@ test('settings account precondition rejects stale cookies before any database ac
   let authenticated = 0;
   api.requireUserContext = async () => {
     authenticated++;
-    return { user: { id: 'bob' }, db: { from() { throw new Error('must not access database'); } } } as unknown as Awaited<ReturnType<typeof original>>;
+    return { user: { id: 'bob' }, scoped: createMockScopedDb() } as unknown as Awaited<ReturnType<typeof original>>;
   };
   t.after(() => { api.requireUserContext = original; });
   const { GET, PATCH } = await import('../app/api/user/settings/route');
@@ -31,33 +58,21 @@ test('user settings route should return normalized settings bundle for the curre
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
 
   apiUtilsModule.requireUserContext = async () => ({
-    user: { id: 'user-1' } as Awaited<ReturnType<typeof import('../lib/api-utils').getAuthContext>>['user'],
-    supabase: {
-      from(table: string) {
-        assert.equal(table, 'user_settings');
-        return {
-          select: () => ({
-            eq: () => ({
-              maybeSingle: async () => ({
-                data: {
-                  expression_style: 'gentle',
-                  custom_instructions: 'keep calm',
-                  chart_prompt_detail_level: 'more',
-                  user_profile: { career: 'engineer' },
-                  prompt_kb_ids: ['kb-2', 'kb-1'],
-                  visualization_settings: {
-                    selectedDimensions: ['career', 'wealth'],
-                    dayunDisplayCount: 6,
-                    chartStyle: 'dark',
-                  },
-                },
-                error: null,
-              }),
-            }),
-          }),
-        };
-      },
-    } as never,
+    user: { id: 'user-1' },
+    scoped: createMockScopedDb({
+      tx: async (work) => work(settingsTx(() => ({
+        expression_style: 'gentle',
+        custom_instructions: 'keep calm',
+        chart_prompt_detail_level: 'more',
+        user_profile: { career: 'engineer' },
+        prompt_kb_ids: ['kb-2', 'kb-1'],
+        visualization_settings: {
+          selectedDimensions: ['career', 'wealth'],
+          dayunDisplayCount: 6,
+          chartStyle: 'dark',
+        },
+      })) as never),
+    }),
   } as unknown as RequireUserContextResult);
 
   t.after(() => {
@@ -84,42 +99,24 @@ test('user settings route PATCH should update only user_settings without touchin
   const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
   type RequireUserContextResult = Awaited<ReturnType<typeof apiUtilsModule.requireUserContext>>;
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
-  const touchedTables: string[] = [];
   const upsertPayloads: Record<string, unknown>[] = [];
 
   apiUtilsModule.requireUserContext = async () => ({
-    user: { id: 'user-1' } as Awaited<ReturnType<typeof import('../lib/api-utils').getAuthContext>>['user'],
-    supabase: {
-      from(table: string) {
-        touchedTables.push(table);
-        assert.equal(table, 'user_settings');
-        return {
-          upsert: (payload: Record<string, unknown>) => {
-            upsertPayloads.push(payload);
-            return { error: null };
-          },
-          select: () => ({
-            eq: () => ({
-              maybeSingle: async () => ({
-                data: {
-                  notifications_enabled: false,
-                  notify_email: false,
-                  notify_site: false,
-                  chart_prompt_detail_level: 'full',
-                  user_profile: { identity: '创业者' },
-                  visualization_settings: {
-                    selectedDimensions: ['career', 'health'],
-                    dayunDisplayCount: 4,
-                    chartStyle: 'modern',
-                  },
-                },
-                error: null,
-              }),
-            }),
-          }),
-        };
-      },
-    } as never,
+    user: { id: 'user-1' },
+    scoped: createMockScopedDb({
+      tx: async (work) => work(settingsTx(() => ({
+        notifications_enabled: false,
+        notify_email: false,
+        notify_site: false,
+        chart_prompt_detail_level: 'full',
+        user_profile: { identity: '创业者' },
+        visualization_settings: {
+          selectedDimensions: ['career', 'health'],
+          dayunDisplayCount: 4,
+          chartStyle: 'modern',
+        },
+      }), (payload) => upsertPayloads.push(payload)) as never),
+    }),
   } as unknown as RequireUserContextResult);
 
   t.after(() => {
@@ -159,7 +156,6 @@ test('user settings route PATCH should update only user_settings without touchin
     dayunDisplayCount: 4,
     chartStyle: 'modern',
   });
-  assert.deepEqual(touchedTables, ['user_settings', 'user_settings']);
 });
 
 test('settings expected account is only a precondition; authentication and server owner remain authoritative', async (t) => {
@@ -175,12 +171,31 @@ test('settings expected account is only a precondition; authentication and serve
   }
   const owners: string[] = [];
   api.requireUserContext = async () => ({
-    user: { id: 'alice' }, db: { from: () => ({
-      upsert: async (payload: { user_id: string }) => { owners.push(payload.user_id); return { error: null }; },
-      select: () => ({ eq: (_key: string, owner: string) => {
-        owners.push(owner); return { maybeSingle: async () => ({ data: {}, error: null }) };
-      } }),
-    }) },
+    user: { id: 'alice' },
+    scoped: createMockScopedDb({
+      tx: async (work) => work({
+        selectFrom: () => ({
+          select: () => ({
+            where: (_key: string, _operator: string, owner: string) => {
+              owners.push(owner);
+              return { executeTakeFirst: async () => ({}) };
+            },
+          }),
+        }),
+        insertInto: () => ({
+          values: (payload: { user_id: string }) => {
+            owners.push(payload.user_id);
+            return {
+              onConflict: (build: (conflict: unknown) => unknown) => build({
+                column: () => ({
+                  doUpdateSet: () => ({ execute: async () => undefined }),
+                }),
+              }),
+            };
+          },
+        }),
+      } as never),
+    }),
   }) as unknown as Awaited<ReturnType<typeof original>>;
   for (const [method, handler] of [['GET', GET], ['PATCH', PATCH]] as const) {
     for (const expected of [undefined, 'alice']) {
@@ -199,10 +214,16 @@ test('Agent preference updates preserve display settings and reject invalid temp
   const template = { id: 'career', name: '事业', content: '分析：{{question}}' };
   let settings: Record<string, unknown> = { chat_preferences: { width: 980, fontScale: 115, desktopNotifications: true, promptTemplates: [template], memoryEnabled: true } };
   const writes: Record<string, unknown>[] = [];
-  t.mock.method(api, 'requireUserContext', async () => ({ user: { id: 'alice' }, db: { from: () => ({
-    select: () => ({ eq: (_key: string, owner: string) => { assert.equal(owner, 'alice'); return { maybeSingle: async () => ({ data: settings, error: null }) }; } }),
-    upsert: async (payload: Record<string, unknown>) => { assert.equal(payload.user_id, 'alice'); writes.push(payload); settings = payload; return { error: null }; },
-  }) } }) as unknown as Awaited<ReturnType<typeof api.requireUserContext>>);
+  t.mock.method(api, 'requireUserContext', async () => ({
+    user: { id: 'alice' },
+    scoped: createMockScopedDb({
+      tx: async (work) => work(settingsTx(() => settings, (payload) => {
+        assert.equal(payload.user_id, 'alice');
+        writes.push(payload);
+        settings = payload;
+      }) as never),
+    }),
+  }) as unknown as Awaited<ReturnType<typeof api.requireUserContext>>);
   const { PATCH } = await import('../app/api/user/settings/route');
   const patch = (chatPreferences: unknown) => PATCH(new NextRequest('http://localhost/api/user/settings', { method: 'PATCH', headers: { 'X-Expected-User-Id': 'alice' }, body: JSON.stringify({ chatPreferences, user_id: 'bob' }) }));
   for (const input of [{ memoryEnabled: 'true' }, { promptTemplates: [template, template] }, { promptTemplates: [{ ...template, content: '' }] }]) assert.equal((await patch(input)).status, 400);

@@ -1,51 +1,44 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createMockScopedDb } from './helpers/db-mock';
 
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon';
 
 test('pruneExpiredNotifications should delete in a single query and return deleted row count', async (t) => {
-    const apiUtilsModule = require('../lib/api-utils') as any;
-    const originalGetServiceClient = apiUtilsModule.getSystemAdminClient;
+    const contextModule = require('../lib/db/context.server') as any;
+    const originalSystemDb = contextModule.systemDb;
 
-    let countSelected = false;
-    let deleteSelected = false;
+    const whereColumns: string[] = [];
 
-    apiUtilsModule.getSystemAdminClient = () => ({
-        from: (table: string) => {
-            assert.equal(table, 'notifications');
-            return {
-                delete: () => ({
-                    lt: () => ({
-                        eq: () => ({
-                            select: async () => {
-                                deleteSelected = true;
-                                return { data: [{ id: 'n1' }, { id: 'n2' }], error: null };
-                            },
-                        }),
-                        select: async () => {
-                            deleteSelected = true;
-                            return { data: [{ id: 'n1' }, { id: 'n2' }], error: null };
+    contextModule.systemDb = () => createMockScopedDb({
+        tx: async (work) => work({
+            deleteFrom: () => ({
+                where: (column: string) => {
+                    whereColumns.push(column);
+                    const query = {
+                        where: (next: string) => {
+                            whereColumns.push(next);
+                            return query;
                         },
-                    }),
-                }),
-                select: () => {
-                    countSelected = true;
-                    throw new Error('pruneExpiredNotifications should not pre-count rows before deleting');
+                        returning: () => ({
+                            execute: async () => [{ id: 'n1' }, { id: 'n2' }],
+                        }),
+                    };
+                    return query;
                 },
-            };
-        },
+            }),
+        } as never),
     });
 
     t.after(() => {
-        apiUtilsModule.getSystemAdminClient = originalGetServiceClient;
+        contextModule.systemDb = originalSystemDb;
     });
 
     const notificationModule = await import('../lib/notification-server');
     const deleted = await notificationModule.pruneExpiredNotifications({ userId: 'user-1' });
 
-    assert.equal(countSelected, false);
-    assert.equal(deleteSelected, true);
+    assert.deepEqual(whereColumns, ['created_at', 'user_id']);
     assert.equal(deleted, 2);
 });
 

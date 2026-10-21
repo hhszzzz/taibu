@@ -5,66 +5,37 @@ import { NextRequest } from 'next/server';
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon';
 
-test('notifications GET should use head count query for unread badge requests', async (t) => {
-  const apiUtils = require('../lib/api-utils') as {
-    requireUserContext: typeof import('../lib/api-utils').requireUserContext;
-  };
-  const notificationServer = require('../lib/notification-server') as {
-    pruneExpiredNotifications: typeof import('../lib/notification-server').pruneExpiredNotifications;
-  };
-  const originalRequireUserContext = apiUtils.requireUserContext;
-  const originalPruneExpiredNotifications = notificationServer.pruneExpiredNotifications;
+import { createMockScopedDb } from './helpers/db-mock';
 
-  const queryState: {
-    columns?: string;
-    options?: Record<string, unknown>;
-    eqCalls: Array<{ column: string; value: unknown }>;
-    gteCalls: Array<{ column: string; value: unknown }>;
-  } = {
-    eqCalls: [],
-    gteCalls: [],
-  };
-
-  apiUtils.requireUserContext = (async () => ({
-    user: { id: 'user-1' },
-    supabase: {
-      from(table: string) {
-        assert.equal(table, 'notifications');
-        return {
-          select(columns: string, options?: Record<string, unknown>) {
-            queryState.columns = columns;
-            queryState.options = options;
-            const query = {
-              eq(column: string, value: unknown) {
-                queryState.eqCalls.push({ column, value });
-                return query;
-              },
-              gte(column: string, value: unknown) {
-                queryState.gteCalls.push({ column, value });
-                return query;
-              },
-              order() {
-                throw new Error('count query should not sort notifications');
-              },
-              limit() {
-                throw new Error('count query should not apply list limit');
-              },
-              then(resolve: (value: { data: null; error: null; count: number }) => unknown) {
-                return Promise.resolve(resolve({ data: null, error: null, count: 5 }));
-              },
-            };
-            return query;
-          },
-        };
-      },
-    },
-  })) as unknown as typeof apiUtils.requireUserContext;
-  notificationServer.pruneExpiredNotifications = (async () => 0) as typeof notificationServer.pruneExpiredNotifications;
-
+function mockUserContext(t: { after: (fn: () => void) => void }, scoped: ReturnType<typeof createMockScopedDb>) {
+  const apiUtils = require('../lib/api-utils') as any;
+  const original = apiUtils.requireUserContext;
+  apiUtils.requireUserContext = async () => ({ user: { id: 'user-1' }, scoped });
   t.after(() => {
-    apiUtils.requireUserContext = originalRequireUserContext;
-    notificationServer.pruneExpiredNotifications = originalPruneExpiredNotifications;
+    apiUtils.requireUserContext = original;
   });
+}
+
+test('notifications GET should use a count query for unread badge requests', async (t) => {
+  const whereCalls: Array<{ column: string; value: unknown }> = [];
+  const query = {
+    where(column: string, _operator: string, value: unknown) {
+      whereCalls.push({ column, value });
+      return query;
+    },
+    orderBy() {
+      throw new Error('count query should not sort notifications');
+    },
+    limit() {
+      throw new Error('count query should not apply list limit');
+    },
+    executeTakeFirstOrThrow: async () => ({ count: 5 }),
+  };
+  mockUserContext(t, createMockScopedDb({
+    tx: async (work) => work({
+      selectFrom: () => ({ select: () => query }),
+    } as never),
+  }));
 
   const { GET } = await import('../app/api/notifications/route');
   const response = await GET(new NextRequest('http://localhost/api/notifications?count=1&unread=1'));
@@ -72,59 +43,34 @@ test('notifications GET should use head count query for unread badge requests', 
 
   assert.equal(response.status, 200);
   assert.equal(payload.count, 5);
-  assert.equal(queryState.columns, 'id');
-  assert.deepEqual(queryState.options, { count: 'exact', head: true });
-  assert.deepEqual(queryState.eqCalls, [
-    { column: 'user_id', value: 'user-1' },
-    { column: 'is_read', value: false },
-  ]);
-  assert.deepEqual(queryState.gteCalls.map((item) => item.column), ['created_at']);
+  assert.deepEqual(whereCalls.map((item) => item.column), ['user_id', 'created_at', 'is_read']);
+  assert.equal(whereCalls[0]?.value, 'user-1');
+  assert.equal(whereCalls[2]?.value, false);
+  assert.equal(typeof whereCalls[1]?.value, 'string');
 });
 
 test('notifications GET should not prune expired rows for unread badge requests', async (t) => {
-  const apiUtils = require('../lib/api-utils') as {
-    requireUserContext: typeof import('../lib/api-utils').requireUserContext;
-  };
   const notificationServer = require('../lib/notification-server') as {
     pruneExpiredNotifications: typeof import('../lib/notification-server').pruneExpiredNotifications;
   };
-  const originalRequireUserContext = apiUtils.requireUserContext;
   const originalPruneExpiredNotifications = notificationServer.pruneExpiredNotifications;
 
   let pruneCalled = false;
-
-  apiUtils.requireUserContext = (async () => ({
-    user: { id: 'user-1' },
-    supabase: {
-      from() {
-        return {
-          select() {
-            const query = {
-              eq() {
-                return query;
-              },
-              gte() {
-                return query;
-              },
-              then(resolve: (value: { data: null; error: null; count: number }) => unknown) {
-                return Promise.resolve(resolve({ data: null, error: null, count: 2 }));
-              },
-            };
-            return query;
-          },
-        };
-      },
-    },
-  })) as unknown as typeof apiUtils.requireUserContext;
   notificationServer.pruneExpiredNotifications = (async () => {
     pruneCalled = true;
     return 0;
   }) as typeof notificationServer.pruneExpiredNotifications;
-
   t.after(() => {
-    apiUtils.requireUserContext = originalRequireUserContext;
     notificationServer.pruneExpiredNotifications = originalPruneExpiredNotifications;
   });
+
+  const query = {
+    where() { return query; },
+    executeTakeFirstOrThrow: async () => ({ count: 2 }),
+  };
+  mockUserContext(t, createMockScopedDb({
+    tx: async (work) => work({ selectFrom: () => ({ select: () => query }) } as never),
+  }));
 
   const { GET } = await import('../app/api/notifications/route');
   const response = await GET(new NextRequest('http://localhost/api/notifications?count=1&unread=1'));
@@ -136,85 +82,51 @@ test('notifications GET should not prune expired rows for unread badge requests'
 });
 
 test('notifications GET list should filter notifications to the most recent 3 days', async (t) => {
-  const apiUtils = require('../lib/api-utils') as {
-    requireUserContext: typeof import('../lib/api-utils').requireUserContext;
-  };
-  const notificationServer = require('../lib/notification-server') as {
-    pruneExpiredNotifications: typeof import('../lib/notification-server').pruneExpiredNotifications;
-  };
-  const originalRequireUserContext = apiUtils.requireUserContext;
-  const originalPruneExpiredNotifications = notificationServer.pruneExpiredNotifications;
-
-  const gteCalls: Array<{ column: string; value: unknown }> = [];
-
-  apiUtils.requireUserContext = (async () => ({
-    user: { id: 'user-1' },
-    supabase: {
-      from(table: string) {
-        assert.equal(table, 'notifications');
-        return {
-          select() {
-            const query = {
-              eq() {
-                return query;
-              },
-              gte(column: string, value: unknown) {
-                gteCalls.push({ column, value });
-                return query;
-              },
-              order() {
-                return query;
-              },
-              range() {
-                return Promise.resolve({
-                  data: [
-                    {
-                      id: 'notification-1',
-                      user_id: 'user-1',
-                      type: 'system',
-                      title: '标题',
-                      content: '内容',
-                      is_read: false,
-                      link: null,
-                      created_at: '2026-03-28T00:00:00.000Z',
-                    },
-                    {
-                      id: 'notification-2',
-                      user_id: 'user-1',
-                      type: 'system',
-                      title: '标题2',
-                      content: '内容2',
-                      is_read: true,
-                      link: null,
-                      created_at: '2026-03-27T00:00:00.000Z',
-                    },
-                    {
-                      id: 'notification-3',
-                      user_id: 'user-1',
-                      type: 'system',
-                      title: '标题3',
-                      content: '内容3',
-                      is_read: true,
-                      link: null,
-                      created_at: '2026-03-26T00:00:00.000Z',
-                    },
-                  ],
-                  error: null,
-                });
-              },
-            };
-            return query;
-          },
-        };
-      },
+  const whereCalls: Array<{ column: string; value: unknown }> = [];
+  const query = {
+    where(column: string, _operator: string, value: unknown) {
+      whereCalls.push({ column, value });
+      return query;
     },
-  })) as unknown as typeof apiUtils.requireUserContext;
-  notificationServer.pruneExpiredNotifications = (async () => 0) as typeof notificationServer.pruneExpiredNotifications;
-
-  t.after(() => {
-    apiUtils.requireUserContext = originalRequireUserContext;
-    notificationServer.pruneExpiredNotifications = originalPruneExpiredNotifications;
-  });
+    orderBy() { return query; },
+    offset() { return query; },
+    limit() { return query; },
+    execute: async () => [
+      {
+        id: 'notification-1',
+        user_id: 'user-1',
+        type: 'system',
+        title: '标题',
+        content: '内容',
+        is_read: false,
+        link: null,
+        created_at: '2026-03-28T00:00:00.000Z',
+      },
+      {
+        id: 'notification-2',
+        user_id: 'user-1',
+        type: 'system',
+        title: '标题2',
+        content: '内容2',
+        is_read: true,
+        link: null,
+        created_at: '2026-03-27T00:00:00.000Z',
+      },
+      {
+        id: 'notification-3',
+        user_id: 'user-1',
+        type: 'system',
+        title: '标题3',
+        content: '内容3',
+        is_read: true,
+        link: null,
+        created_at: '2026-03-26T00:00:00.000Z',
+      },
+    ],
+  };
+  mockUserContext(t, createMockScopedDb({
+    tx: async (work) => work({ selectFrom: () => ({ selectAll: () => query }) } as never),
+  }));
 
   const { GET } = await import('../app/api/notifications/route');
   const response = await GET(new NextRequest('http://localhost/api/notifications?limit=2'));
@@ -226,54 +138,47 @@ test('notifications GET list should filter notifications to the most recent 3 da
     hasMore: true,
     nextOffset: 2,
   });
-  assert.equal(gteCalls.length, 1);
-  assert.equal(gteCalls[0].column, 'created_at');
-  assert.equal(typeof gteCalls[0].value, 'string');
+  const cutoff = whereCalls.find((item) => item.column === 'created_at');
+  assert.ok(cutoff);
+  assert.equal(typeof cutoff.value, 'string');
+  const cutoffMs = Date.parse(cutoff.value as string);
+  assert.ok(Math.abs(Date.now() - cutoffMs - 3 * 24 * 60 * 60 * 1000) < 60_000);
 });
 
 test('notifications PATCH should not prune before mark-one updates', async (t) => {
-  const apiUtils = require('../lib/api-utils') as {
-    requireUserContext: typeof import('../lib/api-utils').requireUserContext;
-  };
   const notificationServer = require('../lib/notification-server') as {
     pruneExpiredNotifications: typeof import('../lib/notification-server').pruneExpiredNotifications;
   };
-  const originalRequireUserContext = apiUtils.requireUserContext;
   const originalPruneExpiredNotifications = notificationServer.pruneExpiredNotifications;
 
   let pruneCalled = false;
   let updatedId: string | null = null;
-
-  apiUtils.requireUserContext = (async () => ({
-    user: { id: 'user-1' },
-    supabase: {
-      from(table: string) {
-        assert.equal(table, 'notifications');
-        return {
-          update(payload: Record<string, unknown>) {
-            assert.deepEqual(payload, { is_read: true });
-            return {
-              eq(column: string, value: unknown) {
-                if (column === 'id') {
-                  updatedId = value as string;
-                }
-                return this;
-              },
-            };
-          },
-        };
-      },
-    },
-  })) as unknown as typeof apiUtils.requireUserContext;
+  let updatedPayload: Record<string, unknown> | null = null;
   notificationServer.pruneExpiredNotifications = (async () => {
     pruneCalled = true;
     return 0;
   }) as typeof notificationServer.pruneExpiredNotifications;
-
   t.after(() => {
-    apiUtils.requireUserContext = originalRequireUserContext;
     notificationServer.pruneExpiredNotifications = originalPruneExpiredNotifications;
   });
+
+  mockUserContext(t, createMockScopedDb({
+    tx: async (work) => work({
+      updateTable: () => ({
+        set: (payload: Record<string, unknown>) => {
+          updatedPayload = payload;
+          const query = {
+            where: (column: string, _operator: string, value: unknown) => {
+              if (column === 'id') updatedId = value as string;
+              return query;
+            },
+            execute: async () => undefined,
+          };
+          return query;
+        },
+      }),
+    } as never),
+  }));
 
   const { PATCH } = await import('../app/api/notifications/route');
   const response = await PATCH(new NextRequest('http://localhost/api/notifications', {
@@ -285,54 +190,38 @@ test('notifications PATCH should not prune before mark-one updates', async (t) =
 
   assert.equal(response.status, 200);
   assert.deepEqual(payload, { success: true });
+  assert.deepEqual(updatedPayload, { is_read: true });
   assert.equal(updatedId, 'notification-1');
   assert.equal(pruneCalled, false);
 });
 
 test('notifications DELETE should not prune before deleting selected ids', async (t) => {
-  const apiUtils = require('../lib/api-utils') as {
-    requireUserContext: typeof import('../lib/api-utils').requireUserContext;
-  };
   const notificationServer = require('../lib/notification-server') as {
     pruneExpiredNotifications: typeof import('../lib/notification-server').pruneExpiredNotifications;
   };
-  const originalRequireUserContext = apiUtils.requireUserContext;
   const originalPruneExpiredNotifications = notificationServer.pruneExpiredNotifications;
 
   let pruneCalled = false;
   let deletedIds: string[] | null = null;
-
-  apiUtils.requireUserContext = (async () => ({
-    user: { id: 'user-1' },
-    supabase: {
-      from(table: string) {
-        assert.equal(table, 'notifications');
-        return {
-          delete() {
-            return {
-              in(column: string, ids: string[]) {
-                assert.equal(column, 'id');
-                deletedIds = ids;
-                return this;
-              },
-              eq() {
-                return Promise.resolve({ error: null });
-              },
-            };
-          },
-        };
-      },
-    },
-  })) as unknown as typeof apiUtils.requireUserContext;
   notificationServer.pruneExpiredNotifications = (async () => {
     pruneCalled = true;
     return 0;
   }) as typeof notificationServer.pruneExpiredNotifications;
-
   t.after(() => {
-    apiUtils.requireUserContext = originalRequireUserContext;
     notificationServer.pruneExpiredNotifications = originalPruneExpiredNotifications;
   });
+
+  mockUserContext(t, createMockScopedDb({
+    tx: async (work) => work({
+      deleteFrom: () => ({
+        where: (column: string, _operator: string, value: unknown) => {
+          if (column === 'id') deletedIds = value as string[];
+          const query = { where: () => query, execute: async () => undefined };
+          return query;
+        },
+      }),
+    } as never),
+  }));
 
   const { DELETE } = await import('../app/api/notifications/route');
   const response = await DELETE(new NextRequest('http://localhost/api/notifications?id=notification-1&id=notification-2', {

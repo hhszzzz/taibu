@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
+import { createMockScopedDb } from './helpers/db-mock';
 
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon';
@@ -16,13 +17,28 @@ type ChartRecord = {
   created_at?: string;
 };
 
-function mockUserContext<T extends object>(user: unknown, db: T) {
+function mockUserContext<T extends object>(user: unknown, db: T, scoped = createMockScopedDb()) {
   return {
     user,
     accessToken: null,
     db,
+    scoped,
     supabase: db,
   };
+}
+
+function settingsScope(row: Record<string, unknown>) {
+  return createMockScopedDb({
+    tx: async (work) => work({
+      selectFrom: () => ({
+        select: () => ({
+          where: () => ({
+            executeTakeFirst: async () => row,
+          }),
+        }),
+      }),
+    } as never),
+  });
 }
 
 test('chart bundle and CRUD handlers reject an expected-user mismatch before any database call', async (t) => {
@@ -134,6 +150,7 @@ test('user charts GET aggregates bazi and ziwei charts through a single user API
         throw new Error(`Unexpected table: ${table}`);
       },
     },
+    settingsScope({ default_bazi_chart_id: 'bazi-1', default_ziwei_chart_id: 'ziwei-1' }),
   )) as unknown as typeof apiUtils.requireUserContext;
 
   t.after(() => {
@@ -291,6 +308,7 @@ test('user charts DELETE removes the requested chart with user scoping', async (
         };
       },
     },
+    settingsScope({ default_bazi_chart_id: null, default_ziwei_chart_id: 'ziwei-9' }),
   )) as unknown as typeof apiUtils.requireUserContext;
 
   t.after(() => {

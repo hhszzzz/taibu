@@ -1,34 +1,16 @@
 import { type NextRequest } from 'next/server';
-import { jsonError, jsonOk, requireUserContext, resolveRequestDbClient } from '@/lib/api-utils';
+import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
 import {
     buildUserSettingsUpdatePayload,
+    getUserSettingsSnapshot,
     hasEffectiveUserSettingsUpdate,
-    normalizeUserSettings,
-    USER_SETTINGS_SELECT,
     type UserSettingsUpdateInput,
 } from '@/lib/user/settings';
 import { validBriefingPreferences } from '@/lib/briefing-preferences';
 import { validPromptTemplates } from '@/lib/agent/prompt-templates';
 
 async function loadSettings(auth: Exclude<Awaited<ReturnType<typeof requireUserContext>>, { error: unknown }>) {
-  const db = resolveRequestDbClient(auth);
-  if (!db) {
-    return {
-      settings: normalizeUserSettings(null),
-      error: new Error('missing auth db client'),
-    };
-  }
-
-  const { data, error } = await db
-    .from('user_settings')
-    .select(USER_SETTINGS_SELECT)
-    .eq('user_id', auth.user.id)
-    .maybeSingle();
-
-  return {
-    settings: normalizeUserSettings((data ?? null) as Record<string, unknown> | null),
-    error,
-  };
+  return getUserSettingsSnapshot(auth.scoped, auth.user.id);
 }
 
 export async function GET(request: NextRequest) {
@@ -56,9 +38,6 @@ export async function PATCH(request: NextRequest) {
   if (expectedUserId !== null && expectedUserId !== auth.user.id) {
     return jsonError('账号已切换，请重新加载设置', 409);
   }
-  const db = resolveRequestDbClient(auth);
-  if (!db) return jsonError('更新用户设置失败', 500);
-
   let body: UserSettingsUpdateInput;
   try {
     body = await request.json() as UserSettingsUpdateInput;
@@ -80,11 +59,13 @@ export async function PATCH(request: NextRequest) {
     return jsonError('没有可更新的设置字段', 400);
   }
 
-  const { error } = await db
-    .from('user_settings')
-    .upsert(payload, { onConflict: 'user_id' });
-
-  if (error) {
+  try {
+    await auth.scoped.tx((trx) => trx
+      .insertInto('user_settings')
+      .values(payload as never)
+      .onConflict((conflict) => conflict.column('user_id').doUpdateSet(payload as never))
+      .execute());
+  } catch {
     return jsonError('更新用户设置失败', 500);
   }
 

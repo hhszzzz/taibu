@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { getSystemAdminClient } from '@/lib/api-utils';
+import { systemDb } from '@/lib/db/context.server';
 import { truncateToTokens } from '@/lib/token-utils';
 import { baziProvider } from '@/lib/data-sources/bazi';
 import { dailyFortuneProvider } from '@/lib/data-sources/fortune';
@@ -77,30 +78,8 @@ export async function buildDreamContextPayload(userId: string): Promise<DreamCon
     const supabase = getSystemAdminClient();
     pruneDreamContextCache();
 
-    const userSettingsClient = {
-        from(table: 'user_settings') {
-            return {
-                select(columns: string) {
-                    return {
-                        eq(column: 'user_id', value: string) {
-                            return {
-                                maybeSingle() {
-                                    return supabase
-                                        .from(table)
-                                        .select(columns)
-                                        .eq(column, value)
-                                        .maybeSingle();
-                                },
-                            };
-                        },
-                    };
-                },
-            };
-        },
-    };
-
     const [{ settings }, dayKey] = await Promise.all([
-        getUserSettingsSnapshot(userSettingsClient, userId),
+        getUserSettingsSnapshot(systemDb(), userId),
         Promise.resolve(formatDayKey(new Date())),
     ]);
 

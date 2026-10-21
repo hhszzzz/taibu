@@ -1,6 +1,7 @@
 import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import type { CreateKeyParams } from '../lib/user/activation-keys';
+import { createMockScopedDb } from './helpers/db-mock';
 
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon';
@@ -14,24 +15,25 @@ type InsertedRow = {
 };
 
 function mockAdminClient(t: TestContext) {
-    const apiUtils = require('../lib/api-utils') as any;
-    const original = apiUtils.getSystemAdminClient;
+    const contextModule = require('../lib/db/context.server') as any;
+    const original = contextModule.systemDb;
     const inserts: InsertedRow[][] = [];
-    apiUtils.getSystemAdminClient = () => ({
-        from(table: string) {
-            assert.equal(table, 'activation_keys');
-            return {
-                insert(rows: InsertedRow[]) {
+    contextModule.systemDb = () => createMockScopedDb({
+        tx: (work) => work({
+            insertInto: () => ({
+                values: (rows: InsertedRow[]) => {
                     inserts.push(rows);
                     return {
-                        select: async () => ({ data: rows.map(row => ({ key_code: row.key_code })), error: null }),
+                        returning: () => ({
+                            execute: async () => rows.map(row => ({ key_code: row.key_code })),
+                        }),
                     };
                 },
-            };
-        },
+            }),
+        } as never),
     });
     t.after(() => {
-        apiUtils.getSystemAdminClient = original;
+        contextModule.systemDb = original;
     });
     return inserts;
 }

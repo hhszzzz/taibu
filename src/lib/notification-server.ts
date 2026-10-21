@@ -1,4 +1,4 @@
-import { getSystemAdminClient } from '@/lib/api-utils';
+import { systemDb } from '@/lib/db/context.server';
 
 const NOTIFICATION_RETENTION_DAYS = 3;
 const NOTIFICATION_RETENTION_MS = NOTIFICATION_RETENTION_DAYS * 24 * 60 * 60 * 1000;
@@ -8,23 +8,21 @@ export function getNotificationRetentionCutoffIso(now: Date = new Date()) {
 }
 
 export async function pruneExpiredNotifications(options: { userId?: string } = {}) {
-    const serviceClient = getSystemAdminClient();
     const cutoffIso = getNotificationRetentionCutoffIso();
 
-    let deleteQuery = serviceClient
-        .from('notifications')
-        .delete()
-        .lt('created_at', cutoffIso);
-
-    if (options.userId) {
-        deleteQuery = deleteQuery.eq('user_id', options.userId);
-    }
-
-    const { data, error } = await deleteQuery.select('id');
-    if (error) {
+    try {
+        const rows = await systemDb().tx((trx) => {
+            let query = trx
+                .deleteFrom('notifications')
+                .where('created_at', '<', cutoffIso);
+            if (options.userId) {
+                query = query.where('user_id', '=', options.userId);
+            }
+            return query.returning('id').execute();
+        });
+        return rows.length;
+    } catch (error) {
         console.error('清理过期通知失败:', error);
         return 0;
     }
-
-    return Array.isArray(data) ? data.length : 0;
 }

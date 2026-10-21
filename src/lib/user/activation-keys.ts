@@ -5,7 +5,7 @@
  */
 
 import { randomInt } from "node:crypto";
-import { getSystemAdminClient } from "@/lib/api-utils";
+import { systemDb } from "@/lib/db/context.server";
 import type { MembershipType } from "@/lib/user/membership";
 
 // Key类型
@@ -68,8 +68,6 @@ export async function createActivationKeys(
     params: CreateKeyParams
 ): Promise<{ success: boolean; keys?: string[]; error?: string }> {
     try {
-        const supabase = getSystemAdminClient();
-
         // 验证参数
         if (params.keyType === 'membership' && params.membershipType !== 'plus' && params.membershipType !== 'pro') {
             return { success: false, error: '会员类型Key需要指定会员等级' };
@@ -83,30 +81,32 @@ export async function createActivationKeys(
         }
 
         // 生成Key
-        const keysToCreate = [];
+        const keysToCreate: Array<{
+            key_code: string;
+            key_type: KeyType;
+            membership_type: MembershipType | null;
+            credits_amount: number | null;
+            created_by: string;
+        }> = [];
         for (let i = 0; i < params.count; i++) {
             keysToCreate.push({
                 key_code: generateKeyCode(),
                 key_type: params.keyType,
-                membership_type: params.keyType === 'membership' ? params.membershipType : null,
-                credits_amount: params.keyType === 'credits' ? params.creditsAmount : null,
+                membership_type: params.keyType === 'membership' ? params.membershipType ?? null : null,
+                credits_amount: params.keyType === 'credits' ? params.creditsAmount ?? null : null,
                 created_by: adminId,
             });
         }
 
-        const { data, error } = await supabase
-            .from('activation_keys')
-            .insert(keysToCreate)
-            .select('key_code');
-
-        if (error) {
-            console.error('[activation-keys] Failed to create keys:', error);
-            return { success: false, error: '创建激活Key失败' };
-        }
+        const data = await systemDb().tx((trx) => trx
+            .insertInto('activation_keys')
+            .values(keysToCreate)
+            .returning('key_code')
+            .execute());
 
         return {
             success: true,
-            keys: data?.map(k => k.key_code) || []
+            keys: data.map((row) => row.key_code),
         };
     } catch (error) {
         console.error('[activation-keys] Error creating keys:', error);
@@ -121,29 +121,20 @@ export async function getAllActivationKeys(
     filters?: { isUsed?: boolean; keyType?: KeyType }
 ): Promise<ActivationKey[]> {
     try {
-        const supabase = getSystemAdminClient();
-
-        let query = supabase
-            .from('activation_keys')
-            .select('*')
-            .neq('source', 'linuxdo_monthly')
-            .order('created_at', { ascending: false });
-
-        if (filters?.isUsed !== undefined) {
-            query = query.eq('is_used', filters.isUsed);
-        }
-        if (filters?.keyType) {
-            query = query.eq('key_type', filters.keyType);
-        }
-
-        const { data, error } = await query;
-
-        if (error) {
-            console.error('[activation-keys] Failed to fetch keys:', error);
-            return [];
-        }
-
-        return data || [];
+        return await systemDb().tx((trx) => {
+            let query = trx
+                .selectFrom('activation_keys')
+                .selectAll()
+                .where('source', '!=', 'linuxdo_monthly')
+                .orderBy('created_at', 'desc');
+            if (filters?.isUsed !== undefined) {
+                query = query.where('is_used', '=', filters.isUsed);
+            }
+            if (filters?.keyType) {
+                query = query.where('key_type', '=', filters.keyType);
+            }
+            return query.execute();
+        }) as ActivationKey[];
     } catch (error) {
         console.error('[activation-keys] Error fetching keys:', error);
         return [];
@@ -155,17 +146,10 @@ export async function getAllActivationKeys(
  */
 export async function deleteActivationKey(keyId: string): Promise<boolean> {
     try {
-        const supabase = getSystemAdminClient();
-
-        const { error } = await supabase
-            .from('activation_keys')
-            .delete()
-            .eq('id', keyId);
-
-        if (error) {
-            console.error('[activation-keys] Failed to delete key:', error);
-            return false;
-        }
+        await systemDb().tx((trx) => trx
+            .deleteFrom('activation_keys')
+            .where('id', '=', keyId)
+            .execute());
 
         return true;
     } catch (error) {
@@ -186,16 +170,10 @@ export async function activateKey(
         if (!keyCode || !keyCode.startsWith('sk-') || keyCode.length < 10) {
             return { success: false, error: '无效的激活码格式' };
         }
-        const supabase = getSystemAdminClient();
-        const { data, error } = await supabase.rpc('activate_key_as_service', {
+        const data = await systemDb().rpc('activate_key_as_service', {
             p_user_id: userId,
             p_key_code: keyCode,
         });
-
-        if (error) {
-            console.error('[activation-keys] RPC error:', error);
-            return { success: false, error: '激活失败，请稍后重试' };
-        }
 
         const result = Array.isArray(data) ? data[0] : data;
         if (!result?.success) {

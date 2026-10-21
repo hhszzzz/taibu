@@ -1106,6 +1106,10 @@ const SYSTEM_DB_ALLOWED = [
   'src/lib/user/checkin.ts',
   'src/lib/user/credits.ts',
   'src/lib/user/membership-server.ts',
+  'src/lib/user/activation-keys.ts',
+  'src/lib/notification-server.ts',
+  'src/app/api/announcements/route.ts',
+  'src/lib/chat/chat-context.ts',
 ];
 mustNotMatchInTree(
   'src',

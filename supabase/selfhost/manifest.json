@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "baselineRevision": "5725dde",
-  "sourceFingerprint": "005c25f9ae8676780e5cf8d3fd5978f4daf054eaa7dfea2a4f4d64c2f1b91ffe",
+  "sourceFingerprint": "7094b8b22ead94748a52583fa6a6f11df85de3b7502f95460079e998ccce719e",
   "target": "empty local self-hosted application schema; NOT production parity or a migration replay",
   "bootstrapOrder": [
     "platform roles/extensions",
@@ -226,7 +226,7 @@
     },
     {
       "file": "src/app/api/user/charts/route.ts",
-      "sha256": "7c5a11f64d227d311431904f7be64644254899e5d6c288a76a5358a34e49f46c"
+      "sha256": "59d2da85a2391655aea5157b7b385fbc64ed034944ab9d870512dc7001e08b05"
     },
     {
       "file": "supabase/selfhost/002-storage.sql",
@@ -1185,25 +1185,6 @@
   ],
   "relationReferences": [
     {
-      "name": "activation_keys",
-      "kind": "table",
-      "status": "defined",
-      "callers": [
-        {
-          "file": "src/lib/user/activation-keys.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/user/activation-keys.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/user/activation-keys.ts",
-          "kind": "literal-from"
-        }
-      ]
-    },
-    {
       "name": "agent_attachment_refs",
       "kind": "table",
       "status": "defined",
@@ -1427,14 +1408,6 @@
         },
         {
           "file": "src/app/api/admin/announcements/route.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/app/api/announcements/route.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/app/api/announcements/route.ts",
           "kind": "literal-from"
         }
       ]
@@ -1786,21 +1759,6 @@
         },
         {
           "file": "src/app/api/search/route.ts",
-          "kind": "literal-from"
-        }
-      ]
-    },
-    {
-      "name": "credit_transactions",
-      "kind": "table",
-      "status": "defined",
-      "callers": [
-        {
-          "file": "src/app/api/credits/transactions/route.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/app/api/credits/transactions/route.ts",
           "kind": "literal-from"
         }
       ]
@@ -2167,35 +2125,7 @@
           "kind": "literal-from"
         },
         {
-          "file": "src/app/api/notifications/route.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/app/api/notifications/route.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/app/api/notifications/route.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/app/api/notifications/route.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/app/api/notifications/route.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/app/api/notifications/route.ts",
-          "kind": "literal-from"
-        },
-        {
           "file": "src/lib/agent/activity.server.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/notification-server.ts",
           "kind": "literal-from"
         }
       ]
@@ -2367,18 +2297,6 @@
           "kind": "literal-from"
         },
         {
-          "file": "src/app/api/user/profile/route.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/app/api/user/settings/route.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/app/api/user/settings/route.ts",
-          "kind": "literal-from"
-        },
-        {
           "file": "src/lib/agent/briefing.server.ts",
           "kind": "literal-from"
         },
@@ -2393,10 +2311,6 @@
         {
           "file": "src/lib/ai/chart-prompt-detail.ts",
           "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/chat/chat-context.ts",
-          "kind": "typed-adapter-catalog"
         },
         {
           "file": "src/lib/data-sources/fortune.ts",
@@ -2417,14 +2331,6 @@
         {
           "file": "src/lib/server/chat/prompt-context.ts",
           "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/user/settings.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/user/settings.ts",
-          "kind": "typed-adapter-catalog"
         }
       ]
     },
@@ -2608,11 +2514,6 @@
       "file": "src/lib/api/divination-pipeline.ts",
       "expression": "tableName",
       "contract": "tableName factory configuration"
-    },
-    {
-      "file": "src/lib/chat/chat-context.ts",
-      "expression": "table",
-      "contract": "typed from(table) adapter"
     }
   ],
   "excludedRelationAdapters": [
@@ -2630,7 +2531,7 @@
   "artifacts": [
     {
       "file": "supabase/selfhost/001-application.sql",
-      "sha256": "96c9fa73baaae9bdf8a7d25eab922cd622e0417dfe4b297d41243fd8383ca218"
+      "sha256": "713b3de44588122562c668dace135397256a4f84893101b6450f1bdc6c4030c6"
     },
     {
       "file": "supabase/selfhost/002-storage.sql",

@@ -35,14 +35,7 @@ function getChartTable(type: ChartType) {
 async function loadDefaultChartIds(
     auth: Exclude<Awaited<ReturnType<typeof requireUserContext>>, { error: unknown }>,
 ) {
-    const db = resolveRequestDbClient(auth);
-    if (!db) {
-        return {
-            defaultChartIds: { bazi: null, ziwei: null },
-            error: new Error('missing auth db client'),
-        };
-    }
-    const { settings, error } = await getUserSettingsSnapshot(db, auth.user.id);
+    const { settings, error } = await getUserSettingsSnapshot(auth.scoped, auth.user.id);
     return {
         defaultChartIds: toDefaultChartIds(settings),
         error,

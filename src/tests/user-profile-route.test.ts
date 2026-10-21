@@ -84,7 +84,26 @@ test('user profile route should update profile fields and return the normalized 
     },
   };
 
-  apiUtilsModule.requireUserContext = async () => mockUserContext({ id: 'user-1' }, fakeSupabase);
+  apiUtilsModule.requireUserContext = async () => mockUserContext(
+    { id: 'user-1' },
+    fakeSupabase,
+    createMockScopedDb({
+      tx: async (work) => work({
+        selectFrom: () => ({
+          select: () => ({
+            where: () => ({
+              executeTakeFirst: async () => ({
+                expression_style: 'gentle',
+                custom_instructions: 'keep calm',
+                user_profile: { identity: 'tester' },
+                prompt_kb_ids: ['kb-1'],
+              }),
+            }),
+          }),
+        }),
+      } as never),
+    }),
+  );
   apiUtilsModule.jsonOk = (payload: unknown, status = 200) => Response.json(payload, { status });
   apiUtilsModule.jsonError = (message: string, status = 400) => Response.json({ error: message }, { status });
 

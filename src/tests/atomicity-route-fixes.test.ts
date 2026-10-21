@@ -769,60 +769,22 @@ test('credits transactions GET should use user context and preserve today spend 
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    supabase: {
-      from(table: string) {
-        assert.equal(table, 'credit_transactions');
-        return {
-          select(columns: string) {
-            if (columns === 'amount') {
-              return {
-                eq() {
-                  return this;
-                },
-                lt(column: string) {
-                  if (column === 'created_at') {
-                    return Promise.resolve({
-                      data: [{ amount: -2 }, { amount: -3 }],
-                      error: null,
-                    });
-                  }
-                  return this;
-                },
-                gte() {
-                  return this;
-                },
-              };
-            }
-
-            return {
-              eq() {
-                return this;
-              },
-              order() {
-                return this;
-              },
-              limit: async () => ({
-                data: [
-                  {
-                    id: 'txn-1',
-                    amount: -2,
-                    type: 'spend',
-                    source: 'ai_usage',
-                    description: 'AI 消费',
-                    balance_after: 8,
-                    reference_type: null,
-                    reference_id: null,
-                    metadata: null,
-                    created_at: '2026-04-11T00:00:00.000Z',
-                  },
-                ],
-                error: null,
-              }),
-            };
-          },
-        };
-      },
-    },
+    scoped: createMockScopedDb({
+      tx: async () => [[
+        {
+          id: 'txn-1',
+          amount: -2,
+          type: 'spend',
+          source: 'ai_usage',
+          description: 'AI 消费',
+          balance_after: 8,
+          reference_type: null,
+          reference_id: null,
+          metadata: null,
+          created_at: '2026-04-11T00:00:00.000Z',
+        },
+      ], [{ amount: -2 }, { amount: -3 }]],
+    }),
   });
   apiUtilsModule.requireBearerUser = async () => {
     throw new Error('credits transactions route should not use requireBearerUser');

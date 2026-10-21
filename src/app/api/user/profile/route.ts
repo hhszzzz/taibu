@@ -2,7 +2,7 @@ import { type NextRequest } from 'next/server';
 import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
 import { buildMembershipInfo, type MembershipType } from '@/lib/user/membership';
 import { ensureUserRecordRow } from '@/lib/user/profile-record';
-import { normalizeUserSettings, USER_SETTINGS_SELECT } from '@/lib/user/settings';
+import { getUserSettingsSnapshot } from '@/lib/user/settings';
 
 type UserProfilePatchBody = {
     profile?: {
@@ -64,16 +64,7 @@ function normalizeProfileRow(row: Record<string, unknown> | null) {
 }
 
 async function loadSettings(auth: Exclude<Awaited<ReturnType<typeof requireUserContext>>, { error: unknown }>) {
-    const { data, error } = await auth.db
-        .from('user_settings')
-        .select(USER_SETTINGS_SELECT)
-        .eq('user_id', auth.user.id)
-        .maybeSingle();
-
-    return {
-        settings: normalizeUserSettings((data ?? null) as Record<string, unknown> | null),
-        error,
-    };
+    return getUserSettingsSnapshot(auth.scoped, auth.user.id);
 }
 
 export async function GET(request: NextRequest) {

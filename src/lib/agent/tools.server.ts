@@ -42,6 +42,7 @@ import { drilldownParameters, executeDrilldown } from './drilldown.server';
 import { nextAgentCitation } from './evidence';
 import { readAgentCite } from './tool-presentation';
 import { searchKnowledgeWithPersistence } from "@/lib/knowledge-base/search";
+import { searchWeb, webSearchConfigured, WEB_SEARCH_QUERY_MAX } from "@/lib/ai/web-search.server";
 import type {
   KnowledgeSearchPersistence,
   KnowledgeSearchRow,
@@ -215,40 +216,6 @@ function agentKnowledgePersistence(
         weight: string;
       }>,
   };
-}
-
-export async function searchAgentWeb(query: string, signal?: AbortSignal) {
-  const apiKey = process.env.TAVILY_API_KEY;
-  if (!apiKey) throw new Error("联网检索未配置");
-  const response = await fetch("https://api.tavily.com/search", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      query,
-      search_depth: "basic",
-      max_results: 5,
-      include_answer: false,
-      include_raw_content: false,
-    }),
-    signal: AbortSignal.any([
-      ...(signal ? [signal] : []),
-      AbortSignal.timeout(30_000),
-    ]),
-  });
-  if (!response.ok) throw new Error(`联网检索失败 (${response.status})`);
-  const data = (await response.json()) as {
-    results?: Array<{ title: string; url: string; content: string }>;
-  };
-  return (data.results ?? []).filter((r) => {
-    try {
-      return ["https:", "http:"].includes(new URL(r.url).protocol);
-    } catch {
-      return false;
-    }
-  });
 }
 
 export async function createAgentTools(
@@ -620,16 +587,16 @@ export async function createAgentTools(
   );
   if (
     run.input.webEnabled &&
-    process.env.TAVILY_API_KEY &&
+    webSearchConfigured() &&
     (await checkMember()).membership !== "free"
   ) {
     tools.push(
       wrap(
         "web_search",
         "联网检索公开资料，返回可引用来源；仅发送完成检索必要的信息",
-        Type.Object({ query: Type.String({ minLength: 1 }) }),
+        Type.Object({ query: Type.String({ minLength: 1, maxLength: WEB_SEARCH_QUERY_MAX }) }),
         async (args, _callId, signal) =>
-          textResult(stampCitations(await searchAgentWeb(args.query, signal))),
+          textResult(stampCitations(await searchWeb(args.query, signal))),
       ),
     );
   }

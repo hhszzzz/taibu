@@ -8,6 +8,7 @@ import { describeQuestionAnswer, getDraftAnswers, questionDraftKey } from '@/lib
 import { useQuestionDraft } from '@/lib/agent/use-question-draft';
 import type { AttachmentState } from '@/types';
 import { usePrivateAttachments } from '@/lib/chat/use-private-attachments';
+import { PRIVATE_ATTACHMENT_ACCEPT } from '@/lib/chat/composer-files';
 import { PrivateAttachments } from './PrivateAttachments';
 
 /** Two short choices sit side by side; longer or more choices stack. */
@@ -120,7 +121,7 @@ export function AgentQuestionDock({ question, questions: supplied, questionId, s
                 <button type="button" className="agent-question-attach" disabled={sending || uploads.uploading || disabled} onClick={() => fileRef.current?.click()}>
                     <Paperclip size={14} aria-hidden="true" />{uploads.uploading ? '正在保存资料…' : '添加图片或文本资料'}
                 </button>
-                <input ref={fileRef} type="file" className="hidden" tabIndex={-1} aria-hidden="true" multiple accept=".jpg,.jpeg,.png,.webp,.txt,.md"
+                <input ref={fileRef} type="file" className="hidden" tabIndex={-1} aria-hidden="true" multiple accept={PRIVATE_ATTACHMENT_ACCEPT}
                     onChange={event => { void uploads.upload(Array.from(event.target.files ?? [])); event.target.value = ''; }} />
                 {error && <p className="agent-error" role="alert">{error}</p>}
             </div>

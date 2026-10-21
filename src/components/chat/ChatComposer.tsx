@@ -29,7 +29,7 @@ import { ComposerStatusBar } from '@/components/chat/composer/ComposerStatusBar'
 import type { ChatMode } from '@/lib/chat/use-chat-state';
 import { useComposerCommands } from './composer/ComposerCommands';
 import { usePrivateAttachments } from '@/lib/chat/use-private-attachments';
-import { COMPOSER_FILES_EVENT, pickPlainAttachment } from '@/lib/chat/composer-files';
+import { COMPOSER_FILES_EVENT, documentFileProblem, pickPlainAttachment } from '@/lib/chat/composer-files';
 import { PrivateAttachments } from './agent/PrivateAttachments';
 import type { ModelSettingsProps } from '@/lib/chat/model-settings';
 import './composer/composer.css';
@@ -64,6 +64,8 @@ interface ChatComposerProps extends ModelSettingsProps {
     /** The note repeats the header's task status; phones leave it out. */
     noteOptional?: boolean;
     webControl?: ComposerWebControl;
+    /** The server can search the web for plain chat. */
+    plainWebAvailable?: boolean;
     agentMode?: boolean;
     /** The conversation already has messages, so the input continues it. */
     continuing?: boolean;
@@ -111,6 +113,7 @@ export function ChatComposer({
     note,
     noteOptional = false,
     webControl,
+    plainWebAvailable = false,
     agentMode = false,
     continuing = false,
     awaitingInput = false,
@@ -265,6 +268,8 @@ export function ChatComposer({
     // --- Event handlers ---
     const attachPlainFile = (file: File) => {
         if (!onAttachmentChange) return;
+        const problem = documentFileProblem(file);
+        if (problem) { showToast('error', problem); return; }
         if (!canUseBoth && attachmentState?.webSearchEnabled) {
             onAttachmentChange({ file, webSearchEnabled: false });
             showToast('info', '同时使用搜索和附件仅限 Pro 用户，已自动关闭搜索');
@@ -296,13 +301,16 @@ export function ChatComposer({
         return () => window.removeEventListener(COMPOSER_FILES_EVENT, onFiles);
     }, []);
 
+    const plainWebAllowed = plainWebAvailable && canUseWeb;
+    const plainWebTitle = !plainWebAvailable ? '当前环境未配置联网搜索' : !canUseWeb ? '联网搜索需要 Plus 会员' : '联网搜索';
     const handleWebToggle = () => {
         if (!onAttachmentChange) return;
-        if (!canUseWeb) {
-            showToast('info', '网络搜索仅限 Plus 以上用户使用');
+        const newWebSearch = !attachmentState?.webSearchEnabled;
+        // Turning search off always works, even after it stopped being available.
+        if (newWebSearch && !plainWebAllowed) {
+            showToast('info', plainWebTitle);
             return;
         }
-        const newWebSearch = !attachmentState?.webSearchEnabled;
         if (!canUseBoth && attachmentState?.file && newWebSearch) {
             onAttachmentChange({ file: undefined, webSearchEnabled: true });
             showToast('info', '同时使用搜索和附件仅限 Pro 用户，已自动清除附件');
@@ -570,7 +578,7 @@ export function ChatComposer({
         fileInputRef,
         hasFile,
         onFileChange: handleFileChange,
-        plainWeb: { active: hasWebSearch, allowed: canUseWeb, onToggle: handleWebToggle },
+        plainWeb: { active: hasWebSearch, allowed: plainWebAllowed || hasWebSearch, title: plainWebTitle, onToggle: handleWebToggle },
         knowledgeBase: { enabled: knowledgeBaseEnabled, allowed: canUseKnowledgeBase, onOpen: () => void handleKnowledgeBaseOpen(), selected: promptKnowledgeBases, onRemove: (id: string) => void toggleKnowledgeBaseSearch(id) },
         chatMode,
         onChatModeChange: onChatModeChange && ((mode: ChatMode) => { onChatModeChange(mode); textareaRef.current?.focus(); }),

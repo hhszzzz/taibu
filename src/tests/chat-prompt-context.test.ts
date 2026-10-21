@@ -245,3 +245,42 @@ test('buildChatPromptContext passes resolved membershipType to knowledge search'
 
   assert.equal(capturedMembershipType, 'pro');
 });
+
+test('the document and search results keep their layout; mention tokens are stripped only from what the user typed', async (t) => {
+  const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
+  const promptBuilderModule = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');
+  const appSettingsModule = require('../lib/app-settings') as typeof import('../lib/app-settings');
+  const webSearchModule = require('../lib/ai/web-search.server') as typeof import('../lib/ai/web-search.server');
+  t.mock.method(apiUtilsModule, 'getSystemAdminClient', () => ({
+    from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }) }),
+  }) as unknown as ReturnType<typeof apiUtilsModule.getSystemAdminClient>);
+  t.mock.method(promptBuilderModule, 'calculatePromptBudget', async () => 1024);
+  t.mock.method(appSettingsModule, 'isFeatureModuleEnabled', async () => false);
+  const queries: string[] = [];
+  t.mock.method(webSearchModule, 'searchChatWeb', async (query: string) => {
+    queries.push(query);
+    return { status: 'ok' as const, query, results: [{ title: '流年', url: 'https://example.com', content: '第一段\n\n第二段' }] };
+  });
+
+  const { buildChatPromptContext } = await import('../lib/server/chat/prompt-context');
+  const result = await buildChatPromptContext({
+    body: {
+      messages: [{ id: 'm1', role: 'user', content: '看看  @{命盘}  这个', createdAt: new Date().toISOString() }],
+      attachment: { name: '流年.xlsx', text: '## 工作表：流年\n年份\t\t干支\n\n备注 @{原样保留}' },
+      stream: false,
+    },
+    userId: 'user-1',
+    canSkipCredit: false,
+    requestedModelId: 'deepseek-chat',
+    membershipType: 'pro',
+    reasoningEnabled: false,
+    creditDeducted: false,
+  }, { webSearch: true });
+
+  const content = result.sanitizedMessages[0].content;
+  assert.ok(content.includes('年份\t\t干支\n\n备注 @{原样保留}'), 'the document keeps its empty cells, paragraphs and own text');
+  assert.ok(content.includes('第一段\n\n第二段'));
+  assert.ok(content.endsWith('【用户的问题如下】\n看看 这个'), content.slice(-40));
+  assert.deepEqual(queries, ['看看 这个'], 'mention tokens never reach the search provider');
+  assert.deepEqual(result.metadata.webSearch, { status: 'ok', sources: [{ title: '流年', url: 'https://example.com' }] });
+});

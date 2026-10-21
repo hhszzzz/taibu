@@ -6,6 +6,7 @@ import type { TestContext } from "node:test";
 import { createMockAuthContext } from "./helpers/supabase-mock";
 import { createMockScopedDb } from "./helpers/db-mock";
 import { AgentStore, type AgentRunRow } from "../lib/agent/store.server";
+import { AGENT_ENGINE } from "../lib/agent/engine";
 import {
   agentEndpoint,
   agentCapabilities,
@@ -218,7 +219,7 @@ test('/compact refuses attached material and long instructions, and honors its o
   for (const extra of [
     { message: { id: 'compact', content: '/compact', attachments: { ids: [randomUUID()] } } },
     { message: { id: 'compact', content: '/compact' }, mentions: [{ type: 'knowledge_base', name: '资料', preview: '' }] },
-    { message: { id: 'compact', content: '/compact' }, fileContent: '附件正文' },
+    { message: { id: 'compact', content: '/compact' }, attachment: { name: '资料.md', text: '附件正文' } },
     { message: { id: 'compact', content: `/compact ${'重点'.repeat(251)}` } },
   ]) assert.equal((await agentEndpoint(() => createAgentTask(fixture.request({ ...fixture.body, ...extra })))).status, 400, JSON.stringify(extra).slice(0, 80));
   t.mock.method(fixture.rate, 'checkRateLimit', async () => ({ allowed: false, remaining: 0, resetAt: new Date(Date.now() + 60000) }));
@@ -228,6 +229,37 @@ test('/compact refuses attached material and long instructions, and honors its o
   const ordinary = await agentEndpoint(() => createAgentTask(fixture.request({ ...fixture.body, message: { id: 'question', content: '/compactness 是什么' } })));
   assert.equal(ordinary.status, 429);
   assert.match((await ordinary.json()).error, /请求过于频繁/, 'any other message is an ordinary task in the shared bucket');
+});
+
+test('a document carried into Agent mode reaches the model in a new task and in a continued one', async t => {
+  const fixture = setup(t, earlierTurn);
+  const document = { name: '命书.md', text: '# 命书\n\n甲辰' };
+  const context = require('../lib/server/chat/prompt-context') as typeof import('../lib/server/chat/prompt-context');
+  t.mock.method(context, 'buildChatPromptContext', async (request: Parameters<typeof context.buildChatPromptContext>[0]) => {
+    assert.deepEqual(request.body.attachment, document);
+    const messages = request.body.messages;
+    return {
+      sanitizedMessages: messages.map((message, index) => index === messages.length - 1 ? { ...message, content: `【文件】${document.text}【问题】${message.content}` } : message),
+      metadata: { sources: [], kbSearchEnabled: false, kbHitCount: 0 },
+      systemPrompt: 'trusted personality',
+      fallbackPersonality: 'general' as const,
+      promptKnowledgeBases: [],
+    };
+  });
+  const send = () => agentEndpoint(() => createAgentTask(fixture.request({ ...fixture.body, clientRequestId: randomUUID(), attachment: document })));
+  const checkpoint = () => fixture.writes.at(-1)?.args.p_checkpoint as AgentRunRow['checkpoint'];
+  const expected = '【文件】# 命书\n\n甲辰【问题】请根据出生资料排盘';
+  assert.equal((await send()).status, 201);
+  assert.equal(checkpoint().messages.at(-1)?.content, expected);
+  // A follow-up to a completed task continues its stored context instead of rebuilding it from the conversation.
+  t.mock.method(AgentStore.prototype, 'currentRun', async () => ({
+    id: randomUUID(), user_id: fixture.owner, status: 'completed', public_message: { id: 'answered' },
+    checkpoint: { version: 2, durable: { engine: AGENT_ENGINE }, messages: [{ role: 'user', content: '帮我看看八字', timestamp: 1 }], parts: [] },
+  }) as unknown as AgentRunRow);
+  assert.equal((await send()).status, 201);
+  assert.deepEqual(checkpoint().messages.map(message => message.content), ['帮我看看八字', expected]);
+  const invalid = await agentEndpoint(() => createAgentTask(fixture.request({ ...fixture.body, attachment: { name: '命书.md', text: ' ' } })));
+  assert.equal(invalid.status, 400); assert.equal((await invalid.json()).error, '附件内容无效');
 });
 
 test("Agent feature admission fails closed when fresh configuration cannot be read", async (t) => {
@@ -247,13 +279,16 @@ test('network capability includes a configured MCP service and ignores malformed
     }
   });
   delete process.env.TAVILY_API_KEY;
-  const available = async () => (await (await agentCapabilities(new NextRequest('http://localhost/api/agent/capabilities'))).json()).webAvailable;
+  const capabilities = async () => (await (await agentCapabilities(new NextRequest('http://localhost/api/agent/capabilities'))).json()) as { webAvailable: boolean; plainWebAvailable: boolean };
+  const available = async () => (await capabilities()).webAvailable;
   process.env.AGENT_MCP_SERVERS = JSON.stringify([{ name: 'reference', url: 'https://mcp.example/tools', tools: ['lookup'] }]);
   assert.equal(await available(), true);
+  assert.equal((await capabilities()).plainWebAvailable, false, 'plain chat searches through Tavily only');
   process.env.AGENT_MCP_SERVERS = 'invalid-json';
   assert.equal(await available(), false);
   process.env.TAVILY_API_KEY = 'fixture';
   assert.equal(await available(), true);
+  assert.equal((await capabilities()).plainWebAvailable, true);
 });
 
 test('image capability is enforced before charging and when adding input to an existing task', async t => {

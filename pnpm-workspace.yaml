@@ -4,3 +4,6 @@ packages:
 ignoredBuiltDependencies:
   - sharp
   - unrs-resolver
+# pdfjs-dist only supplies the CMap and standard font data that unpdf reads; text extraction renders nothing.
+ignoredOptionalDependencies:
+  - '@napi-rs/canvas'

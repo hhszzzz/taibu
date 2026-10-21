@@ -16,6 +16,8 @@ import {
   isReasoningAllowedForMembership,
 } from "@/lib/ai/ai-access";
 import { buildChatPromptContext } from "@/lib/server/chat/prompt-context";
+import { isChatAttachment } from "@/lib/ai/document-formats";
+import { webSearchConfigured } from "@/lib/ai/web-search.server";
 import { getUserAuthInfo } from "@/lib/user/credits";
 import { AI_RATE_LIMIT_CONFIG, checkRateLimit } from "@/lib/rate-limit";
 import { isValidUUID } from "@/lib/validation";
@@ -144,6 +146,8 @@ function createBody(value: Record<string, unknown>) {
   }
   const attachments =
     message.attachments === undefined ? undefined : object(message.attachments);
+  if (value.attachment !== undefined && !isChatAttachment(value.attachment))
+    throw new AgentApiError("附件内容无效");
   return {
     conversationId: value.conversationId,
     clientRequestId: value.clientRequestId,
@@ -170,8 +174,8 @@ function createBody(value: Record<string, unknown>) {
     collaborators,
     dreamMode: value.dreamMode === true,
     mangpaiMode: value.mangpaiMode === true,
-    fileContent:
-      typeof value.fileContent === "string" ? value.fileContent : undefined,
+    /** A plain chat document carried into Agent mode, as text the server extracted. */
+    attachment: value.attachment,
   };
 }
 
@@ -233,7 +237,8 @@ export async function agentCapabilities(request: NextRequest) {
   return jsonOk({
     enabled: state.status === "enabled",
     ready: state.status === "enabled" && (await store.workerReady()),
-    webAvailable: !!process.env.TAVILY_API_KEY || mcpAvailable,
+    webAvailable: webSearchConfigured() || mcpAvailable,
+    plainWebAvailable: webSearchConfigured(),
     customAvailable: !!process.env.AGENT_CREDENTIAL_ENCRYPTION_KEY,
   });
 }
@@ -250,7 +255,7 @@ export async function createAgentTask(request: NextRequest) {
   if (compact) {
     if ((compact.instructions?.length ?? 0) > AGENT_COMPACT_INSTRUCTIONS_MAX)
       throw new AgentApiError(`压缩说明最多 ${AGENT_COMPACT_INSTRUCTIONS_MAX} 字`);
-    if ((Array.isArray(body.message.attachments.ids) && body.message.attachments.ids.length) || body.message.attachments.fileName || body.mentions.length || body.fileContent !== undefined)
+    if ((Array.isArray(body.message.attachments.ids) && body.message.attachments.ids.length) || body.message.attachments.fileName || body.mentions.length || body.attachment !== undefined)
       throw new AgentApiError("压缩上下文时不能附带资料或引用");
   }
   const store = new AgentStore(systemDb());
@@ -293,7 +298,7 @@ export async function createAgentTask(request: NextRequest) {
     collaborators: body.collaborators,
     replaceFromMessageId: body.replaceFromMessageId ?? null,
     mentions: Array.isArray(body.mentions) ? body.mentions : [],
-    fileContent: typeof body.fileContent === "string" ? body.fileContent : null,
+    attachment: body.attachment ?? null,
     dreamMode: body.dreamMode === true,
     mangpaiMode: body.mangpaiMode === true,
   });
@@ -405,10 +410,7 @@ export async function createAgentTask(request: NextRequest) {
         mangpaiMode: body.mangpaiMode === true,
         dreamMode: body.dreamMode === true,
         mentions: body.mentions,
-        difyContext:
-          typeof body.fileContent === "string"
-            ? { fileContent: body.fileContent }
-            : undefined,
+        attachment: body.attachment,
       },
       userId: auth.user.id,
       requestedModelId: modelId,
@@ -427,11 +429,13 @@ export async function createAgentTask(request: NextRequest) {
     history.at(-1)?.id === previous.public_message.id
       ? previous.checkpoint.messages.filter((m) => m.role !== "system")
       : null;
+  // The new turn as prepared, so a continued task also reads the document the message carries.
+  const turn = prepared.sanitizedMessages.at(-1) ?? userMessage;
   const checkpoint: AgentCheckpoint = {
     version: 2,
     durable: { engine: AGENT_ENGINE },
     messages: replay
-      ? [...replay, ...piHistory([userMessage])]
+      ? [...replay, ...piHistory([{ ...turn, attachments: userMessage.attachments }])]
       : piHistory(prepared.sanitizedMessages.map(message => ({ ...message, attachments: message.id === userMessage.id ? userMessage.attachments : history.find(item => item.id === message.id)?.attachments }))),
     parts: [],
     // Evidence numbers continue across the visible branch, so a new answer never reuses one.

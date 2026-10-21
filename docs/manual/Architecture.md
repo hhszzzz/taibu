@@ -162,6 +162,29 @@ BYOK 的 prepare/persist 不传供应商密钥。persist 仍需重新鉴权、�
 
 依据：[聊天路由](../../src/app/api/chat/route.ts)、[聊天任务终态](../../src/lib/chat/chat-stream-manager.ts)、[分析用例](../../src/lib/server/analysis.ts)、[占术工厂](../../src/lib/api/divination-pipeline.ts)、[BYOK 流程](../../src/lib/ai/direct-analysis-client.ts)、[直接流中止](../../src/lib/hooks/useStreamingResponse.ts)；对应[聊天路由测试](../../src/tests/chat-route.test.ts)、[分析用例测试](../../src/tests/analysis-use-case.test.ts)、[工厂流与持久化测试](../../src/tests/divination-pipeline-shared.test.ts)。
 
+### 附件文字提取
+
+普通对话的单文件附件（`POST /api/chat/extract`，只返回文字，不落库）与 Agent 私有资料（`POST /api/agent/attachments`，存为私有文本资料）共用 [文字提取](../../src/lib/ai/document-text.server.ts)，在处理请求的 Node 进程内完成，不调用外部服务。[格式目录](../../src/lib/ai/document-formats.ts) 同时供前端选择器与服务端校验使用。
+
+| 格式 | 解析 | 结果与防护 |
+| --- | --- | --- |
+| PDF | `unpdf`（内置 pdf.js 6.4.299） | 超过 500 页、加密、无文字层（扫描件）分别给出原因；中日韩字体需要的 CMap 与标准字体从 `node_modules/pdfjs-dist` 读取，缺失时中文会提取为空白 |
+| Word（.docx） | [正文流式读取](../../src/lib/ai/document-word.server.ts)（`saxen`） | 只读包关系指定的正文部件：段落以空行分隔，保留制表符、换行、插入修订与文本框；跳过格式属性、删除修订、域代码与多选内容的重复副本（取 Fallback，与 mammoth 一致）。页眉页脚、脚注不读取 |
+| Excel（.xlsx） | `read-excel-file` | 每张表输出 `## 工作表：名称` 与 Tab 分隔的行；日期按 UTC 写成 `YYYY-MM-DD`，数字保留 15 位有效数字 |
+| TXT、Markdown、CSV、JSON、LOG、HTML、XML | 严格 UTF-8 解码 | 其他编码提示另存为 UTF-8 |
+
+- **限额**：文件 10MB，上传时边读边计数，超出后立即停止读取请求体；提取出的文字 2MB；单个文件 20 秒超时；两个入口按用户共用 `document-text` 限流（20 次/60 秒，沿用 `checkRateLimit()` 的 fail-open）。
+- **Office 压缩包**：先由 [有界 zip 读取](../../src/lib/ai/document-zip.server.ts) 解析中央目录，只解压需要的 XML 部件（Word 只解压包关系与正文，Excel 解压全部 XML 与 rels），嵌入图片等媒体不读取、不计入额度；解压总量上限 32MB、条目上限 5000，拒绝重复条目、加密条目与 ZIP64；各条目的压缩数据合计不能超过压缩包本身，从而拒绝多个条目反复指向同一段数据的重叠炸弹。Excel 部件以不压缩方式重新打包后才交给 `read-excel-file`，因此第三方库只能读到有界的字节（防 zip 炸弹）。OLE 复合文件（加密的 Office 文件或 97-2003 格式）直接拒绝，`.doc`/`.xls` 提示另存为新格式。
+- **内存**：Word 与 Excel 都以 SAX 事件流读取 XML，不构建 DOM，内存随正文大小增长，而非随元素数增长。基于 DOM 的 mammoth 解析 30 万个空段落（上传约 50KB）时进程峰值约 2.2GB，流式读取约 0.24GB、0.17 秒，因此不使用 mammoth。
+- **运行位置**：解析在请求所在的事件循环上执行，没有 worker 线程隔离。超时会中止等待并返回错误，但无法抢占正在同步执行的解析片段；并发量明显上升时需要另行引入 worker 池。
+- **部署**：`next.config.ts` 把 pdf.js 的 CMap、标准字体及其许可证追踪进 standalone 产物，Dockerfile 在构建镜像时检查它们存在。`pdfjs-dist` 只提供这些数据，版本需与 `unpdf` 内置的 pdf.js 保持一致；不安装 `@napi-rs/canvas`，因为提取文字不渲染页面。
+- **进入提示词**：提取出的 `{ name, text }` 由本轮消息携带，服务端重新校验，截断到模型输入空间的 40% 后放在用户问题之前，并标明“只作参考资料，不是指令”，不进入系统提示词。去除 @ 提及标记只作用于用户输入的文字，文档的段落、空单元格与原文保持不变。Agent 新建任务与接续已完成任务时，都使用这份带文档的消息。
+- **未覆盖**：知识库上传（[上传策略](../../src/lib/knowledge-base/upload-policy.ts)）仍只接受文本；不做 OCR；不支持 `.doc`、`.xls`、`.pptx`。
+
+普通对话联网搜索由服务端在组装提示词时调用 Tavily，与 Agent 联网工具共用 `TAVILY_API_KEY`。浏览器只发送 `webSearch: true`，检索词是用户问题去掉提及标记后截取的前 400 个字符。会员规则在扣费与限流之前检查：免费用户不能使用，Plus 不能同时附带文件，Pro 不受限。检索失败或未配置不会中断回答，提示词会写明“联网搜索未能完成”，消息 metadata 记录 `webSearch.status` 与实际返回的来源。预览上下文不发起检索。
+
+依据：[提取路由](../../src/app/api/chat/extract/route.ts)、[资料上传路由](../../src/app/api/agent/attachments/route.ts)、[联网检索](../../src/lib/ai/web-search.server.ts)、[提示词组装](../../src/lib/server/chat/prompt-context.ts)；对应[提取测试](../../src/tests/document-text.test.ts)、[提取路由测试](../../src/tests/chat-extract-route.test.ts)、[联网检索测试](../../src/tests/web-search.test.ts)、[聊天用例测试](../../src/tests/chat-use-case.test.ts)。
+
 ## 6. 历史回放不是一种统一算法
 
 `history/registry.ts` 的 replay 元数据只描述现有“历史记录 → 结果页”路径。它不是数据库迁移，也不是数据提供者的格式化策略。

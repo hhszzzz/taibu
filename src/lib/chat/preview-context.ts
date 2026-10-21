@@ -8,8 +8,9 @@ import type { requireUserContext } from '@/lib/api-utils';
 import type { ChatRequestBody } from '@/lib/server/chat/request';
 import type { ResolvedChatRequest } from '@/lib/server/chat/request';
 import type { buildChatPromptContext } from '@/lib/server/chat/prompt-context';
-import type { ChatMessage, DifyContext } from '@/types';
+import type { ChatMessage } from '@/types';
 import type { Mention } from '@/types/mentions';
+import { isChatAttachment } from '@/lib/ai/document-formats';
 
 type PreviewAuthContext = Exclude<Awaited<ReturnType<typeof requireUserContext>>, { error: unknown }>;
 type PreviewMembershipType = ResolvedChatRequest['membershipType'];
@@ -22,7 +23,7 @@ export interface PreviewRequestBody {
     reasoning?: unknown;
     mangpaiMode?: boolean;
     dreamMode?: unknown;
-    difyContext?: DifyContext;
+    attachment?: unknown;
     mentions?: unknown;
     messages?: unknown;
     userMessage?: unknown;
@@ -102,7 +103,7 @@ function buildPreviewChatBody(
         messages: applyPreviewUserMessage(getMessagePayload(body.messages), body.userMessage),
         mangpaiMode: body.mangpaiMode,
         dreamMode: body.dreamMode === true,
-        difyContext: body.difyContext,
+        attachment: isChatAttachment(body.attachment) ? body.attachment : undefined,
         mentions: getRequestMentions(body.mentions),
         model: requestedModelId,
         reasoning: reasoningEnabled,

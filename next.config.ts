@@ -7,14 +7,26 @@ const publicStorageOrigin = isSelfHosted()
   ? parseConfiguredOrigin(process.env.SUPABASE_PUBLIC_URL, 'SUPABASE_PUBLIC_URL')
   : new URL('https://gdaaipkdmwxkvgesknsp.supabase.co');
 
+// pdf.js reads the predefined CJK CMaps and standard fonts from disk while extracting PDF text.
+// Their licenses travel with them; pdfjs-dist stays pinned to the pdf.js version unpdf bundles.
+const pdfjsDataFiles = [
+  './node_modules/pdfjs-dist/LICENSE',
+  './node_modules/pdfjs-dist/cmaps/**/*',
+  './node_modules/pdfjs-dist/standard_fonts/**/*',
+];
+
 const nextConfig: NextConfig = {
   output: 'standalone',
+  // unpdf ships a prebuilt pdf.js that resolves its own parts at runtime; Node loads it as published.
+  serverExternalPackages: ['unpdf'],
   // Sharp loads platform binaries and libvips at runtime; pnpm keeps these
   // optional packages outside the sharp package's directory.
   outputFileTracingIncludes: {
     '/api/agent/attachments': [
       './node_modules/.pnpm/@img+sharp-*/node_modules/@img/sharp-*/**/*',
+      ...pdfjsDataFiles,
     ],
+    '/api/chat/extract': pdfjsDataFiles,
   },
   images: {
     remotePatterns: [

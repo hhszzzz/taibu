@@ -1,3 +1,5 @@
+import { chatWebSearchDenial } from '@/lib/ai/web-search-access';
+import type { MembershipType } from '@/lib/user/membership';
 import type {
   ChatActor,
   ChatPreparationInput,
@@ -9,6 +11,12 @@ import type {
   PreparedChat,
   ResolvedChatPreparation,
 } from '@/lib/server/chat/contracts';
+
+/** Web search is a membership right, so it is refused before anything is charged or counted. */
+function webSearchFailure(input: ChatPreparationInput, membership: MembershipType): ChatPreparationFailure | null {
+  const message = input.webSearch ? chatWebSearchDenial(membership, !!input.attachment) : null;
+  return message ? { kind: 'web-search-denied', message } : null;
+}
 
 /** Resolve admission and precharge once, independently of HTTP and database SDKs. */
 export async function resolveManagedChat(
@@ -26,6 +34,8 @@ export async function resolveManagedChat(
   if (!model.allowedMemberships.includes(membershipType)) {
     return { ok: false, error: { kind: 'membership-denied' } };
   }
+  const webSearchDenied = webSearchFailure(input, membershipType);
+  if (webSearchDenied) return { ok: false, error: webSearchDenied };
   const reasoningEnabled = model.reasoningMemberships.includes(membershipType) ? !!input.reasoning : false;
   const canSkipCredit = actor.creditPolicy === 'trusted-bypass';
 
@@ -108,6 +118,8 @@ export async function prepareDirectChat(
 ): Promise<ChatPreparationResult<PreparedChat>> {
   const account = await operations.loadAccount();
   if (!account.ok) return account;
+  const webSearchDenied = webSearchFailure(input, account.value.effectiveMembership);
+  if (webSearchDenied) return { ok: false, error: webSearchDenied };
   if (!await operations.checkRateLimit()) {
     return { ok: false, error: { kind: 'rate-limited' } };
   }

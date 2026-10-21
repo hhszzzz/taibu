@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CHAT_SHORTCUTS, isShortcutSheetKey, modifierLabel, shouldStopOnEscape } from '../lib/chat/chat-shortcuts';
-import { pickPlainAttachment, dragHasFiles } from '../lib/chat/composer-files';
+import { documentFileProblem, pickPlainAttachment, dragHasFiles } from '../lib/chat/composer-files';
+import { MAX_DOCUMENT_BYTES } from '../lib/ai/document-formats';
 import { isExternalHref, markdownLinkProps } from '../lib/chat/markdown-links';
 
 const key = (patch: Partial<Parameters<typeof shouldStopOnEscape>[0]> = {}) => ({
@@ -42,8 +43,14 @@ test('plain chat takes one document from dropped or pasted files and explains wh
     assert.deepEqual(pickPlainAttachment([doc]), { file: doc, notice: null });
     assert.deepEqual(pickPlainAttachment([photo]), { file: null, notice: '图片需切换到 Agent 模式' });
     assert.deepEqual(pickPlainAttachment([photo, doc]), { file: doc, notice: '图片需切换到 Agent 模式，已只添加文档' });
-    assert.deepEqual(pickPlainAttachment([doc, note]), { file: doc, notice: '普通对话每次只能附加一个文件，已使用第一个' });
-    assert.deepEqual(pickPlainAttachment([{ name: 'a.exe', type: 'application/octet-stream' }]), { file: null, notice: '不支持该文件类型' });
+    assert.deepEqual(pickPlainAttachment([doc, note]), { file: doc, notice: '普通对话每次只能附加一个文件，已添加「命书.pdf」' });
+    const legacy = { name: '旧稿.doc', type: 'application/msword' };
+    assert.deepEqual(pickPlainAttachment([legacy, note]), { file: note, notice: '普通对话每次只能附加一个文件，已添加「笔记.md」' }, 'a readable document is preferred');
+    assert.deepEqual(pickPlainAttachment([legacy]), { file: null, notice: '暂不支持 Word 97-2003（.doc）文件，请另存为 .docx 后上传' });
+    assert.match(pickPlainAttachment([{ name: 'a.exe', type: 'application/octet-stream' }]).notice ?? '', /^不支持该文件类型，可上传 PDF、Word、Excel/u);
+    assert.equal(documentFileProblem({ name: '命书.pdf', size: 1 }), null);
+    assert.equal(documentFileProblem({ name: '命书.pdf', size: MAX_DOCUMENT_BYTES + 1 }), '文件不能超过 10MB');
+    assert.match(documentFileProblem({ name: 'a.exe', size: 1 }) ?? '', /^不支持该文件类型/u);
     assert.equal(dragHasFiles(['text/plain', 'Files']), true);
     assert.equal(dragHasFiles(['text/uri-list']), false, 'links dragged inside the page show no drop overlay');
 });

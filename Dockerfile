@@ -39,6 +39,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/.agent ./.agent
 RUN node .agent/worker.mjs --check
 # Check each traced pnpm entry, including the attachment API and Next's version.
 RUN node --input-type=module -e "import {globSync} from 'node:fs'; import {createRequire} from 'node:module'; import {resolve} from 'node:path'; const entries = [...globSync('node_modules/.pnpm/sharp@*/node_modules/sharp/package.json')]; if (!entries.length) throw new Error('Sharp is missing from the standalone image'); for (const entry of entries) { const sharp = createRequire(resolve(entry))('sharp'); const png = await sharp({create:{width:2,height:2,channels:3,background:'#fff'}}).png().toBuffer(); if (!png.length) throw new Error('Sharp image processing failed'); } console.log('Sharp runtime check passed');"
+# Document text extraction reads pdf.js CMaps and fonts from disk; without them Chinese PDFs extract as blanks.
+RUN test -f node_modules/pdfjs-dist/cmaps/UniGB-UCS2-H.bcmap && test -f node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf && test -f node_modules/pdfjs-dist/LICENSE
 RUN mkdir -p .next/cache && chown -R nextjs:nodejs .next/cache
 USER nextjs
 EXPOSE 3000

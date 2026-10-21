@@ -20,7 +20,6 @@ import { emptyPiAssistant } from "../lib/agent/pi-stream.server";
 import {
   stableAgentSeed,
   createAgentTools,
-  searchAgentWeb,
 } from "../lib/agent/tools.server";
 import { MockLanguageModelV3 } from "ai/test";
 import { estimateContextTokens } from '@earendil-works/pi-ai/utils/estimate';
@@ -588,47 +587,6 @@ test("cached reads still check current feature and membership permissions", asyn
       .execute("kb", { query: "查询" }),
     /当前会员/,
   );
-});
-
-test("Tavily transport sends only search fields and returns usable sources", async (t) => {
-  const previous = process.env.TAVILY_API_KEY;
-  process.env.TAVILY_API_KEY = randomUUID();
-  try {
-    t.mock.method(
-      globalThis,
-      "fetch",
-      async (
-        input: Parameters<typeof fetch>[0],
-        init: Parameters<typeof fetch>[1],
-      ) => {
-        assert.equal(input, "https://api.tavily.com/search");
-        assert.equal(
-          new Headers(init?.headers).get("authorization"),
-          `Bearer ${process.env.TAVILY_API_KEY}`,
-        );
-        assert.deepEqual(JSON.parse(String(init?.body)), {
-          query: "公开信息",
-          search_depth: "basic",
-          max_results: 5,
-          include_answer: false,
-          include_raw_content: false,
-        });
-        assert.ok(init?.signal);
-        return Response.json({
-          results: [
-            { title: "可引用", url: "https://example.com", content: "摘要" },
-            { title: "不可引用", url: "javascript:alert(1)", content: "资料" },
-          ],
-        });
-      },
-    );
-    assert.deepEqual(await searchAgentWeb("公开信息"), [
-      { title: "可引用", url: "https://example.com", content: "摘要" },
-    ]);
-  } finally {
-    if (previous === undefined) delete process.env.TAVILY_API_KEY;
-    else process.env.TAVILY_API_KEY = previous;
-  }
 });
 
 test("lease renewal failure preserves an interrupted checkpoint for takeover", async () => {

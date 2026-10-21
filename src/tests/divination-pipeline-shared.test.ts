@@ -443,8 +443,8 @@ test('divination preserves caller DB identity and the legacy supabase alias', as
         });
         const other = createMockAuthContext({ from: () => assert.fail('must prefer canonical DB') });
         const context = aliasOnly
-          ? { user: caller.user, supabase: caller.db, accessToken: caller.accessToken }
-          : { ...caller, supabase: other.db };
+          ? { user: caller.user, scoped: caller.scoped, supabase: caller.db, accessToken: caller.accessToken }
+          : { ...caller, scoped: caller.scoped, supabase: other.db };
         t.mock.method(apiUtils, 'requireBearerUser', async () => context);
         t.mock.method(apiUtils, 'requireUserContext', async () => context);
         const admin = t.mock.method(apiUtils, 'getSystemAdminClient', () => assert.fail('no implicit administrator'));
@@ -470,7 +470,7 @@ test('divination preserves caller DB identity and the legacy supabase alias', as
         });
         for (const repository of [authInfo, debit]) {
           assert.equal(repository.mock.callCount(), 1);
-          assert.equal(repository.mock.calls[0]?.arguments[1]?.client, caller.db);
+          assert.equal(repository.mock.calls[0]?.arguments[1]?.db, caller.scoped);
           assert.equal(repository.mock.calls[0]?.arguments[1]?.user, caller.user);
         }
         const direct = pipeline.createDirectInterpretHandlers(config);

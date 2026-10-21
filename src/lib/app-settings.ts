@@ -1,5 +1,6 @@
-import { getSystemAdminClient } from "@/lib/api-utils";
 import { IS_NODE_TEST_RUNTIME } from "@/lib/runtime";
+import { systemDb, type ScopedDb } from "@/lib/db/context.server";
+import { toDbError } from "@/lib/db/errors";
 
 // ─── 功能模块开关 ───
 
@@ -80,13 +81,18 @@ function normalizeFeatureToggleRows(rows: FeatureToggleRow[] | null | undefined)
 }
 
 async function readFeatureToggleRows(
-  supabase: ReturnType<typeof getSystemAdminClient>
+  db: ScopedDb
 ): Promise<{ data: FeatureToggleRow[]; error: { message?: string } | null }> {
-  const { data, error } = await supabase
-    .from('app_settings')
-    .select('setting_key, setting_value')
-    .like('setting_key', `${FEATURE_PREFIX}%`);
-  return { data: data ?? [], error };
+  try {
+    const data = await db.tx((trx) => trx
+      .selectFrom('app_settings')
+      .select(['setting_key', 'setting_value'])
+      .where('setting_key', 'like', `${FEATURE_PREFIX}%`)
+      .execute());
+    return { data, error: null };
+  } catch (error) {
+    return { data: [], error: toDbError(error) };
+  }
 }
 
 function getCachedFeatureToggle(featureId: FeatureModuleId): boolean | null {
@@ -111,23 +117,26 @@ function setCachedFeatureToggle(featureId: FeatureModuleId, disabled: boolean) {
 }
 
 async function readFeatureToggleValue(
-  supabase: ReturnType<typeof getSystemAdminClient>,
+  db: ScopedDb,
   featureId: FeatureModuleId
 ): Promise<{ data: { setting_value?: unknown } | null; error: { message?: string } | null }> {
-  const { data, error } = await supabase
-    .from('app_settings')
-    .select('setting_value')
-    .eq('setting_key', `${FEATURE_PREFIX}${featureId}`)
-    .maybeSingle();
-
-  return { data: data ?? null, error };
+  try {
+    const data = await db.tx((trx) => trx
+      .selectFrom('app_settings')
+      .select('setting_value')
+      .where('setting_key', '=', `${FEATURE_PREFIX}${featureId}`)
+      .executeTakeFirst());
+    return { data: data ?? null, error: null };
+  } catch (error) {
+    return { data: null, error: toDbError(error) };
+  }
 }
 
 /** 批量读取所有功能模块开关状态。返回 Record<id, boolean>，true = 已关闭 */
 export async function readFeatureTogglesState(): Promise<FeatureTogglesReadResult> {
   try {
-    const supabase = getSystemAdminClient();
-    const { data, error } = await readFeatureToggleRows(supabase);
+    const db = systemDb();
+    const { data, error } = await readFeatureToggleRows(db);
 
     if (error) {
       if (!IS_NODE_TEST_RUNTIME) {
@@ -160,22 +169,19 @@ export async function setFeatureToggle(
   disabled: boolean
 ): Promise<boolean> {
   try {
-    const supabase = getSystemAdminClient();
-    const { error } = await supabase
-      .from('app_settings')
-      .upsert(
-        {
-          setting_key: `${FEATURE_PREFIX}${featureId}`,
-          setting_value: disabled,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'setting_key' }
-      );
-
-    if (error) {
-      console.error('[app-settings] Failed to set feature toggle:', error.message);
-      return false;
-    }
+    const updatedAt = new Date().toISOString();
+    await systemDb().tx((trx) => trx
+      .insertInto('app_settings')
+      .values({
+        setting_key: `${FEATURE_PREFIX}${featureId}`,
+        setting_value: disabled,
+        updated_at: updatedAt,
+      })
+      .onConflict((conflict) => conflict.column('setting_key').doUpdateSet({
+        setting_value: disabled,
+        updated_at: updatedAt,
+      }))
+      .execute());
     setCachedFeatureToggle(featureId, disabled);
     return true;
   } catch (error) {
@@ -191,8 +197,8 @@ export async function isFeatureModuleEnabled(featureId: FeatureModuleId): Promis
   }
 
   try {
-    const supabase = getSystemAdminClient();
-    const { data, error } = await readFeatureToggleValue(supabase, featureId);
+    const db = systemDb();
+    const { data, error } = await readFeatureToggleValue(db, featureId);
 
     if (error) {
       if (!IS_NODE_TEST_RUNTIME) {
@@ -219,8 +225,8 @@ export async function isFeatureModuleEnabled(featureId: FeatureModuleId): Promis
  */
 export async function readFeatureModuleStateFresh(featureId: FeatureModuleId): Promise<FeatureModuleState> {
   try {
-    const supabase = getSystemAdminClient();
-    const { data, error } = await readFeatureToggleValue(supabase, featureId);
+    const db = systemDb();
+    const { data, error } = await readFeatureToggleValue(db, featureId);
     if (error) {
       return { status: 'unavailable', error: error.message };
     }

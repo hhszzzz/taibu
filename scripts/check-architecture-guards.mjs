@@ -301,7 +301,7 @@ mustMatch(
 );
 mustMatch(
   'src/lib/server/ai-config.ts',
-  /getSystemAdminClient/u,
+  /systemDb/u,
   'server ai-config should use the shared privileged server client',
 );
 mustNotMatch(
@@ -1101,6 +1101,11 @@ const SYSTEM_DB_ALLOWED = [
   'src/app/api/admin/',
   'src/lib/reminders.ts',
   'src/lib/daily-briefing.server.ts',
+  'src/lib/app-settings.ts',
+  'src/lib/server/ai-config.ts',
+  'src/lib/user/checkin.ts',
+  'src/lib/user/credits.ts',
+  'src/lib/user/membership-server.ts',
 ];
 mustNotMatchInTree(
   'src',

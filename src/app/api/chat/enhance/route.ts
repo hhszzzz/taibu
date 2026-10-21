@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     let body: { text?: string; model?: string };
     try { body = await request.json(); } catch { return jsonError('请求体无效', 400); }
     if (typeof body?.text !== 'string' || !body.text.trim() || body.text.length > 8000) return jsonError('润色内容须为 1–8000 个字符', 400);
-    const account = await getUserAuthInfo(auth.user.id, { client: db, user: auth.user });
+    const account = await getUserAuthInfo(auth.user.id, { db: auth.scoped, user: auth.user });
     if (account.effectiveMembership === 'free') return jsonError('润色仅限 Plus / Pro 用户', 403);
     const config = typeof body.model === 'string' ? await getModelConfigAsync(body.model) : await getDefaultModelConfigAsync('chat');
     if (!config || !isModelAllowedForMembership(config, account.effectiveMembership)) return jsonError('当前模型不可用', 403);

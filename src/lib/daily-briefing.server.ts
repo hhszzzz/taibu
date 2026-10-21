@@ -10,7 +10,7 @@ type BriefingJob = { id: string; user_id: string; local_date: string; timezone: 
 
 async function generateBriefing(db: SupabaseClient, job: BriefingJob, signal: AbortSignal): Promise<string> {
     if (await getGlobalAIFeatureGuardResponse()) throw new Error('AI 功能已关闭');
-    const account = await getUserCreditInfo(job.user_id, { client: db });
+    const account = await getUserCreditInfo(job.user_id, {});
     const config = (await getModelsByUsageTypeAsync('chat')).find(model => isModelAllowedForMembership(model, account.membership));
     if (!config) throw new Error('没有可用的早报模型');
     return generateBriefingAgent(db, job, config, signal);

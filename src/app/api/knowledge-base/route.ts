@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
 
     let membership;
     try {
-        membership = await getEffectiveMembershipType(user.id, { client: db });
+        membership = await getEffectiveMembershipType(user.id, { db: auth.scoped });
     } catch (error) {
         if (error instanceof MembershipResolutionError) {
             return jsonError(error.message, 500);

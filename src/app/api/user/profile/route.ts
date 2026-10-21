@@ -27,7 +27,7 @@ async function loadProfileWithRecovery(auth: Exclude<Awaited<ReturnType<typeof r
         return profileResult;
     }
 
-    const ensured = await ensureUserRecordRow(auth.db, auth.user);
+    const ensured = await ensureUserRecordRow(auth.scoped, auth.user);
     if (!ensured.ok) {
         return {
             data: null,
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
         return jsonError(`Unsupported action: ${action}`, 400);
     }
 
-    const ensured = await ensureUserRecordRow(auth.db, auth.user);
+    const ensured = await ensureUserRecordRow(auth.scoped, auth.user);
     if (!ensured.ok) {
         return jsonError('创建用户资料失败', 500);
     }

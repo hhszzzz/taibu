@@ -39,7 +39,7 @@ async function loadViewerProfile(auth: Awaited<ReturnType<typeof getAuthContext>
     return profileResult;
   }
 
-  const ensured = await ensureUserRecordRow(auth.db, auth.user);
+  const ensured = await ensureUserRecordRow(auth.scoped, auth.user);
   if (!ensured.ok) {
     return {
       data: null,

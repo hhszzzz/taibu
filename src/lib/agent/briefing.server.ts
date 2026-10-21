@@ -29,7 +29,7 @@ export async function generateBriefingAgent(db: SupabaseClient, job: { user_id: 
     let harness: Awaited<ReturnType<typeof Harness.open>> | undefined;
     try {
         const authorize = async () => {
-            const account = await getUserCreditInfo(job.user_id, { client: db });
+            const account = await getUserCreditInfo(job.user_id, {});
             const states = await Promise.all(['chat', 'agent'].map(feature => readFeatureModuleStateFresh(feature as 'chat' | 'agent')));
             if (states.some(state => state.status !== 'enabled') || !isModelAllowedForMembership(config, account.membership)) throw new Error('早报模型权限不可用');
         };

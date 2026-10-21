@@ -5,12 +5,15 @@ import { NextRequest } from 'next/server';
 process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
 
-function mockAuthContext<T extends object>(user: unknown, db: T) {
+import { createMockScopedDb } from './helpers/db-mock';
+
+function mockAuthContext<T extends object>(user: unknown, db: T, scoped = createMockScopedDb()) {
   return {
     user,
     accessToken: null,
     authError: null,
     db,
+    scoped,
     supabase: db,
   };
 }
@@ -406,11 +409,6 @@ test('app bootstrap route should recover a missing user row before returning vie
                 },
               };
             },
-            upsert(payload: Record<string, unknown>) {
-              ensured = true;
-              assert.equal(payload.nickname, '补建昵称');
-              return Promise.resolve({ error: null });
-            },
           };
         }
 
@@ -438,6 +436,17 @@ test('app bootstrap route should recover a missing user row before returning vie
         throw new Error(`unexpected table: ${table}`);
       },
     },
+    createMockScopedDb({
+      tx: async (work) => work({
+        insertInto: () => ({
+          values: (seed: Record<string, unknown>) => {
+            assert.equal(seed.nickname, '补建昵称');
+            ensured = true;
+            return { onConflict: () => ({ execute: async () => undefined }) };
+          },
+        }),
+      } as never),
+    }),
   );
   apiUtilsModule.jsonOk = (payload: unknown, status = 200) => Response.json(payload, { status });
   appSettingsModule.readFeatureTogglesState = async () => ({ loaded: true, toggles: { chat: false } });

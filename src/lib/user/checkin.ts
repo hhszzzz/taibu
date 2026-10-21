@@ -9,16 +9,12 @@
  * - 不再维护连续签到、经验值和等级
  */
 
-import type { SupabaseClient, User } from '@supabase/supabase-js';
-import { getSystemAdminClient } from '@/lib/api-utils';
+import type { User } from '@supabase/supabase-js';
+import { systemDb, type ScopedDb } from '@/lib/db/context.server';
 import { getUserCreditInfo, getMembershipCreditLimit } from '@/lib/user/credits';
 
-type CheckinClient = Pick<SupabaseClient, 'from' | 'rpc'>;
 type CheckinUserSeed = Pick<User, 'id' | 'user_metadata'>;
-
-function resolveCheckinClient(options?: { client?: CheckinClient }) {
-    return options?.client ?? getSystemAdminClient();
-}
+type CheckinOptions = { db?: ScopedDb; user?: CheckinUserSeed };
 
 export interface CheckinRecord {
     id: string;
@@ -40,47 +36,38 @@ export interface CheckinStatus {
 
 export async function getCheckinStatus(
     userId: string,
-    options?: { client?: CheckinClient; user?: CheckinUserSeed },
+    options?: CheckinOptions,
 ): Promise<CheckinStatus> {
     const today = new Date().toISOString().split('T')[0];
-    const supabase = resolveCheckinClient(options);
+    const db = options?.db ?? systemDb();
 
-    const [todayResult, lastResult, creditInfo] = await Promise.all([
-        supabase
-            .from('daily_checkins')
+    const [todayRow, lastRow] = await db.tx(async (trx) => Promise.all([
+        trx.selectFrom('daily_checkins')
             .select('checkin_date')
-            .eq('user_id', userId)
-            .eq('checkin_date', today)
-            .maybeSingle(),
-        supabase
-            .from('daily_checkins')
+            .where('user_id', '=', userId)
+            .where('checkin_date', '=', today)
+            .executeTakeFirst(),
+        trx.selectFrom('daily_checkins')
             .select('checkin_date')
-            .eq('user_id', userId)
-            .order('checkin_date', { ascending: false })
+            .where('user_id', '=', userId)
+            .orderBy('checkin_date', 'desc')
             .limit(1)
-            .maybeSingle(),
-        getUserCreditInfo(userId, { client: supabase, user: options?.user }),
-    ]);
-
-    if (todayResult.error) {
-        console.error('[checkin] 获取今日签到状态失败:', todayResult.error);
+            .executeTakeFirst(),
+    ])).catch((error) => {
+        console.error('[checkin] 获取签到状态失败:', error);
         throw new Error('获取签到状态失败');
-    }
+    });
 
-    if (lastResult.error) {
-        console.error('[checkin] 获取最近签到记录失败:', lastResult.error);
-        throw new Error('获取签到状态失败');
-    }
-
+    const creditInfo = await getUserCreditInfo(userId, { db, user: options?.user });
     const membership = creditInfo.membership;
     const currentCredits = creditInfo.credits;
     const creditLimit = getMembershipCreditLimit(membership);
-    const todayCheckedIn = !!todayResult.data;
+    const todayCheckedIn = !!todayRow;
     const capReached = currentCredits >= creditLimit;
 
     return {
         canCheckin: !todayCheckedIn && !capReached,
-        lastCheckin: lastResult.data?.checkin_date || null,
+        lastCheckin: lastRow?.checkin_date || null,
         todayCheckedIn,
         rewardRange: membership === 'pro'
             ? [3, 9]
@@ -108,12 +95,10 @@ export async function performCheckin(
     errorType?: 'blocked' | 'system';
     error?: string;
 }> {
-    const supabase = getSystemAdminClient();
-    const { data, error } = await supabase.rpc('perform_daily_checkin_as_service', {
-        p_user_id: userId,
-    });
-
-    if (error) {
+    let data: unknown;
+    try {
+        data = await systemDb().rpc('perform_daily_checkin_as_service', { p_user_id: userId });
+    } catch (error) {
         console.error('[checkin] 签到失败:', error);
         return {
             success: false,
@@ -173,33 +158,33 @@ export async function getCheckinCalendar(
     userId: string,
     year: number,
     month: number,
-    options?: { client?: CheckinClient },
+    options?: { db?: ScopedDb },
 ): Promise<string[]> {
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
     const lastDay = new Date(year, month, 0).getDate();
     const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
-    const supabase = resolveCheckinClient(options);
-    const { data, error } = await supabase
-        .from('daily_checkins')
-        .select('checkin_date')
-        .eq('user_id', userId)
-        .gte('checkin_date', startDate)
-        .lte('checkin_date', endDate)
-        .order('checkin_date', { ascending: true });
-
-    if (error) {
+    let rows;
+    try {
+        rows = await (options?.db ?? systemDb()).tx((trx) => trx
+            .selectFrom('daily_checkins')
+            .select('checkin_date')
+            .where('user_id', '=', userId)
+            .where('checkin_date', '>=', startDate)
+            .where('checkin_date', '<=', endDate)
+            .orderBy('checkin_date', 'asc')
+            .execute());
+    } catch (error) {
         console.error('[checkin] 获取签到日历失败:', error);
         throw new Error('获取签到日历失败');
     }
 
-    const calendarRows = (data || []) as Array<{ checkin_date: string }>;
-    return calendarRows.map((row) => row.checkin_date);
+    return rows.map((row) => row.checkin_date);
 }
 
 export async function getCheckinStats(
     userId: string,
-    options?: { client?: CheckinClient },
+    options?: { db?: ScopedDb },
 ): Promise<{
     totalDays: number;
     thisMonthDays: number;
@@ -208,19 +193,19 @@ export async function getCheckinStats(
     const now = new Date();
     const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-    const supabase = resolveCheckinClient(options);
-    const { data, error } = await supabase
-        .from('daily_checkins')
-        .select('checkin_date, reward_credits')
-        .eq('user_id', userId)
-        .order('checkin_date', { ascending: false });
-
-    if (error || !data) {
+    let rows;
+    try {
+        rows = await (options?.db ?? systemDb()).tx((trx) => trx
+            .selectFrom('daily_checkins')
+            .select(['checkin_date', 'reward_credits'])
+            .where('user_id', '=', userId)
+            .orderBy('checkin_date', 'desc')
+            .execute());
+    } catch (error) {
         console.error('[checkin] 获取签到统计失败:', error);
         throw new Error('获取签到统计失败');
     }
 
-    const rows = (data || []) as Array<{ checkin_date: string; reward_credits: number }>;
     return {
         totalDays: rows.length,
         thisMonthDays: rows.filter((row) => row.checkin_date.startsWith(thisMonth)).length,

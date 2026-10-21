@@ -7,7 +7,6 @@ import { buildPreviewPromptContext, type PreviewRequestBody } from '@/lib/chat/p
 import { buildChatPromptContext } from '@/lib/server/chat/prompt-context';
 import { getDefaultModelConfigAsync, getModelConfigAsync } from '@/lib/server/ai-config';
 import { getEffectiveMembershipType, MembershipResolutionError } from '@/lib/user/membership-server';
-import type { MembershipType } from '@/lib/user/membership';
 import { getGlobalAIFeatureGuardResponse } from '@/lib/api/ai-feature-guard';
 
 export async function POST(request: NextRequest) {
@@ -37,43 +36,7 @@ export async function POST(request: NextRequest) {
             return jsonError('无效的模型', 400);
         }
 
-        const membershipClient = {
-            from(table: 'users') {
-                return {
-                    select(columns: string) {
-                        return {
-                            eq(column: 'id', userId: string) {
-                                return {
-                                    async maybeSingle() {
-                                        const { data, error } = await auth.db
-                                            .from(table)
-                                            .select(columns)
-                                            .eq(column, userId)
-                                            .maybeSingle();
-                                        const membershipRow = data as {
-                                            membership?: string | null;
-                                            membership_expires_at?: string | null;
-                                        } | null;
-
-                                        return {
-                                            data: membershipRow
-                                                ? {
-                                                    membership: (membershipRow.membership ?? null) as MembershipType | null,
-                                                    membership_expires_at: membershipRow.membership_expires_at ?? null,
-                                                }
-                                                : null,
-                                            error: error ? { message: error.message } : null,
-                                        };
-                                    },
-                                };
-                            },
-                        };
-                    },
-                };
-            },
-        };
-
-        const membershipType = await getEffectiveMembershipType(auth.user.id, { client: membershipClient });
+        const membershipType = await getEffectiveMembershipType(auth.user.id, { db: auth.scoped });
         const knowledgeBaseFeatureEnabled = await isFeatureModuleEnabled('knowledge-base');
         if (!isModelAllowedForMembership(modelConfig, membershipType)) {
             return jsonError('当前会员等级无法使用该模型', 403);

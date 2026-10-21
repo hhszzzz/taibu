@@ -6,6 +6,7 @@
  */
 
 import type { AuthContextResult } from '../../lib/api-utils';
+import { createMockScopedDb } from './db-mock';
 
 type MockAuthenticatedContext = AuthContextResult & {
     user: NonNullable<AuthContextResult['user']>;
@@ -21,6 +22,7 @@ export function createMockAuthContext(
     const db = client as unknown as AuthContextResult['db'];
     return {
         db,
+        scoped: createMockScopedDb(),
         supabase: db,
         accessToken: userId === null ? null : 'test-token',
         authError: null,

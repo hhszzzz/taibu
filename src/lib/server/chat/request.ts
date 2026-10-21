@@ -6,7 +6,7 @@ import type { NextRequest } from 'next/server';
 import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
 import { getDefaultModelConfigAsync, getModelConfigAsync } from '@/lib/server/ai-config';
 import { isModelAllowedForMembership, isReasoningAllowedForMembership } from '@/lib/ai/ai-access';
-import { getAuthContext, jsonError, requireUserContext, resolveRequestDbClient, type AuthContextResult } from '@/lib/api-utils';
+import { getAuthContext, jsonError, requireUserContext, type AuthContextResult } from '@/lib/api-utils';
 import { buildChatPromptContext } from '@/lib/server/chat/prompt-context';
 import { prepareDirectChat, prepareManagedChat } from '@/lib/server/chat/use-case';
 import type {
@@ -132,7 +132,7 @@ function preparationErrorResponse(error: ChatPreparationFailure): Response {
 function bindAccountLoader(
   userId: string | null,
   authUser: ChatAuthUser | null,
-  authDb: ReturnType<typeof resolveRequestDbClient>,
+  authScoped: import('@/lib/db/context.server').ScopedDb,
 ): () => Promise<ChatPreparationResult<ChatAccount>> {
   return async () => {
     if (!userId) {
@@ -140,7 +140,7 @@ function bindAccountLoader(
     }
     try {
       const account = await getUserAuthInfo(userId, {
-        client: authDb ?? undefined,
+        db: authScoped,
         user: authUser ?? undefined,
       });
       return { ok: true, value: { effectiveMembership: account.effectiveMembership, hasCredits: account.hasCredits } };
@@ -161,14 +161,14 @@ async function bindManagedChat(request: NextRequest, body: ChatRequestBody, obse
   const canSkipCredit = !!(INTERNAL_SECRET && body.skipCreditCheck && body.internalSecret === INTERNAL_SECRET);
   let accessTokenForKB: string | null;
   let authUser: ChatAuthUser | null;
-  let authDb: ReturnType<typeof resolveRequestDbClient>;
+  let authScoped: import('@/lib/db/context.server').ScopedDb;
   let actor: ChatActor;
 
   if (canSkipCredit) {
     const auth = await getAuthContext(request);
     if (auth.authError) return jsonError(auth.authError.message, auth.authError.status);
     authUser = auth.user;
-    authDb = resolveRequestDbClient(auth);
+    authScoped = auth.scoped;
     actor = { userId: auth.user?.id || null, creditPolicy: 'trusted-bypass' };
     accessTokenForKB = auth.accessToken ?? null;
   } else {
@@ -178,7 +178,7 @@ async function bindManagedChat(request: NextRequest, body: ChatRequestBody, obse
     return jsonError(auth.error.message, auth.error.status);
   }
     authUser = auth.user;
-    authDb = resolveRequestDbClient(auth);
+    authScoped = auth.scoped;
     actor = { userId: auth.user.id, creditPolicy: 'charge' };
     // Auth may refresh the session; incoming request cookies still contain the old token.
     accessTokenForKB = auth.accessToken ?? null;
@@ -196,10 +196,10 @@ async function bindManagedChat(request: NextRequest, body: ChatRequestBody, obse
         reasoningMemberships: MEMBERSHIP_TYPES.filter((membership) => isReasoningAllowedForMembership(model, membership)),
       };
     },
-    loadAccount: bindAccountLoader(userId, authUser, authDb),
+    loadAccount: bindAccountLoader(userId, authUser, authScoped),
     deductCredit: async () => {
       if (!userId) throw new Error('Chat credit deduction requires an authenticated user');
-      const result = await attemptCreditUse(userId, { client: authDb ?? undefined, user: authUser ?? undefined });
+      const result = await attemptCreditUse(userId, { db: authScoped, user: authUser ?? undefined });
       if (result.ok) observation?.update({ billing: 'charged' });
       return result;
     },
@@ -245,7 +245,7 @@ export async function prepareBrowserDirectChatRequest(
       BROWSER_DIRECT_CHAT_RATE_LIMIT_KEY,
       AI_RATE_LIMIT_CONFIG,
     )).allowed,
-    loadAccount: () => bindAccountLoader(auth.user.id, auth.user, resolveRequestDbClient(auth))(),
+    loadAccount: () => bindAccountLoader(auth.user.id, auth.user, auth.scoped)(),
     buildPrompt: async (resolved) => {
       observation?.phase('prompt');
       try {

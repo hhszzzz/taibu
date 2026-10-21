@@ -8,6 +8,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createMockScopedDb } from './helpers/db-mock';
 
 process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
@@ -84,52 +85,38 @@ test('normalizeMembershipInfo converts serialized expiresAt back to Date', () =>
 });
 
 test('getUserAuthInfo should throw explicit user-state errors when DB query fails', async () => {
-    const apiUtilsModule = require('../lib/api-utils') as any;
-    const creditsModule = require('../lib/user/credits') as typeof import('../lib/user/credits');
+    const contextModule = require('../lib/db/context.server') as any;
     const creditsPath = require.resolve('../lib/user/credits');
-    const originalGetServiceClient = apiUtilsModule.getSystemAdminClient;
+    const originalSystemDb = contextModule.systemDb;
 
-    apiUtilsModule.getSystemAdminClient = () => ({
-        from: () => ({
-            select: () => ({
-                eq: () => ({
-                    maybeSingle: async () => ({ data: null, error: { message: 'connection refused' } }),
-                }),
-            }),
-        }),
+    contextModule.systemDb = () => createMockScopedDb({
+        tx: async () => {
+            throw new Error('connection refused');
+        },
     });
 
     try {
         delete require.cache[creditsPath];
         await assert.rejects(
-            () => creditsModule.getUserAuthInfo('user-1'),
+            () => (require('../lib/user/credits') as typeof import('../lib/user/credits')).getUserAuthInfo('user-1'),
             /加载账户状态失败/u,
         );
     } finally {
-        apiUtilsModule.getSystemAdminClient = originalGetServiceClient;
+        contextModule.systemDb = originalSystemDb;
         delete require.cache[creditsPath];
     }
 });
 
 test('getUserAuthInfo returns hasCredits=false when credits are 0', async () => {
-    const apiUtilsModule = require('../lib/api-utils') as any;
+    const contextModule = require('../lib/db/context.server') as any;
     const creditsPath = require.resolve('../lib/user/credits');
-    const originalGetServiceClient = apiUtilsModule.getSystemAdminClient;
+    const originalSystemDb = contextModule.systemDb;
 
-    apiUtilsModule.getSystemAdminClient = () => ({
-        from: () => ({
-            select: () => ({
-                eq: () => ({
-                    maybeSingle: async () => ({
-                        data: {
-                            ai_chat_count: 0,
-                            membership: 'free',
-                            membership_expires_at: null,
-                        },
-                        error: null,
-                    }),
-                }),
-            }),
+    contextModule.systemDb = () => createMockScopedDb({
+        tx: async () => ({
+            ai_chat_count: 0,
+            membership: 'free',
+            membership_expires_at: null,
         }),
     });
 
@@ -142,18 +129,20 @@ test('getUserAuthInfo returns hasCredits=false when credits are 0', async () => 
         assert.equal(result.credits, 0);
         assert.equal(result.effectiveMembership, 'free');
     } finally {
-        apiUtilsModule.getSystemAdminClient = originalGetServiceClient;
+        contextModule.systemDb = originalSystemDb;
         delete require.cache[creditsPath];
     }
 });
 
 test('useCredit returns null when RPC fails', async () => {
-    const apiUtilsModule = require('../lib/api-utils') as any;
+    const contextModule = require('../lib/db/context.server') as any;
     const creditsPath = require.resolve('../lib/user/credits');
-    const originalGetServiceClient = apiUtilsModule.getSystemAdminClient;
+    const originalSystemDb = contextModule.systemDb;
 
-    apiUtilsModule.getSystemAdminClient = () => ({
-        rpc: async () => ({ data: null, error: { message: 'rpc error' } }),
+    contextModule.systemDb = () => createMockScopedDb({
+        rpc: async () => {
+            throw new Error('rpc error');
+        },
     });
 
     try {
@@ -162,36 +151,27 @@ test('useCredit returns null when RPC fails', async () => {
         const result = await useCredit('user-1');
         assert.equal(result, null);
     } finally {
-        apiUtilsModule.getSystemAdminClient = originalGetServiceClient;
+        contextModule.systemDb = originalSystemDb;
         delete require.cache[creditsPath];
     }
 });
 
 test('attemptCreditUse maps post-deduction races back to insufficient credits', async () => {
-    const apiUtilsModule = require('../lib/api-utils') as any;
+    const contextModule = require('../lib/db/context.server') as any;
     const creditsPath = require.resolve('../lib/user/credits');
-    const originalGetServiceClient = apiUtilsModule.getSystemAdminClient;
+    const originalSystemDb = contextModule.systemDb;
 
-    apiUtilsModule.getSystemAdminClient = () => ({
+    contextModule.systemDb = () => createMockScopedDb({
         rpc: async (fn: string) => {
             if (fn === 'decrement_ai_chat_count') {
-                return { data: null, error: null };
+                return null;
             }
             throw new Error(`unexpected rpc ${fn}`);
         },
-        from: () => ({
-            select: () => ({
-                eq: () => ({
-                    maybeSingle: async () => ({
-                        data: {
-                            ai_chat_count: 0,
-                            membership: 'free',
-                            membership_expires_at: null,
-                        },
-                        error: null,
-                    }),
-                }),
-            }),
+        tx: async () => ({
+            ai_chat_count: 0,
+            membership: 'free',
+            membership_expires_at: null,
         }),
     });
 
@@ -204,31 +184,24 @@ test('attemptCreditUse maps post-deduction races back to insufficient credits', 
             reason: 'insufficient_credits',
         });
     } finally {
-        apiUtilsModule.getSystemAdminClient = originalGetServiceClient;
+        contextModule.systemDb = originalSystemDb;
         delete require.cache[creditsPath];
     }
 });
 
 test('attemptCreditUse should keep rpc failures as deduction_failed even when balance is already 0', async () => {
-    const apiUtilsModule = require('../lib/api-utils') as any;
+    const contextModule = require('../lib/db/context.server') as any;
     const creditsPath = require.resolve('../lib/user/credits');
-    const originalGetServiceClient = apiUtilsModule.getSystemAdminClient;
+    const originalSystemDb = contextModule.systemDb;
 
-    apiUtilsModule.getSystemAdminClient = () => ({
-        rpc: async () => ({ data: null, error: { message: 'rpc unavailable' } }),
-        from: () => ({
-            select: () => ({
-                eq: () => ({
-                    maybeSingle: async () => ({
-                        data: {
-                            ai_chat_count: 0,
-                            membership: 'free',
-                            membership_expires_at: null,
-                        },
-                        error: null,
-                    }),
-                }),
-            }),
+    contextModule.systemDb = () => createMockScopedDb({
+        rpc: async () => {
+            throw new Error('rpc unavailable');
+        },
+        tx: async () => ({
+            ai_chat_count: 0,
+            membership: 'free',
+            membership_expires_at: null,
         }),
     });
 
@@ -241,7 +214,7 @@ test('attemptCreditUse should keep rpc failures as deduction_failed even when ba
             reason: 'deduction_failed',
         });
     } finally {
-        apiUtilsModule.getSystemAdminClient = originalGetServiceClient;
+        contextModule.systemDb = originalSystemDb;
         delete require.cache[creditsPath];
     }
 });

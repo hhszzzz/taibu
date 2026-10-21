@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import type { Session, User } from '@supabase/supabase-js';
+import { createMockScopedDb } from './helpers/db-mock';
 
 type AuthResolverClientDouble = Parameters<typeof import('../lib/auth-session').resolveSessionFromTokens>[0];
 
@@ -254,6 +255,7 @@ test('requireAdminContext should surface admin-check backend failures instead of
       user: { id: 'admin-1' } as User,
       accessToken: null,
       db,
+      scoped: createMockScopedDb(),
       supabase: db,
     },
   });

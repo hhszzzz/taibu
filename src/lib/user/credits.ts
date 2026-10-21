@@ -11,13 +11,12 @@
  */
 
 import { type MembershipType, getPlanConfig, isMembershipExpired } from './membership';
-import { getSystemAdminClient } from '@/lib/api-utils';
-import { ensureUserRecordRow } from '@/lib/user/profile-record';
+import { systemDb, type ScopedDb } from '@/lib/db/context.server';
+import { buildUserRecordSeed } from '@/lib/user/profile-record';
 
-type CreditReaderClient = Pick<ReturnType<typeof getSystemAdminClient>, 'from'>;
 type CreditQueryOptions = {
-    client?: CreditReaderClient;
-    user?: Parameters<typeof ensureUserRecordRow>[1];
+    db?: ScopedDb;
+    user?: Parameters<typeof buildUserRecordSeed>[0];
 };
 
 export type UserStateResolutionErrorCode =
@@ -82,39 +81,27 @@ export async function getUserCreditInfo(
     membership: MembershipType;
     expiresAt: Date | null;
 }> {
-    const supabase = options?.client ?? getSystemAdminClient();
-    const loadUserRow = async () => await supabase
-        .from('users')
-        .select('ai_chat_count, membership, membership_expires_at')
-        .eq('id', userId)
-        .maybeSingle();
-
-    let { data, error } = await loadUserRow();
-
-    if (error) {
-        console.error('[credits] Failed to get user info:', error.message);
-        throw new UserStateResolutionError('加载账户状态失败，请稍后重试', 'USER_QUERY_FAILED', { cause: error });
-    }
-
-    if (!data && options?.user) {
-        const recoveryProbe = supabase.from('users');
-        if (typeof recoveryProbe.upsert !== 'function') {
-            throw new UserStateResolutionError('加载账户状态失败，请稍后重试', 'USER_ROW_MISSING');
-        }
-        const ensured = await ensureUserRecordRow(supabase, options.user);
-        if (ensured.ok) {
-            const reloadResult = await loadUserRow();
-            data = reloadResult.data;
-            error = reloadResult.error;
-        } else {
-            throw new UserStateResolutionError('加载账户状态失败，请稍后重试', 'USER_ROW_MISSING', {
-                cause: ensured.error,
-            });
-        }
-    }
-
-    if (error) {
-        console.error('[credits] Failed to recover user row for auth info:', error);
+    let data;
+    try {
+        data = await (options?.db ?? systemDb()).tx(async (trx) => {
+            const load = () => trx
+                .selectFrom('users')
+                .select(['ai_chat_count', 'membership', 'membership_expires_at'])
+                .where('id', '=', userId)
+                .executeTakeFirst();
+            let row = await load();
+            if (!row && options?.user) {
+                await trx
+                    .insertInto('users')
+                    .values(buildUserRecordSeed(options.user))
+                    .onConflict((conflict) => conflict.column('id').doNothing())
+                    .execute();
+                row = await load();
+            }
+            return row;
+        });
+    } catch (error) {
+        console.error('[credits] Failed to get user info:', error);
         throw new UserStateResolutionError('加载账户状态失败，请稍后重试', 'USER_QUERY_FAILED', { cause: error });
     }
 
@@ -169,23 +156,17 @@ async function runCreditDecrement(userId: string): Promise<
     | { status: 'no_change' }
     | { status: 'rpc_error' }
 > {
-    const supabase = getSystemAdminClient();
-    const { data, error } = await supabase
-        .rpc('decrement_ai_chat_count', { user_id: userId });
-
-    if (error) {
-        console.error('[credits] RPC decrement failed:', error.message);
+    try {
+        const data = await systemDb().rpc('decrement_ai_chat_count', { user_id: userId });
+        if (typeof data === 'number') {
+            return { status: 'ok', remaining: data };
+        }
+        return { status: 'no_change' };
+    } catch (error) {
+        console.error('[credits] RPC decrement failed:', error);
         return { status: 'rpc_error' };
     }
 
-    if (typeof data === 'number') {
-        return {
-            status: 'ok',
-            remaining: data,
-        };
-    }
-
-    return { status: 'no_change' };
 }
 
 export async function attemptCreditUse(
@@ -212,17 +193,13 @@ export async function attemptCreditUse(
  * 添加积分
  */
 export async function addCredits(userId: string, amount: number): Promise<number | null> {
-    const supabase = getSystemAdminClient();
-
-    const { data, error } = await supabase
-        .rpc('increment_ai_chat_count', { user_id: userId, amount });
-
-    if (error) {
-        console.error('[credits] Failed to add credits:', error.message);
+    try {
+        const data = await systemDb().rpc('increment_ai_chat_count', { user_id: userId, amount });
+        return typeof data === 'number' ? data : null;
+    } catch (error) {
+        console.error('[credits] Failed to add credits:', error);
         return null;
     }
-
-    return typeof data === 'number' ? data : null;
 }
 
 export async function refundCreditsOrLog(userId: string, amount: number, context: string): Promise<boolean> {

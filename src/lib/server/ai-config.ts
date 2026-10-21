@@ -15,7 +15,7 @@ import {
   isManagedSourceKey,
   sortModelSources,
 } from '@/lib/ai/source-runtime';
-import { getSystemAdminClient } from '@/lib/supabase-server';
+import { systemDb } from '@/lib/db/context.server';
 
 interface DBGatewayRow {
   gateway_key: string | null;
@@ -37,11 +37,12 @@ interface DBModelGatewayBindingRow {
 }
 
 interface DBModelRow {
+  id?: string;
   model_key: string;
   display_name: string;
   vendor: string;
-  usage_type?: AIModelConfig['usageType'];
-  routing_mode?: AIModelConfig['routingMode'];
+  usage_type?: string;
+  routing_mode?: string;
   supports_reasoning: boolean;
   is_reasoning_default: boolean;
   supports_vision: boolean;
@@ -53,47 +54,10 @@ interface DBModelRow {
   default_reasoning_effort?: AIModelConfig['defaultReasoningEffort'] | null;
   reasoning_effort_format?: AIModelConfig['reasoningEffortFormat'] | null;
   custom_parameters?: Record<string, unknown> | null;
-  required_tier?: AIModelConfig['requiredTier'];
-  reasoning_required_tier?: AIModelConfig['reasoningRequiredTier'];
+  required_tier?: string;
+  reasoning_required_tier?: string | null;
   bindings?: DBModelGatewayBindingRow[];
 }
-
-const MODEL_SELECT = `
-  model_key,
-  display_name,
-  vendor,
-  usage_type,
-  routing_mode,
-  supports_reasoning,
-  is_reasoning_default,
-  supports_vision,
-  default_temperature,
-  default_top_p,
-  default_presence_penalty,
-  default_frequency_penalty,
-  default_max_tokens,
-  default_reasoning_effort,
-  reasoning_effort_format,
-  custom_parameters,
-  required_tier,
-  reasoning_required_tier,
-  bindings:ai_model_gateway_bindings (
-    id,
-    model_id_override,
-    reasoning_model_id,
-    is_enabled,
-    priority,
-    notes,
-    gateway:ai_gateways (
-      gateway_key,
-      display_name,
-      base_url,
-      api_key_env_var,
-      transport,
-      is_enabled
-    )
-  )
-`;
 
 let dbModelsCache: AIModelConfig[] | null = null;
 let dbLastFetch = 0;
@@ -109,8 +73,8 @@ function pickGateway(input: DBModelGatewayBindingRow['gateway']): DBGatewayRow |
 
 function buildSourcesForModel(row: DBModelRow): AIModelSourceConfig[] {
   const usageType = getModelUsageType({
-    usageType: row.usage_type,
-    supportsVision: row.supports_vision,
+    usageType: row.usage_type as AIModelConfig['usageType'],
+    supportsVision: row.supports_vision ?? false,
   });
 
   const mappedSources = (row.bindings || [])
@@ -148,8 +112,8 @@ function mapDbModelRows(rows: DBModelRow[]): AIModelConfig[] {
       id: row.model_key,
       name: row.display_name,
       vendor: row.vendor as AIVendor,
-      usageType: row.usage_type,
-      routingMode: row.routing_mode,
+      usageType: row.usage_type as AIModelConfig['usageType'],
+      routingMode: row.routing_mode as AIModelConfig['routingMode'],
       modelId: row.model_key,
       apiUrl: '',
       apiKeyEnvVar: '',
@@ -175,9 +139,9 @@ function mapDbModelRows(rows: DBModelRow[]): AIModelConfig[] {
       defaultMaxTokens: row.default_max_tokens ?? undefined,
       defaultReasoningEffort: row.default_reasoning_effort ?? undefined,
       reasoningEffortFormat: row.reasoning_effort_format ?? undefined,
-      customParameters: row.custom_parameters ?? null,
-      requiredTier: row.required_tier,
-      reasoningRequiredTier: row.reasoning_required_tier,
+      customParameters: (row.custom_parameters as Record<string, unknown> | null) ?? null,
+      requiredTier: row.required_tier as AIModelConfig['requiredTier'],
+      reasoningRequiredTier: row.reasoning_required_tier as AIModelConfig['reasoningRequiredTier'],
       transport: DEFAULT_AI_TRANSPORT,
       sources,
     };
@@ -205,53 +169,76 @@ async function fetchModelsFromDB(): Promise<AIModelConfig[] | null> {
     return dbModelsCache;
   }
 
-  let supabase;
+  let db;
   try {
-    supabase = getSystemAdminClient();
+    db = systemDb();
   } catch (error) {
     if (!IS_NODE_TEST_RUNTIME) {
-      console.warn('[ai-config/server] Supabase client unavailable, fallback to env models:', error);
+      console.warn('[ai-config/server] Database unavailable, fallback to env models:', error);
     }
     return null;
   }
 
-  const modelQuery = supabase.from('ai_models') as unknown as {
-    select?: (columns: string) => {
-      eq: (column: string, value: unknown) => {
-        order: (column: string, options: { ascending: boolean }) => Promise<{
-          data: unknown[] | null;
-          error: unknown;
-        }>;
-      };
-    };
-  };
-  if (!modelQuery?.select) {
-    return null;
-  }
-
-  let data: unknown[] | null = null;
-  let error: unknown = null;
+  let rows: DBModelRow[];
   try {
-    const result = await modelQuery
-      .select(MODEL_SELECT)
-      .eq('is_enabled', true)
-      .order('sort_order', { ascending: true });
-    data = result.data;
-    error = result.error;
-  } catch {
-    return null;
-  }
-
-  if (error) {
+    rows = await db.tx(async (trx) => {
+      const models = await trx
+        .selectFrom('ai_models')
+        .select([
+          'id', 'model_key', 'display_name', 'vendor', 'usage_type', 'routing_mode',
+          'supports_reasoning', 'is_reasoning_default', 'supports_vision',
+          'default_temperature', 'default_top_p', 'default_presence_penalty',
+          'default_frequency_penalty', 'default_max_tokens', 'default_reasoning_effort',
+          'reasoning_effort_format', 'custom_parameters', 'required_tier',
+          'reasoning_required_tier',
+        ])
+        .where('is_enabled', '=', true)
+        .orderBy('sort_order', 'asc')
+        .execute();
+      if (!models.length) return [];
+      const bindings = await trx
+        .selectFrom('ai_model_gateway_bindings as binding')
+        .innerJoin('ai_gateways as gateway', 'gateway.id', 'binding.gateway_id')
+        .select([
+          'binding.model_id', 'binding.model_id_override', 'binding.reasoning_model_id',
+          'binding.is_enabled', 'binding.priority', 'binding.notes', 'binding.id',
+          'gateway.gateway_key', 'gateway.display_name', 'gateway.base_url',
+          'gateway.api_key_env_var', 'gateway.transport', 'gateway.is_enabled as gateway_enabled',
+        ])
+        .where('binding.model_id', 'in', models.map((model) => model.id))
+        .orderBy('binding.priority', 'asc')
+        .execute();
+      const grouped = new Map<string, DBModelGatewayBindingRow[]>();
+      for (const binding of bindings) {
+        const list = grouped.get(binding.model_id) ?? [];
+        list.push({
+          id: binding.id,
+          model_id_override: binding.model_id_override,
+          reasoning_model_id: binding.reasoning_model_id,
+          is_enabled: binding.is_enabled,
+          priority: binding.priority,
+          notes: binding.notes,
+          gateway: {
+            gateway_key: binding.gateway_key,
+            display_name: binding.display_name,
+            base_url: binding.base_url,
+            api_key_env_var: binding.api_key_env_var,
+            transport: binding.transport,
+            is_enabled: binding.gateway_enabled,
+          },
+        });
+        grouped.set(binding.model_id, list);
+      }
+      // The row interface mirrors the former PostgREST projection; nullable
+      // database defaults are flattened there.
+      return models.map((model) => ({ ...model, bindings: grouped.get(model.id) ?? [] })) as unknown as DBModelRow[];
+    });
+  } catch (error) {
     console.error('[ai-config/server] Failed to fetch from DB:', error);
     return null;
   }
 
-  if (!data) {
-    return null;
-  }
-
-  dbModelsCache = mapDbModelRows(data as DBModelRow[]);
+  dbModelsCache = mapDbModelRows(rows);
   dbLastFetch = now;
   return dbModelsCache;
 }

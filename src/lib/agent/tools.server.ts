@@ -61,7 +61,7 @@ async function featureEnabled(feature: FeatureModuleId) {
   return state.status === "enabled";
 }
 export async function assertAgentToolAccess(store: AgentStore, run: AgentRunRow, name: string, args: Record<string, unknown>) {
-  const account = await getUserCreditInfo(run.user_id, { client: store.db });
+  const account = await getUserCreditInfo(run.user_id, {});
   const feature = ['inspect_chart', 'focus_chart'].includes(name) || getAgentDrilldownBase(name) ? await authorizeChartReference(store, run, args.reference)
     : name.startsWith('bazi_') ? 'bazi' : name.startsWith('ziwei_') ? 'ziwei' : name;
   if (FEATURE_MODULE_IDS.includes(feature as FeatureModuleId) && !(await featureEnabled(feature as FeatureModuleId))) throw new Error('该功能已关闭');
@@ -265,7 +265,7 @@ export async function createAgentTools(
   const boardOf = (name: string, result: Pick<AgentArtifactRow['result'], 'chartSnapshot'>) =>
     result.chartSnapshot?.kind === name && result.chartSnapshot.result ? { board: result.chartSnapshot.result } : {};
   const checkMember = async () =>
-    getUserCreditInfo(run.user_id, { client: store.db });
+    getUserCreditInfo(run.user_id, {});
   const wrap = <T extends TSchema>(
     name: string,
     description: string,
@@ -407,7 +407,7 @@ export async function createAgentTools(
         return textResult(
           await getUserDataSourcesWithErrors(
             run.user_id,
-            { client: store.db },
+            {},
             enabled.filter((item) => item.enabled).map((item) => item.type),
           ),
         );
@@ -433,7 +433,7 @@ export async function createAgentTools(
           content: [
             {
               type: "text",
-              text: await provider.formatForAI(value, { client: store.db }),
+              text: await provider.formatForAI(value, {}),
             },
             // details 不发给模型：命盘引用另起一段写给它（与排盘结果的命盘引用一样不进公开文本）
             ...(chartReference ? [{ type: "text" as const, text: `命盘引用: ${chartReference}。查看、详查或定位这张盘时作为 reference 传入。` }] : []),

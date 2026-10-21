@@ -1,15 +1,7 @@
 import type { User } from '@supabase/supabase-js';
+import type { ScopedDb } from '@/lib/db/context.server';
 
 type UserRecordSeedInput = Pick<User, 'id' | 'user_metadata'>;
-
-type UserRecordEnsureClient = {
-  from: (table: 'users') => {
-    upsert: (
-      payload: ReturnType<typeof buildUserRecordSeed>,
-      options: { onConflict: string; ignoreDuplicates: boolean },
-    ) => PromiseLike<{ error: unknown }>;
-  };
-};
 
 export function buildUserRecordSeed(user: UserRecordSeedInput) {
   return {
@@ -26,19 +18,18 @@ export function buildUserRecordSeed(user: UserRecordSeedInput) {
 }
 
 export async function ensureUserRecordRow(
-  supabase: UserRecordEnsureClient,
+  db: ScopedDb,
   user: UserRecordSeedInput,
 ): Promise<{ ok: true } | { ok: false; error: unknown }> {
-  const { error } = await supabase
-    .from('users')
-    .upsert(buildUserRecordSeed(user), {
-      onConflict: 'id',
-      ignoreDuplicates: true,
-    });
-
-  if (error) {
+  try {
+    const seed = buildUserRecordSeed(user);
+    await db.tx((trx) => trx
+      .insertInto('users')
+      .values(seed)
+      .onConflict((conflict) => conflict.column('id').doNothing())
+      .execute());
+    return { ok: true };
+  } catch (error) {
     return { ok: false, error };
   }
-
-  return { ok: true };
 }

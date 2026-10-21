@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
         if (typeof recoveryProbe.upsert !== 'function') {
             return jsonError('获取会员信息失败', 500);
         }
-        const ensured = await ensureUserRecordRow(auth.db, auth.user);
+        const ensured = await ensureUserRecordRow(auth.scoped, auth.user);
         if (ensured.ok) {
             const nextResult = await loadMembershipRow();
             data = nextResult.data;

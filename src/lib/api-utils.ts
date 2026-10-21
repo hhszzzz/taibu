@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { NextResponse, type NextRequest } from 'next/server';
 import type { Session, User } from '@supabase/supabase-js';
+import { anonDb, userDb, type ScopedDb } from '@/lib/db/context.server';
 import { getAuthAdminClient as getPrivilegedAuthClient, getSystemAdminClient as getPrivilegedSystemAdminClient } from '@/lib/supabase-server';
 import { getSupabaseAnonKey, getSupabaseUrl } from '@/lib/supabase-env';
 import {
@@ -40,6 +41,9 @@ export type RequestAuthError = SessionResolutionError;
 
 export type AuthContextResult = {
     db: RequestDbClient;
+    // P2 过渡字段：已完成迁移的模块使用受控 Kysely 上下文；B6 收尾时把它改名为 db，
+    // 并删除 supabase / resolveRequestDbClient。
+    scoped: ScopedDb;
     // `db` 是包装鉴权上下文的规范字段；`supabase` 仅保留给旧调用点过渡使用。
     supabase: RequestDbClient;
     accessToken: string | null;
@@ -118,6 +122,7 @@ export async function getAuthContext(
 
         return {
             db: authedClientFactory(session.access_token),
+            scoped: userDb(session.user!.id),
             supabase: authedClientFactory(session.access_token),
             accessToken: session.access_token,
             user: session.user ?? null,
@@ -129,6 +134,7 @@ export async function getAuthContext(
     if (resolverError) {
         return {
             db: supabase,
+            scoped: anonDb(),
             supabase,
             accessToken,
             user: null,
@@ -141,6 +147,7 @@ export async function getAuthContext(
         if (error && !isCredentialAuthError(error)) {
             return {
                 db: supabase,
+                scoped: anonDb(),
                 supabase,
                 accessToken,
                 user: null,
@@ -149,6 +156,7 @@ export async function getAuthContext(
         }
         return {
             db: supabase,
+            scoped: user ? userDb(user.id) : anonDb(),
             supabase,
             accessToken,
             user: user ?? null,
@@ -157,6 +165,7 @@ export async function getAuthContext(
     } catch (error) {
         return {
             db: supabase,
+            scoped: anonDb(),
             supabase,
             accessToken,
             user: null,
@@ -208,17 +217,17 @@ export async function requireBearerUser(
 export async function requireUserContext(
     request: NextRequest
 ): Promise<
-    | { db: RequestDbClient; supabase: RequestDbClient; accessToken: string | null; user: User }
+    | { db: RequestDbClient; scoped: ScopedDb; supabase: RequestDbClient; accessToken: string | null; user: User }
     | { error: { message: string; status: number } }
 > {
-    const { db, supabase, accessToken, user, authError } = await getAuthContext(request);
+    const { db, scoped, supabase, accessToken, user, authError } = await getAuthContext(request);
     if (authError) {
         return { error: { message: authError.message, status: authError.status } };
     }
     if (!user) {
         return { error: { message: '请先登录', status: 401 } };
     }
-    return { db, supabase, accessToken, user };
+    return { db, scoped, supabase, accessToken, user };
 }
 
 /**
@@ -231,6 +240,8 @@ async function checkIsAdmin(
     | { ok: true; isAdmin: boolean }
     | { ok: false; error: { message: string; status: number } }
 > {
+    // B6 migrates the administrator gate to the scoped context together with
+    // the admin routes; B1 only needs the new context for data reads.
     const { data: userData, error } = await supabase
         .from('users')
         .select('is_admin')
@@ -281,7 +292,7 @@ export async function requireAdminContext(
         userContext?: Awaited<ReturnType<typeof requireUserContext>>;
     } = {},
 ): Promise<
-    | { db: RequestDbClient; supabase: RequestDbClient; accessToken: string | null; user: User }
+    | { db: RequestDbClient; scoped: ScopedDb; supabase: RequestDbClient; accessToken: string | null; user: User }
     | { error: { message: string; status: number } }
 > {
     const authResult = dependencies.userContext ?? await requireUserContext(request);

@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "baselineRevision": "5725dde",
-  "sourceFingerprint": "16e02ba176507abbb6e9b9f4a27d794d1db954d91342b73ad35f82e79e8c1233",
+  "sourceFingerprint": "005c25f9ae8676780e5cf8d3fd5978f4daf054eaa7dfea2a4f4d64c2f1b91ffe",
   "target": "empty local self-hosted application schema; NOT production parity or a migration replay",
   "bootstrapOrder": [
     "platform roles/extensions",
@@ -234,7 +234,7 @@
     },
     {
       "file": "src/lib/app-settings.ts",
-      "sha256": "c2a5621a0800e8c1206c145deba5331fc62cd96193ba6639d7316925876d60c5"
+      "sha256": "7ee252f1bbe6b887297b47c327b6c43a633a979754a979e71583908cd1626493"
     },
     {
       "file": "scripts/selfhost-schema.mjs",
@@ -1401,10 +1401,6 @@
         {
           "file": "src/app/api/admin/ai-models/route.ts",
           "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/server/ai-config.ts",
-          "kind": "literal-from"
         }
       ]
     },
@@ -1454,25 +1450,6 @@
         },
         {
           "file": "src/lib/annual-report.ts",
-          "kind": "literal-from"
-        }
-      ]
-    },
-    {
-      "name": "app_settings",
-      "kind": "table",
-      "status": "defined",
-      "callers": [
-        {
-          "file": "src/lib/app-settings.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/app-settings.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/app-settings.ts",
           "kind": "literal-from"
         }
       ]
@@ -1835,22 +1812,6 @@
       "callers": [
         {
           "file": "src/lib/annual-report.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/user/checkin.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/user/checkin.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/user/checkin.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/user/checkin.ts",
           "kind": "literal-from"
         }
       ]
@@ -2485,10 +2446,6 @@
           "kind": "literal-from"
         },
         {
-          "file": "src/app/api/chat/preview/route.ts",
-          "kind": "typed-adapter-catalog"
-        },
-        {
           "file": "src/app/api/user/membership/route.ts",
           "kind": "literal-from"
         },
@@ -2527,30 +2484,6 @@
         {
           "file": "src/lib/server/chat/bootstrap.ts",
           "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/user/credits.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/user/credits.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/user/membership-server.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/user/membership-server.ts",
-          "kind": "typed-adapter-catalog"
-        },
-        {
-          "file": "src/lib/user/profile-record.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/user/profile-record.ts",
-          "kind": "typed-adapter-catalog"
         }
       ]
     },
@@ -2627,11 +2560,6 @@
   ],
   "dynamicRelationSites": [
     {
-      "file": "src/app/api/chat/preview/route.ts",
-      "expression": "table",
-      "contract": "typed from(table) adapter"
-    },
-    {
       "file": "src/app/api/history-summaries/route.ts",
       "expression": "config.tableName",
       "contract": "tableName catalog"
@@ -2685,11 +2613,6 @@
       "file": "src/lib/chat/chat-context.ts",
       "expression": "table",
       "contract": "typed from(table) adapter"
-    },
-    {
-      "file": "src/lib/user/membership-server.ts",
-      "expression": "table",
-      "contract": "typed from(table) adapter"
     }
   ],
   "excludedRelationAdapters": [
@@ -2707,7 +2630,7 @@
   "artifacts": [
     {
       "file": "supabase/selfhost/001-application.sql",
-      "sha256": "732817b9bb35154a99ae5f6ea6421cf5e4f19da150fabc580d4d5de1c1a7c88c"
+      "sha256": "96c9fa73baaae9bdf8a7d25eab922cd622e0417dfe4b297d41243fd8383ca218"
     },
     {
       "file": "supabase/selfhost/002-storage.sql",

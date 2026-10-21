@@ -4,11 +4,14 @@ import assert from 'node:assert/strict';
 process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
 
-function mockUserContext<T extends object>(user: unknown, db: T) {
+import { createMockScopedDb } from './helpers/db-mock';
+
+function mockUserContext<T extends object>(user: unknown, db: T, scoped = createMockScopedDb()) {
   return {
     user,
     accessToken: null,
     db,
+    scoped,
     supabase: db,
   };
 }
@@ -246,11 +249,6 @@ test('user profile route should recover a missing user row before returning prof
                 error: null,
               };
             },
-            upsert(payload: Record<string, unknown>) {
-              ensured = true;
-              assert.equal(payload.nickname, '补建资料');
-              return Promise.resolve({ error: null });
-            },
           };
         }
 
@@ -272,6 +270,17 @@ test('user profile route should recover a missing user row before returning prof
         throw new Error(`Unexpected table: ${table}`);
       },
     },
+    createMockScopedDb({
+      tx: async (work) => work({
+        insertInto: () => ({
+          values: (seed: Record<string, unknown>) => {
+            assert.equal(seed.nickname, '补建资料');
+            ensured = true;
+            return { onConflict: () => ({ execute: async () => undefined }) };
+          },
+        }),
+      } as never),
+    }),
   );
   apiUtilsModule.jsonOk = (payload: unknown, status = 200) => Response.json(payload, { status });
   apiUtilsModule.jsonError = (message: string, status = 400) => Response.json({ error: message }, { status });

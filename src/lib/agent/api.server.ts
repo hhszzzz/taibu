@@ -341,7 +341,7 @@ export async function createAgentTask(request: NextRequest) {
   }
   if (compact && !history.length) throw new AgentApiError("当前对话还没有可压缩的内容");
   const account = await getUserAuthInfo(auth.user.id, {
-    client: auth.db,
+    db: auth.scoped,
     user: auth.user,
   });
   const config = custom

@@ -224,7 +224,7 @@ export async function executeAgentRun(
     const collaborators = parseAgentCollaborators(run.input.collaborators);
     if (run.input.customProvider && collaborators.length) throw new Error('自定义直连模型不能调用平台协作模型');
     const authorizeModel = async (selected: AIModelConfig, reasoning = false) => {
-      const account = await getUserCreditInfo(run.user_id, { client: store.db });
+      const account = await getUserCreditInfo(run.user_id, {});
       const states = await Promise.all([readFeatureModuleStateFresh("chat"), readFeatureModuleStateFresh("agent")]);
       if (states.some(state => state.status === "unavailable"))
         throw new Error("AGENT_FEATURE_STATE_UNAVAILABLE");
@@ -480,7 +480,7 @@ export async function executeAgentRun(
     registry.install(background.extension);
     registry.install(createAgentToolSearchExtension(titles));
     if (run.input.codeMode) registry.install(createAgentCodemodeExtension());
-    if (run.input.webEnabled && (await getUserCreditInfo(run.user_id, { client: store.db })).membership !== 'free') {
+    if (run.input.webEnabled && (await getUserCreditInfo(run.user_id, {})).membership !== 'free') {
       mcp = await connectAgentMcp(parseAgentMcpServers(), () => assertAgentToolAccess(store, run, 'mcp__external', {}), context.abortSignal!);
       if (mcp.tools.length) registry.install({ name: 'taibu_mcp', tools: mcp.tools });
     }

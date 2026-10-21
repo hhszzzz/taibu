@@ -6,7 +6,7 @@
 
 import { NextRequest } from 'next/server';
 import { attemptCreditUse, UserStateResolutionError } from '@/lib/user/credits';
-import { requireUserContext, jsonError, jsonOk, resolveRequestDbClient } from '@/lib/api-utils';
+import { requireUserContext, jsonError, jsonOk } from '@/lib/api-utils';
 
 export async function POST(request: NextRequest) {
     try {
@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
         const { user } = auth;
 
         const creditUse = await attemptCreditUse(user.id, {
-            client: resolveRequestDbClient(auth) ?? undefined,
+            db: auth.scoped,
             user,
         });
         if (!creditUse.ok) {

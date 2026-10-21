@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createMockScopedDb } from './helpers/db-mock';
 import { NextRequest } from 'next/server';
 import { createMockAuthContext } from './helpers/supabase-mock';
 import { mockAIRateLimit } from './helpers/route-mock';
@@ -558,28 +559,25 @@ test('records import POST should return 500 when transactional RPC fails', async
 });
 
 test('performCheckin should use transactional rpc result', async (t) => {
-  const apiUtilsModule = require('../lib/api-utils') as any;
-  const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
+  const contextModule = require('../lib/db/context.server') as any;
+  const originalSystemDb = contextModule.systemDb;
 
   const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
 
-  apiUtilsModule.getSystemAdminClient = () => ({
-    rpc: (fn: string, args: Record<string, unknown>) => {
+  contextModule.systemDb = () => createMockScopedDb({
+    rpc: async (fn: string, args: Record<string, unknown>) => {
       rpcCalls.push({ fn, args });
-      return Promise.resolve({
-        data: {
-          status: 'ok',
-          reward_credits: 2,
-          credits: 11,
-          credit_limit: 20,
-        },
-        error: null,
-      });
+      return {
+        status: 'ok',
+        reward_credits: 2,
+        credits: 11,
+        credit_limit: 20,
+      };
     },
   });
 
   t.after(() => {
-    apiUtilsModule.getSystemAdminClient = originalGetSystemAdminClient;
+    contextModule.systemDb = originalSystemDb;
   });
 
   const { performCheckin } = require('../lib/user/checkin') as typeof import('../lib/user/checkin');
@@ -848,34 +846,14 @@ test('credits transactions GET should use user context and preserve today spend 
 });
 
 test('getCheckinStatus should keep the full reward range while the user is still below the cap', async (t) => {
-  const apiUtilsModule = require('../lib/api-utils') as any;
+  const contextModule = require('../lib/db/context.server') as any;
   const creditsModule = require('../lib/user/credits') as any;
   const checkinPath = require.resolve('../lib/user/checkin');
-  const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
+  const originalSystemDb = contextModule.systemDb;
   const originalGetUserCreditInfo = creditsModule.getUserCreditInfo;
 
-  apiUtilsModule.getSystemAdminClient = () => ({
-    from(table: string) {
-      if (table !== 'daily_checkins') {
-        throw new Error(`unexpected table: ${table}`);
-      }
-
-      return {
-        select() {
-          return this;
-        },
-        eq() {
-          return this;
-        },
-        order() {
-          return this;
-        },
-        limit() {
-          return this;
-        },
-        maybeSingle: async () => ({ data: null, error: null }),
-      };
-    },
+  contextModule.systemDb = () => createMockScopedDb({
+    tx: async () => [undefined, undefined],
   });
   creditsModule.getUserCreditInfo = async () => ({
     credits: 19,
@@ -886,7 +864,7 @@ test('getCheckinStatus should keep the full reward range while the user is still
   delete require.cache[checkinPath];
 
   t.after(() => {
-    apiUtilsModule.getSystemAdminClient = originalGetSystemAdminClient;
+    contextModule.systemDb = originalSystemDb;
     creditsModule.getUserCreditInfo = originalGetUserCreditInfo;
     delete require.cache[checkinPath];
   });
@@ -896,6 +874,8 @@ test('getCheckinStatus should keep the full reward range while the user is still
 
   assert.equal(status.canCheckin, true);
   assert.deepEqual(status.rewardRange, [2, 6]);
+  assert.equal(status.currentCredits, 19);
+  assert.equal(status.creditLimit, 20);
   assert.equal(status.blockedReason, null);
 });
 

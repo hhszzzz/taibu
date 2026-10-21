@@ -1,5 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createMockScopedDb } from './helpers/db-mock';
+
+type DbContextModule = typeof import('../lib/db/context.server');
 
 async function loadAppSettingsModule() {
   const modulePath = require.resolve('../lib/app-settings');
@@ -7,143 +10,71 @@ async function loadAppSettingsModule() {
   return await import('../lib/app-settings');
 }
 
-test('getFeatureToggles reads feature toggles via like filter', async (t) => {
-  const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
-  const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
-  const originalConsoleError = console.error;
-  const errorLogs: unknown[][] = [];
-
-  apiUtilsModule.getSystemAdminClient = (() => ({
-    from(table: string) {
-      assert.equal(table, 'app_settings');
-      return {
-        select() {
-          return {
-            like(column: string, pattern: string) {
-              assert.equal(column, 'setting_key');
-              assert.equal(pattern, 'feature_disabled:%');
-              return Promise.resolve({
-                data: [
-                  { setting_key: 'feature_disabled:chat', setting_value: true },
-                  { setting_key: 'feature_disabled:knowledge-base', setting_value: false },
-                ],
-                error: null,
-              });
-            },
-          };
-        },
-      };
-    },
-  })) as unknown as typeof apiUtilsModule.getSystemAdminClient;
-
-  console.error = (...args: unknown[]) => {
-    errorLogs.push(args);
-  };
-
+function stubSystemDb(t: test.TestContext, tx: (call: number) => unknown) {
+  const context = require('../lib/db/context.server') as DbContextModule;
+  const original = context.systemDb;
+  let calls = 0;
+  context.systemDb = (() => createMockScopedDb({
+    tx: async () => tx(++calls),
+  })) as unknown as typeof context.systemDb;
   t.after(() => {
-    apiUtilsModule.getSystemAdminClient = originalGetSystemAdminClient;
-    console.error = originalConsoleError;
+    context.systemDb = original;
     delete require.cache[require.resolve('../lib/app-settings')];
   });
+  return () => calls;
+}
+
+test('getFeatureToggles reads every feature row', async (t) => {
+  stubSystemDb(t, () => [
+    { setting_key: 'feature_disabled:chat', setting_value: true },
+    { setting_key: 'feature_disabled:knowledge-base', setting_value: false },
+  ]);
 
   const appSettingsModule = await loadAppSettingsModule();
   const toggles = await appSettingsModule.getFeatureToggles();
 
   assert.equal(toggles.chat, true);
   assert.equal(toggles['knowledge-base'], false);
-  assert.equal(errorLogs.length, 0);
 });
 
 test('isFeatureModuleEnabled caches single-feature reads', async (t) => {
-  const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
-  const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
-  let readCount = 0;
-
-  apiUtilsModule.getSystemAdminClient = (() => ({
-    from(table: string) {
-      assert.equal(table, 'app_settings');
-      return {
-        select(columns: string) {
-          assert.equal(columns, 'setting_value');
-          return {
-            eq(column: string, key: string) {
-              assert.equal(column, 'setting_key');
-              assert.equal(key, 'feature_disabled:knowledge-base');
-              return {
-                maybeSingle: async () => {
-                  readCount += 1;
-                  return { data: { setting_value: true }, error: null };
-                },
-              };
-            },
-          };
-        },
-      };
-    },
-  })) as unknown as typeof apiUtilsModule.getSystemAdminClient;
-
-  t.after(() => {
-    apiUtilsModule.getSystemAdminClient = originalGetSystemAdminClient;
-    delete require.cache[require.resolve('../lib/app-settings')];
-  });
+  let disabled = true;
+  const reads = stubSystemDb(t, () => ({ setting_value: disabled }));
 
   const appSettingsModule = await loadAppSettingsModule();
-  const first = await appSettingsModule.isFeatureModuleEnabled('knowledge-base');
-  const second = await appSettingsModule.isFeatureModuleEnabled('knowledge-base');
 
-  assert.equal(first, false);
+  assert.equal(await appSettingsModule.isFeatureModuleEnabled('knowledge-base'), false);
+  assert.equal(reads(), 1);
+
+  disabled = true;
+  const second = await appSettingsModule.isFeatureModuleEnabled('knowledge-base');
   assert.equal(second, false);
-  assert.equal(readCount, 1);
+  assert.equal(reads(), 1);
 });
 
-test('setFeatureToggle refreshes cached single-feature value', async (t) => {
-  const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
-  const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
-  let readCount = 0;
-  let upsertCount = 0;
-  let disabledValue = true;
-
-  apiUtilsModule.getSystemAdminClient = (() => ({
-    from(table: string) {
-      assert.equal(table, 'app_settings');
-      return {
-        select(columns: string) {
-          assert.equal(columns, 'setting_value');
-          return {
-            eq(column: string, key: string) {
-              assert.equal(column, 'setting_key');
-              assert.equal(key, 'feature_disabled:chat');
-              return {
-                maybeSingle: async () => {
-                  readCount += 1;
-                  return { data: { setting_value: disabledValue }, error: null };
-                },
-              };
-            },
-          };
-        },
-        upsert(payload: { setting_key: string; setting_value: boolean }) {
-          upsertCount += 1;
-          assert.equal(payload.setting_key, 'feature_disabled:chat');
-          disabledValue = payload.setting_value;
-          return Promise.resolve({ error: null });
-        },
-      };
-    },
-  })) as unknown as typeof apiUtilsModule.getSystemAdminClient;
-
-  t.after(() => {
-    apiUtilsModule.getSystemAdminClient = originalGetSystemAdminClient;
-    delete require.cache[require.resolve('../lib/app-settings')];
-  });
+test('setFeatureToggle refreshes the cached value', async (t) => {
+  let disabled = true;
+  let writes = 0;
+  const reads = stubSystemDb(t, () => ({ setting_value: disabled }));
 
   const appSettingsModule = await loadAppSettingsModule();
-
   assert.equal(await appSettingsModule.isFeatureModuleEnabled('chat'), false);
-  assert.equal(readCount, 1);
+  assert.equal(reads(), 1);
+
+  const context = require('../lib/db/context.server') as DbContextModule;
+  const original = context.systemDb;
+  context.systemDb = (() => createMockScopedDb({
+    tx: async () => {
+      reads();
+      writes += 1;
+      disabled = false;
+      return undefined;
+    },
+  })) as unknown as typeof context.systemDb;
+  t.after(() => { context.systemDb = original; });
 
   assert.equal(await appSettingsModule.setFeatureToggle('chat', false), true);
-  assert.equal(upsertCount, 1);
+  assert.equal(writes, 1);
   assert.equal(await appSettingsModule.isFeatureModuleEnabled('chat'), true);
-  assert.equal(readCount, 1);
+  assert.equal(reads(), 1);
 });

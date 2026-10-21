@@ -22,6 +22,7 @@ import {
   resolveRequestDbClient,
   SSE_HEADERS,
 } from '@/lib/api-utils';
+import { userDb, type ScopedDb } from '@/lib/db/context.server';
 import {
   attemptCreditUse,
   getUserAuthInfo,
@@ -89,10 +90,15 @@ type SuccessfulDivinationAuthResult = {
   user: { id: string };
   db?: UserContextAuthResult['db'];
   supabase?: UserContextAuthResult['db'];
+  scoped?: UserContextAuthResult['scoped'];
   accessToken?: string | null;
 };
 
 type DivinationDbClient = NonNullable<ReturnType<typeof resolveRequestDbClient>>;
+
+function scopedDbFor(result: { user: { id: string }; scoped?: ScopedDb }): ScopedDb {
+  return result.scoped ?? userDb(result.user.id);
+}
 
 type RouteError = { error: string; status: number };
 
@@ -557,7 +563,7 @@ export function createDirectInterpretHandlers<
 
     // BYOK validates account membership without a platform model/balance gate.
     try {
-      await getUserAuthInfo(authContext.userId, { client: authContext.db, user: authResult.user });
+      await getUserAuthInfo(authContext.userId, { db: scopedDbFor(authResult), user: authResult.user });
     } catch (error) {
       if (error instanceof UserStateResolutionError) {
         return jsonError(error.message, 500, { success: false, code: error.code });
@@ -809,7 +815,7 @@ export function createInterpretHandler<
       let authInfo;
       try {
         authInfo = await getUserAuthInfo(user.id, {
-          client: authContext.db,
+          db: scopedDbFor(authResult),
           user,
         });
       } catch (error) {
@@ -840,7 +846,7 @@ export function createInterpretHandler<
 
       // 4. Deduct credit before rate admission and final prompt assembly.
       const creditUse = await attemptCreditUse(user.id, {
-        client: authContext.db,
+        db: scopedDbFor(authResult),
         user,
       });
       if (!creditUse.ok) {

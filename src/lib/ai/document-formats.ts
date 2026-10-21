@@ -1,11 +1,23 @@
 /**
  * Documents a message can carry as text: plain chat sends one document's text with the question, the Agent stores
  * each one as a private text attachment. The server reads each format with the parser of its kind
- * (`document-text.server.ts`); pickers offer exactly these formats.
+ * (`document-text.server.ts`); pickers offer exactly these formats. Why a document is refused, and the bounds on
+ * its text, are shared by the request and the document worker that parses PDF and Office files.
  */
 import type { ChatAttachment } from '@/types';
 
 export type DocumentParserKind = 'text' | 'pdf' | 'docx' | 'xlsx';
+
+export type DocumentTextErrorCode =
+    | 'UNSUPPORTED_FORMAT' | 'EMPTY_FILE' | 'FILE_TOO_LARGE' | 'UNREADABLE' | 'NO_TEXT' | 'TEXT_TOO_LARGE' | 'TIMEOUT' | 'BUSY';
+
+/** A document that cannot be read as text; its message is shown to the user as is. */
+export class DocumentTextError extends Error {
+    constructor(readonly code: DocumentTextErrorCode, message: string) {
+        super(message);
+        this.name = 'DocumentTextError';
+    }
+}
 
 export interface DocumentFormat {
     /** Lower-case file extension, without the dot. */
@@ -57,6 +69,19 @@ export function documentFormatOf(name: string): DocumentFormat | null {
 export function documentRejection(name: string): string | null {
     if (documentFormatOf(name)) return null;
     return LEGACY_FORMATS.get(extensionOf(name)) ?? `不支持该文件类型，可上传 ${DOCUMENT_LABELS} 文件`;
+}
+
+/** What a parser read, as the text a document yields: line endings normalized, trimmed and within the limit. */
+export function documentText(raw: string): string {
+    // trim() also drops a leading byte-order mark.
+    const text = raw.replace(/\r\n?/gu, '\n').trim();
+    if (text.includes('\u0000')) throw new DocumentTextError('UNREADABLE', '文件包含无法识别的二进制内容');
+    if (!text) throw new DocumentTextError('NO_TEXT', '没有提取到文字内容');
+    // Every UTF-16 unit takes at least one UTF-8 byte, so a longer text is over the limit without encoding it.
+    if (text.length > MAX_DOCUMENT_TEXT_BYTES || new TextEncoder().encode(text).length > MAX_DOCUMENT_TEXT_BYTES) {
+        throw new DocumentTextError('TEXT_TOO_LARGE', '提取出的文字超过 2MB，请拆分后上传');
+    }
+    return text;
 }
 
 /** A document's text as a request carries it: a file name and text the server extracted, within the limits above. */

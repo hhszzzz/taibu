@@ -1,4 +1,4 @@
-import { crc32, deflateRawSync } from 'node:zlib';
+import { crc32, createDeflate, deflateRawSync } from 'node:zlib';
 
 /** Builds documents byte by byte, so parser tests need no binary fixtures in the repository. */
 
@@ -176,3 +176,29 @@ export const SONG_UCS2 = [
 
 /** Text drawn in F1; with SONG_UCS2, pass UCS-2 hex such as `<4F60597D>`. */
 export const showText = (operand: string) => `BT /F1 12 Tf 20 100 Td ${operand} Tj ET`;
+
+/**
+ * A small PDF whose one page draws nothing from a content stream that inflates to `megabytes` of spaces, the way
+ * a decompression bomb hides in a PDF. The stream is deflated a megabyte at a time, so building it stays small too.
+ */
+export async function inflatingPdf(megabytes: number): Promise<Uint8Array<ArrayBuffer>> {
+    const deflate = createDeflate({ level: 9 });
+    const chunks: Buffer[] = [];
+    deflate.on('data', (chunk: Buffer) => chunks.push(chunk));
+    const ended = new Promise(resolve => deflate.once('end', resolve));
+    const spaces = Buffer.alloc(1024 * 1024, 0x20);
+    for (let written = 0; written < megabytes; written += 1) {
+        if (!deflate.write(spaces)) await new Promise(resolve => deflate.once('drain', resolve));
+    }
+    deflate.end();
+    await ended;
+    const stream = Buffer.concat(chunks);
+    const objects = [
+        '<< /Type /Catalog /Pages 2 0 R >>',
+        '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+        '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Contents 4 0 R >>',
+    ].map((body, index) => Buffer.from(`${index + 1} 0 obj\n${body}\nendobj\n`));
+    const content = Buffer.concat([Buffer.from(`4 0 obj\n<< /Length ${stream.length} /Filter /FlateDecode >>\nstream\n`), stream, Buffer.from('\nendstream\nendobj\n')]);
+    // pdf.js rebuilds the cross-reference table this file leaves out.
+    return new Uint8Array(Buffer.concat([Buffer.from('%PDF-1.4\n'), ...objects, content, Buffer.from('trailer\n<< /Root 1 0 R >>\n%%EOF\n')]));
+}

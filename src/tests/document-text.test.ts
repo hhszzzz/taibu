@@ -10,22 +10,22 @@ import {
     documentRejection,
     isChatAttachment,
 } from '../lib/ai/document-formats';
+import { BINARY_DOCUMENT_PARSERS, PDF_CMAP_DIRECTORY, PDF_MAX_PAGES, formatSheet } from '../lib/ai/document-parsers.server';
 import {
     DOCUMENT_PARSERS,
     DocumentTextError,
-    PDF_CMAP_DIRECTORY,
-    PDF_MAX_PAGES,
     createDocumentTextExtractor,
+    decodeTextDocument,
     documentTextErrorStatus,
-    extractDocumentText,
-    formatSheet,
     type DocumentParser,
 } from '../lib/ai/document-text.server';
 import { readZipArchive, writeStoredZip, ZipArchiveError } from '../lib/ai/document-zip.server';
 import { HELVETICA, SONG_UCS2, docxDocument, docxPackage, pdfDocument, showText, wordDocumentXml, xlsxWorkbook, zipArchive } from './helpers/document-fixtures';
 
 const utf8 = (text: string) => new TextEncoder().encode(text);
-const extract = (name: string, bytes: Uint8Array) => extractDocumentText({ name, bytes });
+// The parsers run in this process here; document-worker.test.ts runs them in the bundled worker.
+const extractInProcess = createDocumentTextExtractor({ text: decodeTextDocument, ...BINARY_DOCUMENT_PARSERS });
+const extract = (name: string, bytes: Uint8Array) => extractInProcess({ name, bytes });
 async function rejection(promise: Promise<unknown>): Promise<DocumentTextError> {
     try {
         await promise;
@@ -37,7 +37,10 @@ async function rejection(promise: Promise<unknown>): Promise<DocumentTextError> 
 }
 
 test('every offered format has a parser, and pickers offer exactly the catalog', () => {
-    for (const format of DOCUMENT_FORMATS) assert.equal(typeof DOCUMENT_PARSERS[format.parser], 'function', format.extension);
+    for (const format of DOCUMENT_FORMATS) {
+        assert.equal(typeof DOCUMENT_PARSERS[format.parser], 'function', format.extension);
+        if (format.parser !== 'text') assert.equal(typeof BINARY_DOCUMENT_PARSERS[format.parser], 'function', `${format.extension} in the worker`);
+    }
     assert.deepEqual(DOCUMENT_ACCEPT.split(','), DOCUMENT_FORMATS.map(format => `.${format.extension}`));
     assert.equal(documentFormatOf(' 命书.PDF ')?.parser, 'pdf');
     assert.equal(documentFormatOf('archive.tar.gz'), null);
@@ -162,8 +165,15 @@ test('a dense Word body is read without building it in memory', async () => {
     const before = process.memoryUsage().rss;
     const document = await extract('密集.docx', docxPackage(wordDocumentXml(body)));
     assert.equal(document.text.length, paragraphs * 3 - 2);
-    // A DOM of this body takes over two gigabytes; reading it as a stream stays within a small multiple of its size.
+    // A DOM of this body takes over two gigabytes; reading it as a stream stays well inside the worker's heap.
     assert.ok(process.memoryUsage().rss - before < 512 * 1024 * 1024, 'memory follows the text, not the element count');
+});
+
+test('extracted text is normalized once, wherever it was read', async () => {
+    const echo = createDocumentTextExtractor({ pdf: async () => `${String.fromCharCode(0xfeff)} 第一行\r\n第二行\r ` });
+    assert.equal((await echo({ name: 'a.pdf', bytes: utf8('%PDF') })).text, '第一行\n第二行');
+    const refusal = await rejection(createDocumentTextExtractor({ pdf: async () => '字'.repeat(MAX_DOCUMENT_TEXT_BYTES) })({ name: 'a.pdf', bytes: utf8('%PDF') }));
+    assert.equal(refusal.code, 'TEXT_TOO_LARGE', 'counted in UTF-8 bytes even when the units alone fit');
 });
 
 test('Excel sheets become tab-separated text with dates, numbers and booleans spelled out', async () => {

@@ -2,10 +2,10 @@ import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { POST as extract } from '../app/api/chat/extract/route';
-import { MAX_DOCUMENT_BYTES } from '../lib/ai/document-formats';
+import { DocumentTextError, MAX_DOCUMENT_BYTES, documentFormatOf, type DocumentFormat } from '../lib/ai/document-formats';
 import { DOCUMENT_TEXT_RATE_LIMIT } from '../lib/ai/document-text.server';
+import { DocumentWorkerError } from '../lib/ai/document-worker.server';
 import { blockRouteNetwork, mockAIFeatureState, mockAIRateLimit, mockRouteUserContext } from './helpers/route-mock';
-import { docxDocument } from './helpers/document-fixtures';
 
 function upload(file?: File) {
     const form = new FormData();
@@ -31,8 +31,33 @@ test('extraction returns the document text and stores nothing', async t => {
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { name: '命书.md', text: '# 命书\n甲辰' });
     assert.deepEqual(limits, [{ identifier: 'reader-1', endpoint: DOCUMENT_TEXT_RATE_LIMIT.endpoint }]);
-    const word = await extract(upload(new File([docxDocument(['第一段'])], '报告.docx')));
-    assert.deepEqual(await word.json(), { name: '报告.docx', text: '第一段' });
+});
+
+test('PDF and Office files go to the shared extractor; a busy or failed worker is not blamed on the file', async t => {
+    fixture(t);
+    // The extractor parses these in the bundled worker, which document-worker.test.ts builds and runs.
+    const documents = require('../lib/ai/document-text.server') as typeof import('../lib/ai/document-text.server');
+    const word = documentFormatOf('报告.docx') as DocumentFormat;
+    const outcomes: Array<() => Promise<string>> = [
+        async () => '第一段',
+        async () => { throw new DocumentTextError('BUSY', '文件解析繁忙，请稍后重试'); },
+        async () => { throw new DocumentWorkerError('The document worker failed'); },
+    ];
+    const signals: Array<AbortSignal | undefined> = [];
+    t.mock.method(documents, 'extractDocumentText', async (file: { name: string; bytes: Uint8Array }, signal?: AbortSignal) => {
+        signals.push(signal);
+        return { name: file.name, format: word, text: await outcomes[signals.length - 1]() };
+    });
+    const errors = t.mock.method(console, 'error', () => undefined);
+    const send = () => extract(upload(new File(['PK'], '报告.docx')));
+    assert.deepEqual(await (await send()).json(), { name: '报告.docx', text: '第一段' });
+    const busy = await send();
+    assert.equal(busy.status, 503);
+    assert.equal((await busy.json()).code, 'BUSY');
+    const failed = await send();
+    assert.deepEqual([failed.status, (await failed.json()).error], [500, '文件解析失败，请重试']);
+    assert.equal(errors.mock.callCount(), 1);
+    assert.ok(signals.every(signal => signal instanceof AbortSignal), 'the request signal reaches the extractor');
 });
 
 test('extraction requires a signed-in user', async t => {
@@ -67,9 +92,9 @@ test('missing, oversized and unsupported uploads are refused with their reason',
     const legacy = await extract(upload(new File(['x'], '旧.doc')));
     assert.equal(legacy.status, 415);
     assert.deepEqual(await legacy.json(), { success: false, error: '暂不支持 Word 97-2003（.doc）文件，请另存为 .docx 后上传', code: 'UNSUPPORTED_FORMAT' });
-    const broken = await extract(upload(new File(['PK no zip'], '坏.xlsx')));
+    const broken = await extract(upload(new File([new Uint8Array([0xff, 0xfe, 0x00])], '坏.txt')));
     assert.equal(broken.status, 422);
-    assert.equal((await broken.json()).code, 'UNREADABLE');
+    assert.deepEqual(await broken.json(), { success: false, error: '文本需为 UTF-8 编码，请另存为 UTF-8 后上传', code: 'UNREADABLE' });
 });
 
 test('an upload far past the limit stops being read partway through', async t => {

@@ -6,7 +6,8 @@
  * POST: 提升该绑定为首选来源
  */
 import { NextRequest } from 'next/server';
-import { requireAdminUser, jsonError, jsonOk, getSystemAdminClient } from '@/lib/api-utils';
+import { requireAdminUser, jsonError, jsonOk } from '@/lib/api-utils';
+import { systemDb } from '@/lib/db/context.server';
 import { clearModelCache } from '@/lib/server/ai-config';
 import { isManagedSourceKey } from '@/lib/ai/source-runtime';
 
@@ -45,25 +46,24 @@ function normalizeOptionalTextField(
 }
 
 async function getBindingIdentity(
-    supabase: ReturnType<typeof getSystemAdminClient>,
     modelId: string,
     sourceId: string,
 ): Promise<BindingIdentityRow | null> {
-    const { data: binding } = await supabase
-        .from('ai_model_gateway_bindings')
-        .select(`
-            id,
-            is_enabled,
-            gateway:ai_gateways (
-                gateway_key,
-                is_enabled
-            )
-        `)
-        .eq('id', sourceId)
-        .eq('model_id', modelId)
-        .single();
+    const binding = await systemDb().tx((trx) => trx
+        .selectFrom('ai_model_gateway_bindings as binding')
+        .leftJoin('ai_gateways as gateway', 'gateway.id', 'binding.gateway_id')
+        .select(['binding.id', 'binding.is_enabled', 'gateway.gateway_key', 'gateway.is_enabled as gateway_is_enabled'])
+        .where('binding.id', '=', sourceId)
+        .where('binding.model_id', '=', modelId)
+        .executeTakeFirst()).catch(() => null);
 
-    return (binding as BindingIdentityRow | null) || null;
+    if (!binding) return null;
+    return {
+        id: binding.id, is_enabled: binding.is_enabled,
+        gateway: binding.gateway_key === null && binding.gateway_is_enabled === null
+            ? null
+            : { gateway_key: binding.gateway_key, is_enabled: binding.gateway_is_enabled },
+    };
 }
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
@@ -73,7 +73,6 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     const { id: modelId, sourceId } = await context.params;
-    const supabase = getSystemAdminClient();
 
     try {
         const body = await request.json();
@@ -116,14 +115,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
             return jsonError('isActive 仅支持 true', 400);
         }
 
-        const { data, error } = await supabase.rpc('admin_update_ai_model_binding', {
-            p_model_id: modelId,
-            p_source_id: sourceId,
-            p_patch: updateData,
-            p_activate: body.isActive === true,
-        });
-
-        if (error) {
+        let data: unknown;
+        try {
+            data = await systemDb().rpc('admin_update_ai_model_binding', {
+                p_model_id: modelId,
+                p_source_id: sourceId,
+                p_patch: updateData,
+                p_activate: body.isActive === true,
+            });
+        } catch (error) {
             console.error('[ai-models] Failed to update binding transactionally:', error);
             return jsonError('更新来源失败', 500);
         }
@@ -167,8 +167,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     }
 
     const { id: modelId, sourceId } = await context.params;
-    const supabase = getSystemAdminClient();
-    const binding = await getBindingIdentity(supabase, modelId, sourceId);
+    const binding = await getBindingIdentity(modelId, sourceId);
 
     if (!binding) {
         return jsonError('来源不存在', 404);
@@ -179,13 +178,13 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
         return jsonError('仅支持 NewAPI 和 Octopus 来源', 400);
     }
 
-    const { error } = await supabase
-        .from('ai_model_gateway_bindings')
-        .delete()
-        .eq('id', sourceId)
-        .eq('model_id', modelId);
-
-    if (error) {
+    try {
+        await systemDb().tx((trx) => trx
+            .deleteFrom('ai_model_gateway_bindings')
+            .where('id', '=', sourceId)
+            .where('model_id', '=', modelId)
+            .execute());
+    } catch (error) {
         console.error('[ai-models] Failed to delete binding:', error);
         return jsonError('删除来源失败', 500);
     }
@@ -202,16 +201,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     const { id: modelId, sourceId } = await context.params;
-    const supabase = getSystemAdminClient();
 
-    const { data, error } = await supabase.rpc('admin_update_ai_model_binding', {
-        p_model_id: modelId,
-        p_source_id: sourceId,
-        p_patch: {},
-        p_activate: true,
-    });
-
-    if (error) {
+    let data: unknown;
+    try {
+        data = await systemDb().rpc('admin_update_ai_model_binding', {
+            p_model_id: modelId,
+            p_source_id: sourceId,
+            p_patch: {},
+            p_activate: true,
+        });
+    } catch (error) {
         console.error('[ai-models] Failed to activate binding transactionally:', error);
         return jsonError('激活来源失败', 500);
     }

@@ -2,18 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 
-process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
+import { createMockScopedDb } from './helpers/db-mock';
 
 test('admin ai source creation should reject legacy source keys', async (t) => {
-  const apiUtilsModule = require('../lib/api-utils') as any;
-  const originalRequireAdminUser = apiUtilsModule.requireAdminUser;
-
-  apiUtilsModule.requireAdminUser = async () => ({ user: { id: 'admin-1' } });
-
-  t.after(() => {
-    apiUtilsModule.requireAdminUser = originalRequireAdminUser;
-  });
+  const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
+  t.mock.method(apiUtilsModule, 'requireAdminUser', async () => ({ user: { id: 'admin-1' } }));
 
   const { POST } = await import('../app/api/admin/ai-models/[id]/sources/route');
   const request = new NextRequest('http://localhost/api/admin/ai-models/model-1/sources', {
@@ -35,24 +28,14 @@ test('admin ai source creation should reject legacy source keys', async (t) => {
 });
 
 test('admin ai source creation should reject non-string modelIdOverride', async (t) => {
-  const apiUtilsModule = require('../lib/api-utils') as any;
-  const originalRequireAdminUser = apiUtilsModule.requireAdminUser;
-  const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
-
+  const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
+  const contextModule = require('../lib/db/context.server') as typeof import('../lib/db/context.server');
   let rpcCalled = false;
 
-  apiUtilsModule.requireAdminUser = async () => ({ user: { id: 'admin-1' } });
-  apiUtilsModule.getSystemAdminClient = () => ({
-    rpc: async () => {
-      rpcCalled = true;
-      return { data: null, error: null };
-    },
-  });
-
-  t.after(() => {
-    apiUtilsModule.requireAdminUser = originalRequireAdminUser;
-    apiUtilsModule.getSystemAdminClient = originalGetSystemAdminClient;
-  });
+  t.mock.method(apiUtilsModule, 'requireAdminUser', async () => ({ user: { id: 'admin-1' } }));
+  t.mock.method(contextModule, 'systemDb', () => createMockScopedDb({
+    rpc: async () => { rpcCalled = true; return null; },
+  }) as unknown as ReturnType<typeof contextModule.systemDb>);
 
   const { POST } = await import('../app/api/admin/ai-models/[id]/sources/route');
   const request = new NextRequest('http://localhost/api/admin/ai-models/model-1/sources', {
@@ -73,30 +56,18 @@ test('admin ai source creation should reject non-string modelIdOverride', async 
 });
 
 test('admin ai source creation should call transactional binding rpc', async (t) => {
-  const apiUtilsModule = require('../lib/api-utils') as any;
-  const originalRequireAdminUser = apiUtilsModule.requireAdminUser;
-  const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
+  const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
+  const contextModule = require('../lib/db/context.server') as typeof import('../lib/db/context.server');
 
   const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
 
-  apiUtilsModule.requireAdminUser = async () => ({ user: { id: 'admin-1' } });
-  apiUtilsModule.getSystemAdminClient = () => ({
-    rpc: async (fn: string, args: Record<string, unknown>) => {
+  t.mock.method(apiUtilsModule, 'requireAdminUser', async () => ({ user: { id: 'admin-1' } }));
+  t.mock.method(contextModule, 'systemDb', () => createMockScopedDb({
+    rpc: async (fn, args) => {
       rpcCalls.push({ fn, args });
-      return {
-        data: {
-          status: 'ok',
-          binding: { id: 'binding-1' },
-        },
-        error: null,
-      };
+      return { status: 'ok', binding: { id: 'binding-1' } };
     },
-  });
-
-  t.after(() => {
-    apiUtilsModule.requireAdminUser = originalRequireAdminUser;
-    apiUtilsModule.getSystemAdminClient = originalGetSystemAdminClient;
-  });
+  }) as unknown as ReturnType<typeof contextModule.systemDb>);
 
   const { POST } = await import('../app/api/admin/ai-models/[id]/sources/route');
   const request = new NextRequest('http://localhost/api/admin/ai-models/model-1/sources', {

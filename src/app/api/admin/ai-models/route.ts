@@ -5,7 +5,8 @@
  * POST: 创建新模型
  */
 import { NextRequest } from 'next/server';
-import { requireAdminUser, jsonError, jsonOk, getSystemAdminClient } from '@/lib/api-utils';
+import { requireAdminUser, jsonError, jsonOk } from '@/lib/api-utils';
+import { systemDb } from '@/lib/db/context.server';
 import { clearModelCache } from '@/lib/server/ai-config';
 import { AI_REASONING_EFFORTS } from '@/types';
 import type {
@@ -33,50 +34,13 @@ const VALID_ROUTING_MODES: AIRoutingMode[] = ['auto', 'newapi', 'octopus'];
 const VALID_REASONING_EFFORTS: readonly AIReasoningEffort[] = AI_REASONING_EFFORTS;
 const VALID_REASONING_EFFORT_FORMATS: AIReasoningEffortFormat[] = ['reasoning_object', 'reasoning_effort'];
 
-const MODEL_SELECT = `
-    id,
-    model_key,
-    display_name,
-    vendor,
-    usage_type,
-    routing_mode,
-    is_enabled,
-    sort_order,
-    required_tier,
-    supports_reasoning,
-    reasoning_required_tier,
-    is_reasoning_default,
-    supports_vision,
-    default_temperature,
-    default_top_p,
-    default_presence_penalty,
-    default_frequency_penalty,
-    default_max_tokens,
-    default_reasoning_effort,
-    reasoning_effort_format,
-    custom_parameters,
-    description,
-    created_at,
-    updated_at,
-    bindings:ai_model_gateway_bindings (
-        id,
-        model_id_override,
-        reasoning_model_id,
-        is_enabled,
-        priority,
-        notes,
-        gateway:ai_gateways (
-            id,
-            gateway_key,
-            display_name,
-            base_url,
-            api_key_env_var,
-            transport,
-            is_enabled,
-            notes
-        )
-    )
-`;
+const MODEL_COLUMNS = [
+    'id', 'model_key', 'display_name', 'vendor', 'usage_type', 'routing_mode', 'is_enabled', 'sort_order',
+    'required_tier', 'supports_reasoning', 'reasoning_required_tier', 'is_reasoning_default', 'supports_vision',
+    'default_temperature', 'default_top_p', 'default_presence_penalty', 'default_frequency_penalty',
+    'default_max_tokens', 'default_reasoning_effort', 'reasoning_effort_format', 'custom_parameters',
+    'description', 'created_at', 'updated_at',
+] as const;
 
 type AdminGatewayRow = {
     id: string;
@@ -136,6 +100,18 @@ function normalizeCustomParameters(input: unknown): Record<string, unknown> | nu
     }
     return input as Record<string, unknown>;
 }
+
+type JoinedBindingRow = AdminBindingRow & {
+    model_id: string;
+    gateway_id: string | null;
+    gateway_key: string | null;
+    display_name: string | null;
+    base_url: string | null;
+    api_key_env_var: string | null;
+    transport: string | null;
+    gateway_is_enabled: boolean | null;
+    gateway_notes: string | null;
+};
 
 type AdminModelSource = {
     id: string;
@@ -244,27 +220,47 @@ export async function GET(request: NextRequest) {
         return jsonError(authResult.error.message, authResult.error.status);
     }
 
-    const supabase = getSystemAdminClient();
     const url = new URL(request.url);
     const includeDisabled = url.searchParams.get('includeDisabled') === 'true';
 
-    let query = supabase
-        .from('ai_models')
-        .select(MODEL_SELECT)
-        .order('sort_order', { ascending: true });
-
-    if (!includeDisabled) {
-        query = query.eq('is_enabled', true);
-    }
-
-    const { data: models, error } = await query;
-
-    if (error) {
+    let models: AdminModelRow[];
+    let bindings: JoinedBindingRow[];
+    try {
+        models = await systemDb().tx((trx) => {
+            let query = trx.selectFrom('ai_models').select(MODEL_COLUMNS);
+            if (!includeDisabled) query = query.where('is_enabled', '=', true);
+            return query.orderBy('sort_order', 'asc').execute();
+        }) as unknown as AdminModelRow[];
+        const ids = models.map((model) => model.id);
+        bindings = ids.length ? await systemDb().tx((trx) => trx
+            .selectFrom('ai_model_gateway_bindings as binding')
+            .leftJoin('ai_gateways as gateway', 'gateway.id', 'binding.gateway_id')
+            .select([
+                'binding.id', 'binding.model_id_override', 'binding.reasoning_model_id', 'binding.is_enabled',
+                'binding.priority', 'binding.notes', 'binding.model_id',
+                'gateway.id as gateway_id', 'gateway.gateway_key', 'gateway.display_name', 'gateway.base_url',
+                'gateway.api_key_env_var', 'gateway.transport', 'gateway.is_enabled as gateway_is_enabled', 'gateway.notes as gateway_notes',
+            ])
+            .where('binding.model_id', 'in', ids)
+            .execute()) as unknown as JoinedBindingRow[] : [];
+    } catch (error) {
         console.error('[ai-models] Failed to fetch models:', error);
         return jsonError('获取模型列表失败', 500);
     }
 
-    const formattedModels = (models as AdminModelRow[] | null)?.map((model) => ({
+    for (const model of models) model.bindings = bindings
+        .filter((binding) => binding.model_id === model.id)
+        .map((binding) => ({
+            id: binding.id, model_id_override: binding.model_id_override, reasoning_model_id: binding.reasoning_model_id,
+            is_enabled: binding.is_enabled, priority: binding.priority, notes: binding.notes,
+            gateway: binding.gateway_id ? {
+                id: binding.gateway_id, gateway_key: binding.gateway_key, display_name: binding.display_name,
+                base_url: binding.base_url, api_key_env_var: binding.api_key_env_var, transport: binding.transport,
+                is_enabled: binding.gateway_is_enabled, notes: binding.gateway_notes,
+            } : null,
+        }));
+
+    const formattedModels = models.map((model) => ({
         id: model.id,
         modelKey: model.model_key,
         displayName: model.display_name,
@@ -302,7 +298,7 @@ export async function GET(request: NextRequest) {
         createdAt: model.created_at,
         updatedAt: model.updated_at,
         sources: mapModelSources(model),
-    })) || [];
+    }));
 
     return jsonOk({ models: formattedModels });
 }
@@ -312,8 +308,6 @@ export async function POST(request: NextRequest) {
     if ('error' in authResult) {
         return jsonError(authResult.error.message, authResult.error.status);
     }
-
-    const supabase = getSystemAdminClient();
 
     try {
         const body = await request.json();
@@ -401,12 +395,13 @@ export async function POST(request: NextRequest) {
             description,
         };
 
-        const { data, error } = await supabase.rpc('admin_create_ai_model_with_binding', {
-            p_model: insertData,
-            p_primary_gateway_key: selectedGatewayKey,
-        });
-
-        if (error) {
+        let data: unknown;
+        try {
+            data = await systemDb().rpc('admin_create_ai_model_with_binding', {
+                p_model: insertData,
+                p_primary_gateway_key: selectedGatewayKey,
+            });
+        } catch (error) {
             console.error('[ai-models] Failed to create model transaction:', error);
             return jsonError('创建模型失败', 500);
         }

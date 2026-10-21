@@ -5,7 +5,8 @@
  * DELETE: 删除模型
  */
 import { NextRequest } from 'next/server';
-import { requireAdminUser, jsonError, jsonOk, getSystemAdminClient } from '@/lib/api-utils';
+import { requireAdminUser, jsonError, jsonOk } from '@/lib/api-utils';
+import { systemDb } from '@/lib/db/context.server';
 import { clearModelCache } from '@/lib/server/ai-config';
 import { AI_REASONING_EFFORTS } from '@/types';
 import type {
@@ -53,7 +54,6 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     const { id } = await context.params;
-    const supabase = getSystemAdminClient();
 
     try {
         const body = await request.json();
@@ -136,12 +136,13 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
             return jsonError('没有提供要更新的字段', 400);
         }
 
-        const { data, error } = await supabase.rpc('admin_update_ai_model_and_cleanup_bindings', {
-            p_model_id: id,
-            p_patch: updateData,
-        });
-
-        if (error) {
+        let data: unknown;
+        try {
+            data = await systemDb().rpc('admin_update_ai_model_and_cleanup_bindings', {
+                p_model_id: id,
+                p_patch: updateData,
+            });
+        } catch (error) {
             console.error('[ai-models] Failed to update model transaction:', error);
             return jsonError('更新模型失败', 500);
         }
@@ -183,14 +184,10 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     }
 
     const { id } = await context.params;
-    const supabase = getSystemAdminClient();
 
-    const { error } = await supabase
-        .from('ai_models')
-        .delete()
-        .eq('id', id);
-
-    if (error) {
+    try {
+        await systemDb().tx((trx) => trx.deleteFrom('ai_models').where('id', '=', id).execute());
+    } catch (error) {
         console.error('[ai-models] Failed to delete model:', error);
         return jsonError('删除模型失败', 500);
     }

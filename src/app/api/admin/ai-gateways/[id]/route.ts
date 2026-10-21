@@ -4,7 +4,8 @@
  * PATCH: 更新网关配置
  */
 import { NextRequest } from 'next/server';
-import { requireAdminUser, jsonError, jsonOk, getSystemAdminClient } from '@/lib/api-utils';
+import { requireAdminUser, jsonError, jsonOk } from '@/lib/api-utils';
+import { systemDb } from '@/lib/db/context.server';
 import { clearModelCache } from '@/lib/server/ai-config';
 import { DEFAULT_AI_TRANSPORT } from '@/lib/ai/source-runtime';
 
@@ -19,7 +20,6 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     const { id } = await context.params;
-    const supabase = getSystemAdminClient();
 
     try {
         const body = await request.json();
@@ -41,15 +41,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
             return jsonError('没有提供要更新的字段', 400);
         }
 
-        const { data: gateway, error } = await supabase
-            .from('ai_gateways')
-            .update(updateData)
-            .eq('id', id)
-            .select()
-            .single();
+        const gateway = await systemDb().tx((trx) => trx
+            .updateTable('ai_gateways')
+            .set(updateData)
+            .where('id', '=', id)
+            .returningAll()
+            .executeTakeFirst());
 
-        if (error) {
-            console.error('[ai-gateways] Failed to update gateway:', error);
+        if (!gateway) {
+            console.error('[ai-gateways] Failed to update gateway: not found');
             return jsonError('更新网关失败', 500);
         }
 

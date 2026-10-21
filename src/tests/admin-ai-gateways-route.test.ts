@@ -1,62 +1,49 @@
-import { test } from 'node:test';
+import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
+import { createMockScopedDb } from './helpers/db-mock';
 
-process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
 process.env.NEWAPI_API_KEY = process.env.NEWAPI_API_KEY || 'newapi-key';
 
+function authorize(t: TestContext, db: ReturnType<typeof createMockScopedDb>) {
+  const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
+  const contextModule = require('../lib/db/context.server') as typeof import('../lib/db/context.server');
+  t.mock.method(apiUtilsModule, 'requireAdminUser', async () => ({ user: { id: 'admin-1' } }));
+  t.mock.method(contextModule, 'systemDb', () => db as unknown as ReturnType<typeof contextModule.systemDb>);
+}
+
 test('admin ai gateways GET should expose managed gateways with env key presence', async (t) => {
-  const apiUtilsModule = require('../lib/api-utils') as any;
-  const originalRequireAdminUser = apiUtilsModule.requireAdminUser;
-  const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
-
-  apiUtilsModule.requireAdminUser = async () => ({ user: { id: 'admin-1' } });
-  apiUtilsModule.getSystemAdminClient = () => ({
-    from: (table: string) => {
-      assert.equal(table, 'ai_gateways');
-      return {
-        select: () => ({
-          order: async () => ({
-            data: [
-              {
-                id: 'gateway-1',
-                gateway_key: 'newapi',
-                display_name: 'NewAPI',
-                base_url: 'https://newapi.example/v1',
-                api_key_env_var: 'NEWAPI_API_KEY',
-                transport: 'openai_compatible',
-                is_enabled: true,
-                notes: null,
-              },
-              {
-                id: 'gateway-2',
-                gateway_key: 'octopus',
-                display_name: 'Octopus',
-                base_url: 'https://octopus.example/v1',
-                api_key_env_var: 'OCTOPUS_API_KEY',
-                transport: 'openai_compatible',
-                is_enabled: false,
-                notes: 'backup',
-              },
-            ],
-            error: null,
-          }),
-        }),
-      };
-    },
+  const tables: string[] = [];
+  const scoped = createMockScopedDb({
+    tx: async (work) => work({
+      selectFrom: (table: string) => {
+        tables.push(table);
+        const query = {
+          select: () => query,
+          orderBy: () => query,
+          execute: async () => [
+            {
+              id: 'gateway-1', gateway_key: 'newapi', display_name: 'NewAPI', base_url: 'https://newapi.example/v1',
+              api_key_env_var: 'NEWAPI_API_KEY', transport: 'openai_compatible', is_enabled: true, notes: null,
+            },
+            {
+              id: 'gateway-2', gateway_key: 'octopus', display_name: 'Octopus', base_url: 'https://octopus.example/v1',
+              api_key_env_var: 'OCTOPUS_API_KEY', transport: 'openai_compatible', is_enabled: false, notes: 'backup',
+            },
+          ],
+        };
+        return query;
+      },
+    } as never),
   });
-
-  t.after(() => {
-    apiUtilsModule.requireAdminUser = originalRequireAdminUser;
-    apiUtilsModule.getSystemAdminClient = originalGetSystemAdminClient;
-  });
+  authorize(t, scoped);
 
   const { GET } = await import('../app/api/admin/ai-gateways/route');
   const response = await GET(new NextRequest('http://localhost/api/admin/ai-gateways'));
   const body = await response.json();
 
   assert.equal(response.status, 200);
+  assert.deepEqual(tables, ['ai_gateways']);
   assert.deepEqual(
     body.gateways.map((gateway: { gatewayKey: string; hasApiKey: boolean }) => ({
       gatewayKey: gateway.gatewayKey,
@@ -70,45 +57,31 @@ test('admin ai gateways GET should expose managed gateways with env key presence
 });
 
 test('admin ai gateways PATCH should update managed gateway settings', async (t) => {
-  const apiUtilsModule = require('../lib/api-utils') as any;
-  const originalRequireAdminUser = apiUtilsModule.requireAdminUser;
-  const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
-  const serverConfigModule = require('../lib/server/ai-config') as any;
-  const originalClearModelCache = serverConfigModule.clearModelCache;
-
   let updatedPayload: Record<string, unknown> | null = null;
+  const scoped = createMockScopedDb({
+    tx: async (work) => work({
+      updateTable: (table: string) => {
+        assert.equal(table, 'ai_gateways');
+        return {
+          set: (payload: Record<string, unknown>) => {
+            updatedPayload = payload;
+            return {
+              where: (column: string, _operator: string, value: unknown) => {
+                assert.equal(column, 'id');
+                assert.equal(value, 'gateway-1');
+                return { returningAll: () => ({ executeTakeFirst: async () => ({ id: 'gateway-1' }) }) };
+              },
+            };
+          },
+        };
+      },
+    } as never),
+  });
+  authorize(t, scoped);
+
+  const serverConfigModule = require('../lib/server/ai-config') as typeof import('../lib/server/ai-config');
   let cacheCleared = false;
-
-  apiUtilsModule.requireAdminUser = async () => ({ user: { id: 'admin-1' } });
-  apiUtilsModule.getSystemAdminClient = () => ({
-    from: (table: string) => {
-      assert.equal(table, 'ai_gateways');
-      return {
-        update: (payload: Record<string, unknown>) => {
-          updatedPayload = payload;
-          return {
-            eq: () => ({
-              select: () => ({
-                single: async () => ({
-                  data: { id: 'gateway-1' },
-                  error: null,
-                }),
-              }),
-            }),
-          };
-        },
-      };
-    },
-  });
-  serverConfigModule.clearModelCache = () => {
-    cacheCleared = true;
-  };
-
-  t.after(() => {
-    apiUtilsModule.requireAdminUser = originalRequireAdminUser;
-    apiUtilsModule.getSystemAdminClient = originalGetSystemAdminClient;
-    serverConfigModule.clearModelCache = originalClearModelCache;
-  });
+  t.mock.method(serverConfigModule, 'clearModelCache', () => { cacheCleared = true; });
 
   const { PATCH } = await import('../app/api/admin/ai-gateways/[id]/route');
   const request = new NextRequest('http://localhost/api/admin/ai-gateways/gateway-1', {

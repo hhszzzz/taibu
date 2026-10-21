@@ -1358,11 +1358,11 @@
       "callers": [
         {
           "file": "src/app/api/admin/ai-gateways/[id]/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/admin/ai-gateways/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -1373,15 +1373,19 @@
       "callers": [
         {
           "file": "src/app/api/admin/ai-models/[id]/sources/[sourceId]/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/admin/ai-models/[id]/sources/[sourceId]/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/admin/ai-models/[id]/sources/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/app/api/admin/ai-models/route.ts",
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/server/ai-config.ts",
@@ -1396,15 +1400,15 @@
       "callers": [
         {
           "file": "src/app/api/admin/ai-models/[id]/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/admin/ai-models/[id]/sources/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/admin/ai-models/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/server/ai-config.ts",
@@ -1419,23 +1423,23 @@
       "callers": [
         {
           "file": "src/app/api/admin/announcements/[id]/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/admin/announcements/[id]/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/admin/announcements/[id]/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/admin/announcements/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/admin/announcements/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/announcements/route.ts",

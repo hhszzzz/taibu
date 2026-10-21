@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
-import { getSystemAdminClient, jsonError, jsonOk, requireAdminContext } from '@/lib/api-utils';
+import { jsonError, jsonOk, requireAdminContext } from '@/lib/api-utils';
+import { systemDb } from '@/lib/db/context.server';
 import { parseAnnouncementInput, serializeAnnouncement, type AnnouncementRow } from '@/lib/announcement';
 
 type RouteContext = {
@@ -7,17 +8,16 @@ type RouteContext = {
 };
 
 async function getAnnouncementRow(id: string) {
-    const supabase = getSystemAdminClient();
-    const { data, error } = await supabase
-        .from('announcements')
-        .select('*')
-        .eq('id', id)
-        .maybeSingle();
-
-    return {
-        row: data as AnnouncementRow | null,
-        error,
-    };
+    try {
+        const data = await systemDb().tx((trx) => trx
+            .selectFrom('announcements')
+            .selectAll()
+            .where('id', '=', id)
+            .executeTakeFirst());
+        return { row: (data ?? null) as unknown as AnnouncementRow | null, error: null };
+    } catch (error) {
+        return { row: null, error };
+    }
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {
@@ -72,23 +72,26 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (!parsed.value.content) {
         return jsonError('公告内容不能为空', 400);
     }
+    const content = parsed.value.content;
 
-    const supabase = getSystemAdminClient();
-    const { data, error } = await supabase
-        .from('announcements')
-        .update({
-            content: parsed.value.content,
-        })
-        .eq('id', id)
-        .select('*')
-        .single();
-
-    if (error || !data) {
+    let data: AnnouncementRow | undefined;
+    try {
+        data = await systemDb().tx((trx) => trx
+            .updateTable('announcements')
+            .set({ content })
+            .where('id', '=', id)
+            .returningAll()
+            .executeTakeFirst()) as unknown as AnnouncementRow | undefined;
+    } catch (error) {
         console.error('[announcements][admin][PATCH] update failed:', error);
         return jsonError('更新公告失败', 500);
     }
 
-    return jsonOk({ announcement: serializeAnnouncement(data as AnnouncementRow) });
+    if (!data) {
+        return jsonError('更新公告失败', 500);
+    }
+
+    return jsonOk({ announcement: serializeAnnouncement(data) });
 }
 
 export async function DELETE(request: NextRequest, context: RouteContext) {
@@ -106,13 +109,12 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     if (!existing) {
         return jsonError('公告不存在', 404);
     }
-    const supabase = getSystemAdminClient();
-    const { error } = await supabase
-        .from('announcements')
-        .delete()
-        .eq('id', id);
-
-    if (error) {
+    try {
+        await systemDb().tx((trx) => trx
+            .deleteFrom('announcements')
+            .where('id', '=', id)
+            .execute());
+    } catch (error) {
         console.error('[announcements][admin][DELETE] delete failed:', error);
         return jsonError('删除公告失败', 500);
     }

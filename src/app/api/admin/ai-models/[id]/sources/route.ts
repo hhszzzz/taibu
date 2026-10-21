@@ -5,9 +5,10 @@
  * POST: 添加新绑定
  */
 import { NextRequest } from 'next/server';
-import { requireAdminUser, jsonError, jsonOk, getSystemAdminClient } from '@/lib/api-utils';
+import { requireAdminUser, jsonError, jsonOk } from '@/lib/api-utils';
+import { systemDb } from '@/lib/db/context.server';
 import { clearModelCache } from '@/lib/server/ai-config';
-import type { AITransport } from '@/types';
+import type { AITransport, AIUsageType } from '@/types';
 import {
     buildManagedApiUrl,
     DEFAULT_AI_TRANSPORT,
@@ -33,6 +34,23 @@ type GatewayRow = {
     transport?: string | null;
     is_enabled?: boolean | null;
     notes?: string | null;
+};
+
+type JoinedBindingRow = {
+    id: string;
+    model_id_override: string | null;
+    reasoning_model_id: string | null;
+    is_enabled: boolean;
+    priority: number | null;
+    notes: string | null;
+    gateway_id: string | null;
+    gateway_key: string | null;
+    display_name: string | null;
+    base_url: string | null;
+    api_key_env_var: string | null;
+    transport: string | null;
+    gateway_is_enabled: boolean | null;
+    gateway_notes: string | null;
 };
 
 type BindingRow = {
@@ -89,22 +107,22 @@ function normalizeOptionalTextField(
     return { value, error: null };
 }
 
-async function getModelUsageMeta(supabase: ReturnType<typeof getSystemAdminClient>, modelId: string) {
-    const { data: model, error } = await supabase
-        .from('ai_models')
-        .select('model_key, usage_type, supports_vision')
-        .eq('id', modelId)
-        .single();
+async function getModelUsageMeta(modelId: string) {
+    const model = await systemDb().tx((trx) => trx
+        .selectFrom('ai_models')
+        .select(['model_key', 'usage_type', 'supports_vision'])
+        .where('id', '=', modelId)
+        .executeTakeFirst()).catch(() => null);
 
-    if (error || !model) {
+    if (!model) {
         return null;
     }
 
     return {
         modelKey: model.model_key as string,
         usageType: getModelUsageType({
-            usageType: model.usage_type,
-            supportsVision: model.supports_vision,
+            usageType: (model.usage_type ?? undefined) as AIUsageType | undefined,
+            supportsVision: model.supports_vision ?? undefined,
         }),
     };
 }
@@ -158,41 +176,40 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
 
     const { id: modelId } = await context.params;
-    const supabase = getSystemAdminClient();
-    const modelMeta = await getModelUsageMeta(supabase, modelId);
+    const modelMeta = await getModelUsageMeta(modelId);
     if (!modelMeta) {
         return jsonError('模型不存在', 404);
     }
 
-    const { data: bindings, error } = await supabase
-        .from('ai_model_gateway_bindings')
-        .select(`
-            id,
-            model_id_override,
-            reasoning_model_id,
-            is_enabled,
-            priority,
-            notes,
-            gateway:ai_gateways (
-                id,
-                gateway_key,
-                display_name,
-                base_url,
-                api_key_env_var,
-                transport,
-                is_enabled,
-                notes
-            )
-        `)
-        .eq('model_id', modelId)
-        .order('priority', { ascending: true });
-
-    if (error) {
+    let rows: JoinedBindingRow[];
+    try {
+        rows = await systemDb().tx((trx) => trx
+            .selectFrom('ai_model_gateway_bindings as binding')
+            .leftJoin('ai_gateways as gateway', 'gateway.id', 'binding.gateway_id')
+            .select([
+                'binding.id', 'binding.model_id_override', 'binding.reasoning_model_id', 'binding.is_enabled',
+                'binding.priority', 'binding.notes',
+                'gateway.id as gateway_id', 'gateway.gateway_key', 'gateway.display_name', 'gateway.base_url',
+                'gateway.api_key_env_var', 'gateway.transport', 'gateway.is_enabled as gateway_is_enabled', 'gateway.notes as gateway_notes',
+            ])
+            .where('binding.model_id', '=', modelId)
+            .orderBy('binding.priority', 'asc')
+            .execute()) as unknown as JoinedBindingRow[];
+    } catch (error) {
         console.error('[ai-models] Failed to fetch bindings:', error);
         return jsonError('获取来源列表失败', 500);
     }
 
-    return jsonOk({ sources: mapBindingSources((bindings as BindingRow[] | null) || [], modelMeta.usageType) });
+    const bindings: BindingRow[] = rows.map((row) => ({
+        id: row.id, model_id_override: row.model_id_override, reasoning_model_id: row.reasoning_model_id,
+        is_enabled: row.is_enabled, priority: row.priority, notes: row.notes,
+        gateway: row.gateway_id ? {
+            id: row.gateway_id, gateway_key: row.gateway_key, display_name: row.display_name, base_url: row.base_url,
+            api_key_env_var: row.api_key_env_var, transport: row.transport, is_enabled: row.gateway_is_enabled, notes: row.gateway_notes,
+        } : null,
+    }));
+
+    return jsonOk({ sources: mapBindingSources(bindings, modelMeta.usageType) });
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
@@ -202,7 +219,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     const { id: modelId } = await context.params;
-    const supabase = getSystemAdminClient();
 
     try {
         const body = await request.json();
@@ -245,17 +261,18 @@ export async function POST(request: NextRequest, context: RouteContext) {
             return jsonError('priority 必须是大于等于 0 的整数', 400);
         }
 
-        const { data, error } = await supabase.rpc('admin_create_ai_model_binding', {
-            p_model_id: modelId,
-            p_source_key: sourceKey,
-            p_model_id_override: normalizedModelIdOverride.value ?? null,
-            p_reasoning_model_id: normalizedReasoningModelId.value ?? null,
-            p_is_enabled: isEnabled,
-            p_priority: priority ?? null,
-            p_notes: normalizedNotes.value ?? null,
-        });
-
-        if (error) {
+        let data: unknown;
+        try {
+            data = await systemDb().rpc('admin_create_ai_model_binding', {
+                p_model_id: modelId,
+                p_source_key: sourceKey,
+                p_model_id_override: normalizedModelIdOverride.value ?? null,
+                p_reasoning_model_id: normalizedReasoningModelId.value ?? null,
+                p_is_enabled: isEnabled,
+                p_priority: priority ?? null,
+                p_notes: normalizedNotes.value ?? null,
+            });
+        } catch (error) {
             console.error('[ai-models] Failed to create binding transactionally:', error);
             return jsonError('创建来源失败', 500);
         }

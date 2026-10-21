@@ -1,43 +1,28 @@
-import { test } from 'node:test';
+import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 
-process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
+import { createMockScopedDb } from './helpers/db-mock';
+
+function adminRpc(t: TestContext, rpc: (fn: string, args: Record<string, unknown>) => unknown) {
+  const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
+  const contextModule = require('../lib/db/context.server') as typeof import('../lib/db/context.server');
+  t.mock.method(apiUtilsModule, 'requireAdminUser', async () => ({ user: { id: 'admin-1' } }));
+  t.mock.method(contextModule, 'systemDb', () => createMockScopedDb({ rpc }) as unknown as ReturnType<typeof contextModule.systemDb>);
+}
 
 test('admin ai models POST should create a primary gateway binding for the selected routing mode', async (t) => {
-  const apiUtilsModule = require('../lib/api-utils') as any;
-  const serverConfigModule = require('../lib/server/ai-config') as any;
-  const originalRequireAdminUser = apiUtilsModule.requireAdminUser;
-  const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
-  const originalClearModelCache = serverConfigModule.clearModelCache;
+  const serverConfigModule = require('../lib/server/ai-config') as typeof import('../lib/server/ai-config');
 
   let rpcArgs: Record<string, unknown> | null = null;
   let cacheCleared = false;
 
-  apiUtilsModule.requireAdminUser = async () => ({ user: { id: 'admin-1' } });
-  apiUtilsModule.getSystemAdminClient = () => ({
-    rpc: async (fn: string, args: Record<string, unknown>) => {
-      assert.equal(fn, 'admin_create_ai_model_with_binding');
-      rpcArgs = args;
-      return {
-        data: {
-          status: 'ok',
-          model: { id: 'model-1', model_key: 'gpt-5.4' },
-        },
-        error: null,
-      };
-    },
+  adminRpc(t, (fn, args) => {
+    assert.equal(fn, 'admin_create_ai_model_with_binding');
+    rpcArgs = args;
+    return { status: 'ok', model: { id: 'model-1', model_key: 'gpt-5.4' } };
   });
-  serverConfigModule.clearModelCache = () => {
-    cacheCleared = true;
-  };
-
-  t.after(() => {
-    apiUtilsModule.requireAdminUser = originalRequireAdminUser;
-    apiUtilsModule.getSystemAdminClient = originalGetSystemAdminClient;
-    serverConfigModule.clearModelCache = originalClearModelCache;
-  });
+  t.mock.method(serverConfigModule, 'clearModelCache', () => { cacheCleared = true; });
 
   const { POST } = await import('../app/api/admin/ai-models/route');
   const request = new NextRequest('http://localhost/api/admin/ai-models', {
@@ -83,30 +68,12 @@ test('admin ai models POST should create a primary gateway binding for the selec
 });
 
 test('admin ai models POST should return 404 when transactional create cannot resolve primary gateway', async (t) => {
-  const apiUtilsModule = require('../lib/api-utils') as any;
-  const serverConfigModule = require('../lib/server/ai-config') as any;
-  const originalRequireAdminUser = apiUtilsModule.requireAdminUser;
-  const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
-  const originalClearModelCache = serverConfigModule.clearModelCache;
+  const serverConfigModule = require('../lib/server/ai-config') as typeof import('../lib/server/ai-config');
 
   let cacheCleared = false;
 
-  apiUtilsModule.requireAdminUser = async () => ({ user: { id: 'admin-1' } });
-  apiUtilsModule.getSystemAdminClient = () => ({
-    rpc: async () => ({
-      data: { status: 'gateway_not_found' },
-      error: null,
-    }),
-  });
-  serverConfigModule.clearModelCache = () => {
-    cacheCleared = true;
-  };
-
-  t.after(() => {
-    apiUtilsModule.requireAdminUser = originalRequireAdminUser;
-    apiUtilsModule.getSystemAdminClient = originalGetSystemAdminClient;
-    serverConfigModule.clearModelCache = originalClearModelCache;
-  });
+  adminRpc(t, () => ({ status: 'gateway_not_found' }));
+  t.mock.method(serverConfigModule, 'clearModelCache', () => { cacheCleared = true; });
 
   const { POST } = await import('../app/api/admin/ai-models/route');
   const request = new NextRequest('http://localhost/api/admin/ai-models', {
@@ -129,30 +96,12 @@ test('admin ai models POST should return 404 when transactional create cannot re
 });
 
 test('admin ai models POST should return 500 when transactional create RPC fails', async (t) => {
-  const apiUtilsModule = require('../lib/api-utils') as any;
-  const serverConfigModule = require('../lib/server/ai-config') as any;
-  const originalRequireAdminUser = apiUtilsModule.requireAdminUser;
-  const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
-  const originalClearModelCache = serverConfigModule.clearModelCache;
+  const serverConfigModule = require('../lib/server/ai-config') as typeof import('../lib/server/ai-config');
 
   let cacheCleared = false;
 
-  apiUtilsModule.requireAdminUser = async () => ({ user: { id: 'admin-1' } });
-  apiUtilsModule.getSystemAdminClient = () => ({
-    rpc: async () => ({
-      data: null,
-      error: { message: 'transaction failed' },
-    }),
-  });
-  serverConfigModule.clearModelCache = () => {
-    cacheCleared = true;
-  };
-
-  t.after(() => {
-    apiUtilsModule.requireAdminUser = originalRequireAdminUser;
-    apiUtilsModule.getSystemAdminClient = originalGetSystemAdminClient;
-    serverConfigModule.clearModelCache = originalClearModelCache;
-  });
+  adminRpc(t, () => { throw new Error('transaction failed'); });
+  t.mock.method(serverConfigModule, 'clearModelCache', () => { cacheCleared = true; });
 
   const { POST } = await import('../app/api/admin/ai-models/route');
   const request = new NextRequest('http://localhost/api/admin/ai-models', {

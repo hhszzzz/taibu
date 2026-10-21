@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
-import { getSystemAdminClient, jsonError, jsonOk, requireAdminContext } from '@/lib/api-utils';
+import { jsonError, jsonOk, requireAdminContext } from '@/lib/api-utils';
+import { systemDb } from '@/lib/db/context.server';
 import { parseAnnouncementInput, serializeAnnouncement, type AnnouncementRow } from '@/lib/announcement';
 
 export async function GET(request: NextRequest) {
@@ -8,19 +9,20 @@ export async function GET(request: NextRequest) {
         return jsonError(auth.error.message, auth.error.status);
     }
 
-    const supabase = getSystemAdminClient();
-    const { data, error } = await supabase
-        .from('announcements')
-        .select('*')
-        .order('published_at', { ascending: false });
-
-    if (error) {
+    let data: AnnouncementRow[];
+    try {
+        data = await systemDb().tx((trx) => trx
+            .selectFrom('announcements')
+            .selectAll()
+            .orderBy('published_at', 'desc')
+            .execute()) as unknown as AnnouncementRow[];
+    } catch (error) {
         console.error('[announcements][admin][GET] query failed:', error);
         return jsonError('获取公告列表失败', 500);
     }
 
     return jsonOk({
-        announcements: (data || []).map((row: AnnouncementRow) => serializeAnnouncement(row)),
+        announcements: data.map((row) => serializeAnnouncement(row)),
     });
 }
 
@@ -47,17 +49,17 @@ export async function POST(request: NextRequest) {
         published_at: new Date().toISOString(),
     };
 
-    const supabase = getSystemAdminClient();
-    const { data, error } = await supabase
-        .from('announcements')
-        .insert(payload)
-        .select('*')
-        .single();
-
-    if (error) {
+    let data: AnnouncementRow;
+    try {
+        data = await systemDb().tx((trx) => trx
+            .insertInto('announcements')
+            .values(payload)
+            .returningAll()
+            .executeTakeFirstOrThrow()) as unknown as AnnouncementRow;
+    } catch (error) {
         console.error('[announcements][admin][POST] insert failed:', error);
         return jsonError('发布公告失败', 500);
     }
 
-    return jsonOk({ announcement: serializeAnnouncement(data as AnnouncementRow) });
+    return jsonOk({ announcement: serializeAnnouncement(data) });
 }

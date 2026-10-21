@@ -4,7 +4,8 @@
  * GET: 获取受管网关列表
  */
 import { NextRequest } from 'next/server';
-import { requireAdminUser, jsonError, jsonOk, getSystemAdminClient } from '@/lib/api-utils';
+import { requireAdminUser, jsonError, jsonOk } from '@/lib/api-utils';
+import { systemDb } from '@/lib/db/context.server';
 import { DEFAULT_AI_TRANSPORT, isManagedSourceKey } from '@/lib/ai/source-runtime';
 
 function hasEnvVar(envVarName: string): boolean {
@@ -17,27 +18,22 @@ export async function GET(request: NextRequest) {
         return jsonError(authResult.error.message, authResult.error.status);
     }
 
-    const supabase = getSystemAdminClient();
-    const { data: gateways, error } = await supabase
-        .from('ai_gateways')
-        .select(`
-            id,
-            gateway_key,
-            display_name,
-            base_url,
-            api_key_env_var,
-            transport,
-            is_enabled,
-            notes
-        `)
-        .order('gateway_key', { ascending: true });
-
-    if (error) {
+    let gateways: Array<{
+        id: string; gateway_key: string; display_name: string; base_url: string;
+        api_key_env_var: string; transport: string | null; is_enabled: boolean; notes: string | null;
+    }>;
+    try {
+        gateways = await systemDb().tx((trx) => trx
+            .selectFrom('ai_gateways')
+            .select(['id', 'gateway_key', 'display_name', 'base_url', 'api_key_env_var', 'transport', 'is_enabled', 'notes'])
+            .orderBy('gateway_key', 'asc')
+            .execute());
+    } catch (error) {
         console.error('[ai-gateways] Failed to fetch gateways:', error);
         return jsonError('获取网关列表失败', 500);
     }
 
-    const managedGateways = (gateways || [])
+    const managedGateways = gateways
         .filter((gateway: { gateway_key: string | null }) => isManagedSourceKey(gateway.gateway_key))
         .map((gateway: {
             id: string;

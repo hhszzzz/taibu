@@ -19,20 +19,15 @@ export async function GET(
             return jsonError(auth.error.message, auth.error.status);
         }
         const { user } = auth;
-        const db = auth.db;
 
         const { id } = await params;
-        const { data, error } = await db
-            .from('community_comments')
-            .select('id, user_id')
-            .eq('id', id)
-            .eq('is_deleted', false)
-            .maybeSingle();
+        const data = await auth.scoped.tx((trx) => trx
+            .selectFrom('community_comments')
+            .select(['id', 'user_id'])
+            .where('id', '=', id)
+            .where('is_deleted', '=', false)
+            .executeTakeFirst());
 
-        if (error) {
-            console.error('获取评论失败:', error);
-            return jsonError('获取评论失败', 500);
-        }
         if (!data) {
             return jsonError('评论不存在', 404);
         }
@@ -60,7 +55,6 @@ export async function PUT(
             return jsonError(auth.error.message, auth.error.status);
         }
         const { user } = auth;
-        const db = auth.db;
 
         const { id } = await params;
         const body = await request.json();
@@ -69,34 +63,28 @@ export async function PUT(
             return jsonError('内容不能为空', 400);
         }
 
-        const updateResult = await withRetry(async () => {
-            const response = await db
-                .from('community_comments')
-                .update({
+        let data;
+        try {
+            data = await withRetry(() => auth.scoped.tx((trx) => trx
+                .updateTable('community_comments')
+                .set({
                     content: body.content,
                     updated_at: new Date().toISOString(),
                 })
-                .eq('id', id)
-                .eq('user_id', user.id)
-                .eq('is_deleted', false)
-                .select()
-                .maybeSingle();
-            if (response.error) {
-                throw response.error;
-            }
-            return response;
-        });
-
-        if (updateResult.error) {
-            console.error('更新评论失败:', updateResult.error);
+                .where('id', '=', id)
+                .where('user_id', '=', user.id)
+                .where('is_deleted', '=', false)
+                .returningAll()
+                .executeTakeFirst()));
+        } catch (updateError) {
+            console.error('更新评论失败:', updateError);
             return jsonError('更新评论失败', 500);
         }
 
-        const data = updateResult.data as Record<string, unknown> | null;
         if (!data) {
             return jsonError('无权限编辑此评论', 403);
         }
-        const safeComment = { ...(data || {}) } as Record<string, unknown>;
+        const safeComment = { ...data } as Record<string, unknown>;
         delete (safeComment as { user_id?: unknown }).user_id;
         return jsonOk(safeComment);
     } catch (error) {
@@ -115,31 +103,25 @@ export async function DELETE(
             return jsonError(auth.error.message, auth.error.status);
         }
         const { user } = auth;
-        const db = auth.db;
 
         const { id } = await params;
 
-        const deleteResult = await withRetry(async () => {
-            const response = await db
-                .from('community_comments')
-                .update({ is_deleted: true, updated_at: new Date().toISOString() })
-                .eq('id', id)
-                .eq('user_id', user.id)
-                .eq('is_deleted', false)
-                .select('id')
-                .maybeSingle();
-            if (response.error) {
-                throw response.error;
-            }
-            return response;
-        });
-
-        if (deleteResult.error) {
-            console.error('删除评论失败:', deleteResult.error);
+        let deleted;
+        try {
+            deleted = await withRetry(() => auth.scoped.tx((trx) => trx
+                .updateTable('community_comments')
+                .set({ is_deleted: true, updated_at: new Date().toISOString() })
+                .where('id', '=', id)
+                .where('user_id', '=', user.id)
+                .where('is_deleted', '=', false)
+                .returning('id')
+                .executeTakeFirst()));
+        } catch (deleteError) {
+            console.error('删除评论失败:', deleteError);
             return jsonError('删除评论失败', 500);
         }
 
-        if (!deleteResult.data) {
+        if (!deleted) {
             return jsonError('无权限删除此评论', 403);
         }
 

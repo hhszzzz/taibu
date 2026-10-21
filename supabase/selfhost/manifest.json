@@ -1620,27 +1620,27 @@
       "callers": [
         {
           "file": "src/app/api/community/comments/[id]/admin/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/community/comments/[id]/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/community/comments/[id]/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/community/comments/[id]/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/community/comments/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/community/posts/[id]/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -1651,35 +1651,27 @@
       "callers": [
         {
           "file": "src/app/api/community/posts/[id]/admin/route.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/app/api/community/posts/[id]/admin/route.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/app/api/community/posts/[id]/admin/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/community/posts/[id]/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/community/posts/[id]/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/community/posts/[id]/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/community/posts/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/community/posts/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -1690,11 +1682,11 @@
       "callers": [
         {
           "file": "src/app/api/community/reports/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/community/reports/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -1705,11 +1697,11 @@
       "callers": [
         {
           "file": "src/app/api/community/posts/[id]/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/community/votes/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -2502,15 +2494,11 @@
         },
         {
           "file": "src/lib/community-server.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/community-server.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/community-server.ts",
-          "kind": "typed-adapter-catalog"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/server/chat/bootstrap.ts",

@@ -1,5 +1,6 @@
 import { type NextRequest } from 'next/server';
-import { getSystemAdminClient, jsonError, jsonOk, requireAdminContext } from '@/lib/api-utils';
+import { jsonError, jsonOk, requireAdminContext } from '@/lib/api-utils';
+import { systemDb } from '@/lib/db/context.server';
 
 export async function DELETE(
     request: NextRequest,
@@ -9,13 +10,14 @@ export async function DELETE(
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
 
     const { id } = await params;
-    const serviceClient = getSystemAdminClient();
-    const { error } = await serviceClient
-        .from('community_comments')
-        .update({ is_deleted: true, updated_at: new Date().toISOString() })
-        .eq('id', id);
 
-    if (error) {
+    try {
+        await systemDb().tx((trx) => trx
+            .updateTable('community_comments')
+            .set({ is_deleted: true, updated_at: new Date().toISOString() })
+            .where('id', '=', id)
+            .execute());
+    } catch (error) {
         console.error('管理员删除评论失败:', error);
         return jsonError('操作失败', 500);
     }

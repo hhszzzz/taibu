@@ -4,7 +4,8 @@
  */
 
 import { NextRequest } from 'next/server';
-import { jsonError, jsonOk, requireAdminContext, getSystemAdminClient } from '@/lib/api-utils';
+import { jsonError, jsonOk, requireAdminContext } from '@/lib/api-utils';
+import { systemDb } from '@/lib/db/context.server';
 import { missingFields } from '@/lib/validation';
 
 export async function PUT(
@@ -25,37 +26,24 @@ export async function PUT(
             return jsonError('缺少参数', 400);
         }
 
-        // 使用 Service Role Client 绕过 RLS
-        const serviceClient = getSystemAdminClient();
+        const patch = action === 'pin'
+            ? { is_pinned: value as boolean }
+            : action === 'feature'
+                ? { is_featured: value as boolean }
+                : action === 'delete'
+                    ? { is_deleted: true }
+                    : null;
 
-        switch (action) {
-            case 'pin': {
-                const { error } = await serviceClient
-                    .from('community_posts')
-                    .update({ is_pinned: value, updated_at: new Date().toISOString() })
-                    .eq('id', id);
-                if (error) throw error;
-                break;
-            }
-            case 'feature': {
-                const { error } = await serviceClient
-                    .from('community_posts')
-                    .update({ is_featured: value, updated_at: new Date().toISOString() })
-                    .eq('id', id);
-                if (error) throw error;
-                break;
-            }
-            case 'delete': {
-                const { error } = await serviceClient
-                    .from('community_posts')
-                    .update({ is_deleted: true, updated_at: new Date().toISOString() })
-                    .eq('id', id);
-                if (error) throw error;
-                break;
-            }
-            default:
-                return jsonError('无效操作', 400);
+        if (!patch) {
+            return jsonError('无效操作', 400);
         }
+
+        // 使用系统上下文绕过 RLS
+        await systemDb().tx((trx) => trx
+            .updateTable('community_posts')
+            .set({ ...patch, updated_at: new Date().toISOString() })
+            .where('id', '=', id)
+            .execute());
 
         return jsonOk({ success: true });
     } catch (error) {

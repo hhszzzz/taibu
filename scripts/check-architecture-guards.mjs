@@ -1099,6 +1099,9 @@ const SYSTEM_DB_ALLOWED = [
   'src/lib/identity/',
   'src/lib/agent/',
   'src/app/api/admin/',
+  // 社区表在自托管 schema 中只有管理员可见（无 owner 策略），接口与旧版
+  // getSystemAdminClient() 行为一致地使用系统上下文。
+  'src/app/api/community/',
   'src/lib/reminders.ts',
   'src/lib/daily-briefing.server.ts',
   'src/lib/app-settings.ts',

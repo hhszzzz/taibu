@@ -110,12 +110,12 @@ test('community votes POST should toggle vote through transactional rpc', async 
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    supabase: {
+    scoped: createMockScopedDb({
       rpc: async (fn: string, args: Record<string, unknown>) => {
         rpcCalls.push({ fn, args });
-        return { data: { status: 'ok', vote: 'down' }, error: null };
+        return { status: 'ok', vote: 'down' };
       },
-    },
+    }),
   });
   delete require.cache[routePath];
 
@@ -365,24 +365,21 @@ test('community reports POST should submit and notify via transactional rpc', as
 
   apiUtils.requireUserContext = (async () => ({
     user: { id: 'user-1' },
-    supabase: {
+    scoped: createMockScopedDb({
       rpc(fn: string, args: Record<string, unknown>) {
         rpcCalls.push({ fn, args });
         return Promise.resolve({
-          data: {
-            status: 'ok',
-            report: {
-              id: 'report-1',
-              reporter_id: 'user-1',
-              target_type: 'comment',
-              target_id: 'comment-1',
-              reason: 'spam',
-            },
+          status: 'ok',
+          report: {
+            id: 'report-1',
+            reporter_id: 'user-1',
+            target_type: 'comment',
+            target_id: 'comment-1',
+            reason: 'spam',
           },
-          error: null,
         });
       },
-    },
+    }),
   })) as unknown as typeof apiUtils.requireUserContext;
 
   t.after(() => {
@@ -425,14 +422,11 @@ test('community reports POST should return 500 when transactional rpc fails', as
 
   apiUtils.requireUserContext = (async () => ({
     user: { id: 'user-1' },
-    supabase: {
+    scoped: createMockScopedDb({
       rpc() {
-        return Promise.resolve({
-          data: null,
-          error: { message: 'transaction failed' },
-        });
+        throw new Error('transaction failed');
       },
-    },
+    }),
   })) as unknown as typeof apiUtils.requireUserContext;
 
   t.after(() => {

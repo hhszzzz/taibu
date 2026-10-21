@@ -173,7 +173,9 @@ test('literal relations and dynamic factory catalogs resolve to real tables or v
   assert.ok(relations.get('ming_records_with_archive_status').callers.some(c => c.file === 'src/app/api/records/route.ts'));
   assert.ok(relations.get('tarot_readings').callers.some(c => c.file === 'src/lib/history/registry.ts' && c.kind === 'tableName-catalog'));
   assert.ok(relations.get('bazi_charts').callers.some(c => c.kind === 'chart-return-catalog'));
-  assert.ok(relations.get('users').callers.some(c => c.kind === 'typed-adapter-catalog'));
+  // The former typed Supabase adapter for users is gone; scoped Kysely is now
+  // the only path that resolves the users relation for community authors.
+  assert.ok(relations.get('users').callers.some(c => c.kind === 'literal-kysely'));
   assert.ok(manifest.dynamicRelationSites.some(s => s.file === 'src/lib/api/divination-pipeline.ts' && s.expression === 'tableName'));
   assert.ok(manifest.dynamicRelationSites.some(s => s.file === 'src/lib/api/chart-crud.ts' && s.expression === 'config.tableName'));
   assert.ok(manifest.excludedRelationAdapters.some(s => s.file === 'src/app/api/supabase/storage/route.ts'));

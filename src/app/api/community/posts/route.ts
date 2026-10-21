@@ -6,11 +6,12 @@
 
 import { NextRequest } from 'next/server';
 import { PostCategory, PostFilters, normalizePostInput } from '@/lib/community';
-import { asCommunityLookupClient, loadCommunityAuthorProfileMap, loadSingleCommunityAuthorProfile, toPublicPost, type CommunityPostRow } from '@/lib/community-server';
-import { jsonError, jsonOk, requireUserContext, getSystemAdminClient } from '@/lib/api-utils';
+import { loadCommunityAuthorProfileMap, loadSingleCommunityAuthorProfile, toPublicPost, type CommunityPostRow } from '@/lib/community-server';
+import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
+import { systemDb } from '@/lib/db/context.server';
+import { escapeLike } from '@/lib/db/sql-helpers';
 import { withRetry } from '@/lib/retry';
 import { parsePagination } from '@/lib/pagination';
-import { quotePostgrestString } from '@/lib/utils/postgrest';
 
 export async function GET(request: NextRequest) {
     try {
@@ -21,59 +22,35 @@ export async function GET(request: NextRequest) {
         const search = searchParams.get('search');
         const sortBy = searchParams.get('sortBy') as PostFilters['sortBy'] || 'latest';
 
-        // 使用 serviceClient 和重试逻辑
-        const serviceClient = getSystemAdminClient();
-
-        const result = await withRetry(async () => {
-            let query = serviceClient
-                .from('community_posts')
-                .select('*', { count: 'exact' })
-                .eq('is_deleted', false);
-
-            // 应用筛选条件
-            if (category) {
-                query = query.eq('category', category);
-            }
-            if (search) {
-                const pattern = quotePostgrestString(`%${search}%`);
-                query = query.or(`title.ilike.${pattern},content.ilike.${pattern}`);
-            }
-
-            // 排序
-            if (sortBy === 'latest') {
-                query = query.order('is_pinned', { ascending: false }).order('created_at', { ascending: false });
-            } else if (sortBy === 'popular') {
-                query = query.order('is_pinned', { ascending: false }).order('upvote_count', { ascending: false });
-            } else if (sortBy === 'hot') {
-                query = query.order('is_pinned', { ascending: false }).order('comment_count', { ascending: false });
-            }
-
-            // 分页
-            query = query.range(from, to);
-
-            const response = await query;
-            if (response.error) {
-                throw response.error;
-            }
-            return response;
-        });
-
-        if (result.error) {
-            console.error('获取帖子失败:', result.error);
-            return jsonError('获取帖子失败', 500);
-        }
+        const result = await withRetry(() => systemDb().tx(async (trx) => {
+            const filtered = () => {
+                let query = trx.selectFrom('community_posts').where('is_deleted', '=', false);
+                if (category) query = query.where('category', '=', category);
+                if (search) {
+                    const pattern = `%${escapeLike(search)}%`;
+                    query = query.where((eb) => eb.or([eb('title', 'ilike', pattern), eb('content', 'ilike', pattern)]));
+                }
+                return query;
+            };
+            const total = await filtered().select((eb) => eb.fn.countAll<number>().as('count')).executeTakeFirst();
+            let query = filtered().selectAll();
+            if (sortBy === 'popular') query = query.orderBy('is_pinned', 'desc').orderBy('upvote_count', 'desc');
+            else if (sortBy === 'hot') query = query.orderBy('is_pinned', 'desc').orderBy('comment_count', 'desc');
+            else query = query.orderBy('is_pinned', 'desc').orderBy('created_at', 'desc');
+            return { rows: await query.offset(from).limit(to - from + 1).execute(), total: Number(total?.count ?? 0) };
+        }));
 
         const authorMap = await loadCommunityAuthorProfileMap(
-            asCommunityLookupClient(serviceClient),
-            (result.data || []).map((post: CommunityPostRow) => post.user_id),
+            systemDb(),
+            result.rows.map((post) => post.user_id),
         );
-        const safePosts = (result.data || []).map((post: CommunityPostRow) =>
-            toPublicPost(post, authorMap.get(post.user_id) || { name: '命理爱好者', avatarUrl: null }),
+        const safePosts = result.rows.map((post) =>
+            toPublicPost(post as unknown as CommunityPostRow, authorMap.get(post.user_id) || { name: '命理爱好者', avatarUrl: null }),
         );
 
         return jsonOk({
             posts: safePosts,
-            total: result.count || 0,
+            total: result.total,
         });
     } catch (error) {
         console.error('获取帖子失败:', error);
@@ -88,7 +65,6 @@ export async function POST(request: NextRequest) {
             return jsonError(auth.error.message, auth.error.status);
         }
         const { user } = auth;
-        const db = auth.db;
 
         let body: unknown;
         try {
@@ -102,24 +78,23 @@ export async function POST(request: NextRequest) {
             return jsonError(normalized.error, 400);
         }
 
-        const authorProfile = await loadSingleCommunityAuthorProfile(asCommunityLookupClient(db), user.id);
+        const authorProfile = await loadSingleCommunityAuthorProfile(auth.scoped, user.id);
 
-        // 创建帖子
-        const { data: post, error: postError } = await db
-            .from('community_posts')
-            .insert({
-                user_id: user.id,
-                ...normalized.data,
-            })
-            .select()
-            .single();
+        const postValues = Object.fromEntries(Object.entries({ user_id: user.id, ...normalized.data }).filter(([, value]) => value !== undefined));
 
-        if (postError) {
+        let post;
+        try {
+            post = await auth.scoped.tx((trx) => trx
+                .insertInto('community_posts')
+                .values(postValues as never)
+                .returningAll()
+                .executeTakeFirstOrThrow());
+        } catch (postError) {
             console.error('创建帖子失败:', postError);
             return jsonError('创建帖子失败', 500);
         }
 
-        return jsonOk(toPublicPost(post as CommunityPostRow, authorProfile));
+        return jsonOk(toPublicPost(post as unknown as CommunityPostRow, authorProfile));
     } catch (error) {
         console.error('创建帖子失败:', error);
         return jsonError('创建帖子失败', 500);

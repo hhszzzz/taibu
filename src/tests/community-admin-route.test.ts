@@ -28,24 +28,16 @@ test('community reports returns auth error when admin check fails', async (t) =>
 
 test('community admin post rejects invalid action', async (t) => {
     const apiUtils = require('../lib/api-utils') as any;
-    const supabaseServerModule = require('../lib/supabase-server') as any;
 
     const originalRequireAdminContext = apiUtils.requireAdminContext;
-    const originalGetServiceClient = supabaseServerModule.getSystemAdminClient;
 
     apiUtils.requireAdminContext = async () => ({
         supabase: {} as any,
         user: { id: 'admin-1' },
     });
-    supabaseServerModule.getSystemAdminClient = () => ({
-        from: () => ({
-            update: () => ({ eq: async () => ({ error: null }) }),
-        }),
-    });
 
     t.after(() => {
         apiUtils.requireAdminContext = originalRequireAdminContext;
-        supabaseServerModule.getSystemAdminClient = originalGetServiceClient;
     });
 
     const { PUT } = await import('../app/api/community/posts/[id]/admin/route');

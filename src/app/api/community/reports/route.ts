@@ -7,7 +7,7 @@
 
 import { NextRequest } from 'next/server';
 import { TargetType, ReportReason, ReportStatus } from '@/lib/community';
-import { jsonError, jsonOk, requireAdminContext, requireUserContext, resolveRequestDbClient } from '@/lib/api-utils';
+import { jsonError, jsonOk, requireAdminContext, requireUserContext } from '@/lib/api-utils';
 import { parsePagination } from '@/lib/pagination';
 import { missingFields } from '@/lib/validation';
 
@@ -17,37 +17,25 @@ export async function GET(request: NextRequest) {
         if ('error' in auth) {
             return jsonError(auth.error.message, auth.error.status);
         }
-        const db = resolveRequestDbClient(auth);
-        if (!db) {
-            return jsonError('获取举报列表失败', 500);
-        }
 
         const { searchParams } = new URL(request.url);
         const status = searchParams.get('status') as ReportStatus | null;
         const { from, to } = parsePagination(searchParams, { defaultPageSize: 20 });
 
-        // 使用 Service Role Client 获取所有举报
-        let query = db
-            .from('community_reports')
-            .select('*', { count: 'exact' })
-            .order('created_at', { ascending: false });
-
-        if (status) {
-            query = query.eq('status', status);
-        }
-
-        query = query.range(from, to);
-
-        const { data, error, count } = await query;
-
-        if (error) {
-            console.error('获取举报列表失败:', error);
-            return jsonError('获取举报列表失败', 500);
-        }
+        const result = await auth.scoped.tx(async (trx) => {
+            const filtered = () => {
+                let query = trx.selectFrom('community_reports');
+                if (status) query = query.where('status', '=', status);
+                return query;
+            };
+            const totalRow = await filtered().select((eb) => eb.fn.countAll<number>().as('count')).executeTakeFirst();
+            const rows = await filtered().selectAll().orderBy('created_at', 'desc').offset(from).limit(to - from + 1).execute();
+            return { rows, total: Number(totalRow?.count ?? 0) };
+        });
 
         return jsonOk({
-            reports: data,
-            total: count || 0,
+            reports: result.rows,
+            total: result.total,
         });
     } catch (error) {
         console.error('获取举报列表失败:', error);
@@ -60,10 +48,6 @@ export async function POST(request: NextRequest) {
         const auth = await requireUserContext(request);
         if ('error' in auth) {
             return jsonError(auth.error.message, auth.error.status);
-        }
-        const db = resolveRequestDbClient(auth);
-        if (!db) {
-            return jsonError('提交举报失败', 500);
         }
 
         const body = await request.json();
@@ -78,14 +62,15 @@ export async function POST(request: NextRequest) {
             return jsonError('缺少参数', 400);
         }
 
-        const { data, error } = await db.rpc('submit_community_report_and_notify', {
-            p_target_type: targetType,
-            p_target_id: targetId,
-            p_reason: reason,
-            p_description: description || null,
-        });
-
-        if (error) {
+        let data: unknown;
+        try {
+            data = await auth.scoped.rpc('submit_community_report_and_notify' as never, {
+                p_target_type: targetType,
+                p_target_id: targetId,
+                p_reason: reason,
+                p_description: description || null,
+            } as never);
+        } catch (error) {
             console.error('提交举报失败:', error);
             return jsonError('提交举报失败', 500);
         }
@@ -110,10 +95,6 @@ export async function PUT(request: NextRequest) {
             return jsonError(auth.error.message, auth.error.status);
         }
         const { user } = auth;
-        const db = resolveRequestDbClient(auth);
-        if (!db) {
-            return jsonError('处理举报失败', 500);
-        }
 
         const body = await request.json();
         const { reportId, status, notes } = body as {
@@ -126,18 +107,18 @@ export async function PUT(request: NextRequest) {
             return jsonError('缺少参数', 400);
         }
 
-        // 使用 Service Role Client 更新举报
-        const { error } = await db
-            .from('community_reports')
-            .update({
-                status,
-                reviewed_by: user.id,
-                reviewed_at: new Date().toISOString(),
-                review_notes: notes || null,
-            })
-            .eq('id', reportId);
-
-        if (error) {
+        try {
+            await auth.scoped.tx((trx) => trx
+                .updateTable('community_reports')
+                .set({
+                    status,
+                    reviewed_by: user.id,
+                    reviewed_at: new Date().toISOString(),
+                    review_notes: notes || null,
+                })
+                .where('id', '=', reportId)
+                .execute());
+        } catch (error) {
             console.error('处理举报失败:', error);
             return jsonError('处理举报失败', 500);
         }

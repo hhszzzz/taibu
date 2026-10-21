@@ -1,3 +1,5 @@
+import type { ScopedDb } from '@/lib/db/context.server';
+
 export type CommunityAuthorProfile = {
     name: string;
     avatarUrl: string | null;
@@ -39,30 +41,10 @@ type UserProfileRow = {
     avatar_url: string | null;
 };
 
-type UserLookupResult = {
-    data: UserProfileRow[] | null;
-    error: { message?: string } | null;
-};
-
-export type CommunityLookupClient = {
-    from(table: 'users'): {
-        select(columns: 'id, nickname, avatar_url'): {
-            in(column: 'id', values: string[]): Promise<UserLookupResult>;
-            eq(column: 'id', value: string): {
-                maybeSingle(): Promise<{ data: UserProfileRow | null; error: { message?: string } | null }>;
-            };
-        };
-    };
-};
-
-export function asCommunityLookupClient(client: unknown): CommunityLookupClient {
-    return client as CommunityLookupClient;
-}
-
 const DEFAULT_COMMUNITY_AUTHOR_NAME = '命理爱好者';
 
 export async function loadCommunityAuthorProfileMap(
-    supabase: CommunityLookupClient,
+    db: ScopedDb,
     userIds: Array<string | null | undefined>,
 ) {
     const ids = Array.from(new Set(userIds.filter((value): value is string => typeof value === 'string' && value.length > 0)));
@@ -72,17 +54,19 @@ export async function loadCommunityAuthorProfileMap(
         return authorMap;
     }
 
-    const { data, error } = await supabase
-        .from('users')
-        .select('id, nickname, avatar_url')
-        .in('id', ids);
-
-    if (error) {
-        console.error('[community] failed to load author names:', error.message || error);
+    let rows: Array<Pick<UserProfileRow, 'id' | 'nickname' | 'avatar_url'>>;
+    try {
+        rows = await db.tx((trx) => trx
+            .selectFrom('users')
+            .select(['id', 'nickname', 'avatar_url'])
+            .where('id', 'in', ids)
+            .execute());
+    } catch (error) {
+        console.error('[community] failed to load author names:', error);
         return authorMap;
     }
 
-    for (const row of data || []) {
+    for (const row of rows) {
         authorMap.set(row.id, normalizeCommunityAuthorProfile(row));
     }
 
@@ -90,24 +74,25 @@ export async function loadCommunityAuthorProfileMap(
 }
 
 export async function loadSingleCommunityAuthorProfile(
-    supabase: CommunityLookupClient,
+    db: ScopedDb,
     userId: string,
 ) {
-    const { data, error } = await supabase
-        .from('users')
-        .select('id, nickname, avatar_url')
-        .eq('id', userId)
-        .maybeSingle();
-
-    if (error) {
-        console.error('[community] failed to load author name:', error.message || error);
+    let profile: Pick<UserProfileRow, 'nickname' | 'avatar_url'> | undefined;
+    try {
+        profile = await db.tx((trx) => trx
+            .selectFrom('users')
+            .select(['nickname', 'avatar_url'])
+            .where('id', '=', userId)
+            .executeTakeFirst());
+    } catch (error) {
+        console.error('[community] failed to load author name:', error);
         return {
             name: DEFAULT_COMMUNITY_AUTHOR_NAME,
             avatarUrl: null,
         };
     }
 
-    return normalizeCommunityAuthorProfile(data);
+    return normalizeCommunityAuthorProfile(profile ?? null);
 }
 
 export function normalizeCommunityAuthorName(name: string | null | undefined) {

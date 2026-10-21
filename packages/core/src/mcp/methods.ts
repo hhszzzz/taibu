@@ -1,3 +1,4 @@
+import type { ToolDefinition } from './contract.js';
 import { METHOD_CARDS, METHOD_CONVENTIONS, METHOD_PRINCIPLES, METHOD_SYSTEMS } from './methods.generated.js';
 
 /** A method card as written in skills/taibu-divination/methods: who reads, how to judge, which tools in what order, what to write. */
@@ -31,10 +32,11 @@ export interface MethodPrompt {
   arguments: [{ name: 'question'; description: string; required: false }];
 }
 
-export interface MethodPromptResult {
+/** A type alias rather than an interface, so it stays assignable to an MCP SDK result with an index signature. */
+export type MethodPromptResult = {
   description: string;
   messages: [{ role: 'user'; content: { type: 'text'; text: string } }];
-}
+};
 
 export { METHOD_CONVENTIONS, METHOD_PRINCIPLES };
 
@@ -85,6 +87,38 @@ export function renderMethodPersona(id: string, brief = false): string {
   return [card.role, ...(brief ? [] : [`## 断法\n\n${card.method}`]), `## 输出要求\n\n${card.output}`].join('\n\n');
 }
 
+/** The card with the shared reading principles and tool conventions: what a model reads before it interprets. */
+export function renderMethodCard(id: string): string {
+  return [renderMethodGuide(id).trimEnd(), `## 解读通则\n\n${METHOD_PRINCIPLES}`, `## 工具约定\n\n${METHOD_CONVENTIONS}`].join('\n\n');
+}
+
+export const METHOD_TOOL_NAME = 'load_analysis_method';
+
+/**
+ * The tool through which a model loads a card itself. MCP prompts are for the user to choose; a client that offers
+ * the model only tools would otherwise leave it with the chart and no method.
+ */
+export function getMethodToolDefinition(): ToolDefinition {
+  const cards = METHOD_CARDS.map(card => {
+    const notes = [card.name === card.system ? '' : '流派，用户点名时用', METHOD_SYSTEMS[card.system]?.length ? '' : '无需排盘'].filter(Boolean);
+    return `${card.name}（${[card.title, ...notes].join('，')}）`;
+  });
+  return {
+    name: METHOD_TOOL_NAME,
+    title: '加载方法卡',
+    description: '解读太卜结果前加载对应的方法卡：该体系或流派的角色、断法、工具流程与输出要求，附解读通则与工具约定；每个体系首次解读前加载一次。'
+      + 'id 填方法卡 ID，或填刚调用的太卜工具名（得到该体系的默认卡）；同一体系有多张卡时按用户点名的流派选，未点名用与体系同名的默认卡。'
+      + `方法卡：${cards.join('、')}。`,
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'string', minLength: 1, description: '方法卡 ID 或太卜工具名' } },
+      required: ['id'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  };
+}
+
 export function listMethodPrompts(): MethodPrompt[] {
   return METHOD_CARDS.map(card => ({
     name: card.name,
@@ -101,9 +135,7 @@ export function renderMethodPrompt(name: string, question?: string): MethodPromp
   const asked = question?.trim();
   const text = [
     `以下是太卜「${card.title}」方法卡。请按卡中的断法与工具流程处理我的问题：盘面一律用太卜工具计算，不凭记忆推算干支、卦象、星曜。`,
-    renderMethodGuide(card.name).trimEnd(),
-    `## 解读通则\n\n${METHOD_PRINCIPLES}`,
-    `## 工具约定\n\n${METHOD_CONVENTIONS}`,
+    renderMethodCard(card.name),
     asked ? `我的问题：\n\n${asked}` : '请先问我要问的事，并补齐方法卡需要的资料，再按流程计算与解读。',
   ].join('\n\n');
   return { description: card.description, messages: [{ role: 'user', content: { type: 'text', text } }] };

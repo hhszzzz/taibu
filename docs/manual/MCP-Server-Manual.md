@@ -7,7 +7,7 @@ TaiBu 提供两种 MCP 入口：
 - 公共 HTTP Server：`https://mcp.mingai.fun/mcp`
 - 本地 stdio 包：`taibu-mcp`
 
-两种入口复用 `taibu-core` 中同一套工具 manifest、算法、输入输出 schema、规范文本和 canonical JSON，不维护两份术数实现。
+两种入口复用 `taibu-core` 中同一套工具 manifest、算法、输入输出 schema、规范文本和 canonical JSON，不维护两份术数实现；解读用的方法卡（见第 5 节）也来自 `taibu-core`。
 
 ## 1. 客户端配置
 
@@ -28,6 +28,8 @@ TaiBu 提供两种 MCP 入口：
 
 公共服务不要求 OAuth、API Key、站点账号或自定义请求 Header。客户端会自动完成协议发现和请求封装。
 
+客户端不能在本地按需加载工具时，可把地址换成 `https://mcp.mingai.fun/mcp/core`，只列出排盘工具（见第 6 节）。
+
 ### 1.2 本地 stdio
 
 ```json
@@ -41,7 +43,7 @@ TaiBu 提供两种 MCP 入口：
 }
 ```
 
-要求本机安装 Node.js 20 或更高版本。
+要求本机安装 Node.js 20 或更高版本。需要只列排盘工具时，在该配置中加入 `"env": { "TAIBU_MCP_TOOLS": "core" }`（见第 6 节）。
 
 ## 2. 2026-07-28 协议行为
 
@@ -50,9 +52,9 @@ TaiBu 提供两种 MCP 入口：
 - 客户端通过 `server/discover` 获取服务端版本、能力和使用说明。
 - 每个请求都在 `params._meta` 中声明协议版本、客户端能力和可选客户端信息。
 - HTTP 请求使用 `POST /mcp`，不再通过 GET/DELETE 管理 MCP 会话。
-- HTTP 层校验 `MCP-Protocol-Version` 与 `Mcp-Method`；`tools/call` 还校验 `Mcp-Name`。
+- HTTP 层校验 `MCP-Protocol-Version` 与 `Mcp-Method`；`tools/call` 与 `prompts/get` 还校验 `Mcp-Name`。
 - 成功结果包含 `resultType: "complete"`。
-- `server/discover` 和 `tools/list` 包含 `ttlMs`、`cacheScope` 缓存提示。
+- `server/discover`、`tools/list` 和 `prompts/list` 包含 `ttlMs`、`cacheScope` 缓存提示。
 - 长连接通知通过 POST `subscriptions/listen` 建立。
 
 服务仍接受 2025 年协议的无状态 POST 请求：旧客户端可以继续调用 `initialize`、`tools/list` 和 `tools/call`，但服务不再签发或读取 `Mcp-Session-Id`，也不提供旧式 GET SSE 或 DELETE 会话流程。
@@ -89,8 +91,8 @@ curl -X POST https://mcp.mingai.fun/mcp \
 服务会返回：
 
 - `supportedVersions: ["2026-07-28"]`
-- `capabilities.tools`
-- `instructions`
+- `capabilities.tools`、`capabilities.prompts`
+- `instructions`（提示模型解读前先加载方法卡；`/mcp/core` 另说明低频工具的查找方式）
 - `resultType: "complete"`
 - 公共缓存提示
 - `_meta["io.modelcontextprotocol/serverInfo"]`
@@ -185,11 +187,29 @@ curl -X POST https://mcp.mingai.fun/mcp \
 | `daliuren` | 大六壬排盘 | 天地盘、四课、三传、神将与课体 |
 | `xiaoliuren` | 小六壬占测 | 起课信息、推演链与落宫结果 |
 
-工具的完整参数与输出结构以运行时 `tools/list` 为准。
+工具的完整参数与输出结构以运行时 `tools/list` 为准。此外两种入口都提供 `load_analysis_method`（加载方法卡，见第 5 节）；精简列表另有 `tool_search`、`tool_call`（见第 6 节）。
 
 8 个详查工具（`bazi_relations`、`bazi_wuxing`、`bazi_liunian_scan`、`ziwei_palace`、`liuyao_line`、`astrology_point`、`qimen_palace`、`daliuren_lessons`）默认文本只列所查事实；传 `detailLevel: "full"` 另附判定口径；`structuredContent` 始终带口径与计算规则，计算规则不写进文本。只问某柱、某类关系或某几组事实时，用 `pillars`、`types`、`sections`、`focus` 等筛选参数只取所需；八字关系类筛选另列「同字牵连」（与所列关系共用同一字，须一并看），并以「未列出」给出筛掉的条数。筛选参数写错时返回 `isError: true`，错误信息写明缺少或应改用的参数。
 
-## 5. 地点解析
+## 5. 方法卡
+
+太卜的解读方法写成 13 张方法卡：每个体系一张默认卡（子平八字、紫微斗数、六爻、梅花易数、奇门遁甲、大六壬、小六壬、太乙神数、塔罗、西方占星、黄历择日），另有流派卡「盲派八字」（`bazi-mangpai`）与不需排盘的「周公解梦」（`dream`）。每张卡给出角色、断法、工具流程与输出要求，并附解读通则与工具约定。与太卜站内 Agent、普通对话及 skill 使用同一份来源。
+
+- 工具 `load_analysis_method`：模型自己加载方法卡。`id` 填方法卡 ID，或填刚调用的工具名（得到该体系的默认卡）；同一体系有多张卡时按用户点名的流派选。未知 ID 返回 `isError: true`。
+- prompts：每张卡一个同名 prompt，可选参数 `question`（要问的事或要解的梦）。`prompts/get` 返回一条用户消息：方法卡全文、解读通则、工具约定与问题；未给问题时请模型先询问。按协议，prompts 由用户选用（客户端通常显示为斜杠命令），模型自己取方法卡用上面的工具。
+
+## 6. 按需加载的工具
+
+MCP 没有「延迟提供」的工具：`tools/list` 列出服务当前提供的全部工具，协议要求它不随连接或其他请求变化，因此不能像站内 Agent 那样「搜索后再加入列表」。Claude Code 等客户端会在本地按需加载 MCP 工具（工具搜索）；不支持的客户端会把全部工具说明放进模型上下文。为此服务提供固定的精简列表：
+
+| 入口 | 列出的工具 |
+| --- | --- |
+| HTTP `POST /mcp`；stdio 默认（`TAIBU_MCP_TOOLS=all`） | 全部 24 个计算工具与 `load_analysis_method` |
+| HTTP `POST /mcp/core`；stdio `TAIBU_MCP_TOOLS=core` | 11 个排盘工具、`load_analysis_method`、`tool_search`、`tool_call` |
+
+精简列表中其余 13 个低频工具（8 个详查与 `bazi_dayun`、`bazi_pillars_resolve`、`ziwei_horoscope`、`ziwei_flying_star`、`almanac_select`）经两步使用：`tool_search` 按中文关键词或工具名查找（如「大运」「流年扫描」「飞星四化」「择日」「宫位」「动爻」），返回各工具的完整说明与参数 schema；`tool_call` 以 `{ "name": 工具名, "arguments": 参数 }` 调用，结果（规范文本、canonical JSON、地点解析与随机种子作用域）与直接调用相同。已列出的工具不经 `tool_call`。给模型看的工具说明（名称、描述与参数 schema）约由 6.4 万字符降到 2.7 万字符。stdio 的 `TAIBU_MCP_TOOLS` 取其他值时服务拒绝启动并说明原因；HTTP 按入口决定列表，客户端请求头无法改变。
+
+## 7. 地点解析
 
 公共 HTTP Server 可以通过 `AMAP_WEB_SERVICE_KEY` 启用出生地点解析，用于：
 
@@ -199,9 +219,9 @@ curl -X POST https://mcp.mingai.fun/mcp \
 
 未配置密钥、解析失败或精度不足时，工具仍按 core 的原始规则执行，并在文本及 `structuredContent.placeResolutionInfo` 中说明回退原因。
 
-## 6. 自部署
+## 8. 自部署
 
-### 6.1 Docker Compose
+### 8.1 Docker Compose
 
 ```bash
 cp .env.example .env
@@ -212,9 +232,10 @@ docker compose --env-file .env -f docker-compose.mcp.yml up -d --build
 
 - `GET /health`：健康检查
 - `GET /info`：服务信息与当前协议版本
-- `POST /mcp`：MCP 请求入口
+- `POST /mcp`：MCP 请求入口（全部工具）
+- `POST /mcp/core`：只列排盘工具的入口
 
-### 6.2 本地构建
+### 8.2 本地构建
 
 ```bash
 pnpm install
@@ -223,7 +244,7 @@ pnpm -C packages/mcp-server build
 pnpm -C packages/mcp-server start
 ```
 
-## 7. 环境变量
+## 9. 环境变量
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
@@ -240,7 +261,7 @@ pnpm -C packages/mcp-server start
 
 公共 MCP Server 不读取 Supabase、OAuth、JWT 或用户 API Key 配置。
 
-## 8. 安全边界
+## 10. 安全边界
 
 线上服务保持匿名公开，但仍执行以下保护：
 
@@ -253,7 +274,7 @@ pnpm -C packages/mcp-server start
 
 如果启用 `MCP_TRUST_PROXY=true`，必须确保应用只接受来自受信反向代理的流量，否则转发 IP 头可能被伪造。
 
-## 9. 兼容性与迁移
+## 11. 兼容性与迁移
 
 从 2025 年协议迁移时：
 
@@ -264,7 +285,7 @@ pnpm -C packages/mcp-server start
 
 HTTP 标准头与请求体不一致时返回 `-32020`；不支持的协议版本返回 `-32022`。
 
-## 10. 验证
+## 12. 验证
 
 仓库级验证命令：
 
@@ -274,9 +295,9 @@ pnpm lint
 pnpm build
 ```
 
-测试覆盖现代 HTTP、旧版无状态 HTTP、现代/旧版 stdio、标准 Header 错误、协议版本错误、结构化结果和订阅并发限制。
+测试覆盖现代 HTTP、旧版无状态 HTTP、现代/旧版 stdio、标准 Header 错误、协议版本错误、结构化结果、订阅并发限制、方法卡 prompts 与工具，以及精简列表的查找、调用与入口隔离。
 
-## 11. 参考
+## 13. 参考
 
 - [MCP 2026-07-28 Specification](https://modelcontextprotocol.io/specification/2026-07-28)
 - [Model Context Protocol TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)

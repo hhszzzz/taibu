@@ -1,13 +1,13 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { getCurrentTools, type JsonObject } from '@earendil-works/pi-ai';
-import { listToolDefinitions } from 'taibu-core/mcp';
+import { DEFERRED_TOOL_NAMES, listToolDefinitions, rankDeferredTools, toolSearchTerms } from 'taibu-core/mcp';
 import { MockLanguageModelV3 } from 'ai/test';
 import type { AgentRunRow } from '../lib/agent/store.server';
 import type { AgentPart } from '../lib/agent/types';
 import { executeAgentRun } from '../lib/agent/runtime.server';
 import { AGENT_DEFERRED_TOOLS, AGENT_TOOL_SEARCH_TOOL, isAgentDeferredTool } from '../lib/agent/tool-catalog';
-import { AGENT_TOOL_SEARCH_LIMIT, rankDeferredTools, toolSearchTerms } from '../lib/agent/tool-search.server';
+import { AGENT_TOOL_SEARCH_LIMIT } from '../lib/agent/tool-search.server';
 import { summarizeAgentTool } from '../components/chat/agent/presentation';
 import { config, MemoryStore, row, scripted } from './helpers/agent-runtime-fixture';
 
@@ -39,6 +39,8 @@ test('deferred tools are the thirteen low-frequency Taibu tools and every MCP to
     'bazi_wuxing', 'daliuren_lessons', 'liuyao_line', 'qimen_palace', 'ziwei_flying_star', 'ziwei_horoscope', 'ziwei_palace',
   ]);
   for (const name of AGENT_DEFERRED_TOOLS) assert.ok(definitions.some(definition => definition.name === name), `${name} is a Core tool`);
+  // The browser-safe catalogue keeps its own copy; the MCP servers defer the same tools.
+  assert.deepEqual([...AGENT_DEFERRED_TOOLS], [...DEFERRED_TOOL_NAMES]);
   assert.equal(isAgentDeferredTool('mcp__archive__search'), true);
   assert.equal(isAgentDeferredTool('bazi'), false);
   assert.equal(isAgentDeferredTool('__proto__'), false);

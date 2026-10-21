@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { listToolDefinitions } from 'taibu-core/mcp';
+import { DEFERRED_TOOL_NAMES, listAnalysisMethods, listToolDefinitions, renderMethodCard } from 'taibu-core/mcp';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
@@ -68,7 +68,7 @@ async function rpc(url, body, { modern = true, extraHeaders = {}, signal } = {})
     ...(modern ? {
       'mcp-protocol-version': body.params?._meta?.['io.modelcontextprotocol/protocolVersion'] ?? MODERN_PROTOCOL_VERSION,
       'mcp-method': body.method,
-      ...(body.method === 'tools/call' ? { 'mcp-name': body.params.name } : {}),
+      ...(['tools/call', 'prompts/get'].includes(body.method) ? { 'mcp-name': body.params.name } : {}),
     } : {}),
     ...extraHeaders,
   };
@@ -115,6 +115,7 @@ test('public runtime serves MCP 2026-07-28 and stateless legacy clients', async 
     assert.equal(info.protocol_version, MODERN_PROTOCOL_VERSION);
     assert.equal(info.legacy_compatibility, 'stateless');
     assert.equal(info.mcp_endpoint, '/mcp');
+    assert.equal(info.mcp_core_endpoint, '/mcp/core');
     assert.equal((await fetch(`${baseUrl}/.well-known/oauth-authorization-server`)).status, 404);
     assert.equal((await fetch(endpoint)).status, 404);
     assert.equal((await fetch(endpoint, { method: 'DELETE' })).status, 404);
@@ -150,7 +151,8 @@ test('public runtime serves MCP 2026-07-28 and stateless legacy clients', async 
     assert.equal(listed.payload.result.ttlMs, 300_000);
     assert.equal(listed.payload.result.cacheScope, 'public');
     const toolByName = new Map(listed.payload.result.tools.map((tool) => [tool.name, tool]));
-    assert.equal(toolByName.size, listToolDefinitions().length);
+    assert.equal(toolByName.size, listToolDefinitions().length + 1);
+    assert.ok(toolByName.has('load_analysis_method') && !toolByName.has('tool_search'));
     assert.ok(toolByName.get('bazi_relations').inputSchema.properties.birthPlace, 'drilldowns resolve places like their base tool');
     assert.equal(toolByName.get('meihua').title, '梅花易数起卦');
     assert.equal(toolByName.get('xiaoliuren').title, '小六壬占测');
@@ -218,6 +220,64 @@ test('public runtime serves MCP 2026-07-28 and stateless legacy clients', async 
     }, { modern: false });
     assert.equal(legacyCalled.response.status, 200, getStderr());
     assert.equal(legacyCalled.payload.result.structuredContent.结果.落宫, '大安');
+  } finally {
+    await stopProcess(child);
+  }
+});
+
+test('public runtime serves method cards as prompts and a tool, and a core endpoint with a smaller tool list', async () => {
+  const port = await getFreePort();
+  const { child, getStderr } = startRuntime(port);
+
+  try {
+    await waitForHealth(port, child);
+    const endpoint = `http://127.0.0.1:${port}/mcp`;
+    const coreEndpoint = `http://127.0.0.1:${port}/mcp/core`;
+
+    const prompts = await rpc(endpoint, { jsonrpc: '2.0', id: 1, method: 'prompts/list', params: { _meta: modernMeta() } });
+    assert.equal(prompts.response.status, 200, getStderr());
+    assert.equal(prompts.payload.result.cacheScope, 'public');
+    assert.deepEqual(prompts.payload.result.prompts.map((prompt) => prompt.name), listAnalysisMethods().map((method) => method.id));
+    const dream = await rpc(endpoint, {
+      jsonrpc: '2.0', id: 2, method: 'prompts/get', params: { _meta: modernMeta(), name: 'dream', arguments: {} },
+    });
+    assert.equal(dream.response.status, 200, getStderr());
+    assert.ok(dream.payload.result.messages[0].content.text.includes(renderMethodCard('dream')));
+    assert.match(dream.payload.result.messages[0].content.text, /请先问我要问的事/);
+
+    const loaded = await rpc(endpoint, {
+      jsonrpc: '2.0', id: 3, method: 'tools/call', params: { _meta: modernMeta(), name: 'load_analysis_method', arguments: { id: 'ziwei' } },
+    });
+    assert.equal(loaded.payload.result.content[0].text, renderMethodCard('ziwei'));
+
+    // A client cannot pick the list with the private header; the endpoint decides.
+    const forged = await rpc(endpoint, {
+      jsonrpc: '2.0', id: 4, method: 'tools/list', params: { _meta: modernMeta() },
+    }, { extraHeaders: { 'x-taibu-tool-mode': 'core' } });
+    assert.ok(forged.payload.result.tools.some((tool) => tool.name === 'bazi_dayun'));
+
+    const discovered = await rpc(coreEndpoint, { jsonrpc: '2.0', id: 5, method: 'server/discover', params: { _meta: modernMeta() } });
+    assert.match(discovered.payload.result.instructions, /tool_search/);
+    const listed = await rpc(coreEndpoint, { jsonrpc: '2.0', id: 6, method: 'tools/list', params: { _meta: modernMeta() } });
+    assert.equal(listed.response.status, 200, getStderr());
+    assert.deepEqual(listed.payload.result.tools.map((tool) => tool.name), [
+      ...listToolDefinitions().map((tool) => tool.name).filter((name) => !DEFERRED_TOOL_NAMES.includes(name)),
+      'load_analysis_method', 'tool_search', 'tool_call',
+    ]);
+    const searched = await rpc(coreEndpoint, {
+      jsonrpc: '2.0', id: 7, method: 'tools/call', params: { _meta: modernMeta(), name: 'tool_search', arguments: { query: '择日' } },
+    });
+    const found = searched.payload.result.content[0].text;
+    assert.ok(found.includes('## almanac_select') && found.includes('"startDate"'), found.slice(0, 200));
+    const dayun = listToolDefinitions().find((tool) => tool.name === 'bazi_dayun');
+    const called = await rpc(coreEndpoint, {
+      jsonrpc: '2.0', id: 8, method: 'tools/call',
+      params: { _meta: modernMeta(), name: 'tool_call', arguments: { name: 'bazi_dayun', arguments: dayun.inputSchema.examples[0] } },
+    });
+    assert.equal(called.response.status, 200, getStderr());
+    assert.ok(Array.isArray(called.payload.result.structuredContent.大运列表), JSON.stringify(called.payload.result).slice(0, 300));
+    const legacyListed = await rpc(coreEndpoint, { jsonrpc: '2.0', id: 9, method: 'tools/list', params: {} }, { modern: false });
+    assert.equal(legacyListed.payload.result.tools.length, listed.payload.result.tools.length, 'legacy clients get the same core list');
   } finally {
     await stopProcess(child);
   }

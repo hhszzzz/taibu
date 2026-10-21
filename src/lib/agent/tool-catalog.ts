@@ -82,6 +82,7 @@ export const AGENT_PLAN_GATED_TOOLS: ReadonlySet<string> = new Set(['remember_us
 /**
  * Tools the model loads on demand instead of being offered every request: the drilldowns and calculations a reading
  * reaches for once it already has a chart. `tool_search` loads them; scripts may call them without loading.
+ * The same list as Core's `DEFERRED_TOOL_NAMES` (a test holds them equal), copied so this module stays browser-safe.
  */
 export const AGENT_DEFERRED_TOOLS: ReadonlySet<string> = new Set([
   'bazi_relations', 'bazi_wuxing', 'bazi_liunian_scan', 'ziwei_palace', 'qimen_palace', 'daliuren_lessons',

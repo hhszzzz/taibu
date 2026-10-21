@@ -237,3 +237,23 @@
 | `pnpm test:browser` | 307 项通过（工作区方法卡视图改由 Core 方法卡生成） |
 | `pnpm test` | 2046 项通过 |
 | `pnpm lint`、严格类型 | 通过（无新增告警） |
+
+## 阶段十一：MCP 的方法卡与精简工具列表
+
+经 MCP 调用太卜的其他 AI 只拿到盘面；站内 Agent 的「按需加载」能否用到 MCP 也需要答复。MCP `2026-07-28` 规范有两条约束：prompts 由用户选用（客户端通常显示为斜杠命令），模型不能自己取；`tools/list` 返回当前提供的全部工具，且不得随连接或其他请求变化，因此不能像 Agent 那样「搜索后把工具加入列表」。按需加载在 MCP 里只能由客户端在本地做（Claude Code 的工具搜索即是），或由服务提供一个固定的精简列表。
+
+- 方法卡：两个 MCP 服务都为 13 张卡各注册一个同名 prompt（可选参数 `question`），并提供模型可调用的工具 `load_analysis_method`（卡 ID 或工具名，返回卡全文、解读通则与工具约定；未知 ID 为 `isError`）。服务说明提示模型解读前先加载方法卡；`prompts/list` 带公共缓存提示。工具定义与正文都来自 Core 的 `getMethodToolDefinition`／`renderMethodCard`。
+- 精简列表：stdio 设 `TAIBU_MCP_TOOLS=core`（默认 `all`；其他取值拒绝启动并说明原因），HTTP 用入口 `POST /mcp/core`（入口由服务端写入私有请求头，客户端发来的同名头被覆盖）。精简列表只有 11 个排盘工具、`load_analysis_method`、`tool_search` 与 `tool_call`：`tool_search` 用与 Agent 相同的中文排序查找其余 13 个低频工具，返回完整说明与参数 schema；`tool_call` 只接受这 13 个工具，经与直接调用相同的处理（地点解析、随机种子作用域、规范输出）。给模型看的工具说明由约 6.4 万字符降到 2.7 万字符。两种列表各自固定，符合「不随其他请求变化」。
+- 共享：`tool_search` 的排序（关键词、CJK 二元词与名称／标题／关键词／描述打分）从 Agent 移入 Core（`rankDeferredTools`），Agent 改为引用；延迟工具名单在 Core 为 `DEFERRED_TOOL_NAMES`，Agent 的 `AGENT_DEFERRED_TOOLS` 需保持浏览器可用而保留副本，测试保证两者一致。
+- 版本：`taibu-mcp-server` 升至 3.2.0（不发布）；`taibu-core`、`taibu-mcp` 仍为未发布的 3.7.0。公网服务需按既有流程重新构建镜像后生效；Caddy 反代整个主机，`/mcp/core` 无需改代理配置。
+
+### 阶段十一验证
+
+| 验证 | 结果 |
+| --- | --- |
+| Core 测试 | `tool-search.test.mjs`：13 个延迟工具均为 Core 工具且不含排盘工具、模式解析与非法值拒绝、服务说明随模式变化、搜索只返回延迟工具的完整定义（含服务端修饰过的定义）、`tool_call` 只接受延迟工具、搜索结果含参数 schema；`method-cards.test.mjs` 新增方法卡工具（列出全部卡及流派、无需排盘标注，工具名得到默认卡，继承键被拒） |
+| stdio 运行时 | 默认列出 24 个工具与 `load_analysis_method`，声明 prompts 能力；13 个 prompts 与 `prompts/get`（问题、未知 prompt 报错）；按工具名加载默认卡、未知 ID 为 `isError`；`core` 模式的列表、中文搜索与无匹配、`tool_call` 调用 `bazi_dayun`、拒绝已列出工具与不合法参数；非法模式拒绝启动 |
+| HTTP 运行时 | `/info` 列出两个入口；`/mcp` 的 prompts、`prompts/get` 的 `Mcp-Name` 校验、方法卡工具；伪造私有头不能切换列表；`/mcp/core` 的说明、列表、搜索、`tool_call` 与旧协议客户端得到同一列表 |
+| `pnpm test` | 2055 项通过 |
+| `pnpm test:browser`、npm 包产物、skill bundle | 307 项通过；产物检查通过；bundle 重新生成后无漂移 |
+| `pnpm lint`、严格类型 | 通过（无新增告警） |

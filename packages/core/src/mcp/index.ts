@@ -21,12 +21,31 @@ export {
   METHOD_CONVENTIONS,
   METHOD_PRINCIPLES,
   METHOD_PROMPT_QUESTION,
+  METHOD_TOOL_NAME,
   findAnalysisMethod,
+  getMethodToolDefinition,
   getToolSystem,
   listAnalysisMethods,
   listMethodPrompts,
+  renderMethodCard,
   renderMethodGuide,
   renderMethodPersona,
   renderMethodPrompt,
 } from './methods.js';
 export type { AnalysisMethod, MethodCardSource, MethodPrompt, MethodPromptResult } from './methods.js';
+export {
+  DEFERRED_TOOL_NAMES,
+  TOOL_CALL_NAME,
+  TOOL_SEARCH_LIMIT,
+  TOOL_SEARCH_MAX_LIMIT,
+  TOOL_SEARCH_NAME,
+  getServerInstructions,
+  getToolGatewayDefinitions,
+  isDeferredTool,
+  parseToolListMode,
+  rankDeferredTools,
+  renderToolSearchResult,
+  searchDeferredTools,
+  toolSearchTerms,
+} from './tool-search.js';
+export type { ToolListMode, ToolSearchCandidate } from './tool-search.js';

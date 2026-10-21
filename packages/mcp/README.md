@@ -55,6 +55,31 @@ TaiBu 的本地 `stdio` MCP Server，适合直接接入 Claude Desktop、Cursor�
 | `daliuren_lessons` | 大六壬课传详查 |
 | `xiaoliuren` | 小六壬占测 |
 
+## 方法卡
+
+除计算工具外，服务还提供太卜的 13 张方法卡：每个体系一张（断法、工具流程与输出要求），另有「盲派八字」与不需排盘的「周公解梦」。
+
+- 工具 `load_analysis_method`：模型自己加载方法卡，`id` 填方法卡 ID，或填刚调用的工具名（得到该体系的默认卡）。服务说明（`instructions`）提示模型解读前先加载。
+- prompts：每张卡一个同名 prompt（如 `bazi`、`bazi-mangpai`、`dream`），可选参数 `question`。支持 prompts 的客户端可以把它们当作斜杠命令选用。
+
+## 按需加载的工具
+
+MCP 没有「延迟提供」的工具：`tools/list` 一次列出全部工具，且不能因其他请求而改变。Claude Code 等客户端会在本地按需加载（工具搜索）；不支持的客户端会把全部工具说明放进模型上下文。此时可以设 `TAIBU_MCP_TOOLS=core`：
+
+```json
+{
+  "mcpServers": {
+    "taibu": {
+      "command": "npx",
+      "args": ["-y", "taibu-mcp"],
+      "env": { "TAIBU_MCP_TOOLS": "core" }
+    }
+  }
+}
+```
+
+`core` 只列出 11 个排盘工具与 `load_analysis_method`，另加 `tool_search`（按中文关键词查找其余 13 个低频工具，返回用途与参数 schema）和 `tool_call`（按名称调用这些工具，结果与直接调用相同）；给模型看的工具说明约减少六成。默认值 `all` 列出全部工具；其他取值会让服务启动失败并说明原因。
+
 ## 返回结构
 
 本地 `taibu-mcp` 的工具结果统一分成两条通道：
@@ -66,7 +91,7 @@ TaiBu 的本地 `stdio` MCP Server，适合直接接入 Claude Desktop、Cursor�
 
 如果你要稳定的结构化结果，请始终读取 `structuredContent`。
 
-在 MCP `2026-07-28` 客户端中，成功结果还会包含 `resultType: "complete"`；`server/discover` 与 `tools/list` 提供公共缓存提示。旧协议客户端维持原有结果形状。
+在 MCP `2026-07-28` 客户端中，成功结果还会包含 `resultType: "complete"`；`server/discover`、`tools/list` 与 `prompts/list` 提供公共缓存提示。旧协议客户端维持原有结果形状。
 
 ## 其他安装方式
 

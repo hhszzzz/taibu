@@ -1,99 +1,55 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createMockScopedDb } from './helpers/db-mock';
 
-test('searchKnowledge should honor explicit membershipType without env', async (t) => {
-  const prevUrl = process.env.SUPABASE_URL;
-  const prevKey = process.env.SUPABASE_ANON_KEY;
+test('searchKnowledge should honor explicit free membership without touching the database', async (t) => {
+  const searchModule = require('../lib/knowledge-base/search') as typeof import('../lib/knowledge-base/search');
+  const scoped = createMockScopedDb();
+  t.mock.method(scoped, 'rpc', async () => { throw new Error('free membership must not query'); });
+  t.mock.method(scoped, 'tx', async () => { throw new Error('free membership must not query'); });
 
-  delete process.env.SUPABASE_URL;
-  delete process.env.SUPABASE_ANON_KEY;
-
-  t.after(() => {
-    if (prevUrl === undefined) {
-      delete process.env.SUPABASE_URL;
-    } else {
-      process.env.SUPABASE_URL = prevUrl;
-    }
-    if (prevKey === undefined) {
-      delete process.env.SUPABASE_ANON_KEY;
-    } else {
-      process.env.SUPABASE_ANON_KEY = prevKey;
-    }
-  });
-
-  const modulePath = require.resolve('../lib/knowledge-base/search');
-  delete require.cache[modulePath];
-  const { searchKnowledge } = require('../lib/knowledge-base/search') as typeof import('../lib/knowledge-base/search');
-
-  const results = await searchKnowledge('test', { membershipType: 'free' });
+  const results = await searchModule.searchKnowledge('test', { membershipType: 'free', db: scoped });
   assert.deepEqual(results, []);
 });
 
-test('searchKnowledge should bind caller token for RPCs and weights while reusing an authorized userId', async (t) => {
-  const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
-  const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
-  const originalCreateAuthedClient = apiUtilsModule.createAuthedClient;
-  const modulePath = require.resolve('../lib/knowledge-base/search');
-
-  const callerClient = {
-    rpc(fn: string) {
-      if (fn === 'search_knowledge_fts') {
-        return Promise.resolve({
-          data: [
-            {
-              id: 'entry-1',
-              kb_id: 'kb-1',
-              content: '命理知识',
-              metadata: {},
-              rank: 0.9,
-            },
-          ],
-          error: null,
-        });
+test('searchKnowledge keeps RPCs and weights bound to the caller-scoped database', async () => {
+  const searchModule = require('../lib/knowledge-base/search') as typeof import('../lib/knowledge-base/search');
+  const rpcCalls: string[] = [];
+  const ownerFilters: Array<[string, unknown]> = [];
+  const scoped = createMockScopedDb({
+    rpc: async (name) => {
+      rpcCalls.push(name);
+      if (name === 'search_knowledge_fts') {
+        return [{
+          id: 'entry-1',
+          kb_id: 'kb-1',
+          content: '命理知识',
+          metadata: {},
+          rank: 0.9,
+        }];
       }
-
-      throw new Error(`Unexpected rpc: ${fn}`);
+      throw new Error(`Unexpected rpc: ${name}`);
     },
-    from(table: string) {
-      assert.equal(table, 'knowledge_bases');
-      return {
-        select() {
-          return {
-            eq() {
-              return {
-                in: async () => ({
-                  data: [{ id: 'kb-1', weight: 'normal' }],
-                  error: null,
-                }),
-              };
-            },
-          };
-        },
-      };
-    },
-  } as unknown as ReturnType<typeof apiUtilsModule.createAuthedClient>;
-
-  const tokens: string[] = [];
-  apiUtilsModule.createAuthedClient = (token) => {
-    tokens.push(token);
-    return callerClient;
-  };
-  apiUtilsModule.getSystemAdminClient = () => {
-    throw new Error('user knowledge search must not fall back to system-admin');
-  };
-
-  t.after(() => {
-    apiUtilsModule.getSystemAdminClient = originalGetSystemAdminClient;
-    apiUtilsModule.createAuthedClient = originalCreateAuthedClient;
-    delete require.cache[modulePath];
+    tx: async (work) => work({
+      selectFrom(table: string) {
+        assert.equal(table, 'knowledge_bases');
+        const query = {
+          select() { return query; },
+          where(column: string, _operator: string, value: unknown) {
+            if (column === 'user_id') ownerFilters.push([column, value]);
+            return query;
+          },
+          async execute() { return [{ id: 'kb-1', weight: 'normal' }]; },
+        };
+        return query;
+      },
+    } as never),
   });
 
-  delete require.cache[modulePath];
-  const { searchKnowledge } = require('../lib/knowledge-base/search') as typeof import('../lib/knowledge-base/search');
-  const results = await searchKnowledge('test', {
+  const results = await searchModule.searchKnowledge('test', {
     membershipType: 'pro',
     userId: 'user-1',
-    accessToken: 'caller-token',
+    db: scoped,
     useVector: false,
     searchConfig: {
       enableTrigram: false,
@@ -102,5 +58,6 @@ test('searchKnowledge should bind caller token for RPCs and weights while reusin
 
   assert.equal(results.length, 1);
   assert.equal(results[0]?.kbId, 'kb-1');
-  assert.deepEqual(tokens, ['caller-token']);
+  assert.deepEqual(rpcCalls, ['search_knowledge_fts']);
+  assert.deepEqual(ownerFilters, [['user_id', 'user-1']]);
 });

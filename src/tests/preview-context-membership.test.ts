@@ -37,7 +37,6 @@ test('buildPreviewPromptContext reuses shared prompt builder even with preview-o
         reasoningEnabled: false,
         membershipType: 'pro',
         knowledgeBaseFeatureEnabled: true,
-        accessTokenForKB: 'token-1',
         sharedPromptContextBuilder: async (request: ResolvedChatRequest) => {
             capture.request = request;
             return {
@@ -64,7 +63,6 @@ test('buildPreviewPromptContext reuses shared prompt builder even with preview-o
     const capturedRequest = capture.request;
     assert.ok(capturedRequest);
     assert.equal(capturedRequest.membershipType, 'pro');
-    assert.equal(capturedRequest.accessTokenForKB, 'token-1');
     assert.equal(capturedRequest.body.expressionStyle, 'gentle');
     assert.equal(capturedRequest.body.customInstructions, null);
     assert.deepEqual(capturedRequest.body.userProfile, { identity: '创业者' });

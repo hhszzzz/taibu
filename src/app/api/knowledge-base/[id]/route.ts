@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { requireUserContext, jsonError, jsonOk, resolveRequestDbClient } from '@/lib/api-utils';
+import { requireUserContext, jsonError, jsonOk } from '@/lib/api-utils';
 import { ensureFeatureRouteEnabled } from '@/lib/feature-gate-utils';
 import { normalizeKnowledgeBaseInput } from '@/lib/knowledge-base/ingest';
 
@@ -8,19 +8,21 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     if (featureError) return featureError;
     const auth = await requireUserContext(_request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    const { user } = auth;
-    const db = resolveRequestDbClient(auth);
-    if (!db) return jsonError('获取知识库失败', 500);
+    const { user, scoped } = auth;
 
     const { id } = await params;
-    const { data, error } = await db
-        .from('knowledge_bases')
-        .select('*')
-        .eq('id', id)
-        .eq('user_id', user.id)
-        .maybeSingle();
+    let data;
+    try {
+        data = await scoped.tx((trx) => trx
+            .selectFrom('knowledge_bases')
+            .selectAll()
+            .where('id', '=', id)
+            .where('user_id', '=', user.id)
+            .executeTakeFirst());
+    } catch {
+        return jsonError('获取知识库失败', 500);
+    }
 
-    if (error) return jsonError('获取知识库失败', 500);
     if (!data) return jsonError('知识库不存在', 404);
     return jsonOk(data as Record<string, unknown>);
 }
@@ -30,9 +32,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (featureError) return featureError;
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    const { user } = auth;
-    const db = resolveRequestDbClient(auth);
-    if (!db) return jsonError('更新知识库失败', 500);
+    const { user, scoped } = auth;
 
     const { id } = await params;
     let body: unknown;
@@ -45,20 +45,25 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if ('error' in normalized) {
         return jsonError(normalized.error, 400);
     }
-    const updateData: Record<string, unknown> = {
+    const updateData = {
         ...normalized.data,
         updated_at: new Date().toISOString(),
     };
 
-    const { data, error } = await db
-        .from('knowledge_bases')
-        .update(updateData)
-        .eq('id', id)
-        .eq('user_id', user.id)
-        .select('*')
-        .single();
+    let data;
+    try {
+        data = await scoped.tx((trx) => trx
+            .updateTable('knowledge_bases')
+            .set(updateData)
+            .where('id', '=', id)
+            .where('user_id', '=', user.id)
+            .returningAll()
+            .executeTakeFirst());
+    } catch {
+        return jsonError('更新知识库失败', 500);
+    }
 
-    if (error) return jsonError('更新知识库失败', 500);
+    if (!data) return jsonError('知识库不存在', 404);
     return jsonOk(data as Record<string, unknown>);
 }
 
@@ -67,19 +72,21 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
     if (featureError) return featureError;
     const auth = await requireUserContext(_request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    const { user } = auth;
-    const db = resolveRequestDbClient(auth);
-    if (!db) return jsonError('删除知识库失败', 500);
+    const { user, scoped } = auth;
 
     const { id } = await params;
-    const { data, error } = await db
-        .from('knowledge_bases')
-        .delete()
-        .eq('id', id)
-        .eq('user_id', user.id)
-        .select('id');
+    let data;
+    try {
+        data = await scoped.tx((trx) => trx
+            .deleteFrom('knowledge_bases')
+            .where('id', '=', id)
+            .where('user_id', '=', user.id)
+            .returning('id')
+            .execute());
+    } catch {
+        return jsonError('删除知识库失败', 500);
+    }
 
-    if (error) return jsonError('删除知识库失败', 500);
     if (!Array.isArray(data) || data.length === 0) return jsonError('知识库不存在', 404);
     return jsonOk({ success: true });
 }

@@ -53,7 +53,6 @@ export async function POST(request: NextRequest) {
             reasoningEnabled,
             membershipType,
             knowledgeBaseFeatureEnabled,
-            accessTokenForKB: auth.accessToken ?? null,
             sharedPromptContextBuilder: buildChatPromptContext,
         });
 

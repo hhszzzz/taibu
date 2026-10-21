@@ -865,10 +865,10 @@ const adapterEntries = new Set([
   'src/lib/server/chat/prompt-context.ts',
   'src/lib/server/chat/request.ts',
   'src/lib/knowledge-base/browser-client.ts',
-  'src/lib/knowledge-base/client.ts',
   'src/lib/knowledge-base/embedding-config.ts',
   'src/lib/knowledge-base/hits.ts',
   'src/lib/knowledge-base/ingest.ts',
+  'src/app/api/knowledge-base/archive/',
   'src/lib/knowledge-base/persistence.server.ts',
   'src/lib/knowledge-base/reranker.ts',
   'src/lib/knowledge-base/search.ts',
@@ -1117,6 +1117,7 @@ const SYSTEM_DB_ALLOWED = [
   'src/lib/ai/chart-prompt-detail.ts',
   'src/lib/server/bazi-case-profile.ts',
   'src/lib/knowledge-base/ingest.ts',
+  'src/app/api/knowledge-base/archive/',
 ];
 mustNotMatchInTree(
   'src',

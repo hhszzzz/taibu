@@ -13,7 +13,6 @@ export async function POST(request: NextRequest) {
         return jsonError(auth.error.message, auth.error.status);
     }
     const user = auth.user;
-    const accessToken = auth.accessToken ?? null;
 
     const body = await request.json() as { query?: unknown; kbIds?: string[]; topK?: number };
     const query = typeof body.query === 'string' ? body.query.trim() : '';
@@ -24,7 +23,7 @@ export async function POST(request: NextRequest) {
         results = await searchKnowledge(query, {
             kbIds: body.kbIds,
             topK: body.topK,
-            accessToken: accessToken || undefined,
+            db: auth.scoped,
             userId: user.id,
         });
     } catch (error) {

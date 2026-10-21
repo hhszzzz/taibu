@@ -83,12 +83,23 @@ export interface RankedResult extends SearchCandidate {
     rank: number;
 }
 
+/**
+ * Structural identity marker accepted by browser-safe search contracts.
+ * The server layer resolves it to a ScopedDb before any query runs.
+ */
+export type KnowledgeSearchDatabase = {
+    readonly scope: {
+        readonly kind: 'user' | 'anon' | 'system';
+        readonly userId?: string;
+    };
+};
+
 export interface SearchOptions {
     kbIds?: string[];
     limit?: number;
     topK?: number;
     useVector?: boolean;
-    accessToken?: string;
+    db?: KnowledgeSearchDatabase;
     userId?: string;
     membershipType?: MembershipType;
     searchConfig?: Partial<{

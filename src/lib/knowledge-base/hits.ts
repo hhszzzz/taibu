@@ -1,6 +1,6 @@
 import 'server-only';
 
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { ScopedDb } from '@/lib/db/context.server';
 import { searchKnowledge } from '@/lib/knowledge-base/search';
 import { stripMentionTokens } from '@/lib/mentions';
 import type { KnowledgeHit, RankedResult, SearchCandidate } from '@/lib/knowledge-base/types';
@@ -10,9 +10,8 @@ export interface BuildKnowledgeHitsOptions {
     query: string;
     userId: string;
     membershipType: MembershipType;
-    accessToken: string | null;
+    db: ScopedDb;
     promptKbIds: string[];
-    supabase: SupabaseClient;
     knownNames?: { userId: string; names: ReadonlyMap<string, string> };
 }
 
@@ -27,9 +26,8 @@ export async function buildKnowledgeHits({
     query,
     userId,
     membershipType,
-    accessToken,
+    db,
     promptKbIds,
-    supabase,
     knownNames,
 }: BuildKnowledgeHitsOptions): Promise<KnowledgeHit[]> {
     if (membershipType === 'free') return [];
@@ -40,7 +38,7 @@ export async function buildKnowledgeHits({
     const results = await searchKnowledge(cleanedQuery, {
         limit: 12,
         topK: 5,
-        accessToken: accessToken || undefined,
+        db,
         userId,
         kbIds: promptKbIds,
         membershipType,
@@ -58,13 +56,13 @@ export async function buildKnowledgeHits({
     const missingIds = kbIds.filter(id => !kbMap.has(id));
     if (missingIds.length > 0) {
         try {
-            const { data: kbRows, error } = await supabase
-                .from('knowledge_bases')
-                .select('id, name')
-                .eq('user_id', userId)
-                .in('id', missingIds);
-            if (error) throw error;
-            for (const kb of kbRows || []) {
+            const kbRows = await db.tx((trx) => trx
+                .selectFrom('knowledge_bases')
+                .select(['id', 'name'])
+                .where('user_id', '=', userId)
+                .where('id', 'in', missingIds)
+                .execute());
+            for (const kb of kbRows) {
                 if (typeof kb.id === 'string' && typeof kb.name === 'string') kbMap.set(kb.id, kb.name);
             }
         } catch {

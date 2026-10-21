@@ -2,6 +2,7 @@ import { beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { createMockAuthContext } from './helpers/supabase-mock';
+import { createMockScopedDb } from './helpers/db-mock';
 
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon';
@@ -850,27 +851,34 @@ for (const mode of ['managed', 'trusted', 'direct', 'preview'] as const) {
             const membership = require('../lib/user/membership-server') as typeof import('../lib/user/membership-server');
             const settings = require('../lib/app-settings') as typeof import('../lib/app-settings');
             const search = require('../lib/knowledge-base/search') as typeof import('../lib/knowledge-base/search');
+            const contextModule = require('../lib/db/context.server') as typeof import('../lib/db/context.server');
             const resolveAuth = api.getAuthContext;
             const refreshedToken = 'refreshed-access-token';
             const caller = createMockAuthContext({}, `caller-${mode}-${expiredAccessCookie}`);
-            const searchTokens: string[] = [];
             const searchCalls: string[] = [];
             const cookieWrites: string[] = [];
             let refreshCalls = 0;
             let hitCount = 0;
-            const clientForToken = (token: string) => createMockAuthContext({
-                rpc: async (name: string) => {
+            const searchScoped = createMockScopedDb({
+                rpc: async (name) => {
                     searchCalls.push(name);
-                    if (token !== refreshedToken) return { data: null, error: { message: 'JWT expired' } };
-                    return {
-                        data: name === 'search_knowledge_fts'
-                            ? [{ id: 'entry-1', kb_id: 'kb-1', content: 'caller knowledge', rank: 0.3, metadata: {} }]
-                            : [],
-                        error: null,
-                    };
+                    if (name === 'search_knowledge_fts') {
+                        return [{ id: 'entry-1', kb_id: 'kb-1', content: 'caller knowledge', rank: 0.3, metadata: {} }];
+                    }
+                    return [];
                 },
-                from: () => ({ select: () => ({ eq: () => ({ in: async () => ({ data: [{ id: 'kb-1', weight: 'normal' }] }) }) }) }),
-            }, caller.user.id).db;
+                tx: async (work) => work({
+                    selectFrom() {
+                        const query = {
+                            select() { return query; },
+                            where() { return query; },
+                            async execute() { return [{ id: 'kb-1', weight: 'normal' }]; },
+                        };
+                        return query;
+                    },
+                } as never),
+            });
+            t.mock.method(contextModule, 'systemDb', () => searchScoped);
             const authResolverClient = {
                 auth: {
                     async getUser(token: string) {
@@ -891,7 +899,7 @@ for (const mode of ['managed', 'trusted', 'direct', 'preview'] as const) {
                 authResolverClient: authResolverClient as unknown as ReturnType<typeof api.createAnonClient>,
                 authedClientFactory: (token) => {
                     assert.equal(token, refreshedToken);
-                    return clientForToken(token);
+                    return createMockAuthContext({}, caller.user.id).db;
                 },
                 cookieStore: {
                     set: (_name, value) => { cookieWrites.push(value); },
@@ -904,17 +912,14 @@ for (const mode of ['managed', 'trusted', 'direct', 'preview'] as const) {
                 assert.ok(auth.user);
                 return { ...auth, user: auth.user };
             });
-            t.mock.method(api, 'createAuthedClient', (token: string) => {
-                searchTokens.push(token);
-                return clientForToken(token);
-            });
             t.mock.method(membership, 'getEffectiveMembershipType', async () => 'plus' as const);
             t.mock.method(settings, 'isFeatureModuleEnabled', async () => true);
             // Keep the real P6 search/persistence chain; replace only prompt assembly.
             t.mock.method(promptContext, 'buildChatPromptContext', async (resolved: Parameters<typeof promptContext.buildChatPromptContext>[0]) => {
+                assert.equal(resolved.userId, caller.user.id);
                 const hits = await search.searchKnowledge('question', {
                     membershipType: 'plus', userId: resolved.userId ?? undefined,
-                    accessToken: resolved.accessTokenForKB ?? undefined, kbIds: ['kb-1'],
+                    db: contextModule.systemDb(), kbIds: ['kb-1'],
                 });
                 hitCount = hits.length;
                 return {
@@ -945,8 +950,7 @@ for (const mode of ['managed', 'trusted', 'direct', 'preview'] as const) {
             assert.equal(response.status, 200, body);
             assert.doesNotMatch(body, /refreshed-access-token|valid-refresh-token|next-refresh-token/);
             assert.equal(hitCount, 1, 'successful authentication must not silently lose KB results');
-            // Search and weighting share one owner-bound persistence adapter.
-            assert.deepEqual(searchTokens, [refreshedToken]);
+            // Search and weighting share the authenticated request's scoped database.
             assert.deepEqual(searchCalls, ['search_knowledge_fts', 'search_knowledge_trigram']);
             assert.equal(refreshCalls, 1);
             assert.deepEqual(cookieWrites, [refreshedToken, 'next-refresh-token']);

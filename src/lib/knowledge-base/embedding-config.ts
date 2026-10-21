@@ -1,7 +1,5 @@
-import { resolveTokenMembership } from '@/lib/user/membership-server';
-import { createClient } from '@supabase/supabase-js';
-import { createKbClient } from '@/lib/knowledge-base/client';
-import { getSupabaseAnonKey, getSupabaseUrl } from '@/lib/supabase-env';
+import type { ScopedDb } from '@/lib/db/context.server';
+import { getEffectiveMembershipType } from '@/lib/user/membership-server';
 import { DEFAULT_EMBEDDING_MODEL_ID } from '@/lib/ai/ai-config';
 import { getModelConfigAsync, getModelsByUsageTypeAsync } from '@/lib/server/ai-config';
 import { applySourceToModel, getOrderedModelSources } from '@/lib/ai/source-runtime';
@@ -24,23 +22,6 @@ interface EmbeddingConfig {
 }
 
 const DEFAULT_MODEL: EmbeddingModel = DEFAULT_EMBEDDING_MODEL_ID as EmbeddingModel;
-
-async function createSupabaseClient(accessToken?: string) {
-    if (accessToken) {
-        return createClient(
-            getSupabaseUrl(),
-            getSupabaseAnonKey(),
-            {
-                global: {
-                    headers: {
-                        Authorization: `Bearer ${accessToken}`
-                    }
-                }
-            }
-        );
-    }
-    return createKbClient();
-}
 
 function getEmbeddingMetadata(modelId: string): { model: EmbeddingModel; dimension: number; provider: 'gateway' | 'local' } {
     const normalized = ((modelId in EMBEDDING_MODELS ? modelId : DEFAULT_MODEL) as EmbeddingModel);
@@ -84,17 +65,16 @@ export function getEmbeddingDimension(): number {
     return getEmbeddingMetadata(configuredId).dimension;
 }
 
-export async function hasVectorCapability(): Promise<boolean> {
-    const membership = await resolveTokenMembership();
+export async function hasVectorCapability(userId: string, db: ScopedDb): Promise<boolean> {
+    const membership = await getEffectiveMembershipType(userId, { db });
     if (membership !== 'pro') return false;
 
     const dim = await getEmbeddingDimensionAsync();
-    return await checkVectorIndexExists(dim);
+    return await checkVectorIndexExists(dim, db);
 }
 
-export async function checkVectorIndexExists(dim: number, accessToken?: string): Promise<boolean> {
-    const supabase = await createSupabaseClient(accessToken);
-    const { data } = await supabase.rpc('check_vector_index_exists', { p_dim: dim });
+export async function checkVectorIndexExists(dim: number, db: ScopedDb): Promise<boolean> {
+    const data = await db.rpc('check_vector_index_exists', { p_dim: dim });
     return data === true;
 }
 

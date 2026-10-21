@@ -47,7 +47,6 @@ export interface ResolvedChatRequest {
   body: ChatRequestBody;
   userId: string | null;
   canSkipCredit: boolean;
-  accessTokenForKB: string | null;
   requestedModelId: string;
   membershipType: MembershipType;
   reasoningEnabled: boolean;
@@ -96,10 +95,9 @@ function toPreparationInput(body: ChatRequestBody): ChatPreparationInput {
 function withRequestContext<T extends ResolvedChatPreparation>(
   prepared: T,
   body: ChatRequestBody | undefined,
-  accessTokenForKB: string | null,
 ): Omit<T, 'input'> & ResolvedChatRequest {
   const { input, ...resolved } = prepared;
-  return { ...resolved, body: body ?? input, accessTokenForKB };
+  return { ...resolved, body: body ?? input };
 }
 
 function preparationErrorResponse(error: ChatPreparationFailure): Response {
@@ -155,11 +153,9 @@ function bindAccountLoader(
 
 async function bindManagedChat(request: NextRequest, body: ChatRequestBody, observation?: RequestObservation): Promise<{
   actor: ChatActor;
-  accessTokenForKB: string | null;
   operations: ManagedChatOperations;
 } | Response> {
   const canSkipCredit = !!(INTERNAL_SECRET && body.skipCreditCheck && body.internalSecret === INTERNAL_SECRET);
-  let accessTokenForKB: string | null;
   let authUser: ChatAuthUser | null;
   let authScoped: import('@/lib/db/context.server').ScopedDb;
   let actor: ChatActor;
@@ -170,7 +166,6 @@ async function bindManagedChat(request: NextRequest, body: ChatRequestBody, obse
     authUser = auth.user;
     authScoped = auth.scoped;
     actor = { userId: auth.user?.id || null, creditPolicy: 'trusted-bypass' };
-    accessTokenForKB = auth.accessToken ?? null;
   } else {
     const auth = await requireUserContext(request);
     if ('error' in auth) {
@@ -180,8 +175,6 @@ async function bindManagedChat(request: NextRequest, body: ChatRequestBody, obse
     authUser = auth.user;
     authScoped = auth.scoped;
     actor = { userId: auth.user.id, creditPolicy: 'charge' };
-    // Auth may refresh the session; incoming request cookies still contain the old token.
-    accessTokenForKB = auth.accessToken ?? null;
   }
 
   const userId = actor.userId;
@@ -214,7 +207,7 @@ async function bindManagedChat(request: NextRequest, body: ChatRequestBody, obse
     buildPrompt: async (resolved) => {
       observation?.phase('prompt');
       try {
-        return await buildChatPromptContext(withRequestContext(resolved, body, accessTokenForKB));
+        return await buildChatPromptContext(withRequestContext(resolved, body));
       } catch (error) {
         observation?.fail('prompt');
         throw error;
@@ -224,7 +217,7 @@ async function bindManagedChat(request: NextRequest, body: ChatRequestBody, obse
       if (userId) await observeRefund(() => refundCreditsOrLog(userId, 1, 'chat prompt-context'), observation);
     },
   };
-  return { actor, accessTokenForKB, operations };
+  return { actor, operations };
 }
 
 export async function prepareBrowserDirectChatRequest(
@@ -237,7 +230,6 @@ export async function prepareBrowserDirectChatRequest(
     observation?.fail('admission');
     return jsonError(auth.error.message, auth.error.status);
   }
-  const accessTokenForKB = auth.accessToken ?? null;
   const result = await prepareDirectChat({ userId: auth.user.id }, toPreparationInput(body), {
     defaultModelId: DEFAULT_MODEL_ID,
     checkRateLimit: async () => (await checkRateLimit(
@@ -249,7 +241,7 @@ export async function prepareBrowserDirectChatRequest(
     buildPrompt: async (resolved) => {
       observation?.phase('prompt');
       try {
-        return await buildChatPromptContext(withRequestContext(resolved, body, accessTokenForKB));
+        return await buildChatPromptContext(withRequestContext(resolved, body));
       } catch (error) {
         observation?.fail('prompt');
         throw error;
@@ -258,7 +250,7 @@ export async function prepareBrowserDirectChatRequest(
   });
   if (!result.ok) observation?.fail('admission');
   return result.ok
-    ? withRequestContext(result.value, body, accessTokenForKB)
+    ? withRequestContext(result.value, body)
     : preparationErrorResponse(result.error);
 }
 
@@ -275,6 +267,6 @@ export async function prepareChatRequest(
   const result = await prepareManagedChat(adapter.actor, toPreparationInput(body), adapter.operations);
   if (!result.ok) observation?.fail('admission');
   return result.ok
-    ? withRequestContext(result.value, body, adapter.accessTokenForKB)
+    ? withRequestContext(result.value, body)
     : preparationErrorResponse(result.error);
 }

@@ -2,23 +2,23 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { replaceKnowledgeSourceEntries } from '../lib/knowledge-base/source-replacement';
 import { createKnowledgeBasePersistence } from '../lib/knowledge-base/persistence.server';
+import { createMockScopedDb } from './helpers/db-mock';
 import type { KnowledgeSourceChunk, KnowledgeSourcePersistence, KnowledgeSourceReplacement } from '../lib/knowledge-base/types';
 
 type RpcCall = { name: string; args: Record<string, unknown> };
 
 function rpcAdapter(data: unknown, error: unknown = null) {
     const calls: RpcCall[] = [];
-    const client = {
-        rpc: async (name: string, args: Record<string, unknown>) => {
+    const scoped = createMockScopedDb({
+        rpc: async (name, args) => {
             calls.push({ name, args });
-            return { data, error };
+            if (error) throw error;
+            return data;
         },
-        from: () => { throw new Error('Atomic replacement must not write tables separately'); },
-    };
-    // Only the SDK edge is simulated; no database atomicity/RLS claim is made by these unit tests.
-    const sdkClient = client as unknown as Parameters<typeof createKnowledgeBasePersistence>[0];
-    const persistence = createKnowledgeBasePersistence(sdkClient);
-    return { calls, persistence, client: sdkClient };
+        tx: async () => { throw new Error('Atomic replacement must not write tables separately'); },
+    });
+    const persistence = createKnowledgeBasePersistence(scoped);
+    return { calls, persistence, scoped };
 }
 
 function chunk(index = 0): KnowledgeSourceChunk {
@@ -85,7 +85,7 @@ test('non-numeric RPC counts keep legacy fallback and permission failures propag
     const success = rpcAdapter('1');
     assert.deepEqual(await replaceKnowledgeSourceEntries(success.persistence, 'kb-1', [chunk()]), { entriesCreated: 1, chunks: 1 });
     assert.equal(success.calls[0].args.p_archive, false);
-    const error = { code: '42501', message: 'permission denied' };
+    const error = Object.assign(new Error('permission denied'), { code: '42501' });
     const failure = rpcAdapter(null, error);
     await assert.rejects(replaceKnowledgeSourceEntries(failure.persistence, 'kb-1', [chunk()]), actual => actual === error);
     assert.equal(failure.calls.length, 1);
@@ -104,28 +104,21 @@ test('search adapter preserves exact RPC args, raw-score defaults, metadata and 
     assert.deepEqual(fts[0], { id: 'entry-1', kbId: 'kb-1', content: 'text', metadata: {}, rawScore: 0.2 });
     assert.equal(trigram[0].rawScore, 0.4);
     assert.equal(vector[0].rawScore, 0);
-    const failure = rpcAdapter(null, { code: '42501' });
+    const failure = rpcAdapter(null, new Error('permission denied'));
     await assert.rejects(failure.persistence.searchFts('term', undefined, 20, 'english'));
     await assert.rejects(failure.persistence.searchTrigram('term', undefined, 20, 0.3));
     await assert.rejects(failure.persistence.searchVector([1], undefined, 20, 1));
 });
 
-test('user write facade retains caller authentication and never trusts an overridden userId', async t => {
-    const kbClientModule = require('../lib/knowledge-base/client') as typeof import('../lib/knowledge-base/client');
+test('user write facade retains caller authentication and never trusts an overridden userId', async () => {
     const ingestModule = require('../lib/knowledge-base/ingest') as typeof import('../lib/knowledge-base/ingest');
-    const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
-    const { client, calls } = rpcAdapter(1);
-    // Authentication is the only additional SDK surface exercised by this facade.
-    const userClient = { ...client, auth: { getUser: async () => ({ data: { user: { id: 'actual-user' } } }) } } as unknown as Parameters<typeof createKnowledgeBasePersistence>[0];
-    t.mock.method(kbClientModule, 'createKbClient', async () => userClient);
-    t.mock.method(apiUtils, 'getSystemAdminClient', () => { throw new Error('Must not upgrade user client'); });
-    await ingestModule.upsertEntries('kb-1', [chunk()], { userId: 'forged-user' });
-    assert.equal(calls[0].args.p_user_id, 'actual-user');
+    const { calls, scoped } = rpcAdapter(1);
+    await ingestModule.upsertEntries('kb-1', [chunk()], scoped, { userId: 'forged-user' });
+    assert.equal(calls[0].args.p_user_id, 'user-1');
     assert.equal(calls.length, 1);
 });
 
-test('search orchestration retains RPC order, remaining trigram limit and normalization/deduplication', async t => {
-    const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
+test('search orchestration retains RPC order, remaining trigram limit and normalization/deduplication', async (t) => {
     const embeddingModule = require('../lib/knowledge-base/embedding-config') as typeof import('../lib/knowledge-base/embedding-config');
     const searchModule = require('../lib/knowledge-base/search') as typeof import('../lib/knowledge-base/search');
     const calls: RpcCall[] = [];
@@ -135,21 +128,17 @@ test('search orchestration retains RPC order, remaining trigram limit and normal
         search_knowledge_trigram: [{ ...row, id: 'a', similarity: 0.8 }],
         search_knowledge_vector: [{ ...row, id: 'b', distance: 0.5 }, { ...row, id: 'v', distance: 1 }],
     };
-    const client = { rpc: async (name: string, args: Record<string, unknown>) => {
-        calls.push({ name, args });
-        return { data: replies[name], error: null };
-    } } as unknown as Parameters<typeof createKnowledgeBasePersistence>[0];
-    t.mock.method(apiUtils, 'getSystemAdminClient', () => { throw new Error('No system-admin search fallback'); });
-    const callerClient = t.mock.method(apiUtils, 'createAuthedClient', (token: string) => {
-        assert.equal(token, 'caller-token');
-        return client;
+    const scoped = createMockScopedDb({
+        rpc: async (name, args) => {
+            calls.push({ name, args });
+            if (name === 'check_vector_index_exists') return true;
+            return replies[name];
+        },
     });
     t.mock.method(embeddingModule, 'getEmbeddingDimensionAsync', async () => 2);
-    t.mock.method(embeddingModule, 'checkVectorIndexExists', async () => true);
     t.mock.method(embeddingModule, 'generateEmbedding', async () => [0.1, 0.2]);
-    const result = await searchModule.searchCandidates('term', { limit: 3, useVector: true, accessToken: 'caller-token' });
-    assert.equal(callerClient.mock.callCount(), 1);
-    assert.deepEqual(calls.map(call => [call.name, call.args.p_limit]), [
+    const result = await searchModule.searchCandidates('term', { limit: 3, useVector: true, db: scoped });
+    assert.deepEqual(calls.filter(call => call.name.startsWith('search_knowledge_')).map(call => [call.name, call.args.p_limit]), [
         ['search_knowledge_fts', 3], ['search_knowledge_trigram', 1], ['search_knowledge_vector', 3],
     ]);
     assert.deepEqual(result.map(item => [item.id, item.method, item.score]), [
@@ -159,16 +148,16 @@ test('search orchestration retains RPC order, remaining trigram limit and normal
 
 for (const failed of [['fts'], ['trigram'], ['fts', 'trigram']]) {
     test(`search retains successful stages and observes failures: ${failed}`, async t => {
-        const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
         const search = require('../lib/knowledge-base/search') as typeof import('../lib/knowledge-base/search');
         const warnings: unknown[][] = [];
         t.mock.method(console, 'warn', (...args: unknown[]) => warnings.push(args));
-        t.mock.method(apiUtils, 'createAuthedClient', () => ({
-            rpc: async (name: string) => failed.some(stage => name.endsWith(stage))
-                ? { data: null, error: { message: 'PRIVATE_PROVIDER_ERROR' } }
-                : { data: [{ id: 'hit', kb_id: 'kb', content: 'PRIVATE_CONTENT', rank: 0.2, similarity: 0.3 }], error: null },
-        }) as unknown as ReturnType<typeof apiUtils.createAuthedClient>);
-        const promise = search.searchCandidates('PRIVATE_QUERY', { accessToken: 'PRIVATE_TOKEN' });
+        const scoped = createMockScopedDb({
+            rpc: async (name) => {
+                if (failed.some(stage => name.endsWith(stage))) throw new Error('PRIVATE_PROVIDER_ERROR');
+                return [{ id: 'hit', kb_id: 'kb', content: 'PRIVATE_CONTENT', rank: 0.2, similarity: 0.3 }];
+            },
+        });
+        const promise = search.searchCandidates('PRIVATE_QUERY', { db: scoped });
         if (failed.length === 2) await assert.rejects(promise, /Knowledge retrieval failed/);
         else assert.equal((await promise)[0].id, 'hit');
         assert.equal(warnings.length, failed.length);
@@ -176,7 +165,7 @@ for (const failed of [['fts'], ['trigram'], ['fts', 'trigram']]) {
     });
 }
 
-test('hit names reuse only matching request owner, query missing IDs, and retain standalone fallback', async t => {
+test('hit names reuse only matching request owner, query missing IDs, and retain standalone fallback', async (t) => {
     const search = require('../lib/knowledge-base/search') as typeof import('../lib/knowledge-base/search');
     const { buildKnowledgeHits } = require('../lib/knowledge-base/hits') as typeof import('../lib/knowledge-base/hits');
     t.mock.method(search, 'searchKnowledge', async () => [
@@ -184,23 +173,38 @@ test('hit names reuse only matching request owner, query missing IDs, and retain
         { id: 'b', kbId: 'b', content: 'b', score: 0.4, method: 'fts', metadata: {} },
     ]);
     const queries: string[][] = [];
-    const supabase = { from: () => ({ select: (fields: string) => {
-        assert.equal(fields, 'id, name');
-        return { eq: (_key: string, owner: string) => { assert.equal(owner, 'owner'); return {
-            in: async (_key: string, ids: string[]) => { queries.push(ids); return { data: ids.map(id => ({ id, name: id })) }; },
-        }; } };
-    } }) } as unknown as Parameters<typeof buildKnowledgeHits>[0]['supabase'];
-    const options = { query: 'question', userId: 'owner', membershipType: 'pro' as const, accessToken: 'token', promptKbIds: ['a', 'b'], supabase };
+    const ownerFilters: unknown[] = [];
+    const scoped = createMockScopedDb({
+        tx: async (work) => work({
+            selectFrom(table: string) {
+                assert.equal(table, 'knowledge_bases');
+                const query = {
+                    select() { return query; },
+                    where(column: string, _operator: string, value: unknown) {
+                        if (column === 'user_id') ownerFilters.push(value);
+                        if (column === 'id') queries.push(value as string[]);
+                        return query;
+                    },
+                    async execute() {
+                        const ids = queries[queries.length - 1] ?? [];
+                        return ids.map(id => ({ id, name: id }));
+                    },
+                };
+                return query;
+            },
+        } as never),
+    });
+    const options = { query: 'question', userId: 'owner', membershipType: 'pro' as const, promptKbIds: ['a', 'b'], db: scoped };
     const standalone = await buildKnowledgeHits(options);
     assert.deepEqual(await buildKnowledgeHits({ ...options, knownNames: { userId: 'owner', names: new Map([['a', 'a'], ['b', 'b']]) } }), standalone);
     assert.deepEqual(await buildKnowledgeHits({ ...options, knownNames: { userId: 'owner', names: new Map([['a', 'a']]) } }), standalone);
     assert.deepEqual(await buildKnowledgeHits({ ...options, knownNames: { userId: 'other', names: new Map([['a', 'SECRET_OTHER']]) } }), standalone);
     assert.deepEqual(queries, [['a', 'b'], ['b'], ['a', 'b']]);
+    assert.deepEqual(ownerFilters, ['owner', 'owner', 'owner']);
 });
 
-test('missing resolved identity fails closed even with no hits', async t => {
-    const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
+test('missing resolved identity fails closed even with no hits', async () => {
     const search = require('../lib/knowledge-base/search') as typeof import('../lib/knowledge-base/search');
-    t.mock.method(apiUtils, 'createAuthedClient', () => ({ auth: { getUser: async () => ({ data: { user: null } }) } }) as unknown as ReturnType<typeof apiUtils.createAuthedClient>);
-    await assert.rejects(search.searchKnowledge('query', { membershipType: 'plus', accessToken: 'token' }), search.KnowledgeSearchContextError);
+    await assert.rejects(search.searchCandidates('query', { userId: 'caller-1' }), search.KnowledgeSearchContextError);
+    await assert.rejects(search.searchKnowledge('query', { userId: 'caller-1', membershipType: 'plus' }), search.KnowledgeSearchContextError);
 });

@@ -6,7 +6,7 @@ import {
     type DataSourceTypeInput,
 } from '@/lib/data-sources/types';
 import { getProvider } from '@/lib/data-sources';
-import { getSystemAdminClient } from '@/lib/api-utils';
+import type { ScopedDb } from '@/lib/db/context.server';
 import { generateEmbeddings } from '@/lib/knowledge-base/embedding-config';
 import type {
     IngestResult, KnowledgeBaseWeight, KnowledgeSourcePersistence,
@@ -15,9 +15,7 @@ import type {
 } from '@/lib/knowledge-base/types';
 import { createKnowledgeBasePersistence } from '@/lib/knowledge-base/persistence.server';
 import { replaceKnowledgeSourceEntries } from '@/lib/knowledge-base/source-replacement';
-import { createKbClient } from '@/lib/knowledge-base/client';
 import { isConversationMessageInfraMissing, type StoredConversationMessageRow } from '@/lib/server/conversation-messages';
-import { systemDb } from '@/lib/db/context.server';
 
 interface ChunkConfig {
     maxChunkSize: number;
@@ -101,44 +99,51 @@ export function normalizeKnowledgeBaseSourceType(sourceType: DataSourceTypeInput
     return canonicalizeDataSourceType(sourceType);
 }
 
+function requireScopedUserId(db: ScopedDb): string {
+    if (db.scope.kind !== 'user') throw new Error('Not authenticated');
+    return db.scope.userId;
+}
+
+function isInfraMissing(error: unknown): boolean {
+    return isConversationMessageInfraMissing(error as Parameters<typeof isConversationMessageInfraMissing>[0]);
+}
+
 async function loadConversationMessagesFallback(
-    supabase: ReturnType<typeof getSystemAdminClient>,
+    db: ScopedDb,
     conversationId: string,
     userId: string,
 ) {
-    const { data: conversation } = await supabase
-        .from('conversations')
-        .select('id, user_id, messages')
-        .eq('id', conversationId)
-        .eq('user_id', userId)
-        .maybeSingle();
+    const conversation = await db.tx((trx) => trx
+        .selectFrom('conversations')
+        .select(['id', 'user_id', 'messages'])
+        .where('id', '=', conversationId)
+        .where('user_id', '=', userId)
+        .executeTakeFirst());
 
     if (!conversation) {
         throw new Error('Conversation not found');
     }
 
-    return (conversation.messages as ChatMessage[]) || [];
+    return (conversation.messages as unknown as ChatMessage[]) || [];
 }
-
 export async function ingestConversation(
     kbId: string,
     conversationId: string,
+    db: ScopedDb,
     options?: IngestOptions
 ): Promise<IngestResult> {
-    const supabase = await createKbClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
+    const userId = requireScopedUserId(db);
 
-    const { data: conversation } = await supabase
-        .from('conversations')
-        .select('id, user_id, messages')
-        .eq('id', conversationId)
-        .eq('user_id', user.id)
-        .maybeSingle();
+    const conversation = await db.tx((trx) => trx
+        .selectFrom('conversations')
+        .select(['id', 'user_id', 'messages'])
+        .where('id', '=', conversationId)
+        .where('user_id', '=', userId)
+        .executeTakeFirst());
 
     if (!conversation) throw new Error('Conversation not found');
 
-    const messagePairs = extractMessagePairs((conversation.messages as ChatMessage[]) || []);
+    const messagePairs = extractMessagePairs((conversation.messages as unknown as ChatMessage[]) || []);
     const chunks: ChunkData[] = [];
 
     for (const pair of messagePairs) {
@@ -159,30 +164,27 @@ export async function ingestConversation(
         })));
     }
 
-    return await upsertEntries(kbId, chunks, {
-        userId: user.id,
+    return await upsertEntries(kbId, chunks, db, {
         source: {
             sourceType: 'conversation',
             sourceId: conversationId,
         },
     });
 }
-
 export async function ingestRecord(
     kbId: string,
     recordId: string,
+    db: ScopedDb,
     options?: IngestOptions
 ): Promise<IngestResult> {
-    const supabase = await createKbClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
+    const userId = requireScopedUserId(db);
 
-    const { data: record } = await supabase
-        .from('ming_records')
-        .select('id, user_id, title, content, tags, category')
-        .eq('id', recordId)
-        .eq('user_id', user.id)
-        .maybeSingle();
+    const record = await db.tx((trx) => trx
+        .selectFrom('ming_records')
+        .select(['id', 'user_id', 'title', 'content', 'tags', 'category'])
+        .where('id', '=', recordId)
+        .where('user_id', '=', userId)
+        .executeTakeFirst());
 
     if (!record) throw new Error('Record not found');
 
@@ -208,67 +210,61 @@ export async function ingestRecord(
         }
     }));
 
-    return await upsertEntries(kbId, chunks, {
-        userId: user.id,
+    return await upsertEntries(kbId, chunks, db, {
         source: {
             sourceType: MING_RECORD_SOURCE_TYPE,
             sourceId: recordId,
         },
     });
 }
+export async function ingestFile(kbId: string, file: File, db: ScopedDb, options?: IngestOptions): Promise<IngestResult> {
+    requireScopedUserId(db);
 
-export async function ingestFile(_kbId: string, _file: File, _options?: IngestOptions): Promise<IngestResult> {
-    const supabase = await createKbClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
-
-    const content = await _file.text();
+    const content = await file.text();
     if (!content.trim()) {
         return { entriesCreated: 0, chunks: 0 };
     }
 
     const textChunks = chunkText(content, {
         ...DEFAULT_CHUNK_CONFIG,
-        ...(_options?.chunkConfig || {})
+        ...(options?.chunkConfig || {})
     });
 
     const chunks: ChunkData[] = textChunks.map((c, i) => ({
         content: c,
         sourceType: 'file',
-        sourceId: _file.name,
+        sourceId: file.name,
         chunkIndex: i,
         metadata: {
-            file_name: _file.name,
-            file_type: _file.type || null
+            file_name: file.name,
+            file_type: file.type || null
         }
     }));
 
-    return await upsertEntries(_kbId, chunks, {
-        userId: user.id,
+    return await upsertEntries(kbId, chunks, db, {
         source: {
             sourceType: 'file',
-            sourceId: _file.name,
+            sourceId: file.name,
         },
     });
 }
-
 export async function ingestConversationAsService(
     kbId: string,
     conversationId: string,
     userId: string,
+    db: ScopedDb,
     options?: IngestOptions
 ): Promise<IngestResult> {
-    const supabase = getSystemAdminClient();
-    const { data: conversation } = await supabase
-        .from('conversations')
-        .select('id, user_id, messages')
-        .eq('id', conversationId)
-        .eq('user_id', userId)
-        .maybeSingle();
+    const conversation = await db.tx((trx) => trx
+        .selectFrom('conversations')
+        .select(['id', 'user_id', 'messages'])
+        .where('id', '=', conversationId)
+        .where('user_id', '=', userId)
+        .executeTakeFirst());
 
     if (!conversation) throw new Error('Conversation not found');
 
-    const messagePairs = extractMessagePairs((conversation.messages as ChatMessage[]) || []);
+    const messagePairs = extractMessagePairs((conversation.messages as unknown as ChatMessage[]) || []);
     const chunks: ChunkData[] = [];
 
     for (const pair of messagePairs) {
@@ -289,7 +285,7 @@ export async function ingestConversationAsService(
         })));
     }
 
-    return await upsertEntriesAsService(kbId, chunks, {
+    return await upsertEntriesAsService(kbId, chunks, db, {
         persistence: options?.persistence,
         userId,
         source: {
@@ -299,35 +295,38 @@ export async function ingestConversationAsService(
         },
     });
 }
-
 export async function ingestChatMessageAsService(
     kbId: string,
     conversationId: string,
     messageId: string,
     userId: string,
+    db: ScopedDb,
     options?: IngestOptions
 ): Promise<IngestResult> {
-    const supabase = getSystemAdminClient();
-    const { data: conversation } = await supabase
-        .from('conversations')
-        .select('id, user_id')
-        .eq('id', conversationId)
-        .eq('user_id', userId)
-        .maybeSingle();
+    const conversation = await db.tx((trx) => trx
+        .selectFrom('conversations')
+        .select(['id', 'user_id'])
+        .where('id', '=', conversationId)
+        .where('user_id', '=', userId)
+        .executeTakeFirst());
 
     if (!conversation) throw new Error('Conversation not found');
     let target: ChatMessage | null = null;
     let previousUser: ChatMessage | null = null;
 
-    const targetMessageResult = await supabase
-        .from('conversation_messages')
-        .select('sequence, message_id, role, content, metadata, created_at')
-        .eq('conversation_id', conversationId)
-        .eq('message_id', messageId)
-        .maybeSingle();
+    let targetRow: StoredConversationMessageRow | null = null;
+    try {
+        targetRow = await db.tx((trx) => trx
+            .selectFrom('conversation_messages')
+            .select(['sequence', 'message_id', 'role', 'content', 'metadata', 'created_at'])
+            .where('conversation_id', '=', conversationId)
+            .where('message_id', '=', messageId)
+            .executeTakeFirst()) as unknown as StoredConversationMessageRow | null;
+    } catch (error) {
+        if (!isInfraMissing(error)) throw error;
+    }
 
-    if (!targetMessageResult.error && targetMessageResult.data) {
-        const targetRow = targetMessageResult.data as StoredConversationMessageRow;
+    if (targetRow) {
         target = {
             id: targetRow.message_id,
             role: targetRow.role,
@@ -336,22 +335,22 @@ export async function ingestChatMessageAsService(
             ...((targetRow.metadata || {}) as Omit<ChatMessage, 'id' | 'role' | 'content' | 'createdAt'>),
         };
 
-        const previousUserResult = await supabase
-            .from('conversation_messages')
-            .select('sequence, message_id, role, content, metadata, created_at')
-            .eq('conversation_id', conversationId)
-            .eq('role', 'user')
-            .lt('sequence', targetRow.sequence)
-            .order('sequence', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-
-        if (previousUserResult.error && !isConversationMessageInfraMissing(previousUserResult.error)) {
-            throw previousUserResult.error;
+        let previousUserRow: StoredConversationMessageRow | null = null;
+        try {
+            previousUserRow = await db.tx((trx) => trx
+                .selectFrom('conversation_messages')
+                .select(['sequence', 'message_id', 'role', 'content', 'metadata', 'created_at'])
+                .where('conversation_id', '=', conversationId)
+                .where('role', '=', 'user')
+                .where('sequence', '<', targetRow.sequence)
+                .orderBy('sequence', 'desc')
+                .limit(1)
+                .executeTakeFirst()) as unknown as StoredConversationMessageRow | null;
+        } catch (error) {
+            if (!isInfraMissing(error)) throw error;
         }
 
-        if (previousUserResult.data) {
-            const previousUserRow = previousUserResult.data as StoredConversationMessageRow;
+        if (previousUserRow) {
             previousUser = {
                 id: previousUserRow.message_id,
                 role: previousUserRow.role,
@@ -360,12 +359,10 @@ export async function ingestChatMessageAsService(
                 ...((previousUserRow.metadata || {}) as Omit<ChatMessage, 'id' | 'role' | 'content' | 'createdAt'>),
             };
         }
-    } else if (targetMessageResult.error && !isConversationMessageInfraMissing(targetMessageResult.error)) {
-        throw targetMessageResult.error;
     }
 
     if (!target) {
-        const messages = await loadConversationMessagesFallback(supabase, conversationId, userId);
+        const messages = await loadConversationMessagesFallback(db, conversationId, userId);
         const index = messages.findIndex(m => m.id === messageId);
         if (index < 0) throw new Error('Message not found');
 
@@ -399,7 +396,7 @@ export async function ingestChatMessageAsService(
             }
         }));
 
-    return await upsertEntriesAsService(kbId, chunks, {
+    return await upsertEntriesAsService(kbId, chunks, db, {
         persistence: options?.persistence,
         userId,
         source: {
@@ -409,20 +406,19 @@ export async function ingestChatMessageAsService(
         },
     });
 }
-
 export async function ingestRecordAsService(
     kbId: string,
     recordId: string,
     userId: string,
+    db: ScopedDb,
     options?: IngestOptions
 ): Promise<IngestResult> {
-    const supabase = getSystemAdminClient();
-    const { data: record } = await supabase
-        .from('ming_records')
-        .select('id, user_id, title, content, tags, category')
-        .eq('id', recordId)
-        .eq('user_id', userId)
-        .maybeSingle();
+    const record = await db.tx((trx) => trx
+        .selectFrom('ming_records')
+        .select(['id', 'user_id', 'title', 'content', 'tags', 'category'])
+        .where('id', '=', recordId)
+        .where('user_id', '=', userId)
+        .executeTakeFirst());
 
     if (!record) throw new Error('Record not found');
 
@@ -448,7 +444,7 @@ export async function ingestRecordAsService(
         }
     }));
 
-    return await upsertEntriesAsService(kbId, chunks, {
+    return await upsertEntriesAsService(kbId, chunks, db, {
         persistence: options?.persistence,
         userId,
         source: {
@@ -458,11 +454,11 @@ export async function ingestRecordAsService(
         },
     });
 }
-
 export async function ingestFileAsService(
     kbId: string,
     file: { name: string; type: string | null; content: string },
     userId: string,
+    db: ScopedDb,
     options?: IngestOptions
 ): Promise<IngestResult> {
     const text = file.content || '';
@@ -486,7 +482,7 @@ export async function ingestFileAsService(
         }
     }));
 
-    return await upsertEntriesAsService(kbId, chunks, {
+    return await upsertEntriesAsService(kbId, chunks, db, {
         persistence: options?.persistence,
         userId,
         source: {
@@ -495,15 +491,15 @@ export async function ingestFileAsService(
         },
     });
 }
-
 export async function ingestDataSourceAsService(
     kbId: string,
     ref: { type: DataSourceType; id: string },
     userId: string,
+    db: ScopedDb,
     options?: IngestOptions
 ): Promise<IngestResult> {
     const provider = await getProvider(ref.type);
-    const data = await provider.get(ref.id, userId, { db: systemDb() });
+    const data = await provider.get(ref.id, userId, { db });
     if (!data) throw new Error('Data source not found');
 
     const content = await provider.formatForAI(data);
@@ -520,7 +516,7 @@ export async function ingestDataSourceAsService(
         metadata: {}
     }));
 
-    return await upsertEntriesAsService(kbId, chunks, {
+    return await upsertEntriesAsService(kbId, chunks, db, {
         persistence: options?.persistence,
         userId,
         source: {
@@ -530,7 +526,6 @@ export async function ingestDataSourceAsService(
         },
     });
 }
-
 export function chunkText(text: string, config: ChunkConfig = DEFAULT_CHUNK_CONFIG): string[] {
     const { maxChunkSize, overlapSize, separators } = config;
 
@@ -616,42 +611,39 @@ function formatMessagePair(pair: { user: ChatMessage; assistant: ChatMessage }):
 export async function upsertEntries(
     kbId: string,
     chunks: ChunkData[],
+    db: ScopedDb,
     options?: Omit<UpsertEntriesOptions, 'userId'> & { userId?: string },
 ): Promise<IngestResult> {
-    const supabase = await createKbClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
-    return replaceKnowledgeSourceEntries(createKnowledgeBasePersistence(supabase), kbId, chunks, {
+    const userId = requireScopedUserId(db);
+    return replaceKnowledgeSourceEntries(createKnowledgeBasePersistence(db), kbId, chunks, {
         ...options,
-        userId: user.id,
+        userId,
     });
 }
-
 export async function upsertEntriesAsService(
     kbId: string,
     chunks: ChunkData[],
+    db: ScopedDb,
     options?: UpsertEntriesOptions & Pick<IngestOptions, 'persistence'>,
 ): Promise<IngestResult> {
-    const persistence = options?.persistence ?? createKnowledgeBasePersistence(getSystemAdminClient());
-    return replaceKnowledgeSourceEntries(persistence, kbId, chunks, options);
+    return replaceKnowledgeSourceEntries(createKnowledgeBasePersistence(db), kbId, chunks, options);
 }
-
 export async function backfillVectors(
     kbId: string,
+    db: ScopedDb,
     batchSize: number = 100
 ): Promise<VectorBackfillResult> {
-    const supabase = await createKbClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
+    requireScopedUserId(db);
 
-    const { data: entries } = await supabase
-        .from('knowledge_entries')
-        .select('id, content')
-        .eq('kb_id', kbId)
-        .is('content_vector', null)
-        .limit(batchSize);
+    const entries = await db.tx((trx) => trx
+        .selectFrom('knowledge_entries')
+        .select(['id', 'content'])
+        .where('kb_id', '=', kbId)
+        .where('content_vector', 'is', null)
+        .limit(batchSize)
+        .execute());
 
-    if (!entries?.length) {
+    if (!entries.length) {
         return { entriesCreated: 0, chunks: 0, processed: 0, skipped: 0, alreadyExists: 0 };
     }
 
@@ -673,15 +665,15 @@ export async function backfillVectors(
         return { entriesCreated: 0, chunks: 0, processed: 0, skipped: entries.length, alreadyExists: 0 };
     }
 
-    const { data, error } = await supabase.rpc('batch_update_vectors', {
+    const data = await db.rpc('batch_update_vectors', {
         p_updates: updates,
         p_expected_dim: dimension,
         p_force_overwrite: false
     });
 
-    if (error) throw error;
-
-    const row = Array.isArray(data) ? data[0] : data;
+    const row = (Array.isArray(data) ? data[0] : data) as {
+        updated_count?: number; skipped_count?: number; already_exists_count?: number;
+    } | null;
 
     return {
         entriesCreated: 0,
@@ -691,31 +683,30 @@ export async function backfillVectors(
         alreadyExists: row?.already_exists_count ?? 0
     };
 }
-
 export async function backfillVectorsAsService(
     kbId: string,
     userId: string,
+    db: ScopedDb,
     batchSize: number = 100
 ): Promise<VectorBackfillResult> {
-    const supabase = getSystemAdminClient();
-
-    const { data: kb } = await supabase
-        .from('knowledge_bases')
-        .select('id, user_id')
-        .eq('id', kbId)
-        .eq('user_id', userId)
-        .maybeSingle();
+    const kb = await db.tx((trx) => trx
+        .selectFrom('knowledge_bases')
+        .select(['id', 'user_id'])
+        .where('id', '=', kbId)
+        .where('user_id', '=', userId)
+        .executeTakeFirst());
 
     if (!kb) throw new Error('Knowledge base not found');
 
-    const { data: entries } = await supabase
-        .from('knowledge_entries')
-        .select('id, content')
-        .eq('kb_id', kbId)
-        .is('content_vector', null)
-        .limit(batchSize);
+    const entries = await db.tx((trx) => trx
+        .selectFrom('knowledge_entries')
+        .select(['id', 'content'])
+        .where('kb_id', '=', kbId)
+        .where('content_vector', 'is', null)
+        .limit(batchSize)
+        .execute());
 
-    if (!entries?.length) {
+    if (!entries.length) {
         return { entriesCreated: 0, chunks: 0, processed: 0, skipped: 0, alreadyExists: 0 };
     }
 
@@ -737,16 +728,16 @@ export async function backfillVectorsAsService(
         return { entriesCreated: 0, chunks: 0, processed: 0, skipped: entries.length, alreadyExists: 0 };
     }
 
-    const { data, error } = await supabase.rpc('batch_update_vectors_as_service', {
+    const data = await db.rpc('batch_update_vectors_as_service', {
         p_updates: updates,
         p_expected_dim: dimension,
         p_force_overwrite: false,
         p_user_id: userId
     });
 
-    if (error) throw error;
-
-    const row = Array.isArray(data) ? data[0] : data;
+    const row = (Array.isArray(data) ? data[0] : data) as {
+        updated_count?: number; skipped_count?: number; already_exists_count?: number;
+    } | null;
 
     return {
         entriesCreated: 0,

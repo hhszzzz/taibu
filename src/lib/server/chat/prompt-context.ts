@@ -1,7 +1,6 @@
 import 'server-only';
 
 import { buildPromptWithSources, calculatePromptBudget, resolvePersonalities } from '@/lib/ai/prompt-builder';
-import { getSystemAdminClient } from '@/lib/api-utils';
 import { systemDb } from '@/lib/db/context.server';
 import { buildKnowledgeHits } from '@/lib/knowledge-base/hits';
 import { parseMentions, resolveMention, stripMentionTokens } from '@/lib/mentions';
@@ -111,9 +110,7 @@ export async function buildChatPromptContext(
   resolvedRequest: ResolvedChatRequest,
   options?: { deferKnowledgeSearch?: boolean },
 ): Promise<ChatPromptContextResult> {
-  const { body, userId, accessTokenForKB, requestedModelId, reasoningEnabled, membershipType } = resolvedRequest;
-
-  const supabase = getSystemAdminClient();
+  const { body, userId, requestedModelId, reasoningEnabled, membershipType } = resolvedRequest;
   const knowledgeBaseFeatureEnabled = await isFeatureModuleEnabled('knowledge-base');
 
   let dreamContext: { baziChartName?: string; dailyFortune?: string } | undefined;
@@ -180,9 +177,8 @@ export async function buildChatPromptContext(
         query: userQuestionForSearch,
         userId,
         membershipType,
-        accessToken: accessTokenForKB,
         promptKbIds: effectiveUserSettings.promptKbIds,
-        supabase,
+        db: systemDb(),
         knownNames: { userId, names: new Map(promptKnowledgeBases.map(kb => [kb.id, kb.name])) },
       })
     : [];

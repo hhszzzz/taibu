@@ -1492,19 +1492,19 @@
       "callers": [
         {
           "file": "src/app/api/knowledge-base/archive/[id]/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/knowledge-base/archive/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/knowledge-base/archive/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/knowledge-base/archive/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -1716,11 +1716,11 @@
       "callers": [
         {
           "file": "src/lib/knowledge-base/ingest.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/knowledge-base/ingest.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/server/conversation-messages.ts",
@@ -1806,19 +1806,19 @@
         },
         {
           "file": "src/lib/knowledge-base/ingest.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/knowledge-base/ingest.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/knowledge-base/ingest.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/knowledge-base/ingest.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -1955,51 +1955,51 @@
       "callers": [
         {
           "file": "src/app/api/knowledge-base/[id]/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/knowledge-base/[id]/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/knowledge-base/[id]/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/knowledge-base/archive/[id]/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/knowledge-base/archive/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/knowledge-base/archive/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/knowledge-base/ingest/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/knowledge-base/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/knowledge-base/upload/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/knowledge-base/hits.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/knowledge-base/ingest.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/knowledge-base/persistence.server.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/mentions.ts",
@@ -2026,19 +2026,19 @@
       "callers": [
         {
           "file": "src/app/api/knowledge-base/archive/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/knowledge-base/archive/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/knowledge-base/ingest.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/knowledge-base/ingest.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/mentions.ts",
@@ -2197,11 +2197,11 @@
         },
         {
           "file": "src/lib/knowledge-base/ingest.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/knowledge-base/ingest.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         }
       ]
     },

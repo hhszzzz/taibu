@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getEffectiveMembershipType, MembershipResolutionError } from '@/lib/user/membership-server';
-import { requireUserContext, jsonError, jsonOk, resolveRequestDbClient } from '@/lib/api-utils';
+import { requireUserContext, jsonError, jsonOk } from '@/lib/api-utils';
 import { ensureFeatureRouteEnabled } from '@/lib/feature-gate-utils';
 import { normalizeKnowledgeBaseInput } from '@/lib/knowledge-base/ingest';
 
@@ -9,18 +9,19 @@ export async function GET(request: NextRequest) {
     if (featureError) return featureError;
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    const { user } = auth;
-    const db = resolveRequestDbClient(auth);
-    if (!db) return jsonError('获取知识库失败', 500);
+    const { user, scoped } = auth;
 
-    const { data, error } = await db
-        .from('knowledge_bases')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-    if (error) return jsonError('获取知识库失败', 500);
-    return jsonOk({ knowledgeBases: data || [] });
+    try {
+        const knowledgeBases = await scoped.tx((trx) => trx
+            .selectFrom('knowledge_bases')
+            .selectAll()
+            .where('user_id', '=', user.id)
+            .orderBy('created_at', 'desc')
+            .execute());
+        return jsonOk({ knowledgeBases });
+    } catch {
+        return jsonError('获取知识库失败', 500);
+    }
 }
 
 export async function POST(request: NextRequest) {
@@ -28,9 +29,7 @@ export async function POST(request: NextRequest) {
     if (featureError) return featureError;
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    const { user } = auth;
-    const db = resolveRequestDbClient(auth);
-    if (!db) return jsonError('创建知识库失败', 500);
+    const { user, scoped } = auth;
 
     let body: unknown;
     try {
@@ -45,7 +44,7 @@ export async function POST(request: NextRequest) {
 
     let membership;
     try {
-        membership = await getEffectiveMembershipType(user.id, { db: auth.scoped });
+        membership = await getEffectiveMembershipType(user.id, { db: scoped });
     } catch (error) {
         if (error instanceof MembershipResolutionError) {
             return jsonError(error.message, 500);
@@ -57,15 +56,16 @@ export async function POST(request: NextRequest) {
     }
 
     const limit = membership === 'plus' ? 3 : 10;
-    const { data, error } = await db.rpc('create_knowledge_base_with_limit', {
-        p_user_id: user.id,
-        p_name: normalized.data.name,
-        p_description: normalized.data.description ?? null,
-        p_weight: normalized.data.weight ?? 'normal',
-        p_limit: limit,
-    });
-
-    if (error) {
+    let data: unknown;
+    try {
+        data = await scoped.rpc('create_knowledge_base_with_limit', {
+            p_user_id: user.id,
+            p_name: normalized.data.name as string,
+            p_description: normalized.data.description ?? null,
+            p_weight: normalized.data.weight ?? 'normal',
+            p_limit: limit,
+        });
+    } catch (error) {
         console.error('[knowledge-base] Failed to create knowledge base transactionally:', error);
         return jsonError('创建知识库失败', 500);
     }

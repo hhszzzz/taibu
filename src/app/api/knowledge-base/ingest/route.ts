@@ -12,7 +12,7 @@ import {
     normalizeKnowledgeBaseSourceType,
 } from '@/lib/knowledge-base/ingest';
 import { triggerVectorIndexCreation } from '@/lib/knowledge-base/vector-index';
-import { requireUserContext, jsonError, jsonOk, resolveRequestDbClient } from '@/lib/api-utils';
+import { requireUserContext, jsonError, jsonOk } from '@/lib/api-utils';
 import { ensureFeatureRouteEnabled } from '@/lib/feature-gate-utils';
 import { createKnowledgeBasePersistence } from '@/lib/knowledge-base/persistence.server';
 
@@ -21,9 +21,7 @@ export async function POST(request: NextRequest) {
     if (featureError) return featureError;
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    const { user } = auth;
-    const db = resolveRequestDbClient(auth);
-    if (!db) return jsonError('知识库不存在或无权限', 500);
+    const { user, scoped: db } = auth;
 
     const body = await request.json() as {
         kbId?: string;
@@ -39,22 +37,28 @@ export async function POST(request: NextRequest) {
         return jsonError('缺少对话信息', 400);
     }
 
+    const kbId = body.kbId;
     const normalizedSourceType = body.sourceType === 'conversation' || body.sourceType === 'chat_message'
         ? body.sourceType
         : normalizeKnowledgeBaseSourceType(body.sourceType);
 
-    const { data: kb } = await db
-        .from('knowledge_bases')
-        .select('id, user_id')
-        .eq('id', body.kbId)
-        .eq('user_id', user.id)
-        .maybeSingle();
+    let kb;
+    try {
+        kb = await db.tx((trx) => trx
+            .selectFrom('knowledge_bases')
+            .select(['id', 'user_id'])
+            .where('id', '=', kbId)
+            .where('user_id', '=', user.id)
+            .executeTakeFirst());
+    } catch {
+        return jsonError('知识库不存在或无权限', 500);
+    }
 
     if (!kb) return jsonError('知识库不存在或无权限', 403);
 
     let membership;
     try {
-        membership = await getEffectiveMembershipType(user.id, { db: auth.scoped });
+        membership = await getEffectiveMembershipType(user.id, { db });
     } catch (error) {
         if (error instanceof MembershipResolutionError) {
             return jsonError(error.message, 500);
@@ -67,16 +71,16 @@ export async function POST(request: NextRequest) {
 
     const options = { persistence: createKnowledgeBasePersistence(db) };
     const ingestResult = normalizedSourceType === 'conversation'
-        ? await ingestConversationAsService(body.kbId, body.sourceId, user.id, options)
+        ? await ingestConversationAsService(kbId, body.sourceId, user.id, db, options)
         : normalizedSourceType === MING_RECORD_SOURCE_TYPE
-            ? await ingestRecordAsService(body.kbId, body.sourceId, user.id, options)
+            ? await ingestRecordAsService(kbId, body.sourceId, user.id, db, options)
             : normalizedSourceType === 'chat_message'
-                ? await ingestChatMessageAsService(body.kbId, body.sourceMeta?.conversationId || '', body.sourceId, user.id, options)
-                : await ingestDataSourceAsService(body.kbId, { type: normalizedSourceType, id: body.sourceId }, user.id, options);
+                ? await ingestChatMessageAsService(kbId, body.sourceMeta?.conversationId || '', body.sourceId, user.id, db, options)
+                : await ingestDataSourceAsService(kbId, { type: normalizedSourceType, id: body.sourceId }, user.id, db, options);
 
     if (membership === 'pro') {
         try {
-            await backfillVectorsAsService(body.kbId, user.id, 100);
+            await backfillVectorsAsService(kbId, user.id, db, 100);
             await triggerVectorIndexCreation();
         } catch {
         }

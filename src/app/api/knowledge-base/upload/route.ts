@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { getEffectiveMembershipType, MembershipResolutionError } from '@/lib/user/membership-server';
 import { ingestFileAsService, backfillVectorsAsService } from '@/lib/knowledge-base/ingest';
 import { triggerVectorIndexCreation } from '@/lib/knowledge-base/vector-index';
-import { requireUserContext, jsonError, jsonOk, resolveRequestDbClient } from '@/lib/api-utils';
+import { requireUserContext, jsonError, jsonOk } from '@/lib/api-utils';
 import { createKnowledgeBasePersistence } from '@/lib/knowledge-base/persistence.server';
 import { ensureFeatureRouteEnabled } from '@/lib/feature-gate-utils';
 import { validateKnowledgeFile } from '@/lib/knowledge-base/upload-policy';
@@ -12,13 +12,11 @@ export async function POST(request: NextRequest) {
     if (featureError) return featureError;
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    const { user } = auth;
-    const db = resolveRequestDbClient(auth);
-    if (!db) return jsonError('知识库不存在或无权限', 500);
+    const { user, scoped: db } = auth;
 
     let membership;
     try {
-        membership = await getEffectiveMembershipType(user.id, { db: auth.scoped });
+        membership = await getEffectiveMembershipType(user.id, { db });
     } catch (error) {
         if (error instanceof MembershipResolutionError) {
             return jsonError(error.message, 500);
@@ -46,12 +44,17 @@ export async function POST(request: NextRequest) {
         return jsonError(fileError, 400);
     }
 
-    const { data: kb } = await db
-        .from('knowledge_bases')
-        .select('id, user_id')
-        .eq('id', kbId)
-        .eq('user_id', user.id)
-        .maybeSingle();
+    let kb;
+    try {
+        kb = await db.tx((trx) => trx
+            .selectFrom('knowledge_bases')
+            .select(['id', 'user_id'])
+            .where('id', '=', kbId)
+            .where('user_id', '=', user.id)
+            .executeTakeFirst());
+    } catch {
+        return jsonError('知识库不存在或无权限', 500);
+    }
 
     if (!kb) return jsonError('知识库不存在或无权限', 403);
 
@@ -60,12 +63,13 @@ export async function POST(request: NextRequest) {
         kbId,
         { name: file.name, type: file.type || null, content },
         user.id,
+        db,
         { persistence: createKnowledgeBasePersistence(db) },
     );
 
     if (membership === 'pro') {
         try {
-            await backfillVectorsAsService(kbId, user.id, 100);
+            await backfillVectorsAsService(kbId, user.id, db, 100);
             await triggerVectorIndexCreation();
         } catch (error) {
             void error;

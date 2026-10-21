@@ -2,6 +2,7 @@ import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { createMockAuthContext } from './helpers/supabase-mock';
+import { createMockScopedDb } from './helpers/db-mock';
 
 const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
 const membership = require('../lib/user/membership-server') as typeof import('../lib/user/membership-server');
@@ -13,63 +14,67 @@ const uploadRoute = require('../app/api/knowledge-base/upload/route') as typeof 
 const searchRoute = require('../app/api/knowledge-base/search/route') as typeof import('../app/api/knowledge-base/search/route');
 
 type RpcCall = { name: string; args: Record<string, unknown> };
+type ScopeOptions = { ownsKb?: boolean; ownsSource?: boolean };
 
-function setup(t: TestContext, options: { ownsKb?: boolean; ownsSource?: boolean } = {}) {
+function setup(t: TestContext, options: ScopeOptions = {}) {
     const calls: RpcCall[] = [];
     const ownerFilters: Array<[string, unknown]> = [];
-    const db = {
-        from: (table: string) => {
-            assert.equal(table, 'knowledge_bases');
-            const query = {
-                select: () => query,
-                eq: (column: string, value: unknown) => { ownerFilters.push([column, value]); return query; },
-                maybeSingle: async () => ({ data: options.ownsKb === false ? null : { id: 'kb-1', user_id: 'caller-1' }, error: null }),
-            };
-            return query;
-        },
-        rpc: async (name: string, args: Record<string, unknown>) => {
+    const messages = [{ id: 'u1', role: 'user', content: 'question' }, { id: 'a1', role: 'assistant', content: 'answer' }];
+    const scoped = createMockScopedDb({
+        tx: async (work) => work({
+            selectFrom(table: string) {
+                const query = {
+                    select() { return query; },
+                    where(column: string, _operator: string, value: unknown) {
+                        if (column === 'user_id') ownerFilters.push([column, value]);
+                        return query;
+                    },
+                    orderBy() { return query; },
+                    limit() { return query; },
+                    async execute() {
+                        if (table === 'knowledge_bases') return [{ id: 'kb-1', weight: 'normal' }];
+                        if (table === 'conversation_messages') return messages;
+                        return [];
+                    },
+                    async executeTakeFirst() {
+                        if (table === 'knowledge_bases') {
+                            return options.ownsKb === false ? undefined : { id: 'kb-1', user_id: 'caller-1' };
+                        }
+                        if (table === 'conversations') {
+                            return options.ownsSource === false ? undefined : { id: 'source-1', user_id: 'caller-1', messages };
+                        }
+                        if (table === 'ming_records') {
+                            return options.ownsSource === false
+                                ? undefined
+                                : { id: 'source-1', user_id: 'caller-1', title: 'record', content: 'text', tags: [], category: 'general' };
+                        }
+                        if (table === 'conversation_messages') return undefined;
+                        return undefined;
+                    },
+                };
+                return query;
+            },
+        } as never),
+        rpc: async (name, args) => {
             calls.push({ name, args });
-            return { data: name === 'kb_replace_source_entries' ? 1 : [], error: null };
+            if (name === 'kb_replace_source_entries') return 1;
+            return [];
         },
-    };
-    const auth = createMockAuthContext(db, 'caller-1');
-    auth.accessToken = 'caller-token';
+    });
+    const auth = createMockAuthContext({}, 'caller-1', scoped);
     t.mock.method(apiUtils, 'requireUserContext', async () => auth);
     t.mock.method(featureGate, 'ensureFeatureRouteEnabled', async () => null);
     t.mock.method(membership, 'getEffectiveMembershipType', async () => 'plus');
-    t.mock.method(membership, 'resolveTokenMembership', async () => 'plus');
-    t.mock.method(apiUtils, 'createAuthedClient', (token: string) => {
-        assert.equal(token, 'caller-token');
-        return auth.db;
-    });
-    const messages = [{ id: 'u1', role: 'user', content: 'question' }, { id: 'a1', role: 'assistant', content: 'answer' }];
-    const sourceClient = {
-        from: (table: string) => {
-            const query = {
-                select: () => query,
-                eq: (column: string, value: unknown) => {
-                    if (column === 'user_id') assert.equal(value, 'caller-1');
-                    return query;
-                },
-                maybeSingle: async () => ({
-                    data: options.ownsSource === false || table === 'conversation_messages' ? null
-                        : table === 'conversations' ? { id: 'source-1', user_id: 'caller-1', messages }
-                            : { id: 'source-1', user_id: 'caller-1', title: 'record', content: 'text', tags: [], category: 'general' },
-                    error: null,
-                }),
-            };
-            return query;
-        },
-        rpc: () => { throw new Error('A user-driven replacement must never use system-admin RPC'); },
-    };
-    // Legacy source reads retain their explicit owner filters; only the replacement identity changes.
-    t.mock.method(apiUtils, 'getSystemAdminClient', () => sourceClient as unknown as ReturnType<typeof apiUtils.getSystemAdminClient>);
     t.mock.method(dataSources, 'getProvider', async () => ({
         type: 'meihua_divination', displayName: 'Meihua', list: async () => [],
-        get: async (_id: string, userId: string) => { assert.equal(userId, 'caller-1'); return { id: 'source-1' }; },
+        get: async (_id: string, userId: string, context?: { db?: unknown }) => {
+            assert.equal(userId, 'caller-1');
+            assert.equal(context?.db, scoped);
+            return { id: 'source-1' };
+        },
         formatForAI: () => 'fixed canonical source text', summarize: () => 'fixed summary',
     }));
-    return { auth, calls, ownerFilters };
+    return { auth, calls, ownerFilters, scoped };
 }
 
 function ingestRequest(sourceType = 'record'): NextRequest {
@@ -111,7 +116,6 @@ test('every user ingest branch supplies caller-bound atomic replacement instead 
 
 test('upload binds the same authenticated client and performs one non-archive replacement', async t => {
     const { calls } = setup(t);
-    t.mock.method(apiUtils, 'getSystemAdminClient', () => { throw new Error('Upload must not obtain a system-admin client'); });
     const response = await uploadRoute.POST(uploadRequest());
     assert.equal(response.status, 200);
     assert.deepEqual(calls, [{ name: 'kb_replace_source_entries', args: {
@@ -122,8 +126,14 @@ test('upload binds the same authenticated client and performs one non-archive re
 });
 
 test('missing request database context fails before ingest or upload writes', async t => {
-    const { calls } = setup(t);
-    t.mock.method(apiUtils, 'requireUserContext', async () => createMockAuthContext({}, 'caller-1'));
+    const calls: RpcCall[] = [];
+    const brokenScoped = createMockScopedDb({
+        tx: async () => { throw new Error('database unavailable'); },
+        rpc: async (name, args) => { calls.push({ name, args }); return []; },
+    });
+    t.mock.method(apiUtils, 'requireUserContext', async () => createMockAuthContext({}, 'caller-1', brokenScoped));
+    t.mock.method(featureGate, 'ensureFeatureRouteEnabled', async () => null);
+    t.mock.method(membership, 'getEffectiveMembershipType', async () => 'plus');
     assert.equal((await ingestRoute.POST(ingestRequest())).status, 500);
     assert.equal((await uploadRoute.POST(uploadRequest())).status, 500);
     assert.deepEqual(calls, []);
@@ -165,9 +175,8 @@ test('source ownership rejection prevents caller-bound persistence', async t => 
     assert.deepEqual(calls, []);
 });
 
-test('search route forwards caller token to owner-scoped RPCs and never creates a system-admin client', async t => {
+test('search route uses owner-scoped RPCs and never creates a system-admin client', async t => {
     const { calls } = setup(t);
-    t.mock.method(apiUtils, 'getSystemAdminClient', () => { throw new Error('No search fallback'); });
     const response = await searchRoute.POST(searchRequest());
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { candidates: [], ranked: null });
@@ -175,17 +184,12 @@ test('search route forwards caller token to owner-scoped RPCs and never creates 
     assert.deepEqual(calls[0].args.p_kb_ids, ['kb-1']);
 });
 
-test('missing search token fails closed even with a userId and paid membership', async t => {
-    const { auth, calls } = setup(t);
-    auth.accessToken = null;
-    t.mock.method(apiUtils, 'getSystemAdminClient', () => { throw new Error('No missing-context fallback'); });
-    t.mock.method(apiUtils, 'createAuthedClient', () => { throw new Error('No client may be created without token'); });
-    for (const accessToken of [undefined, '', '   ']) {
-        await assert.rejects(search.searchCandidates('query', { userId: 'caller-1', accessToken }), search.KnowledgeSearchContextError);
-        await assert.rejects(search.searchKnowledge('query', { userId: 'caller-1', membershipType: 'plus', accessToken }), search.KnowledgeSearchContextError);
+test('missing scoped context fails closed even with a userId and paid membership', async () => {
+    for (const options of [
+        { userId: 'caller-1' },
+        { userId: 'caller-1', membershipType: 'plus' as const },
+    ]) {
+        await assert.rejects(search.searchCandidates('query', options), search.KnowledgeSearchContextError);
+        await assert.rejects(search.searchKnowledge('query', options), search.KnowledgeSearchContextError);
     }
-    const response = await searchRoute.POST(searchRequest());
-    assert.equal(response.status, 401);
-    assert.match((await response.json() as { error: string }).error, /用户身份上下文/);
-    assert.deepEqual(calls, []);
 });

@@ -51,7 +51,6 @@ type PreviewBuilderOptions = {
     reasoningEnabled: boolean;
     membershipType: PreviewMembershipType;
     knowledgeBaseFeatureEnabled: boolean;
-    accessTokenForKB: string | null;
     sharedPromptContextBuilder: SharedPromptContextBuilder;
 };
 
@@ -129,7 +128,6 @@ async function buildSharedPreviewContext({
     reasoningEnabled,
     membershipType,
     knowledgeBaseFeatureEnabled,
-    accessTokenForKB,
     sharedPromptContextBuilder,
 }: PreviewBuilderOptions): Promise<PreviewContextResult> {
   const chatBody = buildPreviewChatBody(body, requestedModelId, reasoningEnabled);
@@ -140,7 +138,6 @@ async function buildSharedPreviewContext({
         },
         userId: auth.user.id,
         canSkipCredit: false,
-        accessTokenForKB,
         requestedModelId,
         membershipType,
         reasoningEnabled,

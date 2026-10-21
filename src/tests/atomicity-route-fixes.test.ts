@@ -19,21 +19,16 @@ test('knowledge-base POST should create through transactional rpc', async (t) =>
 
   const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
 
-  apiUtilsModule.requireUserContext = async () => ({
-    user: { id: 'user-1' },
-    supabase: {
-      rpc: async (fn: string, args: Record<string, unknown>) => {
-        rpcCalls.push({ fn, args });
-        return {
-          data: {
-            status: 'ok',
-            knowledge_base: { id: 'kb-1', name: 'My KB' },
-          },
-          error: null,
-        };
-      },
+  const scoped = createMockScopedDb({
+    rpc: async (fn, args) => {
+      rpcCalls.push({ fn, args });
+      return {
+        status: 'ok',
+        knowledge_base: { id: 'kb-1', name: 'My KB' },
+      };
     },
   });
+  apiUtilsModule.requireUserContext = async () => ({ user: { id: 'user-1' }, scoped });
   membershipModule.getEffectiveMembershipType = async () => 'plus';
   featureGateModule.ensureFeatureRouteEnabled = async () => null;
   delete require.cache[routePath];
@@ -81,12 +76,8 @@ test('knowledge-base POST should return 403 when transactional limit is reached'
   const originalGetEffectiveMembershipType = membershipModule.getEffectiveMembershipType;
   const originalEnsureFeatureRouteEnabled = featureGateModule.ensureFeatureRouteEnabled;
 
-  apiUtilsModule.requireUserContext = async () => ({
-    user: { id: 'user-1' },
-    supabase: {
-      rpc: async () => ({ data: { status: 'limit_reached' }, error: null }),
-    },
-  });
+  const scoped = createMockScopedDb({ rpc: async () => ({ status: 'limit_reached' }) });
+  apiUtilsModule.requireUserContext = async () => ({ user: { id: 'user-1' }, scoped });
   membershipModule.getEffectiveMembershipType = async () => 'plus';
   featureGateModule.ensureFeatureRouteEnabled = async () => null;
   delete require.cache[routePath];
@@ -284,23 +275,20 @@ test('knowledge-base DELETE should return 404 when no user-owned row is deleted'
   const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
   const originalEnsureFeatureRouteEnabled = featureGateModule.ensureFeatureRouteEnabled;
 
-  const userDb = {
-    from: () => ({
-      delete: () => ({
-        eq: () => ({
-          eq: () => ({
-            select: async () => ({ data: [], error: null }),
-          }),
-        }),
-      }),
-    }),
-  };
-  featureGateModule.ensureFeatureRouteEnabled = async () => null;
-  apiUtilsModule.requireUserContext = async () => ({
-    user: { id: 'user-1' },
-    db: userDb,
-    supabase: userDb,
+  const scoped = createMockScopedDb({
+    tx: async (work) => work({
+      deleteFrom() {
+        const query = {
+          where() { return query; },
+          returning() { return query; },
+          async execute() { return []; },
+        };
+        return query;
+      },
+    } as never),
   });
+  featureGateModule.ensureFeatureRouteEnabled = async () => null;
+  apiUtilsModule.requireUserContext = async () => ({ user: { id: 'user-1' }, scoped });
   apiUtilsModule.getSystemAdminClient = () => {
     throw new Error('knowledge-base DELETE must use the caller database context');
   };
@@ -335,7 +323,7 @@ test('knowledge-base id routes fail closed instead of falling back to the system
 
   featureGateModule.ensureFeatureRouteEnabled = async () => null;
   // 用户态缺少可用的数据库客户端（例如 token 交换失败），路由必须直接失败。
-  apiUtilsModule.requireUserContext = async () => ({ user: { id: 'user-1' }, supabase: {} });
+  apiUtilsModule.requireUserContext = async () => ({ user: { id: 'user-1' }, scoped: undefined });
   apiUtilsModule.getSystemAdminClient = () => {
     throw new Error('a missing caller context must never reach the system-admin client');
   };

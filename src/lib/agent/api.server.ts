@@ -415,7 +415,6 @@ export async function createAgentTask(request: NextRequest) {
             : undefined,
       },
       userId: auth.user.id,
-      accessTokenForKB: null,
       requestedModelId: modelId,
       membershipType: account.effectiveMembership,
       reasoningEnabled: reasoning,

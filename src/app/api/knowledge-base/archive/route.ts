@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { ScopedDb } from '@/lib/db/context.server';
 import type { DataSourceType } from '@/lib/data-sources/types';
 import { requireUserContext, jsonError, jsonOk } from '@/lib/api-utils';
 import { ensureFeatureRouteEnabled } from '@/lib/feature-gate-utils';
@@ -17,8 +17,6 @@ type ArchiveRow = {
     created_at: string;
     preview?: string | null;
 };
-
-type KnowledgeBaseArchiveClient = Pick<SupabaseClient, 'from' | 'rpc'>;
 
 function parseLimit(raw: string | null) {
     const value = Number.parseInt(raw || `${DEFAULT_ARCHIVE_LIMIT}`, 10) || DEFAULT_ARCHIVE_LIMIT;
@@ -62,37 +60,41 @@ function toTimestamp(value?: string) {
 }
 
 async function loadArchivedSourceBatch(
-    service: KnowledgeBaseArchiveClient,
+    db: ScopedDb,
     userId: string,
     kbId: string,
     offset: number,
     limit: number,
-) {
-    return await service
-        .from('archived_sources')
-        .select('id, kb_id, source_type, source_id, created_at')
-        .eq('user_id', userId)
-        .eq('kb_id', kbId)
-        .order('created_at', { ascending: false })
-        .range(offset, offset + limit - 1);
+): Promise<ArchiveRow[]> {
+    return await db.tx((trx) => trx
+        .selectFrom('archived_sources')
+        .select(['id', 'kb_id', 'source_type', 'source_id', 'created_at'])
+        .where('user_id', '=', userId)
+        .where('kb_id', '=', kbId)
+        .orderBy('created_at', 'desc')
+        .offset(offset)
+        .limit(limit)
+        .execute()) as ArchiveRow[];
 }
 
 async function loadVirtualArchiveBatch(
-    service: KnowledgeBaseArchiveClient,
+    db: ScopedDb,
     kbId: string,
     offset: number,
     limit: number,
-) {
+): Promise<Array<{ source_type: string; source_id: string; created_at: string }>> {
     // 每个来源恰有一条 chunk_index = 0 的条目（kb_replace_source_entries 按 0 起连续写入分块），
     // 只取首块使分页偏移按来源计数，长文件的大量分块不会拖慢翻页。
-    return await service
-        .from('knowledge_entries')
-        .select('source_type, source_id, created_at')
-        .eq('kb_id', kbId)
-        .in('source_type', [...VIRTUAL_ARCHIVE_SOURCE_TYPES])
-        .eq('chunk_index', 0)
-        .order('created_at', { ascending: false })
-        .range(offset, offset + limit - 1);
+    return await db.tx((trx) => trx
+        .selectFrom('knowledge_entries')
+        .select(['source_type', 'source_id', 'created_at'])
+        .where('kb_id', '=', kbId)
+        .where('source_type', 'in', [...VIRTUAL_ARCHIVE_SOURCE_TYPES])
+        .where('chunk_index', '=', 0)
+        .orderBy('created_at', 'desc')
+        .offset(offset)
+        .limit(limit)
+        .execute()) as unknown as Array<{ source_type: string; source_id: string; created_at: string }>;
 }
 
 export async function GET(request: NextRequest) {
@@ -100,8 +102,7 @@ export async function GET(request: NextRequest) {
     if (featureError) return featureError;
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    const { user } = auth;
-    const supabase = auth.db as KnowledgeBaseArchiveClient;
+    const { user, scoped: db } = auth;
 
     const { searchParams } = new URL(request.url);
     const kbId = searchParams.get('kbId');
@@ -109,25 +110,29 @@ export async function GET(request: NextRequest) {
     const offset = parseOffset(searchParams.get('offset'));
 
     if (kbId) {
-        const { data: kb } = await supabase
-            .from('knowledge_bases')
+        const kb = await db.tx((trx) => trx
+            .selectFrom('knowledge_bases')
             .select('id')
-            .eq('id', kbId)
-            .eq('user_id', user.id)
-            .maybeSingle();
+            .where('id', '=', kbId)
+            .where('user_id', '=', user.id)
+            .executeTakeFirst());
         if (!kb) return jsonError('知识库不存在或无权限', 403);
     }
     if (!kbId) {
-        const { data, error } = await supabase
-            .from('archived_sources')
-            .select('id, kb_id, source_type, source_id, created_at')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-            .range(offset, offset + limit);
+        let rows;
+        try {
+            rows = await db.tx((trx) => trx
+                .selectFrom('archived_sources')
+                .select(['id', 'kb_id', 'source_type', 'source_id', 'created_at'])
+                .where('user_id', '=', user.id)
+                .orderBy('created_at', 'desc')
+                .offset(offset)
+                .limit(limit + 1)
+                .execute()) as ArchiveRow[];
+        } catch {
+            return jsonError('获取归档列表失败', 500);
+        }
 
-        if (error) return jsonError('获取归档列表失败', 500);
-
-        const rows = (data || []) as ArchiveRow[];
         const hasMore = rows.length > limit;
         const archivedSources = hasMore ? rows.slice(0, limit) : rows;
 
@@ -151,25 +156,25 @@ export async function GET(request: NextRequest) {
     let mergedRows: ArchiveRow[] = [];
 
     while (!archivedDone || !virtualDone) {
-        const archivedBatchPromise: Promise<{ data: ArchiveRow[]; error: unknown }> = archivedDone
-            ? Promise.resolve({ data: [] as ArchiveRow[], error: null })
-            : loadArchivedSourceBatch(supabase, user.id, kbId, archivedOffset, batchSize) as Promise<{ data: ArchiveRow[]; error: unknown }>;
-        const virtualBatchPromise: Promise<{ data: Array<{ source_type: string; source_id: string; created_at: string }>; error: unknown }> = virtualDone
-            ? Promise.resolve({ data: [] as Array<{ source_type: string; source_id: string; created_at: string }>, error: null })
-            : loadVirtualArchiveBatch(supabase, kbId, virtualOffset, batchSize) as Promise<{ data: Array<{ source_type: string; source_id: string; created_at: string }>; error: unknown }>;
+        const archivedBatchPromise = archivedDone
+            ? Promise.resolve([] as ArchiveRow[])
+            : loadArchivedSourceBatch(db, user.id, kbId, archivedOffset, batchSize);
+        const virtualBatchPromise = virtualDone
+            ? Promise.resolve([] as Array<{ source_type: string; source_id: string; created_at: string }>)
+            : loadVirtualArchiveBatch(db, kbId, virtualOffset, batchSize);
 
-        const [archivedBatch, virtualBatch] = await Promise.all([
-            archivedBatchPromise,
-            virtualBatchPromise,
-        ]);
-
-        if (archivedBatch.error || virtualBatch.error) {
+        let archivedBatchRows: ArchiveRow[];
+        let virtualBatchData: Array<{ source_type: string; source_id: string; created_at: string }>;
+        try {
+            [archivedBatchRows, virtualBatchData] = await Promise.all([
+                archivedBatchPromise,
+                virtualBatchPromise,
+            ]);
+        } catch {
             return jsonError('获取归档列表失败', 500);
         }
 
-        const archivedBatchRows = (archivedBatch.data || []) as ArchiveRow[];
-        const virtualBatchData = virtualBatch.data || [];
-        const virtualBatchRows = virtualBatchData.flatMap((row: { source_type: string; source_id: string; created_at: string }): ArchiveRow[] => (
+        const virtualBatchRows = virtualBatchData.flatMap((row): ArchiveRow[] => (
             isVirtualArchiveSourceType(row.source_type)
                 ? [{
                     id: buildVirtualArchiveId(row.source_type, kbId, row.source_id),
@@ -225,17 +230,18 @@ export async function GET(request: NextRequest) {
 
     const previewSourceIds = Array.from(new Set(pageRows.map((item) => item.source_id)));
     const previewSourceTypes = Array.from(new Set(pageRows.map((item) => item.source_type)));
-    const { data: entryPreviews } = await supabase
-        .from('knowledge_entries')
-        .select('source_type, source_id, content, chunk_index')
-        .eq('kb_id', kbId)
-        .in('source_id', previewSourceIds)
-        .in('source_type', previewSourceTypes)
-        .eq('chunk_index', 0)
-        .limit(Math.max(pageRows.length * 2, limit));
+    const entryPreviews = await db.tx((trx) => trx
+        .selectFrom('knowledge_entries')
+        .select(['source_type', 'source_id', 'content', 'chunk_index'])
+        .where('kb_id', '=', kbId)
+        .where('source_id', 'in', previewSourceIds)
+        .where('source_type', 'in', previewSourceTypes)
+        .where('chunk_index', '=', 0)
+        .limit(Math.max(pageRows.length * 2, limit))
+        .execute());
 
     const previewMap = new Map<string, string>();
-    (entryPreviews || []).forEach((row: { source_type: string; source_id: string; content: string }) => {
+    entryPreviews.forEach((row) => {
         const key = `${row.source_type}:${row.source_id}`;
         if (!previewMap.has(key)) {
             previewMap.set(key, extractPreview(row.content));
@@ -261,8 +267,7 @@ export async function POST(request: NextRequest) {
     if (featureError) return featureError;
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    const { user } = auth;
-    const supabase = auth.db as KnowledgeBaseArchiveClient;
+    const { user, scoped: db } = auth;
 
     const body = await request.json() as {
         kbId?: string;
@@ -274,30 +279,36 @@ export async function POST(request: NextRequest) {
         return jsonError('参数不完整', 400);
     }
 
-    const { data: kb } = await supabase
-        .from('knowledge_bases')
+    const kb = await db.tx((trx) => trx
+        .selectFrom('knowledge_bases')
         .select('id')
-        .eq('id', body.kbId)
-        .eq('user_id', user.id)
-        .maybeSingle();
+        .where('id', '=', body.kbId as string)
+        .where('user_id', '=', user.id)
+        .executeTakeFirst());
 
     if (!kb) {
         return jsonError('知识库不存在或无权限', 403);
     }
 
-    const { data, error } = await supabase
-        .from('archived_sources')
-        .upsert({
-            user_id: user.id,
-            kb_id: body.kbId,
-            source_type: body.sourceType,
-            source_id: body.sourceId
-        }, {
-            onConflict: 'source_type,source_id,kb_id'
-        })
-        .select('*')
-        .single();
+    let data;
+    try {
+        data = await db.tx((trx) => trx
+            .insertInto('archived_sources')
+            .values({
+                user_id: user.id,
+                kb_id: body.kbId as string,
+                source_type: body.sourceType as string,
+                source_id: body.sourceId as string
+            })
+            .onConflict((oc) => oc.columns(['source_type', 'source_id', 'kb_id']).doUpdateSet({
+                user_id: user.id,
+            }))
+            .returningAll()
+            .executeTakeFirst());
+    } catch {
+        return jsonError('归档失败', 500);
+    }
 
-    if (error) return jsonError('归档失败', 500);
+    if (!data) return jsonError('归档失败', 500);
     return jsonOk(data as Record<string, unknown>);
 }

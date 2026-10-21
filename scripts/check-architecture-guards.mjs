@@ -1113,6 +1113,10 @@ const SYSTEM_DB_ALLOWED = [
   'src/lib/ai/ai-analysis.ts',
   'src/lib/server/chat/prompt-context.ts',
   'src/lib/mentions.ts',
+  'src/lib/annual-report.ts',
+  'src/lib/ai/chart-prompt-detail.ts',
+  'src/lib/server/bazi-case-profile.ts',
+  'src/lib/knowledge-base/ingest.ts',
 ];
 mustNotMatchInTree(
   'src',

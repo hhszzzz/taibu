@@ -102,7 +102,7 @@ const tarotInterpretConfig: DivinationRouteConfig<TarotInterpretInput> = {
     resolvePromptContext: async (_input, auth) => ({
         userId: auth.userId,
         chartPromptDetailLevel: await loadResolvedChartPromptDetailLevel(auth.userId, 'tarot', {
-            client: auth.db ?? undefined,
+            db: auth.db,
         }),
     }),
     buildPrompts: (input, promptContext) => {
@@ -218,7 +218,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<TarotResp
                 let readingId: string | null = null;
                 if (auth.user) {
                     const persisted = await persistUserOwnedDivinationRecord({
-                        client: auth.db,
+                        db: auth.scoped,
                         tag: 'tarot',
                         tableName: 'tarot_readings',
                         input: {

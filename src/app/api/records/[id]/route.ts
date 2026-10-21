@@ -6,7 +6,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import { requireUserContext, jsonError, jsonOk, resolveRequestDbClient } from '@/lib/api-utils';
+import { requireUserContext, jsonError, jsonOk } from '@/lib/api-utils';
 import { normalizeRecordInput } from '@/lib/records';
 
 export async function GET(
@@ -17,24 +17,18 @@ export async function GET(
         const auth = await requireUserContext(_request);
         if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
         const { user } = auth;
-        const db = resolveRequestDbClient(auth);
-        if (!db) return jsonError('获取记录失败', 500);
 
         const { id } = await params;
 
-        const { data, error } = await db
-            .from('ming_records')
-            .select('*')
-            .eq('id', id)
-            .eq('user_id', user.id)
-            .single();
+        const data = await auth.scoped.tx((trx) => trx
+            .selectFrom('ming_records')
+            .selectAll()
+            .where('id', '=', id)
+            .where('user_id', '=', user.id)
+            .executeTakeFirst());
 
-        if (error) {
-            if (error.code === 'PGRST116') {
-                return jsonError('记录不存在', 404);
-            }
-            console.error('获取记录失败:', error);
-            return jsonError('获取记录失败', 500);
+        if (!data) {
+            return jsonError('记录不存在', 404);
         }
 
         return jsonOk(data as Record<string, unknown>);
@@ -52,8 +46,6 @@ export async function PUT(
         const auth = await requireUserContext(request);
         if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
         const { user } = auth;
-        const db = resolveRequestDbClient(auth);
-        if (!db) return jsonError('更新记录失败', 500);
 
         const { id } = await params;
         let body: Record<string, unknown>;
@@ -65,11 +57,12 @@ export async function PUT(
 
         // 处理置顶切换
         if (body.togglePin === true) {
-            const { data, error } = await db.rpc('toggle_ming_record_pin', {
-                p_record_id: id,
-            });
-
-            if (error) {
+            let data: unknown;
+            try {
+                data = await auth.scoped.rpc('toggle_ming_record_pin', {
+                    p_record_id: id,
+                });
+            } catch (error) {
                 console.error('切换置顶失败:', error);
                 return jsonError('更新记录失败', 500);
             }
@@ -89,22 +82,18 @@ export async function PUT(
             return jsonOk(result.record);
         }
 
-        const existing = await db
-            .from('ming_records')
-            .select('id, related_chart_type, related_chart_id')
-            .eq('id', id)
-            .eq('user_id', user.id)
-            .maybeSingle();
+        const existing = await auth.scoped.tx((trx) => trx
+            .selectFrom('ming_records')
+            .select(['id', 'related_chart_type', 'related_chart_id'])
+            .where('id', '=', id)
+            .where('user_id', '=', user.id)
+            .executeTakeFirst());
 
-        if (existing.error) {
-            console.error('获取记录失败:', existing.error);
-            return jsonError('获取记录失败', 500);
-        }
-        if (!existing.data) {
+        if (!existing) {
             return jsonError('记录不存在', 404);
         }
 
-        const normalized = normalizeRecordInput(body, 'update', existing.data as {
+        const normalized = normalizeRecordInput(body, 'update', existing as {
             related_chart_type: string | null;
             related_chart_id: string | null;
         });
@@ -118,16 +107,15 @@ export async function PUT(
             updated_at: new Date().toISOString(),
         };
 
-        const { data, error } = await db
-            .from('ming_records')
-            .update(updateData)
-            .eq('id', id)
-            .eq('user_id', user.id)
-            .select()
-            .single();
+        const data = await auth.scoped.tx((trx) => trx
+            .updateTable('ming_records')
+            .set(updateData as never)
+            .where('id', '=', id)
+            .where('user_id', '=', user.id)
+            .returningAll()
+            .executeTakeFirst());
 
-        if (error) {
-            console.error('更新记录失败:', error);
+        if (!data) {
             return jsonError('更新记录失败', 500);
         }
 
@@ -146,24 +134,17 @@ export async function DELETE(
         const auth = await requireUserContext(_request);
         if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
         const { user } = auth;
-        const db = resolveRequestDbClient(auth);
-        if (!db) return jsonError('删除记录失败', 500);
 
         const { id } = await params;
 
-        const { data, error } = await db
-            .from('ming_records')
-            .delete()
-            .eq('id', id)
-            .eq('user_id', user.id)
-            .select('id');
+        const data = await auth.scoped.tx((trx) => trx
+            .deleteFrom('ming_records')
+            .where('id', '=', id)
+            .where('user_id', '=', user.id)
+            .returning('id')
+            .execute());
 
-        if (error) {
-            console.error('删除记录失败:', error);
-            return jsonError('删除记录失败', 500);
-        }
-
-        if (!Array.isArray(data) || data.length === 0) {
+        if (data.length === 0) {
             return jsonError('记录不存在', 404);
         }
 

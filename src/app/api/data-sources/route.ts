@@ -15,7 +15,6 @@ export async function GET(request: NextRequest) {
         return jsonError(auth.error.message, auth.error.status);
     }
     const { user } = auth;
-    const db = auth.db;
 
     try {
         const url = new URL(request.url);
@@ -35,7 +34,7 @@ export async function GET(request: NextRequest) {
             return jsonOk(cached.payload as Record<string, unknown>, cached.status);
         }
 
-        const result = await getUserDataSourcesWithErrors(user.id, { client: db, limit }, enabledTypes);
+        const result = await getUserDataSourcesWithErrors(user.id, { db: auth.scoped, limit }, enabledTypes);
         const status = result.errors.length ? 206 : 200;
         cache.set(cacheKey, { status, payload: result });
         return jsonOk(result as unknown as Record<string, unknown>, status);

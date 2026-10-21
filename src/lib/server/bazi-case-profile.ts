@@ -1,7 +1,6 @@
 import 'server-only';
 
-import type { SupabaseClient } from '@supabase/supabase-js';
-import { getSystemAdminClient } from '@/lib/api-utils';
+import { systemDb, type ScopedDb } from '@/lib/db/context.server';
 import {
     createEmptyBaziCaseProfile,
     parseBaziCaseEvents,
@@ -37,19 +36,16 @@ type EventRow = {
 };
 
 export async function ensureUserOwnsBaziChart(
-    supabase: SupabaseClient,
+    db: ScopedDb,
     chartId: string,
     userId: string,
 ): Promise<boolean> {
-    const { data, error } = await supabase
-        .from('bazi_charts')
+    const data = await db.tx((trx) => trx
+        .selectFrom('bazi_charts')
         .select('id')
-        .eq('id', chartId)
-        .eq('user_id', userId)
-        .maybeSingle();
-    if (error) {
-        throw new Error(error.message);
-    }
+        .where('id', '=', chartId)
+        .where('user_id', '=', userId)
+        .executeTakeFirst());
     return !!data?.id;
 }
 
@@ -79,66 +75,64 @@ function mapProfileRow(row: ProfileRow, events: EventRow[]): BaziCaseProfile {
 }
 
 export async function getBaziCaseProfileByChartId(
-    supabase: SupabaseClient,
+    db: ScopedDb,
     chartId: string,
     userId: string,
 ): Promise<BaziCaseProfile | null> {
-    const { data, error } = await supabase
-        .from('bazi_case_profiles')
-        .select('id, user_id, bazi_chart_id, master_review, owner_feedback, created_at, updated_at')
-        .eq('bazi_chart_id', chartId)
-        .eq('user_id', userId)
-        .maybeSingle();
+    const data = await db.tx((trx) => trx
+        .selectFrom('bazi_case_profiles')
+        .select(['id', 'user_id', 'bazi_chart_id', 'master_review', 'owner_feedback', 'created_at', 'updated_at'])
+        .where('bazi_chart_id', '=', chartId)
+        .where('user_id', '=', userId)
+        .executeTakeFirst());
 
-    if (error) {
-        throw new Error(error.message);
-    }
     if (!data) {
         return null;
     }
 
-    const { data: eventRows, error: eventsError } = await supabase
-        .from('bazi_case_events')
-        .select('id, profile_id, user_id, bazi_chart_id, event_date, category, title, detail, created_at, updated_at')
-        .eq('profile_id', data.id)
-        .order('event_date', { ascending: false });
+    const eventRows = await db.tx((trx) => trx
+        .selectFrom('bazi_case_events')
+        .select(['id', 'profile_id', 'user_id', 'bazi_chart_id', 'event_date', 'category', 'title', 'detail', 'created_at', 'updated_at'])
+        .where('profile_id', '=', data.id)
+        .orderBy('event_date', 'desc')
+        .execute());
 
-    if (eventsError) {
-        throw new Error(eventsError.message);
-    }
-
-    return mapProfileRow(data as ProfileRow, (eventRows || []) as EventRow[]);
+    return mapProfileRow(data as ProfileRow, eventRows as EventRow[]);
 }
 
 export async function saveBaziCaseProfile(args: {
-    supabase: SupabaseClient;
+    db: ScopedDb;
     userId: string;
     chartId: string;
     masterReview: BaziCaseMasterReview;
     ownerFeedback: BaziCaseOwnerFeedback;
     events: BaziCaseEvent[];
 }): Promise<BaziCaseProfile> {
-    const { supabase, userId, chartId, masterReview, ownerFeedback, events } = args;
-    const serviceClient = getSystemAdminClient();
-    const { data, error } = await serviceClient.rpc('save_bazi_case_profile_as_service', {
-        p_user_id: userId,
-        p_chart_id: chartId,
-        p_master_review: masterReview,
-        p_owner_feedback: ownerFeedback,
-        p_events: events.map((event) => ({
-            event_date: event.eventDate,
-            category: event.category,
-            title: event.title,
-            detail: event.detail || null,
-        })),
-    });
-
-    const result = (data || {}) as { status?: string; profile_id?: string };
-    if (error || result.status !== 'ok' || !result.profile_id) {
-        throw new Error(error?.message || '保存断事笔记失败');
+    const { db, userId, chartId, masterReview, ownerFeedback, events } = args;
+    let data: unknown;
+    try {
+        data = await systemDb().rpc('save_bazi_case_profile_as_service', {
+            p_user_id: userId,
+            p_chart_id: chartId,
+            p_master_review: masterReview,
+            p_owner_feedback: ownerFeedback,
+            p_events: events.map((event) => ({
+                event_date: event.eventDate,
+                category: event.category,
+                title: event.title,
+                detail: event.detail || null,
+            })),
+        });
+    } catch (error) {
+        throw new Error(error instanceof Error ? error.message : '保存断事笔记失败');
     }
 
-    return (await getBaziCaseProfileByChartId(supabase, chartId, userId))
+    const result = (data || {}) as { status?: string; profile_id?: string };
+    if (result.status !== 'ok' || !result.profile_id) {
+        throw new Error('保存断事笔记失败');
+    }
+
+    return (await getBaziCaseProfileByChartId(db, chartId, userId))
         || {
             ...createEmptyBaziCaseProfile(),
             id: result.profile_id,

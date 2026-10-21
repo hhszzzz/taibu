@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
+import { createMockScopedDb } from './helpers/db-mock';
 
 process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
@@ -11,54 +12,37 @@ test('records PUT validates and persists related chart fields', async (t) => {
     const originalRequireUserContext = apiUtilsModule.requireUserContext;
     const updatePayloads: Record<string, unknown>[] = [];
 
-    apiUtilsModule.requireUserContext = async () => ({
-        user: { id: 'user-1' },
-        supabase: {
-            from(table: string) {
+    const scoped = createMockScopedDb({
+        tx: async (work) => work({
+            selectFrom(table: string) {
                 assert.equal(table, 'ming_records');
-                return {
-                    select() {
-                        return {
-                            eq() {
-                                return {
-                                    eq() {
-                                        return {
-                                            maybeSingle: async () => ({
-                                                data: {
-                                                    id: 'record-1',
-                                                    related_chart_type: null,
-                                                    related_chart_id: null,
-                                                },
-                                                error: null,
-                                            }),
-                                        };
-                                    },
-                                };
-                            },
-                        };
-                    },
-                    update(payload: Record<string, unknown>) {
-                        updatePayloads.push(payload);
-                        return {
-                            eq() {
-                                return {
-                                    eq() {
-                                        return {
-                                            select: () => ({
-                                                single: async () => ({
-                                                    data: { id: 'record-1', ...payload },
-                                                    error: null,
-                                                }),
-                                            }),
-                                        };
-                                    },
-                                };
-                            },
-                        };
+                const query = {
+                    select() { return query; },
+                    where() { return query; },
+                    async executeTakeFirst() {
+                        return { id: 'record-1', related_chart_type: null, related_chart_id: null };
                     },
                 };
+                return query;
             },
-        },
+            updateTable(table: string) {
+                assert.equal(table, 'ming_records');
+                const query = {
+                    set(payload: Record<string, unknown>) {
+                        updatePayloads.push(payload);
+                        return query;
+                    },
+                    where() { return query; },
+                    returningAll() { return query; },
+                    async executeTakeFirst() { return { id: 'record-1', ...updatePayloads.at(-1) }; },
+                };
+                return query;
+            },
+        } as never),
+    });
+    apiUtilsModule.requireUserContext = async () => ({
+        user: { id: 'user-1' },
+        scoped,
     });
     delete require.cache[routePath];
 

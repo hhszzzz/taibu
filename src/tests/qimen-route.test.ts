@@ -2,6 +2,8 @@ import { beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { ensureRouteTestEnv, mockAIFeatureState, mockAIRateLimit, mockRouteUserContext, blockRouteNetwork } from './helpers/route-mock';
+import { createMockAuthContext } from './helpers/supabase-mock';
+import { createMockScopedDb } from './helpers/db-mock';
 import { createMockUIMessageResult } from './helpers/ui-message-result';
 import type { CreateAIAnalysisParams } from '../lib/ai/ai-analysis';
 
@@ -175,26 +177,29 @@ test('qimen route surfaces SSE error when stream persistence fails after content
 
 test('qimen save persists base inputs instead of chart_data', async (t) => {
     const insertCalls: Record<string, unknown>[] = [];
-    const authClient = {
-        from: (table: string) => {
-            assert.equal(table, 'qimen_charts');
-            return {
-                insert: (payload: Record<string, unknown>) => {
-                    insertCalls.push(payload);
-                    return {
-                        select: () => ({
-                            single: async () => ({
-                                data: { id: 'chart-1' },
-                                error: null,
-                            }),
-                        }),
-                    };
-                },
-            };
-        },
-    };
+    const scoped = createMockScopedDb({
+        tx: async (work) => work({
+            insertInto(table: string) {
+                assert.equal(table, 'qimen_charts');
+                return {
+                    values(payload: Record<string, unknown>) {
+                        insertCalls.push(payload);
+                        return {
+                            returning() {
+                                return {
+                                    async executeTakeFirst() { return { id: 'chart-1' }; },
+                                };
+                            },
+                        };
+                    },
+                };
+            },
+        } as never),
+    });
 
-    mockRouteUserContext(t, authClient);
+    mockRouteUserContext(t, {}, 'user-1');
+    const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
+    t.mock.method(apiUtils, 'requireUserContext', async () => createMockAuthContext({}, 'user-1', scoped));
 
     const { POST } = await import('../app/api/qimen/route');
     const request = new NextRequest('http://localhost/api/qimen', {

@@ -1,7 +1,6 @@
-import { getSystemAdminClient } from '@/lib/api-utils';
 import { PERSONALITY_BASICS } from '@/lib/divination/mbti';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
-import type { DataSourceProvider, DataSourceQueryContext } from '@/lib/data-sources/provider.server';
+import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
 
 type MbtiRow = {
     id: string;
@@ -18,34 +17,32 @@ export const mbtiProvider: DataSourceProvider<MbtiRow> = {
     displayName: 'MBTI记录',
 
     async list(userId: string, ctx?: DataSourceQueryContext): Promise<DataSourceSummary[]> {
-        const supabase = ctx?.client ?? getSystemAdminClient();
+        const db = requireQueryDb(ctx);
         const limit = ctx?.limit ?? 50;
-        const { data, error } = await supabase
-            .from('mbti_readings')
-            .select('id, mbti_type, created_at')
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false })
-            .limit(limit);
-
-        if (error) throw new Error(error.message);
-        return (data || []).map((row: { id: string; mbti_type: string; created_at: string }) => ({
+        const data = await db.tx((trx) => trx
+        .selectFrom('mbti_readings')
+        .select(['id', 'mbti_type', 'created_at'])
+        .where('user_id', '=', userId)
+        .orderBy('created_at', 'desc')
+        .limit(limit)
+        .execute());
+        return (data || []).map((row) => ({
             id: row.id,
             type: 'mbti_reading',
             name: `MBTI · ${row.mbti_type}`,
             preview: `人格类型：${row.mbti_type}`,
-            createdAt: row.created_at
+            createdAt: row.created_at ?? '',
         }));
     },
 
     async get(id: string, userId: string, ctx?: DataSourceQueryContext): Promise<MbtiRow | null> {
-        const supabase = ctx?.client ?? getSystemAdminClient();
-        const { data, error } = await supabase
-            .from('mbti_readings')
-            .select('*')
-            .eq('id', id)
-            .eq('user_id', userId)
-            .maybeSingle();
-        if (error) throw new Error(error.message);
+        const db = requireQueryDb(ctx);
+        const data = await db.tx((trx) => trx
+        .selectFrom('mbti_readings')
+        .selectAll()
+        .where('id', '=', id)
+        .where('user_id', '=', userId)
+        .executeTakeFirst());
         return (data as MbtiRow) || null;
     },
 

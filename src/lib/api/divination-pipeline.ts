@@ -19,10 +19,10 @@ import {
   jsonOk,
   requireBearerUser,
   requireUserContext,
-  resolveRequestDbClient,
   SSE_HEADERS,
 } from '@/lib/api-utils';
 import { userDb, type ScopedDb } from '@/lib/db/context.server';
+import { insertIntoDynamic } from '@/lib/db/sql-helpers';
 import {
   attemptCreditUse,
   getUserAuthInfo,
@@ -82,19 +82,15 @@ type UserContextAuthResult = Extract<
 
 export type DivinationAuthContext = {
   userId: string;
-  db: DivinationDbClient;
+  db: ScopedDb;
   accessToken: string | null;
 };
 
 type SuccessfulDivinationAuthResult = {
   user: { id: string };
-  db?: UserContextAuthResult['db'];
-  supabase?: UserContextAuthResult['db'];
   scoped?: UserContextAuthResult['scoped'];
   accessToken?: string | null;
 };
-
-type DivinationDbClient = NonNullable<ReturnType<typeof resolveRequestDbClient>>;
 
 function scopedDbFor(result: { user: { id: string }; scoped?: ScopedDb }): ScopedDb {
   return result.scoped ?? userDb(result.user.id);
@@ -121,7 +117,7 @@ type SaveUserOwnedRecordOptions<TInput, TResponseKey extends string> = {
 };
 
 type PersistUserOwnedRecordOptions<TInput> = {
-  client: SaveUserOwnedRecordClient;
+  db: ScopedDb;
   tag: string;
   tableName: string;
   input: TInput;
@@ -130,24 +126,10 @@ type PersistUserOwnedRecordOptions<TInput> = {
   errorMessage?: string;
 };
 
-type SaveUserOwnedRecordResult = {
-  data?: { id?: string | null } | null;
-  error?: { message?: string } | null;
-};
-type SaveUserOwnedRecordClient = {
-  from: (tableName: string) => {
-    insert: (payload: Record<string, unknown>) => {
-      select: (columns: string) => {
-        single: () => PromiseLike<SaveUserOwnedRecordResult>;
-      };
-    };
-  };
-};
-
 export async function persistUserOwnedDivinationRecord<
   TInput,
 >({
-  client,
+  db,
   tag,
   tableName,
   input,
@@ -155,24 +137,22 @@ export async function persistUserOwnedDivinationRecord<
   buildInsertPayload,
   errorMessage = '保存记录失败',
 }: PersistUserOwnedRecordOptions<TInput>): Promise<{ id: string | null; error: string | null }> {
-  const { data, error } = await client
-    .from(tableName)
-    .insert(buildInsertPayload(input, userId))
-    .select('id')
-    .single();
-
-  if (error) {
-    console.error(`[${tag}] ${errorMessage}:`, error.message);
+  try {
+    const row = await db.tx((trx) => insertIntoDynamic(trx, tableName)
+      .values(buildInsertPayload(input, userId))
+      .returning('id')
+      .executeTakeFirst());
+    return {
+      id: typeof row?.id === 'string' ? row.id : null,
+      error: null,
+    };
+  } catch (error) {
+    console.error(`[${tag}] ${errorMessage}:`, error instanceof Error ? error.message : error);
     return {
       id: null,
       error: errorMessage,
     };
   }
-
-  return {
-    id: (data as { id?: string } | null)?.id ?? null,
-    error: null,
-  };
 }
 
 export async function saveUserOwnedDivinationRecord<
@@ -199,13 +179,10 @@ export async function saveUserOwnedDivinationRecord<
     return jsonError(authResult.error.message, authResult.error.status, { success: false });
   }
 
-  const client = resolveAuthDbClient(authResult);
-  if (isRouteError(client)) {
-    return jsonError(client.error, client.status, { success: false });
-  }
+  const db = scopedDbFor(authResult);
 
   const { id, error } = await persistUserOwnedDivinationRecord({
-    client: client as unknown as SaveUserOwnedRecordClient,
+    db,
     tag,
     tableName,
     input,
@@ -358,22 +335,12 @@ export interface PersistentStreamResult {
   error?: string | null;
 }
 
-function resolveAuthDbClient(
-  authResult: Partial<Pick<UserContextAuthResult, 'db' | 'supabase'>>,
-): DivinationDbClient | RouteError {
-  // Missing caller identity must never become an implicit privileged operation.
-  return resolveRequestDbClient(authResult)
-    ?? { error: '用户数据库上下文不可用，请稍后重试', status: 500 };
-}
-
 function toDivinationAuthContext(
   authResult: SuccessfulDivinationAuthResult,
-): DivinationAuthContext | RouteError {
-  const db = resolveAuthDbClient(authResult);
-  if (isRouteError(db)) return db;
+): DivinationAuthContext {
   return {
     userId: authResult.user.id,
-    db,
+    db: scopedDbFor(authResult),
     accessToken: authResult.accessToken ?? null,
   };
 }

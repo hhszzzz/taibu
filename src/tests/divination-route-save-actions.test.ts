@@ -3,13 +3,36 @@ import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { ensureRouteTestEnv } from './helpers/route-mock';
 import { createMockAuthContext } from './helpers/supabase-mock';
+import { createMockScopedDb } from './helpers/db-mock';
 
 ensureRouteTestEnv();
+
+function createInsertScope(expectedTable: string, id: string, onInsert: (payload: Record<string, unknown>) => void) {
+    return createMockScopedDb({
+        tx: async (work) => work({
+            insertInto(table: string) {
+                assert.equal(table, expectedTable);
+                return {
+                    values(payload: Record<string, unknown>) {
+                        onInsert(payload);
+                        return {
+                            returning() {
+                                return {
+                                    async executeTakeFirst() { return { id }; },
+                                };
+                            },
+                        };
+                    },
+                };
+            },
+        } as never),
+    });
+}
 
 function mockUserContext(
     t: TestContext,
     routeModulePath: string,
-    client: Record<string, unknown> = {},
+    scoped: ReturnType<typeof createMockScopedDb>,
 ) {
     const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
     const rateLimit = require('../lib/rate-limit') as typeof import('../lib/rate-limit');
@@ -29,7 +52,7 @@ function mockUserContext(
     const pipelinePath = require.resolve('../lib/api/divination-pipeline');
     const originalRequireUserContext = apiUtilsModule.requireUserContext;
 
-    apiUtilsModule.requireUserContext = async () => createMockAuthContext(client);
+    apiUtilsModule.requireUserContext = async () => createMockAuthContext({}, 'user-1', scoped);
 
     delete require.cache[routePath];
     delete require.cache[pipelinePath];
@@ -43,24 +66,7 @@ function mockUserContext(
 
 test('mbti save action persists reading through shared save helper', async (t) => {
     const insertCalls: Record<string, unknown>[] = [];
-    const mockDb = {
-        from: (table: string) => {
-            assert.equal(table, 'mbti_readings');
-            return {
-                insert: (payload: Record<string, unknown>) => {
-                    insertCalls.push(payload);
-                    return {
-                        select: () => ({
-                            single: async () => ({
-                                data: { id: 'reading-1' },
-                                error: null,
-                            }),
-                        }),
-                    };
-                },
-            };
-        },
-    };
+    const mockDb = createInsertScope('mbti_readings', 'reading-1', (payload) => { insertCalls.push(payload); });
 
     mockUserContext(t, '../app/api/mbti/route', mockDb);
 
@@ -98,24 +104,7 @@ test('daliuren save action persists reading through shared save helper', async (
     const { calculateDaliuren } = require('taibu-core') as typeof import('taibu-core');
 
     const insertCalls: Record<string, unknown>[] = [];
-    const mockDb = {
-        from: (table: string) => {
-            assert.equal(table, 'daliuren_divinations');
-            return {
-                insert: (payload: Record<string, unknown>) => {
-                    insertCalls.push(payload);
-                    return {
-                        select: () => ({
-                            single: async () => ({
-                                data: { id: 'divination-1' },
-                                error: null,
-                            }),
-                        }),
-                    };
-                },
-            };
-        },
-    };
+    const mockDb = createInsertScope('daliuren_divinations', 'divination-1', (payload) => { insertCalls.push(payload); });
 
     mockUserContext(t, '../app/api/daliuren/route', mockDb);
 

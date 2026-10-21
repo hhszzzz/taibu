@@ -302,6 +302,36 @@ test('fortune and reminder chart reads pass saved time options to shared reconst
       };
     },
   };
+  const { createMockScopedDb } = await import('./helpers/db-mock');
+  const scoped = createMockScopedDb({
+    tx: async (work) => work({
+      selectFrom(table: string) {
+        let columns: string[] = [];
+        const query = {
+          select(selection: string | readonly string[]) {
+            columns = Array.isArray(selection)
+              ? [...selection]
+              : String(selection).split(',').map((column) => column.trim());
+            if (table === 'bazi_charts') {
+              assert.ok(columns.includes('timezone'));
+              assert.ok(columns.includes('disambiguation'));
+            }
+            return query;
+          },
+          where() { return query; },
+          orderBy() { return query; },
+          limit() { return query; },
+          async executeTakeFirst() {
+            if (table === 'user_settings') return { default_bazi_chart_id: row.id };
+            assert.equal(table, 'bazi_charts');
+            return Object.fromEntries(columns.map((key) => [key, row[key]]));
+          },
+          async execute() { return []; },
+        };
+        return query;
+      },
+    } as never),
+  });
   t.mock.method(apiUtils, 'getSystemAdminClient', () => client);
   t.mock.method(apiUtils, 'requireUserContext', async () => ({ user: { id: 'user-1' }, db: client, supabase: client }));
   t.mock.method(reminders, 'updateReminderSubscription', async () => true);
@@ -309,7 +339,7 @@ test('fortune and reminder chart reads pass saved time options to shared reconst
     rebuiltRows.push(input);
     return null;
   });
-  const ctx = { client: client as unknown as NonNullable<Parameters<typeof dailyFortuneProvider.get>[2]>['client'] };
+  const ctx = { db: scoped };
   await dailyFortuneProvider.get('2026-03-25', 'user-1', ctx);
   await monthlyFortuneProvider.get('2026-03', 'user-1', ctx);
   assert.equal(await reminders.scheduleAllUsersReminders(), 0);

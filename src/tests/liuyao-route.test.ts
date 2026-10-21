@@ -1,8 +1,9 @@
-import { beforeEach, test } from 'node:test';
+import { beforeEach, test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { ensureRouteTestEnv, mockAIFeatureState, mockAIRateLimit, mockRouteUserContext, blockRouteNetwork } from './helpers/route-mock';
-import { createMockSupabaseClient } from './helpers/supabase-mock';
+import { createMockAuthContext } from './helpers/supabase-mock';
+import { createMockScopedDb } from './helpers/db-mock';
 import { createMockUIMessageResult } from './helpers/ui-message-result';
 import type { CreateAIAnalysisParams } from '../lib/ai/ai-analysis';
 
@@ -21,14 +22,55 @@ const liuyaoModule = require('../lib/divination/liuyao') as typeof import('../li
 const aiAccessModule = require('../lib/ai/ai-access') as typeof import('../lib/ai/ai-access');
 const chartPromptDetailModule = require('../lib/ai/chart-prompt-detail') as typeof import('../lib/ai/chart-prompt-detail');
 
-function readingClient(data: Record<string, unknown>, captureUpdate?: (payload: unknown) => void) {
-    const client = createMockSupabaseClient({ tables: { liuyao_divinations: { data, captureUpdate } } });
-    return {
-        from(table: string) {
-            assert.equal(table, 'liuyao_divinations');
-            return client.from(table);
-        },
-    };
+function scopedLiuyao(options: {
+    row?: Record<string, unknown> | null;
+    captureInsert?: (payload: unknown) => void;
+    captureUpdate?: (payload: unknown) => void;
+} = {}) {
+    const { row = null, captureInsert, captureUpdate } = options;
+    return createMockScopedDb({
+        tx: async (work) => work({
+            selectFrom(table: string) {
+                assert.equal(table, 'liuyao_divinations');
+                const query = {
+                    select() { return query; },
+                    where() { return query; },
+                    async executeTakeFirst() { return row ?? undefined; },
+                };
+                return query;
+            },
+            insertInto(table: string) {
+                assert.equal(table, 'liuyao_divinations');
+                const query = {
+                    values(payload: Record<string, unknown>) {
+                        captureInsert?.(payload);
+                        return query;
+                    },
+                    returning() { return query; },
+                    async executeTakeFirst() { return { id: 'divination-1' }; },
+                };
+                return query;
+            },
+            updateTable(table: string) {
+                assert.equal(table, 'liuyao_divinations');
+                const query = {
+                    set(payload: Record<string, unknown>) {
+                        captureUpdate?.(payload);
+                        return query;
+                    },
+                    where() { return query; },
+                    returning() { return query; },
+                    async execute() { return row ? [{ id: 'divination-1' }] : []; },
+                };
+                return query;
+            },
+        } as never),
+    });
+}
+
+function mockScopedContext(t: Pick<TestContext, 'mock'>, scoped: unknown) {
+    const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
+    return t.mock.method(apiUtils, 'requireUserContext', async () => createMockAuthContext({}, 'user-1', scoped as never));
 }
 
 test('liuyao route uses divination created_at for analysis date', async (t) => {
@@ -39,9 +81,7 @@ test('liuyao route uses divination created_at for analysis date', async (t) => {
 
     const createdAt = new Date('2024-01-02T03:04:05.000Z');
     let capturedDate: Date | undefined;
-    const authClient = readingClient({ created_at: createdAt.toISOString() });
-
-    mockRouteUserContext(t, authClient);
+    mockScopedContext(t, scopedLiuyao({ row: { created_at: createdAt.toISOString() } }));
     t.mock.method(credits, 'getUserAuthInfo', async () => ({ credits: 10, effectiveMembership: 'pro', hasCredits: true }));
     t.mock.method(credits, 'attemptCreditUse', async () => ({ ok: true, remaining: 5 }));
     t.mock.method(aiAccessModule, 'resolveModelAccessAsync', async () => ({ modelId: 'test-model', reasoningEnabled: false }));
@@ -184,9 +224,7 @@ test('liuyao route persists analysis after streaming completes', async (t) => {
     mockAIRateLimit(t);
 
     const createCalls: CreateAIAnalysisParams[] = [];
-    const authClient = readingClient({ created_at: new Date().toISOString() });
-
-    mockRouteUserContext(t, authClient);
+    mockScopedContext(t, scopedLiuyao({ row: { created_at: new Date().toISOString() } }));
     t.mock.method(credits, 'getUserAuthInfo', async () => ({ credits: 10, effectiveMembership: 'pro', hasCredits: true }));
     t.mock.method(credits, 'attemptCreditUse', async () => ({ ok: true, remaining: 9 }));
     t.mock.method(aiAccessModule, 'resolveModelAccessAsync', async () => ({ modelId: 'test-model', reasoningEnabled: false }));
@@ -247,9 +285,7 @@ test('liuyao route surfaces SSE error when stream persistence fails after conten
     mockAIRateLimit(t);
 
     let refundCalls = 0;
-    const authClient = readingClient({ created_at: new Date().toISOString() });
-
-    mockRouteUserContext(t, authClient);
+    mockScopedContext(t, scopedLiuyao({ row: { created_at: new Date().toISOString() } }));
     t.mock.method(credits, 'getUserAuthInfo', async () => ({ credits: 10, effectiveMembership: 'pro', hasCredits: true }));
     t.mock.method(credits, 'attemptCreditUse', async () => ({ ok: true, remaining: 9 }));
     t.mock.method(aiAccessModule, 'resolveModelAccessAsync', async () => ({ modelId: 'test-model', reasoningEnabled: false }));
@@ -416,9 +452,9 @@ test('liuyao route interpret returns 400 when question is provided but yongShenT
 test('liuyao route interpret enforces targets when persisted question exists but request question is empty', async (t) => {
     mockAIFeatureState(t);
     mockAIRateLimit(t);
-    const authClient = readingClient({ created_at: new Date().toISOString(), question: '这次考试是否顺利', yongshen_targets: null });
-
-    mockRouteUserContext(t, authClient);
+    mockScopedContext(t, scopedLiuyao({
+        row: { created_at: new Date().toISOString(), question: '这次考试是否顺利', yongshen_targets: null },
+    }));
     t.mock.method(credits, 'getUserAuthInfo', async () => ({ credits: 0, effectiveMembership: 'pro', hasCredits: false }));
 
     const { POST } = await import('../app/api/liuyao/route');
@@ -460,17 +496,7 @@ test('liuyao route interpret enforces targets when persisted question exists but
 });
 
 test('liuyao route save allows missing yongShenTargets when question is empty', async (t) => {
-    const authClient = {
-        from: () => ({
-            insert: () => ({
-                select: () => ({
-                    single: async () => ({ data: { id: 'divination-1' }, error: null }),
-                }),
-            }),
-        }),
-    };
-
-    mockRouteUserContext(t, authClient);
+    mockScopedContext(t, scopedLiuyao());
 
     const { POST } = await import('../app/api/liuyao/route');
     const request = new NextRequest('http://localhost/api/liuyao', {
@@ -506,9 +532,10 @@ test('liuyao route rejects interpret when question is empty and persisted questi
     mockAIRateLimit(t);
 
     let updated: unknown = null;
-    const authClient = readingClient({ created_at: new Date().toISOString() }, (payload) => { updated = payload; });
-
-    mockRouteUserContext(t, authClient);
+    mockScopedContext(t, scopedLiuyao({
+        row: { created_at: new Date().toISOString() },
+        captureUpdate: (payload) => { updated = payload; },
+    }));
     t.mock.method(credits, 'getUserAuthInfo', async () => ({ credits: 10, effectiveMembership: 'pro', hasCredits: true }));
     t.mock.method(credits, 'attemptCreditUse', async () => ({ ok: true, remaining: 5 }));
     t.mock.method(aiModule, 'callAIWithReasoning', async () => ({ content: 'analysis', reasoning: null }));
@@ -553,17 +580,7 @@ test('liuyao route rejects interpret when question is empty and persisted questi
 });
 
 test('liuyao route update returns 404 when no record is updated', async (t) => {
-    const authClient = {
-        from: () => {
-            const builder: Record<string, unknown> = {};
-            builder.eq = () => builder;
-            builder.select = async () => ({ data: [], error: null });
-            builder.update = () => builder;
-            return builder;
-        },
-    };
-
-    mockRouteUserContext(t, authClient);
+    mockScopedContext(t, scopedLiuyao());
 
     const { POST } = await import('../app/api/liuyao/route');
     const request = new NextRequest('http://localhost/api/liuyao', {

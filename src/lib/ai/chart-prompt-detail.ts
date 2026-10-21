@@ -1,27 +1,24 @@
 import 'server-only';
 
-import type { SupabaseClient } from '@supabase/supabase-js';
-import { getSystemAdminClient } from '@/lib/api-utils';
+import { systemDb, type ScopedDb } from '@/lib/db/context.server';
 import {
   resolveChartTextDetailLevel,
   type ChartTextDetailLevel,
   type ChartTextDetailTool,
 } from '@/lib/divination/detail-level';
 
-type ChartPromptDetailClient = Pick<SupabaseClient, 'from'>;
-
 export async function loadResolvedChartPromptDetailLevel(
   userId: string,
   tool: ChartTextDetailTool,
-  options?: { client?: ChartPromptDetailClient },
+  options?: { db?: ScopedDb },
 ): Promise<ChartTextDetailLevel> {
   try {
-    const client = options?.client ?? getSystemAdminClient();
-    const { data } = await client
-      .from('user_settings')
+    const db = options?.db ?? systemDb();
+    const data = await db.tx((trx) => trx
+      .selectFrom('user_settings')
       .select('chart_prompt_detail_level')
-      .eq('user_id', userId)
-      .maybeSingle();
+      .where('user_id', '=', userId)
+      .executeTakeFirst());
     const saved = data?.chart_prompt_detail_level === 'full'
       ? 'full'
       : data?.chart_prompt_detail_level === 'more'

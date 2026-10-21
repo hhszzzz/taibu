@@ -1,7 +1,6 @@
-import { getSystemAdminClient } from '@/lib/api-utils';
 import { formatZiweiPromptText } from '@/lib/ziwei-chart-prompt';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
-import type { DataSourceProvider, DataSourceQueryContext } from '@/lib/data-sources/provider.server';
+import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
 import type { BirthTimeResolution } from '@/lib/divination/birth-time';
 
 type ZiweiRow = BirthTimeResolution & {
@@ -23,34 +22,32 @@ export const ziweiProvider: DataSourceProvider<ZiweiRow> = {
     displayName: '紫微命盘',
 
     async list(userId: string, ctx?: DataSourceQueryContext): Promise<DataSourceSummary[]> {
-        const supabase = ctx?.client ?? getSystemAdminClient();
+        const db = requireQueryDb(ctx);
         const limit = ctx?.limit ?? 50;
-        const { data, error } = await supabase
-            .from('ziwei_charts')
-            .select('id, name, birth_date, created_at')
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false })
-            .limit(limit);
-
-        if (error) throw new Error(error.message);
-        return (data || []).map((chart: { id: string; name: string | null; birth_date: string; created_at: string }) => ({
+        const data = await db.tx((trx) => trx
+        .selectFrom('ziwei_charts')
+        .select(['id', 'name', 'birth_date', 'created_at'])
+        .where('user_id', '=', userId)
+        .orderBy('created_at', 'desc')
+        .limit(limit)
+        .execute());
+        return (data || []).map((chart) => ({
             id: chart.id,
             type: 'ziwei_chart',
             name: chart.name || '未命名命盘',
             preview: `紫微命盘 - ${chart.birth_date}`,
-            createdAt: chart.created_at
+            createdAt: chart.created_at ?? '',
         }));
     },
 
     async get(id: string, userId: string, ctx?: DataSourceQueryContext): Promise<ZiweiRow | null> {
-        const supabase = ctx?.client ?? getSystemAdminClient();
-        const { data, error } = await supabase
-            .from('ziwei_charts')
-            .select('*')
-            .eq('id', id)
-            .eq('user_id', userId)
-            .maybeSingle();
-        if (error) throw new Error(error.message);
+        const db = requireQueryDb(ctx);
+        const data = await db.tx((trx) => trx
+        .selectFrom('ziwei_charts')
+        .selectAll()
+        .where('id', '=', id)
+        .where('user_id', '=', userId)
+        .executeTakeFirst());
         return (data as ZiweiRow) || null;
     },
 

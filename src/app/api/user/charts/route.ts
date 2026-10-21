@@ -1,6 +1,7 @@
 import { type NextRequest } from 'next/server';
 import type { BirthTimeResolution } from '@/lib/divination/birth-time';
-import { jsonError, jsonOk, requireUserContext, resolveRequestDbClient } from '@/lib/api-utils';
+import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
+import { deleteFromDynamic, selectFromDynamic } from '@/lib/db/sql-helpers';
 import {
     buildDefaultChartSettingsPayload,
     getUserSettingsSnapshot,
@@ -49,35 +50,43 @@ export async function GET(request: NextRequest) {
     if (expectedUserId !== null && expectedUserId !== auth.user.id) {
         return jsonError('账号已切换，请重新加载命盘', 409);
     }
-    const db = resolveRequestDbClient(auth);
-    if (!db) return jsonError('获取命盘列表失败', 500);
+    const chartColumns = [
+        'id', 'name', 'gender', 'birth_date', 'birth_time', 'birth_place', 'longitude',
+        'calendar_type', 'is_leap_month', 'timezone', 'disambiguation', 'created_at',
+    ] as const;
 
-    const [baziResult, ziweiResult, settingsResult] = await Promise.all([
-        db
-            .from('bazi_charts')
-            .select('id, name, gender, birth_date, birth_time, birth_place, longitude, calendar_type, is_leap_month, timezone, disambiguation, created_at')
-            .eq('user_id', auth.user.id)
-            .order('created_at', { ascending: false }),
-        db
-            .from('ziwei_charts')
-            .select('id, name, gender, birth_date, birth_time, birth_place, longitude, calendar_type, is_leap_month, timezone, disambiguation, created_at')
-            .eq('user_id', auth.user.id)
-            .order('created_at', { ascending: false }),
+    const [baziCharts, ziweiCharts, settingsResult] = await Promise.all([
+        auth.scoped.tx((trx) => trx
+            .selectFrom('bazi_charts')
+            .select(chartColumns)
+            .where('user_id', '=', auth.user.id)
+            .orderBy('created_at', 'desc')
+            .execute()) as Promise<ChartRecord[]>,
+        auth.scoped.tx((trx) => trx
+            .selectFrom('ziwei_charts')
+            .select(chartColumns)
+            .where('user_id', '=', auth.user.id)
+            .orderBy('created_at', 'desc')
+            .execute()) as Promise<ChartRecord[]>,
         loadDefaultChartIds(auth),
-    ]);
-
-    if (baziResult.error || ziweiResult.error || settingsResult.error) {
+    ]).catch((error) => {
         console.error('[user/charts] failed to load chart bundle', {
             userId: auth.user.id,
-            baziError: baziResult.error?.message || null,
-            ziweiError: ziweiResult.error?.message || null,
-            settingsError: settingsResult.error ? String(settingsResult.error) : null,
+            error: error instanceof Error ? error.message : String(error),
+        });
+        return [null, null, null] as const;
+    });
+
+    if (!baziCharts || !ziweiCharts || !settingsResult) {
+        return jsonError('获取命盘列表失败', 500);
+    }
+    if (settingsResult.error) {
+        console.error('[user/charts] failed to load default chart ids', {
+            userId: auth.user.id,
+            error: String(settingsResult.error),
         });
         return jsonError('获取命盘列表失败', 500);
     }
-
-    const baziCharts = (baziResult.data || []) as ChartRecord[];
-    const ziweiCharts = (ziweiResult.data || []) as ChartRecord[];
     const defaultChartIds = sanitizeDefaultChartIds(settingsResult.defaultChartIds, {
         bazi: baziCharts.map((chart) => chart.id),
         ziwei: ziweiCharts.map((chart) => chart.id),
@@ -97,9 +106,6 @@ export async function PATCH(request: NextRequest) {
     if (expectedUserId !== null && expectedUserId !== auth.user.id) {
         return jsonError('账号已切换，请重新加载命盘', 409);
     }
-    const db = resolveRequestDbClient(auth);
-    if (!db) return jsonError('设置默认命盘失败', 500);
-
     let body: { type?: unknown; id?: unknown };
     try {
         body = await request.json() as { type?: unknown; id?: unknown };
@@ -110,32 +116,27 @@ export async function PATCH(request: NextRequest) {
     if (!isChartType(body.type) || typeof body.id !== 'string' || !body.id.trim()) {
         return jsonError('缺少有效的命盘类型或命盘 ID', 400);
     }
+    const chartType = body.type;
+    const chartId = body.id;
 
-    const { data: chart, error: chartError } = await db
-        .from(getChartTable(body.type))
+    const chart = await auth.scoped.tx((trx) => selectFromDynamic(trx, getChartTable(chartType))
         .select('id')
-        .eq('id', body.id)
-        .eq('user_id', auth.user.id)
-        .maybeSingle();
+        .where('id', '=', chartId)
+        .where('user_id', '=', auth.user.id)
+        .executeTakeFirst());
 
-    if (chartError) {
-        return jsonError('获取命盘失败', 500);
-    }
     if (!chart) {
         return jsonError('命盘不存在', 404);
     }
 
-    const payload = buildDefaultChartSettingsPayload(auth.user.id, body.type, body.id);
+    const payload = buildDefaultChartSettingsPayload(auth.user.id, chartType, chartId);
 
-    const { data, error } = await db
-        .from('user_settings')
-        .upsert(payload, { onConflict: 'user_id' })
-        .select('default_bazi_chart_id, default_ziwei_chart_id')
-        .maybeSingle();
-
-    if (error) {
-        return jsonError('设置默认命盘失败', 500);
-    }
+    const data = await auth.scoped.tx((trx) => trx
+        .insertInto('user_settings')
+        .values(payload as never)
+        .onConflict((conflict) => conflict.column('user_id').doUpdateSet(payload as never))
+        .returning(['default_bazi_chart_id', 'default_ziwei_chart_id'])
+        .executeTakeFirst());
 
     return jsonOk({
         defaultChartIds: toDefaultChartIds(normalizeUserSettings((data ?? null) as Record<string, unknown> | null)),
@@ -149,9 +150,6 @@ export async function DELETE(request: NextRequest) {
     if (expectedUserId !== null && expectedUserId !== auth.user.id) {
         return jsonError('账号已切换，请重新加载命盘', 409);
     }
-    const db = resolveRequestDbClient(auth);
-    if (!db) return jsonError('删除命盘失败', 500);
-
     const type = request.nextUrl.searchParams.get('type');
     const id = request.nextUrl.searchParams.get('id');
 
@@ -167,25 +165,20 @@ export async function DELETE(request: NextRequest) {
     const wasDefault = (type === 'bazi' ? defaultChartIds.bazi : defaultChartIds.ziwei) === id;
     if (wasDefault) {
         const payload = buildDefaultChartSettingsPayload(auth.user.id, type, null);
-        const { error: updateError } = await db
-            .from('user_settings')
-            .upsert(payload, { onConflict: 'user_id' });
-        if (updateError) {
-            return jsonError('清理默认命盘失败', 500);
-        }
+        await auth.scoped.tx((trx) => trx
+            .insertInto('user_settings')
+            .values(payload as never)
+            .onConflict((conflict) => conflict.column('user_id').doUpdateSet(payload as never))
+            .execute());
     }
 
-    const { data, error } = await db
-        .from(getChartTable(type))
-        .delete()
-        .eq('id', id)
-        .eq('user_id', auth.user.id)
-        .select('id');
+    const data = await auth.scoped.tx((trx) => deleteFromDynamic(trx, getChartTable(type))
+        .where('id', '=', id)
+        .where('user_id', '=', auth.user.id)
+        .returning('id')
+        .execute());
 
-    if (error) {
-        return jsonError('删除命盘失败', 500);
-    }
-    if (!Array.isArray(data) || data.length === 0) {
+    if (data.length === 0) {
         return jsonError('命盘不存在', 404);
     }
 

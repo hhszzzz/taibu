@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "baselineRevision": "5725dde",
-  "sourceFingerprint": "7094b8b22ead94748a52583fa6a6f11df85de3b7502f95460079e998ccce719e",
+  "sourceFingerprint": "7a9dd4e7f97d43cb60a97a2a7a6bac2ce69ebcda90290f33de6052b859dfafe8",
   "target": "empty local self-hosted application schema; NOT production parity or a migration replay",
   "bootstrapOrder": [
     "platform roles/extensions",
@@ -226,7 +226,7 @@
     },
     {
       "file": "src/app/api/user/charts/route.ts",
-      "sha256": "59d2da85a2391655aea5157b7b385fbc64ed034944ab9d870512dc7001e08b05"
+      "sha256": "56bfe9bb18763cf3d7307cedb035615678a941e73ef7ccb1192ae1999d19506e"
     },
     {
       "file": "supabase/selfhost/002-storage.sql",
@@ -238,7 +238,7 @@
     },
     {
       "file": "scripts/selfhost-schema.mjs",
-      "sha256": "8fb1fa9b1d66d59f7ea5004c4774bfef521e461b35042366dd1615f6abb996eb"
+      "sha256": "946cb8c140c9e3b76c574421a16a72a4374ede0b7a366a68b781a9b50205c7bd"
     },
     {
       "file": "src/app/api/supabase/storage/route.ts",
@@ -1185,6 +1185,25 @@
   ],
   "relationReferences": [
     {
+      "name": "activation_keys",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/lib/user/activation-keys.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/user/activation-keys.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/user/activation-keys.ts",
+          "kind": "literal-kysely"
+        }
+      ]
+    },
+    {
       "name": "agent_attachment_refs",
       "kind": "table",
       "status": "defined",
@@ -1196,6 +1215,10 @@
         {
           "file": "src/lib/agent/tools.server.ts",
           "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/chat/conversation-export.server.ts",
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -1238,6 +1261,10 @@
         {
           "file": "src/lib/agent/store.server.ts",
           "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/chat/conversation-export.server.ts",
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -1355,6 +1382,10 @@
         {
           "file": "src/app/api/admin/ai-models/[id]/sources/route.ts",
           "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/server/ai-config.ts",
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -1374,6 +1405,10 @@
         {
           "file": "src/app/api/admin/ai-models/route.ts",
           "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/server/ai-config.ts",
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -1401,6 +1436,18 @@
         {
           "file": "src/app/api/admin/announcements/route.ts",
           "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/announcements/route.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/app/api/announcements/route.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/app/api/announcements/route.ts",
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -1411,11 +1458,30 @@
       "callers": [
         {
           "file": "src/lib/annual-report.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/annual-report.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
+        }
+      ]
+    },
+    {
+      "name": "app_settings",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/lib/app-settings.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/app-settings.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/app-settings.ts",
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -1449,7 +1515,7 @@
       "callers": [
         {
           "file": "src/lib/server/bazi-case-profile.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -1460,11 +1526,11 @@
       "callers": [
         {
           "file": "src/lib/chat/chat-context.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/server/bazi-case-profile.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -1475,7 +1541,7 @@
       "callers": [
         {
           "file": "src/app/api/bazi/analysis/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/bazi/charts/route.ts",
@@ -1490,8 +1556,12 @@
           "kind": "literal-from"
         },
         {
+          "file": "src/app/api/search/route.ts",
+          "kind": "literal-kysely"
+        },
+        {
           "file": "src/app/api/user/charts/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/user/charts/route.ts",
@@ -1502,28 +1572,32 @@
           "kind": "literal-from"
         },
         {
-          "file": "src/lib/agent/chart-tools.server.ts",
-          "kind": "literal-from"
-        },
-        {
           "file": "src/lib/api/chart-crud.ts",
           "kind": "tableName-catalog"
         },
         {
           "file": "src/lib/chat/chat-context.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/chat/chat-context.ts",
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/data-sources/bazi.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/data-sources/bazi.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/data-sources/fortune.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/data-sources/fortune.ts",
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/reminders.ts",
@@ -1531,7 +1605,7 @@
         },
         {
           "file": "src/lib/server/bazi-case-profile.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -1647,6 +1721,37 @@
         {
           "file": "src/lib/knowledge-base/ingest.ts",
           "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/server/conversation-messages.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/server/conversation-messages.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/server/conversation-messages.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/server/conversation-messages.ts",
+          "kind": "literal-kysely"
+        }
+      ]
+    },
+    {
+      "name": "conversation_shares",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/conversations/[id]/share/route.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/app/api/shares/route.ts",
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -1656,16 +1761,48 @@
       "status": "defined",
       "callers": [
         {
+          "file": "src/app/api/conversations/[id]/configuration/route.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/app/api/conversations/[id]/configuration/route.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/app/api/conversations/[id]/export/route.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/app/api/conversations/[id]/fork/route.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/app/api/conversations/[id]/share/route.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/app/api/history-summaries/route.ts",
+          "kind": "literal-kysely"
+        },
+        {
           "file": "src/lib/agent/api.server.ts",
           "kind": "literal-from"
         },
         {
           "file": "src/lib/annual-report.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/annual-report.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/data-sources/face.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/data-sources/palm.ts",
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/knowledge-base/ingest.ts",
@@ -1682,6 +1819,40 @@
         {
           "file": "src/lib/knowledge-base/ingest.ts",
           "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "conversations_with_archive_status",
+      "kind": "view",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/conversations/[id]/route.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/app/api/conversations/route.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/app/api/search/route.ts",
+          "kind": "literal-kysely"
+        }
+      ]
+    },
+    {
+      "name": "credit_transactions",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/credits/transactions/route.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/app/api/credits/transactions/route.ts",
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -1692,7 +1863,23 @@
       "callers": [
         {
           "file": "src/lib/annual-report.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/user/checkin.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/user/checkin.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/user/checkin.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/user/checkin.ts",
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -1706,16 +1893,12 @@
           "kind": "tableName-catalog"
         },
         {
-          "file": "src/lib/agent/chart-tools.server.ts",
-          "kind": "literal-from"
+          "file": "src/lib/data-sources/daliuren.ts",
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/data-sources/daliuren.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/data-sources/daliuren.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/history/registry.ts",
@@ -1730,11 +1913,11 @@
       "callers": [
         {
           "file": "src/lib/data-sources/face.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/data-sources/face.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/history/registry.ts",
@@ -1753,11 +1936,11 @@
         },
         {
           "file": "src/lib/data-sources/hepan.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/data-sources/hepan.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/history/registry.ts",
@@ -1817,6 +2000,22 @@
         {
           "file": "src/lib/knowledge-base/persistence.server.ts",
           "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/mentions.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/mentions.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/server/chat/bootstrap.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/server/chat/prompt-context.ts",
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -1840,6 +2039,10 @@
         {
           "file": "src/lib/knowledge-base/ingest.ts",
           "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/mentions.ts",
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -1850,27 +2053,23 @@
       "callers": [
         {
           "file": "src/app/api/liuyao/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/liuyao/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/liuyao/route.ts",
           "kind": "tableName-catalog"
         },
         {
-          "file": "src/lib/agent/chart-tools.server.ts",
-          "kind": "literal-from"
+          "file": "src/lib/data-sources/liuyao.ts",
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/data-sources/liuyao.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/data-sources/liuyao.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/history/registry.ts",
@@ -1889,11 +2088,11 @@
         },
         {
           "file": "src/lib/data-sources/mbti.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/data-sources/mbti.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/history/registry.ts",
@@ -1911,16 +2110,12 @@
           "kind": "tableName-catalog"
         },
         {
-          "file": "src/lib/agent/chart-tools.server.ts",
-          "kind": "literal-from"
+          "file": "src/lib/data-sources/meihua.ts",
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/data-sources/meihua.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/data-sources/meihua.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/history/registry.ts",
@@ -1935,27 +2130,31 @@
       "callers": [
         {
           "file": "src/app/api/notes/[id]/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/notes/[id]/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/notes/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/notes/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/notes/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/app/api/notes/route.ts",
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/records/export/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -1966,35 +2165,35 @@
       "callers": [
         {
           "file": "src/app/api/records/[id]/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/records/[id]/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/records/[id]/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/records/[id]/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/records/export/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/records/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/data-sources/record.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/data-sources/record.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/knowledge-base/ingest.ts",
@@ -2013,7 +2212,11 @@
       "callers": [
         {
           "file": "src/app/api/records/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/app/api/records/route.ts",
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -2027,8 +2230,36 @@
           "kind": "literal-from"
         },
         {
+          "file": "src/app/api/notifications/route.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/app/api/notifications/route.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/app/api/notifications/route.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/app/api/notifications/route.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/app/api/notifications/route.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/app/api/notifications/route.ts",
+          "kind": "literal-kysely"
+        },
+        {
           "file": "src/lib/agent/activity.server.ts",
           "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/notification-server.ts",
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -2039,11 +2270,11 @@
       "callers": [
         {
           "file": "src/lib/data-sources/palm.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/data-sources/palm.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/history/registry.ts",
@@ -2061,16 +2292,12 @@
           "kind": "tableName-catalog"
         },
         {
-          "file": "src/lib/agent/chart-tools.server.ts",
-          "kind": "literal-from"
+          "file": "src/lib/data-sources/qimen.ts",
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/data-sources/qimen.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/data-sources/qimen.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/history/registry.ts",
@@ -2126,16 +2353,12 @@
           "kind": "tableName-catalog"
         },
         {
-          "file": "src/lib/agent/chart-tools.server.ts",
-          "kind": "literal-from"
+          "file": "src/lib/data-sources/tarot.ts",
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/data-sources/tarot.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/data-sources/tarot.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/history/registry.ts",
@@ -2187,16 +2410,16 @@
       "status": "defined",
       "callers": [
         {
-          "file": "src/app/api/bazi/analysis/route.ts",
-          "kind": "literal-from"
+          "file": "src/app/api/user/charts/route.ts",
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/user/charts/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
-          "file": "src/app/api/user/charts/route.ts",
-          "kind": "literal-from"
+          "file": "src/app/api/user/settings/route.ts",
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/agent/briefing.server.ts",
@@ -2212,11 +2435,11 @@
         },
         {
           "file": "src/lib/ai/chart-prompt-detail.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/data-sources/fortune.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/reminders.ts",
@@ -2225,6 +2448,14 @@
         {
           "file": "src/lib/reminders.ts",
           "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/server/chat/bootstrap.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/user/settings.ts",
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -2276,6 +2507,26 @@
         {
           "file": "src/lib/community-server.ts",
           "kind": "typed-adapter-catalog"
+        },
+        {
+          "file": "src/lib/server/chat/bootstrap.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/user/credits.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/user/credits.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/user/membership-server.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/user/profile-record.ts",
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -2289,16 +2540,12 @@
           "kind": "tableName-catalog"
         },
         {
-          "file": "src/lib/agent/chart-tools.server.ts",
-          "kind": "literal-from"
+          "file": "src/lib/data-sources/xiaoliuren.ts",
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/data-sources/xiaoliuren.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/data-sources/xiaoliuren.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/history/registry.ts",
@@ -2312,8 +2559,12 @@
       "status": "defined",
       "callers": [
         {
+          "file": "src/app/api/search/route.ts",
+          "kind": "literal-kysely"
+        },
+        {
           "file": "src/app/api/user/charts/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/user/charts/route.ts",
@@ -2321,7 +2572,7 @@
         },
         {
           "file": "src/app/api/ziwei/analysis/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/ziwei/charts/route.ts",
@@ -2332,30 +2583,41 @@
           "kind": "tableName-catalog"
         },
         {
-          "file": "src/lib/agent/chart-tools.server.ts",
-          "kind": "literal-from"
+          "file": "src/lib/data-sources/ziwei.ts",
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/data-sources/ziwei.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/data-sources/ziwei.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         }
       ]
     }
   ],
   "dynamicRelationSites": [
     {
+      "file": "src/app/api/history-summaries/route.ts",
+      "expression": "config.tableName",
+      "contract": "tableName catalog"
+    },
+    {
+      "file": "src/app/api/history-summaries/route.ts",
+      "expression": "config.tableName",
+      "contract": "tableName catalog"
+    },
+    {
       "file": "src/app/api/user/charts/route.ts",
-      "expression": "getChartTable(body.type",
+      "expression": "getChartTable(chartType",
       "contract": "getChartTable return catalog"
     },
     {
       "file": "src/app/api/user/charts/route.ts",
       "expression": "getChartTable(type",
       "contract": "getChartTable return catalog"
+    },
+    {
+      "file": "src/lib/agent/chart-tools.server.ts",
+      "expression": "table",
+      "contract": "chart source table catalog"
     },
     {
       "file": "src/lib/api/chart-crud.ts",
@@ -2398,7 +2660,7 @@
   "artifacts": [
     {
       "file": "supabase/selfhost/001-application.sql",
-      "sha256": "713b3de44588122562c668dace135397256a4f84893101b6450f1bdc6c4030c6"
+      "sha256": "03eee25e07962f2741b624b33a6981015de9b49ec422d28db8a8669ecfc495fd"
     },
     {
       "file": "supabase/selfhost/002-storage.sql",

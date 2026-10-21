@@ -17,6 +17,7 @@ import { createKnowledgeBasePersistence } from '@/lib/knowledge-base/persistence
 import { replaceKnowledgeSourceEntries } from '@/lib/knowledge-base/source-replacement';
 import { createKbClient } from '@/lib/knowledge-base/client';
 import { isConversationMessageInfraMissing, type StoredConversationMessageRow } from '@/lib/server/conversation-messages';
+import { systemDb } from '@/lib/db/context.server';
 
 interface ChunkConfig {
     maxChunkSize: number;
@@ -502,7 +503,7 @@ export async function ingestDataSourceAsService(
     options?: IngestOptions
 ): Promise<IngestResult> {
     const provider = await getProvider(ref.type);
-    const data = await provider.get(ref.id, userId);
+    const data = await provider.get(ref.id, userId, { db: systemDb() });
     if (!data) throw new Error('Data source not found');
 
     const content = await provider.formatForAI(data);

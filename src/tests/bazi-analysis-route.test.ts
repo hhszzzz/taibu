@@ -2,6 +2,7 @@ import { beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { mockAIFeatureState } from './helpers/route-mock';
+import { createMockScopedDb } from './helpers/db-mock';
 
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon';
@@ -18,7 +19,7 @@ beforeEach((t) => {
 
 function mockBaziUserContext(
     t: import('node:test').TestContext,
-    client: Record<string, unknown>,
+    scoped: unknown,
     route: 'bazi' | 'ziwei' = 'bazi',
 ) {
     const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
@@ -29,12 +30,11 @@ function mockBaziUserContext(
 
     apiUtils.requireUserContext = (async () => ({
         user: { id: 'user-1' },
-        db: client,
-        supabase: client,
+        scoped,
         accessToken: 'test-token',
     })) as unknown as typeof apiUtils.requireUserContext;
 
-    apiUtils.getSystemAdminClient = (() => client) as unknown as typeof apiUtils.getSystemAdminClient;
+    apiUtils.getSystemAdminClient = (() => ({})) as unknown as typeof apiUtils.getSystemAdminClient;
 
     delete require.cache[routePath];
     delete require.cache[pipelinePath];
@@ -44,6 +44,61 @@ function mockBaziUserContext(
         apiUtils.getSystemAdminClient = originalGetSystemAdminClient;
         delete require.cache[routePath];
         delete require.cache[pipelinePath];
+    });
+}
+
+
+const BASE_SETTINGS = {
+    expression_style: 'direct',
+    custom_instructions: '',
+    user_profile: {},
+    prompt_kb_ids: [],
+    visualization_settings: {
+        selectedDimensions: ['career', 'wealth'],
+        dayunDisplayCount: 6,
+        chartStyle: 'classic-chinese',
+    },
+};
+
+function createAnalysisScoped(options: {
+    profile?: Record<string, unknown> | null;
+    events?: Array<Record<string, unknown>>;
+    settings?: Record<string, unknown> | null;
+} = {}) {
+    const chart = {
+        id: '11111111-1111-1111-1111-111111111111',
+        user_id: 'user-1',
+        name: '张三',
+        gender: 'male',
+        birth_date: '1990-01-01',
+        birth_time: '08:00',
+        birth_place: '北京',
+        calendar_type: 'solar',
+        is_leap_month: false,
+    };
+    return createMockScopedDb({
+        tx: async (work) => work({
+            selectFrom(table: string) {
+                const query = {
+                    select() { return query; },
+                    where() { return query; },
+                    orderBy() { return query; },
+                    limit() { return query; },
+                    async executeTakeFirst() {
+                        if (table === 'bazi_charts') return chart;
+                        if (table === 'bazi_case_profiles') return options.profile ?? undefined;
+                        if (table === 'user_settings') {
+                            return options.settings === undefined ? BASE_SETTINGS : options.settings ?? undefined;
+                        }
+                        return undefined;
+                    },
+                    async execute() {
+                        return table === 'bazi_case_events' ? options.events ?? [] : [];
+                    },
+                };
+                return query;
+            },
+        } as never),
     });
 }
 
@@ -58,27 +113,39 @@ function setupChartAdmission(t: import('node:test').TestContext, route: 'bazi' |
         disambiguation: undefined as 'later' | undefined,
     };
     const reconstructedInputs: Array<{ timezone?: string; disambiguation?: string }> = [];
-    mockBaziUserContext(t, {
-        from(table: string) {
-            assert.ok(table === `${route}_charts` || table === 'user_settings');
-            return { select(columns: string) {
-                if (table === `${route}_charts`) {
-                    assert.ok(columns.split(', ').includes('timezone'));
-                    assert.ok(columns.split(', ').includes('disambiguation'));
-                }
-                return { eq() { return {
-                eq(column: string, userId: string) {
-                    assert.equal(column, 'user_id');
-                    assert.equal(userId, 'user-1');
-                    return { single: async () => {
-                        events.push('ownership');
-                        return { data: control.ownsChart ? chart : null, error: null };
-                    } };
-                },
-                maybeSingle: async () => ({ data: null, error: null }),
-            }; } }; } };
-        },
-    }, route);
+    const scoped = createMockScopedDb({
+        tx: async (work) => work({
+            selectFrom(table: string) {
+                assert.ok(table === `${route}_charts` || table === 'user_settings');
+                let columns: string[] = [];
+                const query = {
+                    select(selection: string | readonly string[]) {
+                        columns = Array.isArray(selection)
+                            ? [...selection]
+                            : String(selection).split(',').map((column) => column.trim());
+                        if (table === `${route}_charts`) {
+                            assert.ok(columns.includes('timezone'));
+                            assert.ok(columns.includes('disambiguation'));
+                        }
+                        return query;
+                    },
+                    where() { return query; },
+                    orderBy() { return query; },
+                    limit() { return query; },
+                    async executeTakeFirst() {
+                        if (table === `${route}_charts`) {
+                            events.push('ownership');
+                            return control.ownsChart ? chart : undefined;
+                        }
+                        return undefined;
+                    },
+                    async execute() { return []; },
+                };
+                return query;
+            },
+        } as never),
+    });
+    mockBaziUserContext(t, scoped, route);
     const credits = require('../lib/user/credits') as typeof import('../lib/user/credits');
     const access = require('../lib/ai/ai-access') as typeof import('../lib/ai/ai-access');
     const ai = require('../lib/ai/ai') as typeof import('../lib/ai/ai');
@@ -227,146 +294,47 @@ test('bazi analysis route builds prompt from server chart context instead of cli
     let capturedUserPrompt = '';
     let capturedSystemPrompt = '';
     let capturedSourceData: Record<string, unknown> | null = null;
-    const authClient = {
-        from(table: string) {
-            if (table === 'bazi_charts') {
-                return {
-                    select() {
-                        return {
-                            eq() {
-                                return {
-                                    eq() {
-                                        return {
-	                                            single: async () => ({
-	                                                data: {
-	                                                    id: '11111111-1111-1111-1111-111111111111',
-	                                                    user_id: 'user-1',
-	                                                    name: '张三',
-	                                                    gender: 'male',
-	                                                    birth_date: '1990-01-01',
-	                                                    birth_time: '08:00',
-	                                                    birth_place: '北京',
-	                                                    calendar_type: 'solar',
-	                                                    is_leap_month: false,
-	                                                },
-	                                                error: null,
-	                                            }),
-                                        };
-                                    },
-                                };
-                            },
-                        };
-                    },
-                };
-            }
-
-            if (table === 'bazi_case_profiles') {
-                return {
-                    select() {
-                        return {
-                            eq() {
-                                return {
-                                    eq() {
-                                        return {
-                                            maybeSingle: async () => ({
-                                                data: {
-                                                    id: 'profile-1',
-                                                    user_id: 'user-1',
-                                                    bazi_chart_id: '11111111-1111-1111-1111-111111111111',
-                                                    master_review: {
-                                                        strengthLevel: '偏强',
-                                                        patterns: ['财格'],
-                                                        yongShen: { basic: ['水'], advanced: ['壬'] },
-                                                        xiShen: { basic: ['金'], advanced: [] },
-                                                        jiShen: { basic: ['火'], advanced: [] },
-                                                        xianShen: { basic: ['土'], advanced: [] },
-                                                        summary: '财可生官。',
-                                                    },
-                                                    owner_feedback: {
-                                                        occupation: '上班族',
-                                                        education: '本科',
-                                                        wealthLevel: '小康',
-                                                        marriageStatus: '已婚',
-                                                        healthStatus: '健康稳定',
-                                                        familyStatusTags: ['父母助力'],
-                                                        temperamentTags: ['务实'],
-                                                        summary: '近年工作稳定。',
-                                                    },
-                                                    created_at: '2026-03-20T00:00:00.000Z',
-                                                    updated_at: '2026-03-20T00:00:00.000Z',
-                                                },
-                                                error: null,
-                                            }),
-                                        };
-                                    },
-                                };
-                            },
-                        };
-                    },
-                };
-            }
-
-            if (table === 'bazi_case_events') {
-                return {
-                    select() {
-                        return {
-                            eq() {
-                                return {
-                                    order: async () => ({
-                                        data: [
-                                            {
-                                                id: 'event-1',
-                                                profile_id: 'profile-1',
-                                                bazi_chart_id: '11111111-1111-1111-1111-111111111111',
-                                                event_date: '2024-06-01',
-                                                category: '事业',
-                                                title: '晋升',
-                                                detail: '升任主管',
-                                                created_at: '2026-03-20T00:00:00.000Z',
-                                                updated_at: '2026-03-20T00:00:00.000Z',
-                                            },
-                                        ],
-                                        error: null,
-                                    }),
-                                };
-                            },
-                        };
-                    },
-                };
-            }
-
-            if (table === 'user_settings') {
-                return {
-                    select() {
-                        return {
-                            eq() {
-                                return {
-                                    maybeSingle: async () => ({
-                                        data: {
-                                            expression_style: 'direct',
-                                            custom_instructions: '',
-                                            user_profile: {},
-                                            prompt_kb_ids: [],
-                                            visualization_settings: {
-                                                selectedDimensions: ['career', 'wealth'],
-                                                dayunDisplayCount: 6,
-                                                chartStyle: 'classic-chinese',
-                                            },
-                                        },
-                                        error: null,
-                                    }),
-                                };
-                            },
-                        };
-                    },
-                };
-            }
-
-            throw new Error(`Unexpected table: ${table}`);
+    const scoped = createAnalysisScoped({
+        profile: {
+            id: 'profile-1',
+            user_id: 'user-1',
+            bazi_chart_id: '11111111-1111-1111-1111-111111111111',
+            master_review: {
+                strengthLevel: '偏强',
+                patterns: ['财格'],
+                yongShen: { basic: ['水'], advanced: ['壬'] },
+                xiShen: { basic: ['金'], advanced: [] },
+                jiShen: { basic: ['火'], advanced: [] },
+                xianShen: { basic: ['土'], advanced: [] },
+                summary: '财可生官。',
+            },
+            owner_feedback: {
+                occupation: '上班族',
+                education: '本科',
+                wealthLevel: '小康',
+                marriageStatus: '已婚',
+                healthStatus: '健康稳定',
+                familyStatusTags: ['父母助力'],
+                temperamentTags: ['务实'],
+                summary: '近年工作稳定。',
+            },
+            created_at: '2026-03-20T00:00:00.000Z',
+            updated_at: '2026-03-20T00:00:00.000Z',
         },
-    };
-
-    mockBaziUserContext(t, authClient);
+        events: [{
+            id: 'event-1',
+            profile_id: 'profile-1',
+            user_id: 'user-1',
+            bazi_chart_id: '11111111-1111-1111-1111-111111111111',
+            event_date: '2024-06-01',
+            category: '事业',
+            title: '晋升',
+            detail: '升任主管',
+            created_at: '2026-03-20T00:00:00.000Z',
+            updated_at: '2026-03-20T00:00:00.000Z',
+        }],
+    });
+    mockBaziUserContext(t, scoped);
 
     creditsModule.getUserAuthInfo = async () => ({
         effectiveMembership: 'free',
@@ -456,99 +424,18 @@ test('bazi analysis route surfaces SSE error when stream persistence returns nul
     const originalConsoleError = console.error;
 
     let refundCalls = 0;
-    const authClient = {
-        from(table: string) {
-            if (table === 'bazi_charts') {
-                return {
-                    select() {
-                        return {
-                            eq() {
-                                return {
-                                    eq() {
-                                        return {
-	                                            single: async () => ({
-	                                                data: {
-	                                                    id: '11111111-1111-1111-1111-111111111111',
-	                                                    user_id: 'user-1',
-	                                                    name: '张三',
-	                                                    gender: 'male',
-	                                                    birth_date: '1990-01-01',
-	                                                    birth_time: '08:00',
-	                                                    birth_place: '北京',
-	                                                    calendar_type: 'solar',
-	                                                    is_leap_month: false,
-	                                                },
-	                                                error: null,
-	                                            }),
-                                        };
-                                    },
-                                };
-                            },
-                        };
-                    },
-                };
-            }
-
-            if (table === 'bazi_case_profiles') {
-                return {
-                    select() {
-                        return {
-                            eq() {
-                                return {
-                                    eq() {
-                                        return {
-                                            maybeSingle: async () => ({ data: null, error: null }),
-                                        };
-                                    },
-                                };
-                            },
-                        };
-                    },
-                };
-            }
-
-            if (table === 'bazi_case_events') {
-                return {
-                    select() {
-                        return {
-                            eq() {
-                                return {
-                                    order: async () => ({ data: [], error: null }),
-                                };
-                            },
-                        };
-                    },
-                };
-            }
-
-            if (table === 'user_settings') {
-                return {
-                    select() {
-                        return {
-                            eq() {
-                                return {
-                                    maybeSingle: async () => ({
-                                        data: {
-                                            expression_style: 'direct',
-                                            custom_instructions: '',
-                                            user_profile: {},
-                                            prompt_kb_ids: [],
-                                            visualization_settings: null,
-                                        },
-                                        error: null,
-                                    }),
-                                };
-                            },
-                        };
-                    },
-                };
-            }
-
-            throw new Error(`Unexpected table: ${table}`);
+    const scoped = createAnalysisScoped({
+        profile: null,
+        events: [],
+        settings: {
+            expression_style: 'direct',
+            custom_instructions: '',
+            user_profile: {},
+            prompt_kb_ids: [],
+            visualization_settings: null,
         },
-    };
-
-    mockBaziUserContext(t, authClient);
+    });
+    mockBaziUserContext(t, scoped);
 
     creditsModule.getUserAuthInfo = async () => ({
         effectiveMembership: 'free',

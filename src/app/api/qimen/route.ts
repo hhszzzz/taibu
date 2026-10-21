@@ -175,7 +175,7 @@ const qimenInterpretConfig: DivinationRouteConfig<QimenInterpretInput, QimenInte
     resolvePromptContext: async (input, auth) => ({
         userId: auth.userId,
         chartPromptDetailLevel: await loadResolvedChartPromptDetailLevel(auth.userId, 'qimen', {
-            client: auth.db ?? undefined,
+            db: auth.db,
         }),
         chart: await calculateQimenOutput(input),
     }),

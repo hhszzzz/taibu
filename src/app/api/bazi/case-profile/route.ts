@@ -17,13 +17,13 @@ export async function GET(request: NextRequest) {
         }
 
         const { user } = auth;
-        const supabase = auth.db;
-        const ownsChart = await ensureUserOwnsBaziChart(supabase, chartId, user.id);
+        const db = auth.scoped;
+        const ownsChart = await ensureUserOwnsBaziChart(db, chartId, user.id);
         if (!ownsChart) {
             return jsonError('未找到对应命盘', 404);
         }
 
-        const profile = await getBaziCaseProfileByChartId(supabase, chartId, user.id);
+        const profile = await getBaziCaseProfileByChartId(db, chartId, user.id);
         return jsonOk({ profile });
     } catch (error) {
         console.error('[bazi/case-profile][GET] failed:', error);
@@ -57,14 +57,14 @@ export async function PUT(request: NextRequest) {
         }
 
         const { user } = auth;
-        const supabase = auth.db;
-        const ownsChart = await ensureUserOwnsBaziChart(supabase, parsed.chartId, user.id);
+        const db = auth.scoped;
+        const ownsChart = await ensureUserOwnsBaziChart(db, parsed.chartId, user.id);
         if (!ownsChart) {
             return jsonError('未找到对应命盘', 404);
         }
 
         const profile = await saveBaziCaseProfile({
-            supabase,
+            db,
             userId: user.id,
             chartId: parsed.chartId,
             masterReview: parsed.masterReview,

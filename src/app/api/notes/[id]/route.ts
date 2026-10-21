@@ -17,23 +17,19 @@ export async function PUT(
             mood?: string | null;
         };
 
-        const { data, error } = await auth.db
-            .from('ming_notes')
-            .update({
+        const data = await auth.scoped.tx((trx) => trx
+            .updateTable('ming_notes')
+            .set({
                 ...(body.note_date !== undefined ? { note_date: body.note_date } : {}),
                 ...(body.content !== undefined ? { content: body.content } : {}),
                 ...(body.mood !== undefined ? { mood: body.mood } : {}),
                 updated_at: new Date().toISOString(),
-            })
-            .eq('id', id)
-            .eq('user_id', user.id)
-            .select()
-            .maybeSingle();
+            } as never)
+            .where('id', '=', id)
+            .where('user_id', '=', user.id)
+            .returningAll()
+            .executeTakeFirst());
 
-        if (error) {
-            console.error('更新小记失败:', error);
-            return jsonError('更新小记失败', 500);
-        }
         if (!data) {
             return jsonError('小记不存在', 404);
         }
@@ -55,16 +51,11 @@ export async function DELETE(
         const { user } = auth;
 
         const { id } = await params;
-        const { error } = await auth.db
-            .from('ming_notes')
-            .delete()
-            .eq('id', id)
-            .eq('user_id', user.id);
-
-        if (error) {
-            console.error('删除小记失败:', error);
-            return jsonError('删除小记失败', 500);
-        }
+        await auth.scoped.tx((trx) => trx
+            .deleteFrom('ming_notes')
+            .where('id', '=', id)
+            .where('user_id', '=', user.id)
+            .execute());
 
         return jsonOk({ success: true });
     } catch (error) {

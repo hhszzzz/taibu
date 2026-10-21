@@ -1,7 +1,6 @@
-import { getSystemAdminClient } from '@/lib/api-utils';
 import { FACE_ANALYSIS_TYPES } from '@/lib/divination/face';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
-import type { DataSourceProvider, DataSourceQueryContext } from '@/lib/data-sources/provider.server';
+import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
 
 type FaceRow = {
     id: string;
@@ -27,38 +26,44 @@ export const faceProvider: DataSourceProvider<FaceRow> = {
     displayName: '面相记录',
 
     async list(userId: string, ctx?: DataSourceQueryContext): Promise<DataSourceSummary[]> {
-        const supabase = ctx?.client ?? getSystemAdminClient();
+        const db = requireQueryDb(ctx);
         const limit = ctx?.limit ?? 50;
-        const { data, error } = await supabase
-            .from('face_readings')
-            .select('id, analysis_type, created_at')
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false })
-            .limit(limit);
-
-        if (error) throw new Error(error.message);
-        return (data || []).map((row: { id: string; analysis_type: string | null; created_at: string }) => {
+        const data = await db.tx((trx) => trx
+            .selectFrom('face_readings')
+            .select(['id', 'analysis_type', 'created_at'])
+            .where('user_id', '=', userId)
+            .orderBy('created_at', 'desc')
+            .limit(limit)
+            .execute());
+        return (data || []).map((row) => {
             const typeName = FACE_ANALYSIS_TYPES.find(t => t.id === row.analysis_type)?.name || row.analysis_type || '面相分析';
             return {
                 id: row.id,
                 type: 'face_reading',
                 name: `面相分析 - ${typeName}`,
                 preview: row.analysis_type ? `类型：${typeName}` : '面相分析记录',
-                createdAt: row.created_at
+                createdAt: row.created_at ?? '',
             };
         });
     },
 
     async get(id: string, userId: string, ctx?: DataSourceQueryContext): Promise<FaceRow | null> {
-        const supabase = ctx?.client ?? getSystemAdminClient();
-        const { data, error } = await supabase
-            .from('face_readings')
-            .select('*, conversation:conversations(messages, source_data)')
-            .eq('id', id)
-            .eq('user_id', userId)
-            .maybeSingle();
-        if (error) throw new Error(error.message);
-        return (data as FaceRow) || null;
+        const db = requireQueryDb(ctx);
+        const data = await db.tx((trx) => trx
+            .selectFrom('face_readings')
+            .selectAll()
+            .where('id', '=', id)
+            .where('user_id', '=', userId)
+            .executeTakeFirst());
+        if (!data) return null;
+        const conversation = data.conversation_id
+            ? await db.tx((trx) => trx
+                .selectFrom('conversations')
+                .select(['messages', 'source_data'])
+                .where('id', '=', data.conversation_id as string)
+                .executeTakeFirst()) ?? null
+            : null;
+        return { ...data, conversation } as FaceRow;
     },
 
     formatForAI(r: FaceRow): string {

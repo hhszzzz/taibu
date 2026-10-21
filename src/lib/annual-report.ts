@@ -4,7 +4,8 @@
  * 生成用户年度命理使用报告
  */
 
-import { getSystemAdminClient } from '@/lib/api-utils';
+import { systemDb } from '@/lib/db/context.server';
+import { json } from '@/lib/db/sql-helpers';
 import {
     ANNUAL_REPORT_FEATURE_NAMES,
     type AnnualReportData,
@@ -24,16 +25,17 @@ export async function generateAnnualReport(
     const endDate = `${year}-12-31T23:59:59`;
 
     try {
-        const supabase = getSystemAdminClient();
+        const db = systemDb();
         // 1. 获取对话统计
-        const { data: conversations } = await supabase
-            .from('conversations')
-            .select('id, source_type, created_at')
-            .eq('user_id', userId)
-            .gte('created_at', startDate)
-            .lte('created_at', endDate);
+        const conversations = await db.tx((trx) => trx
+            .selectFrom('conversations')
+            .select(['id', 'source_type', 'created_at'])
+            .where('user_id', '=', userId)
+            .where('created_at', '>=', startDate)
+            .where('created_at', '<=', endDate)
+            .execute());
 
-        const convList = (conversations || []) as Array<{ id: string; source_type: string | null; created_at: string }>;
+        const convList = conversations as Array<{ id: string; source_type: string | null; created_at: string }>;
 
         // 2. 计算功能使用分布
         const featureUsage = {
@@ -61,14 +63,15 @@ export async function generateAnnualReport(
         }
 
         // 3. 获取签到统计
-        const { data: checkins } = await supabase
-            .from('daily_checkins')
+        const checkins = await db.tx((trx) => trx
+            .selectFrom('daily_checkins')
             .select('reward_credits')
-            .eq('user_id', userId)
-            .gte('checkin_date', `${year}-01-01`)
-            .lte('checkin_date', `${year}-12-31`);
+            .where('user_id', '=', userId)
+            .where('checkin_date', '>=', `${year}-01-01`)
+            .where('checkin_date', '<=', `${year}-12-31`)
+            .execute());
 
-        const checkinList = (checkins || []) as Array<{ reward_credits: number }>;
+        const checkinList = checkins as Array<{ reward_credits: number }>;
         const totalCheckinDays = checkinList.length;
         const totalCreditsEarned = checkinList.reduce((sum, c) => sum + c.reward_credits, 0);
 
@@ -133,19 +136,18 @@ export async function getCachedAnnualReport(
     userId: string,
     year: number
 ): Promise<AnnualReportData | null> {
-    const supabase = getSystemAdminClient();
-    const { data, error } = await supabase
-        .from('annual_reports')
+    const data = await systemDb().tx((trx) => trx
+        .selectFrom('annual_reports')
         .select('report_data')
-        .eq('user_id', userId)
-        .eq('year', year)
-        .maybeSingle();
+        .where('user_id', '=', userId)
+        .where('year', '=', year)
+        .executeTakeFirst()).catch(() => undefined);
 
-    if (error || !data) {
+    if (!data) {
         return null;
     }
 
-    return data.report_data as AnnualReportData;
+    return data.report_data as unknown as AnnualReportData;
 }
 
 /**
@@ -156,17 +158,19 @@ async function cacheAnnualReport(
     year: number,
     report: AnnualReportData
 ): Promise<void> {
-    const supabase = getSystemAdminClient();
-    await supabase
-        .from('annual_reports')
-        .upsert({
+    await systemDb().tx((trx) => trx
+        .insertInto('annual_reports')
+        .values({
             user_id: userId,
             year,
-            report_data: report,
+            report_data: json(report) as never,
             generated_at: new Date().toISOString(),
-        }, {
-            onConflict: 'user_id,year'
-        });
+        })
+        .onConflict((conflict) => conflict.columns(['user_id', 'year']).doUpdateSet({
+            report_data: json(report) as never,
+            generated_at: new Date().toISOString(),
+        }))
+        .execute());
 }
 
 /**
@@ -176,21 +180,22 @@ export async function getReportSummary(
     userId: string,
     year: number
 ): Promise<{ hasData: boolean; totalAnalyses: number; topFeature: string } | null> {
-    const supabase = getSystemAdminClient();
     const report = await getCachedAnnualReport(userId, year);
 
     if (!report) {
         // 快速检查是否有数据
-        const { count } = await supabase
-            .from('conversations')
-            .select('*', { count: 'exact', head: true })
-            .eq('user_id', userId)
-            .gte('created_at', `${year}-01-01`)
-            .lte('created_at', `${year}-12-31`);
+        const row = await systemDb().tx((trx) => trx
+            .selectFrom('conversations')
+            .select((eb) => eb.fn.countAll<number>().as('count'))
+            .where('user_id', '=', userId)
+            .where('created_at', '>=', `${year}-01-01`)
+            .where('created_at', '<=', `${year}-12-31`)
+            .executeTakeFirst());
+        const count = Number(row?.count ?? 0);
 
         return {
-            hasData: (count || 0) > 0,
-            totalAnalyses: count || 0,
+            hasData: count > 0,
+            totalAnalyses: count,
             topFeature: 'unknown',
         };
     }

@@ -4,7 +4,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import { requireUserContext, jsonError, jsonOk, resolveRequestDbClient } from '@/lib/api-utils';
+import { requireUserContext, jsonError, jsonOk } from '@/lib/api-utils';
 
 const MAX_IMPORT_RECORDS = 500;
 
@@ -37,8 +37,6 @@ export async function POST(request: NextRequest) {
         const auth = await requireUserContext(request);
         if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
         const { user } = auth;
-        const db = resolveRequestDbClient(auth);
-        if (!db) return jsonError('导入数据失败', 500);
 
         const data = await request.json();
 
@@ -54,12 +52,13 @@ export async function POST(request: NextRequest) {
             return jsonError(`小记数量超过上限（最多 ${MAX_IMPORT_RECORDS} 条）`, 400);
         }
 
-        const { data: importResult, error } = await db.rpc('import_ming_records_and_notes', {
-            p_records: data.records,
-            p_notes: data.notes,
-        });
-
-        if (error) {
+        let importResult: unknown;
+        try {
+            importResult = await auth.scoped.rpc('import_ming_records_and_notes', {
+                p_records: data.records,
+                p_notes: data.notes,
+            });
+        } catch (error) {
             console.error('导入事务失败:', error, { userId: user.id });
             return jsonError('导入数据失败', 500);
         }

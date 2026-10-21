@@ -4,6 +4,7 @@ import { NextRequest } from 'next/server';
 
 import { ensureRouteTestEnv, mockAIRateLimit } from './helpers/route-mock';
 import { createMockAuthContext } from './helpers/supabase-mock';
+import { createMockScopedDb } from './helpers/db-mock';
 import { calculateMeihuaBundle } from '../lib/divination/meihua';
 import { calculateXiaoliurenBundle } from '../lib/divination/xiaoliuren';
 import type { FeatureModuleState } from '../lib/app-settings';
@@ -48,25 +49,27 @@ function mockUserContext(
   });
 }
 
-function createInsertClient(expectedTable: string, id: string, onInsert: (payload: Record<string, unknown>) => void) {
-  return {
-    from(table: string) {
-      assert.equal(table, expectedTable);
-      return {
-        insert(payload: Record<string, unknown>) {
-          onInsert(payload);
-          return {
-            select(columns: string) {
-              assert.equal(columns, 'id');
-              return {
-                single: async () => ({ data: { id }, error: null }),
-              };
-            },
-          };
-        },
-      };
-    },
-  };
+function createInsertScope(expectedTable: string, id: string, onInsert: (payload: Record<string, unknown>) => void) {
+  return createMockScopedDb({
+    tx: async (work) => work({
+      insertInto(table: string) {
+        assert.equal(table, expectedTable);
+        return {
+          values(payload: Record<string, unknown>) {
+            onInsert(payload);
+            return {
+              returning(columns: string) {
+                assert.equal(columns, 'id');
+                return {
+                  async executeTakeFirst() { return { id }; },
+                };
+              },
+            };
+          },
+        };
+      },
+    } as never),
+  });
 }
 
 test('Meihua and Xiaoliuren calculate actions return canonical web bundles', async () => {
@@ -113,8 +116,8 @@ test('Meihua save is owner-scoped and recalculates canonical data on the server'
   tampered.canonicalText = '客户端伪造文本';
 
   const insertCalls: Record<string, unknown>[] = [];
-  const db = createInsertClient('meihua_divinations', 'mh-save-1', (payload) => { insertCalls.push(payload); });
-  mockUserContext(t, [MEIHUA_ROUTE], async () => createMockAuthContext(db, 'owner-1'));
+  const db = createInsertScope('meihua_divinations', 'mh-save-1', (payload) => { insertCalls.push(payload); });
+  mockUserContext(t, [MEIHUA_ROUTE], async () => createMockAuthContext({}, 'owner-1', db));
 
   const { POST } = require(MEIHUA_ROUTE) as { POST: PostHandler };
   const response = await post(POST, 'http://localhost/api/meihua', {
@@ -144,8 +147,8 @@ test('Xiaoliuren save is owner-scoped and recalculates canonical data on the ser
   tampered.canonicalText = '客户端伪造文本';
 
   const insertCalls: Record<string, unknown>[] = [];
-  const db = createInsertClient('xiaoliuren_divinations', 'xlr-save-1', (payload) => { insertCalls.push(payload); });
-  mockUserContext(t, [XIAOLIUREN_ROUTE], async () => createMockAuthContext(db, 'owner-2'));
+  const db = createInsertScope('xiaoliuren_divinations', 'xlr-save-1', (payload) => { insertCalls.push(payload); });
+  mockUserContext(t, [XIAOLIUREN_ROUTE], async () => createMockAuthContext({}, 'owner-2', db));
 
   const { POST } = require(XIAOLIUREN_ROUTE) as { POST: PostHandler };
   const response = await post(POST, 'http://localhost/api/xiaoliuren', {

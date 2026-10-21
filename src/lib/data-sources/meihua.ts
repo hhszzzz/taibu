@@ -1,7 +1,6 @@
-import { getSystemAdminClient } from '@/lib/api-utils';
 import { buildMeihuaCanonicalText, type MeihuaWebBundle } from '@/lib/divination/meihua';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
-import type { DataSourceProvider, DataSourceQueryContext } from '@/lib/data-sources/provider.server';
+import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
 
 type MeihuaRow = {
   id: string;
@@ -22,14 +21,14 @@ export const meihuaProvider: DataSourceProvider<MeihuaRow> = {
   displayName: '梅花易数记录',
 
   async list(userId: string, ctx?: DataSourceQueryContext): Promise<DataSourceSummary[]> {
-    const supabase = ctx?.client ?? getSystemAdminClient();
-    const { data, error } = await supabase
-      .from('meihua_divinations')
-      .select('id, question, method, cast_datetime, main_hexagram, changed_hexagram, created_at')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(ctx?.limit ?? 50);
-    if (error) throw new Error(error.message);
+    const db = requireQueryDb(ctx);
+    const data = await db.tx((trx) => trx
+        .selectFrom('meihua_divinations')
+        .select(['id', 'question', 'method', 'cast_datetime', 'main_hexagram', 'changed_hexagram', 'created_at'])
+        .where('user_id', '=', userId)
+        .orderBy('created_at', 'desc')
+        .limit(ctx?.limit ?? 50)
+        .execute());
     return (data || []).map((row: Record<string, unknown>) => ({
       id: String(row.id),
       type: 'meihua_divination' as const,
@@ -40,10 +39,14 @@ export const meihuaProvider: DataSourceProvider<MeihuaRow> = {
   },
 
   async get(id: string, userId: string, ctx?: DataSourceQueryContext): Promise<MeihuaRow | null> {
-    const supabase = ctx?.client ?? getSystemAdminClient();
-    const { data, error } = await supabase.from('meihua_divinations').select('*').eq('id', id).eq('user_id', userId).maybeSingle();
-    if (error) throw new Error(error.message);
-    return data as MeihuaRow | null;
+    const db = requireQueryDb(ctx);
+    const data = await db.tx((trx) => trx
+        .selectFrom('meihua_divinations')
+        .selectAll()
+        .where('id', '=', id)
+        .where('user_id', '=', userId)
+        .executeTakeFirst());
+    return data as unknown as MeihuaRow | null;
   },
 
   formatForAI(row: MeihuaRow): string {

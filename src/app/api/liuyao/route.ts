@@ -129,12 +129,12 @@ const liuyaoInterpretConfig: DivinationRouteConfig<LiuyaoInterpretInput, LiuyaoI
         let persistedTargets = input.requestedTargets;
 
         if (input.divinationId) {
-            const { data } = await db
-                .from('liuyao_divinations')
-                .select('created_at, question, yongshen_targets')
-                .eq('id', input.divinationId)
-                .eq('user_id', userId)
-                .maybeSingle();
+            const data = await db.tx((trx) => trx
+                .selectFrom('liuyao_divinations')
+                .select(['created_at', 'question', 'yongshen_targets'])
+                .where('id', '=', input.divinationId as string)
+                .where('user_id', '=', userId)
+                .executeTakeFirst());
 
             if (data) {
                 if (data.created_at) analysisDate = new Date(data.created_at);
@@ -156,7 +156,7 @@ const liuyaoInterpretConfig: DivinationRouteConfig<LiuyaoInterpretInput, LiuyaoI
             return { error: parsedTargets.error, status: 400 };
         }
 
-        const chartPromptDetailLevel = await loadResolvedChartPromptDetailLevel(userId, 'liuyao', { client: db });
+        const chartPromptDetailLevel = await loadResolvedChartPromptDetailLevel(userId, 'liuyao', { db });
         const bundle = input.yaos
             ? calculateLiuyaoBundle({
                 yaos: input.yaos,
@@ -272,12 +272,14 @@ export async function POST(request: NextRequest) {
                 if (parsedTargets.error) return jsonError(parsedTargets.error, 400, { success: false });
                 const authResult = await requireUserContext(request);
                 if ('error' in authResult) return jsonError(authResult.error.message, authResult.error.status, { success: false });
-                const { data, error } = await authResult.db
-                    .from('liuyao_divinations')
-                    .update({ yongshen_targets: parsedTargets.targets })
-                    .eq('id', divinationId).eq('user_id', authResult.user.id).select('id');
-                if (error) return jsonError('更新分析目标失败', 500, { success: false });
-                if (!data || data.length === 0) return jsonError('记录不存在或无权限', 404, { success: false });
+                const data = await authResult.scoped.tx((trx) => trx
+                    .updateTable('liuyao_divinations')
+                    .set({ yongshen_targets: parsedTargets.targets } as never)
+                    .where('id', '=', divinationId)
+                    .where('user_id', '=', authResult.user.id)
+                    .returning('id')
+                    .execute());
+                if (data.length === 0) return jsonError('记录不存在或无权限', 404, { success: false });
                 return jsonOk({ success: true, data: { divinationId, yongShenTargets: parsedTargets.targets } });
             }
 

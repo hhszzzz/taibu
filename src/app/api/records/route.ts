@@ -7,7 +7,7 @@
 import { NextRequest } from 'next/server';
 import { RecordCategory, RecordFilters, normalizeRecordInput } from '@/lib/records';
 import { requireUserContext, jsonError, jsonOk } from '@/lib/api-utils';
-import { quotePostgrestString } from '@/lib/utils/postgrest';
+import { escapeLike } from '@/lib/db/sql-helpers';
 
 export async function GET(request: NextRequest) {
     try {
@@ -45,51 +45,61 @@ export async function GET(request: NextRequest) {
         if (isPinned === 'false') filters.isPinned = false;
         if (tags.length > 0) filters.tags = tags;
 
-        // 构建查询
-        let query = auth.db
-            .from('ming_records_with_archive_status')
-            .select('*', { count: 'exact' })
-            .eq('user_id', user.id)
-            .order('is_pinned', { ascending: false })
-            .order('created_at', { ascending: false });
-
-        // 应用筛选条件
-        if (filters.category) {
-            query = query.eq('category', filters.category);
-        }
-        if (filters.isPinned !== undefined) {
-            query = query.eq('is_pinned', filters.isPinned);
-        }
-        if (filters.startDate) {
-            query = query.gte('event_date', filters.startDate);
-        }
-        if (filters.endDate) {
-            query = query.lte('event_date', filters.endDate);
-        }
-        if (filters.tags && filters.tags.length > 0) {
-            query = query.overlaps('tags', filters.tags);
-        }
-        if (filters.search) {
-            const pattern = quotePostgrestString(`%${filters.search}%`);
-            query = query.or(`title.ilike.${pattern},content.ilike.${pattern}`);
-        }
-
         // 分页
         const from = (page - 1) * pageSize;
-        const to = from + pageSize - 1;
-        query = query.range(from, to);
+        const pattern = filters.search ? `%${escapeLike(filters.search)}%` : null;
 
-        const { data, error, count } = await query;
+        try {
+            const rows = await auth.scoped.tx((trx) => {
+                let query = trx
+                    .selectFrom('ming_records_with_archive_status')
+                    .selectAll()
+                    .where('user_id', '=', user.id);
+                if (filters.category) query = query.where('category', '=', filters.category);
+                if (filters.isPinned !== undefined) query = query.where('is_pinned', '=', filters.isPinned);
+                if (filters.startDate) query = query.where('event_date', '>=', filters.startDate);
+                if (filters.endDate) query = query.where('event_date', '<=', filters.endDate);
+                if (filters.tags && filters.tags.length > 0) query = query.where('tags', '@>', filters.tags as never);
+                if (pattern) {
+                    query = query.where((eb) => eb.or([
+                        eb('title', 'ilike', pattern),
+                        eb('content', 'ilike', pattern),
+                    ]));
+                }
+                return query
+                    .orderBy('is_pinned', 'desc')
+                    .orderBy('created_at', 'desc')
+                    .offset(from)
+                    .limit(pageSize)
+                    .execute();
+            });
+            const totalRow = await auth.scoped.tx((trx) => {
+                let query = trx
+                    .selectFrom('ming_records_with_archive_status')
+                    .select((eb) => eb.fn.countAll<number>().as('count'))
+                    .where('user_id', '=', user.id);
+                if (filters.category) query = query.where('category', '=', filters.category);
+                if (filters.isPinned !== undefined) query = query.where('is_pinned', '=', filters.isPinned);
+                if (filters.startDate) query = query.where('event_date', '>=', filters.startDate);
+                if (filters.endDate) query = query.where('event_date', '<=', filters.endDate);
+                if (filters.tags && filters.tags.length > 0) query = query.where('tags', '@>', filters.tags as never);
+                if (pattern) {
+                    query = query.where((eb) => eb.or([
+                        eb('title', 'ilike', pattern),
+                        eb('content', 'ilike', pattern),
+                    ]));
+                }
+                return query.executeTakeFirst();
+            });
 
-        if (error) {
+            return jsonOk({
+                records: rows,
+                total: Number(totalRow?.count ?? 0),
+            });
+        } catch (error) {
             console.error('获取记录失败:', error);
             return jsonError('获取记录失败', 500);
         }
-
-        return jsonOk({
-            records: data,
-            total: count || 0,
-        });
     } catch (error) {
         console.error('获取记录失败:', error);
         return jsonError('获取记录失败', 500);
@@ -113,21 +123,22 @@ export async function POST(request: NextRequest) {
             return jsonError(normalized.error, 400);
         }
 
-        const { data, error } = await auth.db
-            .from('ming_records')
-            .insert({
-                user_id: user.id,
-                ...normalized.data,
-            })
-            .select()
-            .single();
-
-        if (error) {
+        let data;
+        try {
+            data = await auth.scoped.tx((trx) => trx
+                .insertInto('ming_records')
+                .values({
+                    user_id: user.id,
+                    ...normalized.data,
+                } as never)
+                .returningAll()
+                .executeTakeFirstOrThrow());
+        } catch (error) {
             console.error('创建记录失败:', error);
             return jsonError('创建记录失败', 500);
         }
 
-        return jsonOk(data as Record<string, unknown>);
+        return jsonOk(data as unknown as Record<string, unknown>);
     } catch (error) {
         console.error('创建记录失败:', error);
         return jsonError('创建记录失败', 500);

@@ -1,4 +1,5 @@
 import 'server-only';
+import { systemDb } from '@/lib/db/context.server';
 import { buildToolSuccessPayload, executeTool, listToolDefinitions, normalizeTransportDetailLevel, type ToolInputSchema, type ToolSchema } from 'taibu-core/mcp';
 import { buildBaziInputFromStoredFields } from '@/lib/divination/bazi-record';
 import { getProvider } from '@/lib/data-sources';
@@ -130,7 +131,7 @@ async function baseInputOf(store: AgentStore, run: AgentRunRow, reference: strin
   }
   if (CHART_SOURCE_KINDS[parsed.source] !== base) throw new Error(`该详查工具只适用于${AGENT_CHART_NAMES[base]}`);
   const provider = await getProvider(parsed.source);
-  const row = await provider.get(parsed.id, run.user_id, { client: store.db }) as Record<string, unknown> | null;
+  const row = await provider.get(parsed.id, run.user_id, { db: systemDb() }) as Record<string, unknown> | null;
   if (!row) throw new Error('命盘不存在或无权访问');
   if (parsed.source === 'bazi_chart') return definedOnly(buildBaziInputFromStoredFields(row));
   if (parsed.source === 'ziwei_chart') return ziweiInputFromStoredFields(row);

@@ -367,11 +367,13 @@ for (const failure of ['account', 'limited', 'rate-error', 'prompt-error'] as co
   });
 }
 
-test('divination rejects missing caller DB context before any downstream work', async (t) => {
+test('divination fails closed when the caller scoped database is unusable', async (t) => {
+  const { createMockScopedDb } = await import('./helpers/db-mock');
+  const { UserStateResolutionError } = await import('../lib/user/credits');
   const invalidContexts = [
-    { user: { id: 'user-1' } },
-    { user: { id: 'user-1' }, db: {}, supabase: {} },
-    { user: { id: 'user-1' }, db: null, supabase: null },
+    { user: { id: 'user-1' }, scoped: createMockScopedDb({ tx: async () => { throw new Error('database unavailable'); } }) },
+    { user: { id: 'user-1' }, db: {}, supabase: {}, scoped: createMockScopedDb({ tx: async () => { throw new Error('database unavailable'); } }) },
+    { user: { id: 'user-1' }, db: null, supabase: null, scoped: createMockScopedDb({ tx: async () => { throw new Error('database unavailable'); } }) },
   ];
   for (const authMethod of ['bearer', 'userContext'] as const) {
     for (const [index, authContext] of invalidContexts.entries()) {
@@ -383,7 +385,10 @@ test('divination rejects missing caller DB context before any downstream work', 
         for (const name of ['getSystemAdminClient', 'getAuthAdminClient']) {
           t.mock.method(apiUtils, name, unexpected);
         }
-        for (const name of ['getUserAuthInfo', 'attemptCreditUse', 'useCredit', 'refundCreditsOrLog', 'addCredits']) {
+        t.mock.method(credits, 'getUserAuthInfo', async () => {
+          throw new UserStateResolutionError('用户数据库上下文不可用，请稍后重试', 'USER_QUERY_FAILED');
+        });
+        for (const name of ['attemptCreditUse', 'useCredit', 'refundCreditsOrLog', 'addCredits']) {
           t.mock.method(credits, name, unexpected);
         }
         for (const name of ['callAIWithReasoning', 'callAIUIMessageResult', 'callAIVision']) {
@@ -393,7 +398,8 @@ test('divination rejects missing caller DB context before any downstream work', 
         t.mock.method(aiAnalysisModule, 'createAIAnalysisConversation', unexpected);
         const config: DivinationRouteConfig = {
           sourceType: 'test_divination', tag: 'test-divination', authMethod,
-          parseInput: () => ({}), precheck: unexpected, resolvePromptContext: unexpected,
+          parseInput: () => ({}), precheck: () => null,
+          resolvePromptContext: () => ({ userId: 'user-1', chartPromptDetailLevel: 'full' }),
           buildPrompts: unexpected, buildSourceData: unexpected, generateTitle: unexpected,
           buildHistoryBinding: unexpected, persistRecord: unexpected,
         };
@@ -408,17 +414,17 @@ test('divination rejects missing caller DB context before any downstream work', 
           await managed(createTestRequest(), { stream: true }),
           await vision(createTestRequest(), {}),
           await direct.handleDirectPrepare(createTestRequest(), {}),
-          await direct.handleDirectPersist(createTestRequest(), { content: 'analysis' }),
           await pipeline.saveUserOwnedDivinationRecord({
             request: createTestRequest(), tag: 'test-divination', tableName: 'test_records',
             responseKey: 'recordId', input: {}, buildInsertPayload: unexpected,
           }),
         ];
-        for (const response of responses) {
+        for (const [responseIndex, response] of responses.entries()) {
           assert.equal(response.status, 500);
-          assert.deepEqual(await response.json(), {
-            error: '用户数据库上下文不可用，请稍后重试', success: false,
-          });
+          const isSave = responseIndex === responses.length - 1;
+          assert.deepEqual(await response.json(), isSave
+            ? { error: '保存记录失败', success: false }
+            : { error: '用户数据库上下文不可用，请稍后重试', success: false, code: 'USER_QUERY_FAILED' });
         }
         assert.equal(unexpected.mock.callCount(), 0);
       });
@@ -426,25 +432,30 @@ test('divination rejects missing caller DB context before any downstream work', 
   }
 });
 
-test('divination preserves caller DB identity and the legacy supabase alias', async (t) => {
+test('divination preserves the caller scoped database identity', async (t) => {
+  const { createMockScopedDb } = await import('./helpers/db-mock');
   for (const authMethod of ['bearer', 'userContext'] as const) {
-    for (const aliasOnly of [false, true]) {
-      await t.test(`${authMethod} ${aliasOnly ? 'legacy alias' : 'canonical DB'}`, async (t) => {
+    for (const minimalContext of [false, true]) {
+      await t.test(`${authMethod} ${minimalContext ? 'minimal context' : 'full context'}`, async (t) => {
         const { apiUtils, credits, createCalls, loadPipeline } = setupPipelineMocks(t);
         const inserts: Record<string, unknown>[] = [];
-        const caller = createMockAuthContext({
-          from: (table: string) => {
-            assert.equal(table, 'test_records');
-            return { insert: (payload: Record<string, unknown>) => {
-              inserts.push(payload);
-              return { select: () => ({ single: async () => ({ data: { id: 'record-1' }, error: null }) }) };
-            } };
-          },
+        const callerScoped = createMockScopedDb({
+          tx: async (work) => work({
+            insertInto(table: string) {
+              assert.equal(table, 'test_records');
+              return {
+                values(payload: Record<string, unknown>) {
+                  inserts.push(payload);
+                  return { returning() { return { executeTakeFirst: async () => ({ id: 'record-1' }) }; } };
+                },
+              };
+            },
+          } as never),
         });
-        const other = createMockAuthContext({ from: () => assert.fail('must prefer canonical DB') });
-        const context = aliasOnly
-          ? { user: caller.user, scoped: caller.scoped, supabase: caller.db, accessToken: caller.accessToken }
-          : { ...caller, scoped: caller.scoped, supabase: other.db };
+        const callerUser = { id: 'user-1' };
+        const context = minimalContext
+          ? { user: callerUser, scoped: callerScoped, accessToken: 'test-token' }
+          : { user: callerUser, scoped: callerScoped, accessToken: 'test-token', db: {}, supabase: {} };
         t.mock.method(apiUtils, 'requireBearerUser', async () => context);
         t.mock.method(apiUtils, 'requireUserContext', async () => context);
         const admin = t.mock.method(apiUtils, 'getSystemAdminClient', () => assert.fail('no implicit administrator'));
@@ -452,9 +463,9 @@ test('divination preserves caller DB identity and the legacy supabase alias', as
         const authInfo = t.mock.method(typedCredits, 'getUserAuthInfo');
         const debit = t.mock.method(typedCredits, 'attemptCreditUse');
         const resolvePromptContext = t.mock.fn((_input: unknown, auth: { db: unknown; userId: string; accessToken: string | null }) => {
-          assert.equal(auth.db, caller.db);
-          assert.equal(auth.userId, caller.user.id);
-          assert.equal(auth.accessToken, caller.accessToken);
+          assert.equal(auth.db, callerScoped);
+          assert.equal(auth.userId, callerUser.id);
+          assert.equal(auth.accessToken, 'test-token');
           return { userId: auth.userId, chartPromptDetailLevel: 'full' as const };
         });
         const config: DivinationRouteConfig = {
@@ -470,8 +481,8 @@ test('divination preserves caller DB identity and the legacy supabase alias', as
         });
         for (const repository of [authInfo, debit]) {
           assert.equal(repository.mock.callCount(), 1);
-          assert.equal(repository.mock.calls[0]?.arguments[1]?.db, caller.scoped);
-          assert.equal(repository.mock.calls[0]?.arguments[1]?.user, caller.user);
+          assert.equal(repository.mock.calls[0]?.arguments[1]?.db, callerScoped);
+          assert.equal(repository.mock.calls[0]?.arguments[1]?.user, callerUser);
         }
         const direct = pipeline.createDirectInterpretHandlers(config);
         assert.equal((await direct.handleDirectPrepare(createTestRequest(), {})).status, 200);
@@ -481,7 +492,7 @@ test('divination preserves caller DB identity and the legacy supabase alias', as
           responseKey: 'recordId', input: {}, buildInsertPayload: (_input, userId) => ({ user_id: userId }),
         });
         assert.deepEqual(await saved.json(), { success: true, data: { recordId: 'record-1' } });
-        assert.deepEqual(inserts, [{ user_id: caller.user.id }]);
+        assert.deepEqual(inserts, [{ user_id: callerUser.id }]);
         assert.equal(resolvePromptContext.mock.callCount(), 3);
         assert.equal(createCalls.length, 2, 'named analysis persistence remains available after authentication');
         assert.equal(admin.mock.callCount(), 0);

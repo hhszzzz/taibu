@@ -13,21 +13,16 @@ export async function GET(request: NextRequest) {
         const { user } = auth;
 
         // 获取所有记录和小记
-        const [recordsResult, notesResult] = await Promise.all([
-            auth.db.from('ming_records').select('*').eq('user_id', user.id),
-            auth.db.from('ming_notes').select('*').eq('user_id', user.id),
+        const [records, notes] = await Promise.all([
+            auth.scoped.tx((trx) => trx.selectFrom('ming_records').selectAll().where('user_id', '=', user.id).execute()),
+            auth.scoped.tx((trx) => trx.selectFrom('ming_notes').selectAll().where('user_id', '=', user.id).execute()),
         ]);
-
-        if (recordsResult.error || notesResult.error) {
-            console.error('导出数据失败:', recordsResult.error || notesResult.error);
-            return jsonError('导出数据失败', 500);
-        }
 
         const exportData = {
             version: '1.0',
             exportedAt: new Date().toISOString(),
-            records: recordsResult.data,
-            notes: notesResult.data,
+            records,
+            notes,
         };
 
         const json = JSON.stringify(exportData, null, 2);

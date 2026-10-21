@@ -15,14 +15,13 @@ export async function GET(
         return jsonError(auth.error.message, auth.error.status);
     }
     const { user } = auth;
-    const db = auth.db;
     const { type, id } = await params;
     const featureError = await ensureFeatureRouteEnabled(getDataSourceFeatureId(type as DataSourceType));
     if (featureError) return featureError;
 
     try {
         const provider = await getProvider(type as DataSourceType);
-        const data = await provider.get(id, user.id, { client: db });
+        const data = await provider.get(id, user.id, { db: auth.scoped });
         if (!data) return jsonError('数据不存在', 404);
         return jsonOk({
             type: provider.type,

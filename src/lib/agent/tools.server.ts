@@ -1,4 +1,5 @@
 import "server-only";
+import { systemDb } from "@/lib/db/context.server";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { Type, type Static, type TSchema } from "@earendil-works/pi-ai";
@@ -407,7 +408,7 @@ export async function createAgentTools(
         return textResult(
           await getUserDataSourcesWithErrors(
             run.user_id,
-            {},
+            { db: systemDb() },
             enabled.filter((item) => item.enabled).map((item) => item.type),
           ),
         );
@@ -425,7 +426,7 @@ export async function createAgentTools(
       async (args) => {
         const provider = await getProvider(args.type);
         const value = await provider.get(args.id, run.user_id, {
-          client: store.db,
+          db: systemDb(),
         });
         if (!value) throw new Error("记录不存在或无权访问");
         const chartReference = Object.hasOwn(CHART_SOURCE_KINDS, args.type) ? args.type + ':' + args.id : null;

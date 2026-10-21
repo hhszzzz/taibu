@@ -1,6 +1,5 @@
-import { getSystemAdminClient } from '@/lib/api-utils';
 import { MING_RECORD_SOURCE_TYPE, type DataSourceSummary } from '@/lib/data-sources/types';
-import type { DataSourceProvider, DataSourceQueryContext } from '@/lib/data-sources/provider.server';
+import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
 
 type RecordRow = {
     id: string;
@@ -18,34 +17,32 @@ export const recordProvider: DataSourceProvider<RecordRow> = {
     displayName: '命理记录',
 
     async list(userId: string, ctx?: DataSourceQueryContext): Promise<DataSourceSummary[]> {
-        const supabase = ctx?.client ?? getSystemAdminClient();
+        const db = requireQueryDb(ctx);
         const limit = ctx?.limit ?? 50;
-        const { data, error } = await supabase
-            .from('ming_records')
-            .select('id, title, created_at')
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false })
-            .limit(limit);
-
-        if (error) throw new Error(error.message);
-        return (data || []).map((row: { id: string; title: string; created_at: string }) => ({
+        const data = await db.tx((trx) => trx
+        .selectFrom('ming_records')
+        .select(['id', 'title', 'created_at'])
+        .where('user_id', '=', userId)
+        .orderBy('created_at', 'desc')
+        .limit(limit)
+        .execute());
+        return (data || []).map((row) => ({
             id: row.id,
             type: MING_RECORD_SOURCE_TYPE,
             name: row.title,
             preview: row.title,
-            createdAt: row.created_at
+            createdAt: row.created_at ?? '',
         }));
     },
 
     async get(id: string, userId: string, ctx?: DataSourceQueryContext): Promise<RecordRow | null> {
-        const supabase = ctx?.client ?? getSystemAdminClient();
-        const { data, error } = await supabase
-            .from('ming_records')
-            .select('*')
-            .eq('id', id)
-            .eq('user_id', userId)
-            .maybeSingle();
-        if (error) throw new Error(error.message);
+        const db = requireQueryDb(ctx);
+        const data = await db.tx((trx) => trx
+        .selectFrom('ming_records')
+        .selectAll()
+        .where('id', '=', id)
+        .where('user_id', '=', userId)
+        .executeTakeFirst());
         return (data as RecordRow) || null;
     },
 

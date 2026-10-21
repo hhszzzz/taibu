@@ -1,7 +1,6 @@
 import 'server-only';
 
-import { getSystemAdminClient } from '@/lib/api-utils';
-import { systemDb } from '@/lib/db/context.server';
+import { systemDb, type ScopedDb } from '@/lib/db/context.server';
 import { truncateToTokens } from '@/lib/token-utils';
 import { baziProvider } from '@/lib/data-sources/bazi';
 import { dailyFortuneProvider } from '@/lib/data-sources/fortune';
@@ -51,31 +50,39 @@ function pruneDreamContextCache(now = Date.now()) {
     }
 }
 
+const BAZI_CHART_COLUMNS = [
+    'id', 'user_id', 'name', 'gender', 'birth_date', 'birth_time', 'birth_place',
+    'longitude', 'calendar_type', 'is_leap_month', 'timezone', 'disambiguation', 'created_at',
+] as const;
+
 async function loadPreferredBaziChart(
-    supabase: ReturnType<typeof getSystemAdminClient>,
+    db: ScopedDb,
     userId: string,
     defaultBaziId: string | null,
 ) {
-    const createQuery = () => supabase
-        .from('bazi_charts')
-        .select('id, user_id, name, gender, birth_date, birth_time, birth_place, longitude, calendar_type, is_leap_month, timezone, disambiguation, created_at')
-        .eq('user_id', userId);
-
     if (defaultBaziId) {
-        const preferred = await createQuery().eq('id', defaultBaziId).maybeSingle();
-        if (preferred.data) {
+        const preferred = await db.tx((trx) => trx
+            .selectFrom('bazi_charts')
+            .select(BAZI_CHART_COLUMNS)
+            .where('user_id', '=', userId)
+            .where('id', '=', defaultBaziId)
+            .executeTakeFirst());
+        if (preferred) {
             return preferred;
         }
     }
 
-    return await createQuery()
-        .order('created_at', { ascending: false })
+    return await db.tx((trx) => trx
+        .selectFrom('bazi_charts')
+        .select(BAZI_CHART_COLUMNS)
+        .where('user_id', '=', userId)
+        .orderBy('created_at', 'desc')
         .limit(1)
-        .maybeSingle();
+        .executeTakeFirst());
 }
 
 export async function buildDreamContextPayload(userId: string): Promise<DreamContextResult> {
-    const supabase = getSystemAdminClient();
+    const db = systemDb();
     pruneDreamContextCache();
 
     const [{ settings }, dayKey] = await Promise.all([
@@ -84,8 +91,8 @@ export async function buildDreamContextPayload(userId: string): Promise<DreamCon
     ]);
 
     const defaultBaziId = settings.defaultBaziChartId;
-    const resolvedChart = await loadPreferredBaziChart(supabase, userId, defaultBaziId);
-    const baziChart = resolvedChart.data as Parameters<typeof baziProvider.formatForAI>[0] | null;
+    const resolvedChart = await loadPreferredBaziChart(db, userId, defaultBaziId);
+    const baziChart = resolvedChart as Parameters<typeof baziProvider.formatForAI>[0] | null;
     const resolvedChartId = baziChart?.id ?? null;
     // bazi_charts 没有 updated_at；用同一行的出生字段和时间选项标识缓存版本。
     const chartFingerprint = JSON.stringify(baziChart ? [
@@ -102,14 +109,14 @@ export async function buildDreamContextPayload(userId: string): Promise<DreamCon
     ] : null);
 
     const caseProfileMeta = resolvedChartId
-        ? await supabase
-            .from('bazi_case_profiles')
+        ? await db.tx((trx) => trx
+            .selectFrom('bazi_case_profiles')
             .select('updated_at')
-            .eq('bazi_chart_id', resolvedChartId)
-            .eq('user_id', userId)
-            .maybeSingle()
-        : { data: null };
-    const caseProfileUpdatedAt = (caseProfileMeta.data as { updated_at?: string | null } | null)?.updated_at ?? null;
+            .where('bazi_chart_id', '=', resolvedChartId)
+            .where('user_id', '=', userId)
+            .executeTakeFirst())
+        : null;
+    const caseProfileUpdatedAt = caseProfileMeta?.updated_at ?? null;
 
     const cacheKey = `${userId}:${resolvedChartId ?? 'none'}:${chartFingerprint}:${caseProfileUpdatedAt ?? 'none'}:${dayKey}`;
     const cached = dreamContextCache.get(cacheKey);
@@ -117,10 +124,10 @@ export async function buildDreamContextPayload(userId: string): Promise<DreamCon
         return cached.result;
     }
 
-    const fortune = await dailyFortuneProvider.get('today', userId, { client: supabase });
+    const fortune = await dailyFortuneProvider.get('today', userId, { db });
 
     const caseProfile = baziChart?.id
-        ? await getBaziCaseProfileByChartId(supabase, baziChart.id, userId)
+        ? await getBaziCaseProfileByChartId(db, baziChart.id, userId)
         : null;
 
     let baziText = baziChart

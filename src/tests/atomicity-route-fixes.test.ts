@@ -167,18 +167,15 @@ test('records PUT togglePin should use transactional rpc', async (t) => {
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    supabase: {
+    scoped: createMockScopedDb({
       rpc: async (fn: string, args: Record<string, unknown>) => {
         rpcCalls.push({ fn, args });
         return {
-          data: {
-            status: 'ok',
-            record: { id: 'record-1', is_pinned: true },
-          },
-          error: null,
+          status: 'ok',
+          record: { id: 'record-1', is_pinned: true },
         };
       },
-    },
+    }),
   });
   delete require.cache[routePath];
 
@@ -215,9 +212,9 @@ test('records PUT togglePin should return 404 when transactional rpc reports not
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    supabase: {
-      rpc: async () => ({ data: { status: 'not_found' }, error: null }),
-    },
+    scoped: createMockScopedDb({
+      rpc: async () => ({ status: 'not_found' }),
+    }),
   });
   delete require.cache[routePath];
 
@@ -247,17 +244,18 @@ test('records DELETE should return 404 when no user-owned row is deleted', async
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    supabase: {
-      from: () => ({
-        delete: () => ({
-          eq: () => ({
-            eq: () => ({
-              select: async () => ({ data: [], error: null }),
-            }),
-          }),
-        }),
-      }),
-    },
+    scoped: createMockScopedDb({
+      tx: async (work) => work({
+        deleteFrom() {
+          const query = {
+            where() { return query; },
+            returning() { return query; },
+            async execute() { return []; },
+          };
+          return query;
+        },
+      } as never),
+    }),
   });
   delete require.cache[routePath];
 
@@ -476,19 +474,16 @@ test('records import POST should call transactional RPC and return imported coun
   let rpcArgs: Record<string, unknown> | null = null;
 
   apiUtilsModule.requireUserContext = async () => ({
-    supabase: {
+    scoped: createMockScopedDb({
       rpc: async (fn: string, args: Record<string, unknown>) => {
         assert.equal(fn, 'import_ming_records_and_notes');
         rpcArgs = args;
         return {
-          data: {
-            recordsImported: 2,
-            notesImported: 1,
-          },
-          error: null,
+          recordsImported: 2,
+          notesImported: 1,
         };
       },
-    },
+    }),
     user: { id: 'user-1' },
   });
 
@@ -529,12 +524,11 @@ test('records import POST should return 500 when transactional RPC fails', async
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
 
   apiUtilsModule.requireUserContext = async () => ({
-    supabase: {
-      rpc: async () => ({
-        data: null,
-        error: { message: 'transaction failed' },
-      }),
-    },
+    scoped: createMockScopedDb({
+      rpc: async () => {
+        throw new Error('transaction failed');
+      },
+    }),
     user: { id: 'user-1' },
   });
 
@@ -932,24 +926,23 @@ test('mbti save should persist through shared save helper and return reading id'
   let insertedPayload: Record<string, unknown> | null = null;
 
   supabaseServerModule.getSystemAdminClient = () => assert.fail('save must use the caller DB client');
-  apiUtilsModule.requireUserContext = async () => createMockAuthContext({
-    from: (table: string) => {
-      assert.equal(table, 'mbti_readings');
-      return {
-        insert: (payload: Record<string, unknown>) => {
-          insertedPayload = payload;
-          return {
-            select: () => ({
-              single: async () => ({
-                data: { id: 'reading-1' },
-                error: null,
-              }),
-            }),
-          };
-        },
-      };
-    },
-  });
+  apiUtilsModule.requireUserContext = async () => createMockAuthContext({}, 'user-1', createMockScopedDb({
+    tx: async (work) => work({
+      insertInto(table: string) {
+        assert.equal(table, 'mbti_readings');
+        return {
+          values(payload: Record<string, unknown>) {
+            insertedPayload = payload;
+            return {
+              returning() {
+                return { executeTakeFirst: async () => ({ id: 'reading-1' }) };
+              },
+            };
+          },
+        };
+      },
+    } as never),
+  }));
   delete require.cache[routePath];
 
   t.after(() => {
@@ -1003,24 +996,23 @@ test('daliuren save should persist through shared save helper and return divinat
   const insertedPayloads: Record<string, unknown>[] = [];
 
   supabaseServerModule.getSystemAdminClient = () => assert.fail('save must use the caller DB client');
-  apiUtilsModule.requireUserContext = async () => createMockAuthContext({
-    from: (table: string) => {
-      assert.equal(table, 'daliuren_divinations');
-      return {
-        insert: (payload: Record<string, unknown>) => {
-          insertedPayloads.push(payload);
-          return {
-            select: () => ({
-              single: async () => ({
-                data: { id: 'divination-1' },
-                error: null,
-              }),
-            }),
-          };
-        },
-      };
-    },
-  });
+  apiUtilsModule.requireUserContext = async () => createMockAuthContext({}, 'user-1', createMockScopedDb({
+    tx: async (work) => work({
+      insertInto(table: string) {
+        assert.equal(table, 'daliuren_divinations');
+        return {
+          values(payload: Record<string, unknown>) {
+            insertedPayloads.push(payload);
+            return {
+              returning() {
+                return { executeTakeFirst: async () => ({ id: 'divination-1' }) };
+              },
+            };
+          },
+        };
+      },
+    } as never),
+  }));
   delete require.cache[routePath];
 
   t.after(() => {

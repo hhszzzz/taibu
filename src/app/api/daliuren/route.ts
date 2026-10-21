@@ -70,7 +70,7 @@ const daliurenInterpretConfig: DivinationRouteConfig<DaliurenInterpretInput> = {
     resolvePromptContext: async (_input, auth) => ({
         userId: auth.userId,
         chartPromptDetailLevel: await loadResolvedChartPromptDetailLevel(auth.userId, 'daliuren', {
-            client: auth.db ?? undefined,
+            db: auth.db,
         }),
     }),
     buildPrompts: (input, promptContext) => ({

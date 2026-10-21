@@ -1,6 +1,5 @@
-import { getSystemAdminClient } from '@/lib/api-utils';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
-import type { DataSourceProvider, DataSourceQueryContext } from '@/lib/data-sources/provider.server';
+import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
 import { type BaziCaseProfile } from '@/lib/bazi-case-profile';
 import { formatBaziPromptText } from '@/lib/bazi-prompt';
 import { getBaziCaseProfileByChartId } from '@/lib/server/bazi-case-profile';
@@ -26,17 +25,15 @@ export const baziProvider: DataSourceProvider<BaziRow> = {
     displayName: '八字命盘',
 
     async list(userId: string, ctx?: DataSourceQueryContext): Promise<DataSourceSummary[]> {
-        const supabase = ctx?.client ?? getSystemAdminClient();
+        const db = requireQueryDb(ctx);
         const limit = ctx?.limit ?? 50;
-        const { data, error } = await supabase
-            .from('bazi_charts')
-            .select('id, name, birth_date, created_at')
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false })
-            .limit(limit);
-
-        if (error) throw new Error(error.message);
-        const rows = (data || []) as Array<{ id: string; name: string | null; birth_date: string; created_at: string }>;
+        const rows = await db.tx((trx) => trx
+            .selectFrom('bazi_charts')
+            .select(['id', 'name', 'birth_date', 'created_at'])
+            .where('user_id', '=', userId)
+            .orderBy('created_at', 'desc')
+            .limit(limit)
+            .execute()) as Array<{ id: string; name: string | null; birth_date: string; created_at: string }>;
         return rows.map((chart) => ({
             id: chart.id,
             type: 'bazi_chart',
@@ -47,16 +44,15 @@ export const baziProvider: DataSourceProvider<BaziRow> = {
     },
 
     async get(id: string, userId: string, ctx?: DataSourceQueryContext): Promise<BaziRow | null> {
-        const supabase = ctx?.client ?? getSystemAdminClient();
-        const { data, error } = await supabase
-            .from('bazi_charts')
-            .select('*')
-            .eq('id', id)
-            .eq('user_id', userId)
-            .maybeSingle();
-        if (error) throw new Error(error.message);
+        const db = requireQueryDb(ctx);
+        const data = await db.tx((trx) => trx
+            .selectFrom('bazi_charts')
+            .selectAll()
+            .where('id', '=', id)
+            .where('user_id', '=', userId)
+            .executeTakeFirst());
         if (!data) return null;
-        const caseProfile = await getBaziCaseProfileByChartId(supabase, id, userId);
+        const caseProfile = await getBaziCaseProfileByChartId(db, id, userId);
         return {
             ...(data as BaziRow),
             caseProfile,

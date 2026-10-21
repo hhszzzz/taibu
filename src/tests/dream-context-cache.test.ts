@@ -67,9 +67,54 @@ function setupDreamContext(t: import('node:test').TestContext) {
   };
   const contextModule = require('../lib/db/context.server') as any;
   t.mock.method(contextModule, 'systemDb', () => createMockScopedDb({
-    tx: async () => {
-      state.settingsReads += 1;
-      return { default_bazi_chart_id: state.defaultChartId };
+    tx: async (work: any) => {
+      const trx = {
+        selectFrom(table: string) {
+          let columns: string[] = [];
+          const filters = new Map<string, string>();
+          const query = {
+            select(selection: string | readonly string[]) {
+              columns = Array.isArray(selection)
+                ? [...selection]
+                : String(selection).split(',').map((column) => column.trim());
+              if (table === 'bazi_charts') {
+                assert.doesNotMatch(columns.join(','), /\*|updated_at/u);
+                for (const field of ['id', 'name', 'gender', 'birth_date', 'birth_time', 'birth_place', 'longitude', 'calendar_type', 'is_leap_month', 'timezone', 'disambiguation']) {
+                  assert.ok(columns.includes(field), `chart SELECT must include ${field}`);
+                }
+              }
+              return query;
+            },
+            where(column: string, _operator: string, value: string) {
+              filters.set(column, value);
+              return query;
+            },
+            orderBy() { return query; },
+            limit() { return query; },
+            async executeTakeFirst() {
+              assert.ok(filters.get('user_id'), `${table} must be account-scoped`);
+              if (table === 'user_settings') {
+                state.settingsReads += 1;
+                return { default_bazi_chart_id: state.defaultChartId };
+              }
+              if (table === 'bazi_charts') {
+                state.chartReads += 1;
+                const wantedId = filters.get('id');
+                const matches = !wantedId || wantedId === state.chart.id;
+                return matches ? { ...state.chart } : undefined;
+              }
+              if (table === 'bazi_case_profiles') {
+                assert.equal(filters.get('bazi_chart_id'), state.chart.id);
+                return { updated_at: state.caseProfileUpdatedAt };
+              }
+              throw new Error(`Unexpected table: ${table}`);
+            },
+            async execute() { return []; },
+          };
+          return query;
+        },
+      };
+      return work(trx as never);
     },
   }));
   t.mock.method(apiUtilsModule, 'getSystemAdminClient', () => client);

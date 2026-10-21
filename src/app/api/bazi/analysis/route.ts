@@ -16,7 +16,7 @@ import {
 import { formatBaziPromptText } from '@/lib/bazi-prompt';
 import { loadResolvedChartPromptDetailLevel } from '@/lib/ai/chart-prompt-detail';
 import { getBaziCaseProfileByChartId } from '@/lib/server/bazi-case-profile';
-import { USER_SETTINGS_SELECT, normalizeUserSettings } from '@/lib/user/settings';
+import { getUserSettingsSnapshot } from '@/lib/user/settings';
 import { buildVisualizationPreferencePrompts } from '@/lib/visualization/prompt';
 import { SOURCE_CHART_TYPE_MAP, type ChartType } from '@/lib/visualization/chart-types';
 import { checkRateLimit, getClientIP } from '@/lib/rate-limit';
@@ -143,17 +143,18 @@ const baziAnalysisConfig: DivinationRouteConfig<BaziAnalysisInput, BaziAnalysisC
     },
     resolvePromptContext: async (input, auth) => {
         const { userId, db } = auth;
-        if (!db) {
-            return { error: '认证上下文缺失', status: 500 };
+        let chart;
+        try {
+            chart = await db.tx((trx) => trx
+                .selectFrom('bazi_charts')
+                .select(['id', 'name', 'user_id', 'gender', 'birth_date', 'birth_time', 'birth_place', 'longitude', 'calendar_type', 'is_leap_month', 'timezone', 'disambiguation'])
+                .where('id', '=', input.chartId)
+                .where('user_id', '=', userId)
+                .executeTakeFirst());
+        } catch {
+            return { error: '未找到命盘信息', status: 404 };
         }
-        const supabase = db;
-        const { data: chart, error: chartError } = await supabase
-            .from('bazi_charts')
-            .select('id, name, user_id, gender, birth_date, birth_time, birth_place, longitude, calendar_type, is_leap_month, timezone, disambiguation')
-            .eq('id', input.chartId)
-            .eq('user_id', userId)
-            .single();
-        if (chartError || !chart?.user_id) {
+        if (!chart?.user_id) {
             return { error: '未找到命盘信息', status: 404 };
         }
 
@@ -161,8 +162,8 @@ const baziAnalysisConfig: DivinationRouteConfig<BaziAnalysisInput, BaziAnalysisC
         if (!resolvedChart.birth_time || !resolvedChart.birth_time.trim()) {
             return { error: '该八字命盘缺少出生时辰，暂不支持 AI 分析', status: 400 };
         }
-        const caseProfile = await getBaziCaseProfileByChartId(supabase, input.chartId, userId);
-        const chartPromptDetailLevel = await loadResolvedChartPromptDetailLevel(userId, 'bazi', { client: supabase });
+        const caseProfile = await getBaziCaseProfileByChartId(db, input.chartId, userId);
+        const chartPromptDetailLevel = await loadResolvedChartPromptDetailLevel(userId, 'bazi', { db });
         const chartSummary = formatBaziPromptText({
             id: resolvedChart.id,
             name: resolvedChart.name || '命盘',
@@ -177,12 +178,7 @@ const baziAnalysisConfig: DivinationRouteConfig<BaziAnalysisInput, BaziAnalysisC
             disambiguation: resolvedChart.disambiguation,
         }, caseProfile, chartPromptDetailLevel);
 
-        const { data: userSettingsRow } = await supabase
-            .from('user_settings')
-            .select(USER_SETTINGS_SELECT)
-            .eq('user_id', userId)
-            .maybeSingle();
-        const userSettings = normalizeUserSettings((userSettingsRow ?? null) as Record<string, unknown> | null);
+        const { settings: userSettings } = await getUserSettingsSnapshot(db, userId);
 
         return {
             userId,

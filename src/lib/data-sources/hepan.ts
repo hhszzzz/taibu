@@ -1,7 +1,6 @@
-import { getSystemAdminClient } from '@/lib/api-utils';
 import { getHepanTypeName, type HepanType } from '@/lib/divination/hepan';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
-import type { DataSourceProvider, DataSourceQueryContext } from '@/lib/data-sources/provider.server';
+import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
 
 type HepanRow = {
     id: string;
@@ -22,17 +21,16 @@ export const hepanProvider: DataSourceProvider<HepanRow> = {
     displayName: '合盘记录',
 
     async list(userId: string, ctx?: DataSourceQueryContext): Promise<DataSourceSummary[]> {
-        const supabase = ctx?.client ?? getSystemAdminClient();
+        const db = requireQueryDb(ctx);
         const limit = ctx?.limit ?? 50;
-        const { data, error } = await supabase
-            .from('hepan_charts')
-            .select('id, type, person1_name, person2_name, compatibility_score, created_at')
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false })
-            .limit(limit);
-
-        if (error) throw new Error(error.message);
-        return (data || []).map((row: { id: string; type: string; person1_name: string; person2_name: string; compatibility_score: number | null; created_at: string }) => {
+        const data = await db.tx((trx) => trx
+        .selectFrom('hepan_charts')
+        .select(['id', 'type', 'person1_name', 'person2_name', 'compatibility_score', 'created_at'])
+        .where('user_id', '=', userId)
+        .orderBy('created_at', 'desc')
+        .limit(limit)
+        .execute());
+        return (data || []).map((row) => {
             const typeName = getHepanTypeName(row.type as HepanType);
             const preview = row.compatibility_score != null
                 ? `匹配度：${row.compatibility_score} / ${typeName}`
@@ -42,21 +40,20 @@ export const hepanProvider: DataSourceProvider<HepanRow> = {
                 type: 'hepan_chart',
                 name: `${typeName} - ${row.person1_name} × ${row.person2_name}`,
                 preview,
-                createdAt: row.created_at,
+                createdAt: row.created_at ?? '',
                 hepanType: row.type as HepanType
             };
         });
     },
 
     async get(id: string, userId: string, ctx?: DataSourceQueryContext): Promise<HepanRow | null> {
-        const supabase = ctx?.client ?? getSystemAdminClient();
-        const { data, error } = await supabase
-            .from('hepan_charts')
-            .select('*')
-            .eq('id', id)
-            .eq('user_id', userId)
-            .maybeSingle();
-        if (error) throw new Error(error.message);
+        const db = requireQueryDb(ctx);
+        const data = await db.tx((trx) => trx
+        .selectFrom('hepan_charts')
+        .selectAll()
+        .where('id', '=', id)
+        .where('user_id', '=', userId)
+        .executeTakeFirst());
         return (data as HepanRow) || null;
     },
 

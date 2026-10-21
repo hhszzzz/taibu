@@ -11,6 +11,7 @@ import { authorizeChartReference, loadAgentChart, loadInspectedChart } from '../
 import { executeAgentRun } from '../lib/agent/runtime.server';
 import { AgentStore, type AgentRunRow } from '../lib/agent/store.server';
 import { config, row, MemoryStore, scripted } from './helpers/agent-runtime-fixture';
+import { createMockScopedDb } from './helpers/db-mock';
 
 const birth = { gender: 'male', birthYear: 1990, birthMonth: 1, birthDay: 15, birthHour: 9 };
 const chartTool = async (name: 'bazi' | 'ziwei'): Promise<AgentToolPart> => {
@@ -116,14 +117,24 @@ test('native calculations retain full immutable snapshots for every system, with
   assert.equal(getChartTargets(traditional.value).filter(target => /^taiyi:palace:\d+$/.test(target.id)).length, 17);
 });
 
-test('every saved chart lookup filters both record ID and current owner', async () => {
+test('every saved chart lookup filters both record ID and current owner', async t => {
   const run = row(), calls: Array<{ table: string; filters: Record<string, string> }> = [];
   let owned = true;
-  const store = new AgentStore({ from(table: string) {
-    const filters: Record<string, string> = {};
-    const query = { select() { return query; }, eq(key: string, value: string) { filters[key] = value; return query; }, async maybeSingle() { calls.push({ table, filters }); return { data: owned ? { id: filters.id } : null, error: null }; } };
-    return query;
-  } } as never);
+  const scoped = createMockScopedDb({
+    tx: async (work) => work({
+      selectFrom(table: string) {
+        const filters: Record<string, string> = {};
+        const query = {
+          select() { return query; },
+          where(key: string, _operator: string, value: string) { filters[key] = value; return query; },
+          async executeTakeFirst() { calls.push({ table, filters }); return owned ? { id: filters.id } : undefined; },
+        };
+        return query;
+      },
+    } as never),
+  });
+  t.mock.method(require('../lib/db/context.server'), 'systemDb', () => scoped);
+  const store = new AgentStore({} as never);
   for (const [source, kind] of Object.entries(CHART_SOURCE_KINDS)) {
     const id = randomUUID();
     assert.equal(await authorizeChartReference(store, run, source + ':' + id), kind);
@@ -331,8 +342,19 @@ test('saved-chart focus uses the inspected snapshot and rejects revoked ownershi
   const store = new ChartStore(), run = row(), id = randomUUID();
   let owned = true, reads = 0;
   const record = { id, gender: 'male', birth_date: '1990-01-15', birth_time: '09:00', timezone: 'Asia/Shanghai' };
-  const query = { select: () => query, eq: () => query, maybeSingle: async () => ({ data: owned ? { id } : null, error: null }) };
-  Object.assign(store.db, { from: () => query });
+  const scoped = createMockScopedDb({
+    tx: async (work) => work({
+      selectFrom() {
+        const query = {
+          select() { return query; },
+          where() { return query; },
+          async executeTakeFirst() { return owned ? { id } : undefined; },
+        };
+        return query;
+      },
+    } as never),
+  });
+  t.mock.method(require('../lib/db/context.server'), 'systemDb', () => scoped);
   t.mock.method(require('../lib/data-sources'), 'getProvider', async () => ({ get: async (_id: string, userId: string) => { assert.equal(userId, run.user_id); reads++; return record; } }));
   const tools = await createAgentTools(store, run, run.checkpoint), reference = 'bazi_chart:' + id;
   const inspected = await tools.find(tool => tool.name === 'inspect_chart')!.execute('inspect-saved', { reference });

@@ -1,4 +1,4 @@
-import { test, beforeEach } from 'node:test';
+import { test, beforeEach, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import type { AgentToolPart } from '../lib/agent/tool-presentation';
@@ -8,6 +8,7 @@ import { createAgentTools } from '../lib/agent/tools.server';
 import { buildAgentWorkspace } from '../lib/agent/workspace';
 import { describeDrilldownSelection } from '../components/chat/agent/presentation';
 import { MemoryStore, row } from './helpers/agent-runtime-fixture';
+import { createMockScopedDb } from './helpers/db-mock';
 
 const birth = { gender: 'male', birthYear: 1990, birthMonth: 1, birthDay: 15, birthHour: 9 };
 
@@ -23,6 +24,23 @@ async function setup() {
   const tool = (name: string) => tools.find(item => item.name === name)!;
   await tool('bazi').execute('calculate', birth);
   return { store, run, tools, tool, reference: 'artifact:' + store.draft('calculate')!.id };
+}
+
+function mockChartOwnership(t: Pick<TestContext, 'mock'>) {
+  const context = require('../lib/db/context.server') as typeof import('../lib/db/context.server');
+  const scoped = createMockScopedDb({
+    tx: async (work) => work({
+      selectFrom() {
+        const query = {
+          select() { return query; },
+          where() { return query; },
+          async executeTakeFirst() { return { id: 'owned' }; },
+        };
+        return query;
+      },
+    } as never),
+  });
+  t.mock.method(context, 'systemDb', () => scoped);
 }
 
 type DrilldownDetails = { chartReference: string; chartKind: string; selection: Record<string, unknown>; result: Record<string, unknown>; targets: Array<{ id: string; label: string }> };
@@ -92,6 +110,7 @@ test('drilldowns reject charts of another system, tampered artifacts and unknown
 });
 
 test('a saved birth record is rebuilt from its stored fields', async t => {
+  mockChartOwnership(t);
   const store = new MemoryStore(), run = row(), id = randomUUID();
   const record = { id, gender: 'male', birth_date: '1990-01-15', birth_time: '09:00', timezone: 'Asia/Shanghai', calendar_type: 'solar' };
   const query = { select: () => query, eq: () => query, maybeSingle: async () => ({ data: { id }, error: null }) };
@@ -236,6 +255,7 @@ test('紫微、奇门、六壬、占星与六爻的详查都重算自己的盘�
 });
 
 test('bazi_wuxing 与 bazi_liunian_scan 复用八字成果，紫微与六爻的已存记录可以重建', async t => {
+  mockChartOwnership(t);
   const { tool, reference, store } = await setup();
   const wuxing = await tool('bazi_wuxing').execute('w1', { reference });
   const liunian = await tool('bazi_liunian_scan').execute('n1', { reference, fromYear: 2026, toYear: 2027 });

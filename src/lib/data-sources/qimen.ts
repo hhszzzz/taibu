@@ -1,6 +1,5 @@
 import { DEFAULT_DIVINATION_TIMEZONE } from 'taibu-core/timezone-utils';
 import { toQimenText } from 'taibu-core/qimen';
-import { getSystemAdminClient } from '@/lib/api-utils';
 import {
     calculateQimenBundle,
     fromStoredQimenZhiFuJiGong,
@@ -8,7 +7,7 @@ import {
 } from '@/lib/divination/qimen';
 import { resolveChartTextDetailLevel } from '@/lib/divination/detail-level';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
-import type { DataSourceProvider, DataSourceQueryContext } from '@/lib/data-sources/provider.server';
+import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
 
 type QimenRow = {
     id: string;
@@ -45,16 +44,15 @@ export const qimenProvider: DataSourceProvider<QimenRow> = {
     displayName: '奇门遁甲',
 
     async list(userId: string, ctx?: DataSourceQueryContext): Promise<DataSourceSummary[]> {
-        const supabase = ctx?.client ?? getSystemAdminClient();
+        const db = requireQueryDb(ctx);
         const limit = ctx?.limit ?? 50;
-        const { data, error } = await supabase
-            .from('qimen_charts')
-            .select('id, question, dun_type, ju_number, created_at')
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false })
-            .limit(limit);
-
-        if (error) throw new Error(error.message);
+        const data = await db.tx((trx) => trx
+        .selectFrom('qimen_charts')
+        .select(['id', 'question', 'dun_type', 'ju_number', 'created_at'])
+        .where('user_id', '=', userId)
+        .orderBy('created_at', 'desc')
+        .limit(limit)
+        .execute());
         return (data || []).map((row: { id: string; question: string | null; dun_type: string; ju_number: number; created_at: string }) => {
             const dunLabel = DUN_LABEL[row.dun_type] || row.dun_type;
             return {
@@ -68,14 +66,13 @@ export const qimenProvider: DataSourceProvider<QimenRow> = {
     },
 
     async get(id: string, userId: string, ctx?: DataSourceQueryContext): Promise<QimenRow | null> {
-        const supabase = ctx?.client ?? getSystemAdminClient();
-        const { data, error } = await supabase
-            .from('qimen_charts')
-            .select('id, question, dun_type, ju_number, year, month, day, hour, minute, timezone, pan_type, ju_method, zhi_fu_ji_gong, created_at')
-            .eq('id', id)
-            .eq('user_id', userId)
-            .maybeSingle();
-        if (error) throw new Error(error.message);
+        const db = requireQueryDb(ctx);
+        const data = await db.tx((trx) => trx
+        .selectFrom('qimen_charts')
+        .select(['id', 'question', 'dun_type', 'ju_number', 'year', 'month', 'day', 'hour', 'minute', 'timezone', 'pan_type', 'ju_method', 'zhi_fu_ji_gong', 'created_at'])
+        .where('id', '=', id)
+        .where('user_id', '=', userId)
+        .executeTakeFirst());
         return (data as QimenRow) || null;
     },
 

@@ -7,7 +7,9 @@ import { calculateBazi } from 'taibu-core/bazi';
 import { calculateZiwei } from 'taibu-core/ziwei';
 import { buildBaziInputFromStoredFields } from '@/lib/divination/bazi-record';
 import { isValidBirthTimeString, resolveBirthTimeOptions } from '@/lib/divination/birth-time';
-import { jsonError, jsonOk, requireUserContext, resolveRequestDbClient } from '@/lib/api-utils';
+import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
+import type { ScopedDb } from '@/lib/db/context.server';
+import { insertIntoDynamic, selectFromDynamic, updateTableDynamic } from '@/lib/db/sql-helpers';
 import { isValidUUID } from '@/lib/validation';
 
 interface ChartCrudConfig {
@@ -20,12 +22,12 @@ interface ChartCrudConfig {
 
 type ChartRouteAuth = Extract<
     Awaited<ReturnType<typeof requireUserContext>>,
-    { user: { id: string }; db: { from: (tableName: string) => unknown } }
+    { user: { id: string } }
 >;
 
 type ChartUpdateContext = {
     auth: ChartRouteAuth;
-    db: NonNullable<ReturnType<typeof resolveRequestDbClient>>;
+    db: ScopedDb;
     chartId: string;
     payload: Record<string, unknown>;
 };
@@ -47,7 +49,7 @@ const DEFAULT_ALLOWED_UPDATE_FIELDS = [
     'disambiguation',
 ] as const;
 
-const BIRTH_RECALCULATION_FIELDS = 'id, user_id, gender, birth_date, birth_time, birth_place, longitude, calendar_type, is_leap_month, timezone, disambiguation';
+const BIRTH_RECALCULATION_FIELDS = ['id', 'user_id', 'gender', 'birth_date', 'birth_time', 'birth_place', 'longitude', 'calendar_type', 'is_leap_month', 'timezone', 'disambiguation'] as const;
 const BIRTH_UPDATE_FIELDS = DEFAULT_ALLOWED_UPDATE_FIELDS.filter(field => field !== 'name' && field !== 'birth_place');
 
 export function validateRequiredBirthTime(payload: Record<string, unknown>): string | null {
@@ -88,13 +90,16 @@ async function prepareChartBirthUpdate(context: ChartUpdateContext, tableName: '
     const { auth, chartId, payload, db } = context;
     const needsRecalculation = BIRTH_UPDATE_FIELDS.some(field => Object.hasOwn(payload, field));
     if (!needsRecalculation && tableName === 'ziwei_charts') return { payload };
-    const { data, error } = await db
-        .from(tableName)
-        .select(BIRTH_RECALCULATION_FIELDS)
-        .eq('id', chartId)
-        .eq('user_id', auth.user.id)
-        .maybeSingle();
-    if (error) return { error: error.message, status: 500 };
+    let data;
+    try {
+        data = await db.tx((trx) => selectFromDynamic(trx, tableName)
+            .select(BIRTH_RECALCULATION_FIELDS)
+            .where('id', '=', chartId)
+            .where('user_id', '=', auth.user.id)
+            .executeTakeFirst());
+    } catch (error) {
+        return { error: error instanceof Error ? error.message : '读取命盘失败', status: 500 };
+    }
     if (!data) return { error: '未找到可更新的命盘', status: 404 };
 
     const merged = { ...data, ...payload };
@@ -138,27 +143,27 @@ export function createChartGetHandler(config: ChartCrudConfig) {
         if (expectedUserId !== null && expectedUserId !== auth.user.id) {
             return jsonError('账号已切换，请重新加载命盘', 409);
         }
-        const db = resolveRequestDbClient(auth);
-        if (!db) return jsonError('获取命盘失败', 500);
-
         const id = request.nextUrl.searchParams.get('id');
         if (!id) {
             return jsonError('缺少命盘 ID', 400);
         }
 
-        const { data, error } = await db
-            .from(config.tableName)
-            .select('*')
-            .eq('id', id)
-            .eq('user_id', auth.user.id)
-            .maybeSingle();
+        const result = await auth.scoped.tx((trx) => selectFromDynamic(trx, config.tableName)
+            .selectAll()
+            .where('id', '=', id)
+            .where('user_id', '=', auth.user.id)
+            .executeTakeFirst()).then(
+            (data) => ({ data, error: null }),
+            (error: unknown) => ({ data: null, error }),
+        );
 
-        if (error) {
+        if (result.error) {
             return jsonError('获取命盘失败', 500);
         }
-        if (!data) {
+        if (!result.data) {
             return jsonError('命盘不存在', 404);
         }
+        const data = result.data;
 
         return jsonOk({ chart: data });
     };
@@ -172,9 +177,6 @@ export function createChartPostHandler(config: ChartCrudConfig) {
         if (expectedUserId !== null && expectedUserId !== auth.user.id) {
             return jsonError('账号已切换，请重新加载命盘', 409);
         }
-        const db = resolveRequestDbClient(auth);
-        if (!db) return jsonError('保存命盘失败', 500);
-
         let body: { payload?: Record<string, unknown> };
         try {
             body = await request.json() as { payload?: Record<string, unknown> };
@@ -202,17 +204,19 @@ export function createChartPostHandler(config: ChartCrudConfig) {
             return jsonError(error instanceof Error ? error.message : '命盘出生参数无效', 400);
         }
 
-        const { data, error } = await db
-            .from(config.tableName)
-            .insert(payload)
-            .select('id')
-            .maybeSingle();
+        const result = await auth.scoped.tx((trx) => insertIntoDynamic(trx, config.tableName)
+            .values(payload)
+            .returning('id')
+            .executeTakeFirst()).then(
+            (data) => ({ data, error: null }),
+            (error: unknown) => ({ data: null, error }),
+        );
 
-        if (error) {
+        if (result.error) {
             return jsonError('保存命盘失败', 500);
         }
 
-        return jsonOk({ id: data?.id ?? null }, 201);
+        return jsonOk({ id: result.data?.id ?? null }, 201);
     };
 }
 
@@ -224,9 +228,6 @@ export function createChartUpdateHandler(config: ChartCrudConfig) {
         if (expectedUserId !== null && expectedUserId !== auth.user.id) {
             return jsonError('账号已切换，请重新加载命盘', 409);
         }
-        const db = resolveRequestDbClient(auth);
-        if (!db) return jsonError('更新失败', 500);
-
         let body: { chartId?: unknown; payload?: unknown };
         try {
             body = await request.json() as { chartId?: unknown; payload?: unknown };
@@ -264,7 +265,7 @@ export function createChartUpdateHandler(config: ChartCrudConfig) {
         if (config.prepareUpdatePayload) {
             const prepared = await config.prepareUpdatePayload({
                 auth,
-                db,
+                db: auth.scoped,
                 chartId: body.chartId,
                 payload: sanitizedPayload,
             });
@@ -274,19 +275,21 @@ export function createChartUpdateHandler(config: ChartCrudConfig) {
             updatePayload = prepared.payload;
         }
 
-        const { data, error } = await db
-            .from(config.tableName)
-            .update(updatePayload)
-            .eq('id', body.chartId)
-            .eq('user_id', auth.user.id)
-            .select('id')
-            .maybeSingle();
+        const result = await auth.scoped.tx((trx) => updateTableDynamic(trx, config.tableName)
+            .set(updatePayload)
+            .where('id', '=', body.chartId)
+            .where('user_id', '=', auth.user.id)
+            .returning('id')
+            .executeTakeFirst()).then(
+            (data) => ({ data, error: null }),
+            (error: unknown) => ({ data: null, error }),
+        );
 
-        if (error) {
-            return jsonError(error.message, 500);
+        if (result.error) {
+            return jsonError(result.error instanceof Error ? result.error.message : '更新失败', 500);
         }
 
-        if (!data) {
+        if (!result.data) {
             return jsonError('未找到可更新的命盘', 404);
         }
 

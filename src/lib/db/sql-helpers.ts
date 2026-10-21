@@ -25,3 +25,18 @@ type LooseTable = Record<string, Record<string, unknown>>;
 export function selectFromDynamic(trx: Transaction<DB>, table: string) {
   return (trx as unknown as Kysely<LooseTable>).selectFrom(table);
 }
+
+/** Registry-controlled table names only; see selectFromDynamic. */
+export function insertIntoDynamic(trx: Transaction<DB>, table: string) {
+  return (trx as unknown as Kysely<LooseTable>).insertInto(table);
+}
+
+/** Registry-controlled table names only; see selectFromDynamic. */
+export function updateTableDynamic(trx: Transaction<DB>, table: string) {
+  return (trx as unknown as Kysely<LooseTable>).updateTable(table);
+}
+
+/** Registry-controlled table names only; see selectFromDynamic. */
+export function deleteFromDynamic(trx: Transaction<DB>, table: string) {
+  return (trx as unknown as Kysely<LooseTable>).deleteFrom(table);
+}

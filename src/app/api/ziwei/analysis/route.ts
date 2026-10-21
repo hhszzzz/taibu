@@ -94,17 +94,18 @@ const handleAnalyze = createInterpretHandler<ZiweiAnalysisInput, ZiweiAnalysisCo
     },
     resolvePromptContext: async (input, auth) => {
         const { userId, db } = auth;
-        if (!db) {
-            return { error: '认证上下文缺失', status: 500 };
+        let chart;
+        try {
+            chart = await db.tx((trx) => trx
+                .selectFrom('ziwei_charts')
+                .select(['id', 'name', 'user_id', 'gender', 'birth_date', 'birth_time', 'birth_place', 'calendar_type', 'is_leap_month', 'longitude', 'timezone', 'disambiguation'])
+                .where('id', '=', input.chartId)
+                .where('user_id', '=', userId)
+                .executeTakeFirst());
+        } catch {
+            return { error: '未找到命盘信息', status: 404 };
         }
-        const supabase = db;
-        const { data: chart, error: chartError } = await supabase
-            .from('ziwei_charts')
-            .select('id, name, user_id, gender, birth_date, birth_time, birth_place, calendar_type, is_leap_month, longitude, timezone, disambiguation')
-            .eq('id', input.chartId)
-            .eq('user_id', userId)
-            .single();
-        if (chartError || !chart?.user_id) {
+        if (!chart?.user_id) {
             return { error: '未找到命盘信息', status: 404 };
         }
 
@@ -139,7 +140,7 @@ const handleAnalyze = createInterpretHandler<ZiweiAnalysisInput, ZiweiAnalysisCo
         };
 
         const { output, astrolabe } = calculateZiweiChartBundle(formData);
-        const chartPromptDetailLevel = await loadResolvedChartPromptDetailLevel(userId, 'ziwei', { client: supabase });
+        const chartPromptDetailLevel = await loadResolvedChartPromptDetailLevel(userId, 'ziwei', { db });
         const chartSummary = generateZiweiChartText(output, {
             includeHoroscope: true,
             detailLevel: chartPromptDetailLevel,

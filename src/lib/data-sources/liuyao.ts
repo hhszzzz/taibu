@@ -1,4 +1,3 @@
-import { getSystemAdminClient } from '@/lib/api-utils';
 import {
     calculateLiuyaoBundle,
     calculateGanZhiTime,
@@ -10,7 +9,7 @@ import {
 } from '@/lib/divination/liuyao';
 import { getHexagramText } from '@/lib/divination/hexagram-texts';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
-import type { DataSourceProvider, DataSourceQueryContext } from '@/lib/data-sources/provider.server';
+import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
 
 type LiuyaoRow = {
     id: string;
@@ -37,17 +36,16 @@ export const liuyaoProvider: DataSourceProvider<LiuyaoRow> = {
     displayName: '六爻记录',
 
     async list(userId: string, ctx?: DataSourceQueryContext): Promise<DataSourceSummary[]> {
-        const supabase = ctx?.client ?? getSystemAdminClient();
+        const db = requireQueryDb(ctx);
         const limit = ctx?.limit ?? 50;
-        const { data, error } = await supabase
-            .from('liuyao_divinations')
-            .select('id, question, hexagram_code, changed_hexagram_code, created_at')
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false })
-            .limit(limit);
-
-        if (error) throw new Error(error.message);
-        return (data || []).map((row: { id: string; question: string | null; hexagram_code: string; changed_hexagram_code: string | null; created_at: string }) => {
+        const data = await db.tx((trx) => trx
+        .selectFrom('liuyao_divinations')
+        .select(['id', 'question', 'hexagram_code', 'changed_hexagram_code', 'created_at'])
+        .where('user_id', '=', userId)
+        .orderBy('created_at', 'desc')
+        .limit(limit)
+        .execute());
+        return (data || []).map((row) => {
             const baseHexagram = findHexagram(row.hexagram_code);
             const baseName = baseHexagram?.name || '未知卦';
             const changedHexagram = row.changed_hexagram_code ? findHexagram(row.changed_hexagram_code) : undefined;
@@ -60,20 +58,19 @@ export const liuyaoProvider: DataSourceProvider<LiuyaoRow> = {
                 preview: row.question
                     ? `问题：${row.question}`
                     : `本卦：${baseName}${changedName ? ` / 变卦：${changedName}` : ''}`,
-                createdAt: row.created_at
+                createdAt: row.created_at ?? '',
             };
         });
     },
 
     async get(id: string, userId: string, ctx?: DataSourceQueryContext): Promise<LiuyaoRow | null> {
-        const supabase = ctx?.client ?? getSystemAdminClient();
-        const { data, error } = await supabase
-            .from('liuyao_divinations')
-            .select('*')
-            .eq('id', id)
-            .eq('user_id', userId)
-            .maybeSingle();
-        if (error) throw new Error(error.message);
+        const db = requireQueryDb(ctx);
+        const data = await db.tx((trx) => trx
+        .selectFrom('liuyao_divinations')
+        .selectAll()
+        .where('id', '=', id)
+        .where('user_id', '=', userId)
+        .executeTakeFirst());
         return (data as LiuyaoRow) || null;
     },
 

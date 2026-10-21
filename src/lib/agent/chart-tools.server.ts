@@ -1,4 +1,6 @@
 import 'server-only';
+import { systemDb } from '@/lib/db/context.server';
+import { selectFromDynamic } from '@/lib/db/sql-helpers';
 import { toBaziJson, toBaziText } from 'taibu-core/bazi';
 import { toZiweiJson, toZiweiText } from 'taibu-core/ziwei';
 import { toQimenJson, toQimenText } from 'taibu-core/qimen';
@@ -20,6 +22,17 @@ import { getAgentChart } from './tool-presentation';
 import { isAgentChartTool } from './tool-catalog';
 import { CHART_SOURCE_KINDS, parseChartReference, type ChartSource } from './chart-interaction';
 
+const CHART_SOURCE_TABLES: Record<ChartSource, string> = {
+  bazi_chart: 'bazi_charts',
+  ziwei_chart: 'ziwei_charts',
+  qimen_chart: 'qimen_charts',
+  liuyao_divination: 'liuyao_divinations',
+  meihua_divination: 'meihua_divinations',
+  daliuren_divination: 'daliuren_divinations',
+  xiaoliuren_divination: 'xiaoliuren_divinations',
+  tarot_reading: 'tarot_readings',
+};
+
 /** Check ownership on every execution and cache replay, independent of model arguments. */
 export async function authorizeChartReference(store: AgentStore, run: AgentRunRow, reference: unknown) {
   const parsed = parseChartReference(reference);
@@ -29,24 +42,17 @@ export async function authorizeChartReference(store: AgentStore, run: AgentRunRo
     if (!artifact || !isAgentChartTool(artifact.tool_name)) throw new Error('命盘不在当前会话中或无权访问');
     return artifact.tool_name;
   }
-  const query = (() => {
-    switch (parsed.source) {
-      case 'bazi_chart': return store.db.from('bazi_charts');
-      case 'ziwei_chart': return store.db.from('ziwei_charts');
-      case 'qimen_chart': return store.db.from('qimen_charts');
-      case 'liuyao_divination': return store.db.from('liuyao_divinations');
-      case 'meihua_divination': return store.db.from('meihua_divinations');
-      case 'daliuren_divination': return store.db.from('daliuren_divinations');
-      case 'xiaoliuren_divination': return store.db.from('xiaoliuren_divinations');
-      case 'tarot_reading': return store.db.from('tarot_readings');
-    }
-  })();
-  const { data, error } = await query.select('id').eq('id', parsed.id).eq('user_id', run.user_id).maybeSingle();
-  if (error || !data) throw new Error('命盘不存在或无权访问');
+  const table = CHART_SOURCE_TABLES[parsed.source];
+  const data = await systemDb().tx((trx) => selectFromDynamic(trx, table)
+    .select('id')
+    .where('id', '=', parsed.id)
+    .where('user_id', '=', run.user_id)
+    .executeTakeFirst());
+  if (!data) throw new Error('命盘不存在或无权访问');
   return CHART_SOURCE_KINDS[parsed.source];
 }
 
-async function storedChart(source: ChartSource, row: Record<string, unknown>, provider: Awaited<ReturnType<typeof getProvider>>, store: AgentStore) {
+async function storedChart(source: ChartSource, row: Record<string, unknown>, provider: Awaited<ReturnType<typeof getProvider>>) {
   let json: unknown;
   let canonicalText: string | undefined;
   const saved = row.result_data as { result?: unknown } | undefined;
@@ -78,7 +84,7 @@ async function storedChart(source: ChartSource, row: Record<string, unknown>, pr
     }
   }
   if (!json) throw new Error('已存结果不完整，无法恢复交互盘面，请查看原记录');
-  return { json, canonicalText: canonicalText ?? await provider.formatForAI(row, { client: store.db }) };
+  return { json, canonicalText: canonicalText ?? await provider.formatForAI(row) };
 }
 
 export async function loadAgentChart(store: AgentStore, run: AgentRunRow, reference: string) {
@@ -94,10 +100,10 @@ export async function loadAgentChart(store: AgentStore, run: AgentRunRow, refere
     return { reference: normalized, value, canonicalText: snapshot?.canonicalText ?? artifact!.result.canonicalText ?? artifact!.result.content.map(part => part.text).join('\n') };
   }
   const provider = await getProvider(parsed.source);
-  const row = await provider.get(parsed.id, run.user_id, { client: store.db }) as Record<string, unknown> | null;
+  const row = await provider.get(parsed.id, run.user_id, { db: systemDb() }) as Record<string, unknown> | null;
   if (!row) throw new Error('命盘不存在或无权访问');
   if (parsed.source !== 'bazi_chart' && parsed.source !== 'ziwei_chart') {
-    const { json, canonicalText } = await storedChart(parsed.source, row, provider, store);
+    const { json, canonicalText } = await storedChart(parsed.source, row, provider);
     const kind = CHART_SOURCE_KINDS[parsed.source];
     const value = getAgentChart({ type: 'tool', id: parsed.id, name: kind, title: kind, status: 'completed', output: json });
     if (!value) throw new Error('命盘数据不完整，无法显示');

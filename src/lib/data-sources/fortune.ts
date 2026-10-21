@@ -1,9 +1,9 @@
 import { calculateDailyFortune, calculateMonthlyFortune, calculateGenericDailyFortune, calculateGenericMonthlyFortune } from '@/lib/divination/fortune';
 import { generateFortuneInterpretation } from '@/lib/divination/fortune-interpretations';
 import type { BaziOutput as CoreBaziOutput } from 'taibu-core/bazi';
-import { getSystemAdminClient } from '@/lib/api-utils';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
-import type { DataSourceProvider, DataSourceQueryContext } from '@/lib/data-sources/provider.server';
+import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
+import type { ScopedDb } from '@/lib/db/context.server';
 import { calculateBaziOutputFromStoredFields } from '@/lib/divination/bazi-record';
 
 type FortuneData = { id: string; name: string; content: string; createdAt: string };
@@ -16,37 +16,42 @@ function formatYm(date: Date) {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
-async function loadPreferredBaziChartRow(
-    supabase: NonNullable<DataSourceQueryContext['client']> | ReturnType<typeof getSystemAdminClient>,
-    userId: string,
-) {
-    const { data: settings } = await supabase
-        .from('user_settings')
+const BAZI_CHART_COLUMNS = [
+    'id', 'name', 'gender', 'birth_date', 'birth_time', 'birth_place', 'longitude',
+    'calendar_type', 'is_leap_month', 'timezone', 'disambiguation', 'day_master',
+    'day_branch', 'created_at',
+] as const;
+
+async function loadPreferredBaziChartRow(db: ScopedDb, userId: string) {
+    const settings = await db.tx((trx) => trx
+        .selectFrom('user_settings')
         .select('default_bazi_chart_id')
-        .eq('user_id', userId)
-        .maybeSingle();
+        .where('user_id', '=', userId)
+        .executeTakeFirst());
 
-    const settingsRow = settings as null | { default_bazi_chart_id: string | null };
-    const defaultId = settingsRow?.default_bazi_chart_id ?? null;
-    const baseQuery = supabase
-        .from('bazi_charts')
-        .select('id, name, gender, birth_date, birth_time, birth_place, longitude, calendar_type, is_leap_month, timezone, disambiguation, day_master, day_branch, created_at')
-        .eq('user_id', userId);
-
+    const defaultId = settings?.default_bazi_chart_id ?? null;
     if (defaultId) {
-        const preferred = await baseQuery.eq('id', defaultId).maybeSingle();
-        if (preferred.data) {
-            return preferred.data;
-        }
+        const preferred = await db.tx((trx) => trx
+            .selectFrom('bazi_charts')
+            .select(BAZI_CHART_COLUMNS)
+            .where('user_id', '=', userId)
+            .where('id', '=', defaultId)
+            .executeTakeFirst());
+        if (preferred) return preferred;
     }
 
-    const fallback = await baseQuery.order('created_at', { ascending: false }).limit(1).maybeSingle();
-    return fallback.data;
+    return await db.tx((trx) => trx
+        .selectFrom('bazi_charts')
+        .select(BAZI_CHART_COLUMNS)
+        .where('user_id', '=', userId)
+        .orderBy('created_at', 'desc')
+        .limit(1)
+        .executeTakeFirst());
 }
 
 async function getDefaultBaziChartForUser(userId: string, ctx?: DataSourceQueryContext): Promise<CoreBaziOutput | null> {
-    const supabase = ctx?.client ?? getSystemAdminClient();
-    const data = await loadPreferredBaziChartRow(supabase, userId);
+    const db = requireQueryDb(ctx);
+    const data = await loadPreferredBaziChartRow(db, userId);
     if (!data) return null;
     return calculateBaziOutputFromStoredFields(data as Parameters<typeof calculateBaziOutputFromStoredFields>[0]);
 }

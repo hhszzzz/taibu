@@ -1,80 +1,89 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createMockScopedDb } from './helpers/db-mock';
 
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon';
 
-test('annual report generation uses service client for queries', async (t) => {
-    const supabaseModule = require('../lib/auth') as any;
-    const supabaseServerModule = require('../lib/supabase-server') as any;
-
-    const originalFrom = supabaseModule.supabase.from;
-    const originalGetServiceClient = supabaseServerModule.getSystemAdminClient;
-
-    let usedServiceClient = false;
-    let cachedReport: Record<string, unknown> | null = null;
-
-    supabaseModule.supabase.from = () => {
-        throw new Error('browser client should not be used');
-    };
-
-    supabaseServerModule.getSystemAdminClient = () => {
-        usedServiceClient = true;
-        return {
-            from: (table: string) => {
-                if (table === 'conversations') {
-                    return {
-                        select: () => ({
-                            eq: () => ({
-                                gte: () => ({
-                                    lte: async () => ({
-                                        data: [
-                                            { source_type: 'bazi', created_at: '2024-01-10T00:00:00Z' },
-                                            { source_type: 'chat', created_at: '2024-01-11T00:00:00Z' },
-                                        ],
-                                    }),
-                                }),
-                            }),
-                        }),
-                    };
-                }
-                if (table === 'daily_checkins') {
-                    return {
-                        select: () => ({
-                            eq: () => ({
-                                gte: () => ({
-                                    lte: async () => ({
-                                        data: [{ reward_credits: 1 }],
-                                    }),
-                                }),
-                            }),
-                        }),
-                    };
-                }
-                if (table === 'annual_reports') {
-                    return {
-                        upsert: async (payload: Record<string, unknown>) => {
-                            cachedReport = payload.report_data as Record<string, unknown>;
-                            return { error: null };
-                        },
-                    };
-                }
-                return {};
+function createAnnualReportDb(state: {
+    conversations?: Array<Record<string, unknown>>;
+    checkins?: Array<Record<string, unknown>>;
+    cachedReport?: Record<string, unknown> | null;
+    cachedRow?: Record<string, unknown> | null;
+    count?: number;
+}) {
+    return createMockScopedDb({
+        tx: async (work) => work({
+            selectFrom(table: string) {
+                let isCount = false;
+                const query = {
+                    select(selection: unknown) {
+                        if (typeof selection === 'function') {
+                            isCount = true;
+                            const expressionBuilder = {
+                                fn: { countAll: () => ({ as: () => undefined }) },
+                            };
+                            (selection as (eb: unknown) => unknown)(expressionBuilder);
+                        }
+                        return query;
+                    },
+                    where() { return query; },
+                    orderBy() { return query; },
+                    limit() { return query; },
+                    offset() { return query; },
+                    async executeTakeFirst() {
+                        if (table === 'annual_reports') return state.cachedRow;
+                        if (table === 'conversations' && isCount) return { count: state.count ?? 0 };
+                        return undefined;
+                    },
+                    async execute() {
+                        if (table === 'conversations') return state.conversations ?? [];
+                        if (table === 'daily_checkins') return state.checkins ?? [];
+                        return [];
+                    },
+                };
+                return query;
             },
-        };
-    };
-
-    t.after(() => {
-        supabaseModule.supabase.from = originalFrom;
-        supabaseServerModule.getSystemAdminClient = originalGetServiceClient;
+            insertInto(table: string) {
+                assert.equal(table, 'annual_reports');
+                const query = {
+                    values(payload: Record<string, unknown>) {
+                        state.cachedReport = payload.report_data as Record<string, unknown>;
+                        return query;
+                    },
+                    onConflict(callback: (conflict: { columns: () => { doUpdateSet: () => unknown } }) => unknown) {
+                        callback({ columns: () => ({ doUpdateSet: () => undefined }) });
+                        return query;
+                    },
+                    async execute() { return []; },
+                };
+                return query;
+            },
+        } as never),
     });
+}
+
+test('annual report generation uses the scoped system database for queries', async (t) => {
+    const contextModule = require('../lib/db/context.server') as any;
+    const state: {
+        conversations?: Array<Record<string, unknown>>;
+        checkins?: Array<Record<string, unknown>>;
+        cachedReport?: Record<string, unknown> | null;
+    } = {
+        conversations: [
+            { id: 'conv-1', source_type: 'bazi', created_at: '2024-01-10T00:00:00Z' },
+            { id: 'conv-2', source_type: 'chat', created_at: '2024-01-11T00:00:00Z' },
+        ],
+        checkins: [{ reward_credits: 1 }],
+        cachedReport: null,
+    };
+    t.mock.method(contextModule, 'systemDb', () => createAnnualReportDb(state));
 
     const { generateAnnualReport } = await import('../lib/annual-report');
     const { ANNUAL_REPORT_FEATURE_NAMES } = await import('../lib/annual-report-shared');
 
     const report = await generateAnnualReport('user-1', 2024);
 
-    assert.equal(usedServiceClient, true);
     assert.ok(report);
     assert.equal(report?.usage.totalAnalyses, 2);
     assert.equal('longestStreak' in (report?.checkin ?? {}), false);
@@ -83,52 +92,15 @@ test('annual report generation uses service client for queries', async (t) => {
     assert.equal(ANNUAL_REPORT_FEATURE_NAMES.daliuren, '大六壬');
     assert.equal(ANNUAL_REPORT_FEATURE_NAMES.dream, '解梦分析');
     assert.equal(ANNUAL_REPORT_FEATURE_NAMES.chat, 'AI 对话');
-    assert.ok(cachedReport);
+    assert.ok(state.cachedReport);
 });
 
-test('annual report summary uses service client when cache is empty', async (t) => {
-    const supabaseModule = require('../lib/auth') as any;
-    const supabaseServerModule = require('../lib/supabase-server') as any;
-
-    const originalFrom = supabaseModule.supabase.from;
-    const originalGetServiceClient = supabaseServerModule.getSystemAdminClient;
-
-    supabaseModule.supabase.from = () => {
-        throw new Error('browser client should not be used');
-    };
-
-    supabaseServerModule.getSystemAdminClient = () => ({
-        from: (table: string) => {
-            if (table === 'annual_reports') {
-                return {
-                    select: () => ({
-                        eq: () => ({
-                            eq: () => ({
-                                maybeSingle: async () => ({ data: null, error: null }),
-                            }),
-                        }),
-                    }),
-                };
-            }
-            if (table === 'conversations') {
-                return {
-                    select: () => ({
-                        eq: () => ({
-                            gte: () => ({
-                                lte: async () => ({ count: 4 }),
-                            }),
-                        }),
-                    }),
-                };
-            }
-            return {};
-        },
-    });
-
-    t.after(() => {
-        supabaseModule.supabase.from = originalFrom;
-        supabaseServerModule.getSystemAdminClient = originalGetServiceClient;
-    });
+test('annual report summary uses the scoped system database when cache is empty', async (t) => {
+    const contextModule = require('../lib/db/context.server') as any;
+    t.mock.method(contextModule, 'systemDb', () => createAnnualReportDb({
+        cachedRow: undefined,
+        count: 4,
+    }));
 
     const { getReportSummary } = await import('../lib/annual-report');
 

@@ -313,6 +313,23 @@ function scan(directory) {
           dynamicRelationSites.push({ file, expression, contract });
         }
       }
+      // src/lib/db defines the helpers themselves; their callers are the review sites.
+      if (file.startsWith('src/lib/db/')) continue;
+      for (const m of text.matchAll(/\b(?:selectFromDynamic|insertIntoDynamic|updateTableDynamic|deleteFromDynamic)\(\s*[^,]*,\s*([^)\n]+)/g)) {
+        const expression = m[1].trim();
+        const contract = expression === 'config.tableName' && ['src/app/api/history-summaries/route.ts', 'src/lib/api/chart-crud.ts'].includes(file) ? 'tableName catalog'
+          : expression === 'tableName' && file === 'src/lib/api/chart-crud.ts' ? 'typed birth-update chart table catalog'
+            : expression === 'tableName' && file === 'src/lib/api/divination-pipeline.ts' ? 'tableName factory configuration'
+              : expression === 'table' && file === 'src/lib/agent/chart-tools.server.ts' ? 'chart source table catalog'
+                : expression.startsWith('getChartTable(') && file === 'src/app/api/user/charts/route.ts' ? 'getChartTable return catalog' : null;
+        if (!contract) throw new Error(`Unreviewed dynamic Kysely relation ${file}: ${expression}`);
+        dynamicRelationSites.push({ file, expression, contract });
+      }
+      // Kysely scoped access uses literal relation names directly; dynamic helpers stay
+      // behind the typed catalogs reviewed above.
+      for (const m of text.matchAll(/\.(?:selectFrom|insertInto|updateTable|deleteFrom)\(\s*['"]([^'"]+)['"]/g)) {
+        relation(m[1].split(/\s+as\s+/i)[0], file, 'literal-kysely');
+      }
       for (const m of text.matchAll(/\btableName\s*:\s*['"]([^'"]+)['"]/g)) relation(m[1], file, 'tableName-catalog');
       for (const m of text.matchAll(/\bfrom\s*(?::\s*)?\(\s*(?:table|tableName)\s*:\s*['"]([^'"]+)['"]/g)) relation(m[1], file, 'typed-adapter-catalog');
       if (file === 'src/app/api/user/charts/route.ts') {

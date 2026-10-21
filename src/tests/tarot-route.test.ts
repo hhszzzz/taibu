@@ -4,6 +4,7 @@ import { NextRequest } from 'next/server';
 import { captureConsoleErrors, ensureRouteTestEnv, mockAIFeatureState, mockAIRateLimit, mockRouteUserContext, blockRouteNetwork } from './helpers/route-mock';
 import { createMockUIMessageResult } from './helpers/ui-message-result';
 import { createMockAuthContext } from './helpers/supabase-mock';
+import { createMockScopedDb } from './helpers/db-mock';
 import type { CreateAIAnalysisParams } from '../lib/ai/ai-analysis';
 
 ensureRouteTestEnv();
@@ -20,6 +21,33 @@ const aiModule = require('../lib/ai/ai') as typeof import('../lib/ai/ai');
 const aiAnalysisModule = require('../lib/ai/ai-analysis') as typeof import('../lib/ai/ai-analysis');
 const chartPromptDetailModule = require('../lib/ai/chart-prompt-detail') as typeof import('../lib/ai/chart-prompt-detail');
 const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
+
+function scopedTarot(options: {
+    captureInsert?: (payload: Record<string, unknown>) => void;
+    insertResult?: (payload: Record<string, unknown>) => Record<string, unknown>;
+} = {}) {
+    return createMockScopedDb({
+        tx: async (work) => work({
+            insertInto(table: string) {
+                assert.equal(table, 'tarot_readings');
+                return {
+                    values(payload: Record<string, unknown>) {
+                        options.captureInsert?.(payload);
+                        return {
+                            returning() {
+                                return {
+                                    async executeTakeFirst() {
+                                        return options.insertResult?.(payload) ?? { id: 'reading-1' };
+                                    },
+                                };
+                            },
+                        };
+                    },
+                };
+            },
+        } as never),
+    });
+}
 
 test('tarot route uses schema column names when inserting history', async (t) => {
     mockAIFeatureState(t);
@@ -236,32 +264,13 @@ test('tarot route returns 400 for invalid timezone on GET daily requests', async
 test('tarot route returns numerology on draw-only and persists birth metadata on save', async (t) => {
 
     const insertCalls: Record<string, unknown>[] = [];
-    const saveClient = {
-        from(table: string) {
-            assert.equal(table, 'tarot_readings');
-            return {
-                insert(payload: Record<string, unknown>) {
-                    insertCalls.push(payload);
-                    return {
-                        select() {
-                            return {
-                                single: async () => ({
-                                    data: { id: 'reading-1' },
-                                    error: null,
-                                }),
-                            };
-                        },
-                    };
-                },
-            };
-        },
-    };
+    const scoped = scopedTarot({ captureInsert: (payload) => { insertCalls.push(payload); } });
 
     t.mock.method(apiUtilsModule, 'getAuthContext', async () =>
         createMockAuthContext({}, null));
 
     t.mock.method(apiUtilsModule, 'requireUserContext', async () =>
-        createMockAuthContext(saveClient, 'user-1'));
+        createMockAuthContext({}, 'user-1', scoped));
 
     const { POST } = await import('../app/api/tarot/route');
 
@@ -369,35 +378,21 @@ test('tarot save should fail fast when metadata column is missing', async (t) =>
 
     const inserted: Record<string, unknown>[] = [];
     let insertAttempts = 0;
-    const saveClient = {
-        from(table: string) {
-            assert.equal(table, 'tarot_readings');
-            return {
-                insert(payload: Record<string, unknown>) {
-                    insertAttempts += 1;
-                    inserted.push(payload);
-                    return {
-                        select() {
-                            return {
-                                single: async () => ({
-                                    data: 'metadata' in payload ? null : { id: 'reading-2' },
-                                    error: 'metadata' in payload
-                                        ? {
-                                            message: 'column \"metadata\" of relation \"tarot_readings\" does not exist',
-                                            code: 'PGRST204',
-                                        }
-                                        : null,
-                                }),
-                            };
-                        },
-                    };
-                },
-            };
+    const scoped = scopedTarot({
+        captureInsert: (payload) => {
+            insertAttempts += 1;
+            inserted.push(payload);
         },
-    };
+        insertResult: (payload) => {
+            if ('metadata' in payload) {
+                throw new Error('column \"metadata\" of relation \"tarot_readings\" does not exist');
+            }
+            return { id: 'reading-2' };
+        },
+    });
 
     t.mock.method(apiUtilsModule, 'requireUserContext', async () =>
-        createMockAuthContext(saveClient, 'user-1'));
+        createMockAuthContext({}, 'user-1', scoped));
 
     const { POST } = await import('../app/api/tarot/route');
 
@@ -438,29 +433,13 @@ test('tarot save should fail fast when metadata column is missing', async (t) =>
 test('tarot spread persists reading for cookie-authenticated users without bearer header', async (t) => {
 
     const insertCalls: Record<string, unknown>[] = [];
-    const persistClient = {
-        from(table: string) {
-            assert.equal(table, 'tarot_readings');
-            return {
-                insert(payload: Record<string, unknown>) {
-                    insertCalls.push(payload);
-                    return {
-                        select() {
-                            return {
-                                single: async () => ({
-                                    data: { id: 'reading-cookie' },
-                                    error: null,
-                                }),
-                            };
-                        },
-                    };
-                },
-            };
-        },
-    };
+    const scoped = scopedTarot({
+        captureInsert: (payload) => { insertCalls.push(payload); },
+        insertResult: () => ({ id: 'reading-cookie' }),
+    });
 
     t.mock.method(apiUtilsModule, 'getAuthContext', async () =>
-        createMockAuthContext(persistClient, 'user-cookie'));
+        createMockAuthContext({}, 'user-cookie', scoped));
 
     const { POST } = await import('../app/api/tarot/route');
     const response = await POST(new NextRequest('http://localhost/api/tarot', {
@@ -494,16 +473,11 @@ test('tarot pilot draws, saves and prepares BYOK before independently authentica
     const writes: CreateAIAnalysisParams[] = [];
     let contextLoads = 0;
     let authCalls = 0;
-    const saveClient = {
-        from(table: string) {
-            assert.equal(table, 'tarot_readings');
-            return { insert: (payload: Record<string, unknown>) => {
-                assert.equal(payload.user_id, 'user-1');
-                return { select: () => ({ single: async () => ({ data: { id: 'reading-pilot' }, error: null }) }) };
-            } };
-        },
-    };
-    mockRouteUserContext(t, saveClient);
+    const scoped = scopedTarot({
+        captureInsert: (payload) => assert.equal(payload.user_id, 'user-1'),
+        insertResult: () => ({ id: 'reading-pilot' }),
+    });
+    t.mock.method(apiUtils, 'requireUserContext', async () => createMockAuthContext({}, 'user-1', scoped));
     const authenticate = apiUtils.requireUserContext;
     t.mock.method(apiUtils, 'requireUserContext', async (...args: Parameters<typeof authenticate>) => {
         authCalls += 1;

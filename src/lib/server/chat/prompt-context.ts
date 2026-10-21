@@ -57,13 +57,11 @@ function mergeMentions(rawUserContent: string, mentions?: Mention[]): Mention[] 
 async function resolveMentionsForPrompt(
   mentions: Mention[],
   userId: string,
-  supabase: ReturnType<typeof getSystemAdminClient>,
   maxTokens: number,
   chartPromptDetailLevel: 'default' | 'more' | 'full',
 ): Promise<ResolvedMention[]> {
   return await Promise.all(mentions.map(async (mention) => {
     const resolvedContent = await resolveMention(mention, userId, {
-      client: supabase,
       db: systemDb(),
       maxTokens,
       chartPromptDetailLevel,
@@ -145,7 +143,7 @@ export async function buildChatPromptContext(
   };
 
   const resolvedMentions = userId
-    ? await resolveMentionsForPrompt(effectiveMentions, userId, supabase, mentionBudget, userSettings.chartPromptDetailLevel)
+    ? await resolveMentionsForPrompt(effectiveMentions, userId, mentionBudget, userSettings.chartPromptDetailLevel)
     : [];
 
   const effectiveUserSettings = applyUserSettingsOverrides(userSettings, {

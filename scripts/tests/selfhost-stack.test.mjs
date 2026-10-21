@@ -167,14 +167,15 @@ test('restore rejects traversal, absolute paths, symlinks and malformed tar', ()
   assert.throws(() => validateStorageArchive(archive('./link', '2')));
   assert.throws(() => validateStorageArchive(gzipSync(Buffer.from('broken'))));
 });
-test('compose exposes only loopback gateway and explicit service env', async () => {
+test('compose exposes only loopback gateway and database ports', async () => {
   const compose = await readFile(new URL('../../docker-compose.local.yml', import.meta.url), 'utf8');
-  assert.equal((compose.match(/^    ports:/gm) ?? []).length, 1);
+  assert.equal((compose.match(/^    ports:/gm) ?? []).length, 2);
   assert.match(compose, /127\.0\.0\.1:\$\{APP_PORT:\?\}:8000/);
+  assert.match(compose, /127\.0\.0\.1:\$\{DB_HOST_PORT:-54329\}:5432/);
   assert.doesNotMatch(compose, /container_name:|env_file:|network_mode: (?:host|service:)|\.env:/);
   assert.match(compose, /backend:\n    internal: true/);
   const web = compose.split('  web:')[1].split('  gateway:')[0];
-  assert.doesNotMatch(web, /SUPABASE_DB_URL|VECTOR_DB_PASSWORD|DB_PASSWORD|JWT_SECRET/);
+  assert.doesNotMatch(web, /SUPABASE_DB_URL|VECTOR_DB_PASSWORD|(?<!APP_)DB_PASSWORD|JWT_SECRET/);
   assert.match(web, /RATE_LIMIT_BACKEND: redis/);
 });
 test('orchestration fail-closed guards and persistent down remain explicit', async () => {

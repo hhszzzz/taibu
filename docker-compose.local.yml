@@ -19,6 +19,8 @@ services:
     environment:
       POSTGRES_DB: taibu
       POSTGRES_PASSWORD: ${DB_PASSWORD:?}
+    # Local-only loopback for `pnpm db:codegen` and DB contract tests.
+    ports: ['127.0.0.1:${DB_HOST_PORT:-54329}:5432']
     volumes: [database:/var/lib/postgresql/data]
     networks: [backend]
     logging: *logging
@@ -145,6 +147,10 @@ services:
       TAVILY_API_KEY: ${TAVILY_API_KEY:-}
       AGENT_MCP_SERVERS: ${AGENT_MCP_SERVERS:-}
       AGENT_CREDENTIAL_ENCRYPTION_KEY: ${AGENT_CREDENTIAL_ENCRYPTION_KEY:-}
+      DATABASE_URL: postgres://taibu_app:${APP_DB_PASSWORD:?}@db:5432/taibu
+      DB_POOL_MAX: '10'
+      DB_APPLICATION_NAME: taibu-web
+      SYSTEM_USER_ID: ${SYSTEM_USER_ID:-}
   worker:
     image: taibu-web:local
     restart: unless-stopped
@@ -154,6 +160,8 @@ services:
     environment:
       <<: *application-env
       AGENT_WORKER_CONCURRENCY: '2'
+      DB_POOL_MAX: '6'
+      DB_APPLICATION_NAME: taibu-worker
     command: [node, .agent/worker.mjs]
     healthcheck:
       test: [CMD, node, .agent/worker.mjs, --health]

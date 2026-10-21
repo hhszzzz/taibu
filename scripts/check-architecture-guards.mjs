@@ -1076,6 +1076,49 @@ mustNotMatch(
   'Query must own the conversation list without a second writable Context copy',
 );
 
+// P1 数据访问边界：只有 src/lib/db 可以持有 pg/Kysely；systemDb 仅限系统路径。
+const DB_SERVER_IMPORT = /from\s*['"]@\/lib\/db\/[^'"]+['"]/u;
+mustNotMatchInTree(
+  'src',
+  DB_SERVER_IMPORT,
+  'client components must not import the server database layer',
+  (file) => /\.(ts|tsx)$/u.test(file) && /^\s*['"]use client['"]/u.test(read(file) ?? ''),
+);
+mustNotMatchInTree(
+  'src',
+  /from\s*['"](?:pg|kysely)['"]/u,
+  'only src/lib/db may import pg or kysely',
+  (file) => /\.(ts|tsx)$/u.test(file) && !file.startsWith('src/lib/db/') && !file.startsWith('src/tests/'),
+);
+for (const file of walk('src/lib/db')) {
+  if (!file.endsWith('.server.ts')) continue;
+  mustMatch(file, /^\s*import\s+['"]server-only['"];?/u, 'db server modules must import server-only first');
+}
+const SYSTEM_DB_ALLOWED = [
+  'src/lib/jobs/',
+  'src/lib/identity/',
+  'src/lib/agent/',
+  'src/app/api/admin/',
+  'src/lib/reminders.ts',
+  'src/lib/daily-briefing.server.ts',
+];
+mustNotMatchInTree(
+  'src',
+  /import\s*\{[^}]*\bsystemDb\b[^}]*\}\s*from\s*['"]@\/lib\/db\/context\.server['"]/u,
+  'systemDb may only be used by whitelisted system paths',
+  (file) => /\.(ts|tsx)$/u.test(file)
+    && !file.startsWith('src/lib/db/')
+    && !file.startsWith('src/tests/')
+    && !SYSTEM_DB_ALLOWED.some((prefix) => file.startsWith(prefix)),
+);
+
+mustNotMatchInTree(
+  'src',
+  /from\s*['"]@\/lib\/db\/pool\.server['"]/u,
+  'pool internals are private to src/lib/db',
+  (file) => /\.(ts|tsx)$/u.test(file) && !file.startsWith('src/lib/db/') && !file.startsWith('src/tests/'),
+);
+
 if (failures.length > 0) {
   console.error('Architecture guard failures:');
   for (const failure of failures) {

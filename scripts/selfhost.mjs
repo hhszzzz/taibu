@@ -127,7 +127,10 @@ export async function localDocker() {
 }
 function runner(state, env) {
   const prefix = ['compose', '--project-directory', ROOT, '--env-file', path.join(state.directory, 'compose.env'), '-f', COMPOSE, '-p', state.config.LOCAL_PROJECT, ...(state.config.DEMO_ENABLED === 'true' ? ['--profile', 'demo'] : [])];
-  const compose = (args, options = {}) => execute('docker', [...prefix, ...args], { env, ...options });
+  // taibu_app never receives a persisted secret: the password is derived from
+  // the stack's existing JWT secret so old private configs stay valid.
+  const composeEnv = { ...env, APP_DB_PASSWORD: appDbPassword(state.config), SYSTEM_USER_ID: state.systemUserId ?? '' };
+  const compose = (args, options = {}) => execute('docker', [...prefix, ...args], { env: composeEnv, ...options });
   const sql = (input, phase = '数据库查询') => compose(['exec', '-T', 'db', 'psql', '-X', '-qAt', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', 'taibu'], { input, phase });
   return { compose, sql, env };
 }
@@ -201,6 +204,28 @@ REVOKE ALL ON SCHEMA local_stack FROM PUBLIC;
 CREATE TABLE local_stack.state (id boolean PRIMARY KEY DEFAULT true CHECK(id), instance_id text NOT NULL, fingerprint text, storage_ready boolean NOT NULL DEFAULT false, seeded boolean NOT NULL DEFAULT false);
 INSERT INTO local_stack.state(id,instance_id) VALUES(true,${quote(config.LOCAL_INSTANCE_ID)});
 COMMIT;`;
+}
+export function appDbPassword(config) {
+  return createHmac('sha256', config.JWT_SECRET).update('taibu_app').digest('hex');
+}
+/**
+ * Least-privilege application login. It owns nothing and inherits nothing, so a
+ * query without a transaction-local role fails closed. Kept outside rolesSQL:
+ * it carries no schema objects and must reach existing local volumes.
+ */
+async function ensureAppRole(run, config) {
+  await run.sql(`DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'taibu_app') THEN
+    CREATE ROLE taibu_app LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+  END IF;
+END $$;
+GRANT anon, authenticated TO taibu_app WITH INHERIT FALSE, SET TRUE;
+ALTER ROLE taibu_app PASSWORD ${quote(appDbPassword(config))};
+ALTER ROLE taibu_app SET search_path TO public, extensions;
+ALTER ROLE taibu_app SET statement_timeout TO '15s';
+ALTER ROLE taibu_app SET lock_timeout TO '5s';
+ALTER ROLE taibu_app SET idle_in_transaction_session_timeout TO '30s';`, '应用角色初始化');
+  await run.sql('GRANT CONNECT ON DATABASE taibu TO taibu_app; GRANT USAGE ON SCHEMA public, extensions TO taibu_app;', '应用角色授权');
 }
 async function bootstrapRoles(run, config) {
   const exists = (await run.sql("SELECT to_regclass('local_stack.state') IS NOT NULL")).trim();
@@ -507,6 +532,7 @@ async function up(state, run, build = false) {
   await assertOwnedVolumes(state, run.env);
   await run.compose(['up', '-d', '--wait', 'db'], { phase: '数据库启动' });
   await bootstrapRoles(run, state.config);
+  await ensureAppRole(run, state.config);
   // Recover a privilege left behind by an uncatchable previous process exit.
   await run.sql('REVOKE CREATE ON DATABASE taibu FROM supabase_storage_admin;', '清理文件存储迁移临时授权');
   await run.compose(['up', '-d', 'auth', 'gateway'], { phase: '身份服务与网关启动' });
@@ -525,6 +551,9 @@ async function up(state, run, build = false) {
   else await withStorageMigrationPrivilege(run.sql, startStorage);
   if (!storageReady) await run.sql(`BEGIN;\n${bundle.storage}\nUPDATE local_stack.state SET storage_ready=true;\nCOMMIT;`, '文件存储策略初始化');
   await seed(run, state.config);
+  // Temporary P1–P4 bridge: systemDb() impersonates the seeded administrator.
+  state.systemUserId = (await run.sql('SELECT id FROM public.users WHERE is_admin ORDER BY created_at LIMIT 1')).trim();
+  if (!state.systemUserId) throw new Error('未能确定本地系统管理员');
   await ensureDemoModels(run, state.config);
   await run.compose(['up', '-d', ...(build ? ['--build'] : []), 'functions', 'web', 'worker', ...(state.config.DEMO_ENABLED === 'true' ? ['demo'] : [])], { timeout: 1_200_000 });
   // Reload the bind-mounted offline model after a local code update.

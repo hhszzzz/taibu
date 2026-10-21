@@ -1,4 +1,5 @@
-import { getSystemAdminClient } from '@/lib/api-utils';
+import { systemDb } from '@/lib/db/context.server';
+import { escapeLike } from '@/lib/db/sql-helpers';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
 import type { DataSourceQueryContext } from '@/lib/data-sources/provider.server';
 import { getProvider } from '@/lib/data-sources';
@@ -72,21 +73,19 @@ export async function searchMentionTargets(
 }
 
 async function searchKnowledgeBases(userId: string, query: string, ctx?: DataSourceQueryContext): Promise<MentionTarget[]> {
-    const supabase = ctx?.client ?? getSystemAdminClient();
-    let q = supabase
-        .from('knowledge_bases')
-        .select('id, name, description, created_at')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(20);
-
+    const db = ctx?.db ?? systemDb();
     const keyword = query.trim();
-    if (keyword) {
-        q = q.ilike('name', `%${keyword}%`);
-    }
-
-    const { data } = await q;
-    return (data || []).map((kb: { id: string; name: string; description: string | null }) => ({
+    const rows = await db.tx((trx) => {
+        let q = trx
+            .selectFrom('knowledge_bases')
+            .select(['id', 'name', 'description'])
+            .where('user_id', '=', userId);
+        if (keyword) {
+            q = q.where('name', 'ilike', `%${escapeLike(keyword)}%`);
+        }
+        return q.orderBy('created_at', 'desc').limit(20).execute();
+    }).catch(() => []);
+    return rows.map((kb) => ({
         id: kb.id,
         type: 'knowledge_base',
         name: kb.name,
@@ -117,13 +116,13 @@ export async function resolveMention(mention: Mention, userId: string, ctx?: Dat
 }
 
 async function resolveKnowledgeBase(kbId: string, userId: string, ctx?: DataSourceQueryContext): Promise<string> {
-    const supabase = ctx?.client ?? getSystemAdminClient();
-    const { data: kb } = await supabase
-        .from('knowledge_bases')
-        .select('id, name, description, weight')
-        .eq('id', kbId)
-        .eq('user_id', userId)
-        .maybeSingle();
+    const db = ctx?.db ?? systemDb();
+    const kb = await db.tx((trx) => trx
+        .selectFrom('knowledge_bases')
+        .select(['id', 'name', 'description', 'weight'])
+        .where('id', '=', kbId)
+        .where('user_id', '=', userId)
+        .executeTakeFirst()).catch(() => undefined);
 
     if (!kb) return '';
 
@@ -151,14 +150,16 @@ async function resolveKnowledgeBase(kbId: string, userId: string, ctx?: DataSour
         if (entriesUsed >= entryLimit) break;
         const remainingEntries = entryLimit - entriesUsed;
         const rangeSize = Math.min(pageSize, remainingEntries);
-        const { data } = await supabase
-            .from('knowledge_entries')
-            .select('content, created_at')
-            .eq('kb_id', kbId)
-            .order('created_at', { ascending: false })
-            .range(offset, offset + rangeSize - 1);
-        if (!data || data.length === 0) break;
-        for (const row of data as Array<{ content: string | null }>) {
+        const rows = await db.tx((trx) => trx
+            .selectFrom('knowledge_entries')
+            .select(['content'])
+            .where('kb_id', '=', kbId)
+            .orderBy('created_at', 'desc')
+            .offset(offset)
+            .limit(rangeSize)
+            .execute()).catch(() => []);
+        if (rows.length === 0) break;
+        for (const row of rows) {
             if (entriesUsed >= entryLimit) break;
             const raw = typeof row.content === 'string' ? row.content : '';
             if (!raw) continue;
@@ -189,7 +190,7 @@ async function resolveKnowledgeBase(kbId: string, userId: string, ctx?: DataSour
                 break;
             }
         }
-        if (data.length < pageSize) break;
+        if (rows.length < pageSize) break;
         if ((remainingTokens != null && remainingTokens <= 0) || (remainingChars != null && remainingChars <= 0)) {
             break;
         }

@@ -1,5 +1,5 @@
 import 'server-only';
-import { createAnonClient } from '@/lib/api-utils';
+import { anonDb } from '@/lib/db/context.server';
 import { isShareToken, parseSharedSnapshot, type SharedMessage } from './conversation-share';
 
 export type PublicConversationShare = {
@@ -18,9 +18,10 @@ type PublicShareRow = { title: string; snapshot: unknown; include_charts: boolea
  */
 export async function loadPublicShare(token: string): Promise<PublicConversationShare | null> {
     if (!isShareToken(token)) return null;
-    const { data, error } = await createAnonClient().rpc('get_conversation_share', { p_token: token });
-    if (error) throw new Error('读取分享失败');
-    const row = (Array.isArray(data) ? data[0] : null) as PublicShareRow | null | undefined;
+    const rows = await anonDb().rpc('get_conversation_share', { p_token: token }).catch(() => {
+        throw new Error('读取分享失败');
+    });
+    const row = (Array.isArray(rows) ? rows[0] : null) as PublicShareRow | null | undefined;
     if (!row) return null;
     return {
         title: row.title || '对话',

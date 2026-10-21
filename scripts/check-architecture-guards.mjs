@@ -1110,6 +1110,9 @@ const SYSTEM_DB_ALLOWED = [
   'src/lib/notification-server.ts',
   'src/app/api/announcements/route.ts',
   'src/lib/chat/chat-context.ts',
+  'src/lib/ai/ai-analysis.ts',
+  'src/lib/server/chat/prompt-context.ts',
+  'src/lib/mentions.ts',
 ];
 mustNotMatchInTree(
   'src',

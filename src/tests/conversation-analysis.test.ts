@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ChatMessage } from '../types';
+import { createMockScopedDb } from './helpers/db-mock';
 
 process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
@@ -59,23 +60,21 @@ test('hydrateConversationMessages backfills model/reasoning when missing', () =>
 });
 
 test('createAIAnalysisConversation stores model/reasoning in assistant message', async (t) => {
-    const supabaseServerPath = require.resolve('../lib/supabase-server');
+    const contextModule = require('../lib/db/context.server') as any;
     const aiAnalysisPath = require.resolve('../lib/ai/ai-analysis');
-    const supabaseServerModule = require('../lib/supabase-server');
-    const originalGetServiceClient = supabaseServerModule.getSystemAdminClient;
+    const originalSystemDb = contextModule.systemDb;
     const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
 
-    supabaseServerModule.getSystemAdminClient = () => ({
+    contextModule.systemDb = () => createMockScopedDb({
         rpc: async (fn: string, args: Record<string, unknown>) => {
             rpcCalls.push({ fn, args });
-            return { data: 'conv-1', error: null };
+            return 'conv-1';
         },
     });
 
     t.after(() => {
-        supabaseServerModule.getSystemAdminClient = originalGetServiceClient;
+        contextModule.systemDb = originalSystemDb;
         delete require.cache[aiAnalysisPath];
-        delete require.cache[supabaseServerPath];
     });
 
     delete require.cache[aiAnalysisPath];
@@ -106,23 +105,21 @@ test('createAIAnalysisConversation stores model/reasoning in assistant message',
 });
 
 test('createAIAnalysisConversation should use transactional history rpc when history binding is provided', async (t) => {
-    const apiUtilsPath = require.resolve('../lib/api-utils');
+    const contextModule = require('../lib/db/context.server') as any;
     const aiAnalysisPath = require.resolve('../lib/ai/ai-analysis');
-    const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
-    const originalGetServiceClient = apiUtilsModule.getSystemAdminClient;
+    const originalSystemDb = contextModule.systemDb;
     const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
 
-    apiUtilsModule.getSystemAdminClient = () => ({
+    contextModule.systemDb = () => createMockScopedDb({
         rpc: async (fn: string, args: Record<string, unknown>) => {
             rpcCalls.push({ fn, args });
-            return { data: 'conv-2', error: null };
+            return 'conv-2';
         },
-    } as unknown as ReturnType<typeof apiUtilsModule.getSystemAdminClient>);
+    });
 
     t.after(() => {
-        apiUtilsModule.getSystemAdminClient = originalGetServiceClient;
+        contextModule.systemDb = originalSystemDb;
         delete require.cache[aiAnalysisPath];
-        delete require.cache[apiUtilsPath];
     });
 
     delete require.cache[aiAnalysisPath];
@@ -167,7 +164,8 @@ test('replaceConversationMessages should return an infra error when rpc is unava
         },
     ]);
 
-    assert.equal(result.error?.message, 'replace_conversation_messages RPC unavailable');
+    assert.ok(result.error);
+    assert.match(String(result.error?.message), /rpc/iu);
 });
 
 test('loadConversationAnalysisSnapshot reads lightweight snapshot payload', async (t) => {

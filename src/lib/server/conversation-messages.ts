@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { ScopedDb } from '@/lib/db/context.server';
 import type { ChatMessage } from '@/types';
 
 export type StoredConversationMessageRow = {
@@ -18,6 +18,7 @@ type MessagePageOptions = {
 type ConversationMessageSyncError = { message?: string; code?: string };
 
 const CHAT_MESSAGE_ROLES: ReadonlySet<ChatMessage['role']> = new Set(['user', 'assistant', 'system']);
+const MESSAGE_COLUMNS = ['sequence', 'message_id', 'role', 'content', 'metadata', 'created_at'] as const;
 
 function toSyncError(error: unknown): ConversationMessageSyncError | null {
     if (!error) return null;
@@ -83,70 +84,80 @@ function fromStoredConversationMessage(row: StoredConversationMessageRow): ChatM
 }
 
 export async function replaceConversationMessages(
-    supabase: SupabaseClient,
+    db: ScopedDb,
     conversationId: string,
     messages: ChatMessage[]
 ) : Promise<{ error: ConversationMessageSyncError | null }> {
-    if (typeof supabase.rpc !== 'function') {
-        return {
-            error: {
-                message: 'replace_conversation_messages RPC unavailable',
-            },
-        };
+    try {
+        await db.rpc('replace_conversation_messages', {
+            p_conversation_id: conversationId,
+            p_messages: messages,
+        });
+        return { error: null };
+    } catch (error) {
+        return { error: toSyncError(error) };
     }
-
-    const { error } = await supabase.rpc('replace_conversation_messages', {
-        p_conversation_id: conversationId,
-        p_messages: messages,
-    });
-
-    return { error: toSyncError(error) };
 }
 
 export async function loadAllConversationMessages(
-    supabase: SupabaseClient,
+    db: ScopedDb,
     conversationId: string,
 ) {
-    const { data, error } = await supabase
-        .from('conversation_messages')
-        .select('sequence, message_id, role, content, metadata, created_at')
-        .eq('conversation_id', conversationId)
-        .order('sequence', { ascending: true });
+    try {
+        const rows = await db.tx((trx) => trx
+            .selectFrom('conversation_messages')
+            .select([...MESSAGE_COLUMNS])
+            .where('conversation_id', '=', conversationId)
+            .orderBy('sequence', 'asc')
+            .execute());
 
-    if (error) {
+        return {
+            messages: (rows as StoredConversationMessageRow[]).map(fromStoredConversationMessage),
+            error: null,
+        };
+    } catch (error) {
         return {
             messages: [],
             error,
         };
     }
-
-    if (!data?.length) {
-        return {
-            messages: [],
-            error: null,
-        };
-    }
-
-    return {
-        messages: (data as StoredConversationMessageRow[]).map(fromStoredConversationMessage),
-        error: null,
-    };
 }
 
 export async function loadConversationMessagePage(
-    supabase: SupabaseClient,
+    db: ScopedDb,
     conversationId: string,
     options: MessagePageOptions,
 ) {
     const { limit, offset } = options;
-    const { data, error, count } = await supabase
-        .from('conversation_messages')
-        .select('sequence, message_id, role, content, metadata, created_at', { count: 'exact' })
-        .eq('conversation_id', conversationId)
-        .order('sequence', { ascending: false })
-        .range(offset, offset + limit - 1);
+    try {
+        const [rows, countRow] = await db.tx(async (trx) => Promise.all([
+            trx
+                .selectFrom('conversation_messages')
+                .select([...MESSAGE_COLUMNS])
+                .where('conversation_id', '=', conversationId)
+                .orderBy('sequence', 'desc')
+                .offset(offset)
+                .limit(limit)
+                .execute(),
+            trx
+                .selectFrom('conversation_messages')
+                .select((eb) => eb.fn.countAll<number>().as('count'))
+                .where('conversation_id', '=', conversationId)
+                .executeTakeFirstOrThrow(),
+        ]));
 
-    if (error) {
+        const orderedMessages = (rows as StoredConversationMessageRow[])
+            .map(fromStoredConversationMessage)
+            .reverse();
+        const total = countRow.count;
+
+        return {
+            messages: orderedMessages,
+            total,
+            hasMore: total > offset + orderedMessages.length,
+            error: null,
+        };
+    } catch (error) {
         return {
             messages: [],
             total: 0,
@@ -154,43 +165,32 @@ export async function loadConversationMessagePage(
             error,
         };
     }
-
-    const orderedMessages = (data as StoredConversationMessageRow[])
-        .map(fromStoredConversationMessage)
-        .reverse();
-
-    return {
-        messages: orderedMessages,
-        total: count ?? orderedMessages.length,
-        hasMore: (count ?? orderedMessages.length) > offset + orderedMessages.length,
-        error: null,
-    };
 }
 
 export async function loadConversationAnalysisMessage(
-    supabase: SupabaseClient,
+    db: ScopedDb,
     conversationId: string,
 ) {
-    const { data, error } = await supabase
-        .from('conversation_messages')
-        .select('sequence, message_id, role, content, metadata, created_at')
-        .eq('conversation_id', conversationId)
-        .eq('role', 'assistant')
-        .order('sequence', { ascending: true })
-        .limit(1)
-        .maybeSingle();
+    try {
+        const row = await db.tx((trx) => trx
+            .selectFrom('conversation_messages')
+            .select([...MESSAGE_COLUMNS])
+            .where('conversation_id', '=', conversationId)
+            .where('role', '=', 'assistant')
+            .orderBy('sequence', 'asc')
+            .limit(1)
+            .executeTakeFirst());
 
-    if (error) {
+        return {
+            message: row ? fromStoredConversationMessage(row as StoredConversationMessageRow) : null,
+            error: null,
+        };
+    } catch (error) {
         return {
             message: null,
             error,
         };
     }
-
-    return {
-        message: data ? fromStoredConversationMessage(data as StoredConversationMessageRow) : null,
-        error: null,
-    };
 }
 
 export function mapConversationMessagesForInsert(conversationId: string, messages: ChatMessage[]) {

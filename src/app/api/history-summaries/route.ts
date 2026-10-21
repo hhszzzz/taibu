@@ -1,107 +1,109 @@
 import { type NextRequest } from 'next/server';
 import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
+import type { ScopedDb } from '@/lib/db/context.server';
+import { selectFromDynamic } from '@/lib/db/sql-helpers';
 import {
     buildHistoryRestorePayload,
     buildHistorySummary,
     HISTORY_CONFIG,
     isHistoryType,
+    type HistoryType,
 } from '@/lib/history/registry';
 
 type HistoryRow = Record<string, unknown>;
 
+type AuthenticatedContext = Exclude<Awaited<ReturnType<typeof requireUserContext>>, { error: unknown }>;
+
 function toHistoryRow(value: unknown): HistoryRow | null {
-    if (!value || typeof value !== 'object' || Array.isArray(value) || 'error' in value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
         return null;
     }
     return value as HistoryRow;
 }
 
+/** HISTORY_CONFIG.summarySelect mixes scalar columns with a PostgREST embed; keep only scalars. */
+function summaryColumns(type: HistoryType): string[] {
+    return HISTORY_CONFIG[type].summarySelect
+        .split(',')
+        .map((column) => column.trim())
+        .filter((column) => column.length > 0 && !column.startsWith('conversation:'));
+}
+
+/** Restore the `conversation:conversations(source_data)` embed the summaries read model. */
+async function attachConversations(db: ScopedDb, rows: HistoryRow[]): Promise<HistoryRow[]> {
+    const ids = [...new Set(rows.flatMap((row) => (
+        typeof row.conversation_id === 'string' ? [row.conversation_id] : []
+    )))];
+    if (ids.length === 0) return rows.map((row) => ({ ...row, conversation: null }));
+
+    const conversations = await db.tx((trx) => trx
+        .selectFrom('conversations')
+        .select(['id', 'source_data'])
+        .where('id', 'in', ids)
+        .execute());
+    const byId = new Map(conversations.map((conversation) => [conversation.id, conversation] as const));
+    return rows.map((row) => ({
+        ...row,
+        conversation: typeof row.conversation_id === 'string' ? byId.get(row.conversation_id) ?? null : null,
+    }));
+}
+
 async function loadHistoryItems(
-    auth: Exclude<Awaited<ReturnType<typeof requireUserContext>>, { error: unknown }>,
-    type: keyof typeof HISTORY_CONFIG,
+    auth: AuthenticatedContext,
+    type: HistoryType,
     limit: number,
     offset: number,
 ) {
     const config = HISTORY_CONFIG[type];
-    const { data, error } = await auth.db
-        .from(config.tableName)
-        .select(config.summarySelect)
-        .eq('user_id', auth.user.id)
-        .order('created_at', { ascending: false })
-        .range(offset, offset + limit);
+    const result = await auth.scoped.tx((trx) => selectFromDynamic(trx, config.tableName)
+        .select(summaryColumns(type))
+        .where('user_id', '=', auth.user.id)
+        .orderBy('created_at', 'desc')
+        .offset(offset)
+        .limit(limit + 1)
+        .execute()).then((data) => ({ data, error: null }), (error) => ({ data: null, error }));
 
-    if (error) {
-        return { items: null, pagination: null, error };
+    if (result.error || !result.data) {
+        return { items: null, pagination: null, error: result.error ?? new Error('missing rows') };
     }
 
-    const rows = (data || []).flatMap((item) => {
+    const rows = result.data.flatMap((item) => {
         const row = toHistoryRow(item);
         return row ? [row] : [];
     });
     const hasMore = rows.length > limit;
     const pageRows = hasMore ? rows.slice(0, limit) : rows;
-    const items = await Promise.all(pageRows.map((row) => buildHistorySummary(type, row)));
 
-    return {
-        items,
-        pagination: {
-            hasMore,
-            nextOffset: hasMore ? offset + limit : null,
-        },
-        error: null,
-    };
+    try {
+        const enriched = await attachConversations(auth.scoped, pageRows);
+        const items = await Promise.all(enriched.map((row) => buildHistorySummary(type, row)));
+        return {
+            items,
+            pagination: {
+                hasMore,
+                nextOffset: hasMore ? offset + limit : null,
+            },
+            error: null,
+        };
+    } catch (error) {
+        return { items: null, pagination: null, error };
+    }
 }
 
-async function loadHistoryRestoreItem(
-    auth: Exclude<Awaited<ReturnType<typeof requireUserContext>>, { error: unknown }>,
-    type: keyof typeof HISTORY_CONFIG,
-    id: string,
-    timezone: string,
-) {
-    const config = HISTORY_CONFIG[type];
-    const { data, error } = await auth.db
-        .from(config.tableName)
-        .select('*')
-        .eq('id', id)
-        .eq('user_id', auth.user.id)
-        .maybeSingle();
-
-    if (error) {
-        return { item: null, error };
-    }
-
-    const row = toHistoryRow(data);
-    if (!row) {
-        return { item: null, error: null };
-    }
-
-    const item = await buildHistoryRestorePayload(type, row, timezone);
-    return { item, error: null };
-}
-
-async function loadHistoryDeleteContext(
-    auth: Exclude<Awaited<ReturnType<typeof requireUserContext>>, { error: unknown }>,
-    type: keyof typeof HISTORY_CONFIG,
+async function loadHistoryRow(
+    auth: AuthenticatedContext,
+    type: HistoryType,
     id: string,
 ) {
     const config = HISTORY_CONFIG[type];
-    const { data, error } = await auth.db
-        .from(config.tableName)
-        .select('*')
-        .eq('id', id)
-        .eq('user_id', auth.user.id)
-        .maybeSingle();
-
-    if (error) {
-        return { conversationId: null, error };
-    }
-
-    const row = toHistoryRow(data);
-    const conversationId = typeof row?.conversation_id === 'string'
-        ? row.conversation_id
-        : null;
-
-    return { conversationId, error: null };
+    return auth.scoped.tx((trx) => selectFromDynamic(trx, config.tableName)
+        .selectAll()
+        .where('id', '=', id)
+        .where('user_id', '=', auth.user.id)
+        .executeTakeFirst()).then(
+        (data) => ({ row: toHistoryRow(data), error: null }),
+        (error) => ({ row: null, error }),
+    );
 }
 
 export async function GET(request: NextRequest) {
@@ -123,14 +125,15 @@ export async function GET(request: NextRequest) {
     }
 
     if (id) {
-        const { item, error } = await loadHistoryRestoreItem(auth, type, id, timezone);
+        const { row, error } = await loadHistoryRow(auth, type, id);
         if (error) {
             console.error('[history-summaries] failed to restore history:', error);
             return jsonError('加载历史记录失败', 500);
         }
-        if (!item) {
+        if (!row) {
             return jsonError('未找到历史记录', 404);
         }
+        const item = await buildHistoryRestorePayload(type, row, timezone);
         return jsonOk({ item });
     }
 
@@ -155,16 +158,17 @@ export async function DELETE(request: NextRequest) {
         return jsonError('缺少有效的历史记录类型或 ID', 400);
     }
 
-    const { conversationId, error: contextError } = await loadHistoryDeleteContext(auth, type, id);
+    const { row, error: contextError } = await loadHistoryRow(auth, type, id);
     if (contextError) {
         console.error('[history-summaries] failed to load delete context:', contextError);
         return jsonError('删除历史记录失败', 500);
     }
+    const conversationId = typeof row?.conversation_id === 'string' ? row.conversation_id : null;
 
-    const { data, error } = await auth.db.rpc('delete_history_item_and_conversation', {
+    const { data, error } = await auth.scoped.rpc('delete_history_item_and_conversation', {
         p_history_type: type,
         p_history_id: id,
-    });
+    }).then((data) => ({ data, error: null }), (error) => ({ data: null, error }));
 
     if (error) {
         console.error('[history-summaries] failed to delete history transaction:', error);

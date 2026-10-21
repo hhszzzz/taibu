@@ -2,6 +2,7 @@ import 'server-only';
 
 import { buildPromptWithSources, calculatePromptBudget, resolvePersonalities } from '@/lib/ai/prompt-builder';
 import { getSystemAdminClient } from '@/lib/api-utils';
+import { systemDb } from '@/lib/db/context.server';
 import { buildKnowledgeHits } from '@/lib/knowledge-base/hits';
 import { parseMentions, resolveMention, stripMentionTokens } from '@/lib/mentions';
 import type { ChatMessage } from '@/types';
@@ -11,7 +12,7 @@ import { buildDreamContextPayload } from '@/lib/chat/chat-context';
 import { extractUserQuestion } from '@/lib/chat/message-utils';
 import type { ResolvedChatRequest } from '@/lib/server/chat/request';
 import { isFeatureModuleEnabled } from '@/lib/app-settings';
-import { normalizeUserSettings, type UserIdentityProfile, USER_SETTINGS_SELECT } from '@/lib/user/settings';
+import { getUserSettingsSnapshot, type UserIdentityProfile } from '@/lib/user/settings';
 import { normalizeVisualizationSettings, type VisualizationSettings } from '@/lib/visualization/settings';
 import { DEFAULT_DIMENSIONS } from '@/lib/visualization/dimensions';
 
@@ -63,6 +64,7 @@ async function resolveMentionsForPrompt(
   return await Promise.all(mentions.map(async (mention) => {
     const resolvedContent = await resolveMention(mention, userId, {
       client: supabase,
+      db: systemDb(),
       maxTokens,
       chartPromptDetailLevel,
     });
@@ -71,15 +73,9 @@ async function resolveMentionsForPrompt(
 }
 
 async function loadUserSettingsContext(
-  supabase: ReturnType<typeof getSystemAdminClient>,
   userId: string
 ): Promise<UserSettingsContext> {
-  const { data } = await supabase
-    .from('user_settings')
-    .select(USER_SETTINGS_SELECT)
-    .eq('user_id', userId)
-    .maybeSingle();
-  const settings = normalizeUserSettings((data ?? null) as Record<string, unknown> | null);
+  const { settings } = await getUserSettingsSnapshot(systemDb(), userId);
 
   return {
     expressionStyle: settings.expressionStyle,
@@ -140,7 +136,7 @@ export async function buildChatPromptContext(
     : mergedMentions.filter((mention) => mention.type !== 'knowledge_base');
 
   const mentionBudget = await calculatePromptBudget(requestedModelId, reasoningEnabled);
-  const userSettings = userId ? await loadUserSettingsContext(supabase, userId) : {
+  const userSettings = userId ? await loadUserSettingsContext(userId) : {
     expressionStyle: 'direct' as const,
     chartPromptDetailLevel: 'default' as const,
     userProfile: null,
@@ -161,18 +157,14 @@ export async function buildChatPromptContext(
 
   const promptKnowledgeBases = userId && canUsePromptKnowledgeBase && effectiveUserSettings.promptKbIds.length > 0
     ? await (async () => {
-      const { data: kbRows, error } = await supabase
-        .from('knowledge_bases')
-        .select('id, name')
-        .eq('user_id', userId)
-        .in('id', effectiveUserSettings.promptKbIds);
-
-      if (error) {
-        console.warn('[knowledge-base] enrichment failed', { stage: 'prompt-names' });
-        return [];
-      }
+      const kbRows = await systemDb().tx((trx) => trx
+        .selectFrom('knowledge_bases')
+        .select(['id', 'name'])
+        .where('user_id', '=', userId)
+        .where('id', 'in', effectiveUserSettings.promptKbIds)
+        .execute());
       const kbMap = new Map<string, { id: string; name: string }>();
-      ((kbRows || []) as Array<{ id: string; name: string }>).forEach((kb) => {
+      kbRows.forEach((kb) => {
         kbMap.set(kb.id, kb);
       });
 

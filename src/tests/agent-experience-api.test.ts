@@ -13,6 +13,7 @@ import { POST as fork } from '../app/api/conversations/[id]/fork/route';
 import { PATCH as configuration } from '../app/api/conversations/[id]/configuration/route';
 import { GET as memories, POST as saveMemory, DELETE as deleteMemory } from '../app/api/user/agent-memory/route';
 
+/** Hybrid double: legacy supabase-style `db` for not-yet-migrated routes, `scoped` for Kysely routes. */
 function fixture(t: TestContext) {
     const owner = randomUUID(), id = randomUUID();
     const calls: { table: string; field: string; value: unknown }[] = [];
@@ -43,8 +44,53 @@ function fixture(t: TestContext) {
         },
         storage: { from: () => ({ upload: async () => ({error:null}), download: async () => ({data:new Blob(['资料正文']),error:null}) }) },
     };
+    const unwrap = (value: unknown): unknown => {
+        if (!value || typeof value !== 'object' || !('toOperationNode' in value)) return value;
+        const node = (value as { toOperationNode(): { parameters?: { value?: unknown }[] } }).toOperationNode();
+        const parameter = node.parameters?.[0]?.value;
+        return typeof parameter === 'string' ? JSON.parse(parameter) : value;
+    };
+    const table = (name: string) => {
+        const query: Record<string, unknown> = {};
+        const read = () => {
+            if (errors[name]) throw errors[name];
+            const value = rows[name];
+            if (value === undefined) return [];
+            return Array.isArray(value) ? value : [value];
+        };
+        Object.assign(query, {
+            select: () => query,
+            selectAll: () => query,
+            where: (field: string, _operator: string, value: unknown) => { calls.push({ table: name, field, value }); return query; },
+            orderBy: () => query, limit: () => query, offset: () => query, groupBy: () => query,
+            innerJoin: () => query, leftJoin: () => query,
+            values: (value: unknown) => { inserts[name] = unwrap(value); return query; },
+            set: (value: unknown) => {
+                inserts[name] = Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, unwrap(entry)]));
+                return query;
+            },
+            returning: () => query, returningAll: () => query, onConflict: () => query,
+            execute: async () => read(),
+            executeTakeFirst: async () => read()[0] ?? null,
+            executeTakeFirstOrThrow: async () => {
+                const first = read()[0];
+                if (!first) throw new Error('not found');
+                return first;
+            },
+        });
+        return query;
+    };
+    const scoped = {
+        scope: { kind: 'user' as const, userId: owner },
+        tx: async (work: (trx: unknown) => unknown) => work({ selectFrom: table, insertInto: table, updateTable: table, deleteFrom: table }),
+        rpc: async (name: string, args?: Record<string, unknown>) => {
+            calls.push({ table: 'rpc', field: name, value: args });
+            if (rpcError) throw rpcError;
+            return rpcData;
+        },
+    };
     const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
-    t.mock.method(api,'requireUserContext',async () => createMockAuthContext(db,owner));
+    t.mock.method(api,'requireUserContext',async () => createMockAuthContext(db,owner,scoped as never));
     t.mock.method(api,'getSystemAdminClient',() => db as unknown as ReturnType<typeof api.getSystemAdminClient>);
     return { owner,id,db,calls,rows,errors,inserts,api,rpc(data:unknown,error:unknown=null){rpcData=data;rpcError=error;} };
 }

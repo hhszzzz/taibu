@@ -2,9 +2,37 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { mockAIFeatureState } from './helpers/route-mock';
+import { createMockScopedDb } from './helpers/db-mock';
 
 process.env.SUPABASE_URL = 'http://localhost';
 process.env.SUPABASE_ANON_KEY = 'test-anon';
+
+type Rows = {
+  user: Record<string, unknown>;
+  settings: Record<string, unknown>;
+  knowledgeBases: Array<Record<string, unknown>>;
+};
+
+function scopedWithRows(rows: Rows) {
+  return createMockScopedDb({
+    tx: async (work) => work({
+      selectFrom: (table: string) => ({
+        select: () => ({
+          where: () => {
+            const query = {
+              where: () => query,
+              executeTakeFirst: async () => (
+                table === 'users' ? rows.user : table === 'user_settings' ? rows.settings : undefined
+              ),
+              execute: async () => (table === 'knowledge_bases' ? rows.knowledgeBases : []),
+            };
+            return query;
+          },
+        }),
+      }),
+    } as never),
+  });
+}
 
 test('chat bootstrap route returns ordered prompt knowledge bases', async (t) => {
   mockAIFeatureState(t);
@@ -13,61 +41,15 @@ test('chat bootstrap route returns ordered prompt knowledge bases', async (t) =>
 
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
   apiUtilsModule.requireUserContext = async () => ({
-    user: { id: 'user-1' } as Awaited<ReturnType<typeof import('../lib/api-utils').getAuthContext>>['user'],
-    supabase: {
-      from(table: string) {
-        if (table === 'users') {
-          return {
-            select: () => ({
-              eq: () => ({
-                maybeSingle: async () => ({
-                  data: {
-                    id: 'user-1',
-                    membership: 'plus',
-                    membership_expires_at: null,
-                    ai_chat_count: 9,
-                  },
-                  error: null,
-                }),
-              }),
-            }),
-          };
-        }
-
-        if (table === 'user_settings') {
-          return {
-            select: () => ({
-              eq: () => ({
-                maybeSingle: async () => ({
-                  data: {
-                    prompt_kb_ids: ['kb-2', 'kb-1'],
-                  },
-                  error: null,
-                }),
-              }),
-            }),
-          };
-        }
-
-        if (table === 'knowledge_bases') {
-          return {
-            select: () => ({
-              eq: () => ({
-                in: async () => ({
-                  data: [
-                    { id: 'kb-1', name: '知识库一', description: 'one' },
-                    { id: 'kb-2', name: '知识库二', description: 'two' },
-                  ],
-                  error: null,
-                }),
-              }),
-            }),
-          };
-        }
-
-        throw new Error(`unexpected table: ${table}`);
-      },
-    } as never,
+    user: { id: 'user-1' },
+    scoped: scopedWithRows({
+      user: { id: 'user-1', membership: 'plus', membership_expires_at: null, ai_chat_count: 9 },
+      settings: { prompt_kb_ids: ['kb-2', 'kb-1'] },
+      knowledgeBases: [
+        { id: 'kb-1', name: '知识库一', description: 'one' },
+        { id: 'kb-2', name: '知识库二', description: 'two' },
+      ],
+    }),
   } as unknown as RequireUserContextResult);
 
   t.after(() => {
@@ -116,61 +98,15 @@ test('chat bootstrap route hides prompt knowledge bases for free membership', as
 
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
   apiUtilsModule.requireUserContext = async () => ({
-    user: { id: 'user-1' } as Awaited<ReturnType<typeof import('../lib/api-utils').getAuthContext>>['user'],
-    supabase: {
-      from(table: string) {
-        if (table === 'users') {
-          return {
-            select: () => ({
-              eq: () => ({
-                maybeSingle: async () => ({
-                  data: {
-                    id: 'user-1',
-                    membership: 'free',
-                    membership_expires_at: null,
-                    ai_chat_count: 1,
-                  },
-                  error: null,
-                }),
-              }),
-            }),
-          };
-        }
-
-        if (table === 'user_settings') {
-          return {
-            select: () => ({
-              eq: () => ({
-                maybeSingle: async () => ({
-                  data: {
-                    prompt_kb_ids: ['kb-2', 'kb-1'],
-                  },
-                  error: null,
-                }),
-              }),
-            }),
-          };
-        }
-
-        if (table === 'knowledge_bases') {
-          return {
-            select: () => ({
-              eq: () => ({
-                in: async () => ({
-                  data: [
-                    { id: 'kb-1', name: '知识库一', description: 'one' },
-                    { id: 'kb-2', name: '知识库二', description: 'two' },
-                  ],
-                  error: null,
-                }),
-              }),
-            }),
-          };
-        }
-
-        throw new Error(`unexpected table: ${table}`);
-      },
-    } as never,
+    user: { id: 'user-1' },
+    scoped: scopedWithRows({
+      user: { id: 'user-1', membership: 'free', membership_expires_at: null, ai_chat_count: 1 },
+      settings: { prompt_kb_ids: ['kb-2', 'kb-1'] },
+      knowledgeBases: [
+        { id: 'kb-1', name: '知识库一', description: 'one' },
+        { id: 'kb-2', name: '知识库二', description: 'two' },
+      ],
+    }),
   } as unknown as RequireUserContextResult);
 
   t.after(() => {
@@ -196,61 +132,15 @@ test('chat bootstrap route hides prompt knowledge bases when knowledge-base feat
   const originalIsFeatureModuleEnabled = appSettingsModule.isFeatureModuleEnabled;
 
   apiUtilsModule.requireUserContext = async () => ({
-    user: { id: 'user-1' } as Awaited<ReturnType<typeof import('../lib/api-utils').getAuthContext>>['user'],
-    supabase: {
-      from(table: string) {
-        if (table === 'users') {
-          return {
-            select: () => ({
-              eq: () => ({
-                maybeSingle: async () => ({
-                  data: {
-                    id: 'user-1',
-                    membership: 'plus',
-                    membership_expires_at: null,
-                    ai_chat_count: 9,
-                  },
-                  error: null,
-                }),
-              }),
-            }),
-          };
-        }
-
-        if (table === 'user_settings') {
-          return {
-            select: () => ({
-              eq: () => ({
-                maybeSingle: async () => ({
-                  data: {
-                    prompt_kb_ids: ['kb-2', 'kb-1'],
-                  },
-                  error: null,
-                }),
-              }),
-            }),
-          };
-        }
-
-        if (table === 'knowledge_bases') {
-          return {
-            select: () => ({
-              eq: () => ({
-                in: async () => ({
-                  data: [
-                    { id: 'kb-1', name: '知识库一', description: 'one' },
-                    { id: 'kb-2', name: '知识库二', description: 'two' },
-                  ],
-                  error: null,
-                }),
-              }),
-            }),
-          };
-        }
-
-        throw new Error(`unexpected table: ${table}`);
-      },
-    } as never,
+    user: { id: 'user-1' },
+    scoped: scopedWithRows({
+      user: { id: 'user-1', membership: 'plus', membership_expires_at: null, ai_chat_count: 9 },
+      settings: { prompt_kb_ids: ['kb-2', 'kb-1'] },
+      knowledgeBases: [
+        { id: 'kb-1', name: '知识库一', description: 'one' },
+        { id: 'kb-2', name: '知识库二', description: 'two' },
+      ],
+    }),
   } as unknown as RequireUserContextResult);
   appSettingsModule.isFeatureModuleEnabled = async () => false;
 

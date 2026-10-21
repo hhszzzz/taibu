@@ -1,10 +1,12 @@
 // Type-only server provider contract; browser DTOs and catalogs stay in types.ts.
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { ScopedDb } from '@/lib/db/context.server';
 import type { ChartTextDetailLevel } from '@/lib/divination/detail-level';
 import type { DataSourceSummary, DataSourceType } from '@/lib/data-sources/types';
 
 export type DataSourceQueryContext = {
     client?: SupabaseClient;
+    db?: ScopedDb;
     limit?: number;
     maxTokens?: number;
     maxChars?: number;

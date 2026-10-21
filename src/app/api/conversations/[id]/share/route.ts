@@ -1,5 +1,6 @@
 import { type NextRequest } from 'next/server';
-import { jsonError, jsonOk, requireUserContext, resolveRequestDbClient } from '@/lib/api-utils';
+import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
+import type { ScopedDb } from '@/lib/db/context.server';
 import { isValidUUID } from '@/lib/validation';
 import { loadAllConversationMessages } from '@/lib/server/conversation-messages';
 import { enrichConversationBasis } from '@/lib/chat/conversation-export.server';
@@ -14,7 +15,7 @@ import {
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-const SHARE_COLUMNS = 'token,conversation_id,title,include_charts,created_at,updated_at';
+const SHARE_COLUMNS = ['token', 'conversation_id', 'title', 'include_charts', 'created_at', 'updated_at'] as const;
 
 /** Shared prologue: caller, valid id, request database and an owned conversation. */
 async function ownedConversation(request: NextRequest, context: RouteContext) {
@@ -22,12 +23,25 @@ async function ownedConversation(request: NextRequest, context: RouteContext) {
     if ('error' in auth) return { ok: false as const, response: jsonError(auth.error.message, auth.error.status) };
     const { id } = await context.params;
     if (!isValidUUID(id)) return { ok: false as const, response: jsonError('对话 ID 无效', 400) };
-    const db = resolveRequestDbClient(auth);
-    if (!db) return { ok: false as const, response: jsonError('读取对话失败', 500) };
-    const { data, error } = await db.from('conversations').select('id,title,updated_at').eq('id', id).eq('user_id', auth.user.id).maybeSingle();
-    if (error) return { ok: false as const, response: jsonError('读取对话失败', 500) };
-    if (!data) return { ok: false as const, response: jsonError('对话不存在', 404) };
-    return { ok: true as const, auth, db, id, conversation: data as { id: string; title: string | null; updated_at: string } };
+    const result = await auth.scoped.tx((trx) => trx
+        .selectFrom('conversations')
+        .select(['id', 'title', 'updated_at'])
+        .where('id', '=', id)
+        .where('user_id', '=', auth.user.id)
+        .executeTakeFirst()).then(
+        (conversation) => ({ conversation, error: null }),
+        (error) => ({ conversation: null, error }),
+    );
+    if (result.error) return { ok: false as const, response: jsonError('读取对话失败', 500) };
+    const { conversation } = result;
+    if (!conversation) return { ok: false as const, response: jsonError('对话不存在', 404) };
+    return {
+        ok: true as const,
+        auth,
+        db: auth.scoped,
+        id,
+        conversation: conversation as { id: string; title: string | null; updated_at: string },
+    };
 }
 
 function shareRpcError(error: { code?: string } | null) {
@@ -38,17 +52,22 @@ function shareRpcError(error: { code?: string } | null) {
     return jsonError('更新公开链接失败', 500);
 }
 
-async function activeShare(db: NonNullable<ReturnType<typeof resolveRequestDbClient>>, userId: string, id: string) {
-    return db.from('conversation_shares').select(SHARE_COLUMNS)
-        .eq('conversation_id', id).eq('user_id', userId).is('revoked_at', null).maybeSingle();
+async function activeShare(db: ScopedDb, userId: string, id: string) {
+    return db.tx((trx) => trx
+        .selectFrom('conversation_shares')
+        .select([...SHARE_COLUMNS])
+        .where('conversation_id', '=', id)
+        .where('user_id', '=', userId)
+        .where('revoked_at', 'is', null)
+        .executeTakeFirst());
 }
 
 /** Current public link of the conversation, or null. */
 export async function GET(request: NextRequest, context: RouteContext) {
     const owned = await ownedConversation(request, context);
     if (!owned.ok) return owned.response;
-    const { data, error } = await activeShare(owned.db, owned.auth.user.id, owned.id);
-    if (error) return jsonError('读取公开链接失败', 500);
+    const data = await activeShare(owned.db, owned.auth.user.id, owned.id).catch(() => null);
+    if (data === null) return jsonError('读取公开链接失败', 500);
     return jsonOk({ share: data ? shareStateFromRow(data as ConversationShareRow) : null });
 }
 
@@ -72,23 +91,31 @@ export async function POST(request: NextRequest, context: RouteContext) {
         return jsonError('读取命盘依据失败', 500);
     }
     if (!snapshot.length) return jsonError('对话还没有可分享的内容', 400);
-    const result = await owned.db.rpc('upsert_conversation_share', {
-        p_conversation: owned.id,
-        p_token: createShareToken(),
-        p_title: normalizeShareTitle(owned.conversation.title),
-        p_snapshot: snapshot,
-        p_include_charts: includeCharts,
-        p_source_updated_at: owned.conversation.updated_at,
-    });
-    if (result.error || !result.data) return shareRpcError(result.error);
-    return jsonOk({ share: shareStateFromRow(result.data as ConversationShareRow) });
+    let data: unknown;
+    try {
+        data = await owned.db.rpc('upsert_conversation_share', {
+            p_conversation: owned.id,
+            p_token: createShareToken(),
+            p_title: normalizeShareTitle(owned.conversation.title),
+            p_snapshot: snapshot,
+            p_include_charts: includeCharts,
+            p_source_updated_at: owned.conversation.updated_at,
+        });
+    } catch (error) {
+        return shareRpcError(error as { code?: string });
+    }
+    if (!data) return shareRpcError(null);
+    return jsonOk({ share: shareStateFromRow(data as ConversationShareRow) });
 }
 
 /** Revoke the public link; the stored snapshot is purged in the same statement. */
 export async function DELETE(request: NextRequest, context: RouteContext) {
     const owned = await ownedConversation(request, context);
     if (!owned.ok) return owned.response;
-    const result = await owned.db.rpc('revoke_conversation_share', { p_conversation: owned.id });
-    if (result.error) return shareRpcError(result.error);
-    return jsonOk({ revoked: result.data === true });
+    try {
+        const revoked = await owned.db.rpc('revoke_conversation_share', { p_conversation: owned.id });
+        return jsonOk({ revoked: revoked === true });
+    } catch (error) {
+        return shareRpcError(error as { code?: string });
+    }
 }

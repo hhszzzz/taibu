@@ -328,6 +328,21 @@ export interface Conversations {
   next_task_config: ColumnType<Json | null, Json | null | undefined, Json | null | undefined>;
 }
 
+export interface ConversationsWithArchiveStatus {
+  id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  user_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  personality: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  title: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  messages: ColumnType<Json | null, Json | null | undefined, Json | null | undefined>;
+  created_at: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  updated_at: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  source_type: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  source_data: ColumnType<Json | null, Json | null | undefined, Json | null | undefined>;
+  is_archived: ColumnType<boolean | null, boolean | null | undefined, boolean | null | undefined>;
+  archived_kb_ids: ColumnType<unknown | null, unknown | null | undefined, unknown | null | undefined>;
+  has_agent_run: ColumnType<boolean | null, boolean | null | undefined, boolean | null | undefined>;
+}
+
 export interface CreditTransactions {
   id: Generated<string>;
   user_id: ColumnType<string, string, string>;
@@ -494,6 +509,23 @@ export interface MingRecords {
   is_pinned: Generated<boolean | null>;
   created_at: Generated<string | null>;
   updated_at: Generated<string | null>;
+}
+
+export interface MingRecordsWithArchiveStatus {
+  id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  user_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  title: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  content: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  category: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  tags: ColumnType<unknown | null, unknown | null | undefined, unknown | null | undefined>;
+  event_date: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  related_chart_type: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  related_chart_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  is_pinned: ColumnType<boolean | null, boolean | null | undefined, boolean | null | undefined>;
+  created_at: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  updated_at: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  is_archived: ColumnType<boolean | null, boolean | null | undefined, boolean | null | undefined>;
+  archived_kb_ids: ColumnType<unknown | null, unknown | null | undefined, unknown | null | undefined>;
 }
 
 export interface Notifications {
@@ -704,6 +736,7 @@ export interface DB {
   "conversation_messages": ConversationMessages;
   "conversation_shares": ConversationShares;
   "conversations": Conversations;
+  "conversations_with_archive_status": ConversationsWithArchiveStatus;
   "credit_transactions": CreditTransactions;
   "daily_briefing_jobs": DailyBriefingJobs;
   "daily_checkins": DailyCheckins;
@@ -718,6 +751,7 @@ export interface DB {
   "meihua_divinations": MeihuaDivinations;
   "ming_notes": MingNotes;
   "ming_records": MingRecords;
+  "ming_records_with_archive_status": MingRecordsWithArchiveStatus;
   "notifications": Notifications;
   "palm_readings": PalmReadings;
   "prompt_enhancement_usage": PromptEnhancementUsage;

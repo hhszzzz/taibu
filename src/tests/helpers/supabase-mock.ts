@@ -12,17 +12,18 @@ type MockAuthenticatedContext = AuthContextResult & {
     user: NonNullable<AuthContextResult['user']>;
 };
 
-export function createMockAuthContext(client?: Record<string, unknown>, userId?: string): MockAuthenticatedContext;
-export function createMockAuthContext(client: Record<string, unknown>, userId: null): AuthContextResult & { user: null };
+export function createMockAuthContext(client?: Record<string, unknown>, userId?: string, scoped?: AuthContextResult['scoped']): MockAuthenticatedContext;
+export function createMockAuthContext(client: Record<string, unknown>, userId: null, scoped?: AuthContextResult['scoped']): AuthContextResult & { user: null };
 export function createMockAuthContext(
     client: Record<string, unknown> = {},
     userId: string | null = 'user-1',
+    scoped: AuthContextResult['scoped'] = createMockScopedDb(),
 ): AuthContextResult {
     // Route doubles implement only the SDK methods exercised by each test.
     const db = client as unknown as AuthContextResult['db'];
     return {
         db,
-        scoped: createMockScopedDb(),
+        scoped,
         supabase: db,
         accessToken: userId === null ? null : 'test-token',
         authError: null,

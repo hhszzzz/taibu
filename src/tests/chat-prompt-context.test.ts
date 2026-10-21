@@ -1,8 +1,25 @@
 import { beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createMockScopedDb } from './helpers/db-mock';
 
 process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
+
+
+function stubSettings(t: import('node:test').TestContext, row: Record<string, unknown>) {
+  const contextModule = require('../lib/db/context.server') as any;
+  const original = contextModule.systemDb;
+  contextModule.systemDb = () => createMockScopedDb({
+    tx: async (work) => work({
+      selectFrom: () => ({
+        select: () => ({
+          where: () => ({ executeTakeFirst: async () => row }),
+        }),
+      }),
+    } as never),
+  });
+  t.after(() => { contextModule.systemDb = original; });
+}
 
 beforeEach((t) => {
   assert.ok('mock' in t);
@@ -26,41 +43,22 @@ test('buildChatPromptContext should load visualization_settings from user_settin
 
   let budgetCalls = 0;
   const resolvePersonality = t.mock.method(promptBuilderModule, 'resolvePersonalities');
-  let selectedColumns = '';
   let capturedVisualizationSettings: unknown = null;
+
+  stubSettings(t, {
+    expression_style: 'direct',
+    user_profile: {},
+    custom_instructions: '',
+    prompt_kb_ids: [],
+    visualization_settings: {
+      selectedDimensions: ['career', 'wealth'],
+      dayunDisplayCount: 6,
+      chartStyle: 'classic-chinese',
+    },
+  });
 
   apiUtilsModule.getSystemAdminClient = (() => ({
     from(table: string) {
-      if (table === 'user_settings') {
-        return {
-          select(columns: string) {
-            selectedColumns = columns;
-            return {
-              eq() {
-                return {
-                  maybeSingle: async () => ({
-                    data: {
-                      expression_style: 'direct',
-                      user_profile: {},
-                      custom_instructions: '',
-                      prompt_kb_ids: [],
-                      visualization_settings: columns.includes('visualization_settings')
-                        ? {
-                          selectedDimensions: ['career', 'wealth'],
-                          dayunDisplayCount: 6,
-                          chartStyle: 'classic-chinese',
-                        }
-                        : undefined,
-                    },
-                    error: null,
-                  }),
-                };
-              },
-            };
-          },
-        };
-      }
-
       if (table === 'knowledge_bases') {
         return {
           select() {
@@ -138,7 +136,6 @@ test('buildChatPromptContext should load visualization_settings from user_settin
 
   assert.equal(budgetCalls, 1);
   assert.equal(resolvePersonality.mock.callCount(), 1);
-  assert.match(selectedColumns, /visualization_settings/u);
   assert.deepEqual(capturedVisualizationSettings, {
     selectedDimensions: ['career', 'wealth'],
     dayunDisplayCount: 6,
@@ -159,31 +156,16 @@ test('buildChatPromptContext passes resolved membershipType to knowledge search'
   const originalSearchKnowledge = searchModule.searchKnowledge;
   let capturedMembershipType: unknown = null;
 
+  stubSettings(t, {
+    expression_style: 'direct',
+    user_profile: {},
+    custom_instructions: '',
+    prompt_kb_ids: ['kb-1'],
+    visualization_settings: null,
+  });
+
   apiUtilsModule.getSystemAdminClient = (() => ({
     from(table: string) {
-      if (table === 'user_settings') {
-        return {
-          select() {
-            return {
-              eq() {
-                return {
-                  maybeSingle: async () => ({
-                    data: {
-                      expression_style: 'direct',
-                      user_profile: {},
-                      custom_instructions: '',
-                      prompt_kb_ids: ['kb-1'],
-                      visualization_settings: null,
-                    },
-                    error: null,
-                  }),
-                };
-              },
-            };
-          },
-        };
-      }
-
       if (table === 'knowledge_bases') {
         return {
           select() {

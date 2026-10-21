@@ -1,22 +1,8 @@
 import { type NextRequest } from 'next/server';
-import { jsonError, jsonOk, requireUserContext, resolveRequestDbClient } from '@/lib/api-utils';
+import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
+import { jsonFieldText } from '@/lib/db/sql-helpers';
 import { isValidChatMessagePayload } from '@/lib/server/conversation-messages';
 import type { ChatMessage } from '@/types';
-
-const CONVERSATION_LIST_SELECT = [
-    'id',
-    'user_id',
-    'personality',
-    'title',
-    'created_at',
-    'updated_at',
-    'source_type',
-    'question_preview:source_data->>question',
-    'is_archived',
-    'archived_kb_ids',
-    // 「Agent 会话 / 普通对话」的派生标记（视图列：该会话是否跑过 Agent 任务，见 20261017_100000 迁移）。
-    'has_agent_run',
-].join(', ');
 
 function isObjectBody(value: unknown): value is Record<string, unknown> {
     return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -37,8 +23,6 @@ function normalizeConversationTitle(title: string | null | undefined): string | 
 export async function GET(request: NextRequest) {
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    const db = resolveRequestDbClient(auth);
-    if (!db) return jsonError('加载对话列表失败', 500);
 
     const { searchParams } = new URL(request.url);
     const includeArchived = searchParams.get('includeArchived') === 'true';
@@ -52,32 +36,46 @@ export async function GET(request: NextRequest) {
         return jsonError('mode 必须是 agent 或 plain', 400);
     }
 
-    let query = db
-        .from('conversations_with_archive_status')
-        .select(CONVERSATION_LIST_SELECT)
-        .eq('user_id', auth.user.id)
-        .order('updated_at', { ascending: false });
+    const rows = await auth.scoped.tx(async (trx) => {
+        let query = trx
+            .selectFrom('conversations_with_archive_status')
+            .select([
+                'id',
+                'user_id',
+                'personality',
+                'title',
+                'created_at',
+                'updated_at',
+                'source_type',
+                'is_archived',
+                'archived_kb_ids',
+                'has_agent_run',
+            ])
+            .select(jsonFieldText('source_data', 'question').as('question_preview'))
+            .where('user_id', '=', auth.user.id)
+            .orderBy('updated_at', 'desc');
 
-    if (mode) {
-        query = query.eq('has_agent_run', mode === 'agent');
-    }
-    if (!includeArchived) {
-        query = query.eq('is_archived', false);
-    }
-    if (sourceType) {
-        query = query.eq('source_type', sourceType);
-    }
-    if (chartId) {
-        query = query.eq('source_data->>chart_id', chartId);
-    }
+        if (mode) {
+            query = query.where('has_agent_run', '=', mode === 'agent');
+        }
+        if (!includeArchived) {
+            query = query.where('is_archived', '=', false);
+        }
+        if (sourceType) {
+            query = query.where('source_type', '=', sourceType);
+        }
+        if (chartId) {
+            query = query.where(jsonFieldText('source_data', 'chart_id'), '=', chartId);
+        }
 
-    const { data, error } = await query.range(offset, offset + limit);
-    if (error) {
+        return await query.offset(offset).limit(limit + 1).execute();
+    }).catch((error) => {
         console.error('[conversations] failed to load list:', error);
-        return jsonError('加载对话列表失败', 500);
-    }
+        return null;
+    });
 
-    const rows = data ?? [];
+    if (rows === null) return jsonError('加载对话列表失败', 500);
+
     const hasMore = rows.length > limit;
     const conversations = hasMore ? rows.slice(0, limit) : rows;
 
@@ -93,8 +91,6 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    const db = resolveRequestDbClient(auth);
-    if (!db) return jsonError('创建对话失败', 500);
 
     let body: {
         personality?: string;
@@ -135,17 +131,19 @@ export async function POST(request: NextRequest) {
         }
     }
 
-    const { data, error } = await db.rpc('create_conversation_with_messages', {
+    const data = await auth.scoped.rpc('create_conversation_with_messages', {
         p_user_id: auth.user.id,
         p_title: normalizedTitle || '新对话',
         p_personality: body.personality || 'general',
         p_source_type: null,
         p_source_data: null,
-        p_messages: initialMessages as ChatMessage[],
+        p_messages: initialMessages,
+    }).catch((error) => {
+        console.error('[conversations] failed to create conversation transactionally:', error);
+        return null;
     });
 
-    if (error || typeof data !== 'string') {
-        console.error('[conversations] failed to create conversation transactionally:', error || data);
+    if (typeof data !== 'string') {
         return jsonError('创建对话失败', 500);
     }
 

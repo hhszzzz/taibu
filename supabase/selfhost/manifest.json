@@ -1196,10 +1196,6 @@
         {
           "file": "src/lib/agent/tools.server.ts",
           "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/chat/conversation-export.server.ts",
-          "kind": "literal-from"
         }
       ]
     },
@@ -1241,10 +1237,6 @@
         },
         {
           "file": "src/lib/agent/store.server.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/chat/conversation-export.server.ts",
           "kind": "literal-from"
         }
       ]
@@ -1498,10 +1490,6 @@
           "kind": "literal-from"
         },
         {
-          "file": "src/app/api/search/route.ts",
-          "kind": "literal-from"
-        },
-        {
           "file": "src/app/api/user/charts/route.ts",
           "kind": "literal-from"
         },
@@ -1659,33 +1647,6 @@
         {
           "file": "src/lib/knowledge-base/ingest.ts",
           "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/server/conversation-messages.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/server/conversation-messages.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/server/conversation-messages.ts",
-          "kind": "literal-from"
-        }
-      ]
-    },
-    {
-      "name": "conversation_shares",
-      "kind": "table",
-      "status": "defined",
-      "callers": [
-        {
-          "file": "src/app/api/conversations/[id]/share/route.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/app/api/shares/route.ts",
-          "kind": "literal-from"
         }
       ]
     },
@@ -1694,26 +1655,6 @@
       "kind": "table",
       "status": "defined",
       "callers": [
-        {
-          "file": "src/app/api/conversations/[id]/configuration/route.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/app/api/conversations/[id]/configuration/route.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/app/api/conversations/[id]/export/route.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/app/api/conversations/[id]/fork/route.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/app/api/conversations/[id]/share/route.ts",
-          "kind": "literal-from"
-        },
         {
           "file": "src/lib/agent/api.server.ts",
           "kind": "literal-from"
@@ -1740,25 +1681,6 @@
         },
         {
           "file": "src/lib/knowledge-base/ingest.ts",
-          "kind": "literal-from"
-        }
-      ]
-    },
-    {
-      "name": "conversations_with_archive_status",
-      "kind": "view",
-      "status": "defined",
-      "callers": [
-        {
-          "file": "src/app/api/conversations/[id]/route.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/app/api/conversations/route.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/app/api/search/route.ts",
           "kind": "literal-from"
         }
       ]
@@ -1895,22 +1817,6 @@
         {
           "file": "src/lib/knowledge-base/persistence.server.ts",
           "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/mentions.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/mentions.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/server/chat/bootstrap.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/server/chat/prompt-context.ts",
-          "kind": "literal-from"
         }
       ]
     },
@@ -1933,10 +1839,6 @@
         },
         {
           "file": "src/lib/knowledge-base/ingest.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/mentions.ts",
           "kind": "literal-from"
         }
       ]
@@ -2323,14 +2225,6 @@
         {
           "file": "src/lib/reminders.ts",
           "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/server/chat/bootstrap.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/server/chat/prompt-context.ts",
-          "kind": "literal-from"
         }
       ]
     },
@@ -2382,14 +2276,6 @@
         {
           "file": "src/lib/community-server.ts",
           "kind": "typed-adapter-catalog"
-        },
-        {
-          "file": "src/lib/server/chat/bootstrap.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/server/chat/bootstrap.ts",
-          "kind": "literal-from"
         }
       ]
     },
@@ -2426,10 +2312,6 @@
       "status": "defined",
       "callers": [
         {
-          "file": "src/app/api/search/route.ts",
-          "kind": "literal-from"
-        },
-        {
           "file": "src/app/api/user/charts/route.ts",
           "kind": "literal-from"
         },
@@ -2465,21 +2347,6 @@
     }
   ],
   "dynamicRelationSites": [
-    {
-      "file": "src/app/api/history-summaries/route.ts",
-      "expression": "config.tableName",
-      "contract": "tableName catalog"
-    },
-    {
-      "file": "src/app/api/history-summaries/route.ts",
-      "expression": "config.tableName",
-      "contract": "tableName catalog"
-    },
-    {
-      "file": "src/app/api/history-summaries/route.ts",
-      "expression": "config.tableName",
-      "contract": "tableName catalog"
-    },
     {
       "file": "src/app/api/user/charts/route.ts",
       "expression": "getChartTable(body.type",

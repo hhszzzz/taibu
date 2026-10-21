@@ -1,28 +1,21 @@
-type QueryError = { message?: string } | null;
+import type { ScopedDb } from '@/lib/db/context.server';
 
-type ConversationDeleteClient = {
-  rpc: (
-    fn: string,
-    args: Record<string, unknown>,
-  ) => Promise<{ data: boolean | null; error: QueryError }>;
-};
-
-function normalizeError(error: QueryError) {
+function normalizeError(error: unknown) {
   if (!error) return null;
-  return { message: typeof error.message === 'string' ? error.message : 'Unknown error' };
+  const message = (error as { message?: unknown }).message;
+  return { message: typeof message === 'string' ? message : 'Unknown error' };
 }
 
 export async function deleteConversationGraph(
-  supabase: ConversationDeleteClient,
+  db: ScopedDb,
   conversationId: string,
 ) {
-  const { data, error } = await supabase.rpc('delete_conversation_graph', {
-    p_conversation_id: conversationId,
-  });
-
-  if (error) {
+  try {
+    const deleted = await db.rpc('delete_conversation_graph', {
+      p_conversation_id: conversationId,
+    });
+    return { error: null, notFound: deleted === false };
+  } catch (error) {
     return { error: normalizeError(error), notFound: false };
   }
-
-  return { error: null, notFound: data === false };
 }

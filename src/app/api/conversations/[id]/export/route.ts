@@ -1,5 +1,5 @@
 import { type NextRequest } from 'next/server';
-import { getSystemAdminClient, jsonError, requireUserContext, resolveRequestDbClient } from '@/lib/api-utils';
+import { getSystemAdminClient, jsonError, requireUserContext } from '@/lib/api-utils';
 import { isValidUUID } from '@/lib/validation';
 import { loadAllConversationMessages } from '@/lib/server/conversation-messages';
 import { conversationHtml } from '@/lib/chat/conversation-transfer';
@@ -9,10 +9,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
     const { id } = await params;
     if (!isValidUUID(id)) return jsonError('对话 ID 无效', 400);
-    const db = resolveRequestDbClient(auth);
-    if (!db) return jsonError('导出失败', 500);
-    const { data, error } = await db.from('conversations').select('title').eq('id', id).eq('user_id', auth.user.id).maybeSingle();
-    if (error) return jsonError('读取对话失败', 500);
+    const db = auth.scoped;
+    const result = await db.tx((trx) => trx
+        .selectFrom('conversations')
+        .select('title')
+        .where('id', '=', id)
+        .where('user_id', '=', auth.user.id)
+        .executeTakeFirst()).then((data) => ({ data, error: null }), (error) => ({ data: null, error }));
+    if (result.error) return jsonError('读取对话失败', 500);
+    const { data } = result;
     if (!data) return jsonError('对话不存在', 404);
     const { messages, error: messageError } = await loadAllConversationMessages(db, id);
     if (messageError) return jsonError('读取消息失败', 500);

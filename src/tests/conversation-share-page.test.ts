@@ -8,10 +8,16 @@ const TOKEN = 'T'.repeat(43);
 
 function anonRpc(t: TestContext, rows: unknown[] | null, error: unknown = null) {
     const calls: { name: string; args: unknown }[] = [];
-    const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
-    t.mock.method(api, 'createAnonClient', () => ({
-        rpc: async (name: string, args: unknown) => { calls.push({ name, args }); return { data: rows, error }; },
-    }) as unknown as ReturnType<typeof api.createAnonClient>);
+    const context = require('../lib/db/context.server') as typeof import('../lib/db/context.server');
+    t.mock.method(context, 'anonDb', () => ({
+        scope: { kind: 'anon' },
+        tx: async () => { throw new Error('unexpected tx'); },
+        rpc: async (name: string, args: unknown) => {
+            calls.push({ name, args });
+            if (error) throw error;
+            return rows;
+        },
+    }) as unknown as ReturnType<typeof context.anonDb>);
     return calls;
 }
 

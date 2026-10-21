@@ -5,7 +5,7 @@
  * 统一存入 conversations 表，通过 source_type 区分来源
  */
 
-import { getSystemAdminClient } from '@/lib/api-utils';
+import { systemDb } from '@/lib/db/context.server';
 import {
     getSourceDataModelId,
     getSourceDataReasoning,
@@ -62,7 +62,6 @@ export interface CreateAIAnalysisParams {
  * 绕过 RLS，用于 API 路由中保存 AI 分析结果
  */
 export async function createAIAnalysisConversation(params: CreateAIAnalysisParams): Promise<string> {
-    const serviceClient = getSystemAdminClient();
     const normalizedSourceData = normalizeAnalysisSourceData(params.sourceType, params.sourceData);
 
     const modelId = getSourceDataModelId(normalizedSourceData) ?? undefined;
@@ -81,7 +80,7 @@ export async function createAIAnalysisConversation(params: CreateAIAnalysisParam
 
     const personality = SOURCE_PERSONALITY_MAP[params.sourceType] ?? 'general';
     if (params.historyBinding) {
-        const { data, error } = await serviceClient.rpc('create_analysis_conversation_with_history_as_service', {
+        const data = await systemDb().rpc('create_analysis_conversation_with_history_as_service', {
             p_user_id: params.userId,
             p_source_type: params.sourceType,
             p_source_data: normalizedSourceData,
@@ -90,34 +89,30 @@ export async function createAIAnalysisConversation(params: CreateAIAnalysisParam
             p_messages: messages,
             p_history_type: params.historyBinding.type,
             p_history_payload: params.historyBinding.payload,
+        }).catch((error) => {
+            throwPersistenceError(params.sourceType, '事务化保存 AI 分析失败', error);
         });
 
-        if (error || typeof data !== 'string') {
-            throwPersistenceError(
-                params.sourceType,
-                '事务化保存 AI 分析失败',
-                error?.message || data,
-            );
+        if (typeof data !== 'string') {
+            throwPersistenceError(params.sourceType, '事务化保存 AI 分析失败', data);
         }
 
         return data;
     }
 
-    const { data, error } = await serviceClient.rpc('create_conversation_with_messages', {
+    const data = await systemDb().rpc('create_conversation_with_messages', {
         p_user_id: params.userId,
         p_title: params.title,
         p_personality: personality,
         p_source_type: params.sourceType,
         p_source_data: normalizedSourceData,
         p_messages: messages,
+    }).catch((error) => {
+        throwPersistenceError(params.sourceType, '事务化创建 AI 分析对话失败', error);
     });
 
-    if (error || typeof data !== 'string') {
-        throwPersistenceError(
-            params.sourceType,
-            '事务化创建 AI 分析对话失败',
-            error?.message || data,
-        );
+    if (typeof data !== 'string') {
+        throwPersistenceError(params.sourceType, '事务化创建 AI 分析对话失败', data);
     }
 
     return data;

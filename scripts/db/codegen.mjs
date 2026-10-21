@@ -19,7 +19,7 @@ const COLUMNS_SQL = `select coalesce(json_agg(x), '[]')::text from (
   from information_schema.columns c
   join information_schema.tables t
     on t.table_schema = c.table_schema and t.table_name = c.table_name
-  where c.table_schema = 'public' and t.table_type = 'BASE TABLE'
+  where c.table_schema = 'public' and t.table_type in ('BASE TABLE', 'VIEW')
   order by c.table_name, c.ordinal_position
 ) x;`;
 
@@ -209,7 +209,10 @@ function serializeRpc({ functions, enums: enumRows }) {
     const args = fn.argtypes.map((type, index) => {
       const optional = index >= fn.nargs - fn.ndefaults;
       const name = names[index] ?? `arg${index + 1}`;
-      return `${JSON.stringify(name)}${optional ? '?' : ''}: ${formatTypeToTs(type, enums)};`;
+      // SQL function arguments have no NOT NULL guarantee, and json/jsonb accept
+      // any serialisable value, so callers never need a cast at the call site.
+      const tsType = type === 'json' || type === 'jsonb' ? 'unknown' : formatTypeToTs(type, enums);
+      return `${JSON.stringify(name)}${optional ? '?' : ''}: ${tsType} | null;`;
     });
     const argBody = args.length ? `{ ${args.join(' ')} }` : 'Record<string, never>';
     lines.push(`  ${JSON.stringify(fn.name)}: { args: ${argBody}; result: ${resultType(fn, enums)} };`);

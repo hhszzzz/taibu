@@ -1,6 +1,6 @@
 import 'server-only';
 
-import type { SupabaseClient, User } from '@supabase/supabase-js';
+import type { ScopedDb } from '@/lib/db/context.server';
 import { buildMembershipInfo } from '@/lib/user/membership';
 import type { MembershipInfoSource } from '@/lib/user/membership';
 import type { ChatBootstrapData, ChatBootstrapKnowledgeBase } from '@/lib/chat/bootstrap';
@@ -14,8 +14,6 @@ function resolveChatBootstrapError(message: string, error?: unknown): Error {
   return new Error('加载对话上下文失败');
 }
 
-export type ChatBootstrapSupabase = Pick<SupabaseClient, 'from'>;
-
 type PromptSettingsRow = {
   prompt_kb_ids?: unknown;
 };
@@ -26,34 +24,26 @@ function toPromptKnowledgeBaseIds(value: unknown): string[] {
 }
 
 async function loadMembershipRow(
-  supabase: ChatBootstrapSupabase,
+  db: ScopedDb,
   userId: string,
 ) {
-  return await supabase
-    .from('users')
-    .select('id, membership, membership_expires_at, ai_chat_count')
-    .eq('id', userId)
-    .maybeSingle();
+  return await db.tx((trx) => trx
+    .selectFrom('users')
+    .select(['id', 'membership', 'membership_expires_at', 'ai_chat_count'])
+    .where('id', '=', userId)
+    .executeTakeFirst());
 }
 
 async function loadMembershipRowWithRecovery(
-  supabase: ChatBootstrapSupabase,
+  db: ScopedDb,
   userId: string,
 ) {
-  let membershipResult = await loadMembershipRow(supabase, userId);
-  if (membershipResult.error || membershipResult.data) {
-    return membershipResult;
+  let membershipRow = await loadMembershipRow(db, userId);
+  if (membershipRow) {
+    return { data: membershipRow, error: null };
   }
 
-  const recoveryProbe = supabase.from('users');
-  if (typeof recoveryProbe.upsert !== 'function') {
-    return membershipResult;
-  }
-
-  const ensured = await ensureUserRecordRow(
-    supabase as unknown as Parameters<typeof ensureUserRecordRow>[0],
-    { id: userId, user_metadata: {} } as Pick<User, 'id' | 'user_metadata'>,
-  );
+  const ensured = await ensureUserRecordRow(db, { id: userId, user_metadata: {} });
   if (!ensured.ok) {
     return {
       data: null,
@@ -61,37 +51,37 @@ async function loadMembershipRowWithRecovery(
     };
   }
 
-  membershipResult = await loadMembershipRow(supabase, userId);
-  return membershipResult;
+  membershipRow = await loadMembershipRow(db, userId);
+  return { data: membershipRow, error: null };
 }
 
 export async function buildChatBootstrap(
-  supabase: ChatBootstrapSupabase,
+  db: ScopedDb,
   userId: string,
 ): Promise<ChatBootstrapData> {
   const knowledgeBaseFeatureEnabled = await isFeatureModuleEnabled('knowledge-base');
-  const { data: membershipRow, error: membershipError } = await loadMembershipRowWithRecovery(supabase, userId);
+  const { data: membershipRow, error: membershipError } = await loadMembershipRowWithRecovery(db, userId)
+    .catch((error) => ({ data: null, error }));
 
   if (membershipError) {
     throw resolveChatBootstrapError('load users row', membershipError);
   }
-  if (!membershipRow || typeof (membershipRow as { ai_chat_count?: unknown }).ai_chat_count !== 'number') {
+  if (!membershipRow || typeof membershipRow.ai_chat_count !== 'number') {
     throw resolveChatBootstrapError('missing or invalid users row', membershipRow);
   }
 
-  const membership = buildMembershipInfo((membershipRow ?? null) as MembershipInfoSource | null);
+  const membership = buildMembershipInfo(membershipRow as MembershipInfoSource);
 
   const promptKbIds = membership?.type === 'free' || !knowledgeBaseFeatureEnabled
     ? []
     : await (async () => {
-      const { data: settingsRow, error: settingsError } = await supabase
-        .from('user_settings')
+      const settingsRow = await db.tx((trx) => trx
+        .selectFrom('user_settings')
         .select('prompt_kb_ids')
-        .eq('user_id', userId)
-        .maybeSingle();
-      if (settingsError) {
-        throw resolveChatBootstrapError('load user settings', settingsError);
-      }
+        .where('user_id', '=', userId)
+        .executeTakeFirst()).catch((error) => {
+        throw resolveChatBootstrapError('load user settings', error);
+      });
       return toPromptKnowledgeBaseIds((settingsRow as PromptSettingsRow | null)?.prompt_kb_ids);
     })();
 
@@ -103,18 +93,17 @@ export async function buildChatBootstrap(
     };
   }
 
-  const { data: kbRows, error: kbError } = await supabase
-    .from('knowledge_bases')
-    .select('id, name, description')
-    .eq('user_id', userId)
-    .in('id', promptKbIds);
-
-  if (kbError) {
-    throw resolveChatBootstrapError('load knowledge bases', kbError);
-  }
+  const kbRows = await db.tx((trx) => trx
+    .selectFrom('knowledge_bases')
+    .select(['id', 'name', 'description'])
+    .where('user_id', '=', userId)
+    .where('id', 'in', promptKbIds)
+    .execute()).catch((error) => {
+    throw resolveChatBootstrapError('load knowledge bases', error);
+  });
 
   const kbMap = new Map(
-    ((kbRows ?? []) as ChatBootstrapKnowledgeBase[]).map((kb) => [kb.id, kb] as const)
+    (kbRows as ChatBootstrapKnowledgeBase[]).map((kb) => [kb.id, kb] as const)
   );
 
   return {

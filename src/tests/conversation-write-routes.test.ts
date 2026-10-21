@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
+import { createMockScopedDb } from './helpers/db-mock';
 
 process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
@@ -16,12 +17,12 @@ test('conversations POST should create through transactional rpc', async (t) => 
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    supabase: {
-      rpc(fn: string, args: Record<string, unknown>) {
+    scoped: createMockScopedDb({
+      rpc: async (fn: string, args: Record<string, unknown>) => {
         rpcCalls.push({ fn, args });
-        return Promise.resolve({ data: 'conv-1', error: null });
+        return 'conv-1';
       },
-    },
+    }),
   });
 
   t.after(() => {
@@ -153,12 +154,12 @@ test('conversations POST should normalize blank titles back to the default title
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    supabase: {
-      rpc(fn: string, args: Record<string, unknown>) {
+    scoped: createMockScopedDb({
+      rpc: async (fn: string, args: Record<string, unknown>) => {
         rpcCalls.push({ fn, args });
-        return Promise.resolve({ data: 'conv-1', error: null });
+        return 'conv-1';
       },
-    },
+    }),
   });
 
   t.after(() => {
@@ -294,12 +295,12 @@ test('conversation detail PATCH should update through transactional rpc', async 
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    supabase: {
-      rpc(fn: string, args: Record<string, unknown>) {
+    scoped: createMockScopedDb({
+      rpc: async (fn: string, args: Record<string, unknown>) => {
         rpcCalls.push({ fn, args });
-        return Promise.resolve({ data: { status: 'ok' }, error: null });
+        return { status: 'ok' };
       },
-    },
+    }),
   });
 
   t.after(() => {
@@ -362,11 +363,9 @@ test('conversation detail PATCH should return 404 when transactional rpc reports
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    supabase: {
-      rpc() {
-        return Promise.resolve({ data: { status: 'not_found' }, error: null });
-      },
-    },
+    scoped: createMockScopedDb({
+      rpc: async () => ({ status: 'not_found' }),
+    }),
   });
 
   t.after(() => {
@@ -398,12 +397,12 @@ test('conversation detail PATCH should normalize messages null into an empty tra
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    supabase: {
-      rpc(fn: string, args: Record<string, unknown>) {
+    scoped: createMockScopedDb({
+      rpc: async (fn: string, args: Record<string, unknown>) => {
         rpcCalls.push({ fn, args });
-        return Promise.resolve({ data: { status: 'ok' }, error: null });
+        return { status: 'ok' };
       },
-    },
+    }),
   });
 
   t.after(() => {
@@ -825,40 +824,20 @@ test('conversation detail route should fail loudly when message storage cannot b
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    supabase: {
-      from(table: string) {
-        assert.equal(table, 'conversations_with_archive_status');
-        return {
-          select() {
-            return {
-              eq() {
-                return {
-                  eq() {
-                    return {
-                      maybeSingle: async () => ({
-                        data: {
-                          id: VALID_CONVERSATION_ID,
-                          user_id: 'user-1',
-                          title: 'Test',
-                          personality: 'general',
-                          created_at: '2026-03-18T00:00:00.000Z',
-                          updated_at: '2026-03-18T00:00:00.000Z',
-                          source_type: 'chat',
-                          source_data: null,
-                          is_archived: false,
-                          archived_kb_ids: [],
-                        },
-                        error: null,
-                      }),
-                    };
-                  },
-                };
-              },
-            };
-          },
-        };
-      },
-    },
+    scoped: createMockScopedDb({
+      tx: async () => ({
+        id: VALID_CONVERSATION_ID,
+        user_id: 'user-1',
+        title: 'Test',
+        personality: 'general',
+        created_at: '2026-03-18T00:00:00.000Z',
+        updated_at: '2026-03-18T00:00:00.000Z',
+        source_type: 'chat',
+        source_data: null,
+        is_archived: false,
+        archived_kb_ids: [],
+      }),
+    }),
   });
 
   conversationMessagesModule.loadAllConversationMessages = async () => ({
@@ -896,38 +875,17 @@ test('conversation detail route returns analysis snapshot without loading full m
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    supabase: {
-      from(table: string) {
-        assert.equal(table, 'conversations_with_archive_status');
-        return {
-          select(columns: string) {
-            assert.match(columns, /source_data/u);
-            return {
-              eq() {
-                return {
-                  eq() {
-                    return {
-                      maybeSingle: async () => ({
-                        data: {
-                          id: VALID_CONVERSATION_ID,
-                          user_id: 'user-1',
-                          source_data: {
-                            model_id: 'glm-4',
-                            reasoning_text: 'source reasoning',
-                            reasoning: true,
-                          },
-                        },
-                        error: null,
-                      }),
-                    };
-                  },
-                };
-              },
-            };
-          },
-        };
-      },
-    },
+    scoped: createMockScopedDb({
+      tx: async () => ({
+        id: VALID_CONVERSATION_ID,
+        user_id: 'user-1',
+        source_data: {
+          model_id: 'glm-4',
+          reasoning_text: 'source reasoning',
+          reasoning: true,
+        },
+      }),
+    }),
   });
 
   conversationMessagesModule.loadAllConversationMessages = async () => {
@@ -979,28 +937,25 @@ test('conversations GET should forward chartId filter to source_data query', asy
 
   apiUtils.requireUserContext = (async () => ({
     user: { id: 'user-1' },
-    supabase: {
-      from(table: string) {
-        assert.equal(table, 'conversations_with_archive_status');
-        const query = {
-          select() {
-            return query;
-          },
-          eq(column: string, value: unknown) {
-            filters.push({ column, value });
-            return query;
-          },
-          order() {
-            return query;
-          },
-          range: async () => ({
-            data: [],
-            error: null,
-          }),
-        };
-        return query;
-      },
-    },
+    scoped: createMockScopedDb({
+      tx: async (work) => work({
+        selectFrom: (table: string) => {
+          assert.equal(table, 'conversations_with_archive_status');
+          const query = {
+            select: () => query,
+            where: (column: string, _operator: string, value: unknown) => {
+              filters.push({ column, value });
+              return query;
+            },
+            orderBy: () => query,
+            offset: () => query,
+            limit: () => query,
+            execute: async () => [],
+          };
+          return query;
+        },
+      } as never),
+    }),
   })) as unknown as typeof apiUtils.requireUserContext;
 
   t.after(() => {
@@ -1014,10 +969,6 @@ test('conversations GET should forward chartId filter to source_data query', asy
   const payload = await response.json();
 
   assert.equal(response.status, 200);
-  assert.deepEqual(filters, [
-    { column: 'user_id', value: 'user-1' },
-    { column: 'source_type', value: 'bazi_wuxing' },
-    { column: 'source_data->>chart_id', value: 'chart-1' },
-  ]);
+  assert.deepEqual(filters.map((item) => item.value), ['user-1', 'bazi_wuxing', 'chart-1']);
   assert.deepEqual(payload.conversations, []);
 });

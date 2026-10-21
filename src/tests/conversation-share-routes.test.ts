@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import type { ChatMessage } from '../types';
 import { createMockAuthContext } from './helpers/supabase-mock';
+import { createMockScopedDb } from './helpers/db-mock';
 import { GET as getShare, POST as saveShare, DELETE as revokeShare } from '../app/api/conversations/[id]/share/route';
 import { GET as listShares } from '../app/api/shares/route';
 
@@ -16,27 +17,34 @@ function fixture(t: TestContext) {
         conversations: { id, title: '我的对话', updated_at: '2026-10-19T08:00:00.123456+00:00' },
     };
     const rpcResults: Record<string, { data: unknown; error: unknown }> = {};
-    const db = {
-        from(table: string) {
-            const result = () => ({ data: rows[table] ?? null, error: null });
-            const record = (field: string, value: unknown) => { calls.push({ table, field, value }); return query; };
-            const query = {
-                select: () => query,
-                eq: record,
-                is: record,
-                in: record,
-                order: () => query,
-                limit: () => query,
-                maybeSingle: async () => result(),
-                then: (resolve: (value: unknown) => void) => resolve(result()),
-            };
-            return query;
-        },
+    const db = createMockScopedDb({
+        tx: async (work) => work({
+            selectFrom: (table: string) => {
+                const record = (field: string, value: unknown) => { calls.push({ table, field, value }); return query; };
+                const query = {
+                    select: () => query,
+                    where: (field: string, _operator: string, value: unknown) => record(field, value),
+                    orderBy: () => query,
+                    limit: () => query,
+                    executeTakeFirst: async () => rows[table] ?? undefined,
+                    execute: async () => {
+                        const row = rows[table];
+                        return Array.isArray(row) ? row : row ? [row] : [];
+                    },
+                };
+                return query;
+            },
+        } as never),
         rpc: async (name: string, args: Record<string, unknown>) => {
             calls.push({ table: 'rpc', field: name, value: args });
-            return rpcResults[name] ?? { data: null, error: null };
+            const result = rpcResults[name];
+            if (result?.error) {
+                const error = result.error as { code?: string; message?: string };
+                throw Object.assign(new Error(error.message ?? 'rpc failed'), { code: error.code });
+            }
+            return result?.data ?? null;
         },
-    };
+    });
     const history: ChatMessage[] = [
         { id: 'u1', role: 'user', content: '问题', createdAt: '2026-10-19T00:00:00.000Z', mentions: [{ type: 'bazi_chart', id: 'chart-id', name: '张三', preview: '' }] },
         { id: 'a1', role: 'assistant', content: '回答', createdAt: '2026-10-19T00:00:01.000Z', model: 'model-key', metadata: { promptDiagnostics: { systemPrompt: 'secret' } } },
@@ -45,7 +53,7 @@ function fixture(t: TestContext) {
     const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
     const loader = require('../lib/server/conversation-messages') as typeof import('../lib/server/conversation-messages');
     const exporter = require('../lib/chat/conversation-export.server') as typeof import('../lib/chat/conversation-export.server');
-    t.mock.method(api, 'requireUserContext', async () => createMockAuthContext(db, owner));
+    t.mock.method(api, 'requireUserContext', async () => createMockAuthContext({}, owner, db));
     t.mock.method(loader, 'loadAllConversationMessages', async () => ({ messages, error: null }));
     const enrich = t.mock.method(exporter, 'enrichConversationBasis', async (_db: unknown, list: ChatMessage[]) => list);
     return {

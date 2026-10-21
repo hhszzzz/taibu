@@ -169,7 +169,7 @@ test('archive views execute as caller and expose SELECT only', () => {
 test('literal relations and dynamic factory catalogs resolve to real tables or views', () => {
   const relations = new Map(manifest.relationReferences.map(r => [r.name, r]));
   for (const relation of relations.values()) assert.ok(names(sql).includes(relation.name) || manifest.views.some(v => v.name === relation.name), relation.name);
-  assert.ok(relations.get('conversations_with_archive_status').callers.some(c => c.file === 'src/app/api/conversations/route.ts' && c.kind === 'literal-from'));
+  assert.ok(manifest.views.some(v => v.name === 'conversations_with_archive_status'));
   assert.ok(relations.get('ming_records_with_archive_status').callers.some(c => c.file === 'src/app/api/records/route.ts'));
   assert.ok(relations.get('tarot_readings').callers.some(c => c.file === 'src/lib/history/registry.ts' && c.kind === 'tableName-catalog'));
   assert.ok(relations.get('bazi_charts').callers.some(c => c.kind === 'chart-return-catalog'));

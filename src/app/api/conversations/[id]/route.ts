@@ -1,5 +1,5 @@
 import { type NextRequest } from 'next/server';
-import { jsonError, jsonOk, requireUserContext, resolveRequestDbClient } from '@/lib/api-utils';
+import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
 import { extractAnalysisFromConversation } from '@/lib/ai/ai-analysis-query';
 import { isValidChatMessagePayload, loadAllConversationMessages, loadConversationAnalysisMessage, loadConversationMessagePage } from '@/lib/server/conversation-messages';
 import { deleteConversationGraph } from '@/lib/chat/conversation-delete';
@@ -51,25 +51,6 @@ type ConversationAnalysisSnapshotRow = {
     source_data?: unknown;
 };
 
-const CONVERSATION_DETAIL_SELECT = [
-    'id',
-    'user_id',
-    'personality',
-    'title',
-    'created_at',
-    'updated_at',
-    'source_type',
-    'source_data',
-    'is_archived',
-    'archived_kb_ids',
-].join(', ');
-
-const CONVERSATION_ANALYSIS_SNAPSHOT_SELECT = [
-    'id',
-    'user_id',
-    'source_data',
-].join(', ');
-
 function isNonErrorRow<T>(value: unknown): value is T {
     return !!value && typeof value === 'object' && !Array.isArray(value) && !('error' in value);
 }
@@ -85,28 +66,35 @@ export async function GET(
     if (!isValidUUID(id)) {
         return jsonError('对话ID格式不合法', 400);
     }
-    const db = resolveRequestDbClient(auth);
-    if (!db) return jsonError('加载对话失败', 500);
+    const db = auth.scoped;
     const { searchParams } = new URL(request.url);
     const includeContext = searchParams.get('includeContext') === '1';
     const snapshotMode = searchParams.get('snapshot');
     const messageLimit = Number(searchParams.get('messageLimit') || 0);
     const messageOffset = Math.max(Number(searchParams.get('messageOffset') || 0), 0);
-    const selectColumns = snapshotMode === 'analysis'
-        ? CONVERSATION_ANALYSIS_SNAPSHOT_SELECT
-        : CONVERSATION_DETAIL_SELECT;
-
-    const { data, error } = await db
-        .from('conversations_with_archive_status')
-        .select(selectColumns)
-        .eq('id', id)
-        .eq('user_id', auth.user.id)
-        .maybeSingle();
-
-    if (error) {
+    const data = await db.tx((trx) => trx
+        .selectFrom('conversations_with_archive_status')
+        .select(snapshotMode === 'analysis'
+            ? ['id', 'user_id', 'source_data']
+            : [
+                'id',
+                'user_id',
+                'personality',
+                'title',
+                'created_at',
+                'updated_at',
+                'source_type',
+                'source_data',
+                'is_archived',
+                'archived_kb_ids',
+            ])
+        .where('id', '=', id)
+        .where('user_id', '=', auth.user.id)
+        .executeTakeFirst()).catch((error) => {
         console.error('[conversations] failed to load conversation:', error);
-        return jsonError('加载对话失败', 500);
-    }
+        return null;
+    });
+
     if (!data) {
         return jsonError('对话不存在', 404);
     }
@@ -201,8 +189,7 @@ export async function PATCH(
     if (!isValidUUID(id)) {
         return jsonError('对话ID格式不合法', 400);
     }
-    const db = resolveRequestDbClient(auth);
-    if (!db) return jsonError('更新对话失败', 500);
+    const db = auth.scoped;
     let body: ConversationPatchBody;
 
     try {
@@ -242,7 +229,7 @@ export async function PATCH(
         }
     }
 
-    const { data, error } = await db.rpc('update_conversation_with_messages', {
+    const data = await db.rpc('update_conversation_with_messages', {
         p_conversation_id: id,
         p_title: normalizedTitle ?? null,
         p_title_present: body.title !== undefined,
@@ -250,12 +237,10 @@ export async function PATCH(
         p_personality_present: body.personality !== undefined,
         p_messages: nextMessages,
         p_messages_present: hasMessagesField,
-    });
-
-    if (error) {
+    }).catch((error) => {
         console.error('[conversations] failed to update conversation transactionally:', error);
-        return jsonError('更新对话失败', 500);
-    }
+        return null;
+    });
 
     const result = (Array.isArray(data) ? data[0] : data) as { status?: string } | null;
     if (result?.status === 'not_found') {
@@ -280,11 +265,7 @@ export async function DELETE(
     if (!isValidUUID(id)) {
         return jsonError('对话ID格式不合法', 400);
     }
-    const db = resolveRequestDbClient(auth) ?? auth.supabase;
-    const result = await deleteConversationGraph(
-        db as never,
-        id,
-    );
+    const result = await deleteConversationGraph(auth.scoped, id);
     if (result.error) {
         if (result.error.message.includes('AGENT_CONVERSATION_BUSY')) {
             return jsonError('请先停止当前 Agent 任务，再删除对话', 409, { code: 'CONVERSATION_BUSY' });

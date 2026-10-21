@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { createAgentTools } from '../lib/agent/tools.server';
 import type { DomainTool } from '../lib/agent/types';
 import { MemoryStore, row } from './helpers/agent-runtime-fixture';
+import { createMockScopedDb } from './helpers/db-mock';
 
 beforeEach((t) => {
   assert.ok('mock' in t);
@@ -165,8 +166,8 @@ class MemoryToolStore extends MemoryStore {
   constructor() {
     super();
     const settings = { chat_preferences: { memoryEnabled: true } };
-    const query = { select: () => query, eq: () => query, maybeSingle: async () => ({ data: settings, error: null }) };
-    Object.defineProperty(this, 'db', { value: { from: () => query } });
+    const query = { select: () => query, where: () => query, executeTakeFirst: async () => settings };
+    Object.defineProperty(this, 'db', { value: createMockScopedDb({ tx: async work => work({ selectFrom: () => query } as never) }) });
   }
   override async rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
     if (name !== 'agent_write_memory') return super.rpc<T>(name, args);

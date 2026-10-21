@@ -2,7 +2,7 @@ import { randomUUID,createHash } from 'node:crypto';
 import sharp from 'sharp';
 import { type NextRequest } from 'next/server';
 import { getSystemAdminClient,jsonError,jsonOk,requireUserContext } from '@/lib/api-utils';
-import { ATTACHMENT_BUCKET,attachmentDto,type AttachmentRow } from '@/lib/agent/attachments.server';
+import { ATTACHMENT_BUCKET,attachmentDto,insertAgentAttachment,markAgentAttachmentReady,type AttachmentRow } from '@/lib/agent/attachments.server';
 export const runtime='nodejs';
 export async function POST(request:NextRequest){
     const auth=await requireUserContext(request);
@@ -27,13 +27,14 @@ export async function POST(request:NextRequest){
             bytes=Buffer.from(text,'utf-8');mime='text/plain';kind='text';
         }
     }catch{return jsonError('文件格式或尺寸无效',400);}
-    const id=randomUUID();const db=getSystemAdminClient();
+    const id=randomUUID();
     const row={id,user_id:auth.user.id,object_path:`${auth.user.id}/${id}`,name:file.name.slice(0,200),kind,mime_type:mime,size:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex'),width,height,status:'uploading'};
-    const inserted=await db.from('agent_attachments').insert(row);
-    if(inserted.error) return jsonError('创建资料失败',500);
-    const uploaded=await db.storage.from(ATTACHMENT_BUCKET).upload(row.object_path,bytes,{contentType:mime,upsert:false});
+    try { await insertAgentAttachment(row); }
+    catch { return jsonError('创建资料失败',500); }
+    const uploaded=await getSystemAdminClient().storage.from(ATTACHMENT_BUCKET).upload(row.object_path,bytes,{contentType:mime,upsert:false});
     if(uploaded.error) return jsonError('上传失败，请重试',500);
-    const saved=await db.from('agent_attachments').update({status:'ready'}).eq('id',id).select('*').single();
-    if(saved.error) return jsonError('资料保存失败，请重试',500);
-    return jsonOk({attachment:attachmentDto(saved.data as AttachmentRow)},201);
+    let saved: AttachmentRow;
+    try { saved=await markAgentAttachmentReady(id); }
+    catch { return jsonError('资料保存失败，请重试',500); }
+    return jsonOk({attachment:attachmentDto(saved)},201);
 }

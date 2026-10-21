@@ -16,6 +16,7 @@ import { emptyPiAssistant } from '../lib/agent/pi-stream.server';
 import { GET as listRoute } from '../app/api/admin/agent-runs/route';
 import { GET as treeRoute } from '../app/api/admin/agent-runs/[id]/route';
 import { config, MemoryStore, row } from './helpers/agent-runtime-fixture';
+import { createMockScopedDb } from './helpers/db-mock';
 
 beforeEach((t) => {
   assert.ok('mock' in t);
@@ -181,38 +182,53 @@ test('the tree keeps each record\'s latest write, names script calls, failures a
 });
 
 const RUN = randomUUID(), CONVERSATION = randomUUID(), USER = randomUUID();
+const runInput = {
+  title: '看事业', model: 'deepseek', codeMode: true, planMode: null, compact: null, webEnabled: false, collaborators: [{ id: 'a' }, { id: 'b' }],
+};
 const runRow = (overrides: Record<string, unknown> = {}) => ({
-  id: RUN, conversation_id: CONVERSATION, user_id: USER, status: 'running', billing: 'charged', worker_id: 'worker-a', fence: '3',
+  id: RUN, conversation_id: CONVERSATION, user_id: USER, status: 'running', billing: 'charged', worker_id: 'worker-a', fence: 3,
   lease_until: '2026-10-21T00:01:00.000Z', cancel_requested: false, created_at: '2026-10-21T00:00:00.000Z', updated_at: '2026-10-21T00:00:30.000Z',
-  title: '看事业', model: 'deepseek', code_mode: true, plan_mode: null, compact: null, web: false, collaborators: [{ id: 'a' }, { id: 'b' }], ...overrides,
+  input: runInput, ...overrides,
 });
 
 function adminFixture(t: TestContext, { admin = true }: { admin?: boolean } = {}) {
   const calls: Array<{ table: string; method: string; args: unknown[] }> = [];
   const rpcs: Array<{ name: string; args: Record<string, unknown> }> = [];
   const state = { rows: [runRow()] as unknown[], logPages: [[]] as unknown[][], logError: null as { message: string } | null, emailError: false };
-  const db = {
-    from(table: string) {
-      let single = false;
-      const query: object = new Proxy({}, {
-        get(_target, method: string) {
-          if (method === 'then') return (resolve: (value: unknown) => void) => resolve({ data: single ? state.rows[0] ?? null : state.rows, error: null });
-          return (...args: unknown[]) => { calls.push({ table, method, args }); if (method === 'maybeSingle') single = true; return query; };
-        },
-      });
-      return query;
-    },
-    async rpc(name: string, args: Record<string, unknown>) {
+  const scoped = createMockScopedDb({
+    tx: async (work) => work({
+      selectFrom(table: string) {
+        const query = {
+          select() { return query; },
+          where(...args: unknown[]) { calls.push({ table, method: 'where', args }); return query; },
+          orderBy(...args: unknown[]) { calls.push({ table, method: 'orderBy', args }); return query; },
+          limit(...args: unknown[]) { calls.push({ table, method: 'limit', args }); return query; },
+          async executeTakeFirst() { return state.rows[0]; },
+          async execute() { return state.rows; },
+        };
+        return query;
+      },
+    } as never),
+    rpc: async (name, args) => {
       rpcs.push({ name, args });
-      if (name === 'admin_get_auth_user_emails') return state.emailError ? { data: null, error: { message: 'denied' } } : { data: [{ user_id: USER, email: 'user@example.com' }], error: null };
-      if (name === 'agent_admin_task_log') return state.logError ? { data: null, error: state.logError } : { data: state.logPages.shift() ?? [], error: null };
+      if (name === 'admin_get_auth_user_emails') {
+        if (state.emailError) throw new Error('denied');
+        return [{ user_id: USER, email: 'user@example.com' }];
+      }
+      if (name === 'agent_admin_task_log') {
+        if (state.logError) throw new Error(state.logError.message);
+        return state.logPages.shift() ?? [];
+      }
       throw new Error(`unexpected rpc ${name}`);
     },
-  };
+  });
   const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
+  const context = require('../lib/db/context.server') as typeof import('../lib/db/context.server');
   let clients = 0;
   t.mock.method(api, 'requireAdminUser', async () => (admin ? { user: { id: 'admin' } } : { error: { message: '无权限操作', status: 403 } }) as Awaited<ReturnType<typeof api.requireAdminUser>>);
-  t.mock.method(api, 'getSystemAdminClient', () => { clients++; return db as unknown as ReturnType<typeof api.getSystemAdminClient>; });
+  const originalSystemDb = context.systemDb;
+  context.systemDb = (() => { clients++; return scoped; }) as typeof context.systemDb;
+  t.after(() => { context.systemDb = originalSystemDb; });
   return { calls, rpcs, state, clients: () => clients };
 }
 const listRequest = (query = '') => new NextRequest(`http://localhost/api/admin/agent-runs${query}`);
@@ -228,18 +244,20 @@ test('the task list reads active tasks newest first, names their users, and find
     modes: { codeMode: true, planMode: false, compact: false, web: false, collaborators: 2 },
     workerId: 'worker-a', fence: 3, leaseUntil: '2026-10-21T00:01:00.000Z', cancelRequested: false, createdAt: '2026-10-21T00:00:00.000Z', updatedAt: '2026-10-21T00:00:30.000Z',
   }]);
-  const filters = () => f.calls.filter(call => call.method !== 'select').map(call => [call.method, ...call.args]);
-  assert.deepEqual(filters(), [['in', 'status', ['queued', 'running', 'awaiting_input', 'cancelling']], ['order', 'updated_at', { ascending: false }], ['limit', 50]]);
+  const filters = () => f.calls.map(call => [call.method, ...call.args]);
+  assert.deepEqual(filters(), [['where', 'status', 'in', ['queued', 'running', 'awaiting_input', 'cancelling']], ['orderBy', 'updated_at', 'desc'], ['limit', 50]]);
   assert.deepEqual(f.rpcs, [{ name: 'admin_get_auth_user_emails', args: { p_user_ids: [USER] } }]);
 
   f.calls.length = 0;
   await listRoute(listRequest('?scope=recent'));
-  assert.deepEqual(filters(), [['order', 'updated_at', { ascending: false }], ['limit', 50]], 'recent tasks in every state');
+  assert.deepEqual(filters(), [['orderBy', 'updated_at', 'desc'], ['limit', 50]], 'recent tasks in every state');
   f.calls.length = 0;
   f.state.emailError = true;
-  f.state.rows = [runRow({ compact: { instructions: null }, status: 'completed' })];
+  f.state.rows = [runRow({ input: { ...runInput, compact: { instructions: null } }, status: 'completed' })];
   const found = await (await listRoute(listRequest(`?q=${CONVERSATION}`))).json();
-  assert.deepEqual(filters()[0], ['or', `id.eq.${CONVERSATION},conversation_id.eq.${CONVERSATION},user_id.eq.${CONVERSATION}`], 'a search ignores the scope');
+  const search = filters().find(([method]) => method === 'where') as [string, (builder: unknown) => unknown];
+  assert.equal(search[0], 'where');
+  assert.equal(typeof search[1], 'function', 'a search uses an OR predicate');
   assert.deepEqual([found.runs[0].userEmail, found.runs[0].modes.compact], [null, true], 'a failed account lookup leaves the email out');
 });
 
@@ -269,7 +287,7 @@ test('a task tree reads the whole log page by page, and reports a missing task o
   assert.equal(body.run.id, RUN);
   assert.deepEqual([body.tree.commits, body.tree.truncated, body.tree.conversations.map((conversation: AgentTaskConversation) => conversation.role)], [201, false, ['main']]);
   assert.deepEqual(f.rpcs.filter(rpc => rpc.name === 'agent_admin_task_log').map(rpc => rpc.args), [{ p_run_id: RUN, p_after: 0 }, { p_run_id: RUN, p_after: 200 }]);
-  assert.deepEqual(f.calls.filter(call => call.method === 'eq').map(call => call.args), [['id', RUN]]);
+  assert.deepEqual(f.calls.filter(call => call.method === 'where').map(call => call.args), [['id', '=', RUN]]);
 
   f.state.rows = [];
   const missing = await treeRoute(...treeRequest(randomUUID()));

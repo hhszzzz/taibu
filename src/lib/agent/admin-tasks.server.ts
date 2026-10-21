@@ -1,5 +1,5 @@
 import "server-only";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { ScopedDb } from "@/lib/db/context.server";
 import type { JsonValue } from "@earendil-works/chord";
 import type { ConversationRecord, JsonObject, StorageWrite, SubmissionRecord, TaskRecord } from "@earendil-works/pi-durable";
 import { AGENT_ACTIVE_STATUSES, type AgentRunStatus } from "./types";
@@ -134,26 +134,21 @@ export function buildAgentTaskTree(commits: readonly AgentTaskLogCommit[], trunc
   return { commits: commits.length, lastCommitAt: commits.at(-1)?.at ?? null, truncated, conversations: top, counts };
 }
 
-const RUN_COLUMNS = [
-  "id", "conversation_id", "user_id", "status", "billing", "worker_id", "fence", "lease_until", "cancel_requested", "created_at", "updated_at",
-  "title:input->>title", "model:input->>model", "code_mode:input->codeMode", "plan_mode:input->planMode", "compact:input->compact",
-  "web:input->webEnabled", "collaborators:input->collaborators",
-].join(",");
-
 interface AdminRunRow {
-  id: string; conversation_id: string; user_id: string; status: AgentRunStatus; billing: AgentAdminRun["billing"];
-  worker_id: string | null; fence: number | string; lease_until: string | null; cancel_requested: boolean;
-  created_at: string; updated_at: string; title: string | null; model: string | null;
-  code_mode: JsonValue | null; plan_mode: JsonValue | null; compact: JsonValue | null; web: JsonValue | null; collaborators: JsonValue | null;
+  id: string; conversation_id: string; user_id: string; status: string; billing: AgentAdminRun["billing"];
+  worker_id: string | null; fence: number; lease_until: string | null; cancel_requested: boolean;
+  created_at: string; updated_at: string; input: JsonValue;
 }
 
 function adminRun(row: AdminRunRow, emails: ReadonlyMap<string, string>): AgentAdminRun {
+  const input = isRecord(row.input) ? row.input : undefined;
   return {
     id: row.id, conversationId: row.conversation_id, userId: row.user_id, userEmail: emails.get(row.user_id) ?? null,
-    status: row.status, billing: row.billing, title: row.title ?? "", model: row.model ?? "",
+    status: row.status as AgentRunStatus, billing: row.billing,
+    title: typeof input?.title === "string" ? input.title : "", model: typeof input?.model === "string" ? input.model : "",
     modes: {
-      codeMode: row.code_mode === true, planMode: row.plan_mode === true, compact: isRecord(row.compact),
-      web: row.web === true, collaborators: Array.isArray(row.collaborators) ? row.collaborators.length : 0,
+      codeMode: input?.codeMode === true, planMode: input?.planMode === true, compact: isRecord(input?.compact),
+      web: input?.webEnabled === true, collaborators: Array.isArray(input?.collaborators) ? input.collaborators.length : 0,
     },
     workerId: row.worker_id, fence: Number(row.fence), leaseUntil: row.lease_until, cancelRequested: row.cancel_requested,
     createdAt: row.created_at, updatedAt: row.updated_at,
@@ -161,10 +156,10 @@ function adminRun(row: AdminRunRow, emails: ReadonlyMap<string, string>): AgentA
 }
 
 /** The accounts' emails, to tell users apart; a failed lookup leaves them out rather than failing the list. */
-async function userEmails(db: SupabaseClient, ids: readonly string[]) {
+async function userEmails(db: ScopedDb, ids: readonly string[]) {
   if (!ids.length) return new Map<string, string>();
-  const { data, error } = await db.rpc("admin_get_auth_user_emails", { p_user_ids: ids });
-  if (error || !Array.isArray(data)) return new Map<string, string>();
+  const data = await db.rpc("admin_get_auth_user_emails", { p_user_ids: [...ids] }).catch(() => null);
+  if (!Array.isArray(data)) return new Map<string, string>();
   return new Map((data as Array<{ user_id: string; email: string | null }>).flatMap(row => row.email ? [[row.user_id, row.email] as const] : []));
 }
 
@@ -172,32 +167,36 @@ async function userEmails(db: SupabaseClient, ids: readonly string[]) {
  * The newest tasks first: active ones (queued, running, awaiting input, stopping) or every recent one. A search, which
  * the route has checked is a UUID, finds a task, a conversation's tasks or a user's tasks in any state.
  */
-export async function listAgentRunsForAdmin(db: SupabaseClient, options: { scope: "active" | "recent"; search?: string }): Promise<AgentAdminRun[]> {
-  let query = db.from("agent_runs").select(RUN_COLUMNS);
-  if (options.search) query = query.or(`id.eq.${options.search},conversation_id.eq.${options.search},user_id.eq.${options.search}`);
-  else if (options.scope === "active") query = query.in("status", AGENT_ACTIVE_STATUSES);
-  const { data, error } = await query.order("updated_at", { ascending: false }).limit(AGENT_ADMIN_RUN_LIMIT);
-  if (error) throw new Error(error.message);
-  const rows = (data ?? []) as unknown as AdminRunRow[];
+export async function listAgentRunsForAdmin(db: ScopedDb, options: { scope: "active" | "recent"; search?: string }): Promise<AgentAdminRun[]> {
+  const rows = await db.tx((trx) => {
+    let query = trx.selectFrom("agent_runs")
+      .select(["id", "conversation_id", "user_id", "status", "billing", "worker_id", "fence", "lease_until", "cancel_requested", "created_at", "updated_at", "input"]);
+    if (options.search) query = query.where((eb) => eb.or([
+      eb("id", "=", options.search!),
+      eb("conversation_id", "=", options.search!),
+      eb("user_id", "=", options.search!),
+    ]));
+    else if (options.scope === "active") query = query.where("status", "in", [...AGENT_ACTIVE_STATUSES]);
+    return query.orderBy("updated_at", "desc").limit(AGENT_ADMIN_RUN_LIMIT).execute();
+  });
   const emails = await userEmails(db, [...new Set(rows.map(row => row.user_id))]);
-  return rows.map(row => adminRun(row, emails));
+  return (rows as unknown as AdminRunRow[]).map(row => adminRun(row, emails));
 }
 
 /** A task with its task tree, or null when there is no such task. */
-export async function readAgentTaskTreeForAdmin(db: SupabaseClient, id: string): Promise<{ run: AgentAdminRun; tree: AgentTaskTree } | null> {
-  const { data, error } = await db.from("agent_runs").select(RUN_COLUMNS).eq("id", id).maybeSingle();
-  if (error) throw new Error(error.message);
-  if (!data) return null;
-  const row = data as unknown as AdminRunRow;
+export async function readAgentTaskTreeForAdmin(db: ScopedDb, id: string): Promise<{ run: AgentAdminRun; tree: AgentTaskTree } | null> {
+  const row = await db.tx((trx) => trx.selectFrom("agent_runs")
+    .select(["id", "conversation_id", "user_id", "status", "billing", "worker_id", "fence", "lease_until", "cancel_requested", "created_at", "updated_at", "input"])
+    .where("id", "=", id).executeTakeFirst());
+  if (!row) return null;
   const commits: AgentTaskLogCommit[] = [];
   let truncated = false;
   for (let page = 1; ; page++) {
-    const { data: batch, error: logError } = await db.rpc("agent_admin_task_log", { p_run_id: id, p_after: commits.at(-1)?.sequence ?? 0 });
-    if (logError) throw new Error(logError.message);
-    const read = (batch ?? []) as AgentTaskLogCommit[];
+    const batch = await db.rpc("agent_admin_task_log", { p_run_id: id, p_after: commits.at(-1)?.sequence ?? 0 });
+    const read = (batch ?? []) as unknown as AgentTaskLogCommit[];
     commits.push(...read);
     if (read.length < TASK_LOG_PAGE) break;
     if (page === TASK_LOG_PAGES) { truncated = true; break; }
   }
-  return { run: adminRun(row, await userEmails(db, [row.user_id])), tree: buildAgentTaskTree(commits, truncated) };
+  return { run: adminRun(row as unknown as AdminRunRow, await userEmails(db, [row.user_id])), tree: buildAgentTaskTree(commits, truncated) };
 }

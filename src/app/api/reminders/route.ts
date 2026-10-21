@@ -26,9 +26,9 @@ export async function GET(request: NextRequest) {
             return jsonError('账号已切换，请重新加载设置', 409, { success: false });
         }
         const { user } = auth;
-        const db = auth.db;
+        const db = auth.scoped;
 
-        const subscriptions = await getReminderSubscriptions(user.id, { client: db });
+        const subscriptions = await getReminderSubscriptions(user.id, { db });
 
         // 确保所有类型都有记录
         const allTypes: ReminderType[] = ['solar_term', 'fortune', 'key_date', 'daily_briefing'];
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
             return jsonError('账号已切换，请重新加载设置', 409, { success: false });
         }
         const { user } = auth;
-        const db = auth.db;
+        const db = auth.scoped;
 
         const body = await request.json();
         const { reminderType, enabled, notifyEmail, notifySite } = body;
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
             user.id,
             reminderType as ReminderType,
             { enabled, notifyEmail, notifySite },
-            { client: db },
+            { db },
         );
 
         if (!success) {
@@ -94,13 +94,13 @@ export async function POST(request: NextRequest) {
                 scheduled = await scheduleUpcomingSolarTermReminders(user.id);
             } else if (reminderType === 'fortune' || reminderType === 'key_date') {
                 // 获取用户的八字命盘
-                const { data: chartData } = await db
-                    .from('bazi_charts')
-                    .select('gender, birth_date, birth_time, birth_place, longitude, calendar_type, is_leap_month, timezone, disambiguation')
-                    .eq('user_id', user.id)
-                    .order('created_at', { ascending: false })
+                const chartData = await db.tx((trx) => trx
+                    .selectFrom('bazi_charts')
+                    .select(['gender', 'birth_date', 'birth_time', 'birth_place', 'longitude', 'calendar_type', 'is_leap_month', 'timezone', 'disambiguation'])
+                    .where('user_id', '=', user.id)
+                    .orderBy('created_at', 'desc')
                     .limit(1)
-                    .maybeSingle();
+                    .executeTakeFirst());
 
                 if (chartData) {
                     const baziOutput = calculateBaziOutputFromStoredFields(chartData);

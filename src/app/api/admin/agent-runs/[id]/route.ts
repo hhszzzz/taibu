@@ -4,7 +4,8 @@
  * GET: 任务概况与按 Pi Durable 提交日志重建的任务树（含已结束的任务）
  */
 import { NextRequest } from 'next/server';
-import { getSystemAdminClient, jsonError, jsonOk, requireAdminUser } from '@/lib/api-utils';
+import { jsonError, jsonOk, requireAdminUser } from '@/lib/api-utils';
+import { systemDb } from '@/lib/db/context.server';
 import { isValidUUID } from '@/lib/validation';
 import { readAgentTaskTreeForAdmin } from '@/lib/agent/admin-tasks.server';
 
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
 
     try {
-        const result = await readAgentTaskTreeForAdmin(getSystemAdminClient(), id);
+        const result = await readAgentTaskTreeForAdmin(systemDb(), id);
         return result ? jsonOk(result) : jsonError('任务不存在', 404);
     } catch (error) {
         console.error('[admin][agent-runs][GET] task tree failed:', error);

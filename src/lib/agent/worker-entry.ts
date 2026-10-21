@@ -2,7 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { loadQuickJSWasm } from "@earendil-works/pi-codemode";
-import { getSystemAdminClient } from "@/lib/supabase-server";
+import { systemDb } from "@/lib/db/context.server";
 import { AgentStore, type AgentRunRow } from "./store.server";
 import { executeAgentRun } from "./runtime.server";
 import { AGENT_ENGINE } from "./engine";
@@ -24,7 +24,7 @@ async function main() {
     return;
   }
   const workerId = randomUUID();
-  const store = new AgentStore(getSystemAdminClient());
+  const store = new AgentStore(systemDb());
   if (process.argv.includes("--health")) {
     process.exitCode = (await store.workerReady()) ? 0 : 1;
     return;

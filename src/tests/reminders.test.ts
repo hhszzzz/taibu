@@ -42,33 +42,15 @@ test('pruneExpiredNotifications should delete in a single query and return delet
     assert.equal(deleted, 2);
 });
 
+function replaceSystemDb(t: import('node:test').TestContext, scoped: import('../lib/db/context.server').ScopedDb) {
+    const contextModule = require('../lib/db/context.server') as typeof import('../lib/db/context.server');
+    const original = contextModule.systemDb;
+    contextModule.systemDb = (() => scoped) as typeof contextModule.systemDb;
+    t.after(() => { contextModule.systemDb = original; });
+}
+
 test('getReminderSubscriptions should throw instead of masquerading as an empty list on read failure', async (t) => {
-    const apiUtilsModule = require('../lib/api-utils') as any;
-    const remindersPath = require.resolve('../lib/reminders');
-    const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
-
-    apiUtilsModule.getSystemAdminClient = () => ({
-        from(table: string) {
-            assert.equal(table, 'reminder_subscriptions');
-            return {
-                select() {
-                    return {
-                        eq: async () => ({
-                            data: null,
-                            error: { message: 'db timeout' },
-                        }),
-                    };
-                },
-            };
-        },
-    });
-
-    t.after(() => {
-        apiUtilsModule.getSystemAdminClient = originalGetSystemAdminClient;
-        delete require.cache[remindersPath];
-    });
-
-    delete require.cache[remindersPath];
+    replaceSystemDb(t, createMockScopedDb({ tx: async () => { throw new Error('db timeout'); } }));
     const { ReminderReadError, getReminderSubscriptions } = require('../lib/reminders') as typeof import('../lib/reminders');
 
     await assert.rejects(
@@ -78,60 +60,22 @@ test('getReminderSubscriptions should throw instead of masquerading as an empty 
 });
 
 test('isSubscribed should throw instead of returning false when user-settings reads fail', async (t) => {
-    const apiUtilsModule = require('../lib/api-utils') as any;
-    const remindersPath = require.resolve('../lib/reminders');
-    const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
-
-    apiUtilsModule.getSystemAdminClient = () => ({
-        from(table: string) {
-            if (table === 'reminder_subscriptions') {
-                return {
-                    select() {
-                        return {
-                            eq() {
-                                return {
-                                    eq() {
-                                        return {
-                                            maybeSingle: async () => ({
-                                                data: { enabled: true, notify_site: true },
-                                                error: null,
-                                            }),
-                                        };
-                                    },
-                                };
-                            },
-                        };
+    replaceSystemDb(t, createMockScopedDb({
+        tx: async (work) => work({
+            selectFrom(table: string) {
+                const query = {
+                    select() { return query; },
+                    where() { return query; },
+                    async executeTakeFirst() {
+                        if (table === 'reminder_subscriptions') return { enabled: true, notify_site: true };
+                        if (table === 'user_settings') throw new Error('settings read failed');
+                        throw new Error(`unexpected table: ${table}`);
                     },
                 };
-            }
-
-            if (table === 'user_settings') {
-                return {
-                    select() {
-                        return {
-                            eq() {
-                                return {
-                                    maybeSingle: async () => ({
-                                        data: null,
-                                        error: { message: 'settings read failed' },
-                                    }),
-                                };
-                            },
-                        };
-                    },
-                };
-            }
-
-            throw new Error(`unexpected table: ${table}`);
-        },
-    });
-
-    t.after(() => {
-        apiUtilsModule.getSystemAdminClient = originalGetSystemAdminClient;
-        delete require.cache[remindersPath];
-    });
-
-    delete require.cache[remindersPath];
+                return query;
+            },
+        } as never),
+    }));
     const { ReminderReadError, isSubscribed } = require('../lib/reminders') as typeof import('../lib/reminders');
 
     await assert.rejects(
@@ -140,60 +84,44 @@ test('isSubscribed should throw instead of returning false when user-settings re
     );
 });
 
-function createReminderServiceMock(options: {
+function createReminderServiceMock(t: import('node:test').TestContext, options: {
     reminder: Record<string, unknown>;
     statuses: Array<'sent' | 'skipped' | 'not_claimed'>;
 }) {
     const rpcCalls: Array<{ fn: string; args: Record<string, unknown> }> = [];
     let statusIndex = 0;
-
-    return {
-        rpcCalls,
-        client: {
-            from: (table: string) => ({
-                select: () => ({
-                    eq: () => ({
-                        lte: () => ({
-                            or: () => ({
-                                limit: async () => {
-                                    assert.equal(table, 'scheduled_reminders');
-                                    return {
-                                        data: [{ ...options.reminder }],
-                                        error: null,
-                                    };
-                                },
-                            }),
-                        }),
-                    }),
-                }),
-            }),
-            rpc: (fn: string, args: Record<string, unknown>) => {
-                rpcCalls.push({ fn, args });
-                const status = options.statuses[statusIndex] ?? 'not_claimed';
-                statusIndex += 1;
-                return Promise.resolve({ data: { status }, error: null });
+    const scoped = createMockScopedDb({
+        tx: async (work) => work({
+            selectFrom(table: string) {
+                assert.equal(table, 'scheduled_reminders');
+                const query = {
+                    selectAll() { return query; },
+                    where() { return query; },
+                    limit() { return query; },
+                    async execute() { return [{ ...options.reminder }]; },
+                };
+                return query;
             },
+        } as never),
+        rpc: async (fn: string, args: Record<string, unknown>) => {
+            rpcCalls.push({ fn, args });
+            const status = options.statuses[statusIndex] ?? 'not_claimed';
+            statusIndex += 1;
+            return status === undefined ? null : { status };
         },
-    };
+    });
+    replaceSystemDb(t, scoped);
+    return { rpcCalls, scoped };
 }
 
 test('processScheduledReminders marks skipped reminder as sent only after successful claim', async (t) => {
-    const supabaseServerModule = require('../lib/supabase-server') as any;
-
-    const originalGetServiceClient = supabaseServerModule.getSystemAdminClient;
     const reminder = {
         id: 'rem-1',
         user_id: 'user-1',
         reminder_type: 'solar_term',
         content: { term_name: 'Term', meaning: 'Meaning', tips: 'Tips' },
     };
-    const reminderMock = createReminderServiceMock({ reminder, statuses: ['skipped'] });
-
-    supabaseServerModule.getSystemAdminClient = () => reminderMock.client;
-
-    t.after(() => {
-        supabaseServerModule.getSystemAdminClient = originalGetServiceClient;
-    });
+    const reminderMock = createReminderServiceMock(t, { reminder, statuses: ['skipped'] });
 
     const { processScheduledReminders } = await import('../lib/reminders');
     const processed = await processScheduledReminders();
@@ -206,22 +134,13 @@ test('processScheduledReminders marks skipped reminder as sent only after succes
 });
 
 test('processScheduledReminders counts sent reminder deliveries', async (t) => {
-    const supabaseServerModule = require('../lib/supabase-server') as any;
-
-    const originalGetServiceClient = supabaseServerModule.getSystemAdminClient;
     const reminder = {
         id: 'rem-2',
         user_id: 'user-1',
         reminder_type: 'fortune',
         content: { summary: 'Summary' },
     };
-    const reminderMock = createReminderServiceMock({ reminder, statuses: ['sent'] });
-
-    supabaseServerModule.getSystemAdminClient = () => reminderMock.client;
-
-    t.after(() => {
-        supabaseServerModule.getSystemAdminClient = originalGetServiceClient;
-    });
+    const reminderMock = createReminderServiceMock(t, { reminder, statuses: ['sent'] });
 
     const { processScheduledReminders } = await import('../lib/reminders');
     const processed = await processScheduledReminders();
@@ -232,22 +151,13 @@ test('processScheduledReminders counts sent reminder deliveries', async (t) => {
 });
 
 test('processScheduledReminders skips sending when reminder claim was already taken', async (t) => {
-    const supabaseServerModule = require('../lib/supabase-server') as any;
-
-    const originalGetServiceClient = supabaseServerModule.getSystemAdminClient;
     const reminder = {
         id: 'rem-3',
         user_id: 'user-1',
         reminder_type: 'fortune',
         content: { summary: 'Summary' },
     };
-    const reminderMock = createReminderServiceMock({ reminder, statuses: ['not_claimed'] });
-
-    supabaseServerModule.getSystemAdminClient = () => reminderMock.client;
-
-    t.after(() => {
-        supabaseServerModule.getSystemAdminClient = originalGetServiceClient;
-    });
+    const reminderMock = createReminderServiceMock(t, { reminder, statuses: ['not_claimed'] });
 
     const { processScheduledReminders } = await import('../lib/reminders');
     const processed = await processScheduledReminders();
@@ -258,22 +168,13 @@ test('processScheduledReminders skips sending when reminder claim was already ta
 });
 
 test('processScheduledReminders sends key date reminders through transactional delivery rpc', async (t) => {
-    const supabaseServerModule = require('../lib/supabase-server') as any;
-
-    const originalGetServiceClient = supabaseServerModule.getSystemAdminClient;
     const reminder = {
         id: 'rem-4',
         user_id: 'user-1',
         reminder_type: 'key_date',
         content: { description: '今天有重要事项' },
     };
-    const reminderMock = createReminderServiceMock({ reminder, statuses: ['sent'] });
-
-    supabaseServerModule.getSystemAdminClient = () => reminderMock.client;
-
-    t.after(() => {
-        supabaseServerModule.getSystemAdminClient = originalGetServiceClient;
-    });
+    const reminderMock = createReminderServiceMock(t, { reminder, statuses: ['sent'] });
 
     const { processScheduledReminders } = await import('../lib/reminders');
     const processed = await processScheduledReminders();
@@ -285,21 +186,13 @@ test('processScheduledReminders sends key date reminders through transactional d
 });
 
 test('scheduleSolarTermReminder should create reminders through transactional rpc', async (t) => {
-    const supabaseServerModule = require('../lib/supabase-server') as any;
-
-    const originalGetServiceClient = supabaseServerModule.getSystemAdminClient;
     const capture: { rpcCall: { fn: string; args: Record<string, unknown> } | null } = { rpcCall: null };
-
-    supabaseServerModule.getSystemAdminClient = () => ({
+    replaceSystemDb(t, createMockScopedDb({
         rpc: async (fn: string, args: Record<string, unknown>) => {
             capture.rpcCall = { fn, args };
-            return { data: true, error: null };
+            return true;
         },
-    });
-
-    t.after(() => {
-        supabaseServerModule.getSystemAdminClient = originalGetServiceClient;
-    });
+    }));
 
     const { scheduleSolarTermReminder } = await import('../lib/reminders');
     const ok = await scheduleSolarTermReminder('user-1', '2026-04-20', '谷雨');
@@ -319,21 +212,13 @@ test('scheduleSolarTermReminder should create reminders through transactional rp
 });
 
 test('scheduleFortuneReminder should create reminders through transactional rpc', async (t) => {
-    const supabaseServerModule = require('../lib/supabase-server') as any;
-
-    const originalGetServiceClient = supabaseServerModule.getSystemAdminClient;
     const capture: { rpcCall: { fn: string; args: Record<string, unknown> } | null } = { rpcCall: null };
-
-    supabaseServerModule.getSystemAdminClient = () => ({
+    replaceSystemDb(t, createMockScopedDb({
         rpc: async (fn: string, args: Record<string, unknown>) => {
             capture.rpcCall = { fn, args };
-            return { data: true, error: null };
+            return true;
         },
-    });
-
-    t.after(() => {
-        supabaseServerModule.getSystemAdminClient = originalGetServiceClient;
-    });
+    }));
 
     const { scheduleFortuneReminder } = await import('../lib/reminders');
     const ok = await scheduleFortuneReminder('user-1', '2026-04-21', { summary: '好运' });

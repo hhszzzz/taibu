@@ -10,7 +10,6 @@ import { jsonError, jsonOk } from '@/lib/api-utils';
 import { pruneExpiredNotifications } from '@/lib/notification-server';
 import { processDailyBriefings } from '@/lib/daily-briefing.server';
 import { cleanupAgentAttachments } from '@/lib/agent/attachments.server';
-import { getSystemAdminClient } from '@/lib/api-utils';
 
 /**
  * 验证 Cron 请求
@@ -45,7 +44,7 @@ export async function GET(request: NextRequest) {
 
     try {
         const operations = await Promise.allSettled([
-            processDailyBriefings(), cleanupAgentAttachments(getSystemAdminClient()),
+            processDailyBriefings(), cleanupAgentAttachments(),
             processScheduledReminders(), scheduleAllUsersReminders(), pruneExpiredNotifications(),
         ]);
         const [briefing, attachmentsCleaned, processed, scheduled, prunedNotifications] = operations.map(result => result.status === 'fulfilled' ? result.value : null);

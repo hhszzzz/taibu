@@ -1,5 +1,5 @@
 import { type NextRequest } from 'next/server';
-import { getSystemAdminClient, jsonError, requireUserContext } from '@/lib/api-utils';
+import { jsonError, requireUserContext } from '@/lib/api-utils';
 import { isValidUUID } from '@/lib/validation';
 import { loadAllConversationMessages } from '@/lib/server/conversation-messages';
 import { conversationHtml } from '@/lib/chat/conversation-transfer';
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (messageError) return jsonError('读取消息失败', 500);
     const format = request.nextUrl.searchParams.get('format') === 'html' ? 'html' : 'md';
     let markdown: string;
-    try { markdown = await exportConversationMarkdown(db, getSystemAdminClient(), auth.user.id, id, data.title || '太卜对话', messages, request.nextUrl.searchParams.get('tools') === '1'); }
+    try { markdown = await exportConversationMarkdown(db, auth.user.id, id, data.title || '太卜对话', messages, request.nextUrl.searchParams.get('tools') === '1'); }
     catch (cause) { return jsonError(cause instanceof Error ? cause.message : '导出资料失败', 409); }
     return new Response(format === 'html' ? conversationHtml(data.title || '太卜对话', markdown) : markdown, { headers: {
         'Content-Type': format === 'html' ? 'text/html;charset=utf-8' : 'text/markdown;charset=utf-8',

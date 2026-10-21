@@ -272,36 +272,6 @@ test('fortune and reminder chart reads pass saved time options to shared reconst
     calendar_type: 'solar', is_leap_month: false, timezone: 'America/New_York', disambiguation: 'later',
   };
   const rebuiltRows: Parameters<typeof storedBazi.calculateBaziOutputFromStoredFields>[0][] = [];
-  const client = {
-    from(table: string) {
-      return {
-        select(columns: string) {
-          if (table === 'bazi_charts') {
-            assert.ok(columns.split(', ').includes('timezone'));
-            assert.ok(columns.split(', ').includes('disambiguation'));
-          }
-          const query = {
-            eq() { return query; }, order() { return query; }, limit() { return query; }, in() { return query; },
-            async maybeSingle() {
-              if (table === 'user_settings') return { data: { default_bazi_chart_id: row.id }, error: null };
-              assert.equal(table, 'bazi_charts');
-              return { data: Object.fromEntries(columns.split(', ').map(key => [key, row[key]])), error: null };
-            },
-            then(resolve: (value: { data: Record<string, unknown>[]; error: null }) => unknown) {
-              assert.ok(table === 'reminder_subscriptions' || table === 'user_settings');
-              return Promise.resolve(resolve({
-                data: table === 'reminder_subscriptions'
-                  ? [{ user_id: 'user-1', reminder_type: 'key_date', enabled: true, notify_site: true }]
-                  : [{ user_id: 'user-1', notifications_enabled: true, notify_site: true }],
-                error: null,
-              }));
-            },
-          };
-          return query;
-        },
-      };
-    },
-  };
   const { createMockScopedDb } = await import('./helpers/db-mock');
   const scoped = createMockScopedDb({
     tx: async (work) => work({
@@ -309,9 +279,7 @@ test('fortune and reminder chart reads pass saved time options to shared reconst
         let columns: string[] = [];
         const query = {
           select(selection: string | readonly string[]) {
-            columns = Array.isArray(selection)
-              ? [...selection]
-              : String(selection).split(',').map((column) => column.trim());
+            columns = Array.isArray(selection) ? [...selection] : String(selection).split(',').map((column) => column.trim());
             if (table === 'bazi_charts') {
               assert.ok(columns.includes('timezone'));
               assert.ok(columns.includes('disambiguation'));
@@ -326,14 +294,21 @@ test('fortune and reminder chart reads pass saved time options to shared reconst
             assert.equal(table, 'bazi_charts');
             return Object.fromEntries(columns.map((key) => [key, row[key]]));
           },
-          async execute() { return []; },
+          async execute() {
+            if (table === 'reminder_subscriptions') return [{ user_id: 'user-1', reminder_type: 'key_date', enabled: true, notify_site: true }];
+            if (table === 'user_settings') return [{ user_id: 'user-1', notifications_enabled: true, notify_site: true }];
+            return [];
+          },
         };
         return query;
       },
     } as never),
   });
-  t.mock.method(apiUtils, 'getSystemAdminClient', () => client);
-  t.mock.method(apiUtils, 'requireUserContext', async () => ({ user: { id: 'user-1' }, db: client, supabase: client }));
+  const contextModule = require('../lib/db/context.server') as typeof import('../lib/db/context.server');
+  const originalSystemDb = contextModule.systemDb;
+  contextModule.systemDb = (() => scoped) as typeof contextModule.systemDb;
+  t.after(() => { contextModule.systemDb = originalSystemDb; });
+  t.mock.method(apiUtils, 'requireUserContext', async () => ({ user: { id: 'user-1' }, scoped }));
   t.mock.method(reminders, 'updateReminderSubscription', async () => true);
   t.mock.method(storedBazi, 'calculateBaziOutputFromStoredFields', (input: Parameters<typeof storedBazi.calculateBaziOutputFromStoredFields>[0]) => {
     rebuiltRows.push(input);

@@ -1210,11 +1210,11 @@
       "callers": [
         {
           "file": "src/lib/agent/attachments.server.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/agent/tools.server.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/chat/conversation-export.server.ts",
@@ -1228,20 +1228,20 @@
       "status": "defined",
       "callers": [
         {
-          "file": "src/app/api/agent/attachments/route.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/app/api/agent/attachments/route.ts",
-          "kind": "literal-from"
+          "file": "src/lib/agent/attachments.server.ts",
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/agent/attachments.server.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/agent/attachments.server.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/agent/attachments.server.ts",
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -1252,15 +1252,15 @@
       "callers": [
         {
           "file": "src/lib/agent/store.server.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/agent/store.server.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/agent/store.server.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/chat/conversation-export.server.ts",
@@ -1275,11 +1275,11 @@
       "callers": [
         {
           "file": "src/lib/agent/api.server.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/agent/store.server.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -1290,7 +1290,7 @@
       "callers": [
         {
           "file": "src/lib/agent/store.server.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -1301,11 +1301,11 @@
       "callers": [
         {
           "file": "src/lib/agent/store.server.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/agent/store.server.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -1316,27 +1316,27 @@
       "callers": [
         {
           "file": "src/lib/agent/activity.server.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/agent/admin-tasks.server.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/agent/admin-tasks.server.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/agent/api.server.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/agent/store.server.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/agent/store.server.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -1347,7 +1347,7 @@
       "callers": [
         {
           "file": "src/lib/agent/store.server.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -1553,7 +1553,7 @@
         },
         {
           "file": "src/app/api/reminders/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/search/route.ts",
@@ -1569,7 +1569,7 @@
         },
         {
           "file": "src/lib/agent/briefing.server.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/api/chart-crud.ts",
@@ -1601,7 +1601,7 @@
         },
         {
           "file": "src/lib/reminders.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/server/bazi-case-profile.ts",
@@ -1786,7 +1786,7 @@
         },
         {
           "file": "src/lib/agent/api.server.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/annual-report.ts",
@@ -2255,7 +2255,7 @@
         },
         {
           "file": "src/lib/agent/activity.server.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/notification-server.ts",
@@ -2312,19 +2312,19 @@
       "callers": [
         {
           "file": "src/lib/reminders.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/reminders.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/reminders.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/reminders.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -2335,7 +2335,7 @@
       "callers": [
         {
           "file": "src/lib/reminders.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -2385,7 +2385,7 @@
         },
         {
           "file": "src/lib/agent/tools.server.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -2423,15 +2423,15 @@
         },
         {
           "file": "src/lib/agent/briefing.server.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/agent/tools.server.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/agent/tools.server.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/ai/chart-prompt-detail.ts",
@@ -2443,11 +2443,11 @@
         },
         {
           "file": "src/lib/reminders.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/reminders.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/server/chat/bootstrap.ts",

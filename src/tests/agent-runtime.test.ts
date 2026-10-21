@@ -1,7 +1,6 @@
 import { test, beforeEach, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   createAssistantMessageEventStream, getCurrentTools,
 } from "@earendil-works/pi-ai";
@@ -254,14 +253,14 @@ test("lease renewal begins while a long native log is still reopening", async ()
 });
 
 test("Agent database RPC requests carry a per-request deadline", async () => {
-  let signal: AbortSignal | undefined;
+  let timeoutMs: number | undefined;
   const store = new AgentStore({
-    rpc: () => ({
-      abortSignal: (deadline: AbortSignal) => { signal = deadline; return Promise.resolve({ data: 7, error: null }); },
-    }),
-  } as unknown as SupabaseClient);
+    scope: { kind: 'system' },
+    tx: async () => { throw new Error('not used'); },
+    rpc: async (_name: string, _args: Record<string, unknown>, options?: { timeoutMs?: number }) => { timeoutMs = options?.timeoutMs; return 7; },
+  } as never);
   assert.equal(await store.rpc("fixture", {}), 7);
-  assert.ok(signal instanceof AbortSignal && !signal.aborted);
+  assert.equal(timeoutMs, 30_000);
 });
 
 test("an empty new answer cannot succeed by reusing an earlier task's history", async () => {

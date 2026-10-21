@@ -3,13 +3,8 @@ import { AGENT_STREAM_QUEUE_BYTES, enqueueAgentFrame, type AgentResync } from '.
 import { createHash, randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { parseAgentMcpServers } from './mcp-client.server';
-import {
-  getSystemAdminClient,
-  jsonError,
-  jsonOk,
-  requireUserContext,
-  resolveRequestDbClient,
-} from "@/lib/api-utils";
+import { jsonError, jsonOk, requireUserContext } from "@/lib/api-utils";
+import { systemDb } from "@/lib/db/context.server";
 import { getGlobalAIFeatureGuardResponse } from "@/lib/api/ai-feature-guard";
 import { readFeatureModuleStateFresh } from "@/lib/app-settings";
 import {
@@ -230,7 +225,7 @@ export async function agentEndpoint(action: () => Promise<Response>) {
 export async function agentCapabilities(request: NextRequest) {
   await authenticated(request);
   const state = await readFeatureModuleStateFresh("agent");
-  const store = new AgentStore(getSystemAdminClient());
+  const store = new AgentStore(systemDb());
   let mcpAvailable = false;
   try { mcpAvailable = parseAgentMcpServers().length > 0; } catch { /* Invalid administrator config cannot advertise network access. */ }
   return jsonOk({
@@ -256,7 +251,7 @@ export async function createAgentTask(request: NextRequest) {
     if ((Array.isArray(body.message.attachments.ids) && body.message.attachments.ids.length) || body.message.attachments.fileName || body.mentions.length || body.fileContent !== undefined)
       throw new AgentApiError("压缩上下文时不能附带资料或引用");
   }
-  const store = new AgentStore(getSystemAdminClient());
+  const store = new AgentStore(systemDb());
   const custom: CustomProviderRequest | undefined = body.customProvider
     ? {
         apiUrl: body.customProvider.apiUrl,
@@ -300,21 +295,20 @@ export async function createAgentTask(request: NextRequest) {
     dreamMode: body.dreamMode === true,
     mangpaiMode: body.mangpaiMode === true,
   });
-  const existing = await store.db
-    .from("agent_runs")
-    .select("*")
-    .eq("user_id", auth.user.id)
-    .eq("request_id", body.clientRequestId)
-    .maybeSingle();
-  if (existing.error) throw new Error(existing.error.message);
-  if (existing.data) {
-    if (existing.data.request_hash !== requestHash)
+  const existing = await store.db.tx((trx) => trx
+    .selectFrom("agent_runs")
+    .selectAll()
+    .where("user_id", "=", auth.user.id)
+    .where("request_id", "=", body.clientRequestId)
+    .executeTakeFirst());
+  if (existing) {
+    if (existing.request_hash !== requestHash)
       throw new AgentApiError(
         "同一请求标识对应了不同内容",
         409,
         "REQUEST_MISMATCH",
       );
-    return jsonOk(await store.view(existing.data as AgentRunRow));
+    return jsonOk(await store.view(existing as unknown as AgentRunRow));
   }
   if (!(await store.workerReady()))
     throw new AgentApiError(
@@ -322,15 +316,15 @@ export async function createAgentTask(request: NextRequest) {
       503,
       "AGENT_WORKER_UNAVAILABLE",
     );
-  const { data: conversation, error } = await auth.db
-    .from("conversations")
-    .select("id,messages,title")
-    .eq("id", body.conversationId)
-    .eq("user_id", auth.user.id)
-    .maybeSingle();
-  if (error || !conversation)
+  const conversation = await auth.scoped.tx((trx) => trx
+    .selectFrom("conversations")
+    .select(["id", "messages", "title"])
+    .where("id", "=", body.conversationId)
+    .where("user_id", "=", auth.user.id)
+    .executeTakeFirst());
+  if (!conversation)
     throw new AgentApiError("对话不存在", 404, "CONVERSATION_NOT_FOUND");
-  let history = (conversation.messages ?? []) as ChatMessage[];
+  let history = (conversation.messages ?? []) as unknown as ChatMessage[];
   if (body.replaceFromMessageId) {
     const index = history.findIndex(
       (m) => m.id === body.replaceFromMessageId && m.role === "user",
@@ -491,7 +485,7 @@ export async function createAgentTask(request: NextRequest) {
 export async function getAgentTask(request: NextRequest, id?: string) {
   if (id && !isValidUUID(id)) throw new AgentApiError("任务标识无效");
   const auth = await authenticated(request);
-  const store = new AgentStore(getSystemAdminClient());
+  const store = new AgentStore(systemDb());
   const conversationId = request.nextUrl.searchParams.get("conversationId");
   if (!id && (!conversationId || !isValidUUID(conversationId)))
     throw new AgentApiError("对话标识无效");
@@ -506,9 +500,7 @@ export async function getAgentTask(request: NextRequest, id?: string) {
 /** Sidebar markers: the caller's active runs and unread task notices, read under their own RLS. */
 export async function getAgentActivity(request: NextRequest) {
   const auth = await authenticated(request);
-  const db = resolveRequestDbClient(auth);
-  if (!db) throw new AgentApiError("读取任务状态失败", 500, "AGENT_SERVICE_ERROR");
-  return jsonOk(await readAgentActivity(db, auth.user.id, request.signal));
+  return jsonOk(await readAgentActivity(auth.scoped, auth.user.id, request.signal));
 }
 
 export async function controlAgentTask(
@@ -518,7 +510,7 @@ export async function controlAgentTask(
 ) {
   if (!isValidUUID(id)) throw new AgentApiError("任务标识无效");
   const auth = await authenticated(request);
-  const store = new AgentStore(getSystemAdminClient());
+  const store = new AgentStore(systemDb());
   const run = await store.getRun(id, auth.user.id);
   if (!run) throw new AgentApiError("任务不存在", 404, "AGENT_RUN_NOT_FOUND");
   if (action === "cancel") {
@@ -537,12 +529,14 @@ export async function controlAgentTask(
     body.clientRequestId.length > 160
   )
     throw new AgentApiError("补充消息无效");
-  const previousCommand = await store.db.from('agent_run_commands').select('message,original_message,mode,original_mode').eq('run_id', id).eq('request_id', body.clientRequestId).maybeSingle();
-  if (previousCommand.error) throw new AgentApiError('读取补充消息失败', 500);
-  if (previousCommand.data) {
-    const old = previousCommand.data.original_message ?? previousCommand.data.message;
-    if ((previousCommand.data.original_mode ?? previousCommand.data.mode) !== body.mode || old.content !== body.content || hashAgentRequest(old.attachments?.ids ?? []) !== hashAgentRequest(body.attachmentIds ?? []) || hashAgentRequest(old.metadata?.agentAnswers ?? null) !== hashAgentRequest(body.answers ?? null) || (body.questionId !== undefined && old.metadata?.agentQuestionId !== body.questionId)) throw new AgentApiError('同一消息标识对应了不同内容', 409);
-    return jsonOk({ message: previousCommand.data.message, run: await store.view(run) });
+  const clientRequestId = body.clientRequestId;
+  const previousCommand = await store.db.tx(trx => trx.selectFrom('agent_run_commands')
+    .select(['message', 'original_message', 'mode', 'original_mode'])
+    .where('run_id', '=', id).where('request_id', '=', clientRequestId).executeTakeFirst());
+  if (previousCommand) {
+    const old = (previousCommand.original_message ?? previousCommand.message) as unknown as ChatMessage;
+    if ((previousCommand.original_mode ?? previousCommand.mode) !== body.mode || old.content !== body.content || hashAgentRequest(old.attachments?.ids ?? []) !== hashAgentRequest(body.attachmentIds ?? []) || hashAgentRequest(old.metadata?.agentAnswers ?? null) !== hashAgentRequest(body.answers ?? null) || (body.questionId !== undefined && old.metadata?.agentQuestionId !== body.questionId)) throw new AgentApiError('同一消息标识对应了不同内容', 409);
+    return jsonOk({ message: previousCommand.message, run: await store.view(run) });
   }
   const message: ChatMessage = {
     id: randomUUID(),
@@ -572,7 +566,7 @@ export async function controlAgentTask(
   }
   const command = await store.rpc<AgentCommandRow>("agent_submit_command", {
     p_run_id: id,
-    p_request_id: body.clientRequestId,
+    p_request_id: clientRequestId,
     p_mode: body.mode,
     p_message: message,
   });
@@ -585,7 +579,7 @@ export async function controlAgentTask(
 export async function streamAgentTask(request: NextRequest, id: string) {
   if (!isValidUUID(id)) throw new AgentApiError("任务标识无效");
   const auth = await authenticated(request);
-  const store = new AgentStore(getSystemAdminClient());
+  const store = new AgentStore(systemDb());
   if (!(await store.getRun(id, auth.user.id)))
     throw new AgentApiError("任务不存在", 404, "AGENT_RUN_NOT_FOUND");
   const encoder = new TextEncoder();

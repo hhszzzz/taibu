@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { createMockAuthContext } from './helpers/supabase-mock';
+import { createMockScopedDb } from './helpers/db-mock';
 import { GET as activityRoute } from '../app/api/agent/activity/route';
 import { getAgentActivityPollDelay, getConversationAgentMarkers, getConversationNoticeIds, parseAgentActivity, type AgentActivity } from '../lib/agent/activity';
 
@@ -47,20 +48,25 @@ function fixture(t: TestContext) {
     const calls: { table: string; method: string; args: unknown[] }[] = [];
     const rows: Record<string, unknown[]> = {};
     const errors: Record<string, unknown> = {};
-    const db = {
-        from(table: string) {
-            const query = new Proxy({}, {
-                get(_target, method: string) {
-                    if (method === 'then') return (resolve: (value: unknown) => void) => resolve({ data: rows[table] ?? [], error: errors[table] ?? null });
-                    return (...args: unknown[]) => { calls.push({ table, method, args }); return query; };
-                },
-            });
-            return query;
-        },
-    };
+    const scoped = createMockScopedDb({
+        tx: async (work) => work({
+            selectFrom(table: string) {
+                const query = {
+                    select() { calls.push({ table, method: 'select', args: [] }); return query; },
+                    where(...args: unknown[]) { calls.push({ table, method: 'where', args }); return query; },
+                    orderBy(...args: unknown[]) { calls.push({ table, method: 'orderBy', args }); return query; },
+                    limit(...args: unknown[]) { calls.push({ table, method: 'limit', args }); return query; },
+                    async execute() {
+                        if (table in errors) throw errors[table];
+                        return rows[table] ?? [];
+                    },
+                };
+                return query;
+            },
+        } as never),
+    });
     const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
-    t.mock.method(api, 'requireUserContext', async () => createMockAuthContext(db, owner));
-    t.mock.method(api, 'getSystemAdminClient', () => { throw new Error('activity must read under the caller’s own RLS'); });
+    t.mock.method(api, 'requireUserContext', async () => createMockAuthContext({}, owner, scoped));
     return { owner, calls, rows, errors, api };
 }
 const request = () => new NextRequest('http://localhost/api/agent/activity');
@@ -78,13 +84,13 @@ test('activity route reads only the caller’s active runs and unread task notic
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { runs: [{ runId: run, conversationId: a, status: 'awaiting_input' }], notices: [{ id: notice, conversationId: b, status: 'completed' }] });
     const filters = (table: string) => f.calls.filter(call => call.table === table).map(call => [call.method, ...call.args]);
-    assert.deepEqual(filters('agent_runs').filter(([method]) => method === 'eq' || method === 'in'), [['eq', 'user_id', f.owner], ['in', 'status', ['queued', 'running', 'awaiting_input', 'cancelling']]]);
-    const noticeFilters = filters('notifications');
-    assert.ok(noticeFilters.some(([method, field, value]) => method === 'eq' && field === 'user_id' && value === f.owner));
-    assert.ok(noticeFilters.some(([method, field, value]) => method === 'eq' && field === 'is_read' && value === false));
-    assert.ok(noticeFilters.some(([method, field, value]) => method === 'like' && field === 'event_key' && value === 'agent:%'));
-    assert.ok(noticeFilters.some(([method, field]) => method === 'gte' && field === 'created_at'), 'notices past retention are not shown');
-    assert.ok(noticeFilters.some(([method, value]) => method === 'limit' && value === 50) && filters('agent_runs').some(([method, value]) => method === 'limit' && value === 50));
+    assert.deepEqual(filters('agent_runs').filter(([method]) => method === 'where').map(call => call.slice(1)), [['user_id', '=', f.owner], ['status', 'in', ['queued', 'running', 'awaiting_input', 'cancelling']]]);
+    const noticeFilters = filters('notifications').filter(([method]) => method === 'where').map(call => call.slice(1));
+    assert.ok(noticeFilters.some(([field, operator, value]) => field === 'user_id' && operator === '=' && value === f.owner));
+    assert.ok(noticeFilters.some(([field, operator, value]) => field === 'is_read' && operator === '=' && value === false));
+    assert.ok(noticeFilters.some(([field, operator, value]) => field === 'event_key' && operator === 'like' && value === 'agent:%'));
+    assert.ok(noticeFilters.some(([field, operator]) => field === 'created_at' && operator === '>='), 'notices past retention are not shown');
+    assert.ok(noticeFilters.length === 4 && filters('agent_runs').some(([method, value]) => method === 'limit' && value === 50) && filters('notifications').some(([method, value]) => method === 'limit' && value === 50));
 });
 
 test('activity route requires a session and reports read failures without details', async t => {

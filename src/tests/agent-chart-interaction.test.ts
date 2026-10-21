@@ -297,31 +297,49 @@ test('with numbered evidence the focus receipt tells the model the number it may
 
 test('artifact database lookup scopes both owner and conversation rather than trusting an artifact UUID', async () => {
   const predicates: Array<[string, unknown]> = [];
+  let joined = '';
   const query = {
-    select: () => query, eq: (key: string, value: unknown) => { predicates.push([key, value]); return query; },
-    maybeSingle: async () => ({ data: null, error: null }),
+    innerJoin: (table: string, left: string, right: string) => { joined = `${table}:${left}:${right}`; return query; },
+    selectAll: () => query,
+    where: (key: string, _operator: string, value: unknown) => { predicates.push([key, value]); return query; },
+    executeTakeFirst: async () => undefined,
   };
-  const store = new AgentStore({ from: () => query } as unknown as ConstructorParameters<typeof AgentStore>[0]);
+  const db = createMockScopedDb({ tx: async work => work({ selectFrom: (table: string) => {
+    assert.equal(table, 'agent_run_artifacts as artifact');
+    return query;
+  } } as never) });
+  const store = new AgentStore(db);
   const run = row(), id = randomUUID();
   assert.equal(await store.chartArtifact(run, id), null);
-  assert.deepEqual(predicates, [['id', id], ['kind', 'calculation'], ['agent_runs.user_id', run.user_id], ['agent_runs.conversation_id', run.conversation_id]]);
+  assert.equal(joined, 'agent_runs as run:run.id:artifact.run_id');
+  assert.deepEqual(predicates, [['artifact.id', id], ['artifact.kind', 'calculation'], ['run.user_id', run.user_id], ['run.conversation_id', run.conversation_id]]);
 });
 
 test('inspection lookup uses native numeric task order and never guesses between ambiguous legacy snapshots', async () => {
-  const run = row(), reference = 'artifact:' + randomUUID(), predicates: Array<[string, unknown]> = [], orders: unknown[] = [];
+  const run = row(), reference = 'artifact:' + randomUUID(), predicates: Array<[string, unknown]> = [], orders: string[] = [];
   const newer = { id: randomUUID(), result: { inspectionOrder: 40 } }, older = { id: randomUUID(), result: { inspectionOrder: 9 } };
   let rows: Array<{ id: string; result: { inspectionOrder?: number } }> = [newer, older];
   const query = {
-    select: () => query, eq: (key: string, value: unknown) => { predicates.push([key, value]); return query; },
-    in: (key: string, value: unknown) => { predicates.push([key, value]); return query; },
-    order: (key: string, options: unknown) => { orders.push([key, options]); return query; },
+    selectAll: () => query,
+    where: (key: string, _operator: string, value: unknown) => { predicates.push([key, value]); return query; },
+    orderBy: (_expression: unknown, modifier: (order: { desc: () => { nullsLast: () => void } }) => void) => {
+      modifier({ desc: () => ({ nullsLast: () => orders.push('desc nulls last') }) });
+      return query;
+    },
     limit: (value: number) => { assert.equal(value, 2); return query; },
-    then: (resolve: (value: unknown) => void) => resolve({ data: rows, error: null }),
+    execute: async () => rows,
   };
-  const store = new AgentStore({ from: (table: string) => { assert.equal(table, 'agent_run_artifacts'); return query; } } as never);
+  const db = createMockScopedDb({ tx: async work => work({ selectFrom: (table: string) => {
+    assert.equal(table, 'agent_run_artifacts');
+    return query;
+  } } as never) });
+  const store = new AgentStore(db);
   assert.equal((await store.inspectedChart(run, reference))!.id, newer.id);
-  assert.deepEqual(predicates, [['run_id', run.id], ['tool_name', ['inspect_chart', ...Object.keys(AGENT_DRILLDOWN_BASES)]], ['result->details->>chartReference', reference]]);
-  assert.deepEqual(orders, [['result->inspectionOrder', { ascending: false, nullsFirst: false }]], 'JSON numeric order, not text ordering or an invented SQL column');
+  assert.equal(predicates.length, 3);
+  assert.deepEqual(predicates[0], ['run_id', run.id]);
+  assert.deepEqual(predicates[1], ['tool_name', ['inspect_chart', ...Object.keys(AGENT_DRILLDOWN_BASES)]]);
+  assert.equal(predicates[2][1], reference);
+  assert.deepEqual(orders, ['desc nulls last'], 'JSON numeric order, not text ordering or an invented SQL column');
   rows = [{ id: older.id, result: {} }, { id: newer.id, result: {} }];
   await assert.rejects(store.inspectedChart(run, reference), /重新调用 inspect_chart/);
   rows = rows.slice(0, 1);

@@ -3,7 +3,7 @@ import { BACKGROUND_CONTEXT, withCancel } from '@earendil-works/chord/context';
 import { createRegistry, defineTool, Harness, MemoryStorage, hook, ToolTask, GenerationTask } from '@earendil-works/pi-durable';
 import { Type, type Api, type Model } from '@earendil-works/pi-ai';
 import { listToolDefinitions, executeTool, buildToolSuccessPayload } from 'taibu-core/mcp';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { ScopedDb } from '@/lib/db/context.server';
 import type { AIModelConfig } from '@/types';
 import { getUserCreditInfo } from '@/lib/user/credits';
 import { readFeatureModuleStateFresh } from '@/lib/app-settings';
@@ -20,7 +20,7 @@ import { backgroundCompactionTokens } from './compaction';
 import type { PiStreamFn } from './types';
 import type { JsonValue } from '@earendil-works/chord';
 
-export async function generateBriefingAgent(db: SupabaseClient, job: { user_id: string; local_date: string; timezone: string }, config: AIModelConfig, signal: AbortSignal, streamFn?: PiStreamFn): Promise<string> {
+export async function generateBriefingAgent(db: ScopedDb, job: { user_id: string; local_date: string; timezone: string }, config: AIModelConfig, signal: AbortSignal, streamFn?: PiStreamFn): Promise<string> {
     const scope = withCancel(BACKGROUND_CONTEXT);
     const cancel = () => scope.cancel();
     signal.addEventListener('abort', cancel, { once: true });
@@ -53,13 +53,14 @@ export async function generateBriefingAgent(db: SupabaseClient, job: { user_id: 
                     called.add('read_saved_chart');
                     return { output: [{ type: 'text', text: JSON.stringify({ available: false, reason: '命盘功能未启用，仅提供一般建议' }) }] };
                 }
-                const settings = await db.from('user_settings').select('default_bazi_chart_id').eq('user_id', job.user_id).maybeSingle();
-                if (settings.error) throw new Error('读取命盘设置失败');
-                let query = db.from('bazi_charts').select('*').eq('user_id', job.user_id);
-                if (settings.data?.default_bazi_chart_id) query = query.eq('id', settings.data.default_bazi_chart_id);
-                const chart = await query.order('created_at', { ascending: false }).limit(1).maybeSingle();
-                if (chart.error) throw new Error('读取命盘失败');
-                const bazi = calculateBaziOutputFromStoredFields(chart.data ?? {});
+                const settings = await db.tx(trx => trx.selectFrom('user_settings').select('default_bazi_chart_id')
+                    .where('user_id', '=', job.user_id).executeTakeFirst()).catch(() => { throw new Error('读取命盘设置失败'); });
+                const chart = await db.tx(trx => {
+                    let query = trx.selectFrom('bazi_charts').selectAll().where('user_id', '=', job.user_id);
+                    if (settings?.default_bazi_chart_id) query = query.where('id', '=', settings.default_bazi_chart_id);
+                    return query.orderBy('created_at', 'desc').limit(1).executeTakeFirst();
+                }).catch(() => { throw new Error('读取命盘失败'); });
+                const bazi = calculateBaziOutputFromStoredFields(chart ?? {});
                 const details = { available: !!bazi, chart: bazi, dailyFortune: bazi ? calculateDailyFortune(bazi, new Date(`${job.local_date}T12:00:00Z`)) : null };
                 called.add('read_saved_chart');
                 return { output: [{ type: 'text', text: JSON.stringify(details) }] };

@@ -1,5 +1,6 @@
 import "server-only";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { ScopedDb } from "@/lib/db/context.server";
+import { jsonPath, jsonPathText } from "@/lib/db/sql-helpers";
 import type { ChatMessage, CustomProviderRequest, AIReasoningEffort } from "@/types";
 import type { AgentCollaborator } from '@/lib/chat/model-settings';
 import type { EncryptedAgentCredential } from "./credentials.server";
@@ -74,54 +75,50 @@ export interface AgentStoredEvent {
 }
 
 export class AgentStore {
-  constructor(readonly db: SupabaseClient) {}
+  constructor(readonly db: ScopedDb) {}
   async rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
-    const { data, error } = await this.db.rpc(name, args)
-      .abortSignal(AbortSignal.timeout(30_000));
-    if (error) throw new Error(error.message);
-    return data as T;
+    return this.db.rpc(name as never, args as never, { timeoutMs: 30_000 }) as Promise<T>;
   }
   async getRun(id: string, userId?: string) {
-    let query = this.db.from("agent_runs").select("*").eq("id", id);
-    if (userId) query = query.eq("user_id", userId);
-    const { data, error } = await query.maybeSingle();
-    if (error) throw new Error(error.message);
-    return data as AgentRunRow | null;
+    const row = await this.db.tx((trx) => {
+      let query = trx.selectFrom("agent_runs").selectAll().where("id", "=", id);
+      if (userId) query = query.where("user_id", "=", userId);
+      return query.executeTakeFirst();
+    });
+    return (row ?? null) as unknown as AgentRunRow | null;
   }
   async currentRun(conversationId: string, userId: string) {
-    const { data, error } = await this.db
-      .from("agent_runs")
-      .select("*")
-      .eq("conversation_id", conversationId)
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
+    const row = await this.db.tx((trx) => trx
+      .selectFrom("agent_runs")
+      .selectAll()
+      .where("conversation_id", "=", conversationId)
+      .where("user_id", "=", userId)
+      .orderBy("created_at", "desc")
       .limit(1)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    return data as AgentRunRow | null;
+      .executeTakeFirst());
+    return (row ?? null) as unknown as AgentRunRow | null;
   }
   async cursor(id: string) {
-    const { data, error } = await this.db
-      .from("agent_run_events")
+    const row = await this.db.tx((trx) => trx
+      .selectFrom("agent_run_events")
       .select("sequence")
-      .eq("run_id", id)
-      .order("sequence", { ascending: false })
+      .where("run_id", "=", id)
+      .orderBy("sequence", "desc")
       .limit(1)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    return Number(data?.sequence ?? 0);
+      .executeTakeFirst());
+    return Number(row?.sequence ?? 0);
   }
   async events(id: string, after: number, through: number) {
-    const { data, error } = await this.db
-      .from("agent_run_events")
-      .select("sequence,type,payload")
-      .eq("run_id", id)
-      .gt("sequence", after)
-      .lte("sequence", through)
-      .order("sequence")
-      .limit(100);
-    if (error) throw new Error(error.message);
-    return (data ?? []) as AgentStoredEvent[];
+    const rows = await this.db.tx((trx) => trx
+      .selectFrom("agent_run_events")
+      .select(["sequence", "type", "payload"])
+      .where("run_id", "=", id)
+      .where("sequence", ">", after)
+      .where("sequence", "<=", through)
+      .orderBy("sequence", "asc")
+      .limit(100)
+      .execute());
+    return rows as unknown as AgentStoredEvent[];
   }
   async view(run: AgentRunRow): Promise<AgentRunView> {
     const commands = await this.commands(run, { includeConsumed: true });
@@ -158,63 +155,73 @@ export class AgentStore {
     };
   }
   async workerReady() {
-    const { data, error } = await this.db
-      .from("agent_workers")
-      .select("id")
-      .eq("engine", AGENT_ENGINE)
-      .gt("heartbeat_at", new Date(Date.now() - 30_000).toISOString())
-      .limit(1);
-    if (error) return false;
-    return !!data?.length;
+    try {
+      const row = await this.db.tx((trx) => trx
+        .selectFrom("agent_workers")
+        .select("id")
+        .where("engine", "=", AGENT_ENGINE)
+        .where("heartbeat_at", ">", new Date(Date.now() - 30_000).toISOString())
+        .limit(1)
+        .executeTakeFirst());
+      return !!row;
+    } catch {
+      return false;
+    }
   }
   lease(run: AgentRunRow) {
     return { p_run_id: run.id, p_worker_id: run.worker_id, p_fence: run.fence };
   }
   async commands(run: AgentRunRow, { includeConsumed = false } = {}) {
-    let query = this.db
-      .from("agent_run_commands")
-      .select("sequence,mode,message,revision,sort_order,delivery_state")
-      .eq("run_id", run.id);
-    if (!includeConsumed) query = query.eq("consumed", false);
-    const { data, error } = await query.order("sort_order").order("sequence");
-    if (error) throw new Error(error.message);
-    return (data ?? []) as AgentCommandRow[];
+    const rows = await this.db.tx((trx) => {
+      let query = trx
+        .selectFrom("agent_run_commands")
+        .select(["sequence", "mode", "message", "revision", "sort_order", "delivery_state"])
+        .where("run_id", "=", run.id);
+      if (!includeConsumed) query = query.where("consumed", "=", false);
+      return query.orderBy("sort_order", "asc").orderBy("sequence", "asc").execute();
+    });
+    return rows as unknown as AgentCommandRow[];
   }
   async credential(run: AgentRunRow) {
-    const { data, error } = await this.db
-      .from("agent_run_credentials")
+    const row = await this.db.tx((trx) => trx
+      .selectFrom("agent_run_credentials")
       .select("ciphertext")
-      .eq("run_id", run.id)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    return data?.ciphertext as EncryptedAgentCredential | undefined;
+      .where("run_id", "=", run.id)
+      .executeTakeFirst());
+    return row?.ciphertext as EncryptedAgentCredential | undefined;
   }
   async artifact(run: AgentRunRow, callId: string) {
-    const { data, error } = await this.db
-      .from("agent_run_artifacts")
-      .select("*")
-      .eq("run_id", run.id)
-      .eq("call_id", callId)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    return data as AgentArtifactRow | null;
+    const row = await this.db.tx((trx) => trx
+      .selectFrom("agent_run_artifacts")
+      .selectAll()
+      .where("run_id", "=", run.id)
+      .where("call_id", "=", callId)
+      .executeTakeFirst());
+    return (row ?? null) as unknown as AgentArtifactRow | null;
   }
   async chartArtifact(run: AgentRunRow, id: string) {
-    const { data, error } = await this.db.from('agent_run_artifacts')
-      .select('*,agent_runs!inner(user_id,conversation_id)')
-      .eq('id', id).eq('kind', 'calculation')
-      .eq('agent_runs.user_id', run.user_id).eq('agent_runs.conversation_id', run.conversation_id)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    return data as AgentArtifactRow | null;
+    const row = await this.db.tx((trx) => trx
+      .selectFrom("agent_run_artifacts as artifact")
+      .innerJoin("agent_runs as run", "run.id", "artifact.run_id")
+      .selectAll("artifact")
+      .where("artifact.id", "=", id)
+      .where("artifact.kind", "=", "calculation")
+      .where("run.user_id", "=", run.user_id)
+      .where("run.conversation_id", "=", run.conversation_id)
+      .executeTakeFirst());
+    return (row ?? null) as unknown as AgentArtifactRow | null;
   }
   async inspectedChart(run: AgentRunRow, reference: string): Promise<AgentArtifactRow | null> {
-    const { data, error } = await this.db.from('agent_run_artifacts').select('*')
-      .eq('run_id', run.id).in('tool_name', ['inspect_chart', ...Object.keys(AGENT_DRILLDOWN_BASES)])
-      .eq('result->details->>chartReference', reference)
-      .order('result->inspectionOrder', { ascending: false, nullsFirst: false }).limit(2);
-    if (error) throw new Error(error.message);
-    const snapshots = (data ?? []) as AgentArtifactRow[];
+    const rows = await this.db.tx((trx) => trx
+      .selectFrom("agent_run_artifacts")
+      .selectAll()
+      .where("run_id", "=", run.id)
+      .where("tool_name", "in", ["inspect_chart", ...Object.keys(AGENT_DRILLDOWN_BASES)])
+      .where(jsonPathText("result", ["details", "chartReference"]), "=", reference)
+      .orderBy(jsonPath("result", ["inspectionOrder"]), (order) => order.desc().nullsLast())
+      .limit(2)
+      .execute());
+    const snapshots = rows as unknown as AgentArtifactRow[];
     if (snapshots.length > 1 && !Number.isSafeInteger(snapshots[0]?.result.inspectionOrder))
       throw new Error('该命盘有多次旧版查看记录，请重新调用 inspect_chart 后再定位');
     return snapshots[0] ?? null;

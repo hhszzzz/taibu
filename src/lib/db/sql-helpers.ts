@@ -13,7 +13,21 @@ export function escapeLike(value: string): string {
 
 /** JSON text projection with a bound key, e.g. `source_data->>'chart_id'`. */
 export function jsonFieldText(column: string, key: string) {
-  return sql<string | null>`${sql.ref(column)}->>${sql.lit(key)}`;
+  return jsonPathText(column, [key]);
+}
+
+/** JSON value projection along a bound key path, e.g. `result->'details'->'chartReference'`. */
+export function jsonPath(column: string, path: readonly string[]) {
+  let expression: Expression<unknown> = sql.ref(column);
+  for (const key of path.slice(0, -1)) expression = sql`${expression}->${sql.lit(key)}`;
+  return sql<unknown>`${expression}->${sql.lit(path.at(-1)!)}`;
+}
+
+/** JSON text projection along a bound key path, e.g. `result->'details'->>'chartReference'`. */
+export function jsonPathText(column: string, path: readonly string[]) {
+  let expression: Expression<unknown> = sql.ref(column);
+  for (const key of path.slice(0, -1)) expression = sql`${expression}->${sql.lit(key)}`;
+  return sql<string | null>`${expression}->>${sql.lit(path.at(-1)!)}`;
 }
 
 type LooseTable = Record<string, Record<string, unknown>>;

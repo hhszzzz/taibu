@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAssistantMessageEventStream, getCurrentTools, getSystemMessageText, type AssistantMessage } from "@earendil-works/pi-ai";
 import type { StorageWrite } from "@earendil-works/pi-durable";
 import type { PiStreamFn as StreamFn } from "../../lib/agent/types";
@@ -85,7 +84,7 @@ export class MemoryStore extends AgentStore {
     return this.log.flatMap(c => c.writes).filter(w => w.type === "entry").map(w => w.value);
   }
   constructor() {
-    super({} as SupabaseClient);
+    super({} as never);
   }
   override async artifact(_run: AgentRunRow, callId: string) {
     return this.drafts.get(callId) ?? null;

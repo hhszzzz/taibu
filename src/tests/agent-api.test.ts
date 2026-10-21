@@ -3,10 +3,8 @@ import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
 import type { TestContext } from "node:test";
-import {
-  createMockAuthContext,
-  createMockSupabaseClient,
-} from "./helpers/supabase-mock";
+import { createMockAuthContext } from "./helpers/supabase-mock";
+import { createMockScopedDb } from "./helpers/db-mock";
 import { AgentStore, type AgentRunRow } from "../lib/agent/store.server";
 import {
   agentEndpoint,
@@ -33,13 +31,24 @@ function setup(t: TestContext, messages: unknown[] = []) {
   const owner = randomUUID(),
     conversation = randomUUID(),
     writes: Array<{ name: string; args: Record<string, unknown> }> = [];
-  const client = createMockSupabaseClient({
-    tables: {
-      agent_run_commands: { data: null },
-      conversations: {
-        data: { id: conversation, messages, title: "fixture" },
+  const scoped = createMockScopedDb({
+    tx: async (work) => work({
+      selectFrom(table: string) {
+        const query = {
+          select() { return query; },
+          selectAll() { return query; },
+          where() { return query; },
+          orderBy() { return query; },
+          limit() { return query; },
+          async executeTakeFirst() {
+            return table === 'conversations' ? { id: conversation, messages, title: 'fixture' } : undefined;
+          },
+          async execute() { return []; },
+        };
+        return query;
       },
-    },
+    } as never),
+    rpc: async () => { throw new Error('unexpected agent rpc in this test'); },
   });
   const api = require("../lib/api-utils") as typeof import("../lib/api-utils");
   const features =
@@ -55,13 +64,12 @@ function setup(t: TestContext, messages: unknown[] = []) {
   const rate =
     require("../lib/rate-limit") as typeof import("../lib/rate-limit");
   t.mock.method(api, "requireUserContext", async () =>
-    createMockAuthContext(client, owner),
+    createMockAuthContext({}, owner, scoped),
   );
-  t.mock.method(
-    api,
-    "getSystemAdminClient",
-    () => client as unknown as ReturnType<typeof api.getSystemAdminClient>,
-  );
+  const contextModule = require("../lib/db/context.server") as typeof import("../lib/db/context.server");
+  const originalSystemDb = contextModule.systemDb;
+  contextModule.systemDb = (() => scoped) as typeof contextModule.systemDb;
+  t.after(() => { contextModule.systemDb = originalSystemDb; });
   t.mock.method(
     features,
     "readFeatureModuleStateFresh",
@@ -127,7 +135,7 @@ function setup(t: TestContext, messages: unknown[] = []) {
       method: "POST",
       body: JSON.stringify(value),
     });
-  return { owner, conversation, writes, body, request, client, api, credits, rate, features };
+  return { owner, conversation, writes, body, request, scoped, api, credits, rate, features };
 }
 
 test('Agent admission freezes reasoning and independently authorized collaborator settings in the single charged run', async t => {
@@ -396,19 +404,23 @@ test('public task views include consumed input IDs while execution reads only pe
     { run_id: 'run', consumed: true, sequence: 2, message: { id: 'consumed' } },
     { run_id: 'other', consumed: true, sequence: 3, message: { id: 'foreign' } },
   ];
-  const store = new AgentStore({
-    from: (table: string) => {
-      assert.equal(table, 'agent_run_commands');
-      const filters: Array<[string, unknown]> = [];
-      const query = {
-        select: () => query,
-        eq: (field: string, value: unknown) => { filters.push([field, value]); return query; },
-        order: (field: string) => { assert.ok(['sort_order','sequence'].includes(field)); return query; },
-        then: (resolve: (value: unknown) => void) => resolve({ data: rows.filter(row => filters.every(([key, value]) => row[key as keyof typeof row] === value)), error: null }),
-      };
-      return query;
-    },
-  } as unknown as ConstructorParameters<typeof AgentStore>[0]);
+  const store = new AgentStore(createMockScopedDb({
+    tx: async (work) => work({
+      selectFrom(table: string) {
+        assert.equal(table, 'agent_run_commands');
+        const filters: Array<[string, unknown]> = [];
+        const query = {
+          select() { return query; },
+          where(field: string, _operator: string, value: unknown) { filters.push([field, value]); return query; },
+          orderBy() { return query; },
+          async execute() {
+            return rows.filter(row => filters.every(([key, value]) => row[key as keyof typeof row] === value));
+          },
+        };
+        return query;
+      },
+    } as never),
+  }));
   const run = { id: 'run', status: 'completed', input: { model:'fixture',reasoning:false,webEnabled:false }, public_message: { id: 'agent:run', role: 'assistant', content: '', createdAt: '' }, billing: 'refunded' } as AgentRunRow;
   assert.deepEqual((await store.commands(run)).map(command => command.message.id), ['pending']);
   const view = await store.view(run);

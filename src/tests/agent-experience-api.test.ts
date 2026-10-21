@@ -92,6 +92,10 @@ function fixture(t: TestContext) {
     const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
     t.mock.method(api,'requireUserContext',async () => createMockAuthContext(db,owner,scoped as never));
     t.mock.method(api,'getSystemAdminClient',() => db as unknown as ReturnType<typeof api.getSystemAdminClient>);
+    const supabaseServer=require('../lib/supabase-server') as typeof import('../lib/supabase-server');
+    t.mock.method(supabaseServer,'getSystemAdminClient',() => db as unknown as ReturnType<typeof supabaseServer.getSystemAdminClient>);
+    const contextModule=require('../lib/db/context.server') as typeof import('../lib/db/context.server');
+    t.mock.method(contextModule,'systemDb',() => scoped as unknown as ReturnType<typeof contextModule.systemDb>);
     return { owner,id,db,calls,rows,errors,inserts,api,rpc(data:unknown,error:unknown=null){rpcData=data;rpcError=error;} };
 }
 const request = (url: string, body?: unknown) => new NextRequest(`http://localhost${url}`, body === undefined ? {} : { method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body) });

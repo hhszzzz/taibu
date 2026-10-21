@@ -5,7 +5,8 @@
  *      q 为任务、对话或用户 ID 时查找它们的任务，不限状态
  */
 import { NextRequest } from 'next/server';
-import { getSystemAdminClient, jsonError, jsonOk, requireAdminUser } from '@/lib/api-utils';
+import { jsonError, jsonOk, requireAdminUser } from '@/lib/api-utils';
+import { systemDb } from '@/lib/db/context.server';
 import { isValidUUID } from '@/lib/validation';
 import { listAgentRunsForAdmin } from '@/lib/agent/admin-tasks.server';
 
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
     const scope = request.nextUrl.searchParams.get('scope') === 'recent' ? 'recent' : 'active';
 
     try {
-        const runs = await listAgentRunsForAdmin(getSystemAdminClient(), { scope, ...(search ? { search } : {}) });
+        const runs = await listAgentRunsForAdmin(systemDb(), { scope, ...(search ? { search } : {}) });
         return jsonOk({ runs });
     } catch (error) {
         console.error('[admin][agent-runs][GET] query failed:', error);

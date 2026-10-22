@@ -47,9 +47,9 @@
 
 1. DNS / Cloudflare 源站指向 hw；用户看到维护页（503 + `Retry-After`）。
 2. 在 Vercel 移除自定义域名，旧应用不可达；写入停止。
-3. 停掉旧的定时提醒工作流：
+3. 停掉旧的定时提醒工作流（若它已随迁移分支删除，命令会失败，确认没有运行即可）：
    ```sh
-   gh workflow disable reminders-cron.yml
+   gh workflow disable reminders-cron.yml 2>/dev/null || true
    ```
 
 ### T+2 确认源库静止
@@ -157,7 +157,7 @@ rm /opt/taibu/maintenance/on
 
 1. 打开维护页：`touch /opt/taibu/maintenance/on`。
 2. Vercel 重新挂回自定义域名；DNS / 源站切回。
-3. `gh workflow enable reminders-cron.yml`。
+3. `gh workflow enable reminders-cron.yml 2>/dev/null || true`。
 4. 确认旧应用可登录、提醒恢复。
 
 代价：新栈在对外开放后产生的写入会丢失。超过 T+60 不再回滚，改为在新栈修复。

@@ -35,6 +35,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 # The worker uses Next's server helpers outside Web's bundled route chunks.
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/next ./node_modules/next
+# scripts/db/import-supabase.mjs runs as a one-off and needs a bcrypt verifier
+# for both $2a$ (GoTrue) and $2b$ hashes; Next bundles the app copy.
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.pnpm/bcryptjs@*/node_modules/bcryptjs ./node_modules/bcryptjs
 COPY --from=builder /app/LICENSE ./LICENSE
 COPY --from=builder /app/packages/core/LICENSE ./licenses/taibu-core.LICENSE
 COPY --from=builder --chown=nextjs:nodejs /app/.agent ./.agent
@@ -42,6 +45,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/.agent ./.agent
 # same SQL that was built with this release.
 COPY --from=builder --chown=nextjs:nodejs /app/database ./database
 COPY --from=builder --chown=nextjs:nodejs /app/scripts/db ./scripts/db
+# transit-build replays the still-pending Supabase migrations at cutover.
+# Remove this copy together with supabase/ in P10.
+COPY --from=builder --chown=nextjs:nodejs /app/supabase/migrations ./supabase/migrations
 RUN node .agent/worker.mjs --check && node -e "require.resolve('pg')" 
 # Check each traced pnpm entry, including the attachment API and Next's version.
 RUN node --input-type=module -e "import {globSync} from 'node:fs'; import {createRequire} from 'node:module'; import {resolve} from 'node:path'; const entries = [...globSync('node_modules/.pnpm/sharp@*/node_modules/sharp/package.json')]; if (!entries.length) throw new Error('Sharp is missing from the standalone image'); for (const entry of entries) { const sharp = createRequire(resolve(entry))('sharp'); const png = await sharp({create:{width:2,height:2,channels:3,background:'#fff'}}).png().toBuffer(); if (!png.length) throw new Error('Sharp image processing failed'); } console.log('Sharp runtime check passed');"

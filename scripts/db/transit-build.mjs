@@ -349,6 +349,9 @@ async function main() {
       .map((line) => line.replace(/^pg_restore: error:\s*/u, '').trim());
     const unexpected = errors.filter((error) => !ALLOWED_RESTORE_ERRORS.some((pattern) => pattern.test(error)));
     report.errors.push(...errors);
+    if (result.code !== 0 && errors.length === 0) {
+      throw new Error(`pg_restore failed (${result.code}) without a parseable error: ${lastLines(result.stderr)}`);
+    }
     if (unexpected.length) {
       throw new Error(`pg_restore reported ${unexpected.length} unexpected error(s): ${unexpected.slice(0, 5).join(' | ')}`);
     }

@@ -25,6 +25,8 @@ ios
 capacitor-www
 capacitor.config.ts
 supabase
+!supabase/migrations
+!supabase/migrations/**
 packages/mcp-local
 src/tests
 **/*.test.ts

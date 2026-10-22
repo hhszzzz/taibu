@@ -4426,8 +4426,8 @@ CREATE INDEX selfhost_ziwei_charts_owner_idx ON public.ziwei_charts USING btree 
 -- Name: user_agent_memory_source_run_idx; Type: INDEX; Schema: public; Owner: -
 CREATE INDEX user_agent_memory_source_run_idx ON public.user_agent_memory USING btree (source_run_id) WHERE (source_run_id IS NOT NULL);
 
--- Name: activation_keys selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.activation_keys TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: activation_keys Admins full access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY "Admins full access" ON public.activation_keys USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
 
 -- Name: agent_attachment_refs attachment_refs_backend_read; Type: POLICY; Schema: public; Owner: -
 CREATE POLICY attachment_refs_backend_read ON public.agent_attachment_refs FOR SELECT TO authenticated USING (public.is_admin_user());
@@ -4460,95 +4460,207 @@ CREATE POLICY agent_runs_read ON public.agent_runs FOR SELECT TO authenticated U
 -- Name: agent_workers agent_workers_admin; Type: POLICY; Schema: public; Owner: -
 CREATE POLICY agent_workers_admin ON public.agent_workers FOR SELECT TO authenticated USING (public.is_admin_user());
 
--- Name: ai_gateways selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.ai_gateways TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: ai_gateways ai_gateways_admin_all; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY ai_gateways_admin_all ON public.ai_gateways TO authenticated USING (( SELECT public.is_admin_user() AS is_admin_user)) WITH CHECK (( SELECT public.is_admin_user() AS is_admin_user));
 
--- Name: ai_gateways selfhost_gateways_read; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_gateways_read ON public.ai_gateways FOR SELECT TO anon, authenticated USING (is_enabled);
+-- Name: ai_model_gateway_bindings ai_model_gateway_bindings_admin_all; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY ai_model_gateway_bindings_admin_all ON public.ai_model_gateway_bindings TO authenticated USING (( SELECT public.is_admin_user() AS is_admin_user)) WITH CHECK (( SELECT public.is_admin_user() AS is_admin_user));
 
--- Name: ai_model_gateway_bindings selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.ai_model_gateway_bindings TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: ai_models ai_models_delete_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY ai_models_delete_access ON public.ai_models FOR DELETE USING (public.is_admin_user());
 
--- Name: ai_model_gateway_bindings selfhost_bindings_read; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_bindings_read ON public.ai_model_gateway_bindings FOR SELECT TO anon, authenticated USING (is_enabled);
+-- Name: ai_models ai_models_insert_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY ai_models_insert_access ON public.ai_models FOR INSERT WITH CHECK (public.is_admin_user());
 
--- Name: ai_models selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.ai_models TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: ai_models ai_models_select_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY ai_models_select_access ON public.ai_models FOR SELECT USING ((public.is_admin_user() OR true));
 
--- Name: ai_models selfhost_models_read; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_models_read ON public.ai_models FOR SELECT TO anon, authenticated USING (is_enabled);
+-- Name: ai_models ai_models_update_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY ai_models_update_access ON public.ai_models FOR UPDATE USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
 
--- Name: announcements selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.announcements TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: announcements announcements_admin_delete; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY announcements_admin_delete ON public.announcements FOR DELETE TO authenticated USING (( SELECT public.is_admin_user() AS is_admin_user));
 
--- Name: announcements selfhost_announcements_read; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_announcements_read ON public.announcements FOR SELECT TO anon, authenticated USING ((published_at <= now()));
+-- Name: announcements announcements_admin_insert; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY announcements_admin_insert ON public.announcements FOR INSERT TO authenticated WITH CHECK (( SELECT public.is_admin_user() AS is_admin_user));
 
--- Name: annual_reports selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.annual_reports TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: announcements announcements_admin_select; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY announcements_admin_select ON public.announcements FOR SELECT TO authenticated USING (( SELECT public.is_admin_user() AS is_admin_user));
 
--- Name: annual_reports selfhost_owner_read; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_owner_read ON public.annual_reports FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+-- Name: announcements announcements_admin_update; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY announcements_admin_update ON public.announcements FOR UPDATE TO authenticated USING (( SELECT public.is_admin_user() AS is_admin_user)) WITH CHECK (( SELECT public.is_admin_user() AS is_admin_user));
 
--- Name: app_settings selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.app_settings TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: annual_reports annual_reports_delete_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY annual_reports_delete_access ON public.annual_reports FOR DELETE USING (public.is_admin_user());
 
--- Name: app_settings selfhost_settings_read; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_settings_read ON public.app_settings FOR SELECT TO anon, authenticated USING (true);
+-- Name: annual_reports annual_reports_insert_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY annual_reports_insert_access ON public.annual_reports FOR INSERT WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
--- Name: archived_sources selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.archived_sources TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: annual_reports annual_reports_select_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY annual_reports_select_access ON public.annual_reports FOR SELECT USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
--- Name: archived_sources selfhost_owner; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_owner ON public.archived_sources TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid))) WITH CHECK (((user_id = ( SELECT auth.uid() AS uid)) AND (EXISTS ( SELECT 1
-   FROM public.knowledge_bases kb
-  WHERE ((kb.id = archived_sources.kb_id) AND (kb.user_id = ( SELECT auth.uid() AS uid)))))));
+-- Name: annual_reports annual_reports_update_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY annual_reports_update_access ON public.annual_reports FOR UPDATE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id))) WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
--- Name: bazi_case_events selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.bazi_case_events TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: app_settings app_settings_delete_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY app_settings_delete_access ON public.app_settings FOR DELETE USING ((public.is_admin_user() OR (( SELECT auth.role() AS role) = 'service_role'::text)));
 
--- Name: bazi_case_events selfhost_owner_read; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_owner_read ON public.bazi_case_events FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+-- Name: app_settings app_settings_insert_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY app_settings_insert_access ON public.app_settings FOR INSERT WITH CHECK ((public.is_admin_user() OR (( SELECT auth.role() AS role) = 'service_role'::text)));
 
--- Name: bazi_case_profiles selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.bazi_case_profiles TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: app_settings app_settings_select_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY app_settings_select_access ON public.app_settings FOR SELECT USING ((public.is_admin_user() OR (( SELECT auth.role() AS role) = 'service_role'::text)));
 
--- Name: bazi_case_profiles selfhost_owner_read; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_owner_read ON public.bazi_case_profiles FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+-- Name: app_settings app_settings_update_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY app_settings_update_access ON public.app_settings FOR UPDATE USING ((public.is_admin_user() OR (( SELECT auth.role() AS role) = 'service_role'::text))) WITH CHECK ((public.is_admin_user() OR (( SELECT auth.role() AS role) = 'service_role'::text)));
 
--- Name: bazi_charts selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.bazi_charts TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: archived_sources archived_sources_delete_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY archived_sources_delete_access ON public.archived_sources FOR DELETE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
--- Name: bazi_charts selfhost_owner; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_owner ON public.bazi_charts TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid))) WITH CHECK ((user_id = ( SELECT auth.uid() AS uid)));
+-- Name: archived_sources archived_sources_insert_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY archived_sources_insert_access ON public.archived_sources FOR INSERT WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
--- Name: conversation_messages selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.conversation_messages TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: archived_sources archived_sources_select_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY archived_sources_select_access ON public.archived_sources FOR SELECT USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
--- Name: conversation_messages selfhost_message_owner; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_message_owner ON public.conversation_messages TO authenticated USING ((EXISTS ( SELECT 1
-   FROM public.conversations c
-  WHERE ((c.id = conversation_messages.conversation_id) AND (c.user_id = ( SELECT auth.uid() AS uid)))))) WITH CHECK ((EXISTS ( SELECT 1
-   FROM public.conversations c
-  WHERE ((c.id = conversation_messages.conversation_id) AND (c.user_id = ( SELECT auth.uid() AS uid))))));
+-- Name: archived_sources archived_sources_update_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY archived_sources_update_access ON public.archived_sources FOR UPDATE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id))) WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: bazi_case_events Users can delete own bazi case events; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY "Users can delete own bazi case events" ON public.bazi_case_events FOR DELETE TO authenticated USING ((( SELECT auth.uid() AS uid) = user_id));
+
+-- Name: bazi_case_events Users can insert own bazi case events; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY "Users can insert own bazi case events" ON public.bazi_case_events FOR INSERT TO authenticated WITH CHECK ((( SELECT auth.uid() AS uid) = user_id));
+
+-- Name: bazi_case_events Users can update own bazi case events; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY "Users can update own bazi case events" ON public.bazi_case_events FOR UPDATE TO authenticated USING ((( SELECT auth.uid() AS uid) = user_id)) WITH CHECK ((( SELECT auth.uid() AS uid) = user_id));
+
+-- Name: bazi_case_events Users can view own bazi case events; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY "Users can view own bazi case events" ON public.bazi_case_events FOR SELECT TO authenticated USING ((( SELECT auth.uid() AS uid) = user_id));
+
+-- Name: bazi_case_profiles Users can delete own bazi case profiles; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY "Users can delete own bazi case profiles" ON public.bazi_case_profiles FOR DELETE TO authenticated USING ((( SELECT auth.uid() AS uid) = user_id));
+
+-- Name: bazi_case_profiles Users can insert own bazi case profiles; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY "Users can insert own bazi case profiles" ON public.bazi_case_profiles FOR INSERT TO authenticated WITH CHECK ((( SELECT auth.uid() AS uid) = user_id));
+
+-- Name: bazi_case_profiles Users can update own bazi case profiles; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY "Users can update own bazi case profiles" ON public.bazi_case_profiles FOR UPDATE TO authenticated USING ((( SELECT auth.uid() AS uid) = user_id)) WITH CHECK ((( SELECT auth.uid() AS uid) = user_id));
+
+-- Name: bazi_case_profiles Users can view own bazi case profiles; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY "Users can view own bazi case profiles" ON public.bazi_case_profiles FOR SELECT TO authenticated USING ((( SELECT auth.uid() AS uid) = user_id));
+
+-- Name: bazi_charts bazi_charts_delete_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY bazi_charts_delete_access ON public.bazi_charts FOR DELETE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id) OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: bazi_charts bazi_charts_insert_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY bazi_charts_insert_access ON public.bazi_charts FOR INSERT WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id) OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: bazi_charts bazi_charts_select_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY bazi_charts_select_access ON public.bazi_charts FOR SELECT USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id) OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: bazi_charts bazi_charts_update_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY bazi_charts_update_access ON public.bazi_charts FOR UPDATE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id))) WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: community_comments community_comments_delete_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY community_comments_delete_access ON public.community_comments FOR DELETE USING (public.is_admin_user());
+
+-- Name: community_comments community_comments_insert_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY community_comments_insert_access ON public.community_comments FOR INSERT WITH CHECK ((public.is_admin_user() OR ((( SELECT auth.uid() AS uid) IS NOT NULL) AND (( SELECT auth.uid() AS uid) = user_id))));
+
+-- Name: community_comments community_comments_select_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY community_comments_select_access ON public.community_comments FOR SELECT USING ((public.is_admin_user() OR (is_deleted = false)));
+
+-- Name: community_comments community_comments_update_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY community_comments_update_access ON public.community_comments FOR UPDATE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id))) WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: community_posts community_posts_delete_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY community_posts_delete_access ON public.community_posts FOR DELETE USING (public.is_admin_user());
+
+-- Name: community_posts community_posts_insert_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY community_posts_insert_access ON public.community_posts FOR INSERT WITH CHECK ((public.is_admin_user() OR ((( SELECT auth.uid() AS uid) IS NOT NULL) AND (( SELECT auth.uid() AS uid) = user_id))));
+
+-- Name: community_posts community_posts_select_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY community_posts_select_access ON public.community_posts FOR SELECT USING ((public.is_admin_user() OR (is_deleted = false)));
+
+-- Name: community_posts community_posts_update_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY community_posts_update_access ON public.community_posts FOR UPDATE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id) OR (( SELECT auth.uid() AS uid) = user_id))) WITH CHECK ((public.is_admin_user() OR (is_deleted = true) OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: community_reports community_reports_delete_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY community_reports_delete_access ON public.community_reports FOR DELETE USING (public.is_admin_user());
+
+-- Name: community_reports community_reports_insert_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY community_reports_insert_access ON public.community_reports FOR INSERT WITH CHECK ((public.is_admin_user() OR ((( SELECT auth.uid() AS uid) IS NOT NULL) AND (( SELECT auth.uid() AS uid) = reporter_id))));
+
+-- Name: community_reports community_reports_select_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY community_reports_select_access ON public.community_reports FOR SELECT USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = reporter_id)));
+
+-- Name: community_reports community_reports_update_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY community_reports_update_access ON public.community_reports FOR UPDATE USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+
+-- Name: community_votes community_votes_delete_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY community_votes_delete_access ON public.community_votes FOR DELETE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: community_votes community_votes_insert_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY community_votes_insert_access ON public.community_votes FOR INSERT WITH CHECK ((public.is_admin_user() OR ((( SELECT auth.uid() AS uid) IS NOT NULL) AND (( SELECT auth.uid() AS uid) = user_id))));
+
+-- Name: community_votes community_votes_select_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY community_votes_select_access ON public.community_votes FOR SELECT USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: community_votes community_votes_update_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY community_votes_update_access ON public.community_votes FOR UPDATE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id))) WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: conversation_messages Users can delete own conversation messages; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY "Users can delete own conversation messages" ON public.conversation_messages FOR DELETE TO authenticated USING ((EXISTS ( SELECT 1
+   FROM public.conversations
+  WHERE ((conversations.id = conversation_messages.conversation_id) AND (conversations.user_id = ( SELECT auth.uid() AS uid))))));
+
+-- Name: conversation_messages Users can insert own conversation messages; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY "Users can insert own conversation messages" ON public.conversation_messages FOR INSERT TO authenticated WITH CHECK ((EXISTS ( SELECT 1
+   FROM public.conversations
+  WHERE ((conversations.id = conversation_messages.conversation_id) AND (conversations.user_id = ( SELECT auth.uid() AS uid))))));
+
+-- Name: conversation_messages Users can update own conversation messages; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY "Users can update own conversation messages" ON public.conversation_messages FOR UPDATE TO authenticated USING ((EXISTS ( SELECT 1
+   FROM public.conversations
+  WHERE ((conversations.id = conversation_messages.conversation_id) AND (conversations.user_id = ( SELECT auth.uid() AS uid)))))) WITH CHECK ((EXISTS ( SELECT 1
+   FROM public.conversations
+  WHERE ((conversations.id = conversation_messages.conversation_id) AND (conversations.user_id = ( SELECT auth.uid() AS uid))))));
+
+-- Name: conversation_messages Users can view own conversation messages; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY "Users can view own conversation messages" ON public.conversation_messages FOR SELECT TO authenticated USING ((EXISTS ( SELECT 1
+   FROM public.conversations
+  WHERE ((conversations.id = conversation_messages.conversation_id) AND (conversations.user_id = ( SELECT auth.uid() AS uid))))));
 
 -- Name: conversation_shares conversation_shares_owner_select; Type: POLICY; Schema: public; Owner: -
 CREATE POLICY conversation_shares_owner_select ON public.conversation_shares FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
--- Name: conversations selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.conversations TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: conversations conversations_delete_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY conversations_delete_access ON public.conversations FOR DELETE TO authenticated USING ((( SELECT public.is_admin_user() AS is_admin_user) OR (( SELECT auth.uid() AS uid) = user_id)));
 
--- Name: conversations selfhost_owner; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_owner ON public.conversations TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid))) WITH CHECK ((user_id = ( SELECT auth.uid() AS uid)));
+-- Name: conversations conversations_insert_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY conversations_insert_access ON public.conversations FOR INSERT TO authenticated WITH CHECK ((( SELECT public.is_admin_user() AS is_admin_user) OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: conversations conversations_select_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY conversations_select_access ON public.conversations FOR SELECT TO authenticated USING ((( SELECT public.is_admin_user() AS is_admin_user) OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: conversations conversations_update_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY conversations_update_access ON public.conversations FOR UPDATE TO authenticated USING ((( SELECT public.is_admin_user() AS is_admin_user) OR (( SELECT auth.uid() AS uid) = user_id))) WITH CHECK ((( SELECT public.is_admin_user() AS is_admin_user) OR (( SELECT auth.uid() AS uid) = user_id)));
 
 -- Name: credit_transactions credit_transactions_authenticated_insert_guard; Type: POLICY; Schema: public; Owner: -
 CREATE POLICY credit_transactions_authenticated_insert_guard ON public.credit_transactions AS RESTRICTIVE FOR INSERT TO authenticated WITH CHECK ((public.is_admin_user() IS TRUE));
 
--- Name: credit_transactions selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.credit_transactions TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: credit_transactions credit_transactions_delete_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY credit_transactions_delete_access ON public.credit_transactions FOR DELETE USING (public.is_admin_user());
 
--- Name: credit_transactions selfhost_owner_read; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_owner_read ON public.credit_transactions FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+-- Name: credit_transactions credit_transactions_insert_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY credit_transactions_insert_access ON public.credit_transactions FOR INSERT WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: credit_transactions credit_transactions_select_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY credit_transactions_select_access ON public.credit_transactions FOR SELECT USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: credit_transactions credit_transactions_update_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY credit_transactions_update_access ON public.credit_transactions FOR UPDATE USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
 
 -- Name: daily_briefing_jobs briefing_backend_read; Type: POLICY; Schema: public; Owner: -
 CREATE POLICY briefing_backend_read ON public.daily_briefing_jobs FOR SELECT TO authenticated USING (public.is_admin_user());
@@ -4556,132 +4668,213 @@ CREATE POLICY briefing_backend_read ON public.daily_briefing_jobs FOR SELECT TO 
 -- Name: daily_briefing_jobs briefing_owner_read; Type: POLICY; Schema: public; Owner: -
 CREATE POLICY briefing_owner_read ON public.daily_briefing_jobs FOR SELECT TO authenticated USING ((user_id = auth.uid()));
 
--- Name: daily_checkins selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.daily_checkins TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: daily_checkins daily_checkins_delete_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY daily_checkins_delete_access ON public.daily_checkins FOR DELETE USING (public.is_admin_user());
 
--- Name: daily_checkins selfhost_owner_read; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_owner_read ON public.daily_checkins FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+-- Name: daily_checkins daily_checkins_insert_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY daily_checkins_insert_access ON public.daily_checkins FOR INSERT WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
--- Name: daliuren_divinations selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.daliuren_divinations TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: daily_checkins daily_checkins_select_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY daily_checkins_select_access ON public.daily_checkins FOR SELECT USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
--- Name: daliuren_divinations selfhost_owner; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_owner ON public.daliuren_divinations TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid))) WITH CHECK (((user_id = ( SELECT auth.uid() AS uid)) AND ((conversation_id IS NULL) OR (EXISTS ( SELECT 1
-   FROM public.conversations c
-  WHERE ((c.id = daliuren_divinations.conversation_id) AND (c.user_id = ( SELECT auth.uid() AS uid))))))));
+-- Name: daily_checkins daily_checkins_update_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY daily_checkins_update_access ON public.daily_checkins FOR UPDATE USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
 
--- Name: face_readings selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.face_readings TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: daliuren_divinations Users can insert own daliuren divinations; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY "Users can insert own daliuren divinations" ON public.daliuren_divinations FOR INSERT TO authenticated WITH CHECK ((( SELECT auth.uid() AS uid) = user_id));
 
--- Name: face_readings selfhost_owner; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_owner ON public.face_readings TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid))) WITH CHECK (((user_id = ( SELECT auth.uid() AS uid)) AND ((conversation_id IS NULL) OR (EXISTS ( SELECT 1
-   FROM public.conversations c
-  WHERE ((c.id = face_readings.conversation_id) AND (c.user_id = ( SELECT auth.uid() AS uid))))))));
+-- Name: daliuren_divinations Users can update own daliuren divinations; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY "Users can update own daliuren divinations" ON public.daliuren_divinations FOR UPDATE TO authenticated USING ((( SELECT auth.uid() AS uid) = user_id));
 
--- Name: hepan_charts selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.hepan_charts TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: daliuren_divinations Users can view own daliuren divinations; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY "Users can view own daliuren divinations" ON public.daliuren_divinations FOR SELECT TO authenticated USING ((( SELECT auth.uid() AS uid) = user_id));
 
--- Name: hepan_charts selfhost_owner; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_owner ON public.hepan_charts TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid))) WITH CHECK (((user_id = ( SELECT auth.uid() AS uid)) AND ((conversation_id IS NULL) OR (EXISTS ( SELECT 1
-   FROM public.conversations c
-  WHERE ((c.id = hepan_charts.conversation_id) AND (c.user_id = ( SELECT auth.uid() AS uid))))))));
+-- Name: face_readings face_readings_delete_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY face_readings_delete_access ON public.face_readings FOR DELETE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
--- Name: knowledge_bases selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.knowledge_bases TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: face_readings face_readings_insert_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY face_readings_insert_access ON public.face_readings FOR INSERT WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
--- Name: knowledge_bases selfhost_owner; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_owner ON public.knowledge_bases TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid))) WITH CHECK ((user_id = ( SELECT auth.uid() AS uid)));
+-- Name: face_readings face_readings_select_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY face_readings_select_access ON public.face_readings FOR SELECT USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
--- Name: knowledge_entries selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.knowledge_entries TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: face_readings face_readings_update_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY face_readings_update_access ON public.face_readings FOR UPDATE USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
 
--- Name: knowledge_entries selfhost_knowledge_entries_owner; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_knowledge_entries_owner ON public.knowledge_entries TO authenticated USING ((EXISTS ( SELECT 1
-   FROM public.knowledge_bases kb
-  WHERE ((kb.id = knowledge_entries.kb_id) AND (kb.user_id = ( SELECT auth.uid() AS uid)))))) WITH CHECK ((EXISTS ( SELECT 1
-   FROM public.knowledge_bases kb
-  WHERE ((kb.id = knowledge_entries.kb_id) AND (kb.user_id = ( SELECT auth.uid() AS uid))))));
+-- Name: hepan_charts hepan_charts_delete_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY hepan_charts_delete_access ON public.hepan_charts FOR DELETE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
--- Name: liuyao_divinations selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.liuyao_divinations TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: hepan_charts hepan_charts_insert_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY hepan_charts_insert_access ON public.hepan_charts FOR INSERT WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
--- Name: liuyao_divinations selfhost_owner; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_owner ON public.liuyao_divinations TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid))) WITH CHECK (((user_id = ( SELECT auth.uid() AS uid)) AND ((conversation_id IS NULL) OR (EXISTS ( SELECT 1
-   FROM public.conversations c
-  WHERE ((c.id = liuyao_divinations.conversation_id) AND (c.user_id = ( SELECT auth.uid() AS uid))))))));
+-- Name: hepan_charts hepan_charts_select_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY hepan_charts_select_access ON public.hepan_charts FOR SELECT USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
--- Name: mbti_readings selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.mbti_readings TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: hepan_charts hepan_charts_update_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY hepan_charts_update_access ON public.hepan_charts FOR UPDATE USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
 
--- Name: mbti_readings selfhost_owner; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_owner ON public.mbti_readings TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid))) WITH CHECK (((user_id = ( SELECT auth.uid() AS uid)) AND ((conversation_id IS NULL) OR (EXISTS ( SELECT 1
-   FROM public.conversations c
-  WHERE ((c.id = mbti_readings.conversation_id) AND (c.user_id = ( SELECT auth.uid() AS uid))))))));
+-- Name: knowledge_bases knowledge_bases_delete_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY knowledge_bases_delete_access ON public.knowledge_bases FOR DELETE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
--- Name: meihua_divinations selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.meihua_divinations TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: knowledge_bases knowledge_bases_insert_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY knowledge_bases_insert_access ON public.knowledge_bases FOR INSERT WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
--- Name: meihua_divinations selfhost_owner; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_owner ON public.meihua_divinations TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid))) WITH CHECK (((user_id = ( SELECT auth.uid() AS uid)) AND ((conversation_id IS NULL) OR (EXISTS ( SELECT 1
-   FROM public.conversations c
-  WHERE ((c.id = meihua_divinations.conversation_id) AND (c.user_id = ( SELECT auth.uid() AS uid))))))));
+-- Name: knowledge_bases knowledge_bases_select_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY knowledge_bases_select_access ON public.knowledge_bases FOR SELECT USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
--- Name: ming_notes selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.ming_notes TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: knowledge_bases knowledge_bases_update_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY knowledge_bases_update_access ON public.knowledge_bases FOR UPDATE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id))) WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
--- Name: ming_notes selfhost_owner; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_owner ON public.ming_notes TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid))) WITH CHECK ((user_id = ( SELECT auth.uid() AS uid)));
+-- Name: knowledge_entries knowledge_entries_delete_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY knowledge_entries_delete_access ON public.knowledge_entries FOR DELETE USING ((public.is_admin_user() OR (kb_id IN ( SELECT knowledge_bases.id
+   FROM public.knowledge_bases
+  WHERE (knowledge_bases.user_id = ( SELECT auth.uid() AS uid))))));
 
--- Name: ming_records selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.ming_records TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: knowledge_entries knowledge_entries_insert_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY knowledge_entries_insert_access ON public.knowledge_entries FOR INSERT WITH CHECK ((public.is_admin_user() OR (kb_id IN ( SELECT knowledge_bases.id
+   FROM public.knowledge_bases
+  WHERE (knowledge_bases.user_id = ( SELECT auth.uid() AS uid))))));
 
--- Name: ming_records selfhost_owner; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_owner ON public.ming_records TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid))) WITH CHECK ((user_id = ( SELECT auth.uid() AS uid)));
+-- Name: knowledge_entries knowledge_entries_select_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY knowledge_entries_select_access ON public.knowledge_entries FOR SELECT USING ((public.is_admin_user() OR (kb_id IN ( SELECT knowledge_bases.id
+   FROM public.knowledge_bases
+  WHERE (knowledge_bases.user_id = ( SELECT auth.uid() AS uid))))));
 
--- Name: notifications selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.notifications TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: knowledge_entries knowledge_entries_update_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY knowledge_entries_update_access ON public.knowledge_entries FOR UPDATE USING ((public.is_admin_user() OR (kb_id IN ( SELECT knowledge_bases.id
+   FROM public.knowledge_bases
+  WHERE (knowledge_bases.user_id = ( SELECT auth.uid() AS uid)))))) WITH CHECK ((public.is_admin_user() OR (kb_id IN ( SELECT knowledge_bases.id
+   FROM public.knowledge_bases
+  WHERE (knowledge_bases.user_id = ( SELECT auth.uid() AS uid))))));
 
--- Name: notifications selfhost_notification_read_flag; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_notification_read_flag ON public.notifications FOR UPDATE TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid))) WITH CHECK ((user_id = ( SELECT auth.uid() AS uid)));
+-- Name: liuyao_divinations liuyao_divinations_delete_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY liuyao_divinations_delete_access ON public.liuyao_divinations FOR DELETE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
--- Name: notifications selfhost_owner_read; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_owner_read ON public.notifications FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+-- Name: liuyao_divinations liuyao_divinations_insert_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY liuyao_divinations_insert_access ON public.liuyao_divinations FOR INSERT WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
--- Name: palm_readings selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.palm_readings TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: liuyao_divinations liuyao_divinations_select_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY liuyao_divinations_select_access ON public.liuyao_divinations FOR SELECT USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
--- Name: palm_readings selfhost_owner; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_owner ON public.palm_readings TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid))) WITH CHECK (((user_id = ( SELECT auth.uid() AS uid)) AND ((conversation_id IS NULL) OR (EXISTS ( SELECT 1
-   FROM public.conversations c
-  WHERE ((c.id = palm_readings.conversation_id) AND (c.user_id = ( SELECT auth.uid() AS uid))))))));
+-- Name: liuyao_divinations liuyao_divinations_update_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY liuyao_divinations_update_access ON public.liuyao_divinations FOR UPDATE USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
 
--- Name: qimen_charts selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.qimen_charts TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: mbti_readings mbti_readings_delete_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY mbti_readings_delete_access ON public.mbti_readings FOR DELETE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
--- Name: qimen_charts selfhost_owner; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_owner ON public.qimen_charts TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid))) WITH CHECK (((user_id = ( SELECT auth.uid() AS uid)) AND ((conversation_id IS NULL) OR (EXISTS ( SELECT 1
-   FROM public.conversations c
-  WHERE ((c.id = qimen_charts.conversation_id) AND (c.user_id = ( SELECT auth.uid() AS uid))))))));
+-- Name: mbti_readings mbti_readings_insert_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY mbti_readings_insert_access ON public.mbti_readings FOR INSERT WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
--- Name: reminder_subscriptions selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.reminder_subscriptions TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: mbti_readings mbti_readings_select_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY mbti_readings_select_access ON public.mbti_readings FOR SELECT USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
--- Name: reminder_subscriptions selfhost_owner; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_owner ON public.reminder_subscriptions TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid))) WITH CHECK ((user_id = ( SELECT auth.uid() AS uid)));
+-- Name: mbti_readings mbti_readings_update_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY mbti_readings_update_access ON public.mbti_readings FOR UPDATE USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
 
--- Name: scheduled_reminders selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.scheduled_reminders TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: meihua_divinations Users can delete own meihua divinations; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY "Users can delete own meihua divinations" ON public.meihua_divinations FOR DELETE USING ((( SELECT auth.uid() AS uid) = user_id));
 
--- Name: scheduled_reminders selfhost_owner_read; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_owner_read ON public.scheduled_reminders FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+-- Name: meihua_divinations Users can insert own meihua divinations; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY "Users can insert own meihua divinations" ON public.meihua_divinations FOR INSERT WITH CHECK ((( SELECT auth.uid() AS uid) = user_id));
 
--- Name: tarot_readings selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.tarot_readings TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: meihua_divinations Users can update own meihua divinations; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY "Users can update own meihua divinations" ON public.meihua_divinations FOR UPDATE USING ((( SELECT auth.uid() AS uid) = user_id)) WITH CHECK ((( SELECT auth.uid() AS uid) = user_id));
 
--- Name: tarot_readings selfhost_owner; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_owner ON public.tarot_readings TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid))) WITH CHECK (((user_id = ( SELECT auth.uid() AS uid)) AND ((conversation_id IS NULL) OR (EXISTS ( SELECT 1
-   FROM public.conversations c
-  WHERE ((c.id = tarot_readings.conversation_id) AND (c.user_id = ( SELECT auth.uid() AS uid))))))));
+-- Name: meihua_divinations Users can view own meihua divinations; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY "Users can view own meihua divinations" ON public.meihua_divinations FOR SELECT USING ((( SELECT auth.uid() AS uid) = user_id));
+
+-- Name: ming_notes ming_notes_delete_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY ming_notes_delete_access ON public.ming_notes FOR DELETE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: ming_notes ming_notes_insert_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY ming_notes_insert_access ON public.ming_notes FOR INSERT WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: ming_notes ming_notes_select_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY ming_notes_select_access ON public.ming_notes FOR SELECT USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: ming_notes ming_notes_update_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY ming_notes_update_access ON public.ming_notes FOR UPDATE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id))) WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: ming_records ming_records_delete_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY ming_records_delete_access ON public.ming_records FOR DELETE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: ming_records ming_records_insert_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY ming_records_insert_access ON public.ming_records FOR INSERT WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: ming_records ming_records_select_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY ming_records_select_access ON public.ming_records FOR SELECT USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: ming_records ming_records_update_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY ming_records_update_access ON public.ming_records FOR UPDATE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id))) WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: notifications notifications_delete_admin_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY notifications_delete_admin_access ON public.notifications FOR DELETE TO authenticated USING (( SELECT public.is_admin_user() AS is_admin_user));
+
+-- Name: notifications notifications_insert_admin_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY notifications_insert_admin_access ON public.notifications FOR INSERT TO authenticated WITH CHECK (( SELECT public.is_admin_user() AS is_admin_user));
+
+-- Name: notifications notifications_select_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY notifications_select_access ON public.notifications FOR SELECT TO authenticated USING ((( SELECT public.is_admin_user() AS is_admin_user) OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: notifications notifications_update_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY notifications_update_access ON public.notifications FOR UPDATE TO authenticated USING ((( SELECT public.is_admin_user() AS is_admin_user) OR (( SELECT auth.uid() AS uid) = user_id))) WITH CHECK ((( SELECT public.is_admin_user() AS is_admin_user) OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: palm_readings palm_readings_delete_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY palm_readings_delete_access ON public.palm_readings FOR DELETE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: palm_readings palm_readings_insert_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY palm_readings_insert_access ON public.palm_readings FOR INSERT WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: palm_readings palm_readings_select_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY palm_readings_select_access ON public.palm_readings FOR SELECT USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: palm_readings palm_readings_update_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY palm_readings_update_access ON public.palm_readings FOR UPDATE USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+
+-- Name: qimen_charts Users can delete own qimen charts; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY "Users can delete own qimen charts" ON public.qimen_charts FOR DELETE TO authenticated USING ((( SELECT auth.uid() AS uid) = user_id));
+
+-- Name: qimen_charts Users can insert own qimen charts; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY "Users can insert own qimen charts" ON public.qimen_charts FOR INSERT TO authenticated WITH CHECK ((( SELECT auth.uid() AS uid) = user_id));
+
+-- Name: qimen_charts Users can view own qimen charts; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY "Users can view own qimen charts" ON public.qimen_charts FOR SELECT TO authenticated USING ((( SELECT auth.uid() AS uid) = user_id));
+
+-- Name: reminder_subscriptions reminder_subscriptions_delete_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY reminder_subscriptions_delete_access ON public.reminder_subscriptions FOR DELETE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: reminder_subscriptions reminder_subscriptions_insert_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY reminder_subscriptions_insert_access ON public.reminder_subscriptions FOR INSERT WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: reminder_subscriptions reminder_subscriptions_select_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY reminder_subscriptions_select_access ON public.reminder_subscriptions FOR SELECT USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: reminder_subscriptions reminder_subscriptions_update_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY reminder_subscriptions_update_access ON public.reminder_subscriptions FOR UPDATE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id))) WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: scheduled_reminders scheduled_reminders_delete_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY scheduled_reminders_delete_access ON public.scheduled_reminders FOR DELETE USING (public.is_admin_user());
+
+-- Name: scheduled_reminders scheduled_reminders_insert_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY scheduled_reminders_insert_access ON public.scheduled_reminders FOR INSERT WITH CHECK (public.is_admin_user());
+
+-- Name: scheduled_reminders scheduled_reminders_select_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY scheduled_reminders_select_access ON public.scheduled_reminders FOR SELECT USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: scheduled_reminders scheduled_reminders_update_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY scheduled_reminders_update_access ON public.scheduled_reminders FOR UPDATE USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+
+-- Name: tarot_readings tarot_readings_delete_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY tarot_readings_delete_access ON public.tarot_readings FOR DELETE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: tarot_readings tarot_readings_insert_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY tarot_readings_insert_access ON public.tarot_readings FOR INSERT WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: tarot_readings tarot_readings_select_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY tarot_readings_select_access ON public.tarot_readings FOR SELECT USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: tarot_readings tarot_readings_update_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY tarot_readings_update_access ON public.tarot_readings FOR UPDATE USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
 
 -- Name: user_agent_memory user_agent_memory_owner; Type: POLICY; Schema: public; Owner: -
 CREATE POLICY user_agent_memory_owner ON public.user_agent_memory TO authenticated USING ((user_id = auth.uid())) WITH CHECK ((user_id = auth.uid()));
@@ -4689,47 +4882,65 @@ CREATE POLICY user_agent_memory_owner ON public.user_agent_memory TO authenticat
 -- Name: user_agent_memory user_agent_memory_worker_read; Type: POLICY; Schema: public; Owner: -
 CREATE POLICY user_agent_memory_worker_read ON public.user_agent_memory FOR SELECT TO authenticated USING (public.is_admin_user());
 
--- Name: user_oauth_providers selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.user_oauth_providers TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: user_oauth_providers user_oauth_providers_delete_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY user_oauth_providers_delete_access ON public.user_oauth_providers FOR DELETE USING (public.is_admin_user());
 
--- Name: user_oauth_providers selfhost_owner_read; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_owner_read ON public.user_oauth_providers FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+-- Name: user_oauth_providers user_oauth_providers_insert_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY user_oauth_providers_insert_access ON public.user_oauth_providers FOR INSERT WITH CHECK (public.is_admin_user());
 
--- Name: user_settings selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.user_settings TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: user_oauth_providers user_oauth_providers_select_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY user_oauth_providers_select_access ON public.user_oauth_providers FOR SELECT USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
--- Name: user_settings selfhost_owner; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_owner ON public.user_settings TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid))) WITH CHECK (((user_id = ( SELECT auth.uid() AS uid)) AND ((default_bazi_chart_id IS NULL) OR (EXISTS ( SELECT 1
-   FROM public.bazi_charts b
-  WHERE ((b.id = user_settings.default_bazi_chart_id) AND (b.user_id = ( SELECT auth.uid() AS uid)))))) AND ((default_ziwei_chart_id IS NULL) OR (EXISTS ( SELECT 1
-   FROM public.ziwei_charts z
-  WHERE ((z.id = user_settings.default_ziwei_chart_id) AND (z.user_id = ( SELECT auth.uid() AS uid))))))));
+-- Name: user_oauth_providers user_oauth_providers_update_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY user_oauth_providers_update_access ON public.user_oauth_providers FOR UPDATE USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
 
--- Name: users selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.users TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: user_settings user_settings_delete_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY user_settings_delete_access ON public.user_settings FOR DELETE USING (public.is_admin_user());
 
--- Name: users selfhost_profile_insert; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_profile_insert ON public.users FOR INSERT TO authenticated WITH CHECK ((id = ( SELECT auth.uid() AS uid)));
+-- Name: user_settings user_settings_insert_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY user_settings_insert_access ON public.user_settings FOR INSERT WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
--- Name: users selfhost_profile_read; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_profile_read ON public.users FOR SELECT TO authenticated USING ((id = ( SELECT auth.uid() AS uid)));
+-- Name: user_settings user_settings_select_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY user_settings_select_access ON public.user_settings FOR SELECT USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
--- Name: users selfhost_profile_update; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_profile_update ON public.users FOR UPDATE TO authenticated USING ((id = ( SELECT auth.uid() AS uid))) WITH CHECK ((id = ( SELECT auth.uid() AS uid)));
+-- Name: user_settings user_settings_update_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY user_settings_update_access ON public.user_settings FOR UPDATE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id))) WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
--- Name: xiaoliuren_divinations selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.xiaoliuren_divinations TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: users users_delete_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY users_delete_access ON public.users FOR DELETE USING (public.is_admin_user());
 
--- Name: xiaoliuren_divinations selfhost_owner; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_owner ON public.xiaoliuren_divinations TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid))) WITH CHECK (((user_id = ( SELECT auth.uid() AS uid)) AND ((conversation_id IS NULL) OR (EXISTS ( SELECT 1
-   FROM public.conversations c
-  WHERE ((c.id = xiaoliuren_divinations.conversation_id) AND (c.user_id = ( SELECT auth.uid() AS uid))))))));
+-- Name: users users_insert_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY users_insert_access ON public.users FOR INSERT WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = id)));
 
--- Name: ziwei_charts selfhost_admin; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_admin ON public.ziwei_charts TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+-- Name: users users_select_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY users_select_access ON public.users FOR SELECT USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = id)));
 
--- Name: ziwei_charts selfhost_owner; Type: POLICY; Schema: public; Owner: -
-CREATE POLICY selfhost_owner ON public.ziwei_charts TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid))) WITH CHECK ((user_id = ( SELECT auth.uid() AS uid)));
+-- Name: users users_update_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY users_update_access ON public.users FOR UPDATE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = id))) WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = id)));
+
+-- Name: xiaoliuren_divinations Users can delete own xiaoliuren divinations; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY "Users can delete own xiaoliuren divinations" ON public.xiaoliuren_divinations FOR DELETE USING ((( SELECT auth.uid() AS uid) = user_id));
+
+-- Name: xiaoliuren_divinations Users can insert own xiaoliuren divinations; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY "Users can insert own xiaoliuren divinations" ON public.xiaoliuren_divinations FOR INSERT WITH CHECK ((( SELECT auth.uid() AS uid) = user_id));
+
+-- Name: xiaoliuren_divinations Users can update own xiaoliuren divinations; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY "Users can update own xiaoliuren divinations" ON public.xiaoliuren_divinations FOR UPDATE USING ((( SELECT auth.uid() AS uid) = user_id)) WITH CHECK ((( SELECT auth.uid() AS uid) = user_id));
+
+-- Name: xiaoliuren_divinations Users can view own xiaoliuren divinations; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY "Users can view own xiaoliuren divinations" ON public.xiaoliuren_divinations FOR SELECT USING ((( SELECT auth.uid() AS uid) = user_id));
+
+-- Name: ziwei_charts ziwei_charts_delete_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY ziwei_charts_delete_access ON public.ziwei_charts FOR DELETE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: ziwei_charts ziwei_charts_insert_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY ziwei_charts_insert_access ON public.ziwei_charts FOR INSERT WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: ziwei_charts ziwei_charts_select_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY ziwei_charts_select_access ON public.ziwei_charts FOR SELECT USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
+
+-- Name: ziwei_charts ziwei_charts_update_access; Type: POLICY; Schema: public; Owner: -
+CREATE POLICY ziwei_charts_update_access ON public.ziwei_charts FOR UPDATE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id))) WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
 -- Name: activation_keys; Type: ROW SECURITY; Schema: public; Owner: -
 ALTER TABLE public.activation_keys ENABLE ROW LEVEL SECURITY;

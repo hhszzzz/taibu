@@ -97,12 +97,6 @@ function psql(dsn, script, { timeout = 600_000 } = {}) {
   });
 }
 
-async function withClient(dsn, work) {
-  const client = new pg.Client({ connectionString: dsn });
-  await client.connect();
-  try { return await work(client); } finally { await client.end(); }
-}
-
 async function tableNames(client, schema = 'public') {
   const { rows } = await client.query(
     `select tablename from pg_tables where schemaname = $1 order by tablename`,
@@ -168,7 +162,7 @@ function avatarExpression(column) {
   return `case when ${column} like '%/storage/v1/object/public/avatars/%' then '/api/files/avatars/' || split_part(${column}, '/storage/v1/object/public/avatars/', 2) else ${column} end`;
 }
 
-function selectExpression(table, column, sourceType) {
+function selectExpression(table, column) {
   const quoted = `"${column.column_name}"`;
   if (table === 'users' && column.column_name === 'avatar_url') return avatarExpression(quoted);
   return quoted;
@@ -267,6 +261,14 @@ async function main() {
     const clientSecret = process.env.LINUXDO_CLIENT_SECRET;
     const seed = process.env[seedName] || clientSecret;
     const canDetectDeterministic = Boolean(seed);
+    if (!canDetectDeterministic && linuxdoByUser.size > 0) {
+      // Without the old seed, a deterministic Linux.do password cannot be told
+      // apart from a user-chosen one. Importing it would preserve a
+      // secret-derived credential, so fail unless the operator opts in.
+      const message = 'legacy HMAC seed is unavailable; Linux.do passwords cannot be classified (pass --allow-missing-seed to override)';
+      if (!has('--allow-missing-seed')) throw new Error(message);
+      report.warnings.push(message);
+    }
 
     const identitySql = [];
     for (const row of identityUsers.rows) {

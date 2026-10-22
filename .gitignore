@@ -133,6 +133,7 @@ docs/manual/*
 !docs/manual/Architecture.md
 !docs/manual/Refactor-Acceptance.md
 !docs/manual/Self-Hosting.md
+!docs/manual/Cutover.md
 !docs/manual/Agent.md
 !docs/agent-experience-implementation.md
 !docs/agent-domain-competence-implementation.md

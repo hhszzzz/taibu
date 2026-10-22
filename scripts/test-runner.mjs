@@ -68,7 +68,7 @@ export function verificationSteps(files, complete = false, useInstalledChrome = 
     pnpmStep('Agent worker build', ['build:agent']),
     pnpmStep('Next production build', ['exec', 'next', 'build']),
     nodeStep('Package, license and Skill artifacts', ['--test', ...ARTIFACT_TESTS]),
-    nodeStep('Isolated PostgreSQL contracts', ['--test', 'scripts/tests/postgres-contracts.test.mjs']),
+    nodeStep('Isolated PostgreSQL contracts', ['--require', './scripts/ts-register.cjs', '--test', 'scripts/tests/postgres-contracts.test.mjs', 'scripts/tests/db-context-contracts.test.mjs', 'scripts/tests/db-baseline.test.mjs']),
     nodeStep('Auth acceptance (local stack + Mailpit)', ['--test', 'scripts/tests/auth-acceptance.test.mjs']),
     nodeStep('Real Redis admission contracts', ['--require', './scripts/ts-register.cjs', '--test', 'scripts/tests/selfhost-redis.test.mjs']),
     nodeStep('Offline browser component contracts', ['scripts/tests/p5-browser-fixture.mjs', ...(useInstalledChrome ? ['--chrome'] : [])]),

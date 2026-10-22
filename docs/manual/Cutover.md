@@ -53,10 +53,51 @@ hw 上已有宿主 Caddy 2.11.7，不能再启动本栈的 `caddy` 服务。`com
   也不会占用 80/443；容器边缘模式下 web 不发布任何宿主端口。
 - `EDGE_MODE=container`（默认）：`deploy.sh` 以 `--profile edge` 启动 caddy，由它占 80/443。
 
-宿主 Caddy 的站点块以 `deploy/Caddyfile` 为基准：保留 `flush_interval -1`、`X-Real-IP`、
-`request_body max_size 12MB`，以及维护开关（`file /opt/taibu/maintenance/on` 时 503 并放行
-`ADMIN_IP`）。走 Cloudflare 时沿用主机全局的 `trusted_proxies` 与 `CF-Connecting-IP`。
-切换前用 `sudo -u caddy caddy validate --config /etc/caddy/Caddyfile` 校验，再 `systemctl reload caddy`。
+宿主 Caddy 的站点块以 `deploy/Caddyfile` 为基准，把上游改成 `127.0.0.1:3000`，维护开关改成
+宿主路径。模板（`<ADMIN_IP>` 替换为实际放行地址；TLS 证书沿用主机现有 origin 证书）：
+
+```caddyfile
+:443 {
+	tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin-key.pem
+	encode zstd gzip
+	request_body {
+		max_size 12MB
+	}
+
+	@maintenance file /opt/taibu/maintenance/on
+	@admin remote_ip <ADMIN_IP>
+	handle @maintenance {
+		handle @admin {
+			reverse_proxy 127.0.0.1:3000 {
+				flush_interval -1
+				header_up X-Real-IP {client_ip}
+			}
+		}
+		handle {
+			header Retry-After 300
+			respond "维护中，请稍后重试" 503 {
+				close
+			}
+		}
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:3000 {
+			flush_interval -1
+			header_up X-Real-IP {client_ip}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+}
+```
+
+走 Cloudflare 时沿用主机全局的 `trusted_proxies` 与 `CF-Connecting-IP`。切换前用
+`sudo -u caddy caddy validate --config /etc/caddy/Caddyfile` 校验，再 `systemctl reload caddy`。
 
 ## 3. 切换时间线（T+0 开始）
 

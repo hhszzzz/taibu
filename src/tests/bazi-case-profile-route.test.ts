@@ -300,13 +300,36 @@ test('bazi case profile PUT should use the privileged rpc client instead of auth
     assert.equal(payload.profile.id, 'profile-1');
 });
 
-/** A query double: every filter returns itself; the read resolves to the given rows. */
-function rows(data: unknown, calls: Array<[string, ...unknown[]]> = []) {
-    const query: Record<string, unknown> = {};
-    for (const method of ['select', 'eq', 'in', 'order']) query[method] = (...args: unknown[]) => { calls.push([method, ...args]); return query; };
-    query.maybeSingle = async () => ({ data, error: null });
-    query.then = (resolve: (value: unknown) => void) => resolve({ data, error: null });
-    return query;
+type TableRow = Record<string, unknown>;
+
+/** A scoped database double: `tx` serves each table's rows through Kysely's chain and records its filters. */
+function scopedFor(t: import('node:test').TestContext, tables: Record<string, TableRow[]>, rpc?: (fn: string, args: Record<string, unknown>) => unknown) {
+    const calls: Array<[string, ...unknown[]]> = [];
+    const scoped = createMockScopedDb({
+        tx: async (work) => work({
+            selectFrom(table: string) {
+                let matched = tables[table];
+                if (!matched) throw new Error(`Unexpected table: ${table}`);
+                const query = {
+                    select: () => query,
+                    selectAll: () => query,
+                    orderBy: () => query,
+                    limit: () => query,
+                    where: (column: string, operator: string, value: unknown) => {
+                        calls.push([operator, column, value]);
+                        if (operator === 'in') matched = matched!.filter(row => (value as unknown[]).includes(row.id));
+                        else if (operator === '=') matched = matched!.filter(row => row[column] === value);
+                        return query;
+                    },
+                    execute: async () => matched,
+                    executeTakeFirst: async () => matched![0],
+                };
+                return query;
+            },
+        } as never),
+        rpc: async (fn, args) => rpc ? rpc(fn, args) : undefined,
+    });
+    return { scoped, calls };
 }
 
 const CHART = '11111111-1111-1111-1111-111111111111';
@@ -315,19 +338,17 @@ const CONVERSATION = '44444444-4444-4444-8444-444444444444';
 
 test('bazi case profile PUT sends each kept event ID once, lowercased, so the save keeps its source and creation time', async (t) => {
     const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
+    const contextModule = require('../lib/db/context.server') as typeof import('../lib/db/context.server');
     const rpcCalls: Array<Record<string, unknown>> = [];
-    const authDb = {
-        from(table: string) {
-            if (table === 'bazi_charts') return rows({ id: CHART });
-            if (table === 'bazi_case_profiles') return rows({ id: 'profile-1', user_id: 'user-1', bazi_chart_id: CHART, master_review: {}, owner_feedback: {}, source_run_id: null, created_at: '2026-03-20T00:00:00.000Z', updated_at: '2026-03-20T00:00:00.000Z' });
-            if (table === 'bazi_case_events') return rows([]);
-            throw new Error(`Unexpected table: ${table}`);
-        },
-    };
-    t.mock.method(apiUtils, 'requireUserContext', async () => ({ user: { id: 'user-1' }, db: authDb, supabase: authDb }) as unknown as Awaited<ReturnType<typeof apiUtils.requireUserContext>>);
-    t.mock.method(apiUtils, 'getSystemAdminClient', () => ({
-        rpc: async (_fn: string, args: Record<string, unknown>) => { rpcCalls.push(args); return { data: { status: 'ok', profile_id: 'profile-1' }, error: null }; },
-    }) as unknown as ReturnType<typeof apiUtils.getSystemAdminClient>);
+    const { scoped } = scopedFor(t, {
+        bazi_charts: [{ id: CHART, user_id: 'user-1' }],
+        bazi_case_profiles: [{ id: 'profile-1', user_id: 'user-1', bazi_chart_id: CHART, master_review: {}, owner_feedback: {}, source_run_id: null, created_at: '2026-03-20T00:00:00.000Z', updated_at: '2026-03-20T00:00:00.000Z' }],
+        bazi_case_events: [],
+    }, (_fn, args) => { rpcCalls.push(args); return { status: 'ok', profile_id: 'profile-1' }; });
+    t.mock.method(apiUtils, 'requireUserContext', async () => ({ user: { id: 'user-1' }, db: scoped }) as unknown as Awaited<ReturnType<typeof apiUtils.requireUserContext>>);
+    const originalSystemDb = contextModule.systemDb;
+    contextModule.systemDb = (() => scoped) as typeof contextModule.systemDb;
+    t.after(() => { contextModule.systemDb = originalSystemDb; });
 
     const kept = 'AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA';
     const event = (id: string | undefined, title: string) => ({ ...(id === undefined ? {} : { id }), eventDate: '2024-03-01', category: '事业', title, detail: '' });
@@ -346,29 +367,25 @@ test('bazi case profile PUT sends each kept event ID once, lowercased, so the sa
 
 test('bazi case profile GET says which entries the Agent wrote and the conversation it wrote them in', async (t) => {
     const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
-    const runCalls: Array<[string, ...unknown[]]> = [];
     const event = (id: string, eventDate: string, category: string, title: string, source: string | null) =>
         ({ id, profile_id: 'profile-1', event_date: eventDate, category, title, detail: null, source_run_id: source, created_at: '2026-10-21T00:00:00.000Z', updated_at: '2026-10-21T00:00:00.000Z' });
-    const authDb = {
-        from(table: string) {
-            if (table === 'bazi_charts') return rows({ id: CHART });
-            if (table === 'bazi_case_profiles') return rows({ id: 'profile-1', user_id: 'user-1', bazi_chart_id: CHART, master_review: { strengthLevel: '偏弱' }, owner_feedback: {}, source_run_id: RUN, created_at: '2026-03-20T00:00:00.000Z', updated_at: '2026-03-20T00:00:00.000Z' });
-            if (table === 'bazi_case_events') return rows([
-                event('event-1', '2024-03-01', '事业', '换到新公司', RUN),
-                event('event-2', '2019-07-01', '婚姻', '结婚', HIDDEN_RUN),
-                event('event-3', '2015-09-01', '学业', '读研', null),
-            ]);
-            // The reader's own tasks only: a task it cannot see keeps its ID and no conversation.
-            if (table === 'agent_runs') return rows([{ id: RUN, conversation_id: CONVERSATION }], runCalls);
-            throw new Error(`Unexpected table: ${table}`);
-        },
-    };
-    t.mock.method(apiUtils, 'requireUserContext', async () => ({ user: { id: 'user-1' }, db: authDb, supabase: authDb }) as unknown as Awaited<ReturnType<typeof apiUtils.requireUserContext>>);
+    const { scoped, calls } = scopedFor(t, {
+        bazi_charts: [{ id: CHART, user_id: 'user-1' }],
+        bazi_case_profiles: [{ id: 'profile-1', user_id: 'user-1', bazi_chart_id: CHART, master_review: { strengthLevel: '偏弱' }, owner_feedback: {}, source_run_id: RUN, created_at: '2026-03-20T00:00:00.000Z', updated_at: '2026-03-20T00:00:00.000Z' }],
+        bazi_case_events: [
+            event('event-1', '2024-03-01', '事业', '换到新公司', RUN),
+            event('event-2', '2019-07-01', '婚姻', '结婚', HIDDEN_RUN),
+            event('event-3', '2015-09-01', '学业', '读研', null),
+        ],
+        // The reader's own tasks only: a task it cannot see keeps its ID and no conversation.
+        agent_runs: [{ id: RUN, conversation_id: CONVERSATION, user_id: 'user-1' }],
+    });
+    t.mock.method(apiUtils, 'requireUserContext', async () => ({ user: { id: 'user-1' }, db: scoped }) as unknown as Awaited<ReturnType<typeof apiUtils.requireUserContext>>);
 
     const { GET } = await import('../app/api/bazi/case-profile/route');
     const payload = await (await GET(new NextRequest(`http://localhost/api/bazi/case-profile?chartId=${CHART}`))).json();
 
-    assert.deepEqual(runCalls.find(call => call[0] === 'in'), ['in', 'id', [RUN, HIDDEN_RUN]], 'each task is read once');
+    assert.deepEqual(calls.find(call => call[0] === 'in'), ['in', 'id', [RUN, HIDDEN_RUN]], 'each task is read once');
     assert.deepEqual(payload.profile.masterReviewSource, { runId: RUN, conversationId: CONVERSATION });
     assert.deepEqual(payload.profile.events.map((item: { source: unknown }) => item.source), [
         { runId: RUN, conversationId: CONVERSATION },

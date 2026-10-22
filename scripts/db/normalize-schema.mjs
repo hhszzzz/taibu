@@ -27,6 +27,8 @@ export function normalizeSchemaDump(dump) {
   }
   if (current) blocks.push(current);
 
-  blocks.sort((left, right) => left.key.localeCompare(right.key));
+  // Byte-wise ordering keeps the snapshot identical across machines; ICU
+  // locale collation would make --check depend on the host locale.
+  blocks.sort((left, right) => (left.key < right.key ? -1 : left.key > right.key ? 1 : 0));
   return `${blocks.map((block) => block.lines.join('\n')).join('\n\n')}\n`;
 }

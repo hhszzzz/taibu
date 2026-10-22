@@ -42,7 +42,9 @@
     "db:transit": "node scripts/db/transit-build.mjs",
     "db:diff": "node scripts/db/schema-diff.mjs",
     "db:verify-restore": "node scripts/db/verify-restore.mjs",
-    "db:import": "node scripts/db/import-supabase.mjs"
+    "db:import": "node scripts/db/import-supabase.mjs",
+    "db:schema": "node scripts/db/dump-schema.mjs",
+    "db:schema:check": "node scripts/db/dump-schema.mjs --check"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.48",

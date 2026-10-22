@@ -15,6 +15,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { normalizeSchemaDump } from './normalize-schema.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const PG_DUMP_BIN = process.env.PG_DUMP_BIN || 'pg_dump';
@@ -70,38 +71,6 @@ function dumpSchema(dsn) {
   });
 }
 
-/**
- * pg_dump output is not stable across server versions and object creation
- * order. Keep object bodies, sort objects by name/type, and drop the session
- * boilerplate that only reflects the dumping client.
- */
-function normalize(dump) {
-  const lines = dump.split('\n').filter((line) => {
-    if (line.startsWith('\\restrict') || line.startsWith('\\unrestrict')) return false;
-    if (line.startsWith('--') && !line.startsWith('-- Name:')) return false;
-    if (/^SET (client_encoding|standard_conforming_strings|search_path)\b/u.test(line)) return false;
-    if (/^SELECT pg_catalog\.set_config\(/u.test(line)) return false;
-    if (line.trim() === '') return false;
-    return true;
-  });
-
-  const blocks = [];
-  let current = null;
-  for (const line of lines) {
-    const header = line.match(/^-- Name: (.*?); Type: (.*?); Schema: /u);
-    if (header) {
-      if (current) blocks.push(current);
-      current = { key: `${header[2]}\u0000${header[1]}`, lines: [line] };
-    } else if (current) {
-      current.lines.push(line);
-    }
-  }
-  if (current) blocks.push(current);
-
-  blocks.sort((left, right) => left.key.localeCompare(right.key));
-  return `${blocks.map((block) => block.lines.join('\n')).join('\n\n')}\n`;
-}
-
 function lineDiff(leftFile, rightFile) {
   return new Promise((resolve) => {
     const child = spawn('diff', ['-u', '--label', labels.a, '--label', labels.b, leftFile, rightFile], {
@@ -115,8 +84,8 @@ function lineDiff(leftFile, rightFile) {
 
 async function main() {
   const [aDump, bDump] = await Promise.all([dumpSchema(aUrl), dumpSchema(bUrl)]);
-  const a = normalize(aDump);
-  const b = normalize(bDump);
+  const a = normalizeSchemaDump(aDump);
+  const b = normalizeSchemaDump(bDump);
 
   if (a === b) {
     mkdirSync(path.dirname(outPath), { recursive: true });

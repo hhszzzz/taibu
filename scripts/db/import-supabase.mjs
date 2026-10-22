@@ -5,6 +5,8 @@
 // Secrets never belong on the command line:
 //   IMPORT_SOURCE_URL=... IMPORT_TARGET_URL=... node scripts/db/import-supabase.mjs
 // Optional: IMPORT_FILES_ROOT, LEGACY_HMAC_KEY_ENV, LINUXDO_CLIENT_SECRET.
+// When Linux.do accounts exist the legacy HMAC seed is mandatory; pass
+// --allow-missing-seed only for a deliberate dry run.
 import { spawn } from 'node:child_process';
 import { createHmac } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';

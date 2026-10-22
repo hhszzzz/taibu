@@ -158,7 +158,7 @@ async function withClient(dsn, work) {
 /** CSV headers are simple here (no embedded newlines); pg's exports quote when needed. */
 function csvHeader(file) {
   const text = readFileSync(file, 'utf8');
-  const line = text.slice(0, text.indexOf('\n') === -1 ? text.length : text.indexOf('\n'));
+  const line = text.slice(0, text.indexOf('\n') === -1 ? text.length : text.indexOf('\n')).replace(/\r$/u, '');
   const fields = [];
   let current = '';
   let quoted = false;

@@ -12,9 +12,13 @@ compose() {
     -f "$ROOT/deploy/compose.base.yml" -f "$ROOT/deploy/compose.prod.yml" "$@"
 }
 
-echo "[deploy] pre-flight backup"
 mkdir -p /opt/taibu/backups
-compose exec -T db sh -c 'pg_dump -U postgres -Fc taibu' > "/opt/taibu/backups/pre-${TAG}.dump"
+if compose ps --status running --services 2>/dev/null | grep -qx db; then
+  echo "[deploy] pre-flight backup"
+  compose exec -T db sh -c 'pg_dump -U postgres -Fc taibu' > "/opt/taibu/backups/pre-${TAG}.dump"
+else
+  echo "[deploy] no running db; skipping pre-flight backup (first deploy)"
+fi
 
 echo "[deploy] pull ${TAG}"
 compose pull

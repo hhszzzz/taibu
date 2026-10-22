@@ -1,0 +1,7 @@
+# Overlay for hosts where a system Caddy already owns 80/443 (hw) and reaches
+# the web container through loopback. deploy.sh adds this file when
+# EDGE_MODE=host; container-edge hosts publish nothing and let caddy proxy
+# web:3000 over the edge network.
+services:
+  web:
+    ports: ['127.0.0.1:${WEB_PORT:-3000}:3000']

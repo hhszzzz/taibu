@@ -32,14 +32,31 @@
 2. 让新栈处于维护模式且数据库为空：
    ```sh
    touch /opt/taibu/maintenance/on
+   # hw（宿主 Caddy）额外加 compose.host-edge.yml；容器 caddy 则加 --profile edge。
+   COMPOSE_FILES="-f /opt/taibu/source/deploy/compose.base.yml -f /opt/taibu/source/deploy/compose.prod.yml"
+   COMPOSE_FILES="$COMPOSE_FILES -f /opt/taibu/source/deploy/compose.host-edge.yml"  # hw
    docker compose --project-directory /opt/taibu/source --env-file /opt/taibu/env/compose.env \
-     -f /opt/taibu/source/deploy/compose.base.yml -f /opt/taibu/source/deploy/compose.prod.yml \
-     up -d --no-build
+     $COMPOSE_FILES up -d --no-build
    ```
    `/api/health/ready` 应因数据库未导入而失败，这是预期状态。
 3. 记录基线：`pg_stat_statements` 前 20、各表行数、磁盘与内存快照。
 4. 在密码管理器里确认：`SUPABASE_SECRET_KEY`、`LINUXDO_CLIENT_SECRET`（仅用于确定性口令剔除）、`IMPORT_SOURCE_URL`、`IMPORT_TARGET_URL` 可用。
 5. 确认 GitHub cron 仍启用：`gh workflow view reminders-cron.yml`。
+
+### 边缘模式（hw 已占用 80/443）
+
+hw 上已有宿主 Caddy 2.11.7，不能再启动本栈的 `caddy` 服务。`compose.prod.yml` 把 caddy 放进
+`edge` profile，并用 `EDGE_MODE` 控制 `deploy.sh`：
+
+- `EDGE_MODE=host`（hw）：只启动 web/worker/backup，并叠加 `compose.host-edge.yml`，把 web
+  发布到 `127.0.0.1:${WEB_PORT:-3000}`，由宿主 Caddy 反代。`deploy.sh` 不会启动 caddy，
+  也不会占用 80/443；容器边缘模式下 web 不发布任何宿主端口。
+- `EDGE_MODE=container`（默认）：`deploy.sh` 以 `--profile edge` 启动 caddy，由它占 80/443。
+
+宿主 Caddy 的站点块以 `deploy/Caddyfile` 为基准：保留 `flush_interval -1`、`X-Real-IP`、
+`request_body max_size 12MB`，以及维护开关（`file /opt/taibu/maintenance/on` 时 503 并放行
+`ADMIN_IP`）。走 Cloudflare 时沿用主机全局的 `trusted_proxies` 与 `CF-Connecting-IP`。
+切换前用 `sudo -u caddy caddy validate --config /etc/caddy/Caddyfile` 校验，再 `systemctl reload caddy`。
 
 ## 3. 切换时间线（T+0 开始）
 
@@ -190,6 +207,7 @@ compose run --rm -T restore-check scripts/db/verify-restore.mjs --backup "$LATES
 | `/api/health/ready` 503 | web 日志中的 DB/Redis 错误；`pg_isready`；Redis `PING` |
 | OTP 收不到 | `EMAIL_TRANSPORT`、SMTP 凭据、SPF/DKIM；BullMQ `taibu-email` 失败计数 |
 | 登录 429 | Redis `taibu:login-fail:v1:*`；确认不是共享出口 IP 触发 Better Auth 限流 |
-| SSE 不刷新 | Caddy `flush_interval -1`；`X-Accel-Buffering: no`；LISTEN 连接是否重连 |
+| SSE 不刷新 | Caddy（容器或宿主）`flush_interval -1`；`X-Accel-Buffering: no`；LISTEN 连接是否重连 |
+| 80/443 被占用 | 宿主已有 Caddy：用 `EDGE_MODE=host`，不要 `--profile edge`；否则停掉宿主服务 |
 | 导入校验失败 | 查看 `tmp/import-*.json` 的 `tables[].checksum` 与 `orphans`；不要 `--reset-target` 重跑生产 |
 | 备份恢复失败 | `verify-restore` 报告；先确认 `pg_restore` 版本与备份一致（17） |

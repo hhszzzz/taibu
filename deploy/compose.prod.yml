@@ -6,6 +6,9 @@
 services:
   caddy:
     image: caddy:2.10-alpine
+    # Hosts that already run a system Caddy (like hw) use EDGE_MODE=host and
+    # never start this service; `--profile edge` opts in explicitly.
+    profiles: ["edge"]
     restart: unless-stopped
     ports: ["80:80", "443:443"]
     environment:

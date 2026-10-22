@@ -250,6 +250,19 @@ async function main() {
       order by au.id`);
     if (!identityUsers.rowCount) throw new Error('source auth.users is empty');
 
+    // The GoTrue trigger created public.users rows, but it does not run in
+    // replica mode and a missing row makes every profile API fail after login.
+    const missingProfiles = new Map(
+      (await source.query(`
+        select au.id,
+               nullif(btrim(coalesce(au.raw_user_meta_data->>'nickname', '')), '') as nickname,
+               ${avatarExpression("coalesce(au.raw_user_meta_data->>'avatar_url', au.raw_user_meta_data->>'picture')")} as avatar_url
+        from auth.users au
+        left join public.users pu on pu.id = au.id
+        where pu.id is null and au.email is not null and au.id <> $1`, [SYSTEM_USER])).rows
+        .map((row) => [row.id, row]),
+    );
+
     const seenEmails = new Set();
     for (const row of identityUsers.rows) {
       if (!row.email) throw new Error(`user ${row.id} has no email`);
@@ -308,6 +321,11 @@ async function main() {
         report.password.linuxdoOnly += 1;
       }
     }
+    for (const [userId, profile] of missingProfiles) {
+      identitySql.push(`insert into public.users (id, nickname, avatar_url, membership, ai_chat_count)
+        values (${quote(userId)}, ${quote(profile.nickname || '命理爱好者')}, ${quote(profile.avatar_url)}, 'free', 1)
+        on conflict (id) do nothing;`);
+    }
     for (const [userId, sub] of linuxdoByUser) {
       identitySql.push(`insert into identity.accounts (id, user_id, account_id, provider_id, created_at, updated_at)
         values (gen_random_uuid(), ${quote(userId)}, ${quote(sub)}, 'linuxdo', now(), now());`);
@@ -316,7 +334,9 @@ async function main() {
       users: identityUsers.rowCount,
       linuxdo: linuxdoByUser.size,
       verified: identityUsers.rows.filter((row) => row.email_verified).length,
+      backfilledProfiles: missingProfiles.size,
     };
+    if (missingProfiles.size) report.warnings.push(`backfilled ${missingProfiles.size} public.users rows absent from the source`);
 
     // Column plans for every shared table.
     const edges = await fkEdges(target, targetTables);
@@ -376,8 +396,11 @@ async function main() {
       const excludeSystem = plan.table === 'users' ? ` where id <> '${SYSTEM_USER}'` : '';
       const sourceCount = Number(await scalar(source, `select count(*) from public."${plan.table}"${excludeSystem}`));
       const targetCount = Number(await scalar(target, `select count(*) from public."${plan.table}"${excludeSystem}`));
+      // Backfilled profile rows are intentionally absent from the source.
+      const expectedTarget = plan.table === 'users' ? sourceCount + missingProfiles.size : sourceCount;
       const entry = { table: plan.table, source: sourceCount, target: targetCount, checksum: 'skipped' };
-      if (sourceCount !== targetCount) throw new Error(`${plan.table}: count ${sourceCount} -> ${targetCount}`);
+      if (expectedTarget !== targetCount) throw new Error(`${plan.table}: count ${expectedTarget} -> ${targetCount}`);
+      if (plan.table === 'users' && missingProfiles.size) entry.backfilled = missingProfiles.size;
       if (plan.table !== 'users') {
         const hashSql = (client) => client.query(`
           select md5(coalesce(string_agg(h, '' order by h), '')) as digest from (

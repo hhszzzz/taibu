@@ -10,7 +10,6 @@ const config: CapacitorConfig = {
     allowNavigation: [
       'mingai.fun',
       '*.mingai.fun',
-      '*.vercel.app',
     ],
   },
   ios: {

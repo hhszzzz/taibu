@@ -5,12 +5,19 @@ import { createRequire } from 'node:module';
 import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import test from 'node:test';
-import { assertLocalDocker } from './local-auth-stack.mjs';
 
 const require = createRequire(import.meta.url);
 const Redis = require('ioredis');
 const { createRedisRateLimiter, REDIS_RATE_LIMIT_OPTIONS } = require('../../src/lib/rate-limit-redis.ts');
 const execute = promisify(execFile);
+
+async function assertLocalDocker() {
+  const endpoint = process.env.DOCKER_HOST && !process.env.DOCKER_CONTEXT
+    ? process.env.DOCKER_HOST
+    : (await execute('docker', ['context', 'inspect', '--format', '{{.Endpoints.docker.Host}}'])).stdout.trim();
+  assert.ok(endpoint.startsWith('unix://'), 'Redis contracts require a local Unix-socket Docker endpoint');
+  await execute('docker', ['version', '--format', '{{.Server.Version}}']);
+}
 
 // Explicit integration entrypoint; no production URL or existing Redis data is used.
 test('real Redis shares atomic admission across independent application clients', { timeout: 60_000 }, async t => {
@@ -28,7 +35,7 @@ test('real Redis shares atomic admission across independent application clients'
   });
   await execute('docker', ['run', '--detach', '--name', name,
     '--label', `io.taibu.redis-acceptance.run=${name}`, '--publish', '127.0.0.1::6379',
-    '--env', 'REDIS_PASSWORD', 'redis:7.4.2-alpine', 'sh', '-c',
+    '--env', 'REDIS_PASSWORD', 'redis:8.2.1-alpine', 'sh', '-c',
     'exec redis-server --save "" --appendonly no --requirepass "$REDIS_PASSWORD"'],
   { env: { ...process.env, REDIS_PASSWORD: password }, timeout: 30_000 });
   created = true;

@@ -42,7 +42,7 @@ test('records PUT validates and persists related chart fields', async (t) => {
     });
     apiUtilsModule.requireUserContext = async () => ({
         user: { id: 'user-1' },
-        scoped,
+        db: scoped,
     });
     delete require.cache[routePath];
 

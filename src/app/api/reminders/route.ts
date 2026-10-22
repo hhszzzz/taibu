@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
             return jsonError('账号已切换，请重新加载设置', 409, { success: false });
         }
         const { user } = auth;
-        const db = auth.scoped;
+        const db = auth.db;
 
         const subscriptions = await getReminderSubscriptions(user.id, { db });
 
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
             return jsonError('账号已切换，请重新加载设置', 409, { success: false });
         }
         const { user } = auth;
-        const db = auth.scoped;
+        const db = auth.db;
 
         const body = await request.json();
         const { reminderType, enabled, notifyEmail, notifySite } = body;

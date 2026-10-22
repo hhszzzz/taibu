@@ -28,7 +28,6 @@ interface FaceInterpretInput extends InterpretInput {
 const handleAnalyze = createInterpretHandler<FaceInterpretInput>({
     sourceType: 'face',
     tag: 'face',
-    authMethod: 'userContext',
     allowedChartTypes: [...SOURCE_CHART_TYPE_MAP.face_reading],
     defaultModelId: DEFAULT_VISION_MODEL_ID,
     isVision: true,

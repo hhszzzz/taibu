@@ -316,7 +316,7 @@ export async function createAgentTask(request: NextRequest) {
       503,
       "AGENT_WORKER_UNAVAILABLE",
     );
-  const conversation = await auth.scoped.tx((trx) => trx
+  const conversation = await auth.db.tx((trx) => trx
     .selectFrom("conversations")
     .select(["id", "messages", "title"])
     .where("id", "=", body.conversationId)
@@ -335,7 +335,7 @@ export async function createAgentTask(request: NextRequest) {
   }
   if (compact && !history.length) throw new AgentApiError("当前对话还没有可压缩的内容");
   const account = await getUserAuthInfo(auth.user.id, {
-    db: auth.scoped,
+    db: auth.db,
     user: auth.user,
   });
   const config = custom
@@ -500,7 +500,7 @@ export async function getAgentTask(request: NextRequest, id?: string) {
 /** Sidebar markers: the caller's active runs and unread task notices, read under their own RLS. */
 export async function getAgentActivity(request: NextRequest) {
   const auth = await authenticated(request);
-  return jsonOk(await readAgentActivity(auth.scoped, auth.user.id, request.signal));
+  return jsonOk(await readAgentActivity(auth.db, auth.user.id, request.signal));
 }
 
 export async function controlAgentTask(

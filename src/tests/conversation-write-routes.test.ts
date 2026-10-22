@@ -17,7 +17,7 @@ test('conversations POST should create through transactional rpc', async (t) => 
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    scoped: createMockScopedDb({
+    db: createMockScopedDb({
       rpc: async (fn: string, args: Record<string, unknown>) => {
         rpcCalls.push({ fn, args });
         return 'conv-1';
@@ -154,7 +154,7 @@ test('conversations POST should normalize blank titles back to the default title
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    scoped: createMockScopedDb({
+    db: createMockScopedDb({
       rpc: async (fn: string, args: Record<string, unknown>) => {
         rpcCalls.push({ fn, args });
         return 'conv-1';
@@ -295,7 +295,7 @@ test('conversation detail PATCH should update through transactional rpc', async 
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    scoped: createMockScopedDb({
+    db: createMockScopedDb({
       rpc: async (fn: string, args: Record<string, unknown>) => {
         rpcCalls.push({ fn, args });
         return { status: 'ok' };
@@ -363,7 +363,7 @@ test('conversation detail PATCH should return 404 when transactional rpc reports
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    scoped: createMockScopedDb({
+    db: createMockScopedDb({
       rpc: async () => ({ status: 'not_found' }),
     }),
   });
@@ -397,7 +397,7 @@ test('conversation detail PATCH should normalize messages null into an empty tra
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    scoped: createMockScopedDb({
+    db: createMockScopedDb({
       rpc: async (fn: string, args: Record<string, unknown>) => {
         rpcCalls.push({ fn, args });
         return { status: 'ok' };
@@ -824,7 +824,7 @@ test('conversation detail route should fail loudly when message storage cannot b
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    scoped: createMockScopedDb({
+    db: createMockScopedDb({
       tx: async () => ({
         id: VALID_CONVERSATION_ID,
         user_id: 'user-1',
@@ -875,7 +875,7 @@ test('conversation detail route returns analysis snapshot without loading full m
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    scoped: createMockScopedDb({
+    db: createMockScopedDb({
       tx: async () => ({
         id: VALID_CONVERSATION_ID,
         user_id: 'user-1',
@@ -937,7 +937,7 @@ test('conversations GET should forward chartId filter to source_data query', asy
 
   apiUtils.requireUserContext = (async () => ({
     user: { id: 'user-1' },
-    scoped: createMockScopedDb({
+    db: createMockScopedDb({
       tx: async (work) => work({
         selectFrom: (table: string) => {
           assert.equal(table, 'conversations_with_archive_status');

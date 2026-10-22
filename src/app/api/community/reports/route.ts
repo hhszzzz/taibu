@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
         const status = searchParams.get('status') as ReportStatus | null;
         const { from, to } = parsePagination(searchParams, { defaultPageSize: 20 });
 
-        const result = await auth.scoped.tx(async (trx) => {
+        const result = await auth.db.tx(async (trx) => {
             const filtered = () => {
                 let query = trx.selectFrom('community_reports');
                 if (status) query = query.where('status', '=', status);
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
 
         let data: unknown;
         try {
-            data = await auth.scoped.rpc('submit_community_report_and_notify' as never, {
+            data = await auth.db.rpc('submit_community_report_and_notify' as never, {
                 p_target_type: targetType,
                 p_target_id: targetId,
                 p_reason: reason,
@@ -108,7 +108,7 @@ export async function PUT(request: NextRequest) {
         }
 
         try {
-            await auth.scoped.tx((trx) => trx
+            await auth.db.tx((trx) => trx
                 .updateTable('community_reports')
                 .set({
                     status,

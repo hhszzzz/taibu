@@ -1,3 +1,10 @@
+/**
+ * 请求级鉴权与数据库上下文。
+ *
+ * B6 之后 `db` 一律是受控的 Kysely 上下文（ScopedDb）；旧 supabase-js 客户端
+ * 只保留给尚未迁移的认证/存储表层（P3/P5 删除）。
+ */
+
 import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
@@ -16,10 +23,6 @@ import {
     writeSessionCookies,
 } from '@/lib/auth-session';
 
-type RequestDbClient =
-    | Awaited<ReturnType<typeof createRequestSupabaseClient>>
-    | ReturnType<typeof createAuthedClient>;
-
 type WritableCookieStore = {
     set: (name: string, value: string, options: {
         httpOnly: boolean;
@@ -33,35 +36,18 @@ type WritableCookieStore = {
 
 type GetAuthContextDependencies = {
     authResolverClient?: ReturnType<typeof createAnonClient>;
-    authedClientFactory?: typeof createAuthedClient;
     cookieStore?: WritableCookieStore | null;
 };
 
 export type RequestAuthError = SessionResolutionError;
 
 export type AuthContextResult = {
-    db: RequestDbClient;
-    // P2 过渡字段：已完成迁移的模块使用受控 Kysely 上下文；B6 收尾时把它改名为 db，
-    // 并删除 supabase / resolveRequestDbClient。
-    scoped: ScopedDb;
-    // `db` 是包装鉴权上下文的规范字段；`supabase` 仅保留给旧调用点过渡使用。
-    supabase: RequestDbClient;
+    db: ScopedDb;
+    // 过渡字段：GoTrue 会话 JWT。仅剩认证/存储表层（P3/P5 删除）继续消费。
     accessToken: string | null;
     user: User | null;
     authError: RequestAuthError | null;
 };
-
-export function resolveRequestDbClient(
-    auth: Partial<Pick<AuthContextResult, 'db' | 'supabase'>> | null | undefined,
-): RequestDbClient | null {
-    if (auth?.db && (typeof auth.db.from === 'function' || typeof auth.db.rpc === 'function')) {
-        return auth.db;
-    }
-    if (auth?.supabase && (typeof auth.supabase.from === 'function' || typeof auth.supabase.rpc === 'function')) {
-        return auth.supabase;
-    }
-    return null;
-}
 
 export async function createRequestSupabaseClient() {
     let cookieValues: Array<{ name: string; value: string }> = [];
@@ -106,7 +92,6 @@ export async function getAuthContext(
     const accessToken = bearer?.replace(/Bearer\s+/i, '') || request.cookies.get(ACCESS_COOKIE)?.value || null;
     const refreshToken = request.cookies.get(REFRESH_COOKIE)?.value || null;
     const authResolverClient = dependencies.authResolverClient ?? createAnonClient();
-    const authedClientFactory = dependencies.authedClientFactory ?? createAuthedClient;
     const { session, refreshed, error: resolverError } = await resolveSessionFromTokens(authResolverClient, {
         accessToken,
         refreshToken,
@@ -121,52 +106,42 @@ export async function getAuthContext(
         }
 
         return {
-            db: authedClientFactory(session.access_token),
-            scoped: userDb(session.user!.id),
-            supabase: authedClientFactory(session.access_token),
+            db: userDb(session.user!.id),
             accessToken: session.access_token,
             user: session.user ?? null,
             authError: null,
         };
     }
 
-    const supabase = await createRequestSupabaseClient();
     if (resolverError) {
         return {
-            db: supabase,
-            scoped: anonDb(),
-            supabase,
+            db: anonDb(),
             accessToken,
             user: null,
             authError: resolverError,
         };
     }
 
+    const supabase = await createRequestSupabaseClient();
     try {
         const { data: { user }, error } = await supabase.auth.getUser();
         if (error && !isCredentialAuthError(error)) {
             return {
-                db: supabase,
-                scoped: anonDb(),
-                supabase,
+                db: anonDb(),
                 accessToken,
                 user: null,
                 authError: normalizeSessionResolutionError(error),
             };
         }
         return {
-            db: supabase,
-            scoped: user ? userDb(user.id) : anonDb(),
-            supabase,
+            db: user ? userDb(user.id) : anonDb(),
             accessToken,
             user: user ?? null,
             authError: null,
         };
     } catch (error) {
         return {
-            db: supabase,
-            scoped: anonDb(),
-            supabase,
+            db: anonDb(),
             accessToken,
             user: null,
             authError: normalizeSessionResolutionError(error),
@@ -182,73 +157,40 @@ async function getWritableCookieStore(): Promise<WritableCookieStore | null> {
     }
 }
 
-// 仅用于必须使用 Bearer Token 的接口
-export async function requireBearerUser(
-    request: NextRequest,
-    dependencies: Pick<GetAuthContextDependencies, 'authResolverClient' | 'authedClientFactory'> = {},
-): Promise<
-    | { db: RequestDbClient; supabase: RequestDbClient; accessToken: string; user: User }
-    | { error: { message: string; status: number } }
-> {
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
-    if (!token) {
-        return { error: { message: '请先登录', status: 401 } };
-    }
-
-    const authResolverClient = dependencies.authResolverClient ?? createAnonClient();
-
-    const { session, error } = await resolveSessionFromTokens(authResolverClient, {
-        accessToken: token,
-        refreshToken: null,
-    });
-
-    if (!session?.user) {
-        if (error) {
-            return { error: { message: error.message, status: error.status } };
-        }
-        return { error: { message: '认证失败', status: 401 } };
-    }
-
-    const db = (dependencies.authedClientFactory ?? createAuthedClient)(session.access_token);
-    return { db, supabase: db, accessToken: session.access_token, user: session.user };
-}
-
 export async function requireUserContext(
     request: NextRequest
 ): Promise<
-    | { db: RequestDbClient; scoped: ScopedDb; supabase: RequestDbClient; accessToken: string | null; user: User }
+    | { db: ScopedDb; user: User }
     | { error: { message: string; status: number } }
 > {
-    const { db, scoped, supabase, accessToken, user, authError } = await getAuthContext(request);
+    const { db, user, authError } = await getAuthContext(request);
     if (authError) {
         return { error: { message: authError.message, status: authError.status } };
     }
     if (!user) {
         return { error: { message: '请先登录', status: 401 } };
     }
-    return { db, scoped, supabase, accessToken, user };
+    return { db, user };
 }
 
 /**
  * 检查用户是否为管理员
  */
 async function checkIsAdmin(
-    supabase: RequestDbClient,
+    db: ScopedDb,
     userId: string
 ): Promise<
     | { ok: true; isAdmin: boolean }
     | { ok: false; error: { message: string; status: number } }
 > {
-    // B6 migrates the administrator gate to the scoped context together with
-    // the admin routes; B1 only needs the new context for data reads.
-    const { data: userData, error } = await supabase
-        .from('users')
-        .select('is_admin')
-        .eq('id', userId)
-        .maybeSingle();
-
-    if (error) {
+    try {
+        const userData = await db.tx((trx) => trx
+            .selectFrom('users')
+            .select('is_admin')
+            .where('id', '=', userId)
+            .executeTakeFirst());
+        return { ok: true, isAdmin: userData?.is_admin ?? false };
+    } catch (error) {
         console.error('[api-utils] admin check failed:', error);
         return {
             ok: false,
@@ -258,11 +200,6 @@ async function checkIsAdmin(
             },
         };
     }
-
-    return {
-        ok: true,
-        isAdmin: userData?.is_admin ?? false,
-    };
 }
 
 export async function requireAdminUser(
@@ -292,7 +229,7 @@ export async function requireAdminContext(
         userContext?: Awaited<ReturnType<typeof requireUserContext>>;
     } = {},
 ): Promise<
-    | { db: RequestDbClient; scoped: ScopedDb; supabase: RequestDbClient; accessToken: string | null; user: User }
+    | { db: ScopedDb; user: User }
     | { error: { message: string; status: number } }
 > {
     const authResult = dependencies.userContext ?? await requireUserContext(request);
@@ -356,30 +293,18 @@ export function createSessionClient(session: Session) {
 }
 
 /**
- * 创建带有用户 access token 的 Supabase 客户端
- * 用于需要 RLS 策略识别用户身份的场景
+ * 过渡：文件上传仍走 Storage RLS，按会话 JWT 建立用户态客户端。
+ * P3 文件存储替换 ObjectStore 后删除。
  */
-export function createAuthedClient(accessToken: string) {
-    return createClient(
-        getSupabaseUrl(),
-        getSupabaseAnonKey(),
-        {
-            global: { headers: { Authorization: `Bearer ${accessToken}` } },
-            auth: {
-                persistSession: false,
-                autoRefreshToken: false,
-                detectSessionInUrl: false,
-            }
-        }
-    );
-}
-
-/**
- * 从请求中获取 access token（优先 Bearer，其次 session）
- */
-export async function getAccessToken(request: NextRequest): Promise<string | null> {
-    const { accessToken } = await getAuthContext(request);
-    return accessToken;
+export function createUserStorageClient(accessToken: string | null) {
+    return createClient(getSupabaseUrl(), getSupabaseAnonKey(), {
+        global: { headers: { Authorization: `Bearer ${accessToken ?? ''}` } },
+        auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+            detectSessionInUrl: false,
+        },
+    });
 }
 
 export function jsonError<TExtra extends Record<string, unknown> = Record<string, never>>(

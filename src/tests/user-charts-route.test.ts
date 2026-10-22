@@ -18,12 +18,12 @@ type ChartRecord = {
 };
 
 function mockUserContext<T extends object>(user: unknown, db: T, scoped = createMockScopedDb()) {
+  void db;
   return {
     user,
     accessToken: null,
-    db,
-    scoped,
-    supabase: db,
+    authError: null,
+    db: scoped,
   };
 }
 

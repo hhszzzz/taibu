@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     const query = request.nextUrl.searchParams.get('q')?.trim() ?? '';
     // 空词 = 搜索弹层的「最近使用」：只列最近的对话，不查命盘。
     if (!query) {
-        const rows = await auth.scoped.tx((trx) => trx
+        const rows = await auth.db.tx((trx) => trx
             .selectFrom('conversations_with_archive_status')
             .select(['id', 'title', 'updated_at'])
             .where('user_id', '=', auth.user.id)
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
         });
     }
     if (query.length > 200) return jsonError('搜索词须为 1–200 个字符', 400);
-    const db = auth.scoped;
+    const db = auth.db;
     const pattern = `%${escapeLike(query)}%`;
     const [messages, bazi, ziwei] = await Promise.all([
         db.rpc('search_conversation_messages', { p_query: query, p_limit: 30 }).then(

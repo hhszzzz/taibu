@@ -119,7 +119,6 @@ const baziAnalysisConfig: DivinationRouteConfig<BaziAnalysisInput, BaziAnalysisC
     sourceType: (input) => (input.type === 'wuxing' ? 'bazi_wuxing' : 'bazi_personality'),
     tag: 'bazi/analysis',
     personality: 'bazi',
-    authMethod: 'userContext',
     parseInput: (body) => {
         const request = body as BaziAnalysisRequest;
         if (!request.chartId || typeof request.chartId !== 'string') {

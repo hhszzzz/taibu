@@ -33,7 +33,6 @@ test('getAuthContext should refresh cookie sessions when access token has expire
     },
   };
 
-  let refreshedAccessToken: string | null = null;
   const request = new NextRequest('http://localhost/api/notifications?count=1&unread=1', {
     headers: {
       cookie: `${ACCESS_COOKIE}=expired-access-token; ${REFRESH_COOKIE}=refresh-cookie-token`,
@@ -59,141 +58,17 @@ test('getAuthContext should refresh cookie sessions when access token has expire
         },
       },
     } as ReturnType<typeof import('../lib/api-utils').createAnonClient>,
-    authedClientFactory(token: string) {
-      refreshedAccessToken = token;
-      return {
-        auth: {
-          async getUser() {
-            return { data: { user }, error: null };
-          },
-        },
-      } as ReturnType<typeof import('../lib/api-utils').createAuthedClient>;
-    },
     cookieStore,
   });
 
   assert.equal(result.user?.id, 'user-1');
   assert.equal(result.authError, null);
-  assert.equal(refreshedAccessToken, 'fresh-access-token');
+  assert.equal(result.accessToken, 'fresh-access-token');
+  assert.equal(typeof result.db.tx, 'function');
   assert.deepEqual(cookieWrites, [
     { name: ACCESS_COOKIE, value: 'fresh-access-token', maxAge: 3600 },
     { name: REFRESH_COOKIE, value: 'fresh-refresh-token', maxAge: 60 * 60 * 24 * 30 },
   ]);
-});
-
-test('requireBearerUser returns one caller-scoped DB client without using cookie refresh', async () => {
-  const { requireBearerUser } = await import('../lib/api-utils');
-  const { createMockAuthContext } = await import('./helpers/supabase-mock');
-  const { ACCESS_COOKIE, REFRESH_COOKIE } = await import('../lib/auth-session');
-  const caller = createMockAuthContext({ from: () => assert.fail('authentication must not query application tables') });
-  const tokens: string[] = [];
-  const result = await requireBearerUser(new NextRequest('http://localhost/api/mbti', {
-    headers: {
-      authorization: 'Bearer caller-bearer-token',
-      cookie: `${ACCESS_COOKIE}=other-user-cookie-token; ${REFRESH_COOKIE}=refresh-cookie-token`,
-    },
-  }), {
-    authResolverClient: {
-      auth: {
-        async getUser(token: string) {
-          assert.equal(token, 'caller-bearer-token');
-          return { data: { user: caller.user }, error: null };
-        },
-        async refreshSession() {
-          assert.fail('bearer-only auth must not refresh cookie sessions');
-        },
-      },
-    } satisfies AuthResolverClientDouble as unknown as ReturnType<typeof import('../lib/api-utils').createAnonClient>,
-    authedClientFactory(token) {
-      tokens.push(token);
-      return caller.db;
-    },
-  });
-  assert.ok(!('error' in result));
-  assert.equal(result.user, caller.user);
-  assert.equal(result.db, caller.db);
-  assert.equal(result.supabase, caller.db);
-  assert.equal(result.accessToken, 'caller-bearer-token');
-  assert.deepEqual(tokens, ['caller-bearer-token']);
-});
-
-test('requireBearerUser should reject stale bearer tokens even when a refresh cookie is present', async () => {
-  const { requireBearerUser } = await import('../lib/api-utils');
-  const { REFRESH_COOKIE } = await import('../lib/auth-session');
-
-  let refreshCalled = false;
-
-  // This SDK double implements only the session resolver contract exercised below.
-  const authResolverClient = {
-    auth: {
-      async getUser(accessToken: string) {
-        assert.equal(accessToken, 'expired-bearer-token');
-        return {
-          data: { user: null },
-          error: { message: 'JWT expired' },
-        };
-      },
-      async refreshSession(tokens: { refresh_token: string }) {
-        void tokens;
-        refreshCalled = true;
-        throw new Error('refreshSession should not be called for bearer-only auth');
-      },
-    },
-  } satisfies AuthResolverClientDouble as unknown as ReturnType<typeof import('../lib/api-utils').createAnonClient>;
-
-  const request = new NextRequest('http://localhost/api/mbti', {
-    headers: {
-      authorization: 'Bearer expired-bearer-token',
-      cookie: `${REFRESH_COOKIE}=refresh-cookie-token`,
-    },
-  });
-
-  const result = await requireBearerUser(request, { authResolverClient });
-  assert.deepEqual(result, {
-    error: {
-      message: '认证失败',
-      status: 401,
-    },
-  });
-  assert.equal(refreshCalled, false);
-});
-
-test('requireBearerUser should preserve access-token backend failures even when refresh token is present', async () => {
-  const { requireBearerUser } = await import('../lib/api-utils');
-  const { REFRESH_COOKIE } = await import('../lib/auth-session');
-
-  const request = new NextRequest('http://localhost/api/mbti', {
-    headers: {
-      authorization: 'Bearer broken-bearer-token',
-      cookie: `${REFRESH_COOKIE}=stale-refresh-token`,
-    },
-  });
-
-  const result = await requireBearerUser(request, {
-    authResolverClient: {
-      auth: {
-        async getUser() {
-          return {
-            data: { user: null },
-            error: { message: 'Auth backend unavailable', status: 503 },
-          };
-        },
-        async refreshSession() {
-          return {
-            data: { session: null },
-            error: { message: 'Invalid Refresh Token', status: 400 },
-          };
-        },
-      },
-    } as ReturnType<typeof import('../lib/api-utils').createAnonClient>,
-  });
-
-  assert.deepEqual(result, {
-    error: {
-      message: 'Auth backend unavailable',
-      status: 503,
-    },
-  });
 });
 
 test('getAuthContext should surface auth backend failures instead of masquerading as anonymous', async () => {
@@ -231,32 +106,15 @@ test('getAuthContext should surface auth backend failures instead of masqueradin
 test('requireAdminContext should surface admin-check backend failures instead of returning a fake 403', async () => {
   const { requireAdminContext } = await import('../lib/api-utils');
   const request = new NextRequest('http://localhost/api/admin/announcements');
-  // The admin-check double provides only its query chain, not a complete Supabase SDK client.
-  const db = {
-    from(table: string) {
-      assert.equal(table, 'users');
-      return {
-        select() {
-          return this;
-        },
-        eq() {
-          return this;
-        },
-        maybeSingle: async () => ({
-          data: null,
-          error: { message: 'db timeout' },
-        }),
-      };
-    },
-  } as unknown as Awaited<ReturnType<typeof import('../lib/api-utils').createAuthedClient>>;
+  // The admin-check double fails at the database boundary, not with a 403-shaped result.
+  const db = createMockScopedDb({
+    tx: async () => { throw new Error('db timeout'); },
+  });
 
   const result = await requireAdminContext(request, {
     userContext: {
       user: { id: 'admin-1' } as User,
-      accessToken: null,
       db,
-      scoped: createMockScopedDb(),
-      supabase: db,
     },
   });
 

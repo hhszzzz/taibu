@@ -1,5 +1,6 @@
 import { type NextRequest } from 'next/server';
 import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
+import type { ScopedDb } from '@/lib/db/context.server';
 import { buildMembershipInfo, type MembershipType } from '@/lib/user/membership';
 import { ensureUserRecordRow } from '@/lib/user/profile-record';
 import { getUserSettingsSnapshot } from '@/lib/user/settings';
@@ -13,29 +14,43 @@ type UserProfilePatchBody = {
     avatar_url?: unknown;
 };
 
-async function loadProfile(auth: Exclude<Awaited<ReturnType<typeof requireUserContext>>, { error: unknown }>) {
-    return auth.db
-        .from('users')
-        .select('id, nickname, avatar_url, is_admin, membership, membership_expires_at, ai_chat_count')
-        .eq('id', auth.user.id)
-        .maybeSingle();
+const PROFILE_COLUMNS = ['id', 'nickname', 'avatar_url', 'is_admin', 'membership', 'membership_expires_at', 'ai_chat_count'] as const;
+
+async function loadProfileRow(db: ScopedDb, userId: string): Promise<Record<string, unknown> | null> {
+    const row = await db.tx((trx) => trx
+        .selectFrom('users')
+        .select(PROFILE_COLUMNS)
+        .where('id', '=', userId)
+        .executeTakeFirst());
+    return (row ?? null) as Record<string, unknown> | null;
 }
 
-async function loadProfileWithRecovery(auth: Exclude<Awaited<ReturnType<typeof requireUserContext>>, { error: unknown }>) {
-    const profileResult = await loadProfile(auth);
-    if (profileResult.error || profileResult.data) {
-        return profileResult;
+async function loadProfileWithRecovery(
+    auth: Exclude<Awaited<ReturnType<typeof requireUserContext>>, { error: unknown }>,
+): Promise<{ row: Record<string, unknown> | null; error: { message: string } | null }> {
+    let row: Record<string, unknown> | null;
+    try {
+        row = await loadProfileRow(auth.db, auth.user.id);
+    } catch (error) {
+        console.error('加载用户资料失败:', error);
+        return { row: null, error: { message: '加载用户资料失败' } };
+    }
+    if (row) {
+        return { row, error: null };
     }
 
-    const ensured = await ensureUserRecordRow(auth.scoped, auth.user);
+    const ensured = await ensureUserRecordRow(auth.db, auth.user);
     if (!ensured.ok) {
-        return {
-            data: null,
-            error: ensured.error,
-        };
+        console.error('创建用户资料失败:', ensured.error);
+        return { row: null, error: { message: '创建用户资料失败' } };
     }
 
-    return await loadProfile(auth);
+    try {
+        return { row: await loadProfileRow(auth.db, auth.user.id), error: null };
+    } catch (error) {
+        console.error('加载用户资料失败:', error);
+        return { row: null, error: { message: '加载用户资料失败' } };
+    }
 }
 
 function normalizeProfileRow(row: Record<string, unknown> | null) {
@@ -64,7 +79,7 @@ function normalizeProfileRow(row: Record<string, unknown> | null) {
 }
 
 async function loadSettings(auth: Exclude<Awaited<ReturnType<typeof requireUserContext>>, { error: unknown }>) {
-    return getUserSettingsSnapshot(auth.scoped, auth.user.id);
+    return getUserSettingsSnapshot(auth.db, auth.user.id);
 }
 
 export async function GET(request: NextRequest) {
@@ -79,7 +94,7 @@ export async function GET(request: NextRequest) {
         }
 
         return jsonOk({
-            profile: normalizeProfileRow((profileResult.data ?? null) as Record<string, unknown> | null),
+            profile: normalizeProfileRow(profileResult.row),
             settings: null,
         });
     }
@@ -93,7 +108,7 @@ export async function GET(request: NextRequest) {
     }
 
     return jsonOk({
-        profile: normalizeProfileRow((profileResult.data ?? null) as Record<string, unknown> | null),
+        profile: normalizeProfileRow(profileResult.row),
         settings: settingsResult.settings,
     });
 }
@@ -114,7 +129,7 @@ export async function POST(request: NextRequest) {
         return jsonError(`Unsupported action: ${action}`, 400);
     }
 
-    const ensured = await ensureUserRecordRow(auth.scoped, auth.user);
+    const ensured = await ensureUserRecordRow(auth.db, auth.user);
     if (!ensured.ok) {
         return jsonError('创建用户资料失败', 500);
     }
@@ -156,12 +171,20 @@ export async function PATCH(request: NextRequest) {
     }
 
     const [updateResult, settingsResult] = await Promise.all([
-        auth.db
-        .from('users')
-        .update(updatePayload)
-        .eq('id', auth.user.id)
-        .select('id, nickname, avatar_url, is_admin, membership, membership_expires_at, ai_chat_count')
-        .maybeSingle(),
+        (async () => {
+            try {
+                const row = await auth.db.tx((trx) => trx
+                    .updateTable('users')
+                    .set(updatePayload as never)
+                    .where('id', '=', auth.user.id)
+                    .returning(PROFILE_COLUMNS)
+                    .executeTakeFirst());
+                return { row: (row ?? null) as Record<string, unknown> | null, error: null };
+            } catch (error) {
+                console.error('更新用户资料失败:', error);
+                return { row: null, error: { message: '更新用户资料失败' } };
+            }
+        })(),
         loadSettings(auth),
     ]);
 
@@ -170,7 +193,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     return jsonOk({
-        profile: normalizeProfileRow((updateResult.data ?? null) as Record<string, unknown> | null),
+        profile: normalizeProfileRow(updateResult.row),
         settings: settingsResult.settings,
     });
 }

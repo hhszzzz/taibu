@@ -158,7 +158,6 @@ function buildInsertPayload(
 const qimenInterpretConfig: DivinationRouteConfig<QimenInterpretInput, QimenInterpretContext> = {
     sourceType: 'qimen',
     tag: 'qimen',
-    authMethod: 'userContext',
     personality: 'qimen',
     allowedChartTypes: [...SOURCE_CHART_TYPE_MAP.qimen_chart],
     parseInput: (body) => {

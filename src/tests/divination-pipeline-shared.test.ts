@@ -68,7 +68,7 @@ function setupPipelineMocks(t: TestContext) {
   const aiAnalysisModule = require('../lib/ai/ai-analysis') as MutableModule;
 
   const originals = {
-    requireBearerUser: apiUtils.requireBearerUser,
+    requireUserContext: apiUtils.requireUserContext,
     getUserAuthInfo: credits.getUserAuthInfo,
     attemptCreditUse: credits.attemptCreditUse,
     useCredit: credits.useCredit,
@@ -81,9 +81,7 @@ function setupPipelineMocks(t: TestContext) {
     createAIAnalysisConversation: aiAnalysisModule.createAIAnalysisConversation,
   };
 
-  apiUtils.requireBearerUser = async () => createMockAuthContext({
-    from: () => assert.fail('unexpected query: credit and persistence repositories are mocked'),
-  });
+  apiUtils.requireUserContext = async () => createMockAuthContext();
   credits.getUserAuthInfo = async () => ({
     credits: 10,
     effectiveMembership: 'pro',
@@ -138,7 +136,7 @@ function setupPipelineMocks(t: TestContext) {
   delete require.cache[pipelinePath];
 
   t.after(() => {
-    apiUtils.requireBearerUser = originals.requireBearerUser;
+    apiUtils.requireUserContext = originals.requireUserContext;
     credits.getUserAuthInfo = originals.getUserAuthInfo;
     credits.attemptCreditUse = originals.attemptCreditUse;
     credits.useCredit = originals.useCredit;
@@ -371,16 +369,12 @@ test('divination fails closed when the caller scoped database is unusable', asyn
   const { createMockScopedDb } = await import('./helpers/db-mock');
   const { UserStateResolutionError } = await import('../lib/user/credits');
   const invalidContexts = [
-    { user: { id: 'user-1' }, scoped: createMockScopedDb({ tx: async () => { throw new Error('database unavailable'); } }) },
-    { user: { id: 'user-1' }, db: {}, supabase: {}, scoped: createMockScopedDb({ tx: async () => { throw new Error('database unavailable'); } }) },
-    { user: { id: 'user-1' }, db: null, supabase: null, scoped: createMockScopedDb({ tx: async () => { throw new Error('database unavailable'); } }) },
+    { user: { id: 'user-1' }, db: createMockScopedDb({ tx: async () => { throw new Error('database unavailable'); } }) },
   ];
-  for (const authMethod of ['bearer', 'userContext'] as const) {
-    for (const [index, authContext] of invalidContexts.entries()) {
-      await t.test(`${authMethod} invalid DB context ${index}`, async (t) => {
+  for (const [index, authContext] of invalidContexts.entries()) {
+      await t.test(`invalid DB context ${index}`, async (t) => {
         const { apiUtils, credits, aiModule, aiAnalysisModule, loadPipeline } = setupPipelineMocks(t);
-        const authHelper = authMethod === 'bearer' ? 'requireBearerUser' : 'requireUserContext';
-        t.mock.method(apiUtils, authHelper, async () => authContext);
+        t.mock.method(apiUtils, 'requireUserContext', async () => authContext);
         const unexpected = t.mock.fn(() => assert.fail('invalid identity reached downstream work'));
         for (const name of ['getSystemAdminClient', 'getAuthAdminClient']) {
           t.mock.method(apiUtils, name, unexpected);
@@ -397,7 +391,7 @@ test('divination fails closed when the caller scoped database is unusable', asyn
         t.mock.method(require('../lib/ai/ai-access'), 'resolveModelAccessAsync', unexpected);
         t.mock.method(aiAnalysisModule, 'createAIAnalysisConversation', unexpected);
         const config: DivinationRouteConfig = {
-          sourceType: 'test_divination', tag: 'test-divination', authMethod,
+          sourceType: 'test_divination', tag: 'test-divination',
           parseInput: () => ({}), precheck: () => null,
           resolvePromptContext: () => ({ userId: 'user-1', chartPromptDetailLevel: 'full' }),
           buildPrompts: unexpected, buildSourceData: unexpected, generateTitle: unexpected,
@@ -428,15 +422,13 @@ test('divination fails closed when the caller scoped database is unusable', asyn
         }
         assert.equal(unexpected.mock.callCount(), 0);
       });
-    }
   }
 });
 
 test('divination preserves the caller scoped database identity', async (t) => {
   const { createMockScopedDb } = await import('./helpers/db-mock');
-  for (const authMethod of ['bearer', 'userContext'] as const) {
-    for (const minimalContext of [false, true]) {
-      await t.test(`${authMethod} ${minimalContext ? 'minimal context' : 'full context'}`, async (t) => {
+  for (const minimalContext of [false, true]) {
+      await t.test(minimalContext ? 'minimal context' : 'full context', async (t) => {
         const { apiUtils, credits, createCalls, loadPipeline } = setupPipelineMocks(t);
         const inserts: Record<string, unknown>[] = [];
         const callerScoped = createMockScopedDb({
@@ -453,23 +445,20 @@ test('divination preserves the caller scoped database identity', async (t) => {
           } as never),
         });
         const callerUser = { id: 'user-1' };
-        const context = minimalContext
-          ? { user: callerUser, scoped: callerScoped, accessToken: 'test-token' }
-          : { user: callerUser, scoped: callerScoped, accessToken: 'test-token', db: {}, supabase: {} };
-        t.mock.method(apiUtils, 'requireBearerUser', async () => context);
+        const context = { user: callerUser, db: callerScoped, accessToken: 'test-token' };
+        void minimalContext;
         t.mock.method(apiUtils, 'requireUserContext', async () => context);
         const admin = t.mock.method(apiUtils, 'getSystemAdminClient', () => assert.fail('no implicit administrator'));
         const typedCredits = credits as unknown as typeof import('../lib/user/credits');
         const authInfo = t.mock.method(typedCredits, 'getUserAuthInfo');
         const debit = t.mock.method(typedCredits, 'attemptCreditUse');
-        const resolvePromptContext = t.mock.fn((_input: unknown, auth: { db: unknown; userId: string; accessToken: string | null }) => {
+        const resolvePromptContext = t.mock.fn((_input: unknown, auth: { db: unknown; userId: string }) => {
           assert.equal(auth.db, callerScoped);
           assert.equal(auth.userId, callerUser.id);
-          assert.equal(auth.accessToken, 'test-token');
           return { userId: auth.userId, chartPromptDetailLevel: 'full' as const };
         });
         const config: DivinationRouteConfig = {
-          sourceType: 'test_divination', tag: 'test-divination', authMethod,
+          sourceType: 'test_divination', tag: 'test-divination',
           parseInput: () => ({}), resolvePromptContext,
           buildPrompts: () => ({ systemPrompt: 'system prompt', userPrompt: 'user prompt' }),
           buildSourceData: () => ({}), generateTitle: () => 'Caller identity',
@@ -497,7 +486,6 @@ test('divination preserves the caller scoped database identity', async (t) => {
         assert.equal(createCalls.length, 2, 'named analysis persistence remains available after authentication');
         assert.equal(admin.mock.callCount(), 0);
       });
-    }
   }
 });
 

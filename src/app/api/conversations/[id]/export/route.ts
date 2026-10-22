@@ -9,7 +9,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
     const { id } = await params;
     if (!isValidUUID(id)) return jsonError('对话 ID 无效', 400);
-    const db = auth.scoped;
+    const db = auth.db;
     const result = await db.tx((trx) => trx
         .selectFrom('conversations')
         .select('title')

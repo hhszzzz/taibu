@@ -21,7 +21,7 @@ export async function GET(
 
     try {
         const provider = await getProvider(type as DataSourceType);
-        const data = await provider.get(id, user.id, { db: auth.scoped });
+        const data = await provider.get(id, user.id, { db: auth.db });
         if (!data) return jsonError('数据不存在', 404);
         return jsonOk({
             type: provider.type,

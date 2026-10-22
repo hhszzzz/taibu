@@ -84,7 +84,7 @@ function mockCaseProfileContext(t: import('node:test').TestContext, options: Pro
 
     apiUtils.requireUserContext = (async () => ({
         user: { id: 'user-1' },
-        scoped,
+        db: scoped,
         accessToken: null,
     })) as unknown as typeof apiUtils.requireUserContext;
     contextModule.systemDb = (() => scoped) as typeof contextModule.systemDb;
@@ -250,7 +250,7 @@ test('bazi case profile PUT should use the privileged rpc client instead of auth
 
     apiUtils.requireUserContext = (async () => ({
         user: { id: 'user-1' },
-        scoped: authScoped,
+        db: authScoped,
         accessToken: null,
     })) as unknown as typeof apiUtils.requireUserContext;
     contextModule.systemDb = (() => systemScoped) as typeof contextModule.systemDb;

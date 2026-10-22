@@ -10,7 +10,7 @@ import { createMockScopedDb } from './helpers/db-mock';
 function mockUserContext(t: { after: (fn: () => void) => void }, scoped: ReturnType<typeof createMockScopedDb>) {
   const apiUtils = require('../lib/api-utils') as any;
   const original = apiUtils.requireUserContext;
-  apiUtils.requireUserContext = async () => ({ user: { id: 'user-1' }, scoped });
+  apiUtils.requireUserContext = async () => ({ user: { id: 'user-1' }, db: scoped });
   t.after(() => {
     apiUtils.requireUserContext = original;
   });

@@ -5,7 +5,7 @@ import { attachmentDto,attachmentBytes,validateAttachmentIds } from '@/lib/agent
 export async function GET(request:NextRequest,{params}:{params:Promise<{id:string}>}){
     const auth=await requireUserContext(request);if('error' in auth) return jsonError(auth.error.message,auth.error.status);
     const {id}=await params;if(!isValidUUID(id)) return jsonError('资料 ID 无效',400);
-    const db=auth.scoped;
+    const db=auth.db;
     try{
         const [row]=await validateAttachmentIds(db,auth.user.id,[id]);
         if(request.nextUrl.searchParams.get('content')==='1'){

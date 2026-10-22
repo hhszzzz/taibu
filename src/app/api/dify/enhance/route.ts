@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
         }
 
         // 获取用户会员等级
-        const membershipType = await getEffectiveMembershipType(userId, { db: auth.scoped });
+        const membershipType = await getEffectiveMembershipType(userId, { db: auth.db });
 
         // 权限校验
         const accessResult = checkDifyAccess(membershipType, mode);

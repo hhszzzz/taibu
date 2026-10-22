@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
         const from = (page - 1) * pageSize;
 
         const [notes, totalRow] = await Promise.all([
-            auth.scoped.tx((trx) => {
+            auth.db.tx((trx) => {
                 let query = trx
                     .selectFrom('ming_notes')
                     .selectAll()
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
                     .limit(pageSize)
                     .execute();
             }),
-            auth.scoped.tx((trx) => {
+            auth.db.tx((trx) => {
                 let query = trx
                     .selectFrom('ming_notes')
                     .select((eb) => eb.fn.countAll<number>().as('count'))
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
             return jsonError('内容不能为空', 400);
         }
 
-        const data = await auth.scoped.tx((trx) => trx
+        const data = await auth.db.tx((trx) => trx
             .insertInto('ming_notes')
             .values({
                 user_id: user.id,
@@ -104,7 +104,7 @@ export async function DELETE(request: NextRequest) {
             return jsonError('缺少 id 参数', 400);
         }
 
-        await auth.scoped.tx((trx) => trx
+        await auth.db.tx((trx) => trx
             .deleteFrom('ming_notes')
             .where('id', '=', id)
             .where('user_id', '=', user.id)

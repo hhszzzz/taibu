@@ -66,7 +66,7 @@ export async function GET(
     if (!isValidUUID(id)) {
         return jsonError('对话ID格式不合法', 400);
     }
-    const db = auth.scoped;
+    const db = auth.db;
     const { searchParams } = new URL(request.url);
     const includeContext = searchParams.get('includeContext') === '1';
     const snapshotMode = searchParams.get('snapshot');
@@ -189,7 +189,7 @@ export async function PATCH(
     if (!isValidUUID(id)) {
         return jsonError('对话ID格式不合法', 400);
     }
-    const db = auth.scoped;
+    const db = auth.db;
     let body: ConversationPatchBody;
 
     try {
@@ -265,7 +265,7 @@ export async function DELETE(
     if (!isValidUUID(id)) {
         return jsonError('对话ID格式不合法', 400);
     }
-    const result = await deleteConversationGraph(auth.scoped, id);
+    const result = await deleteConversationGraph(auth.db, id);
     if (result.error) {
         if (result.error.message.includes('AGENT_CONVERSATION_BUSY')) {
             return jsonError('请先停止当前 Agent 任务，再删除对话', 409, { code: 'CONVERSATION_BUSY' });

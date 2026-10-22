@@ -23,7 +23,7 @@ async function ownedConversation(request: NextRequest, context: RouteContext) {
     if ('error' in auth) return { ok: false as const, response: jsonError(auth.error.message, auth.error.status) };
     const { id } = await context.params;
     if (!isValidUUID(id)) return { ok: false as const, response: jsonError('对话 ID 无效', 400) };
-    const result = await auth.scoped.tx((trx) => trx
+    const result = await auth.db.tx((trx) => trx
         .selectFrom('conversations')
         .select(['id', 'title', 'updated_at'])
         .where('id', '=', id)
@@ -38,7 +38,7 @@ async function ownedConversation(request: NextRequest, context: RouteContext) {
     return {
         ok: true as const,
         auth,
-        db: auth.scoped,
+        db: auth.db,
         id,
         conversation: conversation as { id: string; title: string | null; updated_at: string },
     };

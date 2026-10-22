@@ -132,44 +132,12 @@ mustNotExist('src/app/api/admin/mcp-keys/route.ts', 'authenticated MCP admin key
 mustNotExist('src/app/api/user/mcp-key/route.ts', 'authenticated MCP user key route should stay removed for the public MCP service');
 mustNotExist('src/lib/mcp-keys.ts', 'authenticated MCP key storage helper should stay removed for the public MCP service');
 
-for (const file of [
-  'src/app/api/activation-keys/route.ts',
-  'src/app/api/mbti/route.ts',
-  'src/app/api/hepan/route.ts',
-  'src/app/api/qimen/route.ts',
-  'src/app/api/liuyao/route.ts',
-  'src/app/api/tarot/route.ts',
-  'src/app/api/daliuren/route.ts',
-  'src/app/api/palm/route.ts',
-  'src/app/api/face/route.ts',
-  'src/app/api/meihua/route.ts',
-  'src/app/api/xiaoliuren/route.ts',
-]) {
-  mustNotMatch(
-    file,
-    /requireBearerUser\(/u,
-    'browser-driven routes should not require bearer-only auth',
-  );
-}
-
-for (const file of [
-  'src/app/api/mbti/route.ts',
-  'src/app/api/hepan/route.ts',
-  'src/app/api/qimen/route.ts',
-  'src/app/api/liuyao/route.ts',
-  'src/app/api/tarot/route.ts',
-  'src/app/api/daliuren/route.ts',
-  'src/app/api/palm/route.ts',
-  'src/app/api/face/route.ts',
-  'src/app/api/meihua/route.ts',
-  'src/app/api/xiaoliuren/route.ts',
-]) {
-  mustMatch(
-    file,
-    /authMethod:\s*'userContext'/u,
-    'browser-driven divination routes should opt into cookie-compatible userContext auth',
-  );
-}
+// B6 破坏性迁移：bearer-only 路由鉴权已删除，所有接口统一走 requireUserContext。
+mustNotMatchInTree(
+  'src/app/api',
+  /requireBearerUser\(|authMethod\s*:/u,
+  'bearer-only route auth has been removed in favor of requireUserContext',
+);
 
 const meihuaXiaoliurenMigration = 'supabase/migrations/20260723_100000_create_meihua_xiaoliuren_web.sql';
 mustExist(meihuaXiaoliurenMigration, 'web divination tables require a deployable migration');

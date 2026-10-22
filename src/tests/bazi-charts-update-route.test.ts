@@ -71,7 +71,7 @@ function mockChartCrudUser(t: import('node:test').TestContext, scoped: unknown) 
     const original = apiUtils.requireUserContext;
     apiUtils.requireUserContext = (async () => ({
         user: { id: 'user-1' },
-        scoped,
+        db: scoped,
         accessToken: null,
     })) as unknown as typeof apiUtils.requireUserContext;
     t.after(() => { apiUtils.requireUserContext = original; });

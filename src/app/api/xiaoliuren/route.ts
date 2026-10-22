@@ -78,7 +78,6 @@ function resolveCanonicalXiaoliurenResultData(
 const xiaoliurenInterpretConfig: DivinationRouteConfig<XiaoliurenInterpretInput> = {
   sourceType: 'xiaoliuren',
   tag: 'xiaoliuren',
-  authMethod: 'userContext',
   personality: 'xiaoliuren',
   allowedChartTypes: [...SOURCE_CHART_TYPE_MAP.xiaoliuren_divination],
   parseInput: (body) => {

@@ -81,7 +81,6 @@ function buildTarotMetadata(birthDate?: string, numerology?: TarotNumerology, se
 const tarotInterpretConfig: DivinationRouteConfig<TarotInterpretInput> = {
     sourceType: 'tarot',
     tag: 'tarot',
-    authMethod: 'userContext',
     personality: 'tarot',
     allowedChartTypes: [...SOURCE_CHART_TYPE_MAP.tarot_reading],
     parseInput: (body) => {
@@ -218,7 +217,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<TarotResp
                 let readingId: string | null = null;
                 if (auth.user) {
                     const persisted = await persistUserOwnedDivinationRecord({
-                        db: auth.scoped,
+                        db: auth.db,
                         tag: 'tarot',
                         tableName: 'tarot_readings',
                         input: {

@@ -148,7 +148,7 @@ export function createChartGetHandler(config: ChartCrudConfig) {
             return jsonError('缺少命盘 ID', 400);
         }
 
-        const result = await auth.scoped.tx((trx) => selectFromDynamic(trx, config.tableName)
+        const result = await auth.db.tx((trx) => selectFromDynamic(trx, config.tableName)
             .selectAll()
             .where('id', '=', id)
             .where('user_id', '=', auth.user.id)
@@ -204,7 +204,7 @@ export function createChartPostHandler(config: ChartCrudConfig) {
             return jsonError(error instanceof Error ? error.message : '命盘出生参数无效', 400);
         }
 
-        const result = await auth.scoped.tx((trx) => insertIntoDynamic(trx, config.tableName)
+        const result = await auth.db.tx((trx) => insertIntoDynamic(trx, config.tableName)
             .values(payload)
             .returning('id')
             .executeTakeFirst()).then(
@@ -265,7 +265,7 @@ export function createChartUpdateHandler(config: ChartCrudConfig) {
         if (config.prepareUpdatePayload) {
             const prepared = await config.prepareUpdatePayload({
                 auth,
-                db: auth.scoped,
+                db: auth.db,
                 chartId: body.chartId,
                 payload: sanitizedPayload,
             });
@@ -275,7 +275,7 @@ export function createChartUpdateHandler(config: ChartCrudConfig) {
             updatePayload = prepared.payload;
         }
 
-        const result = await auth.scoped.tx((trx) => updateTableDynamic(trx, config.tableName)
+        const result = await auth.db.tx((trx) => updateTableDynamic(trx, config.tableName)
             .set(updatePayload)
             .where('id', '=', body.chartId)
             .where('user_id', '=', auth.user.id)

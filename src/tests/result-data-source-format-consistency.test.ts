@@ -308,7 +308,7 @@ test('fortune and reminder chart reads pass saved time options to shared reconst
   const originalSystemDb = contextModule.systemDb;
   contextModule.systemDb = (() => scoped) as typeof contextModule.systemDb;
   t.after(() => { contextModule.systemDb = originalSystemDb; });
-  t.mock.method(apiUtils, 'requireUserContext', async () => ({ user: { id: 'user-1' }, scoped }));
+  t.mock.method(apiUtils, 'requireUserContext', async () => ({ user: { id: 'user-1' }, db: scoped }));
   t.mock.method(reminders, 'updateReminderSubscription', async () => true);
   t.mock.method(storedBazi, 'calculateBaziOutputFromStoredFields', (input: Parameters<typeof storedBazi.calculateBaziOutputFromStoredFields>[0]) => {
     rebuiltRows.push(input);

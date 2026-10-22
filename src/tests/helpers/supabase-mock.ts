@@ -6,25 +6,31 @@
  */
 
 import type { AuthContextResult } from '../../lib/api-utils';
+import type { ScopedDb } from '../../lib/db/context.server';
 import { createMockScopedDb } from './db-mock';
 
 type MockAuthenticatedContext = AuthContextResult & {
     user: NonNullable<AuthContextResult['user']>;
 };
 
-export function createMockAuthContext(client?: Record<string, unknown>, userId?: string, scoped?: AuthContextResult['scoped']): MockAuthenticatedContext;
-export function createMockAuthContext(client: Record<string, unknown>, userId: null, scoped?: AuthContextResult['scoped']): AuthContextResult & { user: null };
+function looksLikeScopedDb(value: unknown): value is ScopedDb {
+    return !!value && typeof value === 'object'
+        && typeof (value as ScopedDb).tx === 'function'
+        && typeof (value as ScopedDb).rpc === 'function';
+}
+
+export function createMockAuthContext(db?: unknown, userId?: string, scoped?: ScopedDb): MockAuthenticatedContext;
+export function createMockAuthContext(db: unknown, userId: null, scoped?: ScopedDb): AuthContextResult & { user: null };
 export function createMockAuthContext(
-    client: Record<string, unknown> = {},
+    db: unknown = undefined,
     userId: string | null = 'user-1',
-    scoped: AuthContextResult['scoped'] = createMockScopedDb(),
+    scoped?: ScopedDb,
 ): AuthContextResult {
-    // Route doubles implement only the SDK methods exercised by each test.
-    const db = client as unknown as AuthContextResult['db'];
+    // Route doubles implement only the scoped methods each test exercises;
+    // legacy first-argument clients are ignored unless they are scoped doubles.
+    const scopedDb = scoped ?? (looksLikeScopedDb(db) ? db : createMockScopedDb());
     return {
-        db,
-        scoped,
-        supabase: db,
+        db: scopedDb,
         accessToken: userId === null ? null : 'test-token',
         authError: null,
         user: userId === null ? null : {

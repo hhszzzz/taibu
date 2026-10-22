@@ -68,7 +68,6 @@ function resolveCanonicalMeihuaResultData(value: unknown): MeihuaWebBundle | Mei
 const meihuaInterpretConfig: DivinationRouteConfig<MeihuaInterpretInput> = {
   sourceType: 'meihua',
   tag: 'meihua',
-  authMethod: 'userContext',
   personality: 'meihua',
   allowedChartTypes: [...SOURCE_CHART_TYPE_MAP.meihua_divination],
   parseInput: (body) => {

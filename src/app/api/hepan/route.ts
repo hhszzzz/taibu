@@ -32,7 +32,6 @@ interface HepanInterpretInput extends InterpretInput {
 const hepanInterpretConfig: DivinationRouteConfig<HepanInterpretInput> = {
     sourceType: 'hepan',
     tag: 'hepan',
-    authMethod: 'userContext',
     personality: 'hepan',
     allowedChartTypes: [...SOURCE_CHART_TYPE_MAP.hepan_chart],
     parseInput: (body) => {

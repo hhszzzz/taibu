@@ -99,7 +99,6 @@ type LiuyaoInterpretContext = {
 const liuyaoInterpretConfig: DivinationRouteConfig<LiuyaoInterpretInput, LiuyaoInterpretContext> = {
     sourceType: 'liuyao',
     tag: 'liuyao',
-    authMethod: 'userContext',
     personality: 'liuyao',
     allowedChartTypes: [...SOURCE_CHART_TYPE_MAP.liuyao_divination],
     parseInput: (body) => {
@@ -272,7 +271,7 @@ export async function POST(request: NextRequest) {
                 if (parsedTargets.error) return jsonError(parsedTargets.error, 400, { success: false });
                 const authResult = await requireUserContext(request);
                 if ('error' in authResult) return jsonError(authResult.error.message, authResult.error.status, { success: false });
-                const data = await authResult.scoped.tx((trx) => trx
+                const data = await authResult.db.tx((trx) => trx
                     .updateTable('liuyao_divinations')
                     .set({ yongshen_targets: parsedTargets.targets } as never)
                     .where('id', '=', divinationId)

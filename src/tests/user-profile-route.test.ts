@@ -6,104 +6,94 @@ process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANO
 
 import { createMockScopedDb } from './helpers/db-mock';
 
-function mockUserContext<T extends object>(user: unknown, db: T, scoped = createMockScopedDb()) {
+type Row = Record<string, unknown> | null;
+
+function mockUserContext(user: unknown, db = createMockScopedDb()) {
   return {
     user,
     accessToken: null,
+    authError: null,
     db,
-    scoped,
-    supabase: db,
   };
 }
 
-test('user profile route should update profile fields and return the normalized settings bundle', async (t) => {
+type ProfileScopedOptions = {
+  selectUsers: () => Promise<Row> | Row;
+  updateUsers?: (payload: Record<string, unknown>) => Promise<Row> | Row;
+  selectSettings?: () => Promise<Row> | Row;
+  onInsert?: (seed: Record<string, unknown>) => void;
+};
+
+function profileScoped(options: ProfileScopedOptions) {
+  return createMockScopedDb({
+    tx: async (work) => work({
+      selectFrom(table: string) {
+        const query = {
+          select() { return query; },
+          where() { return query; },
+          async executeTakeFirst() {
+            if (table === 'users') return options.selectUsers();
+            if (table === 'user_settings') return options.selectSettings ? options.selectSettings() : null;
+            throw new Error(`unexpected table: ${table}`);
+          },
+        };
+        return query;
+      },
+      updateTable(table: string) {
+        assert.equal(table, 'users');
+        return {
+          set(payload: Record<string, unknown>) {
+            return {
+              where() {
+                return {
+                  returning() {
+                    return {
+                      async executeTakeFirst() {
+                        return options.updateUsers ? options.updateUsers(payload) : null;
+                      },
+                    };
+                  },
+                };
+              },
+            };
+          },
+        };
+      },
+      insertInto(table: string) {
+        assert.equal(table, 'users');
+        return {
+          values(seed: Record<string, unknown>) {
+            options.onInsert?.(seed);
+            return {
+              onConflict: () => ({ execute: async () => undefined }),
+            };
+          },
+        };
+      },
+    } as never),
+  });
+}
+
+const BASE_ROW: Record<string, unknown> = {
+  id: 'user-1',
+  nickname: '命理爱好者',
+  avatar_url: null,
+  is_admin: false,
+  membership: 'free',
+  membership_expires_at: null,
+  ai_chat_count: 1,
+};
+
+function installRoute(t: import('node:test').TestContext, scoped: ReturnType<typeof createMockScopedDb>, user: unknown = { id: 'user-1' }) {
   const apiUtilsPath = require.resolve('../lib/api-utils');
   const routePath = require.resolve('../app/api/user/profile/route');
-  const apiUtilsModule = require('../lib/api-utils');
+  const apiUtilsModule = require('../lib/api-utils') as any;
 
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
   const originalJsonOk = apiUtilsModule.jsonOk;
   const originalJsonError = apiUtilsModule.jsonError;
 
-  const calls: Array<{ table: string; action: string; payload?: Record<string, unknown> }> = [];
-
-  const makeUsersQuery = (nickname = '命理爱好者') => ({
-    select() {
-      return this;
-    },
-    eq() {
-      return this;
-    },
-    maybeSingle: async () => ({
-      data: {
-        id: 'user-1',
-        nickname,
-        avatar_url: null,
-        is_admin: false,
-        membership: 'free',
-        membership_expires_at: null,
-        ai_chat_count: 1,
-      },
-      error: null,
-    }),
-  });
-
-  const fakeSupabase = {
-    from(table: string) {
-      if (table === 'users') {
-        return {
-          ...makeUsersQuery(),
-          update(payload: Record<string, unknown>) {
-            calls.push({ table, action: 'update', payload });
-            return makeUsersQuery(String(payload.nickname ?? '命理爱好者'));
-          },
-        };
-      }
-
-      if (table === 'user_settings') {
-        return {
-          select() {
-            return this;
-          },
-          eq() {
-            return this;
-          },
-          maybeSingle: async () => ({
-            data: {
-              expression_style: 'gentle',
-              custom_instructions: 'keep calm',
-              user_profile: { identity: 'tester' },
-              prompt_kb_ids: ['kb-1'],
-            },
-            error: null,
-          }),
-        };
-      }
-
-      throw new Error(`Unexpected table: ${table}`);
-    },
-  };
-
-  apiUtilsModule.requireUserContext = async () => mockUserContext(
-    { id: 'user-1' },
-    fakeSupabase,
-    createMockScopedDb({
-      tx: async (work) => work({
-        selectFrom: () => ({
-          select: () => ({
-            where: () => ({
-              executeTakeFirst: async () => ({
-                expression_style: 'gentle',
-                custom_instructions: 'keep calm',
-                user_profile: { identity: 'tester' },
-                prompt_kb_ids: ['kb-1'],
-              }),
-            }),
-          }),
-        }),
-      } as never),
-    }),
-  );
+  apiUtilsModule.requireUserContext = async () => mockUserContext(user, scoped);
   apiUtilsModule.jsonOk = (payload: unknown, status = 200) => Response.json(payload, { status });
   apiUtilsModule.jsonError = (message: string, status = 400) => Response.json({ error: message }, { status });
 
@@ -116,7 +106,25 @@ test('user profile route should update profile fields and return the normalized 
   });
 
   delete require.cache[routePath];
-  const routeModule = require('../app/api/user/profile/route') as typeof import('../app/api/user/profile/route');
+  return require('../app/api/user/profile/route') as typeof import('../app/api/user/profile/route');
+}
+
+test('user profile route should update profile fields and return the normalized settings bundle', async (t) => {
+  const calls: Array<{ table: string; action: string; payload?: Record<string, unknown> }> = [];
+  const scoped = profileScoped({
+    selectUsers: () => { throw new Error('profile patch must not read the users row'); },
+    updateUsers: (payload) => {
+      calls.push({ table: 'users', action: 'update', payload });
+      return { ...BASE_ROW, nickname: payload.nickname };
+    },
+    selectSettings: () => ({
+      expression_style: 'gentle',
+      custom_instructions: 'keep calm',
+      user_profile: { identity: 'tester' },
+      prompt_kb_ids: ['kb-1'],
+    }),
+  });
+  const routeModule = installRoute(t, scoped);
 
   const response = await routeModule.PATCH(new Request('http://localhost/api/user/profile', {
     method: 'PATCH',
@@ -141,73 +149,20 @@ test('user profile route should update profile fields and return the normalized 
 });
 
 test('user profile route should downgrade expired membership to free in profile responses', async (t) => {
-  const apiUtilsPath = require.resolve('../lib/api-utils');
-  const routePath = require.resolve('../app/api/user/profile/route');
-  const apiUtilsModule = require('../lib/api-utils');
-
-  const originalRequireUserContext = apiUtilsModule.requireUserContext;
-  const originalJsonOk = apiUtilsModule.jsonOk;
-  const originalJsonError = apiUtilsModule.jsonError;
-
-  apiUtilsModule.requireUserContext = async () => mockUserContext(
-    { id: 'user-1' },
-    {
-      from(table: string) {
-        if (table === 'users') {
-          return {
-            select() {
-              return this;
-            },
-            eq() {
-              return this;
-            },
-            maybeSingle: async () => ({
-              data: {
-                id: 'user-1',
-                nickname: '过期会员',
-                avatar_url: null,
-                is_admin: false,
-                membership: 'pro',
-                membership_expires_at: '2020-01-01T00:00:00.000Z',
-                ai_chat_count: 7,
-              },
-              error: null,
-            }),
-          };
-        }
-
-        if (table === 'user_settings') {
-          return {
-            select() {
-              return this;
-            },
-            eq() {
-              return this;
-            },
-            maybeSingle: async () => ({
-              data: null,
-              error: null,
-            }),
-          };
-        }
-
-        throw new Error(`Unexpected table: ${table}`);
-      },
-    },
-  );
-  apiUtilsModule.jsonOk = (payload: unknown, status = 200) => Response.json(payload, { status });
-  apiUtilsModule.jsonError = (message: string, status = 400) => Response.json({ error: message }, { status });
-
-  t.after(() => {
-    apiUtilsModule.requireUserContext = originalRequireUserContext;
-    apiUtilsModule.jsonOk = originalJsonOk;
-    apiUtilsModule.jsonError = originalJsonError;
-    delete require.cache[routePath];
-    delete require.cache[apiUtilsPath];
+  const scoped = profileScoped({
+    selectUsers: () => ({
+      id: 'user-1',
+      nickname: '过期会员',
+      avatar_url: null,
+      is_admin: false,
+      membership: 'pro',
+      membership_expires_at: '2020-01-01T00:00:00.000Z',
+      ai_chat_count: 7,
+    }),
+    selectSettings: () => null,
   });
+  const routeModule = installRoute(t, scoped);
 
-  delete require.cache[routePath];
-  const routeModule = require('../app/api/user/profile/route') as typeof import('../app/api/user/profile/route');
   const response = await routeModule.GET(new Request('http://localhost/api/user/profile?scope=profile') as never);
   const payload = await response.json();
 
@@ -218,102 +173,29 @@ test('user profile route should downgrade expired membership to free in profile 
 });
 
 test('user profile route should recover a missing user row before returning profile data', async (t) => {
-  const apiUtilsPath = require.resolve('../lib/api-utils');
-  const routePath = require.resolve('../app/api/user/profile/route');
-  const apiUtilsModule = require('../lib/api-utils');
-
-  const originalRequireUserContext = apiUtilsModule.requireUserContext;
-  const originalJsonOk = apiUtilsModule.jsonOk;
-  const originalJsonError = apiUtilsModule.jsonError;
-
   let ensured = false;
   let userLookupCount = 0;
-
-  apiUtilsModule.requireUserContext = async () => mockUserContext(
-    {
-      id: 'user-1',
-      user_metadata: {
+  const scoped = profileScoped({
+    selectUsers: () => {
+      userLookupCount += 1;
+      if (!ensured) return null;
+      return {
+        ...BASE_ROW,
         nickname: '补建资料',
-      },
+      };
     },
-    {
-      from(table: string) {
-        if (table === 'users') {
-          return {
-            select() {
-              return this;
-            },
-            eq() {
-              return this;
-            },
-            maybeSingle: async () => {
-              userLookupCount += 1;
-              if (!ensured) {
-                return {
-                  data: null,
-                  error: null,
-                };
-              }
-
-              return {
-                data: {
-                  id: 'user-1',
-                  nickname: '补建资料',
-                  avatar_url: null,
-                  is_admin: false,
-                  membership: 'free',
-                  membership_expires_at: null,
-                  ai_chat_count: 1,
-                },
-                error: null,
-              };
-            },
-          };
-        }
-
-        if (table === 'user_settings') {
-          return {
-            select() {
-              return this;
-            },
-            eq() {
-              return this;
-            },
-            maybeSingle: async () => ({
-              data: null,
-              error: null,
-            }),
-          };
-        }
-
-        throw new Error(`Unexpected table: ${table}`);
-      },
+    onInsert: (seed) => {
+      assert.equal(seed.nickname, '补建资料');
+      ensured = true;
     },
-    createMockScopedDb({
-      tx: async (work) => work({
-        insertInto: () => ({
-          values: (seed: Record<string, unknown>) => {
-            assert.equal(seed.nickname, '补建资料');
-            ensured = true;
-            return { onConflict: () => ({ execute: async () => undefined }) };
-          },
-        }),
-      } as never),
-    }),
-  );
-  apiUtilsModule.jsonOk = (payload: unknown, status = 200) => Response.json(payload, { status });
-  apiUtilsModule.jsonError = (message: string, status = 400) => Response.json({ error: message }, { status });
-
-  t.after(() => {
-    apiUtilsModule.requireUserContext = originalRequireUserContext;
-    apiUtilsModule.jsonOk = originalJsonOk;
-    apiUtilsModule.jsonError = originalJsonError;
-    delete require.cache[routePath];
-    delete require.cache[apiUtilsPath];
+  });
+  const routeModule = installRoute(t, scoped, {
+    id: 'user-1',
+    user_metadata: {
+      nickname: '补建资料',
+    },
   });
 
-  delete require.cache[routePath];
-  const routeModule = require('../app/api/user/profile/route') as typeof import('../app/api/user/profile/route');
   const response = await routeModule.GET(new Request('http://localhost/api/user/profile?scope=profile') as never);
   const payload = await response.json();
 

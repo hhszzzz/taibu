@@ -43,7 +43,6 @@ interface MBTIInterpretInput extends InterpretInput {
 const mbtiInterpretConfig: DivinationRouteConfig<MBTIInterpretInput> = {
     sourceType: 'mbti',
     tag: 'mbti',
-    authMethod: 'userContext',
     personality: 'mbti',
     allowedChartTypes: [...SOURCE_CHART_TYPE_MAP.mbti_reading],
     parseInput: (body) => {

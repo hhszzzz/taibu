@@ -28,7 +28,7 @@ test('knowledge-base POST should create through transactional rpc', async (t) =>
       };
     },
   });
-  apiUtilsModule.requireUserContext = async () => ({ user: { id: 'user-1' }, scoped });
+  apiUtilsModule.requireUserContext = async () => ({ user: { id: 'user-1' }, db: scoped });
   membershipModule.getEffectiveMembershipType = async () => 'plus';
   featureGateModule.ensureFeatureRouteEnabled = async () => null;
   delete require.cache[routePath];
@@ -77,7 +77,7 @@ test('knowledge-base POST should return 403 when transactional limit is reached'
   const originalEnsureFeatureRouteEnabled = featureGateModule.ensureFeatureRouteEnabled;
 
   const scoped = createMockScopedDb({ rpc: async () => ({ status: 'limit_reached' }) });
-  apiUtilsModule.requireUserContext = async () => ({ user: { id: 'user-1' }, scoped });
+  apiUtilsModule.requireUserContext = async () => ({ user: { id: 'user-1' }, db: scoped });
   membershipModule.getEffectiveMembershipType = async () => 'plus';
   featureGateModule.ensureFeatureRouteEnabled = async () => null;
   delete require.cache[routePath];
@@ -110,7 +110,7 @@ test('community votes POST should toggle vote through transactional rpc', async 
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    scoped: createMockScopedDb({
+    db: createMockScopedDb({
       rpc: async (fn: string, args: Record<string, unknown>) => {
         rpcCalls.push({ fn, args });
         return { status: 'ok', vote: 'down' };
@@ -158,7 +158,7 @@ test('records PUT togglePin should use transactional rpc', async (t) => {
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    scoped: createMockScopedDb({
+    db: createMockScopedDb({
       rpc: async (fn: string, args: Record<string, unknown>) => {
         rpcCalls.push({ fn, args });
         return {
@@ -203,7 +203,7 @@ test('records PUT togglePin should return 404 when transactional rpc reports not
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    scoped: createMockScopedDb({
+    db: createMockScopedDb({
       rpc: async () => ({ status: 'not_found' }),
     }),
   });
@@ -235,7 +235,7 @@ test('records DELETE should return 404 when no user-owned row is deleted', async
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    scoped: createMockScopedDb({
+    db: createMockScopedDb({
       tx: async (work) => work({
         deleteFrom() {
           const query = {
@@ -288,7 +288,7 @@ test('knowledge-base DELETE should return 404 when no user-owned row is deleted'
     } as never),
   });
   featureGateModule.ensureFeatureRouteEnabled = async () => null;
-  apiUtilsModule.requireUserContext = async () => ({ user: { id: 'user-1' }, scoped });
+  apiUtilsModule.requireUserContext = async () => ({ user: { id: 'user-1' }, db: scoped });
   apiUtilsModule.getSystemAdminClient = () => {
     throw new Error('knowledge-base DELETE must use the caller database context');
   };
@@ -323,7 +323,7 @@ test('knowledge-base id routes fail closed instead of falling back to the system
 
   featureGateModule.ensureFeatureRouteEnabled = async () => null;
   // 用户态缺少可用的数据库客户端（例如 token 交换失败），路由必须直接失败。
-  apiUtilsModule.requireUserContext = async () => ({ user: { id: 'user-1' }, scoped: undefined });
+  apiUtilsModule.requireUserContext = async () => ({ user: { id: 'user-1' }, db: undefined });
   apiUtilsModule.getSystemAdminClient = () => {
     throw new Error('a missing caller context must never reach the system-admin client');
   };
@@ -365,7 +365,7 @@ test('community reports POST should submit and notify via transactional rpc', as
 
   apiUtils.requireUserContext = (async () => ({
     user: { id: 'user-1' },
-    scoped: createMockScopedDb({
+    db: createMockScopedDb({
       rpc(fn: string, args: Record<string, unknown>) {
         rpcCalls.push({ fn, args });
         return Promise.resolve({
@@ -422,7 +422,7 @@ test('community reports POST should return 500 when transactional rpc fails', as
 
   apiUtils.requireUserContext = (async () => ({
     user: { id: 'user-1' },
-    scoped: createMockScopedDb({
+    db: createMockScopedDb({
       rpc() {
         throw new Error('transaction failed');
       },
@@ -456,7 +456,7 @@ test('records import POST should call transactional RPC and return imported coun
   let rpcArgs: Record<string, unknown> | null = null;
 
   apiUtilsModule.requireUserContext = async () => ({
-    scoped: createMockScopedDb({
+    db: createMockScopedDb({
       rpc: async (fn: string, args: Record<string, unknown>) => {
         assert.equal(fn, 'import_ming_records_and_notes');
         rpcArgs = args;
@@ -506,7 +506,7 @@ test('records import POST should return 500 when transactional RPC fails', async
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
 
   apiUtilsModule.requireUserContext = async () => ({
-    scoped: createMockScopedDb({
+    db: createMockScopedDb({
       rpc: async () => {
         throw new Error('transaction failed');
       },
@@ -577,13 +577,9 @@ test('checkin route should return structured status when the user already checke
   const checkinModule = require('../lib/user/checkin') as any;
   const routePath = require.resolve('../app/api/checkin/route');
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
-  const originalRequireBearerUser = apiUtilsModule.requireBearerUser;
   const originalPerformCheckin = checkinModule.performCheckin;
 
   apiUtilsModule.requireUserContext = async () => ({ user: { id: 'user-1' } });
-  apiUtilsModule.requireBearerUser = async () => {
-    throw new Error('checkin route should not use requireBearerUser');
-  };
   checkinModule.performCheckin = async () => ({
     success: false,
     rewardCredits: 0,
@@ -594,7 +590,6 @@ test('checkin route should return structured status when the user already checke
 
   t.after(() => {
     apiUtilsModule.requireUserContext = originalRequireUserContext;
-    apiUtilsModule.requireBearerUser = originalRequireBearerUser;
     checkinModule.performCheckin = originalPerformCheckin;
     delete require.cache[routePath];
   });
@@ -663,13 +658,9 @@ test('checkin route should return structured cap details when credits are full',
   const checkinModule = require('../lib/user/checkin') as any;
   const routePath = require.resolve('../app/api/checkin/route');
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
-  const originalRequireBearerUser = apiUtilsModule.requireBearerUser;
   const originalPerformCheckin = checkinModule.performCheckin;
 
   apiUtilsModule.requireUserContext = async () => ({ user: { id: 'user-1' } });
-  apiUtilsModule.requireBearerUser = async () => {
-    throw new Error('checkin route should not use requireBearerUser');
-  };
   checkinModule.performCheckin = async () => ({
     success: false,
     rewardCredits: 0,
@@ -682,7 +673,6 @@ test('checkin route should return structured cap details when credits are full',
 
   t.after(() => {
     apiUtilsModule.requireUserContext = originalRequireUserContext;
-    apiUtilsModule.requireBearerUser = originalRequireBearerUser;
     checkinModule.performCheckin = originalPerformCheckin;
     delete require.cache[routePath];
   });
@@ -741,11 +731,10 @@ test('credits transactions GET should use user context and preserve today spend 
   const apiUtilsModule = require('../lib/api-utils') as any;
   const routePath = require.resolve('../app/api/credits/transactions/route');
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
-  const originalRequireBearerUser = apiUtilsModule.requireBearerUser;
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    scoped: createMockScopedDb({
+    db: createMockScopedDb({
       tx: async () => [[
         {
           id: 'txn-1',
@@ -762,14 +751,10 @@ test('credits transactions GET should use user context and preserve today spend 
       ], [{ amount: -2 }, { amount: -3 }]],
     }),
   });
-  apiUtilsModule.requireBearerUser = async () => {
-    throw new Error('credits transactions route should not use requireBearerUser');
-  };
   delete require.cache[routePath];
 
   t.after(() => {
     apiUtilsModule.requireUserContext = originalRequireUserContext;
-    apiUtilsModule.requireBearerUser = originalRequireBearerUser;
     delete require.cache[routePath];
   });
 

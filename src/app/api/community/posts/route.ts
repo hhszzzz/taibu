@@ -78,13 +78,13 @@ export async function POST(request: NextRequest) {
             return jsonError(normalized.error, 400);
         }
 
-        const authorProfile = await loadSingleCommunityAuthorProfile(auth.scoped, user.id);
+        const authorProfile = await loadSingleCommunityAuthorProfile(auth.db, user.id);
 
         const postValues = Object.fromEntries(Object.entries({ user_id: user.id, ...normalized.data }).filter(([, value]) => value !== undefined));
 
         let post;
         try {
-            post = await auth.scoped.tx((trx) => trx
+            post = await auth.db.tx((trx) => trx
                 .insertInto('community_posts')
                 .values(postValues as never)
                 .returningAll()

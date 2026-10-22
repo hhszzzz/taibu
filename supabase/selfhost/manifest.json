@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "baselineRevision": "5725dde",
-  "sourceFingerprint": "7a9dd4e7f97d43cb60a97a2a7a6bac2ce69ebcda90290f33de6052b859dfafe8",
+  "sourceFingerprint": "8592de838ea1b1ffc3e5b1c8e91f02c0ef9d1d2260a68f4b45d0408b5c3ce14a",
   "target": "empty local self-hosted application schema; NOT production parity or a migration replay",
   "bootstrapOrder": [
     "platform roles/extensions",
@@ -226,7 +226,7 @@
     },
     {
       "file": "src/app/api/user/charts/route.ts",
-      "sha256": "56bfe9bb18763cf3d7307cedb035615678a941e73ef7ccb1192ae1999d19506e"
+      "sha256": "96da1f91840f3a4b0fcb704967fcf79b9eed4c4715ae081dfdbebb219b3a4079"
     },
     {
       "file": "supabase/selfhost/002-storage.sql",
@@ -242,7 +242,7 @@
     },
     {
       "file": "src/app/api/supabase/storage/route.ts",
-      "sha256": "43e46f2388b101f777894971b92039a91d302ad78ea9cf5bf9c840c0f42eac28"
+      "sha256": "2fbad89ae19d26ed33e400dc8c0f9d2f1ce1529ef64e2ba13172002d4f6aaae9"
     },
     {
       "file": "src/lib/user/profile.ts",
@@ -2223,7 +2223,7 @@
       "callers": [
         {
           "file": "src/app/api/app/bootstrap/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/notifications/route.ts",
@@ -2369,15 +2369,15 @@
       "callers": [
         {
           "file": "src/app/api/user/agent-memory/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/user/agent-memory/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/user/agent-memory/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/agent/tools.server.ts",
@@ -2462,11 +2462,7 @@
       "callers": [
         {
           "file": "src/app/api/app/bootstrap/route.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/app/api/app/bootstrap/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/auth/linuxdo/callback/route.ts",
@@ -2474,23 +2470,19 @@
         },
         {
           "file": "src/app/api/user/membership/route.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/app/api/user/membership/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/user/profile/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/app/api/user/profile/route.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/api-utils.ts",
-          "kind": "literal-from"
+          "kind": "literal-kysely"
         },
         {
           "file": "src/lib/community-server.ts",
@@ -2652,7 +2644,7 @@
   "artifacts": [
     {
       "file": "supabase/selfhost/001-application.sql",
-      "sha256": "03eee25e07962f2741b624b33a6981015de9b49ec422d28db8a8669ecfc495fd"
+      "sha256": "9a29e03ba6567106ee8dd8fd5e36c922b61472ef420e485f4b339bf057873bc2"
     },
     {
       "file": "supabase/selfhost/002-storage.sql",

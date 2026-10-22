@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
         const pattern = filters.search ? `%${escapeLike(filters.search)}%` : null;
 
         try {
-            const rows = await auth.scoped.tx((trx) => {
+            const rows = await auth.db.tx((trx) => {
                 let query = trx
                     .selectFrom('ming_records_with_archive_status')
                     .selectAll()
@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
                     .limit(pageSize)
                     .execute();
             });
-            const totalRow = await auth.scoped.tx((trx) => {
+            const totalRow = await auth.db.tx((trx) => {
                 let query = trx
                     .selectFrom('ming_records_with_archive_status')
                     .select((eb) => eb.fn.countAll<number>().as('count'))
@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
 
         let data;
         try {
-            data = await auth.scoped.tx((trx) => trx
+            data = await auth.db.tx((trx) => trx
                 .insertInto('ming_records')
                 .values({
                     user_id: user.id,

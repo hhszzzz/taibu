@@ -36,7 +36,7 @@ function getChartTable(type: ChartType) {
 async function loadDefaultChartIds(
     auth: Exclude<Awaited<ReturnType<typeof requireUserContext>>, { error: unknown }>,
 ) {
-    const { settings, error } = await getUserSettingsSnapshot(auth.scoped, auth.user.id);
+    const { settings, error } = await getUserSettingsSnapshot(auth.db, auth.user.id);
     return {
         defaultChartIds: toDefaultChartIds(settings),
         error,
@@ -56,13 +56,13 @@ export async function GET(request: NextRequest) {
     ] as const;
 
     const [baziCharts, ziweiCharts, settingsResult] = await Promise.all([
-        auth.scoped.tx((trx) => trx
+        auth.db.tx((trx) => trx
             .selectFrom('bazi_charts')
             .select(chartColumns)
             .where('user_id', '=', auth.user.id)
             .orderBy('created_at', 'desc')
             .execute()) as Promise<ChartRecord[]>,
-        auth.scoped.tx((trx) => trx
+        auth.db.tx((trx) => trx
             .selectFrom('ziwei_charts')
             .select(chartColumns)
             .where('user_id', '=', auth.user.id)
@@ -119,7 +119,7 @@ export async function PATCH(request: NextRequest) {
     const chartType = body.type;
     const chartId = body.id;
 
-    const chart = await auth.scoped.tx((trx) => selectFromDynamic(trx, getChartTable(chartType))
+    const chart = await auth.db.tx((trx) => selectFromDynamic(trx, getChartTable(chartType))
         .select('id')
         .where('id', '=', chartId)
         .where('user_id', '=', auth.user.id)
@@ -131,7 +131,7 @@ export async function PATCH(request: NextRequest) {
 
     const payload = buildDefaultChartSettingsPayload(auth.user.id, chartType, chartId);
 
-    const data = await auth.scoped.tx((trx) => trx
+    const data = await auth.db.tx((trx) => trx
         .insertInto('user_settings')
         .values(payload as never)
         .onConflict((conflict) => conflict.column('user_id').doUpdateSet(payload as never))
@@ -165,14 +165,14 @@ export async function DELETE(request: NextRequest) {
     const wasDefault = (type === 'bazi' ? defaultChartIds.bazi : defaultChartIds.ziwei) === id;
     if (wasDefault) {
         const payload = buildDefaultChartSettingsPayload(auth.user.id, type, null);
-        await auth.scoped.tx((trx) => trx
+        await auth.db.tx((trx) => trx
             .insertInto('user_settings')
             .values(payload as never)
             .onConflict((conflict) => conflict.column('user_id').doUpdateSet(payload as never))
             .execute());
     }
 
-    const data = await auth.scoped.tx((trx) => deleteFromDynamic(trx, getChartTable(type))
+    const data = await auth.db.tx((trx) => deleteFromDynamic(trx, getChartTable(type))
         .where('id', '=', id)
         .where('user_id', '=', auth.user.id)
         .returning('id')

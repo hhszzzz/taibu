@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     if (featureError) return featureError;
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    const { user, scoped } = auth;
+    const { user, db: scoped } = auth;
 
     try {
         const knowledgeBases = await scoped.tx((trx) => trx
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     if (featureError) return featureError;
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    const { user, scoped } = auth;
+    const { user, db: scoped } = auth;
 
     let body: unknown;
     try {

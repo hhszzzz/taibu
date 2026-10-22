@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
         // 从数据库获取模型配置（带缓存）
         const models = (await getModelsAsync()).filter((model) => isUserSelectableUsageType(getModelUsageType(model)));
         const membership: MembershipType = auth.user
-            ? await getEffectiveMembershipType(auth.user.id, { db: auth.scoped })
+            ? await getEffectiveMembershipType(auth.user.id, { db: auth.db })
             : 'free';
 
         // 返回模型配置（不包含敏感信息）

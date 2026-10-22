@@ -21,7 +21,7 @@ export async function GET(
         const { user } = auth;
 
         const { id } = await params;
-        const data = await auth.scoped.tx((trx) => trx
+        const data = await auth.db.tx((trx) => trx
             .selectFrom('community_comments')
             .select(['id', 'user_id'])
             .where('id', '=', id)
@@ -65,7 +65,7 @@ export async function PUT(
 
         let data;
         try {
-            data = await withRetry(() => auth.scoped.tx((trx) => trx
+            data = await withRetry(() => auth.db.tx((trx) => trx
                 .updateTable('community_comments')
                 .set({
                     content: body.content,
@@ -108,7 +108,7 @@ export async function DELETE(
 
         let deleted;
         try {
-            deleted = await withRetry(() => auth.scoped.tx((trx) => trx
+            deleted = await withRetry(() => auth.db.tx((trx) => trx
                 .updateTable('community_comments')
                 .set({ is_deleted: true, updated_at: new Date().toISOString() })
                 .where('id', '=', id)

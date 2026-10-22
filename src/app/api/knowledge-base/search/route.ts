@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
         results = await searchKnowledge(query, {
             kbIds: body.kbIds,
             topK: body.topK,
-            db: auth.scoped,
+            db: auth.db,
             userId: user.id,
         });
     } catch (error) {

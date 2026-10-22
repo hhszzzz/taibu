@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
         if (missingSearchParams(searchParams, ['targetType', 'targetId']).length > 0) {
             return jsonError('缺少参数', 400);
         }
-        const voteRow = await withRetry(() => auth.scoped.tx((trx) => trx
+        const voteRow = await withRetry(() => auth.db.tx((trx) => trx
             .selectFrom('community_votes')
             .select('vote_type')
             .where('user_id', '=', user.id)
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
 
         let data: unknown;
         try {
-            data = await auth.scoped.rpc('toggle_community_vote' as never, {
+            data = await auth.db.rpc('toggle_community_vote' as never, {
                 p_target_type: targetType,
                 p_target_id: targetId,
                 p_vote_type: voteType,

@@ -8,7 +8,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     if (featureError) return featureError;
     const auth = await requireUserContext(_request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    const { user, scoped } = auth;
+    const { user, db: scoped } = auth;
 
     const { id } = await params;
     let data;
@@ -32,7 +32,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (featureError) return featureError;
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    const { user, scoped } = auth;
+    const { user, db: scoped } = auth;
 
     const { id } = await params;
     let body: unknown;
@@ -72,7 +72,7 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
     if (featureError) return featureError;
     const auth = await requireUserContext(_request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    const { user, scoped } = auth;
+    const { user, db: scoped } = auth;
 
     const { id } = await params;
     let data;

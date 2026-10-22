@@ -897,10 +897,6 @@ for (const mode of ['managed', 'trusted', 'direct', 'preview'] as const) {
             } satisfies Parameters<typeof sessionModule.resolveSessionFromTokens>[0];
             const resolveRequestAuth = (request: NextRequest) => resolveAuth(request, {
                 authResolverClient: authResolverClient as unknown as ReturnType<typeof api.createAnonClient>,
-                authedClientFactory: (token) => {
-                    assert.equal(token, refreshedToken);
-                    return createMockAuthContext({}, caller.user.id).db;
-                },
                 cookieStore: {
                     set: (_name, value) => { cookieWrites.push(value); },
                     delete: () => assert.fail('successful refresh must not delete cookies'),
@@ -962,27 +958,6 @@ for (const mode of ['managed', 'trusted', 'direct', 'preview'] as const) {
     }
 }
 
-test('KB token propagation does not enable cookie refresh for Bearer-only authentication', async (t) => {
-    const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
-    const { REFRESH_COOKIE } = await import('../lib/auth-session');
-    const refresh = t.mock.fn(async () => assert.fail('Bearer-only authentication must not refresh cookies'));
-    const result = await api.requireBearerUser(new NextRequest('http://localhost/api/test', {
-        headers: { authorization: 'Bearer expired-token', cookie: `${REFRESH_COOKIE}=valid-refresh-token` },
-    }), {
-        authResolverClient: {
-            auth: {
-                getUser: async (token: string) => {
-                    assert.equal(token, 'expired-token');
-                    return { data: { user: null }, error: { message: 'JWT expired' } };
-                },
-                refreshSession: refresh,
-            },
-        } satisfies Parameters<typeof import('../lib/auth-session').resolveSessionFromTokens>[0] as unknown as ReturnType<typeof api.createAnonClient>,
-        authedClientFactory: () => assert.fail('rejected Bearer must not construct a request DB client'),
-    });
-    assert.deepEqual(result, { error: { message: '认证失败', status: 401 } });
-    assert.equal(refresh.mock.callCount(), 0);
-});
 
 test('chat direct prepare returns 400 for invalid JSON bodies', async (t) => {
     const state = setupRouteMocks(t, createUIChunkStream([]));

@@ -10,7 +10,7 @@ async function scope(request: NextRequest, id: string): Promise<
     const auth = await requireUserContext(request);
     if ('error' in auth) return { response: jsonError(auth.error.message, auth.error.status) };
     if (!isValidUUID(id)) return { response: jsonError('对话 ID 无效', 400) };
-    return { db: auth.scoped, userId: auth.user.id };
+    return { db: auth.db, userId: auth.user.id };
 }
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     const id = (await params).id;

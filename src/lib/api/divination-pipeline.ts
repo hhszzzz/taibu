@@ -2,7 +2,7 @@
  * 占卜路由工厂
  *
  * 共享准入与生成流水线：
- * 1. Auth (requireBearerUser / requireUserContext)
+ * 1. Auth (requireUserContext)
  * 2. Ordinary route precheck + owned-resource context validation
  * 3. Account loading and model membership admission
  * 4. Credit balance check and actual deduction
@@ -17,7 +17,6 @@ import { createUIMessageStream, createUIMessageStreamResponse, type FinishReason
 import {
   jsonError,
   jsonOk,
-  requireBearerUser,
   requireUserContext,
   SSE_HEADERS,
 } from '@/lib/api-utils';
@@ -83,22 +82,18 @@ type UserContextAuthResult = Extract<
 export type DivinationAuthContext = {
   userId: string;
   db: ScopedDb;
-  accessToken: string | null;
 };
 
 type SuccessfulDivinationAuthResult = {
   user: { id: string };
-  scoped?: UserContextAuthResult['scoped'];
-  accessToken?: string | null;
+  db?: UserContextAuthResult['db'];
 };
 
-function scopedDbFor(result: { user: { id: string }; scoped?: ScopedDb }): ScopedDb {
-  return result.scoped ?? userDb(result.user.id);
+function scopedDbFor(result: { user: { id: string }; db?: ScopedDb }): ScopedDb {
+  return result.db ?? userDb(result.user.id);
 }
 
 type RouteError = { error: string; status: number };
-
-type AuthMethod = 'bearer' | 'userContext';
 
 function isRouteError(value: unknown): value is RouteError {
   return Boolean(value && typeof value === 'object' && 'error' in value && 'status' in value);
@@ -211,8 +206,6 @@ export interface DivinationRouteConfig<
   sourceType: string | ((input: T, context?: TContext) => string);
   /** Log tag, e.g. 'tarot', 'liuyao' */
   tag: string;
-  /** Auth strategy (defaults to Bearer token). */
-  authMethod?: AuthMethod;
   /** Parse & validate the request body. Return parsed input or an error. */
   parseInput: (body: unknown) => T | RouteError;
   /** Resource/business precheck before account admission; never a rate limiter. */
@@ -341,7 +334,6 @@ function toDivinationAuthContext(
   return {
     userId: authResult.user.id,
     db: scopedDbFor(authResult),
-    accessToken: authResult.accessToken ?? null,
   };
 }
 
@@ -453,7 +445,6 @@ export function createDirectInterpretHandlers<
   const {
     sourceType,
     tag,
-    authMethod = 'bearer',
     parseInput,
     precheck,
     resolvePromptContext,
@@ -494,9 +485,7 @@ export function createDirectInterpretHandlers<
     }
     const input = parsed as T;
 
-    const authResult = authMethod === 'userContext'
-      ? await requireUserContext(request)
-      : await requireBearerUser(request);
+    const authResult = await requireUserContext(request);
     if ('error' in authResult) {
       return jsonError(authResult.error.message, authResult.error.status, { success: false });
     }
@@ -710,7 +699,6 @@ export function createInterpretHandler<
   const {
     sourceType,
     tag,
-    authMethod = 'bearer',
     parseInput,
     precheck,
     resolvePromptContext,
@@ -749,9 +737,7 @@ export function createInterpretHandler<
       const input = parsed as T;
 
       // 1. Auth
-      const authResult = authMethod === 'userContext'
-        ? await requireUserContext(request)
-        : await requireBearerUser(request);
+      const authResult = await requireUserContext(request);
       if ('error' in authResult) {
         observation.fail('admission');
         return jsonError(authResult.error.message, authResult.error.status, { success: false });

@@ -42,7 +42,7 @@ test('chat bootstrap route returns ordered prompt knowledge bases', async (t) =>
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    scoped: scopedWithRows({
+    db: scopedWithRows({
       user: { id: 'user-1', membership: 'plus', membership_expires_at: null, ai_chat_count: 9 },
       settings: { prompt_kb_ids: ['kb-2', 'kb-1'] },
       knowledgeBases: [
@@ -99,7 +99,7 @@ test('chat bootstrap route hides prompt knowledge bases for free membership', as
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    scoped: scopedWithRows({
+    db: scopedWithRows({
       user: { id: 'user-1', membership: 'free', membership_expires_at: null, ai_chat_count: 1 },
       settings: { prompt_kb_ids: ['kb-2', 'kb-1'] },
       knowledgeBases: [
@@ -133,7 +133,7 @@ test('chat bootstrap route hides prompt knowledge bases when knowledge-base feat
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    scoped: scopedWithRows({
+    db: scopedWithRows({
       user: { id: 'user-1', membership: 'plus', membership_expires_at: null, ai_chat_count: 9 },
       settings: { prompt_kb_ids: ['kb-2', 'kb-1'] },
       knowledgeBases: [

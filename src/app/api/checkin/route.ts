@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
 
         switch (action) {
             case 'status': {
-                const status = await getCheckinStatus(user.id, { db: auth.scoped, user });
+                const status = await getCheckinStatus(user.id, { db: auth.db, user });
                 const data: CheckinResponse['data'] = { status };
                 if (perfEnabled) {
                     const duration = Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - perfStart);
@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
             case 'calendar': {
                 const year = parseInt(requestUrl.searchParams.get('year') || String(new Date().getFullYear()));
                 const month = parseInt(requestUrl.searchParams.get('month') || String(new Date().getMonth() + 1));
-                const calendar = await getCheckinCalendar(user.id, year, month, { db: auth.scoped });
+                const calendar = await getCheckinCalendar(user.id, year, month, { db: auth.db });
                 if (perfEnabled) {
                     const duration = Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - perfStart);
                     console.info(`[perf:checkin:calendar] ${duration}ms`, { userId: user.id, year, month });
@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
             }
 
             case 'stats': {
-                const stats = await getCheckinStats(user.id, { db: auth.scoped });
+                const stats = await getCheckinStats(user.id, { db: auth.db });
                 if (perfEnabled) {
                     const duration = Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - perfStart);
                     console.info(`[perf:checkin:stats] ${duration}ms`, { userId: user.id });

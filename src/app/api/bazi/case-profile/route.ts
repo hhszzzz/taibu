@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
         }
 
         const { user } = auth;
-        const db = auth.scoped;
+        const db = auth.db;
         const ownsChart = await ensureUserOwnsBaziChart(db, chartId, user.id);
         if (!ownsChart) {
             return jsonError('未找到对应命盘', 404);
@@ -57,7 +57,7 @@ export async function PUT(request: NextRequest) {
         }
 
         const { user } = auth;
-        const db = auth.scoped;
+        const db = auth.db;
         const ownsChart = await ensureUserOwnsBaziChart(db, parsed.chartId, user.id);
         if (!ownsChart) {
             return jsonError('未找到对应命盘', 404);

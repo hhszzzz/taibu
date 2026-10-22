@@ -29,7 +29,7 @@ function messageScope(capture: { rpcCall: { fn: string; args: Record<string, unk
                 const filters: string[] = [];
                 const query = {
                     select() { return query; },
-                    where(column: string, ..._rest: unknown[]) { filters.push(column); return query; },
+                    where(column: string) { filters.push(column); return query; },
                     orderBy() { return query; },
                     limit() { return query; },
                     async executeTakeFirst() {
@@ -128,7 +128,7 @@ test('knowledge-base ingest route normalizes legacy record source type to ming_r
 
     t.mock.method(apiUtils, 'requireUserContext', async () => ({
         user: { id: 'user-1' },
-        scoped,
+        db: scoped,
     }));
     t.mock.method(membershipModule, 'getEffectiveMembershipType', async () => 'plus');
     t.mock.method(featureGateModule, 'ensureFeatureRouteEnabled', async () => null);

@@ -55,7 +55,7 @@ async function loadHistoryItems(
     offset: number,
 ) {
     const config = HISTORY_CONFIG[type];
-    const result = await auth.scoped.tx((trx) => selectFromDynamic(trx, config.tableName)
+    const result = await auth.db.tx((trx) => selectFromDynamic(trx, config.tableName)
         .select(summaryColumns(type))
         .where('user_id', '=', auth.user.id)
         .orderBy('created_at', 'desc')
@@ -75,7 +75,7 @@ async function loadHistoryItems(
     const pageRows = hasMore ? rows.slice(0, limit) : rows;
 
     try {
-        const enriched = await attachConversations(auth.scoped, pageRows);
+        const enriched = await attachConversations(auth.db, pageRows);
         const items = await Promise.all(enriched.map((row) => buildHistorySummary(type, row)));
         return {
             items,
@@ -96,7 +96,7 @@ async function loadHistoryRow(
     id: string,
 ) {
     const config = HISTORY_CONFIG[type];
-    return auth.scoped.tx((trx) => selectFromDynamic(trx, config.tableName)
+    return auth.db.tx((trx) => selectFromDynamic(trx, config.tableName)
         .selectAll()
         .where('id', '=', id)
         .where('user_id', '=', auth.user.id)
@@ -165,7 +165,7 @@ export async function DELETE(request: NextRequest) {
     }
     const conversationId = typeof row?.conversation_id === 'string' ? row.conversation_id : null;
 
-    const { data, error } = await auth.scoped.rpc('delete_history_item_and_conversation', {
+    const { data, error } = await auth.db.rpc('delete_history_item_and_conversation', {
         p_history_type: type,
         p_history_id: id,
     }).then((data) => ({ data, error: null }), (error) => ({ data: null, error }));

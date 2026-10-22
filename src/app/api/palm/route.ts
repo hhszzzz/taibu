@@ -29,7 +29,6 @@ interface PalmInterpretInput extends InterpretInput {
 const handleAnalyze = createInterpretHandler<PalmInterpretInput>({
     sourceType: 'palm',
     tag: 'palm',
-    authMethod: 'userContext',
     allowedChartTypes: [...SOURCE_CHART_TYPE_MAP.palm_reading],
     defaultModelId: DEFAULT_VISION_MODEL_ID,
     isVision: true,

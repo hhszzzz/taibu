@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
         const startOfTomorrowUtc = new Date(startOfTodayUtc);
         startOfTomorrowUtc.setUTCDate(startOfTomorrowUtc.getUTCDate() + 1);
 
-        const [data, todaySpendRows] = await auth.scoped.tx(async (trx) => Promise.all([
+        const [data, todaySpendRows] = await auth.db.tx(async (trx) => Promise.all([
             trx
                 .selectFrom('credit_transactions')
                 .select(['id', 'amount', 'type', 'source', 'description', 'balance_after', 'reference_type', 'reference_id', 'metadata', 'created_at'])

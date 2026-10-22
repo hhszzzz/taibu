@@ -30,7 +30,7 @@ function mockBaziUserContext(
 
     apiUtils.requireUserContext = (async () => ({
         user: { id: 'user-1' },
-        scoped,
+        db: scoped,
         accessToken: 'test-token',
     })) as unknown as typeof apiUtils.requireUserContext;
 

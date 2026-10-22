@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
       return jsonError(auth.error.message, auth.error.status);
     }
 
-    const data = await buildChatBootstrap(auth.scoped, auth.user.id);
+    const data = await buildChatBootstrap(auth.db, auth.user.id);
     return jsonOk({ data });
   } catch (error) {
     console.error('[chat/bootstrap] failed to build bootstrap:', error);

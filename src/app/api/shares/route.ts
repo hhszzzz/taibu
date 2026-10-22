@@ -8,7 +8,7 @@ const SHARE_LIST_LIMIT = 200;
 export async function GET(request: NextRequest) {
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    const rows = await auth.scoped.tx((trx) => trx
+    const rows = await auth.db.tx((trx) => trx
         .selectFrom('conversation_shares')
         .select(['token', 'conversation_id', 'title', 'include_charts', 'created_at', 'updated_at'])
         .where('user_id', '=', auth.user.id)

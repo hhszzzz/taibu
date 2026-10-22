@@ -10,30 +10,31 @@ export async function GET(request: NextRequest) {
         return jsonError(auth.error.message, auth.error.status);
     }
 
-    const loadMembershipRow = async () => await auth.db
-        .from('users')
-        .select('membership, membership_expires_at, ai_chat_count')
-        .eq('id', auth.user.id)
-        .maybeSingle();
+    const loadMembershipRow = async () => await auth.db.tx((trx) => trx
+        .selectFrom('users')
+        .select(['membership', 'membership_expires_at', 'ai_chat_count'])
+        .where('id', '=', auth.user.id)
+        .executeTakeFirst());
 
-    let { data, error } = await loadMembershipRow();
-    if (!data && !error) {
-        const recoveryProbe = auth.db.from('users');
-        if (typeof recoveryProbe.upsert !== 'function') {
-            return jsonError('获取会员信息失败', 500);
-        }
-        const ensured = await ensureUserRecordRow(auth.scoped, auth.user);
-        if (ensured.ok) {
-            const nextResult = await loadMembershipRow();
-            data = nextResult.data;
-            error = nextResult.error;
-        } else {
-            return jsonError('获取会员信息失败', 500);
-        }
+    let data;
+    try {
+        data = await loadMembershipRow();
+    } catch (error) {
+        console.error('获取会员信息失败:', error);
+        return jsonError('获取会员信息失败', 500);
     }
 
-    if (error) {
-        return jsonError('获取会员信息失败', 500);
+    if (!data) {
+        const ensured = await ensureUserRecordRow(auth.db, auth.user);
+        if (!ensured.ok) {
+            return jsonError('获取会员信息失败', 500);
+        }
+        try {
+            data = await loadMembershipRow();
+        } catch (error) {
+            console.error('获取会员信息失败:', error);
+            return jsonError('获取会员信息失败', 500);
+        }
     }
 
     if (!data || typeof data.ai_chat_count !== 'number' || Number.isNaN(data.ai_chat_count)) {

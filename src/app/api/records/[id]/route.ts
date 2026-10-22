@@ -20,7 +20,7 @@ export async function GET(
 
         const { id } = await params;
 
-        const data = await auth.scoped.tx((trx) => trx
+        const data = await auth.db.tx((trx) => trx
             .selectFrom('ming_records')
             .selectAll()
             .where('id', '=', id)
@@ -59,7 +59,7 @@ export async function PUT(
         if (body.togglePin === true) {
             let data: unknown;
             try {
-                data = await auth.scoped.rpc('toggle_ming_record_pin', {
+                data = await auth.db.rpc('toggle_ming_record_pin', {
                     p_record_id: id,
                 });
             } catch (error) {
@@ -82,7 +82,7 @@ export async function PUT(
             return jsonOk(result.record);
         }
 
-        const existing = await auth.scoped.tx((trx) => trx
+        const existing = await auth.db.tx((trx) => trx
             .selectFrom('ming_records')
             .select(['id', 'related_chart_type', 'related_chart_id'])
             .where('id', '=', id)
@@ -107,7 +107,7 @@ export async function PUT(
             updated_at: new Date().toISOString(),
         };
 
-        const data = await auth.scoped.tx((trx) => trx
+        const data = await auth.db.tx((trx) => trx
             .updateTable('ming_records')
             .set(updateData as never)
             .where('id', '=', id)
@@ -137,7 +137,7 @@ export async function DELETE(
 
         const { id } = await params;
 
-        const data = await auth.scoped.tx((trx) => trx
+        const data = await auth.db.tx((trx) => trx
             .deleteFrom('ming_records')
             .where('id', '=', id)
             .where('user_id', '=', user.id)

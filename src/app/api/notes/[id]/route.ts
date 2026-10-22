@@ -17,7 +17,7 @@ export async function PUT(
             mood?: string | null;
         };
 
-        const data = await auth.scoped.tx((trx) => trx
+        const data = await auth.db.tx((trx) => trx
             .updateTable('ming_notes')
             .set({
                 ...(body.note_date !== undefined ? { note_date: body.note_date } : {}),
@@ -51,7 +51,7 @@ export async function DELETE(
         const { user } = auth;
 
         const { id } = await params;
-        await auth.scoped.tx((trx) => trx
+        await auth.db.tx((trx) => trx
             .deleteFrom('ming_notes')
             .where('id', '=', id)
             .where('user_id', '=', user.id)

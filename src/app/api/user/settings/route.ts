@@ -10,7 +10,7 @@ import { validBriefingPreferences } from '@/lib/briefing-preferences';
 import { validPromptTemplates } from '@/lib/agent/prompt-templates';
 
 async function loadSettings(auth: Exclude<Awaited<ReturnType<typeof requireUserContext>>, { error: unknown }>) {
-  return getUserSettingsSnapshot(auth.scoped, auth.user.id);
+  return getUserSettingsSnapshot(auth.db, auth.user.id);
 }
 
 export async function GET(request: NextRequest) {
@@ -60,7 +60,7 @@ export async function PATCH(request: NextRequest) {
   }
 
   try {
-    await auth.scoped.tx((trx) => trx
+    await auth.db.tx((trx) => trx
       .insertInto('user_settings')
       .values(payload as never)
       .onConflict((conflict) => conflict.column('user_id').doUpdateSet(payload as never))

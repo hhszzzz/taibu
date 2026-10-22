@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
         return jsonError('mode 必须是 agent 或 plain', 400);
     }
 
-    const rows = await auth.scoped.tx(async (trx) => {
+    const rows = await auth.db.tx(async (trx) => {
         let query = trx
             .selectFrom('conversations_with_archive_status')
             .select([
@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
         }
     }
 
-    const data = await auth.scoped.rpc('create_conversation_with_messages', {
+    const data = await auth.db.rpc('create_conversation_with_messages', {
         p_user_id: auth.user.id,
         p_title: normalizedTitle || '新对话',
         p_personality: body.personality || 'general',

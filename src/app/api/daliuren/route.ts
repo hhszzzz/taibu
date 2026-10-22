@@ -53,7 +53,6 @@ function buildDaliurenPrompt(result: DaliurenOutput, question?: string, detailLe
 const daliurenInterpretConfig: DivinationRouteConfig<DaliurenInterpretInput> = {
     sourceType: 'daliuren',
     tag: 'daliuren',
-    authMethod: 'userContext',
     personality: 'daliuren',
     allowedChartTypes: [...SOURCE_CHART_TYPE_MAP.daliuren_divination],
     parseInput: (body) => {

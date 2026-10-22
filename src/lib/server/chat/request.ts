@@ -164,7 +164,7 @@ async function bindManagedChat(request: NextRequest, body: ChatRequestBody, obse
     const auth = await getAuthContext(request);
     if (auth.authError) return jsonError(auth.authError.message, auth.authError.status);
     authUser = auth.user;
-    authScoped = auth.scoped;
+    authScoped = auth.db;
     actor = { userId: auth.user?.id || null, creditPolicy: 'trusted-bypass' };
   } else {
     const auth = await requireUserContext(request);
@@ -173,7 +173,7 @@ async function bindManagedChat(request: NextRequest, body: ChatRequestBody, obse
     return jsonError(auth.error.message, auth.error.status);
   }
     authUser = auth.user;
-    authScoped = auth.scoped;
+    authScoped = auth.db;
     actor = { userId: auth.user.id, creditPolicy: 'charge' };
   }
 
@@ -237,7 +237,7 @@ export async function prepareBrowserDirectChatRequest(
       BROWSER_DIRECT_CHAT_RATE_LIMIT_KEY,
       AI_RATE_LIMIT_CONFIG,
     )).allowed,
-    loadAccount: () => bindAccountLoader(auth.user.id, auth.user, auth.scoped)(),
+    loadAccount: () => bindAccountLoader(auth.user.id, auth.user, auth.db)(),
     buildPrompt: async (resolved) => {
       observation?.phase('prompt');
       try {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createRequestSupabaseClient, jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
+import { createRequestSupabaseClient, createUserStorageClient, getAuthContext, jsonError, jsonOk } from '@/lib/api-utils';
 
 import { toPublicStorageUrl } from '@/lib/supabase-env';
 
@@ -45,9 +45,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireUserContext(request);
-  if ('error' in auth) {
-    return jsonError(auth.error.message, auth.error.status);
+  const auth = await getAuthContext(request);
+  if (auth.authError) {
+    return jsonError(auth.authError.message, auth.authError.status);
+  }
+  if (!auth.user) {
+    return jsonError('请先登录', 401);
   }
 
   let formData: FormData;
@@ -90,7 +93,8 @@ export async function POST(request: NextRequest) {
 
   const upsert = parseUpsert(formData.get('upsert'));
 
-  const { data, error } = await auth.db.storage
+  const storageClient = createUserStorageClient(auth.accessToken);
+  const { data, error } = await storageClient.storage
     .from(bucket)
     .upload(path, file, { upsert });
 
@@ -98,7 +102,7 @@ export async function POST(request: NextRequest) {
     return jsonError(error.message || 'Upload failed', 400);
   }
 
-  const { data: publicData } = auth.db.storage.from(bucket).getPublicUrl(path);
+  const { data: publicData } = storageClient.storage.from(bucket).getPublicUrl(path);
   return jsonOk({
     data: {
       path: data?.path ?? path,

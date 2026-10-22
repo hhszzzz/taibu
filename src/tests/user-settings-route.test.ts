@@ -12,7 +12,7 @@ function settingsTx(getRow: () => SettingsRow, onInsert?: (payload: Record<strin
   return {
     selectFrom: () => ({
       select: () => ({
-        where: (_column: string, _value: unknown) => ({
+        where: () => ({
           executeTakeFirst: async () => getRow(),
         }),
       }),
@@ -38,7 +38,7 @@ test('settings account precondition rejects stale cookies before any database ac
   let authenticated = 0;
   api.requireUserContext = async () => {
     authenticated++;
-    return { user: { id: 'bob' }, scoped: createMockScopedDb() } as unknown as Awaited<ReturnType<typeof original>>;
+    return { user: { id: 'bob' }, db: createMockScopedDb() } as unknown as Awaited<ReturnType<typeof original>>;
   };
   t.after(() => { api.requireUserContext = original; });
   const { GET, PATCH } = await import('../app/api/user/settings/route');
@@ -59,7 +59,7 @@ test('user settings route should return normalized settings bundle for the curre
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    scoped: createMockScopedDb({
+    db: createMockScopedDb({
       tx: async (work) => work(settingsTx(() => ({
         expression_style: 'gentle',
         custom_instructions: 'keep calm',
@@ -103,7 +103,7 @@ test('user settings route PATCH should update only user_settings without touchin
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    scoped: createMockScopedDb({
+    db: createMockScopedDb({
       tx: async (work) => work(settingsTx(() => ({
         notifications_enabled: false,
         notify_email: false,
@@ -172,7 +172,7 @@ test('settings expected account is only a precondition; authentication and serve
   const owners: string[] = [];
   api.requireUserContext = async () => ({
     user: { id: 'alice' },
-    scoped: createMockScopedDb({
+    db: createMockScopedDb({
       tx: async (work) => work({
         selectFrom: () => ({
           select: () => ({
@@ -216,7 +216,7 @@ test('Agent preference updates preserve display settings and reject invalid temp
   const writes: Record<string, unknown>[] = [];
   t.mock.method(api, 'requireUserContext', async () => ({
     user: { id: 'alice' },
-    scoped: createMockScopedDb({
+    db: createMockScopedDb({
       tx: async (work) => work(settingsTx(() => settings, (payload) => {
         assert.equal(payload.user_id, 'alice');
         writes.push(payload);

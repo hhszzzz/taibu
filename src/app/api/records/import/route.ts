@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
 
         let importResult: unknown;
         try {
-            importResult = await auth.scoped.rpc('import_ming_records_and_notes', {
+            importResult = await auth.db.rpc('import_ming_records_and_notes', {
                 p_records: data.records,
                 p_notes: data.notes,
             });

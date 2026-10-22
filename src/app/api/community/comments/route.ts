@@ -23,12 +23,12 @@ export async function POST(request: NextRequest) {
             return jsonError('帖子ID和内容不能为空', 400);
         }
 
-        const authorProfile = await loadSingleCommunityAuthorProfile(auth.scoped, user.id);
+        const authorProfile = await loadSingleCommunityAuthorProfile(auth.db, user.id);
 
         // 创建评论
         let data;
         try {
-            data = await withRetry(() => auth.scoped.tx((trx) => trx
+            data = await withRetry(() => auth.db.tx((trx) => trx
                 .insertInto('community_comments')
                 .values({
                     post_id: body.post_id as string,

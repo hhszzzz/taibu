@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
   const cutoffIso = getNotificationRetentionCutoffIso();
 
   if (countOnly) {
-    const result = await auth.scoped.tx(async (trx) => {
+    const result = await auth.db.tx(async (trx) => {
       let query = trx
         .selectFrom('notifications')
         .select((eb) => eb.fn.countAll<number>().as('count'))
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     return jsonOk({ count: result.count ?? 0 });
   }
 
-  const rows = await auth.scoped.tx(async (trx) => {
+  const rows = await auth.db.tx(async (trx) => {
     let query = trx
       .selectFrom('notifications')
       .selectAll()
@@ -82,7 +82,7 @@ export async function PATCH(request: NextRequest) {
 
   const action = typeof body.action === 'string' ? body.action : '';
   if (action === 'mark-one' && typeof body.id === 'string') {
-    const ok = await auth.scoped.tx((trx) => trx
+    const ok = await auth.db.tx((trx) => trx
       .updateTable('notifications')
       .set({ is_read: true })
       .where('id', '=', body.id as string)
@@ -94,7 +94,7 @@ export async function PATCH(request: NextRequest) {
 
   if (action === 'mark-all') {
     const cutoffIso = getNotificationRetentionCutoffIso();
-    const ok = await auth.scoped.tx((trx) => trx
+    const ok = await auth.db.tx((trx) => trx
       .updateTable('notifications')
       .set({ is_read: true })
       .where('user_id', '=', auth.user.id)
@@ -108,7 +108,7 @@ export async function PATCH(request: NextRequest) {
   if (action === 'mark-selected') {
     const ids = parseIds(body.ids);
     if (ids.length === 0) return jsonOk({ success: true });
-    const ok = await auth.scoped.tx((trx) => trx
+    const ok = await auth.db.tx((trx) => trx
       .updateTable('notifications')
       .set({ is_read: true })
       .where('id', 'in', ids)
@@ -143,7 +143,7 @@ export async function DELETE(request: NextRequest) {
     return jsonError('缺少通知 ID', 400);
   }
 
-  const ok = await auth.scoped.tx((trx) => trx
+  const ok = await auth.db.tx((trx) => trx
     .deleteFrom('notifications')
     .where('id', 'in', ids)
     .where('user_id', '=', auth.user.id)

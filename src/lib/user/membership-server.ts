@@ -1,6 +1,5 @@
-import { createAuthedClient } from "@/lib/api-utils";
 import { isMembershipExpired, type MembershipType } from "@/lib/user/membership";
-import { systemDb, userDb, type ScopedDb } from "@/lib/db/context.server";
+import { systemDb, type ScopedDb } from "@/lib/db/context.server";
 
 export class MembershipResolutionError extends Error {
     constructor(message: string, options?: { cause?: unknown }) {
@@ -45,28 +44,6 @@ export async function getEffectiveMembershipType(
             throw error;
         }
         console.error("[membership] Failed to resolve membership:", error);
-        throw new MembershipResolutionError('获取会员状态失败', { cause: error });
-    }
-}
-
-/**
- * 通过 access token 解析当前用户的有效会员等级
- * 统一入口，避免各模块重复实现 token -> userId -> membership 链路
- */
-export async function resolveTokenMembership(accessToken?: string): Promise<MembershipType> {
-    if (!accessToken) return 'free';
-    try {
-        const supabase = createAuthedClient(accessToken);
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-            throw new MembershipResolutionError('认证已失效');
-        }
-
-        return await getEffectiveMembershipType(user.id, { db: userDb(user.id) });
-    } catch (error) {
-        if (error instanceof MembershipResolutionError) {
-            throw error;
-        }
         throw new MembershipResolutionError('获取会员状态失败', { cause: error });
     }
 }

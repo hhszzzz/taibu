@@ -59,7 +59,7 @@ function useScopedFixture(t: TestContext, options: FixtureOptions) {
   };
   const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
-  apiUtilsModule.requireUserContext = (async () => ({ user: { id: 'user-1' }, scoped })) as unknown as typeof originalRequireUserContext;
+  apiUtilsModule.requireUserContext = (async () => ({ user: { id: 'user-1' }, db: scoped })) as unknown as typeof originalRequireUserContext;
   t.after(() => {
     apiUtilsModule.requireUserContext = originalRequireUserContext;
   });

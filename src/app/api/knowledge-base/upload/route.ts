@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
     if (featureError) return featureError;
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    const { user, scoped: db } = auth;
+    const { user, db } = auth;
 
     let membership;
     try {

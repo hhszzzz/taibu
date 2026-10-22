@@ -6,7 +6,7 @@ import { parseArchiveId } from '@/lib/knowledge-base/archive-ids';
 export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     const auth = await requireUserContext(_request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    const { user, scoped } = auth;
+    const { user, db: scoped } = auth;
     const serviceDb = systemDb();
 
     const target = parseArchiveId((await params).id);

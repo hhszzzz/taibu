@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
         const { user } = auth;
 
         const creditUse = await attemptCreditUse(user.id, {
-            db: auth.scoped,
+            db: auth.db,
             user,
         });
         if (!creditUse.ok) {

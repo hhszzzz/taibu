@@ -95,7 +95,7 @@ test('knowledge-base archive route should page merged archive rows and virtual c
     ],
   });
   const { apiUtils } = await loadArchiveRoute(t);
-  t.mock.method(apiUtils, 'requireUserContext', async () => ({ user: { id: 'user-1' }, scoped }));
+  t.mock.method(apiUtils, 'requireUserContext', async () => ({ user: { id: 'user-1' }, db: scoped }));
   delete require.cache[require.resolve('../app/api/knowledge-base/archive/route')];
   const routeModule = require('../app/api/knowledge-base/archive/route') as typeof import('../app/api/knowledge-base/archive/route');
   const response = await routeModule.GET(
@@ -153,7 +153,7 @@ test('knowledge-base archive route should continue fetching batches for deep off
       : [],
   });
   const { apiUtils } = await loadArchiveRoute(t);
-  t.mock.method(apiUtils, 'requireUserContext', async () => ({ user: { id: 'user-1' }, scoped }));
+  t.mock.method(apiUtils, 'requireUserContext', async () => ({ user: { id: 'user-1' }, db: scoped }));
   delete require.cache[require.resolve('../app/api/knowledge-base/archive/route')];
   const routeModule = require('../app/api/knowledge-base/archive/route') as typeof import('../app/api/knowledge-base/archive/route');
   const response = await routeModule.GET(
@@ -171,7 +171,7 @@ test('knowledge-base archive route should continue fetching batches for deep off
 async function loadDeleteRoute(t: import('node:test').TestContext, scoped: unknown, serviceScoped: unknown) {
   const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
   const contextModule = require('../lib/db/context.server') as typeof import('../lib/db/context.server');
-  t.mock.method(apiUtils, 'requireUserContext', async () => ({ user: { id: 'user-1' }, scoped }));
+  t.mock.method(apiUtils, 'requireUserContext', async () => ({ user: { id: 'user-1' }, db: scoped }));
   t.mock.method(contextModule, 'systemDb', () => serviceScoped);
   delete require.cache[require.resolve('../app/api/knowledge-base/archive/[id]/route')];
   return require('../app/api/knowledge-base/archive/[id]/route') as typeof import('../app/api/knowledge-base/archive/[id]/route');
@@ -306,7 +306,7 @@ test('knowledge-base archive route should list uploaded files as removable virtu
     } as never),
   });
   const { apiUtils } = await loadArchiveRoute(t);
-  t.mock.method(apiUtils, 'requireUserContext', async () => ({ user: { id: 'user-1' }, scoped }));
+  t.mock.method(apiUtils, 'requireUserContext', async () => ({ user: { id: 'user-1' }, db: scoped }));
   delete require.cache[require.resolve('../app/api/knowledge-base/archive/route')];
   const routeModule = require('../app/api/knowledge-base/archive/route') as typeof import('../app/api/knowledge-base/archive/route');
   const response = await routeModule.GET(

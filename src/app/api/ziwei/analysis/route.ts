@@ -75,7 +75,6 @@ const handleAnalyze = createInterpretHandler<ZiweiAnalysisInput, ZiweiAnalysisCo
     sourceType: 'ziwei',
     tag: 'ziwei/analysis',
     personality: 'ziwei',
-    authMethod: 'userContext',
     allowedChartTypes: [...SOURCE_CHART_TYPE_MAP.ziwei_chart],
     parseInput: (body) => {
         const request = body as ZiweiAnalysisRequest;

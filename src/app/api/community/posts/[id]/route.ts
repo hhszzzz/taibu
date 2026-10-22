@@ -31,7 +31,7 @@ export async function GET(
 
         let post: Record<string, unknown> | undefined;
         try {
-            post = await auth.scoped.tx((trx) => trx
+            post = await auth.db.tx((trx) => trx
                 .selectFrom('community_posts')
                 .selectAll()
                 .where('id', '=', id)
@@ -213,7 +213,7 @@ export async function PUT(
 
         let data;
         try {
-            data = await auth.scoped.tx((trx) => trx
+            data = await auth.db.tx((trx) => trx
                 .updateTable('community_posts')
                 .set(updateData as never)
                 .where('id', '=', id)
@@ -229,7 +229,7 @@ export async function PUT(
             return jsonError('更新帖子失败', 500);
         }
 
-        const authorMap = await loadCommunityAuthorProfileMap(auth.scoped, [user.id]);
+        const authorMap = await loadCommunityAuthorProfileMap(auth.db, [user.id]);
         return jsonOk(
             toPublicPost(data as unknown as CommunityPostRow, authorMap.get(user.id) || { name: '命理爱好者', avatarUrl: null }),
         );
@@ -253,7 +253,7 @@ export async function DELETE(
         const { id } = await params;
 
         try {
-            await auth.scoped.tx((trx) => trx
+            await auth.db.tx((trx) => trx
                 .updateTable('community_posts')
                 .set({ is_deleted: true, updated_at: new Date().toISOString() })
                 .where('id', '=', id)

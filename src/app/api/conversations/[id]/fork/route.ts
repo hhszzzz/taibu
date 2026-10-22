@@ -12,7 +12,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
     const { id } = await params;
     if (!isValidUUID(id)) return jsonError('对话 ID 无效', 400);
-    const db = auth.scoped;
+    const db = auth.db;
     let body: { messageId?: string };
     try { body = await request.json(); } catch { return jsonError('请求体无效', 400); }
     if (typeof body?.messageId !== 'string' || body.messageId.length > 200) return jsonError('回答 ID 无效', 400);

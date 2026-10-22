@@ -1,5 +1,7 @@
 import { NextRequest } from 'next/server';
+import type { User } from '@supabase/supabase-js';
 import { getAuthContext, jsonOk } from '@/lib/api-utils';
+import type { ScopedDb } from '@/lib/db/context.server';
 import { readFeatureTogglesState } from '@/lib/app-settings';
 import { getNotificationRetentionCutoffIso } from '@/lib/notification-server';
 import { buildMembershipInfo, type MembershipInfo, type MembershipInfoSource } from '@/lib/user/membership';
@@ -16,6 +18,8 @@ type UserRow = {
   ai_chat_count: number | null;
 };
 
+const PROFILE_COLUMNS = ['id', 'nickname', 'avatar_url', 'is_admin', 'membership', 'membership_expires_at', 'ai_chat_count'] as const;
+
 function buildViewerSummary(row: UserRow, membership: MembershipInfo): AppBootstrapViewerSummary {
   return {
     userId: row.id,
@@ -28,30 +32,29 @@ function buildViewerSummary(row: UserRow, membership: MembershipInfo): AppBootst
   };
 }
 
-async function loadViewerProfile(auth: Awaited<ReturnType<typeof getAuthContext>>) {
-  const profileResult = await auth.db
-    .from('users')
-    .select('id, nickname, avatar_url, is_admin, membership, membership_expires_at, ai_chat_count')
-    .eq('id', auth.user!.id)
-    .maybeSingle();
+async function loadUserRow(db: ScopedDb, userId: string): Promise<UserRow | undefined> {
+  return await db.tx((trx) => trx
+    .selectFrom('users')
+    .select(PROFILE_COLUMNS)
+    .where('id', '=', userId)
+    .executeTakeFirst()) as UserRow | undefined;
+}
 
-  if (profileResult.error || profileResult.data || !auth.user) {
-    return profileResult;
+async function loadViewerProfile(
+  db: ScopedDb,
+  user: Pick<User, 'id' | 'user_metadata'>,
+): Promise<UserRow | undefined> {
+  const row = await loadUserRow(db, user.id);
+  if (row) {
+    return row;
   }
 
-  const ensured = await ensureUserRecordRow(auth.scoped, auth.user);
+  const ensured = await ensureUserRecordRow(db, user);
   if (!ensured.ok) {
-    return {
-      data: null,
-      error: ensured.error,
-    };
+    throw ensured.error;
   }
 
-  return await auth.db
-    .from('users')
-    .select('id, nickname, avatar_url, is_admin, membership, membership_expires_at, ai_chat_count')
-    .eq('id', auth.user.id)
-    .maybeSingle();
+  return await loadUserRow(db, user.id);
 }
 
 async function loadViewerState(auth: Awaited<ReturnType<typeof getAuthContext>>) {
@@ -77,36 +80,35 @@ async function loadViewerState(auth: Awaited<ReturnType<typeof getAuthContext>>)
     };
   }
 
-  const [profileResult, unreadResult] = await Promise.all([
-    loadViewerProfile(auth),
-    auth.db
-      .from('notifications')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', auth.user.id)
-      .gte('created_at', getNotificationRetentionCutoffIso())
-      .eq('is_read', false),
+  const user = auth.user;
+  const [profileOutcome, unreadOutcome] = await Promise.all([
+    loadViewerProfile(auth.db, user).then(
+      (row) => ({ ok: true as const, row }),
+      (error: unknown) => {
+        console.error('[bootstrap] failed to load viewer profile:', error);
+        return { ok: false as const };
+      },
+    ),
+    getUnreadNotificationCount(auth.db, user.id).then(
+      (count) => ({ ok: true as const, count }),
+      (error: unknown) => {
+        console.error('[bootstrap] failed to load unread notifications:', error);
+        return { ok: false as const };
+      },
+    ),
   ]);
 
-  if (profileResult.error) {
-    return {
-      viewerLoaded: false,
-      viewerSummary: null,
-      viewerErrorMessage: '加载账户状态失败',
-      membership: null,
-      unreadCount: unreadResult.count ?? 0,
-      unreadCountLoaded: !unreadResult.error,
-    };
-  }
-
-  const row = (profileResult.data ?? null) as UserRow | null;
+  const unreadCount = unreadOutcome.ok ? unreadOutcome.count : 0;
+  const unreadCountLoaded = unreadOutcome.ok;
+  const row = profileOutcome.ok ? profileOutcome.row : undefined;
   if (!row || typeof row.ai_chat_count !== 'number' || Number.isNaN(row.ai_chat_count)) {
     return {
       viewerLoaded: false,
       viewerSummary: null,
       viewerErrorMessage: '加载账户状态失败',
       membership: null,
-      unreadCount: unreadResult.count ?? 0,
-      unreadCountLoaded: !unreadResult.error,
+      unreadCount,
+      unreadCountLoaded,
     };
   }
 
@@ -122,9 +124,20 @@ async function loadViewerState(auth: Awaited<ReturnType<typeof getAuthContext>>)
     viewerSummary,
     viewerErrorMessage: null,
     membership,
-    unreadCount: unreadResult.count ?? 0,
-    unreadCountLoaded: !unreadResult.error,
+    unreadCount,
+    unreadCountLoaded,
   };
+}
+
+async function getUnreadNotificationCount(db: ScopedDb, userId: string): Promise<number> {
+  const row = await db.tx((trx) => trx
+    .selectFrom('notifications')
+    .select((eb) => eb.fn.countAll<number>().as('count'))
+    .where('user_id', '=', userId)
+    .where('created_at', '>=', getNotificationRetentionCutoffIso())
+    .where('is_read', '=', false)
+    .executeTakeFirst());
+  return Number(row?.count ?? 0);
 }
 
 export async function GET(request: NextRequest) {

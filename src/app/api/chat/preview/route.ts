@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
             return jsonError('无效的模型', 400);
         }
 
-        const membershipType = await getEffectiveMembershipType(auth.user.id, { db: auth.scoped });
+        const membershipType = await getEffectiveMembershipType(auth.user.id, { db: auth.db });
         const knowledgeBaseFeatureEnabled = await isFeatureModuleEnabled('knowledge-base');
         if (!isModelAllowedForMembership(modelConfig, membershipType)) {
             return jsonError('当前会员等级无法使用该模型', 403);

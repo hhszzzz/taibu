@@ -123,7 +123,8 @@ npm install taibu-core
 
 ```bash
 pnpm install
-pnpm local:up      # 构建并启动 db、redis、web、worker、mailpit
+pnpm local:update  # 构建并启动 db、redis、web、worker、mailpit（首次）
+pnpm local:up      # 复用镜像启动
 pnpm local:status  # 查看端口与健康状态
 pnpm local:logs    # 跟随日志
 pnpm local:down    # 保留数据库与头像文件卷

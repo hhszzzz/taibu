@@ -9,8 +9,8 @@
 [![Next.js](https://img.shields.io/badge/Next.js-16+-black?style=flat-square&logo=next.js)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4.x-38B2AC?style=flat-square&logo=tailwind-css)](https://tailwindcss.com/)
-[![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?style=flat-square&logo=supabase)](https://supabase.com/)
-[![Vercel](https://img.shields.io/badge/Deployed_on-Vercel-black?style=flat-square&logo=vercel)](https://vercel.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169E1?style=flat-square&logo=postgresql)](https://www.postgresql.org/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker)](https://www.docker.com/)
 
 Language: [中文](README.md) | **English**
 
@@ -115,32 +115,29 @@ See [taibu-core on npm](https://www.npmjs.com/package/taibu-core) and [packages/
 
 ## Quick Start
 
-### Docker Deployment
+### Self-hosted stack (PostgreSQL 17 + Redis 8)
 
-Three deployment options are supported:
+Data, authentication and files are served by a local Docker stack; no Vercel
+or hosted Supabase account is used. You need Docker, Node.js 24 and pnpm:
 
 ```bash
-# Prepare environment variables (first time)
-cp .env.example .env
-
-# 1) One-command deployment: start both Web + MCP
-docker compose up -d --build
-
-# 2) Web only
-docker compose -f docker-compose.web.yml up -d --build
-
-# 3) MCP Server only
-docker compose -f docker-compose.mcp.yml up -d --build
+pnpm install
+pnpm local:update  # build and start db, redis, web, worker and mailpit (first run)
+pnpm local:up      # start with existing images
+pnpm local:status  # ports and health
+pnpm local:down    # keep the database and file volumes
 ```
 
-Default ports:
-- Web: `3000` ([http://localhost:3000](http://localhost:3000))
-- MCP: `3001` ([http://localhost:3001/mcp](http://localhost:3001/mcp))
+Random secrets and ports are generated under `.taibu-local/taibu-v2/` on first
+start. Verification emails are captured by Mailpit. The local stack uses the
+same migrations (`database/migrations/`) and Compose services as production;
+see [Self-Hosting](docs/manual/Self-Hosting.md) and the
+[cutover runbook](docs/manual/Cutover.md).
 
 ### Local Development
 
 Requirements:
-- Node.js 18+
+- Node.js 24+
 - pnpm (recommended) / npm / yarn
 
 ```bash

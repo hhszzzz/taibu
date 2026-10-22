@@ -534,6 +534,9 @@ test("Agent SSE stays open while awaiting input and observes another tab's resum
     },
   }) as unknown as AgentRunRow;
   t.mock.method(AgentStore.prototype, "getRun", async () => run());
+  t.mock.method(AgentStore.prototype, "runState", async () => ({
+    id, status, event_cursor: cursor, fence: 0, cancel_requested: false, lease_until: null, updated_at: null,
+  }));
   t.mock.method(AgentStore.prototype, "events", async () => []);
   const controller = new AbortController();
   const response = await streamAgentTask(new NextRequest(`http://localhost/api/agent/runs/${id}/events`, { signal: controller.signal }), id);
@@ -563,6 +566,10 @@ test("idle SSE heartbeats read only the run row; the public view is built when a
     },
   } as unknown as AgentRunRow;
   t.mock.method(AgentStore.prototype, "getRun", async () => run);
+  t.mock.method(AgentStore.prototype, "runState", async () => ({
+    id, status: run.status, event_cursor: run.event_cursor, fence: run.fence,
+    cancel_requested: false, lease_until: null, updated_at: null,
+  }));
   t.mock.method(AgentStore.prototype, "events", async () => [{ sequence: 2, type: "tool_execution_end", payload: {} }]);
   const view = t.mock.method(AgentStore.prototype, "view", async (row: AgentRunRow) => ({
     id: row.id, conversationId: row.conversation_id, status: row.status, message: row.public_message,

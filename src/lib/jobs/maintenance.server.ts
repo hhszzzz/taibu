@@ -4,6 +4,7 @@ import { cleanupAgentAttachments } from '@/lib/agent/attachments.server';
 import { processDailyBriefings } from '@/lib/daily-briefing.server';
 import { pruneExpiredNotifications } from '@/lib/notification-server';
 import { processScheduledReminders, scheduleAllUsersReminders } from '@/lib/reminders';
+import { runAgentRetention, runIdentityCleanup } from './retention.server';
 
 export type MaintenanceRunSummary = {
   job: string;
@@ -46,6 +47,10 @@ export async function runMaintenanceJob(name: string): Promise<MaintenanceRunSum
       return runSteps([{ name: 'cleanup-agent-attachments', run: cleanupAgentAttachments }]);
     case 'notifications-prune':
       return runSteps([{ name: 'prune-expired-notifications', run: pruneExpiredNotifications }]);
+    case 'agent-retention':
+      return runSteps([{ name: 'agent-retention', run: runAgentRetention }]);
+    case 'identity-cleanup':
+      return runSteps([{ name: 'identity-cleanup', run: runIdentityCleanup }]);
     default:
       throw new Error(`Unknown maintenance job: ${name}`);
   }

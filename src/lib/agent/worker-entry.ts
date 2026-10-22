@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { loadQuickJSWasm } from "@earendil-works/pi-codemode";
 import { systemDb } from "@/lib/db/context.server";
+import { waitForAgentSignal } from "@/lib/db/listen.server";
 import { AgentStore, type AgentRunRow } from "./store.server";
 import { executeAgentRun } from "./runtime.server";
 import { AGENT_ENGINE } from "./engine";
@@ -83,7 +84,8 @@ async function main() {
           continue;
         }
       }
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Wake on a queued run; the 5 s fallback covers a missed notification.
+      await waitForAgentSignal(undefined, 5_000, shutdown.signal);
     }
     await Promise.allSettled(active);
   } finally {

@@ -74,6 +74,16 @@ export interface AgentStoredEvent {
   payload: Record<string, unknown>;
 }
 
+export type AgentRunState = {
+  id: string;
+  status: AgentRunRow['status'];
+  event_cursor: string | number;
+  fence: number | null;
+  cancel_requested: boolean | null;
+  lease_until: string | null;
+  updated_at: string | null;
+};
+
 export class AgentStore {
   constructor(readonly db: ScopedDb) {}
   async rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
@@ -86,6 +96,17 @@ export class AgentStore {
       return query.executeTakeFirst();
     });
     return (row ?? null) as unknown as AgentRunRow | null;
+  }
+  /** Narrow columns used by wake-up loops; avoids reading checkpoints. */
+  async runState(id: string, userId?: string) {
+    const row = await this.db.tx((trx) => {
+      let query = trx.selectFrom("agent_runs")
+        .select(["id", "status", "event_cursor", "fence", "cancel_requested", "lease_until", "updated_at"])
+        .where("id", "=", id);
+      if (userId) query = query.where("user_id", "=", userId);
+      return query.executeTakeFirst();
+    });
+    return (row ?? null) as unknown as AgentRunState | null;
   }
   async currentRun(conversationId: string, userId: string) {
     const row = await this.db.tx((trx) => trx

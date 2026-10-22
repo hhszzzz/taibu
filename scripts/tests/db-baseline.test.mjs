@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -93,9 +93,14 @@ GRANT CREATE, CONNECT ON DATABASE ${database} TO taibu_owner;
 GRANT CONNECT ON DATABASE ${database} TO taibu_migrator, taibu_app, taibu_auth, taibu_backup;
 ALTER ROLE taibu_app PASSWORD '${appPassword}';`);
 
+    const migrationDirectory = path.join(repoRoot, 'database/migrations');
+    const files = (await readdir(migrationDirectory))
+      .filter((file) => /^\d{4}_[a-z0-9_]+\.sql$/u.test(file))
+      .sort();
+    assert.ok(files.length >= 9, `expected the full migration chain, got ${files.length}`);
     const migrations = [];
-    for (const file of ['0001_identity.sql', '0002_app_baseline.sql', '0003_identity_profile_and_system_user.sql']) {
-      migrations.push(`-- ${file}\n${await readFile(path.join(repoRoot, 'database/migrations', file), 'utf8')}`);
+    for (const file of files) {
+      migrations.push(`-- ${file}\n${await readFile(path.join(migrationDirectory, file), 'utf8')}`);
     }
     await sql(`SET ROLE taibu_owner;\nSET check_function_bodies = false;\n${migrations.join('\n')}`);
 
@@ -132,6 +137,57 @@ ALTER ROLE taibu_app PASSWORD '${appPassword}';`);
         values ('00000000-0000-4000-8000-0000000000aa', 'trigger@fixture.test', true, '触发器用户');`);
       assert.equal(await sql(`select nickname from public.users where id = '00000000-0000-4000-8000-0000000000aa';`), '触发器用户');
       assert.equal(await sql(`select is_admin from public.users where id = '00000000-0000-4000-8000-000000000001';`), 't');
+    });
+
+    await t.test('Agent wake-up triggers and indexes are installed', async () => {
+      const triggers = (await sql(`
+        select tgname from pg_trigger
+        where not tgisinternal and tgname like 'agent_notify_%'
+        order by tgname;`)).split('\n').filter(Boolean);
+      assert.deepEqual(triggers, ['agent_notify_command', 'agent_notify_event', 'agent_notify_run']);
+      const indexes = (await sql(`
+        select indexname from pg_indexes
+        where indexname in ('agent_claim_queued','agent_claim_expired','knowledge_entries_vector_1024_hnsw_idx')
+        order by indexname;`)).split('\n').filter(Boolean);
+      assert.deepEqual(indexes, ['agent_claim_expired', 'agent_claim_queued', 'knowledge_entries_vector_1024_hnsw_idx']);
+      assert.equal(await sql(`
+        select count(*) from information_schema.columns
+        where table_schema = 'public' and table_name = 'knowledge_entries'
+          and column_name = 'embedding_dim' and is_generated = 'ALWAYS';`), '1');
+      assert.equal(await sql(`
+        select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public' and p.proname in
+          ('delete_agent_retention','cleanup_expired_identity_rows');`), '2');
+      // The claim predicate must prefer the partial index even before data exists.
+      const plan = await sql(`
+        set enable_seqscan = off;
+        explain select id from public.agent_runs
+        where status = 'queued'
+          and checkpoint->>'version' = '2'
+          and checkpoint#>>'{durable,engine}' = 'pi-durable/1.3.0'
+        order by created_at limit 1;`);
+      assert.match(plan, /agent_claim_queued/u);
+    });
+
+    await t.test('vector search can use the 1024-dimension HNSW index', async () => {
+      await sql(`
+        insert into knowledge_bases (id, user_id, name) values
+          ('00000000-0000-4000-8000-0000000000bb', '00000000-0000-4000-8000-0000000000aa', '向量测试');
+        insert into knowledge_entries (id, kb_id, content, content_vector, source_type, source_id, metadata) values
+          ('00000000-0000-4000-8000-0000000000cc',
+           '00000000-0000-4000-8000-0000000000bb',
+           '向量内容',
+           array_fill(0.1::float8, ARRAY[1024])::extensions.vector(1024),
+           'note', 'fixture',
+           '{"embedding_model":"fixture","embedding_dim":1024}'::jsonb);`);
+      const plan = await sql(`
+        set enable_seqscan = off;
+        explain select id from public.knowledge_entries
+        where embedding_dim = 1024
+          and content_vector is not null
+        order by content_vector::extensions.vector(1024) OPERATOR(extensions.<=>) array_fill(0.1::float8, ARRAY[1024])::extensions.vector(1024)
+        limit 5;`);
+      assert.match(plan, /knowledge_entries_vector_1024_hnsw_idx/u);
     });
 
     await t.test('RLS is enabled on every public table', async () => {

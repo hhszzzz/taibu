@@ -71,6 +71,7 @@ export function verificationSteps(files, complete = false, useInstalledChrome = 
     nodeStep('Isolated PostgreSQL contracts', ['--require', './scripts/ts-register.cjs', '--test', 'scripts/tests/postgres-contracts.test.mjs', 'scripts/tests/db-context-contracts.test.mjs', 'scripts/tests/db-baseline.test.mjs']),
     nodeStep('Auth acceptance (local stack + Mailpit)', ['--test', 'scripts/tests/auth-acceptance.test.mjs']),
     nodeStep('Real Redis admission contracts', ['--require', './scripts/ts-register.cjs', '--test', 'scripts/tests/selfhost-redis.test.mjs']),
+    nodeStep('Agent notification contracts', ['--test', 'scripts/tests/agent-notify-live.test.mjs']),
     nodeStep('Offline browser component contracts', ['scripts/tests/p5-browser-fixture.mjs', ...(useInstalledChrome ? ['--chrome'] : [])]),
   ];
 }

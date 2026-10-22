@@ -440,6 +440,7 @@ export interface KnowledgeEntries {
   chunk_index: Generated<number>;
   metadata: Generated<Json>;
   created_at: Generated<string | null>;
+  embedding_dim: GeneratedAlways<number | null>;
 }
 
 export interface LiuyaoDivinations {

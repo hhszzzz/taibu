@@ -25,6 +25,9 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+# The migrate service uses psql for `-- migrate:no-transaction` files
+# (CREATE INDEX CONCURRENTLY cannot run inside a transaction block).
+RUN apk add --no-cache postgresql17-client
 RUN addgroup -S nodejs && adduser -S nextjs -G nodejs
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./

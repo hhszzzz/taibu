@@ -5,6 +5,7 @@ import type { NextRequest } from "next/server";
 import { parseAgentMcpServers } from './mcp-client.server';
 import { jsonError, jsonOk, requireUserContext } from "@/lib/api-utils";
 import { systemDb } from "@/lib/db/context.server";
+import { waitForAgentSignal } from "@/lib/db/listen.server";
 import { getGlobalAIFeatureGuardResponse } from "@/lib/api/ai-feature-guard";
 import { readFeatureModuleStateFresh } from "@/lib/app-settings";
 import {
@@ -598,42 +599,74 @@ export async function streamAgentTask(request: NextRequest, id: string) {
       );
       if (!Number.isSafeInteger(cursor) || cursor < 0) cursor = 0;
       const suppliedEpoch = request.nextUrl.searchParams.get('epoch');
-      let epoch = suppliedEpoch === null ? undefined : Number(suppliedEpoch);
+      let epoch: number | undefined = suppliedEpoch === null ? undefined : Number(suppliedEpoch);
+
+      const emitSnapshot = async (run: AgentRunRow, resetReason?: AgentResync['reason']) => {
+        const view = { ...await store.view(run), epoch: run.fence ?? 0 };
+        const resync = (reason: AgentResync['reason']) => {
+          resetReason = reason;
+          cursor = view.cursor;
+          epoch = view.epoch;
+        };
+        if (resetReason) resync(resetReason);
+        while (cursor < view.cursor && !closed && !request.signal.aborted) {
+          const events = await store.events(id, cursor, view.cursor);
+          if (!events.length) { resync('gap'); break; }
+          for (const event of events) {
+            if (Number(event.sequence) <= cursor || Number(event.sequence) > view.cursor) { resync('gap'); break; }
+            cursor = Number(event.sequence);
+            if (!send(`event: history\nid: ${cursor}\ndata: ${JSON.stringify({ version: 1, runId: id, ...event })}\n\n`)) break;
+          }
+        }
+        cursor = view.cursor;
+        const resetFrame = resetReason
+          ? `event: resync\ndata: ${JSON.stringify({ version: 1, runId: id, cursor: view.cursor, epoch: view.epoch, reason: resetReason } satisfies AgentResync)}\n\n`
+          : '';
+        if (!send(`${resetFrame}event: snapshot\nid: ${cursor}\ndata: ${JSON.stringify(view)}\n\n`)) return false;
+        epoch = view.epoch;
+        return true;
+      };
+
       try {
+        const initial = await store.getRun(id, auth.user.id);
+        if (!initial) return;
+        const initialCursor = Number(initial.event_cursor);
+        const needsSnapshot = epoch !== undefined && epoch !== (initial.fence ?? 0)
+          || cursor > initialCursor
+          || initialCursor > cursor
+          || isAgentRunTerminal(initial.status);
+        const initialReason: AgentResync['reason'] | undefined =
+          epoch !== undefined && epoch !== (initial.fence ?? 0) ? 'epoch'
+            : cursor > initialCursor ? 'cursor' : undefined;
+        if (needsSnapshot && !(await emitSnapshot(initial, initialReason))) return;
+        else if (epoch === undefined) epoch = initial.fence ?? 0;
+        if (isAgentRunTerminal(initial.status)) return;
+
+        let known = initial;
         while (!closed && !request.signal.aborted) {
-          const run = await store.getRun(id, auth.user.id);
-          if (!run) break;
-          // The run row decides whether a frame is due. The public view also
-          // reads the command queue, so idle heartbeats never build it.
-          const runCursor = Number(run.event_cursor);
-          const runEpoch = run.fence ?? 0;
-          let resetReason: AgentResync['reason'] | undefined =
-            epoch !== undefined && epoch !== runEpoch ? 'epoch' : cursor > runCursor ? 'cursor' : undefined;
-          if (resetReason || runCursor > cursor || isAgentRunTerminal(run.status)) {
-            const view = { ...await store.view(run), epoch: runEpoch };
-            const resync = (reason: AgentResync['reason']) => {
-              resetReason = reason;
-              cursor = view.cursor;
-              epoch = view.epoch;
-            };
-            if (resetReason) resync(resetReason);
-            while (cursor < view.cursor && !closed && !request.signal.aborted) {
-              const events = await store.events(id, cursor, view.cursor);
-              if (!events.length) { resync('gap'); break; }
-              for (const event of events) {
-                if (Number(event.sequence) <= cursor || Number(event.sequence) > view.cursor) { resync('gap'); break; }
-                cursor = Number(event.sequence);
-                if (!send(`event: history\nid: ${cursor}\ndata: ${JSON.stringify({ version: 1, runId: id, ...event })}\n\n`)) break;
-              }
-            }
-            cursor = view.cursor;
-            const resetFrame = resetReason ? `event: resync\ndata: ${JSON.stringify({ version: 1, runId: id, cursor: view.cursor, epoch: view.epoch, reason: resetReason } satisfies AgentResync)}\n\n` : '';
-            if (!send(`${resetFrame}event: snapshot\nid: ${cursor}\ndata: ${JSON.stringify(view)}\n\n`)) break;
-            epoch = view.epoch;
-          } else if (!send(': heartbeat\n\n')) break;
-          if (isAgentRunTerminal(run.status))
-            break;
-          await new Promise((resolve) => setTimeout(resolve, 1000));
+          // Timestamp before the wait: notifications emitted between the last
+          // state read and registering the waiter are replayed from the buffer.
+          const observedAt = Date.now();
+          const signal = await waitForAgentSignal(id, 15_000, request.signal, observedAt);
+          if (closed || request.signal.aborted) break;
+
+          const state = await store.runState(id, auth.user.id);
+          if (!state) break;
+          const changed = Number(state.event_cursor) !== cursor
+            || (state.fence ?? 0) !== (epoch ?? 0)
+            || state.status !== known.status;
+          if (changed) {
+            const run = await store.getRun(id, auth.user.id);
+            if (!run) break;
+            known = run;
+            const epochChanged = (run.fence ?? 0) !== (epoch ?? 0);
+            if (!(await emitSnapshot(run, epochChanged ? 'epoch' : undefined))) break;
+            if (isAgentRunTerminal(run.status)) break;
+            continue;
+          }
+          if (!signal && !send(': heartbeat\n\n')) break;
+          // A signal without a state change (for example a cancel request) is
+          // already reflected in the next run update; no frame is due yet.
         }
       } catch {
         if (!closed && !request.signal.aborted)

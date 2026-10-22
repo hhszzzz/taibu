@@ -33,10 +33,12 @@ export interface RpcRegistry {
   "claim_linuxdo_membership_as_service": { args: { "p_user_id": string | null; "p_plan_id": string | null; "p_trust_level": number | null; "p_provider_user_id": string | null; }; result: Json };
   "claim_notification_popup": { args: { "p_id": string | null; }; result: boolean };
   "claim_prompt_enhancement": { args: Record<string, never>; result: boolean };
+  "cleanup_expired_identity_rows": { args: { "p_limit"?: number | null; }; result: { sessions_deleted: number; verifications_deleted: number; }[] };
   "create_analysis_conversation_with_history_as_service": { args: { "p_user_id": string | null; "p_source_type": string | null; "p_source_data": unknown | null; "p_title": string | null; "p_personality": string | null; "p_messages": unknown | null; "p_history_type": string | null; "p_history_payload": unknown | null; }; result: string };
   "create_conversation_with_messages": { args: { "p_user_id": string | null; "p_title": string | null; "p_personality"?: string | null; "p_source_type"?: string | null; "p_source_data"?: unknown | null; "p_messages"?: unknown | null; }; result: string };
   "create_knowledge_base_with_limit": { args: { "p_user_id": string | null; "p_name": string | null; "p_description"?: string | null; "p_weight"?: string | null; "p_limit"?: number | null; }; result: Json };
   "decrement_ai_chat_count": { args: { "user_id": string | null; }; result: number };
+  "delete_agent_retention": { args: { "p_event_days"?: number | null; "p_commit_days"?: number | null; "p_worker_hours"?: number | null; "p_limit"?: number | null; }; result: { events_deleted: number; commits_deleted: number; workers_deleted: number; }[] };
   "delete_conversation_graph": { args: { "p_conversation_id": string | null; }; result: boolean };
   "delete_history_item_and_conversation": { args: { "p_history_type": string | null; "p_history_id": string | null; }; result: boolean };
   "deliver_daily_briefing_notices": { args: { "p_limit"?: number | null; }; result: number };
@@ -100,10 +102,12 @@ export const RPC_SPECS = {
   "claim_linuxdo_membership_as_service": { args: [["p_user_id", "uuid", false], ["p_plan_id", "text", false], ["p_trust_level", "integer", false], ["p_provider_user_id", "text", false]], returns: "scalar" },
   "claim_notification_popup": { args: [["p_id", "uuid", false]], returns: "scalar" },
   "claim_prompt_enhancement": { args: [], returns: "scalar" },
+  "cleanup_expired_identity_rows": { args: [["p_limit", "integer", true]], returns: "setof" },
   "create_analysis_conversation_with_history_as_service": { args: [["p_user_id", "uuid", false], ["p_source_type", "text", false], ["p_source_data", "jsonb", false], ["p_title", "text", false], ["p_personality", "text", false], ["p_messages", "jsonb", false], ["p_history_type", "text", false], ["p_history_payload", "jsonb", false]], returns: "scalar" },
   "create_conversation_with_messages": { args: [["p_user_id", "uuid", false], ["p_title", "text", false], ["p_personality", "text", true], ["p_source_type", "text", true], ["p_source_data", "jsonb", true], ["p_messages", "jsonb", true]], returns: "scalar" },
   "create_knowledge_base_with_limit": { args: [["p_user_id", "uuid", false], ["p_name", "text", false], ["p_description", "text", true], ["p_weight", "text", true], ["p_limit", "integer", true]], returns: "scalar" },
   "decrement_ai_chat_count": { args: [["user_id", "uuid", false]], returns: "scalar" },
+  "delete_agent_retention": { args: [["p_event_days", "integer", true], ["p_commit_days", "integer", true], ["p_worker_hours", "integer", true], ["p_limit", "integer", true]], returns: "setof" },
   "delete_conversation_graph": { args: [["p_conversation_id", "text", false]], returns: "scalar" },
   "delete_history_item_and_conversation": { args: [["p_history_type", "text", false], ["p_history_id", "text", false]], returns: "scalar" },
   "deliver_daily_briefing_notices": { args: [["p_limit", "integer", true]], returns: "scalar" },

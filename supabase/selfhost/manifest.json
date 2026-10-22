@@ -750,6 +750,7 @@
     {
       "name": "agent_renew_lease",
       "callers": [
+        "src/lib/agent/runtime.server.ts",
         "src/lib/agent/runtime.server.ts"
       ],
       "source": "supabase/migrations/20261005_100000_agent_runtime.sql",
@@ -867,6 +868,15 @@
       "reason": null
     },
     {
+      "name": "cleanup_expired_identity_rows",
+      "callers": [
+        "src/lib/jobs/retention.server.ts"
+      ],
+      "source": null,
+      "status": "missing-source",
+      "reason": "No tracked definition at baseline revision; affected feature must remain unavailable."
+    },
+    {
       "name": "create_analysis_conversation_with_history_as_service",
       "callers": [
         "src/lib/ai/ai-analysis.ts"
@@ -902,6 +912,15 @@
       "source": "supabase/migrations/20260409_235900_membership_credit_redesign.sql",
       "status": "defined",
       "reason": null
+    },
+    {
+      "name": "delete_agent_retention",
+      "callers": [
+        "src/lib/jobs/retention.server.ts"
+      ],
+      "source": null,
+      "status": "missing-source",
+      "reason": "No tracked definition at baseline revision; affected feature must remain unavailable."
     },
     {
       "name": "delete_conversation_graph",
@@ -1296,6 +1315,10 @@
         },
         {
           "file": "src/lib/agent/api.server.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/agent/store.server.ts",
           "kind": "literal-kysely"
         },
         {

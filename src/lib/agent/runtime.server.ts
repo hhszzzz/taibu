@@ -11,6 +11,7 @@ import {
 } from "@earendil-works/pi-ai";
 import type { AIModelConfig, ChatMessage } from "@/types";
 import { getModelConfigAsync } from "@/lib/server/ai-config";
+import { waitForAgentSignal } from "@/lib/db/listen.server";
 import { isModelAllowedForMembership, isReasoningAllowedForMembership } from "@/lib/ai/ai-access";
 import { resolveKnownModelContextConfig } from "@/lib/ai/model-context";
 import { readFeatureModuleStateFresh } from "@/lib/app-settings";
@@ -124,7 +125,7 @@ export async function executeAgentRun(
   if (!isCurrentAgentCheckpoint(checkpoint)) throw new Error("AGENT_ENGINE_UNSUPPORTED");
   const scope = withCancel(BACKGROUND_CONTEXT);
   const context = scope.context;
-  let interrupted = false, stopping = run.cancel_requested, polling = false;
+  let interrupted = false, stopping = run.cancel_requested;
   let harness: Harness | undefined, root: Conversation | undefined, watch: ConversationWatch | undefined;
   let storage: AgentDurableStorage | undefined, apiKey: string | undefined;
   let mcp: Awaited<ReturnType<typeof connectAgentMcp>> | undefined;
@@ -133,11 +134,16 @@ export async function executeAgentRun(
   let controlInFlight: Promise<void> = Promise.resolve();
   let projectionInFlight: Promise<void> = Promise.resolve();
   let pollCommands: (() => Promise<void>) | undefined;
+  const controlAbort = new AbortController();
   let signalPause!: () => void;
   const inputPause = new Promise<"input">(resolve => { signalPause = () => resolve("input"); });
   let signalInterrupted!: () => void;
   const interruption = new Promise<"interrupted">(resolve => { signalInterrupted = () => resolve("interrupted"); });
-  const interrupt = () => { interrupted = true; signalInterrupted(); scope.cancel(); };
+  const stoppedByLease = () => {
+    stopping = true;
+    if (root) void root.abort(context, { background: true });
+  };
+  const interrupt = () => { interrupted = true; controlAbort.abort(); signalInterrupted(); scope.cancel(); };
   const onShutdown = () => interrupt();
   shutdown?.addEventListener("abort", onShutdown, { once: true });
   if (shutdown?.aborted) interrupt();
@@ -185,16 +191,24 @@ export async function executeAgentRun(
     // Replaying a long log can exceed one lease window. Renew from startup,
     // but do not admit commands until the initial history and input are ready.
     heartbeat = setInterval(() => {
-      if (polling || interrupted) return;
-      polling = true;
-      controlInFlight = (async () => {
-        if (await store.rpc<boolean>("agent_renew_lease", store.lease(run))) {
-          stopping = true;
-          if (root) await root.abort(context, { background: true });
-        } else if (!stopping) await pollCommands?.();
-      })().catch(() => interrupt()).finally(() => { polling = false; });
-    }, 1000);
+      if (interrupted) return;
+      void store.rpc<boolean>("agent_renew_lease", store.lease(run)).then((renewed) => {
+        if (!renewed) return;
+        stoppedByLease();
+      }).catch(() => interrupt());
+    }, 10_000);
     heartbeat.unref();
+    controlInFlight = (async () => {
+      while (!interrupted && !controlAbort.signal.aborted) {
+        const signal = await waitForAgentSignal(run.id, 10_000, controlAbort.signal);
+        if (interrupted || controlAbort.signal.aborted) break;
+        if (signal?.t === 'run' && signal.cancel) { interrupt(); break; }
+        try {
+          if (await store.rpc<boolean>("agent_renew_lease", store.lease(run))) stoppedByLease();
+          if (!stopping) await pollCommands?.();
+        } catch { interrupt(); break; }
+      }
+    })().catch(() => interrupt());
     const config = injected?.config ?? (run.input.customProvider ? {
       id: run.input.model, name: run.input.model, vendor: "other" as const,
       modelId: run.input.customProvider.modelId, apiUrl: run.input.customProvider.apiUrl,
@@ -591,6 +605,7 @@ export async function executeAgentRun(
         if (waited === 'input') break;
       }
     }
+    controlAbort.abort();
     clearInterval(heartbeat);
     await controlInFlight;
     if (interrupted) return;
@@ -641,6 +656,7 @@ export async function executeAgentRun(
     await finish(stopping ? "cancelled" : "failed");
     console.warn("[agent-run]", { runId: run.id, phase: "execution", code: "FAILED" });
   } finally {
+    controlAbort.abort();
     if (heartbeat) clearInterval(heartbeat);
     if (backgroundRefresh) clearInterval(backgroundRefresh);
     await watch?.stop();

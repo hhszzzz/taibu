@@ -3,7 +3,7 @@
  *
  * 支持 PKCE (S256)、授权码流程、token 交换、userinfo 获取
  */
-import { createHmac, randomBytes, createHash } from 'crypto';
+import { randomBytes, createHash } from 'crypto';
 
 const AUTHORIZE_URL = 'https://connect.linux.do/oauth2/authorize';
 const TOKEN_URLS = [
@@ -25,10 +25,6 @@ function getClientSecret(): string {
   const v = process.env.LINUXDO_CLIENT_SECRET;
   if (!v) throw new Error('LINUXDO_CLIENT_SECRET is not set');
   return v;
-}
-
-function getStablePasswordSeed(): string {
-  return process.env.SUPABASE_SECRET_KEY || getClientSecret();
 }
 
 // --- PKCE helpers ---
@@ -234,12 +230,4 @@ export async function fetchUserInfo(accessToken: string): Promise<LinuxDoUser> {
   }
 
   throw new Error(`UserInfo request failed: ${errors.join(' | ')}`);
-}
-
-// --- Deterministic password ---
-
-export function generateDeterministicPassword(sub: string): string {
-  return createHmac('sha256', getStablePasswordSeed())
-    .update(`linuxdo:${sub}`)
-    .digest('hex');
 }

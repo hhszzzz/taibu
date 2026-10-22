@@ -15,9 +15,9 @@ const repoRoot = path.resolve(import.meta.dirname, '..', '..');
 const image = 'pgvector/pgvector:0.8.6-pg16';
 const runLabel = 'io.taibu.db-context.run';
 const ids = {
-  owner: '00000000-0000-4000-8000-000000000001',
-  other: '00000000-0000-4000-8000-000000000002',
-  admin: '00000000-0000-4000-8000-000000000003',
+  owner: '00000000-0000-4000-8000-000000000002',
+  other: '00000000-0000-4000-8000-000000000003',
+  admin: '00000000-0000-4000-8000-000000000001',
 };
 const quote = (value) => `'${String(value).replaceAll("'", "''")}'`;
 
@@ -115,7 +115,6 @@ RESET ROLE;`);
     assert.ok(port > 0, 'Published PostgreSQL port was not resolved');
 
     process.env.DATABASE_URL = `postgres://taibu_app:${encodeURIComponent(appPassword)}@127.0.0.1:${port}/taibu_contracts`;
-    process.env.SYSTEM_USER_ID = ids.admin;
     process.env.DB_POOL_MAX = '2';
     process.env.NODE_ENV = 'test';
 

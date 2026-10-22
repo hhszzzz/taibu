@@ -12,9 +12,15 @@ export type UserProfile = {
   ai_chat_count: number | null;
 };
 
+export type LinuxDoBinding = {
+  sub: string | null;
+  trustLevel: number | null;
+};
+
 export type UserProfileBundle = {
   profile: UserProfile | null;
   settings: UserSettingsSnapshot | null;
+  linuxdo: LinuxDoBinding;
 };
 
 export type ProfileUpdateInput = {

@@ -231,24 +231,8 @@ for (const file of [
 }
 
 mustMatch(
-  'src/app/api/auth/route.ts',
-  /from ['"]@\/lib\/api-utils['"]/u,
-  'auth route should rely on api-utils clients instead of creating its own Supabase client',
-);
-mustMatch(
-  'src/app/api/auth/route.ts',
-  /createAnonClient/u,
-  'auth route should use createAnonClient from api-utils',
-);
-mustNotMatch(
-  'src/app/api/auth/route.ts',
-  /createClient\(/u,
-  'auth route should not call createClient directly',
-);
-
-mustMatch(
   'src/lib/api-utils.ts',
-  /const authResult = dependencies\.userContext \?\? await requireUserContext\(request\);/u,
+  /const resolvedAuthResult = dependencies\.userContext \?\? await requireUserContext\(request\);/u,
   'requireAdminUser should be based on requireUserContext',
 );
 mustNotMatch(
@@ -596,16 +580,6 @@ mustNotMatch(
   'src/app/page.tsx',
   /ACCESS_COOKIE|REFRESH_COOKIE|resolveSessionFromTokens|createAnonClient|createRequestSupabaseClient|cookies\(\)/u,
   'home page should not resolve auth cookies or server sessions directly',
-);
-mustMatch(
-  'src/lib/supabase-server.ts',
-  /NODE_ENV[\s\S]*production/u,
-  'supabase-server should branch on production environment for admin session policy',
-);
-mustMatch(
-  'src/lib/supabase-server.ts',
-  /Missing SUPABASE_SYSTEM_ADMIN_EMAIL or SUPABASE_SYSTEM_ADMIN_PASSWORD/u,
-  'supabase-server should keep a clear missing-credentials error',
 );
 for (const file of [
   'src/app/api/liuyao/route.ts',
@@ -1104,9 +1078,36 @@ mustNotMatchInTree(
 mustNotMatchInTree(
   'src',
   /from\s*['"]@\/lib\/db\/pool\.server['"]/u,
-  'pool internals are private to src/lib/db',
-  (file) => /\.(ts|tsx)$/u.test(file) && !file.startsWith('src/lib/db/') && !file.startsWith('src/tests/'),
+  'pool internals are private to src/lib/db (Better Auth owns its own pool)',
+  (file) => /\.(ts|tsx)$/u.test(file)
+    && !file.startsWith('src/lib/db/')
+    && !file.startsWith('src/lib/identity/')
+    && !file.startsWith('src/tests/'),
 );
+
+// P5 身份边界：Supabase SDK 与旧部署变量不得回流；identity 模块仅限服务端。
+mustNotMatchInTree(
+  'src',
+  /@supabase\/(?:supabase-js|ssr)/u,
+  'Supabase SDK imports must not return after the Better Auth migration',
+  (file) => /\.(ts|tsx)$/u.test(file),
+);
+mustNotMatchInTree(
+  'src',
+  /process\.env\.(?:SUPABASE_[A-Z_]+|SELF_HOSTED)\b/u,
+  'retired Supabase/self-host environment variables must not be read',
+  (file) => /\.(ts|tsx|mjs)$/u.test(file) && !file.startsWith('src/tests/'),
+);
+mustNotMatchInTree(
+  'src',
+  /from\s*['"]@\/lib\/identity\//u,
+  'identity modules are server-only',
+  (file) => /\.(ts|tsx)$/u.test(file) && /^\s*['"]use client['"]/u.test(read(file) ?? ''),
+);
+for (const file of walk('src/lib/identity')) {
+  if (!file.endsWith('.server.ts')) continue;
+  mustMatch(file, /^\s*import\s+['"]server-only['"];?/u, 'identity server modules must import server-only first');
+}
 
 if (failures.length > 0) {
   console.error('Architecture guard failures:');

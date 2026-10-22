@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { CommunityPost, PostCategory, POST_CATEGORIES, getPosts } from '@/lib/community';
-import { supabase } from '@/lib/auth';
+import { getUserSnapshot } from '@/lib/auth';
 
 // =====================================================
 // 帖子卡片组件
@@ -136,7 +136,7 @@ export default function CommunityPage() {
     // 检查登录状态
     useEffect(() => {
         const checkAuth = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
+            const { data: { user } } = await getUserSnapshot();
             setUser(user);
         };
         checkAuth();

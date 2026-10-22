@@ -576,17 +576,29 @@ export async function build(outputDirectory) {
         `;
         if (args.path === '@/lib/auth') contents = `
           const listeners = new Set();
-          const session = () => window.fixtureAuth.cookieUser ? { user: { id: window.fixtureAuth.cookieUser, email: window.fixtureAuth.cookieUser + '@fixture.invalid' } } : null;
+          const user = () => window.fixtureAuth.cookieUser ? {
+            id: window.fixtureAuth.cookieUser,
+            email: window.fixtureAuth.cookieUser + '@fixture.invalid',
+            emailVerified: true,
+            name: window.fixtureAuth.cookieUser,
+            image: null,
+          } : null;
+          const session = () => { const current = user(); return current ? { id: 'fixture-session', userId: current.id, expiresAt: new Date(Date.now() + 3600_000).toISOString(), user: current } : null; };
+          const payload = () => ({ data: { session: session(), user: user() }, error: null });
           window.fixtureAuth = { cookieUser: 'alice', revalidations: 0, change(id) { this.cookieUser = id; for (const cb of listeners) cb('SIGNED_IN', session()); } };
           export const authSessionCacheConstants = { SESSION_REVALIDATE_EVENT_COOLDOWN_MS: 0 };
           // Sign-in flows are outside this fixture; the sidebar only mounts their components.
           const outsideFixture = async () => { throw new Error('Auth flows are outside the browser fixture'); };
           export const signInWithEmailProtected = outsideFixture, sendOTP = outsideFixture, verifyOTP = outsideFixture, recordLoginAttempt = outsideFixture, resetPasswordWithOTP = outsideFixture, signOut = outsideFixture;
-          export const supabase = { auth: {
-            getSession: async () => ({ data: { session: session() }, error: null }),
-            revalidateSession: async () => { window.fixtureAuth.revalidations++; return { data: { session: session() }, error: null }; },
-            onAuthStateChange: cb => { listeners.add(cb); return { data: { subscription: { unsubscribe: () => listeners.delete(cb) } } }; },
-          } };
+          export const updateNickname = outsideFixture, updateAvatarUrl = outsideFixture, ensureUserRecord = outsideFixture;
+          export const getSessionSnapshot = async () => payload();
+          export const getUserSnapshot = async () => ({ data: { user: user() }, error: null });
+          export const getSession = async () => session();
+          export const getCurrentUser = async () => user();
+          export const invalidateBrowserSessionCache = () => {};
+          export const revalidateBrowserSession = async () => { window.fixtureAuth.revalidations++; return payload(); };
+          export const onAuthStateChange = cb => { listeners.add(cb); return { data: { subscription: { unsubscribe: () => listeners.delete(cb) } } }; };
+          export const authClient = {};
         `;
         if (args.path.endsWith('/ChatTaskToastBridge')) contents = 'export function ChatTaskToastBridge() { return null; }';
         if (args.path.endsWith('/AnnouncementPopupHost')) contents = 'export function AnnouncementPopupHost({ children }) { return children; } export function useAnnouncementCenterSafe() { return { openAnnouncementCenter() { window.fixture.announcementCenter = (window.fixture.announcementCenter ?? 0) + 1; }, closeAnnouncementCenter() {}, announcementPromptCount: 0 }; }';

@@ -1,0 +1,25 @@
+# Local development overlay: source builds, loopback ports, Mailpit.
+services:
+  db:
+    ports: ['127.0.0.1:${DB_HOST_PORT:-54329}:5432']
+  db-setup:
+    build: &build
+      context: ${TAIBU_SOURCE_DIR:?}
+      dockerfile: Dockerfile
+      args: { GIT_SHA: local }
+  migrate:
+    build: *build
+  web:
+    build: *build
+    ports: ['127.0.0.1:${APP_PORT:-3080}:3000']
+  worker:
+    build: *build
+  mailpit:
+    image: axllent/mailpit:v1.27.8
+    restart: unless-stopped
+    networks: [backend]
+    ports: ['127.0.0.1:${MAILPIT_PORT:-8025}:8025']
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: "3" }
+    labels: { io.taibu.local.instance: "${LOCAL_INSTANCE_ID:?}" }

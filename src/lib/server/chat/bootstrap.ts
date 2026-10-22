@@ -43,7 +43,7 @@ async function loadMembershipRowWithRecovery(
     return { data: membershipRow, error: null };
   }
 
-  const ensured = await ensureUserRecordRow(db, { id: userId, user_metadata: {} });
+  const ensured = await ensureUserRecordRow(db, { id: userId });
   if (!ensured.ok) {
     return {
       data: null,

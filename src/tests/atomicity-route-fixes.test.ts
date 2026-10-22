@@ -272,7 +272,8 @@ test('knowledge-base DELETE should return 404 when no user-owned row is deleted'
   const featureGateModule = require('../lib/feature-gate-utils') as any;
   const routePath = require.resolve('../app/api/knowledge-base/[id]/route');
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
-  const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
+  const contextModule = require('../lib/db/context.server') as any;
+  const originalSystemDb = contextModule.systemDb;
   const originalEnsureFeatureRouteEnabled = featureGateModule.ensureFeatureRouteEnabled;
 
   const scoped = createMockScopedDb({
@@ -289,7 +290,7 @@ test('knowledge-base DELETE should return 404 when no user-owned row is deleted'
   });
   featureGateModule.ensureFeatureRouteEnabled = async () => null;
   apiUtilsModule.requireUserContext = async () => ({ user: { id: 'user-1' }, db: scoped });
-  apiUtilsModule.getSystemAdminClient = () => {
+  contextModule.systemDb = () => {
     throw new Error('knowledge-base DELETE must use the caller database context');
   };
   delete require.cache[routePath];
@@ -297,7 +298,7 @@ test('knowledge-base DELETE should return 404 when no user-owned row is deleted'
   t.after(() => {
     featureGateModule.ensureFeatureRouteEnabled = originalEnsureFeatureRouteEnabled;
     apiUtilsModule.requireUserContext = originalRequireUserContext;
-    apiUtilsModule.getSystemAdminClient = originalGetSystemAdminClient;
+    contextModule.systemDb = originalSystemDb;
     delete require.cache[routePath];
   });
 
@@ -318,21 +319,22 @@ test('knowledge-base id routes fail closed instead of falling back to the system
   const featureGateModule = require('../lib/feature-gate-utils') as any;
   const routePath = require.resolve('../app/api/knowledge-base/[id]/route');
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
-  const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
+  const contextModule = require('../lib/db/context.server') as any;
+  const originalSystemDb = contextModule.systemDb;
   const originalEnsureFeatureRouteEnabled = featureGateModule.ensureFeatureRouteEnabled;
 
   featureGateModule.ensureFeatureRouteEnabled = async () => null;
   // 用户态缺少可用的数据库客户端（例如 token 交换失败），路由必须直接失败。
   apiUtilsModule.requireUserContext = async () => ({ user: { id: 'user-1' }, db: undefined });
-  apiUtilsModule.getSystemAdminClient = () => {
-    throw new Error('a missing caller context must never reach the system-admin client');
+  contextModule.systemDb = () => {
+    throw new Error('a missing caller context must never reach the system database');
   };
   delete require.cache[routePath];
 
   t.after(() => {
     featureGateModule.ensureFeatureRouteEnabled = originalEnsureFeatureRouteEnabled;
     apiUtilsModule.requireUserContext = originalRequireUserContext;
-    apiUtilsModule.getSystemAdminClient = originalGetSystemAdminClient;
+    contextModule.systemDb = originalSystemDb;
     delete require.cache[routePath];
   });
 
@@ -803,28 +805,12 @@ test('getCheckinStatus should keep the full reward range while the user is still
 });
 
 
-test('checkRateLimit should fail open when transactional rpc errors', async (t) => {
-  const apiUtilsModule = require('../lib/api-utils') as any;
-  const rateLimitPath = require.resolve('../lib/rate-limit');
-  const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
+test('checkRateLimit should fail open when Redis is unavailable', async (t) => {
+  const redis = require('../lib/rate-limit-redis') as typeof import('../lib/rate-limit-redis');
+  t.mock.method(redis, 'consumeRedisRateLimit', async () => { throw new Error('redis down'); });
+  t.mock.method(console, 'error', () => {});
 
-  apiUtilsModule.getSystemAdminClient = () => ({
-    rpc() {
-      return Promise.resolve({
-        data: null,
-        error: { message: 'rpc failed' },
-      });
-    },
-  });
-
-  delete require.cache[rateLimitPath];
-  const { checkRateLimit } = require('../lib/rate-limit') as typeof import('../lib/rate-limit');
-
-  t.after(() => {
-    apiUtilsModule.getSystemAdminClient = originalGetSystemAdminClient;
-    delete require.cache[rateLimitPath];
-  });
-
+  const { checkRateLimit } = await import('../lib/rate-limit');
   const result = await checkRateLimit('127.0.0.1', '/api/chat/direct/prepare', {
     maxRequests: 10,
     windowMs: 60_000,
@@ -837,14 +823,14 @@ test('checkRateLimit should fail open when transactional rpc errors', async (t) 
 test('mbti save should persist through shared save helper and return reading id', async (t) => {
   mockAIRateLimit(t, async () => assert.fail('save must not consume a rate slot'));
   const apiUtilsModule = require('../lib/api-utils') as any;
-  const supabaseServerModule = require('../lib/supabase-server') as any;
+  const contextModule = require('../lib/db/context.server') as any;
   const routePath = require.resolve('../app/api/mbti/route');
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
-  const originalGetSystemAdminClient = supabaseServerModule.getSystemAdminClient;
+  const originalSystemDb = contextModule.systemDb;
 
   let insertedPayload: Record<string, unknown> | null = null;
 
-  supabaseServerModule.getSystemAdminClient = () => assert.fail('save must use the caller DB client');
+  contextModule.systemDb = () => assert.fail('save must use the caller DB client');
   apiUtilsModule.requireUserContext = async () => createMockAuthContext({}, 'user-1', createMockScopedDb({
     tx: async (work) => work({
       insertInto(table: string) {
@@ -866,7 +852,7 @@ test('mbti save should persist through shared save helper and return reading id'
 
   t.after(() => {
     apiUtilsModule.requireUserContext = originalRequireUserContext;
-    supabaseServerModule.getSystemAdminClient = originalGetSystemAdminClient;
+    contextModule.systemDb = originalSystemDb;
     delete require.cache[routePath];
   });
 
@@ -906,15 +892,15 @@ test('mbti save should persist through shared save helper and return reading id'
 test('daliuren save should persist through shared save helper and return divination id', async (t) => {
   mockAIRateLimit(t, async () => assert.fail('save must not consume a rate slot'));
   const apiUtilsModule = require('../lib/api-utils') as any;
-  const supabaseServerModule = require('../lib/supabase-server') as any;
+  const contextModule = require('../lib/db/context.server') as any;
   const routePath = require.resolve('../app/api/daliuren/route');
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
-  const originalGetSystemAdminClient = supabaseServerModule.getSystemAdminClient;
+  const originalSystemDb = contextModule.systemDb;
   const { calculateDaliuren } = await import('taibu-core');
 
   const insertedPayloads: Record<string, unknown>[] = [];
 
-  supabaseServerModule.getSystemAdminClient = () => assert.fail('save must use the caller DB client');
+  contextModule.systemDb = () => assert.fail('save must use the caller DB client');
   apiUtilsModule.requireUserContext = async () => createMockAuthContext({}, 'user-1', createMockScopedDb({
     tx: async (work) => work({
       insertInto(table: string) {
@@ -936,7 +922,7 @@ test('daliuren save should persist through shared save helper and return divinat
 
   t.after(() => {
     apiUtilsModule.requireUserContext = originalRequireUserContext;
-    supabaseServerModule.getSystemAdminClient = originalGetSystemAdminClient;
+    contextModule.systemDb = originalSystemDb;
     delete require.cache[routePath];
   });
 

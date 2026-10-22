@@ -29,8 +29,9 @@ async function main() {
   const store = new AgentStore(systemDb());
   if (process.argv.includes("--health")) {
     const [databaseReady, redisReady] = await Promise.all([store.workerReady(), pingRedis(1500)]);
-    process.exitCode = databaseReady && redisReady ? 0 : 1;
-    return;
+    // Database and Redis clients keep the event loop alive; a probe must exit
+    // deterministically instead of waiting for them to close.
+    process.exit(databaseReady && redisReady ? 0 : 1);
   }
   await configureCodemode();
   await startJobWorkers();

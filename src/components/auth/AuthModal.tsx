@@ -9,23 +9,23 @@
 import { useReducer, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { X, Lock, User, ArrowLeft, RefreshCw, Eye, EyeOff } from 'lucide-react';
+import { X, Lock, ArrowLeft, RefreshCw, Eye, EyeOff } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import {
     signInWithEmailProtected,
+    signUpWithEmail,
     sendOTP,
     verifyOTP,
     recordLoginAttempt,
     resetPasswordWithOTP,
 } from '@/lib/auth';
-import { supabase } from '@/lib/auth';
 import { PasswordStrengthIndicator, validatePasswordStrength } from '@/components/auth/PasswordStrengthIndicator';
 import { VerificationCodeInput } from '@/components/auth/VerificationCodeInput';
 import { EmailField, LoginForm, resolveAuthEmail } from '@/components/auth/LoginForm';
 import { RegisterForm } from '@/components/auth/RegisterForm';
 import { OAuthButtons } from '@/components/auth/OAuthButtons';
 
-type AuthMode = 'login' | 'register' | 'forgot' | 'verify-register' | 'verify-login' | 'set-password' | 'verify-reset' | 'reset-password';
+type AuthMode = 'login' | 'register' | 'forgot' | 'verify-login' | 'verify-reset' | 'reset-password';
 type LoginMethod = 'password' | 'otp';
 
 interface AuthModalProps {
@@ -170,8 +170,8 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
         router.refresh();
     };
 
-    // 发送验证码
-    const handleSendOTP = async (type: 'signup' | 'magiclink') => {
+    // 发送登录验证码
+    const handleSendOTP = async () => {
         if (!emailPrefix) {
             setField('error', '请输入邮箱地址');
             return;
@@ -181,16 +181,11 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
         setField('loading', true);
 
         try {
-            const result = await sendOTP(email, type);
+            const result = await sendOTP(email, 'magiclink');
             if (result.success) {
                 setField('countdown', 60);
-                if (type === 'signup') {
-                    setField('mode', 'verify-register');
-                    setField('success', '验证码已发送到您的邮箱');
-                } else {
-                    setField('mode', 'verify-login');
-                    setField('success', '登录验证码已发送到您的邮箱');
-                }
+                setField('mode', 'verify-login');
+                setField('success', '登录验证码已发送到您的邮箱');
             } else {
                 setField('error', result.error?.message || '发送失败');
             }
@@ -223,7 +218,11 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
         setField('sendingCode', true);
 
         try {
-            const result = await sendOTP(email, 'signup');
+            let result = await signUpWithEmail(email, password, nickname);
+            if (!result.success && result.error?.code === 'USER_ALREADY_EXISTS') {
+                // 未验证的旧账号：重发验证码，验证后即可登录。
+                result = await sendOTP(email, 'signup');
+            }
             if (result.success) {
                 setField('countdown', 60);
                 setField('success', '验证码已发送到您的邮箱');
@@ -260,8 +259,7 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
             return;
         }
 
-        const type = mode === 'verify-register' ? 'signup' : 'magiclink';
-        await handleSendOTP(type);
+        await handleSendOTP();
     };
 
     // 验证验证码
@@ -284,19 +282,11 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
         setField('error', '');
         setField('loading', true);
         verifyingRef.current = true;
-        const currentMode = mode;
 
         try {
-            const verifyType = currentMode === 'verify-register' ? 'signup' : 'magiclink';
-            const result = await verifyOTP(email, codeToVerify, verifyType);
+            const result = await verifyOTP(email, codeToVerify, 'magiclink');
             if (result.success) {
-                if (currentMode === 'verify-register') {
-                    setField('mode', 'set-password');
-                    setField('success', '验证成功！请设置您的密码');
-                    setField('verificationCode', '');
-                } else {
-                    completeAuth();
-                }
+                completeAuth();
             } else {
                 setField('error', result.error?.message || '验证失败');
             }
@@ -315,11 +305,14 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
             const result = await signInWithEmailProtected(email, password);
             if (result.success) {
                 completeAuth();
+            } else if (result.error?.code === 'EMAIL_NOT_VERIFIED') {
+                // 未验证邮箱：先发登录验证码，验证后即完成登录。
+                await handleSendOTP();
             } else {
                 setField('error', result.error?.message || '登录失败');
             }
         } else {
-            await handleSendOTP('magiclink');
+            await handleSendOTP();
         }
     };
 
@@ -343,42 +336,14 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
             return;
         }
 
-        const verifyResult = await verifyOTP(email, verificationCode);
+        // 账号已在“发送验证码”时创建；此处只消费验证码并自动登录。
+        const verifyResult = await verifyOTP(email, verificationCode, 'signup');
         if (verifyResult.success) {
-            const { error: updateError } = await supabase.auth.updateUser({
-                password: password,
-                data: { nickname: nickname || '命理爱好者' },
-            });
-
-            if (updateError) {
-                setField('error', '设置密码失败：' + updateError.message);
-            } else {
-                await recordLoginAttempt(email, true);
-                setField('success', '注册成功！');
-                completeAuth();
-            }
+            await recordLoginAttempt(email, true);
+            setField('success', '注册成功！');
+            completeAuth();
         } else {
             setField('error', verifyResult.error?.message || '验证码验证失败');
-        }
-    };
-
-    const handleSetPassword = async () => {
-        const { isValid } = validatePasswordStrength(password);
-        if (!isValid) {
-            setField('error', '密码不符合强度要求');
-            setField('loading', false);
-            return;
-        }
-
-        const { error: updateError } = await supabase.auth.updateUser({
-            password: password,
-            data: { nickname: nickname || '命理爱好者' },
-        });
-
-        if (updateError) {
-            setField('error', '设置密码失败：' + updateError.message);
-        } else {
-            completeAuth();
         }
     };
 
@@ -436,10 +401,8 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
             switch (mode) {
                 case 'login': await handleLogin(); break;
                 case 'register': await handleRegister(); break;
-                case 'set-password': await handleSetPassword(); break;
                 case 'forgot': await handleForgotPassword(); break;
                 case 'reset-password': await handleResetPassword(); break;
-                case 'verify-register':
                 case 'verify-login':
                 case 'verify-reset':
                     await handleVerifyOTP(); break;
@@ -457,10 +420,8 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
             case 'login': return '登录';
             case 'register': return '注册';
             case 'forgot': return '重置密码';
-            case 'verify-register': return '验证邮箱';
             case 'verify-login': return '验证登录';
             case 'verify-reset': return '验证身份';
-            case 'set-password': return '设置密码';
             case 'reset-password': return '设置新密码';
         }
     };
@@ -471,22 +432,18 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
             case 'login': return loginMethod === 'password' ? '登录' : '发送验证码';
             case 'register': return '注册';
             case 'forgot': return '发送验证码';
-            case 'verify-register':
             case 'verify-login':
             case 'verify-reset': return '验证';
-            case 'set-password': return '完成注册';
             case 'reset-password': return '重置密码';
         }
     };
 
     // 是否显示返回按钮
-    const showBackButton = mode === 'forgot' || mode === 'verify-register' || mode === 'verify-login' || mode === 'set-password' || mode === 'verify-reset' || mode === 'reset-password';
+    const showBackButton = mode === 'forgot' || mode === 'verify-login' || mode === 'verify-reset' || mode === 'reset-password';
 
     // 返回上一步
     const handleBack = () => {
-        if (mode === 'verify-register' || mode === 'set-password') {
-            switchMode('register');
-        } else if (mode === 'verify-login') {
+        if (mode === 'verify-login') {
             switchMode('login');
         } else if (mode === 'verify-reset' || mode === 'reset-password' || mode === 'forgot') {
             switchMode('login');
@@ -559,7 +516,7 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
                     )}
 
                     {/* 验证码输入（验证模式） */}
-                    {(mode === 'verify-register' || mode === 'verify-login' || mode === 'verify-reset') && (
+                    {(mode === 'verify-login' || mode === 'verify-reset') && (
                         <div className="space-y-4">
                             <p className="text-sm text-foreground-secondary text-center">
                                 验证码已发送至 <span className="font-medium text-foreground">{email}</span>
@@ -589,48 +546,6 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
                     )}
 
                     {/* 设置密码模式 */}
-                    {mode === 'set-password' && (
-                        <>
-                            {/* 昵称 */}
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium text-foreground-secondary">
-                                    昵称
-                                </label>
-                                <div className="relative">
-                                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-foreground-secondary" />
-                                    <input
-                                        type="text"
-                                        value={nickname}
-                                        onChange={(e) => setField('nickname', e.target.value)}
-                                        placeholder="输入您的昵称"
-                                        className="w-full pl-10 pr-4 py-3 rounded-xl bg-background-secondary border border-border focus:border-accent focus:outline-none transition-colors"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* 密码 */}
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium text-foreground-secondary">
-                                    设置密码
-                                </label>
-                                <div className="relative">
-                                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-foreground-secondary" />
-                                    <input
-                                        type="password"
-                                        value={password}
-                                        onChange={(e) => setField('password', e.target.value)}
-                                        placeholder="设置登录密码"
-                                        required
-                                        minLength={8}
-                                        className="w-full pl-10 pr-4 py-3 rounded-xl bg-background-secondary border border-border focus:border-accent focus:outline-none transition-colors"
-                                    />
-                                </div>
-                                <PasswordStrengthIndicator password={password} />
-                            </div>
-                        </>
-                    )}
-
-                    {/* 重置密码模式 */}
                     {mode === 'reset-password' && (
                         <>
                             <div className="space-y-2">

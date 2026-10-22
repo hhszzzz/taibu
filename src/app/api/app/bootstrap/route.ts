@@ -1,6 +1,5 @@
 import { NextRequest } from 'next/server';
-import type { User } from '@supabase/supabase-js';
-import { getAuthContext, jsonOk } from '@/lib/api-utils';
+import { getAuthContext, jsonOk, type AppUser } from '@/lib/api-utils';
 import type { ScopedDb } from '@/lib/db/context.server';
 import { readFeatureTogglesState } from '@/lib/app-settings';
 import { getNotificationRetentionCutoffIso } from '@/lib/notification-server';
@@ -42,7 +41,7 @@ async function loadUserRow(db: ScopedDb, userId: string): Promise<UserRow | unde
 
 async function loadViewerProfile(
   db: ScopedDb,
-  user: Pick<User, 'id' | 'user_metadata'>,
+  user: Pick<AppUser, 'id' | 'name' | 'image'>,
 ): Promise<UserRow | undefined> {
   const row = await loadUserRow(db, user.id);
   if (row) {

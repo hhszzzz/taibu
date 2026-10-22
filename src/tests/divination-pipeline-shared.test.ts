@@ -376,9 +376,7 @@ test('divination fails closed when the caller scoped database is unusable', asyn
         const { apiUtils, credits, aiModule, aiAnalysisModule, loadPipeline } = setupPipelineMocks(t);
         t.mock.method(apiUtils, 'requireUserContext', async () => authContext);
         const unexpected = t.mock.fn(() => assert.fail('invalid identity reached downstream work'));
-        for (const name of ['getSystemAdminClient', 'getAuthAdminClient']) {
-          t.mock.method(apiUtils, name, unexpected);
-        }
+        t.mock.method(require('../lib/db/context.server'), 'systemDb', unexpected);
         t.mock.method(credits, 'getUserAuthInfo', async () => {
           throw new UserStateResolutionError('用户数据库上下文不可用，请稍后重试', 'USER_QUERY_FAILED');
         });
@@ -448,7 +446,7 @@ test('divination preserves the caller scoped database identity', async (t) => {
         const context = { user: callerUser, db: callerScoped, accessToken: 'test-token' };
         void minimalContext;
         t.mock.method(apiUtils, 'requireUserContext', async () => context);
-        const admin = t.mock.method(apiUtils, 'getSystemAdminClient', () => assert.fail('no implicit administrator'));
+        const admin = t.mock.method(require('../lib/db/context.server'), 'systemDb', () => assert.fail('no implicit administrator'));
         const typedCredits = credits as unknown as typeof import('../lib/user/credits');
         const authInfo = t.mock.method(typedCredits, 'getUserAuthInfo');
         const debit = t.mock.method(typedCredits, 'attemptCreditUse');

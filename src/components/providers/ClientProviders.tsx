@@ -11,7 +11,7 @@ import { SessionContext, type SessionState } from '@/lib/hooks/session-context';
 import { ToastProvider, useToast } from '@/components/ui/Toast';
 import { ChatTaskToastBridge } from '@/components/providers/ChatTaskToastBridge';
 import { AnnouncementPopupHost } from '@/components/providers/AnnouncementPopupHost';
-import { authSessionCacheConstants, supabase } from '@/lib/auth';
+import { authSessionCacheConstants, getSessionSnapshot, onAuthStateChange, revalidateBrowserSession } from '@/lib/auth';
 import { getLinuxDoAuthErrorMessage } from '@/lib/auth-feedback';
 import { createAppQueryClient, registerBrowserQueryClient } from '@/lib/query/client';
 import { invalidateQueriesForPath } from '@/lib/query/invalidation';
@@ -80,8 +80,8 @@ export function ClientProviders({ children }: ClientProvidersProps) {
 
         const syncSessionFromServer = async (force = false) => {
             const result = force
-                ? await supabase.auth.revalidateSession()
-                : await supabase.auth.getSession();
+                ? await revalidateBrowserSession()
+                : await getSessionSnapshot();
             if (!isMounted) return;
             setState((current) => {
                 const session = result.data.session;
@@ -102,7 +102,7 @@ export function ClientProviders({ children }: ClientProvidersProps) {
 
         void syncSessionFromServer();
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        const { data: { subscription } } = onAuthStateChange((event, session) => {
             if (!isMounted) return;
             setState({
                 session,

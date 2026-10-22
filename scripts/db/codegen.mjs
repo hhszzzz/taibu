@@ -59,13 +59,14 @@ async function queryViaUrl(url) {
   const client = new Client({ connectionString: url });
   await client.connect();
   try {
-    const [columns, enums, functions] = await Promise.all([
-      client.query(COLUMNS_SQL), client.query(ENUMS_SQL), client.query(FUNCTIONS_SQL),
-    ]);
+    // pg does not support concurrent queries on one client; run them in order.
+    const columns = await client.query(COLUMNS_SQL);
+    const enums = await client.query(ENUMS_SQL);
+    const functions = await client.query(FUNCTIONS_SQL);
     return {
-      columns: JSON.parse(columns.rows[0][0]),
-      enums: JSON.parse(enums.rows[0][0]),
-      functions: JSON.parse(functions.rows[0][0]),
+      columns: JSON.parse(columns.rows[0].coalesce),
+      enums: JSON.parse(enums.rows[0].coalesce),
+      functions: JSON.parse(functions.rows[0].coalesce),
     };
   } finally {
     await client.end();

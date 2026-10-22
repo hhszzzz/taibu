@@ -13,7 +13,7 @@ import { useToast } from '@/components/ui/Toast';
 import { divine, yaosTpCode, findHexagram, calculateChangedHexagram, type LiuQin } from '@/lib/divination/liuyao';
 import { HistoryDrawer } from '@/components/layout/HistoryDrawer';
 import { YongShenTargetPicker } from '@/components/liuyao/YongShenTargetPicker';
-import { supabase } from '@/lib/auth';
+import { getSessionSnapshot } from '@/lib/auth';
 import { writeSessionJSON } from '@/lib/cache/session-storage';
 import { saveDivinationAction } from '@/lib/divination/save-client';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -75,7 +75,7 @@ export default function LiuyaoPage() {
             // 保存起卦记录到数据库
             let divinationId: string | null = null;
             try {
-                const { data: { session } } = await supabase.auth.getSession();
+                const { data: { session } } = await getSessionSnapshot();
                 if (session?.user) {
                     const saveResult = await saveDivinationAction({
                         endpoint: '/api/liuyao',

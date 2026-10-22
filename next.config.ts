@@ -1,14 +1,12 @@
 import type { NextConfig } from "next";
-import { isSelfHosted, parseConfiguredOrigin } from './src/lib/runtime-env';
 
-// Next serializes image configuration at build time: rebuild when this origin changes.
-// Do not enable dangerouslyAllowLocalIP; local avatars use the controlled storage URL.
-const publicStorageOrigin = isSelfHosted()
-  ? parseConfiguredOrigin(process.env.SUPABASE_PUBLIC_URL, 'SUPABASE_PUBLIC_URL')
-  : new URL('https://gdaaipkdmwxkvgesknsp.supabase.co');
-
+// Local avatars are same-origin (`/api/files/avatars/...`), so only external
+// avatar providers need remote patterns.
 const nextConfig: NextConfig = {
   output: 'standalone',
+  // Forces a new client build id per deploy so stale chunks 404 instead of
+  // mixing builds behind a rolling restart.
+  deploymentId: process.env.GIT_SHA,
   // Sharp loads platform binaries and libvips at runtime; pnpm keeps these
   // optional packages outside the sharp package's directory.
   outputFileTracingIncludes: {
@@ -18,12 +16,6 @@ const nextConfig: NextConfig = {
   },
   images: {
     remotePatterns: [
-      {
-        protocol: publicStorageOrigin.protocol.slice(0, -1) as 'http' | 'https',
-        hostname: publicStorageOrigin.hostname,
-        port: publicStorageOrigin.port,
-        pathname: '/storage/v1/object/public/**',
-      },
       {
         protocol: 'https',
         hostname: 'connect.linux.do',

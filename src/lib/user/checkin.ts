@@ -9,11 +9,11 @@
  * - 不再维护连续签到、经验值和等级
  */
 
-import type { User } from '@supabase/supabase-js';
+import type { UserRecordSeedInput } from '@/lib/user/profile-record';
 import { systemDb, type ScopedDb } from '@/lib/db/context.server';
 import { getUserCreditInfo, getMembershipCreditLimit } from '@/lib/user/credits';
 
-type CheckinUserSeed = Pick<User, 'id' | 'user_metadata'>;
+type CheckinUserSeed = UserRecordSeedInput;
 type CheckinOptions = { db?: ScopedDb; user?: CheckinUserSeed };
 
 export interface CheckinRecord {

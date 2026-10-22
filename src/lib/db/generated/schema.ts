@@ -316,6 +316,7 @@ export interface ConversationShares {
 }
 
 export interface Conversations {
+  next_task_config: ColumnType<Json | null, Json | null | undefined, Json | null | undefined>;
   id: Generated<string>;
   user_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   personality: Generated<string | null>;
@@ -325,7 +326,6 @@ export interface Conversations {
   updated_at: Generated<string | null>;
   source_type: Generated<string | null>;
   source_data: ColumnType<Json | null, Json | null | undefined, Json | null | undefined>;
-  next_task_config: ColumnType<Json | null, Json | null | undefined, Json | null | undefined>;
 }
 
 export interface ConversationsWithArchiveStatus {
@@ -454,14 +454,6 @@ export interface LiuyaoDivinations {
   yongshen_targets: ColumnType<unknown | null, unknown | null | undefined, unknown | null | undefined>;
 }
 
-export interface LoginAttempts {
-  id: Generated<string>;
-  email: ColumnType<string, string, string>;
-  ip_address: ColumnType<string | null, string | null | undefined, string | null | undefined>;
-  attempt_at: Generated<string | null>;
-  success: Generated<boolean | null>;
-}
-
 export interface MbtiReadings {
   id: Generated<string>;
   user_id: ColumnType<string, string, string>;
@@ -529,6 +521,9 @@ export interface MingRecordsWithArchiveStatus {
 }
 
 export interface Notifications {
+  event_key: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  event_data: ColumnType<Json | null, Json | null | undefined, Json | null | undefined>;
+  popup_claimed_at: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   id: Generated<string>;
   user_id: ColumnType<string, string, string>;
   type: ColumnType<string, string, string>;
@@ -537,9 +532,6 @@ export interface Notifications {
   is_read: Generated<boolean | null>;
   link: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   created_at: Generated<string | null>;
-  event_key: ColumnType<string | null, string | null | undefined, string | null | undefined>;
-  event_data: ColumnType<Json | null, Json | null | undefined, Json | null | undefined>;
-  popup_claimed_at: ColumnType<string | null, string | null | undefined, string | null | undefined>;
 }
 
 export interface PalmReadings {
@@ -575,14 +567,6 @@ export interface QimenCharts {
   minute: ColumnType<number, number, number>;
   timezone: Generated<string>;
   zhi_fu_ji_gong: Generated<string>;
-}
-
-export interface RateLimits {
-  id: Generated<number>;
-  identifier: ColumnType<string, string, string>;
-  endpoint: ColumnType<string, string, string>;
-  request_count: Generated<number | null>;
-  window_start: Generated<string | null>;
 }
 
 export interface ReminderSubscriptions {
@@ -645,6 +629,8 @@ export interface UserOauthProviders {
 }
 
 export interface UserSettings {
+  chat_preferences: Generated<Json>;
+  daily_briefing_settings: Generated<Json>;
   user_id: ColumnType<string, string, string>;
   notifications_enabled: Generated<boolean | null>;
   notify_email: Generated<boolean | null>;
@@ -660,8 +646,6 @@ export interface UserSettings {
   prompt_kb_ids: Generated<Json | null>;
   visualization_settings: Generated<Json | null>;
   chart_prompt_detail_level: Generated<string>;
-  chat_preferences: Generated<Json>;
-  daily_briefing_settings: Generated<Json>;
 }
 
 export interface Users {
@@ -746,7 +730,6 @@ export interface DB {
   "knowledge_bases": KnowledgeBases;
   "knowledge_entries": KnowledgeEntries;
   "liuyao_divinations": LiuyaoDivinations;
-  "login_attempts": LoginAttempts;
   "mbti_readings": MbtiReadings;
   "meihua_divinations": MeihuaDivinations;
   "ming_notes": MingNotes;
@@ -756,7 +739,6 @@ export interface DB {
   "palm_readings": PalmReadings;
   "prompt_enhancement_usage": PromptEnhancementUsage;
   "qimen_charts": QimenCharts;
-  "rate_limits": RateLimits;
   "reminder_subscriptions": ReminderSubscriptions;
   "scheduled_reminders": ScheduledReminders;
   "tarot_readings": TarotReadings;

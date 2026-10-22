@@ -76,7 +76,6 @@ function viewerScoped(options: ViewerScopedOptions = {}) {
 function mockAuthContext(user: unknown, db = createMockScopedDb()) {
   return {
     user,
-    accessToken: null,
     authError: null,
     db,
   };
@@ -234,7 +233,7 @@ test('app bootstrap route should recover a missing user row before returning vie
     onInsert: (seed) => { seededNickname = seed.nickname; },
   });
   const { appSettingsModule, routeModule } = installRoute(t, async () => mockAuthContext(
-    { id: 'user-1', user_metadata: { nickname: '补建昵称' } },
+    { id: 'user-1', name: '补建昵称', image: null },
     scoped.db,
   ));
   appSettingsModule.readFeatureTogglesState = async () => ({ loaded: true, toggles: { chat: false } });

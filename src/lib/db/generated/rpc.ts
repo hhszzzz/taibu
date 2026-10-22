@@ -27,14 +27,12 @@ export interface RpcRegistry {
   "agent_write_memory": { args: { "p_run_id": string | null; "p_worker_id": string | null; "p_fence": number | null; "p_title": string | null; "p_content": string | null; "p_kind": string | null; "p_evidence": string | null; }; result: Record<string, unknown> };
   "batch_update_vectors": { args: { "p_updates": unknown | null; "p_expected_dim"?: number | null; "p_force_overwrite"?: boolean | null; }; result: { updated_count: number; skipped_count: number; already_exists_count: number; error_details: Json; }[] };
   "batch_update_vectors_as_service": { args: { "p_updates": unknown | null; "p_user_id": string | null; "p_expected_dim"?: number | null; "p_force_overwrite"?: boolean | null; }; result: { updated_count: number; skipped_count: number; already_exists_count: number; error_details: Json; }[] };
-  "check_login_attempts": { args: { "p_email": string | null; }; result: { failed_count: number; }[] };
   "check_vector_index_exists": { args: { "p_dim"?: number | null; }; result: boolean };
   "claim_agent_attachment_cleanup": { args: { "p_limit"?: number | null; }; result: Record<string, unknown>[] };
   "claim_daily_briefings": { args: { "p_limit"?: number | null; "p_enabled"?: boolean | null; }; result: Record<string, unknown>[] };
   "claim_linuxdo_membership_as_service": { args: { "p_user_id": string | null; "p_plan_id": string | null; "p_trust_level": number | null; "p_provider_user_id": string | null; }; result: Json };
   "claim_notification_popup": { args: { "p_id": string | null; }; result: boolean };
   "claim_prompt_enhancement": { args: Record<string, never>; result: boolean };
-  "consume_rate_limit_slot_as_admin": { args: { "p_identifier": string | null; "p_endpoint": string | null; "p_max_requests": number | null; "p_window_ms": number | null; }; result: Json };
   "create_analysis_conversation_with_history_as_service": { args: { "p_user_id": string | null; "p_source_type": string | null; "p_source_data": unknown | null; "p_title": string | null; "p_personality": string | null; "p_messages": unknown | null; "p_history_type": string | null; "p_history_payload": unknown | null; }; result: string };
   "create_conversation_with_messages": { args: { "p_user_id": string | null; "p_title": string | null; "p_personality"?: string | null; "p_source_type"?: string | null; "p_source_data"?: unknown | null; "p_messages"?: unknown | null; }; result: string };
   "create_knowledge_base_with_limit": { args: { "p_user_id": string | null; "p_name": string | null; "p_description"?: string | null; "p_weight"?: string | null; "p_limit"?: number | null; }; result: Json };
@@ -51,7 +49,6 @@ export interface RpcRegistry {
   "kb_unarchive_source_as_service": { args: { "p_user_id": string | null; "p_kb_id": string | null; "p_source_type": string | null; "p_source_id": string | null; }; result: boolean };
   "perform_daily_checkin_as_service": { args: { "p_user_id": string | null; }; result: Json };
   "process_scheduled_reminder_delivery_as_service": { args: { "p_reminder_id": string | null; "p_stale_before": string | null; "p_notification_title": string | null; "p_notification_content": string | null; "p_notification_link"?: string | null; }; result: Json };
-  "record_login_attempt": { args: { "p_email": string | null; "p_success": boolean | null; }; result: null };
   "replace_conversation_messages": { args: { "p_conversation_id": string | null; "p_messages": unknown | null; }; result: null };
   "revoke_conversation_share": { args: { "p_conversation": string | null; }; result: boolean };
   "save_bazi_case_profile_as_service": { args: { "p_user_id": string | null; "p_chart_id": string | null; "p_master_review": unknown | null; "p_owner_feedback": unknown | null; "p_events": unknown | null; }; result: Json };
@@ -97,14 +94,12 @@ export const RPC_SPECS = {
   "agent_write_memory": { args: [["p_run_id", "uuid", false], ["p_worker_id", "text", false], ["p_fence", "bigint", false], ["p_title", "text", false], ["p_content", "text", false], ["p_kind", "text", false], ["p_evidence", "text", false]], returns: "row" },
   "batch_update_vectors": { args: [["p_updates", "jsonb", false], ["p_expected_dim", "integer", true], ["p_force_overwrite", "boolean", true]], returns: "setof" },
   "batch_update_vectors_as_service": { args: [["p_updates", "jsonb", false], ["p_user_id", "uuid", false], ["p_expected_dim", "integer", true], ["p_force_overwrite", "boolean", true]], returns: "setof" },
-  "check_login_attempts": { args: [["p_email", "text", false]], returns: "setof" },
   "check_vector_index_exists": { args: [["p_dim", "integer", true]], returns: "scalar" },
   "claim_agent_attachment_cleanup": { args: [["p_limit", "integer", true]], returns: "setof" },
   "claim_daily_briefings": { args: [["p_limit", "integer", true], ["p_enabled", "boolean", true]], returns: "setof" },
   "claim_linuxdo_membership_as_service": { args: [["p_user_id", "uuid", false], ["p_plan_id", "text", false], ["p_trust_level", "integer", false], ["p_provider_user_id", "text", false]], returns: "scalar" },
   "claim_notification_popup": { args: [["p_id", "uuid", false]], returns: "scalar" },
   "claim_prompt_enhancement": { args: [], returns: "scalar" },
-  "consume_rate_limit_slot_as_admin": { args: [["p_identifier", "text", false], ["p_endpoint", "text", false], ["p_max_requests", "integer", false], ["p_window_ms", "integer", false]], returns: "scalar" },
   "create_analysis_conversation_with_history_as_service": { args: [["p_user_id", "uuid", false], ["p_source_type", "text", false], ["p_source_data", "jsonb", false], ["p_title", "text", false], ["p_personality", "text", false], ["p_messages", "jsonb", false], ["p_history_type", "text", false], ["p_history_payload", "jsonb", false]], returns: "scalar" },
   "create_conversation_with_messages": { args: [["p_user_id", "uuid", false], ["p_title", "text", false], ["p_personality", "text", true], ["p_source_type", "text", true], ["p_source_data", "jsonb", true], ["p_messages", "jsonb", true]], returns: "scalar" },
   "create_knowledge_base_with_limit": { args: [["p_user_id", "uuid", false], ["p_name", "text", false], ["p_description", "text", true], ["p_weight", "text", true], ["p_limit", "integer", true]], returns: "scalar" },
@@ -121,7 +116,6 @@ export const RPC_SPECS = {
   "kb_unarchive_source_as_service": { args: [["p_user_id", "uuid", false], ["p_kb_id", "uuid", false], ["p_source_type", "text", false], ["p_source_id", "text", false]], returns: "scalar" },
   "perform_daily_checkin_as_service": { args: [["p_user_id", "uuid", false]], returns: "scalar" },
   "process_scheduled_reminder_delivery_as_service": { args: [["p_reminder_id", "uuid", false], ["p_stale_before", "timestamp with time zone", false], ["p_notification_title", "text", false], ["p_notification_content", "text", false], ["p_notification_link", "text", true]], returns: "scalar" },
-  "record_login_attempt": { args: [["p_email", "text", false], ["p_success", "boolean", false]], returns: "void" },
   "replace_conversation_messages": { args: [["p_conversation_id", "uuid", false], ["p_messages", "jsonb", false]], returns: "void" },
   "revoke_conversation_share": { args: [["p_conversation", "uuid", false]], returns: "scalar" },
   "save_bazi_case_profile_as_service": { args: [["p_user_id", "uuid", false], ["p_chart_id", "uuid", false], ["p_master_review", "jsonb", false], ["p_owner_feedback", "jsonb", false], ["p_events", "jsonb", false]], returns: "scalar" },

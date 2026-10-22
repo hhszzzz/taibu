@@ -1,0 +1,100 @@
+# Shared service graph for the self-hosted stack.
+# Local: docker compose -f deploy/compose.base.yml -f deploy/compose.local.yml
+# Production (P7): compose.prod.yml layers TLS, backups and resource limits.
+name: ${LOCAL_PROJECT:?run `pnpm selfhost init` first}
+x-ownership: &ownership
+  io.taibu.local.instance: ${LOCAL_INSTANCE_ID:?}
+x-logging: &logging
+  driver: json-file
+  options: { max-size: 10m, max-file: "3" }
+x-node: &node
+  image: ${TAIBU_IMAGE:-taibu-local}:${TAIBU_TAG:-local}
+  restart: unless-stopped
+  init: true
+  env_file: ["${TAIBU_ENV_DIR}/app.env"]
+  security_opt: [no-new-privileges:true]
+  logging: *logging
+  labels: *ownership
+  networks: [backend]
+services:
+  db:
+    image: pgvector/pgvector:0.8.7-pg17-bookworm
+    restart: unless-stopped
+    env_file: ["${TAIBU_ENV_DIR}/db.env"]
+    environment:
+      POSTGRES_DB: taibu
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./deploy/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    command: [postgres, -c, config_file=/etc/postgresql/postgresql.conf]
+    networks: [backend]
+    logging: *logging
+    labels: *ownership
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -h 127.0.0.1 -U postgres -d taibu']
+      interval: 3s
+      timeout: 3s
+      retries: 40
+  redis:
+    image: redis:8.2.1-alpine
+    restart: unless-stopped
+    env_file: ["${TAIBU_ENV_DIR}/redis.env"]
+    command:
+      - sh
+      - -c
+      - exec redis-server --appendonly yes --appendfsync everysec --maxmemory 128mb --maxmemory-policy noeviction --requirepass "$$REDIS_PASSWORD"
+    volumes: [redisdata:/data]
+    networks: [backend]
+    logging: *logging
+    labels: *ownership
+    healthcheck:
+      test: [CMD-SHELL, 'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -q PONG']
+      interval: 3s
+      timeout: 3s
+      retries: 40
+  db-setup:
+    <<: *node
+    env_file: ["${TAIBU_ENV_DIR}/db-setup.env"]
+    command: [node, scripts/db/bootstrap.mjs]
+    restart: "no"
+    depends_on:
+      db: { condition: service_healthy }
+  migrate:
+    <<: *node
+    env_file: ["${TAIBU_ENV_DIR}/migrate.env"]
+    command: [node, scripts/db/migrate.mjs, up]
+    restart: "no"
+    depends_on:
+      db-setup: { condition: service_completed_successfully }
+  web:
+    <<: *node
+    command: [node, server.js]
+    volumes: [files:/data/files]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/health',{signal:AbortSignal.timeout(3000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+  worker:
+    <<: *node
+    command: [node, .agent/worker.mjs]
+    volumes: [files:/data/files]
+    stop_grace_period: 90s
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: [CMD, node, .agent/worker.mjs, --health]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+volumes:
+  pgdata: {}
+  redisdata: {}
+  files: {}
+networks:
+  backend: {}

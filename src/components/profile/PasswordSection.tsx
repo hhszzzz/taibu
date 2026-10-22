@@ -4,8 +4,7 @@ import { useState, useEffect } from 'react';
 import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 import { Eye, EyeOff } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
-import { sendOTP, verifyOTP } from '@/lib/auth';
-import { supabase } from '@/lib/auth';
+import { resetPasswordWithOTP, sendOTP, verifyOTP } from '@/lib/auth';
 import { PasswordStrengthIndicator, validatePasswordStrength } from '@/components/auth/PasswordStrengthIndicator';
 import { VerificationCodeInput } from '@/components/auth/VerificationCodeInput';
 import { SettingsRow } from '@/components/settings/SettingsControls';
@@ -123,12 +122,10 @@ export function PasswordSection({
         setLoading(true);
 
         try {
-            const { error: updateError } = await supabase.auth.updateUser({
-                password: newPassword
-            });
+            const result = await resetPasswordWithOTP(email, verificationCode, newPassword);
 
-            if (updateError) {
-                setError('密码修改失败：' + updateError.message);
+            if (!result.success) {
+                setError('密码修改失败：' + (result.error?.message || '请重试'));
             } else {
                 setSuccess('密码修改成功！');
                 setTimeout(() => {

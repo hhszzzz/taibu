@@ -1,16 +1,14 @@
 /**
- * 浏览器侧统一认证入口
+ * 浏览器侧统一认证入口（Better Auth）。
  *
- * - 对外只暴露一个模块，避免 auth/auth-client 双入口
- * - 仅保留 auth/storage 能力，不再暴露通用表查询与 RPC
- * - 业务语义（资料、登录保护、错误文案）也统一放在这里
+ * 业务语义（资料、错误文案、事件缓存）集中在这里；组件只依赖本模块导出的
+ * `authClient` 与同名 helper，不再直接接触底层会话实现。
  */
 
-import type { AuthChangeEvent, Session, User as SupabaseUser } from '@supabase/supabase-js';
+import { createAuthClient } from 'better-auth/react';
+import { emailOTPClient } from 'better-auth/client/plugins';
 import {
     type BrowserApiError,
-    type BrowserApiPayload,
-    normalizeBrowserApiError as normalizeError,
     requestBrowserJson,
 } from '@/lib/browser-api';
 import {
@@ -18,15 +16,33 @@ import {
     updateNickname as updateNicknameProfile,
 } from '@/lib/user/profile';
 
-export type { AuthChangeEvent, Session, User as SupabaseUser } from '@supabase/supabase-js';
-export type User = SupabaseUser;
-
-type AuthPayload<T = unknown> = BrowserApiPayload<T>;
-type SessionPayload = AuthPayload<{ session: Session | null; user: SupabaseUser | null }>;
-type SessionLoadOptions = {
-    force?: boolean;
-    emitEvent?: boolean;
+export type AuthUser = {
+    id: string;
+    email: string;
+    emailVerified: boolean;
+    name: string;
+    image: string | null;
+    createdAt?: Date | string;
+    updatedAt?: Date | string;
 };
+
+/** 兼容旧组件的类型别名。 */
+export type User = AuthUser;
+export type SupabaseUser = AuthUser;
+
+export type AuthSession = {
+    id: string;
+    userId: string;
+    token?: string;
+    expiresAt: Date | string;
+    createdAt?: Date | string;
+    updatedAt?: Date | string;
+    user: AuthUser;
+};
+
+export type Session = AuthSession;
+
+export type AuthChangeEvent = 'INITIAL_SESSION' | 'SIGNED_IN' | 'SIGNED_OUT' | 'USER_UPDATED' | 'TOKEN_REFRESHED';
 
 export type AuthResult = {
     success: boolean;
@@ -39,13 +55,38 @@ export type LoginAttemptStatus = {
     error: BrowserApiError | null;
 };
 
+type SessionPayload = {
+    data: { session: Session | null; user: AuthUser | null };
+    error: BrowserApiError | null;
+};
+
 type AuthListener = (event: AuthChangeEvent, session: Session | null) => void;
 
 type OtpType = 'signup' | 'magiclink' | 'recovery' | 'email_change' | 'email';
 
+const configuredAuthClient = createAuthClient({
+    basePath: '/api/auth',
+    plugins: [emailOTPClient()],
+});
+
+type AuthClient = typeof configuredAuthClient;
+
+let authClientImplementation: AuthClient = configuredAuthClient;
+
+/** Test seam: swaps the transport and returns the previous one for restoration. */
+export function __setAuthClientForTests(next: AuthClient): AuthClient {
+    const previous = authClientImplementation;
+    authClientImplementation = next;
+    return previous;
+}
+
+export const authClient: AuthClient = new Proxy({} as AuthClient, {
+    get: (_target, property) => Reflect.get(authClientImplementation, property),
+});
+
 const authListeners = new Set<AuthListener>();
 let cachedSession: Session | null = null;
-let cachedUser: SupabaseUser | null = null;
+let cachedUser: AuthUser | null = null;
 let hasInitializedSession = false;
 let sessionBootstrapPromise: Promise<SessionPayload> | null = null;
 let lastSessionBootstrapAt = 0;
@@ -70,23 +111,17 @@ function applySession(session: Session | null, event?: AuthChangeEvent) {
     cachedUser = session?.user ?? null;
     hasInitializedSession = true;
     lastSessionBootstrapAt = Date.now();
-    if (event) {
-        emitAuthEvent(event, session);
-    }
+    if (event) emitAuthEvent(event, session);
 }
 
-async function requestJson<T>(url: string, init?: RequestInit): Promise<AuthPayload<T>> {
-    return requestBrowserJson<T>(url, init);
-}
-
-async function postAuthAction<T>(action: string, payload: Record<string, unknown> = {}): Promise<AuthPayload<T>> {
-    return requestJson<T>('/api/auth', {
-        method: 'POST',
-        body: JSON.stringify({
-            action,
-            ...payload,
-        }),
-    });
+/** Better Auth errors carry a code; keep the historical message mapping. */
+function normalizeAuthError(error: { message?: string; code?: string; status?: number } | null | undefined): BrowserApiError | null {
+    if (!error) return null;
+    const raw = error.code || error.message || 'UNKNOWN';
+    return {
+        message: getErrorMessage(raw),
+        code: raw,
+    };
 }
 
 function getCachedSessionPayload(error: BrowserApiError | null = null): SessionPayload {
@@ -104,64 +139,38 @@ function hasFreshSessionCache() {
 }
 
 function resolveRefreshedSessionEvent(previousSession: Session | null, nextSession: Session | null): AuthChangeEvent | null {
-    if (!previousSession && !nextSession) {
-        return null;
-    }
-    if (!previousSession && nextSession) {
-        return 'SIGNED_IN';
-    }
-    if (previousSession && !nextSession) {
-        return 'SIGNED_OUT';
-    }
-    if (!previousSession || !nextSession) {
-        return null;
-    }
-
-    const hasChanged = previousSession.access_token !== nextSession.access_token
-        || previousSession.refresh_token !== nextSession.refresh_token
-        || previousSession.expires_at !== nextSession.expires_at
+    if (!previousSession && !nextSession) return null;
+    if (!previousSession && nextSession) return 'SIGNED_IN';
+    if (previousSession && !nextSession) return 'SIGNED_OUT';
+    if (!previousSession || !nextSession) return null;
+    const changed = previousSession.id !== nextSession.id
+        || previousSession.expiresAt !== nextSession.expiresAt
         || previousSession.user?.id !== nextSession.user?.id;
-
-    return hasChanged ? 'TOKEN_REFRESHED' : null;
+    return changed ? 'TOKEN_REFRESHED' : null;
 }
 
-async function loadSessionFromServer(
-    options: SessionLoadOptions = {},
-): Promise<SessionPayload> {
-    if (!options.force && hasFreshSessionCache()) {
-        return getCachedSessionPayload();
-    }
-
-    if (sessionBootstrapPromise) {
-        return await sessionBootstrapPromise;
-    }
+async function loadSessionFromServer(options: { force?: boolean; emitEvent?: boolean } = {}): Promise<SessionPayload> {
+    if (!options.force && hasFreshSessionCache()) return getCachedSessionPayload();
+    if (sessionBootstrapPromise) return await sessionBootstrapPromise;
 
     const previousSession = cachedSession;
-    sessionBootstrapPromise = requestJson<{ session: Session | null; user: SupabaseUser | null }>('/api/auth', {
-        method: 'GET',
-    }).then((result) => {
+    sessionBootstrapPromise = authClient.getSession().then((result) => {
         if (result.error) {
-            return getCachedSessionPayload(result.error);
+            return getCachedSessionPayload(normalizeAuthError(result.error));
         }
-
-        const nextSession = result.data?.session ?? null;
-        cachedSession = nextSession;
-        cachedUser = result.data?.user ?? result.data?.session?.user ?? null;
+        const session = (result.data?.session ?? null) as Session | null;
+        cachedSession = session;
+        cachedUser = (session?.user ?? result.data?.user ?? null) as AuthUser | null;
         hasInitializedSession = true;
         lastSessionBootstrapAt = Date.now();
-
         if (options.emitEvent) {
-            const event = resolveRefreshedSessionEvent(previousSession, nextSession);
-            if (event) {
-                emitAuthEvent(event, nextSession);
-            }
+            const event = resolveRefreshedSessionEvent(previousSession, session);
+            if (event) emitAuthEvent(event, session);
         }
-
         return getCachedSessionPayload();
     }).finally(() => {
         sessionBootstrapPromise = null;
     });
-
     return await sessionBootstrapPromise;
 }
 
@@ -174,324 +183,129 @@ export async function revalidateBrowserSession(): Promise<SessionPayload> {
     return await loadSessionFromServer({ force: true, emitEvent: true });
 }
 
-export const supabase = {
-    auth: {
-        async signInWithPassword(credentials: { email: string; password: string }) {
-            const result = await postAuthAction<{ session: Session | null; user: SupabaseUser | null }>('signInWithPassword', credentials);
-            if (!result.error) {
-                applySession(result.data?.session ?? null, 'SIGNED_IN');
-            }
-            return result;
-        },
-
-        async signUp(params: {
-            email: string;
-            password: string;
-            options?: Record<string, unknown>;
-        }) {
-            const result = await postAuthAction<{ session: Session | null; user: SupabaseUser | null }>('signUp', params);
-            if (!result.error && result.data?.session) {
-                applySession(result.data.session, 'SIGNED_IN');
-            }
-            return result;
-        },
-
-        async signOut() {
-            const result = await postAuthAction<{ signedOut: boolean }>('signOut');
-            if (!result.error) {
-                applySession(null, 'SIGNED_OUT');
-            }
-            return result;
-        },
-
-        async getSession(options?: { force?: boolean }): Promise<{ data: { session: Session | null }; error: BrowserApiError | null }> {
-            const result = await loadSessionFromServer(options);
-            return {
-                data: { session: result.data?.session ?? null },
-                error: result.error,
-            };
-        },
-
-        async revalidateSession(): Promise<{ data: { session: Session | null }; error: BrowserApiError | null }> {
-            const result = await revalidateBrowserSession();
-            return {
-                data: { session: result.data?.session ?? null },
-                error: result.error,
-            };
-        },
-
-        invalidateSessionCache() {
-            invalidateBrowserSessionCache();
-        },
-
-        async getUser(
-            token?: string,
-            options?: { force?: boolean },
-        ): Promise<{ data: { user: SupabaseUser | null }; error: BrowserApiError | null }> {
-            if (token) {
-                const result = await postAuthAction<{ user: SupabaseUser | null }>('getUser', { token });
-                return { data: { user: result.data?.user ?? null }, error: result.error };
-            }
-            const sessionResult = await loadSessionFromServer(options);
-            return { data: { user: sessionResult.data?.user ?? null }, error: sessionResult.error };
-        },
-
-        async updateUser(attributes: Record<string, unknown>) {
-            const result = await postAuthAction<{ user: SupabaseUser | null }>('updateUser', { attributes });
-            if (!result.error && cachedSession?.user) {
-                applySession(
-                    {
-                        ...cachedSession,
-                        user: result.data?.user || cachedSession.user,
-                    },
-                    'USER_UPDATED'
-                );
-            }
-            return result;
-        },
-
-        async resetPasswordForEmail(email: string, options?: Record<string, unknown>) {
-            return postAuthAction('resetPasswordForEmail', { email, options });
-        },
-
-        async signInWithOtp(params: Record<string, unknown>) {
-            return postAuthAction('signInWithOtp', { params });
-        },
-
-        async verifyOtp(params: { email: string; token: string; type: OtpType }) {
-            const result = await postAuthAction<{ session: Session | null; user: SupabaseUser | null }>('verifyOtp', { params });
-            if (!result.error && result.data?.session) {
-                applySession(result.data.session, 'SIGNED_IN');
-            }
-            return result;
-        },
-
-        onAuthStateChange(callback: AuthListener) {
-            authListeners.add(callback);
-            const bootstrap = hasInitializedSession
-                ? Promise.resolve(getCachedSessionPayload())
-                : (sessionBootstrapPromise ?? loadSessionFromServer());
-            void bootstrap.then((res) => {
-                callback('INITIAL_SESSION', res.data?.session ?? null);
-            });
-            return {
-                data: {
-                    subscription: {
-                        unsubscribe() {
-                            authListeners.delete(callback);
-                        },
-                    },
+export function onAuthStateChange(callback: AuthListener) {
+    authListeners.add(callback);
+    const bootstrap = hasInitializedSession
+        ? Promise.resolve(getCachedSessionPayload())
+        : (sessionBootstrapPromise ?? loadSessionFromServer());
+    void bootstrap.then((result) => {
+        callback('INITIAL_SESSION', result.data?.session ?? null);
+    });
+    return {
+        data: {
+            subscription: {
+                unsubscribe() {
+                    authListeners.delete(callback);
                 },
-            };
+            },
         },
-    },
+    };
+}
 
-    // Realtime channel 桩（auth-only 模式下不支持，保留接口兼容）
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    channel(name: string): any {
-        console.warn(`[auth] channel("${name}") is not supported in auth-only mode`);
-        const noop = () => channelObj;
-        const channelObj = { on: noop, subscribe: noop, unsubscribe: noop };
-        return channelObj;
-    },
+/** Snapshot for legacy call sites that read `{ data: { session } }`. */
+export async function getSessionSnapshot(): Promise<SessionPayload> {
+    return await loadSessionFromServer();
+}
 
-    removeChannel(channel?: unknown) {
-        void channel;
-    },
+export async function getUserSnapshot(): Promise<{ data: { user: AuthUser | null }; error: BrowserApiError | null }> {
+    const result = await loadSessionFromServer();
+    return { data: { user: result.data.user }, error: result.error };
+}
 
-    storage: {
-        from(bucket: string) {
-            // 伪造的 supabase-storage 门面：只服务头像，bucket/path 由服务端会话决定。
-            void bucket;
-            return {
-                async upload(path: string, file: File | Blob, options?: { upsert?: boolean }) {
-                    void path;
-                    void options;
-                    const formData = new FormData();
-                    formData.append('file', file);
-                    try {
-                        const res = await fetch('/api/files/avatars', {
-                            method: 'POST',
-                            credentials: 'include',
-                            body: formData,
-                        });
-                        const json = await res.json();
-                        return { data: json.data ?? null, error: normalizeError(json.error) };
-                    } catch (err) {
-                        return { data: null, error: normalizeError(err) || { message: 'Upload failed' } };
-                    }
-                },
-                getPublicUrl(path: string) {
-                    return {
-                        data: { publicUrl: `/api/files/avatars/${path}` },
-                    };
-                },
-            };
-        },
-    },
-};
+export async function getSession(): Promise<Session | null> {
+    const result = await authClient.getSession();
+    if (result.error) throw new Error(result.error.message || '获取会话失败');
+    return (result.data?.session ?? null) as Session | null;
+}
 
-export const authClient = supabase;
+export async function getCurrentUser(): Promise<AuthUser | null> {
+    const session = await getSession();
+    return session?.user ?? null;
+}
 
 export async function signInWithEmail(email: string, password: string): Promise<AuthResult> {
-    const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-    });
-
+    const { error } = await authClient.signIn.email({ email, password });
     if (error) {
-        return {
-            success: false,
-            error: {
-                message: getErrorMessage(error.message),
-                code: error.code || error.message,
-            },
-        };
+        return { success: false, error: normalizeAuthError(error) ?? undefined };
     }
-
+    invalidateBrowserSessionCache();
+    await loadSessionFromServer({ force: true, emitEvent: true });
     return { success: true };
 }
 
-export async function signUpWithEmail(
-    email: string,
-    password: string,
-    nickname?: string
-): Promise<AuthResult> {
-    const { error } = await supabase.auth.signUp({
+/** 失败次数已由服务端 Redis 锁定；保留入口以兼容旧调用方。 */
+export async function signInWithEmailProtected(email: string, password: string): Promise<AuthResult> {
+    return signInWithEmail(email, password);
+}
+
+export async function signUpWithEmail(email: string, password: string, nickname?: string): Promise<AuthResult> {
+    const { error } = await authClient.signUp.email({
         email,
         password,
-        options: {
-            data: {
-                nickname: nickname || '命理爱好者',
-            },
-            emailRedirectTo: `${window.location.origin}/auth/callback`,
-        },
+        name: nickname?.trim() || '命理爱好者',
     });
-
     if (error) {
-        return {
-            success: false,
-            error: {
-                message: getErrorMessage(error.message),
-                code: error.code || error.message,
-            },
-        };
+        return { success: false, error: normalizeAuthError(error) ?? undefined };
     }
-
+    invalidateBrowserSessionCache();
     return { success: true };
 }
 
 export async function signOut(): Promise<AuthResult> {
-    const { error } = await supabase.auth.signOut();
-
+    const { error } = await authClient.signOut();
     if (error) {
-        return {
-            success: false,
-            error: {
-                message: '登出失败，请重试',
-                code: error.code || error.message,
-            },
-        };
+        return { success: false, error: { message: '登出失败，请重试', code: error.code || error.message } };
     }
-
+    applySession(null, 'SIGNED_OUT');
     return { success: true };
 }
 
-export async function getCurrentUser() {
-    const { data: { user }, error } = await supabase.auth.getUser();
-    if (error) {
-        throw new Error(error.message || '获取当前用户失败');
-    }
-    return user;
-}
-
-export async function getSession() {
-    const { data: { session }, error } = await supabase.auth.getSession();
-    if (error) {
-        throw new Error(error.message || '获取会话失败');
-    }
-    return session;
-}
-
-export { getCurrentUserProfileBundle } from '@/lib/user/profile';
-
-export async function ensureUserRecord(user: SupabaseUser) {
+export async function ensureUserRecord(user: AuthUser) {
     void user;
-    const result = await requestJson<{ success: boolean }>('/api/user/profile', {
+    const result = await requestBrowserJson<{ success: boolean }>('/api/user/profile', {
         method: 'POST',
         body: JSON.stringify({ action: 'ensure' }),
     });
-
     if (result.error) {
         console.error('[auth] failed to ensure user profile:', result.error.message);
     }
 }
 
 export async function updateNickname(_userId: string, nickname: string): Promise<AuthResult> {
-
     const result = await updateNicknameProfile(nickname);
-
     if (!result.success) {
         return {
             success: false,
-            error: {
-                message: '更新失败，请重试',
-                code: result.error?.code || result.error?.message,
-            },
+            error: { message: '更新失败，请重试', code: result.error?.code || result.error?.message },
         };
     }
-
-    const { error: authError } = await supabase.auth.updateUser({
-        data: { nickname },
-    });
-
-    if (authError) {
-        console.warn('[auth] failed to sync auth nickname:', authError.message);
+    if (cachedUser) {
+        cachedUser = { ...cachedUser, name: nickname };
+        if (cachedSession) cachedSession = { ...cachedSession, user: cachedUser };
+        emitAuthEvent('USER_UPDATED', cachedSession);
     }
-
     return { success: true };
 }
 
 export async function updateAvatarUrl(avatarUrl: string | null): Promise<AuthResult> {
     const result = await updateAvatarProfile(avatarUrl);
-
     if (!result.success) {
         return {
             success: false,
-            error: {
-                message: '更新头像失败，请重试',
-                code: result.error?.code || result.error?.message,
-            },
+            error: { message: '更新头像失败，请重试', code: result.error?.code || result.error?.message },
         };
     }
-
-    const { error: authError } = await supabase.auth.updateUser({
-        data: { avatar_url: avatarUrl },
-    });
-
-    if (authError) {
-        console.warn('[auth] failed to sync auth avatar:', authError.message);
+    if (cachedUser) {
+        cachedUser = { ...cachedUser, image: avatarUrl };
+        if (cachedSession) cachedSession = { ...cachedSession, user: cachedUser };
+        emitAuthEvent('USER_UPDATED', cachedSession);
     }
-
     return { success: true };
 }
 
-
 export async function resetPassword(email: string): Promise<AuthResult> {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/reset-password`,
-    });
-
-    if (error) {
-        return {
-            success: false,
-            error: {
-                message: getErrorMessage(error.message),
-                code: error.code || error.message,
-            },
-        };
-    }
-
+    const { error } = await authClient.emailOtp.sendVerificationOtp({ email, type: 'forget-password' });
+    if (error) return { success: false, error: normalizeAuthError(error) ?? undefined };
     return { success: true };
 }
 
@@ -502,90 +316,24 @@ export async function sendOTP(
 ): Promise<AuthResult> {
     try {
         if (type === 'signup') {
-            const { error } = await supabase.auth.signInWithOtp({
-                email,
-                options: {
-                    shouldCreateUser: true,
-                    emailRedirectTo: `${window.location.origin}/auth/callback`,
-                },
-            });
-
-            if (error) {
-                return {
-                    success: false,
-                    error: {
-                        message: getErrorMessage(error.message),
-                        code: error.code || error.message,
-                    },
-                };
-            }
+            const { error } = await authClient.emailOtp.sendVerificationOtp({ email, type: 'email-verification' });
+            if (error) return { success: false, error: normalizeAuthError(error) ?? undefined };
         } else if (type === 'magiclink') {
-            const { error } = await supabase.auth.signInWithOtp({
-                email,
-                options: {
-                    shouldCreateUser: false,
-                },
-            });
-
-            if (error) {
-                return {
-                    success: false,
-                    error: {
-                        message: getErrorMessage(error.message),
-                        code: error.code || error.message,
-                    },
-                };
-            }
+            const { error } = await authClient.emailOtp.sendVerificationOtp({ email, type: 'sign-in' });
+            if (error) return { success: false, error: normalizeAuthError(error) ?? undefined };
         } else if (type === 'recovery') {
-            const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                redirectTo: `${window.location.origin}/auth/reset-password`,
-            });
-
-            if (error) {
-                return {
-                    success: false,
-                    error: {
-                        message: getErrorMessage(error.message),
-                        code: error.code || error.message,
-                    },
-                };
-            }
+            return await resetPassword(email);
         } else if (type === 'email_change') {
             if (!newEmail) {
-                return {
-                    success: false,
-                    error: {
-                        message: '请提供新邮箱地址',
-                        code: 'MISSING_NEW_EMAIL',
-                    },
-                };
+                return { success: false, error: { message: '请提供新邮箱地址', code: 'MISSING_NEW_EMAIL' } };
             }
-
-            const { error } = await supabase.auth.updateUser({
-                email: newEmail,
-            });
-
-            if (error) {
-                return {
-                    success: false,
-                    error: {
-                        message: getErrorMessage(error.message),
-                        code: error.code || error.message,
-                    },
-                };
-            }
+            const { error } = await authClient.emailOtp.requestEmailChange({ newEmail });
+            if (error) return { success: false, error: normalizeAuthError(error) ?? undefined };
         }
-
         return { success: true };
     } catch (err) {
         console.error('[auth] sendOTP failed:', err);
-        return {
-            success: false,
-            error: {
-                message: '发送失败，请重试',
-                code: 'SEND_FAILED',
-            },
-        };
+        return { success: false, error: { message: '发送失败，请重试', code: 'SEND_FAILED' } };
     }
 }
 
@@ -594,22 +342,28 @@ export async function verifyOTP(
     token: string,
     type: OtpType = 'email'
 ): Promise<AuthResult> {
-    const { error } = await supabase.auth.verifyOtp({
-        email,
-        token,
-        type,
-    });
-
-    if (error) {
-        return {
-            success: false,
-            error: {
-                message: getErrorMessage(error.message),
-                code: error.code || error.message,
-            },
-        };
+    if (type === 'magiclink' || type === 'email') {
+        const { error } = await authClient.signIn.emailOtp({ email, otp: token });
+        if (error) return { success: false, error: normalizeAuthError(error) ?? undefined };
+        invalidateBrowserSessionCache();
+        await loadSessionFromServer({ force: true, emitEvent: true });
+        return { success: true };
     }
-
+    if (type === 'signup') {
+        const { error } = await authClient.emailOtp.verifyEmail({ email, otp: token });
+        if (error) return { success: false, error: normalizeAuthError(error) ?? undefined };
+        return { success: true };
+    }
+    if (type === 'recovery') {
+        const { error } = await authClient.emailOtp.checkVerificationOtp({
+            email,
+            otp: token,
+            type: 'forget-password',
+        });
+        if (error) return { success: false, error: normalizeAuthError(error) ?? undefined };
+        return { success: true };
+    }
+    // email_change codes are consumed by the change-email endpoint.
     return { success: true };
 }
 
@@ -618,89 +372,17 @@ export async function resetPasswordWithOTP(
     token: string,
     newPassword: string
 ): Promise<AuthResult> {
-    const result = await postAuthAction<{ success: boolean }>('resetPasswordWithOtp', {
-        email,
-        token,
-        newPassword,
-    });
-
-    if (result.error) {
-        return {
-            success: false,
-            error: {
-                message: getErrorMessage(result.error.message),
-                code: result.error.code || result.error.message,
-            },
-        };
-    }
-
+    const { error } = await authClient.emailOtp.resetPassword({ email, otp: token, password: newPassword });
+    if (error) return { success: false, error: normalizeAuthError(error) ?? undefined };
     return { success: true };
 }
 
-export async function checkLoginAttempts(email: string): Promise<LoginAttemptStatus> {
-    const maxAttempts = 5;
-    const result = await postAuthAction<{ blocked: boolean; remainingAttempts: number }>('checkLoginAttempts', { email });
-
-    if (result.error || !result.data) {
-        console.error('[auth] failed to check login attempts:', result.error?.message);
-        return {
-            blocked: false,
-            remainingAttempts: maxAttempts,
-            error: {
-                message: LOGIN_GUARD_UNAVAILABLE_MESSAGE,
-                code: result.error?.code || LOGIN_GUARD_UNAVAILABLE_CODE,
-            },
-        };
-    }
-
-    return {
-        ...result.data,
-        error: null,
-    };
+export async function checkLoginAttempts(_email: string): Promise<LoginAttemptStatus> {
+    return { blocked: false, remainingAttempts: 5, error: null };
 }
 
-export async function recordLoginAttempt(email: string, success: boolean): Promise<void> {
-    const result = await postAuthAction<{ success: boolean }>('recordLoginAttempt', { email, success });
-
-    if (result.error) {
-        console.error('[auth] failed to record login attempt:', result.error.message);
-    }
-}
-
-export async function signInWithEmailProtected(email: string, password: string): Promise<AuthResult> {
-    const { blocked, remainingAttempts, error } = await checkLoginAttempts(email);
-
-    if (error) {
-        return {
-            success: false,
-            error,
-        };
-    }
-
-    if (blocked) {
-        return {
-            success: false,
-            error: {
-                message: '登录失败次数过多，请15分钟后再试',
-                code: 'too_many_attempts',
-            },
-        };
-    }
-
-    const result = await signInWithEmail(email, password);
-    await recordLoginAttempt(email, result.success);
-
-    if (!result.success && remainingAttempts <= 1) {
-        return {
-            success: false,
-            error: {
-                message: `邮箱或密码错误，剩余尝试次数：${remainingAttempts - 1}`,
-                code: result.error?.code,
-            },
-        };
-    }
-
-    return result;
+export async function recordLoginAttempt(_email: string, _success: boolean): Promise<void> {
+    // Server-side lock (src/lib/identity/login-guard.server.ts) owns the counter.
 }
 
 export const authSessionCacheConstants = {
@@ -712,15 +394,21 @@ export const authSessionCacheConstants = {
 
 function getErrorMessage(code: string): string {
     const errorMessages: Record<string, string> = {
+        INVALID_EMAIL_OR_PASSWORD: '邮箱或密码错误',
+        EMAIL_NOT_VERIFIED: '请先验证邮箱',
+        USER_ALREADY_EXISTS: '该邮箱已注册',
+        INVALID_EMAIL: '邮箱格式不正确',
+        PASSWORD_TOO_SHORT: '密码至少8个字符',
+        PASSWORD_TOO_LONG: '密码过长',
+        INVALID_OTP: '验证码已过期或无效',
+        OTP_EXPIRED: '验证码已过期或无效',
+        TOO_MANY_ATTEMPTS: '请求过于频繁，请稍后再试',
+        TOO_MANY_REQUESTS: '请求过于频繁，请稍后再试',
+        SIGNUP_DISABLED: '该邮箱尚未注册，请先注册',
         'Invalid login credentials': '邮箱或密码错误',
         'Email not confirmed': '请先验证邮箱',
         'User already registered': '该邮箱已注册',
-        'Password should be at least 6 characters': '密码至少6个字符',
-        'Unable to validate email address: invalid format': '邮箱格式不正确',
-        'Email rate limit exceeded': '请求过于频繁，请稍后再试',
-        'Token has expired or is invalid': '验证码已过期或无效',
-        'Signups not allowed for otp': '该邮箱尚未注册，请先注册',
+        'Invalid email or password': '邮箱或密码错误',
     };
-
     return errorMessages[code] || code;
 }

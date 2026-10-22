@@ -26,22 +26,17 @@ function mockBaziUserContext(
     const routePath = require.resolve(route === 'bazi' ? '../app/api/bazi/analysis/route' : '../app/api/ziwei/analysis/route');
     const pipelinePath = require.resolve('../lib/api/divination-pipeline');
     const originalRequireUserContext = apiUtils.requireUserContext;
-    const originalGetSystemAdminClient = apiUtils.getSystemAdminClient;
 
     apiUtils.requireUserContext = (async () => ({
         user: { id: 'user-1' },
         db: scoped,
-        accessToken: 'test-token',
     })) as unknown as typeof apiUtils.requireUserContext;
-
-    apiUtils.getSystemAdminClient = (() => ({})) as unknown as typeof apiUtils.getSystemAdminClient;
 
     delete require.cache[routePath];
     delete require.cache[pipelinePath];
 
     t.after(() => {
         apiUtils.requireUserContext = originalRequireUserContext;
-        apiUtils.getSystemAdminClient = originalGetSystemAdminClient;
         delete require.cache[routePath];
         delete require.cache[pipelinePath];
     });

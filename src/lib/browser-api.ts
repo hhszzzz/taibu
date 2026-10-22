@@ -55,7 +55,6 @@ export function normalizeBrowserApiError(raw: unknown): BrowserApiError | null {
 
 function shouldHandleApiWrite(pathname: string, method: string) {
   if (!pathname.startsWith('/api/')) return false;
-  if (pathname.startsWith('/api/supabase/')) return false;
   if (pathname.startsWith('/api/chat')) return false;
   if (pathname.startsWith('/api/dify/')) return false;
   return method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE';

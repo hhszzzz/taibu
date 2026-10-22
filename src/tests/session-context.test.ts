@@ -36,11 +36,10 @@ test('session hook returns the supplied user and session without creating anothe
         user,
         loading: false,
         session: {
+            id: 'session-context',
+            userId: 'user-context',
+            expiresAt: new Date(Date.now() + 3600_000).toISOString(),
             user,
-            access_token: 'test-access-token',
-            refresh_token: 'test-refresh-token',
-            expires_in: 3600,
-            token_type: 'bearer',
         },
     };
     const observed: SessionState[] = [];

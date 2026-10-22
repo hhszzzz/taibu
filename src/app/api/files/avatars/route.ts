@@ -1,7 +1,6 @@
 import { type NextRequest } from 'next/server';
 
-import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
-import type { User } from '@supabase/supabase-js';
+import { jsonError, jsonOk, requireUserContext, type AppUser } from '@/lib/api-utils';
 import type { ScopedDb } from '@/lib/db/context.server';
 import { ensureUserRecordRow } from '@/lib/user/profile-record';
 import { getObjectStore } from '@/lib/storage/index.server';
@@ -14,7 +13,7 @@ const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 const MULTIPART_OVERHEAD_BYTES = 64 * 1024;
 export const AVATAR_URL_PREFIX = '/api/files/avatars/';
 
-async function saveAvatarUrl(db: ScopedDb, user: Pick<User, 'id' | 'user_metadata'>, publicUrl: string): Promise<boolean> {
+async function saveAvatarUrl(db: ScopedDb, user: Pick<AppUser, 'id'>, publicUrl: string): Promise<boolean> {
   const write = async () => Boolean(await db.tx((trx) => trx
     .updateTable('users')
     .set({ avatar_url: publicUrl, updated_at: new Date().toISOString() })

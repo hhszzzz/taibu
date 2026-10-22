@@ -15,10 +15,8 @@ RUN --mount=type=cache,id=taibu-pnpm,target=/pnpm/store pnpm install --frozen-lo
 FROM dependencies AS builder
 COPY . .
 # Only public deployment settings belong in the build. Credentials are runtime-only.
-ARG SUPABASE_PUBLIC_URL
-ARG SELF_HOSTED=false
-ENV SUPABASE_PUBLIC_URL=$SUPABASE_PUBLIC_URL
-ENV SELF_HOSTED=$SELF_HOSTED
+ARG GIT_SHA=local
+ENV GIT_SHA=$GIT_SHA
 RUN --mount=type=cache,id=taibu-pnpm,target=/pnpm/store pnpm build
 
 FROM node:24.22.1-alpine3.23 AS runner
@@ -36,7 +34,11 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules/next ./node_modules/
 COPY --from=builder /app/LICENSE ./LICENSE
 COPY --from=builder /app/packages/core/LICENSE ./licenses/taibu-core.LICENSE
 COPY --from=builder --chown=nextjs:nodejs /app/.agent ./.agent
-RUN node .agent/worker.mjs --check
+# Migration tooling ships with the image so `migrate`/`db-setup` run the exact
+# same SQL that was built with this release.
+COPY --from=builder --chown=nextjs:nodejs /app/database ./database
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/db ./scripts/db
+RUN node .agent/worker.mjs --check && node -e "require.resolve('pg')" 
 # Check each traced pnpm entry, including the attachment API and Next's version.
 RUN node --input-type=module -e "import {globSync} from 'node:fs'; import {createRequire} from 'node:module'; import {resolve} from 'node:path'; const entries = [...globSync('node_modules/.pnpm/sharp@*/node_modules/sharp/package.json')]; if (!entries.length) throw new Error('Sharp is missing from the standalone image'); for (const entry of entries) { const sharp = createRequire(resolve(entry))('sharp'); const png = await sharp({create:{width:2,height:2,channels:3,background:'#fff'}}).png().toBuffer(); if (!png.length) throw new Error('Sharp image processing failed'); } console.log('Sharp runtime check passed');"
 RUN mkdir -p .next/cache && chown -R nextjs:nodejs .next/cache

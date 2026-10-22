@@ -1,7 +1,6 @@
 import { beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
-import { createMockAuthContext } from './helpers/supabase-mock';
 import { createMockScopedDb } from './helpers/db-mock';
 
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost';
@@ -110,7 +109,7 @@ function setupRouteMocks(
     const aiConfigServerModule = require('../lib/server/ai-config') as any;
     const aiAccessModule = require('../lib/ai/ai-access') as any;
     const promptBuilderModule = require('../lib/ai/prompt-builder') as any;
-    const supabaseServerModule = require('../lib/supabase-server') as any;
+    const contextModule = require('../lib/db/context.server') as any;
     const apiUtilsModule = require('../lib/api-utils') as any;
     const rateLimitModule = require('../lib/rate-limit') as any;
 
@@ -129,7 +128,7 @@ function setupRouteMocks(
     const originalBuildMinimalChatSystemPrompt = promptBuilderModule.buildMinimalChatSystemPrompt;
     const originalGetPromptBudget = promptBuilderModule.calculatePromptBudget;
     const originalResolvePersonalities = promptBuilderModule.resolvePersonalities;
-    const originalGetServiceClient = supabaseServerModule.getSystemAdminClient;
+    const originalSystemDb = contextModule.systemDb;
     const originalRequireUserContext = apiUtilsModule.requireUserContext;
     const originalCheckRateLimit = rateLimitModule.checkRateLimit;
 
@@ -256,45 +255,20 @@ function setupRouteMocks(
         };
     };
 
-    supabaseServerModule.getSystemAdminClient = () => ({
-        auth: {
-            getUser: async () => ({ data: { user: { id: 'user-1' } }, error: null }),
-        },
-        rpc: async () => ({
-            data: {
-                allowed: true,
-                remaining: 19,
-                reset_at: new Date(Date.now() + 60_000).toISOString(),
-            },
-            error: null,
-        }),
-        from: (table: string) => {
-            if (table === 'user_settings') {
-                return {
-                    select: () => ({
-                        eq: () => ({
-                            maybeSingle: async () => ({ data: null, error: null }),
-                        }),
-                    }),
-                };
-            }
-            if (table === 'knowledge_bases') {
-                return {
-                    select: () => ({
-                        eq: () => ({
-                            in: async () => ({ data: [], error: null }),
-                        }),
-                    }),
-                };
-            }
-            return {
+    contextModule.systemDb = () => createMockScopedDb({
+        tx: async (work) => work({
+            selectFrom: () => ({
                 select: () => ({
-                    eq: () => ({
-                        maybeSingle: async () => ({ data: null, error: null }),
+                    where: () => ({
+                        where: () => ({ execute: async () => [] }),
+                        execute: async () => [],
+                        executeTakeFirst: async () => null,
                     }),
+                    executeTakeFirst: async () => null,
                 }),
-            };
-        },
+                executeTakeFirst: async () => null,
+            }),
+        } as never),
     });
 
     delete require.cache[routeModulePath];
@@ -317,7 +291,7 @@ function setupRouteMocks(
         promptBuilderModule.buildMinimalChatSystemPrompt = originalBuildMinimalChatSystemPrompt;
         promptBuilderModule.calculatePromptBudget = originalGetPromptBudget;
         promptBuilderModule.resolvePersonalities = originalResolvePersonalities;
-        supabaseServerModule.getSystemAdminClient = originalGetServiceClient;
+        contextModule.systemDb = originalSystemDb;
         apiUtilsModule.requireUserContext = originalRequireUserContext;
         rateLimitModule.checkRateLimit = originalCheckRateLimit;
         delete require.cache[routeModulePath];
@@ -841,122 +815,6 @@ test('invalid conversation reasoning levels fail before charging or model execut
     assert.equal(state.aiUiCalls, 0);
 });
 
-for (const mode of ['managed', 'trusted', 'direct', 'preview'] as const) {
-    for (const expiredAccessCookie of [true, false]) {
-        test(`${mode} KB search uses refreshed identity with ${expiredAccessCookie ? 'stale access' : 'refresh-only'} cookies`, async (t) => {
-            const state = setupRouteMocks(t, createUIChunkStream([{ type: 'text-delta', id: 't1', delta: 'answer' }]));
-            const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
-            const sessionModule = require('../lib/auth-session') as typeof import('../lib/auth-session');
-            const promptContext = require('../lib/server/chat/prompt-context') as typeof import('../lib/server/chat/prompt-context');
-            const membership = require('../lib/user/membership-server') as typeof import('../lib/user/membership-server');
-            const settings = require('../lib/app-settings') as typeof import('../lib/app-settings');
-            const search = require('../lib/knowledge-base/search') as typeof import('../lib/knowledge-base/search');
-            const contextModule = require('../lib/db/context.server') as typeof import('../lib/db/context.server');
-            const resolveAuth = api.getAuthContext;
-            const refreshedToken = 'refreshed-access-token';
-            const caller = createMockAuthContext({}, `caller-${mode}-${expiredAccessCookie}`);
-            const searchCalls: string[] = [];
-            const cookieWrites: string[] = [];
-            let refreshCalls = 0;
-            let hitCount = 0;
-            const searchScoped = createMockScopedDb({
-                rpc: async (name) => {
-                    searchCalls.push(name);
-                    if (name === 'search_knowledge_fts') {
-                        return [{ id: 'entry-1', kb_id: 'kb-1', content: 'caller knowledge', rank: 0.3, metadata: {} }];
-                    }
-                    return [];
-                },
-                tx: async (work) => work({
-                    selectFrom() {
-                        const query = {
-                            select() { return query; },
-                            where() { return query; },
-                            async execute() { return [{ id: 'kb-1', weight: 'normal' }]; },
-                        };
-                        return query;
-                    },
-                } as never),
-            });
-            t.mock.method(contextModule, 'systemDb', () => searchScoped);
-            const authResolverClient = {
-                auth: {
-                    async getUser(token: string) {
-                        assert.equal(token, 'expired-access-token');
-                        return { data: { user: null }, error: { message: 'JWT expired' } };
-                    },
-                    async refreshSession(tokens: { refresh_token: string }) {
-                        assert.equal(tokens.refresh_token, 'valid-refresh-token');
-                        refreshCalls += 1;
-                        return { data: { session: {
-                            access_token: refreshedToken, refresh_token: 'next-refresh-token',
-                            token_type: 'bearer', expires_in: 3600, user: caller.user,
-                        } }, error: null };
-                    },
-                },
-            } satisfies Parameters<typeof sessionModule.resolveSessionFromTokens>[0];
-            const resolveRequestAuth = (request: NextRequest) => resolveAuth(request, {
-                authResolverClient: authResolverClient as unknown as ReturnType<typeof api.createAnonClient>,
-                cookieStore: {
-                    set: (_name, value) => { cookieWrites.push(value); },
-                    delete: () => assert.fail('successful refresh must not delete cookies'),
-                },
-            });
-            t.mock.method(api, 'getAuthContext', resolveRequestAuth);
-            t.mock.method(api, 'requireUserContext', async (request: NextRequest) => {
-                const auth = await resolveRequestAuth(request);
-                assert.ok(auth.user);
-                return { ...auth, user: auth.user };
-            });
-            t.mock.method(membership, 'getEffectiveMembershipType', async () => 'plus' as const);
-            t.mock.method(settings, 'isFeatureModuleEnabled', async () => true);
-            // Keep the real P6 search/persistence chain; replace only prompt assembly.
-            t.mock.method(promptContext, 'buildChatPromptContext', async (resolved: Parameters<typeof promptContext.buildChatPromptContext>[0]) => {
-                assert.equal(resolved.userId, caller.user.id);
-                const hits = await search.searchKnowledge('question', {
-                    membershipType: 'plus', userId: resolved.userId ?? undefined,
-                    db: contextModule.systemDb(), kbIds: ['kb-1'],
-                });
-                hitCount = hits.length;
-                return {
-                    sanitizedMessages: resolved.body.messages, fallbackPersonality: 'general' as const,
-                    systemPrompt: hits.map(hit => hit.content).join('\n'),
-                    promptKnowledgeBases: [{ id: 'kb-1', name: 'Caller KB' }],
-                    metadata: { kbSearchEnabled: true, kbHitCount: hits.length,
-                        promptDiagnostics: { modelId: resolved.requestedModelId, layers: [], totalTokens: 1, budgetTotal: 1024, userMessageTokens: 1 } },
-                };
-            });
-            const request = new NextRequest(`http://localhost/api/chat/${mode}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', cookie: [
-                    ...(expiredAccessCookie ? [`${sessionModule.ACCESS_COOKIE}=expired-access-token`] : []),
-                    `${sessionModule.REFRESH_COOKIE}=valid-refresh-token`,
-                ].join('; ') },
-                body: JSON.stringify({
-                    stream: true,
-                    ...(mode === 'trusted' ? { skipCreditCheck: true, internalSecret: 'internal-secret' } : {}),
-                    messages: [{ id: 'm1', role: 'user', content: 'question', createdAt: '2026-01-01' }],
-                }),
-            });
-            const route = mode === 'preview' ? await import('../app/api/chat/preview/route')
-                : mode === 'direct' ? await import('../app/api/chat/direct/prepare/route')
-                    : await import('../app/api/chat/route');
-            const response = await route.POST(request);
-            const body = await response.text();
-            assert.equal(response.status, 200, body);
-            assert.doesNotMatch(body, /refreshed-access-token|valid-refresh-token|next-refresh-token/);
-            assert.equal(hitCount, 1, 'successful authentication must not silently lose KB results');
-            // Search and weighting share the authenticated request's scoped database.
-            assert.deepEqual(searchCalls, ['search_knowledge_fts', 'search_knowledge_trigram']);
-            assert.equal(refreshCalls, 1);
-            assert.deepEqual(cookieWrites, [refreshedToken, 'next-refresh-token']);
-            assert.equal(request.cookies.get(sessionModule.ACCESS_COOKIE)?.value, expiredAccessCookie ? 'expired-access-token' : undefined);
-            assert.equal(state.useCreditCalls, mode === 'managed' ? 1 : 0);
-            assert.equal(state.addCreditCalls, 0);
-            assert.equal(state.aiUiCalls, mode === 'managed' || mode === 'trusted' ? 1 : 0);
-        });
-    }
-}
 
 
 test('chat direct prepare returns 400 for invalid JSON bodies', async (t) => {

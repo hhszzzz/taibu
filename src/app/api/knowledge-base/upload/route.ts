@@ -1,7 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getEffectiveMembershipType, MembershipResolutionError } from '@/lib/user/membership-server';
 import { ingestFileAsService, backfillVectorsAsService } from '@/lib/knowledge-base/ingest';
-import { triggerVectorIndexCreation } from '@/lib/knowledge-base/vector-index';
 import { requireUserContext, jsonError, jsonOk } from '@/lib/api-utils';
 import { createKnowledgeBasePersistence } from '@/lib/knowledge-base/persistence.server';
 import { ensureFeatureRouteEnabled } from '@/lib/feature-gate-utils';
@@ -70,7 +69,6 @@ export async function POST(request: NextRequest) {
     if (membership === 'pro') {
         try {
             await backfillVectorsAsService(kbId, user.id, db, 100);
-            await triggerVectorIndexCreation();
         } catch (error) {
             void error;
         }

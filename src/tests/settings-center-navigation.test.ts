@@ -144,7 +144,8 @@ test('settings panels retain route boundaries, Linux.do claims and private accou
 
   assert.doesNotMatch(hostSource, /import\(['"]@\/app\//u);
   assert.equal(hostSource.includes('SETTINGS_CENTER_GROUP_LABELS[entry.group]'), false);
-  assert.equal(upgradePanelSource.includes("const hasLinuxDoLogin = typeof user?.user_metadata?.linuxdo_sub === 'string'"), true);
+  assert.equal(upgradePanelSource.includes('const [hasLinuxDoLogin, setHasLinuxDoLogin] = useState(false)'), true);
+  assert.equal(upgradePanelSource.includes('setHasLinuxDoLogin(Boolean(bundle.linuxdo?.sub))'), true);
   assert.equal(upgradePanelSource.includes('{hasLinuxDoLogin ? ('), true);
   assert.equal(upgradePanelSource.includes("showToast('success', 'Linux.do 月度会员已领取')"), false);
   assert.equal(upgradePanelSource.includes("showToast('success', `恭喜领取 ${planName ?? '会员'} 会员`)"), true);

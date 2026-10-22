@@ -18,7 +18,7 @@ import { SegmentedControl } from '@/components/bazi/SegmentedControl';
 import { HepanPersonCard } from '@/components/hepan/HepanPersonCard';
 import { HepanPrinciples } from '@/components/hepan/HepanPrinciples';
 import { HEPAN_PERSON_LABELS, HEPAN_TYPE_OPTIONS } from '@/components/hepan/hepan-display';
-import { supabase } from '@/lib/auth';
+import { getSessionSnapshot } from '@/lib/auth';
 import { writeSessionJSON } from '@/lib/cache/session-storage';
 import { saveDivinationAction } from '@/lib/divination/save-client';
 
@@ -39,7 +39,7 @@ export function HepanCreateView() {
 
     // 获取用户 ID
     useEffect(() => {
-        supabase.auth.getSession().then(({ data: { session } }) => {
+        getSessionSnapshot().then(({ data: { session } }) => {
             if (session?.user) {
                 setUserId(session.user.id);
             }
@@ -108,7 +108,7 @@ export function HepanCreateView() {
         // 保存合盘记录到数据库
         let chartId: string | null = null;
         try {
-            const { data: { session } } = await supabase.auth.getSession();
+            const { data: { session } } = await getSessionSnapshot();
             if (session?.user) {
                 const saveResult = await saveDivinationAction({
                     endpoint: '/api/hepan',

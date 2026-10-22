@@ -11,7 +11,6 @@ type Row = Record<string, unknown> | null;
 function mockUserContext(user: unknown, db = createMockScopedDb()) {
   return {
     user,
-    accessToken: null,
     authError: null,
     db,
   };
@@ -191,9 +190,8 @@ test('user profile route should recover a missing user row before returning prof
   });
   const routeModule = installRoute(t, scoped, {
     id: 'user-1',
-    user_metadata: {
-      nickname: '补建资料',
-    },
+    name: '补建资料',
+    image: null,
   });
 
   const response = await routeModule.GET(new Request('http://localhost/api/user/profile?scope=profile') as never);

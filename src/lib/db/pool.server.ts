@@ -110,6 +110,23 @@ declare global {
   var __taibuKysely: Kysely<DB> | undefined;
 }
 
+/**
+ * Better Auth needs its own small pool on the `taibu_auth` role. It keeps the
+ * default type parsers because the auth tables store plain strings/booleans.
+ */
+export function createAuthPool(): pg.Pool {
+  const connectionString = process.env.AUTH_DATABASE_URL;
+  if (!connectionString) throw new Error('[db] AUTH_DATABASE_URL 未配置');
+  return new Pool({
+    connectionString,
+    max: 4,
+    application_name: 'taibu-auth',
+    idleTimeoutMillis: 30_000,
+    connectionTimeoutMillis: 5_000,
+    keepAlive: true,
+  });
+}
+
 export function getPool(): pg.Pool {
   globalThis.__taibuDbPool ??= createPool();
   return globalThis.__taibuDbPool;

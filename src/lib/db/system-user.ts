@@ -1,14 +1,12 @@
 import 'server-only';
-import { DbError } from './errors';
 
 /**
- * P1–P4: the local stack seeds its administrator through GoTrue, so the id is
- * supplied by the stack. P5 replaces this with the fixed system-user constant.
+ * The system principal owns scheduled work and administrative reads.
+ * Seeded by database/migrations/0003_identity_profile_and_system_user.sql;
+ * it has no account row, so it can never sign in.
  */
+export const SYSTEM_USER_ID = '00000000-0000-4000-8000-000000000001';
+
 export function systemUserId(): string {
-  const value = process.env.SYSTEM_USER_ID;
-  if (!value || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
-    throw new DbError({ code: 'SYSTEM_USER_MISSING', message: '系统用户未配置' });
-  }
-  return value;
+  return SYSTEM_USER_ID;
 }

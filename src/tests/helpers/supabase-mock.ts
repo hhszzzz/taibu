@@ -31,14 +31,13 @@ export function createMockAuthContext(
     const scopedDb = scoped ?? (looksLikeScopedDb(db) ? db : createMockScopedDb());
     return {
         db: scopedDb,
-        accessToken: userId === null ? null : 'test-token',
         authError: null,
         user: userId === null ? null : {
             id: userId,
-            aud: 'authenticated',
-            app_metadata: {},
-            user_metadata: {},
-            created_at: '2026-01-01T00:00:00.000Z',
+            email: `${userId}@example.test`,
+            emailVerified: true,
+            name: '测试用户',
+            image: null,
         },
     };
 }

@@ -1,12 +1,16 @@
 import 'server-only';
 import { Worker } from 'bullmq';
 
+import { EMAIL_QUEUE, closeEmailQueue } from '@/lib/email/queue.server';
+import { sendMail } from '@/lib/email/mailer.server';
+import type { OutgoingMail } from '@/lib/email/mailer.server';
 import { createBullConnection } from '@/lib/redis.server';
 import { runMaintenanceJob } from './maintenance.server';
 import { closeMaintenanceQueue, getMaintenanceQueue, JOB_QUEUE_PREFIX, MAINTENANCE_QUEUE } from './queues.server';
 import { upsertMaintenanceSchedulers } from './schedulers.server';
 
 let worker: Worker | null = null;
+let emailWorker: Worker<OutgoingMail> | null = null;
 let starting: Promise<void> | null = null;
 
 async function start(): Promise<void> {
@@ -29,6 +33,19 @@ async function start(): Promise<void> {
   worker.on('error', () => {
     console.warn('[jobs] maintenance worker error');
   });
+  emailWorker = new Worker<OutgoingMail>(EMAIL_QUEUE, async (job) => {
+    await sendMail(job.data);
+  }, {
+    connection: createBullConnection(),
+    prefix: JOB_QUEUE_PREFIX,
+    concurrency: 2,
+  });
+  emailWorker.on('failed', (job, error) => {
+    console.warn('[jobs] email job failed:', job?.id, error.message);
+  });
+  emailWorker.on('error', () => {
+    console.warn('[jobs] email worker error');
+  });
 }
 
 /** Idempotent: worker-entry calls this once per process. */
@@ -39,8 +56,11 @@ export function startJobWorkers(): Promise<void> {
 
 export async function stopJobWorkers(): Promise<void> {
   const current = worker;
+  const currentEmail = emailWorker;
   worker = null;
+  emailWorker = null;
   starting = null;
-  await current?.close();
+  await Promise.all([current?.close(), currentEmail?.close()]);
   await closeMaintenanceQueue();
+  await closeEmailQueue();
 }

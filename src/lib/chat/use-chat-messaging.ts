@@ -93,7 +93,7 @@ const unavailableReply = (content: string): ChatMessage => ({ id: (Date.now() + 
 interface UseChatMessagingParams {
     state: ChatStateReturn;
     userId: string | null;
-    user: { user_metadata?: { nickname?: string } } | null;
+    user: { name?: string | null } | null;
     refreshViewerState: () => Promise<unknown>;
     markViewerCreditsExhausted: () => void;
     showToast: ReturnType<typeof import('@/components/ui/Toast').useToast>['showToast'];
@@ -409,7 +409,7 @@ export function useChatMessaging({
             if (chatStreamManager.isConversationRunning(conversationId)) { showToast('info', '当前会话正在生成中，请稍后再试'); return; }
 
             const dreamInfo: DreamInterpretationInfo | undefined = isDreamMode ? {
-                userName: user?.user_metadata?.nickname || ANONYMOUS_DISPLAY_NAME,
+                userName: user?.name || ANONYMOUS_DISPLAY_NAME,
                 dreamDate: new Date().toISOString(),
                 dreamContent: trimmedInput.slice(0, 50),
             } : undefined;

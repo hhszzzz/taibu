@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import { loadAdminClientAccessState } from '@/lib/admin/client';
-import { supabase } from '@/lib/auth';
+import { onAuthStateChange } from '@/lib/auth';
 
 export function useAdminJsonCopy(jsonPayload: unknown) {
     const { showToast } = useToast();
@@ -29,7 +29,7 @@ export function useAdminJsonCopy(jsonPayload: unknown) {
         };
 
         void loadAccess();
-        const { data } = supabase.auth.onAuthStateChange(() => {
+        const { data } = onAuthStateChange(() => {
             void loadAccess();
         });
 

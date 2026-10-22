@@ -8,7 +8,6 @@ process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANO
 type BaziRow = Parameters<typeof import('../lib/data-sources/bazi').baziProvider.formatForAI>[0];
 
 function setupDreamContext(t: import('node:test').TestContext) {
-  const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
   const baziModule = require('../lib/data-sources/bazi') as typeof import('../lib/data-sources/bazi');
   const fortuneModule = require('../lib/data-sources/fortune') as typeof import('../lib/data-sources/fortune');
   const caseProfileModule = require('../lib/server/bazi-case-profile') as typeof import('../lib/server/bazi-case-profile');
@@ -26,44 +25,6 @@ function setupDreamContext(t: import('node:test').TestContext) {
     settingsReads: 0,
     fortuneReads: 0,
     formattedRows: [] as BaziRow[],
-  };
-  const client = {
-    from(table: string) {
-      return {
-        select(columns: string) {
-          const filters = new Map<string, string>();
-          if (table === 'bazi_charts') {
-            assert.doesNotMatch(columns, /\*|updated_at/u);
-            for (const field of ['id', 'name', 'gender', 'birth_date', 'birth_time', 'birth_place', 'longitude', 'calendar_type', 'is_leap_month', 'timezone', 'disambiguation']) {
-              assert.ok(columns.split(', ').includes(field), `chart SELECT must include ${field}`);
-            }
-          }
-          const query = {
-            eq(column: string, value: string) { filters.set(column, value); return query; },
-            order() { return query; },
-            limit() { return query; },
-            async maybeSingle() {
-              assert.ok(filters.get('user_id'), `${table} must be account-scoped`);
-              if (table === 'user_settings') {
-                state.settingsReads += 1;
-                return { data: { default_bazi_chart_id: state.defaultChartId }, error: null };
-              }
-              if (table === 'bazi_charts') {
-                state.chartReads += 1;
-                const matches = !filters.has('id') || filters.get('id') === state.chart.id;
-                return { data: matches ? { ...state.chart } : null, error: null };
-              }
-              if (table === 'bazi_case_profiles') {
-                assert.equal(filters.get('bazi_chart_id'), state.chart.id);
-                return { data: { updated_at: state.caseProfileUpdatedAt }, error: null };
-              }
-              throw new Error(`Unexpected table: ${table}`);
-            },
-          };
-          return query;
-        },
-      };
-    },
   };
   const contextModule = require('../lib/db/context.server') as any;
   t.mock.method(contextModule, 'systemDb', () => createMockScopedDb({
@@ -117,7 +78,6 @@ function setupDreamContext(t: import('node:test').TestContext) {
       return work(trx as never);
     },
   }));
-  t.mock.method(apiUtilsModule, 'getSystemAdminClient', () => client);
   t.mock.method(baziModule.baziProvider, 'formatForAI', (chart: BaziRow) => {
     state.formattedRows.push(chart);
     return `命盘:${chart.id}:${chart.timezone}:${chart.disambiguation}:${chart.birth_time}`;

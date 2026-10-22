@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "baselineRevision": "5725dde",
-  "sourceFingerprint": "0b91b09641d193b3da7cc5ad9f6a7c9902d26af74a214e426ebe21e27a083912",
+  "sourceFingerprint": "433c724b7afc9bbd25f03ee080b971b47a060c33c8561ab08e1f77d33bcaf897",
   "target": "empty local self-hosted application schema; NOT production parity or a migration replay",
   "bootstrapOrder": [
     "platform roles/extensions",
@@ -242,7 +242,7 @@
     },
     {
       "file": "src/lib/user/profile.ts",
-      "sha256": "86d9d0dfd710f4ad7358fb4c7eac728a052d78c606596acf9eafffea5f9984da"
+      "sha256": "95a5c678f9632d49519847c9ebdca870b4b90f15cd94ebdfbd79e4baea1ce580"
     }
   ],
   "normalizations": [
@@ -812,19 +812,9 @@
       "reason": null
     },
     {
-      "name": "check_login_attempts",
-      "callers": [
-        "src/app/api/auth/route.ts"
-      ],
-      "source": "supabase/migrations/fix_login_attempts_rls.sql",
-      "status": "defined",
-      "reason": null
-    },
-    {
       "name": "check_vector_index_exists",
       "callers": [
-        "src/lib/knowledge-base/embedding-config.ts",
-        "src/lib/knowledge-base/vector-index.ts"
+        "src/lib/knowledge-base/embedding-config.ts"
       ],
       "source": "supabase/selfhost/source-rpcs.sql",
       "status": "defined",
@@ -852,7 +842,7 @@
     {
       "name": "claim_linuxdo_membership_as_service",
       "callers": [
-        "src/app/api/auth/linuxdo/callback/route.ts"
+        "src/lib/identity/linuxdo-plugin.server.ts"
       ],
       "source": "supabase/migrations/20260410_103000_fix_linuxdo_claim_concurrency.sql",
       "status": "defined",
@@ -1019,15 +1009,6 @@
         "src/lib/reminders.ts"
       ],
       "source": "supabase/migrations/20260409_000100_remaining_atomicity_rpcs.sql",
-      "status": "defined",
-      "reason": null
-    },
-    {
-      "name": "record_login_attempt",
-      "callers": [
-        "src/app/api/auth/route.ts"
-      ],
-      "source": "supabase/migrations/fix_login_attempts_rls.sql",
       "status": "defined",
       "reason": null
     },
@@ -2378,12 +2359,16 @@
       "status": "defined",
       "callers": [
         {
-          "file": "src/app/api/auth/linuxdo/callback/route.ts",
-          "kind": "literal-from"
+          "file": "src/app/api/user/profile/route.ts",
+          "kind": "literal-kysely"
         },
         {
-          "file": "src/app/api/auth/linuxdo/callback/route.ts",
-          "kind": "literal-from"
+          "file": "src/lib/identity/linuxdo-plugin.server.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/identity/linuxdo-plugin.server.ts",
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -2452,10 +2437,6 @@
           "kind": "literal-kysely"
         },
         {
-          "file": "src/app/api/auth/linuxdo/callback/route.ts",
-          "kind": "literal-from"
-        },
-        {
           "file": "src/app/api/files/avatars/route.ts",
           "kind": "literal-kysely"
         },
@@ -2485,6 +2466,10 @@
         },
         {
           "file": "src/lib/community-server.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/identity/linuxdo-plugin.server.ts",
           "kind": "literal-kysely"
         },
         {
@@ -2634,7 +2619,7 @@
   "artifacts": [
     {
       "file": "supabase/selfhost/001-application.sql",
-      "sha256": "5e2397e1da39d9b106944936649de7ef6375b969fb7b6ac0645ba8d1a11d12d5"
+      "sha256": "bb26588139dcc98e262408a14236ead200af93290459c5840244074ee940c038"
     },
     {
       "file": "supabase/selfhost/002-storage.sql",

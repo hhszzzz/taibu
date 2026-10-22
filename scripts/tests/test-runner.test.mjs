@@ -35,7 +35,7 @@ test('focused execution builds only the required workspace dependencies in order
   assert.deepEqual(requiredPackages(['packages/mcp-server/tests/http.test.mjs']), ['core', 'mcp-server']);
   assert.deepEqual(requiredPackages(['scripts/tests/test-runner.test.mjs']), []);
   assert.deepEqual(requiredPackages(['scripts/tests/skill-bundle.test.mjs']), ['core']);
-  assert.deepEqual(requiredPackages(['scripts/tests/auth-postgrest-acceptance.test.mjs']), ['core']);
+  assert.deepEqual(requiredPackages(['scripts/tests/auth-acceptance.test.mjs']), []);
   assert.deepEqual(requiredPackages(['scripts/tests/npm-package-artifacts.test.mjs']), ['core', 'mcp', 'mcp-server']);
 });
 
@@ -44,11 +44,11 @@ test('full verification builds each package once and enforces database and brows
   assert.deepEqual(steps.filter(step => step.args[0] === '-C').map(step => step.args[1]), ['packages/core', 'packages/mcp', 'packages/mcp-server']);
   assert.ok(steps.some(step => step.args.includes('tsc')));
   assert.ok(steps.some(step => step.args.includes('next') && step.args.includes('build')));
-  for (const file of ['npm-package-artifacts.test.mjs', 'skill-bundle.test.mjs', 'prepare-github-package.test.mjs', 'postgres-contracts.test.mjs', 'auth-postgrest-acceptance.test.mjs', 'p5-browser-fixture.mjs']) {
+  for (const file of ['npm-package-artifacts.test.mjs', 'skill-bundle.test.mjs', 'prepare-github-package.test.mjs', 'postgres-contracts.test.mjs', 'auth-acceptance.test.mjs', 'p5-browser-fixture.mjs']) {
     assert.ok(steps.some(step => step.args.some(arg => arg.endsWith(file))), file);
   }
-  assert.deepEqual(steps.find(step => step.args.includes('scripts/tests/auth-postgrest-acceptance.test.mjs'))?.args,
-    ['--require', './scripts/ts-register.cjs', '--test', 'scripts/tests/auth-postgrest-acceptance.test.mjs']);
+  assert.deepEqual(steps.find(step => step.args.includes('scripts/tests/auth-acceptance.test.mjs'))?.args,
+    ['--test', 'scripts/tests/auth-acceptance.test.mjs']);
   assert.ok(!steps.some(step => step.args.some(arg => ['typecheck', 'test', 'test:npm-packages', 'test:auth', 'test:browser'].includes(arg))));
 });
 

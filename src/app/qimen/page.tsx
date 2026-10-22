@@ -23,7 +23,7 @@ import {
     useSanshiFormTime,
     type SegmentOption,
 } from '@/components/divination/SanshiFormControls';
-import { supabase } from '@/lib/auth';
+import { getSessionSnapshot } from '@/lib/auth';
 import { writeSessionJSON } from '@/lib/cache/session-storage';
 import { PageHeader } from '@/components/layout/PageHeader';
 
@@ -63,7 +63,7 @@ export default function QimenPage() {
         try {
             const castTime = formTime.resolveTime();
 
-            const { data: { session } } = await supabase.auth.getSession();
+            const { data: { session } } = await getSessionSnapshot();
             if (!session?.user) {
                 showToast('error', '请先登录');
                 setIsLoading(false);

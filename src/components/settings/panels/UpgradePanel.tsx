@@ -31,6 +31,7 @@ import { useToast } from '@/components/ui/Toast';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import { getSettingsCenterRouteTargetForPath } from '@/lib/settings-center';
 import { describePricingPlan, getMembershipInfo, pricingPlans, type MembershipInfo } from '@/lib/user/membership';
+import { getCurrentUserProfileBundle } from '@/lib/user/profile';
 
 type ClaimStatus =
   | 'ok'
@@ -48,13 +49,7 @@ function resolveMembershipPlanName(type: MembershipInfo['type'] | null | undefin
   return null;
 }
 
-function resolveLinuxDoPlanNameFromUser(user: ReturnType<typeof useSessionSafe>['user']): LinuxDoClaimPlanName | null {
-  const providerMetadata = user?.user_metadata?.linuxdo_provider_metadata;
-  if (!providerMetadata || typeof providerMetadata !== 'object') {
-    return null;
-  }
-
-  const trustLevel = (providerMetadata as { trust_level?: unknown }).trust_level;
+function resolveLinuxDoPlanName(trustLevel: number | null): LinuxDoClaimPlanName | null {
   if (typeof trustLevel !== 'number') {
     return null;
   }
@@ -170,9 +165,29 @@ export default function UpgradePanel() {
   const [transactionsRefreshKey, setTransactionsRefreshKey] = useState(0);
   const [linuxDoClaimLockedUntil, setLinuxDoClaimLockedUntil] = useState<string | null>(null);
   const [linuxDoClaimPlanName, setLinuxDoClaimPlanName] = useState<LinuxDoClaimPlanName | null>(null);
+  const [linuxDoTrustLevel, setLinuxDoTrustLevel] = useState<number | null>(null);
+  const [hasLinuxDoLogin, setHasLinuxDoLogin] = useState(false);
   const { showToast } = useToast();
-  const hasLinuxDoLogin = typeof user?.user_metadata?.linuxdo_sub === 'string'
-    && user.user_metadata.linuxdo_sub.trim().length > 0;
+
+  useEffect(() => {
+    if (!user) {
+      setHasLinuxDoLogin(false);
+      setLinuxDoTrustLevel(null);
+      return;
+    }
+    let active = true;
+    void getCurrentUserProfileBundle().then((bundle) => {
+      if (!active) return;
+      setHasLinuxDoLogin(Boolean(bundle.linuxdo?.sub));
+      setLinuxDoTrustLevel(bundle.linuxdo?.trustLevel ?? null);
+    }).catch(() => {
+      if (active) {
+        setHasLinuxDoLogin(false);
+        setLinuxDoTrustLevel(null);
+      }
+    });
+    return () => { active = false; };
+  }, [user]);
 
   const checkinEnabled = featureLoaded && isFeatureEnabled('checkin');
 
@@ -284,7 +299,7 @@ export default function UpgradePanel() {
     window.history.replaceState({}, '', nextUrl.toString());
 
     if (claim === 'ok') {
-      const fallbackPlanName = resolveLinuxDoPlanNameFromUser(user);
+      const fallbackPlanName = resolveLinuxDoPlanName(linuxDoTrustLevel);
       const lockedUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
       setLinuxDoClaimLockedUntil(lockedUntil);
       setLinuxDoClaimPlanName(fallbackPlanName);
@@ -311,7 +326,7 @@ export default function UpgradePanel() {
 
     if (claim === 'cooldown') {
       const nextAvailableAt = searchParams.get('next_available_at');
-      const fallbackPlanName = resolveLinuxDoPlanNameFromUser(user);
+      const fallbackPlanName = resolveLinuxDoPlanName(linuxDoTrustLevel);
       if (nextAvailableAt) {
         setLinuxDoClaimLockedUntil(nextAvailableAt);
         setLinuxDoClaimPlanName(fallbackPlanName);

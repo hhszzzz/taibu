@@ -22,7 +22,7 @@ import {
     vote,
     VoteType,
 } from '@/lib/community';
-import { supabase } from '@/lib/auth';
+import { getUserSnapshot } from '@/lib/auth';
 import { loadAdminClientAccessState } from '@/lib/admin/client';
 import { useToast } from '@/components/ui/Toast';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
@@ -58,7 +58,7 @@ export default function PostDetailPage() {
     useEffect(() => {
         const checkAuth = async () => {
             try {
-                const { data: { user } } = await supabase.auth.getUser();
+                const { data: { user } } = await getUserSnapshot();
                 setUser(user);
                 if (user) {
                     try {

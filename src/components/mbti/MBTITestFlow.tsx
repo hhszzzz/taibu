@@ -23,7 +23,7 @@ import {
     type TestAnswer,
     type LikertValue,
 } from '@/lib/divination/mbti';
-import { supabase } from '@/lib/auth';
+import { getSessionSnapshot } from '@/lib/auth';
 
 /** 提交后保留分析动画的时长，避免结果页闪现 */
 const RESULT_REDIRECT_DELAY_MS = 1500;
@@ -106,7 +106,7 @@ export function MBTITestFlow() {
         // 已登录时保存测试记录；保存失败不阻断查看结果
         let readingId: string | null = null;
         try {
-            const { data: { session } } = await supabase.auth.getSession();
+            const { data: { session } } = await getSessionSnapshot();
             if (session?.user) {
                 const saveResult = await saveDivinationAction({
                     endpoint: '/api/mbti',

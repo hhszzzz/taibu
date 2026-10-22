@@ -82,6 +82,29 @@ async function loadSettings(auth: Exclude<Awaited<ReturnType<typeof requireUserC
     return getUserSettingsSnapshot(auth.db, auth.user.id);
 }
 
+async function loadLinuxDoBinding(
+    auth: Exclude<Awaited<ReturnType<typeof requireUserContext>>, { error: unknown }>,
+): Promise<{ sub: string | null; trustLevel: number | null }> {
+    try {
+        const row = await auth.db.tx((trx) => trx
+            .selectFrom('user_oauth_providers')
+            .select(['provider_user_id', 'provider_metadata'])
+            .where('user_id', '=', auth.user.id)
+            .where('provider', '=', 'linuxdo')
+            .executeTakeFirst());
+        if (!row) return { sub: null, trustLevel: null };
+        const metadata = row.provider_metadata;
+        const trustLevel = metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+            && typeof (metadata as { trust_level?: unknown }).trust_level === 'number'
+            ? (metadata as { trust_level: number }).trust_level
+            : null;
+        return { sub: row.provider_user_id, trustLevel };
+    } catch (error) {
+        console.error('加载 Linux.do 绑定失败:', error);
+        return { sub: null, trustLevel: null };
+    }
+}
+
 export async function GET(request: NextRequest) {
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
@@ -96,12 +119,14 @@ export async function GET(request: NextRequest) {
         return jsonOk({
             profile: normalizeProfileRow(profileResult.row),
             settings: null,
+            linuxdo: await loadLinuxDoBinding(auth),
         });
     }
 
-    const [profileResult, settingsResult] = await Promise.all([
+    const [profileResult, settingsResult, linuxdo] = await Promise.all([
         loadProfileWithRecovery(auth),
         loadSettings(auth),
+        loadLinuxDoBinding(auth),
     ]);
     if (profileResult.error || settingsResult.error) {
         return jsonError('获取用户资料失败', 500);
@@ -110,6 +135,7 @@ export async function GET(request: NextRequest) {
     return jsonOk({
         profile: normalizeProfileRow(profileResult.row),
         settings: settingsResult.settings,
+        linuxdo,
     });
 }
 

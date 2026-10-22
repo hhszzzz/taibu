@@ -1,17 +1,18 @@
-import type { User } from '@supabase/supabase-js';
 import type { ScopedDb } from '@/lib/db/context.server';
 
-type UserRecordSeedInput = Pick<User, 'id' | 'user_metadata'>;
+/** Minimal identity shape available after the Better Auth migration. */
+export type UserRecordSeedInput = {
+  id: string;
+  name?: string | null;
+  image?: string | null;
+};
 
 export function buildUserRecordSeed(user: UserRecordSeedInput) {
+  const nickname = typeof user.name === 'string' ? user.name.trim() : '';
   return {
     id: user.id,
-    nickname: typeof user.user_metadata?.nickname === 'string' && user.user_metadata.nickname.trim().length > 0
-      ? user.user_metadata.nickname.trim()
-      : '命理爱好者',
-    avatar_url: typeof user.user_metadata?.avatar_url === 'string'
-      ? user.user_metadata.avatar_url
-      : null,
+    nickname: nickname || '命理爱好者',
+    avatar_url: typeof user.image === 'string' && user.image ? user.image : null,
     membership: 'free' as const,
     ai_chat_count: 1,
   };

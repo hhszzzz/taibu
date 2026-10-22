@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TEST_DIRECTORIES = ['src/tests', 'packages/core/tests', 'packages/mcp/tests', 'packages/mcp-server/tests'];
-const SCRIPT_TESTS = ['scripts/tests/architecture-guards.test.mjs', 'scripts/tests/test-runner.test.mjs', 'scripts/tests/selfhost-schema.test.mjs', 'scripts/tests/selfhost-stack.test.mjs', 'scripts/tests/method-cards.test.mjs'];
+const SCRIPT_TESTS = ['scripts/tests/architecture-guards.test.mjs', 'scripts/tests/test-runner.test.mjs', 'scripts/tests/selfhost-schema.test.mjs', 'scripts/tests/method-cards.test.mjs'];
 const ARTIFACT_TESTS = [
   'scripts/tests/npm-package-artifacts.test.mjs',
   'scripts/tests/skill-bundle.test.mjs',
@@ -69,7 +69,7 @@ export function verificationSteps(files, complete = false, useInstalledChrome = 
     pnpmStep('Next production build', ['exec', 'next', 'build']),
     nodeStep('Package, license and Skill artifacts', ['--test', ...ARTIFACT_TESTS]),
     nodeStep('Isolated PostgreSQL contracts', ['--test', 'scripts/tests/postgres-contracts.test.mjs']),
-    nodeStep('Real Auth and PostgREST contracts', ['--require', './scripts/ts-register.cjs', '--test', 'scripts/tests/auth-postgrest-acceptance.test.mjs']),
+    nodeStep('Auth acceptance (local stack + Mailpit)', ['--test', 'scripts/tests/auth-acceptance.test.mjs']),
     nodeStep('Real Redis admission contracts', ['--require', './scripts/ts-register.cjs', '--test', 'scripts/tests/selfhost-redis.test.mjs']),
     nodeStep('Offline browser component contracts', ['scripts/tests/p5-browser-fixture.mjs', ...(useInstalledChrome ? ['--chrome'] : [])]),
   ];

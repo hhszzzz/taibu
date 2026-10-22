@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
-import { supabase } from '@/lib/auth';
+import { revalidateBrowserSession } from '@/lib/auth';
 import { requestBrowserJson } from '@/lib/browser-api';
 
 type CreditTransaction = {
@@ -62,7 +62,7 @@ export function CreditTransactionsPanel({ pageSize = 5, refreshKey = 0 }: Credit
       let result = await loadTransactions();
       if (result.error) {
         if (result.status === 401) {
-          const { data: { session } } = await supabase.auth.revalidateSession();
+          const { data: { session } } = await revalidateBrowserSession();
           if (session) {
             result = await loadTransactions();
           }

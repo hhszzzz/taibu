@@ -10,6 +10,7 @@ import { SessionContext } from '../lib/hooks/session-context';
 import { EMPTY_APP_BOOTSTRAP, type AppBootstrapData } from '../lib/app/bootstrap';
 import { buildMembershipInfo } from '../lib/user/membership';
 import { createMockAuthContext } from './helpers/supabase-mock';
+import { createMockScopedDb } from './helpers/db-mock';
 
 type BootstrapSnapshot = ReturnType<typeof import('../lib/hooks/useAppBootstrap').useAppBootstrap>;
 
@@ -20,125 +21,135 @@ function bootstrapSnapshot(data: AppBootstrapData, state: Pick<BootstrapSnapshot
   return { ...result, data, ...state, viewerStateError: null, refresh: async () => data, markCreditsExhausted() {} };
 }
 
-process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
+function sessionFor(id: string) {
+  const user = {
+    id: `user-${id}`,
+    email: `user-${id}@example.test`,
+    emailVerified: true,
+    name: '测试用户',
+    image: null,
+  };
+  return { id: `session-${id}`, userId: user.id, expiresAt: new Date(Date.now() + 3600_000).toISOString(), user };
+}
 
-test('checkLoginAttempts should return an explicit guard error instead of failing open', async () => {
-  const browserApiModule = require('../lib/browser-api') as typeof import('../lib/browser-api');
-  const authPath = require.resolve('../lib/auth');
-  const originalRequestBrowserJson = browserApiModule.requestBrowserJson;
+test('browser session cache deduplicates reads, invalidates, and revalidates with events', async (t) => {
+  const auth = require('../lib/auth') as typeof import('../lib/auth');
+  let calls = 0;
+  const previous = auth.__setAuthClientForTests({
+    getSession: async () => {
+      calls += 1;
+      const session = sessionFor(String(calls));
+      return { data: { session, user: session.user }, error: null };
+    },
+  } as unknown as Parameters<typeof auth.__setAuthClientForTests>[0]);
+  t.after(() => { auth.__setAuthClientForTests(previous); });
 
-  browserApiModule.requestBrowserJson = async () => ({
-    data: null,
-    error: { message: 'guard backend down', code: 'guard_backend_down' },
+  auth.invalidateBrowserSessionCache();
+  const first = await auth.getSessionSnapshot();
+  const second = await auth.getSessionSnapshot();
+  auth.invalidateBrowserSessionCache();
+  const third = await auth.getSessionSnapshot();
+
+  const events: Array<{ event: string; userId: string | null }> = [];
+  const { data: { subscription } } = auth.onAuthStateChange((event, session) => {
+    events.push({ event, userId: session?.user?.id ?? null });
   });
+  await new Promise((resolve) => setImmediate(resolve));
+  const fourth = await auth.revalidateBrowserSession();
+  subscription.unsubscribe();
 
-  try {
-    delete require.cache[authPath];
-    const { checkLoginAttempts, authSessionCacheConstants } = require('../lib/auth') as typeof import('../lib/auth');
-    const result = await checkLoginAttempts('user@example.com');
-
-    assert.deepEqual(result, {
-      blocked: false,
-      remainingAttempts: 5,
-      error: {
-        message: authSessionCacheConstants.LOGIN_GUARD_UNAVAILABLE_MESSAGE,
-        code: 'guard_backend_down',
-      },
-    });
-  } finally {
-    browserApiModule.requestBrowserJson = originalRequestBrowserJson;
-    delete require.cache[authPath];
-  }
+  assert.equal(first.data.session?.user?.id, 'user-1');
+  assert.equal(second.data.session?.user?.id, 'user-1');
+  assert.equal(third.data.session?.user?.id, 'user-2');
+  assert.equal(fourth.data.session?.user?.id, 'user-3');
+  assert.equal(calls, 3);
+  assert.deepEqual(events, [
+    { event: 'INITIAL_SESSION', userId: 'user-2' },
+    { event: 'TOKEN_REFRESHED', userId: 'user-3' },
+  ]);
 });
 
-test('signInWithEmailProtected should fail closed when the login guard is unavailable', async () => {
-  const browserApiModule = require('../lib/browser-api') as typeof import('../lib/browser-api');
-  const authPath = require.resolve('../lib/auth');
-  const originalRequestBrowserJson = browserApiModule.requestBrowserJson;
-  const calls: Array<{ url: string; method?: string }> = [];
+test('signInWithEmail maps Better Auth codes to the historical Chinese messages', async (t) => {
+  const auth = require('../lib/auth') as typeof import('../lib/auth');
+  const previous = auth.__setAuthClientForTests({
+    signIn: {
+      email: async () => ({
+        data: null,
+        error: { code: 'INVALID_EMAIL_OR_PASSWORD', message: 'invalid credentials' },
+      }),
+    },
+  } as unknown as Parameters<typeof auth.__setAuthClientForTests>[0]);
+  t.after(() => { auth.__setAuthClientForTests(previous); });
 
-  browserApiModule.requestBrowserJson = async (url: string, init?: RequestInit) => {
-    calls.push({ url, method: init?.method });
-    return {
-      data: null,
-      error: { message: 'guard backend down', code: 'guard_backend_down' },
-    };
-  };
+  const result = await auth.signInWithEmail('user@example.test', 'wrong-password');
 
-  try {
-    delete require.cache[authPath];
-    const { signInWithEmailProtected, authSessionCacheConstants } = require('../lib/auth') as typeof import('../lib/auth');
-    const result = await signInWithEmailProtected('user@example.com', 'password');
-
-    assert.deepEqual(result, {
-      success: false,
-      error: {
-        message: authSessionCacheConstants.LOGIN_GUARD_UNAVAILABLE_MESSAGE,
-        code: 'guard_backend_down',
-      },
-    });
-    assert.equal(calls.length, 1);
-    assert.equal(calls[0]?.url, '/api/auth');
-  } finally {
-    browserApiModule.requestBrowserJson = originalRequestBrowserJson;
-    delete require.cache[authPath];
-  }
+  assert.deepEqual(result, {
+    success: false,
+    error: { message: '邮箱或密码错误', code: 'INVALID_EMAIL_OR_PASSWORD' },
+  });
 });
 
-test('browser auth session cache should support explicit invalidate and revalidate flows', async () => {
-  const authPath = require.resolve('../lib/auth');
-  const originalFetch = global.fetch;
-  let callCount = 0;
+test('signUpWithEmail surfaces password policy and duplicate-account errors', async (t) => {
+  const auth = require('../lib/auth') as typeof import('../lib/auth');
+  const responses = [
+    { code: 'PASSWORD_TOO_SHORT', message: 'too short' },
+    { code: 'USER_ALREADY_EXISTS', message: 'exists' },
+  ];
+  const previous = auth.__setAuthClientForTests({
+    signUp: {
+      email: async () => ({ data: null, error: responses.shift() }),
+    },
+  } as unknown as Parameters<typeof auth.__setAuthClientForTests>[0]);
+  t.after(() => { auth.__setAuthClientForTests(previous); });
 
-  global.fetch = async () => {
-    callCount += 1;
-    const userId = `user-${callCount}`;
-    return Response.json({
-      data: {
-        session: {
-          access_token: `access-token-${callCount}`,
-          refresh_token: `refresh-token-${callCount}`,
-          token_type: 'bearer',
-          expires_in: 3600,
-          expires_at: Math.floor(Date.now() / 1000) + 3600,
-          user: { id: userId },
-        },
-        user: { id: userId },
-      },
-      error: null,
-    });
-  };
+  const short = await auth.signUpWithEmail('user@example.test', 'short');
+  const duplicate = await auth.signUpWithEmail('user@example.test', 'long-enough-password');
 
-  try {
-    delete require.cache[authPath];
-    const { supabase } = require('../lib/auth') as typeof import('../lib/auth');
+  assert.equal(short.error?.message, '密码至少8个字符');
+  assert.equal(duplicate.error?.message, '该邮箱已注册');
+});
 
-    const first = await supabase.auth.getSession();
-    const second = await supabase.auth.getSession();
-    supabase.auth.invalidateSessionCache();
-    const third = await supabase.auth.getSession();
-    const events: Array<{ event: string; userId: string | null }> = [];
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      events.push({ event, userId: session?.user?.id ?? null });
-    });
-    await new Promise((resolve) => setImmediate(resolve));
-    const fourth = await supabase.auth.revalidateSession();
+test('sendOTP maps OTP rate limiting to a retry message', async (t) => {
+  const auth = require('../lib/auth') as typeof import('../lib/auth');
+  const previous = auth.__setAuthClientForTests({
+    emailOtp: {
+      sendVerificationOtp: async () => ({
+        data: null,
+        error: { code: 'TOO_MANY_ATTEMPTS', message: 'slow down' },
+      }),
+    },
+  } as unknown as Parameters<typeof auth.__setAuthClientForTests>[0]);
+  t.after(() => { auth.__setAuthClientForTests(previous); });
 
-    subscription.unsubscribe();
-    assert.equal(first.data.session?.user?.id, 'user-1');
-    assert.equal(second.data.session?.user?.id, 'user-1');
-    assert.equal(third.data.session?.user?.id, 'user-2');
-    assert.equal(fourth.data.session?.user?.id, 'user-3');
-    assert.equal(callCount, 3);
-    assert.deepEqual(events, [
-      { event: 'INITIAL_SESSION', userId: 'user-2' },
-      { event: 'TOKEN_REFRESHED', userId: 'user-3' },
-    ]);
-  } finally {
-    global.fetch = originalFetch;
-    delete require.cache[authPath];
-  }
+  const result = await auth.sendOTP('user@example.test', 'magiclink');
+
+  assert.equal(result.success, false);
+  assert.equal(result.error?.message, '请求过于频繁，请稍后再试');
+});
+
+test('signOut clears the cached session and emits SIGNED_OUT', async (t) => {
+  const auth = require('../lib/auth') as typeof import('../lib/auth');
+  const previous = auth.__setAuthClientForTests({
+    getSession: async () => {
+      const session = sessionFor('1');
+      return { data: { session, user: session.user }, error: null };
+    },
+    signOut: async () => ({ data: { success: true }, error: null }),
+  } as unknown as Parameters<typeof auth.__setAuthClientForTests>[0]);
+  t.after(() => { auth.__setAuthClientForTests(previous); });
+
+  auth.invalidateBrowserSessionCache();
+  assert.equal((await auth.getSessionSnapshot()).data.session?.user?.id, 'user-1');
+  const events: string[] = [];
+  const { data: { subscription } } = auth.onAuthStateChange((event) => { events.push(event); });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const result = await auth.signOut();
+  subscription.unsubscribe();
+
+  assert.deepEqual(result, { success: true });
+  assert.deepEqual(events, ['INITIAL_SESSION', 'SIGNED_OUT']);
+  assert.equal((await auth.getSessionSnapshot()).data.session, null);
 });
 
 test('useAppBootstrap should defer viewer failures briefly before surfacing them', () => {
@@ -200,116 +211,11 @@ test('useFeatureToggles keeps unloaded bootstrap pending without exposing featur
   assert.equal(actual.isFeatureEnabled('chat'), false);
 });
 
-for (const scenario of ['valid', 'bearer-only', 'refreshed', 'update-error', 'refreshed-update-error', 'anonymous', 'session-error'] as const) {
-  test(`auth updateUser ${scenario} uses an isolated caller session`, async (t) => {
-    const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
-    const sessions = require('../lib/auth-session') as typeof import('../lib/auth-session');
-    const { user } = createMockAuthContext({}, `update-${scenario}`);
-    const refreshed = scenario === 'refreshed' || scenario === 'refreshed-update-error';
-    const updateRejected = scenario === 'update-error' || scenario === 'refreshed-update-error';
-    const token = refreshed ? 'rotated-access-token' : `validated-${scenario}`;
-    const session = sessions.buildSessionFromUser(user, token, scenario === 'bearer-only' ? '' : 'rotated-refresh-token');
-    t.mock.method(sessions, 'resolveSessionFromTokens', async () => ({
-      session: scenario === 'anonymous' || scenario === 'session-error' ? null : session,
-      refreshed,
-      error: scenario === 'session-error' ? { message: 'Auth unavailable', status: 503, code: 'auth_unavailable' } : null,
-    }));
-    const attributes = { data: { display_name: 'Local fixture' } };
-    const updatedUser = { ...user, user_metadata: attributes.data };
-    const requests: Array<{ path: string; method: string | undefined; authorization: string | null; body: unknown }> = [];
-    t.mock.method(globalThis, 'fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = new URL(input instanceof Request ? input.url : String(input));
-      requests.push({ path: url.pathname, method: init?.method, authorization: new Headers(init?.headers).get('authorization'), body: JSON.parse(String(init?.body)) });
-      return updateRejected
-        ? Response.json({ msg: 'Update rejected', error_code: 'update_rejected' }, { status: 400 })
-        : Response.json(updatedUser);
-    });
-    t.mock.method(apiUtils, 'getAuthAdminClient', () => assert.fail('user update must not acquire a privileged client'));
-    t.mock.method(apiUtils, 'getSystemAdminClient', () => assert.fail('user update must not acquire a system administrator'));
-    const { POST } = require('../app/api/auth/route') as typeof import('../app/api/auth/route');
-    const response = await POST(new NextRequest('http://localhost/api/auth', {
-      method: 'POST',
-      headers: scenario === 'bearer-only'
-        ? { 'content-type': 'application/json', authorization: 'Bearer original-bearer' }
-        : { 'content-type': 'application/json', cookie: `${sessions.ACCESS_COOKIE}=stale-access; ${sessions.REFRESH_COOKIE}=stale-refresh` },
-      body: JSON.stringify({ action: 'updateUser', attributes, token: 'untrusted-body-token' }),
-    }));
-    assert.equal(response.status, scenario === 'session-error' ? 503 : scenario === 'anonymous' ? 401 : updateRejected ? 400 : 200);
-    assert.deepEqual(requests, scenario === 'anonymous' || scenario === 'session-error' ? [] : [{
-      path: '/auth/v1/user', method: 'PUT', authorization: `Bearer ${token}`,
-      body: { ...attributes, code_challenge: null, code_challenge_method: null },
-    }]);
-    const payload = await response.json();
-    if (scenario === 'anonymous' || scenario === 'session-error' || updateRejected) {
-      assert.equal(payload.data, null);
-      if (updateRejected) assert.equal(payload.error.code, 'update_rejected');
-    } else {
-      assert.deepEqual(payload, { data: { user: updatedUser }, error: null });
-    }
-    if (refreshed) {
-      assert.equal(response.cookies.get(sessions.ACCESS_COOKIE)?.value, token);
-      assert.equal(response.cookies.get(sessions.REFRESH_COOKIE)?.value, session.refresh_token);
-    } else {
-      assert.equal(response.headers.get('set-cookie'), null);
-    }
-  });
-}
-
-for (const scenario of ['valid', 'refreshed', 'revocation-error', 'anonymous', 'session-error'] as const) {
-  test(`auth logout ${scenario} uses token-scoped revocation before clearing cookies`, async (t) => {
-    const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
-    const sessions = require('../lib/auth-session') as typeof import('../lib/auth-session');
-    const { user } = createMockAuthContext({}, 'logout-user');
-    const token = scenario === 'refreshed' ? 'newly-refreshed-token' : 'validated-access-token';
-    const session = sessions.buildSessionFromUser(user, token, 'fixture-refresh-token');
-    t.mock.method(sessions, 'resolveSessionFromTokens', async () => ({
-      session: scenario === 'anonymous' || scenario === 'session-error' ? null : session,
-      refreshed: scenario === 'refreshed',
-      error: scenario === 'session-error' ? { message: 'Invalid session', status: 401, code: 'invalid_token' } : null,
-    }));
-    const requests: Array<{ path: string; method: string | undefined; authorization: string | null }> = [];
-    t.mock.method(globalThis, 'fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = new URL(input instanceof Request ? input.url : String(input));
-      requests.push({ path: url.pathname + url.search, method: init?.method, authorization: new Headers(init?.headers).get('authorization') });
-      return scenario === 'revocation-error'
-        ? Response.json({ msg: 'Logout unavailable', error_code: 'logout_failed' }, { status: 400 })
-        : new Response(null, { status: 204 });
-    });
-    t.mock.method(apiUtils, 'getAuthAdminClient', () => assert.fail('logout must not acquire a privileged client'));
-    t.mock.method(apiUtils, 'getSystemAdminClient', () => assert.fail('logout must not acquire a system administrator'));
-    const { POST } = require('../app/api/auth/route') as typeof import('../app/api/auth/route');
-    const response = await POST(new NextRequest('http://localhost/api/auth', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', cookie: `${sessions.ACCESS_COOKIE}=old-request-token; ${sessions.REFRESH_COOKIE}=fixture-refresh-token` },
-      body: JSON.stringify({ action: 'signOut', token: 'untrusted-body-token' }),
-    }));
-    const rejected = scenario === 'session-error' || scenario === 'revocation-error';
-    assert.equal(response.status, scenario === 'session-error' ? 401 : scenario === 'revocation-error' ? 400 : 200);
-    assert.deepEqual(requests, scenario === 'anonymous' || scenario === 'session-error' ? [] : [{
-      path: '/auth/v1/logout?scope=global', method: 'POST', authorization: `Bearer ${token}`,
-    }]);
-    const payload = await response.json();
-    if (rejected) {
-      assert.equal(payload.data, null);
-      assert.equal(payload.error.code, scenario === 'session-error' ? 'invalid_token' : 'logout_failed');
-      assert.equal(response.headers.get('set-cookie'), null, 'failed revocation must not be reported as a completed logout');
-    } else {
-      assert.deepEqual(payload, { data: { signedOut: true }, error: null });
-      for (const name of [sessions.ACCESS_COOKIE, sessions.REFRESH_COOKIE]) {
-        assert.equal(response.cookies.get(name)?.value, '');
-        const expiry = response.cookies.get(name)?.expires;
-        assert.equal(expiry instanceof Date ? expiry.getTime() : expiry, 0);
-      }
-    }
-  });
-}
-
-// Timer grace and auth-event side effects are not exercised by SSR or the synthetic
-// P5 SessionContext fixture, so retain their unique guards until runtime coverage exists.
 test('ClientProviders should revalidate auth state and invalidate auth-bound queries after auth changes', () => {
   const source = readFileSync(resolve(process.cwd(), 'src/components/providers/ClientProviders.tsx'), 'utf8');
 
-  assert.match(source, /supabase\.auth\.revalidateSession\(\)/u);
+  assert.match(source, /revalidateBrowserSession\(\)/u);
+  assert.match(source, /onAuthStateChange\(/u);
   assert.match(source, /invalidateQueriesForPath\('\/api\/auth'\)/u);
 });
 
@@ -323,7 +229,7 @@ test('/api/reminders GET should return 500 when reminder subscriptions cannot be
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    supabase: null,
+    db: createMockScopedDb(),
   });
   remindersModule.getReminderSubscriptions = async () => {
     throw new remindersModule.ReminderReadError('获取提醒订阅失败');
@@ -361,7 +267,7 @@ test('reminder account preconditions authenticate first, reject before read/writ
   const { GET, POST } = await import('../app/api/reminders/route');
   for (const authenticated of [false, true]) {
     api.requireUserContext = async () => authenticated
-      ? { user: { id: 'alice' }, db: {} } as unknown as Awaited<ReturnType<typeof originalAuth>>
+      ? { user: { id: 'alice' }, db: createMockScopedDb() } as unknown as Awaited<ReturnType<typeof originalAuth>>
       : { error: { message: 'Unauthorized', status: 401 } };
     for (const [method, handler] of [['GET', GET], ['POST', POST]] as const) {
       for (const expected of [undefined, 'alice', 'bob', '']) {

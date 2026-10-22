@@ -6,14 +6,24 @@ process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
 
 
-function stubSettings(t: import('node:test').TestContext, row: Record<string, unknown>) {
+function stubSettings(
+  t: import('node:test').TestContext,
+  row: Record<string, unknown>,
+  options: { knowledgeBases?: Array<{ id: string; name: string; weight?: string }> } = {},
+) {
   const contextModule = require('../lib/db/context.server') as any;
   const original = contextModule.systemDb;
+  const knowledgeBases = options.knowledgeBases ?? [];
   contextModule.systemDb = () => createMockScopedDb({
     tx: async (work) => work({
-      selectFrom: () => ({
+      selectFrom: (table: string) => ({
         select: () => ({
-          where: () => ({ executeTakeFirst: async () => row }),
+          where: () => ({
+            where: () => ({ execute: async () => knowledgeBases }),
+            execute: async () => knowledgeBases,
+            executeTakeFirst: async () => (table === 'user_settings' ? row : null),
+          }),
+          executeTakeFirst: async () => (table === 'user_settings' ? row : null),
         }),
       }),
     } as never),
@@ -32,11 +42,9 @@ beforeEach((t) => {
 });
 
 test('buildChatPromptContext should load visualization_settings from user_settings', async (t) => {
-  const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
   const promptBuilderModule = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');
   const appSettingsModule = require('../lib/app-settings') as typeof import('../lib/app-settings');
 
-  const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
   const originalBuildPromptWithSources = promptBuilderModule.buildPromptWithSources;
   const originalGetPromptBudget = promptBuilderModule.calculatePromptBudget;
   const originalFeatureEnabled = appSettingsModule.isFeatureModuleEnabled;
@@ -57,36 +65,6 @@ test('buildChatPromptContext should load visualization_settings from user_settin
     },
   });
 
-  apiUtilsModule.getSystemAdminClient = (() => ({
-    from(table: string) {
-      if (table === 'knowledge_bases') {
-        return {
-          select() {
-            return {
-              eq() {
-                return {
-                  in: async () => ({ data: [], error: null }),
-                };
-              },
-            };
-          },
-        };
-      }
-
-      return {
-        select() {
-          return {
-            eq() {
-              return {
-                maybeSingle: async () => ({ data: null, error: null }),
-              };
-            },
-          };
-        },
-      };
-    },
-  })) as unknown as typeof apiUtilsModule.getSystemAdminClient;
-
   promptBuilderModule.calculatePromptBudget = (async () => { budgetCalls++; return 1024; }) as typeof promptBuilderModule.calculatePromptBudget;
   promptBuilderModule.buildPromptWithSources = (async (context, prepared) => {
     assert.equal(prepared?.budget, 1024);
@@ -105,7 +83,6 @@ test('buildChatPromptContext should load visualization_settings from user_settin
   appSettingsModule.isFeatureModuleEnabled = (async () => false) as typeof appSettingsModule.isFeatureModuleEnabled;
 
   t.after(() => {
-    apiUtilsModule.getSystemAdminClient = originalGetSystemAdminClient;
     promptBuilderModule.buildPromptWithSources = originalBuildPromptWithSources;
     promptBuilderModule.calculatePromptBudget = originalGetPromptBudget;
     appSettingsModule.isFeatureModuleEnabled = originalFeatureEnabled;
@@ -143,12 +120,10 @@ test('buildChatPromptContext should load visualization_settings from user_settin
 });
 
 test('buildChatPromptContext passes resolved membershipType to knowledge search', async (t) => {
-  const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
   const promptBuilderModule = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');
   const appSettingsModule = require('../lib/app-settings') as typeof import('../lib/app-settings');
   const searchModule = require('../lib/knowledge-base/search') as typeof import('../lib/knowledge-base/search');
 
-  const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
   const originalBuildPromptWithSources = promptBuilderModule.buildPromptWithSources;
   const originalGetPromptBudget = promptBuilderModule.calculatePromptBudget;
   const originalFeatureEnabled = appSettingsModule.isFeatureModuleEnabled;
@@ -161,40 +136,7 @@ test('buildChatPromptContext passes resolved membershipType to knowledge search'
     custom_instructions: '',
     prompt_kb_ids: ['kb-1'],
     visualization_settings: null,
-  });
-
-  apiUtilsModule.getSystemAdminClient = (() => ({
-    from(table: string) {
-      if (table === 'knowledge_bases') {
-        return {
-          select() {
-            return {
-              eq() {
-                return {
-                  in: async () => ({
-                    data: [{ id: 'kb-1', name: '知识库', weight: 'normal' }],
-                    error: null,
-                  }),
-                };
-              },
-            };
-          },
-        };
-      }
-
-      return {
-        select() {
-          return {
-            eq() {
-              return {
-                maybeSingle: async () => ({ data: null, error: null }),
-              };
-            },
-          };
-        },
-      };
-    },
-  })) as unknown as typeof apiUtilsModule.getSystemAdminClient;
+  }, { knowledgeBases: [{ id: 'kb-1', name: '知识库', weight: 'normal' }] });
 
   promptBuilderModule.calculatePromptBudget = (async () => 1024) as typeof promptBuilderModule.calculatePromptBudget;
   promptBuilderModule.buildPromptWithSources = (async () => ({
@@ -213,7 +155,6 @@ test('buildChatPromptContext passes resolved membershipType to knowledge search'
   }) as typeof searchModule.searchKnowledge;
 
   t.after(() => {
-    apiUtilsModule.getSystemAdminClient = originalGetSystemAdminClient;
     promptBuilderModule.buildPromptWithSources = originalBuildPromptWithSources;
     promptBuilderModule.calculatePromptBudget = originalGetPromptBudget;
     appSettingsModule.isFeatureModuleEnabled = originalFeatureEnabled;

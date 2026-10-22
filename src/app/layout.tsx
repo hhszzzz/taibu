@@ -20,8 +20,6 @@ import { HeaderMenuProvider } from "@/components/layout/HeaderMenuContext";
 import { ConversationListProvider } from "@/lib/chat/ConversationListContext";
 import { AppShell } from "@/components/layout/AppShell";
 import { ClientProviders } from "@/components/providers/ClientProviders";
-import { isSelfHosted } from "@/lib/runtime-env";
-import { Analytics } from "@vercel/analytics/react";
 import { SettingsCenterHost } from "@/components/settings/SettingsCenterHost";
 
 const themeInitScript = `
@@ -160,7 +158,6 @@ export default function RootLayout({
           </ConversationListProvider>
           </ClientProviders>
         </ThemeProvider>
-        {process.env.NODE_ENV === "production" && !isSelfHosted() ? <Analytics /> : null}
       </body>
     </html>
   );

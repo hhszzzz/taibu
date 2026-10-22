@@ -12,7 +12,7 @@ services:
       APP_DOMAIN: ${APP_DOMAIN:?}
       ADMIN_IP: ${ADMIN_IP:-127.0.0.1}   # space separated CIDR list
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
       - /opt/taibu/maintenance:/srv/maintenance:ro
@@ -55,7 +55,7 @@ services:
     depends_on:
       db: { condition: service_healthy }
   backup:
-    build: ./backup
+    build: ./deploy/backup
     restart: unless-stopped
     env_file: ["${TAIBU_ENV_DIR:?}/backup.env"]
     volumes:

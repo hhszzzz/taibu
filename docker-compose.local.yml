@@ -141,8 +141,6 @@ services:
       SUPABASE_SYSTEM_ADMIN_EMAIL: ${ADMIN_EMAIL:?}
       SUPABASE_SYSTEM_ADMIN_PASSWORD: ${ADMIN_PASSWORD:?}
       INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:?}
-      CRON_SECRET: ${CRON_SECRET:?}
-      RATE_LIMIT_BACKEND: redis
       REDIS_URL: redis://:${REDIS_PASSWORD:?}@redis:6379
       NEWAPI_API_KEY: ${DEMO_API_KEY:?}
       TAVILY_API_KEY: ${TAVILY_API_KEY:-}
@@ -183,14 +181,6 @@ services:
     command: [node, /app/gateway.mjs]
     environment:
       APP_ORIGIN: ${APP_ORIGIN:?}
-  scheduler:
-    <<: *node
-    user: node
-    read_only: true
-    volumes: ['./scripts/selfhost/scheduler.mjs:/app/scheduler.mjs:ro']
-    command: [node, /app/scheduler.mjs]
-    environment:
-      CRON_SECRET: ${CRON_SECRET:?}
   demo:
     <<: *node
     profiles: [demo]

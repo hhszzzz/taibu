@@ -77,3 +77,16 @@ export function anonDb(): ScopedDb {
 export function systemDb(): ScopedDb {
   return createScopedDb({ kind: 'system' });
 }
+
+/** Readiness probe; bounded so a saturated pool cannot stall the health route. */
+export async function pingDatabase(timeoutMs = 2000): Promise<boolean> {
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('Database ping timeout')), timeoutMs);
+      sql`select 1`.execute(rootDb()).then(() => resolve(), reject).finally(() => clearTimeout(timer));
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}

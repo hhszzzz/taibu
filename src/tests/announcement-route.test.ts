@@ -86,8 +86,10 @@ test('announcements GET count should return total announcement count', async (t)
   const originalSystemDb = contextModule.systemDb;
 
   contextModule.systemDb = () => createMockScopedDb({
-    tx: async () => 4,
+    tx: async () => Array.from({ length: 4 }, (_, index) => ({ id: `announcement-${index}` })),
   });
+  // 共享缓存沿用前两个用例的内存值；本用例需要从新 stub 重新加载。
+  await (await import('../lib/announcements.server')).invalidateAnnouncementCache();
 
   t.after(() => {
     contextModule.systemDb = originalSystemDb;

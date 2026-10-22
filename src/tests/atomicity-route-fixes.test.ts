@@ -802,54 +802,6 @@ test('getCheckinStatus should keep the full reward range while the user is still
   assert.equal(status.blockedReason, null);
 });
 
-test('checkRateLimit should use transactional rpc result', async (t) => {
-  const apiUtilsModule = require('../lib/api-utils') as any;
-  const rateLimitPath = require.resolve('../lib/rate-limit');
-  const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
-
-  const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
-
-  apiUtilsModule.getSystemAdminClient = () => ({
-    rpc(fn: string, args: Record<string, unknown>) {
-      rpcCalls.push({ fn, args });
-      return Promise.resolve({
-        data: {
-          allowed: false,
-          remaining: 0,
-          reset_at: '2026-04-09T00:10:00.000Z',
-        },
-        error: null,
-      });
-    },
-  });
-
-  delete require.cache[rateLimitPath];
-  const { checkRateLimit } = require('../lib/rate-limit') as typeof import('../lib/rate-limit');
-
-  t.after(() => {
-    apiUtilsModule.getSystemAdminClient = originalGetSystemAdminClient;
-    delete require.cache[rateLimitPath];
-  });
-
-  const result = await checkRateLimit('127.0.0.1', '/api/chat/direct/prepare', {
-    maxRequests: 10,
-    windowMs: 60_000,
-  });
-
-  assert.equal(rpcCalls.length, 1);
-  const [rpcCall] = rpcCalls;
-  assert.ok(rpcCall);
-  assert.equal(rpcCall.fn, 'consume_rate_limit_slot_as_admin');
-  assert.deepEqual(rpcCall.args, {
-    p_identifier: '127.0.0.1',
-    p_endpoint: '/api/chat/direct/prepare',
-    p_max_requests: 10,
-    p_window_ms: 60_000,
-  });
-  assert.equal(result.allowed, false);
-  assert.equal(result.remaining, 0);
-  assert.equal(result.resetAt.toISOString(), '2026-04-09T00:10:00.000Z');
-});
 
 test('checkRateLimit should fail open when transactional rpc errors', async (t) => {
   const apiUtilsModule = require('../lib/api-utils') as any;

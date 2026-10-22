@@ -200,7 +200,7 @@ function setupChartAdmission(t: import('node:test').TestContext, route: 'bazi' |
     return {
         events, control, chart, reconstructedInputs,
         request: (body: Record<string, unknown> = {}) => POST(new NextRequest(`http://localhost/api/${route}/analysis`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '198.51.100.10' },
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'x-real-ip': '198.51.100.10' },
             body: JSON.stringify({ chartId: chart.id, type: 'wuxing', modelId: 'test-model', ...body }),
         })),
     };

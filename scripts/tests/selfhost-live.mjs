@@ -137,18 +137,15 @@ test('persistent self-hosted application contracts', { timeout: 120_000 }, async
     assert.ok(result.results.every(row => ['created', 'already_exists'].includes(row.status)));
     assert.equal(noError(await admin.rpc('check_vector_index_exists')), true);
   });
-  await check('protected scheduler delivers a due reminder once under concurrent triggers', async () => {
-    const marker = `local reminder ${randomUUID()}`;
-    noError(await admin.from('user_settings').upsert({ user_id: userId, notifications_enabled: true, notify_site: true }, { onConflict: 'user_id' }));
-    noError(await admin.from('reminder_subscriptions').upsert({ user_id: userId, reminder_type: 'key_date', enabled: true, notify_site: true, notify_email: false }, { onConflict: 'user_id,reminder_type' }));
-    const reminder = noError(await admin.from('scheduled_reminders').insert({ user_id: userId, reminder_type: 'key_date', scheduled_for: new Date(Date.now() - 1000).toISOString(), content: { description: marker } }).select('id').single());
-    const denied = await fetch(`${origin}/api/cron/process-reminders`);
-    assert.equal(denied.status, 401);
-    await denied.body?.cancel();
-    const invoke = () => fetch(`${origin}/api/cron/process-reminders`, { headers: { 'x-cron-secret': config.CRON_SECRET }, signal: AbortSignal.timeout(30_000) }).then(unwrap);
-    await Promise.all([invoke(), invoke()]);
-    assert.equal(noError(await user.from('scheduled_reminders').select('sent').eq('id', reminder.id).single()).sent, true);
-    assert.equal(noError(await user.from('notifications').select('id').eq('content', marker)).length, 1);
+  await check('readiness reports database and redis while the legacy cron route is gone', async () => {
+    const ready = await fetch(`${origin}/api/health/ready`);
+    const body = await ready.json();
+    assert.equal(ready.status, 200, JSON.stringify(body));
+    assert.equal(body.database, true);
+    assert.equal(body.redis, true);
+    const legacy = await fetch(`${origin}/api/cron/process-reminders`);
+    assert.equal(legacy.status, 404);
+    await legacy.body?.cancel();
   });
   assert.ok(readingId && conversationId && avatarPath, 'do not persist an incomplete acceptance receipt');
   await writeFile(receiptPath, `${JSON.stringify({ readingId, conversationId, avatarPath }, null, 2)}\n`, { mode: 0o600 });

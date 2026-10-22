@@ -7,6 +7,8 @@ import { AgentStore, type AgentRunRow } from "./store.server";
 import { executeAgentRun } from "./runtime.server";
 import { AGENT_ENGINE } from "./engine";
 import { checkAgentCodemode, configureAgentCodemode } from "./codemode.server";
+import { startJobWorkers, stopJobWorkers } from "@/lib/jobs/workers.server";
+import { pingRedis } from "@/lib/redis.server";
 
 /** The build ships code mode's VM worker and QuickJS binary beside this bundle; a missing one fails startup. */
 async function configureCodemode() {
@@ -26,10 +28,12 @@ async function main() {
   const workerId = randomUUID();
   const store = new AgentStore(systemDb());
   if (process.argv.includes("--health")) {
-    process.exitCode = (await store.workerReady()) ? 0 : 1;
+    const [databaseReady, redisReady] = await Promise.all([store.workerReady(), pingRedis(1500)]);
+    process.exitCode = databaseReady && redisReady ? 0 : 1;
     return;
   }
   await configureCodemode();
+  await startJobWorkers();
   const shutdown = new AbortController();
   const active = new Set<Promise<void>>();
   const concurrency = Number(process.env.AGENT_WORKER_CONCURRENCY ?? 2);
@@ -85,6 +89,7 @@ async function main() {
     clearInterval(heartbeat);
     shutdown.abort();
     await Promise.allSettled(active);
+    await stopJobWorkers();
   }
 }
 

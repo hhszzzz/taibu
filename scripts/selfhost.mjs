@@ -29,7 +29,7 @@ export function signJWT(role, jwtSecret, now = Math.floor(Date.now() / 1000)) {
 }
 export function createConfig(project, port, demo = false) {
   const config = { LOCAL_INSTANCE_ID: secret(), LOCAL_PROJECT: validateProject(project), APP_PORT: validatePort(port), APP_ORIGIN: `http://127.0.0.1:${validatePort(port)}`, DEMO_ENABLED: demo ? 'true' : 'false', ADMIN_EMAIL: 'admin@taibu.local', USER_EMAIL: 'user@taibu.local', USER2_EMAIL: 'user2@taibu.local' };
-  for (const key of ['DB_PASSWORD', 'AUTH_DB_PASSWORD', 'REST_DB_PASSWORD', 'STORAGE_DB_PASSWORD', 'VECTOR_DB_PASSWORD', 'REDIS_PASSWORD', 'JWT_SECRET', 'INTERNAL_API_SECRET', 'CRON_SECRET', 'ADMIN_PASSWORD', 'USER_PASSWORD', 'USER2_PASSWORD', 'DEMO_API_KEY']) config[key] = secret();
+  for (const key of ['DB_PASSWORD', 'AUTH_DB_PASSWORD', 'REST_DB_PASSWORD', 'STORAGE_DB_PASSWORD', 'VECTOR_DB_PASSWORD', 'REDIS_PASSWORD', 'JWT_SECRET', 'INTERNAL_API_SECRET', 'ADMIN_PASSWORD', 'USER_PASSWORD', 'USER2_PASSWORD', 'DEMO_API_KEY']) config[key] = secret();
   config.ANON_KEY = signJWT('anon', config.JWT_SECRET);
   config.SERVICE_KEY = signJWT('service_role', config.JWT_SECRET);
   config.AGENT_CREDENTIAL_ENCRYPTION_KEY = randomBytes(32).toString('base64');
@@ -45,7 +45,7 @@ export function validateConfig(config) {
   if (config.APP_ORIGIN !== `http://127.0.0.1:${config.APP_PORT}` || !['true', 'false'].includes(config.DEMO_ENABLED)) throw new Error('本地配置地址无效');
   for (const [key, value] of Object.entries(config)) {
     if (typeof value !== 'string' || /[\r\n$`\\]/.test(value)) throw new Error('本地配置值无效');
-    if (key.endsWith('_PASSWORD') || ['LOCAL_INSTANCE_ID', 'JWT_SECRET', 'INTERNAL_API_SECRET', 'CRON_SECRET', 'DEMO_API_KEY'].includes(key)) {
+    if (key.endsWith('_PASSWORD') || ['LOCAL_INSTANCE_ID', 'JWT_SECRET', 'INTERNAL_API_SECRET', 'DEMO_API_KEY'].includes(key)) {
       if (!/^[a-f0-9]{64}$/.test(value)) throw new Error('本地密钥格式无效');
     }
   }

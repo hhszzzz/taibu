@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { jsonError, jsonOk, requireAdminContext } from '@/lib/api-utils';
 import { systemDb } from '@/lib/db/context.server';
 import { parseAnnouncementInput, serializeAnnouncement, type AnnouncementRow } from '@/lib/announcement';
+import { invalidateAnnouncementCache } from '@/lib/announcements.server';
 
 type RouteContext = {
     params: Promise<{ id: string }>;
@@ -91,6 +92,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         return jsonError('更新公告失败', 500);
     }
 
+    await invalidateAnnouncementCache();
     return jsonOk({ announcement: serializeAnnouncement(data) });
 }
 
@@ -119,5 +121,6 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
         return jsonError('删除公告失败', 500);
     }
 
+    await invalidateAnnouncementCache();
     return jsonOk({ success: true });
 }

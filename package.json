@@ -55,6 +55,7 @@
     "@tanstack/react-virtual": "^3.13.18",
     "@vercel/analytics": "^1.6.1",
     "ai": "^6.0.137",
+    "bullmq": "6.4.0",
     "html2canvas": "^1.4.1",
     "ioredis": "5.8.2",
     "ipaddr.js": "2.5.0",

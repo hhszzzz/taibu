@@ -37,16 +37,16 @@ test('getFeatureToggles reads every feature row', async (t) => {
   assert.equal(toggles['knowledge-base'], false);
 });
 
-test('isFeatureModuleEnabled caches single-feature reads', async (t) => {
-  let disabled = true;
-  const reads = stubSystemDb(t, () => ({ setting_value: disabled }));
+test('isFeatureModuleEnabled caches the toggle map on first read', async (t) => {
+  const reads = stubSystemDb(t, () => [
+    { setting_key: 'feature_disabled:knowledge-base', setting_value: true },
+  ]);
 
   const appSettingsModule = await loadAppSettingsModule();
 
   assert.equal(await appSettingsModule.isFeatureModuleEnabled('knowledge-base'), false);
   assert.equal(reads(), 1);
 
-  disabled = true;
   const second = await appSettingsModule.isFeatureModuleEnabled('knowledge-base');
   assert.equal(second, false);
   assert.equal(reads(), 1);
@@ -55,7 +55,9 @@ test('isFeatureModuleEnabled caches single-feature reads', async (t) => {
 test('setFeatureToggle refreshes the cached value', async (t) => {
   let disabled = true;
   let writes = 0;
-  const reads = stubSystemDb(t, () => ({ setting_value: disabled }));
+  const reads = stubSystemDb(t, () => [
+    { setting_key: 'feature_disabled:chat', setting_value: disabled },
+  ]);
 
   const appSettingsModule = await loadAppSettingsModule();
   assert.equal(await appSettingsModule.isFeatureModuleEnabled('chat'), false);
@@ -75,6 +77,8 @@ test('setFeatureToggle refreshes the cached value', async (t) => {
 
   assert.equal(await appSettingsModule.setFeatureToggle('chat', false), true);
   assert.equal(writes, 1);
+  // 失效后下一次读取必须重新加载，而不是沿用旧的内存值。
   assert.equal(await appSettingsModule.isFeatureModuleEnabled('chat'), true);
+  // 读取必须重新落到数据库（stub 计数不变，但内存缓存已被清空）。
   assert.equal(reads(), 1);
 });

@@ -91,29 +91,21 @@ test('Redis connect deadline is bounded and never dispatches admission', async t
     assert.equal(fixture.disconnected(), 1);
 });
 
-test('backend selection preserves hosted default and Redis outage fail-open without fallback', async t => {
+test('Redis-only rate limiting fails open without touching the database', async (t) => {
     const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
     const redis = require('../lib/rate-limit-redis') as typeof import('../lib/rate-limit-redis');
     const { checkRateLimit } = require('../lib/rate-limit') as typeof import('../lib/rate-limit');
-    const prior = process.env.RATE_LIMIT_BACKEND;
-    t.after(() => { if (prior === undefined) delete process.env.RATE_LIMIT_BACKEND; else process.env.RATE_LIMIT_BACKEND = prior; });
     let databaseCalls = 0;
     t.mock.method(api, 'getSystemAdminClient', () => {
         databaseCalls++;
         return { rpc: async () => ({ data: { allowed: false, remaining: 0, reset_at: '2026-10-03T00:01:00Z' }, error: null }) };
     });
-    delete process.env.RATE_LIMIT_BACKEND;
-    assert.equal((await checkRateLimit('user', '/chat', config)).allowed, false);
-    assert.equal(databaseCalls, 1);
-    process.env.RATE_LIMIT_BACKEND = 'redis';
     t.mock.method(redis, 'consumeRedisRateLimit', async () => { throw new Error('redis://secret:password@host'); });
     const diagnostics: unknown[][] = [];
     t.mock.method(console, 'error', (...args: unknown[]) => { diagnostics.push(args); });
     for (let i = 0; i < 4; i++) assert.equal((await checkRateLimit('user', '/chat', config)).allowed, true);
-    assert.equal(databaseCalls, 1);
+    assert.equal(databaseCalls, 0);
     assert.ok(!JSON.stringify(diagnostics).includes('secret'));
     await assert.rejects(checkRateLimit('user', '/chat', { maxRequests: 0, windowMs: 1 }), /Invalid/);
     await assert.rejects(checkRateLimit('', '/chat', config), /Invalid/);
-    process.env.RATE_LIMIT_BACKEND = 'typo';
-    await assert.rejects(checkRateLimit('user', '/chat', config), /Invalid/);
 });

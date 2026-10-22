@@ -6,6 +6,7 @@ import type {
   AIVendor,
 } from '@/types';
 import { buildModels, clearModelCache as clearSharedModelCache } from '@/lib/ai/ai-config';
+import { createSharedCache } from '@/lib/cache/shared.server';
 import {
   applySourceToModel,
   buildManagedApiUrl,
@@ -59,9 +60,11 @@ interface DBModelRow {
   bindings?: DBModelGatewayBindingRow[];
 }
 
-let dbModelsCache: AIModelConfig[] | null = null;
-let dbLastFetch = 0;
-const DB_CACHE_TTL = 5 * 60 * 1000;
+const DB_CACHE_TTL_MS = 5 * 60 * 1000;
+const dbModelsCache = createSharedCache<AIModelConfig[]>({
+  name: 'ai-models',
+  ttlMs: DB_CACHE_TTL_MS,
+});
 import { IS_NODE_TEST_RUNTIME } from '@/lib/runtime';
 
 function pickGateway(input: DBModelGatewayBindingRow['gateway']): DBGatewayRow | null {
@@ -163,25 +166,9 @@ function hasAvailableSource(model: AIModelConfig): boolean {
   });
 }
 
-async function fetchModelsFromDB(): Promise<AIModelConfig[] | null> {
-  const now = Date.now();
-  if (dbModelsCache && now - dbLastFetch < DB_CACHE_TTL) {
-    return dbModelsCache;
-  }
-
-  let db;
-  try {
-    db = systemDb();
-  } catch (error) {
-    if (!IS_NODE_TEST_RUNTIME) {
-      console.warn('[ai-config/server] Database unavailable, fallback to env models:', error);
-    }
-    return null;
-  }
-
-  let rows: DBModelRow[];
-  try {
-    rows = await db.tx(async (trx) => {
+async function loadModelsFromDB(): Promise<AIModelConfig[]> {
+  const db = systemDb();
+  const rows: DBModelRow[] = await db.tx(async (trx) => {
       const models = await trx
         .selectFrom('ai_models')
         .select([
@@ -233,14 +220,19 @@ async function fetchModelsFromDB(): Promise<AIModelConfig[] | null> {
       // database defaults are flattened there.
       return models.map((model) => ({ ...model, bindings: grouped.get(model.id) ?? [] })) as unknown as DBModelRow[];
     });
+
+  return mapDbModelRows(rows);
+}
+
+async function fetchModelsFromDB(): Promise<AIModelConfig[] | null> {
+  try {
+    return await dbModelsCache.load(loadModelsFromDB);
   } catch (error) {
-    console.error('[ai-config/server] Failed to fetch from DB:', error);
+    if (!IS_NODE_TEST_RUNTIME) {
+      console.warn('[ai-config/server] Database unavailable, fallback to env models:', error);
+    }
     return null;
   }
-
-  dbModelsCache = mapDbModelRows(rows);
-  dbLastFetch = now;
-  return dbModelsCache;
 }
 
 export async function getModelsAsync(): Promise<AIModelConfig[]> {
@@ -279,7 +271,6 @@ export async function getModelConfigAsync(
 
 export function clearModelCache(): void {
   clearSharedModelCache();
-  dbModelsCache = null;
-  dbLastFetch = 0;
+  void dbModelsCache.invalidate();
   console.info('[ai-config/server] Model cache cleared');
 }

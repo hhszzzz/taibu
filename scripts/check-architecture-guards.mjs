@@ -1089,6 +1089,7 @@ const SYSTEM_DB_ALLOWED = [
   'src/lib/server/bazi-case-profile.ts',
   'src/lib/knowledge-base/ingest.ts',
   'src/app/api/knowledge-base/archive/',
+  'src/lib/announcements.server.ts',
 ];
 mustNotMatchInTree(
   'src',

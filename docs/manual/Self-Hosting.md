@@ -87,12 +87,12 @@ pnpm local:showcase # 清空演示账号的对话与 Agent 自动保存的记录
 - `APP_ORIGIN`：浏览器应用 origin。CLI 仅生成 loopback HTTP。
 - `SUPABASE_URL`：服务间网关地址；`SUPABASE_PUBLIC_URL`：浏览器可访问地址，防止头像指向容器 hostname。
 - `AUTH_ALLOW_INSECURE_LOCAL_HTTP`：仅明确自托管且配置精确 loopback HTTP origin 时生效。不会根据请求 Host 降低 Cookie 安全性；托管生产仍保留 Secure。
-- `RATE_LIMIT_BACKEND`：默认 `postgres`，本地为 `redis`；`REDIS_URL` 仅服务端使用。
+- `REDIS_URL`：服务端专用；限流、共享缓存与后台任务队列只使用 Redis，不再有 `RATE_LIMIT_BACKEND` 开关。
 - `AGENT_CREDENTIAL_ENCRYPTION_KEY`：Web/worker 共用的 32 字节标准 Base64 任务密钥；新项目自动生成。`TAVILY_API_KEY` 为空时关闭联网；`AGENT_WORKER_CONCURRENCY` 控制单 worker 并发。
 
 `SELF_HOSTED`、`SUPABASE_PUBLIC_URL` 同时影响构建和运行，变更需 `up --build`。镜像不接收 Auth/供应商秘密 build args。多个不同公开 origin 的部署应分别构建/标记镜像，不能假定同一个 `:local` 镜像内的图片白名单会随运行环境自动更新。头像使用直接 URL，不开启 Next 图片优化器的任意内网访问。
 
-Redis 只存限流状态，不存积分余额或替代业务事务。窗口内允许配置的最大次数，拒绝不延长窗口；后端故障继续原来的 **fail-open**，有界超时且不重试可能已执行的扣槽命令，不切换到另一份独立计数器。这个可用性选择不等于强制防滥用保障；生产策略需单独评估。
+Redis 存限流状态、共享缓存与 BullMQ 任务队列，不存积分余额或替代业务事务。窗口内允许配置的最大次数，拒绝不延长窗口；后端故障继续原来的 **fail-open**，有界超时且不重试可能已执行的扣槽命令，不切换到另一份独立计数器。这个可用性选择不等于强制防滥用保障；生产策略需单独评估。
 
 生成的本地 JWT/密码需要与持久卷一起保管。CLI 不是生产密钥轮换工具；不能通过删除配置文件重新生成秘密后接回旧卷。
 

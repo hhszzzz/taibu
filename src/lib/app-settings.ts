@@ -1,4 +1,5 @@
 import { IS_NODE_TEST_RUNTIME } from "@/lib/runtime";
+import { createSharedCache } from "@/lib/cache/shared.server";
 import { systemDb, type ScopedDb } from "@/lib/db/context.server";
 import { toDbError } from "@/lib/db/errors";
 
@@ -53,12 +54,11 @@ type FeatureToggleRow = {
   setting_value: unknown;
 };
 
-type FeatureToggleCacheEntry = {
-  disabled: boolean;
-  expiresAt: number;
-};
-
-const featureToggleCache = new Map<FeatureModuleId, FeatureToggleCacheEntry>();
+/** 两级缓存（内存 + Redis），管理员写入后广播失效。 */
+const featureTogglesCache = createSharedCache<Record<string, boolean>>({
+  name: 'feature-toggles',
+  ttlMs: FEATURE_TOGGLE_CACHE_TTL_MS,
+});
 
 export type FeatureTogglesReadResult = {
   loaded: boolean;
@@ -95,25 +95,10 @@ async function readFeatureToggleRows(
   }
 }
 
-function getCachedFeatureToggle(featureId: FeatureModuleId): boolean | null {
-  const cached = featureToggleCache.get(featureId);
-  if (!cached) {
-    return null;
-  }
-
-  if (cached.expiresAt <= Date.now()) {
-    featureToggleCache.delete(featureId);
-    return null;
-  }
-
-  return cached.disabled;
-}
-
-function setCachedFeatureToggle(featureId: FeatureModuleId, disabled: boolean) {
-  featureToggleCache.set(featureId, {
-    disabled,
-    expiresAt: Date.now() + FEATURE_TOGGLE_CACHE_TTL_MS,
-  });
+async function loadAllFeatureToggles(db: ScopedDb): Promise<Record<string, boolean>> {
+  const { data, error } = await readFeatureToggleRows(db);
+  if (error) throw new Error(error.message ?? '读取功能开关失败');
+  return normalizeFeatureToggleRows(data);
 }
 
 async function readFeatureToggleValue(
@@ -182,7 +167,7 @@ export async function setFeatureToggle(
         updated_at: updatedAt,
       }))
       .execute());
-    setCachedFeatureToggle(featureId, disabled);
+    await featureTogglesCache.invalidate();
     return true;
   } catch (error) {
     console.error('[app-settings] Failed to set feature toggle:', error);
@@ -191,25 +176,9 @@ export async function setFeatureToggle(
 }
 
 export async function isFeatureModuleEnabled(featureId: FeatureModuleId): Promise<boolean> {
-  const cached = getCachedFeatureToggle(featureId);
-  if (cached !== null) {
-    return cached !== true;
-  }
-
   try {
-    const db = systemDb();
-    const { data, error } = await readFeatureToggleValue(db, featureId);
-
-    if (error) {
-      if (!IS_NODE_TEST_RUNTIME) {
-        console.error('[app-settings] Failed to read feature toggle:', error.message);
-      }
-      return true;
-    }
-
-    const disabled = !!data?.setting_value;
-    setCachedFeatureToggle(featureId, disabled);
-    return disabled !== true;
+    const toggles = await featureTogglesCache.load(() => loadAllFeatureToggles(systemDb()));
+    return toggles[featureId] !== true;
   } catch (error) {
     if (!IS_NODE_TEST_RUNTIME) {
       console.error('[app-settings] Failed to read feature toggle:', error);

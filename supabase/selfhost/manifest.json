@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "baselineRevision": "5725dde",
-  "sourceFingerprint": "01f72664ce263c062814aaee9b5dadf6ad11766042cbc3aace0b9cf9223980cd",
+  "sourceFingerprint": "0b91b09641d193b3da7cc5ad9f6a7c9902d26af74a214e426ebe21e27a083912",
   "target": "empty local self-hosted application schema; NOT production parity or a migration replay",
   "bootstrapOrder": [
     "platform roles/extensions",
@@ -234,7 +234,7 @@
     },
     {
       "file": "src/lib/app-settings.ts",
-      "sha256": "7ee252f1bbe6b887297b47c327b6c43a633a979754a979e71583908cd1626493"
+      "sha256": "2e0b456770b063d90ff2638b69e0ddbc9f8dcdabcf84ac98cbe244c3b885d123"
     },
     {
       "file": "scripts/selfhost-schema.mjs",
@@ -877,15 +877,6 @@
       "reason": null
     },
     {
-      "name": "consume_rate_limit_slot_as_admin",
-      "callers": [
-        "src/lib/rate-limit.ts"
-      ],
-      "source": "supabase/migrations/20260409_000100_remaining_atomicity_rpcs.sql",
-      "status": "blocked",
-      "reason": "Disabled until required 20261003_100000_fix_rate_limit_admission.sql is applied."
-    },
-    {
       "name": "create_analysis_conversation_with_history_as_service",
       "callers": [
         "src/lib/ai/ai-analysis.ts"
@@ -1446,7 +1437,7 @@
           "kind": "literal-kysely"
         },
         {
-          "file": "src/app/api/announcements/route.ts",
+          "file": "src/lib/announcements.server.ts",
           "kind": "literal-kysely"
         }
       ]
@@ -2643,7 +2634,7 @@
   "artifacts": [
     {
       "file": "supabase/selfhost/001-application.sql",
-      "sha256": "ca412f77bea7f19c7006d0e96b80bb70bea1d1a045b59f4d7ed0e07ecb6aaf03"
+      "sha256": "5e2397e1da39d9b106944936649de7ef6375b969fb7b6ac0645ba8d1a11d12d5"
     },
     {
       "file": "supabase/selfhost/002-storage.sql",

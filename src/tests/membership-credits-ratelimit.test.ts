@@ -258,15 +258,3 @@ test('describePricingPlan folds credit cap and check-in reward into one summary 
     });
 });
 
-test('resolveRateLimitResetAt uses earliest window start', () => {
-    const rateLimit = require('../lib/rate-limit') as { resolveRateLimitResetAt?: (rows: Array<{ window_start: string }>, windowMs: number) => Date };
-
-    assert.equal(typeof rateLimit.resolveRateLimitResetAt, 'function');
-    const windowMs = 60_000;
-    const rows = [
-        { window_start: '2026-01-28T11:59:30.000Z' },
-        { window_start: '2026-01-28T11:59:50.000Z' },
-    ];
-    const resetAt = rateLimit.resolveRateLimitResetAt!(rows, windowMs);
-    assert.equal(resetAt.toISOString(), '2026-01-28T12:00:30.000Z');
-});

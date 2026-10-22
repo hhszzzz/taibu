@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { jsonError, jsonOk, requireAdminContext } from '@/lib/api-utils';
 import { systemDb } from '@/lib/db/context.server';
 import { parseAnnouncementInput, serializeAnnouncement, type AnnouncementRow } from '@/lib/announcement';
+import { invalidateAnnouncementCache } from '@/lib/announcements.server';
 
 export async function GET(request: NextRequest) {
     const auth = await requireAdminContext(request);
@@ -61,5 +62,6 @@ export async function POST(request: NextRequest) {
         return jsonError('发布公告失败', 500);
     }
 
+    await invalidateAnnouncementCache();
     return jsonOk({ announcement: serializeAnnouncement(data) });
 }

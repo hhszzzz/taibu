@@ -176,7 +176,8 @@ test('compose exposes only loopback gateway and database ports', async () => {
   assert.match(compose, /backend:\n    internal: true/);
   const web = compose.split('  web:')[1].split('  gateway:')[0];
   assert.doesNotMatch(web, /SUPABASE_DB_URL|VECTOR_DB_PASSWORD|(?<!APP_)DB_PASSWORD|JWT_SECRET/);
-  assert.match(web, /RATE_LIMIT_BACKEND: redis/);
+  assert.match(web, /REDIS_URL: redis:\/\/:\$\{REDIS_PASSWORD:\?\}@redis:6379/);
+  assert.doesNotMatch(web, /CRON_SECRET|RATE_LIMIT_BACKEND/);
 });
 test('orchestration fail-closed guards and persistent down remain explicit', async () => {
   const source = await readFile(new URL('../selfhost.mjs', import.meta.url), 'utf8');

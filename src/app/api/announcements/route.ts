@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { systemDb } from '@/lib/db/context.server';
 import { jsonError, jsonOk } from '@/lib/api-utils';
 import { serializeAnnouncement, type AnnouncementRow } from '@/lib/announcement';
+import { loadPublishedAnnouncementRows, PUBLISHED_ANNOUNCEMENT_CACHE_LIMIT } from '@/lib/announcements.server';
 
 export async function GET(request: NextRequest) {
     const countOnly = request.nextUrl.searchParams.get('count') === '1';
@@ -10,6 +11,15 @@ export async function GET(request: NextRequest) {
     const offset = Math.max(Number(request.nextUrl.searchParams.get('offset') || 0), 0);
 
     if (countOnly) {
+        try {
+            const rows = await loadPublishedAnnouncementRows();
+            if (rows.length < PUBLISHED_ANNOUNCEMENT_CACHE_LIMIT) {
+                return jsonOk({ count: rows.length });
+            }
+        } catch (error) {
+            console.error('[announcements][GET][count] cached read failed:', error);
+            return jsonError('获取公告失败', 500);
+        }
         const count = await systemDb().tx(async (trx) => {
             const row = await trx
                 .selectFrom('announcements')
@@ -26,20 +36,36 @@ export async function GET(request: NextRequest) {
     }
 
     if (latestOnly) {
-        const row = await systemDb().tx((trx) => trx
-            .selectFrom('announcements')
-            .selectAll()
-            .orderBy('published_at', 'desc')
-            .limit(1)
-            .executeTakeFirst()).catch((error) => {
-            console.error('[announcements][GET][latest] query failed:', error);
-            return null;
-        });
-        if (row === null) return jsonError('获取公告失败', 500);
+        try {
+            const [row] = await loadPublishedAnnouncementRows();
+            return jsonOk({
+                announcement: row ? serializeAnnouncement(row) : null,
+            });
+        } catch (error) {
+            console.error('[announcements][GET][latest] cached read failed:', error);
+            return jsonError('获取公告失败', 500);
+        }
+    }
 
-        return jsonOk({
-            announcement: row ? serializeAnnouncement(row as AnnouncementRow) : null,
-        });
+    try {
+        const rows = await loadPublishedAnnouncementRows();
+        const complete = rows.length < PUBLISHED_ANNOUNCEMENT_CACHE_LIMIT
+            || offset + limit + 1 <= PUBLISHED_ANNOUNCEMENT_CACHE_LIMIT;
+        if (complete) {
+            const page = rows.slice(offset, offset + limit + 1);
+            const hasMore = page.length > limit;
+            const announcements = page.slice(0, limit).map((row) => serializeAnnouncement(row));
+            return jsonOk({
+                announcements,
+                pagination: {
+                    hasMore,
+                    nextOffset: hasMore ? offset + announcements.length : null,
+                },
+            });
+        }
+    } catch (error) {
+        console.error('[announcements][GET][list] cached read failed:', error);
+        return jsonError('获取公告失败', 500);
     }
 
     const rows = await systemDb().tx((trx) => trx

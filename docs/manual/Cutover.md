@@ -155,7 +155,7 @@ docker compose ... run --rm --no-deps -e TRANSIT_TARGET_URL="$TRANSIT_TARGET_URL
   node scripts/db/transit-build.mjs --dump /dump --recreate --report /tmp/transit.json
 ```
 
-验收：`transit.json` 中 `validate migration state` 通过，`pending.json` 中的全部迁移（当前 27 个）replay 成功，`pg_restore` 只有白名单内的错误。`20261021_120000_agent_user_archive.sql` 已从 cutover 清单排除：它被 `.gitignore` 忽略且仓库中没有对应应用代码；若将来启用该功能，必须先新增正式数据库迁移并提交代码。
+验收：`transit.json` 中 `validate migration state` 通过，`pending.json` 中的全部迁移（当前 27 个）replay 成功，`pg_restore` 只有白名单内的错误。`20261021_120000_agent_user_archive.sql` 不参与 transit 重放：它已移植成新链的 `database/migrations/0013_agent_user_archive.sql`，生产从未应用它、也没有档案数据，新库在 `migrate` 阶段就会建好这些列与函数。
 
 ### 无 DSN 的备用路径（2026-10-22 已演练）
 

@@ -175,7 +175,7 @@ sequences → tables → functions → views → 数据 → constraints/indexes/
 ### T+8 迁移空库并导入
 
 ```sh
-docker compose ... run --rm migrate                     # 全新 0001…0010
+docker compose ... run --rm migrate                     # 全新 0001…0012（含 0011 生产 RLS、0012 生产 DML 授权）
 docker compose ... run --rm --no-deps \
   -e IMPORT_SOURCE_URL="$TRANSIT_TARGET_URL" \
   -e IMPORT_TARGET_URL="$TARGET_IMPORT_URL" \
@@ -188,7 +188,8 @@ docker compose ... run --rm --no-deps \
 
 验收（不通过则停止，保持维护页）：
 
-- 报告里每张表行数与源一致，校验和一致，78 项 FK 反连接均为 0。
+- 报告里每张表行数与源一致，校验和一致，全部 FK 反连接均为 0。
+- `pg_policies` 为 164 条（生产 172 条减去已删除的 `rate_limits`/`login_attempts` 8 条）；`0011` 已替换 0002 中 74 条 `selfhost_*` 策略。
 - `identity.users` = 708；credential 数 = 有哈希用户数 − 被剔除的确定性口令数；linuxdo 账户 = 去重 sub 数（预期 46）。
 - 被剔除确定性口令的用户清单已保存，公告中提示用 Linux.do 或验证码登录后重设密码。
 

@@ -3,6 +3,7 @@ set -eu
 MODE="${1:-hourly}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 LOCAL_KEEP_HOURS="${LOCAL_KEEP_HOURS:-48}"
+LOCAL_KEEP_DAYS="${LOCAL_KEEP_DAYS:-7}"
 
 dump() {
   PGPASSWORD="$TAIBU_BACKUP_PASSWORD" pg_dump \
@@ -12,13 +13,21 @@ dump() {
 case "$MODE" in
   hourly)
     dump
-    # Keep 48 hourly dumps; failures are surfaced by the entrypoint loop.
-    find /backups -name 'taibu-*.dump' -type f -mmin +"$((LOCAL_KEEP_HOURS * 60))" -delete
+    # One daily copy survives the hourly retention window.
+    if [ "$(date -u +%H)" = "03" ]; then
+      cp "/backups/taibu-${STAMP}.dump" "/backups/taibu-daily-$(date -u +%Y%m%d).dump"
+    fi
+    # Keep 48 hourly dumps (daily copies excluded) and 7 daily dumps.
+    find /backups -name 'taibu-*.dump' ! -name 'taibu-daily-*' -type f \
+      -mmin +"$((LOCAL_KEEP_HOURS * 60))" -delete
+    find /backups -name 'taibu-daily-*.dump' -type f \
+      -mmin +"$((LOCAL_KEEP_DAYS * 24 * 60))" -delete
     ;;
   offsite)
     : "${RESTIC_REPOSITORY:?}"
     : "${RESTIC_PASSWORD:?}"
-    restic backup --tag taibu-db /backups --tag taibu-files /data/files
+    restic backup --tag taibu-db /backups
+    restic backup --tag taibu-files /data/files
     ;;
   prune)
     restic forget --keep-hourly 24 --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune

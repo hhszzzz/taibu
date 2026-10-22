@@ -83,6 +83,10 @@ SQL
 
 要求客户端为 PostgreSQL 17（`pg_dump --version` ≥ 17）。Dump 与 CSV 只放在导入机的临时目录，完成后删除。
 
+### 导入专用 DSN
+
+`TRANSIT_TARGET_URL` 与 `IMPORT_TARGET_URL` 都要用 `postgres` 超级用户（或等价的 CREATEDB + BYPASSRLS 角色）：transit 需要建库/恢复，导入需要写全部表并在复制期间关闭触发器。它们只从密码管理器注入当前 shell，不写入任何文件。`taibu_migrator` 只用于 `migrate` 服务，不适合导入。
+
 ### T+5 构建 transit 并重放待上线迁移
 
 在 hw 上（镜像内已带 `scripts/db`）：

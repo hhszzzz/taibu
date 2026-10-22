@@ -92,7 +92,7 @@ SQL
 在 hw 上（镜像内已带 `scripts/db`）：
 
 ```sh
-docker compose ... run --rm -e TRANSIT_TARGET_URL="$TRANSIT_TARGET_URL" \
+docker compose ... run --rm --no-deps -e TRANSIT_TARGET_URL="$TRANSIT_TARGET_URL" \
   -v /tmp/taibu-cutover:/dump:ro web \
   node scripts/db/transit-build.mjs --dump /dump --recreate --report /tmp/transit.json
 ```
@@ -103,7 +103,7 @@ docker compose ... run --rm -e TRANSIT_TARGET_URL="$TRANSIT_TARGET_URL" \
 
 ```sh
 docker compose ... run --rm migrate                     # 全新 0001…0010
-docker compose ... run --rm \
+docker compose ... run --rm --no-deps \
   -e IMPORT_SOURCE_URL="$TRANSIT_TARGET_URL" \
   -e IMPORT_TARGET_URL="$TARGET_IMPORT_URL" \
   -e SUPABASE_SECRET_KEY="$SUPABASE_SECRET_KEY" \

@@ -128,7 +128,7 @@ docker compose ... run --rm --no-deps \
 
 ```sh
 docker compose ... up -d web worker
-curl -fsS https://$APP_DOMAIN/api/health/ready
+docker compose ... exec -T web wget -qO- http://127.0.0.1:3000/api/health/ready
 ```
 
 以管理员 IP 绕过维护页，逐项打勾：

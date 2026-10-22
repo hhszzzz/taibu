@@ -188,13 +188,16 @@ test('buildChatPromptContext passes resolved membershipType to knowledge search'
 });
 
 test('the document and search results keep their layout; mention tokens are stripped only from what the user typed', async (t) => {
-  const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
   const promptBuilderModule = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');
   const appSettingsModule = require('../lib/app-settings') as typeof import('../lib/app-settings');
   const webSearchModule = require('../lib/ai/web-search.server') as typeof import('../lib/ai/web-search.server');
-  t.mock.method(apiUtilsModule, 'getSystemAdminClient', () => ({
-    from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }) }),
-  }) as unknown as ReturnType<typeof apiUtilsModule.getSystemAdminClient>);
+  stubSettings(t, {
+    expression_style: 'direct',
+    user_profile: {},
+    custom_instructions: '',
+    prompt_kb_ids: [],
+    visualization_settings: {},
+  });
   t.mock.method(promptBuilderModule, 'calculatePromptBudget', async () => 1024);
   t.mock.method(appSettingsModule, 'isFeatureModuleEnabled', async () => false);
   const queries: string[] = [];

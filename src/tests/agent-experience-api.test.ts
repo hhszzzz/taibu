@@ -22,6 +22,7 @@ function fixture(t: TestContext) {
     const errors: Record<string, unknown> = {};
     const inserts: Record<string, unknown> = {};
     const objects = new Map<string, Uint8Array>();
+    const uploads: { row: unknown; text: string; contentType: string | undefined }[] = [];
     let rpcError: unknown = null, rpcData: unknown = [];
     const db = {
         from(table: string) {
@@ -96,7 +97,11 @@ function fixture(t: TestContext) {
     const contextModule=require('../lib/db/context.server') as typeof import('../lib/db/context.server');
     t.mock.method(contextModule,'systemDb',() => scoped as unknown as ReturnType<typeof contextModule.systemDb>);
     const objectStore = {
-        async put(bucket: string, key: string, body: Uint8Array) { objects.set(`${bucket}/${key}`, new Uint8Array(body)); },
+        async put(bucket: string, key: string, body: Uint8Array, options?: { contentType?: string }) {
+            objects.set(`${bucket}/${key}`, new Uint8Array(body));
+            // The row is read while its bytes upload, before it is marked ready.
+            uploads.push({ row: inserts.agent_attachments, text: Buffer.from(body).toString('utf8'), contentType: options?.contentType });
+        },
         async get(bucket: string, key: string) {
             const value = objects.get(`${bucket}/${key}`);
             if (!value) return null;
@@ -110,7 +115,7 @@ function fixture(t: TestContext) {
     };
     const storageModule = require('../lib/storage/index.server') as typeof import('../lib/storage/index.server');
     t.mock.method(storageModule,'getObjectStore',() => objectStore as unknown as ReturnType<typeof storageModule.getObjectStore>);
-    return { owner,id,db,calls,rows,errors,inserts,objects,api,rpc(data:unknown,error:unknown=null){rpcData=data;rpcError=error;} };
+    return { owner,id,db,calls,rows,errors,inserts,objects,uploads,api,rpc(data:unknown,error:unknown=null){rpcData=data;rpcError=error;} };
 }
 const request = (url: string, body?: unknown) => new NextRequest(`http://localhost${url}`, body === undefined ? {} : { method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body) });
 const params = (id:string) => ({params:Promise.resolve({id})});
@@ -205,8 +210,7 @@ test('private document upload stores the extracted text under its own name withi
     const f=fixture(t); const limits:string[]=[]; let allowed=true;
     mockAIRateLimit(t,async(identifier,endpoint,config)=>{limits.push(`${identifier}:${endpoint}`);return {allowed,remaining:0,resetAt:new Date(Date.now()+config.windowMs)};});
     // The row is read while its bytes upload, before it is marked ready.
-    const stored:{row:unknown;text:string;contentType:string}[]=[];
-    t.mock.method(f.db.storage,'from',()=>({upload:async(_path:string,bytes:Buffer,options:{contentType:string})=>{stored.push({row:f.inserts.agent_attachments,text:bytes.toString('utf8'),contentType:options.contentType});return {error:null};}}));
+    const stored=f.uploads;
     const send=(file:File)=>{const form=new FormData();form.append('file',file);return upload(new NextRequest('http://localhost/api/agent/attachments',{method:'POST',body:form}));};
     f.rows.agent_attachments={id:f.id,user_id:f.owner,name:'命书.md',kind:'text',mime_type:'text/plain',size:12,sha256:'digest',status:'ready'};
     assert.equal((await send(new File(['# 命书\r\n甲辰'],'命书.md',{type:'text/markdown'}))).status,201);

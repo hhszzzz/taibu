@@ -9,7 +9,6 @@ export const ATTACHMENT_BUCKET = 'agent-attachments';
 /** Raw multipart body cap; the parsed file cap is checked separately. */
 export const ATTACHMENT_MAX_REQUEST_BYTES = 12 * 1024 * 1024;
 export const ATTACHMENT_MAX_FILE_BYTES = 10 * 1024 * 1024;
-export const ATTACHMENT_TEXT_EXTENSION_PATTERN = /\.(txt|md)$/iu;
 export const ATTACHMENT_IMAGE_FORMATS = ['jpeg', 'png', 'webp'] as const;
 export type AttachmentRow = { id:string;user_id:string;object_path:string;name:string;kind:'image'|'text';mime_type:string;size:number;sha256:string;width?:number;height?:number;status:string };
 export function attachmentDto(row:AttachmentRow):PrivateAttachment { return { id:row.id,name:row.name,kind:row.kind,mimeType:row.mime_type,size:row.size,sha256:row.sha256,width:row.width,height:row.height }; }

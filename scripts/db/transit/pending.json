@@ -119,7 +119,7 @@
   "excluded": [
     {
       "file": "20261021_120000_agent_user_archive.sql",
-      "reason": "ignored in-flight migration; no application code exists in this tree, so it is not part of the cutover"
+      "reason": "carried into the new chain as database/migrations/0013_agent_user_archive.sql; production never applied it and holds no archive rows, so transit does not replay it"
     }
   ]
 }

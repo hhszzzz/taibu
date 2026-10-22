@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "baselineRevision": "5725dde",
-  "sourceFingerprint": "8592de838ea1b1ffc3e5b1c8e91f02c0ef9d1d2260a68f4b45d0408b5c3ce14a",
+  "sourceFingerprint": "1274455bb214b4e4cd8b71c429400129a7b30d511416c0fd50bff054f56f5768",
   "target": "empty local self-hosted application schema; NOT production parity or a migration replay",
   "bootstrapOrder": [
     "platform roles/extensions",
@@ -18,7 +18,7 @@
   "sources": [
     {
       "file": "supabase/tabel_export_from_supabase.sql",
-      "sha256": "5ef973fa5bf6047a678d0765fd070ceb82147e428ef3bafd3b38d2e061a83d1e"
+      "sha256": "3be9d87a49b3956ed803f5f8eff9a0f456b8306a0c29e7f6dab319215f21316c"
     },
     {
       "file": "supabase/migrations/20260118_create_gamification_tables.sql",
@@ -217,8 +217,12 @@
       "sha256": "e8047ae94b905454941103ffb354e96dd793a9955981d188ebf0c25b744f39cc"
     },
     {
+      "file": "supabase/migrations/20261021_120000_agent_user_archive.sql",
+      "sha256": "670d4a9465e93fc3d8c376b283def59ad23056f3ebdf3b5971592e0ac232ffa5"
+    },
+    {
       "file": "supabase/selfhost/source-views.sql",
-      "sha256": "65a5ab3f4d78c1c4c291be37e04e747072294ccc834c63a9c71795b11d14432e"
+      "sha256": "a65bcdc6436ef69a20253a50a6e45dd9a8860647b8dddbaabc48d630a78e703e"
     },
     {
       "file": "src/lib/history/registry.ts",
@@ -238,7 +242,7 @@
     },
     {
       "file": "scripts/selfhost-schema.mjs",
-      "sha256": "946cb8c140c9e3b76c574421a16a72a4374ede0b7a366a68b781a9b50205c7bd"
+      "sha256": "faaa49feb2e7a0d09222ae474843b75811b41e59c055686199d3b32367fe568e"
     },
     {
       "file": "src/app/api/supabase/storage/route.ts",
@@ -752,11 +756,38 @@
       "reason": null
     },
     {
+      "name": "agent_record_user_event",
+      "callers": [
+        "src/lib/agent/tools.server.ts"
+      ],
+      "source": "supabase/migrations/20261021_120000_agent_user_archive.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
       "name": "agent_renew_lease",
       "callers": [
         "src/lib/agent/runtime.server.ts"
       ],
       "source": "supabase/migrations/20261005_100000_agent_runtime.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "agent_save_archive_proposal",
+      "callers": [
+        "src/lib/agent/api.server.ts"
+      ],
+      "source": "supabase/migrations/20261021_120000_agent_user_archive.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "agent_search_conversations",
+      "callers": [
+        "src/lib/agent/tools.server.ts"
+      ],
+      "source": "supabase/migrations/20261021_120000_agent_user_archive.sql",
       "status": "defined",
       "reason": null
     },
@@ -1067,7 +1098,7 @@
       "callers": [
         "src/lib/server/bazi-case-profile.ts"
       ],
-      "source": "supabase/migrations/20260408_z_remaining_transactional_multi_write_rpcs.sql",
+      "source": "supabase/migrations/20261021_120000_agent_user_archive.sql",
       "status": "defined",
       "reason": null
     },
@@ -1337,6 +1368,10 @@
         {
           "file": "src/lib/agent/store.server.ts",
           "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/server/bazi-case-profile.ts",
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -1529,6 +1564,14 @@
       "status": "defined",
       "callers": [
         {
+          "file": "src/lib/agent/archive.server.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/agent/archive.server.ts",
+          "kind": "literal-kysely"
+        },
+        {
           "file": "src/lib/chat/chat-context.ts",
           "kind": "literal-kysely"
         },
@@ -1570,6 +1613,10 @@
         {
           "file": "src/app/api/user/charts/route.ts",
           "kind": "chart-return-catalog"
+        },
+        {
+          "file": "src/lib/agent/archive.server.ts",
+          "kind": "archive-chart-catalog"
         },
         {
           "file": "src/lib/agent/briefing.server.ts",
@@ -1889,6 +1936,10 @@
           "kind": "tableName-catalog"
         },
         {
+          "file": "src/lib/agent/archive.server.ts",
+          "kind": "archive-chart-catalog"
+        },
+        {
           "file": "src/lib/data-sources/daliuren.ts",
           "kind": "literal-kysely"
         },
@@ -1907,6 +1958,10 @@
       "kind": "table",
       "status": "defined",
       "callers": [
+        {
+          "file": "src/lib/agent/archive.server.ts",
+          "kind": "archive-chart-catalog"
+        },
         {
           "file": "src/lib/data-sources/face.ts",
           "kind": "literal-kysely"
@@ -1929,6 +1984,10 @@
         {
           "file": "src/app/api/hepan/route.ts",
           "kind": "tableName-catalog"
+        },
+        {
+          "file": "src/lib/agent/archive.server.ts",
+          "kind": "archive-chart-catalog"
         },
         {
           "file": "src/lib/data-sources/hepan.ts",
@@ -2060,6 +2119,10 @@
           "kind": "tableName-catalog"
         },
         {
+          "file": "src/lib/agent/archive.server.ts",
+          "kind": "archive-chart-catalog"
+        },
+        {
           "file": "src/lib/data-sources/liuyao.ts",
           "kind": "literal-kysely"
         },
@@ -2083,6 +2146,10 @@
           "kind": "tableName-catalog"
         },
         {
+          "file": "src/lib/agent/archive.server.ts",
+          "kind": "archive-chart-catalog"
+        },
+        {
           "file": "src/lib/data-sources/mbti.ts",
           "kind": "literal-kysely"
         },
@@ -2104,6 +2171,10 @@
         {
           "file": "src/app/api/meihua/route.ts",
           "kind": "tableName-catalog"
+        },
+        {
+          "file": "src/lib/agent/archive.server.ts",
+          "kind": "archive-chart-catalog"
         },
         {
           "file": "src/lib/data-sources/meihua.ts",
@@ -2151,6 +2222,10 @@
         {
           "file": "src/app/api/records/export/route.ts",
           "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/agent/tools.server.ts",
+          "kind": "literal-kysely"
         }
       ]
     },
@@ -2181,6 +2256,10 @@
         },
         {
           "file": "src/app/api/records/route.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/lib/agent/archive.server.ts",
           "kind": "literal-kysely"
         },
         {
@@ -2265,6 +2344,10 @@
       "status": "defined",
       "callers": [
         {
+          "file": "src/lib/agent/archive.server.ts",
+          "kind": "archive-chart-catalog"
+        },
+        {
           "file": "src/lib/data-sources/palm.ts",
           "kind": "literal-kysely"
         },
@@ -2286,6 +2369,10 @@
         {
           "file": "src/app/api/qimen/route.ts",
           "kind": "tableName-catalog"
+        },
+        {
+          "file": "src/lib/agent/archive.server.ts",
+          "kind": "archive-chart-catalog"
         },
         {
           "file": "src/lib/data-sources/qimen.ts",
@@ -2347,6 +2434,10 @@
         {
           "file": "src/app/api/tarot/route.ts",
           "kind": "tableName-catalog"
+        },
+        {
+          "file": "src/lib/agent/archive.server.ts",
+          "kind": "archive-chart-catalog"
         },
         {
           "file": "src/lib/data-sources/tarot.ts",
@@ -2524,6 +2615,10 @@
           "kind": "tableName-catalog"
         },
         {
+          "file": "src/lib/agent/archive.server.ts",
+          "kind": "archive-chart-catalog"
+        },
+        {
           "file": "src/lib/data-sources/xiaoliuren.ts",
           "kind": "literal-kysely"
         },
@@ -2567,6 +2662,10 @@
           "kind": "tableName-catalog"
         },
         {
+          "file": "src/lib/agent/archive.server.ts",
+          "kind": "archive-chart-catalog"
+        },
+        {
           "file": "src/lib/data-sources/ziwei.ts",
           "kind": "literal-kysely"
         },
@@ -2597,6 +2696,11 @@
       "file": "src/app/api/user/charts/route.ts",
       "expression": "getChartTable(type",
       "contract": "getChartTable return catalog"
+    },
+    {
+      "file": "src/lib/agent/archive.server.ts",
+      "expression": "CHART_TABLES[type]",
+      "contract": "typed archive chart table catalog"
     },
     {
       "file": "src/lib/agent/chart-tools.server.ts",
@@ -2644,7 +2748,7 @@
   "artifacts": [
     {
       "file": "supabase/selfhost/001-application.sql",
-      "sha256": "9a29e03ba6567106ee8dd8fd5e36c922b61472ef420e485f4b339bf057873bc2"
+      "sha256": "ffa56922e36bd60ab33c6708319be4d2a312ee174c1fdf04bbf58483986f11f7"
     },
     {
       "file": "supabase/selfhost/002-storage.sql",

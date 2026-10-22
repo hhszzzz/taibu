@@ -322,6 +322,7 @@ function scan(directory) {
           : expression === 'tableName' && file === 'src/lib/api/chart-crud.ts' ? 'typed birth-update chart table catalog'
             : expression === 'tableName' && file === 'src/lib/api/divination-pipeline.ts' ? 'tableName factory configuration'
               : expression === 'table' && file === 'src/lib/agent/chart-tools.server.ts' ? 'chart source table catalog'
+                : expression === 'CHART_TABLES[type]' && file === 'src/lib/agent/archive.server.ts' ? 'typed archive chart table catalog'
                 : expression.startsWith('getChartTable(') && file === 'src/app/api/user/charts/route.ts' ? 'getChartTable return catalog' : null;
         if (!contract) throw new Error(`Unreviewed dynamic Kysely relation ${file}: ${expression}`);
         dynamicRelationSites.push({ file, expression, contract });

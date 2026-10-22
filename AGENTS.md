@@ -19,23 +19,23 @@ pnpm test           # 自动先构建 packages/core、mcp、mcp-server，再跑�
 
 ## 固定本地测试环境
 
-- 通用测试栈沿用 Docker Compose 项目 `taibu-agent-1006b`，统一入口 `http://127.0.0.1:3196`；后续 Web、Agent worker 及相关服务的本地更新在此栈验收。
-- `pnpm local:update` 重建并更新服务；`pnpm local:up` 启动既有镜像；`pnpm local:status` / `pnpm local:logs` 检查状态。
-- 复用现有 `selfhost` CLI 的项目归属、配置与数据库基线校验，保留账号和持久数据卷。不要为 UI 更新重建数据库或更换项目名；真正的 schema 变更遵守迁移规范。
-- 登录凭据保存在私有 `.taibu-local/taibu-agent-1006b/credentials.json`，不得输出或提交。
+- 通用测试栈使用 Docker Compose 项目 `taibu-v2`（db、redis、web、worker、mailpit），入口以 `.taibu-local/taibu-v2/env/` 生成的端口为准。
+- `pnpm local:up` 启动本地栈；`pnpm local:update` 重新构建镜像并启动；`pnpm local:status` / `pnpm local:logs` 检查状态。
+- 本地数据卷与生成的密钥保存在 `.taibu-local/taibu-v2/`，不得输出或提交。schema 变更只用 `database/migrations/`。
 
 ## 项目最小地图
 
 - `packages/core`（`taibu-core`）: 占术计算引擎，以及 **`text.ts` 规范文本渲染层以及`json.ts` 规范json输出格式**。
 - `packages/mcp`: MCP 协议层。
 - `packages/mcp-server`: MCP 服务端。
-- `supabase/tabel_export_from_supabase.sql`: 当前数据库 schema 导出快照。
+- `database/`: 数据库唯一事实来源（bootstrap、migrations、schema.sql 快照）。
+- `deploy/`: Compose、Caddy、PostgreSQL/Redis 配置与备份脚本。
 
 ## 数据库与迁移规范
 
-- 使用 mcp supabase 进行更新执行 migration
+- 本地用 `pnpm db:migrate` 执行 `database/migrations/`；生产经 ssh-mcp-server 在主机运行 `deploy/deploy.sh <tag>`。禁止直接改线上表结构。
 - migration 中涉及安全对象（函数、视图、触发器）时，显式声明 `search_path` 与权限边界。
-- 如结构变化影响开发理解，需同步更新相关文档与 schema 快照。
+- 结构变化后运行 `pnpm db:schema` 更新 `database/schema.sql`。
 
 ## 测试与验收
 

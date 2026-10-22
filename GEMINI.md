@@ -47,16 +47,17 @@ pnpm test           # 自动先构建 packages/core、mcp、mcp-server，再跑�
 - `packages/core`（`@mingai/core`）: 占术计算引擎，以及 **`text.ts` 规范文本渲染层以及`json.ts` 规范json输出格式**。
 - `packages/mcp`: MCP 协议层。
 - `packages/mcp-server`: MCP 服务端。
-- `supabase/tabel_export_from_supabase.sql`: 当前数据库 schema 导出快照。
+- `database/`: 数据库唯一事实来源（bootstrap、migrations、schema.sql 快照）。
+- `deploy/`: Compose、Caddy、PostgreSQL/Redis 配置与备份脚本。
 
 ## 强制规范（MUST）
 
-- `API 路由`必须优先使用 `src/lib/api-utils.ts`，禁止在 `route.ts` 里随意创建 Supabase 客户端。
+- `API 路由`必须优先使用 `src/lib/api-utils.ts`，禁止在 `route.ts` 里自行创建数据库客户端或连接池。
 - `管理员接口`必须使用 `requireAdminUser()` 或 `requireAdminContext()`。
 - 需要用户态的接口必须使用 `requireUserContext()`（或等价受控封装），并统一返回 `jsonOk/jsonError`。
 - 涉及订阅的功能，必须按顺序执行：会员校验 -> 积分校验/扣减 -> 限流校验。
-- 需要 RLS bypass 时，只能在服务端使用 `getSystemAdminClient()`；严禁暴露 service role 到客户端。`api-utils.ts` 还提供 `getAuthAdminClient()`（Auth 管理）、`createAnonClient()`（匿名）、`createAuthedClient(token)`（带 token）等客户端，按需选用。
-- 新增表/字段前，必须先检查 `supabase/tabel_export_from_supabase.sql` ，并说明“为何不能复用现有结构”，必要时可以检查 `mcp supabase migrations`。
+- 服务端数据访问一律通过 `src/lib/db/context.server.ts` 的 `userDb()` / `anonDb()` / `systemDb()` 取得 `ScopedDb`；用户上下文缺失必须失败，禁止回退到 `systemDb()`。严禁把数据访问层或角色口令暴露到客户端。
+- 新增表/字段前，必须先检查 `database/schema.sql` 与 `database/migrations/`，并说明“为何不能复用现有结构”。
 - 未经明确批准，禁止新增核心目录、系统级模块或数据库主表。
 - 新增或修改数据库结构，必须新增 migration；禁止直接改线上表结构。
 - 修改 DB 行为时必须评估并同步：RLS、索引、默认值、回填策略、兼容旧数据。
@@ -74,9 +75,8 @@ pnpm test           # 自动先构建 packages/core、mcp、mcp-server，再跑�
 1. 解析请求（body / query / params）。
 2. 参数校验（优先复用 `src/lib/validation.ts`）。
 3. 鉴权——按场景选用：
-   - `getAuthContext(request)`：可选鉴权，返回 `{ supabase, user }`（user 可能为 null）。
-   - `requireUserContext(request)`：必须登录，支持 Cookie 与 Bearer。
-   - `requireBearerUser(request)`：仅 Bearer token 鉴权（`divination-pipeline` 使用）。
+   - `getAuthContext(request)`：可选鉴权，返回 `{ db, user }`（未登录时 `db` 为 anon 作用域，user 为 null）。
+   - `requireUserContext(request)`：必须登录，返回 `{ db, user }`。
    - `requireAdminUser(request)` / `requireAdminContext(request)`：管理员鉴权。
 4. 权限与业务前置检查（membership、credits、rate limit）。
 5. 执行业务逻辑（优先复用 `src/lib/*` 现有模块）。
@@ -97,9 +97,9 @@ pnpm test           # 自动先构建 packages/core、mcp、mcp-server，再跑�
 
 ## 数据库与迁移规范
 
-- 使用 mcp supabase 进行更新执行 migration
+- 本地用 `pnpm db:migrate` 执行 `database/migrations/`；生产经 ssh-mcp-server 在主机运行 `deploy/deploy.sh <tag>`。禁止直接改线上表结构。
 - migration 中涉及安全对象（函数、视图、触发器）时，显式声明 `search_path` 与权限边界。
-- 如结构变化影响开发理解，需同步更新相关文档与 schema 快照。
+- 结构变化后运行 `pnpm db:schema` 更新 `database/schema.sql`。
 
 ## 测试与验收
 

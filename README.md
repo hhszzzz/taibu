@@ -9,8 +9,8 @@
 [![Next.js](https://img.shields.io/badge/Next.js-16+-black?style=flat-square&logo=next.js)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4.x-38B2AC?style=flat-square&logo=tailwind-css)](https://tailwindcss.com/)
-[![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?style=flat-square&logo=supabase)](https://supabase.com/)
-[![Vercel](https://img.shields.io/badge/Deployed_on-Vercel-black?style=flat-square&logo=vercel)](https://vercel.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169E1?style=flat-square&logo=postgresql)](https://www.postgresql.org/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker)](https://www.docker.com/)
 
 Language: **中文** | [English](README.en.md)
 
@@ -117,47 +117,30 @@ npm install taibu-core
 
 ## 快速开始
 
-### 本地自托管原型（PostgreSQL＋Redis）
+### 本地自托管栈（PostgreSQL 17 + Redis 8）
 
-不读取真实 `.env`，不连接 Vercel 或托管 Supabase。需要本机 Docker、Node.js 和 pnpm：
-
-```bash
-pnpm selfhost init --demo
-pnpm selfhost up
-# 打开 http://127.0.0.1:3080
-# 随机账号和密码：.taibu-local/taibu-local/credentials.json（不要公开）
-pnpm selfhost status
-pnpm selfhost down # 保留数据库与头像文件卷
-```
-
-`--demo` 使用明确标注的本地确定性模型，不产生真实 AI 费用。第一阶段保留自托管 Auth/PostgREST/Storage 兼容层；不是已完成生产迁移，也不是已删除全部 Supabase SDK。社区暂不开放，其余可用范围、备份恢复和生产切换门槛见 [自托管说明](docs/manual/Self-Hosting.md)。
-
-### Docker 部署（沿用外部后端）
-
-以下三种方式保留现有外部 Supabase 配置，不包含 PostgreSQL/Redis 初始化：
+数据、认证与文件全部由本机 Docker 栈提供，不连接 Vercel 或托管 Supabase。需要本机 Docker、Node.js 24 和 pnpm：
 
 ```bash
-# 准备环境变量（首次）
-cp .env.example .env
-
-# 1) 一键部署：同时启动 Web + MCP
-docker compose up -d --build
-
-# 2) 仅部署 Web
-docker compose -f docker-compose.web.yml up -d --build
-
-# 3) 仅部署 MCP Server
-docker compose -f docker-compose.mcp.yml up -d --build
+pnpm install
+pnpm local:up      # 构建并启动 db、redis、web、worker、mailpit
+pnpm local:status  # 查看端口与健康状态
+pnpm local:logs    # 跟随日志
+pnpm local:down    # 保留数据库与头像文件卷
 ```
 
-默认端口：
-- Web: `3000` （[http://localhost:3000](http://localhost:3000)）
-- MCP: `3001`（[http://localhost:3001/mcp](http://localhost:3001/mcp)）
+首次启动会在 `.taibu-local/taibu-v2/` 生成随机密钥与端口配置（不要公开或提交）。验证码邮件在 Mailpit 中查看，监听地址由 `pnpm local:status` 给出。
+
+`pnpm local:showcase` 使用明确标注的本地确定性模型，不产生真实 AI 费用。本地栈与生产使用同一套迁移（`database/migrations/`）和 Compose 服务图，部署细节见 [自托管说明](docs/manual/Self-Hosting.md)，正式切换步骤见 [切换运行手册](docs/manual/Cutover.md)。
+
+### 生产部署
+
+生产主机运行 `deploy/compose.base.yml` + `deploy/compose.prod.yml` 的 Compose 栈（Caddy、web、worker、PostgreSQL + pgvector、Redis、备份）。镜像在 CI 构建后由主机执行 `deploy/deploy.sh <tag>`；不在 2C2G 主机上构建。环境变量清单以 `.env.example` 为准，密钥按容器拆分写入 `/opt/taibu/env/*.env`。
 
 ### 开发环境部署
 
 环境要求：
-- Node.js 18+
+- Node.js 24+
 - pnpm (推荐) / npm / yarn
 
 ```bash

@@ -455,8 +455,14 @@ async function main() {
       join pg_namespace n on n.oid = s.relnamespace
       where s.relkind = 'S' and n.nspname = 'public' and t.relkind = 'r'`);
     for (const row of sequences.rows) {
-      const max = await scalar(target, `select coalesce(max("${row.column}"), 0) from public."${row.table}"`);
-      await target.query(`select setval($1::regclass, $2, $3)`, [`public.${row.sequence}`, Number(max), Number(max) > 0]);
+      const max = Number(await scalar(target, `select coalesce(max("${row.column}"), 0) from public."${row.table}"`));
+      // setval(..., 0, false) is below the default minimum of 1. An empty
+      // table starts at 1 with is_called=false so the next value is 1.
+      await target.query(`select setval($1::regclass, $2, $3)`, [
+        `public.${row.sequence}`,
+        max > 0 ? max : 1,
+        max > 0,
+      ]);
     }
 
     if (filesRoot) await migrateAvatars(source, filesRoot);

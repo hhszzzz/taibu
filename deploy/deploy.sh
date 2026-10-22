@@ -13,13 +13,15 @@ compose() {
 }
 
 echo "[deploy] pre-flight backup"
+mkdir -p /opt/taibu/backups
 compose exec -T db sh -c 'pg_dump -U postgres -Fc taibu' > "/opt/taibu/backups/pre-${TAG}.dump"
 
 echo "[deploy] pull ${TAG}"
 compose pull
+compose build backup
 compose up -d db redis
-compose run --rm db-setup
-compose run --rm migrate
+compose run --rm -T db-setup
+compose run --rm -T migrate
 compose up -d web worker caddy backup
 
 echo "[deploy] waiting for readiness"

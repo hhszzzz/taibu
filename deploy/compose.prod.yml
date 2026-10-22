@@ -10,7 +10,7 @@ services:
     ports: ["80:80", "443:443"]
     environment:
       APP_DOMAIN: ${APP_DOMAIN:?}
-      ADMIN_IP: ${ADMIN_IP:-127.0.0.1}
+      ADMIN_IP: ${ADMIN_IP:-127.0.0.1}   # space separated CIDR list
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -44,7 +44,7 @@ services:
   backup:
     build: ./backup
     restart: unless-stopped
-    env_file: ["/opt/taibu/env/backup.env"]
+    env_file: ["${TAIBU_ENV_DIR:?}/backup.env"]
     volumes:
       - backups:/backups
       - files:/data/files:ro

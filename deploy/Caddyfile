@@ -1,11 +1,8 @@
 {
 	# Cloudflare proxy mode: keep the real client IP from the edge.
 	servers {
-		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22
-		141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22
-		198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13
-		131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32
-		2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+		client_ip_headers CF-Connecting-IP
 	}
 }
 
@@ -16,19 +13,22 @@
 	}
 
 	# Maintenance switch: `/opt/taibu/maintenance/on` serves a static 503 for
-	# everyone except ADMIN_IP (comma separated allow-list).
+	# everyone except ADMIN_IP (space separated allow-list, e.g.
+	# "203.0.113.7 198.51.100.0/24").
 	@maintenance file /srv/maintenance/on
+	@admin remote_ip {$ADMIN_IP}
 	handle @maintenance {
-		@admin remote_ip {$ADMIN_IP}
 		handle @admin {
 			reverse_proxy web:3000 {
 				flush_interval -1
 				header_up X-Real-IP {client_ip}
 			}
 		}
-		respond "维护中，请稍后重试" 503 {
+		handle {
 			header Retry-After 300
-			close
+			respond "维护中，请稍后重试" 503 {
+				close
+			}
 		}
 	}
 

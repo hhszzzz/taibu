@@ -243,7 +243,7 @@ async function main() {
              ${authColumnNames.has('updated_at') ? 'au.updated_at' : 'now()'} as updated_at,
              ${authColumnNames.has('encrypted_password') ? 'au.encrypted_password' : 'null::text'} as encrypted_password,
              ${authColumnNames.has('raw_user_meta_data') ? 'au.raw_user_meta_data' : "'{}'::jsonb"} as metadata,
-             pu.nickname, pu.avatar_url
+             pu.nickname, ${avatarExpression('pu.avatar_url')} as avatar_url
       from auth.users au
       left join public.users pu on pu.id = au.id
       where au.email is not null

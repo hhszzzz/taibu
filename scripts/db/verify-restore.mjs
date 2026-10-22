@@ -178,7 +178,12 @@ async function orphanCheck(dsn) {
   });
 }
 
+const PROTECTED_DATABASES = new Set(['postgres', 'template0', 'template1', 'taibu']);
+
 async function main() {
+  if (PROTECTED_DATABASES.has(database)) {
+    throw new Error(`refusing to drop protected database "${database}"; choose a temporary name`);
+  }
   const started = Date.now();
   const restoredUrl = withDatabase(adminDsn, database);
   const adminUrl = adminDsn;

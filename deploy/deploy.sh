@@ -9,6 +9,10 @@ ROOT="${ROOT:-/opt/taibu/source}"
 # host: an existing system Caddy proxies 127.0.0.1:3000 (hw).
 # container: this compose stack owns the caddy service and 80/443.
 EDGE_MODE="${EDGE_MODE:-container}"
+case "$EDGE_MODE" in
+  host|container) ;;
+  *) echo "EDGE_MODE must be host or container (got $EDGE_MODE)" >&2; exit 2 ;;
+esac
 
 compose() {
   if [ "$EDGE_MODE" = "host" ]; then

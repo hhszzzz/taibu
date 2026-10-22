@@ -1,0 +1,30 @@
+# Staging on the hw host: no public edge. Web is bound to loopback and reached
+# through an SSH tunnel; the host Caddy keeps its placeholders untouched.
+services:
+  web:
+    ports: ['127.0.0.1:${APP_PORT:-3000}:3000']
+    environment:
+      NODE_OPTIONS: --max-old-space-size=448
+      DB_POOL_MAX: '10'
+    mem_limit: 640m
+    stop_grace_period: 30s
+  worker:
+    environment:
+      NODE_OPTIONS: --max-old-space-size=384
+      DB_POOL_MAX: '6'
+      AGENT_WORKER_CONCURRENCY: '2'
+    mem_limit: 512m
+  db:
+    mem_limit: 640m
+    shm_size: 256m
+  redis:
+    mem_limit: 160m
+  mailpit:
+    image: axllent/mailpit:v1.27.8
+    restart: unless-stopped
+    networks: [backend]
+    ports: ['127.0.0.1:8025:8025']
+    mem_limit: 64m
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: '3' }

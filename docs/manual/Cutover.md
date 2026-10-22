@@ -85,7 +85,7 @@ SQL
 
 ### 导入专用 DSN
 
-`TRANSIT_TARGET_URL` 与 `IMPORT_TARGET_URL` 都要用 `postgres` 超级用户（或等价的 CREATEDB + BYPASSRLS 角色）：transit 需要建库/恢复，导入需要写全部表并在复制期间关闭触发器。它们只从密码管理器注入当前 shell，不写入任何文件。`taibu_migrator` 只用于 `migrate` 服务，不适合导入。
+`TRANSIT_TARGET_URL` 必须指向 db 服务上的**独立库名**（如 `taibu_transit`），`transit-build --recreate` 会删掉并重建它；脚本拒绝 `postgres`/`template0`/`template1`/`taibu`。`TRANSIT_TARGET_URL` 与 `IMPORT_TARGET_URL` 都要用 `postgres` 超级用户（或等价的 CREATEDB + BYPASSRLS 角色）：transit 需要建库/恢复，导入需要写全部表并在复制期间关闭触发器。它们只从密码管理器注入当前 shell，不写入任何文件。`taibu_migrator` 只用于 `migrate` 服务，不适合导入。
 
 ### T+5 构建 transit 并重放待上线迁移
 

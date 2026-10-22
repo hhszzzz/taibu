@@ -223,8 +223,13 @@ async function assertEmpty(client) {
   }
 }
 
+const PROTECTED_DATABASES = new Set(['postgres', 'template0', 'template1', 'taibu']);
+
 async function recreateDatabase() {
   const name = databaseName(targetUrl);
+  if (PROTECTED_DATABASES.has(name)) {
+    throw new Error(`refusing to drop protected database "${name}"; use a dedicated transit database name`);
+  }
   const adminUrl = withDatabase(targetUrl, maintenanceDb);
   await withClient(adminUrl, async (client) => {
     await client.query(`SELECT pg_terminate_backend(pid) FROM pg_stat_activity

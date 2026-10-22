@@ -1,6 +1,7 @@
 'use client';
 import { useRef, useState } from 'react';
 import type { AttachmentState, PrivateAttachment } from '@/types';
+import { documentFileProblem } from '@/lib/chat/composer-files';
 
 export async function prepareImage(file: File): Promise<File> {
     if (file.size > 10 * 1024 * 1024) throw new Error('图片原始文件不能超过 10MB');
@@ -39,13 +40,10 @@ export function usePrivateAttachments({ scopeKey, state, change, onError }: {
             for (let file of files) {
                 if (latest.current.scopeKey !== scope) break;
                 if (images.includes(file)) file = await prepareImage(file);
-                else if (!/\.(txt|md)$/i.test(file.name) && file.type !== 'text/plain') {
-                    // Reuse the existing document extraction and its membership checks.
-                    const form = new FormData(); form.append('mode', 'file'); form.append('query', '提取资料正文'); form.append('file', file);
-                    const response = await fetch('/api/dify/enhance', { method: 'POST', body: form });
-                    const result = await response.json();
-                    if (!response.ok || !result.success || typeof result.data?.file_content !== 'string') throw new Error(result.error || '文件提取失败');
-                    file = new File([result.data.file_content], `${file.name}.txt`, { type: 'text/plain' });
+                else {
+                    // The server reads the document's text as it stores it.
+                    const problem = documentFileProblem(file);
+                    if (problem) throw new Error(`${file.name}：${problem}`);
                 }
                 if (latest.current.scopeKey !== scope) break;
                 const form = new FormData(); form.append('file', file);

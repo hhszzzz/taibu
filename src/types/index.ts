@@ -223,6 +223,11 @@ export interface AIMessageMetadata extends Record<string, unknown> {
         baziChartName?: string;
         dailyFortune?: string;
     };
+    /** 普通对话的联网搜索：是否完成，以及回答参考的网页 */
+    webSearch?: {
+        status: 'ok' | 'failed' | 'unavailable';
+        sources: Array<{ title: string; url: string }>;
+    };
     /** 提示词诊断信息 */
     promptDiagnostics?: PromptDiagnostics;
 }
@@ -362,10 +367,7 @@ export type FortuneLevel = '大吉' | '吉' | '中吉' | '平' | '小凶' | '凶
 
 // ===== 用户相关类型 =====
 
-// ===== Dify 增强功能相关类型 =====
-
-/** Dify 增强模式 */
-export type DifyMode = 'file' | 'web' | 'all';
+// ===== 附件与联网搜索 =====
 
 /** 附件选择状态（前端使用） */
 export interface AttachmentState {
@@ -375,14 +377,8 @@ export interface AttachmentState {
 }
 export interface PrivateAttachment { id: string; name: string; kind: 'image' | 'text'; mimeType: string; size: number; sha256: string; width?: number; height?: number }
 
-/** Dify API 响应数据 */
-export interface DifyResponse {
-    web_content?: string;
-    file_content?: string;
-}
-
-/** Dify 增强上下文（传递给 Chat API） */
-export interface DifyContext {
-    webContent?: string;
-    fileContent?: string;
+/** 随消息发送的文档文字：普通对话的单个附件，或 Agent 模式下沿用的单文件附件 */
+export interface ChatAttachment {
+    name: string;
+    text: string;
 }

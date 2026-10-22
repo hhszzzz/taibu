@@ -30,6 +30,9 @@ export interface MingRecord {
     updated_at: string;
     is_archived?: boolean;
     archived_kb_ids?: string[] | null;
+    /** The Agent task that wrote the record, and that task's conversation; cleared once the user edits what it says. */
+    source_run_id?: string | null;
+    source_conversation_id?: string | null;
 }
 
 export interface MingNote {

@@ -1,5 +1,6 @@
 import type { DataSourceSummary } from '@/lib/data-sources/types';
 import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
+import { applyListFilters } from '@/lib/db/data-source-filters';
 import { type BaziCaseProfile } from '@/lib/bazi-case-profile';
 import { formatBaziPromptText } from '@/lib/bazi-prompt';
 import { getBaziCaseProfileByChartId } from '@/lib/server/bazi-case-profile';
@@ -27,13 +28,14 @@ export const baziProvider: DataSourceProvider<BaziRow> = {
     async list(userId: string, ctx?: DataSourceQueryContext): Promise<DataSourceSummary[]> {
         const db = requireQueryDb(ctx);
         const limit = ctx?.limit ?? 50;
-        const rows = await db.tx((trx) => trx
-            .selectFrom('bazi_charts')
-            .select(['id', 'name', 'birth_date', 'created_at'])
-            .where('user_id', '=', userId)
-            .orderBy('created_at', 'desc')
-            .limit(limit)
-            .execute()) as Array<{ id: string; name: string | null; birth_date: string; created_at: string }>;
+        const rows = await db.tx(async (trx) => {
+            const query = applyListFilters(trx
+                .selectFrom('bazi_charts')
+                .select(['id', 'name', 'birth_date', 'created_at'])
+                .where('user_id', '=', userId), ctx, ['name']);
+            if (!query) return [];
+            return query.orderBy('created_at', 'desc').limit(limit).execute();
+        }) as Array<{ id: string; name: string | null; birth_date: string; created_at: string }>;
         return rows.map((chart) => ({
             id: chart.id,
             type: 'bazi_chart',
@@ -72,7 +74,7 @@ export const baziProvider: DataSourceProvider<BaziRow> = {
             isLeapMonth: chart.is_leap_month ?? undefined,
             timezone: chart.timezone,
             disambiguation: chart.disambiguation,
-        }, chart.caseProfile || null, ctx?.chartPromptDetailLevel);
+        }, chart.caseProfile || null, ctx?.chartPromptDetailLevel, ctx?.caseEventLimit);
     },
 
     summarize(chart: BaziRow): string {

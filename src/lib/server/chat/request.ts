@@ -29,6 +29,7 @@ import { normalizeIdentityUserProfile } from '@/lib/user/settings';
 import { AI_RATE_LIMIT_CONFIG, checkRateLimit } from '@/lib/rate-limit';
 import { normalizeVisualizationSettings } from '@/lib/visualization/settings';
 import { parseReasoningEffort } from '@/lib/chat/model-settings';
+import { isChatAttachment } from '@/lib/ai/document-formats';
 
 const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET;
 const MANAGED_CHAT_RATE_LIMIT_KEY = '/api/chat';
@@ -68,6 +69,8 @@ export async function parseChatRequestBody(request: NextRequest): Promise<ChatRe
     return jsonError('无效的消息格式', 400);
   }
   try { body.reasoningEffort = parseReasoningEffort(body.reasoningEffort); } catch { return jsonError('推理档位无效', 400); }
+  if (body.attachment !== undefined && !isChatAttachment(body.attachment)) return jsonError('附件内容无效', 400);
+  if (body.webSearch !== undefined && typeof body.webSearch !== 'boolean') return jsonError('联网搜索参数无效', 400);
   body.userProfile = normalizeIdentityUserProfile(body.userProfile);
   body.visualizationSettings = normalizeVisualizationSettings(body.visualizationSettings);
   return body;
@@ -82,7 +85,8 @@ function toPreparationInput(body: ChatRequestBody): ChatPreparationInput {
     model: body.model,
     reasoning: body.reasoning,
     reasoningEffort: body.reasoningEffort,
-    difyContext: body.difyContext,
+    attachment: body.attachment,
+    webSearch: body.webSearch,
     mentions: body.mentions,
     dreamMode: body.dreamMode,
     expressionStyle: body.expressionStyle,
@@ -106,6 +110,8 @@ function preparationErrorResponse(error: ChatPreparationFailure): Response {
       return jsonError('无效的模型', 400);
     case 'membership-denied':
       return jsonError('当前会员等级无法使用该模型', 403);
+    case 'web-search-denied':
+      return jsonError(error.message, 403, { code: 'MEMBERSHIP_REQUIRED' });
     case 'insufficient-credits':
       return jsonError('积分不足，请先通过签到、激活码或会员权益获取积分', 402, {
         code: 'INSUFFICIENT_CREDITS',
@@ -207,7 +213,7 @@ async function bindManagedChat(request: NextRequest, body: ChatRequestBody, obse
     buildPrompt: async (resolved) => {
       observation?.phase('prompt');
       try {
-        return await buildChatPromptContext(withRequestContext(resolved, body));
+        return await buildChatPromptContext(withRequestContext(resolved, body), { webSearch: resolved.input.webSearch === true });
       } catch (error) {
         observation?.fail('prompt');
         throw error;
@@ -241,7 +247,7 @@ export async function prepareBrowserDirectChatRequest(
     buildPrompt: async (resolved) => {
       observation?.phase('prompt');
       try {
-        return await buildChatPromptContext(withRequestContext(resolved, body));
+        return await buildChatPromptContext(withRequestContext(resolved, body), { webSearch: resolved.input.webSearch === true });
       } catch (error) {
         observation?.fail('prompt');
         throw error;

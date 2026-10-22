@@ -1,6 +1,7 @@
 import { PERSONALITY_BASICS } from '@/lib/divination/mbti';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
 import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
+import { applyListFilters } from '@/lib/db/data-source-filters';
 
 type MbtiRow = {
     id: string;
@@ -19,13 +20,14 @@ export const mbtiProvider: DataSourceProvider<MbtiRow> = {
     async list(userId: string, ctx?: DataSourceQueryContext): Promise<DataSourceSummary[]> {
         const db = requireQueryDb(ctx);
         const limit = ctx?.limit ?? 50;
-        const data = await db.tx((trx) => trx
-        .selectFrom('mbti_readings')
-        .select(['id', 'mbti_type', 'created_at'])
-        .where('user_id', '=', userId)
-        .orderBy('created_at', 'desc')
-        .limit(limit)
-        .execute());
+        const data = await db.tx(async (trx) => {
+            const query = applyListFilters(trx
+                .selectFrom('mbti_readings')
+                .select(['id', 'mbti_type', 'created_at'])
+                .where('user_id', '=', userId), ctx, ['mbti_type']);
+            if (!query) return [];
+            return query.orderBy('created_at', 'desc').limit(limit).execute();
+        });
         return (data || []).map((row) => ({
             id: row.id,
             type: 'mbti_reading',

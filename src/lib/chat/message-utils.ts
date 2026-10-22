@@ -3,7 +3,7 @@
  */
 
 /**
- * 从可能包含 Dify 上下文前缀的用户消息中提取原始问题
+ * 从可能带有附件与联网搜索前缀的用户消息中提取原始问题
  */
 export function extractUserQuestion(rawUserContent: string): string {
     const marker = '【用户的问题如下】';

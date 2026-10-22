@@ -1,6 +1,7 @@
 import { PALM_ANALYSIS_TYPES } from '@/lib/divination/palm';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
 import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
+import { applyListFilters } from '@/lib/db/data-source-filters';
 
 type PalmRow = {
     id: string;
@@ -39,13 +40,15 @@ export const palmProvider: DataSourceProvider<PalmRow> = {
     async list(userId: string, ctx?: DataSourceQueryContext): Promise<DataSourceSummary[]> {
         const db = requireQueryDb(ctx);
         const limit = ctx?.limit ?? 50;
-        const data = await db.tx((trx) => trx
-            .selectFrom('palm_readings')
-            .select(['id', 'analysis_type', 'hand_type', 'created_at'])
-            .where('user_id', '=', userId)
-            .orderBy('created_at', 'desc')
-            .limit(limit)
-            .execute());
+        // A palm reading has no text of its own: a keyword lists none.
+        const data = await db.tx(async (trx) => {
+            const query = applyListFilters(trx
+                .selectFrom('palm_readings')
+                .select(['id', 'analysis_type', 'hand_type', 'created_at'])
+                .where('user_id', '=', userId), ctx, []);
+            if (!query) return [];
+            return query.orderBy('created_at', 'desc').limit(limit).execute();
+        });
         return (data || []).map((row) => {
             const typeName = getPalmAnalysisTypeLabel(row.analysis_type);
             const handName = getPalmHandLabel(row.hand_type);

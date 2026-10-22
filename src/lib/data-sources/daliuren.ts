@@ -2,6 +2,7 @@ import { toDaliurenText, type DaliurenOutput } from 'taibu-core/daliuren';
 import { resolveChartTextDetailLevel } from '@/lib/divination/detail-level';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
 import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
+import { applyListFilters } from '@/lib/db/data-source-filters';
 
 type DaliurenRow = {
     id: string;
@@ -24,13 +25,14 @@ export const daliurenProvider: DataSourceProvider<DaliurenRow> = {
     async list(userId: string, ctx?: DataSourceQueryContext): Promise<DataSourceSummary[]> {
         const db = requireQueryDb(ctx);
         const limit = ctx?.limit ?? 50;
-        const data = await db.tx((trx) => trx
-        .selectFrom('daliuren_divinations')
-        .select(['id', 'question', 'solar_date', 'day_ganzhi', 'hour_ganzhi', 'yue_jiang', 'created_at'])
-        .where('user_id', '=', userId)
-        .orderBy('created_at', 'desc')
-        .limit(limit)
-        .execute());
+        const data = await db.tx(async (trx) => {
+            const query = applyListFilters(trx
+                .selectFrom('daliuren_divinations')
+                .select(['id', 'question', 'solar_date', 'day_ganzhi', 'hour_ganzhi', 'yue_jiang', 'created_at'])
+                .where('user_id', '=', userId), ctx, ['question']);
+            if (!query) return [];
+            return query.orderBy('created_at', 'desc').limit(limit).execute();
+        });
         return (data || []).map((row) => ({
             id: row.id,
             type: 'daliuren_divination' as const,

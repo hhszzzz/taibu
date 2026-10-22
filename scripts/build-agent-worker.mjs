@@ -11,6 +11,7 @@ import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildDocumentWorker } from "./build-document-worker.mjs";
 await mkdir(".agent", { recursive: true });
 // Next's standalone trace omits workspace packages it bundled into Web chunks.
 // Keep the public Core package and its production dependencies beside the worker.
@@ -158,3 +159,5 @@ await build({
     },
   ],
 });
+// The Web server's document worker ships in the same directory.
+await buildDocumentWorker();

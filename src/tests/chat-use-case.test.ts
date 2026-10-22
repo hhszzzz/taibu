@@ -196,6 +196,40 @@ test('invalid model and account failure stop preparation before debit or limit',
   assert.deepEqual(events, []);
 });
 
+const attachment = { name: '命书.pdf', text: '正文' };
+for (const [membership, withDocument, message] of [
+  ['free', false, '免费用户无法使用网络搜索功能，请升级会员'],
+  ['plus', true, 'Plus 会员无法同时使用文件和搜索，请升级 Pro 会员'],
+] as const) {
+  test(`web search for ${membership}${withDocument ? ' with a document' : ''} is refused before debit and rate limit`, async () => {
+    const { events, operations, directOperations } = fixture();
+    operations.loadAccount = async () => { events.push('account'); return { ok: true, value: { effectiveMembership: membership, hasCredits: true } }; };
+    directOperations.loadAccount = operations.loadAccount;
+    const searching = { ...input, webSearch: true, ...(withDocument ? { attachment } : {}) };
+    const denied = { ok: false, error: { kind: 'web-search-denied', message } };
+    assert.deepEqual(await prepareManagedChat(actor, searching, operations), denied);
+    assert.deepEqual(events, ['model:requested-model', 'account']);
+    events.length = 0;
+    assert.deepEqual(await prepareDirectChat({ userId: 'user-1' }, searching, directOperations), denied);
+    assert.deepEqual(events, ['account']);
+  });
+}
+
+test('web search is admitted for Plus alone and for Pro with a document; documents alone need no membership', async () => {
+  for (const [membership, request] of [
+    ['plus', { ...input, webSearch: true }],
+    ['pro', { ...input, webSearch: true, attachment }],
+    ['free', { ...input, attachment }],
+    ['free', { ...input, webSearch: false }],
+  ] as const) {
+    const { events, operations } = fixture();
+    operations.loadAccount = async () => { events.push('account'); return { ok: true, value: { effectiveMembership: membership, hasCredits: true } }; };
+    const result = await prepareManagedChat(actor, request, operations);
+    assert.equal(result.ok, true, membership);
+    assert.deepEqual(events, ['model:requested-model', 'account', 'debit', 'rate-limit', 'prompt']);
+  }
+});
+
 test('direct preparation validates account before rate limit, without model check or debit', async () => {
   const { events, directOperations } = fixture();
   directOperations.loadAccount = async () => {

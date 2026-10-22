@@ -17,6 +17,8 @@ import type { MembershipType } from '@/lib/user/membership';
 import type { ChatMode } from '@/lib/chat/use-chat-state';
 import type { ModelSettingsProps } from '@/lib/chat/model-settings';
 import { FloatingPanel } from '@/components/ui/FloatingPanel';
+import { DOCUMENT_ACCEPT } from '@/lib/ai/document-formats';
+import { PRIVATE_ATTACHMENT_ACCEPT } from '@/lib/chat/composer-files';
 import type { KnowledgeBaseSummary } from './useComposerState';
 
 /** Agent web search toggle for the next task. */
@@ -59,7 +61,7 @@ interface ComposerToolbarProps extends ModelSettingsProps {
     hasFile: boolean;
     onFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
     // Plain chat search and knowledge
-    plainWeb: { active: boolean; allowed: boolean; onToggle: () => void };
+    plainWeb: { active: boolean; allowed: boolean; title: string; onToggle: () => void };
     knowledgeBase: { enabled: boolean; allowed: boolean; onOpen: () => void; selected: KnowledgeBaseSummary[]; onRemove: (id: string) => void };
     // Analysis style
     chatMode: ChatMode;
@@ -88,7 +90,7 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
     const openMenu = () => { setMenu(value => value === 'plus' ? null : 'plus'); setStyleOpen(false); };
     const searchToggle = webControl
         ? { active: webControl.enabled, disabled: webControl.disabled, title: webControl.title, onToggle: webControl.onToggle }
-        : { active: props.plainWeb.active, disabled: !props.plainWeb.allowed, title: '联网搜索', onToggle: props.plainWeb.onToggle };
+        : { active: props.plainWeb.active, disabled: !props.plainWeb.allowed, title: props.plainWeb.title, onToggle: props.plainWeb.onToggle };
     const knowledgeChecked = props.knowledgeBase.selected.length > 0;
     return (
         <div className="chat-composer-actions">
@@ -133,7 +135,7 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
                 </div>
             </FloatingPanel>}
             <input ref={fileInputRef} type="file" className="hidden" tabIndex={-1} aria-hidden="true"
-                accept={agentMode ? '.jpg,.jpeg,.png,.webp,.pdf,.txt,.md,.doc,.docx,.xlsx,.xls,.csv' : '.pdf,.txt,.md,.doc,.docx,.xlsx,.xls,.csv'}
+                accept={agentMode ? PRIVATE_ATTACHMENT_ACCEPT : DOCUMENT_ACCEPT}
                 multiple={agentMode} onChange={props.onFileChange} />
 
             {props.knowledgeBase.allowed && props.knowledgeBase.selected.map(base => <span key={base.id} className="chat-kb-chip" title={base.description || base.name}>

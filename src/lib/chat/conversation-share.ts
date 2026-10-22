@@ -6,9 +6,10 @@
  * references never leave the owner's account; chart basis is opt-in.
  */
 import { randomBytes } from 'node:crypto';
-import type { ChatMessage, MentionType } from '@/types';
+import type { AIMessageMetadata, ChatMessage, MentionType } from '@/types';
 import { DATA_SOURCE_TYPES } from '@/lib/data-sources/types';
 import { redactExportValue } from './conversation-transfer';
+import { getVisibleWebSearch } from './feature-normalization';
 
 export const SHARE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 export const SHARE_SNAPSHOT_MAX_BYTES = 1_048_576;
@@ -118,6 +119,11 @@ function shareMessage(message: ChatMessage, includeCharts: boolean): SharedMessa
             const text = part.canonicalText ?? (typeof output?.canonicalText === 'string' ? output.canonicalText : undefined);
             if (text) basis.push({ title: part.title || '命盘依据', text });
         }
+    }
+    // Plain chat keeps the pages its web search returned in metadata rather than in Agent parts.
+    const web = message.role === 'assistant' ? getVisibleWebSearch(message.metadata as AIMessageMetadata | undefined) : null;
+    for (const { title, url } of web?.sources ?? []) {
+        if (!sources.some(source => source.url === url)) sources.push({ title, url });
     }
     if (sources.length) shared.sources = sources;
     if (basis.length) shared.basis = basis;

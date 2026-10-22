@@ -82,7 +82,10 @@
 .agent-ws-list strong { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; font-size: calc(13 / 16 * 1rem); font-weight: 550; }
 .agent-ws-list strong code, .agent-ws-chips code { font-family: var(--font-mono); font-size: calc(11 / 16 * 1rem); font-weight: 400; color: var(--foreground-tertiary); }
 .agent-ws-list small { font-size: calc(12 / 16 * 1rem); font-weight: 400; color: var(--foreground-secondary); overflow-wrap: anywhere; }
-.agent-ws-list blockquote { margin: 2px 0; padding-left: 10px; border-left: 2px solid var(--accent); font-size: calc(13 / 16 * 1rem); color: var(--foreground); }
+.agent-ws-list blockquote { margin: 2px 0; padding-left: 10px; border-left: 2px solid var(--accent); font-size: calc(13 / 16 * 1rem); color: var(--foreground); overflow-wrap: anywhere; }
+.agent-ws-list strong a { color: inherit; text-decoration: underline; text-decoration-color: var(--hairline-color); text-underline-offset: 3px; }
+.agent-ws-list strong a:hover { text-decoration-color: currentColor; }
+.agent-ws-list-text { font-size: calc(13 / 16 * 1rem); line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
 .agent-ws-list [data-deleted="true"] { opacity: .55; }
 .agent-ws-list [data-deleted="true"] blockquote { text-decoration: line-through; }
 .agent-ws-actions { display: flex; gap: 6px; }

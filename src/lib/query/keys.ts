@@ -13,4 +13,5 @@ export const queryKeys = {
   chatBootstrapPrefix: () => ['chat', 'bootstrap'] as const,
   models: (userId?: string | null, options?: { vision?: boolean; membershipType?: string | null }) => ['models', userId ?? 'visitor', options?.membershipType ?? 'free', options?.vision === true ? 'vision' : 'chat'] as const,
   modelsPrefix: () => ['models'] as const,
+  agentArchive: (runId: string, callId: string) => ['agent', 'archive', runId, callId] as const,
 } as const;

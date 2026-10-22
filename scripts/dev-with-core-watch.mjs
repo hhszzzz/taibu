@@ -38,6 +38,8 @@ async function main() {
   }
 
   const coreWatch = run(PNPM_BIN, ['-C', 'packages/core', 'exec', 'tsc', '--watch', '--preserveWatchOutput']);
+  // PDF and Office uploads are parsed in worker threads running this bundle.
+  const documentWorkerWatch = run(process.execPath, ['scripts/build-document-worker.mjs', '--watch']);
   const webDev = run(PNPM_BIN, ['exec', 'next', 'dev', ...nextArgs]);
 
   let shuttingDown = false;
@@ -45,6 +47,7 @@ async function main() {
     if (shuttingDown) return;
     shuttingDown = true;
     terminate(coreWatch, signal);
+    terminate(documentWorkerWatch, signal);
     terminate(webDev, signal);
   };
 
@@ -55,19 +58,14 @@ async function main() {
     shutdown('SIGTERM');
   });
 
-  coreWatch.once('exit', (code, signal) => {
-    if (!shuttingDown) {
-      shutdown();
-      process.exitCode = code ?? (signal ? 1 : 0);
-    }
-  });
-
-  webDev.once('exit', (code, signal) => {
-    if (!shuttingDown) {
-      shutdown();
-      process.exitCode = code ?? (signal ? 1 : 0);
-    }
-  });
+  for (const child of [coreWatch, documentWorkerWatch, webDev]) {
+    child.once('exit', (code, signal) => {
+      if (!shuttingDown) {
+        shutdown();
+        process.exitCode = code ?? (signal ? 1 : 0);
+      }
+    });
+  }
 }
 
 main().catch((error) => {

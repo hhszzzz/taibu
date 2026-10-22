@@ -4,6 +4,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import sharp from 'sharp';
 import { createMockAuthContext } from './helpers/supabase-mock';
+import { mockAIRateLimit } from './helpers/route-mock';
 import { GET as search } from '../app/api/search/route';
 import { GET as conversations } from '../app/api/conversations/route';
 import { POST as enhance } from '../app/api/chat/enhance/route';
@@ -198,6 +199,26 @@ test('private upload validates real image bytes, downsamples and stores only an 
     const body=await response.json(); assert.equal(body.attachment.id,f.id); assert.equal(body.attachment.width,2048); assert.ok(!JSON.stringify(body).includes('object_path'));
     const invalid=new FormData(); invalid.append('file',new File(['not an image'],'bad.png',{type:'image/png'}));
     assert.equal((await upload(new NextRequest('http://localhost/api/agent/attachments',{method:'POST',body:invalid}))).status,400);
+});
+
+test('private document upload stores the extracted text under its own name within the document rate limit',async t => {
+    const f=fixture(t); const limits:string[]=[]; let allowed=true;
+    mockAIRateLimit(t,async(identifier,endpoint,config)=>{limits.push(`${identifier}:${endpoint}`);return {allowed,remaining:0,resetAt:new Date(Date.now()+config.windowMs)};});
+    // The row is read while its bytes upload, before it is marked ready.
+    const stored:{row:unknown;text:string;contentType:string}[]=[];
+    t.mock.method(f.db.storage,'from',()=>({upload:async(_path:string,bytes:Buffer,options:{contentType:string})=>{stored.push({row:f.inserts.agent_attachments,text:bytes.toString('utf8'),contentType:options.contentType});return {error:null};}}));
+    const send=(file:File)=>{const form=new FormData();form.append('file',file);return upload(new NextRequest('http://localhost/api/agent/attachments',{method:'POST',body:form}));};
+    f.rows.agent_attachments={id:f.id,user_id:f.owner,name:'命书.md',kind:'text',mime_type:'text/plain',size:12,sha256:'digest',status:'ready'};
+    assert.equal((await send(new File(['# 命书\r\n甲辰'],'命书.md',{type:'text/markdown'}))).status,201);
+    const row=stored[0].row as {name:string;kind:string;mime_type:string;user_id:string};
+    assert.deepEqual([row.name,row.kind,row.mime_type,row.user_id],['命书.md','text','text/plain',f.owner]);
+    assert.deepEqual([stored[0].text,stored[0].contentType],['# 命书\n甲辰','text/plain']);
+    assert.deepEqual(limits,[`${f.owner}:document-text`]);
+    delete f.inserts.agent_attachments;
+    const unsupported=await send(new File(['MZ'],'tool.exe',{type:'application/octet-stream'}));
+    assert.equal(unsupported.status,415); assert.equal((await unsupported.json()).code,'UNSUPPORTED_FORMAT');
+    allowed=false; assert.equal((await send(new File(['正文'],'资料.txt',{type:'text/plain'}))).status,429);
+    assert.equal(f.inserts.agent_attachments,undefined,'a refused document is never stored'); assert.equal(stored.length,1);
 });
 
 test('private text reads verify ownership, hash and pagination; unavailable IDs stay private',async t => {

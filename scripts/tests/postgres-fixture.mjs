@@ -53,6 +53,7 @@ export const SQL_SOURCE_MANIFEST = {
   agentDurable13: 'supabase/migrations/20261020_100000_agent_pi_durable_1_3.sql',
   agentUserSavedCharts: 'supabase/migrations/20261020_120000_agent_user_saved_charts.sql',
   agentAdminTaskLog: 'supabase/migrations/20261021_100000_agent_admin_task_log.sql',
+  agentUserArchive: 'supabase/migrations/20261021_120000_agent_user_archive.sql',
   userSettings: 'supabase/migrations/20260110_add_user_settings_and_fix_notifications_rls.sql',
   chartTimeResolution: 'supabase/migrations/20261005_110000_chart_time_resolution.sql',
   agentChartIdentity: 'supabase/migrations/20261005_120000_agent_chart_identity.sql',
@@ -186,14 +187,14 @@ CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE SET search_path = p
 $$;`}`,
     // Five schema slices from the snapshot; no wholesale execution of it.
     ...['users', 'credit_transactions', 'conversations', 'mbti_readings', 'tarot_readings'].map(name => snapshotTable(sources.snapshot, name)),
-    ...['bazi_charts', 'ziwei_charts', 'ming_records'].map(name => snapshotTable(sources.snapshot, name)),
+    ...['bazi_charts', 'ziwei_charts', 'ming_records', 'bazi_case_profiles', 'bazi_case_events'].map(name => snapshotTable(sources.snapshot, name)),
     ...['user_settings', 'notifications', 'reminder_subscriptions'].map(name => snapshotTable(sources.snapshot, name)),
     policies(sources.userSettings, 'user_settings'),
     'ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY; CREATE POLICY fixture_notification_owner_read ON public.notifications FOR SELECT TO authenticated USING(user_id=auth.uid()); GRANT SELECT ON public.notifications TO authenticated;',
     'ALTER TABLE public.reminder_subscriptions ADD UNIQUE(user_id,reminder_type);',
     // Explicit bounded fixture owner policies for Agent chart/record reads.
     // The source-only selfhost baseline separately supplies its reviewed policy contract.
-    ...['bazi_charts', 'ziwei_charts', 'ming_records'].map(name => `ALTER TABLE public.${name} ENABLE ROW LEVEL SECURITY; CREATE POLICY fixture_owner_read ON public.${name} FOR SELECT TO authenticated USING(user_id=auth.uid()); GRANT SELECT ON public.${name} TO authenticated;`),
+    ...['bazi_charts', 'ziwei_charts', 'ming_records', 'bazi_case_profiles', 'bazi_case_events'].map(name => `ALTER TABLE public.${name} ENABLE ROW LEVEL SECURITY; CREATE POLICY fixture_owner_read ON public.${name} FOR SELECT TO authenticated USING(user_id=auth.uid()); GRANT SELECT ON public.${name} TO authenticated;`),
     policies(sources.usersPolicies, 'users'),
     policies(sources.creditPolicies, 'credit_transactions'),
     policies(sources.conversationPolicies, 'conversations'),
@@ -246,6 +247,9 @@ $$;`}`,
     grants(sources.graphDelete, ['delete_conversation_graph']),
     functionDefinition(sources.transactions, 'create_analysis_conversation_with_history_as_service'),
     grants(sources.transactions, ['create_analysis_conversation_with_history_as_service']),
+    // The case notes save the archive migration replaces; the alignment below gives it the administrator guard first.
+    functionDefinition(sources.transactions, 'save_bazi_case_profile_as_service'),
+    grants(sources.transactions, ['save_bazi_case_profile_as_service']),
     // Whole narrowly scoped alignment: exact functions AND dynamic history guard
     // rewrite. Other listed functions are absent from this bounded fixture.
     sources.conversationAlignment,
@@ -313,6 +317,7 @@ RESET ROLE;`,
     sources.agentDurable13,
     sources.agentUserSavedCharts,
     sources.agentAdminTaskLog,
+    sources.agentUserArchive,
     'RESET ROLE;',
   ].join('\n\n');
 }

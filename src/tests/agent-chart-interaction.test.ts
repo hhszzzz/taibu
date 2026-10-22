@@ -417,15 +417,33 @@ test('native Pi tools project chart actions and rebuild the exact focus after an
 
 test('reading a saved chart hands the model its reference in a model-only line; other records get none', async t => {
   const store = new ChartStore(), run = row(), id = randomUUID();
-  t.mock.method(require('../lib/data-sources'), 'getProvider', async () => ({ get: async () => ({ id }), formatForAI: async () => '已保存的规范文本' }));
+  const contexts: unknown[] = [];
+  t.mock.method(require('../lib/data-sources'), 'getProvider', async () => ({
+    get: async (_id: string, _user: string, ctx: unknown) => { contexts.push(ctx); return { id }; },
+    formatForAI: async () => '已保存的规范文本',
+  }));
+  const linked: string[] = [];
+  t.mock.method(require('../lib/agent/archive.server'), 'readLinkedRecords', async (_db: unknown, userId: string, type: string) => {
+    linked.push(`${userId}:${type}`);
+    return type === 'bazi_chart' ? '【关联的命理记录】\n- 2020-01-01｜人生事件｜换工作（Agent 记录）' : null;
+  });
   const read = (await createAgentTools(store, run, run.checkpoint)).find(tool => tool.name === 'read_user_data')!;
   const chart = await read.execute('read-chart', { type: 'bazi_chart', id });
-  // Pi sends only the content to the model, so the reference inspect_chart needs must be in the text.
-  assert.deepEqual(chart.content.map(part => part.text), ['已保存的规范文本', `命盘引用: bazi_chart:${id}。查看、详查或定位这张盘时作为 reference 传入。`]);
+  // Pi sends only the content to the model, so the reference inspect_chart needs must be in the text. The linked
+  // records follow the chart in the same text, so the workspace's canonical copy shows them too.
+  assert.deepEqual(chart.content.map(part => part.text), [
+    '已保存的规范文本\n\n【关联的命理记录】\n- 2020-01-01｜人生事件｜换工作（Agent 记录）',
+    `命盘引用: bazi_chart:${id}。查看、详查或定位这张盘时作为 reference 传入。`,
+  ]);
   assert.deepEqual(parseChartReference((chart.details as { chartReference: string }).chartReference), { source: 'bazi_chart', id });
+  // The case notes come with the chart, up to the reading's limit.
+  assert.equal((contexts[0] as { caseEventLimit?: number }).caseEventLimit, 50);
   const other = await read.execute('read-other', { type: 'mbti_reading', id });
   assert.deepEqual(other.content.map(part => part.text), ['已保存的规范文本']);
   assert.equal((other.details as { chartReference?: string }).chartReference, undefined);
+  // A record is not something records link to.
+  await read.execute('read-record', { type: 'ming_record', id });
+  assert.deepEqual(linked, [`${run.user_id}:bazi_chart`, `${run.user_id}:mbti_reading`]);
 });
 
 test('a public inspection step keeps the chart text but never the target directory, even when filtered by palace', async () => {

@@ -393,6 +393,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         dreamContext, dreamContextLoading,
         knowledgeBaseEnabled,
         webControl,
+        plainWebAvailable: !!agent?.capabilities.plainWebAvailable,
     };
     const composer = <ChatComposer {...composerProps} onSend={sendWithChartAsk} continuing note={note} noteOptional={isRunningComposerNote(noteState)} header={composerHeader}
         queue={currentRun && <AgentQueue key={`${workspaceKey}:${currentRun.id}`} run={currentRun} restoreDraft={message => void restoreDraft(message)} />} />;

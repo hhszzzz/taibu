@@ -2,16 +2,19 @@
 // 需要 useState（删除确认、展开）、问题草稿同步与浏览器请求（删除长期记忆）
 
 import { Fragment, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import Link from 'next/link';
 import { ArrowUpRight, Check, ChevronRight, CircleAlert, Database, Globe, LoaderCircle, Trash2, UserRound } from 'lucide-react';
 import type { AgentRunStatus } from '@/lib/agent/types';
 import type { AgentQuestionAnswer, AgentWorkspaceModel, AgentWorkspaceResource } from '@/lib/agent/workspace';
 import {
-    getAgentAttachmentRead, getAgentCalculation, getAgentChart, getAgentDataResults, getAgentMemories, getAgentMethod, getAgentMethodCatalog,
-    getAgentProfile, getAgentScript, getAgentSearchResults, getAgentToolQuestions, getAgentToolText, type AgentCalculation, type AgentScript, type AgentScriptCall, type AgentSearchMethod, type AgentToolPart,
+    getAgentAttachmentRead, getAgentCalculation, getAgentChart, getAgentConversationHits, getAgentDataResults, getAgentMemories, getAgentMethod, getAgentMethodCatalog,
+    getAgentNotes, getAgentProfile, getAgentScript, getAgentSearchResults, getAgentToolQuestions, getAgentToolText,
+    type AgentCalculation, type AgentConversationHit, type AgentScript, type AgentScriptCall, type AgentSearchMethod, type AgentToolPart,
 } from '@/lib/agent/tool-presentation';
+import { getAgentArchiveProposal, getAgentArchiveRecord } from '@/lib/agent/archive';
 import { AGENT_EVIDENCE_KINDS, AGENT_EVIDENCE_LABELS, countAgentEvidence, type AgentEvidence, type AgentEvidenceKind } from '@/lib/agent/evidence';
 import { getChartTargets, parseChartReference, type ChartFocus } from '@/lib/agent/chart-interaction';
-import { AGENT_BACKGROUND_TOOL, isAgentChartTool } from '@/lib/agent/tool-catalog';
+import { AGENT_ARCHIVE_TOOLS, AGENT_BACKGROUND_TOOL, isAgentChartTool } from '@/lib/agent/tool-catalog';
 import { questionLabel } from '@/lib/agent/questions';
 import { describeQuestionAnswer, getDraftAnswers } from '@/lib/agent/question-drafts';
 import { useQuestionDraft } from '@/lib/agent/use-question-draft';
@@ -29,6 +32,7 @@ import { useToast } from '@/components/ui/Toast';
 import { mentionTypeLabels } from '@/components/chat/mentionStyles';
 import { describeAgentChartSubject, formatAgentToolDuration, formatAgentValue, getAgentMemberBrief, getAgentToolState, getAgentToolTitle, getParallelMemberState, stripLeadingTitle, summarizeAgentActivity, summarizeAgentTool } from './presentation';
 import { CopyButton } from './AgentToolCard';
+import { AgentArchiveProposalCard, AgentArchiveReceipt } from './AgentArchiveCards';
 import { PrivateAttachmentPreview } from './PrivateAttachments';
 import { ChartMiniPreview } from './chart-preview';
 import { ModelAvatar } from './ModelAvatar';
@@ -473,6 +477,76 @@ export function ProfileView({ tool, runStatus, step }: ToolViewProps & { step?: 
                 <div><dt>默认八字命盘</dt><dd>{profile.defaultBaziChartId ? '已设置' : '未设置'}</dd></div>
                 <div><dt>默认紫微命盘</dt><dd>{profile.defaultZiweiChartId ? '已设置' : '未设置'}</dd></div>
             </dl>}
+    </section>;
+}
+
+/** 每日笔记: the notes the latest reading returned, newest first, under the conditions it used. */
+export function NotesView({ tools, runStatus, step }: { tools: AgentToolPart[]; runStatus: AgentRunStatus; step?: number }) {
+    const id = useId();
+    const tool = latestCompleted(tools) ?? tools.at(-1)!;
+    const data = getAgentNotes(tool);
+    const summary = summarizeAgentTool(tool);
+    return <section className="agent-ws-view" aria-labelledby={id}>
+        <WorkspaceViewHeading id={id} kicker={kickerOf(step, '只读')} title="每日笔记">你在命理记录页写的每日笔记与心情；Agent 只读取，不会修改。</WorkspaceViewHeading>
+        <WorkspaceToolMeta tool={tool} runStatus={runStatus}>{summary && <span>{summary}</span>}</WorkspaceToolMeta>
+        {tool.status !== 'completed' ? <WorkspaceToolPending tool={tool} runStatus={runStatus} running="正在读取笔记…" />
+            : !data ? <WorkspaceTextFallback tool={tool} note="笔记格式无法识别，已显示原始返回。" />
+            : data.notes.length ? <ul className="agent-ws-list" aria-label="每日笔记">
+                {data.notes.map((note, index) => <li key={index}>
+                    <strong>{note.date}{note.mood && <small>{note.mood}</small>}</strong>
+                    <p className="agent-ws-list-text">{note.content}</p>
+                </li>)}
+            </ul> : <p className="agent-ws-note">没有符合条件的笔记。</p>}
+        {data?.more && <p className="agent-ws-note">更早的笔记没有读取。</p>}
+    </section>;
+}
+
+const conversationHref = (hit: AgentConversationHit) =>
+    `/chat?id=${encodeURIComponent(hit.conversationId)}${hit.messageId ? `&message=${encodeURIComponent(hit.messageId)}` : ''}`;
+
+/** 以往对话: what the latest search found in the user's other conversations; each hit opens its conversation at the message. */
+export function HistoryView({ tools, runStatus, step }: { tools: AgentToolPart[]; runStatus: AgentRunStatus; step?: number }) {
+    const id = useId();
+    const tool = latestCompleted(tools) ?? tools.at(-1)!;
+    const hits = getAgentConversationHits(tool);
+    const summary = summarizeAgentTool(tool);
+    return <section className="agent-ws-view" aria-labelledby={id}>
+        <WorkspaceViewHeading id={id} kicker={kickerOf(step, '只读', '仅你可见')} title="以往对话">在你的其他对话中按关键词找到的提问与回答；Agent 引用时会说明出自哪次对话。</WorkspaceViewHeading>
+        <WorkspaceToolMeta tool={tool} runStatus={runStatus}>{summary && <span>{summary}</span>}</WorkspaceToolMeta>
+        {tool.status !== 'completed' ? <WorkspaceToolPending tool={tool} runStatus={runStatus} running="正在检索以往对话…" />
+            : !hits ? <WorkspaceTextFallback tool={tool} note="检索结果格式无法识别，已显示原始返回。" />
+            : hits.length ? <ul className="agent-ws-list" aria-label="命中的对话">
+                {hits.map((hit, index) => <li key={`${hit.conversationId}:${hit.messageId ?? index}`}>
+                    <strong>
+                        <Link href={conversationHref(hit)}>{hit.title}</Link>
+                        <small>{[hit.updatedAt && new Date(hit.updatedAt).toLocaleDateString('zh-CN'), hit.role === 'user' ? '你的提问' : '太卜的回答'].filter(Boolean).join(' · ')}</small>
+                    </strong>
+                    <blockquote>{hit.excerpt}</blockquote>
+                    {hit.role === 'user' && hit.reply && <small>回答：{hit.reply}</small>}
+                    {hit.role === 'assistant' && hit.question && <small>提问：{hit.question}</small>}
+                </li>)}
+            </ul> : <p className="agent-ws-note">其他对话中没有同时包含这些词的内容。</p>}
+    </section>;
+}
+
+/** 档案: events recorded from the user's own words and the cards the model proposed, in call order; the cards save from here as in the chat. */
+export function ArchiveView({ tools, runStatus, step }: { tools: AgentToolPart[]; runStatus: AgentRunStatus; step?: number }) {
+    const id = useId();
+    return <section className="agent-ws-view" aria-labelledby={id}>
+        <WorkspaceViewHeading id={id} kicker={kickerOf(step, '原话依据', '结论由你保存')} title="档案">
+            你讲述的经历按原话记入档案；Agent 的判断与结论只做成保存卡片，由你决定是否保存。
+        </WorkspaceViewHeading>
+        <div className="agent-archive-list">
+            {tools.map(tool => {
+                const card = getAgentArchiveProposal(tool);
+                if (card) return <AgentArchiveProposalCard key={tool.id} card={card} />;
+                const record = getAgentArchiveRecord(tool);
+                if (record) return <AgentArchiveReceipt key={tool.id} record={record} />;
+                if (tool.status === 'completed') return <WorkspaceTextFallback key={tool.id} tool={tool} note="档案结果格式无法识别，已显示原始返回。" />;
+                return <WorkspaceToolPending key={tool.id} tool={tool} runStatus={runStatus}
+                    running={tool.name === AGENT_ARCHIVE_TOOLS.record ? '正在记入档案…' : '正在生成保存卡片…'} />;
+            })}
+        </div>
     </section>;
 }
 

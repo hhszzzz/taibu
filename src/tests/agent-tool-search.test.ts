@@ -6,7 +6,7 @@ import { MockLanguageModelV3 } from 'ai/test';
 import type { AgentRunRow } from '../lib/agent/store.server';
 import type { AgentPart } from '../lib/agent/types';
 import { executeAgentRun } from '../lib/agent/runtime.server';
-import { AGENT_DEFERRED_TOOLS, AGENT_TOOL_SEARCH_TOOL, isAgentDeferredTool } from '../lib/agent/tool-catalog';
+import { AGENT_CORE_DEFERRED_TOOLS, AGENT_DATA_DEFERRED_TOOLS, AGENT_DEFERRED_TOOLS, AGENT_TOOL_SEARCH_TOOL, isAgentDeferredTool } from '../lib/agent/tool-catalog';
 import { AGENT_TOOL_SEARCH_LIMIT } from '../lib/agent/tool-search.server';
 import { summarizeAgentTool } from '../components/chat/agent/presentation';
 import { config, MemoryStore, row, scripted } from './helpers/agent-runtime-fixture';
@@ -33,17 +33,48 @@ const candidates = definitions.filter(definition => isAgentDeferredTool(definiti
 const titles = new Map(definitions.map(definition => [definition.name, definition.title]));
 const rank = (query: string, limit?: number) => rankDeferredTools(query, candidates, titles, limit);
 
-test('deferred tools are the thirteen low-frequency Taibu tools and every MCP tool', () => {
-  assert.deepEqual([...AGENT_DEFERRED_TOOLS].sort(), [
+test('deferred tools are the thirteen low-frequency Core tools, the notes and conversation searches, and every MCP tool', () => {
+  assert.deepEqual([...AGENT_CORE_DEFERRED_TOOLS].sort(), [
     'almanac_select', 'astrology_point', 'bazi_dayun', 'bazi_liunian_scan', 'bazi_pillars_resolve', 'bazi_relations',
     'bazi_wuxing', 'daliuren_lessons', 'liuyao_line', 'qimen_palace', 'ziwei_flying_star', 'ziwei_horoscope', 'ziwei_palace',
   ]);
-  for (const name of AGENT_DEFERRED_TOOLS) assert.ok(definitions.some(definition => definition.name === name), `${name} is a Core tool`);
-  // The browser-safe catalogue keeps its own copy; the MCP servers defer the same tools.
-  assert.deepEqual([...AGENT_DEFERRED_TOOLS], [...DEFERRED_TOOL_NAMES]);
+  for (const name of AGENT_CORE_DEFERRED_TOOLS) assert.ok(definitions.some(definition => definition.name === name), `${name} is a Core tool`);
+  // The browser-safe catalogue keeps its own copy; the MCP servers defer the same Core tools.
+  assert.deepEqual([...AGENT_CORE_DEFERRED_TOOLS], [...DEFERRED_TOOL_NAMES]);
+  assert.deepEqual([...AGENT_DATA_DEFERRED_TOOLS], ['read_user_notes', 'search_conversations']);
+  assert.deepEqual([...AGENT_DEFERRED_TOOLS].sort(), [...AGENT_CORE_DEFERRED_TOOLS, ...AGENT_DATA_DEFERRED_TOOLS].sort());
+  assert.equal(isAgentDeferredTool('read_user_notes'), true);
+  assert.equal(isAgentDeferredTool('list_user_data'), false, 'the listing is how a reading starts, so it stays offered');
   assert.equal(isAgentDeferredTool('mcp__archive__search'), true);
   assert.equal(isAgentDeferredTool('bazi'), false);
   assert.equal(isAgentDeferredTool('__proto__'), false);
+});
+
+/** The prompt sections Pi sends with a request, as one string to match against. */
+const systemText = (messages: Parameters<NonNullable<Parameters<typeof scripted>[1]>>[0]) => JSON.stringify(messages.filter(message => message.role === 'system'));
+
+test('notes and earlier conversations load by their Chinese titles, and only with the task that has them', async () => {
+  const run = row();
+  run.input.memoryEnabled = true;
+  const offered: string[][] = [], prompts: string[] = [];
+  const store = new MemoryStore();
+  await executeAgentRun(store, run, undefined, { config, streamFn: scripted(index => {
+    if (index === 0) return [{ type: 'toolCall', id: 'notes', name: AGENT_TOOL_SEARCH_TOOL, arguments: { query: '笔记' } }];
+    if (index === 1) return [{ type: 'toolCall', id: 'history', name: AGENT_TOOL_SEARCH_TOOL, arguments: { query: '以往对话' } }];
+    return [{ type: 'text', text: '已加载' }];
+  }, messages => { offered.push(getCurrentTools(messages).map(tool => tool.name)); prompts.push(systemText(messages)); }) });
+  const [notes, history] = toolParts(store).filter(part => part.name === AGENT_TOOL_SEARCH_TOOL).map(part => (part.output as { loaded: string[] }).loaded);
+  assert.equal(notes[0], 'read_user_notes');
+  assert.equal(history[0], 'search_conversations');
+  for (const name of AGENT_DATA_DEFERRED_TOOLS) assert.ok(!offered[0].includes(name), `${name} waits to be loaded`);
+  assert.ok(offered[2].includes('read_user_notes') && offered[2].includes('search_conversations'));
+  // The guidance names them only when they are there to load: conversation search needs long-term memory.
+  assert.match(prompts[0], /读取用户的每日笔记与心情、用户以往对话中的提问与结论/);
+  assert.match(prompts[0], /「笔记」「以往对话」/);
+  const plainPrompts: string[] = [];
+  await executeAgentRun(new MemoryStore(), row(), undefined, { config, streamFn: scripted(() => [{ type: 'text', text: '好' }], messages => { plainPrompts.push(systemText(messages)); }) });
+  assert.match(plainPrompts[0], /读取用户的每日笔记与心情，/);
+  assert.doesNotMatch(plainPrompts[0], /以往对话中的提问与结论/);
 });
 
 test('a Chinese query finds the tool a model means, before tools that merely mention the words', () => {

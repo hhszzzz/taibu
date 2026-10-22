@@ -10,6 +10,7 @@ import {
 import { getHexagramText } from '@/lib/divination/hexagram-texts';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
 import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
+import { applyListFilters } from '@/lib/db/data-source-filters';
 
 type LiuyaoRow = {
     id: string;
@@ -38,13 +39,14 @@ export const liuyaoProvider: DataSourceProvider<LiuyaoRow> = {
     async list(userId: string, ctx?: DataSourceQueryContext): Promise<DataSourceSummary[]> {
         const db = requireQueryDb(ctx);
         const limit = ctx?.limit ?? 50;
-        const data = await db.tx((trx) => trx
-        .selectFrom('liuyao_divinations')
-        .select(['id', 'question', 'hexagram_code', 'changed_hexagram_code', 'created_at'])
-        .where('user_id', '=', userId)
-        .orderBy('created_at', 'desc')
-        .limit(limit)
-        .execute());
+        const data = await db.tx(async (trx) => {
+            const query = applyListFilters(trx
+                .selectFrom('liuyao_divinations')
+                .select(['id', 'question', 'hexagram_code', 'changed_hexagram_code', 'created_at'])
+                .where('user_id', '=', userId), ctx, ['question']);
+            if (!query) return [];
+            return query.orderBy('created_at', 'desc').limit(limit).execute();
+        });
         return (data || []).map((row) => {
             const baseHexagram = findHexagram(row.hexagram_code);
             const baseName = baseHexagram?.name || '未知卦';

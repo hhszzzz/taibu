@@ -671,6 +671,28 @@ test('chat route refuses a member-only model without debit or AI execution', asy
     assert.equal(state.aiUiCalls, 0);
 });
 
+test('chat route validates the carried document and search flag, and refuses search to a free account before any debit', async (t) => {
+    const state = setupRouteMocks(t, createUIChunkStream([]));
+    const { POST } = await import('../app/api/chat/route');
+
+    for (const [overrides, error] of [
+        [{ attachment: { name: '命书.md', text: ' ' } }, '附件内容无效'],
+        [{ attachment: '正文' }, '附件内容无效'],
+        [{ webSearch: 'yes' }, '联网搜索参数无效'],
+    ] as const) {
+        const response = await POST(createChatRequest(overrides));
+        assert.equal(response.status, 400);
+        assert.equal((await response.json()).error, error);
+    }
+    const denied = await POST(createChatRequest({ webSearch: true }));
+    assert.equal(denied.status, 403);
+    assert.deepEqual(await denied.json(), { success: false, error: '免费用户无法使用网络搜索功能，请升级会员', code: 'MEMBERSHIP_REQUIRED' });
+    assert.equal(state.useCreditCalls, 0);
+    assert.equal(state.rateLimitCalls, 0);
+    assert.equal(state.promptCalls, 0);
+    assert.equal(state.aiUiCalls, 0);
+});
+
 test('chat route refunds prompt assembly failure once, without a second route refund', async (t) => {
     const state = setupRouteMocks(t, createUIChunkStream([]));
     const promptBuilder = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');

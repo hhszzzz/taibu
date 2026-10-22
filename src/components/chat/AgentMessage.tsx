@@ -5,11 +5,13 @@ import { ArrowUpRight, CircleAlert, Globe } from "lucide-react";
 import type { AgentMessageData, AgentPart } from "@/lib/agent/types";
 import { collaborationProgress } from "@/lib/agent/parallel-results";
 import { getAgentCitationLabels } from "@/lib/agent/evidence";
+import { getAgentArchiveProposal, getAgentArchiveRecord, type AgentArchiveCard, type AgentArchiveRecord } from "@/lib/agent/archive";
 import { MarkdownContent, type MarkdownCitations } from "@/components/ui/MarkdownContent";
 import { AgentStatus } from './agent/AgentStatus';
 import { AgentActivityGroup, AgentActivityIndicator } from './agent/AgentActivityGroup';
 import { AgentTodoProgress } from './agent/AgentTodoProgress';
 import { AgentEvidenceChip } from './agent/AgentEvidenceChip';
+import { AgentArchiveProposalCard, AgentArchiveReceipt } from './agent/AgentArchiveCards';
 import { useAgentResultWorkspace } from './agent/AgentResultContext';
 import { groupAgentParts } from './agent/presentation';
 
@@ -26,12 +28,29 @@ function useAnswerCitations(parts: AgentPart[]): MarkdownCitations | undefined {
   return useMemo(() => labels.size ? { labels, active, onOpen: openResource && ((cite: number) => openResource(`cite:${cite}`)) } : undefined, [labels, active, openResource]);
 }
 
+type ArchiveEntry = { id: string; kind: 'card'; card: AgentArchiveCard } | { id: string; kind: 'record'; record: AgentArchiveRecord };
+
+/**
+ * Save cards and recorded events of this answer, under it: the steps fold away, but what waits for the user must not.
+ * A script cannot write the archive, so only the model's own calls count.
+ */
+function getArchiveEntries(parts: AgentPart[]): ArchiveEntry[] {
+  return parts.flatMap((part): ArchiveEntry[] => {
+    if (part.type !== 'tool' || part.parentId) return [];
+    const card = getAgentArchiveProposal(part);
+    if (card) return [{ id: part.id, kind: 'card', card }];
+    const record = getAgentArchiveRecord(part);
+    return record ? [{ id: part.id, kind: 'record', record }] : [];
+  });
+}
+
 export function AgentMessage({ data, actions }: { data: AgentMessageData; actions?: ReactNode }) {
   const citations = useAnswerCitations(data.parts);
   const groups = groupAgentParts(data.parts);
   const active = ['queued', 'running', 'awaiting_input', 'cancelling'].includes(data.status);
   const summarizing = data.status === 'running' && data.runtime?.model.name && collaborationProgress(data.parts) ? data.runtime.model.name : null;
   const lastText = groups.findLastIndex(group => group.type === 'content' && group.part.type === 'text');
+  const archive = useMemo(() => getArchiveEntries(data.parts), [data.parts]);
   return (
     <div className="agent-message" data-agent-run-id={data.runId} data-agent-status={data.status}>
       <div className="agent-message-heading">
@@ -63,6 +82,9 @@ export function AgentMessage({ data, actions }: { data: AgentMessageData; action
           ) : null;
         return null;
       })}
+      {archive.length > 0 && <div className="agent-archive-list">
+        {archive.map(entry => entry.kind === 'card' ? <AgentArchiveProposalCard key={entry.id} card={entry.card} /> : <AgentArchiveReceipt key={entry.id} record={entry.record} />)}
+      </div>}
       <AgentActivityIndicator data={data} />
       {data.error && <p className="agent-error" role="alert"><CircleAlert size={15} aria-hidden="true" />{data.error}</p>}
       {/* Evidence and message actions share one row; it collapses when both are absent. */}

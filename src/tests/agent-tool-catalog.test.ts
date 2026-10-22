@@ -7,7 +7,8 @@ import { MockLanguageModelV3 } from 'ai/test';
 import type { AgentRunRow } from '../lib/agent/store.server';
 import { CODEMODE_TOOL_NAME } from '@earendil-works/pi-durable/codemode';
 import {
-  AGENT_BACKGROUND_TOOL, AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_DEFERRED_TOOLS, AGENT_DRILLDOWN_BASES, AGENT_MODEL_ONLY_TOOLS, AGENT_PLAN_GATED_TOOLS,
+  AGENT_BACKGROUND_TOOL, AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_CORE_DEFERRED_TOOLS, AGENT_DATA_DEFERRED_TOOLS, AGENT_DEFERRED_TOOLS, AGENT_DRILLDOWN_BASES,
+  AGENT_MODEL_ONLY_TOOLS, AGENT_PLAN_GATED_TOOLS,
   AGENT_SUBMIT_PLAN_TOOL, AGENT_TOOL_SEARCH_TOOL,
   getAgentDrilldownBase, getAgentExtensionToolTitle, getAgentToolFamily, isAgentDeferredTool,
   isAgentChartTool, isAgentMemberTool, projectsAgentCanonicalText, returnsAgentScriptResult,
@@ -51,6 +52,8 @@ test('every Core tool and every registered Agent tool belongs to a presentation 
     const background = createBackgroundAgents([]).extension;
     const names = [...tools.map((tool) => tool.name), ...[...parallel.tools ?? [], ...background.tools ?? []].map((tool) => tool.name)];
     assert.ok(names.includes('web_search') && names.includes('remember_user_fact') && names.includes('parallel_analysis') && names.includes(AGENT_BACKGROUND_TOOL));
+    // The user's own material: notes, earlier conversations and the archive the model writes or proposes.
+    for (const name of [...AGENT_DATA_DEFERRED_TOOLS, 'record_user_event', 'propose_archive_entry']) assert.ok(names.includes(name), name);
     for (const name of names) assert.notEqual(getAgentToolFamily(name), 'other', `${name} needs a family in tool-catalog.ts`);
     // Code mode: the tools a script may not call are real tools, and the dispatching tools say so themselves.
     for (const name of AGENT_MODEL_ONLY_TOOLS) assert.ok(names.includes(name), `${name} is not a registered tool`);
@@ -74,9 +77,10 @@ test('every Core tool and every registered Agent tool belongs to a presentation 
   assert.equal(getAgentExtensionToolTitle(AGENT_TOOL_SEARCH_TOOL), '查找工具');
   assert.equal(getAgentExtensionToolTitle(AGENT_SUBMIT_PLAN_TOOL), '提交计划');
   assert.equal(getAgentExtensionToolTitle(AGENT_BACKGROUND_TOOL), '后台子分析');
-  assert.deepEqual([...AGENT_PLAN_GATED_TOOLS].sort(), [AGENT_BACKGROUND_TOOL, 'parallel_analysis', 'remember_user_fact']);
+  assert.deepEqual([...AGENT_PLAN_GATED_TOOLS].sort(), [AGENT_BACKGROUND_TOOL, 'parallel_analysis', 'record_user_event', 'remember_user_fact']);
   // 低频工具按需加载；外部 MCP 工具同样只在检索后提供。
-  for (const name of AGENT_DEFERRED_TOOLS) assert.ok(listToolDefinitions().some(definition => definition.name === name), `${name} is a Core tool`);
+  for (const name of AGENT_CORE_DEFERRED_TOOLS) assert.ok(listToolDefinitions().some(definition => definition.name === name), `${name} is a Core tool`);
+  assert.deepEqual([...AGENT_DEFERRED_TOOLS].sort(), [...AGENT_CORE_DEFERRED_TOOLS, ...AGENT_DATA_DEFERRED_TOOLS].sort());
   assert.equal(isAgentDeferredTool('mcp__archive__search'), true);
   assert.equal(isAgentDeferredTool('bazi'), false);
   assert.equal(projectsAgentCanonicalText(AGENT_TOOL_SEARCH_TOOL), false);

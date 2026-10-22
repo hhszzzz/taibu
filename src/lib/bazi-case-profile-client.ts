@@ -8,11 +8,21 @@ import {
     type BaziCaseMasterReview,
     type BaziCaseOwnerFeedback,
     type BaziCaseProfile,
+    type BaziCaseSource,
 } from '@/lib/bazi-case-profile';
+
+function sourceOf(value: unknown): BaziCaseSource | null {
+    if (!value || typeof value !== 'object') return null;
+    const source = value as Record<string, unknown>;
+    return typeof source.runId === 'string'
+        ? { runId: source.runId, conversationId: typeof source.conversationId === 'string' ? source.conversationId : null }
+        : null;
+}
 
 function normalizeProfile(value: unknown): BaziCaseProfile | null {
     if (!value || typeof value !== 'object') return null;
     const row = value as Record<string, unknown>;
+    const events = parseBaziCaseEvents(row.events);
     return {
         ...createEmptyBaziCaseProfile(),
         id: typeof row.id === 'string' ? row.id : undefined,
@@ -22,7 +32,9 @@ function normalizeProfile(value: unknown): BaziCaseProfile | null {
         updatedAt: typeof row.updatedAt === 'string' ? row.updatedAt : undefined,
         masterReview: parseBaziCaseMasterReview(row.masterReview),
         ownerFeedback: parseBaziCaseOwnerFeedback(row.ownerFeedback),
-        events: parseBaziCaseEvents(row.events),
+        // Who wrote an entry is for display only; the save reads its ID and ignores the rest.
+        events: events.map((event, index) => ({ ...event, source: sourceOf((row.events as Array<Record<string, unknown>>)[index]?.source) })),
+        masterReviewSource: sourceOf(row.masterReviewSource),
     };
 }
 

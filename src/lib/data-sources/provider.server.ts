@@ -9,6 +9,12 @@ export type DataSourceQueryContext = {
     maxTokens?: number;
     maxChars?: number;
     chartPromptDetailLevel?: ChartTextDetailLevel;
+    /** List conditions (list-filters.ts): a keyword in the source's own text, and a saved-date range in China time. */
+    keyword?: string;
+    since?: string;
+    until?: string;
+    /** Key events of a bazi chart's case notes to include; the chat prompt keeps the latest ten. */
+    caseEventLimit?: number;
 };
 
 export interface DataSourceProvider<T = unknown> {

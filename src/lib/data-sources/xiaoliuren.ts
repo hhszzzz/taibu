@@ -1,6 +1,7 @@
 import { buildXiaoliurenCanonicalText, type XiaoliurenWebBundle } from '@/lib/divination/xiaoliuren';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
 import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
+import { applyListFilters } from '@/lib/db/data-source-filters';
 
 type XiaoliurenRow = {
   id: string;
@@ -24,13 +25,14 @@ export const xiaoliurenProvider: DataSourceProvider<XiaoliurenRow> = {
 
   async list(userId: string, ctx?: DataSourceQueryContext): Promise<DataSourceSummary[]> {
     const db = requireQueryDb(ctx);
-    const data = await db.tx((trx) => trx
+    const data = await db.tx(async (trx) => {
+      const query = applyListFilters(trx
         .selectFrom('xiaoliuren_divinations')
         .select(['id', 'question', 'solar_datetime', 'lunar_month', 'lunar_day', 'is_leap_month', 'final_status', 'created_at'])
-        .where('user_id', '=', userId)
-        .orderBy('created_at', 'desc')
-        .limit(ctx?.limit ?? 50)
-        .execute());
+        .where('user_id', '=', userId), ctx, ['question']);
+      if (!query) return [];
+      return query.orderBy('created_at', 'desc').limit(ctx?.limit ?? 50).execute();
+    });
     return (data || []).map((row: Record<string, unknown>) => ({
       id: String(row.id),
       type: 'xiaoliuren_divination' as const,

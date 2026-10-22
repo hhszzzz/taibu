@@ -1,7 +1,8 @@
 import type { ChatMessage } from '@/types';
 import { isAgentRunTerminal, type AgentMessageData, type AgentPart, type AgentRunStatus, type AgentRuntimeInfo } from '@/lib/agent/types';
-import { getAgentToolFamily, type AgentToolFamily, AGENT_BACKGROUND_TOOL, AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_SUBMIT_PLAN_TOOL, AGENT_TOOL_SEARCH_TOOL, isAgentChartTool, isAgentMemberTool } from '@/lib/agent/tool-catalog';
-import { getAgentAttachmentRead, getAgentChart, getAgentDataResults, getAgentMethod, getAgentScript, getAgentSearchResults, getAgentToolArtifactId, getAgentToolQuestions, type AgentChart } from '@/lib/agent/tool-presentation';
+import { getAgentToolFamily, type AgentToolFamily, AGENT_ARCHIVE_TOOLS, AGENT_BACKGROUND_TOOL, AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_SUBMIT_PLAN_TOOL, AGENT_TOOL_SEARCH_TOOL, isAgentChartTool, isAgentMemberTool } from '@/lib/agent/tool-catalog';
+import { getAgentAttachmentRead, getAgentChart, getAgentConversationHits, getAgentDataResults, getAgentMethod, getAgentNotes, getAgentScript, getAgentSearchResults, getAgentToolArtifactId, getAgentToolQuestions, type AgentChart } from '@/lib/agent/tool-presentation';
+import { AGENT_ARCHIVE_KIND_LABELS, getAgentArchiveProposal, getAgentArchiveRecord } from '@/lib/agent/archive';
 import { getChartFocus, getChartTargets } from '@/lib/agent/chart-interaction';
 import { getSavedChartHref } from '@/lib/agent/chart-save';
 import type { AgentWorkspaceModel } from '@/lib/agent/workspace';
@@ -84,6 +85,10 @@ const RAW_TOOL_TITLES: Record<string, string> = {
     search_knowledge: '知识库检索',
     list_user_data: '检索资料',
     read_user_data: '读取资料',
+    read_user_notes: '读取每日笔记',
+    search_conversations: '检索以往对话',
+    [AGENT_ARCHIVE_TOOLS.record]: '记入档案',
+    [AGENT_ARCHIVE_TOOLS.propose]: '生成保存卡片',
     read_attachment: '读取附件',
     list_analysis_methods: '列出分析方法',
     load_analysis_method: '加载分析方法',
@@ -157,6 +162,14 @@ export function describeDrilldownSelection(args: Record<string, unknown>): strin
     return parts.join(' · ') || '原局';
 }
 
+/** 「工作」 · 2026-01-01 至 2026-03-31: the conditions a listing was narrowed by. */
+function describeListConditions(args: Record<string, unknown>): string {
+    const keyword = typeof args.keyword === 'string' && args.keyword.trim() ? `「${args.keyword.trim().slice(0, 40)}」` : '';
+    const since = typeof args.since === 'string' ? args.since : '', until = typeof args.until === 'string' ? args.until : '';
+    const range = since && until ? `${since} 至 ${until}` : since ? `${since} 起` : until ? `至 ${until}` : '';
+    return [keyword, range].filter(Boolean).join(' · ');
+}
+
 /** One line under a process step, read from its arguments and stored result only. */
 export function summarizeAgentTool(tool: AgentTool): string | null {
     const args = tool.input && typeof tool.input === 'object' && !Array.isArray(tool.input) ? tool.input as Record<string, unknown> : {};
@@ -175,7 +188,28 @@ export function summarizeAgentTool(tool: AgentTool): string | null {
     }
     if (tool.name === 'list_user_data') {
         const data = getAgentDataResults(tool);
-        return data ? `找到 ${data.items.length} 份资料${data.errors.length ? ` · ${data.errors.length} 项暂不可读` : ''}` : null;
+        const found = data && `找到 ${data.items.length} 份资料${data.errors.length ? ` · ${data.errors.length} 项暂不可读` : ''}`;
+        return [describeListConditions(args), found].filter(Boolean).join(' · ') || null;
+    }
+    if (tool.name === 'read_user_notes') {
+        const notes = getAgentNotes(tool);
+        return [describeListConditions(args), notes && `${notes.notes.length}${notes.more ? '+' : ''} 条笔记`].filter(Boolean).join(' · ') || null;
+    }
+    if (tool.name === 'search_conversations') {
+        const query = typeof args.query === 'string' ? `「${args.query.slice(0, 60)}」` : '';
+        const hits = getAgentConversationHits(tool);
+        return [query, hits && (hits.length ? `命中 ${hits.length} 处` : '没有找到')].filter(Boolean).join(' · ') || null;
+    }
+    if (tool.name === AGENT_ARCHIVE_TOOLS.record) {
+        const event = getAgentArchiveRecord(tool);
+        if (event) return `${event.date} · ${event.title}`;
+        return typeof args.title === 'string' ? args.title.slice(0, 80) : null;
+    }
+    if (tool.name === AGENT_ARCHIVE_TOOLS.propose) {
+        const card = getAgentArchiveProposal(tool);
+        if (!card) return typeof args.title === 'string' ? args.title.slice(0, 80) : null;
+        const subject = card.proposal.kind === 'master_review' ? card.proposal.chart.label : card.proposal.title;
+        return `${AGENT_ARCHIVE_KIND_LABELS[card.proposal.kind]} · ${subject}`;
     }
     if (tool.name === 'load_analysis_method') return getAgentMethod(tool)?.title ?? (typeof args.id === 'string' ? args.id : null);
     if (tool.name === 'parallel_analysis') {
@@ -302,6 +336,7 @@ const FAMILY_PHRASES: Partial<Record<AgentToolFamily, (count: number) => string>
     data: count => `已读取 ${count} 份资料`,
     method: count => `已加载 ${count} 套分析方法`,
     memory: count => `已记忆 ${count} 条`,
+    archive: count => `已整理 ${count} 条档案`,
     code: count => `已运行 ${count} 个脚本`,
     external: count => `已调用 ${count} 个外部工具`,
     other: count => `已运行 ${count} 个工具`,
@@ -489,7 +524,7 @@ export function formatAgentValue(value: unknown): string {
 /** Short tags shown on process steps, one per tool family. */
 export const AGENT_TOOL_FAMILY_LABELS: Record<AgentToolFamily, string> = {
     chart: '命盘', calculation: '推演', drilldown: '详查', search: '依据', data: '资料', method: '指引', plan: '计划',
-    question: '问题', collaboration: '协作', memory: '记忆', code: '脚本', external: '外部', other: '工具',
+    question: '问题', collaboration: '协作', memory: '记忆', archive: '档案', code: '脚本', external: '外部', other: '工具',
 };
 
 /**

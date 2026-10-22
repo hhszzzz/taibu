@@ -1,6 +1,7 @@
 import { getHepanTypeName, type HepanType } from '@/lib/divination/hepan';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
 import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
+import { applyListFilters } from '@/lib/db/data-source-filters';
 
 type HepanRow = {
     id: string;
@@ -23,13 +24,14 @@ export const hepanProvider: DataSourceProvider<HepanRow> = {
     async list(userId: string, ctx?: DataSourceQueryContext): Promise<DataSourceSummary[]> {
         const db = requireQueryDb(ctx);
         const limit = ctx?.limit ?? 50;
-        const data = await db.tx((trx) => trx
-        .selectFrom('hepan_charts')
-        .select(['id', 'type', 'person1_name', 'person2_name', 'compatibility_score', 'created_at'])
-        .where('user_id', '=', userId)
-        .orderBy('created_at', 'desc')
-        .limit(limit)
-        .execute());
+        const data = await db.tx(async (trx) => {
+            const query = applyListFilters(trx
+                .selectFrom('hepan_charts')
+                .select(['id', 'type', 'person1_name', 'person2_name', 'compatibility_score', 'created_at'])
+                .where('user_id', '=', userId), ctx, ['person1_name', 'person2_name']);
+            if (!query) return [];
+            return query.orderBy('created_at', 'desc').limit(limit).execute();
+        });
         return (data || []).map((row) => {
             const typeName = getHepanTypeName(row.type as HepanType);
             const preview = row.compatibility_score != null

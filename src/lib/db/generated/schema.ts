@@ -207,6 +207,7 @@ export interface BaziCaseEvents {
   detail: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   created_at: Generated<string>;
   updated_at: Generated<string>;
+  source_run_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
 }
 
 export interface BaziCaseProfiles {
@@ -217,6 +218,7 @@ export interface BaziCaseProfiles {
   owner_feedback: Generated<Json>;
   created_at: Generated<string>;
   updated_at: Generated<string>;
+  source_run_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
 }
 
 export interface BaziCharts {
@@ -502,6 +504,7 @@ export interface MingRecords {
   is_pinned: Generated<boolean | null>;
   created_at: Generated<string | null>;
   updated_at: Generated<string | null>;
+  source_run_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
 }
 
 export interface MingRecordsWithArchiveStatus {

@@ -22,8 +22,8 @@ export type AgentWorkspaceSection = 'results';
 export const AGENT_WORKSPACE_SECTIONS: readonly AgentWorkspaceSection[] = ['results'];
 
 export type AgentWorkspaceView =
-  | 'chart' | 'saved' | 'calculation' | 'evidence' | 'data' | 'record' | 'profile' | 'attachment'
-  | 'methods' | 'method' | 'question' | 'collaboration' | 'member' | 'memory' | 'code' | 'tool';
+  | 'chart' | 'saved' | 'calculation' | 'evidence' | 'data' | 'record' | 'profile' | 'attachment' | 'notes' | 'history'
+  | 'methods' | 'method' | 'question' | 'collaboration' | 'member' | 'memory' | 'archive' | 'code' | 'tool';
 
 export interface AgentWorkspaceResource {
   id: string;
@@ -137,6 +137,8 @@ export function buildAgentWorkspace({ parts, artifacts, attachmentIds }: { parts
           for (const item of getAgentDataResults(tool)?.items ?? []) recordNames.set(item.type + ':' + item.id, item.name);
           add('data', { view: 'data', family, title: '个人资料' }, tool);
         } else if (tool.name === 'read_user_profile') add('profile', { view: 'profile', family, title: '个性化档案' }, tool);
+        else if (tool.name === 'read_user_notes') add('notes', { view: 'notes', family, title: '每日笔记' }, tool);
+        else if (tool.name === 'search_conversations') add('history', { view: 'history', family, title: '以往对话' }, tool);
         else if (tool.name === 'read_attachment') {
           const id = inputText(tool, 'id') ?? tool.id;
           const name = getAgentAttachmentRead(tool)?.name;
@@ -181,6 +183,10 @@ export function buildAgentWorkspace({ parts, artifacts, attachmentIds }: { parts
       }
       case 'memory':
         add('memory', { view: 'memory', family, title: '长期记忆' }, tool);
+        break;
+      case 'archive':
+        // Events recorded and cards proposed in this conversation share one page, where the cards can be saved.
+        add('archive', { view: 'archive', family, title: '档案' }, tool);
         break;
       case 'code':
         // A script's page lists its calls; each call shows where its family belongs, as the model's own calls do.

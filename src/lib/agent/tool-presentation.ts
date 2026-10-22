@@ -242,6 +242,51 @@ export function getAgentDataResults(tool: AgentToolPart) {
   }) : [] };
 }
 
+/** Daily notes read_user_notes returned, newest first; `more` when the limit cut older ones off. */
+export function getAgentNotes(tool: AgentToolPart) {
+  if (tool.status !== 'completed' || tool.name !== 'read_user_notes') return null;
+  const output = record(tool.output);
+  if (!Array.isArray(output.notes)) return null;
+  return {
+    notes: output.notes.filter(note => strings(note, ['date', 'content'])).map(note => {
+      const row = record(note);
+      return { date: String(row.date), mood: typeof row.mood === 'string' ? row.mood : null, content: String(row.content) };
+    }),
+    more: output.more === true,
+  };
+}
+
+export interface AgentConversationHit {
+  conversationId: string;
+  /** The matched message, so a link opens the conversation at it. */
+  messageId: string | null;
+  title: string;
+  updatedAt: string;
+  role: 'user' | 'assistant';
+  excerpt: string;
+  /** The start of the answer a matched question got, or the question a matched answer replied to. */
+  reply: string | null;
+  question: string | null;
+}
+
+/** Messages search_conversations found in the user's other conversations, latest conversation first. */
+export function getAgentConversationHits(tool: AgentToolPart): AgentConversationHit[] | null {
+  if (tool.status !== 'completed' || tool.name !== 'search_conversations' || !Array.isArray(tool.output)) return null;
+  return tool.output.filter(hit => strings(hit, ['conversationId', 'excerpt']) && ['user', 'assistant'].includes(String(record(hit).role))).map(hit => {
+    const row = record(hit);
+    return {
+      conversationId: String(row.conversationId),
+      messageId: typeof row.messageId === 'string' && row.messageId ? row.messageId : null,
+      title: typeof row.title === 'string' && row.title.trim() ? row.title : '未命名对话',
+      updatedAt: typeof row.updatedAt === 'string' ? row.updatedAt : '',
+      role: row.role as 'user' | 'assistant',
+      excerpt: String(row.excerpt),
+      reply: typeof row.reply === 'string' ? row.reply : null,
+      question: typeof row.question === 'string' ? row.question : null,
+    };
+  });
+}
+
 export type AgentCalculation =
   | { kind: 'bazi_dayun'; data: DayunCanonicalJSON }
   | { kind: 'bazi_pillars_resolve'; data: BaziPillarsResolveCanonicalJSON }

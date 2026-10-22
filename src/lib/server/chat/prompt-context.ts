@@ -4,7 +4,6 @@ import { buildPromptWithSources, calculatePromptBudget, resolvePersonalities } f
 import { systemDb } from '@/lib/db/context.server';
 import { buildKnowledgeHits } from '@/lib/knowledge-base/hits';
 import { parseMentions, resolveMention, stripMentionTokens } from '@/lib/mentions';
-import type { ChatMessage } from '@/types';
 import type { ChatPromptContext } from '@/lib/server/chat/contracts';
 import type { Mention } from '@/types/mentions';
 import { buildDreamContextPayload } from '@/lib/chat/chat-context';
@@ -14,6 +13,7 @@ import { isFeatureModuleEnabled } from '@/lib/app-settings';
 import { getUserSettingsSnapshot, type UserIdentityProfile } from '@/lib/user/settings';
 import { normalizeVisualizationSettings, type VisualizationSettings } from '@/lib/visualization/settings';
 import { DEFAULT_DIMENSIONS } from '@/lib/visualization/dimensions';
+import { searchChatWeb } from '@/lib/ai/web-search.server';
 
 /** 用户未保存可视化设置时的默认配置 */
 const DEFAULT_VISUALIZATION_SETTINGS: VisualizationSettings = {
@@ -21,16 +21,6 @@ const DEFAULT_VISUALIZATION_SETTINGS: VisualizationSettings = {
   dayunDisplayCount: 5,
   chartStyle: 'modern',
 };
-
-function injectToLastUserMessage(messages: ChatMessage[], prefix: string): ChatMessage[] {
-  if (!prefix) return messages;
-  return messages.map((msg, index) => {
-    if (index === messages.length - 1 && msg.role === 'user') {
-      return { ...msg, content: prefix + msg.content };
-    }
-    return msg;
-  });
-}
 
 type UserSettingsContext = {
   memoryEnabled?: boolean;
@@ -106,9 +96,13 @@ function applyUserSettingsOverrides(
   };
 }
 
+/**
+ * `webSearch` is granted by the admitting adapter, never read from the body: the preview builds the same context
+ * and must not search.
+ */
 export async function buildChatPromptContext(
   resolvedRequest: ResolvedChatRequest,
-  options?: { deferKnowledgeSearch?: boolean },
+  options?: { deferKnowledgeSearch?: boolean; webSearch?: boolean },
 ): Promise<ChatPromptContextResult> {
   const { body, userId, requestedModelId, reasoningEnabled, membershipType } = resolvedRequest;
   const knowledgeBaseFeatureEnabled = await isFeatureModuleEnabled('knowledge-base');
@@ -124,6 +118,8 @@ export async function buildChatPromptContext(
   const lastUserMessage = [...body.messages].reverse().find((message) => message.role === 'user');
   const rawUserContent = lastUserMessage?.content || '';
   const userQuestionForSearch = extractUserQuestion(rawUserContent);
+  // Runs while the rest of the context loads; mention tokens never leave for the search provider.
+  const webSearch = options?.webSearch ? searchChatWeb(stripMentionTokens(userQuestionForSearch)) : undefined;
   const canUsePromptKnowledgeBase = knowledgeBaseFeatureEnabled && membershipType !== 'free';
   const mergedMentions = mergeMentions(rawUserContent, body.mentions);
   const effectiveMentions = canUsePromptKnowledgeBase
@@ -200,6 +196,7 @@ export async function buildChatPromptContext(
     mentions: resolvedMentions,
   });
 
+  const web = await webSearch;
   const promptBuild = await buildPromptWithSources({
     modelId: requestedModelId,
     reasoningEnabled,
@@ -209,12 +206,8 @@ export async function buildChatPromptContext(
     userSettings: effectiveUserSettings,
     chartContext: promptChartContext,
     dreamMode: promptDreamMode,
-    difyContext: body.difyContext,
+    attachments: { file: body.attachment, web },
   }, { budget: mentionBudget, personalityResolution });
-
-  const processedMessages = promptBuild.userMessagePrefix
-    ? injectToLastUserMessage(body.messages, promptBuild.userMessagePrefix)
-    : body.messages;
 
   const metadata = {
     sources: promptBuild.sources,
@@ -228,11 +221,17 @@ export async function buildChatPromptContext(
       userMessageTokens: promptBuild.userMessageTokens,
     },
     dreamContext,
+    webSearch: web && {
+      status: web.status,
+      sources: web.status === 'ok' ? web.results.map(({ title, url }) => ({ title, url })) : [],
+    },
   };
 
-  const sanitizedMessages = processedMessages.map((message, index) => {
-    if (index === processedMessages.length - 1 && message.role === 'user') {
-      return { ...message, content: stripMentionTokens(message.content) };
+  // Mention tokens are stripped from what the user typed before the document and search results go in front,
+  // since stripping also collapses whitespace and would flatten their paragraphs and table cells.
+  const sanitizedMessages = body.messages.map((message, index) => {
+    if (index === body.messages.length - 1 && message.role === 'user') {
+      return { ...message, content: promptBuild.userMessagePrefix + stripMentionTokens(message.content) };
     }
     return message;
   });

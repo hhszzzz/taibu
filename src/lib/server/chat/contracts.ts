@@ -1,4 +1,4 @@
-import type { AIMessageMetadata, AIPersonality, ChatMessage, DifyContext } from '@/types';
+import type { AIMessageMetadata, AIPersonality, ChatAttachment, ChatMessage } from '@/types';
 import type { Mention } from '@/types/mentions';
 import type { MembershipType } from '@/lib/user/membership';
 import type { UserIdentityProfile } from '@/lib/user/settings';
@@ -12,7 +12,10 @@ export interface ChatPreparationInput {
   model?: string;
   reasoning?: boolean;
   reasoningEffort?: import('@/types').AIReasoningEffort | null;
-  difyContext?: DifyContext;
+  /** Text the server extracted from the document attached to the last user message. */
+  attachment?: ChatAttachment;
+  /** Search the web for the last user message before answering. */
+  webSearch?: boolean;
   mentions?: Mention[];
   dreamMode?: boolean;
   expressionStyle?: 'direct' | 'gentle';
@@ -39,6 +42,7 @@ export interface ChatModelAccess {
 
 export type ChatPreparationFailure =
   | { kind: 'invalid-model' | 'membership-denied' | 'insufficient-credits' | 'deduction-failed' | 'rate-limited' | 'rate-limit-failed' | 'rate-limit-refund-failed' }
+  | { kind: 'web-search-denied'; message: string }
   | { kind: 'account-unavailable'; message: string; code: string };
 
 export type ChatPreparationResult<T> =

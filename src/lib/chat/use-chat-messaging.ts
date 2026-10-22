@@ -2,7 +2,8 @@
  * 消息发送、流式响应、中止、重试逻辑 hook
  */
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import type { ChatMessage, ConversationListItem, DifyContext, Mention, AIMessageMetadata, DreamInterpretationInfo } from '@/types';
+import type { ChatAttachment, ChatMessage, ConversationListItem, Mention, AIMessageMetadata, DreamInterpretationInfo } from '@/types';
+import { extractPlainAttachment } from '@/lib/chat/composer-files';
 import { ANONYMOUS_DISPLAY_NAME } from '@/types';
 import { createConversation, deleteConversation, DEFAULT_CONVERSATION_TITLE } from '@/lib/chat/conversation';
 import { buildDraftTitle } from '@/lib/chat/draft-title';
@@ -123,7 +124,7 @@ export function useChatMessaging({
         chatMode,
         selectedModel, reasoningEnabled,
         customProviderConfig,
-        attachmentState, setAttachmentState,
+        attachmentState,
         mentions,
         dreamContextLoading,
         setDreamContext, setDreamContextLoading,
@@ -372,6 +373,17 @@ export function useChatMessaging({
                 showToast('info', '会话加载中，请稍后再试');
                 return;
             }
+            // The document is read before anything is created or saved, so a file that cannot be read leaves the draft as it was.
+            let attachment: ChatAttachment | undefined;
+            if (attachmentState.file) {
+                try {
+                    attachment = await extractPlainAttachment(attachmentState.file);
+                } catch (error) {
+                    showToast('error', error instanceof Error ? error.message : '文件解析失败，请重试');
+                    return;
+                }
+                if (!isCurrent()) return;
+            }
             if (isNewConversation && userId) {
                 setPendingSidebarTitle(draftTitle || DEFAULT_CONVERSATION_TITLE);
                 setHasLoadedConversations(true);
@@ -427,15 +439,7 @@ export function useChatMessaging({
             if (agent.mode === 'agent') {
                 if (isCurrent()) setMessages(newMessages);
                 try {
-                    let fileContent: string | undefined;
-                    if (attachmentState.file) {
-                        const form = new FormData(); form.append('mode', 'file'); form.append('query', trimmedInput); form.append('file', attachmentState.file);
-                        const response = await fetch('/api/dify/enhance', { method: 'POST', body: form });
-                        const result = await response.json();
-                        if (!response.ok || !result.success) throw new Error(result.error || '附件解析失败');
-                        fileContent = result.data?.file_content;
-                    }
-                    await agent.start(conversationId, userMessage, { model: selectedModel, reasoning: reasoningEnabled, mentions: messageMentions, provider: activeCustomProvider, fileContent });
+                    await agent.start(conversationId, userMessage, { model: selectedModel, reasoning: reasoningEnabled, mentions: messageMentions, provider: activeCustomProvider, attachment });
                     clearSubmittedDraft();
                 } catch (error) {
                     if (isCurrent()) {
@@ -479,26 +483,6 @@ export function useChatMessaging({
 
             const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
-            let difyContext: DifyContext | undefined;
-            if (attachmentState.file || attachmentState.webSearchEnabled) {
-                const mode = attachmentState.file && attachmentState.webSearchEnabled ? 'all' : attachmentState.file ? 'file' : 'web';
-                const formData = new FormData();
-                formData.append('mode', mode);
-                formData.append('query', trimmedInput);
-                if (attachmentState.file) formData.append('file', attachmentState.file);
-                const difyResponse = await fetch('/api/dify/enhance', { method: 'POST', body: formData });
-                if (difyResponse.ok) {
-                    const difyResult = await difyResponse.json();
-                    if (difyResult.success && difyResult.data) {
-                        difyContext = { webContent: difyResult.data.web_content, fileContent: difyResult.data.file_content };
-                        setAttachmentState(prev => ({ ...prev, file: undefined }));
-                    }
-                } else {
-                    const errorData = await difyResponse.json();
-                    if (errorData.code === 'MEMBERSHIP_REQUIRED') console.warn('Dify权限不足:', errorData.error);
-                }
-            }
-
             // 读取可视化设置
             const visualizationSettings = readLocalVisualizationSettings(localStorage);
 
@@ -512,7 +496,8 @@ export function useChatMessaging({
                     mangpaiMode: isMangpaiMode || undefined,
                     reasoning: activeCustomProvider ? false : reasoningEnabled,
                     reasoningEffort: activeCustomProvider ? null : state.reasoningEffort,
-                    difyContext,
+                    attachment,
+                    webSearch: attachmentState.webSearchEnabled || undefined,
                     mentions: messageMentions.map(m => ({ ...m })),
                     dreamMode: isDreamMode || undefined,
                     visualizationSettings,

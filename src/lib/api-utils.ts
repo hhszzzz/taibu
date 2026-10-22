@@ -170,3 +170,51 @@ export const SSE_HEADERS = {
     'Connection': 'keep-alive',
     'X-Accel-Buffering': 'no',
 } as const;
+
+/** Room for multipart boundaries and part headers around the one uploaded file. */
+const UPLOAD_ENVELOPE_BYTES = 2 * 1024 * 1024;
+
+/**
+ * Reads the `file` field of a multipart upload. The body is counted while it streams in, so an upload far past
+ * `maxBytes` is cut off instead of being buffered whole.
+ */
+export async function readUploadedFile(
+    request: Request,
+    maxBytes: number
+): Promise<{ file: File } | { error: { message: string; status: number } }> {
+    const tooLarge = { error: { message: `文件不能超过 ${Math.floor(maxBytes / 1024 / 1024)}MB`, status: 413 } };
+    const invalid = { error: { message: '文件请求无效', status: 400 } };
+    const reader = request.body?.getReader();
+    if (!reader) return { error: { message: '请选择文件', status: 400 } };
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    try {
+        while (true) {
+            const next = await reader.read();
+            if (next.done) break;
+            total += next.value.length;
+            if (total > maxBytes + UPLOAD_ENVELOPE_BYTES) {
+                await reader.cancel().catch(() => undefined);
+                return tooLarge;
+            }
+            chunks.push(next.value);
+        }
+    } catch {
+        return invalid;
+    } finally {
+        reader.releaseLock();
+    }
+    let form: FormData;
+    try {
+        form = await new Response(Buffer.concat(chunks), {
+            headers: { 'Content-Type': request.headers.get('content-type') ?? '' },
+        }).formData();
+    } catch {
+        return invalid;
+    }
+    const file = form.get('file');
+    if (!(file instanceof File)) return { error: { message: '请选择文件', status: 400 } };
+    if (!file.size) return { error: { message: '文件为空', status: 400 } };
+    if (file.size > maxBytes) return tooLarge;
+    return { file };
+}

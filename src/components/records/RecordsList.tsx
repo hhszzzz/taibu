@@ -16,7 +16,9 @@ import {
     ChevronLeft,
     ChevronRight,
     SearchX,
+    Sparkles,
 } from 'lucide-react';
+import Link from 'next/link';
 import { MingRecord, RECORD_CATEGORIES } from '@/lib/records';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { StatePanel, STATE_PRIMARY_ACTION_CLASS, STATE_SECONDARY_ACTION_CLASS } from '@/components/ui/StatePanel';
@@ -66,6 +68,17 @@ function RecordCard({
                     ) : null}
                     {record.is_archived ? (
                         <span className={`${META_CHIP_CLASS} bg-success/10 text-success`} title={getArchiveTitle(record)}>已归档</span>
+                    ) : null}
+                    {record.source_run_id ? (
+                        record.source_conversation_id ? (
+                            <Link href={`/chat?id=${encodeURIComponent(record.source_conversation_id)}`} className={`${META_CHIP_CLASS} bg-background-secondary text-foreground-secondary hover:text-foreground`} title="由 Agent 在对话中记入，打开那次对话；改动后不再标记">
+                                <Sparkles className="h-3 w-3" aria-hidden="true" />Agent 记录
+                            </Link>
+                        ) : (
+                            <span className={`${META_CHIP_CLASS} bg-background-secondary text-foreground-secondary`} title="由 Agent 在对话中记入；改动后不再标记">
+                                <Sparkles className="h-3 w-3" aria-hidden="true" />Agent 记录
+                            </span>
+                        )
                     ) : null}
                     {record.event_date ? (
                         <span className="inline-flex items-center gap-1 text-xs text-foreground-tertiary">

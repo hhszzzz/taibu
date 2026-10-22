@@ -2,6 +2,17 @@ import type { NextConfig } from "next";
 
 // Local avatars are same-origin (`/api/files/avatars/...`), so only external
 // avatar providers need remote patterns.
+// The document routes parse PDF and Office files in worker threads running a bundle that
+// `pnpm build:agent` writes before `next build` (scripts/build-document-worker.mjs). pdf.js
+// reads the predefined CJK CMaps and standard fonts from disk while extracting PDF text; their
+// license travels with them, and pdfjs-dist stays pinned to the pdf.js version unpdf bundles.
+const documentWorkerFiles = [
+  './.agent/document-text-worker.mjs',
+  './node_modules/pdfjs-dist/LICENSE',
+  './node_modules/pdfjs-dist/cmaps/**/*',
+  './node_modules/pdfjs-dist/standard_fonts/**/*',
+];
+
 const nextConfig: NextConfig = {
   output: 'standalone',
   // Forces a new client build id per deploy so stale chunks 404 instead of
@@ -12,7 +23,9 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     '/api/agent/attachments': [
       './node_modules/.pnpm/@img+sharp-*/node_modules/@img/sharp-*/**/*',
+      ...documentWorkerFiles,
     ],
+    '/api/chat/extract': documentWorkerFiles,
   },
   images: {
     remotePatterns: [

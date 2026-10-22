@@ -97,7 +97,8 @@ test('restored transactional uniqueness and message cascade are present', () => 
 
 test('all current literal application RPC references have definitions or explicit blockers', () => {
   // P4 moved rate limiting fully to Redis; consume_rate_limit_slot_as_admin lost its last caller.
-  assert.equal(manifest.rpcReferences.length, 62);
+  // The Agent archive adds its own RPCs (agent_search_conversations, agent_save_archive_proposal…).
+  assert.equal(manifest.rpcReferences.length, 65);
   // These two live in database/migrations (the new chain), which the legacy
   // selfhost generator does not scan.
   const newChainRpcs = ['cleanup_expired_identity_rows', 'delete_agent_retention'];

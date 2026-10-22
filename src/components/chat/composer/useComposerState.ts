@@ -6,6 +6,7 @@
  */
 import { useState, useRef, useMemo, useCallback, useLayoutEffect } from 'react';
 import type { MembershipType } from '@/lib/user/membership';
+import { chatWebSearchAccess } from '@/lib/ai/web-search-access';
 import { DATA_INDEX_INVALIDATED_EVENT } from '@/lib/browser-api';
 import { readLocalCache, removeLocalCache, writeLocalCache } from '@/lib/cache/local-storage';
 import {
@@ -71,8 +72,9 @@ export function useComposerState(opts: UseComposerStateOptions) {
     const [knowledgeBaseSavingId, setKnowledgeBaseSavingId] = useState<string | null>(null);
 
     // --- Derived values ---
-    const canUseWeb = membershipType !== 'free';
-    const canUseBoth = membershipType === 'pro';
+    const webAccess = chatWebSearchAccess(membershipType);
+    const canUseWeb = webAccess.search;
+    const canUseBoth = webAccess.withDocument;
     const canUseKnowledgeBase = membershipType !== 'free' && knowledgeBaseEnabled;
     const canMentionDataSources = enabledDataSourceTypes.length > 0;
     const canMentionAnything = canMentionDataSources || canUseKnowledgeBase;

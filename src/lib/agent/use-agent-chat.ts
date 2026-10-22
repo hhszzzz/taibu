@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChatMessage, CustomProviderConfig, Mention } from "@/types";
+import type { ChatAttachment, ChatMessage, CustomProviderConfig, Mention } from "@/types";
 import type { ChatStateReturn } from "@/lib/chat/use-chat-state";
 import {
   agentJson,
@@ -18,7 +18,16 @@ type AgentCapabilities = {
   enabled: boolean;
   ready: boolean;
   webAvailable: boolean;
+  /** Plain chat can search the web; reported here because every chat already polls this status. */
+  plainWebAvailable: boolean;
   customAvailable: boolean;
+};
+const NO_CAPABILITIES: AgentCapabilities = {
+  enabled: false,
+  ready: false,
+  webAvailable: false,
+  plainWebAvailable: false,
+  customAvailable: false,
 };
 type AgentCommandRequest = Parameters<typeof postAgentCommand>[1];
 export function useAgentChat(
@@ -27,12 +36,7 @@ export function useAgentChat(
   refreshViewer: () => Promise<unknown>,
 ) {
   const [mode, setModeState] = useState<"agent" | "plain">("plain");
-  const [capabilities, setCapabilities] = useState<AgentCapabilities>({
-    enabled: false,
-    ready: false,
-    webAvailable: false,
-    customAvailable: false,
-  });
+  const [capabilities, setCapabilities] = useState<AgentCapabilities>(NO_CAPABILITIES);
   const [run, setRun] = useState<AgentRunView | null>(null);
   const [reconnecting, setReconnecting] = useState(false);
   const [restoring, setRestoring] = useState(false);
@@ -122,13 +126,7 @@ export function useAgentChat(
         if (!explicitMode.current)
           setModeState(value.ready ? "agent" : "plain");
       } catch {
-        if (!controller.signal.aborted)
-          setCapabilities({
-            enabled: false,
-            ready: false,
-            webAvailable: false,
-            customAvailable: false,
-          });
+        if (!controller.signal.aborted) setCapabilities(NO_CAPABILITIES);
       }
     };
     void load();
@@ -221,7 +219,7 @@ export function useAgentChat(
       reasoning: boolean;
       mentions: Mention[];
       provider: CustomProviderConfig | null;
-      fileContent?: string;
+      attachment?: ChatAttachment;
       replaceFromMessageId?: string;
     },
   ) => {
@@ -239,7 +237,7 @@ export function useAgentChat(
       reasoningEffort: state.reasoningEffort,
       collaborators: options.provider ? [] : state.collaborators,
       mentions: options.mentions,
-      fileContent: options.fileContent,
+      attachment: options.attachment,
       replaceFromMessageId: options.replaceFromMessageId,
       customProvider: options.provider
         ? {

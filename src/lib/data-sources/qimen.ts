@@ -8,7 +8,7 @@ import {
 import { resolveChartTextDetailLevel } from '@/lib/divination/detail-level';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
 import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
-import { applyListFilters } from '@/lib/data-sources/list-filters';
+import { applyListFilters } from '@/lib/db/data-source-filters';
 
 type QimenRow = {
     id: string;

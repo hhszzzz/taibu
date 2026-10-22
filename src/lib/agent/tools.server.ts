@@ -1,7 +1,6 @@
 import "server-only";
-import { sql } from "kysely";
 import { systemDb } from "@/lib/db/context.server";
-import { escapeLike } from "@/lib/db/sql-helpers";
+import { escapeLike, textMatches } from "@/lib/db/sql-helpers";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { Type, type Static, type TSchema } from "@earendil-works/pi-ai";
@@ -496,7 +495,7 @@ export async function createAgentTools(
         let query = trx.selectFrom('ming_notes').select(['note_date', 'mood', 'content']).where('user_id', '=', run.user_id);
         if (conditions.since) query = query.where('note_date', '>=', conditions.since);
         if (conditions.until) query = query.where('note_date', '<=', conditions.until);
-        if (conditions.keyword) query = query.where(sql<boolean>`content ilike ${`%${escapeLike(conditions.keyword)}%`}`);
+        if (conditions.keyword) query = query.where(textMatches('content', `%${escapeLike(conditions.keyword)}%`));
         return query.orderBy('note_date', 'desc').orderBy('created_at', 'desc').limit(limit + 1).execute();
       });
       return textResult({

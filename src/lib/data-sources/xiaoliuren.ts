@@ -1,7 +1,7 @@
 import { buildXiaoliurenCanonicalText, type XiaoliurenWebBundle } from '@/lib/divination/xiaoliuren';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
 import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
-import { applyListFilters } from '@/lib/data-sources/list-filters';
+import { applyListFilters } from '@/lib/db/data-source-filters';
 
 type XiaoliurenRow = {
   id: string;

@@ -1,7 +1,13 @@
 import { sql, type SelectQueryBuilder } from 'kysely';
-import type { DataSourceQueryContext } from '@/lib/data-sources/provider.server';
 import type { DB } from '@/lib/db/generated/schema';
 import { escapeLike } from '@/lib/db/sql-helpers';
+
+/** The conditions a data source's list narrows by; the Agent's listConditions builds them. */
+export interface DataSourceListConditions {
+    keyword?: string;
+    since?: string;
+    until?: string;
+}
 
 /** The instant a China Standard Time day starts, `days` after `date` (YYYY-MM-DD). */
 function chinaDayStart(date: string, days = 0): string {
@@ -11,13 +17,13 @@ function chinaDayStart(date: string, days = 0): string {
 }
 
 /**
- * A provider's list narrowed to the Agent's conditions: the keyword in any of the source's text columns (as the
+ * A data source's list narrowed to the Agent's conditions: the keyword in any of the source's text columns (as the
  * records page searches) and the saved date from `since` through `until`. Null when a keyword is given but the source
  * has no text of its own, so it lists nothing rather than everything.
  */
 export function applyListFilters<TB extends keyof DB, O>(
     query: SelectQueryBuilder<DB, TB, O>,
-    ctx: DataSourceQueryContext | undefined,
+    ctx: DataSourceListConditions | undefined,
     textColumns: readonly string[],
 ): SelectQueryBuilder<DB, TB, O> | null {
     let filtered = query;

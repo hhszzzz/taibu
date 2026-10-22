@@ -1,6 +1,6 @@
 import type { DataSourceSummary } from '@/lib/data-sources/types';
 import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
-import { applyListFilters } from '@/lib/data-sources/list-filters';
+import { applyListFilters } from '@/lib/db/data-source-filters';
 import { type BaziCaseProfile } from '@/lib/bazi-case-profile';
 import { formatBaziPromptText } from '@/lib/bazi-prompt';
 import { getBaziCaseProfileByChartId } from '@/lib/server/bazi-case-profile';

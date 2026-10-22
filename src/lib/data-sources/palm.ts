@@ -1,7 +1,7 @@
 import { PALM_ANALYSIS_TYPES } from '@/lib/divination/palm';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
 import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
-import { applyListFilters } from '@/lib/data-sources/list-filters';
+import { applyListFilters } from '@/lib/db/data-source-filters';
 
 type PalmRow = {
     id: string;

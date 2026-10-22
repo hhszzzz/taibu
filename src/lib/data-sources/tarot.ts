@@ -1,7 +1,7 @@
 import { generateTarotReadingText, TAROT_SPREADS } from '@/lib/divination/tarot';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
 import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
-import { applyListFilters } from '@/lib/data-sources/list-filters';
+import { applyListFilters } from '@/lib/db/data-source-filters';
 
 type TarotRow = {
     id: string;

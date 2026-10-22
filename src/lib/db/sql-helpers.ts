@@ -11,6 +11,11 @@ export function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, (character) => `\\${character}`);
 }
 
+/** A bound ILIKE comparison for one text column, for keywords that are not part of a column catalog. */
+export function textMatches(column: string, pattern: string) {
+  return sql<boolean>`${sql.ref(column)} ilike ${pattern}`;
+}
+
 /** JSON text projection with a bound key, e.g. `source_data->>'chart_id'`. */
 export function jsonFieldText(column: string, key: string) {
   return jsonPathText(column, [key]);

@@ -1,6 +1,5 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
-import { sql } from 'kysely';
 import type { ScopedDb } from '@/lib/db/context.server';
 import { selectFromDynamic } from '@/lib/db/sql-helpers';
 import { parseBaziCaseMasterReview } from '@/lib/bazi-case-profile';
@@ -68,16 +67,18 @@ type LinkedRecordRow = { title: string; content: string | null; category: string
 
 /** The 命理记录 the user linked to a saved item, as text after the item's own; null when there are none. */
 export async function readLinkedRecords(db: ScopedDb, userId: string, type: AgentArchiveChartType, id: string): Promise<string | null> {
-    const rows = await db.tx((trx) => trx
+    // PostgreSQL sorts NULL first on DESC; the records page lists undated ones last.
+    const rows = (await db.tx((trx) => trx
         .selectFrom('ming_records')
         .select(['title', 'content', 'category', 'event_date', 'source_run_id'])
         .where('user_id', '=', userId)
         .where('related_chart_type', '=', type)
         .where('related_chart_id', '=', id)
-        .orderBy('event_date', sql`desc nulls last`)
+        .orderBy('event_date', 'desc')
         .orderBy('created_at', 'desc')
         .limit(LINKED_RECORD_LIMIT + 1)
-        .execute()) as LinkedRecordRow[];
+        .execute()) as LinkedRecordRow[])
+        .sort((a, b) => Number(a.event_date === null) - Number(b.event_date === null));
     if (!rows.length) return null;
     const lines = rows.slice(0, LINKED_RECORD_LIMIT).map(row => {
         const category = RECORD_CATEGORIES.find(item => item.value === row.category)?.label ?? row.category;

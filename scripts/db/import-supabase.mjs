@@ -315,6 +315,7 @@ async function main() {
         const sub = linuxdoByUser.get(row.id);
         if (canDetectDeterministic && sub) {
           const derived = createHmac('sha256', seed).update(`linuxdo:${sub}`).digest('hex');
+          // bcryptjs understands both $2a$ (GoTrue) and $2b$ hashes.
           deterministic = await bcrypt.compare(derived, hash);
         }
         if (deterministic) {

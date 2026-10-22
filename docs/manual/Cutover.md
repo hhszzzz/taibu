@@ -155,7 +155,22 @@ docker compose ... run --rm --no-deps -e TRANSIT_TARGET_URL="$TRANSIT_TARGET_URL
   node scripts/db/transit-build.mjs --dump /dump --recreate --report /tmp/transit.json
 ```
 
-验收：`transit.json` 中 `validate migration state` 通过，28 个 pending 迁移全部 replay，`pg_restore` 只有白名单内的错误。
+验收：`transit.json` 中 `validate migration state` 通过，`pending.json` 中的全部迁移（当前 27 个）replay 成功，`pg_restore` 只有白名单内的错误。`20261021_120000_agent_user_archive.sql` 已从 cutover 清单排除：它被 `.gitignore` 忽略且仓库中没有对应应用代码；若将来启用该功能，必须先新增正式数据库迁移并提交代码。
+
+### 无 DSN 的备用路径（2026-10-22 已演练）
+
+如果拿不到 `pg_dump` 或只读 DSN，可从只读 `pg_catalog` 导出 DDL 后在本地重建 transit。顺序必须是
+sequences → tables → functions → views → 数据 → constraints/indexes/triggers/RLS/policies/grants，
+否则 FK 会先于被引用的唯一约束创建。关键导出函数：`pg_get_functiondef`、`pg_get_indexdef`、
+`pg_get_constraintdef`、`pg_get_triggerdef`、`pg_get_viewdef`，策略取 `pg_policies`，授权取
+`aclexplode`，迁移历史取 `supabase_migrations.schema_migrations`。
+
+本次实测基线：42 表、157 约束、146 索引、60 函数、7 触发器、2 视图、158 策略、124 条迁移历史；
+装载 708 用户 / 684 会话 / 1430 条消息后重放 27 个迁移全部成功；再走 `import-supabase` 得到
+709 个 identity/profile、49 个 Linux.do 账户、76 项 FK 无孤儿、53 张表校验和一致。
+
+限制：这是 catalog 重建，不是 `pg_dump`。正式切换仍应优先使用真实 dump；若只能用重建结果，
+必须逐项核对上述对象计数，并在切换记录中注明。
 
 ### T+8 迁移空库并导入
 

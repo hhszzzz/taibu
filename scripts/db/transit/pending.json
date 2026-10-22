@@ -114,16 +114,12 @@
     {
       "file": "20261021_100000_agent_admin_task_log.sql",
       "sha256": "e8047ae94b905454941103ffb354e96dd793a9955981d188ebf0c25b744f39cc"
-    },
-    {
-      "file": "20261021_120000_agent_user_archive.sql",
-      "sha256": "d17f8ddd5281b455e50b299f594fce42f455a442aee8f5bd99b26a0852dd0d64"
     }
   ],
   "excluded": [
     {
       "file": "20261021_120000_agent_user_archive.sql",
-      "reason": "untracked in-flight work; decide in P0 before adding it here"
+      "reason": "ignored in-flight migration; no application code exists in this tree, so it is not part of the cutover"
     }
   ]
 }

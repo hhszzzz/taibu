@@ -126,6 +126,7 @@ services:
     networks: [backend, egress]
     logging: *logging
     labels: *ownership
+    volumes: [files:/data/files]
     environment: &application-env
       NODE_ENV: production
       HOSTNAME: 0.0.0.0
@@ -151,12 +152,15 @@ services:
       DB_POOL_MAX: '10'
       DB_APPLICATION_NAME: taibu-web
       SYSTEM_USER_ID: ${SYSTEM_USER_ID:-}
+      FILE_STORAGE_DRIVER: local
+      FILE_STORAGE_ROOT: /data/files
   worker:
     image: taibu-web:local
     restart: unless-stopped
     networks: [backend, egress]
     logging: *logging
     labels: *ownership
+    volumes: [files:/data/files]
     environment:
       <<: *application-env
       AGENT_WORKER_CONCURRENCY: '2'
@@ -222,6 +226,8 @@ volumes:
   database:
     labels: *ownership
   storage:
+    labels: *ownership
+  files:
     labels: *ownership
   redis:
     labels: *ownership

@@ -301,15 +301,16 @@ export const supabase = {
 
     storage: {
         from(bucket: string) {
+            // 伪造的 supabase-storage 门面：只服务头像，bucket/path 由服务端会话决定。
+            void bucket;
             return {
                 async upload(path: string, file: File | Blob, options?: { upsert?: boolean }) {
+                    void path;
+                    void options;
                     const formData = new FormData();
                     formData.append('file', file);
-                    formData.append('bucket', bucket);
-                    formData.append('path', path);
-                    if (options?.upsert) formData.append('upsert', 'true');
                     try {
-                        const res = await fetch('/api/supabase/storage', {
+                        const res = await fetch('/api/files/avatars', {
                             method: 'POST',
                             credentials: 'include',
                             body: formData,
@@ -321,9 +322,8 @@ export const supabase = {
                     }
                 },
                 getPublicUrl(path: string) {
-                    const qs = new URLSearchParams({ bucket, path });
                     return {
-                        data: { publicUrl: `/api/supabase/storage?${qs.toString()}` },
+                        data: { publicUrl: `/api/files/avatars/${path}` },
                     };
                 },
             };

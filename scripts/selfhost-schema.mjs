@@ -271,7 +271,6 @@ tableSecurity.knowledge_entries = 'owner CRUD through knowledge_bases ownership 
 tableSecurity.conversation_messages = 'owner CRUD through conversations ownership + administrator JWT';
 for (const name of ['app_settings', 'ai_models', 'ai_gateways', 'ai_model_gateway_bindings', 'announcements']) tableSecurity[name] = 'public catalog SELECT (enabled/published rows where applicable); administrator JWT writes';
 source('scripts/selfhost-schema.mjs');
-source('src/app/api/supabase/storage/route.ts');
 source('src/lib/user/profile.ts');
 const sourceFingerprint = hash(JSON.stringify([...used]));
 sql.push(`COMMENT ON SCHEMA public IS 'taibu-selfhost-v1:${sourceFingerprint}';`, "NOTIFY pgrst, 'reload schema';");
@@ -295,8 +294,6 @@ function scan(directory) {
         const refs = applicationRpcRefs.get(m[1]) ?? [];
         refs.push(path.relative(root, full)); applicationRpcRefs.set(m[1], refs);
       }
-      // The only Storage adapter at this revision uses buckets, not relations.
-      if (file === 'src/app/api/supabase/storage/route.ts') continue;
       for (const m of text.matchAll(/\.from\(\s*([^\n)]*)/g)) {
         if (/(?:Array|Buffer)$/.test(text.slice(Math.max(0, m.index - 8), m.index))) continue;
         const literal = /^['"]([^'"]+)['"]/.exec(m[1]);
@@ -355,7 +352,7 @@ const manifest = {
   views: viewNames.map(name => ({ name, source: 'supabase/selfhost/source-views.sql', security: 'security_invoker; SELECT only for authenticated/service_role; underlying caller RLS' })),
   relationReferences: [...relationRefs].sort(([a], [b]) => a.localeCompare(b)).map(([name, callers]) => ({ name, kind: viewNames.includes(name) ? 'view' : 'table', status: blockedTables.includes(name) ? 'blocked' : 'defined', callers })),
   dynamicRelationSites,
-  excludedRelationAdapters: [{ file: 'src/app/api/supabase/storage/route.ts', reason: 'Storage bucket API, not PostgREST relations' }],
+  excludedRelationAdapters: [],
   blockedFunctions,
   artifacts: [{ file: 'supabase/selfhost/001-application.sql', sha256: hash(applicationSql) }, { file: 'supabase/selfhost/002-storage.sql', sha256: hash(storageSql) }],
 };

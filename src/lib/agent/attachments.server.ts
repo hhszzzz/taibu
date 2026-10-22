@@ -1,11 +1,16 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
 import { systemDb,type ScopedDb } from '@/lib/db/context.server';
-import { getSystemAdminClient } from '@/lib/supabase-server';
+import { getObjectStore } from '@/lib/storage/index.server';
 import type { ModelMessage } from 'ai';
 import type { PrivateAttachment } from '@/types';
 import { ATTACHMENT_MARKER } from './attachment-input';
 export const ATTACHMENT_BUCKET = 'agent-attachments';
+/** Raw multipart body cap; the parsed file cap is checked separately. */
+export const ATTACHMENT_MAX_REQUEST_BYTES = 12 * 1024 * 1024;
+export const ATTACHMENT_MAX_FILE_BYTES = 10 * 1024 * 1024;
+export const ATTACHMENT_TEXT_EXTENSION_PATTERN = /\.(txt|md)$/iu;
+export const ATTACHMENT_IMAGE_FORMATS = ['jpeg', 'png', 'webp'] as const;
 export type AttachmentRow = { id:string;user_id:string;object_path:string;name:string;kind:'image'|'text';mime_type:string;size:number;sha256:string;width?:number;height?:number;status:string };
 export function attachmentDto(row:AttachmentRow):PrivateAttachment { return { id:row.id,name:row.name,kind:row.kind,mimeType:row.mime_type,size:row.size,sha256:row.sha256,width:row.width,height:row.height }; }
 export async function validateAttachmentIds(db:ScopedDb,userId:string,value:unknown):Promise<AttachmentRow[]> {
@@ -19,9 +24,9 @@ export async function validateAttachmentIds(db:ScopedDb,userId:string,value:unkn
     return data as unknown as AttachmentRow[];
 }
 export async function attachmentBytes(row:AttachmentRow):Promise<Uint8Array> {
-    const {data,error}=await getSystemAdminClient().storage.from(ATTACHMENT_BUCKET).download(row.object_path);
-    if(error || !data) throw new Error('读取资料失败');
-    const bytes=new Uint8Array(await data.arrayBuffer());
+    const stored=await getObjectStore().get(ATTACHMENT_BUCKET,row.object_path);
+    if(!stored) throw new Error('读取资料失败');
+    const bytes=new Uint8Array(await new Response(stored.stream).arrayBuffer());
     if(bytes.length!==row.size || createHash('sha256').update(bytes).digest('hex')!==row.sha256) throw new Error('资料完整性校验失败');
     return bytes;
 }
@@ -54,6 +59,9 @@ export async function resolveAttachmentImages(db:ScopedDb,userId:string,conversa
 }
 export type AttachmentInsert = Omit<AttachmentRow,'width'|'height'|'status'> & {width?:number;height?:number;status:string};
 /** Attachment rows are written by the system context because `agent_attachments` has no user-facing write policy. */
+export async function uploadAttachmentBytes(objectPath:string,bytes:Uint8Array,mimeType:string):Promise<void> {
+    await getObjectStore().put(ATTACHMENT_BUCKET,objectPath,bytes,{contentType:mimeType});
+}
 export async function insertAgentAttachment(row:AttachmentInsert):Promise<void> {
     await systemDb().tx(trx=>trx.insertInto('agent_attachments').values(row).execute());
 }
@@ -65,8 +73,8 @@ export async function cleanupAgentAttachments():Promise<number> {
     const data=await db.rpc('claim_agent_attachment_cleanup',{p_limit:50});
     let removed=0;
     for(const row of data as unknown as AttachmentRow[]){
-        const result=await getSystemAdminClient().storage.from(ATTACHMENT_BUCKET).remove([row.object_path]);
-        if(result.error) continue;
+        try { await getObjectStore().delete(ATTACHMENT_BUCKET,[row.object_path]); }
+        catch(error) { console.warn('清理附件文件失败:',error); continue; }
         await db.tx(trx=>trx.deleteFrom('agent_attachments').where('id','=',row.id).where('status','=','deleting').execute());
         removed++;
     }

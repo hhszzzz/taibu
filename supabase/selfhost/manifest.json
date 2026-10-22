@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "baselineRevision": "5725dde",
-  "sourceFingerprint": "8592de838ea1b1ffc3e5b1c8e91f02c0ef9d1d2260a68f4b45d0408b5c3ce14a",
+  "sourceFingerprint": "01f72664ce263c062814aaee9b5dadf6ad11766042cbc3aace0b9cf9223980cd",
   "target": "empty local self-hosted application schema; NOT production parity or a migration replay",
   "bootstrapOrder": [
     "platform roles/extensions",
@@ -238,15 +238,11 @@
     },
     {
       "file": "scripts/selfhost-schema.mjs",
-      "sha256": "946cb8c140c9e3b76c574421a16a72a4374ede0b7a366a68b781a9b50205c7bd"
-    },
-    {
-      "file": "src/app/api/supabase/storage/route.ts",
-      "sha256": "2fbad89ae19d26ed33e400dc8c0f9d2f1ce1529ef64e2ba13172002d4f6aaae9"
+      "sha256": "51c4468dee2aed39e52eeda00d6befca7828ec4a1adc5a40f9f8667360256a82"
     },
     {
       "file": "src/lib/user/profile.ts",
-      "sha256": "23357316b11b39d331597ec3eb6a37f309fcd80be39458f95401a8d2279f2d20"
+      "sha256": "86d9d0dfd710f4ad7358fb4c7eac728a052d78c606596acf9eafffea5f9984da"
     }
   ],
   "normalizations": [
@@ -2469,6 +2465,14 @@
           "kind": "literal-from"
         },
         {
+          "file": "src/app/api/files/avatars/route.ts",
+          "kind": "literal-kysely"
+        },
+        {
+          "file": "src/app/api/files/avatars/route.ts",
+          "kind": "literal-kysely"
+        },
+        {
           "file": "src/app/api/user/membership/route.ts",
           "kind": "literal-kysely"
         },
@@ -2629,12 +2633,7 @@
       "contract": "tableName factory configuration"
     }
   ],
-  "excludedRelationAdapters": [
-    {
-      "file": "src/app/api/supabase/storage/route.ts",
-      "reason": "Storage bucket API, not PostgREST relations"
-    }
-  ],
+  "excludedRelationAdapters": [],
   "blockedFunctions": {
     "increment_community_post_view_count": "Community prototype blocked pending counter/moderation contract.",
     "toggle_community_vote": "Missing authoritative vote counter triggers and moderation rules.",
@@ -2644,7 +2643,7 @@
   "artifacts": [
     {
       "file": "supabase/selfhost/001-application.sql",
-      "sha256": "9a29e03ba6567106ee8dd8fd5e36c922b61472ef420e485f4b339bf057873bc2"
+      "sha256": "ca412f77bea7f19c7006d0e96b80bb70bea1d1a045b59f4d7ed0e07ecb6aaf03"
     },
     {
       "file": "supabase/selfhost/002-storage.sql",

@@ -104,23 +104,16 @@ export async function updateNickname(nickname: string) {
   });
 }
 
-export async function uploadAvatarForCurrentUser(userId: string, file: File | Blob): Promise<{
+export async function uploadAvatarForCurrentUser(file: File | Blob): Promise<{
   success: boolean;
   publicUrl: string | null;
   error?: { message: string; code?: string };
 }> {
   const formData = new FormData();
-  const extension = file instanceof File && file.name.includes('.')
-    ? file.name.split('.').pop()
-    : 'png';
-  const path = `${userId}-${Date.now()}.${extension}`;
-
   formData.append('file', file);
-  formData.append('bucket', 'avatars');
-  formData.append('path', path);
-  formData.append('upsert', 'true');
 
-  const uploadResult = await fetch('/api/supabase/storage', {
+  // 上传路由按会话用户生成 key、写入 public.users.avatar_url 并清理旧文件。
+  const uploadResult = await fetch('/api/files/avatars', {
     method: 'POST',
     credentials: 'include',
     body: formData,
@@ -141,15 +134,6 @@ export async function uploadAvatarForCurrentUser(userId: string, file: File | Bl
       success: false,
       publicUrl: null,
       error: uploadError || { message: '头像上传失败' },
-    };
-  }
-
-  const profileUpdate = await updateAvatarUrl(publicUrl);
-  if (!profileUpdate.success) {
-    return {
-      success: false,
-      publicUrl: null,
-      error: profileUpdate.error || { message: '头像保存失败' },
     };
   }
 

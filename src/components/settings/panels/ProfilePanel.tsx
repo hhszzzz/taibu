@@ -121,7 +121,7 @@ export default function ProfilePanel() {
     setError('');
 
     try {
-      const uploadResult = await uploadAvatarForCurrentUser(user.id, file);
+      const uploadResult = await uploadAvatarForCurrentUser(file);
       if (!uploadResult.success || !uploadResult.publicUrl) {
         throw new Error(uploadResult.error?.message || '头像上传失败');
       }

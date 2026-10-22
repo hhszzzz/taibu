@@ -6991,6 +6991,6 @@ GRANT SELECT ON public.conversations_with_archive_status, public.ming_records_wi
 -- Explicit local feature block; no user/model/credential seeds.
 INSERT INTO public.app_settings (setting_key, setting_value) VALUES ('feature_disabled:community', true);
 
-COMMENT ON SCHEMA public IS 'taibu-selfhost-v1:8592de838ea1b1ffc3e5b1c8e91f02c0ef9d1d2260a68f4b45d0408b5c3ce14a';
+COMMENT ON SCHEMA public IS 'taibu-selfhost-v1:01f72664ce263c062814aaee9b5dadf6ad11766042cbc3aace0b9cf9223980cd';
 
 NOTIFY pgrst, 'reload schema';

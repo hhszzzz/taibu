@@ -2,7 +2,7 @@ import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest, NextResponse } from 'next/server';
 import { authCookieOptions, buildSessionFromUser, setSessionCookies } from '../lib/auth-session';
-import { getSupabasePublicUrl, getSupabaseUrl, toPublicStorageUrl } from '../lib/supabase-env';
+import { getSupabasePublicUrl, getSupabaseUrl } from '../lib/supabase-env';
 import { isSelfHosted, parseConfiguredOrigin } from '../lib/runtime-env';
 import { blockRouteNetwork } from './helpers/route-mock';
 import { createMockAuthContext } from './helpers/supabase-mock';
@@ -103,16 +103,10 @@ for (const selfHosted of [false, true]) {
     });
 }
 
-test('storage URLs use a controlled browser origin and preserve encoded keys', t => {
+test('storage browser origin still honors the configured public URL', t => {
     environment(t, local);
     assert.equal(getSupabaseUrl(), 'http://gateway:8000');
     assert.equal(getSupabasePublicUrl(), 'http://localhost:8000');
-    assert.equal(toPublicStorageUrl('http://gateway:8000/storage/v1/object/public/avatars/user/a%20b%252F.png'),
-        'http://localhost:8000/storage/v1/object/public/avatars/user/a%20b%252F.png');
-    for (const url of ['http://evil.test/storage/v1/object/public/avatars/a.png',
-        'http://gateway:8000/auth/v1/user', 'http://user@gateway:8000/storage/v1/object/public/avatars/a.png']) {
-        assert.throws(() => toPublicStorageUrl(url));
-    }
     delete process.env.SUPABASE_PUBLIC_URL;
     assert.throws(() => getSupabasePublicUrl());
     for (const invalid of ['http://localhost:8000/path', 'http://user@localhost:8000', 'file:///tmp', 'https://*.example.com']) {
@@ -122,40 +116,7 @@ test('storage URLs use a controlled browser origin and preserve encoded keys', t
 
 test('hosted public URL default is unchanged', t => {
     environment(t, { SUPABASE_PUBLIC_URL: 'http://ignored.test' });
-    const url = 'https://fixture.supabase.co/storage/v1/object/public/avatars/user.png';
-    assert.equal(toPublicStorageUrl(url), url);
     assert.equal(getSupabasePublicUrl(), getSupabaseUrl());
-});
-
-test('storage GET and upload return browser URLs and retain ownership checks', async t => {
-    environment(t, local);
-    let uploads = 0;
-    const client = { storage: { from: () => ({
-        getPublicUrl: (path: string) => ({ data: { publicUrl: `http://gateway:8000/storage/v1/object/public/avatars/${path}` } }),
-        upload: async (path: string) => { uploads++; return { data: { path }, error: null }; },
-    }) } };
-    const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
-    t.mock.method(api, 'getAuthContext', async () => createMockAuthContext({}, 'user-1'));
-    t.mock.method(api, 'createUserStorageClient', () => client);
-    t.mock.method(api, 'createRequestSupabaseClient', async () => client);
-    const route = require('../app/api/supabase/storage/route') as typeof import('../app/api/supabase/storage/route');
-    const response = await route.GET(new NextRequest('http://attacker.test/api/supabase/storage?bucket=avatars&path=user-1.png'));
-    assert.equal(response.status, 302);
-    assert.equal(response.headers.get('location'), 'http://localhost:8000/storage/v1/object/public/avatars/user-1.png');
-    for (const [path, status] of [['user-1-avatar.png', 200], ['other-avatar.png', 403], ['../user-1.png', 400]] as const) {
-        const body = new FormData();
-        body.set('bucket', 'avatars');
-        body.set('path', path);
-        body.set('file', new File(['image'], 'avatar.png', { type: 'image/png' }));
-        const uploaded = await route.POST(new NextRequest('http://localhost/api/supabase/storage', { method: 'POST', body }));
-        assert.equal(uploaded.status, status);
-        if (status === 200) assert.equal((await uploaded.json()).data.publicUrl,
-            'http://localhost:8000/storage/v1/object/public/avatars/user-1-avatar.png');
-    }
-    assert.equal(uploads, 1);
-    assert.equal((await route.GET(new NextRequest('http://localhost/api/supabase/storage?bucket=private&path=user-1.png'))).status, 403);
-    t.mock.method(api, 'getAuthContext', async () => ({ ...createMockAuthContext({}, 'user-1'), user: null }));
-    assert.equal((await route.POST(new NextRequest('http://localhost/api/supabase/storage', { method: 'POST' }))).status, 401);
 });
 
 for (const selfHosted of [false, true]) {

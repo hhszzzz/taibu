@@ -20,6 +20,7 @@ function fixture(t: TestContext) {
     const rows: Record<string, unknown> = {};
     const errors: Record<string, unknown> = {};
     const inserts: Record<string, unknown> = {};
+    const objects = new Map<string, Uint8Array>();
     let rpcError: unknown = null, rpcData: unknown = [];
     const db = {
         from(table: string) {
@@ -96,7 +97,22 @@ function fixture(t: TestContext) {
     t.mock.method(supabaseServer,'getSystemAdminClient',() => db as unknown as ReturnType<typeof supabaseServer.getSystemAdminClient>);
     const contextModule=require('../lib/db/context.server') as typeof import('../lib/db/context.server');
     t.mock.method(contextModule,'systemDb',() => scoped as unknown as ReturnType<typeof contextModule.systemDb>);
-    return { owner,id,db,calls,rows,errors,inserts,api,rpc(data:unknown,error:unknown=null){rpcData=data;rpcError=error;} };
+    const objectStore = {
+        async put(bucket: string, key: string, body: Uint8Array) { objects.set(`${bucket}/${key}`, new Uint8Array(body)); },
+        async get(bucket: string, key: string) {
+            const value = objects.get(`${bucket}/${key}`);
+            if (!value) return null;
+            const stream = new ReadableStream<Uint8Array>({
+                start(controller) { controller.enqueue(value); controller.close(); },
+            });
+            return { stream, size: value.byteLength, mtime: new Date() };
+        },
+        async delete(bucket: string, keys: readonly string[]) { for (const key of keys) objects.delete(`${bucket}/${key}`); },
+        async list() { return []; },
+    };
+    const storageModule = require('../lib/storage/index.server') as typeof import('../lib/storage/index.server');
+    t.mock.method(storageModule,'getObjectStore',() => objectStore as unknown as ReturnType<typeof storageModule.getObjectStore>);
+    return { owner,id,db,calls,rows,errors,inserts,objects,api,rpc(data:unknown,error:unknown=null){rpcData=data;rpcError=error;} };
 }
 const request = (url: string, body?: unknown) => new NextRequest(`http://localhost${url}`, body === undefined ? {} : { method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body) });
 const params = (id:string) => ({params:Promise.resolve({id})});
@@ -190,6 +206,7 @@ test('private upload validates real image bytes, downsamples and stores only an 
 test('private text reads verify ownership, hash and pagination; unavailable IDs stay private',async t => {
     const f=fixture(t); const bytes=Buffer.from('资料正文');
     f.rows.agent_attachments=[{id:f.id,user_id:f.owner,object_path:`${f.owner}/${f.id}`,name:'资料.txt',kind:'text',mime_type:'text/plain',size:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex'),status:'ready'}];
+    f.objects.set(`agent-attachments/${f.owner}/${f.id}`,new Uint8Array(bytes));
     const response=await attachment(request(`/api/agent/attachments/${f.id}?content=1&offset=1&length=2`),params(f.id));
     assert.equal(response.status,200); assert.equal((await response.json()).text,'料正');
     assert.ok(f.calls.some(call=>call.field==='user_id' && call.value===f.owner));

@@ -178,6 +178,6 @@ test('literal relations and dynamic factory catalogs resolve to real tables or v
   assert.ok(relations.get('users').callers.some(c => c.kind === 'literal-kysely'));
   assert.ok(manifest.dynamicRelationSites.some(s => s.file === 'src/lib/api/divination-pipeline.ts' && s.expression === 'tableName'));
   assert.ok(manifest.dynamicRelationSites.some(s => s.file === 'src/lib/api/chart-crud.ts' && s.expression === 'config.tableName'));
-  assert.ok(manifest.excludedRelationAdapters.some(s => s.file === 'src/app/api/supabase/storage/route.ts'));
+  assert.deepEqual(manifest.excludedRelationAdapters, []);
   assert.equal(relations.has('avatars'), false);
 });

@@ -6,20 +6,6 @@ export function getSupabasePublicUrl(): string {
     return parseConfiguredOrigin(process.env.SUPABASE_PUBLIC_URL, 'SUPABASE_PUBLIC_URL').origin;
 }
 
-/** Rewrite only URLs owned by this configured Supabase storage service; never proxy arbitrary URLs. */
-export function toPublicStorageUrl(value: string): string {
-    const internal = new URL(getSupabaseUrl());
-    const generated = new URL(value);
-    const prefix = `${internal.pathname.replace(/\/$/, '')}/storage/v1/object/public/`;
-    if (generated.origin !== internal.origin || generated.username || generated.password
-        || !generated.pathname.startsWith(prefix)) {
-        throw new Error('Storage URL does not belong to the configured Supabase service');
-    }
-    if (!isSelfHosted()) return value;
-    // pathname remains URL-encoded; decoding/re-encoding could change object keys.
-    return `${getSupabasePublicUrl()}/storage/v1/object/public/${generated.pathname.slice(prefix.length)}${generated.search}${generated.hash}`;
-}
-
 export function getSupabaseUrl(): string {
     const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || null;
     if (!url) {

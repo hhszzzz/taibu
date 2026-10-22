@@ -1,4 +1,4 @@
-FROM node:24.21.0-alpine3.23 AS base
+FROM node:24.22.1-alpine3.23 AS base
 
 # 固定 pnpm 版本，避免 lockfileVersion 9 与未来主版本不兼容
 RUN npm install -g pnpm@10.28.1
@@ -26,7 +26,7 @@ COPY packages/mcp-server ./packages/mcp-server
 RUN pnpm -C packages/core build
 RUN pnpm -C packages/mcp-server build
 
-FROM node:24.21.0-alpine3.23 AS runner
+FROM node:24.22.1-alpine3.23 AS runner
 
 WORKDIR /app
 ENV NODE_ENV=production

@@ -1,4 +1,4 @@
-FROM node:24.21.0-alpine3.23 AS base
+FROM node:24.22.1-alpine3.23 AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -21,7 +21,7 @@ ENV SUPABASE_PUBLIC_URL=$SUPABASE_PUBLIC_URL
 ENV SELF_HOSTED=$SELF_HOSTED
 RUN --mount=type=cache,id=taibu-pnpm,target=/pnpm/store pnpm build
 
-FROM node:24.21.0-alpine3.23 AS runner
+FROM node:24.22.1-alpine3.23 AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

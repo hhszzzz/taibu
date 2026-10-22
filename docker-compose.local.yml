@@ -6,7 +6,7 @@ x-logging: &logging
   driver: json-file
   options: {max-size: 10m, max-file: "3"}
 x-node: &node
-  image: node:24.21.0-alpine3.23
+  image: node:24.22.1-alpine3.23
   restart: unless-stopped
   security_opt: [no-new-privileges:true]
   logging: *logging

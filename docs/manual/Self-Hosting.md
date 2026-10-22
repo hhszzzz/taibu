@@ -16,7 +16,7 @@
 
 ## 启动与体验
 
-前置：本机 Unix-socket Docker、Docker Compose、Node.js 22.19+、pnpm。镜像固定 Node 24.21.0 / pnpm 10.33.0；首次安装/构建需要访问镜像和依赖仓库，运行 demo 不需要外部模型或托管数据库。
+前置：本机 Unix-socket Docker、Docker Compose、Node.js 22.19+、pnpm。镜像固定 Node 24.22.1 / pnpm 10.33.0；首次安装/构建需要访问镜像和依赖仓库，运行 demo 不需要外部模型或托管数据库。
 
 ```bash
 pnpm install --frozen-lockfile

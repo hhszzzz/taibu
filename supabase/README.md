@@ -70,7 +70,7 @@ pnpm test:auth
 
 入口为 `scripts/tests/auth-postgrest-acceptance.test.mjs`，栈装配为 `local-auth-stack.mjs`，复用 `buildPostgresFixture(..., { authMode: 'gotrue' })`。原 SQL suite 默认仍使用 synthetic 模式。真实模式先由 GoTrue 建立 Auth schema，不自行创建模拟 `auth.users`；JWT 由 GoTrue 签发、Auth/PostgREST 校验。
 
-固定组件：`pgvector/pgvector:0.8.6-pg16`、`supabase/gotrue:v2.196.0`、`postgrest/postgrest:v14.17`、`node:24.21.0-alpine3.23`（固定路径 HTTP 转发）。不包含 Studio、Storage、Realtime、邮件发送或 TLS。首次运行需要下载镜像。
+固定组件：`pgvector/pgvector:0.8.6-pg16`、`supabase/gotrue:v2.196.0`、`postgrest/postgrest:v14.17`、`node:24.22.1-alpine3.23`（固定路径 HTTP 转发）。不包含 Studio、Storage、Realtime、邮件发送或 TLS。首次运行需要下载镜像。
 
 - Auth/REST/DB 只连接 internal Docker 网络；转发器另接桥接网络，仅发布随机 `127.0.0.1` 端口，目标固定为 Auth/REST，不参与鉴权。
 - 唯一名称与标签、tmpfs、无 host bind 或已有卷。应用测试进程清除继承的供应商/生产配置，网络仅允许本次 loopback 端口；不读取 `.env`，不调用真实模型。

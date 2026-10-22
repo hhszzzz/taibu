@@ -30,7 +30,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 24.21.0
+          node-version: 24.22.1
           scope: '@hhszzzz'
           registry-url: https://npm.pkg.github.com
 

@@ -15,7 +15,7 @@ export const AUTH_STACK_IMAGES = {
   db: 'pgvector/pgvector:0.8.6-pg16',
   auth: 'supabase/gotrue:v2.196.0',
   rest: 'postgrest/postgrest:v14.17',
-  gateway: 'node:24.21.0-alpine3.23',
+  gateway: 'node:24.22.1-alpine3.23',
 };
 // Runs in the gateway container. All targets are constants, not request input;
 // neither tokens nor bodies are inspected or logged. Backend containers have no

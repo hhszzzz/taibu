@@ -158,7 +158,20 @@ rm /opt/taibu/maintenance/on
 
 代价：新栈在对外开放后产生的写入会丢失。超过 T+60 不再回滚，改为在新栈修复。
 
-## 5. 切换后清理
+## 5. 每周备份恢复演练
+
+在 hw 上每周执行一次（建议 systemd timer / cron）。`restore.env` 只需 `RESTORE_ADMIN_URL`（带 CREATEDB 的超级用户/等价角色）。`verify-restore` 会建临时库、恢复、校验迁移历史/用户一致性/FK 孤儿，然后删除临时库：
+
+```sh
+compose() { docker compose --project-directory /opt/taibu/source --env-file /opt/taibu/env/compose.env \
+  -f /opt/taibu/source/deploy/compose.base.yml -f /opt/taibu/source/deploy/compose.prod.yml "$@"; }
+LATEST=$(compose exec -T backup sh -c 'ls -t /backups/taibu-*.dump | head -1' | tr -d '\r')
+compose run --rm -T restore-check scripts/db/verify-restore.mjs --backup "$LATEST"
+```
+
+报告写入容器内 `tmp/`（随容器删除）；需要留档时把 `--report /backups/verify-$(date +%F).json` 指到可写挂载。任一项检查失败即告警，并按“回滚/恢复”流程处理。
+
+## 6. 切换后清理
 
 - Supabase 项目暂停、Vercel 项目保留 30 天；期满前再做一次最终 `pg_dump` 存入异地备份，然后删除两者。
 - 删除 `.github/workflows/reminders-cron.yml` 与 GitHub 的 `CRON_SECRET`。

@@ -41,6 +41,19 @@ services:
     shm_size: 256m
   redis:
     mem_limit: 160m
+  # Weekly drill helper: same image as web, read-only access to the dumps.
+  # Not started by `up`; invoked with `docker compose run --rm restore-check`.
+  restore-check:
+    image: ${TAIBU_IMAGE:?}:${TAIBU_TAG:?}
+    profiles: ["tools"]
+    restart: "no"
+    env_file: ["${TAIBU_ENV_DIR:?}/restore.env"]
+    entrypoint: ["node"]
+    volumes:
+      - backups:/backups:ro
+    networks: [backend]
+    depends_on:
+      db: { condition: service_healthy }
   backup:
     build: ./backup
     restart: unless-stopped

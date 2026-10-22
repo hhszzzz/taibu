@@ -36,6 +36,8 @@ compose up -d db redis
 compose run --rm -T db-setup
 compose run --rm -T migrate
 if [ "$EDGE_MODE" = "host" ]; then
+  # Switching from container edge must release 80/443 before host Caddy owns them.
+  compose --profile edge stop caddy >/dev/null 2>&1 || true
   compose up -d web worker backup
 else
   compose --profile edge up -d web worker caddy backup

@@ -172,6 +172,10 @@ sequences → tables → functions → views → 数据 → constraints/indexes/
 限制：这是 catalog 重建，不是 `pg_dump`。正式切换仍应优先使用真实 dump；若只能用重建结果，
 必须逐项核对上述对象计数，并在切换记录中注明。
 
+hw 彩排（2026-10-22，同一重建快照）：装载 30 MB 数据 1s、post-data 2s、27 条迁移 4s、
+新栈迁移 <1s、导入 7s，合计 <15s；目标库 709 identity/profile、684 会话、1430 条消息、
+164 条策略、12 条迁移、76 项 FK 无孤儿、1 个头像。
+
 ### T+8 迁移空库并导入
 
 ```sh

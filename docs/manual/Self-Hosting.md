@@ -8,7 +8,7 @@
 - 文件写入本机卷（`/data/files`），不再使用 Supabase Storage。
 - 限流、登录失败锁、会话二级存储和 BullMQ 队列使用 Redis。
 - PostgreSQL 17 + pgvector 由 `database/bootstrap` 与 `database/migrations` 管理。
-- 本文只描述本地栈；生产主机、TLS、备份与切换步骤见后续运维文档。
+- 本文只描述本地栈；生产主机、TLS、备份与切换步骤见 [切换运行手册](Cutover.md)。
 
 ## 前置
 
@@ -57,7 +57,14 @@ pnpm selfhost restore --project taibu-v2 --input ./backups/taibu.dump
 pnpm db:status    # 需要 MIGRATOR_DATABASE_URL
 pnpm db:migrate   # 只向前；校验 sha256，已应用文件变化会拒绝执行
 pnpm db:codegen   # 从 pg_catalog 重新生成 src/lib/db/generated
+pnpm db:schema    # 从已迁移库重新生成 database/schema.sql
+pnpm db:schema:check  # CI：快照与迁移结果不一致时失败
+pnpm db:diff      # --a/--b 两个 DSN 的 public schema 漂移报告
+pnpm db:verify-restore  # 恢复备份到临时库并校验迁移、用户一致性、FK 孤儿
+pnpm db:transit   # 从只读生产快照构建 transit 并重放待上线迁移
 ```
+
+`db:transit` / `db:diff` / `db:verify-restore` 需要 PostgreSQL 17 客户端（`PG_DUMP_BIN` / `PG_RESTORE_BIN` / `PSQL_BIN` 可覆盖路径），生产演练步骤见 [切换运行手册](Cutover.md)。
 
 本地连接信息在 `.taibu-local/<project>/env/*.env`（0600）。迁移脚本在 `database/migrations/NNNN_name.sql`；新增结构必须写新迁移，不能改已应用文件。
 

@@ -279,6 +279,12 @@ async function main() {
       const sub = row.metadata?.linuxdo_sub;
       if (!linuxdoByUser.has(row.id) && typeof sub === 'string' && sub) linuxdoByUser.set(row.id, sub);
     }
+    const subOwners = new Map();
+    for (const [userId, sub] of linuxdoByUser) {
+      const owner = subOwners.get(sub);
+      if (owner && owner !== userId) throw new Error(`Linux.do sub ${sub} is linked to ${owner} and ${userId}; resolve before importing`);
+      subOwners.set(sub, userId);
+    }
 
     // Historical derivation: HMAC(key = SUPABASE_SECRET_KEY || LINUXDO_CLIENT_SECRET,
     // message = "linuxdo:<sub>"). The Supabase key wins when present.

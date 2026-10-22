@@ -28,7 +28,8 @@ ENV HOSTNAME=0.0.0.0
 # The migrate service uses psql for `-- migrate:no-transaction` files
 # (CREATE INDEX CONCURRENTLY cannot run inside a transaction block).
 RUN apk add --no-cache postgresql17-client
-RUN addgroup -S nodejs && adduser -S nextjs -G nodejs
+RUN addgroup -S nodejs && adduser -S nextjs -G nodejs \
+  && mkdir -p /data/files && chown -R nextjs:nodejs /data
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static

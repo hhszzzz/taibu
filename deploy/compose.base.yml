@@ -53,6 +53,17 @@ services:
       interval: 3s
       timeout: 3s
       retries: 40
+  # Named volumes are created root-owned. The image already owns /data/files,
+  # but volumes created before that fix keep root ownership, so normalize once.
+  files-init:
+    image: alpine:3.22
+    user: root
+    command: [sh, -c, 'chown -R 100:101 /data/files && chmod 0750 /data/files']
+    volumes: [files:/data/files]
+    restart: "no"
+    networks: [backend]
+    logging: *logging
+    labels: *ownership
   db-setup:
     <<: *node
     env_file: ["${TAIBU_ENV_DIR}/db-setup.env"]
@@ -73,6 +84,7 @@ services:
     volumes: [files:/data/files]
     depends_on:
       migrate: { condition: service_completed_successfully }
+      files-init: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
     healthcheck:
       test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/health',{signal:AbortSignal.timeout(3000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
@@ -86,6 +98,7 @@ services:
     stop_grace_period: 90s
     depends_on:
       migrate: { condition: service_completed_successfully }
+      files-init: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
     healthcheck:
       test: [CMD, node, .agent/worker.mjs, --health]

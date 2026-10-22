@@ -520,8 +520,10 @@ export interface MingRecordsWithArchiveStatus {
   is_pinned: ColumnType<boolean | null, boolean | null | undefined, boolean | null | undefined>;
   created_at: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   updated_at: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  source_run_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   is_archived: ColumnType<boolean | null, boolean | null | undefined, boolean | null | undefined>;
   archived_kb_ids: ColumnType<unknown | null, unknown | null | undefined, unknown | null | undefined>;
+  source_conversation_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
 }
 
 export interface Notifications {

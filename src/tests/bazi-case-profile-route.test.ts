@@ -303,7 +303,7 @@ test('bazi case profile PUT should use the privileged rpc client instead of auth
 type TableRow = Record<string, unknown>;
 
 /** A scoped database double: `tx` serves each table's rows through Kysely's chain and records its filters. */
-function scopedFor(t: import('node:test').TestContext, tables: Record<string, TableRow[]>, rpc?: (fn: string, args: Record<string, unknown>) => unknown) {
+function scopedFor(tables: Record<string, TableRow[]>, rpc?: (fn: string, args: Record<string, unknown>) => unknown) {
     const calls: Array<[string, ...unknown[]]> = [];
     const scoped = createMockScopedDb({
         tx: async (work) => work({
@@ -340,7 +340,7 @@ test('bazi case profile PUT sends each kept event ID once, lowercased, so the sa
     const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
     const contextModule = require('../lib/db/context.server') as typeof import('../lib/db/context.server');
     const rpcCalls: Array<Record<string, unknown>> = [];
-    const { scoped } = scopedFor(t, {
+    const { scoped } = scopedFor({
         bazi_charts: [{ id: CHART, user_id: 'user-1' }],
         bazi_case_profiles: [{ id: 'profile-1', user_id: 'user-1', bazi_chart_id: CHART, master_review: {}, owner_feedback: {}, source_run_id: null, created_at: '2026-03-20T00:00:00.000Z', updated_at: '2026-03-20T00:00:00.000Z' }],
         bazi_case_events: [],
@@ -369,7 +369,7 @@ test('bazi case profile GET says which entries the Agent wrote and the conversat
     const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
     const event = (id: string, eventDate: string, category: string, title: string, source: string | null) =>
         ({ id, profile_id: 'profile-1', event_date: eventDate, category, title, detail: null, source_run_id: source, created_at: '2026-10-21T00:00:00.000Z', updated_at: '2026-10-21T00:00:00.000Z' });
-    const { scoped, calls } = scopedFor(t, {
+    const { scoped, calls } = scopedFor({
         bazi_charts: [{ id: CHART, user_id: 'user-1' }],
         bazi_case_profiles: [{ id: 'profile-1', user_id: 'user-1', bazi_chart_id: CHART, master_review: { strengthLevel: '偏弱' }, owner_feedback: {}, source_run_id: RUN, created_at: '2026-03-20T00:00:00.000Z', updated_at: '2026-03-20T00:00:00.000Z' }],
         bazi_case_events: [

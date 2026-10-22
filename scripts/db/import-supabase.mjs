@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import bcrypt from 'bcryptjs';
 import pg from 'pg';
+import { defaultReportPath } from './report-path.mjs';
 
 const args = process.argv.slice(2);
 const has = (flag) => args.includes(flag);
@@ -25,7 +26,7 @@ const value = (flag, fallback) => {
 const sourceUrl = value('--source', process.env.IMPORT_SOURCE_URL);
 const targetUrl = value('--target', process.env.IMPORT_TARGET_URL);
 const filesRoot = value('--files-root', process.env.IMPORT_FILES_ROOT);
-const reportPath = value('--report', path.join(process.cwd(), 'tmp', `import-${Date.now()}.json`));
+const reportPath = value('--report', defaultReportPath(process.cwd(), 'import'));
 const dryRun = has('--dry-run');
 const allowExtraSource = has('--allow-extra-source');
 const allowMissingSource = has('--allow-missing-source');

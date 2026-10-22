@@ -16,6 +16,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { normalizeSchemaDump } from './normalize-schema.mjs';
+import { defaultReportPath } from './report-path.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const PG_DUMP_BIN = process.env.PG_DUMP_BIN || 'pg_dump';
@@ -28,7 +29,7 @@ const value = (flag, fallback) => {
 
 const aUrl = value('--a', process.env.SCHEMA_DIFF_A);
 const bUrl = value('--b', process.env.SCHEMA_DIFF_B);
-const outPath = path.resolve(value('--out', path.join(root, 'tmp', 'schema-diff.txt')));
+const outPath = path.resolve(value('--out', defaultReportPath(root, 'schema-diff', 'txt')));
 const allowDiff = has('--allow-diff');
 const labels = { a: value('--label-a', 'a'), b: value('--label-b', 'b') };
 

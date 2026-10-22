@@ -27,6 +27,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync } from 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
+import { defaultReportPath } from './report-path.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const PSQL_BIN = process.env.PSQL_BIN || 'psql';
@@ -42,7 +43,7 @@ const dumpDir = path.resolve(value('--dump', ''));
 const targetUrl = value('--target', process.env.TRANSIT_TARGET_URL);
 const pendingPath = path.resolve(value('--pending', path.join(root, 'scripts/db/transit/pending.json')));
 const shimPath = path.join(root, 'scripts/db/transit/shim.sql');
-const reportPath = path.resolve(value('--report', path.join(root, 'tmp', `transit-${Date.now()}.json`)));
+const reportPath = path.resolve(value('--report', defaultReportPath(root, 'transit')));
 const maintenanceDb = value('--maintenance-db', 'postgres');
 const recreate = has('--recreate');
 const dryRun = has('--dry-run');

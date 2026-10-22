@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { chmodSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+
+import { defaultReportPath } from '../db/report-path.mjs';
 import { fileURLToPath } from 'node:url';
 
 import { normalizeSchemaDump } from '../db/normalize-schema.mjs';
@@ -80,4 +84,18 @@ test('schema normalisation ignores dump order and session boilerplate', () => {
   assert.equal(normalizeSchemaDump(a), normalizeSchemaDump(b));
   assert.equal(normalizeSchemaDump(a), normalizeSchemaDump(a));
   assert.ok(normalizeSchemaDump(a).indexOf('alpha') < normalizeSchemaDump(a).indexOf('beta'));
+});
+
+test('report paths fall back to the OS temp dir when the preferred one is read-only', () => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'taibu-report-'));
+  try {
+    assert.ok(defaultReportPath(directory, 'ok', 'json', {}).startsWith(directory));
+    chmodSync(directory, 0o500);
+    const fallback = defaultReportPath(directory, 'ro', 'json', { TAIBU_REPORT_DIR: directory });
+    assert.ok(!fallback.startsWith(directory), 'a read-only directory must not be used');
+    assert.ok(fallback.startsWith(tmpdir()));
+  } finally {
+    chmodSync(directory, 0o700);
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

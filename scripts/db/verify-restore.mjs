@@ -14,6 +14,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
+import { defaultReportPath } from './report-path.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const PG_RESTORE_BIN = process.env.PG_RESTORE_BIN || 'pg_restore';
@@ -29,7 +30,7 @@ const backupPath = path.resolve(value('--backup', ''));
 const adminDsn = value('--admin-dsn', process.env.RESTORE_ADMIN_URL);
 const compareDsn = value('--compare', process.env.RESTORE_COMPARE_URL);
 const database = value('--database', 'taibu_restore_check');
-const reportPath = path.resolve(value('--report', path.join(root, 'tmp', `restore-${Date.now()}.json`)));
+const reportPath = path.resolve(value('--report', defaultReportPath(root, 'restore')));
 const keep = has('--keep');
 
 if (!value('--backup', '') || !existsSync(backupPath)) {

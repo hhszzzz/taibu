@@ -38,7 +38,8 @@
     "db:bootstrap": "node scripts/db/bootstrap.mjs",
     "db:baseline": "node scripts/db/build-baseline.mjs",
     "db:migrate": "node scripts/db/migrate.mjs up",
-    "db:status": "node scripts/db/migrate.mjs status"
+    "db:status": "node scripts/db/migrate.mjs status",
+    "db:import": "node scripts/db/import-supabase.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.48",

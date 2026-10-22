@@ -1,0 +1,129 @@
+{
+  "schema": "taibu-transit-pending/1",
+  "source": {
+    "appliedThrough": {
+      "version": "20261003005536",
+      "name": "protect_account_and_ledger_writes"
+    }
+  },
+  "migrations": [
+    {
+      "file": "20261003_100000_fix_rate_limit_admission.sql",
+      "sha256": "cf0814eea899459166fae0e8a5749d6fc902a99aaddb613977437ac3ea661bdd"
+    },
+    {
+      "file": "20261005_100000_agent_runtime.sql",
+      "sha256": "b180b3aa3dd71ea00d05b6ad3265fabe6778c9f65669f26ffefc68095dd29b4f"
+    },
+    {
+      "file": "20261005_110000_chart_time_resolution.sql",
+      "sha256": "ba985d4cdbdda899a935dea2bf870a312c26412958c1305bcb9a5d46148db9fd"
+    },
+    {
+      "file": "20261005_120000_agent_chart_identity.sql",
+      "sha256": "a07ad1069420ba33c4e239faf522f590310e0f827bfe00ddb9ea323cc71936da"
+    },
+    {
+      "file": "20261006_100000_agent_pi_durable.sql",
+      "sha256": "d4bbe5f367df9d2a2eb090deb09e39c480c88aed95867c37e3a2aa6beb87c62e"
+    },
+    {
+      "file": "20261006_110000_agent_lifecycle_fixes.sql",
+      "sha256": "1dad2e8fe0dd2614bcd416d479a26f314dd8b284c8f851cdc81ac9da71fefc3e"
+    },
+    {
+      "file": "20261007_100000_agent_chat_results.sql",
+      "sha256": "462a8badd3f41fa1f5f5b389f2e2fa4320bc7911d0e125da6d06a8dee27effe8"
+    },
+    {
+      "file": "20261007_110000_agent_reading_preferences.sql",
+      "sha256": "377a05f32be8c9de71ff7e410983c95a2663e1fdd707bad0680526abacc658e2"
+    },
+    {
+      "file": "20261007_120000_agent_search.sql",
+      "sha256": "0fffdb9815f41d84cc5a63e31dec2da7cecdd0387771ef03a27594aa4fb193cd"
+    },
+    {
+      "file": "20261007_130000_agent_input_preferences.sql",
+      "sha256": "84e29f04f70ec8eb0338baac047960ffa6556fbe3a43c90aec0c67b758e004e1"
+    },
+    {
+      "file": "20261007_140000_agent_queue.sql",
+      "sha256": "adf9092f2fa03d18fdaef52e3cb20134e84e6e5ece35580364a4a295959d40e6"
+    },
+    {
+      "file": "20261007_150000_agent_notifications.sql",
+      "sha256": "61a3c68ecf0ac582dc75ac86d1f3142dd030445ab834b67c957d95c91439ed4d"
+    },
+    {
+      "file": "20261007_160000_agent_attachments.sql",
+      "sha256": "53d5562f071394cb7fd30d0c91526891a9d9b299848d3d0b6a873882a2d56ca6"
+    },
+    {
+      "file": "20261007_170000_daily_briefing.sql",
+      "sha256": "4fa35a28d49e8f74ec770e09832cde23efd55755a118d0bc4b6833c6c88976ba"
+    },
+    {
+      "file": "20261007_180000_conversation_fork.sql",
+      "sha256": "e3bb2317479f95523b6079bf0a5e388802907cb8134771525179132174a9409d"
+    },
+    {
+      "file": "20261007_190000_agent_backend_access.sql",
+      "sha256": "26bf8dd2d1e758a1dbc3467c051fb4d8fd03c994c1856314b7c221181397e84d"
+    },
+    {
+      "file": "20261008_100000_agent_question_dedupe.sql",
+      "sha256": "ed9806aa50e8c009390c39ed4d50ffa654097d40a4162009f5d3c644170d3c17"
+    },
+    {
+      "file": "20261008_180000_agent_competence.sql",
+      "sha256": "a9fe2732170d32b4c448d492090f81c417e7dd05a0804c979e07b528fc0a6208"
+    },
+    {
+      "file": "20261009_100000_agent_pi_durable_1_1.sql",
+      "sha256": "bcd3996445aff8a3f610b6e38078f9df94999030b814fcb71f4e23f540e4a687"
+    },
+    {
+      "file": "20261009_120000_ai_reasoning_effort_levels.sql",
+      "sha256": "b20e45bcea4a96d43476c3656a1220d2bfd104d860eb935835928bd92bd42673"
+    },
+    {
+      "file": "20261010_100000_agent_current_engine_only.sql",
+      "sha256": "6d78410e8a10b710bc9d03a28920b6a066ea3c035e29b96d89bd72bac216fa06"
+    },
+    {
+      "file": "20261017_100000_conversation_list_agent_flag.sql",
+      "sha256": "0072eda3b0ef2520cf5893b275f083b9cca43d6e42f72f7f65e011e6f7da64b7"
+    },
+    {
+      "file": "20261018_090000_conversation_agent_flag_includes_forks.sql",
+      "sha256": "c5d308b52badcc457c9acd62f179c58145708c89df7379aae36ddf2ca6d21f7a"
+    },
+    {
+      "file": "20261019_100000_conversation_shares.sql",
+      "sha256": "38998e70bca24541263e54d788ca46c1b0a2537b66cae65b2892658c2a907d43"
+    },
+    {
+      "file": "20261020_100000_agent_pi_durable_1_3.sql",
+      "sha256": "654f1445606b17dc14ae84ac34d188698242ad74aa1b82ff6736c89b44031fe9"
+    },
+    {
+      "file": "20261020_120000_agent_user_saved_charts.sql",
+      "sha256": "55ad3521aad922853bd3535a4f87c6e37430498b383ac4b045c366effea43842"
+    },
+    {
+      "file": "20261021_100000_agent_admin_task_log.sql",
+      "sha256": "e8047ae94b905454941103ffb354e96dd793a9955981d188ebf0c25b744f39cc"
+    },
+    {
+      "file": "20261021_120000_agent_user_archive.sql",
+      "sha256": "d17f8ddd5281b455e50b299f594fce42f455a442aee8f5bd99b26a0852dd0d64"
+    }
+  ],
+  "excluded": [
+    {
+      "file": "20261021_120000_agent_user_archive.sql",
+      "reason": "untracked in-flight work; decide in P0 before adding it here"
+    }
+  ]
+}

@@ -39,6 +39,9 @@
     "db:baseline": "node scripts/db/build-baseline.mjs",
     "db:migrate": "node scripts/db/migrate.mjs up",
     "db:status": "node scripts/db/migrate.mjs status",
+    "db:transit": "node scripts/db/transit-build.mjs",
+    "db:diff": "node scripts/db/schema-diff.mjs",
+    "db:verify-restore": "node scripts/db/verify-restore.mjs",
     "db:import": "node scripts/db/import-supabase.mjs"
   },
   "dependencies": {

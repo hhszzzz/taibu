@@ -156,3 +156,4 @@ skills/*-workspace/
 .playwright-mcp/
 .playwright-cli/
 output/playwright/
+tmp/

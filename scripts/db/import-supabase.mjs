@@ -226,6 +226,16 @@ async function main() {
 
     const authColumns = await columns(source, 'users', 'auth').catch(() => []);
     const authColumnNames = new Set(authColumns.map((column) => column.column_name));
+    const deletedCondition = [
+      authColumnNames.has('deleted_at') ? 'deleted_at is not null' : null,
+      authColumnNames.has('is_anonymous') ? 'is_anonymous' : null,
+    ].filter(Boolean).join(' or ');
+    if (deletedCondition) {
+      const { rows } = await source.query(`select count(*)::int as count from auth.users where ${deletedCondition}`);
+      if (rows[0].count > 0) {
+        throw new Error(`source has ${rows[0].count} deleted/anonymous users; decide how to handle them before importing`);
+      }
+    }
     const identityUsers = await source.query(`
       select au.id, lower(au.email) as email,
              (au.email_confirmed_at is not null) as email_verified,

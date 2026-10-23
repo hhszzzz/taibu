@@ -28,8 +28,14 @@ pnpm lint
 pnpm test           # 构建所需 packages 后跑默认单元/路由/协议测试
 pnpm test -- src/tests/chat-route.test.ts # 只运行指定文件，自动构建 Core
 pnpm test:db        # 独立本地 Docker PostgreSQL/RLS 契约；不连接生产
+pnpm test:auth      # 本地栈 + Mailpit 的 Better Auth 端到端验收
 pnpm test:browser   # 必跑浏览器行为层的独立入口，使用离线 fixture
 pnpm verify         # 完整验收：每个包只构建一次，含类型/测试/Web 构建/产物/DB/浏览器
+pnpm local:up       # 启动本地 Docker 栈（db/redis/web/worker/mailpit）
+pnpm local:update   # 重新构建镜像并启动本地栈
+pnpm db:status      # 查看已应用/待应用迁移
+pnpm db:migrate     # 应用 database/migrations/
+pnpm db:schema      # 由已迁移数据库重新生成 database/schema.sql
 ```
 
 > **注意**：独立 `pnpm test` 会先构建选定测试依赖的包，无需手动 build。完整 `pnpm verify` 要求本地 Docker 已运行，且已执行 `pnpm exec playwright install --only-shell chromium`（Linux CI 加 `--with-deps`）。若本机使用已有 Chrome，可显式运行 `pnpm verify -- --chrome` 或 `pnpm test:browser -- --chrome`，只切换浏览器，不跳过断言；CI 默认仍使用固定 Chromium。不得默认跳过构建或复用旧 dist。
@@ -39,16 +45,17 @@ pnpm verify         # 完整验收：每个包只构建一次，含类型/测试
 - `packages/core`（`taibu-core`）: 占术计算引擎；通过领域子路径公开 `to*Text()` / `to*Json()` 规范渲染接口。
 - `packages/mcp`（`taibu-mcp`）: MCP 协议层。
 - `packages/mcp-server`（`taibu-mcp-server`）: MCP 服务端。
-- `supabase/tabel_export_from_supabase.sql`: 当前数据库 schema 导出快照。
+- `database/`：数据库唯一事实来源（`bootstrap/` 角色与扩展、`migrations/` 前向迁移、`schema.sql` 生成快照）。
+- `deploy/`：Compose、Caddy、PostgreSQL/Redis 配置与备份脚本。
 
 ## 强制规范（MUST）
 
-- `API 路由`必须优先使用 `src/lib/api-utils.ts`，禁止在 `route.ts` 里随意创建 Supabase 客户端。
+- `API 路由`必须优先使用 `src/lib/api-utils.ts`，禁止在 `route.ts` 里自行创建数据库客户端或连接池。
 - `管理员接口`必须使用 `requireAdminUser()` 或 `requireAdminContext()`。
 - 需要用户态的接口必须使用 `requireUserContext()`（或等价受控封装），并统一返回 `jsonOk/jsonError`。
 - 涉及会员与积分的功能，必须按顺序执行：会员校验 -> 积分校验/扣减 -> 限流校验。
-- 系统管理员数据访问只能在服务端通过 `getSystemAdminClient()`；它实际使用管理员登录 JWT，不是真正 `service_role` 或无限制 RLS bypass。用户数据库上下文缺失必须失败，禁止回退到管理员。严禁暴露 service role 到客户端。`api-utils.ts` 还提供 `getAuthAdminClient()`（仅 Auth 管理）、`createAnonClient()`（匿名）、`createAuthedClient(token)`（带 token）等客户端，按权限边界选用。
-- 新增表/字段前，必须先检查 `supabase/tabel_export_from_supabase.sql` ，并说明“为何不能复用现有结构”，必要时可以检查 `mcp supabase migrations`。
+- 服务端数据访问一律通过 `src/lib/db/context.server.ts` 的 `userDb()` / `anonDb()` / `systemDb()` 取得 `ScopedDb`。系统管理员路径只用 `systemDb()`（`request.jwt.claims` 固定为系统用户，仍受 RLS 约束），用户上下文缺失必须失败，禁止回退到 `systemDb()`。严禁把数据访问层或角色口令暴露到客户端。
+- 新增表/字段前，必须先检查 `database/schema.sql` 与 `database/migrations/`，并说明“为何不能复用现有结构”。
 - 未经明确批准，禁止新增核心目录、系统级模块或数据库主表。
 - 新增或修改数据库结构，必须新增 migration；禁止直接改线上表结构。
 - 修改 DB 行为时必须评估并同步：RLS、索引、默认值、回填策略、兼容旧数据。
@@ -66,9 +73,8 @@ pnpm verify         # 完整验收：每个包只构建一次，含类型/测试
 1. 解析请求（body / query / params）。
 2. 参数校验（优先复用 `src/lib/validation.ts`）。
 3. 鉴权——按场景选用：
-   - `getAuthContext(request)`：可选鉴权，返回 `{ supabase, user }`（user 可能为 null）。
-   - `requireUserContext(request)`：必须登录，支持 Cookie 与 Bearer。
-   - `requireBearerUser(request)`：仅 Bearer token 鉴权（`divination-pipeline` 使用）。
+   - `getAuthContext(request)`：可选鉴权，返回 `{ db, user }`（未登录时 `db` 为 anon 作用域，user 为 null）。
+   - `requireUserContext(request)`：必须登录，返回 `{ db, user }`。
    - `requireAdminUser(request)` / `requireAdminContext(request)`：管理员鉴权。
 4. 权限与业务前置检查（membership、credits、rate limit）。
 5. 执行业务逻辑（优先复用 `src/lib/*` 现有模块）。
@@ -89,9 +95,9 @@ pnpm verify         # 完整验收：每个包只构建一次，含类型/测试
 
 ## 数据库与迁移规范
 
-- 使用 mcp supabase 进行更新执行 migration
+- 本地用 `pnpm db:migrate` 执行 `database/migrations/`；生产经 ssh-mcp-server 在主机运行 `deploy/deploy.sh <tag>`（迁移由 `migrate` 服务先执行）。禁止直接改线上表结构。
 - migration 中涉及安全对象（函数、视图、触发器）时，显式声明 `search_path` 与权限边界。
-- 如结构变化影响开发理解，需同步更新相关文档与 schema 快照。
+- 结构变化后运行 `pnpm db:schema` 更新 `database/schema.sql`，并同步相关文档。
 
 ## 测试与验收
 

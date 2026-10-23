@@ -87,46 +87,46 @@ docker compose \
 
 应用是 **SMTP 客户端**，不自建 MTA：只需要一个能收发的发信服务商，凭据填进 `app.env` 的 `SMTP_*`。
 
-### 腾讯云邮件推送（当前选定）
+### Brevo（当前选定，免费版 300 封/天）
 
-控制台「邮件推送」里先完成两件事，再取凭据：
+在 Brevo 后台 **Settings → SMTP & API → SMTP** 页取三个值，它们各不相同，混用是 `535` 认证失败最常见的原因：
 
-1. **验证发信域名**（`mingai.fun`）：按提示加 DNS TXT 记录。
-2. **新建发信地址**（如 `noreply@mingai.fun`），并为它单独设置 **SMTP 密码**——不是腾讯云账号密码。
-
-然后按账号所属站点选 SMTP 地址：
-
-| 站点 | SMTP 地址 |
+| 值 | 取自哪里 |
 |---|---|
-| 中国站（广州区） | `gz-smtp.qcloudmail.com` |
-| 中国站（香港区） | `smtp.qcloudmail.com` |
-| 国际站 | `sg-smtp.qcloudmail.com` |
+| SMTP 服务器 | 固定 `smtp-relay.brevo.com` |
+| SMTP 登录名 | 页面上显示的 Login，形如 `1234567@smtp-brevo.com`（**不是** relay 主机名，也不一定是账号邮箱） |
+| SMTP 密钥 | 点 **Generate a new SMTP key** 生成，只显示一次；**不是** API key，也不是账号密码 |
 
-端口用 `465`（隐式 TLS，`SMTP_SECURE=true`）或 `587`；腾讯云已禁用 `25`。
+端口三选一：`587`（STARTTLS，推荐）、`465`（隐式 TLS）、`2525`（前两个被挡时）。
 
 ```ini
 EMAIL_TRANSPORT=smtp
-SMTP_HOST=gz-smtp.qcloudmail.com
-SMTP_PORT=465
-SMTP_SECURE=true
-SMTP_USER=noreply@mingai.fun
-SMTP_PASS=<控制台设置的 SMTP 密码>
+SMTP_HOST=smtp-relay.brevo.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=1234567@smtp-brevo.com
+SMTP_PASS=<生成的 SMTP 密钥>
 SMTP_FROM=noreply@mingai.fun
 ```
 
-`SMTP_FROM` 必须是控制台里已通过验证的发信地址，否则会被拒发。`EMAIL_TRANSPORT=log` 在 `NODE_ENV=production` 下会直接抛错，不会静默丢信。
+`SMTP_SECURE` 必须与端口对应：`465` 用 `true`，`587`/`2525` 用 `false`（nodemailer 会自动 STARTTLS）。`SMTP_FROM` 必须是已在 Brevo 验证过的发件人域名下的地址。`EMAIL_TRANSPORT=log` 在 `NODE_ENV=production` 下会直接抛错，不会静默丢信。
+
+免费版每天 300 封；按现有用户量（708 人、近 30 天活跃 103）足够，超限时 Brevo 会拒发而不是扣费。
 
 ### 域名 DNS 记录
 
-送达率主要取决于这三条记录，缺一条就可能进垃圾箱：
+在 Brevo 的 **Senders, Domains & Dedicated IPs → Domains** 里添加 `mingai.fun`，它会给出要加的记录。送达率主要取决于这些记录，缺一条就可能进垃圾箱：
 
 ```dns
-mingai.fun                     TXT  "v=spf1 include:qcloudmail.com -all"
-<selector>._domainkey.mingai.fun TXT  "v=DKIM1; k=rsa; p=<控制台给出的公钥>"
-_dmarc.mingai.fun              TXT  "v=DMARC1; p=quarantine; rua=mailto:dmarc@mingai.fun"
+mingai.fun                       TXT  "v=spf1 include:spf.brevo.com -all"
+mail._domainkey.mingai.fun       TXT  "v=DKIM1; k=rsa; p=<Brevo 给出的公钥>"
+brevo._domainkey.mingai.fun      TXT  "v=DKIM1; k=rsa; p=<Brevo 给出的公钥>"
+_dmarc.mingai.fun                TXT  "v=DMARC1; p=quarantine; rua=mailto:dmarc@mingai.fun"
 ```
 
-`<selector>` 与 SPF 的 `include:` 值以控制台「域名配置」页显示的为准。
+DKIM 的选择器与公钥、SPF 的 `include:` 值都以 Brevo 页面实际显示的为准——不同时期开通的账号给出的记录条数可能不同。
+
+域名验证通过前，Brevo 只允许发往账号本人邮箱，所以先验证域名再切生产。
 
 ### 验收
 
@@ -136,7 +136,7 @@ _dmarc.mingai.fun              TXT  "v=DMARC1; p=quarantine; rua=mailto:dmarc@mi
 - 用验证码完成登录；
 - 走一次「找回密码」流程。
 
-BullMQ 的 `taibu-email` 队列失败计数可在 Redis 里查看；连续失败通常是 `SMTP_PASS` 或发信地址未验证。
+BullMQ 的 `taibu-email` 队列失败计数可在 Redis 里查看；连续失败通常是 `SMTP_PASS`（用了 API key 而不是 SMTP 密钥）、`SMTP_USER` 填成了 relay 主机名，或发件域名尚未验证。
 
 ## 目录
 

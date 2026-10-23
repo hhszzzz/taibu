@@ -94,7 +94,7 @@ export function ClientProviders({ children }: ClientProvidersProps) {
 
                 return {
                     session,
-                    user: session?.user ?? null,
+                    user: result.data.user,
                     loading: false,
                 };
             });
@@ -102,11 +102,11 @@ export function ClientProviders({ children }: ClientProvidersProps) {
 
         void syncSessionFromServer();
 
-        const { data: { subscription } } = onAuthStateChange((event, session) => {
+        const { data: { subscription } } = onAuthStateChange((event, { session, user }) => {
             if (!isMounted) return;
             setState({
                 session,
-                user: session?.user ?? null,
+                user,
                 loading: false,
             });
             if (event !== 'INITIAL_SESSION') {

@@ -63,8 +63,8 @@ export default function DivinePage() {
         // 保存起卦记录到数据库
         let divinationId: string | null = null;
         try {
-            const { data: { session } } = await getSessionSnapshot();
-            if (session?.user) {
+            const { data: { user } } = await getSessionSnapshot();
+            if (user) {
                 const saveResult = await saveDivinationAction({
                     endpoint: '/api/liuyao',
                     body: {

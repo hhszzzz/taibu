@@ -28,8 +28,8 @@ export type AuthUser = {
 
 /** 兼容旧组件的类型别名。 */
 export type User = AuthUser;
-export type SupabaseUser = AuthUser;
 
+/** Better Auth 的 session 记录本身不含用户对象；用户与 session 是同级的两份数据。 */
 export type AuthSession = {
     id: string;
     userId: string;
@@ -37,7 +37,6 @@ export type AuthSession = {
     expiresAt: Date | string;
     createdAt?: Date | string;
     updatedAt?: Date | string;
-    user: AuthUser;
 };
 
 export type Session = AuthSession;
@@ -60,7 +59,7 @@ type SessionPayload = {
     error: BrowserApiError | null;
 };
 
-type AuthListener = (event: AuthChangeEvent, session: Session | null) => void;
+type AuthListener = (event: AuthChangeEvent, state: { session: Session | null; user: AuthUser | null }) => void;
 
 type OtpType = 'signup' | 'magiclink' | 'recovery' | 'email_change' | 'email';
 
@@ -96,22 +95,22 @@ const SESSION_REVALIDATE_EVENT_COOLDOWN_MS = 5_000;
 const LOGIN_GUARD_UNAVAILABLE_CODE = 'login_guard_unavailable';
 const LOGIN_GUARD_UNAVAILABLE_MESSAGE = '登录保护服务暂不可用，请稍后重试';
 
-function emitAuthEvent(event: AuthChangeEvent, session: Session | null) {
+function emitAuthEvent(event: AuthChangeEvent, state: { session: Session | null; user: AuthUser | null }) {
     for (const listener of authListeners) {
         try {
-            listener(event, session);
+            listener(event, state);
         } catch (error) {
             console.error('[auth] auth listener error:', error);
         }
     }
 }
 
-function applySession(session: Session | null, event?: AuthChangeEvent) {
+function applySession(session: Session | null, user: AuthUser | null, event?: AuthChangeEvent) {
     cachedSession = session;
-    cachedUser = session?.user ?? null;
+    cachedUser = user;
     hasInitializedSession = true;
     lastSessionBootstrapAt = Date.now();
-    if (event) emitAuthEvent(event, session);
+    if (event) emitAuthEvent(event, { session, user });
 }
 
 /** Better Auth errors carry a code; keep the historical message mapping. */
@@ -128,7 +127,7 @@ function getCachedSessionPayload(error: BrowserApiError | null = null): SessionP
     return {
         data: {
             session: cachedSession,
-            user: cachedUser ?? cachedSession?.user ?? null,
+            user: cachedUser,
         },
         error,
     };
@@ -145,7 +144,7 @@ function resolveRefreshedSessionEvent(previousSession: Session | null, nextSessi
     if (!previousSession || !nextSession) return null;
     const changed = previousSession.id !== nextSession.id
         || previousSession.expiresAt !== nextSession.expiresAt
-        || previousSession.user?.id !== nextSession.user?.id;
+        || previousSession.userId !== nextSession.userId;
     return changed ? 'TOKEN_REFRESHED' : null;
 }
 
@@ -158,14 +157,16 @@ async function loadSessionFromServer(options: { force?: boolean; emitEvent?: boo
         if (result.error) {
             return getCachedSessionPayload(normalizeAuthError(result.error));
         }
+        // Better Auth 返回 { session, user } 平级结构，这里保持原样缓存，不做嵌套归一。
         const session = (result.data?.session ?? null) as Session | null;
+        const user = (result.data?.user ?? null) as AuthUser | null;
         cachedSession = session;
-        cachedUser = (session?.user ?? result.data?.user ?? null) as AuthUser | null;
+        cachedUser = user;
         hasInitializedSession = true;
         lastSessionBootstrapAt = Date.now();
         if (options.emitEvent) {
             const event = resolveRefreshedSessionEvent(previousSession, session);
-            if (event) emitAuthEvent(event, session);
+            if (event) emitAuthEvent(event, { session, user });
         }
         return getCachedSessionPayload();
     }).finally(() => {
@@ -189,7 +190,7 @@ export function onAuthStateChange(callback: AuthListener) {
         ? Promise.resolve(getCachedSessionPayload())
         : (sessionBootstrapPromise ?? loadSessionFromServer());
     void bootstrap.then((result) => {
-        callback('INITIAL_SESSION', result.data?.session ?? null);
+        callback('INITIAL_SESSION', { session: result.data?.session ?? null, user: result.data?.user ?? null });
     });
     return {
         data: {
@@ -219,8 +220,9 @@ export async function getSession(): Promise<Session | null> {
 }
 
 export async function getCurrentUser(): Promise<AuthUser | null> {
-    const session = await getSession();
-    return session?.user ?? null;
+    const result = await authClient.getSession();
+    if (result.error) throw new Error(result.error.message || '获取会话失败');
+    return (result.data?.user ?? null) as AuthUser | null;
 }
 
 export async function signInWithEmail(email: string, password: string): Promise<AuthResult> {
@@ -256,7 +258,7 @@ export async function signOut(): Promise<AuthResult> {
     if (error) {
         return { success: false, error: { message: '登出失败，请重试', code: error.code || error.message } };
     }
-    applySession(null, 'SIGNED_OUT');
+    applySession(null, null, 'SIGNED_OUT');
     return { success: true };
 }
 
@@ -281,8 +283,7 @@ export async function updateNickname(_userId: string, nickname: string): Promise
     }
     if (cachedUser) {
         cachedUser = { ...cachedUser, name: nickname };
-        if (cachedSession) cachedSession = { ...cachedSession, user: cachedUser };
-        emitAuthEvent('USER_UPDATED', cachedSession);
+        emitAuthEvent('USER_UPDATED', { session: cachedSession, user: cachedUser });
     }
     return { success: true };
 }
@@ -297,8 +298,7 @@ export async function updateAvatarUrl(avatarUrl: string | null): Promise<AuthRes
     }
     if (cachedUser) {
         cachedUser = { ...cachedUser, image: avatarUrl };
-        if (cachedSession) cachedSession = { ...cachedSession, user: cachedUser };
-        emitAuthEvent('USER_UPDATED', cachedSession);
+        emitAuthEvent('USER_UPDATED', { session: cachedSession, user: cachedUser });
     }
     return { success: true };
 }

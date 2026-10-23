@@ -176,6 +176,7 @@ export function getAuth(): AppAuth {
   return auth;
 }
 
-export async function getAuthSession(headers: Headers) {
+/** 返回 Better Auth 的 `{ session, user }` 状态；两者同级，session 本身不含 user。 */
+export async function getAuthState(headers: Headers) {
   return getAuth().api.getSession({ headers });
 }

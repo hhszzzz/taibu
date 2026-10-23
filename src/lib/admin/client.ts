@@ -15,7 +15,7 @@ export const UNAUTHED_ADMIN_ACCESS_STATE: AdminClientAccessState = {
 
 export async function loadAdminClientAccessState(): Promise<AdminClientAccessState> {
   const session = await getSession();
-  if (!session?.user) {
+  if (!session) {
     return UNAUTHED_ADMIN_ACCESS_STATE;
   }
 

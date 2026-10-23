@@ -9,7 +9,7 @@ import { signOut } from '@/lib/auth';
 import { buildMembershipInfo } from '@/lib/user/membership';
 import { getUserEmailDisplay } from '@/lib/user-email';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
-import type { User as SupabaseUser } from '@/lib/auth';
+import type { AuthUser } from '@/lib/auth';
 import { SettingsCenterLink } from '@/components/settings/SettingsCenterLink';
 import { SETTINGS_CENTER_TAB_ICONS } from '@/components/settings/settings-center-icons';
 import { useCurrentUserProfile } from '@/lib/hooks/useCurrentUserProfile';
@@ -18,7 +18,7 @@ import { openSettingsCenter } from '@/lib/settings-center';
 import type { SettingsCenterTab } from '@/lib/settings-center';
 
 interface SidebarUserCardProps {
-    user: SupabaseUser;
+    user: AuthUser;
     collapsed?: boolean;
     /** `account`: the chat sidebar's footer row (membership and credits) or, collapsed, its round rail button. */
     appearance?: 'card' | 'account';

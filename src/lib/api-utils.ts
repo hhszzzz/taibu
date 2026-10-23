@@ -7,7 +7,7 @@
 
 import { NextResponse, type NextRequest } from 'next/server';
 import { anonDb, userDb, type ScopedDb } from '@/lib/db/context.server';
-import { getAuthSession } from '@/lib/identity/auth.server';
+import { getAuthState } from '@/lib/identity/auth.server';
 
 export type AppUser = {
     id: string;
@@ -48,11 +48,11 @@ function toAppUser(user: {
 /** Optional authentication: anonymous requests get the anon RLS scope. */
 export async function getAuthContext(request: NextRequest): Promise<AuthContextResult> {
     try {
-        const session = await getAuthSession(request.headers);
-        if (!session?.user) {
+        const authState = await getAuthState(request.headers);
+        if (!authState?.user) {
             return { db: anonDb(), user: null, authError: null };
         }
-        const user = toAppUser(session.user);
+        const user = toAppUser(authState.user);
         return { db: userDb(user.id), user, authError: null };
     } catch (error) {
         console.error('[api-utils] session resolution failed:', error);

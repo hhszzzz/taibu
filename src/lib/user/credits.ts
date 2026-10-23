@@ -1,9 +1,9 @@
 /**
  * 用户积分/次数管理模块
- * 
- * 使用服务端 Supabase 客户端绕过 RLS
+ *
+ * 通过 systemDb() 的受控系统身份访问，仍受 RLS 约束。
  * 注意：积分存储在 users 表的 ai_chat_count 字段
- * 
+ *
  * 当前规则：
  * - 积分余额存储在 users.ai_chat_count
  * - 会员只决定上限（Free 10 / Plus 20 / Pro 50）

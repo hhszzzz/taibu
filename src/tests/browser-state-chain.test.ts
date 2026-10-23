@@ -106,7 +106,9 @@ test('loadAdminClientAccessState surfaces profile loading failures instead of do
     const originalGetCurrentUserProfileBundle = profileModule.getCurrentUserProfileBundle;
 
     (authModule as { getSession: typeof import('../lib/auth').getSession }).getSession = async () => ({
-        user: { id: 'user-1' },
+        id: 'session-1',
+        userId: 'user-1',
+        expiresAt: new Date(Date.now() + 3600_000).toISOString(),
     } as Awaited<ReturnType<typeof originalGetSession>>);
     (profileModule as { getCurrentUserProfileBundle: typeof import('../lib/user/profile').getCurrentUserProfileBundle }).getCurrentUserProfileBundle = async () => {
         throw new Error('获取用户资料失败');

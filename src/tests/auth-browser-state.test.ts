@@ -21,15 +21,19 @@ function bootstrapSnapshot(data: AppBootstrapData, state: Pick<BootstrapSnapshot
   return { ...result, data, ...state, viewerStateError: null, refresh: async () => data, markCreditsExhausted() {} };
 }
 
-function sessionFor(id: string) {
-  const user = {
+function userFor(id: string) {
+  return {
     id: `user-${id}`,
     email: `user-${id}@example.test`,
     emailVerified: true,
     name: '测试用户',
     image: null,
   };
-  return { id: `session-${id}`, userId: user.id, expiresAt: new Date(Date.now() + 3600_000).toISOString(), user };
+}
+
+function sessionFor(id: string) {
+  const user = userFor(id);
+  return { id: `session-${id}`, userId: user.id, expiresAt: new Date(Date.now() + 3600_000).toISOString() };
 }
 
 test('browser session cache deduplicates reads, invalidates, and revalidates with events', async (t) => {
@@ -38,8 +42,8 @@ test('browser session cache deduplicates reads, invalidates, and revalidates wit
   const previous = auth.__setAuthClientForTests({
     getSession: async () => {
       calls += 1;
-      const session = sessionFor(String(calls));
-      return { data: { session, user: session.user }, error: null };
+      const key = String(calls);
+      return { data: { session: sessionFor(key), user: userFor(key) }, error: null };
     },
   } as unknown as Parameters<typeof auth.__setAuthClientForTests>[0]);
   t.after(() => { auth.__setAuthClientForTests(previous); });
@@ -51,17 +55,17 @@ test('browser session cache deduplicates reads, invalidates, and revalidates wit
   const third = await auth.getSessionSnapshot();
 
   const events: Array<{ event: string; userId: string | null }> = [];
-  const { data: { subscription } } = auth.onAuthStateChange((event, session) => {
-    events.push({ event, userId: session?.user?.id ?? null });
+  const { data: { subscription } } = auth.onAuthStateChange((event, state) => {
+    events.push({ event, userId: state.user?.id ?? null });
   });
   await new Promise((resolve) => setImmediate(resolve));
   const fourth = await auth.revalidateBrowserSession();
   subscription.unsubscribe();
 
-  assert.equal(first.data.session?.user?.id, 'user-1');
-  assert.equal(second.data.session?.user?.id, 'user-1');
-  assert.equal(third.data.session?.user?.id, 'user-2');
-  assert.equal(fourth.data.session?.user?.id, 'user-3');
+  assert.equal(first.data.user?.id, 'user-1');
+  assert.equal(second.data.user?.id, 'user-1');
+  assert.equal(third.data.user?.id, 'user-2');
+  assert.equal(fourth.data.user?.id, 'user-3');
   assert.equal(calls, 3);
   assert.deepEqual(events, [
     { event: 'INITIAL_SESSION', userId: 'user-2' },
@@ -131,15 +135,14 @@ test('signOut clears the cached session and emits SIGNED_OUT', async (t) => {
   const auth = require('../lib/auth') as typeof import('../lib/auth');
   const previous = auth.__setAuthClientForTests({
     getSession: async () => {
-      const session = sessionFor('1');
-      return { data: { session, user: session.user }, error: null };
+      return { data: { session: sessionFor('1'), user: userFor('1') }, error: null };
     },
     signOut: async () => ({ data: { success: true }, error: null }),
   } as unknown as Parameters<typeof auth.__setAuthClientForTests>[0]);
   t.after(() => { auth.__setAuthClientForTests(previous); });
 
   auth.invalidateBrowserSessionCache();
-  assert.equal((await auth.getSessionSnapshot()).data.session?.user?.id, 'user-1');
+  assert.equal((await auth.getSessionSnapshot()).data.user?.id, 'user-1');
   const events: string[] = [];
   const { data: { subscription } } = auth.onAuthStateChange((event) => { events.push(event); });
   await new Promise((resolve) => setImmediate(resolve));

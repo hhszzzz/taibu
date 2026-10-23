@@ -37,8 +37,8 @@ export function toDbError(error: unknown): DbError {
 }
 
 /**
- * Migration helper that keeps the former supabase-js `{ data, error }`
- * branch shape while callers are rewritten mechanically in P2.
+ * Settle a query into the `{ data, error }` shape so call sites can branch
+ * without try/catch. The result carries `DbError` instead of throwing.
  */
 export async function settle<T>(promise: Promise<T>): Promise<{ data: T | null; error: DbError | null }> {
   try {

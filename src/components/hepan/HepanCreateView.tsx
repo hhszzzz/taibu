@@ -39,9 +39,9 @@ export function HepanCreateView() {
 
     // 获取用户 ID
     useEffect(() => {
-        getSessionSnapshot().then(({ data: { session } }) => {
-            if (session?.user) {
-                setUserId(session.user.id);
+        getSessionSnapshot().then(({ data: { user } }) => {
+            if (user) {
+                setUserId(user.id);
             }
         });
     }, []);
@@ -108,8 +108,8 @@ export function HepanCreateView() {
         // 保存合盘记录到数据库
         let chartId: string | null = null;
         try {
-            const { data: { session } } = await getSessionSnapshot();
-            if (session?.user) {
+            const { data: { user } } = await getSessionSnapshot();
+            if (user) {
                 const saveResult = await saveDivinationAction({
                     endpoint: '/api/hepan',
                     body: { result },

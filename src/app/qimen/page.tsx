@@ -63,8 +63,8 @@ export default function QimenPage() {
         try {
             const castTime = formTime.resolveTime();
 
-            const { data: { session } } = await getSessionSnapshot();
-            if (!session?.user) {
+            const { data: { user } } = await getSessionSnapshot();
+            if (!user) {
                 showToast('error', '请先登录');
                 setIsLoading(false);
                 return;

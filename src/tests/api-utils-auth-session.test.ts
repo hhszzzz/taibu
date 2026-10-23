@@ -24,7 +24,7 @@ function adminDb(isAdmin: boolean) {
 
 test('getAuthContext returns an anonymous scope when there is no session', async (t) => {
   const auth = require('../lib/identity/auth.server') as typeof import('../lib/identity/auth.server');
-  t.mock.method(auth, 'getAuthSession', async () => null);
+  t.mock.method(auth, 'getAuthState', async () => null);
 
   const { getAuthContext } = await import('../lib/api-utils');
   const result = await getAuthContext(request());
@@ -36,7 +36,7 @@ test('getAuthContext returns an anonymous scope when there is no session', async
 
 test('getAuthContext exposes the session user and a user scope', async (t) => {
   const auth = require('../lib/identity/auth.server') as typeof import('../lib/identity/auth.server');
-  t.mock.method(auth, 'getAuthSession', async () => ({
+  t.mock.method(auth, 'getAuthState', async () => ({
     user: {
       id: 'user-1',
       email: 'user@example.test',
@@ -57,7 +57,7 @@ test('getAuthContext exposes the session user and a user scope', async (t) => {
 
 test('getAuthContext reports session resolution failures instead of masquerading as anonymous', async (t) => {
   const auth = require('../lib/identity/auth.server') as typeof import('../lib/identity/auth.server');
-  t.mock.method(auth, 'getAuthSession', async () => {
+  t.mock.method(auth, 'getAuthState', async () => {
     throw new Error('session store unavailable');
   });
 
@@ -73,7 +73,7 @@ test('getAuthContext reports session resolution failures instead of masquerading
 
 test('requireUserContext rejects anonymous requests with 401', async (t) => {
   const auth = require('../lib/identity/auth.server') as typeof import('../lib/identity/auth.server');
-  t.mock.method(auth, 'getAuthSession', async () => null);
+  t.mock.method(auth, 'getAuthState', async () => null);
 
   const { requireUserContext } = await import('../lib/api-utils');
   const result = await requireUserContext(request());

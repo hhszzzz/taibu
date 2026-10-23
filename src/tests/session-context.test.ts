@@ -9,7 +9,7 @@ function SessionProbe() {
     const state = useSessionSafe();
     return createElement('output', {
         'data-user': state.user?.id ?? 'visitor',
-        'data-session-user': state.session?.user.id ?? 'visitor',
+        'data-session-user': state.session?.userId ?? 'visitor',
         'data-loading': String(state.loading),
     });
 }
@@ -39,7 +39,6 @@ test('session hook returns the supplied user and session without creating anothe
             id: 'session-context',
             userId: 'user-context',
             expiresAt: new Date(Date.now() + 3600_000).toISOString(),
-            user,
         },
     };
     const observed: SessionState[] = [];

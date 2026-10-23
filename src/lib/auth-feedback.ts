@@ -12,7 +12,6 @@ const LINUXDO_AUTH_ERROR_MESSAGES: Record<string, string> = {
   provider_sync_failed: 'Linux.do 登录失败：账号绑定同步失败，请稍后重试',
   login_failed: 'Linux.do 登录失败：站内账号登录失败，请稍后重试',
   email_exists: '该 Linux.do 邮箱已绑定其他账号，请使用原登录方式',
-  signup_requires_admin_key: 'Linux.do 登录失败：站点缺少 Supabase 管理密钥配置，请联系管理员处理',
   signup_failed: 'Linux.do 登录失败：创建账号失败，请稍后重试',
 };
 

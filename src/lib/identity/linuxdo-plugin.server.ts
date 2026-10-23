@@ -171,12 +171,12 @@ export function linuxdoPlugin() {
         const payload: OAuthStatePayload = { state, codeVerifier, intent, returnTo };
 
         if (intent === CLAIM_INTENT) {
-          const session = await getSessionFromCtx(ctx).catch(() => null);
-          const bound = session ? await boundProvider(session.user.id) : null;
-          if (!session || !bound) {
+          const authState = await getSessionFromCtx(ctx).catch(() => null);
+          const bound = authState?.user ? await boundProvider(authState.user.id) : null;
+          if (!authState?.user || !bound) {
             throw ctx.redirect(resultUrl(origin, returnTo, { claim: 'missing_linuxdo' }).toString());
           }
-          payload.claimUserId = session.user.id;
+          payload.claimUserId = authState.user.id;
           payload.claimSub = bound.provider_user_id;
         }
 

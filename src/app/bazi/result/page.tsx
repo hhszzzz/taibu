@@ -69,7 +69,7 @@ function BaziResultContent() {
     const [copyDetailLevel, setCopyDetailLevel] = useState<ChartTextDetailLevel>('default');
     const [showCopyModal, setShowCopyModal] = useState(false);
     const { showToast } = useToast();
-    const { session, userId, sessionLoading, membershipInfo, membershipResolved } = useSessionMembership();
+    const { userId, sessionLoading, membershipInfo, membershipResolved } = useSessionMembership();
     const { pending: saving, run: runSave } = useChartMutation(userId);
     const [loadedForUserId, setLoadedForUserId] = useState<string | null | undefined>(undefined);
     const credits = membershipResolved ? (membershipInfo?.aiChatCount ?? null) : null;
@@ -335,7 +335,7 @@ function BaziResultContent() {
             return;
         }
 
-        if (!session?.user) {
+        if (!userId) {
             showToast('warning', '请先登录后再保存命盘');
             setShowAuthModal(true);
             return;

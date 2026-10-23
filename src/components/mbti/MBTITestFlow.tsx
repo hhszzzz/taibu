@@ -106,8 +106,8 @@ export function MBTITestFlow() {
         // 已登录时保存测试记录；保存失败不阻断查看结果
         let readingId: string | null = null;
         try {
-            const { data: { session } } = await getSessionSnapshot();
-            if (session?.user) {
+            const { data: { user } } = await getSessionSnapshot();
+            if (user) {
                 const saveResult = await saveDivinationAction({
                     endpoint: '/api/mbti',
                     body: {

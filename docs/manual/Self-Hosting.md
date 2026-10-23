@@ -81,6 +81,63 @@ docker compose \
   -c "update public.users set is_admin = true where id = (select id from identity.users where email = 'you@example.com');"
 ```
 
+## 邮件
+
+本地栈用 Mailpit 捕获邮件，不需要任何配置。生产必须接一个真实发信服务，否则注册验证码、验证码登录和找回密码都发不出去。
+
+应用是 **SMTP 客户端**，不自建 MTA：只需要一个能收发的发信服务商，凭据填进 `app.env` 的 `SMTP_*`。
+
+### 腾讯云邮件推送（当前选定）
+
+控制台「邮件推送」里先完成两件事，再取凭据：
+
+1. **验证发信域名**（`mingai.fun`）：按提示加 DNS TXT 记录。
+2. **新建发信地址**（如 `noreply@mingai.fun`），并为它单独设置 **SMTP 密码**——不是腾讯云账号密码。
+
+然后按账号所属站点选 SMTP 地址：
+
+| 站点 | SMTP 地址 |
+|---|---|
+| 中国站（广州区） | `gz-smtp.qcloudmail.com` |
+| 中国站（香港区） | `smtp.qcloudmail.com` |
+| 国际站 | `sg-smtp.qcloudmail.com` |
+
+端口用 `465`（隐式 TLS，`SMTP_SECURE=true`）或 `587`；腾讯云已禁用 `25`。
+
+```ini
+EMAIL_TRANSPORT=smtp
+SMTP_HOST=gz-smtp.qcloudmail.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=noreply@mingai.fun
+SMTP_PASS=<控制台设置的 SMTP 密码>
+SMTP_FROM=noreply@mingai.fun
+```
+
+`SMTP_FROM` 必须是控制台里已通过验证的发信地址，否则会被拒发。`EMAIL_TRANSPORT=log` 在 `NODE_ENV=production` 下会直接抛错，不会静默丢信。
+
+### 域名 DNS 记录
+
+送达率主要取决于这三条记录，缺一条就可能进垃圾箱：
+
+```dns
+mingai.fun                     TXT  "v=spf1 include:qcloudmail.com -all"
+<selector>._domainkey.mingai.fun TXT  "v=DKIM1; k=rsa; p=<控制台给出的公钥>"
+_dmarc.mingai.fun              TXT  "v=DMARC1; p=quarantine; rua=mailto:dmarc@mingai.fun"
+```
+
+`<selector>` 与 SPF 的 `include:` 值以控制台「域名配置」页显示的为准。
+
+### 验收
+
+改完 `app.env` 后重启 `web` 与 `worker`，然后用一个真实邮箱注册一次，确认：
+
+- 收件箱能收到验证码，且不在垃圾箱；
+- 用验证码完成登录；
+- 走一次「找回密码」流程。
+
+BullMQ 的 `taibu-email` 队列失败计数可在 Redis 里查看；连续失败通常是 `SMTP_PASS` 或发信地址未验证。
+
 ## 目录
 
 - `deploy/compose.base.yml`：db、redis、db-setup、migrate、web、worker

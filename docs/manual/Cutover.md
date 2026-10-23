@@ -10,7 +10,7 @@
 | 规范主机 | `www.mingai.fun` / apex（二选一） |
 | DNS / 代理 | 服务商；是否走 Cloudflare 代理 |
 | ICP 备案 | 大陆地域必须已备案 |
-| SMTP | 服务商、发信域名、SPF/DKIM/DMARC 状态 |
+| SMTP | 腾讯云邮件推送（见 [自托管手册 · 邮件](Self-Hosting.md#邮件)），需确认发信域名已验证、SPF/DKIM/DMARC 已生效 |
 | 镜像仓库 | GHCR / 华为 SWR，及最终 tag |
 | 异地备份 | restic 仓库与凭据保管方式 |
 | 维护窗口 | `YYYY-MM-DD HH:mm`（Asia/Shanghai） |

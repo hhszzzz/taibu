@@ -37,14 +37,24 @@ echo "[deploy] pull ${TAG}"
 compose pull
 compose build backup
 compose up -d db redis
+
+# The one-shot services run here, explicitly, so a failure stops the rollout
+# before web and worker are replaced. The long-running services then start with
+# --no-deps: without it compose re-runs every `depends_on: service_completed_
+# successfully` one-shot again, which repeated the whole migration pass on each
+# deploy.
+echo "[deploy] one-shot setup"
+compose run --rm -T files-init
 compose run --rm -T db-setup
 compose run --rm -T migrate
+
+echo "[deploy] start services"
 if [ "$EDGE_MODE" = "host" ]; then
   # Switching from container edge must release 80/443 before host Caddy owns them.
   compose --profile edge stop caddy >/dev/null 2>&1 || true
-  compose up -d web worker backup
+  compose up -d --no-deps web worker backup
 else
-  compose --profile edge up -d web worker caddy backup
+  compose --profile edge up -d --no-deps web worker caddy backup
 fi
 
 echo "[deploy] waiting for readiness"

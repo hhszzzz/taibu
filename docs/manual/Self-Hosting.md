@@ -130,18 +130,21 @@ SMTP_FROM=noreply@mingai.fun
 
 ### 域名 DNS 记录
 
-在 Brevo 的 **Senders, Domains & Dedicated IPs → Domains** 里添加 `mingai.fun`，它会给出要加的记录。送达率主要取决于这些记录，缺一条就可能进垃圾箱：
+Brevo 用的是共享 IP，此时**不需要改 SPF**：发信信封的 Return-Path 落在 Brevo 自己的域名（`smtp-relay.sendinblue.com`）上，SPF 由 Brevo 那边通过；DMARC 对齐靠你自己域名的 DKIM 签名。只有开通独立 IP 才需要把 Brevo 加进 SPF。
 
-```dns
-mingai.fun                       TXT  "v=spf1 include:spf.brevo.com -all"
-mail._domainkey.mingai.fun       TXT  "v=DKIM1; k=rsa; p=<Brevo 给出的公钥>"
-brevo._domainkey.mingai.fun      TXT  "v=DKIM1; k=rsa; p=<Brevo 给出的公钥>"
-_dmarc.mingai.fun                TXT  "v=DMARC1; p=quarantine; rua=mailto:dmarc@mingai.fun"
-```
+在 Brevo 的 **Senders, Domains & Dedicated IPs → Domains** 里添加 `mingai.fun`，点 **Authenticate this email domain**，它会给出三条记录：
 
-DKIM 的选择器与公钥、SPF 的 `include:` 值都以 Brevo 页面实际显示的为准——不同时期开通的账号给出的记录条数可能不同。
+| 记录 | 用途 |
+|---|---|
+| Brevo code（TXT） | 证明域名归属 |
+| DKIM 1（CNAME 或 TXT） | 签名密钥，selector 由 Brevo 生成 |
+| DKIM 2（CNAME 或 TXT） | 第二个 selector |
 
-**已有 SPF 记录不能重复添加。** 若 `mingai.fun` 已有 SPF（例如 Cloudflare 邮件路由留下的 `include:_spf.mx.cloudflare.net`），要把 `include:spf.brevo.com` 合并进同一条记录；两条 SPF 记录会让校验直接失败。
+**selector 名称以 Brevo 页面显示的为准**，不同账号可能给出 `mail._domainkey`、`brevo1._domainkey` 或 CNAME 指向 `*.dkim.brevo.com` 的形式。照抄页面上的「Name」和「Value」即可，不要套用别处的示例。
+
+DMARC 已有就保持不动，先留在 `p=none` 观察；等 SPF/DKIM 都验证通过、报告里没有异常，再改成 `p=quarantine`。
+
+**同一域名下可以并存多个 DKIM selector**（比如 Cloudflare 邮件路由的 `cf2024-1._domainkey` 和 Resend 的 `resend._domainkey`），互不冲突。唯一不能重复的是 SPF：一个域名只能有一条 SPF TXT，新增发送方必须合并进同一条。
 
 域名验证通过前，Brevo 只允许发往账号本人邮箱，所以先验证域名再切生产。
 

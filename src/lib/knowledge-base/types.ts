@@ -60,12 +60,6 @@ export interface KnowledgeBase {
     updated_at: string;
 }
 
-export interface KnowledgeBaseInput {
-    name: string;
-    description?: string | null;
-    weight?: KnowledgeBaseWeight;
-}
-
 export type SearchConfig = 'simple' | 'english';
 
 export type SearchMethod = 'fts' | 'trigram' | 'vector';
@@ -107,10 +101,6 @@ export interface SearchOptions {
         enableTrigram: boolean;
         trigramThreshold: number;
     }>;
-}
-
-export interface SearchResult {
-    results: RankedResult[] | SearchCandidate[];
 }
 
 export interface KnowledgeHit {

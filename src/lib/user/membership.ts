@@ -159,13 +159,6 @@ export function describePricingPlan(plan: PricingPlan): { summary: string; perks
 }
 
 /**
- * 获取积分上限
- */
-export function getCreditLimit(type: MembershipType): number {
-    return getPlanConfig(type).creditLimit;
-}
-
-/**
  * 获取用户会员信息
  */
 export async function getMembershipInfoResult(userId: string): Promise<MembershipLookupResult> {

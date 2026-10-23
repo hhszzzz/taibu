@@ -347,26 +347,3 @@ export function generateLiuyaoChartText(
 export function getHexagramBrief(name: string): string {
     return getHexagramBriefMap()[name] || '此卦宜结合问题、用神与动变条件综合判断。';
 }
-
-export function getLiuShenMeaning(liuShen: string): string {
-    const meanings: Record<string, string> = {
-        青龙: '主喜庆、贵人、顺势之助。',
-        朱雀: '主言语、文书、消息与争辩。',
-        勾陈: '主迟滞、牵连、田土与反复。',
-        螣蛇: '主虚惊、疑虑、反复与牵绊。',
-        白虎: '主压力、伤病、是非与急事。',
-        玄武: '主隐情、暗事、拖延与虚实难辨。',
-    };
-    return meanings[liuShen] || '需结合六亲、旺衰与动变判断。';
-}
-
-export function getLiuQinMeaning(liuQin: LiuQin): string {
-    const meanings: Record<LiuQin, string> = {
-        父母: '文书、证件、长辈、学业、房屋车辆',
-        兄弟: '同辈、合作、竞争、分财',
-        子孙: '子女后辈、成果、医药、解忧',
-        妻财: '钱财、资源、交易、经营、男测感情线索',
-        官鬼: '事业、规则、压力、风险、疾病、女测感情线索',
-    };
-    return meanings[liuQin];
-}

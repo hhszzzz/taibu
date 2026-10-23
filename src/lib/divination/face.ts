@@ -224,10 +224,3 @@ export function generateFaceTitle(analysisType: string = 'full'): string {
     const typeName = typeInfo?.name || '综合分析';
     return `面相分析 - ${typeName}`;
 }
-
-/**
- * 获取分析类型信息
- */
-export function getFaceAnalysisType(id: string): FaceAnalysisType | undefined {
-    return FACE_ANALYSIS_TYPES.find(t => t.id === id);
-}

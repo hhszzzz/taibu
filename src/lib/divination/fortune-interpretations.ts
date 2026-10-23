@@ -260,13 +260,6 @@ export function getDimensionAdvice(
 }
 
 /**
- * 根据模式获取关键日期描述
- */
-export function getKeyDateDescription(desc: string, mode: InterpretationMode): string {
-    return KEY_DATE_DESCRIPTIONS[desc]?.[mode] || desc;
-}
-
-/**
  * 生成完整的运势解读
  */
 export function generateFortuneInterpretation(

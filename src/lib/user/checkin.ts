@@ -16,14 +16,6 @@ import { getUserCreditInfo, getMembershipCreditLimit } from '@/lib/user/credits'
 type CheckinUserSeed = UserRecordSeedInput;
 type CheckinOptions = { db?: ScopedDb; user?: CheckinUserSeed };
 
-export interface CheckinRecord {
-    id: string;
-    userId: string;
-    checkinDate: string;
-    rewardCredits: number;
-    createdAt: string;
-}
-
 export interface CheckinStatus {
     canCheckin: boolean;
     lastCheckin: string | null;

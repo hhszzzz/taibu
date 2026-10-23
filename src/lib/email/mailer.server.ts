@@ -34,13 +34,6 @@ function getTransport(): Transporter | null {
   return cachedTransport;
 }
 
-/** Opens and authenticates a connection without sending anything. */
-export async function verifyMailer(): Promise<void> {
-  const transport = getTransport();
-  if (!transport) throw new Error('the log provider never opens a connection');
-  await transport.verify();
-}
-
 export async function sendMail(mail: OutgoingMail): Promise<void> {
   const transport = getTransport();
   if (!transport) {

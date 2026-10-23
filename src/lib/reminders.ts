@@ -24,16 +24,6 @@ export interface ReminderSubscription {
     notifySite: boolean;
 }
 
-export interface ScheduledReminder {
-    id: string;
-    userId: string;
-    reminderType: ReminderType;
-    scheduledFor: string;
-    content: Record<string, unknown>;
-    sent: boolean;
-    sentAt: string | null;
-}
-
 const REMINDER_CLAIM_TTL_MS = 5 * 60 * 1000;
 
 type ReminderNotificationPayload = {

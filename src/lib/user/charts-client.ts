@@ -161,14 +161,6 @@ export async function getUserCharts(scope: ChartRequestScope = {}): Promise<User
   return normalizeUserChartBundle(data);
 }
 
-export async function listSelectableCharts(): Promise<SelectableChart[]> {
-  const data = await getUserCharts();
-  return [
-    ...data.baziCharts.map((chart) => ({ ...chart, type: 'bazi' as const })),
-    ...data.ziweiCharts.map((chart) => ({ ...chart, type: 'ziwei' as const })),
-  ];
-}
-
 export function listSavedBaziCharts(bundle: UserChartBundle | null | undefined): SavedBaziChart[] {
   const rows = bundle?.baziCharts ?? [];
   return rows
@@ -186,11 +178,6 @@ export function selectPrimarySavedBaziChart(bundle: UserChartBundle | null | und
   return charts.find((chart) => chart.id === defaultId) || charts[0];
 }
 
-export async function loadPrimarySavedBaziChart(): Promise<SavedBaziChart | null> {
-  const bundle = await getUserCharts();
-  return selectPrimarySavedBaziChart(bundle);
-}
-
 export async function loadSavedChart(type: UserChartType, id: string, scope: ChartRequestScope = {}) {
   const result = await requestBrowserJson<{ chart?: Record<string, unknown> | null }>(`/api/${type}/charts?id=${encodeURIComponent(id)}`, {
     ...chartRequestInit(scope),
@@ -202,11 +189,6 @@ export async function loadSavedChart(type: UserChartType, id: string, scope: Cha
   }
 
   return result.data?.chart ?? null;
-}
-
-export async function loadSavedBaziChart(id: string) {
-  const chart = await loadSavedChart('bazi', id);
-  return toSavedBaziChart(chart);
 }
 
 export async function createSavedChart(type: UserChartType, payload: Record<string, unknown>, scope: ChartRequestScope = {}) {

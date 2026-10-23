@@ -16,36 +16,6 @@ export const FEATURE_MODULE_IDS = [
 
 export type FeatureModuleId = typeof FEATURE_MODULE_IDS[number];
 
-export const FEATURE_MODULE_LABELS: Record<FeatureModuleId, string> = {
-  bazi: '八字',
-  hepan: '八字合盘',
-  ziwei: '紫微斗数',
-  tarot: '塔罗',
-  liuyao: '六爻',
-  qimen: '奇门遁甲',
-  daliuren: '大六壬',
-  meihua: '梅花易数',
-  xiaoliuren: '小六壬',
-  face: '面相',
-  palm: '手相',
-  mbti: 'MBTI',
-  chat: 'AI 功能',
-  daily: '日运',
-  monthly: '月运',
-  records: '命理记录',
-  community: '社区',
-  'knowledge-base': '知识库',
-  'mcp-service': 'MCP 服务',
-  checkin: '签到',
-  credits: '积分流水',
-  charts: '我的命盘',
-  'ai-personalization': '个性化',
-  notifications: '消息通知',
-  upgrade: '订阅',
-  help: '帮助',
-  agent: 'Agent 任务',
-};
-
 const FEATURE_PREFIX = 'feature_disabled:';
 const FEATURE_TOGGLE_CACHE_TTL_MS = 30_000;
 

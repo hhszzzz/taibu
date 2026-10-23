@@ -56,7 +56,3 @@ export const SETTINGS_CENTER_TAB_ICONS: Record<SettingsCenterTab, ComponentType<
   'admin-features': withDefaultSize(FeatureFlagsIcon),
   'admin-ai-services': withDefaultSize(BotIcon),
 };
-
-export function getSettingsCenterTabIcon(tab: SettingsCenterTab) {
-  return SETTINGS_CENTER_TAB_ICONS[tab];
-}

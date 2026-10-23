@@ -6,10 +6,7 @@
 
 import { systemDb } from '@/lib/db/context.server';
 import { json } from '@/lib/db/sql-helpers';
-import {
-    ANNUAL_REPORT_FEATURE_NAMES,
-    type AnnualReportData,
-} from '@/lib/annual-report-shared';
+import type { AnnualReportData } from '@/lib/annual-report-shared';
 import { toFeatureUsageBucket } from '@/lib/source-contracts';
 
 // ===== 报告生成 =====
@@ -215,5 +212,3 @@ export async function getReportSummary(
  * 功能名称映射
  */
 export type { AnnualReportData } from '@/lib/annual-report-shared';
-
-export const FEATURE_NAMES = ANNUAL_REPORT_FEATURE_NAMES;

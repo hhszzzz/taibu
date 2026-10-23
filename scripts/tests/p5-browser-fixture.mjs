@@ -609,7 +609,6 @@ export async function build(outputDirectory) {
           export const getSessionSnapshot = async () => payload();
           export const getUserSnapshot = async () => ({ data: { user: user() }, error: null });
           export const getSession = async () => session();
-          export const getCurrentUser = async () => user();
           export const invalidateBrowserSessionCache = () => {};
           export const revalidateBrowserSession = async () => { window.fixtureAuth.revalidations++; return payload(); };
           export const onAuthStateChange = cb => { listeners.add(cb); return { data: { subscription: { unsubscribe: () => listeners.delete(cb) } } }; };

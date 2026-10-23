@@ -57,11 +57,6 @@ export function setChatMode(mode: 'agent' | 'plain'): void {
     changeMode?.(mode);
 }
 
-/** 当前是否有页面（/chat）接管这个控件。 */
-export function hasChatModeControl(): boolean {
-    return changeMode !== null;
-}
-
 /**
  * 本地偏好键——与 `use-agent-chat` 的持久化共用同一个键，
  * 全站侧栏在 /chat 之外读它显示当前「对话方式」。

@@ -124,22 +124,6 @@ export function calculateTenGod(dayStem: HeavenlyStem, targetStem: HeavenlyStem)
 /**
  * 获取十神的解释
  */
-export function getTenGodDescription(tenGod: TenGod): string {
-    const descriptions: Record<TenGod, string> = {
-        '比肩': '代表兄弟、朋友、同辈，体现独立自主、竞争合作',
-        '劫财': '代表竞争对手、损耗，体现冲动、好胜、慷慨',
-        '食神': '代表才华、福气，体现温和、聪慧、享受生活',
-        '伤官': '代表创造力、叛逆，体现才华横溢但傲气较重',
-        '偏财': '代表意外之财、父亲，体现人缘好、理财能力强',
-        '正财': '代表稳定收入、妻子，体现勤劳务实、财运稳定',
-        '七杀': '代表权威、压力，体现魄力强但容易有冲突',
-        '正官': '代表事业、丈夫，体现正直守规、有领导能力',
-        '偏印': '代表学问、艺术，体现思维独特、富有创意',
-        '正印': '代表母亲、学历，体现温和善良、学识渊博',
-    };
-    return descriptions[tenGod];
-}
-
 /**
  * 获取日主性格特点
  */
@@ -216,6 +200,7 @@ export interface LiuRiInfo {
     diShi: string;
     shenSha: string[];
 }
+
 /**
  * 神煞信息（按柱分类）
  */

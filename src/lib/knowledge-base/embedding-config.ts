@@ -1,5 +1,4 @@
 import type { ScopedDb } from '@/lib/db/context.server';
-import { getEffectiveMembershipType } from '@/lib/user/membership-server';
 import { DEFAULT_EMBEDDING_MODEL_ID } from '@/lib/ai/ai-config';
 import { getModelConfigAsync, getModelsByUsageTypeAsync } from '@/lib/server/ai-config';
 import { applySourceToModel, getOrderedModelSources } from '@/lib/ai/source-runtime';
@@ -58,19 +57,6 @@ async function getEmbeddingConfig(): Promise<EmbeddingConfig> {
 export async function getEmbeddingDimensionAsync(): Promise<number> {
     const config = await getEmbeddingConfig();
     return config.dimension;
-}
-
-export function getEmbeddingDimension(): number {
-    const configuredId = process.env.KNOWLEDGE_BASE_EMBEDDING_MODEL_ID || DEFAULT_MODEL;
-    return getEmbeddingMetadata(configuredId).dimension;
-}
-
-export async function hasVectorCapability(userId: string, db: ScopedDb): Promise<boolean> {
-    const membership = await getEffectiveMembershipType(userId, { db });
-    if (membership !== 'pro') return false;
-
-    const dim = await getEmbeddingDimensionAsync();
-    return await checkVectorIndexExists(dim, db);
 }
 
 export async function checkVectorIndexExists(dim: number, db: ScopedDb): Promise<boolean> {

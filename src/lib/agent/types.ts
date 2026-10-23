@@ -134,6 +134,7 @@ export interface DomainToolResult<T = unknown> {
   canonicalText?: string;
   usage?: Usage;
 }
+
 /** Business tools have no dependency on an agent loop implementation. */
 export interface DomainTool<T extends TSchema = TSchema, R = unknown> extends Tool<T> {
   label: string;
@@ -156,13 +157,6 @@ export interface AgentRunView {
   configuration?: import('@/lib/chat/model-settings').NextTaskConfiguration;
   /** Settled credit state of this task: one charge covers its replies and follow-ups. */
   billing?: 'charged' | 'exempt' | 'refunded';
-}
-
-export interface AgentRunEvent {
-  sequence: number;
-  runId: string;
-  type: "snapshot" | "terminal";
-  run: AgentRunView;
 }
 
 export const AGENT_ACTIVE_STATUSES: AgentRunStatus[] = [

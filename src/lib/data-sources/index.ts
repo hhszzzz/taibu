@@ -8,11 +8,6 @@ export async function getProvider(type: DataSourceType): Promise<DataSourceProvi
     return await loader();
 }
 
-export async function getUserDataSources(userId: string, ctx?: DataSourceQueryContext): Promise<DataSourceSummary[]> {
-    const { items } = await getUserDataSourcesWithErrors(userId, ctx);
-    return items;
-}
-
 export type UserDataSourcesResult = {
     items: DataSourceSummary[];
     errors: Array<{ type: DataSourceType; message: string }>;
@@ -44,16 +39,4 @@ export async function getUserDataSourcesWithErrors(
     const results = lists.flat();
     results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return { items: results, errors };
-}
-
-export async function resolveDataSources(
-    refs: Array<{ type: DataSourceType; id: string }>,
-    userId: string,
-    ctx?: DataSourceQueryContext
-): Promise<Array<{ type: DataSourceType; id: string; content: string }>> {
-    return Promise.all(refs.map(async ({ type, id }) => {
-        const provider = await getProvider(type);
-        const data = await provider.get(id, userId, ctx);
-        return { type, id, content: data ? await provider.formatForAI(data, ctx) : '' };
-    }));
 }

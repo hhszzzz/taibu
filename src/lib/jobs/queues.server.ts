@@ -1,5 +1,5 @@
 import 'server-only';
-import { Queue, type Job } from 'bullmq';
+import { Queue } from 'bullmq';
 
 import { createBullConnection } from '@/lib/redis.server';
 
@@ -7,7 +7,6 @@ export const MAINTENANCE_QUEUE = 'taibu-maintenance';
 export const JOB_QUEUE_PREFIX = 'taibu:bull';
 
 export type MaintenanceJobData = Record<string, never>;
-export type MaintenanceJob = Job<MaintenanceJobData>;
 
 let maintenanceQueue: Queue<MaintenanceJobData> | null = null;
 

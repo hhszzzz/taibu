@@ -63,13 +63,6 @@ export interface ZiweiFormData extends BirthTimeResolution {
 
 const EARTHLY_BRANCHES = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
 
-const PALACE_LAYOUT_ORDER = [
-    5, 6, 7, 8,    // 巳午未申 (第一行)
-    4, -1, -1, 9,  // 辰-中空-酉 (第二行)
-    3, -1, -1, 10, // 卯-中空-戌 (第三行)
-    2, 1, 0, 11,   // 寅丑子亥 (第四行)
-];
-
 // 宫名统一为对外的「交友」：iztro 原名为「仆役」，core 输出前已归一为「交友」
 const PALACE_TEXT_ORDER = ['命宫', '兄弟', '夫妻', '子女', '财帛', '疾厄', '迁移', '交友', '官禄', '田宅', '福德', '父母'];
 
@@ -111,18 +104,6 @@ export function calculateZiweiChartBundle(formData: ZiweiFormData): {
         output,
         astrolabe,
     };
-}
-
-/**
- * 获取宫位的传统排列顺序（用于 4x3 布局）
- * 返回索引数组，按照：
- *   [巳] [午] [未] [申]
- *   [辰]         [酉]
- *   [卯]         [戌]
- *   [寅] [丑] [子] [亥]
- */
-export function getPalaceLayoutOrder(): number[] {
-    return PALACE_LAYOUT_ORDER;
 }
 
 /**
@@ -444,13 +425,6 @@ export function getTriangleSquare(palaceIndex: number): {
         triangle: [self, left, right],
         square: [self, opposite, left, right],
     };
-}
-
-/**
- * 获取宫位名称对应的索引
- */
-export function getPalaceIndexByName(output: CoreZiweiOutput, name: string): number {
-    return output.palaces.findIndex((palace) => palace.name === name);
 }
 
 function getTraditionalTextPalaces(output: CoreZiweiOutput) {

@@ -76,17 +76,6 @@ export function toFeatureUsageBucket(sourceType?: string | null): FeatureUsageBu
   return SOURCE_META[normalizeConversationSourceType(sourceType)].featureUsageBucket;
 }
 
-export function getSourceQuestion(
-  sourceType?: string | null,
-  sourceData?: Record<string, unknown> | null,
-): string | null {
-  if (!sourceData) return null;
-  const field = SOURCE_META[normalizeConversationSourceType(sourceType)].questionField;
-  if (!field) return null;
-  const value = sourceData[field];
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
-}
-
 // ===== Analysis source types (merged from ai/source-contract.ts) =====
 
 export const ANALYSIS_SOURCE_TYPES = CONVERSATION_SOURCE_TYPES.filter(
@@ -167,10 +156,6 @@ export type AnalysisSourceDataMap = {
 export type AnalysisSourceData<T extends AnalysisSourceType = AnalysisSourceType> =
   AnalysisSourceDataMap[T];
 
-export function isAnalysisSourceType(value: unknown): value is AnalysisSourceType {
-  return typeof value === 'string' && ANALYSIS_SOURCE_TYPES.includes(value as AnalysisSourceType);
-}
-
 export function normalizeAnalysisSourceType(value?: string | null): AnalysisSourceType {
   const normalized = normalizeConversationSourceType(value);
   return normalized === 'dream' ? 'chat' : normalized;
@@ -184,13 +169,6 @@ export function normalizeAnalysisSourceData<T extends AnalysisSourceType>(
     schema_version: 1,
     ...sourceData,
   };
-}
-
-export function getSourceDataQuestion(sourceData?: Record<string, unknown> | null): string | undefined {
-  const question = sourceData?.question;
-  return typeof question === 'string' && question.trim().length > 0
-    ? question.trim()
-    : undefined;
 }
 
 export function getSourceDataModelId(sourceData?: Record<string, unknown> | null): string | null {

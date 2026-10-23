@@ -48,12 +48,6 @@ export type AuthResult = {
     error?: BrowserApiError;
 };
 
-export type LoginAttemptStatus = {
-    blocked: boolean;
-    remainingAttempts: number;
-    error: BrowserApiError | null;
-};
-
 type SessionPayload = {
     data: { session: Session | null; user: AuthUser | null };
     error: BrowserApiError | null;
@@ -219,12 +213,6 @@ export async function getSession(): Promise<Session | null> {
     return (result.data?.session ?? null) as Session | null;
 }
 
-export async function getCurrentUser(): Promise<AuthUser | null> {
-    const result = await authClient.getSession();
-    if (result.error) throw new Error(result.error.message || '获取会话失败');
-    return (result.data?.user ?? null) as AuthUser | null;
-}
-
 export async function signInWithEmail(email: string, password: string): Promise<AuthResult> {
     const { error } = await authClient.signIn.email({ email, password });
     if (error) {
@@ -375,10 +363,6 @@ export async function resetPasswordWithOTP(
     const { error } = await authClient.emailOtp.resetPassword({ email, otp: token, password: newPassword });
     if (error) return { success: false, error: normalizeAuthError(error) ?? undefined };
     return { success: true };
-}
-
-export async function checkLoginAttempts(_email: string): Promise<LoginAttemptStatus> {
-    return { blocked: false, remainingAttempts: 5, error: null };
 }
 
 export async function recordLoginAttempt(_email: string, _success: boolean): Promise<void> {

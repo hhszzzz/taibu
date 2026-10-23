@@ -56,23 +56,6 @@ export function isValidChatMessagePayload(value: unknown): value is ChatMessage 
     return true;
 }
 
-function toStoredConversationMessage(
-    conversationId: string,
-    message: ChatMessage,
-    sequence: number
-) {
-    const { id, role, content, createdAt, ...metadata } = message;
-    return {
-        conversation_id: conversationId,
-        sequence,
-        message_id: id,
-        role,
-        content,
-        metadata,
-        created_at: createdAt,
-    };
-}
-
 function fromStoredConversationMessage(row: StoredConversationMessageRow): ChatMessage {
     return {
         id: row.message_id,
@@ -191,8 +174,4 @@ export async function loadConversationAnalysisMessage(
             error,
         };
     }
-}
-
-export function mapConversationMessagesForInsert(conversationId: string, messages: ChatMessage[]) {
-    return messages.map((message, index) => toStoredConversationMessage(conversationId, message, index));
 }

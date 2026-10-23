@@ -17,10 +17,6 @@ export type UserIdentityProfile = {
   identity: string;
 };
 
-export const DEFAULT_NAV_ORDER = [
-  'bazi', 'hepan', 'ziwei', 'liuyao', 'meihua', 'qimen', 'daliuren', 'xiaoliuren', 'tarot', 'face', 'palm', 'mbti', 'daily', 'monthly',
-] as const;
-
 export const DEFAULT_TOOL_ORDER = [
   'chat', 'records', 'community',
 ] as const;
@@ -117,9 +113,6 @@ export const USER_SETTINGS_COLUMNS = [
   'default_ziwei_chart_id',
 ] as const;
 
-/** Legacy PostgREST projection; removed once B3 finishes migrating its readers. */
-export const USER_SETTINGS_SELECT = USER_SETTINGS_COLUMNS.join(', ');
-
 export function normalizeIdentityUserProfile(raw: unknown): UserIdentityProfile | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     return null;
@@ -215,14 +208,6 @@ export async function getUserSettingsSnapshot(
       error,
     };
   }
-}
-
-export async function getChartPromptDetailLevel(
-  db: ScopedDb,
-  userId: string,
-): Promise<ChartPromptDetailLevel> {
-  const { settings } = await getUserSettingsSnapshot(db, userId);
-  return settings.chartPromptDetailLevel;
 }
 
 export function buildUserSettingsUpdatePayload(

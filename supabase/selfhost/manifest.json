@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "baselineRevision": "5725dde",
-  "sourceFingerprint": "6d37e111538c15e11af66bd1e11a22c0b31d36fe25d3ca0137faeed1e7ce0ebd",
+  "sourceFingerprint": "836f43d963e6dc41273b189bc52fbf2af50ddd714f3d5d11e5e0705db96c7915",
   "target": "empty local self-hosted application schema; NOT production parity or a migration replay",
   "bootstrapOrder": [
     "platform roles/extensions",
@@ -238,7 +238,7 @@
     },
     {
       "file": "src/lib/app-settings.ts",
-      "sha256": "2e0b456770b063d90ff2638b69e0ddbc9f8dcdabcf84ac98cbe244c3b885d123"
+      "sha256": "a16e60e6fb197d1ac9cf85b7595dc95f32d2f74cfd70a29c6e8295b64c6d5f26"
     },
     {
       "file": "scripts/selfhost-schema.mjs",
@@ -822,15 +822,6 @@
         "src/lib/agent/tools.server.ts"
       ],
       "source": "supabase/migrations/20261008_180000_agent_competence.sql",
-      "status": "defined",
-      "reason": null
-    },
-    {
-      "name": "batch_update_vectors",
-      "callers": [
-        "src/lib/knowledge-base/ingest.ts"
-      ],
-      "source": "supabase/selfhost/source-rpcs.sql",
       "status": "defined",
       "reason": null
     },
@@ -1849,10 +1840,6 @@
         {
           "file": "src/lib/knowledge-base/ingest.ts",
           "kind": "literal-kysely"
-        },
-        {
-          "file": "src/lib/knowledge-base/ingest.ts",
-          "kind": "literal-kysely"
         }
       ]
     },
@@ -2052,10 +2039,6 @@
           "kind": "literal-kysely"
         },
         {
-          "file": "src/lib/mentions.ts",
-          "kind": "literal-kysely"
-        },
-        {
           "file": "src/lib/server/chat/bootstrap.ts",
           "kind": "literal-kysely"
         },
@@ -2076,10 +2059,6 @@
         },
         {
           "file": "src/app/api/knowledge-base/archive/route.ts",
-          "kind": "literal-kysely"
-        },
-        {
-          "file": "src/lib/knowledge-base/ingest.ts",
           "kind": "literal-kysely"
         },
         {
@@ -2259,10 +2238,6 @@
         },
         {
           "file": "src/lib/data-sources/record.ts",
-          "kind": "literal-kysely"
-        },
-        {
-          "file": "src/lib/knowledge-base/ingest.ts",
           "kind": "literal-kysely"
         },
         {
@@ -2746,7 +2721,7 @@
   "artifacts": [
     {
       "file": "supabase/selfhost/001-application.sql",
-      "sha256": "275309a472f03bc04b9d23e3efaa3cfa9b15e9e0fec7a64802a717b894cdc042"
+      "sha256": "ab866e09334f6c001953a99b5d913798305d24ad3d7b823a4821f356b424e6fb"
     },
     {
       "file": "supabase/selfhost/002-storage.sql",

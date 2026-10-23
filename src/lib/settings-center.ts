@@ -147,7 +147,6 @@ export function getSettingsCenterDisabledState(
 export const SETTINGS_CENTER_EVENT = 'taibu:settings-center:change';
 export const SETTINGS_CENTER_NAVIGATE_EVENT = 'taibu:settings-center:navigate';
 export const SETTINGS_CENTER_LEAVE_EVENT = 'taibu:settings-center:leave';
-const SETTINGS_CENTER_STATE_KEY = '__taibuSettingsCenter';
 export type SettingsCenterCloseMode = 'back' | 'replace';
 
 export function isSettingsCenterTab(value: unknown): value is SettingsCenterTab {
@@ -184,11 +183,6 @@ function parseSettingsCenterHashParts(hash: string | null | undefined): {
     tab: tab || null,
     subpath: rest.length > 0 ? rest.join('/') : null,
   };
-}
-
-export function buildSettingsCenterHash(tab: SettingsCenterTab, options?: { subpath?: string | null }): string {
-  const normalizedSubpath = normalizeSettingsCenterSubpath(options?.subpath);
-  return `#${SETTINGS_CENTER_NAMESPACE}/${tab}${normalizedSubpath ? `/${normalizedSubpath}` : ''}`;
 }
 
 export function parseSettingsCenterHash(hash: string | null | undefined): SettingsCenterTab | null {
@@ -242,13 +236,6 @@ export function subscribeSettingsCenterLocation(listener: () => void): () => voi
     window.removeEventListener('popstate', listener);
     window.removeEventListener(SETTINGS_CENTER_EVENT, listener as EventListener);
   };
-}
-
-export function getSettingsCenterCloseMode(
-  state: unknown = typeof window !== 'undefined' ? window.history.state : null,
-): SettingsCenterCloseMode {
-  const currentState = state as Record<string, unknown> | null;
-  return currentState?.[SETTINGS_CENTER_STATE_KEY] === true ? 'back' : 'replace';
 }
 
 export function parseSettingsCenterPath(pathname: string | null | undefined): { tab: SettingsCenterTab; subpath: string | null } | null {

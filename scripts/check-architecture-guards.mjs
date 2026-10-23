@@ -531,11 +531,6 @@ mustNotMatch(
   /NAV_TO_FEATURE_ID/u,
   'navigation registry should not re-export the removed NAV_TO_FEATURE_ID shim',
 );
-mustMatch(
-  'src/lib/user/settings.ts',
-  /DEFAULT_NAV_ORDER\s*=\s*\[[^\]]*'qimen'[^\]]*'daliuren'[^\]]*'daily'[^\]]*'monthly'/u,
-  'default nav order should keep qimen, daliuren, daily, and monthly in the main navigation list',
-);
 mustNotMatch(
   'src/lib/user/settings.ts',
   /DEFAULT_TOOL_ORDER\s*=\s*\[[^\]]*'daily'/u,

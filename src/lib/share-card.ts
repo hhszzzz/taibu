@@ -52,28 +52,6 @@ export async function captureToBlob(options: ShareCardOptions): Promise<Blob> {
 }
 
 /**
- * 将 DOM 元素转换为 Data URL
- */
-export async function captureToDataURL(options: ShareCardOptions): Promise<string> {
-    const {
-        element,
-        quality = 0.95,
-        backgroundColor = '#ffffff',
-        scale = 2
-    } = options;
-
-    const canvas = await html2canvas(element, {
-        backgroundColor,
-        scale,
-        useCORS: true,
-        logging: false,
-        allowTaint: true,
-    });
-
-    return canvas.toDataURL('image/png', quality);
-}
-
-/**
  * 下载分享卡片图片
  */
 export async function downloadShareCard(

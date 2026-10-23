@@ -51,14 +51,6 @@ const LazyAdminAIServicesContent = lazy(async () => ({
   default: (await import('@/components/settings/AccountAdminPanels')).AdminAIServicesContent,
 }));
 
-export type SettingsCenterTabItem = {
-  id: SettingsCenterTab;
-  label: string;
-  group: string;
-  icon: ComponentType<{ className?: string; size?: number | string }>;
-  disabled: boolean;
-};
-
 function SettingsPanelFallback() {
   return (
     <div className="flex min-h-[240px] items-center justify-center rounded-lg border border-border bg-background">

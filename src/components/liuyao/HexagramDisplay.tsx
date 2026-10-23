@@ -20,7 +20,6 @@ import {
     KONG_WANG_LABELS,
 } from '@/lib/divination/liuyao';
 import { parseTraditionalYaoPosition } from '@/lib/divination/liuyao-result-state';
-import { YaoLine } from '@/components/liuyao/YaoLine';
 import { wuxingTextClass } from '@/components/liuyao/wuxing-tone';
 import { ChartTarget, chartSelected, type ChartInteraction } from '@/components/visualization/ChartTarget';
 
@@ -345,22 +344,6 @@ export function HexagramDisplay({
                     )}
                 </div>
             )}
-        </div>
-    );
-}
-
-// 小型卦象预览
-export function HexagramPreview({ hexagram, yaos }: { hexagram: Hexagram; yaos: Yao[] }) {
-    const displayYaos = [...yaos].reverse();
-
-    return (
-        <div className="flex items-center gap-3">
-            <div className="flex flex-col gap-0.5">
-                {displayYaos.map((yao) => (
-                    <YaoLine key={yao.position} yao={yao} size="sm" />
-                ))}
-            </div>
-            <span className="font-display text-sm text-foreground">{hexagram.name}</span>
         </div>
     );
 }

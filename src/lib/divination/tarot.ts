@@ -51,17 +51,6 @@ export interface TarotSpread {
     cardCount: number;
 }
 
-export interface TarotReading {
-    id?: string;
-    userId?: string;
-    spreadId: string;
-    spreadName: string;
-    question?: string;
-    cards: DrawnCard[];
-    summary?: string;
-    createdAt: Date;
-}
-
 export interface TarotNumerologyCard {
     number: number;
     name: string;
@@ -653,8 +642,4 @@ export function createTarotDrawSession(
         conversationId: null,
         createdAt,
     };
-}
-
-export function getCardById(id: number): TarotCard | undefined {
-    return TAROT_CARDS.find((card) => card.id === id);
 }

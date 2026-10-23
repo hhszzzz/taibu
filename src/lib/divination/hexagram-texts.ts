@@ -261,13 +261,3 @@ export function getHexagramText(name: string): HexagramText | undefined {
 export function getYaoText(hexagramName: string, position: number): YaoText | undefined {
     return HEXAGRAM_TEXTS[hexagramName]?.yao.find((item) => item.position === position);
 }
-
-export function getHighEmphasisYaos(hexagramName: string): number[] {
-    return HEXAGRAM_TEXTS[hexagramName]?.yao
-        .filter((item) => item.emphasis === 'high')
-        .map((item) => item.position) ?? [];
-}
-
-export function hasTimingHint(hexagramName: string, position: number): string | undefined {
-    return getYaoText(hexagramName, position)?.timing;
-}

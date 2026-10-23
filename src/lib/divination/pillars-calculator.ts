@@ -38,13 +38,6 @@ export function getAvailableBranches(stem: HeavenlyStem): EarthlyBranch[] {
 }
 
 /**
- * 根据地支计算可选的天干（符合六十甲子规则）
- */
-export function getAvailableStems(branch: EarthlyBranch): HeavenlyStem[] {
-    return STEMS.filter(stem => isValidPillar(stem, branch));
-}
-
-/**
  * 根据年柱计算可能的月柱
  * 月柱的天干由年干推算：
  * 甲己之年丙作首，乙庚之年戊为头
@@ -80,34 +73,6 @@ export function calculateMonthPillars(yearPillar: PillarData): PillarData[] {
     }
 
     return monthPillars;
-}
-
-/**
- * 根据年月日柱计算可能的日柱
- * 日柱的计算需要结合实际的年月来确定
- * 由于日柱是连续的六十甲子循环，我们需要通过实际日期来计算
- */
-export function calculateDayPillars(
-    /* _yearPillar: PillarData, */
-    /* _monthPillar: PillarData */
-): PillarData[] {
-    // 日柱是六十甲子的连续循环，理论上所有60个组合都可能
-    // 但实际上需要结合具体的年月来确定可能的日柱
-    // 这里返回所有符合六十甲子规则的组合
-    const dayPillars: PillarData[] = [];
-
-    for (let stemIndex = 0; stemIndex < 10; stemIndex++) {
-        for (let branchIndex = 0; branchIndex < 12; branchIndex++) {
-            const stem = STEMS[stemIndex];
-            const branch = BRANCHES[branchIndex];
-
-            if (isValidPillar(stem, branch)) {
-                dayPillars.push({ stem, branch });
-            }
-        }
-    }
-
-    return dayPillars;
 }
 
 /**

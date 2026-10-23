@@ -1,10 +1,8 @@
 import { systemDb } from '@/lib/db/context.server';
-import { escapeLike } from '@/lib/db/sql-helpers';
-import type { DataSourceSummary } from '@/lib/data-sources/types';
 import type { DataSourceQueryContext } from '@/lib/data-sources/provider.server';
 import { getProvider } from '@/lib/data-sources';
 import { countTokens, truncateToTokens } from '@/lib/token-utils';
-import type { Mention, MentionTarget, MentionType } from '@/types/mentions';
+import type { Mention } from '@/types/mentions';
 
 export function parseMentions(content: string): Mention[] {
     const results: Mention[] = [];
@@ -43,54 +41,6 @@ export function stripMentionTokens(content: string): string {
         .replace(/@\{(\{[\s\S]*?\}|[^{}]+)\}/g, '')
         .replace(/\s{2,}/g, ' ')
         .trim();
-}
-
-export async function searchMentionTargets(
-    userId: string,
-    type: MentionType,
-    query: string,
-    ctx?: DataSourceQueryContext
-): Promise<MentionTarget[]> {
-    if (type === 'knowledge_base') {
-        return await searchKnowledgeBases(userId, query, ctx);
-    }
-
-    const provider = await getProvider(type);
-    const list = await provider.list(userId, ctx);
-    return list
-        .filter(item => {
-            const q = query.trim().toLowerCase();
-            if (!q) return true;
-            return item.name.toLowerCase().includes(q) || item.preview.toLowerCase().includes(q);
-        })
-        .slice(0, 20)
-        .map(item => ({
-            id: item.id,
-            type,
-            name: item.name,
-            preview: item.preview
-        }));
-}
-
-async function searchKnowledgeBases(userId: string, query: string, ctx?: DataSourceQueryContext): Promise<MentionTarget[]> {
-    const db = ctx?.db ?? systemDb();
-    const keyword = query.trim();
-    const rows = await db.tx((trx) => {
-        let q = trx
-            .selectFrom('knowledge_bases')
-            .select(['id', 'name', 'description'])
-            .where('user_id', '=', userId);
-        if (keyword) {
-            q = q.where('name', 'ilike', `%${escapeLike(keyword)}%`);
-        }
-        return q.orderBy('created_at', 'desc').limit(20).execute();
-    }).catch(() => []);
-    return rows.map((kb) => ({
-        id: kb.id,
-        type: 'knowledge_base',
-        name: kb.name,
-        preview: kb.description || '知识库'
-    }));
 }
 
 export async function resolveMention(mention: Mention, userId: string, ctx?: DataSourceQueryContext): Promise<string> {
@@ -199,13 +149,4 @@ async function resolveKnowledgeBase(kbId: string, userId: string, ctx?: DataSour
 
     const body = bodyParts.join('\n\n');
     return body ? `${header}\n\n${body}` : header;
-}
-
-export async function mentionFromSummary(summary: DataSourceSummary): Promise<Mention> {
-    return {
-        type: summary.type,
-        id: summary.id,
-        name: summary.name,
-        preview: summary.preview
-    };
 }

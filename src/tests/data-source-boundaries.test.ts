@@ -14,7 +14,7 @@ function source(file: string): string {
 }
 
 test('browser data-source DTOs/catalog neither import nor re-export server provider types', () => {
-    for (const file of ['types.ts', 'catalog.ts', 'icon-catalog.ts']) {
+    for (const file of ['types.ts', 'catalog.ts']) {
         const text = source(file);
         assert.doesNotMatch(text, /SupabaseClient|@supabase|provider\.server|data-sources\/manifest|lib\/api-utils/);
     }

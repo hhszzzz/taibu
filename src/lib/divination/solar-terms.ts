@@ -109,27 +109,8 @@ export function getNextSolarTerm(): SolarTerm | null {
 }
 
 /**
- * 获取某月的节气
- */
-export function getSolarTermsInMonth(year: number, month: number): SolarTerm[] {
-    const monthStr = `${year}-${String(month).padStart(2, '0')}`;
-    const allTerms = getYearSolarTerms(year);
-    return allTerms.filter(t => t.date.startsWith(monthStr));
-}
-
-/**
  * 获取节气含义
  */
 export function getSolarTermMeaning(termName: string): { meaning: string; tips: string } {
     return SOLAR_TERM_INFO[termName] || { meaning: '未知节气', tips: '' };
-}
-
-/**
- * 判断今天是否是节气
- */
-export function isTodaySolarTerm(): SolarTerm | null {
-    const today = new Date().toISOString().split('T')[0];
-    const year = new Date().getFullYear();
-    const terms = getYearSolarTerms(year);
-    return terms.find(t => t.date === today) || null;
 }

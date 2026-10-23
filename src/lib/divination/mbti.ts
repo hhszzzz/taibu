@@ -265,41 +265,6 @@ export function getDimensionDescription(dimension: Dimension): { name: string; d
 }
 
 /**
- * 获取随机问题子集（用于简化测试）
- */
-export function getRandomQuestions(questions: MBTIQuestion[], count: number = 28): MBTIQuestion[] {
-    // 确保每个维度对都有足够的问题
-    const dimensionQuestions: Record<string, MBTIQuestion[]> = {
-        'EI': [],
-        'SN': [],
-        'TF': [],
-        'JP': [],
-    };
-
-    // 分类问题
-    for (const q of questions) {
-        const dim = q.choice_a.value;
-        if (dim === 'E' || dim === 'I') dimensionQuestions['EI'].push(q);
-        else if (dim === 'S' || dim === 'N') dimensionQuestions['SN'].push(q);
-        else if (dim === 'T' || dim === 'F') dimensionQuestions['TF'].push(q);
-        else if (dim === 'J' || dim === 'P') dimensionQuestions['JP'].push(q);
-    }
-
-    // 从每个维度随机选择
-    const perDimension = Math.floor(count / 4);
-    const selected: MBTIQuestion[] = [];
-
-    for (const key of Object.keys(dimensionQuestions)) {
-        const pool = dimensionQuestions[key];
-        const shuffled = pool.sort(() => Math.random() - 0.5);
-        selected.push(...shuffled.slice(0, perDimension));
-    }
-
-    // 打乱顺序
-    return selected.sort(() => Math.random() - 0.5);
-}
-
-/**
  * 构建查看模式的默认结果数据
  */
 export function buildViewResult(type: string): TestResult | null {

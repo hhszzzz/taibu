@@ -25,14 +25,6 @@ export function getDimensionColor(key: FortuneDimensionKey): string {
   return getDimensionConfig(key).color;
 }
 
-export function getDimensionFillColor(key: FortuneDimensionKey, opacity = 0.2): string {
-  const hex = getDimensionConfig(key).color;
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
-}
-
 export const CHART_COLORS = {
   grid: 'var(--color-border)',
   axis: 'var(--color-foreground-secondary)',
@@ -54,11 +46,3 @@ export const WUXING_COLORS = {
 } as const;
 
 export type WuxingElement = keyof typeof WUXING_COLORS;
-
-export const SCORE_THRESHOLDS = {
-  excellent: 85,
-  good: 75,
-  fair: 65,
-  average: 55,
-  poor: 45,
-} as const;

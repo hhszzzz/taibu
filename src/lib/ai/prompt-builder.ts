@@ -23,13 +23,6 @@ import {
 } from '@/lib/visualization/prompt';
 import { formatPreviousChartsForPrompt, type ExtractedChart } from '@/lib/visualization/chart-data-extract';
 
-export interface PromptBuildResult {
-    prompt: string;
-    layers: PromptLayerDiagnostic[];
-    totalTokens: number;
-    budgetTotal: number;
-}
-
 type BaziChartInput = BaziPromptInput & {
     caseProfile?: Pick<BaziCaseProfile, 'masterReview' | 'ownerFeedback' | 'events'> | null;
 };

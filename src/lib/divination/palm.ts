@@ -191,10 +191,3 @@ export function generatePalmTitle(analysisType: string = 'full', handType: HandT
     const handLabel = getPalmHandLabel(handType) ?? '双手';
     return `手相分析 - ${handLabel}${typeName}`;
 }
-
-/**
- * 获取分析类型信息
- */
-export function getPalmAnalysisType(id: string): PalmAnalysisType | undefined {
-    return PALM_ANALYSIS_TYPES.find(t => t.id === id);
-}

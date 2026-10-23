@@ -1,6 +1,5 @@
 'use client';
 // Shares the chat sidebar's fold state between the app shell and the chat page.
-import { useSyncExternalStore } from 'react';
 
 /**
  * The chat sidebar is either the full list (260px) or the icon rail (60px).
@@ -47,12 +46,6 @@ export function createChatSidebarStore(storage: () => Pick<Storage, 'getItem' | 
 }
 
 const store = createChatSidebarStore(() => (typeof window === 'undefined' ? undefined : window.localStorage));
-const getServerSnapshot = () => SERVER_STATE;
 
 export const setChatWorkspaceOpen = store.setWorkspaceOpen;
 export const collapseChatSidebar = store.collapse;
-export const expandChatSidebar = store.expand;
-
-export function useChatSidebarCollapsed(): boolean {
-    return isChatSidebarCollapsed(useSyncExternalStore(store.subscribe, store.getSnapshot, getServerSnapshot));
-}

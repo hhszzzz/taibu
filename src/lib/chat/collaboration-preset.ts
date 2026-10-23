@@ -82,10 +82,3 @@ function subscribe(onChange: () => void) {
 export function useCollaborationPreset(userId: string | null): CollaborationPreset {
     return useSyncExternalStore(subscribe, () => readCollaborationPreset(userId), () => COLLABORATION_PRESET_DEFAULTS);
 }
-
-/** 预设加载到即将运行的成员列表（0–4 名）；成员模型不可用时回退到默认成员。 */
-export function buildCollaborationMembers(preset: CollaborationPreset, availableIds: readonly string[], fallback: () => AgentCollaborator[]): AgentCollaborator[] {
-    const usable = preset.members.filter(member => availableIds.includes(member.model));
-    if (usable.length > 0) return usable;
-    return fallback();
-}

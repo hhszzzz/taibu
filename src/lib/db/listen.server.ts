@@ -132,7 +132,3 @@ export async function waitForAgentSignal(
     signal?.addEventListener('abort', onAbort, { once: true });
   });
 }
-
-export function listenerReady(): boolean {
-  return connected;
-}

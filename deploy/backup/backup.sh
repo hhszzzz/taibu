@@ -26,6 +26,8 @@ case "$MODE" in
   offsite)
     : "${RESTIC_REPOSITORY:?}"
     : "${RESTIC_PASSWORD:?}"
+    # The repository is created once, on the first run against a new target.
+    restic cat config >/dev/null 2>&1 || restic init
     restic backup --tag taibu-db /backups
     restic backup --tag taibu-files /data/files
     ;;

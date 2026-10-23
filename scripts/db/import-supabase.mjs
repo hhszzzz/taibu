@@ -397,38 +397,15 @@ async function main() {
     await psql(sourceUrl, exportScript.join('\n'));
     report.warnings.push(`source snapshot exported in ${exportScript.filter((line) => line.startsWith('\\copy')).length} tables`);
 
-    const importScript = ['begin;', 'set local session_replication_role = replica;', ...identitySql];
-    for (const plan of plans) {
-      importScript.push(`\\copy public."${plan.table}" (${plan.columns.map((column) => `"${column}"`).join(', ')}) from '${plan.file.replaceAll("'", "''")}' with (format csv)`);
-    }
-    importScript.push('commit;');
-    await psql(targetUrl, importScript.join('\n'));
-
-    // Counts and multiset checksums, then orphan checks.
-    for (const plan of plans) {
-      const excludeSystem = plan.table === 'users' ? ` where id <> '${SYSTEM_USER}'` : '';
-      const sourceCount = Number(await scalar(source, `select count(*) from public."${plan.table}"${excludeSystem}`));
-      const targetCount = Number(await scalar(target, `select count(*) from public."${plan.table}"${excludeSystem}`));
-      // Backfilled profile rows are intentionally absent from the source.
-      const expectedTarget = plan.table === 'users' ? sourceCount + missingProfiles.size : sourceCount;
-      const entry = { table: plan.table, source: sourceCount, target: targetCount, checksum: 'skipped' };
-      if (expectedTarget !== targetCount) throw new Error(`${plan.table}: count ${expectedTarget} -> ${targetCount}`);
-      if (plan.table === 'users' && missingProfiles.size) entry.backfilled = missingProfiles.size;
-      if (plan.table !== 'users') {
-        const hashSql = (client) => client.query(`
-          select md5(coalesce(string_agg(h, '' order by h), '')) as digest from (
-            select md5(row_to_json(x)::text) as h from (
-              select ${plan.columns.map((column) => `"${column}"`).join(', ')} from public."${plan.table}"
-            ) x
-          ) y`);
-        const sourceDigest = (await hashSql(source)).rows[0].digest;
-        const targetDigest = (await hashSql(target)).rows[0].digest;
-        entry.checksum = sourceDigest === targetDigest ? 'ok' : 'mismatch';
-        if (sourceDigest !== targetDigest) throw new Error(`${plan.table}: checksum mismatch`);
-      }
-      report.tables.push(entry);
-    }
-
+    // Expected values are read before the load so the checks can run inside the
+    // load transaction: a mismatch must roll the whole import back, not leave a
+    // half-verified database behind.
+    const digestSql = (plan) => `
+      select md5(coalesce(string_agg(h, '' order by h), '')) as digest from (
+        select md5(row_to_json(x)::text) as h from (
+          select ${plan.columns.map((column) => `"${column}"`).join(', ')} from public."${plan.table}"
+        ) x
+      ) y`;
     const foreignKeys = (await target.query(`
       select c.conrelid::regclass::text as child,
              c.confrelid::regclass::text as parent,
@@ -440,13 +417,56 @@ async function main() {
       join pg_class t on t.oid = c.conrelid
       join pg_namespace n on n.oid = t.relnamespace
       where c.contype = 'f' and n.nspname = 'public'`)).rows;
+
+    const verifySql = [];
+    for (const plan of plans) {
+      const excludeSystem = plan.table === 'users' ? ` where id <> '${SYSTEM_USER}'` : '';
+      plan.sourceCount = Number(await scalar(source, `select count(*) from public."${plan.table}"${excludeSystem}`));
+      // Backfilled profile rows are intentionally absent from the source.
+      plan.expectedCount = plan.table === 'users' ? plan.sourceCount + missingProfiles.size : plan.sourceCount;
+      const countCondition = `(select count(*) from public."${plan.table}"${excludeSystem})`;
+      verifySql.push(`do $$ begin
+  if ${countCondition} <> ${plan.expectedCount} then
+    raise exception 'import count mismatch on ${plan.table}: % rows, expected ${plan.expectedCount}', ${countCondition};
+  end if;
+end $$;`);
+      if (plan.table !== 'users') {
+        plan.sourceDigest = (await source.query(digestSql(plan))).rows[0].digest;
+        verifySql.push(`do $$ begin
+  if (${digestSql(plan)}) <> '${plan.sourceDigest}' then
+    raise exception 'import checksum mismatch on ${plan.table}';
+  end if;
+end $$;`);
+      }
+    }
     for (const fk of foreignKeys) {
       if (fk.arity !== 1) { report.warnings.push(`composite foreign key ${fk.conname} was not orphan-checked`); continue; }
-      const orphans = Number(await scalar(target, `
-        select count(*) from ${fk.child} c
-        where c."${fk.child_column}" is not null
-          and not exists (select 1 from ${fk.parent} p where p."${fk.parent_column}" = c."${fk.child_column}")`));
-      if (orphans > 0) throw new Error(`${fk.conname}: ${orphans} orphan rows`);
+      verifySql.push(`do $$ begin
+  if exists (select 1 from ${fk.child} c where c."${fk.child_column}" is not null
+      and not exists (select 1 from ${fk.parent} p where p."${fk.parent_column}" = c."${fk.child_column}")) then
+    raise exception 'import left orphan rows on ${fk.conname}';
+  end if;
+end $$;`);
+    }
+
+    const importScript = ['begin;', 'set local session_replication_role = replica;', ...identitySql];
+    for (const plan of plans) {
+      importScript.push(`\\copy public."${plan.table}" (${plan.columns.map((column) => `"${column}"`).join(', ')}) from '${plan.file.replaceAll("'", "''")}' with (format csv)`);
+    }
+    importScript.push(...verifySql, 'commit;');
+    await psql(targetUrl, importScript.join('\n'));
+
+    // The transaction verified everything above; this pass only fills the report.
+    for (const plan of plans) {
+      const excludeSystem = plan.table === 'users' ? ` where id <> '${SYSTEM_USER}'` : '';
+      const entry = {
+        table: plan.table,
+        source: plan.sourceCount,
+        target: Number(await scalar(target, `select count(*) from public."${plan.table}"${excludeSystem}`)),
+        checksum: plan.table === 'users' ? 'skipped' : 'ok',
+      };
+      if (plan.table === 'users' && missingProfiles.size) entry.backfilled = missingProfiles.size;
+      report.tables.push(entry);
     }
     report.foreignKeysChecked = foreignKeys.filter((fk) => fk.arity === 1).length;
 

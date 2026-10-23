@@ -12,10 +12,15 @@
 		max_size 12MB
 	}
 
+	# The `file` matcher resolves against the site root, which defaults to the
+	# working directory (/srv in the caddy image). Setting it explicitly keeps
+	# `file maintenance/on` pointing at the mounted switch file.
+	root * /srv
+
 	# Maintenance switch: `/opt/taibu/maintenance/on` serves a static 503 for
 	# everyone except ADMIN_IP (space separated allow-list, e.g.
 	# "203.0.113.7 198.51.100.0/24").
-	@maintenance file /srv/maintenance/on
+	@maintenance file maintenance/on
 	@admin remote_ip {$ADMIN_IP}
 	handle @maintenance {
 		handle @admin {

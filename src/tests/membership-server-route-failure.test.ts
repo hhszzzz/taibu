@@ -1,47 +1,48 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
+import { createMockScopedDb } from './helpers/db-mock';
 import { mockAIFeatureState } from './helpers/route-mock';
 
-process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
-
 test('getEffectiveMembershipType should throw explicit error when user row lookup fails', async (t) => {
-  const apiUtilsModule = require('../lib/api-utils') as any;
+  const contextModule = require('../lib/db/context.server') as any;
   const membershipPath = require.resolve('../lib/user/membership-server');
-  const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
+  const originalSystemDb = contextModule.systemDb;
 
-  apiUtilsModule.getSystemAdminClient = () => ({
-    from() {
-      return {
-        select() {
-          return {
-            eq() {
-              return {
-                maybeSingle: async () => ({
-                  data: null,
-                  error: { message: 'db failed' },
-                }),
-              };
-            },
-          };
-        },
-      };
-    },
+  contextModule.systemDb = () => createMockScopedDb({
+    tx: async () => { throw new Error('db failed'); },
   });
 
   t.after(() => {
-    apiUtilsModule.getSystemAdminClient = originalGetSystemAdminClient;
+    contextModule.systemDb = originalSystemDb;
+    delete require.cache[membershipPath];
+  });
+
+  delete require.cache[membershipPath];
+  const { getEffectiveMembershipType, MembershipResolutionError } = require('../lib/user/membership-server') as typeof import('../lib/user/membership-server');
+
+  await assert.rejects(
+    () => getEffectiveMembershipType('user-1'),
+    (error: unknown) => error instanceof MembershipResolutionError && /获取会员状态失败/u.test(error.message),
+  );
+});
+
+test('getEffectiveMembershipType keeps a missing row an explicit failure rather than free', async (t) => {
+  const contextModule = require('../lib/db/context.server') as any;
+  const membershipPath = require.resolve('../lib/user/membership-server');
+  const originalSystemDb = contextModule.systemDb;
+
+  contextModule.systemDb = () => createMockScopedDb({ tx: async () => undefined });
+
+  t.after(() => {
+    contextModule.systemDb = originalSystemDb;
     delete require.cache[membershipPath];
   });
 
   delete require.cache[membershipPath];
   const { getEffectiveMembershipType } = require('../lib/user/membership-server') as typeof import('../lib/user/membership-server');
 
-  await assert.rejects(
-    () => getEffectiveMembershipType('user-1'),
-    /获取会员状态失败/u,
-  );
+  await assert.rejects(() => getEffectiveMembershipType('user-1'), /获取会员状态失败/u);
 });
 
 test('/api/models should surface membership resolution failures instead of downgrading to free', async (t) => {
@@ -61,7 +62,7 @@ test('/api/models should surface membership resolution failures instead of downg
   };
   apiUtilsModule.getAuthContext = async () => ({
     user: { id: 'user-1' },
-    supabase: null,
+    db: createMockScopedDb(),
   });
 
   t.after(() => {

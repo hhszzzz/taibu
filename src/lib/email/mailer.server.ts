@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { createTransport, type Transporter } from 'nodemailer';
+import { resolveMailerConfig, type MailerConfig } from '@/lib/email/providers';
 
 export type OutgoingMail = {
   to: string;
@@ -9,45 +10,35 @@ export type OutgoingMail = {
   html?: string;
 };
 
-type TransportName = 'smtp' | 'mailpit' | 'log';
-
-function transportName(): TransportName {
-  const name = (process.env.EMAIL_TRANSPORT ?? 'log').trim();
-  if (name !== 'smtp' && name !== 'mailpit' && name !== 'log') {
-    throw new Error(`EMAIL_TRANSPORT must be smtp, mailpit or log, got ${name}`);
-  }
-  return name;
-}
-
-function requireEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) throw new Error(`Missing ${name} configuration`);
-  return value;
-}
-
 let cachedTransport: Transporter | null | undefined;
+
+/** What the current environment resolves to, without the password. */
+export function describeMailer(): MailerConfig & { hasPassword: boolean } {
+  const config = resolveMailerConfig();
+  return { ...config, password: undefined, hasPassword: Boolean(config.password) };
+}
 
 function getTransport(): Transporter | null {
   if (cachedTransport !== undefined) return cachedTransport;
-  const name = transportName();
-  if (name === 'log') {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('EMAIL_TRANSPORT=log is not allowed in production');
-    }
+  const config = resolveMailerConfig();
+  if (config.transport === 'log') {
     cachedTransport = null;
     return cachedTransport;
   }
-  const mailpit = name === 'mailpit';
-  const host = mailpit ? (process.env.SMTP_HOST || '127.0.0.1') : requireEnv('SMTP_HOST');
-  const port = Number(mailpit ? (process.env.SMTP_PORT || '1025') : requireEnv('SMTP_PORT'));
-  const user = process.env.SMTP_USER;
   cachedTransport = createTransport({
-    host,
-    port,
-    secure: mailpit ? false : process.env.SMTP_SECURE === 'true',
-    ...(user ? { auth: { user, pass: requireEnv('SMTP_PASS') } } : {}),
+    host: config.host,
+    port: config.port,
+    secure: config.secure,
+    ...(config.user ? { auth: { user: config.user, pass: config.password } } : {}),
   });
   return cachedTransport;
+}
+
+/** Opens and authenticates a connection without sending anything. */
+export async function verifyMailer(): Promise<void> {
+  const transport = getTransport();
+  if (!transport) throw new Error('the log provider never opens a connection');
+  await transport.verify();
 }
 
 export async function sendMail(mail: OutgoingMail): Promise<void> {
@@ -57,7 +48,7 @@ export async function sendMail(mail: OutgoingMail): Promise<void> {
     return;
   }
   await transport.sendMail({
-    from: requireEnv('SMTP_FROM'),
+    from: resolveMailerConfig().from,
     to: mail.to,
     subject: mail.subject,
     text: mail.text,

@@ -85,9 +85,31 @@ docker compose \
 
 本地栈用 Mailpit 捕获邮件，不需要任何配置。生产必须接一个真实发信服务，否则注册验证码、验证码登录和找回密码都发不出去。
 
-应用是 **SMTP 客户端**，不自建 MTA：只需要一个能收发的发信服务商，凭据填进 `app.env` 的 `SMTP_*`。
+应用是 **SMTP 客户端**，不自建 MTA。所有服务商（Brevo、Resend、腾讯云、自建 Postfix）都走同一条 SMTP 通道，因此接入方式统一：
 
-### Brevo（当前选定，免费版 300 封/天）
+```ini
+EMAIL_PROVIDER=<brevo|resend|tencent|custom|mailpit|log>
+SMTP_USER=<中转登录名>
+SMTP_PASS=<SMTP 密钥>
+SMTP_FROM=<已验证发信域名下的地址>
+```
+
+`EMAIL_PROVIDER` 只负责预填主机、端口和加密方式；下面三类值需要你按服务商填写。预设之外的中转（自建 Postfix、企业内网 SMTP）用 `custom`，此时 `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` 全部按实际情况填。
+
+配置在启动时校验，错误信息直接指出是哪一项不对，包括端口与 `SMTP_SECURE` 不匹配这种最常见的错配。
+
+| `EMAIL_PROVIDER` | 主机 | 端口 | `SMTP_SECURE` | 说明 |
+|---|---|---:|---|---|
+| `brevo` | `smtp-relay.brevo.com` | 587 | `false` | 免费版 300 封/天 |
+| `resend` | `smtp.resend.com` | 465 | `true` | 免费版 100 封/天 |
+| `tencent` | 自行填写 | 465 | `true` | 广州 `gz-smtp.qcloudmail.com`、香港 `smtp.qcloudmail.com`、国际站 `sg-smtp.qcloudmail.com` |
+| `custom` | 自行填写 | 自行填写 | 自行填写 | 自建 Postfix 等 |
+| `mailpit` | `127.0.0.1` | 1025 | `false` | 本地捕获，不需要凭据 |
+| `log` | — | — | — | 只写日志；`NODE_ENV=production` 下拒绝启动 |
+
+显式填写 `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` 会覆盖预设，所以同一个 `EMAIL_PROVIDER` 也能指向备用中转。
+
+### Brevo
 
 在 Brevo 后台 **Settings → SMTP & API → SMTP** 页取三个值，它们各不相同，混用是 `535` 认证失败最常见的原因：
 
@@ -97,21 +119,14 @@ docker compose \
 | SMTP 登录名 | 页面上显示的 Login，形如 `1234567@smtp-brevo.com`（**不是** relay 主机名，也不一定是账号邮箱） |
 | SMTP 密钥 | 点 **Generate a new SMTP key** 生成，只显示一次；**不是** API key，也不是账号密码 |
 
-端口三选一：`587`（STARTTLS，推荐）、`465`（隐式 TLS）、`2525`（前两个被挡时）。
-
 ```ini
-EMAIL_TRANSPORT=smtp
-SMTP_HOST=smtp-relay.brevo.com
-SMTP_PORT=587
-SMTP_SECURE=false
+EMAIL_PROVIDER=brevo
 SMTP_USER=1234567@smtp-brevo.com
 SMTP_PASS=<生成的 SMTP 密钥>
 SMTP_FROM=noreply@mingai.fun
 ```
 
-`SMTP_SECURE` 必须与端口对应：`465` 用 `true`，`587`/`2525` 用 `false`（nodemailer 会自动 STARTTLS）。`SMTP_FROM` 必须是已在 Brevo 验证过的发件人域名下的地址。`EMAIL_TRANSPORT=log` 在 `NODE_ENV=production` 下会直接抛错，不会静默丢信。
-
-免费版每天 300 封；按现有用户量（708 人、近 30 天活跃 103）足够，超限时 Brevo 会拒发而不是扣费。
+`SMTP_FROM` 必须是已在 Brevo 验证过的发件人域名下的地址。免费版每天 300 封；按现有用户量（708 人、近 30 天活跃 103）足够，超限时 Brevo 会拒发而不是扣费。
 
 ### 域名 DNS 记录
 
@@ -125,6 +140,8 @@ _dmarc.mingai.fun                TXT  "v=DMARC1; p=quarantine; rua=mailto:dmarc@
 ```
 
 DKIM 的选择器与公钥、SPF 的 `include:` 值都以 Brevo 页面实际显示的为准——不同时期开通的账号给出的记录条数可能不同。
+
+**已有 SPF 记录不能重复添加。** 若 `mingai.fun` 已有 SPF（例如 Cloudflare 邮件路由留下的 `include:_spf.mx.cloudflare.net`），要把 `include:spf.brevo.com` 合并进同一条记录；两条 SPF 记录会让校验直接失败。
 
 域名验证通过前，Brevo 只允许发往账号本人邮箱，所以先验证域名再切生产。
 

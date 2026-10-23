@@ -123,10 +123,12 @@ SMTP_FROM=<已验证发信域名下的地址>
 EMAIL_PROVIDER=brevo
 SMTP_USER=1234567@smtp-brevo.com
 SMTP_PASS=<生成的 SMTP 密钥>
-SMTP_FROM=noreply@mingai.fun
+SMTP_FROM=命理排盘 <noreply@mingai.fun>
 ```
 
-`SMTP_FROM` 必须是已在 Brevo 验证过的发件人域名下的地址。免费版每天 300 封；按现有用户量（708 人、近 30 天活跃 103）足够，超限时 Brevo 会拒发而不是扣费。
+`SMTP_FROM` 用 `显示名 <地址>` 的形式，收件人看到的是「命理排盘」而不是 `noreply`。只写地址也能发信，但多数邮件客户端会把 `noreply` 直接显示成发件人名称。
+
+`SMTP_FROM` 的地址部分必须是已在 Brevo 验证过的发件人域名下的地址。免费版每天 300 封；按现有用户量（708 人、近 30 天活跃 103）足够，超限时 Brevo 会拒发而不是扣费。
 
 ### 域名 DNS 记录
 

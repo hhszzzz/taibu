@@ -51,6 +51,21 @@ import { useComposerState } from '@/components/chat/composer/useComposerState';
 import { HistoryDrawer } from '@/components/layout/HistoryDrawer';
 import { HistoryPageTemplate } from '@/components/history/HistoryPageTemplate';
 import RecordsPage from '@/app/records/page';
+import TarotResultPage from '@/app/tarot/result/page';
+import QimenResultPage from '@/app/qimen/result/page';
+import AnnualReportPage from '@/app/user/annual-report/page';
+import CommunityPage from '@/app/community/page';
+import PostDetailPage from '@/app/community/[postId]/page';
+import MeihuaResultPage from '@/app/meihua/result/page';
+import XiaoliurenResultPage from '@/app/xiaoliuren/result/page';
+import DaliurenResultPage from '@/app/daliuren/result/page';
+import LiuyaoResultPage from '@/app/liuyao/result/page';
+import { calculateMeihuaBundle } from '@/lib/divination/meihua';
+import { calculateXiaoliurenBundle } from '@/lib/divination/xiaoliuren';
+import { findHexagram } from '@/lib/divination/liuyao';
+import { HeaderMenuProvider } from '@/components/layout/HeaderMenuContext';
+import { TAROT_CARDS, TAROT_SPREADS, createTarotDrawSession } from '@/lib/divination/tarot';
+import { useAgentActivity, refreshAgentActivity } from '@/lib/agent/use-agent-activity';
 import * as chartClient from '@/lib/user/charts-client';
 import { useSelectedBaziChart } from '@/lib/hooks/useUserCharts';
 import { TimeInputModal } from '@/components/bazi/form/TimeInputModal';
@@ -253,13 +268,21 @@ function MenuProbe() {
 function ShareProbe() {
   const anchorRef = useRef(null);
   const [busy, setBusy] = useState(false);
+  const [conversationId, setConversationId] = useState('share-fixture');
   window.fixture.shareBusy = setBusy;
+  window.fixture.shareConversation = setConversationId;
   return <section data-testid="share-probe">
     <button ref={anchorRef} type="button">Share fixture anchor</button>
     <FloatingPanel open anchorRef={anchorRef} onClose={() => {}} label="分享">
-      <ShareConversationMenu conversationId="share-fixture" taskActive={busy} exportBusy={null} onExport={format => { window.fixture.shareExport = format; }} onClose={() => {}} />
+      <ShareConversationMenu conversationId={conversationId} taskActive={busy} exportBusy={null} onExport={format => { window.fixture.shareExport = format; }} onClose={() => {}} />
     </FloatingPanel>
   </section>;
+}
+
+function ActivityProbe({ id }) {
+  const { user } = useSessionSafe();
+  const markers = useAgentActivity(user?.id ?? null, '11111111-1111-4111-8111-111111111111');
+  return <output data-testid={'activity-' + id}>{markers.size}</output>;
 }
 
 // Two Agent rounds as the AgentResearch board shows them: the earlier one folds to a 上一轮 bar.
@@ -423,12 +446,38 @@ function Shell() {
   const [roundsMounted, setRoundsMounted] = useState(false);
   const [polishMounted, setPolishMounted] = useState(false);
   const [snapshotMounted, setSnapshotMounted] = useState(false);
+  const [tarotMounted, setTarotMounted] = useState(false);
+  const [qimenMounted, setQimenMounted] = useState(false);
+  const [activityMounted, setActivityMounted] = useState(false);
+  const [annualMounted, setAnnualMounted] = useState(false);
+  const [communityMounted, setCommunityMounted] = useState(false);
+  const [postMounted, setPostMounted] = useState(false);
+  const [castMounted, setCastMounted] = useState(null);
+  window.fixture.refreshActivity = refreshAgentActivity;
+  window.fixture.seedTarot = () => sessionStorage.setItem('tarot_result', JSON.stringify({
+    ...createTarotDrawSession({ spread: TAROT_SPREADS[0], cards: [{ card: TAROT_CARDS[0], orientation: 'upright' }], seed: 'review' }, { question: 'review', birthDate: '' }, '2026-10-23T00:00:00Z'), recordOwnerId: user?.id ?? null,
+  }));
+  window.fixture.seedQimen = () => sessionStorage.setItem('qimen_result', JSON.stringify({
+    year: 2024, month: 6, day: 1, hour: 12, minute: 0, timezone: 'Asia/Shanghai', panType: 'zhuan', juMethod: 'chaibu', zhiFuJiGong: 'jiLiuYi',
+    output: QIMEN_RESULT_FIXTURE, createdAt: '2026-10-23T00:00:00Z', chartId: 'alice-qimen', recordOwnerId: 'alice',
+  }));
   window.fixture.chatWorkspace = setChatWorkspaceOpen;
+  window.fixture.seedCast = name => {
+    const owner = { recordOwnerId: 'alice' };
+    if (name === 'meihua') sessionStorage.setItem('meihua_result', JSON.stringify({ ...owner, resultData: calculateMeihuaBundle({ method: 'time', date: '2026-10-23T12:00:00', timezone: 'Asia/Shanghai', question: 'review' }) }));
+    if (name === 'xiaoliuren') sessionStorage.setItem('xiaoliuren_result', JSON.stringify({ ...owner, resultData: calculateXiaoliurenBundle({ date: '2026-10-23T12:00:00', question: 'review' }) }));
+    if (name === 'daliuren') sessionStorage.setItem('daliuren_params', JSON.stringify({ ...owner, date: '2026-10-23', hour: 12, timezone: 'Asia/Shanghai' }));
+    if (name === 'liuyao') sessionStorage.setItem('liuyao_result', JSON.stringify({ ...owner, divinationId: 'alice-liuyao', conversationId: 'alice-liuyao-conversation',
+      question: 'review', yongShenTargets: ['兄弟'], yaos: Array.from({ length: 6 }, (_, index) => ({ type: 1, change: 'stable', position: index + 1 })),
+      hexagram: findHexagram('111111'), changedLines: [], createdAt: '2026-10-23T12:00:00+08:00' }));
+  };
+  window.fixture.daliurenResult = DALIUREN_RESULT_FIXTURE;
   const [modelMountKey, setModelMountKey] = useState(0);
   window.fixture.remountModels = () => setModelMountKey(current => current + 1);
   window.fixture.mount = { composer: setComposerMounted, history: setHistoryMounted, drawer: setDrawerMounted,
     records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted, agent: setAgentMounted, question: setQuestionMounted, results: setResultsMounted, sidebar: setSidebarMounted, phoneDrawer: setPhoneDrawerMounted, menu: setMenuMounted, rounds: setRoundsMounted, polish: setPolishMounted,
-    snapshot: setSnapshotMounted, share: setShareMounted };
+    snapshot: setSnapshotMounted, share: setShareMounted, tarot: setTarotMounted, qimen: setQimenMounted, activity: setActivityMounted,
+    annual: setAnnualMounted, community: setCommunityMounted, post: setPostMounted, cast: setCastMounted };
   window.fixture.chartKey = queryKeys.userCharts;
   window.fixture.chartClient = chartClient;
   window.fixture.deleteHistory = deleteHistorySummary;
@@ -503,6 +552,16 @@ function Shell() {
     {drawerMounted && <section data-testid="history-drawer"><HistoryDrawer type="tarot" /></section>}
     {recordsMounted && <section data-testid="records"><RecordsPage /></section>}
     {snapshotMounted && <AnalysisSnapshotProbe />}
+    {tarotMounted && <section data-testid="tarot-result"><HeaderMenuProvider><TarotResultPage /></HeaderMenuProvider></section>}
+    {qimenMounted && <section data-testid="qimen-result"><HeaderMenuProvider><QimenResultPage /></HeaderMenuProvider></section>}
+    {activityMounted && <><ActivityProbe id="one" /><ActivityProbe id="two" /></>}
+    {annualMounted && <section data-testid="annual-report"><AnnualReportPage /></section>}
+    {communityMounted && <section data-testid="community"><CommunityPage /></section>}
+    {postMounted && <section data-testid="community-post"><PostDetailPage /></section>}
+    {castMounted && <section data-testid="cast-result"><HeaderMenuProvider>
+      {castMounted === 'meihua' && <MeihuaResultPage />}{castMounted === 'xiaoliuren' && <XiaoliurenResultPage />}
+      {castMounted === 'daliuren' && <DaliurenResultPage />}{castMounted === 'liuyao' && <LiuyaoResultPage />}
+    </HeaderMenuProvider></section>}
     <section data-testid="chart-picker"><ChartPickerModal isOpen={pickerOpen} userId={user?.id ?? ''}
       onClose={() => setPickerOpen(false)} onSelect={chart => { window.fixture.pickedChart = chart; }} /></section>
     <BirthRulesProbe />
@@ -551,7 +610,7 @@ export async function build(outputDirectory) {
     output: { artifactId: 'family-dayun', result: dayun.structuredContent }, canonicalText: dayun.content.map(part => part.text).join('\n') };
 
   await bundle({
-    stdin: { contents: entry.replace('AGENT_TOOL_FIXTURE_PARTS', JSON.stringify(toolParts)).replace('TRADITIONAL_TAIYI_FIXTURE_PART', JSON.stringify(traditionalPart)).replace('REVISED_BAZI_FIXTURE_RESULT', JSON.stringify(revisedBazi.structuredContent)).replace('AGENT_DAYUN_FIXTURE_PART', JSON.stringify(dayunPart)).replace('BAZI_DRILLDOWN_FIXTURE_PARTS_JSON', JSON.stringify(drilldownParts)).replace('BAZI_METHOD_FIXTURE', JSON.stringify({ ...baziMethod, whenToUse: baziMethod.description, instructions: renderMethodGuide('bazi') })), loader: 'jsx', resolveDir: root, sourcefile: 'p5-browser-entry.jsx' },
+    stdin: { contents: entry.replace('DALIUREN_RESULT_FIXTURE', JSON.stringify(await executeTool('daliuren', { date: '2026-10-23', hour: 12, timezone: 'Asia/Shanghai' }))).replace('QIMEN_RESULT_FIXTURE', JSON.stringify(await executeTool('qimen', { year: 2024, month: 6, day: 1, hour: 12, timezone: 'Asia/Shanghai' }))).replace('AGENT_TOOL_FIXTURE_PARTS', JSON.stringify(toolParts)).replace('TRADITIONAL_TAIYI_FIXTURE_PART', JSON.stringify(traditionalPart)).replace('REVISED_BAZI_FIXTURE_RESULT', JSON.stringify(revisedBazi.structuredContent)).replace('AGENT_DAYUN_FIXTURE_PART', JSON.stringify(dayunPart)).replace('BAZI_DRILLDOWN_FIXTURE_PARTS_JSON', JSON.stringify(drilldownParts)).replace('BAZI_METHOD_FIXTURE', JSON.stringify({ ...baziMethod, whenToUse: baziMethod.description, instructions: renderMethodGuide('bazi') })), loader: 'jsx', resolveDir: root, sourcefile: 'p5-browser-entry.jsx' },
     outfile, bundle: true, format: 'iife', platform: 'browser', jsx: 'automatic',
     tsconfig: resolve(root, 'tsconfig.json'),
     define: { 'process.env.NODE_ENV': '"development"', 'process.env': '{}' },
@@ -578,6 +637,7 @@ export async function build(outputDirectory) {
           const subscribe = callback => { window.addEventListener('fixture:navigate', callback); window.addEventListener('popstate', callback); return () => { window.removeEventListener('fixture:navigate', callback); window.removeEventListener('popstate', callback); }; };
           export const useRouter = () => router;
           export const usePathname = () => useSyncExternalStore(subscribe, () => location.pathname, () => '/chat');
+          export const useParams = () => ({ postId: usePathname().split('/')[2] });
           export const useSearchParams = () => new URLSearchParams(useSyncExternalStore(subscribe, () => location.search, () => ''));
         `;
         if (args.path === 'next/link') contents = `
@@ -600,7 +660,7 @@ export async function build(outputDirectory) {
           } : null;
           const session = () => { const current = user(); return current ? { id: 'fixture-session', userId: current.id, expiresAt: new Date(Date.now() + 3600_000).toISOString(), user: current } : null; };
           const payload = () => ({ data: { session: session(), user: user() }, error: null });
-          window.fixtureAuth = { cookieUser: 'alice', revalidations: 0, change(id) { this.cookieUser = id; for (const cb of listeners) cb('SIGNED_IN', session()); } };
+          window.fixtureAuth = { cookieUser: 'alice', revalidations: 0, change(id) { this.cookieUser = id; for (const cb of listeners) cb('SIGNED_IN', payload().data); } };
           export const authSessionCacheConstants = { SESSION_REVALIDATE_EVENT_COOLDOWN_MS: 0 };
           // Sign-in flows are outside this fixture; the sidebar only mounts their components.
           const outsideFixture = async () => { throw new Error('Auth flows are outside the browser fixture'); };
@@ -861,7 +921,7 @@ export async function run(existingPage, bundlePath) {
     requests.push({ method, pathname: url.pathname, search: url.search, body, expectedUserId: request.headers()['x-expected-user-id'] });
     if (holdSettingsReads && url.pathname === '/api/user/settings' && method === 'GET') holdNext(url.pathname, method);
     if (holdReads.has(url.pathname) && method === 'GET' && !controls.some(item => !item.intercepted && item.pathname === url.pathname && item.method === method)) holdNext(url.pathname, method);
-    const control = controls.find(item => !item.intercepted && item.pathname === url.pathname && item.method === method);
+    const control = controls.find(item => !item.intercepted && item.pathname === url.pathname && item.method === method && (!item.action || item.action === body?.action));
     if (control) control.requestId = request.headers()['x-fixture-request-id'];
     const wait = control ? new Promise(done => { control.release = done; control.intercepted = true; }) : Promise.resolve();
     const ok = async (data, raw = false) => {
@@ -881,6 +941,25 @@ export async function run(existingPage, bundlePath) {
       { id: 'fixture-denied', name: '受限模型', vendor: 'other', supportsReasoning: true, allowed: false, blockedReason: '会员限制', reasoningAllowed: false },
       { id: 'fixture-toggle', name: '仅支持推理开关', vendor: 'other', supportsReasoning: true, allowed: true, reasoningAllowed: true },
     ] });
+    if (url.pathname === '/api/user/profile' && method === 'GET') return ok({ profile: { id: await page.evaluate(() => window.fixtureAuth.cookieUser), is_admin: false } });
+    if (url.pathname === '/api/annual-report' && method === 'GET') {
+      const userId = await page.evaluate(() => window.fixtureAuth.cookieUser);
+      const year = Number(url.searchParams.get('year'));
+      return ok({ success: true, data: { report: { userId, year, generatedAt: '2026-10-23T00:00:00Z',
+        usage: { totalAnalyses: (userId === 'alice' ? 11111 : 22222) + year, totalChats: 1, activeMonths: 1, firstUseDate: null, lastUseDate: null },
+        featureUsage: { bazi: 1 }, activity: { monthlyUsage: [{ month: 1, count: 1 }], weekdayDistribution: [], peakHour: 10 },
+        checkin: { totalDays: 1, totalCreditsEarned: 1 } } } }, true);
+    }
+    if (url.pathname.startsWith('/api/community/posts') && method === 'GET') {
+      const userId = await page.evaluate(() => window.fixtureAuth.cookieUser);
+      const id = url.pathname.split('/').at(-1);
+      const post = { id, author_name: 'fixture author', author_avatar_url: null, title: '讨论 ' + id,
+        content: '社区验收内容', category: 'general', tags: [], view_count: 1, upvote_count: 0, downvote_count: 0,
+        comment_count: 0, is_pinned: false, is_featured: false, is_deleted: false,
+        created_at: '2026-10-23T00:00:00Z', updated_at: '2026-10-23T00:00:00Z' };
+      if (id === 'posts') return ok({ posts: [{ ...post, id: 'list-item', title: '检索 ' + (url.searchParams.get('search') || '初始') }], total: 1 });
+      return ok({ post, comments: [], viewer: { isAuthenticated: !!userId, isAuthor: userId === 'alice' }, viewerVotes: { post: null, comments: {} } });
+    }
     if (['/api/user/settings','/api/reminders','/api/user/agent-memory'].includes(url.pathname)) {
       const cookieUser = await page.evaluate(() => window.fixtureAuth.cookieUser);
       if (request.headers()['x-expected-user-id'] && request.headers()['x-expected-user-id'] !== cookieUser) {
@@ -899,6 +978,18 @@ export async function run(existingPage, bundlePath) {
       if (method === 'POST') fixtureShare = { token: fixtureShare?.token ?? 'S'.repeat(43), path: '/share/' + 'S'.repeat(43), includeCharts: body?.includeCharts === true, createdAt: '2026-10-19T08:00:00Z', updatedAt: '2026-10-19T08:0' + (fixtureShare ? '5' : '0') + ':00Z' };
       if (method === 'DELETE') { const revoked = fixtureShare !== null; fixtureShare = null; return ok({ revoked }, true); }
       return ok({ share: fixtureShare }, true);
+    }
+    if (/^\/api\/conversations\/retry-[ab]\/share$/.test(url.pathname)) {
+      const token = url.pathname.includes('retry-b') ? 'B'.repeat(43) : 'A'.repeat(43);
+      return ok({ share: { token, path: '/share/' + token, includeCharts: false, createdAt: '2026-10-23T00:00:00Z', updatedAt: '2026-10-23T00:00:00Z' } }, true);
+    }
+    if (['/api/tarot', '/api/qimen'].includes(url.pathname) && method === 'POST' && body.action === 'save') {
+      const user = await page.evaluate(() => window.fixtureAuth.cookieUser);
+      return ok(url.pathname === '/api/tarot' ? { readingId: user + '-tarot' } : { chartId: user + '-qimen' }, true);
+    }
+    if (['/api/meihua', '/api/xiaoliuren', '/api/daliuren', '/api/liuyao'].includes(url.pathname) && method === 'POST') {
+      if (body.action === 'calculate' && url.pathname === '/api/daliuren') return ok(await page.evaluate(() => window.fixture.daliurenResult));
+      if (body.action === 'save') return ok({ divinationId: await page.evaluate(() => window.fixtureAuth.cookieUser) + '-' + url.pathname.split('/').at(-1) }, true);
     }
     if (url.pathname === '/api/shares' && method === 'GET') return ok({ shares: fixtureShare ? [{ ...fixtureShare, conversationId: 'share-fixture', title: '分享夹具对话' }] : [] }, true);
     if (url.pathname === '/api/reminders') return ok({ subscriptions: ['solar_term', 'fortune', 'key_date'].map(reminderType => ({ reminderType, enabled: false, notifySite: true, notifyEmail: false })) });
@@ -968,6 +1059,7 @@ export async function run(existingPage, bundlePath) {
       const filtered = records.filter(item => !category || item.category === category);
       return ok({ records: filtered, total: filtered.length }, true);
     }
+    if (url.pathname.startsWith('/api/records/') && method === 'GET') return ok(records.find(item => item.id === url.pathname.split('/').at(-1)) ?? null, true);
     if (url.pathname === '/api/conversations' && method === 'GET') {
       const user = await page.evaluate(() => window.fixture.user);
       const offset = Number(url.searchParams.get('offset'));
@@ -2868,6 +2960,125 @@ export async function run(existingPage, bundlePath) {
     await page.getByText('还没有公开分享的对话', { exact: true }).waitFor();
     check('Deleting from settings revokes the link and shows the empty state',
       requests.some(entry => entry.pathname === '/api/conversations/share-fixture/share' && entry.method === 'DELETE'));
+
+    {
+    await page.evaluate(() => { history.replaceState(null, '', '/chat'); window.dispatchEvent(new Event('fixture:navigate')); window.fixture.mount.share(true); });
+    await shareMenu.getByRole('menuitem', { name: '创建公开链接' }).waitFor();
+    const initialShareFailure = holdNext('/api/conversations/retry-a/share', 'GET');
+    initialShareFailure.fail = true;
+    await page.evaluate(() => window.fixture.shareConversation('retry-a'));
+    await intercepted(initialShareFailure); initialShareFailure.release();
+    await shareMenu.getByRole('menuitem', { name: '重试', exact: true }).waitFor();
+    const oldShareRetry = holdNext('/api/conversations/retry-a/share', 'GET');
+    await shareMenu.getByRole('menuitem', { name: '重试', exact: true }).click();
+    await intercepted(oldShareRetry);
+    await page.evaluate(() => window.fixture.shareConversation('retry-b'));
+    await shareMenu.getByRole('menuitem', { name: '复制公开链接' }).waitFor();
+    oldShareRetry.release(); await renderBarrier();
+    await shareMenu.getByRole('menuitem', { name: '复制公开链接' }).click();
+    check('A held retry from conversation A cannot replace the share link of conversation B', (await page.evaluate(() => window.fixture.copied.at(-1))).endsWith('/share/' + 'B'.repeat(43)));
+    await page.evaluate(() => window.fixture.mount.share(false));
+
+    const activityReads = () => page.evaluate(() => window.fixtureAgentIO.requests.filter(request => request.url === '/api/agent/activity').length);
+    const beforeActivity = await activityReads();
+    await page.evaluate(() => window.fixture.mount.activity(true));
+    await page.getByTestId('activity-one').waitFor(); await renderBarrier();
+    check('Two activity consumers share one initial poll', await activityReads() === beforeActivity + 1);
+    const beforeWake = await activityReads();
+    await page.evaluate(() => window.fixture.refreshActivity()); await renderBarrier();
+    check('An activity refresh wakes one poller for all mounted consumers', await activityReads() === beforeWake + 1);
+    await page.evaluate(() => window.fixture.mount.activity(false));
+
+    await page.evaluate(() => { window.fixtureAuth.change('alice'); }); await renderBarrier();
+    await page.evaluate(() => { window.fixture.seedTarot(); window.fixture.mount.tarot(true); });
+    const tarotResult = page.getByTestId('tarot-result');
+    await tarotResult.getByRole('button', { name: '保存', exact: true, includeHidden: true }).waitFor({ state: 'attached' });
+    const oldTarotSave = holdNext('/api/tarot', 'POST');
+    await tarotResult.getByRole('button', { name: '保存', exact: true, includeHidden: true }).evaluate(button => button.click());
+    await intercepted(oldTarotSave);
+    await page.evaluate(() => window.fixtureAuth.change('bob')); await renderBarrier();
+    oldTarotSave.release(); await renderBarrier();
+    check('A Tarot save receipt from the old account cannot mark the new account saved', await page.evaluate(() => {
+      const result = JSON.parse(sessionStorage.getItem('tarot_result'));
+      return result.recordOwnerId === 'bob' && !result.readingId && !result.conversationId;
+    }));
+    await tarotResult.getByRole('button', { name: '保存', exact: true, includeHidden: true }).evaluate(button => button.click());
+    await until(() => JSON.parse(sessionStorage.getItem('tarot_result')).readingId === 'bob-tarot');
+    check('The new account can save its own Tarot reading after an old receipt is discarded', await page.evaluate(() => JSON.parse(sessionStorage.getItem('tarot_result')).recordOwnerId === 'bob'));
+    await page.evaluate(() => { window.fixture.mount.tarot(false); window.fixture.seedQimen(); window.fixture.mount.qimen(true); });
+    await until(() => JSON.parse(sessionStorage.getItem('qimen_result')).chartId === 'bob-qimen');
+    check('Qimen does not inherit another account’s saved chart ID', await page.evaluate(() => JSON.parse(sessionStorage.getItem('qimen_result')).recordOwnerId === 'bob'));
+    await page.evaluate(() => window.fixture.mount.qimen(false));
+    await page.evaluate(() => { window.fixtureAuth.change('alice'); history.replaceState(null, '', '/records?id=record-general'); window.dispatchEvent(new Event('fixture:navigate')); window.fixture.mount.records(true); });
+    await until(() => document.querySelector('input[placeholder="例如：九月面试结果与卦象一致"]')?.value === 'General saved record');
+    await page.evaluate(() => { history.pushState(null, '', '/records?id=record-event'); window.dispatchEvent(new Event('fixture:navigate')); });
+    const currentEventTitle = records.find(record => record.id === 'record-event').title;
+    await page.waitForFunction(title => document.querySelector('input[placeholder="例如：九月面试结果与卦象一致"]')?.value === title, currentEventTitle);
+    check('A second records deep link replaces the editor while the page stays mounted', await page.getByRole('dialog').getByLabel('标题', { exact: true }).inputValue() === currentEventTitle);
+    await page.evaluate(() => window.fixture.mount.records(false));
+
+    const oldAnnual = holdNext('/api/annual-report', 'GET');
+    await page.evaluate(() => window.fixture.mount.annual(true)); await intercepted(oldAnnual);
+    await page.evaluate(() => window.fixtureAuth.change('bob'));
+    const annual = page.getByTestId('annual-report');
+    await annual.getByText(String(22222 + new Date().getFullYear()), { exact: true }).waitFor();
+    oldAnnual.release(); await renderBarrier();
+    check('An old account’s annual report cannot replace the current account’s report', await annual.getByText(String(11111 + new Date().getFullYear()), { exact: true }).count() === 0);
+    const oldYear = holdNext('/api/annual-report', 'GET');
+    await annual.getByRole('button', { name: '刷新年度报告' }).click(); await intercepted(oldYear);
+    await annual.locator('select').last().selectOption('2024');
+    await annual.getByText(String(22222 + 2024), { exact: true }).waitFor();
+    oldYear.release(); await renderBarrier();
+    check('A slower annual report response cannot overwrite a newer selected year', await annual.getByText(String(22222 + new Date().getFullYear()), { exact: true }).count() === 0);
+    await page.evaluate(() => { window.fixture.mount.annual(false); window.fixture.mount.community(true); });
+    const community = page.getByTestId('community');
+    await community.getByRole('heading', { name: '检索 初始' }).waitFor();
+    const oldPosts = holdNext('/api/community/posts', 'GET');
+    await community.getByPlaceholder('搜索感兴趣的话题...').fill('旧查询'); await intercepted(oldPosts);
+    await community.getByPlaceholder('搜索感兴趣的话题...').fill('新查询');
+    await community.getByRole('heading', { name: '检索 新查询' }).waitFor();
+    oldPosts.release(); await renderBarrier();
+    check('Community filtering retains the newest result when old requests finish later', await community.getByRole('heading', { name: '检索 旧查询' }).count() === 0);
+    await page.evaluate(() => { window.fixture.mount.community(false); window.fixtureAuth.change('alice'); history.pushState(null, '', '/community/old-post'); window.dispatchEvent(new Event('fixture:navigate')); });
+    const oldPost = holdNext('/api/community/posts/old-post', 'GET');
+    await page.evaluate(() => window.fixture.mount.post(true)); await intercepted(oldPost);
+    await page.evaluate(() => { history.pushState(null, '', '/community/new-post'); window.dispatchEvent(new Event('fixture:navigate')); });
+    const post = page.getByTestId('community-post');
+    await post.getByRole('heading', { name: '讨论 new-post' }).waitFor();
+    await post.getByTitle('编辑', { exact: true }).waitFor();
+    oldPost.release(); await renderBarrier();
+    check('A previous post response cannot replace the newly selected post', await post.getByRole('heading', { name: '讨论 old-post' }).count() === 0);
+    await page.evaluate(() => window.fixtureAuth.change('bob'));
+    await post.getByRole('heading', { name: '讨论 new-post' }).waitFor(); await renderBarrier();
+    check('Switching accounts clears the previous community author’s edit controls', await post.getByTitle('编辑', { exact: true }).count() === 0);
+    await page.evaluate(() => window.fixture.mount.post(false));
+
+    for (const name of ['meihua', 'xiaoliuren', 'daliuren']) {
+      await page.evaluate(() => window.fixtureAuth.change('alice')); await renderBarrier();
+      const oldSave = holdNext('/api/' + name, 'POST'); oldSave.action = 'save';
+      await page.evaluate(name => { window.fixture.seedCast(name); window.fixture.mount.cast(name); }, name);
+      await intercepted(oldSave);
+      await page.evaluate(() => window.fixtureAuth.change('bob'));
+      const key = name === 'daliuren' ? 'daliuren_params' : name + '_result';
+      await page.waitForFunction(({ key, name }) => JSON.parse(sessionStorage.getItem(key)).divinationId === 'bob-' + name, { key, name });
+      oldSave.release(); await renderBarrier();
+      check(name + ' fences an old account’s save receipt and automatically saves for the new account', await page.evaluate(({ key, name }) => {
+        const result = JSON.parse(sessionStorage.getItem(key)); return result.recordOwnerId === 'bob' && result.divinationId === 'bob-' + name;
+      }, { key, name }));
+      await page.evaluate(() => window.fixture.mount.cast(null)); await renderBarrier();
+    }
+    await page.evaluate(() => { window.fixture.seedCast('liuyao'); window.fixture.mount.cast('liuyao'); });
+    const castResult = page.getByTestId('cast-result');
+    await castResult.getByRole('button', { name: '保存', exact: true, includeHidden: true }).last().waitFor({ state: 'attached' });
+    check('Liuyao clears another account’s saved reading and conversation IDs', await page.evaluate(() => {
+      const result = JSON.parse(sessionStorage.getItem('liuyao_result')); return result.recordOwnerId === 'bob' && !result.divinationId && !result.conversationId;
+    }));
+    await castResult.getByRole('button', { name: '保存', exact: true, includeHidden: true }).last().evaluate(button => button.click());
+    await until(() => JSON.parse(sessionStorage.getItem('liuyao_result')).divinationId === 'bob-liuyao');
+    check('Liuyao can save its own reading after rejecting another account’s saved ID', true);
+    await page.evaluate(() => window.fixture.mount.cast(null));
+
+    }
 
     check('No unhandled network requests escaped fixtures', blocked.length === 0);
     check('No browser runtime exceptions', browserErrors.length === 0);

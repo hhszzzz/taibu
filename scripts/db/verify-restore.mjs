@@ -9,12 +9,13 @@
 // identity table must match as well. The temporary database is dropped unless
 // --keep is passed. Exit code 1 means the backup is not trustworthy.
 import { spawn } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { defaultReportPath } from './report-path.mjs';
+import { libpqEnvironment } from './connection-env.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const PG_RESTORE_BIN = process.env.PG_RESTORE_BIN || 'pg_restore';
@@ -29,7 +30,7 @@ const value = (flag, fallback) => {
 const backupPath = path.resolve(value('--backup', ''));
 const adminDsn = value('--admin-dsn', process.env.RESTORE_ADMIN_URL);
 const compareDsn = value('--compare', process.env.RESTORE_COMPARE_URL);
-const database = value('--database', 'taibu_restore_check');
+const database = value('--database', `taibu_restore_${randomUUID().replaceAll('-', '')}`);
 const reportPath = path.resolve(value('--report', defaultReportPath(root, 'restore')));
 const keep = has('--keep');
 
@@ -57,18 +58,6 @@ function check(name, passed, detail) {
   console.log(`[restore-check] ${passed ? 'ok' : 'FAIL'} ${name}${detail === undefined ? '' : ` (${JSON.stringify(detail)})`}`);
 }
 
-function connectionEnv(dsn) {
-  const url = new URL(dsn);
-  return {
-    ...process.env,
-    PGHOST: decodeURIComponent(url.hostname),
-    PGPORT: url.port || '5432',
-    PGUSER: decodeURIComponent(url.username),
-    PGPASSWORD: decodeURIComponent(url.password),
-    PGDATABASE: decodeURIComponent(url.pathname.slice(1)),
-    PGOPTIONS: '',
-  };
-}
 
 function withDatabase(dsn, name) {
   const url = new URL(dsn);
@@ -93,7 +82,7 @@ async function withClient(dsn, work) {
 function run(command, commandArgs, dsn) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, commandArgs, {
-      env: connectionEnv(dsn),
+      env: libpqEnvironment(dsn),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let stdout = '';
@@ -178,78 +167,76 @@ async function orphanCheck(dsn) {
   });
 }
 
-const PROTECTED_DATABASES = new Set(['postgres', 'template0', 'template1', 'taibu']);
-
 async function main() {
-  if (PROTECTED_DATABASES.has(database)) {
-    throw new Error(`refusing to drop protected database "${database}"; choose a temporary name`);
+  if (!/^taibu_restore_[a-z0-9_]+$/u.test(database)) {
+    throw new Error('restore verification requires a temporary database named taibu_restore_<suffix>');
   }
   const started = Date.now();
   const restoredUrl = withDatabase(adminDsn, database);
   const adminUrl = adminDsn;
 
   await withClient(adminUrl, async (client) => {
-    await client.query('SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()', [database]);
-    await client.query(`DROP DATABASE IF EXISTS ${quoteIdent(database)} WITH (FORCE)`);
+    // CREATE must fail if the name already exists. Never delete an unowned DB.
     await client.query(`CREATE DATABASE ${quoteIdent(database)}`);
   });
   report.steps.push({ name: 'create database', durationMs: Date.now() - started });
 
-  const restoreAt = Date.now();
-  const restored = await run(PG_RESTORE_BIN, ['--no-owner', '--no-privileges', '--exit-on-error', '-d', database, backupPath], adminDsn);
-  if (restored.code !== 0) {
-    throw new Error(`pg_restore failed: ${restored.stderr.trim().split('\n').slice(-4).join(' | ')}`);
-  }
-  report.steps.push({ name: 'pg_restore', durationMs: Date.now() - restoreAt });
-
-  const migrations = expectedMigrations();
-  const applied = await withClient(restoredUrl, async (client) => {
-    const { rows } = await client.query('select version, name, checksum from taibu_meta.schema_migrations order by version');
-    return rows;
-  });
-  check('migration count', applied.length === migrations.length, { applied: applied.length, expected: migrations.length });
-  const byVersion = new Map(applied.map((row) => [row.version, row]));
-  const missing = migrations.filter((migration) => !byVersion.has(migration.version));
-  const checksumMismatch = migrations.filter((migration) => {
-    const row = byVersion.get(migration.version);
-    return row && (row.checksum !== migration.checksum || row.name !== migration.name);
-  });
-  check('all migrations recorded', missing.length === 0 && checksumMismatch.length === 0, {
-    missing: missing.map((migration) => migration.version),
-    checksumMismatch: checksumMismatch.map((migration) => migration.version),
-  });
-
-  const counts = await tableCounts(restoredUrl);
-  check('identity users present', (counts['identity.users'] ?? 0) > 0, counts['identity.users']);
-  check('profile rows match identity users',
-    counts['public.users'] === counts['identity.users'],
-    { identity: counts['identity.users'], profile: counts['public.users'] });
-  check('core tables restored', Object.keys(counts).length >= 40, { tables: Object.keys(counts).length });
-
-  const orphans = await orphanCheck(restoredUrl);
-  check('no orphaned foreign keys', orphans.failures.length === 0, {
-    checked: orphans.checks, failures: orphans.failures.slice(0, 5),
-  });
-
-  if (compareDsn) {
-    const live = await tableCounts(compareDsn);
-    const mismatches = [];
-    for (const table of new Set([...Object.keys(counts), ...Object.keys(live)])) {
-      if (counts[table] !== live[table]) mismatches.push({ table, restored: counts[table], live: live[table] });
+  try {
+    const restoreAt = Date.now();
+    const restored = await run(PG_RESTORE_BIN, ['--no-owner', '--no-privileges', '--exit-on-error', '-d', database, backupPath], adminDsn);
+    if (restored.code !== 0) {
+      throw new Error(`pg_restore failed: ${restored.stderr.trim().split('\n').slice(-4).join(' | ')}`);
     }
-    check('row counts match live database', mismatches.length === 0, { mismatches: mismatches.slice(0, 10) });
-  }
+    report.steps.push({ name: 'pg_restore', durationMs: Date.now() - restoreAt });
 
-  report.counts = counts;
-  report.totalDurationMs = Date.now() - started;
-  report.finishedAt = new Date().toISOString();
-
-  if (!keep) {
-    await withClient(adminUrl, async (client) => {
-      await client.query('SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()', [database]);
-      await client.query(`DROP DATABASE IF EXISTS ${quoteIdent(database)} WITH (FORCE)`);
+    const migrations = expectedMigrations();
+    const applied = await withClient(restoredUrl, async (client) => {
+      const { rows } = await client.query('select version, name, checksum from taibu_meta.schema_migrations order by version');
+      return rows;
     });
-    report.databaseDropped = true;
+    check('migration count', applied.length === migrations.length, { applied: applied.length, expected: migrations.length });
+    const byVersion = new Map(applied.map((row) => [row.version, row]));
+    const missing = migrations.filter((migration) => !byVersion.has(migration.version));
+    const checksumMismatch = migrations.filter((migration) => {
+      const row = byVersion.get(migration.version);
+      return row && (row.checksum !== migration.checksum || row.name !== migration.name);
+    });
+    check('all migrations recorded', missing.length === 0 && checksumMismatch.length === 0, {
+      missing: missing.map((migration) => migration.version),
+      checksumMismatch: checksumMismatch.map((migration) => migration.version),
+    });
+
+    const counts = await tableCounts(restoredUrl);
+    check('identity users present', (counts['identity.users'] ?? 0) > 0, counts['identity.users']);
+    check('profile rows match identity users',
+      counts['public.users'] === counts['identity.users'],
+      { identity: counts['identity.users'], profile: counts['public.users'] });
+    check('core tables restored', Object.keys(counts).length >= 40, { tables: Object.keys(counts).length });
+
+    const orphans = await orphanCheck(restoredUrl);
+    check('no orphaned foreign keys', orphans.failures.length === 0, {
+      checked: orphans.checks, failures: orphans.failures.slice(0, 5),
+    });
+
+    if (compareDsn) {
+      const live = await tableCounts(compareDsn);
+      const mismatches = [];
+      for (const table of new Set([...Object.keys(counts), ...Object.keys(live)])) {
+        if (counts[table] !== live[table]) mismatches.push({ table, restored: counts[table], live: live[table] });
+      }
+      check('row counts match live database', mismatches.length === 0, { mismatches: mismatches.slice(0, 10) });
+    }
+
+    report.counts = counts;
+    report.totalDurationMs = Date.now() - started;
+    report.finishedAt = new Date().toISOString();
+  } finally {
+    if (!keep) {
+      await withClient(adminUrl, async (client) => {
+        await client.query(`DROP DATABASE ${quoteIdent(database)} WITH (FORCE)`);
+      });
+      report.databaseDropped = true;
+    }
   }
 
   mkdirSync(path.dirname(reportPath), { recursive: true });

@@ -82,6 +82,7 @@ test('createActivationKeys rejects fractional or out-of-range input before writi
     const inserts = mockAdminClient(t);
     const { createActivationKeys } = await import('../lib/user/activation-keys');
     const cases: Array<[CreateKeyParams, string]> = [
+        [{ keyType: 'invalid' as CreateKeyParams['keyType'], count: 1 }, '激活码类型无效'],
         // 小数数量过去会让循环多生成一个激活码。
         [{ keyType: 'credits', creditsAmount: 20, count: 1.5 }, '创建数量需在1-100之间'],
         [{ keyType: 'membership', membershipType: 'pro', count: 0 }, '创建数量需在1-100之间'],
@@ -97,4 +98,18 @@ test('createActivationKeys rejects fractional or out-of-range input before writi
         assert.deepEqual(await createActivationKeys('admin-1', params), { success: false, error }, JSON.stringify(params));
     }
     assert.equal(inserts.length, 0);
+});
+
+test('activation storage failures propagate instead of becoming empty lists or business rejections', async t => {
+    const context = require('../lib/db/context.server') as typeof import('../lib/db/context.server');
+    const { createActivationKeys, getAllActivationKeys, deleteActivationKey, activateKey } = await import('../lib/user/activation-keys');
+    t.mock.method(console, 'error', () => {});
+    t.mock.method(context, 'systemDb', () => createMockScopedDb({
+        tx: async () => { throw new Error('storage unavailable'); },
+        rpc: async () => { throw new Error('storage unavailable'); },
+    }));
+    await assert.rejects(createActivationKeys('admin-1', { keyType: 'credits', creditsAmount: 20, count: 1 }), /storage unavailable/);
+    await assert.rejects(getAllActivationKeys(), /storage unavailable/);
+    await assert.rejects(deleteActivationKey('key-1'), /storage unavailable/);
+    await assert.rejects(activateKey('user-1', 'sk-validfixture'), /storage unavailable/);
 });

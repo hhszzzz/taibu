@@ -12,6 +12,12 @@ test('searchKnowledge should honor explicit free membership without touching the
   assert.deepEqual(results, []);
 });
 
+test('internal knowledge callers cannot send oversized inputs to persistence or embedding', async () => {
+  const { searchKnowledgeWithPersistence } = require('../lib/knowledge-base/search') as typeof import('../lib/knowledge-base/search');
+  const { KNOWLEDGE_QUERY_MAX_LENGTH } = require('../lib/knowledge-base/types') as typeof import('../lib/knowledge-base/types');
+  await assert.rejects(searchKnowledgeWithPersistence('x'.repeat(KNOWLEDGE_QUERY_MAX_LENGTH + 1), 'user-1', 'pro', new Proxy({} as never, { get() { throw new Error('retrieval must not start'); } })), /检索内容不能超过/);
+});
+
 test('searchKnowledge keeps RPCs and weights bound to the caller-scoped database', async () => {
   const searchModule = require('../lib/knowledge-base/search') as typeof import('../lib/knowledge-base/search');
   const rpcCalls: string[] = [];

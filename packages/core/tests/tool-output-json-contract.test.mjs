@@ -5,6 +5,7 @@ import { buildToolSuccessPayload, executeTool } from 'taibu-core/mcp';
 
 function createBaziResult() {
   return {
+    calculationOptions: { dayBoundary: 'midnight', timezone: 'Asia/Shanghai', solarTermBasis: 'instant', disambiguation: 'reject', ruleVersion: 'bazi-2026.10' },
     gender: 'male',
     birthPlace: '北京',
     dayMaster: '甲',

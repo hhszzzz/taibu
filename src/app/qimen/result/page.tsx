@@ -26,7 +26,8 @@ import { AddToKnowledgeBaseModal } from '@/components/knowledge-base/AddToKnowle
 import { useKnowledgeBaseFeatureEnabled } from '@/components/knowledge-base/useKnowledgeBaseFeatureEnabled';
 import { useHeaderMenu, useHeaderTitle, type HeaderMenuItem } from '@/components/layout/HeaderMenuContext';
 import { useStreamingResponse, isCreditsError } from '@/lib/hooks/useStreamingResponse';
-import { readSessionJSON, updateSessionJSON } from '@/lib/cache/session-storage';
+import { readSessionJSON, scopeResultSession, updateSessionJSON } from '@/lib/cache/session-storage';
+import { useIdentityGuard } from '@/lib/hooks/useIdentityGuard';
 import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
 import { runSharedAnalysisFlow } from '@/lib/ai/analysis-runner';
 import { useSessionMembership } from '@/lib/hooks/useSessionMembership';
@@ -58,6 +59,7 @@ function formatInputTime(input: Pick<QimenInput, 'year' | 'month' | 'day' | 'hou
 }
 
 interface QimenSessionData extends QimenInput {
+    recordOwnerId?: string | null;
     output?: QimenOutput;
     createdAt: string;
     chartId?: string;
@@ -99,7 +101,7 @@ export default function QimenResultPage() {
     const { setMenuItems, clearMenuItems } = useHeaderMenu();
     const { knowledgeBaseEnabled } = useKnowledgeBaseFeatureEnabled();
     const { showToast } = useToast();
-    const [result, setResult] = useState<QimenSessionData | null>(null);
+    const [storedResult, setResult] = useState<QimenSessionData | null>(null);
     const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL_ID);
     const [reasoningEnabled, setReasoningEnabled] = useState(false);
     const [interpretation, setInterpretation] = useState<string | null>(null);
@@ -114,10 +116,18 @@ export default function QimenResultPage() {
     const [showCopyModal, setShowCopyModal] = useState(false);
     const [selectedPalace, setSelectedPalace] = useState<number | null>(null);
     const [isSaving, setIsSaving] = useState(false);
-    const hasSavedRef = useRef(false);
+    const hasSavedRef = useRef<string | null>(null);
     const aiSectionRef = useRef<HTMLElement>(null);
     const streaming = useStreamingResponse();
-    const { user, membershipInfo, sessionLoading, membershipLoading, membershipResolved } = useSessionMembership();
+    const { user, userId, membershipInfo, sessionLoading, membershipLoading, membershipResolved } = useSessionMembership();
+    const captureIdentity = useIdentityGuard(userId);
+    const result = storedResult?.recordOwnerId === userId ? storedResult : null;
+    const streamRef = useRef(streaming);
+    streamRef.current = streaming;
+    useEffect(() => {
+        setIsSaving(false); setIsLoading(false); setInterpretation(null); setInterpretationReasoning(null); setError(null);
+        streamRef.current.stop(); streamRef.current.reset();
+    }, [userId]);
     const membershipPending = membershipLoading || !membershipResolved;
     const membershipType = membershipResolved ? (membershipInfo?.type ?? 'free') : 'free';
     const currentUser = useMemo(() => (user ? { id: user.id } : null), [user]);
@@ -130,6 +140,8 @@ export default function QimenResultPage() {
 
     /** 保存起局记录（进入页面时自动保存与「保存」按钮共用），成功后回写 chartId */
     const saveChartRecord = useCallback(async (record: QimenSessionData): Promise<boolean> => {
+        if (!userId || record.recordOwnerId !== userId) return false;
+        const isCurrent = captureIdentity();
         setIsSaving(true);
         try {
             const saveResult = await saveDivinationAction({
@@ -138,12 +150,13 @@ export default function QimenResultPage() {
                 idKey: 'chartId',
                 fallbackMessage: '保存奇门记录失败',
             });
+            if (!isCurrent()) return false;
             if (!saveResult.ok) {
                 throw new Error(saveResult.error.message || '保存奇门记录失败');
             }
             const savedChartId = saveResult.id;
             if (savedChartId) {
-                updateSessionJSON('qimen_result', (prev) => ({ ...(prev || {}), chartId: savedChartId }));
+                updateSessionJSON('qimen_result', (prev) => ({ ...(prev || {}), recordOwnerId: userId, chartId: savedChartId }));
                 setResult(prev => prev ? { ...prev, chartId: savedChartId } : prev);
             }
             return true;
@@ -151,23 +164,28 @@ export default function QimenResultPage() {
             console.error(e);
             return false;
         } finally {
-            setIsSaving(false);
+            if (isCurrent()) setIsSaving(false);
         }
-    }, []);
+    }, [captureIdentity, userId]);
 
     useEffect(() => {
         if (sessionLoading) return;
+        let cancelled = false;
+        const isCurrent = captureIdentity();
         const init = async () => {
-            const parsed = readSessionJSON<QimenSessionData>('qimen_result');
-            if (!parsed) { router.push('/qimen'); return; }
+            const stored = readSessionJSON<QimenSessionData>('qimen_result');
+            if (!stored) { router.push('/qimen'); return; }
+            const parsed = scopeResultSession(stored, userId);
             let nextResult = parsed;
 
             if (!nextResult.output) {
                 try {
                     const { output } = await calculateQimenBundle(pickQimenInput(parsed));
+                    if (cancelled || !isCurrent()) return;
                     nextResult = { ...parsed, output };
                     updateSessionJSON('qimen_result', () => nextResult);
                 } catch (e) {
+                    if (cancelled || !isCurrent()) return;
                     console.error('[qimen/result] 重新计算命盘失败:', e);
                     router.push('/qimen');
                     return;
@@ -175,14 +193,17 @@ export default function QimenResultPage() {
             }
 
             setResult(nextResult);
+            updateSessionJSON('qimen_result', () => nextResult);
 
-            if (!nextResult.chartId && currentUser && !hasSavedRef.current) {
-                hasSavedRef.current = true;
+            const saveKey = `${userId}:${nextResult.createdAt}`;
+            if (!nextResult.chartId && userId && hasSavedRef.current !== saveKey) {
+                hasSavedRef.current = saveKey;
                 await saveChartRecord(nextResult);
             }
         };
         void init();
-    }, [currentUser, router, saveChartRecord, sessionLoading]);
+        return () => { cancelled = true; };
+    }, [userId, router, saveChartRecord, sessionLoading, captureIdentity]);
 
     // 次要操作：桌面端收进标题区「更多」，移动端进顶栏三点菜单（另加重新起局）
     // 收藏到知识库依赖已保存的 chartId，保存完成前不出现
@@ -228,6 +249,7 @@ export default function QimenResultPage() {
 
     const handleGetInterpretation = async () => {
         if (!result || !currentUser) return;
+        const isCurrent = captureIdentity();
         setIsLoading(true); streaming.reset(); setError(null); setInterpretationReasoning(null); setInterpretation(null);
         try {
             const baseBody = {
@@ -256,6 +278,7 @@ export default function QimenResultPage() {
                     stream: true,
                 },
             });
+            if (!isCurrent()) return;
             if (analysisResult.requiresCredits) {
                 setShowCreditsModal(true);
                 return;
@@ -276,7 +299,7 @@ export default function QimenResultPage() {
                 setResult((prev) => prev ? { ...prev, conversationId: analysisResult.conversationId || undefined } : prev);
                 updateSessionJSON('qimen_result', (prev) => ({ ...(prev || {}), conversationId: analysisResult.conversationId }));
             }
-        } catch (err) { setError(err instanceof Error ? err.message : '解读失败'); } finally { setIsLoading(false); }
+        } catch (err) { if (isCurrent()) setError(err instanceof Error ? err.message : '解读失败'); } finally { if (isCurrent()) setIsLoading(false); }
     };
 
     const handleConfirmCopy = async (level: ChartTextDetailLevel) => {
@@ -314,8 +337,10 @@ export default function QimenResultPage() {
             setShowAuthModal(true);
             return;
         }
-        hasSavedRef.current = true;
+        hasSavedRef.current = `${userId}:${result.createdAt}`;
+        const isCurrent = captureIdentity();
         const saved = await saveChartRecord(result);
+        if (!isCurrent()) return;
         showToast(saved ? 'success' : 'error', saved ? '已保存到命理记录' : '保存失败，请重试');
     };
 

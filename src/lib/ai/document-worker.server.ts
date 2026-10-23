@@ -17,6 +17,8 @@ export const DOCUMENT_WORKER_FILE = path.join(process.cwd(), '.agent', 'document
 export interface DocumentWorkerLimits {
     /** Documents parsed at once in this process; the others wait their turn. */
     concurrency: number;
+    /** Maximum waiting documents retained in this process. */
+    maxWaiting: number;
     /** How long a document waits for its turn before it is refused as busy. */
     waitMs: number;
     /** JavaScript heap of one thread; V8 stops the thread past it. */
@@ -26,7 +28,7 @@ export interface DocumentWorkerLimits {
 }
 
 /** Large documents measured well under these (Architecture.md「附件文字提取」); a hostile one stops at them. */
-export const DOCUMENT_WORKER_LIMITS: Readonly<DocumentWorkerLimits> = { concurrency: 2, waitMs: 5_000, heapMb: 256, bufferMb: 256 };
+export const DOCUMENT_WORKER_LIMITS: Readonly<DocumentWorkerLimits> = { concurrency: 2, maxWaiting: 8, waitMs: 5_000, heapMb: 256, bufferMb: 256 };
 /** How often a running thread's buffers are measured; a parse overshoots the budget by what it allocates in between. */
 const MEMORY_CHECK_MS = 50;
 const MB = 1024 * 1024;
@@ -66,6 +68,7 @@ export function createDocumentWorkerParser(file: string, limits: Readonly<Docume
             running += 1;
             return Promise.resolve();
         }
+        if (waiting.length >= limits.maxWaiting) return Promise.reject(new DocumentTextError('BUSY', '文件解析繁忙，请稍后重试'));
         return new Promise((resolve, reject) => {
             const start = () => {
                 clearTimeout(timer);

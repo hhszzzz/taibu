@@ -20,6 +20,9 @@ test('every domain and supported detail level satisfies its public output schema
       assert.ok(rendered.structuredContent,`${definition.name} ${detailLevel}`);
       assert.ok(rendered.structuredContent.计算规则?.ruleVersion || rendered.structuredContent.计算规则?.规则版本,definition.name);
       assert.doesNotThrow(()=>validateOutput(definition.name,rendered.structuredContent,definition.outputSchema));
+      const withoutRules = { ...rendered.structuredContent };
+      delete withoutRules.计算规则;
+      assert.throws(()=>validateOutput(definition.name,withoutRules,definition.outputSchema),{code:'OUTPUT_SCHEMA_MISMATCH'},`${definition.name} requires calculation rules`);
       assert.ok(rendered.content[0].text.length>0);
       if(derived) assert.ok(rendered.structuredContent.口径.length>0,`${definition.name} JSON keeps 口径`);
       assert.doesNotMatch(rendered.content[0].text,/## 计算规则|ruleVersion/,`${definition.name} ${detailLevel} text leaves 计算规则 to the JSON`);

@@ -7,7 +7,7 @@
 import { NextRequest } from 'next/server';
 import { RecordCategory, RecordFilters, normalizeRecordInput } from '@/lib/records';
 import { requireUserContext, jsonError, jsonOk } from '@/lib/api-utils';
-import { escapeLike } from '@/lib/db/sql-helpers';
+import { arrayValue, escapeLike } from '@/lib/db/sql-helpers';
 
 export async function GET(request: NextRequest) {
     try {
@@ -50,47 +50,30 @@ export async function GET(request: NextRequest) {
         const pattern = filters.search ? `%${escapeLike(filters.search)}%` : null;
 
         try {
-            const rows = await auth.db.tx((trx) => {
+            const { rows, totalRow } = await auth.db.tx(async (trx) => {
                 let query = trx
                     .selectFrom('ming_records_with_archive_status')
-                    .selectAll()
                     .where('user_id', '=', user.id);
                 if (filters.category) query = query.where('category', '=', filters.category);
                 if (filters.isPinned !== undefined) query = query.where('is_pinned', '=', filters.isPinned);
                 if (filters.startDate) query = query.where('event_date', '>=', filters.startDate);
                 if (filters.endDate) query = query.where('event_date', '<=', filters.endDate);
-                if (filters.tags && filters.tags.length > 0) query = query.where('tags', '@>', filters.tags as never);
+                if (filters.tags && filters.tags.length > 0) query = query.where('tags', '&&', arrayValue(filters.tags));
                 if (pattern) {
                     query = query.where((eb) => eb.or([
                         eb('title', 'ilike', pattern),
                         eb('content', 'ilike', pattern),
                     ]));
                 }
-                return query
+                const rows = await query.selectAll()
                     .orderBy('is_pinned', 'desc')
                     .orderBy('created_at', 'desc')
                     .offset(from)
                     .limit(pageSize)
                     .execute();
-            });
-            const totalRow = await auth.db.tx((trx) => {
-                let query = trx
-                    .selectFrom('ming_records_with_archive_status')
-                    .select((eb) => eb.fn.countAll<number>().as('count'))
-                    .where('user_id', '=', user.id);
-                if (filters.category) query = query.where('category', '=', filters.category);
-                if (filters.isPinned !== undefined) query = query.where('is_pinned', '=', filters.isPinned);
-                if (filters.startDate) query = query.where('event_date', '>=', filters.startDate);
-                if (filters.endDate) query = query.where('event_date', '<=', filters.endDate);
-                if (filters.tags && filters.tags.length > 0) query = query.where('tags', '@>', filters.tags as never);
-                if (pattern) {
-                    query = query.where((eb) => eb.or([
-                        eb('title', 'ilike', pattern),
-                        eb('content', 'ilike', pattern),
-                    ]));
-                }
-                return query.executeTakeFirst();
-            });
+                const totalRow = await query.select((eb) => eb.fn.countAll<number>().as('count')).executeTakeFirst();
+                return { rows, totalRow };
+            }, { isolationLevel: 'repeatable read' });
 
             return jsonOk({
                 records: rows,

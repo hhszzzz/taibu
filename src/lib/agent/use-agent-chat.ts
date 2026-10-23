@@ -116,17 +116,26 @@ export function useAgentChat(
       }
     } catch {}
     const controller = new AbortController();
+    let requestSequence = 0;
+    let busy = false;
+    let again = false;
     const load = async () => {
+      if (busy) { again = true; return; }
+      busy = true;
+      const sequence = ++requestSequence;
       try {
         const value = await agentJson<AgentCapabilities>("/api/agent/status", {
           signal: controller.signal,
         });
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || sequence !== requestSequence) return;
         setCapabilities(value);
         if (!explicitMode.current)
           setModeState(value.ready ? "agent" : "plain");
       } catch {
-        if (!controller.signal.aborted) setCapabilities(NO_CAPABILITIES);
+        if (!controller.signal.aborted && sequence === requestSequence) setCapabilities(NO_CAPABILITIES);
+      } finally {
+        busy = false;
+        if (!controller.signal.aborted && again) { again = false; void load(); }
       }
     };
     void load();

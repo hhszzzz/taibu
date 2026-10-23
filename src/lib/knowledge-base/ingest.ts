@@ -407,65 +407,27 @@ export async function ingestDataSourceAsService(
 }
 export function chunkText(text: string, config: ChunkConfig = DEFAULT_CHUNK_CONFIG): string[] {
     const { maxChunkSize, overlapSize, separators } = config;
-
-    if (text.length <= maxChunkSize) {
-        return [text];
+    if (!Number.isInteger(maxChunkSize) || maxChunkSize < 1 || !Number.isInteger(overlapSize) || overlapSize < 0 || overlapSize >= maxChunkSize) {
+        throw new RangeError('分块长度必须为正整数，重叠长度须小于分块长度');
     }
-
-    for (const sep of separators) {
-        const parts = text.split(sep);
-        if (parts.length > 1) {
-            const chunks: string[] = [];
-            let current = '';
-
-            for (const part of parts) {
-                const candidate = current ? `${current}${sep}${part}` : part;
-                if (candidate.length <= maxChunkSize) {
-                    current = candidate;
-                } else {
-                    if (current) chunks.push(current);
-                    current = part;
-                }
-            }
-
-            if (current) chunks.push(current);
-            return addOverlap(chunks, overlapSize);
-        }
-    }
-
-    return forceChunk(text, maxChunkSize, overlapSize);
-}
-
-function addOverlap(chunks: string[], overlapSize: number): string[] {
-    if (overlapSize <= 0) return chunks;
-    const result: string[] = [];
-
-    for (let i = 0; i < chunks.length; i++) {
-        const current = chunks[i] || '';
-        if (i === 0) {
-            result.push(current);
-            continue;
-        }
-
-        const prev = chunks[i - 1] || '';
-        const overlap = prev.slice(Math.max(0, prev.length - overlapSize));
-        result.push(`${overlap}${current}`);
-    }
-
-    return result;
-}
-
-function forceChunk(text: string, maxChunkSize: number, overlapSize: number): string[] {
+    if (text.length <= maxChunkSize) return [text];
     const chunks: string[] = [];
     let start = 0;
-
     while (start < text.length) {
-        const end = Math.min(start + maxChunkSize, text.length);
+        let end = Math.min(start + maxChunkSize, text.length);
+        if (end < text.length) {
+            const window = text.slice(start, end);
+            for (const separator of separators) {
+                if (!separator) continue;
+                const index = window.lastIndexOf(separator);
+                const boundary = start + index + separator.length;
+                if (index >= 0 && boundary > start + overlapSize) { end = boundary; break; }
+            }
+        }
         chunks.push(text.slice(start, end));
         if (end >= text.length) break;
-        start = Math.max(0, end - overlapSize);
+        start = end - overlapSize;
     }
-
     return chunks;
 }
 

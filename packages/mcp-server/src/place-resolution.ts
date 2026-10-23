@@ -285,10 +285,11 @@ function buildBirthPlaceInputDescription(): string {
 }
 
 function appendPlaceResolutionNote(markdown: string, info: RuntimePlaceResolutionInfo): string {
+  const literal = (text: string) => text.replace(/[\r\n]+/gu, ' ').replace(/[\\`*_{}\[\]()#+.!|<>~\-]/gu, '\\$&');
   const lines = ['## 出生地解析'];
 
   if (info.requestedPlace) {
-    lines.push(`- **输入地点**: ${info.requestedPlace}`);
+    lines.push(`- **输入地点**: ${literal(info.requestedPlace)}`);
   }
 
   if (info.source === 'manual_input') {
@@ -297,15 +298,15 @@ function appendPlaceResolutionNote(markdown: string, info: RuntimePlaceResolutio
     if (info.usedLatitude != null) lines.push(`- **使用纬度**: ${info.usedLatitude}°`);
   } else if (info.resolved) {
     lines.push('- **来源**: 地点解析');
-    lines.push(`- **解析结果**: ${info.formattedAddress || info.requestedPlace || '-'}`);
-    if (info.level) lines.push(`- **解析级别**: ${info.level}`);
+    lines.push(`- **解析结果**: ${literal(info.formattedAddress || info.requestedPlace || '-')}`);
+    if (info.level) lines.push(`- **解析级别**: ${literal(info.level)}`);
     if (info.usedLongitude != null) lines.push(`- **使用经度**: ${info.usedLongitude}°`);
     if (info.usedLatitude != null) lines.push(`- **使用纬度**: ${info.usedLatitude}°`);
   } else {
     lines.push('- **解析状态**: 未完成');
     lines.push(`- **原因**: ${describeFallbackReason(info.fallbackReason)}`);
     if (info.formattedAddress) {
-      lines.push(`- **最近结果**: ${info.formattedAddress}`);
+      lines.push(`- **最近结果**: ${literal(info.formattedAddress)}`);
     }
   }
 

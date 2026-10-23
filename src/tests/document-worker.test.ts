@@ -106,6 +106,24 @@ test('documents beyond the concurrent workers wait their turn, and are refused a
     assert.equal((await extract({ name: 'after.pdf', bytes: pdf })).text, 'after.pdf', 'the caller who left gave up its place');
 });
 
+test('the document waiting queue refuses excess jobs immediately and frees aborted slots', async () => {
+    const parse = createDocumentWorkerParser(
+        workerScript('bounded-queue', "setTimeout(() => parentPort.postMessage({ text: workerData.name }), 250);"),
+        limits({ concurrency: 1, maxWaiting: 1, waitMs: 2000 }),
+    );
+    const extract = pdfExtractor(parse);
+    const running = extract({ name: 'running.pdf', bytes: pdf });
+    const controller = new AbortController();
+    const waiting = extract({ name: 'waiting.pdf', bytes: pdf }, controller.signal);
+    const rejected = await refusal(extract({ name: 'excess.pdf', bytes: pdf }));
+    assert.equal(rejected.code, 'BUSY');
+    controller.abort(new Error('cancel queue'));
+    await assert.rejects(waiting, /cancel queue/);
+    const replacement = extract({ name: 'replacement.pdf', bytes: pdf });
+    assert.equal((await running).text, 'running.pdf');
+    assert.equal((await replacement).text, 'replacement.pdf');
+});
+
 test('a worker that cannot start or stops without answering fails the request, not the document', async t => {
     const errors = t.mock.method(console, 'error', () => undefined);
     for (const file of [

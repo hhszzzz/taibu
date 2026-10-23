@@ -150,6 +150,28 @@ RESET ROLE;`);
       );
     });
 
+    await t.test('records route executes any-tag matching with owner isolation in a repeatable snapshot', async () => {
+      await sql(`insert into public.ming_records (user_id, title, content, tags) values
+        (${quote(ids.owner)}, '甲记录', '内容', ARRAY['甲']),
+        (${quote(ids.owner)}, '乙记录', '内容', ARRAY['乙']),
+        (${quote(ids.other)}, '其他账号记录', '内容', ARRAY['甲']);`);
+      const api = require('../../src/lib/api-utils.ts');
+      const { NextRequest } = require('next/server');
+      const scoped = userDb(ids.owner);
+      const auth = t.mock.method(api, 'requireUserContext', async () => ({ user: { id: ids.owner }, db: scoped }));
+      try {
+        const { GET } = require('../../src/app/api/records/route.ts');
+        const response = await GET(new NextRequest('http://localhost/api/records?tag=甲&tag=乙'));
+        assert.equal(response.status, 200);
+        const result = await response.json();
+        assert.equal(result.total, 2);
+        assert.deepEqual(result.records.map(row => row.title).sort(), ['乙记录', '甲记录']);
+        const isolation = await scoped.tx(async trx => (await kyselySql`show transaction_isolation`.execute(trx)).rows[0].transaction_isolation,
+          { isolationLevel: 'repeatable read' });
+        assert.equal(isolation, 'repeatable read');
+      } finally { auth.mock.restore(); }
+    });
+
     await t.test('statement timeout aborts only that transaction', async () => {
       await assert.rejects(
         userDb(ids.owner).tx(async (trx) => {

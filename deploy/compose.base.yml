@@ -58,8 +58,8 @@ services:
   files-init:
     image: alpine:3.22
     user: root
-    command: [sh, -c, 'chown -R 100:101 /data/files && chmod 0750 /data/files']
-    volumes: [files:/data/files]
+    command: [sh, -c, 'if [ ! -f /data/meta/ownership-v1 ]; then chown -R 100:101 /data/files && chmod 0750 /data/files && touch /data/meta/ownership-v1; fi']
+    volumes: [files:/data/files, filesmeta:/data/meta]
     restart: "no"
     networks: [backend]
     logging: *logging
@@ -109,5 +109,6 @@ volumes:
   pgdata: {}
   redisdata: {}
   files: {}
+  filesmeta: {}
 networks:
   backend: {}

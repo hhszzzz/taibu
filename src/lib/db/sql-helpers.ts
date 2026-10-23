@@ -6,6 +6,11 @@ export function json(value: unknown): Expression<unknown> {
   return sql`${JSON.stringify(value)}::jsonb`;
 }
 
+/** Bind an array as one PostgreSQL parameter instead of Kysely's tuple expansion. */
+export function arrayValue<T>(value: T[]): Expression<T[]> {
+  return sql.val(value);
+}
+
 /** Escape user input before ILIKE: backslash, percent and underscore. */
 export function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, (character) => `\\${character}`);

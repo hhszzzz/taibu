@@ -20,12 +20,13 @@ import { XiaoliurenForm } from '@/components/xiaoliuren/XiaoliurenForm';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import { useAdminJsonCopy } from '@/lib/admin/useAdminJsonCopy';
-import { readSessionJSON, updateSessionJSON, writeSessionJSON } from '@/lib/cache/session-storage';
+import { readSessionJSON, scopeResultSession, updateSessionJSON, writeSessionJSON } from '@/lib/cache/session-storage';
+import { useResultIdentity } from '@/lib/hooks/useIdentityGuard';
 import { buildXiaoliurenCanonicalText, type XiaoliurenWebBundle } from '@/lib/divination/xiaoliuren';
 import { saveDivinationAction } from '@/lib/divination/save-client';
 import { useSessionMembership } from '@/lib/hooks/useSessionMembership';
 
-type XiaoliurenSession = { resultData?: XiaoliurenWebBundle; divinationId?: string; conversationId?: string };
+type XiaoliurenSession = { resultData?: XiaoliurenWebBundle; divinationId?: string; conversationId?: string; recordOwnerId?: string | null };
 type LoadedSession = XiaoliurenSession & { resultData: XiaoliurenWebBundle };
 
 const SESSION_KEY = 'xiaoliuren_result';
@@ -46,6 +47,7 @@ function formatLunarDate(bundle: XiaoliurenWebBundle): string {
 }
 
 export default function XiaoliurenResultPage() {
+  const identity = useResultIdentity();
   const router = useRouter();
   const [loaded, setLoaded] = useState<{ generation: number; session: LoadedSession } | null>(null);
 
@@ -72,14 +74,15 @@ export default function XiaoliurenResultPage() {
   }, []);
 
   if (!loaded) return <div className="flex min-h-screen items-center justify-center bg-background"><SoundWaveLoader variant="block" text="正在排课" /></div>;
-  return <XiaoliurenResultView key={loaded.generation} session={loaded.session} onRecalculated={handleRecalculated} />;
+  return <XiaoliurenResultView key={`${loaded.generation}:${identity.key}`} session={loaded.session} onRecalculated={handleRecalculated} isCurrent={identity.isCurrent} />;
 }
 
-function XiaoliurenResultView({ session, onRecalculated }: { session: LoadedSession; onRecalculated: (bundle: XiaoliurenWebBundle) => void }) {
+function XiaoliurenResultView({ session: storedSession, onRecalculated, isCurrent }: { session: LoadedSession; onRecalculated: (bundle: XiaoliurenWebBundle) => void; isCurrent: () => boolean }) {
   const router = useRouter();
   const { showToast } = useToast();
   const { setMenuItems, clearMenuItems } = useHeaderMenu();
   const { userId, sessionLoading } = useSessionMembership();
+  const session = scopeResultSession(storedSession, userId);
   const bundle = session.resultData;
   const [divinationId, setDivinationId] = useState(session.divinationId);
   const [conversationId, setConversationId] = useState(session.conversationId);
@@ -93,11 +96,12 @@ function XiaoliurenResultView({ session, onRecalculated }: { session: LoadedSess
 
   /** 只回写仍属于本课的会话：原地换课后，旧课迟到的记录 / 会话 id 不能串到新课上。 */
   const persistSessionIds = useCallback((next: { divinationId?: string; conversationId?: string }) => {
+    if (!isCurrent()) return;
     updateSessionJSON<XiaoliurenSession>(SESSION_KEY, (previous) => {
       if (previous?.resultData && previous.resultData.canonicalText !== bundle.canonicalText) return previous;
-      return { ...(previous || {}), ...next };
+      return { ...scopeResultSession(previous || {}, userId), ...next, recordOwnerId: userId };
     });
-  }, [bundle.canonicalText]);
+  }, [bundle.canonicalText, isCurrent, userId]);
 
   const handleConversationId = useCallback((id: string) => {
     setConversationId(id);
@@ -118,6 +122,7 @@ function XiaoliurenResultView({ session, onRecalculated }: { session: LoadedSess
     setSaving(true);
     try {
       const saved = await saveDivinationAction({ endpoint: '/api/xiaoliuren', body: { resultData: bundle }, idKey: 'divinationId', fallbackMessage: '保存小六壬记录失败' });
+      if (!isCurrent()) return undefined;
       if (saved.ok && saved.id) {
         setDivinationId(saved.id);
         persistSessionIds({ divinationId: saved.id });
@@ -126,9 +131,9 @@ function XiaoliurenResultView({ session, onRecalculated }: { session: LoadedSess
       if (!saved.ok) console.error('[xiaoliuren/result] 保存失败:', saved.error.message);
       return undefined;
     } finally {
-      setSaving(false);
+      if (isCurrent()) setSaving(false);
     }
-  }, [bundle, persistSessionIds]);
+  }, [bundle, persistSessionIds, isCurrent]);
 
   // 登录用户自动保存；不阻塞盘面展示，进度体现在「保存」上
   useEffect(() => {
@@ -168,6 +173,7 @@ function XiaoliurenResultView({ session, onRecalculated }: { session: LoadedSess
     }
     hasAutoSavedRef.current = true;
     const savedId = await saveRecord();
+    if (!isCurrent()) return;
     showToast(savedId ? 'success' : 'error', savedId ? '已保存到命理记录' : '保存失败，请重试');
   };
 

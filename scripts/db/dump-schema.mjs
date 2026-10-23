@@ -14,6 +14,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { normalizeSchemaDump } from './normalize-schema.mjs';
+import { libpqEnvironment } from './connection-env.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const PG_DUMP_BIN = process.env.PG_DUMP_BIN || 'pg_dump';
@@ -33,18 +34,6 @@ if (!dsn) {
   process.exit(1);
 }
 
-function connectionEnv(url) {
-  const parsed = new URL(url);
-  return {
-    ...process.env,
-    PGHOST: decodeURIComponent(parsed.hostname),
-    PGPORT: parsed.port || '5432',
-    PGUSER: decodeURIComponent(parsed.username),
-    PGPASSWORD: decodeURIComponent(parsed.password),
-    PGDATABASE: decodeURIComponent(parsed.pathname.slice(1)),
-    PGOPTIONS: '',
-  };
-}
 
 function dumpSchema() {
   return new Promise((resolve, reject) => {
@@ -57,7 +46,7 @@ function dumpSchema() {
       '--no-owner',
       '--no-privileges',
       '--no-comments',
-    ], { env: connectionEnv(dsn), stdio: ['ignore', 'pipe', 'pipe'] });
+    ], { env: libpqEnvironment(dsn), stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (chunk) => { stdout += chunk; });

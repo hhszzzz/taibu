@@ -6,7 +6,7 @@ import type { NextRequest } from 'next/server';
 import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
 import { getDefaultModelConfigAsync, getModelConfigAsync } from '@/lib/server/ai-config';
 import { isModelAllowedForMembership, isReasoningAllowedForMembership } from '@/lib/ai/ai-access';
-import { getAuthContext, jsonError, requireUserContext, type AuthContextResult } from '@/lib/api-utils';
+import { getAuthContext, jsonError, readRequestBytes, requireUserContext, type AuthContextResult } from '@/lib/api-utils';
 import { buildChatPromptContext } from '@/lib/server/chat/prompt-context';
 import { prepareDirectChat, prepareManagedChat } from '@/lib/server/chat/use-case';
 import type {
@@ -59,14 +59,22 @@ export type PreparedChatRequest =
   Awaited<ReturnType<typeof buildChatPromptContext>>;
 
 export async function parseChatRequestBody(request: NextRequest): Promise<ChatRequestBody | Response> {
+  const input = await readRequestBytes(request, 8 * 1024 * 1024);
+  if ('error' in input) return jsonError(input.error.message, input.error.status);
   let body: ChatRequestBody;
   try {
-    body = await request.json() as ChatRequestBody;
+    body = JSON.parse(input.bytes.toString('utf8')) as ChatRequestBody;
   } catch {
     return jsonError('请求体不是合法 JSON', 400);
   }
-  if (!body.messages || !Array.isArray(body.messages)) {
+  if (!body || typeof body !== 'object' || !Array.isArray(body.messages) || body.messages.length > 4096) {
     return jsonError('无效的消息格式', 400);
+  }
+  for (const message of body.messages) {
+    if (!message || typeof message !== 'object' || !['user', 'assistant', 'system'].includes(message.role) || typeof message.content !== 'string') {
+      return jsonError('无效的消息格式', 400);
+    }
+    if (Buffer.byteLength(message.content, 'utf8') > 2 * 1024 * 1024) return jsonError('单条消息不能超过 2MB', 413);
   }
   try { body.reasoningEffort = parseReasoningEffort(body.reasoningEffort); } catch { return jsonError('推理档位无效', 400); }
   if (body.attachment !== undefined && !isChatAttachment(body.attachment)) return jsonError('附件内容无效', 400);

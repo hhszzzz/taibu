@@ -19,13 +19,15 @@ import { MeihuaChart } from '@/components/meihua/MeihuaChart';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import { useAdminJsonCopy } from '@/lib/admin/useAdminJsonCopy';
-import { readSessionJSON, updateSessionJSON } from '@/lib/cache/session-storage';
+import { readSessionJSON, scopeResultSession, updateSessionJSON, writeSessionJSON } from '@/lib/cache/session-storage';
+import { useResultIdentity } from '@/lib/hooks/useIdentityGuard';
 import { requestBrowserJson } from '@/lib/browser-api';
 import { buildMeihuaCanonicalText, type MeihuaOutput, type MeihuaWebBundle } from '@/lib/divination/meihua';
 import { saveDivinationAction } from '@/lib/divination/save-client';
 import { useSessionMembership } from '@/lib/hooks/useSessionMembership';
 
 type MeihuaSession = {
+  recordOwnerId?: string | null;
   input?: MeihuaWebBundle['input'];
   resultData?: MeihuaWebBundle;
   divinationId?: string;
@@ -49,6 +51,11 @@ function formatWallClock(value: string | undefined): string {
 }
 
 export default function MeihuaResultPage() {
+  const identity = useResultIdentity();
+  return <MeihuaResultContent key={identity.key} isCurrent={identity.isCurrent} />;
+}
+
+function MeihuaResultContent({ isCurrent }: { isCurrent: () => boolean }) {
   const router = useRouter();
   const { showToast } = useToast();
   const { setMenuItems, clearMenuItems } = useHeaderMenu();
@@ -67,8 +74,8 @@ export default function MeihuaResultPage() {
   const { isAdmin, jsonCopied, copyJson } = useAdminJsonCopy(canonicalJson);
 
   const persistSessionIds = useCallback((next: { divinationId?: string; conversationId?: string }) => {
-    updateSessionJSON<MeihuaSession>('meihua_result', (previous) => ({ ...(previous || {}), ...next }));
-  }, []);
+    if (isCurrent()) updateSessionJSON<MeihuaSession>('meihua_result', (previous) => ({ ...(previous || {}), ...next, recordOwnerId: userId }));
+  }, [isCurrent, userId]);
 
   const handleConversationId = useCallback((id: string) => {
     setConversationId(id);
@@ -94,6 +101,7 @@ export default function MeihuaResultPage() {
         idKey: 'divinationId',
         fallbackMessage: '保存梅花记录失败',
       });
+      if (!isCurrent()) return undefined;
       if (saved.ok && saved.id) {
         setDivinationId(saved.id);
         persistSessionIds({ divinationId: saved.id });
@@ -102,19 +110,21 @@ export default function MeihuaResultPage() {
       if (!saved.ok) console.error('[meihua/result] 保存失败:', saved.error.message);
       return undefined;
     } finally {
-      setSaving(false);
+      if (isCurrent()) setSaving(false);
     }
-  }, [persistSessionIds]);
+  }, [persistSessionIds, isCurrent]);
 
   useEffect(() => {
     if (sessionLoading) return;
     let cancelled = false;
     const init = async () => {
-      const session = readSessionJSON<MeihuaSession>('meihua_result');
-      if (!session?.resultData && !session?.input) {
+      const stored = readSessionJSON<MeihuaSession>('meihua_result');
+      if (!stored?.resultData && !stored?.input) {
         router.replace('/meihua');
         return;
       }
+      const session = scopeResultSession(stored, userId);
+      writeSessionJSON('meihua_result', session);
       try {
         let nextBundle = session.resultData;
         if (!nextBundle && session.input) {
@@ -183,6 +193,7 @@ export default function MeihuaResultPage() {
     }
     hasAutoSavedRef.current = true;
     const savedId = await saveRecord(bundle);
+    if (!isCurrent()) return;
     showToast(savedId ? 'success' : 'error', savedId ? '已保存到命理记录' : '保存失败，请重试');
   };
 

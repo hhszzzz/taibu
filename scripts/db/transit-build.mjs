@@ -28,6 +28,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { defaultReportPath } from './report-path.mjs';
+import { libpqEnvironment } from './connection-env.mjs';
+import { csvHeader } from './csv-header.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const PSQL_BIN = process.env.PSQL_BIN || 'psql';
@@ -75,19 +77,6 @@ function redact(dsn) {
   }
 }
 
-function connectionEnv(dsn) {
-  const url = new URL(dsn);
-  return {
-    ...process.env,
-    PGHOST: decodeURIComponent(url.hostname),
-    PGPORT: url.port || '5432',
-    PGUSER: decodeURIComponent(url.username),
-    PGPASSWORD: decodeURIComponent(url.password),
-    PGDATABASE: decodeURIComponent(url.pathname.slice(1)),
-    PGOPTIONS: '',
-    PGCLIENTENCODING: 'UTF8',
-  };
-}
 
 function databaseName(dsn) {
   return decodeURIComponent(new URL(dsn).pathname.slice(1));
@@ -102,7 +91,7 @@ function withDatabase(dsn, database) {
 function run(command, commandArgs, { dsn, timeout = 1_800_000, capture = true, input } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, commandArgs, {
-      env: dsn ? connectionEnv(dsn) : process.env,
+      env: dsn ? libpqEnvironment(dsn) : process.env,
       stdio: [input === undefined ? 'ignore' : 'pipe', capture ? 'pipe' : 'inherit', 'pipe'],
     });
     let stdout = '';
@@ -154,27 +143,6 @@ async function withClient(dsn, work) {
   } finally {
     await client.end();
   }
-}
-
-/** CSV headers are simple here (no embedded newlines); pg's exports quote when needed. */
-function csvHeader(file) {
-  const text = readFileSync(file, 'utf8');
-  const line = text.slice(0, text.indexOf('\n') === -1 ? text.length : text.indexOf('\n')).replace(/\r$/u, '');
-  const fields = [];
-  let current = '';
-  let quoted = false;
-  for (let index = 0; index < line.length; index += 1) {
-    const char = line[index];
-    if (quoted) {
-      if (char === '"' && line[index + 1] === '"') { current += '"'; index += 1; }
-      else if (char === '"') quoted = false;
-      else current += char;
-    } else if (char === '"') quoted = true;
-    else if (char === ',') { fields.push(current); current = ''; }
-    else current += char;
-  }
-  fields.push(current);
-  return fields.map((field) => field.replace(/^﻿/u, '').trim());
 }
 
 const PENDING_SCHEMA = 'taibu-transit-pending/1';

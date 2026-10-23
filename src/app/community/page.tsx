@@ -22,12 +22,10 @@ import {
     Clock,
     MessageSquare,
     Heart,
-    type LucideIcon,
-    type LucideProps
 } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { CommunityPost, PostCategory, POST_CATEGORIES, getPosts } from '@/lib/community';
-import { getUserSnapshot } from '@/lib/auth';
+import { useSessionSafe } from '@/lib/hooks/session-context';
 
 // =====================================================
 // 帖子卡片组件
@@ -96,7 +94,7 @@ function PostCard({ post }: { post: CommunityPost }) {
                                 {post.view_count}
                             </span>
                             <span className="flex items-center gap-1.5 hover:text-purple-400 transition-colors">
-                                <PropsIconWrapper icon={Heart} className="w-3.5 h-3.5" />
+                                <Heart className="w-3.5 h-3.5" />
                                 {post.upvote_count}
                             </span>
                             <span className="flex items-center gap-1.5 hover:text-purple-400 transition-colors">
@@ -111,11 +109,6 @@ function PostCard({ post }: { post: CommunityPost }) {
     );
 }
 
-// 辅助组件：用于处理 Lucide 图标 props 可能不匹配的问题 (仅为示例，实际可直接使用)
-const PropsIconWrapper = ({ icon: Icon, ...props }: { icon: LucideIcon } & LucideProps) => (
-    <Icon {...props} />
-);
-
 // =====================================================
 // 主页面组件
 // =====================================================
@@ -129,43 +122,38 @@ export default function CommunityPage() {
     const [search, setSearch] = useState('');
     const [category, setCategory] = useState<PostCategory | ''>('');
     const [sortBy, setSortBy] = useState<'latest' | 'popular' | 'hot'>('latest');
-    const [user, setUser] = useState<{ id: string } | null>(null);
+    const { user } = useSessionSafe();
 
     const pageSize = 20;
 
-    // 检查登录状态
-    useEffect(() => {
-        const checkAuth = async () => {
-            const { data: { user } } = await getUserSnapshot();
-            setUser(user);
-        };
-        checkAuth();
-    }, []);
-
     // 加载帖子
-    const loadPosts = useCallback(async () => {
+    const loadPosts = useCallback(async (signal: AbortSignal) => {
         setLoading(true);
         try {
             const result = await getPosts({
                 sortBy,
                 ...(search ? { search } : {}),
                 ...(category ? { category } : {}),
-            }, page, pageSize);
+            }, page, pageSize, { signal });
+            if (signal.aborted) return;
             setPosts(result.posts);
             setTotal(result.total);
             setLoadError(null);
         } catch (error) {
+            if (signal.aborted) return;
             console.error('加载帖子失败:', error);
             setPosts([]);
             setTotal(0);
             setLoadError(error instanceof Error ? error.message : '加载帖子失败');
         } finally {
-            setLoading(false);
+            if (!signal.aborted) setLoading(false);
         }
     }, [page, search, category, sortBy]);
 
     useEffect(() => {
-        loadPosts();
+        const controller = new AbortController();
+        void loadPosts(controller.signal);
+        return () => controller.abort();
     }, [loadPosts]);
 
     const totalPages = Math.ceil(total / pageSize);

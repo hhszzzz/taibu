@@ -97,7 +97,10 @@ export async function POST(request: NextRequest) {
 
   if (previousUrl?.startsWith(AVATAR_URL_PREFIX)) {
     const previousKey = previousUrl.slice(AVATAR_URL_PREFIX.length);
-    if (previousKey && previousKey !== key) {
+    // Profile URLs are user-editable; only clean up keys minted for this owner.
+    const ownKey = previousKey.startsWith(`${auth.user.id}-`)
+      && /^\d+\.(?:png|jpe?g|webp|gif|avif)$/.test(previousKey.slice(auth.user.id.length + 1));
+    if (ownKey && previousKey !== key) {
       await store.delete('avatars', [previousKey]).catch((error: unknown) => {
         console.warn('清理旧头像失败:', error);
       });

@@ -6,7 +6,7 @@
  */
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link2, RefreshCw, Trash2 } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { copyShareUrl, deleteConversationShare, fetchConversationShare, saveConversationShare } from '@/lib/chat/conversation-share-client';
@@ -31,44 +31,52 @@ export function ShareConversationMenu({ conversationId, taskActive, exportBusy, 
     const [includeCharts, setIncludeCharts] = useState(false);
     const [busy, setBusy] = useState<'save' | 'delete' | null>(null);
     const [confirmDelete, setConfirmDelete] = useState(false);
+    const requestSequence = useRef(0);
 
-    const load = useCallback(async (id: string, signal: { cancelled: boolean }) => {
+    const load = useCallback(async (id: string) => {
+        const sequence = ++requestSequence.current;
         setStatus('loading');
+        setShare(null);
+        setIncludeCharts(false);
+        setConfirmDelete(false);
+        setBusy(null);
         try {
             const current = await fetchConversationShare(id);
-            if (signal.cancelled) return;
+            if (sequence !== requestSequence.current) return;
             setShare(current);
             setIncludeCharts(current?.includeCharts ?? false);
             setStatus('ready');
         } catch {
-            if (!signal.cancelled) setStatus('error');
+            if (sequence === requestSequence.current) setStatus('error');
         }
     }, []);
 
     useEffect(() => {
         if (!conversationId) return;
-        const signal = { cancelled: false };
-        void load(conversationId, signal);
-        return () => { signal.cancelled = true; };
+        void load(conversationId);
+        return () => { requestSequence.current += 1; };
     }, [conversationId, load]);
 
     const save = async () => {
         if (!conversationId || busy) return;
+        const sequence = ++requestSequence.current;
         setBusy('save');
         try {
             const next = await saveConversationShare(conversationId, includeCharts);
+            if (sequence !== requestSequence.current) return;
             const created = !share;
             setShare(next);
             if (created) {
                 const copied = await copyShareUrl(next.path);
+                if (sequence !== requestSequence.current) return;
                 showToast('success', copied ? '已创建公开链接并复制' : '已创建公开链接');
             } else {
                 showToast('success', '公开链接已更新为当前对话');
             }
         } catch (error) {
-            showToast('error', error instanceof Error ? error.message : '更新公开链接失败');
+            if (sequence === requestSequence.current) showToast('error', error instanceof Error ? error.message : '更新公开链接失败');
         } finally {
-            setBusy(null);
+            if (sequence === requestSequence.current) setBusy(null);
         }
     };
 
@@ -81,16 +89,18 @@ export function ShareConversationMenu({ conversationId, taskActive, exportBusy, 
     const remove = async () => {
         if (!conversationId || busy) return;
         if (!confirmDelete) { setConfirmDelete(true); return; }
+        const sequence = ++requestSequence.current;
         setBusy('delete');
         try {
             await deleteConversationShare(conversationId);
+            if (sequence !== requestSequence.current) return;
             setShare(null);
             setConfirmDelete(false);
             showToast('success', '公开链接已删除，原链接将无法访问');
         } catch (error) {
-            showToast('error', error instanceof Error ? error.message : '删除公开链接失败');
+            if (sequence === requestSequence.current) showToast('error', error instanceof Error ? error.message : '删除公开链接失败');
         } finally {
-            setBusy(null);
+            if (sequence === requestSequence.current) setBusy(null);
         }
     };
 
@@ -101,7 +111,7 @@ export function ShareConversationMenu({ conversationId, taskActive, exportBusy, 
         {status === 'loading' && <p className="chat-header-menu-note">正在读取分享状态…</p>}
         {status === 'error' && <>
             <p className="chat-header-menu-note">读取分享状态失败。</p>
-            <button type="button" role="menuitem" onClick={() => { void load(conversationId, { cancelled: false }); }}>
+            <button type="button" role="menuitem" onClick={() => { void load(conversationId); }}>
                 <RefreshCw size={15} aria-hidden="true" />重试
             </button>
         </>}

@@ -9,6 +9,9 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
+import { setTimeout as delay } from 'node:timers/promises';
+import { repairConcurrentIndexes } from './concurrent-indexes.mjs';
+import { libpqEnvironment } from './connection-env.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const migrationsDir = path.join(root, 'database/migrations');
@@ -43,23 +46,11 @@ function listFiles() {
   });
 }
 
-function psqlEnvironment() {
-  const url = new URL(dsn);
-  return {
-    ...process.env,
-    PGHOST: decodeURIComponent(url.hostname),
-    PGPORT: url.port || '5432',
-    PGUSER: decodeURIComponent(url.username),
-    PGPASSWORD: decodeURIComponent(url.password),
-    PGDATABASE: decodeURIComponent(url.pathname.replace(/^\//, '')),
-  };
-}
-
 function runWithoutTransaction(migration) {
   // SET ROLE first: taibu_migrator itself owns nothing.
   const result = spawnSync('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-f', '-'], {
     input: `SET ROLE taibu_owner;\nSET search_path = public, extensions, pg_catalog;\n${migration.sql}`,
-    env: psqlEnvironment(),
+    env: libpqEnvironment(dsn),
     encoding: 'utf8',
   });
   if (result.error) throw new Error(`psql is required for ${migration.file}: ${result.error.message}`);
@@ -74,6 +65,14 @@ const client = new pg.Client({ connectionString: dsn });
 await client.connect();
 try {
   await client.query('SET ROLE taibu_owner');
+  // Lock before even reading the ledger: another migrator may have applied it
+  // while we waited. This also serializes first-time ledger creation.
+  // A blocking SELECT pg_advisory_lock holds an old snapshot while waiting,
+  // which can stall the lock holder's CREATE INDEX CONCURRENTLY. Poll with
+  // short statements so competing migrators release their snapshots promptly.
+  while (!(await client.query(`select pg_try_advisory_lock(hashtext('taibu:migrate')) as locked`)).rows[0].locked) {
+    await delay(250);
+  }
   await client.query('CREATE SCHEMA IF NOT EXISTS taibu_meta');
   await client.query(`CREATE TABLE IF NOT EXISTS taibu_meta.schema_migrations (
     version text PRIMARY KEY,
@@ -117,36 +116,32 @@ try {
     if (dryRun) {
       for (const migration of pending) console.log(`  would apply ${migration.file}`);
     } else {
-      await client.query(`select pg_advisory_lock(hashtext('taibu:migrate'))`);
-      try {
-        for (const migration of pending) {
-          const started = Date.now();
-          if (migration.noTransaction) {
-            runWithoutTransaction(migration);
+      for (const migration of pending) {
+        const started = Date.now();
+        if (migration.noTransaction) {
+          await repairConcurrentIndexes(client, migration.sql);
+          runWithoutTransaction(migration);
+          await client.query(
+            'insert into taibu_meta.schema_migrations (version, name, checksum, duration_ms) values ($1, $2, $3, $4)',
+            [migration.version, migration.name, migration.checksum, Date.now() - started],
+          );
+        } else {
+          await client.query('BEGIN');
+          try {
+            await client.query('SET LOCAL ROLE taibu_owner');
+            await client.query('SET LOCAL search_path = public, extensions, pg_catalog');
+            await client.query(migration.sql);
             await client.query(
               'insert into taibu_meta.schema_migrations (version, name, checksum, duration_ms) values ($1, $2, $3, $4)',
               [migration.version, migration.name, migration.checksum, Date.now() - started],
             );
-          } else {
-            await client.query('BEGIN');
-            try {
-              await client.query('SET LOCAL ROLE taibu_owner');
-              await client.query('SET LOCAL search_path = public, extensions, pg_catalog');
-              await client.query(migration.sql);
-              await client.query(
-                'insert into taibu_meta.schema_migrations (version, name, checksum, duration_ms) values ($1, $2, $3, $4)',
-                [migration.version, migration.name, migration.checksum, Date.now() - started],
-              );
-              await client.query('COMMIT');
-            } catch (error) {
-              await client.query('ROLLBACK');
-              throw error;
-            }
+            await client.query('COMMIT');
+          } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
           }
-          console.log(`[db:migrate] applied ${migration.file} in ${Date.now() - started}ms`);
         }
-      } finally {
-        await client.query(`select pg_advisory_unlock(hashtext('taibu:migrate'))`);
+        console.log(`[db:migrate] applied ${migration.file} in ${Date.now() - started}ms`);
       }
     }
   } else {

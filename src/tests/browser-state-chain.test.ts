@@ -1,7 +1,5 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 
 process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
@@ -125,17 +123,4 @@ test('loadAdminClientAccessState surfaces profile loading failures instead of do
         (profileModule as { getCurrentUserProfileBundle: typeof import('../lib/user/profile').getCurrentUserProfileBundle }).getCurrentUserProfileBundle = originalGetCurrentUserProfileBundle;
         delete require.cache[adminClientPath];
     }
-});
-
-test('community post page separates auth failures from admin access failures', () => {
-    const source = readFileSync(resolve(process.cwd(), 'src/app/community/[postId]/page.tsx'), 'utf8');
-
-    assert.match(
-        source,
-        /setUser\(user\);[\s\S]*try\s*\{\s*const access = await loadAdminClientAccessState\(\);[\s\S]*catch \(error\) \{\s*console\.error\('获取社区管理员状态失败:'/,
-    );
-    assert.match(
-        source,
-        /catch \(error\) \{\s*console\.error\('获取社区登录态失败:'/,
-    );
 });

@@ -7,7 +7,7 @@
  */
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import {
     adminDeletePost,
@@ -22,7 +22,7 @@ import {
     vote,
     VoteType,
 } from '@/lib/community';
-import { getUserSnapshot } from '@/lib/auth';
+import { useSessionSafe } from '@/lib/hooks/session-context';
 import { loadAdminClientAccessState } from '@/lib/admin/client';
 import { useToast } from '@/components/ui/Toast';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
@@ -32,9 +32,14 @@ import { PostDetail } from '@/components/community/PostDetail';
 import { CommentSection } from '@/components/community/CommentSection';
 
 export default function PostDetailPage() {
-    const router = useRouter();
     const params = useParams();
-    const postId = params.postId as string;
+    const { user, loading } = useSessionSafe();
+    return <PostDetailContent key={`${params.postId}:${loading}:${user?.id ?? ''}`} postId={params.postId as string} />;
+}
+
+function PostDetailContent({ postId }: { postId: string }) {
+    const router = useRouter();
+    const { user, loading: sessionLoading } = useSessionSafe();
     const { showToast } = useToast();
 
     const [loading, setLoading] = useState(true);
@@ -42,7 +47,6 @@ export default function PostDetailPage() {
     const [comments, setComments] = useState<CommunityComment[]>([]);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [isAuthor, setIsAuthor] = useState(false);
-    const [user, setUser] = useState<{ id: string } | null>(null);
     const [isAdmin, setIsAdmin] = useState(false);
     const [authResolved, setAuthResolved] = useState(false);
     const [userVotes, setUserVotes] = useState<Map<string, VoteType>>(new Map());
@@ -53,18 +57,26 @@ export default function PostDetailPage() {
     const [reportTarget, setReportTarget] = useState<{ type: 'post' | 'comment'; id: string } | null>(null);
     const [showEditModal, setShowEditModal] = useState(false);
     const [confirmDeleteState, setConfirmDeleteState] = useState<{ type: 'comment' | 'post'; id?: string } | null>(null);
+    const mounted = useRef(false);
+    const pendingLoad = useRef<AbortController | null>(null);
+    useEffect(() => {
+        mounted.current = true;
+        return () => { mounted.current = false; pendingLoad.current?.abort(); };
+    }, []);
 
     // 加载用户信息
     useEffect(() => {
+        if (sessionLoading) return;
+        let current = true;
         const checkAuth = async () => {
             try {
-                const { data: { user } } = await getUserSnapshot();
-                setUser(user);
                 if (user) {
                     try {
                         const access = await loadAdminClientAccessState();
+                        if (!current) return;
                         setIsAdmin(access.isAdmin);
                     } catch (error) {
+                        if (!current) return;
                         console.error('获取社区管理员状态失败:', error);
                         setIsAdmin(false);
                         showToast('error', error instanceof Error ? error.message : '管理员权限获取失败');
@@ -73,22 +85,27 @@ export default function PostDetailPage() {
                     setIsAdmin(false);
                 }
             } catch (error) {
+                if (!current) return;
                 console.error('获取社区登录态失败:', error);
-                setUser(null);
                 setIsAdmin(false);
                 showToast('error', error instanceof Error ? error.message : '认证状态获取失败');
             } finally {
-                setAuthResolved(true);
+                if (current) setAuthResolved(true);
             }
         };
         void checkAuth();
-    }, [showToast]);
+        return () => { current = false; };
+    }, [showToast, user, sessionLoading]);
 
     // 加载帖子
     const loadPost = useCallback(async () => {
+        pendingLoad.current?.abort();
+        const controller = new AbortController();
+        pendingLoad.current = controller;
         setLoading(true);
         try {
-            const detail = await getPostDetail(postId);
+            const detail = await getPostDetail(postId, { signal: controller.signal });
+            if (controller.signal.aborted) return;
             if (!detail) {
                 setPost(null);
                 setComments([]);
@@ -105,6 +122,7 @@ export default function PostDetailPage() {
             setUserVotes(new Map(Object.entries(detail.viewerVotes.comments)));
             setLoadError(null);
         } catch (error) {
+            if (controller.signal.aborted) return;
             setPost(null);
             setComments([]);
             setIsAuthor(false);
@@ -112,7 +130,7 @@ export default function PostDetailPage() {
             setUserVotes(new Map());
             setLoadError(error instanceof Error ? error.message : '获取帖子失败');
         } finally {
-            setLoading(false);
+            if (!controller.signal.aborted) setLoading(false);
         }
     }, [postId]);
 
@@ -179,6 +197,7 @@ export default function PostDetailPage() {
         try {
             await vote(targetType, targetId, voteType);
         } catch (error) {
+            if (!mounted.current) return;
             // 回滚
             if (targetType === 'post' && post) {
                 setPostVote(currentVote);
@@ -239,6 +258,7 @@ export default function PostDetailPage() {
                 content: commentContent.trim(),
                 parent_id: replyTo || undefined,
             });
+            if (!mounted.current) return;
             setCommentContent('');
 
             if (replyTo) {
@@ -249,9 +269,10 @@ export default function PostDetailPage() {
             setPost(prev => prev ? { ...prev, comment_count: prev.comment_count + 1 } : null);
             setReplyTo(null);
         } catch (err) {
+            if (!mounted.current) return;
             showToast('error', err instanceof Error ? err.message : '发表评论失败，请重试');
         } finally {
-            setSubmitting(false);
+            if (mounted.current) setSubmitting(false);
         }
     };
 
@@ -285,10 +306,12 @@ export default function PostDetailPage() {
 
         try {
             await deleteComment(commentId);
+            if (!mounted.current) return;
             setComments(prev => removeCommentFromList(prev, commentId));
             setPost(prev => prev ? { ...prev, comment_count: Math.max(0, prev.comment_count - 1) } : null);
             setConfirmDeleteState(null);
         } catch (error) {
+            if (!mounted.current) return;
             showToast('error', error instanceof Error ? error.message : '删除评论失败');
         }
     };
@@ -309,9 +332,11 @@ export default function PostDetailPage() {
     const handleDeletePost = async () => {
         try {
             await deletePost(postId);
+            if (!mounted.current) return;
             setConfirmDeleteState(null);
             router.push('/community');
         } catch (error) {
+            if (!mounted.current) return;
             showToast('error', error instanceof Error ? error.message : '删除帖子失败');
         }
     };
@@ -324,11 +349,13 @@ export default function PostDetailPage() {
                 await adminFeaturePost(postId, value === true);
             } else {
                 await adminDeletePost(postId);
+                if (!mounted.current) return;
                 router.push('/community');
                 return;
             }
-            await loadPost();
+            if (mounted.current) await loadPost();
         } catch (error) {
+            if (!mounted.current) return;
             showToast('error', error instanceof Error ? error.message : '管理员操作失败');
         }
     };

@@ -54,7 +54,9 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
     try {
-        const body = await request.json();
+        let body;
+        try { body = await request.json(); } catch { return jsonError('请求体不是合法 JSON', 400); }
+        if (!body || typeof body !== 'object' || Array.isArray(body)) return jsonError('请求体无效', 400);
 
         // 判断是创建还是激活
         if (body.action === "create") {
@@ -67,11 +69,11 @@ export async function POST(request: NextRequest) {
                 keyType: body.keyType,
                 membershipType: body.membershipType,
                 creditsAmount: body.creditsAmount,
-                count: body.count || 1,
+                count: body.count ?? 1,
             };
 
             const result = await createActivationKeys(auth.user.id, params);
-            return jsonOk(result);
+            return result.success ? jsonOk(result) : jsonError(result.error || '创建激活码失败', 400);
         } else if (body.action === "activate") {
             const auth = await requireUserContext(request);
             if ("error" in auth) {
@@ -84,7 +86,7 @@ export async function POST(request: NextRequest) {
             }
 
             const result = await activateKey(auth.user.id, keyCode);
-            return jsonOk(result);
+            return result.success ? jsonOk(result) : jsonError(result.error || '激活失败', 400);
         } else {
             return jsonError("无效的操作", 400);
         }

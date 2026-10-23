@@ -111,12 +111,11 @@ async function featureEnabled(feature: FeatureModuleId) {
 const MEMORY_TOOLS: ReadonlySet<string> = new Set(['read_user_memory', 'remember_user_fact', 'search_conversations', AGENT_RECORD_EVENT_TOOL]);
 const CROSS_TASK_TOOLS: ReadonlySet<string> = new Set(['read_user_profile', ...MEMORY_TOOLS]);
 export async function assertAgentToolAccess(store: AgentStore, run: AgentRunRow, name: string, args: Record<string, unknown>) {
-  const account = await getUserCreditInfo(run.user_id, {});
   const feature = ['inspect_chart', 'focus_chart'].includes(name) || getAgentDrilldownBase(name) ? await authorizeChartReference(store, run, args.reference)
     : name.startsWith('bazi_') ? 'bazi' : name.startsWith('ziwei_') ? 'ziwei' : name;
   if (FEATURE_MODULE_IDS.includes(feature as FeatureModuleId) && !(await featureEnabled(feature as FeatureModuleId))) throw new Error('该功能已关闭');
-  if (name === 'search_knowledge' && (!(await featureEnabled('knowledge-base')) || account.membership === 'free')) throw new Error('当前会员无法使用知识库检索');
-  if ((name === 'web_search' || name.startsWith('mcp__')) && (!run.input.webEnabled || account.membership === 'free')) throw new Error('当前任务不能使用联网工具');
+  if (name === 'search_knowledge' && (!(await featureEnabled('knowledge-base')) || (await getUserCreditInfo(run.user_id, {})).membership === 'free')) throw new Error('当前会员无法使用知识库检索');
+  if ((name === 'web_search' || name.startsWith('mcp__')) && (!run.input.webEnabled || (await getUserCreditInfo(run.user_id, {})).membership === 'free')) throw new Error('当前任务不能使用联网工具');
   if (name === 'read_user_data' && !(await featureEnabled(getDataSourceFeatureId(args.type as typeof DATA_SOURCE_TYPES[number])))) throw new Error('该资料功能已关闭');
   if (name === 'read_saved_chart' && !(await featureEnabled('bazi'))) throw new Error('命盘功能已关闭');
   if (name === 'read_user_notes' && !(await featureEnabled('records'))) throw new Error('命理记录功能已关闭');

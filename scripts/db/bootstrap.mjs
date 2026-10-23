@@ -25,6 +25,11 @@ const ROLE_PASSWORDS = [
   ['taibu_auth', 'TAIBU_AUTH_PASSWORD'],
   ['taibu_backup', 'TAIBU_BACKUP_PASSWORD'],
 ];
+if (!noPasswords) {
+  for (const [role, variable] of ROLE_PASSWORDS) {
+    if (!process.env[variable]) throw new Error(`${variable} is required to bootstrap role ${role}`);
+  }
+}
 
 function quoteIdent(value) {
   return `"${value.replace(/"/g, '""')}"`;
@@ -33,6 +38,7 @@ function quoteIdent(value) {
 const client = new pg.Client({ connectionString: dsn });
 await client.connect();
 try {
+  await client.query('BEGIN');
   const files = readdirSync(bootstrapDir).filter((name) => name.endsWith('.sql')).sort();
   for (const file of files) {
     const sql = readFileSync(path.join(bootstrapDir, file), 'utf8');
@@ -52,15 +58,16 @@ try {
   if (!noPasswords) {
     for (const [role, variable] of ROLE_PASSWORDS) {
       const password = process.env[variable];
-      if (!password) {
-        throw new Error(`${variable} is required to bootstrap role ${role}`);
-      }
       const { rows } = await client.query('select format(\'ALTER ROLE %I PASSWORD %L\', $1::text, $2::text) as sql', [role, password]);
       await client.query(rows[0].sql);
       console.log(`[db:bootstrap] set password for ${role}`);
     }
   }
+  await client.query('COMMIT');
   console.log(`[db:bootstrap] database ${databaseName} ready`);
+} catch (error) {
+  await client.query('ROLLBACK');
+  throw error;
 } finally {
   await client.end();
 }

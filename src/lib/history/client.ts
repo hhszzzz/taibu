@@ -88,8 +88,10 @@ export async function resolveHistoryConversationId(
   type: HistoryType,
   id: string,
   sessionKey?: string,
+  options: { signal?: AbortSignal } = {},
 ): Promise<string | null> {
-  const payload = await loadHistoryRestore(type, id);
+  const payload = await loadHistoryRestore(type, id, undefined, options);
+  options.signal?.throwIfAborted();
   const conversationId = typeof payload?.sessionData?.conversationId === 'string'
     ? payload.sessionData.conversationId
     : null;

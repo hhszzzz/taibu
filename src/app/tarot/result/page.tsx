@@ -29,7 +29,8 @@ import {
     type TarotResultSession,
     type TarotSpread,
 } from '@/lib/divination/tarot';
-import { readSessionJSON, updateSessionJSON, writeSessionJSON } from '@/lib/cache/session-storage';
+import { readSessionJSON, scopeResultSession, updateSessionJSON, writeSessionJSON } from '@/lib/cache/session-storage';
+import { useIdentityGuard } from '@/lib/hooks/useIdentityGuard';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { ModelSelector } from '@/components/ui/ModelSelector';
 import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
@@ -90,8 +91,8 @@ function TarotResultContent() {
     const [isInterpreting, setIsInterpreting] = useState(false);
     const [revealedCards, setRevealedCards] = useState<number[]>([]);
     const [flippedToInterpretation, setFlippedToInterpretation] = useState<number[]>([]);
-    const [readingId, setReadingId] = useState<string | null>(null);
-    const [conversationId, setConversationId] = useState<string | null>(null);
+    const [storedReadingId, setReadingId] = useState<string | null>(null);
+    const [storedConversationId, setConversationId] = useState<string | null>(null);
     const [historyMissing, setHistoryMissing] = useState(false);
     const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL_ID);
     const [reasoningEnabled, setReasoningEnabled] = useState(false);
@@ -107,6 +108,20 @@ function TarotResultContent() {
     const drawnInPageRef = useRef(false);
     const streaming = useStreamingResponse();
     const { user, userId, sessionLoading, membershipInfo, membershipLoading, membershipResolved } = useSessionMembership();
+    const captureIdentity = useIdentityGuard(userId);
+    const [resultOwnerId, setResultOwnerId] = useState<string | null | undefined>(undefined);
+    const readingId = resultOwnerId === userId ? storedReadingId : null;
+    const conversationId = resultOwnerId === userId ? storedConversationId : null;
+    const streamRef = useRef(streaming);
+    streamRef.current = streaming;
+    useEffect(() => {
+        setSaving(false);
+        setIsInterpreting(false);
+        setInterpretation('');
+        setInterpretationReasoning(null);
+        streamRef.current.stop();
+        streamRef.current.reset();
+    }, [userId]);
     const membershipPending = membershipLoading || !membershipResolved;
     const membershipType = membershipResolved ? (membershipInfo?.type ?? 'free') : 'free';
 
@@ -132,7 +147,7 @@ function TarotResultContent() {
     // 抽牌：地址上的抽牌参数是一次性请求。抽到牌后整体替换会话并换成不带这些参数的地址，
     // 之后刷新、前进或后退都从会话恢复同一组牌，而不是重新抽一组。抽牌失败时保留地址，刷新即重试。
     useEffect(() => {
-        if (!spreadId) return;
+        if (!spreadId || sessionLoading) return;
         let cancelled = false;
         const drawCards = async () => {
             setIsLoading(true); setRevealedCards([]); setInterpretation(''); setInterpretationReasoning(null);
@@ -141,7 +156,9 @@ function TarotResultContent() {
                 const data: TarotDrawResponse = await res.json();
                 if (cancelled || !data.success || !data.data?.cards) return;
                 const draw = data.data;
-                writeSessionJSON('tarot_result', createTarotDrawSession(draw, { question: questionParam, birthDate: birthDateParam }, new Date().toISOString()));
+                writeSessionJSON('tarot_result', { ...createTarotDrawSession(draw, { question: questionParam, birthDate: birthDateParam }, new Date().toISOString()), recordOwnerId: userId });
+                setResultOwnerId(userId);
+                setReadingId(null); setConversationId(null);
                 drawnInPageRef.current = true;
                 setSelectedSpread(draw.spread); setDrawnCards(draw.cards); setNumerology(draw.numerology || null); setSeed(draw.seed || null);
                 window.history.replaceState(null, '', hrefAfterDraw);
@@ -149,32 +166,35 @@ function TarotResultContent() {
         };
         void drawCards();
         return () => { cancelled = true; };
-    }, [allowReversed, birthDateParam, hrefAfterDraw, questionParam, spreadId]);
+    }, [allowReversed, birthDateParam, hrefAfterDraw, questionParam, spreadId, sessionLoading, userId]);
 
     // 从会话恢复：刷新、历史记录（带 t）以及抽牌后换掉的地址
     useEffect(() => {
-        if (spreadId) return;
+        if (spreadId || sessionLoading) return;
         // 本页刚抽的牌已在屏幕上，按会话重置会把未翻开的牌全部翻开；历史记录跳转（带 t）仍照常恢复
-        if (drawnInPageRef.current && !historyTimestamp) return;
-        const parsed = readSessionJSON<TarotResultSession>('tarot_result');
+        if (drawnInPageRef.current && !historyTimestamp && resultOwnerId === userId) return;
+        const stored = readSessionJSON<TarotResultSession>('tarot_result');
+        const parsed = stored ? scopeResultSession(stored, userId) : null;
         if (parsed?.cards) {
             const spread = TAROT_SPREADS.find(s => s.id === (parsed.spreadId || parsed.spread?.id)) || null;
             if (spread) {
                 setSelectedSpread(spread); setDrawnCards(parsed.cards); setQuestion(parsed.question || ''); setBirthDate(parsed.birthDate || '');
                 setNumerology(parsed.numerology || null); setSeed(parsed.seed || null); setRevealedCards(parsed.cards.map((_: DrawnCard, i: number) => i));
                 setReadingId(parsed.readingId || null); setConversationId(parsed.conversationId || null);
+                setResultOwnerId(userId);
                 setIsLoading(false); return;
             }
         }
         if (historyTimestamp) { setHistoryMissing(true); setIsLoading(false); return; }
         router.push('/tarot');
-    }, [historyTimestamp, router, spreadId]);
+    }, [historyTimestamp, router, spreadId, sessionLoading, userId, resultOwnerId]);
 
     useEffect(() => {
-        if (!selectedSpread || drawnCards.length === 0) return;
+        if (!selectedSpread || drawnCards.length === 0 || sessionLoading || resultOwnerId !== userId) return;
 
         updateSessionJSON<TarotResultSession>('tarot_result', (prev) => ({
             ...(prev || {}),
+            recordOwnerId: userId,
             spread: selectedSpread,
             spreadId: selectedSpread.id,
             cards: drawnCards,
@@ -186,7 +206,7 @@ function TarotResultContent() {
             conversationId,
             createdAt: prev?.createdAt || new Date().toISOString(),
         }));
-    }, [birthDate, conversationId, drawnCards, numerology, question, readingId, seed, selectedSpread]);
+    }, [birthDate, conversationId, drawnCards, numerology, question, readingId, seed, selectedSpread, sessionLoading, userId, resultOwnerId]);
 
     const handleConfirmCopy = useCallback(async (level: ChartTextDetailLevel) => {
         if (!selectedSpread || drawnCards.length === 0) return;
@@ -203,6 +223,7 @@ function TarotResultContent() {
 
     const handleInterpret = useCallback(async () => {
         if (drawnCards.length === 0 || !user) { if (!user) setShowAuthModal(true); return; }
+        const isCurrent = captureIdentity();
         // 解读覆盖整组牌，先把未翻开的牌全部翻开
         setRevealedCards(drawnCards.map((_, i) => i));
         setIsInterpreting(true); streaming.reset(); setInterpretationReasoning(null); setInterpretation('');
@@ -232,6 +253,7 @@ function TarotResultContent() {
                     stream: true,
                 },
             });
+            if (!isCurrent()) return;
             if (result.requiresCredits) setShowCreditsModal(true);
             else {
                 if (result.error) showToast('error', result.error);
@@ -239,16 +261,17 @@ function TarotResultContent() {
                 if (result.reasoning) setInterpretationReasoning(result.reasoning);
                 if (result.conversationId) setConversationId(result.conversationId);
             }
-        } catch (e) { console.error(e); } finally { setIsInterpreting(false); }
-    }, [birthDate, drawnCards, numerology, question, readingId, reasoningEnabled, seed, selectedModel, selectedSpread?.id, showToast, streaming, user]);
+        } catch (e) { if (isCurrent()) console.error(e); } finally { if (isCurrent()) setIsInterpreting(false); }
+    }, [birthDate, drawnCards, numerology, question, readingId, reasoningEnabled, seed, selectedModel, selectedSpread?.id, showToast, streaming, user, captureIdentity]);
 
     // 未解读时抽牌结果只在会话里；解读后会随对话一起入库（历史绑定），此时视为已保存
-    const saved = Boolean(readingId || conversationId);
+    const saved = resultOwnerId === userId && Boolean(readingId || conversationId);
 
     /** 「保存」：未登录先登录；已登录则把本次抽牌写入命理记录 */
     const handleSave = useCallback(async () => {
         if (!selectedSpread || drawnCards.length === 0 || saved || saving || sessionLoading) return;
         if (!user) { setShowAuthModal(true); return; }
+        const isCurrent = captureIdentity();
         setSaving(true);
         try {
             const result = await saveDivinationAction({
@@ -257,6 +280,7 @@ function TarotResultContent() {
                 idKey: 'readingId',
                 fallbackMessage: '保存塔罗记录失败',
             });
+            if (!isCurrent()) return;
             if (result.ok && result.id) {
                 setReadingId(result.id);
                 showToast('success', '已保存到命理记录');
@@ -264,13 +288,13 @@ function TarotResultContent() {
                 showToast('error', result.ok ? '保存失败，请重试' : result.error.message || '保存失败，请重试');
             }
         } finally {
-            setSaving(false);
+            if (isCurrent()) setSaving(false);
         }
-    }, [birthDate, drawnCards, numerology, question, saved, saving, seed, selectedSpread, sessionLoading, showToast, user]);
+    }, [birthDate, drawnCards, numerology, question, saved, saving, seed, selectedSpread, sessionLoading, showToast, user, captureIdentity]);
 
     useAnalysisSnapshot({
-        conversationId,
-        recordId: readingId,
+        conversationId: resultOwnerId === userId ? conversationId : null,
+        recordId: resultOwnerId === userId ? readingId : null,
         divinationType: 'tarot',
         sessionKey: 'tarot_result',
         hasExistingAnalysis: !!interpretation,

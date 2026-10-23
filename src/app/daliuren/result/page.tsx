@@ -12,7 +12,8 @@ import { RotateCcw, RefreshCw, Copy, Check, ChevronLeft } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { ResultMobileActions } from '@/components/bazi/result/ResultHeader';
 import { ResultHeaderActions } from '@/components/divination/ResultHeaderActions';
-import { readSessionJSON, updateSessionJSON } from '@/lib/cache/session-storage';
+import { readSessionJSON, scopeResultSession, updateSessionJSON, writeSessionJSON } from '@/lib/cache/session-storage';
+import { useResultIdentity } from '@/lib/hooks/useIdentityGuard';
 import { DaliurenChart } from '@/components/daliuren/DaliurenChart';
 import { formatBenMing, formatCastTime, formatKeShiDetail, parseKeShi } from '@/components/daliuren/daliuren-display';
 import { ModelSelector } from '@/components/ui/ModelSelector';
@@ -46,9 +47,15 @@ type DaliurenSessionParams = Record<string, unknown> & {
     date?: string;
     divinationId?: string;
     conversationId?: string;
+    recordOwnerId?: string | null;
 };
 
 export default function DaliurenResultPage() {
+    const identity = useResultIdentity();
+    return <DaliurenResultContent key={identity.key} isCurrent={identity.isCurrent} />;
+}
+
+function DaliurenResultContent({ isCurrent }: { isCurrent: () => boolean }) {
     const router = useRouter();
     const { setMenuItems, clearMenuItems } = useHeaderMenu();
     const { showToast } = useToast();
@@ -82,8 +89,8 @@ export default function DaliurenResultPage() {
     const { isAdmin, jsonCopied, copyJson } = useAdminJsonCopy(canonicalResult);
 
     const persistSessionIds = useCallback((next: { divinationId?: string; conversationId?: string; }) => {
-        updateSessionJSON('daliuren_params', (prev) => ({ ...(prev || {}), ...next }));
-    }, []);
+        if (isCurrent()) updateSessionJSON('daliuren_params', (prev) => ({ ...(prev || {}), ...next, recordOwnerId: userId }));
+    }, [isCurrent, userId]);
 
     const saveDivinationRecord = useCallback(async (params: DaliurenSessionParams, nextResult: DaliurenOutput) => {
         setSaving(true);
@@ -94,6 +101,7 @@ export default function DaliurenResultPage() {
                 idKey: 'divinationId',
                 fallbackMessage: '保存排盘记录失败',
             });
+            if (!isCurrent()) return undefined;
             if (!saveResult.ok) {
                 console.error('[daliuren/result] 保存排盘记录失败:', saveResult.error.message);
                 return undefined;
@@ -101,26 +109,29 @@ export default function DaliurenResultPage() {
             if (saveResult.id) { setDivinationId(saveResult.id); persistSessionIds({ divinationId: saveResult.id }); return saveResult.id; }
             return undefined;
         } finally {
-            setSaving(false);
+            if (isCurrent()) setSaving(false);
         }
-    }, [persistSessionIds]);
+    }, [persistSessionIds, isCurrent]);
 
     useEffect(() => {
         if (sessionLoading) return;
         const init = async () => {
-            const params = readSessionJSON<DaliurenSessionParams>('daliuren_params');
-            if (!params?.date) { router.replace('/daliuren'); return; }
+            const stored = readSessionJSON<DaliurenSessionParams>('daliuren_params');
+            if (!stored?.date) { router.replace('/daliuren'); return; }
+            const params = scopeResultSession(stored, userId);
+            writeSessionJSON('daliuren_params', params);
             try {
                 const response = await fetch('/api/daliuren', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'calculate', ...params }) });
                 const payload = await response.json();
+                if (!isCurrent()) return;
                 if (payload?.data) {
                     setResult(payload.data); setSessionParams(params); if (params.divinationId) setDivinationId(params.divinationId); if (params.conversationId) setConversationId(params.conversationId);
                     if (!params.divinationId && userId && !hasAutoSavedRef.current) { hasAutoSavedRef.current = true; await saveDivinationRecord(params, payload.data); }
                 }
-            } catch (e) { console.error(e); } finally { setIsLoading(false); }
+            } catch (e) { if (isCurrent()) console.error(e); } finally { if (isCurrent()) setIsLoading(false); }
         };
         void init();
-    }, [router, saveDivinationRecord, sessionLoading, userId]);
+    }, [router, saveDivinationRecord, sessionLoading, userId, isCurrent]);
 
     const handleConfirmCopy = async (level: ChartTextDetailLevel) => {
         if (!result) return;
@@ -198,6 +209,7 @@ export default function DaliurenResultPage() {
                     stream: true,
                 },
             });
+            if (!isCurrent()) return;
             if (analysisResult.requiresCredits) {
                 setShowCreditsModal(true);
             } else {
@@ -216,9 +228,9 @@ export default function DaliurenResultPage() {
                 }
             }
         } catch (err) {
-            setError(err instanceof Error ? err.message : '解读失败');
+            if (isCurrent()) setError(err instanceof Error ? err.message : '解读失败');
         }
-    }, [divinationId, modelId, persistSessionIds, reasoningEnabled, result, streaming, userId]);
+    }, [divinationId, modelId, persistSessionIds, reasoningEnabled, result, streaming, userId, isCurrent]);
 
     /** 「保存」：未登录先登录（登录后页面自动保存），已登录则手动重试保存 */
     const handleSave = async () => {
@@ -229,6 +241,7 @@ export default function DaliurenResultPage() {
         }
         hasAutoSavedRef.current = true;
         const savedId = await saveDivinationRecord(sessionParams, result);
+        if (!isCurrent()) return;
         showToast(savedId ? 'success' : 'error', savedId ? '已保存到命理记录' : '保存失败，请重试');
     };
 

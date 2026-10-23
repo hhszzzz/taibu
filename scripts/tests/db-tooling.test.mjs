@@ -3,13 +3,17 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { chmodSync, mkdtempSync, rmSync } from 'node:fs';
+import { chmodSync, ftruncateSync, mkdtempSync, openSync, closeSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 import { defaultReportPath } from '../db/report-path.mjs';
 import { fileURLToPath } from 'node:url';
 
 import { normalizeSchemaDump } from '../db/normalize-schema.mjs';
+import { repairConcurrentIndexes } from '../db/concurrent-indexes.mjs';
+import { execute } from '../selfhost.mjs';
+import { libpqEnvironment } from '../db/connection-env.mjs';
+import { csvHeader } from '../db/csv-header.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (relative) => readFileSync(path.join(root, relative), 'utf8');
@@ -84,6 +88,88 @@ test('schema normalisation ignores dump order and session boilerplate', () => {
   assert.equal(normalizeSchemaDump(a), normalizeSchemaDump(b));
   assert.equal(normalizeSchemaDump(a), normalizeSchemaDump(a));
   assert.ok(normalizeSchemaDump(a).indexOf('alpha') < normalizeSchemaDump(a).indexOf('beta'));
+});
+
+test('concurrent index migrations are replay-safe after an invalid index residue', () => {
+  const runner = read('scripts/db/migrate.mjs');
+  const repair = read('scripts/db/concurrent-indexes.mjs');
+  const migration = read('database/migrations/0014_repair_concurrent_indexes.sql');
+  assert.match(runner, /pg_try_advisory_lock[\s\S]*appliedRows/u);
+  assert.match(runner, /repairConcurrentIndexes\(client, migration\.sql\)/u);
+  assert.match(repair, /indisvalid|indisready/u);
+  assert.match(migration, /create index concurrently if not exists agent_claim_queued/u);
+});
+
+test('index recovery only drops invalid indexes declared by a concurrent migration', async () => {
+  const calls = [];
+  await repairConcurrentIndexes({ query: async (sql, args) => {
+    calls.push({ sql, args });
+    return { rows: args ? [{ qualified_name: 'public.agent_claim_queued' }] : [] };
+  } }, 'create index concurrently if not exists agent_claim_queued on public.agent_runs (created_at);');
+  assert.deepEqual(calls[0].args, [['agent_claim_queued']]);
+  assert.match(calls[0].sql, /not i.indisvalid or not i.indisready/u);
+  assert.equal(calls[1].sql, 'DROP INDEX CONCURRENTLY IF EXISTS public.agent_claim_queued');
+  assert.equal(calls.length, 2);
+});
+
+test('selfhost subprocesses receive all binary restore bytes through stdin', async () => {
+  const bytes = Buffer.from([0, 255, 13, 10, ...Buffer.from('PGDMP')]);
+  const received = await execute(process.execPath, ['-e', 'process.stdin.pipe(process.stdout)'], { input: bytes, binary: true });
+  assert.deepEqual(received, bytes);
+  await assert.rejects(execute(process.execPath, ['-e', 'process.exit(1)'], { input: bytes }), /本地操作失败/);
+});
+
+test('database CLI environments preserve TLS and connection URI options without argv credentials', () => {
+  const env = libpqEnvironment('postgres://alice:encoded%40secret@localhost:5544/example?sslmode=verify-full&sslrootcert=%2Ftmp%2Froot.crt&channel_binding=require&connect_timeout=3');
+  assert.equal(env.PGSSLMODE, 'verify-full');
+  assert.equal(env.PGSSLROOTCERT, '/tmp/root.crt');
+  assert.equal(env.PGCHANNELBINDING, 'require');
+  assert.equal(env.PGCONNECT_TIMEOUT, '3');
+  assert.equal(env.PGPASSWORD, 'encoded@secret');
+  assert.equal(env.PGDATABASE, 'example');
+  assert.equal(libpqEnvironment('postgres://alice:fixture@[::1]:5544/example').PGHOST, '::1');
+  assert.throws(() => libpqEnvironment('postgres://localhost/db?unsupported=1'), /Unsupported libpq URI option/);
+});
+
+test('CSV headers are bounded even when the exported table is several GiB', () => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'taibu-csv-header-'));
+  try {
+    const file = path.join(directory, 'large.csv');
+    writeFileSync(file, '\uFEFFid,"comma,name","quote""name"\r\n');
+    const fd = openSync(file, 'r+');
+    try { ftruncateSync(fd, 3 * 1024 * 1024 * 1024); } finally { closeSync(fd); }
+    assert.deepEqual(csvHeader(file), ['id', 'comma,name', 'quote"name']);
+    writeFileSync(file, 'x'.repeat(1024 * 1024 + 1));
+    assert.throws(() => csvHeader(file), /header exceeds/);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('offsite backups run after a missed minute, retry failures, and run once per day', async () => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'taibu-backup-schedule-'));
+  const script = (name, text) => { const file = path.join(directory, name); writeFileSync(file, text, { mode: 0o700 }); return file; };
+  try {
+    const backup = script('backup.sh', '#!/bin/sh\necho "$1" >> "$TEST_DIR/calls"\nif [ "$1" = offsite ] && [ ! -f "$TEST_DIR/failed" ]; then touch "$TEST_DIR/failed"; exit 1; fi\n');
+    script('date', '#!/bin/sh\nn=$(cat "$TEST_DIR/tick" 2>/dev/null || echo 0)\ncase "$1" in +%F) if [ "$n" -ge 4 ]; then echo 2026-10-24; else echo 2026-10-23; fi;; +%H) case "$n" in 0) echo 02;; 1) echo 03;; 2) echo 04;; 3) echo 05;; *) echo 03;; esac;; esac\n');
+    script('sleep', '#!/bin/sh\nn=$(cat "$TEST_DIR/tick" 2>/dev/null || echo 0)\nn=$((n+1)); echo "$n" > "$TEST_DIR/tick"\n[ "$n" -lt 5 ] || exit 9\n');
+    const entry = script('entry.sh', read('deploy/backup/entrypoint.sh').replaceAll('/usr/local/bin/backup.sh', backup));
+    await assert.rejects(execute('sh', [entry], { env: { ...process.env, TEST_DIR: directory, PATH: `${directory}:${process.env.PATH}` } }));
+    const calls = readFileSync(path.join(directory, 'calls'), 'utf8').trim().split('\n');
+    assert.equal(calls.filter(mode => mode === 'hourly').length, 5);
+    assert.equal(calls.filter(mode => mode === 'offsite').length, 3);
+    assert.deepEqual(calls, ['hourly', 'hourly', 'offsite', 'prune', 'hourly', 'offsite', 'prune', 'hourly', 'hourly', 'offsite', 'prune']);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('a failed dump is removed before any final archive name is published', async () => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'taibu-backup-atomic-'));
+  try {
+    const dump = path.join(directory, 'pg_dump');
+    writeFileSync(dump, '#!/bin/sh\nwhile [ "$1" != -f ]; do shift; done\nshift; echo partial > "$1"\nexit 1\n', { mode: 0o700 });
+    const script = path.join(directory, 'backup.sh');
+    writeFileSync(script, read('deploy/backup/backup.sh').replaceAll('/backups', directory));
+    await assert.rejects(execute('sh', [script, 'hourly'], { env: { ...process.env, TAIBU_BACKUP_PASSWORD: 'fixture', PATH: `${directory}:${process.env.PATH}` } }));
+    assert.deepEqual(readdirSync(directory).sort(), ['backup.sh', 'pg_dump']);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
 test('report paths fall back to the OS temp dir when the preferred one is read-only', () => {

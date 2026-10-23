@@ -2373,15 +2373,15 @@ $_$;
 -- Name: check_vector_index_exists(integer); Type: FUNCTION; Schema: public; Owner: -
 CREATE FUNCTION public.check_vector_index_exists(p_dim integer DEFAULT NULL::integer) RETURNS boolean
     LANGUAGE sql SECURITY DEFINER
-    SET search_path TO 'public'
+    SET search_path TO 'pg_catalog', 'public'
     AS $$
   select exists (
-    select 1 from pg_indexes
-    where schemaname = 'public'
-      and (
-        (p_dim is not null and indexname = 'knowledge_entries_vector_' || p_dim || '_hnsw_idx')
-        or (p_dim is null and indexname like 'knowledge_entries_vector_%_hnsw_idx')
-      )
+    select 1 from pg_index i
+    join pg_class c on c.oid = i.indexrelid
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and i.indisvalid and i.indisready
+      and ((p_dim is not null and c.relname = 'knowledge_entries_vector_' || p_dim || '_hnsw_idx')
+        or (p_dim is null and c.relname like 'knowledge_entries_vector_%_hnsw_idx'))
   );
 $$;
 

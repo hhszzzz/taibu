@@ -5,7 +5,7 @@
 // script owns only: private per-project config, env files, and compose calls.
 import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { chmod, lstat, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -126,9 +126,9 @@ export async function localDocker() {
   return { ...process.env, DOCKER_SERVER_VERSION: String(version).trim() };
 }
 
-function execute(command, args, { input, env = process.env, binary = false, timeout = 120_000, phase } = {}) {
+export function execute(command, args, { input, env = process.env, binary = false, timeout = 120_000, phase } = {}) {
   return new Promise((resolve, reject) => {
-    const child = execFile(command, args, { env, input, timeout, encoding: binary ? 'buffer' : 'utf8', maxBuffer: 64 * 1024 * 1024 },
+    const child = execFile(command, args, { env, timeout, encoding: binary ? 'buffer' : 'utf8', maxBuffer: 64 * 1024 * 1024 },
       (error, stdout, stderr) => {
         if (error) {
           const detail = String(stderr || error.message).trim().split('\n').slice(-6).join('\n');
@@ -137,7 +137,8 @@ function execute(command, args, { input, env = process.env, binary = false, time
         }
         resolve(binary ? stdout : String(stdout).trim());
       });
-    child.stdin?.end();
+    child.stdin?.on('error', error => { if (error.code !== 'EPIPE') reject(error); });
+    child.stdin?.end(input);
   });
 }
 

@@ -6,8 +6,14 @@ LOCAL_KEEP_HOURS="${LOCAL_KEEP_HOURS:-48}"
 LOCAL_KEEP_DAYS="${LOCAL_KEEP_DAYS:-7}"
 
 dump() {
-  PGPASSWORD="$TAIBU_BACKUP_PASSWORD" pg_dump \
-    -h db -U taibu_backup -d taibu -Fc -f "/backups/taibu-${STAMP}.dump"
+  pending_dump="$(mktemp /backups/.taibu-dump-XXXXXX)"
+  if PGPASSWORD="$TAIBU_BACKUP_PASSWORD" pg_dump \
+    -h db -U taibu_backup -d taibu -Fc -f "$pending_dump"; then
+    mv "$pending_dump" "/backups/taibu-${STAMP}.dump"
+  else
+    rm -f "$pending_dump"
+    return 1
+  fi
 }
 
 case "$MODE" in

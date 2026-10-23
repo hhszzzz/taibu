@@ -132,8 +132,10 @@ export default function SelectHexagramPage() {
 
             // 保存到数据库
             let divinationId: string | null = null;
+            let recordOwnerId: string | null = null;
             try {
                 const { data: { user } } = await getSessionSnapshot();
+                recordOwnerId = user?.id ?? null;
                 if (user) {
                     const saveResult = await saveDivinationAction({
                         endpoint: '/api/liuyao',
@@ -167,6 +169,7 @@ export default function SelectHexagramPage() {
                 changedHexagram,
                 changedLines,
                 divinationId,
+                recordOwnerId,
                 createdAt: new Date().toISOString(),
             };
 

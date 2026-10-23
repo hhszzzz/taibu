@@ -12,7 +12,7 @@ export type DbScope =
   | { kind: 'anon' }
   | { kind: 'system' };
 
-export type TxOptions = { timeoutMs?: number };
+export type TxOptions = { timeoutMs?: number; isolationLevel?: 'read committed' | 'repeatable read' | 'serializable' };
 
 export interface ScopedDb {
   readonly scope: DbScope;
@@ -47,7 +47,7 @@ export function createScopedDb(scope: DbScope): ScopedDb {
     const { role, claims } = roleAndClaims(scope);
     const timeout = `${options.timeoutMs ?? 15_000}ms`;
     try {
-      return await rootDb().transaction().execute(async (trx) => {
+      return await rootDb().transaction().setIsolationLevel(options.isolationLevel ?? 'read committed').execute(async (trx) => {
         await sql`select set_config('role', ${role}, true),
                          set_config('request.jwt.claims', ${JSON.stringify(claims)}, true),
                          set_config('statement_timeout', ${timeout}, true)`.execute(trx);

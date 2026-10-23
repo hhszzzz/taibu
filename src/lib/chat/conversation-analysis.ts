@@ -9,10 +9,11 @@ export type ConversationAnalysisSnapshot = {
 
 export async function loadConversationAnalysisSnapshot(
   conversationId: string,
+  options: { signal?: AbortSignal } = {},
 ): Promise<ConversationAnalysisSnapshot | null> {
   const payload = await requestBrowserData<{
     snapshot?: ConversationAnalysisSnapshot | null;
-  }>(`/api/conversations/${conversationId}?snapshot=analysis`, { method: 'GET' }, {
+  }>(`/api/conversations/${conversationId}?snapshot=analysis`, { method: 'GET', signal: options.signal }, {
     fallbackMessage: '加载分析快照失败',
     allowNotFound: true,
   });

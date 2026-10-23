@@ -219,7 +219,8 @@ export const REPORT_REASONS: { value: ReportReason; label: string }[] = [
 export async function getPosts(
     filters?: PostFilters,
     page: number = 1,
-    pageSize: number = 20
+    pageSize: number = 20,
+    options: { signal?: AbortSignal } = {},
 ): Promise<{ posts: CommunityPost[]; total: number }> {
     const query = new URLSearchParams({
         page: String(page),
@@ -231,7 +232,7 @@ export async function getPosts(
 
     const payload = await requestBrowserData<{ posts?: CommunityPost[]; total?: number }>(
         `/api/community/posts?${query.toString()}`,
-        { method: 'GET' },
+        { method: 'GET', signal: options.signal },
         { fallbackMessage: '获取帖子失败' },
     );
     return {
@@ -240,7 +241,7 @@ export async function getPosts(
     };
 }
 
-export async function getPostDetail(postId: string): Promise<CommunityPostDetail | null> {
+export async function getPostDetail(postId: string, options: { signal?: AbortSignal } = {}): Promise<CommunityPostDetail | null> {
     const payload = await requestBrowserData<{
         post?: CommunityPost | null;
         comments?: CommunityComment[];
@@ -251,7 +252,7 @@ export async function getPostDetail(postId: string): Promise<CommunityPostDetail
         } | null;
     }>(
         `/api/community/posts/${postId}`,
-        { method: 'GET' },
+        { method: 'GET', signal: options.signal },
         { fallbackMessage: '获取帖子失败', allowNotFound: true },
     );
 

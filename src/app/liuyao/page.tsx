@@ -74,8 +74,10 @@ export default function LiuyaoPage() {
 
             // 保存起卦记录到数据库
             let divinationId: string | null = null;
+            let recordOwnerId: string | null = null;
             try {
                 const { data: { user } } = await getSessionSnapshot();
+                recordOwnerId = user?.id ?? null;
                 if (user) {
                     const saveResult = await saveDivinationAction({
                         endpoint: '/api/liuyao',
@@ -108,6 +110,7 @@ export default function LiuyaoPage() {
                 changedHexagram,
                 changedLines,
                 divinationId,
+                recordOwnerId,
                 createdAt: new Date().toISOString(),
             };
             writeSessionJSON('liuyao_result', result);

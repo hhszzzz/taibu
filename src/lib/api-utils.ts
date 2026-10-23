@@ -174,18 +174,10 @@ export const SSE_HEADERS = {
 /** Room for multipart boundaries and part headers around the one uploaded file. */
 const UPLOAD_ENVELOPE_BYTES = 2 * 1024 * 1024;
 
-/**
- * Reads the `file` field of a multipart upload. The body is counted while it streams in, so an upload far past
- * `maxBytes` is cut off instead of being buffered whole.
- */
-export async function readUploadedFile(
-    request: Request,
-    maxBytes: number
-): Promise<{ file: File } | { error: { message: string; status: number } }> {
-    const tooLarge = { error: { message: `文件不能超过 ${Math.floor(maxBytes / 1024 / 1024)}MB`, status: 413 } };
-    const invalid = { error: { message: '文件请求无效', status: 400 } };
+/** Counts actual streamed bytes and cancels the request as soon as the limit is exceeded. */
+export async function readRequestBytes(request: Request, maxBytes: number): Promise<{ bytes: Buffer } | { error: { message: string; status: number } }> {
     const reader = request.body?.getReader();
-    if (!reader) return { error: { message: '请选择文件', status: 400 } };
+    if (!reader) return { error: { message: '请求体为空', status: 400 } };
     const chunks: Uint8Array[] = [];
     let total = 0;
     try {
@@ -193,20 +185,33 @@ export async function readUploadedFile(
             const next = await reader.read();
             if (next.done) break;
             total += next.value.length;
-            if (total > maxBytes + UPLOAD_ENVELOPE_BYTES) {
+            if (total > maxBytes) {
                 await reader.cancel().catch(() => undefined);
-                return tooLarge;
+                return { error: { message: '请求体超过大小限制', status: 413 } };
             }
             chunks.push(next.value);
         }
     } catch {
-        return invalid;
+        return { error: { message: '请求体读取失败', status: 400 } };
     } finally {
         reader.releaseLock();
     }
+    return { bytes: Buffer.concat(chunks) };
+}
+
+/** Reads a multipart file while bounding both the payload and multipart envelope. */
+export async function readUploadedFile(
+    request: Request,
+    maxBytes: number
+): Promise<{ file: File } | { error: { message: string; status: number } }> {
+    const tooLarge = { error: { message: `文件不能超过 ${Math.floor(maxBytes / 1024 / 1024)}MB`, status: 413 } };
+    const invalid = { error: { message: '文件请求无效', status: 400 } };
+    if (!request.body) return { error: { message: '请选择文件', status: 400 } };
+    const input = await readRequestBytes(request, maxBytes + UPLOAD_ENVELOPE_BYTES);
+    if ('error' in input) return input.error.status === 413 ? tooLarge : invalid;
     let form: FormData;
     try {
-        form = await new Response(Buffer.concat(chunks), {
+        form = await new Response(new Uint8Array(input.bytes), {
             headers: { 'Content-Type': request.headers.get('content-type') ?? '' },
         }).formData();
     } catch {

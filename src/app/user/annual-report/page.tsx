@@ -3,7 +3,7 @@
  */
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Calendar,
     BarChart3,
@@ -19,24 +19,36 @@ import {
 } from '@/lib/annual-report-shared';
 import { LoginOverlay } from '@/components/auth/LoginOverlay';
 import { useToast } from '@/components/ui/Toast';
+import { useSessionSafe } from '@/lib/hooks/session-context';
 
 export default function AnnualReportPage() {
+    const { user, loading } = useSessionSafe();
+    return <AnnualReportContent key={`${loading}:${user?.id ?? ''}`} enabled={!loading && !!user} />;
+}
+
+function AnnualReportContent({ enabled }: { enabled: boolean }) {
     const { showToast } = useToast();
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [report, setReport] = useState<AnnualReportData | null>(null);
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [error, setError] = useState<string | null>(null);
+    const pending = useRef<AbortController | null>(null);
 
     const fetchReport = useCallback(async (refresh = false) => {
+        if (!enabled) { setLoading(false); return; }
+        pending.current?.abort();
+        const controller = new AbortController();
+        pending.current = controller;
         try {
             if (refresh) setRefreshing(true);
             else setLoading(true);
             setError(null);
 
             const url = `/api/annual-report?year=${selectedYear}&action=report${refresh ? '&refresh=true' : ''}`;
-            const res = await fetch(url);
+            const res = await fetch(url, { signal: controller.signal });
             const data = await res.json();
+            if (controller.signal.aborted) return;
 
             if (data.success && data.data.report) {
                 setReport(data.data.report);
@@ -44,16 +56,17 @@ export default function AnnualReportPage() {
                 setError(data.error || '获取报告失败');
             }
         } catch (err) {
+            if (controller.signal.aborted) return;
             console.error('获取年度报告失败:', err);
             setError('网络错误，请稍后重试');
         } finally {
-            setLoading(false);
-            setRefreshing(false);
+            if (!controller.signal.aborted) { setLoading(false); setRefreshing(false); }
         }
-    }, [selectedYear]);
+    }, [selectedYear, enabled]);
 
     useEffect(() => {
         fetchReport();
+        return () => pending.current?.abort();
     }, [fetchReport]);
 
     const handleRefresh = () => {
@@ -204,6 +217,7 @@ export default function AnnualReportPage() {
                                 ))}
                             </select>
                             <button
+                                aria-label="刷新年度报告"
                                 onClick={handleRefresh}
                                 disabled={refreshing}
                                 className="p-2 hover:bg-background-secondary rounded-lg transition-colors"
@@ -225,6 +239,7 @@ export default function AnnualReportPage() {
                             ))}
                         </select>
                         <button
+                            aria-label="刷新年度报告"
                             onClick={handleRefresh}
                             disabled={refreshing}
                             className="p-2 hover:bg-background-secondary rounded-lg transition-colors"

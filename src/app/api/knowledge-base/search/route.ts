@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { KnowledgeSearchContextError, searchKnowledge } from '@/lib/knowledge-base/search';
 import type { RankedResult, SearchCandidate } from '@/lib/knowledge-base/types';
+import { KNOWLEDGE_QUERY_MAX_LENGTH } from '@/lib/knowledge-base/types';
 import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
 import { ensureFeatureRouteEnabled } from '@/lib/feature-gate-utils';
 import { MembershipResolutionError } from '@/lib/user/membership-server';
@@ -14,9 +15,15 @@ export async function POST(request: NextRequest) {
     }
     const user = auth.user;
 
-    const body = await request.json() as { query?: unknown; kbIds?: string[]; topK?: number };
+    let body: { query?: unknown; kbIds?: string[]; topK?: number };
+    try {
+        const value = await request.json();
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return jsonError('请求体无效', 400);
+        body = value;
+    } catch { return jsonError('请求体不是合法 JSON', 400); }
     const query = typeof body.query === 'string' ? body.query.trim() : '';
     if (!query) return jsonError('query 不能为空', 400);
+    if (query.length > KNOWLEDGE_QUERY_MAX_LENGTH) return jsonError(`检索内容不能超过 ${KNOWLEDGE_QUERY_MAX_LENGTH} 字`, 400);
 
     let results;
     try {

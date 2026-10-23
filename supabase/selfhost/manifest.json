@@ -2254,10 +2254,6 @@
         {
           "file": "src/app/api/records/route.ts",
           "kind": "literal-kysely"
-        },
-        {
-          "file": "src/app/api/records/route.ts",
-          "kind": "literal-kysely"
         }
       ]
     },

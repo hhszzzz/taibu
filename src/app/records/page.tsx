@@ -5,7 +5,8 @@
  */
 'use client';
 
-import { useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react';
+import { Suspense, useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Plus, ArrowDownUp } from 'lucide-react';
 import { MING_RECORD_SOURCE_TYPE } from '@/lib/data-sources/types';
 import {
@@ -64,7 +65,8 @@ function SectionError({
     );
 }
 
-export default function RecordsPage() {
+function RecordsContent() {
+    const recordId = useSearchParams().get('id');
     const [loading, setLoading] = useState(true);
     const [notesLoading, setNotesLoading] = useState(true);
     const [records, setRecords] = useState<MingRecord[]>([]);
@@ -86,8 +88,9 @@ export default function RecordsPage() {
     const accountIdentity = JSON.stringify([userId ?? null, sessionLoading]);
     useEffect(() => {
         if (sessionLoading || !userId) return;
-        const recordId = new URLSearchParams(window.location.search).get('id');
         if (!recordId) return;
+        setEditingRecord(null);
+        setShowRecordForm(false);
         const controller = new AbortController();
         void getRecord(recordId, { signal: controller.signal }).then(record => {
             if (controller.signal.aborted) return;
@@ -97,7 +100,7 @@ export default function RecordsPage() {
             if (!controller.signal.aborted) showToast('error', error instanceof Error ? error.message : '获取记录失败');
         });
         return () => controller.abort();
-    }, [sessionLoading, showToast, userId]);
+    }, [recordId, sessionLoading, showToast, userId]);
     const recordsIdentity = JSON.stringify([accountIdentity, search, category, page]);
     const recordsLifecycle = useRef<ReadScope | null>(null);
     const notesLifecycle = useRef<ReadScope | null>(null);
@@ -438,4 +441,8 @@ export default function RecordsPage() {
             </div>
         </div>
     );
+}
+
+export default function RecordsPage() {
+    return <Suspense fallback={<SoundWaveLoader />}><RecordsContent /></Suspense>;
 }

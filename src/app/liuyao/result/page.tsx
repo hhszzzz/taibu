@@ -37,7 +37,8 @@ import {
 import { saveDivinationAction } from '@/lib/divination/save-client';
 import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
 import { useSessionMembership } from '@/lib/hooks/useSessionMembership';
-import { readSessionJSON, updateSessionJSON } from '@/lib/cache/session-storage';
+import { readSessionJSON, scopeResultSession, updateSessionJSON, writeSessionJSON } from '@/lib/cache/session-storage';
+import { useResultIdentity } from '@/lib/hooks/useIdentityGuard';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { AddToKnowledgeBaseModal } from '@/components/knowledge-base/AddToKnowledgeBaseModal';
 import { useKnowledgeBaseFeatureEnabled } from '@/components/knowledge-base/useKnowledgeBaseFeatureEnabled';
@@ -56,6 +57,7 @@ type LiuyaoResultSession = Omit<DivinationResult, 'createdAt'> & {
     createdAt: string;
     divinationId?: string | null;
     conversationId?: string | null;
+    recordOwnerId?: string | null;
 };
 
 type LiuyaoQuestionSession = {
@@ -66,6 +68,11 @@ const DERIVED_KEYS = ['互卦', '错卦', '综卦'] as const;
 const MENU_ICON_CLASS = 'h-4 w-4';
 
 export default function ResultPage() {
+    const identity = useResultIdentity();
+    return <LiuyaoResultContent key={identity.key} isCurrent={identity.isCurrent} />;
+}
+
+function LiuyaoResultContent({ isCurrent }: { isCurrent: () => boolean }) {
     const router = useRouter();
     const { setMenuItems, clearMenuItems } = useHeaderMenu();
     const { knowledgeBaseEnabled } = useKnowledgeBaseFeatureEnabled();
@@ -142,8 +149,11 @@ export default function ResultPage() {
     };
 
     useEffect(() => {
-        const parsed = readSessionJSON<LiuyaoResultSession>('liuyao_result');
-        if (parsed) {
+        if (sessionLoading) return;
+        const stored = readSessionJSON<LiuyaoResultSession>('liuyao_result');
+        if (stored) {
+            const parsed = scopeResultSession(stored, userId);
+            writeSessionJSON('liuyao_result', parsed);
             const questionPayload = readSessionJSON<LiuyaoQuestionSession | string>('liuyao_question');
             const questionSessionTargets = questionPayload && typeof questionPayload !== 'string'
                 ? questionPayload.yongShenTargets
@@ -154,7 +164,7 @@ export default function ResultPage() {
             setDivinationId(parsed.divinationId || null);
             setConversationId(parsed.conversationId || null);
         } else router.push('/liuyao');
-    }, [router]);
+    }, [router, sessionLoading, userId]);
 
     // 次要操作：桌面端收进标题区「更多」，移动端进顶栏三点菜单（另加重新起卦）
     const resultActions = useMemo((): HeaderMenuItem[] => {
@@ -221,6 +231,7 @@ export default function ResultPage() {
                     stream: true,
                 },
             });
+            if (!isCurrent()) return;
             if (analysisResult.requiresCredits) {
                 setShowCreditsModal(true);
                 return;
@@ -232,7 +243,7 @@ export default function ResultPage() {
                 setConversationId(analysisResult.conversationId);
                 updateSessionJSON('liuyao_result', (prev: LiuyaoResultSession | null) => ({ ...(prev || {}), conversationId: analysisResult.conversationId } as LiuyaoResultSession));
             }
-        } catch (err) { setError(err instanceof Error ? err.message : '解读失败'); } finally { setIsLoading(false); }
+        } catch (err) { if (isCurrent()) setError(err instanceof Error ? err.message : '解读失败'); } finally { if (isCurrent()) setIsLoading(false); }
     };
 
     const handleApplyYongShenTargets = async () => {
@@ -270,6 +281,7 @@ export default function ResultPage() {
                 idKey: 'divinationId',
                 fallbackMessage: '保存起卦记录失败',
             });
+            if (!isCurrent()) return;
             if (!saved.ok || !saved.id) {
                 showToast('error', saved.ok ? '保存起卦记录失败' : saved.error.message || '保存起卦记录失败');
                 return;
@@ -279,7 +291,7 @@ export default function ResultPage() {
             updateSessionJSON('liuyao_result', (prev: LiuyaoResultSession | null) => ({ ...(prev || {}), divinationId: savedId } as LiuyaoResultSession));
             showToast('success', '已保存到命理记录');
         } finally {
-            setSaving(false);
+            if (isCurrent()) setSaving(false);
         }
     };
 

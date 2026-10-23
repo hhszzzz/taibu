@@ -109,6 +109,18 @@ test('avatar upload stores a magic-checked image, updates the row and removes th
   await assert.rejects(stat(path.join(root, 'avatars', previousKey)));
 });
 
+test('avatar upload never deletes another user’s file referenced by an editable profile URL', async (t) => {
+  const previousKey = 'user-2-1.png';
+  const { root, route } = await setup(t, scopedFor({ avatarUrl: `/api/files/avatars/${previousKey}` }));
+  await mkdir(path.join(root, 'avatars'), { recursive: true });
+  await writeFile(path.join(root, 'avatars', previousKey), new Uint8Array([1, 2, 3]));
+  const response = await route.POST(uploadRequest(
+    new File([Buffer.from(PNG_BASE64, 'base64')], 'avatar.png', { type: 'image/png' }),
+  ));
+  assert.equal(response.status, 200);
+  assert.equal((await stat(path.join(root, 'avatars', previousKey))).isFile(), true);
+});
+
 test('avatar upload rejects anonymous callers', async (t) => {
   const { route } = await setup(t);
   const apiUtilsModule = require('../lib/api-utils') as any;

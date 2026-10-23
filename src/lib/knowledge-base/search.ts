@@ -6,6 +6,7 @@ import { callReranker } from '@/lib/knowledge-base/reranker';
 import { checkVectorIndexExists, generateEmbedding, getEmbeddingDimensionAsync } from '@/lib/knowledge-base/embedding-config';
 import type { KnowledgeSearchPersistence, RankedResult, SearchCandidate, SearchOptions } from '@/lib/knowledge-base/types';
 import { createKnowledgeBasePersistence } from '@/lib/knowledge-base/persistence.server';
+import { KNOWLEDGE_QUERY_MAX_LENGTH } from './types';
 
 export class KnowledgeSearchContextError extends Error {
     readonly code = 'KNOWLEDGE_READ_CONTEXT_REQUIRED';
@@ -269,6 +270,7 @@ export async function searchKnowledge(query: string, options: SearchOptions = {}
 /** A server adapter must bind an owner-scoped persistence implementation before using this entry point. */
 export async function searchKnowledgeWithPersistence(query: string, userId: string, membership: NonNullable<SearchOptions['membershipType']>, persistence: KnowledgeSearchPersistence, options: SearchOptions = {}): Promise<SearchCandidate[] | RankedResult[]> {
     if (membership === 'free') return [];
+    if (query.length > KNOWLEDGE_QUERY_MAX_LENGTH) throw new Error(`检索内容不能超过 ${KNOWLEDGE_QUERY_MAX_LENGTH} 字`);
     const candidates = await searchCandidates(query, {
         ...options,
         useVector: membership === 'pro' && options.useVector !== false

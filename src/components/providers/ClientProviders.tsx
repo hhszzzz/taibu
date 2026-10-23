@@ -18,6 +18,7 @@ import { invalidateQueriesForPath } from '@/lib/query/invalidation';
 import { queryKeys } from '@/lib/query/keys';
 import dynamic from 'next/dynamic';
 import { AgentNotificationBridge } from './AgentNotificationBridge';
+import { AgentActivityProvider } from '@/lib/agent/use-agent-activity';
 const ConversationSearchHost = dynamic(() => import('./ConversationSearchHost').then(module => module.ConversationSearchHost), { ssr: false });
 
 interface ClientProvidersProps {
@@ -150,9 +151,11 @@ export function ClientProviders({ children }: ClientProvidersProps) {
                 <SessionContext.Provider value={state}>
                     <ConversationSearchHost userId={state.user?.id ?? null} />
                     <AgentNotificationBridge userId={state.user?.id ?? null} />
-                    <AnnouncementPopupHost userId={state.user?.id ?? null} authLoading={state.loading}>
-                        {children}
-                    </AnnouncementPopupHost>
+                    <AgentActivityProvider userId={state.user?.id ?? null}>
+                        <AnnouncementPopupHost userId={state.user?.id ?? null} authLoading={state.loading}>
+                            {children}
+                        </AnnouncementPopupHost>
+                    </AgentActivityProvider>
                 </SessionContext.Provider>
             </QueryClientProvider>
         </ToastProvider>

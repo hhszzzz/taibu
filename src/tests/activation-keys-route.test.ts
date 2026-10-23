@@ -1,0 +1,34 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { NextRequest } from 'next/server';
+import { createMockAuthContext } from './helpers/supabase-mock';
+
+test('activation API distinguishes invalid codes, successful redemption, authorization and storage failures', async t => {
+    const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
+    const keys = require('../lib/user/activation-keys') as typeof import('../lib/user/activation-keys');
+    const user = t.mock.method(api, 'requireUserContext', async () => createMockAuthContext());
+    const admin = t.mock.method(api, 'requireAdminUser', async () => createMockAuthContext());
+    const activate = t.mock.method(keys, 'activateKey', async () => ({ success: false, error: '激活码已被使用' }));
+    const create = t.mock.method(keys, 'createActivationKeys', async () => ({ success: false, error: '创建数量需在1-100之间' }));
+    const list = t.mock.method(keys, 'getAllActivationKeys', async () => []);
+    t.mock.method(console, 'error', () => {});
+    const { POST, GET } = require('../app/api/activation-keys/route') as typeof import('../app/api/activation-keys/route');
+    const request = (body: string) => new NextRequest('http://localhost/api/activation-keys', { method: 'POST', body });
+    for (const body of ['{', 'null', '[]']) assert.equal((await POST(request(body))).status, 400);
+    const body = JSON.stringify({ action: 'activate', keyCode: 'sk-usedfixture' });
+    assert.equal((await POST(request(body))).status, 400);
+    activate.mock.mockImplementation(async () => ({ success: true, keyType: 'credits' as const, creditsAmount: 20 }));
+    const success = await POST(request(body));
+    assert.equal(success.status, 200);
+    assert.equal((await success.json()).creditsAmount, 20);
+    assert.equal((await POST(request(JSON.stringify({ action: 'create', count: 0 })))).status, 400);
+    assert.equal(create.mock.calls[0]?.arguments[1]?.count, 0);
+    activate.mock.mockImplementation(async () => { throw new Error('database unavailable'); });
+    assert.equal((await POST(request(body))).status, 500);
+    list.mock.mockImplementation(async () => { throw new Error('database unavailable'); });
+    assert.equal((await GET(new NextRequest('http://localhost/api/activation-keys'))).status, 500);
+    user.mock.mockImplementation(async () => ({ error: { message: '请先登录', status: 401 } }));
+    admin.mock.mockImplementation(async () => ({ error: { message: '需要管理员权限', status: 403 } }));
+    assert.equal((await POST(request(body))).status, 401);
+    assert.equal((await GET(new NextRequest('http://localhost/api/activation-keys'))).status, 403);
+});

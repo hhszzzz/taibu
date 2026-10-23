@@ -299,3 +299,15 @@ test('mcp server markdown place-resolution note should stay neutral and avoid ru
   assert.match(ziweiPayload.content[0].text, /出生地解析/u);
   assert.doesNotMatch(ziweiPayload.content[0].text, /真太阳时/u);
 });
+
+test('place text stays a single literal Markdown value', async () => {
+  const { attachPlaceResolutionNoteToPayload } = await import('../dist/place-resolution.js');
+  const result = attachPlaceResolutionNoteToPayload({ content: [{ type: 'text', text: '# chart' }] }, {
+    requestedPlace: '北京\n## injected [link](https://example.com)', formattedAddress: '<b>地址</b>',
+    resolved: true, source: 'birth_place', locationMode: 'coordinates',
+  }, 'markdown');
+  const text = result.content[0].text;
+  assert.ok(text.includes('北京 \\#\\# injected \\[link\\]\\(https://example\\.com\\)'));
+  assert.ok(text.includes('\\<b\\>地址\\</b\\>'));
+  assert.equal(text.split('\n').filter(line => /^## /u.test(line)).length, 1);
+});

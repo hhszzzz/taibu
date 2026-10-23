@@ -68,6 +68,17 @@ test('ingestChatMessageAsService stores chat_message entries with metadata', asy
     assert.equal(entries[0]?.metadata?.user_message_id, 'u1');
 });
 
+test('chunkText hard-cuts oversized fragments and keeps overlap within the cap', () => {
+    for (const source of ['x'.repeat(1300) + '\nend', ('abcdef\n\n').repeat(100), '无分隔符'.repeat(300)]) {
+        const chunks = ingestModule.chunkText(source, { maxChunkSize: 100, overlapSize: 20, separators: ['\n\n', '\n'] });
+        assert.ok(chunks.length > 1);
+        assert.ok(chunks.every(chunk => chunk.length <= 100));
+        for (let i = 1; i < chunks.length; i++) assert.equal(chunks[i]?.slice(0, 20), chunks[i - 1]?.slice(-20));
+        assert.equal(chunks.reduce((text, chunk, i) => text + (i ? chunk.slice(20) : chunk), ''), source, 'no content is lost at boundaries');
+    }
+    assert.throws(() => ingestModule.chunkText('long input', { maxChunkSize: 5, overlapSize: 5, separators: [] }), RangeError);
+});
+
 test('ingestRecordAsService stores canonical ming_record source type', async () => {
     const capture: { rpcCall: { fn: string; args: Record<string, unknown> } | null } = { rpcCall: null };
     const scoped = createMockScopedDb({

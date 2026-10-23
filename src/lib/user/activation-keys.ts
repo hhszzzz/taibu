@@ -69,6 +69,9 @@ export async function createActivationKeys(
 ): Promise<{ success: boolean; keys?: string[]; error?: string }> {
     try {
         // 验证参数
+        if (params.keyType !== 'membership' && params.keyType !== 'credits') {
+            return { success: false, error: '激活码类型无效' };
+        }
         if (params.keyType === 'membership' && params.membershipType !== 'plus' && params.membershipType !== 'pro') {
             return { success: false, error: '会员类型Key需要指定会员等级' };
         }
@@ -110,7 +113,7 @@ export async function createActivationKeys(
         };
     } catch (error) {
         console.error('[activation-keys] Error creating keys:', error);
-        return { success: false, error: '服务器错误' };
+        throw error;
     }
 }
 
@@ -137,7 +140,7 @@ export async function getAllActivationKeys(
         }) as ActivationKey[];
     } catch (error) {
         console.error('[activation-keys] Error fetching keys:', error);
-        return [];
+        throw error;
     }
 }
 
@@ -154,7 +157,7 @@ export async function deleteActivationKey(keyId: string): Promise<boolean> {
         return true;
     } catch (error) {
         console.error('[activation-keys] Error deleting key:', error);
-        return false;
+        throw error;
     }
 }
 
@@ -188,6 +191,6 @@ export async function activateKey(
         };
     } catch (error) {
         console.error('[activation-keys] Error activating key:', error);
-        return { success: false, error: '服务器错误' };
+        throw error;
     }
 }

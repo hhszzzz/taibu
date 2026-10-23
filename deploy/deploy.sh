@@ -26,9 +26,18 @@ compose() {
 }
 
 mkdir -p /opt/taibu/backups
-if compose ps --status running --services 2>/dev/null | grep -qx db; then
+RUNNING_SERVICES="$(compose ps --status running --services)" || {
+  echo "[deploy] cannot inspect running services; refusing to skip the backup" >&2
+  exit 1
+}
+if printf '%s\n' "$RUNNING_SERVICES" | grep -qx db; then
   echo "[deploy] pre-flight backup"
-  compose exec -T db sh -c 'pg_dump -U postgres -Fc taibu' > "/opt/taibu/backups/pre-${TAG}.dump"
+  BACKUP_FILE="$(mktemp "/opt/taibu/backups/pre-${TAG}-$(date -u +%Y%m%dT%H%M%SZ)-XXXXXX")"
+  if ! compose exec -T db sh -c 'pg_dump -U postgres -Fc taibu' > "$BACKUP_FILE"; then
+    rm -f "$BACKUP_FILE"
+    exit 1
+  fi
+  echo "[deploy] backup saved: $BACKUP_FILE"
 else
   echo "[deploy] no running db; skipping pre-flight backup (first deploy)"
 fi

@@ -7,6 +7,7 @@ import {
 } from '@/lib/chat/conversation-analysis';
 import { resolveHistoryConversationId } from '@/lib/history/client';
 import type { HistoryType } from '@/lib/history/registry';
+import { useSessionSafe } from './session-context';
 
 interface AnalysisSnapshotCallbacks {
     /** Called when a saved analysis text is found */
@@ -58,6 +59,8 @@ export function useAnalysisSnapshot({
     callbacks,
 }: UseAnalysisSnapshotOptions): boolean {
     const [loading, setLoading] = useState(false);
+    const { user } = useSessionSafe();
+    const userId = user?.id;
     // Callers pass inline callbacks; keeping them out of the load effect's dependencies stops a settled
     // load from re-rendering, getting a new callbacks object and starting the same lookup again.
     const callbacksRef = useRef(callbacks);
@@ -73,6 +76,7 @@ export function useAnalysisSnapshot({
         }
 
         let cancelled = false;
+        const controller = new AbortController();
 
         const loadAnalysis = async () => {
             setLoading(true);
@@ -84,6 +88,7 @@ export function useAnalysisSnapshot({
                         divinationType,
                         recordId,
                         sessionKey,
+                        { signal: controller.signal },
                     );
                     if (cancelled) return;
                     if (resolvedId) {
@@ -94,7 +99,7 @@ export function useAnalysisSnapshot({
                 if (!resolvedId) return;
 
                 const snapshot: ConversationAnalysisSnapshot | null =
-                    await loadConversationAnalysisSnapshot(resolvedId);
+                    await loadConversationAnalysisSnapshot(resolvedId, { signal: controller.signal });
                 if (cancelled || !snapshot) return;
 
                 if (snapshot.analysis) {
@@ -108,6 +113,7 @@ export function useAnalysisSnapshot({
                 }
                 callbacksRef.current.onReasoningEnabled?.(snapshot.reasoningEnabled);
             } catch (error) {
+                if (cancelled) return;
                 const message = error instanceof Error ? error.message : '加载分析快照失败';
                 console.error('[useAnalysisSnapshot] failed to load analysis snapshot:', error);
                 callbacksRef.current.onError?.(message);
@@ -122,8 +128,9 @@ export function useAnalysisSnapshot({
         void loadAnalysis();
         return () => {
             cancelled = true;
+            controller.abort();
         };
-    }, [conversationId, recordId, divinationType, sessionKey, hasExistingAnalysis, skip]);
+    }, [conversationId, recordId, divinationType, sessionKey, hasExistingAnalysis, skip, userId]);
 
     return loading;
 }

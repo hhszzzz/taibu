@@ -16,6 +16,7 @@ import path from 'node:path';
 import bcrypt from 'bcryptjs';
 import pg from 'pg';
 import { defaultReportPath } from './report-path.mjs';
+import { libpqEnvironment } from './connection-env.mjs';
 
 const args = process.argv.slice(2);
 const has = (flag) => args.includes(flag);
@@ -71,18 +72,9 @@ function quote(value) {
 }
 
 function psql(dsn, script, { timeout = 600_000 } = {}) {
-  const url = new URL(dsn);
   return new Promise((resolve, reject) => {
-    const child = spawn('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-d', dsn, '-f', '-'], {
-      env: {
-        ...process.env,
-        PGHOST: decodeURIComponent(url.hostname),
-        PGPORT: url.port || '5432',
-        PGUSER: decodeURIComponent(url.username),
-        PGPASSWORD: decodeURIComponent(url.password),
-        PGDATABASE: decodeURIComponent(url.pathname.slice(1)),
-        PGOPTIONS: '',
-      },
+    const child = spawn('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-f', '-'], {
+      env: libpqEnvironment(dsn),
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     let stdout = '';
@@ -97,6 +89,7 @@ function psql(dsn, script, { timeout = 600_000 } = {}) {
       else reject(new Error(`psql failed (${code}): ${stderr.trim().split('\n').slice(-4).join(' ')}`));
     });
     if (process.env.IMPORT_DEBUG_SCRIPT) void writeFile(process.env.IMPORT_DEBUG_SCRIPT, script, { mode: 0o600 });
+    child.stdin.on('error', (error) => { if (error.code !== 'EPIPE') reject(error); });
     child.stdin.end(script);
   });
 }
@@ -175,6 +168,7 @@ function selectExpression(table, column) {
 async function main() {
   const source = new pg.Client({ connectionString: sourceUrl });
   const target = new pg.Client({ connectionString: targetUrl });
+  let directory;
   await source.connect();
   await target.connect();
   try {
@@ -199,32 +193,26 @@ async function main() {
       report.warnings.push(`tables kept empty because the source has none: ${missingSource.join(', ')}`);
     }
 
+    const resetSql = [];
     if (resetTarget) {
-      if (process.env.TAIBU_ENV === 'production' && !cutover) {
+      if (!dryRun && process.env.TAIBU_ENV === 'production' && !cutover) {
         throw new Error('--reset-target is refused in production without --cutover');
       }
-      await target.query('begin');
-      try {
-        await target.query('set local session_replication_role = replica');
-        const tables = (await tableNames(target)).filter((table) => !SKIP_TABLES.has(table));
-        await target.query(`truncate ${tables.map((table) => `public."${table}"`).join(', ')} cascade`);
-        await target.query(`insert into public.users (id, nickname, is_admin) values ($1, '系统', true)`, [SYSTEM_USER]);
-        await target.query('delete from identity.sessions');
-        await target.query('delete from identity.verifications');
-        await target.query('delete from identity.accounts');
-        await target.query('delete from identity.users where id <> $1', [SYSTEM_USER]);
-        await target.query('commit');
-      } catch (error) {
-        await target.query('rollback').catch(() => {});
-        throw error;
-      }
-      report.warnings.push('target reset before import');
+      resetSql.push(
+        `truncate ${targetTables.map((table) => `public."${table}"`).join(', ')} cascade;`,
+        `insert into public.users (id, nickname, is_admin) values (${quote(SYSTEM_USER)}, '系统', true);`,
+        'delete from identity.sessions;',
+        'delete from identity.verifications;',
+        'delete from identity.accounts;',
+        `delete from identity.users where id <> ${quote(SYSTEM_USER)};`,
+      );
+      report.warnings.push('target reset planned inside the import transaction');
     }
 
     // Preflight: the target must be freshly migrated.
     const existing = Number(await scalar(target, `select count(*) from public.users where id <> $1`, [SYSTEM_USER]))
       + Number(await scalar(target, `select count(*) from identity.users where id <> $1`, [SYSTEM_USER]));
-    if (existing > 0 && !cutover) throw new Error(`target already contains ${existing} non-system users; refusing to import`);
+    if (existing > 0 && !cutover && !resetTarget) throw new Error(`target already contains ${existing} non-system users; refusing to import`);
 
     const authColumns = await columns(source, 'users', 'auth').catch(() => []);
     const authColumnNames = new Set(authColumns.map((column) => column.column_name));
@@ -377,7 +365,7 @@ async function main() {
       plans.push({ table, columns: common.map((column) => column.column_name), targetColumns: common });
     }
 
-    const directory = await mkdtemp(path.join(tmpdir(), 'taibu-import-'));
+    directory = await mkdtemp(path.join(tmpdir(), 'taibu-import-'));
     const exportScript = ['begin isolation level repeatable read read only;'];
     for (const plan of plans) {
       const file = path.join(directory, `${plan.table}.csv`);
@@ -449,7 +437,7 @@ end $$;`);
 end $$;`);
     }
 
-    const importScript = ['begin;', 'set local session_replication_role = replica;', ...identitySql];
+    const importScript = ['begin;', 'set local session_replication_role = replica;', ...resetSql, ...identitySql];
     for (const plan of plans) {
       importScript.push(`\\copy public."${plan.table}" (${plan.columns.map((column) => `"${column}"`).join(', ')}) from '${plan.file.replaceAll("'", "''")}' with (format csv)`);
     }
@@ -498,6 +486,7 @@ end $$;`);
     console.log(`[import] complete: ${report.tables.length} tables, ${report.identity.users} users; report ${reportPath}`);
     await rm(directory, { recursive: true, force: true });
   } finally {
+    if (directory) await rm(directory, { recursive: true, force: true });
     await source.end().catch(() => {});
     await target.end().catch(() => {});
   }

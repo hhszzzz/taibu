@@ -1,6 +1,9 @@
 import type { MembershipType } from '@/lib/user/membership';
 import type { DataSourceType } from '@/lib/data-sources/types';
 
+/** Shared by HTTP and internal retrieval callers before embedding or SQL. */
+export const KNOWLEDGE_QUERY_MAX_LENGTH = 4_000;
+
 export interface KnowledgeSourceChunk {
     content: string;
     sourceType: 'conversation' | 'record' | 'file' | 'chat_message' | DataSourceType;

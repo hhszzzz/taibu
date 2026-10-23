@@ -62,7 +62,7 @@ const boardArrays: Record<string, { path: string[]; size: number; fields: string
 export function completeOutputSchema(name: string, schema: ToolOutputSchema): ToolOutputSchema {
   const result = structuredClone(schema);
   result.properties.计算规则 = calculationRulesSchema;
-  result.required ??= requiredOutputSections[name];
+  result.required = [...new Set([...(result.required ?? requiredOutputSections[name] ?? []), '计算规则'])];
   for (const rule of boardArrays[name] ?? []) {
     let current = result as unknown as Record<string, unknown>;
     for (const key of rule.path) {

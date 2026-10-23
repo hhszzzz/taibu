@@ -134,6 +134,7 @@ export async function GET(request: NextRequest) {
             return jsonError('未找到历史记录', 404);
         }
         const item = await buildHistoryRestorePayload(type, row, timezone);
+        if (item) item.sessionData.recordOwnerId = auth.user.id;
         return jsonOk({ item });
     }
 

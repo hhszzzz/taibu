@@ -581,6 +581,7 @@ export interface TarotDrawRequest {
 
 /** 结果页会话（sessionStorage `tarot_result`），抽牌、历史恢复与保存/解读回写共用 */
 export interface TarotResultSession {
+    recordOwnerId?: string | null;
     spread?: TarotSpread;
     spreadId?: string;
     cards?: DrawnCard[];

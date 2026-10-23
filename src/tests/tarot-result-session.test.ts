@@ -11,6 +11,7 @@ import {
     type DrawnCard,
     type TarotResultSession,
 } from '../lib/divination/tarot';
+import { scopeResultSession } from '../lib/cache/session-storage';
 
 function searchOf(href: string): URLSearchParams {
     return new URL(href, 'https://taibu.invalid').searchParams;
@@ -74,4 +75,12 @@ test('a new draw writes a complete session, so nothing from the previous reading
         conversationId: null,
         createdAt: '2026-10-13T09:30:00.000Z',
     });
+});
+
+test('result session IDs are cleared when a different account opens the same browser session', () => {
+    const scoped = scopeResultSession({ cards: [], recordOwnerId: 'account-a', readingId: 'reading-a', divinationId: 'divination-a', conversationId: 'conversation-a' }, 'account-b');
+    assert.equal(scoped.recordOwnerId, 'account-b');
+    assert.equal(scoped.readingId, undefined);
+    assert.equal(scoped.conversationId, undefined);
+    assert.equal(scoped.divinationId, undefined);
 });

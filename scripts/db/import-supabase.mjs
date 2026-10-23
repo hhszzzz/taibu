@@ -5,8 +5,9 @@
 // Secrets never belong on the command line:
 //   IMPORT_SOURCE_URL=... IMPORT_TARGET_URL=... node scripts/db/import-supabase.mjs
 // Optional: IMPORT_FILES_ROOT, LEGACY_HMAC_KEY_ENV, LINUXDO_CLIENT_SECRET.
-// When Linux.do accounts exist the legacy HMAC seed is mandatory; pass
-// --allow-missing-seed only for a deliberate dry run.
+// The legacy HMAC seed is optional. With it, Linux.do users whose stored
+// password is the old deterministic one lose that credential and keep theirs.
+// Without it, every Linux.do user's stored credential is dropped instead.
 import { spawn } from 'node:child_process';
 import { createHmac } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -48,7 +49,7 @@ const report = {
   target: redact(targetUrl),
   identity: {},
   tables: [],
-  password: { credentials: 0, deterministicRemoved: 0, linuxdoOnly: 0 },
+  password: { credentials: 0, deterministicRemoved: 0, linuxdoDropped: 0, linuxdoOnly: 0 },
   files: { downloaded: 0, failed: [] },
   warnings: [],
 };
@@ -294,12 +295,13 @@ async function main() {
     const seed = process.env[seedName] || clientSecret;
     const canDetectDeterministic = Boolean(seed);
     if (!canDetectDeterministic && linuxdoByUser.size > 0) {
-      // Without the old seed, a deterministic Linux.do password cannot be told
-      // apart from a user-chosen one. Importing it would preserve a
-      // secret-derived credential, so fail unless the operator opts in.
-      const message = 'legacy HMAC seed is unavailable; Linux.do passwords cannot be classified (pass --allow-missing-seed to override)';
-      if (!has('--allow-missing-seed')) throw new Error(message);
-      report.warnings.push(message);
+      // Every Linux.do login used to overwrite the account password with the
+      // HMAC-derived one (syncLinuxDoAuthUser). Without the seed that hash
+      // cannot be told apart from a password the user chose afterwards, so
+      // those credentials are dropped instead of imported: they would be
+      // secret-derived and nobody knows the plaintext. Such users sign in with
+      // Linux.do or an email code and can set a password again.
+      report.warnings.push(`legacy HMAC seed is unavailable; dropping the stored credential of ${linuxdoByUser.size} Linux.do users (they sign in with Linux.do or an email code)`);
     }
 
     const identitySql = [];
@@ -318,8 +320,11 @@ async function main() {
           // bcryptjs understands both $2a$ (GoTrue) and $2b$ hashes.
           deterministic = await bcrypt.compare(derived, hash);
         }
-        if (deterministic) {
-          report.password.deterministicRemoved += 1;
+        // Without the seed a Linux.do user's hash is unverifiable, so it is
+        // dropped rather than imported (see the warning above).
+        if (deterministic || (sub && !canDetectDeterministic)) {
+          if (deterministic) report.password.deterministicRemoved += 1;
+          else report.password.linuxdoDropped += 1;
         } else {
           identitySql.push(`insert into identity.accounts (id, user_id, account_id, provider_id, password, created_at, updated_at)
             values (gen_random_uuid(), ${quote(row.id)}, ${quote(row.id)}, 'credential', ${quote(hash)}, now(), now());`);

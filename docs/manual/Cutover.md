@@ -40,7 +40,9 @@
    ```
    `/api/health/ready` 应因数据库未导入而失败，这是预期状态。
 3. 记录基线：`pg_stat_statements` 前 20、各表行数、磁盘与内存快照。
-4. 在密码管理器里确认：`SUPABASE_SECRET_KEY`、`LINUXDO_CLIENT_SECRET`（仅用于确定性口令剔除）、`IMPORT_SOURCE_URL`、`IMPORT_TARGET_URL` 可用。
+4. 在密码管理器里确认：`IMPORT_SOURCE_URL`、`IMPORT_TARGET_URL` 可用。`LINUXDO_CLIENT_SECRET` 必须可用（Linux.do 登录）。
+   `SUPABASE_SECRET_KEY` 是**可选**的：有它时能精确识别哪些 Linux.do 用户存的是旧确定性口令，从而只剔除这些人的凭据；
+   没有它时，49 个 Linux.do 用户的凭据一律不导入（这些人用 Linux.do 或邮箱验证码登录后重设密码）。两种结果都不影响业务数据。
 5. 确认 GitHub cron 仍启用：`gh workflow view reminders-cron.yml`。
 
 ### 边缘模式（hw 已占用 80/443）
@@ -179,16 +181,18 @@ hw 彩排（2026-10-22，同一重建快照）：装载 30 MB 数据 1s、post-d
 ### T+8 迁移空库并导入
 
 ```sh
-docker compose ... run --rm migrate                     # 全新 0001…0012（含 0011 生产 RLS、0012 生产 DML 授权）
+docker compose ... run --rm migrate                     # 全新 0001…0013（含 0011 生产 RLS、0012 生产 DML 授权、0013 档案）
 docker compose ... run --rm --no-deps \
   -e IMPORT_SOURCE_URL="$TRANSIT_TARGET_URL" \
   -e IMPORT_TARGET_URL="$TARGET_IMPORT_URL" \
-  -e SUPABASE_SECRET_KEY="$SUPABASE_SECRET_KEY" \
   -e LINUXDO_CLIENT_SECRET="$LINUXDO_CLIENT_SECRET" \
   -v /tmp/taibu-cutover:/dump:ro web \
   node scripts/db/import-supabase.mjs --cutover \
     --files-root /data/files --report /tmp/import.json
 ```
+
+`SUPABASE_SECRET_KEY` 只在需要精确剔除旧确定性口令时通过 `-e` 追加；省略时报告会给出
+`linuxdoDropped: 49` 的告警，凭据数为 659，业务数据不变。
 
 验收（不通过则停止，保持维护页）：
 

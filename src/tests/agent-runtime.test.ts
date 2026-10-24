@@ -25,6 +25,7 @@ import { MockLanguageModelV3 } from "ai/test";
 import { estimateContextTokens } from '@earendil-works/pi-ai/utils/estimate';
 
 import { config, row, MemoryStore, scripted, isSummaryTranscript } from "./helpers/agent-runtime-fixture";
+import { __dispatchAgentSignalForTests as dispatchAgentSignal } from "../lib/db/listen.server";
 beforeEach((t) => {
   assert.ok("mock" in t);
   const credits =
@@ -246,7 +247,7 @@ test("lease renewal begins while a long native log is still reopening", async ()
     }
   }
   const store = new SlowReadStore();
-  await executeAgentRun(store, row(), undefined, { config, streamFn: scripted(() => [{ type: "text", text: "加载后完成" }]) });
+  await executeAgentRun(store, row(), undefined, { config, leaseRenewMs: 200, streamFn: scripted(() => [{ type: "text", text: "加载后完成" }]) });
   assert.equal(store.renewingBeforeOpen, true);
   assert.equal(store.writes.find(w => w.name === "agent_finish_run")!.args.p_status, "completed");
 });
@@ -591,11 +592,16 @@ test("cached reads still check current feature and membership permissions", asyn
 
 test("lease renewal failure preserves an interrupted checkpoint for takeover", async () => {
   class InterruptedStore extends MemoryStore {
+    streamingSaved = false;
+    failRenewals = true;
     override async rpc<T>(
       name: string,
       args: Record<string, unknown>,
     ): Promise<T> {
-      if (name === "agent_renew_lease")
+      if (name === "agent_checkpoint" && (args.p_checkpoint as AgentRunRow["checkpoint"]).streamingAssistantId)
+        this.streamingSaved = true;
+      // The connection drops once the streaming answer has been checkpointed.
+      if (name === "agent_renew_lease" && this.failRenewals && this.streamingSaved)
         throw new Error("connection interrupted");
       return super.rpc<T>(name, args);
     }
@@ -606,6 +612,7 @@ test("lease renewal failure preserves an interrupted checkpoint for takeover", a
   try {
     await executeAgentRun(store, run, undefined, {
       config,
+      leaseRenewMs: 100,
       streamFn: (model, _context, options) => {
         const output = createAssistantMessageEventStream(),
           message = emptyPiAssistant(model);
@@ -644,6 +651,8 @@ test("lease renewal failure preserves an interrupted checkpoint for takeover", a
     );
     run.checkpoint = checkpoint;
     run.fence++;
+    // The worker that takes over has a healthy connection.
+    store.failRenewals = false;
     await executeAgentRun(store, run, undefined, {
       config,
       streamFn: scripted(() => [{ type: "text", text: "接管后完成" }]),
@@ -657,6 +666,62 @@ test("lease renewal failure preserves an interrupted checkpoint for takeover", a
   } finally {
     clearTimeout(keepAlive);
   }
+});
+
+function streamUntilAborted(onStart?: () => void): StreamFn {
+  return (model, _context, options) => {
+    const output = createAssistantMessageEventStream(),
+      message = emptyPiAssistant(model);
+    message.content = [{ type: "text", text: "进行中" }];
+    output.push({ type: "start", partial: message });
+    output.push({ type: "text_delta", contentIndex: 0, delta: "进行中", partial: message });
+    options!.signal!.addEventListener(
+      "abort",
+      () => {
+        message.stopReason = "aborted";
+        output.push({ type: "error", reason: "aborted", error: message });
+        output.end(message);
+      },
+      { once: true },
+    );
+    onStart?.();
+    return output;
+  };
+}
+
+test("a cancel notification settles the run as cancelled instead of leaving it to a takeover", async () => {
+  const store = new MemoryStore(),
+    run = row();
+  const started = Date.now();
+  await executeAgentRun(store, run, undefined, {
+    config,
+    streamFn: streamUntilAborted(() => {
+      setTimeout(() => dispatchAgentSignal({ t: "run", run: run.id, status: "cancelling", cancel: true }), 50);
+    }),
+  });
+  const finish = store.writes.find((w) => w.name === "agent_finish_run");
+  assert.equal(finish?.args.p_status, "cancelled");
+  assert.ok(Date.now() - started < 5_000, "the cancel did not wait for a lease to expire");
+});
+
+test("a cancel seen only by lease renewal also stops the run gracefully", async () => {
+  class CancelledStore extends MemoryStore {
+    streaming = false;
+    override async rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
+      if (name === "agent_renew_lease") {
+        this.writes.push({ name, args: structuredClone(args) });
+        return this.streaming as T;
+      }
+      return super.rpc<T>(name, args);
+    }
+  }
+  const store = new CancelledStore();
+  await executeAgentRun(store, row(), undefined, {
+    config,
+    leaseRenewMs: 100,
+    streamFn: streamUntilAborted(() => { store.streaming = true; }),
+  });
+  assert.equal(store.writes.find((w) => w.name === "agent_finish_run")?.args.p_status, "cancelled");
 });
 
 test("calculations alone do not complete a task: an answer without text fails", async () => {
@@ -806,6 +871,24 @@ test('Tarot implicit seeds satisfy Core schema and durable hooks block overrides
   const results = store.nativeEntries().flatMap(entry => entry.model ?? []).filter(message => message.role === 'toolResult');
   assert.ok(results.some(message => message.role === 'toolResult' && message.toolCallId === 'blocked' && message.isError));
   assert.ok(results.some(message => message.role === 'toolResult' && message.toolCallId === 'draw' && !message.isError && message.content.some(part => part.type === 'text' && part.text.includes(`命盘引用: artifact:${store.draft('draw')!.id}`))));
+});
+
+test('a disabled Agent tool scope stays registered and reports the policy reason to the model', async t => {
+  const settings = require('../lib/app-settings') as typeof import('../lib/app-settings');
+  t.mock.method(settings, 'readFeatureModuleStateFresh', async (featureId: string) => ({
+    status: featureId === 'agent-tool:bazi' ? 'disabled' as const : 'enabled' as const,
+  }));
+  const store = new MemoryStore();
+  await executeAgentRun(store, row(), undefined, { config, streamFn: scripted(index => index === 0
+    ? [{ type: 'toolCall', id: 'blocked-bazi', name: 'bazi', arguments: { gender: 'male', birthYear: 1990, birthMonth: 1, birthDay: 1, birthHour: 9 } }]
+    : [{ type: 'text', text: '已根据权限调整' }]) });
+  const result = store.nativeEntries()
+    .flatMap(entry => entry.model ?? [])
+    .filter(message => message.role === 'toolResult')
+    .find(message => message.toolCallId === 'blocked-bazi');
+  assert.ok(result);
+  assert.ok(result.isError);
+  assert.ok(result.content.some(part => part.type === 'text' && part.text.includes('八字工具')));
 });
 
 test("unknown capacity still uses Pi's bounded compaction recovery on a reported overflow", async () => {

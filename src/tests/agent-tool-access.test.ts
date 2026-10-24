@@ -30,3 +30,32 @@ test('membership tools still reject free accounts and disabled task networking',
   await assert.rejects(assertAgentToolAccess(new MemoryStore(), run, 'web_search', {}), /当前任务/);
   assert.equal(account.mock.callCount(), 3, 'disabled networking needs no membership query');
 });
+
+test('administrator Agent scope switches block tool execution before the provider is called', async t => {
+  const settings = require('../lib/app-settings') as typeof import('../lib/app-settings');
+  t.mock.method(settings, 'readFeatureModuleStateFresh', async (featureId: string) => ({
+    status: featureId === 'agent-tool:bazi' || featureId === 'agent-tool:web' ? 'disabled' as const : 'enabled' as const,
+  }));
+  const run = row();
+
+  await assert.rejects(
+    assertAgentToolAccess(new MemoryStore(), run, 'bazi', {}),
+    /Agent 工具范围已关闭：八字工具/,
+  );
+  await assert.rejects(
+    assertAgentToolAccess(new MemoryStore(), run, 'web_search', {}),
+    /Agent 工具范围已关闭：联网与 MCP/,
+  );
+});
+
+test('disabling the bazi module also blocks reading saved bazi data', async t => {
+  const settings = require('../lib/app-settings') as typeof import('../lib/app-settings');
+  t.mock.method(settings, 'readFeatureModuleStateFresh', async (featureId: string) => ({
+    status: featureId === 'bazi' ? 'disabled' as const : 'enabled' as const,
+  }));
+
+  await assert.rejects(
+    assertAgentToolAccess(new MemoryStore(), row(), 'read_user_data', { type: 'bazi_chart', id: 'chart-1' }),
+    /该资料功能已关闭/,
+  );
+});

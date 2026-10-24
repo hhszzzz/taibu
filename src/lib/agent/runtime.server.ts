@@ -423,7 +423,12 @@ export async function executeAgentRun(
             const block = toolPolicyBlock(call.name, call.arguments);
             if (block) return { block };
             try { await assertAgentToolAccess(store, run, call.name, call.arguments); }
-            catch { return { block: '当前权限或工具策略不允许此调用，请检查任务配置。' }; }
+            catch (error) {
+              const message = error instanceof Error && error.message.trim()
+                ? error.message
+                : '当前权限或工具策略不允许此调用，请检查任务配置。';
+              return { block: message };
+            }
           },
           afterTool: (call, result, api, hookContext) => {
             if (call.parent) return settleScriptCall(call, call.parent, result, api.taskId, hookContext);

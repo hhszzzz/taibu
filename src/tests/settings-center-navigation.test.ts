@@ -120,6 +120,9 @@ test('checkin is removed from default user-facing tool orders', () => {
 test('shared navigation and admin feature toggles do not expose legacy credits entries', () => {
   assert.equal(NAV_REGISTRY.some(item => item.id === 'user/credits' || item.href === '/user/credits'), false);
   assert.equal(getFeatureModules().some(item => item.id === 'credits' || item.label === '积分流水'), false);
+  for (const id of ['agent', 'taiyi', 'astrology', 'almanac']) {
+    assert.ok(getFeatureModules().some(item => item.id === id), `${id} is available to administrators`);
+  }
   const headerSource = readFileSync(resolve(process.cwd(), 'src/components/layout/Header.tsx'), 'utf8');
   assert.equal(headerSource.includes("'/user/credits'"), false);
 });

@@ -220,6 +220,10 @@ const adminLabelOverride: Record<string, string> = {
 const ADMIN_ONLY_FEATURES: { id: string; label: string }[] = [
   { id: 'checkin', label: '签到' },
   { id: 'mcp-service', label: 'MCP 服务' },
+  { id: 'agent', label: 'Agent 任务' },
+  { id: 'taiyi', label: '太乙' },
+  { id: 'astrology', label: '西方占星' },
+  { id: 'almanac', label: '黄历与择日' },
 ];
 
 /** Lookup a single registry entry by id. */

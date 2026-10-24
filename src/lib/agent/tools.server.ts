@@ -18,7 +18,9 @@ import { getDataSourceFeatureId } from "@/lib/data-sources/catalog";
 import {
   FEATURE_MODULE_IDS,
   readFeatureModuleStateFresh,
+  toAgentToolScopeFeatureId,
   type FeatureModuleId,
+  type AgentToolScopeId,
 } from "@/lib/app-settings";
 import { getUserCreditInfo } from "@/lib/user/credits";
 import { normalizeUserSettings } from "@/lib/user/settings";
@@ -36,7 +38,15 @@ import { attachmentBytes, attachmentDto, validateAttachmentIds } from './attachm
 import { publicMemory, type AgentMemory } from './memory';
 import { authorizeChartReference, loadAgentChart, loadInspectedChart } from './chart-tools.server';
 import { CHART_SOURCE_KINDS, getChartTargets, validateChartFocus } from './chart-interaction';
-import { CHART_TARGET_DIRECTORY_HEADING, getAgentDrilldownBase, isAgentChartTool } from './tool-catalog';
+import {
+  AGENT_TOOL_SCOPE_IDS,
+  CHART_TARGET_DIRECTORY_HEADING,
+  getAgentDrilldownBase,
+  getAgentToolFeatureId,
+  getAgentToolScope,
+  getAgentToolScopeLabel,
+  isAgentChartTool,
+} from './tool-catalog';
 import { drilldownParameters, executeDrilldown } from './drilldown.server';
 import { nextAgentCitation } from './evidence';
 import { readAgentCite } from './tool-presentation';
@@ -107,16 +117,30 @@ async function featureEnabled(feature: FeatureModuleId) {
   if (state.status === "unavailable") throw new Error("功能状态暂不可用，请稍后再试");
   return state.status === "enabled";
 }
+async function agentToolScopeEnabled(scope: AgentToolScopeId) {
+  const state = await readFeatureModuleStateFresh(toAgentToolScopeFeatureId(scope));
+  if (state.status === "unavailable") throw new Error("功能状态暂不可用，请稍后再试");
+  return state.status === "enabled";
+}
 /** Tools that reach across tasks only with long-term memory on: the memory itself, the user's other conversations, and events recorded from their words. */
 const MEMORY_TOOLS: ReadonlySet<string> = new Set(['read_user_memory', 'remember_user_fact', 'search_conversations', AGENT_RECORD_EVENT_TOOL]);
 const CROSS_TASK_TOOLS: ReadonlySet<string> = new Set(['read_user_profile', ...MEMORY_TOOLS]);
 export async function assertAgentToolAccess(store: AgentStore, run: AgentRunRow, name: string, args: Record<string, unknown>) {
-  const feature = ['inspect_chart', 'focus_chart'].includes(name) || getAgentDrilldownBase(name) ? await authorizeChartReference(store, run, args.reference)
-    : name.startsWith('bazi_') ? 'bazi' : name.startsWith('ziwei_') ? 'ziwei' : name;
+  const feature = ['inspect_chart', 'focus_chart'].includes(name) || getAgentDrilldownBase(name)
+    ? await authorizeChartReference(store, run, args.reference)
+    : getAgentToolFeatureId(name) ?? name;
   if (FEATURE_MODULE_IDS.includes(feature as FeatureModuleId) && !(await featureEnabled(feature as FeatureModuleId))) throw new Error('该功能已关闭');
+  const scope = getAgentToolScope(name)
+    ?? ((AGENT_TOOL_SCOPE_IDS as readonly string[]).includes(feature) ? feature as AgentToolScopeId : null);
+  if (scope && !(await agentToolScopeEnabled(scope))) throw new Error(`Agent 工具范围已关闭：${getAgentToolScopeLabel(scope)}`);
   if (name === 'search_knowledge' && (!(await featureEnabled('knowledge-base')) || (await getUserCreditInfo(run.user_id, {})).membership === 'free')) throw new Error('当前会员无法使用知识库检索');
   if ((name === 'web_search' || name.startsWith('mcp__')) && (!run.input.webEnabled || (await getUserCreditInfo(run.user_id, {})).membership === 'free')) throw new Error('当前任务不能使用联网工具');
-  if (name === 'read_user_data' && !(await featureEnabled(getDataSourceFeatureId(args.type as typeof DATA_SOURCE_TYPES[number])))) throw new Error('该资料功能已关闭');
+  if (name === 'read_user_data') {
+    const dataSourceFeature = getDataSourceFeatureId(args.type as typeof DATA_SOURCE_TYPES[number]);
+    if (!(await featureEnabled(dataSourceFeature))) throw new Error('该资料功能已关闭');
+    if (getAgentToolScope(dataSourceFeature) && !(await agentToolScopeEnabled(dataSourceFeature as AgentToolScopeId)))
+      throw new Error(`Agent 工具范围已关闭：${getAgentToolScopeLabel(dataSourceFeature as AgentToolScopeId)}`);
+  }
   if (name === 'read_saved_chart' && !(await featureEnabled('bazi'))) throw new Error('命盘功能已关闭');
   if (name === 'read_user_notes' && !(await featureEnabled('records'))) throw new Error('命理记录功能已关闭');
   // An archive entry lands in a bazi chart's case notes or in the records.
@@ -434,10 +458,16 @@ export async function createAgentTools(
         // Today's and this month's fortune are not saved items: a condition never matches them.
         const types = [...new Set(args.types ?? DATA_SOURCE_TYPES)].filter(type => !Object.keys(conditions).length || !SYNTHETIC_SOURCES.has(type));
         const enabled = await Promise.all(
-          types.map(async (type) => ({
-            type,
-            enabled: await featureEnabled(getDataSourceFeatureId(type)),
-          })),
+          types.map(async (type) => {
+            const featureId = getDataSourceFeatureId(type);
+            const scopeId = (AGENT_TOOL_SCOPE_IDS as readonly string[]).includes(featureId)
+              ? featureId as AgentToolScopeId
+              : null;
+            return {
+              type,
+              enabled: await featureEnabled(featureId) && (!scopeId || await agentToolScopeEnabled(scopeId)),
+            };
+          }),
         );
         return textResult(
           await getUserDataSourcesWithErrors(

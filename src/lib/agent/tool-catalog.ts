@@ -37,6 +37,75 @@ export function getAgentDrilldownBase(name: string): AgentChartKind | null {
   return Object.hasOwn(AGENT_DRILLDOWN_BASES, name) ? AGENT_DRILLDOWN_BASES[name as AgentDrilldownTool] : null;
 }
 
+/**
+ * Admin-visible Agent capability scopes. These are deliberately separate from
+ * public feature modules: an administrator can keep a page or MCP capability
+ * available while preventing Agent from using the corresponding tool family.
+ */
+export const AGENT_TOOL_SCOPE_DEFINITIONS = [
+  { id: 'bazi', label: '八字工具', description: '排八字、四柱推算、八字详查与岁运分析。' },
+  { id: 'ziwei', label: '紫微工具', description: '排紫微命盘、限运、飞星与宫位详查。' },
+  { id: 'qimen', label: '奇门工具', description: '排奇门遁甲及宫位详查。' },
+  { id: 'liuyao', label: '六爻工具', description: '排六爻卦盘及爻位详查。' },
+  { id: 'meihua', label: '梅花工具', description: '排梅花易数卦盘。' },
+  { id: 'daliuren', label: '大六壬工具', description: '排大六壬天地盘及三传详查。' },
+  { id: 'xiaoliuren', label: '小六壬工具', description: '排小六壬课盘。' },
+  { id: 'tarot', label: '塔罗工具', description: '抽取和解读塔罗牌阵。' },
+  { id: 'taiyi', label: '太乙工具', description: '排太乙局盘。' },
+  { id: 'astrology', label: '占星工具', description: '排西方占星盘及星体详查。' },
+  { id: 'almanac', label: '黄历工具', description: '计算黄历和择日信息。' },
+  { id: 'user-data', label: '用户资料工具', description: '读取用户命盘、记录、笔记、附件和个性化档案。' },
+  { id: 'knowledge', label: '知识库检索', description: '检索管理员或用户配置的知识库。' },
+  { id: 'memory', label: '长期记忆', description: '读取、写入长期记忆及检索历史对话。' },
+  { id: 'web', label: '联网与 MCP', description: '联网搜索以及外部 MCP 工具。' },
+  { id: 'archive', label: '档案写入', description: '记录用户事件或生成档案保存卡片。' },
+  { id: 'collaboration', label: 'Agent 协作', description: '并行分析和后台子分析。' },
+  { id: 'code', label: '代码模式', description: '允许 Agent 使用脚本批量调用工具。' },
+] as const;
+
+export type AgentToolScopeId = (typeof AGENT_TOOL_SCOPE_DEFINITIONS)[number]['id'];
+export const AGENT_TOOL_SCOPE_IDS: readonly AgentToolScopeId[] = AGENT_TOOL_SCOPE_DEFINITIONS.map(({ id }) => id);
+
+export function getAgentToolScopeLabel(scope: AgentToolScopeId): string {
+  return AGENT_TOOL_SCOPE_DEFINITIONS.find(item => item.id === scope)?.label ?? scope;
+}
+
+/** Return the public feature module behind a Core chart/calculation tool. */
+export function getAgentToolFeatureId(name: string): AgentChartKind | null {
+  if (isAgentChartTool(name)) return name;
+  const drilldown = getAgentDrilldownBase(name);
+  if (drilldown) return drilldown;
+  switch (name) {
+    case 'bazi_dayun':
+    case 'bazi_pillars_resolve':
+      return 'bazi';
+    case 'ziwei_horoscope':
+    case 'ziwei_flying_star':
+      return 'ziwei';
+    case 'almanac_select':
+      return 'almanac';
+    default:
+      for (const domain of Object.keys(AGENT_CHART_NAMES) as AgentChartKind[]) {
+        if (name.startsWith(`${domain}_`)) return domain;
+      }
+      return null;
+  }
+}
+
+/** Static Agent tools that belong to an administrator-configurable scope. */
+export function getAgentToolScope(name: string): AgentToolScopeId | null {
+  const feature = getAgentToolFeatureId(name);
+  if (feature && (AGENT_TOOL_SCOPE_IDS as readonly string[]).includes(feature)) return feature;
+  if (name.startsWith('mcp__') || name === 'web_search') return 'web';
+  if (name === 'search_knowledge') return 'knowledge';
+  if (['list_user_data', 'read_user_data', 'read_user_notes', 'read_user_profile', 'read_attachment'].includes(name)) return 'user-data';
+  if (['read_user_memory', 'remember_user_fact', 'search_conversations'].includes(name)) return 'memory';
+  if (name === AGENT_ARCHIVE_TOOLS.record || name === AGENT_ARCHIVE_TOOLS.propose) return 'archive';
+  if (name === 'parallel_analysis' || name === AGENT_BACKGROUND_TOOL) return 'collaboration';
+  if (name === AGENT_CODEMODE_TOOL) return 'code';
+  return null;
+}
+
 /** Every tool belongs to exactly one family; each family has one result presentation. */
 export type AgentToolFamily =
   | 'chart'

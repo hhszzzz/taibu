@@ -82,3 +82,21 @@ test('setFeatureToggle refreshes the cached value', async (t) => {
   // 读取必须重新落到数据库（stub 计数不变，但内存缓存已被清空）。
   assert.equal(reads(), 1);
 });
+
+test('Agent tool scope settings use an independent namespace and fresh reads', async (t) => {
+  stubSystemDb(t, () => [
+    { setting_key: 'agent_tool_disabled:bazi', setting_value: true },
+    { setting_key: 'agent_tool_disabled:web', setting_value: false },
+  ]);
+
+  const appSettingsModule = await loadAppSettingsModule();
+  const scopes = await appSettingsModule.getAgentToolScopes();
+  assert.deepEqual(scopes, { bazi: true, web: false });
+  const context = require('../lib/db/context.server') as DbContextModule;
+  const original = context.systemDb;
+  context.systemDb = (() => createMockScopedDb({
+    tx: async () => ({ setting_value: true }),
+  })) as unknown as typeof context.systemDb;
+  t.after(() => { context.systemDb = original; });
+  assert.deepEqual(await appSettingsModule.readAgentToolScopeStateFresh('bazi'), { status: 'disabled' });
+});

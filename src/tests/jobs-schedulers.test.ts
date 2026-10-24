@@ -14,14 +14,28 @@ type UpsertCall = {
 
 test('maintenance schedulers use stable ids and are safe to upsert repeatedly', async () => {
   const calls: UpsertCall[] = [];
+  const removed: string[] = [];
+  const existing = [
+    { key: 'reminders', name: 'reminders' },
+    { key: 'renamed-job', name: 'old-name' },
+  ];
   const queue = {
     async upsertJobScheduler(id: string, repeat: unknown, template: UpsertCall['template']) {
       calls.push({ id, repeat, template });
+    },
+    async getJobSchedulers() {
+      return existing;
+    },
+    async removeJobScheduler(id: string) {
+      removed.push(id);
     },
   };
 
   await upsertMaintenanceSchedulers(queue as never);
   await upsertMaintenanceSchedulers(queue as never);
+
+  // A scheduler this release no longer declares is removed, not left firing.
+  assert.deepEqual(removed, ['renamed-job', 'renamed-job']);
 
   assert.equal(calls.length, MAINTENANCE_SCHEDULERS.length * 2);
   const ids = new Set(calls.map((call) => call.id));

@@ -50,8 +50,17 @@ export async function checkRateLimit(
  * 获取客户端 IP。Caddy 注入 x-real-ip 并覆盖任何客户端伪造的同名头；
  * 其它 forwarded 头可被直连客户端伪造，不予信任。
  */
+let warnedMissingRealIp = false;
+
 export function getClientIP(request: Request): string {
     const value = request.headers.get('x-real-ip');
-    if (!value) return 'unknown';
+    if (!value || !value.trim()) {
+        // A proxy that forgets X-Real-IP collapses every caller into one bucket.
+        if (process.env.NODE_ENV === 'production' && !warnedMissingRealIp) {
+            warnedMissingRealIp = true;
+            console.warn('[rate-limit] x-real-ip is missing; set it in the reverse proxy or all clients share one rate-limit bucket');
+        }
+        return 'unknown';
+    }
     return value.split(',')[0].trim() || 'unknown';
 }

@@ -27,8 +27,13 @@ export interface DocumentWorkerLimits {
     bufferMb: number;
 }
 
-/** Large documents measured well under these (Architecture.md「附件文字提取」); a hostile one stops at them. */
-export const DOCUMENT_WORKER_LIMITS: Readonly<DocumentWorkerLimits> = { concurrency: 2, maxWaiting: 8, waitMs: 5_000, heapMb: 256, bufferMb: 256 };
+/**
+ * One parse at a time within the container budget: web runs with a 448MB heap
+ * inside a 640MB limit, so two 256MB parsers plus buffers would let two
+ * hostile documents get the container OOM-killed. A waiting document queues
+ * instead of starting a second thread.
+ */
+export const DOCUMENT_WORKER_LIMITS: Readonly<DocumentWorkerLimits> = { concurrency: 1, maxWaiting: 8, waitMs: 5_000, heapMb: 160, bufferMb: 160 };
 /** How often a running thread's buffers are measured; a parse overshoots the budget by what it allocates in between. */
 const MEMORY_CHECK_MS = 50;
 const MB = 1024 * 1024;

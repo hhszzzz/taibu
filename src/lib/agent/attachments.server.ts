@@ -64,6 +64,10 @@ export async function uploadAttachmentBytes(objectPath:string,bytes:Uint8Array,m
 export async function insertAgentAttachment(row:AttachmentInsert):Promise<void> {
     await systemDb().tx(trx=>trx.insertInto('agent_attachments').values(row).execute());
 }
+/** Marks a failed upload for the maintenance sweeper instead of leaving it uploading. */
+export async function discardAgentAttachment(id:string):Promise<void> {
+    await systemDb().tx(trx=>trx.updateTable('agent_attachments').set({status:'deleting',orphaned_at:new Date().toISOString()}).where('id','=',id).execute());
+}
 export async function markAgentAttachmentReady(id:string):Promise<AttachmentRow> {
     return await systemDb().tx(trx=>trx.updateTable('agent_attachments').set({status:'ready'}).where('id','=',id).returningAll().executeTakeFirstOrThrow()) as unknown as AttachmentRow;
 }

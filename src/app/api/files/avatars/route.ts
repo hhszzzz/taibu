@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server';
 
-import { jsonError, jsonOk, requireUserContext, type AppUser } from '@/lib/api-utils';
+import { jsonError, jsonOk, readUploadedFile, requireUserContext, type AppUser } from '@/lib/api-utils';
 import type { ScopedDb } from '@/lib/db/context.server';
 import { ensureUserRecordRow } from '@/lib/user/profile-record';
 import { getObjectStore } from '@/lib/storage/index.server';
@@ -9,8 +9,6 @@ import { sniffAvatarImage } from '@/lib/storage/image-type';
 export const runtime = 'nodejs';
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
-/** Multipart overhead allowance for the early Content-Length rejection. */
-const MULTIPART_OVERHEAD_BYTES = 64 * 1024;
 export const AVATAR_URL_PREFIX = '/api/files/avatars/';
 
 async function saveAvatarUrl(db: ScopedDb, user: Pick<AppUser, 'id'>, publicUrl: string): Promise<boolean> {
@@ -39,25 +37,12 @@ export async function POST(request: NextRequest) {
   const auth = await requireUserContext(request);
   if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
 
-  const contentLength = Number(request.headers.get('content-length') ?? 0);
-  if (Number.isFinite(contentLength) && contentLength > MAX_AVATAR_BYTES * 2 + MULTIPART_OVERHEAD_BYTES) {
-    return jsonError('头像文件不能超过 2 MiB', 413);
+  // Stream and bound the body: a chunked upload has no Content-Length to check.
+  const upload = await readUploadedFile(request, MAX_AVATAR_BYTES);
+  if ('error' in upload) {
+    return jsonError(upload.error.message.replace('文件不能超过', '头像文件不能超过'), upload.error.status);
   }
-
-  let formData: FormData;
-  try {
-    formData = await request.formData();
-  } catch {
-    return jsonError('头像请求无效', 400);
-  }
-
-  const file = formData.get('file');
-  if (!(file instanceof File) || file.size === 0) {
-    return jsonError('请选择头像文件', 400);
-  }
-  if (file.size > MAX_AVATAR_BYTES) {
-    return jsonError('头像文件不能超过 2 MiB', 413);
-  }
+  const { file } = upload;
 
   const bytes = new Uint8Array(await file.arrayBuffer());
   const imageType = sniffAvatarImage(bytes);

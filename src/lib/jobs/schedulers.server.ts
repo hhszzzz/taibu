@@ -40,4 +40,13 @@ export async function upsertMaintenanceSchedulers(
       },
     );
   }
+  // A rename or removal leaves its scheduler in Redis forever, still firing
+  // the old job name. Upserting cannot remove it, so reconcile explicitly.
+  const declared = new Set(MAINTENANCE_SCHEDULERS.map((scheduler) => scheduler.id));
+  for (const existing of await queue.getJobSchedulers(0, -1, true)) {
+    if (!declared.has(existing.key)) {
+      console.info(`[jobs] removing scheduler ${existing.key} (${existing.name}) that this release does not declare`);
+      await queue.removeJobScheduler(existing.key);
+    }
+  }
 }

@@ -52,8 +52,12 @@ export function createSharedCache<T>(options: { name: string; ttlMs: number }): 
   const key = `${KEY_PREFIX}${name}`;
   const memory = createMemoryCache<T>(ttlMs, 32);
   const flight = createSingleFlight<T>();
+  // Bumped by invalidate(): a load that started before the invalidation must
+  // not publish its now-stale result into L1 or Redis afterwards.
+  let generation = 0;
 
   invalidateListeners.set(name, () => {
+    generation += 1;
     memory.remove(key);
     flight.clear(name);
   });
@@ -64,6 +68,7 @@ export function createSharedCache<T>(options: { name: string; ttlMs: number }): 
       const local = memory.get(key);
       if (local !== null) return local;
 
+      const startedAt = generation;
       return flight.run(name, async () => {
         const second = memory.get(key);
         if (second !== null) return second;
@@ -73,7 +78,7 @@ export function createSharedCache<T>(options: { name: string; ttlMs: number }): 
           if (raw !== null) {
             try {
               const parsed = JSON.parse(raw) as { value: T };
-              memory.set(key, parsed.value);
+              if (generation === startedAt) memory.set(key, parsed.value);
               return parsed.value;
             } catch {
               await getRedisClient().del(key).catch(() => undefined);
@@ -84,6 +89,7 @@ export function createSharedCache<T>(options: { name: string; ttlMs: number }): 
         }
 
         const value = await loader();
+        if (generation !== startedAt) return value;
         memory.set(key, value);
         try {
           await withTimeout(
@@ -98,6 +104,7 @@ export function createSharedCache<T>(options: { name: string; ttlMs: number }): 
     },
 
     async invalidate() {
+      generation += 1;
       memory.remove(key);
       flight.clear(name);
       try {

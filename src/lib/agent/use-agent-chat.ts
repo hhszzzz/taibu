@@ -36,6 +36,8 @@ export function useAgentChat(
   refreshViewer: () => Promise<unknown>,
 ) {
   const [mode, setModeState] = useState<"agent" | "plain">("plain");
+  // The viewer whose mode is final: their saved choice, else what the first status reply allows.
+  const [modeOwner, setModeOwner] = useState<string | null>(null);
   const [capabilities, setCapabilities] = useState<AgentCapabilities>(NO_CAPABILITIES);
   const [run, setRun] = useState<AgentRunView | null>(null);
   const [reconnecting, setReconnecting] = useState(false);
@@ -131,8 +133,9 @@ export function useAgentChat(
         setCapabilities(value);
         if (!explicitMode.current)
           setModeState(value.ready ? "agent" : "plain");
+        setModeOwner(userId);
       } catch {
-        if (!controller.signal.aborted && sequence === requestSequence) setCapabilities(NO_CAPABILITIES);
+        if (!controller.signal.aborted && sequence === requestSequence) { setCapabilities(NO_CAPABILITIES); setModeOwner(userId); }
       } finally {
         busy = false;
         if (!controller.signal.aborted && again) { again = false; void load(); }
@@ -213,6 +216,7 @@ export function useAgentChat(
     (value: "agent" | "plain") => {
       explicitMode.current = true;
       setModeState(value);
+      setModeOwner(userId);
       if (userId)
         try {
           localStorage.setItem(`taibu:agent-mode:${userId}`, value);
@@ -365,6 +369,8 @@ export function useAgentChat(
   };
   return {
     mode,
+    /** False until the mode stops changing on its own, so a conversation of the other kind is not turned away early. */
+    modeSettled: userId !== null && modeOwner === userId,
     setMode,
     capabilities,
     run,

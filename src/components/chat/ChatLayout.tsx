@@ -248,8 +248,10 @@ export function ChatLayout(props: ChatLayoutProps) {
     const { conversations } = useConversationList();
     // 对话 / Agent 的会话不互通：打开另一类会话（含直接访问链接）时退回新建页，
     // 避免普通对话里出现 Agent 的标题、工具步骤或工作区数据。
+    const modeSettled = props.agent?.modeSettled !== false;
     useEffect(() => {
-        if (!activeConversationId) return;
+        // Before the mode is known it reads 对话, which would turn away every Agent conversation opened by link.
+        if (!activeConversationId || !modeSettled) return;
         const current = conversations.find(conversation => conversation.id === activeConversationId);
         if (!current || current.hasAgentRun === undefined) return;
         // 新建的 Agent 会话在首轮运行前 hasAgentRun 仍为 false，用消息形态区分，避免误跳。
@@ -257,7 +259,7 @@ export function ChatLayout(props: ChatLayoutProps) {
             : messages.length > 0 && messages.every(message => !message.agent) ? 'plain'
             : undefined;
         if (kind && (kind === 'agent') !== isAgentMode) router.push('/chat');
-    }, [isAgentMode, activeConversationId, conversations, messages, router]);
+    }, [isAgentMode, modeSettled, activeConversationId, conversations, messages, router]);
     const waitingQuestion = userId && props.agent?.run?.conversationId === activeConversationId && props.agent.run.status === 'awaiting_input'
         ? [...props.agent.run.message.agent?.parts ?? []].reverse().find((part): part is Extract<AgentPart, { type: 'question' }> => part.type === 'question') : undefined;
     const hasWorkspace = isAgentMode || Boolean(latestAgentData);

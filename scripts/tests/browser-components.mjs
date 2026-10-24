@@ -1,13 +1,13 @@
 /**
- * Serverless browser-component acceptance for P5.
+ * Browser component acceptance with synthetic API and model fixtures.
  * Run: pnpm test:browser (uses the pinned Playwright Chromium runtime).
- * Build only: node scripts/tests/p5-browser-fixture.mjs /tmp/taibu-p5-browser
+ * Build only: node scripts/tests/browser-components.mjs /tmp/taibu-browser
  * Build + run with an already-installed Playwright module (never installs):
- *   node scripts/tests/p5-browser-fixture.mjs /tmp/taibu-p5-browser /absolute/path/to/playwright/index.mjs
+ *   node scripts/tests/browser-components.mjs /tmp/taibu-browser /absolute/path/to/playwright/index.mjs
  * Or pass generated acceptance.playwright.js as MCP browser_run_code_unsafe.filename.
  * Programmatic use with an existing Playwright page:
- *   const { run } = await import('file:///absolute/repo/scripts/tests/p5-browser-fixture.mjs');
- *   return run(page, '/tmp/taibu-p5-browser/fixture.js');
+ *   const { run } = await import('file:///absolute/repo/scripts/tests/browser-components.mjs');
+ *   return run(page, '/tmp/taibu-browser/fixture.js');
  *
  * Actual components: SettingsCenterPage/SettingsCenterHost/GeneralSettingsPanel/ChartsPanel/SharedLinksPanel, ShareConversationMenu, AIModelPanel,
  * AnnouncementManagementPanel, KeyManagementPanel, AgentTaskPanel, ConversationListProvider, ChartPickerModal,
@@ -16,7 +16,7 @@
  * Fixture-only boundaries: auth I/O/profile/feature flags, unrelated lazy panels,
  * framework navigation, viewport notifications, held fetch/JSON completion and HTTP responses.
  * Unused Node-only random-calculation crypto fails closed; real Bazi projections are bundled.
- * No Next router, Supabase, Auth, PostgREST, paid model or CSS/layout acceptance is claimed.
+ * Next routing, live authentication, paid models and CSS/layout are outside this fixture's scope.
  * No .env loading, listening socket, server process or unhandled network access.
  */
 import assert from 'node:assert/strict';
@@ -610,7 +610,7 @@ export async function build(outputDirectory) {
     output: { artifactId: 'family-dayun', result: dayun.structuredContent }, canonicalText: dayun.content.map(part => part.text).join('\n') };
 
   await bundle({
-    stdin: { contents: entry.replace('DALIUREN_RESULT_FIXTURE', JSON.stringify(await executeTool('daliuren', { date: '2026-10-23', hour: 12, timezone: 'Asia/Shanghai' }))).replace('QIMEN_RESULT_FIXTURE', JSON.stringify(await executeTool('qimen', { year: 2024, month: 6, day: 1, hour: 12, timezone: 'Asia/Shanghai' }))).replace('AGENT_TOOL_FIXTURE_PARTS', JSON.stringify(toolParts)).replace('TRADITIONAL_TAIYI_FIXTURE_PART', JSON.stringify(traditionalPart)).replace('REVISED_BAZI_FIXTURE_RESULT', JSON.stringify(revisedBazi.structuredContent)).replace('AGENT_DAYUN_FIXTURE_PART', JSON.stringify(dayunPart)).replace('BAZI_DRILLDOWN_FIXTURE_PARTS_JSON', JSON.stringify(drilldownParts)).replace('BAZI_METHOD_FIXTURE', JSON.stringify({ ...baziMethod, whenToUse: baziMethod.description, instructions: renderMethodGuide('bazi') })), loader: 'jsx', resolveDir: root, sourcefile: 'p5-browser-entry.jsx' },
+    stdin: { contents: entry.replace('DALIUREN_RESULT_FIXTURE', JSON.stringify(await executeTool('daliuren', { date: '2026-10-23', hour: 12, timezone: 'Asia/Shanghai' }))).replace('QIMEN_RESULT_FIXTURE', JSON.stringify(await executeTool('qimen', { year: 2024, month: 6, day: 1, hour: 12, timezone: 'Asia/Shanghai' }))).replace('AGENT_TOOL_FIXTURE_PARTS', JSON.stringify(toolParts)).replace('TRADITIONAL_TAIYI_FIXTURE_PART', JSON.stringify(traditionalPart)).replace('REVISED_BAZI_FIXTURE_RESULT', JSON.stringify(revisedBazi.structuredContent)).replace('AGENT_DAYUN_FIXTURE_PART', JSON.stringify(dayunPart)).replace('BAZI_DRILLDOWN_FIXTURE_PARTS_JSON', JSON.stringify(drilldownParts)).replace('BAZI_METHOD_FIXTURE', JSON.stringify({ ...baziMethod, whenToUse: baziMethod.description, instructions: renderMethodGuide('bazi') })), loader: 'jsx', resolveDir: root, sourcefile: 'browser-components-entry.jsx' },
     outfile, bundle: true, format: 'iife', platform: 'browser', jsx: 'automatic',
     tsconfig: resolve(root, 'tsconfig.json'),
     define: { 'process.env.NODE_ENV': '"development"', 'process.env': '{}' },
@@ -664,10 +664,9 @@ export async function build(outputDirectory) {
           export const authSessionCacheConstants = { SESSION_REVALIDATE_EVENT_COOLDOWN_MS: 0 };
           // Sign-in flows are outside this fixture; the sidebar only mounts their components.
           const outsideFixture = async () => { throw new Error('Auth flows are outside the browser fixture'); };
-          export const signInWithEmailProtected = outsideFixture, sendOTP = outsideFixture, verifyOTP = outsideFixture, recordLoginAttempt = outsideFixture, resetPasswordWithOTP = outsideFixture, signOut = outsideFixture;
+          export const signInWithEmail = outsideFixture, sendOTP = outsideFixture, verifyOTP = outsideFixture, recordLoginAttempt = outsideFixture, resetPasswordWithOTP = outsideFixture, signOut = outsideFixture;
           export const updateNickname = outsideFixture, updateAvatarUrl = outsideFixture, ensureUserRecord = outsideFixture;
           export const getSessionSnapshot = async () => payload();
-          export const getUserSnapshot = async () => ({ data: { user: user() }, error: null });
           export const getSession = async () => session();
           export const invalidateBrowserSessionCache = () => {};
           export const revalidateBrowserSession = async () => { window.fixtureAuth.revalidations++; return payload(); };
@@ -3083,7 +3082,7 @@ export async function run(existingPage, bundlePath) {
     check('No unhandled network requests escaped fixtures', blocked.length === 0);
     check('No browser runtime exceptions', browserErrors.length === 0);
     check('Disabled Query observers emit no missing queryFn warnings, including visitor', queryWarnings.length === 0);
-    return { checks, requests, blocked, browserErrors, queryWarnings, scope: 'P5 browser-component integration only; synthetic identity/API/model fixtures; no Next/Auth/PostgREST acceptance' };
+    return { checks, requests, blocked, browserErrors, queryWarnings, scope: 'Browser-component integration with synthetic identity/API/model fixtures; no live Next routing or authentication acceptance' };
   } catch (error) {
     throw new Error(JSON.stringify({ message: error.message, checks, blocked, browserErrors, requests, pageText: await page.locator('body').innerText().catch(() => '') }, null, 2), { cause: error });
   } finally {

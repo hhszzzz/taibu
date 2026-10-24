@@ -5,8 +5,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TEST_DIRECTORIES = ['src/tests', 'packages/core/tests', 'packages/mcp/tests', 'packages/mcp-server/tests'];
-const SCRIPT_TESTS = ['scripts/tests/architecture-guards.test.mjs', 'scripts/tests/test-runner.test.mjs', 'scripts/tests/selfhost-schema.test.mjs', 'scripts/tests/method-cards.test.mjs',
-  'scripts/tests/db-tooling.test.mjs'];
+const SCRIPT_TESTS = ['scripts/tests/architecture-guards.test.mjs', 'scripts/tests/test-runner.test.mjs', 'scripts/tests/method-cards.test.mjs',
+  'scripts/tests/db-tooling.test.mjs', 'scripts/tests/selfhost.test.mjs'];
 const ARTIFACT_TESTS = [
   'scripts/tests/npm-package-artifacts.test.mjs',
   'scripts/tests/skill-bundle.test.mjs',
@@ -42,7 +42,7 @@ export function selectTests(targets = []) {
 export function requiredPackages(files) {
   const required = new Set();
   for (const file of files) {
-    if (file.startsWith('src/tests/') || file.startsWith('packages/') || file.endsWith('/skill-bundle.test.mjs') || file.endsWith('/auth-postgrest-acceptance.test.mjs')) required.add('core');
+    if (file.startsWith('src/tests/') || file.startsWith('packages/') || file.endsWith('/skill-bundle.test.mjs')) required.add('core');
     if (file.startsWith('packages/mcp/tests/')) required.add('mcp');
     if (file.startsWith('packages/mcp-server/tests/')) required.add('mcp-server');
     if (file.endsWith('/npm-package-artifacts.test.mjs') || file.endsWith('/prepare-github-package.test.mjs')) {
@@ -69,11 +69,11 @@ export function verificationSteps(files, complete = false, useInstalledChrome = 
     pnpmStep('Agent worker build', ['build:agent']),
     pnpmStep('Next production build', ['exec', 'next', 'build']),
     nodeStep('Package, license and Skill artifacts', ['--test', ...ARTIFACT_TESTS]),
-    nodeStep('Isolated PostgreSQL contracts', ['--require', './scripts/ts-register.cjs', '--test', 'scripts/tests/postgres-contracts.test.mjs', 'scripts/tests/db-context-contracts.test.mjs', 'scripts/tests/db-baseline.test.mjs']),
+    nodeStep('Isolated PostgreSQL contracts', ['--require', './scripts/ts-register.cjs', '--test', 'scripts/tests/postgres-contracts.test.mjs', 'scripts/tests/db-context-contracts.test.mjs', 'scripts/tests/db-init.test.mjs']),
     nodeStep('Auth acceptance (local stack + Mailpit)', ['--test', 'scripts/tests/auth-acceptance.test.mjs']),
     nodeStep('Real Redis admission contracts', ['--require', './scripts/ts-register.cjs', '--test', 'scripts/tests/selfhost-redis.test.mjs']),
     nodeStep('Agent notification contracts', ['--test', 'scripts/tests/agent-notify-live.test.mjs']),
-    nodeStep('Offline browser component contracts', ['scripts/tests/p5-browser-fixture.mjs', ...(useInstalledChrome ? ['--chrome'] : [])]),
+    nodeStep('Offline browser component contracts', ['scripts/tests/browser-components.mjs', ...(useInstalledChrome ? ['--chrome'] : [])]),
   ];
 }
 

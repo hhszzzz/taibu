@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { AUTH_SQL_SOURCE_MANIFEST, SQL_SOURCE_MANIFEST } from './postgres-fixture.mjs';
+import { DATABASE_SQL_FILES } from '../db/current-sql.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const GUARD_SCRIPT = path.join(REPO_ROOT, 'scripts/check-architecture-guards.mjs');
@@ -18,38 +18,12 @@ function checkIgnored(paths) {
   });
 }
 
-test('architecture migration inputs exist and are not hidden by ignore rules', () => {
-  const source = readFileSync(GUARD_SCRIPT, 'utf8');
-  const paths = [...new Set(
-    [...source.matchAll(/['"](supabase\/migrations\/[^'"]+\.sql)['"]/gu)]
-      .map((match) => match[1]),
-  )];
-  assert.ok(paths.length > 0, 'guard migration references must be discovered');
-  for (const relativePath of paths) {
-    assert.ok(existsSync(path.join(REPO_ROOT, relativePath)), `Missing ${relativePath}`);
-  }
-
+test('current PostgreSQL definitions exist and are tracked inputs', () => {
+  const paths = DATABASE_SQL_FILES.map(name => 'database/' + name + '.sql');
+  for (const filename of paths) assert.ok(existsSync(path.join(REPO_ROOT, filename)), filename);
   const ignored = checkIgnored(paths);
   assert.equal(ignored.status, 1, ignored.error?.message || ignored.stderr || ignored.stdout);
   assert.equal(ignored.stdout, '');
-});
-
-test('PostgreSQL and real Auth fixture source manifests are complete and reproducible', () => {
-  const paths = [...Object.values(SQL_SOURCE_MANIFEST), ...Object.values(AUTH_SQL_SOURCE_MANIFEST)];
-  for (const manifest of [SQL_SOURCE_MANIFEST, AUTH_SQL_SOURCE_MANIFEST]) assert.equal(new Set(Object.values(manifest)).size, Object.values(manifest).length);
-  for (const relativePath of paths) {
-    assert.ok(existsSync(path.join(REPO_ROOT, relativePath)), `Missing ${relativePath}`);
-  }
-  const ignored = checkIgnored(paths);
-  assert.equal(ignored.status, 1, ignored.error?.message || ignored.stderr || ignored.stdout);
-  assert.equal(ignored.stdout, '');
-});
-
-test('unreviewed local migrations stay excluded from the repository baseline', () => {
-  const relativePath = 'supabase/migrations/unreviewed_local_only.sql';
-  const ignored = checkIgnored([relativePath]);
-  assert.equal(ignored.status, 0, ignored.error?.message || ignored.stderr);
-  assert.equal(ignored.stdout.trim(), relativePath);
 });
 
 test('extracted use-case and browser DTO dependencies fail closed', (t) => {
@@ -248,7 +222,7 @@ test('missing architecture inputs fail with actionable diagnostics, not an uncau
   assert.equal(result.status, 1, result.error?.message || result.stderr);
   assert.match(result.stderr, /Architecture guard failures:/u);
   assert.match(result.stderr, /required architecture input is missing/u);
-  assert.match(result.stderr, /supabase\/migrations\/20260410_103000_fix_linuxdo_claim_concurrency\.sql/u);
+  assert.match(result.stderr, /database\/schema\.sql/u);
   assert.doesNotMatch(result.stderr, /ENOENT|Error:|\bat readFileSync\b/u);
   assert.doesNotMatch(result.stdout, /Architecture guards passed/u);
 });

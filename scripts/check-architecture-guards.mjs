@@ -139,23 +139,10 @@ mustNotMatchInTree(
   'bearer-only route auth has been removed in favor of requireUserContext',
 );
 
-const meihuaXiaoliurenMigration = 'supabase/migrations/20260723_100000_create_meihua_xiaoliuren_web.sql';
-mustExist(meihuaXiaoliurenMigration, 'web divination tables require a deployable migration');
-mustMatch(
-  meihuaXiaoliurenMigration,
-  /CREATE TABLE public\.meihua_divinations[\s\S]*CREATE TABLE public\.xiaoliuren_divinations/u,
-  'the web divination migration should create both owner-scoped history tables',
-);
-mustMatch(
-  meihuaXiaoliurenMigration,
-  /SECURITY DEFINER[\s\S]*SET search_path = pg_catalog, public/u,
-  'security-definer history RPCs should pin their search path',
-);
-mustMatch(
-  meihuaXiaoliurenMigration,
-  /REVOKE ALL ON FUNCTION public\.create_analysis_conversation_with_history_as_service\([\s\S]*FROM public, anon, authenticated, service_role;[\s\S]*GRANT EXECUTE ON FUNCTION public\.create_analysis_conversation_with_history_as_service\([\s\S]*TO authenticated;/u,
-  'the history binding RPC should deny default execution and expose only the authenticated admin-session entrypoint',
-);
+mustExist('database/schema.sql', 'current PostgreSQL table definitions must be deployable');
+mustExist('database/functions.sql', 'database functions must have a single current definition');
+mustExist('database/access.sql', 'RLS and grants must be explicit');
+mustNotMatch('database/schema.sql', /CREATE TABLE (?:auth\.users|taibu_meta\.schema_migrations)/u, 'database definitions must use Better Auth without a migration ledger');
 
 for (const page of ['src/app/meihua/page.tsx', 'src/app/xiaoliuren/page.tsx']) {
   mustMatch(
@@ -178,24 +165,6 @@ for (const form of ['src/app/meihua/page.tsx', 'src/components/xiaoliuren/Xiaoli
     `${form} should reuse the shared local datetime formatter`,
   );
 }
-
-const mcpStorageCleanupMigration = 'supabase/migrations/20260723_110000_drop_mcp_auth_storage.sql';
-mustExist(mcpStorageCleanupMigration, 'public MCP rollout requires a tracked legacy storage cleanup migration');
-mustMatch(
-  mcpStorageCleanupMigration,
-  /cron\.unschedule[\s\S]*DROP FUNCTION IF EXISTS public\.cleanup_mcp_oauth_data\(\);/u,
-  'legacy MCP cleanup should remove its scheduled job and cleanup function',
-);
-mustMatch(
-  mcpStorageCleanupMigration,
-  /DROP TABLE IF EXISTS public\.mcp_oauth_codes;[\s\S]*DROP TABLE IF EXISTS public\.mcp_api_keys;/u,
-  'legacy MCP cleanup should remove OAuth and API-key tables explicitly',
-);
-mustNotMatch(
-  mcpStorageCleanupMigration,
-  /DROP\s+(?:TABLE|FUNCTION|TRIGGER)[^;]*\bCASCADE\b/iu,
-  'legacy MCP cleanup must stop on unexpected dependencies instead of cascading',
-);
 
 mustNotMatch(
   'src/app/api/mbti/route.ts',
@@ -556,16 +525,6 @@ mustNotMatch(
   /ARG SUPABASE_SERVICE_ROLE_KEY|SUPABASE_SERVICE_ROLE_KEY="\$SUPABASE_SERVICE_ROLE_KEY"/u,
   'Dockerfile should not accept or forward the Supabase service role key at build time',
 );
-mustNotMatch(
-  'docker-compose.yml',
-  /SUPABASE_SERVICE_ROLE_KEY:/u,
-  'docker-compose.yml should not pass the Supabase service role key into the web build args',
-);
-mustNotMatch(
-  'docker-compose.web.yml',
-  /SUPABASE_SERVICE_ROLE_KEY:/u,
-  'docker-compose.web.yml should not pass the Supabase service role key into the web build args',
-);
 mustMatch(
   'src/app/page.tsx',
   /redirect\('\/bazi'\)/u,
@@ -587,197 +546,6 @@ for (const file of [
     'liuyao surfaces should not expose rank score wording',
   );
 }
-
-mustMatch(
-  'supabase/migrations/20260318_drop_community_posts_anonymous_name.sql',
-  /ALTER TABLE public\.community_posts[\s\S]*DROP COLUMN IF EXISTS anonymous_name/u,
-  'community anonymity cleanup migration should drop the obsolete anonymous_name column',
-);
-mustMatch(
-  'supabase/tabel_export_from_supabase.sql',
-  /CREATE TABLE public\.announcements[\s\S]*content text NOT NULL[\s\S]*published_at timestamp with time zone NOT NULL DEFAULT now\(\)/u,
-  'schema snapshot should keep the simplified announcements table',
-);
-mustNotMatch(
-  'supabase/tabel_export_from_supabase.sql',
-  /CREATE TABLE public\.announcement_user_states/u,
-  'schema snapshot should not reintroduce announcement_user_states',
-);
-mustExist(
-  'supabase/migrations/20260328_simplify_announcements_for_unified_center.sql',
-  'announcements simplification migration should stay tracked in repo',
-);
-mustMatch(
-  'supabase/migrations/20260328_simplify_announcements_for_unified_center.sql',
-  /DROP TABLE IF EXISTS public\.announcement_user_states/u,
-  'announcements simplification migration should drop announcement_user_states',
-);
-mustMatch(
-  'supabase/migrations/20260328_simplify_announcements_for_unified_center.sql',
-  /CREATE TABLE public\.announcements[\s\S]*content text NOT NULL[\s\S]*published_at timestamp with time zone NOT NULL DEFAULT now\(\)/u,
-  'announcements simplification migration should define the simplified announcements table',
-);
-mustExist(
-  'supabase/migrations/20260328_fix_announcements_admin_rls.sql',
-  'announcements admin RLS migration should stay tracked in repo',
-);
-for (const policy of [
-  /CREATE POLICY announcements_admin_select/u,
-  /CREATE POLICY announcements_admin_insert/u,
-  /CREATE POLICY announcements_admin_update/u,
-  /CREATE POLICY announcements_admin_delete/u,
-]) {
-  mustMatch(
-    'supabase/migrations/20260328_fix_announcements_admin_rls.sql',
-    policy,
-    'announcements admin RLS migration should define every admin policy',
-  );
-}
-mustMatch(
-  'supabase/migrations/20260410_103000_fix_linuxdo_claim_concurrency.sql',
-  /CREATE OR REPLACE FUNCTION public\.claim_linuxdo_membership_as_service/u,
-  'linuxdo claim concurrency migration should redefine the monthly claim RPC',
-);
-mustMatch(
-  'supabase/migrations/20260410_103000_fix_linuxdo_claim_concurrency.sql',
-  /pg_advisory_xact_lock/u,
-  'linuxdo claim concurrency migration should serialize grants with an advisory lock',
-);
-mustMatch(
-  'supabase/migrations/20260410_103000_fix_linuxdo_claim_concurrency.sql',
-  /linuxdo_monthly_claim:/u,
-  'linuxdo claim concurrency migration should keep the scoped advisory-lock key',
-);
-mustMatch(
-  'supabase/migrations/20260410_141500_checkin_overcap_drop_user_achievements.sql',
-  /DROP TABLE IF EXISTS public\.user_achievements/u,
-  'checkin over-cap migration should drop the obsolete user_achievements table',
-);
-mustMatch(
-  'supabase/migrations/20260410_141500_checkin_overcap_drop_user_achievements.sql',
-  /CREATE OR REPLACE FUNCTION public\.perform_daily_checkin_as_service/u,
-  'checkin over-cap migration should redefine the service-side checkin RPC',
-);
-mustNotMatch(
-  'supabase/migrations/20260410_141500_checkin_overcap_drop_user_achievements.sql',
-  /LEAST\(v_reward_credits,\s*v_credit_limit - v_current_credits\)/u,
-  'checkin over-cap migration should stop capping a valid reward below the credit limit',
-);
-mustMatch(
-  'supabase/migrations/20260410_141500_checkin_overcap_drop_user_achievements.sql',
-  /v_new_credits := v_current_credits \+ v_reward_credits;/u,
-  'checkin over-cap migration should add the full reward when the user is still below the cap',
-);
-mustMatch(
-  'supabase/migrations/20260411_103500_align_admin_session_service_rpcs.sql',
-  /GRANT EXECUTE ON FUNCTION public\.perform_daily_checkin_as_service\(uuid\) TO authenticated, service_role;/u,
-  'admin-session rpc alignment migration should grant authenticated access to perform_daily_checkin_as_service',
-);
-mustMatch(
-  'supabase/migrations/20260411_103500_align_admin_session_service_rpcs.sql',
-  /GRANT EXECUTE ON FUNCTION public\.claim_linuxdo_membership_as_service\(uuid, text, integer, text\) TO authenticated, service_role;/u,
-  'admin-session rpc alignment migration should grant authenticated access to claim_linuxdo_membership_as_service',
-);
-mustMatch(
-  'supabase/migrations/20260411_103500_align_admin_session_service_rpcs.sql',
-  /GRANT EXECUTE ON FUNCTION public\.activate_key_as_service\(uuid, text\) TO authenticated, service_role;/u,
-  'admin-session rpc alignment migration should grant authenticated access to activate_key_as_service',
-);
-mustMatch(
-  'supabase/migrations/20260411_103500_align_admin_session_service_rpcs.sql',
-  /IF NOT public\.is_admin_user\(\) THEN/u,
-  'admin-session rpc alignment migration should keep the shared admin-session guard',
-);
-mustMatch(
-  'supabase/migrations/20260411_104200_restore_batch_update_vectors_as_service.sql',
-  /CREATE OR REPLACE FUNCTION public\.batch_update_vectors_as_service/u,
-  'batch vector restore migration should redefine batch_update_vectors_as_service',
-);
-mustMatch(
-  'supabase/migrations/20260411_104200_restore_batch_update_vectors_as_service.sql',
-  /GRANT EXECUTE ON FUNCTION public\.batch_update_vectors_as_service\(jsonb, uuid, integer, boolean\) TO authenticated, service_role;/u,
-  'batch vector restore migration should grant authenticated access to batch_update_vectors_as_service',
-);
-mustMatch(
-  'supabase/migrations/20260411_104200_restore_batch_update_vectors_as_service.sql',
-  /IF NOT public\.is_admin_user\(\) THEN/u,
-  'batch vector restore migration should keep the shared admin-session guard',
-);
-mustMatch(
-  'supabase/migrations/20260411_111500_restrict_admin_session_rpc_acl.sql',
-  /admin_list_mcp_keys/u,
-  'admin-session rpc acl migration should cover admin_list_mcp_keys',
-);
-mustMatch(
-  'supabase/migrations/20260411_111500_restrict_admin_session_rpc_acl.sql',
-  /mcp_reset_key/u,
-  'admin-session rpc acl migration should cover mcp_reset_key',
-);
-mustMatch(
-  'supabase/migrations/20260411_111500_restrict_admin_session_rpc_acl.sql',
-  /process_scheduled_reminder_delivery_as_service/u,
-  'admin-session rpc acl migration should cover scheduled reminder delivery RPCs',
-);
-mustMatch(
-  'supabase/migrations/20260315_fix_user_oauth_providers_admin_rls.sql',
-  /DROP POLICY IF EXISTS "Service role full access on oauth providers"/u,
-  'oauth provider RLS migration should remove the service_role-only policy',
-);
-mustMatch(
-  'supabase/migrations/20260315_fix_user_oauth_providers_admin_rls.sql',
-  /CREATE POLICY "Admins full access" ON public\.user_oauth_providers/u,
-  'oauth provider RLS migration should add an admin access policy',
-);
-mustMatch(
-  'supabase/migrations/20260315_fix_user_oauth_providers_admin_rls.sql',
-  /public\.is_admin_user\(\)/u,
-  'oauth provider RLS migration should use the shared admin predicate',
-);
-mustMatch(
-  'supabase/migrations/20260212_mcp_guard_internal_updates.sql',
-  /current_setting\('mingai\.mcp_internal_update', true\)/u,
-  'mcp guard migration should support the scoped internal-update bypass flag',
-);
-mustMatch(
-  'supabase/migrations/20260212_mcp_guard_internal_updates.sql',
-  /set_config\('mingai\.mcp_internal_update', '1', true\)/u,
-  'mcp guard migration should set the scoped bypass flag inside trusted RPCs',
-);
-mustMatch(
-  'supabase/migrations/20260212_mcp_guard_internal_updates.sql',
-  /CREATE OR REPLACE FUNCTION public\.mcp_reset_key/u,
-  'mcp guard migration should patch mcp_reset_key',
-);
-mustMatch(
-  'supabase/migrations/20260212_mcp_guard_internal_updates.sql',
-  /CREATE OR REPLACE FUNCTION public\.admin_revoke_mcp_key/u,
-  'mcp guard migration should patch admin_revoke_mcp_key',
-);
-mustMatch(
-  'supabase/migrations/20260212_mcp_guard_internal_updates.sql',
-  /CREATE OR REPLACE FUNCTION public\.admin_unban_mcp_key/u,
-  'mcp guard migration should define admin_unban_mcp_key',
-);
-mustMatch(
-  'supabase/migrations/20260212_mcp_guard_internal_updates.sql',
-  /SET key_code = p_new_key_code,[\s\S]*is_active = true/u,
-  'mcp reset RPC should reactivate a key when rotating its code',
-);
-mustMatch(
-  'supabase/migrations/20260212_mcp_unban_reactivate_keys.sql',
-  /UPDATE public\.mcp_api_keys[\s\S]*WHERE is_banned = false[\s\S]*is_active = false/u,
-  'mcp unban reactivation migration should backfill legacy inactive keys',
-);
-mustMatch(
-  'supabase/migrations/20260212_mcp_unban_reactivate_keys.sql',
-  /CREATE OR REPLACE FUNCTION public\.admin_unban_mcp_key/u,
-  'mcp unban reactivation migration should redefine admin_unban_mcp_key',
-);
-mustMatch(
-  'supabase/migrations/20260212_mcp_unban_reactivate_keys.sql',
-  /SET is_banned = false,[\s\S]*is_active = true/u,
-  'admin_unban_mcp_key should restore active state',
-);
 
 mustNotMatch(
   'src/lib/data-sources/index.ts',
@@ -1080,7 +848,7 @@ mustNotMatchInTree(
     && !file.startsWith('src/tests/'),
 );
 
-// P5 身份边界：Supabase SDK 与旧部署变量不得回流；identity 模块仅限服务端。
+// 身份边界：Supabase SDK 与旧部署变量不得回流；identity 模块仅限服务端。
 mustNotMatchInTree(
   'src',
   /@supabase\/(?:supabase-js|ssr)/u,

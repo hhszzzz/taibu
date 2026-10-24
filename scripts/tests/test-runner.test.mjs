@@ -13,7 +13,7 @@ test('default tests retain application, Core, both MCP adapters and script guard
   }
   assert.ok(files.includes('scripts/tests/architecture-guards.test.mjs'));
   assert.ok(files.includes('scripts/tests/test-runner.test.mjs'));
-  assert.ok(!files.some(file => /postgres-contracts|auth-postgrest-acceptance|npm-package-artifacts|skill-bundle|prepare-github-package/.test(file)));
+  assert.ok(!files.some(file => /postgres-contracts|auth-acceptance|npm-package-artifacts|skill-bundle|prepare-github-package/.test(file)));
 });
 
 test('explicit selection accepts real files and directories without duplicate executions', () => {
@@ -44,7 +44,7 @@ test('full verification builds each package once and enforces database and brows
   assert.deepEqual(steps.filter(step => step.args[0] === '-C').map(step => step.args[1]), ['packages/core', 'packages/mcp', 'packages/mcp-server']);
   assert.ok(steps.some(step => step.args.includes('tsc')));
   assert.ok(steps.some(step => step.args.includes('next') && step.args.includes('build')));
-  for (const file of ['npm-package-artifacts.test.mjs', 'skill-bundle.test.mjs', 'prepare-github-package.test.mjs', 'postgres-contracts.test.mjs', 'auth-acceptance.test.mjs', 'p5-browser-fixture.mjs']) {
+  for (const file of ['npm-package-artifacts.test.mjs', 'skill-bundle.test.mjs', 'prepare-github-package.test.mjs', 'postgres-contracts.test.mjs', 'auth-acceptance.test.mjs', 'browser-components.mjs']) {
     assert.ok(steps.some(step => step.args.some(arg => arg.endsWith(file))), file);
   }
   assert.deepEqual(steps.find(step => step.args.includes('scripts/tests/auth-acceptance.test.mjs'))?.args,

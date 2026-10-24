@@ -11,7 +11,7 @@ import { useIsDesktopLayout } from '@/lib/hooks/useIsDesktopLayout';
 import { useTranscriptRecordView } from '@/lib/chat/chat-record-view';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { ThinkingBlock } from '../ThinkingBlock';
-import { describeAgentStep, formatAgentValue, getAgentLiveLine, getAgentMemberBrief, getAgentScriptCalls, getAgentToolTitle, getParallelMemberState, summarizeAgentActivity, type AgentProcessPart, type AgentTool } from './presentation';
+import { describeAgentStep, formatAgentValue, getAgentDataTypeLabel, getAgentLiveLine, getAgentMemberBrief, getAgentScriptCalls, getAgentToolTitle, getParallelMemberState, summarizeAgentActivity, type AgentProcessPart, type AgentTool } from './presentation';
 import { memberAnswerText, parallelAnalysisResults } from '@/lib/agent/parallel-results';
 import { ModelAvatar } from './ModelAvatar';
 import { getChartFocus, getChartTargets, getAgentChartReference, parseChartReference } from '@/lib/agent/chart-interaction';
@@ -68,7 +68,7 @@ function StepStructured({ tool, parts, workspace }: { tool: AgentTool; parts: Ag
         const data = getAgentDataResults(tool);
         return data ? <div className="agent-step-structured">
             <p className="agent-step-structured-fact">找到 {data.items.length} 份资料{data.errors.length ? ` · ${data.errors.length} 项暂不可读` : ''}</p>
-            {data.items.length > 0 && <ul className="agent-step-structured-list">{data.items.slice(0, 6).map(item => <li key={item.type + item.id}><strong>{item.name}</strong><span>{item.type}</span></li>)}</ul>}
+            {data.items.length > 0 && <ul className="agent-step-structured-list">{data.items.slice(0, 6).map(item => <li key={item.type + item.id}><strong>{item.name}</strong><span>{getAgentDataTypeLabel(item.type)}</span></li>)}</ul>}
             {workspace && <button type="button" className="agent-step-structured-open" onClick={() => open('data')}>查看资料</button>}
         </div> : null;
     }
@@ -96,9 +96,8 @@ function StepStructured({ tool, parts, workspace }: { tool: AgentTool; parts: Ag
     }
     if (tool.name === 'read_user_data') {
         const input = tool.input && typeof tool.input === 'object' ? tool.input as Record<string, unknown> : {};
-        const label = typeof input.type === 'string' ? input.type : '资料';
         return <div className="agent-step-structured">
-            <p className="agent-step-structured-fact">读取了 1 份{label}</p>
+            <p className="agent-step-structured-fact">读取了 1 份{getAgentDataTypeLabel(input.type)}</p>
             {workspace && <button type="button" className="agent-step-structured-open" onClick={() => open(`tool:${tool.id}`)}>查看资料</button>}
         </div>;
     }

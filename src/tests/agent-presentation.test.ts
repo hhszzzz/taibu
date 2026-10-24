@@ -105,6 +105,10 @@ test('Activity grouping preserves narration, question IDs and tool ordering', ()
 test('process steps summarize each call from its arguments and stored result only', () => {
     const tool = (name: string, extra: Partial<AgentTool> = {}): AgentTool => ({ type: 'tool', id: name, name, title: name, status: 'completed', ...extra });
     assert.equal(summarizeAgentTool(tool('bazi_dayun', { input: { birthYear: 1990, birthMonth: 1, birthDay: 15, birthHour: 9 } })), '1990 / 1 / 15 · 9 时');
+    assert.equal(summarizeAgentTool(tool('bazi_hepan', { input: { a: { name: '小王', birthYear: 1990, birthMonth: 1, birthDay: 15, birthHour: 9 }, b: { birthYear: 1992, birthMonth: 8, birthDay: 3, birthHour: 14 } } })),
+        '小王 · 1990 / 1 / 15 · 9 时 × 乙方 · 1992 / 8 / 3 · 14 时', 'a pairing names both people, by the defaults Core gives the unnamed');
+    assert.equal(summarizeAgentTool(tool('bazi_hepan', { input: { a: { name: '我', reference: 'bazi_chart:1', birthMinute: 0 }, b: { reference: 'artifact:2' } } })), '我 · 已有命盘 × 乙方 · 已有命盘');
+    assert.equal(summarizeAgentTool(tool('read_user_data', { input: { type: 'liuyao_divination', id: 'x' } })), '六爻占卜', 'a data type reads by its name, not its key');
     assert.equal(summarizeAgentTool(tool('search_knowledge', { input: { query: '庚金 正官 月令' }, output: [{ content: '庚金带煞' }, { content: '八字用神' }] })), '「庚金 正官 月令」 · 命中 2 段');
     assert.equal(summarizeAgentTool(tool('web_search', { input: { query: '丑月' }, output: [] })), '「丑月」 · 没有可引用的公开来源');
     assert.equal(summarizeAgentTool(tool('web_search', { input: { query: '丑月' }, output: [{ title: 'a', url: 'https://a.example', content: 'x' }] })), '「丑月」 · 找到 1 个公开来源');

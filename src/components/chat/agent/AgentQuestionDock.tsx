@@ -131,7 +131,7 @@ export function AgentQuestionDock({ question, questions: supplied, questionId, s
                     onClick={() => { update({ answers: { ...draft.answers, [current.id]: null }, custom: { ...draft.custom, [current.id]: '' } }); setStep(step + 1); }}>跳过此题</button>}
                 <button type="button" className="agent-question-previous" disabled={sending || step === 0} onClick={() => setStep(step - 1)}>上一题</button>
                 <button type="submit" className="agent-question-next" disabled={sending || disabled || (summary && !ready)}>
-                    {sending && <LoaderCircle size={15} className="animate-spin" aria-hidden="true" />}
+                    {sending && <LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}
                     {sending ? '正在发送' : summary ? '提交并继续' : step === questions.length - 1 ? '检查回答' : '下一题'}
                 </button>
             </div>

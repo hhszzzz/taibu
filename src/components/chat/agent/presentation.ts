@@ -9,6 +9,11 @@ import type { AgentWorkspaceModel } from '@/lib/agent/workspace';
 import { parallelAnalysisResults, type ParallelAnalysisResult } from '@/lib/agent/parallel-results';
 import { countAgentEvidence, getAgentCitationLabels, getAgentEvidence } from '@/lib/agent/evidence';
 import { getCitedParagraphs } from '@/lib/chat/markdown-citations';
+import { mentionTypeLabels } from '@/components/chat/mentionStyles';
+
+/** 资料类别的中文名（八字命盘、六爻占卜…），不把 bazi_chart 之类的内部类型名露给用户。 */
+export const getAgentDataTypeLabel = (type: unknown) => typeof type === 'string' && Object.hasOwn(mentionTypeLabels, type)
+    ? mentionTypeLabels[type as keyof typeof mentionTypeLabels] : mentionTypeLabels.default;
 
 export type AgentArtifact = Extract<AgentPart, { type: 'artifact' }>;
 export type AgentTool = Extract<AgentPart, { type: 'tool' }>;
@@ -220,6 +225,7 @@ export function summarizeAgentTool(tool: AgentTool): string | null {
         return `${AGENT_ARCHIVE_KIND_LABELS[card.proposal.kind]} · ${subject}`;
     }
     if (tool.name === 'load_analysis_method') return getAgentMethod(tool)?.title ?? (typeof args.id === 'string' ? args.id : null);
+    if (tool.name === 'read_user_data') return getAgentDataTypeLabel(args.type);
     if (tool.name === 'parallel_analysis') {
         const members = parallelAnalysisResults(tool.output);
         const names = members.length ? members.map(member => member.name ?? member.system)

@@ -1,7 +1,7 @@
 'use client';
 // 需要复制状态与 Toast 反馈
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Check, Copy } from 'lucide-react';
 import type { AgentRunStatus } from '@/lib/agent/types';
 import { getAgentToolText } from '@/lib/agent/tool-presentation';
@@ -10,10 +10,15 @@ import { useToast } from '@/components/ui/Toast';
 import { formatAgentValue, getAgentToolState, type AgentTool } from './presentation';
 import { AgentToolResult } from './AgentToolResult';
 
-/** Copies `text`; an icon-only button is named by `label` and confirms with a check mark. */
+/** Copies `text`; an icon-only button is named by `label` and confirms with a check mark for two seconds, as code blocks do. */
 export function CopyButton({ text, label, name, iconOnly = false, className = 'agent-tool-copy' }: { text: string; label: string; name?: string; iconOnly?: boolean; className?: string }) {
     const [copied, setCopied] = useState(false);
     const { showToast } = useToast();
+    useEffect(() => {
+        if (!copied) return;
+        const timer = setTimeout(() => setCopied(false), 2000);
+        return () => clearTimeout(timer);
+    }, [copied]);
     const size = iconOnly ? 16 : 12;
     return <button type="button" className={className} aria-label={name ?? (iconOnly ? label : undefined)} title={iconOnly ? label : undefined} onClick={async () => {
         try {

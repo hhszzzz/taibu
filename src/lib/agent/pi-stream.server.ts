@@ -18,6 +18,11 @@ import type { PiStreamFn as StreamFn } from "./types";
 import { toPiUsage } from './usage';
 
 export const AGENT_UNSUPPORTED_TOOLS_MESSAGE = "当前模型不支持工具调用，请切换普通对话";
+/**
+ * The failure of a request every source failed transiently (overload, rate limit, network, 5xx). Its English half is
+ * what Pi's retry classification recognizes, so the generation sleeps and retries (AGENT_RETRY_POLICY).
+ */
+export const AGENT_TRANSIENT_ERROR_MESSAGE = "模型服务暂时不可用（service temporarily unavailable）";
 import type { AIModelConfig } from "@/types";
 import {
   buildProviderOptions,
@@ -139,6 +144,16 @@ export function agentModelSources(config: AIModelConfig, apiKey?: string) {
         .map((s) => applySourceToModel(config, s))
         .filter(isModelAvailable);
 }
+/** A provider failure a later attempt can get past: Pi's retry classification over the SDK error's message, code and status. */
+function isTransientProviderError(error: unknown, message: AssistantMessage) {
+  const status = (error as { statusCode?: number } | null)?.statusCode;
+  const errorMessage = error instanceof Error ? error.message : '';
+  return isRetryableAssistantError({ ...message, stopReason: 'error', errorMessage: [
+    errorMessage,
+    (error as { code?: string } | null)?.code === 'ECONNRESET' || /ECONNRESET/iu.test(errorMessage) ? 'network error' : '',
+    typeof status === 'number' && status >= 500 ? 'server_error' : status === 408 ? 'timeout' : status === 429 ? '429' : '',
+  ].join(' ') });
+}
 export function createPiSDKStream(
   config: AIModelConfig,
   settings: { reasoning: boolean; nativeReasoning?: boolean; apiKey?: string; resolveImages?: (messages:ModelMessage[])=>Promise<ModelMessage[]> },
@@ -150,6 +165,8 @@ export function createPiSDKStream(
       let started = false;
       let emitted = false;
       let emptyRecoveries = 0;
+      /** Every source failed the way a later attempt can succeed, before any output: Pi retries after a backoff. */
+      let transientFailure = false;
       try {
         const sources = agentModelSources(config, settings.apiKey);
         if (!sources.length) throw new Error("模型服务未配置");
@@ -166,8 +183,8 @@ export function createPiSDKStream(
         );
         for (let sourceIndex = 0; sourceIndex < 3; sourceIndex++) {
           const source = sources[Math.min(sourceIndex, sources.length - 1)];
+          const requestSignal = agentModelRequestSignal(options?.signal);
           try {
-            const requestSignal = agentModelRequestSignal(options?.signal);
             let finished = false;
             const outputLimits = [source.defaultMaxTokens, piModel.maxTokens, options?.maxTokens].filter((limit): limit is number => limit !== undefined);
             const result = streamText({
@@ -347,6 +364,10 @@ export function createPiSDKStream(
             });
             return;
           } catch (error) {
+            const empty = error instanceof Error && error.message === 'AGENT_EMPTY_RESPONSE';
+            const transient = isTransientProviderError(error, message);
+            // A request that ran out its own time already waited minutes; Pi does not wait for it again.
+            transientFailure = transient && !emitted && !requestSignal.aborted;
             // Never restart a provider after emitting part of a response.
             if (
               emitted ||
@@ -354,15 +375,7 @@ export function createPiSDKStream(
               sourceIndex === 2
             )
               throw error;
-            const empty = error instanceof Error && error.message === 'AGENT_EMPTY_RESPONSE';
             if (empty && emptyRecoveries++ >= 1) throw error;
-            const status = (error as { statusCode?: number } | null)?.statusCode;
-            const errorMessage = error instanceof Error ? error.message : '';
-            const transient = isRetryableAssistantError({ ...message, stopReason: 'error', errorMessage: [
-              errorMessage,
-              (error as { code?: string } | null)?.code === 'ECONNRESET' || /ECONNRESET/iu.test(errorMessage) ? 'network error' : '',
-              typeof status === 'number' && status >= 500 ? 'server_error' : status === 408 ? 'timeout' : status === 429 ? '429' : '',
-            ].join(' ') });
             if (!empty && !transient && sourceIndex >= sources.length - 1) throw error;
             started = false; message.content = []; message.stopReason = 'stop';
           }
@@ -376,6 +389,7 @@ export function createPiSDKStream(
             : error instanceof Error && error.message === "模型不支持工具调用"
               ? AGENT_UNSUPPORTED_TOOLS_MESSAGE
             : overflow ? "模型上下文超出限制（context_length_exceeded）"
+            : transientFailure ? AGENT_TRANSIENT_ERROR_MESSAGE
             : "模型调用失败，请确认模型支持工具调用或切换普通对话";
         output.push({
           type: "error",

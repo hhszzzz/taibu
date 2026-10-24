@@ -47,6 +47,7 @@ const LIVE_TASK: Record<Exclude<AgentTaskNode['status'], 'terminal'>, Tone> = {
     pending: { label: '待执行', tone: 'text-foreground-secondary' },
     running: { label: '执行中', tone: 'text-accent' },
     waiting: { label: '等待', tone: 'text-warning' },
+    sleeping: { label: '休眠', tone: 'text-foreground-secondary' },
     completing: { label: '收尾', tone: 'text-accent' },
 };
 const OUTCOME: Record<NonNullable<AgentTaskNode['outcome']>, Tone> = {
@@ -101,7 +102,8 @@ function taskState(task: AgentTaskNode): Tone {
     if (task.status === 'terminal') return OUTCOME[task.outcome ?? 'completed'];
     const { label, tone } = LIVE_TASK[task.status];
     if (task.status === 'completing') return { label: task.outcome ? `${label}（${OUTCOME[task.outcome].label}）` : label, tone };
-    const waiting = task.status === 'waiting' && task.waitingOn?.length ? ` ${task.waitingOn.map(id => `#${id}`).join(' ')}` : '';
+    const waiting = task.status === 'waiting' && task.waitingOn?.length ? ` ${task.waitingOn.map(id => `#${id}`).join(' ')}`
+        : task.status === 'sleeping' && task.sleepUntil !== undefined ? `至 ${formatTime(task.sleepUntil)}` : '';
     return { label: `${label}${waiting}${task.phase ? ` · ${task.phase}` : ''}`, tone };
 }
 
@@ -168,7 +170,8 @@ function Submissions({ submissions }: { submissions: AgentTaskSubmission[] }) {
 function TaskItem({ task, now }: { task: AgentTaskNode; now: number }) {
     const state = taskState(task);
     const duration = taskDuration(task, now);
-    const flags = [task.background ? '后台' : null, task.abortRequested ? '已请求中止' : null, task.abandoned ? '重启后放弃' : null].filter(Boolean);
+    const flags = [task.background ? '后台' : null, task.abortRequested ? '已请求中止' : null, task.abandoned ? '重启后放弃' : null,
+        task.restarts ? `连续中断 ${task.restarts} 次` : null].filter(Boolean);
     return (
         <li data-agent-task={task.id}>
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 py-1 text-[13px]">

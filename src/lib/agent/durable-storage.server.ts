@@ -16,7 +16,7 @@ export interface DurableCommitPersistence {
 /**
  * Postgres supplies the durable commit log and the run's lease. Pi's reference
  * backend supplies validation, document history, ancestry and query semantics.
- * prepareCommit is public in the pinned 1.3.0 backend and is also the boundary
+ * prepareCommit is public in the pinned 1.4.0 backend and is also the boundary
  * used by Pi's JSONL implementation. Never apply or publish before Postgres
  * acknowledges the entire batch. A reopen replays only acknowledged batches.
  */

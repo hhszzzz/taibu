@@ -43,7 +43,7 @@ export async function agentDatabaseContracts(
   });
   const checkpoint = {
     version: 2,
-    durable: { engine: 'pi-durable/1.3.0' },
+    durable: { engine: 'pi-durable/1.4.0' },
     messages: [],
     parts: [],
   };
@@ -61,7 +61,7 @@ export async function agentDatabaseContracts(
     );
   };
   const claim = async (worker = "worker-a") => {
-    await admin(`SELECT public.agent_worker_heartbeat(${quote(worker)},'pi-durable/1.3.0');`);
+    await admin(`SELECT public.agent_worker_heartbeat(${quote(worker)},'pi-durable/1.4.0');`);
     return parsed(`SELECT to_jsonb(public.agent_claim_run(${quote(worker)}));`);
   };
   const lease = (run) =>
@@ -182,11 +182,11 @@ export async function agentDatabaseContracts(
   });
 
   await t.test("Pi Durable commits checkpoints atomically, deduplicates receipts, and consumes only placed commands", async () => {
-    const nativeCheckpoint = { ...checkpoint, version: 2, durable: { engine: "pi-durable/1.3.0", seeded: true } };
+    const nativeCheckpoint = { ...checkpoint, version: 2, durable: { engine: "pi-durable/1.4.0", seeded: true } };
     const queued = await create(await createConversation(), { checkpoint: nativeCheckpoint });
     await assert.rejects(admin("SELECT public.agent_worker_heartbeat('old-engine','pi-agent-core/1.0.2');"), /AGENT_ENGINE_UNSUPPORTED/);
     assert.equal(await parsed("SELECT to_jsonb(public.agent_claim_run('old-engine'));"), null, "unregistered workers cannot claim tasks");
-    await admin("SELECT public.agent_worker_heartbeat('durable-worker','pi-durable/1.3.0');");
+    await admin("SELECT public.agent_worker_heartbeat('durable-worker','pi-durable/1.4.0');");
     const run = await claim("durable-worker");
     assert.equal(run.id, queued.id);
     const cmd = JSON.parse(await command(run, randomUUID(), "steer", "继续对比"));
@@ -209,7 +209,7 @@ export async function agentDatabaseContracts(
     await assert.rejects(asActor(other, `SELECT public.agent_durable_read(${lease(run)},0);`), /AGENT_ADMIN_REQUIRED/);
     await asOwner(`UPDATE public.agent_runs SET lease_until=now()-interval '1 second' WHERE id=${quote(run.id)};`);
     assert.equal(await parsed("SELECT to_jsonb(public.agent_claim_run('old-engine'));"), null);
-    await admin("SELECT public.agent_worker_heartbeat('durable-replacement','pi-durable/1.3.0');");
+    await admin("SELECT public.agent_worker_heartbeat('durable-replacement','pi-durable/1.4.0');");
     const replacement = await claim("durable-replacement");
     assert.equal(replacement.fence, run.fence + 1);
     await assert.rejects(commit(3, []), /AGENT_LEASE_LOST/);
@@ -219,7 +219,7 @@ export async function agentDatabaseContracts(
   });
 
   await t.test("admins read a run's task log without its content, after the run ends too; nobody else can", async () => {
-    const cp = { ...checkpoint, version: 2, durable: { engine: "pi-durable/1.3.0", seeded: true } };
+    const cp = { ...checkpoint, version: 2, durable: { engine: "pi-durable/1.4.0", seeded: true } };
     const queued = await create(await createConversation(), { checkpoint: cp });
     const run = await claim("durable-worker");
     assert.equal(run.id, queued.id);
@@ -260,7 +260,7 @@ export async function agentDatabaseContracts(
 
   await t.test("Pi Durable admitted input stays awaiting a human reply instead of spinning queued leases", async () => {
     const before = await balance();
-    const cp = { ...checkpoint, version: 2, question: "补充信息？", durable: { engine: "pi-durable/1.3.0", seeded: true } };
+    const cp = { ...checkpoint, version: 2, question: "补充信息？", durable: { engine: "pi-durable/1.4.0", seeded: true } };
     await create(await createConversation(), { checkpoint: cp });
     const run = await claim("durable-worker");
     const first = JSON.parse(await command(run, randomUUID(), "follow_up", "之后比较两份命盘"));
@@ -280,7 +280,7 @@ export async function agentDatabaseContracts(
 
   await t.test('only the current engine may heartbeat, create or claim; unsupported creation never debits', async () => {
     const before = await balance();
-    for (const engine of ['pi-durable/1.0.4', 'pi-durable/1.1.0', 'pi-agent-core/1.0.2', 'pi-durable/9.9.9']) {
+    for (const engine of ['pi-durable/1.0.4', 'pi-durable/1.1.0', 'pi-durable/1.3.0', 'pi-agent-core/1.0.2', 'pi-durable/9.9.9']) {
       await assert.rejects(admin(`SELECT public.agent_worker_heartbeat('unsupported',${quote(engine)});`), /AGENT_ENGINE_UNSUPPORTED/);
       await assert.rejects(create(await createConversation(), { checkpoint: { ...checkpoint, durable: { engine } } }), /AGENT_ENGINE_UNSUPPORTED/);
     }
@@ -288,7 +288,7 @@ export async function agentDatabaseContracts(
     assert.equal(await balance(), before);
     const next = await create(await createConversation());
     assert.equal(await parsed("SELECT to_jsonb(public.agent_claim_run('unsupported'));"), null);
-    const current = await claim('v13-worker');
+    const current = await claim('v14-worker');
     assert.equal(current.id, next.id);
     await finish(current, 'failed');
   });
@@ -300,7 +300,7 @@ export async function agentDatabaseContracts(
       const artifact = await saveTool(run);
       await command(run, randomUUID(), 'follow_up', '旧任务待处理消息');
       const output = { ...assistant(run.id), content: status === 'running' ? '已有局部回答' : '' };
-      await asOwner(`UPDATE public.agent_runs SET checkpoint=${json({ ...checkpoint, durable: { engine: 'pi-durable/1.1.0' } })},status=${quote(status)},cancel_requested=${status === 'cancelling'},public_message=${json(output)} WHERE id=${quote(queued.id)};`);
+      await asOwner(`UPDATE public.agent_runs SET checkpoint=${json({ ...checkpoint, durable: { engine: 'pi-durable/1.3.0' } })},status=${quote(status)},cancel_requested=${status === 'cancelling'},public_message=${json(output)} WHERE id=${quote(queued.id)};`);
       active.push({ run, artifact });
     }
     const historical = await create(await createConversation(), { charge: false });

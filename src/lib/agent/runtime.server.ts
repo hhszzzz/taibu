@@ -3,7 +3,7 @@ import { BACKGROUND_CONTEXT, awaitWithContext, withCancel } from "@earendil-work
 import type { Context, JsonValue } from "@earendil-works/chord";
 import {
   CompactionTask, GenerationTask, ToolTask, Harness, createRegistry, defineTool, hook,
-  type CompactionResult, type Conversation, type ConversationWatch, type PromptSection, type SettledTask, type StorageWrite,
+  type CompactionResult, type Conversation, type ConversationWatch, type PromptSection, type ReportInfo, type SettledTask, type StorageWrite,
   type TaskId, type ToolExecutionApi, type ToolExecutionResult, type ToolHookCall, type UserInput,
 } from "@earendil-works/pi-durable";
 import {
@@ -33,7 +33,7 @@ import type { AgentAnswers, AgentQuestion } from './questions';
 import { agentInputContent } from './attachment-input';
 import { resolveAttachmentImages } from './attachments.server';
 import { taibuMethodSection } from './method-section.server';
-import { backgroundCompactionTokens } from './compaction';
+import { agentCompactionPolicy } from './compaction';
 import { prepareToolArguments, toolPolicyBlock } from './tool-arguments';
 import { commitSummary, generateSummary, readSummary } from './summary-usage.server';
 import { createGuardedAgentModels, type GuardedAgentModel } from './model-registry.server';
@@ -60,6 +60,24 @@ search_knowledge、web_search 的每条结果和 focus_chart 的结果带 cite �
 最终答复的最后另起一行写 <followups>，其后只写一个用户最可能接着问的问题（不超过 20 字，用用户的口吻），最后一行写 </followups>；向用户提问或任务未完成时不写。`;
 export const AGENT_COMPACTION_FAILED_MESSAGE = "上下文过长且压缩失败，可开启新对话或重新发起任务";
 export const AGENT_MANUAL_COMPACTION_FAILED_MESSAGE = "上下文压缩失败，原上下文仍保留，可稍后再试";
+/** A step that kept taking its worker down was parked by Pi's crash-loop guard: the task stops instead of looping. */
+export const AGENT_RESTART_LIMIT_MESSAGE = "任务的某一步多次意外中断，已停止执行；可重新发起任务";
+/**
+ * Pi's durable retries of a request every model source failed transiently (the stream marks those, see
+ * AGENT_TRANSIENT_ERROR_MESSAGE): two more attempts, three and six seconds later.
+ */
+export const AGENT_RETRY_POLICY = { enabled: true, maxRetries: 2, baseDelayMs: 3000 } as const;
+
+/** What a Pi report says, without its error: the report type and the task, extension or host callback involved. */
+export function agentReportFields(runId: string, info: ReportInfo) {
+  return {
+    runId, code: info.type,
+    ...("task" in info && info.task ? { task: info.task.kind, taskId: Number(info.task.id) } : {}),
+    ...("extension" in info && info.extension ? { extension: info.extension } : {}),
+    ...("reason" in info ? { reason: info.reason } : {}),
+    ...(info.type === "host_error" ? { callback: info.callback } : {}),
+  };
+}
 const MANUAL_COMPACTION_TEXT = {
   compacted: "已压缩上下文：较早的内容整理成了摘要（可展开查看），最近的内容原样保留。接下来的提问会在压缩后的上下文上继续。",
   unchanged: "当前上下文还不长，没有需要压缩的内容，接下来的提问照常继续。",
@@ -146,6 +164,9 @@ export async function executeAgentRun(
   let signalInterrupted!: () => void;
   const interruption = new Promise<"interrupted">(resolve => { signalInterrupted = () => resolve("interrupted"); });
   const interrupt = () => { interrupted = true; controlAbort.abort(); signalInterrupted(); scope.cancel(); };
+  // Pi parks a task that was cut off too often when it opens the log (its crash-loop guard). A parked task never runs
+  // again, so the conversation would never be idle: the run stops it and ends failed.
+  let parked = false;
   // A user cancel stops gracefully so the run settles as cancelled; interrupt()
   // is for shutdown and lease loss, where another worker resumes the run.
   const requestStop = () => {
@@ -271,8 +292,11 @@ export async function executeAgentRun(
       await authorizeModel(selected, member.reasoning);
       configs.set(selected.id, selected);
     }
+    // Each model's own window: a member that reasons with a model gets that model's reasoning limits.
+    const windows = new Map([...configs.values()].map(selected => [selected.id, selected.id === config.id ? window
+      : resolveKnownModelContextConfig(selected.id, collaborators.some(member => member.model === selected.id && member.reasoning))]));
     const bindings: GuardedAgentModel[] = [...configs.values()].map(selected => {
-      const capacity = resolveKnownModelContextConfig(selected.id);
+      const capacity = windows.get(selected.id);
       const model: Model<Api> = selected.id === config.id ? piModel : { ...piModel, id: selected.id, name: selected.name, baseUrl: selected.apiUrl, reasoning: selected.supportsReasoning,
         input: ['text'], contextWindow: capacity?.maxContext ?? 0, maxTokens: selected.defaultMaxTokens ?? 4096 };
       return { model, authorize: options => authorizeModel(selected, options?.reasoning !== undefined),
@@ -520,17 +544,31 @@ export async function executeAgentRun(
       mcp = await connectAgentMcp(parseAgentMcpServers(), () => assertAgentToolAccess(store, run, 'mcp__external', {}), context.abortSignal!);
       if (mcp.tools.length) registry.install({ name: 'taibu_mcp', tools: mcp.tools });
     }
+    // The main model's thresholds apply harness-wide; a collaborator with a smaller or larger window compacts by its own.
+    const policies = new Map(bindings.map(binding => [binding.model.id, agentCompactionPolicy(windows.get(binding.model.id) ?? null, binding.model.maxTokens)]));
     harness = await Harness.open(storage, {
       models, registry,
       ...(injected?.now ? { now: injected.now } : {}),
       settings: {
-        stream: { timeoutMs: 300_000 }, retry: { enabled: false },
+        stream: { timeoutMs: 300_000 },
+        // The stream already falls back across sources within one request; a transient failure of them all sleeps
+        // durably and retries the request, so a worker can stop or hand over during the backoff.
+        retry: AGENT_RETRY_POLICY,
         toolExecution: "sequential", steeringMode: "all", followUpMode: "all",
+        // Messages the user queued behind a failed answer start the next answer instead of waiting for another input.
+        afterFailedRun: "continue",
         progress: { partialIntervalMs: 200, outputIntervalMs: 200 },
-        compaction: { enabled: true, reserveTokens: (window?.reserveOutput ?? piModel.maxTokens) + 4000, keepRecentTokens: window ? Math.min(8000, Math.floor(window.maxContext / 4)) : 8000, backgroundTokens: backgroundCompactionTokens(window?.maxContext ?? null, (window?.reserveOutput ?? piModel.maxTokens) + 4000) },
+        compaction: {
+          enabled: true, ...policies.get(config.id)!,
+          modelOverrides: Object.fromEntries([...policies].filter(([id]) => id !== config.id).map(([id, policy]) => [`taibu/${id}`, policy])),
+        },
       },
-      // Also receives, once, the error that failed the Session; a storage failure has already interrupted the run.
-      onReport: () => console.warn("[agent-durable]", { runId: run.id, code: storage?.isUnavailable ? "SESSION_FAILED" : "EXTENSION_FAILURE" }),
+      // Content-free: what failed and where, never the error text, which can quote the conversation. A failed Session
+      // has already interrupted the run through its storage; a parked task ends it.
+      onReport: (_error, info) => {
+        if (info.type === "task_parked") parked = true;
+        console.warn("[agent-durable]", agentReportFields(run.id, info));
+      },
     }, context);
     root = await harness.root(context, { agent: {
       model: { provider: "taibu", modelId: config.id },
@@ -593,7 +631,7 @@ export async function executeAgentRun(
     }, BACKGROUND_POLL_MS);
     backgroundRefresh.unref();
     let compacted: Awaited<ReturnType<typeof manualCompactionOutcome>> | undefined;
-    if (stopping) {
+    if (stopping || parked) {
       await root.abort(context, { background: true });
     } else if (run.input.compact) {
       // `/compact` answers nothing: it compacts the context it continues, which the next task then reuses.
@@ -658,13 +696,13 @@ export async function executeAgentRun(
       submission?.status === "unanswered";
     if (compacted && compacted !== "failed" && !stopping)
       putAgentPart(checkpoint.parts, { type: "text", id: "compact:result", text: MANUAL_COMPACTION_TEXT[compacted] });
-    const status = stopping ? "cancelled" : checkpoint.question ? "awaiting_input" :
+    const status = stopping ? "cancelled" : parked ? "failed" : checkpoint.question ? "awaiting_input" :
       compacted ? (compacted === "failed" ? "failed" : "completed") :
       failed || !text.trim() ? "failed" : "completed";
     // A blocking compaction that fails leaves the input unanswered with Pi's "Compaction failed: …" detail.
     const compactionFailed = submission?.status === "unanswered" && typeof submission.detail === "string" &&
       submission.detail.startsWith("Compaction failed");
-    await finish(status, compacted ? AGENT_MANUAL_COMPACTION_FAILED_MESSAGE
+    await finish(status, parked ? AGENT_RESTART_LIMIT_MESSAGE : compacted ? AGENT_MANUAL_COMPACTION_FAILED_MESSAGE
       : last?.errorMessage === AGENT_UNSUPPORTED_TOOLS_MESSAGE ? AGENT_UNSUPPORTED_TOOLS_MESSAGE
       : compactionFailed ? AGENT_COMPACTION_FAILED_MESSAGE : undefined);
   } catch (error) {

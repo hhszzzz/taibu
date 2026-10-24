@@ -815,10 +815,10 @@ CREATE OR REPLACE FUNCTION public.agent_claim_run(p_worker_id text) RETURNS publ
 DECLARE r public.agent_runs;
 BEGIN
   PERFORM public.agent_require_admin();
-  IF NOT EXISTS(SELECT 1 FROM public.agent_workers WHERE id=p_worker_id AND engine='pi-durable/1.3.0') THEN RETURN NULL; END IF;
+  IF NOT EXISTS(SELECT 1 FROM public.agent_workers WHERE id=p_worker_id AND engine='pi-durable/1.4.0') THEN RETURN NULL; END IF;
   SELECT * INTO r FROM public.agent_runs
     WHERE (status='queued' OR (status IN ('running','cancelling') AND lease_until<now()))
-      AND checkpoint->>'version'='2' AND checkpoint#>>'{durable,engine}'='pi-durable/1.3.0'
+      AND checkpoint->>'version'='2' AND checkpoint#>>'{durable,engine}'='pi-durable/1.4.0'
     ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1;
   IF NOT FOUND THEN RETURN NULL; END IF;
   UPDATE public.agent_runs SET status=CASE WHEN cancel_requested THEN 'cancelling' ELSE 'running' END,
@@ -852,7 +852,7 @@ DECLARE
   version_index integer; version_snapshot jsonb; tail_position bigint; previous_write text;
 BEGIN
   PERFORM public.agent_require_admin();
-  IF coalesce(p_checkpoint->>'version','')<>'2' OR coalesce(p_checkpoint#>>'{durable,engine}','')<>'pi-durable/1.3.0' THEN RAISE EXCEPTION 'AGENT_ENGINE_UNSUPPORTED' USING ERRCODE='22023'; END IF;
+  IF coalesce(p_checkpoint->>'version','')<>'2' OR coalesce(p_checkpoint#>>'{durable,engine}','')<>'pi-durable/1.4.0' THEN RAISE EXCEPTION 'AGENT_ENGINE_UNSUPPORTED' USING ERRCODE='22023'; END IF;
   SELECT * INTO c FROM public.conversations WHERE id=p_conversation_id FOR UPDATE;
   IF NOT FOUND OR c.user_id IS DISTINCT FROM p_user_id THEN RAISE EXCEPTION 'AGENT_CONVERSATION_NOT_FOUND' USING ERRCODE='42501'; END IF;
   SELECT * INTO r FROM public.agent_runs WHERE user_id=p_user_id AND request_id=p_request_id;
@@ -1420,13 +1420,13 @@ CREATE OR REPLACE FUNCTION public.agent_user_said(p_run public.agent_runs, p_tex
           AND c.delivery_state IN ('admitted','consumed') AND strpos(coalesce(c.message->>'content',''),p_text)>0)));
 $$;
 
-CREATE OR REPLACE FUNCTION public.agent_worker_heartbeat(p_worker_id text, p_engine text DEFAULT 'pi-durable/1.3.0'::text) RETURNS void
+CREATE OR REPLACE FUNCTION public.agent_worker_heartbeat(p_worker_id text, p_engine text DEFAULT 'pi-durable/1.4.0'::text) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
     AS $$
 BEGIN
   PERFORM public.agent_require_admin();
-  IF p_engine IS DISTINCT FROM 'pi-durable/1.3.0' THEN
+  IF p_engine IS DISTINCT FROM 'pi-durable/1.4.0' THEN
     RAISE EXCEPTION 'AGENT_ENGINE_UNSUPPORTED' USING ERRCODE='22023';
   END IF;
   INSERT INTO public.agent_workers(id,heartbeat_at,engine) VALUES(p_worker_id,now(),p_engine)

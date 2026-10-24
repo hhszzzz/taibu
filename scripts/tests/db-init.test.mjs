@@ -307,7 +307,7 @@ ALTER ROLE taibu_schema PASSWORD '${schemaPassword}';`);
         explain select id from public.agent_runs
         where status = 'queued'
           and checkpoint->>'version' = '2'
-          and checkpoint#>>'{durable,engine}' = 'pi-durable/1.3.0'
+          and checkpoint#>>'{durable,engine}' = 'pi-durable/1.4.0'
         order by created_at limit 1;`);
       assert.match(plan, /agent_claim_queued/u);
     });

@@ -19,9 +19,9 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS agent_attachment_refs_conversation_idx O
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS agent_attachments_user_idx ON public.agent_attachments USING btree (user_id);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS agent_claim_expired ON public.agent_runs USING btree (lease_until, created_at) WHERE ((status = ANY (ARRAY['running'::text, 'cancelling'::text])) AND ((checkpoint ->> 'version'::text) = '2'::text) AND ((checkpoint #>> '{durable,engine}'::text[]) = 'pi-durable/1.3.0'::text));
+CREATE INDEX CONCURRENTLY IF NOT EXISTS agent_claim_expired ON public.agent_runs USING btree (lease_until, created_at) WHERE ((status = ANY (ARRAY['running'::text, 'cancelling'::text])) AND ((checkpoint ->> 'version'::text) = '2'::text) AND ((checkpoint #>> '{durable,engine}'::text[]) = 'pi-durable/1.4.0'::text));
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS agent_claim_queued ON public.agent_runs USING btree (created_at) WHERE ((status = 'queued'::text) AND ((checkpoint ->> 'version'::text) = '2'::text) AND ((checkpoint #>> '{durable,engine}'::text[]) = 'pi-durable/1.3.0'::text));
+CREATE INDEX CONCURRENTLY IF NOT EXISTS agent_claim_queued ON public.agent_runs USING btree (created_at) WHERE ((status = 'queued'::text) AND ((checkpoint ->> 'version'::text) = '2'::text) AND ((checkpoint #>> '{durable,engine}'::text[]) = 'pi-durable/1.4.0'::text));
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS agent_conversation_runs ON public.agent_runs USING btree (user_id, conversation_id, created_at DESC);
 

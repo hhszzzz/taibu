@@ -34,7 +34,7 @@ export const row = (): AgentRunRow => {
     status: "running",
     checkpoint: {
       version: 2,
-      durable: { engine: 'pi-durable/1.3.0' },
+      durable: { engine: 'pi-durable/1.4.0' },
       messages: [
         { role: "user", content: "请用工具分析", timestamp: Date.now() },
       ],

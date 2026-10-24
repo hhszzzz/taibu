@@ -4,7 +4,8 @@ import type { Context } from '@earendil-works/chord';
 import type { Api, Message, Model, Usage } from '@earendil-works/pi-ai';
 import { agentModelRequestSignal } from './pi-stream.server';
 
-const SummaryDoc = defineDoc({ kind: 'taibu.summary', version: 1, scope: 'task', initial: (): { summary: string | null } => ({ summary: null }) });
+// Written once per compaction: a delta is never longer than the document, so no change is stored as a base.
+const SummaryDoc = defineDoc({ kind: 'taibu.summary', version: 1, scope: 'task', initial: (): { summary: string | null } => ({ summary: null }), checkpointWhen: () => false });
 
 export const AGENT_SUMMARY_PROMPT = '将已完成的任务历史整理为事实摘要，保留不确定性。';
 

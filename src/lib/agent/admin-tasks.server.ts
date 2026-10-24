@@ -53,6 +53,8 @@ function taskNode(task: StoredTask, changedAt: string, toolNames: ReadonlyMap<st
     node.waitingOn = state.on.map(Number);
     node.policy = state.policy;
   }
+  if (state.status === "sleeping") node.sleepUntil = state.until;
+  if (task.restarts) node.restarts = task.restarts;
   if (state.status === "completing" || state.status === "terminal") {
     const { outcome } = state;
     node.outcome = outcome.status;

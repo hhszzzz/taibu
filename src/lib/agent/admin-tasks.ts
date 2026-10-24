@@ -47,6 +47,10 @@ export interface AgentTaskNode {
   model?: string;
   waitingOn?: number[];
   policy?: JoinPolicy;
+  /** A sleeping task (a retry or poll backoff) resumes when the Harness clock reaches this time, in epoch milliseconds. */
+  sleepUntil?: number;
+  /** Times in a row a crash or takeover cut the task off without it committing a new state; at Pi's limit it is parked. */
+  restarts?: number;
   outcome?: TaskOutcome<JsonValue>['status'];
   /** The failure's message, or why the task was aborted or could not resume. */
   reason?: string;

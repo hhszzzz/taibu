@@ -25,9 +25,9 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
-# Current indexes use CREATE INDEX CONCURRENTLY outside a transaction.
+# db:init builds indexes CONCURRENTLY and verify-restore runs pg_restore on the host.
 RUN apk add --no-cache postgresql17-client
-RUN addgroup -S nodejs && adduser -S nextjs -G nodejs \
+RUN addgroup -S -g 101 nodejs && adduser -S -u 100 -G nodejs nextjs \
   && mkdir -p /data/files && chown -R nextjs:nodejs /data
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
@@ -40,8 +40,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/.agent ./.agent
 # Database setup uses the SQL definitions shipped with this release.
 COPY --from=builder --chown=nextjs:nodejs /app/database ./database
 COPY --from=builder --chown=nextjs:nodejs /app/scripts/db ./scripts/db
-COPY --from=builder --chown=nextjs:nodejs /app/scripts/selfhost.mjs ./scripts/selfhost.mjs
-RUN node .agent/worker.mjs --check && node -e "require.resolve('pg')" 
+RUN node .agent/worker.mjs --check && node -e "require.resolve('pg')"
 # Check each traced pnpm entry, including the attachment API and Next's version.
 RUN node --input-type=module -e "import {globSync} from 'node:fs'; import {createRequire} from 'node:module'; import {resolve} from 'node:path'; const entries = [...globSync('node_modules/.pnpm/sharp@*/node_modules/sharp/package.json')]; if (!entries.length) throw new Error('Sharp is missing from the standalone image'); for (const entry of entries) { const sharp = createRequire(resolve(entry))('sharp'); const png = await sharp({create:{width:2,height:2,channels:3,background:'#fff'}}).png().toBuffer(); if (!png.length) throw new Error('Sharp image processing failed'); } console.log('Sharp runtime check passed');"
 # PDF and Office uploads are parsed in worker threads from .agent, and pdf.js reads its CMaps and fonts from

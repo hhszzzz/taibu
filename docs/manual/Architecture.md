@@ -30,7 +30,7 @@
 
 后台 `systemDb()` 使用固定系统主体；该主体不能登录，且业务请求不能通过缺少身份回退为系统主体。管理员身份来自数据库账号状态。Better Auth 使用独立的 `taibu_auth` 连接，仅访问 `identity`。
 
-数据库直接维护当前 SQL：`schema.sql` 描述表与约束，`functions.sql` 描述函数与视图，`triggers.sql`、`access.sql`、`indexes.sql` 和 `seed.sql` 分别描述触发器、权限、索引与系统主体。没有编号迁移、校验账本或历史 SQL 重放。已有库的表结构调整由维护者执行明确的 SQL，不能靠重跑建表文件完成。
+数据库直接维护当前 SQL：`schema.sql` 描述表与约束，`functions.sql` 描述函数与视图，`triggers.sql`、`access.sql`、`indexes.sql` 和 `seed.sql` 分别描述触发器、权限、索引与系统主体/数据不变量。没有编号迁移、校验账本或历史 SQL 重放。`db:init` 把声明对象与 PostgreSQL 反解文本比较，只应用差异，并删除文件不再声明的函数、视图、策略、触发器与索引；表与列的结构调整仍由维护者执行明确的 SQL，不能靠重跑建表文件完成。
 
 安全函数显式固定 `search_path` 与执行权限。积分、会员和账本写入由数据库事务共同约束；通知的用户写权限仅允许确认已读。
 

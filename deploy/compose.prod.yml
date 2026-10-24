@@ -5,7 +5,8 @@
 # LOCAL_INSTANCE_ID, APP_DOMAIN, TAIBU_IMAGE, TAIBU_TAG.
 services:
   caddy:
-    image: caddy:2.10-alpine
+    # Pinned by digest so an upstream tag move cannot change the edge unseen.
+    image: caddy:2.10-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
     # Hosts that already run a system Caddy (like hw) use EDGE_MODE=host and
     # never start this service; `--profile edge` opts in explicitly.
     profiles: ["edge"]

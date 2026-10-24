@@ -19,10 +19,10 @@ dump() {
 case "$MODE" in
   hourly)
     dump
-    # One daily copy survives the hourly retention window.
-    if [ "$(date -u +%H)" = "03" ]; then
-      cp "/backups/taibu-${STAMP}.dump" "/backups/taibu-daily-$(date -u +%Y%m%d).dump"
-    fi
+    # The first successful hourly dump of each UTC day becomes the daily copy,
+    # so a missed 03:00 run (restart, failure) does not lose the day.
+    daily="/backups/taibu-daily-$(date -u +%Y%m%d).dump"
+    if [ ! -f "$daily" ]; then cp "/backups/taibu-${STAMP}.dump" "$daily"; fi
     # Keep 48 hourly dumps (daily copies excluded) and 7 daily dumps.
     find /backups -name 'taibu-*.dump' ! -name 'taibu-daily-*' -type f \
       -mmin +"$((LOCAL_KEEP_HOURS * 60))" -delete

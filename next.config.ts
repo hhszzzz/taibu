@@ -1,7 +1,5 @@
 import type { NextConfig } from "next";
 
-// Local avatars are same-origin (`/api/files/avatars/...`), so only external
-// avatar providers need remote patterns.
 // The document routes parse PDF and Office files in worker threads running a bundle that
 // `pnpm build:agent` writes before `next build` (scripts/build-document-worker.mjs). pdf.js
 // reads the predefined CJK CMaps and standard fonts from disk while extracting PDF text; their
@@ -28,6 +26,8 @@ const nextConfig: NextConfig = {
     '/api/chat/extract': documentWorkerFiles,
   },
   images: {
+    // Local avatars are same-origin (`/api/files/avatars/...`); only external
+    // avatar providers need remote patterns.
     remotePatterns: [
       {
         protocol: 'https',

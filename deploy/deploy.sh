@@ -3,8 +3,17 @@
 # stops the rollout before web/worker are replaced.
 set -eu
 TAG="${1:?usage: deploy.sh <tag>}"
-export TAIBU_TAG="$TAG"
 ENV_FILE="${ENV_FILE:-/opt/taibu/env/compose.env}"
+BACKUP_DIR="${BACKUP_DIR:-/opt/taibu/backups}"
+KEEP_BACKUPS="${KEEP_BACKUPS:-10}"
+# Rolling back replaces the application images only; database definitions were
+# already reconciled by db:init, so restore the pre-flight dump to go back
+# further than the previous release.
+PREVIOUS_TAG=""
+if [ -f "$ENV_FILE" ]; then
+  PREVIOUS_TAG="$(sed -n 's/^TAIBU_TAG=//p' "$ENV_FILE" | tail -n 1)"
+fi
+export TAIBU_TAG="$TAG"
 ROOT="${ROOT:-/opt/taibu/source}"
 # host: an existing system Caddy proxies 127.0.0.1:3000 (hw).
 # container: this compose stack owns the caddy service and 80/443.
@@ -25,19 +34,23 @@ compose() {
   fi
 }
 
-mkdir -p /opt/taibu/backups
+mkdir -p "$BACKUP_DIR"
 RUNNING_SERVICES="$(compose ps --status running --services)" || {
   echo "[deploy] cannot inspect running services; refusing to skip the backup" >&2
   exit 1
 }
 if printf '%s\n' "$RUNNING_SERVICES" | grep -qx db; then
   echo "[deploy] pre-flight backup"
-  BACKUP_FILE="$(mktemp "/opt/taibu/backups/pre-${TAG}-$(date -u +%Y%m%dT%H%M%SZ)-XXXXXX")"
+  BACKUP_FILE="$(mktemp "$BACKUP_DIR/pre-${TAG}-$(date -u +%Y%m%dT%H%M%SZ)-XXXXXX")"
   if ! compose exec -T db sh -c 'pg_dump -U postgres -Fc taibu' > "$BACKUP_FILE"; then
     rm -f "$BACKUP_FILE"
     exit 1
   fi
   echo "[deploy] backup saved: $BACKUP_FILE"
+  # Keep the newest pre-flight dumps; older ones are the operator's to archive.
+  ls -1t "$BACKUP_DIR"/pre-* 2>/dev/null | tail -n +"$((KEEP_BACKUPS + 1))" | while IFS= read -r old; do
+    rm -f "$old"
+  done
 else
   echo "[deploy] no running db; skipping pre-flight backup (first deploy)"
 fi
@@ -57,13 +70,24 @@ compose run --rm -T files-init
 compose run --rm -T db-setup
 compose run --rm -T db-init
 
+rollback() {
+  if [ -z "$PREVIOUS_TAG" ] || [ "$PREVIOUS_TAG" = "$TAG" ]; then
+    echo "[deploy] no previous image tag recorded in $ENV_FILE; staying on $TAG" >&2
+    return 0
+  fi
+  echo "[deploy] rolling web and worker back to $PREVIOUS_TAG (database keeps this release's definitions)" >&2
+  TAIBU_TAG="$PREVIOUS_TAG"
+  export TAIBU_TAG
+  compose up -d --no-deps web worker || echo "[deploy] rollback could not start $PREVIOUS_TAG" >&2
+}
+
 echo "[deploy] start services"
 if [ "$EDGE_MODE" = "host" ]; then
   # Switching from container edge must release 80/443 before host Caddy owns them.
   compose --profile edge stop caddy >/dev/null 2>&1 || true
-  compose up -d --no-deps web worker backup
+  if ! compose up -d --no-deps web worker backup; then rollback; exit 1; fi
 else
-  compose --profile edge up -d --no-deps web worker caddy backup
+  if ! compose --profile edge up -d --no-deps web worker caddy backup; then rollback; exit 1; fi
 fi
 
 echo "[deploy] waiting for readiness"
@@ -75,4 +99,5 @@ for attempt in $(seq 1 30); do
   sleep 2
 done
 echo "[deploy] readiness check failed" >&2
+rollback
 exit 1

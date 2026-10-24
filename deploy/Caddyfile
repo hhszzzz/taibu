@@ -1,8 +1,23 @@
 {
-	# Cloudflare proxy mode: keep the real client IP from the edge.
+	# Cloudflare proxy mode: keep the real client IP from the edge. The list is
+	# checked in; deploy/update-cloudflare-ips.sh refreshes it from Cloudflare's
+	# published ranges before a reload.
 	servers {
 		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
 		client_ip_headers CF-Connecting-IP
+	}
+}
+
+# One upstream definition for the maintenance allow-list and normal traffic.
+# X-Forwarded-Proto is not overridden: Cloudflare's value passes through and
+# describes the scheme the visitor used, which the app needs for secure cookies.
+(app) {
+	reverse_proxy web:3000 {
+		flush_interval -1
+		header_up X-Real-IP {client_ip}
+		# A deploy restarts web; retry briefly instead of answering 502.
+		lb_try_duration 30s
+		lb_try_interval 1s
 	}
 }
 
@@ -19,15 +34,12 @@
 
 	# Maintenance switch: `/opt/taibu/maintenance/on` serves a static 503 for
 	# everyone except ADMIN_IP (space separated allow-list, e.g.
-	# "203.0.113.7 198.51.100.0/24").
+	# "203.0.113.7 198.51.100.0/24"). client_ip is Cloudflare-aware.
 	@maintenance file maintenance/on
-	@admin remote_ip {$ADMIN_IP}
+	@admin client_ip {$ADMIN_IP}
 	handle @maintenance {
 		handle @admin {
-			reverse_proxy web:3000 {
-				flush_interval -1
-				header_up X-Real-IP {client_ip}
-			}
+			import app
 		}
 		handle {
 			header Retry-After 300
@@ -38,11 +50,7 @@
 	}
 
 	handle {
-		reverse_proxy web:3000 {
-			flush_interval -1
-			header_up X-Real-IP {client_ip}
-			header_up X-Forwarded-Proto {scheme}
-		}
+		import app
 	}
 
 	header {

@@ -1,0 +1,60 @@
+# Template for a system Caddy that already owns 80/443 (EDGE_MODE=host, e.g. hw).
+# deploy.sh gives the web container 127.0.0.1:${WEB_PORT} and never starts the
+# caddy service. Copy this file into the host's Caddy config, replace the
+# placeholders, then: caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy
+#
+# The trusted_proxies block below may appear only once per Caddyfile. If the
+# host already configures it, merge the ranges instead of adding a second block.
+{
+	servers {
+		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+		client_ip_headers CF-Connecting-IP
+	}
+}
+
+example.com {
+	encode zstd gzip
+	request_body {
+		max_size 12MB
+	}
+
+	root * /opt/taibu
+
+	@maintenance file maintenance/on
+	@admin client_ip 203.0.113.7
+	handle @maintenance {
+		handle @admin {
+			reverse_proxy 127.0.0.1:3000 {
+				flush_interval -1
+				header_up X-Real-IP {client_ip}
+				lb_try_duration 30s
+				lb_try_interval 1s
+			}
+		}
+		handle {
+			header Retry-After 300
+			respond "维护中，请稍后重试" 503 {
+				close
+			}
+		}
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:3000 {
+			flush_interval -1
+			header_up X-Real-IP {client_ip}
+			lb_try_duration 30s
+			lb_try_interval 1s
+		}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

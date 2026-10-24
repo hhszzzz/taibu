@@ -63,25 +63,25 @@ SQL 是创建空库及更新数据库对象的源码。搬迁已有数据库时�
 | --- | --- |
 | `bootstrap/` | 超级用户建立角色、schema、扩展与角色密码 |
 | `schema.sql` | 表、序列和约束，仅用于全新空库 |
-| `functions.sql` | 可替换的函数、视图与不支持任务的结算 |
-| `triggers.sql` | 重建当前触发器 |
-| `access.sql` | RLS、策略和明确的角色权限 |
-| `seed.sql` | 幂等建立系统主体 |
+| `functions.sql` | 函数与视图；未在此声明的函数/视图会被删除 |
+| `triggers.sql` | 当前触发器定义 |
+| `access.sql` | RLS、策略和明确的角色权限；未在此声明的权限会被撤销 |
+| `seed.sql` | 系统主体与必须的数据不变量 |
 | `indexes.sql` | 在事务外并发建立索引 |
 
 ```bash
 pnpm db:bootstrap  # ADMIN_DATABASE_URL 和各角色密码，见脚本校验
-pnpm db:init       # SCHEMA_DATABASE_URL，兼容 MIGRATOR_DATABASE_URL
+pnpm db:init       # SCHEMA_DATABASE_URL，以 taibu_schema 登录后 SET ROLE taibu_owner
 pnpm db:codegen    # --project taibu-v2，或 DATABASE_URL；生成 src/lib/db/generated
-pnpm db:diff       # --a/--b 两个 DSN 的 public schema 结构对比
-pnpm db:verify-restore  # 在临时库验证备份、用户一致性与 FK
+pnpm db:diff       # --a/--b 两个 DSN 的 public/identity/auth/extensions 结构与权限对比
+pnpm db:verify-restore  # 在临时库验证备份：定义对比、用户一致性、FK
 ```
 
-`db:init` 使用数据库锁串行执行。全新库先创建表，再应用其余 SQL；已有库刷新函数、触发器、权限、系统主体与索引，保留业务数据，并移除旧迁移账本。失败事务回滚，失败的并发索引可在重跑时修复。
+`db:init` 使用数据库锁串行执行，没有迁移账本。它把每个声明对象与 PostgreSQL 反解出的规范文本比较，只应用差异：全新库先创建表，再应用其余 SQL；已有库替换变化的函数与视图、重建变化的策略与触发器、按规范文本新建或重建索引、补齐声明权限并撤销未声明权限，然后删除文件不再声明的函数、视图、策略、触发器与索引。业务数据保持不变。每段 DDL 在独立短事务中执行并带锁超时，部署时正在服务的旧版本不会被长时间阻塞；没有变化的一轮不会写入系统目录。
 
-**已有库增加列、改变类型、修改约束或替换索引时，需要维护者先备份并执行明确的 `ALTER` / 索引 SQL，然后同步当前定义。** `db:init` 会拒绝缺少表或列的已有库，但不会推断类型、约束或索引定义差异，也不会自动删表或清空数据。`CREATE INDEX IF NOT EXISTS` 不会替换同名索引；调整定义时需显式处理旧索引。
+**表与列的结构不会被隐式修改。** 已有库与 `database/schema.sql` 不一致时，`db:init` 在改动任何对象之前失败并逐条列出差异；增加列、改变类型、修改约束需要维护者先备份并执行明确的 `ALTER`，然后同步当前定义。索引、策略、触发器、视图与函数定义由 `db:init` 自动收敛，删除表或列仍需显式 SQL。
 
-宿主机操作需要 PostgreSQL 17 客户端；对比与恢复校验支持 `PG_DUMP_BIN` / `PG_RESTORE_BIN` / `PSQL_BIN` 覆盖路径。私有连接保存在 `.taibu-local/<project>/env/*.env`（0600）。为兼容现有部署，DDL 连接文件仍叫 `migrate.env`，登录角色仍叫 `taibu_migrator`；新生成文件写入 `SCHEMA_DATABASE_URL`，既有 `MIGRATOR_DATABASE_URL` 仍可使用。这些名称不涉及历史迁移。
+宿主机操作需要 PostgreSQL 17 客户端；对比与恢复校验支持 `PG_DUMP_BIN` / `PG_RESTORE_BIN` / `PSQL_BIN` 覆盖路径。私有连接保存在 `.taibu-local/<project>/env/*.env`（0600）：DDL 连接是 `schema.env` 里的 `SCHEMA_DATABASE_URL`，登录角色 `taibu_schema`；它只能 `SET ROLE taibu_owner`，本身不是对象属主。
 
 ### 设为管理员
 
@@ -177,7 +177,7 @@ BullMQ 的 `taibu-email` 队列失败计数可在 Redis 里查看；连续失败
 
 ## 生产部署与备份
 
-生产使用 `deploy/compose.base.yml` + `deploy/compose.prod.yml`，私有配置写入 `/opt/taibu/env/`。`compose.env` 保存项目名、镜像、tag、域名及 `TAIBU_ENV_DIR`；账号口令按 `app.env`、`db.env`、`db-setup.env`、`migrate.env`、`backup.env`、`restore.env` 拆分。部署使用 CI 构建好的镜像。
+生产使用 `deploy/compose.base.yml` + `deploy/compose.prod.yml`，私有配置写入 `/opt/taibu/env/`。`compose.env` 保存项目名、镜像、tag、域名及 `TAIBU_ENV_DIR`；账号口令按 `app.env`、`db.env`、`db-setup.env`、`schema.env`、`backup.env`、`restore.env` 拆分。部署使用 CI 构建好的镜像。
 
 ```bash
 # 在主机源码目录执行；已有宿主反向代理时使用 host。
@@ -186,11 +186,11 @@ EDGE_MODE=host deploy/deploy.sh <tag>
 EDGE_MODE=container deploy/deploy.sh <tag>
 ```
 
-`host` 模式叠加 `compose.host-edge.yml`，Web 只发布回环端口；`container` 模式启动 Caddy 的 `edge` profile。TLS、域名、代理真实 IP 与上传限制以 `deploy/Caddyfile` 和主机代理配置为准。
+`host` 模式叠加 `compose.host-edge.yml`，Web 只发布回环端口；`container` 模式启动 Caddy 的 `edge` profile。TLS、域名、代理真实 IP 与上传限制以 `deploy/Caddyfile`（容器边缘）或 `deploy/Caddyfile.host`（宿主 Caddy 模板）为准；`deploy/update-cloudflare-ips.sh` 从 Cloudflare 官方列表刷新 `trusted_proxies`，改完需自行 validate + reload。
 
-发布脚本先备份运行中的 PostgreSQL，再执行 `files-init`、`db-setup` 与 `db-init`，成功后更新 Web / worker 并检查 `/api/health/ready`。准备表结构变更时需把前述显式 SQL 操作纳入发布顺序；切换镜像 tag 不会撤销已经执行的结构变更。
+发布脚本先备份运行中的 PostgreSQL（默认保留最近 10 份 `pre-*`），再执行 `files-init`、`db-setup` 与 `db-init`，成功后更新 Web / worker 并检查 `/api/health/ready`；启动失败或健康检查超时会把 Web / worker 退回 `compose.env` 中记录的上一版本。数据库定义已由 `db-init` 收敛，回到更早版本需要恢复发布前备份。准备表结构变更时需把前述显式 SQL 操作纳入发布顺序；切换镜像 tag 不会撤销已经执行的结构变更。
 
-`deploy/backup/` 定时备份 PostgreSQL 和文件卷，可选同步到异地 restic 仓库。`db:verify-restore` 或生产 `restore-check` 工具在独立临时库验证结构、数据与外键；该校验使用 `--no-owner --no-privileges`，不验证业务角色权限。恢复业务环境前停止写入，使用匹配的数据库、文件备份和镜像，并恢复对象属主与权限。
+`deploy/backup/` 按整点备份 PostgreSQL 和文件卷（当天首份成功备份即成为当日副本，可选同步到异地 restic 仓库）。`db:verify-restore` 或生产 `restore-check` 工具在独立临时库恢复备份，并把还原出的定义与当前 `database/*.sql` 逐项比较（表与列、策略、触发器、视图、索引、函数名与 RLS），再校验用户一致性与外键；使用较早版本镜像产生的备份可以加 `--no-schema` 跳过定义比较。该校验使用 `--no-owner --no-privileges`，不验证业务角色权限。恢复业务环境前停止写入，使用匹配的数据库、文件备份和镜像，并恢复对象属主与权限。
 
 - `deploy/postgres/postgresql.conf`：数据库资源配置。
 - `.taibu-local/<project>/`：本地私有配置、env 与 Compose 插值文件。
@@ -201,5 +201,7 @@ EDGE_MODE=container deploy/deploy.sh <tag>
 - 只有 `web` 的 3000 端口映射到 `127.0.0.1`；db/redis 不对宿主发布端口（本地 db 仅回环供 codegen）。
 - `taibu_app` 是 NOINHERIT 零权限角色；每个事务显式设置 `role` 与 `request.jwt.claims`，缺少上下文时直接失败。
 - `taibu_auth` 只能访问 `identity` schema，供 Better Auth 专用连接池。
-- DDL 初始化使用 `taibu_migrator` 登录后 `SET ROLE taibu_owner`；`taibu_owner` 不对外登录。
+- DDL 初始化使用 `taibu_schema` 登录后 `SET ROLE taibu_owner`；`taibu_owner` 不对外登录。
+
+- 策略、触发器和权限由 `db:init` 收敛；仓库里不再声明的对象会被删除，因此不要在数据库中手工创建同名对象。
 - 不要把 `.taibu-local`、`.env` 或备份文件提交到仓库。

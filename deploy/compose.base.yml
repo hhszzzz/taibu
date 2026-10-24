@@ -73,7 +73,7 @@ services:
       db: { condition: service_healthy }
   db-init:
     <<: *node
-    env_file: ["${TAIBU_ENV_DIR}/migrate.env"]
+    env_file: ["${TAIBU_ENV_DIR}/schema.env"]
     command: [node, scripts/db/init.mjs]
     restart: "no"
     depends_on:

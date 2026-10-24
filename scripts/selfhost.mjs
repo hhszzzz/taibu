@@ -4,7 +4,7 @@
 // Owns private per-project config, env files, and compose calls.
 import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { chmod, lstat, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -13,7 +13,7 @@ const STATE = path.join(ROOT, '.taibu-local');
 const COMPOSE_FILES = ['deploy/compose.base.yml', 'deploy/compose.local.yml'];
 const APP_IMAGE = 'taibu-local';
 const SECRET_KEYS = [
-  'DB_PASSWORD', 'TAIBU_MIGRATOR_PASSWORD', 'TAIBU_APP_PASSWORD',
+  'DB_PASSWORD', 'TAIBU_SCHEMA_PASSWORD', 'TAIBU_APP_PASSWORD',
   'TAIBU_AUTH_PASSWORD', 'TAIBU_BACKUP_PASSWORD', 'REDIS_PASSWORD',
   'BETTER_AUTH_SECRET', 'INTERNAL_API_SECRET',
 ];
@@ -138,13 +138,21 @@ async function writePrivate(file, content) {
   await chmod(file, 0o600);
 }
 
+/** Private config, upgrading files written before a secret key was renamed. */
 async function readConfig(project) {
   const file = path.join(projectDirectory(project), 'config.json');
   const stat = await lstat(file);
   if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o077) || stat.uid !== process.getuid?.()) {
     throw new Error('config.json 必须是当前用户的 0600 私有文件');
   }
-  return validateConfig(JSON.parse(await readFile(file, 'utf8')));
+  const stored = JSON.parse(await readFile(file, 'utf8'));
+  const missing = SECRET_KEYS.filter((key) => typeof stored?.[key] !== 'string');
+  if (missing.length) {
+    for (const key of missing) stored[key] = key === 'AGENT_CREDENTIAL_ENCRYPTION_KEY'
+      ? randomBytes(32).toString('base64') : secret();
+    await writePrivate(file, `${JSON.stringify(stored, null, 2)}\n`);
+  }
+  return validateConfig(stored);
 }
 
 function envFile(entries) {
@@ -197,21 +205,23 @@ async function writeEnvironment(config) {
   }));
   await writePrivate(path.join(env, 'db.env'), envFile({
     POSTGRES_PASSWORD: config.DB_PASSWORD,
-    TAIBU_MIGRATOR_PASSWORD: config.TAIBU_MIGRATOR_PASSWORD,
+    TAIBU_SCHEMA_PASSWORD: config.TAIBU_SCHEMA_PASSWORD,
     TAIBU_APP_PASSWORD: config.TAIBU_APP_PASSWORD,
     TAIBU_AUTH_PASSWORD: config.TAIBU_AUTH_PASSWORD,
     TAIBU_BACKUP_PASSWORD: config.TAIBU_BACKUP_PASSWORD,
   }));
   await writePrivate(path.join(env, 'db-setup.env'), envFile({
     ADMIN_DATABASE_URL: `postgres://postgres:${config.DB_PASSWORD}@db:5432/taibu`,
-    TAIBU_MIGRATOR_PASSWORD: config.TAIBU_MIGRATOR_PASSWORD,
+    TAIBU_SCHEMA_PASSWORD: config.TAIBU_SCHEMA_PASSWORD,
     TAIBU_APP_PASSWORD: config.TAIBU_APP_PASSWORD,
     TAIBU_AUTH_PASSWORD: config.TAIBU_AUTH_PASSWORD,
     TAIBU_BACKUP_PASSWORD: config.TAIBU_BACKUP_PASSWORD,
   }));
-  await writePrivate(path.join(env, 'migrate.env'), envFile({
-    SCHEMA_DATABASE_URL: `postgres://taibu_migrator:${config.TAIBU_MIGRATOR_PASSWORD}@db:5432/taibu`,
+  await writePrivate(path.join(env, 'schema.env'), envFile({
+    SCHEMA_DATABASE_URL: `postgres://taibu_schema:${config.TAIBU_SCHEMA_PASSWORD}@db:5432/taibu`,
   }));
+  // Earlier versions named this file migrate.env.
+  await rm(path.join(env, 'migrate.env'), { force: true });
   await writePrivate(path.join(env, 'redis.env'), envFile({ REDIS_PASSWORD: config.REDIS_PASSWORD }));
   await writePrivate(path.join(directory, 'compose.env'), envFile({
     LOCAL_PROJECT: config.LOCAL_PROJECT,

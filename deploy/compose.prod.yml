@@ -53,6 +53,8 @@ services:
     image: ${TAIBU_IMAGE:?}:${TAIBU_TAG:?}
     profiles: ["tools"]
     restart: "no"
+    # Dumps are 0600 root on the volume; the image runs as uid 100.
+    user: "0:0"
     env_file: ["${TAIBU_ENV_DIR:?}/restore.env"]
     entrypoint: ["node"]
     volumes:

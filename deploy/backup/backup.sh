@@ -19,10 +19,11 @@ dump() {
 case "$MODE" in
   hourly)
     dump
-    # The first successful hourly dump of each UTC day becomes the daily copy,
-    # so a missed 03:00 run (restart, failure) does not lose the day.
-    daily="/backups/taibu-daily-$(date -u +%Y%m%d).dump"
-    if [ ! -f "$daily" ]; then cp "/backups/taibu-${STAMP}.dump" "$daily"; fi
+    # Every successful hourly becomes the daily copy, so the daily file is
+    # always the newest dump of the day. Picking only the first dump would
+    # freeze the pre-import (empty) database on cutover day, when the first
+    # hourly run happens before the import and no later run could replace it.
+    cp "/backups/taibu-${STAMP}.dump" "/backups/taibu-daily-$(date -u +%Y%m%d).dump"
     # Keep 48 hourly dumps (daily copies excluded) and 7 daily dumps.
     find /backups -name 'taibu-*.dump' ! -name 'taibu-daily-*' -type f \
       -mmin +"$((LOCAL_KEEP_HOURS * 60))" -delete

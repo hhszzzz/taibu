@@ -170,14 +170,22 @@ function describeListConditions(args: Record<string, unknown>): string {
     return [keyword, range].filter(Boolean).join(' · ');
 }
 
+/** 「小王 · 1990 / 1 / 15 · 9 时」: whose birth data a chart step took; a pairing side may name a chart instead. */
+function describeBirth(args: Record<string, unknown>): string {
+    const date = [args.birthYear, args.birthMonth, args.birthDay].filter(value => typeof value === 'number').join(' / ');
+    return [typeof args.name === 'string' ? args.name : '', date, typeof args.birthHour === 'number' ? `${args.birthHour} 时` : '',
+        typeof args.reference === 'string' ? '已有命盘' : ''].filter(Boolean).join(' · ');
+}
+
 /** One line under a process step, read from its arguments and stored result only. */
 export function summarizeAgentTool(tool: AgentTool): string | null {
     const args = tool.input && typeof tool.input === 'object' && !Array.isArray(tool.input) ? tool.input as Record<string, unknown> : {};
     if (getAgentToolFamily(tool.name) === 'drilldown') return describeDrilldownSelection(args);
-    if (typeof args.birthYear === 'number' && (tool.name.startsWith('bazi') || tool.name.startsWith('ziwei'))) {
-        const date = [args.birthYear, args.birthMonth, args.birthDay].filter(value => typeof value === 'number').join(' / ');
-        return [typeof args.name === 'string' ? args.name : '', date, typeof args.birthHour === 'number' ? `${args.birthHour} 时` : ''].filter(Boolean).join(' · ') || null;
-    }
+    if (typeof args.birthYear === 'number' && (tool.name.startsWith('bazi') || tool.name.startsWith('ziwei'))) return describeBirth(args) || null;
+    // 合盘的两人按 Core 的默认称呼（甲方、乙方）补名。
+    if (tool.name === 'bazi_hepan') return (['a', 'b'] as const).map((key, index) => describeBirth({
+        name: index ? '乙方' : '甲方', ...(args[key] && typeof args[key] === 'object' ? args[key] as Record<string, unknown> : {}),
+    })).join(' × ');
     if (tool.name === 'web_search' || tool.name === 'search_knowledge') {
         const query = typeof args.query === 'string' ? `「${args.query.slice(0, 60)}」` : '';
         const results = getAgentSearchResults(tool);

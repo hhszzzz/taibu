@@ -97,7 +97,7 @@ test('every Core tool and every registered Agent tool belongs to a presentation 
 test('the projection keeps canonical text on every Core chart and calculation for text fallbacks', async () => {
   const definitions = listToolDefinitions();
   const calculations = definitions.filter(definition => getAgentToolFamily(definition.name) === 'calculation').map(definition => definition.name);
-  assert.deepEqual(calculations.sort(), ['almanac_select', 'bazi_dayun', 'bazi_pillars_resolve', 'ziwei_flying_star', 'ziwei_horoscope']);
+  assert.deepEqual(calculations.sort(), ['almanac_select', 'bazi_dayun', 'bazi_hepan', 'bazi_pillars_resolve', 'ziwei_flying_star', 'ziwei_horoscope']);
   const charts = [...Object.keys(AGENT_CHART_NAMES), ...calculations].map((name) => {
     const args = { ...(definitions.find((definition) => definition.name === name)!.inputSchema.examples![0] as Record<string, unknown>) };
     // Agent seeds come from the task and call; explicit seeds are blocked by policy.

@@ -1,4 +1,4 @@
-import type { BaziCanonicalJSON } from 'taibu-core/bazi';
+import type { BaziCanonicalJSON, BaziHepanCanonicalJSON } from 'taibu-core/bazi';
 import type { ZiweiCanonicalJSON } from 'taibu-core/ziwei';
 import type { QimenCanonicalJSON } from 'taibu-core/qimen';
 import type { LiuyaoCanonicalJSON, LiuyaoJSON } from 'taibu-core/liuyao';
@@ -292,7 +292,8 @@ export type AgentCalculation =
   | { kind: 'bazi_pillars_resolve'; data: BaziPillarsResolveCanonicalJSON }
   | { kind: 'ziwei_horoscope'; data: ZiweiHoroscopeCanonicalJSON }
   | { kind: 'ziwei_flying_star'; data: ZiweiFlyingStarCanonicalJSON }
-  | { kind: 'almanac_select'; data: AlmanacSelectCanonicalJSON };
+  | { kind: 'almanac_select'; data: AlmanacSelectCanonicalJSON }
+  | { kind: 'bazi_hepan'; data: BaziHepanCanonicalJSON };
 
 /** Core calculation results; anything incomplete falls back to the projected canonical text. */
 export function getAgentCalculation(tool: AgentToolPart): AgentCalculation | null {
@@ -325,6 +326,14 @@ export function getAgentCalculation(tool: AgentToolPart): AgentCalculation | nul
       if (!['候选数', '犯忌', '无对应宜', '冲煞'].every(key => typeof stats[key] === 'number')) return null;
       if (!arrayRows(data.候选日, ['日期', '日干支', '冲煞']) || !(data.候选日 as unknown[]).every(row => stringArray(record(row).宜) && stringArray(record(row).忌))) return null;
       return { kind: 'almanac_select', data: data as unknown as AlmanacSelectCanonicalJSON };
+    }
+    case 'bazi_hepan': {
+      const relations = (value: unknown) => arrayRows(value, ['类型', '说明']) && (value as unknown[]).every(row => arrayRows(record(row).位置, ['柱', '部位', '字']));
+      if (!rows(data.双方, 2, ['称呼', '性别', '日主', '月令', '月令旺衰', '生肖'])) return null;
+      if (!(data.双方 as unknown[]).every(person => rows(record(person).四柱, 4, ['柱', '干支', '纳音']) && stringArray(record(person).缺失五行))) return null;
+      if (!stringArray(record(data.日主互见).说明) || !strings(data.日主互见, ['五行生克']) || !strings(data.年命纳音, ['说明', '五行生克'])) return null;
+      if (!['日柱之间', '年柱之间', '其余关系'].every(key => relations(data[key])) || !stringArray(data.五行互补)) return null;
+      return { kind: 'bazi_hepan', data: data as unknown as BaziHepanCanonicalJSON };
     }
     default:
       return null;

@@ -347,8 +347,8 @@ test('hepan data source formatForAI should match saved analysis structure instea
     result_data: {
       type: 'love',
       overallScore: 86,
-      person1: { name: '甲', year: 1990, month: 1, day: 1 },
-      person2: { name: '乙', year: 1991, month: 2, day: 2 },
+      person1: { name: '甲', year: 1990, month: 1, day: 1, hour: 9, minute: 5, gender: 'male', timezone: 'Asia/Shanghai', longitude: 116.4 },
+      person2: { name: '乙', year: 1991, month: 2, day: 2, hour: 23, calendarType: 'lunar', isLeapMonth: true, gender: 'female', timezone: 'America/New_York' },
       dimensions: [
         { name: '沟通', score: 90, description: '交流顺畅' },
       ],
@@ -360,6 +360,9 @@ test('hepan data source formatForAI should match saved analysis structure instea
 
   const text = await hepanProvider.formatForAI(row as never);
   assert.ok(text.includes('合盘类型：情侣合婚'));
+  // 出生时刻、历法、性别、非默认时区与经度都写出来，Agent 据此即可重排八字合盘，不必再问。
+  assert.ok(text.includes('- 甲：1990年1月1日 9:05（男，经度 116.4）'), text);
+  assert.ok(text.includes('- 乙：1991年2月2日 23:00（农历闰月，女，America/New_York）'), text);
   assert.ok(text.includes('综合契合度：86分'));
   assert.ok(text.includes('沟通: 90分 - 交流顺畅'));
   assert.ok(text.includes('[medium] 节奏差异: 需要多磨合'));

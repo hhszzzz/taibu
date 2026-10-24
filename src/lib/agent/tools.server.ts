@@ -48,6 +48,7 @@ import {
   isAgentChartTool,
 } from './tool-catalog';
 import { drilldownParameters, executeDrilldown } from './drilldown.server';
+import { AGENT_PAIRING_SIDES, pairingParameters, resolvePairing } from './pairing.server';
 import { nextAgentCitation } from './evidence';
 import { readAgentCite } from './tool-presentation';
 import { searchKnowledgeWithPersistence } from "@/lib/knowledge-base/search";
@@ -133,6 +134,11 @@ export async function assertAgentToolAccess(store: AgentStore, run: AgentRunRow,
   const scope = getAgentToolScope(name)
     ?? ((AGENT_TOOL_SCOPE_IDS as readonly string[]).includes(feature) ? feature as AgentToolScopeId : null);
   if (scope && !(await agentToolScopeEnabled(scope))) throw new Error(`Agent 工具范围已关闭：${getAgentToolScopeLabel(scope)}`);
+  // 合盘引用的命盘与详查一样，每次执行和重放都核对归属与盘种。
+  if (name === 'bazi_hepan') for (const side of AGENT_PAIRING_SIDES) {
+    const person = args[side] && typeof args[side] === 'object' ? args[side] as Record<string, unknown> : {};
+    if (person.reference !== undefined && await authorizeChartReference(store, run, person.reference) !== 'bazi') throw new Error('合盘只能引用八字命盘');
+  }
   if (name === 'search_knowledge' && (!(await featureEnabled('knowledge-base')) || (await getUserCreditInfo(run.user_id, {})).membership === 'free')) throw new Error('当前会员无法使用知识库检索');
   if ((name === 'web_search' || name.startsWith('mcp__')) && (!run.input.webEnabled || (await getUserCreditInfo(run.user_id, {})).membership === 'free')) throw new Error('当前任务不能使用联网工具');
   if (name === 'read_user_data') {
@@ -386,10 +392,10 @@ export async function createAgentTools(
   const tools: AgentTool[] = definitions.filter(def => !getDerivedToolSource(def.name)).map((def) =>
     wrap(
       def.name,
-      def.description,
-      Type.Unsafe<Record<string, unknown>>(def.inputSchema),
+      def.name === 'bazi_hepan' ? `${def.description} 已排过或已存的八字直接传 reference，出生信息由服务端从命盘重建。` : def.description,
+      Type.Unsafe<Record<string, unknown>>(def.name === 'bazi_hepan' ? pairingParameters(def.inputSchema) : def.inputSchema),
       async (args, callId) => {
-        const stableArgs = { ...args };
+        const stableArgs: Record<string, unknown> = def.name === 'bazi_hepan' ? await resolvePairing(store, run, args, def.inputSchema) : { ...args };
         if (def.inputSchema.properties?.seed && stableArgs.seed == null)
           stableArgs.seed = String(stableAgentSeed(run.id, callId));
         const result = await executeTool(def.name, stableArgs);

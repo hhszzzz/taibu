@@ -145,31 +145,42 @@ export interface DrilldownToolResult extends DomainToolResult {
   inspection: { chartReference: string; chartKind: AgentChartKind; result: unknown };
 }
 
-export async function executeDrilldown(
-  store: AgentStore, run: AgentRunRow, name: string, args: Record<string, unknown>,
-): Promise<DrilldownToolResult> {
-  const base = getAgentDrilldownBase(name);
-  if (!base) throw new Error(`未知详查工具: ${name}`);
-  const { reference: rawReference, ...selection } = args;
+/**
+ * The chart a reference names and the input its base tool recomputes it from: the artifact's own arguments or the
+ * saved record's birth or casting fields. An artifact is recomputed and must still be the chart the reference shows.
+ */
+export async function chartInputOf(
+  store: AgentStore, run: AgentRunRow, rawReference: unknown, base: AgentChartKind, mismatch = `该详查工具只适用于${AGENT_CHART_NAMES[base]}`,
+) {
   const { reference, value } = await loadAgentChart(store, run, String(rawReference));
-  if (value.kind !== base) throw new Error(`该详查工具只适用于${AGENT_CHART_NAMES[base]}`);
-  const baseInput = await baseInputOf(store, run, reference, base);
+  if (value.kind !== base) throw new Error(mismatch);
+  const input = await baseInputOf(store, run, reference, base);
   // 占星成果把流运时刻固定在盘面上；模型省略时补回，保证详查与所看盘面同一时刻。
-  if (base === 'astrology' && reference.startsWith('artifact:') && baseInput.transitDateTime === undefined) {
+  if (base === 'astrology' && reference.startsWith('artifact:') && input.transitDateTime === undefined) {
     const transit = findNestedString(value.chart, '流运时刻');
-    if (transit) baseInput.transitDateTime = transit;
+    if (transit) input.transitDateTime = transit;
   }
   const identity = CHART_IDENTITY[base];
   if (identity && reference.startsWith('artifact:')) {
     // 与 tools.server 的成果快照同档重算：快照存 full（占星近似模式为 more），
     // 默认档重算会缺少部分字段，造成与快照的无谓差异。
-    const recomputedRaw = await executeTool(base, baseInput);
+    const recomputedRaw = await executeTool(base, input);
     const snapshotLevel = base === 'astrology' && (recomputedRaw as { chartMeta?: { calculationMode?: string } }).chartMeta?.calculationMode === 'approximate' ? 'more' : 'full';
     const recomputed = buildToolSuccessPayload(base, recomputedRaw, { detailLevel: snapshotLevel }).structuredContent as Record<string, unknown>;
     if (identity(recomputed) !== identity(value.chart as unknown as Record<string, unknown>)) {
       throw new Error('命盘算法已更新或时间无法还原，请重新排盘后再详查');
     }
   }
+  return { reference, value, input };
+}
+
+export async function executeDrilldown(
+  store: AgentStore, run: AgentRunRow, name: string, args: Record<string, unknown>,
+): Promise<DrilldownToolResult> {
+  const base = getAgentDrilldownBase(name);
+  if (!base) throw new Error(`未知详查工具: ${name}`);
+  const { reference: rawReference, ...selection } = args;
+  const { reference, value, input: baseInput } = await chartInputOf(store, run, rawReference, base);
   // detailLevel 只决定给模型的文本是否附口径；Core 计算时会把它剥掉
   const rendered = buildToolSuccessPayload(name, await executeTool(name, { ...baseInput, ...selection }),
     { detailLevel: normalizeTransportDetailLevel(selection.detailLevel) });

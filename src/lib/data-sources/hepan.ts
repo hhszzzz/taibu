@@ -1,3 +1,4 @@
+import { DEFAULT_DIVINATION_TIMEZONE } from 'taibu-core/timezone-utils';
 import { getHepanTypeName, type HepanType } from '@/lib/divination/hepan';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
 import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
@@ -16,6 +17,23 @@ type HepanRow = {
     conversation_id: string | null;
     result_data: unknown;
 };
+
+type StoredBirth = {
+    name?: string; year?: number; month?: number; day?: number; hour?: number; minute?: number;
+    calendarType?: string; isLeapMonth?: boolean; gender?: string; timezone?: string; longitude?: number;
+};
+
+/** 「甲：1990年1月15日 9:05（农历闰月，男，经度 116.4）」：一方的出生资料，足够据此重排八字或合盘。 */
+function birthLine(person: StoredBirth, fallbackName: string): string {
+    const time = typeof person.hour === 'number' ? ` ${person.hour}:${String(person.minute ?? 0).padStart(2, '0')}` : '';
+    const notes = [
+        person.calendarType === 'lunar' ? `农历${person.isLeapMonth ? '闰月' : ''}` : '',
+        person.gender === 'male' ? '男' : person.gender === 'female' ? '女' : '',
+        person.timezone && person.timezone !== DEFAULT_DIVINATION_TIMEZONE ? person.timezone : '',
+        typeof person.longitude === 'number' ? `经度 ${person.longitude}` : '',
+    ].filter(Boolean);
+    return `- ${person.name || fallbackName}：${person.year ?? '-'}年${person.month ?? '-'}月${person.day ?? '-'}日${time}${notes.length ? `（${notes.join('，')}）` : ''}`;
+}
 
 export const hepanProvider: DataSourceProvider<HepanRow> = {
     type: 'hepan_chart',
@@ -64,8 +82,8 @@ export const hepanProvider: DataSourceProvider<HepanRow> = {
             ? r.result_data as {
                 type?: string;
                 overallScore?: number;
-                person1?: { name?: string; year?: number; month?: number; day?: number };
-                person2?: { name?: string; year?: number; month?: number; day?: number };
+                person1?: StoredBirth;
+                person2?: StoredBirth;
                 dimensions?: Array<{ name?: string; score?: number; description?: string }>;
                 conflicts?: Array<{ severity?: string; title?: string; description?: string }>;
             }
@@ -87,8 +105,8 @@ export const hepanProvider: DataSourceProvider<HepanRow> = {
         return [
             `## 合盘分析：${r.person1_name} × ${r.person2_name}`,
             `- 合盘类型：${typeName}`,
-            person1 ? `- ${person1.name || r.person1_name}：${person1.year ?? '-'}年${person1.month ?? '-'}月${person1.day ?? '-'}日` : '',
-            person2 ? `- ${person2.name || r.person2_name}：${person2.year ?? '-'}年${person2.month ?? '-'}月${person2.day ?? '-'}日` : '',
+            person1 ? birthLine(person1, r.person1_name) : '',
+            person2 ? birthLine(person2, r.person2_name) : '',
             (result?.overallScore ?? r.compatibility_score) != null ? `- 综合契合度：${result?.overallScore ?? r.compatibility_score}分` : '',
             dimensionsSummary ? `\n## 各维度分析\n${dimensionsSummary}` : '',
             `\n## 潜在冲突点\n${conflictsSummary}`,

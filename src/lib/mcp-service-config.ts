@@ -14,6 +14,7 @@ export const MCP_PUBLIC_TOOLS: McpPublicTool[] = [
   { id: 'bazi_relations', label: '八字岁运刑冲合害详查' },
   { id: 'bazi_wuxing', label: '八字五行旺衰详查' },
   { id: 'bazi_liunian_scan', label: '八字流年扫描' },
+  { id: 'bazi_hepan', label: '八字合盘' },
   { id: 'ziwei', label: '紫微斗数排盘' },
   { id: 'ziwei_horoscope', label: '紫微运限' },
   { id: 'ziwei_flying_star', label: '紫微飞星' },

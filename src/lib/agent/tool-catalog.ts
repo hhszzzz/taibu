@@ -78,6 +78,7 @@ export function getAgentToolFeatureId(name: string): AgentChartKind | null {
   switch (name) {
     case 'bazi_dayun':
     case 'bazi_pillars_resolve':
+    case 'bazi_hepan':
       return 'bazi';
     case 'ziwei_horoscope':
     case 'ziwei_flying_star':
@@ -159,7 +160,7 @@ export const AGENT_PLAN_GATED_TOOLS: ReadonlySet<string> = new Set(['remember_us
 export const AGENT_CORE_DEFERRED_TOOLS: readonly string[] = [
   'bazi_relations', 'bazi_wuxing', 'bazi_liunian_scan', 'ziwei_palace', 'qimen_palace', 'daliuren_lessons',
   'astrology_point', 'liuyao_line',
-  'bazi_dayun', 'bazi_pillars_resolve', 'ziwei_horoscope', 'ziwei_flying_star', 'almanac_select',
+  'bazi_dayun', 'bazi_pillars_resolve', 'ziwei_horoscope', 'ziwei_flying_star', 'almanac_select', 'bazi_hepan',
 ];
 
 /** The user's own material a reading rarely needs: daily notes, and other conversations (with long-term memory on). */
@@ -214,6 +215,7 @@ const TOOL_FAMILIES: ReadonlyMap<string, AgentToolFamily> = new Map<string, Agen
   ['ziwei_horoscope', 'calculation'],
   ['ziwei_flying_star', 'calculation'],
   ['almanac_select', 'calculation'],
+  ['bazi_hepan', 'calculation'],
   ['web_search', 'search'],
   ['search_knowledge', 'search'],
   ['list_user_data', 'data'],

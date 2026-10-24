@@ -79,6 +79,13 @@ function calculationRow(card: CalculationCard): { thumb: ReactNode; facts: strin
             const [first] = card.value.data.候选列表;
             return { thumb: null, facts: first ? `${card.value.data.候选列表.length} 个候选 · 首个 ${first.公历} ${first.出生时间}` : '没有匹配的出生时间' };
         }
+        case 'bazi_hepan': {
+            const { 双方: people, 日柱之间: day, 年柱之间: year, 其余关系: other } = card.value.data;
+            return {
+                thumb: <span className="chart-thumb-glyphs" aria-hidden="true">{people.map(person => <b key={person.称呼}>{person.四柱[2].干支}</b>)}</span>,
+                facts: `${people.map(person => `${person.称呼}属${person.生肖}`).join('、')} · 日柱之间 ${day.length} 项 · 年柱之间 ${year.length} 项 · 其余 ${other.length} 项`,
+            };
+        }
         case 'almanac_select': {
             const [first] = card.value.data.候选日;
             return { thumb: null, facts: first ? `${card.value.data.查询.起止日期} · 候选 ${card.value.data.候选日.length} 天 · 首个 ${first.日期}` : `${card.value.data.查询.起止日期} · 没有符合条件的日期` };

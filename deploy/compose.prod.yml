@@ -46,7 +46,9 @@ services:
   redis:
     mem_limit: 160m
   # Weekly drill helper: same image as web, read-only access to the dumps.
-  # Not started by `up`; invoked with `docker compose run --rm restore-check`.
+  # Not started by `up`; the entrypoint is node, so pass the script explicitly:
+  #   docker compose … run --rm restore-check scripts/db/verify-restore.mjs \
+  #     --backup /backups/taibu-daily-YYYYMMDD.dump
   restore-check:
     image: ${TAIBU_IMAGE:?}:${TAIBU_TAG:?}
     profiles: ["tools"]

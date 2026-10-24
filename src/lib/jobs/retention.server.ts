@@ -28,7 +28,7 @@ export async function runAgentRetention(): Promise<RetentionSummary> {
       p_commit_days: 7,
       p_worker_hours: 24,
       p_limit: BATCH,
-    });
+    }, { timeoutMs: 30_000 });
     const row = rows[0];
     if (!row) break;
     summary.passes += 1;

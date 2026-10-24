@@ -90,9 +90,22 @@ else
   if ! compose --profile edge up -d --no-deps web worker caddy backup; then rollback; exit 1; fi
 fi
 
+record_tag() {
+  # Remember the release that is actually running. Without this the next
+  # deploy reads the same stale tag from compose.env and rolls back to it.
+  temporary="$(mktemp "$ENV_FILE.XXXXXX")"
+  if sed "s/^TAIBU_TAG=.*/TAIBU_TAG=$TAG/" "$ENV_FILE" > "$temporary" \
+    && ! grep -q '^TAIBU_TAG=' "$temporary"; then
+    printf 'TAIBU_TAG=%s\n' "$TAG" >> "$temporary"
+  fi
+  chmod --reference="$ENV_FILE" "$temporary" 2>/dev/null || chmod 600 "$temporary"
+  mv "$temporary" "$ENV_FILE"
+}
+
 echo "[deploy] waiting for readiness"
 for attempt in $(seq 1 30); do
   if compose exec -T web wget -qO- http://127.0.0.1:3000/api/health/ready >/dev/null 2>&1; then
+    record_tag || echo "[deploy] could not record $TAG in $ENV_FILE" >&2
     echo "[deploy] ready"
     exit 0
   fi

@@ -736,6 +736,13 @@ mustNotMatchInTree(
   'client components must not import the server database layer',
   (file) => /\.(ts|tsx)$/u.test(file) && /^\s*['"]use client['"]/u.test(read(file) ?? ''),
 );
+// A secret name in a client bundle is inlined and shipped to every visitor.
+mustNotMatchInTree(
+  'src',
+  /process\.env\.(?!NODE_ENV\b|NEXT_PUBLIC_)[A-Z0-9_]+/u,
+  'client components may only read NODE_ENV or NEXT_PUBLIC_*',
+  (file) => /\.(ts|tsx)$/u.test(file) && /^\s*['"]use client['"]/u.test(read(file) ?? ''),
+);
 mustNotMatchInTree(
   'src',
   /from\s*['"](?:pg|kysely)['"]/u,

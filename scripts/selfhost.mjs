@@ -287,7 +287,8 @@ async function up(project, build) {
   const env = await localDocker();
   await assertOwnedProject(project, env);
   await writeEnvironment(config);
-  await compose(project, ['up', '-d', ...(build ? ['--build'] : [])], { phase: '启动' });
+  // An image build takes minutes, far past the default command timeout.
+  await compose(project, ['up', '-d', ...(build ? ['--build'] : [])], { phase: '启动', ...(build ? { timeout: 0 } : {}) });
   console.log(`本地栈已启动：${config.APP_ORIGIN}（邮件预览 http://127.0.0.1:${config.MAILPIT_PORT}）`);
 }
 

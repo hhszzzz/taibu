@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">MingAI</string>
-    <string name="title_activity_main">MingAI</string>
-    <string name="package_name">com.hhs.mingai</string>
-    <string name="custom_url_scheme">com.hhs.mingai</string>
+    <string name="app_name">太卜</string>
+    <string name="title_activity_main">太卜</string>
+    <string name="package_name">com.hhs.taibu</string>
+    <string name="custom_url_scheme">com.hhs.taibu</string>
 </resources>

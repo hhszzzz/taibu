@@ -1,4 +1,4 @@
-package com.hhs.mingai;
+package com.hhs.taibu;
 
 import com.getcapacitor.BridgeActivity;
 

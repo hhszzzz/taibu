@@ -47,7 +47,7 @@ DECLARE
     v_next_expires_at timestamptz;
     v_now timestamptz := now();
 BEGIN
-    
+
 IF auth.role() <> 'service_role' THEN
     IF NOT public.is_admin_user() THEN
         RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
@@ -1890,7 +1890,7 @@ DECLARE
   v_next_expires_at timestamptz;
   v_now timestamptz := now();
 BEGIN
-  
+
 IF auth.role() <> 'service_role' THEN
     IF NOT public.is_admin_user() THEN
         RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
@@ -2487,7 +2487,7 @@ CREATE OR REPLACE FUNCTION public.decrement_ai_chat_count(user_id uuid) RETURNS 
 DECLARE
   new_count integer;
 BEGIN
-  
+
 IF auth.role() <> 'service_role' THEN
     IF NOT public.is_admin_user() THEN
         RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
@@ -2856,7 +2856,7 @@ CREATE OR REPLACE FUNCTION public.increment_ai_chat_count(user_id uuid, amount i
 DECLARE
   new_count integer;
 BEGIN
-  
+
 IF auth.role() <> 'service_role' THEN
     IF NOT public.is_admin_user() THEN
         RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
@@ -3101,7 +3101,7 @@ DECLARE
   v_base_reward integer := 1;
   v_reward_credits integer := 0;
 BEGIN
-  
+
 IF auth.role() <> 'service_role' THEN
     IF NOT public.is_admin_user() THEN
         RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';

@@ -5,7 +5,7 @@ import type { NextRequest } from "next/server";
 import { parseAgentMcpServers } from './mcp-client.server';
 import { jsonError, jsonOk, requireUserContext } from "@/lib/api-utils";
 import { systemDb } from "@/lib/db/context.server";
-import { waitForAgentSignal } from "@/lib/db/listen.server";
+import { subscribeAgentSignals } from "@/lib/db/listen.server";
 import { getGlobalAIFeatureGuardResponse } from "@/lib/api/ai-feature-guard";
 import { readFeatureModuleStateFresh } from "@/lib/app-settings";
 import {
@@ -633,6 +633,9 @@ export async function streamAgentTask(request: NextRequest, id: string) {
         return true;
       };
 
+      // Subscribed before the first state read: a change that lands while state
+      // is read or a snapshot is sent stays queued for the next wait.
+      const signals = subscribeAgentSignals({ run: id });
       try {
         const initial = await store.getRun(id, auth.user.id);
         if (!initial) return;
@@ -650,10 +653,7 @@ export async function streamAgentTask(request: NextRequest, id: string) {
 
         let known = initial;
         while (!closed && !request.signal.aborted) {
-          // Timestamp before the wait: notifications emitted between the last
-          // state read and registering the waiter are replayed from the buffer.
-          const observedAt = Date.now();
-          const signal = await waitForAgentSignal(id, 15_000, request.signal, observedAt);
+          const received = await signals.next(15_000, request.signal);
           if (closed || request.signal.aborted) break;
 
           const state = await store.runState(id, auth.user.id);
@@ -670,7 +670,7 @@ export async function streamAgentTask(request: NextRequest, id: string) {
             if (isAgentRunTerminal(run.status)) break;
             continue;
           }
-          if (!signal && !send(': heartbeat\n\n')) break;
+          if (!received.length && !send(': heartbeat\n\n')) break;
           // A signal without a state change (for example a cancel request) is
           // already reflected in the next run update; no frame is due yet.
         }
@@ -678,6 +678,7 @@ export async function streamAgentTask(request: NextRequest, id: string) {
         if (!closed && !request.signal.aborted)
           send('event: error\ndata: {"code":"AGENT_STREAM_INTERRUPTED"}\n\n');
       } finally {
+        signals.close();
         if (!closed) {
           closed = true;
           controller.close();

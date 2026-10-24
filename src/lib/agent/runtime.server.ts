@@ -11,7 +11,7 @@ import {
 } from "@earendil-works/pi-ai";
 import type { AIModelConfig, ChatMessage } from "@/types";
 import { getModelConfigAsync } from "@/lib/server/ai-config";
-import { waitForAgentSignal } from "@/lib/db/listen.server";
+import { subscribeAgentSignals } from "@/lib/db/listen.server";
 import { isModelAllowedForMembership, isReasoningAllowedForMembership } from "@/lib/ai/ai-access";
 import { resolveKnownModelContextConfig } from "@/lib/ai/model-context";
 import { readFeatureModuleStateFresh } from "@/lib/app-settings";
@@ -63,6 +63,10 @@ const MANUAL_COMPACTION_TEXT = {
   compacted: "已压缩上下文：较早的内容整理成了摘要（可展开查看），最近的内容原样保留。接下来的提问会在压缩后的上下文上继续。",
   unchanged: "当前上下文还不长，没有需要压缩的内容，接下来的提问照常继续。",
 } as const;
+/** Well inside the 60 s lease the database grants on every renewal. */
+const LEASE_RENEW_MS = 10_000;
+/** Fallback for a command whose notification was missed. */
+const COMMAND_POLL_MS = 10_000;
 
 export { piHistory } from "./history.server";
 
@@ -120,7 +124,7 @@ async function latestAssistant(root: Conversation, context: Context) {
 
 export async function executeAgentRun(
   store: AgentStore, run: AgentRunRow, shutdown?: AbortSignal,
-  injected?: { streamFn?: PiStreamFn; config?: AIModelConfig; configs?: AIModelConfig[]; now?: () => number },
+  injected?: { streamFn?: PiStreamFn; config?: AIModelConfig; configs?: AIModelConfig[]; now?: () => number; leaseRenewMs?: number },
 ) {
   const checkpoint: AgentCheckpoint = structuredClone(run.checkpoint);
   if (!isCurrentAgentCheckpoint(checkpoint)) throw new Error("AGENT_ENGINE_UNSUPPORTED");
@@ -140,11 +144,14 @@ export async function executeAgentRun(
   const inputPause = new Promise<"input">(resolve => { signalPause = () => resolve("input"); });
   let signalInterrupted!: () => void;
   const interruption = new Promise<"interrupted">(resolve => { signalInterrupted = () => resolve("interrupted"); });
-  const stoppedByLease = () => {
-    stopping = true;
-    if (root) void root.abort(context, { background: true });
-  };
   const interrupt = () => { interrupted = true; controlAbort.abort(); signalInterrupted(); scope.cancel(); };
+  // A user cancel stops gracefully so the run settles as cancelled; interrupt()
+  // is for shutdown and lease loss, where another worker resumes the run.
+  const requestStop = () => {
+    if (stopping) return;
+    stopping = true;
+    root?.abort(context, { background: true }).catch(() => interrupt());
+  };
   const onShutdown = () => interrupt();
   shutdown?.addEventListener("abort", onShutdown, { once: true });
   if (shutdown?.aborted) interrupt();
@@ -191,25 +198,33 @@ export async function executeAgentRun(
   try {
     // Replaying a long log can exceed one lease window. Renew from startup,
     // but do not admit commands until the initial history and input are ready.
-    heartbeat = setInterval(() => {
-      if (interrupted) return;
-      void store.rpc<boolean>("agent_renew_lease", store.lease(run)).then((renewed) => {
-        if (!renewed) return;
-        stoppedByLease();
-      }).catch(() => interrupt());
-    }, 10_000);
-    heartbeat.unref();
+    // Renewing also reports whether the user asked to cancel.
+    const renewLease = async () => {
+      if (await store.rpc<boolean>("agent_renew_lease", store.lease(run))) requestStop();
+    };
+    // Subscribed before the first renewal: a cancel or command sent after the
+    // claim is either seen by that renewal or queued for the control loop.
+    const signals = subscribeAgentSignals({ run: run.id, kinds: ["run", "cmd"] });
     controlInFlight = (async () => {
-      while (!interrupted && !controlAbort.signal.aborted) {
-        const signal = await waitForAgentSignal(run.id, 10_000, controlAbort.signal);
-        if (interrupted || controlAbort.signal.aborted) break;
-        if (signal?.t === 'run' && signal.cancel) { interrupt(); break; }
-        try {
-          if (await store.rpc<boolean>("agent_renew_lease", store.lease(run))) stoppedByLease();
+      try {
+        while (!interrupted && !controlAbort.signal.aborted) {
           if (!stopping) await pollCommands?.();
-        } catch { interrupt(); break; }
+          const received = await signals.next(COMMAND_POLL_MS, controlAbort.signal);
+          if (received.some((signal) => signal.t === "run" && signal.cancel)) requestStop();
+          // A resync means notifications may have been lost; ask the database.
+          else if (received.some((signal) => signal.t === "resync")) await renewLease();
+        }
+      } finally {
+        signals.close();
       }
     })().catch(() => interrupt());
+    // A renewal that fails leaves the run to a takeover instead of settling it.
+    await renewLease().catch(() => interrupt());
+    if (interrupted) return;
+    heartbeat = setInterval(() => {
+      if (!interrupted) renewLease().catch(() => interrupt());
+    }, injected?.leaseRenewMs ?? LEASE_RENEW_MS);
+    heartbeat.unref();
     const config = injected?.config ?? (run.input.customProvider ? {
       id: run.input.model, name: run.input.model, vendor: "other" as const,
       modelId: run.input.customProvider.modelId, apiUrl: run.input.customProvider.apiUrl,

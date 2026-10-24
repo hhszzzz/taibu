@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { loadQuickJSWasm } from "@earendil-works/pi-codemode";
 import { systemDb } from "@/lib/db/context.server";
-import { waitForAgentSignal } from "@/lib/db/listen.server";
+import { subscribeAgentSignals } from "@/lib/db/listen.server";
 import { AgentStore, type AgentRunRow } from "./store.server";
 import { executeAgentRun } from "./runtime.server";
 import { AGENT_ENGINE } from "./engine";
@@ -52,43 +52,51 @@ async function main() {
       );
   }, 10_000);
   heartbeat.unref();
+  // Subscribed before the first claim: a run queued while a claim is in flight
+  // stays queued for the next wait.
+  const queued = subscribeAgentSignals({ kinds: ["queue"] });
   try {
     while (!shutdown.signal.aborted) {
-      if (active.size < concurrency) {
-        const run = await store.rpc<AgentRunRow | null>("agent_claim_run", {
-          p_worker_id: workerId,
-        });
-        if (run?.id) {
-          const work = executeAgentRun(store, run, shutdown.signal)
-            .catch(async () => {
-              if (shutdown.signal.aborted) return;
-              const message = structuredClone(run.public_message);
-              if (message.agent)
-                message.agent.error = "任务准备失败，请检查模型配置";
-              try {
-                await store.rpc("agent_finish_run", {
-                  ...store.lease(run),
-                  p_status: "failed",
-                  p_checkpoint: run.checkpoint,
-                  p_message: message,
-                });
-              } catch {
-                console.warn("[agent-worker]", {
-                  runId: run.id,
-                  code: "SETTLEMENT_PENDING",
-                });
-              }
-            })
-            .finally(() => active.delete(work));
-          active.add(work);
-          continue;
-        }
+      if (active.size >= concurrency) {
+        // Every slot is busy; the next claim waits for one to settle.
+        await Promise.race(active);
+        continue;
       }
-      // Wake on a queued run; the 5 s fallback covers a missed notification.
-      await waitForAgentSignal(undefined, 5_000, shutdown.signal);
+      const run = await store.rpc<AgentRunRow | null>("agent_claim_run", {
+        p_worker_id: workerId,
+      });
+      if (run?.id) {
+        const work = executeAgentRun(store, run, shutdown.signal)
+          .catch(async () => {
+            if (shutdown.signal.aborted) return;
+            const message = structuredClone(run.public_message);
+            if (message.agent)
+              message.agent.error = "任务准备失败，请检查模型配置";
+            try {
+              await store.rpc("agent_finish_run", {
+                ...store.lease(run),
+                p_status: "failed",
+                p_checkpoint: run.checkpoint,
+                p_message: message,
+              });
+            } catch {
+              console.warn("[agent-worker]", {
+                runId: run.id,
+                code: "SETTLEMENT_PENDING",
+              });
+            }
+          })
+          .finally(() => active.delete(work));
+        active.add(work);
+        continue;
+      }
+      // Nothing claimable: wait for a queued run. The 5 s fallback also picks
+      // up runs whose lease expired, which no notification announces.
+      await queued.next(5_000, shutdown.signal);
     }
     await Promise.allSettled(active);
   } finally {
+    queued.close();
     clearInterval(heartbeat);
     shutdown.abort();
     await Promise.allSettled(active);

@@ -3,8 +3,6 @@ import assert from 'node:assert/strict';
 import type { CreateKeyParams } from '../lib/user/activation-keys';
 import { createMockScopedDb } from './helpers/db-mock';
 
-process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost';
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon';
 
 type InsertedRow = {
     key_code: string;

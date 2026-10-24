@@ -2,7 +2,7 @@ import { beforeEach, test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { ensureRouteTestEnv, mockAIFeatureState, mockAIRateLimit, mockRouteUserContext, blockRouteNetwork } from './helpers/route-mock';
-import { createMockAuthContext } from './helpers/supabase-mock';
+import { createMockAuthContext } from './helpers/auth-mock';
 import { createMockScopedDb } from './helpers/db-mock';
 import { createMockUIMessageResult } from './helpers/ui-message-result';
 import type { CreateAIAnalysisParams } from '../lib/ai/ai-analysis';
@@ -70,7 +70,7 @@ function scopedLiuyao(options: {
 
 function mockScopedContext(t: Pick<TestContext, 'mock'>, scoped: unknown) {
     const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
-    return t.mock.method(apiUtils, 'requireUserContext', async () => createMockAuthContext({}, 'user-1', scoped as never));
+    return t.mock.method(apiUtils, 'requireUserContext', async () => createMockAuthContext('user-1', scoped as never));
 }
 
 test('liuyao route uses divination created_at for analysis date', async (t) => {
@@ -141,14 +141,7 @@ test('liuyao route only marks 用神 when position and liuqin both match', async
 
     let capturedPrompt = '';
 
-    mockRouteUserContext(t, {
-        from() {
-            throw new Error('liuyao prompt test should not query tables directly');
-        },
-        rpc() {
-            throw new Error('liuyao prompt test should not call rpc directly');
-        },
-    });
+    mockRouteUserContext(t);
     t.mock.method(credits, 'getUserAuthInfo', async () => ({ credits: 10, effectiveMembership: 'pro', hasCredits: true }));
     t.mock.method(credits, 'attemptCreditUse', async () => ({ ok: true, remaining: 9 }));
     t.mock.method(aiAccessModule, 'resolveModelAccessAsync', async () => ({ modelId: 'test-model', reasoningEnabled: false }));
@@ -408,9 +401,7 @@ test('liuyao route interpret returns 400 when question is provided but yongShenT
     mockAIFeatureState(t);
     mockAIRateLimit(t);
 
-    mockRouteUserContext(t, {
-        from: () => assert.fail('invalid targets must fail before database queries'),
-    });
+    mockRouteUserContext(t);
 
     const { POST } = await import('../app/api/liuyao/route');
     const request = new NextRequest('http://localhost/api/liuyao', {

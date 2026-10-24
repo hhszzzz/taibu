@@ -2,8 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createMockScopedDb } from './helpers/db-mock';
 
-process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost';
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon';
 
 test('pruneExpiredNotifications should delete in a single query and return deleted row count', async (t) => {
     const contextModule = require('../lib/db/context.server') as any;

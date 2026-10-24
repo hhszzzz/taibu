@@ -2,7 +2,7 @@ import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { ensureRouteTestEnv } from './helpers/route-mock';
-import { createMockAuthContext } from './helpers/supabase-mock';
+import { createMockAuthContext } from './helpers/auth-mock';
 import { createMockScopedDb } from './helpers/db-mock';
 
 ensureRouteTestEnv();
@@ -52,7 +52,7 @@ function mockUserContext(
     const pipelinePath = require.resolve('../lib/api/divination-pipeline');
     const originalRequireUserContext = apiUtilsModule.requireUserContext;
 
-    apiUtilsModule.requireUserContext = async () => createMockAuthContext({}, 'user-1', scoped);
+    apiUtilsModule.requireUserContext = async () => createMockAuthContext('user-1', scoped);
 
     delete require.cache[routePath];
     delete require.cache[pipelinePath];

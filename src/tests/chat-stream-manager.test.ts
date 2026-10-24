@@ -2,8 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ChatMessage } from '../types';
 
-process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
 
 const { ChatStreamManager } = require('../lib/chat/chat-stream-manager') as typeof import('../lib/chat/chat-stream-manager');
 const { BrowserDirectProviderError } = require('../lib/ai/browser-direct-provider') as typeof import('../lib/ai/browser-direct-provider');

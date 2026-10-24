@@ -12,7 +12,7 @@ import Link from 'next/link';
 import { X, Lock, ArrowLeft, RefreshCw, Eye, EyeOff } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import {
-    signInWithEmailProtected,
+    signInWithEmail,
     signUpWithEmail,
     sendOTP,
     verifyOTP,
@@ -302,7 +302,7 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
 
     const handleLogin = async () => {
         if (loginMethod === 'password') {
-            const result = await signInWithEmailProtected(email, password);
+            const result = await signInWithEmail(email, password);
             if (result.success) {
                 completeAuth();
             } else if (result.error?.code === 'EMAIL_NOT_VERIFIED') {

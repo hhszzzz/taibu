@@ -9,7 +9,7 @@ import { QueryClient, QueryObserver } from '@tanstack/react-query';
 import { SessionContext } from '../lib/hooks/session-context';
 import { EMPTY_APP_BOOTSTRAP, type AppBootstrapData } from '../lib/app/bootstrap';
 import { buildMembershipInfo } from '../lib/user/membership';
-import { createMockAuthContext } from './helpers/supabase-mock';
+import { createMockAuthContext } from './helpers/auth-mock';
 import { createMockScopedDb } from './helpers/db-mock';
 
 type BootstrapSnapshot = ReturnType<typeof import('../lib/hooks/useAppBootstrap').useAppBootstrap>;
@@ -166,7 +166,7 @@ test('useAppBootstrap should defer viewer failures briefly before surfacing them
 test('session membership distinguishes anonymous, pending, failed, loaded and refreshing viewer states', async (t) => {
   const bootstrapModule = require('../lib/hooks/useAppBootstrap') as typeof import('../lib/hooks/useAppBootstrap');
   const { useSessionMembership } = require('../lib/hooks/useSessionMembership') as typeof import('../lib/hooks/useSessionMembership');
-  const user = createMockAuthContext({}, 'user-1').user;
+  const user = createMockAuthContext('user-1').user;
   const membership = buildMembershipInfo({ membership: 'pro', ai_chat_count: 12 });
   const cases = [
     { name: 'anonymous', user: null, sessionLoading: false, loaded: false, resolved: false, expectedResolved: true, expectedLoading: false },

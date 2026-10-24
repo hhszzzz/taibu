@@ -216,8 +216,7 @@ async function loadModelsFromDB(): Promise<AIModelConfig[]> {
         });
         grouped.set(binding.model_id, list);
       }
-      // The row interface mirrors the former PostgREST projection; nullable
-      // database defaults are flattened there.
+      // The row mapper normalizes nullable database defaults.
       return models.map((model) => ({ ...model, bindings: grouped.get(model.id) ?? [] })) as unknown as DBModelRow[];
     });
 

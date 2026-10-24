@@ -2,11 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createMockScopedDb } from './helpers/db-mock';
 import { NextRequest } from 'next/server';
-import { createMockAuthContext } from './helpers/supabase-mock';
+import { createMockAuthContext } from './helpers/auth-mock';
 import { mockAIRateLimit } from './helpers/route-mock';
 
-process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
 
 test('knowledge-base POST should create through transactional rpc', async (t) => {
   const apiUtilsModule = require('../lib/api-utils') as any;
@@ -831,7 +829,7 @@ test('mbti save should persist through shared save helper and return reading id'
   let insertedPayload: Record<string, unknown> | null = null;
 
   contextModule.systemDb = () => assert.fail('save must use the caller DB client');
-  apiUtilsModule.requireUserContext = async () => createMockAuthContext({}, 'user-1', createMockScopedDb({
+  apiUtilsModule.requireUserContext = async () => createMockAuthContext('user-1', createMockScopedDb({
     tx: async (work) => work({
       insertInto(table: string) {
         assert.equal(table, 'mbti_readings');
@@ -901,7 +899,7 @@ test('daliuren save should persist through shared save helper and return divinat
   const insertedPayloads: Record<string, unknown>[] = [];
 
   contextModule.systemDb = () => assert.fail('save must use the caller DB client');
-  apiUtilsModule.requireUserContext = async () => createMockAuthContext({}, 'user-1', createMockScopedDb({
+  apiUtilsModule.requireUserContext = async () => createMockAuthContext('user-1', createMockScopedDb({
     tx: async (work) => work({
       insertInto(table: string) {
         assert.equal(table, 'daliuren_divinations');

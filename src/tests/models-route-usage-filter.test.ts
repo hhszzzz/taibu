@@ -3,8 +3,6 @@ import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { mockAIFeatureState } from './helpers/route-mock';
 
-process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
 
 test('/api/models should only expose chat and vision models', async (t) => {
   mockAIFeatureState(t);
@@ -70,7 +68,6 @@ test('/api/models should only expose chat and vision models', async (t) => {
   });
   apiUtilsModule.getAuthContext = async () => ({
     user: { id: 'user-1' },
-    supabase: null,
   });
 
   t.after(() => {

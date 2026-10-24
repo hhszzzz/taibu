@@ -2,8 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 
-process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost';
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon';
 
 test('community reports returns auth error when admin check fails', async (t) => {
     const apiUtils = require('../lib/api-utils') as any;
@@ -32,7 +30,6 @@ test('community admin post rejects invalid action', async (t) => {
     const originalRequireAdminContext = apiUtils.requireAdminContext;
 
     apiUtils.requireAdminContext = async () => ({
-        supabase: {} as any,
         user: { id: 'admin-1' },
     });
 

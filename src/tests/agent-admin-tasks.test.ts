@@ -51,7 +51,7 @@ function respond(model: Model<Api>, content: AssistantMessage['content']): Assis
   return output;
 }
 
-/** What `agent_admin_task_log` keeps of a write (see its migration): the tree may read nothing else. */
+/** What `agent_admin_task_log` keeps of a write (database/functions.sql): the tree may read nothing else. */
 function kept(write: StorageWrite): StorageWrite[] {
   if (write.type === 'conversation' || write.type === 'submission') return [write];
   if (write.type === 'task') {

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import type { ChatMessage } from '../types';
-import { createMockAuthContext } from './helpers/supabase-mock';
+import { createMockAuthContext } from './helpers/auth-mock';
 import { createMockScopedDb } from './helpers/db-mock';
 import { GET as getShare, POST as saveShare, DELETE as revokeShare } from '../app/api/conversations/[id]/share/route';
 import { GET as listShares } from '../app/api/shares/route';
@@ -53,7 +53,7 @@ function fixture(t: TestContext) {
     const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
     const loader = require('../lib/server/conversation-messages') as typeof import('../lib/server/conversation-messages');
     const exporter = require('../lib/chat/conversation-export.server') as typeof import('../lib/chat/conversation-export.server');
-    t.mock.method(api, 'requireUserContext', async () => createMockAuthContext({}, owner, db));
+    t.mock.method(api, 'requireUserContext', async () => createMockAuthContext(owner, db));
     t.mock.method(loader, 'loadAllConversationMessages', async () => ({ messages, error: null }));
     const enrich = t.mock.method(exporter, 'enrichConversationBasis', async (_db: unknown, list: ChatMessage[]) => list);
     return {

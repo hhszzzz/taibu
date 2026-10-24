@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID, createHash } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import sharp from 'sharp';
-import { createMockAuthContext } from './helpers/supabase-mock';
+import { createMockAuthContext } from './helpers/auth-mock';
 import { mockAIRateLimit } from './helpers/route-mock';
 import { GET as search } from '../app/api/search/route';
 import { GET as conversations } from '../app/api/conversations/route';
@@ -14,7 +14,7 @@ import { POST as fork } from '../app/api/conversations/[id]/fork/route';
 import { PATCH as configuration } from '../app/api/conversations/[id]/configuration/route';
 import { GET as memories, POST as saveMemory, DELETE as deleteMemory } from '../app/api/user/agent-memory/route';
 
-/** Hybrid double: legacy supabase-style `db` for not-yet-migrated routes, `scoped` for Kysely routes. */
+/** Scoped database and object storage doubles for the API routes under test. */
 function fixture(t: TestContext) {
     const owner = randomUUID(), id = randomUUID();
     const calls: { table: string; field: string; value: unknown }[] = [];
@@ -24,29 +24,6 @@ function fixture(t: TestContext) {
     const objects = new Map<string, Uint8Array>();
     const uploads: { row: unknown; text: string; contentType: string | undefined }[] = [];
     let rpcError: unknown = null, rpcData: unknown = [];
-    const db = {
-        from(table: string) {
-            const result = () => ({ data: rows[table] ?? null, error: errors[table] ?? null });
-            const query = {
-                select: () => query, in: (field: string,value: unknown) => { calls.push({table,field,value}); return query; },
-                eq: (field: string,value: unknown) => { calls.push({table,field,value}); return query; },
-                ilike: (field: string,value: unknown) => { calls.push({table,field,value}); return query; },
-                abortSignal: () => query,
-                insert: (value: unknown) => { inserts[table] = value; return query; },
-                update: (value: unknown) => { inserts[table] = value; return query; },
-                upsert: (value: unknown) => { inserts[table] = value; return query; }, delete: () => query,
-                order: () => query, limit: () => query, range: () => query,
-                maybeSingle: async () => result(), single: async () => result(),
-                then: (resolve: (value: unknown) => void) => resolve(result()),
-            }; return query;
-        },
-        rpc: (_name: string, args?: Record<string, unknown>) => {
-            calls.push({table:'rpc',field:_name,value:args});
-            const result = Promise.resolve({ data: rpcData, error: rpcError });
-            return Object.assign(result, { abortSignal: () => result });
-        },
-        storage: { from: () => ({ upload: async () => ({error:null}), download: async () => ({data:new Blob(['资料正文']),error:null}) }) },
-    };
     const unwrap = (value: unknown): unknown => {
         if (!value || typeof value !== 'object' || !('toOperationNode' in value)) return value;
         const node = (value as { toOperationNode(): { parameters?: { value?: unknown }[] } }).toOperationNode();
@@ -93,7 +70,7 @@ function fixture(t: TestContext) {
         },
     };
     const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
-    t.mock.method(api,'requireUserContext',async () => createMockAuthContext(db,owner,scoped as never));
+    t.mock.method(api,'requireUserContext',async () => createMockAuthContext(owner,scoped as never));
     const contextModule=require('../lib/db/context.server') as typeof import('../lib/db/context.server');
     t.mock.method(contextModule,'systemDb',() => scoped as unknown as ReturnType<typeof contextModule.systemDb>);
     const objectStore = {
@@ -115,7 +92,7 @@ function fixture(t: TestContext) {
     };
     const storageModule = require('../lib/storage/index.server') as typeof import('../lib/storage/index.server');
     t.mock.method(storageModule,'getObjectStore',() => objectStore as unknown as ReturnType<typeof storageModule.getObjectStore>);
-    return { owner,id,db,calls,rows,errors,inserts,objects,uploads,api,rpc(data:unknown,error:unknown=null){rpcData=data;rpcError=error;} };
+    return { owner,id,calls,rows,errors,inserts,objects,uploads,api,rpc(data:unknown,error:unknown=null){rpcData=data;rpcError=error;} };
 }
 const request = (url: string, body?: unknown) => new NextRequest(`http://localhost${url}`, body === undefined ? {} : { method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body) });
 const params = (id:string) => ({params:Promise.resolve({id})});

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { SessionContext, useSessionSafe, type SessionState } from '../lib/hooks/session-context';
-import { createMockAuthContext } from './helpers/supabase-mock';
+import { createMockAuthContext } from './helpers/auth-mock';
 
 function SessionProbe() {
     const state = useSessionSafe();
@@ -31,7 +31,7 @@ test('session hook preserves a pending provider snapshot instead of using its fa
 });
 
 test('session hook returns the supplied user and session without creating another store', () => {
-    const { user } = createMockAuthContext({}, 'user-context');
+    const { user } = createMockAuthContext('user-context');
     const state: SessionState = {
         user,
         loading: false,

@@ -3,8 +3,6 @@ import assert from 'node:assert/strict';
 import { toDaliurenText, toQimenText } from 'taibu-core';
 import { resolveChartTextDetailLevel } from '@/lib/divination/detail-level';
 
-process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
 
 test('tarot data source formatForAI should reuse canonical reading text', async () => {
   const { tarotProvider } = await import('../lib/data-sources/tarot');

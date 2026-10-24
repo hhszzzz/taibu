@@ -3,8 +3,6 @@ import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { createMockScopedDb } from './helpers/db-mock';
 
-process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
 
 const VALID_CONVERSATION_ID = '11111111-1111-4111-8111-111111111111';
 const MISSING_CONVERSATION_ID = '22222222-2222-4222-8222-222222222222';
@@ -80,11 +78,6 @@ test('conversations POST should reject non-object request bodies', async (t) => 
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    supabase: {
-      rpc() {
-        throw new Error('rpc should not be called');
-      },
-    },
   });
 
   t.after(() => {
@@ -112,11 +105,6 @@ test('conversations POST should reject non-string title and personality payloads
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    supabase: {
-      rpc() {
-        throw new Error('rpc should not be called');
-      },
-    },
   });
 
   t.after(() => {
@@ -189,11 +177,6 @@ test('conversations POST should reject non-array non-null messages payloads', as
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    supabase: {
-      rpc() {
-        throw new Error('rpc should not be called');
-      },
-    },
   });
 
   t.after(() => {
@@ -221,11 +204,6 @@ test('conversations POST should reject invalid message items inside messages arr
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    supabase: {
-      rpc() {
-        throw new Error('rpc should not be called');
-      },
-    },
   });
 
   t.after(() => {
@@ -253,11 +231,6 @@ test('conversations POST should reject message items with invalid createdAt time
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    supabase: {
-      rpc() {
-        throw new Error('rpc should not be called');
-      },
-    },
   });
 
   t.after(() => {
@@ -446,11 +419,6 @@ test('conversation detail PATCH should reject non-array non-null messages payloa
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    supabase: {
-      rpc() {
-        throw new Error('rpc should not be called');
-      },
-    },
   });
 
   t.after(() => {
@@ -481,11 +449,6 @@ test('conversation detail PATCH should reject non-object request bodies', async 
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    supabase: {
-      rpc() {
-        throw new Error('rpc should not be called');
-      },
-    },
   });
 
   t.after(() => {
@@ -516,11 +479,6 @@ test('conversation detail PATCH should reject non-string title and personality p
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    supabase: {
-      rpc() {
-        throw new Error('rpc should not be called');
-      },
-    },
   });
 
   t.after(() => {
@@ -563,11 +521,6 @@ test('conversation detail PATCH should reject blank titles after trimming', asyn
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    supabase: {
-      rpc() {
-        throw new Error('rpc should not be called');
-      },
-    },
   });
 
   t.after(() => {
@@ -598,11 +551,6 @@ test('conversation detail PATCH should reject invalid message items inside messa
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    supabase: {
-      rpc() {
-        throw new Error('rpc should not be called');
-      },
-    },
   });
 
   t.after(() => {
@@ -633,11 +581,6 @@ test('conversation detail PATCH should reject message items with invalid created
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    supabase: {
-      rpc() {
-        throw new Error('rpc should not be called');
-      },
-    },
   });
 
   t.after(() => {
@@ -677,11 +620,6 @@ test('conversation detail GET should reject invalid conversation ids', async (t)
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    supabase: {
-      from() {
-        throw new Error('db should not be called');
-      },
-    },
   });
 
   t.after(() => {
@@ -708,11 +646,6 @@ test('conversation detail PATCH should reject invalid conversation ids', async (
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    supabase: {
-      rpc() {
-        throw new Error('rpc should not be called');
-      },
-    },
   });
 
   t.after(() => {
@@ -745,7 +678,6 @@ test('conversation detail DELETE should return 404 when rpc reports missing conv
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    supabase: {},
   });
   deleteModule.deleteConversationGraph = async () => ({
     error: null,
@@ -779,7 +711,6 @@ test('conversation detail DELETE should reject invalid conversation ids', async 
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
-    supabase: {},
   });
 
   t.after(() => {
@@ -804,7 +735,7 @@ test('conversation detail DELETE should reject invalid conversation ids', async 
 test('conversation DELETE returns a recoverable conflict while an Agent task is active', async (t) => {
   const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
   const deletion = require('../lib/chat/conversation-delete') as typeof import('../lib/chat/conversation-delete');
-  t.mock.method(api, 'requireUserContext', async () => ({ user: { id: 'owner' }, supabase: {} }));
+  t.mock.method(api, 'requireUserContext', async () => ({ user: { id: 'owner' } }));
   t.mock.method(deletion, 'deleteConversationGraph', async () => ({ error: { message: 'AGENT_CONVERSATION_BUSY' }, notFound: false }));
   const { DELETE } = await import('../app/api/conversations/[id]/route');
   const response = await DELETE(new NextRequest(`http://localhost/api/conversations/${VALID_CONVERSATION_ID}`, { method: 'DELETE' }), { params: Promise.resolve({ id: VALID_CONVERSATION_ID }) });

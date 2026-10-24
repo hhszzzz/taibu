@@ -3,8 +3,6 @@ import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { createMockScopedDb } from './helpers/db-mock';
 
-process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost';
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon';
 
 const CHART_ID = '11111111-1111-1111-1111-111111111111';
 const CHART_ID_PATH = `?chartId=${CHART_ID}`;

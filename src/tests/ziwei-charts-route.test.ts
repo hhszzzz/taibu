@@ -2,8 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 
-process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost';
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon';
 
 test('ziwei chart create rejects missing birth_time', async (t) => {
     const apiUtils = require('../lib/api-utils') as {
@@ -14,25 +12,7 @@ test('ziwei chart create rejects missing birth_time', async (t) => {
 
     apiUtils.requireUserContext = (async () => ({
         user: { id: 'user-1' },
-        supabase: {
-            from() {
-                return {
-                    insert() {
-                        insertCalled = true;
-                        return {
-                            select() {
-                                return {
-                                    maybeSingle: async () => ({
-                                        data: { id: 'ziwei-1' },
-                                        error: null,
-                                    }),
-                                };
-                            },
-                        };
-                    },
-                };
-            },
-        },
+        db: { tx() { insertCalled = true; throw new Error('invalid input reached the database'); } },
     })) as unknown as typeof apiUtils.requireUserContext;
 
     t.after(() => {
@@ -70,33 +50,7 @@ test('ziwei chart update rejects invalid birth_time', async (t) => {
 
     apiUtils.requireUserContext = (async () => ({
         user: { id: 'user-1' },
-        supabase: {
-            from() {
-                return {
-                    update() {
-                        updateCalled = true;
-                        return {
-                            eq() {
-                                return {
-                                    eq() {
-                                        return {
-                                            select() {
-                                                return {
-                                                    maybeSingle: async () => ({
-                                                        data: { id: 'ziwei-1' },
-                                                        error: null,
-                                                    }),
-                                                };
-                                            },
-                                        };
-                                    },
-                                };
-                            },
-                        };
-                    },
-                };
-            },
-        },
+        db: { tx() { updateCalled = true; throw new Error('invalid input reached the database'); } },
     })) as unknown as typeof apiUtils.requireUserContext;
 
     t.after(() => {

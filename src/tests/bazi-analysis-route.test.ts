@@ -4,8 +4,6 @@ import { NextRequest } from 'next/server';
 import { mockAIFeatureState } from './helpers/route-mock';
 import { createMockScopedDb } from './helpers/db-mock';
 
-process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost';
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon';
 
 beforeEach((t) => {
     assert.ok('mock' in t);

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
-import { createMockAuthContext } from './helpers/supabase-mock';
+import { createMockAuthContext } from './helpers/auth-mock';
 
 test('activation API distinguishes invalid codes, successful redemption, authorization and storage failures', async t => {
     const api = require('../lib/api-utils') as typeof import('../lib/api-utils');

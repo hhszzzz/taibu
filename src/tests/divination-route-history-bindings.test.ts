@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { ensureRouteTestEnv, mockAIFeatureState, mockAIRateLimit } from './helpers/route-mock';
 import { createMockUIMessageResult } from './helpers/ui-message-result';
-import { createMockAuthContext } from './helpers/supabase-mock';
+import { createMockAuthContext } from './helpers/auth-mock';
 import type { CreateAIAnalysisParams } from '../lib/ai/ai-analysis';
 
 ensureRouteTestEnv();
@@ -37,15 +37,15 @@ async function runRouteHistoryBindingTest(t: TestContext, spec: RouteBindingSpec
 
     const createCalls: CreateAIAnalysisParams[] = [];
     const mockDb = {
-        from() {
-            throw new Error('db.from should not be called in history binding route tests');
+        tx() {
+            throw new Error('db.tx should not be called in history binding route tests');
         },
         rpc() {
             throw new Error('db.rpc should not be called in history binding route tests');
         },
     };
 
-    apiUtilsModule.requireUserContext = async () => createMockAuthContext(mockDb);
+    apiUtilsModule.requireUserContext = async () => createMockAuthContext('user-1', mockDb as never);
     credits.getUserAuthInfo = async () => ({ credits: 10, effectiveMembership: 'pro', hasCredits: true });
     credits.attemptCreditUse = async () => ({ ok: true, remaining: 9 });
     aiAccessModule.resolveModelAccessAsync = async () => ({

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { DbError, isUniqueViolation, settle, toDbError } from '../lib/db/errors';
+import { DbError, isUniqueViolation, toDbError } from '../lib/db/errors';
 
 test('toDbError preserves SQLSTATE, detail and hint', () => {
   const error = toDbError({ code: '23505', message: 'duplicate', detail: 'd', hint: 'h' });
@@ -13,13 +13,6 @@ test('toDbError wraps unknown failures without losing the message', () => {
   assert.equal(toDbError(new Error('boom')).code, 'DB_ERROR');
   assert.equal(toDbError(new Error('boom')).message, 'boom');
   assert.equal(toDbError('plain').message, 'plain');
-});
-
-test('settle keeps the supabase-style branch shape for migration', async () => {
-  assert.deepEqual(await settle(Promise.resolve(1)), { data: 1, error: null });
-  const failed = await settle(Promise.reject({ code: '42501', message: 'denied' }));
-  assert.equal(failed.data, null);
-  assert.equal(failed.error?.code, '42501');
 });
 
 test('unique violations are detected through the wrapper', () => {

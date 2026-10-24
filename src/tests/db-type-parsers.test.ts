@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseNumber, parseTextArray, parseTimestamp } from '../lib/db/pool.server';
 
-test('timestamptz keeps PostgREST JSON shape', () => {
+test('timestamptz preserves the API timestamp format', () => {
   assert.equal(parseTimestamp('2026-10-21 03:08:25.25+00'), '2026-10-21T03:08:25.25+00:00');
   assert.equal(parseTimestamp('2026-10-21 03:08:25+08'), '2026-10-21T03:08:25+08:00');
   assert.equal(parseTimestamp('2026-10-21 03:08:25+05:30'), '2026-10-21T03:08:25+05:30');
@@ -15,7 +15,7 @@ test('timestamp without time zone keeps its wall clock', () => {
   assert.equal(parseTimestamp('-infinity'), '-infinity');
 });
 
-test('numbers match PostgREST JSON numbers', () => {
+test('numeric database values become JSON numbers', () => {
   assert.equal(parseNumber('42'), 42);
   assert.equal(parseNumber('1700.25'), 1700.25);
   assert.ok(Number.isNaN(parseNumber('NaN')));

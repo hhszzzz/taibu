@@ -51,7 +51,7 @@ type HistoryConfig = {
   historyPath: string;
   detailPath: string;
   sessionKey: string;
-  summarySelect: string;
+  summaryColumns: readonly string[];
   replay: HistoryReplayPolicy;
   useTimestamp?: boolean;
 };
@@ -64,7 +64,7 @@ export const HISTORY_CONFIG: Record<HistoryType, HistoryConfig> = {
     historyPath: '/tarot/history',
     detailPath: '/tarot/result',
     sessionKey: 'tarot_result',
-    summarySelect: 'id, spread_id, question, cards, conversation_id, created_at, conversation:conversations(source_data)',
+    summaryColumns: ['id', 'spread_id', 'question', 'cards', 'conversation_id', 'created_at'],
     useTimestamp: true,
   },
   liuyao: {
@@ -74,7 +74,7 @@ export const HISTORY_CONFIG: Record<HistoryType, HistoryConfig> = {
     historyPath: '/liuyao/history',
     detailPath: '/liuyao/result',
     sessionKey: 'liuyao_result',
-    summarySelect: 'id, hexagram_code, changed_hexagram_code, changed_lines, question, conversation_id, created_at, conversation:conversations(source_data)',
+    summaryColumns: ['id', 'hexagram_code', 'changed_hexagram_code', 'changed_lines', 'question', 'conversation_id', 'created_at'],
   },
   mbti: {
     replay: { mode: 'stored-fields', legacyFallback: 'field-defaults' },
@@ -83,7 +83,7 @@ export const HISTORY_CONFIG: Record<HistoryType, HistoryConfig> = {
     historyPath: '/mbti/history',
     detailPath: '/mbti/result',
     sessionKey: 'mbti_result',
-    summarySelect: 'id, mbti_type, scores, percentages, conversation_id, created_at, conversation:conversations(source_data)',
+    summaryColumns: ['id', 'mbti_type', 'scores', 'percentages', 'conversation_id', 'created_at'],
   },
   hepan: {
     replay: { mode: 'saved-result', legacyFallback: 'input-recompute' },
@@ -92,7 +92,7 @@ export const HISTORY_CONFIG: Record<HistoryType, HistoryConfig> = {
     historyPath: '/hepan/history',
     detailPath: '/hepan/result',
     sessionKey: 'hepan_result',
-    summarySelect: 'id, type, person1_name, person2_name, compatibility_score, conversation_id, created_at, conversation:conversations(source_data)',
+    summaryColumns: ['id', 'type', 'person1_name', 'person2_name', 'compatibility_score', 'conversation_id', 'created_at'],
   },
   palm: {
     replay: { mode: 'stored-fields', legacyFallback: 'field-defaults' },
@@ -101,7 +101,7 @@ export const HISTORY_CONFIG: Record<HistoryType, HistoryConfig> = {
     historyPath: '/palm/history',
     detailPath: '/palm/result',
     sessionKey: 'palm_result',
-    summarySelect: 'id, analysis_type, hand_type, conversation_id, created_at, conversation:conversations(source_data)',
+    summaryColumns: ['id', 'analysis_type', 'hand_type', 'conversation_id', 'created_at'],
   },
   face: {
     replay: { mode: 'stored-fields', legacyFallback: 'field-defaults' },
@@ -110,7 +110,7 @@ export const HISTORY_CONFIG: Record<HistoryType, HistoryConfig> = {
     historyPath: '/face/history',
     detailPath: '/face/result',
     sessionKey: 'face_result',
-    summarySelect: 'id, analysis_type, conversation_id, created_at, conversation:conversations(source_data)',
+    summaryColumns: ['id', 'analysis_type', 'conversation_id', 'created_at'],
   },
   qimen: {
     replay: { mode: 'input-recompute', legacyFallback: 'field-defaults' },
@@ -119,7 +119,7 @@ export const HISTORY_CONFIG: Record<HistoryType, HistoryConfig> = {
     historyPath: '/qimen/history',
     detailPath: '/qimen/result',
     sessionKey: 'qimen_result',
-    summarySelect: 'id, dun_type, ju_number, question, conversation_id, created_at, conversation:conversations(source_data)',
+    summaryColumns: ['id', 'dun_type', 'ju_number', 'question', 'conversation_id', 'created_at'],
   },
   daliuren: {
     replay: { mode: 'input-recompute', legacyFallback: 'field-defaults' },
@@ -128,7 +128,7 @@ export const HISTORY_CONFIG: Record<HistoryType, HistoryConfig> = {
     historyPath: '/daliuren/history',
     detailPath: '/daliuren/result',
     sessionKey: 'daliuren_params',
-    summarySelect: 'id, day_ganzhi, result_data, question, conversation_id, created_at, conversation:conversations(source_data)',
+    summaryColumns: ['id', 'day_ganzhi', 'result_data', 'question', 'conversation_id', 'created_at'],
     useTimestamp: true,
   },
   meihua: {
@@ -138,7 +138,7 @@ export const HISTORY_CONFIG: Record<HistoryType, HistoryConfig> = {
     historyPath: '/meihua/history',
     detailPath: '/meihua/result',
     sessionKey: 'meihua_result',
-    summarySelect: 'id, question, method, cast_datetime, main_hexagram, changed_hexagram, input_data, result_data, conversation_id, created_at, conversation:conversations(source_data)',
+    summaryColumns: ['id', 'question', 'method', 'cast_datetime', 'main_hexagram', 'changed_hexagram', 'input_data', 'result_data', 'conversation_id', 'created_at'],
   },
   xiaoliuren: {
     replay: { mode: 'saved-result', legacyFallback: 'unavailable' },
@@ -147,7 +147,7 @@ export const HISTORY_CONFIG: Record<HistoryType, HistoryConfig> = {
     historyPath: '/xiaoliuren/history',
     detailPath: '/xiaoliuren/result',
     sessionKey: 'xiaoliuren_result',
-    summarySelect: 'id, question, solar_datetime, lunar_month, lunar_day, is_leap_month, shichen, final_status, input_data, result_data, conversation_id, created_at, conversation:conversations(source_data)',
+    summaryColumns: ['id', 'question', 'solar_datetime', 'lunar_month', 'lunar_day', 'is_leap_month', 'shichen', 'final_status', 'input_data', 'result_data', 'conversation_id', 'created_at'],
   },
 };
 

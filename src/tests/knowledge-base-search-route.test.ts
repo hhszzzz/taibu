@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
-import { createMockAuthContext } from './helpers/supabase-mock';
+import { createMockAuthContext } from './helpers/auth-mock';
 import { KNOWLEDGE_QUERY_MAX_LENGTH } from '../lib/knowledge-base/types';
 
 test('knowledge search rejects oversized or malformed queries before retrieval and keeps success/auth paths', async t => {

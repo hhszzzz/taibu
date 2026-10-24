@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { DummyDriver, Kysely, PostgresAdapter, PostgresIntrospector, PostgresQueryCompiler } from 'kysely';
 import type { DB } from '../lib/db/generated/schema';
-import { createMockAuthContext } from './helpers/supabase-mock';
+import { createMockAuthContext } from './helpers/auth-mock';
 import { createMockScopedDb } from './helpers/db-mock';
 import {
     agentArchiveToday, describeMasterReviewFill, fillableMasterReviewItems, getAgentArchiveHref, getAgentArchiveProposal, getAgentArchiveRecord,
@@ -198,7 +198,7 @@ function archiveFixture(t: TestContext, proposal: AgentArchiveProposal, toolName
     const settings = require('../lib/app-settings') as typeof import('../lib/app-settings');
     const store = require('../lib/agent/store.server') as typeof import('../lib/agent/store.server');
     const contextModule = require('../lib/db/context.server') as typeof import('../lib/db/context.server');
-    t.mock.method(api, 'requireUserContext', async () => createMockAuthContext({}, owner, scoped));
+    t.mock.method(api, 'requireUserContext', async () => createMockAuthContext(owner, scoped));
     t.mock.method(store.AgentStore.prototype, 'getRun', async (id: string, userId?: string) => (id === runId && userId === owner ? { id: runId, user_id: owner } as never : null));
     t.mock.method(store.AgentStore.prototype, 'artifact', async (_run: unknown, call: string) => (call === callId ? artifact as never : null));
     const originalSystemDb = contextModule.systemDb;

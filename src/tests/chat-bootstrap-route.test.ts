@@ -4,8 +4,6 @@ import { NextRequest } from 'next/server';
 import { mockAIFeatureState } from './helpers/route-mock';
 import { createMockScopedDb } from './helpers/db-mock';
 
-process.env.SUPABASE_URL = 'http://localhost';
-process.env.SUPABASE_ANON_KEY = 'test-anon';
 
 type Rows = {
   user: Record<string, unknown>;

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { captureConsoleErrors, ensureRouteTestEnv, mockAIFeatureState, mockAIRateLimit, mockRouteUserContext, blockRouteNetwork } from './helpers/route-mock';
 import { createMockUIMessageResult } from './helpers/ui-message-result';
-import { createMockAuthContext } from './helpers/supabase-mock';
+import { createMockAuthContext } from './helpers/auth-mock';
 import { createMockScopedDb } from './helpers/db-mock';
 import type { CreateAIAnalysisParams } from '../lib/ai/ai-analysis';
 
@@ -56,14 +56,7 @@ test('tarot route uses schema column names when inserting history', async (t) =>
 
     const createCalls: CreateAIAnalysisParams[] = [];
 
-    mockRouteUserContext(t, {
-        from() {
-            throw new Error('tarot interpret test should not query tables directly');
-        },
-        rpc() {
-            throw new Error('tarot interpret test should not call rpc directly');
-        },
-    });
+    mockRouteUserContext(t);
     t.mock.method(credits, 'getUserAuthInfo', async () => ({ credits: 10, effectiveMembership: 'free', hasCredits: true }));
     t.mock.method(credits, 'attemptCreditUse', async () => ({ ok: true, remaining: 9 }));
     t.mock.method(aiAccessModule, 'resolveModelAccessAsync', async () => ({ modelId: 'test-model', reasoningEnabled: false }));
@@ -108,8 +101,7 @@ test('tarot route uses schema column names when inserting history', async (t) =>
     const data = await response.json();
 
     const hasMembershipWarning = consoleCapture.errors.some((line) =>
-        line.includes('[membership] Failed') ||
-        line.includes('[supabase-server] Missing Supabase service configuration')
+        line.includes('[membership] Failed')
     );
     assert.equal(hasMembershipWarning, false);
     assert.equal(response.status, 200);
@@ -131,14 +123,7 @@ test('tarot route persists analysis after streaming completes', async (t) => {
 
     const createCalls: CreateAIAnalysisParams[] = [];
 
-    mockRouteUserContext(t, {
-        from() {
-            throw new Error('tarot stream test should not query tables directly');
-        },
-        rpc() {
-            throw new Error('tarot stream test should not call rpc directly');
-        },
-    });
+    mockRouteUserContext(t);
     t.mock.method(credits, 'getUserAuthInfo', async () => ({ credits: 10, effectiveMembership: 'pro', hasCredits: true }));
     t.mock.method(credits, 'attemptCreditUse', async () => ({ ok: true, remaining: 9 }));
     t.mock.method(aiAccessModule, 'resolveModelAccessAsync', async () => ({ modelId: 'test-model', reasoningEnabled: false }));
@@ -192,14 +177,7 @@ test('tarot route surfaces SSE error when stream persistence fails after content
     mockAIRateLimit(t);
     const refundCalls: Array<Parameters<typeof import('../lib/user/credits').addCredits>> = [];
 
-    mockRouteUserContext(t, {
-        from() {
-            throw new Error('tarot stream test should not query tables directly');
-        },
-        rpc() {
-            throw new Error('tarot stream test should not call rpc directly');
-        },
-    });
+    mockRouteUserContext(t);
     t.mock.method(credits, 'getUserAuthInfo', async () => ({ credits: 10, effectiveMembership: 'pro', hasCredits: true }));
     t.mock.method(credits, 'attemptCreditUse', async () => ({ ok: true, remaining: 9 }));
     t.mock.method(aiAccessModule, 'resolveModelAccessAsync', async () => ({ modelId: 'test-model', reasoningEnabled: false }));
@@ -267,10 +245,10 @@ test('tarot route returns numerology on draw-only and persists birth metadata on
     const scoped = scopedTarot({ captureInsert: (payload) => { insertCalls.push(payload); } });
 
     t.mock.method(apiUtilsModule, 'getAuthContext', async () =>
-        createMockAuthContext({}, null));
+        createMockAuthContext(null));
 
     t.mock.method(apiUtilsModule, 'requireUserContext', async () =>
-        createMockAuthContext({}, 'user-1', scoped));
+        createMockAuthContext('user-1', scoped));
 
     const { POST } = await import('../app/api/tarot/route');
 
@@ -324,15 +302,8 @@ test('tarot route draws and titles the spreads newly exposed to the web layer', 
     mockAIRateLimit(t);
     const createCalls: CreateAIAnalysisParams[] = [];
 
-    t.mock.method(apiUtilsModule, 'getAuthContext', async () => createMockAuthContext({}, null));
-    mockRouteUserContext(t, {
-        from() {
-            throw new Error('tarot interpret test should not query tables directly');
-        },
-        rpc() {
-            throw new Error('tarot interpret test should not call rpc directly');
-        },
-    });
+    t.mock.method(apiUtilsModule, 'getAuthContext', async () => createMockAuthContext(null));
+    mockRouteUserContext(t);
     t.mock.method(credits, 'getUserAuthInfo', async () => ({ credits: 10, effectiveMembership: 'free', hasCredits: true }));
     t.mock.method(credits, 'attemptCreditUse', async () => ({ ok: true, remaining: 9 }));
     t.mock.method(aiAccessModule, 'resolveModelAccessAsync', async () => ({ modelId: 'test-model', reasoningEnabled: false }));
@@ -392,7 +363,7 @@ test('tarot save should fail fast when metadata column is missing', async (t) =>
     });
 
     t.mock.method(apiUtilsModule, 'requireUserContext', async () =>
-        createMockAuthContext({}, 'user-1', scoped));
+        createMockAuthContext('user-1', scoped));
 
     const { POST } = await import('../app/api/tarot/route');
 
@@ -439,7 +410,7 @@ test('tarot spread persists reading for cookie-authenticated users without beare
     });
 
     t.mock.method(apiUtilsModule, 'getAuthContext', async () =>
-        createMockAuthContext({}, 'user-cookie', scoped));
+        createMockAuthContext('user-cookie', scoped));
 
     const { POST } = await import('../app/api/tarot/route');
     const response = await POST(new NextRequest('http://localhost/api/tarot', {
@@ -477,13 +448,13 @@ test('tarot pilot draws, saves and prepares BYOK before independently authentica
         captureInsert: (payload) => assert.equal(payload.user_id, 'user-1'),
         insertResult: () => ({ id: 'reading-pilot' }),
     });
-    t.mock.method(apiUtils, 'requireUserContext', async () => createMockAuthContext({}, 'user-1', scoped));
+    t.mock.method(apiUtils, 'requireUserContext', async () => createMockAuthContext('user-1', scoped));
     const authenticate = apiUtils.requireUserContext;
     t.mock.method(apiUtils, 'requireUserContext', async (...args: Parameters<typeof authenticate>) => {
         authCalls += 1;
         return authenticate(...args);
     });
-    t.mock.method(apiUtils, 'getAuthContext', async () => createMockAuthContext({}, null));
+    t.mock.method(apiUtils, 'getAuthContext', async () => createMockAuthContext(null));
     const account = t.mock.method(credits, 'getUserAuthInfo', async () => ({
         credits: 0, effectiveMembership: 'free', hasCredits: false,
     }));

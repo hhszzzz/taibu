@@ -3,8 +3,6 @@ import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { createMockScopedDb } from './helpers/db-mock';
 
-process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
 
 test('announcements GET should return history ordered by published_at desc', async (t) => {
   const contextModule = require('../lib/db/context.server') as any;

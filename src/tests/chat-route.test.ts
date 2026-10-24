@@ -2,9 +2,8 @@ import { beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { createMockScopedDb } from './helpers/db-mock';
+import { createMockAuthContext } from './helpers/auth-mock';
 
-process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost';
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon';
 process.env.INTERNAL_API_SECRET = 'internal-secret';
 
 beforeEach((t) => {
@@ -238,11 +237,6 @@ function setupRouteMocks(
     };
     apiUtilsModule.requireUserContext = async () => ({
         user: { id: 'user-1' },
-        supabase: {
-            auth: {
-                getSession: async () => ({ data: { session: null } }),
-            },
-        },
     });
     rateLimitModule.checkRateLimit = async (_identifier: string, endpoint: string) => {
         state.events.push('rate-limit');
@@ -769,7 +763,7 @@ test('chat route keeps normal-user debit and strips authorization fields before 
 test('chat route grants secret-validated bypass without leaking credentials into provider arguments', async (t) => {
     const state = setupRouteMocks(t, createUIChunkStream([{ type: 'text-delta', id: 't1', delta: 'ok' }]));
     const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
-    t.mock.method(api, 'getAuthContext', async () => ({ user: null, authError: null, supabase: null }));
+    t.mock.method(api, 'getAuthContext', async () => createMockAuthContext(null));
     t.mock.method(api, 'requireUserContext', async () => { throw new Error('Trusted bypass reached required auth'); });
     const ai = require('../lib/ai/ai') as typeof import('../lib/ai/ai');
     const original = ai.callAIUIMessageResult;

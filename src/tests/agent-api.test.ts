@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
 import type { TestContext } from "node:test";
-import { createMockAuthContext } from "./helpers/supabase-mock";
+import { createMockAuthContext } from "./helpers/auth-mock";
 import { createMockScopedDb } from "./helpers/db-mock";
 import { AgentStore, type AgentRunRow } from "../lib/agent/store.server";
 import { AGENT_ENGINE } from "../lib/agent/engine";
@@ -65,7 +65,7 @@ function setup(t: TestContext, messages: unknown[] = []) {
   const rate =
     require("../lib/rate-limit") as typeof import("../lib/rate-limit");
   t.mock.method(api, "requireUserContext", async () =>
-    createMockAuthContext({}, owner, scoped),
+    createMockAuthContext(owner, scoped),
   );
   const contextModule = require("../lib/db/context.server") as typeof import("../lib/db/context.server");
   const originalSystemDb = contextModule.systemDb;

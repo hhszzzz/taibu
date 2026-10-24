@@ -19,7 +19,7 @@ const OID = {
 } as const;
 
 /**
- * PostgREST renders a timestamptz as `2026-10-21T03:08:25.25+00:00`.
+ * Preserve the API timestamp format, e.g. `2026-10-21T03:08:25.25+00:00`.
  * Sessions run with TimeZone=UTC; we only reformat the server's text.
  */
 export function parseTimestamp(value: string): string {

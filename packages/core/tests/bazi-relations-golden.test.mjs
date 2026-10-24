@@ -9,7 +9,7 @@ import { buildToolSuccessPayload, executeTool } from '../dist/mcp/index.js';
  * 关系引擎重构（0cb975f4）的金标：200 个种子化出生在重构前的 dist 上生成，
  * 重构后 bazi / bazi_dayun 的规范文本与结构化 JSON 必须逐字节一致。
  * 有意改动输出时按 fixture 的 revisions 记录：先确认新输出去掉所记改动后仍与旧哈希逐一相等，再整体重算。
- * 固定样本只存 sha256；重建方法见测试名与 docs/requirements-audit.md。
+ * 固定样本只存 sha256；样本来源与判定口径见 ../ALGORITHM_RULES.md。
  */
 const fixture = JSON.parse(readFileSync(fileURLToPath(new URL('./fixtures/bazi-golden-hashes.json', import.meta.url)), 'utf8'));
 

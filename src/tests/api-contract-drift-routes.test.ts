@@ -3,9 +3,6 @@ import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { createMockScopedDb } from './helpers/db-mock';
 
-process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
-
 test('records PUT validates and persists related chart fields', async (t) => {
     const apiUtilsModule = require('../lib/api-utils') as any;
     const routePath = require.resolve('../app/api/records/[id]/route');
@@ -80,7 +77,6 @@ test('records POST rejects incomplete related chart payload', async (t) => {
 
     apiUtilsModule.requireUserContext = async () => ({
         user: { id: 'user-1' },
-        supabase: {},
     });
     delete require.cache[routePath];
 
@@ -122,7 +118,6 @@ test('community posts PUT reuses shared validation and rejects blank title', asy
 
     apiUtilsModule.requireUserContext = async () => ({
         user: { id: 'user-1' },
-        supabase: {},
     });
     delete require.cache[routePath];
 
@@ -163,15 +158,15 @@ test('knowledge-base PATCH reuses shared validation and rejects invalid weight',
     const originalRequireUserContext = apiUtilsModule.requireUserContext;
     const originalEnsureFeatureRouteEnabled = featureGateModule.ensureFeatureRouteEnabled;
 
-    const userDb = {
-        from() {
-            throw new Error('validation must reject the body before any query');
-        },
+    let databaseCalls = 0;
+    const unexpected = async () => {
+        databaseCalls += 1;
+        throw new Error('validation must reject the body before any query');
     };
+    const userDb = createMockScopedDb({ tx: unexpected, rpc: unexpected });
     apiUtilsModule.requireUserContext = async () => ({
         user: { id: 'user-1' },
         db: userDb,
-        supabase: userDb,
     });
     featureGateModule.ensureFeatureRouteEnabled = async () => null;
     delete require.cache[routePath];
@@ -194,4 +189,5 @@ test('knowledge-base PATCH reuses shared validation and rejects invalid weight',
 
     assert.equal(response.status, 400);
     assert.equal(payload.error, 'weight 无效');
+    assert.equal(databaseCalls, 0);
 });

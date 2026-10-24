@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 
 import { ensureRouteTestEnv, mockAIRateLimit } from './helpers/route-mock';
-import { createMockAuthContext } from './helpers/supabase-mock';
+import { createMockAuthContext } from './helpers/auth-mock';
 import { createMockScopedDb } from './helpers/db-mock';
 import { calculateMeihuaBundle } from '../lib/divination/meihua';
 import { calculateXiaoliurenBundle } from '../lib/divination/xiaoliuren';
@@ -117,7 +117,7 @@ test('Meihua save is owner-scoped and recalculates canonical data on the server'
 
   const insertCalls: Record<string, unknown>[] = [];
   const db = createInsertScope('meihua_divinations', 'mh-save-1', (payload) => { insertCalls.push(payload); });
-  mockUserContext(t, [MEIHUA_ROUTE], async () => createMockAuthContext({}, 'owner-1', db));
+  mockUserContext(t, [MEIHUA_ROUTE], async () => createMockAuthContext('owner-1', db));
 
   const { POST } = require(MEIHUA_ROUTE) as { POST: PostHandler };
   const response = await post(POST, 'http://localhost/api/meihua', {
@@ -148,7 +148,7 @@ test('Xiaoliuren save is owner-scoped and recalculates canonical data on the ser
 
   const insertCalls: Record<string, unknown>[] = [];
   const db = createInsertScope('xiaoliuren_divinations', 'xlr-save-1', (payload) => { insertCalls.push(payload); });
-  mockUserContext(t, [XIAOLIUREN_ROUTE], async () => createMockAuthContext({}, 'owner-2', db));
+  mockUserContext(t, [XIAOLIUREN_ROUTE], async () => createMockAuthContext('owner-2', db));
 
   const { POST } = require(XIAOLIUREN_ROUTE) as { POST: PostHandler };
   const response = await post(POST, 'http://localhost/api/xiaoliuren', {

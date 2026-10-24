@@ -10,8 +10,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createMockScopedDb } from './helpers/db-mock';
 
-process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
 
 test('isMembershipExpired returns false for free users regardless of expiresAt', () => {
     const { isMembershipExpired } = require('../lib/user/membership') as typeof import('../lib/user/membership');

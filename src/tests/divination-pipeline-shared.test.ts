@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 
 import { ensureRouteTestEnv, mockAIFeatureState } from './helpers/route-mock';
-import { createMockAuthContext } from './helpers/supabase-mock';
+import { createMockAuthContext } from './helpers/auth-mock';
 import type { DivinationRouteConfig, InterpretPromptContext } from '../lib/api/divination-pipeline';
 
 ensureRouteTestEnv();

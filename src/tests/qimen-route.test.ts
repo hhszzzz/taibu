@@ -2,7 +2,7 @@ import { beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { ensureRouteTestEnv, mockAIFeatureState, mockAIRateLimit, mockRouteUserContext, blockRouteNetwork } from './helpers/route-mock';
-import { createMockAuthContext } from './helpers/supabase-mock';
+import { createMockAuthContext } from './helpers/auth-mock';
 import { createMockScopedDb } from './helpers/db-mock';
 import { createMockUIMessageResult } from './helpers/ui-message-result';
 import type { CreateAIAnalysisParams } from '../lib/ai/ai-analysis';
@@ -27,14 +27,7 @@ test('qimen route persists analysis after streaming completes', async (t) => {
 
     const createCalls: CreateAIAnalysisParams[] = [];
 
-    mockRouteUserContext(t, {
-        from() {
-            throw new Error('qimen history test should not query tables directly');
-        },
-        rpc() {
-            throw new Error('qimen history test should not call rpc directly');
-        },
-    });
+    mockRouteUserContext(t);
     t.mock.method(credits, 'getUserAuthInfo', async () => ({ credits: 10, effectiveMembership: 'pro', hasCredits: true }));
     t.mock.method(credits, 'attemptCreditUse', async () => ({ ok: true, remaining: 9 }));
     t.mock.method(aiAccessModule, 'resolveModelAccessAsync', async () => ({ modelId: 'test-model', reasoningEnabled: false }));
@@ -85,10 +78,7 @@ test('qimen route hosts the centre palace at 坤二 when zhiFuJiGong is omitted'
     mockAIFeatureState(t);
     mockAIRateLimit(t);
     const createCalls: CreateAIAnalysisParams[] = [];
-    mockRouteUserContext(t, {
-        from() { throw new Error('qimen history test should not query tables directly'); },
-        rpc() { throw new Error('qimen history test should not call rpc directly'); },
-    });
+    mockRouteUserContext(t);
     t.mock.method(credits, 'getUserAuthInfo', async () => ({ credits: 10, effectiveMembership: 'pro', hasCredits: true }));
     t.mock.method(credits, 'attemptCreditUse', async () => ({ ok: true, remaining: 9 }));
     t.mock.method(aiAccessModule, 'resolveModelAccessAsync', async () => ({ modelId: 'test-model', reasoningEnabled: false }));
@@ -119,14 +109,7 @@ test('qimen route surfaces SSE error when stream persistence fails after content
     mockAIRateLimit(t);
     const refundCalls: Array<Parameters<typeof import('../lib/user/credits').addCredits>> = [];
 
-    mockRouteUserContext(t, {
-        from() {
-            throw new Error('qimen history test should not query tables directly');
-        },
-        rpc() {
-            throw new Error('qimen history test should not call rpc directly');
-        },
-    });
+    mockRouteUserContext(t);
     t.mock.method(credits, 'getUserAuthInfo', async () => ({ credits: 10, effectiveMembership: 'pro', hasCredits: true }));
     t.mock.method(credits, 'attemptCreditUse', async () => ({ ok: true, remaining: 9 }));
     t.mock.method(aiAccessModule, 'resolveModelAccessAsync', async () => ({ modelId: 'test-model', reasoningEnabled: false }));
@@ -197,9 +180,8 @@ test('qimen save persists base inputs instead of chart_data', async (t) => {
         } as never),
     });
 
-    mockRouteUserContext(t, {}, 'user-1');
     const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
-    t.mock.method(apiUtils, 'requireUserContext', async () => createMockAuthContext({}, 'user-1', scoped));
+    t.mock.method(apiUtils, 'requireUserContext', async () => createMockAuthContext('user-1', scoped));
 
     const { POST } = await import('../app/api/qimen/route');
     const request = new NextRequest('http://localhost/api/qimen', {

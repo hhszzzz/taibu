@@ -2,8 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ResolvedChatRequest } from '../lib/server/chat/request';
 
-process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
 
 test('buildPreviewPromptContext reuses shared prompt builder even with preview-only overrides', async (t) => {
     t.after(() => {
@@ -17,7 +15,6 @@ test('buildPreviewPromptContext reuses shared prompt builder even with preview-o
     const result = await buildPreviewPromptContext({
         auth: {
             user: { id: 'user-1' },
-            supabase: {},
         } as never,
         body: {
             messages: [

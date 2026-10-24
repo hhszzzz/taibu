@@ -197,14 +197,9 @@ export function onAuthStateChange(callback: AuthListener) {
     };
 }
 
-/** Snapshot for legacy call sites that read `{ data: { session } }`. */
+/** Cached session and user snapshot shared by browser subscribers. */
 export async function getSessionSnapshot(): Promise<SessionPayload> {
     return await loadSessionFromServer();
-}
-
-export async function getUserSnapshot(): Promise<{ data: { user: AuthUser | null }; error: BrowserApiError | null }> {
-    const result = await loadSessionFromServer();
-    return { data: { user: result.data.user }, error: result.error };
 }
 
 export async function getSession(): Promise<Session | null> {
@@ -221,11 +216,6 @@ export async function signInWithEmail(email: string, password: string): Promise<
     invalidateBrowserSessionCache();
     await loadSessionFromServer({ force: true, emitEvent: true });
     return { success: true };
-}
-
-/** 失败次数已由服务端 Redis 锁定；保留入口以兼容旧调用方。 */
-export async function signInWithEmailProtected(email: string, password: string): Promise<AuthResult> {
-    return signInWithEmail(email, password);
 }
 
 export async function signUpWithEmail(email: string, password: string, nickname?: string): Promise<AuthResult> {

@@ -1,19 +1,18 @@
 /** Explicit, independently selected capabilities for API route tests. */
 
-import { createMockAuthContext } from './supabase-mock';
+import { createMockAuthContext } from './auth-mock';
 import type { TestContext } from 'node:test';
 import type { FeatureModuleState } from '../../lib/app-settings';
 
-/** Auth-only capability: callers must supply the database methods their route uses. */
+/** Auth-only capability. Unexpected database access fails through the default scoped double. */
 export function mockRouteUserContext(
     t: Pick<TestContext, 'mock'>,
-    client: Record<string, unknown>,
     userId = 'user-1',
 ) {
     /* eslint-disable @typescript-eslint/no-require-imports */
     const apiUtils = require('../../lib/api-utils') as typeof import('../../lib/api-utils');
     /* eslint-enable @typescript-eslint/no-require-imports */
-    return t.mock.method(apiUtils, 'requireUserContext', async () => createMockAuthContext(client, userId));
+    return t.mock.method(apiUtils, 'requireUserContext', async () => createMockAuthContext(userId));
 }
 
 /** Fail even when a lower-level adapter catches an unexpected fetch failure. */
@@ -43,8 +42,6 @@ export function captureConsoleErrors() {
 
 /** Standard env vars needed by most route tests. */
 export function ensureRouteTestEnv() {
-    process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
     process.env.NEWAPI_API_KEY = process.env.NEWAPI_API_KEY || 'test-key';
     process.env.NEWAPI_BASE_URL = process.env.NEWAPI_BASE_URL || 'https://newapi.example';
     process.env.MINGAI_FALLBACK_MODELS_JSON = process.env.MINGAI_FALLBACK_MODELS_JSON || JSON.stringify([

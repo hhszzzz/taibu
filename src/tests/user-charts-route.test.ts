@@ -2,9 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { createMockScopedDb } from './helpers/db-mock';
+import { createMockAuthContext } from './helpers/auth-mock';
 
-process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost';
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon';
 
 type ChartRecord = {
   id: string;
@@ -17,22 +16,13 @@ type ChartRecord = {
   created_at?: string;
 };
 
-function mockUserContext<T extends object>(user: unknown, db: T, scoped = createMockScopedDb()) {
-  void db;
-  return {
-    user,
-    accessToken: null,
-    authError: null,
-    db: scoped,
-  };
-}
-
 test('chart bundle and CRUD handlers reject an expected-user mismatch before any database call', async (t) => {
   const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
   let databaseCalls = 0;
-  t.mock.method(apiUtils, 'requireUserContext', async () => mockUserContext({ id: 'bob' }, {
-    from() { databaseCalls += 1; throw new Error('must not access the database'); },
-  }));
+  const unexpected = async () => { databaseCalls += 1; throw new Error('must not access the database'); };
+  t.mock.method(apiUtils, 'requireUserContext', async () => createMockAuthContext('bob', createMockScopedDb({
+    tx: unexpected, rpc: unexpected,
+  })));
   const bundle = await import('../app/api/user/charts/route');
   const crud = await import('../lib/api/chart-crud');
   const handlers: Array<(request: NextRequest) => Promise<Response>> = [bundle.GET, bundle.PATCH, bundle.DELETE];
@@ -147,8 +137,8 @@ test('user charts GET aggregates bazi and ziwei charts through a single user API
     settings: { default_bazi_chart_id: 'bazi-1', default_ziwei_chart_id: 'ziwei-1' },
   });
 
-  apiUtils.requireUserContext = (async () => mockUserContext(
-    { id: 'user-1' }, {}, scoped,
+  apiUtils.requireUserContext = (async () => createMockAuthContext(
+    'user-1', scoped,
   )) as unknown as typeof apiUtils.requireUserContext;
 
   t.after(() => {
@@ -174,8 +164,8 @@ test('user charts PATCH updates default chart through user_settings', async (t) 
   const originalRequireUserContext = apiUtils.requireUserContext;
   const updates: Array<Record<string, unknown>> = [];
 
-  apiUtils.requireUserContext = (async () => mockUserContext(
-    { id: 'user-1' }, {}, bundleScope({ updates, chartRow: { id: 'bazi-2' } }),
+  apiUtils.requireUserContext = (async () => createMockAuthContext(
+    'user-1', bundleScope({ updates, chartRow: { id: 'bazi-2' } }),
   )) as unknown as typeof apiUtils.requireUserContext;
 
   t.after(() => {
@@ -207,9 +197,8 @@ test('user charts DELETE removes the requested chart with user scoping', async (
   const deleted: string[] = [];
   const updates: Array<Record<string, unknown>> = [];
 
-  apiUtils.requireUserContext = (async () => mockUserContext(
-    { id: 'user-1' },
-    {},
+  apiUtils.requireUserContext = (async () => createMockAuthContext(
+    'user-1',
     bundleScope({
       settings: { default_bazi_chart_id: null, default_ziwei_chart_id: 'ziwei-9' },
       updates,

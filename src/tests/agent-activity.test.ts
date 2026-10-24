@@ -2,7 +2,7 @@ import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { NextRequest } from 'next/server';
-import { createMockAuthContext } from './helpers/supabase-mock';
+import { createMockAuthContext } from './helpers/auth-mock';
 import { createMockScopedDb } from './helpers/db-mock';
 import { GET as activityRoute } from '../app/api/agent/activity/route';
 import { getAgentActivityPollDelay, getConversationAgentMarkers, getConversationNoticeIds, parseAgentActivity, type AgentActivity } from '../lib/agent/activity';
@@ -66,7 +66,7 @@ function fixture(t: TestContext) {
         } as never),
     });
     const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
-    t.mock.method(api, 'requireUserContext', async () => createMockAuthContext({}, owner, scoped));
+    t.mock.method(api, 'requireUserContext', async () => createMockAuthContext(owner, scoped));
     return { owner, calls, rows, errors, api };
 }
 const request = () => new NextRequest('http://localhost/api/agent/activity');

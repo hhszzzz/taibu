@@ -36,18 +36,6 @@ export function toDbError(error: unknown): DbError {
   });
 }
 
-/**
- * Settle a query into the `{ data, error }` shape so call sites can branch
- * without try/catch. The result carries `DbError` instead of throwing.
- */
-export async function settle<T>(promise: Promise<T>): Promise<{ data: T | null; error: DbError | null }> {
-  try {
-    return { data: await promise, error: null };
-  } catch (error) {
-    return { data: null, error: toDbError(error) };
-  }
-}
-
 export function isUniqueViolation(error: unknown): boolean {
   return toDbError(error).code === '23505';
 }

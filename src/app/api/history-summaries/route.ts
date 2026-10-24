@@ -21,15 +21,7 @@ function toHistoryRow(value: unknown): HistoryRow | null {
     return value as HistoryRow;
 }
 
-/** HISTORY_CONFIG.summarySelect mixes scalar columns with a PostgREST embed; keep only scalars. */
-function summaryColumns(type: HistoryType): string[] {
-    return HISTORY_CONFIG[type].summarySelect
-        .split(',')
-        .map((column) => column.trim())
-        .filter((column) => column.length > 0 && !column.startsWith('conversation:'));
-}
-
-/** Restore the `conversation:conversations(source_data)` embed the summaries read model. */
+/** Load the owner-scoped conversation metadata used by history summaries. */
 async function attachConversations(db: ScopedDb, rows: HistoryRow[]): Promise<HistoryRow[]> {
     const ids = [...new Set(rows.flatMap((row) => (
         typeof row.conversation_id === 'string' ? [row.conversation_id] : []
@@ -56,7 +48,7 @@ async function loadHistoryItems(
 ) {
     const config = HISTORY_CONFIG[type];
     const result = await auth.db.tx((trx) => selectFromDynamic(trx, config.tableName)
-        .select(summaryColumns(type))
+        .select(config.summaryColumns)
         .where('user_id', '=', auth.user.id)
         .orderBy('created_at', 'desc')
         .offset(offset)

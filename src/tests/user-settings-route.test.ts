@@ -3,8 +3,6 @@ import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { createMockScopedDb } from './helpers/db-mock';
 
-process.env.SUPABASE_URL = 'http://localhost';
-process.env.SUPABASE_ANON_KEY = 'test-anon';
 
 type SettingsRow = Record<string, unknown> | null;
 

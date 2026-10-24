@@ -113,8 +113,6 @@ test('a saved birth record is rebuilt from its stored fields', async t => {
   mockChartOwnership(t);
   const store = new MemoryStore(), run = row(), id = randomUUID();
   const record = { id, gender: 'male', birth_date: '1990-01-15', birth_time: '09:00', timezone: 'Asia/Shanghai', calendar_type: 'solar' };
-  const query = { select: () => query, eq: () => query, maybeSingle: async () => ({ data: { id }, error: null }) };
-  Object.assign(store.db, { from: () => query });
   t.mock.method(require('../lib/data-sources'), 'getProvider', async () => ({ get: async () => record, formatForAI: async () => '' }));
   const tools = await createAgentTools(store, run, run.checkpoint);
   const result = await tools.find(item => item.name === 'bazi_relations')!.execute('saved', { reference: 'bazi_chart:' + id, year: 2027 });
@@ -268,8 +266,6 @@ test('bazi_wuxing 与 bazi_liunian_scan 复用八字成果，紫微与六爻的�
   const store2 = new MemoryStore(), run2 = row(), ziweiId = randomUUID(), liuyaoId = randomUUID();
   const ziweiRow = { id: ziweiId, gender: 'male', birth_date: '1990-01-15', birth_time: '09:00', timezone: 'Asia/Shanghai', calendar_type: 'solar' };
   const liuyaoRow = { id: liuyaoId, question: '财运怎么样？', hexagram_code: '101111', changed_hexagram_code: null, changed_lines: [], yongshen_targets: ['妻财'], created_at: '2026-02-10T09:30:00.000Z' };
-  const query = { select: () => query, eq: () => query, maybeSingle: async () => ({ data: { id: ziweiId }, error: null }) };
-  Object.assign(store2.db, { from: () => query });
   t.mock.method(require('../lib/data-sources'), 'getProvider', async () => ({ get: async (id: string) => id === ziweiId ? ziweiRow : liuyaoRow, formatForAI: async () => '' }));
   const tools2 = await createAgentTools(store2, run2, run2.checkpoint);
   const ziweiResult = await tools2.find(item => item.name === 'ziwei_palace')!.execute('zs', { reference: 'ziwei_chart:' + ziweiId, palace: '命宫' });

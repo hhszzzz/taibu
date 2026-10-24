@@ -1,7 +1,7 @@
 import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
-import { createMockAuthContext } from './helpers/supabase-mock';
+import { createMockAuthContext } from './helpers/auth-mock';
 import { createMockScopedDb } from './helpers/db-mock';
 
 const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
@@ -61,7 +61,7 @@ function setup(t: TestContext, options: ScopeOptions = {}) {
             return [];
         },
     });
-    const auth = createMockAuthContext({}, 'caller-1', scoped);
+    const auth = createMockAuthContext('caller-1', scoped);
     t.mock.method(apiUtils, 'requireUserContext', async () => auth);
     t.mock.method(featureGate, 'ensureFeatureRouteEnabled', async () => null);
     t.mock.method(membership, 'getEffectiveMembershipType', async () => 'plus');
@@ -131,7 +131,7 @@ test('missing request database context fails before ingest or upload writes', as
         tx: async () => { throw new Error('database unavailable'); },
         rpc: async (name, args) => { calls.push({ name, args }); return []; },
     });
-    t.mock.method(apiUtils, 'requireUserContext', async () => createMockAuthContext({}, 'caller-1', brokenScoped));
+    t.mock.method(apiUtils, 'requireUserContext', async () => createMockAuthContext('caller-1', brokenScoped));
     t.mock.method(featureGate, 'ensureFeatureRouteEnabled', async () => null);
     t.mock.method(membership, 'getEffectiveMembershipType', async () => 'plus');
     assert.equal((await ingestRoute.POST(ingestRequest())).status, 500);

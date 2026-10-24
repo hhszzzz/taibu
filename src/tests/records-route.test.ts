@@ -4,7 +4,7 @@ import { NextRequest } from 'next/server';
 import { DummyDriver, Kysely, PostgresAdapter, PostgresIntrospector, PostgresQueryCompiler, type CompiledQuery, type DatabaseConnection } from 'kysely';
 import type { DB } from '../lib/db/generated/schema';
 import type { ScopedDb, TxOptions } from '../lib/db/context.server';
-import { createMockAuthContext } from './helpers/supabase-mock';
+import { createMockAuthContext } from './helpers/auth-mock';
 
 test('records list compiles an owner-scoped any-tag filter and counts within the same snapshot', async t => {
     const statements: CompiledQuery[] = [];
@@ -34,7 +34,7 @@ test('records list compiles an owner-scoped any-tag filter and counts within the
         rpc: async () => { throw new Error('unexpected rpc'); },
     };
     const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
-    const auth = t.mock.method(api, 'requireUserContext', async () => createMockAuthContext(scoped));
+    const auth = t.mock.method(api, 'requireUserContext', async () => createMockAuthContext('user-1', scoped));
     const { GET } = require('../app/api/records/route') as typeof import('../app/api/records/route');
     const request = (query = '') => new NextRequest(`http://localhost/api/records${query}`);
     const response = await GET(request('?tag=甲&tag=乙&page=2&pageSize=2'));

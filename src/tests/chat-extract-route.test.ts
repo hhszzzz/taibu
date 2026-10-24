@@ -21,7 +21,7 @@ function fixture(t: TestContext, options: { allowed?: boolean } = {}) {
         limits.push({ identifier, endpoint });
         return { allowed: options.allowed ?? true, remaining: 0, resetAt: new Date(Date.now() + config.windowMs) };
     });
-    mockRouteUserContext(t, {}, 'reader-1');
+    mockRouteUserContext(t, 'reader-1');
     return { limits };
 }
 
@@ -70,7 +70,7 @@ test('extraction requires a signed-in user', async t => {
 test('extraction is closed while the AI module is disabled', async t => {
     blockRouteNetwork(t);
     mockAIFeatureState(t, { status: 'disabled' });
-    mockRouteUserContext(t, {});
+    mockRouteUserContext(t);
     const response = await extract(upload(new File(['x'], 'a.txt')));
     assert.equal(response.status, 403);
     assert.equal((await response.json()).code, 'FEATURE_DISABLED');

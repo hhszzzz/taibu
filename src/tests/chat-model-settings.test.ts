@@ -4,7 +4,7 @@ import { NextRequest } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { freshTaskConfiguration, parseNextTaskConfiguration, parseAgentCollaborators } from '../lib/chat/model-settings';
 import { PATCH, GET } from '../app/api/conversations/[id]/configuration/route';
-import { createMockAuthContext } from './helpers/supabase-mock';
+import { createMockAuthContext } from './helpers/auth-mock';
 
 const collaborators = ['first', 'second'].map(id => ({ id, name: id, model: id, focus: '核对盘面', reasoning: true, reasoningEffort: 'max' as const }));
 const configuration = { model: 'root', reasoning: true, reasoningEffort: 'xhigh' as const, webEnabled: false, codeMode: true, planMode: true, collaborators };
@@ -63,20 +63,20 @@ test('conversation model settings persist and read the owner-scoped reasoning an
   const id = randomUUID(), owner = randomUUID();
   const { scoped, updates, filters } = database(id, owner);
   const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
-  t.mock.method(api, 'requireUserContext', async () => createMockAuthContext({}, owner, scoped as never));
+  t.mock.method(api, 'requireUserContext', async () => createMockAuthContext(owner, scoped as never));
   const request = new NextRequest('http://localhost/api/conversations/' + id + '/configuration', { method: 'PATCH', body: JSON.stringify(configuration) });
   assert.equal((await PATCH(request, { params: Promise.resolve({ id }) })).status, 200);
   assert.deepEqual((await (await GET(request, { params: Promise.resolve({ id }) })).json()).configuration, configuration);
   assert.ok(filters.some(([key, value]) => key === 'user_id' && value === owner));
   assert.deepEqual(updates, [{ next_task_config: configuration }]);
-  t.mock.method(api, 'requireUserContext', async () => createMockAuthContext({}, randomUUID(), scoped as never));
+  t.mock.method(api, 'requireUserContext', async () => createMockAuthContext(randomUUID(), scoped as never));
   assert.equal((await GET(request, { params: Promise.resolve({ id }) })).status, 404);
 });
 
 test('invalid or unauthenticated conversation model settings never write', async t => {
   const id = randomUUID(), { scoped, updates } = database(id, randomUUID());
   const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
-  t.mock.method(api, 'requireUserContext', async () => createMockAuthContext({}, randomUUID(), scoped as never));
+  t.mock.method(api, 'requireUserContext', async () => createMockAuthContext(randomUUID(), scoped as never));
   const request = (body: unknown) => new NextRequest('http://localhost/configuration', { method: 'PATCH', body: JSON.stringify(body) });
   assert.equal((await PATCH(request({ ...configuration, collaborators: [...collaborators, ...collaborators, { ...collaborators[0], id: 'fifth' }] }), { params: Promise.resolve({ id }) })).status, 400);
   t.mock.method(api, 'requireUserContext', async () => ({ error: { message: '登录后使用', status: 401 } }));

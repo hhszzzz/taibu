@@ -42,7 +42,7 @@ const ENABLED_FLAGS = {
 };
 
 // Mounted-panel identity, close/reopen and per-user loading are behavior-owned by
-// scripts/tests/p5-browser-fixture.mjs, enforced by pnpm test:browser in verify/CI.
+// scripts/tests/browser-components.mjs, enforced by pnpm test:browser in verify/CI.
 // Unit tests below retain fast route/registry contracts and unique UI/security guards.
 
 

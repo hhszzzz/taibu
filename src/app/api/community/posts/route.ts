@@ -8,7 +8,7 @@ import { NextRequest } from 'next/server';
 import { PostCategory, PostFilters, normalizePostInput } from '@/lib/community';
 import { loadCommunityAuthorProfileMap, loadSingleCommunityAuthorProfile, toPublicPost, type CommunityPostRow } from '@/lib/community-server';
 import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
-import { systemDb } from '@/lib/db/context.server';
+import { anonDb } from '@/lib/db/context.server';
 import { escapeLike } from '@/lib/db/sql-helpers';
 import { withRetry } from '@/lib/retry';
 import { parsePagination } from '@/lib/pagination';
@@ -22,7 +22,9 @@ export async function GET(request: NextRequest) {
         const search = searchParams.get('search');
         const sortBy = searchParams.get('sortBy') as PostFilters['sortBy'] || 'latest';
 
-        const result = await withRetry(() => systemDb().tx(async (trx) => {
+        // Public list: row level security shows only published posts to anon.
+        const db = anonDb();
+        const result = await withRetry(() => db.tx(async (trx) => {
             const filtered = () => {
                 let query = trx.selectFrom('community_posts').where('is_deleted', '=', false);
                 if (category) query = query.where('category', '=', category);
@@ -41,7 +43,7 @@ export async function GET(request: NextRequest) {
         }));
 
         const authorMap = await loadCommunityAuthorProfileMap(
-            systemDb(),
+            db,
             result.rows.map((post) => post.user_id),
         );
         const safePosts = result.rows.map((post) =>

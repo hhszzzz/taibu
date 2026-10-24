@@ -1,6 +1,5 @@
 import { type NextRequest } from 'next/server';
 import { jsonError, jsonOk, requireAdminContext } from '@/lib/api-utils';
-import { systemDb } from '@/lib/db/context.server';
 
 export async function DELETE(
     request: NextRequest,
@@ -12,7 +11,7 @@ export async function DELETE(
     const { id } = await params;
 
     try {
-        await systemDb().tx((trx) => trx
+        await auth.db.tx((trx) => trx
             .updateTable('community_comments')
             .set({ is_deleted: true, updated_at: new Date().toISOString() })
             .where('id', '=', id)

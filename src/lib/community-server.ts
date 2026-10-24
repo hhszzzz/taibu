@@ -54,20 +54,18 @@ export async function loadCommunityAuthorProfileMap(
         return authorMap;
     }
 
-    let rows: Array<Pick<UserProfileRow, 'id' | 'nickname' | 'avatar_url'>>;
+    // Author rows belong to other users, which row level security hides; the
+    // definer function exposes only the display fields a post shows.
+    let rows: Array<{ user_id: string; nickname: string | null; avatar_url: string | null }>;
     try {
-        rows = await db.tx((trx) => trx
-            .selectFrom('users')
-            .select(['id', 'nickname', 'avatar_url'])
-            .where('id', 'in', ids)
-            .execute());
+        rows = await db.rpc('community_author_profiles', { p_user_ids: ids });
     } catch (error) {
         console.error('[community] failed to load author names:', error);
         return authorMap;
     }
 
     for (const row of rows) {
-        authorMap.set(row.id, normalizeCommunityAuthorProfile(row));
+        authorMap.set(row.user_id, normalizeCommunityAuthorProfile({ nickname: row.nickname, avatar_url: row.avatar_url }));
     }
 
     return authorMap;
@@ -77,13 +75,9 @@ export async function loadSingleCommunityAuthorProfile(
     db: ScopedDb,
     userId: string,
 ) {
-    let profile: Pick<UserProfileRow, 'nickname' | 'avatar_url'> | undefined;
+    let profile: { nickname: string | null; avatar_url: string | null } | undefined;
     try {
-        profile = await db.tx((trx) => trx
-            .selectFrom('users')
-            .select(['nickname', 'avatar_url'])
-            .where('id', '=', userId)
-            .executeTakeFirst());
+        profile = (await db.rpc('community_author_profiles', { p_user_ids: [userId] }))[0];
     } catch (error) {
         console.error('[community] failed to load author name:', error);
         return {

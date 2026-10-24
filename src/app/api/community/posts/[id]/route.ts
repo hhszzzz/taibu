@@ -9,7 +9,6 @@ import { NextRequest } from 'next/server';
 import { CommunityComment, normalizePostInput } from '@/lib/community';
 import { loadCommunityAuthorProfileMap, toPublicPost, type CommunityPostRow } from '@/lib/community-server';
 import { getAuthContext, jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
-import { systemDb } from '@/lib/db/context.server';
 import { withRetry } from '@/lib/retry';
 
 type CommunityCommentRow = Omit<CommunityComment, 'author_name' | 'author_avatar_url' | 'replies'> & {
@@ -27,6 +26,7 @@ export async function GET(
             return jsonError(auth.authError.message, auth.authError.status);
         }
         const { user } = auth;
+        const db = auth.db;
         const { id } = await params;
 
         let post: Record<string, unknown> | undefined;
@@ -47,20 +47,17 @@ export async function GET(
         const postRow = post;
         const postId = postRow.id as string;
 
-        // 浏览量计数器与评论读取都走系统上下文：两者都不受普通用户的写权限约束。
-        // 计数器函数在自托管 schema 中被显式封锁，失败时不能影响帖子读取。
+        // The counter is a definer function (readers have no write policy) and
+        // must never make the post unreadable when it fails.
         try {
-            await withRetry(() => systemDb().rpc(
-                'increment_community_post_view_count' as never,
-                { post_id: id } as never,
-            ));
+            await withRetry(() => db.rpc('increment_community_post_view_count', { post_id: id }));
         } catch (viewError) {
             console.error('更新浏览量失败:', viewError);
         }
 
         let commentsData: CommunityCommentRow[];
         try {
-            commentsData = await withRetry(() => systemDb().tx((trx) => trx
+            commentsData = await withRetry(() => db.tx((trx) => trx
                 .selectFrom('community_comments')
                 .selectAll()
                 .where('post_id', '=', id)
@@ -72,7 +69,7 @@ export async function GET(
             commentsData = [];
         }
 
-        const authorMap = await loadCommunityAuthorProfileMap(systemDb(), [
+        const authorMap = await loadCommunityAuthorProfileMap(db, [
             postRow.user_id as string,
             ...commentsData.map((comment) => comment.user_id),
         ]);
@@ -118,7 +115,7 @@ export async function GET(
             const voteTargetIds: string[] = [postId, ...commentIds];
             if (voteTargetIds.length > 0) {
                 try {
-                    const voteRows = await withRetry(() => systemDb().tx((trx) => trx
+                    const voteRows = await withRetry(() => db.tx((trx) => trx
                         .selectFrom('community_votes')
                         .select(['target_type', 'target_id', 'vote_type'])
                         .where('user_id', '=', currentUserId)

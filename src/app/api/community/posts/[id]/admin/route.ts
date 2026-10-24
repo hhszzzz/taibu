@@ -5,7 +5,6 @@
 
 import { NextRequest } from 'next/server';
 import { jsonError, jsonOk, requireAdminContext } from '@/lib/api-utils';
-import { systemDb } from '@/lib/db/context.server';
 import { missingFields } from '@/lib/validation';
 
 export async function PUT(
@@ -38,8 +37,8 @@ export async function PUT(
             return jsonError('无效操作', 400);
         }
 
-        // 使用系统上下文绕过 RLS
-        await systemDb().tx((trx) => trx
+        // The administrator passes the table's admin policy on its own.
+        await auth.db.tx((trx) => trx
             .updateTable('community_posts')
             .set({ ...patch, updated_at: new Date().toISOString() })
             .where('id', '=', id)

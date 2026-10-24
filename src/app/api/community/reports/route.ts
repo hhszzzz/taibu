@@ -64,12 +64,12 @@ export async function POST(request: NextRequest) {
 
         let data: unknown;
         try {
-            data = await auth.db.rpc('submit_community_report_and_notify' as never, {
+            data = await auth.db.rpc('submit_community_report_and_notify', {
                 p_target_type: targetType,
                 p_target_id: targetId,
                 p_reason: reason,
                 p_description: description || null,
-            } as never);
+            });
         } catch (error) {
             console.error('提交举报失败:', error);
             return jsonError('提交举报失败', 500);

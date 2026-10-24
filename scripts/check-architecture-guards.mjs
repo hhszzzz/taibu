@@ -106,7 +106,6 @@ mustNotMatch(
 
 mustExist('src/lib/auth.ts', 'browser auth should converge on the unified auth entrypoint');
 mustNotExist('src/lib/auth-client.ts', 'legacy browser auth client entrypoint should stay removed');
-mustNotExist('src/app/api/supabase/proxy/route.ts', 'legacy supabase proxy route should stay removed');
 mustNotExist('src/lib/data-sources/init.ts', 'data source side-effect init should stay removed');
 mustNotExist('src/lib/divination/qimen-shared.ts', 'legacy qimen shared adapter should stay removed');
 mustNotExist('src/lib/divination/liuyao-traditional.ts', 'legacy liuyao traditional adapter should stay removed');
@@ -225,22 +224,7 @@ mustMatch(
   /systemDb/u,
   'server ai-config should use the shared privileged server client',
 );
-mustNotMatch(
-  'src/lib/server/ai-config.ts',
-  /SUPABASE_SERVICE_ROLE_KEY/u,
-  'server ai-config should not reference service-role env vars directly',
-);
 
-mustNotMatch(
-  'src/lib/ai/ai-config.ts',
-  /SUPABASE_SERVICE_ROLE_KEY/u,
-  'shared ai-config should not reference service-role env vars directly',
-);
-mustNotMatch(
-  'src/lib/ai/ai-config.ts',
-  /await import\('@supabase\/supabase-js'\)/u,
-  'shared ai-config should not dynamically import supabase-js for privileged access',
-);
 
 mustMatch(
   'src/app/api/models/route.ts',
@@ -462,38 +446,11 @@ mustMatch(
   'conversation client should target the dedicated conversations API',
 );
 
-mustNotMatchInTree(
-  'src/app',
-  /supabase\s*\.\s*(from|rpc)\s*\(/m,
-  'page layer should not query Supabase directly from app routes or pages',
-  (file) => !file.includes('/api/') && /\.(ts|tsx)$/u.test(file),
-);
-mustNotMatchInTree(
-  'src/components',
-  /supabase\s*\.\s*(from|rpc)\s*\(/m,
-  'component layer should not query Supabase directly',
-  (file) => /\.(ts|tsx)$/u.test(file),
-);
 
-mustNotMatch(
-  'src/components/settings/panels/ProfilePanel.tsx',
-  /\.from\('users'\)|supabase\.storage/u,
-  'profile panel should use APIs instead of direct users/storage access',
-);
-mustNotMatch(
-  'src/app/community/[postId]/page.tsx',
-  /\.from\('user_settings'\)/u,
-  'community page should not write user_settings directly from the browser',
-);
 mustNotMatch(
   'src/app/user/notifications/page.tsx',
   /FeatureGate/u,
   'user notifications page should remain directly accessible even when entry links are hidden',
-);
-mustNotMatch(
-  'src/lib/user/membership.ts',
-  /supabase\s*\.\s*from\s*\(/m,
-  'browser membership helpers should not write tables directly',
 );
 mustNotMatch(
   'src/lib/navigation/registry.ts',
@@ -509,16 +466,6 @@ mustNotMatch(
   'src/lib/user/settings.ts',
   /DEFAULT_TOOL_ORDER\s*=\s*\[[^\]]*'monthly'/u,
   'default tool order should not list monthly as a tool entry',
-);
-mustNotMatch(
-  'src/lib/auth.ts',
-  /createBrowserClient|createClient|NEXT_PUBLIC_SUPABASE_ANON_KEY/u,
-  'browser auth adapter should stay decoupled from browser Supabase clients',
-);
-mustNotMatch(
-  'src/app/layout.tsx',
-  /__MINGAI_PUBLIC_SUPABASE__|getSupabaseUrl|getSupabaseAnonKey/u,
-  'root layout should not inject Supabase config into window state',
 );
 mustNotMatch(
   'Dockerfile',
@@ -804,9 +751,6 @@ const SYSTEM_DB_ALLOWED = [
   'src/lib/identity/',
   'src/lib/agent/',
   'src/app/api/admin/',
-  // 社区表在自托管 schema 中只有管理员可见（无 owner 策略），接口与旧版
-  // getSystemAdminClient() 行为一致地使用系统上下文。
-  'src/app/api/community/',
   'src/lib/reminders.ts',
   'src/lib/daily-briefing.server.ts',
   'src/lib/app-settings.ts',
@@ -857,9 +801,15 @@ mustNotMatchInTree(
 );
 mustNotMatchInTree(
   'src',
-  /process\.env\.(?:SUPABASE_[A-Z_]+|SELF_HOSTED)\b/u,
-  'retired Supabase/self-host environment variables must not be read',
+  /process\.env\.(?:(?:NEXT_PUBLIC_)?SUPABASE_[A-Z_]+|SELF_HOSTED)\b|__MINGAI_PUBLIC_SUPABASE__|getSupabaseUrl|getSupabaseAnonKey/u,
+  'retired Supabase/self-host configuration must not be read',
   (file) => /\.(ts|tsx|mjs)$/u.test(file) && !file.startsWith('src/tests/'),
+);
+mustNotMatchInTree(
+  'src',
+  /\bsupabase\s*\.\s*(?:from|rpc|storage)\b/u,
+  'a Supabase-style client must not return after the Kysely migration',
+  (file) => /\.(ts|tsx)$/u.test(file),
 );
 mustNotMatchInTree(
   'src',

@@ -70,11 +70,11 @@ export async function POST(request: NextRequest) {
 
         let data: unknown;
         try {
-            data = await auth.db.rpc('toggle_community_vote' as never, {
+            data = await auth.db.rpc('toggle_community_vote', {
                 p_target_type: targetType,
                 p_target_id: targetId,
                 p_vote_type: voteType,
-            } as never);
+            });
         } catch (error) {
             console.error('投票失败:', error);
             return jsonError('投票失败', 500);

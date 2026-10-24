@@ -46,6 +46,7 @@ const expectedDerivedTools = [
 /** 独立工具：不属于新的公开领域，但必须注册进 MCP 并写入文档 */
 const expectedStandaloneTools = [
   { tool: 'almanac_select', folder: 'almanac-select' },
+  { tool: 'bazi_hepan', folder: 'bazi-hepan' },
 ];
 
 test('public core domains should stay aligned across exports, docs, and MCP registry', () => {

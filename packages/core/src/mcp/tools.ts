@@ -3,6 +3,7 @@ import { almanacManifest } from './domains/almanac/tool.js';
 import { astrologyPointManifest } from './domains/astrology-point/tool.js';
 import { astrologyManifest } from './domains/astrology/tool.js';
 import { baziDayunManifest } from './domains/bazi-dayun/tool.js';
+import { baziHepanManifest } from './domains/bazi-hepan/tool.js';
 import { baziRelationsManifest } from './domains/bazi-relations/tool.js';
 import { baziWuxingManifest } from './domains/bazi-wuxing/tool.js';
 import { baziLiunianScanManifest } from './domains/bazi-liunian-scan/tool.js';
@@ -53,6 +54,7 @@ export const tools: AnyTool[] = [
   astrologyPointManifest,
   liuyaoLineManifest,
   almanacSelectManifest,
+  baziHepanManifest,
 ];
 
 export const toolByName = new Map(tools.map((tool) => [tool.definition.name, tool] as const));

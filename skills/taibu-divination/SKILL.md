@@ -57,7 +57,8 @@ echo '{"gender":"male","birthYear":1990,"birthMonth":5,"birthDay":20,"birthHour"
 | `daliuren_lessons` | 大六壬课传详查 | 在已起的六壬课上详查四课与三传：逐课列上下神的贼克生克、所乘天将、神将与遁干六亲 | [references/daliuren_lessons.md](references/daliuren_lessons.md) | [methods/daliuren.md](methods/daliuren.md) |
 | `astrology_point` | 占星单点详查 | 在西方占星命盘上详查一颗星体（含交点、莉莉丝、上升、天顶）或一个宫位：星座宫位与逆行、托勒密传统尊贵、主管宫位或宫主星落点、本命相位（标入相／出相）、流运触发或流运过境 | [references/astrology_point.md](references/astrology_point.md) | [methods/astrology.md](methods/astrology.md) |
 | `liuyao_line` | 六爻逐爻详查 | 在六爻卦盘上按爻位或角色（世、应、动爻、六亲）取爻，列纳甲、六亲、六神、世应、动静、旺衰判据、月破日破暗动与空亡、月建日辰作用、化进化退与回头生克、伏神飞伏，以及动爻对本爻的生克冲合 | [references/liuyao_line.md](references/liuyao_line.md) | [methods/liuyao.md](methods/liuyao.md) |
-| `almanac_select` | 黄历择日筛选 | 在指定区间内逐日取黄历，按事项（宜忌逐条匹配）与冲煞（生肖或地支的六冲）筛选候选日，列出干支、农历、建除、黄黑道、二十八宿、纳音、冲煞与宜忌，并给出排除统计 | [references/almanac_select.md](references/almanac_select.md) | [methods/almanac.md](methods/almanac.md) |
+| `almanac_select` | 黄历择日筛选 | 在指定区间内逐日取黄历，按事项（宜忌逐条匹配）与冲煞（一个或多个生肖、地支的六冲）筛选候选日，列出干支、农历、建除、黄黑道、二十八宿、纳音、冲煞与宜忌，并给出排除统计 | [references/almanac_select.md](references/almanac_select.md) | [methods/almanac.md](methods/almanac.md) |
+| `bazi_hepan` | 八字合盘 | 两人各排四柱，列出两盘之间的天干五合/相冲与地支六合、三合、半合、三会、六冲、刑、害、破，日主互见的十神与五行生克，日柱（日主与夫妻宫）、年柱（生肖与年命纳音）之间的关系，以及一方所缺、另一方原局有的五行 | [references/bazi_hepan.md](references/bazi_hepan.md) | [methods/bazi.md](methods/bazi.md) |
 <!-- TOOLS:END -->
 
 调用前先 `schema <tool>`，或读 `references/<tool>.md`（参数表与可复制的示例）。
@@ -71,7 +72,7 @@ echo '{"gender":"male","birthYear":1990,"birthMonth":5,"birthDay":20,"birthHour"
 <!-- METHODS:BEGIN -->
 | 方法卡 | 名称 | 适用 | 文件 |
 | --- | --- | --- | --- |
-| `bazi` | 子平八字 | 子平法论八字：月令定格，旺衰、调候、通关、病药取用，十神六亲与大运流年应期。问命局格局、性格才能、事业财运、婚姻六亲、健康或某几年运势时使用；用户点名盲派时改用 bazi-mangpai。 | [methods/bazi.md](methods/bazi.md) |
+| `bazi` | 子平八字 | 子平法论八字：月令定格，旺衰、调候、通关、病药取用，十神六亲与大运流年应期。问命局格局、性格才能、事业财运、婚姻六亲、健康、某几年运势，或两人合不合（合婚、合作、亲子）时使用；用户点名盲派时改用 bazi-mangpai。 | [methods/bazi.md](methods/bazi.md) |
 | `bazi-mangpai` | 盲派八字 | 盲派（段建业一系）论八字：宾主、体用定位，看做功方式与效率定层次，以十神、宫位、干支取象断事，岁运引动定应期；不以日主旺衰定喜忌。用户点名盲派、做功、象法，或要直断职业、婚姻、六亲事件时使用。 | [methods/bazi-mangpai.md](methods/bazi-mangpai.md) |
 | `ziwei` | 紫微斗数 | 紫微斗数论命：三合派看星曜组合、庙旺与三方四正，飞星派看生年四化与宫干飞化，大限、流年叠宫断事与时间。问性格格局、十二宫各领域、大限流年运势时使用。 | [methods/ziwei.md](methods/ziwei.md) |
 | `liuyao` | 六爻 | 六爻纳甲断卦，宗《增删卜易》《卜筮正宗》：定用神，月建日辰论旺衰，动变论生克，世应论人我，以用神之病与动静取应期。问一件具体事情的成败、得失、吉凶与时间时使用。 | [methods/liuyao.md](methods/liuyao.md) |

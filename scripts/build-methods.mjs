@@ -19,7 +19,7 @@ export const target = path.join(root, 'packages/core/src/mcp/methods.generated.t
  * Each system has a default card named after it; school cards (bazi-mangpai) share its tools; dream needs none.
  */
 export const SYSTEM_TOOLS = Object.freeze({
-  bazi: ['bazi', 'bazi_wuxing', 'bazi_dayun', 'bazi_liunian_scan', 'bazi_relations', 'bazi_pillars_resolve'],
+  bazi: ['bazi', 'bazi_wuxing', 'bazi_dayun', 'bazi_liunian_scan', 'bazi_relations', 'bazi_pillars_resolve', 'bazi_hepan'],
   ziwei: ['ziwei', 'ziwei_palace', 'ziwei_flying_star', 'ziwei_horoscope'],
   liuyao: ['liuyao', 'liuyao_line'],
   meihua: ['meihua'],

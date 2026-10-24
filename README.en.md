@@ -82,6 +82,7 @@ Modern clients automatically perform `server/discover` and supply the per-reques
 | `bazi_relations` | Bazi clash/combination drill-down for luck, year, month and day overlays on the natal pillars (natal-only relations stay in the chart) | "Which clashes and combinations does 2027 bring to my chart?" |
 | `bazi_wuxing` | Bazi five-element strength drill-down (monthly vigor and exposed month stems, roots of every stem, stem–branch and adjacent-stem cycles, missing elements; no strength verdicts) | "Is my day master rooted?" |
 | `bazi_liunian_scan` | Scan annual pillars year by year (pillar, luck period, relations to natal and luck, Tai Sui; up to 30 years) | "Scan my annual pillars from 2026 to 2035." |
+| `bazi_hepan` | Bazi compatibility of two people (relations between the two charts, how each day master sees the other, day and year pillars, year Na Yin, complementary elements; facts only, no score) | "I was born 1990-01-15 at 9 AM and she was born 1992-08-03 at 2 PM. Are we compatible?" |
 | `ziwei` | Generate a Ziwei Doushu chart (Life/Body Master stars, Small Limit, Scholar Stars, San Fang Si Zheng) | "I was born on the 8th day of the 4th lunar month in 1990, please generate my Ziwei chart." |
 | `ziwei_horoscope` | Ziwei fortune periods (decadal/small limit/yearly/monthly/daily/hourly with transit stars) | "What are my Ziwei fortune periods for 2026?" |
 | `ziwei_flying_star` | Flying star analysis (four transformations, mutagen placements, surrounded palaces) | "Analyze the flying stars of my Life Palace." |

@@ -177,6 +177,7 @@ curl -X POST https://mcp.mingai.fun/mcp \
 | `bazi_relations` | 八字岁运刑冲合害 | 岁运叠加到原局后的干支关系、岁运提示与太岁（原局之间的关系见命盘，须给出年份、流日或大运）；可按柱位、类型筛选 |
 | `bazi_wuxing` | 八字五行旺衰 | 月令旺衰与藏干透出、四干通根与无根、干支自坐、相邻天干生克、缺失五行；只列事实，不判身强身弱；可只取部分事实组 |
 | `bazi_liunian_scan` | 八字流年扫描 | 逐年干支、所在大运、与原局和大运的关系与太岁；可按柱位、类型筛选 |
+| `bazi_hepan` | 八字合盘 | 两人各排四柱，列两盘之间的干支关系、日主互见十神、日柱与年柱之间的关系、年命纳音与五行互补；只给事实，不打分 |
 | `ziwei_palace` | 紫微宫位详查 | 单宫星曜四化、三方四正、夹宫、宫干飞化与运限叠加 |
 | `liuyao_line` | 六爻逐爻详查 | 单爻纳甲、六亲、世应、旺衰、空亡、回头生克与变爻 |
 | `almanac_select` | 黄历择日筛选 | 日期区间的候选日、事项宜忌过滤与冲煞排除 |
@@ -204,10 +205,10 @@ MCP 没有「延迟提供」的工具：`tools/list` 列出服务当前提供的
 
 | 入口 | 列出的工具 |
 | --- | --- |
-| HTTP `POST /mcp`；stdio 默认（`TAIBU_MCP_TOOLS=all`） | 全部 24 个计算工具与 `load_analysis_method` |
+| HTTP `POST /mcp`；stdio 默认（`TAIBU_MCP_TOOLS=all`） | 全部 25 个计算工具与 `load_analysis_method` |
 | HTTP `POST /mcp/core`；stdio `TAIBU_MCP_TOOLS=core` | 11 个排盘工具、`load_analysis_method`、`tool_search`、`tool_call` |
 
-精简列表中其余 13 个低频工具（8 个详查与 `bazi_dayun`、`bazi_pillars_resolve`、`ziwei_horoscope`、`ziwei_flying_star`、`almanac_select`）经两步使用：`tool_search` 按中文关键词或工具名查找（如「大运」「流年扫描」「飞星四化」「择日」「宫位」「动爻」），返回各工具的完整说明与参数 schema；`tool_call` 以 `{ "name": 工具名, "arguments": 参数 }` 调用，结果（规范文本、canonical JSON、地点解析与随机种子作用域）与直接调用相同。已列出的工具不经 `tool_call`。给模型看的工具说明（名称、描述与参数 schema）约由 6.4 万字符降到 2.7 万字符。stdio 的 `TAIBU_MCP_TOOLS` 取其他值时服务拒绝启动并说明原因；HTTP 按入口决定列表，客户端请求头无法改变。
+精简列表中其余 14 个低频工具（8 个详查与 `bazi_dayun`、`bazi_pillars_resolve`、`ziwei_horoscope`、`ziwei_flying_star`、`almanac_select`、`bazi_hepan`）经两步使用：`tool_search` 按中文关键词或工具名查找（如「大运」「流年扫描」「飞星四化」「择日」「合盘」「宫位」「动爻」），返回各工具的完整说明与参数 schema；`tool_call` 以 `{ "name": 工具名, "arguments": 参数 }` 调用，结果（规范文本、canonical JSON、地点解析与随机种子作用域）与直接调用相同。已列出的工具不经 `tool_call`。给模型看的工具说明（名称、描述与参数 schema）约由 6.4 万字符降到 2.7 万字符。stdio 的 `TAIBU_MCP_TOOLS` 取其他值时服务拒绝启动并说明原因；HTTP 按入口决定列表，客户端请求头无法改变。
 
 ## 7. 地点解析
 

@@ -36,6 +36,7 @@ TaiBu 的本地 `stdio` MCP Server，适合直接接入 Claude Desktop、Cursor�
 | `bazi_relations` | 八字岁运刑冲合害详查 |
 | `bazi_wuxing` | 八字五行旺衰详查 |
 | `bazi_liunian_scan` | 八字流年扫描 |
+| `bazi_hepan` | 八字合盘 |
 | `ziwei` | 紫微斗数排盘 |
 | `ziwei_horoscope` | 紫微运限 |
 | `ziwei_flying_star` | 紫微飞星 |
@@ -78,7 +79,7 @@ MCP 没有「延迟提供」的工具：`tools/list` 一次列出全部工具，
 }
 ```
 
-`core` 只列出 11 个排盘工具与 `load_analysis_method`，另加 `tool_search`（按中文关键词查找其余 13 个低频工具，返回用途与参数 schema）和 `tool_call`（按名称调用这些工具，结果与直接调用相同）；给模型看的工具说明约减少六成。默认值 `all` 列出全部工具；其他取值会让服务启动失败并说明原因。
+`core` 只列出 11 个排盘工具与 `load_analysis_method`，另加 `tool_search`（按中文关键词查找其余 14 个低频工具，返回用途与参数 schema）和 `tool_call`（按名称调用这些工具，结果与直接调用相同）；给模型看的工具说明约减少六成。默认值 `all` 列出全部工具；其他取值会让服务启动失败并说明原因。
 
 ## 返回结构
 

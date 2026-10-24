@@ -22,7 +22,7 @@ test('every card loads its own text by id, and every Core tool loads its system 
     assert.equal(loadAnalysisMethod('bazi-mangpai').title, '盲派八字');
     assert.deepEqual(loadAnalysisMethod('bazi-mangpai').tools, loadAnalysisMethod('bazi').tools);
     assert.deepEqual(loadAnalysisMethod('dream').tools, []);
-    assert.equal(loadAnalysisMethod('bazi', '2.0.0').version, '2.0.0');
+    assert.equal(loadAnalysisMethod('bazi', '2.1.0').version, '2.1.0');
     assert.throws(() => loadAnalysisMethod('__proto__'), /分析方法或版本不存在/);
     assert.throws(() => loadAnalysisMethod('bazi', '1.0.0'), /分析方法或版本不存在/);
 });

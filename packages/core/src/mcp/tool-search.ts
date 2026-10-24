@@ -7,7 +7,7 @@ import type { ToolAnnotation, ToolDefinition } from './contract.js';
 export const DEFERRED_TOOL_NAMES: readonly string[] = [
   'bazi_relations', 'bazi_wuxing', 'bazi_liunian_scan', 'ziwei_palace', 'qimen_palace', 'daliuren_lessons',
   'astrology_point', 'liuyao_line',
-  'bazi_dayun', 'bazi_pillars_resolve', 'ziwei_horoscope', 'ziwei_flying_star', 'almanac_select',
+  'bazi_dayun', 'bazi_pillars_resolve', 'ziwei_horoscope', 'ziwei_flying_star', 'almanac_select', 'bazi_hepan',
 ];
 
 const DEFERRED = new Set(DEFERRED_TOOL_NAMES);
@@ -35,6 +35,7 @@ const KEYWORDS: Readonly<Record<string, string>> = {
   ziwei_horoscope: '紫微 紫微斗数 大限 流年 流月 流日 流时 运势 运程',
   ziwei_flying_star: '紫微 紫微斗数 飞星 四化 化禄 化权 化科 化忌 宫位 飞化',
   almanac_select: '黄历 择日 选日 吉日 宜忌 嫁娶 开业 动土 搬家 出行 日子',
+  bazi_hepan: '八字 合盘 合婚 婚配 配对 两人 双方 夫妻 姻缘 合不合 相配 属相 生肖 夫妻宫',
 };
 
 const CJK = /\p{Script=Han}+/gu;

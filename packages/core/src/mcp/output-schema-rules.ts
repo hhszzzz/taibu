@@ -39,6 +39,7 @@ export const requiredOutputSections: Record<string, string[]> = {
   taiyi: ['问卜与时空底盘', '外部时空环境', '核心物理关系', '九星阵列', '古典参考'],
   almanac: ['基础与个性化坐标', '传统黄历基调', '择日宜忌', '神煞参考'],
   almanac_select: ['查询', '候选日', '排除统计', '口径'],
+  bazi_hepan: ['双方', '日主互见', '年命纳音', '日柱之间', '年柱之间', '其余关系', '五行互补', '口径'],
   qimen: ['基本信息', '九宫盘'],
   qimen_palace: ['查询', '宫位', '天地盘', '星门神', '状态', '柱干落宫', '遁甲', '生克', '值符值使', '格局', '口径'],
   daliuren: ['基本信息', '四课', '三传', '天地盘'],
@@ -49,6 +50,7 @@ export const requiredOutputSections: Record<string, string[]> = {
 /** Cardinality and identity fields of the canonical board, independent of detail level. */
 const boardArrays: Record<string, { path: string[]; size: number; fields: string[] }[]> = {
   bazi: [{ path: ['四柱'], size: 4, fields: ['柱', '干支', '藏干'] }],
+  bazi_hepan: [{ path: ['双方'], size: 2, fields: ['称呼', '四柱', '日主', '生肖', '缺失五行'] }],
   ziwei: [{ path: ['十二宫位'], size: 12, fields: ['宫位', '干支', '主星及四化', '辅星'] }],
   liuyao: [{ path: ['六爻全盘', '爻列表'], size: 6, fields: ['爻位', '六神', '本爻'] }],
   qimen: [{ path: ['九宫盘'], size: 9, fields: ['宫名', '九星', '八门', '天盘天干', '地盘天干'] }],

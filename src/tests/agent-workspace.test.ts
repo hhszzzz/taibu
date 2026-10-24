@@ -176,6 +176,25 @@ test('family parsers read real Core and method results and reject incomplete one
   const brokenDayun = broken.output.result.大运列表.find(item => (item.流年列表?.length ?? 0) > 0)!;
   brokenDayun.流年列表![0].流年 = '二〇二七';
   assert.equal(getAgentCalculation(tool('bad', 'bazi_dayun', broken)), null, '异常流年列表回退到规范文本');
+  // 合盘两人各四柱，关系行都带柱位；缺一柱或缺柱位时整卡回退。
+  const hepan = await coreResult('bazi_hepan');
+  const pairing = getAgentCalculation(tool('pair', 'bazi_hepan', hepan));
+  assert.deepEqual(pairing?.kind === 'bazi_hepan' && pairing.data.双方.map(person => person.称呼), ['男方', '女方']);
+  type Pairing = { 双方: Array<{ 四柱: unknown[] }>; 年柱之间: Array<{ 位置?: unknown }> };
+  const damaged = (breakIt: (result: Pairing) => void) => {
+    const copy = structuredClone(hepan);
+    breakIt(copy.output.result as unknown as Pairing);
+    return getAgentCalculation(tool('bad', 'bazi_hepan', copy));
+  };
+  assert.equal(damaged(result => { result.双方[1].四柱.pop(); }), null, '少一柱整卡回退');
+  assert.equal(damaged(result => { delete result.年柱之间[0].位置; }), null, '关系行缺柱位整卡回退');
+  // 择日可同时为多人避冲；旧版把避冲写成一个字符串，按规范文本显示。
+  const avoiding = await coreResult('almanac_select', { excludeClash: ['牛', '鸡'] });
+  const selection = getAgentCalculation(tool('sel', 'almanac_select', avoiding));
+  assert.deepEqual(selection?.kind === 'almanac_select' && selection.data.查询.排除冲煞, ['丑牛（冲未）', '酉鸡（冲卯）']);
+  const legacy = structuredClone(avoiding) as unknown as { output: { result: { 查询: Record<string, unknown> } } };
+  legacy.output.result.查询.排除冲煞 = '丑牛（冲未）';
+  assert.equal(getAgentCalculation(tool('old', 'almanac_select', legacy)), null);
   const method = loadAnalysisMethod('bazi');
   const guide = getAgentMethod(tool('m', 'load_analysis_method', { output: method }))!;
   assert.deepEqual([guide.title, guide.version], ['子平八字', method.version]);

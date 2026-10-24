@@ -322,7 +322,7 @@ export function getAgentCalculation(tool: AgentToolPart): AgentCalculation | nul
     case 'almanac_select': {
       const query = record(data.查询);
       const stats = record(data.排除统计);
-      if (typeof query.起止日期 !== 'string' || typeof query.天数 !== 'number') return null;
+      if (typeof query.起止日期 !== 'string' || typeof query.天数 !== 'number' || (query.排除冲煞 !== undefined && !stringArray(query.排除冲煞))) return null;
       if (!['候选数', '犯忌', '无对应宜', '冲煞'].every(key => typeof stats[key] === 'number')) return null;
       if (!arrayRows(data.候选日, ['日期', '日干支', '冲煞']) || !(data.候选日 as unknown[]).every(row => stringArray(record(row).宜) && stringArray(record(row).忌))) return null;
       return { kind: 'almanac_select', data: data as unknown as AlmanacSelectCanonicalJSON };

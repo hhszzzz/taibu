@@ -53,13 +53,24 @@ test('an activity keeps the days that 宜 it and excludes the days that 忌 it',
 });
 
 test('excludeClash drops the days whose branch clashes the given zodiac or branch', async () => {
-  const byAnimal = await select({ ...RANGE, excludeClash: '牛' });
-  const byBranch = await select({ ...RANGE, excludeClash: '丑' });
-  assert.equal(byAnimal.查询.排除冲煞, '丑牛（冲未）');
+  const byAnimal = await select({ ...RANGE, excludeClash: ['牛'] });
+  const byBranch = await select({ ...RANGE, excludeClash: ['丑'] });
+  assert.deepEqual(byAnimal.查询.排除冲煞, ['丑牛（冲未）']);
   assert.deepEqual(byAnimal.排除统计, byBranch.排除统计);
   assert.equal(byAnimal.候选日.length + byAnimal.排除统计.冲煞, 7);
   assert.ok(byAnimal.候选日.every((item) => !item.日干支.endsWith('未')));
   assert.ok(byAnimal.排除统计.冲煞 > 0, '区间内应有未日');
+});
+
+test('several people\'s clashes are avoided together, each branch once', async () => {
+  // 2026-02-14 至 02-20 的日支依次为 未申酉戌亥子丑：属牛避未日，属兔避酉日
+  const both = await select({ ...RANGE, excludeClash: ['兔', '牛', '丑'] });
+  assert.deepEqual(both.查询.排除冲煞, ['丑牛（冲未）', '卯兔（冲酉）'], '按地支顺序，同一支只算一次');
+  assert.equal(both.排除统计.冲煞, 2);
+  assert.ok(both.候选日.every((item) => !/[未酉]$/u.test(item.日干支)));
+  const text = renderToolResult('almanac_select', await executeTool('almanac_select', { ...RANGE, excludeClash: ['牛', '兔'] })).content[0].text;
+  assert.match(text, /- 排除冲煞：丑牛（冲未）、卯兔（冲酉）/u);
+  await assert.rejects(executeTool('almanac_select', { ...RANGE, excludeClash: ['牛', '财神'] }), /excludeClash\[1\]/u);
 });
 
 test('the 92-day boundary is inclusive and anything longer is rejected', async () => {
@@ -79,7 +90,7 @@ test('boundaries and invalid inputs are rejected', async () => {
   ]) {
     await assert.rejects(executeTool('almanac_select', input), JSON.stringify(input));
   }
-  for (const extra of [{ excludeClash: '财神' }, { excludeClash: '' }, { activity: '' }, { activity: '一二三四五六七八九十一二三四五六七八九十一二三四五' }]) {
+  for (const extra of [{ excludeClash: ['财神'] }, { excludeClash: [''] }, { excludeClash: [] }, { excludeClash: '牛' }, { activity: '' }, { activity: '一二三四五六七八九十一二三四五六七八九十一二三四五' }]) {
     await assert.rejects(executeTool('almanac_select', { ...RANGE, ...extra }), JSON.stringify(extra));
   }
 });

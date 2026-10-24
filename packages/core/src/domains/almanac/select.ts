@@ -25,17 +25,25 @@ const ZHI_CHONG: Record<string, string> = {
 
 export const ALMANAC_SELECT_NOTES = [
   '宜忌取黄历条文，事项按逐条包含匹配（如「开市」可命中「开市交易」），不另立择日体系',
-  '冲煞排除按六冲推算：给出的是目标生肖或地支，排除当日地支冲其的日子，不解析冲煞文本',
+  '冲煞排除按六冲推算：给出的是目标生肖或地支（可多个，如新人双方），当日地支冲其中任何一个即排除，不解析冲煞文本',
   '逐日结果与黄历工具同源，含农历、建除、黄黑道、二十八宿与纳音',
   '候选日按日期升序；只陈列条文与统计，不评定吉凶等级，也不推算具体吉时',
 ];
 
-function resolveClashBranch(value: string): string {
+function resolveClashBranch(value: string, path: string): string {
   const text = value.trim();
   if (text in ZHI_CHONG) return text;
   const found = Object.entries(ZHI_SHENG_XIAO).find(([, animal]) => animal === text);
-  if (!found) throw new CoreInputError('excludeClash', '必须为十二生肖（如 牛）或十二地支（如 丑）之一');
+  if (!found) throw new CoreInputError(path, '必须为十二生肖（如 牛）或十二地支（如 丑）之一');
   return found[0];
+}
+
+/** 要避冲的地支，按十二地支顺序去重（生肖与地支可混写，同一支只算一次） */
+function resolveClashBranches(values: string[] | undefined): string[] {
+  if (values === undefined) return [];
+  if (!Array.isArray(values) || !values.length) throw new CoreInputError('excludeClash', '至少给出一个生肖或地支');
+  const branches = new Set(values.map((value, index) => resolveClashBranch(String(value), `excludeClash[${index}]`)));
+  return Object.keys(ZHI_SHENG_XIAO).filter((branch) => branches.has(branch));
 }
 
 function civilDates(startDate: string, endDate: string): string[] {
@@ -58,7 +66,7 @@ export async function calculateAlmanacSelection(input: AlmanacSelectInput): Prom
   const dates = civilDates(input.startDate, input.endDate);
   const activity = input.activity?.trim();
   if (input.activity !== undefined && !activity) throw new CoreInputError('activity', '事项不能为空');
-  const clashBranch = input.excludeClash === undefined ? undefined : resolveClashBranch(input.excludeClash);
+  const clashBranches = resolveClashBranches(input.excludeClash);
   const timezone = input.timezone ?? DEFAULT_DIVINATION_TIMEZONE;
 
   const candidates: AlmanacSelectDayJSON[] = [];
@@ -66,7 +74,7 @@ export async function calculateAlmanacSelection(input: AlmanacSelectInput): Prom
   for (const date of dates) {
     const day = await calculateDailyAlmanac({ date, timezone });
     const info = day.almanac;
-    if (clashBranch && ZHI_CHONG[day.dayInfo.branch] === clashBranch) {
+    if (clashBranches.includes(ZHI_CHONG[day.dayInfo.branch])) {
       excluded.冲煞 += 1;
       continue;
     }
@@ -103,7 +111,7 @@ export async function calculateAlmanacSelection(input: AlmanacSelectInput): Prom
         起止日期: `${dates[0]} 至 ${dates[dates.length - 1]}`,
         天数: dates.length,
         ...(activity ? { 事项: activity } : {}),
-        ...(clashBranch ? { 排除冲煞: `${clashBranch}${ZHI_SHENG_XIAO[clashBranch]}（冲${ZHI_CHONG[clashBranch]}）` } : {}),
+        ...(clashBranches.length ? { 排除冲煞: clashBranches.map((branch) => `${branch}${ZHI_SHENG_XIAO[branch]}（冲${ZHI_CHONG[branch]}）`) } : {}),
       },
       候选日: candidates,
       排除统计: { 候选数: candidates.length, ...excluded },

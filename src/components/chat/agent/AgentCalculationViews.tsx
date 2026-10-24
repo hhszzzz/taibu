@@ -94,7 +94,7 @@ function FlyingStars({ data }: { data: Extract<AgentCalculation, { kind: 'ziwei_
 function AlmanacCandidates({ data }: { data: Extract<AgentCalculation, { kind: 'almanac_select' }>['data'] }) {
     const query = data.查询;
     return <>
-        <p className="agent-ws-note">{query.起止日期} · {query.天数} 天{query.事项 ? ` · 事项「${query.事项}」` : ''}{query.排除冲煞 ? ` · 避冲 ${query.排除冲煞}` : ''} · 候选 {data.候选日.length} 天</p>
+        <p className="agent-ws-note">{query.起止日期} · {query.天数} 天{query.事项 ? ` · 事项「${query.事项}」` : ''}{query.排除冲煞 ? ` · 避冲 ${query.排除冲煞.join('、')}` : ''} · 候选 {data.候选日.length} 天</p>
         {data.候选日.length ? <ol className="agent-ws-list" aria-label="候选日">
             {data.候选日.map(candidate => <li key={candidate.日期}>
                 <strong>{candidate.日期} · {candidate.日干支}</strong>

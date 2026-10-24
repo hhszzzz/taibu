@@ -7,8 +7,8 @@ export interface AlmanacSelectInput {
   endDate: string;
   /** 择日事项，如 嫁娶、开市；按黄历宜忌逐条包含匹配 */
   activity?: string;
-  /** 需要避冲的生肖（如 牛）或地支（如 丑） */
-  excludeClash?: string;
+  /** 需要避冲的生肖（如 牛）或地支（如 丑），可多个（如新人双方） */
+  excludeClash?: string[];
   /** IANA 时区，决定逐日黄历的取用时刻，默认 Asia/Shanghai */
   timezone?: string;
 }
@@ -30,7 +30,7 @@ export interface AlmanacSelectDayJSON {
 }
 
 export interface AlmanacSelectSections {
-  查询: { 起止日期: string; 天数: number; 事项?: string; 排除冲煞?: string };
+  查询: { 起止日期: string; 天数: number; 事项?: string; 排除冲煞?: string[] };
   候选日: AlmanacSelectDayJSON[];
   排除统计: { 候选数: number; 犯忌: number; 无对应宜: number; 冲煞: number };
   口径: string[];

@@ -21,7 +21,7 @@ export const almanacSelectOutputSchema: OutputSchema = obj({
     起止日期: str('区间起止日期'),
     天数: num('区间天数（含首尾）'),
     事项: str('本次筛选的择日事项'),
-    排除冲煞: str('本次需要避冲的生肖或地支'),
+    排除冲煞: arr(str(), '本次需要避冲的地支与生肖（按地支顺序），各附其所冲'),
   }, '本次筛选条件'),
   候选日: arr(daySchema, '区间内命中条件的日子'),
   排除统计: obj({

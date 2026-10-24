@@ -6,9 +6,23 @@ type Executor = Kysely<DB> | Transaction<DB>;
 type ArgSpec = readonly [name: string, cast: string, optional: boolean];
 type ReturnShape = 'void' | 'scalar' | 'row' | 'setof';
 
+/**
+ * JSON arguments travel as text. `null` stays SQL NULL, as PostgREST passed
+ * it, so `IS NULL` and parameter defaults keep working; an array of JSON
+ * values becomes a PostgreSQL array of JSON texts.
+ */
+export function encodeRpcArgument(cast: string, value: unknown): unknown {
+  if (value === null) return null;
+  if (cast === 'json' || cast === 'jsonb') return JSON.stringify(value);
+  if (cast === 'json[]' || cast === 'jsonb[]') {
+    if (!Array.isArray(value)) throw new Error(`[db] ${cast} 参数必须是数组`);
+    return value.map((item) => (item === null ? null : JSON.stringify(item)));
+  }
+  return value;
+}
+
 function bindArgument(name: string, cast: string, value: unknown): RawBuilder<unknown> {
-  const base = /^(json|jsonb)(\[\])?$/.test(cast) ? JSON.stringify(value) : value;
-  return sql`${sql.ref(name)} => ${base}::${sql.raw(cast)}`;
+  return sql`${sql.ref(name)} => ${encodeRpcArgument(cast, value)}::${sql.raw(cast)}`;
 }
 
 /** Named-notation call keeps overload resolution explicit and argument order free. */

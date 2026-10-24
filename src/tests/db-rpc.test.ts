@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DummyDriver, Kysely, PostgresAdapter, PostgresIntrospector, PostgresQueryCompiler } from 'kysely';
 import type { DB } from '../lib/db/generated/schema';
-import { buildRpcStatement } from '../lib/db/rpc';
+import { buildRpcStatement, encodeRpcArgument } from '../lib/db/rpc';
 
 const compiler = new Kysely<DB>({
   dialect: {
@@ -30,6 +30,25 @@ test('RPC uses named notation with explicit PostgreSQL casts', () => {
   assert.match(compiled.sql, /"p_args" => \$7::jsonb/);
   assert.deepEqual(compiled.parameters[6], '{"a":1}');
   assert.deepEqual(compiled.parameters[7], '{"ok":true}');
+});
+
+test('a null JSON argument is SQL NULL, not the JSON value null', () => {
+  const compiled = buildRpcStatement('agent_change_command', {
+    p_run_id: '00000000-0000-4000-8000-000000000001',
+    p_sequence: 1,
+    p_revision: 1,
+    p_action: 'stop',
+    p_payload: null,
+  }).compile(compiler);
+  assert.match(compiled.sql, /"p_payload" => \$5::jsonb/);
+  assert.equal(compiled.parameters[4], null);
+});
+
+test('JSON array arguments become arrays of JSON texts', () => {
+  assert.deepEqual(encodeRpcArgument('jsonb[]', [{ a: 1 }, 'x', null]), ['{"a":1}', '"x"', null]);
+  assert.equal(encodeRpcArgument('jsonb[]', null), null);
+  assert.throws(() => encodeRpcArgument('jsonb[]', { a: 1 }), /必须是数组/u);
+  assert.equal(encodeRpcArgument('text', 'plain'), 'plain');
 });
 
 test('arguments are bound, never interpolated', () => {

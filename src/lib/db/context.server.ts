@@ -1,8 +1,9 @@
 import 'server-only';
 import { sql, type Transaction } from 'kysely';
+import pg from 'pg';
 import type { DB } from './generated/schema';
 import { rootDb } from './pool.server';
-import { toDbError } from './errors';
+import { DbError, toDbError } from './errors';
 import { executeRpc } from './rpc';
 import { systemUserId } from './system-user';
 import type { RpcArgs, RpcName, RpcResult } from './generated/rpc';
@@ -41,19 +42,33 @@ function roleAndClaims(scope: DbScope): { role: string; claims: Record<string, s
  * One round trip, inside the transaction, sets the two GUCs the existing RLS
  * policies read. `set_config(..., true)` is transaction-local, so a pooled
  * connection can never leak another request's identity.
+ *
+ * Module-private: the exported constructors below are the only way to pick a
+ * scope, which keeps the system identity behind the guarded `systemDb()`.
  */
-export function createScopedDb(scope: DbScope): ScopedDb {
+function createScopedDb(scope: DbScope): ScopedDb {
   const tx = async <T>(work: (trx: Transaction<DB>) => Promise<T>, options: TxOptions = {}): Promise<T> => {
     const { role, claims } = roleAndClaims(scope);
     const timeout = `${options.timeoutMs ?? 15_000}ms`;
+    const callback: { error?: unknown; threw: boolean } = { threw: false };
     try {
       return await rootDb().transaction().setIsolationLevel(options.isolationLevel ?? 'read committed').execute(async (trx) => {
         await sql`select set_config('role', ${role}, true),
                          set_config('request.jwt.claims', ${JSON.stringify(claims)}, true),
                          set_config('statement_timeout', ${timeout}, true)`.execute(trx);
-        return work(trx);
+        try {
+          return await work(trx);
+        } catch (error) {
+          callback.error = error;
+          callback.threw = true;
+          throw error;
+        }
       });
     } catch (error) {
+      // The callback's own errors still roll the transaction back but keep
+      // their class; database failures are normalised into DbError.
+      const own = callback.threw && callback.error === error;
+      if (own && !(error instanceof pg.DatabaseError) && !(error instanceof DbError)) throw error;
       throw toDbError(error);
     }
   };

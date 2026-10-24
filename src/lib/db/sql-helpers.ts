@@ -21,19 +21,28 @@ export function textMatches(column: string, pattern: string) {
   return sql<boolean>`${sql.ref(column)} ilike ${pattern}`;
 }
 
-/** JSON text projection with a bound key, e.g. `source_data->>'chart_id'`. */
+/** Sort key for `orderBy` that lists undated rows last, like the records page. */
+export function descNullsLast(column: string) {
+  return sql`${sql.ref(column)} desc nulls last`;
+}
+
+/** JSON text projection for one key, e.g. `source_data->>'chart_id'`. */
 export function jsonFieldText(column: string, key: string) {
   return jsonPathText(column, [key]);
 }
 
-/** JSON value projection along a bound key path, e.g. `result->'details'->'chartReference'`. */
+/**
+ * JSON value projection along a key path, e.g. `result->'details'->'chartReference'`.
+ * Keys are escaped SQL literals rather than parameters so the expression still
+ * matches expression indexes such as `(result->'details')`.
+ */
 export function jsonPath(column: string, path: readonly string[]) {
   let expression: Expression<unknown> = sql.ref(column);
   for (const key of path.slice(0, -1)) expression = sql`${expression}->${sql.lit(key)}`;
   return sql<unknown>`${expression}->${sql.lit(path.at(-1)!)}`;
 }
 
-/** JSON text projection along a bound key path, e.g. `result->'details'->>'chartReference'`. */
+/** JSON text projection along a key path (escaped literals, as in jsonPath), e.g. `result->'details'->>'chartReference'`. */
 export function jsonPathText(column: string, path: readonly string[]) {
   let expression: Expression<unknown> = sql.ref(column);
   for (const key of path.slice(0, -1)) expression = sql`${expression}->${sql.lit(key)}`;

@@ -89,12 +89,20 @@ const customTypes = {
   },
 };
 
+/** Unset or empty means the default; anything else must be a positive integer, never a zero-sized pool. */
+function poolMax(): number {
+  const raw = process.env.DB_POOL_MAX?.trim() || '10';
+  const max = Number(raw);
+  if (!Number.isSafeInteger(max) || max < 1) throw new Error(`[db] DB_POOL_MAX 必须是正整数（当前为 ${raw}）`);
+  return max;
+}
+
 export function createPool(): pg.Pool {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) throw new Error('[db] DATABASE_URL 未配置');
   return new Pool({
     connectionString,
-    max: Number(process.env.DB_POOL_MAX ?? '10'),
+    max: poolMax(),
     application_name: process.env.DB_APPLICATION_NAME ?? 'taibu',
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 5_000,

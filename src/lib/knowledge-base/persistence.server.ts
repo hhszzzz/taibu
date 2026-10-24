@@ -36,7 +36,7 @@ export function createKnowledgeBasePersistence(
     db: ScopedDb,
 ): KnowledgeSourcePersistence & KnowledgeSearchPersistence {
     return {
-        async replaceSourceEntries({ kbId, source, chunks, userId }) {
+        async replaceSourceEntries({ kbId, source, chunks }) {
             const data = await db.rpc('kb_replace_source_entries', {
                 p_kb_id: kbId,
                 p_source_type: source.sourceType,
@@ -47,7 +47,6 @@ export function createKnowledgeBasePersistence(
                     metadata: chunk.metadata,
                 })),
                 p_archive: source.archive === true,
-                p_user_id: userId || null,
             });
             return typeof data === 'number' ? data : null;
         },

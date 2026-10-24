@@ -107,7 +107,7 @@ test('every user ingest branch supplies caller-bound atomic replacement instead 
             assert.equal(calls.length, 1);
             assert.equal(calls[0].name, 'kb_replace_source_entries');
             assert.equal(calls[0].args.p_source_type, sourceType === 'record' ? 'ming_record' : sourceType);
-            assert.equal(calls[0].args.p_user_id, 'caller-1');
+            assert.equal('p_user_id' in calls[0].args, false, 'the caller scope decides the owner');
             assert.equal(calls[0].args.p_archive, true);
             assert.ok(ownerFilters.some(([column, value]) => column === 'user_id' && value === 'caller-1'));
         });
@@ -121,7 +121,7 @@ test('upload binds the same authenticated client and performs one non-archive re
     assert.deepEqual(calls, [{ name: 'kb_replace_source_entries', args: {
         p_kb_id: 'kb-1', p_source_type: 'file', p_source_id: 'fixture.txt',
         p_entries: [{ content: 'fixed text', chunk_index: 0, metadata: { file_name: 'fixture.txt', file_type: 'text/plain' } }],
-        p_archive: false, p_user_id: 'caller-1',
+        p_archive: false,
     } }]);
 });
 

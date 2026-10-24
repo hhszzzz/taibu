@@ -9,18 +9,19 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import pg from 'pg';
-import { repairConcurrentIndexes } from '../db/concurrent-indexes.mjs';
 import { setTimeout as delay } from 'node:timers/promises';
+import { normalizeSchemaDump } from '../db/normalize-schema.mjs';
 import { execute } from '../selfhost.mjs';
 
 const repoRoot = path.resolve(import.meta.dirname, '..', '..');
 const image = 'pgvector/pgvector:0.8.7-pg17-bookworm';
 const runLabel = 'io.taibu.db-baseline.run';
 const database = 'taibu_baseline';
+const reference = 'taibu_reference';
 
 function docker(args, { input = '', timeout = 60_000, env = process.env } = {}) {
   return new Promise((resolve, reject) => {
-    const child = execFile('docker', args, { encoding: 'utf8', timeout, maxBuffer: 8 * 1024 * 1024, env },
+    const child = execFile('docker', args, { encoding: 'utf8', timeout, maxBuffer: 64 * 1024 * 1024, env },
       (error, stdout, stderr) => {
         if (error) reject(new Error(`docker ${args[0]} failed: ${(stderr || error.message).trim()}`));
         else resolve(stdout.trim());
@@ -44,7 +45,7 @@ test('current SQL initializes and refreshes the native database', { timeout: 300
   const containerName = `taibu-baseline-${runId}`;
   const postgresPassword = randomBytes(32).toString('hex');
   const appPassword = randomBytes(32).toString('hex');
-  const migratorPassword = randomBytes(32).toString('hex');
+  const schemaPassword = randomBytes(32).toString('hex');
   let containerId;
 
   const cleanup = async () => {
@@ -86,29 +87,37 @@ test('current SQL initializes and refreshes the native database', { timeout: 300
     }
     assert.ok(accepting, 'PostgreSQL did not accept queries after initdb');
 
-    const sql = (statement) => docker([
+    const sql = (statement, target = database) => docker([
       'exec', '-i', containerId, 'psql', '-X', '--quiet', '--tuples-only', '--no-align',
-      '--set', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', database,
+      '--set', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', target,
     ], { input: statement });
 
-    const bootstrap = await readFile(path.join(repoRoot, 'database/bootstrap/00-roles.sql'), 'utf8');
-    await sql(`${bootstrap}
+    const bootstrapSql = await readFile(path.join(repoRoot, 'database/bootstrap/00-roles.sql'), 'utf8');
+    await sql(`${bootstrapSql}
 ALTER DATABASE ${database} SET timezone = 'UTC';
 REVOKE ALL ON DATABASE ${database} FROM PUBLIC;
 GRANT CREATE, CONNECT ON DATABASE ${database} TO taibu_owner;
-GRANT CONNECT ON DATABASE ${database} TO taibu_migrator, taibu_app, taibu_auth, taibu_backup;
+GRANT CONNECT ON DATABASE ${database} TO taibu_schema, taibu_app, taibu_auth, taibu_backup;
 ALTER ROLE taibu_app PASSWORD '${appPassword}';
-ALTER ROLE taibu_migrator PASSWORD '${migratorPassword}';`);
+ALTER ROLE taibu_schema PASSWORD '${schemaPassword}';`);
 
     const hostPort = Number((await docker(['port', containerId, '5432/tcp'])).split(':').at(-1));
+    const adminUrl = (name) => `postgres://postgres:${postgresPassword}@127.0.0.1:${hostPort}/${name}`;
     const native = new pg.Client({ host: '127.0.0.1', port: hostPort, user: 'postgres', password: postgresPassword, database });
     await native.connect();
+    const initialize = (target = database) => new Promise((resolve, reject) => execFile(process.execPath, ['scripts/db/init.mjs'], {
+      cwd: repoRoot, timeout: 180_000, maxBuffer: 4 * 1024 * 1024,
+      env: { ...process.env, SCHEMA_DATABASE_URL: `postgres://taibu_schema:${schemaPassword}@127.0.0.1:${hostPort}/${target}` },
+    }, (error, stdout, stderr) => error ? reject(new Error(stderr || error.message)) : resolve(stdout)));
+    // Structure and privileges of every managed schema, in pg_dump's canonical text.
+    const definitionsOf = async (target) => normalizeSchemaDump(await docker(['exec', containerId, 'pg_dump', '-U', 'postgres',
+      '-d', target, '--schema-only', '-n', 'public', '-n', 'identity', '-n', 'auth', '-n', 'extensions']));
     try {
       await t.test('bootstrap validates all passwords and rolls back changes if database setup fails', async () => {
         const state = async () => createHash('sha256').update(JSON.stringify((await native.query("select rolname, rolpassword, rolinherit, rolcreaterole, rolsuper, rolbypassrls from pg_authid where rolname like 'taibu_%' order by rolname")).rows)).digest('hex');
         const before = await state();
-        const environment = { ...process.env, ADMIN_DATABASE_URL: `postgres://postgres:${postgresPassword}@127.0.0.1:${hostPort}/${database}`,
-          TAIBU_MIGRATOR_PASSWORD: randomBytes(32).toString('hex'), TAIBU_APP_PASSWORD: randomBytes(32).toString('hex'),
+        const environment = { ...process.env, ADMIN_DATABASE_URL: adminUrl(database),
+          TAIBU_SCHEMA_PASSWORD: randomBytes(32).toString('hex'), TAIBU_APP_PASSWORD: randomBytes(32).toString('hex'),
           TAIBU_AUTH_PASSWORD: randomBytes(32).toString('hex'), TAIBU_BACKUP_PASSWORD: '' };
         const bootstrap = env => new Promise((resolve, reject) => execFile(process.execPath, [path.join(repoRoot, 'scripts/db/bootstrap.mjs')],
           { env, timeout: 30_000 }, (error, stdout, stderr) => error ? reject(new Error(stderr)) : resolve(stdout)));
@@ -128,8 +137,7 @@ ALTER ROLE taibu_migrator PASSWORD '${migratorPassword}';`);
         await native.query(`create database ${existing}`);
         try {
           const verify = name => execute(process.execPath, ['scripts/db/verify-restore.mjs', '--backup', backup, '--database', name,
-            '--report', path.join(directory, 'report.json')], { cwd: repoRoot, env: { ...process.env,
-              RESTORE_ADMIN_URL: `postgres://postgres:${postgresPassword}@127.0.0.1:${hostPort}/${database}` } });
+            '--report', path.join(directory, 'report.json')], { cwd: repoRoot, env: { ...process.env, RESTORE_ADMIN_URL: adminUrl(database) } });
           await assert.rejects(verify(existing), /already exists/);
           assert.equal((await native.query('select count(*)::int as n from pg_database where datname=$1', [existing])).rows[0].n, 1);
           await assert.rejects(verify(database), /temporary database named/);
@@ -142,42 +150,87 @@ ALTER ROLE taibu_migrator PASSWORD '${migratorPassword}';`);
           await rm(directory, { recursive: true, force: true });
         }
       });
-      const initialize = () => new Promise((resolve, reject) => execFile(process.execPath, ['scripts/db/init.mjs'], {
-        cwd: repoRoot, timeout: 180_000, maxBuffer: 4 * 1024 * 1024,
-        env: { ...process.env, SCHEMA_DATABASE_URL: 'postgres://taibu_migrator:' + migratorPassword + '@127.0.0.1:' + hostPort + '/' + database },
-      }, (error, stdout, stderr) => error ? reject(new Error(stderr || error.message)) : resolve(stdout)));
       await t.test('concurrent initialization is serialized without a migration ledger', async () => {
         const logs = await Promise.all([initialize(), initialize()]);
         assert.equal(logs.filter(log => log.includes('[db:init] initialized')).length, 1);
-        assert.equal(logs.filter(log => log.includes('[db:init] refreshed')).length, 1);
-        assert.equal((await native.query("select to_regclass('taibu_meta.schema_migrations') as ledger")).rows[0].ledger, null);
+        assert.equal(logs.filter(log => log.includes('[db:init] refreshed current SQL definitions (no definition changes)')).length, 1);
+        assert.equal((await native.query("select count(*)::int as n from pg_namespace where nspname = 'taibu_meta'")).rows[0].n, 0);
       });
-      await t.test('refresh preserves business rows and retires only the old ledger', async () => {
+      await t.test('a refresh with nothing to change commits no catalog change', async () => {
+        const catalog = async () => (await native.query(`select md5(string_agg(x, ',' order by x)) as hash from (
+          select oid::text || ':' || xmin::text as x from pg_class union all select oid::text || ':' || xmin::text from pg_proc
+          union all select oid::text || ':' || xmin::text from pg_policy union all select oid::text || ':' || xmin::text from pg_trigger) rows`)).rows[0].hash;
+        const before = await catalog();
+        assert.match(await initialize(), /\(no definition changes\)/);
+        assert.equal(await catalog(), before);
+      });
+      await t.test('refresh preserves business rows and converges stale, altered and missing definitions', async () => {
         await native.query("insert into identity.users(id,email,name) values ('00000000-0000-4000-8000-0000000000ef','retained@fixture.test','保留用户')");
-        await native.query("create schema taibu_meta authorization taibu_owner; create table taibu_meta.schema_migrations(version text); grant update on public.notifications to authenticated");
-        await initialize();
-        await initialize();
+        await native.query(`
+          SET ROLE taibu_owner;
+          GRANT UPDATE ON public.notifications TO authenticated;
+          GRANT SELECT ON public.users TO PUBLIC;
+          GRANT USAGE ON SCHEMA public TO PUBLIC;
+          CREATE POLICY review_stale_policy ON public.notifications FOR SELECT USING (true);
+          DROP POLICY app_settings_select_access ON public.app_settings;
+          CREATE POLICY app_settings_select_access ON public.app_settings FOR SELECT USING (true);
+          ALTER TABLE public.ming_notes DISABLE ROW LEVEL SECURITY;
+          CREATE FUNCTION public.review_stale_function() RETURNS integer LANGUAGE sql AS 'select 1';
+          GRANT EXECUTE ON FUNCTION public.review_stale_function() TO anon;
+          CREATE OR REPLACE FUNCTION public.agent_archive_entry_id(p_run_id uuid, p_call_id text) RETURNS uuid
+            LANGUAGE sql IMMUTABLE SET search_path TO 'public', 'pg_temp' AS 'SELECT gen_random_uuid()';
+          CREATE VIEW public.review_stale_view AS SELECT 1 AS one;
+          CREATE TRIGGER review_stale_trigger BEFORE UPDATE ON public.notifications FOR EACH ROW EXECUTE FUNCTION public.update_conversations_updated_at();
+          DROP TRIGGER agent_notify_event ON public.agent_run_events;
+          ALTER TABLE public.agent_runs DISABLE TRIGGER agent_notify_run;
+          DROP INDEX public.agent_events_cursor;
+          CREATE INDEX agent_events_cursor ON public.agent_run_events USING btree (sequence);
+          CREATE INDEX review_stale_index ON public.notifications USING btree (created_at);
+          RESET ROLE;
+          UPDATE pg_index SET indisvalid = false WHERE indexrelid = 'public.agent_claim_queued'::regclass;`);
+        const log = await initialize();
+        assert.match(log, /dropping functions no longer declared: public\.review_stale_function\(\)/);
+        assert.match(log, /dropping views no longer declared: public\.review_stale_view/);
+        assert.match(log, /indexes 1 created, 1 rebuilt, 1 dropped/);
         assert.equal((await native.query("select name from identity.users where email='retained@fixture.test'")).rows[0].name, '保留用户');
-        assert.equal((await native.query("select to_regclass('taibu_meta.schema_migrations') as ledger")).rows[0].ledger, null);
-        assert.equal((await native.query("select has_column_privilege('authenticated','public.notifications','title','UPDATE') as allowed")).rows[0].allowed, false);
+        await sql(`CREATE DATABASE ${reference}`);
+        await execute(process.execPath, ['scripts/db/bootstrap.mjs', '--no-passwords'], { cwd: repoRoot, env: { ...process.env, ADMIN_DATABASE_URL: adminUrl(reference) } });
+        assert.match(await initialize(reference), /\[db:init\] initialized/);
+        assert.equal(await definitionsOf(database), await definitionsOf(reference), 'a refreshed database must equal a fresh one');
+        assert.match(await initialize(), /\(no definition changes\)/);
       });
-      await t.test('incomplete existing structures fail without resetting data or access', async () => {
-        await native.query('alter table public.notifications rename column is_read to review_missing_read');
+      await t.test('table drift fails before anything changes, naming each difference', async () => {
+        const before = await definitionsOf(database);
+        await native.query(`
+          ALTER TABLE public.notifications RENAME COLUMN is_read TO review_missing_read;
+          ALTER TABLE public.notifications ALTER COLUMN title DROP NOT NULL;
+          ALTER TABLE public.notifications ADD COLUMN review_extra text;
+          ALTER TABLE public.notifications DROP CONSTRAINT notifications_pkey;
+          SET ROLE taibu_owner;
+          CREATE POLICY review_unapplied_policy ON public.notifications FOR SELECT USING (true);
+          RESET ROLE;`);
         try {
-          await assert.rejects(initialize(), /public.notifications.is_read/);
+          const failure = await initialize().then(() => null, error => error.message);
+          assert.match(failure, /public\.notifications\.is_read: column is missing/);
+          assert.match(failure, /public\.notifications\.review_missing_read: column is not declared/);
+          assert.match(failure, /public\.notifications\.title: definition is text, declared text NOT NULL/);
+          assert.match(failure, /public\.notifications\.review_extra: column is not declared/);
+          assert.match(failure, /public\.notifications: constraint notifications_pkey is missing/);
+          assert.equal((await native.query("select count(*)::int as n from pg_policy where polname = 'review_unapplied_policy'")).rows[0].n, 1,
+            'nothing is applied while tables differ');
           assert.equal((await native.query("select count(*)::int as n from identity.users where email='retained@fixture.test'")).rows[0].n, 1);
-        } finally { await native.query('alter table public.notifications rename column review_missing_read to is_read'); }
+        } finally {
+          await native.query(`
+            DROP POLICY review_unapplied_policy ON public.notifications;
+            ALTER TABLE public.notifications ADD CONSTRAINT notifications_pkey PRIMARY KEY (id);
+            ALTER TABLE public.notifications DROP COLUMN review_extra;
+            ALTER TABLE public.notifications ALTER COLUMN title SET NOT NULL;
+            ALTER TABLE public.notifications RENAME COLUMN review_missing_read TO is_read;`);
+        }
+        assert.equal(await definitionsOf(database), before);
       });
-      await t.test('failed concurrent index residue is rebuilt without dropping unrelated indexes', async () => {
-        await native.query('create table public.review_index_fixture (value integer); insert into public.review_index_fixture values (1), (1)');
-        const declaration = 'create unique index concurrently if not exists review_recovery_index on public.review_index_fixture (value)';
-        await assert.rejects(native.query(declaration), /duplicate key|unique index/);
-        assert.equal((await native.query("select indisvalid from pg_index where indexrelid='public.review_recovery_index'::regclass")).rows[0].indisvalid, false);
-        await native.query('delete from public.review_index_fixture where ctid in (select ctid from public.review_index_fixture limit 1)');
-        await repairConcurrentIndexes(native, declaration);
-        await native.query(declaration);
-        assert.equal((await native.query("select indisvalid from pg_index where indexrelid='public.review_recovery_index'::regclass")).rows[0].indisvalid, true);
-        await native.query('drop table public.review_index_fixture');
+      await t.test('retired principals are not created', async () => {
+        assert.equal((await native.query("select count(*)::int as n from pg_roles where rolname in ('service_role','taibu_migrator')")).rows[0].n, 0);
       });
     } finally { await native.end(); }
 

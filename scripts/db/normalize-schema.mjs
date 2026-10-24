@@ -17,10 +17,11 @@ export function normalizeSchemaDump(dump) {
   const blocks = [];
   let current = null;
   for (const line of lines) {
-    const header = line.match(/^-- Name: (.*?); Type: (.*?); Schema: /u);
+    const header = line.match(/^-- Name: (.*?); Type: (.*?); Schema: (.*?);/u);
     if (header) {
       if (current) blocks.push(current);
-      current = { key: `${header[2]}\u0000${header[1]}`, lines: [line] };
+      // The same object name can exist in public, identity and auth.
+      current = { key: `${header[3]}\u0000${header[2]}\u0000${header[1]}`, lines: [line] };
     } else if (current) {
       current.lines.push(line);
     }

@@ -49,10 +49,10 @@ test('validated usecase delegates plain data once and honors returned counts', a
         replaceSourceEntries: async input => { calls.push(input); return 0; },
     };
     const chunks = [chunk(), chunk(1)];
-    assert.deepEqual(await replaceKnowledgeSourceEntries(persistence, 'kb-1', chunks, { userId: 'user-1' }), {
+    assert.deepEqual(await replaceKnowledgeSourceEntries(persistence, 'kb-1', chunks), {
         entriesCreated: 0, chunks: 2,
     });
-    assert.deepEqual(calls, [{ kbId: 'kb-1', chunks, userId: 'user-1',
+    assert.deepEqual(calls, [{ kbId: 'kb-1', chunks,
         source: { sourceType: 'ming_record', sourceId: 'record-1', archive: false } }]);
 });
 
@@ -60,24 +60,24 @@ test('source replacement and archive delegate to the exact single atomic RPC', a
     const { calls, persistence } = rpcAdapter(2);
     const chunks = [chunk(), chunk(1)];
     const result = await replaceKnowledgeSourceEntries(persistence, 'kb-1', chunks, {
-        userId: 'user-1', source: { sourceType: 'ming_record', sourceId: 'record-1', archive: true },
+        source: { sourceType: 'ming_record', sourceId: 'record-1', archive: true },
     });
     assert.deepEqual(result, { entriesCreated: 2, chunks: 2 });
     assert.deepEqual(calls, [{ name: 'kb_replace_source_entries', args: {
         p_kb_id: 'kb-1', p_source_type: 'ming_record', p_source_id: 'record-1',
         p_entries: chunks.map(c => ({ content: c.content, chunk_index: c.chunkIndex, metadata: c.metadata })),
-        p_archive: true, p_user_id: 'user-1',
+        p_archive: true,
     } }]);
 });
 
-test('empty replacement can atomically clear/archive a known source and preserve null user default', async () => {
+test('empty replacement can atomically clear/archive a known source', async () => {
     const { calls, persistence } = rpcAdapter(null);
     assert.deepEqual(await replaceKnowledgeSourceEntries(persistence, 'kb-1', [], {
         source: { sourceType: 'chat_message', sourceId: 'message-1', archive: true },
     }), { entriesCreated: 0, chunks: 0 });
     assert.deepEqual(calls[0].args, {
         p_kb_id: 'kb-1', p_source_type: 'chat_message', p_source_id: 'message-1',
-        p_entries: [], p_archive: true, p_user_id: null,
+        p_entries: [], p_archive: true,
     });
 });
 
@@ -110,11 +110,14 @@ test('search adapter preserves exact RPC args, raw-score defaults, metadata and 
     await assert.rejects(failure.persistence.searchVector([1], undefined, 20, 1));
 });
 
-test('user write facade retains caller authentication and never trusts an overridden userId', async () => {
+test('user write facade writes only through a caller scope and never names an owner itself', async () => {
     const ingestModule = require('../lib/knowledge-base/ingest') as typeof import('../lib/knowledge-base/ingest');
     const { calls, scoped } = rpcAdapter(1);
-    await ingestModule.upsertEntries('kb-1', [chunk()], scoped, { userId: 'forged-user' });
-    assert.equal(calls[0].args.p_user_id, 'user-1');
+    await ingestModule.upsertEntries('kb-1', [chunk()], scoped);
+    assert.equal(calls.length, 1);
+    assert.equal('p_user_id' in calls[0].args, false, 'the database identity decides the owner');
+    const system = createMockScopedDb({ scope: { kind: 'system' }, rpc: async (name, args) => { calls.push({ name, args }); return 1; } });
+    await assert.rejects(ingestModule.upsertEntries('kb-1', [chunk()], system), /Not authenticated/);
     assert.equal(calls.length, 1);
 });
 

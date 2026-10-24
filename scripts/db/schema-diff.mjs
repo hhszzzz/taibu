@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Compares the public schema of two databases after normalising pg_dump output.
+// Compares the application schemas (public, identity, auth, extensions) of two
+// databases after normalising pg_dump output, including owners and privileges.
 //
 // Usage:
 //   node scripts/db/schema-diff.mjs --a <dsn> --b <dsn> [--out tmp/schema.diff]
@@ -40,9 +41,7 @@ function dumpSchema(dsn) {
   return new Promise((resolve, reject) => {
     const child = spawn(PG_DUMP_BIN, [
       '--schema-only',
-      '--schema=public',
-      '--no-owner',
-      '--no-privileges',
+      '--schema=public', '--schema=identity', '--schema=auth', '--schema=extensions',
       '--no-comments',
     ], { env: libpqEnvironment(dsn), stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';

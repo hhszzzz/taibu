@@ -9,24 +9,59 @@ import { defaultReportPath } from '../db/report-path.mjs';
 import { fileURLToPath } from 'node:url';
 
 import { normalizeSchemaDump } from '../db/normalize-schema.mjs';
-import { repairConcurrentIndexes } from '../db/concurrent-indexes.mjs';
 import { execute } from '../selfhost.mjs';
 import { libpqEnvironment } from '../db/connection-env.mjs';
-import { declaredTables } from '../db/current-sql.mjs';
+import { DATABASE_SQL_FILES, parseDatabaseSql } from '../db/current-sql.mjs';
+import { normalizeStatement, splitStatements } from '../db/sql-text.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (relative) => readFileSync(path.join(root, relative), 'utf8');
 
+const currentSql = () => Object.fromEntries(DATABASE_SQL_FILES.map(name => [name, read(`database/${name}.sql`)]));
+
 test('current SQL includes native identities and explicit access boundaries', () => {
-  const schema = read('database/schema.sql');
-  const tables = declaredTables(schema);
-  assert.equal(tables.length, 57);
-  assert.ok(tables.find(table => table.name === 'identity.users').columns.includes('email'));
-  assert.ok(tables.find(table => table.name === 'public.notifications').columns.includes('is_read'));
-  assert.deepEqual(tables.find(table => table.name === 'public.agent_workers').columns, ['id', 'heartbeat_at', 'engine']);
-  assert.ok(!tables.find(table => table.name === 'public.agent_runs').columns.includes('call_id'));
-  assert.doesNotMatch(schema, /CREATE TABLE taibu_meta\.schema_migrations/);
-  assert.match(read('database/access.sql'), /GRANT UPDATE\(is_read\) ON TABLE public\.notifications TO authenticated/);
+  const definitions = parseDatabaseSql(currentSql());
+  const columns = name => definitions.tables.find(table => table.name === name).columns.map(column => column.name);
+  assert.equal(definitions.tables.length, 57);
+  assert.ok(columns('identity.users').includes('email'));
+  assert.ok(columns('public.notifications').includes('is_read'));
+  assert.deepEqual(columns('public.agent_workers'), ['id', 'heartbeat_at', 'engine']);
+  assert.ok(!columns('public.agent_runs').includes('call_id'));
+  assert.deepEqual(definitions.tables.find(table => table.name === 'public.agent_runs').columns
+    .find(column => column.name === 'status'), { name: 'status', definition: "text DEFAULT 'queued'::text NOT NULL", compression: null, identity: null });
+  assert.ok(definitions.grants.some(grant => grant.canonical === 'GRANT UPDATE(is_read) ON TABLE public.notifications TO authenticated'));
+  assert.equal(new Set(definitions.rowSecurity).size, definitions.tables.filter(table => table.name.startsWith('public.')).length,
+    'every public table declares row level security');
+  for (const name of DATABASE_SQL_FILES) assert.doesNotMatch(read(`database/${name}.sql`), /service_role|taibu_migrator|schema_migrations/u, name);
+});
+
+test('statements split outside comments, quoted text and dollar-quoted bodies', () => {
+  const sql = [
+    "-- header; not a statement",
+    "CREATE FUNCTION a() RETURNS text AS $body$ SELECT 'x;y' ; $body$ LANGUAGE sql;",
+    "/* outer /* nested; */ still comment; */ SELECT E'it\\'s;', \"weird;name\", $1;",
+    "SELECT 'it''s'; ",
+  ].join('\n');
+  assert.deepEqual(splitStatements(sql).map(normalizeStatement), [
+    "CREATE FUNCTION a() RETURNS text AS $body$ SELECT 'x;y' ; $body$ LANGUAGE sql",
+    "SELECT E'it\\'s;', \"weird;name\", $1",
+    "SELECT 'it''s'",
+  ]);
+  assert.throws(() => splitStatements('SELECT 1'), /without a semicolon/);
+  assert.throws(() => splitStatements("SELECT 'open;"), /unterminated/);
+  assert.equal(normalizeStatement("SELECT  'a    b'\n  FROM\tt -- tail\n;"), "SELECT 'a    b' FROM t");
+});
+
+test('db:init refuses SQL it cannot reconcile instead of ignoring it', () => {
+  const sql = currentSql();
+  const parse = (file, text) => () => parseDatabaseSql({ ...sql, [file]: `${sql[file]}\n${text}\n` });
+  assert.throws(parse('access', 'REVOKE ALL ON TABLE public.users FROM anon;'), /database\/access\.sql: unsupported statement/);
+  assert.throws(parse('access', 'DROP POLICY IF EXISTS x ON public.users;'), /unsupported statement/);
+  assert.throws(parse('functions', "SET default_tablespace = '';"), /database\/functions\.sql: unsupported statement/);
+  assert.throws(parse('triggers', 'DROP TRIGGER IF EXISTS x ON public.users;'), /unsupported statement/);
+  assert.throws(parse('schema', 'CREATE INDEX x ON public.users (id);'), /database\/schema\.sql: unsupported statement/);
+  assert.throws(parse('indexes', 'CREATE INDEX x ON public.users (id);'), /unsupported statement/);
+  assert.throws(parse('access', sql.access.match(/^CREATE POLICY .*;$/mu)[0]), /duplicate policy declaration/);
 });
 
 test('schema normalisation ignores dump order and session boilerplate', () => {
@@ -47,18 +82,6 @@ test('schema normalisation ignores dump order and session boilerplate', () => {
   assert.equal(normalizeSchemaDump(a), normalizeSchemaDump(b));
   assert.equal(normalizeSchemaDump(a), normalizeSchemaDump(a));
   assert.ok(normalizeSchemaDump(a).indexOf('alpha') < normalizeSchemaDump(a).indexOf('beta'));
-});
-
-test('index recovery only drops invalid indexes declared by current SQL', async () => {
-  const calls = [];
-  await repairConcurrentIndexes({ query: async (sql, args) => {
-    calls.push({ sql, args });
-    return { rows: args ? [{ qualified_name: 'public.agent_claim_queued' }] : [] };
-  } }, 'create index concurrently if not exists agent_claim_queued on public.agent_runs (created_at);');
-  assert.deepEqual(calls[0].args, [['public.agent_claim_queued']]);
-  assert.match(calls[0].sql, /not i.indisvalid or not i.indisready/u);
-  assert.equal(calls[1].sql, 'DROP INDEX CONCURRENTLY IF EXISTS public.agent_claim_queued');
-  assert.equal(calls.length, 2);
 });
 
 test('selfhost subprocesses receive all binary restore bytes through stdin', async () => {
@@ -85,7 +108,7 @@ test('offsite backups run after a missed minute, retry failures, and run once pe
   const script = (name, text) => { const file = path.join(directory, name); writeFileSync(file, text, { mode: 0o700 }); return file; };
   try {
     const backup = script('backup.sh', '#!/bin/sh\necho "$1" >> "$TEST_DIR/calls"\nif [ "$1" = offsite ] && [ ! -f "$TEST_DIR/failed" ]; then touch "$TEST_DIR/failed"; exit 1; fi\n');
-    script('date', '#!/bin/sh\nn=$(cat "$TEST_DIR/tick" 2>/dev/null || echo 0)\ncase "$1" in +%F) if [ "$n" -ge 4 ]; then echo 2026-10-24; else echo 2026-10-23; fi;; +%H) case "$n" in 0) echo 02;; 1) echo 03;; 2) echo 04;; 3) echo 05;; *) echo 03;; esac;; esac\n');
+    script('date', '#!/bin/sh\nn=$(cat "$TEST_DIR/tick" 2>/dev/null || echo 0)\ncase "$1" in +%F) if [ "$n" -ge 4 ]; then echo 2026-10-24; else echo 2026-10-23; fi;; +%H) case "$n" in 0) echo 02;; 1) echo 03;; 2) echo 04;; 3) echo 05;; *) echo 03;; esac;; +%s) echo $((n * 1000));; esac\n');
     script('sleep', '#!/bin/sh\nn=$(cat "$TEST_DIR/tick" 2>/dev/null || echo 0)\nn=$((n+1)); echo "$n" > "$TEST_DIR/tick"\n[ "$n" -lt 5 ] || exit 9\n');
     const entry = script('entry.sh', read('deploy/backup/entrypoint.sh').replaceAll('/usr/local/bin/backup.sh', backup));
     await assert.rejects(execute('sh', [entry], { env: { ...process.env, TEST_DIR: directory, PATH: `${directory}:${process.env.PATH}` } }));

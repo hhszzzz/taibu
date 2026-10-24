@@ -20,7 +20,7 @@ const databaseName = process.env.TAIBU_DB_NAME || decodeURIComponent(url.pathnam
 const noPasswords = process.argv.includes('--no-passwords');
 
 const ROLE_PASSWORDS = [
-  ['taibu_migrator', 'TAIBU_MIGRATOR_PASSWORD'],
+  ['taibu_schema', 'TAIBU_SCHEMA_PASSWORD'],
   ['taibu_app', 'TAIBU_APP_PASSWORD'],
   ['taibu_auth', 'TAIBU_AUTH_PASSWORD'],
   ['taibu_backup', 'TAIBU_BACKUP_PASSWORD'],
@@ -52,7 +52,7 @@ try {
   // taibu_owner creates schemas inside the database; everything else only connects.
   await client.query(`GRANT CREATE, CONNECT ON DATABASE ${database} TO taibu_owner`);
   await client.query(
-    `GRANT CONNECT ON DATABASE ${database} TO taibu_migrator, taibu_app, taibu_auth, taibu_backup`,
+    `GRANT CONNECT ON DATABASE ${database} TO taibu_schema, taibu_app, taibu_auth, taibu_backup`,
   );
 
   if (!noPasswords) {

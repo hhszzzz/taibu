@@ -5,9 +5,13 @@
 //   node scripts/db/verify-restore.mjs --backup /backups/taibu-....dump \
 //     --admin-dsn postgres://.../postgres
 //
+// The restored catalog is compared with this release's database/*.sql, so a
+// backup that lost policies, triggers, views, indexes or row level security
+// fails instead of passing on row counts alone. A backup taken by an older
+// release can legitimately differ: pass --no-schema to skip that check.
 // If --compare points at the live database, row counts of every public and
 // identity table must match as well. The temporary database is dropped unless
-// --keep is passed. Owner/ACL restoration is excluded from this data/structure drill.
+// --keep is passed. Owner/ACL restoration is excluded from this drill.
 // A failed check exits with code 1.
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -17,6 +21,12 @@ import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { defaultReportPath } from './report-path.mjs';
 import { libpqEnvironment } from './connection-env.mjs';
+import { readDatabaseDefinitions } from './current-sql.mjs';
+import {
+  compareTables, describeIndexes, describePolicies, describeRoutines, describeRowSecurity, describeTables,
+  describeTriggers, describeViews,
+} from './catalog.mjs';
+import { QUALIFIED, qualifiedName } from './sql-text.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const PG_RESTORE_BIN = process.env.PG_RESTORE_BIN || 'pg_restore';
@@ -33,6 +43,7 @@ const compareDsn = value('--compare', process.env.RESTORE_COMPARE_URL);
 const database = value('--database', `taibu_restore_${randomUUID().replaceAll('-', '')}`);
 const reportPath = path.resolve(value('--report', defaultReportPath(root, 'restore')));
 const keep = has('--keep');
+const checkSchema = !has('--no-schema');
 
 if (!value('--backup', '') || !existsSync(backupPath)) {
   console.error('[restore-check] --backup <file.dump> is required and must exist');
@@ -112,6 +123,40 @@ async function tableCounts(dsn) {
   });
 }
 
+/** Objects the release declares, compared with what the restore actually produced. */
+async function schemaDrift(dsn, definitions) {
+  return withClient(dsn, async (client) => {
+    // Canonical forms are produced with an empty search_path, as db:init does.
+    await client.query("SET search_path = ''");
+    const problems = compareTables(definitions.tables, await describeTables(client));
+    const sets = [
+      ['policy', item => `${item.table} ${item.name}`, definitions.policies, await describePolicies(client)],
+      ['trigger', item => `${item.table} ${item.name}`, definitions.triggers, await describeTriggers(client)],
+      ['view', item => item.name, definitions.views, await describeViews(client)],
+      ['index', item => item.name, definitions.indexes, await describeIndexes(client)],
+    ];
+    for (const [kind, key, declared, live] of sets) {
+      const remaining = new Map(live.map((item) => [key(item), item]));
+      for (const item of declared) {
+        const existing = remaining.get(key(item));
+        if (!existing) problems.push(`${kind} ${key(item)} is missing`);
+        else if (existing.canonical !== item.canonical) problems.push(`${kind} ${key(item)} differs from database/${kind}s.sql`);
+        remaining.delete(key(item));
+      }
+      for (const name of remaining.keys()) problems.push(`${kind} ${name} is not declared`);
+    }
+    const routines = new Map((await describeRoutines(client)).map((routine) => [routine.name, routine]));
+    const declaredFunctions = new Set(definitions.functions.map((statement) =>
+      qualifiedName(new RegExp(`^CREATE OR REPLACE FUNCTION (${QUALIFIED})\\s*\\(`, 'u').exec(statement.canonical)[1])));
+    for (const name of declaredFunctions) if (!routines.has(name)) problems.push(`function ${name} is missing`);
+    for (const routine of routines.keys()) if (!declaredFunctions.has(routine)) problems.push(`function ${routine} is not declared`);
+    const rowSecurity = await describeRowSecurity(client);
+    for (const table of definitions.rowSecurity) if (!rowSecurity.has(table)) problems.push(`${table}: row level security is off`);
+    for (const table of rowSecurity) if (!definitions.rowSecurity.includes(table)) problems.push(`${table}: row level security is on but not declared`);
+    return problems;
+  });
+}
+
 async function orphanCheck(dsn) {
   return withClient(dsn, async (client) => {
     const { rows: definitions } = await client.query(`
@@ -185,6 +230,13 @@ async function main() {
       counts['public.users'] === counts['identity.users'],
       { identity: counts['identity.users'], profile: counts['public.users'] });
     check('core tables restored', Object.keys(counts).length >= 40, { tables: Object.keys(counts).length });
+
+    if (checkSchema) {
+      const schemaAt = Date.now();
+      const drift = await schemaDrift(restoredUrl, await readDatabaseDefinitions(root));
+      check('restored definitions match database/*.sql', drift.length === 0, drift.slice(0, 10));
+      report.steps.push({ name: 'schema comparison', durationMs: Date.now() - schemaAt });
+    }
 
     const orphans = await orphanCheck(restoredUrl);
     check('no orphaned foreign keys', orphans.failures.length === 0, {

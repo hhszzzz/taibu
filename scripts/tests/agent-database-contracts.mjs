@@ -307,8 +307,10 @@ export async function agentDatabaseContracts(
     await finish(await claim(), 'completed', { ...assistant(historical.id), content: '历史答复保留' });
     await asOwner(`UPDATE public.agent_runs SET checkpoint=${json({ ...checkpoint, durable: { engine: 'pi-durable/1.1.0' } })} WHERE id=${quote(historical.id)};`);
     const current = await create(await createConversation(), { charge: false });
-    const definitions = await readFile(new URL('../../database/functions.sql', import.meta.url), 'utf8');
-    await asOwner(definitions);
+    // seed.sql settles retired-engine runs as the system principal it seeds;
+    // the principal is removed again so later contracts keep their own admins.
+    const seed = await readFile(new URL('../../database/seed.sql', import.meta.url), 'utf8');
+    await asOwner(seed);
     for (const { run, artifact } of active) {
       const ended = await get(run.id);
       assert.ok(['failed', 'cancelled'].includes(ended.status));
@@ -325,9 +327,10 @@ export async function agentDatabaseContracts(
     assert.equal(await balance(), before - 1, 'only the old partial answer stays charged');
     assert.equal((await get(historical.id)).public_message.content, '历史答复保留');
     assert.equal((await get(current.id)).status, 'queued');
-    await asOwner(definitions);
+    await asOwner(seed);
     assert.equal(await balance(), before - 1);
     for (const { run } of active) assert.equal(await asOwner(`SELECT count(*) FROM public.agent_run_events WHERE run_id=${quote(run.id)} AND type IN ('failed','cancelled');`), '1');
+    // seed.sql keeps the system principal it created; later contracts use their own administrators.
     await finish(await claim(), 'failed');
   });
 

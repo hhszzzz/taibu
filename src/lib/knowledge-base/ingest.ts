@@ -99,9 +99,8 @@ export function normalizeKnowledgeBaseSourceType(sourceType: DataSourceTypeInput
     return canonicalizeDataSourceType(sourceType);
 }
 
-function requireScopedUserId(db: ScopedDb): string {
+function requireUserScope(db: ScopedDb): void {
     if (db.scope.kind !== 'user') throw new Error('Not authenticated');
-    return db.scope.userId;
 }
 
 function isInfraMissing(error: unknown): boolean {
@@ -166,7 +165,6 @@ export async function ingestConversationAsService(
 
     return await upsertEntriesAsService(kbId, chunks, db, {
         persistence: options?.persistence,
-        userId,
         source: {
             sourceType: 'conversation',
             sourceId: conversationId,
@@ -277,7 +275,6 @@ export async function ingestChatMessageAsService(
 
     return await upsertEntriesAsService(kbId, chunks, db, {
         persistence: options?.persistence,
-        userId,
         source: {
             sourceType: 'chat_message',
             sourceId: messageId,
@@ -325,7 +322,6 @@ export async function ingestRecordAsService(
 
     return await upsertEntriesAsService(kbId, chunks, db, {
         persistence: options?.persistence,
-        userId,
         source: {
             sourceType: MING_RECORD_SOURCE_TYPE,
             sourceId: recordId,
@@ -336,7 +332,6 @@ export async function ingestRecordAsService(
 export async function ingestFileAsService(
     kbId: string,
     file: { name: string; type: string | null; content: string },
-    userId: string,
     db: ScopedDb,
     options?: IngestOptions
 ): Promise<IngestResult> {
@@ -363,7 +358,6 @@ export async function ingestFileAsService(
 
     return await upsertEntriesAsService(kbId, chunks, db, {
         persistence: options?.persistence,
-        userId,
         source: {
             sourceType: 'file',
             sourceId: file.name,
@@ -397,7 +391,6 @@ export async function ingestDataSourceAsService(
 
     return await upsertEntriesAsService(kbId, chunks, db, {
         persistence: options?.persistence,
-        userId,
         source: {
             sourceType: ref.type,
             sourceId: ref.id,
@@ -449,17 +442,15 @@ function formatMessagePair(pair: { user: ChatMessage; assistant: ChatMessage }):
     return [`用户：${pair.user.content}`, `AI：${pair.assistant.content}`].join('\n\n');
 }
 
+/** Writes as the caller: the database identity, never an argument, decides the owner. */
 export async function upsertEntries(
     kbId: string,
     chunks: ChunkData[],
     db: ScopedDb,
-    options?: Omit<UpsertEntriesOptions, 'userId'> & { userId?: string },
+    options?: UpsertEntriesOptions,
 ): Promise<IngestResult> {
-    const userId = requireScopedUserId(db);
-    return replaceKnowledgeSourceEntries(createKnowledgeBasePersistence(db), kbId, chunks, {
-        ...options,
-        userId,
-    });
+    requireUserScope(db);
+    return replaceKnowledgeSourceEntries(createKnowledgeBasePersistence(db), kbId, chunks, options);
 }
 export async function upsertEntriesAsService(
     kbId: string,
@@ -467,7 +458,7 @@ export async function upsertEntriesAsService(
     db: ScopedDb,
     options?: UpsertEntriesOptions & Pick<IngestOptions, 'persistence'>,
 ): Promise<IngestResult> {
-    return replaceKnowledgeSourceEntries(createKnowledgeBasePersistence(db), kbId, chunks, options);
+    return replaceKnowledgeSourceEntries(options?.persistence ?? createKnowledgeBasePersistence(db), kbId, chunks, options);
 }
 
 export async function backfillVectorsAsService(

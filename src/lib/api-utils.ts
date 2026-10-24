@@ -55,11 +55,13 @@ export async function getAuthContext(request: NextRequest): Promise<AuthContextR
         const user = toAppUser(authState.user);
         return { db: userDb(user.id), user, authError: null };
     } catch (error) {
+        // A thrown session lookup means the identity store is unreachable, not
+        // that the cookie is bad; a 401 would make the client drop its session.
         console.error('[api-utils] session resolution failed:', error);
         return {
             db: anonDb(),
             user: null,
-            authError: { message: '登录状态解析失败，请重新登录', status: 401, code: 'SESSION_RESOLUTION_FAILED' },
+            authError: { message: '登录服务暂时不可用，请稍后重试', status: 503, code: 'SESSION_RESOLUTION_UNAVAILABLE' },
         };
     }
 }
@@ -112,18 +114,8 @@ export async function requireAdminUser(
         userContext?: Awaited<ReturnType<typeof requireUserContext>>;
     } = {},
 ): Promise<{ user: AppUser } | { error: { message: string; status: number } }> {
-    const resolvedAuthResult = dependencies.userContext ?? await requireUserContext(request);
-    if ('error' in resolvedAuthResult) return resolvedAuthResult;
-
-    const adminCheck = await checkIsAdmin(resolvedAuthResult.db, resolvedAuthResult.user.id);
-    if (!adminCheck.ok) {
-        return { error: adminCheck.error };
-    }
-    if (!adminCheck.isAdmin) {
-        return { error: { message: '无权限操作', status: 403 } };
-    }
-
-    return { user: resolvedAuthResult.user };
+    const resolved = await requireAdminContext(request, dependencies);
+    return 'error' in resolved ? resolved : { user: resolved.user };
 }
 
 export async function requireAdminContext(
@@ -199,27 +191,39 @@ export async function readRequestBytes(request: Request, maxBytes: number): Prom
     return { bytes: Buffer.concat(chunks) };
 }
 
-/** Reads a multipart file while bounding both the payload and multipart envelope. */
-export async function readUploadedFile(
+/** Parses a multipart body without ever buffering more than `maxBytes`. */
+export async function readMultipartForm(
     request: Request,
     maxBytes: number
-): Promise<{ file: File } | { error: { message: string; status: number } }> {
+): Promise<{ form: FormData } | { error: { message: string; status: number } }> {
     const tooLarge = { error: { message: `文件不能超过 ${Math.floor(maxBytes / 1024 / 1024)}MB`, status: 413 } };
     const invalid = { error: { message: '文件请求无效', status: 400 } };
     if (!request.body) return { error: { message: '请选择文件', status: 400 } };
     const input = await readRequestBytes(request, maxBytes + UPLOAD_ENVELOPE_BYTES);
     if ('error' in input) return input.error.status === 413 ? tooLarge : invalid;
-    let form: FormData;
     try {
-        form = await new Response(new Uint8Array(input.bytes), {
-            headers: { 'Content-Type': request.headers.get('content-type') ?? '' },
-        }).formData();
+        return {
+            form: await new Response(new Uint8Array(input.bytes), {
+                headers: { 'Content-Type': request.headers.get('content-type') ?? '' },
+            }).formData(),
+        };
     } catch {
         return invalid;
     }
-    const file = form.get('file');
+}
+
+/** Reads a multipart file while bounding both the payload and multipart envelope. */
+export async function readUploadedFile(
+    request: Request,
+    maxBytes: number
+): Promise<{ file: File } | { error: { message: string; status: number } }> {
+    const parsed = await readMultipartForm(request, maxBytes);
+    if ('error' in parsed) return parsed;
+    const file = parsed.form.get('file');
     if (!(file instanceof File)) return { error: { message: '请选择文件', status: 400 } };
     if (!file.size) return { error: { message: '文件为空', status: 400 } };
-    if (file.size > maxBytes) return tooLarge;
+    if (file.size > maxBytes) {
+        return { error: { message: `文件不能超过 ${Math.floor(maxBytes / 1024 / 1024)}MB`, status: 413 } };
+    }
     return { file };
 }

@@ -1,12 +1,5 @@
--- Current definitions. Safe to apply repeatedly; no migration history.
--- Maintained directly as PostgreSQL SQL.
-
-CREATE OR REPLACE FUNCTION auth.role() RETURNS text
-    LANGUAGE sql STABLE
-    SET search_path TO 'pg_catalog'
-    AS $$
-  SELECT COALESCE(NULLIF(current_setting('request.jwt.claims', true), '')::jsonb->>'role', '')
-$$;
+-- Functions and views, maintained directly as PostgreSQL SQL. scripts/db/init.mjs
+-- replaces them in place and drops any function or view no longer declared here.
 
 CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid
     LANGUAGE sql STABLE
@@ -48,10 +41,8 @@ DECLARE
     v_now timestamptz := now();
 BEGIN
 
-IF auth.role() <> 'service_role' THEN
-    IF NOT public.is_admin_user() THEN
-        RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
-    END IF;
+IF NOT public.is_admin_user() THEN
+    RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
 END IF;
 
 
@@ -657,10 +648,6 @@ CREATE OR REPLACE FUNCTION public.agent_archive_entry_id(p_run_id uuid, p_call_i
 $$;
 
 
-SET default_tablespace = '';
-
-SET default_table_access_method = heap;
-
 CREATE OR REPLACE FUNCTION public.agent_archive_event(p_run public.agent_runs, p_id uuid, p_chart_type text, p_chart_id uuid, p_event_date date, p_category text, p_title text, p_detail text) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
@@ -750,7 +737,7 @@ CREATE OR REPLACE FUNCTION public.agent_cancel_run(p_run_id uuid) RETURNS public
 DECLARE r public.agent_runs;
 BEGIN
   SELECT * INTO r FROM public.agent_runs WHERE id=p_run_id FOR UPDATE;
-  IF NOT FOUND OR (r.user_id IS DISTINCT FROM auth.uid() AND NOT coalesce(public.is_admin_user(),false) AND coalesce(auth.role(),'')<>'service_role') THEN RAISE EXCEPTION 'AGENT_RUN_NOT_FOUND' USING ERRCODE='42501'; END IF;
+  IF NOT FOUND OR (r.user_id IS DISTINCT FROM auth.uid() AND NOT public.is_admin_user()) THEN RAISE EXCEPTION 'AGENT_RUN_NOT_FOUND' USING ERRCODE='42501'; END IF;
   IF r.status IN ('completed','failed','cancelled') THEN RETURN r; END IF;
   UPDATE public.agent_runs SET cancel_requested=true,status=CASE WHEN status IN ('queued','awaiting_input') THEN 'queued' ELSE 'cancelling' END WHERE id=p_run_id RETURNING * INTO r;
   PERFORM public.agent_emit(p_run_id,'cancel_requested');
@@ -1199,7 +1186,7 @@ CREATE OR REPLACE FUNCTION public.agent_require_admin() RETURNS void
     SET search_path TO 'public', 'pg_temp'
     AS $$
 BEGIN
-  IF coalesce(auth.role(),'') <> 'service_role' AND NOT coalesce(public.is_admin_user(),false) THEN
+  IF NOT public.is_admin_user() THEN
     RAISE EXCEPTION 'AGENT_ADMIN_REQUIRED' USING ERRCODE='42501';
   END IF;
 END;
@@ -1333,7 +1320,7 @@ CREATE OR REPLACE FUNCTION public.agent_submit_command(p_run_id uuid, p_request_
 DECLARE r public.agent_runs; cmd public.agent_run_commands; messages jsonb; previous_write text; question_id text;
 BEGIN
   SELECT * INTO r FROM public.agent_runs WHERE id=p_run_id FOR UPDATE;
-  IF NOT FOUND OR (r.user_id IS DISTINCT FROM auth.uid() AND NOT coalesce(public.is_admin_user(),false) AND coalesce(auth.role(),'')<>'service_role') THEN
+  IF NOT FOUND OR (r.user_id IS DISTINCT FROM auth.uid() AND NOT public.is_admin_user()) THEN
     RAISE EXCEPTION 'AGENT_RUN_NOT_FOUND' USING ERRCODE='42501';
   END IF;
   SELECT * INTO cmd FROM public.agent_run_commands WHERE run_id=p_run_id AND request_id=p_request_id;
@@ -1655,14 +1642,13 @@ DECLARE
     v_invalid_elem_info TEXT;
     v_ord INT;
 BEGIN
-    IF auth.role() != 'service_role' THEN
-        IF NOT public.is_admin_user() THEN
-            RAISE EXCEPTION 'Unauthorized';
-        END IF;
-    END IF;
-
     IF p_user_id IS NULL THEN
         RAISE EXCEPTION 'p_user_id is required';
+    END IF;
+
+    -- Owners backfill their own entries; administrators may act for anyone.
+    IF auth.uid() IS DISTINCT FROM p_user_id AND NOT public.is_admin_user() THEN
+        RAISE EXCEPTION 'Unauthorized' USING ERRCODE = '42501';
     END IF;
 
     FOR v_update IN SELECT * FROM jsonb_array_elements(p_updates)
@@ -1891,10 +1877,8 @@ DECLARE
   v_now timestamptz := now();
 BEGIN
 
-IF auth.role() <> 'service_role' THEN
-    IF NOT public.is_admin_user() THEN
-        RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
-    END IF;
+IF NOT public.is_admin_user() THEN
+    RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
 END IF;
 
 
@@ -2488,10 +2472,8 @@ DECLARE
   new_count integer;
 BEGIN
 
-IF auth.role() <> 'service_role' THEN
-    IF NOT public.is_admin_user() THEN
-        RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
-    END IF;
+IF NOT public.is_admin_user() THEN
+    RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
 END IF;
 
 
@@ -2716,7 +2698,7 @@ BEGIN
 
     -- Effective SQL identity survives nested SECURITY DEFINER RPCs. Never use
     -- session_user or the JWT role to decide whether this is an owner write.
-    IF current_user = v_owner OR current_user = 'service_role' THEN
+    IF current_user = v_owner THEN
         RETURN NEW;
     END IF;
     IF current_user = 'authenticated' AND public.is_admin_user() IS TRUE THEN
@@ -2857,10 +2839,8 @@ DECLARE
   new_count integer;
 BEGIN
 
-IF auth.role() <> 'service_role' THEN
-    IF NOT public.is_admin_user() THEN
-        RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
-    END IF;
+IF NOT public.is_admin_user() THEN
+    RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
 END IF;
 
 
@@ -2895,8 +2875,17 @@ END IF;
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION public.community_author_profiles(p_user_ids uuid[]) RETURNS TABLE(user_id uuid, nickname text, avatar_url text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  SELECT u.id, u.nickname, u.avatar_url
+  FROM public.users u
+  WHERE u.id = ANY (p_user_ids)
+$$;
+
 CREATE OR REPLACE FUNCTION public.increment_community_post_view_count(post_id uuid) RETURNS integer
-    LANGUAGE plpgsql
+    LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
 DECLARE
@@ -2922,7 +2911,7 @@ CREATE OR REPLACE FUNCTION public.is_admin_user() RETURNS boolean
   );
 $$;
 
-CREATE OR REPLACE FUNCTION public.kb_replace_source_entries(p_kb_id uuid, p_source_type text, p_source_id text, p_entries jsonb, p_archive boolean DEFAULT false, p_user_id uuid DEFAULT NULL::uuid) RETURNS integer
+CREATE OR REPLACE FUNCTION public.kb_replace_source_entries(p_kb_id uuid, p_source_type text, p_source_id text, p_entries jsonb, p_archive boolean DEFAULT false) RETURNS integer
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -2934,14 +2923,8 @@ BEGIN
     RAISE EXCEPTION 'entries must be an array' USING ERRCODE = '22023';
   END IF;
 
-  IF auth.role() = 'service_role' THEN
-    v_actor_user_id := p_user_id;
-    IF v_actor_user_id IS NULL THEN
-      RAISE EXCEPTION 'user required for service role' USING ERRCODE = '22023';
-    END IF;
-  ELSIF auth.uid() IS NOT NULL THEN
-    v_actor_user_id := auth.uid();
-  ELSE
+  v_actor_user_id := auth.uid();
+  IF v_actor_user_id IS NULL THEN
     RAISE EXCEPTION 'authentication required' USING ERRCODE = '42501';
   END IF;
 
@@ -3102,10 +3085,8 @@ DECLARE
   v_reward_credits integer := 0;
 BEGIN
 
-IF auth.role() <> 'service_role' THEN
-    IF NOT public.is_admin_user() THEN
-        RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
-    END IF;
+IF NOT public.is_admin_user() THEN
+    RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
 END IF;
 
 
@@ -3339,7 +3320,7 @@ CREATE OR REPLACE FUNCTION public.replace_conversation_messages(p_conversation_i
 DECLARE
   v_owner uuid;
 BEGIN
-  IF auth.uid() IS NULL AND auth.role() <> 'service_role' THEN
+  IF auth.uid() IS NULL THEN
     RAISE EXCEPTION 'authentication required' USING ERRCODE = '42501';
   END IF;
 
@@ -3356,10 +3337,7 @@ BEGIN
     RAISE EXCEPTION 'conversation not found';
   END IF;
 
-  IF auth.uid() IS NOT NULL
-    AND auth.uid() <> v_owner
-    AND NOT public.is_admin_user()
-  THEN
+  IF auth.uid() <> v_owner AND NOT public.is_admin_user() THEN
     RAISE EXCEPTION 'permission denied' USING ERRCODE = '42501';
   END IF;
 
@@ -4028,23 +4006,3 @@ CREATE OR REPLACE VIEW public.ming_records_with_archive_status WITH (security_in
            FROM public.agent_runs s
           WHERE (s.id = r.source_run_id)) AS source_conversation_id
    FROM public.ming_records r;
-
--- Settle unfinished checkpoints that the current runtime cannot execute.
-DO $retire$
-DECLARE r public.agent_runs; message jsonb;
-  old_claims text := current_setting('request.jwt.claims',true);
-  old_role text := current_setting('request.jwt.claim.role',true);
-BEGIN
-  PERFORM set_config('request.jwt.claims','{"role":"service_role"}',true);
-  PERFORM set_config('request.jwt.claim.role','service_role',true);
-  FOR r IN SELECT * FROM public.agent_runs WHERE status IN ('queued','running','awaiting_input','cancelling')
-    AND (coalesce(checkpoint->>'version','')<>'2' OR coalesce(checkpoint#>>'{durable,engine}','')<>'pi-durable/1.3.0') FOR UPDATE LOOP
-    UPDATE public.agent_runs SET worker_id='engine-retirement',fence=fence+1,lease_until=now()+interval '60 seconds',status='running'
-      WHERE id=r.id RETURNING * INTO r;
-    message:=jsonb_set(r.public_message,'{agent}',coalesce(r.public_message->'agent','{}'::jsonb)||jsonb_build_object('error','运行版本已更新，请重新发起任务。'));
-    PERFORM public.agent_finish_run(r.id,r.worker_id,r.fence,'failed',r.checkpoint,message);
-    UPDATE public.agent_run_commands SET consumed=true,delivery_state='cancelled' WHERE run_id=r.id AND NOT consumed;
-  END LOOP;
-  PERFORM set_config('request.jwt.claims',coalesce(old_claims,''),true);
-  PERFORM set_config('request.jwt.claim.role',coalesce(old_role,''),true);
-END; $retire$;

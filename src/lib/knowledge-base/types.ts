@@ -19,7 +19,6 @@ export interface KnowledgeSourceRef {
 }
 
 export interface KnowledgeSourceWriteOptions {
-    userId?: string;
     source?: KnowledgeSourceRef;
 }
 
@@ -27,7 +26,6 @@ export interface KnowledgeSourceReplacement {
     kbId: string;
     source: KnowledgeSourceRef;
     chunks: KnowledgeSourceChunk[];
-    userId?: string;
 }
 
 /** Replacement and optional archival are one atomic operation, never two writes. */

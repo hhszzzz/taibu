@@ -30,7 +30,7 @@ export async function replaceKnowledgeSourceEntries(
         throw new Error('知识库条目必须按单一来源顺序写入');
     }
 
-    const count = await persistence.replaceSourceEntries({ kbId, source, chunks, userId: options?.userId });
+    const count = await persistence.replaceSourceEntries({ kbId, source, chunks });
     return {
         entriesCreated: typeof count === 'number' ? count : chunks.length,
         chunks: chunks.length,

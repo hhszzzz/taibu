@@ -149,7 +149,7 @@ test('native PostgreSQL contracts', { timeout: 300_000 }, async t => {
     '-U', 'postgres', '-d', 'taibu_contracts',
   ], { input: statement });
   const asActor = (userId, statement, role = 'authenticated') => {
-    assert.ok(['authenticated', 'anon', 'service_role'].includes(role));
+    assert.ok(['authenticated', 'anon'].includes(role));
     return sql(`BEGIN;
 SET LOCAL ROLE ${role};
 SET LOCAL request.jwt.claims = ${quote(JSON.stringify({ role, ...(userId ? { sub: userId } : {}) }))};
@@ -188,8 +188,8 @@ ROLLBACK;`), /42501/);
       messageRows: [{ id: 'tarot-analysis-1', sequence: 0, role: 'assistant', content: 'tarot analysis', metadata: { model: 'fixture-model' } }],
     });
   };
-  const replaceEntries = (entries, archive = false, userId = null) => `SELECT public.kb_replace_source_entries(
-    ${quote(ids.kb)}, 'record', ${quote(ids.source)}, ${json(entries)}, ${archive}, ${userId ? quote(userId) : 'NULL'});`;
+  const replaceEntries = (entries, archive = false) => `SELECT public.kb_replace_source_entries(
+    ${quote(ids.kb)}, 'record', ${quote(ids.source)}, ${json(entries)}, ${archive});`;
 
   await sql(fixture);
   await sql(`
@@ -329,7 +329,7 @@ RESET ROLE;`);
     const statement = actor => `INSERT INTO public.credit_transactions(user_id,amount,type,source,balance_after) VALUES (${quote(actor)},50,'earn','direct-write-regression',60);`;
     await expectDeniedWrite(ids.owner, statement(ids.owner));
     await expectDeniedWrite(ids.other, statement(ids.owner));
-    await expectDeniedWrite(null, statement(ids.rollback), 'service_role');
+    await expectDeniedWrite(null, statement(ids.rollback));
     await asActor(ids.admin, statement(ids.rollback));
     await asOwner(statement(ids.rollback));
     assert.equal(await asActor(ids.rollback, `SELECT count(*) FROM public.credit_transactions WHERE source='direct-write-regression';`), '2');
@@ -345,7 +345,10 @@ RESET ROLE;`);
     await asOwner(`SET LOCAL request.jwt.claims=${quote(JSON.stringify({ role: 'authenticated', sub: ids.owner }))};
       UPDATE public.users SET ai_chat_count=7,membership='plus' WHERE id=${quote(trusted)};`);
     assert.equal(await asActor(ids.admin, `UPDATE public.users SET ai_chat_count=8 WHERE id=${quote(trusted)} RETURNING ai_chat_count;`), '8');
-    await expectDeniedWrite(null, `UPDATE public.users SET ai_chat_count=99 WHERE id=${quote(trusted)};`, 'service_role');
+    await expectDeniedWrite(null, `UPDATE public.users SET ai_chat_count=99 WHERE id=${quote(trusted)};`, 'anon');
+    // An authenticated session without a subject passes the grant but matches no row.
+    assert.equal(await asActor(null, `WITH changed AS (UPDATE public.users SET ai_chat_count=99 WHERE id=${quote(trusted)} RETURNING id) SELECT count(*) FROM changed;`), '0');
+    assert.equal(await asActor(ids.admin, `SELECT ai_chat_count FROM public.users WHERE id=${quote(trusted)};`), '8');
     await assert.rejects(sql(`BEGIN; UPDATE public.users SET ai_chat_count=99 WHERE id=${quote(trusted)}; ROLLBACK;`), /42501/, 'bootstrap session_user is not an implicit table-owner capability');
   });
 
@@ -357,44 +360,43 @@ RESET ROLE;`);
       'policy',(SELECT permissive FROM pg_policies WHERE schemaname='public' AND tablename='credit_transactions' AND policyname='credit_transactions_authenticated_insert_guard'),
       'auth_sync',(SELECT tgenabled FROM pg_trigger WHERE tgrelid='identity.users'::regclass AND tgname='on_identity_user_created'));`));
     assert.deepEqual(catalog, { definer: false, config: ['search_path=pg_catalog'], trigger: 'O', policy: 'RESTRICTIVE', auth_sync: 'O' });
-    for (const role of ['anon', 'authenticated', 'service_role']) {
+    for (const role of ['anon', 'authenticated']) {
       assert.equal(await sql(`SELECT has_function_privilege('${role}','public.guard_user_entitlement_writes()','EXECUTE');`), 'f');
     }
     await expectDeniedWrite(ids.owner, 'SELECT public.guard_user_entitlement_writes();');
     await expectDeniedWrite(ids.admin, 'SELECT public.guard_user_entitlement_writes();');
   });
 
-  await t.test('current activation check-in and monthly RPCs accept admin/service and reject ordinary callers', async () => {
-    for (const [number, actor, role] of [[601, ids.admin, 'authenticated'], [602, null, 'service_role']]) {
-      const id = uuid(number);
-      const code = randomUUID();
-      const membershipCode = randomUUID();
-      await sql(`INSERT INTO identity.users(id) VALUES (${quote(id)});`);
-      await asOwner(`UPDATE public.users SET ai_chat_count=0 WHERE id=${quote(id)};
-        INSERT INTO public.activation_keys(key_code,key_type,credits_amount,created_by) VALUES (${quote(code)},'credits',5,${quote(ids.admin)});
-        INSERT INTO public.activation_keys(key_code,key_type,membership_type,created_by) VALUES (${quote(membershipCode)},'membership','plus',${quote(ids.admin)});`);
-      for (const call of [
-        `SELECT public.activate_key_as_service(${quote(id)},${quote(code)});`,
-        `SELECT public.perform_daily_checkin_as_service(${quote(id)});`,
-        `SELECT public.claim_linuxdo_membership_as_service(${quote(id)},'pro',3,'fixture-provider');`,
-      ]) await expectDeniedWrite(id, call);
-      const activated = JSON.parse(await asActor(actor, `SELECT row_to_json(r) FROM public.activate_key_as_service(${quote(id)},${quote(code)}) r;`, role));
-      assert.equal(activated.success, true);
-      assert.equal(await sql(`SELECT ai_chat_count FROM public.users WHERE id=${quote(id)};`), '5');
-      const duplicate = JSON.parse(await asActor(actor, `SELECT row_to_json(r) FROM public.activate_key_as_service(${quote(id)},${quote(code)}) r;`, role));
-      assert.equal(duplicate.success, false);
-      assert.equal(JSON.parse(await asActor(actor, `SELECT row_to_json(r) FROM public.activate_key_as_service(${quote(id)},${quote(membershipCode)}) r;`, role)).success, true);
-      const checkin = JSON.parse(await asActor(actor, `SELECT public.perform_daily_checkin_as_service(${quote(id)});`, role));
-      assert.equal(checkin.status, 'ok');
-      assert.ok([2,4,6].includes(checkin.reward_credits));
-      assert.equal(checkin.credits, 5 + checkin.reward_credits);
-      assert.equal(JSON.parse(await asActor(actor, `SELECT public.perform_daily_checkin_as_service(${quote(id)});`, role)).status, 'already_checked_in');
-      const monthly = JSON.parse(await asActor(actor, `SELECT public.claim_linuxdo_membership_as_service(${quote(id)},'pro',3,'fixture-provider');`, role));
-      assert.equal(monthly.status, 'ok');
-      assert.equal(monthly.membership, 'pro');
-      assert.equal(JSON.parse(await asActor(actor, `SELECT public.claim_linuxdo_membership_as_service(${quote(id)},'pro',3,'fixture-provider');`, role)).status, 'cooldown');
-      assert.equal(await sql(`SELECT count(*) FROM public.credit_transactions WHERE user_id=${quote(id)};`), '2');
-    }
+  await t.test('current activation check-in and monthly RPCs accept administrators and reject ordinary callers', async () => {
+    const actor = ids.admin;
+    const id = uuid(601);
+    const code = randomUUID();
+    const membershipCode = randomUUID();
+    await sql(`INSERT INTO identity.users(id) VALUES (${quote(id)});`);
+    await asOwner(`UPDATE public.users SET ai_chat_count=0 WHERE id=${quote(id)};
+      INSERT INTO public.activation_keys(key_code,key_type,credits_amount,created_by) VALUES (${quote(code)},'credits',5,${quote(ids.admin)});
+      INSERT INTO public.activation_keys(key_code,key_type,membership_type,created_by) VALUES (${quote(membershipCode)},'membership','plus',${quote(ids.admin)});`);
+    for (const call of [
+      `SELECT public.activate_key_as_service(${quote(id)},${quote(code)});`,
+      `SELECT public.perform_daily_checkin_as_service(${quote(id)});`,
+      `SELECT public.claim_linuxdo_membership_as_service(${quote(id)},'pro',3,'fixture-provider');`,
+    ]) await expectDeniedWrite(id, call);
+    const activated = JSON.parse(await asActor(actor, `SELECT row_to_json(r) FROM public.activate_key_as_service(${quote(id)},${quote(code)}) r;`));
+    assert.equal(activated.success, true);
+    assert.equal(await sql(`SELECT ai_chat_count FROM public.users WHERE id=${quote(id)};`), '5');
+    const duplicate = JSON.parse(await asActor(actor, `SELECT row_to_json(r) FROM public.activate_key_as_service(${quote(id)},${quote(code)}) r;`));
+    assert.equal(duplicate.success, false);
+    assert.equal(JSON.parse(await asActor(actor, `SELECT row_to_json(r) FROM public.activate_key_as_service(${quote(id)},${quote(membershipCode)}) r;`)).success, true);
+    const checkin = JSON.parse(await asActor(actor, `SELECT public.perform_daily_checkin_as_service(${quote(id)});`));
+    assert.equal(checkin.status, 'ok');
+    assert.ok([2,4,6].includes(checkin.reward_credits));
+    assert.equal(checkin.credits, 5 + checkin.reward_credits);
+    assert.equal(JSON.parse(await asActor(actor, `SELECT public.perform_daily_checkin_as_service(${quote(id)});`)).status, 'already_checked_in');
+    const monthly = JSON.parse(await asActor(actor, `SELECT public.claim_linuxdo_membership_as_service(${quote(id)},'pro',3,'fixture-provider');`));
+    assert.equal(monthly.status, 'ok');
+    assert.equal(monthly.membership, 'pro');
+    assert.equal(JSON.parse(await asActor(actor, `SELECT public.claim_linuxdo_membership_as_service(${quote(id)},'pro',3,'fixture-provider');`)).status, 'cooldown');
+    assert.equal(await sql(`SELECT count(*) FROM public.credit_transactions WHERE user_id=${quote(id)};`), '2');
   });
 
   await t.test('April10 concurrency and over-cap check-in amendments remain active', async () => {
@@ -433,13 +435,13 @@ RESET ROLE;`);
     } finally { await sql('ALTER TABLE public.credit_transactions DROP CONSTRAINT fixture_reject_membership_ledger;'); }
   });
 
-  await t.test('credit mutations deny ordinary users and accept admin/service claims', async () => {
+  await t.test('credit mutations deny ordinary users and accept administrators', async () => {
     for (const actor of [ids.owner, ids.other]) {
       await assert.rejects(asActor(actor, `SELECT public.decrement_ai_chat_count(${quote(ids.owner)});`), /42501/);
       await assert.rejects(asActor(actor, `SELECT public.increment_ai_chat_count(${quote(ids.owner)}, 1);`), /42501/);
     }
     assert.equal(await asActor(ids.admin, `SELECT public.decrement_ai_chat_count(${quote(ids.owner)});`), '9');
-    assert.equal(await asActor(null, `SELECT public.increment_ai_chat_count(${quote(ids.owner)}, 1);`, 'service_role'), '10');
+    assert.equal(await asActor(ids.admin, `SELECT public.increment_ai_chat_count(${quote(ids.owner)}, 1);`), '10');
     assert.equal(await asActor(ids.owner, `SELECT count(*) FROM public.credit_transactions WHERE user_id = ${quote(ids.owner)};`), '2');
     assert.equal(await asActor(ids.other, `SELECT count(*) FROM public.credit_transactions WHERE user_id = ${quote(ids.owner)};`), '0');
   });
@@ -456,13 +458,14 @@ ROLLBACK;`), /42501/, 'record_credit_transaction must reject direct authenticate
     }
   });
 
-  await t.test('admin and service business debit/refund still append the restricted ledger', async () => {
+  await t.test('administrator business debit/refund still appends the restricted ledger', async () => {
     const helperSignature = 'public.record_credit_transaction(uuid,integer,text,text,integer,text,text,text,jsonb)';
-    assert.equal(await asActor(ids.admin, `SELECT has_function_privilege(current_user, ${quote(helperSignature)}, 'EXECUTE');`), 'f');
-    assert.equal(await asActor(null, `SELECT has_function_privilege(current_user, ${quote(helperSignature)}, 'EXECUTE');`, 'service_role'), 't');
-    for (const [actor, role] of [[ids.admin, 'authenticated'], [null, 'service_role']]) {
-      assert.equal(await asActor(actor, `SELECT public.decrement_ai_chat_count(${quote(ids.other)});`, role), '9');
-      assert.equal(await asActor(actor, `SELECT public.increment_ai_chat_count(${quote(ids.other)}, 1);`, role), '10');
+    for (const role of ['anon', 'authenticated']) {
+      assert.equal(await sql(`SELECT has_function_privilege('${role}', ${quote(helperSignature)}, 'EXECUTE');`), 'f');
+    }
+    for (let round = 0; round < 2; round += 1) {
+      assert.equal(await asActor(ids.admin, `SELECT public.decrement_ai_chat_count(${quote(ids.other)});`), '9');
+      assert.equal(await asActor(ids.admin, `SELECT public.increment_ai_chat_count(${quote(ids.other)}, 1);`), '10');
     }
     const ledger = JSON.parse(await asActor(ids.other, `SELECT json_agg(json_build_object(
       'amount', amount, 'type', type, 'source', source, 'balance', balance_after) ORDER BY amount)
@@ -619,17 +622,30 @@ ROLLBACK;`), /42501/, 'record_credit_transaction must reject direct authenticate
   await t.test('KB replace enforces caller ownership, chunk uniqueness and real vector reset', async () => {
     const entries = [0, 1, 2].map(chunk_index => ({ chunk_index, content: `chunk ${chunk_index}`, metadata: {} }));
     await assert.rejects(asActor(ids.other, replaceEntries(entries)), /42501/);
-    // p_user_id is an override only for the service-role branch, not admin claims.
-    await assert.rejects(asActor(ids.admin, replaceEntries(entries, false, ids.owner)), /42501/);
+    // The caller is the owner; an administrator cannot write into someone else's base.
+    await assert.rejects(asActor(ids.admin, replaceEntries(entries)), /42501/);
     assert.equal(await asActor(ids.owner, replaceEntries(entries, true)), '3');
     await sql(`UPDATE public.knowledge_entries SET content_vector = '[1,2,3]'::extensions.vector,
       metadata = '{"embedding_model":"fixture","embedding_dim":3}' WHERE kb_id = ${quote(ids.kb)} AND source_id = ${quote(ids.source)};`);
-    assert.equal(await asActor(null, replaceEntries(entries.slice(0, 1), true, ids.owner), 'service_role'), '1');
+    assert.equal(await asActor(ids.owner, replaceEntries(entries.slice(0, 1), true)), '1');
     const rows = JSON.parse(await asActor(ids.owner, `SELECT json_agg(json_build_object('chunk', chunk_index, 'vector', content_vector))
       FROM public.knowledge_entries WHERE kb_id = ${quote(ids.kb)} AND source_id = ${quote(ids.source)};`));
     assert.deepEqual(rows, [{ chunk: 0, vector: null }]);
     assert.equal(await sql(`SELECT count(*) FROM public.archived_sources WHERE kb_id = ${quote(ids.kb)} AND source_id = ${quote(ids.source)};`), '1');
     assert.equal(await asActor(ids.other, `SELECT count(*) FROM public.knowledge_entries WHERE kb_id = ${quote(ids.kb)};`), '0');
+  });
+
+  await t.test("vector backfill writes the caller's own entries, or anyone's for an administrator", async () => {
+    const metadata = { embedding_model: 'fixture', embedding_dim: 3 };
+    await asActor(ids.owner, replaceEntries([{ chunk_index: 0, content: 'vector fixture', metadata }]));
+    const entry = await asActor(ids.owner, `SELECT id FROM public.knowledge_entries
+      WHERE kb_id = ${quote(ids.kb)} AND source_id = ${quote(ids.source)} AND chunk_index = 0;`);
+    const backfill = (actor, owner) => asActor(actor, `SELECT row_to_json(r) FROM public.batch_update_vectors_as_service(
+      ${json([{ id: entry, content_vector: [1, 2, 3] }])}, ${quote(owner)}, 3, true) r;`);
+    await assert.rejects(backfill(ids.other, ids.owner), /42501/);
+    assert.equal(JSON.parse(await backfill(ids.other, ids.other)).updated_count, 0, 'an entry the caller does not own is skipped');
+    assert.equal(JSON.parse(await backfill(ids.owner, ids.owner)).updated_count, 1);
+    assert.equal(JSON.parse(await backfill(ids.admin, ids.owner)).updated_count, 1);
   });
 
   await t.test('KB replacement failure restores chunks deleted earlier in the transaction', async () => {

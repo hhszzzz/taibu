@@ -1,10 +1,10 @@
 import { NextRequest } from 'next/server';
 import { getEffectiveMembershipType, MembershipResolutionError } from '@/lib/user/membership-server';
 import { ingestFileAsService, backfillVectorsAsService } from '@/lib/knowledge-base/ingest';
-import { requireUserContext, jsonError, jsonOk } from '@/lib/api-utils';
+import { requireUserContext, jsonError, jsonOk, readMultipartForm } from '@/lib/api-utils';
 import { createKnowledgeBasePersistence } from '@/lib/knowledge-base/persistence.server';
 import { ensureFeatureRouteEnabled } from '@/lib/feature-gate-utils';
-import { validateKnowledgeFile } from '@/lib/knowledge-base/upload-policy';
+import { KNOWLEDGE_FILE_MAX_BYTES, validateKnowledgeFile } from '@/lib/knowledge-base/upload-policy';
 
 export async function POST(request: NextRequest) {
     const featureError = await ensureFeatureRouteEnabled('knowledge-base');
@@ -26,9 +26,11 @@ export async function POST(request: NextRequest) {
         return jsonError('当前会员等级无法使用知识库', 403);
     }
 
-    const formData = await request.formData();
-    const kbId = formData.get('kbId');
-    const file = formData.get('file');
+    // Bound the stream: a chunked request has no Content-Length to check.
+    const parsed = await readMultipartForm(request, KNOWLEDGE_FILE_MAX_BYTES);
+    if ('error' in parsed) return jsonError(parsed.error.message, parsed.error.status);
+    const kbId = parsed.form.get('kbId');
+    const file = parsed.form.get('file');
 
     if (!kbId || typeof kbId !== 'string') {
         return jsonError('kbId 不能为空', 400);
@@ -61,7 +63,6 @@ export async function POST(request: NextRequest) {
     const ingestResult = await ingestFileAsService(
         kbId,
         { name: file.name, type: file.type || null, content },
-        user.id,
         db,
         { persistence: createKnowledgeBasePersistence(db) },
     );

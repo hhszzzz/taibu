@@ -17,6 +17,7 @@ import {
 } from '@/lib/bazi-case-profile';
 import type { DataSourceType } from '@/lib/data-sources/types';
 import { isValidUUID } from '@/lib/validation';
+import { DEFAULT_DIVINATION_TIMEZONE, getZonedDateTimeParts } from 'taibu-core/timezone-utils';
 import { getSavedChartHref } from './chart-save';
 import { AGENT_ARCHIVE_TOOLS } from './tool-catalog';
 
@@ -108,9 +109,10 @@ export function parseAgentArchiveReference(value: string): { type: AgentArchiveC
     return { type: type as AgentArchiveChartType, id };
 }
 
-/** China Standard Time's date today, the day an event may not come after. */
-export function agentArchiveToday(now = Date.now()): string {
-    return new Date(now + 8 * 3_600_000).toISOString().slice(0, 10);
+/** Today's date where the user is (China Standard Time by default): the day an event may not come after. */
+export function agentArchiveToday(now = Date.now(), timeZone = DEFAULT_DIVINATION_TIMEZONE): string {
+    const { year, month, day } = getZonedDateTimeParts(new Date(now), timeZone);
+    return `${year}-${pad(month)}-${pad(day)}`;
 }
 
 /**

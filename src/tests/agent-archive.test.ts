@@ -29,9 +29,11 @@ test('an entry links to a saved item by its type:ID reference, never to a board 
         assert.throws(() => parseAgentArchiveReference(reference), /reference 须为已存资料的引用/, reference);
 });
 
-test('a date keeps the precision the user gave, today is China Standard Time\'s, and an event cannot lie ahead', () => {
+test('a date keeps the precision the user gave, today is where the user is (China Standard Time by default), and an event cannot lie ahead', () => {
     assert.equal(agentArchiveToday(Date.UTC(2026, 9, 20, 15, 59)), '2026-10-20');
     assert.equal(agentArchiveToday(Date.UTC(2026, 9, 20, 16, 0)), '2026-10-21');
+    assert.equal(agentArchiveToday(Date.UTC(2026, 9, 20, 16, 0), 'America/Los_Angeles'), '2026-10-20');
+    assert.equal(agentArchiveToday(Date.UTC(2026, 9, 21, 7, 0), 'America/Los_Angeles'), '2026-10-21');
     assert.equal(parseAgentArchiveDate('2024'), '2024-01-01');
     assert.equal(parseAgentArchiveDate('2024-3'), '2024-03-01');
     assert.equal(parseAgentArchiveDate(' 2024-03-9 '), '2024-03-09');

@@ -14,6 +14,7 @@ import { getUserSettingsSnapshot, type UserIdentityProfile } from '@/lib/user/se
 import { normalizeVisualizationSettings, type VisualizationSettings } from '@/lib/visualization/settings';
 import { DEFAULT_DIMENSIONS } from '@/lib/visualization/dimensions';
 import { searchChatWeb } from '@/lib/ai/web-search.server';
+import { resolveUserTimeZone } from '@/lib/ai/prompt-time';
 
 /** 用户未保存可视化设置时的默认配置 */
 const DEFAULT_VISUALIZATION_SETTINGS: VisualizationSettings = {
@@ -206,6 +207,7 @@ export async function buildChatPromptContext(
     userSettings: effectiveUserSettings,
     chartContext: promptChartContext,
     dreamMode: promptDreamMode,
+    sentAt: { at: new Date(), timeZone: resolveUserTimeZone(body.timezone) },
     attachments: { file: body.attachment, web },
   }, { budget: mentionBudget, personalityResolution });
 

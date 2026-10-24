@@ -28,6 +28,7 @@ import { readLocalVisualizationSettings } from '@/lib/visualization/settings';
 import type { ChatStreamTaskRunner } from '@/lib/chat/chat-stream-manager';
 import { useAgentChat } from '@/lib/agent/use-agent-chat';
 import { parseAgentCompactCommand } from '@/lib/agent/compaction';
+import { browserTimeZone } from '@/lib/ai/prompt-time';
 import { captureCurrentBranch, switchToVersion, withPendingVersion } from '@/lib/chat/message-versions';
 
 function shouldShowCheckKeyAction(message?: string): boolean {
@@ -501,6 +502,7 @@ export function useChatMessaging({
                     mentions: messageMentions.map(m => ({ ...m })),
                     dreamMode: isDreamMode || undefined,
                     visualizationSettings,
+                    timezone: browserTimeZone(),
                 },
                 baseMessages: newMessages, assistantMessage: initialAssistantMessage,
                 runner: activeCustomProvider ? createCustomProviderChatRunner(activeCustomProvider) : undefined,
@@ -593,6 +595,7 @@ export function useChatMessaging({
                     mentions: messageMentions,
                     dreamMode: isDreamMode || undefined,
                     visualizationSettings: readLocalVisualizationSettings(localStorage),
+                    timezone: browserTimeZone(),
                 },
                 baseMessages: newMessages, assistantMessage: initialAssistantMessage, onBeforeSave,
                 runner: activeCustomProvider ? createCustomProviderChatRunner(activeCustomProvider) : undefined,
@@ -697,6 +700,7 @@ export function useChatMessaging({
                     mentions: messageMentions,
                     dreamMode: isDreamMode || undefined,
                     visualizationSettings: readLocalVisualizationSettings(localStorage),
+                    timezone: browserTimeZone(),
                 },
                 baseMessages: updatedPreviousMessages, assistantMessage: initialAssistantMessage, onBeforeSave,
                 runner: activeCustomProvider ? createCustomProviderChatRunner(activeCustomProvider) : undefined,

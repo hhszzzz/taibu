@@ -152,6 +152,20 @@ test('Agent admission freezes reasoning and independently authorized collaborato
   assert.equal(fixture.writes[0].args.p_charge, true);
 });
 
+test('the task keeps the browser\'s time zone for dating the messages sent into it, and ignores one that is not a zone', async t => {
+  const fixture = setup(t);
+  const zones: Array<string | undefined> = [];
+  const context = require('../lib/server/chat/prompt-context') as typeof import('../lib/server/chat/prompt-context');
+  t.mock.method(context, 'buildChatPromptContext', async (request: Parameters<typeof context.buildChatPromptContext>[0]) => {
+    zones.push(request.body.timezone);
+    return { sanitizedMessages: request.body.messages, metadata: { sources: [], kbSearchEnabled: false, kbHitCount: 0 }, systemPrompt: 'trusted personality', fallbackPersonality: 'general', promptKnowledgeBases: [] };
+  });
+  for (const timezone of ['America/New_York', 'Mars/Olympus'])
+    assert.equal((await agentEndpoint(() => createAgentTask(fixture.request({ ...fixture.body, clientRequestId: randomUUID(), timezone })))).status, 201);
+  assert.deepEqual(fixture.writes.map(write => (write.args.p_input as AgentRunRow['input']).timezone), ['America/New_York', 'Asia/Shanghai']);
+  assert.deepEqual(zones, ['America/New_York', 'Asia/Shanghai'], 'the first message is dated in the same zone');
+});
+
 test('invalid reasoning/team input and inaccessible collaborator models fail before creation or debit', async t => {
   const fixture = setup(t);
   const member = { id: 'first', name: '分析', model: 'fixture', focus: '', reasoning: false, reasoningEffort: null };
@@ -333,6 +347,7 @@ test("Agent create uses server history and an atomic charge RPC; supplied assist
   assert.equal(input.userMessage.role, "user");
   assert.equal(input.userMessage.metadata, undefined);
   assert.equal(input.systemPrompt, "trusted personality");
+  assert.equal(input.timezone, "Asia/Shanghai", "a request without a zone is dated in China Standard Time");
   const view = await response.json();
   assert.equal(view.message.agent.version, 1);
   assert.equal(view.cursor, 1);

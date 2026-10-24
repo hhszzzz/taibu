@@ -20,6 +20,8 @@ import {
 import { DEFAULT_MODEL_ID } from './ai-config';
 import { getDefaultModelConfigAsync, getModelConfigAsync } from '@/lib/server/ai-config';
 import { applySourceToModel, getOrderedModelSources } from './source-runtime';
+import { formatUserTime } from './prompt-time';
+import { DEFAULT_DIVINATION_TIMEZONE } from 'taibu-core/timezone-utils';
 // ===== 流式转换辅助函数 =====
 
 const SSE_ENCODER = new TextEncoder();
@@ -63,17 +65,11 @@ function fullStreamToSSE(fullStream: AsyncIterable<{ type: string; text?: string
 // ===== 时间辅助函数 =====
 
 /**
- * 生成当前时间前缀，用于所有 AI 回复的提示词
- * 格式：当前时间：2026年1月22日21:30
+ * 人格提示词前的当前时间，按北京时间写出（服务器时区通常是 UTC）。
+ * 格式：当前时间：2026-01-22 21:30 星期四，Asia/Shanghai（UTC+08:00）
  */
 function getCurrentTimePrefix(): string {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth() + 1;
-    const day = now.getDate();
-    const hours = now.getHours().toString().padStart(2, '0');
-    const minutes = now.getMinutes().toString().padStart(2, '0');
-    return `当前时间：${year}年${month}月${day}日${hours}:${minutes}\n\n`;
+    return `当前时间：${formatUserTime(new Date(), DEFAULT_DIVINATION_TIMEZONE)}\n\n`;
 }
 
 // ===== AI 人格配置 =====
@@ -190,7 +186,7 @@ export interface AICallOptions {
     maxTokens?: number;
     imageBase64?: string;
     imageMimeType?: string;
-    // 覆盖默认人格提示词（用于各模块自定义系统提示）
+    // 覆盖默认人格提示词与时间行（用于各模块自定义系统提示）：对话在用户消息开头写发送时间，系统提示词不随分钟变化
     systemPromptOverride?: string;
 }
 
@@ -236,8 +232,7 @@ function buildSystemPrompt(
     options?: AICallOptions
 ): string {
     const personalityConfig = AI_PERSONALITIES[personality];
-    return getCurrentTimePrefix()
-        + (options?.systemPromptOverride ?? personalityConfig.systemPrompt)
+    return (options?.systemPromptOverride ?? getCurrentTimePrefix() + personalityConfig.systemPrompt)
         + chartContext;
 }
 

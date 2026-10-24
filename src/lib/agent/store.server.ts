@@ -35,6 +35,8 @@ export interface AgentRunRow {
     title: string;
     knowledgeBaseIds?: string[];
     memoryEnabled?: boolean;
+    /** The IANA zone the user's messages are dated in, from their browser when the task was created. */
+    timezone: string;
   };
   billing: "charged" | "exempt" | "refunded";
   worker_id: string | null;

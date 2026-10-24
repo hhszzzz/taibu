@@ -10,6 +10,8 @@ import { PARALLEL_SYSTEMS, memberAgentChange, memberInstructions, memberStats, m
 import type { ParallelAnalysisResult } from './parallel-results';
 import { AGENT_BACKGROUND_TASKS, AGENT_BACKGROUND_TOOL } from './tool-catalog';
 import type { AgentBackgroundResident, AgentCheckpoint } from './types';
+import { DEFAULT_DIVINATION_TIMEZONE } from 'taibu-core/timezone-utils';
+import { sentAtLine } from '@/lib/ai/prompt-time';
 
 /** Subagents a conversation keeps, and messages one task may send them. */
 export const BACKGROUND_AGENT_LIMIT = 3;
@@ -35,6 +37,8 @@ type BackgroundAgent = { name: string; system: string; conversationId: number; r
 const BackgroundDoc = defineDoc<{ agents: BackgroundAgent[]; reporters: Record<string, number> }>({
     kind: 'taibu.background', version: 1, scope: 'conversation', history: 'latest', fork: 'initial',
     initial: () => ({ agents: [], reporters: {} }),
+    // Bounded by three subagents and eight messages a task: deltas stay small, so no change is stored as a base.
+    checkpointWhen: () => false,
 });
 
 /** Background tasks of the main conversation: its idle waits and the main agent's stop leave them alone. */
@@ -116,7 +120,7 @@ const Reporter = defineTask<ReporterInput, ReporterState, null>({
  * Background subagents of one task: the extension to install, and how the task recreates the subagents the
  * conversation kept. Each subagent is its own conversation limited to one system; it remembers its earlier messages.
  */
-export function createBackgroundAgents(registrations: readonly ToolRegistration[]) {
+export function createBackgroundAgents(registrations: readonly ToolRegistration[], timeZone = DEFAULT_DIVINATION_TIMEZONE) {
     /** Owned by an anchor of the main conversation, it starts as a copy of the main agent: its model and effort. */
     const createSubagent = async (tx: Tx, mainId: ConversationId, name: string, system: string, tools: readonly ToolRegistration[]) => {
         const anchor = await tx.createTask(Anchor, null, { ...BACKGROUND, conversationId: mainId });
@@ -195,7 +199,9 @@ export function createBackgroundAgents(registrations: readonly ToolRegistration[
                     doc.agents.push({ name, system, conversationId: await createSubagent(tx, api.conversationId, name, system, tools), reported: [] });
                 }
                 const target = doc.agents.find(item => item.name === name)!;
-                const reporter = await tx.createTask(Reporter, { name, conversationId: target.conversationId, message, followUp: action === 'send' && args.followUp === true },
+                // Dated when sent, in the user's time zone, as the user's own messages are; the task input keeps the time.
+                const dated = `${sentAtLine(new Date(api.now()), timeZone)}\n${message}`;
+                const reporter = await tx.createTask(Reporter, { name, conversationId: target.conversationId, message: dated, followUp: action === 'send' && args.followUp === true },
                     { ...BACKGROUND, conversationId: api.conversationId });
                 doc.reporters[String(api.taskId)] = reporter;
                 return { system: target.system, conversationId: target.conversationId, reporterId: reporter as number };

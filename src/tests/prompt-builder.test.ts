@@ -132,6 +132,18 @@ test('a failed or empty search is stated instead of leaving the model to invent 
     assert.equal((await pb.buildPromptWithSources({ modelId: 'deepseek-chat', userMessage: '测试问题', mentions: [], knowledgeHits: [], userSettings: promptSettings })).userMessagePrefix, '');
 });
 
+test('the message is dated in the user\'s time zone ahead of anything it carries, and the system prompt is not', async () => {
+    const pb = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');
+    const sentAt = { at: new Date('2026-10-24T16:05:00Z'), timeZone: 'Asia/Shanghai' };
+    const plain = await pb.buildPromptWithSources({ modelId: 'deepseek-chat', userMessage: '现在起一卦', mentions: [], knowledgeHits: [], userSettings: promptSettings, sentAt });
+    assert.equal(plain.userMessagePrefix, '【发送时间：2026-10-25 00:05 星期日，Asia/Shanghai（UTC+08:00）】\n');
+    assert.ok(!plain.systemPrompt.includes('2026'), 'the system prompt stays the same from minute to minute');
+    const searched = await pb.buildPromptWithSources({ modelId: 'deepseek-chat', userMessage: '现在起一卦', mentions: [], knowledgeHits: [], userSettings: promptSettings, sentAt,
+        attachments: { web: { status: 'failed', query: '起卦' } } });
+    assert.equal(searched.userMessagePrefix,
+        '【发送时间：2026-10-25 00:05 星期日，Asia/Shanghai（UTC+08:00）】\n【联网搜索未能完成】本次没有可参考的网页，回答中不要引用或编造网页来源。\n\n【用户的问题如下】\n');
+});
+
 test('a document is cut to its share of the model input, leaving room for the rest of the prompt', async () => {
     const pb = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');
     const { resolveModelContextConfig } = require('../lib/ai/model-context') as typeof import('../lib/ai/model-context');

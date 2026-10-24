@@ -220,9 +220,36 @@ test('the document and search results keep their layout; mention tokens are stri
   }, { webSearch: true });
 
   const content = result.sanitizedMessages[0].content;
+  assert.match(content, /^【发送时间：\d{4}-\d{2}-\d{2} \d{2}:\d{2} 星期.，Asia\/Shanghai（UTC\+08:00）】\n【用户上传的文件/u, 'dated in China Standard Time without a zone from the browser');
   assert.ok(content.includes('年份\t\t干支\n\n备注 @{原样保留}'), 'the document keeps its empty cells, paragraphs and own text');
   assert.ok(content.includes('第一段\n\n第二段'));
   assert.ok(content.endsWith('【用户的问题如下】\n看看 这个'), content.slice(-40));
   assert.deepEqual(queries, ['看看 这个'], 'mention tokens never reach the search provider');
   assert.deepEqual(result.metadata.webSearch, { status: 'ok', sources: [{ title: '流年', url: 'https://example.com' }] });
+});
+
+test('the last user message is dated in the zone the browser sent; earlier messages are left as they were', async (t) => {
+  const promptBuilderModule = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');
+  const appSettingsModule = require('../lib/app-settings') as typeof import('../lib/app-settings');
+  stubSettings(t, { expression_style: 'direct', user_profile: {}, custom_instructions: '', prompt_kb_ids: [], visualization_settings: {} });
+  t.mock.method(promptBuilderModule, 'calculatePromptBudget', async () => 1024);
+  t.mock.method(appSettingsModule, 'isFeatureModuleEnabled', async () => false);
+  const { buildChatPromptContext } = await import('../lib/server/chat/prompt-context');
+  const request = (timezone: string | undefined) => buildChatPromptContext({
+    body: {
+      messages: [
+        { id: 'm1', role: 'user', content: '昨天问过的事', createdAt: '2026-10-23T01:00:00.000Z' },
+        { id: 'a1', role: 'assistant', content: '答', createdAt: '2026-10-23T01:00:05.000Z' },
+        { id: 'm2', role: 'user', content: '现在起一卦', createdAt: new Date().toISOString() },
+      ],
+      stream: false,
+      timezone,
+    },
+    userId: 'user-1', canSkipCredit: false, requestedModelId: 'deepseek-chat', membershipType: 'free', reasoningEnabled: false, creditDeducted: false,
+  });
+  const result = await request('America/New_York');
+  assert.equal(result.sanitizedMessages[0].content, '昨天问过的事');
+  assert.match(result.sanitizedMessages[2].content, /^【发送时间：\d{4}-\d{2}-\d{2} \d{2}:\d{2} 星期.，America\/New_York（UTC-0[45]:00）】\n现在起一卦$/u);
+  assert.ok(!result.systemPrompt.includes('发送时间'));
+  assert.match((await request('Not/AZone')).sanitizedMessages[2].content, /^【发送时间：[^】]+Asia\/Shanghai（UTC\+08:00）】\n/u);
 });

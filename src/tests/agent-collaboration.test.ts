@@ -141,6 +141,8 @@ test('the collaboration names its topics and shows each finished member with its
     assert.equal(finished.args.p_status, 'completed');
     assert.equal(inputs.length, 2);
     assert.ok(inputs.every(input => input.endsWith(positionsInstruction(TOPICS))), 'each member is told how to state its positions');
+    // Members read "now" from their task as the main agent does from the user's message: dated in the user's time zone.
+    assert.ok(inputs.every(input => /^【发送时间：\d{4}-\d{2}-\d{2} \d{2}:\d{2} 星期.，Asia\/Shanghai（UTC\+08:00）】\n/u.test(input)), inputs[0]);
 
     const checkpoint = finished.args.p_checkpoint as typeof run.checkpoint;
     const collaboration = checkpoint.parts.find(part => part.type === 'tool' && part.name === 'parallel_analysis');

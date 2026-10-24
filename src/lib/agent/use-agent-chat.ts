@@ -13,6 +13,7 @@ import {
 } from "./browser-client";
 import { isAgentRunTerminal, type AgentRunView } from "./types";
 import { useNextTaskConfiguration } from '@/lib/chat/use-next-task-configuration';
+import { browserTimeZone } from '@/lib/ai/prompt-time';
 
 type AgentCapabilities = {
   enabled: boolean;
@@ -264,6 +265,7 @@ export function useAgentChat(
       planMode,
       dreamMode: state.chatMode === "dream",
       mangpaiMode: state.chatMode === "mangpai",
+      timezone: browserTimeZone(),
     };
     const key = JSON.stringify({
       ...body,

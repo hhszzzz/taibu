@@ -52,6 +52,7 @@ export const row = (): AgentRunRow => {
       reasoning: false,
       webEnabled: false,
       systemPrompt: "fixture",
+      timezone: "Asia/Shanghai",
       title: "fixture",
       userMessage: {
         id: "user",

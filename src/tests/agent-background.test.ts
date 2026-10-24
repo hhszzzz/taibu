@@ -159,7 +159,10 @@ test('the next task recreates a kept subagent, which continues from what it reme
   assert.ok(listed, 'the main agent knows the subagents the conversation kept');
   assert.ok(remembered, 'the subagent continues from its earlier exchange');
   const checkpoint = finalCheckpoint(store);
-  assert.deepEqual(checkpoint.background?.[0].messages.filter(message => message.role === 'user').map(textOf), ['请看 1990-01-15 9 时男命的事业', '接着看 2028 年']);
+  const [earlier, sent] = checkpoint.background?.[0].messages.filter(message => message.role === 'user').map(textOf) ?? [];
+  assert.equal(earlier, '请看 1990-01-15 9 时男命的事业');
+  // A message to a subagent is dated in the user's time zone, as the user's own messages are.
+  assert.match(sent, /^【发送时间：\d{4}-\d{2}-\d{2} \d{2}:\d{2} 星期.，Asia\/Shanghai（UTC\+08:00）】\n接着看 2028 年$/u);
   assert.equal(reports(checkpoint.messages).length, 1);
 });
 
@@ -226,7 +229,7 @@ test('a task interrupted while a subagent works resumes it, and its message and 
       if (!results(context.messages, 'background_agent').length) return respond(model, [manage('spawn', { action: 'spawn', name: '八字复核', system: 'bazi', message: '请看事业运' })]);
       return respond(model, say('等待八字复核。'));
     }
-    deliveries.push(context.messages.filter(message => message.role === 'user' && textOf(message) === '请看事业运').length);
+    deliveries.push(context.messages.filter(message => message.role === 'user' && textOf(message).endsWith('】\n请看事业运')).length);
     if (interrupt) {
       interrupt = false;
       setTimeout(() => abort.abort(), 20);

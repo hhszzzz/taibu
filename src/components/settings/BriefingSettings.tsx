@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { getCurrentUserSettings, updateCurrentUserSettings } from '@/lib/user/settings';
 import { loadReminderSubscriptions, updateReminderSubscriptionClient } from '@/lib/reminders-client';
 import { DEFAULT_BRIEFING_PREFERENCES, initialBriefingPreferences, validBriefingPreferences, type BriefingPreferences } from '@/lib/briefing-preferences';
+import { browserTimeZone } from '@/lib/ai/prompt-time';
 import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 import { SettingsSwitch } from '@/components/settings/SettingsControls';
 export function BriefingSettings({ userId, initialPreferences, initialEnabled = false }: { userId: string; initialPreferences?: BriefingPreferences; initialEnabled?: boolean }) {
@@ -24,8 +25,7 @@ export function BriefingSettings({ userId, initialPreferences, initialEnabled = 
         void Promise.all([getCurrentUserSettings(scope), loadReminderSubscriptions(scope)]).then(([settings, subscriptions]) => {
             if (controller.signal.aborted) return;
             if (!settings.settings || !subscriptions.ok) throw new Error('加载早报设置失败');
-            let timezone = 'Asia/Shanghai'; try { timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || timezone; } catch { /* fallback */ }
-            const initial = initialBriefingPreferences(settings.settings.briefingPreferences, settings.settings.briefingConfigured ?? false, timezone);
+            const initial = initialBriefingPreferences(settings.settings.briefingPreferences, settings.settings.briefingConfigured ?? false, browserTimeZone() ?? 'Asia/Shanghai');
             setPreferences(initial); setSavedPreferences(initial);
             setEnabled(subscriptions.subscriptions.find(item => item.reminderType === 'daily_briefing')?.enabled ?? false);
             setLoaded(true);

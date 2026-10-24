@@ -95,6 +95,7 @@ function toPreparationInput(body: ChatRequestBody): ChatPreparationInput {
     reasoningEffort: body.reasoningEffort,
     attachment: body.attachment,
     webSearch: body.webSearch,
+    timezone: body.timezone,
     mentions: body.mentions,
     dreamMode: body.dreamMode,
     expressionStyle: body.expressionStyle,

@@ -18,6 +18,7 @@ import {
 } from "@/lib/ai/ai-access";
 import { buildChatPromptContext } from "@/lib/server/chat/prompt-context";
 import { isChatAttachment } from "@/lib/ai/document-formats";
+import { resolveUserTimeZone } from "@/lib/ai/prompt-time";
 import { webSearchConfigured } from "@/lib/ai/web-search.server";
 import { getUserAuthInfo } from "@/lib/user/credits";
 import { AI_RATE_LIMIT_CONFIG, checkRateLimit } from "@/lib/rate-limit";
@@ -177,6 +178,8 @@ function createBody(value: Record<string, unknown>) {
     mangpaiMode: value.mangpaiMode === true,
     /** A plain chat document carried into Agent mode, as text the server extracted. */
     attachment: value.attachment,
+    /** The browser's IANA time zone; the user's messages are dated in it. */
+    timezone: resolveUserTimeZone(value.timezone),
   };
 }
 
@@ -412,6 +415,7 @@ export async function createAgentTask(request: NextRequest) {
         dreamMode: body.dreamMode === true,
         mentions: body.mentions,
         attachment: body.attachment,
+        timezone: body.timezone,
       },
       userId: auth.user.id,
       requestedModelId: modelId,
@@ -466,6 +470,7 @@ export async function createAgentTask(request: NextRequest) {
     ...(compact ? { compact } : {}),
     systemPrompt: prepared.systemPrompt,
     memoryEnabled: prepared.agentMemoryEnabled === true,
+    timezone: body.timezone,
     knowledgeBaseIds: prepared.promptKnowledgeBases.map((kb) => kb.id),
     userMessage,
     title: body.message.content.slice(0, 60),

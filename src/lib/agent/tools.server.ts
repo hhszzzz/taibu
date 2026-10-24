@@ -562,7 +562,7 @@ export async function createAgentTools(
     }),
     async (args, callId) => {
       const chart = await resolveAgentArchiveChart(store.db, run.user_id, args.reference);
-      const proposal = normalizeAgentArchiveProposal(args, chart);
+      const proposal = normalizeAgentArchiveProposal(args, chart, agentArchiveToday(Date.now(), run.input.timezone));
       let note = '';
       if (proposal.kind === 'master_review') {
         // Items the user already filled are theirs: say which items the card would fill, or that none are left.
@@ -682,7 +682,7 @@ export async function createAgentTools(
       }),
       async (args, callId) => {
         const chart = await resolveAgentArchiveChart(store.db, run.user_id, args.reference);
-        const date = parseAgentArchiveDate(args.date, agentArchiveToday());
+        const date = parseAgentArchiveDate(args.date, agentArchiveToday(Date.now(), run.input.timezone));
         const title = agentArchiveText(args.title, 'title', 80, true), evidence = agentArchiveText(args.evidence, 'evidence', 500, true);
         const entry = await archiveCall(store.rpc<{ target: 'record' | 'case_event'; id: string }>('agent_record_user_event', {
           ...store.lease(run), p_call_id: callId, p_chart_type: chart?.type ?? null, p_chart_id: chart?.id ?? null,

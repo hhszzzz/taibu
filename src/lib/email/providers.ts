@@ -77,13 +77,12 @@ function secureForPort(port: number): boolean | null {
 }
 
 export function resolveMailerConfig(env: MailerEnv = process.env): MailerConfig {
+    if (present(env.EMAIL_TRANSPORT)) {
+        // Better a startup failure than silently falling back to log.
+        throw new Error('EMAIL_TRANSPORT is no longer supported; set EMAIL_PROVIDER (smtp is now the custom preset)');
+    }
     const requested = (present(env.EMAIL_PROVIDER) ?? '').toLowerCase();
-    // EMAIL_TRANSPORT predates the provider presets; keep it working so an
-    // existing deployment only has to add a provider name, not rewrite its env.
-    // `smtp` there meant "explicit SMTP_* values", which is the `custom` preset.
-    const legacy = present(env.EMAIL_TRANSPORT)?.toLowerCase();
-    const legacyId = legacy === 'smtp' ? 'custom' : legacy;
-    const providerId = (requested || legacyId || 'log') as MailProviderId;
+    const providerId = (requested || 'log') as MailProviderId;
 
     const preset = MAIL_PROVIDERS[providerId];
     if (!preset) {

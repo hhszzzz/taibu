@@ -16,7 +16,6 @@ import {
     signUpWithEmail,
     sendOTP,
     verifyOTP,
-    recordLoginAttempt,
     resetPasswordWithOTP,
 } from '@/lib/auth';
 import { PasswordStrengthIndicator, validatePasswordStrength } from '@/components/auth/PasswordStrengthIndicator';
@@ -27,6 +26,8 @@ import { OAuthButtons } from '@/components/auth/OAuthButtons';
 
 type AuthMode = 'login' | 'register' | 'forgot' | 'verify-login' | 'verify-reset' | 'reset-password';
 type LoginMethod = 'password' | 'otp';
+/** Why the six-digit code in verify-login was sent. */
+type VerifyPurpose = 'login' | 'verify-email';
 
 interface AuthModalProps {
     isOpen: boolean;
@@ -46,6 +47,7 @@ interface AuthState {
     showConfirmPassword: boolean;
     nickname: string;
     verificationCode: string;
+    verifyPurpose: VerifyPurpose;
     loading: boolean;
     sendingCode: boolean;
     error: string;
@@ -70,6 +72,7 @@ const initialAuthState: AuthState = {
     showConfirmPassword: false,
     nickname: '',
     verificationCode: '',
+    verifyPurpose: 'login',
     loading: false,
     sendingCode: false,
     error: '',
@@ -91,6 +94,7 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
                 showConfirmPassword: false,
                 nickname: '',
                 verificationCode: '',
+                verifyPurpose: 'login',
                 error: '',
                 success: '',
                 countdown: 0,
@@ -104,6 +108,7 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
                 showConfirmPassword: false,
                 nickname: '',
                 verificationCode: '',
+                verifyPurpose: 'login',
                 error: '',
                 success: '',
                 countdown: 0,
@@ -139,7 +144,7 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
     const {
         mode, loginMethod, emailPrefix, emailSuffix,
         password, confirmPassword, showPassword, showConfirmPassword,
-        nickname, verificationCode, loading, sendingCode,
+        nickname, verificationCode, verifyPurpose, loading, sendingCode,
         error, success, countdown,
     } = state;
 
@@ -218,14 +223,12 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
         setField('sendingCode', true);
 
         try {
-            let result = await signUpWithEmail(email, password, nickname);
-            if (!result.success && result.error?.code === 'USER_ALREADY_EXISTS') {
-                // 未验证的旧账号：重发验证码，验证后即可登录。
-                result = await sendOTP(email, 'signup');
-            }
+            // For an address that already exists Better Auth answers generically
+            // and mails the owner a notice; the form cannot tell the two apart.
+            const result = await signUpWithEmail(email, password, nickname);
             if (result.success) {
                 setField('countdown', 60);
-                setField('success', '验证码已发送到您的邮箱');
+                setField('success', '验证码已发送；若该邮箱已注册，请直接登录或使用验证码登录');
             } else {
                 setField('error', result.error?.message || '发送失败');
             }
@@ -245,6 +248,25 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
             setField('loading', true);
             try {
                 const result = await sendOTP(email, 'recovery');
+                if (result.success) {
+                    setField('countdown', 60);
+                    setField('success', '验证码已发送到您的邮箱');
+                } else {
+                    setField('error', result.error?.message || '发送失败');
+                }
+            } catch {
+                setField('error', '发送失败，请重试');
+            } finally {
+                setField('loading', false);
+            }
+            return;
+        }
+
+        if (mode === 'verify-login' && verifyPurpose === 'verify-email') {
+            setField('error', '');
+            setField('loading', true);
+            try {
+                const result = await sendOTP(email, 'signup');
                 if (result.success) {
                     setField('countdown', 60);
                     setField('success', '验证码已发送到您的邮箱');
@@ -284,6 +306,22 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
         verifyingRef.current = true;
 
         try {
+            if (verifyPurpose === 'verify-email') {
+                const verified = await verifyOTP(email, codeToVerify, 'signup');
+                if (!verified.success) {
+                    setField('error', verified.error?.message || '验证失败');
+                    return;
+                }
+                // The address is verified now; the password was already checked.
+                const login = await signInWithEmail(email, password);
+                if (login.success) {
+                    completeAuth();
+                    return;
+                }
+                switchMode('login');
+                setField('error', '邮箱已验证，请使用密码登录');
+                return;
+            }
             const result = await verifyOTP(email, codeToVerify, 'magiclink');
             if (result.success) {
                 completeAuth();
@@ -306,8 +344,18 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
             if (result.success) {
                 completeAuth();
             } else if (result.error?.code === 'EMAIL_NOT_VERIFIED') {
-                // 未验证邮箱：先发登录验证码，验证后即完成登录。
-                await handleSendOTP();
+                // Do not send a sign-in code: Better Auth revokes every account
+                // (including this proven password) when an email OTP promotes an
+                // unverified user. An email-verification code keeps the password.
+                const sent = await sendOTP(email, 'signup');
+                if (sent.success) {
+                    setField('verifyPurpose', 'verify-email');
+                    setField('countdown', 60);
+                    setField('mode', 'verify-login');
+                    setField('success', '邮箱尚未验证，验证码已发送；验证后会用刚才的密码登录');
+                } else {
+                    setField('error', sent.error?.message || '发送失败');
+                }
             } else {
                 setField('error', result.error?.message || '登录失败');
             }
@@ -339,7 +387,6 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
         // 账号已在“发送验证码”时创建；此处只消费验证码并自动登录。
         const verifyResult = await verifyOTP(email, verificationCode, 'signup');
         if (verifyResult.success) {
-            await recordLoginAttempt(email, true);
             setField('success', '注册成功！');
             completeAuth();
         } else {
@@ -420,7 +467,7 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
             case 'login': return '登录';
             case 'register': return '注册';
             case 'forgot': return '重置密码';
-            case 'verify-login': return '验证登录';
+            case 'verify-login': return verifyPurpose === 'verify-email' ? '验证邮箱' : '验证登录';
             case 'verify-reset': return '验证身份';
             case 'reset-password': return '设置新密码';
         }

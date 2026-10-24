@@ -31,3 +31,25 @@ export function renderOtpEmail({ otp, type }: { otp: string; type: OtpEmailType 
   ].join('');
   return { subject: `【命理排盘】${subject}`, text, html };
 }
+
+/**
+ * Sent when someone tries to register with an address that already has an
+ * account. Better Auth answers the browser generically so the form cannot be
+ * used to enumerate accounts; only the mailbox owner learns what happened.
+ */
+export function renderExistingAccountEmail(): EmailTemplate {
+  const text = [
+    '有人刚刚尝试用这个邮箱注册命理排盘账号，但该邮箱已经注册过了。',
+    '',
+    '如果这是你本人：请直接登录。忘记密码时，在登录框选择“忘记密码”并重置。',
+    '如果不是你本人：无需处理，这封邮件已经说明了情况，你的账号没有被改动。',
+  ].join('\n');
+  const html = [
+    '<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;line-height:1.7;color:#1f2937">',
+    '<p>有人刚刚尝试用这个邮箱注册命理排盘账号，但该邮箱已经注册过了。</p>',
+    '<p>如果这是你本人：请直接登录。忘记密码时，在登录框选择“忘记密码”并重置。</p>',
+    '<p style="color:#6b7280">如果不是你本人：无需处理，这封邮件已经说明了情况，你的账号没有被改动。</p>',
+    '</div>',
+  ].join('');
+  return { subject: '【命理排盘】有人尝试用你的邮箱注册', text, html };
+}

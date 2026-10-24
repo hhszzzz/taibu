@@ -116,6 +116,7 @@ export async function exchangeCode(code: string, codeVerifier: string, redirectU
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: body.toString(),
+        signal: AbortSignal.timeout(10_000),
       });
 
       if (res.ok) {
@@ -208,6 +209,7 @@ export async function fetchUserInfo(accessToken: string): Promise<LinuxDoUser> {
     try {
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${accessToken}` },
+        signal: AbortSignal.timeout(10_000),
       });
 
       if (res.ok) {

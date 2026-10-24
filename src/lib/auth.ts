@@ -26,9 +26,6 @@ export type AuthUser = {
     updatedAt?: Date | string;
 };
 
-/** 兼容旧组件的类型别名。 */
-export type User = AuthUser;
-
 /** Better Auth 的 session 记录本身不含用户对象；用户与 session 是同级的两份数据。 */
 export type AuthSession = {
     id: string;
@@ -41,7 +38,7 @@ export type AuthSession = {
 
 export type Session = AuthSession;
 
-export type AuthChangeEvent = 'INITIAL_SESSION' | 'SIGNED_IN' | 'SIGNED_OUT' | 'USER_UPDATED' | 'TOKEN_REFRESHED';
+export type AuthChangeEvent = 'initial' | 'signed-in' | 'signed-out' | 'user-updated' | 'token-refreshed';
 
 export type AuthResult = {
     success: boolean;
@@ -55,7 +52,7 @@ type SessionPayload = {
 
 type AuthListener = (event: AuthChangeEvent, state: { session: Session | null; user: AuthUser | null }) => void;
 
-type OtpType = 'signup' | 'magiclink' | 'recovery' | 'email_change' | 'email';
+type OtpType = 'signup' | 'magiclink' | 'recovery' | 'email';
 
 const configuredAuthClient = createAuthClient({
     basePath: '/api/auth',
@@ -133,13 +130,13 @@ function hasFreshSessionCache() {
 
 function resolveRefreshedSessionEvent(previousSession: Session | null, nextSession: Session | null): AuthChangeEvent | null {
     if (!previousSession && !nextSession) return null;
-    if (!previousSession && nextSession) return 'SIGNED_IN';
-    if (previousSession && !nextSession) return 'SIGNED_OUT';
+    if (!previousSession && nextSession) return 'signed-in';
+    if (previousSession && !nextSession) return 'signed-out';
     if (!previousSession || !nextSession) return null;
     const changed = previousSession.id !== nextSession.id
         || previousSession.expiresAt !== nextSession.expiresAt
         || previousSession.userId !== nextSession.userId;
-    return changed ? 'TOKEN_REFRESHED' : null;
+    return changed ? 'token-refreshed' : null;
 }
 
 async function loadSessionFromServer(options: { force?: boolean; emitEvent?: boolean } = {}): Promise<SessionPayload> {
@@ -178,22 +175,17 @@ export async function revalidateBrowserSession(): Promise<SessionPayload> {
     return await loadSessionFromServer({ force: true, emitEvent: true });
 }
 
-export function onAuthStateChange(callback: AuthListener) {
+/** Subscribes to cache changes and emits an initial snapshot; returns unsubscribe. */
+export function subscribeToAuth(callback: AuthListener): () => void {
     authListeners.add(callback);
     const bootstrap = hasInitializedSession
         ? Promise.resolve(getCachedSessionPayload())
         : (sessionBootstrapPromise ?? loadSessionFromServer());
     void bootstrap.then((result) => {
-        callback('INITIAL_SESSION', { session: result.data?.session ?? null, user: result.data?.user ?? null });
+        callback('initial', { session: result.data?.session ?? null, user: result.data?.user ?? null });
     });
-    return {
-        data: {
-            subscription: {
-                unsubscribe() {
-                    authListeners.delete(callback);
-                },
-            },
-        },
+    return () => {
+        authListeners.delete(callback);
     };
 }
 
@@ -236,12 +228,11 @@ export async function signOut(): Promise<AuthResult> {
     if (error) {
         return { success: false, error: { message: '登出失败，请重试', code: error.code || error.message } };
     }
-    applySession(null, null, 'SIGNED_OUT');
+    applySession(null, null, 'signed-out');
     return { success: true };
 }
 
-export async function ensureUserRecord(user: AuthUser) {
-    void user;
+export async function ensureUserRecord() {
     const result = await requestBrowserJson<{ success: boolean }>('/api/user/profile', {
         method: 'POST',
         body: JSON.stringify({ action: 'ensure' }),
@@ -251,7 +242,7 @@ export async function ensureUserRecord(user: AuthUser) {
     }
 }
 
-export async function updateNickname(_userId: string, nickname: string): Promise<AuthResult> {
+export async function updateNickname(nickname: string): Promise<AuthResult> {
     const result = await updateNicknameProfile(nickname);
     if (!result.success) {
         return {
@@ -261,7 +252,7 @@ export async function updateNickname(_userId: string, nickname: string): Promise
     }
     if (cachedUser) {
         cachedUser = { ...cachedUser, name: nickname };
-        emitAuthEvent('USER_UPDATED', { session: cachedSession, user: cachedUser });
+        emitAuthEvent('user-updated', { session: cachedSession, user: cachedUser });
     }
     return { success: true };
 }
@@ -276,7 +267,7 @@ export async function updateAvatarUrl(avatarUrl: string | null): Promise<AuthRes
     }
     if (cachedUser) {
         cachedUser = { ...cachedUser, image: avatarUrl };
-        emitAuthEvent('USER_UPDATED', { session: cachedSession, user: cachedUser });
+        emitAuthEvent('user-updated', { session: cachedSession, user: cachedUser });
     }
     return { success: true };
 }
@@ -341,8 +332,7 @@ export async function verifyOTP(
         if (error) return { success: false, error: normalizeAuthError(error) ?? undefined };
         return { success: true };
     }
-    // email_change codes are consumed by the change-email endpoint.
-    return { success: true };
+    return { success: false, error: { message: '不支持的验证码类型', code: 'UNSUPPORTED_OTP_TYPE' } };
 }
 
 export async function resetPasswordWithOTP(
@@ -353,10 +343,6 @@ export async function resetPasswordWithOTP(
     const { error } = await authClient.emailOtp.resetPassword({ email, otp: token, password: newPassword });
     if (error) return { success: false, error: normalizeAuthError(error) ?? undefined };
     return { success: true };
-}
-
-export async function recordLoginAttempt(_email: string, _success: boolean): Promise<void> {
-    // Server-side lock (src/lib/identity/login-guard.server.ts) owns the counter.
 }
 
 export const authSessionCacheConstants = {
@@ -371,6 +357,7 @@ function getErrorMessage(code: string): string {
         INVALID_EMAIL_OR_PASSWORD: '邮箱或密码错误',
         EMAIL_NOT_VERIFIED: '请先验证邮箱',
         USER_ALREADY_EXISTS: '该邮箱已注册',
+        USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL: '该邮箱已注册',
         INVALID_EMAIL: '邮箱格式不正确',
         PASSWORD_TOO_SHORT: '密码至少8个字符',
         PASSWORD_TOO_LONG: '密码过长',
@@ -379,10 +366,6 @@ function getErrorMessage(code: string): string {
         TOO_MANY_ATTEMPTS: '请求过于频繁，请稍后再试',
         TOO_MANY_REQUESTS: '请求过于频繁，请稍后再试',
         SIGNUP_DISABLED: '该邮箱尚未注册，请先注册',
-        'Invalid login credentials': '邮箱或密码错误',
-        'Email not confirmed': '请先验证邮箱',
-        'User already registered': '该邮箱已注册',
-        'Invalid email or password': '邮箱或密码错误',
     };
     return errorMessages[code] || code;
 }

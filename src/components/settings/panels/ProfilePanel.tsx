@@ -78,7 +78,7 @@ export default function ProfilePanel() {
       return;
     }
     ensuredUserIdRef.current = user.id;
-    void ensureUserRecord(user).then(() => refreshProfile());
+    void ensureUserRecord().then(() => refreshProfile());
   }, [profile, profileError, profileLoading, profileResolved, refreshProfile, sessionLoading, user]);
 
   const handleSave = async () => {
@@ -88,7 +88,7 @@ export default function ProfilePanel() {
     setError('');
     setSuccess('');
 
-    const result = await updateNickname(user.id, nickname.trim());
+    const result = await updateNickname(nickname.trim());
     if (result.success) {
       setOriginalNickname(nickname.trim());
       setSuccess('昵称已更新');

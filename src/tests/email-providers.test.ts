@@ -72,14 +72,11 @@ test('an unknown provider is rejected with the list of known ones', () => {
   );
 });
 
-test('the legacy EMAIL_TRANSPORT keeps working for existing deployments', () => {
-  // `smtp` used to mean "explicit SMTP_*", which is now the custom preset.
-  const legacy = resolveMailerConfig({ EMAIL_TRANSPORT: 'smtp', SMTP_HOST: 'relay', SMTP_PORT: '587', SMTP_SECURE: 'false', ...base });
-  assert.equal(legacy.provider, 'custom');
-  assert.equal(legacy.host, 'relay');
-
-  const mailpit = resolveMailerConfig({ EMAIL_TRANSPORT: 'mailpit', SMTP_FROM: 'Taibu <no-reply@taibu.local>' });
-  assert.deepEqual([mailpit.transport, mailpit.host, mailpit.port, mailpit.user], ['mailpit', '127.0.0.1', 1025, undefined]);
+test('the retired EMAIL_TRANSPORT fails loudly instead of falling back to log', () => {
+  assert.throws(
+    () => resolveMailerConfig({ EMAIL_TRANSPORT: 'smtp', SMTP_HOST: 'relay', SMTP_PORT: '587', SMTP_SECURE: 'false', ...base }),
+    /EMAIL_TRANSPORT is no longer supported/u,
+  );
 });
 
 test('the log transport needs no relay but is refused in production', () => {

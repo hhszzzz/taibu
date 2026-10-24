@@ -11,7 +11,7 @@ import { SessionContext, type SessionState } from '@/lib/hooks/session-context';
 import { ToastProvider, useToast } from '@/components/ui/Toast';
 import { ChatTaskToastBridge } from '@/components/providers/ChatTaskToastBridge';
 import { AnnouncementPopupHost } from '@/components/providers/AnnouncementPopupHost';
-import { authSessionCacheConstants, getSessionSnapshot, onAuthStateChange, revalidateBrowserSession } from '@/lib/auth';
+import { authSessionCacheConstants, getSessionSnapshot, revalidateBrowserSession, subscribeToAuth } from '@/lib/auth';
 import { getLinuxDoAuthErrorMessage } from '@/lib/auth-feedback';
 import { createAppQueryClient, registerBrowserQueryClient } from '@/lib/query/client';
 import { invalidateQueriesForPath } from '@/lib/query/invalidation';
@@ -103,14 +103,14 @@ export function ClientProviders({ children }: ClientProvidersProps) {
 
         void syncSessionFromServer();
 
-        const { data: { subscription } } = onAuthStateChange((event, { session, user }) => {
+        const unsubscribe = subscribeToAuth((event, { session, user }) => {
             if (!isMounted) return;
             setState({
                 session,
                 user,
                 loading: false,
             });
-            if (event !== 'INITIAL_SESSION') {
+            if (event !== 'initial') {
                 invalidateQueriesForPath('/api/auth');
             }
         });
@@ -139,7 +139,7 @@ export function ClientProviders({ children }: ClientProvidersProps) {
             window.removeEventListener('focus', handleForcedSync);
             window.removeEventListener('pageshow', handleForcedSync);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
-            subscription.unsubscribe();
+            unsubscribe();
         };
     }, []);
 

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import { loadAdminClientAccessState } from '@/lib/admin/client';
-import { onAuthStateChange } from '@/lib/auth';
+import { subscribeToAuth } from '@/lib/auth';
 
 export function useAdminJsonCopy(jsonPayload: unknown) {
     const { showToast } = useToast();
@@ -29,13 +29,13 @@ export function useAdminJsonCopy(jsonPayload: unknown) {
         };
 
         void loadAccess();
-        const { data } = onAuthStateChange(() => {
+        const unsubscribe = subscribeToAuth(() => {
             void loadAccess();
         });
 
         return () => {
             cancelled = true;
-            data.subscription.unsubscribe();
+            unsubscribe();
             if (resetTimerRef.current !== null) {
                 window.clearTimeout(resetTimerRef.current);
             }

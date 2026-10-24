@@ -5,7 +5,7 @@ import { createAuthMiddleware, APIError, isAPIError } from 'better-auth/api';
 import { nextCookies } from 'better-auth/next-js';
 import { emailOTP } from 'better-auth/plugins';
 import { createAuthPool } from '@/lib/db/pool.server';
-import { renderOtpEmail } from '@/lib/email/templates';
+import { renderExistingAccountEmail, renderOtpEmail } from '@/lib/email/templates';
 import { enqueueEmail } from '@/lib/email/queue.server';
 import {
   clearLoginFailures,
@@ -69,8 +69,8 @@ function buildAuth() {
       updateAge: 60 * 60 * 24,
       storeSessionInDatabase: true,
       // Cookie caching would keep a signed session valid until its maxAge even
-      // after a password reset revokes the database row. Read the database on
-      // every session lookup instead; the pool is small and sessions are hot.
+      // after a password reset revokes the database row. Keep it off: each
+      // lookup reads the secondary storage (Redis) and then the database.
       cookieCache: { enabled: false },
     },
     account: {
@@ -104,6 +104,17 @@ function buildAuth() {
       autoSignIn: true,
       revokeSessionsOnPasswordReset: true,
       password: { hash: hashPassword, verify: verifyPassword },
+      // The sign-up route answers generically for an existing address so the
+      // form cannot enumerate accounts; tell the mailbox owner instead.
+      async onExistingUserSignUp({ user }) {
+        // A failed notice must not turn the generic success into an error that
+        // reveals whether the address exists.
+        try {
+          await enqueueEmail({ to: user.email, ...renderExistingAccountEmail() });
+        } catch (error) {
+          console.warn('[auth] existing-account notice not queued:', error instanceof Error ? error.name : typeof error);
+        }
+      },
     },
     emailVerification: {
       sendOnSignUp: true,

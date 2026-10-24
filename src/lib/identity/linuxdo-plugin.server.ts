@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { createAuthEndpoint, getSessionFromCtx } from 'better-auth/api';
+import { revokeUnprovenAccountAccess } from 'better-auth/db';
 import { setSessionCookie } from 'better-auth/cookies';
 import { systemDb } from '@/lib/db/context.server';
 import { ensureUserRecordRow } from '@/lib/user/profile-record';
@@ -130,6 +131,10 @@ async function resolveUser(ctx: Parameters<typeof getSessionFromCtx>[0], sub: st
 
   const byEmail = await ctx.context.internalAdapter.findUserByEmail(user.email.toLowerCase());
   if (byEmail) {
+    // A row whose address was never proven may carry a password or link that
+    // someone else chose. Linux.do has proven this mailbox, so drop that access
+    // before promoting the row, exactly as an email OTP login does.
+    if (!byEmail.user.emailVerified) await revokeUnprovenAccountAccess(ctx, byEmail.user.id);
     await ctx.context.internalAdapter.linkAccount({
       providerId: PROVIDER_ID,
       accountId: sub,

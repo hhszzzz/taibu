@@ -55,12 +55,12 @@ test('browser session cache deduplicates reads, invalidates, and revalidates wit
   const third = await auth.getSessionSnapshot();
 
   const events: Array<{ event: string; userId: string | null }> = [];
-  const { data: { subscription } } = auth.onAuthStateChange((event, state) => {
+  const unsubscribe = auth.subscribeToAuth((event, state) => {
     events.push({ event, userId: state.user?.id ?? null });
   });
   await new Promise((resolve) => setImmediate(resolve));
   const fourth = await auth.revalidateBrowserSession();
-  subscription.unsubscribe();
+  unsubscribe();
 
   assert.equal(first.data.user?.id, 'user-1');
   assert.equal(second.data.user?.id, 'user-1');
@@ -68,8 +68,8 @@ test('browser session cache deduplicates reads, invalidates, and revalidates wit
   assert.equal(fourth.data.user?.id, 'user-3');
   assert.equal(calls, 3);
   assert.deepEqual(events, [
-    { event: 'INITIAL_SESSION', userId: 'user-2' },
-    { event: 'TOKEN_REFRESHED', userId: 'user-3' },
+    { event: 'initial', userId: 'user-2' },
+    { event: 'token-refreshed', userId: 'user-3' },
   ]);
 });
 
@@ -131,7 +131,7 @@ test('sendOTP maps OTP rate limiting to a retry message', async (t) => {
   assert.equal(result.error?.message, '请求过于频繁，请稍后再试');
 });
 
-test('signOut clears the cached session and emits SIGNED_OUT', async (t) => {
+test('signOut clears the cached session and emits signed-out', async (t) => {
   const auth = require('../lib/auth') as typeof import('../lib/auth');
   const previous = auth.__setAuthClientForTests({
     getSession: async () => {
@@ -144,15 +144,25 @@ test('signOut clears the cached session and emits SIGNED_OUT', async (t) => {
   auth.invalidateBrowserSessionCache();
   assert.equal((await auth.getSessionSnapshot()).data.user?.id, 'user-1');
   const events: string[] = [];
-  const { data: { subscription } } = auth.onAuthStateChange((event) => { events.push(event); });
+  const unsubscribe = auth.subscribeToAuth((event) => { events.push(event); });
   await new Promise((resolve) => setImmediate(resolve));
 
   const result = await auth.signOut();
-  subscription.unsubscribe();
+  unsubscribe();
 
   assert.deepEqual(result, { success: true });
-  assert.deepEqual(events, ['INITIAL_SESSION', 'SIGNED_OUT']);
+  assert.deepEqual(events, ['initial', 'signed-out']);
   assert.equal((await auth.getSessionSnapshot()).data.session, null);
+});
+
+test('an unverified password sign-in verifies the mailbox instead of sending a sign-in code', () => {
+  // P1-1: Better Auth revokes every account, password included, when a sign-in
+  // OTP promotes an unverified user; this flow must use email verification.
+  const source = readFileSync(resolve(process.cwd(), 'src/components/auth/AuthModal.tsx'), 'utf8');
+  assert.match(source, /EMAIL_NOT_VERIFIED[\s\S]{0,400}sendOTP\(email, 'signup'\)/u);
+  assert.match(source, /verifyPurpose === 'verify-email'[\s\S]{0,400}verifyOTP\(email, codeToVerify, 'signup'\)/u);
+  assert.match(source, /verifyPurpose === 'verify-email'[\s\S]{0,900}signInWithEmail\(email, password\)/u);
+  assert.doesNotMatch(source, /USER_ALREADY_EXISTS/u);
 });
 
 test('useAppBootstrap should defer viewer failures briefly before surfacing them', () => {
@@ -218,7 +228,7 @@ test('ClientProviders should revalidate auth state and invalidate auth-bound que
   const source = readFileSync(resolve(process.cwd(), 'src/components/providers/ClientProviders.tsx'), 'utf8');
 
   assert.match(source, /revalidateBrowserSession\(\)/u);
-  assert.match(source, /onAuthStateChange\(/u);
+  assert.match(source, /subscribeToAuth\(/u);
   assert.match(source, /invalidateQueriesForPath\('\/api\/auth'\)/u);
 });
 

@@ -66,8 +66,8 @@ test('getAuthContext reports session resolution failures instead of masquerading
   const result = await getAuthContext(request());
 
   assert.equal(result.user, null);
-  assert.equal(result.authError?.status, 401);
-  assert.equal(result.authError?.code, 'SESSION_RESOLUTION_FAILED');
+  assert.equal(result.authError?.status, 503);
+  assert.equal(result.authError?.code, 'SESSION_RESOLUTION_UNAVAILABLE');
   assert.equal(result.db.scope.kind, 'anon');
 });
 

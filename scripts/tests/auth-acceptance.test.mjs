@@ -136,6 +136,41 @@ test('local auth acceptance', async (t) => {
     assert.equal(session.json?.user?.email, user.email);
   });
 
+  await t.test('an unverified password account keeps its password after email verification', async () => {
+    // P1-1 regression: a sign-in OTP would revoke every account (password
+    // included) when it promotes an unverified user; email verification must not.
+    nextIp();
+    const unverified = { email: `unverified-${stamp}@example.test`, name: '未验证用户' };
+    const signUp = await call('/api/auth/sign-up/email', {
+      method: 'POST', jar: new CookieJar(), body: { email: unverified.email, password, name: unverified.name },
+    });
+    assert.equal(signUp.status, 200, signUp.text);
+
+    const denied = await call('/api/auth/sign-in/email', {
+      method: 'POST', jar: new CookieJar(), body: { email: unverified.email, password },
+    });
+    assert.equal(denied.status, 403, denied.text);
+
+    await clearMail();
+    const jar = new CookieJar();
+    const sent = await call('/api/auth/email-otp/send-verification-otp', {
+      method: 'POST', jar, body: { email: unverified.email, type: 'email-verification' },
+    });
+    assert.equal(sent.status, 200, sent.text);
+    const otp = await latestOtp(unverified.email);
+    const verified = await call('/api/auth/email-otp/verify-email', {
+      method: 'POST', jar: new CookieJar(), body: { email: unverified.email, otp },
+    });
+    assert.equal(verified.status, 200, verified.text);
+
+    const signIn = await call('/api/auth/sign-in/email', {
+      method: 'POST', jar, body: { email: unverified.email, password },
+    });
+    assert.equal(signIn.status, 200, signIn.text);
+    const session = await call('/api/auth/get-session', { jar });
+    assert.equal(session.json?.user?.email, unverified.email);
+  });
+
   await t.test('password sign-in works and rejects a wrong password', async () => {
     nextIp();
     const jar = new CookieJar();

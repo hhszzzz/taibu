@@ -660,17 +660,17 @@ export async function build(outputDirectory) {
           } : null;
           const session = () => { const current = user(); return current ? { id: 'fixture-session', userId: current.id, expiresAt: new Date(Date.now() + 3600_000).toISOString(), user: current } : null; };
           const payload = () => ({ data: { session: session(), user: user() }, error: null });
-          window.fixtureAuth = { cookieUser: 'alice', revalidations: 0, change(id) { this.cookieUser = id; for (const cb of listeners) cb('SIGNED_IN', payload().data); } };
+          window.fixtureAuth = { cookieUser: 'alice', revalidations: 0, change(id) { this.cookieUser = id; for (const cb of listeners) cb('signed-in', payload().data); } };
           export const authSessionCacheConstants = { SESSION_REVALIDATE_EVENT_COOLDOWN_MS: 0 };
           // Sign-in flows are outside this fixture; the sidebar only mounts their components.
           const outsideFixture = async () => { throw new Error('Auth flows are outside the browser fixture'); };
-          export const signInWithEmail = outsideFixture, sendOTP = outsideFixture, verifyOTP = outsideFixture, recordLoginAttempt = outsideFixture, resetPasswordWithOTP = outsideFixture, signOut = outsideFixture;
+          export const signInWithEmail = outsideFixture, sendOTP = outsideFixture, verifyOTP = outsideFixture, resetPasswordWithOTP = outsideFixture, signOut = outsideFixture;
           export const updateNickname = outsideFixture, updateAvatarUrl = outsideFixture, ensureUserRecord = outsideFixture;
           export const getSessionSnapshot = async () => payload();
           export const getSession = async () => session();
           export const invalidateBrowserSessionCache = () => {};
           export const revalidateBrowserSession = async () => { window.fixtureAuth.revalidations++; return payload(); };
-          export const onAuthStateChange = cb => { listeners.add(cb); return { data: { subscription: { unsubscribe: () => listeners.delete(cb) } } }; };
+          export const subscribeToAuth = cb => { listeners.add(cb); return () => listeners.delete(cb); };
           export const authClient = {};
         `;
         if (args.path.endsWith('/ChatTaskToastBridge')) contents = 'export function ChatTaskToastBridge() { return null; }';

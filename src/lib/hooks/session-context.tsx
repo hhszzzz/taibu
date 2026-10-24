@@ -2,11 +2,11 @@
 
 // 需要 React Context，在基础 hooks 与应用 Provider 之间共享会话快照。
 import { createContext, useContext } from 'react';
-import type { Session, User } from '@/lib/auth';
+import type { AuthUser, Session } from '@/lib/auth';
 
 export type SessionState = {
     session: Session | null;
-    user: User | null;
+    user: AuthUser | null;
     loading: boolean;
 };
 

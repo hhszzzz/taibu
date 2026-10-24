@@ -12,6 +12,11 @@ export type OutgoingMail = {
 
 let cachedTransport: Transporter | null | undefined;
 
+/** Fails the process at startup instead of inside a queued delivery. */
+export function validateMailer(): MailerConfig {
+  return resolveMailerConfig();
+}
+
 /** What the current environment resolves to, without the password. */
 export function describeMailer(): MailerConfig & { hasPassword: boolean } {
   const config = resolveMailerConfig();

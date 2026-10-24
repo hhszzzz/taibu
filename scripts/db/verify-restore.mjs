@@ -2,15 +2,16 @@
 // Restores a custom-format backup into a throwaway database and verifies it.
 //
 // Weekly drill (deploy/backup/backup.sh):
-//   node scripts/db/verify-restore.mjs --backup /backups/pg/taibu-....dump \
+//   node scripts/db/verify-restore.mjs --backup /backups/taibu-....dump \
 //     --admin-dsn postgres://.../postgres
 //
 // If --compare points at the live database, row counts of every public and
 // identity table must match as well. The temporary database is dropped unless
-// --keep is passed. Exit code 1 means the backup is not trustworthy.
+// --keep is passed. Owner/ACL restoration is excluded from this data/structure drill.
+// A failed check exits with code 1.
 import { spawn } from 'node:child_process';
-import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
@@ -19,7 +20,6 @@ import { libpqEnvironment } from './connection-env.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const PG_RESTORE_BIN = process.env.PG_RESTORE_BIN || 'pg_restore';
-const migrationsDir = path.join(root, 'database/migrations');
 const args = process.argv.slice(2);
 const has = (flag) => args.includes(flag);
 const value = (flag, fallback) => {
@@ -103,7 +103,6 @@ async function tableCounts(dsn) {
       order by 1, 2`);
     const counts = {};
     for (const row of rows) {
-      if (row.table === 'schema_migrations') continue;
       const { rows: countRows } = await client.query(
         `select count(*)::bigint as count from ${quoteIdent(row.schema)}.${quoteIdent(row.table)}`,
       );
@@ -111,21 +110,6 @@ async function tableCounts(dsn) {
     }
     return counts;
   });
-}
-
-function expectedMigrations() {
-  const pattern = /^(\d{4})_([a-z0-9_]+)\.sql$/u;
-  return readdirSync(migrationsDir)
-    .filter((file) => pattern.test(file))
-    .sort()
-    .map((file) => {
-      const sql = readFileSync(path.join(migrationsDir, file), 'utf8');
-      return {
-        version: pattern.exec(file)[1],
-        name: pattern.exec(file)[2],
-        checksum: createHash('sha256').update(sql).digest('hex'),
-      };
-    });
 }
 
 async function orphanCheck(dsn) {
@@ -189,22 +173,11 @@ async function main() {
     }
     report.steps.push({ name: 'pg_restore', durationMs: Date.now() - restoreAt });
 
-    const migrations = expectedMigrations();
-    const applied = await withClient(restoredUrl, async (client) => {
-      const { rows } = await client.query('select version, name, checksum from taibu_meta.schema_migrations order by version');
-      return rows;
+    const structure = await withClient(restoredUrl, async client => {
+      const { rows } = await client.query("select to_regclass('identity.users') is not null and to_regclass('public.users') is not null as ready");
+      return rows[0].ready;
     });
-    check('migration count', applied.length === migrations.length, { applied: applied.length, expected: migrations.length });
-    const byVersion = new Map(applied.map((row) => [row.version, row]));
-    const missing = migrations.filter((migration) => !byVersion.has(migration.version));
-    const checksumMismatch = migrations.filter((migration) => {
-      const row = byVersion.get(migration.version);
-      return row && (row.checksum !== migration.checksum || row.name !== migration.name);
-    });
-    check('all migrations recorded', missing.length === 0 && checksumMismatch.length === 0, {
-      missing: missing.map((migration) => migration.version),
-      checksumMismatch: checksumMismatch.map((migration) => migration.version),
-    });
+    check('native identity and profile definitions restored', structure);
 
     const counts = await tableCounts(restoredUrl);
     check('identity users present', (counts['identity.users'] ?? 0) > 0, counts['identity.users']);

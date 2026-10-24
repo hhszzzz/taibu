@@ -5,7 +5,7 @@ const json = value => `${quote(JSON.stringify(value))}::jsonb`;
 
 export async function agentExperienceDatabaseContracts(t, { sql, asActor, asOwner, adminId }) {
   const owner = randomUUID(), other = randomUUID();
-  await sql(`INSERT INTO auth.users(id) VALUES(${quote(owner)}),(${quote(other)});`);
+  await sql(`INSERT INTO identity.users(id) VALUES(${quote(owner)}),(${quote(other)});`);
   await asOwner(`UPDATE public.users SET ai_chat_count=20,membership='plus' WHERE id IN (${quote(owner)},${quote(other)});`);
   const admin = statement => asActor(adminId, statement);
   const parsed = async statement => { const value=await admin(statement); return value ? JSON.parse(value) : null; };
@@ -170,7 +170,7 @@ export async function agentExperienceDatabaseContracts(t, { sql, asActor, asOwne
   });
   await t.test('briefing failures share one reservation, fence stale leases and refund on the third failure',async()=>{
     const user=randomUUID();
-    await sql(`INSERT INTO auth.users(id) VALUES(${quote(user)});`);
+    await sql(`INSERT INTO identity.users(id) VALUES(${quote(user)});`);
     await asOwner(`UPDATE public.users SET ai_chat_count=5 WHERE id=${quote(user)}; INSERT INTO public.user_settings(user_id,daily_briefing_settings) VALUES(${quote(user)},'{"timezone":"Pacific/Auckland","time":"00:00"}'); INSERT INTO public.reminder_subscriptions(user_id,reminder_type,enabled) VALUES(${quote(user)},'daily_briefing',true);`);
     let previous;
     for(let attempt=1;attempt<=3;attempt++){
@@ -190,7 +190,7 @@ export async function agentExperienceDatabaseContracts(t, { sql, asActor, asOwne
     await asOwner(`UPDATE public.reminder_subscriptions SET enabled=false WHERE user_id=${quote(user)};`);
   });
   await t.test('zero balance skips a local day and feature shutdown refunds an outstanding job',async()=>{
-    const users=[randomUUID(),randomUUID()]; await sql(`INSERT INTO auth.users(id) VALUES(${users.map(quote).join('),(')});`);
+    const users=[randomUUID(),randomUUID()]; await sql(`INSERT INTO identity.users(id) VALUES(${users.map(quote).join('),(')});`);
     for(let index=0;index<users.length;index++) await asOwner(`UPDATE public.users SET ai_chat_count=${index} WHERE id=${quote(users[index])}; INSERT INTO public.user_settings(user_id,daily_briefing_settings) VALUES(${quote(users[index])},'{"timezone":"Asia/Shanghai","time":"00:00"}'); INSERT INTO public.reminder_subscriptions(user_id,reminder_type,enabled) VALUES(${quote(users[index])},'daily_briefing',true);`);
     await admin('SELECT public.claim_daily_briefings(10);');
     assert.equal(await asOwner(`SELECT status||':'||billing FROM public.daily_briefing_jobs WHERE user_id=${quote(users[0])};`),'skipped:none');

@@ -1,10 +1,6 @@
 #!/usr/bin/env node
 // Compares the public schema of two databases after normalising pg_dump output.
 //
-// Used in P5 to adjudicate drift between the transit database (production
-// schema + replayed pending migrations) and the legacy self-host stack, and in
-// P10 to check that database/schema.sql still matches the migrations.
-//
 // Usage:
 //   node scripts/db/schema-diff.mjs --a <dsn> --b <dsn> [--out tmp/schema.diff]
 //   node scripts/db/schema-diff.mjs --a <dsn> --b <dsn> --allow-diff

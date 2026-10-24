@@ -79,7 +79,8 @@ function queryViaLocalStack(project) {
   if (!existsSync(envFile)) throw new Error(`本地配置不存在：${path.relative(ROOT, envFile)}`);
   const psql = (sql) => execFileSync('docker', [
     'compose', '--project-directory', ROOT, '--env-file', envFile,
-    '-f', path.join(ROOT, 'docker-compose.local.yml'), '-p', project,
+    '-f', path.join(ROOT, 'deploy/compose.base.yml'),
+    '-f', path.join(ROOT, 'deploy/compose.local.yml'), '-p', project,
     'exec', '-T', 'db', 'psql', '-X', '-qAt', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', 'taibu',
   ], { cwd: ROOT, input: sql, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trim();
   return {

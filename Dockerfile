@@ -25,8 +25,7 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
-# The migrate service uses psql for `-- migrate:no-transaction` files
-# (CREATE INDEX CONCURRENTLY cannot run inside a transaction block).
+# Current indexes use CREATE INDEX CONCURRENTLY outside a transaction.
 RUN apk add --no-cache postgresql17-client
 RUN addgroup -S nodejs && adduser -S nextjs -G nodejs \
   && mkdir -p /data/files && chown -R nextjs:nodejs /data
@@ -35,19 +34,13 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 # The worker uses Next's server helpers outside Web's bundled route chunks.
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/next ./node_modules/next
-# scripts/db/import-supabase.mjs runs as a one-off and needs a bcrypt verifier
-# for both $2a$ (GoTrue) and $2b$ hashes; Next bundles the app copy.
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.pnpm/bcryptjs@*/node_modules/bcryptjs ./node_modules/bcryptjs
 COPY --from=builder /app/LICENSE ./LICENSE
 COPY --from=builder /app/packages/core/LICENSE ./licenses/taibu-core.LICENSE
 COPY --from=builder --chown=nextjs:nodejs /app/.agent ./.agent
-# Migration tooling ships with the image so `migrate`/`db-setup` run the exact
-# same SQL that was built with this release.
+# Database setup uses the SQL definitions shipped with this release.
 COPY --from=builder --chown=nextjs:nodejs /app/database ./database
 COPY --from=builder --chown=nextjs:nodejs /app/scripts/db ./scripts/db
-# transit-build replays the still-pending Supabase migrations at cutover.
-# Remove this copy together with supabase/ in P10.
-COPY --from=builder --chown=nextjs:nodejs /app/supabase/migrations ./supabase/migrations
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/selfhost.mjs ./scripts/selfhost.mjs
 RUN node .agent/worker.mjs --check && node -e "require.resolve('pg')" 
 # Check each traced pnpm entry, including the attachment API and Next's version.
 RUN node --input-type=module -e "import {globSync} from 'node:fs'; import {createRequire} from 'node:module'; import {resolve} from 'node:path'; const entries = [...globSync('node_modules/.pnpm/sharp@*/node_modules/sharp/package.json')]; if (!entries.length) throw new Error('Sharp is missing from the standalone image'); for (const entry of entries) { const sharp = createRequire(resolve(entry))('sharp'); const png = await sharp({create:{width:2,height:2,channels:3,background:'#fff'}}).png().toBuffer(); if (!png.length) throw new Error('Sharp image processing failed'); } console.log('Sharp runtime check passed');"

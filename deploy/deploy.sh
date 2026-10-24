@@ -1,5 +1,5 @@
 #!/bin/sh
-# Run on the host, not in CI. Every step is explicit so a failed migration
+# Run on the host, not in CI. Every step is explicit so a failed database setup
 # stops the rollout before web/worker are replaced.
 set -eu
 TAG="${1:?usage: deploy.sh <tag>}"
@@ -50,12 +50,12 @@ compose up -d db redis
 # The one-shot services run here, explicitly, so a failure stops the rollout
 # before web and worker are replaced. The long-running services then start with
 # --no-deps: without it compose re-runs every `depends_on: service_completed_
-# successfully` one-shot again, which repeated the whole migration pass on each
+# successfully` one-shot again, which repeated the SQL initialization on each
 # deploy.
 echo "[deploy] one-shot setup"
 compose run --rm -T files-init
 compose run --rm -T db-setup
-compose run --rm -T migrate
+compose run --rm -T db-init
 
 echo "[deploy] start services"
 if [ "$EDGE_MODE" = "host" ]; then

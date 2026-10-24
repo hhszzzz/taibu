@@ -2,13 +2,13 @@
 
 ## 适用范围
 
-这是 Vercel + 托管 Supabase 迁往自有基础设施后的运行方式。应用仍是 Next.js 模块化单体（`output: 'standalone'`），Core/MCP 包边界不变。
+应用以自有 PostgreSQL、Redis、SMTP 和文件卷运行。应用仍是 Next.js 模块化单体（`output: 'standalone'`），Core/MCP 包边界不变。
 
 - 认证使用 Better Auth（`identity` schema），数据访问统一走 Kysely 的受控 `ScopedDb`。
-- 文件写入本机卷（`/data/files`），不再使用 Supabase Storage。
+- 文件写入本机卷（`/data/files`），由本机卷持久化。
 - 限流、登录失败锁、会话二级存储和 BullMQ 队列使用 Redis。
-- PostgreSQL 17 + pgvector 由 `database/bootstrap` 与 `database/migrations` 管理。
-- 本文只描述本地栈；生产主机、TLS、备份与切换步骤见 [切换运行手册](Cutover.md)。
+- PostgreSQL 17 + pgvector 由 `database/bootstrap/` 与 `database/*.sql` 管理。
+- 本文统一描述本地与生产运行方式，不保留一次性基础设施切换记录。
 
 ## 前置
 
@@ -21,20 +21,21 @@
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm selfhost init --project taibu-v2 --port 3080
-pnpm selfhost up --project taibu-v2 --build
+pnpm local:update
 ```
 
-访问 `http://127.0.0.1:3080`。邮件由 Mailpit 捕获，界面在 `http://127.0.0.1:8025`；注册、登录验证码和找回密码都从这里读取。
+首次运行自动生成配置并构建、启动全部服务，数据库 SQL 自动执行。默认访问 `http://127.0.0.1:3080`；实际端口以 `pnpm local:status` 为准。邮件由 Mailpit 捕获，默认界面在 `http://127.0.0.1:8025`；注册、登录验证码和找回密码都从这里读取。
 
 首次启动顺序由 Compose 保证：
 
 1. `db` 健康；
 2. `db-setup` 执行 `database/bootstrap`（角色、schema、扩展、角色密码）；
-3. `migrate` 执行 `database/migrations`；
+3. `db-init` 应用当前 SQL 定义；
 4. `web` 与 `worker` 启动。
 
 `web` 与 `worker` 共用同一个镜像；`worker` 同时消费 Agent 任务和 BullMQ 的维护、邮件队列。
+
+根目录 `Dockerfile` 构建这个应用镜像；`deploy/compose.*.yml` 定义镜像与 PostgreSQL、Redis、文件卷等服务如何一起运行。`deploy/deploy.sh` 封装生产备份、更新和健康检查，本地入口仍是 `pnpm local:update`。根目录 `docker-compose.mcp.yml` 用于单独运行 MCP Server，与网站栈分别启动。
 
 ## 常用命令
 
@@ -48,25 +49,39 @@ pnpm selfhost backup --project taibu-v2 --output ./backups/taibu.dump
 pnpm selfhost restore --project taibu-v2 --input ./backups/taibu.dump
 ```
 
+根目录 `backups/` 已同时从 Git 和 Docker 构建上下文排除，备份应保存在私有目录。
+
 独立项目：`pnpm selfhost init --project taibu-preview --port 3082`，后续命令携带相同 `--project`。`init` 拒绝覆盖既有配置。不同项目使用独立 Docker 网络、卷和 0700 配置目录。
 
 ## 数据库
 
+`database/` 直接保存当前 PostgreSQL SQL，不保留编号迁移或版本账本。
+
+SQL 是创建空库及更新数据库对象的源码。搬迁已有数据库时，完整的 `pg_dump -Fc` 备份会携带表、数据、函数、触发器、权限及索引定义，`pg_restore` 会据此重建索引，不需要手工逐条建索引。只导出 CSV 或使用 `--data-only` 则不包含这些结构。集群角色、扩展安装和文件卷仍需在目标环境准备；数据库备份不能代替文件卷备份。
+
+| 文件 | 内容与执行方式 |
+| --- | --- |
+| `bootstrap/` | 超级用户建立角色、schema、扩展与角色密码 |
+| `schema.sql` | 表、序列和约束，仅用于全新空库 |
+| `functions.sql` | 可替换的函数、视图与不支持任务的结算 |
+| `triggers.sql` | 重建当前触发器 |
+| `access.sql` | RLS、策略和明确的角色权限 |
+| `seed.sql` | 幂等建立系统主体 |
+| `indexes.sql` | 在事务外并发建立索引 |
+
 ```bash
-# 在宿主上连接容器内的数据库
-pnpm db:status    # 需要 MIGRATOR_DATABASE_URL
-pnpm db:migrate   # 只向前；校验 sha256，已应用文件变化会拒绝执行
-pnpm db:codegen   # 从 pg_catalog 重新生成 src/lib/db/generated
-pnpm db:schema    # 从已迁移库重新生成 database/schema.sql
-pnpm db:schema:check  # CI：快照与迁移结果不一致时失败
-pnpm db:diff      # --a/--b 两个 DSN 的 public schema 漂移报告
-pnpm db:verify-restore  # 恢复备份到临时库并校验迁移、用户一致性、FK 孤儿
-pnpm db:transit   # 从只读生产快照构建 transit 并重放待上线迁移
+pnpm db:bootstrap  # ADMIN_DATABASE_URL 和各角色密码，见脚本校验
+pnpm db:init       # SCHEMA_DATABASE_URL，兼容 MIGRATOR_DATABASE_URL
+pnpm db:codegen    # --project taibu-v2，或 DATABASE_URL；生成 src/lib/db/generated
+pnpm db:diff       # --a/--b 两个 DSN 的 public schema 结构对比
+pnpm db:verify-restore  # 在临时库验证备份、用户一致性与 FK
 ```
 
-`db:transit` / `db:diff` / `db:verify-restore` 需要 PostgreSQL 17 客户端（`PG_DUMP_BIN` / `PG_RESTORE_BIN` / `PSQL_BIN` 可覆盖路径），生产演练步骤见 [切换运行手册](Cutover.md)。
+`db:init` 使用数据库锁串行执行。全新库先创建表，再应用其余 SQL；已有库刷新函数、触发器、权限、系统主体与索引，保留业务数据，并移除旧迁移账本。失败事务回滚，失败的并发索引可在重跑时修复。
 
-本地连接信息在 `.taibu-local/<project>/env/*.env`（0600）。迁移脚本在 `database/migrations/NNNN_name.sql`；新增结构必须写新迁移，不能改已应用文件。
+**已有库增加列、改变类型、修改约束或替换索引时，需要维护者先备份并执行明确的 `ALTER` / 索引 SQL，然后同步当前定义。** `db:init` 会拒绝缺少表或列的已有库，但不会推断类型、约束或索引定义差异，也不会自动删表或清空数据。`CREATE INDEX IF NOT EXISTS` 不会替换同名索引；调整定义时需显式处理旧索引。
+
+宿主机操作需要 PostgreSQL 17 客户端；对比与恢复校验支持 `PG_DUMP_BIN` / `PG_RESTORE_BIN` / `PSQL_BIN` 覆盖路径。私有连接保存在 `.taibu-local/<project>/env/*.env`（0600）。为兼容现有部署，DDL 连接文件仍叫 `migrate.env`，登录角色仍叫 `taibu_migrator`；新生成文件写入 `SCHEMA_DATABASE_URL`，既有 `MIGRATOR_DATABASE_URL` 仍可使用。这些名称不涉及历史迁移。
 
 ### 设为管理员
 
@@ -78,7 +93,7 @@ docker compose \
   --env-file .taibu-local/taibu-v2/compose.env \
   -f deploy/compose.base.yml -f deploy/compose.local.yml -p taibu-v2 \
   exec -T db psql -U postgres -d taibu \
-  -c "update public.users set is_admin = true where id = (select id from identity.users where email = 'you@example.com');"
+  -c "set role taibu_owner; update public.users set is_admin = true where id = (select id from identity.users where email = 'you@example.com');"
 ```
 
 ## 邮件
@@ -100,8 +115,8 @@ SMTP_FROM=<已验证发信域名下的地址>
 
 | `EMAIL_PROVIDER` | 主机 | 端口 | `SMTP_SECURE` | 说明 |
 |---|---|---:|---|---|
-| `brevo` | `smtp-relay.brevo.com` | 587 | `false` | 免费版 300 封/天 |
-| `resend` | `smtp.resend.com` | 465 | `true` | 免费版 100 封/天 |
+| `brevo` | `smtp-relay.brevo.com` | 587 | `false` | STARTTLS |
+| `resend` | `smtp.resend.com` | 465 | `true` | 隐式 TLS |
 | `tencent` | 自行填写 | 465 | `true` | 广州 `gz-smtp.qcloudmail.com`、香港 `smtp.qcloudmail.com`、国际站 `sg-smtp.qcloudmail.com` |
 | `custom` | 自行填写 | 自行填写 | 自行填写 | 自建 Postfix 等 |
 | `mailpit` | `127.0.0.1` | 1025 | `false` | 本地捕获，不需要凭据 |
@@ -128,7 +143,7 @@ SMTP_FROM=命理排盘 <noreply@mingai.fun>
 
 `SMTP_FROM` 用 `显示名 <地址>` 的形式，收件人看到的是「命理排盘」而不是 `noreply`。只写地址也能发信，但多数邮件客户端会把 `noreply` 直接显示成发件人名称。
 
-`SMTP_FROM` 的地址部分必须是已在 Brevo 验证过的发件人域名下的地址。免费版每天 300 封；按现有用户量（708 人、近 30 天活跃 103）足够，超限时 Brevo 会拒发而不是扣费。
+`SMTP_FROM` 的地址部分必须是已在 Brevo 验证过的发件人域名下的地址。发信额度与 DNS 验证要求以服务商当前控制台为准。
 
 ### 域名 DNS 记录
 
@@ -160,19 +175,31 @@ DMARC 已有就保持不动，先留在 `p=none` 观察；等 SPF/DKIM 都验证
 
 BullMQ 的 `taibu-email` 队列失败计数可在 Redis 里查看；连续失败通常是 `SMTP_PASS`（用了 API key 而不是 SMTP 密钥）、`SMTP_USER` 填成了 relay 主机名，或发件域名尚未验证。
 
-## 目录
+## 生产部署与备份
 
-- `deploy/compose.base.yml`：db、redis、db-setup、migrate、web、worker
-- `deploy/compose.local.yml`：源码构建、回环端口、Mailpit
-- `deploy/postgres/postgresql.conf`：2 vCPU / 2 GB 起点配置
-- `database/bootstrap/`：超级用户执行的初始化
-- `database/migrations/`：只向前的 schema 变更
-- `.taibu-local/<project>/`：私有配置、env 文件、compose.env（0700/0600）
+生产使用 `deploy/compose.base.yml` + `deploy/compose.prod.yml`，私有配置写入 `/opt/taibu/env/`。`compose.env` 保存项目名、镜像、tag、域名及 `TAIBU_ENV_DIR`；账号口令按 `app.env`、`db.env`、`db-setup.env`、`migrate.env`、`backup.env`、`restore.env` 拆分。部署使用 CI 构建好的镜像。
+
+```bash
+# 在主机源码目录执行；已有宿主反向代理时使用 host。
+EDGE_MODE=host deploy/deploy.sh <tag>
+# 由 Compose 的 Caddy 接管 80/443 时使用 container（默认）。
+EDGE_MODE=container deploy/deploy.sh <tag>
+```
+
+`host` 模式叠加 `compose.host-edge.yml`，Web 只发布回环端口；`container` 模式启动 Caddy 的 `edge` profile。TLS、域名、代理真实 IP 与上传限制以 `deploy/Caddyfile` 和主机代理配置为准。
+
+发布脚本先备份运行中的 PostgreSQL，再执行 `files-init`、`db-setup` 与 `db-init`，成功后更新 Web / worker 并检查 `/api/health/ready`。准备表结构变更时需把前述显式 SQL 操作纳入发布顺序；切换镜像 tag 不会撤销已经执行的结构变更。
+
+`deploy/backup/` 定时备份 PostgreSQL 和文件卷，可选同步到异地 restic 仓库。`db:verify-restore` 或生产 `restore-check` 工具在独立临时库验证结构、数据与外键；该校验使用 `--no-owner --no-privileges`，不验证业务角色权限。恢复业务环境前停止写入，使用匹配的数据库、文件备份和镜像，并恢复对象属主与权限。
+
+- `deploy/postgres/postgresql.conf`：数据库资源配置。
+- `.taibu-local/<project>/`：本地私有配置、env 与 Compose 插值文件。
+- `/opt/taibu/backups/` 与 Compose `backups` 卷：发布前备份和定时备份，分别管理保留策略。
 
 ## 安全边界
 
 - 只有 `web` 的 3000 端口映射到 `127.0.0.1`；db/redis 不对宿主发布端口（本地 db 仅回环供 codegen）。
 - `taibu_app` 是 NOINHERIT 零权限角色；每个事务显式设置 `role` 与 `request.jwt.claims`，缺少上下文时直接失败。
 - `taibu_auth` 只能访问 `identity` schema，供 Better Auth 专用连接池。
-- 迁移使用 `taibu_migrator` 登录后 `SET ROLE taibu_owner`；`taibu_owner` 不对外登录。
+- DDL 初始化使用 `taibu_migrator` 登录后 `SET ROLE taibu_owner`；`taibu_owner` 不对外登录。
 - 不要把 `.taibu-local`、`.env` 或备份文件提交到仓库。

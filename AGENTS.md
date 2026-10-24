@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Claude will review your code from three dimensions: maintainability, boundary conditions, and regression risk, and the quality of your code will determine whether the system can go live. Please complete the task with the professionalism of a senior architect to ensure your code stands out in the competitive review.
+公共开发约定统一维护在本文件；架构、运行与 Agent 说明见 `docs/manual/`。
 
 ## 强制规范（MUST）
 
@@ -10,32 +10,47 @@ Claude will review your code from three dimensions: maintainability, boundary co
 
 ```bash
 pnpm install
-pnpm build          # 构建所有 packages + Next.js
+pnpm build          # 构建 Core、worker 与 Next.js
+pnpm build:packages # 构建 core、mcp、mcp-server
+pnpm typecheck      # 构建 packages 后进行 strict 类型检查
 pnpm lint
-pnpm test           # 自动先构建 packages/core、mcp、mcp-server，再跑全量测试
+pnpm test           # 自动构建所需包后运行默认测试
+pnpm test:db        # 隔离 PostgreSQL 契约
+pnpm verify         # 完整验收，需要 Docker 与 Playwright 浏览器
 ```
 
-> **注意**：`pnpm test` 会先执行 `pnpm -C packages/core build && pnpm -C packages/mcp build && pnpm -C packages/mcp-server build`，修改 `packages/*` 源码后无需手动 build 即可直接跑测试。
+> **注意**：`pnpm test` 按选定测试构建依赖包；修改包源码后无需手动 build。禁止默认复用过期 dist。
 
 ## 固定本地测试环境
 
 - 通用测试栈使用 Docker Compose 项目 `taibu-v2`（db、redis、web、worker、mailpit），入口以 `.taibu-local/taibu-v2/env/` 生成的端口为准。
 - `pnpm local:up` 启动本地栈；`pnpm local:update` 重新构建镜像并启动；`pnpm local:status` / `pnpm local:logs` 检查状态。
-- 本地数据卷与生成的密钥保存在 `.taibu-local/taibu-v2/`，不得输出或提交。schema 变更只用 `database/migrations/`。
+- 本地数据卷与生成的密钥保存在 `.taibu-local/taibu-v2/`，不得输出或提交。数据库直接维护 `database/*.sql` 当前定义，不新增历史迁移。
 
 ## 项目最小地图
 
 - `packages/core`（`taibu-core`）: 占术计算引擎，以及 **`text.ts` 规范文本渲染层以及`json.ts` 规范json输出格式**。
 - `packages/mcp`: MCP 协议层。
 - `packages/mcp-server`: MCP 服务端。
-- `database/`: 数据库唯一事实来源（bootstrap、migrations、schema.sql 快照）。
+- `database/`: 数据库唯一事实来源（bootstrap 与直接维护的当前 SQL）。
 - `deploy/`: Compose、Caddy、PostgreSQL/Redis 配置与备份脚本。
 
-## 数据库与迁移规范
+## 数据库规范
 
-- 本地用 `pnpm db:migrate` 执行 `database/migrations/`；生产经 ssh-mcp-server 在主机运行 `deploy/deploy.sh <tag>`。禁止直接改线上表结构。
-- migration 中涉及安全对象（函数、视图、触发器）时，显式声明 `search_path` 与权限边界。
-- 结构变化后运行 `pnpm db:schema` 更新 `database/schema.sql`。
+- `pnpm db:bootstrap` 创建角色与扩展；`pnpm db:init` 应用 `database/` 当前 SQL。Compose 中由 `db-setup`、`db-init` 先于 Web 和 worker 执行。
+- `schema.sql` 描述全新库的表与约束，不是生成快照；函数、权限、触发器、索引和系统主体分别维护于同目录 SQL。
+- 不维护编号迁移和版本账本。已有库的表或列变更使用明确的 SQL，先备份并验证，随后同步当前定义与生成类型；不得重建已有业务表来替代升级。
+- 安全函数、视图和触发器显式声明 `search_path` 与权限边界，同时评估 RLS、索引、默认值、回填和旧数据兼容。
+- 生产发布由主机运行 `deploy/deploy.sh <tag>`，具体操作见自托管手册；发布需要用户授权。
+
+## 实现边界
+
+- API 复用 `src/lib/api-utils.ts` 的鉴权、`jsonOk/jsonError`；管理员接口使用 `requireAdminUser()` / `requireAdminContext()`。
+- 数据访问通过 `src/lib/db/context.server.ts` 的 `userDb()` / `anonDb()` / `systemDb()`，禁止在路由内创建连接池。缺少用户身份时失败，不得回退为系统主体。
+- 占术解读复用 `src/lib/api/divination-pipeline.ts`；来源在 `src/lib/source-contracts.ts` 注册，保存通过现有 `createAIAnalysisConversation`。会员、模型权限、积分、限流和失败补偿保持现有用例边界。
+- 占术计算、文本和 JSON 复用 `taibu-core/<领域>` 的公开接口，Web / MCP 不重复实现算法或规范渲染。
+- 页面保持轻量，复杂逻辑复用业务模块；保持 TypeScript strict，不引入无必要的 `any` 或 `@ts-ignore`。
+- 主题、交互反馈和 Toast 复用现有体系；客户端不使用 `alert`。默认使用 Server Component，需要交互时再用客户端组件。
 
 ## 测试与验收
 

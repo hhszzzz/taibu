@@ -1,4 +1,4 @@
-// Shared pg_dump normaliser for schema-diff and database/schema.sql.
+// pg_dump normaliser for schema-diff.
 //
 // pg_dump output is not stable across server versions and object creation
 // order. Keep object bodies, sort objects by name/type and drop the session

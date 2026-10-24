@@ -117,22 +117,22 @@ See [taibu-core on npm](https://www.npmjs.com/package/taibu-core) and [packages/
 
 ### Self-hosted stack (PostgreSQL 17 + Redis 8)
 
-Data, authentication and files are served by a local Docker stack; no Vercel
-or hosted Supabase account is used. You need Docker, Node.js 24 and pnpm:
+Data, authentication and files are served by a local Docker stack. You need Docker, Node.js 24 and pnpm:
 
 ```bash
 pnpm install
 pnpm local:update  # build and start db, redis, web, worker and mailpit (first run)
 pnpm local:up      # start with existing images
 pnpm local:status  # ports and health
-pnpm local:down    # keep the database and file volumes
+pnpm selfhost down --project taibu-v2 # keep database and file volumes
 ```
 
 Random secrets and ports are generated under `.taibu-local/taibu-v2/` on first
 start. Verification emails are captured by Mailpit. The local stack uses the
-same migrations (`database/migrations/`) and Compose services as production;
-see [Self-Hosting](docs/manual/Self-Hosting.md) and the
-[cutover runbook](docs/manual/Cutover.md).
+current PostgreSQL definitions in `database/` and the same Compose services as
+production, with no numbered migrations or ledger. See
+[Self-Hosting](docs/manual/Self-Hosting.md) for initialization, explicit SQL
+changes to existing databases, deployment and backups.
 
 ### Local Development
 
@@ -162,9 +162,9 @@ Visit [http://localhost:3000](http://localhost:3000) to view the app.
 
 ## Developer Documentation
 
-- [Architecture and migration boundaries (Chinese)](docs/manual/Architecture.md): module ownership, AI lifecycle/billing, historical replay, compatibility exceptions, and rollback conditions.
+- [Architecture (Chinese)](docs/manual/Architecture.md): module ownership, data permissions and AI lifecycle.
 - [Core public API](packages/core/README.md) · [MCP manual](docs/manual/MCP-Server-Manual.md)
-- [Refactor and test acceptance record (Chinese)](docs/manual/Refactor-Acceptance.md)
+- [Agent manual (Chinese)](docs/manual/Agent.md) · [Self-Hosting (Chinese)](docs/manual/Self-Hosting.md)
 
 ```bash
 pnpm test -- src/tests/chat-route.test.ts # Selected tests; builds required packages
@@ -173,7 +173,7 @@ pnpm exec playwright install --only-shell chromium # First-time browser setup
 pnpm verify                              # Build each package once; full verification (local Docker required)
 ```
 
-SQL, real Auth/REST, and browser checks also run independently with `pnpm test:db`, `pnpm test:auth`, and `pnpm test:browser`. `test:auth` creates a disposable Auth/PostgREST/PostgreSQL stack without reading production configuration or existing data. If Chromium downloads are unavailable and Chrome is already installed, explicitly use `pnpm verify -- --chrome`; no browser assertions are skipped. CI uses pinned Chromium and requires all three gates.
+SQL, Better Auth, and browser checks also run independently with `pnpm test:db`, `pnpm test:auth`, and `pnpm test:browser`. `test:auth` uses Better Auth and Mailpit in the selected local stack, which must be running; `test:db` uses disposable PostgreSQL containers. If Chromium downloads are unavailable and Chrome is already installed, explicitly use `pnpm verify -- --chrome`; no browser assertions are skipped. CI uses pinned Chromium; database and browser checks have separate entry points.
 
 ---
 

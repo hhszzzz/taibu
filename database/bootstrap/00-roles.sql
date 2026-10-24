@@ -35,8 +35,7 @@ DO $$ BEGIN
     CREATE ROLE authenticated NOLOGIN NOBYPASSRLS;
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
-    -- Inert placeholder so the historical GRANT statements keep executing.
-    -- Dropped by the P10 cleanup once no baseline object references it.
+    -- Non-login RPC role. Application connections can only SET anon/authenticated.
     CREATE ROLE service_role NOLOGIN NOBYPASSRLS;
   END IF;
 END $$;
@@ -63,24 +62,21 @@ GRANT pg_read_all_data TO taibu_backup;
 CREATE SCHEMA IF NOT EXISTS extensions AUTHORIZATION taibu_owner;
 CREATE SCHEMA IF NOT EXISTS auth AUTHORIZATION taibu_owner;
 CREATE SCHEMA IF NOT EXISTS identity AUTHORIZATION taibu_owner;
-CREATE SCHEMA IF NOT EXISTS taibu_meta AUTHORIZATION taibu_owner;
 
 CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions;
 CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA extensions;
 CREATE EXTENSION IF NOT EXISTS pg_stat_statements WITH SCHEMA extensions;
 
 -- PostgreSQL 15+ gives public to pg_database_owner; taibu_owner must own it
--- to create the baseline objects inside a transaction with SET LOCAL ROLE.
+-- to create the current objects inside a transaction with SET LOCAL ROLE.
 ALTER SCHEMA public OWNER TO taibu_owner;
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 GRANT USAGE ON SCHEMA public, extensions TO anon, authenticated, service_role;
 GRANT USAGE ON SCHEMA extensions TO taibu_app;
 GRANT USAGE ON SCHEMA identity TO taibu_auth;
-GRANT USAGE ON SCHEMA taibu_meta TO taibu_migrator;
 
 -- New functions owned by taibu_owner stay unexecutable until granted explicitly.
 ALTER DEFAULT PRIVILEGES FOR ROLE taibu_owner REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
 ALTER DEFAULT PRIVILEGES FOR ROLE taibu_owner IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
 
--- Import tool needs to disable triggers while copying rows.
-GRANT SET ON PARAMETER session_replication_role TO taibu_migrator;
+REVOKE SET ON PARAMETER session_replication_role FROM taibu_migrator;

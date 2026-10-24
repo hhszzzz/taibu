@@ -13,7 +13,7 @@ export async function agentDatabaseContracts(
   const owner = randomUUID(),
     other = randomUUID();
   await sql(
-    `INSERT INTO auth.users(id) VALUES (${quote(owner)}),(${quote(other)});`,
+    `INSERT INTO identity.users(id) VALUES (${quote(owner)}),(${quote(other)});`,
   );
   await asOwner(
     `UPDATE public.users SET membership='plus',ai_chat_count=50 WHERE id IN (${quote(owner)},${quote(other)});`,
@@ -307,13 +307,8 @@ export async function agentDatabaseContracts(
     await finish(await claim(), 'completed', { ...assistant(historical.id), content: '历史答复保留' });
     await asOwner(`UPDATE public.agent_runs SET checkpoint=${json({ ...checkpoint, durable: { engine: 'pi-durable/1.1.0' } })} WHERE id=${quote(historical.id)};`);
     const current = await create(await createConversation(), { charge: false });
-    // The latest generation migration is the one that must stay replayable. Its retirement settles through
-    // agent_finish_run, which lost the unused p_record argument afterwards (20261020_120000).
-    const source = await readFile(new URL('../../supabase/migrations/20261020_100000_agent_pi_durable_1_3.sql', import.meta.url), 'utf8');
-    const settle = 'PERFORM public.agent_finish_run(r.id,r.worker_id,r.fence,\'failed\',r.checkpoint,message,NULL);';
-    assert.equal(source.split(settle).length, 2);
-    const migration = source.replace(settle, 'PERFORM public.agent_finish_run(r.id,r.worker_id,r.fence,\'failed\',r.checkpoint,message);');
-    await sql(migration);
+    const definitions = await readFile(new URL('../../database/functions.sql', import.meta.url), 'utf8');
+    await asOwner(definitions);
     for (const { run, artifact } of active) {
       const ended = await get(run.id);
       assert.ok(['failed', 'cancelled'].includes(ended.status));
@@ -330,7 +325,7 @@ export async function agentDatabaseContracts(
     assert.equal(await balance(), before - 1, 'only the old partial answer stays charged');
     assert.equal((await get(historical.id)).public_message.content, '历史答复保留');
     assert.equal((await get(current.id)).status, 'queued');
-    await sql(migration);
+    await asOwner(definitions);
     assert.equal(await balance(), before - 1);
     for (const { run } of active) assert.equal(await asOwner(`SELECT count(*) FROM public.agent_run_events WHERE run_id=${quote(run.id)} AND type IN ('failed','cancelled');`), '1');
     await finish(await claim(), 'failed');

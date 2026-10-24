@@ -1,6 +1,6 @@
 # Shared service graph for the self-hosted stack.
 # Local: docker compose -f deploy/compose.base.yml -f deploy/compose.local.yml
-# Production (P7): compose.prod.yml layers TLS, backups and resource limits.
+# Production: compose.prod.yml layers TLS, backups and resource limits.
 name: ${LOCAL_PROJECT:?run `pnpm selfhost init` first}
 x-ownership: &ownership
   io.taibu.local.instance: ${LOCAL_INSTANCE_ID:?}
@@ -71,10 +71,10 @@ services:
     restart: "no"
     depends_on:
       db: { condition: service_healthy }
-  migrate:
+  db-init:
     <<: *node
     env_file: ["${TAIBU_ENV_DIR}/migrate.env"]
-    command: [node, scripts/db/migrate.mjs, up]
+    command: [node, scripts/db/init.mjs]
     restart: "no"
     depends_on:
       db-setup: { condition: service_completed_successfully }
@@ -83,7 +83,7 @@ services:
     command: [node, server.js]
     volumes: [files:/data/files]
     depends_on:
-      migrate: { condition: service_completed_successfully }
+      db-init: { condition: service_completed_successfully }
       files-init: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
     healthcheck:
@@ -97,7 +97,7 @@ services:
     volumes: [files:/data/files]
     stop_grace_period: 90s
     depends_on:
-      migrate: { condition: service_completed_successfully }
+      db-init: { condition: service_completed_successfully }
       files-init: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
     healthcheck:

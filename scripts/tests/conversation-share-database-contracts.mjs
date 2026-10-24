@@ -8,7 +8,7 @@ const token = () => randomBytes(32).toString('base64url');
 /** Public share table, RLS and RPC contracts; runs inside the disposable PostgreSQL fixture only. */
 export async function conversationShareDatabaseContracts(t, { sql, asActor }) {
   const owner = randomUUID(), other = randomUUID();
-  await sql(`INSERT INTO auth.users(id) VALUES (${quote(owner)}),(${quote(other)});`);
+  await sql(`INSERT INTO identity.users(id) VALUES (${quote(owner)}),(${quote(other)});`);
   const createConversation = async () => (await asActor(owner,
     `SELECT public.create_conversation_with_messages(${quote(owner)},'分享夹具','general','chat','{}',${json([{ id: 'u', role: 'user', content: '问题', createdAt: '2026-10-19T00:00:00Z' }])});`)).trim();
   const version = conversation => `(SELECT updated_at FROM public.conversations WHERE id=${quote(conversation)})`;

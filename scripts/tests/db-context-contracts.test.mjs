@@ -12,7 +12,7 @@ import { buildPostgresFixture } from './postgres-fixture.mjs';
 // Run: node --require ./scripts/ts-register.cjs --test scripts/tests/db-context-contracts.test.mjs
 const require = createRequire(import.meta.url);
 const repoRoot = path.resolve(import.meta.dirname, '..', '..');
-const image = 'pgvector/pgvector:0.8.6-pg16';
+const image = 'pgvector/pgvector:0.8.7-pg17-bookworm';
 const runLabel = 'io.taibu.db-context.run';
 const ids = {
   owner: '00000000-0000-4000-8000-000000000002',
@@ -102,11 +102,11 @@ ALTER ROLE taibu_app LOGIN PASSWORD ${quote(appPassword)};
 GRANT anon, authenticated TO taibu_app WITH INHERIT FALSE, SET TRUE;
 GRANT USAGE ON SCHEMA public, extensions TO taibu_app;
 GRANT EXECUTE ON FUNCTION public.is_admin_user() TO authenticated;
-INSERT INTO auth.users(id, email) VALUES
+INSERT INTO identity.users(id, email) VALUES
   (${quote(ids.owner)}, 'owner@fixture.test'),
   (${quote(ids.other)}, 'other@fixture.test'),
   (${quote(ids.admin)}, 'admin@fixture.test');
-SET ROLE taibu_contract_owner;
+SET ROLE taibu_owner;
 UPDATE public.users SET is_admin = (id = ${quote(ids.admin)}::uuid);
 RESET ROLE;`);
 

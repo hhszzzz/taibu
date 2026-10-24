@@ -29,7 +29,7 @@ Language: **中文** | [English](README.en.md)
 - **历史记录、知识库与@提及** - 支持存储所有命理体系的记录，可将命理体系纳入个人知识库，显式引用命理体系数据源
 - **AI个性化** - 表达风格/用户画像/自定义指令 + 上下文、提示词预算可视化
 - **多端体验** - Web + iOS/Android 客户端
-- **统一界面与设置** - 暖色浅深主题，独立 `/settings` 页面，分类切换保留草稿，见 [界面与设置说明](docs/ui-settings-agent.md)
+- **统一界面与设置** - 暖色浅深主题，独立 `/settings` 页面，分类切换保留草稿，见 [Agent 与设置说明](docs/manual/Agent.md#设置与展示)
 - **社区与激励** - 命理记录、匿名讨论、签到激励
 
 ---
@@ -119,7 +119,7 @@ npm install taibu-core
 
 ### 本地自托管栈（PostgreSQL 17 + Redis 8）
 
-数据、认证与文件全部由本机 Docker 栈提供，不连接 Vercel 或托管 Supabase。需要本机 Docker、Node.js 24 和 pnpm：
+数据、认证与文件由本机 Docker 栈提供。需要本机 Docker、Node.js 24 和 pnpm：
 
 ```bash
 pnpm install
@@ -127,12 +127,12 @@ pnpm local:update  # 构建并启动 db、redis、web、worker、mailpit（首�
 pnpm local:up      # 复用镜像启动
 pnpm local:status  # 查看端口与健康状态
 pnpm local:logs    # 跟随日志
-pnpm local:down    # 保留数据库与头像文件卷
+pnpm selfhost down --project taibu-v2 # 保留数据库与文件卷
 ```
 
 首次启动会在 `.taibu-local/taibu-v2/` 生成随机密钥与端口配置（不要公开或提交）。验证码邮件在 Mailpit 中查看，监听地址由 `pnpm local:status` 给出。
 
-`pnpm local:showcase` 使用明确标注的本地确定性模型，不产生真实 AI 费用。本地栈与生产使用同一套迁移（`database/migrations/`）和 Compose 服务图，部署细节见 [自托管说明](docs/manual/Self-Hosting.md)，正式切换步骤见 [切换运行手册](docs/manual/Cutover.md)。
+本地与生产直接使用 `database/` 当前 PostgreSQL 定义和同一套 Compose 服务图，不维护历史迁移；初始化、已有库结构调整与部署见 [自托管说明](docs/manual/Self-Hosting.md)。
 
 ### 生产部署
 
@@ -166,9 +166,9 @@ pnpm dev
 
 ## 开发文档
 
-- [架构与迁移边界](docs/manual/Architecture.md)：模块职责、AI 生命周期与计费、数据回放、兼容例外及回滚条件。
+- [项目架构](docs/manual/Architecture.md)：模块职责、数据权限与 AI 生命周期。
 - [Core 公开 API](packages/core/README.md) · [MCP 使用手册](docs/manual/MCP-Server-Manual.md)
-- [重构与测试验收记录](docs/manual/Refactor-Acceptance.md)
+- [Agent 手册](docs/manual/Agent.md) · [自托管手册](docs/manual/Self-Hosting.md)
 
 ```bash
 pnpm test -- src/tests/chat-route.test.ts # 按文件运行，自动构建所需包
@@ -177,7 +177,7 @@ pnpm exec playwright install --only-shell chromium # 首次配置浏览器
 pnpm verify                              # 一次包构建，完整验收（需本地 Docker）
 ```
 
-`pnpm test:db`、`pnpm test:auth`、`pnpm test:browser` 可独立运行。`test:auth` 使用独立临时 Auth/PostgREST/PostgreSQL 栈，不读取生产配置或现有数据。无法下载 Chromium 且本机已有 Chrome 时，显式使用 `pnpm verify -- --chrome`；不跳过浏览器断言。CI 默认使用固定 Chromium，并强制执行 SQL、真实 Auth/REST 与浏览器层。
+`pnpm test:db`、`pnpm test:auth`、`pnpm test:browser` 可独立运行。`test:auth` 使用指定本地栈的 Better Auth 与 Mailpit，需要先启动本地环境；`test:db` 使用隔离临时 PostgreSQL。无法下载 Chromium 且本机已有 Chrome 时，显式使用 `pnpm verify -- --chrome`；不跳过浏览器断言。CI 默认使用固定 Chromium，数据库与浏览器验收分别使用独立入口。
 
 ---
 

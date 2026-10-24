@@ -13,7 +13,7 @@ const entryId = (runId, callId) => {
 // own save of a card the task cached, and the case notes page keeps what the Agent wrote while it is unchanged.
 export async function agentArchiveDatabaseContracts(t, { sql, asActor, asOwner, adminId }) {
   const owner = randomUUID(), other = randomUUID();
-  await sql(`INSERT INTO auth.users(id) VALUES(${quote(owner)}),(${quote(other)});`);
+  await sql(`INSERT INTO identity.users(id) VALUES(${quote(owner)}),(${quote(other)});`);
   const admin = statement => asActor(adminId, statement);
   const memory = enabled => asOwner(`INSERT INTO public.user_settings(user_id,chat_preferences) VALUES(${quote(owner)},${json({ memoryEnabled: enabled })})
     ON CONFLICT(user_id) DO UPDATE SET chat_preferences=excluded.chat_preferences;`);

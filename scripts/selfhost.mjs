@@ -1,29 +1,37 @@
 #!/usr/bin/env node
 // Local self-hosted stack orchestrator (Docker Compose + PostgreSQL + Redis).
 //
-// The old Supabase emulation (GoTrue/PostgREST/storage/functions) is gone. This
-// script owns only: private per-project config, env files, and compose calls.
+// Owns private per-project config, env files, and compose calls.
 import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { chmod, lstat, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const STATE = path.join(ROOT, '.taibu-local');
 const COMPOSE_FILES = ['deploy/compose.base.yml', 'deploy/compose.local.yml'];
 const APP_IMAGE = 'taibu-local';
+const SECRET_KEYS = [
+  'DB_PASSWORD', 'TAIBU_MIGRATOR_PASSWORD', 'TAIBU_APP_PASSWORD',
+  'TAIBU_AUTH_PASSWORD', 'TAIBU_BACKUP_PASSWORD', 'REDIS_PASSWORD',
+  'BETTER_AUTH_SECRET', 'INTERNAL_API_SECRET',
+];
+const CONFIG_KEYS = [
+  'LOCAL_INSTANCE_ID', 'LOCAL_PROJECT', 'APP_PORT', 'APP_ORIGIN',
+  'DB_HOST_PORT', 'MAILPIT_PORT', 'AGENT_CREDENTIAL_ENCRYPTION_KEY', ...SECRET_KEYS,
+];
 
 const secret = () => randomBytes(32).toString('hex');
 
-export function validateProject(value) {
+function validateProject(value) {
   if (typeof value !== 'string' || value !== value.trim() || !/^taibu-[a-z0-9][a-z0-9-]{0,39}$/u.test(value)) {
     throw new Error('项目名须以 taibu- 开头，仅限小写字母、数字和连字符');
   }
   return value;
 }
 
-export function validatePort(value) {
+function validatePort(value) {
   const text = String(value);
   if (text !== text.trim() || !/^\d+$/u.test(text) || Number(text) < 1024 || Number(text) > 65535) {
     throw new Error('端口须为 1024–65535');
@@ -31,26 +39,11 @@ export function validatePort(value) {
   return String(Number(text));
 }
 
-export function validateEndpoint(value) {
-  const url = new URL(value);
-  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
-    throw new Error('端点必须是 HTTP(S) 且不含凭据');
-  }
-  if (value !== url.origin && value !== `${url.origin}/`) throw new Error('端点必须是 origin');
-  return url.origin;
-}
-
-export function validateResourceOwnership(marker, instance, requireAbsent = false) {
-  if (requireAbsent) throw new Error('目标已有 Docker 资源，拒绝覆盖');
+function validateResourceOwnership(marker, instance) {
   if (marker !== instance) throw new Error('Docker 资源缺少当前实例归属标记，拒绝接管');
 }
 
-export function containerNameFilter(project) {
-  validateProject(project);
-  return `name=^/${project}-(db|redis|db-setup|migrate|web|worker|mailpit)-([0-9]+|run-[a-z0-9]+)$`;
-}
-
-export function summarizeLogs(text) {
+function summarizeLogs(text) {
   // Never echo credentials or query strings from log lines.
   return String(text)
     .split('\n')
@@ -61,47 +54,34 @@ export function summarizeLogs(text) {
     .join('\n');
 }
 
-export function createConfig(project, port = '3080', demo = false) {
+export function createConfig(project, port = '3080') {
   const appPort = validatePort(port);
   const config = {
     LOCAL_INSTANCE_ID: secret(),
     LOCAL_PROJECT: validateProject(project),
     APP_PORT: appPort,
     APP_ORIGIN: `http://127.0.0.1:${appPort}`,
-    DEMO_ENABLED: demo ? 'true' : 'false',
-    ADMIN_EMAIL: 'admin@taibu.local',
-    USER_EMAIL: 'user@taibu.local',
-    USER2_EMAIL: 'user2@taibu.local',
     DB_HOST_PORT: '54329',
     MAILPIT_PORT: '8025',
   };
-  for (const key of [
-    'DB_PASSWORD',
-    'TAIBU_MIGRATOR_PASSWORD',
-    'TAIBU_APP_PASSWORD',
-    'TAIBU_AUTH_PASSWORD',
-    'TAIBU_BACKUP_PASSWORD',
-    'REDIS_PASSWORD',
-    'BETTER_AUTH_SECRET',
-    'INTERNAL_API_SECRET',
-    'ADMIN_PASSWORD',
-    'USER_PASSWORD',
-    'USER2_PASSWORD',
-  ]) config[key] = secret();
+  for (const key of SECRET_KEYS) config[key] = secret();
   config.AGENT_CREDENTIAL_ENCRYPTION_KEY = randomBytes(32).toString('base64');
   return config;
 }
 
 export function validateConfig(config) {
-  const expected = Object.keys(createConfig('taibu-validation', '3080')).sort();
-  if (!config || JSON.stringify(Object.keys(config).sort()) !== JSON.stringify(expected)) {
+  if (!config || typeof config !== 'object' || Array.isArray(config)
+    || CONFIG_KEYS.some((key) => !Object.hasOwn(config, key) || typeof config[key] !== 'string')) {
     throw new Error('本地配置字段无效');
   }
+  // Read only active fields; older private configs can keep unused fields without
+  // regenerating credentials or exposing them to Compose.
+  config = Object.fromEntries(CONFIG_KEYS.map((key) => [key, config[key]]));
   validateProject(config.LOCAL_PROJECT);
   validatePort(config.APP_PORT);
   validatePort(config.DB_HOST_PORT);
   validatePort(config.MAILPIT_PORT);
-  if (config.APP_ORIGIN !== `http://127.0.0.1:${config.APP_PORT}` || !['true', 'false'].includes(config.DEMO_ENABLED)) {
+  if (config.APP_ORIGIN !== `http://127.0.0.1:${config.APP_PORT}`) {
     throw new Error('本地配置地址无效');
   }
   if (Buffer.from(config.AGENT_CREDENTIAL_ENCRYPTION_KEY, 'base64').length !== 32
@@ -114,13 +94,10 @@ export function validateConfig(config) {
       if (!/^[a-f0-9]{64}$/u.test(value)) throw new Error('本地密钥格式无效');
     }
   }
-  for (const email of [config.ADMIN_EMAIL, config.USER_EMAIL, config.USER2_EMAIL]) {
-    if (!/^[a-z0-9.]+@taibu\.local$/u.test(email)) throw new Error('种子账号配置无效');
-  }
   return config;
 }
 
-export async function localDocker() {
+async function localDocker() {
   const version = await execute('docker', ['version', '--format', '{{.Server.Version}}']);
   await execute('docker', ['compose', 'version']);
   return { ...process.env, DOCKER_SERVER_VERSION: String(version).trim() };
@@ -206,7 +183,7 @@ async function writeEnvironment(config) {
     BETTER_AUTH_SECRET: config.BETTER_AUTH_SECRET,
     FILE_STORAGE_DRIVER: 'local',
     FILE_STORAGE_ROOT: '/data/files',
-    EMAIL_TRANSPORT: 'mailpit',
+    EMAIL_PROVIDER: 'mailpit',
     SMTP_HOST: 'mailpit',
     SMTP_PORT: '1025',
     SMTP_SECURE: 'false',
@@ -233,7 +210,7 @@ async function writeEnvironment(config) {
     TAIBU_BACKUP_PASSWORD: config.TAIBU_BACKUP_PASSWORD,
   }));
   await writePrivate(path.join(env, 'migrate.env'), envFile({
-    MIGRATOR_DATABASE_URL: `postgres://taibu_migrator:${config.TAIBU_MIGRATOR_PASSWORD}@db:5432/taibu`,
+    SCHEMA_DATABASE_URL: `postgres://taibu_migrator:${config.TAIBU_MIGRATOR_PASSWORD}@db:5432/taibu`,
   }));
   await writePrivate(path.join(env, 'redis.env'), envFile({ REDIS_PASSWORD: config.REDIS_PASSWORD }));
   await writePrivate(path.join(directory, 'compose.env'), envFile({
@@ -249,8 +226,8 @@ async function writeEnvironment(config) {
   }));
 }
 
-async function initialize(project, port, demo) {
-  const config = createConfig(project, port, demo);
+async function initialize(project, port) {
+  const config = createConfig(project, port);
   const directory = projectDirectory(project);
   await privateDirectory(directory, true);
   await writePrivate(path.join(directory, 'config.json'), `${JSON.stringify(config, null, 2)}\n`);
@@ -295,7 +272,7 @@ async function up(project, build) {
     config = await readConfig(project);
   } catch (error) {
     if (error.code !== 'ENOENT') throw error;
-    config = await initialize(project, '3080', false);
+    config = await initialize(project, '3080');
   }
   const env = await localDocker();
   await assertOwnedProject(project, env);
@@ -344,7 +321,7 @@ async function restore(project, input) {
 export async function main(args = process.argv.slice(2)) {
   const [command, ...rest] = args;
   const allowed = {
-    init: ['project', 'port', 'demo'],
+    init: ['project', 'port'],
     up: ['project', 'build'],
     update: ['project'],
     status: ['project'],
@@ -360,7 +337,7 @@ export async function main(args = process.argv.slice(2)) {
     if (!flag.startsWith('--')) throw new Error('参数无效');
     const key = flag.slice(2);
     if (!allowed[command].includes(key) || key in options) throw new Error('参数无效或重复');
-    if (['demo', 'build'].includes(key)) options[key] = true;
+    if (key === 'build') options[key] = true;
     else {
       const value = rest[index + 1];
       if (value === undefined || value.startsWith('--')) throw new Error('参数缺少值');
@@ -368,11 +345,11 @@ export async function main(args = process.argv.slice(2)) {
       index += 1;
     }
   }
-  const project = validateProject(options.project ?? 'taibu-local');
+  const project = validateProject(options.project ?? 'taibu-v2');
 
   if (command === 'init') {
-    await initialize(project, options.port ?? '3080', Boolean(options.demo));
-    console.log('本地配置已生成；密钥与账号仅保存在私有 .taibu-local 项目目录。');
+    await initialize(project, options.port ?? '3080');
+    console.log('本地配置已生成；密钥仅保存在私有 .taibu-local 项目目录。');
     return;
   }
   if (command === 'up') { await up(project, Boolean(options.build)); return; }

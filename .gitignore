@@ -1,8 +1,5 @@
 # dependencies
-/node_modules
-**/node_modules
-/.pnp
-.pnp.js
+node_modules/
 
 # testing
 /coverage
@@ -15,8 +12,7 @@
 /build
 packages/*/dist/
 
-# misc
-.DS_Store
+# local certificates
 *.pem
 
 # debug
@@ -25,11 +21,8 @@ yarn-debug.log*
 yarn-error.log*
 
 # local env files
-.env*.local
-.env
-
-# vercel
-.vercel
+.env*
+!.env.example
 
 # typescript
 *.tsbuildinfo
@@ -55,94 +48,6 @@ next-env.d.ts
 # pnpm cache
 .pnpm-store
 
-# Migration inputs required by repository checks; see supabase/README.md.
-# This allowlist is historical evidence, not a complete deployment baseline.
-supabase/migrations/*
-!supabase/migrations/fix_login_attempts_rls.sql
-!supabase/migrations/create_conversations_table.sql
-!supabase/migrations/20260110_add_mbti_readings_rls.sql
-!supabase/migrations/20260110_add_tarot_readings_rls.sql
-!supabase/migrations/20260118_create_gamification_tables.sql
-!supabase/migrations/20260124_create_knowledge_base_tables.sql
-!supabase/migrations/20260124_search_functions.sql
-!supabase/migrations/20260125_alter_archived_sources_source_id_to_text.sql
-!supabase/migrations/20260126_fix_search_path_and_extensions.sql
-!supabase/migrations/20260211_remove_service_role_key_phase2.sql
-!supabase/migrations/20260316_create_conversation_messages.sql
-!supabase/migrations/20260408_z_remaining_transactional_multi_write_rpcs.sql
-!supabase/migrations/20260409_021500_admin_session_rpc_alignment.sql
-!supabase/migrations/20260409_235900_membership_credit_redesign.sql
-!supabase/migrations/20260212_mcp_guard_internal_updates.sql
-!supabase/migrations/20260212_mcp_unban_reactivate_keys.sql
-!supabase/migrations/20260315_fix_user_oauth_providers_admin_rls.sql
-!supabase/migrations/20260318_drop_community_posts_anonymous_name.sql
-!supabase/migrations/20260328_fix_announcements_admin_rls.sql
-!supabase/migrations/20260328_simplify_announcements_for_unified_center.sql
-!supabase/migrations/20260401_add_chart_prompt_detail_level_to_user_settings.sql
-!supabase/migrations/20260410_103000_fix_linuxdo_claim_concurrency.sql
-!supabase/migrations/20260410_141500_checkin_overcap_drop_user_achievements.sql
-!supabase/migrations/20260411_103500_align_admin_session_service_rpcs.sql
-!supabase/migrations/20260411_104200_restore_batch_update_vectors_as_service.sql
-!supabase/migrations/20260411_111500_restrict_admin_session_rpc_acl.sql
-!supabase/migrations/20260723_100000_create_meihua_xiaoliuren_web.sql
-!supabase/migrations/20260723_110000_drop_mcp_auth_storage.sql
-!supabase/migrations/20261002_100000_fix_knowledge_search_contracts.sql
-!supabase/migrations/20261002_101000_restrict_credit_ledger_rpc.sql
-!supabase/migrations/20261002_102000_protect_account_and_ledger_writes.sql
-!supabase/migrations/20261003_100000_fix_rate_limit_admission.sql
-!supabase/migrations/20261005_100000_agent_runtime.sql
-!supabase/migrations/20261005_110000_chart_time_resolution.sql
-!supabase/migrations/20261005_120000_agent_chart_identity.sql
-!supabase/migrations/20261006_100000_agent_pi_durable.sql
-!supabase/migrations/20261006_110000_agent_lifecycle_fixes.sql
-!supabase/migrations/20261007_100000_agent_chat_results.sql
-!supabase/migrations/20261007_110000_agent_reading_preferences.sql
-!supabase/migrations/20261007_120000_agent_search.sql
-!supabase/migrations/20261007_130000_agent_input_preferences.sql
-!supabase/migrations/20261007_140000_agent_queue.sql
-!supabase/migrations/20261007_150000_agent_notifications.sql
-!supabase/migrations/20261007_160000_agent_attachments.sql
-!supabase/migrations/20261007_170000_daily_briefing.sql
-!supabase/migrations/20261007_180000_conversation_fork.sql
-!supabase/migrations/20261007_190000_agent_backend_access.sql
-!supabase/migrations/20261008_100000_agent_question_dedupe.sql
-!supabase/migrations/20261008_180000_agent_competence.sql
-!supabase/migrations/20261009_100000_agent_pi_durable_1_1.sql
-!supabase/migrations/20261009_120000_ai_reasoning_effort_levels.sql
-!supabase/migrations/20261010_100000_agent_current_engine_only.sql
-!supabase/migrations/20261017_100000_conversation_list_agent_flag.sql
-!supabase/migrations/20261018_090000_conversation_agent_flag_includes_forks.sql
-!supabase/migrations/20261019_100000_conversation_shares.sql
-!supabase/migrations/20261020_100000_agent_pi_durable_1_3.sql
-!supabase/migrations/20261020_120000_agent_user_saved_charts.sql
-!supabase/migrations/20261021_100000_agent_admin_task_log.sql
-!supabase/migrations/20261021_120000_agent_user_archive.sql
-# Additional explicit inputs for isolated Auth/PostgREST acceptance only.
-!supabase/migrations/20260110_add_user_settings_and_fix_notifications_rls.sql
-!supabase/migrations/20260113_add_app_settings.sql
-!supabase/migrations/20260128_create_ai_model_tables.sql
-!supabase/migrations/20260318_unify_ai_gateway_sources.sql
-!supabase/migrations/20260409_000100_remaining_atomicity_rpcs.sql
-!supabase/migrations/20260123_add_activation_keys_and_purchase_links.sql
-!supabase/migrations/20260313_user_oauth_providers.sql
-!supabase/migrations/20260409_140500_full_atomicity_repairs.sql
-
-# docs
-docs/*
-!docs/manual/
-docs/manual/*
-!docs/manual/Architecture.md
-!docs/manual/Refactor-Acceptance.md
-!docs/manual/Self-Hosting.md
-!docs/manual/Cutover.md
-!docs/manual/Agent.md
-!docs/agent-experience-implementation.md
-!docs/agent-domain-competence-implementation.md
-!docs/agent-chart-interaction-review.md
-!docs/agent-pi-durable-1-1-upgrade.md
-!docs/agent-pi-durable-1-3-upgrade.md
-!docs/ui-settings-agent.md
-
 # AI
 .claude
 **/CLAUDE.md
@@ -158,4 +63,5 @@ skills/*-workspace/
 .playwright-mcp/
 .playwright-cli/
 output/playwright/
-tmp/
+/tmp/
+/backups/

@@ -5,18 +5,22 @@
 .pnpm-store
 .vscode
 .worktrees
+.release
 .claude
+.ace-tool
+.idea
 .codex-deploy
 .taibu-local
 .playwright-cli
+.playwright-mcp
 output/playwright
-GEMINI.md
-skills/notion-style.md
+skills/*-workspace
+/tmp/
+/backups/
 .trae
 .DS_Store
 AGENTS.md
 CLAUDE.md
-node_modules
 **/node_modules
 **/dist
 docs
@@ -24,10 +28,6 @@ android
 ios
 capacitor-www
 capacitor.config.ts
-supabase
-!supabase/migrations
-!supabase/migrations/**
-packages/mcp-local
 src/tests
 **/*.test.ts
 **/*.test.tsx
@@ -35,7 +35,9 @@ src/tests
 **/*.spec.tsx
 coverage
 .nyc_output
-tsconfig.tsbuildinfo
+**/*.tsbuildinfo
 *.log
 .env*
 !.env.example
+# Local credential scratch file, also excluded by .git/info/exclude.
+/临时测试apikey

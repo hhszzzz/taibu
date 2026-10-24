@@ -7,7 +7,7 @@ services:
       context: ${TAIBU_SOURCE_DIR:?}
       dockerfile: Dockerfile
       args: { GIT_SHA: local }
-  migrate:
+  db-init:
     build: *build
   web:
     build: *build

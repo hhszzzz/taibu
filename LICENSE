@@ -9,11 +9,11 @@ License, version 3 only (`AGPL-3.0-only`).
 This AGPL scope includes, for example:
 
 - `src/`
-- `supabase/`
+- `database/`
 - `public/`
 - root-level `scripts/`
 - `Dockerfile`
-- `docker-compose*.yml`
+- `deploy/`
 - other root-level application, deployment, and runtime files
 
 The following package directories are separately licensed under the MIT License:

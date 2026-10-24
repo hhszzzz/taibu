@@ -259,7 +259,7 @@ pnpm -C packages/mcp-server start
 | `MCP_REQUEST_LOG` | `false` | 输出匿名请求日志 |
 | `AMAP_WEB_SERVICE_KEY` | 空 | 可选高德地点解析密钥 |
 
-公共 MCP Server 不读取 Supabase、OAuth、JWT 或用户 API Key 配置。
+公共 MCP Server 不读取站点数据库、OAuth、JWT 或用户 API Key 配置。
 
 ## 10. 安全边界
 

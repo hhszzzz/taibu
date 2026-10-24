@@ -74,7 +74,7 @@ pnpm -C packages/mcp-server start
 docker compose --env-file .env -f docker-compose.mcp.yml up -d --build
 ```
 
-公共 MCP 容器不需要任何 Supabase、JWT 或站点账号变量。
+公共 MCP 容器不需要站点数据库、JWT 或站点账号变量。
 
 ## 包关系
 

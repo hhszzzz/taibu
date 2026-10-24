@@ -1,7 +1,7 @@
 name: deploy-image
 
 # Builds and pushes the production image. Deployment itself stays manual and
-# runs on the host (deploy/deploy.sh <tag>) so migrations are never driven by CI.
+# runs on the host (deploy/deploy.sh <tag>); CI only publishes the image.
 on:
   push:
     tags: ['v*']

@@ -144,21 +144,3 @@
 传统太乙原始 SDK 结果仅返回 `traditionalBoard`，九星分支仅返回 `coreBoard`。新增流派选项首先由 SDK/MCP 提供；网页八字／紫微现可通过共用出生时辰弹窗选择时区及 DST 策略，URL、保存、读取、AI 重建和合盘导入保留相同规则。网页四柱反推复用 Core 异步入口，不再维护独立整点反推。其它新增流派控件不属于本轮算法改动。
 
 输出新增规则元数据为可选字段，旧保存结果继续可渲染。数值修正可能使重新计算的结果不同于旧结果，应按当时保存的原始数据展示历史盘；需要重算时保留规则版本与完整输入。版本发布属于新增功能，应提高次版本并独立执行发布流程。
-
-## 本地验收记录（2026-10-06）
-
-验证在本地工作区（分支 `codex/agent-chat`，包含本轮算法修复完成后的全部改动）执行；未部署、未发布、未执行线上数据库迁移。运行环境为 Node.js 24.21.0、pnpm 10.28.1、ICU 78.3、IANA tzdata 2026a。测试结果证明已列规则和覆盖用例下的计算与契约行为，不扩大前文的精度或流派承诺。
-
-| 命令 | 实际结果 |
-|---|---|
-| `node --test packages/core/tests/*.test.mjs`（先构建 core） | 451 项通过，0 失败、0 跳过 |
-| `pnpm test` | 1452 项通过，0 失败、0 跳过；包含上述 core 用例及 Web/API/MCP 回归 |
-| `pnpm lint` | ESLint 和架构守卫通过 |
-| `pnpm typecheck`（构建三个包后 strict） | 全仓严格类型检查通过 |
-| `pnpm exec next build` | Next.js 生产构建通过（Agent worker 先行构建） |
-| `pnpm test:db`（本地 Docker PostgreSQL/RLS 契约） | 41 项通过 |
-| `node --require ./scripts/ts-register.cjs --test scripts/tests/auth-postgrest-acceptance.test.mjs` | 21 项通过（真实 Auth/PostgREST 契约） |
-| `node --require ./scripts/ts-register.cjs --test scripts/tests/selfhost-redis.test.mjs` | 1 项通过（真实 Redis 限流准入契约） |
-| `node --test scripts/tests/{npm-package-artifacts,skill-bundle,prepare-github-package}.test.mjs` | 20 项通过；离线 Skill bundle 已按 `scripts/build-skill-bundle.mjs` 重新生成并与本构建对齐 |
-| `pnpm test:browser -- --chrome` | 88 项检查通过；无外部请求与运行时异常 |
-| `pnpm test -- src/tests/bazi-analysis-route.test.ts`（代码评审后复核） | 21 项通过；含非法旧出生时辰值显式 400 的新回归 |

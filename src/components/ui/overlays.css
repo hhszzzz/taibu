@@ -54,7 +54,7 @@
 .search-palette-close:hover { background: var(--fill-ghost-hover); color: var(--foreground); }
 .search-palette-close:focus-visible { outline: none; background: var(--fill-ghost-hover); color: var(--foreground); }
 .search-palette-tabs { display: flex; flex-shrink: 0; gap: 2px; padding: 0 24px 10px; }
-.search-palette-tab { height: 28px; padding: 0 10px; border-radius: 6px; font-size: calc(14 / 16 * 1rem); font-weight: 500; line-height: 1; color: var(--foreground-tertiary); }
+.search-palette-tab { height: 28px; padding: 0 10px; border-radius: 6px; font-size: calc(14 / 16 * 1rem); font-weight: 500; line-height: 1; color: var(--foreground-tertiary); transition: color var(--duration-fast) var(--ease-out), background-color var(--duration-fast) var(--ease-out); }
 .search-palette-tab:hover { color: var(--foreground-secondary); background: var(--fill-ghost-hover); }
 .search-palette-tab[aria-selected="true"] { color: var(--foreground); }
 .search-palette-body { flex: 1; min-height: 120px; overflow-y: auto; padding: 4px 8px 12px; }

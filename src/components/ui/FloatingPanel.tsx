@@ -120,7 +120,9 @@ export function FloatingPanel({ open, anchorRef, onClose, children, label, id, c
                 // paint, and revealing the panel at the stale spot reads as a flash.
                 panel.style.left = `${left}px`;
                 panel.style.top = `${top}px`;
-                // Remove hidden before focusing; the first placement runs before paint.
+                // Remove hidden before focusing; the first placement runs before paint. The entrance starts in the
+                // same frame the panel shows (waiting for the state commit would show it once, then replay it from 0).
+                panel.setAttribute('data-placed', '');
                 panel.style.visibility = 'visible';
                 if (!focused && initialFocus !== 'none') {
                     focused = true;
@@ -182,6 +184,8 @@ export function FloatingPanel({ open, anchorRef, onClose, children, label, id, c
     if (!open || typeof document === 'undefined') return null;
     const panel = <div ref={panelRef} id={id} role={role} aria-label={label}
         className={`floating-panel ${className}`} style={{ left: position?.left ?? 0, top: position?.top ?? 0, visibility: position ? 'visible' : 'hidden' }}
+        /* 定位完成才挂 data-placed，入场动效从可见的那一帧开始；data-side 决定从哪一侧展开。 */
+        data-side={side} data-align={align} data-placed={position ? '' : undefined}
         onClick={event => {
             if (role === 'menu' && restoreFocus && (event.target as HTMLElement).closest('button:not(:disabled)')) anchorRef.current?.focus();
         }}>{children}</div>;

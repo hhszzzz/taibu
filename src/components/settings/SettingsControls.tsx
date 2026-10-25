@@ -3,8 +3,9 @@
  *
  * 桌面端设置行以细分隔线排列；手机端同一分组收进白色圆角卡片（见 settings-page.css）。
  */
-import type { KeyboardEvent, ReactNode } from 'react';
+import { useRef, type KeyboardEvent, type ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
+import { useTabIndicator } from '@/lib/motion/tab-indicator';
 
 export function SettingsSection({
   title,
@@ -106,6 +107,8 @@ export function SettingsTabs<T extends string>({
   value: T;
   onChange: (next: T) => void;
 }) {
+  const listRef = useRef<HTMLDivElement>(null);
+  useTabIndicator(listRef);
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     const lastIndex = tabs.length - 1;
     const index = tabs.findIndex((tab) => tab.id === value);
@@ -122,7 +125,7 @@ export function SettingsTabs<T extends string>({
   };
 
   return (
-    <div role="tablist" aria-label={label} className="settings-tabs">
+    <div ref={listRef} role="tablist" aria-label={label} className="settings-tabs motion-tabs motion-tabs--pill">
       {tabs.map(({ id, label: tabLabel, icon: Icon }) => {
         const selected = id === value;
         return (

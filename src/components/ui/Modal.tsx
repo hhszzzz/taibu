@@ -1,10 +1,16 @@
 'use client';
 
-import { useEffect, useRef, type ReactNode, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import './overlays.css';
 
-/** Native top-layer modal: focus containment, backdrop, Escape and focus return. */
+/**
+ * Native top-layer modal: focus containment, backdrop, Escape and focus return.
+ *
+ * Closing plays the dialog's exit animation first (`[data-closing]` in globals.css and the variants' own sheets),
+ * then leaves the top layer. Without a stylesheet or with reduced motion there is nothing to wait for and it closes
+ * at once.
+ */
 export function Modal({ open, onClose, children, labelledBy, describedBy, className = '',
     busy = false, initialFocusRef, returnFocusRef, keepMounted = false, id,
 }: {
@@ -21,9 +27,26 @@ export function Modal({ open, onClose, children, labelledBy, describedBy, classN
     id?: string;
 }) {
     const ref = useRef<HTMLDialogElement>(null);
+    // Still shown while the exit animation plays after `open` turned false.
+    const [present, setPresent] = useState(open);
+    if (open && !present) setPresent(true);
+    useLayoutEffect(() => {
+        const dialog = ref.current;
+        if (open) { dialog?.removeAttribute('data-closing'); return; }
+        if (!present) return;
+        if (!dialog) { setPresent(false); return; }
+        dialog.setAttribute('data-closing', '');
+        // Only the dialog's own finite animations (and its ::backdrop's); a spinner inside never finishes.
+        const animations = dialog.getAnimations({ subtree: true }).filter(animation => animation.effect instanceof KeyframeEffect
+            && animation.effect.target === dialog && Number.isFinite(animation.effect.getComputedTiming().endTime));
+        if (!animations.length) { setPresent(false); return; }
+        let current = true;
+        void Promise.allSettled(animations.map(animation => animation.finished)).then(() => { if (current) setPresent(false); });
+        return () => { current = false; };
+    }, [open, present]);
     useEffect(() => {
         const dialog = ref.current;
-        if (!open || !dialog) return;
+        if (!present || !dialog) return;
         const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
         const returnFocus = returnFocusRef?.current;
         dialog.showModal();
@@ -36,10 +59,10 @@ export function Modal({ open, onClose, children, labelledBy, describedBy, classN
             const target = returnFocus ?? previous;
             if (target?.isConnected) target.focus();
         };
-    }, [open, initialFocusRef, returnFocusRef]);
-    if ((!open && !keepMounted) || typeof document === 'undefined') return null;
+    }, [present, initialFocusRef, returnFocusRef]);
+    if ((!present && !keepMounted) || typeof document === 'undefined') return null;
     return createPortal(<dialog ref={ref} id={id} tabIndex={-1} aria-labelledby={labelledBy} aria-describedby={describedBy}
-        aria-busy={busy || undefined} className={`app-modal ${className}`}
+        aria-busy={busy || undefined} className={`app-modal ${className}`} inert={!open || undefined}
         onKeyDown={event => {
             if (event.key !== 'Tab' || event.defaultPrevented) return;
             const dialog = event.currentTarget;
@@ -58,9 +81,9 @@ export function Modal({ open, onClose, children, labelledBy, describedBy, classN
                 if (!first) dialog.focus();
             }
         }}
-        onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}
+        onCancel={event => { event.preventDefault(); if (!busy && open) onClose(); }}
         onClick={event => {
-            if (busy || event.target !== event.currentTarget) return;
+            if (busy || !open || event.target !== event.currentTarget) return;
             const rect = event.currentTarget.getBoundingClientRect();
             if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) onClose();
         }}>{children}</dialog>, document.body);

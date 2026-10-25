@@ -97,7 +97,8 @@
 .settings-chip:hover { border-color: var(--border-hover); }
 .settings-chip[aria-pressed=true] { border-color: var(--accent); background: var(--accent-light); color: var(--accent-strong); }
 /* 分段控件 = cds SegmentedControl（B7）：壳 32px/r8/p1px/5% 轨道，项 r6、选中白底 + 1px 内衬 + 1px 投影。 */
-.settings-tabs { display: inline-flex; align-self: flex-start; height: 2rem; max-width: 100%; gap: 0; padding: 1px; overflow-x: auto; border-radius: .5rem; background: var(--fill-field); }
+.settings-tabs { --tab-radius: .375rem; --tab-shadow: inset 0 0 0 1px var(--border), 0 1px 2px hsl(from var(--neutral-900) h s l / 5%); display: inline-flex; align-self: flex-start; height: 2rem; max-width: 100%; gap: 0; padding: 1px; overflow-x: auto; border-radius: .5rem; background: var(--fill-field); }
+.dark .settings-tabs { --tab-bg: var(--background-tertiary); }
 .settings-tab { display: inline-flex; flex-shrink: 0; align-items: center; gap: .5rem; height: 100%; padding: 0 1rem; border-radius: .375rem; font-size: .875rem; white-space: nowrap; color: var(--foreground-secondary); transition: background-color .15s, color .15s; }
 .settings-tab:hover { color: var(--foreground); }
 .settings-tab[aria-selected=true] { background: var(--surface); font-weight: 500; color: var(--foreground); box-shadow: inset 0 0 0 1px var(--border), 0 1px 2px hsl(from var(--neutral-900) h s l / 5%); }

@@ -447,3 +447,15 @@ legend.agent-question-title { margin-bottom: 2px; }
     .chat-run-secondary, .chat-run-primary { padding: 0 8px; }
 }
 @media (max-width: 359px) { .agent-question-footer > span, .chat-model-hint { display: none; } }
+
+/* ---- 动效：输入框（关键帧与时长刻度在 globals.css「动效体系」） ----
+   发送键随可发与否渐变而不是跳变，按下回弹；开始生成时停止键弹入。附件、知识库与上下文标签、@ 提及面板、
+   续问队列出现时轻弹或上浮；这些元素只在用户操作时挂载，不会在流式更新中重放。 */
+.chat-send-button, .chat-stop-button { transition: background-color var(--duration-snap) var(--ease-out), color var(--duration-snap) var(--ease-out), opacity var(--duration-base) var(--ease-out), scale var(--duration-fast) var(--ease-out); }
+.chat-send-button:active:not(:disabled), .chat-stop-button:active:not(:disabled), .chat-tool-button:active:not(:disabled), .chat-tool-text:active:not(:disabled) { scale: .92; }
+.chat-tool-button, .chat-tool-text { transition: background-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out), scale var(--duration-fast) var(--ease-out); }
+.chat-stop-button { animation: motion-pop-in var(--duration-base) var(--ease-overshoot) backwards; }
+.chat-attachment-chip, .chat-kb-chip, .chat-context-chip { animation: motion-pop-in var(--duration-base) var(--ease-snap) backwards; }
+.chat-mention-popover { transform-origin: bottom left; animation: motion-pop-in var(--duration-snap) var(--ease-snap) backwards; }
+.agent-queue { animation: motion-fade-up var(--duration-base) var(--ease-out) backwards; }
+.agent-queue-row { animation: motion-fade var(--duration-base) var(--ease-out) backwards; }

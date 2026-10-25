@@ -515,6 +515,55 @@ html {
   animation: zoomIn 0.3s ease-out;
 }
 
+/* ===== 动效体系 =====
+ * 全站共用的入场与反馈，时长与缓动只取上方 --duration-* / --ease-*：
+ * - 浮层（菜单、弹出面板）：snap 120ms，从锚点所在一侧缩放淡入；
+ * - 对话框：base 200ms 轻微上浮放大，遮罩同步淡入；
+ * - 内容进入（新消息、新步骤、切换视图）：base 200ms 淡入并上移几像素；
+ * - 状态反馈（复制成功、按下）：snap 120ms / fast 60ms。
+ * 系统开启「减少动态效果」时，上方的全局规则把动画压到 0.01ms，这里不再单独处理。
+ * 位移一律用 translate/scale 属性而不是 transform，不覆盖元素自身的 transform（定位、居中）。 */
+@keyframes motion-pop-in { from { opacity: 0; scale: .96; } }
+@keyframes motion-fade-up { from { opacity: 0; translate: 0 6px; } }
+@keyframes motion-fade { from { opacity: 0; } }
+@keyframes motion-dialog-in { from { opacity: 0; translate: 0 8px; scale: .98; } }
+@keyframes motion-dialog-out { to { opacity: 0; translate: 0 6px; scale: .98; } }
+@keyframes motion-fade-out { to { opacity: 0; } }
+/* 勾号描线：lucide 的 check 路径长约 22.6，取 24 保证起笔完全隐藏。 */
+@keyframes motion-check-draw { from { stroke-dashoffset: 24; } to { stroke-dashoffset: 0; } }
+/* 进行中文字的流光：高光从右向左扫过，配合 background-clip: text。 */
+@keyframes motion-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+
+/* 浮层：定位完成（data-placed）才开始播放，变换原点贴着锚点一侧。 */
+.floating-panel[data-placed] { transform-origin: top left; animation: motion-pop-in var(--duration-snap) var(--ease-snap) backwards; }
+.floating-panel[data-side="bottom"][data-align="end"] { transform-origin: top right; }
+.floating-panel[data-side="top"] { transform-origin: bottom left; }
+.floating-panel[data-side="top"][data-align="end"] { transform-origin: bottom right; }
+.floating-panel:is([data-side="right"], [data-side="right-start"]) { transform-origin: left top; }
+.app-modal[open] { animation: motion-dialog-in var(--duration-base) var(--ease-out) backwards; }
+.app-modal[open]::backdrop { animation: motion-fade var(--duration-base) var(--ease-out) backwards; }
+/* 关闭：Modal 先挂 data-closing 播放退场，播完才离开顶层（Modal.tsx）。 */
+.app-modal[data-closing] { animation: motion-dialog-out var(--duration-snap) var(--ease-out) forwards; }
+.app-modal[data-closing]::backdrop { animation: motion-fade-out var(--duration-snap) var(--ease-out) forwards; }
+
+/* 标签栏的滑动选中块（lib/motion/tab-indicator.ts 写入当前标签的位置与尺寸）：
+   --pill 是分段控件式的浮起块（--tab-bg / --tab-shadow / --tab-radius 由各标签栏给出原来的选中样式），
+   --underline 是贴着标签底边的 2px 横线，--result 窄屏为浮起块、桌面为横线。
+   挂上选中块后，标签自身的选中底色、阴影与下划线让位给它；第一次定位不带过渡。 */
+.motion-tabs { position: relative; isolation: isolate; }
+.motion-tabs::before { content: ''; position: absolute; top: 0; left: 0; z-index: -1; width: var(--tab-w, 0px); height: var(--tab-h, 0px); translate: var(--tab-x, 0px) var(--tab-y, 0px); border-radius: var(--tab-radius, 7px); opacity: 0; pointer-events: none; }
+.motion-tabs[data-indicator]::before { opacity: 1; }
+.motion-tabs[data-indicator-ready]::before { transition: translate var(--duration-base) var(--ease-snap), width var(--duration-base) var(--ease-snap), height var(--duration-base) var(--ease-snap); }
+:is(.motion-tabs--pill, .motion-tabs--result)::before { background: var(--tab-bg, var(--surface)); box-shadow: var(--tab-shadow, 0 1px 2px hsl(from var(--neutral-900) h s l / 8%)); }
+.motion-tabs--underline::before { height: 2px; translate: var(--tab-x, 0px) calc(var(--tab-y, 0px) + var(--tab-h, 0px) - 2px); border-radius: 2px; background: var(--foreground); box-shadow: none; }
+@media (min-width: 1024px) {
+  .motion-tabs--result::before { height: 2px; translate: var(--tab-x, 0px) calc(var(--tab-y, 0px) + var(--tab-h, 0px) - 2px); border-radius: 2px; background: var(--foreground); box-shadow: none; }
+}
+.motion-tabs[data-indicator] > [role=tab][aria-selected=true] { background: transparent; box-shadow: none; border-bottom-color: transparent; }
+
+/* 复制成功：按钮里的勾号一笔画出（claude epitaxy-check-draw：.18s ease-out）。 */
+:is([aria-label*="复制"], [title*="复制"]) svg.lucide-check :is(path, polyline) { stroke-dasharray: 24; animation: motion-check-draw .18s var(--ease-out) both; }
+
 /* ===== 主题切换过渡 ===== */
 body,
 .theme-transition,

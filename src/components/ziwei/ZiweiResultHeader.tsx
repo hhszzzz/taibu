@@ -8,6 +8,7 @@
 import { useRef, type KeyboardEvent, type ReactNode } from 'react';
 import Link from 'next/link';
 import { AIFeatureGate } from '@/components/ai/AIFeatureGate';
+import { useTabIndicator } from '@/lib/motion/tab-indicator';
 import { ResultMoreActions } from '@/components/divination/ResultMoreActions';
 import { ASK_TAIBU_HREF } from '@/components/bazi/result/ResultHeader';
 import type { HeaderMenuItem } from '@/components/layout/HeaderMenuContext';
@@ -39,6 +40,8 @@ interface ZiweiResultHeaderProps {
 
 function ModeTabs({ mode, onModeChange }: { mode: ZiweiChartMode; onModeChange: (mode: ZiweiChartMode) => void }) {
     const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+    const listRef = useRef<HTMLDivElement>(null);
+    useTabIndicator(listRef);
 
     const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
         const current = ZIWEI_CHART_MODES.findIndex((item) => item.id === mode);
@@ -56,10 +59,11 @@ function ModeTabs({ mode, onModeChange }: { mode: ZiweiChartMode; onModeChange: 
 
     return (
         <div
+            ref={listRef}
             role="tablist"
             aria-label="命盘视图"
             onKeyDown={handleKeyDown}
-            className="grid h-10 grid-cols-3 gap-1 rounded-xl bg-background-secondary p-1 lg:flex"
+            className="motion-tabs motion-tabs--pill grid h-10 grid-cols-3 gap-1 rounded-xl bg-background-secondary p-1 lg:flex"
         >
             {ZIWEI_CHART_MODES.map((item, index) => {
                 const selected = item.id === mode;
@@ -75,7 +79,7 @@ function ModeTabs({ mode, onModeChange }: { mode: ZiweiChartMode; onModeChange: 
                         tabIndex={selected ? 0 : -1}
                         onClick={() => onModeChange(item.id)}
                         className={`rounded-[7px] text-sm transition-colors lg:px-3.5 ${selected
-                            ? 'bg-surface text-foreground shadow-[0_1px_2px_rgba(11, 11, 11,0.08)]'
+                            ? 'bg-surface text-foreground shadow-[0_1px_2px_rgba(11,11,11,0.08)]'
                             : 'text-foreground-secondary hover:text-foreground'}`}
                     >
                         {item.label}

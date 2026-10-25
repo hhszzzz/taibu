@@ -12,6 +12,9 @@
 .app-modal.chat-conversation-drawer { inset: 0 auto 0 0; width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border: 0; border-radius: 0; background: var(--sidebar-background); overflow: hidden; }
 .app-modal.chat-conversation-drawer[open] { animation: chat-drawer-in .3s cubic-bezier(.32, .72, 0, 1) both; }
 @keyframes chat-drawer-in { from { transform: translateX(-100%); } }
+/* 关闭时滑回左侧（Modal 播完退场才离开顶层）。 */
+.app-modal.chat-conversation-drawer[data-closing] { animation: chat-drawer-out var(--duration-base) var(--ease-out) forwards; }
+@keyframes chat-drawer-out { to { transform: translateX(-100%); } }
 @media (prefers-reduced-motion: reduce) { .app-modal.chat-conversation-drawer[open] { animation: none; } }
 .app-modal.chat-conversation-drawer[open] { display: flex; flex-direction: column; }
 /* 抽屉在触摸设备上保留更大的行高（>= 40px 触达）；搜索行按 claude 移动端实测为 40px / radius 10 */
@@ -180,3 +183,6 @@
 .chat-recents-menu-item:hover { background: var(--fill-ghost-hover); }
 .chat-recents-menu-item > svg { flex-shrink: 0; color: var(--accent); }
 .chat-recents-menu-divider { height: 1px; margin: 4px 8px; background: var(--fill-field); }
+
+/* 动效：行底色过渡。会话行会随列表刷新重新挂载，不加入场动画，否则每次刷新整列闪一遍。 */
+.chat-nav-row { transition: background-color var(--duration-snap) var(--ease-out), color var(--duration-snap) var(--ease-out); }

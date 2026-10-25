@@ -67,6 +67,8 @@ export interface NavItemDef {
    * When omitted the `id` itself is used as the feature ID.
    */
   featureId?: string;
+  /** Personal data that needs an account: guests do not see the entry at all. */
+  requiresAuth?: boolean;
   /** Logical grouping */
   category: NavCategory;
   /** Divination sub-group; required for `category: 'divination'` items. */
@@ -97,7 +99,7 @@ export const NAV_REGISTRY: readonly NavItemDef[] = [
 
   // ── Tools ───────────────────────────────────────────────────────────────
   { id: 'chat', href: '/chat', label: '新聊天', icon: ChatIcon, category: 'tool' },
-  { id: 'records', href: '/records', label: '命理记录', icon: RecordsIcon, category: 'tool' },
+  { id: 'records', href: '/records', label: '命理记录', icon: RecordsIcon, requiresAuth: true, category: 'tool' },
   { id: 'community', href: '/community', label: '社区', icon: CommunityIcon, category: 'tool' },
 
   // ── User ────────────────────────────────────────────────────────────────
@@ -167,6 +169,11 @@ export function filterNavItems(items: readonly NavItemDef[], query: string): rea
 /** Sidebar "工具" items (tool category). */
 export function getSidebarToolItems() {
   return NAV_REGISTRY.filter((n) => n.category === 'tool');
+}
+
+/** Nav rows a guest may see: personal-data entries disappear until sign-in. */
+export function visibleNavItems<T extends Pick<NavItemDef, 'requiresAuth'>>(items: readonly T[], signedIn: boolean): T[] {
+  return signedIn ? [...items] : items.filter(item => !item.requiresAuth);
 }
 
 /** FeatureTogglePanel — modules list with admin-specific labels. */

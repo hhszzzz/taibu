@@ -14,10 +14,11 @@ import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
 import { Plus, Search, X } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
+import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import { useActiveSettingsCenterTab } from '@/lib/hooks/useSettingsCenterRouteState';
 import { DEFAULT_MOBILE_MAIN_ITEMS, DEFAULT_MOBILE_DRAWER_ORDER } from '@/lib/user/settings';
-import { filterNavItems, getNavItemById, groupDivinationItems, toFeatureId, type NavItemDef } from '@/lib/navigation/registry';
+import { filterNavItems, getNavItemById, groupDivinationItems, toFeatureId, visibleNavItems, type NavItemDef } from '@/lib/navigation/registry';
 import { isMobileNavPinnable, resolveMobileNavPin, useMobileNavPins } from '@/lib/navigation/mobile-nav-pins';
 import {
     getSettingsCenterTabFromRouteTarget,
@@ -132,6 +133,7 @@ export function MobileNav() {
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [query, setQuery] = useState('');
     const { isFeatureEnabled, isLoading: featureLoading, loaded: featureLoaded, error: featureError, refresh: refreshFeatures } = useFeatureToggles();
+    const { user } = useSessionSafe();
     const activeSettingsTab = useActiveSettingsCenterTab();
     const { pins, togglePin } = useMobileNavPins();
     const { showToast } = useToast();
@@ -149,7 +151,8 @@ export function MobileNav() {
         return pinnedItem ? [pinnedItem, ...fixedItems] : fixedItems;
     }, [pinnedItem, isFeatureEnabled]);
 
-    const drawerNavItems = useMemo(() => resolveEnabledItems(DEFAULT_MOBILE_DRAWER_ORDER, isFeatureEnabled), [isFeatureEnabled]);
+    // 未登录不显示命理记录等个人数据入口。
+    const drawerNavItems = useMemo(() => visibleNavItems(resolveEnabledItems(DEFAULT_MOBILE_DRAWER_ORDER, isFeatureEnabled), !!user), [isFeatureEnabled, user]);
     const activeSiblings = useMemo(() => [...mainNavItems, ...drawerNavItems], [mainNavItems, drawerNavItems]);
 
     const divinationGroups = useMemo(

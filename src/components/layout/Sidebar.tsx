@@ -21,7 +21,7 @@ import { RecentsHead, SidebarConversations } from '@/components/layout/SidebarCo
 import { AnnouncementBellButton } from '@/components/layout/AnnouncementBellButton';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
-import { getSidebarNavItems, getSidebarToolItems, type NavItemDef } from '@/lib/navigation/registry';
+import { getSidebarNavItems, getSidebarToolItems, visibleNavItems, type NavItemDef } from '@/lib/navigation/registry';
 import { resolveSidebarPinnedIds, useSidebarPins } from '@/lib/navigation/sidebar-pins';
 import { FloatingPanel } from '@/components/ui/FloatingPanel';
 import { AllDivinationsPanel } from '@/components/layout/AllDivinationsPanel';
@@ -186,7 +186,7 @@ function SidebarInner() {
     const filteredNavItems = useMemo(() => navItems
         .filter((item) => isFeatureEnabled(item.id)), [isFeatureEnabled]);
 
-    // 内置固定项（日运 / 月运）+ 用户固定项按 registry 固定顺序展示；
+    // 固定项（含默认固定的日运 / 月运）按 registry 固定顺序展示；
     // 当前页属于未固定占术时临时追加，不改变其余项的相对顺序。
     const pinnedIds = useMemo(() => resolveSidebarPinnedIds(pins), [pins]);
     const pinnedNavItems = useMemo(() => pinnedIds
@@ -201,8 +201,9 @@ function SidebarInner() {
     const chatItem = useMemo(() => toolItems
         .find((item) => item.id === 'chat' && isFeatureEnabled('chat')), [isFeatureEnabled]);
 
-    const filteredToolItems = useMemo(() => toolItems
-        .filter((item) => item.id !== 'chat' && isFeatureEnabled(item.id)), [isFeatureEnabled]);
+    // 未登录不显示命理记录等个人数据入口；其余工具照常。
+    const filteredToolItems = useMemo(() => visibleNavItems(toolItems, !!user)
+        .filter((item) => item.id !== 'chat' && isFeatureEnabled(item.id)), [isFeatureEnabled, user]);
 
     if (isNavLoading) {
         return <SidebarSkeleton />;

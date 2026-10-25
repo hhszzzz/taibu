@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  BUILT_IN_SIDEBAR_PINS,
   DEFAULT_SIDEBAR_PINS,
   SIDEBAR_DIVINATION_ORDER,
+  SIDEBAR_PINS_STORAGE_KEY,
   normalizeSidebarPins,
   resolveSidebarPinnedIds,
   toggleSidebarPin,
@@ -36,22 +36,22 @@ test('toggleSidebarPin appends new pins and removes existing ones without mutati
   assert.deepEqual(pins, ['bazi', 'ziwei']);
 });
 
-test('default pins are frozen', () => {
+test('default pins are frozen and include the fortune entries, which stay toggleable', () => {
   assert.ok(Object.isFrozen(DEFAULT_SIDEBAR_PINS));
-  assert.deepEqual([...DEFAULT_SIDEBAR_PINS], ['bazi', 'ziwei', 'tarot', 'liuyao', 'qimen']);
+  assert.deepEqual([...DEFAULT_SIDEBAR_PINS], ['bazi', 'ziwei', 'tarot', 'liuyao', 'qimen', 'daily', 'monthly']);
+  assert.deepEqual(toggleSidebarPin(DEFAULT_SIDEBAR_PINS, 'daily'), ['bazi', 'ziwei', 'tarot', 'liuyao', 'qimen', 'monthly']);
+  assert.deepEqual(toggleSidebarPin(['bazi'], 'monthly'), ['bazi', 'monthly'], 'an unpinned fortune entry can be pinned again');
 });
 
-test('built-in entries are 日运 / 月运, frozen, and always visible', () => {
-  assert.ok(Object.isFrozen(BUILT_IN_SIDEBAR_PINS));
-  assert.deepEqual([...BUILT_IN_SIDEBAR_PINS], ['daily', 'monthly']);
-  assert.deepEqual(resolveSidebarPinnedIds([]), ['daily', 'monthly']);
+test('the storage key version gives existing browsers the new defaults once', () => {
+  assert.equal(SIDEBAR_PINS_STORAGE_KEY, 'taibu.pref.sidebarPinned.v2');
 });
 
 test('sidebar order follows the registry declaration order, not pin insertion order', () => {
   assert.deepEqual([...SIDEBAR_DIVINATION_ORDER], getSidebarNavItems().map(item => item.id));
   assert.deepEqual(
     resolveSidebarPinnedIds(['qimen', 'bazi', 'meihua', 'daily']),
-    ['bazi', 'qimen', 'meihua', 'daily', 'monthly'],
+    ['bazi', 'qimen', 'meihua', 'daily'],
   );
 });
 
@@ -59,10 +59,10 @@ test('adding or removing a pin never reorders the remaining entries', () => {
   const base = resolveSidebarPinnedIds(['bazi', 'qimen']);
   const added = resolveSidebarPinnedIds(['bazi', 'meihua', 'qimen']);
   assert.deepEqual(added.filter(id => id !== 'meihua'), base);
-  assert.deepEqual(resolveSidebarPinnedIds(['bazi']), ['bazi', 'daily', 'monthly']);
+  assert.deepEqual(resolveSidebarPinnedIds(['bazi']), ['bazi'], 'an empty stored list is not refilled with fortune entries');
   assert.deepEqual(
     resolveSidebarPinnedIds(['qimen', 'bazi']).filter(id => id !== 'bazi'),
-    ['qimen', 'daily', 'monthly'],
+    ['qimen'],
   );
 });
 
@@ -71,10 +71,5 @@ test('resolveSidebarPinnedIds drops stale ids and de-duplicates', () => {
     resolveSidebarPinnedIds(['removed-method', 'tarot', 'tarot', 'daily', 'monthly']),
     ['tarot', 'daily', 'monthly'],
   );
-});
-
-test('built-in entries cannot be toggled off or duplicated', () => {
-  assert.deepEqual(toggleSidebarPin(['bazi', 'daily'], 'daily'), ['bazi', 'daily']);
-  assert.deepEqual(toggleSidebarPin([], 'monthly'), []);
-  assert.deepEqual(resolveSidebarPinnedIds(['daily', 'daily']), ['daily', 'monthly']);
+  assert.deepEqual(resolveSidebarPinnedIds(['daily', 'daily']), ['daily']);
 });

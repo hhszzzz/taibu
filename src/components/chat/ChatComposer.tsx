@@ -8,6 +8,7 @@
 'use client';
 
 import { useEffect, useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Maximize2, Minimize2 } from 'lucide-react';
 import type { AttachmentState, Mention } from '@/types';
 import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
 import type { MembershipType } from '@/lib/user/membership';
@@ -30,6 +31,7 @@ import type { ChatMode } from '@/lib/chat/use-chat-state';
 import { useComposerCommands } from './composer/ComposerCommands';
 import { usePrivateAttachments } from '@/lib/chat/use-private-attachments';
 import { COMPOSER_FILES_EVENT, documentFileProblem, pickPlainAttachment } from '@/lib/chat/composer-files';
+import { COMPOSER_MAX_HEIGHT, resolveComposerHeight } from '@/lib/chat/composer-height';
 import { PrivateAttachments } from './agent/PrivateAttachments';
 import type { ModelSettingsProps } from '@/lib/chat/model-settings';
 import './composer/composer.css';
@@ -349,17 +351,28 @@ export function ChatComposer({
         showToast('success', promptKbIdSet.has(kbId) ? '已关闭知识库搜索' : '已启用知识库搜索');
     }, [membershipType, promptKbIdSet, showToast, userId, state]);
 
-    // Auto-resize textarea
+    // 输入框高度：单行保持紧凑；换行后给足下方空白；超过上限出现右上角放大键，可原地加高。
+    const [composerExpanded, setComposerExpanded] = useState(false);
+    const [composerExpandable, setComposerExpandable] = useState(false);
+    const [composerHeight, setComposerHeight] = useState(0);
     useEffect(() => {
         const textarea = textareaRef.current;
         if (!textarea) return;
         textarea.style.height = 'auto';
-        const newHeight = Math.min(Math.max(textarea.scrollHeight, 24), 236);
-        textarea.style.height = `${newHeight}px`;
+        const { height, expandable } = resolveComposerHeight({
+            natural: textarea.scrollHeight,
+            hero: variant === 'hero',
+            expanded: composerExpanded,
+            viewport: window.innerHeight,
+        });
+        textarea.style.height = `${height}px`;
+        setComposerHeight(height);
+        setComposerExpandable(expandable);
+        if (!expandable && composerExpanded) setComposerExpanded(false);
         if (overlayRef.current) {
             overlayRef.current.scrollTop = textarea.scrollTop;
         }
-    }, [inputValue, mentions, textareaRef, overlayRef, variant]);
+    }, [inputValue, mentions, textareaRef, overlayRef, variant, composerExpanded]);
 
     // 追问 chip 的文本范围：与提及一样，退格时整体删除。
     const chartTokenRanges = useMemo(() => {
@@ -541,6 +554,8 @@ export function ChatComposer({
     };
 
     const hero = variant === 'hero';
+    // 放大（首屏与已有对话一致）：输入区向上长高、底边留在原处并盖住上方内容；margin 与高度同速过渡。
+    const dockStyle = composerExpanded ? { marginTop: -(composerHeight - COMPOSER_MAX_HEIGHT) } : undefined;
     const running = allowDuringRun && isLoading;
     const hasDraft = Boolean(inputValue.trim());
     let inputPlaceholder: string;
@@ -591,7 +606,7 @@ export function ChatComposer({
     };
 
     return (
-        <div data-chat-composer className={`chat-composer-dock${hero ? ' is-hero' : ''}${disabled ? ' is-locked' : ''}`} style={{ zIndex: knowledgeBaseOpen ? 60 : 30 }}>
+        <div data-chat-composer data-expanded={composerExpanded || undefined} className={`chat-composer-dock${hero ? ' is-hero' : ''}${disabled ? ' is-locked' : ''}`} style={{ zIndex: knowledgeBaseOpen ? 60 : 30, ...dockStyle }}>
             <div className="chat-composer-inner">
                 {header && <div className="chat-composer-header">{header}</div>}
                 <MentionManager
@@ -635,7 +650,19 @@ export function ChatComposer({
 
                     {!hero && <ComposerToolbar {...toolbarProps} showSend={false} />}
 
-                    <div className="chat-composer-field">
+                    <div className={`chat-composer-field${composerExpandable ? ' has-expand' : ''}`}>
+                        {composerExpandable && (
+                            <button
+                                type="button"
+                                className="chat-composer-expand"
+                                aria-expanded={composerExpanded}
+                                aria-label={composerExpanded ? '收起输入框' : '展开输入框'}
+                                title={composerExpanded ? '收起输入框' : '展开输入框'}
+                                onClick={() => { setComposerExpanded(value => !value); textareaRef.current?.focus(); }}
+                            >
+                                {composerExpanded ? <Minimize2 size={14} aria-hidden="true" /> : <Maximize2 size={14} aria-hidden="true" />}
+                            </button>
+                        )}
                         <div ref={overlayRef} className="chat-composer-input chat-composer-overlay" aria-hidden="true">
                             {inputValue ? highlightedInput.map((part, index) => part.kind === 'mention'
                                 ? <span key={`${part.start}-${part.end}`} className="chat-mention-token" data-type={part.type}>

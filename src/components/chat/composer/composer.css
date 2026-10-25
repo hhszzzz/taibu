@@ -7,7 +7,8 @@
 /* 会话内 composer dock = 克隆站：dock 在布局内、页色承托；不再额外画顶部渐变/模糊带
    （用户反馈 composer 上方出现一条来路不明的横带）。 */
 @media (min-width: 1024px) {
-    .chat-composer-dock:not(.is-hero) { padding-top: 24px; padding-bottom: 8px; }
+    /* 会话内不再留 24px 上衬：输入框贴近聊天内容。 */
+    .chat-composer-dock:not(.is-hero) { padding-top: 8px; padding-bottom: 8px; }
 }
 /* 会话内 composer 与阅读列同宽（cds：dock 宽 = transcript 列 768px）；首屏列宽由 .chat-empty-inner 提供 */
 .chat-composer-inner { position: relative; width: 100%; max-width: var(--chat-column); min-width: 0; container-type: inline-size; }
@@ -34,6 +35,12 @@
 .chat-composer-shell:focus-within { box-shadow: 0 0 0 1px var(--border-hover), 0 4px 20px hsl(from var(--neutral-900) h s l / 7.5%); }
 /* claude /new 实测（克隆站源码）：hero 壳 = `p-2` 换成 `14px 8px 8px`、gap 6px、编辑区 42px、工具行 32px
    → 102 = 14+42+6+32+8。 */
+/* 首屏放大：高度由负 margin 抵消，底边留在原处、顶边向上长，盖住问候语；整体略下移贴近窗口底部。 */
+/* 放大时底边不动、顶边向上长：负 margin 抵消新增高度，输入框覆盖上方内容而不是挤压布局。 */
+.chat-composer-dock { transition: margin-top .24s cubic-bezier(.22,.7,.2,1); }
+.chat-composer-dock[data-expanded] { position: relative; }
+.chat-composer-dock.is-hero { transition: margin-top .24s cubic-bezier(.22,.7,.2,1), transform .24s cubic-bezier(.22,.7,.2,1); }
+.chat-composer-dock.is-hero[data-expanded] { transform: translateY(6vh); }
 .is-hero .chat-composer-shell { flex-direction: column; align-items: stretch; gap: 6px; padding: 14px 8px 8px; border-radius: 14px; }
 .is-hero .chat-composer-field { flex: 0 0 auto; }
 .is-hero .chat-composer-shell > :not(.chat-composer-field):not(.chat-composer-actions):not(.chat-composer-send-group) { flex: 0 0 auto; }
@@ -43,7 +50,13 @@
 /* The overlay draws mention tokens and the placeholder under a transparent textarea; both share metrics. */
 .chat-composer-input { display: block; box-sizing: border-box; width: 100%; margin: 0; padding: 5.5px 8px; border: 0; font: inherit; font-size: calc(15 / 16 * 1rem); line-height: 1.4; letter-spacing: normal; white-space: pre-wrap; overflow-wrap: anywhere; overflow-y: auto; scrollbar-width: thin; }
 .chat-composer-overlay { position: absolute; inset: 0; pointer-events: none; color: var(--foreground); }
-.chat-composer-textarea { position: relative; max-height: 320px; resize: none; background: transparent; color: transparent; caret-color: var(--foreground); outline: none; field-sizing: content; }
+/* 高度由 resolveComposerHeight 内联写死（单行紧凑 / 换行留白 / 展开到窗口比例），不再用 CSS 上限二次裁切；高度变化带动画。 */
+.chat-composer-textarea { position: relative; max-height: none; resize: none; background: transparent; color: transparent; caret-color: var(--foreground); outline: none; field-sizing: content; transition: height .24s cubic-bezier(.22,.7,.2,1); }
+/* 长文本放大键：停在输入区右上角，仅在草稿超过常规上限时出现。 */
+.chat-composer-expand { position: absolute; top: 0; right: 0; z-index: 2; display: flex; width: 24px; height: 24px; align-items: center; justify-content: center; border-radius: 6px; color: var(--foreground-tertiary); transition: background-color .12s, color .12s; }
+.chat-composer-expand:hover { background: var(--fill-ghost-hover); color: var(--foreground); }
+/* 给放大键让出右上角：textarea 与镜像层同步加右衬，保证文字与光标仍逐字对齐。 */
+.chat-composer-field.has-expand .chat-composer-input { padding-right: 34px; }
 @supports not (field-sizing: content) { .chat-composer-textarea { min-height: calc(2 * 1.4em + 11px); } }
 /* hero 首屏编辑区 42px（claude /new 克隆站实测：102 = 14 上衬 + 42 编辑区 + 6 缝 + 32 工具行 + 8 下衬） */
 .is-hero .chat-composer-input { min-height: 42px; }

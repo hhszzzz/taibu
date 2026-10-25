@@ -168,6 +168,13 @@ const auxiliaryToolTitles: Record<string, string> = {
   ask_user: "补充必要信息",
   inspect_chart: "查看命盘",
   focus_chart: "定位分析位置",
+  // Without a title here the label falls back to the model-facing description, which becomes the step title.
+  todo_write: "更新计划",
+  list_analysis_methods: "列出分析方法",
+  load_analysis_method: "加载分析方法",
+  read_attachment: "读取附件",
+  read_user_memory: "读取长期记忆",
+  remember_user_fact: "记住偏好",
 };
 function searchRow(
   data: unknown,

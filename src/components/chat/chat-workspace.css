@@ -301,8 +301,8 @@
 .agent-step[data-state="failed"] .agent-step-note { color: var(--danger); }
 .agent-step-chevron { flex-shrink: 0; margin-left: 0; color: inherit; transition: rotate .15s; }
 .agent-step-body { border-top: 0; }
-/* 右侧操作列（复制 ×2 + 在工作区查看 = 76px，自步骤顶 8px 起）绝对定位；普通视图只剩一行结果时，正文至少撑到操作列底部，避免按钮压进下一步。 */
-.agent-step-call { display: flex; min-width: 0; flex-direction: column; gap: 5px; padding: 6px 0; color: var(--foreground-secondary); font-size: calc(14 / 16 * 1rem); line-height: calc(20 / 16 * 1rem); }
+/* 步骤正文：参数、结果、脚本各一块面板，操作（复制）在面板头，「在工作区查看」在正文底部。 */
+.agent-step-call { display: flex; min-width: 0; flex-direction: column; gap: 8px; padding: 6px 0 4px; color: var(--foreground-secondary); font-size: calc(14 / 16 * 1rem); line-height: calc(20 / 16 * 1rem); }
 .agent-step-code { position: relative; display: flex; min-width: 0; }
 .agent-step-command { display: flex; width: 100%; flex-direction: column; gap: 3px; margin: 0; padding: 0; color: var(--foreground-secondary); font-size: inherit; line-height: inherit; white-space: pre-wrap; overflow-wrap: anywhere; }
 .agent-step-detail-line { overflow-wrap: anywhere; }
@@ -312,12 +312,8 @@
 .agent-step-copy { display: inline-flex; width: 24px; height: 24px; align-items: center; justify-content: center; border-radius: 5px; color: var(--foreground-tertiary); transition: color .12s; }
 .agent-step-copy:hover { background: var(--fill-ghost-hover); color: var(--foreground); }
 .agent-step-output { max-height: 24rem; margin: 0; padding: 0; overflow-y: auto; color: var(--foreground-secondary); font-family: var(--font-sans); font-size: calc(14 / 16 * 1rem); line-height: calc(20 / 16 * 1rem); white-space: pre-wrap; overflow-wrap: anywhere; }
-.agent-step-output-wrap { position: relative; display: flex; min-width: 0; padding-right: 32px; }
 .agent-step-empty { margin: 0; font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-tertiary); }
-.agent-step-actions { position: absolute; top: 8px; right: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; opacity: 0; transition: opacity .12s; }
-.agent-step:hover .agent-step-actions, .agent-step:focus-within .agent-step-actions { opacity: 1; }
-@media (hover: none) { .agent-step-actions { opacity: 1; } }
-.agent-step-workspace { display: inline-flex; height: 24px; align-items: center; gap: 4px; padding: 0 8px; border-radius: 6px; color: var(--foreground-secondary); font-size: calc(12.5 / 16 * 1rem); }
+.agent-step-workspace { display: inline-flex; height: 26px; align-items: center; gap: 5px; padding: 0 10px; border-radius: 7px; background: var(--background); box-shadow: 0 0 0 var(--hairline) var(--border); color: var(--foreground-secondary); font-size: calc(12.5 / 16 * 1rem); transition: background-color var(--duration-snap) var(--ease-out), color var(--duration-snap) var(--ease-out); }
 .agent-step-workspace:hover { background: var(--fill-ghost-hover); color: var(--foreground); }
 .agent-step-structured { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .agent-step-structured-lead { margin: 0; color: var(--foreground); font-size: calc(13.5 / 16 * 1rem); line-height: 1.6; overflow-wrap: anywhere; }
@@ -335,8 +331,43 @@
 .agent-step-structured-sources small { flex-shrink: 0; color: var(--foreground-tertiary); }
 .agent-step-cite { flex-shrink: 0; color: var(--foreground-tertiary); font-variant-numeric: tabular-nums; }
 .agent-step-more { color: var(--foreground-tertiary); }
-.agent-step-structured-open { align-self: flex-start; display: inline-flex; height: 24px; align-items: center; padding: 0 8px; border-radius: 6px; color: var(--foreground-secondary); font-size: calc(12.5 / 16 * 1rem); }
-.agent-step-structured-open:hover { color: var(--accent-hover); }
+.agent-step-structured-open { align-self: flex-start; display: inline-flex; height: 26px; align-items: center; gap: 4px; padding: 0 10px; border-radius: 7px; background: var(--background); box-shadow: 0 0 0 var(--hairline) var(--border); color: var(--foreground-secondary); font-size: calc(12.5 / 16 * 1rem); transition: background-color var(--duration-snap) var(--ease-out), color var(--duration-snap) var(--ease-out); }
+.agent-step-structured-open:hover { background: var(--fill-ghost-hover); color: var(--foreground); }
+/* ---- 步骤正文面板 ----
+   面板 = 发丝环 + 极淡底色（深浅主题都取 neutral-900 的 3%）+ 8px 圆角；面板头 28px 写名称，右侧放复制。
+   命令行与 JSON 用等宽字：提示符与标点最淡，工具名用强调色，选项与键蓝、字符串绿、数字黄、字面量紫
+   （取五行色与四化权色，深浅主题各自有对应值）。正文过长先收起到 15rem，底边淡出，「展开全部」后最多 32rem 滚动。 */
+.agent-step-panel { display: flex; min-width: 0; flex-direction: column; overflow: hidden; border-radius: 8px; background: hsl(from var(--neutral-900) h s l / 3%); box-shadow: 0 0 0 var(--hairline) var(--hairline-color); }
+.agent-step-panel-head { display: flex; height: 28px; flex-shrink: 0; align-items: center; gap: 2px; padding: 0 4px 0 10px; border-bottom: var(--hairline) solid var(--hairline-color); color: var(--foreground-tertiary); font-size: calc(12 / 16 * 1rem); }
+.agent-step-panel-title { min-width: 0; flex: 1; overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.agent-step-call .agent-step-panel :is(.agent-step-output, .agent-step-script, .agent-code) { max-height: none; margin: 0; padding: 8px 10px 10px; overflow: visible; border-radius: 0; background: transparent; }
+.agent-step-fold { position: relative; max-height: 15rem; overflow: hidden; }
+.agent-step-fold[data-expanded] { max-height: 32rem; overflow-y: auto; }
+.agent-step-fold[data-overflowing]:not([data-expanded]) { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 48px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 48px), transparent); }
+.agent-step-fold-toggle { display: inline-flex; height: 26px; align-self: flex-start; align-items: center; gap: 4px; margin: 0 6px 6px; padding: 0 8px; border-radius: 6px; color: var(--foreground-secondary); font-size: calc(12 / 16 * 1rem); transition: background-color var(--duration-snap) var(--ease-out), color var(--duration-snap) var(--ease-out); }
+.agent-step-fold-toggle:hover { background: var(--fill-ghost-hover); color: var(--foreground); }
+.agent-step-fold-toggle > svg { transition: rotate var(--duration-base) var(--ease-out); }
+.agent-step-fold-toggle[aria-expanded="true"] > svg { rotate: 180deg; }
+.agent-step-foot { display: flex; flex-wrap: wrap; gap: 6px; }
+.agent-code { margin: 0; padding: 8px 10px 10px; overflow-x: auto; color: var(--foreground-secondary); font-family: var(--font-mono); font-size: calc(12.5 / 16 * 1rem); line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 2; }
+.agent-code-prompt { color: var(--foreground-tertiary); user-select: none; }
+.agent-code-command { color: var(--accent); font-weight: 600; }
+.agent-code-flag, .agent-code-key { color: var(--wx-water); }
+.agent-code-string { color: var(--wx-wood); }
+.agent-code-number { color: var(--wx-earth); }
+.agent-code-literal { color: var(--hua-quan); }
+.agent-code-punct { color: var(--foreground-tertiary); }
+/* 排盘步骤：小盘缩略图 + 盘名与要点，和概览行是同一套缩略图。 */
+.agent-step-chart { display: flex; min-width: 0; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 8px; background: hsl(from var(--neutral-900) h s l / 3%); box-shadow: 0 0 0 var(--hairline) var(--hairline-color); }
+.agent-step-chart-thumb { display: inline-flex; flex-shrink: 0; max-width: 55%; }
+.agent-step-chart-text { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.agent-step-chart-text > strong { color: var(--foreground); font-size: calc(13.5 / 16 * 1rem); font-weight: 500; }
+.agent-step-chart-text > span { overflow: hidden; color: var(--foreground-secondary); font-size: calc(12.5 / 16 * 1rem); text-overflow: ellipsis; white-space: nowrap; }
+/* 结果正文的键值行（tool-display 把「- 键: 值」的键加粗）：键淡、定宽对齐，像一张两列表。 */
+.agent-step-markdown :is(ul, ol) { padding-left: 1.25em; }
+.agent-step-markdown ul:has(> li > strong:first-child) { padding-left: 0; list-style: none; }
+.agent-step-markdown li > strong:first-child { display: inline-block; min-width: 6.5em; margin-right: 6px; color: var(--foreground-tertiary); font-weight: 400; }
+.agent-step-markdown tbody tr:nth-child(even) td { background: hsl(from var(--neutral-900) h s l / 2.5%); }
 /* 协作成员 / 最终成果：图标 + 名称 + 一行预览，整行可点，右侧箭头表示会打开对应页面。 */
 .agent-step-entities { display: flex; flex-direction: column; gap: 2px; margin: 0 -6px; padding: 0; list-style: none; }
 .agent-step-entity { display: flex; width: 100%; min-width: 0; align-items: flex-start; gap: 10px; padding: 7px 6px; border-radius: 8px; color: var(--foreground); text-align: left; transition: color .12s; }
@@ -489,11 +520,20 @@ button.agent-evidence-chip:hover { border-color: var(--accent); color: var(--acc
 .chat-message-model { margin-left: 8px; padding-left: 10px; border-left: 1px solid var(--border); font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); white-space: nowrap; }
 /* 工作区 = 停靠分栏里的悬浮卡片（claude /code 讨论串面板实测：白卡 r12 + 0.5px 发丝描边）。
    上留白 4px：40px 头部的标签行中线落在 24px，与左侧 48px 标题栏同一水平线；下留白 8px。
-   列为 in-flow、挤压对话列而不盖住内容；任务态默认 320，含原生盘面默认 660，拖拽可在 280–780 间调宽，始终给阅读列留 ≥360px。
-   max-width 的保留值必须与 AgentWorkspacePanel 的拖拽上限一致（100% − 360px 阅读列 − 10px 右外边距），否则指针到了面板却停住。 */
-.agent-workspace-panel { position: relative; display: flex; flex-shrink: 0; flex-direction: column; width: 320px; min-width: 280px; max-width: min(780px, calc(100% - 370px)); margin: 4px 10px 8px 0; border: var(--hairline) solid var(--hairline-color); border-radius: 12px; background: var(--chat-raised); box-shadow: none; }
+   列为 in-flow、挤压对话列而不盖住内容；任务态默认 320，含原生盘面时与对话列平分，拖拽可在 280–780 间调宽，始终给阅读列留 ≥360px。
+   max-width 的保留值必须与 AgentWorkspacePanel 的拖拽上限一致（100% − 360px 阅读列 − 10px 右外边距），否则指针到了面板却停住。
+   打开时从右侧滑入；默认宽在 320 与平分之间切换（出现盘面、恢复默认宽、最大化）时宽度平滑过渡，拖动中不过渡。 */
+.agent-workspace-panel { position: relative; display: flex; flex-shrink: 0; flex-direction: column; width: 320px; min-width: 280px; max-width: min(780px, calc(100% - 370px)); margin: 4px 10px 8px 0; border: var(--hairline) solid var(--hairline-color); border-radius: 12px; background: var(--chat-raised); box-shadow: none; transition: width var(--duration-sheet) var(--ease-snap); }
+/* 读者或模型刚打开时滑入（data-entering）；随会话恢复的面板直接出现。关闭时滑出（data-leaving），播完由 ChatLayout 卸载。 */
+@keyframes agent-panel-in { from { opacity: 0; translate: 16px 0; } }
+@keyframes agent-panel-out { to { opacity: 0; translate: 16px 0; } }
+.agent-workspace-panel[data-entering] { animation: agent-panel-in var(--duration-sheet) var(--ease-out) backwards; }
+.agent-workspace-panel[data-leaving] { animation: agent-panel-out var(--duration-base) var(--ease-out) forwards; pointer-events: none; }
+/* 从聊天里的步骤、引用或成果打开某一页时，描边闪一下（保留入场动画的名字，已播完的不会重播）。 */
+@keyframes agent-panel-flash { from { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent); } to { box-shadow: 0 0 0 6px transparent; } }
+.agent-workspace-panel[data-flash]:not([data-leaving]) { animation: agent-panel-flash .7s var(--ease-out); }
 /* 拖动中：整块面板宽度实时跟随指针，内容不参与 hover/选择，避免图表区域抢事件。 */
-.agent-workspace-panel[data-resizing] { cursor: col-resize; }
+.agent-workspace-panel[data-resizing] { cursor: col-resize; transition: none; }
 .agent-workspace-panel[data-resizing] .agent-panel-content { pointer-events: none; }
 /* 会话详情停靠栏 = 克隆站 SessionRail：固定 280px、右留 12px、卡片间隔 8px；不参与拖拽。 */
 .agent-session-rail { position: relative; z-index: 40; display: flex; flex-shrink: 0; flex-direction: column; width: 280px; min-height: 0; margin-top: 51px; margin-right: 12px; padding: 0 1px 8px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
@@ -548,8 +588,10 @@ button.agent-evidence-chip:hover { border-color: var(--accent); color: var(--acc
 .agent-workspace-panel.is-maximized .agent-panel-resizer { display: none; }
 /* 拖拽热区铺在卡片左侧外侧（压在对话区边缘），悬停显示 3px 胶囊（同侧栏拖拽柄）。 */
 .agent-panel-resizer { position: absolute; top: 0; bottom: 0; left: -9px; width: 9px; cursor: col-resize; touch-action: none; z-index: 2; }
-.agent-panel-resizer::after { content: ''; position: absolute; top: 50%; left: 50%; width: 3px; height: 48px; border-radius: 999px; background: var(--accent); opacity: 0; transform: translate(-50%, -50%); transition: opacity .15s; }
+.agent-panel-resizer::after { content: ''; position: absolute; top: 50%; left: 50%; width: 3px; height: 48px; border-radius: 999px; background: var(--accent); opacity: 0; transform: translate(-50%, -50%); transition: opacity .15s, height var(--duration-base) var(--ease-out); }
 .agent-panel-resizer:hover::after, .agent-panel-resizer:focus-visible::after { opacity: .55; }
+/* 拖动时胶囊拉长、加深，提示正在调宽。 */
+.agent-workspace-panel[data-resizing] .agent-panel-resizer::after { height: 96px; opacity: .85; }
 .agent-panel-content { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 /* 面板头 = cds pane header：48px（h-frame-row）/ 左右 16·8 / 标题 14px·500（非衬线大字） */
 .agent-panel-header { display: flex; flex-shrink: 0; align-items: center; gap: 8px; height: 40px; padding: 0 8px; border-bottom: 0; }
@@ -641,7 +683,35 @@ button.agent-evidence-chip:hover { border-color: var(--accent); color: var(--acc
     .chat-workspace-toggle { padding: 0 10px; }
     .chat-suggestion-grid button { min-height: 0; padding: 12px 14px; }
 }
+/* ---- 动效：对话、任务过程与工作区 ----
+   关键帧 motion-* 与时长、缓动刻度都在 globals.css「动效体系」。入场动画只用 backwards 填充，播完不留下任何样式。 */
+/* 新消息的淡入由 useEntranceMotion（lib/motion/entrance.ts）按行号播放：CSS 入场会在行重新挂载时重放，看起来像闪。 */
+/* 任务过程展开 = claude TurnStatus 的 clip-path 揭开：卡片从上往下展开；负内缩保住外圈发丝环。
+   只在读者点开时播放（data-reveal）；任务进行中新加的步骤由 useEntranceMotion 淡入，重新挂载不重放。 */
+@keyframes agent-reveal { from { opacity: .4; clip-path: inset(-4px -4px 100% -4px round 12px); } to { opacity: 1; clip-path: inset(-4px -4px -4px -4px round 12px); } }
+.agent-process-steps[data-reveal]:not([hidden]) { animation: agent-reveal var(--duration-base) var(--ease-out) backwards; }
+/* 读者点开的步骤正文与思考、提问正文：从行下方滑出；默认展开的正文直接出现。 */
+@keyframes agent-body-in { from { opacity: 0; translate: 0 -4px; } }
+.agent-step-body[data-disclosed], .agent-step-note-body { animation: agent-body-in var(--duration-base) var(--ease-out) backwards; }
+/* 进行中：步骤标题、折叠行的「正在…」与思考中的提示带一道流光，读者不必盯着转圈也知道它还在动。 */
+:is(.agent-process-heading.is-live .agent-process-now, .agent-step[data-state="running"] > .agent-step-row .agent-step-title, .chat-thinking.is-streaming .chat-thinking-toggle > span) {
+    background: linear-gradient(90deg, var(--foreground-tertiary) 40%, var(--foreground) 50%, var(--foreground-tertiary) 60%) 0 0 / 250% 100%;
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    animation: motion-shimmer 1.8s linear infinite;
+}
+/* tailwind 的 rotate-90 写的是 rotate 属性，过渡也要跟 rotate。 */
+.chat-thinking-toggle > svg:last-child { transition: rotate .15s var(--ease-out); }
+/* 引用角标、回到最新、提问面板：悬停换色有过渡，出现时轻弹入。 */
+.chat-prose .md-cite { transition: background-color var(--duration-snap) var(--ease-out), color var(--duration-snap) var(--ease-out); }
+.chat-jump-latest { animation: motion-pop-in var(--duration-base) var(--ease-overshoot) backwards; transition: color var(--duration-snap) var(--ease-out), scale var(--duration-fast) var(--ease-out); }
+.agent-question-dock, .agent-question-strip { animation: motion-fade-up var(--duration-base) var(--ease-out) backwards; }
+/* 图标键按下回弹：60ms 缩到 .94，松手回到原大小。 */
+:is(.agent-icon-button, .chat-message-action, .chat-workspace-toggle, .chat-header-button, .agent-step-copy, .chat-jump-latest):active:not(:disabled) { scale: .94; }
+.agent-icon-button, .chat-message-action, .chat-workspace-toggle, .chat-header-button { transition: background-color var(--duration-snap) var(--ease-out), color var(--duration-snap) var(--ease-out), scale var(--duration-fast) var(--ease-out); }
+/* 上下文用量环：数值变化时沿圆周走过去，而不是跳变。 */
+.chat-context-value { transition: stroke-dasharray var(--duration-slow) var(--ease-out); }
 @media (prefers-reduced-motion: reduce) {
+    :is(.agent-process-heading.is-live .agent-process-now, .agent-step[data-state="running"] > .agent-step-row .agent-step-title, .chat-thinking.is-streaming .chat-thinking-toggle > span) { background: none; color: inherit; }
     .chat-workspace *, .chat-workspace *::before, .chat-workspace *::after { scroll-behavior: auto; transition-duration: 0s; }
     .chat-answer.is-streaming > *::after, .chat-answer.is-streaming li::after { animation: none; }
 }

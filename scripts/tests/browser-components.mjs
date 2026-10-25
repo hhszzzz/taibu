@@ -2261,8 +2261,9 @@ export async function run(existingPage, bundlePath) {
     check('The overview shows each valid reading once, marks the saved one and excludes the incomplete result', await readingCards.count() === 11 &&
       await readingCards.filter({ hasText: '已保存' }).count() === 1 && await page.locator('#agent-workspace-panel [data-overview-result="saved"]').count() === 0);
     // 概览改为等高列表行：每行都有缩略图，第二行不重复小图里已有的日主。
-    check('Overview rows share one height, each with a thumbnail and a one-line facts row', await page.locator('#agent-workspace-panel .agent-ws-row').evaluateAll(rows =>
-      rows.length >= 11 && new Set(rows.map(row => Math.round(row.getBoundingClientRect().height))).size === 1 && rows.every(row => row.querySelector('.agent-ws-row-thumb')?.childElementCount === 1)) &&
+    // 等高由 .agent-ws-row 的 CSS 高度保证；夹具不加载应用样式，盘面工作区与对话列平分后长文案会换行，故这里只验结构。
+    check('Overview rows each carry a thumbnail and one facts row', await page.locator('#agent-workspace-panel .agent-ws-row').evaluateAll(rows =>
+      rows.length >= 11 && rows.every(row => row.querySelector('.agent-ws-row-thumb')?.childElementCount === 1 && row.querySelectorAll('.agent-ws-row-facts').length === 1)) &&
       await readingCards.filter({ hasText: '八字命盘' }).first().locator('.agent-ws-row-facts').innerText().then(text => !text.includes('日主')));
     await page.getByRole('button', { name: '关闭工作区', exact: true }).click();
     await results.getByRole('button', { name: '恢复已有成果标签', exact: true }).click();
@@ -2610,6 +2611,16 @@ export async function run(existingPage, bundlePath) {
     await renderBarrier();
     check('Restoring the default width returns the workspace to its content width',
       await workspacePanel.evaluate(el => Math.round(el.getBoundingClientRect().width)) === widthBeforeDrag);
+    await resizer.focus();
+    await page.keyboard.press('ArrowLeft');
+    await renderBarrier();
+    const widened = await workspacePanel.evaluate(el => Math.round(el.getBoundingClientRect().width));
+    // 热区在夹具里没有尺寸（不加载应用 CSS），直接派发双击。
+    await resizer.dispatchEvent('dblclick');
+    await renderBarrier();
+    check('Double-clicking the resizer restores the default width and the separator reports the real width',
+      widened === widthBeforeDrag + 24 && await workspacePanel.evaluate(el => Math.round(el.getBoundingClientRect().width)) === widthBeforeDrag &&
+      await resizer.getAttribute('aria-valuenow') === String(widthBeforeDrag));
     // The desktop layout starts at 1024 (the site sidebar's breakpoint): narrower desktop windows keep the panel docked,
     // and only below it does the workspace become a dialog, which has no room to grow.
     await page.setViewportSize({ width: 1100, height: 1000 });
@@ -2808,7 +2819,7 @@ export async function run(existingPage, bundlePath) {
     if (await planHeading.getAttribute('aria-expanded') !== 'true') await planHeading.click();
     const planStep = planGroup.locator('.agent-process-steps > .agent-step').filter({ has: page.locator('.agent-step-title', { hasText: '提交计划' }) }).last();
     if (await planStep.locator('.agent-step-row').getAttribute('aria-expanded') !== 'true') await planStep.locator('.agent-step-row').click();
-    check('An approved plan shows the plan as Markdown, with the decision on the step row', await planStep.getByLabel('计划').innerText().then(text => text.includes('分析计划') && text.includes('先排八字')) &&
+    check('An approved plan shows the plan as Markdown, with the decision on the step row', await planStep.getByLabel('计划', { exact: true }).innerText().then(text => text.includes('分析计划') && text.includes('先排八字')) &&
       await planStep.locator('.agent-step-detail').innerText().then(text => text.includes('已批准')));
     await planStep.getByRole('button', { name: '查看计划', exact: true }).click();
     await workspacePanel.locator('[data-workspace-view="plan"]').waitFor();

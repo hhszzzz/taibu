@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CHAT_SHORTCUTS, isShortcutSheetKey, modifierLabel, shouldStopOnEscape } from '../lib/chat/chat-shortcuts';
+import { CHAT_SHORTCUTS, isShortcutSheetKey, isWorkspaceToggleKey, modifierLabel, shouldStopOnEscape } from '../lib/chat/chat-shortcuts';
 import { documentFileProblem, pickPlainAttachment, dragHasFiles } from '../lib/chat/composer-files';
 import { MAX_DOCUMENT_BYTES } from '../lib/ai/document-formats';
 import { isExternalHref, markdownLinkProps } from '../lib/chat/markdown-links';
@@ -34,6 +34,15 @@ test('⌘/ (or Ctrl /) opens the shortcut sheet, and the sheet lists the wired s
     assert.equal(sheet['新建对话'], '⇧ ⌘ O');
     assert.equal(sheet['停止生成'], 'Esc');
     assert.equal(sheet['键盘快捷键'], '⌘ /');
+    assert.equal(sheet['打开或关闭工作区'], '⌘ \\');
+});
+
+test('⌘\\ toggles the workspace only as a bare modifier chord', () => {
+    assert.equal(isWorkspaceToggleKey(key({ key: '\\', metaKey: true })), true);
+    assert.equal(isWorkspaceToggleKey(key({ key: '\\', ctrlKey: true })), true);
+    assert.equal(isWorkspaceToggleKey(key({ key: '\\' })), false, 'a typed backslash stays in the composer');
+    assert.equal(isWorkspaceToggleKey(key({ key: '\\', metaKey: true, shiftKey: true })), false);
+    assert.equal(isWorkspaceToggleKey(key({ key: '\\', metaKey: true, isComposing: true })), false, 'an IME composition keeps the key');
 });
 
 test('plain chat takes one document from dropped or pasted files and explains what it left out', () => {

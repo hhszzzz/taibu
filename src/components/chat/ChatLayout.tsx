@@ -31,6 +31,7 @@ import type { MembershipType } from '@/lib/user/membership';
 import type { ChatMode } from '@/lib/chat/use-chat-state';
 import { getSettingsCenterRouteTarget, openSettingsCenter } from '@/lib/settings-center';
 import { AgentWorkspacePanel } from './agent/AgentWorkspacePanel';
+import { prefersReducedMotion, useEntranceMotion } from '@/lib/motion/entrance';
 import { SessionDetailsPanel } from './agent/SessionDetailsPanel';
 import { AgentResultContext, isSameWorkspaceShown, type AgentWorkspaceShown } from './agent/AgentResultContext';
 import { getAgentQuestionAnswers, getAgentWorkspaceAutoOpenEvent } from '@/lib/agent/workspace';
@@ -41,7 +42,7 @@ import type { ComposerWebControl } from './composer/ComposerToolbar';
 import { publishChatModeControl, clearChatModeControl, type ChatModeControl } from '@/lib/chat/mode-control-store';
 import { composerNote, isRunningComposerNote, type ComposerNoteState } from '@/lib/chat/composer-copy';
 import { collectAgentArtifacts, getAgentCitedParagraph } from './agent/presentation';
-import { type AgentPart, type AgentRunStatus } from '@/lib/agent/types';
+import { isAgentRunTerminal, type AgentPart, type AgentRunStatus } from '@/lib/agent/types';
 import { shouldPrefillFollowUp } from '@/lib/agent/follow-ups';
 import { useTranscriptScroll } from '@/lib/chat/use-transcript-scroll';
 import { orderAgentMessagesForDisplay } from '@/lib/agent/browser-client';
@@ -53,10 +54,13 @@ import { setChatWorkspaceOpen } from '@/lib/chat/chat-sidebar';
 import { refreshAgentActivity } from '@/lib/agent/use-agent-activity';
 import { isDesktopLayout } from '@/lib/hooks/useIsDesktopLayout';
 import type { CSSProperties } from 'react';
-import { CHAT_SHORTCUTS, isShortcutSheetKey, modifierLabel, shouldStopOnEscape } from '@/lib/chat/chat-shortcuts';
+import { CHAT_SHORTCUTS, isShortcutSheetKey, isWorkspaceToggleKey, modifierLabel, shouldStopOnEscape } from '@/lib/chat/chat-shortcuts';
 import { dispatchComposerFiles, dragHasFiles } from '@/lib/chat/composer-files';
 import './chat-workspace.css';
 import type { ModelSettingsProps } from '@/lib/chat/model-settings';
+
+/** 工作区退场动画的时长（chat-workspace.css 的 agent-panel-out / agent-sheet-out），播完再卸载。 */
+const WORKSPACE_LEAVE_MS = 200;
 
 interface ChatLayoutProps extends ModelSettingsProps {
     agent?: ReturnType<typeof import('@/lib/agent/use-agent-chat').useAgentChat>;
@@ -150,11 +154,16 @@ export function ChatLayout(props: ChatLayoutProps) {
     const workspaceButtonRef = useRef<HTMLButtonElement>(null);
     const [openWorkspaceKey, setOpenWorkspaceKey] = useState<string | null>(null);
     const workspaceKey = `${userId ?? 'anonymous'}:${activeConversationId ?? 'new'}`;
+    // 工作区的进出场：读者或模型刚打开时滑入（enteringKey）；随会话恢复的直接出现，不在切换会话时重放。
+    // 关闭时先播放退场（leavingKey），播完再卸载。
+    const [enteringKey, setEnteringKey] = useState<string | null>(null);
+    const [leavingKey, setLeavingKey] = useState<string | null>(null);
     const [resourceRequest, setResourceRequest] = useState<{ scope: string; id: string; version: number } | null>(null);
     const autoWorkspace = useRef<{ scope: string; action: string | null }>({ scope: '', action: null });
     const openResource = useCallback((id: string) => {
         setResourceRequest(previous => ({ scope: workspaceKey, id, version: (previous?.version ?? 0) + 1 }));
         setOpenWorkspaceKey(workspaceKey);
+        setEnteringKey(workspaceKey);
         try { sessionStorage.setItem(`taibu.workspace-open:${workspaceKey}`, '1'); } catch { /* optional */ }
     }, [workspaceKey]);
     const [workspaceShown, setWorkspaceShown] = useState<AgentWorkspaceShown | null>(null);
@@ -164,6 +173,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         queueMicrotask(() => {
             if (!current) return;
             // Reopened only where it docks beside the conversation; narrower screens would get a dialog nobody asked for.
+            setEnteringKey(null);
             try { setOpenWorkspaceKey(sessionStorage.getItem(`taibu.workspace-open:${workspaceKey}`) === '1' && isDesktopLayout() ? workspaceKey : null); } catch { setOpenWorkspaceKey(null); }
         });
         return () => { current = false; };
@@ -211,12 +221,23 @@ export function ChatLayout(props: ChatLayoutProps) {
     // Earlier Agent rounds fold to 上一轮 bars; a jump to one of their messages unfolds it first.
     // 记录视图只影响步骤明细的展开，不改变轮次折叠。
     const { rounds, reveal: revealMessage } = useAgentRoundFolds(transcriptMessages, workspaceKey);
+    // 新消息淡入：按行号记住已出现的行，临时 id 换成正式 id、虚拟列表滚回视野时不再重放。
+    // 新对话发出第一条消息后才拿到会话 ID：这一步仍是同一段对话，作用域沿用，第一轮的淡入不被打断。
+    const [motionScope, setMotionScope] = useState(workspaceKey);
+    const [motionKey, setMotionKey] = useState(workspaceKey);
+    if (motionKey !== workspaceKey) {
+        setMotionKey(workspaceKey);
+        if (!(motionKey.endsWith(':new') && transcriptMessages.length > 0)) setMotionScope(workspaceKey);
+    }
+    useEntranceMotion(contentRef, { selector: '.chat-transcript-row', scope: motionScope, ready: !conversationLoading });
     const { showJump, jumpToLatest } = useTranscriptScroll({ scrollRef: messageScrollContainerRef, followRef: props.shouldAutoScrollRef, conversationKey: workspaceKey, messages: transcriptMessages, enabled: !conversationLoading && transcriptMessages.length > 0, virtualized: transcriptMessages.length > 20, reveal: revealMessage });
-    // Esc 停止生成（菜单、弹窗、行内编辑先消费 Esc）；⌘/ 打开快捷键说明。
+    // Esc 停止生成（菜单、弹窗、行内编辑先消费 Esc）；⌘/ 打开快捷键说明；⌘\ 开关工作区（有工作区按钮时）。
     const [shortcutsOpen, setShortcutsOpen] = useState(false);
+    const workspaceShortcut = useRef<(() => void) | null>(null);
     useEffect(() => {
         const onKeyDown = (event: KeyboardEvent) => {
             if (isShortcutSheetKey(event)) { event.preventDefault(); setShortcutsOpen(open => !open); return; }
+            if (isWorkspaceToggleKey(event) && workspaceShortcut.current) { event.preventDefault(); workspaceShortcut.current(); return; }
             if (shouldStopOnEscape(event, isLoading, document)) { event.preventDefault(); onStop(); }
         };
         window.addEventListener('keydown', onKeyDown);
@@ -278,7 +299,10 @@ export function ChatLayout(props: ChatLayoutProps) {
     useEffect(() => { if (currentRunStatus) refreshAgentActivity(); }, [currentRunStatus]);
     const closeWorkspace = () => {
         const previous = document.activeElement;
+        const scope = workspaceKey;
         setOpenWorkspaceKey(null);
+        setLeavingKey(scope);
+        setTimeout(() => setLeavingKey(current => current === scope ? null : current), prefersReducedMotion() ? 0 : WORKSPACE_LEAVE_MS);
         setResourceRequest(null);
         try { sessionStorage.removeItem(`taibu.workspace-open:${workspaceKey}`); if (currentRun) sessionStorage.setItem('taibu.workspace-dismissed:' + workspaceKey, currentRun.id); } catch { /* optional */ }
         requestAnimationFrame(() => {
@@ -294,11 +318,14 @@ export function ChatLayout(props: ChatLayoutProps) {
         if (autoWorkspace.current.scope !== workspaceKey) { autoWorkspace.current = { scope: workspaceKey, action }; return; }
         if (!action || autoWorkspace.current.action === action || !currentRun || props.agent?.restoring) return;
         autoWorkspace.current.action = action;
+        // 自动打开只跟随进行中的任务；回看已结束的任务时，最后一次查看的盘不再把面板拉开。
+        if (isAgentRunTerminal(currentRun.status)) return;
         if (!isDesktopLayout()) return;
         try { if (sessionStorage.getItem('taibu.workspace-dismissed:' + workspaceKey) === currentRun.id) return; } catch { /* optional */ }
         queueMicrotask(() => {
             if (autoWorkspace.current.scope !== workspaceKey) return;
             setOpenWorkspaceKey(workspaceKey);
+            setEnteringKey(workspaceKey);
             // 直接落到产生这次自动打开的资源（命盘 / 协作 / 问题），而不是停在概览。
             setResourceRequest(previous => ({ scope: workspaceKey, id: `tool:${action}`, version: (previous?.version ?? 0) + 1 }));
             try { sessionStorage.setItem('taibu.workspace-open:' + workspaceKey, '1'); } catch { /* optional */ }
@@ -412,13 +439,16 @@ export function ChatLayout(props: ChatLayoutProps) {
     const toggleWorkspace = () => {
         if (workspaceOpen) { closeWorkspace(); return; }
         setOpenWorkspaceKey(workspaceKey);
+        setEnteringKey(workspaceKey);
         try { sessionStorage.setItem(`taibu.workspace-open:${workspaceKey}`, '1'); sessionStorage.removeItem('taibu.workspace-dismissed:' + workspaceKey); } catch { /* optional */ }
     };
     // 会话栏的成果行：打开工作区并定位到对应资源。
-    const openWorkspaceResource = (id: string) => { setOpenWorkspaceKey(workspaceKey); openResource(id); };
+    const openWorkspaceResource = (id: string) => openResource(id);
     // A new conversation opens on the greeting alone; saved conversations keep their header.
     const emptyState = !conversationLoading && messages.length === 0;
     const showHeader = !emptyState || !!activeConversationId || !!conversationError;
+    // ⌘\ 走与标题栏按钮相同的开关；没有按钮（新对话、普通对话）时快捷键不做事。
+    useEffect(() => { workspaceShortcut.current = hasWorkspace && showHeader ? toggleWorkspace : null; });
     // 右侧会话栏常驻（claude /code 无开关），仅在打开工作区时让位。
     const showSessionDetails = isAgentMode && Boolean(latestAgentData) && showHeader && !workspaceOpen;
     // 生成中锁住编辑、重新生成、版本切换与分叉：它们都会改写正在写入的分支。
@@ -521,7 +551,8 @@ export function ChatLayout(props: ChatLayoutProps) {
                     {showSessionDetails && <SessionDetailsPanel data={latestAgentData} run={workspaceRun} onOpen={openWorkspaceResource} />}
                 </div>
             </div>
-            {workspaceOpen && <AgentWorkspacePanel key={workspaceKey} workspaceKey={workspaceKey} parts={agentParts} artifacts={artifacts} attachmentIds={attachmentIds}
+            {(workspaceOpen || (hasWorkspace && leavingKey === workspaceKey)) && <AgentWorkspacePanel key={workspaceKey} workspaceKey={workspaceKey} parts={agentParts} artifacts={artifacts} attachmentIds={attachmentIds}
+                entering={enteringKey === workspaceKey} leaving={!workspaceOpen}
                 data={latestAgentData} answers={questionAnswers} userId={userId}
                 onClose={closeWorkspace} onChartQuestion={askAboutChart} onShownChange={updateWorkspaceShown} requestedResource={resourceRequest?.scope === workspaceKey ? resourceRequest : undefined}
                 citedParagraph={citedParagraph} />}

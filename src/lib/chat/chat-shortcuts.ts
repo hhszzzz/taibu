@@ -1,5 +1,5 @@
 /**
- * 对话页键盘快捷键：Esc 停止生成、⌘/ 打开快捷键说明，以及说明面板列出的全站快捷键。
+ * 对话页键盘快捷键：Esc 停止生成、⌘/ 打开快捷键说明、⌘\ 开关工作区，以及说明面板列出的全站快捷键。
  *
  * 表里的每一项都对应已接线的处理器（⌘K 搜索、⇧⌘O 新建、⌘U 上传、菜单字母键等），
  * 新增快捷键时同步这里，避免说明与实际行为脱节。
@@ -22,6 +22,11 @@ export function isShortcutSheetKey(event: KeyInput) {
     return !event.isComposing && event.key === '/' && (event.metaKey || event.ctrlKey) && !event.altKey;
 }
 
+/** ⌘\ (Ctrl \ elsewhere) opens or closes the task workspace beside the conversation. */
+export function isWorkspaceToggleKey(event: KeyInput) {
+    return !event.isComposing && event.key === '\\' && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey;
+}
+
 export type ChatShortcut = { label: string; keys: (mod: string) => string[] };
 
 export const CHAT_SHORTCUTS: readonly ChatShortcut[] = [
@@ -31,6 +36,7 @@ export const CHAT_SHORTCUTS: readonly ChatShortcut[] = [
     { label: '发送消息', keys: () => ['Enter'] },
     { label: '换行', keys: () => ['Shift', 'Enter'] },
     { label: '停止生成', keys: () => ['Esc'] },
+    { label: '打开或关闭工作区', keys: mod => [mod, '\\'] },
     { label: '菜单内执行对应项', keys: () => ['字母键'] },
     { label: '键盘快捷键', keys: mod => [mod, '/'] },
 ];

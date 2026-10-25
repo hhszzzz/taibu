@@ -563,3 +563,41 @@ button.agent-ws-status-head:disabled { cursor: default; }
 .agent-ws-plan-draft [data-state="approved"] { color: var(--success); }
 .agent-ws-plan-draft [data-state="revised"] { color: var(--warning); }
 .agent-ws-plan-draft [data-state="waiting"] { color: var(--accent); }
+
+/* ---- 动效：工作区 ----
+   关键帧 motion-* 在 globals.css「动效体系」。切换标签时视图淡入上移（面板按资源重建视图），新标签轻弹入，
+   仍在更新的标签圆点呼吸，手机抽屉从底边升起；入场动画只用 backwards 填充，播完不留样式。 */
+.agent-panel-scroll > * { animation: motion-fade-up var(--duration-base) var(--ease-out) backwards; }
+/* 新开标签的弹入由 useEntranceMotion 播放（面板随会话重新挂载时已有标签不重放）。 */
+.agent-ws-resource-tab { transition: background-color var(--duration-snap) var(--ease-out); }
+.agent-ws-tabs [role="tab"], .agent-ws-tab-close, .agent-ws-tab-handle { transition: background-color var(--duration-snap) var(--ease-out), color var(--duration-snap) var(--ease-out), opacity var(--duration-snap) var(--ease-out); }
+@keyframes agent-live-breathe { 50% { opacity: .35; scale: .7; } }
+.agent-ws-tab-live { animation: agent-live-breathe 1.6s var(--ease-out) infinite; }
+.agent-ws-tab-live[data-state="waiting"] { animation-duration: 2.4s; }
+.agent-follow-chart { transition: background-color var(--duration-base) var(--ease-out), border-color var(--duration-base) var(--ease-out), color var(--duration-base) var(--ease-out); }
+.agent-ws-search-header { animation: motion-fade var(--duration-snap) var(--ease-out) backwards; }
+.agent-ws-search-results > button { transition: color var(--duration-snap) var(--ease-out), background-color var(--duration-snap) var(--ease-out); }
+.agent-ws-search-results > button:hover { background: var(--fill-ghost-hover); }
+/* 概览卡片与成果行：悬停时轻微抬起。 */
+.agent-ws-row { transition: border-color var(--duration-snap) var(--ease-out), box-shadow var(--duration-base) var(--ease-out), translate var(--duration-base) var(--ease-out); }
+button.agent-ws-row:hover { translate: 0 -1px; box-shadow: 0 4px 14px rgb(0 0 0 / .06); }
+/* 任务清单：分段随进度换色，进行中的一段呼吸。 */
+.agent-todo-segments > span { transition: background-color var(--duration-sheet) var(--ease-out); }
+.agent-todo-segments > span[data-state="in_progress"] { animation: agent-live-breathe 1.6s var(--ease-out) infinite; }
+.agent-todo-progress { animation: motion-fade-up var(--duration-base) var(--ease-out) backwards; }
+/* 上下文分段条：各段宽度随用量平滑变化。 */
+.agent-context-bar-stack > span { transition: flex-basis var(--duration-slow) var(--ease-out), width var(--duration-slow) var(--ease-out); }
+/* 协作成员仍在分析：卡片外圈的强调环缓慢呼吸。 */
+@keyframes agent-member-glow { 50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); } }
+.agent-ws-member[data-state="running"] { animation: agent-member-glow 2.2s ease-in-out infinite; }
+/* 手机：抽屉从底边升起（覆盖全站对话框的上浮放大）。 */
+@keyframes agent-sheet-in { from { translate: 0 100%; } }
+@keyframes agent-sheet-out { to { translate: 0 100%; } }
+@media (max-width: 767px) {
+    .app-modal.agent-workspace-dialog[open] { animation: agent-sheet-in var(--duration-sheet) var(--ease-snap) backwards; }
+    .app-modal.agent-workspace-dialog[data-closing] { animation: agent-sheet-out var(--duration-base) var(--ease-out) forwards; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .agent-ws-tab-live, .agent-todo-segments > span[data-state="in_progress"], .agent-ws-member[data-state="running"] { animation: none; }
+    button.agent-ws-row:hover { translate: none; }
+}

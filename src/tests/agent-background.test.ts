@@ -265,5 +265,5 @@ test('background cards read as their subagent: live line, step summary, activity
   assert.deepEqual(workspace.resources.map(resource => [resource.id, resource.view, resource.title]), [
     ['member:spawn:2', 'member', '八字复核'], ['tool:status', 'tool', '后台子分析'],
   ]);
-  assert.equal(getAgentWorkspaceAutoOpenEvent([running, status]), 'spawn', 'checking on subagents does not pull the workspace');
+  assert.equal(getAgentWorkspaceAutoOpenEvent([running, status]), null, 'subagents have no board: neither starting nor checking on them opens the workspace');
 });

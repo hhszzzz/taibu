@@ -129,14 +129,16 @@ test('a script has a code page and each chart it reads opens where a direct call
   assert.equal(getAgentWorkspaceAutoOpenEvent([script, call]), 'nested:5');
 });
 
-test('only chart readings, questions and collaborations open the workspace by themselves', async () => {
+test('only boards open the workspace by themselves; tasks without one leave it closed', async () => {
   const bazi = await coreResult('bazi');
   const running = tool('calc', 'bazi', { status: 'running' });
   assert.equal(getAgentWorkspaceAutoOpenEvent([running]), null, 'a chart opens the panel once there is a reading to show');
   assert.equal(getAgentWorkspaceAutoOpenEvent([running, tool('web', 'web_search', { status: 'running' })]), null);
   assert.equal(getAgentWorkspaceAutoOpenEvent([tool('calc', 'bazi', bazi), tool('web', 'web_search')]), 'calc');
-  assert.equal(getAgentWorkspaceAutoOpenEvent([tool('calc', 'bazi', bazi), tool('ask', 'ask_user', { status: 'awaiting_input' })]), 'ask');
-  assert.equal(getAgentWorkspaceAutoOpenEvent([tool('team', 'parallel_analysis', { status: 'running' }), { type: 'text', id: 'text', text: '汇总' }]), 'team');
+  assert.equal(getAgentWorkspaceAutoOpenEvent([tool('calc', 'bazi', bazi), tool('relations', 'bazi_relations', { status: 'running' })]), 'relations', 'a drilldown is the model looking at the board');
+  assert.equal(getAgentWorkspaceAutoOpenEvent([tool('calc', 'bazi', bazi), tool('ask', 'ask_user', { status: 'awaiting_input' })]), 'calc', 'a question stays in the chat');
+  assert.equal(getAgentWorkspaceAutoOpenEvent([tool('ask', 'ask_user', { status: 'awaiting_input' })]), null);
+  assert.equal(getAgentWorkspaceAutoOpenEvent([tool('team', 'parallel_analysis', { status: 'running' }), { type: 'text', id: 'text', text: '汇总' }]), null, 'a collaboration has no board of its own');
 });
 
 test('question cards find their answers through the question part their call created', () => {

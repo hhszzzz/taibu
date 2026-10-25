@@ -17,7 +17,9 @@
 .agent-primary-button:hover { background: var(--fill-ghost-hover); }
 .agent-result-summary { font-size: .8rem; color: var(--foreground-secondary); overflow-wrap: anywhere; margin: .25rem 0 0; }
 .agent-chart-scroll { overflow: auto; max-width: 100%; padding: .25rem; overscroll-behavior: contain; }
-.agent-canonical-chart--ziwei { min-width: 38rem; }
+/* 紫微盘在 42rem 以下自动换成紧凑排布（星曜横排、宫名缩小），工作区与对话列平分时也放得下；
+   只在极窄（拖到 280 附近）时保留横向滚动，不把十二宫挤到无法辨认。 */
+.agent-canonical-chart--ziwei { min-width: 24rem; }
 .agent-result-full { min-width: 0; }
 .agent-result-full > .agent-result-summary { margin-bottom: 1rem; }
 .agent-result-fallback { padding: 1rem; }
@@ -216,3 +218,14 @@
 .agent-archive-receipt { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); overflow-wrap: anywhere; }
 .agent-archive-receipt > svg { flex-shrink: 0; margin-top: 3px; color: var(--accent-hover); }
 .agent-archive-list { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+/* 「太卜正在查看」：跟随进行中的任务时，模型的焦点落到一处，那一格由内向外闪两下，读者的视线跟着落过去；
+   定位图标随之呼吸，焦点说明与位置标签淡入。焦点每换一次，新亮起的格子重新播放。
+   回看已结束的任务、切换标签重新挂载时只静态高亮，不再闪。 */
+@keyframes agent-look-ping { from { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent); } to { box-shadow: inset 0 0 0 14px transparent; } }
+@keyframes agent-look-breathe { 50% { opacity: .4; } }
+.agent-interactive-chart[data-live] .agent-canonical-chart:not(.agent-canonical-chart--bazi) [data-chart-selected=true],
+.agent-interactive-chart[data-live] .agent-canonical-chart--bazi .chart-cell-button[aria-pressed=true] { animation: agent-look-ping .9s var(--ease-out) 2; }
+.agent-board-focus[data-live] .agent-board-focus-label > svg { animation: agent-look-breathe 1.6s var(--ease-out) infinite; }
+.agent-board-focus[data-live]:not(.is-empty) { animation: motion-fade-up var(--duration-base) var(--ease-out) backwards; }
+.agent-board-focus[data-live] .agent-board-chips > li { animation: motion-pop-in var(--duration-snap) var(--ease-snap) backwards; }
+@media (prefers-reduced-motion: reduce) { .agent-board-focus[data-live] .agent-board-focus-label > svg { animation: none; } }

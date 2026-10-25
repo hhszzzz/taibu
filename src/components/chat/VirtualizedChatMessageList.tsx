@@ -128,6 +128,7 @@ export function VirtualizedChatMessageList({
                                 ref={virtualizer.measureElement}
                                 className="chat-transcript-row"
                                 data-role={message.role}
+                                data-motion-key={virtualRow.index}
                                 hidden={hidden}
                             >
                                 {hidden ? null : <AgentRoundRow rounds={rounds} messageId={message.id}>

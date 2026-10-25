@@ -103,11 +103,12 @@ export function AgentInteractiveChart({ value, tool, reference, focus, followMod
     : undefined;
   const text = getAgentToolText(tool);
   // 详查在盘面上方只留一行「太卜正在查看」；看的是哪一项由紧随其后的详查标题说明。
-  const label = model ? '太卜正在查看' : null;
+  // 任务结束后不再说「正在」，改称它查看过的位置（与工具栏图标的说明一致）。
+  const label = model ? live ? '太卜正在查看' : '太卜查看的位置' : null;
   const caption = model?.caption ?? null;
   const hasFocus = Boolean(label);
   // Agent 正在看某些位置时，盘面其余位置自动退后；指着任一位置时只亮它（样式见 agent-results.css）。
-  return <section className="agent-interactive-chart" aria-labelledby={titleId} data-viewing={selected.length > 0 || undefined}>
+  return <section className="agent-interactive-chart" aria-labelledby={titleId} data-viewing={selected.length > 0 || undefined} data-live={(model && live && followModel) || undefined}>
     <header className="agent-board-heading">
       <h3 id={titleId} className="sr-only">{value.title}</h3>
       {subject && <p className="agent-board-subject">{subject}</p>}
@@ -120,7 +121,7 @@ export function AgentInteractiveChart({ value, tool, reference, focus, followMod
         {actions}
       </div>
     </header>
-    <div className={`agent-board-focus${hasFocus ? '' : ' is-empty'}`} aria-live="polite" data-chart-focus={selected.map(target => target.id).join(',')} data-source={model ? 'model' : undefined}>
+    <div className={`agent-board-focus${hasFocus ? '' : ' is-empty'}`} aria-live="polite" data-chart-focus={selected.map(target => target.id).join(',')} data-source={model ? 'model' : undefined} data-live={(model && live && followModel) || undefined}>
       {label && <span className="agent-board-focus-label">
         <LocateFixed size={13} aria-hidden="true" /><span>{label}</span>
         {live && <span className="agent-board-follow-state">{followModel ? '跟随中' : '已暂停跟随'}</span>}

@@ -50,6 +50,7 @@ export function ChatMessageList({
                     key={message.id || `msg-${index}`}
                     className="chat-transcript-row"
                     data-role={message.role}
+                    data-motion-key={index}
                 >
                     <AgentRoundRow rounds={rounds} messageId={message.id}>
                         <ChatMessageItem

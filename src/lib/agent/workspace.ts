@@ -49,8 +49,12 @@ export interface AgentWorkspaceModel {
   evidence: AgentEvidence[];
 }
 
-/** New events of these families open the workspace on desktop until the user closes it for that task. */
-export const AGENT_WORKSPACE_AUTO_OPEN: readonly AgentToolFamily[] = ['chart', 'question', 'collaboration'];
+/**
+ * New events of these families open the workspace on desktop until the user closes it for that task: a board the
+ * model reads, locates on or drills into is what it is looking at, and that has to be in sight. Questions,
+ * collaborations and other tasks without a board leave it closed; the chat already shows them.
+ */
+export const AGENT_WORKSPACE_AUTO_OPEN: readonly AgentToolFamily[] = ['chart', 'drilldown'];
 /** The task list and the plan are already bars in the chat; following them would pull the panel away on every update. */
 const UNFOLLOWED: readonly AgentToolFamily[] = ['plan', 'todo'];
 
@@ -277,8 +281,6 @@ export function getAgentWorkspaceAutoOpenEvent(parts: AgentPart[]): string | nul
     const part = parts[index];
     if (part.type !== 'tool' || !AGENT_WORKSPACE_AUTO_OPEN.includes(getAgentToolFamily(part.name))) continue;
     if (getAgentToolFamily(part.name) === 'chart' && !getChartFocus(part) && !getAgentChart(part)) continue;
-    // Checking on, stopping or dismissing subagents shows no member to follow.
-    if (part.name === AGENT_BACKGROUND_TOOL && !parallelAnalysisResults(part.output).length) continue;
     return part.id;
   }
   return null;

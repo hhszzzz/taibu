@@ -4,6 +4,7 @@
 import { useEffect, useId, useMemo, useRef, useState, lazy, Suspense, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { useIsDesktopLayout } from '@/lib/hooks/useIsDesktopLayout';
+import { useEntranceMotion } from '@/lib/motion/entrance';
 import { Ellipsis, LayoutGrid, LocateFixed, Maximize2, Minimize2, Search, X } from 'lucide-react';
 import { getAgentToolFamily, isAgentChartTool } from '@/lib/agent/tool-catalog';
 import { isAgentRunTerminal, type AgentMessageData, type AgentPart } from '@/lib/agent/types';
@@ -40,16 +41,17 @@ const InteractiveChart = lazy(() => import('./AgentInteractiveChart').then(modul
 
 const MAX_TABS = 20;
 // 工作区是停靠分栏（claude artifacts 预览面板形态）：桌面布局（≥1024，与全站侧栏、会话栏同一断点）参与布局、不遮对话，
-// 更窄的屏幕改为弹窗 / 底部抽屉。默认宽按内容给——
-// 任务态 320（小工作区），含原生盘面 660（放得下十二宫盘），用户手动调宽后以手动值为准。
-const DEFAULT_WIDTH = 320;
-const BOARD_WIDTH = 660;
+// 更窄的屏幕改为弹窗 / 底部抽屉。默认与对话列平分（盘面在窄宽下自动换成紧凑排布），用户手动调宽后以手动值为准。
+// 量不到面板宽度时（尚未布局）按 320 起算拖拽与键盘调整。
+const FALLBACK_WIDTH = 320;
 // 拖拽边界：面板 280–780，且始终给阅读列留 360（与 .agent-workspace-panel 的 max-width 一致）。
 const MIN_WIDTH = 280;
 const MAX_WIDTH = 780;
 const READING_MIN = 360;
 // 面板只保留右外边距 10px；左侧与对话列齐平，拖动时不会露出一条底色带。
 const PANEL_GUTTER = 10;
+// 百分比相对 .chat-workspace：扣掉右外边距后与对话列对半分；min/max-width 仍按上面的边界收口。
+const DEFAULT_WIDTH = `calc((100% - ${PANEL_GUTTER}px) / 2)`;
 const SECTION_LABELS: Record<AgentWorkspaceSection, string> = { results: '概览' };
 const TAB_KEYS = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
 const LIVE_LABELS = { running: '正在更新', waiting: '等待回答' } as const;
@@ -174,8 +176,12 @@ function ResourceView({ resource, model, data, answers, questionIds, userId, art
     return latest ? <ChartErrorBoundary resetKey={latest} fallback={<WorkspaceTextFallback tool={latest} note="这个视图暂时无法显示，已改为工具返回的规范文本。" />}>{body}</ChartErrorBoundary> : <>{body}</>;
 }
 
-export function AgentWorkspacePanel({ parts, artifacts, data, attachmentIds, answers, userId, onClose, workspaceKey, requestedResource, onChartQuestion, onShownChange, citedParagraph }: {
+export function AgentWorkspacePanel({ parts, artifacts, data, attachmentIds, answers, userId, onClose, workspaceKey, requestedResource, onChartQuestion, onShownChange, citedParagraph, entering = false, leaving = false }: {
     workspaceKey: string;
+    /** Opened just now by the reader or by the model's first board: slides in. Restored with its conversation: appears as is. */
+    entering?: boolean;
+    /** Closed: plays the way out, then the conversation unmounts it. */
+    leaving?: boolean;
     /** Agent parts of the visible conversation branch, in transcript order. */
     parts: AgentPart[];
     artifacts: AgentArtifact[];
@@ -196,6 +202,11 @@ export function AgentWorkspacePanel({ parts, artifacts, data, attachmentIds, ans
     const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
     // 拖拽中的实时宽度：直接写 DOM，避免每次 pointermove 都重渲染整个工作区（图表很重）。
     const widthRef = useRef<number | null>(null);
+    const resizerRef = useRef<HTMLDivElement>(null);
+    // 进场只看挂载那一刻：已经开着的面板被再次「打开」（模型又看了一张盘）时不重放滑入。
+    const [enterOnMount] = useState(entering);
+    const mountedAt = useRef(0);
+    useEffect(() => { mountedAt.current = performance.now(); }, []);
     const scrollRef = useRef<HTMLDivElement>(null);
     const moreRef = useRef<HTMLButtonElement>(null);
     const ids = useId();
@@ -204,12 +215,11 @@ export function AgentWorkspacePanel({ parts, artifacts, data, attachmentIds, ans
     const [search, setSearch] = useState('');
     const [maximized, setMaximized] = useState(false);
     const model = useMemo(() => buildAgentWorkspace({ parts, artifacts, attachmentIds }), [parts, artifacts, attachmentIds]);
-    // 盘面（宽幅预览）决定形态；用户一旦手动调宽，就以手动值为准。
-    const board = useMemo(() => model.resources.some(resource => resource.view === 'chart'), [model]);
+    // 用户一旦手动调宽，就以手动值为准。
     const [customWidth, setCustomWidth] = useState<number | null>(null);
     // 每个会话回到内容默认宽：上一会话手动拖宽的宽度不带到下一会话。
     useEffect(() => { setCustomWidth(null); }, [workspaceKey]);
-    const width = customWidth ?? (board ? BOARD_WIDTH : DEFAULT_WIDTH);
+    const width = customWidth ?? DEFAULT_WIDTH;
     const questionIds = useMemo(() => getAgentToolQuestionIds(parts), [parts]);
     const numbers = useMemo(() => getAgentStepNumbers(data?.parts ?? []), [data]);
     const library = useUserCharts(userId, { enabled: model.tools.some(tool => getAgentChartSave(tool) !== null) });
@@ -288,7 +298,14 @@ export function AgentWorkspacePanel({ parts, artifacts, data, attachmentIds, ans
     useEffect(() => {
         if (!requestedResource) return;
         let current = true;
-        queueMicrotask(() => { if (current) open(requestedResource.id); });
+        queueMicrotask(() => {
+            if (!current) return;
+            open(requestedResource.id);
+            // 从聊天里点开的位置：已经开着的面板描边闪一下，视线从对话跟到工作区（重挂属性让动画重放）。
+            // 刚打开的面板正在滑入，不再叠一次闪烁。
+            const panel = panelRef.current;
+            if (panel && performance.now() - mountedAt.current > 400) { panel.removeAttribute('data-flash'); void panel.offsetWidth; panel.setAttribute('data-flash', ''); }
+        });
         return () => { current = false; };
         // A new request version is a new instruction; the resolver reads the current model.
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -315,7 +332,7 @@ export function AgentWorkspacePanel({ parts, artifacts, data, attachmentIds, ans
     const startResize = (event: ReactPointerEvent<HTMLDivElement>) => {
         if (event.button !== 0) return;
         event.preventDefault();
-        const startWidth = panelRef.current?.getBoundingClientRect().width ?? width;
+        const startWidth = panelRef.current?.getBoundingClientRect().width ?? FALLBACK_WIDTH;
         dragRef.current = { startX: event.clientX, startWidth };
         widthRef.current = Math.round(startWidth);
         // 拖拽期间锁住文本选择与光标，整块面板随指针实时改变宽度。
@@ -344,6 +361,14 @@ export function AgentWorkspacePanel({ parts, artifacts, data, attachmentIds, ans
         // 松手后把实时宽度提交为状态（恢复默认宽度 / 键盘调整都以它为准）。
         if (finalWidth !== null) setCustomWidth(finalWidth);
     };
+    // 默认宽（盘面时与对话列平分）是 CSS 算出来的，分隔条的 aria-valuenow 跟随实际宽度；直接写 DOM，拖动时不重渲染。
+    useEffect(() => {
+        const panel = panelRef.current, resizer = resizerRef.current;
+        if (!panel || !resizer) return;
+        const observer = new ResizeObserver(() => resizer.setAttribute('aria-valuenow', String(Math.round(panel.getBoundingClientRect().width))));
+        observer.observe(panel);
+        return () => observer.disconnect();
+    }, [desktop]);
     // 组件在拖拽途中被卸载（关闭工作区）时，恢复被临时锁住的全局样式。
     useEffect(() => () => {
         dragRef.current = null;
@@ -369,6 +394,19 @@ export function AgentWorkspacePanel({ parts, artifacts, data, attachmentIds, ans
     // One tab list: the sections, then the resources. Arrow keys move along it; Alt+Arrow reorders resources.
     const tabOrder = [...sections, ...visibleTabs.map(resource => resource.id)];
     const selectedTab = activeResource?.id ?? section;
+    // 跟随模型或从聊天打开时，选中的标签可能在标签行可视区外：横向滚到它（只动标签行，不带动页面）。
+    const tabsRef = useRef<HTMLDivElement>(null);
+    // 新开的标签弹入；面板随会话重新挂载、搜索框换回标签栏时已有的标签不重放。
+    useEntranceMotion(tabsRef, { selector: '.agent-ws-resource-tab', preset: 'pop', scope: `${workspaceKey}:${searchOpen}` });
+    useEffect(() => {
+        const list = tabsRef.current;
+        const tab = list?.querySelector<HTMLElement>('[role=tab][aria-selected=true]')?.closest<HTMLElement>('.agent-ws-resource-tab, [role=tab]');
+        if (!list || !tab) return;
+        const left = tab.offsetLeft - list.offsetLeft, right = left + tab.offsetWidth;
+        if (left >= list.scrollLeft && right <= list.scrollLeft + list.clientWidth) return;
+        const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        list.scrollTo({ left: Math.max(0, left - 24), behavior: smooth ? 'smooth' : 'auto' });
+    }, [selectedTab, searchOpen]);
     const tabId = (id: string) => `${ids}-tab-${tabOrder.indexOf(id)}`;
     const onTabKey = (event: KeyboardEvent<HTMLButtonElement>, id: string) => {
         const resourceIndex = visibleTabs.findIndex(resource => resource.id === id);
@@ -425,10 +463,10 @@ export function AgentWorkspacePanel({ parts, artifacts, data, attachmentIds, ans
                     <input autoFocus value={search} onChange={event => setSearch(event.target.value)} placeholder="搜索标签" aria-label="搜索工作区标签" />
                     <button type="button" aria-label="关闭搜索" onClick={() => { setSearch(''); setSearchOpen(false); }}><X size={13} aria-hidden="true" /></button>
                 </label>
-                : <div className="agent-ws-tabs" role="tablist" aria-label="工作区资源">
+                : <div ref={tabsRef} className="agent-ws-tabs" role="tablist" aria-label="工作区资源">
                     {sections.map(id => tab(id, SECTION_LABELS[id], { icon: <LayoutGrid size={15} aria-hidden="true" /> }))}
                     {visibleTabs.length > 0 && <span className="agent-ws-tab-separator" aria-hidden="true" />}
-                    {filteredTabs.map((resource, index) => <div key={resource.id} role="presentation" className="agent-ws-resource-tab" data-selected={activeResource?.id === resource.id || undefined}>
+                    {filteredTabs.map((resource, index) => <div key={resource.id} role="presentation" className="agent-ws-resource-tab" data-motion-key={resource.id} data-selected={activeResource?.id === resource.id || undefined}>
                         {tab(resource.id, resource.title, { live: liveState(resource), icon: chartIcon(resource) })}
                         {/* Only the open tab's close button is in the Tab order; Delete closes the focused tab. */}
                         <button type="button" className="agent-ws-tab-close" aria-label={`关闭${resource.title}标签`} title="关闭标签（Delete）" tabIndex={activeResource?.id === resource.id ? 0 : -1}
@@ -465,17 +503,19 @@ export function AgentWorkspacePanel({ parts, artifacts, data, attachmentIds, ans
                     : <p className="agent-ws-note">没有匹配的标签。</p>}
             </div>
             : <div ref={scrollRef} id={`${ids}-panel`} className="agent-panel-scroll" role="tabpanel" aria-labelledby={tabId(selectedTab)} data-workspace-view={activeResource?.view ?? section}>
+                {/* 按资源建视图：换一个标签就是换一页，入场动效（.agent-panel-scroll > *）随之重放。 */}
                 {activeResource
-                    ? <ResourceView resource={activeResource} model={model} data={data} answers={answers ?? new Map()} questionIds={questionIds} userId={userId ?? null}
+                    ? <ResourceView key={activeResource.id} resource={activeResource} model={model} data={data} answers={answers ?? new Map()} questionIds={questionIds} userId={userId ?? null}
                         artifacts={artifacts} numbers={numbers} followModel={following} live={working} namedToolId={inView(namedTool)} cite={activeCite} citedParagraph={citedParagraph}
                         draftScope={workspaceKey} onOpen={open} onChartQuestion={onChartQuestion} />
                     : <WorkspaceOverview model={model} artifacts={artifacts} saved={saved} onOpen={open} />}
             </div>}
     </div>;
-    return desktop ? <aside ref={panelRef} id="agent-workspace-panel" className={`agent-workspace-panel${maximized ? ' is-maximized' : ''}`} style={{ width: maximized ? undefined : widthRef.current ?? width }} aria-labelledby="agent-workspace-heading">
-        <div className="agent-panel-resizer" role="separator" tabIndex={0} aria-label="调整工作区宽度" aria-orientation="vertical" aria-valuenow={widthRef.current ?? width} aria-valuemin={MIN_WIDTH} aria-valuemax={MAX_WIDTH}
-            onPointerDown={startResize} onPointerMove={moveResize} onPointerUp={endResize} onPointerCancel={endResize} onLostPointerCapture={endResize}
-            onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); adjustWidth((panelRef.current?.getBoundingClientRect().width ?? width) + (event.key === 'ArrowLeft' ? 24 : -24)); } }} />
+    return desktop ? <aside ref={panelRef} id="agent-workspace-panel" className={`agent-workspace-panel${maximized ? ' is-maximized' : ''}`} style={{ width: maximized ? undefined : widthRef.current ?? width }} aria-labelledby="agent-workspace-heading"
+        data-entering={enterOnMount || undefined} data-leaving={leaving || undefined} inert={leaving || undefined}>
+        <div ref={resizerRef} className="agent-panel-resizer" role="separator" tabIndex={0} aria-label="调整工作区宽度" title="拖动调整宽度，双击恢复默认" aria-orientation="vertical" aria-valuemin={MIN_WIDTH} aria-valuemax={MAX_WIDTH}
+            onDoubleClick={() => setCustomWidth(null)} onPointerDown={startResize} onPointerMove={moveResize} onPointerUp={endResize} onPointerCancel={endResize} onLostPointerCapture={endResize}
+            onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); adjustWidth((panelRef.current?.getBoundingClientRect().width ?? FALLBACK_WIDTH) + (event.key === 'ArrowLeft' ? 24 : -24)); } }} />
         {content}</aside>
-        : <Modal open id="agent-workspace-panel" onClose={onClose} className="agent-workspace-dialog" labelledBy="agent-workspace-heading">{content}</Modal>;
+        : <Modal open={!leaving} id="agent-workspace-panel" onClose={onClose} className="agent-workspace-dialog" labelledBy="agent-workspace-heading">{content}</Modal>;
 }

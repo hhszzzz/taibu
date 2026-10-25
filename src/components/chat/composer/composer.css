@@ -172,11 +172,6 @@
 .chat-credit-strip > span { font-weight: 500; }
 .chat-credit-strip > a { display: inline-flex; align-items: center; gap: 6px; height: 30px; margin-left: auto; padding: 0 12px; border-radius: 8px; background: var(--accent); color: var(--on-accent); font-size: calc(12.5 / 16 * 1rem); text-decoration: none; }
 .chat-credit-strip > a:hover { background: var(--accent-hover); color: var(--on-accent); }
-.chat-followups { display: flex; flex-wrap: wrap; gap: 8px; }
-.chat-followups button { display: inline-flex; max-width: 100%; align-items: center; height: 32px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: transparent; font-size: calc(13 / 16 * 1rem); color: var(--foreground); }
-.chat-followups button > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.chat-followups button:hover:not(:disabled) { border-color: var(--border-hover); background: var(--fill-ghost-hover); }
-.chat-followups button:disabled { opacity: .5; cursor: not-allowed; }
 
 /* ---- @ 提及弹层（claude 同款形态：r12 面板 + 13px 分组标签 + 32px 选项行） ---- */
 .chat-mention-popover { overflow: hidden; border: var(--hairline) solid var(--border); border-radius: 12px; background: var(--chat-raised); box-shadow: var(--shadow-panel-popover); }

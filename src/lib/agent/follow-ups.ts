@@ -1,16 +1,18 @@
+import { isAgentRunTerminal, type AgentRunStatus } from './types';
+
 /**
- * Follow-up questions the model appends to its final answer, one per line:
+ * The follow-up question the model appends to its final answer:
  *
  *   <followups>
  *   适合往哪个城市发展？
  *   </followups>
  *
  * The block never reaches the visible answer, including while it streams in;
- * the reader sees at most three short, distinct suggestions instead.
+ * the reader gets one short suggestion, prefilled into the composer to edit or send.
  */
 const OPEN = '<followups>';
 const CLOSE = '</followups>';
-export const AGENT_FOLLOW_UP_LIMIT = 3;
+export const AGENT_FOLLOW_UP_LIMIT = 1;
 /** Longer lines are prose that slipped into the block, not a question to offer. */
 const MAX_LENGTH = 40;
 
@@ -28,4 +30,20 @@ export function splitAgentFollowUps(text: string): { text: string; followUps: st
     const rest = end < 0 ? '' : text.slice(end + CLOSE.length).trim();
     const answer = text.slice(0, start).trimEnd();
     return { text: rest ? (answer ? `${answer}\n\n${rest}` : rest) : answer, followUps: [...new Set(lines)].slice(0, AGENT_FOLLOW_UP_LIMIT) };
+}
+
+/**
+ * Whether a finished task's suggestion goes into the composer: the run must have been
+ * seen working on this page (not opened already finished), it must have just completed,
+ * and the viewer must not have written a draft of their own.
+ */
+export function shouldPrefillFollowUp(input: {
+  previousStatus: AgentRunStatus | undefined;
+  status: AgentRunStatus;
+  suggestion: string | undefined;
+  draft: string;
+  disabled: boolean;
+}): boolean {
+  if (!input.suggestion || input.status !== 'completed' || input.disabled || input.draft.trim()) return false;
+  return input.previousStatus !== undefined && !isAgentRunTerminal(input.previousStatus);
 }

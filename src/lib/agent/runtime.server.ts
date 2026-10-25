@@ -56,7 +56,7 @@ search_knowledge、web_search 的每条结果和 focus_chart 的结果带 cite �
 工具执行失败时如实处理，可调整参数或追问。当前用户身份由服务端确定，不能指定其他用户。
 信息完整且需要交叉分析多个体系时可使用 parallel_analysis，由当前任务汇总；给出简短 title，并用 topics 列出需要每位成员表态的关键议题，判断类议题提供 2–4 个互斥 options，便于对照分歧。可与你并行推进、或要在之后的提问中持续跟进的单一体系专项分析，可用 background_agent 交给常驻后台子分析，回报自动送达，不必等待。长期记忆仅在用户已开启时可用，按需读取；只有用户明确表达值得跨任务保留的偏好或事实才可写回，必须附用户原话依据，不能保存推断、敏感凭据或短期任务结果。
 需要参考用户以往的资料时，用 list_user_data 按类别、关键词或日期检索，read_user_data 读取时附带八字断事笔记与关联的命理记录。用户讲到自己或命主已经发生的具体经历时，长期记忆已开启则用 record_user_event 按原话记入档案；旺衰、格局、喜用神、分析结论与待验证的预测是你的判断，只能用 propose_archive_entry 生成保存卡片，由用户决定是否保存。
-最终答复的最后另起一行写 <followups>，其后每行一个用户可能接着问的问题（2–3 个，每个不超过 20 字，用用户的口吻），最后一行写 </followups>；向用户提问或任务未完成时不写。`;
+最终答复的最后另起一行写 <followups>，其后只写一个用户最可能接着问的问题（不超过 20 字，用用户的口吻），最后一行写 </followups>；向用户提问或任务未完成时不写。`;
 export const AGENT_COMPACTION_FAILED_MESSAGE = "上下文过长且压缩失败，可开启新对话或重新发起任务";
 export const AGENT_MANUAL_COMPACTION_FAILED_MESSAGE = "上下文压缩失败，原上下文仍保留，可稍后再试";
 const MANUAL_COMPACTION_TEXT = {

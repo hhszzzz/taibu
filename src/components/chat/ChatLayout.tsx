@@ -41,7 +41,8 @@ import type { ComposerWebControl } from './composer/ComposerToolbar';
 import { publishChatModeControl, clearChatModeControl, type ChatModeControl } from '@/lib/chat/mode-control-store';
 import { composerNote, isRunningComposerNote, type ComposerNoteState } from '@/lib/chat/composer-copy';
 import { collectAgentArtifacts, getAgentCitedParagraph } from './agent/presentation';
-import type { AgentPart } from '@/lib/agent/types';
+import { type AgentPart, type AgentRunStatus } from '@/lib/agent/types';
+import { shouldPrefillFollowUp } from '@/lib/agent/follow-ups';
 import { useTranscriptScroll } from '@/lib/chat/use-transcript-scroll';
 import { orderAgentMessagesForDisplay } from '@/lib/agent/browser-client';
 import { JumpToLatest } from './JumpToLatest';
@@ -304,13 +305,21 @@ export function ChatLayout(props: ChatLayoutProps) {
         });
     }, [autoOpenEvent, currentRun, props.agent?.restoring, workspaceKey]);
     const title = props.conversationTitle || messages.find(message => message.role === 'user')?.content.slice(0, 60) || (isAgentMode ? '新任务' : '新对话');
-    const focusComposer = (scope = workspaceKey) => requestAnimationFrame(() => {
+    const focusComposer = useCallback((scope = workspaceKey) => requestAnimationFrame(() => {
         if (draftScope.current === scope) contentRef.current?.querySelector<HTMLTextAreaElement>('[data-chat-composer] textarea')?.focus();
-    });
-    const suggest = (text: string) => {
-        onInputChange(text);
+    }), [workspaceKey]);
+    // 任务在本页跑完时，把它建议的那一条追问直接写进输入框（可改可直接发）。
+    // 只在看到过它运行时生效：打开旧对话不会把当时的建议塞进输入框；已有草稿也不覆盖。
+    const seenRunStatus = useRef(new Map<string, AgentRunStatus>());
+    useEffect(() => {
+        if (!latestAgentData) return;
+        const previousStatus = seenRunStatus.current.get(latestAgentData.runId);
+        seenRunStatus.current.set(latestAgentData.runId, latestAgentData.status);
+        const suggestion = latestAgentData.followUps?.[0];
+        if (!shouldPrefillFollowUp({ previousStatus, status: latestAgentData.status, suggestion, draft: inputValue, disabled })) return;
+        onInputChange(suggestion!);
         focusComposer();
-    };
+    }, [latestAgentData, inputValue, disabled, onInputChange, focusComposer]);
     // 追问命盘：与提及同一形态——在输入框尾部追加可识别的 chip，可以连续叠加多条。
     const [chartAsks, setChartAsks] = useState<ChartAskContext[]>([]);
     const chartAskToken = (ask: ChartAskContext) => `@${ask.title}${ask.targets.length ? ` · ${ask.targets.map(target => target.label).join('、')}` : ' · 整张命盘'}`;
@@ -370,10 +379,9 @@ export function ChatLayout(props: ChatLayoutProps) {
     };
     const note = composerNote(noteState);
     const creditStrip = isCreditLocked ? <CreditStrip /> : undefined;
-    // Suggested next questions belong to a finished answer that is still the latest turn.
-    const lastAgent = transcriptMessages.at(-1)?.agent;
-    const followUps = lastAgent?.status === 'completed' && lastAgent.followUps?.length && !inputValue.trim() && !agent?.active && !isLoading && !isSendingToList ? lastAgent.followUps : null;
-    const composerHeader = creditStrip || followUps ? <>{creditStrip}{followUps && <FollowUps questions={followUps} disabled={disabled} onPick={suggest} />}</> : undefined;
+    // 追问建议不再显示为输入框上方的胶囊：任务跑完时那一条建议直接写进输入框（见上面的 seenRunStatus），
+    // 输入框上方只留积分不足的提示条。
+    const composerHeader = creditStrip;
     const citedParagraph = useCallback((cite: number) => getAgentCitedParagraph(messages, cite), [messages]);
     const composerProps = {
         draftKey: workspaceKey,
@@ -533,13 +541,6 @@ function subscribeToHour(onChange: () => void) {
 function useGreeting() {
     const hour = useSyncExternalStore(subscribeToHour, () => new Date().getHours(), () => -1);
     return hour < 0 ? '你好' : hour < 5 ? '夜深了' : hour < 11 ? '早上好' : hour < 13 ? '中午好' : hour < 18 ? '下午好' : '晚上好';
-}
-
-/** 继续追问: questions the answer suggested asking next; picking one fills the input to edit or send. */
-function FollowUps({ questions, disabled, onPick }: { questions: readonly string[]; disabled: boolean; onPick: (text: string) => void }) {
-    return <div className="chat-followups" role="group" aria-label="继续追问">
-        {questions.map(question => <button key={question} type="button" title={question} disabled={disabled} onClick={() => onPick(question)}><span>{question}</span></button>)}
-    </div>;
 }
 
 /** ⌘/ 键盘快捷键说明：只列已接线的快捷键（见 chat-shortcuts）。 */

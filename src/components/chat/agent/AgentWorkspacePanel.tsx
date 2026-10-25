@@ -1,8 +1,9 @@
 'use client';
 // 需要 useState/useEffect、拖拽调整宽度与 sessionStorage 恢复标签
 
-import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, lazy, Suspense, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, lazy, Suspense, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { useIsDesktopLayout } from '@/lib/hooks/useIsDesktopLayout';
 import { Ellipsis, LayoutGrid, LocateFixed, Maximize2, Minimize2, Search, X } from 'lucide-react';
 import { getAgentToolFamily, isAgentChartTool } from '@/lib/agent/tool-catalog';
 import { isAgentRunTerminal, type AgentMessageData, type AgentPart } from '@/lib/agent/types';
@@ -36,9 +37,9 @@ import { AgentChartSave } from './AgentChartSave';
 const ChartPreview = lazy(() => import('./AgentChartPreview').then(module => ({ default: module.AgentChartPreview })));
 const InteractiveChart = lazy(() => import('./AgentInteractiveChart').then(module => ({ default: module.AgentInteractiveChart })));
 
-const desktopQuery = '(min-width: 1280px)';
 const MAX_TABS = 20;
-// 工作区是停靠分栏（claude artifacts 预览面板形态）：参与布局、不遮对话；默认宽按内容给——
+// 工作区是停靠分栏（claude artifacts 预览面板形态）：桌面布局（≥1024，与全站侧栏、会话栏同一断点）参与布局、不遮对话，
+// 更窄的屏幕改为弹窗 / 底部抽屉。默认宽按内容给——
 // 任务态 320（小工作区），含原生盘面 660（放得下十二宫盘），用户手动调宽后以手动值为准。
 const DEFAULT_WIDTH = 320;
 const BOARD_WIDTH = 660;
@@ -52,12 +53,6 @@ const SECTION_LABELS: Record<AgentWorkspaceSection, string> = { results: '概览
 const TAB_KEYS = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
 const LIVE_LABELS = { running: '正在更新', waiting: '等待回答' } as const;
 const isSection = (id: string | null): id is AgentWorkspaceSection => id !== null && (AGENT_WORKSPACE_SECTIONS as readonly string[]).includes(id);
-
-function subscribeToViewport(onChange: () => void) {
-    const media = window.matchMedia(desktopQuery);
-    media.addEventListener('change', onChange);
-    return () => media.removeEventListener('change', onChange);
-}
 
 type SavedWorkspace = { tabs: string[]; selected: string | null; followModel: boolean };
 function readSavedWorkspace(workspaceKey: string): Partial<SavedWorkspace> {
@@ -194,7 +189,7 @@ export function AgentWorkspacePanel({ parts, artifacts, data, attachmentIds, ans
     /** The paragraph of the answer that cites a number, counted from 1. */
     citedParagraph?: (cite: number) => number | null;
 }) {
-    const desktop = useSyncExternalStore(subscribeToViewport, () => window.matchMedia(desktopQuery).matches, () => false);
+    const desktop = useIsDesktopLayout();
     const panelRef = useRef<HTMLElement>(null);
     const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
     // 拖拽中的实时宽度：直接写 DOM，避免每次 pointermove 都重渲染整个工作区（图表很重）。
@@ -446,8 +441,9 @@ export function AgentWorkspacePanel({ parts, artifacts, data, attachmentIds, ans
                     onClick={() => setSearchOpen(true)}><Search size={16} aria-hidden="true" /></button></Tooltip>}
                 <Tooltip label="视图选项" side="bottom"><button ref={moreRef} type="button" className="agent-icon-button" aria-label="视图选项" aria-haspopup="menu" aria-expanded={moreOpen}
                     onClick={() => setMoreOpen(value => !value)}><Ellipsis size={18} aria-hidden="true" /></button></Tooltip>
-                <Tooltip label={maximized ? '还原工作区' : '最大化工作区'} side="bottom"><button type="button" className="agent-icon-button" aria-label={maximized ? '还原工作区' : '最大化工作区'}
-                    aria-pressed={maximized} onClick={() => setMaximized(value => !value)}>{maximized ? <Minimize2 size={16} aria-hidden="true" /> : <Maximize2 size={16} aria-hidden="true" />}</button></Tooltip>
+                {/* Only the docked panel can grow; the dialog and the phone sheet already take their full size. */}
+                {desktop && <Tooltip label={maximized ? '还原工作区' : '最大化工作区'} side="bottom"><button type="button" className="agent-icon-button" aria-label={maximized ? '还原工作区' : '最大化工作区'}
+                    aria-pressed={maximized} onClick={() => setMaximized(value => !value)}>{maximized ? <Minimize2 size={16} aria-hidden="true" /> : <Maximize2 size={16} aria-hidden="true" />}</button></Tooltip>}
                 <Tooltip label="关闭工作区" side="bottom"><button type="button" onClick={onClose} aria-label="关闭工作区" className="agent-icon-button"><X size={18} aria-hidden="true" /></button></Tooltip>
             </div>
         </div>

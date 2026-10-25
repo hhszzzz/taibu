@@ -11,11 +11,12 @@ function subscribe(onStoreChange: () => void) {
     return () => mediaQuery.removeEventListener('change', onStoreChange);
 }
 
-/** True at the `lg` breakpoint, where the desktop sidebars are shown; false on the server. */
+/** True at the `lg` breakpoint, where the desktop sidebars are shown and side panels dock; false on the server. */
+export function isDesktopLayout() {
+    return typeof window !== 'undefined' && window.matchMedia(DESKTOP_QUERY).matches;
+}
+
+/** {@link isDesktopLayout}, following the viewport. */
 export function useIsDesktopLayout() {
-    return useSyncExternalStore(
-        subscribe,
-        () => (typeof window !== 'undefined' ? window.matchMedia(DESKTOP_QUERY).matches : false),
-        () => false,
-    );
+    return useSyncExternalStore(subscribe, isDesktopLayout, () => false);
 }

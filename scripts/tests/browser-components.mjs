@@ -2561,6 +2561,18 @@ export async function run(existingPage, bundlePath) {
     await renderBarrier();
     check('Restoring the default width returns the workspace to its content width',
       await workspacePanel.evaluate(el => Math.round(el.getBoundingClientRect().width)) === widthBeforeDrag);
+    // The desktop layout starts at 1024 (the site sidebar's breakpoint): narrower desktop windows keep the panel docked,
+    // and only below it does the workspace become a dialog, which has no room to grow.
+    await page.setViewportSize({ width: 1100, height: 1000 });
+    await renderBarrier();
+    check('A narrower desktop window keeps the workspace docked beside the chat', await page.locator('aside#agent-workspace-panel').count() === 1 &&
+      await page.getByRole('dialog', { name: '工作区' }).count() === 0);
+    await page.setViewportSize({ width: 900, height: 1000 });
+    await page.getByRole('dialog', { name: '工作区' }).waitFor();
+    check('Below the desktop layout the workspace is a dialog without the maximize control', await page.locator('aside#agent-workspace-panel').count() === 0 &&
+      await page.getByRole('dialog', { name: '工作区' }).getByRole('button', { name: '最大化工作区' }).count() === 0);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.locator('aside#agent-workspace-panel').waitFor();
     // Following is for a working task; once it ends the overview is shown.
     await page.evaluate(() => window.fixture.agentRunStatus('running'));
     await workspacePanel.getByRole('button', { name: '跟随模型', exact: true }).click();

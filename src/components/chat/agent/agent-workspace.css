@@ -437,7 +437,8 @@ button.agent-ws-row:hover { border-color: color-mix(in srgb, var(--accent) 45%, 
     .agent-workspace-dialog .agent-panel-content::before { content: ''; flex-shrink: 0; align-self: center; width: 40px; height: 5px; margin: 8px 0 2px; border-radius: 999px; background: var(--border-hover); }
     .agent-workspace-dialog .agent-panel-header { gap: 6px; height: 52px; padding: 0 6px 0 8px; border-bottom: 0; }
     .agent-workspace-dialog .agent-panel-header h2 { font-size: calc(17 / 16 * 1rem); }
-    .agent-workspace-dialog .agent-ws-header-actions > [aria-haspopup="menu"] { display: none; }
+    /* Each action sits in a Tooltip wrapper (display: contents), so the menu button is matched below the row, not as its child. */
+    .agent-workspace-dialog .agent-ws-header-actions [aria-haspopup="menu"] { display: none; }
     .agent-workspace-dialog .agent-follow-chart { height: 36px; font-size: calc(13 / 16 * 1rem); }
     .agent-workspace-dialog .agent-ws-header-actions .agent-icon-button { width: 44px; height: 44px; border-radius: 12px; }
     .agent-workspace-dialog .agent-ws-tabs { flex: 1 1 auto; min-width: 0; align-items: center; gap: 2px; height: 32px; padding: 0; background: transparent; scrollbar-width: none; }

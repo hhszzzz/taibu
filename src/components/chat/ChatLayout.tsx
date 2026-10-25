@@ -50,6 +50,7 @@ import { useConversationList } from '@/lib/chat/ConversationListContext';
 import { ChatRecordViewContext, useChatRecordView } from '@/lib/chat/chat-record-view';
 import { setChatWorkspaceOpen } from '@/lib/chat/chat-sidebar';
 import { refreshAgentActivity } from '@/lib/agent/use-agent-activity';
+import { isDesktopLayout } from '@/lib/hooks/useIsDesktopLayout';
 import type { CSSProperties } from 'react';
 import { CHAT_SHORTCUTS, isShortcutSheetKey, modifierLabel, shouldStopOnEscape } from '@/lib/chat/chat-shortcuts';
 import { dispatchComposerFiles, dragHasFiles } from '@/lib/chat/composer-files';
@@ -161,7 +162,8 @@ export function ChatLayout(props: ChatLayoutProps) {
         let current = true;
         queueMicrotask(() => {
             if (!current) return;
-            try { setOpenWorkspaceKey(sessionStorage.getItem(`taibu.workspace-open:${workspaceKey}`) === '1' ? workspaceKey : null); } catch { setOpenWorkspaceKey(null); }
+            // Reopened only where it docks beside the conversation; narrower screens would get a dialog nobody asked for.
+            try { setOpenWorkspaceKey(sessionStorage.getItem(`taibu.workspace-open:${workspaceKey}`) === '1' && isDesktopLayout() ? workspaceKey : null); } catch { setOpenWorkspaceKey(null); }
         });
         return () => { current = false; };
     }, [workspaceKey]);
@@ -291,7 +293,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         if (autoWorkspace.current.scope !== workspaceKey) { autoWorkspace.current = { scope: workspaceKey, action }; return; }
         if (!action || autoWorkspace.current.action === action || !currentRun || props.agent?.restoring) return;
         autoWorkspace.current.action = action;
-        if (!window.matchMedia('(min-width: 1280px)').matches) return;
+        if (!isDesktopLayout()) return;
         try { if (sessionStorage.getItem('taibu.workspace-dismissed:' + workspaceKey) === currentRun.id) return; } catch { /* optional */ }
         queueMicrotask(() => {
             if (autoWorkspace.current.scope !== workspaceKey) return;
@@ -327,7 +329,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         const token = chartAskToken(ask);
         const base = inputValue.replace(/\s*$/, '');
         if (!base.includes(token)) onInputChange(base ? `${base}\n${token}` : token);
-        if (!window.matchMedia('(min-width: 1280px)').matches) closeWorkspace();
+        if (!isDesktopLayout()) closeWorkspace();
         focusComposer();
     };
     const sendWithChartAsk = async () => {

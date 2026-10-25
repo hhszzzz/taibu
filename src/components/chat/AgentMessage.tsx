@@ -50,6 +50,7 @@ export function AgentMessage({ data, actions }: { data: AgentMessageData; action
   const active = ['queued', 'running', 'awaiting_input', 'cancelling'].includes(data.status);
   const summarizing = data.status === 'running' && data.runtime?.model.name && collaborationProgress(data.parts) ? data.runtime.model.name : null;
   const lastText = groups.findLastIndex(group => group.type === 'content' && group.part.type === 'text');
+  const hasSearchStep = data.parts.some(part => part.type === 'tool' && (part.name === 'web_search' || part.name === 'search_knowledge'));
   const archive = useMemo(() => getArchiveEntries(data.parts), [data.parts]);
   return (
     <div className="agent-message" data-agent-run-id={data.runId} data-agent-status={data.status}>
@@ -72,7 +73,9 @@ export function AgentMessage({ data, actions }: { data: AgentMessageData; action
           const streaming = data.status === 'running' && index === groups.length - 1 && index === lastText;
           return <div key={part.id} className={`chat-answer${streaming ? ' is-streaming' : ''}`}><MarkdownContent content={part.text} className="chat-prose" streaming={streaming} citations={citations} /></div>;
         }
-        if (part.type === "source")
+        if (part.type === "source") {
+          // 命中的来源现在列在对应检索调用的框里；只有检索调用不在这条消息里的旧记录才在正文下单独列出。
+          if (hasSearchStep) return null;
           return /^https?:\/\//iu.test(part.url) ? (
             <a key={part.id} href={part.url} target="_blank" rel="noopener noreferrer" className="agent-source-link">
               <Globe className="h-4 w-4 shrink-0 mt-0.5" />
@@ -80,6 +83,7 @@ export function AgentMessage({ data, actions }: { data: AgentMessageData; action
               <ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             </a>
           ) : null;
+        }
         return null;
       })}
       {archive.length > 0 && <div className="agent-archive-list">

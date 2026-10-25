@@ -64,7 +64,7 @@ export function createAgentToolSearchExtension(titles: ReadonlyMap<string, strin
         return {
           output: [{ type: 'text' as const, text: loaded.length ? loadedText(loaded, candidates, titles)
             : '没有匹配的工具。换一个说法，或用工具名再试；常见排盘工具已直接提供，不必检索。' }],
-          details: { loaded },
+          details: { loaded, labels: loaded.map(name => titles.get(name) ?? name) },
           ...(loaded.length ? { control: { addTools: loaded } } : {}),
         };
       },

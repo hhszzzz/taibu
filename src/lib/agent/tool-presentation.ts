@@ -380,6 +380,18 @@ export function getAgentSkills(tools: readonly AgentToolPart[]) {
   return { listed, cards: [...cards.values()] };
 }
 
+export interface AgentToolSearchLoaded { names: string[]; labels: string[] }
+
+/** 工具搜索加载了哪些工具：名称与中文标题；旧记录只有名称，标题退回名称。 */
+export function getAgentToolSearchLoaded(tool: AgentToolPart): AgentToolSearchLoaded | null {
+  if (tool.status !== 'completed' || tool.name !== 'tool_search' || !tool.output || typeof tool.output !== 'object') return null;
+  const output = tool.output as { loaded?: unknown; labels?: unknown };
+  if (!Array.isArray(output.loaded)) return null;
+  const names = output.loaded.filter((name): name is string => typeof name === 'string');
+  const labels = Array.isArray(output.labels) ? output.labels : [];
+  return { names, labels: names.map((name, index) => typeof labels[index] === 'string' ? labels[index] : name) };
+}
+
 export interface AgentPlanDraft { plan: string; approved: boolean | null; feedback: string | null }
 
 /** 计划模式的提交：模型写的 Markdown 计划，以及用户批准、要求修改（可带意见）的结果。 */

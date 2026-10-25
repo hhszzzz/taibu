@@ -132,7 +132,7 @@ test('a search with no match says so and loads nothing', async () => {
     return [{ type: 'text', text: '没有可用工具' }];
   }, messages => { offered = getCurrentTools(messages).map(tool => tool.name); }) });
   const search = toolParts(store).find(part => part.name === AGENT_TOOL_SEARCH_TOOL)!;
-  assert.deepEqual(search.output, { loaded: [] });
+  assert.deepEqual(search.output, { loaded: [], labels: [] }, 'no match loads nothing and names nothing');
   assert.equal(search.status, 'completed');
   assert.ok(!offered.includes('bazi_dayun'));
   assert.equal(AGENT_TOOL_SEARCH_LIMIT, 8);

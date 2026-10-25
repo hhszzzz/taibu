@@ -45,6 +45,8 @@ export async function buildAgentDemo({ root, baziChartId, plainConversations, no
   const core = await import('taibu-core/mcp');
   const definitions = new Map(core.listToolDefinitions().map((definition) => [definition.name, definition]));
   const titleOf = (name) => TOOL_TITLES[name] ?? definitions.get(name)?.title ?? name;
+  /** Core 的规范文本，截断成成员过程里放得下的长度（真实运行也只保留开头）。 */
+  const coreText = async (name, input, limit = 520) => text(core.buildToolSuccessPayload(name, await core.executeTool(name, { ...input }), { detailLevel: 'full' })).slice(0, limit);
   const isChart = (name) => ['bazi', 'ziwei', 'qimen', 'liuyao', 'meihua', 'daliuren', 'xiaoliuren', 'tarot', 'taiyi', 'astrology', 'almanac'].includes(name);
 
   const artifacts = [];
@@ -187,11 +189,15 @@ export async function buildAgentDemo({ root, baziChartId, plainConversations, no
       else state.question = { question, questions: normalized, questionId: result.cacheId };
       return result;
     };
-    const plan = async (planText) => {
+    /** A plan submission and its decision: 批准, or 要求修改 with the feedback the user typed. */
+    const plan = async (planText, decision = 'approve', feedback = '') => {
       const questions = [{ id: 'plan', question: '是否按这个计划执行？', options: [{ id: 'approve', label: '批准' }, { id: 'revise', label: '要求修改' }], allowCustom: true, allowSkip: false }];
-      const result = await call('submit_plan', { plan: planText }, { ms: 400, cache: false, details: { plan: planText, approved: true },
+      const approved = decision === 'approve';
+      const result = await call('submit_plan', { plan: planText }, { ms: 400, cache: false,
+        details: { plan: planText, approved, ...(approved || !feedback ? {} : { feedback }) },
         attach: ({ cacheId }) => [{ type: 'question', id: cacheId, question: questions[0].question, questions }] });
-      answers.push({ questionId: result.cacheId, content: formatQuestionAnswers(questions, { plan: ['approve'] }), answers: { plan: ['approve'] } });
+      const reply = approved ? ['approve'] : [feedback || 'revise'];
+      answers.push({ questionId: result.cacheId, content: formatQuestionAnswers(questions, { plan: reply }), answers: { plan: reply } });
       return result;
     };
     /** A code mode script and the calls it made, nested under its card in call order. */
@@ -234,7 +240,7 @@ export async function buildAgentDemo({ root, baziChartId, plainConversations, no
         lastCite: state.cite,
       };
     };
-    return { turn, think, say, call, chart, calculate, drill, inspect, focus, knowledge, web, tool, todo, ask, plan, script, finish };
+    return { turn, think, say, call, chart, calculate, drill, inspect, focus, knowledge, web, tool, todo, ask, plan, script, finish, resolve: coreResult };
   }
 
   /** A conversation of one or more tasks, each with its question, the task's message and any replies. */
@@ -256,7 +262,7 @@ export async function buildAgentDemo({ root, baziChartId, plainConversations, no
       const input = {
         model: (round.model ?? { id: 'demo-model' }).id, reasoning: true, reasoningEffort: 'medium', webEnabled: round.webEnabled ?? false,
         codeMode: round.codeMode ?? false, planMode: round.planMode ?? false, memoryEnabled: round.memoryEnabled ?? true,
-        ...(round.collaborators ? { collaborators: round.collaborators } : {}),
+        ...(round.collaborators ? { collaborators: round.collaborators } : {}), timezone: 'Asia/Shanghai',
         systemPrompt: '本地演示任务', title, userMessage: { id: `${id}-${runId.slice(-2)}-u`, role: 'user', content: round.question, createdAt: new Date(question.at).toISOString(), ...attached },
       };
       const agent = { version: 1, runId, status: result.status, parts: result.parts, runtime: result.runtime, ...(result.followUps ? { followUps: result.followUps } : {}) };
@@ -275,7 +281,7 @@ export async function buildAgentDemo({ root, baziChartId, plainConversations, no
         id: runId, status: result.status, input, billing: result.status === 'cancelled' ? 'refunded' : 'charged',
         checkpoint: {
           version: 2, durable: { engine: ENGINE, seeded: true, started: true },
-          messages: [{ role: 'user', content: agentInputContent(input.userMessage), timestamp: question.at }],
+          messages: [{ role: 'user', content: agentInputContent(input.userMessage, input.timezone), timestamp: question.at }],
           parts: result.parts, runtime: result.runtime, ...result.checkpoint,
           ...(result.followUps ? { followUps: result.followUps } : {}),
           ...(round.planMode ? { planApproved: true } : {}),
@@ -333,7 +339,7 @@ export async function buildAgentDemo({ root, baziChartId, plainConversations, no
           await t.focus(baziReading, ['日柱天干 庚', '月柱地支 丑'], '日主庚金生于丑月');
           t.turn();
           t.think('需要大运和流年的刑冲合害，先加载低频工具。');
-          await t.call('tool_search', { query: '大运 流年 刑冲合害' }, { ms: 200, cache: false, details: { loaded: ['bazi_dayun', 'bazi_relations', 'bazi_wuxing'] } });
+          await t.call('tool_search', { query: '大运 流年 刑冲合害' }, { ms: 200, cache: false, details: { loaded: ['bazi_dayun', 'bazi_relations', 'bazi_wuxing'], labels: ['大运', '八字岁运刑冲合害', '八字五行旺衰'] } });
           t.turn();
           await t.todo([
             { id: 'chart', title: '按真太阳时排八字原局', status: 'completed' },
@@ -400,10 +406,10 @@ export async function buildAgentDemo({ root, baziChartId, plainConversations, no
         await t.inspect(qimen);
         const palaces = getChartTargets(qimen.value).filter((target) => target.kind === 'qimen_palace').slice(0, 2).map((target) => target.label);
         await t.focus(qimen, palaces, '值符与开门所在宫位');
-        await t.call('tool_search', { query: '奇门宫位 择日' }, { ms: 200, cache: false, details: { loaded: ['qimen_palace', 'almanac_select'] } });
+        await t.call('tool_search', { query: '奇门宫位 择日' }, { ms: 200, cache: false, details: { loaded: ['qimen_palace', 'almanac_select'], labels: ['奇门宫位', '黄历择日筛选'] } });
         t.turn();
         await t.drill('qimen_palace', qimen, { palace: 6 });
-        await t.calculate('almanac_select', { startDate: '2026-11-01', endDate: '2026-11-30', activity: '订盟', excludeClash: '蛇', timezone: 'Asia/Shanghai' });
+        await t.calculate('almanac_select', { startDate: '2026-11-01', endDate: '2026-11-30', activity: '订盟', excludeClash: ['蛇'], timezone: 'Asia/Shanghai' });
         t.turn();
         await t.web('重要商务谈判 前期准备 要点', [
           { title: '商务谈判前的三项准备', url: 'https://example.com/negotiation-prep', content: '明确底线、准备替代方案、提前确认决策人，是谈判前最有效的三项准备。' },
@@ -432,12 +438,21 @@ export async function buildAgentDemo({ root, baziChartId, plainConversations, no
           t.turn();
           t.think('启用了多模型协作：三位成员分工，主任务自己排紫微并核对官禄宫，最后汇总分歧。');
           const ziwei = (await t.chart('ziwei', { gender: 'male', birthYear: 1990, birthMonth: 1, birthDay: 15, birthHour: 9, birthMinute: 0, longitude: 121.47, timezone: 'Asia/Shanghai' })).chart;
-          await t.call('tool_search', { query: '紫微宫位 运限' }, { ms: 200, cache: false, details: { loaded: ['ziwei_palace', 'ziwei_horoscope'] } });
+          await t.call('tool_search', { query: '紫微宫位 运限' }, { ms: 200, cache: false, details: { loaded: ['ziwei_palace', 'ziwei_horoscope'], labels: ['紫微宫位', '紫微运限'] } });
           t.turn();
           await t.drill('ziwei_palace', ziwei, { palace: '官禄' });
           await t.calculate('ziwei_horoscope', { gender: 'male', birthYear: 1990, birthMonth: 1, birthDay: 15, birthHour: 9, birthMinute: 0, longitude: 121.47, timezone: 'Asia/Shanghai', targetDate: '2026-10-24' });
           t.turn();
           const topics = [{ title: '是否转管理', options: ['继续做产品', '转管理'] }, { title: '时间窗口' }];
+          // 成员过程里的参数与返回都用真实 Core 输出，展开成员步骤时看到的是具体数据。
+          const memberBirth = { gender: 'male', birthYear: 1990, birthMonth: 1, birthDay: 15, birthHour: 9, birthMinute: 0, longitude: 121.47, timezone: 'Asia/Shanghai' };
+          const memberText = {
+            bazi: await coreText('bazi', memberBirth),
+            wuxing: await coreText('bazi_wuxing', memberBirth),
+            relations: await coreText('bazi_relations', { ...memberBirth, year: 2027 }),
+            ziwei: await coreText('ziwei', memberBirth),
+            palace: await coreText('ziwei_palace', { ...memberBirth, palace: '官禄' }),
+          };
           await t.call('parallel_analysis', {
             title: '三方会诊', topics,
             tasks: [
@@ -449,19 +464,19 @@ export async function buildAgentDemo({ root, baziChartId, plainConversations, no
             { system: 'bazi', conversationId: 31, status: 'completed', agentId: 'member-ziping', name: '子平', model: 'demo-model', modelName: '本地演示模型', reasoningEffort: 'high', focus: '格局与用神',
               answer: '庚金生丑月，身不弱，七杀透出可作权柄。宜往带团队、有决策权的方向走，转管理更能发挥格局。', positions: { 是否转管理: '转管理', 时间窗口: '2026 年下半年' }, toolCalls: 3, durationMs: 41_000,
               steps: [
-                { name: 'bazi', title: '八字命盘', status: 'completed', note: '先按真太阳时排盘。', input: JSON.stringify({ gender: 'male', birthYear: 1990, birthMonth: 1, birthDay: 15, birthHour: 9, longitude: 121.47 }), output: '# 八字命盘\n- 日主: 庚', truncated: true },
-                { name: 'bazi_wuxing', title: '八字五行旺衰', status: 'completed', output: '# 八字五行旺衰详查', truncated: true },
-                { name: 'bazi_relations', title: '八字岁运刑冲合害', status: 'completed', output: '# 八字岁运刑冲合害', truncated: true },
+                { name: 'bazi', title: '八字命盘', status: 'completed', note: '先按真太阳时排盘。', input: JSON.stringify(memberBirth), output: memberText.bazi, truncated: true },
+                { name: 'bazi_wuxing', title: '八字五行旺衰', status: 'completed', input: JSON.stringify({ sections: ['通根', '缺失五行'] }), output: memberText.wuxing, truncated: true },
+                { name: 'bazi_relations', title: '八字岁运刑冲合害', status: 'completed', input: JSON.stringify({ year: 2027 }), output: memberText.relations, truncated: true },
               ] },
             { system: 'ziwei', conversationId: 32, status: 'completed', agentId: 'member-ziwei', name: '紫微', model: 'demo-model', modelName: '本地演示模型', reasoningEffort: 'medium', focus: '官禄宫与运限',
               answer: '官禄宫主星稳重，适合专业路线；当前大限偏重积累，转管理可以，但要先在专业上立住。', positions: { 是否转管理: '继续做产品', 时间窗口: '2027 年春' }, toolCalls: 2, durationMs: 36_000,
               steps: [
-                { name: 'ziwei', title: '紫微斗数命盘', status: 'completed', output: '# 紫微斗数命盘', truncated: true },
-                { name: 'ziwei_palace', title: '紫微宫位', status: 'completed', note: '重点看官禄宫。', output: '# 官禄宫', truncated: true },
+                { name: 'ziwei', title: '紫微斗数命盘', status: 'completed', input: JSON.stringify(memberBirth), output: memberText.ziwei, truncated: true },
+                { name: 'ziwei_palace', title: '紫微宫位', status: 'completed', note: '重点看官禄宫。', input: JSON.stringify({ palace: '官禄' }), output: memberText.palace, truncated: true },
               ] },
             { system: 'bazi', conversationId: 33, status: 'completed', agentId: 'member-review', name: '复核', model: 'demo-model', modelName: '本地演示模型', reasoningEffort: 'off', focus: '逐条核对生克',
               answer: '两位的依据都成立，分歧在节奏：子平看格局，紫微看大限。建议先争取管理职责，再换岗位名义。', positions: { 是否转管理: '转管理', 时间窗口: '2026 年下半年至 2027 年春' }, toolCalls: 1, durationMs: 18_000,
-              steps: [{ name: 'bazi', title: '八字命盘', status: 'completed', output: '# 八字命盘', truncated: true }] },
+              steps: [{ name: 'bazi', title: '八字命盘', status: 'completed', input: JSON.stringify(memberBirth), output: memberText.bazi, truncated: true }] },
           ] } });
           t.turn(5600);
           t.say('三位成员的结论有分歧，但方向一致：**可以往管理走，关键在节奏。**\n\n| 成员 | 判断 | 时间窗口 |\n|---|---|---|\n| 子平 | 转管理，七杀可作权柄 | 2026 年下半年 |\n| 紫微 | 先在专业上立住，再转 | 2027 年春 |\n| 复核 | 先争取管理职责，再换名义 | 2026 下半年至 2027 春 |\n\n我自己看的紫微官禄宫也偏稳重，所以更稳妥的做法是：**今年下半年先在现岗位接带人的职责**，做出一两件有说服力的事，2027 年春天再正式换岗或换名义。');
@@ -476,7 +491,12 @@ export async function buildAgentDemo({ root, baziChartId, plainConversations, no
           await t.call('background_agent', { action: 'spawn', name: '紫微流年跟进', system: 'ziwei', message: '按用户命盘逐月跟进 2026 年下半年的紫微流月，有明显变化时回报。' },
             { ms: 9000, cache: false, details: { action: 'spawn', name: '紫微流年跟进', system: 'ziwei', conversationId: 41, reporterId: 7, analyses: [
               { system: 'ziwei', conversationId: 41, status: 'completed', name: '紫微流年跟进', answer: '2026 年 11 月流月官禄宫有化权，适合主动争取职责；12 月节奏放缓。', toolCalls: 2, durationMs: 9000,
-                steps: [{ name: 'ziwei', title: '紫微斗数命盘', status: 'completed' }, { name: 'ziwei_horoscope', title: '紫微斗数运限', status: 'completed' }] },
+                steps: [
+                  { name: 'ziwei', title: '紫微斗数命盘', status: 'completed', input: JSON.stringify({ gender: 'male', birthYear: 1990, birthMonth: 1, birthDay: 15, birthHour: 9, birthMinute: 0, longitude: 121.47, timezone: 'Asia/Shanghai' }),
+                    output: await coreText('ziwei', { gender: 'male', birthYear: 1990, birthMonth: 1, birthDay: 15, birthHour: 9, birthMinute: 0, longitude: 121.47, timezone: 'Asia/Shanghai' }), truncated: true },
+                  { name: 'ziwei_horoscope', title: '紫微斗数运限', status: 'completed', input: JSON.stringify({ targetDate: '2026-11-15' }),
+                    output: await coreText('ziwei_horoscope', { gender: 'male', birthYear: 1990, birthMonth: 1, birthDay: 15, birthHour: 9, birthMinute: 0, longitude: 121.47, timezone: 'Asia/Shanghai', targetDate: '2026-11-15' }), truncated: true },
+                ] },
             ] } });
           t.turn(2400);
           t.say('已经交给后台的“紫微流年跟进”。它的第一次回报：**11 月流月官禄宫有化权，适合主动争取职责；12 月节奏放缓。** 之后有明显变化会继续在这里告诉你。');
@@ -520,14 +540,16 @@ export async function buildAgentDemo({ root, baziChartId, plainConversations, no
         await t.tool('list_analysis_methods', {}, ANALYSIS_METHODS, { ms: 120 });
         await t.tool('load_analysis_method', { id: 'liuyao' }, loadAnalysisMethod('liuyao'), { ms: 140 });
         t.turn();
-        await t.plan('## 分析计划\n1. 用六爻起一卦，问 2027 年事业的总体走向，用神取官鬼。\n2. 详查世爻与动爻，看变化落在哪几个月。\n3. 用黄历筛选 2027 年适合启动新项目的日子。\n4. 汇总成按季度的节点表。');
+        await t.plan('## 分析计划\n1. 用六爻起一卦，问 2027 年事业的总体走向，用神取官鬼。\n2. 详查世爻与动爻，看变化落在哪几个月。\n3. 用黄历筛选 2027 年适合启动新项目的日子。', 'revise', '节点要落到季度，并给出可以启动的具体月份');
+        t.turn();
+        await t.plan('## 分析计划\n1. 用六爻起一卦，问 2027 年事业的总体走向，用神取官鬼。\n2. 详查世爻与动爻，看变化落在哪几个月。\n3. 用黄历筛选 2027 年适合启动新项目的日子，给出具体月份。\n4. 汇总成按季度的节点表。');
         t.turn();
         const liuyao = (await t.chart('liuyao', { question: '2027 年事业的总体走向', yongShenTargets: ['官鬼'], method: 'auto', date: '2026-10-22T10:00:00', timezone: 'Asia/Shanghai' })).chart;
-        await t.call('tool_search', { query: '六爻动爻 择日' }, { ms: 200, cache: false, details: { loaded: ['liuyao_line', 'almanac_select'] } });
+        await t.call('tool_search', { query: '六爻动爻 择日' }, { ms: 200, cache: false, details: { loaded: ['liuyao_line', 'almanac_select'], labels: ['六爻逐爻详查', '黄历择日筛选'] } });
         t.turn();
         await t.drill('liuyao_line', liuyao, { role: '世' });
         await t.chart('almanac', { date: '2027-03-01', timezone: 'Asia/Shanghai', birthYear: 1990, birthMonth: 1, birthDay: 15, birthHour: 9 });
-        await t.calculate('almanac_select', { startDate: '2027-03-01', endDate: '2027-03-31', activity: '开市', excludeClash: '蛇', timezone: 'Asia/Shanghai' });
+        await t.calculate('almanac_select', { startDate: '2027-03-01', endDate: '2027-03-31', activity: '开市', excludeClash: ['蛇', '猪'], timezone: 'Asia/Shanghai' });
         t.turn(5000);
         t.say('按批准的计划，2027 年的事业节点如下：\n\n| 季度 | 节点 | 建议 |\n|---|---|---|\n| 一季度 | 世爻得助，适合启动 | 3 月挑一个黄历宜开市的日子正式启动新项目 |\n| 二季度 | 动爻生变 | 调整团队分工，别同时铺太多线 |\n| 三季度 | 官鬼持世 | 压力最大的阶段，提前准备述职材料 |\n| 四季度 | 收尾 | 复盘成果，为 2028 年的晋升做铺垫 |\n\n三月的候选日已经在工作区的择日结果里，可以直接挑。');
         return t.finish();
@@ -571,7 +593,7 @@ export async function buildAgentDemo({ root, baziChartId, plainConversations, no
         await t.chart('xiaoliuren', { date: '2026-10-21', hour: 20, question: '下半年的整体运势' });
         t.turn();
         const daliuren = (await t.chart('daliuren', { date: '2026-10-21', hour: 20, minute: 0, timezone: 'Asia/Shanghai', question: '下半年的整体运势' })).chart;
-        await t.call('tool_search', { query: '大六壬课传 占星单点' }, { ms: 200, cache: false, details: { loaded: ['daliuren_lessons', 'astrology_point'] } });
+        await t.call('tool_search', { query: '大六壬课传 占星单点' }, { ms: 200, cache: false, details: { loaded: ['daliuren_lessons', 'astrology_point'], labels: ['大六壬课传详查', '占星单点详查'] } });
         await t.drill('daliuren_lessons', daliuren, {});
         await t.chart('taiyi', { mode: 'day', date: '2026-10-21', timezone: 'Asia/Shanghai', question: '下半年的整体运势' });
         t.turn();
@@ -630,6 +652,36 @@ export async function buildAgentDemo({ root, baziChartId, plainConversations, no
         t.say('先排命盘。');
         await t.chart('ziwei', { gender: 'female', birthYear: 1992, birthMonth: 8, birthDay: 8, birthHour: 20, birthMinute: 0, longitude: 120.15, timezone: 'Asia/Shanghai' });
         return t.finish({ status: 'cancelled', usage: 5200 });
+      },
+    }],
+  });
+
+  // 10. 合盘：一方直接引用库里已存的命盘，另一方给出出生信息；只列两盘之间的事实，不打分。
+  await conversation({
+    id: conv(14), title: '和他的八字合不合', hoursAgo: 8,
+    rounds: [{
+      runId: run(12), question: '我是 1990 年 1 月 15 日早上 9 点在上海生的，他是 1992 年 8 月 3 日下午 2 点，帮我看看我们合不合。',
+      build: async (t) => {
+        t.turn();
+        t.think('双方出生信息齐全；我的八字就是库里那张已存命盘，直接引用，不必重排。');
+        const partner = { name: '他', gender: 'male', birthYear: 1992, birthMonth: 8, birthDay: 3, birthHour: 14, birthMinute: 0, timezone: 'Asia/Shanghai' };
+        // 模型只传引用与另一方的出生信息，出生参数由服务端重建（pairing.server.ts）。
+        const pairing = await t.call('bazi_hepan',
+          { a: { name: '我', reference: `bazi_chart:${baziChartId}` }, b: partner },
+          { ms: 900, details: ({ cacheId }) => t.resolve('bazi_hepan', { a: { ...birth, name: '我' }, b: partner }, cacheId) });
+        const facts = pairing.output?.result ?? {};
+        const [me, him] = facts.双方 ?? [];
+        const lines = [
+          me && him ? `- 日主：我 ${me.日主}，他 ${him.日主}；${facts.日主互见?.五行生克 ?? ''}` : '',
+          ...(facts.日主互见?.说明 ?? []).map((line) => `- ${line}`),
+          ...(facts.日柱之间?.length ? facts.日柱之间.map((row) => `- 日柱之间：${row.说明}`) : ['- 日柱之间：没有同时涉及双方日柱的合冲刑害。']),
+          ...(facts.年柱之间?.length ? facts.年柱之间.map((row) => `- 年柱之间：${row.说明}`) : ['- 年柱之间：没有同时涉及双方年柱的合冲刑害。']),
+          ...(facts.其余关系 ?? []).slice(0, 2).map((row) => `- 其余：${row.说明}`),
+          ...(facts.五行互补 ?? []).map((line) => `- ${line}`),
+        ].filter(Boolean);
+        t.turn(2000);
+        t.say(`两盘之间的事实如下：\n\n${lines.join('\n')}\n\n这些只说明两边先天的呼应；合不合还要看各自的大运流年与相处方式，需要的话我再按年份细看。`);
+        return t.finish();
       },
     }],
   });

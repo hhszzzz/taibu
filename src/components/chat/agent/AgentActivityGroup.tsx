@@ -4,9 +4,9 @@
 import { useId, useState, type ReactNode } from 'react';
 import { ChevronRight, LoaderCircle, PanelRight, Pause } from 'lucide-react';
 import type { AgentMessageData, AgentPart } from '@/lib/agent/types';
-import { AGENT_SUBMIT_PLAN_TOOL, getAgentToolFamily, isAgentMemberTool } from '@/lib/agent/tool-catalog';
+import { AGENT_SUBMIT_PLAN_TOOL, AGENT_TOOL_SEARCH_TOOL, getAgentToolFamily, isAgentMemberTool } from '@/lib/agent/tool-catalog';
 import { getAgentToolQuestionIds } from '@/lib/agent/workspace';
-import { getAgentAttachmentRead, getAgentChart, getAgentDataResults, getAgentMemories, getAgentMethod, getAgentMethodCatalog, getAgentPlan, getAgentProfile, getAgentScript, getAgentToolQuestions, getAgentToolText } from '@/lib/agent/tool-presentation';
+import { getAgentAttachmentRead, getAgentChart, getAgentConversationHits, getAgentDataResults, getAgentMemories, getAgentMethod, getAgentMethodCatalog, getAgentNotes, getAgentPlan, getAgentProfile, getAgentScript, getAgentSearchResults, getAgentToolQuestions, getAgentToolSearchLoaded, getAgentToolText } from '@/lib/agent/tool-presentation';
 import { useIsDesktopLayout } from '@/lib/hooks/useIsDesktopLayout';
 import { useTranscriptRecordView } from '@/lib/chat/chat-record-view';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
@@ -106,6 +106,52 @@ function StepStructured({ tool, parts, workspace }: { tool: AgentTool; parts: Ag
         return method ? <div className="agent-step-structured">
             <p className="agent-step-structured-fact">{method.title} · 版本 {method.version}</p>
             {workspace && <button type="button" className="agent-step-structured-open" onClick={() => open(`tool:${tool.id}`)}>查看指引</button>}
+        </div> : null;
+    }
+    // 检索的来源直接列在调用框里：标题、编号与站点，点击打开原页；完整摘录在工作区「回答依据」。
+    if (tool.name === 'web_search' || tool.name === 'search_knowledge') {
+        const web = tool.name === 'web_search';
+        const results = getAgentSearchResults(tool);
+        if (!results) return null;
+        return <div className="agent-step-structured">
+            <p className="agent-step-structured-fact">{results.length ? `找到 ${results.length} 个${web ? '公开来源' : '相关段落'}` : web ? '没有可引用的公开来源' : '没有匹配的段落'}</p>
+            {results.length > 0 && <ul className="agent-step-structured-sources">
+                {results.slice(0, 4).map(result => <li key={result.id}>
+                    {result.cite !== null && <span className="agent-step-cite">[{result.cite}]</span>}
+                    {result.url ? <a href={result.url} target="_blank" rel="noopener noreferrer">{result.title}</a> : <span>{result.title}</span>}
+                    {result.source && result.source !== result.title && <small>{result.source}</small>}
+                </li>)}
+                {results.length > 4 && <li className="agent-step-more">等 {results.length} 条</li>}
+            </ul>}
+            {workspace && <button type="button" className="agent-step-structured-open" onClick={() => open('evidence')}>查看依据</button>}
+        </div>;
+    }
+    // 工具搜索加载了哪些工具：写中文名，点名它们从下一次模型调用起可用。
+    if (tool.name === AGENT_TOOL_SEARCH_TOOL) {
+        const loaded = getAgentToolSearchLoaded(tool);
+        if (!loaded) return null;
+        return <div className="agent-step-structured">
+            <p className="agent-step-structured-fact">{loaded.names.length ? `加载 ${loaded.names.length} 个工具` : '没有匹配的工具'}</p>
+            {loaded.names.length > 0 && <ul className="agent-step-chips" aria-label="加载的工具">{loaded.labels.map(label => <li key={label}>{label}</li>)}</ul>}
+        </div>;
+    }
+    // 「过程资料」不再单列，读过的笔记与对话在这里给出具体内容。
+    if (tool.name === 'read_user_notes') {
+        const notes = getAgentNotes(tool);
+        return notes ? <div className="agent-step-structured">
+            <p className="agent-step-structured-fact">读到 {notes.notes.length} 条笔记{notes.more ? '（还有更早的）' : ''}</p>
+            {notes.notes.length > 0 && <ul className="agent-step-structured-list">{notes.notes.slice(0, 3).map(note =>
+                <li key={note.date}><strong>{note.date}{note.mood ? ` · ${note.mood}` : ''}</strong><span>{note.content}</span></li>)}</ul>}
+            {workspace && <button type="button" className="agent-step-structured-open" onClick={() => open('notes')}>查看笔记</button>}
+        </div> : null;
+    }
+    if (tool.name === 'search_conversations') {
+        const hits = getAgentConversationHits(tool);
+        return hits ? <div className="agent-step-structured">
+            <p className="agent-step-structured-fact">{hits.length ? `找到 ${hits.length} 条以往对话` : '没有找到以往的对话'}</p>
+            {hits.length > 0 && <ul className="agent-step-structured-list">{hits.slice(0, 3).map(hit =>
+                <li key={`${hit.conversationId}:${hit.messageId ?? ''}`}><strong>{hit.title}</strong><span>{hit.excerpt}</span></li>)}</ul>}
+            {workspace && <button type="button" className="agent-step-structured-open" onClick={() => open('history')}>查看对话</button>}
         </div> : null;
     }
     return null;
@@ -236,12 +282,12 @@ function ToolStep({ tool, data, shownId, calls = [] }: { tool: AgentTool; data: 
 }
 
 /** Reasoning between calls and questions asked without the question tool: rows that disclose their text in place. */
-function NoteStep({ title, text, children }: { title: string; text: string; children: ReactNode }) {
+function NoteStep({ title, text, children }: { title: string; text?: string; children: ReactNode }) {
     const id = useId();
     const [open, setOpen] = useState(false);
     return <li className="agent-step agent-step--note">
         <button type="button" className="agent-step-row" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => setOpen(!open)}>
-            <span className="agent-step-text"><span className="agent-step-title">{title}</span><span className="agent-step-detail">{text}</span>
+            <span className="agent-step-text"><span className="agent-step-title">{title}</span>{text && <span className="agent-step-detail">{text}</span>}
                 <ChevronRight size={12} aria-hidden="true" className={`agent-step-chevron${open ? ' rotate-90' : ''}`} /></span>
         </button>
         {open && <div id={id} className="agent-step-note-body">{children}</div>}
@@ -296,7 +342,8 @@ export function AgentActivityGroup({ parts, data, active = false }: { parts: Age
             <ol id={id} className="agent-process-steps" hidden={!open}>
                 {open && rows.map(part => {
                     if (part.type === 'tool') return <ToolStep key={part.id} tool={part} data={data} shownId={workspace?.shown?.toolId ?? undefined} calls={scriptCalls.get(part.id)} />;
-                    if (part.type === 'reasoning') return <NoteStep key={part.id} title="思考" text={firstLine(part.text)}>
+                    // 思考只在展开后给出内容：折叠时只剩「思考」一行，避免把草稿当成过程结论。
+                    if (part.type === 'reasoning') return <NoteStep key={part.id} title="思考">
                         <p className="agent-step-reasoning">{part.text}</p>
                     </NoteStep>;
                     return <NoteStep key={part.id} title="向你确认信息" text={firstLine(part.question)}>

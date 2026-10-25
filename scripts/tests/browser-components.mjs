@@ -95,6 +95,8 @@ const initialToolParts = AGENT_TOOL_FIXTURE_PARTS;
 const BAZI_DRILLDOWN_FIXTURE_PARTS = BAZI_DRILLDOWN_FIXTURE_PARTS_JSON;
 const familyParts = () => [
   AGENT_DAYUN_FIXTURE_PART,
+  HEPAN_FIXTURE_PART,
+  ALMANAC_CLASH_FIXTURE_PART,
   { type: 'tool', id: 'family-web', name: 'web_search', title: '联网检索', status: 'completed', input: { query: '庚金 月令' }, output: [{ title: '庚金论', url: 'https://example.com/gengjin', content: '庚金带煞，刚健为最。' }, { title: '无效链接', url: 'javascript:alert(1)', content: '不应成为链接' }] },
   { type: 'tool', id: 'family-kb', name: 'search_knowledge', title: '知识库检索', status: 'completed', input: { query: '不存在的资料' }, output: [] },
   { type: 'tool', id: 'family-method', name: 'load_analysis_method', title: '加载分析方法', status: 'completed', input: { id: 'bazi' },
@@ -114,6 +116,9 @@ const familyParts = () => [
     output: { target: 'record', id: '44444444-4444-4444-8444-444444444444', event: { date: '2024-03-01', category: '事业', title: '换到新公司', detail: '2024年3月从老东家离职', chart: null } } },
   { type: 'tool', id: 'family-propose', name: 'propose_archive_entry', title: '生成保存卡片', status: 'completed', input: { kind: 'conclusion', title: '明年换岗' },
     output: { runId: 'run-family', callId: 'family-propose', proposal: { kind: 'conclusion', category: 'prediction', title: '明年换岗', content: '官星透出，宜在下半年调整岗位。', date: '2027-06-01', tags: ['事业'], chart: null } } },
+  { type: 'tool', id: 'family-tool-search', name: 'tool_search', title: '查找工具', status: 'completed', input: { query: '六爻动爻 择日' },
+    output: { loaded: ['liuyao_line', 'almanac_select'], labels: ['六爻逐爻详查', '黄历择日筛选'] } },
+  { type: 'reasoning', id: 'family-think', text: '先看命盘，再核对流年；出生时间不确定时先问清楚。' },
   { type: 'tool', id: 'family-ask', name: 'ask_user', title: '补充必要信息', status: 'completed', input: {},
     output: { question: '出生时间？', questions: [{ id: 'birth', question: '出生时间？', options: [{ id: 'morning', label: '早上' }, { id: 'night', label: '晚上' }], allowCustom: true, allowSkip: false }], awaitingUser: true } },
   { type: 'question', id: '9:family-ask', question: '出生时间？' },
@@ -152,11 +157,16 @@ function AgentResultsProbe() {
   window.fixture.workspaceFamilies = () => setParts(previous => [...previous.filter(part => !part.id.includes('family')), ...familyParts()]);
   window.fixture.workspaceStep = (name, status) => setParts(previous => [...previous, { type: 'tool', id: 'step-' + (window.fixture.stepRevision = (window.fixture.stepRevision ?? 0) + 1), name, title: name, status, input: { query: '流年' } }]);
   window.fixture.answerFamilyQuestion = () => setAnswers(new Map([['9:family-ask', { content: '出生时间？\n早上', answers: { birth: ['morning'] } }]]));
-  // A plan-mode call that the user approved, with the plan the model submitted.
-  window.fixture.planStep = () => setParts(previous => [...previous, {
-    type: 'tool', id: 'native-tool:12:plan', name: 'submit_plan', title: '提交计划', status: 'completed',
-    input: { plan: '## 分析计划\n1. 先排八字，再看紫微。' }, output: { plan: '## 分析计划\n1. 先排八字，再看紫微。', approved: true },
-  }]);
+  // 旧消息里检索结果还带独立的 source parts；界面现在把它们列在调用框里，不再在正文下另起一段。
+  window.fixture.searchSource = (on = true) => setParts(previous => [...previous.filter(part => part.id !== 'family-web:0'),
+    ...(on ? [{ type: 'source', id: 'family-web:0', title: '庚金论', url: 'https://example.com/gengjin' }] : [])]);
+  // 计划模式：先要求修改、再批准；两次提交与决定都留在计划页。
+  window.fixture.planStep = () => setParts(previous => [...previous,
+    { type: 'tool', id: 'native-tool:12:plan-1', name: 'submit_plan', title: '提交计划', status: 'completed',
+      input: { plan: '## 分析计划\n1. 先排八字。' }, output: { plan: '## 分析计划\n1. 先排八字。', approved: false, feedback: '加上紫微一起看' } },
+    { type: 'tool', id: 'native-tool:12:plan-2', name: 'submit_plan', title: '提交计划', status: 'completed',
+      input: { plan: '## 分析计划\n1. 先排八字，再看紫微。' }, output: { plan: '## 分析计划\n1. 先排八字，再看紫微。', approved: true } },
+  ]);
   window.fixture.codemodeScript = () => setParts(previous => {
     const bazi = initialToolParts.find(part => part.name === 'bazi');
     const script = { type: 'tool', id: 'native-tool:9:script', name: 'codemode', title: '运行脚本', status: 'completed', input: { code: 'for (const birthYear of [1990, 1991]) await tools.bazi({ birthYear });' },
@@ -190,7 +200,10 @@ function AgentResultsProbe() {
       input: { action: 'spawn', name: '八字复核', system: 'bazi', message: '请排盘并看 2027 年事业。' },
       output: JSON.parse(JSON.stringify({ action: 'spawn', name: '八字复核', system: 'bazi', conversationId: 21, reporterId: 7, analyses: [
         { system: 'bazi', conversationId: 21, name: '八字复核', status: completed ? 'completed' : 'running',
-          ...(completed ? { answer: '2027 年事业有变动。', toolCalls: 1, durationMs: 9000, steps: [{ name: 'bazi', title: '八字排盘', status: 'completed' }] } : { steps: [{ name: 'bazi', title: '八字排盘', status: 'running' }] }) },
+          ...(completed ? { answer: '2027 年事业有变动。', toolCalls: 1, durationMs: 9000,
+            steps: [{ name: 'bazi', title: '八字排盘', status: 'completed', input: JSON.stringify({ gender: 'male', birthYear: 1990, birthMonth: 1, birthDay: 15, birthHour: 9 }),
+              output: '# 八字命盘\n\n## 基本信息\n- 日主：庚金\n- 生肖：蛇', truncated: true }] }
+            : { steps: [{ name: 'bazi', title: '八字排盘', status: 'running' }] }) },
       ] })),
     }])]);
   };
@@ -611,9 +624,19 @@ export async function build(outputDirectory) {
   }
   const dayunPart = { type: 'tool', id: 'family-dayun', name: 'bazi_dayun', title: '八字大运', status: 'completed', input: dayunInput, durationMs: 12,
     output: { artifactId: 'family-dayun', result: dayun.structuredContent }, canonicalText: dayun.content.map(part => part.text).join('\n') };
+  // 合盘与多人避冲：两个新工具的推演卡用 Core 的真实结果，浏览器里渲染的就是线上会看到的样子。
+  const hepanDefinition = listToolDefinitions().find(tool => tool.name === 'bazi_hepan');
+  const hepanInput = { ...hepanDefinition.inputSchema.examples[0] };
+  const hepan = buildToolSuccessPayload('bazi_hepan', await executeTool('bazi_hepan', hepanInput));
+  const hepanPart = { type: 'tool', id: 'family-hepan', name: 'bazi_hepan', title: hepanDefinition.title, status: 'completed', input: hepanInput,
+    output: { artifactId: 'family-hepan', result: hepan.structuredContent }, canonicalText: hepan.content.map(part => part.text).join('\n') };
+  const clashInput = { startDate: '2026-02-14', endDate: '2026-02-20', activity: '嫁娶', excludeClash: ['牛', '鸡'] };
+  const clash = buildToolSuccessPayload('almanac_select', await executeTool('almanac_select', clashInput));
+  const clashPart = { type: 'tool', id: 'family-almanac-clash', name: 'almanac_select', title: '黄历择日筛选', status: 'completed', input: clashInput,
+    output: { artifactId: 'family-almanac-clash', result: clash.structuredContent }, canonicalText: clash.content.map(part => part.text).join('\n') };
 
   await bundle({
-    stdin: { contents: entry.replace('DALIUREN_RESULT_FIXTURE', JSON.stringify(await executeTool('daliuren', { date: '2026-10-23', hour: 12, timezone: 'Asia/Shanghai' }))).replace('QIMEN_RESULT_FIXTURE', JSON.stringify(await executeTool('qimen', { year: 2024, month: 6, day: 1, hour: 12, timezone: 'Asia/Shanghai' }))).replace('AGENT_TOOL_FIXTURE_PARTS', JSON.stringify(toolParts)).replace('TRADITIONAL_TAIYI_FIXTURE_PART', JSON.stringify(traditionalPart)).replace('REVISED_BAZI_FIXTURE_RESULT', JSON.stringify(revisedBazi.structuredContent)).replace('AGENT_DAYUN_FIXTURE_PART', JSON.stringify(dayunPart)).replace('BAZI_DRILLDOWN_FIXTURE_PARTS_JSON', JSON.stringify(drilldownParts)).replace('BAZI_METHOD_FIXTURE', JSON.stringify({ ...baziMethod, whenToUse: baziMethod.description, instructions: renderMethodGuide('bazi') })), loader: 'jsx', resolveDir: root, sourcefile: 'browser-components-entry.jsx' },
+    stdin: { contents: entry.replace('DALIUREN_RESULT_FIXTURE', JSON.stringify(await executeTool('daliuren', { date: '2026-10-23', hour: 12, timezone: 'Asia/Shanghai' }))).replace('QIMEN_RESULT_FIXTURE', JSON.stringify(await executeTool('qimen', { year: 2024, month: 6, day: 1, hour: 12, timezone: 'Asia/Shanghai' }))).replace('AGENT_TOOL_FIXTURE_PARTS', JSON.stringify(toolParts)).replace('TRADITIONAL_TAIYI_FIXTURE_PART', JSON.stringify(traditionalPart)).replace('REVISED_BAZI_FIXTURE_RESULT', JSON.stringify(revisedBazi.structuredContent)).replace('AGENT_DAYUN_FIXTURE_PART', JSON.stringify(dayunPart)).replace('HEPAN_FIXTURE_PART', JSON.stringify(hepanPart)).replace('ALMANAC_CLASH_FIXTURE_PART', JSON.stringify(clashPart)).replace('BAZI_DRILLDOWN_FIXTURE_PARTS_JSON', JSON.stringify(drilldownParts)).replace('BAZI_METHOD_FIXTURE', JSON.stringify({ ...baziMethod, whenToUse: baziMethod.description, instructions: renderMethodGuide('bazi') })), loader: 'jsx', resolveDir: root, sourcefile: 'browser-components-entry.jsx' },
     outfile, bundle: true, format: 'iife', platform: 'browser', jsx: 'automatic',
     tsconfig: resolve(root, 'tsconfig.json'),
     define: { 'process.env.NODE_ENV': '"development"', 'process.env': '{}' },
@@ -2513,6 +2536,13 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => { window.fixture.backgroundResults(true); window.fixture.agentRunStatus('completed'); });
     await renderBarrier();
     check('Once it reports, the subagent’s page shows its answer', await subagentPage.innerText().then(text => text.includes('2027 年事业有变动。') && !text.includes('正在分析')));
+    // 子分析的调用也能展开：参数与工具返回都是具体内容。
+    const subagentProcess = subagentPage.locator('.agent-ws-member-process-heading');
+    if (await subagentProcess.getAttribute('aria-expanded') !== 'true') await subagentProcess.click();
+    const subagentCall = subagentPage.locator('.agent-ws-member-call').filter({ hasText: '八字排盘' }).first();
+    if (await subagentCall.getAttribute('aria-expanded') !== 'true') await subagentCall.click();
+    check('A subagent call expands to the arguments it ran with and what it returned', await subagentPage.locator('.agent-ws-member-args').innerText().then(text => text.includes('birthYear') && text.includes('1990')) &&
+      await subagentPage.locator('.agent-ws-member-output').innerText().then(text => text.includes('日主：庚金')));
     await page.getByRole('button', { name: '关闭工作区', exact: true }).click();
     await page.evaluate(() => window.fixture.backgroundResults(null));
     await renderBarrier();
@@ -2631,6 +2661,37 @@ export async function run(existingPage, bundlePath) {
     await openProcessStep('加载分析方法');
     await workspacePanel.locator('[data-workspace-view="method"]').waitFor();
     check('A process step opens its versioned read-only method guide', await workspacePanel.innerText().then(text => /版本 \d+\.\d+\.\d+/.test(text) && text.includes('不增加任何执行权限') && text.includes('子平八字')));
+    await openProcessStep('八字合盘');
+    await workspacePanel.locator('[data-workspace-view="calculation"]').waitFor();
+    check('A pairing lists both people and the three relation groups from Core', await workspacePanel.locator('.agent-ws-group').count() === 3 &&
+      await workspacePanel.innerText().then(text => text.includes('日主互见') && text.includes('年命纳音') && text.includes('五行互补') && text.includes('女方')));
+    await openProcessStep('黄历择日筛选');
+    await workspacePanel.locator('[data-workspace-view="calculation"]').waitFor();
+    check('A date selection names every zodiac it avoids', await workspacePanel.innerText().then(text => text.includes('避冲 丑牛（冲未）、酉鸡（冲卯）')));
+    // 检索来源列在调用框里；同样的来源不再在正文下另起一段。
+    await openProcessStep('联网检索');
+    await page.evaluate(() => window.fixture.searchSource(true));
+    await renderBarrier();
+    const searchStep = results.locator('.agent-step').filter({ has: page.locator('.agent-step-title', { hasText: '联网检索' }) }).last();
+    check('A search step lists its sources in place instead of below the message', await results.locator('.agent-source-link').count() === 0 &&
+      await searchStep.locator('.agent-step-structured-sources a').count() === 1 &&
+      await searchStep.locator('.agent-step-structured-sources a').innerText().then(text => text.includes('庚金论')) &&
+      await searchStep.innerText().then(text => !text.includes('已返回结构化结果')));
+    await page.evaluate(() => window.fixture.searchSource(false));
+    const toolSearchStep = results.locator('.agent-step').filter({ has: page.locator('.agent-step-title', { hasText: '查找工具' }) }).last();
+    if (await toolSearchStep.locator('.agent-step-row').getAttribute('aria-expanded') !== 'true') await toolSearchStep.locator('.agent-step-row').click();
+    check('A tool search step names the tools it loaded', await toolSearchStep.locator('.agent-step-chips').innerText().then(text => text.includes('六爻逐爻详查') && text.includes('黄历择日筛选')));
+    const thought = results.locator('.agent-step--note').filter({ hasText: '思考' }).first();
+    check('A thinking row keeps its draft closed until expanded', await thought.locator('.agent-step-row').innerText().then(text => text.trim() === '思考'));
+    await thought.locator('.agent-step-row').click();
+    check('Expanding a thinking row shows what it thought', await thought.locator('.agent-step-reasoning').innerText().then(text => text.includes('先看命盘')));
+    await thought.locator('.agent-step-row').click();
+    // 「过程资料」删掉后，读过的笔记与以往对话在过程块里给出具体内容。
+    for (const [title, expected] of [['读取每日笔记', '面试顺利'], ['检索以往对话', '2024年我跳槽去了上海']]) {
+        const step = results.locator('.agent-step').filter({ has: page.locator('.agent-step-title', { hasText: title }) }).last();
+        if (await step.locator('.agent-step-row').getAttribute('aria-expanded') !== 'true') await step.locator('.agent-step-row').click();
+        check(`A ${title} step lists what it read instead of only a count`, await step.locator('.agent-step-structured-list').innerText().then(text => text.includes(expected)));
+    }
     await openTeamMember('协作分析', '子平');
     await workspacePanel.locator('[data-workspace-view="member"]').waitFor();
     check('Each collaboration member opens its own page with model, effort and focus', await workspacePanel.innerText().then(text => text.includes('子平') && text.includes('推理 高') && text.includes('格局取用')) &&
@@ -2745,14 +2806,14 @@ export async function run(existingPage, bundlePath) {
     const planHeading = planGroup.locator('.agent-process-heading');
     await planHeading.waitFor();
     if (await planHeading.getAttribute('aria-expanded') !== 'true') await planHeading.click();
-    const planStep = planGroup.locator('.agent-process-steps > .agent-step').filter({ has: page.locator('.agent-step-title', { hasText: '提交计划' }) });
+    const planStep = planGroup.locator('.agent-process-steps > .agent-step').filter({ has: page.locator('.agent-step-title', { hasText: '提交计划' }) }).last();
     if (await planStep.locator('.agent-step-row').getAttribute('aria-expanded') !== 'true') await planStep.locator('.agent-step-row').click();
     check('An approved plan shows the plan as Markdown, with the decision on the step row', await planStep.getByLabel('计划').innerText().then(text => text.includes('分析计划') && text.includes('先排八字')) &&
       await planStep.locator('.agent-step-detail').innerText().then(text => text.includes('已批准')));
     await planStep.getByRole('button', { name: '查看计划', exact: true }).click();
     await workspacePanel.locator('[data-workspace-view="plan"]').waitFor();
-    check('The plan page renders every submission as Markdown, not as escaped JSON', await workspacePanel.locator('.agent-ws-plan-draft').count() === 1 &&
-      await workspacePanel.innerText().then(text => text.includes('先排八字，再看紫微') && text.includes('已批准') && !text.includes('\\n')));
+    check('The plan page renders every submission as Markdown, newest first, with its decision', await workspacePanel.locator('.agent-ws-plan-draft').count() === 2 &&
+      await workspacePanel.innerText().then(text => text.includes('先排八字，再看紫微') && text.includes('第 1 次提交 · 要求修改') && text.includes('你的意见：加上紫微一起看') && !text.includes('\\n')));
     await workspacePanel.getByRole('button', { name: '关闭工作区', exact: true }).click();
     await page.setViewportSize({ width: 1200, height: 1000 });
     await page.evaluate(() => window.fixture.mount.results(false));

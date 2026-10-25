@@ -22,7 +22,10 @@
 .markdown-code-head > button:hover { background: var(--fill-ghost-hover); color: var(--foreground); }
 .markdown-table-container { position: relative; margin: 1rem 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 .chat-answer .markdown-table-container { margin: 11.25px 0 0; }
-.markdown-table-toolbar { display: flex; justify-content: end; gap: .75rem; padding: .4rem .75rem; background: var(--background-secondary); font-size: .7rem; }
+/* 表格操作浮在表的右上角：不再独占一条横带，避免表格上方出现一段空白。 */
+.markdown-table-toolbar { position: absolute; top: 2px; right: 4px; z-index: 1; display: flex; gap: .75rem; padding: 2px 6px; border-radius: 6px; background: color-mix(in srgb, var(--background) 88%, transparent); font-size: .7rem; opacity: 0; transition: opacity .12s; }
+.markdown-table-container:hover .markdown-table-toolbar, .markdown-table-toolbar:focus-within { opacity: 1; }
+@media (hover: none) { .markdown-table-toolbar { opacity: 1; } }
 .markdown-table-toolbar button { display: flex; align-items: center; gap: .3rem; }
 .markdown-table-dialog { width: min(95vw, 75rem); max-height: 90dvh; border: 1px solid var(--border); border-radius: .75rem; background: var(--background); color: var(--foreground); }
 .chat-workspace {
@@ -324,6 +327,14 @@
 .agent-step-structured-list { display: flex; flex-direction: column; gap: 3px; margin: 0; padding: 0; list-style: none; }
 .agent-step-structured-list > li { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; color: var(--foreground-secondary); font-size: calc(13 / 16 * 1rem); line-height: 1.6; overflow-wrap: anywhere; }
 .agent-step-structured-list strong { color: var(--foreground); font-weight: 500; }
+/* 检索来源：编号、标题与站点排成一行，标题打开原页。 */
+.agent-step-structured-sources { display: flex; flex-direction: column; gap: 3px; margin: 0; padding: 0; list-style: none; color: var(--foreground-secondary); font-size: calc(13 / 16 * 1rem); line-height: 1.6; }
+.agent-step-structured-sources > li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+.agent-step-structured-sources a { color: var(--accent); text-decoration-line: underline; text-decoration-color: color-mix(in srgb, currentColor 40%, transparent); text-underline-offset: 2px; }
+.agent-step-structured-sources a:hover { color: var(--accent-hover); text-decoration-color: currentColor; }
+.agent-step-structured-sources small { flex-shrink: 0; color: var(--foreground-tertiary); }
+.agent-step-cite { flex-shrink: 0; color: var(--foreground-tertiary); font-variant-numeric: tabular-nums; }
+.agent-step-more { color: var(--foreground-tertiary); }
 .agent-step-structured-open { align-self: flex-start; display: inline-flex; height: 24px; align-items: center; padding: 0 8px; border-radius: 6px; color: var(--foreground-secondary); font-size: calc(12.5 / 16 * 1rem); }
 .agent-step-structured-open:hover { color: var(--accent-hover); }
 /* 协作成员 / 最终成果：图标 + 名称 + 一行预览，整行可点，右侧箭头表示会打开对应页面。 */

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildToolSuccessPayload, executeTool, listToolDefinitions } from 'taibu-core/mcp';
-import { getAgentChart, getAgentDataResults, getAgentSearchResults, getAgentToolArtifactId, getAgentToolText, getAgentUnrepresentedArtifacts, type AgentToolPart } from '../lib/agent/tool-presentation';
+import { getAgentChart, getAgentDataResults, getAgentSearchResults, getAgentToolArtifactId, getAgentToolSearchLoaded, getAgentToolText, getAgentUnrepresentedArtifacts, type AgentToolPart } from '../lib/agent/tool-presentation';
 import { AGENT_CHART_NAMES, isAgentChartTool } from '../lib/agent/tool-catalog';
 
 test('all eleven real tool results display the persisted reading in default/full formats and after JSON history restore', async () => {
@@ -112,4 +112,19 @@ test('saved artifacts are counted once with their completed chart tool and unrel
   assert.deepEqual(getAgentUnrepresentedArtifacts([{ ...tool, status: 'failed' }], artifacts), artifacts);
   assert.deepEqual(getAgentUnrepresentedArtifacts([{ ...tool, name: 'web_search' }], artifacts), artifacts);
   assert.equal(getAgentToolArtifactId({ ...tool, output: { artifactId: 12 } }), null);
+});
+
+test('tool search names every loaded tool in Chinese, falling back to the raw name for old records', () => {
+  const tool: AgentToolPart = { type: 'tool', id: 'search', name: 'tool_search', title: '查找工具', status: 'completed', input: { query: '计划' } };
+  const loaded = { loaded: ['todo_write', 'submit_plan'] };
+  assert.deepEqual(getAgentToolSearchLoaded({ ...tool, output: { ...loaded, labels: ['待办', '提交计划'] } }), { names: ['todo_write', 'submit_plan'], labels: ['待办', '提交计划'] });
+  assert.deepEqual(getAgentToolSearchLoaded({ ...tool, output: loaded }), { names: ['todo_write', 'submit_plan'], labels: ['todo_write', 'submit_plan'] },
+    'records written before labels existed still read as their names');
+  assert.deepEqual(getAgentToolSearchLoaded({ ...tool, output: { loaded: ['todo_write', 'submit_plan', 7], labels: ['待办', 9] } }),
+    { names: ['todo_write', 'submit_plan'], labels: ['待办', 'submit_plan'] }, 'a missing or non-string label falls back per tool');
+  assert.deepEqual(getAgentToolSearchLoaded({ ...tool, output: { loaded: [] } }), { names: [], labels: [] }, 'an empty load keeps its answer');
+  assert.equal(getAgentToolSearchLoaded({ ...tool, status: 'running', output: loaded }), null, 'only a finished search has loaded tools');
+  assert.equal(getAgentToolSearchLoaded({ ...tool, name: 'todo_write', output: loaded }), null);
+  assert.equal(getAgentToolSearchLoaded({ ...tool, output: { loaded: 'todo_write' } }), null);
+  assert.equal(getAgentToolSearchLoaded({ ...tool, output: 'loaded' }), null);
 });

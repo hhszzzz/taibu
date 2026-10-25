@@ -116,6 +116,7 @@ export type AgentToolFamily =
   | 'data'
   | 'method'
   | 'plan'
+  | 'todo'
   | 'question'
   | 'collaboration'
   | 'memory'
@@ -198,7 +199,7 @@ export function getAgentExtensionToolTitle(name: string): string | undefined {
  */
 export const AGENT_MODEL_ONLY_TOOLS: ReadonlySet<string> = new Set([
   'ask_user', 'todo_write', 'inspect_chart', 'focus_chart', 'web_search', 'search_knowledge', 'read_attachment',
-  'list_analysis_methods', 'load_analysis_method', 'read_user_memory', 'remember_user_fact',
+  'list_analysis_methods', 'load_analysis_method', 'read_user_memory', 'remember_user_fact', AGENT_SUBMIT_PLAN_TOOL,
   AGENT_ARCHIVE_TOOLS.record, AGENT_ARCHIVE_TOOLS.propose, 'parallel_analysis', AGENT_BACKGROUND_TOOL,
 ]);
 
@@ -226,7 +227,8 @@ const TOOL_FAMILIES: ReadonlyMap<string, AgentToolFamily> = new Map<string, Agen
   ['read_attachment', 'data'],
   ['list_analysis_methods', 'method'],
   ['load_analysis_method', 'method'],
-  ['todo_write', 'plan'],
+  ['todo_write', 'todo'],
+  [AGENT_SUBMIT_PLAN_TOOL, 'plan'],
   ['ask_user', 'question'],
   ['parallel_analysis', 'collaboration'],
   [AGENT_BACKGROUND_TOOL, 'collaboration'],

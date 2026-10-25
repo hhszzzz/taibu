@@ -3,10 +3,11 @@
  *
  * Every tool call maps to exactly one workspace location chosen by its tool
  * family (tool-catalog.ts): repeated calls about the same chart, record,
- * attachment or method share one tab, searches share the evidence view, and
- * plans or final selections live in the fixed process/results sections. The
- * panel follows the model by showing the location of the latest call. Nothing
- * here calculates, fetches or saves; views only read stored tool results.
+ * attachment or method share one tab, searches share the evidence view, plan
+ * submissions share the plan page, and the final selections live in the results
+ * section. The panel follows the model by showing the location of the latest
+ * call. Nothing here calculates, fetches or saves; views only read stored tool
+ * results.
  */
 import type { ChatMessage } from '@/types';
 import { isAgentRunTerminal, type AgentPart, type AgentRunStatus } from './types';
@@ -23,7 +24,7 @@ export const AGENT_WORKSPACE_SECTIONS: readonly AgentWorkspaceSection[] = ['resu
 
 export type AgentWorkspaceView =
   | 'chart' | 'saved' | 'calculation' | 'evidence' | 'data' | 'record' | 'profile' | 'attachment' | 'notes' | 'history'
-  | 'methods' | 'method' | 'question' | 'collaboration' | 'member' | 'memory' | 'archive' | 'code' | 'tool';
+  | 'methods' | 'method' | 'plan' | 'question' | 'collaboration' | 'member' | 'memory' | 'archive' | 'code' | 'tool';
 
 export interface AgentWorkspaceResource {
   id: string;
@@ -50,8 +51,8 @@ export interface AgentWorkspaceModel {
 
 /** New events of these families open the workspace on desktop until the user closes it for that task. */
 export const AGENT_WORKSPACE_AUTO_OPEN: readonly AgentToolFamily[] = ['chart', 'question', 'collaboration'];
-/** The plan is already a compact bar in the chat; following it would pull the panel away on every update. */
-const UNFOLLOWED: readonly AgentToolFamily[] = ['plan'];
+/** The task list and the plan are already bars in the chat; following them would pull the panel away on every update. */
+const UNFOLLOWED: readonly AgentToolFamily[] = ['plan', 'todo'];
 
 type Artifact = Extract<AgentPart, { type: 'artifact' }>;
 
@@ -157,8 +158,12 @@ export function buildAgentWorkspace({ parts, artifacts, attachmentIds }: { parts
           if (guide) resource.title = guide.title;
         }
         break;
-      case 'plan':
+      case 'todo':
         // 任务清单已经以进度条形式显示在聊天里，不单独开工作区标签。
+        break;
+      case 'plan':
+        // 计划模式的每次提交并入同一页，修订与决定按时间排开，正文不再只留在折叠的步骤里。
+        add('plan', { view: 'plan', family, title: '分析计划' }, tool);
         break;
       case 'question':
         add('question:' + tool.id, { view: 'question', family, title: '补充信息' }, tool);

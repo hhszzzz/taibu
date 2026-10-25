@@ -556,3 +556,10 @@ button.agent-ws-status-head:disabled { cursor: default; }
 .agent-ws-seasons > li > strong { font-family: var(--font-display); font-size: calc(15 / 16 * 1rem); font-weight: 500; color: var(--foreground); }
 .agent-ws-seasons > li[data-day-master] { border-color: var(--accent); background: var(--accent-light); }
 .agent-ws-seasons-note { margin-left: 6px; font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); }
+
+/* 计划页：每次提交的标题、修改意见与正文；正文沿用文档卡，决定用一行状态色区分。 */
+.agent-ws-plan-draft { display: flex; flex-direction: column; gap: 8px; }
+.agent-ws-plan-draft > .agent-ws-note > strong { font-weight: 550; }
+.agent-ws-plan-draft [data-state="approved"] { color: var(--success); }
+.agent-ws-plan-draft [data-state="revised"] { color: var(--warning); }
+.agent-ws-plan-draft [data-state="waiting"] { color: var(--accent); }

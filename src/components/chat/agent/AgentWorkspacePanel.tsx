@@ -30,6 +30,7 @@ import {
 } from './AgentWorkspaceViews';
 import { getChartKindMeta } from './chart-registry';
 import { ModelAvatar } from './ModelAvatar';
+import { AgentPlanView } from './AgentPlanView';
 import { WorkspaceOverview } from './AgentWorkspaceSections';
 import { DrilldownList } from './AgentDrilldownViews';
 import { getLatestBaziWuxing } from './bazi-board';
@@ -146,6 +147,7 @@ function ResourceView({ resource, model, data, answers, questionIds, userId, art
         case 'attachment': body = <AttachmentView id={resource.id.slice('attachment:'.length)} title={resource.title} tools={tools} />; break;
         case 'methods': body = latest && <MethodCatalogView tool={latest} runStatus={runStatus} step={step(latest)} />; break;
         case 'method': body = <MethodView tools={tools} runStatus={runStatus} step={step(tools.findLast(tool => tool.status === 'completed') ?? latest)} />; break;
+        case 'plan': body = <AgentPlanView tools={tools} runStatus={runStatus} step={step(latest)} />; break;
         case 'question': {
             const questionId = latest && questionIds.get(latest.id);
             body = latest && <QuestionView tool={latest} runStatus={runStatus} step={step(latest)} model={model}
@@ -245,7 +247,9 @@ export function AgentWorkspacePanel({ parts, artifacts, data, attachmentIds, ans
     const tabIds = [...new Set([...tabs.flatMap(id => resolve(id) ?? []), ...(activeResource ? [activeResource.id] : []), ...autoIds])].filter(id => !isSection(id));
     const visibleTabs = tabIds.flatMap(id => model.resources.find(resource => resource.id === id) ?? []);
     const normalizedSearch = search.trim().toLowerCase();
-    const filteredTabs = normalizedSearch ? visibleTabs.filter(resource => resource.title.toLowerCase().includes(normalizedSearch)) : visibleTabs;
+    // 搜索覆盖本对话的全部资源，不只已打开的标签：没开过或关掉过的资料页也能找到并重新打开。
+    const unmatched = normalizedSearch ? model.resources.filter(resource => !tabIds.includes(resource.id)) : [];
+    const filteredTabs = normalizedSearch ? [...visibleTabs, ...unmatched].filter(resource => resource.title.toLowerCase().includes(normalizedSearch)) : visibleTabs;
 
     // The step the reader is on: a step they opened, else the newest call of the view (the followed one).
     // The process section keeps showing the call details of the last step a view showed.

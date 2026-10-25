@@ -6,7 +6,7 @@ import { ChevronRight, LoaderCircle, PanelRight, Pause } from 'lucide-react';
 import type { AgentMessageData, AgentPart } from '@/lib/agent/types';
 import { AGENT_SUBMIT_PLAN_TOOL, getAgentToolFamily, isAgentMemberTool } from '@/lib/agent/tool-catalog';
 import { getAgentToolQuestionIds } from '@/lib/agent/workspace';
-import { getAgentAttachmentRead, getAgentChart, getAgentDataResults, getAgentMemories, getAgentMethod, getAgentMethodCatalog, getAgentProfile, getAgentScript, getAgentToolQuestions, getAgentToolText } from '@/lib/agent/tool-presentation';
+import { getAgentAttachmentRead, getAgentChart, getAgentDataResults, getAgentMemories, getAgentMethod, getAgentMethodCatalog, getAgentPlan, getAgentProfile, getAgentScript, getAgentToolQuestions, getAgentToolText } from '@/lib/agent/tool-presentation';
 import { useIsDesktopLayout } from '@/lib/hooks/useIsDesktopLayout';
 import { useTranscriptRecordView } from '@/lib/chat/chat-record-view';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
@@ -132,20 +132,17 @@ function AgentStepCall({ tool, runStatus, parts }: { tool: AgentTool; runStatus:
             </button>
         </div>}
     </div>;
-    // 计划模式：计划正文按 Markdown 展示，决定写在下面；工作区仍是这个调用的详情页。
+    // 计划模式：计划正文按 Markdown 展示，决定只由行上的状态说明；工作区里是这一任务的全部计划版本。
     if (tool.name === AGENT_SUBMIT_PLAN_TOOL) {
-        const plan = tool.input && typeof tool.input === 'object' ? (tool.input as { plan?: unknown }).plan : undefined;
-        const summary = describeAgentStep(tool, runStatus).summary;
+        const draft = getAgentPlan(tool);
         return <div className="agent-step-call">
-            {typeof plan === 'string' && <div className="agent-step-output agent-step-markdown" tabIndex={0} aria-label="计划">
-                <MarkdownContent content={plan} className="chat-prose" />
+            {draft && <div className="agent-step-output agent-step-markdown" tabIndex={0} aria-label="计划">
+                <MarkdownContent content={draft.plan} className="chat-prose" />
             </div>}
-            <p className="agent-step-empty">{summary === '等待你批准' ? '等待你批准后继续。'
-                : summary === '已批准' ? '你已批准，Agent 继续执行。'
-                : summary === '要求修改' ? '你要求修改，Agent 会修订后再次提交。' : '计划已提交。'}</p>
+            {draft?.feedback && <p className="agent-step-empty">你的意见：{draft.feedback}</p>}
             {workspace && <div className="agent-step-actions">
                 <button type="button" className="agent-step-workspace" onClick={() => workspace.openResource(`tool:${tool.id}`)}>
-                    <PanelRight size={13} aria-hidden="true" />在工作区查看
+                    <PanelRight size={13} aria-hidden="true" />查看计划
                 </button>
             </div>}
         </div>;
@@ -214,8 +211,9 @@ function ToolStep({ tool, data, shownId, calls = [] }: { tool: AgentTool; data: 
     const detailed = useTranscriptRecordView() === 'detailed';
     const step = describeAgentStep(tool, data.status);
     const [disclosed, setDisclosed] = useState<boolean | null>(null);
-    // 详细视图默认展开每一步的调用参数与结果；普通视图点击行才展开。
-    const details = disclosed ?? (detailed || step.status === 'failed');
+    // 详细视图默认展开每一步的调用参数与结果；普通视图点击行才展开，等用户批准的计划例外——要批的就是这段正文。
+    const awaitingPlan = tool.name === AGENT_SUBMIT_PLAN_TOOL && step.status === 'running';
+    const details = disclosed ?? (detailed || step.status === 'failed' || awaitingPlan);
     return <li className="agent-step" data-state={step.status}>
         <button type="button" className="agent-step-row" aria-current={shownId === tool.id || undefined}
             aria-expanded={details} aria-controls={details ? id : undefined}
@@ -264,7 +262,7 @@ export function AgentActivityGroup({ parts, data, active = false }: { parts: Age
     // part has not moved under its script yet still shows there.
     const scriptCalls = getAgentScriptCalls(data.parts);
     // Plan updates already show as the task list bar; their questions are answered in the question panel.
-    const rows = parts.filter(part => part.type === 'tool' ? !part.parentId && getAgentToolFamily(part.name) !== 'plan' : part.type === 'reasoning' ? part.text.trim() : !answered.has(part.id));
+    const rows = parts.filter(part => part.type === 'tool' ? !part.parentId && getAgentToolFamily(part.name) !== 'todo' : part.type === 'reasoning' ? part.text.trim() : !answered.has(part.id));
     const tools = rows.filter((part): part is AgentTool => part.type === 'tool');
     const streaming = active && data.status === 'running';
     // Reasoning alone is not a process: it shows as the thinking line, as in plain chat.

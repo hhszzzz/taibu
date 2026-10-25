@@ -5,12 +5,12 @@ import { useId, useRef, useState, type PointerEvent as ReactPointerEvent, type R
 import Link from 'next/link';
 import { ArrowUpRight, BookOpen, BookmarkPlus, Calculator, ChevronDown, ChevronRight, CircleHelp, Database, Files, FileCode2, FileText, Globe, GripVertical, ListChecks, ScanSearch, Search, Sigma, Users, Wrench, type LucideIcon } from 'lucide-react';
 import { type AgentMessageData, type AgentRunView } from '@/lib/agent/types';
-import { getAgentCalculation, getAgentChart, getAgentUnrepresentedArtifacts, type AgentCalculation, type AgentChart, type AgentToolPart } from '@/lib/agent/tool-presentation';
+import { getAgentCalculation, getAgentChart, getAgentPlan, getAgentUnrepresentedArtifacts, type AgentCalculation, type AgentChart, type AgentToolPart } from '@/lib/agent/tool-presentation';
 import { getAgentToolFamily } from '@/lib/agent/tool-catalog';
 import type { AgentWorkspaceModel, AgentWorkspaceResource } from '@/lib/agent/workspace';
 import { resolveClientModelName } from '@/lib/ai/model-name-cache';
 import type { NavIcon } from '@/lib/navigation/registry';
-import { AgentContextOverview } from './AgentContextUsage';
+import { AgentContextOverview, type ContextSkills } from './AgentContextUsage';
 import { ChartThumb } from './chart-preview';
 import { ModelAvatar } from './ModelAvatar';
 import { getChartKindMeta } from './chart-registry';
@@ -20,7 +20,7 @@ import {
 } from './presentation';
 
 export const WORKSPACE_ICONS: Record<AgentWorkspaceResource['family'], LucideIcon> = {
-    chart: Calculator, calculation: Sigma, drilldown: ScanSearch, search: Search, data: Database, method: BookOpen, plan: ListChecks,
+    chart: Calculator, calculation: Sigma, drilldown: ScanSearch, search: Search, data: Database, method: BookOpen, plan: ListChecks, todo: ListChecks,
     question: CircleHelp, collaboration: Users, memory: Database, archive: BookmarkPlus, code: FileCode2, external: Globe, other: Wrench,
     saved: Files, attachment: FileText,
 };
@@ -152,7 +152,12 @@ type CardDrag = { kind: RailCardKind; pointer: number; startY: number; dy: numbe
  * 会话状态卡：模型（仅协作时）/ 上下文 / 成果；按住手柄拖动排序，整张卡跟着指针走，
  * 其余卡片实时让位，松手落位；Alt+↑↓ 同效。
  */
-export function WorkspaceStatusCards({ data, run, afterContext }: { data?: AgentMessageData; run?: WorkspaceRunInfo; afterContext?: (grip: ReactNode) => ReactNode }) {
+export function WorkspaceStatusCards({ data, run, afterContext, skills, onOpen }: {
+    data?: AgentMessageData; run?: WorkspaceRunInfo; afterContext?: (grip: ReactNode) => ReactNode;
+    /** 本任务用过的方法卡，列在上下文卡的「技能」一行下。 */
+    skills?: ContextSkills;
+    onOpen?: (id: string) => void;
+}) {
     const [order, setOrder] = useState<RailCardKind[]>(['models', 'context', 'results']);
     const [drag, setDrag] = useState<CardDrag | null>(null);
     const cards = useRef(new Map<RailCardKind, HTMLDivElement>());
@@ -214,7 +219,7 @@ export function WorkspaceStatusCards({ data, run, afterContext }: { data?: Agent
             className="agent-rail-card" data-dragged={drag?.kind === kind || undefined}
             style={drag ? { transform: `translateY(${drag.kind === kind ? drag.dy : shift(index)}px)` } : undefined}>
             {kind === 'models' ? <ModelsCard data={data} run={run} grip={grip(kind)} />
-                : kind === 'context' ? <AgentContextOverview runtime={data.runtime} working={data.status === 'running'} grip={grip(kind)} />
+                : kind === 'context' ? <AgentContextOverview runtime={data.runtime} working={data.status === 'running'} grip={grip(kind)} skills={skills} onOpen={onOpen} />
                 : afterContext?.(grip(kind))}
         </div>)}
     </div>;
@@ -237,14 +242,31 @@ export function WorkspaceOverview({ model, artifacts, saved, onOpen }: {
     const { readings, calculations } = overviewCards(model, saved);
     const savedOnly = getAgentUnrepresentedArtifacts(model.tools, artifacts).filter(artifact => getAgentArtifactHref(artifact));
     const located = (resource: AgentWorkspaceResource) => model.evidence.filter(item => item.kind === 'chart' && model.chartResources.get(item.focus.reference) === resource.id).length;
-    const others = model.resources.filter(resource => !['chart', 'saved', 'calculation', 'evidence', 'attachment', 'member'].includes(resource.view));
+    // 过程资料不再单列：读过、问过、写过的每一步都在聊天里的工具调用过程块中，重复一遍只会让人以为是另一份东西。
     const attachments = model.resources.filter(resource => resource.view === 'attachment');
+    // 计划是任务的纲领，超出「成果」的范围，因此在概览顶部单独一行；读过的技能在「上下文」卡里。
+    const plan = model.resources.find(resource => resource.view === 'plan');
+    const PlanIcon = plan ? WORKSPACE_ICONS[plan.family] : null;
+    const planTool = plan && [...plan.toolIds].reverse().map(toolId => model.toolsById.get(toolId)).find(Boolean);
+    const planState = planTool ? summarizeAgentTool(planTool) : null;
+    const planPreview = planTool && (() => {
+        const value = getAgentPlan(planTool);
+        // 预览取第一行正文，去掉 Markdown 标题、引用、列表记号。
+        const line = value?.plan.split('\n').map(text => text.replace(/^(?:#{1,6}\s+|>\s*|[-*+]\s+|\d+[.)、]\s*)/u, '').trim()).find(Boolean);
+        return line ? (line.length > 40 ? `${line.slice(0, 40)}…` : line) : null;
+    })();
     const count = readings.length + calculations.length + savedOnly.length;
     return <section className="agent-ws-view agent-ws-overview" aria-labelledby={id}>
         <header className="agent-ws-heading agent-ws-overview-heading">
             <h2 id={id}>本对话的成果</h2>
             {count > 0 && <span>{count} 项</span>}
         </header>
+        {plan && <section className="agent-ws-overview-links" aria-label="分析计划">
+            <h3>分析计划{planState && <span> {planState}</span>}</h3>
+            <div className="agent-ws-links"><button type="button" className="agent-secondary-button" onClick={() => onOpen(plan.id)}>
+                {PlanIcon && <PlanIcon size={12} aria-hidden="true" />}{planPreview ?? '查看计划'}
+            </button></div>
+        </section>}
         {count === 0 ? <p className="agent-ws-overview-empty"><Files size={16} aria-hidden="true" />Agent 排盘、计算或检索后，成果会汇总在这里。</p>
             : <div className="agent-ws-rows">
                 {readings.map(({ resource, value, state, source, drilldowns }) => {
@@ -271,13 +293,6 @@ export function WorkspaceOverview({ model, artifacts, saved, onOpen }: {
                         <Link href={getAgentArtifactHref(artifact)!}>打开<ArrowUpRight size={12} aria-hidden="true" /></Link>
                     </>} />)}
             </div>}
-        {others.length > 0 && <section className="agent-ws-overview-links" aria-label="过程资料">
-            <h3>过程资料 <span>{others.length}</span></h3>
-            <div className="agent-ws-links">{others.map(resource => {
-                const Icon = WORKSPACE_ICONS[resource.family];
-                return <button key={resource.id} type="button" className="agent-secondary-button" onClick={() => onOpen(resource.id)}><Icon size={12} aria-hidden="true" />{resource.title}</button>;
-            })}</div>
-        </section>}
         {attachments.length > 0 && <section className="agent-ws-overview-links" aria-label="对话资料">
             <h3>对话资料 <span>{attachments.length}</span></h3>
             <div className="agent-ws-links">{attachments.map(resource => <button key={resource.id} type="button" className="agent-secondary-button" onClick={() => onOpen(resource.id)}><FileText size={12} aria-hidden="true" />{resource.title}</button>)}</div>

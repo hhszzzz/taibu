@@ -2650,8 +2650,8 @@ export async function run(existingPage, bundlePath) {
     await workspacePanel.getByText('已删除', { exact: true }).waitFor();
     check('A confirmed memory deletion is scoped to the signed-in account', memoryDeletes().length === 1 && memoryDeletes()[0].expectedUserId === 'alice' && memoryDeletes()[0].body?.id === '33333333-3333-4333-8333-333333333333');
     await workspacePanel.getByRole('tab', { name: '概览', exact: true }).click();
-    check('The overview keeps results and intermediate material without an evidence card or task summary', await workspacePanel.locator('[data-overview-card="evidence"]').count() === 0 &&
-      await workspacePanel.innerText().then(text => text.includes('过程资料') && !text.includes('依据与定位') && !text.includes('任务摘要') && !text.includes('本任务计费')));
+    check('The overview keeps results without an evidence card, task summary or a second copy of the process', await workspacePanel.locator('[data-overview-card="evidence"]').count() === 0 &&
+      await workspacePanel.innerText().then(text => text.includes('本对话的成果') && !text.includes('过程资料') && !text.includes('依据与定位') && !text.includes('任务摘要') && !text.includes('本任务计费')));
     const familyTabs = await Promise.all(['八字大运', '子平八字', '两派会诊', '子平', '盲派', '档案检索', '长期记忆', '补充信息', '回答依据'].map(name => workspacePanel.getByRole('tab', { name, exact: true }).count()));
     check('Opened and followed family views stay as one tab each', familyTabs.every(count => count === 1));
     await results.getByRole('button', { name: /^依据 \d+/ }).click();
@@ -2747,8 +2747,13 @@ export async function run(existingPage, bundlePath) {
     if (await planHeading.getAttribute('aria-expanded') !== 'true') await planHeading.click();
     const planStep = planGroup.locator('.agent-process-steps > .agent-step').filter({ has: page.locator('.agent-step-title', { hasText: '提交计划' }) });
     if (await planStep.locator('.agent-step-row').getAttribute('aria-expanded') !== 'true') await planStep.locator('.agent-step-row').click();
-    check('An approved plan shows the plan as Markdown and the decision', await planStep.getByLabel('计划').innerText().then(text => text.includes('分析计划') && text.includes('先排八字')) &&
-      await planStep.innerText().then(text => text.includes('你已批准，Agent 继续执行')));
+    check('An approved plan shows the plan as Markdown, with the decision on the step row', await planStep.getByLabel('计划').innerText().then(text => text.includes('分析计划') && text.includes('先排八字')) &&
+      await planStep.locator('.agent-step-detail').innerText().then(text => text.includes('已批准')));
+    await planStep.getByRole('button', { name: '查看计划', exact: true }).click();
+    await workspacePanel.locator('[data-workspace-view="plan"]').waitFor();
+    check('The plan page renders every submission as Markdown, not as escaped JSON', await workspacePanel.locator('.agent-ws-plan-draft').count() === 1 &&
+      await workspacePanel.innerText().then(text => text.includes('先排八字，再看紫微') && text.includes('已批准') && !text.includes('\\n')));
+    await workspacePanel.getByRole('button', { name: '关闭工作区', exact: true }).click();
     await page.setViewportSize({ width: 1200, height: 1000 });
     await page.evaluate(() => window.fixture.mount.results(false));
 

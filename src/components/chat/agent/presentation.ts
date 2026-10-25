@@ -349,6 +349,7 @@ const FAMILY_PHRASES: Partial<Record<AgentToolFamily, (count: number) => string>
     search: count => `已搜索 ${count} 次`,
     data: count => `已读取 ${count} 份资料`,
     method: count => `已加载 ${count} 套分析方法`,
+    plan: count => `已提交 ${count} 次计划`,
     memory: count => `已记忆 ${count} 条`,
     archive: count => `已整理 ${count} 条档案`,
     code: count => `已运行 ${count} 个脚本`,
@@ -376,7 +377,7 @@ export function summarizeAgentActivity(tools: readonly AgentTool[], questionCoun
             continue;
         }
         if (family === 'collaboration') { members += collaborationMembers(tool); continue; }
-        if (family === 'plan') continue;
+        if (family === 'todo') continue;
         counts.set(family, (counts.get(family) ?? 0) + 1);
     }
     const phrases = (Object.keys(FAMILY_PHRASES) as AgentToolFamily[])
@@ -388,11 +389,11 @@ export function summarizeAgentActivity(tools: readonly AgentTool[], questionCoun
 }
 
 /**
- * Process steps of a task: every call the model made except plan updates, which show as the task list instead. A code
- * mode script's calls are part of the script's step.
+ * Process steps of a task: every call the model made except task-list updates, which show as the task list instead.
+ * A code mode script's calls are part of the script's step.
  */
 export function getAgentSteps(parts: readonly AgentPart[]): AgentTool[] {
-    return parts.filter((part): part is AgentTool => part.type === 'tool' && !part.parentId && getAgentToolFamily(part.name) !== 'plan');
+    return parts.filter((part): part is AgentTool => part.type === 'tool' && !part.parentId && getAgentToolFamily(part.name) !== 'todo');
 }
 
 /** The calls a code mode script made, keyed by the script's card, in transcript order (the order it made them). */
@@ -537,7 +538,7 @@ export function formatAgentValue(value: unknown): string {
 
 /** Short tags shown on process steps, one per tool family. */
 export const AGENT_TOOL_FAMILY_LABELS: Record<AgentToolFamily, string> = {
-    chart: '命盘', calculation: '推演', drilldown: '详查', search: '依据', data: '资料', method: '指引', plan: '计划',
+    chart: '命盘', calculation: '推演', drilldown: '详查', search: '依据', data: '资料', method: '指引', plan: '计划', todo: '清单',
     question: '问题', collaboration: '协作', memory: '记忆', archive: '档案', code: '脚本', external: '外部', other: '工具',
 };
 

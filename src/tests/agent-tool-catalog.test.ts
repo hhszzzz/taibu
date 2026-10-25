@@ -56,7 +56,8 @@ test('every Core tool and every registered Agent tool belongs to a presentation 
     for (const name of [...AGENT_DATA_DEFERRED_TOOLS, 'record_user_event', 'propose_archive_entry']) assert.ok(names.includes(name), name);
     for (const name of names) assert.notEqual(getAgentToolFamily(name), 'other', `${name} needs a family in tool-catalog.ts`);
     // Code mode: the tools a script may not call are real tools, and the dispatching tools say so themselves.
-    for (const name of AGENT_MODEL_ONLY_TOOLS) assert.ok(names.includes(name), `${name} is not a registered tool`);
+    // submit_plan is installed by the runtime in plan mode, so it is not among createAgentTools' own tools.
+    for (const name of AGENT_MODEL_ONLY_TOOLS) assert.ok(names.includes(name) || name === AGENT_SUBMIT_PLAN_TOOL, `${name} is not a registered tool`);
     assert.deepEqual(parallel.tools?.find(tool => tool.name === 'parallel_analysis')?.callers, ['model']);
     assert.deepEqual(background.tools?.find(tool => tool.name === AGENT_BACKGROUND_TOOL)?.callers, ['model']);
     assert.ok(isAgentMemberTool('parallel_analysis') && isAgentMemberTool(AGENT_BACKGROUND_TOOL) && !isAgentMemberTool('bazi'));

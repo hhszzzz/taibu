@@ -16,7 +16,7 @@ import type { ZiweiHoroscopeCanonicalJSON } from 'taibu-core/ziwei-horoscope';
 import type { ZiweiFlyingStarCanonicalJSON } from 'taibu-core/ziwei-flying-star';
 import { normalizeQuestions, type AgentQuestion } from './questions';
 import type { AgentPart } from './types';
-import { AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, isAgentChartTool, type AgentChartKind } from './tool-catalog';
+import { AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_SUBMIT_PLAN_TOOL, isAgentChartTool, type AgentChartKind } from './tool-catalog';
 
 export type AgentToolPart = Extract<AgentPart, { type: 'tool' }>;
 /**
@@ -361,6 +361,38 @@ export function getAgentMethodCatalog(tool: AgentToolPart) {
     const row = record(item);
     return { id: String(row.id), title: String(row.title), version: String(row.version), description: typeof row.description === 'string' ? row.description : typeof row.whenToUse === 'string' ? row.whenToUse : '' };
   });
+}
+
+export interface AgentSkill { id: string; title: string; version: string }
+
+/**
+ * 技能：本任务用的方法卡。目录随系统提示注入，正文由 load_analysis_method 读进上下文；
+ * 这里按卡 id 去重（改版重载同一张卡只算一次），`id` 就是它在工作区的页。
+ */
+export function getAgentSkills(tools: readonly AgentToolPart[]) {
+  const cards = new Map<string, AgentSkill>();
+  let listed = false;
+  for (const tool of tools) {
+    if (getAgentMethodCatalog(tool)) listed = true;
+    const guide = getAgentMethod(tool);
+    if (guide) cards.set(guide.id, { id: `method:${guide.id}`, title: guide.title, version: guide.version });
+  }
+  return { listed, cards: [...cards.values()] };
+}
+
+export interface AgentPlanDraft { plan: string; approved: boolean | null; feedback: string | null }
+
+/** 计划模式的提交：模型写的 Markdown 计划，以及用户批准、要求修改（可带意见）的结果。 */
+export function getAgentPlan(tool: AgentToolPart): AgentPlanDraft | null {
+  if (tool.name !== AGENT_SUBMIT_PLAN_TOOL) return null;
+  const input = record(tool.input);
+  if (typeof input.plan !== 'string' || !input.plan.trim()) return null;
+  const output = record(tool.output);
+  return {
+    plan: input.plan,
+    approved: typeof output.approved === 'boolean' ? output.approved : null,
+    feedback: typeof output.feedback === 'string' && output.feedback.trim() ? output.feedback.trim() : null,
+  };
 }
 
 export function getAgentProfile(tool: AgentToolPart) {

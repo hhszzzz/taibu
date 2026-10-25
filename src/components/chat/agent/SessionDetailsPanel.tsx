@@ -10,7 +10,7 @@
 import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { WorkspaceStatusCards, type WorkspaceRunInfo } from './AgentWorkspaceSections';
-import { getAgentChart } from '@/lib/agent/tool-presentation';
+import { getAgentChart, getAgentSkills } from '@/lib/agent/tool-presentation';
 import { getAgentChartReference } from '@/lib/agent/chart-interaction';
 import type { AgentMessageData, AgentPart } from '@/lib/agent/types';
 import { getChartKindMeta } from './chart-registry';
@@ -21,8 +21,8 @@ export function SessionDetailsPanel({ data, run, onOpen }: {
     onOpen?: (id: string) => void;
 }) {
     // 每种命盘只列一次（同一盘面的复查合并到第一次读取）。
+    const tools = useMemo(() => (data?.parts ?? []).filter((part): part is Extract<AgentPart, { type: 'tool' }> => part.type === 'tool'), [data?.parts]);
     const charts = useMemo(() => {
-        const tools = (data?.parts ?? []).filter((part): part is Extract<AgentPart, { type: 'tool' }> => part.type === 'tool');
         const seen = new Set<string>();
         return tools.flatMap(tool => {
             const chart = getAgentChart(tool);
@@ -32,11 +32,13 @@ export function SessionDetailsPanel({ data, run, onOpen }: {
             seen.add(key);
             return [{ id: tool.id, chart }];
         });
-    }, [data?.parts]);
+    }, [tools]);
+    // 技能 = 本任务用过的方法卡，列在上下文卡里，点开就是它的页。
+    const skills = useMemo(() => getAgentSkills(tools), [tools]);
     // 会话栏固定宽度（280px，见 .agent-session-rail）：不提供拖拽或顶部手柄。
     const [showAll, setShowAll] = useState(false);
     return <aside id="agent-session-panel" className="agent-session-rail" aria-label="会话详情">
-        <WorkspaceStatusCards data={data} run={run} afterContext={charts.length > 0 ? (grip => <section className="agent-ws-status-card" aria-label="成果">
+        <WorkspaceStatusCards data={data} run={run} skills={skills} onOpen={onOpen} afterContext={charts.length > 0 ? (grip => <section className="agent-ws-status-card" aria-label="成果">
             <div className="agent-ws-status-head"><span>成果</span>{grip}</div>
             <div className="agent-rail-body">
                 {(showAll ? charts : charts.slice(0, 4)).map(({ id, chart }) => {

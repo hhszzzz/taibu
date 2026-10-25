@@ -379,11 +379,14 @@ function AgentChatProbe() {
   const state = useChatState({ userId: user?.id ?? null, sessionLoading: false, bootstrapLoading: false, router, searchParams });
   const messaging = useChatMessaging({ state, userId: user?.id ?? null, user,
     refreshViewerState: async () => {}, markViewerCreditsExhausted() {}, showToast: (...args) => { window.fixture.agentToasts.push(args); }, router, searchParams });
-  window.fixture.agentChat = { state, messaging };
+  const [planMode, setPlanMode] = useState(false);
+  const [codeMode, setCodeMode] = useState(false);
+  window.fixture.agentChat = { state, messaging, planMode, codeMode };
   return <section data-testid="agent-chat"><input aria-label="Agent fixture draft" value={state.inputValue} onChange={event => state.setInputValue(event.target.value)} />
     <ComposerStatusBar agentMode disabled={false} userId={user?.id} membershipType="plus"
       selectedModel={state.selectedModel} onModelChange={state.setSelectedModel} reasoningEnabled={state.reasoningEnabled} onReasoningChange={state.setReasoningEnabled}
       reasoningEffort={state.reasoningEffort} onReasoningEffortChange={state.setReasoningEffort} collaborators={state.collaborators} onCollaboratorsChange={state.setCollaborators}
+      planMode={planMode} onPlanModeChange={setPlanMode} codeMode={codeMode} onCodeModeChange={setCodeMode}
       usage={{ credits: 20, membershipType: 'plus' }} customProviderActive={false} customProviderLabel={null} />
     <output data-testid="agent-status">{messaging.agent.run?.status ?? 'none'}</output>
     <output data-testid="agent-messages">{JSON.stringify(state.messages)}</output></section>;
@@ -1956,6 +1959,22 @@ export async function run(existingPage, bundlePath) {
       await renderBarrier();
     };
     await selectAgentConversation('agent-settings');
+    // 运行模式 = chin 行左端一个键，点开与「+」同款弹窗；不在行内并排三个分段。
+    const modeTrigger = page.locator('[data-testid="agent-chat"]').getByRole('button', { name: /^运行模式：/ });
+    check('Run mode is one button beside the model key, not three inline segments', await modeTrigger.count() === 1 &&
+      await modeTrigger.getAttribute('aria-haspopup') === 'menu' && await page.getByRole('radiogroup', { name: '运行模式' }).count() === 0);
+    await modeTrigger.click();
+    const modeMenu = page.getByRole('menu', { name: '运行模式', exact: true });
+    await modeMenu.waitFor();
+    check('Run mode opens a popup with the three exclusive choices', JSON.stringify(await modeMenu.getByRole('menuitemradio').allInnerTexts()) === JSON.stringify(['默认', '计划', '代码']) &&
+      await modeMenu.getByRole('menuitemradio', { name: '默认', exact: true }).getAttribute('aria-checked') === 'true');
+    await modeMenu.getByRole('menuitemradio', { name: '代码', exact: true }).click();
+    await until(() => window.fixture.agentChat.codeMode === true && window.fixture.agentChat.planMode === false);
+    check('Choosing a run mode closes the popup and clears the other one', await modeMenu.count() === 0 &&
+      await modeTrigger.getAttribute('aria-label') === '运行模式：代码');
+    await modeTrigger.click();
+    await modeMenu.getByRole('menuitemradio', { name: '默认', exact: true }).click();
+    await until(() => window.fixture.agentChat.codeMode === false);
     const settingsTrigger = page.locator('[data-testid="agent-chat"]').getByRole('button', { name: /^选择模型：/ });
     await settingsTrigger.click();
     const modelSettings = page.getByRole('dialog', { name: '模型与分析设置', exact: true });

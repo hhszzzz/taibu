@@ -9,9 +9,10 @@
  */
 'use client';
 
-import { useRef, useState, type ReactNode } from 'react';
+import { useRef, useState } from 'react';
 import { ChevronDown, KeyRound, X } from 'lucide-react';
 import { ModelSelector } from '@/components/ui/ModelSelector';
+import { AgentModeMenu } from '@/components/chat/composer/AgentModeMenu';
 import { CustomProviderPanel } from '@/components/chat/CustomProviderPanel';
 import { Modal } from '@/components/ui/Modal';
 import { FloatingPanel } from '@/components/ui/FloatingPanel';
@@ -67,8 +68,6 @@ export interface ComposerStatusBarProps extends ModelSettingsProps {
     customProviderLabel: string | null;
     /** 关闭自定义模型弹窗后的焦点落点（`+` 菜单按钮）。 */
     providerReturnRef?: React.RefObject<HTMLButtonElement | null>;
-    /** 行首槽位：会话内的工具簇（+ / 知识库 / 联网等）排在 chin 行左端（claude /chat 实测）。 */
-    leading?: ReactNode;
 }
 
 export function ComposerStatusBar(props: ComposerStatusBarProps) {
@@ -78,7 +77,16 @@ export function ComposerStatusBar(props: ComposerStatusBarProps) {
 
     return (
         <div className="chat-composer-toolbar chat-composer-statusbar">
-            {props.leading}
+            {/* 运行模式固定在 chin 行左端（原「+」的位置）：一个按钮打开弹窗选择默认 / 计划 / 代码。 */}
+            {agentMode && props.onPlanModeChange && props.onCodeModeChange && (
+                <AgentModeMenu
+                    planMode={!!props.planMode}
+                    codeMode={!!props.codeMode}
+                    disabled={disabled}
+                    onPlanModeChange={props.onPlanModeChange}
+                    onCodeModeChange={props.onCodeModeChange}
+                />
+            )}
             <span className="chat-toolbar-spacer" />
             {/* chin 中央免责声明：仅普通 chat 模式显示（Agent 模式不显示），hero 也不显示 */}
             {!agentMode && <span className="chat-composer-disclaimer">理性看待玄学</span>}

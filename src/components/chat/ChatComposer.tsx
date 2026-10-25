@@ -633,6 +633,8 @@ export function ChatComposer({
                         dreamContext={dreamContext}
                     />
 
+                    {!hero && <ComposerToolbar {...toolbarProps} showSend={false} />}
+
                     <div className="chat-composer-field">
                         <div ref={overlayRef} className="chat-composer-input chat-composer-overlay" aria-hidden="true">
                             {inputValue ? highlightedInput.map((part, index) => part.kind === 'mention'
@@ -671,15 +673,14 @@ export function ChatComposer({
                         />
                     </div>
 
-                    {/* claude /chat 实测：白壳一行只放「编辑区 + 发送」；工具簇在框外 chin 行左端（见 ComposerStatusBar 的 leading）。
-                       hero（首屏）是两行壳：工具与发送同排在第二行，见 .is-hero 覆盖。 */}
+                    {/* 会话内白壳只有一行：+（在最前）、编辑区、发送键同排。
+                       hero（首屏）仍是两行壳：工具与发送同排在第二行，见 .is-hero 覆盖。 */}
                     {hero
                         ? <ComposerToolbar {...toolbarProps} />
                         : <ComposerSendCluster send={send} agentMode={agentMode} disabled={disabled} onSend={handleButtonClick} onStop={onStop} />}
                 </div>
 
                 <ComposerStatusBar
-                    leading={hero ? undefined : <ComposerToolbar {...toolbarProps} showSend={false} />}
                     agentMode={agentMode}
                     disabled={disabled}
                     userId={userId}

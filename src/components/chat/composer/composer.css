@@ -26,8 +26,8 @@
 .chat-composer-status { font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); }
 
 /* ---- Input shell ---- */
-/* claude /chat 实测：会话内白壳只有一行——编辑区 + 发送（输入随内容长高，按钮贴末行）；
-   工具簇（+ 等）在框外的 chin 行（见 .chat-composer-statusbar）。附件条等附属行占满整行置于主行上方。 */
+/* 会话内白壳只有一行：+（最前）、编辑区、发送键（输入随内容长高，按钮贴末行）。
+   运行模式与模型在框外的 chin 行（见 .chat-composer-statusbar）。附件条等附属行占满整行置于主行上方。 */
 /* claude 实测：白壳无 CSS 边框（border-width 0），靠 shadow ring 收边；环 = border-strong（20%），
    阴影 0 4px 20px 7.5%（本地克隆站源码实测：`shadow-[0_4px_20px_rgb(0_0_0/7.5%),0_0_0_1px_var(--cds-border-strong)]`）。 */
 .chat-composer-shell { position: relative; z-index: 1; display: flex; flex-direction: row; flex-wrap: wrap; align-items: flex-end; gap: 0 2px; padding: 8px; border: 0; border-radius: 14px; background: var(--chat-raised); box-shadow: 0 0 0 1px var(--border-hover), 0 4px 20px hsl(from var(--neutral-900) h s l / 7.5%); transition: box-shadow .15s; }
@@ -89,6 +89,11 @@
 .chat-composer-statusbar .chat-composer-actions { flex: 0 1 auto; }
 .chat-composer-statusbar .chat-kb-chip { height: 24px; }
 .chat-toolbar-spacer { flex: 1; min-width: 0; }
+/* 运行模式按钮（默认 / 计划 / 代码）：24px 高，点开与「+」同款弹窗；只占 chin 行左端一个键。 */
+.chat-run-mode-trigger { height: 24px; border-radius: 6px; padding: 0 8px; }
+.chat-run-mode-trigger > span { font-size: calc(12 / 16 * 1rem); }
+.chat-run-mode-trigger > svg:last-child { margin-left: -2px; opacity: .7; }
+.chat-run-mode-menu { min-width: 148px; }
 .chat-tool-button, .chat-tool-text, .chat-model-trigger, .chat-context-meter { flex-shrink: 0; height: 32px; border-radius: 8px; transition: background-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out); }
 .chat-tool-button { display: inline-flex; width: 32px; align-items: center; justify-content: center; border: 1px solid transparent; color: var(--foreground-secondary); }
 .chat-tool-button.is-bordered { border-color: transparent; }

@@ -62,6 +62,8 @@ export interface AgentRuntimeInfo {
   model: { id: string; name: string; contextWindow: number | null; limitSource: "configured" | "unknown" };
   /** Settled model response measurements; old entries may have no measurements. */
   responses?: Array<{ id: string; durationMs?: number; startedAt?: number; endedAt?: number }>;
+  /** 系统提示里注入的方法目录估算 token；上下文卡把它计入「技能」而不是「系统提示」。 */
+  skillsTokens?: number;
   context?: {
     tokens: number;
     measuredTokens: number;

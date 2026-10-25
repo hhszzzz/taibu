@@ -32,7 +32,7 @@ import { createAgentToolSearchExtension } from './tool-search.server';
 import type { AgentAnswers, AgentQuestion } from './questions';
 import { agentInputContent } from './attachment-input';
 import { resolveAttachmentImages } from './attachments.server';
-import { taibuMethodSection } from './method-section.server';
+import { renderMethodDirectory, taibuMethodSection } from './method-section.server';
 import { agentCompactionPolicy } from './compaction';
 import { prepareToolArguments, toolPolicyBlock } from './tool-arguments';
 import { commitSummary, generateSummary, readSummary } from './summary-usage.server';
@@ -415,6 +415,9 @@ export async function executeAgentRun(
         },
       });
     });
+    // 方法目录随系统提示注入；记录它的大小，上下文卡把这段从「系统提示」计入「技能」。
+    const methodDirectory = renderMethodDirectory(registrations.map(tool => tool.name));
+    if (checkpoint.runtime) checkpoint.runtime.skillsTokens = methodDirectory ? Math.ceil(methodDirectory.length / 3.5) : 0;
     const toolTitle = (name: string) => tools.find(tool => tool.name === name)?.label ?? getAgentExtensionToolTitle(name) ?? name;
     /**
      * A code mode script's call becomes a public part under the script's card, committed with the call's result. The

@@ -71,8 +71,8 @@ test('the skills are the method cards this task loaded, listed once each', () =>
   const skills = getAgentSkills([catalog, loaded('bazi', '2.0.0'), loaded('bazi', '2.1.0'), loaded('ziwei', '1.0.0')]);
   assert.equal(skills.listed, true, 'the injected directory was used');
   assert.deepEqual(skills.cards, [
-    { id: 'method:bazi', title: '子平八字', version: '2.1.0' },
-    { id: 'method:ziwei', title: '紫微斗数', version: '1.0.0' },
+    { id: 'method:bazi', title: '子平八字', version: '2.1.0', tokens: 1 },
+    { id: 'method:ziwei', title: '紫微斗数', version: '1.0.0', tokens: 1 },
   ], 'a reloaded card replaces its earlier version and keeps one entry');
   assert.deepEqual(getAgentSkills([]), { listed: false, cards: [] });
 });
@@ -84,12 +84,12 @@ test('the context card reports skills instead of leaving the row as a placeholde
   };
   const render = (props: Parameters<typeof AgentContextOverview>[0]) =>
     renderToStaticMarkup(createElement(AgentContextOverview, props)).replace(/<[^>]+>/gu, ' ').replace(/\s+/gu, ' ');
-  const withSkills = render({ runtime, skills: { listed: true, cards: [{ id: 'method:bazi', title: '子平八字', version: '2.1.0' }] } });
-  assert.match(withSkills, /技能 1 张已加载/u);
-  assert.match(withSkills, /方法目录 随任务注入系统提示/u);
-  assert.match(withSkills, /子平八字 版本 2\.1\.0 · 已读入上下文/u);
+  const withSkills = render({ runtime, skills: { listed: true, cards: [{ id: 'method:bazi', title: '子平八字', version: '2.1.0', tokens: 1_200 }] } });
+  assert.match(withSkills, /技能 1 张卡 · 1\.2k/u, 'the row states the card count and the tokens it occupies');
   assert.ok(!withSkills.includes('技能 未启用'), 'a used skill row is not a placeholder');
-  assert.match(render({ runtime, skills: { listed: false, cards: [] } }), /技能 未加载/u);
+  const unusedSkills = render({ runtime, skills: { listed: false, cards: [] } });
+  assert.match(unusedSkills, /技能 方法目录 · /u, 'the injected catalog is counted as skills, not «未加载»');
+  assert.ok(!unusedSkills.includes('未加载'));
   assert.match(render({ runtime }), /技能 0 项 未启用/u, 'without skill data the row stays as it was');
 });
 

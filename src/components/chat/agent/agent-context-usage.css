@@ -1,0 +1,7 @@
+/* 上下文卡「技能」一行：可展开，展开后以横线分隔列注入的方法目录与已读方法卡。 */
+.agent-context-legend-toggle { display: inline-flex; align-items: center; gap: 4px; color: var(--foreground); font: inherit; text-align: left; }
+.agent-context-legend-toggle:hover { color: var(--accent-hover); }
+.agent-context-legend-toggle svg { color: var(--foreground-tertiary); transition: transform .15s; }
+.agent-context-legend-toggle svg.is-open { transform: rotate(180deg); }
+.agent-context-skills { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; padding-top: 8px; border-top: var(--hairline) solid var(--border); }
+.agent-context-skills .agent-rail-result-text small { color: var(--foreground-tertiary); }

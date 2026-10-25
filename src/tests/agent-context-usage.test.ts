@@ -4,6 +4,8 @@ import type { AssistantMessage, Message } from '@earendil-works/pi-ai';
 import { projectAgentContextUsage } from '../lib/agent/context-usage';
 import { resolveKnownModelContextConfig, resolveModelContextConfig } from '../lib/ai/model-context';
 import { shouldRequestChatPreview } from '../lib/chat/chat-preview';
+import { buildContextSegments } from '../lib/agent/context-segments';
+import type { AgentRuntimeInfo } from '../lib/agent/types';
 
 const assistant: AssistantMessage = { role: 'assistant', api: 'openai-completions', provider: 'fixture', model: 'fixture', timestamp: 2, stopReason: 'stop', content: [{ type: 'text', text: 'answer' }], usage: { input: 600, output: 100, cacheRead: 200, cacheWrite: 100, reasoning: 30, totalTokens: 1000, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } };
 const user: Message = { role: 'user', content: 'original task', timestamp: 1 };
@@ -50,4 +52,53 @@ test('Agent mode never requests the ordinary-chat prompt preview', () => {
     assert.equal(shouldRequestChatPreview({ ...idle, userId: null }), false);
     assert.equal(shouldRequestChatPreview({ ...idle, isLoading: true }), false);
     assert.equal(shouldRequestChatPreview({ ...idle, isSendingToList: true }), false);
+});
+
+const runtimeWith = (usage: AgentRuntimeInfo['usage'], contextWindow = 200_000): AgentRuntimeInfo => ({ model: { id: 'm', name: 'M', contextWindow, limitSource: 'configured' }, usage });
+const seedContext = { tokens: 18_400, measuredTokens: 17_200, estimatedTokens: 1_200, source: 'mixed' as const, compactions: 0 };
+
+test('the measured total is split into messages, tools and a visible system prompt', () => {
+  const segments = buildContextSegments(runtimeWith({ models: {}, tools: {}, totalTokens: 0 }), seedContext);
+  const tokens = Object.fromEntries(segments.map(segment => [segment.key, segment.tokens]));
+  assert.deepEqual(tokens, { messages: 15_088, tools: 2_208, mcp: 0, system: 1_104, skills: 0, memory: 0, 'mcp-instructions': 0, buffer: 0, free: 181_600 },
+    'messages + tools + system partition the measured context instead of leaving the system prompt at zero');
+  assert.equal(tokens.messages + tokens.tools + tokens.system, seedContext.tokens);
+});
+
+test('measured tool totals win over the share estimate and never overflow the context', () => {
+  const segments = buildContextSegments(runtimeWith({ models: {}, tools: { bazi: { totalTokens: 5_000 } }, totalTokens: 5_000 }), seedContext);
+  const tokens = Object.fromEntries(segments.map(segment => [segment.key, segment.tokens]));
+  assert.equal(tokens.tools, 5_000);
+  assert.equal(tokens.system, 1_104);
+  assert.equal(tokens.messages, 18_400 - 5_000 - 1_104);
+  const huge = buildContextSegments(runtimeWith({ models: {}, tools: { bazi: { totalTokens: 99_999 } }, totalTokens: 99_999 }), seedContext);
+  assert.equal(huge.find(segment => segment.key === 'tools')?.tokens, 18_400 - 1_104, 'a measured tool total is capped by the context itself');
+});
+
+test('skills say the method catalog is injected even when no card was read', () => {
+  const skills = (cards: number) => ({ listed: false, cards: Array.from({ length: cards }, (_, index) => ({ id: `c${index}`, title: `卡${index}`, version: '1' })) });
+  const meta = (value?: ReturnType<typeof skills>) => buildContextSegments(runtimeWith(undefined), seedContext, value).find(segment => segment.key === 'skills');
+  assert.equal(meta(skills(0))?.meta, '方法目录', 'the injected catalog is counted under skills even with no card');
+  assert.equal(meta(skills(2))?.meta, '2 张卡');
+  assert.equal(meta()?.deferred, true, 'without skills data the row stays a placeholder');
+  assert.equal(meta()?.meta, undefined);
+});
+
+test('compaction buffer shrinks free space only when the model has room', () => {
+  const compacted = buildContextSegments(runtimeWith(undefined), { ...seedContext, compactions: 2 });
+  assert.equal(compacted.find(segment => segment.key === 'buffer')?.tokens, 13_200);
+  assert.equal(compacted.find(segment => segment.key === 'free')?.tokens, 200_000 - 18_400 - 13_200);
+  const full = buildContextSegments(runtimeWith(undefined), { ...seedContext, tokens: 200_000, measuredTokens: 200_000, compactions: 2 });
+  assert.equal(full.find(segment => segment.key === 'buffer')?.tokens, 0, 'a full window reserves no compaction buffer');
+});
+
+test('skill tokens are counted under 技能 and taken out of messages and the system prompt', () => {
+  const runtime = { ...runtimeWith(undefined), skillsTokens: 700 };
+  const segments = buildContextSegments(runtime, seedContext, { listed: false, cards: [{ id: 'method:bazi', title: '子平八字', version: '2.1.0', tokens: 300 }] });
+  const tokens = Object.fromEntries(segments.map(segment => [segment.key, segment.tokens]));
+  assert.equal(tokens.skills, 1_000, 'catalog 700 + loaded card 300');
+  assert.equal(tokens.system, 1_104 - 700, 'the catalog leaves the system-prompt share');
+  assert.equal(tokens.messages, 18_400 - 2_208 - 404 - 1_000);
+  assert.equal(tokens.messages + tokens.tools + tokens.system + tokens.skills, seedContext.tokens);
+  assert.deepEqual(segments.find(segment => segment.key === 'skills')?.meta, '1 张卡');
 });

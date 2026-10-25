@@ -363,7 +363,10 @@ export function getAgentMethodCatalog(tool: AgentToolPart) {
   });
 }
 
-export interface AgentSkill { id: string; title: string; version: string }
+export interface AgentSkill { id: string; title: string; version: string; tokens: number }
+
+/** 与 Pi 的上下文估算同一口径：3.5 字符 ≈ 1 token。 */
+const estimateSkillTokens = (text: string) => Math.ceil(text.length / 3.5);
 
 /**
  * 技能：本任务用的方法卡。目录随系统提示注入，正文由 load_analysis_method 读进上下文；
@@ -375,7 +378,7 @@ export function getAgentSkills(tools: readonly AgentToolPart[]) {
   for (const tool of tools) {
     if (getAgentMethodCatalog(tool)) listed = true;
     const guide = getAgentMethod(tool);
-    if (guide) cards.set(guide.id, { id: `method:${guide.id}`, title: guide.title, version: guide.version });
+    if (guide) cards.set(guide.id, { id: `method:${guide.id}`, title: guide.title, version: guide.version, tokens: estimateSkillTokens(guide.instructions) });
   }
   return { listed, cards: [...cards.values()] };
 }

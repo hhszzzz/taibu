@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { AgentPlanView } from '../components/chat/agent/AgentPlanView';
 import { AgentContextOverview } from '../components/chat/agent/AgentContextUsage';
 import { getAgentPlan, getAgentSkills, type AgentToolPart } from '../lib/agent/tool-presentation';
+import { estimateTokens } from '../lib/agent/token-estimate';
 import { getAgentSteps, summarizeAgentActivity } from '../components/chat/agent/presentation';
 import { buildAgentWorkspace, getAgentWorkspaceLocation } from '../lib/agent/workspace';
 import type { AgentRuntimeInfo } from '../lib/agent/types';
@@ -65,15 +66,16 @@ test('a plan still waiting for the user says so, and an ended task does not pret
 
 test('the skills are the method cards this task loaded, listed once each', () => {
   const catalog = part('c', 'list_analysis_methods', { output: [{ id: 'bazi', title: '子平八字', version: '2.1.0', description: '论八字' }] });
-  const loaded = (id: string, version: string) => part(`m-${id}-${version}`, 'load_analysis_method', {
-    output: { id, title: id === 'bazi' ? '子平八字' : '紫微斗数', version, instructions: '# 卡', tools: ['bazi'] },
+  const loaded = (id: string, version: string, tokens?: number) => part(`m-${id}-${version}`, 'load_analysis_method', {
+    output: { id, title: id === 'bazi' ? '子平八字' : '紫微斗数', version, instructions: '# 卡', tools: ['bazi'], ...(tokens === undefined ? {} : { tokens }) },
   });
-  const skills = getAgentSkills([catalog, loaded('bazi', '2.0.0'), loaded('bazi', '2.1.0'), loaded('ziwei', '1.0.0')]);
+  const ziwei = loaded('ziwei', '1.0.0');
+  const skills = getAgentSkills([catalog, loaded('bazi', '2.0.0', 300), loaded('bazi', '2.1.0', 640), ziwei], 'deepseek-v3.2');
   assert.equal(skills.listed, true, 'the injected directory was used');
   assert.deepEqual(skills.cards, [
-    { id: 'method:bazi', title: '子平八字', version: '2.1.0', tokens: 1 },
-    { id: 'method:ziwei', title: '紫微斗数', version: '1.0.0', tokens: 1 },
-  ], 'a reloaded card replaces its earlier version and keeps one entry');
+    { id: 'method:bazi', title: '子平八字', version: '2.1.0', tokens: 640 },
+    { id: 'method:ziwei', title: '紫微斗数', version: '1.0.0', tokens: estimateTokens('deepseek-v3.2', JSON.stringify(ziwei.output)) },
+  ], 'a reloaded card replaces its earlier version; a card counted at run time keeps its count, an older one is estimated from what the model read');
   assert.deepEqual(getAgentSkills([]), { listed: false, cards: [] });
 });
 
@@ -102,4 +104,12 @@ test('a plan is a process step; the task list stays a progress bar', () => {
   assert.deepEqual(steps.map(step => step.name), ['submit_plan', 'bazi']);
   assert.equal(summarizeAgentActivity(steps, 0, 0), '已查看 1 张命盘，已提交 1 次计划');
   assert.equal(summarizeAgentActivity([part('todo', 'todo_write')], 0, 0), '任务过程', 'task-list updates do not count as work');
+});
+
+test('the status line counts method cards, not method calls', () => {
+  const load = (id: string, card: string) => part(id, 'load_analysis_method', { input: { id: card } });
+  const catalog = part('c', 'list_analysis_methods');
+  assert.equal(summarizeAgentActivity([catalog, load('m1', 'bazi'), load('m2', 'bazi'), load('m3', 'ziwei')], 0, 0), '已加载 2 套分析方法',
+    'listing the directory loads nothing, and reading a card twice is still one card');
+  assert.equal(summarizeAgentActivity([catalog], 0, 0), '已查看方法目录');
 });

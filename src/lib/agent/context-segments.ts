@@ -13,7 +13,7 @@ export type AgentContext = NonNullable<AgentRuntimeInfo['context']>;
 
 export type ContextSegment = { key: string; label: string; tokens: number; tone: string; deferred?: boolean; count?: number; meta?: string };
 
-/** 本任务用的方法卡：目录随系统提示注入，正文由 load_analysis_method 读进上下文；tokens 为正文估算。 */
+/** 本任务用的方法卡：目录随系统提示注入，正文由 load_analysis_method 读进上下文；tokens 是卡在上下文里的计数。 */
 export interface ContextSkills { listed: boolean; cards: Array<{ id: string; title: string; version: string; tokens?: number }> }
 
 /** Share of the measured context the system prompt is assumed to take. */

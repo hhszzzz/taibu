@@ -34,7 +34,8 @@ export function SessionDetailsPanel({ data, run, onOpen }: {
         });
     }, [tools]);
     // 技能 = 本任务用过的方法卡，列在上下文卡里，点开就是它的页。
-    const skills = useMemo(() => getAgentSkills(tools), [tools]);
+    const model = data?.runtime?.model.id;
+    const skills = useMemo(() => getAgentSkills(tools, model), [tools, model]);
     // 会话栏固定宽度（280px，见 .agent-session-rail）：不提供拖拽或顶部手柄。
     const [showAll, setShowAll] = useState(false);
     return <aside id="agent-session-panel" className="agent-session-rail" aria-label="会话详情">

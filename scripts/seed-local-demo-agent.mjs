@@ -225,7 +225,7 @@ export async function buildAgentDemo({ root, baziChartId, plainConversations, no
         model: { ...model, contextWindow: 200_000, limitSource: 'configured' },
         responses,
         context: { tokens: usage, measuredTokens: usage - 1200, estimatedTokens: 1200, source: 'mixed', input: usage - 2600, output: 2600, cacheRead: Math.round(usage * 0.4), compactions: 0 },
-        // 系统提示注入的方法目录估算（与真实运行同口径：目录文本 / 3.5）。
+        // 系统提示注入的方法目录占的 token（真实运行由网关 count_tokens 计数，这里取一个相近的固定值）。
         skillsTokens: 720,
         usage: { models: { [model.id]: { input: usage * 3, output: 2600 * tools, totalTokens: usage * 3 + 2600 * tools } }, tools: {}, totalTokens: usage * 3 + 2600 * tools },
         ...(status === 'awaiting_input' ? { activity: { phase: 'awaiting_input' } } : {}),

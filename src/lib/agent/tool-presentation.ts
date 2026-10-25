@@ -17,6 +17,7 @@ import type { ZiweiFlyingStarCanonicalJSON } from 'taibu-core/ziwei-flying-star'
 import { normalizeQuestions, type AgentQuestion } from './questions';
 import type { AgentPart } from './types';
 import { AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_SUBMIT_PLAN_TOOL, isAgentChartTool, type AgentChartKind } from './tool-catalog';
+import { estimateTokens } from './token-estimate';
 
 export type AgentToolPart = Extract<AgentPart, { type: 'tool' }>;
 /**
@@ -365,20 +366,22 @@ export function getAgentMethodCatalog(tool: AgentToolPart) {
 
 export interface AgentSkill { id: string; title: string; version: string; tokens: number }
 
-/** 与 Pi 的上下文估算同一口径：3.5 字符 ≈ 1 token。 */
-const estimateSkillTokens = (text: string) => Math.ceil(text.length / 3.5);
-
 /**
  * 技能：本任务用的方法卡。目录随系统提示注入，正文由 load_analysis_method 读进上下文；
  * 这里按卡 id 去重（改版重载同一张卡只算一次），`id` 就是它在工作区的页。
+ * token 读卡上记的模型计数（运行时按网关 count_tokens 计）；早先的任务没有记，按 `model` 的 tokenizer 家族估算
+ * 模型当时读到的文本（卡的 JSON）。
  */
-export function getAgentSkills(tools: readonly AgentToolPart[]) {
+export function getAgentSkills(tools: readonly AgentToolPart[], model = '') {
   const cards = new Map<string, AgentSkill>();
   let listed = false;
   for (const tool of tools) {
     if (getAgentMethodCatalog(tool)) listed = true;
     const guide = getAgentMethod(tool);
-    if (guide) cards.set(guide.id, { id: `method:${guide.id}`, title: guide.title, version: guide.version, tokens: estimateSkillTokens(guide.instructions) });
+    if (!guide) continue;
+    const counted = record(tool.output).tokens;
+    const tokens = typeof counted === 'number' && counted >= 0 ? counted : estimateTokens(model, JSON.stringify(tool.output));
+    cards.set(guide.id, { id: `method:${guide.id}`, title: guide.title, version: guide.version, tokens });
   }
   return { listed, cards: [...cards.values()] };
 }

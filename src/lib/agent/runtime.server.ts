@@ -33,6 +33,8 @@ import type { AgentAnswers, AgentQuestion } from './questions';
 import { agentInputContent } from './attachment-input';
 import { resolveAttachmentImages } from './attachments.server';
 import { renderMethodDirectory, taibuMethodSection } from './method-section.server';
+import { countModelTokens } from './token-count.server';
+import { estimateTokens } from './token-estimate';
 import { agentCompactionPolicy } from './compaction';
 import { prepareToolArguments, toolPolicyBlock } from './tool-arguments';
 import { commitSummary, generateSummary, readSummary } from './summary-usage.server';
@@ -259,6 +261,8 @@ export async function executeAgentRun(
       apiKey = decryptAgentCredential(encrypted, run.user_id, run.id);
     }
     const tools = await createAgentTools(store, run, checkpoint);
+    // 进入上下文的技能文本按主模型计数；测试注入的模型不发网络请求。
+    const countTokens = (text: string) => injected ? Promise.resolve(estimateTokens(config.modelId || config.id, text)) : countModelTokens(config, text, { apiKey });
     const window = run.input.customProvider ? null : resolveKnownModelContextConfig(config.id, run.input.reasoning);
     checkpoint.runtime = { model: {
       id: config.id, name: config.name, contextWindow: window?.maxContext ?? null,
@@ -409,15 +413,22 @@ export async function executeAgentRun(
         execute: async (args, api, toolContext) => {
           if (tool.name === "ask_user") return ask(args as Record<string, unknown>, api, toolContext, tool);
           const output = await tool.execute(`${api.taskId}:${api.callId}`, args, toolContext.abortSignal);
+          // 方法卡读进上下文的就是这段文本：按模型计数后记在卡上，上下文卡的「技能」直接读它。
+          const details = tool.name === "load_analysis_method" && output.details && typeof output.details === "object"
+            ? { ...output.details, tokens: await countTokens(output.content.map(item => item.type === "text" ? item.text : "").join("")) }
+            : output.details;
           // Pi drops structured output on a model-issued call; a script reads it instead of the text.
-          return { output: output.content, details: output.details as JsonValue, ...(output.usage ? { usage: output.usage } : {}),
+          return { output: output.content, details: details as JsonValue, ...(output.usage ? { usage: output.usage } : {}),
             ...(structured ? { structuredOutput: agentScriptResult(output) as JsonValue } : {}) };
         },
       });
     });
-    // 方法目录随系统提示注入；记录它的大小，上下文卡把这段从「系统提示」计入「技能」。
+    // 方法目录随系统提示注入（Pi 把小节包成 <taibu_methods> 标签）；上下文卡把这段从「系统提示」计入「技能」。
+    // 先记本地估算，网关的真实计数回来后替换；之后的检查点会带上它。
     const methodDirectory = renderMethodDirectory(registrations.map(tool => tool.name));
-    if (checkpoint.runtime) checkpoint.runtime.skillsTokens = methodDirectory ? Math.ceil(methodDirectory.length / 3.5) : 0;
+    const directorySection = methodDirectory ? `<taibu_methods>\n${methodDirectory}\n</taibu_methods>` : "";
+    if (checkpoint.runtime) checkpoint.runtime.skillsTokens = estimateTokens(config.modelId || config.id, directorySection);
+    if (directorySection) void countTokens(directorySection).then(tokens => { if (checkpoint.runtime) checkpoint.runtime.skillsTokens = tokens; });
     const toolTitle = (name: string) => tools.find(tool => tool.name === name)?.label ?? getAgentExtensionToolTitle(name) ?? name;
     /**
      * A code mode script's call becomes a public part under the script's card, committed with the call's result. The

@@ -348,7 +348,8 @@ const FAMILY_PHRASES: Partial<Record<AgentToolFamily, (count: number) => string>
     drilldown: count => `已详查 ${count} 处`,
     search: count => `已搜索 ${count} 次`,
     data: count => `已读取 ${count} 份资料`,
-    method: count => `已加载 ${count} 套分析方法`,
+    // 按读进上下文的方法卡计；只查看过目录时没有卡。
+    method: count => count ? `已加载 ${count} 套分析方法` : '已查看方法目录',
     plan: count => `已提交 ${count} 次计划`,
     memory: count => `已记忆 ${count} 条`,
     archive: count => `已整理 ${count} 条档案`,
@@ -369,6 +370,8 @@ export function summarizeAgentActivity(tools: readonly AgentTool[], questionCoun
     let members = 0;
     // A background subagent counts once, when it is started; later messages go to the same one.
     const subagents = new Set<string>();
+    // 方法卡按卡计：同一张卡读两次仍是一套，列出目录不算加载。
+    const cards = new Set<string>();
     for (const tool of tools) {
         const family = getAgentToolFamily(tool.name);
         if (tool.name === AGENT_BACKGROUND_TOOL) {
@@ -378,6 +381,11 @@ export function summarizeAgentActivity(tools: readonly AgentTool[], questionCoun
         }
         if (family === 'collaboration') { members += collaborationMembers(tool); continue; }
         if (family === 'todo') continue;
+        if (family === 'method') {
+            if (tool.name === 'load_analysis_method') cards.add(String(toolArgs(tool).id ?? tool.id));
+            counts.set(family, cards.size);
+            continue;
+        }
         counts.set(family, (counts.get(family) ?? 0) + 1);
     }
     const phrases = (Object.keys(FAMILY_PHRASES) as AgentToolFamily[])

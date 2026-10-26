@@ -1,7 +1,7 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
 import type { AIModelConfig } from '@/types';
-import { getApiKey, isModelAvailable } from '@/lib/ai/providers/ai-sdk-provider';
+import { getApiKey, isModelAvailable, MODEL_REQUEST_USER_AGENT } from '@/lib/ai/providers/ai-sdk-provider';
 import { applySourceToModel, getOrderedModelSources } from '@/lib/ai/source-runtime';
 import { estimateTokens } from './token-estimate';
 
@@ -26,7 +26,7 @@ type Fetch = typeof fetch;
 async function requestCount(url: string, key: string, model: string, text: string, fetcher: Fetch): Promise<number | null> {
     const response = await fetcher(url, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${key}`, 'user-agent': MODEL_REQUEST_USER_AGENT },
         body: JSON.stringify({ model, messages: [{ role: 'user', content: text }] }),
         signal: AbortSignal.timeout(TIMEOUT_MS),
     });

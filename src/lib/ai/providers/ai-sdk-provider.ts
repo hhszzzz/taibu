@@ -11,6 +11,7 @@ import { generateText, streamText, type CoreMessage, type LanguageModel, type Pr
 import type { AIModelConfig } from '@/types';
 import type { ChatMessage, AIReasoningEffort } from '@/types';
 import { normalizeCustomProviderBaseUrl } from '@/lib/ai/custom-provider-url';
+import packageJson from '../../../../package.json';
 
 // AI 请求只需要最小消息结构，避免强制依赖存储/展示字段。
 export type AIRequestMessage = Pick<ChatMessage, 'role' | 'content' | 'model' | 'reasoning'>;
@@ -46,12 +47,11 @@ export function createModelFromConfig(
 
     const baseURL = normalizeBaseUrl(config.apiUrl);
     const requestParameters = buildModelRequestParameters(config, options);
-    const baseFetch = options?.fetch ?? gatewayFetch;
+    // 平台网关与用户自己的模型服务都收到同一个 User-Agent。
+    const baseFetch = withModelUserAgent(options?.fetch ?? gatewayFetch);
     const provider = createOpenAI({
         apiKey,
         baseURL,
-        // 自定义 fetch：部分网关上游的 Cloudflare WAF 会拦截 Node.js 默认指纹，
-        // 使用浏览器风格请求头绕过 bot 检测
         fetch: Object.keys(requestParameters).length ? async (input, init) => {
             if (typeof init?.body !== 'string') return baseFetch(input, init);
             const body = JSON.parse(init.body) as Record<string, unknown>;
@@ -250,16 +250,23 @@ export function streamWithAISDK(
 // ─── Internal Helpers ───
 
 /**
- * 自定义 fetch：绕过部分网关上游 Cloudflare WAF 的 bot 检测。
- *
- * Node.js 默认 fetch 的 TLS 指纹和请求头会被某些 CDN 拦截（返回 403），
- * 使用浏览器风格的 User-Agent 和 Accept 头即可通过。
+ * 太卜发出的模型请求一律以 `taibu_agent/<应用版本>` 自报身份，网关日志里认得出是谁、哪个版本在调用。
+ * 按 User-Agent 拦截的网关（如上游 CDN 拒绝 Node.js 或 Python 的默认值）把它加入白名单即可，不再冒充浏览器。
  */
-const BROWSER_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36';
+export const MODEL_REQUEST_USER_AGENT = `taibu_agent/${packageJson.version}`;
 
+function withModelUserAgent(fetcher: typeof globalThis.fetch): typeof globalThis.fetch {
+    return (input, init) => {
+        const headers = new Headers(init?.headers);
+        headers.set('User-Agent', MODEL_REQUEST_USER_AGENT);
+        return fetcher(input, { ...init, headers });
+    };
+}
+
+/** 平台网关的请求头：自报身份，并按是否流式声明 Accept。 */
 function normalizeGatewayHeaders(init?: RequestInit): Headers {
     const headers = new Headers(init?.headers);
-    headers.set('User-Agent', BROWSER_UA);
+    headers.set('User-Agent', MODEL_REQUEST_USER_AGENT);
     if (!headers.has('Accept')) {
         let isStream = true;
         try {

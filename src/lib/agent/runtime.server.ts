@@ -19,7 +19,7 @@ import { getUserCreditInfo } from "@/lib/user/credits";
 import { AgentStore, type AgentRunRow, type AgentCommandRow } from "./store.server";
 import { agentMessageContent, putAgentPart, type AgentCheckpoint, type DomainTool, type PiStreamFn } from "./types";
 import { decryptAgentCredential } from "./credentials.server";
-import { AGENT_UNSUPPORTED_TOOLS_MESSAGE, createPiSDKStream } from "./pi-stream.server";
+import { AGENT_PUBLIC_STREAM_ERRORS, createPiSDKStream } from "./pi-stream.server";
 import { createAgentTools, assertAgentToolAccess } from "./tools.server";
 import { isCurrentAgentCheckpoint } from "./engine";
 import { AgentDurableStorage, agentDurablePersistence } from "./durable-storage.server";
@@ -717,7 +717,7 @@ export async function executeAgentRun(
     const compactionFailed = submission?.status === "unanswered" && typeof submission.detail === "string" &&
       submission.detail.startsWith("Compaction failed");
     await finish(status, parked ? AGENT_RESTART_LIMIT_MESSAGE : compacted ? AGENT_MANUAL_COMPACTION_FAILED_MESSAGE
-      : last?.errorMessage === AGENT_UNSUPPORTED_TOOLS_MESSAGE ? AGENT_UNSUPPORTED_TOOLS_MESSAGE
+      : last?.errorMessage && AGENT_PUBLIC_STREAM_ERRORS.has(last.errorMessage) ? last.errorMessage
       : compactionFailed ? AGENT_COMPACTION_FAILED_MESSAGE : undefined);
   } catch (error) {
     if (interrupted || shutdown?.aborted || storage?.isUnavailable) return;

@@ -126,6 +126,29 @@ test('source fallback and transient errors share three external attempts; empty 
   assert.equal((await stream.result()).stopReason,'error'); assert.equal(empty.doStreamCalls.length,2);
 });
 
+test('a response that spends the whole output budget thinking fails once with the reason, without a retry', async t => {
+  const sdk = require('../lib/ai/providers/ai-sdk-provider') as typeof import('../lib/ai/providers/ai-sdk-provider');
+  t.mock.method(sdk, 'isModelAvailable', () => true);
+  const { AGENT_OUTPUT_EXHAUSTED_MESSAGE, AGENT_PUBLIC_STREAM_ERRORS } = require('../lib/agent/pi-stream.server') as typeof import('../lib/agent/pi-stream.server');
+  const thinking = mockModel([
+    { type: 'stream-start', warnings: [] },
+    { type: 'reasoning-start', id: 'reason' },
+    { type: 'reasoning-delta', id: 'reason', delta: '先比较各个候选时辰……' },
+    { type: 'reasoning-end', id: 'reason' },
+    { type: 'finish', finishReason: { unified: 'length', raw: 'length' }, usage },
+  ]);
+  t.mock.method(sdk, 'createModelFromConfig', () => thinking);
+  const result = await createPiSDKStream(config, { reasoning: true })({ ...piModel, reasoning: true }, context(), { reasoning: 'high' }).result();
+  assert.equal(result.stopReason, 'error');
+  assert.equal(result.errorMessage, AGENT_OUTPUT_EXHAUSTED_MESSAGE);
+  assert.ok(AGENT_PUBLIC_STREAM_ERRORS.has(result.errorMessage!), 'the task shows this reason instead of the generic failure');
+  assert.equal(thinking.doStreamCalls.length, 1);
+  // A cut-off answer is still an answer: only a budget with no text and no call is this failure.
+  const cut = mockModel([{ type: 'stream-start', warnings: [] }, { type: 'text-start', id: 'text' }, { type: 'text-delta', id: 'text', delta: '日主乙木生于巳月' }, { type: 'text-end', id: 'text' }, { type: 'finish', finishReason: { unified: 'length', raw: 'length' }, usage }]);
+  t.mock.method(sdk, 'createModelFromConfig', () => cut);
+  assert.equal((await createPiSDKStream(config, { reasoning: false })(piModel, context()).result()).stopReason, 'length');
+});
+
 test('native summary requests retain guarded source fallback and reasoning controls across the SDK bridge', async t => {
   const sdk = require('../lib/ai/providers/ai-sdk-provider') as typeof import('../lib/ai/providers/ai-sdk-provider');
   t.mock.method(sdk, 'isModelAvailable', () => true);

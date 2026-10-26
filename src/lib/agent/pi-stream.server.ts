@@ -23,6 +23,10 @@ export const AGENT_UNSUPPORTED_TOOLS_MESSAGE = "当前模型不支持工具调�
  * what Pi's retry classification recognizes, so the generation sleeps and retries (AGENT_RETRY_POLICY).
  */
 export const AGENT_TRANSIENT_ERROR_MESSAGE = "模型服务暂时不可用（service temporarily unavailable）";
+/** The model spent the whole output budget thinking and left neither an answer nor a call. */
+export const AGENT_OUTPUT_EXHAUSTED_MESSAGE = "模型的思考用完了单次输出上限，没来得及回答；可以调低思考等级后重新发起";
+/** Stream failures whose text the task shows as is, in place of the generic failure. */
+export const AGENT_PUBLIC_STREAM_ERRORS: ReadonlySet<string> = new Set([AGENT_UNSUPPORTED_TOOLS_MESSAGE, AGENT_OUTPUT_EXHAUSTED_MESSAGE]);
 import type { AIModelConfig } from "@/types";
 import {
   buildProviderOptions,
@@ -352,6 +356,8 @@ export function createPiSDKStream(
             // EOF and an SDK abort are not successful Pi terminal messages.
             if (!finished) throw new Error("模型回复缺少结束标记");
             requestSignal.throwIfAborted();
+            // The same budget would most likely be spent the same way again, so this is not retried.
+            if (message.stopReason === 'length' && !message.content.some(part => part.type === 'toolCall' || (part.type === 'text' && part.text.trim()))) throw new Error(AGENT_OUTPUT_EXHAUSTED_MESSAGE);
             if (!message.content.some(part => part.type === 'toolCall' || (part.type === 'text' && part.text.trim()) || (part.type === 'thinking' && part.thinking.trim()))) throw new Error('AGENT_EMPTY_RESPONSE');
             if (!started) {
               started = true;
@@ -388,6 +394,7 @@ export function createPiSDKStream(
             ? "任务已停止"
             : error instanceof Error && error.message === "模型不支持工具调用"
               ? AGENT_UNSUPPORTED_TOOLS_MESSAGE
+            : error instanceof Error && error.message === AGENT_OUTPUT_EXHAUSTED_MESSAGE ? AGENT_OUTPUT_EXHAUSTED_MESSAGE
             : overflow ? "模型上下文超出限制（context_length_exceeded）"
             : transientFailure ? AGENT_TRANSIENT_ERROR_MESSAGE
             : "模型调用失败，请确认模型支持工具调用或切换普通对话";

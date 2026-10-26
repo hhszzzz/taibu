@@ -45,6 +45,8 @@ import { validateAttachmentIds } from './attachments.server';
 import { getAgentCitationBase } from './evidence';
 import { readAgentActivity } from './activity.server';
 import { AGENT_COMPACT_INSTRUCTIONS_MAX, parseAgentCompactCommand } from './compaction';
+import { SkillUnavailableError, expandSkillMessages, joinSkillTurn, skillCommandBlock } from './skills/catalog.server';
+import { parseSkillCommand } from './skills/config';
 import { getAgentArchiveProposal } from './archive';
 import { readAgentArchiveStatus } from './archive.server';
 
@@ -400,6 +402,16 @@ export async function createAgentTask(request: NextRequest) {
     : await checkRateLimit(auth.user.id, "/api/chat", AI_RATE_LIMIT_CONFIG);
   if (!limit.allowed)
     throw new AgentApiError(compact ? "压缩上下文过于频繁，请稍后再试" : "请求过于频繁，请稍后再试", 429, "RATE_LIMITED");
+  // `/skill:名称 要求` brings the skill into this turn as pi expands it; the conversation keeps what the user typed.
+  let skillTurn: Awaited<ReturnType<typeof skillCommandBlock>> = null;
+  if (!compact && parseSkillCommand(body.message.content)) {
+    try {
+      skillTurn = await skillCommandBlock(auth.user.id, account.effectiveMembership, body.message.content);
+    } catch (error) {
+      if (error instanceof SkillUnavailableError) throw new AgentApiError(error.message, 400, "SKILL_UNAVAILABLE");
+      throw error;
+    }
+  }
   const modelId = config?.id ?? custom!.modelId;
   const reasoning =
     !!config &&
@@ -425,7 +437,8 @@ export async function createAgentTask(request: NextRequest) {
   const prepared = await buildChatPromptContext(
     {
       body: {
-        messages: [...history, userMessage],
+        // The prompt is prepared from what the user asked of the skill; the skill joins the turn afterwards.
+        messages: [...history, skillTurn ? { ...userMessage, content: skillTurn.args } : userMessage],
         model: modelId,
         reasoning,
         mangpaiMode: body.mangpaiMode === true,
@@ -452,13 +465,17 @@ export async function createAgentTask(request: NextRequest) {
       ? previous.checkpoint.messages.filter((m) => m.role !== "system")
       : null;
   // The new turn as prepared, so a continued task also reads the document the message carries.
-  const turn = prepared.sanitizedMessages.at(-1) ?? userMessage;
+  const preparedTurn = prepared.sanitizedMessages.at(-1) ?? userMessage;
+  const turn = skillTurn ? { ...preparedTurn, content: joinSkillTurn(skillTurn.block, preparedTurn.content) } : preparedTurn;
+  // A rebuilt context expands the earlier `/skill:` turns again, as they were expanded when sent.
+  const earlier = replay ? [] : await expandSkillMessages(prepared.sanitizedMessages.slice(0, -1), auth.user.id, account.effectiveMembership)
+    .catch(() => prepared.sanitizedMessages.slice(0, -1));
   const checkpoint: AgentCheckpoint = {
     version: 2,
     durable: { engine: AGENT_ENGINE },
     messages: replay
       ? [...replay, ...piHistory([{ ...turn, attachments: userMessage.attachments }])]
-      : piHistory(prepared.sanitizedMessages.map(message => ({ ...message, attachments: message.id === userMessage.id ? userMessage.attachments : history.find(item => item.id === message.id)?.attachments }))),
+      : piHistory([...earlier, turn].map(message => ({ ...message, attachments: message.id === userMessage.id ? userMessage.attachments : history.find(item => item.id === message.id)?.attachments }))),
     parts: [],
     // Evidence numbers continue across the visible branch, so a new answer never reuses one.
     citations: { base: getAgentCitationBase(history), calls: {} },
@@ -580,6 +597,15 @@ export async function controlAgentTask(
     if (!model?.supportsVision) throw new AgentApiError('当前任务的模型不支持图片；请在下个独立任务选择视觉模型');
   }
   if(commandAttachments.length) message.attachments={fileName:commandAttachments.map(item=>item.name).join('、'),ids:commandAttachments.map(item=>item.id)};
+  // A skill named in a message sent into the task must be usable now; the worker expands it when it delivers the message.
+  if (body.mode !== 'reply' && parseSkillCommand(body.content)) {
+    try {
+      await skillCommandBlock(auth.user.id, (await getUserCreditInfo(auth.user.id, {})).membership, body.content);
+    } catch (error) {
+      if (error instanceof SkillUnavailableError) throw new AgentApiError(error.message, 400, "SKILL_UNAVAILABLE");
+      throw error;
+    }
+  }
   if (body.mode === 'reply') {
     const question = [...run.public_message.agent?.parts ?? []].reverse().find(part => part.type === 'question');
     const questionId = typeof body.questionId === 'string' ? body.questionId : run.checkpoint.questionId ?? question?.id;

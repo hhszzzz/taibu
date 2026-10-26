@@ -1,4 +1,5 @@
-/* MCP servers (admin) and connectors (members): the list, the tools panel and the editor dialog. */
+/* MCP servers (admin) and connectors (members): the list, the tools panel and the editor dialog. The skills settings
+   reuse the list and dialog rules (skills/skill-settings.css). */
 .mcp-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; }
 .mcp-toolbar p { font-size: .8125rem; line-height: 1.6; color: var(--foreground-secondary); }
 .mcp-notice { padding: .75rem 1rem; border: 1px solid var(--border); border-radius: .75rem; background: var(--background-secondary); font-size: .8125rem; line-height: 1.6; color: var(--foreground-secondary); }

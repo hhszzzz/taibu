@@ -2,7 +2,7 @@
 // 'use client'：上下文用量弹层需要开关状态
 
 import { useState, type ReactNode } from 'react';
-import { BookOpen, ChevronDown, ChevronRight } from 'lucide-react';
+import { BookOpen, ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
 import type { AgentRuntimeInfo } from '@/lib/agent/types';
 import { buildContextSegments, type ContextSkills } from '@/lib/agent/context-segments';
 import './agent-context-usage.css';
@@ -24,7 +24,7 @@ export function ContextRing({ percent, size }: { percent: number | null; size: n
 
 export function AgentContextOverview({ runtime, working = false, grip, skills, onOpen }: {
     runtime?: AgentRuntimeInfo; working?: boolean; grip?: ReactNode;
-    /** 本任务用过的方法卡；省略时技能一行仍是占位。 */
+    /** 本任务用过的方法卡与技能；省略时技能一行仍是占位。 */
     skills?: ContextSkills;
     onOpen?: (id: string) => void;
 }) {
@@ -72,9 +72,13 @@ export function AgentContextOverview({ runtime, working = false, grip, skills, o
                     <BookOpen size={15} aria-hidden="true" />
                     <span className="agent-rail-result-text"><span>方法目录</span><small>随系统提示注入 · {compact(runtime.skillsTokens ?? 0)} token{skills.listed ? ' · 本任务查看过' : ''}</small></span>
                 </button>
+                {runtime.skills?.listed ? <div className="agent-rail-row agent-rail-result">
+                    <Sparkles size={15} aria-hidden="true" />
+                    <span className="agent-rail-result-text"><span>技能目录</span><small>随系统提示注入 · {runtime.skills.listed} 个技能 · {compact(runtime.skills.sectionTokens)} token</small></span>
+                </div> : null}
                 {skills.cards.map(card => <button key={card.id} type="button" className="agent-rail-row agent-rail-button agent-rail-result" onClick={() => onOpen?.(card.id)}>
-                    <BookOpen size={15} aria-hidden="true" />
-                    <span className="agent-rail-result-text"><span>{card.title}</span><small>版本 {card.version} · {compact(card.tokens ?? 0)} token</small></span>
+                    {card.kind === 'skill' ? <Sparkles size={15} aria-hidden="true" /> : <BookOpen size={15} aria-hidden="true" />}
+                    <span className="agent-rail-result-text"><span>{card.title}</span><small>{card.kind === 'skill' ? `技能 ${card.version}` : `版本 ${card.version}`} · {compact(card.tokens ?? 0)} token</small></span>
                 </button>)}
             </div>}
             <p className="agent-context-foot">{approximate ? '数值为估算；' : ''}{working ? '随任务实时更新。' : '发送消息以刷新。'}自动压缩缓冲在接近窗口上限时启用。</p>

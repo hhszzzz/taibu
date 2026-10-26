@@ -17,6 +17,7 @@ import {
   hashAgentRequest,
 } from "../lib/agent/api.server";
 import type { AIModelConfig } from "../types";
+import { DEFAULT_AGENT_EXTENSIONS_POLICY } from "../lib/agent/mcp/config";
 
 const model: AIModelConfig = {
   id: "fixture",
@@ -242,6 +243,80 @@ test('/compact refuses attached material and long instructions, and honors its o
   const ordinary = await agentEndpoint(() => createAgentTask(fixture.request({ ...fixture.body, message: { id: 'question', content: '/compactness 是什么' } })));
   assert.equal(ordinary.status, 429);
   assert.match((await ordinary.json()).error, /请求过于频繁/, 'any other message is an ordinary task in the shared bucket');
+});
+
+/** A platform skill only the user may start, as the database holds it; returns its block. */
+function useSkills(t: TestContext) {
+  const store = require('../lib/agent/skills/store.server') as typeof import('../lib/agent/skills/store.server');
+  const settings = require('../lib/app-settings') as typeof import('../lib/app-settings');
+  t.mock.method(store, 'platformSkills', async () => [{
+    id: 'skill-1', owner_id: null, name: 'case-review', description: '复盘一个命理案例', version: 2, required_tier: 'free' as const, is_enabled: true,
+    disable_model_invocation: true, sort_order: 0, created_at: '2026-10-27T00:00:00Z', updated_at: '2026-10-27T00:00:00Z', bytes: 80, files: [],
+  }]);
+  t.mock.method(store, 'userSkills', async () => []);
+  t.mock.method(store, 'readSkillContent', async () => '---\nname: case-review\ndescription: 复盘一个命理案例\ndisable-model-invocation: true\n---\n先读命盘，再列要点。');
+  t.mock.method(settings, 'getAgentExtensionsPolicy', async () => DEFAULT_AGENT_EXTENSIONS_POLICY);
+  return '<skill name="case-review">\n先读命盘，再列要点。\n</skill>';
+}
+const contains = (content: unknown, text: string) => JSON.stringify(content).includes(JSON.stringify(text).slice(1, -1));
+
+test('/skill: brings the skill into the task\'s turn while the conversation keeps what the user typed', async t => {
+  const fixture = setup(t, [
+    ...earlierTurn,
+    { id: 'skilled', role: 'user', content: '/skill:case-review 先看这张', createdAt: '2026-10-20T00:02:00Z' },
+    { id: 'skilled-answer', role: 'assistant', content: '看过了。', createdAt: '2026-10-20T00:03:00Z' },
+  ]);
+  const block = useSkills(t);
+  const prepared: string[] = [];
+  const context = require('../lib/server/chat/prompt-context') as typeof import('../lib/server/chat/prompt-context');
+  t.mock.method(context, 'buildChatPromptContext', async (request: Parameters<typeof context.buildChatPromptContext>[0]) => {
+    prepared.push(request.body.messages.at(-1)!.content);
+    return {
+      sanitizedMessages: request.body.messages, metadata: { sources: [], kbSearchEnabled: false, kbHitCount: 0 },
+      systemPrompt: 'trusted personality', fallbackPersonality: 'general', promptKnowledgeBases: [],
+    };
+  });
+  const response = await agentEndpoint(() => createAgentTask(fixture.request({ ...fixture.body, message: { id: 'user', content: '/skill:case-review 看看这张盘' } })));
+  assert.equal(response.status, 201);
+  const write = fixture.writes[0];
+  assert.equal((write.args.p_input as AgentRunRow['input']).userMessage.content, '/skill:case-review 看看这张盘', 'the conversation shows what the user typed');
+  assert.deepEqual(prepared, ['看看这张盘'], 'the prompt is prepared from what the user asked of the skill');
+  const messages = (write.args.p_checkpoint as AgentRunRow['checkpoint']).messages;
+  assert.equal(messages.length, 5);
+  assert.ok(contains(messages[4].content, `${block}\n\n看看这张盘`), JSON.stringify(messages[4].content));
+  assert.ok(contains(messages[2].content, `${block}\n\n先看这张`), 'a rebuilt context expands the earlier call again');
+});
+
+test('/skill: naming a skill the member cannot use fails before creation, and so does one sent into a task', async t => {
+  const fixture = setup(t);
+  useSkills(t);
+  for (const content of ['/skill:missing 看看', '/skill: 看看']) {
+    const response = await agentEndpoint(() => createAgentTask(fixture.request({ ...fixture.body, clientRequestId: randomUUID(), message: { id: 'user', content } })));
+    assert.equal(response.status, 400, content);
+    assert.equal((await response.json()).code, 'SKILL_UNAVAILABLE');
+  }
+  assert.equal(fixture.writes.length, 0, 'nothing is created or charged');
+
+  const id = randomUUID();
+  const run = {
+    id, user_id: fixture.owner, conversation_id: fixture.conversation, input: { model: 'fixture', reasoning: false, webEnabled: false }, checkpoint: {},
+    status: 'running', event_cursor: 1, created_at: '2026-01-01', public_message: {
+      id: `agent:${id}`, role: 'assistant', content: '', createdAt: '2026-01-01', agent: { version: 1, runId: id, status: 'running', parts: [] },
+    },
+  } as unknown as AgentRunRow;
+  t.mock.method(AgentStore.prototype, 'getRun', async () => run);
+  t.mock.method(fixture.credits, 'getUserCreditInfo', async () => ({ membership: 'plus', credits: 10, expiresAt: null }));
+  const submitted: string[] = [];
+  t.mock.method(AgentStore.prototype, 'rpc', async (_name: string, args: Record<string, unknown>) => {
+    submitted.push((args.p_message as { content: string }).content);
+    return { message: args.p_message };
+  });
+  const refused = await agentEndpoint(() => controlAgentTask(fixture.request({ content: '/skill:missing 再看', clientRequestId: randomUUID(), mode: 'steer' }), id, 'message'));
+  assert.equal(refused.status, 400);
+  assert.match((await refused.json()).error, /没有可用的技能「missing」/);
+  const accepted = await agentEndpoint(() => controlAgentTask(fixture.request({ content: '/skill:case-review 再看', clientRequestId: randomUUID(), mode: 'follow_up' }), id, 'message'));
+  assert.equal(accepted.status, 200);
+  assert.deepEqual(submitted, ['/skill:case-review 再看'], 'the worker expands the message when it delivers it');
 });
 
 test('a document carried into Agent mode reaches the model in a new task and in a continued one', async t => {

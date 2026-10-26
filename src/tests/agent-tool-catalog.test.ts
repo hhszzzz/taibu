@@ -8,12 +8,13 @@ import { CODEMODE_TOOL_NAME } from '@earendil-works/pi-durable/codemode';
 import {
   AGENT_BACKGROUND_TOOL, AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_CORE_DEFERRED_TOOLS, AGENT_DATA_DEFERRED_TOOLS, AGENT_DEFERRED_TOOLS, AGENT_DRILLDOWN_BASES,
   AGENT_MODEL_ONLY_TOOLS, AGENT_PLAN_GATED_TOOLS,
-  AGENT_SUBMIT_PLAN_TOOL, AGENT_TOOL_SEARCH_TOOL,
+  AGENT_SKILL_TOOLS, AGENT_SUBMIT_PLAN_TOOL, AGENT_TOOL_SEARCH_TOOL,
   getAgentDrilldownBase, getAgentExtensionToolTitle, getAgentToolFamily, isAgentDeferredTool,
   isAgentChartTool, isAgentMemberTool, projectsAgentCanonicalText, returnsAgentScriptResult,
 } from '../lib/agent/tool-catalog';
 import { getAgentToolText, type AgentToolPart } from '../lib/agent/tool-presentation';
 import { createAgentTools } from '../lib/agent/tools.server';
+import type { SkillRow } from '../lib/agent/skills/store.server';
 import { createParallelExtension } from '../lib/agent/parallel.server';
 import { createBackgroundAgents } from '../lib/agent/background.server';
 import { executeAgentRun } from '../lib/agent/runtime.server';
@@ -46,7 +47,15 @@ test('every Core tool and every registered Agent tool belongs to a presentation 
     const run = row();
     run.input.webEnabled = true;
     run.input.memoryEnabled = true;
-    const tools = await createAgentTools(new MemoryStore(), run, run.checkpoint);
+    // A skill the model may load, with a file to read, registers both skill tools.
+    const skill: SkillRow = {
+      id: 'skill-1', owner_id: null, name: 'case-review', description: '复盘案例', version: 1, required_tier: 'free', is_enabled: true,
+      disable_model_invocation: false, sort_order: 0, created_at: '', updated_at: '', bytes: 40, files: [{ path: 'notes.md', bytes: 5 }],
+    };
+    const tools = await createAgentTools(new MemoryStore(), run, run.checkpoint, {
+      skills: { skills: [skill], section: { key: 'taibu_skills', render: () => undefined }, sectionText: '' },
+    });
+    for (const name of Object.values(AGENT_SKILL_TOOLS)) assert.equal(getAgentToolFamily(name), 'skill', name);
     const parallel = createParallelExtension([], () => { throw new Error('the harness is not opened in this test'); });
     const background = createBackgroundAgents([]).extension;
     const names = [...tools.map((tool) => tool.name), ...[...parallel.tools ?? [], ...background.tools ?? []].map((tool) => tool.name)];

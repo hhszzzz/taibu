@@ -1,7 +1,7 @@
 import type { ChatMessage } from '@/types';
-import { type AgentMessageData, type AgentPart, type AgentRunStatus, type AgentRuntimeInfo } from '@/lib/agent/types';
-import { getAgentToolFamily, type AgentToolFamily, AGENT_ARCHIVE_TOOLS, AGENT_BACKGROUND_TOOL, AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_SUBMIT_PLAN_TOOL, AGENT_TOOL_SEARCH_TOOL, isAgentChartTool, isAgentMemberTool } from '@/lib/agent/tool-catalog';
-import { getAgentAttachmentRead, getAgentCalculation, getAgentChart, getAgentConversationHits, getAgentDataResults, getAgentMethod, getAgentNotes, getAgentScript, getAgentSearchResults, getAgentToolArtifactId, getAgentToolQuestions, type AgentChart } from '@/lib/agent/tool-presentation';
+import { isAgentRunTerminal, type AgentMessageData, type AgentPart, type AgentRunStatus, type AgentRuntimeInfo } from '@/lib/agent/types';
+import { getAgentToolFamily, type AgentToolFamily, AGENT_ARCHIVE_TOOLS, AGENT_BACKGROUND_TOOL, AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_SKILL_TOOLS, AGENT_SUBMIT_PLAN_TOOL, AGENT_TOOL_SEARCH_TOOL, isAgentChartTool, isAgentMemberTool } from '@/lib/agent/tool-catalog';
+import { getAgentAttachmentRead, getAgentCalculation, getAgentChart, getAgentConversationHits, getAgentDataResults, getAgentMethod, getAgentNotes, getAgentScript, getAgentSearchResults, getAgentSkillLoad, getAgentToolArtifactId, getAgentToolQuestions, type AgentChart } from '@/lib/agent/tool-presentation';
 import { AGENT_ARCHIVE_KIND_LABELS, getAgentArchiveProposal, getAgentArchiveRecord } from '@/lib/agent/archive';
 import { getChartFocus, getChartTargets } from '@/lib/agent/chart-interaction';
 import { getSavedChartHref } from '@/lib/agent/chart-save';
@@ -107,6 +107,8 @@ const RAW_TOOL_TITLES: Record<string, string> = {
     read_attachment: '读取附件',
     list_analysis_methods: '列出分析方法',
     load_analysis_method: '加载分析方法',
+    [AGENT_SKILL_TOOLS.load]: '加载技能',
+    [AGENT_SKILL_TOOLS.read]: '读取技能文件',
     todo_write: '更新计划',
     ask_user: '向你确认信息',
     read_user_memory: '读取长期记忆',
@@ -258,6 +260,12 @@ export function summarizeAgentTool(tool: AgentTool): string | null {
         return `${AGENT_ARCHIVE_KIND_LABELS[card.proposal.kind]} · ${subject}`;
     }
     if (tool.name === 'load_analysis_method') return getAgentMethod(tool)?.title ?? (typeof args.id === 'string' ? args.id : null);
+    if (tool.name === AGENT_SKILL_TOOLS.load) {
+        const skill = getAgentSkillLoad(tool);
+        if (skill) return `${skill.name} · v${skill.version}${skill.files.length ? ` · ${skill.files.length} 个附属文件` : ''}`;
+        return typeof args.name === 'string' ? args.name : null;
+    }
+    if (tool.name === AGENT_SKILL_TOOLS.read) return typeof args.name === 'string' && typeof args.path === 'string' ? `${args.name}/${args.path}` : null;
     if (tool.name === 'read_user_data') return getAgentDataTypeLabel(args.type);
     if (tool.name === 'parallel_analysis') {
         const members = parallelAnalysisResults(tool.output);
@@ -383,6 +391,8 @@ const FAMILY_PHRASES: Partial<Record<AgentToolFamily, (count: number) => string>
     data: count => `已读取 ${count} 份资料`,
     // 按读进上下文的方法卡计；只查看过目录时没有卡。
     method: count => count ? `已加载 ${count} 套分析方法` : '已查看方法目录',
+    // 按技能计：加载和读它的文件都算用了这个技能。
+    skill: count => `已使用 ${count} 个技能`,
     plan: count => `已提交 ${count} 次计划`,
     memory: count => `已记忆 ${count} 条`,
     archive: count => `已整理 ${count} 条档案`,
@@ -416,6 +426,7 @@ export function summarizeAgentActivity(tools: readonly AgentTool[], questionCoun
     const subagents = new Set<string>();
     // 方法卡按卡计：同一张卡读两次仍是一套，列出目录不算加载。
     const cards = new Set<string>();
+    const skills = new Set<string>();
     for (const tool of tools) {
         const family = getAgentToolFamily(tool.name);
         if (tool.name === AGENT_BACKGROUND_TOOL) {
@@ -428,6 +439,11 @@ export function summarizeAgentActivity(tools: readonly AgentTool[], questionCoun
         if (family === 'method') {
             if (tool.name === 'load_analysis_method') cards.add(String(toolArgs(tool).id ?? tool.id));
             counts.set(family, cards.size);
+            continue;
+        }
+        if (family === 'skill') {
+            skills.add(String(toolArgs(tool).name ?? tool.id));
+            counts.set(family, skills.size);
             continue;
         }
         counts.set(family, (counts.get(family) ?? 0) + 1);
@@ -537,7 +553,7 @@ export function formatAgentValue(value: unknown): string {
 
 /** Short tags shown on process steps, one per tool family. */
 export const AGENT_TOOL_FAMILY_LABELS: Record<AgentToolFamily, string> = {
-    chart: '命盘', calculation: '推演', drilldown: '详查', search: '依据', data: '资料', method: '指引', plan: '计划', todo: '清单',
+    chart: '命盘', calculation: '推演', drilldown: '详查', search: '依据', data: '资料', method: '指引', skill: '技能', plan: '计划', todo: '清单',
     question: '问题', collaboration: '协作', memory: '记忆', archive: '档案', code: '脚本', external: '外部', other: '工具',
 };
 

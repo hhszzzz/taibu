@@ -70,11 +70,16 @@ test('the skills are the method cards this task loaded, listed once each', () =>
     output: { id, title: id === 'bazi' ? '子平八字' : '紫微斗数', version, instructions: '# 卡', tools: ['bazi'], ...(tokens === undefined ? {} : { tokens }) },
   });
   const ziwei = loaded('ziwei', '1.0.0');
-  const skills = getAgentSkills([catalog, loaded('bazi', '2.0.0', 300), loaded('bazi', '2.1.0', 640), ziwei], 'deepseek-v3.2');
+  // A skill counts once by name, its latest load opening its step; one loaded before counting is shown at zero.
+  const skill = (id: string, version: number, tokens?: number) => part(id, 'load_skill', {
+    output: { name: 'case-review', version, scope: 'user', files: [{ path: 'notes.md', bytes: 12 }], ...(tokens === undefined ? {} : { tokens }) },
+  });
+  const skills = getAgentSkills([catalog, loaded('bazi', '2.0.0', 300), skill('s1', 1, 90), loaded('bazi', '2.1.0', 640), ziwei, skill('s2', 2, 120)], 'deepseek-v3.2');
   assert.equal(skills.listed, true, 'the injected directory was used');
   assert.deepEqual(skills.cards, [
-    { id: 'method:bazi', title: '子平八字', version: '2.1.0', tokens: 640 },
-    { id: 'method:ziwei', title: '紫微斗数', version: '1.0.0', tokens: estimateTokens('deepseek-v3.2', JSON.stringify(ziwei.output)) },
+    { id: 'method:bazi', kind: 'method', title: '子平八字', version: '2.1.0', tokens: 640 },
+    { id: 'tool:s2', kind: 'skill', title: 'case-review', version: 'v2', tokens: 120 },
+    { id: 'method:ziwei', kind: 'method', title: '紫微斗数', version: '1.0.0', tokens: estimateTokens('deepseek-v3.2', JSON.stringify(ziwei.output)) },
   ], 'a reloaded card replaces its earlier version; a card counted at run time keeps its count, an older one is estimated from what the model read');
   assert.deepEqual(getAgentSkills([]), { listed: false, cards: [] });
 });
@@ -93,6 +98,13 @@ test('the context card reports skills instead of leaving the row as a placeholde
   assert.match(unusedSkills, /技能 方法目录 · /u, 'the injected catalog is counted as skills, not «未加载»');
   assert.ok(!unusedSkills.includes('未加载'));
   assert.match(render({ runtime }), /技能 0 项 未启用/u, 'without skill data the row stays as it was');
+  // The skill directory is counted with the method directory; a loaded skill is named apart from the cards.
+  const listed = { ...runtime, skillsTokens: 500, skills: { listed: 2, sectionTokens: 300 } };
+  assert.match(render({ runtime: listed, skills: { listed: false, cards: [] } }), /技能 方法与技能目录 · 800/u);
+  assert.match(render({ runtime: listed, skills: { listed: false, cards: [
+    { id: 'method:bazi', kind: 'method', title: '子平八字', version: '2.1.0', tokens: 200 },
+    { id: 'tool:s1', kind: 'skill', title: 'case-review', version: 'v2', tokens: 100 },
+  ] } }), /技能 1 张卡 · 1 个技能 · 1\.1k/u);
 });
 
 test('a plan is a process step; the task list stays a progress bar', () => {

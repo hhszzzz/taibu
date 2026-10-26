@@ -91,6 +91,30 @@ CREATE POLICY agent_mcp_servers_owner ON public.agent_mcp_servers TO authenticat
 
 CREATE POLICY agent_mcp_servers_worker_read ON public.agent_mcp_servers FOR SELECT TO authenticated USING (public.is_admin_user());
 
+ALTER TABLE public.agent_skill_files ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY agent_skill_files_admin_platform ON public.agent_skill_files TO authenticated USING ((( SELECT public.is_admin_user() AS is_admin_user) AND (EXISTS ( SELECT 1
+   FROM public.agent_skills s
+  WHERE ((s.id = agent_skill_files.skill_id) AND (s.owner_id IS NULL)))))) WITH CHECK ((( SELECT public.is_admin_user() AS is_admin_user) AND (EXISTS ( SELECT 1
+   FROM public.agent_skills s
+  WHERE ((s.id = agent_skill_files.skill_id) AND (s.owner_id IS NULL))))));
+
+CREATE POLICY agent_skill_files_owner ON public.agent_skill_files TO authenticated USING ((EXISTS ( SELECT 1
+   FROM public.agent_skills s
+  WHERE ((s.id = agent_skill_files.skill_id) AND (s.owner_id = auth.uid()))))) WITH CHECK ((EXISTS ( SELECT 1
+   FROM public.agent_skills s
+  WHERE ((s.id = agent_skill_files.skill_id) AND (s.owner_id = auth.uid())))));
+
+CREATE POLICY agent_skill_files_worker_read ON public.agent_skill_files FOR SELECT TO authenticated USING (public.is_admin_user());
+
+ALTER TABLE public.agent_skills ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY agent_skills_admin_platform ON public.agent_skills TO authenticated USING (((owner_id IS NULL) AND ( SELECT public.is_admin_user() AS is_admin_user))) WITH CHECK (((owner_id IS NULL) AND ( SELECT public.is_admin_user() AS is_admin_user)));
+
+CREATE POLICY agent_skills_owner ON public.agent_skills TO authenticated USING ((owner_id = auth.uid())) WITH CHECK ((owner_id = auth.uid()));
+
+CREATE POLICY agent_skills_worker_read ON public.agent_skills FOR SELECT TO authenticated USING (public.is_admin_user());
+
 CREATE POLICY agent_events_read ON public.agent_run_events FOR SELECT TO authenticated USING ((EXISTS ( SELECT 1
    FROM public.agent_runs r
   WHERE (r.id = agent_run_events.run_id))));
@@ -649,6 +673,10 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.agent_mcp_servers TO authentic
 GRANT SELECT ON TABLE public.agent_run_credentials TO authenticated;
 
 GRANT SELECT ON TABLE public.agent_run_events TO authenticated;
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.agent_skill_files TO authenticated;
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.agent_skills TO authenticated;
 
 GRANT SELECT ON TABLE public.agent_workers TO authenticated;
 

@@ -31,6 +31,8 @@ CREATE TRIGGER agent_notify_event AFTER INSERT ON public.agent_run_events FOR EA
 
 CREATE TRIGGER agent_notify_run AFTER INSERT OR UPDATE OF status, cancel_requested ON public.agent_runs FOR EACH ROW EXECUTE FUNCTION public.agent_notify_run();
 
+CREATE TRIGGER agent_skills_updated_at BEFORE UPDATE ON public.agent_skills FOR EACH ROW EXECUTE FUNCTION public.update_ai_model_updated_at();
+
 CREATE TRIGGER agent_task_notice AFTER UPDATE OF status ON public.agent_runs FOR EACH ROW EXECUTE FUNCTION public.agent_task_notification();
 
 CREATE TRIGGER ai_gateways_updated_at BEFORE UPDATE ON public.ai_gateways FOR EACH ROW EXECUTE FUNCTION public.update_ai_model_updated_at();

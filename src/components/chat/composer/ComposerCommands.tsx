@@ -7,6 +7,8 @@ import { useToast } from '@/components/ui/Toast';
 import { requestBrowserJson } from '@/lib/browser-api';
 import { CHAT_NEW_EVENT } from '@/lib/chat/ConversationListContext';
 import { requestConversationExport } from '@/lib/chat/conversation-export';
+import { fetchSkillCommands } from '@/lib/agent/skills/client';
+import type { SkillCommand } from '@/lib/agent/skills/config';
 type Command = { id: string; label: string; run: () => void };
 export function useComposerCommands({ userId, draftKey, text, change, textarea, mentionsOpen, model, agentMode = false }: {
     draftKey?: string;
@@ -40,6 +42,22 @@ export function useComposerCommands({ userId, draftKey, text, change, textarea, 
         } finally { setPolishing(false); }
     };
     const dispatch = (name: string) => window.dispatchEvent(new Event(name));
+    // Agent mode lists the member's skills once a command is being typed, read again after a minute.
+    const [skills, setSkills] = useState<{ owner: string; at: number; list: SkillCommand[] } | null>(null);
+    const wantsSkills = agentMode && !!userId && /^[\/、]/u.test(text);
+    useEffect(() => {
+        if (!wantsSkills || !userId || (skills?.owner === userId && Date.now() - skills.at < 60_000)) return;
+        const controller = new AbortController();
+        const settle = (list: SkillCommand[]) => { if (!controller.signal.aborted) setSkills({ owner: userId, at: Date.now(), list }); };
+        fetchSkillCommands(controller.signal).then(settle, () => settle([]));
+        return () => controller.abort();
+    }, [wantsSkills, userId, skills]);
+    const skillCommands: Command[] = agentMode && skills && skills.owner === userId ? skills.list.map(skill => ({
+        id: `skill:${skill.name}`,
+        label: skill.description.length > 40 ? `${skill.description.slice(0, 40)}…` : skill.description,
+        // 填入 `/skill:名称 `，接着写要它做什么，回车发送。
+        run: () => { change(`/skill:${skill.name} `); textarea.current?.focus(); },
+    })) : [];
     const commands: Command[] = [
         { id: 'new', label: '新对话', run: () => dispatch(CHAT_NEW_EVENT) },
         { id: 'search', label: '搜索对话', run: () => dispatch('taibu:search') },
@@ -49,6 +67,7 @@ export function useComposerCommands({ userId, draftKey, text, change, textarea, 
         { id: 'methods', label: '选择分析方法', run: () => dispatch('taibu:methods') },
         // 压缩是 Agent 对话的指令：填入 `/compact `，可接着写想保留的重点，回车发送。
         ...(agentMode ? [{ id: 'compact', label: '压缩上下文', run: () => { change('/compact '); textarea.current?.focus(); } }] : []),
+        ...skillCommands,
     ];
     const prefix = /^[\/、]([^\s]*)$/u.exec(text);
     const matches = prefix ? commands.filter(command => command.id.includes(prefix[1].toLowerCase()) || command.label.includes(prefix[1])) : [];

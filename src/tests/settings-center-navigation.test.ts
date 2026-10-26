@@ -38,7 +38,7 @@ const { NAV_REGISTRY, getFeatureModules, getNavItemById, getSidebarToolItems } =
 
 const ENABLED_FLAGS = {
   upgradeEnabled: true, chartsEnabled: true, knowledgeBaseEnabled: true,
-  mcpServiceEnabled: true, connectorsEnabled: true, personalizationEnabled: true, helpEnabled: true, isAdmin: false,
+  mcpServiceEnabled: true, agentEnabled: true, personalizationEnabled: true, helpEnabled: true, isAdmin: false,
 };
 
 // Mounted-panel identity, close/reopen and per-user loading are behavior-owned by
@@ -194,7 +194,7 @@ test('connectors sit among the extensions, follow the Agent toggle, and their ad
     'the inbound connectors stand next to, and apart from, the outbound MCP service page');
   assert.equal(tabs.some(tab => tab.id === 'admin-agent-extensions'), false);
   assert.equal(getSettingsCenterTabs({ ...ENABLED_FLAGS, isAdmin: true }).find(tab => tab.id === 'admin-agent-extensions')?.group, 'management');
-  const off = { ...ENABLED_FLAGS, connectorsEnabled: false };
+  const off = { ...ENABLED_FLAGS, agentEnabled: false };
   assert.equal(getSettingsCenterTabs(off).find(tab => tab.id === 'connectors')?.disabled, true);
   assert.equal(getSettingsCenterDisabledState('connectors', off)?.title, '暂未开放');
   assert.deepEqual(parseSettingsCenterPath('/settings/admin-agent-extensions/policy'), { tab: 'admin-agent-extensions', subpath: 'policy' });

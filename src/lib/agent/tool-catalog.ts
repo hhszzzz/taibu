@@ -58,6 +58,7 @@ export const AGENT_TOOL_SCOPE_DEFINITIONS = [
   { id: 'knowledge', label: '知识库检索', description: '检索管理员或用户配置的知识库。' },
   { id: 'memory', label: '长期记忆', description: '读取、写入长期记忆及检索历史对话。' },
   { id: 'web', label: '联网与 MCP', description: '联网搜索以及外部 MCP 工具。' },
+  { id: 'skills', label: '技能', description: '加载管理员与用户添加的技能及其附属文件，包括输入框的 /skill: 调用。' },
   { id: 'archive', label: '档案写入', description: '记录用户事件或生成档案保存卡片。' },
   { id: 'collaboration', label: 'Agent 协作', description: '并行分析和后台子分析。' },
   { id: 'code', label: '代码模式', description: '允许 Agent 使用脚本批量调用工具。' },
@@ -100,11 +101,15 @@ export function getAgentToolFeatureId(name: string): AgentChartKind | null {
  */
 export const AGENT_WEB_TOOLS: ReadonlySet<string> = new Set(['web_search', 'web_fetch']);
 
+/** The skill tools (skills/catalog.server.ts): one loads a skill's SKILL.md, the other reads a file beside it. */
+export const AGENT_SKILL_TOOLS = { load: 'load_skill', read: 'read_skill_file' } as const;
+
 /** Static Agent tools that belong to an administrator-configurable scope. */
 export function getAgentToolScope(name: string): AgentToolScopeId | null {
   const feature = getAgentToolFeatureId(name);
   if (feature && (AGENT_TOOL_SCOPE_IDS as readonly string[]).includes(feature)) return feature;
   if (name.startsWith('mcp__') || AGENT_WEB_TOOLS.has(name)) return 'web';
+  if (name === AGENT_SKILL_TOOLS.load || name === AGENT_SKILL_TOOLS.read) return 'skills';
   if (name === 'search_knowledge') return 'knowledge';
   if (['list_user_data', 'read_user_data', 'read_user_notes', 'read_user_profile', 'read_attachment'].includes(name)) return 'user-data';
   if (['read_user_memory', 'remember_user_fact', 'search_conversations'].includes(name)) return 'memory';
@@ -122,6 +127,7 @@ export type AgentToolFamily =
   | 'search'
   | 'data'
   | 'method'
+  | 'skill'
   | 'plan'
   | 'todo'
   | 'question'
@@ -207,7 +213,7 @@ export function getAgentExtensionToolTitle(name: string): string | undefined {
  */
 export const AGENT_MODEL_ONLY_TOOLS: ReadonlySet<string> = new Set([
   'ask_user', 'todo_write', 'inspect_chart', 'focus_chart', 'web_search', 'web_fetch', 'search_knowledge', 'read_attachment',
-  'list_analysis_methods', 'load_analysis_method', 'read_user_memory', 'remember_user_fact', AGENT_SUBMIT_PLAN_TOOL,
+  'list_analysis_methods', 'load_analysis_method', AGENT_SKILL_TOOLS.load, AGENT_SKILL_TOOLS.read, 'read_user_memory', 'remember_user_fact', AGENT_SUBMIT_PLAN_TOOL,
   AGENT_ARCHIVE_TOOLS.record, AGENT_ARCHIVE_TOOLS.propose, 'parallel_analysis', AGENT_BACKGROUND_TOOL,
 ]);
 
@@ -237,6 +243,8 @@ const TOOL_FAMILIES: ReadonlyMap<string, AgentToolFamily> = new Map<string, Agen
   ['read_attachment', 'data'],
   ['list_analysis_methods', 'method'],
   ['load_analysis_method', 'method'],
+  [AGENT_SKILL_TOOLS.load, 'skill'],
+  [AGENT_SKILL_TOOLS.read, 'skill'],
   ['todo_write', 'todo'],
   [AGENT_SUBMIT_PLAN_TOOL, 'plan'],
   ['ask_user', 'question'],

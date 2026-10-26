@@ -9,9 +9,9 @@
  *   const { run } = await import('file:///absolute/repo/scripts/tests/browser-components.mjs');
  *   return run(page, '/tmp/taibu-browser/fixture.js');
  *
- * Actual components: SettingsCenterPage/SettingsCenterHost/GeneralSettingsPanel/ChartsPanel/SharedLinksPanel/ConnectorsPanel, ShareConversationMenu, AIModelPanel,
- * AnnouncementManagementPanel, KeyManagementPanel, AgentTaskPanel, ConversationListProvider, ChartPickerModal,
- * useSelectedBaziChart, useComposerState, HistoryDrawer/HistoryPageTemplate, RecordsPage and useAnalysisSnapshot.
+ * Actual components: SettingsCenterPage/SettingsCenterHost/GeneralSettingsPanel/ChartsPanel/SharedLinksPanel/ConnectorsPanel/SkillsPanel, ShareConversationMenu,
+ * AIModelPanel, AnnouncementManagementPanel, KeyManagementPanel, AgentTaskPanel, ConversationListProvider, ChartPickerModal,
+ * useSelectedBaziChart, useComposerState, useComposerCommands, HistoryDrawer/HistoryPageTemplate, RecordsPage and useAnalysisSnapshot.
  * Actual root ClientProviders owns the shared Query client and handles synthetic auth I/O.
  * Fixture-only boundaries: auth I/O/profile/feature flags, unrelated lazy panels,
  * framework navigation, viewport notifications, held fetch/JSON completion and HTTP responses.
@@ -76,6 +76,7 @@ import { SessionDetailsPanel } from '@/components/chat/agent/SessionDetailsPanel
 import { AgentResultContext } from '@/components/chat/agent/AgentResultContext';
 import { ChatRecordViewContext } from '@/lib/chat/chat-record-view';
 import { ComposerStatusBar } from '@/components/chat/composer/ComposerStatusBar';
+import { useComposerCommands } from '@/components/chat/composer/ComposerCommands';
 import { getAgentChart } from '@/lib/agent/tool-presentation';
 import { getChartTargets, getDrilldownTargets } from '@/lib/agent/chart-interaction';
 import { getAgentEvidence } from '@/lib/agent/evidence';
@@ -415,6 +416,18 @@ function ComposerProbe() {
     <output data-testid="composer-error">{state.mentionLoadError}</output>
   </section>;
 }
+// The composer's slash menu in Agent mode: the member's skills join the built-in commands.
+function SkillCommandsProbe() {
+  const { user } = useSessionSafe();
+  const [text, setText] = useState('');
+  const textarea = useRef(null);
+  const commands = useComposerCommands({ userId: user?.id, text, change: setText, textarea, mentionsOpen: false, model: 'fixture-analysis', agentMode: true });
+  return <section data-testid="skill-commands" data-chat-composer="">
+    <textarea aria-label="命令输入夹具" ref={textarea} value={text} onChange={event => { setText(event.target.value); commands.changed(); }}
+      onKeyDown={event => { commands.keyDown(event); }} />
+    {commands.ui}
+  </section>;
+}
 function SelectedChartProbe() {
   const { user } = useSessionSafe();
   const selected = useSelectedBaziChart(user?.id);
@@ -467,6 +480,7 @@ function Shell() {
   const [annualMounted, setAnnualMounted] = useState(false);
   const [communityMounted, setCommunityMounted] = useState(false);
   const [postMounted, setPostMounted] = useState(false);
+  const [skillCommandsMounted, setSkillCommandsMounted] = useState(false);
   const [castMounted, setCastMounted] = useState(null);
   window.fixture.refreshActivity = refreshAgentActivity;
   window.fixture.seedTarot = () => sessionStorage.setItem('tarot_result', JSON.stringify({
@@ -492,7 +506,7 @@ function Shell() {
   window.fixture.mount = { composer: setComposerMounted, history: setHistoryMounted, drawer: setDrawerMounted,
     records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted, agent: setAgentMounted, question: setQuestionMounted, results: setResultsMounted, sidebar: setSidebarMounted, phoneDrawer: setPhoneDrawerMounted, menu: setMenuMounted, rounds: setRoundsMounted, polish: setPolishMounted,
     snapshot: setSnapshotMounted, share: setShareMounted, tarot: setTarotMounted, qimen: setQimenMounted, activity: setActivityMounted,
-    annual: setAnnualMounted, community: setCommunityMounted, post: setPostMounted, cast: setCastMounted };
+    annual: setAnnualMounted, community: setCommunityMounted, post: setPostMounted, cast: setCastMounted, skillCommands: setSkillCommandsMounted };
   window.fixture.chartKey = queryKeys.userCharts;
   window.fixture.chartClient = chartClient;
   window.fixture.deleteHistory = deleteHistorySummary;
@@ -553,6 +567,7 @@ function Shell() {
     {route === '/keys' && <section data-testid="activation-keys"><KeyManagementPanel /></section>}
     {route === '/agent-tasks' && <section data-testid="agent-tasks"><AgentTaskPanel /></section>}
     {composerMounted && <ComposerProbe />}
+    {skillCommandsMounted && <SkillCommandsProbe />}
     {selectedMounted && <SelectedChartProbe />}
     {agentMounted && <AgentChatProbe />}
     {questionMounted && <StructuredQuestionProbe />}
@@ -648,7 +663,7 @@ export async function build(outputDirectory) {
       plugin.onResolve({ filter: /^@\/lib\/auth$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^@\/components\/providers\/(ChatTaskToastBridge|AnnouncementPopupHost)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^@\/lib\/hooks\/(useFeatureToggles|useCurrentUserProfile)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
-      plugin.onResolve({ filter: /^@\/components\/settings\/panels\// }, args => /\/(GeneralSettingsPanel|AISettingsPanel|ChartsPanel|SharedLinksPanel|ConnectorsPanel)$/.test(args.path) ? null : ({ path: args.path, namespace: 'fixture' }));
+      plugin.onResolve({ filter: /^@\/components\/settings\/panels\// }, args => /\/(GeneralSettingsPanel|AISettingsPanel|ChartsPanel|SharedLinksPanel|ConnectorsPanel|SkillsPanel)$/.test(args.path) ? null : ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^(?:node:)?crypto$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^next\/(navigation|link)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^@\/components\/settings\/AccountAdminPanels$/ }, args => ({ path: args.path, namespace: 'fixture' }));
@@ -767,6 +782,7 @@ export async function run(existingPage, bundlePath) {
         agentIO.requests.push({ url: url.pathname, search: url.search, method, body });
         if (url.pathname === '/api/agent/status') return Response.json({ enabled: true, ready: true, webAvailable: false, customAvailable: true });
         if (url.pathname === '/api/agent/activity') return Response.json(agentIO.activity ?? { runs: [], notices: [] });
+        if (url.pathname === '/api/agent/skills') return Response.json({ skills: agentIO.skills ?? [] });
         if (url.pathname === '/api/agent/runs' && method === 'GET') return Response.json(agentIO.runs[url.searchParams.get('conversationId')] ?? null);
         const events = url.pathname.match(/^\/api\/agent\/runs\/([^/]+)\/events$/);
         if (events) {
@@ -942,6 +958,8 @@ export async function run(existingPage, bundlePath) {
   let fixtureShare = null;
   // Each account's own MCP connectors (/api/user/connectors): alice may add three, bob's administrator closed them.
   const connectorsByUser = { alice: [], bob: [] };
+  // Each account's own skills (/api/user/skills), with the same allowance: alice may add three, bob's are closed.
+  const skillsByUser = { alice: [], bob: [] };
   await context.route('**/*', async route => {
     const request = route.request();
     const url = new URL(request.url());
@@ -1058,6 +1076,35 @@ export async function run(existingPage, bundlePath) {
         return ok({ server }, true);
       }
       if (method === 'DELETE') { owned.splice(owned.indexOf(server), 1); return ok({ deleted: true }, true); }
+    }
+    if (url.pathname.startsWith('/api/user/skills')) {
+      const user = await page.evaluate(() => window.fixtureAuth.cookieUser);
+      if (request.headers()['x-expected-user-id'] !== user) return route.fulfill({ status: 409, json: { error: 'Account changed' } });
+      const owned = skillsByUser[user];
+      const [, , , , id] = url.pathname.split('/');
+      const open = user === 'alice';
+      // The list leaves SKILL.md out; the detail carries it.
+      const view = skill => Object.fromEntries(Object.entries(skill).filter(([key]) => key !== 'content'));
+      if (!id && method === 'GET') return ok({ skills: owned.map(view), allowance: { enabled: open, tierAllowed: open, limit: open ? 3 : 0, used: owned.length, tiers: open ? ['free', 'plus', 'pro'] : [] } }, true);
+      if (!id && method === 'POST') {
+        // The server reads name and description from the frontmatter and refuses a SKILL.md without one.
+        const front = /^---\n([\s\S]*?)\n---\n/u.exec(body.content ?? '')?.[1];
+        const name = /^name: (\S+)$/mu.exec(front ?? '')?.[1];
+        if (!name) return route.fulfill({ status: 400, json: { error: 'SKILL.md 开头需要用 --- 包住的 frontmatter，写明 name 与 description' } });
+        const skill = { id: 'skill-' + (owned.length + 1), scope: 'user', name, description: /^description: (.+)$/mu.exec(front)?.[1] ?? '', version: 1,
+          requiredTier: 'free', enabled: body.enabled ?? true, manualOnly: false, sortOrder: body.sortOrder ?? 0, bytes: body.content.length,
+          files: (body.files ?? []).map(file => ({ path: file.path, bytes: file.content.length })), shadowed: false, updatedAt: '2026-10-27T00:00:00Z', content: body.content };
+        owned.push(skill);
+        return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ skill: view(skill) }) });
+      }
+      const skill = owned.find(item => item.id === id);
+      if (!skill) return route.fulfill({ status: 404, json: { error: '技能不存在' } });
+      if (method === 'GET') return ok({ skill }, true);
+      if (method === 'PATCH') {
+        Object.assign(skill, { enabled: body.enabled ?? skill.enabled, sortOrder: body.sortOrder ?? skill.sortOrder });
+        return ok({ skill: view(skill) }, true);
+      }
+      if (method === 'DELETE') { owned.splice(owned.indexOf(skill), 1); return ok({ deleted: true }, true); }
     }
     if (url.pathname === '/api/shares' && method === 'GET') return ok({ shares: fixtureShare ? [{ ...fixtureShare, conversationId: 'share-fixture', title: '分享夹具对话' }] : [] }, true);
     if (url.pathname === '/api/reminders') return ok({ subscriptions: ['solar_term', 'fortune', 'key_date'].map(reminderType => ({ reminderType, enabled: false, notifySite: true, notifyEmail: false })) });
@@ -3198,6 +3245,57 @@ export async function run(existingPage, bundlePath) {
     check('A closed policy says so and offers no way to add', await page.getByRole('button', { name: '添加连接器' }).isDisabled() &&
       requests.filter(entry => entry.pathname === '/api/user/connectors' && entry.method === 'GET').at(-1)?.expectedUserId === 'bob');
     await page.evaluate(() => window.fixtureAuth.change('alice')); await renderBarrier();
+
+    // Skills: a member's own SKILL.md with the files beside it, sent once; an edit that changes neither sends neither.
+    await page.evaluate(() => { history.replaceState(null, '', '#settings/skills'); window.dispatchEvent(new HashChangeEvent('hashchange')); });
+    await page.getByText('已添加 0 / 3 个技能', { exact: true }).waitFor();
+    await page.getByRole('button', { name: '添加技能' }).click();
+    const skillDialog = page.getByRole('dialog', { name: '添加技能' });
+    check('A new skill starts from a SKILL.md template with its name and description',
+      (await skillDialog.getByLabel('SKILL.md', { exact: true }).inputValue()).startsWith('---\nname: my-skill\ndescription: '));
+    await skillDialog.getByLabel('SKILL.md', { exact: true }).fill('---\nname: case-review\ndescription: 复盘一个命理案例\n---\n\n先读命盘，再列要点。');
+    const skillChooser = page.waitForEvent('filechooser');
+    await skillDialog.getByRole('button', { name: '添加文件' }).click();
+    await (await skillChooser).setFiles([{ name: 'terms.md', mimeType: 'text/markdown', buffer: Buffer.from('术语表') }]);
+    await skillDialog.getByText('已读取 1 个附属文件', { exact: true }).waitFor();
+    await skillDialog.getByRole('button', { name: '添加', exact: true }).click();
+    await skillDialog.waitFor({ state: 'hidden' });
+    const createdSkill = requests.find(entry => entry.pathname === '/api/user/skills' && entry.method === 'POST');
+    check('A skill is saved for the signed-in account with its SKILL.md and the picked file',
+      createdSkill?.expectedUserId === 'alice' && createdSkill.body.content.startsWith('---\nname: case-review\n') &&
+      JSON.stringify(createdSkill.body.files) === JSON.stringify([{ path: 'terms.md', content: '术语表' }]));
+    await page.getByText('已添加 1 / 3 个技能', { exact: true }).waitFor();
+    check('The list names the skill with its version, file count and size',
+      await page.getByRole('list', { name: '我的技能' }).getByText(/^v1 · 1 个附属文件 · /u).isVisible());
+    await page.getByRole('button', { name: '编辑「case-review」' }).click();
+    const skillEditor = page.getByRole('dialog', { name: '编辑技能「case-review」' });
+    await skillEditor.getByText('terms.md', { exact: true }).waitFor();
+    await skillEditor.getByRole('button', { name: '保存', exact: true }).click();
+    await skillEditor.waitFor({ state: 'hidden' });
+    const skillPatch = requests.filter(entry => entry.pathname === '/api/user/skills/skill-1' && entry.method === 'PATCH').at(-1);
+    check('Saving an unchanged skill sends neither SKILL.md nor its files again', !!skillPatch && !('content' in skillPatch.body) && !('files' in skillPatch.body));
+    await page.getByRole('button', { name: '添加技能' }).click();
+    await skillDialog.getByLabel('SKILL.md', { exact: true }).fill('# 没有 frontmatter');
+    await skillDialog.getByRole('button', { name: '添加', exact: true }).click();
+    await skillDialog.getByRole('alert').getByText(/frontmatter/u).waitFor();
+    check('A SKILL.md the server refuses keeps the dialog open with the reason', await skillDialog.isVisible() && skillsByUser.alice.length === 1);
+    await skillDialog.getByRole('button', { name: '取消', exact: true }).click();
+    await skillDialog.waitFor({ state: 'hidden' });
+    await page.evaluate(() => window.fixtureAuth.change('bob')); await renderBarrier();
+    await page.getByText('管理员已关闭个人技能。', { exact: true }).waitFor();
+    check('A closed skills policy says so and offers no way to add', await page.getByRole('button', { name: '添加技能' }).isDisabled());
+    await page.evaluate(() => window.fixtureAuth.change('alice')); await renderBarrier();
+    // The slash menu reads the skills the member can call, as /api/agent/skills lists the saved ones.
+    await page.evaluate(skills => { window.fixtureAgentIO.skills = skills; }, skillsByUser.alice.map(({ name, description }) => ({ name, description, scope: 'user' })));
+    await page.evaluate(() => { history.replaceState(null, '', '/chat'); window.dispatchEvent(new Event('fixture:navigate')); window.fixture.mount.skillCommands(true); });
+    const commandInput = page.getByLabel('命令输入夹具');
+    await commandInput.fill('/skill');
+    await page.getByRole('option', { name: /\/skill:case-review/u }).waitFor();
+    await commandInput.press('Enter');
+    await until(() => document.querySelector('[aria-label="命令输入夹具"]')?.value === '/skill:case-review ');
+    check('Agent mode\'s slash menu offers the member\'s skills and fills in /skill:名称',
+      await page.evaluate(() => window.fixtureAgentIO.requests.filter(request => request.url === '/api/agent/skills').length) === 1);
+    await page.evaluate(() => window.fixture.mount.skillCommands(false));
 
     {
     await page.evaluate(() => { history.replaceState(null, '', '/chat'); window.dispatchEvent(new Event('fixture:navigate')); window.fixture.mount.share(true); });

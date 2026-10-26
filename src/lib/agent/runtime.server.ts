@@ -29,7 +29,7 @@ import { agentToolCardId, modelCallEntry, projectDurableConversation, publicCano
 import {
   AGENT_CODEMODE_CALL_LIMIT, AGENT_SCRIPT_RESULT_SCHEMA, agentScriptCallNumber, agentScriptResult, createAgentCodemodeExtension,
 } from './codemode.server';
-import { AGENT_MODEL_ONLY_TOOLS, AGENT_PLAN_GATED_TOOLS, AGENT_SUBMIT_PLAN_TOOL, getAgentExtensionToolTitle, isAgentChartTool, isAgentDeferredTool, returnsAgentScriptResult } from './tool-catalog';
+import { AGENT_MODEL_ONLY_TOOLS, AGENT_PLAN_GATED_TOOLS, AGENT_SKILL_TOOLS, AGENT_SUBMIT_PLAN_TOOL, getAgentExtensionToolTitle, isAgentChartTool, isAgentDeferredTool, returnsAgentScriptResult } from './tool-catalog';
 import { createAgentToolSearchExtension } from './tool-search.server';
 import type { AgentAnswers, AgentQuestion } from './questions';
 import { agentInputContent } from './attachment-input';
@@ -48,6 +48,8 @@ import { parallelAnalysisResults } from './parallel-results';
 import { openAgentMcp, type AgentMcpSession } from './mcp/session.server';
 import type { McpConfirm } from './mcp/tools.server';
 import type { McpPool } from './mcp/pool.server';
+import { expandSkillMessages, openAgentSkills, type AgentSkillsSession } from './skills/catalog.server';
+import { parseSkillCommand } from './skills/config';
 import { projectAgentUsage } from './usage';
 import { splitAgentFollowUps } from './follow-ups';
 
@@ -150,7 +152,7 @@ async function latestAssistant(root: Conversation, context: Context) {
 
 export async function executeAgentRun(
   store: AgentStore, run: AgentRunRow, shutdown?: AbortSignal,
-  injected?: { streamFn?: PiStreamFn; config?: AIModelConfig; configs?: AIModelConfig[]; now?: () => number; leaseRenewMs?: number; mcpPool?: McpPool },
+  injected?: { streamFn?: PiStreamFn; config?: AIModelConfig; configs?: AIModelConfig[]; now?: () => number; leaseRenewMs?: number; mcpPool?: McpPool; skills?: AgentSkillsSession },
 ) {
   const checkpoint: AgentCheckpoint = structuredClone(run.checkpoint);
   if (!isCurrentAgentCheckpoint(checkpoint)) throw new Error("AGENT_ENGINE_UNSUPPORTED");
@@ -265,7 +267,13 @@ export async function executeAgentRun(
       if (!encrypted) throw new Error("任务凭据不可用");
       apiKey = decryptAgentCredential(encrypted, run.user_id, run.id);
     }
-    const tools = await createAgentTools(store, run, checkpoint);
+    // The skills the prompt lists are fixed when the task opens; every load finds the skill again. A configuration that
+    // cannot be read leaves the task without skills rather than failing it. A test or evaluation run brings its own.
+    const skills = injected ? injected.skills : await openAgentSkills(run.user_id, (await getUserCreditInfo(run.user_id, {})).membership).catch(() => {
+      console.warn("[agent-skills]", { runId: run.id, code: "SKILLS_UNAVAILABLE" });
+      return undefined;
+    });
+    const tools = await createAgentTools(store, run, checkpoint, { skills });
     // 进入上下文的技能文本按主模型计数；测试注入的模型不发网络请求。
     const countTokens = (text: string) => injected ? Promise.resolve(estimateTokens(config.modelId || config.id, text)) : countModelTokens(config, text, { apiKey });
     const window = run.input.customProvider ? null : resolveModelWindow(config, run.input.reasoning);
@@ -446,8 +454,8 @@ export async function executeAgentRun(
         execute: async (args, api, toolContext) => {
           if (tool.name === "ask_user") return ask(args as Record<string, unknown>, api, toolContext, tool);
           const output = await tool.execute(`${api.taskId}:${api.callId}`, args, toolContext.abortSignal);
-          // 方法卡读进上下文的就是这段文本：按模型计数后记在卡上，上下文卡的「技能」直接读它。
-          const details = tool.name === "load_analysis_method" && output.details && typeof output.details === "object"
+          // 方法卡与技能读进上下文的就是这段文本：按模型计数后记在卡上，上下文卡的「技能」直接读它。
+          const details = (tool.name === "load_analysis_method" || tool.name === AGENT_SKILL_TOOLS.load) && output.details && typeof output.details === "object"
             ? { ...output.details, tokens: await countTokens(output.content.map(item => item.type === "text" ? item.text : "").join("")) }
             : output.details;
           // Pi drops structured output on a model-issued call; a script reads it instead of the text.
@@ -462,6 +470,13 @@ export async function executeAgentRun(
     const directorySection = methodDirectory ? `<taibu_methods>\n${methodDirectory}\n</taibu_methods>` : "";
     if (checkpoint.runtime) checkpoint.runtime.skillsTokens = estimateTokens(config.modelId || config.id, directorySection);
     if (directorySection) void countTokens(directorySection).then(tokens => { if (checkpoint.runtime) checkpoint.runtime.skillsTokens = tokens; });
+    // 技能目录同样随系统提示注入，单独记数，上下文卡把它与方法目录一起计入「技能」。
+    const skillDirectory = skills?.sectionText ?? "";
+    if (checkpoint.runtime && skillDirectory) {
+      const listed = skills!.skills.filter(skill => !skill.disable_model_invocation).length;
+      checkpoint.runtime.skills = { listed, sectionTokens: estimateTokens(config.modelId || config.id, skillDirectory) };
+      void countTokens(skillDirectory).then(tokens => { if (checkpoint.runtime?.skills) checkpoint.runtime.skills.sectionTokens = tokens; });
+    }
     const toolTitle = (name: string) => tools.find(tool => tool.name === name)?.label ?? mcp?.titles.get(name) ?? getAgentExtensionToolTitle(name) ?? name;
     /**
      * A code mode script's call becomes a public part under the script's card, committed with the call's result. The
@@ -498,7 +513,7 @@ export async function executeAgentRun(
     };
     registry.install({
       name: "taibu",
-      sections: [taibuMethodSection, planSection],
+      sections: [taibuMethodSection, ...(skills ? [skills.section] : []), planSection],
       tools: [...registrations, ...(run.input.planMode ? [submitPlan] : [])],
       hooks: [
         hook(ToolTask, {
@@ -640,8 +655,13 @@ export async function executeAgentRun(
         if (checkpoint.question && command.mode !== 'reply') continue;
         const claimed = command.delivery_state === 'pending' ? await store.rpc<AgentCommandRow | null>('agent_claim_command', { ...store.lease(run), p_sequence: command.sequence }) : command;
         if (!claimed) continue;
+        // A message sent into the task may call a skill, expanded as a task's first message is; a skill that cannot be
+        // read leaves the message as written.
+        const [message] = claimed.mode === 'reply' || !parseSkillCommand(claimed.message.content) ? [claimed.message]
+          : await expandSkillMessages([claimed.message], run.user_id, (await getUserCreditInfo(run.user_id, {})).membership)
+            .catch(() => [claimed.message]);
         await root!.submit({
-          type: "input", requestId: `command:${claimed.sequence}`, content: agentInputContent(claimed.message, run.input.timezone),
+          type: "input", requestId: `command:${claimed.sequence}`, content: agentInputContent(message, run.input.timezone),
           whenBusy: claimed.mode === "follow_up" ? "followUp" : "steer",
         }, context);
         enqueued.add(command.sequence);

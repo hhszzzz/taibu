@@ -16,7 +16,7 @@ import type { ZiweiHoroscopeCanonicalJSON } from 'taibu-core/ziwei-horoscope';
 import type { ZiweiFlyingStarCanonicalJSON } from 'taibu-core/ziwei-flying-star';
 import { normalizeQuestions, type AgentQuestion } from './questions';
 import type { AgentPart } from './types';
-import { AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_SUBMIT_PLAN_TOOL, AGENT_WEB_TOOLS, isAgentChartTool, type AgentChartKind } from './tool-catalog';
+import { AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_SKILL_TOOLS, AGENT_SUBMIT_PLAN_TOOL, AGENT_WEB_TOOLS, isAgentChartTool, type AgentChartKind } from './tool-catalog';
 import { estimateTokens } from './token-estimate';
 
 export type AgentToolPart = Extract<AgentPart, { type: 'tool' }>;
@@ -383,11 +383,28 @@ export function getAgentMethodCatalog(tool: AgentToolPart) {
   });
 }
 
-export interface AgentSkill { id: string; title: string; version: string; tokens: number }
+export interface AgentSkill { id: string; kind: 'method' | 'skill'; title: string; version: string; tokens: number }
+
+/** What load_skill read: the skill's name and version, whose it is and the files beside it. */
+export interface AgentSkillLoad { name: string; version: number; scope: 'platform' | 'user'; files: Array<{ path: string; bytes: number }>; tokens: number | null }
+
+export function getAgentSkillLoad(tool: AgentToolPart): AgentSkillLoad | null {
+  if (tool.status !== 'completed' || tool.name !== AGENT_SKILL_TOOLS.load) return null;
+  const output = record(tool.output);
+  if (typeof output.name !== 'string' || typeof output.version !== 'number') return null;
+  const files = Array.isArray(output.files) ? output.files.flatMap(item => {
+    const file = record(item);
+    return typeof file.path === 'string' ? [{ path: file.path, bytes: typeof file.bytes === 'number' ? file.bytes : 0 }] : [];
+  }) : [];
+  return {
+    name: output.name, version: output.version, scope: output.scope === 'user' ? 'user' : 'platform', files,
+    tokens: typeof output.tokens === 'number' && output.tokens >= 0 ? output.tokens : null,
+  };
+}
 
 /**
- * 技能：本任务用的方法卡。目录随系统提示注入，正文由 load_analysis_method 读进上下文；
- * 这里按卡 id 去重（改版重载同一张卡只算一次），`id` 就是它在工作区的页。
+ * 技能：本任务用的方法卡与技能。目录随系统提示注入，正文由 load_analysis_method、load_skill 读进上下文；
+ * 这里按卡 id、技能名去重（改版重载同一张卡只算一次）。`id` 是它在工作区的页：方法卡的页，技能最近一次加载的步骤。
  * token 读卡上记的模型计数（运行时按网关 count_tokens 计）；早先的任务没有记，按 `model` 的 tokenizer 家族估算
  * 模型当时读到的文本（卡的 JSON）。
  */
@@ -396,11 +413,13 @@ export function getAgentSkills(tools: readonly AgentToolPart[], model = '') {
   let listed = false;
   for (const tool of tools) {
     if (getAgentMethodCatalog(tool)) listed = true;
+    const skill = getAgentSkillLoad(tool);
+    if (skill) cards.set(`skill:${skill.name}`, { id: `tool:${tool.id}`, kind: 'skill', title: skill.name, version: `v${skill.version}`, tokens: skill.tokens ?? 0 });
     const guide = getAgentMethod(tool);
     if (!guide) continue;
     const counted = record(tool.output).tokens;
     const tokens = typeof counted === 'number' && counted >= 0 ? counted : estimateTokens(model, JSON.stringify(tool.output));
-    cards.set(guide.id, { id: `method:${guide.id}`, title: guide.title, version: guide.version, tokens });
+    cards.set(guide.id, { id: `method:${guide.id}`, kind: 'method', title: guide.title, version: guide.version, tokens });
   }
   return { listed, cards: [...cards.values()] };
 }

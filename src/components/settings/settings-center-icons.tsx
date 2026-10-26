@@ -14,6 +14,7 @@ import {
   ScribbleIcon,
   SettingsIcon,
   ShareLinkIcon,
+  SkillIcon,
   UpgradeIcon,
 } from '@/lib/navigation/nav-icons';
 import type { SettingsCenterTab } from '@/lib/settings-center';
@@ -54,6 +55,7 @@ export const SETTINGS_CENTER_TAB_ICONS: Record<SettingsCenterTab, ComponentType<
   charts: withDefaultSize(ChartsIcon),
   'knowledge-base': withDefaultSize(KnowledgeIcon),
   connectors: withDefaultSize(PlugIcon),
+  skills: withDefaultSize(SkillIcon),
   'mcp-service': withDefaultSize(ScribbleIcon),
   'admin-announcements': withDefaultSize(MegaphoneIcon),
   'admin-features': withDefaultSize(FeatureFlagsIcon),

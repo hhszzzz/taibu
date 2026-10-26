@@ -277,6 +277,35 @@ ALTER TABLE public.agent_run_events ALTER COLUMN sequence ADD GENERATED ALWAYS A
     CACHE 1
 );
 
+CREATE TABLE public.agent_skill_files (
+    skill_id uuid NOT NULL,
+    path text NOT NULL,
+    content text NOT NULL,
+    CONSTRAINT agent_skill_files_content_check CHECK ((octet_length(content) <= 1048576)),
+    CONSTRAINT agent_skill_files_path_check CHECK (((length(path) <= 256) AND (path ~ '^[^/\\]+(/[^/\\]+)*$'::text) AND (path !~ '(^|/)\.\.?(/|$)'::text) AND (path !~ '[[:cntrl:]]'::text)))
+);
+
+CREATE TABLE public.agent_skills (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    owner_id uuid,
+    name text NOT NULL,
+    description text NOT NULL,
+    content text NOT NULL,
+    version integer DEFAULT 1 NOT NULL,
+    required_tier text DEFAULT 'free'::text NOT NULL,
+    is_enabled boolean DEFAULT true NOT NULL,
+    disable_model_invocation boolean DEFAULT false NOT NULL,
+    sort_order integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT agent_skills_content_check CHECK ((octet_length(content) <= 131072)),
+    CONSTRAINT agent_skills_description_check CHECK (((length(btrim(description)) >= 1) AND (length(description) <= 1024))),
+    CONSTRAINT agent_skills_name_check CHECK (((length(name) <= 64) AND (name ~ '^[a-z0-9]+(-[a-z0-9]+)*$'::text))),
+    CONSTRAINT agent_skills_required_tier_check CHECK ((required_tier = ANY (ARRAY['free'::text, 'plus'::text, 'pro'::text]))),
+    CONSTRAINT agent_skills_user_tier_check CHECK (((owner_id IS NULL) OR (required_tier = 'free'::text))),
+    CONSTRAINT agent_skills_version_check CHECK ((version >= 1))
+);
+
 CREATE TABLE public.agent_workers (
     id text NOT NULL,
     heartbeat_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -908,6 +937,15 @@ ALTER TABLE ONLY public.agent_runs
 ALTER TABLE ONLY public.agent_runs
     ADD CONSTRAINT agent_runs_user_id_request_id_key UNIQUE (user_id, request_id);
 
+ALTER TABLE ONLY public.agent_skill_files
+    ADD CONSTRAINT agent_skill_files_pkey PRIMARY KEY (skill_id, path);
+
+ALTER TABLE ONLY public.agent_skills
+    ADD CONSTRAINT agent_skills_owner_id_name_key UNIQUE NULLS NOT DISTINCT (owner_id, name);
+
+ALTER TABLE ONLY public.agent_skills
+    ADD CONSTRAINT agent_skills_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY public.agent_workers
     ADD CONSTRAINT agent_workers_pkey PRIMARY KEY (id);
 
@@ -1132,6 +1170,12 @@ ALTER TABLE ONLY public.agent_runs
 
 ALTER TABLE ONLY public.agent_runs
     ADD CONSTRAINT agent_runs_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.agent_skill_files
+    ADD CONSTRAINT agent_skill_files_skill_id_fkey FOREIGN KEY (skill_id) REFERENCES public.agent_skills(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.agent_skills
+    ADD CONSTRAINT agent_skills_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.ai_model_gateway_bindings
     ADD CONSTRAINT ai_model_gateway_bindings_gateway_id_fkey FOREIGN KEY (gateway_id) REFERENCES public.ai_gateways(id);

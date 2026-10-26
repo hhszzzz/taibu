@@ -342,6 +342,13 @@ export const PlugIcon = createNavIcon('plug', <>
 
 export const PuzzleIcon = createNavIcon('puzzle', <path d="M5.5 8.5h3.4a2 2 0 1 1 4 0h3.6v3.4a2 2 0 1 1 0 4v3.6h-11z" />);
 
+/** A skill: the SKILL.md page with a spark on it. */
+export const SkillIcon = createNavIcon('skill', <>
+    <path d="M6.5 4.5h7.2l3.8 3.8v10.7a.5.5 0 0 1-.5.5H7a.5.5 0 0 1-.5-.5z" />
+    <path d="M13.5 4.5v4h4" />
+    <path d="M12 11.2l.9 2 2 .9-2 .9-.9 2-.9-2-2-.9 2-.9z" />
+</>);
+
 /** MCP：一笔涂鸦，悬停时像刚写上去一样顺着笔迹画出来。 */
 export const ScribbleIcon = createNavIcon('scribble', <g className="ni-glyph">
     <path pathLength={100} d="M5 14.5c1-4 2.6-6 4-6s1.6 2 .8 4.4c-.7 2.2-.3 3.4 1 3.4 1.8 0 3.2-2.6 4.4-5.6" />

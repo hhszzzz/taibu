@@ -137,13 +137,18 @@ test('process steps summarize each call from its arguments and stored result onl
     // 按需加载的工具：检索一行写清关键词与加载数量。
     assert.equal(summarizeAgentTool(tool('tool_search', { input: { query: '大运' }, output: { loaded: ['bazi_dayun', 'bazi_relations'] } })), '「大运」 · 加载 2 个工具');
     assert.equal(summarizeAgentTool(tool('tool_search', { status: 'running', input: { query: '大运' } })), '「大运」');
+    // 技能：加载写名称、版本与附属文件数，读文件写技能名与路径。
+    assert.equal(summarizeAgentTool(tool('load_skill', { input: { name: 'case-review' }, output: { name: 'case-review', version: 3, scope: 'user', files: [{ path: 'notes.md', bytes: 12 }] } })),
+        'case-review · v3 · 1 个附属文件');
+    assert.equal(summarizeAgentTool(tool('load_skill', { status: 'running', input: { name: 'case-review' } })), 'case-review');
+    assert.equal(summarizeAgentTool(tool('read_skill_file', { input: { name: 'case-review', path: 'references/terms.md' } })), 'case-review/references/terms.md');
     assert.equal(summarizeAgentTool(tool('tool_search', { output: { loaded: [] } })), '加载 0 个工具');
     assert.equal(getAgentToolFamily('tool_search'), 'other');
     // 计划模式：计划提交后按用户的决定显示。
     assert.equal(summarizeAgentTool(tool('submit_plan', { input: { plan: '# 计划' }, output: { plan: '# 计划', approved: true } })), '已批准');
     assert.equal(summarizeAgentTool(tool('submit_plan', { input: { plan: '# 计划' }, output: { plan: '# 计划', approved: false } })), '要求修改');
     assert.equal(summarizeAgentTool(tool('submit_plan', { status: 'running', input: { plan: '# 计划' } })), '等待你批准');
-    assert.equal(Object.keys(AGENT_TOOL_FAMILY_LABELS).length, 15, 'every tool family has a step tag');
+    assert.equal(Object.keys(AGENT_TOOL_FAMILY_LABELS).length, 16, 'every tool family has a step tag');
     // 个人资料检索：条件、笔记、以往对话与档案各写一行。
     assert.equal(summarizeAgentTool(tool('list_user_data', { input: { keyword: '换工作', since: '2026-01-01', until: '2026-03-31' }, output: { items: [], errors: [] } })),
         '「换工作」 · 2026-01-01 至 2026-03-31 · 找到 0 份资料');
@@ -221,6 +226,9 @@ test('the claude-style status line groups tools by effect and names collaboratio
     assert.equal(summarizeAgentActivity([team], 0, 0), '开启 2 个智能体');
     assert.equal(summarizeAgentActivity([tool('a', 'bazi', { status: 'failed' })], 2, 1), '已查看 1 张命盘，已确认 2 项信息，1 处失败');
     assert.equal(summarizeAgentActivity([], 1, 0), '已确认 1 项信息');
+    // A skill counts once: loading it and reading its files are one skill used.
+    assert.equal(summarizeAgentActivity([tool('k', 'load_skill', { input: { name: 'case-review' } }), tool('f', 'read_skill_file', { input: { name: 'case-review', path: 'notes.md' } }),
+        tool('g', 'load_skill', { input: { name: 'timing' } })], 0, 0), '已使用 2 个技能');
     assert.equal(summarizeAgentActivity([tool('s', 'select_final_artifacts', { input: { artifactIds: ['a', 'b', 'c'] } })], 0, 0), '已运行 1 个工具', 'a step of a retired tool in an earlier answer still counts as a step');
 });
 

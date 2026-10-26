@@ -10,6 +10,7 @@ import { agentExperienceDatabaseContracts } from './agent-experience-database-co
 import { conversationShareDatabaseContracts } from './conversation-share-database-contracts.mjs';
 import { agentArchiveDatabaseContracts } from './agent-archive-database-contracts.mjs';
 import { agentMcpDatabaseContracts } from './agent-mcp-database-contracts.mjs';
+import { agentSkillsDatabaseContracts } from './agent-skills-database-contracts.mjs';
 
 // Real PostgreSQL/RLS contracts against a disposable local container. This does
 // NOT validate Better Auth sessions, network authentication, or production parity.
@@ -723,6 +724,7 @@ ROLLBACK;`), /42501/, 'record_credit_transaction must reject direct authenticate
   await conversationShareDatabaseContracts(t,{sql,asActor});
   await agentArchiveDatabaseContracts(t,{sql,asActor,asOwner,adminId:ids.admin});
   await agentMcpDatabaseContracts(t,{sql,asActor,asOwner,adminId:ids.admin});
+  await agentSkillsDatabaseContracts(t,{sql,asActor,asOwner,adminId:ids.admin});
 
 
 });

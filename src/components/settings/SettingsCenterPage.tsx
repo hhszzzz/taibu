@@ -39,6 +39,7 @@ const LazyChartsContent = lazy(() => import('@/components/settings/panels/Charts
 const LazyKnowledgeBaseManageContent = lazy(() => import('@/components/settings/panels/KnowledgeBasePanel'));
 const LazyMcpPageContent = lazy(() => import('@/components/settings/panels/McpServicePanel'));
 const LazyConnectorsContent = lazy(() => import('@/components/settings/panels/ConnectorsPanel'));
+const LazySkillsContent = lazy(() => import('@/components/settings/panels/SkillsPanel'));
 const LazyProfileContent = lazy(() => import('@/components/settings/panels/ProfilePanel'));
 const LazyHelpContent = lazy(() => import('@/components/settings/panels/HelpPanel'));
 const LazySharedLinksContent = lazy(() => import('@/components/settings/panels/SharedLinksPanel'));
@@ -175,6 +176,8 @@ function renderSettingsCenterPanel(
       return renderLazyPanel(<LazyKnowledgeBaseManageContent />);
     case 'connectors':
       return renderLazyPanel(<LazyConnectorsContent />);
+    case 'skills':
+      return renderLazyPanel(<LazySkillsContent />);
     case 'mcp-service':
       return renderLazyPanel(<LazyMcpPageContent />);
     case 'admin-announcements':
@@ -201,7 +204,7 @@ export function SettingsCenterPage({ children }: { children: React.ReactNode }) 
     chartsEnabled: !featureTogglesLoaded || isFeatureEnabled('charts'),
     knowledgeBaseEnabled: !featureTogglesLoaded || isFeatureEnabled('knowledge-base'),
     mcpServiceEnabled: !featureTogglesLoaded || isFeatureEnabled('mcp-service'),
-    connectorsEnabled: !featureTogglesLoaded || isFeatureEnabled('agent'),
+    agentEnabled: !featureTogglesLoaded || isFeatureEnabled('agent'),
     personalizationEnabled: featureTogglesLoaded && isFeatureEnabled('chat') && isFeatureEnabled('ai-personalization'),
     helpEnabled: !featureTogglesLoaded || isFeatureEnabled('help'), isAdmin,
   }), [featureTogglesLoaded, isAdmin, isFeatureEnabled]);

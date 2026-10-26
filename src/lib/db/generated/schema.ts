@@ -133,6 +133,27 @@ export interface AgentRuns {
   updated_at: Generated<string>;
 }
 
+export interface AgentSkillFiles {
+  skill_id: ColumnType<string, string, string>;
+  path: ColumnType<string, string, string>;
+  content: ColumnType<string, string, string>;
+}
+
+export interface AgentSkills {
+  id: Generated<string>;
+  owner_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  name: ColumnType<string, string, string>;
+  description: ColumnType<string, string, string>;
+  content: ColumnType<string, string, string>;
+  version: Generated<number>;
+  required_tier: Generated<string>;
+  is_enabled: Generated<boolean>;
+  disable_model_invocation: Generated<boolean>;
+  sort_order: Generated<number>;
+  created_at: Generated<string>;
+  updated_at: Generated<string>;
+}
+
 export interface AgentWorkers {
   id: ColumnType<string, string, string>;
   heartbeat_at: Generated<string>;
@@ -738,6 +759,8 @@ export interface DB {
   "agent_run_credentials": AgentRunCredentials;
   "agent_run_events": AgentRunEvents;
   "agent_runs": AgentRuns;
+  "agent_skill_files": AgentSkillFiles;
+  "agent_skills": AgentSkills;
   "agent_workers": AgentWorkers;
   "ai_gateways": AiGateways;
   "ai_model_gateway_bindings": AiModelGatewayBindings;

@@ -430,31 +430,11 @@ html {
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .toast-item { animation: toastIn .18s cubic-bezier(.165, .84, .44, 1); }
+/* 离开时淡出并略微下沉、缩小，播完才从堆叠里移除（Toast.tsx），其余提示随后滑到新位置。 */
+.toast-item[data-leaving] { animation: motion-dialog-out var(--duration-snap) var(--ease-out) forwards; pointer-events: none; }
 /* 手机底部导航占位：提示条整体上移，避免盖住导航。 */
 @media (max-width: 1023px) { .app-toast-stack { bottom: calc(5rem + var(--sab)); } }
 @media (prefers-reduced-motion: reduce) { .toast-item { animation: none; } }
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
 
 @keyframes pulse {
 
@@ -489,30 +469,6 @@ html {
   height: 100%;
   transform-origin: center;
   animation: soundWave 1s ease-in-out infinite;
-}
-
-@keyframes zoomIn {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.animate-fade-in {
-  animation: fadeIn 0.3s ease-out;
-}
-
-.animate-slide-up {
-  animation: slideUp 0.4s ease-out;
-}
-
-.animate-zoom-in {
-  animation: zoomIn 0.3s ease-out;
 }
 
 /* ===== 动效体系 =====
@@ -560,6 +516,29 @@ html {
   .motion-tabs--result::before { height: 2px; translate: var(--tab-x, 0px) calc(var(--tab-y, 0px) + var(--tab-h, 0px) - 2px); border-radius: 2px; background: var(--foreground); box-shadow: none; }
 }
 .motion-tabs[data-indicator] > [role=tab][aria-selected=true] { background: transparent; box-shadow: none; border-bottom-color: transparent; }
+
+/* 旧的 animate-* 工具类并入动效刻度：整块淡入 base，上浮 sheet，缩放进入 base。 */
+.animate-fade-in { animation: motion-fade var(--duration-base) var(--ease-out) backwards; }
+.animate-slide-up { animation: motion-fade-up var(--duration-sheet) var(--ease-out) backwards; }
+.animate-zoom-in { animation: motion-pop-in var(--duration-base) var(--ease-out) backwards; }
+
+/* 结果页的区块依次上浮：第一块（页头）不动，随换页一起淡入；它常带着手机底部的 fixed 操作条，
+   动画中的祖先会成为 fixed 的包含块、并让后面的区块盖住它。其后的区块每块晚 40ms，第六块起同时。 */
+.motion-stagger > :nth-child(n+2) { animation: motion-fade-up var(--duration-sheet) var(--ease-out) backwards; }
+.motion-stagger > :nth-child(3) { animation-delay: 40ms; }
+.motion-stagger > :nth-child(4) { animation-delay: 80ms; }
+.motion-stagger > :nth-child(5) { animation-delay: 120ms; }
+.motion-stagger > :nth-child(n+6) { animation-delay: 160ms; }
+/* 减少动态效果时全局只压短时长，这里把错开的延迟也去掉，免得区块先空着再出现。 */
+@media (prefers-reduced-motion: reduce) { .motion-stagger > * { animation-delay: 0s !important; } }
+
+/* 折叠块（<details>）展开收起时高度过渡；不支持 ::details-content 的浏览器照旧直接开合。
+   interpolate-size 只在 details 子树内生效，不改变其他元素的 auto 尺寸过渡。 */
+@supports selector(::details-content) {
+  details { interpolate-size: allow-keywords; }
+  details::details-content { block-size: 0; overflow-y: clip; transition: block-size var(--duration-base) var(--ease-out), content-visibility var(--duration-base) allow-discrete; }
+  details[open]::details-content { block-size: auto; }
+}
 
 /* 复制成功：按钮里的勾号一笔画出（claude epitaxy-check-draw：.18s ease-out）。 */
 :is([aria-label*="复制"], [title*="复制"]) svg.lucide-check :is(path, polyline) { stroke-dasharray: 24; animation: motion-check-draw .18s var(--ease-out) both; }

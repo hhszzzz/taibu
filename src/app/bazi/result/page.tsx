@@ -577,7 +577,7 @@ function BaziResultContent() {
 
     return (
         <div className="min-h-screen bg-background">
-            <div className="mx-auto flex w-full max-w-[1104px] flex-col gap-5 px-4 pb-24 pt-4 sm:gap-6 sm:px-6 lg:px-8 lg:pb-0 lg:pt-7 animate-fade-in">
+            <div className="mx-auto flex w-full max-w-[1104px] flex-col gap-5 px-4 pb-24 pt-4 sm:gap-6 sm:px-6 lg:px-8 lg:pb-0 lg:pt-7 motion-stagger">
                 <ResultHeader
                     chartId={chartId}
                     saving={saving}

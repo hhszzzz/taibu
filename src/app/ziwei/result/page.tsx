@@ -436,7 +436,7 @@ function ZiweiResultContent() {
 
     return (
         <div className="min-h-screen bg-background text-foreground">
-            <div className="mx-auto flex max-w-[1144px] animate-fade-in flex-col gap-[18px] px-4 pt-0.5 pb-28 lg:px-8 lg:pt-8 lg:pb-14">
+            <div className="mx-auto flex max-w-[1144px] motion-stagger flex-col gap-[18px] px-4 pt-0.5 pb-28 lg:px-8 lg:pt-8 lg:pb-14">
                 <ZiweiResultHeader
                     title={pageTitle}
                     summary={summary}

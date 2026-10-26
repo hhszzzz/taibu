@@ -377,7 +377,7 @@ function TarotResultContent() {
 
     return (
         <div className="min-h-full bg-background text-foreground">
-            <div className="mx-auto flex w-full max-w-[1024px] animate-fade-in flex-col gap-3.5 px-4 pt-0.5 pb-28 lg:gap-7 lg:px-8 lg:pt-8 lg:pb-16">
+            <div className="mx-auto flex w-full max-w-[1024px] motion-stagger flex-col gap-3.5 px-4 pt-0.5 pb-28 lg:gap-7 lg:px-8 lg:pt-8 lg:pb-16">
                 {/* 桌面端返回；移动端由顶栏返回与底栏「重新洗牌」承载 */}
                 <Link href="/tarot" className="hidden w-fit items-center gap-1.5 rounded-md text-sm text-foreground-secondary transition-colors hover:text-foreground lg:inline-flex">
                     <ChevronLeft className="h-4 w-4" aria-hidden="true" />重新洗牌

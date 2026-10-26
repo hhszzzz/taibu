@@ -7,7 +7,7 @@
  */
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Calendar, MapPin, Plus, Star, Trash2 } from 'lucide-react';
@@ -17,6 +17,7 @@ import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import { SettingsLoginRequired } from '@/components/settings/SettingsLoginRequired';
 import { useChartMutation, useUserCharts } from '@/lib/hooks/useUserCharts';
+import { useListMotion } from '@/lib/motion/list';
 import { getNavItemById } from '@/lib/navigation/registry';
 import { deleteUserChart, setDefaultUserChart, type UserChartRecord } from '@/lib/user/charts-client';
 
@@ -43,6 +44,8 @@ function formatCharts(rows: UserChartRecord[], type: ChartType, defaultId: strin
     is_default: chart.id === defaultId,
   })).sort((a, b) => Number(b.is_default) - Number(a.is_default) || new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 }
+
+const chartKey = (chart: ChartItem) => `${chart.type}-${chart.id}`;
 
 function getGenderLabel(gender: ChartItem['gender']) {
   if (gender === 'female') return '女';
@@ -75,7 +78,7 @@ function ChartRow({
   const birthDate = new Date(`${chart.birth_date}T00:00:00`).toLocaleDateString('zh-CN');
 
   return (
-    <li className="flex items-center gap-3 py-3.5 pl-5 pr-3 transition-colors duration-150 hover:bg-background-secondary/60 [&+li]:border-t [&+li]:border-border">
+    <li data-motion-key={chartKey(chart)} className="flex items-center gap-3 py-3.5 pl-5 pr-3 transition-colors duration-150 hover:bg-background-secondary/60 [&+li]:border-t [&+li]:border-border">
       <Link
         href={href}
         onClick={(event) => onNavigate?.(event, href)}
@@ -154,6 +157,9 @@ function ChartSection({
 }) {
   const headingId = `settings-charts-${type}`;
   const createHref = getNavItemById(type)?.href ?? `/${type}`;
+  // 删掉的命盘收起离开，设为默认的滑到最前。
+  const listRef = useRef<HTMLUListElement>(null);
+  const rows = useListMotion(listRef, list, chartKey);
 
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-3">
@@ -168,11 +174,11 @@ function ChartSection({
         </Link>
       </div>
 
-      {list.length > 0 ? (
-        <ul className="overflow-hidden rounded-2xl border border-border bg-surface">
-          {list.map((chart) => (
+      {rows.length > 0 ? (
+        <ul ref={listRef} className="overflow-hidden rounded-2xl border border-border bg-surface">
+          {rows.map(({ key, item: chart }) => (
             <ChartRow
-              key={`${chart.type}-${chart.id}`}
+              key={key}
               chart={chart}
               onDelete={onDelete}
               onSetDefault={onSetDefault}

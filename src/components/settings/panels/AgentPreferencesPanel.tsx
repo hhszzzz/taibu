@@ -9,12 +9,16 @@ import type { ChatPreferences } from '@/lib/chat/preferences';
 import type { AgentMemory } from '@/lib/agent/memory';
 import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 import { CollaborationSettings } from '@/components/settings/CollaborationSettings';
+import { useListMotion } from '@/lib/motion/list';
 
 export function AgentPreferencesPanel({ userId }: { userId: string }) {
     const [preferences, setPreferences] = useState<ChatPreferences | null>(null), [memoryEnabled, setMemoryEnabled] = useState(false);
     const [memories, setMemories] = useState<AgentMemory[]>([]), [busy, setBusy] = useState(false), [error, setError] = useState('');
     const [title, setTitle] = useState(''), [content, setContent] = useState('');
     const controller = useRef<AbortController | null>(null);
+    // 删掉的一条收起离开，新存的一条上浮进入。
+    const listRef = useRef<HTMLUListElement>(null);
+    const memoryRows = useListMotion(listRef, memories, memory => memory.id);
     const { showToast } = useToast();
     useUnsavedSettingsGuard(!!preferences && (memoryEnabled !== (preferences.memoryEnabled === true) || !!title || !!content));
     const request = <T,>(method: string, body?: unknown) => requestBrowserJson<T>('/api/user/agent-memory', { method, headers: { 'Content-Type': 'application/json', 'X-Expected-User-Id': userId }, ...(body ? { body: JSON.stringify(body) } : {}), signal: controller.current?.signal });
@@ -50,6 +54,8 @@ export function AgentPreferencesPanel({ userId }: { userId: string }) {
             const result = await request<{ memory?: AgentMemory }>(method, body);
             if (!active || active.signal.aborted) return;
             if (result.error) { showToast('error', result.error.message); return; }
+            // 删掉的一条先从列表拿掉，收起与刷新同时进行。
+            if (method === 'DELETE') setMemories(current => current.filter(memory => memory.id !== (body as { id: string }).id));
             const refreshed = await request<{ memories: AgentMemory[] }>('GET');
             if (!active.signal.aborted && !refreshed.error) setMemories(refreshed.data?.memories ?? []);
             if (method === 'POST') { setTitle(''); setContent(''); }
@@ -74,8 +80,8 @@ export function AgentPreferencesPanel({ userId }: { userId: string }) {
         </div>
         <div className="settings-field-block">
             <h4 className="settings-label">已保存记忆 <span className="settings-counter">{memories.length} / 128</span></h4>
-            {memories.length > 0
-                ? <ul className="settings-list-card">{memories.map(memory => <li key={memory.id} className="settings-list-item">
+            {memoryRows.length > 0
+                ? <ul ref={listRef} className="settings-list-card">{memoryRows.map(({ key, item: memory }) => <li key={key} data-motion-key={key} className="settings-list-item">
                     <div className="settings-list-item-text"><strong>{memory.title}</strong><p>{memory.content}</p></div>
                     <button type="button" disabled={busy} className="settings-text-button-danger" onClick={() => void mutateMemory('DELETE', { id: memory.id })} aria-label={`删除记忆 ${memory.title}`}>删除</button>
                 </li>)}</ul>

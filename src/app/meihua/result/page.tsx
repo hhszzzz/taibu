@@ -223,7 +223,7 @@ function MeihuaResultContent({ isCurrent }: { isCurrent: () => boolean }) {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto flex w-full max-w-[1104px] animate-fade-in flex-col gap-3 px-4 pt-0.5 pb-28 sm:px-8 lg:gap-6 lg:pt-8 lg:pb-16">
+      <div className="mx-auto flex w-full max-w-[1104px] motion-stagger flex-col gap-3 px-4 pt-0.5 pb-28 sm:px-8 lg:gap-6 lg:pt-8 lg:pb-16">
         <Link href="/meihua" className="hidden w-fit items-center gap-1.5 text-sm text-foreground-secondary transition-colors hover:text-foreground lg:inline-flex">
           <ChevronLeft className="h-4 w-4" />重新起卦
         </Link>

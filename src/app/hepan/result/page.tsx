@@ -216,7 +216,7 @@ export default function HepanResultPage() {
 
     return (
         <div className="min-h-screen bg-background">
-            <div className="mx-auto flex w-full max-w-[860px] flex-col gap-5 px-4 pb-10 pt-4 sm:gap-6 sm:px-6 lg:px-8 lg:pb-16 lg:pt-7 animate-fade-in">
+            <div className="mx-auto flex w-full max-w-[860px] flex-col gap-5 px-4 pb-10 pt-4 sm:gap-6 sm:px-6 lg:px-8 lg:pb-16 lg:pt-7 motion-stagger">
                 {/* 头部导航 - 仅桌面端显示 */}
                 <div className="hidden items-center justify-between lg:flex">
                     <Link

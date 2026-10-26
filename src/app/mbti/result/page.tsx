@@ -136,7 +136,7 @@ function MBTIResultContent() {
 
     return (
         <div className="min-h-full bg-background text-foreground">
-            <div className="mx-auto flex w-full max-w-[820px] animate-fade-in flex-col gap-5 px-4 py-4 lg:gap-6 lg:px-8 lg:py-8">
+            <div className="mx-auto flex w-full max-w-[820px] motion-stagger flex-col gap-5 px-4 py-4 lg:gap-6 lg:px-8 lg:py-8">
                 {/* 头部导航（桌面端；移动端由顶栏承载） */}
                 <div className="hidden items-center justify-between lg:flex">
                     <Link href="/mbti" className="inline-flex items-center gap-1 text-sm text-foreground-secondary transition-colors hover:text-foreground"><ChevronLeft className="h-4 w-4" aria-hidden="true" />返回 MBTI 首页</Link>

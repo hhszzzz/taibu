@@ -378,7 +378,7 @@ export default function QimenResultPage() {
 
     return (
         <div className="min-h-screen bg-background text-foreground">
-            <div className="mx-auto flex w-full max-w-[1104px] flex-col gap-3 px-4 pb-28 pt-3 animate-fade-in lg:gap-[22px] lg:px-8 lg:pb-16 lg:pt-8">
+            <div className="mx-auto flex w-full max-w-[1104px] flex-col gap-3 px-4 pb-28 pt-3 motion-stagger lg:gap-[22px] lg:px-8 lg:pb-16 lg:pt-8">
                 <Link href="/qimen" className="hidden w-fit items-center gap-1.5 text-sm text-foreground-secondary transition-colors hover:text-foreground lg:inline-flex">
                     <ChevronLeft className="h-4 w-4" />重新起局
                 </Link>

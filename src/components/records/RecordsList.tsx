@@ -3,6 +3,7 @@
  *
  * 'use client' 标记说明：
  * - 使用交互回调（onClick）
+ * - 测量各条位置：删除时收起，置顶、补位与新建时重排
  */
 'use client';
 
@@ -18,8 +19,10 @@ import {
     SearchX,
     Sparkles,
 } from 'lucide-react';
+import { useRef } from 'react';
 import Link from 'next/link';
 import { MingRecord, RECORD_CATEGORIES } from '@/lib/records';
+import { useListMotion } from '@/lib/motion/list';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { StatePanel, STATE_PRIMARY_ACTION_CLASS, STATE_SECONDARY_ACTION_CLASS } from '@/components/ui/StatePanel';
 import { useKnowledgeBaseFeatureEnabled } from '@/components/knowledge-base/useKnowledgeBaseFeatureEnabled';
@@ -168,6 +171,9 @@ export function RecordsList({
     onClearFilters,
 }: RecordsListProps) {
     const { knowledgeBaseEnabled } = useKnowledgeBaseFeatureEnabled();
+    // 删掉的一条收起离开，置顶、补位、新建时各条滑到新位置。
+    const listRef = useRef<HTMLUListElement>(null);
+    const rows = useListMotion(listRef, records, record => record.id);
 
     const pagination = totalPages > 1 ? (
         <nav aria-label="分页" className="mt-6 flex items-center justify-center gap-3">
@@ -203,7 +209,7 @@ export function RecordsList({
         );
     }
 
-    if (records.length === 0) {
+    if (rows.length === 0) {
         const pageEmptied = totalPages > 1;
         return (
             <>
@@ -231,9 +237,9 @@ export function RecordsList({
 
     return (
         <>
-            <ul className="flex flex-col gap-3">
-                {records.map(record => (
-                    <li key={record.id}>
+            <ul ref={listRef} className="flex flex-col gap-3">
+                {rows.map(({ key, item: record }) => (
+                    <li key={key} data-motion-key={key}>
                         <RecordCard
                             record={record}
                             onEdit={() => onEdit(record)}

@@ -6,7 +6,7 @@
  */
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Copy, ExternalLink, Trash2 } from 'lucide-react';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
@@ -14,6 +14,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import { SettingsLoginRequired } from '@/components/settings/SettingsLoginRequired';
+import { useListMotion } from '@/lib/motion/list';
 import { copyShareUrl, deleteConversationShare, fetchConversationShares } from '@/lib/chat/conversation-share-client';
 import type { ConversationShareSummary } from '@/lib/chat/conversation-share';
 
@@ -26,6 +27,7 @@ function formatDate(value: string) {
 
 // Results are tagged with their account so a switched session never shows the previous list.
 type PanelState = { status: 'loading' } | { status: 'error'; userId: string } | { status: 'ready'; userId: string; shares: ConversationShareSummary[] };
+const NO_SHARES: ConversationShareSummary[] = [];
 
 export default function SharedLinksPanel() {
     const { user, loading: sessionLoading } = useSessionSafe();
@@ -35,6 +37,11 @@ export default function SharedLinksPanel() {
     const [pendingDelete, setPendingDelete] = useState<ConversationShareSummary | null>(null);
     const [deleting, setDeleting] = useState(false);
     const [reload, setReload] = useState(0);
+    const current = state.status !== 'loading' && state.userId === userId ? state : null;
+    const shares = current?.status === 'ready' ? current.shares : NO_SHARES;
+    // 删掉的一行收起离开，其余各行补位。
+    const listRef = useRef<HTMLUListElement>(null);
+    const rows = useListMotion(listRef, shares, share => share.token);
 
     useEffect(() => {
         if (!userId) return;
@@ -68,7 +75,6 @@ export default function SharedLinksPanel() {
         }
     };
 
-    const current = state.status !== 'loading' && state.userId === userId ? state : null;
     if (sessionLoading || (userId && !current)) {
         return (
             <div className="flex min-h-[240px] items-center justify-center rounded-2xl border border-border bg-surface">
@@ -88,13 +94,12 @@ export default function SharedLinksPanel() {
         );
     }
 
-    const shares = current?.status === 'ready' ? current.shares : [];
     return (
         <div className="flex flex-col gap-3">
-            {shares.length > 0 ? (
-                <ul className="settings-list-card" aria-label="公开分享的对话">
-                    {shares.map(share => (
-                        <li key={share.token} className="settings-list-item items-center">
+            {rows.length > 0 ? (
+                <ul ref={listRef} className="settings-list-card" aria-label="公开分享的对话">
+                    {rows.map(({ key, item: share }) => (
+                        <li key={key} data-motion-key={key} className="settings-list-item items-center">
                             <div className="settings-list-item-text">
                                 <strong className="truncate">
                                     <Link href={`/chat?id=${encodeURIComponent(share.conversationId)}`} className="hover:underline underline-offset-2">{share.title || '对话'}</Link>

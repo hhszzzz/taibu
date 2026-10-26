@@ -115,7 +115,8 @@ function RecordsContent() {
     }, []);
 
     // A refresh supersedes every earlier request for this account/filter/page.
-    const loadRecords = useCallback(async () => {
+    // quiet：增删改之后的刷新保留当前列表，不换成加载占位，变化由列表动效呈现。
+    const loadRecords = useCallback(async ({ quiet = false }: { quiet?: boolean } = {}) => {
         const scope = recordsLifecycle.current;
         if (!scope || scope.identity !== recordsIdentity || scope.controller.signal.aborted || sessionLoading) return;
         scope.request?.abort();
@@ -130,7 +131,7 @@ function RecordsContent() {
             setLoading(false);
             return;
         }
-        setLoading(true);
+        if (!quiet) setLoading(true);
         setRecordsError(null);
         try {
             const { records: nextRecords, total: nextTotal } = await getRecords(
@@ -218,7 +219,7 @@ function RecordsContent() {
     useLayoutEffect(() => {
         const scope: ReadScope = { identity: recordsIdentity, controller: new AbortController(), request: null };
         recordsLifecycle.current = scope;
-        reloadRecordsRef.current = loadRecords;
+        reloadRecordsRef.current = () => loadRecords({ quiet: true });
         setRecords([]);
         setTotal(0);
         setRecordsError(null);
@@ -283,6 +284,8 @@ function RecordsContent() {
             await deleteRecord(id, { signal: scope.controller.signal });
             if (!isCurrent()) return;
             setDeleteRecordId(null);
+            // Drop the row now so it folds away while the list refreshes.
+            setRecords(current => current.filter(record => record.id !== id));
             // Refresh the current filters, even if they changed while the mutation was pending.
             // The returned total, not a captured total-minus-one, determines the last page.
             await reloadRecordsRef.current?.();

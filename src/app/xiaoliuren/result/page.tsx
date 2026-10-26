@@ -223,7 +223,7 @@ function XiaoliurenResultView({ session: storedSession, onRecalculated, isCurren
   const result = bundle.result;
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto flex w-full max-w-[1024px] animate-fade-in flex-col gap-3 px-4 pt-4 pb-28 sm:px-8 lg:gap-7 lg:pt-12 lg:pb-16">
+      <div className="mx-auto flex w-full max-w-[1024px] motion-stagger flex-col gap-3 px-4 pt-4 pb-28 sm:px-8 lg:gap-7 lg:pt-12 lg:pb-16">
         <header className="hidden items-end justify-between gap-4 lg:flex">
           <div className="flex min-w-0 flex-col gap-2">
             <h1 className="font-display text-[2rem] font-normal leading-tight">小六壬</h1>

@@ -9,10 +9,12 @@ export const SETTINGS_CENTER_TABS = [
   'byok',
   'charts',
   'knowledge-base',
+  'connectors',
   'mcp-service',
   'admin-announcements',
   'admin-features',
   'admin-ai-services',
+  'admin-agent-extensions',
   'help',
 ] as const;
 
@@ -24,6 +26,7 @@ export type SettingsCenterFlags = {
   chartsEnabled: boolean;
   knowledgeBaseEnabled: boolean;
   mcpServiceEnabled: boolean;
+  connectorsEnabled: boolean;
   personalizationEnabled: boolean;
   helpEnabled: boolean;
   isAdmin: boolean;
@@ -59,10 +62,12 @@ const SETTINGS_CENTER_TAB_META: Record<SettingsCenterTab, Omit<SettingsCenterTab
   byok: { id: 'byok', label: '自定义模型', group: 'extensions', description: '用你自己的 API Key 调用模型，不消耗本站积分。' },
   charts: { id: 'charts', label: '命盘', group: 'extensions', description: '保存过的命盘都在这里。默认八字命盘会用于日运、月运和每日早报。' },
   'knowledge-base': { id: 'knowledge-base', label: '知识库', group: 'extensions', description: '把命盘、解读和资料归档到知识库，AI 对话时可以检索引用。' },
+  connectors: { id: 'connectors', label: '连接器', group: 'extensions', description: '接入你自己的 MCP 服务，Agent 在开启联网的任务中可以调用它们的工具。只对你自己生效。' },
   'mcp-service': { id: 'mcp-service', label: 'MCP', group: 'extensions', description: '在支持 MCP 的客户端里直接调用太卜的排盘工具。' },
   'admin-announcements': { id: 'admin-announcements', label: '公告', group: 'management', description: '发布和编辑站内公告，支持 Markdown，保存后立即生效。' },
   'admin-features': { id: 'admin-features', label: '功能与激活码', group: 'management', description: '统一管理功能开关与激活码发放。' },
   'admin-ai-services': { id: 'admin-ai-services', label: 'AI 服务', group: 'management', description: '管理模型配置、来源绑定和网关可用性，查看 Agent 任务的执行过程。' },
+  'admin-agent-extensions': { id: 'admin-agent-extensions', label: 'Agent 扩展', group: 'management', description: '接入平台级 MCP 服务与联网搜索路由，决定用户能否添加自己的连接器和技能。' },
 };
 
 function isSettingsCenterTabDisabled(tab: SettingsCenterTab, flags: SettingsCenterFlags) {
@@ -79,6 +84,8 @@ function isSettingsCenterTabDisabled(tab: SettingsCenterTab, flags: SettingsCent
       return !flags.knowledgeBaseEnabled;
     case 'mcp-service':
       return !flags.mcpServiceEnabled;
+    case 'connectors':
+      return !flags.connectorsEnabled;
     case 'help':
       return !flags.helpEnabled;
     default:
@@ -118,6 +125,11 @@ export function getSettingsCenterDisabledState(
       return {
         title: '暂未开放',
         description: '当前 MCP 服务入口不可用。',
+      };
+    case 'connectors':
+      return {
+        title: '暂未开放',
+        description: '当前 Agent 不可用，连接器暂时无法使用。',
       };
     case 'charts':
       return {

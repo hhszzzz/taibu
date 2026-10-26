@@ -64,6 +64,8 @@ export interface AgentRuntimeInfo {
   responses?: Array<{ id: string; durationMs?: number; startedAt?: number; endedAt?: number }>;
   /** 系统提示里注入的方法目录占的 token（网关 count_tokens 计数，不可用时估算）；上下文卡把它计入「技能」而不是「系统提示」。 */
   skillsTokens?: number;
+  /** 本任务接入的 MCP：接上与没连上的服务数、各暴露方式的工具数、常驻工具定义与「外部服务」小节的估算 token。 */
+  mcp?: { servers: number; skipped: number; direct: number; deferred: number; codemode: number; toolsTokens: number; sectionTokens: number };
   context?: {
     tokens: number;
     measuredTokens: number;

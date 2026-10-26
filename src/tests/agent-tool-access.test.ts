@@ -22,13 +22,16 @@ test('membership tools still reject free accounts and disabled task networking',
   t.mock.method(settings, 'readFeatureModuleStateFresh', async () => ({ status: 'enabled' as const }));
   const run = row();
   run.input.webEnabled = true;
-  for (const name of ['search_knowledge', 'web_search', 'mcp__web__search']) {
+  for (const name of ['search_knowledge', 'web_search']) {
     await assert.rejects(assertAgentToolAccess(new MemoryStore(), run, name, {}), /当前会员|当前任务/);
   }
-  assert.equal(account.mock.callCount(), 3);
+  assert.equal(account.mock.callCount(), 2);
+  // An MCP tool's server sets the tier, checked when the tool runs; the task must still have networking on.
+  await assertAgentToolAccess(new MemoryStore(), run, 'mcp__web__search', {});
   run.input.webEnabled = false;
   await assert.rejects(assertAgentToolAccess(new MemoryStore(), run, 'web_search', {}), /当前任务/);
-  assert.equal(account.mock.callCount(), 3, 'disabled networking needs no membership query');
+  await assert.rejects(assertAgentToolAccess(new MemoryStore(), run, 'mcp__web__search', {}), /没有开启联网/);
+  assert.equal(account.mock.callCount(), 2, 'disabled networking needs no membership query');
 });
 
 test('administrator Agent scope switches block tool execution before the provider is called', async t => {

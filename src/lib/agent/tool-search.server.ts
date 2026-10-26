@@ -3,11 +3,11 @@ import { Type } from '@earendil-works/pi-ai';
 import type { Extension, PromptSection } from '@earendil-works/pi-durable';
 import { defineTool } from '@earendil-works/pi-durable';
 import { rankDeferredTools, TOOL_SEARCH_LIMIT, TOOL_SEARCH_MAX_LIMIT, type ToolSearchCandidate } from 'taibu-core/mcp';
-import { AGENT_CODEMODE_TOOL, AGENT_TOOL_SEARCH_TOOL, getAgentExtensionToolTitle } from './tool-catalog';
+import { AGENT_CODEMODE_TOOL, AGENT_MCP_TOOL_PREFIX, AGENT_TOOL_SEARCH_TOOL, getAgentExtensionToolTitle } from './tool-catalog';
 
 /**
- * Deferred tools are the low-frequency Taibu tools and the external MCP tools: offered only once the model asks for
- * them, so a request carries the tools a reading needs instead of every tool that exists. The ranking is Core's, shared
+ * Deferred tools are the low-frequency Taibu tools and the MCP tools of servers set to be searched: offered only once
+ * the model asks for them, so a request carries the tools a reading needs instead of every tool that exists. The ranking is Core's, shared
  * with the MCP servers' `tool_search`: Pi's own ranks with BM25 over Latin tokens, where a Chinese query finds nothing.
  */
 export const AGENT_TOOL_SEARCH_LIMIT = TOOL_SEARCH_LIMIT;
@@ -31,9 +31,10 @@ const toolSearchSection: PromptSection = {
     const deferred = input.agent.deferred;
     if (!deferred.length) return undefined;
     const data = DATA_TOOL_NAMES.filter(([name]) => deferred.some(tool => tool.name === name)).map(([, label]) => label);
+    const external = deferred.some(tool => tool.name.startsWith(AGENT_MCP_TOOL_PREFIX));
     return [
-      `还有 ${deferred.length} 个低频工具没有直接提供：八字的关系、五行、流年扫描详查，大运、四柱反推与两人合盘，紫微大限与飞星，择日，奇门／大六壬／占星／六爻的局部详查，${data.length ? `读取${data.join('、')}，` : ''}以及外部 MCP 工具。`,
-      `需要其中某个工具时，先调用 tool_search 用中文关键词检索（例如「大运」「流年扫描」「合盘」「飞星四化」「择日」「宫位」「六爻动爻」${data.length ? '「笔记」「以往对话」' : ''}）。命中的工具从下一次模型调用起可用；同一对话内加载过的工具保持可用，压缩上下文后仍可用。已直接提供的排盘工具不必检索。`,
+      `还有 ${deferred.length} 个低频工具没有直接提供：八字的关系、五行、流年扫描详查，大运、四柱反推与两人合盘，紫微大限与飞星，择日，奇门／大六壬／占星／六爻的局部详查${data.length ? `，读取${data.join('、')}` : ''}${external ? '，以及外部服务的工具' : ''}。`,
+      `需要其中某个工具时，先调用 tool_search 用中文关键词检索（例如「大运」「流年扫描」「合盘」「飞星四化」「择日」「宫位」「六爻动爻」${data.length ? '「笔记」「以往对话」' : ''}${external ? '，外部工具也可用服务名或用途检索' : ''}）。命中的工具从下一次模型调用起可用；同一对话内加载过的工具保持可用，压缩上下文后仍可用。已直接提供的排盘工具不必检索。`,
       ...(input.agent.tools.some(tool => tool.name === AGENT_CODEMODE_TOOL)
         ? ['代码模式脚本可以直接调用全部工具（包括尚未加载的），不必先检索。']
         : []),
@@ -41,13 +42,16 @@ const toolSearchSection: PromptSection = {
   },
 };
 
-/** The `tool_search` tool and its guidance; the tools it loads are the ones the registry marks deferred. */
-export function createAgentToolSearchExtension(titles: ReadonlyMap<string, string>): Extension {
+/**
+ * The `tool_search` tool and its guidance; the tools it loads are the ones the registry marks deferred. `searchTitles`
+ * is what a query matches as the title (an external tool's title with its keywords); `titles` is what the result shows.
+ */
+export function createAgentToolSearchExtension(titles: ReadonlyMap<string, string>, searchTitles: ReadonlyMap<string, string> = titles): Extension {
   return {
     name: 'taibu_tool_search',
     tools: [defineTool({
       name: AGENT_TOOL_SEARCH_TOOL,
-      description: '按中文关键词检索本任务尚未提供的低频工具（详查、大运、流年扫描、合盘、飞星、择日、MCP 等），命中后从下一次模型调用起可用。',
+      description: '按中文关键词检索本任务尚未提供的低频工具（详查、大运、流年扫描、合盘、飞星、择日、外部服务等），命中后从下一次模型调用起可用。',
       parameters: Type.Object({
         query: Type.String({ minLength: 1, description: '中文关键词，如「大运」「流年扫描」「合盘」「飞星四化」「择日」「宫位」' }),
         limit: Type.Optional(Type.Number({ description: `最多返回几个工具，默认 ${AGENT_TOOL_SEARCH_LIMIT}，最多 ${TOOL_SEARCH_MAX_LIMIT}` })),
@@ -60,7 +64,7 @@ export function createAgentToolSearchExtension(titles: ReadonlyMap<string, strin
         if (!Number.isInteger(requested) || requested <= 0 || requested > TOOL_SEARCH_MAX_LIMIT)
           throw new Error(`limit 必须是 1–${TOOL_SEARCH_MAX_LIMIT} 的整数`);
         const candidates = (await api.agent(context)).deferred.map(tool => ({ name: tool.name, description: tool.description }));
-        const loaded = rankDeferredTools(query, candidates, titles, requested);
+        const loaded = rankDeferredTools(query, candidates, searchTitles, requested);
         return {
           output: [{ type: 'text' as const, text: loaded.length ? loadedText(loaded, candidates, titles)
             : '没有匹配的工具。换一个说法，或用工具名再试；常见排盘工具已直接提供，不必检索。' }],

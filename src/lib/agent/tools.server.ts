@@ -39,6 +39,7 @@ import { publicMemory, type AgentMemory } from './memory';
 import { authorizeChartReference, loadAgentChart, loadInspectedChart } from './chart-tools.server';
 import { CHART_SOURCE_KINDS, getChartTargets, validateChartFocus } from './chart-interaction';
 import {
+  AGENT_MCP_TOOL_PREFIX,
   AGENT_TOOL_SCOPE_IDS,
   CHART_TARGET_DIRECTORY_HEADING,
   getAgentDrilldownBase,
@@ -140,7 +141,9 @@ export async function assertAgentToolAccess(store: AgentStore, run: AgentRunRow,
     if (person.reference !== undefined && await authorizeChartReference(store, run, person.reference) !== 'bazi') throw new Error('合盘只能引用八字命盘');
   }
   if (name === 'search_knowledge' && (!(await featureEnabled('knowledge-base')) || (await getUserCreditInfo(run.user_id, {})).membership === 'free')) throw new Error('当前会员无法使用知识库检索');
-  if ((name === 'web_search' || name.startsWith('mcp__')) && (!run.input.webEnabled || (await getUserCreditInfo(run.user_id, {})).membership === 'free')) throw new Error('当前任务不能使用联网工具');
+  if (name === 'web_search' && (!run.input.webEnabled || (await getUserCreditInfo(run.user_id, {})).membership === 'free')) throw new Error('当前任务不能使用联网工具');
+  // The server, the member's tier and the tool itself are checked again when an MCP tool runs.
+  if (name.startsWith(AGENT_MCP_TOOL_PREFIX) && !run.input.webEnabled) throw new Error('当前任务没有开启联网，不能调用外部工具');
   if (name === 'read_user_data') {
     const dataSourceFeature = getDataSourceFeatureId(args.type as typeof DATA_SOURCE_TYPES[number]);
     if (!(await featureEnabled(dataSourceFeature))) throw new Error('该资料功能已关闭');

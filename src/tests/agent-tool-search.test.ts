@@ -45,7 +45,7 @@ test('deferred tools are the fifteen low-frequency Core tools, the notes and con
   assert.deepEqual([...AGENT_DEFERRED_TOOLS].sort(), [...AGENT_CORE_DEFERRED_TOOLS, ...AGENT_DATA_DEFERRED_TOOLS].sort());
   assert.equal(isAgentDeferredTool('read_user_notes'), true);
   assert.equal(isAgentDeferredTool('list_user_data'), false, 'the listing is how a reading starts, so it stays offered');
-  assert.equal(isAgentDeferredTool('mcp__archive__search'), true);
+  assert.equal(isAgentDeferredTool('mcp__archive__search'), false, 'an MCP server sets its own exposure');
   assert.equal(isAgentDeferredTool('bazi'), false);
   assert.equal(isAgentDeferredTool('__proto__'), false);
 });
@@ -73,7 +73,7 @@ test('notes and earlier conversations load by their Chinese titles, and only wit
   assert.match(prompts[0], /「笔记」「以往对话」/);
   const plainPrompts: string[] = [];
   await executeAgentRun(new MemoryStore(), row(), undefined, { config, streamFn: scripted(() => [{ type: 'text', text: '好' }], messages => { plainPrompts.push(systemText(messages)); }) });
-  assert.match(plainPrompts[0], /读取用户的每日笔记与心情，/);
+  assert.match(plainPrompts[0], /读取用户的每日笔记与心情。/, "external tools are named only when a server registered some");
   assert.doesNotMatch(plainPrompts[0], /以往对话中的提问与结论/);
 });
 

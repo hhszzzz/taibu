@@ -1,5 +1,5 @@
 /**
- * 设置中心的管理页：公告、功能与激活码、AI 服务（含 Agent 任务排障）
+ * 设置中心的管理页：公告、功能与激活码、AI 服务（含 Agent 任务排障）、Agent 扩展（MCP 服务与用户扩展策略）
  *
  * 'use client' 标记说明：
  * - 子页跟随路由切换，需要 useState / useEffect 记住访问过的子页并保留其状态
@@ -36,10 +36,17 @@ const LazyAIGatewayPanel = lazy(async () => ({
 const LazyAgentTaskPanel = lazy(async () => ({
   default: (await import('@/components/admin/AgentTaskPanel')).AgentTaskPanel,
 }));
+const LazyAgentMcpPanel = lazy(async () => ({
+  default: (await import('@/components/admin/AgentMcpPanel')).AgentMcpPanel,
+}));
+const LazyAgentExtensionsPolicyPanel = lazy(async () => ({
+  default: (await import('@/components/admin/AgentExtensionsPolicyPanel')).AgentExtensionsPolicyPanel,
+}));
 
-type AdminSubtabOwner = 'admin-features' | 'admin-ai-services';
+type AdminSubtabOwner = 'admin-features' | 'admin-ai-services' | 'admin-agent-extensions';
 type AdminFeatureTab = 'toggles' | 'keys';
 type AdminAITab = 'models' | 'gateways' | 'agent-tasks';
+type AdminExtensionsTab = 'mcp' | 'policy';
 
 const FEATURE_TABS: SettingsTabOption<AdminFeatureTab>[] = [
   { id: 'toggles', label: '功能开关' },
@@ -50,6 +57,11 @@ const AI_TABS: SettingsTabOption<AdminAITab>[] = [
   { id: 'models', label: '模型管理' },
   { id: 'gateways', label: '网关管理' },
   { id: 'agent-tasks', label: 'Agent 任务' },
+];
+
+const EXTENSIONS_TABS: SettingsTabOption<AdminExtensionsTab>[] = [
+  { id: 'mcp', label: 'MCP 服务' },
+  { id: 'policy', label: '用户扩展' },
 ];
 
 function PanelFallback() {
@@ -66,6 +78,10 @@ function resolveAdminFeatureTab(value: string | null | undefined): AdminFeatureT
 
 function resolveAdminAITab(value: string | null | undefined): AdminAITab {
   return value === 'gateways' || value === 'agent-tasks' ? value : 'models';
+}
+
+function resolveAdminExtensionsTab(value: string | null | undefined): AdminExtensionsTab {
+  return value === 'policy' ? 'policy' : 'mcp';
 }
 
 function useResolvedSettingsCenterSubtab<T extends string>(
@@ -143,6 +159,7 @@ const renderFeaturePanel = (tab: AdminFeatureTab) => (tab === 'toggles' ? <LazyF
 const renderAIPanel = (tab: AdminAITab, active: boolean) => (
   tab === 'models' ? <LazyAIModelPanel /> : tab === 'gateways' ? <LazyAIGatewayPanel /> : <LazyAgentTaskPanel active={active} />
 );
+const renderExtensionsPanel = (tab: AdminExtensionsTab) => (tab === 'mcp' ? <LazyAgentMcpPanel /> : <LazyAgentExtensionsPolicyPanel />);
 
 export function AdminAnnouncementsContent() {
   return (
@@ -172,6 +189,18 @@ export function AdminAIServicesContent() {
       tabs={AI_TABS}
       resolveTab={resolveAdminAITab}
       renderPanel={renderAIPanel}
+    />
+  );
+}
+
+export function AdminAgentExtensionsContent() {
+  return (
+    <AdminSubtabs
+      owner="admin-agent-extensions"
+      label="Agent 扩展"
+      tabs={EXTENSIONS_TABS}
+      resolveTab={resolveAdminExtensionsTab}
+      renderPanel={renderExtensionsPanel}
     />
   );
 }

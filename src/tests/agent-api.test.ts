@@ -283,25 +283,28 @@ test("Agent feature admission fails closed when fresh configuration cannot be re
   assert.equal(fixture.writes.length, 0);
 });
 
-test('network capability includes a configured MCP service and ignores malformed configuration', async t => {
+test('network capability includes an MCP server the member may use and fails closed when it cannot tell', async t => {
   setup(t);
-  const previous = { mcp: process.env.AGENT_MCP_SERVERS, tavily: process.env.TAVILY_API_KEY };
-  t.after(() => {
-    for (const [key, value] of [['AGENT_MCP_SERVERS', previous.mcp], ['TAVILY_API_KEY', previous.tavily]] as const) {
-      if (value === undefined) delete process.env[key]; else process.env[key] = value;
-    }
-  });
+  const previous = process.env.TAVILY_API_KEY;
+  t.after(() => { if (previous === undefined) delete process.env.TAVILY_API_KEY; else process.env.TAVILY_API_KEY = previous; });
   delete process.env.TAVILY_API_KEY;
+  const session = require('../lib/agent/mcp/session.server') as typeof import('../lib/agent/mcp/session.server');
+  const credits = require('../lib/user/credits') as typeof import('../lib/user/credits');
+  t.mock.method(credits, 'getUserCreditInfo', async () => ({ membership: 'plus' as const, credits: 10, expiresAt: null }));
+  let servers: unknown = [{ id: 'server' }];
+  const available = t.mock.method(session, 'availableMcpServers', async () => {
+    if (servers instanceof Error) throw servers;
+    return servers as Awaited<ReturnType<typeof session.availableMcpServers>>;
+  });
   const capabilities = async () => (await (await agentCapabilities(new NextRequest('http://localhost/api/agent/capabilities'))).json()) as { webAvailable: boolean; plainWebAvailable: boolean };
-  const available = async () => (await capabilities()).webAvailable;
-  process.env.AGENT_MCP_SERVERS = JSON.stringify([{ name: 'reference', url: 'https://mcp.example/tools', tools: ['lookup'] }]);
-  assert.equal(await available(), true);
-  assert.equal((await capabilities()).plainWebAvailable, false, 'plain chat searches through Tavily only');
-  process.env.AGENT_MCP_SERVERS = 'invalid-json';
-  assert.equal(await available(), false);
+  assert.deepEqual(await capabilities().then(value => [value.webAvailable, value.plainWebAvailable]), [true, false], 'plain chat searches through Tavily only');
+  assert.equal(available.mock.calls[0].arguments[1], 'plus', 'the member\'s own tier decides');
+  servers = [];
+  assert.equal((await capabilities()).webAvailable, false);
+  servers = new Error('database unavailable');
+  assert.equal((await capabilities()).webAvailable, false);
   process.env.TAVILY_API_KEY = 'fixture';
-  assert.equal(await available(), true);
-  assert.equal((await capabilities()).plainWebAvailable, true);
+  assert.deepEqual(await capabilities().then(value => [value.webAvailable, value.plainWebAvailable]), [true, true]);
 });
 
 test('image capability is enforced before charging and when adding input to an existing task', async t => {

@@ -38,6 +38,7 @@ const LazyBYOKContent = lazy(() => import('@/components/settings/panels/BYOKPane
 const LazyChartsContent = lazy(() => import('@/components/settings/panels/ChartsPanel'));
 const LazyKnowledgeBaseManageContent = lazy(() => import('@/components/settings/panels/KnowledgeBasePanel'));
 const LazyMcpPageContent = lazy(() => import('@/components/settings/panels/McpServicePanel'));
+const LazyConnectorsContent = lazy(() => import('@/components/settings/panels/ConnectorsPanel'));
 const LazyProfileContent = lazy(() => import('@/components/settings/panels/ProfilePanel'));
 const LazyHelpContent = lazy(() => import('@/components/settings/panels/HelpPanel'));
 const LazySharedLinksContent = lazy(() => import('@/components/settings/panels/SharedLinksPanel'));
@@ -49,6 +50,9 @@ const LazyAdminFeaturesContent = lazy(async () => ({
 }));
 const LazyAdminAIServicesContent = lazy(async () => ({
   default: (await import('@/components/settings/AccountAdminPanels')).AdminAIServicesContent,
+}));
+const LazyAdminAgentExtensionsContent = lazy(async () => ({
+  default: (await import('@/components/settings/AccountAdminPanels')).AdminAgentExtensionsContent,
 }));
 
 function SettingsPanelFallback() {
@@ -169,6 +173,8 @@ function renderSettingsCenterPanel(
       return renderLazyPanel(<LazyChartsContent />);
     case 'knowledge-base':
       return renderLazyPanel(<LazyKnowledgeBaseManageContent />);
+    case 'connectors':
+      return renderLazyPanel(<LazyConnectorsContent />);
     case 'mcp-service':
       return renderLazyPanel(<LazyMcpPageContent />);
     case 'admin-announcements':
@@ -177,6 +183,8 @@ function renderSettingsCenterPanel(
       return renderLazyPanel(<LazyAdminFeaturesContent />);
     case 'admin-ai-services':
       return renderLazyPanel(<LazyAdminAIServicesContent />);
+    case 'admin-agent-extensions':
+      return renderLazyPanel(<LazyAdminAgentExtensionsContent />);
   }
 }
 
@@ -193,6 +201,7 @@ export function SettingsCenterPage({ children }: { children: React.ReactNode }) 
     chartsEnabled: !featureTogglesLoaded || isFeatureEnabled('charts'),
     knowledgeBaseEnabled: !featureTogglesLoaded || isFeatureEnabled('knowledge-base'),
     mcpServiceEnabled: !featureTogglesLoaded || isFeatureEnabled('mcp-service'),
+    connectorsEnabled: !featureTogglesLoaded || isFeatureEnabled('agent'),
     personalizationEnabled: featureTogglesLoaded && isFeatureEnabled('chat') && isFeatureEnabled('ai-personalization'),
     helpEnabled: !featureTogglesLoaded || isFeatureEnabled('help'), isAdmin,
   }), [featureTogglesLoaded, isAdmin, isFeatureEnabled]);

@@ -1,0 +1,61 @@
+/* MCP servers (admin) and connectors (members): the list, the tools panel and the editor dialog. */
+.mcp-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; }
+.mcp-toolbar p { font-size: .8125rem; line-height: 1.6; color: var(--foreground-secondary); }
+.mcp-notice { padding: .75rem 1rem; border: 1px solid var(--border); border-radius: .75rem; background: var(--background-secondary); font-size: .8125rem; line-height: 1.6; color: var(--foreground-secondary); }
+.mcp-notice strong { font-weight: 500; color: var(--foreground); }
+.mcp-empty { display: flex; flex-direction: column; align-items: center; gap: .5rem; padding: 2.25rem 1.5rem; border: 1px dashed var(--border-hover); border-radius: 1rem; text-align: center; }
+.mcp-empty p { font-size: .875rem; color: var(--foreground-secondary); }
+.mcp-empty p + p { font-size: .75rem; color: var(--foreground-tertiary); }
+
+/* Two classes so the stacked layout wins over .settings-list-item whichever sheet loads last. */
+.settings-list-item.mcp-server { flex-direction: column; align-items: stretch; gap: .75rem; }
+.mcp-server-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.mcp-server-title { display: flex; flex-wrap: wrap; align-items: center; gap: .375rem; }
+/* Inside .settings-list-item-text, whose `p` rule has the same weight as one class. */
+.settings-list-item-text .mcp-server-line { font-family: var(--font-mono); font-size: .75rem; color: var(--foreground-tertiary); }
+.settings-list-item-text .mcp-status-error { color: var(--danger); }
+.mcp-actions { display: flex; flex-shrink: 0; align-items: center; gap: .25rem; }
+.mcp-badge { display: inline-flex; align-items: center; height: 1.25rem; padding: 0 .5rem; border-radius: 999px; background: var(--fill-field); font-size: .75rem; font-weight: 400; white-space: nowrap; color: var(--foreground-secondary); }
+.mcp-badge-accent { background: var(--accent-light); color: var(--accent-strong); }
+.mcp-badge-muted { background: transparent; box-shadow: inset 0 0 0 1px var(--border); color: var(--foreground-tertiary); }
+
+.mcp-tools { display: flex; flex-direction: column; gap: .75rem; padding-top: .75rem; border-top: 1px solid var(--border); }
+.mcp-tools-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; font-size: .8125rem; color: var(--foreground-secondary); }
+.mcp-instructions summary { cursor: pointer; font-size: .8125rem; color: var(--foreground-secondary); }
+.mcp-instructions pre { max-height: 12rem; margin-top: .5rem; padding: .75rem; overflow: auto; border-radius: .5rem; background: var(--background-secondary); font-family: var(--font-mono); font-size: .75rem; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--foreground-secondary); }
+.mcp-tool-list { display: flex; flex-direction: column; }
+.mcp-tool { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem 1rem; padding: .75rem 0; border-top: 1px solid var(--fill-field); }
+.mcp-tool:first-child { border-top: 0; padding-top: 0; }
+.mcp-tool-text { display: flex; min-width: 0; flex-direction: column; gap: .25rem; }
+.mcp-tool-name { display: flex; flex-wrap: wrap; align-items: center; gap: .375rem; font-family: var(--font-mono); font-size: .8125rem; overflow-wrap: anywhere; color: var(--foreground); }
+.mcp-tool-description { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; font-size: .75rem; line-height: 1.6; color: var(--foreground-secondary); }
+.mcp-tool-fields { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: center; gap: .5rem; }
+.mcp-tool-fields .settings-input { width: 100%; }
+.mcp-check { display: inline-flex; align-items: center; gap: .375rem; font-size: .8125rem; color: var(--foreground-secondary); }
+
+.app-modal.mcp-editor { width: min(640px, calc(100vw - 32px)); }
+.mcp-editor-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: 1.25rem 1.25rem .25rem; }
+.mcp-editor-head h2 { font-size: 1rem; font-weight: 600; }
+.mcp-editor-body { display: flex; flex-direction: column; gap: 1.25rem; padding: .75rem 1.25rem 1.25rem; }
+.mcp-editor-foot { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .5rem; padding: .875rem 1.25rem; border-top: 1px solid var(--border); background: var(--surface); }
+.mcp-editor-foot [role=alert] { flex: 1 1 12rem; font-size: .8125rem; line-height: 1.5; color: var(--danger); }
+.mcp-editor :where(.settings-input, .settings-select, .settings-textarea) { width: 100%; min-width: 0; border-radius: .5rem; background: var(--surface); }
+.mcp-editor .settings-textarea { font-size: .875rem; }
+.mcp-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .875rem .75rem; }
+.mcp-fields > .is-wide { grid-column: 1 / -1; }
+.mcp-group { display: flex; flex-direction: column; gap: .5rem; min-width: 0; margin: 0; padding: 0; border: 0; }
+.mcp-group legend { margin-bottom: .375rem; padding: 0; font-size: .875rem; color: var(--foreground); }
+.mcp-hint { font-size: .75rem; line-height: 1.6; color: var(--foreground-tertiary); }
+.mcp-pair { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) auto; align-items: center; gap: .5rem; }
+.mcp-secret-state { font-size: .8125rem; color: var(--foreground-secondary); }
+.mcp-add { align-self: flex-start; }
+.mcp-advanced summary { cursor: pointer; font-size: .875rem; color: var(--foreground-secondary); }
+.mcp-advanced[open] summary { margin-bottom: .875rem; }
+.mcp-advanced-body { display: flex; flex-direction: column; gap: 1.25rem; }
+
+@media (max-width: 767px) {
+  .mcp-server-head { flex-direction: column; }
+  .mcp-fields, .mcp-tool-fields { grid-template-columns: minmax(0, 1fr); }
+  .mcp-pair { grid-template-columns: minmax(0, 1fr) auto; }
+  .mcp-pair > :nth-child(2) { grid-column: 1; }
+}

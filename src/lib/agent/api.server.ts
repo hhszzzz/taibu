@@ -2,7 +2,7 @@ import "server-only";
 import { AGENT_STREAM_QUEUE_BYTES, enqueueAgentFrame, type AgentResync } from './sse';
 import { createHash, randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
-import { parseAgentMcpServers } from './mcp-client.server';
+import { availableMcpServers } from './mcp/session.server';
 import { jsonError, jsonOk, requireUserContext } from "@/lib/api-utils";
 import { systemDb } from "@/lib/db/context.server";
 import { subscribeAgentSignals } from "@/lib/db/listen.server";
@@ -21,7 +21,7 @@ import { buildChatPromptContext } from "@/lib/server/chat/prompt-context";
 import { isChatAttachment } from "@/lib/ai/document-formats";
 import { resolveUserTimeZone } from "@/lib/ai/prompt-time";
 import { webSearchConfigured } from "@/lib/ai/web-search.server";
-import { getUserAuthInfo } from "@/lib/user/credits";
+import { getUserAuthInfo, getUserCreditInfo } from "@/lib/user/credits";
 import { AI_RATE_LIMIT_CONFIG, checkRateLimit } from "@/lib/rate-limit";
 import { isValidUUID } from "@/lib/validation";
 import type { ChatMessage, CustomProviderRequest, Mention } from "@/types";
@@ -234,11 +234,14 @@ export async function agentEndpoint(action: () => Promise<Response>) {
   }
 }
 export async function agentCapabilities(request: NextRequest) {
-  await authenticated(request);
+  const auth = await authenticated(request);
   const state = await readFeatureModuleStateFresh("agent");
   const store = new AgentStore(systemDb());
   let mcpAvailable = false;
-  try { mcpAvailable = parseAgentMcpServers().length > 0; } catch { /* Invalid administrator config cannot advertise network access. */ }
+  try {
+    const { membership } = await getUserCreditInfo(auth.user.id, {});
+    mcpAvailable = (await availableMcpServers(auth.user.id, membership, { codeMode: true })).length > 0;
+  } catch { /* A configuration that cannot be read does not advertise network access. */ }
   return jsonOk({
     enabled: state.status === "enabled",
     ready: state.status === "enabled" && (await store.workerReady()),

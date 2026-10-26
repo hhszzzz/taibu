@@ -207,6 +207,47 @@ CREATE TABLE public.agent_durable_commits (
     CONSTRAINT agent_durable_commits_writes_check CHECK ((jsonb_typeof(writes) = 'array'::text))
 );
 
+CREATE TABLE public.agent_mcp_servers (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    owner_id uuid,
+    name text NOT NULL,
+    display_name text NOT NULL,
+    description text DEFAULT ''::text NOT NULL,
+    url text NOT NULL,
+    headers jsonb DEFAULT '{}'::jsonb NOT NULL,
+    secret_headers jsonb DEFAULT '{}'::jsonb NOT NULL,
+    secret_query jsonb DEFAULT '{}'::jsonb NOT NULL,
+    exposure text DEFAULT 'deferred'::text NOT NULL,
+    tool_policy jsonb DEFAULT '{}'::jsonb NOT NULL,
+    search_tool text,
+    fetch_tool text,
+    result_adapter text DEFAULT 'generic'::text NOT NULL,
+    route_priority integer DEFAULT 100 NOT NULL,
+    required_tier text DEFAULT 'plus'::text NOT NULL,
+    is_enabled boolean DEFAULT true NOT NULL,
+    timeout_ms integer DEFAULT 30000 NOT NULL,
+    max_result_chars integer DEFAULT 20000 NOT NULL,
+    sort_order integer DEFAULT 0 NOT NULL,
+    tools_snapshot jsonb,
+    last_checked_at timestamp with time zone,
+    last_error text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT agent_mcp_servers_description_check CHECK ((length(description) <= 2000)),
+    CONSTRAINT agent_mcp_servers_display_name_check CHECK (((length(btrim(display_name)) >= 1) AND (length(btrim(display_name)) <= 40))),
+    CONSTRAINT agent_mcp_servers_exposure_check CHECK ((exposure = ANY (ARRAY['direct'::text, 'deferred'::text, 'codemode'::text, 'hidden'::text]))),
+    CONSTRAINT agent_mcp_servers_json_check CHECK (((jsonb_typeof(headers) = 'object'::text) AND (jsonb_typeof(secret_headers) = 'object'::text) AND (jsonb_typeof(secret_query) = 'object'::text) AND (jsonb_typeof(tool_policy) = 'object'::text))),
+    CONSTRAINT agent_mcp_servers_max_result_chars_check CHECK (((max_result_chars >= 2000) AND (max_result_chars <= 100000))),
+    CONSTRAINT agent_mcp_servers_name_check CHECK ((name ~ '^[a-z][a-z0-9_]{1,30}$'::text)),
+    CONSTRAINT agent_mcp_servers_required_tier_check CHECK ((required_tier = ANY (ARRAY['free'::text, 'plus'::text, 'pro'::text]))),
+    CONSTRAINT agent_mcp_servers_result_adapter_check CHECK ((result_adapter = ANY (ARRAY['exa'::text, 'tavily'::text, 'generic'::text]))),
+    CONSTRAINT agent_mcp_servers_route_tool_check CHECK ((((search_tool IS NULL) OR ((length(search_tool) >= 1) AND (length(search_tool) <= 128))) AND ((fetch_tool IS NULL) OR ((length(fetch_tool) >= 1) AND (length(fetch_tool) <= 128))))),
+    CONSTRAINT agent_mcp_servers_timeout_check CHECK (((timeout_ms >= 5000) AND (timeout_ms <= 120000))),
+    CONSTRAINT agent_mcp_servers_url_check CHECK (((url ~ '^https://'::text) AND (length(url) <= 2048))),
+    CONSTRAINT agent_mcp_servers_user_exposure_check CHECK (((owner_id IS NULL) OR (exposure = ANY (ARRAY['direct'::text, 'deferred'::text])))),
+    CONSTRAINT agent_mcp_servers_user_route_check CHECK (((owner_id IS NULL) OR ((search_tool IS NULL) AND (fetch_tool IS NULL))))
+);
+
 ALTER TABLE public.agent_run_commands ALTER COLUMN sequence ADD GENERATED ALWAYS AS IDENTITY (
     SEQUENCE NAME public.agent_run_commands_sequence_seq
     START WITH 1
@@ -329,7 +370,7 @@ CREATE TABLE public.annual_reports (
 
 CREATE TABLE public.app_settings (
     setting_key text NOT NULL,
-    setting_value boolean DEFAULT false NOT NULL,
+    setting_value jsonb DEFAULT 'false'::jsonb NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
@@ -839,6 +880,12 @@ ALTER TABLE ONLY public.agent_attachments
 ALTER TABLE ONLY public.agent_durable_commits
     ADD CONSTRAINT agent_durable_commits_pkey PRIMARY KEY (run_id, sequence);
 
+ALTER TABLE ONLY public.agent_mcp_servers
+    ADD CONSTRAINT agent_mcp_servers_owner_id_name_key UNIQUE NULLS NOT DISTINCT (owner_id, name);
+
+ALTER TABLE ONLY public.agent_mcp_servers
+    ADD CONSTRAINT agent_mcp_servers_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY public.agent_run_artifacts
     ADD CONSTRAINT agent_run_artifacts_pkey PRIMARY KEY (id);
 
@@ -1063,6 +1110,9 @@ ALTER TABLE ONLY public.agent_attachments
 
 ALTER TABLE ONLY public.agent_durable_commits
     ADD CONSTRAINT agent_durable_commits_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.agent_runs(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.agent_mcp_servers
+    ADD CONSTRAINT agent_mcp_servers_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.agent_run_artifacts
     ADD CONSTRAINT agent_run_artifacts_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.agent_runs(id) ON DELETE CASCADE;

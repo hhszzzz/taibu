@@ -45,7 +45,9 @@ import { parseAgentCollaborators } from '@/lib/chat/model-settings';
 import { createParallelExtension } from './parallel.server';
 import { BACKGROUND_POLL_MS, createBackgroundAgents, pendingBackgroundReports, projectBackgroundAgents, residentBackgroundAgents } from './background.server';
 import { parallelAnalysisResults } from './parallel-results';
-import { connectAgentMcp, parseAgentMcpServers } from './mcp-client.server';
+import { openAgentMcp, type AgentMcpSession } from './mcp/session.server';
+import type { McpConfirm } from './mcp/tools.server';
+import type { McpPool } from './mcp/pool.server';
 import { projectAgentUsage } from './usage';
 import { splitAgentFollowUps } from './follow-ups';
 
@@ -148,7 +150,7 @@ async function latestAssistant(root: Conversation, context: Context) {
 
 export async function executeAgentRun(
   store: AgentStore, run: AgentRunRow, shutdown?: AbortSignal,
-  injected?: { streamFn?: PiStreamFn; config?: AIModelConfig; configs?: AIModelConfig[]; now?: () => number; leaseRenewMs?: number },
+  injected?: { streamFn?: PiStreamFn; config?: AIModelConfig; configs?: AIModelConfig[]; now?: () => number; leaseRenewMs?: number; mcpPool?: McpPool },
 ) {
   const checkpoint: AgentCheckpoint = structuredClone(run.checkpoint);
   if (!isCurrentAgentCheckpoint(checkpoint)) throw new Error("AGENT_ENGINE_UNSUPPORTED");
@@ -157,7 +159,7 @@ export async function executeAgentRun(
   let interrupted = false, stopping = run.cancel_requested;
   let harness: Harness | undefined, root: Conversation | undefined, watch: ConversationWatch | undefined;
   let storage: AgentDurableStorage | undefined, apiKey: string | undefined;
-  let mcp: Awaited<ReturnType<typeof connectAgentMcp>> | undefined;
+  let mcp: AgentMcpSession | undefined;
   let heartbeat: ReturnType<typeof setInterval> | undefined;
   let backgroundRefresh: ReturnType<typeof setInterval> | undefined;
   let controlInFlight: Promise<void> = Promise.resolve();
@@ -412,6 +414,25 @@ export async function executeAgentRun(
         };
       },
     });
+    /**
+     * A tool set to need consent asks before each call, as a question the user answers like ask_user's. Declining
+     * returns an error result to the model; the memo'd reply makes a restart reuse the answer.
+     */
+    const confirmMcp: McpConfirm = async (request, api, toolContext) => {
+      const cacheId = `${api.taskId}:${api.callId}`;
+      const questions: AgentQuestion[] = [{
+        id: 'mcp_confirm', header: '确认调用',
+        question: `是否允许调用外部工具「${request.title}」（${request.server}）？\n调用参数见上方的工具步骤。`,
+        options: [{ id: 'allow', label: '允许' }, { id: 'deny', label: '拒绝' }],
+        allowCustom: false, allowSkip: false,
+      }];
+      checkpoint.question = questions[0].question;
+      checkpoint.questions = questions;
+      checkpoint.questionId = cacheId;
+      putAgentPart(checkpoint.parts, { type: 'question', id: cacheId, question: questions[0].question, questions });
+      const reply = await awaitReply({ mcpConfirm: request.tool }, api, toolContext);
+      return (reply.answers as AgentAnswers | undefined)?.mcp_confirm?.[0] === 'allow';
+    };
     const registry = createRegistry();
     const registrations = tools.map(tool => {
       const structured = returnsAgentScriptResult(tool.name);
@@ -441,7 +462,7 @@ export async function executeAgentRun(
     const directorySection = methodDirectory ? `<taibu_methods>\n${methodDirectory}\n</taibu_methods>` : "";
     if (checkpoint.runtime) checkpoint.runtime.skillsTokens = estimateTokens(config.modelId || config.id, directorySection);
     if (directorySection) void countTokens(directorySection).then(tokens => { if (checkpoint.runtime) checkpoint.runtime.skillsTokens = tokens; });
-    const toolTitle = (name: string) => tools.find(tool => tool.name === name)?.label ?? getAgentExtensionToolTitle(name) ?? name;
+    const toolTitle = (name: string) => tools.find(tool => tool.name === name)?.label ?? mcp?.titles.get(name) ?? getAgentExtensionToolTitle(name) ?? name;
     /**
      * A code mode script's call becomes a public part under the script's card, committed with the call's result. The
      * script reads the structured output, so the details stay only on the part and the native log keeps one copy.
@@ -564,12 +585,16 @@ export async function executeAgentRun(
     registry.install(createParallelExtension(registrations, () => harness!, collaborators, configs, titles, run.input.timezone));
     const background = createBackgroundAgents(registrations, run.input.timezone);
     registry.install(background.extension);
-    registry.install(createAgentToolSearchExtension(titles));
+    mcp = await openAgentMcp({
+      run, membership: (await getUserCreditInfo(run.user_id, {})).membership, confirm: confirmMcp,
+      main: conversationId => conversationId === root?.id,
+      signal: context.abortSignal!, estimate: text => estimateTokens(config.modelId || config.id, text),
+      ...(injected?.mcpPool ? { pool: injected.mcpPool } : {}),
+    });
+    if (mcp.extension) registry.install(mcp.extension);
+    if (checkpoint.runtime) checkpoint.runtime.mcp = mcp.runtime;
+    registry.install(createAgentToolSearchExtension(new Map([...titles, ...mcp.titles]), new Map([...titles, ...mcp.searchTitles])));
     if (run.input.codeMode) registry.install(createAgentCodemodeExtension());
-    if (run.input.webEnabled && (await getUserCreditInfo(run.user_id, {})).membership !== 'free') {
-      mcp = await connectAgentMcp(parseAgentMcpServers(), () => assertAgentToolAccess(store, run, 'mcp__external', {}), context.abortSignal!);
-      if (mcp.tools.length) registry.install({ name: 'taibu_mcp', tools: mcp.tools });
-    }
     // The main model's thresholds apply harness-wide; a collaborator with a smaller or larger window compacts by its own.
     const policies = new Map(bindings.map(binding => [binding.model.id, agentCompactionPolicy(windows.get(binding.model.id) ?? null, binding.model.maxTokens)]));
     harness = await Harness.open(storage, {
@@ -637,7 +662,7 @@ export async function executeAgentRun(
     }
     let backgroundWorking = false, refreshing = false;
     const project = async () => {
-      await projectDurableConversation(root!, storage!, checkpoint, tools, context);
+      await projectDurableConversation(root!, storage!, checkpoint, toolTitle, context);
       backgroundWorking = await projectBackgroundAgents(harness!, storage!, checkpoint, titles, context);
       if (checkpoint.runtime) checkpoint.runtime.usage = projectAgentUsage(await harness!.usage(context));
       await persistProjection();
@@ -747,7 +772,6 @@ export async function executeAgentRun(
     if (backgroundRefresh) clearInterval(backgroundRefresh);
     await watch?.stop();
     await harness?.close(BACKGROUND_CONTEXT).catch(() => {});
-    await mcp?.close();
     scope.cancel();
     shutdown?.removeEventListener("abort", onShutdown);
     apiKey = undefined;

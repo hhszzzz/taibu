@@ -112,3 +112,17 @@ test('skill tokens are counted under 技能 and taken out of messages and the sy
   assert.equal(tokens.messages + tokens.tools + tokens.system + tokens.skills, seedContext.tokens);
   assert.deepEqual(segments.find(segment => segment.key === 'skills')?.meta, '1 张卡');
 });
+
+test('MCP tool definitions and the servers section are rows of their own, and unreachable servers are counted', () => {
+  const runtime = { ...runtimeWith(undefined), mcp: { servers: 1, skipped: 1, direct: 1, deferred: 2, codemode: 0, toolsTokens: 900, sectionTokens: 300 } };
+  const segments = buildContextSegments(runtime, seedContext);
+  const tokens = Object.fromEntries(segments.map(segment => [segment.key, segment.tokens]));
+  assert.deepEqual([tokens.mcp, tokens['mcp-instructions'], tokens.system, tokens.messages], [900, 300, 1_104 - 300, 18_400 - 2_208 - 804 - 300 - 900]);
+  assert.equal(tokens.messages + tokens.tools + tokens.mcp + tokens.system + tokens['mcp-instructions'], seedContext.tokens);
+  const row = (list: typeof segments, key: string) => list.find(segment => segment.key === key)!;
+  assert.deepEqual([row(segments, 'mcp').count, row(segments, 'mcp').meta], [3, '1 个常驻 · 2 个按需']);
+  assert.equal(row(segments, 'mcp-instructions').meta, '1 个服务 · 1 个未连上');
+  const missed = buildContextSegments({ ...runtime, mcp: { ...runtime.mcp, servers: 0, direct: 0, deferred: 0, toolsTokens: 0 } }, seedContext);
+  assert.equal(row(missed, 'mcp').deferred, true);
+  assert.equal(row(missed, 'mcp-instructions').meta, '1 个未连上', 'a task whose servers all failed still says so');
+});

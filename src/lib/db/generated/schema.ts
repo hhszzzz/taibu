@@ -47,6 +47,34 @@ export interface AgentDurableCommits {
   created_at: Generated<string>;
 }
 
+export interface AgentMcpServers {
+  id: Generated<string>;
+  owner_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  name: ColumnType<string, string, string>;
+  display_name: ColumnType<string, string, string>;
+  description: Generated<string>;
+  url: ColumnType<string, string, string>;
+  headers: Generated<Json>;
+  secret_headers: Generated<Json>;
+  secret_query: Generated<Json>;
+  exposure: Generated<string>;
+  tool_policy: Generated<Json>;
+  search_tool: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  fetch_tool: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  result_adapter: Generated<string>;
+  route_priority: Generated<number>;
+  required_tier: Generated<string>;
+  is_enabled: Generated<boolean>;
+  timeout_ms: Generated<number>;
+  max_result_chars: Generated<number>;
+  sort_order: Generated<number>;
+  tools_snapshot: ColumnType<Json | null, Json | null | undefined, Json | null | undefined>;
+  last_checked_at: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  last_error: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  created_at: Generated<string>;
+  updated_at: Generated<string>;
+}
+
 export interface AgentRunArtifacts {
   id: Generated<string>;
   run_id: ColumnType<string, string, string>;
@@ -185,7 +213,7 @@ export interface AnnualReports {
 
 export interface AppSettings {
   setting_key: ColumnType<string, string, string>;
-  setting_value: Generated<boolean>;
+  setting_value: Generated<Json>;
   updated_at: Generated<string>;
 }
 
@@ -705,6 +733,7 @@ export interface DB {
   "agent_attachment_refs": AgentAttachmentRefs;
   "agent_attachments": AgentAttachments;
   "agent_durable_commits": AgentDurableCommits;
+  "agent_mcp_servers": AgentMcpServers;
   "agent_run_artifacts": AgentRunArtifacts;
   "agent_run_commands": AgentRunCommands;
   "agent_run_credentials": AgentRunCredentials;

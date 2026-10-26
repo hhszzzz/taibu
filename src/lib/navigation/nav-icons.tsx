@@ -334,6 +334,14 @@ export const BotIcon = createNavIcon('bot', <>
     <circle className="ni-eye" cx="14.8" cy="12.8" r=".6" fill="currentColor" stroke="none" />
 </>);
 
+export const PlugIcon = createNavIcon('plug', <>
+    <path d="M9 4v4M15 4v4" />
+    <path d="M6.5 8h11v3a5.5 5.5 0 0 1-11 0z" />
+    <path d="M12 16.5V20" />
+</>);
+
+export const PuzzleIcon = createNavIcon('puzzle', <path d="M5.5 8.5h3.4a2 2 0 1 1 4 0h3.6v3.4a2 2 0 1 1 0 4v3.6h-11z" />);
+
 /** MCP：一笔涂鸦，悬停时像刚写上去一样顺着笔迹画出来。 */
 export const ScribbleIcon = createNavIcon('scribble', <g className="ni-glyph">
     <path pathLength={100} d="M5 14.5c1-4 2.6-6 4-6s1.6 2 .8 4.4c-.7 2.2-.3 3.4 1 3.4 1.8 0 3.2-2.6 4.4-5.6" />

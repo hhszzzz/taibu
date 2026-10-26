@@ -79,10 +79,10 @@ test('every Core tool and every registered Agent tool belongs to a presentation 
   assert.equal(getAgentExtensionToolTitle(AGENT_SUBMIT_PLAN_TOOL), '提交计划');
   assert.equal(getAgentExtensionToolTitle(AGENT_BACKGROUND_TOOL), '后台子分析');
   assert.deepEqual([...AGENT_PLAN_GATED_TOOLS].sort(), [AGENT_BACKGROUND_TOOL, 'parallel_analysis', 'record_user_event', 'remember_user_fact']);
-  // 低频工具按需加载；外部 MCP 工具同样只在检索后提供。
+  // 低频工具按需加载；MCP 工具是否按需由所属服务的暴露方式决定。
   for (const name of AGENT_CORE_DEFERRED_TOOLS) assert.ok(listToolDefinitions().some(definition => definition.name === name), `${name} is a Core tool`);
   assert.deepEqual([...AGENT_DEFERRED_TOOLS].sort(), [...AGENT_CORE_DEFERRED_TOOLS, ...AGENT_DATA_DEFERRED_TOOLS].sort());
-  assert.equal(isAgentDeferredTool('mcp__archive__search'), true);
+  assert.equal(isAgentDeferredTool('mcp__archive__search'), false, 'an MCP server sets its own exposure');
   assert.equal(isAgentDeferredTool('bazi'), false);
   assert.equal(projectsAgentCanonicalText(AGENT_TOOL_SEARCH_TOOL), false);
   for (const name of ['unknown', '__proto__', 'constructor', 'toString', '']) {

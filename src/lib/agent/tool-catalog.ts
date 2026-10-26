@@ -175,12 +175,12 @@ export const AGENT_DATA_DEFERRED_TOOLS: readonly string[] = ['read_user_notes', 
  */
 export const AGENT_DEFERRED_TOOLS: ReadonlySet<string> = new Set([...AGENT_CORE_DEFERRED_TOOLS, ...AGENT_DATA_DEFERRED_TOOLS]);
 
-/** Administrator-configured MCP tools are registered as `mcp__<server>__<tool>`. */
-const EXTERNAL_TOOL_PREFIX = 'mcp__';
+/** MCP tools, the platform's and the user's own connectors', are registered as `mcp__<server>__<tool>`. */
+export const AGENT_MCP_TOOL_PREFIX = 'mcp__';
 
-/** Whether a tool is deferred: the low-frequency Taibu tools and every external MCP tool. */
+/** Whether a Taibu tool is deferred. An MCP tool is deferred or not as its server's exposure says. */
 export function isAgentDeferredTool(name: string): boolean {
-  return AGENT_DEFERRED_TOOLS.has(name) || name.startsWith(EXTERNAL_TOOL_PREFIX);
+  return AGENT_DEFERRED_TOOLS.has(name);
 }
 
 /** Titles of tools that Pi extensions define, which have no Taibu label. */
@@ -245,7 +245,7 @@ const TOOL_FAMILIES: ReadonlyMap<string, AgentToolFamily> = new Map<string, Agen
 export function getAgentToolFamily(name: string): AgentToolFamily {
   if (isAgentChartTool(name)) return 'chart';
   if (getAgentDrilldownBase(name)) return 'drilldown';
-  if (name.startsWith(EXTERNAL_TOOL_PREFIX)) return 'external';
+  if (name.startsWith(AGENT_MCP_TOOL_PREFIX)) return 'external';
   return TOOL_FAMILIES.get(name) ?? 'other';
 }
 

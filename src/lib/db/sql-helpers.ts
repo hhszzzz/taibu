@@ -73,3 +73,11 @@ export function updateTableDynamic(trx: Transaction<DB>, table: string) {
 export function deleteFromDynamic(trx: Transaction<DB>, table: string) {
   return (trx as unknown as Kysely<LooseTable>).deleteFrom(table);
 }
+
+/**
+ * Serializes the transactions that take the same key until they end, e.g. a per-user quota count followed by the
+ * insert it allows. `namespace` keeps unrelated features' keys apart.
+ */
+export async function lockTransactionKey(trx: Transaction<DB>, key: string, namespace: number): Promise<void> {
+  await sql`select pg_advisory_xact_lock(hashtextextended(${key}::text, ${namespace}::bigint))`.execute(trx);
+}

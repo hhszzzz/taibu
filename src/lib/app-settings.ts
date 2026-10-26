@@ -2,11 +2,17 @@ import { IS_NODE_TEST_RUNTIME } from "@/lib/runtime";
 import { createSharedCache } from "@/lib/cache/shared.server";
 import { systemDb, type ScopedDb } from "@/lib/db/context.server";
 import { toDbError } from "@/lib/db/errors";
+import { json } from "@/lib/db/sql-helpers";
 import {
   AGENT_TOOL_SCOPE_DEFINITIONS,
   AGENT_TOOL_SCOPE_IDS,
   type AgentToolScopeId,
 } from "@/lib/agent/tool-catalog";
+import {
+  AGENT_EXTENSIONS_POLICY_KEY,
+  normalizeAgentExtensionsPolicy,
+  type AgentExtensionsPolicy,
+} from "@/lib/agent/mcp/config";
 
 // ─── 功能模块开关 ───
 
@@ -263,4 +269,34 @@ export async function readFeatureModuleStateFresh(featureId: FeatureModuleId | A
       error: error instanceof Error ? error.message : 'feature state unavailable',
     };
   }
+}
+
+// ─── Agent 扩展策略 ───
+
+/** Whether users may add their own connectors and skills; administrators edit it, runtime checks read it. */
+const agentExtensionsPolicyCache = createSharedCache<AgentExtensionsPolicy>({
+  name: 'agent-extensions-policy',
+  ttlMs: FEATURE_TOGGLE_CACHE_TTL_MS,
+});
+
+/** The stored policy, or the defaults when none was saved. Throws when the database cannot be read. */
+export async function getAgentExtensionsPolicy(): Promise<AgentExtensionsPolicy> {
+  return agentExtensionsPolicyCache.load(async () => {
+    const row = await systemDb().tx((trx) => trx
+      .selectFrom('app_settings')
+      .select('setting_value')
+      .where('setting_key', '=', AGENT_EXTENSIONS_POLICY_KEY)
+      .executeTakeFirst());
+    return normalizeAgentExtensionsPolicy(row?.setting_value);
+  });
+}
+
+export async function setAgentExtensionsPolicy(policy: AgentExtensionsPolicy): Promise<void> {
+  const updatedAt = new Date().toISOString();
+  await systemDb().tx((trx) => trx
+    .insertInto('app_settings')
+    .values({ setting_key: AGENT_EXTENSIONS_POLICY_KEY, setting_value: json(policy) as never, updated_at: updatedAt })
+    .onConflict((conflict) => conflict.column('setting_key').doUpdateSet({ setting_value: json(policy) as never, updated_at: updatedAt }))
+    .execute());
+  await agentExtensionsPolicyCache.invalidate();
 }

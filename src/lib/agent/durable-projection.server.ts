@@ -4,10 +4,10 @@ import type { AssistantMessage, ToolResultMessage } from "@earendil-works/pi-ai"
 import type { CompactionResult, Conversation, Cursor, EntryRecord, LiveState, TaskId, ToolTaskInput } from "@earendil-works/pi-durable";
 import { CompactionEntry } from "@earendil-works/pi-durable";
 import type { AgentDurableStorage } from "./durable-storage.server";
-import { putAgentPart, type AgentCheckpoint, type AgentPart, type AgentRuntimeInfo, type DomainTool } from "./types";
+import { putAgentPart, type AgentCheckpoint, type AgentPart, type AgentRuntimeInfo } from "./types";
 import { projectAgentContextUsage } from "./context-usage";
 import { projectAgentUsage } from './usage';
-import { AGENT_CODEMODE_TOOL, CHART_TARGET_DIRECTORY_HEADING, getAgentExtensionToolTitle, projectsAgentCanonicalText } from './tool-catalog';
+import { AGENT_CODEMODE_TOOL, CHART_TARGET_DIRECTORY_HEADING, projectsAgentCanonicalText } from './tool-catalog';
 import { splitAgentFollowUps } from './follow-ups';
 import { agentScriptCallNumber } from './codemode.server';
 
@@ -112,7 +112,7 @@ async function projectScriptCalls(storage: AgentDurableStorage, checkpoint: Agen
 /** Public messages are a projection; Durable entries remain the execution truth. */
 export async function projectDurableConversation(
   root: Conversation, storage: AgentDurableStorage, checkpoint: AgentCheckpoint,
-  tools: DomainTool[], context: Context,
+  title: (name: string) => string, context: Context,
 ) {
   const state = await root.viewState(context);
   const live = state.value.docs["pi.live"] as LiveState | undefined;
@@ -128,7 +128,6 @@ export async function projectDurableConversation(
   } while (cursor);
   history.reverse();
   await settleCompactionRetries(storage, checkpoint, history, context);
-  const title = (name: string) => tools.find(t => t.name === name)?.label ?? getAgentExtensionToolTitle(name) ?? name;
   await projectScriptCalls(storage, checkpoint, live, title, context);
   if (checkpoint.runtime) {
     checkpoint.runtime.usage = usage;

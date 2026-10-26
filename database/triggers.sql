@@ -19,6 +19,8 @@ CREATE TRIGGER agent_conversation_delete_guard BEFORE DELETE ON public.conversat
 
 CREATE TRIGGER agent_conversation_message_guard BEFORE UPDATE OF messages ON public.conversations FOR EACH ROW EXECUTE FUNCTION public.agent_protect_conversation_messages();
 
+CREATE TRIGGER agent_mcp_servers_updated_at BEFORE UPDATE ON public.agent_mcp_servers FOR EACH ROW EXECUTE FUNCTION public.update_ai_model_updated_at();
+
 CREATE TRIGGER agent_memory_guard BEFORE INSERT OR UPDATE ON public.user_agent_memory FOR EACH ROW EXECUTE FUNCTION public.agent_memory_guard();
 
 CREATE TRIGGER agent_normalized_message_guard BEFORE INSERT OR DELETE OR UPDATE ON public.conversation_messages FOR EACH ROW EXECUTE FUNCTION public.agent_protect_normalized_messages();

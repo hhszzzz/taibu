@@ -17,6 +17,13 @@ export function isPublicAgentAddress(address: string) {
     return false;
   }
 }
+function isPrivateHostname(url: URL) {
+  const host = url.hostname.replace(/^\[|\]$/gu, "");
+  return host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host.endsWith(".local") ||
+    (ipaddr.isValid(host) && !isPublicAgentAddress(host));
+}
 export function validateAgentProviderUrl(url: string) {
   const errors = validateCustomProviderInput({
     apiUrl: url,
@@ -24,15 +31,19 @@ export function validateAgentProviderUrl(url: string) {
     modelId: "validation",
   });
   if (errors.apiUrl) throw new Error(errors.apiUrl);
-  const host = new URL(url).hostname.replace(/^\[|\]$/gu, "");
-  if (
-    host === "localhost" ||
-    host.endsWith(".localhost") ||
-    host.endsWith(".local") ||
-    (ipaddr.isValid(host) && !isPublicAgentAddress(host))
-  ) {
+  if (isPrivateHostname(new URL(url))) {
     throw new Error("模型服务地址必须指向公开 HTTPS 服务");
   }
+}
+/** An MCP endpoint may carry query parameters (some services take their key or tool list there). */
+export function validateMcpServerUrl(url: string) {
+  let parsed: URL;
+  try { parsed = new URL(url); } catch { throw new Error("MCP 服务地址格式无效"); }
+  if (url.length > 2048) throw new Error("MCP 服务地址过长");
+  if (parsed.protocol !== "https:" || !parsed.hostname) throw new Error("MCP 服务地址必须是 HTTPS");
+  if (parsed.username || parsed.password) throw new Error("MCP 服务地址不应包含认证信息，请改用密钥请求头");
+  if (parsed.hash) throw new Error("MCP 服务地址不应包含片段");
+  if (isPrivateHostname(parsed)) throw new Error("MCP 服务地址必须指向公开 HTTPS 服务");
 }
 
 export async function resolveAgentAddresses(
@@ -70,10 +81,14 @@ const dispatcher = new HttpAgent({
 
 export function createAgentSafeFetch(
   transport: typeof undiciFetch = undiciFetch,
+  { validate = validateAgentProviderUrl, redirectMessage = "模型服务重定向被拒绝，请配置最终 HTTPS 地址" }: {
+    validate?: (url: string) => void;
+    redirectMessage?: string;
+  } = {},
 ): typeof globalThis.fetch {
   return async (input, init) => {
     const request = new Request(input, init);
-    validateAgentProviderUrl(request.url);
+    validate(request.url);
     const response = await transport(request.url, {
       ...(init as Parameters<typeof undiciFetch>[1]),
       method: request.method,
@@ -88,9 +103,13 @@ export function createAgentSafeFetch(
     });
     if (response.status >= 300 && response.status < 400) {
       await response.body?.cancel();
-      throw new Error("模型服务重定向被拒绝，请配置最终 HTTPS 地址");
+      throw new Error(redirectMessage);
     }
     return response as unknown as Response;
   };
 }
 export const agentSafeFetch = createAgentSafeFetch();
+export const mcpSafeFetch = createAgentSafeFetch(undiciFetch, {
+  validate: validateMcpServerUrl,
+  redirectMessage: "MCP 服务重定向被拒绝，请填写最终地址",
+});

@@ -1,7 +1,7 @@
 import type { ChatMessage } from '@/types';
 import { isAgentRunTerminal, type AgentMessageData, type AgentPart, type AgentRunStatus, type AgentRuntimeInfo } from '@/lib/agent/types';
 import { getAgentToolFamily, type AgentToolFamily, AGENT_ARCHIVE_TOOLS, AGENT_BACKGROUND_TOOL, AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_SUBMIT_PLAN_TOOL, AGENT_TOOL_SEARCH_TOOL, isAgentChartTool, isAgentMemberTool } from '@/lib/agent/tool-catalog';
-import { getAgentAttachmentRead, getAgentChart, getAgentConversationHits, getAgentDataResults, getAgentMethod, getAgentNotes, getAgentScript, getAgentSearchResults, getAgentToolArtifactId, getAgentToolQuestions, type AgentChart } from '@/lib/agent/tool-presentation';
+import { getAgentAttachmentRead, getAgentCalculation, getAgentChart, getAgentConversationHits, getAgentDataResults, getAgentMethod, getAgentNotes, getAgentScript, getAgentSearchResults, getAgentToolArtifactId, getAgentToolQuestions, type AgentChart } from '@/lib/agent/tool-presentation';
 import { AGENT_ARCHIVE_KIND_LABELS, getAgentArchiveProposal, getAgentArchiveRecord } from '@/lib/agent/archive';
 import { getChartFocus, getChartTargets } from '@/lib/agent/chart-interaction';
 import { getSavedChartHref } from '@/lib/agent/chart-save';
@@ -186,6 +186,14 @@ function describeBirth(args: Record<string, unknown>): string {
 export function summarizeAgentTool(tool: AgentTool): string | null {
     const args = tool.input && typeof tool.input === 'object' && !Array.isArray(tool.input) ? tool.input as Record<string, unknown> : {};
     if (getAgentToolFamily(tool.name) === 'drilldown') return describeDrilldownSelection(args);
+    // 推算时辰：出生日期、记得的时段与前事年份，算完再给候选个数
+    if (tool.name === 'bazi_hour_candidates') {
+        const window = typeof args.fromHour === 'number' || typeof args.toHour === 'number' ? `${args.fromHour ?? 0}–${args.toHour ?? 24} 时` : '';
+        const events = Array.isArray(args.eventYears) && args.eventYears.length ? `前事 ${args.eventYears.join('、')}` : '';
+        const result = getAgentCalculation(tool);
+        const count = result?.kind === 'bazi_hour_candidates' ? `${result.data.候选数量} 个候选时辰` : '';
+        return [describeBirth(args), window, events, count].filter(Boolean).join(' · ') || null;
+    }
     if (typeof args.birthYear === 'number' && (tool.name.startsWith('bazi') || tool.name.startsWith('ziwei'))) return describeBirth(args) || null;
     // 合盘的两人按 Core 的默认称呼（甲方、乙方）补名。
     if (tool.name === 'bazi_hepan') return (['a', 'b'] as const).map((key, index) => describeBirth({

@@ -8,6 +8,7 @@ export const DEFERRED_TOOL_NAMES: readonly string[] = [
   'bazi_relations', 'bazi_wuxing', 'bazi_liunian_scan', 'ziwei_palace', 'qimen_palace', 'daliuren_lessons',
   'astrology_point', 'liuyao_line',
   'bazi_dayun', 'bazi_pillars_resolve', 'ziwei_horoscope', 'ziwei_flying_star', 'almanac_select', 'bazi_hepan',
+  'bazi_hour_candidates',
 ];
 
 const DEFERRED = new Set(DEFERRED_TOOL_NAMES);
@@ -36,6 +37,7 @@ const KEYWORDS: Readonly<Record<string, string>> = {
   ziwei_flying_star: '紫微 紫微斗数 飞星 四化 化禄 化权 化科 化忌 宫位 飞化',
   almanac_select: '黄历 择日 选日 吉日 宜忌 嫁娶 开业 动土 搬家 出行 日子',
   bazi_hepan: '八字 合盘 合婚 婚配 配对 两人 双方 夫妻 姻缘 合不合 相配 属相 生肖 夫妻宫',
+  bazi_hour_candidates: '八字 时辰 推时辰 定时辰 推算时辰 出生时辰 时辰未知 不知道时辰 时柱 候选 前事 六亲',
 };
 
 const CJK = /\p{Script=Han}+/gu;
@@ -112,7 +114,7 @@ export function getToolGatewayDefinitions(): ToolDefinition[] {
   return [{
     name: TOOL_SEARCH_NAME,
     title: '查找工具',
-    description: '按中文关键词查找没有直接列出的低频太卜工具：八字的关系、五行、流年扫描详查，大运与四柱反推，紫微宫位、运限与飞星，择日，以及奇门、大六壬、占星、六爻的局部详查。'
+    description: '按中文关键词查找没有直接列出的低频太卜工具：八字的关系、五行、流年扫描详查，大运、四柱反推与推算出生时辰，紫微宫位、运限与飞星，择日，以及奇门、大六壬、占星、六爻的局部详查。'
       + '返回各工具的用途与参数 schema，再用 tool_call 调用。已列出的排盘工具直接调用，不必查找。',
     inputSchema: {
       type: 'object',
@@ -161,6 +163,7 @@ export function getServerInstructions(mode: ToolListMode): string {
   return [
     '太卜提供命理、术数与占卜计算工具。工具结果同时包含规范文本与 canonical JSON。',
     '解读结果前先用 load_analysis_method 加载对应体系的方法卡，按卡中的断法、工具流程与输出要求组织解读；用户也可以选用与方法卡同名的 prompt。',
+    '技法卡与体系卡同用：出生时辰未知时加载 birth-hour（推理时柱），先推时辰、经用户确认后再排盘；断语要以用户经历校准时加载 past-events（验证前事）。',
     ...(mode === 'core' ? ['低频的详查、大运、运限、飞星与择日工具没有直接列出：用 tool_search 按中文关键词查找，再用 tool_call 调用。'] : []),
   ].join('\n');
 }

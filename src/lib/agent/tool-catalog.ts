@@ -43,7 +43,7 @@ export function getAgentDrilldownBase(name: string): AgentChartKind | null {
  * available while preventing Agent from using the corresponding tool family.
  */
 export const AGENT_TOOL_SCOPE_DEFINITIONS = [
-  { id: 'bazi', label: '八字工具', description: '排八字、四柱推算、八字详查与岁运分析。' },
+  { id: 'bazi', label: '八字工具', description: '排八字、四柱反推与推算时辰、八字详查与岁运分析。' },
   { id: 'ziwei', label: '紫微工具', description: '排紫微命盘、限运、飞星与宫位详查。' },
   { id: 'qimen', label: '奇门工具', description: '排奇门遁甲及宫位详查。' },
   { id: 'liuyao', label: '六爻工具', description: '排六爻卦盘及爻位详查。' },
@@ -78,6 +78,7 @@ export function getAgentToolFeatureId(name: string): AgentChartKind | null {
   switch (name) {
     case 'bazi_dayun':
     case 'bazi_pillars_resolve':
+    case 'bazi_hour_candidates':
     case 'bazi_hepan':
       return 'bazi';
     case 'ziwei_horoscope':
@@ -162,6 +163,7 @@ export const AGENT_CORE_DEFERRED_TOOLS: readonly string[] = [
   'bazi_relations', 'bazi_wuxing', 'bazi_liunian_scan', 'ziwei_palace', 'qimen_palace', 'daliuren_lessons',
   'astrology_point', 'liuyao_line',
   'bazi_dayun', 'bazi_pillars_resolve', 'ziwei_horoscope', 'ziwei_flying_star', 'almanac_select', 'bazi_hepan',
+  'bazi_hour_candidates',
 ];
 
 /** The user's own material a reading rarely needs: daily notes, and other conversations (with long-term memory on). */
@@ -217,6 +219,7 @@ const TOOL_FAMILIES: ReadonlyMap<string, AgentToolFamily> = new Map<string, Agen
   ['ziwei_flying_star', 'calculation'],
   ['almanac_select', 'calculation'],
   ['bazi_hepan', 'calculation'],
+  ['bazi_hour_candidates', 'calculation'],
   ['web_search', 'search'],
   ['search_knowledge', 'search'],
   ['list_user_data', 'data'],

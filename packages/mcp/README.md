@@ -37,6 +37,7 @@ TaiBu 的本地 `stdio` MCP Server，适合直接接入 Claude Desktop、Cursor�
 | `bazi_wuxing` | 八字五行旺衰详查 |
 | `bazi_liunian_scan` | 八字流年扫描 |
 | `bazi_hepan` | 八字合盘 |
+| `bazi_hour_candidates` | 推算出生时辰 |
 | `ziwei` | 紫微斗数排盘 |
 | `ziwei_horoscope` | 紫微运限 |
 | `ziwei_flying_star` | 紫微飞星 |

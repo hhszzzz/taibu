@@ -17,9 +17,11 @@ export const target = path.join(root, 'packages/core/src/mcp/methods.generated.t
 /**
  * Every Core tool belongs to exactly one system, listed chart first, then the drilldowns in workflow order.
  * Each system has a default card named after it; school cards (bazi-mangpai) share its tools; dream needs none.
+ * Technique cards (birth-hour, past-events) are procedures loaded beside a system card when their situation arises;
+ * one may serve several systems and then reads all of their tools.
  */
 export const SYSTEM_TOOLS = Object.freeze({
-  bazi: ['bazi', 'bazi_wuxing', 'bazi_dayun', 'bazi_liunian_scan', 'bazi_relations', 'bazi_pillars_resolve', 'bazi_hepan'],
+  bazi: ['bazi', 'bazi_wuxing', 'bazi_dayun', 'bazi_liunian_scan', 'bazi_relations', 'bazi_pillars_resolve', 'bazi_hour_candidates', 'bazi_hepan'],
   ziwei: ['ziwei', 'ziwei_palace', 'ziwei_flying_star', 'ziwei_horoscope'],
   liuyao: ['liuyao', 'liuyao_line'],
   meihua: ['meihua'],
@@ -35,6 +37,8 @@ export const SYSTEM_TOOLS = Object.freeze({
 
 const SECTIONS = [['role', '角色'], ['method', '断法'], ['workflow', '工具流程'], ['output', '输出要求']];
 const FIELDS = ['name', 'title', 'system', 'version', 'description'];
+/** Required on every card but a system's default one: a school replaces the default card, a technique joins it. */
+const KINDS = ['school', 'technique'];
 
 /** The card body exactly as a card is laid out; parsing must round-trip to the source. */
 export function renderCardBody(card) {
@@ -50,18 +54,25 @@ export function parseCard(source, file) {
   for (const line of match[1].split('\n')) {
     const field = /^([a-z]+): (.+)$/.exec(line);
     if (!field) fail(`frontmatter 行格式应为「键: 值」：${line}`);
-    if (!FIELDS.includes(field[1]) || field[1] in meta) fail(`未知或重复的字段 ${field[1]}`);
+    if (![...FIELDS, 'kind'].includes(field[1]) || field[1] in meta) fail(`未知或重复的字段 ${field[1]}`);
     meta[field[1]] = field[2].trim();
   }
   for (const key of FIELDS) if (!meta[key]) fail(`缺少 ${key}`);
   if (meta.name !== path.basename(file, '.md')) fail('name 必须与文件名一致');
   if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(meta.name)) fail('name 只能用小写字母、数字与连字符');
-  if (!Object.hasOwn(SYSTEM_TOOLS, meta.system)) fail(`未登记的体系 ${meta.system}，请在 scripts/build-methods.mjs 的 SYSTEM_TOOLS 中登记`);
+  const systems = meta.system.split(',').map(system => system.trim());
+  for (const system of systems) if (!Object.hasOwn(SYSTEM_TOOLS, system)) fail(`未登记的体系 ${system}，请在 scripts/build-methods.mjs 的 SYSTEM_TOOLS 中登记`);
+  if (new Set(systems).size !== systems.length) fail('system 不能重复');
+  if (meta.name === systems[0] && systems.length === 1) {
+    if (meta.kind) fail('体系的默认卡不写 kind');
+    meta.kind = 'system';
+  } else if (!KINDS.includes(meta.kind)) fail(`kind 须为 ${KINDS.join(' 或 ')}`);
+  if (systems.length > 1 && meta.kind !== 'technique') fail('只有技法卡可以用于多个体系');
   if (!/^\d+\.\d+\.\d+$/.test(meta.version)) fail('version 须为 x.y.z');
   const parts = match[2].split(/^## (.+)\n\n/m);
   const heading = /^# (.+)\n\n$/.exec(parts[0])?.[1];
   if (heading !== meta.title) fail('正文须以与 title 相同的一级标题开头');
-  const card = { ...meta };
+  const card = { name: meta.name, title: meta.title, kind: meta.kind, system: systems[0], systems, version: meta.version, description: meta.description };
   SECTIONS.forEach(([key, name], index) => {
     if (parts[1 + index * 2] !== name) fail(`第 ${index + 1} 节应为「${name}」`);
     const body = parts[2 + index * 2]?.trim();

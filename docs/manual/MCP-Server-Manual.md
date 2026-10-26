@@ -178,6 +178,7 @@ curl -X POST https://mcp.mingai.fun/mcp \
 | `bazi_wuxing` | 八字五行旺衰 | 月令旺衰与藏干透出、四干通根与无根、干支自坐、相邻天干生克、缺失五行；只列事实，不判身强身弱；可只取部分事实组 |
 | `bazi_liunian_scan` | 八字流年扫描 | 逐年干支、所在大运、与原局和大运的关系与太岁；可按柱位、类型筛选 |
 | `bazi_hepan` | 八字合盘 | 两人各排四柱，列两盘之间的干支关系、日主互见十神、日柱与年柱之间的关系、年命纳音与五行互补；只给事实，不打分 |
+| `bazi_hour_candidates` | 推算出生时辰 | 出生时辰未知时列当天各时辰的候选：四柱、时柱十神与藏干、时柱参与的关系、命宫、日主之根与起运；可带前事年份逐个比对；只给事实，不排序 |
 | `ziwei_palace` | 紫微宫位详查 | 单宫星曜四化、三方四正、夹宫、宫干飞化与运限叠加 |
 | `liuyao_line` | 六爻逐爻详查 | 单爻纳甲、六亲、世应、旺衰、空亡、回头生克与变爻 |
 | `almanac_select` | 黄历择日筛选 | 日期区间的候选日、事项宜忌过滤与冲煞排除 |
@@ -194,9 +195,9 @@ curl -X POST https://mcp.mingai.fun/mcp \
 
 ## 5. 方法卡
 
-太卜的解读方法写成 13 张方法卡：每个体系一张默认卡（子平八字、紫微斗数、六爻、梅花易数、奇门遁甲、大六壬、小六壬、太乙神数、塔罗、西方占星、黄历择日），另有流派卡「盲派八字」（`bazi-mangpai`）与不需排盘的「周公解梦」（`dream`）。每张卡给出角色、断法、工具流程与输出要求，并附解读通则与工具约定。与太卜站内 Agent、普通对话及 skill 使用同一份来源。
+太卜的解读方法写成 15 张方法卡：每个体系一张默认卡（子平八字、紫微斗数、六爻、梅花易数、奇门遁甲、大六壬、小六壬、太乙神数、塔罗、西方占星、黄历择日），另有流派卡「盲派八字」（`bazi-mangpai`）、不需排盘的「周公解梦」（`dream`），以及与体系卡同用的技法卡「推理时柱」（`birth-hour`，出生时辰未知时先推时辰、经用户确认再排盘）与「验证前事」（`past-events`，以往事校准拿不准的取舍）。每张卡给出角色、断法、工具流程与输出要求，并附解读通则与工具约定。与太卜站内 Agent、普通对话及 skill 使用同一份来源。
 
-- 工具 `load_analysis_method`：模型自己加载方法卡。`id` 填方法卡 ID，或填刚调用的工具名（得到该体系的默认卡）；同一体系有多张卡时按用户点名的流派选。未知 ID 返回 `isError: true`。
+- 工具 `load_analysis_method`：模型自己加载方法卡。`id` 填方法卡 ID，或填刚调用的工具名（得到该体系的默认卡）；同一体系有多张卡时按用户点名的流派选；技法卡在遇到其所述情形时另行加载，与体系卡同用。未知 ID 返回 `isError: true`。
 - prompts：每张卡一个同名 prompt，可选参数 `question`（要问的事或要解的梦）。`prompts/get` 返回一条用户消息：方法卡全文、解读通则、工具约定与问题；未给问题时请模型先询问。按协议，prompts 由用户选用（客户端通常显示为斜杠命令），模型自己取方法卡用上面的工具。
 
 ## 6. 按需加载的工具
@@ -205,10 +206,10 @@ MCP 没有「延迟提供」的工具：`tools/list` 列出服务当前提供的
 
 | 入口 | 列出的工具 |
 | --- | --- |
-| HTTP `POST /mcp`；stdio 默认（`TAIBU_MCP_TOOLS=all`） | 全部 25 个计算工具与 `load_analysis_method` |
+| HTTP `POST /mcp`；stdio 默认（`TAIBU_MCP_TOOLS=all`） | 全部 26 个计算工具与 `load_analysis_method` |
 | HTTP `POST /mcp/core`；stdio `TAIBU_MCP_TOOLS=core` | 11 个排盘工具、`load_analysis_method`、`tool_search`、`tool_call` |
 
-精简列表中其余 14 个低频工具（8 个详查与 `bazi_dayun`、`bazi_pillars_resolve`、`ziwei_horoscope`、`ziwei_flying_star`、`almanac_select`、`bazi_hepan`）经两步使用：`tool_search` 按中文关键词或工具名查找（如「大运」「流年扫描」「飞星四化」「择日」「合盘」「宫位」「动爻」），返回各工具的完整说明与参数 schema；`tool_call` 以 `{ "name": 工具名, "arguments": 参数 }` 调用，结果（规范文本、canonical JSON、地点解析与随机种子作用域）与直接调用相同。已列出的工具不经 `tool_call`。给模型看的工具说明（名称、描述与参数 schema）约由 6.4 万字符降到 2.7 万字符。stdio 的 `TAIBU_MCP_TOOLS` 取其他值时服务拒绝启动并说明原因；HTTP 按入口决定列表，客户端请求头无法改变。
+精简列表中其余 15 个低频工具（8 个详查与 `bazi_dayun`、`bazi_pillars_resolve`、`ziwei_horoscope`、`ziwei_flying_star`、`almanac_select`、`bazi_hepan`、`bazi_hour_candidates`）经两步使用：`tool_search` 按中文关键词或工具名查找（如「大运」「流年扫描」「飞星四化」「择日」「合盘」「推时辰」「宫位」「动爻」），返回各工具的完整说明与参数 schema；`tool_call` 以 `{ "name": 工具名, "arguments": 参数 }` 调用，结果（规范文本、canonical JSON、地点解析与随机种子作用域）与直接调用相同。已列出的工具不经 `tool_call`。给模型看的工具说明（名称、描述与参数 schema）约由 6.4 万字符降到 2.7 万字符。stdio 的 `TAIBU_MCP_TOOLS` 取其他值时服务拒绝启动并说明原因；HTTP 按入口决定列表，客户端请求头无法改变。
 
 ## 7. 地点解析
 

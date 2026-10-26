@@ -59,6 +59,7 @@ echo '{"gender":"male","birthYear":1990,"birthMonth":5,"birthDay":20,"birthHour"
 | `liuyao_line` | 六爻逐爻详查 | 在六爻卦盘上按爻位或角色（世、应、动爻、六亲）取爻，列纳甲、六亲、六神、世应、动静、旺衰判据、月破日破暗动与空亡、月建日辰作用、化进化退与回头生克、伏神飞伏，以及动爻对本爻的生克冲合 | [references/liuyao_line.md](references/liuyao_line.md) | [methods/liuyao.md](methods/liuyao.md) |
 | `almanac_select` | 黄历择日筛选 | 在指定区间内逐日取黄历，按事项（宜忌逐条匹配）与冲煞（一个或多个生肖、地支的六冲）筛选候选日，列出干支、农历、建除、黄黑道、二十八宿、纳音、冲煞与宜忌，并给出排除统计 | [references/almanac_select.md](references/almanac_select.md) | [methods/almanac.md](methods/almanac.md) |
 | `bazi_hepan` | 八字合盘 | 两人各排四柱，列出两盘之间的天干五合/相冲与地支六合、三合、半合、三会、六冲、刑、害、破，日主互见的十神与五行生克，日柱（日主与夫妻宫）、年柱（生肖与年命纳音）之间的关系，以及一方所缺、另一方原局有的五行 | [references/bazi_hepan.md](references/bazi_hepan.md) | [methods/bazi.md](methods/bazi.md) |
+| `bazi_hour_candidates` | 推算出生时辰 | 出生时辰未知时，列出出生当天各时辰的候选：四柱、时柱十神与藏干、时柱与原局的干支关系、命宫、日主在时支的根、月令透时干、缺失五行与起运 | [references/bazi_hour_candidates.md](references/bazi_hour_candidates.md) | [methods/bazi.md](methods/bazi.md) |
 <!-- TOOLS:END -->
 
 调用前先 `schema <tool>`，或读 `references/<tool>.md`（参数表与可复制的示例）。
@@ -74,6 +75,8 @@ echo '{"gender":"male","birthYear":1990,"birthMonth":5,"birthDay":20,"birthHour"
 | --- | --- | --- | --- |
 | `bazi` | 子平八字 | 子平法论八字：月令定格，旺衰、调候、通关、病药取用，十神六亲与大运流年应期。问命局格局、性格才能、事业财运、婚姻六亲、健康、某几年运势，或两人合不合（合婚、合作、亲子）时使用；用户点名盲派时改用 bazi-mangpai。 | [methods/bazi.md](methods/bazi.md) |
 | `bazi-mangpai` | 盲派八字 | 盲派（段建业一系）论八字：宾主、体用定位，看做功方式与效率定层次，以十神、宫位、干支取象断事，岁运引动定应期；不以日主旺衰定喜忌。用户点名盲派、做功、象法，或要直断职业、婚姻、六亲事件时使用。 | [methods/bazi-mangpai.md](methods/bazi-mangpai.md) |
+| `birth-hour` | 推理时柱 | 出生时辰未知时先推时辰：列出当天各时辰的候选，以六亲、几件前事的年份与性情逐个排除，剩两三个时用紫微交叉核对，经用户确认后再正式排盘。用户不知道或记不清出生时辰、只记得大致时段时使用，与八字、紫微、占星的体系卡同用。 | [methods/birth-hour.md](methods/birth-hour.md) |
+| `past-events` | 验证前事 | 以前事校准论断：论断依赖拿不准的取舍（身强身弱与用神、格局成败、时辰交界、流派口径），或用户说断语不准时，先挑两三件在不同取舍下结论相反的往事请用户核对，按核对结果定下取舍再论将来。与八字、紫微、占星的体系卡同用。 | [methods/past-events.md](methods/past-events.md) |
 | `ziwei` | 紫微斗数 | 紫微斗数论命：三合派看星曜组合、庙旺与三方四正，飞星派看生年四化与宫干飞化，大限、流年叠宫断事与时间。问性格格局、十二宫各领域、大限流年运势时使用。 | [methods/ziwei.md](methods/ziwei.md) |
 | `liuyao` | 六爻 | 六爻纳甲断卦，宗《增删卜易》《卜筮正宗》：定用神，月建日辰论旺衰，动变论生克，世应论人我，以用神之病与动静取应期。问一件具体事情的成败、得失、吉凶与时间时使用。 | [methods/liuyao.md](methods/liuyao.md) |
 | `meihua` | 梅花易数 | 梅花易数断事：以体用生克为纲，参月令旺衰，本卦、互卦、变卦三段推演，依体用诸诀定吉凶，卦象取义并推克应之期。用时间、数字、文字、物象起卦问一件事时使用。 | [methods/meihua.md](methods/meihua.md) |
@@ -98,7 +101,7 @@ echo '{"gender":"male","birthYear":1990,"birthMonth":5,"birthDay":20,"birthHour"
 
 - **历法**：生辰类工具默认公历（`calendarType: "solar"`）；用户给的是农历生日时改传 `"lunar"`，闰月再加 `isLeapMonth: true`。`xiaoliuren` 例外，直接接收农历月、日。
 - **时间**：`birthHour` 传 0-23 的钟表小时，早晚子时由引擎处理，不要自行折算时辰。`xiaoliuren` 的 `hour` 用 `hourType` 指明口径：`clock` 为 0-23 小时，`shichen` 为时辰序号 1-12（子=1）。用户未提供的出生信息应当询问，而非代为假设。
-- **出生时辰未知**：用户确实不知道出生时辰时，八字类工具（`bazi`、`bazi_dayun`、`bazi_hepan` 及八字详查）省略 `birthHour`，只按年、月、日三柱分析（不给命宫、时柱神煞与小运，起运给出范围），并说明时柱相关的内容没有覆盖；不要自行填一个时辰代替。紫微、占星离不开时辰，不能这样省略。
+- **出生时辰未知**：先推时辰、经用户确认后再分析，不要自行填一个时辰，也不要直接按三柱下结论。加载技法卡 `birth-hour`（推理时柱），用 `bazi_hour_candidates` 列出当天各时辰的候选与区分事实，向用户核对六亲与几件前事的年份逐个排除，剩两三个时可对它们各排一张 `ziwei` 交叉核对；把最可能的一到三个时辰连同依据交给用户确认，确认后以该候选给出的 `birthHour`、`birthMinute` 正式排盘，回答里注明时辰是推定并经用户确认的。用户答不上来或不愿推时，八字类工具省略 `birthHour`，只按年、月、日三柱分析（不给命宫、时柱神煞与小运，起运给出范围），并说明时柱相关的内容没有覆盖。紫微、占星离不开时辰，必须先推、确认后再排。六爻、梅花、奇门、六壬、塔罗占的是一件事，不用来推出生时辰。
 - **占当下**：`qimen`、`daliuren`、`liuyao` 与 `meihua` 的时间起卦需要当前时间时，先取得实际的当前时间（命令行可用 `date +"%Y-%m-%dT%H:%M:%S"`）再填入参数，不凭印象估计。
 - **日期核实**：用户说「今天/现在」并同时报出农历日期时，先取得实际的当前日期、用 `almanac` 核对公农历对应——农历与公历的映射是查历数据，不能凭记忆换算。口述与核实不符时，指出差异并以核实结果起盘，必要时附口述日期的对照结果。出生生肖、未来日期干支也以 Core 对相应日期的计算为准，不能从公历年份或单日盘面补算。
 - **随机性**：`tarot` 可传 `seed` 复现抽牌；`liuyao` 的 `method: "auto"` 每次结果随机，需要复现时改用 `select`（指定卦名）或 `number`（数字起卦）。

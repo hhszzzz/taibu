@@ -18,7 +18,9 @@ export { CoreOutputError, validateOutput } from './output-validator.js';
 export { buildListToolsPayload, buildToolSuccessPayload, renderToolResult } from './payloads.js';
 export type { RenderedToolResult, ToolContentItem, ToolListPayload } from './payloads.js';
 export {
+  METHOD_CHOICE_RULE,
   METHOD_CONVENTIONS,
+  METHOD_KIND_NOTES,
   METHOD_PRINCIPLES,
   METHOD_PROMPT_QUESTION,
   METHOD_TOOL_NAME,
@@ -32,7 +34,7 @@ export {
   renderMethodPersona,
   renderMethodPrompt,
 } from './methods.js';
-export type { AnalysisMethod, MethodCardSource, MethodPrompt, MethodPromptResult } from './methods.js';
+export type { AnalysisMethod, MethodCardKind, MethodCardSource, MethodPrompt, MethodPromptResult } from './methods.js';
 export {
   DEFERRED_TOOL_NAMES,
   TOOL_CALL_NAME,

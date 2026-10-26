@@ -28,6 +28,7 @@ export const requiredOutputSections: Record<string, string[]> = {
   bazi_wuxing: ['日主', '月令', '缺失五行', '口径'],
   bazi_liunian_scan: ['扫描范围', '原局四柱', '逐年', '口径'],
   bazi_pillars_resolve: ['原始四柱', '候选数量', '候选列表'],
+  bazi_hour_candidates: ['出生日期', '共有柱', '候选数量', '候选', '口径'],
   ziwei: ['基本信息', '十二宫位'],
   ziwei_horoscope: ['基本信息', '运限叠宫'],
   ziwei_flying_star: ['查询结果'],

@@ -15,8 +15,8 @@ import {
 const definitions = listToolDefinitions();
 const CHART_TOOLS = ['bazi', 'ziwei', 'liuyao', 'meihua', 'tarot', 'taiyi', 'almanac', 'qimen', 'daliuren', 'xiaoliuren', 'astrology'];
 
-test('the deferred tools are fourteen Core tools, none of them a chart', () => {
-  assert.equal(DEFERRED_TOOL_NAMES.length, 14);
+test('the deferred tools are fifteen Core tools, none of them a chart', () => {
+  assert.equal(DEFERRED_TOOL_NAMES.length, 15);
   for (const name of DEFERRED_TOOL_NAMES) assert.ok(definitions.some(tool => tool.name === name), name);
   for (const name of CHART_TOOLS) assert.equal(isDeferredTool(name), false, name);
   assert.deepEqual(definitions.filter(tool => !isDeferredTool(tool.name)).map(tool => tool.name).sort(), [...CHART_TOOLS].sort());

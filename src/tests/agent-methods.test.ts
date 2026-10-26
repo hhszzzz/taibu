@@ -8,7 +8,7 @@ import { PARALLEL_SYSTEMS, memberInstructions, systemTitle } from '../lib/agent/
 const LIMIT = '\n计算必须调用 Core 工具；方法包不授予工具、联网或会员权限。';
 
 test('every card loads its own text by id, and every Core tool loads its system default card', () => {
-    assert.equal(ANALYSIS_METHODS.length, 13);
+    assert.equal(ANALYSIS_METHODS.length, 15);
     for (const method of ANALYSIS_METHODS) {
         const loaded = loadAnalysisMethod(method.id);
         const source = readFileSync(`skills/taibu-divination/methods/${method.id}.md`, 'utf8');
@@ -22,7 +22,7 @@ test('every card loads its own text by id, and every Core tool loads its system 
     assert.equal(loadAnalysisMethod('bazi-mangpai').title, '盲派八字');
     assert.deepEqual(loadAnalysisMethod('bazi-mangpai').tools, loadAnalysisMethod('bazi').tools);
     assert.deepEqual(loadAnalysisMethod('dream').tools, []);
-    assert.equal(loadAnalysisMethod('bazi', '2.1.0').version, '2.1.0');
+    assert.equal(loadAnalysisMethod('bazi', '2.2.0').version, '2.2.0');
     assert.throws(() => loadAnalysisMethod('__proto__'), /分析方法或版本不存在/);
     assert.throws(() => loadAnalysisMethod('bazi', '1.0.0'), /分析方法或版本不存在/);
 });
@@ -30,6 +30,7 @@ test('every card loads its own text by id, and every Core tool loads its system 
 test('collaboration members work with a chart-reading card, a school as well as a system', () => {
     assert.ok(PARALLEL_SYSTEMS.includes('bazi') && PARALLEL_SYSTEMS.includes('bazi-mangpai'));
     assert.ok(!PARALLEL_SYSTEMS.includes('dream'), 'a card that reads no chart has no member tools');
+    for (const technique of ['birth-hour', 'past-events']) assert.ok(!PARALLEL_SYSTEMS.includes(technique), `${technique} goes with a system card, not on its own`);
     assert.equal(systemTitle('bazi-mangpai'), '盲派八字');
     assert.equal(systemTitle('unknown'), 'unknown');
     // A school member loads its own card, not the system default.

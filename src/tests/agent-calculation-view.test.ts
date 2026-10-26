@@ -51,3 +51,22 @@ test('luck periods of an unknown birth time show the start as a range and the ye
   assert.match(text, /交运年份 出生时辰未知：时辰偏晚时各步大运晚一年交运/u);
   assert.match(text, /1995（或1996）–2004 · 1 岁/u);
 });
+
+test('hour candidates list every hour with what sets it apart, and how each past year falls on it', async () => {
+  const { html, text } = await render('bazi_hour_candidates', { gender: 'female', birthYear: 1995, birthMonth: 1, birthDay: 9, eventYears: [2018] });
+  const items = new Map([...html.matchAll(/<li data-hour-candidate="([^"]+)">(.*?)<\/li>/gu)].map(match => [match[1], match[2].replace(/<[^>]+>/gu, ' ').replace(/\s+/gu, ' ').trim()]));
+  assert.deepEqual([...items.keys()], ['早子时', '丑时', '寅时', '卯时', '辰时', '巳时', '午时', '未时', '申时', '酉时', '戌时', '亥时', '晚子时']);
+  assert.match(text, /公历 1995-01-09（农历一九九四年腊月初九）· 女 · 共有 年柱甲戌 月柱丁丑 日柱庚子（日主庚金）/u);
+  assert.match(items.get('丑时')!, /^丑时 · 01:00–03:00 · 时柱 丁丑 正官 · 日主坐墓 · 涧下水 · 命宫丁卯 · 日主庚通根于时支丑（藏辛·余气） 子丑六合化土（日支子·时支丑） · 戌丑恃势之刑（年支戌·月支丑·时支丑）/u);
+  assert.match(items.get('晚子时')!, /^晚子时 · 23:00–24:00 · 时柱 戊子/u);
+  // The year and the luck period are both 戌, so the same clash shows twice, told apart by where it falls.
+  assert.match(items.get('辰时')!, /2018 戊戌 · 甲戌（第3步大运）：庚甲相冲（时干庚·大运干甲） · 辰戌相冲（时支辰·大运支戌） · 辰戌相冲（时支辰·流年支戌） · 大运与时柱天克地冲/u);
+  assert.match(items.get('寅时')!, /2018 戊戌 · 甲戌（第3步大运）：无区分候选的关系$/u);
+  assert.match(text, /只列各时辰的事实，不判断哪个更可能；时辰由你确认。/u);
+});
+
+test('true solar time that falls on the day before reads as such, not as a second date', async () => {
+  const { text } = await render('bazi_hour_candidates', { gender: 'male', birthYear: 1990, birthMonth: 5, birthDay: 20, longitude: 87.6, fromHour: 0, toHour: 2 });
+  assert.match(text, /戌时 · 00:00–00:06（真太阳时 前一日 20:54–21:00） · 时柱 甲戌/u);
+  assert.match(text, /亥时 · 00:06–02:06（真太阳时 前一日 21:00–23:00） · 时柱 乙亥/u);
+});

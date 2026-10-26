@@ -138,7 +138,49 @@ function HepanReading({ data }: { data: Extract<AgentCalculation, { kind: 'bazi_
     </>;
 }
 
-/** 推演的结构化结果：大运时间线、四柱候选、运限表、飞星、择日候选与合盘，按 Core 的计算种类选一种展示。 */
+type HourCandidates = Extract<AgentCalculation, { kind: 'bazi_hour_candidates' }>['data'];
+
+/** 钟表时刻：与出生日期同日只写钟点，次日零点写作 24:00，其余写全 */
+/** 时段只写时分：次日零点写 24:00，落在出生前后一天（真太阳时跨日）时注明前一日、次日 */
+function clockSpan(start: string, end: string, solarDate: string) {
+    const [startDate, startTime] = start.split(' ');
+    const [endDate, endTime] = end.split(' ');
+    const day = (date: string) => date === solarDate ? '' : date < solarDate ? '前一日 ' : '次日 ';
+    const tail = endDate === startDate ? endTime : endTime === '00:00' ? '24:00' : `${day(endDate)}${endTime}`;
+    return `${day(startDate)}${startTime}–${tail}`;
+}
+
+/** 「辰戌相冲（时支辰·流年支戌）」：流年与大运同字时，同一关系出现两次，靠位置区分 */
+function relationText(row: HourCandidates['候选'][number]['时柱关系'][number]) {
+    return `${row.说明}（${row.位置.map(cell => `${cell.柱.replace(/柱$/u, '')}${cell.部位 === '天干' ? '干' : '支'}${cell.字}`).join('·')}）`;
+}
+
+/** 推算时辰：每个候选一行——时段与时柱、时柱自身的事实、与原局的关系、起运，给了前事年份时再列各年的区分事实。 */
+function HourCandidateList({ data }: { data: HourCandidates }) {
+    const birth = data.出生日期;
+    const solar = birth.公历;
+    return <>
+        <p className="agent-ws-note">公历 {solar}（农历{birth.农历}）· {birth.性别}{data.共有柱.length ? ` · 共有 ${data.共有柱.map(pillar => `${pillar.柱}${pillar.干支}`).join(' ')}` : ''}{data.日主 ? `（日主${data.日主}）` : ''}</p>
+        {data.当天交节 && <p className="agent-ws-note">当天交节：{data.当天交节}</p>}
+        {data.前事年份 && <p className="agent-ws-note">前事 {data.前事年份.map(event => `${event.年份} ${event.流年}`).join('、')}</p>}
+        <ol className="agent-ws-list" aria-label="候选时辰">
+            {data.候选.map(candidate => {
+                const hour = candidate.时柱;
+                const truth = candidate.真太阳时 ? `（真太阳时 ${clockSpan(candidate.真太阳时.开始, candidate.真太阳时.结束, solar)}）` : '';
+                return <li key={candidate.序号} data-hour-candidate={candidate.时辰}>
+                    <strong>{candidate.时辰} · {clockSpan(candidate.钟表时间.开始, candidate.钟表时间.结束, solar)}{truth} · 时柱 {hour.干支}</strong>
+                    <small>{[hour.天干十神, `日主坐${hour.地势}`, hour.纳音, hour.空亡 ? '空亡' : '', `命宫${candidate.命宫}`, candidate.日主之根, candidate.月令透时干.length ? `月令${candidate.月令透时干.join('、')}透时干` : ''].filter(Boolean).join(' · ')}</small>
+                    <small>{candidate.时柱关系.length ? candidate.时柱关系.map(relationText).join(' · ') : '时柱与原局无合冲刑害'}</small>
+                    <small>{candidate.起运}{candidate.首步大运 ? ` · 首步大运${candidate.首步大运.干支}（${candidate.首步大运.起运年份}）` : ''}</small>
+                    {candidate.前事?.map(event => <small key={event.年份}>{event.年份} {event.流年}{event.大运 ? ` · ${event.大运}` : ''}：{[...event.关系.map(relationText), ...event.岁运提示].join(' · ') || '无区分候选的关系'}</small>)}
+                </li>;
+            })}
+        </ol>
+        <p className="agent-ws-note">只列各时辰的事实，不判断哪个更可能；时辰由你确认。</p>
+    </>;
+}
+
+/** 推演的结构化结果：大运时间线、四柱候选、运限表、飞星、择日候选、合盘与候选时辰，按 Core 的计算种类选一种展示。 */
 export function CalculationResult({ value }: { value: AgentCalculation }) {
     switch (value.kind) {
         case 'bazi_dayun': return <DayunTimeline data={value.data} />;
@@ -147,5 +189,6 @@ export function CalculationResult({ value }: { value: AgentCalculation }) {
         case 'ziwei_flying_star': return <FlyingStars data={value.data} />;
         case 'almanac_select': return <AlmanacCandidates data={value.data} />;
         case 'bazi_hepan': return <HepanReading data={value.data} />;
+        case 'bazi_hour_candidates': return <HourCandidateList data={value.data} />;
     }
 }

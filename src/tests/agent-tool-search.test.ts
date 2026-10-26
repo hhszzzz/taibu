@@ -33,10 +33,10 @@ const candidates = definitions.filter(definition => isAgentDeferredTool(definiti
 const titles = new Map(definitions.map(definition => [definition.name, definition.title]));
 const rank = (query: string, limit?: number) => rankDeferredTools(query, candidates, titles, limit);
 
-test('deferred tools are the fourteen low-frequency Core tools, the notes and conversation searches, and every MCP tool', () => {
+test('deferred tools are the fifteen low-frequency Core tools, the notes and conversation searches, and every MCP tool', () => {
   assert.deepEqual([...AGENT_CORE_DEFERRED_TOOLS].sort(), [
-    'almanac_select', 'astrology_point', 'bazi_dayun', 'bazi_hepan', 'bazi_liunian_scan', 'bazi_pillars_resolve', 'bazi_relations',
-    'bazi_wuxing', 'daliuren_lessons', 'liuyao_line', 'qimen_palace', 'ziwei_flying_star', 'ziwei_horoscope', 'ziwei_palace',
+    'almanac_select', 'astrology_point', 'bazi_dayun', 'bazi_hepan', 'bazi_hour_candidates', 'bazi_liunian_scan', 'bazi_pillars_resolve',
+    'bazi_relations', 'bazi_wuxing', 'daliuren_lessons', 'liuyao_line', 'qimen_palace', 'ziwei_flying_star', 'ziwei_horoscope', 'ziwei_palace',
   ]);
   for (const name of AGENT_CORE_DEFERRED_TOOLS) assert.ok(definitions.some(definition => definition.name === name), `${name} is a Core tool`);
   // The browser-safe catalogue keeps its own copy; the MCP servers defer the same Core tools.
@@ -89,6 +89,8 @@ test('a Chinese query finds the tool a model means, before tools that merely men
   assert.equal(rank('合盘')[0], 'bazi_hepan');
   assert.equal(rank('合婚')[0], 'bazi_hepan');
   assert.equal(rank('两人八字合不合')[0], 'bazi_hepan');
+  assert.equal(rank('推时辰')[0], 'bazi_hour_candidates');
+  assert.equal(rank('不知道出生时辰')[0], 'bazi_hour_candidates');
   assert.equal(rank('动爻')[0], 'liuyao_line');
   assert.equal(rank('三方四正')[0], 'ziwei_palace');
   assert.equal(rank('三传四课')[0], 'daliuren_lessons');

@@ -59,6 +59,27 @@
     ]
   },
   {
+    "id": "bazi_hour_candidates",
+    "tool": "bazi_hour_candidates",
+    "guide": "birth-hour",
+    "arguments": {
+      "gender": "female",
+      "birthYear": 1995,
+      "birthMonth": 1,
+      "birthDay": 9,
+      "fromHour": 5,
+      "toHour": 12,
+      "eventYears": [2018, 2021]
+    },
+    "prompt": "我是女生，1995年1月9日出生，不知道具体几点，家里说是上午。2018年换了工作，2021年结婚。能帮我推一下出生时辰吗？",
+    "assertions": [
+      "调用推算出生时辰工具列出上午的候选时辰，引用 Core 返回的时柱干支与区分事实，不捏造",
+      "不替用户直接定下时辰：给出最可能的一到三个候选及各自依据，请用户确认",
+      "用 2018、2021 两年流年、大运与各候选时柱的关系说明区分依据，并追问兄弟姐妹、子女等进一步线索",
+      "用户确认之前不按某个时辰下命局结论"
+    ]
+  },
+  {
     "id": "ziwei",
     "tool": "ziwei",
     "guide": "ziwei",

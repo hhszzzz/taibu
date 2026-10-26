@@ -10,8 +10,11 @@ test('method directory lists each card once with only its offered tools, then th
     assert.deepEqual(lines.map(line => line.slice(2, line.indexOf('（'))), ANALYSIS_METHODS.map(item => item.id));
     assert.match(full, /^- bazi-mangpai（盲派八字）— .+工具：bazi, bazi_wuxing/m);
     assert.match(full, /^- dream（周公解梦）— .+无需排盘工具。$/m);
-    // Thirteen cards with their routing descriptions stay a short catalogue; the cards themselves load on demand.
-    assert.ok(full.length < 3200, `directory length ${full.length}`);
+    // A technique goes with a system card, so it names no tools of its own.
+    assert.match(full, /^- birth-hour（推理时柱，技法）— /m);
+    assert.doesNotMatch(full, /^- (birth-hour|past-events)（[^\n]*工具：/m);
+    // Fifteen cards with their routing descriptions stay a short catalogue; the cards themselves load on demand.
+    assert.ok(full.length < 3800, `directory length ${full.length}`);
     for (const label of ['历法', '时间', '占当下', '日期核实', '随机性', '六爻用神', 'detailLevel']) {
         assert.ok(full.includes(`**${label}**`), `missing shared convention: ${label}`);
     }

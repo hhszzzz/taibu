@@ -18,6 +18,7 @@ TaiBu 的命理术数算法核心库。
 | `bazi_wuxing` | 八字五行旺衰详查（月令旺衰与藏干透出、四干通根与无根、干支自坐、相邻天干生克、缺失五行；只列事实不判旺衰；可用 `sections` 只取部分事实组） |
 | `bazi_liunian_scan` | 八字流年扫描（逐年干支、所在大运、与原局和大运的刑冲合害、太岁，最多 30 年；可按柱位、类型筛选） |
 | `bazi_hepan` | 八字合盘（两人各排四柱，列两盘之间的干支关系、日主互见十神、日柱与年柱之间的关系、年命纳音与五行互补；只给事实不打分） |
+| `bazi_hour_candidates` | 推算出生时辰（出生时辰未知时列当天各时辰的候选：四柱、时柱十神与藏干、时柱参与的关系、命宫、日主之根与起运；给 `eventYears` 时逐个候选列出前事之年的岁运关系；只列事实不排序） |
 | `ziwei` | 紫微斗数排盘 |
 | `ziwei_horoscope` | 紫微运限 |
 | `ziwei_flying_star` | 紫微飞星与四化落宫分析 |
@@ -151,7 +152,8 @@ MCP 在发送结构化结果前按公开 schema 校验字段类型、必需主�
 完整支持矩阵、边界、来源和验证范围见 [ALGORITHM_RULES.md](./ALGORITHM_RULES.md)。
 直接算法依赖固定为本次验证的版本；仓库锁文件同时固定传递依赖。独立 npm 消费者应保留自己的锁文件，重新升级依赖后重新运行规则回归测试。
 
-- 八字与大运支持 `timezone`、`disambiguation`、`dayBoundary`，大运另支持 `yunSect: 1 | 2`。
+- 八字与大运支持 `timezone`、`disambiguation`、`dayBoundary`，大运另支持 `yunSect: 1 | 2`；不知道出生时辰时省略 `birthHour`，只排年、月、日三柱，起运给出范围。
+- 推算时辰（`bazi_hour_candidates`）逐分钟枚举出生当天的四柱，返回各候选时辰的区分事实与确认后排盘用的出生时间。
 - 四柱反推支持 `startYear`、`endYear` 和同一组历法规则，返回按分钟搜索的半开候选时间区间。
 - 紫微三工具共用 `calculationOptions`，可选算法、年界、运限界、年龄界、子时界、闰月策略和十干四化覆盖表。
 - 六爻增加 `method: 'coins'`（初爻到上爻六个 `yaoValues: 6..9`）与 `'yarrow'`（蓍草概率模型）。

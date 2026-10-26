@@ -97,6 +97,7 @@ const familyParts = () => [
   AGENT_DAYUN_FIXTURE_PART,
   HEPAN_FIXTURE_PART,
   ALMANAC_CLASH_FIXTURE_PART,
+  HOUR_CANDIDATES_FIXTURE_PART,
   { type: 'tool', id: 'family-web', name: 'web_search', title: '联网检索', status: 'completed', input: { query: '庚金 月令' }, output: [{ title: '庚金论', url: 'https://example.com/gengjin', content: '庚金带煞，刚健为最。' }, { title: '无效链接', url: 'javascript:alert(1)', content: '不应成为链接' }] },
   { type: 'tool', id: 'family-kb', name: 'search_knowledge', title: '知识库检索', status: 'completed', input: { query: '不存在的资料' }, output: [] },
   { type: 'tool', id: 'family-method', name: 'load_analysis_method', title: '加载分析方法', status: 'completed', input: { id: 'bazi' },
@@ -634,9 +635,14 @@ export async function build(outputDirectory) {
   const clash = buildToolSuccessPayload('almanac_select', await executeTool('almanac_select', clashInput));
   const clashPart = { type: 'tool', id: 'family-almanac-clash', name: 'almanac_select', title: '黄历择日筛选', status: 'completed', input: clashInput,
     output: { artifactId: 'family-almanac-clash', result: clash.structuredContent }, canonicalText: clash.content.map(part => part.text).join('\n') };
+  // 推算时辰：全天 13 个候选加前事年份，最长的一行（多条关系）要在工作区里换行而不撑宽。
+  const hourInput = { gender: 'female', birthYear: 1995, birthMonth: 1, birthDay: 9, eventYears: [2018] };
+  const hours = buildToolSuccessPayload('bazi_hour_candidates', await executeTool('bazi_hour_candidates', hourInput));
+  const hourPart = { type: 'tool', id: 'family-hour-candidates', name: 'bazi_hour_candidates', title: '推算出生时辰', status: 'completed', input: hourInput,
+    output: { artifactId: 'family-hour-candidates', result: hours.structuredContent }, canonicalText: hours.content.map(part => part.text).join('\n') };
 
   await bundle({
-    stdin: { contents: entry.replace('DALIUREN_RESULT_FIXTURE', JSON.stringify(await executeTool('daliuren', { date: '2026-10-23', hour: 12, timezone: 'Asia/Shanghai' }))).replace('QIMEN_RESULT_FIXTURE', JSON.stringify(await executeTool('qimen', { year: 2024, month: 6, day: 1, hour: 12, timezone: 'Asia/Shanghai' }))).replace('AGENT_TOOL_FIXTURE_PARTS', JSON.stringify(toolParts)).replace('TRADITIONAL_TAIYI_FIXTURE_PART', JSON.stringify(traditionalPart)).replace('REVISED_BAZI_FIXTURE_RESULT', JSON.stringify(revisedBazi.structuredContent)).replace('AGENT_DAYUN_FIXTURE_PART', JSON.stringify(dayunPart)).replace('HEPAN_FIXTURE_PART', JSON.stringify(hepanPart)).replace('ALMANAC_CLASH_FIXTURE_PART', JSON.stringify(clashPart)).replace('BAZI_DRILLDOWN_FIXTURE_PARTS_JSON', JSON.stringify(drilldownParts)).replace('BAZI_METHOD_FIXTURE', JSON.stringify({ ...baziMethod, whenToUse: baziMethod.description, instructions: renderMethodGuide('bazi') })), loader: 'jsx', resolveDir: root, sourcefile: 'browser-components-entry.jsx' },
+    stdin: { contents: entry.replace('DALIUREN_RESULT_FIXTURE', JSON.stringify(await executeTool('daliuren', { date: '2026-10-23', hour: 12, timezone: 'Asia/Shanghai' }))).replace('QIMEN_RESULT_FIXTURE', JSON.stringify(await executeTool('qimen', { year: 2024, month: 6, day: 1, hour: 12, timezone: 'Asia/Shanghai' }))).replace('AGENT_TOOL_FIXTURE_PARTS', JSON.stringify(toolParts)).replace('TRADITIONAL_TAIYI_FIXTURE_PART', JSON.stringify(traditionalPart)).replace('REVISED_BAZI_FIXTURE_RESULT', JSON.stringify(revisedBazi.structuredContent)).replace('AGENT_DAYUN_FIXTURE_PART', JSON.stringify(dayunPart)).replace('HEPAN_FIXTURE_PART', JSON.stringify(hepanPart)).replace('ALMANAC_CLASH_FIXTURE_PART', JSON.stringify(clashPart)).replace('HOUR_CANDIDATES_FIXTURE_PART', JSON.stringify(hourPart)).replace('BAZI_DRILLDOWN_FIXTURE_PARTS_JSON', JSON.stringify(drilldownParts)).replace('BAZI_METHOD_FIXTURE', JSON.stringify({ ...baziMethod, whenToUse: baziMethod.description, instructions: renderMethodGuide('bazi') })), loader: 'jsx', resolveDir: root, sourcefile: 'browser-components-entry.jsx' },
     outfile, bundle: true, format: 'iife', platform: 'browser', jsx: 'automatic',
     tsconfig: resolve(root, 'tsconfig.json'),
     define: { 'process.env.NODE_ENV': '"development"', 'process.env': '{}' },
@@ -2679,6 +2685,12 @@ export async function run(existingPage, bundlePath) {
     await openProcessStep('黄历择日筛选');
     await workspacePanel.locator('[data-workspace-view="calculation"]').waitFor();
     check('A date selection names every zodiac it avoids', await workspacePanel.innerText().then(text => text.includes('避冲 丑牛（冲未）、酉鸡（冲卯）')));
+    await openProcessStep('推算出生时辰');
+    await workspacePanel.locator('[data-workspace-view="calculation"] [aria-label="候选时辰"]').waitFor();
+    const hourList = workspacePanel.locator('[aria-label="候选时辰"]');
+    check('Hour candidates list every hour of the day, and the longest line wraps inside the workspace', await hourList.locator('li[data-hour-candidate]').count() === 13 &&
+      await hourList.locator('li[data-hour-candidate="辰时"]').innerText().then(text => text.includes('辰戌相冲（时支辰·流年支戌）')) &&
+      await hourList.evaluate(list => [...list.querySelectorAll('li, small')].every(node => node.scrollWidth <= node.clientWidth + 1) && list.scrollWidth <= list.clientWidth + 1));
     // 检索来源列在调用框里；同样的来源不再在正文下另起一段。
     await openProcessStep('联网检索');
     await page.evaluate(() => window.fixture.searchSource(true));

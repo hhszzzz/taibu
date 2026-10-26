@@ -5,7 +5,7 @@ import { validateOutput } from '../dist/mcp/output-validator.js';
 
 test('every domain and supported detail level satisfies its public output schema', async () => {
   const definitions=listToolDefinitions();
-  assert.equal(definitions.length, 25);
+  assert.equal(definitions.length, 26);
   for(const definition of definitions) {
     const input={ ...definition.inputSchema.examples[0] };
     // Freeze otherwise dynamic inputs to make this regression replayable.

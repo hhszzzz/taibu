@@ -1,11 +1,20 @@
 import type { ToolDefinition } from './contract.js';
 import { METHOD_CARDS, METHOD_CONVENTIONS, METHOD_PRINCIPLES, METHOD_SYSTEMS } from './methods.generated.js';
 
+/**
+ * What a card is to its system: the system's default card, a school that replaces it when the user names the school,
+ * or a technique loaded beside the system card when its situation arises (推理时柱 when the birth hour is unknown).
+ */
+export type MethodCardKind = 'system' | 'school' | 'technique';
+
 /** A method card as written in skills/taibu-divination/methods: who reads, how to judge, which tools in what order, what to write. */
 export interface MethodCardSource {
   name: string;
   title: string;
+  kind: MethodCardKind;
+  /** The first of `systems`; a technique may serve several */
   system: string;
+  systems: string[];
   version: string;
   description: string;
   role: string;
@@ -14,11 +23,13 @@ export interface MethodCardSource {
   output: string;
 }
 
-/** A card and the Core tools of its system, chart first; a method that needs no chart has none. */
+/** A card and the Core tools of its systems, chart first; a method that needs no chart has none. */
 export interface AnalysisMethod {
   id: string;
   title: string;
+  kind: MethodCardKind;
   system: string;
+  systems: string[];
   version: string;
   description: string;
   tools: string[];
@@ -46,7 +57,10 @@ const CARDS = new Map(METHOD_CARDS.map(card => [card.name, card]));
 const TOOL_SYSTEMS = new Map(Object.entries(METHOD_SYSTEMS).flatMap(([system, tools]) => tools.map(tool => [tool, system] as const)));
 
 function describe(card: MethodCardSource): AnalysisMethod {
-  return { id: card.name, title: card.title, system: card.system, version: card.version, description: card.description, tools: [...(METHOD_SYSTEMS[card.system] ?? [])] };
+  return {
+    id: card.name, title: card.title, kind: card.kind, system: card.system, systems: [...card.systems], version: card.version, description: card.description,
+    tools: card.systems.flatMap(system => METHOD_SYSTEMS[system] ?? []),
+  };
 }
 
 /** A card by its id, or the default card of the system a Core tool belongs to. */
@@ -98,16 +112,22 @@ export const METHOD_TOOL_NAME = 'load_analysis_method';
  * The tool through which a model loads a card itself. MCP prompts are for the user to choose; a client that offers
  * the model only tools would otherwise leave it with the chart and no method.
  */
+/** How a card is chosen, after its title in a catalogue line; a system's own card needs no note. */
+export const METHOD_KIND_NOTES: Readonly<Record<MethodCardKind, string>> = { system: '', school: '流派，用户点名时用', technique: '技法，遇到所述情形时与体系卡同用' };
+
+/** How to choose among the cards, for a model that sees the whole catalogue. */
+export const METHOD_CHOICE_RULE = '同一体系有多张卡时按用户点名的流派选，未点名用与体系同名的默认卡；技法卡（如出生时辰未知时的推理时柱）在遇到其所述情形时另行加载，与体系卡同用，不代替体系卡。';
+
 export function getMethodToolDefinition(): ToolDefinition {
   const cards = METHOD_CARDS.map(card => {
-    const notes = [card.name === card.system ? '' : '流派，用户点名时用', METHOD_SYSTEMS[card.system]?.length ? '' : '无需排盘'].filter(Boolean);
+    const notes = [METHOD_KIND_NOTES[card.kind], card.systems.some(system => METHOD_SYSTEMS[system]?.length) ? '' : '无需排盘'].filter(Boolean);
     return `${card.name}（${[card.title, ...notes].join('，')}）`;
   });
   return {
     name: METHOD_TOOL_NAME,
     title: '加载方法卡',
-    description: '解读太卜结果前加载对应的方法卡：该体系或流派的角色、断法、工具流程与输出要求，附解读通则与工具约定；每个体系首次解读前加载一次。'
-      + 'id 填方法卡 ID，或填刚调用的太卜工具名（得到该体系的默认卡）；同一体系有多张卡时按用户点名的流派选，未点名用与体系同名的默认卡。'
+    description: '解读太卜结果前加载对应的方法卡：该体系、流派或技法的角色、断法、工具流程与输出要求，附解读通则与工具约定；每个体系首次解读前加载一次。'
+      + `id 填方法卡 ID，或填刚调用的太卜工具名（得到该体系的默认卡）；${METHOD_CHOICE_RULE}`
       + `方法卡：${cards.join('、')}。`,
     inputSchema: {
       type: 'object',

@@ -919,25 +919,34 @@ export function resolveBaziCalendarContext(input: BaziInput): BaziCalendarContex
   };
 }
 
+/**
+ * 四柱干支：年柱、月柱按交节时刻（termLunar），日柱、时柱按本地或真太阳时间（lunar）与换日口径。
+ * 出生时辰未知时没有时柱：此时的 lunar 取的是当天 00:00，时柱只是占位。
+ */
+export function resolveBaziGanZhi(context: BaziCalendarContext, dayBoundary: BaziInput['dayBoundary']) {
+  const eightChar = context.lunar.getEightChar();
+  eightChar.setSect(dayBoundary === 'zi' ? 1 : 2);
+  const termEightChar = context.termLunar.getEightChar();
+  return {
+    yearStem: termEightChar.getYearGan(),
+    yearBranch: termEightChar.getYearZhi(),
+    monthStem: termEightChar.getMonthGan(),
+    monthBranch: termEightChar.getMonthZhi(),
+    dayStem: eightChar.getDayGan(),
+    dayBranch: eightChar.getDayZhi(),
+    hourStem: context.timeUnknown ? undefined : eightChar.getTimeGan(),
+    hourBranch: context.timeUnknown ? undefined : eightChar.getTimeZhi(),
+  };
+}
+
 export function calculateBaziData(input: BaziInput): BaziOutput {
   const {
     gender,
     birthPlace,
   } = input;
-  const { lunar, termLunar, trueSolarTimeInfo, timeUnknown } = resolveBaziCalendarContext(input);
-
-  const eightChar = lunar.getEightChar();
-  eightChar.setSect(input.dayBoundary === 'zi' ? 1 : 2);
-  const termEightChar = termLunar.getEightChar();
-  const yearStem = termEightChar.getYearGan();
-  const yearBranch = termEightChar.getYearZhi();
-  const monthStem = termEightChar.getMonthGan();
-  const monthBranch = termEightChar.getMonthZhi();
-  const dayStem = eightChar.getDayGan();
-  const dayBranch = eightChar.getDayZhi();
-  // 出生时辰未知不排时柱：此时的 lunar 取的是当天 00:00，时柱只是占位
-  const hourStem = timeUnknown ? undefined : eightChar.getTimeGan();
-  const hourBranch = timeUnknown ? undefined : eightChar.getTimeZhi();
+  const context = resolveBaziCalendarContext(input);
+  const { trueSolarTimeInfo, timeUnknown } = context;
+  const { yearStem, yearBranch, monthStem, monthBranch, dayStem, dayBranch, hourStem, hourBranch } = resolveBaziGanZhi(context, input.dayBoundary);
 
   const kongWang = getKongWang(dayStem, dayBranch);
   const yearNaYin = getNaYin(yearStem, yearBranch);

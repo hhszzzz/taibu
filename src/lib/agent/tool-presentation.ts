@@ -1,4 +1,4 @@
-import type { BaziCanonicalJSON, BaziHepanCanonicalJSON } from 'taibu-core/bazi';
+import type { BaziCanonicalJSON, BaziHepanCanonicalJSON, BaziHourCandidatesCanonicalJSON } from 'taibu-core/bazi';
 import type { ZiweiCanonicalJSON } from 'taibu-core/ziwei';
 import type { QimenCanonicalJSON } from 'taibu-core/qimen';
 import type { LiuyaoCanonicalJSON, LiuyaoJSON } from 'taibu-core/liuyao';
@@ -296,13 +296,15 @@ export type AgentCalculation =
   | { kind: 'ziwei_horoscope'; data: ZiweiHoroscopeCanonicalJSON }
   | { kind: 'ziwei_flying_star'; data: ZiweiFlyingStarCanonicalJSON }
   | { kind: 'almanac_select'; data: AlmanacSelectCanonicalJSON }
-  | { kind: 'bazi_hepan'; data: BaziHepanCanonicalJSON };
+  | { kind: 'bazi_hepan'; data: BaziHepanCanonicalJSON }
+  | { kind: 'bazi_hour_candidates'; data: BaziHourCandidatesCanonicalJSON };
 
 /** Core calculation results; anything incomplete falls back to the projected canonical text. */
 export function getAgentCalculation(tool: AgentToolPart): AgentCalculation | null {
   if (tool.status !== 'completed') return null;
   const output = record(tool.output);
   const data = record(Object.hasOwn(output, 'result') ? output.result : output);
+  const relations = (value: unknown) => arrayRows(value, ['类型', '说明']) && (value as unknown[]).every(row => arrayRows(record(row).位置, ['柱', '部位', '字']));
   switch (tool.name) {
     case 'bazi_dayun': {
       const start = record(data.起运信息);
@@ -331,12 +333,27 @@ export function getAgentCalculation(tool: AgentToolPart): AgentCalculation | nul
       return { kind: 'almanac_select', data: data as unknown as AlmanacSelectCanonicalJSON };
     }
     case 'bazi_hepan': {
-      const relations = (value: unknown) => arrayRows(value, ['类型', '说明']) && (value as unknown[]).every(row => arrayRows(record(row).位置, ['柱', '部位', '字']));
       if (!rows(data.双方, 2, ['称呼', '性别', '日主', '月令', '月令旺衰', '生肖'])) return null;
       if (!(data.双方 as unknown[]).every(person => rows(record(person).四柱, pillarCount(record(person)), ['柱', '干支', '纳音']) && stringArray(record(person).缺失五行))) return null;
       if (!stringArray(record(data.日主互见).说明) || !strings(data.日主互见, ['五行生克']) || !strings(data.年命纳音, ['说明', '五行生克'])) return null;
       if (!['日柱之间', '年柱之间', '其余关系'].every(key => relations(data[key])) || !stringArray(data.五行互补)) return null;
       return { kind: 'bazi_hepan', data: data as unknown as BaziHepanCanonicalJSON };
+    }
+    case 'bazi_hour_candidates': {
+      if (!strings(data.出生日期, ['公历', '农历', '性别', '时区']) || !arrayRows(data.共有柱, ['柱', '干支']) || typeof data.候选数量 !== 'number') return null;
+      const event = (value: unknown) => Number.isInteger(record(value).年份) && typeof record(value).流年 === 'string'
+        && relations(record(value).关系) && stringArray(record(value).岁运提示);
+      const candidate = (value: unknown) => {
+        const row = record(value), clock = record(row.钟表时间), hour = record(row.时柱), birth = record(row.排盘参数);
+        return Number.isInteger(row.序号) && strings(row, ['时辰', '命宫', '日主之根', '起运'])
+          && strings(clock, ['开始', '结束']) && typeof clock.分钟数 === 'number' && rows(row.四柱, 4, ['柱', '干支'])
+          && strings(hour, ['干支', '天干十神', '地势', '纳音']) && arrayRows(hour.藏干, ['天干', '十神'])
+          && relations(row.时柱关系) && stringArray(row.月令透时干) && stringArray(row.缺失五行)
+          && Number.isInteger(birth.出生时) && Number.isInteger(birth.出生分)
+          && (row.前事 === undefined || (Array.isArray(row.前事) && row.前事.every(event)));
+      };
+      if (!Array.isArray(data.候选) || !data.候选.length || !data.候选.every(candidate)) return null;
+      return { kind: 'bazi_hour_candidates', data: data as unknown as BaziHourCandidatesCanonicalJSON };
     }
     default:
       return null;

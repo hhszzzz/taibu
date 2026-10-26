@@ -29,8 +29,15 @@ test('every Core tool belongs to exactly one system and every system has its def
 
 test('cards come in system order, each default card first, with its system tools chart first', () => {
   assert.equal(new Set(methods.map(method => method.id)).size, methods.length);
-  assert.deepEqual(methods.slice(0, 3).map(method => method.id), ['bazi', 'bazi-mangpai', 'ziwei']);
+  assert.deepEqual(methods.slice(0, 5).map(method => method.id), ['bazi', 'bazi-mangpai', 'birth-hour', 'past-events', 'ziwei']);
   assert.deepEqual(methods.find(method => method.id === 'bazi-mangpai')?.tools, methods.find(method => method.id === 'bazi')?.tools);
+  assert.deepEqual(methods.map(method => [method.id, method.kind]).filter(([, kind]) => kind !== 'system'), [['bazi-mangpai', 'school'], ['birth-hour', 'technique'], ['past-events', 'technique']]);
+  // A technique serving several systems reads all of their tools, in registry order.
+  const toolsOf = (...ids) => ids.flatMap(id => methods.find(method => method.id === id).tools);
+  assert.deepEqual(methods.find(method => method.id === 'birth-hour')?.tools, toolsOf('bazi', 'ziwei'));
+  assert.deepEqual(methods.find(method => method.id === 'past-events')?.systems, ['bazi', 'ziwei', 'astrology']);
+  assert.deepEqual(methods.find(method => method.id === 'past-events')?.tools, toolsOf('bazi', 'ziwei', 'astrology'));
+  assert.ok(methods.find(method => method.id === 'birth-hour')?.tools.includes('bazi_hour_candidates'));
   assert.equal(methods.find(method => method.id === 'bazi')?.tools[0], 'bazi');
   assert.deepEqual(methods.find(method => method.id === 'dream')?.tools, []);
   for (const method of methods) {
@@ -90,6 +97,8 @@ test('the method tool lets a model load any card by id or tool name; it lists ev
   assert.equal(tool.annotations.readOnlyHint, true);
   for (const method of methods) assert.ok(tool.description.includes(`${method.id}（${method.title}`), method.id);
   assert.ok(tool.description.includes('bazi-mangpai（盲派八字，流派，用户点名时用）'));
+  assert.ok(tool.description.includes('birth-hour（推理时柱，技法，遇到所述情形时与体系卡同用）'));
+  assert.ok(tool.description.includes('技法卡（如出生时辰未知时的推理时柱）在遇到其所述情形时另行加载，与体系卡同用'));
   assert.ok(tool.description.includes('dream（周公解梦，无需排盘）'));
   assert.ok(tool.description.includes('bazi（子平八字）、'), 'a default card for a charted system carries no note');
   const card = renderMethodCard('bazi_dayun');

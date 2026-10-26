@@ -17,6 +17,8 @@ export { toBaziLiunianScanJson, toBaziLiunianScanText } from './liunian-scan-ren
 export { renderBaziCanonicalText as toBaziText } from './text.js';
 export { BAZI_HEPAN_DEFAULT_NAMES, calculateBaziHepan } from './hepan.js';
 export { toBaziHepanJson, toBaziHepanText } from './hepan-render.js';
+export { BAZI_HOUR_EVENT_YEARS_MAX, calculateBaziHourCandidates } from './hour-candidates.js';
+export { toBaziHourCandidatesJson, toBaziHourCandidatesText } from './hour-candidates-render.js';
 export type { BaziCanonicalJSON, BaziPillarJSON, BaziCellJSON, BaziRelationJSON } from './json-types.js';
 export type { BaziInput, BaziOutput } from './types.js';
 export type { BaziFortuneHint, BaziRelationPillar, BaziRelationsFilter, BaziRelationsOutput, BaziRelationsSelector } from './relations.js';
@@ -27,3 +29,5 @@ export type { BaziLiunianScanOutput, BaziLiunianScanSelector, BaziLiunianYear } 
 export type { BaziLiunianScanCanonicalJSON, BaziLiunianYearJSON } from './liunian-scan-render.js';
 export type { BaziHepanInput, BaziHepanOutput, BaziHepanPerson, BaziHepanPersonInput } from './hepan.js';
 export type { BaziHepanCanonicalJSON, BaziHepanPersonJSON } from './hepan-render.js';
+export type { BaziHourCandidate, BaziHourCandidateEvent, BaziHourCandidatesInput, BaziHourCandidatesOutput } from './hour-candidates.js';
+export type { BaziHourCandidateEventJSON, BaziHourCandidateJSON, BaziHourCandidatesCanonicalJSON } from './hour-candidates-render.js';

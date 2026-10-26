@@ -86,6 +86,13 @@ function calculationRow(card: CalculationCard): { thumb: ReactNode; facts: strin
                 facts: `${people.map(person => `${person.称呼}属${person.生肖}`).join('、')} · 日柱之间 ${day.length} 项 · 年柱之间 ${year.length} 项 · 其余 ${other.length} 项`,
             };
         }
+        case 'bazi_hour_candidates': {
+            const { 出生日期: birth, 候选: candidates, 前事年份: events } = card.value.data;
+            return {
+                thumb: <span className="chart-thumb-glyphs" aria-hidden="true">{candidates.slice(0, 3).map(candidate => <b key={candidate.序号}>{candidate.时柱.干支}</b>)}</span>,
+                facts: `${birth.公历} · 候选 ${candidates.length} 个时辰${events ? ` · 比对前事 ${events.map(event => event.年份).join('、')}` : ''}`,
+            };
+        }
         case 'almanac_select': {
             const [first] = card.value.data.候选日;
             return { thumb: null, facts: first ? `${card.value.data.查询.起止日期} · 候选 ${card.value.data.候选日.length} 天 · 首个 ${first.日期}` : `${card.value.data.查询.起止日期} · 没有符合条件的日期` };

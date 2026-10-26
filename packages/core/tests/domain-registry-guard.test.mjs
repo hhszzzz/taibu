@@ -47,6 +47,7 @@ const expectedDerivedTools = [
 const expectedStandaloneTools = [
   { tool: 'almanac_select', folder: 'almanac-select' },
   { tool: 'bazi_hepan', folder: 'bazi-hepan' },
+  { tool: 'bazi_hour_candidates', folder: 'bazi-hour-candidates' },
 ];
 
 test('public core domains should stay aligned across exports, docs, and MCP registry', () => {

@@ -10,8 +10,11 @@ import { sentAtLine } from '@/lib/ai/prompt-time';
 
 // At most four children, written in one commit: deltas only.
 const ParallelDoc = defineDoc({ kind: 'taibu.parallel', version: 1, scope: 'task', initial: (): { children: number[] } => ({ children: [] }), checkpointWhen: () => false });
-/** What a member works with: a method card that reads a chart, by id (a system such as bazi, or a school such as bazi-mangpai). */
-export const PARALLEL_SYSTEMS = ANALYSIS_METHODS.filter(method => method.tools.length).map(method => method.id);
+/**
+ * What a member works with: a method card that reads a chart, by id (a system such as bazi, or a school such as
+ * bazi-mangpai). A technique (birth-hour) only joins a system card, so it leads no member.
+ */
+export const PARALLEL_SYSTEMS = ANALYSIS_METHODS.filter(method => method.tools.length && method.kind !== 'technique').map(method => method.id);
 
 /** 「盲派八字」: a member's method as its card names it. */
 export function systemTitle(system: string): string {

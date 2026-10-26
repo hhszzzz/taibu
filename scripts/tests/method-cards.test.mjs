@@ -33,7 +33,7 @@ description: 子平法论八字。
 
 test('a card parses into its fields and four sections, and lays out exactly as written', () => {
   const card = parseCard(CARD, 'bazi.md');
-  assert.deepEqual(card, { name: 'bazi', title: '子平八字', system: 'bazi', version: '2.0.0', description: '子平法论八字。', role: '你是命理师。', method: '1. 定盘。', workflow: '1. `bazi` 排盘。', output: '- 先结论。' });
+  assert.deepEqual(card, { name: 'bazi', title: '子平八字', kind: 'system', system: 'bazi', systems: ['bazi'], version: '2.0.0', description: '子平法论八字。', role: '你是命理师。', method: '1. 定盘。', workflow: '1. `bazi` 排盘。', output: '- 先结论。' });
   assert.equal(renderCardBody(card), CARD.split('---\n\n')[1]);
   assert.deepEqual(parseCard(CARD.replaceAll('\n', '\r\n'), 'bazi.md'), card, 'CRLF checkouts parse the same');
 });
@@ -55,6 +55,20 @@ test('a malformed card is refused with the file and the reason', () => {
   refused(CARD.replace('- 先结论。\n', '- 先结论。'), 'bazi.md', /排版不规范/);
 });
 
+test('a card other than a system default says whether it is a school or a technique; only a technique serves several systems', () => {
+  const card = (name, frontmatter) => CARD.replace('name: bazi', `name: ${name}`).replace('system: bazi', frontmatter);
+  const refused = (source, file, reason) => assert.throws(() => parseCard(source, file), error => error.message.startsWith(`方法卡 ${file}`) && reason.test(error.message));
+  assert.equal(parseCard(card('bazi-mangpai', 'system: bazi\nkind: school'), 'bazi-mangpai.md').kind, 'school');
+  const technique = parseCard(card('birth-hour', 'system: bazi, ziwei\nkind: technique'), 'birth-hour.md');
+  assert.deepEqual({ kind: technique.kind, system: technique.system, systems: technique.systems }, { kind: 'technique', system: 'bazi', systems: ['bazi', 'ziwei'] });
+  refused(card('bazi-mangpai', 'system: bazi'), 'bazi-mangpai.md', /kind 须为 school 或 technique/);
+  refused(card('bazi-mangpai', 'system: bazi\nkind: persona'), 'bazi-mangpai.md', /kind 须为/);
+  refused(CARD.replace('system: bazi', 'system: bazi\nkind: school'), 'bazi.md', /默认卡不写 kind/);
+  refused(card('bazi-ziwei', 'system: bazi, ziwei\nkind: school'), 'bazi-ziwei.md', /只有技法卡可以用于多个体系/);
+  refused(card('birth-hour', 'system: bazi, bazi\nkind: technique'), 'birth-hour.md', /system 不能重复/);
+  refused(card('birth-hour', 'system: bazi, fengshui\nkind: technique'), 'birth-hour.md', /未登记的体系 fengshui/);
+});
+
 test('shared SKILL.md sections run through the next heading or the end of the file', () => {
   const body = '- 历法：公历\n- 时间：钟表小时';
   assert.equal(skillSection(`prefix\n## 约定\n\n${body}\n## 其他\nnot conventions`, '约定'), body);
@@ -70,7 +84,10 @@ test('every registered system has a default card, and the Core artifact and the 
   // Cards appear in registry order, a system's default card before its schools.
   const systems = Object.keys(SYSTEM_TOOLS);
   assert.deepEqual(cards.map(card => systems.indexOf(card.system)), [...cards.map(card => systems.indexOf(card.system))].sort((a, b) => a - b));
-  for (const card of cards) assert.equal(`---\n${['name', 'title', 'system', 'version', 'description'].map(key => `${key}: ${card[key]}`).join('\n')}\n---\n\n${renderCardBody(card)}`, readFileSync(path.join(METHODS_DIR, `${card.name}.md`), 'utf8'));
+  for (const card of cards) {
+    const fields = [['name', card.name], ['title', card.title], ['system', card.systems.join(', ')], ...(card.kind === 'system' ? [] : [['kind', card.kind]]), ['version', card.version], ['description', card.description]];
+    assert.equal(`---\n${fields.map(([key, value]) => `${key}: ${value}`).join('\n')}\n---\n\n${renderCardBody(card)}`, readFileSync(path.join(METHODS_DIR, `${card.name}.md`), 'utf8'));
+  }
   const skill = readFileSync(SKILL_MD, 'utf8');
   assert.equal(skillWithCatalogue(skill, cards), skill, 'SKILL.md 方法卡目录已漂移，请运行 pnpm build:methods');
   assert.equal(readFileSync(target, 'utf8'), methodsSource(cards, skill), 'Core 方法卡产物已漂移，请运行 pnpm build:methods');

@@ -57,8 +57,8 @@ export function AgentMessage({ data, actions }: { data: AgentMessageData; action
       <div className="agent-message-heading">
         <span className="agent-avatar" aria-hidden="true">卜</span>
         <span className="agent-name">太卜</span>
-        {/* 回答旁不显示「任务完成」这类状态：完成后状态行安静收起 */}
-        {data.status !== 'completed' && <AgentStatus status={data.status} />}
+        {/* 进行中由底部那一行实时说明，失败由错误提示说明；这里只给没有别处交代的结局：已停止、没有原因的失败。 */}
+        {(data.status === 'cancelled' || (data.status === 'failed' && !data.error)) && <AgentStatus status={data.status} />}
         {summarizing && <span className="agent-response-time">主模型 {summarizing} · 汇总</span>}
       </div>
       {data.parts.map(part => part.type === 'todo' && <AgentTodoProgress key={part.id} items={part.items} />)}

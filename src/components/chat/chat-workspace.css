@@ -419,10 +419,9 @@ button.agent-step-entity:hover .agent-step-entity-go { color: var(--foreground-s
 .agent-live-activity { display: flex; align-items: center; gap: 8px; font-size: calc(13 / 16 * 1rem); color: var(--foreground-secondary); }
 .agent-live-activity > svg { flex-shrink: 0; }
 .agent-live-activity[data-tone="warning"] { color: var(--chat-warning); }
-/* Narrower screens show that line in the folded process card instead; it stays announced. */
-@media (max-width: 1023px) {
-    .agent-message:has(.agent-process-heading.is-live) > .agent-live-activity { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-}
+/* A folded process card carries that line in its heading (phones fold it by default, wider screens when the reader does);
+   the line below then stays announced but out of sight, so one live line shows at a time. */
+.agent-message:has(.agent-process-heading.is-live) > .agent-live-activity { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .chat-thinking { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: 6px; }
 .chat-thinking-toggle { display: inline-flex; align-items: center; gap: 6px; border-radius: 6px; font-size: calc(13 / 16 * 1rem); color: var(--foreground-secondary); }
 .chat-thinking-toggle:hover { color: var(--foreground); }

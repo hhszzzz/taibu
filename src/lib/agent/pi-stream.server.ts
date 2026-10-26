@@ -1,21 +1,32 @@
 import "server-only";
-import { jsonSchema, streamText, tool, type ModelMessage } from "ai";
 import {
   createAssistantMessageEventStream,
-  getCurrentTools,
-  collapseSystemMessages,
-  getSystemMessageText,
-  normalizeContext,
   isContextOverflow,
   isRetryableAssistantError,
+  normalizeContext,
   type Api,
   type AssistantMessage,
-  type JsonValue,
-  type Model,
+  type AssistantMessageEvent,
   type Message,
+  type Model,
+  type OpenAICompletionsCompat,
+  type Usage,
 } from "@earendil-works/pi-ai";
+import { stream as streamCompletions } from "@earendil-works/pi-ai/api/openai-completions";
 import type { PiStreamFn as StreamFn } from "./types";
-import { toPiUsage } from './usage';
+import type { AIModelConfig } from "@/types";
+import {
+  gatewayFetch,
+  getApiKey,
+  isModelAvailable,
+  MODEL_REQUEST_USER_AGENT,
+} from "@/lib/ai/providers/ai-sdk-provider";
+import { normalizeCustomProviderBaseUrl } from "@/lib/ai/custom-provider-url";
+import {
+  applySourceToModel,
+  getOrderedModelSources,
+} from "@/lib/ai/source-runtime";
+import { agentSafeFetch } from "./safe-fetch.server";
 
 export const AGENT_UNSUPPORTED_TOOLS_MESSAGE = "当前模型不支持工具调用，请切换普通对话";
 /**
@@ -25,19 +36,41 @@ export const AGENT_UNSUPPORTED_TOOLS_MESSAGE = "当前模型不支持工具调�
 export const AGENT_TRANSIENT_ERROR_MESSAGE = "模型服务暂时不可用（service temporarily unavailable）";
 /** The model spent the whole output budget thinking and left neither an answer nor a call. */
 export const AGENT_OUTPUT_EXHAUSTED_MESSAGE = "模型的思考用完了单次输出上限，没来得及回答；可以调低思考等级后重新发起";
+/** The model ended a response with nothing to show twice in a row, the second time after being told so. */
+export const AGENT_SILENT_RESPONSE_MESSAGE = "模型连续两次没有给出回复也没有调用工具；可以重新发起，或换个问法";
+export const AGENT_REJECTED_KEY_MESSAGE = "模型服务拒绝了请求：密钥无效或没有这个模型的权限";
+export const AGENT_UNKNOWN_MODEL_MESSAGE = "模型服务找不到这个模型，请检查上游模型 ID";
+/** One request ran for the whole request time limit (agentModelRequestSignal) without finishing. */
+export const AGENT_TIMEOUT_MESSAGE = "模型超过 5 分钟没有完成这次回复，已中止";
 /** Stream failures whose text the task shows as is, in place of the generic failure. */
-export const AGENT_PUBLIC_STREAM_ERRORS: ReadonlySet<string> = new Set([AGENT_UNSUPPORTED_TOOLS_MESSAGE, AGENT_OUTPUT_EXHAUSTED_MESSAGE]);
-import type { AIModelConfig } from "@/types";
-import {
-  buildProviderOptions,
-  createModelFromConfig,
-  isModelAvailable,
-} from "@/lib/ai/providers/ai-sdk-provider";
-import {
-  applySourceToModel,
-  getOrderedModelSources,
-} from "@/lib/ai/source-runtime";
-import { agentSafeFetch } from "./safe-fetch.server";
+export const AGENT_PUBLIC_STREAM_ERRORS: ReadonlySet<string> = new Set([
+  AGENT_UNSUPPORTED_TOOLS_MESSAGE, AGENT_OUTPUT_EXHAUSTED_MESSAGE, AGENT_SILENT_RESPONSE_MESSAGE,
+  AGENT_REJECTED_KEY_MESSAGE, AGENT_UNKNOWN_MODEL_MESSAGE, AGENT_TIMEOUT_MESSAGE,
+]);
+const AGENT_OVERFLOW_MESSAGE = "模型上下文超出限制（context_length_exceeded）";
+const AGENT_GENERIC_FAILURE_MESSAGE = "模型调用失败，请确认模型支持工具调用或切换普通对话";
+
+/**
+ * Appended to the system prompt for one more request after a response with neither visible text nor a tool call.
+ * Two shapes were observed in Pi Desktop's sessions: a wholly empty response, and a finished conclusion written only
+ * into the reasoning. Both need the same next move.
+ */
+export const SILENT_TURN_NUDGE = [
+  "<no_output_recovery>",
+  "你上一次回复既没有正文，也没有调用工具，用户没有得到任何结果。",
+  "推理过程不算答复：已经得出结论的，现在把结论写成正文；还没做完的，先用一句话说明正在做什么，再接着做。",
+  "</no_output_recovery>",
+].join("\n");
+/**
+ * The same for a response that only announced its next step: without a tool call the answer is final, and the task
+ * would stop halfway.
+ */
+export const PROGRESS_TURN_NUDGE = [
+  "<progress_only_recovery>",
+  "你上一条消息只说了接下来要做什么，却没有调用工具，任务会停在半路。",
+  "现在接着做：调用刚才说要用的工具，或者直接写出完整的最终答复。说明打算的那条消息里要同时带上工具调用。",
+  "</progress_only_recovery>",
+].join("\n");
 
 const EMPTY_USAGE = {
   input: 0,
@@ -47,26 +80,11 @@ const EMPTY_USAGE = {
   totalTokens: 0,
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 };
-const SDK_SIGNATURE = "taibu-sdk:v1:";
 export function agentModelRequestSignal(signal?: AbortSignal) {
   return AbortSignal.any([
     ...(signal ? [signal] : []),
     AbortSignal.timeout(300_000),
   ]);
-}
-type SDKProviderOptions = NonNullable<
-  Extract<ModelMessage, { role: "assistant" }>["providerOptions"]
->;
-function providerOptions(signature: unknown): SDKProviderOptions | undefined {
-  if (typeof signature !== "string" || !signature.startsWith(SDK_SIGNATURE))
-    return;
-  try {
-    return JSON.parse(
-      signature.slice(SDK_SIGNATURE.length),
-    ) as SDKProviderOptions;
-  } catch {
-    return;
-  }
 }
 export function emptyPiAssistant(model: Model<Api>): AssistantMessage {
   return {
@@ -80,67 +98,8 @@ export function emptyPiAssistant(model: Model<Api>): AssistantMessage {
     usage: structuredClone(EMPTY_USAGE),
   };
 }
-export function toAgentModelMessages(messages: Message[]): ModelMessage[] {
-  return collapseSystemMessages(normalizeContext({ messages })).messages.map((message) => {
-    if (message.role === "system")
-      return {
-        role: "system",
-        content: getSystemMessageText(message),
-      };
-    if (message.role === "user")
-      return {
-        role: "user",
-        content:
-          typeof message.content === "string"
-            ? message.content
-            : message.content
-                .map((p) => (p.type === "text" ? p.text : "[图片]"))
-                .join("\n"),
-      };
-    if (message.role === "toolResult")
-      return {
-        role: "tool",
-        content: [
-          {
-            type: "tool-result",
-            toolCallId: message.toolCallId,
-            toolName: message.toolName,
-            output: {
-              type: message.isError ? "error-text" : "text",
-              value: message.content
-                .map((p) => (p.type === "text" ? p.text : "[图片]"))
-                .join("\n"),
-            },
-          },
-        ],
-      };
-    return {
-      role: "assistant",
-      content: message.content.map((part) => {
-        if (part.type === "text")
-          return {
-            type: "text",
-            text: part.text,
-            providerOptions: providerOptions(part.textSignature),
-          };
-        if (part.type === "thinking")
-          return {
-            type: "reasoning",
-            text: part.thinking,
-            providerOptions: providerOptions(part.thinkingSignature),
-          };
-        return {
-          type: "tool-call",
-          toolCallId: part.id,
-          toolName: part.name,
-          input: part.arguments,
-        };
-      }),
-    };
-  });
-}
 
-/** One model request per invocation. Pi, rather than the SDK, owns tool execution and continuation. */
+/** One model request per invocation. Pi owns tool execution and continuation. */
 export function agentModelSources(config: AIModelConfig, apiKey?: string) {
   return apiKey
     ? [config]
@@ -148,261 +107,218 @@ export function agentModelSources(config: AIModelConfig, apiKey?: string) {
         .map((s) => applySourceToModel(config, s))
         .filter(isModelAvailable);
 }
-/** A provider failure a later attempt can get past: Pi's retry classification over the SDK error's message, code and status. */
-function isTransientProviderError(error: unknown, message: AssistantMessage) {
-  const status = (error as { statusCode?: number } | null)?.statusCode;
-  const errorMessage = error instanceof Error ? error.message : '';
-  return isRetryableAssistantError({ ...message, stopReason: 'error', errorMessage: [
-    errorMessage,
-    (error as { code?: string } | null)?.code === 'ECONNRESET' || /ECONNRESET/iu.test(errorMessage) ? 'network error' : '',
-    typeof status === 'number' && status >= 500 ? 'server_error' : status === 408 ? 'timeout' : status === 429 ? '429' : '',
-  ].join(' ') });
+
+/** Request body fields the transport writes; a model's custom parameters cannot replace them. */
+const TRANSPORT_FIELDS = new Set(["model", "messages", "tools", "tool_choice", "stream", "stream_options", "max_tokens", "max_completion_tokens", "__proto__", "constructor", "prototype"]);
+/** Thinking is set by the model's thinking format and the task's level, never by custom parameters. */
+const THINKING_FIELDS = new Set(["reasoning_effort", "reasoningEffort", "reasoning", "enable_thinking", "thinking", "chat_template_kwargs"]);
+/** Vendors whose thinking switch is `enable_thinking`. */
+const VENDORS_WITH_ENABLE_THINKING = new Set(["glm", "deepseek", "moonshot", "qwen", "qwen-vl"]);
+
+/**
+ * How the gateway takes the thinking switch and level. Gateways are OpenAI-compatible proxies, so pi-ai's
+ * auto-detection by host does not apply: system prompts stay `system`, the output limit is `max_tokens`, and
+ * `store` is not sent.
+ */
+export function agentCompletionsCompat(config: AIModelConfig): OpenAICompletionsCompat {
+  return {
+    supportsStore: false,
+    supportsDeveloperRole: false,
+    supportsReasoningEffort: config.reasoningEffortFormat !== undefined,
+    supportsUsageInStreaming: true,
+    maxTokensField: "max_tokens",
+    thinkingFormat: config.reasoningEffortFormat === "reasoning_object" ? "openrouter" : VENDORS_WITH_ENABLE_THINKING.has(config.vendor) ? "qwen" : "openai",
+    supportsStrictMode: false,
+  };
 }
-export function createPiSDKStream(
-  config: AIModelConfig,
-  settings: { reasoning: boolean; nativeReasoning?: boolean; apiKey?: string; resolveImages?: (messages:ModelMessage[])=>Promise<ModelMessage[]> },
-): StreamFn {
+
+/** Sampling defaults and the model's own extra body fields, written after the transport's. */
+function extraBody(source: AIModelConfig): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(source.customParameters ?? {})) {
+    if (!TRANSPORT_FIELDS.has(key) && !THINKING_FIELDS.has(key)) body[key] = value;
+  }
+  if (source.defaultTopP !== undefined) body.top_p = source.defaultTopP;
+  if (source.defaultPresencePenalty !== undefined) body.presence_penalty = source.defaultPresencePenalty;
+  if (source.defaultFrequencyPenalty !== undefined) body.frequency_penalty = source.defaultFrequencyPenalty;
+  return body;
+}
+
+function addUsage(total: Usage, next: Usage): Usage {
+  return {
+    input: total.input + next.input,
+    output: total.output + next.output,
+    cacheRead: total.cacheRead + next.cacheRead,
+    cacheWrite: total.cacheWrite + next.cacheWrite,
+    ...(total.reasoning !== undefined || next.reasoning !== undefined ? { reasoning: (total.reasoning ?? 0) + (next.reasoning ?? 0) } : {}),
+    totalTokens: total.totalTokens + next.totalTokens,
+    cost: {
+      input: total.cost.input + next.cost.input,
+      output: total.cost.output + next.cost.output,
+      cacheRead: total.cost.cacheRead + next.cost.cacheRead,
+      cacheWrite: total.cost.cacheWrite + next.cost.cacheWrite,
+      total: total.cost.total + next.cost.total,
+    },
+  };
+}
+
+const hasVisibleText = (message: AssistantMessage) => message.content.some(part => part.type === "text" && part.text.trim());
+const callsTools = (message: AssistantMessage) => message.content.some(part => part.type === "toolCall");
+
+/** A forward-looking sentence about the assistant's own next action: 「我先排出命盘」「接下来我查一下大运」「Let me check」. */
+const ANNOUNCED_ACTION = /(?:我(?:先|来|将|现在|这就|马上|接着|再)|接下来(?:我|先)?|下一步(?:我|先)?|下面(?:我|先|来)|让我(?:先|来)?)[^。！？\n]{0,24}?(?:排|查|算|调用|看|读|检索|搜索|核对|整理|分析|起卦|起局|定位|展示|对照|比较|推|获取|确认|计算)|\b(?:I(?:'ll| will| am going to)|let me|next,? I)\b/iu;
+
+/**
+ * A short reply that only says what comes next, without the call that would do it: a final answer ends with the
+ * follow-up block, a question ends with a question mark, and an analysis runs much longer.
+ */
+export function isProgressOnlyTurn(message: AssistantMessage) {
+  if (message.stopReason !== "stop" || callsTools(message)) return false;
+  const text = message.content.flatMap(part => part.type === "text" ? [part.text] : []).join("\n").trim();
+  if (!text || text.length > 400 || text.includes("<followups>") || /[？?]\s*$/u.test(text)) return false;
+  return ANNOUNCED_ACTION.test(text);
+}
+
+/** A failed request, as pi-ai reports it: the raw provider text is only read here, never shown or stored. */
+function failureKind(result: AssistantMessage) {
+  const failed = { ...result, stopReason: "error" as const };
+  const text = result.errorMessage ?? "";
+  if (isContextOverflow(failed)) return "overflow";
+  if (/tool/iu.test(text) && /not support|unsupported|不支持/iu.test(text)) return "unsupported_tools";
+  const status = Number(/^(\d{3})\b/u.exec(text)?.[1]);
+  if (status === 401 || status === 403) return "rejected_key";
+  if (status === 404) return "unknown_model";
+  // A gateway that ends the stream with `finish_reason: "error"` relays an upstream failure.
+  if (result.rawStopReason === "error" || isRetryableAssistantError(failed)) return "transient";
+  return "other";
+}
+type FailureKind = ReturnType<typeof failureKind> | "silent" | "exhausted";
+class StreamFailure extends Error {
+  constructor(readonly kind: FailureKind, readonly transientBeforeOutput = false) { super(kind); }
+}
+function publicFailure(error: unknown) {
+  if (error instanceof DOMException && error.name === "TimeoutError") return AGENT_TIMEOUT_MESSAGE;
+  if (!(error instanceof StreamFailure)) return AGENT_GENERIC_FAILURE_MESSAGE;
+  switch (error.kind) {
+    case "overflow": return AGENT_OVERFLOW_MESSAGE;
+    case "unsupported_tools": return AGENT_UNSUPPORTED_TOOLS_MESSAGE;
+    case "rejected_key": return AGENT_REJECTED_KEY_MESSAGE;
+    case "unknown_model": return AGENT_UNKNOWN_MODEL_MESSAGE;
+    case "silent": return AGENT_SILENT_RESPONSE_MESSAGE;
+    case "exhausted": return AGENT_OUTPUT_EXHAUSTED_MESSAGE;
+    default: return error.transientBeforeOutput ? AGENT_TRANSIENT_ERROR_MESSAGE : AGENT_GENERIC_FAILURE_MESSAGE;
+  }
+}
+
+export interface AgentModelStreamSettings {
+  /** False keeps every request of this stream without thinking, whatever the task's level. */
+  reasoning?: boolean;
+  /** The user's own provider key: requests go only to the configured URL, through the public-address guard. */
+  apiKey?: string;
+  /** Replaces attachment references with their images, for a vision model. */
+  resolveImages?: (messages: Message[]) => Promise<Message[]>;
+  fetch?: typeof globalThis.fetch;
+}
+
+/**
+ * Pi's model requests through pi-ai's own Chat Completions transport. It reads the reasoning the gateway streams
+ * (`reasoning_content` and its variants) and sends each assistant message's reasoning back with it, so the model
+ * continues from its own thinking between tool calls instead of starting over.
+ *
+ * A request falls back to the next source only before anything of the response was shown. A response with nothing to
+ * show, or one that only announced its next step, is requested once more with a note appended to the system prompt
+ * (as Pi Desktop does); the second response streams into the same message, so the reply reads as one.
+ */
+export function createPiModelStream(config: AIModelConfig, settings: AgentModelStreamSettings = {}): StreamFn {
   return (piModel, context, options) => {
     const output = createAssistantMessageEventStream();
     void (async () => {
       const message = emptyPiAssistant(piModel);
       let started = false;
-      let emitted = false;
-      let emptyRecoveries = 0;
-      /** Every source failed the way a later attempt can succeed, before any output: Pi retries after a backoff. */
-      let transientFailure = false;
       try {
         const sources = agentModelSources(config, settings.apiKey);
         if (!sources.length) throw new Error("模型服务未配置");
-        const reasoning = settings.reasoning && piModel.reasoning !== false && (!settings.nativeReasoning || options?.reasoning !== undefined);
-        const declared = getCurrentTools(context.messages);
-        const tools = Object.fromEntries(
-          declared.map((t) => [
-            t.name,
-            tool({
-              description: t.description,
-              inputSchema: jsonSchema(t.parameters),
-            }),
-          ]),
-        );
-        for (let sourceIndex = 0; sourceIndex < 3; sourceIndex++) {
-          const source = sources[Math.min(sourceIndex, sources.length - 1)];
+        const effort = settings.reasoning !== false && piModel.reasoning ? options?.reasoning : undefined;
+        const transcript = settings.resolveImages && piModel.input?.includes("image") ? await settings.resolveImages(context.messages) : context.messages;
+        const fetcher = settings.fetch ?? (settings.apiKey ? agentSafeFetch : gatewayFetch);
+        let nudge: string | undefined;
+        let failures = 0;
+        while (true) {
+          const source = sources[Math.min(failures, sources.length - 1)];
           const requestSignal = agentModelRequestSignal(options?.signal);
-          try {
-            let finished = false;
-            const outputLimits = [source.defaultMaxTokens, piModel.maxTokens, options?.maxTokens].filter((limit): limit is number => limit !== undefined);
-            const result = streamText({
-              // The SDK's default handler logs upstream exception bodies.
-              // Emit our public error event instead of logging provider secrets.
-              onError: () => {},
-              model: createModelFromConfig(source, {
-                reasoning,
-                reasoningEffort: options?.reasoning ?? source.defaultReasoningEffort,
-                apiKey: settings.apiKey,
-                fetch: settings.apiKey ? agentSafeFetch : undefined,
-              }),
-              messages: settings.resolveImages && piModel.input?.includes('image') ? await settings.resolveImages(toAgentModelMessages(context.messages)) : toAgentModelMessages(context.messages),
-              tools,
-              maxRetries: 0,
-              abortSignal: requestSignal,
-              temperature: source.defaultTemperature ?? 0.7,
-              maxOutputTokens: outputLimits.length ? Math.min(...outputLimits) : undefined,
-              topP: source.defaultTopP ?? undefined,
-              presencePenalty: source.defaultPresencePenalty ?? undefined,
-              frequencyPenalty: source.defaultFrequencyPenalty ?? undefined,
-              providerOptions: buildProviderOptions(source, {
-                reasoning,
-                reasoningEffort: options?.reasoning ?? source.defaultReasoningEffort,
-              }),
-            });
-            const blocks = new Map<string, number>();
-            for await (const event of result.fullStream) {
-              if (event.type === "error") throw event.error;
-              if (event.type === "abort") throw new Error("模型请求已中断");
-              if (
-                event.type === "start-step" &&
-                event.warnings.some(
-                  (warning) =>
-                    /unsupported/iu.test(warning.type) &&
-                    "feature" in warning &&
-                    /tool/iu.test(String(warning.feature)),
-                )
-              )
-                throw new Error("模型不支持工具调用");
-              if (
-                event.type === "text-start" ||
-                event.type === "reasoning-start"
-              ) {
-                if (!started) {
-                  started = true;
-                  output.push({ type: "start", partial: message });
-                }
-                const index = message.content.length;
-                blocks.set(event.id, index);
-                if (event.type === "text-start") {
-                  message.content.push({ type: "text", text: "" });
-                  output.push({
-                    type: "text_start",
-                    contentIndex: index,
-                    partial: message,
-                  });
-                } else {
-                  message.content.push({ type: "thinking", thinking: "" });
-                  output.push({
-                    type: "thinking_start",
-                    contentIndex: index,
-                    partial: message,
-                  });
-                }
-              } else if (
-                event.type === "text-delta" ||
-                event.type === "reasoning-delta"
-              ) {
-                const index = blocks.get(event.id);
-                if (index === undefined) continue;
-                const block = message.content[index];
-                if (event.type === "text-delta" && block.type === "text") {
-                  if (event.text) emitted = true;
-                  block.text += event.text;
-                  output.push({
-                    type: "text_delta",
-                    contentIndex: index,
-                    delta: event.text,
-                    partial: message,
-                  });
-                }
-                if (
-                  event.type === "reasoning-delta" &&
-                  block.type === "thinking"
-                ) {
-                  if (event.text) emitted = true;
-                  block.thinking += event.text;
-                  output.push({
-                    type: "thinking_delta",
-                    contentIndex: index,
-                    delta: event.text,
-                    partial: message,
-                  });
-                }
-              } else if (
-                event.type === "text-end" ||
-                event.type === "reasoning-end"
-              ) {
-                const index = blocks.get(event.id);
-                if (index === undefined) continue;
-                const block = message.content[index];
-                const signature = event.providerMetadata
-                  ? SDK_SIGNATURE + JSON.stringify(event.providerMetadata)
-                  : undefined;
-                if (block.type === "text") {
-                  block.textSignature = signature;
-                  output.push({
-                    type: "text_end",
-                    contentIndex: index,
-                    content: block.text,
-                    partial: message,
-                  });
-                }
-                if (block.type === "thinking") {
-                  block.thinkingSignature = signature;
-                  output.push({
-                    type: "thinking_end",
-                    contentIndex: index,
-                    content: block.thinking,
-                    partial: message,
-                  });
-                }
-              } else if (event.type === "tool-call") {
-                emitted = true;
-                if (!started) {
-                  started = true;
-                  output.push({ type: "start", partial: message });
-                }
-                const call = {
-                  type: "toolCall" as const,
-                  id: event.toolCallId,
-                  name: event.toolName,
-                  arguments: event.input as Record<string, JsonValue>,
-                };
-                const index = message.content.length;
-                message.content.push(call);
-                output.push({
-                  type: "toolcall_start",
-                  contentIndex: index,
-                  partial: message,
-                });
-                output.push({
-                  type: "toolcall_end",
-                  contentIndex: index,
-                  toolCall: call,
-                  partial: message,
-                });
-              } else if (event.type === "tool-error") {
-                throw new Error("模型返回无效的工具参数");
-              } else if (event.type === "finish") {
-                if (event.finishReason === "error") throw new Error('provider returned error (finish_reason: error)');
-                if (event.finishReason === "content-filter" || event.finishReason === "other")
-                  throw new Error("模型未正常完成回复");
-                finished = true;
-                message.stopReason =
-                  event.finishReason === "length"
-                    ? "length"
-                    : message.content.some((p) => p.type === "toolCall")
-                      ? "toolUse"
-                      : "stop";
-                message.usage = toPiUsage(event.totalUsage);
-              }
-            }
-            // EOF and an SDK abort are not successful Pi terminal messages.
-            if (!finished) throw new Error("模型回复缺少结束标记");
-            requestSignal.throwIfAborted();
-            // The same budget would most likely be spent the same way again, so this is not retried.
-            if (message.stopReason === 'length' && !message.content.some(part => part.type === 'toolCall' || (part.type === 'text' && part.text.trim()))) throw new Error(AGENT_OUTPUT_EXHAUSTED_MESSAGE);
-            if (!message.content.some(part => part.type === 'toolCall' || (part.type === 'text' && part.text.trim()) || (part.type === 'thinking' && part.thinking.trim()))) throw new Error('AGENT_EMPTY_RESPONSE');
+          const outputLimits = [source.defaultMaxTokens, piModel.maxTokens, options?.maxTokens].filter((limit): limit is number => limit !== undefined && limit > 0);
+          const upstream = (effort && source.reasoningModelId) || source.modelId;
+          const body = extraBody(source);
+          const inner = streamCompletions({
+            ...piModel,
+            api: "openai-completions",
+            baseUrl: normalizeCustomProviderBaseUrl(source.apiUrl),
+            compat: agentCompletionsCompat(source),
+          }, normalizeContext({
+            messages: nudge ? [...transcript, { role: "system", content: nudge, timestamp: Date.now() }] : transcript,
+          }), {
+            apiKey: settings.apiKey ?? getApiKey(source.apiKeyEnvVar),
+            fetch: fetcher,
+            signal: requestSignal,
+            maxRetries: 0,
+            identity: { userAgent: { custom: MODEL_REQUEST_USER_AGENT } },
+            temperature: source.defaultTemperature ?? 0.7,
+            ...(outputLimits.length ? { maxTokens: Math.min(...outputLimits) } : {}),
+            ...(effort ? { reasoningEffort: effort } : {}),
+            // The transcript keeps the task's model identity; the gateway is asked for the source's upstream model.
+            onPayload: payload => ({ ...body, ...(payload as Record<string, unknown>), model: upstream }),
+          });
+          const base = message.content.length;
+          let shown = false;
+          for await (const event of inner) {
+            if (event.type === "start" || event.type === "done" || event.type === "error") continue;
+            message.content.length = base;
+            message.content.push(...event.partial.content);
             if (!started) {
               started = true;
               output.push({ type: "start", partial: message });
             }
-            output.push({
-              type: "done",
-              reason: message.stopReason as "stop" | "length" | "toolUse",
-              message,
-            });
-            return;
-          } catch (error) {
-            const empty = error instanceof Error && error.message === 'AGENT_EMPTY_RESPONSE';
-            const transient = isTransientProviderError(error, message);
-            // A request that ran out its own time already waited minutes; Pi does not wait for it again.
-            transientFailure = transient && !emitted && !requestSignal.aborted;
-            // Never restart a provider after emitting part of a response.
-            if (
-              emitted ||
-              options?.signal?.aborted ||
-              sourceIndex === 2
-            )
-              throw error;
-            if (empty && emptyRecoveries++ >= 1) throw error;
-            if (!empty && !transient && sourceIndex >= sources.length - 1) throw error;
-            started = false; message.content = []; message.stopReason = 'stop';
+            shown = true;
+            output.push({ ...event, contentIndex: base + event.contentIndex, partial: message } as AssistantMessageEvent);
           }
+          const result = await inner.result();
+          message.usage = addUsage(message.usage, result.usage);
+          if (result.stopReason === "error" || result.stopReason === "aborted") {
+            requestSignal.throwIfAborted();
+            const kind = failureKind(result);
+            // Never restart a provider after part of a response was shown, nor a recovery request.
+            if (shown || nudge !== undefined || options?.signal?.aborted || ++failures >= 3) {
+              message.content.length = base;
+              message.content.push(...result.content);
+              throw new StreamFailure(kind, kind === "transient" && !shown);
+            }
+            if (kind !== "transient" && failures >= sources.length) throw new StreamFailure(kind);
+            continue;
+          }
+          message.content.length = base;
+          message.content.push(...result.content);
+          message.stopReason = result.stopReason;
+          if (callsTools(message) || hasVisibleText(message)) {
+            if (nudge === undefined && isProgressOnlyTurn(result)) {
+              nudge = PROGRESS_TURN_NUDGE;
+              continue;
+            }
+            break;
+          }
+          // The same budget would most likely be spent the same way again, so this is not requested again.
+          if (result.stopReason === "length") throw new StreamFailure("exhausted");
+          if (nudge !== undefined) throw new StreamFailure("silent");
+          nudge = SILENT_TURN_NUDGE;
         }
+        if (!started) {
+          started = true;
+          output.push({ type: "start", partial: message });
+        }
+        output.push({ type: "done", reason: message.stopReason as "stop" | "length" | "toolUse", message });
       } catch (error) {
         message.stopReason = options?.signal?.aborted ? "aborted" : "error";
-        const overflow = error instanceof Error && isContextOverflow({ ...message, stopReason: "error", errorMessage: error.message });
-        message.errorMessage =
-          message.stopReason === "aborted"
-            ? "任务已停止"
-            : error instanceof Error && error.message === "模型不支持工具调用"
-              ? AGENT_UNSUPPORTED_TOOLS_MESSAGE
-            : error instanceof Error && error.message === AGENT_OUTPUT_EXHAUSTED_MESSAGE ? AGENT_OUTPUT_EXHAUSTED_MESSAGE
-            : overflow ? "模型上下文超出限制（context_length_exceeded）"
-            : transientFailure ? AGENT_TRANSIENT_ERROR_MESSAGE
-            : "模型调用失败，请确认模型支持工具调用或切换普通对话";
-        output.push({
-          type: "error",
-          reason: message.stopReason,
-          error: message,
-        });
+        message.errorMessage = message.stopReason === "aborted" ? "任务已停止" : publicFailure(error);
+        output.push({ type: "error", reason: message.stopReason, error: message });
       } finally {
         output.end(message);
       }

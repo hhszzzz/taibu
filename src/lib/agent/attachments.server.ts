@@ -2,7 +2,7 @@ import 'server-only';
 import { createHash } from 'node:crypto';
 import { systemDb,type ScopedDb } from '@/lib/db/context.server';
 import { getObjectStore } from '@/lib/storage/index.server';
-import type { ModelMessage } from 'ai';
+import type { Message } from '@earendil-works/pi-ai';
 import type { PrivateAttachment } from '@/types';
 import { ATTACHMENT_MARKER } from './attachment-input';
 export const ATTACHMENT_BUCKET = 'agent-attachments';
@@ -29,13 +29,14 @@ export async function attachmentBytes(row:AttachmentRow):Promise<Uint8Array> {
     if(bytes.length!==row.size || createHash('sha256').update(bytes).digest('hex')!==row.sha256) throw new Error('资料完整性校验失败');
     return bytes;
 }
-export async function resolveAttachmentImages(db:ScopedDb,userId:string,conversationId:string,messages:ModelMessage[]):Promise<ModelMessage[]> {
+export async function resolveAttachmentImages(db:ScopedDb,userId:string,conversationId:string,messages:readonly Message[]):Promise<Message[]> {
     const cache=new Map<string,Promise<Uint8Array>>();
-    const output: ModelMessage[] = [];
+    const output: Message[] = [];
     let totalBytes = 0;
     for (const message of messages) {
-        if(message.role!=='user' || typeof message.content!=='string') { output.push(message); continue; }
-        const ids=[...message.content.matchAll(ATTACHMENT_MARKER)].map(match=>match[1]);
+        if(message.role!=='user') { output.push(message); continue; }
+        const text=typeof message.content==='string' ? message.content : message.content.flatMap(part=>part.type==='text' ? [part.text] : []).join('\n');
+        const ids=[...text.matchAll(ATTACHMENT_MARKER)].map(match=>match[1]);
         if(!ids.length) { output.push(message); continue; }
         const rows=await validateAttachmentIds(db,userId,[...new Set(ids)]);
         const imageRows=rows.filter(row=>row.kind==='image');
@@ -50,9 +51,9 @@ export async function resolveAttachmentImages(db:ScopedDb,userId:string,conversa
                 if (totalBytes > 64 * 1024 * 1024) throw new Error('本轮图片资料过多，请压缩对话后重试');
                 bytes=attachmentBytes(row); cache.set(row.id,bytes);
             }
-            return {type:'image' as const,image:await bytes,mediaType:row.mime_type};
+            return {type:'image' as const,data:Buffer.from(await bytes).toString('base64'),mimeType:row.mime_type};
         }));
-        output.push({role:'user' as const,content:[{type:'text' as const,text:message.content},...images]});
+        output.push({...message,content:[...(typeof message.content==='string' ? [{type:'text' as const,text:message.content}] : message.content),...images]});
     }
     return output;
 }

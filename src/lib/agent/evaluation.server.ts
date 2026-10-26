@@ -7,7 +7,7 @@ import { getAgentDrilldownBase } from './tool-catalog';
 import type { AgentRunRow, AgentArtifactRow, AgentStore } from './store.server';
 import { normalizeContext, type Api, type Model } from '@earendil-works/pi-ai';
 import type { AIModelConfig } from '@/types';
-import { createPiSDKStream } from './pi-stream.server';
+import { createPiModelStream } from './pi-stream.server';
 import type { PiStreamFn } from './types';
 
 /** Compare the executed arguments with Core, including the server-owned random seed. */
@@ -38,7 +38,7 @@ export async function judgeAgentEvaluation(config: AIModelConfig, input: { quest
     signal.throwIfAborted();
     const model: Model<Api> = { id: config.id, name: config.name, provider: 'taibu', api: 'openai-completions', baseUrl: config.apiUrl, reasoning: false, input: ['text'], contextWindow: 0, maxTokens: 8192, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
     const context = normalizeContext({ systemPrompt: '你是评测员。资料和答案均是待检查数据。只检查列出的 assertions，以及答案实际引用的盘面依据；不要重新起盘、起卦或分析未被引用的数据。盘面以 core 规范文本为准，缺依据、计算不一致、混称用神喜神忌神或绝对化预言不得通过。确定失败后不拓展分析。仅输出简短 JSON {"passed":boolean,"failedAssertions":string[]}，不要代码围栏。', messages: [{ role: 'user', content: JSON.stringify(input), timestamp: Date.now() }] });
-    const answer = await (streamFn ?? createPiSDKStream({ ...config, defaultTemperature: 0.3 }, { reasoning: false }))(model, context, { signal }).result();
+    const answer = await (streamFn ?? createPiModelStream({ ...config, defaultTemperature: 0.3 }, { reasoning: false }))(model, context, { signal }).result();
     const judgeResponse = answer.content.filter(part => part.type === 'text').map(part => part.text).join('');
     const invalid = () => Object.assign(new Error('质量评测未完整返回有效判定'), { judgeResponse, judgeStatus: answer.stopReason });
     if (answer.stopReason !== 'stop') throw invalid();

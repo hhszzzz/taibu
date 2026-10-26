@@ -1,427 +1,376 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MockLanguageModelV3 } from "ai/test";
 import {
   normalizeContext,
   isContextOverflow,
   Type,
   type Api,
+  type AssistantMessage,
+  type Message,
   type Model,
 } from "@earendil-works/pi-ai";
 import { BACKGROUND_CONTEXT } from '@earendil-works/chord/context';
 import { createGuardedAgentModels } from '../lib/agent/model-registry.server';
 import { generateSummary } from '../lib/agent/summary-usage.server';
 import {
-  createPiSDKStream,
-  toAgentModelMessages,
+  AGENT_OUTPUT_EXHAUSTED_MESSAGE,
+  AGENT_PUBLIC_STREAM_ERRORS,
+  AGENT_REJECTED_KEY_MESSAGE,
+  AGENT_SILENT_RESPONSE_MESSAGE,
+  AGENT_TIMEOUT_MESSAGE,
+  AGENT_TRANSIENT_ERROR_MESSAGE,
+  AGENT_UNKNOWN_MODEL_MESSAGE,
+  AGENT_UNSUPPORTED_TOOLS_MESSAGE,
+  PROGRESS_TURN_NUDGE,
+  SILENT_TURN_NUDGE,
+  createPiModelStream,
+  isProgressOnlyTurn,
 } from "../lib/agent/pi-stream.server";
+import { MODEL_REQUEST_USER_AGENT } from '../lib/ai/providers/ai-sdk-provider';
 import type { AIModelConfig } from "../types";
 
-type Part =
-  Awaited<
-    ReturnType<MockLanguageModelV3["doStream"]>
-  >["stream"] extends ReadableStream<infer P>
-    ? P
-    : never;
-const usage = {
-  inputTokens: { total: 3, noCache: 3, cacheRead: 0, cacheWrite: 0 },
-  outputTokens: { total: 5, text: 4, reasoning: 1 },
-};
+process.env.TAIBU_TEST_GATEWAY_KEY = 'gateway-fixture-key';
 const piModel = {
   id: "fixture",
+  name: "fixture",
   provider: "taibu",
   api: "openai-completions",
+  baseUrl: "",
+  reasoning: true,
+  input: ["text"],
+  contextWindow: 0,
+  maxTokens: 4096,
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 } as Model<Api>;
 const config: AIModelConfig = {
   id: "fixture",
   name: "fixture",
   vendor: "other",
-  modelId: "fixture",
-  apiUrl: "https://model.example/v1",
-  apiKeyEnvVar: "KEY",
+  modelId: "fixture-upstream",
+  apiUrl: "https://model.example/v1/chat/completions",
+  apiKeyEnvVar: "TAIBU_TEST_GATEWAY_KEY",
   supportsReasoning: true,
 };
-const context = () =>
+const sourced = (...keys: string[]): AIModelConfig => ({
+  ...config,
+  sources: keys.map(key => ({ sourceKey: key, sourceName: key, apiUrl: `https://${key}.example/v1/chat/completions`, apiKeyEnvVar: 'TAIBU_TEST_GATEWAY_KEY', modelIdOverride: `${key}-upstream` })),
+});
+const context = (messages: Message[] = [{ role: "user", content: "query", timestamp: 1 }]) =>
   normalizeContext({
     systemPrompt: "existing personality",
-    messages: [{ role: "user", content: "query", timestamp: 1 }],
-    tools: [
-      {
-        name: "search",
-        description: "fixture tool",
-        parameters: Type.Object({ query: Type.String() }),
-      },
-    ],
+    messages,
+    tools: [{ name: "search", description: "fixture tool", parameters: Type.Object({ query: Type.String() }) }],
   });
-function mockModel(parts: Part[]) {
-  return new MockLanguageModelV3({
-    doStream: async () => ({
-      stream: new ReadableStream({
-        start(controller) {
-          parts.forEach((part) => controller.enqueue(part));
-          controller.close();
-        },
-      }),
-    }),
-  });
+
+type Delta = { content?: string; reasoning_content?: string; tool_calls?: unknown[] };
+type Chunk = { delta?: Delta; finish_reason?: string | null; usage?: Record<string, unknown> };
+const USAGE = { prompt_tokens: 3, completion_tokens: 5, total_tokens: 8, completion_tokens_details: { reasoning_tokens: 1 } };
+const frame = ({ delta = {}, finish_reason = null, usage }: Chunk) =>
+  `data: ${JSON.stringify({ id: "chatcmpl-fixture", object: "chat.completion.chunk", created: 1, model: "upstream", choices: [{ index: 0, delta, finish_reason }], ...(usage ? { usage } : {}) })}\n\n`;
+type Sent = { url: string; headers: Headers; body: Record<string, unknown> & { messages: Array<Record<string, unknown>> } };
+type Answer = (request: Sent, init?: RequestInit) => Response | Promise<Response>;
+/** A gateway answer streamed as server-sent events; each request gets a fresh body (a cloned one stalls the SDK). */
+const sse = (chunks: Chunk[], { done = true } = {}): Answer => () =>
+  new Response(chunks.map(frame).join("") + (done ? "data: [DONE]\n\n" : ""), { status: 200, headers: { "content-type": "text/event-stream" } });
+const reply = (text: string, finish = "stop") => sse([{ delta: { content: text } }, { finish_reason: finish, usage: USAGE }]);
+const call = (name: string, args: unknown, id = "call_1") =>
+  sse([{ delta: { tool_calls: [{ index: 0, id, type: "function", function: { name, arguments: JSON.stringify(args) } }] } }, { finish_reason: "tool_calls", usage: USAGE }]);
+const failure = (status: number, message: string): Answer => () =>
+  new Response(JSON.stringify({ error: { message, type: "error" } }), { status, headers: { "content-type": "application/json" } });
+
+/** Records every request and answers with the next response, repeating the last one. */
+function gateway(...responses: Answer[]) {
+  const requests: Sent[] = [];
+  const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const request: Sent = { url: input instanceof Request ? input.url : String(input), headers: new Headers(init?.headers), body: JSON.parse(String(init?.body)) };
+    requests.push(request);
+    return responses[Math.min(requests.length - 1, responses.length - 1)](request, init);
+  }) as typeof globalThis.fetch;
+  return { fetch, requests };
+}
+const systemText = (request: Sent) => request.body.messages.filter(message => message.role === "system").map(message => String(message.content)).join("\n");
+async function drain(stream: ReturnType<ReturnType<typeof createPiModelStream>>) {
+  const events = [];
+  for await (const event of stream) events.push(event);
+  return { events, message: await stream.result() };
 }
 
-test('SDK requests include native prompt sections and replay their latest updates before instructions', async t => {
-  const sdk = require('../lib/ai/providers/ai-sdk-provider') as typeof import('../lib/ai/providers/ai-sdk-provider');
-  t.mock.method(sdk, 'isModelAvailable', () => true);
-  const model = mockModel([
-    { type: 'stream-start', warnings: [] },
-    { type: 'text-start', id: 'text' },
-    { type: 'text-delta', id: 'text', delta: 'answer with guide' },
-    { type: 'text-end', id: 'text' },
-    { type: 'finish', finishReason: { unified: 'stop', raw: 'stop' }, usage },
-  ]);
-  t.mock.method(sdk, 'createModelFromConfig', () => model);
+test('requests send one system prompt with the latest sections, in the system role, to the source URL', async () => {
+  const gw = gateway(reply('answer with guide'));
   const input = normalizeContext({ messages: [
     { role: 'system', content: '系统约定', timestamp: 1, sections: { taibu_methods: '<taibu_methods>旧目录</taibu_methods>', instructions: '<instructions>先计算后解读</instructions>', obsolete: '已移除权限' } },
     { role: 'user', content: 'query', timestamp: 2 },
     { role: 'system', content: '', timestamp: 3, sections: { taibu_methods: '<taibu_methods>解读前读取八字指引</taibu_methods>', obsolete: null } },
   ] });
-  const output = createPiSDKStream(config, { reasoning: false })(piModel, input);
-  assert.equal((await output.result()).stopReason, 'stop');
-  const prompt = model.doStreamCalls[0].prompt;
-  assert.equal(prompt.filter(message => message.role === 'system').length, 1);
-  assert.equal(prompt[0].role, 'system');
-  assert.match(String(prompt[0].content), /<taibu_methods>解读前读取八字指引<\/taibu_methods>/);
-  assert.doesNotMatch(String(prompt[0].content), /旧目录|已移除权限/);
-  assert.ok(String(prompt[0].content).indexOf('<taibu_methods>') < String(prompt[0].content).indexOf('<instructions>'));
+  const message = await createPiModelStream(config, { fetch: gw.fetch })(piModel, input).result();
+  assert.equal(message.stopReason, 'stop');
+  const [request] = gw.requests;
+  assert.equal(request.url, 'https://model.example/v1/chat/completions');
+  assert.equal(request.headers.get('authorization'), 'Bearer gateway-fixture-key');
+  assert.equal(request.headers.get('user-agent'), MODEL_REQUEST_USER_AGENT);
+  assert.equal(request.body.model, 'fixture-upstream');
+  assert.equal(request.body.store, undefined);
+  assert.deepEqual(request.body.messages.map(item => item.role), ['system', 'user']);
+  const prompt = systemText(request);
+  assert.match(prompt, /<taibu_methods>解读前读取八字指引<\/taibu_methods>/);
+  assert.doesNotMatch(prompt, /旧目录|已移除权限/);
+  assert.ok(prompt.indexOf('<taibu_methods>') < prompt.indexOf('<instructions>'));
+  assert.equal(message.model, piModel.id, 'the transcript keeps the task model, not the upstream name');
 });
 
-test('SDK output tokens respect the smallest source, native model and per-request budget', async t => {
-  const sdk = require('../lib/ai/providers/ai-sdk-provider') as typeof import('../lib/ai/providers/ai-sdk-provider');
-  t.mock.method(sdk, 'isModelAvailable', () => true);
-  const model = mockModel([
-    { type: 'stream-start', warnings: [] },
-    { type: 'text-start', id: 'text' },
-    { type: 'text-delta', id: 'text', delta: 'budgeted answer' },
-    { type: 'text-end', id: 'text' },
-    { type: 'finish', finishReason: { unified: 'stop', raw: 'stop' }, usage },
-  ]);
-  t.mock.method(sdk, 'createModelFromConfig', () => model);
+test('output tokens respect the smallest source, native model and per-request budget', async () => {
   for (const [sourceLimit, requestLimit, expected] of [[12288, undefined, 2400], [12288, 1200, 1200], [800, 1200, 800]] as const) {
-    const output = createPiSDKStream({ ...config, defaultMaxTokens: sourceLimit }, { reasoning: false })({ ...piModel, maxTokens: 2400 }, context(), { maxTokens: requestLimit });
-    assert.equal((await output.result()).stopReason, 'stop');
-    assert.equal(model.doStreamCalls.at(-1)!.maxOutputTokens, expected);
+    const gw = gateway(reply('budgeted answer'));
+    const message = await createPiModelStream({ ...config, defaultMaxTokens: sourceLimit }, { fetch: gw.fetch })({ ...piModel, maxTokens: 2400 }, context(), { maxTokens: requestLimit }).result();
+    assert.equal(message.stopReason, 'stop');
+    assert.equal(gw.requests[0].body.max_tokens, expected);
+    assert.equal(gw.requests[0].body.max_completion_tokens, undefined);
   }
 });
 
-test('source fallback and transient errors share three external attempts; empty responses recover once', async t => {
-  const sdk = require('../lib/ai/providers/ai-sdk-provider') as typeof import('../lib/ai/providers/ai-sdk-provider');
-  t.mock.method(sdk, 'isModelAvailable', () => true);
-  const model = new MockLanguageModelV3({ doStream: async () => { throw Object.assign(new Error('network timeout'), { statusCode: 503 }); } });
-  t.mock.method(sdk, 'createModelFromConfig', () => model);
-  const fallback = { ...config, sources: Array.from({length:5},(_,index)=>({sourceKey:String(index),sourceName:String(index),apiUrl:`https://source${index}.example/v1`,apiKeyEnvVar:'KEY'})) };
-  let stream = createPiSDKStream(fallback,{reasoning:false})(piModel,context());
-  for await(const event of stream) void event;
-  assert.equal((await stream.result()).stopReason,'error'); assert.equal(model.doStreamCalls.length,3);
-  const empty = mockModel([{ type:'stream-start', warnings:[] },{type:'finish', finishReason:{unified:'stop',raw:'stop'},usage}]);
-  t.mock.method(sdk, 'createModelFromConfig', () => empty);
-  stream = createPiSDKStream(config,{reasoning:false})(piModel,context());
-  for await(const event of stream) void event;
-  assert.equal((await stream.result()).stopReason,'error'); assert.equal(empty.doStreamCalls.length,2);
+test('reasoning streams as thinking and goes back with the assistant message, whichever source serves the next step', async () => {
+  const first = gateway(sse([
+    { delta: { reasoning_content: '先排盘再看大运' } },
+    { delta: { content: '我先排出命盘。' } },
+    { delta: { tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: 'search', arguments: '{"query":"星象"}' } }] } },
+    { finish_reason: 'tool_calls', usage: USAGE },
+  ]));
+  const { events, message } = await drain(createPiModelStream(sourced('first'), { fetch: first.fetch })(piModel, context(), { reasoning: 'high' }));
+  assert.equal(message.stopReason, 'toolUse');
+  assert.deepEqual(message.content.map(part => part.type), ['thinking', 'text', 'toolCall']);
+  assert.equal(message.content[0].type === 'thinking' && message.content[0].thinkingSignature, 'reasoning_content');
+  assert.deepEqual(message.content.find(part => part.type === 'toolCall')?.arguments, { query: '星象' });
+  assert.ok(events.some(event => event.type === 'thinking_end') && events.some(event => event.type === 'toolcall_end'));
+  assert.equal(message.usage.totalTokens, 8);
+  assert.equal(message.usage.reasoning, 1);
+
+  const second = gateway(reply('大运走火地'));
+  const next = context([
+    { role: 'user', content: 'query', timestamp: 1 },
+    message,
+    { role: 'toolResult', toolCallId: 'call_1', toolName: 'search', content: [{ type: 'text', text: '命盘' }], isError: false, timestamp: 3 },
+  ]);
+  await createPiModelStream(sourced('second'), { fetch: second.fetch })(piModel, next, { reasoning: 'high' }).result();
+  const replayed = second.requests[0].body.messages.find(item => item.role === 'assistant');
+  assert.equal(second.requests[0].body.model, 'second-upstream');
+  assert.equal(replayed?.reasoning_content, '先排盘再看大运');
+  assert.equal(replayed?.content, '我先排出命盘。');
 });
 
-test('a response that spends the whole output budget thinking fails once with the reason, without a retry', async t => {
-  const sdk = require('../lib/ai/providers/ai-sdk-provider') as typeof import('../lib/ai/providers/ai-sdk-provider');
-  t.mock.method(sdk, 'isModelAvailable', () => true);
-  const { AGENT_OUTPUT_EXHAUSTED_MESSAGE, AGENT_PUBLIC_STREAM_ERRORS } = require('../lib/agent/pi-stream.server') as typeof import('../lib/agent/pi-stream.server');
-  const thinking = mockModel([
-    { type: 'stream-start', warnings: [] },
-    { type: 'reasoning-start', id: 'reason' },
-    { type: 'reasoning-delta', id: 'reason', delta: '先比较各个候选时辰……' },
-    { type: 'reasoning-end', id: 'reason' },
-    { type: 'finish', finishReason: { unified: 'length', raw: 'length' }, usage },
-  ]);
-  t.mock.method(sdk, 'createModelFromConfig', () => thinking);
-  const result = await createPiSDKStream(config, { reasoning: true })({ ...piModel, reasoning: true }, context(), { reasoning: 'high' }).result();
+test('the thinking switch and level follow the model: enable_thinking, reasoning_effort, a reasoning object, or nothing', async () => {
+  const sent = async (model: AIModelConfig, settings: { reasoning?: boolean }, reasoning?: 'high' | 'max' | 'xhigh', native = piModel) => {
+    const gw = gateway(reply('ok'));
+    await createPiModelStream(model, { ...settings, fetch: gw.fetch })(native, context(), reasoning ? { reasoning } : undefined).result();
+    const { enable_thinking, reasoning_effort, reasoning: object, model: upstream } = gw.requests[0].body;
+    return { enable_thinking, reasoning_effort, reasoning: object, upstream };
+  };
+  const deepseek = { ...config, vendor: 'deepseek' };
+  assert.deepEqual(await sent(deepseek, {}, 'high'), { enable_thinking: true, reasoning_effort: undefined, reasoning: undefined, upstream: 'fixture-upstream' });
+  assert.deepEqual(await sent({ ...deepseek, reasoningEffortFormat: 'reasoning_effort' }, {}, 'max'), { enable_thinking: true, reasoning_effort: 'max', reasoning: undefined, upstream: 'fixture-upstream' });
+  assert.deepEqual(await sent(deepseek, {}), { enable_thinking: false, reasoning_effort: undefined, reasoning: undefined, upstream: 'fixture-upstream' });
+  assert.deepEqual(await sent(deepseek, { reasoning: false }, 'high'), { enable_thinking: false, reasoning_effort: undefined, reasoning: undefined, upstream: 'fixture-upstream' });
+  assert.deepEqual(await sent({ ...config, reasoningEffortFormat: 'reasoning_effort' }, {}, 'xhigh'), { enable_thinking: undefined, reasoning_effort: 'xhigh', reasoning: undefined, upstream: 'fixture-upstream' });
+  assert.deepEqual(await sent({ ...config, reasoningEffortFormat: 'reasoning_object' }, {}, 'high'), { enable_thinking: undefined, reasoning_effort: undefined, reasoning: { effort: 'high' }, upstream: 'fixture-upstream' });
+  // A model that cannot think gets no thinking field at all; a separate reasoning model serves the thinking requests.
+  assert.deepEqual(await sent(deepseek, {}, 'high', { ...piModel, reasoning: false }), { enable_thinking: undefined, reasoning_effort: undefined, reasoning: undefined, upstream: 'fixture-upstream' });
+  assert.equal((await sent({ ...config, reasoningModelId: 'fixture-reasoner' }, {}, 'high')).upstream, 'fixture-reasoner');
+});
+
+test('custom parameters and sampling defaults reach the body, but never replace transport or thinking fields', async () => {
+  const gw = gateway(reply('ok'));
+  await createPiModelStream({ ...config, vendor: 'qwen', defaultTopP: 0.9, defaultPresencePenalty: 0.1, customParameters: { top_k: 20, enable_thinking: true, max_tokens: 1, model: 'other' } }, { fetch: gw.fetch })(piModel, context()).result();
+  const { body } = gw.requests[0];
+  assert.equal(body.top_k, 20);
+  assert.equal(body.top_p, 0.9);
+  assert.equal(body.presence_penalty, 0.1);
+  assert.equal(body.enable_thinking, false);
+  assert.equal(body.max_tokens, 4096);
+  assert.equal(body.model, 'fixture-upstream');
+  assert.equal(body.temperature, 0.7);
+});
+
+test('a response with nothing to show is asked once more with a note, and the answer joins the same message', async () => {
+  const gw = gateway(sse([{ delta: { reasoning_content: '结论是火旺' } }, { finish_reason: 'stop', usage: USAGE }]), reply('火旺，宜用水。'));
+  const { events, message } = await drain(createPiModelStream(config, { fetch: gw.fetch })(piModel, context(), { reasoning: 'high' }));
+  assert.equal(message.stopReason, 'stop');
+  assert.deepEqual(message.content.map(part => part.type), ['thinking', 'text']);
+  assert.equal(message.usage.totalTokens, 16, 'both requests are counted');
+  assert.equal(events.filter(event => event.type === 'start').length, 1);
+  assert.equal(events.at(-1)?.type, 'done');
+  assert.equal(gw.requests.length, 2);
+  assert.doesNotMatch(systemText(gw.requests[0]), /no_output_recovery/);
+  assert.ok(systemText(gw.requests[1]).includes(SILENT_TURN_NUDGE));
+
+  const silent = gateway(sse([{ finish_reason: 'stop', usage: USAGE }]));
+  const failed = await createPiModelStream(config, { fetch: silent.fetch })(piModel, context()).result();
+  assert.equal(silent.requests.length, 2);
+  assert.equal(failed.stopReason, 'error');
+  assert.equal(failed.errorMessage, AGENT_SILENT_RESPONSE_MESSAGE);
+  assert.ok(AGENT_PUBLIC_STREAM_ERRORS.has(failed.errorMessage!));
+});
+
+test('a response that only announces its next step is continued once; answers and questions are not', async () => {
+  const gw = gateway(reply('我先排出八字命盘，再看大运流年。'), call('search', { query: '八字' }));
+  const message = await createPiModelStream(config, { fetch: gw.fetch })(piModel, context()).result();
+  assert.equal(message.stopReason, 'toolUse');
+  assert.deepEqual(message.content.map(part => part.type), ['text', 'toolCall']);
+  assert.equal(gw.requests.length, 2);
+  assert.ok(systemText(gw.requests[1]).includes(PROGRESS_TURN_NUDGE));
+  // Announcing again after the note ends the turn instead of looping.
+  const stubborn = gateway(reply('我先排出八字命盘。'));
+  assert.equal((await createPiModelStream(config, { fetch: stubborn.fetch })(piModel, context()).result()).stopReason, 'stop');
+  assert.equal(stubborn.requests.length, 2);
+
+  const final = (text: string) => ({ role: 'assistant', content: [{ type: 'text', text }], stopReason: 'stop' }) as AssistantMessage;
+  assert.equal(isProgressOnlyTurn(final('我先排出八字命盘，再看大运流年。')), true);
+  assert.equal(isProgressOnlyTurn(final('Let me check the chart first.')), true);
+  assert.equal(isProgressOnlyTurn(final('日主偏弱，接下来三年运势平稳。\n<followups>\n今年适合换工作吗\n</followups>')), false);
+  assert.equal(isProgressOnlyTurn(final('我先排盘还是先看你的问题？')), false);
+  assert.equal(isProgressOnlyTurn(final(`${'日主乙木生于巳月，'.repeat(50)}接下来我再看大运。`)), false, 'an analysis is long');
+  assert.equal(isProgressOnlyTurn({ ...final('我先排盘。'), content: [{ type: 'text', text: '我先排盘。' }, { type: 'toolCall', id: 'c', name: 'search', arguments: {} }] }), false);
+});
+
+test('a response that spends the whole output budget thinking fails once with the reason, without another request', async () => {
+  const gw = gateway(sse([{ delta: { reasoning_content: '先比较各个候选时辰……' } }, { finish_reason: 'length', usage: USAGE }]));
+  const result = await createPiModelStream(config, { fetch: gw.fetch })(piModel, context(), { reasoning: 'high' }).result();
   assert.equal(result.stopReason, 'error');
   assert.equal(result.errorMessage, AGENT_OUTPUT_EXHAUSTED_MESSAGE);
   assert.ok(AGENT_PUBLIC_STREAM_ERRORS.has(result.errorMessage!), 'the task shows this reason instead of the generic failure');
-  assert.equal(thinking.doStreamCalls.length, 1);
+  assert.equal(gw.requests.length, 1);
   // A cut-off answer is still an answer: only a budget with no text and no call is this failure.
-  const cut = mockModel([{ type: 'stream-start', warnings: [] }, { type: 'text-start', id: 'text' }, { type: 'text-delta', id: 'text', delta: '日主乙木生于巳月' }, { type: 'text-end', id: 'text' }, { type: 'finish', finishReason: { unified: 'length', raw: 'length' }, usage }]);
-  t.mock.method(sdk, 'createModelFromConfig', () => cut);
-  assert.equal((await createPiSDKStream(config, { reasoning: false })(piModel, context()).result()).stopReason, 'length');
+  const cut = gateway(reply('日主乙木生于巳月', 'length'));
+  assert.equal((await createPiModelStream(config, { fetch: cut.fetch })(piModel, context()).result()).stopReason, 'length');
 });
 
-test('native summary requests retain guarded source fallback and reasoning controls across the SDK bridge', async t => {
-  const sdk = require('../lib/ai/providers/ai-sdk-provider') as typeof import('../lib/ai/providers/ai-sdk-provider');
-  t.mock.method(sdk, 'isModelAvailable', () => true);
-  const primary = new MockLanguageModelV3({ doStream: async () => { throw new Error('server_busy private upstream details'); } });
-  const fallback = mockModel([{ type: 'stream-start', warnings: [] }, { type: 'text-start', id: 'summary' }, { type: 'text-delta', id: 'summary', delta: '保留原盘事实和引用来源' }, { type: 'text-end', id: 'summary' }, { type: 'finish', finishReason: { unified: 'stop', raw: 'stop' }, usage }]);
-  const requested: Array<{ url: string; reasoning: boolean | undefined }> = [];
-  t.mock.method(sdk, 'createModelFromConfig', (source: AIModelConfig, options?: Parameters<typeof sdk.createModelFromConfig>[1]) => { requested.push({ url: source.apiUrl, reasoning: options?.reasoning }); return source.apiUrl.includes('first') ? primary : fallback; });
-  const routed = { ...config, sources: [{ sourceKey: 'first', sourceName: 'first', apiUrl: 'https://first.example/v1', apiKeyEnvVar: 'KEY' }, { sourceKey: 'second', sourceName: 'second', apiUrl: 'https://second.example/v1', apiKeyEnvVar: 'KEY' }] };
-  const nativeModel = { ...piModel, name: 'fixture', reasoning: true, input: ['text', 'image'], maxTokens: 4096, contextWindow: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } } as Model<Api>;
-  let checks = 0;
-  const models = createGuardedAgentModels(nativeModel, createPiSDKStream(routed, { reasoning: true, resolveImages: async () => { throw new Error('summary must remain text-only'); } }), async () => { checks++; });
-  const result = await generateSummary({ models }, nativeModel, [{ role: 'user', content: '目标与已确认资料', timestamp: 1 }], BACKGROUND_CONTEXT);
-  assert.equal(result.summary, '保留原盘事实和引用来源');
-  assert.equal(checks, 1);
-  assert.deepEqual(requested, [{ url: 'https://first.example/v1', reasoning: false }, { url: 'https://second.example/v1', reasoning: false }]);
-  assert.equal(fallback.doStreamCalls[0].maxOutputTokens, 2000);
-  assert.equal(result.usage.totalTokens, 8);
-});
+test('source fallback and transient failures share three requests; quota, key and model errors are not retried', async () => {
+  const busy = gateway(failure(503, 'server_busy'));
+  let result = await createPiModelStream(sourced('a', 'b', 'c', 'd', 'e'), { fetch: busy.fetch })(piModel, context()).result();
+  assert.equal(result.stopReason, 'error');
+  assert.equal(result.errorMessage, AGENT_TRANSIENT_ERROR_MESSAGE, 'Pi retries the whole request after a backoff');
+  assert.deepEqual(busy.requests.map(request => new URL(request.url).hostname), ['a.example', 'b.example', 'c.example']);
 
-test('SDK bridge uses Pi retry classification before output and passes xhigh/max without retrying quota exhaustion', async t => {
-  const sdk = require('../lib/ai/providers/ai-sdk-provider') as typeof import('../lib/ai/providers/ai-sdk-provider');
-  t.mock.method(sdk, 'isModelAvailable', () => true);
-  const optionsModel = mockModel([{ type: 'stream-start', warnings: [] }, { type: 'text-start', id: 'answer' }, { type: 'text-delta', id: 'answer', delta: '完整回答' }, { type: 'text-end', id: 'answer' }, { type: 'finish', finishReason: { unified: 'stop', raw: 'stop' }, usage }]);
-  t.mock.method(sdk, 'createModelFromConfig', () => optionsModel);
-  for (const effort of ['xhigh', 'max'] as const) {
-    const result = await createPiSDKStream({ ...config, reasoningEffortFormat: 'reasoning_effort' }, { reasoning: true })({ ...piModel, reasoning: true }, context(), { reasoning: effort }).result();
-    assert.equal(result.stopReason, 'stop');
-    assert.equal(optionsModel.doStreamCalls.at(-1)!.providerOptions?.openai?.reasoningEffort, effort === 'max' ? undefined : effort);
+  const offline = gateway(() => { throw new TypeError('fetch failed'); });
+  assert.equal((await createPiModelStream(config, { fetch: offline.fetch })(piModel, context()).result()).errorMessage, AGENT_TRANSIENT_ERROR_MESSAGE);
+  assert.equal(offline.requests.length, 3);
+  const upstreamError = gateway(sse([{ finish_reason: 'error', usage: USAGE }]));
+  assert.equal((await createPiModelStream(config, { fetch: upstreamError.fetch })(piModel, context()).result()).errorMessage, AGENT_TRANSIENT_ERROR_MESSAGE);
+  assert.equal(upstreamError.requests.length, 3);
+
+  for (const [response, expected] of [
+    [failure(429, 'insufficient_quota'), '模型调用失败，请确认模型支持工具调用或切换普通对话'],
+    [failure(401, 'invalid api key'), AGENT_REJECTED_KEY_MESSAGE],
+    [failure(404, 'model not found'), AGENT_UNKNOWN_MODEL_MESSAGE],
+    [failure(400, 'tools is not supported for this model'), AGENT_UNSUPPORTED_TOOLS_MESSAGE],
+  ] as const) {
+    const gw = gateway(response);
+    result = await createPiModelStream(config, { fetch: gw.fetch })(piModel, context()).result();
+    assert.equal(result.errorMessage, expected);
+    assert.equal(gw.requests.length, 1);
   }
-  for (const [error, expected] of [[new Error('server_busy'), 3], [Object.assign(new Error('connection reset'), { code: 'ECONNRESET' }), 3], [new Error('ECONNRESET'), 3], [Object.assign(new Error('insufficient_quota'), { statusCode: 429 }), 1]] as const) {
-    const failed = new MockLanguageModelV3({ doStream: async () => { throw error; } });
-    t.mock.method(sdk, 'createModelFromConfig', () => failed);
-    assert.equal((await createPiSDKStream(config, { reasoning: false })(piModel, context()).result()).stopReason, 'error');
-    assert.equal(failed.doStreamCalls.length, expected);
-  }
-  const retryableFinish = mockModel([{ type: 'stream-start', warnings: [] }, { type: 'finish', finishReason: { unified: 'error', raw: 'error' }, usage }]);
-  t.mock.method(sdk, 'createModelFromConfig', () => retryableFinish);
-  assert.equal((await createPiSDKStream(config, { reasoning: false })(piModel, context()).result()).stopReason, 'error');
-  assert.equal(retryableFinish.doStreamCalls.length, 3);
 });
 
-test("Pi StreamFn uses one SDK request and preserves text, reasoning signatures and tool arguments", async (t) => {
-  const sdk =
-    require("../lib/ai/providers/ai-sdk-provider") as typeof import("../lib/ai/providers/ai-sdk-provider");
-  const model = mockModel([
-    { type: "stream-start", warnings: [] },
-    { type: "reasoning-start", id: "reason" },
-    { type: "reasoning-delta", id: "reason", delta: "推理" },
-    {
-      type: "reasoning-end",
-      id: "reason",
-      providerMetadata: { openai: { reasoningSignature: "signed" } },
+test('a failing source falls back before anything is shown, never after; provider errors stay private', async t => {
+  const logged = t.mock.method(console, 'error', () => {});
+  const first = gateway(failure(500, 'private provider error api-key-secret'), reply('fallback success'));
+  let result = await createPiModelStream(sourced('first', 'second'), { fetch: first.fetch })(piModel, context()).result();
+  assert.equal(result.stopReason, 'stop');
+  assert.deepEqual(first.requests.map(request => new URL(request.url).hostname), ['first.example', 'second.example']);
+
+  const encoder = new TextEncoder();
+  // Pulled one read at a time, so the text arrives before the connection breaks.
+  let reads = 0;
+  const partial = gateway(() => new Response(new ReadableStream({
+    pull(controller) {
+      if (reads++ === 0) controller.enqueue(encoder.encode(frame({ delta: { content: 'already visible' } })));
+      else controller.error(new Error('api-key-secret'));
     },
-    { type: "text-start", id: "text" },
-    { type: "text-delta", id: "text", delta: "说明" },
-    { type: "text-end", id: "text" },
-    {
-      type: "tool-call",
-      toolCallId: "call",
-      toolName: "search",
-      input: '{"query":"星象"}',
-    },
-    {
-      type: "finish",
-      finishReason: { unified: "tool-calls", raw: "tool_calls" },
-      usage,
-    },
-  ]);
-  t.mock.method(sdk, "createModelFromConfig", () => model);
-  const output = await createPiSDKStream(config, {
-    reasoning: true,
-    apiKey: "ephemeral-fixture",
-  })(piModel, context());
-  const events = [];
-  for await (const event of output) events.push(event);
-  const message = await output.result();
-  assert.equal(message.stopReason, "toolUse");
-  assert.equal(message.usage.totalTokens, 8);
-  assert.equal(message.usage.reasoning, 1);
-  assert.ok(events.some((e) => e.type === "thinking_end"));
-  assert.ok(events.some((e) => e.type === "text_end"));
-  assert.deepEqual(
-    message.content.find((p) => p.type === "toolCall")?.arguments,
-    { query: "星象" },
-  );
-  const converted = toAgentModelMessages([message]);
-  const parts = converted[0].content;
-  assert.ok(Array.isArray(parts));
-  assert.deepEqual(parts.find((p) => p.type === "reasoning")?.providerOptions, {
-    openai: { reasoningSignature: "signed" },
-  });
-  assert.equal(model.doStreamCalls.length, 1);
-  assert.equal(model.doStreamCalls[0].tools?.length, 1);
-  assert.ok(model.doStreamCalls[0].abortSignal);
+  }), { headers: { 'content-type': 'text/event-stream' } }), reply('fallback success'));
+  const { events, message } = await drain(createPiModelStream(sourced('first', 'second'), { fetch: partial.fetch })(piModel, context()));
+  assert.equal(message.stopReason, 'error');
+  assert.equal(partial.requests.length, 1);
+  assert.equal(message.content[0].type === 'text' && message.content[0].text, 'already visible');
+  assert.equal(events.some(event => event.type === 'done'), false);
+  assert.ok(!JSON.stringify(message).includes('api-key-secret'));
+  result = await createPiModelStream(config, { fetch: gateway(failure(400, 'context_length_exceeded private-user-content secret-key')).fetch })(piModel, context()).result();
+  assert.equal(isContextOverflow(result), true);
+  assert.doesNotMatch(JSON.stringify(result), /private-user-content|secret-key/);
+  assert.equal(logged.mock.callCount(), 0);
 });
 
-test("SDK cached inputs map to Pi without double-counting and overflow stays recognizable without private details", async (t) => {
-  const sdk = require("../lib/ai/providers/ai-sdk-provider") as typeof import("../lib/ai/providers/ai-sdk-provider");
-  t.mock.method(sdk, "isModelAvailable", () => true);
-  t.mock.method(sdk, "createModelFromConfig", () => mockModel([
-    { type: "stream-start", warnings: [] },
-    { type: "text-start", id: "text" },
-    { type: "text-delta", id: "text", delta: "answer" },
-    { type: "text-end", id: "text" },
-    { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage: { inputTokens: { total: 900, noCache: 600, cacheRead: 200, cacheWrite: 100 }, outputTokens: { total: 100, text: 70, reasoning: 30 } } },
-  ]));
-  let stream = createPiSDKStream(config, { reasoning: false })(piModel, context());
-  for await (const _event of stream) void _event;
-  const result = await stream.result();
-  assert.equal(result.usage.input, 600);
-  assert.equal(result.usage.cacheRead, 200);
-  assert.equal(result.usage.cacheWrite, 100);
-  assert.equal(result.usage.output, 100);
-  assert.equal(result.usage.reasoning, 30);
-  assert.equal(result.usage.totalTokens, 1000);
-  t.mock.method(sdk, "createModelFromConfig", () => new MockLanguageModelV3({ doStream: async () => { throw new Error("context_length_exceeded private-user-content secret-key"); } }));
-  t.mock.method(console, "error", () => {});
-  stream = createPiSDKStream(config, { reasoning: false })(piModel, context());
-  for await (const _event of stream) void _event;
-  const failure = await stream.result();
-  assert.equal(isContextOverflow(failure), true);
-  assert.doesNotMatch(JSON.stringify(failure), /private-user-content|secret-key/);
+test('cached input maps to Pi usage without double-counting', async () => {
+  const gw = gateway(sse([{ delta: { content: 'answer' } }, { finish_reason: 'stop', usage: { prompt_tokens: 900, completion_tokens: 100, prompt_tokens_details: { cached_tokens: 200, cache_write_tokens: 100 }, completion_tokens_details: { reasoning_tokens: 30 } } }]));
+  const { usage } = await createPiModelStream(config, { fetch: gw.fetch })(piModel, context()).result();
+  assert.deepEqual([usage.input, usage.cacheRead, usage.cacheWrite, usage.output, usage.reasoning, usage.totalTokens], [600, 200, 100, 100, 30, 1000]);
 });
 
-test("Pi source fallback retries only before any response part; provider errors are sanitized", async (t) => {
-  const sdk =
-    require("../lib/ai/providers/ai-sdk-provider") as typeof import("../lib/ai/providers/ai-sdk-provider");
-  const loggedErrors = t.mock.method(console, "error", () => {});
-  t.mock.method(sdk, "isModelAvailable", () => true);
-  const fallback = {
-    ...config,
-    sources: [
-      {
-        sourceKey: "first",
-        sourceName: "first",
-        apiUrl: "https://first.example/v1",
-        apiKeyEnvVar: "FIRST",
+test('a stream that ends without a finish reason fails, keeping the partial text and sending no done event', async () => {
+  const gw = gateway(sse([{ delta: { content: 'partial' } }], { done: false }));
+  const { events, message } = await drain(createPiModelStream(config, { fetch: gw.fetch })(piModel, context()));
+  assert.equal(message.stopReason, 'error');
+  assert.equal(events.some(event => event.type === 'done'), false);
+  assert.equal(events.at(-1)?.type, 'error');
+  assert.equal(message.content[0].type, 'text');
+  const filtered = gateway(sse([{ delta: { content: 'partial' } }, { finish_reason: 'content_filter', usage: USAGE }]));
+  assert.equal((await createPiModelStream(config, { fetch: filtered.fetch })(piModel, context()).result()).stopReason, 'error');
+});
+
+test('the request time limit and a user stop both end the stream after partial output, without another request', async t => {
+  // One mock for both runs: a second mock of the same method would restore to the first, aborted one.
+  let timeout = new AbortController();
+  t.mock.method(AbortSignal, 'timeout', () => timeout.signal);
+  for (const scenario of ['timeout', 'user'] as const) {
+    timeout = new AbortController();
+    const user = new AbortController();
+    const encoder = new TextEncoder();
+    const gw = gateway((_request, init) => new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(frame({ delta: { content: 'partial' } })));
+        init?.signal?.addEventListener('abort', () => controller.error(init.signal!.reason), { once: true });
       },
-      {
-        sourceKey: "second",
-        sourceName: "second",
-        apiUrl: "https://second.example/v1",
-        apiKeyEnvVar: "SECOND",
-      },
-    ],
-  };
-  const failing = new MockLanguageModelV3({
-    doStream: async () => {
-      throw new Error("private provider error api-key-secret");
-    },
-  });
-  const success = mockModel([
-    { type: "stream-start", warnings: [] },
-    { type: "text-start", id: "text" },
-    { type: "text-delta", id: "text", delta: "fallback success" },
-    { type: "text-end", id: "text" },
-    { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage },
-  ]);
-  t.mock.method(sdk, "createModelFromConfig", (value: AIModelConfig) =>
-    value.sourceKey === "first" ? failing : success,
-  );
-  let stream = await createPiSDKStream(fallback, { reasoning: false })(
-    piModel,
-    context(),
-  );
-  for await (const _event of stream) {
-    void _event;
-  }
-  assert.equal((await stream.result()).stopReason, "stop");
-  assert.equal(success.doStreamCalls.length, 1);
-  const partial = mockModel([
-    { type: "stream-start", warnings: [] },
-    { type: "text-start", id: "text" },
-    { type: "text-delta", id: "text", delta: "already visible" },
-    { type: "error", error: new Error("api-key-secret") },
-  ]);
-  t.mock.method(sdk, "createModelFromConfig", (value: AIModelConfig) =>
-    value.sourceKey === "first" ? partial : success,
-  );
-  stream = await createPiSDKStream(fallback, { reasoning: false })(
-    piModel,
-    context(),
-  );
-  for await (const _event of stream) {
-    void _event;
-  }
-  const failed = await stream.result();
-  assert.equal(failed.stopReason, "error");
-  assert.ok(!JSON.stringify(failed).includes("api-key-secret"));
-  assert.equal(success.doStreamCalls.length, 1);
-  assert.equal(
-    loggedErrors.mock.callCount(),
-    0,
-    "SDK does not print raw provider exceptions",
-  );
-});
-
-test("unsupported tool warnings and abnormal model finish reasons fail explicitly", async (t) => {
-  const sdk =
-    require("../lib/ai/providers/ai-sdk-provider") as typeof import("../lib/ai/providers/ai-sdk-provider");
-  t.mock.method(console, "warn", () => {});
-  for (const scenario of ["tools", "error", "content-filter", "other"] as const) {
-    const model = mockModel([
-      {
-        type: "stream-start",
-        warnings:
-          scenario === "tools"
-            ? [{ type: "unsupported", feature: "tools" }]
-            : [],
-      },
-      { type: "text-start", id: "text" },
-      { type: "text-delta", id: "text", delta: "partial" },
-      { type: "text-end", id: "text" },
-      {
-        type: "finish",
-        finishReason: {
-          unified: scenario === "tools" ? "stop" : scenario,
-          raw: scenario,
-        },
-        usage,
-      },
-    ]);
-    t.mock.method(sdk, "createModelFromConfig", () => model);
-    const stream = await createPiSDKStream(config, {
-      reasoning: false,
-      apiKey: "fixture",
-    })(piModel, context());
-    for await (const event of stream) void event;
-    const message = await stream.result();
-    assert.equal(message.stopReason, "error", scenario);
-    assert.match(message.errorMessage ?? "", /工具调用.*普通对话/);
-  }
-});
-
-test("SDK EOF without a finish marker emits a Pi error, preserving partial text without a success event", async (t) => {
-  const sdk = require("../lib/ai/providers/ai-sdk-provider") as typeof import("../lib/ai/providers/ai-sdk-provider");
-  t.mock.method(sdk, "createModelFromConfig", () => mockModel([
-    { type: "stream-start", warnings: [] }, { type: "text-start", id: "text" },
-    { type: "text-delta", id: "text", delta: "partial" }, { type: "text-end", id: "text" },
-  ]));
-  const stream = createPiSDKStream(config, { reasoning: false, apiKey: "fixture" })(piModel, context());
-  const events = [];
-  for await (const event of stream) events.push(event);
-  assert.equal((await stream.result()).stopReason, "error");
-  assert.equal(events.some(event => event.type === "done"), false);
-  assert.equal(events.at(-1)?.type, "error");
-  assert.equal((await stream.result()).content[0].type, "text");
-});
-
-test("SDK timeout and user abort both emit a Pi failure after partial output", async (t) => {
-  const sdk = require("../lib/ai/providers/ai-sdk-provider") as typeof import("../lib/ai/providers/ai-sdk-provider");
-  for (const scenario of ["timeout", "user"] as const) {
-    const timeout = new AbortController(), user = new AbortController();
-    t.mock.method(AbortSignal, "timeout", () => timeout.signal);
-    const model = new MockLanguageModelV3({
-      doStream: async ({ abortSignal }) => ({ stream: new ReadableStream<Part>({
-        start(controller) {
-          controller.enqueue({ type: "stream-start", warnings: [] });
-          controller.enqueue({ type: "text-start", id: "text" });
-          controller.enqueue({ type: "text-delta", id: "text", delta: "partial" });
-          abortSignal!.addEventListener("abort", () => controller.error(abortSignal!.reason), { once: true });
-        },
-      }) }),
-    });
-    t.mock.method(sdk, "createModelFromConfig", () => model);
-    const stream = createPiSDKStream(config, { reasoning: false, apiKey: "fixture" })(piModel, context(), { signal: user.signal });
+    }), { headers: { 'content-type': 'text/event-stream' } }));
+    const stream = createPiModelStream(config, { fetch: gw.fetch })(piModel, context(), { signal: user.signal });
     const events = [];
     for await (const event of stream) {
       events.push(event);
-      if (event.type === "text_delta") (scenario === "timeout" ? timeout : user).abort();
+      if (event.type !== 'text_delta') continue;
+      if (scenario === 'timeout') timeout.abort(new DOMException('timed out', 'TimeoutError'));
+      else user.abort();
     }
-    assert.equal((await stream.result()).stopReason, scenario === "timeout" ? "error" : "aborted");
-    assert.equal(events.some(event => event.type === "done"), false, scenario);
-    assert.equal(model.doStreamCalls.length, 1);
+    const message = await stream.result();
+    assert.equal(message.stopReason, scenario === 'timeout' ? 'error' : 'aborted');
+    assert.equal(message.errorMessage, scenario === 'timeout' ? AGENT_TIMEOUT_MESSAGE : '任务已停止');
+    assert.equal(events.some(event => event.type === 'done'), false, scenario);
+    assert.equal(gw.requests.length, 1);
   }
+});
+
+test('a user key goes only to the user URL, and images reach a vision model as image parts', async () => {
+  const image = { type: 'image' as const, data: Buffer.from('png').toString('base64'), mimeType: 'image/png' };
+  let resolved = 0;
+  const gw = gateway(reply('看到了'));
+  await createPiModelStream(sourced('platform'), {
+    apiKey: 'ephemeral-fixture', fetch: gw.fetch,
+    resolveImages: async messages => { resolved++; return messages.map(message => message.role === 'user' ? { ...message, content: [{ type: 'text', text: '看图' }, image] } : message); },
+  })({ ...piModel, input: ['text', 'image'] }, context()).result();
+  const [request] = gw.requests;
+  assert.equal(resolved, 1);
+  assert.equal(request.url, 'https://model.example/v1/chat/completions');
+  assert.equal(request.headers.get('authorization'), 'Bearer ephemeral-fixture');
+  assert.deepEqual(request.body.messages.at(-1)?.content, [{ type: 'text', text: '看图' }, { type: 'image_url', image_url: { url: `data:image/png;base64,${image.data}` } }]);
+  // A text model never loads them.
+  await createPiModelStream(config, { fetch: gateway(reply('ok')).fetch, resolveImages: async () => { throw new Error('text model must not load images'); } })(piModel, context()).result();
+});
+
+test('summaries keep guarded source fallback and send no thinking fields', async () => {
+  const gw = gateway(failure(503, 'server_busy private upstream details'), reply('保留原盘事实和引用来源'));
+  const nativeModel = { ...piModel, reasoning: true, input: ['text', 'image'] } as Model<Api>;
+  let checks = 0;
+  const models = createGuardedAgentModels(nativeModel, createPiModelStream({ ...sourced('first', 'second'), vendor: 'deepseek' }, { fetch: gw.fetch, resolveImages: async () => { throw new Error('summary must remain text-only'); } }), async () => { checks++; });
+  const result = await generateSummary({ models }, nativeModel, [{ role: 'user', content: '目标与已确认资料', timestamp: 1 }], BACKGROUND_CONTEXT);
+  assert.equal(result.summary, '保留原盘事实和引用来源');
+  assert.equal(checks, 1);
+  assert.deepEqual(gw.requests.map(request => new URL(request.url).hostname), ['first.example', 'second.example']);
+  assert.equal(gw.requests[1].body.max_tokens, 2000);
+  assert.equal(gw.requests[1].body.enable_thinking, undefined);
+  assert.equal(result.usage.totalTokens, 8);
 });

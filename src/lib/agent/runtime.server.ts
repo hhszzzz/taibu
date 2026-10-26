@@ -19,7 +19,7 @@ import { getUserCreditInfo } from "@/lib/user/credits";
 import { AgentStore, type AgentRunRow, type AgentCommandRow } from "./store.server";
 import { agentMessageContent, putAgentPart, type AgentCheckpoint, type DomainTool, type PiStreamFn } from "./types";
 import { decryptAgentCredential } from "./credentials.server";
-import { AGENT_PUBLIC_STREAM_ERRORS, createPiSDKStream } from "./pi-stream.server";
+import { AGENT_PUBLIC_STREAM_ERRORS, createPiModelStream } from "./pi-stream.server";
 import { createAgentTools, assertAgentToolAccess } from "./tools.server";
 import { isCurrentAgentCheckpoint } from "./engine";
 import { AgentDurableStorage, agentDurablePersistence } from "./durable-storage.server";
@@ -48,6 +48,7 @@ import { projectAgentUsage } from './usage';
 import { splitAgentFollowUps } from './follow-ups';
 
 export const AGENT_INSTRUCTIONS = `\n你是太卜任务助手，使用真实工具逐步完成任务。
+每批工具调用前先用一句话说明这一步要做什么、为什么；耗时较长的任务中途简要说明进展。没有实际执行的工具调用或核对，不能说成已经做过。
 出生信息不足必须调用 ask_user，不可猜测。需要多个信息时一次提交带稳定 ID 的问题数组，适合时提供选项，允许跳过非必要问题。默认直接执行，不另设方案审批；本任务开启计划模式时按计划模式段执行。
 用户消息开头的【发送时间】由服务端按用户所在时区记下，最新一条就是现在：占当下起卦起局、今天、今年、流年、年龄与「最近」都以它为准，不凭印象推算；方法卡要求先取得实际的当前时间时，取的就是这一行。
 复杂分析使用 todo_write 展示真实步骤，保持稳定条目 ID 并用 revision 更新，最多一项执行中；简单问答直接回答。
@@ -304,7 +305,7 @@ export async function executeAgentRun(
       const model: Model<Api> = selected.id === config.id ? piModel : { ...piModel, id: selected.id, name: selected.name, baseUrl: selected.apiUrl, reasoning: selected.supportsReasoning,
         input: ['text'], contextWindow: capacity?.maxContext ?? 0, maxTokens: selected.defaultMaxTokens ?? 4096 };
       return { model, authorize: options => authorizeModel(selected, options?.reasoning !== undefined),
-        stream: injected?.streamFn ?? createPiSDKStream(selected, { reasoning: selected.supportsReasoning, nativeReasoning: true, apiKey,
+        stream: injected?.streamFn ?? createPiModelStream(selected, { reasoning: selected.supportsReasoning, apiKey,
           ...(selected.id === config.id && selected.supportsVision && !run.input.customProvider ? { resolveImages: (messages: Parameters<typeof resolveAttachmentImages>[3]) => resolveAttachmentImages(store.db,run.user_id,run.conversation_id,messages) } : {}) }) };
     });
     const [primary, ...additional] = bindings;

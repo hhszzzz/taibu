@@ -347,7 +347,8 @@ async function fetchWithGatewayHeaders(
     }
 }
 
-function gatewayFetch(url: string | URL | Request, init?: RequestInit): Promise<Response> {
+/** 平台网关的请求：自报身份、按是否流式声明 Accept。 */
+export function gatewayFetch(url: string | URL | Request, init?: RequestInit): Promise<Response> {
     return fetchWithGatewayHeaders(url, init);
 }
 

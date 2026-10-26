@@ -23,7 +23,6 @@ import {
   stableAgentSeed,
   createAgentTools,
 } from "../lib/agent/tools.server";
-import { MockLanguageModelV3 } from "ai/test";
 import { estimateContextTokens } from '@earendil-works/pi-ai/utils/estimate';
 
 import { config, row, MemoryStore, scripted, isSummaryTranscript } from "./helpers/agent-runtime-fixture";
@@ -43,7 +42,7 @@ beforeEach((t) => {
   }));
   t.mock.method(settings, "readFeatureModuleStateFresh", async () => ({ status: "enabled" as const }));
   t.mock.method(sdk, "isModelAvailable", () => true);
-  t.mock.method(sdk, "createModelFromConfig", () => new MockLanguageModelV3());
+  t.mock.method(sdk, "getApiKey", () => "fixture-gateway-key");
 });
 
 test("Pi completes more than common loop defaults using real core tools with no per-task cap", async () => {
@@ -292,31 +291,33 @@ test("unsupported tools are reported without copying upstream error details", as
   assert.match((finished.args.p_message as AgentRunRow["public_message"]).agent!.error!, /不支持工具调用/);
 });
 
-test("native Durable settlement fails SDK EOF and timeout, retaining visible text without saving a record", async (t) => {
-  const sdk = require("../lib/ai/providers/ai-sdk-provider") as typeof import("../lib/ai/providers/ai-sdk-provider");
+test("native Durable settlement fails a stream cut off without a finish, and one that runs out of time, keeping the visible text", async (t) => {
+  // One mock for both runs: a second mock of the same method would restore to the first, aborted one.
+  let timeout = new AbortController();
+  t.mock.method(AbortSignal, "timeout", () => timeout.signal);
+  const text = `data: ${JSON.stringify({ id: "x", object: "chat.completion.chunk", created: 1, model: "fixture", choices: [{ index: 0, delta: { content: "partial interrupted response" }, finish_reason: null }] })}\n\n`;
   for (const scenario of ["eof", "timeout"] as const) {
-    const timeout = new AbortController();
-    t.mock.method(AbortSignal, "timeout", () => timeout.signal);
-    const model = new MockLanguageModelV3({ doStream: async ({ abortSignal }) => ({
-      stream: new ReadableStream({ start(controller) {
-        controller.enqueue({ type: "stream-start", warnings: [] });
-        controller.enqueue({ type: "text-start", id: "text" });
-        controller.enqueue({ type: "text-delta", id: "text", delta: "partial interrupted response" });
-        if (scenario === "eof") controller.close();
-        else {
-          abortSignal!.addEventListener("abort", () => controller.error(abortSignal!.reason), { once: true });
-          setTimeout(() => timeout.abort(), 20);
-        }
-      } }),
-    }) });
-    t.mock.method(sdk, "createModelFromConfig", () => model);
+    timeout = new AbortController();
+    let requests = 0;
+    t.mock.method(globalThis, "fetch", async (_input: unknown, init?: RequestInit) => {
+      requests++;
+      let reads = 0;
+      return new Response(new ReadableStream({
+        pull(controller) {
+          if (reads++ === 0) return controller.enqueue(new TextEncoder().encode(text));
+          if (scenario === "eof") return controller.close();
+          init?.signal?.addEventListener("abort", () => controller.error(init.signal!.reason), { once: true });
+          setTimeout(() => timeout.abort(new DOMException("timed out", "TimeoutError")), 20);
+        },
+      }), { headers: { "content-type": "text/event-stream" } });
+    });
     const store = new MemoryStore();
     await executeAgentRun(store, row(), undefined, { config });
     const finished = store.writes.find(w => w.name === "agent_finish_run")!;
     assert.equal(finished.args.p_status, "failed", scenario);
     assert.match((finished.args.p_message as AgentRunRow["public_message"]).content, /partial interrupted/);
     assert.ok(store.log.flatMap(c => c.writes).some(w => w.type === "submission" && w.value.status === "unanswered"));
-    assert.equal(model.doStreamCalls.length, 1);
+    assert.equal(requests, 1);
   }
 });
 

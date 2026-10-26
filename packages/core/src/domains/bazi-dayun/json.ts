@@ -11,9 +11,7 @@ import type {
 import {
   normalizeDetailLevelBinary
 } from '../../shared/render-utils.js';
-import type {
-  DayunOutput
-} from './types.js';
+import { DAYUN_YEAR_SHIFT_NOTE, type DayunOutput } from './types.js';
 import type {
   DayunCanonicalTextOptions
 } from '../shared/text-options.js';
@@ -127,8 +125,10 @@ function renderDayunCanonicalJSONBase(result: DayunOutput, options: { detailLeve
       起运详情: result.startAgeDetail,
       ...(result.startSolar ? { 起运时刻: result.startSolar, 时区: result.calculationOptions?.startSolarTimezone ?? 'Asia/Shanghai' } : {}),
       ...(result.direction ? { 顺逆: result.direction === 'forward' ? '顺行' : '逆行' } : {}),
+      ...(result.startRange ? { 最晚起运时刻: result.startRange.latestStartSolar } : {}),
+      ...(result.startRange?.yearShift ? { 交运年份: DAYUN_YEAR_SHIFT_NOTE } : {}),
     },
-    大运列表: result.list.map((item) => buildDayunItemJSON({
+    大运列表: result.list.map((item) => ({ ...buildDayunItemJSON({
       startYear: item.startYear,
       startAge: item.startAge,
       ganZhi: item.ganZhi,
@@ -142,7 +142,7 @@ function renderDayunCanonicalJSONBase(result: DayunOutput, options: { detailLeve
       shenSha: detailLevel === 'full' ? item.shenSha : undefined,
       branchRelations: detailLevel === 'full' ? item.branchRelations : undefined,
       liunianList: detailLevel === 'full' ? item.liunianList : undefined,
-    })),
+    }), ...(result.startRange?.yearShift ? { 最晚起运年份: item.startYear + 1, 最晚起运年龄: item.startAge + 1 } : {}) })),
   };
 
   if (detailLevel === 'full' && result.xiaoYun.length > 0) {

@@ -27,11 +27,11 @@ export const baziCalculateDefinition: ToolDefinition = {
       },
       birthHour: {
         type: 'integer', minimum: 0, maximum: 23,
-        description: "出生时（0-23）",
+        description: "出生时（0-23）；不知道出生时辰时省略，此时不排时柱，也不给命宫、时柱神煞与小运",
       },
       birthMinute: {
         type: 'integer', minimum: 0, maximum: 59,
-        description: "出生分（0-59）",
+        description: "出生分（0-59）；省略 birthHour 时不填",
         default: 0,
       },
       calendarType: {
@@ -60,10 +60,11 @@ export const baziCalculateDefinition: ToolDefinition = {
         default: 'default',
       },
     },
-    required: ['gender', 'birthYear', 'birthMonth', 'birthDay', 'birthHour'],
+    required: ['gender', 'birthYear', 'birthMonth', 'birthDay'],
     examples: [
       { gender: 'male', birthYear: 1990, birthMonth: 1, birthDay: 15, birthHour: 9 },
       { gender: 'female', birthYear: 1995, birthMonth: 6, birthDay: 20, birthHour: 23, calendarType: 'lunar' },
+      { gender: 'female', birthYear: 1988, birthMonth: 3, birthDay: 12 },
     ],
   },
   annotations: {

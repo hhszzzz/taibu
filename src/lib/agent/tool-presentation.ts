@@ -45,6 +45,8 @@ function stringArray(value: unknown) { return Array.isArray(value) && value.ever
 function rows(value: unknown, length: number, keys: string[]) {
   return Array.isArray(value) && value.length === length && arrayRows(value, keys);
 }
+/** 八字的柱数：标了「出生时辰」（时辰未知）的盘只有年、月、日三柱 */
+const pillarCount = (info: Record<string, unknown>) => typeof info.出生时辰 === 'string' ? 3 : 4;
 export function getAgentToolArtifactId(tool: AgentToolPart): string | null {
   const id = record(tool.output).artifactId;
   return typeof id === 'string' && id ? id : null;
@@ -71,7 +73,7 @@ export function getAgentChart(tool: AgentToolPart): AgentChart | null {
   const title = AGENT_CHART_NAMES[name];
   switch (name) {
     case 'bazi':
-      if (!strings(basic, ['性别', '日主']) || !rows(chart.四柱, 4, ['柱', '干支', '天干十神', '地势']) || !Array.isArray(chart.干支关系)) return null;
+      if (!strings(basic, ['性别', '日主']) || !rows(chart.四柱, pillarCount(basic), ['柱', '干支', '天干十神', '地势']) || !Array.isArray(chart.干支关系)) return null;
       return { kind: 'bazi', chart: chart as unknown as BaziCanonicalJSON, title, summary: (chart.四柱 as BaziCanonicalJSON['四柱']).map(pillar => pillar.干支).join(' · ') };
     case 'ziwei':
       if (!strings(basic, ['阳历', '农历', '四柱', '命主', '身主', '五行局']) || !rows(chart.十二宫位, 12, ['宫位', '干支', '是否身宫'])) return null;
@@ -331,7 +333,7 @@ export function getAgentCalculation(tool: AgentToolPart): AgentCalculation | nul
     case 'bazi_hepan': {
       const relations = (value: unknown) => arrayRows(value, ['类型', '说明']) && (value as unknown[]).every(row => arrayRows(record(row).位置, ['柱', '部位', '字']));
       if (!rows(data.双方, 2, ['称呼', '性别', '日主', '月令', '月令旺衰', '生肖'])) return null;
-      if (!(data.双方 as unknown[]).every(person => rows(record(person).四柱, 4, ['柱', '干支', '纳音']) && stringArray(record(person).缺失五行))) return null;
+      if (!(data.双方 as unknown[]).every(person => rows(record(person).四柱, pillarCount(record(person)), ['柱', '干支', '纳音']) && stringArray(record(person).缺失五行))) return null;
       if (!stringArray(record(data.日主互见).说明) || !strings(data.日主互见, ['五行生克']) || !strings(data.年命纳音, ['说明', '五行生克'])) return null;
       if (!['日柱之间', '年柱之间', '其余关系'].every(key => relations(data[key])) || !stringArray(data.五行互补)) return null;
       return { kind: 'bazi_hepan', data: data as unknown as BaziHepanCanonicalJSON };

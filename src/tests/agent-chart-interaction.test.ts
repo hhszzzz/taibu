@@ -1,7 +1,7 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { toBaziJson, type BaziPillarJSON, type BaziOutput } from 'taibu-core/bazi';
+import { baziPillarEntries, toBaziJson, type BaziPillarJSON, type BaziOutput } from 'taibu-core/bazi';
 import { buildToolSuccessPayload, executeTool, listToolDefinitions } from 'taibu-core/mcp';
 import { getAgentChart, getAgentToolText, type AgentToolPart } from '../lib/agent/tool-presentation';
 import { AGENT_CHART_NAMES, AGENT_DRILLDOWN_BASES, CHART_TARGET_DIRECTORY_HEADING, getAgentDrilldownBase } from '../lib/agent/tool-catalog';
@@ -192,10 +192,14 @@ test('Core exposes actual bazi relation endpoints in default/full formats withou
   const legacy = structuredClone(value);
   if (legacy.kind === 'bazi') delete legacy.chart.干支关系明细;
   assert.equal(getChartTargets(legacy).filter(target => target.kind === 'bazi_relation').length, 0, 'legacy natural-language relations cannot invent coordinates');
-  const unknown = structuredClone(value);
-  if (unknown.kind === 'bazi') unknown.chart.四柱[3].干支 = '**';
-  assert.equal(getChartTargets(unknown).filter(target => target.kind === 'bazi_cell').length, 6);
   assert.equal(JSON.stringify(value), original);
+  // 出生时辰未知的盘只有三柱：只能定位到六个字，关系也都落在这六个字上
+  const withoutHour = { gender: birth.gender, birthYear: birth.birthYear, birthMonth: birth.birthMonth, birthDay: birth.birthDay };
+  const unknown = getAgentChart({ type: 'tool', name: 'bazi', id: 'bazi', title: 'bazi', status: 'completed',
+    output: { artifactId: randomUUID(), result: buildToolSuccessPayload('bazi', await executeTool('bazi', withoutHour)).structuredContent } })!;
+  const unknownTargets = getChartTargets(unknown);
+  assert.equal(unknownTargets.filter(target => target.kind === 'bazi_cell').length, 6);
+  assert.ok(unknownTargets.every(target => target.kind !== 'bazi_cell' || target.cell.柱 !== '时柱'));
 });
 
 test('Ziwei targets use returned palaces, exact star group/index and work with slim palace indices', async () => {
@@ -212,8 +216,7 @@ test('Ziwei targets use returned palaces, exact star group/index and work with s
 
 test('repeated characters retain their actual pillar positions and nonadjacent stem endpoints', async () => {
   const output = await executeTool('bazi', birth) as BaziOutput;
-  const keys = ['year', 'month', 'day', 'hour'] as const;
-  keys.forEach((key, index) => { output.fourPillars[key].stem = index < 2 ? '甲' : '庚'; output.fourPillars[key].branch = index < 2 ? '午' : '子'; });
+  baziPillarEntries(output).forEach(({ pillar }, index) => { pillar.stem = index < 2 ? '甲' : '庚'; pillar.branch = index < 2 ? '午' : '子'; });
   output.relations = [{ type: '刑', pillars: ['年支', '月支'], description: '午午自刑' }];
   output.tianGanWuHe = []; output.diZhiBanHe = []; output.diZhiSanHui = [];
   output.tianGanChongKe = [{ stemA: '甲', stemB: '庚', positions: ['年干', '时干'] }];
@@ -384,6 +387,19 @@ test('saved-chart focus uses the inspected snapshot and rejects revoked ownershi
   assert.equal(reads, 1, 'focusing never recalculates the inspected reading');
   owned = false;
   await assert.rejects(focus.execute('focus-saved', args), /不存在或无权访问/);
+});
+
+test('a saved bazi record without a birth time inspects as three pillars instead of failing', async t => {
+  const store = new ChartStore(), run = row(), id = randomUUID();
+  const record = { id, gender: 'female', birth_date: '1995-01-09', birth_time: null, timezone: 'Asia/Shanghai' };
+  const query = { select: () => query, where: () => query, executeTakeFirst: async () => ({ id }) };
+  t.mock.method(require('../lib/db/context.server'), 'systemDb', () => createMockScopedDb({ tx: async (work) => work({ selectFrom: () => query } as never) }));
+  t.mock.method(require('../lib/data-sources'), 'getProvider', async () => ({ get: async () => record }));
+  const tools = await createAgentTools(store, run, run.checkpoint);
+  const inspected = await tools.find(tool => tool.name === 'inspect_chart')!.execute('inspect-unknown', { reference: 'bazi_chart:' + id });
+  const chart = (inspected.details as { result: { 四柱: BaziPillarJSON[]; 基本信息: { 出生时辰?: string } } }).result;
+  assert.deepEqual(chart.四柱.map(pillar => pillar.干支), ['甲戌', '丁丑', '庚子']);
+  assert.match(chart.基本信息.出生时辰 ?? '', /^未知（未排时柱/u);
 });
 
 test('native Pi tools project chart actions and rebuild the exact focus after an outer checkpoint is lost', async () => {

@@ -18,6 +18,8 @@ export interface BaziWuxingCanonicalJSON {
     藏干: Array<{ 天干: string; 气性: string; 透出: string[]; }>;
   };
   缺失五行: string[];
+  /** 只在出生时辰未知时出现：事实只取年、月、日三柱 */
+  出生时辰?: string;
   筛选?: { 事实组: BaziWuxingSection[]; };
   /** 日主在前，其后年干、月干、时干的根 */
   通根?: BaziWuxingRootJSON[];
@@ -36,6 +38,9 @@ const WUXING_NOTES = [
   '缺失五行：天干、地支本气、藏干都没有出现的五行',
   '给出 sections 时只列所选事实组；日主、月令与缺失五行总在',
 ];
+
+/** 时辰未知时缺失五行只就三柱而言 */
+const UNKNOWN_TIME_NOTE = '未知（只看年、月、日三柱；缺失的五行可能由时柱补上）';
 
 function row(fact: WuxingFact): GanzhiRelationRowJSON {
   return {
@@ -57,6 +62,7 @@ function renderBaziWuxingJSONBase(result: BaziWuxingOutput): BaziWuxingCanonical
       藏干: month.hiddenStems.map((hidden) => ({ 天干: hidden.stem, 气性: hidden.qiType, 透出: [...hidden.revealedIn] })),
     },
     缺失五行: [...result.missingElements],
+    ...(result.birthTimeUnknown ? { 出生时辰: UNKNOWN_TIME_NOTE } : {}),
     ...(result.sections ? { 筛选: { 事实组: [...result.sections] } } : {}),
     ...(result.stemRoots ? {
       通根: result.stemRoots.flatMap((item) => item.roots.map(rootRow)),
@@ -92,6 +98,7 @@ function renderBaziWuxingTextBase(result: BaziWuxingOutput): string {
     ...facts('干支自坐', result.pillarSelf),
     ...facts('相邻天干', result.adjacentStems),
     '', '## 缺失五行', '', `- ${result.missingElements.join('、') || '无'}`,
+    ...(result.birthTimeUnknown ? [`- 出生时辰${UNKNOWN_TIME_NOTE}`] : []),
   ];
   return lines.join('\n');
 }

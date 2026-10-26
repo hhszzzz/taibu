@@ -1,9 +1,7 @@
 import {
   normalizeDetailLevelBinary
 } from '../../shared/render-utils.js';
-import type {
-  DayunOutput
-} from './types.js';
+import { DAYUN_YEAR_SHIFT_NOTE, dayunYearText, type DayunOutput } from './types.js';
 import type {
   DayunCanonicalTextOptions
 } from '../shared/text-options.js';
@@ -17,16 +15,26 @@ export function renderDayunCanonicalText(result: DayunOutput, options: DayunCano
   return renderDayunCanonicalDefaultText(result);
 }
 
+/** 起运信息：时辰未知时起运时刻写成当天最早到最晚出生的范围，另写交运年份的推迟 */
+function startLines(result: DayunOutput): string[] {
+  const range = result.startRange ? ` 至 ${result.startRange.latestStartSolar} 之间` : '';
+  return [
+    `- 起运年龄：${result.startAge}岁`,
+    `- 起运详情：${result.startAgeDetail}`,
+    ...(result.startSolar ? [`- 起运时刻：${result.startSolar}${range}（${result.calculationOptions?.startSolarTimezone ?? 'Asia/Shanghai'}）`] : []),
+    ...(result.startRange?.yearShift ? [`- 交运年份：${DAYUN_YEAR_SHIFT_NOTE}`] : []),
+    ...(result.direction ? [`- 顺逆：${result.direction === 'forward' ? '顺行' : '逆行'}`] : []),
+  ];
+}
+
 function renderDayunCanonicalDefaultText(result: DayunOutput): string {
+  const shift = result.startRange?.yearShift;
   const lines: string[] = [
     '# 大运流年',
     '',
     '## 起运信息',
     '',
-    `- 起运年龄：${result.startAge}岁`,
-    `- 起运详情：${result.startAgeDetail}`,
-    ...(result.startSolar ? [`- 起运时刻：${result.startSolar}（${result.calculationOptions?.startSolarTimezone ?? 'Asia/Shanghai'}）`] : []),
-    ...(result.direction ? [`- 顺逆：${result.direction === 'forward' ? '顺行' : '逆行'}`] : []),
+    ...startLines(result),
     '',
     '## 大运列表',
     '',
@@ -38,22 +46,20 @@ function renderDayunCanonicalDefaultText(result: DayunOutput): string {
     const hiddenStemsText = dayun.hiddenStems && dayun.hiddenStems.length > 0
       ? dayun.hiddenStems.map((hs) => `${hs.stem}(${hs.tenGod})`).join(' ')
       : '-';
-    lines.push(`| ${dayun.startYear} | ${dayun.startAge}岁 | ${dayun.ganZhi} | ${dayun.tenGod || '-'} | ${hiddenStemsText} |`);
+    lines.push(`| ${dayunYearText(dayun.startYear, shift)} | ${dayunYearText(dayun.startAge, shift, '岁')} | ${dayun.ganZhi} | ${dayun.tenGod || '-'} | ${hiddenStemsText} |`);
   }
 
   return lines.join('\n');
 }
 
 function renderDayunCanonicalFullText(result: DayunOutput): string {
+  const shift = result.startRange?.yearShift;
   const lines: string[] = [
     '# 大运流年',
     '',
     '## 起运信息',
     '',
-    `- 起运年龄：${result.startAge}岁`,
-    `- 起运详情：${result.startAgeDetail}`,
-    ...(result.startSolar ? [`- 起运时刻：${result.startSolar}（${result.calculationOptions?.startSolarTimezone ?? 'Asia/Shanghai'}）`] : []),
-    ...(result.direction ? [`- 顺逆：${result.direction === 'forward' ? '顺行' : '逆行'}`] : []),
+    ...startLines(result),
   ];
 
   if (result.xiaoYun.length > 0) {
@@ -78,14 +84,14 @@ function renderDayunCanonicalFullText(result: DayunOutput): string {
       : '-';
     const shenShaText = dayun.shenSha.length > 0 ? dayun.shenSha.join('、') : '-';
     const relationText = dayun.branchRelations.length > 0 ? dayun.branchRelations.map((item) => item.description).join('；') : '-';
-    lines.push(`| ${dayun.startYear} | ${dayun.startAge}岁 | ${dayun.ganZhi} | ${dayun.tenGod || '-'} | ${dayun.branchTenGod || '-'} | ${hiddenStemsText} | ${dayun.diShi || '-'} | ${dayun.naYin || '-'} | ${shenShaText} | ${relationText} |`);
+    lines.push(`| ${dayunYearText(dayun.startYear, shift)} | ${dayunYearText(dayun.startAge, shift, '岁')} | ${dayun.ganZhi} | ${dayun.tenGod || '-'} | ${dayun.branchTenGod || '-'} | ${hiddenStemsText} | ${dayun.diShi || '-'} | ${dayun.naYin || '-'} | ${shenShaText} | ${relationText} |`);
   }
 
   for (const [index, dayun] of result.list.entries()) {
     const endYear = result.list[index + 1]?.startYear ? result.list[index + 1]!.startYear - 1 : dayun.startYear + 9;
     lines.push('');
     lines.push(`### ${dayun.startYear}-${endYear} ${dayun.ganZhi}`);
-    lines.push(`- 起运年龄: ${dayun.startAge}岁`);
+    lines.push(`- 起运年龄: ${dayunYearText(dayun.startAge, shift, '岁')}`);
     if (dayun.branchRelations.length > 0) {
       lines.push(`- 原局关系: ${dayun.branchRelations.map((item) => item.description).join('；')}`);
     }

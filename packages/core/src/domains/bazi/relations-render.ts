@@ -70,16 +70,20 @@ export function relationsFilterText(filter: BaziRelationsFilter): string {
   return [pillars, types].filter(Boolean).join('；');
 }
 
+/** 出生时辰未知的命盘上详查：原局没有时柱，关系里也就没有时柱 */
+export const NATAL_UNKNOWN_TIME_NOTE = '未知（原局只有年、月、日三柱，关系不含时柱）';
+
 /** 同字牵连的段名：说明这些关系为何在筛选之外仍然列出 */
 export const LINKED_SECTION = '同字牵连（不在筛选内，与上列关系共用同一字，须一并看）';
 
 function queryJSON(query: BaziRelationsQuery): Record<string, string | number> {
   return {
-    ...(query.dayun ? { 大运: `第${query.dayun.index}步 ${query.dayun.ganZhi}（${query.dayun.startYear}–${query.dayun.endYear}，${query.dayun.startAge}岁起）` } : {}),
+    ...(query.dayun ? { 大运: `第${query.dayun.index}步 ${query.dayun.ganZhi}（${query.dayun.startYear}–${query.dayun.endYear}，${query.dayun.startAge}岁起）${query.dayun.note ? `；${query.dayun.note}` : ''}` } : {}),
     ...(query.xiaoYun ? { 小运: `${query.xiaoYun.ganZhi}（虚岁${query.xiaoYun.age}，起运前）` } : {}),
     ...(query.year !== undefined ? { 流年: query.year } : {}),
     ...(query.month ? { 流月: `${query.month.ganZhi}月（${query.month.jieQi}起，${query.month.startDate} 至 ${query.month.endDate}）` } : {}),
     ...(query.day ? { 流日: query.day } : {}),
+    ...(query.birthTimeUnknown ? { 出生时辰: NATAL_UNKNOWN_TIME_NOTE } : {}),
   };
 }
 

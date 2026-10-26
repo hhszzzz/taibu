@@ -20,7 +20,7 @@ import {
   type GanzhiRelationParticipant,
   type GanzhiRelationType,
 } from '../shared/ganzhi-relations.js';
-import { calculateBaziLiuYueData, getNaYin } from './calculate.js';
+import { baziPillarEntries, calculateBaziLiuYueData, getNaYin } from './calculate.js';
 import type { BaziInput, BaziOutput } from './types.js';
 
 export const BAZI_RELATIONS_RULE_VERSION = 'bazi-relations-2026.10';
@@ -58,11 +58,14 @@ export interface BaziRelationsPillar {
 }
 
 export interface BaziRelationsQuery {
-  dayun?: { index: number; ganZhi: string; startYear: number; endYear: number; startAge: number; };
+  /** note：出生时辰未知、这一年正当交运时，它也可能仍属上一步 */
+  dayun?: { index: number; ganZhi: string; startYear: number; endYear: number; startAge: number; note?: string; };
   xiaoYun?: { age: number; ganZhi: string; };
   year?: number;
   month?: { index: number; ganZhi: string; jieQi: string; startDate: string; endDate: string; };
   day?: string;
+  /** 出生时辰未知：原局只有年、月、日三柱 */
+  birthTimeUnknown?: true;
 }
 
 /** 岁运提示：伏吟（干支全同；大运与流年伏吟即岁运并临）、天克地冲（天干相冲且地支六冲） */
@@ -88,8 +91,6 @@ export interface BaziRelationsOutput {
   omitted?: string[];
   calculationOptions: Record<string, unknown> & { ruleVersion: string; };
 }
-
-const NATAL_LABELS = ['年柱', '月柱', '日柱', '时柱'] as const;
 
 function tenGods(dayStem: string, stem: string, branch: string, isDayPillar: boolean) {
   const mainStem = HIDDEN_STEM_DETAILS[branch]?.[0]?.stem;
@@ -176,6 +177,7 @@ function missingPillarHint(pillar: BaziRelationPillar): string {
     case '流年': return '查流年须同时给出 year 或 day';
     case '流月': return '查流月须同时给出 year 与 month，或 day';
     case '流日': return '查流日须改用 day（YYYY-MM-DD，与 year、month 互斥）';
+    case '时柱': return '出生时辰未知，命盘没有时柱';
     default: return '';
   }
 }
@@ -190,9 +192,10 @@ export function deriveBaziRelations(
   validateSelector(selector);
   const filter = resolveRelationsFilter(selector);
   const dayStem = chart.dayMaster;
-  const natal = [chart.fourPillars.year, chart.fourPillars.month, chart.fourPillars.day, chart.fourPillars.hour];
-  const pillars: GanzhiPillar[] = natal.map((p, i) => ({ label: NATAL_LABELS[i], layer: '原局', stem: p.stem, branch: p.branch }));
-  const query: BaziRelationsQuery = {};
+  // 出生时辰未知时原局只有年、月、日三柱
+  const natal = baziPillarEntries(chart);
+  const pillars: GanzhiPillar[] = natal.map(({ label, pillar }) => ({ label, layer: '原局', stem: pillar.stem, branch: pillar.branch }));
+  const query: BaziRelationsQuery = chart.birthTimeUnknown ? { birthTimeUnknown: true } : {};
   const fortuneHints: BaziFortuneHint[] = [];
   const add = (label: string, layer: GanzhiLayer, ganZhi: string) => {
     pillars.push({ label, layer, stem: ganZhi[0], branch: ganZhi[1] });
@@ -223,7 +226,11 @@ export function deriveBaziRelations(
       const item = dayun.list[index];
       add('大运', '大运', item.ganZhi);
       const next = dayun.list[index + 1];
-      query.dayun = { index: index + 1, ganZhi: item.ganZhi, startYear: item.startYear, endYear: next ? next.startYear - 1 : item.startYear + 9, startAge: item.startAge };
+      // 时辰未知时交运年份可能晚一年：这一年正当交运时，也可能还在上一步大运（首步之前为小运期间）
+      const previous = dayun.list[index - 1];
+      const note = dayun.startRange?.yearShift && flowYear === item.startYear
+        ? `出生时辰未知：${flowYear} 年也可能仍在${previous ? `上一步大运 ${previous.ganZhi}` : '起运之前'}` : undefined;
+      query.dayun = { index: index + 1, ganZhi: item.ganZhi, startYear: item.startYear, endYear: next ? next.startYear - 1 : item.startYear + 9, startAge: item.startAge, ...(note ? { note } : {}) };
     } else if (flowYear !== undefined && birthYear !== undefined) {
       const age = flowYear - birthYear + 1;
       const xiaoYun = dayun.xiaoYun.find((item) => item.age === age);
@@ -256,7 +263,7 @@ export function deriveBaziRelations(
     throw new CoreInputError('pillars', `本次查询没有「${missing}」柱（参与柱位：${labels.join('、')}）；${missingPillarHint(missing)}`);
   }
 
-  const overlayIndices = pillars.map((_, i) => i).slice(NATAL_LABELS.length);
+  const overlayIndices = pillars.map((_, i) => i).slice(natal.length);
   const overlayRelations = overlayIndices.length > 0 ? analyzeGanzhiRelations(pillars, { focus: overlayIndices }) : [];
 
   // 岁运提示：伏吟（干支全同）、天克地冲（天干相冲且地支六冲，亦称反吟）、岁运并临

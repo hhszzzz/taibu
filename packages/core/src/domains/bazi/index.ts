@@ -1,9 +1,12 @@
 export {
+  BAZI_PILLAR_LABELS,
+  baziPillarEntries,
   calculateBaziData as calculateBazi,
   calculateBaziLiuRiData,
   calculateBaziLiuYueData,
   calculateBaziShenShaData,
 } from './calculate.js';
+export type { BaziPillarKey } from './calculate.js';
 export { renderBaziCanonicalJSON as toBaziJson } from './json.js';
 export { BAZI_RELATION_PILLARS, deriveBaziRelations } from './relations.js';
 export { toBaziRelationsJson, toBaziRelationsText } from './relations-render.js';

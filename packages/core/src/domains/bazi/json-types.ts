@@ -15,6 +15,8 @@ export interface BaziCanonicalJSON {
     真太阳时?: TrueSolarTimeJSON;
     胎元?: string;
     命宫?: string;
+    /** 只在出生时辰未知时出现；此时四柱只有年、月、日三柱 */
+    出生时辰?: string;
   };
   四柱: BaziPillarJSON[];
   干支关系: string[];

@@ -11,7 +11,7 @@ const describe = (rows) => rows.map((row) => `${row.类型}:${row.位置.map((p)
 
 test('bazi_liunian_scan requires a year range on top of the bazi input', () => {
   const tool = listToolDefinitions().find((item) => item.name === 'bazi_liunian_scan');
-  assert.deepEqual(tool.inputSchema.required, ['gender', 'birthYear', 'birthMonth', 'birthDay', 'birthHour', 'fromYear', 'toYear']);
+  assert.deepEqual(tool.inputSchema.required, ['gender', 'birthYear', 'birthMonth', 'birthDay', 'fromYear', 'toYear']);
   assert.ok(tool.inputSchema.examples.every((example) => example.fromYear && example.toYear && example.birthYear));
 });
 

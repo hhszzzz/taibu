@@ -5,7 +5,9 @@ import type {
   BaziOutput
 } from './types.js';
 import { GAN_WUXING } from '../../shared/utils.js';
-import { baziBranchRelationText } from './json.js';
+import { baziBranchRelationText, baziUnknownTimeNote } from './json.js';
+import { baziPillarEntries } from './calculate.js';
+import { DAYUN_YEAR_SHIFT_NOTE, dayunYearText } from '../bazi-dayun/types.js';
 import type {
   BaziCanonicalTextOptions
 } from '../shared/text-options.js';
@@ -79,6 +81,7 @@ function renderBaziCanonicalDefaultText(chart: BaziOutput, options: BaziCanonica
   if (options.name) lines.push(`- 姓名: ${options.name}`);
   lines.push(`- 性别: ${chart.gender === 'male' ? '男' : '女'}`);
   lines.push(`- 日主: ${chart.dayMaster}`);
+  if (chart.birthTimeUnknown) lines.push(`- 出生时辰: ${baziUnknownTimeNote(chart)}`);
   if (chart.birthPlace) lines.push(`- 出生地: ${chart.birthPlace}`);
   if (chart.trueSolarTimeInfo) {
     lines.push(...formatTrueSolarBlock(chart.trueSolarTimeInfo));
@@ -86,12 +89,7 @@ function renderBaziCanonicalDefaultText(chart: BaziOutput, options: BaziCanonica
   lines.push('');
   lines.push('| 柱 | 干支 | 天干(十神) | 地支藏干(十神) | 地势 | 空亡 |');
   lines.push('|---|------|------------|----------------|------|------|');
-  for (const [label, pillar] of [
-    ['年柱', chart.fourPillars.year],
-    ['月柱', chart.fourPillars.month],
-    ['日柱', chart.fourPillars.day],
-    ['时柱', chart.fourPillars.hour],
-  ] as const) {
+  for (const { label, pillar } of baziPillarEntries(chart)) {
     const hiddenStemsText = pillar.hiddenStems.length > 0
       ? pillar.hiddenStems.map((item) => `${item.stem}(${item.tenGod || '-'})`).join(' ')
       : '-';
@@ -114,6 +112,7 @@ function renderBaziCanonicalDefaultText(chart: BaziOutput, options: BaziCanonica
     lines.push('');
     lines.push('## 大运轨迹');
     lines.push(`- 起运: ${dayun.startAge}岁（${dayun.startAgeDetail}）`);
+    if (dayun.startRange?.yearShift) lines.push(`- 交运年份: ${DAYUN_YEAR_SHIFT_NOTE}`);
     lines.push('');
     lines.push('| 起运年份 | 年龄 | 大运干支 | 天干(十神) | 地支藏干(十神) |');
     lines.push('|----------|------|----------|------------|----------------|');
@@ -121,7 +120,7 @@ function renderBaziCanonicalDefaultText(chart: BaziOutput, options: BaziCanonica
       const hiddenStemsText = item.hiddenStems?.length
         ? item.hiddenStems.map((hs) => `${hs.stem}(${hs.tenGod})`).join(' ')
         : '-';
-      lines.push(`| ${item.startYear} | ${item.startAge}岁 | ${item.ganZhi} | ${item.stem}(${item.tenGod || '-'}) | ${hiddenStemsText} |`);
+      lines.push(`| ${dayunYearText(item.startYear, dayun.startRange?.yearShift)} | ${dayunYearText(item.startAge, dayun.startRange?.yearShift, '岁')} | ${item.ganZhi} | ${item.stem}(${item.tenGod || '-'}) | ${hiddenStemsText} |`);
     }
   }
 
@@ -135,6 +134,7 @@ function renderBaziCanonicalFullText(chart: BaziOutput, options: BaziCanonicalTe
   lines.push(`- 性别: ${chart.gender === 'male' ? '男' : '女'}`);
   lines.push(`- 日主: ${chart.dayMaster}`);
   lines.push(`- 命主五行: ${chart.dayMaster}${GAN_WUXING[chart.dayMaster.charAt(0)] || ''}`);
+  if (chart.birthTimeUnknown) lines.push(`- 出生时辰: ${baziUnknownTimeNote(chart)}`);
   if (chart.birthPlace) lines.push(`- 出生地: ${chart.birthPlace}`);
   if (chart.trueSolarTimeInfo) {
     lines.push(...formatTrueSolarBlock(chart.trueSolarTimeInfo));
@@ -146,12 +146,7 @@ function renderBaziCanonicalFullText(chart: BaziOutput, options: BaziCanonicalTe
   lines.push('## 四柱');
   lines.push('| 柱 | 干支 | 天干(十神) | 地支藏干(十神) | 地势 | 纳音 | 神煞 |');
   lines.push('|---|------|------------|----------------|------|------|------|');
-  for (const [label, pillar] of [
-    ['年柱', chart.fourPillars.year],
-    ['月柱', chart.fourPillars.month],
-    ['日柱', chart.fourPillars.day],
-    ['时柱', chart.fourPillars.hour],
-  ] as const) {
+  for (const { label, pillar } of baziPillarEntries(chart)) {
     const hiddenStemsText = pillar.hiddenStems.length > 0
       ? pillar.hiddenStems.map((item) => `${item.stem}(${item.tenGod || '-'})`).join(' ')
       : '-';
@@ -175,6 +170,7 @@ function renderBaziCanonicalFullText(chart: BaziOutput, options: BaziCanonicalTe
     lines.push('');
     lines.push('## 大运轨迹');
     lines.push(`- 起运: ${dayun.startAge}岁（${dayun.startAgeDetail}）`);
+    if (dayun.startRange?.yearShift) lines.push(`- 交运年份: ${DAYUN_YEAR_SHIFT_NOTE}`);
     lines.push('');
     lines.push('| 起运年份 | 年龄 | 大运干支 | 天干(十神) | 地支藏干(十神) | 地势 | 纳音 | 神煞 |');
     lines.push('|----------|------|----------|------------|----------------|------|------|------|');
@@ -183,7 +179,7 @@ function renderBaziCanonicalFullText(chart: BaziOutput, options: BaziCanonicalTe
         ? item.hiddenStems.map((hs) => `${hs.stem}(${hs.tenGod})`).join('、')
         : '-';
       const shenShaText = item.shenSha?.length ? item.shenSha.join('、') : '-';
-      lines.push(`| ${item.startYear} | ${item.startAge}岁 | ${item.ganZhi} | ${item.stem}(${item.tenGod || '-'}) | ${hiddenStemsText} | ${item.diShi || '-'} | ${item.naYin || '-'} | ${shenShaText} |`);
+      lines.push(`| ${dayunYearText(item.startYear, dayun.startRange?.yearShift)} | ${dayunYearText(item.startAge, dayun.startRange?.yearShift, '岁')} | ${item.ganZhi} | ${item.stem}(${item.tenGod || '-'}) | ${hiddenStemsText} | ${item.diShi || '-'} | ${item.naYin || '-'} | ${shenShaText} |`);
     }
   }
 

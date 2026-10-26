@@ -35,7 +35,7 @@ export function CanonicalChartView({ value, targets = [], includeRelated = true,
   const interaction = onTargetSelect ? { selectedIds: targets.map(target => target.id), onSelect: onTargetSelect } : undefined;
   switch (value.kind) {
     // 关系层没有连线时也要挂上：它负责 Agent 在看时让其余字退后，以及根透标记的悬停聚焦。
-    case 'bazi': content = <Bazi canonicalChart={value.chart} isUnknownTime={value.chart.四柱[3]?.干支.includes('*')} canonicalLabels
+    case 'bazi': content = <Bazi canonicalChart={value.chart} canonicalLabels
       overlay={baziOverlay ? <GanzhiRelationOverlay layout={baziOverlay.layout} located={baziOverlay.located} locatedCells={baziOverlay.locatedCells} onSelect={baziOverlay.onSelect} /> : undefined}
       relationBands={baziOverlay ? { stem: relationBandHeight(baziOverlay.layout.lanes.stem), branch: relationBandHeight(baziOverlay.layout.lanes.branch), cross: relationCrossHeight(baziOverlay.layout.lanes.cross) } : undefined}
       glyphMarks={baziOverlay?.marks}

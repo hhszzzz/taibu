@@ -57,14 +57,14 @@ export interface BaziMeta extends BirthTimeResolution {
     isUnknownTime?: boolean;
 }
 
+/** 时辰未知时不传时分：Core 只排年、月、日三柱，不拿表单里的占位时辰去算时柱 */
 function toCoreBaziInput(formData: BaziFormData) {
     return {
         gender: formData.gender,
         birthYear: formData.birthYear,
         birthMonth: formData.birthMonth,
         birthDay: formData.birthDay,
-        birthHour: formData.birthHour,
-        birthMinute: formData.birthMinute,
+        ...(formData.isUnknownTime ? {} : { birthHour: formData.birthHour, birthMinute: formData.birthMinute }),
         calendarType: formData.calendarType === 'lunar' ? 'lunar' as const : 'solar' as const,
         isLeapMonth: formData.isLeapMonth,
         birthPlace: formData.birthPlace,
@@ -77,7 +77,7 @@ function buildBaziMeta(formData: BaziFormData): BaziMeta {
     return {
         name: formData.name,
         birthDate: `${formData.birthYear}-${String(formData.birthMonth).padStart(2, '0')}-${String(formData.birthDay).padStart(2, '0')}`,
-        birthTime: `${String(formData.birthHour).padStart(2, '0')}:${String(formData.birthMinute).padStart(2, '0')}`,
+        birthTime: formData.isUnknownTime ? '' : `${String(formData.birthHour).padStart(2, '0')}:${String(formData.birthMinute).padStart(2, '0')}`,
         birthPlace: formData.birthPlace,
         gender: formData.gender,
         calendarType: formData.calendarType,
@@ -333,35 +333,38 @@ export function calculateProfessionalData(
 ): ProfessionalBaziData {
     const coreBazi = calculateBazi(toCoreBaziInput(formData));
 
+    // 出生时辰未知时没有时柱，时柱各项留空
+    const { year, month, day, hour } = coreBazi.fourPillars;
+
     // 纳音
     const naYin = {
-        year: coreBazi.fourPillars.year.naYin || '',
-        month: coreBazi.fourPillars.month.naYin || '',
-        day: coreBazi.fourPillars.day.naYin || '',
-        hour: coreBazi.fourPillars.hour.naYin || '',
+        year: year.naYin || '',
+        month: month.naYin || '',
+        day: day.naYin || '',
+        hour: hour?.naYin || '',
     };
 
     // 十二长生
     const diShi = {
-        year: coreBazi.fourPillars.year.diShi || '',
-        month: coreBazi.fourPillars.month.diShi || '',
-        day: coreBazi.fourPillars.day.diShi || '',
-        hour: coreBazi.fourPillars.hour.diShi || '',
+        year: year.diShi || '',
+        month: month.diShi || '',
+        day: day.diShi || '',
+        hour: hour?.diShi || '',
     };
 
     // 十神（天干）
     const shiShenGan = {
-        year: coreBazi.fourPillars.year.tenGod || '',
-        month: coreBazi.fourPillars.month.tenGod || '',
-        hour: coreBazi.fourPillars.hour.tenGod || '',
+        year: year.tenGod || '',
+        month: month.tenGod || '',
+        hour: hour?.tenGod || '',
     };
 
     // 十神（地支藏干）
     const shiShenZhi = {
-        year: coreBazi.fourPillars.year.hiddenStems.map((item) => item.tenGod),
-        month: coreBazi.fourPillars.month.hiddenStems.map((item) => item.tenGod),
-        day: coreBazi.fourPillars.day.hiddenStems.map((item) => item.tenGod),
-        hour: coreBazi.fourPillars.hour.hiddenStems.map((item) => item.tenGod),
+        year: year.hiddenStems.map((item) => item.tenGod),
+        month: month.hiddenStems.map((item) => item.tenGod),
+        day: day.hiddenStems.map((item) => item.tenGod),
+        hour: hour?.hiddenStems.map((item) => item.tenGod) ?? [],
     };
 
     const coreDayun = calculateBaziDayun(toCoreBaziInput(formData));
@@ -494,14 +497,14 @@ export function buildBaziCanonicalJSON(
 function buildCanonicalDayunFromMeta(meta: BaziDayunMeta) {
     try {
         const [year, month, day] = meta.birthDate.split('-').map(Number);
-        const [hour, minute] = meta.birthTime.split(':').map(Number);
+        // 时辰未知（birthTime 为空）时不传时分，起运按当天最早与最晚出生给出范围
+        const [hour, minute] = meta.birthTime ? meta.birthTime.split(':').map(Number) : [];
         return calculateBaziDayun({
             gender: meta.gender,
             birthYear: year,
             birthMonth: month,
             birthDay: day,
-            birthHour: hour,
-            birthMinute: minute || 0,
+            ...(hour === undefined ? {} : { birthHour: hour, birthMinute: minute || 0 }),
             calendarType: meta.calendarType === 'lunar' ? 'lunar' : 'solar',
             isLeapMonth: meta.isLeapMonth,
             longitude: meta.longitude,

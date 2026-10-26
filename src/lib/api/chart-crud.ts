@@ -82,7 +82,10 @@ function calculateChartBirthFields(payload: Record<string, unknown>, tableName: 
         const output = calculateBazi(input);
         return { ...options, day_master: output.dayMaster, day_branch: output.fourPillars.day.branch };
     }
-    calculateZiwei(input);
+    // 调用前已校验出生时辰；紫微离不开时辰
+    const { birthHour } = input;
+    if (birthHour === undefined) throw new Error('紫微命盘必须提供有效的出生时辰');
+    calculateZiwei({ ...input, birthHour });
     return options;
 }
 

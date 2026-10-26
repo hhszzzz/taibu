@@ -7,8 +7,9 @@ export interface ShenShaContext {
   monthBranch: string;
   dayStem: string;
   dayBranch: string;
-  hourStem: string;
-  hourBranch: string;
+  /** 八字出生时辰未知时没有时柱 */
+  hourStem?: string;
+  hourBranch?: string;
   kongWang?: { xun: string; kongZhi: [string, string]; };
   yearNaYinElement?: string; // 年柱纳音五行（金/木/水/火/土），用于学堂查表
 }
@@ -17,7 +18,7 @@ export interface PillarShenShaByPosition {
   year: string[];
   month: string[];
   day: string[];
-  hour: string[];
+  hour?: string[];
 }
 
 // 从数据模块导入
@@ -239,6 +240,6 @@ export function calculatePillarShenSha(context: ShenShaContext): PillarShenShaBy
     year: calculateBranchShenSha(context, context.yearBranch, { positionHint: 'year' }),
     month: calculateBranchShenSha(context, context.monthBranch, { positionHint: 'month' }),
     day: calculateBranchShenSha(context, context.dayBranch, { positionHint: 'day' }),
-    hour: calculateBranchShenSha(context, context.hourBranch, { positionHint: 'hour' }),
+    ...(context.hourBranch === undefined ? {} : { hour: calculateBranchShenSha(context, context.hourBranch, { positionHint: 'hour' }) }),
   };
 }

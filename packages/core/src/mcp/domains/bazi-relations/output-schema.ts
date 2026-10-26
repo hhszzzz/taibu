@@ -26,11 +26,12 @@ export const drilldownOmittedSchema = obj({
 
 export const baziRelationsOutputSchema: OutputSchema = obj({
   查询: obj({
-    大运: str('所叠加的大运（序号、干支、起止年份、起运年龄）'),
+    大运: str('所叠加的大运（序号、干支、起止年份、起运年龄；出生时辰未知且正当交运时注明也可能仍在上一步）'),
     小运: str('起运前所叠加的小运'),
     流年: num('流年公历年份'),
     流月: str('流月干支与节气区间'),
     流日: str('流日日期'),
+    出生时辰: str('只在出生时辰未知时出现：原局只有年、月、日三柱'),
   }, '本次叠加的层次'),
   筛选: relationsFilterSchema,
   参与柱位: arr(obj({

@@ -19,11 +19,11 @@ export type BaziPromptInput = BirthTimeResolution & {
 export type ResolvedBaziPromptData = ReturnType<typeof calculateBaziChartBundle>;
 
 function rebuildBaziChart(chart: BaziPromptInput): ResolvedBaziPromptData | null {
-    if (!chart.birthDate || !chart.birthTime) return null;
+    if (!chart.birthDate) return null;
 
-    const birthTime = chart.birthTime;
     const [birthYear, birthMonth, birthDay] = chart.birthDate.split('-').map(Number);
-    const [birthHour, birthMinute] = birthTime.split(':').map(Number);
+    // 没有出生时间的记录只排年、月、日三柱，时分只是占位，不参与排盘
+    const [birthHour, birthMinute] = chart.birthTime ? chart.birthTime.split(':').map(Number) : [0, 0];
     if (
         !Number.isFinite(birthYear)
         || !Number.isFinite(birthMonth)
@@ -43,6 +43,7 @@ function rebuildBaziChart(chart: BaziPromptInput): ResolvedBaziPromptData | null
             birthDay,
             birthHour,
             birthMinute,
+            ...(chart.birthTime ? {} : { isUnknownTime: true }),
             birthPlace: chart.birthPlace,
             longitude: chart.longitude,
             calendarType: chart.calendarType === 'lunar' ? 'lunar' : 'solar',

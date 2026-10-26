@@ -99,7 +99,7 @@ type PillarShenShaByPosition = {
   year: string[];
   month: string[];
   day: string[];
-  hour: string[];
+  hour?: string[];
 };
 
 type FortuneRuntimeContext = {
@@ -107,6 +107,20 @@ type FortuneRuntimeContext = {
   dayBranch: string;
   yearBranch: string;
 };
+
+export const BAZI_PILLAR_LABELS = { year: '年柱', month: '月柱', day: '日柱', hour: '时柱' } as const;
+export type BaziPillarKey = keyof typeof BAZI_PILLAR_LABELS;
+
+/** 排出的各柱，按年、月、日、时的顺序；出生时辰未知时没有时柱，日柱总在第三位 */
+export function baziPillarEntries(chart: Pick<BaziOutput, 'fourPillars'>): Array<{ key: BaziPillarKey; label: typeof BAZI_PILLAR_LABELS[BaziPillarKey]; pillar: PillarInfo; }> {
+  const { year, month, day, hour } = chart.fourPillars;
+  return [
+    { key: 'year' as const, label: BAZI_PILLAR_LABELS.year, pillar: year },
+    { key: 'month' as const, label: BAZI_PILLAR_LABELS.month, pillar: month },
+    { key: 'day' as const, label: BAZI_PILLAR_LABELS.day, pillar: day },
+    ...(hour ? [{ key: 'hour' as const, label: BAZI_PILLAR_LABELS.hour, pillar: hour }] : []),
+  ];
+}
 
 export function getNaYin(stem: string, branch: string): string {
   return NA_YIN_TABLE[`${stem}${branch}`] || '';
@@ -184,11 +198,14 @@ function normalizePillarPosition(label: string): PillarPosition {
   return normalized;
 }
 
+/** 年、月、日三柱，时辰已知时再加时柱；时柱总在最后，前三柱的位置不随之改变 */
+const knownPillars = <T>(year: T, month: T, day: T, hour: T | undefined): T[] => hour === undefined ? [year, month, day] : [year, month, day, hour];
+
 // ===== 天干五合 =====
 export function analyzeTianGanWuHe(
-  yearStem: string, monthStem: string, dayStem: string, hourStem: string,
+  yearStem: string, monthStem: string, dayStem: string, hourStem?: string,
 ): TianGanWuHeItem[] {
-  const stems = [yearStem, monthStem, dayStem, hourStem];
+  const stems = knownPillars(yearStem, monthStem, dayStem, hourStem);
   const stemNames: StemPosition[] = ['年干', '月干', '日干', '时干'];
   const result: TianGanWuHeItem[] = [];
 
@@ -213,9 +230,9 @@ export function analyzeTianGanWuHe(
 
 // ===== 地支半合 =====
 export function analyzeDiZhiBanHe(
-  yearBranch: string, monthBranch: string, dayBranch: string, hourBranch: string,
+  yearBranch: string, monthBranch: string, dayBranch: string, hourBranch?: string,
 ): DiZhiBanHeItem[] {
-  const branches = [yearBranch, monthBranch, dayBranch, hourBranch];
+  const branches = knownPillars(yearBranch, monthBranch, dayBranch, hourBranch);
   const pillarNames: PillarPosition[] = ['年支', '月支', '日支', '时支'];
   const result: DiZhiBanHeItem[] = [];
   const seen = new Set<string>();
@@ -248,9 +265,9 @@ export function analyzeDiZhiBanHe(
 
 // ===== 天干冲克 =====
 export function analyzeTianGanChongKe(
-  yearStem: string, monthStem: string, dayStem: string, hourStem: string,
+  yearStem: string, monthStem: string, dayStem: string, hourStem?: string,
 ): TianGanChongKeItem[] {
-  const stems = [yearStem, monthStem, dayStem, hourStem];
+  const stems = knownPillars(yearStem, monthStem, dayStem, hourStem);
   const stemNames: StemPosition[] = ['年干', '月干', '日干', '时干'];
   const result: TianGanChongKeItem[] = [];
 
@@ -273,9 +290,9 @@ export function analyzeTianGanChongKe(
 
 // ===== 地支三会（方局） =====
 export function analyzeDiZhiSanHui(
-  yearBranch: string, monthBranch: string, dayBranch: string, hourBranch: string,
+  yearBranch: string, monthBranch: string, dayBranch: string, hourBranch?: string,
 ): DiZhiSanHuiItem[] {
-  const branches = [yearBranch, monthBranch, dayBranch, hourBranch];
+  const branches = knownPillars(yearBranch, monthBranch, dayBranch, hourBranch);
   const pillarNames: PillarPosition[] = ['年支', '月支', '日支', '时支'];
   const result: DiZhiSanHuiItem[] = [];
 
@@ -344,8 +361,8 @@ function calculateMingGong(yearStem: string, monthBranch: string, hourBranch: st
   return `${mingStem}${mingBranch}`;
 }
 
-export function analyzePillarRelations(yearBranch: string, monthBranch: string, dayBranch: string, hourBranch: string): PillarRelation[] {
-  const branches = [yearBranch, monthBranch, dayBranch, hourBranch];
+export function analyzePillarRelations(yearBranch: string, monthBranch: string, dayBranch: string, hourBranch?: string): PillarRelation[] {
+  const branches = knownPillars(yearBranch, monthBranch, dayBranch, hourBranch);
   const pillarNames = ['year', 'month', 'day', 'hour'] as const;
   const relations: PillarRelation[] = [];
 
@@ -451,8 +468,8 @@ export function calculateBaziPillarShenSha(params: {
   monthBranch: string;
   dayStem: string;
   dayBranch: string;
-  hourStem: string;
-  hourBranch: string;
+  hourStem?: string;
+  hourBranch?: string;
   kongWang: { xun: string; kongZhi: [string, string]; };
   yearNaYinElement?: string;
 }): PillarShenShaByPosition {
@@ -468,9 +485,8 @@ export function calculateBaziPillarShenSha(params: {
   } = params;
 
   const pushUnique = (position: keyof PillarShenShaByPosition, name: string) => {
-    if (!shenSha[position].includes(name)) {
-      shenSha[position].push(name);
-    }
+    const names = shenSha[position];
+    if (names && !names.includes(name)) names.push(name);
   };
 
   const jinYuBranch = JIN_YU[dayStem];
@@ -491,7 +507,7 @@ export function calculateBaziPillarShenSha(params: {
 
   const deXiuStems = DE_XIU[monthBranch] || [];
   if (deXiuStems.includes(dayStem)) pushUnique('day', '德秀贵人');
-  if (deXiuStems.includes(hourStem)) pushUnique('hour', '德秀贵人');
+  if (hourStem !== undefined && deXiuStems.includes(hourStem)) pushUnique('hour', '德秀贵人');
 
   const tianDeHeChar = TIAN_DE_HE[monthBranch];
   if (tianDeHeChar === yearStem || tianDeHeChar === yearBranch) pushUnique('year', '天德合');
@@ -737,22 +753,54 @@ function validateLunarDateInput(params: {
   };
 }
 
-export function resolveBaziCalendarContext(input: BaziInput): {
+type CalendarLunar = ReturnType<typeof Lunar.fromYmdHms>;
+
+export interface BaziCalendarContext {
   solar: ReturnType<typeof Solar.fromYmdHms>;
-  lunar: ReturnType<typeof Lunar.fromYmdHms>;
-  termLunar: ReturnType<typeof Lunar.fromYmdHms>;
+  lunar: CalendarLunar;
+  termLunar: CalendarLunar;
   trueSolarTimeInfo?: TrueSolarTimeInfo;
-} {
+  /**
+   * 出生时辰未知：solar、lunar、termLunar 取出生当天 00:00，lateTermLunar 取当天 23:59。
+   * 年柱、月柱已核对两端一致；起运等随时刻变化的量由调用方按两端分别计算。
+   */
+  timeUnknown?: { lateTermLunar: CalendarLunar };
+}
+
+/** 两个时刻的年柱、月柱（按交节时刻）是否相同 */
+const sameYearMonthPillars = (a: CalendarLunar, b: CalendarLunar) => {
+  const left = a.getEightChar(), right = b.getEightChar();
+  return left.getYear() === right.getYear() && left.getMonth() === right.getMonth();
+};
+
+/**
+ * 时辰未知时出生当天不能交节：交节前后年柱或月柱不同，取哪一个都在替用户假定时辰。
+ * 报出交节的节气与北京时间，让调用方补时辰。
+ */
+function assertNoTermChange(early: CalendarLunar, late: CalendarLunar, date: string): void {
+  if (sameYearMonthPillars(early, late)) return;
+  const term = late.getPrevJie();
+  const yearChanges = early.getEightChar().getYear() !== late.getEightChar().getYear();
+  const when = term ? `${term.getName()}交节（北京时间 ${term.getSolar().toYmdHms().slice(0, 16)}）` : '交节';
+  throw new CoreInputError('birthHour', `出生当天（${date}）${when}，${yearChanges ? '年柱、月柱' : '月柱'}取决于出生时间，请提供出生时辰`);
+}
+
+export function resolveBaziCalendarContext(input: BaziInput): BaziCalendarContext {
   const {
     birthYear,
     birthMonth,
     birthDay,
-    birthHour,
-    birthMinute = 0,
     calendarType = 'solar',
     isLeapMonth = false,
-    longitude,
   } = input;
+  const timeUnknown = input.birthHour === undefined;
+  if (timeUnknown && input.birthMinute !== undefined && input.birthMinute !== 0) {
+    throw new CoreInputError('birthMinute', '出生时辰未知时不能只给分钟；知道时间请同时给出 birthHour');
+  }
+  // 时辰未知时先按当天 00:00 校验与换算日期；真太阳时校正需要时刻，不做。
+  const birthHour = input.birthHour ?? 0;
+  const birthMinute = timeUnknown ? 0 : input.birthMinute ?? 0;
+  const longitude = timeUnknown ? undefined : input.longitude;
 
   if (input.gender !== 'male' && input.gender !== 'female') throw new CoreInputError('gender', '必须为 male 或 female');
   resolveEnum(calendarType, ['solar', 'lunar'], 'solar', 'calendarType');
@@ -773,9 +821,11 @@ export function resolveBaziCalendarContext(input: BaziInput): {
     if (isLeapMonth) throw new CoreInputError('isLeapMonth', '公历输入不能指定闰月');
   }
   const timezone = input.timezone ?? DEFAULT_DIVINATION_TIMEZONE;
+  // 时辰未知时 00:00 与 23:59 是代用的边界，不是用户给的时刻：夏令时缺口或重叠时顺延，不报错
+  const instantRule = timeUnknown ? 'compatible' : disambiguation;
   const termCalendar = (birthSolar: Solar) => {
     const instant = zonedTimeToUtc({ year: birthSolar.getYear(), month: birthSolar.getMonth(), day: birthSolar.getDay(),
-      hour: birthSolar.getHour(), minute: birthSolar.getMinute() }, timezone, disambiguation);
+      hour: birthSolar.getHour(), minute: birthSolar.getMinute() }, timezone, instantRule);
     const beijing = new Date(instant.getTime() + 8 * 3600000);
     const clock = getZonedDateTimeParts(instant, timezone);
     return {
@@ -785,9 +835,15 @@ export function resolveBaziCalendarContext(input: BaziInput): {
     };
   };
 
-  if (longitude != null && (typeof longitude !== 'number' || longitude < -180 || longitude > 180)) {
+  if (input.longitude != null && (typeof input.longitude !== 'number' || input.longitude < -180 || input.longitude > 180)) {
     throw new Error('longitude 必须是 -180 到 180 之间的数字');
   }
+  // 出生时辰未知：日柱按出生日期（钟表日期）取，年柱、月柱须在当天 00:00 与 23:59 一致。
+  const unknownTimeContext = (early: ReturnType<typeof termCalendar>, day: Solar): BaziCalendarContext => {
+    const late = termCalendar(Solar.fromYmdHms(day.getYear(), day.getMonth(), day.getDay(), 23, 59, 0));
+    assertNoTermChange(early.termLunar, late.termLunar, day.toYmd());
+    return { solar: early.clockSolar, lunar: early.clockSolar.getLunar(), termLunar: early.termLunar, timeUnknown: { lateTermLunar: late.termLunar } };
+  };
 
   let trueSolarTimeInfo: TrueSolarTimeInfo | undefined;
   let effectiveYear = birthYear;
@@ -807,6 +863,7 @@ export function resolveBaziCalendarContext(input: BaziInput): {
     });
 
     const calendar = termCalendar(prepared.solar);
+    if (timeUnknown) return unknownTimeContext(calendar, prepared.solar);
 
     if (longitude != null) {
       const resolvedDateTime = resolveTrueSolarDateTimeFromInstant(calendar.instant, longitude, timezone);
@@ -835,6 +892,7 @@ export function resolveBaziCalendarContext(input: BaziInput): {
   }
 
   const calendar = termCalendar(Solar.fromYmdHms(birthYear, birthMonth, birthDay, birthHour, birthMinute, 0));
+  if (timeUnknown) return unknownTimeContext(calendar, calendar.clockSolar);
   if (longitude != null) {
     const resolvedDateTime = resolveTrueSolarDateTimeFromInstant(calendar.instant, longitude, timezone);
     trueSolarTimeInfo = resolvedDateTime.trueSolarTimeInfo;
@@ -866,7 +924,7 @@ export function calculateBaziData(input: BaziInput): BaziOutput {
     gender,
     birthPlace,
   } = input;
-  const { lunar, termLunar, trueSolarTimeInfo } = resolveBaziCalendarContext(input);
+  const { lunar, termLunar, trueSolarTimeInfo, timeUnknown } = resolveBaziCalendarContext(input);
 
   const eightChar = lunar.getEightChar();
   eightChar.setSect(input.dayBoundary === 'zi' ? 1 : 2);
@@ -877,8 +935,9 @@ export function calculateBaziData(input: BaziInput): BaziOutput {
   const monthBranch = termEightChar.getMonthZhi();
   const dayStem = eightChar.getDayGan();
   const dayBranch = eightChar.getDayZhi();
-  const hourStem = eightChar.getTimeGan();
-  const hourBranch = eightChar.getTimeZhi();
+  // 出生时辰未知不排时柱：此时的 lunar 取的是当天 00:00，时柱只是占位
+  const hourStem = timeUnknown ? undefined : eightChar.getTimeGan();
+  const hourBranch = timeUnknown ? undefined : eightChar.getTimeZhi();
 
   const kongWang = getKongWang(dayStem, dayBranch);
   const yearNaYin = getNaYin(yearStem, yearBranch);
@@ -912,11 +971,13 @@ export function calculateBaziData(input: BaziInput): BaziOutput {
       shenSha: pillarShenSha.day,
       kongWang: buildPillarKongWang(dayBranch, kongWang),
     },
-    hour: {
-      ...createPillar(hourStem, hourBranch, dayStem),
-      shenSha: pillarShenSha.hour,
-      kongWang: buildPillarKongWang(hourBranch, kongWang),
-    },
+    ...(hourStem === undefined || hourBranch === undefined ? {} : {
+      hour: {
+        ...createPillar(hourStem, hourBranch, dayStem),
+        shenSha: pillarShenSha.hour ?? [],
+        kongWang: buildPillarKongWang(hourBranch, kongWang),
+      },
+    }),
   };
 
   fourPillars.day.tenGod = undefined;
@@ -927,7 +988,8 @@ export function calculateBaziData(input: BaziInput): BaziOutput {
   const diZhiBanHe = analyzeDiZhiBanHe(yearBranch, monthBranch, dayBranch, hourBranch);
   const diZhiSanHui = analyzeDiZhiSanHui(yearBranch, monthBranch, dayBranch, hourBranch);
   const taiYuan = calculateTaiYuan(monthStem, monthBranch);
-  const mingGong = calculateMingGong(yearStem, monthBranch, hourBranch);
+  // 命宫由生月与生时推出，时辰未知时不给
+  const mingGong = hourBranch === undefined ? '' : calculateMingGong(yearStem, monthBranch, hourBranch);
 
   return {
     gender,
@@ -935,6 +997,7 @@ export function calculateBaziData(input: BaziInput): BaziOutput {
     dayMaster: dayStem,
     kongWang,
     fourPillars,
+    ...(timeUnknown ? { birthTimeUnknown: true as const } : {}),
     relations,
     tianGanWuHe,
     tianGanChongKe,
@@ -957,8 +1020,8 @@ export function calculateBaziShenShaData(input: BaziInput): BaziShenShaOutput {
     monthBranch: coreBazi.fourPillars.month.branch,
     dayStem: coreBazi.fourPillars.day.stem,
     dayBranch: coreBazi.fourPillars.day.branch,
-    hourStem: coreBazi.fourPillars.hour.stem,
-    hourBranch: coreBazi.fourPillars.hour.branch,
+    hourStem: coreBazi.fourPillars.hour?.stem,
+    hourBranch: coreBazi.fourPillars.hour?.branch,
     kongWang: {
       xun: coreBazi.kongWang.xun,
       kongZhi: [...coreBazi.kongWang.kongZhi] as [string, string],

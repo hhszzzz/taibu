@@ -15,8 +15,8 @@
 | `birthYear` | integer | 是 | — | 出生年 (1-9999) |
 | `birthMonth` | integer | 是 | — | 出生月（1-12） |
 | `birthDay` | integer | 是 | — | 出生日（公历 1-31，农历 1-30） |
-| `birthHour` | integer | 是 | — | 出生时（0-23） |
-| `birthMinute` | integer | 否 | `0` | 出生分（0-59） |
+| `birthHour` | integer | 否 | — | 出生时（0-23）；不知道出生时辰时省略，此时起运给出当天最早与最晚出生之间的范围，不排小运 |
+| `birthMinute` | integer | 否 | `0` | 出生分（0-59）；省略 birthHour 时不填 |
 | `calendarType` | enum | 否 | `"solar"` | 出生日期的历法（solar=公历，lunar=农历）；可选值: `solar` / `lunar` |
 | `isLeapMonth` | boolean | 否 | `false` | 是否农历闰月（仅 calendarType=lunar 时有效） |
 | `detailLevel` | enum | 否 | `"default"` | 输出详略（default=起运信息与大运概要；full=追加起运前小运，以及各步大运的纳音、神煞、原局关系与流年列表）；可选值: `default` / `full` |
@@ -34,7 +34,7 @@ echo '{"gender":"female","birthYear":1995,"birthMonth":6,"birthDay":20,"birthHou
 ## 输出结构（structuredContent 顶层键）
 
 - `起运信息`：起运年龄与起运详情
-- `小运`：小运列表（逐年）
+- `小运`：小运列表（逐年；出生时辰未知时不排）
 - `大运列表`：大运列表（每十年一步）
 - `计算规则`
 

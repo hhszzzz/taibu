@@ -9,7 +9,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { Solar } from 'lunar-javascript';
-import { calculateBazi } from 'taibu-core/bazi';
+import { baziPillarEntries, calculateBazi } from 'taibu-core/bazi';
 import type { BaziFormData } from '@/types';
 import { getEarthlyBranchByHour } from '@/lib/divination/bazi-form-utils';
 import { ganZhiTextClass } from '@/components/bazi/element-classes';
@@ -64,7 +64,7 @@ export function InstantBaziPreview({ onUseInstant }: InstantBaziPreviewProps) {
                 isLeapMonth: false,
                 birthPlace: formData.birthPlace,
             });
-            return result.fourPillars;
+            return result;
         } catch (error) {
             console.error('计算即时八字失败:', error);
             return null;
@@ -99,12 +99,7 @@ export function InstantBaziPreview({ onUseInstant }: InstantBaziPreviewProps) {
 
     const solarText = `${currentTime.getFullYear()}-${String(currentTime.getMonth() + 1).padStart(2, '0')}-${String(currentTime.getDate()).padStart(2, '0')} ${String(currentTime.getHours()).padStart(2, '0')}:${String(currentTime.getMinutes()).padStart(2, '0')}`;
     const lunarText = `农历${LUNAR_MONTH_NAMES[lunarInfo.month] ?? ''}${LUNAR_DAY_NAMES[lunarInfo.day] ?? ''} ${lunarInfo.hourBranch}时`;
-    const pillars = [
-        { label: '年柱', pillar: instantBazi.year },
-        { label: '月柱', pillar: instantBazi.month },
-        { label: '日柱', pillar: instantBazi.day },
-        { label: '时柱', pillar: instantBazi.hour },
-    ];
+    const pillars = baziPillarEntries(instantBazi);
 
     return (
         <section

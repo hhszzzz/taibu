@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { DI_ZHI, getDiShi, STEM_ELEMENTS, TIAN_GAN, ZHI_WUXING as BRANCH_ELEMENTS } from 'taibu-core/utils';
-import { calculateBazi, calculateBaziShenShaData, toBaziText } from 'taibu-core/bazi';
+import { baziPillarEntries, calculateBazi, calculateBaziShenShaData, toBaziJson, toBaziText } from 'taibu-core/bazi';
 import { calculateBaziDayun } from 'taibu-core/bazi-dayun';
 import { readBirthTimeOptions, resolveBirthTimeOptions, writeBirthTimeOptions } from '@/lib/divination/birth-time';
 import { buildInitialZiweiFormState } from '@/lib/divination/ziwei-form';
@@ -20,7 +20,15 @@ import {
     SAN_HE_TABLE,
 } from '@/lib/divination/bazi';
 import { formatLunarDateFromSolar, parseNumberParam } from '@/lib/divination/bazi-form-utils';
+import { buildBaziInputFromStoredFields, calculateBaziOutputFromStoredFields } from '@/lib/divination/bazi-record';
 import type { HeavenlyStem, BaziFormData, TenGod } from '@/types';
+
+/** 给了出生时辰的盘一定有时柱 */
+function hourOf(output: ReturnType<typeof calculateBazi>) {
+    const { hour } = output.fourPillars;
+    assert.ok(hour, '给了出生时辰的盘应有时柱');
+    return hour;
+}
 
 describe('birth time rule adapters', () => {
     const form: BaziFormData = {
@@ -62,14 +70,12 @@ describe('birth time rule adapters', () => {
 
     it('reuses complete Core inverse search, preserving original minutes and checking hour stems', async () => {
         const output = calculateBazi({ ...form, calendarType: 'solar' });
-        const results = await reversePillars(output.fourPillars, form);
+        const results = await reversePillars({ ...output.fourPillars, hour: hourOf(output) }, form);
         assert.ok(results.some(result => result.year === 2024 && result.month === 3 && result.day === 10));
         for (const result of results) {
             const recalculated = calculateBazi({ ...form, calendarType: 'solar', birthYear: result.year, birthMonth: result.month, birthDay: result.day, birthHour: result.hour, birthMinute: result.minute });
-            for (const pillar of ['year', 'month', 'day', 'hour'] as const) {
-                assert.equal(recalculated.fourPillars[pillar].stem, output.fourPillars[pillar].stem);
-                assert.equal(recalculated.fourPillars[pillar].branch, output.fourPillars[pillar].branch);
-            }
+            assert.deepEqual(baziPillarEntries(recalculated).map(({ pillar }) => pillar.stem + pillar.branch),
+                baziPillarEntries(output).map(({ pillar }) => pillar.stem + pillar.branch));
         }
     });
 });
@@ -350,9 +356,9 @@ describe('calculateBaziChartBundle 集成测试', () => {
         const early = calculateBaziChartBundle(base).output;
         const noon = calculateBaziChartBundle({ ...base, birthHour: 12 }).output;
 
-        assert.equal(early.fourPillars.hour.branch, '子');
-        assert.equal(noon.fourPillars.hour.branch, '午');
-        assert.notEqual(early.fourPillars.hour.stem, noon.fourPillars.hour.stem);
+        assert.equal(hourOf(early).branch, '子');
+        assert.equal(hourOf(noon).branch, '午');
+        assert.notEqual(hourOf(early).stem, hourOf(noon).stem);
     });
 
     it('公历 1990-01-01 12:00 男 → 四柱计算正确', () => {
@@ -378,8 +384,8 @@ describe('calculateBaziChartBundle 集成测试', () => {
         assert.equal(result.fourPillars.month.branch, '子', '月支');
         assert.equal(result.fourPillars.day.stem, '丙', '日干');
         assert.equal(result.fourPillars.day.branch, '寅', '日支');
-        assert.equal(result.fourPillars.hour.stem, '甲', '时干');
-        assert.equal(result.fourPillars.hour.branch, '午', '时支');
+        assert.equal(hourOf(result).stem, '甲', '时干');
+        assert.equal(hourOf(result).branch, '午', '时支');
 
         // 日主
         assert.equal(result.dayMaster, '丙');
@@ -406,12 +412,8 @@ describe('calculateBaziChartBundle 集成测试', () => {
 
         const { output: result } = calculateBaziChartBundle(formData);
 
-        const pillars = [
-            result.fourPillars.year,
-            result.fourPillars.month,
-            result.fourPillars.day,
-            result.fourPillars.hour,
-        ];
+        const pillars = baziPillarEntries(result).map(entry => entry.pillar);
+        assert.equal(pillars.length, 4);
         for (const pillar of pillars) {
             assert.ok(STEM_ELEMENTS[pillar.stem], `${pillar.stem}应有五行映射`);
             assert.ok(BRANCH_ELEMENTS[pillar.branch], `${pillar.branch}应有五行映射`);
@@ -435,7 +437,42 @@ describe('calculateBaziChartBundle 集成测试', () => {
         assert.ok(result.fourPillars.year.tenGod !== undefined, '年柱应有十神');
         assert.ok(result.fourPillars.month.tenGod !== undefined, '月柱应有十神');
         assert.equal(result.fourPillars.day.tenGod, undefined, '日柱不应有十神');
-        assert.ok(result.fourPillars.hour.tenGod !== undefined, '时柱应有十神');
+        assert.ok(hourOf(result).tenGod !== undefined, '时柱应有十神');
+    });
+
+    it('时辰未知时不排时柱，也不拿表单里的占位时辰去算', () => {
+        const form: BaziFormData = {
+            name: '时辰未知', gender: 'female', birthYear: 1990, birthMonth: 1, birthDay: 15,
+            birthHour: 12, birthMinute: 0, calendarType: 'solar', isLeapMonth: false, isUnknownTime: true,
+        };
+        const { output, meta } = calculateBaziChartBundle(form);
+        assert.equal(output.fourPillars.hour, undefined);
+        assert.equal(output.birthTimeUnknown, true);
+        assert.equal(output.mingGong, undefined, '命宫要用生时，时辰未知时不给');
+        assert.equal(meta.birthTime, '');
+        const json = toBaziJson(output);
+        assert.deepEqual(json.四柱.map(pillar => pillar.柱), ['年柱', '月柱', '日柱']);
+        assert.match(json.基本信息.出生时辰 ?? '', /未排时柱/);
+        assert.ok(json.干支关系明细!.every(relation => relation.位置.every(cell => cell.柱 !== '时柱')));
+        const professional = calculateProfessionalData(form);
+        assert.deepEqual([professional.naYin.hour, professional.diShi.hour, professional.shiShenGan.hour], ['', '', '']);
+        assert.deepEqual(professional.shiShenZhi.hour, []);
+        assert.match(professional.startAgeDetail, /^出生时辰未知，.+之间起运$/u);
+        assert.match(generateBaziChartText(output, { meta }), /出生时辰: 未知/);
+        // 出生当天交节：年柱、月柱取决于出生时间，不替用户假定
+        assert.throws(() => calculateBaziChartBundle({ ...form, birthYear: 2024, birthMonth: 2, birthDay: 4 }), /立春交节.*请提供出生时辰/);
+    });
+
+    it('没有出生时间的已存命盘按三柱重排，不再当作午时', () => {
+        const row = { gender: 'male', birth_date: '1990-01-15', birth_time: null, calendar_type: 'solar' };
+        const input = buildBaziInputFromStoredFields(row);
+        assert.equal(input.birthHour, undefined);
+        assert.equal(input.birthMinute, undefined);
+        assert.deepEqual(buildBaziInputFromStoredFields({ ...row, birth_time: '  ' }), input);
+        assert.equal(calculateBaziOutputFromStoredFields(row)?.fourPillars.hour, undefined);
+        assert.equal(buildBaziInputFromStoredFields({ ...row, birth_time: '09:05' }).birthMinute, 5);
+        assert.throws(() => buildBaziInputFromStoredFields({ ...row, birth_time: '9点' }), /出生时辰格式无效/);
+        assert.equal(calculateBaziOutputFromStoredFields({ ...row, birth_date: '2024-02-04' }), null, '交节当天没有时辰无法排盘');
     });
 });
 

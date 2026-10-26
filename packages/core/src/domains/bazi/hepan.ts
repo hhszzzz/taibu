@@ -7,13 +7,12 @@
 import { calculateTenGod, getElementRelation, STEM_ELEMENTS, WU_XING_ORDER } from '../../shared/utils.js';
 import { CoreInputError } from '../../shared/validation.js';
 import { analyzeGanzhiRelations, type GanzhiPillar, type GanzhiRelationFact } from '../shared/ganzhi-relations.js';
-import { calculateBaziData, getNaYin, getNaYinElement } from './calculate.js';
+import { baziPillarEntries, calculateBaziData, getNaYin, getNaYinElement } from './calculate.js';
 import { deriveBaziWuxing, type WangShuaiState } from './wuxing.js';
 import type { BaziInput, BaziOutput } from './types.js';
 
 export const BAZI_HEPAN_RULE_VERSION = 'bazi-hepan-2026.10';
 export const BAZI_HEPAN_DEFAULT_NAMES = ['甲方', '乙方'] as const;
-const PILLAR_LABELS = ['年柱', '月柱', '日柱', '时柱'] as const;
 const ZODIAC: Readonly<Record<string, string>> = {
   子: '鼠', 丑: '牛', 寅: '虎', 卯: '兔', 辰: '龙', 巳: '蛇', 午: '马', 未: '羊', 申: '猴', 酉: '鸡', 戌: '狗', 亥: '猪',
 };
@@ -39,6 +38,8 @@ export interface BaziHepanPerson {
   monthCommand: { branch: string; dayMasterState: WangShuaiState; };
   zodiac: string;
   missingElements: string[];
+  /** 出生时辰未知：只有年、月、日三柱，缺失五行只就三柱而言 */
+  birthTimeUnknown?: true;
 }
 
 export interface BaziHepanOutput {
@@ -90,30 +91,32 @@ export function calculateBaziHepan(input: BaziHepanInput): BaziHepanOutput {
     }
   });
 
-  const pillarsOf = (chart: BaziOutput) => [chart.fourPillars.year, chart.fourPillars.month, chart.fourPillars.day, chart.fourPillars.hour];
   const people = charts.map((chart, side): BaziHepanPerson => {
     const wuxing = deriveBaziWuxing(chart);
     return {
       name: names[side],
       gender: chart.gender,
-      pillars: pillarsOf(chart).map((pillar, index) => ({ label: PILLAR_LABELS[index], stem: pillar.stem, branch: pillar.branch, naYin: getNaYin(pillar.stem, pillar.branch) })),
+      // 时辰未知的一方只有年、月、日三柱，时柱不参与两盘之间的关系
+      pillars: baziPillarEntries(chart).map(({ label, pillar }) => ({ label, stem: pillar.stem, branch: pillar.branch, naYin: getNaYin(pillar.stem, pillar.branch) })),
       dayMaster: { stem: chart.dayMaster, element: STEM_ELEMENTS[chart.dayMaster] },
       monthCommand: { branch: chart.fourPillars.month.branch, dayMasterState: wuxing.monthCommand.dayMasterState },
       zodiac: ZODIAC[chart.fourPillars.year.branch],
       missingElements: wuxing.missingElements,
+      ...(chart.birthTimeUnknown ? { birthTimeUnknown: true as const } : {}),
     };
   }) as [BaziHepanPerson, BaziHepanPerson];
 
-  // 两盘八柱按同层口径一起枚举（合局与三刑按八柱全体出现判断，交换甲乙结果不变），只留同时涉及双方的关系；
-  // 各自盘内的关系见各自命盘。
+  // 两盘各柱按同层口径一起枚举（合局与三刑按两盘全体出现判断，交换甲乙结果不变），只留同时涉及双方的关系；
+  // 各自盘内的关系见各自命盘。乙方各柱接在甲方之后，甲方时辰未知时只占三位。
   const pillars: GanzhiPillar[] = people.flatMap((person) => person.pillars.map((pillar) => ({
     label: `${person.name}${pillar.label}`, layer: '原局' as const, stem: pillar.stem, branch: pillar.branch,
   })));
-  const sideOf = (index: number) => (index < PILLAR_LABELS.length ? 0 : 1);
+  const offset = people[0].pillars.length;
+  const sideOf = (index: number) => (index < offset ? 0 : 1);
   const cross = analyzeGanzhiRelations(pillars)
     .filter((fact) => new Set(fact.participants.map((p) => sideOf(p.index))).size === 2);
   const involvesBoth = (fact: GanzhiRelationFact, pillar: number) =>
-    fact.participants.some((p) => p.index === pillar) && fact.participants.some((p) => p.index === pillar + 4);
+    fact.participants.some((p) => p.index === pillar) && fact.participants.some((p) => p.index === pillar + offset);
   const dayRelations = cross.filter((fact) => involvesBoth(fact, 2));
   const yearRelations = cross.filter((fact) => !dayRelations.includes(fact) && involvesBoth(fact, 0));
   const otherRelations = cross.filter((fact) => !dayRelations.includes(fact) && !yearRelations.includes(fact));

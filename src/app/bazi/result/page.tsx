@@ -40,6 +40,13 @@ import { useAdminJsonCopy } from '@/lib/admin/useAdminJsonCopy';
 import { CopyTextModal } from '@/components/divination/CopyTextModal';
 import type { ChartTextDetailLevel } from '@/lib/divination/detail-level';
 
+/** Core 的输入错误以参数名开头（「birthHour 出生当天……」）；给用户看时去掉参数名，其他错误不外露 */
+function coreInputMessage(error: unknown): string | null {
+    if (!(error instanceof Error) || error.name !== 'CoreInputError') return null;
+    const path = (error as Error & { path?: string }).path;
+    return path && error.message.startsWith(`${path} `) ? error.message.slice(path.length + 1) : error.message;
+}
+
 // 结果内容组件
 function BaziResultContent() {
     const searchParams = useSearchParams();
@@ -168,7 +175,7 @@ function BaziResultContent() {
                     birthYear: year,
                     birthMonth: month,
                     birthDay: day,
-                    birthHour: parsedBirthTime?.hour ?? 12,
+                    birthHour: parsedBirthTime?.hour ?? 12, // 时辰未知时只是占位，不参与排盘
                     birthMinute: parsedBirthTime?.minute ?? 0,
                     isUnknownTime: !hasTime,
                     calendarType: (data.calendar_type as CalendarType) || 'solar',
@@ -218,7 +225,7 @@ function BaziResultContent() {
             birthYear: Number(searchParams.get('year')) || 1990,
             birthMonth: Number(searchParams.get('month')) || 1,
             birthDay: Number(searchParams.get('day')) || 1,
-            birthHour: isUnknownTime ? 12 : parseNumberParam(hourParam, 12), // 未知时默认用午时计算
+            birthHour: isUnknownTime ? 12 : parseNumberParam(hourParam, 12), // 时辰未知时只是占位，不参与排盘（不排时柱）
             birthMinute: parseNumberParam(searchParams.get('minute'), 0),
             calendarType: (searchParams.get('calendar') as CalendarType) || 'solar',
             isLeapMonth: searchParams.get('leap') === '1',
@@ -232,13 +239,13 @@ function BaziResultContent() {
     // 是否不确定时辰
     const isUnknownTime = formData.isUnknownTime ?? false;
 
-    // 计算八字
-    const baziBundle = useMemo(() => {
+    // 计算八字；输入本身有问题（如时辰未知而出生当天交节）时把 Core 的说明原样给用户
+    const { bundle: baziBundle, error: calculationError } = useMemo(() => {
         try {
-            return calculateBaziChartBundle(formData);
+            return { bundle: calculateBaziChartBundle(formData), error: null };
         } catch (error) {
             console.error('八字计算错误:', error);
-            return null;
+            return { bundle: null, error: coreInputMessage(error) };
         }
     }, [formData]);
     const baziOutput = baziBundle?.output ?? null;
@@ -558,7 +565,7 @@ function BaziResultContent() {
     if (!baziOutput || !baziMeta || !proData || !canonicalBazi) {
         return (
             <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 text-center">
-                <p className="text-sm text-foreground-secondary mb-6">八字计算出错，请返回重新输入</p>
+                <p className="text-sm text-foreground-secondary mb-6">{calculationError ?? '八字计算出错，请返回重新输入'}</p>
                 <Link href="/bazi" className="inline-flex h-11 items-center rounded-xl bg-accent px-5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover">
                     返回重新输入
                 </Link>
@@ -623,7 +630,6 @@ function BaziResultContent() {
                         <ProfessionalSection
                             canonicalChart={canonicalBazi}
                             proData={proData}
-                            isUnknownTime={isUnknownTime}
                             selectedDaYunIndex={selectedDaYunIndex}
                             onSelectDaYun={handleSelectDaYun}
                             currentLiuNian={currentLiuNian}

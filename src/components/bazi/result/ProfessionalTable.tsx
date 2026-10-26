@@ -46,7 +46,6 @@ const PILLAR_KEYS = ['year', 'month', 'day', 'hour'] as const;
 const PILLAR_SHORT_LABELS: Record<string, string> = { 年柱: '年', 月柱: '月', 日柱: '日', 时柱: '时' };
 const DAY_PILLAR_INDEX = 2;
 const LABEL_COLUMN_PERCENT = 10;
-const HOUR_PILLAR_INDEX = 3;
 
 // 获取神煞的吉凶样式（吉神用成功色、凶煞用危险色）
 function getShenShaClass(sha: string): string {
@@ -162,7 +161,6 @@ function ShenShaCell({ items, expanded }: { items: string[]; expanded: boolean }
 
 export function ProfessionalTable({
     canonicalChart,
-    isUnknownTime = false,
     activeDaYun,
     activeLiuNian,
     activeLiuYue,
@@ -175,7 +173,6 @@ export function ProfessionalTable({
     glyphMarks,
 }: {
     canonicalChart: BaziCanonicalJSON;
-    isUnknownTime?: boolean;
     activeDaYun?: DaYunInfo;
     activeLiuNian?: LiuNianInfo;
     activeLiuYue?: LiuYueInfo;
@@ -221,7 +218,6 @@ export function ProfessionalTable({
             stem,
             branch,
             shiShen: index === DAY_PILLAR_INDEX ? (canonicalLabels ? '日主' : canonicalChart.基本信息.性别 === '男' ? '元男' : '元女') : (pillar.天干十神 || ''),
-            hidden: isUnknownTime && index === HOUR_PILLAR_INDEX,
             isDay: index === DAY_PILLAR_INDEX,
         };
     });
@@ -236,16 +232,13 @@ export function ProfessionalTable({
     // 标签列占 10%，其余列等分；内容放不下时表格自动加宽并横向滚动
     const dataColumnWidth = `${((100 - LABEL_COLUMN_PERCENT) / Math.max(columnCount, 1)).toFixed(3)}%`;
 
-    /** 本命柱单元格公共样式：时辰未知的时柱降低透明度；与运势列之间加分隔线 */
-    const pillarCellClass = (col: PillarColumn, idx: number) => [
-        col.hidden ? 'opacity-30' : '',
-        idx === 0 && hasFortuneColumns ? 'border-l-[0.5px] border-border' : '',
-    ].join(' ');
+    /** 本命柱与运势列之间加分隔线 */
+    const pillarCellClass = (idx: number) => idx === 0 && hasFortuneColumns ? 'border-l-[0.5px] border-border' : '';
 
     const character = (col: PillarColumn, part: BaziCellJSON['部位'], index: number) => {
         const char = part === '天干' ? col.stem : col.branch;
-        const colorClass = col.hidden ? 'text-foreground-tertiary' : ganZhiTextClass(char);
-        if (!onCellSelect || col.hidden) return <span className={`${GLYPH_CLASS} ${colorClass}`} data-relation-cell={col.hidden ? undefined : col.label + ':' + part}>{col.hidden ? '*' : char}</span>;
+        const colorClass = ganZhiTextClass(char);
+        if (!onCellSelect) return <span className={`${GLYPH_CLASS} ${colorClass}`} data-relation-cell={col.label + ':' + part}>{char}</span>;
         const cell: BaziCellJSON = { 柱: col.label as BaziCellJSON['柱'], 部位: part, 字: char };
         const highlighted = highlightedCells?.some(item => item.柱 === cell.柱 && item.部位 === cell.部位 && item.字 === char) ?? false;
         return <button type="button" className={`chart-cell-button ${GLYPH_CLASS} ${colorClass}`}
@@ -277,7 +270,7 @@ export function ProfessionalTable({
                 <td key={col.key} className={`${cellClass} ${FORTUNE_CELL_CLASS}`} style={style}>{fortune(col)}</td>
             ))}
             {columns.map((col, idx) => (
-                <td key={col.key} className={`${cellClass} ${pillarCellClass(col, idx)}`} style={style}>{pillar(col, idx)}</td>
+                <td key={col.key} className={`${cellClass} ${pillarCellClass(idx)}`} style={style}>{pillar(col, idx)}</td>
             ))}
         </tr>
     );
@@ -307,7 +300,6 @@ export function ProfessionalTable({
                                     className={`px-1 py-1.5 text-xs @lg:py-3.5 @lg:text-sm ${col.isDay ? 'font-medium text-accent' : 'font-normal text-foreground-secondary'} ${idx === 0 && hasFortuneColumns ? 'border-l-[0.5px] border-border' : ''}`}
                                 >
                                     <DualLabel short={PILLAR_SHORT_LABELS[col.label] ?? col.label} full={col.label} />
-                                    {col.hidden && <span className="ml-0.5 text-warning">*</span>}
                                 </th>
                             ))}
                         </tr>
@@ -320,8 +312,8 @@ export function ProfessionalTable({
                             fortune: (col) => col.shiShen || '-',
                             pillar: (col) => (
                                 <>
-                                    <span className={col.isDay ? 'text-accent' : ''}>{col.hidden ? '?' : col.shiShen}</span>
-                                    {!col.hidden && glyphMarks?.stems[col.label]?.map(mark => <GlyphMarkTag key={mark.kind} mark={mark} />)}
+                                    <span className={col.isDay ? 'text-accent' : ''}>{col.shiShen}</span>
+                                    {glyphMarks?.stems[col.label]?.map(mark => <GlyphMarkTag key={mark.kind} mark={mark} />)}
                                 </>
                             ),
                         })}
@@ -352,7 +344,7 @@ export function ProfessionalTable({
                             fortune: (col) => (
                                 <HiddenStemsCell stems={col.hiddenStems.map(item => ({ stem: item.stem, tenGod: item.tenGod }))} />
                             ),
-                            pillar: (col) => col.hidden ? '*' : (
+                            pillar: (col) => (
                                 <HiddenStemsCell stems={(col.pillar.藏干 || []).map(item => ({ stem: item.天干, tenGod: item.十神 }))}
                                     marksOf={glyphMarks && (stem => glyphMarks.hidden[col.label + ':' + stem])} />
                             ),
@@ -362,28 +354,28 @@ export function ProfessionalTable({
                             label: canonicalLabels ? '地势' : '星运',
                             className: ROW_DIVIDER_CLASS,
                             fortune: (col) => col.diShi,
-                            pillar: (col) => col.hidden ? '?' : col.pillar.地势,
+                            pillar: (col) => col.pillar.地势,
                         })}
                         {renderRow({
                             key: 'selfSitting',
                             label: '自坐',
                             className: WIDE_ONLY_ROW_CLASS,
                             fortune: (col) => selfSittingOf(col.stem, col.branch),
-                            pillar: (col) => col.hidden ? '?' : selfSittingOf(col.stem, col.branch),
+                            pillar: (col) => selfSittingOf(col.stem, col.branch),
                         })}
                         {renderRow({
                             key: 'voidBranches',
                             label: '空亡',
                             className: WIDE_ONLY_ROW_CLASS,
                             fortune: (col) => voidBranchesOf(col.stem, col.branch),
-                            pillar: (col) => col.hidden ? '?' : voidBranchesOf(col.stem, col.branch),
+                            pillar: (col) => voidBranchesOf(col.stem, col.branch),
                         })}
                         {hasNaYin && renderRow({
                             key: 'naYin',
                             label: '纳音',
                             className: ROW_DIVIDER_CLASS,
                             fortune: (col) => col.naYin,
-                            pillar: (col) => col.hidden ? '?' : col.pillar.纳音,
+                            pillar: (col) => col.pillar.纳音,
                         })}
                         {hasShenSha && renderRow({
                             key: 'shenSha',
@@ -403,13 +395,14 @@ export function ProfessionalTable({
                             className: ROW_DIVIDER_CLASS,
                             cellClass: 'px-1 py-1.5 align-top @lg:py-3',
                             fortune: (col) => <ShenShaCell items={col.shenSha} expanded={shenShaExpanded} />,
-                            pillar: (col) => col.hidden ? '?' : <ShenShaCell items={col.pillar.神煞 || []} expanded={shenShaExpanded} />,
+                            pillar: (col) => <ShenShaCell items={col.pillar.神煞 || []} expanded={shenShaExpanded} />,
                         })}
                     </tbody>
                 </table>
                 {overlay}
             </div>
-            {isUnknownTime && <p className="mt-3 text-xs text-warning">* 时辰未知，时柱数据仅供逻辑参考</p>}
+            {/* 出生时辰未知的盘没有时柱，照 Core 的说明写出缺了什么 */}
+            {canonicalChart.基本信息.出生时辰 && <p className="mt-3 text-xs text-foreground-secondary">出生时辰{canonicalChart.基本信息.出生时辰}</p>}
         </div>
     );
 }

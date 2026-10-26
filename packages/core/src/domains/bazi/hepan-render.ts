@@ -13,6 +13,8 @@ export interface BaziHepanPersonJSON {
   月令旺衰: string;
   生肖: string;
   缺失五行: string[];
+  /** 只在这一方出生时辰未知时出现：四柱只有年、月、日三柱 */
+  出生时辰?: string;
 }
 
 export interface BaziHepanCanonicalJSON {
@@ -37,6 +39,8 @@ const HEPAN_NOTES = [
 ];
 
 const GENDER = { male: '男', female: '女' } as const;
+/** 时辰未知的一方：没有时柱，两盘之间的关系不涉及其时柱，缺失五行只就三柱而言 */
+const HEPAN_UNKNOWN_TIME = '未知（未排时柱；两盘之间的关系不含其时柱，缺失五行只就年、月、日三柱而言）';
 
 function personJSON(person: BaziHepanPerson): BaziHepanPersonJSON {
   return {
@@ -48,6 +52,7 @@ function personJSON(person: BaziHepanPerson): BaziHepanPersonJSON {
     月令旺衰: person.monthCommand.dayMasterState,
     生肖: person.zodiac,
     缺失五行: [...person.missingElements],
+    ...(person.birthTimeUnknown ? { 出生时辰: HEPAN_UNKNOWN_TIME } : {}),
   };
 }
 
@@ -82,7 +87,8 @@ function personLine(person: BaziHepanPerson, full: boolean): string {
   const pillars = person.pillars.map((pillar) => `${pillar.stem}${pillar.branch}`).join(' ');
   const naYin = full ? `；四柱纳音 ${person.pillars.map((pillar) => pillar.naYin || '-').join(' ')}` : '';
   const missing = person.missingElements.length ? person.missingElements.join('、') : '无';
-  return `- ${person.name}（${GENDER[person.gender]}）：${pillars}；日主${person.dayMaster.stem}${person.dayMaster.element}，生于${person.monthCommand.branch}月（${person.monthCommand.dayMasterState}）；属${person.zodiac}；缺失五行：${missing}${naYin}`;
+  const unknownTime = person.birthTimeUnknown ? `；出生时辰${HEPAN_UNKNOWN_TIME}` : '';
+  return `- ${person.name}（${GENDER[person.gender]}）：${pillars}；日主${person.dayMaster.stem}${person.dayMaster.element}，生于${person.monthCommand.branch}月（${person.monthCommand.dayMasterState}）；属${person.zodiac}；缺失五行：${missing}${unknownTime}${naYin}`;
 }
 
 /** 两盘各自的盘面与盘内关系在各自命盘里；这里只写双方四柱的要点和两盘之间的事实。 */

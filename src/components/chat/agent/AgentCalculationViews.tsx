@@ -10,7 +10,9 @@ function DayunTimeline({ data }: { data: Extract<AgentCalculation, { kind: 'bazi
     return <>
         <dl className="agent-ws-facts">
             <div><dt>起运</dt><dd>{start.起运详情}（{start.起运年龄} 岁）</dd></div>
-            {start.起运时刻 && <div><dt>起运时刻</dt><dd>{start.起运时刻}{start.时区 ? ` · ${start.时区}` : ''}</dd></div>}
+            {/* 出生时辰未知：起运时刻是当天最早到最晚出生之间的范围 */}
+            {start.起运时刻 && <div><dt>起运时刻</dt><dd>{start.起运时刻}{start.最晚起运时刻 ? ` 至 ${start.最晚起运时刻}` : ''}{start.时区 ? ` · ${start.时区}` : ''}</dd></div>}
+            {start.交运年份 && <div><dt>交运年份</dt><dd>{start.交运年份}</dd></div>}
             {start.顺逆 && <div><dt>排列</dt><dd>{start.顺逆}</dd></div>}
         </dl>
         <ol className="agent-ws-timeline" aria-label="大运列表">
@@ -27,7 +29,7 @@ function DayunTimeline({ data }: { data: Extract<AgentCalculation, { kind: 'bazi
                 return <li key={item.起运年份} aria-current={current ? 'step' : undefined}>
                     <span className="agent-ws-glyph">{item.干支}</span>
                     <span className="agent-ws-timeline-body">
-                        <strong>{item.起运年份}{next ? `–${next.起运年份 - 1}` : ' 起'} · {item.起运年龄 !== undefined ? `${item.起运年龄} 岁` : ''}{current && <em>当前</em>}</strong>
+                        <strong>{item.起运年份}{item.最晚起运年份 ? `（或${item.最晚起运年份}）` : ''}{next ? `–${next.起运年份 - 1}` : ' 起'} · {item.起运年龄 !== undefined ? `${item.起运年龄} 岁` : ''}{current && <em>当前</em>}</strong>
                         <small>天干{item.十神} · 藏干 {item.藏干.map(stem => `${stem.天干}${stem.十神}`).join('、') || '无'}</small>
                         {liunian.length > 0 && <details className="agent-ws-liunian">
                             <summary>流年 {liunian[0].流年}–{liunian[liunian.length - 1].流年}（{liunian.length} 年）</summary>
@@ -116,7 +118,7 @@ function HepanReading({ data }: { data: Extract<AgentCalculation, { kind: 'bazi_
     const id = useId();
     return <>
         {data.双方.map(person => <Fragment key={person.称呼}>
-            <p className="agent-ws-note">{person.称呼}（{person.性别}）· 属{person.生肖} · 日主{person.日主}，生于{person.月令}月（{person.月令旺衰}）· 缺失五行 {person.缺失五行.join('、') || '无'}</p>
+            <p className="agent-ws-note">{person.称呼}（{person.性别}）· 属{person.生肖} · 日主{person.日主}，生于{person.月令}月（{person.月令旺衰}）· 缺失五行 {person.缺失五行.join('、') || '无'}{person.出生时辰 ? ' · 出生时辰未知，未排时柱' : ''}</p>
             <p className="agent-ws-pillars" aria-label={`${person.称呼}四柱`}>{person.四柱.map(pillar => <span key={pillar.柱} title={`${pillar.柱} · ${pillar.纳音}`}>{pillar.干支}</span>)}</p>
         </Fragment>)}
         <dl className="agent-ws-facts">

@@ -75,6 +75,15 @@ export function completeOutputSchema(name: string, schema: ToolOutputSchema): To
     current.maxItems = rule.size;
     (current.items as Record<string, unknown>).required = rule.fields;
   }
+  if (name === 'bazi') {
+    // 出生时辰未知时不排时柱：带「出生时辰」标注的盘只有年、月、日三柱，其余仍须四柱齐全
+    (result.properties.四柱 as Record<string, unknown>).minItems = 3;
+    Object.assign(result as Record<string, unknown>, {
+      if: { properties: { 基本信息: { required: ['出生时辰'] } } },
+      then: { properties: { 四柱: { maxItems: 3 } } },
+      else: { properties: { 四柱: { minItems: 4 } } },
+    });
+  }
   if (name === 'tarot') {
     const cards = result.properties.牌阵展开 as Record<string, unknown>;
     cards.minItems = 1;

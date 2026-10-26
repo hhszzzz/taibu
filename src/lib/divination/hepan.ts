@@ -22,7 +22,8 @@ export interface BirthInfo extends BirthTimeResolution {
     year: number;
     month: number;
     day: number;
-    hour: number;
+    /** 省略即出生时辰未知：不排时柱，不拿任何时辰代替 */
+    hour?: number;
     gender?: 'male' | 'female';
 }
 
@@ -37,8 +38,9 @@ export interface BaZiInfo {
     monthZhi: string;
     dayGan: string;
     dayZhi: string;
-    hourGan: string;
-    hourZhi: string;
+    /** 出生时辰未知时没有时柱 */
+    hourGan?: string;
+    hourZhi?: string;
     wuxingCount: Record<WuXing, number>;
     dominantWuxing: WuXing;
 }
@@ -150,8 +152,7 @@ export function calculateBaZi(birth: BirthInfo): BaZiInfo {
         birthYear: birth.year,
         birthMonth: birth.month,
         birthDay: birth.day,
-        birthHour: birth.hour ?? 0,
-        birthMinute: birth.minute ?? 0,
+        ...(birth.hour === undefined ? {} : { birthHour: birth.hour, birthMinute: birth.minute ?? 0 }),
         calendarType: birth.calendarType ?? 'solar',
         isLeapMonth: birth.isLeapMonth,
         longitude: birth.longitude,
@@ -160,15 +161,15 @@ export function calculateBaZi(birth: BirthInfo): BaZiInfo {
     const yearPillar = { gan: fourPillars.year.stem, zhi: fourPillars.year.branch };
     const monthPillar = { gan: fourPillars.month.stem, zhi: fourPillars.month.branch };
     const dayPillar = { gan: fourPillars.day.stem, zhi: fourPillars.day.branch };
-    const hourPillar = { gan: fourPillars.hour.stem, zhi: fourPillars.hour.branch };
+    const hourPillar = fourPillars.hour && { gan: fourPillars.hour.stem, zhi: fourPillars.hour.branch };
 
-    // 统计五行
+    // 统计五行（时辰未知时只数年、月、日三柱）
     const wuxingCount: Record<WuXing, number> = { '金': 0, '木': 0, '水': 0, '火': 0, '土': 0 };
     const allGanZhi = [
         yearPillar.gan, yearPillar.zhi,
         monthPillar.gan, monthPillar.zhi,
         dayPillar.gan, dayPillar.zhi,
-        hourPillar.gan, hourPillar.zhi,
+        ...(hourPillar ? [hourPillar.gan, hourPillar.zhi] : []),
     ];
 
     for (const gz of allGanZhi) {
@@ -193,8 +194,7 @@ export function calculateBaZi(birth: BirthInfo): BaZiInfo {
         monthZhi: monthPillar.zhi,
         dayGan: dayPillar.gan,
         dayZhi: dayPillar.zhi,
-        hourGan: hourPillar.gan,
-        hourZhi: hourPillar.zhi,
+        ...(hourPillar ? { hourGan: hourPillar.gan, hourZhi: hourPillar.zhi } : {}),
         wuxingCount,
         dominantWuxing,
     };
@@ -361,8 +361,8 @@ export function analyzeCompatibility(
             score: Math.max(30, Math.min(95, emotionScore)),
             description: emotionDesc,
         });
-    } else if (type === 'business') {
-        // 事业互补：基于时柱关系（时支六合/相冲 + 时干五行生克）
+    } else if (type === 'business' && bazi1.hourGan && bazi1.hourZhi && bazi2.hourGan && bazi2.hourZhi) {
+        // 事业互补：基于时柱关系（时支六合/相冲 + 时干五行生克）；有一方出生时辰未知就没有时柱可比，不给这一项
         const hourZhi1 = bazi1.hourZhi;
         const hourZhi2 = bazi2.hourZhi;
         const hourGanRelation = calculateWuxingRelation(

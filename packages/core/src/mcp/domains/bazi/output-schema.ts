@@ -21,6 +21,7 @@ export const baziCalculateOutputSchema: OutputSchema = obj({
     }, "真太阳时"),
     胎元: str("胎元干支"),
     命宫: str("命宫干支"),
+    出生时辰: str('只在出生时辰未知时出现：没有时柱，也不给命宫与时柱神煞'),
   }),
   四柱: arr(obj({
     柱: str("柱位（年柱/月柱/日柱/时柱）"),
@@ -35,7 +36,7 @@ export const baziCalculateOutputSchema: OutputSchema = obj({
     纳音: str('纳音'),
     神煞: arr(str()),
     空亡: str("是否落空亡（仅落空时输出“是”）"),
-  }), "年、月、日、时四柱"),
+  }), "年、月、日、时四柱（出生时辰未知时只有年、月、日三柱）"),
   干支关系: arr(str(), "原局天干与地支之间的合、冲、刑、害、破等关系"),
   干支关系明细: arr(obj({
     id: str('关系定位 ID'), 类型: str('关系类型'), 说明: str('关系说明'),
@@ -46,6 +47,8 @@ export const baziCalculateOutputSchema: OutputSchema = obj({
     大运列表: arr(obj({
       起运年份: num('起始年份'),
       起运年龄: num('起运年龄'),
+      最晚起运年份: num('出生时辰未知且可能晚一年交运时：时辰偏晚的交运年份'),
+      最晚起运年龄: num('出生时辰未知且可能晚一年交运时：时辰偏晚的交运年龄'),
       干支: str("大运干支"),
       天干: str('天干'),
       地支: str('地支'),

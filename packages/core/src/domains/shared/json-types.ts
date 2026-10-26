@@ -42,6 +42,9 @@ export interface LiunianItemJSON {
 export interface DayunItemJSON {
   起运年份: number;
   起运年龄?: number;
+  /** 出生时辰未知、时辰偏晚时这一步大运的交运年份与年龄（晚一年） */
+  最晚起运年份?: number;
+  最晚起运年龄?: number;
   干支: string;
   天干?: string;
   地支?: string;

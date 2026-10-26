@@ -8,6 +8,7 @@ import { HIDDEN_STEM_DETAILS } from '../../data/shensha.js';
 import { getElementRelation, STEM_ELEMENTS, WU_XING_ORDER, ZHI_WUXING } from '../../shared/utils.js';
 import { resolveEnumList } from '../../shared/validation.js';
 import type { BaziOutput } from './types.js';
+import { baziPillarEntries } from './calculate.js';
 
 export const BAZI_WUXING_RULE_VERSION = 'bazi-wuxing-2026.10.2';
 /** 可按需取的事实组，顺序即输出顺序 */
@@ -69,6 +70,8 @@ export interface BaziWuxingOutput {
     dayMasterState: WangShuaiState;
     hiddenStems: MonthHiddenStem[];
   };
+  /** 出生时辰未知：只看年、月、日三柱，缺失五行可能由时柱补上 */
+  birthTimeUnknown?: true;
   /** 给出 sections 时所取的事实组 */
   sections?: BaziWuxingSection[];
   /** 日主在前，其后年干、月干、时干 */
@@ -98,13 +101,13 @@ const RELATION_WORDS: Record<string, (a: string, b: string) => string> = {
 };
 const RELATION_TYPES: Record<string, string> = { same: '同气', produce: '生', produced: '生', control: '克', controlled: '克' };
 
-/** 日主排在最前：旺衰先看日主之根，再看其余天干的虚实 */
+/** 日主排在最前：旺衰先看日主之根，再看其余天干的虚实（时辰未知时没有时干） */
 const ROOT_STEM_ORDER = [2, 0, 1, 3] as const;
 
 export function deriveBaziWuxing(chart: BaziOutput, selector: BaziWuxingSelector = {}): BaziWuxingOutput {
   const sections = resolveEnumList(selector.sections, BAZI_WUXING_SECTIONS, 'sections');
   const want = (section: BaziWuxingSection) => !sections || sections.includes(section);
-  const pillars = [chart.fourPillars.year, chart.fourPillars.month, chart.fourPillars.day, chart.fourPillars.hour];
+  const pillars = baziPillarEntries(chart).map((entry) => entry.pillar);
   const dayStem = chart.dayMaster;
   const dayElement = STEM_ELEMENTS[dayStem];
   const cell = (index: number, part: '天干' | '地支'): WuxingCell => ({
@@ -131,7 +134,7 @@ export function deriveBaziWuxing(chart: BaziOutput, selector: BaziWuxingSelector
   }));
 
   // 通根：每个天干在四支藏干中的同五行者；年、月、时干与藏干同字即透出
-  const stemRoots: StemRoots[] = ROOT_STEM_ORDER.map((stemIndex) => {
+  const stemRoots: StemRoots[] = ROOT_STEM_ORDER.filter((stemIndex) => stemIndex < pillars.length).map((stemIndex) => {
     const stem = pillars[stemIndex].stem;
     const element = STEM_ELEMENTS[stem];
     const roots = pillars.flatMap((pillar, branchIndex) => (HIDDEN_STEM_DETAILS[pillar.branch] ?? [])
@@ -155,8 +158,8 @@ export function deriveBaziWuxing(chart: BaziOutput, selector: BaziWuxingSelector
     };
   });
 
-  // 相邻天干：年月、月日、日时
-  const adjacentStems = [0, 1, 2].map((index): WuxingFact => {
+  // 相邻天干：年月、月日、日时（时辰未知时没有日时）
+  const adjacentStems = pillars.slice(0, -1).map((_, index): WuxingFact => {
     const a = pillars[index].stem, b = pillars[index + 1].stem;
     const relation = getElementRelation(STEM_ELEMENTS[a], STEM_ELEMENTS[b]);
     const label = (i: number) => (i === 2 ? '日干' : STEM_LABELS[i]);
@@ -169,6 +172,7 @@ export function deriveBaziWuxing(chart: BaziOutput, selector: BaziWuxingSelector
   return {
     dayMaster: { stem: dayStem, element: dayElement },
     missingElements: WU_XING_ORDER.filter((element) => !present.has(element)),
+    ...(chart.birthTimeUnknown ? { birthTimeUnknown: true as const } : {}),
     monthCommand: { branch: monthBranch, element: monthElement, states, dayMasterState: monthCommandState(monthElement, dayElement), hiddenStems: monthHidden },
     ...(sections ? { sections: BAZI_WUXING_SECTIONS.filter((section) => sections.includes(section)) } : {}),
     ...(want('通根') ? { stemRoots } : {}),

@@ -89,6 +89,23 @@ test('prompt reconstruction defaults legacy time fields and rejects invalid save
     }
 });
 
+test('a saved bazi record without a birth time is rebuilt with three pillars, not with a stand-in hour', async () => {
+    const { resolveBaziPromptData, formatBaziPromptText } = await import('../lib/bazi-prompt');
+    const { resolveZiweiPromptData } = await import('../lib/ziwei-chart-prompt');
+    const record = { name: '无时辰', gender: 'female' as const, birthDate: '1995-01-09' };
+    const bazi = resolveBaziPromptData(record);
+    assert.ok(bazi);
+    assert.equal(bazi.output.fourPillars.hour, undefined);
+    assert.deepEqual([bazi.output.fourPillars.year, bazi.output.fourPillars.month, bazi.output.fourPillars.day].map(pillar => pillar.stem + pillar.branch), ['甲戌', '丁丑', '庚子']);
+    assert.equal(bazi.meta.birthTime, '');
+    assert.equal(resolveBaziPromptData({ ...record, birthTime: '' })?.output.fourPillars.hour, undefined);
+    const text = formatBaziPromptText(record);
+    assert.match(text, /出生时辰: 未知（未排时柱/u);
+    assert.doesNotMatch(text, /命盘数据不完整/u);
+    // 紫微离不开时辰，仍然不重建
+    assert.equal(resolveZiweiPromptData(record), null);
+});
+
 const promptSettings = { expressionStyle: 'direct' as const, userProfile: null, customInstructions: '' };
 
 test('buildPromptWithSources puts the document and search results in front of the question, never in the system prompt', async () => {

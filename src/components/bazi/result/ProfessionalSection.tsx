@@ -20,7 +20,6 @@ function SectionHeading({ title, aside }: { title: ReactNode; aside?: ReactNode 
 export function ProfessionalSection({
     canonicalChart,
     proData,
-    isUnknownTime = false,
     selectedDaYunIndex,
     onSelectDaYun,
     currentLiuNian,
@@ -36,7 +35,6 @@ export function ProfessionalSection({
 }: {
     canonicalChart: BaziCanonicalJSON;
     proData: ReturnType<typeof calculateProfessionalData>;
-    isUnknownTime?: boolean;
     selectedDaYunIndex: number;
     onSelectDaYun: (index: number) => void;
     currentLiuNian: LiuNianInfo[];
@@ -54,7 +52,8 @@ export function ProfessionalSection({
     const activeDaYun: DaYunInfo | undefined = proData.daYun[selectedDaYunIndex];
     const activeLiuNian: LiuNianInfo | undefined = currentLiuNian.find(ln => ln.year === selectedLiuNianYear);
     const activeLiuRi: LiuRiInfo | undefined = liuRi.find(lr => lr.date === selectedLiuRiDate);
-    const relationHighlights = isUnknownTime ? [] : canonicalChart.干支关系;
+    // 时辰未知的盘只有三柱，干支关系也只在三柱之间，照常列出
+    const relationHighlights = canonicalChart.干支关系;
     const hasGanZhiHighlights = relationHighlights.length > 0;
     const basicInfo = canonicalChart.基本信息;
     const chartFacts = [
@@ -68,7 +67,6 @@ export function ProfessionalSection({
             <section className="rounded-2xl border-[0.5px] border-border bg-surface px-3 py-2 sm:px-6 sm:py-3">
                 <ProfessionalTable
                     canonicalChart={canonicalChart}
-                    isUnknownTime={isUnknownTime}
                     // 运势信息
                     activeDaYun={activeDaYun}
                     activeLiuNian={activeLiuNian}

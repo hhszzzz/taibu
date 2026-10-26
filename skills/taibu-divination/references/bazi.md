@@ -14,8 +14,8 @@
 | `birthYear` | integer | 是 | — | 出生年 (1-9999；公元纪年) |
 | `birthMonth` | integer | 是 | — | 出生月（1-12） |
 | `birthDay` | integer | 是 | — | 出生日（公历 1-31，农历 1-30） |
-| `birthHour` | integer | 是 | — | 出生时（0-23） |
-| `birthMinute` | integer | 否 | `0` | 出生分（0-59） |
+| `birthHour` | integer | 否 | — | 出生时（0-23）；不知道出生时辰时省略，此时不排时柱，也不给命宫、时柱神煞与小运 |
+| `birthMinute` | integer | 否 | `0` | 出生分（0-59）；省略 birthHour 时不填 |
 | `calendarType` | enum | 否 | `"solar"` | 出生日期的历法（solar=公历，lunar=农历）；可选值: `solar` / `lunar` |
 | `isLeapMonth` | boolean | 否 | `false` | 是否农历闰月（仅 calendarType=lunar 时有效） |
 | `birthPlace` | string | 否 | — | 出生地点文本 |
@@ -31,10 +31,14 @@ echo '{"gender":"male","birthYear":1990,"birthMonth":1,"birthDay":15,"birthHour"
 echo '{"gender":"female","birthYear":1995,"birthMonth":6,"birthDay":20,"birthHour":23,"calendarType":"lunar"}' | node "$TB/scripts/taibu.mjs" call bazi -
 ```
 
+```bash
+echo '{"gender":"female","birthYear":1988,"birthMonth":3,"birthDay":12}' | node "$TB/scripts/taibu.mjs" call bazi -
+```
+
 ## 输出结构（structuredContent 顶层键）
 
 - `基本信息`
-- `四柱`：年、月、日、时四柱
+- `四柱`：年、月、日、时四柱（出生时辰未知时只有年、月、日三柱）
 - `干支关系`：原局天干与地支之间的合、冲、刑、害、破等关系
 - `干支关系明细`：可交互的关系坐标；旧结果可省略
 - `大运`：大运（随大运专项结果输出）

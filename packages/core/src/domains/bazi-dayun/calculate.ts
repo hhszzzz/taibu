@@ -243,7 +243,7 @@ export function calculateDayunData(input: DayunInput): DayunOutput {
   const { gender } = input;
   const yunSect = input.yunSect ?? 1;
   if (yunSect !== 1 && yunSect !== 2) throw new CoreInputError('yunSect', '起运算法必须为 1 或 2');
-  const { lunar, termLunar, trueSolarTimeInfo } = resolveBaziCalendarContext(input);
+  const { lunar, termLunar, trueSolarTimeInfo, timeUnknown } = resolveBaziCalendarContext(input);
   const eightChar = lunar.getEightChar();
   eightChar.setSect(input.dayBoundary === 'zi' ? 1 : 2);
   const termEightChar = termLunar.getEightChar();
@@ -253,12 +253,13 @@ export function calculateDayunData(input: DayunInput): DayunOutput {
   const yearBranch = termEightChar.getYearZhi();
   const monthBranch = termEightChar.getMonthZhi();
   const dayBranch = eightChar.getDayZhi();
-  const hourStem = eightChar.getTimeGan();
-  const hourBranch = eightChar.getTimeZhi();
+  // 出生时辰未知不排时柱，小运（由时柱起）也不排
+  const hourStem = timeUnknown ? undefined : eightChar.getTimeGan();
+  const hourBranch = timeUnknown ? undefined : eightChar.getTimeZhi();
 
-  // 原局四柱地支
-  const natalBranches = [yearBranch, monthBranch, dayBranch, hourBranch];
-  const natalLabels = ['年柱', '月柱', '日柱', '时柱'];
+  // 原局各柱地支
+  const natalBranches = hourBranch === undefined ? [yearBranch, monthBranch, dayBranch] : [yearBranch, monthBranch, dayBranch, hourBranch];
+  const natalLabels = ['年柱', '月柱', '日柱', '时柱'].slice(0, natalBranches.length);
 
   // 构建神煞上下文（基于原命盘四柱）
   const shenShaContext: ShenShaContext = {
@@ -273,8 +274,18 @@ export function calculateDayunData(input: DayunInput): DayunOutput {
   };
 
   const genderNum = gender === 'male' ? 1 : 0;
-  const yun = termEightChar.getYun(genderNum, yunSect);
+  const yunOf = (calendar: typeof termLunar) => {
+    const chart = calendar.getEightChar();
+    chart.setSect(input.dayBoundary === 'zi' ? 1 : 2);
+    return chart.getYun(genderNum, yunSect);
+  };
+  // 时辰未知：起运随出生时刻变化，当天最早、最晚两端都推；大运按起运较早的一端排，另一端只记差别
+  const yuns = [yunOf(termLunar), ...(timeUnknown ? [yunOf(timeUnknown.lateTermLunar)] : [])]
+    .sort((a, b) => a.getStartSolar().toYmdHms().localeCompare(b.getStartSolar().toYmdHms()));
+  const yun = yuns[0];
+  const latest = yuns[yuns.length - 1];
   const daYunList = yun.getDaYun().filter((dy) => dy.getGanZhi()).slice(0, 10);
+  const firstStartYear = (item: typeof yun) => item.getDaYun().find((dy) => dy.getGanZhi())?.getStartYear() ?? 0;
 
   const list = daYunList
     .map((dy) => {
@@ -348,11 +359,19 @@ export function calculateDayunData(input: DayunInput): DayunOutput {
 
   // 小运计算
   const firstDaYunStartAge = daYunList.length > 0 ? daYunList[0].getStartAge() : 1;
-  const xiaoYun = calculateXiaoYun(hourStem, hourBranch, gender, yearStem, dayStem, firstDaYunStartAge);
+  const xiaoYun = hourStem === undefined || hourBranch === undefined ? [] : calculateXiaoYun(hourStem, hourBranch, gender, yearStem, dayStem, firstDaYunStartAge);
   const startAge = daYunList.length > 0 ? daYunList[0].getStartAge() : yun.getStartYear();
-  const startAgeDetail = `${yun.getStartYear()}年${yun.getStartMonth()}月${yun.getStartDay()}天${yun.getStartHour() ? `${yun.getStartHour()}小时` : ''}起运`;
+  const detail = (item: typeof yun) => `${item.getStartYear()}年${item.getStartMonth()}月${item.getStartDay()}天${item.getStartHour() ? `${item.getStartHour()}小时` : ''}`;
+  const startAgeDetail = timeUnknown
+    ? `出生时辰未知，${detail(yun)}至${detail(latest)}之间起运`
+    : `${detail(yun)}起运`;
+  const startRange = timeUnknown ? {
+    latestStartSolar: latest.getStartSolar().toYmdHms(),
+    latestStartAgeDetail: `${detail(latest)}起运`,
+    yearShift: firstStartYear(latest) > firstStartYear(yun) ? 1 as const : 0 as const,
+  } : undefined;
   return { startAge, startAgeDetail, xiaoYun, list,
-    startSolar: yun.getStartSolar().toYmdHms(), direction: yun.isForward() ? 'forward' : 'backward',
+    startSolar: yun.getStartSolar().toYmdHms(), ...(startRange ? { startRange } : {}), direction: yun.isForward() ? 'forward' : 'backward',
     yunSect, dayBoundary: input.dayBoundary ?? 'midnight', trueSolarTimeInfo,
-    calculationOptions: { timezone: input.timezone ?? DEFAULT_DIVINATION_TIMEZONE, startSolarTimezone: CALENDAR_TIMEZONE, ...(input.longitude === undefined ? {} : { longitude: input.longitude }), yunSect, dayBoundary: input.dayBoundary ?? 'midnight', disambiguation: input.disambiguation ?? 'reject', ageConvention: 'nominal', ruleVersion: 'bazi-dayun-2026.10' } };
+    calculationOptions: { timezone: input.timezone ?? DEFAULT_DIVINATION_TIMEZONE, startSolarTimezone: CALENDAR_TIMEZONE, ...(input.longitude === undefined || timeUnknown ? {} : { longitude: input.longitude }), yunSect, dayBoundary: input.dayBoundary ?? 'midnight', disambiguation: input.disambiguation ?? 'reject', ageConvention: 'nominal', ruleVersion: 'bazi-dayun-2026.10' } };
 }

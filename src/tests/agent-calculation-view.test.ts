@@ -34,3 +34,20 @@ test('a date selection names every zodiac it avoids', async () => {
   const { text } = await render('almanac_select', { startDate: '2026-02-14', endDate: '2026-02-20', excludeClash: ['牛', '兔'] });
   assert.match(text, /2026-02-14 至 2026-02-20 · 7 天 · 避冲 丑牛（冲未）、卯兔（冲酉） · 候选 5 天/u);
 });
+
+test('a pairing with an unknown birth time shows three pillars for that person and says why', async () => {
+  const { html, text } = await render('bazi_hepan', {
+    a: { name: '男方', gender: 'male', birthYear: 1990, birthMonth: 1, birthDay: 15, birthHour: 9 },
+    b: { name: '女方', gender: 'female', birthYear: 1992, birthMonth: 8, birthDay: 3 },
+  });
+  assert.match(html, /aria-label="女方四柱"><span title="年柱 · 剑锋金">壬申<\/span><span[^>]*>丁未<\/span><span[^>]*>辛亥<\/span><\/p>/u);
+  assert.match(text, /女方（女）[^·]*· 属猴 .* · 出生时辰未知，未排时柱/u);
+  assert.match(text, /男方（男）· 属蛇 · 日主庚金，生于丑月（相）· 缺失五行 无 己巳 丁丑 庚辰 辛巳/u, 'the side with a time keeps four pillars and no note');
+});
+
+test('luck periods of an unknown birth time show the start as a range and the year that may come later', async () => {
+  const { text } = await render('bazi_dayun', { gender: 'female', birthYear: 1995, birthMonth: 1, birthDay: 9 });
+  assert.match(text, /起运时刻 1995-12-19 00:00:00 至 1996-04-09 23:59:00/u);
+  assert.match(text, /交运年份 出生时辰未知：时辰偏晚时各步大运晚一年交运/u);
+  assert.match(text, /1995（或1996）–2004 · 1 岁/u);
+});

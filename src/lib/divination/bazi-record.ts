@@ -14,15 +14,18 @@ type StoredBaziBase = {
     disambiguation?: unknown;
 };
 
-/** Shared birth-input reconstruction; callers decide whether a calculation error is fatal. */
+/**
+ * Shared birth-input reconstruction; callers decide whether a calculation error is fatal.
+ * A record without a birth time casts no hour pillar: no hour is assumed in its place.
+ */
 export function buildBaziInputFromStoredFields(row: StoredBaziBase): BaziInput {
     if (typeof row.birth_date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(row.birth_date)) {
         throw new Error('出生日期格式无效');
     }
     const [birthYear, birthMonth, birthDay] = row.birth_date.split('-').map(Number);
-    const birthTime = row.birth_time == null || row.birth_time === '' ? '12:00' : row.birth_time;
-    const time = parseBirthTimeString(birthTime);
-    if (!time) throw new Error('出生时辰格式无效');
+    const birthTime = row.birth_time?.trim() ?? '';
+    const time = birthTime ? parseBirthTimeString(birthTime) : null;
+    if (birthTime && !time) throw new Error('出生时辰格式无效');
     if (row.gender != null && row.gender !== 'male' && row.gender !== 'female') throw new Error('性别无效');
     if (row.calendar_type != null && row.calendar_type !== 'lunar' && row.calendar_type !== 'solar') throw new Error('历法无效');
     const longitude = parseLongitude(row.longitude);
@@ -32,8 +35,7 @@ export function buildBaziInputFromStoredFields(row: StoredBaziBase): BaziInput {
         birthYear,
         birthMonth,
         birthDay,
-        birthHour: time.hour,
-        birthMinute: time.minute,
+        ...(time ? { birthHour: time.hour, birthMinute: time.minute } : {}),
         birthPlace: row.birth_place || undefined,
         longitude,
         calendarType: row.calendar_type === 'lunar' ? 'lunar' : 'solar',

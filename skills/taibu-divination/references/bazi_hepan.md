@@ -16,8 +16,8 @@
 | `a.birthYear` | integer | 是 | — | 出生年 (1-9999；公元纪年) |
 | `a.birthMonth` | integer | 是 | — | 出生月（1-12） |
 | `a.birthDay` | integer | 是 | — | 出生日（公历 1-31，农历 1-30） |
-| `a.birthHour` | integer | 是 | — | 出生时（0-23） |
-| `a.birthMinute` | integer | 否 | `0` | 出生分（0-59） |
+| `a.birthHour` | integer | 否 | — | 出生时（0-23）；不知道出生时辰时省略，此时不排时柱，也不给命宫、时柱神煞与小运 |
+| `a.birthMinute` | integer | 否 | `0` | 出生分（0-59）；省略 birthHour 时不填 |
 | `a.calendarType` | enum | 否 | `"solar"` | 出生日期的历法（solar=公历，lunar=农历）；可选值: `solar` / `lunar` |
 | `a.isLeapMonth` | boolean | 否 | `false` | 是否农历闰月（仅 calendarType=lunar 时有效） |
 | `a.birthPlace` | string | 否 | — | 出生地点文本 |
@@ -31,8 +31,8 @@
 | `b.birthYear` | integer | 是 | — | 出生年 (1-9999；公元纪年) |
 | `b.birthMonth` | integer | 是 | — | 出生月（1-12） |
 | `b.birthDay` | integer | 是 | — | 出生日（公历 1-31，农历 1-30） |
-| `b.birthHour` | integer | 是 | — | 出生时（0-23） |
-| `b.birthMinute` | integer | 否 | `0` | 出生分（0-59） |
+| `b.birthHour` | integer | 否 | — | 出生时（0-23）；不知道出生时辰时省略，此时不排时柱，也不给命宫、时柱神煞与小运 |
+| `b.birthMinute` | integer | 否 | `0` | 出生分（0-59）；省略 birthHour 时不填 |
 | `b.calendarType` | enum | 否 | `"solar"` | 出生日期的历法（solar=公历，lunar=农历）；可选值: `solar` / `lunar` |
 | `b.isLeapMonth` | boolean | 否 | `false` | 是否农历闰月（仅 calendarType=lunar 时有效） |
 | `b.birthPlace` | string | 否 | — | 出生地点文本 |

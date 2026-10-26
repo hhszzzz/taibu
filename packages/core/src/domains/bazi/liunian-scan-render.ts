@@ -1,6 +1,7 @@
 import { withRulesJSON } from '../../shared/calculation-rules.js';
 import { drilldownText, omittedLine, omittedSummary, type DrilldownOmittedJSON } from '../shared/drilldown-render.js';
 import {
+  NATAL_UNKNOWN_TIME_NOTE,
   OMITTED_ORDER,
   ganzhiRelationLine,
   ganzhiRelationRow,
@@ -30,6 +31,8 @@ export interface BaziLiunianScanCanonicalJSON {
   扫描范围: { 起始年: number; 结束年: number; 列出年数: number; };
   筛选?: BaziRelationsFilterJSON;
   原局四柱: Array<{ 柱: string; 干支: string; }>;
+  /** 只在出生时辰未知时出现：原局只有年、月、日三柱 */
+  出生时辰?: string;
   逐年: BaziLiunianYearJSON[];
   未列出?: DrilldownOmittedJSON;
   口径: string[];
@@ -67,6 +70,7 @@ function renderScanJSONBase(result: BaziLiunianScanOutput): BaziLiunianScanCanon
     扫描范围: { 起始年: result.range.fromYear, 结束年: result.range.toYear, 列出年数: result.range.matchedYears },
     ...(result.filter ? { 筛选: relationsFilterJSON(result.filter) } : {}),
     原局四柱: result.natal.map((p) => ({ 柱: p.label, 干支: p.ganZhi })),
+    ...(result.birthTimeUnknown ? { 出生时辰: NATAL_UNKNOWN_TIME_NOTE } : {}),
     逐年: result.years.map(yearJSON),
     ...(omitted ? { 未列出: omitted } : {}),
     口径: SCAN_NOTES,
@@ -84,6 +88,7 @@ function renderScanTextBase(result: BaziLiunianScanOutput, full: boolean): strin
     '## 扫描范围', '',
     `- ${range.fromYear}–${range.toYear} 年${result.filter ? `，筛选：${relationsFilterText(result.filter)}` : ''}，列出 ${range.matchedYears} 年`,
   ];
+  if (result.birthTimeUnknown) lines.push(`- 出生时辰：${NATAL_UNKNOWN_TIME_NOTE}`);
   if (result.years.some((item) => item.linkedRelations?.length)) lines.push('- 牵连：不在筛选内、但与所列关系共用同一字的流年关系，须一并看');
   let fortune = '';
   for (const item of result.years) {

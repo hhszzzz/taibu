@@ -50,6 +50,8 @@ declare module 'lunar-javascript' {
     getDayShengXiao(): string;
     getJieQi(): string | null;
     getPrevJieQi(): JieQi | null;
+    /** 此刻之前最近的「节」（立春、惊蛰…，不含中气） */
+    getPrevJie(wholeDay?: boolean): JieQi | null;
     getPrevQi(wholeDay?: boolean): JieQi;
     getNextJieQi(): JieQi | null;
     getCurrentJie(): JieQi | null;

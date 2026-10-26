@@ -46,6 +46,8 @@ export interface BaziLiunianScanOutput {
   range: { fromYear: number; toYear: number; matchedYears: number; };
   filter?: BaziRelationsFilter;
   natal: Array<{ label: string; ganZhi: string; }>;
+  /** 出生时辰未知：原局只有年、月、日三柱 */
+  birthTimeUnknown?: true;
   years: BaziLiunianYear[];
   /** 筛选时整个范围内没有列出的流年事实（含未列出年份的全部事实），每条记一个类型 */
   omitted?: string[];
@@ -71,6 +73,7 @@ export function deriveBaziLiunianScan(
 ): BaziLiunianScanOutput {
   validate(selector);
   const filter = resolveRelationsFilter(selector, BAZI_LIUNIAN_SCAN_PILLARS);
+  if (chart.birthTimeUnknown && filter?.pillars?.includes('时柱')) throw new CoreInputError('pillars', '出生时辰未知，命盘没有时柱');
   const dayun = calculateDayunData({ ...baseInput, ...(selector.yunSect ? { yunSect: selector.yunSect } : {}) });
   const birthYear = solarYearOfDayun(dayun);
   if (birthYear !== undefined && selector.fromYear < birthYear) {
@@ -113,7 +116,7 @@ export function deriveBaziLiunianScan(
         fortune: {
           layer: fortunePillar.layer as '大运' | '小运',
           ganZhi: `${fortunePillar.stem}${fortunePillar.branch}`,
-          label: result.query.dayun ? `第${result.query.dayun.index}步大运` : `小运（虚岁${result.query.xiaoYun?.age}）`,
+          label: result.query.dayun ? `第${result.query.dayun.index}步大运${result.query.dayun.note ? `；${result.query.dayun.note}` : ''}` : `小运（虚岁${result.query.xiaoYun?.age}）`,
         },
       } : {}),
       natalRelations: selection.kept.filter((fact) => !withFortune(fact)),
@@ -127,7 +130,8 @@ export function deriveBaziLiunianScan(
   return {
     range: { fromYear: selector.fromYear, toYear: selector.toYear, matchedYears: years.length },
     ...(filter ? { filter } : {}),
-    natal: (first?.pillars ?? []).slice(0, 4).map((p) => ({ label: p.label, ganZhi: `${p.stem}${p.branch}` })),
+    natal: (first?.pillars ?? []).filter((p) => p.layer === '原局').map((p) => ({ label: p.label, ganZhi: `${p.stem}${p.branch}` })),
+    ...(chart.birthTimeUnknown ? { birthTimeUnknown: true as const } : {}),
     years,
     ...(filter ? { omitted } : {}),
     calculationOptions: {

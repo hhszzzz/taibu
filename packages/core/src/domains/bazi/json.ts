@@ -15,6 +15,8 @@ import {
 import type {
   BaziOutput
 } from './types.js';
+import { baziPillarEntries } from './calculate.js';
+import { DAYUN_YEAR_SHIFT_NOTE } from '../bazi-dayun/types.js';
 import { GAN_WUXING, getElementRelation } from '../../shared/utils.js';
 import type {
   BaziCanonicalTextOptions
@@ -137,11 +139,11 @@ function buildBaziCanonicalPillarShenSha(item: { shenSha?: string[]; }): string[
 /** 地支关系的说明；刑名不含地支，写出实际参与的地支，如「丑未刑（恃势之刑）」 */
 export function baziBranchRelationText(chart: Pick<BaziOutput, 'fourPillars'>, relation: BaziOutput['relations'][number]): string {
   if (relation.type !== '刑') return relation.description;
-  const branchOf: Record<string, string> = {
+  const branchOf: Record<string, string | undefined> = {
     '年支': chart.fourPillars.year.branch,
     '月支': chart.fourPillars.month.branch,
     '日支': chart.fourPillars.day.branch,
-    '时支': chart.fourPillars.hour.branch,
+    '时支': chart.fourPillars.hour?.branch,
   };
   return `${[...new Set(relation.pillars.map((pillar) => branchOf[pillar]))].join('')}刑（${relation.description}）`;
 }
@@ -174,17 +176,29 @@ function buildBaziCanonicalRelations(result: Pick<BaziOutput, 'fourPillars' | 'r
 
 // ===== 八字 =====
 
+/** 出生时辰未知时写在基本信息里：不排时柱，与时辰有关的量一概不给 */
+/**
+ * 出生时辰未知时「出生时辰」一栏的说明。日柱按 23 点换日时，23 点后出生的日柱是次日；
+ * 时辰未知只能按出生日期取，一并写明。
+ */
+export function baziUnknownTimeNote(chart: Pick<BaziOutput, 'calculationOptions'>): string {
+  const notes = ['未排时柱', '命宫、时柱神煞与小运不给出'];
+  if (chart.calculationOptions?.dayBoundary === 'zi') notes.push('日柱按出生日期取，23 点后出生则为次日');
+  return `未知（${notes.join('；')}）`;
+}
+
 export const renderBaziCanonicalJSON = withRulesJSON(renderBaziCanonicalJSONBase);
 
 /** Preserve the positions computed by Core, including repeated stems/branches. */
 function buildRelationCoordinates(chart: BaziOutput): BaziRelationJSON[] {
-  const pillars = [chart.fourPillars.year, chart.fourPillars.month, chart.fourPillars.day, chart.fourPillars.hour];
+  // 时辰未知时只有前三柱；关系里也不会出现时柱
+  const pillars = baziPillarEntries(chart).map(entry => entry.pillar);
   const names = ['年柱', '月柱', '日柱', '时柱'] as const;
   const branchPositions = ['年支', '月支', '日支', '时支'];
   const stemPositions = ['年干', '月干', '日干', '时干'];
   const cell = (position: string, part: BaziCellJSON['部位']): BaziCellJSON | null => {
     const index = (part === '天干' ? stemPositions : branchPositions).indexOf(position);
-    if (index < 0) return null;
+    if (index < 0 || index >= pillars.length) return null;
     const char = part === '天干' ? pillars[index].stem : pillars[index].branch;
     return char && char !== '*' ? { 柱: names[index], 部位: part, 字: char } : null;
   };
@@ -227,13 +241,9 @@ function renderBaziCanonicalJSONBase(
   if (chart.trueSolarTimeInfo) basicInfo.真太阳时 = buildTrueSolarTimeJSON(chart.trueSolarTimeInfo);
   if (detailLevel === 'full' && chart.taiYuan) basicInfo.胎元 = chart.taiYuan;
   if (detailLevel === 'full' && chart.mingGong) basicInfo.命宫 = chart.mingGong;
+  if (chart.birthTimeUnknown) basicInfo.出生时辰 = baziUnknownTimeNote(chart);
 
-  const fourPillars = ([
-    ['年柱', chart.fourPillars.year],
-    ['月柱', chart.fourPillars.month],
-    ['日柱', chart.fourPillars.day],
-    ['时柱', chart.fourPillars.hour],
-  ] as const).map(([label, pillar]) => {
+  const fourPillars = baziPillarEntries(chart).map(({ label, pillar }) => {
     const entry: BaziCanonicalJSON['四柱'][number] = {
       柱: label,
       干支: `${pillar.stem}${pillar.branch}`,
@@ -256,9 +266,10 @@ function renderBaziCanonicalJSONBase(
   const json: BaziCanonicalJSON = { 基本信息: basicInfo, 四柱: fourPillars, 干支关系: relations, 干支关系明细: buildRelationCoordinates(chart) };
 
   if (dayun) {
+    const shift = dayun.startRange?.yearShift;
     json.大运 = {
-      起运信息: `${dayun.startAge}岁（${dayun.startAgeDetail}）`,
-      大运列表: dayun.list.map((item) => buildDayunItemJSON({
+      起运信息: `${dayun.startAge}岁（${dayun.startAgeDetail}）${shift ? `；${DAYUN_YEAR_SHIFT_NOTE}` : ''}`,
+      大运列表: dayun.list.map((item) => ({ ...buildDayunItemJSON({
         startYear: item.startYear,
         startAge: item.startAge,
         ganZhi: item.ganZhi,
@@ -272,7 +283,7 @@ function renderBaziCanonicalJSONBase(
         shenSha: detailLevel === 'full' ? item.shenSha : undefined,
         branchRelations: detailLevel === 'full' ? item.branchRelations : undefined,
         liunianList: detailLevel === 'full' ? item.liunianList : undefined,
-      })),
+      }), ...(shift ? { 最晚起运年份: item.startYear + 1, 最晚起运年龄: item.startAge + 1 } : {}) })),
     };
   }
 

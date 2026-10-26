@@ -6,7 +6,8 @@ export const baziLiunianScanOutputSchema: OutputSchema = obj({
     起始年: num('起始流年'), 结束年: num('结束流年'), 列出年数: num('实际列出的年数'),
   }, '扫描的年份范围'),
   筛选: relationsFilterSchema,
-  原局四柱: arr(obj({ 柱: str('柱名'), 干支: str('干支') }), '原局四柱'),
+  原局四柱: arr(obj({ 柱: str('柱名'), 干支: str('干支') }), '原局四柱（出生时辰未知时只有年、月、日三柱）'),
+  出生时辰: str('只在出生时辰未知时出现：原局只有年、月、日三柱'),
   逐年: arr(obj({
     流年: num('流年年份（公历）'), 干支: str('流年干支'), 天干十神: str(), 地支主气十神: str('地支本气相对日主的十神'), 纳音: str(),
     大运: str('所在大运（干支与步数）'), 小运: str('起运前的小运'),

@@ -13,8 +13,8 @@ test('imported compatibility charts retain exact minutes, calendars, longitude a
         const expected = calculateBazi({ gender: 'male', birthYear: birth.year, birthMonth: birth.month, birthDay: birth.day, birthHour: birth.hour, birthMinute: birth.minute, ...birth });
         const actual = calculateBaZi(birth);
         for (const pillar of ['year', 'month', 'day', 'hour'] as const) {
-            assert.equal(actual[`${pillar}Gan`], expected.fourPillars[pillar].stem);
-            assert.equal(actual[`${pillar}Zhi`], expected.fourPillars[pillar].branch);
+            assert.equal(actual[`${pillar}Gan`], expected.fourPillars[pillar]?.stem);
+            assert.equal(actual[`${pillar}Zhi`], expected.fourPillars[pillar]?.branch);
         }
     }
     assert.throws(() => calculateBaZi({ ...inputs[0], disambiguation: 'reject' }));
@@ -44,4 +44,19 @@ test('hepan calculateBaZi should match lunar-javascript pillars', () => {
     assert.equal(result.dayZhi, eightChar.getDayZhi());
     assert.equal(result.hourGan, eightChar.getTimeGan());
     assert.equal(result.hourZhi, eightChar.getTimeZhi());
+});
+
+test('a person without a birth time has no hour pillar and no hour-based dimension', () => {
+    const known = { name: '甲', year: 1990, month: 1, day: 15, hour: 9, gender: 'male' as const };
+    const unknown = { name: '乙', year: 1992, month: 8, day: 3, gender: 'female' as const };
+    const bazi = calculateBaZi(unknown);
+    assert.equal(bazi.hourGan, undefined);
+    assert.equal(bazi.hourZhi, undefined);
+    // 五行只数年、月、日三柱的六个字
+    assert.equal(Object.values(bazi.wuxingCount).reduce((sum, count) => sum + count, 0), 6);
+    const business = analyzeCompatibility(known, unknown, 'business');
+    assert.ok(!business.dimensions.some(dimension => dimension.name === '事业互补'), '没有时柱可比时不给时柱维度');
+    assert.ok(analyzeCompatibility(known, { ...unknown, hour: 14 }, 'business').dimensions.some(dimension => dimension.name === '事业互补'));
+    // 出生当天交节而时辰未知：月柱取决于时辰，明确报错
+    assert.throws(() => calculateBaZi({ ...unknown, year: 2024, month: 3, day: 5 }), /惊蛰交节/);
 });

@@ -66,7 +66,7 @@ export function mcpServerRow(overrides: Partial<McpServerRow> = {}): McpServerRo
   return {
     id: '00000000-0000-4000-8000-0000000000a1', owner_id: null, name: 'archive', display_name: '档案库', description: '查询公开档案',
     url: 'https://mcp.example.com/mcp', headers: {}, secret_headers: {}, secret_query: {}, exposure: 'deferred', tool_policy: {},
-    search_tool: null, fetch_tool: null, result_adapter: 'generic', route_priority: 100, required_tier: 'free', is_enabled: true,
+    search_tool: null, fetch_tool: null, route_priority: 100, required_tier: 'free', is_enabled: true,
     timeout_ms: 30_000, max_result_chars: 20_000, sort_order: 0, tools_snapshot: null, last_checked_at: null, last_error: null,
     created_at: '2026-10-26T00:00:00Z', updated_at: '2026-10-26T00:00:00Z',
     ...overrides,

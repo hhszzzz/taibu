@@ -4,7 +4,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight, LoaderCircle, PanelRight, Pause } from 'lucide-react';
 import type { AgentMessageData, AgentPart } from '@/lib/agent/types';
-import { AGENT_SUBMIT_PLAN_TOOL, AGENT_TOOL_SEARCH_TOOL, getAgentToolFamily, isAgentMemberTool } from '@/lib/agent/tool-catalog';
+import { AGENT_SUBMIT_PLAN_TOOL, AGENT_TOOL_SEARCH_TOOL, AGENT_WEB_TOOLS, getAgentToolFamily, isAgentMemberTool } from '@/lib/agent/tool-catalog';
 import { getAgentToolQuestionIds } from '@/lib/agent/workspace';
 import { getAgentAttachmentRead, getAgentChart, getAgentConversationHits, getAgentDataResults, getAgentMemories, getAgentMethod, getAgentMethodCatalog, getAgentNotes, getAgentPlan, getAgentProfile, getAgentScript, getAgentSearchResults, getAgentToolQuestions, getAgentToolSearchLoaded, getAgentToolText } from '@/lib/agent/tool-presentation';
 import { useIsDesktopLayout } from '@/lib/hooks/useIsDesktopLayout';
@@ -115,12 +115,14 @@ function StepStructured({ tool, parts, workspace }: { tool: AgentTool; parts: Ag
         </div> : null;
     }
     // 检索的来源直接列在调用框里：标题、编号与站点，点击打开原页；完整摘录在工作区「回答依据」。
-    if (tool.name === 'web_search' || tool.name === 'search_knowledge') {
-        const web = tool.name === 'web_search';
+    if (AGENT_WEB_TOOLS.has(tool.name) || tool.name === 'search_knowledge') {
+        const web = tool.name !== 'search_knowledge';
         const results = getAgentSearchResults(tool);
         if (!results) return null;
+        const fact = tool.name === 'web_fetch' ? results.length ? '读取了网页正文' : '没有读到网页正文'
+            : results.length ? `找到 ${results.length} 个${web ? '公开来源' : '相关段落'}` : web ? '没有可引用的公开来源' : '没有匹配的段落';
         return <div className="agent-step-structured">
-            <p className="agent-step-structured-fact">{results.length ? `找到 ${results.length} 个${web ? '公开来源' : '相关段落'}` : web ? '没有可引用的公开来源' : '没有匹配的段落'}</p>
+            <p className="agent-step-structured-fact">{fact}</p>
             {results.length > 0 && <ul className="agent-step-structured-sources">
                 {results.slice(0, 4).map(result => <li key={result.id}>
                     {result.cite !== null && <span className="agent-step-cite">[{result.cite}]</span>}

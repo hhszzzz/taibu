@@ -96,6 +96,7 @@ const RAW_TOOL_TITLES: Record<string, string> = {
     inspect_chart: '查看命盘',
     focus_chart: '定位分析位置',
     web_search: '联网搜索',
+    web_fetch: '读取网页',
     search_knowledge: '知识库检索',
     list_user_data: '检索资料',
     read_user_data: '读取资料',
@@ -176,6 +177,16 @@ export function describeDrilldownSelection(args: Record<string, unknown>): strin
     return parts.join(' · ') || '原局';
 }
 
+/** A page address as a reader recognises it: host and path without the scheme, cut to 60 characters. */
+function shortAddress(url: string): string {
+    try {
+        const parsed = new URL(url);
+        return `${parsed.host.replace(/^www\./u, '')}${parsed.pathname === '/' ? '' : parsed.pathname}`.slice(0, 60);
+    } catch {
+        return url.slice(0, 60);
+    }
+}
+
 /** 「工作」 · 2026-01-01 至 2026-03-31: the conditions a listing was narrowed by. */
 function describeListConditions(args: Record<string, unknown>): string {
     const keyword = typeof args.keyword === 'string' && args.keyword.trim() ? `「${args.keyword.trim().slice(0, 40)}」` : '';
@@ -208,6 +219,11 @@ export function summarizeAgentTool(tool: AgentTool): string | null {
     if (tool.name === 'bazi_hepan') return (['a', 'b'] as const).map((key, index) => describeBirth({
         name: index ? '乙方' : '甲方', ...(args[key] && typeof args[key] === 'object' ? args[key] as Record<string, unknown> : {}),
     })).join(' × ');
+    if (tool.name === 'web_fetch') {
+        const address = typeof args.url === 'string' ? `「${shortAddress(args.url)}」` : '';
+        const page = getAgentSearchResults(tool)?.[0];
+        return [address, page && `读取了「${page.title.slice(0, 40)}」`].filter(Boolean).join(' · ') || null;
+    }
     if (tool.name === 'web_search' || tool.name === 'search_knowledge') {
         const query = typeof args.query === 'string' ? `「${args.query.slice(0, 60)}」` : '';
         const results = getAgentSearchResults(tool);

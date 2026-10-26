@@ -1038,7 +1038,7 @@ export async function run(existingPage, bundlePath) {
         // As the API answers: secrets come back by name only.
         const server = { id: 'connector-' + (owned.length + 1), scope: 'user', name: body.name, displayName: body.displayName, description: body.description ?? '',
           url: body.url, headers: body.headers ?? {}, secretHeaders: Object.keys(body.secretHeaders ?? {}), secretQuery: Object.keys(body.secretQuery ?? {}),
-          exposure: body.exposure ?? 'deferred', toolPolicy: {}, searchTool: null, fetchTool: null, resultAdapter: 'generic', routePriority: 100,
+          exposure: body.exposure ?? 'deferred', toolPolicy: {}, searchTool: null, fetchTool: null, routePriority: 100,
           requiredTier: 'free', enabled: body.enabled ?? true, timeoutMs: body.timeoutMs ?? 30000, maxResultChars: body.maxResultChars ?? 20000,
           sortOrder: body.sortOrder ?? 0, snapshot: null, lastCheckedAt: null, lastError: null, updatedAt: '2026-10-26T00:00:00Z' };
         owned.push(server);

@@ -26,19 +26,13 @@ class FailingCacheStore extends MemoryStore {
   }
 }
 
+/** Search and page services that serve every member, faked where tools.server.ts routes to them. */
 function withWebSearch(t: TestContext) {
-  const previous = process.env.TAVILY_API_KEY;
-  process.env.TAVILY_API_KEY = randomUUID();
-  const fetch = t.mock.method(globalThis, 'fetch', async () => Response.json({
-    results: [{ title: '来源', url: 'https://example.com/source', content: '摘要' }],
-  }));
-  return {
-    fetch,
-    restore: () => {
-      if (previous === undefined) delete process.env.TAVILY_API_KEY;
-      else process.env.TAVILY_API_KEY = previous;
-    },
-  };
+  const route = require('../lib/agent/mcp/web-route.server') as typeof import('../lib/agent/mcp/web-route.server');
+  t.mock.method(route, 'webRouteAvailable', async () => true);
+  const search = t.mock.method(route, 'searchWeb', async () => [{ title: '来源', url: 'https://example.com/source', content: '摘要' }]);
+  const fetch = t.mock.method(route, 'fetchWebPage', async (url: string) => ({ title: '网页', url, content: '正文' }));
+  return { search, fetch };
 }
 
 const find = (tools: DomainTool[], name: string) => {
@@ -50,64 +44,56 @@ const find = (tools: DomainTool[], name: string) => {
 const plan = { revision: 0, items: [{ id: 'chart', title: '排盘并复述盘面', status: 'in_progress' }] };
 
 test('a failed tool cache write leaves no checkpoint state, so the model can retry the same step', async (t) => {
-  const web = withWebSearch(t);
-  try {
-    const store = new FailingCacheStore(), run = row();
-    run.input.webEnabled = true;
-    const tools = await createAgentTools(store, run, run.checkpoint);
+  withWebSearch(t);
+  const store = new FailingCacheStore(), run = row();
+  run.input.webEnabled = true;
+  const tools = await createAgentTools(store, run, run.checkpoint);
 
-    await assert.rejects(find(tools, 'todo_write').execute('1:todo', plan), /AGENT_CACHE_UNAVAILABLE/);
-    assert.equal(run.checkpoint.todos, undefined, 'the revision must not advance for an unrecorded result');
-    // The model saw revision 0 fail, so its retry still uses revision 0.
-    await find(tools, 'todo_write').execute('2:todo', plan);
-    assert.deepEqual(run.checkpoint.todos, { revision: 1, items: plan.items });
+  await assert.rejects(find(tools, 'todo_write').execute('1:todo', plan), /AGENT_CACHE_UNAVAILABLE/);
+  assert.equal(run.checkpoint.todos, undefined, 'the revision must not advance for an unrecorded result');
+  // The model saw revision 0 fail, so its retry still uses revision 0.
+  await find(tools, 'todo_write').execute('2:todo', plan);
+  assert.deepEqual(run.checkpoint.todos, { revision: 1, items: plan.items });
 
-    store.failNextCache = true;
-    await assert.rejects(find(tools, 'ask_user').execute('3:ask', { question: '出生时间？' }), /AGENT_CACHE_UNAVAILABLE/);
-    assert.equal(run.checkpoint.question, undefined, 'an unrecorded question cannot pause the task');
-    assert.equal(run.checkpoint.questionId, undefined);
+  store.failNextCache = true;
+  await assert.rejects(find(tools, 'ask_user').execute('3:ask', { question: '出生时间？' }), /AGENT_CACHE_UNAVAILABLE/);
+  assert.equal(run.checkpoint.question, undefined, 'an unrecorded question cannot pause the task');
+  assert.equal(run.checkpoint.questionId, undefined);
 
-    store.failNextCache = true;
-    await assert.rejects(find(tools, 'web_search').execute('4:web', { query: '庚金' }), /AGENT_CACHE_UNAVAILABLE/);
+  store.failNextCache = true;
+  await assert.rejects(find(tools, 'web_search').execute('4:web', { query: '庚金' }), /AGENT_CACHE_UNAVAILABLE/);
 
 
-    assert.deepEqual(run.checkpoint.parts.map((part) => part.type), ['todo'], 'no question or source part for failed writes');
-  } finally {
-    web.restore();
-  }
+  assert.deepEqual(run.checkpoint.parts.map((part) => part.type), ['todo'], 'no question or source part for failed writes');
 });
 
 test('fresh results and cache replays derive identical checkpoint state without re-running tools', async (t) => {
   const web = withWebSearch(t);
-  try {
-    const store = new MemoryStore();
-    const calls: Array<[name: string, callId: string, args: Record<string, unknown>]> = [
-      ['todo_write', '1:todo', plan],
-      ['web_search', '2:web', { query: '庚金' }],
-      ['ask_user', '4:ask', { questions: [{ id: 'birth', question: '她的出生时间？' }, { id: 'calendar', question: '公历还是农历？', options: [{ id: 'solar', label: '公历' }] }] }],
-    ];
-    const replay = async () => {
-      const run = row();
-      run.input.webEnabled = true;
-      const tools = await createAgentTools(store, run, run.checkpoint);
-      for (const [name, callId, args] of calls) await find(tools, name).execute(callId, args);
-      return JSON.parse(JSON.stringify(run.checkpoint)) as typeof run.checkpoint;
-    };
+  const store = new MemoryStore();
+  const calls: Array<[name: string, callId: string, args: Record<string, unknown>]> = [
+    ['todo_write', '1:todo', plan],
+    ['web_search', '2:web', { query: '庚金' }],
+    ['ask_user', '4:ask', { questions: [{ id: 'birth', question: '她的出生时间？' }, { id: 'calendar', question: '公历还是农历？', options: [{ id: 'solar', label: '公历' }] }] }],
+  ];
+  const replay = async () => {
+    const run = row();
+    run.input.webEnabled = true;
+    const tools = await createAgentTools(store, run, run.checkpoint);
+    for (const [name, callId, args] of calls) await find(tools, name).execute(callId, args);
+    return JSON.parse(JSON.stringify(run.checkpoint)) as typeof run.checkpoint;
+  };
 
-    const fresh = await replay();
-    const writes = store.writes.filter((write) => write.name === 'agent_cache_tool').length;
-    const restored = await replay();
+  const fresh = await replay();
+  const writes = store.writes.filter((write) => write.name === 'agent_cache_tool').length;
+  const restored = await replay();
 
-    assert.equal(web.fetch.mock.callCount(), 1, 'replay never repeats the network request');
-    assert.equal(store.writes.filter((write) => write.name === 'agent_cache_tool').length, writes, 'replay never recaches');
-    assert.equal(fresh.question, '她的出生时间？\n\n公历还是农历？');
-    assert.equal(fresh.questionId, '4:ask');
-    assert.deepEqual(fresh.parts.map((part) => `${part.type}:${part.id}`), ['todo:task-list', 'source:2:web:0', 'question:4:ask']);
-    for (const key of ['todos', 'question', 'questions', 'questionId', 'parts'] as const)
-      assert.deepEqual(restored[key], fresh[key], key);
-  } finally {
-    web.restore();
-  }
+  assert.equal(web.search.mock.callCount(), 1, 'replay never repeats the network request');
+  assert.equal(store.writes.filter((write) => write.name === 'agent_cache_tool').length, writes, 'replay never recaches');
+  assert.equal(fresh.question, '她的出生时间？\n\n公历还是农历？');
+  assert.equal(fresh.questionId, '4:ask');
+  assert.deepEqual(fresh.parts.map((part) => `${part.type}:${part.id}`), ['todo:task-list', 'source:2:web:0', 'question:4:ask']);
+  for (const key of ['todos', 'question', 'questions', 'questionId', 'parts'] as const)
+    assert.deepEqual(restored[key], fresh[key], key);
 });
 
 test('knowledge hit counts are recorded only for searches whose results were cached', async () => {
@@ -123,42 +109,50 @@ test('knowledge hit counts are recorded only for searches whose results were cac
 });
 
 test('search results are numbered after the conversation\'s earlier evidence, once per call', async (t) => {
+  withWebSearch(t);
+  const store = new MemoryStore(), run = row();
+  run.input.webEnabled = true;
+  run.checkpoint.citations = { base: 4, calls: {} };
+  store.drafts.set('3:kb', {
+    id: randomUUID(), call_id: '3:kb', tool_name: 'search_knowledge', kind: 'tool', args: { query: '庚金' },
+    result: { content: [], details: [{ id: 'a', content: '庚金带煞', cite: 7 }, { id: 'b', content: '得火而锐', cite: 8 }] },
+  });
+  const tools = await createAgentTools(store, run, run.checkpoint);
+  const cites = (result: { details: unknown }) => (result.details as Array<{ cite?: number }>).map((item) => item.cite);
+  const first = await find(tools, 'web_search').execute('1:web', { query: '庚金' });
+  assert.deepEqual(cites(first), [5]);
+  assert.match(first.content[0].type === 'text' ? first.content[0].text : '', /"cite":5/, 'the model reads the number it may cite');
+  assert.deepEqual(cites(await find(tools, 'web_search').execute('1:web', { query: '庚金' })), [5], 'a replay returns the stored number');
+  assert.deepEqual(cites(await find(tools, 'web_search').execute('2:web', { query: '辛金' })), [6]);
+  await find(tools, 'search_knowledge').execute('3:kb', { query: '庚金' });
+  assert.deepEqual(run.checkpoint.citations, { base: 4, calls: { '1:web': 5, '2:web': 6, '3:kb': 8 } }, 'replayed stamps advance the next number');
+  assert.deepEqual(cites(await find(tools, 'web_search').execute('4:web', { query: '壬水' })), [9]);
+  const page = await find(tools, 'web_fetch').execute('5:page', { url: 'https://example.com/page' });
+  assert.deepEqual(page.details, [{ title: '网页', url: 'https://example.com/page', content: '正文', cite: 10 }], 'a page read is cited like a search result');
+  assert.ok(run.checkpoint.parts.some((part) => part.type === 'source' && part.id === '5:page:0' && part.url === 'https://example.com/page'));
+  assert.deepEqual(run.checkpoint.citations, { base: 4, calls: { '1:web': 5, '2:web': 6, '3:kb': 8, '4:web': 9, '5:page': 10 } });
+});
+
+test('a page read keeps its full text for the model and only an excerpt in the source part', async (t) => {
   const web = withWebSearch(t);
-  try {
-    const store = new MemoryStore(), run = row();
-    run.input.webEnabled = true;
-    run.checkpoint.citations = { base: 4, calls: {} };
-    store.drafts.set('3:kb', {
-      id: randomUUID(), call_id: '3:kb', tool_name: 'search_knowledge', kind: 'tool', args: { query: '庚金' },
-      result: { content: [], details: [{ id: 'a', content: '庚金带煞', cite: 7 }, { id: 'b', content: '得火而锐', cite: 8 }] },
-    });
-    const tools = await createAgentTools(store, run, run.checkpoint);
-    const cites = (result: { details: unknown }) => (result.details as Array<{ cite?: number }>).map((item) => item.cite);
-    const first = await find(tools, 'web_search').execute('1:web', { query: '庚金' });
-    assert.deepEqual(cites(first), [5]);
-    assert.match(first.content[0].type === 'text' ? first.content[0].text : '', /"cite":5/, 'the model reads the number it may cite');
-    assert.deepEqual(cites(await find(tools, 'web_search').execute('1:web', { query: '庚金' })), [5], 'a replay returns the stored number');
-    assert.deepEqual(cites(await find(tools, 'web_search').execute('2:web', { query: '辛金' })), [6]);
-    await find(tools, 'search_knowledge').execute('3:kb', { query: '庚金' });
-    assert.deepEqual(run.checkpoint.citations, { base: 4, calls: { '1:web': 5, '2:web': 6, '3:kb': 8 } }, 'replayed stamps advance the next number');
-    assert.deepEqual(cites(await find(tools, 'web_search').execute('4:web', { query: '壬水' })), [9]);
-  } finally {
-    web.restore();
-  }
+  web.fetch.mock.mockImplementation(async (url: string) => ({ title: '长页', url, content: '字'.repeat(2_000) }));
+  const store = new MemoryStore(), run = row();
+  run.input.webEnabled = true;
+  const tools = await createAgentTools(store, run, run.checkpoint);
+  const result = await find(tools, 'web_fetch').execute('1:page', { url: 'https://example.com/long' });
+  assert.equal((result.details as Array<{ content: string }>)[0].content.length, 2_000);
+  const source = run.checkpoint.parts.find((part) => part.type === 'source');
+  assert.ok(source?.type === 'source' && source.content === `${'字'.repeat(1_500)}…`);
 });
 
 test('a task created before numbering keeps its results unnumbered', async (t) => {
-  const web = withWebSearch(t);
-  try {
-    const store = new MemoryStore(), run = row();
-    run.input.webEnabled = true;
-    const tools = await createAgentTools(store, run, run.checkpoint);
-    const result = await find(tools, 'web_search').execute('1:web', { query: '庚金' });
-    assert.deepEqual(result.details, [{ title: '来源', url: 'https://example.com/source', content: '摘要' }]);
-    assert.equal(run.checkpoint.citations, undefined, 'its answer could not have been told any number');
-  } finally {
-    web.restore();
-  }
+  withWebSearch(t);
+  const store = new MemoryStore(), run = row();
+  run.input.webEnabled = true;
+  const tools = await createAgentTools(store, run, run.checkpoint);
+  const result = await find(tools, 'web_search').execute('1:web', { query: '庚金' });
+  assert.deepEqual(result.details, [{ title: '来源', url: 'https://example.com/source', content: '摘要' }]);
+  assert.equal(run.checkpoint.citations, undefined, 'its answer could not have been told any number');
 });
 
 /** user_settings has memory on; agent_write_memory returns the full table row like the SQL function. */

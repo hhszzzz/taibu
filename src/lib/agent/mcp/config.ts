@@ -28,11 +28,8 @@ export const MCP_EXPOSURE_HINTS: Record<McpExposure, string> = {
   direct: '工具随每次请求提供给模型，会占用上下文，适合少量常用工具。',
   deferred: '模型先用 tool_search 检索到才加载，适合工具多或不常用的服务。',
   codemode: '只能在代码模式的脚本里调用，不出现在模型的工具表中。',
-  hidden: '不注册任何工具，只供联网搜索与网页抓取的路由使用。',
+  hidden: '不注册任何工具，只供联网搜索与读网页的路由使用。',
 };
-
-export const MCP_RESULT_ADAPTERS = ['exa', 'tavily', 'generic'] as const;
-export type McpResultAdapter = (typeof MCP_RESULT_ADAPTERS)[number];
 
 export const MCP_SERVER_NAME_PATTERN = /^[a-z][a-z0-9_]{1,30}$/;
 /** Tools one server may register; a user's connector gets fewer so one cannot flood the model's tool list. */
@@ -84,7 +81,6 @@ export type McpServerView = {
   toolPolicy: Record<string, McpToolPolicy>;
   searchTool: string | null;
   fetchTool: string | null;
-  resultAdapter: McpResultAdapter;
   routePriority: number;
   requiredTier: MembershipType;
   enabled: boolean;
@@ -113,7 +109,6 @@ export type McpServerInput = {
   toolPolicy?: Record<string, McpToolPolicy>;
   searchTool?: string | null;
   fetchTool?: string | null;
-  resultAdapter?: McpResultAdapter;
   routePriority?: number;
   requiredTier?: MembershipType;
   enabled?: boolean;
@@ -127,16 +122,16 @@ export const MCP_SERVER_TEMPLATES = {
   exa: {
     label: 'Exa',
     input: {
-      name: 'exa', displayName: 'Exa', url: 'https://mcp.exa.ai/mcp', exposure: 'hidden', resultAdapter: 'exa',
+      name: 'exa', displayName: 'Exa', url: 'https://mcp.exa.ai/mcp', exposure: 'hidden',
       searchTool: 'web_search_exa', fetchTool: 'web_fetch_exa', requiredTier: 'plus',
-      description: 'Exa 联网搜索与网页正文抓取。',
+      description: 'Exa 联网搜索与网页正文读取。',
     },
     secretHeader: { name: 'x-api-key', placeholder: 'Exa API Key' },
   },
   tavily: {
     label: 'Tavily',
     input: {
-      name: 'tavily', displayName: 'Tavily', url: 'https://mcp.tavily.com/mcp/', exposure: 'hidden', resultAdapter: 'tavily',
+      name: 'tavily', displayName: 'Tavily', url: 'https://mcp.tavily.com/mcp/', exposure: 'hidden',
       searchTool: 'tavily_search', fetchTool: 'tavily_extract', requiredTier: 'plus',
       description: 'Tavily 联网搜索与网页正文提取。',
     },

@@ -20,7 +20,9 @@ import {
 import { buildChatPromptContext } from "@/lib/server/chat/prompt-context";
 import { isChatAttachment } from "@/lib/ai/document-formats";
 import { resolveUserTimeZone } from "@/lib/ai/prompt-time";
-import { webSearchConfigured } from "@/lib/ai/web-search.server";
+import { webSearchTier } from "@/lib/ai/web-search-access";
+import { webRouteAvailable, webRouteLowestTier } from "./mcp/web-route.server";
+import type { MembershipType } from "@/lib/user/membership";
 import { getUserAuthInfo, getUserCreditInfo } from "@/lib/user/credits";
 import { AI_RATE_LIMIT_CONFIG, checkRateLimit } from "@/lib/rate-limit";
 import { isValidUUID } from "@/lib/validation";
@@ -237,16 +239,27 @@ export async function agentCapabilities(request: NextRequest) {
   const auth = await authenticated(request);
   const state = await readFeatureModuleStateFresh("agent");
   const store = new AgentStore(systemDb());
-  let mcpAvailable = false;
+  let mcpAvailable = false, searchAvailable = false;
+  let webTier: MembershipType | null = null;
   try {
     const { membership } = await getUserCreditInfo(auth.user.id, {});
-    mcpAvailable = (await availableMcpServers(auth.user.id, membership, { codeMode: true })).length > 0;
-  } catch { /* A configuration that cannot be read does not advertise network access. */ }
+    [mcpAvailable, searchAvailable, webTier] = await Promise.all([
+      availableMcpServers(auth.user.id, membership, { codeMode: true }).then((rows) => rows.length > 0),
+      // Free accounts never search; whether Plus would is what tells them which plan does.
+      webRouteAvailable("search", membership === "free" ? "plus" : membership),
+      webRouteLowestTier("search").then(webSearchTier),
+    ]);
+  } catch {
+    // A configuration that cannot be read does not advertise network access.
+    mcpAvailable = searchAvailable = false;
+    webTier = null;
+  }
   return jsonOk({
     enabled: state.status === "enabled",
     ready: state.status === "enabled" && (await store.workerReady()),
-    webAvailable: webSearchConfigured() || mcpAvailable,
-    plainWebAvailable: webSearchConfigured(),
+    webAvailable: searchAvailable || mcpAvailable,
+    plainWebAvailable: searchAvailable,
+    webTier,
     customAvailable: !!process.env.AGENT_CREDENTIAL_ENCRYPTION_KEY,
   });
 }

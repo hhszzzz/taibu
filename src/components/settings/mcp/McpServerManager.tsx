@@ -43,7 +43,8 @@ function hostOf(url: string) {
 
 function statusOf(server: McpServerView) {
   const at = checkedAt(server.lastCheckedAt);
-  if (server.lastError) return `上次连接失败${at ? `（${at}）` : ''}：${server.lastError}`;
+  // Set by a connection test, a task that could not connect, or search routing that kept failing.
+  if (server.lastError) return `上次出错${at ? `（${at}）` : ''}：${server.lastError}`;
   if (server.snapshot) return `上次测试 ${at} · ${server.snapshot.tools.length} 个工具`;
   return '还没有测试连接';
 }
@@ -205,10 +206,12 @@ export function McpServerManager({ scope, userId, notice, canAdd = true, addLabe
                       {server.displayName}
                       <span className="mcp-badge">{MCP_EXPOSURE_LABELS[server.exposure]}</span>
                       {scope === 'platform' ? <span className="mcp-badge">{MEMBERSHIP_TIER_LABELS[server.requiredTier]}+</span> : null}
-                      {server.searchTool || server.fetchTool ? <span className="mcp-badge mcp-badge-accent">联网路由</span> : null}
+                      {server.searchTool || server.fetchTool
+                        ? <span className="mcp-badge mcp-badge-accent">联网：{[server.searchTool && '搜索', server.fetchTool && '读网页'].filter(Boolean).join('、')}</span>
+                        : null}
                       {server.enabled ? null : <span className="mcp-badge mcp-badge-muted">已停用</span>}
                     </strong>
-                    <p className="mcp-server-line">{server.name} · {hostOf(server.url)}</p>
+                    <p className="mcp-server-line">{server.name} · {hostOf(server.url)}{server.searchTool || server.fetchTool ? ` · 路由优先级 ${server.routePriority}` : ''}</p>
                     <p className={server.lastError ? 'mcp-status-error' : undefined}>{statusOf(server)}</p>
                   </div>
                   <div className="mcp-actions">

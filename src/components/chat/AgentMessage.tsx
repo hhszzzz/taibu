@@ -16,6 +16,7 @@ import { AgentArchiveProposalCard, AgentArchiveReceipt } from './agent/AgentArch
 import { useAgentResultWorkspace } from './agent/AgentResultContext';
 import { useAgentTailText } from '@/lib/agent/use-agent-tail';
 import { groupAgentParts } from './agent/presentation';
+import { AGENT_WEB_TOOLS } from "@/lib/agent/tool-catalog";
 
 /**
  * [n] badges for what this answer's own task returned; a badge opens its source in the workspace.
@@ -56,7 +57,7 @@ export function AgentMessage({ data, actions }: { data: AgentMessageData; action
   const lastTextPart = lastText < 0 || groups[lastText].type !== 'content' ? undefined : groups[lastText].part;
   // 增量只承接已提交的正文：快照还没走到这一块时按快照显示。
   const liveText = lastTextPart?.type === 'text' && tail.length > lastTextPart.text.length && tail.startsWith(lastTextPart.text) ? tail : undefined;
-  const hasSearchStep = data.parts.some(part => part.type === 'tool' && (part.name === 'web_search' || part.name === 'search_knowledge'));
+  const hasSearchStep = data.parts.some(part => part.type === 'tool' && (AGENT_WEB_TOOLS.has(part.name) || part.name === 'search_knowledge'));
   const archive = useMemo(() => getArchiveEntries(data.parts), [data.parts]);
   return (
     <div className="agent-message" data-agent-run-id={data.runId} data-agent-status={data.status}>

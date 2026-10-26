@@ -1,6 +1,5 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
 import { getDerivedToolSource, listToolDefinitions } from 'taibu-core/mcp';
 import type { JsonObject } from '@earendil-works/pi-ai';
 import { MockLanguageModelV3 } from 'ai/test';
@@ -31,7 +30,7 @@ beforeEach((t) => {
   t.mock.method(sdk, 'createModelFromConfig', () => new MockLanguageModelV3());
 });
 
-test('every Core tool and every registered Agent tool belongs to a presentation family', async () => {
+test('every Core tool and every registered Agent tool belongs to a presentation family', async (t) => {
   for (const definition of listToolDefinitions()) {
     const derived = getDerivedToolSource(definition.name);
     assert.equal(getAgentToolFamily(definition.name), derived ? 'drilldown' : getAgentToolFamily(definition.name), definition.name);
@@ -41,8 +40,8 @@ test('every Core tool and every registered Agent tool belongs to a presentation 
     if (derived) assert.equal(projectsAgentCanonicalText(definition.name), true, definition.name);
   }
   assert.deepEqual(Object.keys(AGENT_DRILLDOWN_BASES).sort(), listToolDefinitions().filter(item => getDerivedToolSource(item.name)).map(item => item.name).sort());
-  const previous = process.env.TAVILY_API_KEY;
-  process.env.TAVILY_API_KEY = randomUUID();
+  const route = require('../lib/agent/mcp/web-route.server') as typeof import('../lib/agent/mcp/web-route.server');
+  const routes = t.mock.method(route, 'webRouteAvailable', async () => true);
   try {
     const run = row();
     run.input.webEnabled = true;
@@ -52,6 +51,8 @@ test('every Core tool and every registered Agent tool belongs to a presentation 
     const background = createBackgroundAgents([]).extension;
     const names = [...tools.map((tool) => tool.name), ...[...parallel.tools ?? [], ...background.tools ?? []].map((tool) => tool.name)];
     assert.ok(names.includes('web_search') && names.includes('remember_user_fact') && names.includes('parallel_analysis') && names.includes(AGENT_BACKGROUND_TOOL));
+    assert.ok(names.includes('web_fetch'), 'a page service offers the page read');
+    assert.deepEqual(routes.mock.calls.map(call => call.arguments).sort(), [['fetch', 'plus'], ['search', 'plus']], 'offered for the member\'s own tier');
     // The user's own material: notes, earlier conversations and the archive the model writes or proposes.
     for (const name of [...AGENT_DATA_DEFERRED_TOOLS, 'record_user_event', 'propose_archive_entry']) assert.ok(names.includes(name), name);
     for (const name of names) assert.notEqual(getAgentToolFamily(name), 'other', `${name} needs a family in tool-catalog.ts`);
@@ -63,8 +64,7 @@ test('every Core tool and every registered Agent tool belongs to a presentation 
     assert.ok(isAgentMemberTool('parallel_analysis') && isAgentMemberTool(AGENT_BACKGROUND_TOOL) && !isAgentMemberTool('bazi'));
     for (const name of names) assert.equal(returnsAgentScriptResult(name), ['chart', 'calculation', 'drilldown'].includes(getAgentToolFamily(name)) && !AGENT_MODEL_ONLY_TOOLS.has(name), name);
   } finally {
-    if (previous === undefined) delete process.env.TAVILY_API_KEY;
-    else process.env.TAVILY_API_KEY = previous;
+    routes.mock.restore();
   }
   assert.equal(getAgentToolFamily('mcp__archive__search'), 'external');
   assert.equal(getAgentToolFamily('focus_chart'), 'chart');
@@ -72,7 +72,7 @@ test('every Core tool and every registered Agent tool belongs to a presentation 
   assert.equal(getAgentToolFamily(AGENT_CODEMODE_TOOL), 'code');
   for (const name of ['bazi_dayun', 'bazi_pillars_resolve', 'ziwei_horoscope', 'ziwei_flying_star', 'inspect_chart', 'read_user_data'])
     assert.equal(projectsAgentCanonicalText(name), true, name);
-  for (const name of ['focus_chart', 'web_search', 'todo_write', 'mcp__archive__search'])
+  for (const name of ['focus_chart', 'web_search', 'web_fetch', 'todo_write', 'mcp__archive__search'])
     assert.equal(projectsAgentCanonicalText(name), false, `${name} returns structured data, not canonical text`);
   assert.equal(getAgentExtensionToolTitle(AGENT_CODEMODE_TOOL), '运行脚本');
   assert.equal(getAgentExtensionToolTitle(AGENT_TOOL_SEARCH_TOOL), '查找工具');

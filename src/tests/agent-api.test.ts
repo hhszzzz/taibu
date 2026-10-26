@@ -283,28 +283,43 @@ test("Agent feature admission fails closed when fresh configuration cannot be re
   assert.equal(fixture.writes.length, 0);
 });
 
-test('network capability includes an MCP server the member may use and fails closed when it cannot tell', async t => {
+test('network capability follows the search services and connectors the member reaches, and fails closed when it cannot tell', async t => {
   setup(t);
-  const previous = process.env.TAVILY_API_KEY;
-  t.after(() => { if (previous === undefined) delete process.env.TAVILY_API_KEY; else process.env.TAVILY_API_KEY = previous; });
-  delete process.env.TAVILY_API_KEY;
   const session = require('../lib/agent/mcp/session.server') as typeof import('../lib/agent/mcp/session.server');
+  const route = require('../lib/agent/mcp/web-route.server') as typeof import('../lib/agent/mcp/web-route.server');
   const credits = require('../lib/user/credits') as typeof import('../lib/user/credits');
-  t.mock.method(credits, 'getUserCreditInfo', async () => ({ membership: 'plus' as const, credits: 10, expiresAt: null }));
+  let membership: 'free' | 'plus' | 'pro' = 'plus';
+  t.mock.method(credits, 'getUserCreditInfo', async () => ({ membership, credits: 10, expiresAt: null }));
   let servers: unknown = [{ id: 'server' }];
   const available = t.mock.method(session, 'availableMcpServers', async () => {
     if (servers instanceof Error) throw servers;
     return servers as Awaited<ReturnType<typeof session.availableMcpServers>>;
   });
-  const capabilities = async () => (await (await agentCapabilities(new NextRequest('http://localhost/api/agent/capabilities'))).json()) as { webAvailable: boolean; plainWebAvailable: boolean };
-  assert.deepEqual(await capabilities().then(value => [value.webAvailable, value.plainWebAvailable]), [true, false], 'plain chat searches through Tavily only');
+  // The lowest tier a search service serves; null when none is set up.
+  let serviceTier: 'free' | 'plus' | 'pro' | null = null;
+  const rank = { free: 0, plus: 1, pro: 2 } as const;
+  const searchChecks = t.mock.method(route, 'webRouteAvailable', async (_kind: string, tier: 'free' | 'plus' | 'pro') =>
+    serviceTier !== null && rank[tier] >= rank[serviceTier]);
+  t.mock.method(route, 'webRouteLowestTier', async () => serviceTier);
+  const capabilities = async () => {
+    const value = (await (await agentCapabilities(new NextRequest('http://localhost/api/agent/capabilities'))).json()) as { webAvailable: boolean; plainWebAvailable: boolean; webTier: string | null };
+    return [value.webAvailable, value.plainWebAvailable, value.webTier];
+  };
+  assert.deepEqual(await capabilities(), [true, false, null], 'a connector puts the Agent online; plain chat needs a search service');
   assert.equal(available.mock.calls[0].arguments[1], 'plus', 'the member\'s own tier decides');
   servers = [];
-  assert.equal((await capabilities()).webAvailable, false);
+  assert.deepEqual(await capabilities(), [false, false, null]);
   servers = new Error('database unavailable');
-  assert.equal((await capabilities()).webAvailable, false);
-  process.env.TAVILY_API_KEY = 'fixture';
-  assert.deepEqual(await capabilities().then(value => [value.webAvailable, value.plainWebAvailable]), [true, true]);
+  assert.deepEqual(await capabilities(), [false, false, null]);
+  servers = [];
+  serviceTier = 'free';
+  assert.deepEqual(await capabilities(), [true, true, 'plus'], 'nobody below Plus searches');
+  membership = 'free';
+  assert.deepEqual(await capabilities(), [true, true, 'plus'], 'a free account is told that Plus searches');
+  assert.equal(searchChecks.mock.calls.at(-1)?.arguments[1], 'plus');
+  serviceTier = 'pro';
+  membership = 'plus';
+  assert.deepEqual(await capabilities(), [false, false, 'pro'], 'a service only Pro reaches asks for Pro');
 });
 
 test('image capability is enforced before charging and when adding input to an existing task', async t => {

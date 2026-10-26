@@ -61,7 +61,6 @@ export interface AgentMcpServers {
   tool_policy: Generated<Json>;
   search_tool: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   fetch_tool: ColumnType<string | null, string | null | undefined, string | null | undefined>;
-  result_adapter: Generated<string>;
   route_priority: Generated<number>;
   required_tier: Generated<string>;
   is_enabled: Generated<boolean>;

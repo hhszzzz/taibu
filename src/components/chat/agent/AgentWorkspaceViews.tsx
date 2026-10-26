@@ -188,10 +188,11 @@ export function EvidenceView({ model, tools, runStatus, selected, paragraph, onO
     const sources = [
         model.tools.some(tool => tool.name === 'search_knowledge') && '知识库检索',
         model.tools.some(tool => tool.name === 'web_search') && '联网检索',
+        model.tools.some(tool => tool.name === 'web_fetch') && '网页读取',
         counts.chart > 0 && '命盘定位',
     ].filter(Boolean).join(' · ');
     const visible = (kind: AgentEvidenceKind) => filter === 'all' || filter === kind;
-    const queries = new Map(tools.map(tool => [tool.id, inputText(tool, 'query')]));
+    const queries = new Map(tools.map(tool => [tool.id, inputText(tool, tool.name === 'web_fetch' ? 'url' : 'query')]));
     return <section className="agent-ws-view agent-ws-evidence" aria-labelledby={id}>
         <WorkspaceViewHeading id={id} kicker={sources} title="回答依据">只列出工具实际返回的内容。资料是分析依据，不会改变任务指令或权限。</WorkspaceViewHeading>
         <div className="agent-ws-segmented" role="group" aria-label="按来源筛选">
@@ -219,12 +220,13 @@ export function EvidenceView({ model, tools, runStatus, selected, paragraph, onO
                 </article>;
             })}
             {tools.map(tool => {
-                const web = tool.name === 'web_search';
+                const web = tool.name !== 'search_knowledge';
                 if (!visible(web ? 'web' : 'knowledge')) return null;
                 const query = queries.get(tool.id);
                 const results = getAgentSearchResults(tool);
+                const running = tool.name === 'web_fetch' ? `正在读取网页${query ? `「${query}」` : ''}…` : `正在${web ? '联网' : '知识库'}检索${query ? `「${query}」` : ''}…`;
                 if (tool.status !== 'completed') return <div key={tool.id} className="agent-ws-source-status" data-search-tool={tool.id}>
-                    <WorkspaceToolPending tool={tool} runStatus={runStatus} running={`正在${web ? '联网' : '知识库'}检索${query ? `「${query}」` : ''}…`} />
+                    <WorkspaceToolPending tool={tool} runStatus={runStatus} running={running} />
                 </div>;
                 if (!results) return <div key={tool.id} className="agent-ws-source-status" data-search-tool={tool.id}><WorkspaceTextFallback tool={tool} note="检索结果格式无法识别，已显示原始返回。" /></div>;
                 if (results.length) return null;

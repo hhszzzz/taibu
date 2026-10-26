@@ -41,6 +41,7 @@ import { CHART_SOURCE_KINDS, getChartTargets, validateChartFocus } from './chart
 import {
   AGENT_MCP_TOOL_PREFIX,
   AGENT_TOOL_SCOPE_IDS,
+  AGENT_WEB_TOOLS,
   CHART_TARGET_DIRECTORY_HEADING,
   getAgentDrilldownBase,
   getAgentToolFeatureId,
@@ -53,7 +54,8 @@ import { AGENT_PAIRING_SIDES, pairingParameters, resolvePairing } from './pairin
 import { nextAgentCitation } from './evidence';
 import { readAgentCite } from './tool-presentation';
 import { searchKnowledgeWithPersistence } from "@/lib/knowledge-base/search";
-import { searchWeb, webSearchConfigured, WEB_SEARCH_QUERY_MAX } from "@/lib/ai/web-search.server";
+import { fetchWebPage, searchWeb, webRouteAvailable } from "./mcp/web-route.server";
+import { WEB_SEARCH_QUERY_MAX } from "./mcp/web-results";
 import type {
   KnowledgeSearchPersistence,
   KnowledgeSearchRow,
@@ -78,6 +80,8 @@ function textResult(details: unknown): AgentToolResult<unknown> {
   };
 }
 const DATE_PATTERN = "^\\d{4}-\\d{2}-\\d{2}$";
+/** As long as one search result's text (web-route.server.ts), so only a page read is cut. */
+const SOURCE_EXCERPT_CHARS = 1_500;
 /** Today's and this month's fortune: listed for @ mentions, never saved. */
 const SYNTHETIC_SOURCES: ReadonlySet<string> = new Set(["daily_fortune", "monthly_fortune"]);
 /** A bazi chart read by the Agent carries this many case-note events; the chat prompt keeps ten. */
@@ -141,7 +145,8 @@ export async function assertAgentToolAccess(store: AgentStore, run: AgentRunRow,
     if (person.reference !== undefined && await authorizeChartReference(store, run, person.reference) !== 'bazi') throw new Error('合盘只能引用八字命盘');
   }
   if (name === 'search_knowledge' && (!(await featureEnabled('knowledge-base')) || (await getUserCreditInfo(run.user_id, {})).membership === 'free')) throw new Error('当前会员无法使用知识库检索');
-  if (name === 'web_search' && (!run.input.webEnabled || (await getUserCreditInfo(run.user_id, {})).membership === 'free')) throw new Error('当前任务不能使用联网工具');
+  // Which services may serve the member's tier is checked when the search or the page read is routed.
+  if (AGENT_WEB_TOOLS.has(name) && (!run.input.webEnabled || (await getUserCreditInfo(run.user_id, {})).membership === 'free')) throw new Error('当前任务不能使用联网工具');
   // The server, the member's tier and the tool itself are checked again when an MCP tool runs.
   if (name.startsWith(AGENT_MCP_TOOL_PREFIX) && !run.input.webEnabled) throw new Error('当前任务没有开启联网，不能调用外部工具');
   if (name === 'read_user_data') {
@@ -174,6 +179,7 @@ const auxiliaryToolTitles: Record<string, string> = {
   read_user_profile: "个性化档案",
   search_knowledge: "知识库检索",
   web_search: "联网检索",
+  web_fetch: "读取网页",
   ask_user: "补充必要信息",
   inspect_chart: "查看命盘",
   focus_chart: "定位分析位置",
@@ -262,6 +268,7 @@ export async function createAgentTools(
   checkpoint: AgentCheckpoint,
 ): Promise<AgentTool[]> {
   const putPart = (part: AgentPart) => putAgentPart(checkpoint.parts, part);
+  // A source part is the link and an excerpt for exports; a page read's full text stays in its tool output.
   const putSources = (
     callId: string,
     results: Array<{ title: string; url: string; content: string }>,
@@ -272,7 +279,7 @@ export async function createAgentTools(
         id: `${callId}:${index}`,
         title: result.title,
         url: result.url,
-        content: result.content,
+        content: result.content.length > SOURCE_EXCERPT_CHARS ? `${result.content.slice(0, SOURCE_EXCERPT_CHARS)}…` : result.content,
       }),
     );
   };
@@ -293,6 +300,11 @@ export async function createAgentTools(
     checkpoint.citations = { base: checkpoint.citations.base, calls: { ...checkpoint.citations.calls, [callId]: last } };
   };
   const citesOf = (rows: unknown) => Array.isArray(rows) ? rows.map(row => readAgentCite((row as { cite?: unknown } | null)?.cite)) : [];
+  // A search's results and a page read are both cited web pages.
+  const webSources = (details: unknown, callId: string) => {
+    putSources(callId, details as Array<{ title: string; url: string; content: string }>);
+    recordCitations(callId, citesOf(details));
+  };
   // Checkpoint state is derived from a tool's persisted details only. Fresh
   // results apply it after agent_cache_tool succeeds and cached results replay
   // the same reducer, so a failed cache write cannot leave a phantom question
@@ -309,10 +321,8 @@ export async function createAgentTools(
       checkpoint.todos = details as AgentCheckpoint["todos"];
       putPart({ type: "todo", id: "task-list", ...checkpoint.todos! });
     }],
-    ["web_search", (details, callId) => {
-      putSources(callId, details as Array<{ title: string; url: string; content: string }>);
-      recordCitations(callId, citesOf(details));
-    }],
+    ["web_search", webSources],
+    ["web_fetch", webSources],
     ["search_knowledge", (details, callId) => {
       checkpoint.knowledgeQueries = {
         ...checkpoint.knowledgeQueries,
@@ -629,18 +639,29 @@ export async function createAgentTools(
       },
     ),
   );
-  if (
-    run.input.webEnabled &&
-    webSearchConfigured() &&
-    (await checkMember()).membership !== "free"
-  ) {
-    tools.push(
+  // Offered when a search or page service serves the member's tier; the call is routed with their tier at that time.
+  const webMembership = run.input.webEnabled ? (await checkMember()).membership : "free";
+  if (webMembership !== "free") {
+    const [searchRoute, fetchRoute] = await Promise.all([
+      webRouteAvailable("search", webMembership),
+      webRouteAvailable("fetch", webMembership),
+    ]);
+    if (searchRoute) tools.push(
       wrap(
         "web_search",
         "联网检索公开资料，返回可引用来源；仅发送完成检索必要的信息",
         Type.Object({ query: Type.String({ minLength: 1, maxLength: WEB_SEARCH_QUERY_MAX }) }),
         async (args, _callId, signal) =>
-          textResult(stampCitations(await searchWeb(args.query, signal))),
+          textResult(stampCitations(await searchWeb(args.query, { membership: (await checkMember()).membership, signal }))),
+      ),
+    );
+    if (fetchRoute) tools.push(
+      wrap(
+        "web_fetch",
+        "读取一个公开网页的正文，返回可引用来源；用于搜索摘要不够时读原文，或读取用户给出的网址。网址会发给联网服务，不要读取含个人信息或密钥的地址",
+        Type.Object({ url: Type.String({ minLength: 1, maxLength: 2048, description: "http(s) 网页地址" }) }),
+        async (args, _callId, signal) =>
+          textResult(stampCitations([await fetchWebPage(args.url, { membership: (await checkMember()).membership, signal })])),
       ),
     );
   }

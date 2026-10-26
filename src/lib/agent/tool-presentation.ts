@@ -16,7 +16,7 @@ import type { ZiweiHoroscopeCanonicalJSON } from 'taibu-core/ziwei-horoscope';
 import type { ZiweiFlyingStarCanonicalJSON } from 'taibu-core/ziwei-flying-star';
 import { normalizeQuestions, type AgentQuestion } from './questions';
 import type { AgentPart } from './types';
-import { AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_SUBMIT_PLAN_TOOL, isAgentChartTool, type AgentChartKind } from './tool-catalog';
+import { AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_SUBMIT_PLAN_TOOL, AGENT_WEB_TOOLS, isAgentChartTool, type AgentChartKind } from './tool-catalog';
 import { estimateTokens } from './token-estimate';
 
 export type AgentToolPart = Extract<AgentPart, { type: 'tool' }>;
@@ -212,7 +212,7 @@ const nonEmpty = (value: unknown) => typeof value === 'string' && value.trim() ?
 const hostname = (url: string) => { try { return new URL(url).hostname; } catch { return null; } };
 
 export function getAgentSearchResults(tool: AgentToolPart): AgentSearchResult[] | null {
-  if (tool.status !== 'completed' || !['web_search', 'search_knowledge'].includes(tool.name) || !Array.isArray(tool.output)) return null;
+  if (tool.status !== 'completed' || !(AGENT_WEB_TOOLS.has(tool.name) || tool.name === 'search_knowledge') || !Array.isArray(tool.output)) return null;
   return tool.output.filter(item => strings(item, ['content'])).map((item, index) => {
     const row = record(item);
     const metadata = record(row.metadata);

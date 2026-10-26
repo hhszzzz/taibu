@@ -14,9 +14,9 @@ import { Modal } from '@/components/ui/Modal';
 import { SettingsSwitch } from '@/components/settings/SettingsControls';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import {
-  MCP_EXPOSURES, MCP_EXPOSURE_HINTS, MCP_EXPOSURE_LABELS, MCP_RESULT_ADAPTERS, MCP_RESULT_CHARS_RANGE, MCP_TIMEOUT_RANGE,
+  MCP_EXPOSURES, MCP_EXPOSURE_HINTS, MCP_EXPOSURE_LABELS, MCP_RESULT_CHARS_RANGE, MCP_TIMEOUT_RANGE,
   MEMBERSHIP_TIERS, MEMBERSHIP_TIER_LABELS, USER_MCP_EXPOSURES,
-  type McpExposure, type McpResultAdapter, type McpServerInput, type McpServerView,
+  type McpExposure, type McpServerInput, type McpServerView,
 } from '@/lib/agent/mcp/config';
 import type { McpServerScope } from '@/lib/agent/mcp/client';
 import type { MembershipType } from '@/lib/user/membership';
@@ -37,7 +37,6 @@ type Draft = {
   requiredTier: MembershipType;
   searchTool: string;
   fetchTool: string;
-  resultAdapter: McpResultAdapter;
   routePriority: string;
   headers: Pair[];
   secretHeaders: Secret[];
@@ -47,8 +46,6 @@ type Draft = {
   sortOrder: string;
   enabled: boolean;
 };
-
-const ADAPTER_LABELS: Record<McpResultAdapter, string> = { exa: 'Exa 格式', tavily: 'Tavily 格式', generic: '通用' };
 
 let rowKey = 0;
 const nextKey = () => ++rowKey;
@@ -60,7 +57,7 @@ function draftOf(seed: McpEditorSeed): Draft {
     return {
       displayName: server.displayName, name: server.name, url: server.url, description: server.description,
       exposure: server.exposure, requiredTier: server.requiredTier,
-      searchTool: server.searchTool ?? '', fetchTool: server.fetchTool ?? '', resultAdapter: server.resultAdapter,
+      searchTool: server.searchTool ?? '', fetchTool: server.fetchTool ?? '',
       routePriority: String(server.routePriority),
       headers: Object.entries(server.headers).map(([name, value]) => ({ key: nextKey(), name, value })),
       secretHeaders: server.secretHeaders.map(stored), secretQuery: server.secretQuery.map(stored),
@@ -72,7 +69,7 @@ function draftOf(seed: McpEditorSeed): Draft {
   return {
     displayName: input.displayName, name: input.name, url: input.url, description: input.description ?? '',
     exposure: input.exposure ?? 'deferred', requiredTier: input.requiredTier ?? 'free',
-    searchTool: input.searchTool ?? '', fetchTool: input.fetchTool ?? '', resultAdapter: input.resultAdapter ?? 'generic',
+    searchTool: input.searchTool ?? '', fetchTool: input.fetchTool ?? '',
     routePriority: String(input.routePriority ?? 100), headers: [],
     secretHeaders: secretHeader ? [{ key: nextKey(), name: secretHeader.name, stored: false, value: '', removed: false, placeholder: secretHeader.placeholder }] : [],
     secretQuery: [],
@@ -119,7 +116,7 @@ function payloadOf(draft: Draft, scope: McpServerScope): McpServerInput {
     maxResultChars: integer(draft.maxResultChars, '结果字数上限', MCP_RESULT_CHARS_RANGE.min, MCP_RESULT_CHARS_RANGE.max),
     sortOrder: integer(draft.sortOrder, '排序', -10_000, 10_000),
     ...(scope === 'platform' ? {
-      requiredTier: draft.requiredTier, resultAdapter: draft.resultAdapter,
+      requiredTier: draft.requiredTier,
       searchTool: draft.searchTool.trim() || null, fetchTool: draft.fetchTool.trim() || null,
       routePriority: integer(draft.routePriority, '路由优先级', 0, 1000),
     } : {}),
@@ -223,7 +220,8 @@ export function McpServerEditor({ scope, seed, onClose, onSubmit }: {
     }
   };
 
-  const noun = scope === 'platform' ? 'MCP 服务' : '连接器';
+  // A space sets the Latin acronym off from the verb before it.
+  const noun = scope === 'platform' ? ' MCP 服务' : '连接器';
   return (
     <Modal open={seed !== null} onClose={() => { if (!saving) onClose(); }} labelledBy={titleId} busy={saving} className="mcp-editor" initialFocusRef={firstField}>
       {draft ? (
@@ -273,17 +271,10 @@ export function McpServerEditor({ scope, seed, onClose, onSubmit }: {
             {scope === 'platform' ? (
               <fieldset className="mcp-group">
                 <legend>联网路由</legend>
-                <p className="mcp-hint">填了搜索或抓取工具，这个服务就会参与 web_search / web_fetch 的路由，按优先级从小到大尝试，失败时转下一个。工具名以测试连接列出的为准。</p>
+                <p className="mcp-hint">填了搜索或读网页工具，这个服务就会承担 Agent 的 web_search / web_fetch 与普通对话的联网搜索：按优先级数字从小到大尝试，出错、超时或没有结果时转下一个，连续失败 3 次的服务暂停 1 分钟。工具名以测试连接列出的为准，返回内容自动识别。</p>
                 <div className="mcp-fields">
                   <Field label="搜索工具">{props => <input {...props} className="settings-input" list={toolsId} value={draft.searchTool} spellCheck={false} onChange={event => set({ searchTool: event.target.value })} />}</Field>
-                  <Field label="抓取工具">{props => <input {...props} className="settings-input" list={toolsId} value={draft.fetchTool} spellCheck={false} onChange={event => set({ fetchTool: event.target.value })} />}</Field>
-                  <Field label="结果格式">
-                    {props => (
-                      <select {...props} className="settings-select" value={draft.resultAdapter} onChange={event => set({ resultAdapter: event.target.value as McpResultAdapter })}>
-                        {MCP_RESULT_ADAPTERS.map(adapter => <option key={adapter} value={adapter}>{ADAPTER_LABELS[adapter]}</option>)}
-                      </select>
-                    )}
-                  </Field>
+                  <Field label="读网页工具">{props => <input {...props} className="settings-input" list={toolsId} value={draft.fetchTool} spellCheck={false} onChange={event => set({ fetchTool: event.target.value })} />}</Field>
                   <Field label="路由优先级">{props => <input {...props} className="settings-input" inputMode="numeric" value={draft.routePriority} onChange={event => set({ routePriority: event.target.value })} />}</Field>
                 </div>
                 <datalist id={toolsId}>{tools.map(tool => <option key={tool.name} value={tool.name} />)}</datalist>

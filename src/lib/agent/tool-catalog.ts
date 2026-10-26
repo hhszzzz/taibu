@@ -94,11 +94,17 @@ export function getAgentToolFeatureId(name: string): AgentChartKind | null {
   }
 }
 
+/**
+ * The web tools: a search and a page read, both routed to the search services an administrator set up
+ * (mcp/web-route.server.ts), both returning numbered sources.
+ */
+export const AGENT_WEB_TOOLS: ReadonlySet<string> = new Set(['web_search', 'web_fetch']);
+
 /** Static Agent tools that belong to an administrator-configurable scope. */
 export function getAgentToolScope(name: string): AgentToolScopeId | null {
   const feature = getAgentToolFeatureId(name);
   if (feature && (AGENT_TOOL_SCOPE_IDS as readonly string[]).includes(feature)) return feature;
-  if (name.startsWith('mcp__') || name === 'web_search') return 'web';
+  if (name.startsWith('mcp__') || AGENT_WEB_TOOLS.has(name)) return 'web';
   if (name === 'search_knowledge') return 'knowledge';
   if (['list_user_data', 'read_user_data', 'read_user_notes', 'read_user_profile', 'read_attachment'].includes(name)) return 'user-data';
   if (['read_user_memory', 'remember_user_fact', 'search_conversations'].includes(name)) return 'memory';
@@ -200,7 +206,7 @@ export function getAgentExtensionToolTitle(name: string): string | undefined {
  * the archive, load guidance or dispatch members, each of which the model must do itself.
  */
 export const AGENT_MODEL_ONLY_TOOLS: ReadonlySet<string> = new Set([
-  'ask_user', 'todo_write', 'inspect_chart', 'focus_chart', 'web_search', 'search_knowledge', 'read_attachment',
+  'ask_user', 'todo_write', 'inspect_chart', 'focus_chart', 'web_search', 'web_fetch', 'search_knowledge', 'read_attachment',
   'list_analysis_methods', 'load_analysis_method', 'read_user_memory', 'remember_user_fact', AGENT_SUBMIT_PLAN_TOOL,
   AGENT_ARCHIVE_TOOLS.record, AGENT_ARCHIVE_TOOLS.propose, 'parallel_analysis', AGENT_BACKGROUND_TOOL,
 ]);
@@ -221,6 +227,7 @@ const TOOL_FAMILIES: ReadonlyMap<string, AgentToolFamily> = new Map<string, Agen
   ['bazi_hepan', 'calculation'],
   ['bazi_hour_candidates', 'calculation'],
   ['web_search', 'search'],
+  ['web_fetch', 'search'],
   ['search_knowledge', 'search'],
   ['list_user_data', 'data'],
   ['read_user_data', 'data'],

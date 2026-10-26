@@ -12,6 +12,7 @@ import { Maximize2, Minimize2 } from 'lucide-react';
 import type { AttachmentState, Mention } from '@/types';
 import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
 import type { MembershipType } from '@/lib/user/membership';
+import { webSearchUnavailableTitle } from '@/lib/ai/web-search-access';
 import { useToast } from '@/components/ui/Toast';
 import { buildMentionHighlightedParts } from '@/components/chat/mentionHighlight';
 import { MentionIcon } from '@/components/chat/mention/MentionIcon';
@@ -68,6 +69,8 @@ interface ChatComposerProps extends ModelSettingsProps {
     webControl?: ComposerWebControl;
     /** The server can search the web for plain chat. */
     plainWebAvailable?: boolean;
+    /** The lowest membership a search service serves, null when none is set up. */
+    webTier?: MembershipType | null;
     agentMode?: boolean;
     /** The conversation already has messages, so the input continues it. */
     continuing?: boolean;
@@ -116,6 +119,7 @@ export function ChatComposer({
     noteOptional = false,
     webControl,
     plainWebAvailable = false,
+    webTier = null,
     agentMode = false,
     continuing = false,
     awaitingInput = false,
@@ -304,7 +308,7 @@ export function ChatComposer({
     }, []);
 
     const plainWebAllowed = plainWebAvailable && canUseWeb;
-    const plainWebTitle = !plainWebAvailable ? '当前环境未配置联网搜索' : !canUseWeb ? '联网搜索需要 Plus 会员' : '联网搜索';
+    const plainWebTitle = !plainWebAvailable ? webSearchUnavailableTitle(webTier) : !canUseWeb ? '联网搜索需要 Plus 会员' : '联网搜索';
     const handleWebToggle = () => {
         if (!onAttachmentChange) return;
         const newWebSearch = !attachmentState?.webSearchEnabled;

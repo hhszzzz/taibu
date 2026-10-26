@@ -19,7 +19,7 @@ export async function agentMcpDatabaseContracts(t, { sql, asActor, asOwner, admi
   const sealed = { 'x-api-key': { version: 1, iv: 'aXY=', tag: 'dGFn', data: 'c2VhbGVk' } };
 
   await t.test('platform MCP servers are administrators\' and a connector is only its owner\'s', async () => {
-    const platform = await add(adminId, null, 'exa', { secret_headers: sealed, exposure: 'hidden', search_tool: 'web_search_exa', result_adapter: 'exa' });
+    const platform = await add(adminId, null, 'exa', { secret_headers: sealed, exposure: 'hidden', search_tool: 'web_search_exa' });
     await assert.rejects(add(owner, null, 'forged'), /42501/, 'a member cannot add a platform server');
     await assert.rejects(add(owner, other, 'planted'), /42501/, 'nor a connector in another account');
     await assert.rejects(add(adminId, owner, 'planted'), /42501/, 'nor can an administrator');

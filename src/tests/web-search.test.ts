@@ -1,77 +1,51 @@
-import { beforeEach, test, type TestContext } from 'node:test';
+import { beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
-import { searchChatWeb, searchWeb, WEB_SEARCH_QUERY_MAX, webSearchConfigured } from '../lib/ai/web-search.server';
-import { chatWebSearchAccess, chatWebSearchDenial } from '../lib/ai/web-search-access';
+import { searchChatWeb } from '../lib/ai/web-search.server';
+import { chatWebSearchAccess, chatWebSearchDenial, webSearchTier, webSearchUnavailableTitle } from '../lib/ai/web-search-access';
+import { WEB_SEARCH_QUERY_MAX } from '../lib/agent/mcp/web-results';
+import type { MembershipType } from '../lib/user/membership';
 
-const previousKey = process.env.TAVILY_API_KEY;
-beforeEach(t => {
+const route = require('../lib/agent/mcp/web-route.server') as typeof import('../lib/agent/mcp/web-route.server');
+
+let searches: Array<{ query: string; membership: MembershipType }> = [];
+beforeEach((t) => {
     assert.ok('mock' in t);
-    process.env.TAVILY_API_KEY = randomUUID();
-    t.after(() => {
-        if (previousKey === undefined) delete process.env.TAVILY_API_KEY;
-        else process.env.TAVILY_API_KEY = previousKey;
+    searches = [];
+    t.mock.method(route, 'webRouteAvailable', async (kind: string, membership: MembershipType) => kind === 'search' && membership !== 'free');
+    t.mock.method(route, 'searchWeb', async (query: string, options: { membership: MembershipType }) => {
+        searches.push({ query, membership: options.membership });
+        return [{ title: '来源', url: 'https://example.com/', content: '摘要' }];
     });
 });
 
-function tavily(t: TestContext, respond: (body: { query: string }) => Response | Promise<Response>) {
-    const queries: string[] = [];
-    t.mock.method(globalThis, 'fetch', async (input: Parameters<typeof fetch>[0], init: Parameters<typeof fetch>[1]) => {
-        assert.equal(input, 'https://api.tavily.com/search');
-        const body = JSON.parse(String(init?.body)) as { query: string };
-        queries.push(body.query);
-        return respond(body);
-    });
-    return queries;
-}
-
-test('Tavily transport sends only search fields and returns usable sources', async t => {
-    t.mock.method(globalThis, 'fetch', async (input: Parameters<typeof fetch>[0], init: Parameters<typeof fetch>[1]) => {
-        assert.equal(input, 'https://api.tavily.com/search');
-        assert.equal(new Headers(init?.headers).get('authorization'), `Bearer ${process.env.TAVILY_API_KEY}`);
-        assert.deepEqual(JSON.parse(String(init?.body)), { query: '公开信息', search_depth: 'basic', max_results: 5, include_answer: false, include_raw_content: false });
-        assert.ok(init?.signal);
-        return Response.json({ results: [
-            { title: '可引用', url: 'https://example.com', content: '摘要' },
-            { title: '不可引用', url: 'javascript:alert(1)', content: '资料' },
-            { title: '无效', url: 'not a url', content: '资料' },
-            { title: null, url: 'https://example.com/untitled', content: '资料' },
-            'not a result',
-        ] });
-    });
-    assert.deepEqual(await searchWeb('公开信息'), [{ title: '可引用', url: 'https://example.com', content: '摘要' }]);
-});
-
-test('an unexpected Tavily payload yields no results instead of a crash', async t => {
-    tavily(t, () => Response.json({ results: { title: '不是数组' } }));
-    assert.deepEqual(await searchWeb('公开信息'), []);
-});
-
-test('chat search sends the question collapsed and cut to the length Tavily accepts', async t => {
-    const queries = tavily(t, () => Response.json({ results: [] }));
+test('chat search sends the question collapsed and cut by characters, routed for the member\'s tier', async () => {
     const question = `  甲辰年\n\n  运势 ${'😀'.repeat(WEB_SEARCH_QUERY_MAX)}`;
-    const result = await searchChatWeb(question);
+    const result = await searchChatWeb(question, 'pro');
     assert.equal(result.status, 'ok');
-    assert.equal(Array.from(queries[0]).length, WEB_SEARCH_QUERY_MAX, 'cut by characters, never inside one');
-    assert.ok(queries[0].startsWith('甲辰年 运势 😀'));
-    assert.deepEqual(await searchChatWeb(' \n '), { status: 'ok', query: '', results: [] });
-    assert.equal(queries.length, 1, 'an empty question is not sent');
+    assert.equal(Array.from(searches[0].query).length, WEB_SEARCH_QUERY_MAX, 'cut by characters, never inside one');
+    assert.ok(searches[0].query.startsWith('甲辰年 运势 😀'));
+    assert.equal(searches[0].membership, 'pro');
+    assert.deepEqual(await searchChatWeb(' \n ', 'plus'), { status: 'ok', query: '', results: [] });
+    assert.equal(searches.length, 1, 'an empty question is not sent');
 });
 
-test('chat search never fails the answer: it reports an unconfigured or failing search instead', async t => {
+test('chat search never fails the answer: no service for the tier, or a failing one, is reported instead', async (t) => {
+    assert.deepEqual(await searchChatWeb('甲辰', 'free'), { status: 'unavailable', query: '甲辰' });
     const warn = t.mock.method(console, 'warn', () => undefined);
-    tavily(t, () => new Response('quota', { status: 432 }));
-    assert.deepEqual(await searchChatWeb('甲辰'), { status: 'failed', query: '甲辰' });
+    t.mock.method(route, 'searchWeb', async () => { throw new Error('联网搜索失败：外部服务响应超时'); });
+    assert.deepEqual(await searchChatWeb('甲辰', 'plus'), { status: 'failed', query: '甲辰' });
     assert.equal(warn.mock.callCount(), 1);
-    delete process.env.TAVILY_API_KEY;
-    assert.equal(webSearchConfigured(), false);
-    assert.deepEqual(await searchChatWeb('甲辰'), { status: 'unavailable', query: '甲辰' });
+    assert.doesNotMatch(JSON.stringify(warn.mock.calls[0].arguments), /超时/u, 'the log names no upstream detail');
 });
 
-test('a cancelled chat search rejects instead of answering without results', async t => {
-    tavily(t, () => new Promise<Response>((_, reject) => setTimeout(() => reject(new DOMException('aborted', 'AbortError')), 5)));
+test('a cancelled chat search rejects instead of answering without results', async (t) => {
     const controller = new AbortController();
-    const pending = searchChatWeb('甲辰', controller.signal);
+    t.mock.method(route, 'searchWeb', async (_query: string, options: { signal?: AbortSignal }) => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        options.signal?.throwIfAborted();
+        return [];
+    });
+    const pending = searchChatWeb('甲辰', 'plus', controller.signal);
     controller.abort(new Error('client left'));
     await assert.rejects(pending, /client left/u);
 });
@@ -84,4 +58,10 @@ test('Plus may search, only Pro may search alongside a document, and free accoun
     assert.equal(chatWebSearchDenial('plus', true), 'Plus 会员无法同时使用文件和搜索，请升级 Pro 会员');
     assert.equal(chatWebSearchDenial('plus', false), null);
     assert.equal(chatWebSearchDenial('pro', true), null);
+});
+
+test('the web toggle names the plan a search service serves, never below Plus, or says none is set up', () => {
+    assert.deepEqual([webSearchTier(null), webSearchTier('free'), webSearchTier('plus'), webSearchTier('pro')], [null, 'plus', 'plus', 'pro']);
+    assert.equal(webSearchUnavailableTitle('pro'), '联网搜索需要 Pro 会员');
+    assert.equal(webSearchUnavailableTitle(null), '当前环境未配置联网搜索');
 });

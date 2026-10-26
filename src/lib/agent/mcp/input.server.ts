@@ -1,8 +1,8 @@
 import 'server-only';
 import { validateMcpServerUrl } from '../safe-fetch.server';
 import {
-  MCP_EXPOSURES, MCP_RESULT_ADAPTERS, MCP_RESULT_CHARS_RANGE, MCP_SERVER_NAME_PATTERN, MCP_TIMEOUT_RANGE, USER_MCP_EXPOSURES,
-  isMembershipTier, type McpExposure, type McpResultAdapter, type McpToolPolicy,
+  MCP_EXPOSURES, MCP_RESULT_CHARS_RANGE, MCP_SERVER_NAME_PATTERN, MCP_TIMEOUT_RANGE, USER_MCP_EXPOSURES,
+  isMembershipTier, type McpExposure, type McpToolPolicy,
 } from './config';
 import type { MembershipType } from '@/lib/user/membership';
 
@@ -35,7 +35,6 @@ export type McpServerFields = {
   toolPolicy: Record<string, McpToolPolicy>;
   searchTool: string | null;
   fetchTool: string | null;
-  resultAdapter: McpResultAdapter;
   routePriority: number;
   requiredTier: MembershipType;
   enabled: boolean;
@@ -157,17 +156,13 @@ export function parseMcpServerInput(body: unknown, scope: 'platform' | 'user', p
   if (has('toolPolicy')) result.toolPolicy = toolPolicy(raw.toolPolicy);
   if (scope === 'platform') {
     if (has('searchTool')) result.searchTool = routeTool(raw.searchTool, '搜索工具');
-    if (has('fetchTool')) result.fetchTool = routeTool(raw.fetchTool, '抓取工具');
-    if (has('resultAdapter')) {
-      if (!(MCP_RESULT_ADAPTERS as readonly string[]).includes(raw.resultAdapter as string)) fail('结果解析方式无效');
-      result.resultAdapter = raw.resultAdapter as McpResultAdapter;
-    }
+    if (has('fetchTool')) result.fetchTool = routeTool(raw.fetchTool, '读网页工具');
     if (has('routePriority')) result.routePriority = integer(raw.routePriority, '路由优先级', 0, 1000);
     if (has('requiredTier')) {
       if (!isMembershipTier(raw.requiredTier)) fail('会员等级无效');
       result.requiredTier = raw.requiredTier as MembershipType;
     }
-  } else if (['searchTool', 'fetchTool', 'resultAdapter', 'routePriority', 'requiredTier'].some(key => has(key) && raw[key] !== null)) {
+  } else if (['searchTool', 'fetchTool', 'routePriority', 'requiredTier'].some(key => has(key) && raw[key] !== null)) {
     fail('个人连接器不能设置联网路由或会员等级');
   }
   if (has('enabled')) result.enabled = typeof raw.enabled === 'boolean' ? raw.enabled : fail('启用状态无效');

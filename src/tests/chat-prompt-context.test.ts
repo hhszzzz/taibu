@@ -198,9 +198,10 @@ test('the document and search results keep their layout; mention tokens are stri
   });
   t.mock.method(promptBuilderModule, 'calculatePromptBudget', async () => 1024);
   t.mock.method(appSettingsModule, 'isFeatureModuleEnabled', async () => false);
-  const queries: string[] = [];
-  t.mock.method(webSearchModule, 'searchChatWeb', async (query: string) => {
+  const queries: string[] = [], memberships: string[] = [];
+  t.mock.method(webSearchModule, 'searchChatWeb', async (query: string, membership: string) => {
     queries.push(query);
+    memberships.push(membership);
     return { status: 'ok' as const, query, results: [{ title: '流年', url: 'https://example.com', content: '第一段\n\n第二段' }] };
   });
 
@@ -225,6 +226,7 @@ test('the document and search results keep their layout; mention tokens are stri
   assert.ok(content.includes('第一段\n\n第二段'));
   assert.ok(content.endsWith('【用户的问题如下】\n看看 这个'), content.slice(-40));
   assert.deepEqual(queries, ['看看 这个'], 'mention tokens never reach the search provider');
+  assert.deepEqual(memberships, ['pro'], 'the search is routed for the member\'s tier');
   assert.deepEqual(result.metadata.webSearch, { status: 'ok', sources: [{ title: '流年', url: 'https://example.com' }] });
 });
 

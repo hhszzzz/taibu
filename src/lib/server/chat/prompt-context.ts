@@ -120,7 +120,7 @@ export async function buildChatPromptContext(
   const rawUserContent = lastUserMessage?.content || '';
   const userQuestionForSearch = extractUserQuestion(rawUserContent);
   // Runs while the rest of the context loads; mention tokens never leave for the search provider.
-  const webSearch = options?.webSearch ? searchChatWeb(stripMentionTokens(userQuestionForSearch)) : undefined;
+  const webSearch = options?.webSearch ? searchChatWeb(stripMentionTokens(userQuestionForSearch), membershipType) : undefined;
   const canUsePromptKnowledgeBase = knowledgeBaseFeatureEnabled && membershipType !== 'free';
   const mergedMentions = mergeMentions(rawUserContent, body.mentions);
   const effectiveMentions = canUsePromptKnowledgeBase

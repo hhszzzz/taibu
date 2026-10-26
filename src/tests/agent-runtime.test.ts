@@ -498,59 +498,56 @@ test("takeover continues after a committed model response", async () => {
   assert.ok((finish.args.p_message as AgentRunRow["public_message"]).content.includes("最终分析"), "final analysis stays in chat history");
 });
 
-test("cached web and question results restore their public parts once before continuation", async () => {
-  const previous = process.env.TAVILY_API_KEY;
-  process.env.TAVILY_API_KEY = randomUUID();
-  try {
-    const store = new MemoryStore(),
-      run = row();
-    run.input.webEnabled = true;
-    const results = [
-      { title: "来源", url: "https://example.com/source", content: "摘要" },
-    ];
-    store.drafts.set("web", {
-      id: randomUUID(),
-      call_id: "web",
-      tool_name: "web_search",
-      kind: "tool",
-      args: { query: "查询" },
-      result: { content: [], details: results },
-    });
-    store.drafts.set("ask", {
-      id: randomUUID(),
-      call_id: "ask",
-      tool_name: "ask_user",
-      kind: "tool",
-      args: { question: "出生时间？" },
-      result: { content: [], details: { question: "出生时间？" } },
-    });
-    const tools = await createAgentTools(store, run, run.checkpoint);
-    for (let i = 0; i < 2; i++) {
-      await tools
-        .find((t) => t.name === "web_search")!
-        .execute("web", { query: "查询" });
-      await tools
-        .find((t) => t.name === "ask_user")!
-        .execute("ask", { question: "出生时间？" });
-    }
-    assert.equal(
-      run.checkpoint.parts.filter((p) => p.type === "source").length,
-      1,
-    );
-    assert.equal(
-      run.checkpoint.parts.filter((p) => p.type === "question").length,
-      1,
-    );
-    assert.equal(run.checkpoint.question, "出生时间？");
-    assert.equal(
-      store.writes.length,
-      0,
-      "cache replay does not fetch or recache",
-    );
-  } finally {
-    if (previous === undefined) delete process.env.TAVILY_API_KEY;
-    else process.env.TAVILY_API_KEY = previous;
+test("cached web and question results restore their public parts once before continuation", async (t) => {
+  const route = require("../lib/agent/mcp/web-route.server") as typeof import("../lib/agent/mcp/web-route.server");
+  t.mock.method(route, "webRouteAvailable", async () => true);
+  const searches = t.mock.method(route, "searchWeb", async () => []);
+  const store = new MemoryStore(),
+    run = row();
+  run.input.webEnabled = true;
+  const results = [
+    { title: "来源", url: "https://example.com/source", content: "摘要" },
+  ];
+  store.drafts.set("web", {
+    id: randomUUID(),
+    call_id: "web",
+    tool_name: "web_search",
+    kind: "tool",
+    args: { query: "查询" },
+    result: { content: [], details: results },
+  });
+  store.drafts.set("ask", {
+    id: randomUUID(),
+    call_id: "ask",
+    tool_name: "ask_user",
+    kind: "tool",
+    args: { question: "出生时间？" },
+    result: { content: [], details: { question: "出生时间？" } },
+  });
+  const tools = await createAgentTools(store, run, run.checkpoint);
+  for (let i = 0; i < 2; i++) {
+    await tools
+      .find((t) => t.name === "web_search")!
+      .execute("web", { query: "查询" });
+    await tools
+      .find((t) => t.name === "ask_user")!
+      .execute("ask", { question: "出生时间？" });
   }
+  assert.equal(
+    run.checkpoint.parts.filter((p) => p.type === "source").length,
+    1,
+  );
+  assert.equal(
+    run.checkpoint.parts.filter((p) => p.type === "question").length,
+    1,
+  );
+  assert.equal(run.checkpoint.question, "出生时间？");
+  assert.equal(
+    store.writes.length,
+    0,
+    "cache replay does not fetch or recache",
+  );
+  assert.equal(searches.mock.callCount(), 0, "cache replay does not search again");
 });
 
 test("cached reads still check current feature and membership permissions", async (t) => {

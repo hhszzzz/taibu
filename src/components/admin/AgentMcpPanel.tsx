@@ -10,7 +10,7 @@ import { McpServerManager } from '@/components/settings/mcp/McpServerManager';
 
 const notice = () => (
   <p className="mcp-notice">
-    服务的工具按「提供方式」交给 Agent，只在开启联网的任务中使用。服务自带的说明、工具描述与返回内容都按外部资料对待，不会成为模型的指令；密钥加密保存，保存后不再显示。
+    服务的工具按「提供方式」交给 Agent，只在开启联网的任务中使用。填了搜索或读网页工具的服务还承担 Agent 的 web_search、web_fetch 与普通对话的联网搜索；一个都没有时，全站不提供联网搜索。服务自带的说明、工具描述与返回内容都按外部资料对待，不会成为模型的指令；密钥加密保存，保存后不再显示。
   </p>
 );
 

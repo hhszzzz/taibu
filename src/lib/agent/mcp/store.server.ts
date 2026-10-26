@@ -7,7 +7,7 @@ import { createSharedCache } from '@/lib/cache/shared.server';
 import type { MembershipType } from '@/lib/user/membership';
 import {
   MCP_RESULT_CHARS_RANGE, MCP_TIMEOUT_RANGE, isMembershipTier,
-  type McpExposure, type McpResultAdapter, type McpServerSnapshot, type McpServerView, type McpToolPolicy,
+  type McpExposure, type McpServerSnapshot, type McpServerView, type McpToolPolicy,
 } from './config';
 import { McpInputError, type McpServerFields } from './input.server';
 import { applyMcpSecretChanges, sealedEntries, type SealedSecretMap } from './secrets.server';
@@ -26,7 +26,6 @@ export interface McpServerRow {
   tool_policy: Record<string, McpToolPolicy>;
   search_tool: string | null;
   fetch_tool: string | null;
-  result_adapter: McpResultAdapter;
   route_priority: number;
   required_tier: MembershipType;
   is_enabled: boolean;
@@ -125,7 +124,6 @@ export async function insertMcpServer(
         exposure: fields.exposure ?? 'deferred', tool_policy: json(fields.toolPolicy ?? {}) as never,
         search_tool: owner === null ? fields.searchTool ?? null : null,
         fetch_tool: owner === null ? fields.fetchTool ?? null : null,
-        result_adapter: owner === null ? fields.resultAdapter ?? 'generic' : 'generic',
         route_priority: fields.routePriority ?? 100,
         required_tier: owner === null ? fields.requiredTier ?? 'plus' : 'free',
         is_enabled: fields.enabled ?? true,
@@ -165,7 +163,6 @@ export async function updateMcpServer(
         ...(fields.toolPolicy !== undefined ? { tool_policy: json(fields.toolPolicy) as never } : {}),
         ...(owner === null && fields.searchTool !== undefined ? { search_tool: fields.searchTool } : {}),
         ...(owner === null && fields.fetchTool !== undefined ? { fetch_tool: fields.fetchTool } : {}),
-        ...(owner === null && fields.resultAdapter !== undefined ? { result_adapter: fields.resultAdapter } : {}),
         ...(fields.routePriority !== undefined ? { route_priority: fields.routePriority } : {}),
         ...(owner === null && fields.requiredTier !== undefined ? { required_tier: fields.requiredTier } : {}),
         ...(fields.enabled !== undefined ? { is_enabled: fields.enabled } : {}),
@@ -225,7 +222,6 @@ export function toMcpServerView(row: McpServerRow): McpServerView {
     toolPolicy: row.tool_policy ?? {},
     searchTool: row.search_tool,
     fetchTool: row.fetch_tool,
-    resultAdapter: row.result_adapter,
     routePriority: row.route_priority,
     requiredTier: isMembershipTier(row.required_tier) ? row.required_tier : 'pro',
     enabled: row.is_enabled,

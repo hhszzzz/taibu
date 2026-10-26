@@ -29,6 +29,7 @@ import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { BrandMark } from '@/components/brand/BrandMark';
 import type { ChatBootstrapKnowledgeBase } from '@/lib/chat/bootstrap';
 import type { MembershipType } from '@/lib/user/membership';
+import { webSearchUnavailableTitle } from '@/lib/ai/web-search-access';
 import type { ChatMode } from '@/lib/chat/use-chat-state';
 import { getSettingsCenterRouteTarget, openSettingsCenter } from '@/lib/settings-center';
 import { AgentWorkspacePanel } from './agent/AgentWorkspacePanel';
@@ -396,7 +397,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         enabled: agent.webEnabled && webAllowed,
         disabled: !webAllowed,
         label: agent.active ? '下次联网' : '按需联网',
-        title: !agent.capabilities.webAvailable ? '当前环境未配置联网搜索' : membershipType === 'free' ? '联网搜索需要 Plus 会员' : agent.active ? '下个独立任务使用此配置' : 'Agent 会在需要时搜索网络',
+        title: !agent.capabilities.webAvailable ? webSearchUnavailableTitle(agent.capabilities.webTier) : membershipType === 'free' ? '联网搜索需要 Plus 会员' : agent.active ? '下个独立任务使用此配置' : 'Agent 会在需要时搜索网络',
         onToggle: () => agent.setWebEnabled(!agent.webEnabled),
     } : undefined;
     const noteState: ComposerNoteState = {
@@ -436,6 +437,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         knowledgeBaseEnabled,
         webControl,
         plainWebAvailable: !!agent?.capabilities.plainWebAvailable,
+        webTier: agent?.capabilities.webTier ?? null,
     };
     const composer = <ChatComposer {...composerProps} onSend={sendWithChartAsk} continuing note={note} noteOptional={isRunningComposerNote(noteState)} header={composerHeader}
         queue={currentRun && <AgentQueue key={`${workspaceKey}:${currentRun.id}`} run={currentRun} restoreDraft={message => void restoreDraft(message)} />} />;

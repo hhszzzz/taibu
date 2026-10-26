@@ -41,7 +41,7 @@ export function getAgentEvidence(parts: readonly AgentPart[], previous = 0): Age
     }
     for (const result of getAgentSearchResults(part) ?? []) {
       last = nextAgentCitation(last, result.cite);
-      evidence.push({ n: last, toolId: part.id, citable: result.cite === last, kind: part.name === 'web_search' ? 'web' : 'knowledge', result });
+      evidence.push({ n: last, toolId: part.id, citable: result.cite === last, kind: part.name === 'search_knowledge' ? 'knowledge' : 'web', result });
     }
   }
   return evidence;

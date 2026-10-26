@@ -2682,6 +2682,14 @@ export async function run(existingPage, bundlePath) {
     await workspacePanel.locator('[data-workspace-view="calculation"]').waitFor();
     check('A pairing lists both people and the three relation groups from Core', await workspacePanel.locator('.agent-ws-group').count() === 3 &&
       await workspacePanel.innerText().then(text => text.includes('日主互见') && text.includes('年命纳音') && text.includes('五行互补') && text.includes('女方')));
+    const pairingStrip = workspacePanel.locator('.agent-ws-pairing');
+    const pairingLines = workspacePanel.locator('.agent-ws-pairing-relations > li');
+    const pairingCount = await pairingLines.count();
+    await pairingLines.first().hover();
+    check('A pairing draws each relation between the two charts on one strip, and pointing at a line lights its arc', pairingCount > 0 &&
+      await pairingStrip.locator('[data-relation-cell]').count() === 16 && await pairingStrip.locator('[data-relation-edge]').count() === pairingCount &&
+      await pairingStrip.locator('[data-relation-edge][data-lit]').count() === 1 && await pairingLines.first().getAttribute('data-active') === '');
+    await workspacePanel.locator('h3').first().hover();
     await openProcessStep('黄历择日筛选');
     await workspacePanel.locator('[data-workspace-view="calculation"]').waitFor();
     check('A date selection names every zodiac it avoids', await workspacePanel.innerText().then(text => text.includes('避冲 丑牛（冲未）、酉鸡（冲卯）')));

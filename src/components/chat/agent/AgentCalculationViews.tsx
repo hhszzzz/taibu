@@ -1,8 +1,11 @@
 'use client';
-// 需要 useId：合盘各组关系的标题与列表相互关联
+// 合盘要记住指着的关系，并在柱位条上量字画线
 
-import { Fragment, useId } from 'react';
+import { useId, useMemo, useState } from 'react';
 import type { AgentCalculation } from '@/lib/agent/tool-presentation';
+import { layoutRelations, relationTone, type RelationLayout } from '@/lib/divination/ganzhi-relation-layout';
+import { GanzhiRelationOverlay, relationBandHeight } from '@/components/bazi/result/GanzhiRelationOverlay';
+import { ganZhiTextClass } from '@/components/bazi/element-classes';
 
 function DayunTimeline({ data }: { data: Extract<AgentCalculation, { kind: 'bazi_dayun' }>['data'] }) {
     const year = new Date().getFullYear();
@@ -107,6 +110,14 @@ function AlmanacCandidates({ data }: { data: Extract<AgentCalculation, { kind: '
     </>;
 }
 
+type Hepan = Extract<AgentCalculation, { kind: 'bazi_hepan' }>['data'];
+type RelationRowJSON = Hepan['日柱之间'][number];
+
+/** 关系落在哪几个字：「我年支巳·他年支申」「时支辰·流年支戌」 */
+function positionText(row: RelationRowJSON) {
+    return row.位置.map(cell => `${cell.柱.replace(/柱$/u, '')}${cell.部位 === '天干' ? '干' : '支'}${cell.字}`).join('·');
+}
+
 /** 两盘之间的关系分三组：日柱（日主与夫妻宫）、年柱（生肖与年命）、其余；各组按 Core 的顺序列出。 */
 const HEPAN_GROUPS = [
     { key: '日柱之间', note: '日主与夫妻宫', scope: '两人日柱之间' },
@@ -114,33 +125,89 @@ const HEPAN_GROUPS = [
     { key: '其余关系', note: '其余柱位', scope: '其余柱位之间' },
 ] as const;
 
-function HepanReading({ data }: { data: Extract<AgentCalculation, { kind: 'bazi_hepan' }>['data'] }) {
+const PILLARS = ['年柱', '月柱', '日柱', '时柱'] as const;
+const NOTHING: ReadonlySet<string> = new Set();
+
+/**
+ * 两人八柱排成一条：每人一组四柱，日柱衬底，五行着色；两盘之间的关系用八字盘面的连线画在条上
+ * （天干之间在上、地支之间在下）。时辰未知的一方时柱留空。指着一条线、一个字时由关系层自己突出，
+ * 指着下面列表里的一条时，由 focus 交给关系层突出同一条线。
+ */
+function PairingStrip({ data, layout, focus }: { data: Hepan; layout: RelationLayout; focus: RelationRowJSON & { id: string } | null }) {
+    const located = useMemo(() => focus ? new Set([focus.id]) : NOTHING, [focus]);
+    const locatedCells = useMemo(() => focus ? new Set(focus.位置.map(cell => `${cell.柱}:${cell.部位}`)) : NOTHING, [focus]);
+    const stemBand = relationBandHeight(layout.lanes.stem), branchBand = relationBandHeight(layout.lanes.branch);
+    const glyphs = (part: '天干' | '地支') => data.双方.flatMap((person, index) => PILLARS.map(label => {
+        const pillar = person.四柱.find(item => item.柱 === label);
+        const char = pillar?.干支.charAt(part === '天干' ? 0 : 1);
+        return <td key={person.称呼 + label} data-person-start={index > 0 && label === '年柱' ? '' : undefined} data-day={label === '日柱' ? '' : undefined}
+            style={part === '天干' ? { paddingTop: stemBand + 6 } : { paddingBottom: branchBand + 6 }}>
+            {char
+                ? <span className={ganZhiTextClass(char)} data-relation-cell={`${person.称呼}${label}:${part}`} title={`${person.称呼}${label} · ${pillar!.纳音}`}>{char}</span>
+                : <span className="agent-ws-pairing-missing" title="出生时辰未知，未排时柱">—</span>}
+        </td>;
+    }));
+    return <div className="agent-ws-pairing" data-relation-strip="">
+        <table aria-label="双方四柱">
+            <thead>
+                <tr data-row="person">{data.双方.map((person, index) => <th key={person.称呼} colSpan={PILLARS.length} scope="colgroup" data-person-start={index > 0 ? '' : undefined}>
+                    {person.称呼}<small>{person.性别} · 属{person.生肖}</small>
+                </th>)}</tr>
+                <tr data-row="pillar">{data.双方.flatMap((person, index) => PILLARS.map(label => <th key={person.称呼 + label} scope="col" abbr={label}
+                    data-person-start={index > 0 && label === '年柱' ? '' : undefined} data-day={label === '日柱' ? '' : undefined}>{label.charAt(0)}</th>))}</tr>
+            </thead>
+            <tbody>
+                <tr data-row="stem">{glyphs('天干')}</tr>
+                <tr data-row="branch">{glyphs('地支')}</tr>
+            </tbody>
+            <tfoot>
+                <tr>{data.双方.map((person, index) => <td key={person.称呼} colSpan={PILLARS.length} data-person-start={index > 0 ? '' : undefined}>
+                    日主{person.日主} · 生于{person.月令}月（{person.月令旺衰}）<br />缺失五行 {person.缺失五行.join('、') || '无'}{person.出生时辰 ? ' · 出生时辰未知，未排时柱' : ''}
+                </td>)}</tr>
+            </tfoot>
+        </table>
+        {layout.edges.length > 0 && <GanzhiRelationOverlay layout={layout} located={located} locatedCells={locatedCells} />}
+    </div>;
+}
+
+/**
+ * 合盘：先是两人八柱与两盘之间的连线，再分日柱、年柱、其余三组逐条列出关系。日主互见领起日柱一组，
+ * 生肖与年命纳音领起年柱一组；指着一条关系时，条上同一条线与两端的字亮起。
+ */
+function HepanReading({ data }: { data: Hepan }) {
     const id = useId();
+    const [focus, setFocus] = useState<RelationRowJSON & { id: string } | null>(null);
+    // 连线与列表共用 id，指着列表里的一条就能在条上找到同一条线。
+    const groups = useMemo(() => HEPAN_GROUPS.map(group => ({ ...group, rows: data[group.key].map((row, index) => ({ ...row, id: `${group.key}-${index}` })) })), [data]);
+    const layout = useMemo(() => layoutRelations(groups.flatMap(group => group.rows), data.双方.flatMap(person => PILLARS.map(label => person.称呼 + label))), [groups, data]);
+    const [a, b] = data.双方;
+    const leads: Record<typeof HEPAN_GROUPS[number]['key'], Array<[string, string]>> = {
+        日柱之间: [['日主互见', [...data.日主互见.说明, data.日主互见.五行生克].join('；')]],
+        年柱之间: [['生肖', `${a.称呼}属${a.生肖}，${b.称呼}属${b.生肖}`], ['年命纳音', `${data.年命纳音.说明}：${data.年命纳音.五行生克}`]],
+        其余关系: [],
+    };
     return <>
-        {data.双方.map(person => <Fragment key={person.称呼}>
-            <p className="agent-ws-note">{person.称呼}（{person.性别}）· 属{person.生肖} · 日主{person.日主}，生于{person.月令}月（{person.月令旺衰}）· 缺失五行 {person.缺失五行.join('、') || '无'}{person.出生时辰 ? ' · 出生时辰未知，未排时柱' : ''}</p>
-            <p className="agent-ws-pillars" aria-label={`${person.称呼}四柱`}>{person.四柱.map(pillar => <span key={pillar.柱} title={`${pillar.柱} · ${pillar.纳音}`}>{pillar.干支}</span>)}</p>
-        </Fragment>)}
-        <dl className="agent-ws-facts">
-            <div><dt>日主互见</dt><dd>{[...data.日主互见.说明, data.日主互见.五行生克].join('；')}</dd></div>
-            <div><dt>年命纳音</dt><dd>{data.年命纳音.说明}：{data.年命纳音.五行生克}</dd></div>
-            <div><dt>五行互补</dt><dd>{data.五行互补.join('；')}</dd></div>
-        </dl>
-        {HEPAN_GROUPS.map(({ key, note, scope }, index) => <section key={key} className="agent-ws-group" aria-labelledby={`${id}-${index}`}>
-            <h3 id={`${id}-${index}`}>{key} <span>{note} · {data[key].length} 项</span></h3>
-            {data[key].length ? <ol className="agent-ws-list">
-                {data[key].map(row => <li key={`${row.类型}:${row.位置.map(cell => cell.柱 + cell.部位).join('·')}`}>
-                    <strong>{row.说明}</strong>
-                    <small>{row.位置.map(cell => `${cell.柱}${cell.部位}${cell.字}`).join(' · ')}</small>
-                </li>)}
-            </ol> : <p className="agent-ws-note">{scope}没有干支合冲刑害破。</p>}
+        <PairingStrip data={data} layout={layout} focus={focus} />
+        <p className="agent-ws-note">五行互补：{data.五行互补.join('；')}</p>
+        {groups.map(({ key, note, scope, rows }, index) => <section key={key} className="agent-ws-group" aria-labelledby={`${id}-${index}`}>
+            <h3 id={`${id}-${index}`}>{key} <span>{note} · {rows.length} 项</span></h3>
+            {leads[key].length > 0 && <dl className="agent-ws-facts">
+                {leads[key].map(([term, text]) => <div key={term}><dt>{term}</dt><dd>{text}</dd></div>)}
+            </dl>}
+            {rows.length ? <ul className="agent-ws-relation-lines agent-ws-pairing-relations" aria-label={`${key}的干支关系`} onPointerLeave={() => setFocus(null)}>
+                {rows.map(row => {
+                    const { tone, mark } = relationTone(row.类型, row.位置.length);
+                    return <li key={row.id} data-active={focus?.id === row.id ? '' : undefined} onPointerEnter={() => setFocus(row)}>
+                        <span data-tone={tone}>{mark}</span>{row.说明}<small>{positionText(row)}</small>
+                    </li>;
+                })}
+            </ul> : <p className="agent-ws-note">{scope}没有干支合冲刑害破。</p>}
         </section>)}
     </>;
 }
 
 type HourCandidates = Extract<AgentCalculation, { kind: 'bazi_hour_candidates' }>['data'];
 
-/** 钟表时刻：与出生日期同日只写钟点，次日零点写作 24:00，其余写全 */
 /** 时段只写时分：次日零点写 24:00，落在出生前后一天（真太阳时跨日）时注明前一日、次日 */
 function clockSpan(start: string, end: string, solarDate: string) {
     const [startDate, startTime] = start.split(' ');
@@ -151,9 +218,7 @@ function clockSpan(start: string, end: string, solarDate: string) {
 }
 
 /** 「辰戌相冲（时支辰·流年支戌）」：流年与大运同字时，同一关系出现两次，靠位置区分 */
-function relationText(row: HourCandidates['候选'][number]['时柱关系'][number]) {
-    return `${row.说明}（${row.位置.map(cell => `${cell.柱.replace(/柱$/u, '')}${cell.部位 === '天干' ? '干' : '支'}${cell.字}`).join('·')}）`;
-}
+const relationText = (row: RelationRowJSON) => `${row.说明}（${positionText(row)}）`;
 
 /** 推算时辰：每个候选一行——时段与时柱、时柱自身的事实、与原局的关系、起运，给了前事年份时再列各年的区分事实。 */
 function HourCandidateList({ data }: { data: HourCandidates }) {

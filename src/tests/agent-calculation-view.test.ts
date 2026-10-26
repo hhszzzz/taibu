@@ -14,20 +14,30 @@ async function render(name: string, input: Record<string, unknown>) {
   return { html, text: html.replace(/<[^>]+>/gu, ' ').replace(/\s+/gu, ' ') };
 }
 
-test('a pairing shows both people, how they see each other and the relations between their charts in three groups', async () => {
+/** One row of the pairing strip, as 「男方年柱己」…: each glyph is keyed for the relation lines drawn over it. */
+const glyphs = (html: string, part: '天干' | '地支') => [...html.matchAll(new RegExp(`data-relation-cell="([^"]+):${part}"[^>]*>(.)<`, 'gu'))].map(match => match[1] + match[2]);
+
+test('a pairing shows both charts as one strip, and the relations between them in three groups', async () => {
   const { html, text } = await render('bazi_hepan', {
     a: { name: '男方', gender: 'male', birthYear: 1990, birthMonth: 1, birthDay: 15, birthHour: 9 },
     b: { name: '女方', gender: 'female', birthYear: 1992, birthMonth: 8, birthDay: 3, birthHour: 14 },
   });
-  assert.match(text, /男方（男）· 属蛇 · 日主庚金，生于丑月（相）· 缺失五行 无/u);
-  assert.match(html, /aria-label="女方四柱"><span title="年柱 · 剑锋金">壬申<\/span><span[^>]*>丁未<\/span><span[^>]*>辛亥<\/span><span[^>]*>乙未<\/span><\/p>/u);
-  assert.match(text, /日主互见 女方日主辛金是男方的劫财；男方日主庚金是女方的劫财；男方日主庚金与女方日主辛金比和/u);
-  assert.match(text, /年命纳音 男方大林木，女方剑锋金：女方年命剑锋金克男方年命大林木/u);
+  // Eight pillars side by side, colored by element, with the strip's relation layer over them.
+  assert.deepEqual(glyphs(html, '天干'), ['男方年柱己', '男方月柱丁', '男方日柱庚', '男方时柱辛', '女方年柱壬', '女方月柱丁', '女方日柱辛', '女方时柱乙']);
+  assert.equal(glyphs(html, '地支').map(cell => cell.at(-1)).join(''), '巳丑辰巳申未亥未');
+  assert.match(html, /<span class="text-water" data-relation-cell="女方年柱:天干" title="女方年柱 · 剑锋金">壬<\/span>/u);
+  assert.match(html, /data-relation-overlay=""/u);
+  assert.match(text, /男方 男 · 属蛇 女方 女 · 属猴 年 月 日 时 年 月 日 时/u);
+  assert.match(text, /日主庚金 · 生于丑月（相） 缺失五行 无 日主辛金 · 生于未月（相） 缺失五行 无 五行互补：双方原局五行俱全/u);
+  // How the day masters see each other leads the day-pillar group; zodiac and year nayin lead the year-pillar group.
+  assert.match(text, /日柱之间 日主与夫妻宫 · 0 项 日主互见 女方日主辛金是男方的劫财；男方日主庚金是女方的劫财；男方日主庚金与女方日主辛金比和 两人日柱之间没有干支合冲刑害破。/u);
+  assert.match(text, /生肖 男方属蛇，女方属猴 年命纳音 男方大林木，女方剑锋金：女方年命剑锋金克男方年命大林木/u);
   // Each group is a labelled section with its count; an empty one says so instead of vanishing.
   const groups = [...html.matchAll(/<h3 id="[^"]+">([^<]+) <span>([^<]+)<\/span><\/h3>/gu)].map(match => `${match[1]}|${match[2].replace(/\d+ 项/u, 'N 项')}`);
   assert.deepEqual(groups, ['日柱之间|日主与夫妻宫 · N 项', '年柱之间|生肖与年命 · N 项', '其余关系|其余柱位 · N 项']);
-  assert.match(text, /两人日柱之间没有干支合冲刑害破。/u);
-  assert.match(text, /巳申六合化水 男方年柱地支巳 · 女方年柱地支申/u);
+  assert.match(text, /合 巳申六合化水 男方年支巳·女方年支申/u);
+  // The same relation from two of one person's pillars reads apart by where it falls.
+  assert.match(text, /冲 巳亥相冲 男方年支巳·女方日支亥 .*冲 巳亥相冲 男方时支巳·女方日支亥/u);
 });
 
 test('a date selection names every zodiac it avoids', async () => {
@@ -35,14 +45,15 @@ test('a date selection names every zodiac it avoids', async () => {
   assert.match(text, /2026-02-14 至 2026-02-20 · 7 天 · 避冲 丑牛（冲未）、卯兔（冲酉） · 候选 5 天/u);
 });
 
-test('a pairing with an unknown birth time shows three pillars for that person and says why', async () => {
+test('a pairing with an unknown birth time leaves that hour pillar empty and says why', async () => {
   const { html, text } = await render('bazi_hepan', {
     a: { name: '男方', gender: 'male', birthYear: 1990, birthMonth: 1, birthDay: 15, birthHour: 9 },
     b: { name: '女方', gender: 'female', birthYear: 1992, birthMonth: 8, birthDay: 3 },
   });
-  assert.match(html, /aria-label="女方四柱"><span title="年柱 · 剑锋金">壬申<\/span><span[^>]*>丁未<\/span><span[^>]*>辛亥<\/span><\/p>/u);
-  assert.match(text, /女方（女）[^·]*· 属猴 .* · 出生时辰未知，未排时柱/u);
-  assert.match(text, /男方（男）· 属蛇 · 日主庚金，生于丑月（相）· 缺失五行 无 己巳 丁丑 庚辰 辛巳/u, 'the side with a time keeps four pillars and no note');
+  assert.deepEqual(glyphs(html, '天干'), ['男方年柱己', '男方月柱丁', '男方日柱庚', '男方时柱辛', '女方年柱壬', '女方月柱丁', '女方日柱辛']);
+  assert.equal([...html.matchAll(/<span class="agent-ws-pairing-missing" title="出生时辰未知，未排时柱">—<\/span><\/td><\/tr>/gu)].length, 2, 'both rows end in an empty hour');
+  assert.match(text, /日主辛金 · 生于未月（相） 缺失五行 无 · 出生时辰未知，未排时柱/u);
+  assert.match(text, /日主庚金 · 生于丑月（相） 缺失五行 无 日主辛金/u, 'the side with a time keeps four pillars and no note');
 });
 
 test('luck periods of an unknown birth time show the start as a range and the year that may come later', async () => {

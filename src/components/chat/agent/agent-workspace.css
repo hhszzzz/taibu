@@ -551,6 +551,25 @@ button.agent-ws-status-head:disabled { cursor: default; }
 .agent-ws-relation-lines > li > span[data-tone="harm"] { color: var(--accent-strong); }
 .agent-ws-relation-lines > li > span:is([data-tone="break"], [data-tone="same"]) { color: var(--foreground-tertiary); }
 .agent-ws-relation-lines > li > span:is([data-tone="root"], [data-tone="reveal"]) { color: var(--accent); }
+/* 合盘的关系行另带位置；指着一行时整行加深，条上同一条线亮起。 */
+.agent-ws-relation-lines > li > small { margin-left: auto; padding-left: 8px; font-size: calc(11.5 / 16 * 1rem); color: var(--foreground-tertiary); white-space: nowrap; }
+.agent-ws-pairing-relations > li { margin-inline: -6px; padding: 1px 6px; border-radius: 6px; transition: background-color var(--duration-snap) var(--ease-out), color var(--duration-snap) var(--ease-out); }
+.agent-ws-pairing-relations > li[data-active] { background: var(--background-secondary); color: var(--foreground); }
+
+/* 合盘柱位条：两人各四柱，人与人之间一道竖线，日柱衬底；连线的空间由天干行上、地支行下的内边距留出。 */
+.agent-ws-pairing { position: relative; overflow-x: auto; }
+.agent-ws-pairing table { width: 100%; min-width: 22rem; table-layout: fixed; border-collapse: separate; border-spacing: 0; border: var(--hairline) solid var(--border); border-radius: 12px; background: var(--background); text-align: center; }
+.agent-ws-pairing th { background: var(--background-secondary); font-weight: 500; white-space: nowrap; }
+.agent-ws-pairing tr[data-row="person"] th { padding: 8px 6px 2px; font-size: calc(13 / 16 * 1rem); font-weight: 600; color: var(--foreground); }
+.agent-ws-pairing tr[data-row="person"] th:first-child { border-top-left-radius: 12px; }
+.agent-ws-pairing tr[data-row="person"] th:last-child { border-top-right-radius: 12px; }
+.agent-ws-pairing tr[data-row="person"] th > small { margin-left: 6px; font-size: calc(11 / 16 * 1rem); font-weight: 400; color: var(--foreground-tertiary); }
+.agent-ws-pairing tr[data-row="pillar"] th { padding: 2px 4px 6px; font-size: calc(11.5 / 16 * 1rem); color: var(--foreground-tertiary); }
+.agent-ws-pairing tbody td { padding-inline: 4px; font-family: var(--font-display); font-size: calc(24 / 16 * 1rem); line-height: 1.2; }
+.agent-ws-pairing :is(td, th)[data-day] { background-color: color-mix(in srgb, var(--accent-light) 55%, transparent); }
+.agent-ws-pairing :is(td, th)[data-person-start] { border-left: var(--hairline) solid var(--border); }
+.agent-ws-pairing-missing { color: var(--foreground-tertiary); opacity: .5; }
+.agent-ws-pairing tfoot td { padding: 7px 8px 9px; border-top: var(--hairline) solid var(--border); font-size: calc(11.5 / 16 * 1rem); line-height: 1.6; color: var(--foreground-secondary); }
 .agent-ws-seasons { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 10px; }
 .agent-ws-seasons > li:not(.agent-ws-seasons-note) { display: flex; flex-direction: column; align-items: center; min-width: 2.5rem; padding: 3px 6px; border: var(--hairline) solid var(--border); border-radius: 8px; font-size: calc(11 / 16 * 1rem); color: var(--foreground-tertiary); }
 .agent-ws-seasons > li > strong { font-family: var(--font-display); font-size: calc(15 / 16 * 1rem); font-weight: 500; color: var(--foreground); }

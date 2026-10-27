@@ -477,7 +477,7 @@ export function ChatLayout(props: ChatLayoutProps) {
                     title={title}
                     conversationId={activeConversationId}
                     workspaceButton={hasWorkspace && showHeader ? <button type="button" ref={workspaceButtonRef} className="chat-workspace-toggle" aria-label="任务工作区" aria-expanded={workspaceOpen} aria-controls="agent-workspace-panel" onClick={toggleWorkspace}>
-                        <LayoutDashboard size={17} strokeWidth={1.8} aria-hidden="true" />
+                        <LayoutDashboard size={17} strokeWidth={1.8} aria-hidden="true" /><span className="chat-workspace-toggle-label">工作区</span>
                     </button> : undefined}
                     membershipType={membershipType}
                     knowledgeBaseEnabled={knowledgeBaseEnabled}

@@ -73,7 +73,10 @@
 /* 次级按钮 = cds Button size sm：28px 高 / radius 7 / 内距 0 10 / 14px·20px / 500 字重（claude 会话头实测 28×28 r7） */
 .chat-workspace-toggle, .chat-header-button { display: inline-flex; flex-shrink: 0; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border: 1px solid var(--border-hover); border-radius: 6px; background: var(--chat-raised); font-size: calc(14 / 16 * 1rem); font-weight: 500; line-height: calc(20 / 16 * 1rem); white-space: nowrap; }
 /* claude 会话头右侧：工作区 = 28×28 幽灵图标键（无边框、无文字、无计数）；分享 = 58×28 幽灵键。 */
-.chat-workspace-toggle { width: 26px; justify-content: center; padding: 0; border: 0; background: transparent; color: var(--foreground-secondary); }
+.chat-workspace-toggle { justify-content: center; gap: 5px; padding: 0 8px; border: 0; background: transparent; color: var(--foreground-secondary); }
+.chat-workspace-toggle-label { font-size: calc(13 / 16 * 1rem); line-height: 1; white-space: nowrap; }
+/* 工作区开着时只留图标，把头部让给内容。 */
+.chat-workspace-toggle[aria-expanded="true"] .chat-workspace-toggle-label { display: none; }
 .chat-workspace-toggle:hover { background: var(--fill-ghost-hover); color: var(--foreground); }
 .chat-workspace-toggle[aria-expanded="true"] { background: var(--df-selected, var(--background-tertiary)); color: var(--foreground); }
 .chat-result-count { padding: 0 6px; border-radius: 6px; background: var(--background-secondary); color: var(--foreground-secondary); font-size: calc(12 / 16 * 1rem); font-weight: 400; font-variant-numeric: tabular-nums; }

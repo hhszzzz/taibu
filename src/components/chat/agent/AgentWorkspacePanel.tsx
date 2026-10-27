@@ -50,8 +50,8 @@ const MAX_WIDTH = 780;
 const READING_MIN = 360;
 // 面板只保留右外边距 4px（与上、下齐平）；左侧与对话列齐平，拖动时不会露出一条底色带。
 const PANEL_GUTTER = 4;
-// 百分比相对 .chat-workspace：扣掉右外边距后比对话列略宽一点（0.58）；min/max-width 仍按上面的边界收口。
-const DEFAULT_WIDTH = `min(${MAX_WIDTH}px, calc((100% - ${PANEL_GUTTER}px) * 0.58))`;
+// 百分比相对 .chat-workspace：扣掉右外边距后与对话列对半分；min/max-width 仍按上面的边界收口。
+const DEFAULT_WIDTH = `min(${MAX_WIDTH}px, calc((100% - ${PANEL_GUTTER}px) / 2))`;
 const SECTION_LABELS: Record<AgentWorkspaceSection, string> = { results: '概览' };
 const TAB_KEYS = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
 const LIVE_LABELS = { running: '正在更新', waiting: '等待回答' } as const;

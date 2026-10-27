@@ -158,22 +158,28 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
             return true;
         });
     }, [conversations, chatMode, activeId, listPreferences.display, pinnedSet, markers]);
+    // 正在跑或等你回答的会话：列表里本来就有标记，这里让它永远在列，并排到最近使用的最上面。
+    const needsAttention = useCallback((id: string) => markers?.get(id) === 'running' || markers?.get(id) === 'awaiting', [markers]);
     const shownConversations = useMemo(() => {
         const kept: ConversationListItem[] = [];
         let recents = 0;
         for (const conv of visibleConversations) {
-            if (pinnedSet.has(conv.id) || conv.id === activeId) { kept.push(conv); continue; }
+            if (pinnedSet.has(conv.id) || conv.id === activeId || needsAttention(conv.id)) { kept.push(conv); continue; }
             if (recents >= recentsLimit) continue;
             recents += 1;
             kept.push(conv);
         }
         return kept;
-    }, [recentsLimit, visibleConversations, pinnedSet, activeId]);
+    }, [recentsLimit, visibleConversations, pinnedSet, activeId, needsAttention]);
     const hasHiddenRecents = shownConversations.length < visibleConversations.length;
     // 还有没列出来的（本地或服务端）就只给「查看更多」；全都列完了才给「收起」。
     const hasMoreToShow = hasHiddenRecents || hasMoreConversations;
     // 置顶会话从最近列表里抽出，单独组成最上面的「已置顶」组。
-    const unpinnedConversations = useMemo(() => shownConversations.filter(conv => !pinnedSet.has(conv.id)), [shownConversations, pinnedSet]);
+    const unpinnedConversations = useMemo(() => {
+        const recents = shownConversations.filter(conv => !pinnedSet.has(conv.id));
+        // 需要你回应的排在最前，其余保持原来的先后。
+        return [...recents.filter(conv => needsAttention(conv.id) && conv.id !== activeId), ...recents.filter(conv => !needsAttention(conv.id) || conv.id === activeId)];
+    }, [shownConversations, pinnedSet, needsAttention, activeId]);
     const pinnedConversations = useMemo(() => pinnedIds.map(id => shownConversations.find(conv => conv.id === id)).filter((conv): conv is ConversationListItem => Boolean(conv)), [pinnedIds, shownConversations]);
 
     // 「标题 A→Z」作用于每个日期组内部；「最近活动」保持接口原始顺序。

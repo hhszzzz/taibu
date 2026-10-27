@@ -6,9 +6,8 @@
  */
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { ChevronDown, ChevronRight, Clock3, Ellipsis, Share2 } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { ChevronDown, ChevronRight, Ellipsis, Share2 } from 'lucide-react';
 import { useConversationList } from '@/lib/chat/ConversationListContext';
 import { useConversationExport } from '@/components/chat/ConversationExportDialog';
 import { ShareConversationMenu } from '@/components/chat/ShareConversationMenu';
@@ -17,7 +16,6 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
 import { AddToKnowledgeBaseModal } from '@/components/knowledge-base/AddToKnowledgeBaseModal';
 import { useAgentActivity } from '@/lib/agent/use-agent-activity';
-import { AGENT_MARKER_LABELS } from '@/lib/agent/activity';
 import { CHAT_RECORD_VIEW_LABELS, CHAT_RECORD_VIEWS, useChatRecordView, useChatRecordViewDefault, writeChatRecordView, writeChatRecordViewDefault } from '@/lib/chat/chat-record-view';
 import type { ReactNode } from 'react';
 
@@ -46,13 +44,11 @@ export function ChatHeader({
     knowledgeBaseEnabled,
     userId = null,
 }: ChatHeaderProps) {
-    const { conversations, handleRenameConversation, handleDeleteConversation } = useConversationList();
-    const router = useRouter();
+    const { handleRenameConversation, handleDeleteConversation } = useConversationList();
     const { showToast } = useToast();
     const titleRef = useRef<HTMLButtonElement>(null);
     const moreRef = useRef<HTMLButtonElement>(null);
     const shareRef = useRef<HTMLButtonElement>(null);
-    const tasksRef = useRef<HTMLButtonElement>(null);
     const recordRef = useRef<HTMLButtonElement>(null);
     const exportRef = useRef<HTMLButtonElement>(null);
     const renameInput = useRef<HTMLInputElement>(null);
@@ -61,7 +57,6 @@ export function ChatHeader({
     const [exportOpen, setExportOpen] = useState(false);
     const [moreMenu, setMoreMenu] = useState(false);
     const [shareMenu, setShareMenu] = useState(false);
-    const [tasksOpen, setTasksOpen] = useState(false);
     const [kbOpen, setKbOpen] = useState(false);
     const [renaming, setRenaming] = useState<string | null>(null);
     const [deleting, setDeleting] = useState(false);
@@ -72,11 +67,6 @@ export function ChatHeader({
     // 导出 = 标题菜单的二级浮层（Markdown / 可打印 HTML），不再弹独立对话框。
     const { tools: exportTools, setTools: setExportTools, busy: exportBusy, download: downloadExport } = useConversationExport(conversationId ?? '');
     const markers = useAgentActivity(userId, conversationId, !!userId);
-    // 后台任务：直接取活动标记（不依赖会话列表是否已分页加载到该会话）。
-    const backgroundTasks = useMemo(() => [...markers.entries()]
-        .filter(([, marker]) => marker === 'running' || marker === 'awaiting')
-        .map(([id, marker]) => ({ id, marker, title: conversations.find(conv => conv.id === id)?.title ?? '任务对话' })), [conversations, markers]);
-
     const saveRename = async () => {
         const next = renaming?.trim();
         if (!conversationId || !next || renameBusy) return;
@@ -124,11 +114,6 @@ export function ChatHeader({
             </h1>
             <div className="chat-session-actions">
                 {workspaceButton}
-                <button ref={tasksRef} type="button" className="chat-header-icon" aria-label="后台任务" title="后台任务"
-                    aria-haspopup="dialog" aria-expanded={tasksOpen} onClick={() => setTasksOpen(open => !open)}>
-                    <Clock3 size={17} aria-hidden="true" />
-                    {backgroundTasks.length > 0 && <span className="chat-header-count" aria-hidden="true">{backgroundTasks.length}</span>}
-                </button>
                 <button ref={shareRef} type="button" className="chat-header-share" aria-label="分享" aria-haspopup="menu" aria-expanded={shareMenu}
                     onClick={() => setShareMenu(open => !open)}>
                     <Share2 size={15} aria-hidden="true" /><span>分享</span>
@@ -178,18 +163,8 @@ export function ChatHeader({
             </FloatingPanel>}
 
             <FloatingPanel open={shareMenu} anchorRef={shareRef} onClose={() => setShareMenu(false)} label="分享" className="chat-header-menu" align="end">
-                <ShareConversationMenu conversationId={conversationId} taskActive={backgroundTasks.some(task => task.id === conversationId)}
+                <ShareConversationMenu conversationId={conversationId} taskActive={!!conversationId && (markers.get(conversationId) === 'running' || markers.get(conversationId) === 'awaiting')}
                     exportBusy={exportBusy} onExport={format => { void downloadExport(format); }} onClose={() => setShareMenu(false)} />
-            </FloatingPanel>
-
-            <FloatingPanel open={tasksOpen} anchorRef={tasksRef} onClose={() => setTasksOpen(false)} label="后台任务" role="dialog" className="chat-header-menu chat-tasks-menu" align="end">
-                {backgroundTasks.length ? <>
-                    <p className="chat-tasks-title">进行中的任务 <span>{backgroundTasks.length}</span></p>
-                    {backgroundTasks.slice(0, 6).map(task => <button key={task.id} type="button" className="chat-task-row" onClick={() => { setTasksOpen(false); router.push(`/chat?id=${encodeURIComponent(task.id)}`); }}>
-                        <span className="chat-task-title">{task.title}</span>
-                        <span className="chat-task-state">{AGENT_MARKER_LABELS[task.marker]}</span>
-                    </button>)}
-                </> : <p className="chat-header-menu-note">没有进行中的后台任务。</p>}
             </FloatingPanel>
 
             <FloatingPanel open={moreMenu} anchorRef={moreRef} onClose={() => setMoreMenu(false)} label="查看选项" role="dialog" align="end" className="chat-header-menu chat-header-more">

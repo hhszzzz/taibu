@@ -9,6 +9,7 @@
 import { Fragment, memo, useState, useMemo, useCallback, useRef } from 'react';
 import { FileText, Globe, KeyRound } from 'lucide-react';
 import type { AIMessageMetadata, ChatMessage, InjectedSource, Mention } from '@/types';
+import type { MessageQuote } from '@/lib/chat/quotes';
 import { getEnabledDataSourceTypes } from '@/lib/data-sources/catalog';
 import { formatMentionsForDisplay } from '@/lib/format-mentions';
 import { getVisibleSourcePanelState, getVisibleWebSearch } from '@/lib/chat/feature-normalization';
@@ -24,6 +25,7 @@ import { MentionIcon } from '@/components/chat/mention/MentionIcon';
 import { useKnowledgeBaseFeatureEnabled } from '@/components/knowledge-base/useKnowledgeBaseFeatureEnabled';
 import { openSettingsCenter } from '@/lib/settings-center';
 import { MessageActions } from './MessageActions';
+import { MessageQuoteCards } from './MessageQuotes';
 import { useToast } from '@/components/ui/Toast';
 import { PrivateAttachments } from './agent/PrivateAttachments';
 import { GeneratedImageGallery } from './agent/GeneratedImageGallery';
@@ -40,6 +42,8 @@ interface ChatMessageItemProps {
     onRegenerateResponse?: (messageId: string) => void;
     onSwitchVersion?: (messageId: string, versionIndex: number) => void;
     onArchiveMessage?: (message: ChatMessage) => void;
+    /** 引用这条助手回答的整段文字。 */
+    onQuoteMessage?: (quote: MessageQuote) => void;
 }
 
 export const ChatMessageItem = memo(function ChatMessageItem({
@@ -52,6 +56,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
     onRegenerateResponse,
     onSwitchVersion,
     onArchiveMessage,
+    onQuoteMessage,
 }: ChatMessageItemProps) {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editContent, setEditContent] = useState('');
@@ -229,6 +234,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                         {message.dreamInfo && (
                             <p className="chat-message-meta">解梦 · {new Date(message.dreamInfo.dreamDate).toLocaleDateString('zh-CN')}</p>
                         )}
+                        {message.quotes?.length ? <MessageQuoteCards quotes={message.quotes} /> : null}
                         <div className={`chat-user-bubble text-foreground ${message.dreamInfo
                             ? 'is-dream bg-purple-500/10 dark:bg-purple-500/15 border border-purple-500/20'
                             : ''
@@ -269,6 +275,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
             onCopy={handleCopy}
             onRegenerate={onRegenerateResponse}
             onArchive={onArchiveMessage}
+            onQuote={onQuoteMessage ? () => onQuoteMessage({ messageId: message.id, text: message.content }) : undefined}
         />
     ) : null;
     return (

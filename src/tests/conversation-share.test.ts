@@ -136,3 +136,19 @@ test('share titles are single-line, non-empty and bounded', () => {
     assert.equal(normalizeShareTitle(null), '对话');
     assert.equal(normalizeShareTitle('长'.repeat(300)).length, 200);
 });
+
+test('quoted passages are shared as text without the source message ids and parsed defensively', () => {
+    const message: ChatMessage = {
+        id: 'u-quotes', role: 'user', content: '解释一下', createdAt: '2026-10-19T00:00:05.000Z',
+        quotes: [
+            { messageId: 'assistant-private-id', text: '庚金带煞，刚健为最。' },
+            { messageId: 'assistant-private-id-2', text: '用神专求月令。' },
+        ],
+    };
+    const [shared] = buildShareSnapshot([message], { includeCharts: false });
+    assert.deepEqual(shared.quotes, [{ text: '庚金带煞，刚健为最。' }, { text: '用神专求月令。' }]);
+    assert.equal(JSON.stringify(shared).includes('assistant-private-id'), false);
+    assert.deepEqual(parseSharedSnapshot([{ role: 'user', content: '解释一下', quotes: [{ text: '庚金带煞' }, { text: '' }, 'garbage'] }]), [
+        { role: 'user', content: '解释一下', quotes: [{ text: '庚金带煞' }] },
+    ]);
+});

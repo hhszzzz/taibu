@@ -25,6 +25,15 @@
 .chat-composer-context-remove:hover { background: color-mix(in srgb, var(--accent-hover) 12%, transparent); opacity: 1; }
 .chat-composer-note { margin: 8px 0 0; text-align: center; font-size: calc(12 / 16 * 1rem); line-height: 1.6; color: var(--foreground-secondary); }
 .chat-composer-status { font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); }
+/* 输入框上方的引用条：与附件条同占壳内整行，每段单行省略、可单独移除。 */
+.chat-composer-quotes { display: flex; flex-direction: column; gap: 5px; margin: 0 2px 2px; }
+.chat-composer-quotes-label { display: inline-flex; align-items: center; gap: 5px; color: var(--foreground-tertiary); font-size: calc(12 / 16 * 1rem); line-height: 1.4; }
+.chat-composer-quotes-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.chat-composer-quote { display: flex; max-width: min(100%, 340px); align-items: center; gap: 6px; padding: 4px 5px 4px 9px; border-left: 2px solid var(--accent); border-radius: 0 6px 6px 0; background: var(--fill-field); color: var(--foreground-secondary); font-size: calc(12.5 / 16 * 1rem); line-height: 1.5; }
+.chat-composer-quote > p { min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-composer-quote > button { display: inline-flex; flex-shrink: 0; width: 20px; height: 20px; align-items: center; justify-content: center; border-radius: 4px; color: inherit; opacity: .7; }
+.chat-composer-quote > button:hover { background: color-mix(in srgb, var(--accent-hover) 12%, transparent); opacity: 1; }
+.chat-composer-quote > button:disabled { cursor: default; opacity: .4; }
 
 /* ---- Input shell ---- */
 /* 会话内白壳只有一行：+（最前）、编辑区、发送键（输入随内容长高，按钮贴末行）。

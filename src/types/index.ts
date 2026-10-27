@@ -6,6 +6,7 @@
  */
 
 import type { Mention } from '@/types/mentions';
+import type { MessageQuote } from '@/lib/chat/quotes';
 import type { ConversationSourceType } from '@/lib/source-contracts';
 import type { InjectedSource } from '@/lib/source-tracker';
 import type { BirthTimeResolution } from '@/lib/divination/birth-time';
@@ -138,6 +139,8 @@ export interface ChatMessage {
     createdAt: string;
     // 提及信息（仅用户消息）- 用于渲染高亮与复用输入框颜色
     mentions?: Mention[];
+    // 引用的回答片段（仅用户消息）- 发送时序列化进模型输入，界面渲染为引用卡
+    quotes?: MessageQuote[];
     model?: string;                   // 使用的模型（仅AI消息）
     modelName?: string;               // 使用的模型名称（仅AI消息）
     reasoning?: string;               // 推理/思考过程（仅AI消息）

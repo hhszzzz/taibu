@@ -90,6 +90,7 @@ import { MobileChatDrawer } from '@/components/chat/MobileChatDrawer';
 import { FloatingPanel } from '@/components/ui/FloatingPanel';
 import { setChatWorkspaceOpen } from '@/lib/chat/chat-sidebar';
 import { ChatMessageList } from '@/components/chat/ChatMessageList';
+import { QuoteSelection } from '@/components/chat/QuoteSelection';
 import { VirtualizedChatMessageList } from '@/components/chat/VirtualizedChatMessageList';
 import { useTranscriptScroll } from '@/lib/chat/use-transcript-scroll';
 import { scrollToMessageId } from '@/lib/chat/message-navigation';
@@ -355,6 +356,36 @@ function PolishProbe() {
     onEditMessage={async (id, content) => { window.fixture.polish.edits.push([id, content]); }} onRegenerateResponse={() => {}} /></section>;
 }
 
+// 引用：选中助手回答中的文字（或「引用整条」）进入输入框上方的引用条，发送后成为用户消息上方的引用卡。
+const QUOTE_MESSAGES = [
+  { id: 'quote-u0', role: 'user', content: '先问一句', createdAt: ROUND_START },
+  { id: 'quote-a1', role: 'assistant', content: '庚金带煞，刚健为最。用神专求月令，不可只论旺衰。', createdAt: ROUND_START },
+];
+function QuoteProbe() {
+  const [messages, setMessages] = useState(QUOTE_MESSAGES);
+  const [quotes, setQuotes] = useState([]);
+  const [value, setValue] = useState('');
+  const containerRef = useRef(null);
+  const endRef = useRef(null);
+  const add = quote => setQuotes(current => current.length >= 3 || current.some(item => item.messageId === quote.messageId && item.text === quote.text)
+    ? current : [...current, quote]);
+  window.fixture.quote = { quotes: () => quotes };
+  const send = () => {
+    const text = value.trim();
+    if (!text) return;
+    setMessages(current => [...current, { id: 'quote-u2', role: 'user', content: text, createdAt: ROUND_START, quotes }]);
+    setQuotes([]);
+    setValue('');
+  };
+  return <section data-testid="quote-probe">
+    <div ref={containerRef}><ChatMessageList messages={messages} isLoading={false} messagesEndRef={endRef} onQuoteMessage={add} /></div>
+    <QuoteSelection containerRef={containerRef} messages={messages} onQuote={add} />
+    <ChatComposer draftKey="quote-fixture" inputValue={value} onInputChange={setValue} onSend={send} isLoading={false}
+      userId="alice" membershipType="plus" disabled={false} quotes={quotes}
+      onRemoveQuote={index => setQuotes(current => current.filter((_, position) => position !== index))} />
+  </section>;
+}
+
 // Chart and visual cards share one shell; a visual runs in a sandboxed srcdoc iframe.
 function VisualizationProbe() {
   const [state, setState] = useState({ content: '', streaming: false });
@@ -501,6 +532,7 @@ function Shell() {
   const [shareMounted, setShareMounted] = useState(false);
   const [roundsMounted, setRoundsMounted] = useState(false);
   const [polishMounted, setPolishMounted] = useState(false);
+  const [quoteMounted, setQuoteMounted] = useState(false);
   const [visualizationMounted, setVisualizationMounted] = useState(false);
   const [snapshotMounted, setSnapshotMounted] = useState(false);
   const [tarotMounted, setTarotMounted] = useState(false);
@@ -537,7 +569,7 @@ function Shell() {
     records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted, agent: setAgentMounted, question: setQuestionMounted, results: setResultsMounted, sidebar: setSidebarMounted, phoneDrawer: setPhoneDrawerMounted, menu: setMenuMounted, rounds: setRoundsMounted, polish: setPolishMounted,
     snapshot: setSnapshotMounted, share: setShareMounted, tarot: setTarotMounted, qimen: setQimenMounted, activity: setActivityMounted,
     annual: setAnnualMounted, community: setCommunityMounted, post: setPostMounted, cast: setCastMounted, skillCommands: setSkillCommandsMounted, imageComposer: setImageComposerMounted,
-    visualization: setVisualizationMounted };
+    visualization: setVisualizationMounted, quote: setQuoteMounted };
   window.fixture.chartKey = queryKeys.userCharts;
   window.fixture.chartClient = chartClient;
   window.fixture.deleteHistory = deleteHistorySummary;
@@ -612,6 +644,7 @@ function Shell() {
     {shareMounted && <ShareProbe />}
     {roundsMounted && <RoundsProbe />}
     {polishMounted && <PolishProbe />}
+    {quoteMounted && <QuoteProbe />}
     {visualizationMounted && <VisualizationProbe />}
     {historyMounted && <section data-testid="history-page"><HistoryPageTemplate {...historyConfig} /></section>}
     {drawerMounted && <section data-testid="history-drawer"><HistoryDrawer type="tarot" /></section>}
@@ -2014,6 +2047,53 @@ export async function run(existingPage, bundlePath) {
       && (await galleryImage.getAttribute('style') ?? '').includes('aspect-ratio'));
     await page.evaluate(() => window.fixture.mount.imageComposer(false));
     await page.getByTestId('image-composer').waitFor({ state: 'detached' });
+
+    // 引用：选中助手回答中的文字浮出「引用」按钮，消息菜单可引用整条；发送后引用卡在用户气泡上方。
+    await page.evaluate(() => window.fixture.mount.quote(true));
+    const quoteProbe = page.getByTestId('quote-probe');
+    await quoteProbe.waitFor();
+    check('assistant messages offer 引用整条 in their action row', await quoteProbe.getByRole('button', { name: '引用整条' }).count() === 1);
+    await page.evaluate(() => {
+      const article = document.querySelector('[data-testid="quote-probe"] [data-message-id="quote-a1"]');
+      const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+      let node = null;
+      while (walker.nextNode()) { node = walker.currentNode; if (node.textContent.includes('庚金带煞')) break; }
+      const start = node.textContent.indexOf('庚金带煞');
+      const range = document.createRange();
+      range.setStart(node, start);
+      range.setEnd(node, start + 4);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new Event('selectionchange'));
+    });
+    const floatingQuote = page.getByRole('button', { name: '引用所选文字' });
+    await floatingQuote.waitFor();
+    check('selecting assistant text floats the 引用 button', await floatingQuote.isVisible());
+    await floatingQuote.click();
+    const quoteBar = quoteProbe.locator('.chat-composer-quotes');
+    await quoteBar.waitFor();
+    check('the floating button adds the selected passage to the quote bar',
+      (await quoteBar.innerText()).includes('庚金带煞') && await quoteBar.getByRole('button', { name: '移除第 1 段引用' }).count() === 1);
+    await quoteProbe.getByRole('button', { name: '引用整条' }).click();
+    check('引用整条 appends the whole answer to the quote bar',
+      (await quoteBar.innerText()).includes('已引用 2 段') && (await quoteBar.innerText()).includes('用神专求月令'));
+    await quoteBar.getByRole('button', { name: '移除第 2 段引用' }).click();
+    check('a quote can be removed from the bar', (await quoteBar.innerText()).includes('已引用 1 段'));
+    await quoteProbe.getByLabel('输入消息').fill('这段话怎么理解？');
+    await quoteProbe.getByLabel('输入消息').press('Enter');
+    const sentUser = quoteProbe.locator('[data-message-id="quote-u2"]');
+    await sentUser.waitFor();
+    const quoteCard = sentUser.locator('.chat-message-quote');
+    check('the sent message keeps a quote card above the user bubble', await quoteCard.count() === 1 && (await quoteCard.innerText()).includes('庚金带煞'));
+    check('the quote card sits above the bubble inside the user message', await sentUser.evaluate(node => {
+      const quote = node.querySelector('.chat-message-quote');
+      const bubble = node.querySelector('.chat-user-bubble');
+      return !!quote && !!bubble && !!(quote.compareDocumentPosition(bubble) & Node.DOCUMENT_POSITION_FOLLOWING);
+    }));
+    check('sending clears the quote bar', await quoteProbe.locator('.chat-composer-quotes').count() === 0);
+    await page.evaluate(() => window.fixture.mount.quote(false));
+    await quoteProbe.waitFor({ state: 'detached' });
 
     const openCharts = async () => {
       await page.evaluate(() => { history.replaceState(null, '', '#settings/charts'); window.dispatchEvent(new HashChangeEvent('hashchange')); });

@@ -12,7 +12,7 @@ export function forkConversationMessages(messages: ChatMessage[], throughId: str
     return messages.slice(0, index + 1).filter(message => message.role !== 'system').map(message => ({
         id: newId(), role: message.role, content: message.content, createdAt: message.createdAt,
         model: message.model, modelName: message.modelName, reasoning: message.reasoning,
-        mentions: message.mentions, attachments: message.attachments, chartInfo: message.chartInfo,
+        mentions: message.mentions, quotes: message.quotes, attachments: message.attachments, chartInfo: message.chartInfo,
         metadata: { forkHistory: true, forkOriginMessageId: message.id },
         ...(message.agent ? { agent: { version: 1 as const, runId: newId(), status: 'completed' as const, parts: message.agent.parts.filter(part => part.type !== 'question').map(part => ({ ...part, id: newId() })) } } : {}),
     }));

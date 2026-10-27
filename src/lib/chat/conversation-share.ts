@@ -10,6 +10,7 @@ import type { AIMessageMetadata, ChatMessage, MentionType } from '@/types';
 import { DATA_SOURCE_TYPES } from '@/lib/data-sources/types';
 import { redactExportValue } from './conversation-transfer';
 import { getVisibleWebSearch } from './feature-normalization';
+import { normalizeMessageQuotes } from './quotes';
 import { readGeneratedImageRefs, type GeneratedImageRef } from '@/lib/images/generated';
 
 export const SHARE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
@@ -18,6 +19,8 @@ export const SHARE_TITLE_MAX_LENGTH = 200;
 
 export type SharedSource = { title: string; url: string };
 export type SharedBasis = { title: string; text: string };
+/** Quoted answer passages; only the words are shared, never the source message ids. */
+export type SharedQuote = { text: string };
 export type SharedMessage = {
     role: 'user' | 'assistant';
     content: string;
@@ -27,6 +30,8 @@ export type SharedMessage = {
     attachments?: string[];
     /** Referenced data kinds (八字命盘…); never the chart names or ids. */
     mentionTypes?: MentionType[];
+    /** Passages the user quoted from earlier answers, read-only on the share page. */
+    quotes?: SharedQuote[];
     /** Number of injected references (knowledge base / charts) behind the answer. */
     references?: number;
     sources?: SharedSource[];
@@ -109,6 +114,8 @@ function shareMessage(message: ChatMessage, includeCharts: boolean): SharedMessa
     if (fileName) shared.attachments = [fileName.slice(0, 200)];
     const mentionTypes = [...new Set((message.mentions ?? []).map(mention => mention.type).filter(type => MENTION_TYPES.has(type)))];
     if (mentionTypes.length) shared.mentionTypes = mentionTypes;
+    const quotes = normalizeMessageQuotes(message.quotes).map(quote => ({ text: quote.text }));
+    if (quotes.length) shared.quotes = quotes;
     const injected = (message.metadata as { sources?: unknown } | undefined)?.sources;
     if (message.role === 'assistant' && Array.isArray(injected) && injected.length) shared.references = injected.length;
     const sources: SharedSource[] = [];
@@ -138,7 +145,7 @@ function shareMessage(message: ChatMessage, includeCharts: boolean): SharedMessa
     if (sources.length) shared.sources = sources;
     if (basis.length) shared.basis = basis;
     if (images.length) shared.images = images;
-    if (!shared.content.trim() && !shared.attachments && !shared.sources && !shared.basis && !shared.images) return null;
+    if (!shared.content.trim() && !shared.attachments && !shared.quotes && !shared.sources && !shared.basis && !shared.images) return null;
     return shared;
 }
 
@@ -179,6 +186,13 @@ export function parseSharedSnapshot(value: unknown): SharedMessage[] {
         if (Array.isArray(raw.mentionTypes)) {
             const types = raw.mentionTypes.filter((type): type is MentionType => typeof type === 'string' && MENTION_TYPES.has(type));
             if (types.length) message.mentionTypes = types;
+        }
+        if (Array.isArray(raw.quotes)) {
+            const quotes = normalizeMessageQuotes(raw.quotes.map((entry, index) => ({
+                messageId: String(index),
+                text: (entry as Record<string, unknown> | null)?.text,
+            }))).map(quote => ({ text: quote.text }));
+            if (quotes.length) message.quotes = quotes;
         }
         if (typeof raw.references === 'number' && Number.isInteger(raw.references) && raw.references > 0) message.references = raw.references;
         if (Array.isArray(raw.sources)) {

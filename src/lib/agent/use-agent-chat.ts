@@ -269,7 +269,7 @@ export function useAgentChat(
     const key = JSON.stringify({
       ...body,
       clientRequestId: undefined,
-      message: { content: message.content, attachments: message.attachments },
+      message: { content: message.content, attachments: message.attachments, quotes: message.quotes },
     });
     const pending = pendingCreations.current.get(conversationId);
     const requestBody = pending?.key === key ? pending.body : body;

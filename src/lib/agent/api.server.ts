@@ -27,6 +27,7 @@ import { getUserAuthInfo, getUserCreditInfo } from "@/lib/user/credits";
 import { AI_RATE_LIMIT_CONFIG, checkRateLimit } from "@/lib/rate-limit";
 import { isValidUUID } from "@/lib/validation";
 import type { ChatMessage, CustomProviderRequest, Mention } from "@/types";
+import { normalizeMessageQuotes } from "@/lib/chat/quotes";
 import { isDataSourceType } from "@/lib/data-sources/types";
 import { validateCustomProviderInput } from "@/lib/ai/custom-provider-url";
 import {
@@ -170,6 +171,8 @@ function createBody(value: Record<string, unknown>) {
             ? attachments.fileName
             : undefined,
       },
+      // Passages quoted from earlier answers; the caps and trimming live in the shared serializer.
+      quotes: normalizeMessageQuotes(message.quotes),
     },
     model: value.model as string | undefined,
     replaceFromMessageId: value.replaceFromMessageId as string | undefined,
@@ -280,7 +283,7 @@ export async function createAgentTask(request: NextRequest) {
   if (compact) {
     if ((compact.instructions?.length ?? 0) > AGENT_COMPACT_INSTRUCTIONS_MAX)
       throw new AgentApiError(`压缩说明最多 ${AGENT_COMPACT_INSTRUCTIONS_MAX} 字`);
-    if ((Array.isArray(body.message.attachments.ids) && body.message.attachments.ids.length) || body.message.attachments.fileName || body.mentions.length || body.attachment !== undefined)
+    if ((Array.isArray(body.message.attachments.ids) && body.message.attachments.ids.length) || body.message.attachments.fileName || body.mentions.length || body.attachment !== undefined || body.message.quotes.length)
       throw new AgentApiError("压缩上下文时不能附带资料或引用");
   }
   const store = new AgentStore(systemDb());
@@ -311,6 +314,7 @@ export async function createAgentTask(request: NextRequest) {
     messageId: body.message.id,
     content: body.message.content,
     attachmentIds: body.message.attachments.ids ?? [],
+    quotes: body.message.quotes,
     model: body.model ?? null,
     custom: custom
       ? { ...custom, apiKey: hashAgentRequest(custom.apiKey) }
@@ -436,6 +440,7 @@ export async function createAgentTask(request: NextRequest) {
     createdAt: new Date().toISOString(),
   };
   if (Array.isArray(body.mentions)) userMessage.mentions = body.mentions;
+  if (body.message.quotes.length) userMessage.quotes = body.message.quotes;
   if (typeof body.message.attachments?.fileName === "string" || attachments.length)
     userMessage.attachments = {
       fileName: body.message.attachments.fileName ?? attachments.map(item=>item.name).join('、'),

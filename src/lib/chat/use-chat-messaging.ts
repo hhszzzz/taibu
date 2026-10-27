@@ -30,6 +30,7 @@ import { useAgentChat } from '@/lib/agent/use-agent-chat';
 import { parseAgentCompactCommand } from '@/lib/agent/compaction';
 import { browserTimeZone } from '@/lib/ai/prompt-time';
 import { captureCurrentBranch, switchToVersion, withPendingVersion } from '@/lib/chat/message-versions';
+import { normalizeMessageQuotes, type MessageQuote } from '@/lib/chat/quotes';
 import { requestBrowserJson } from '@/lib/browser-api';
 import type { GeneratedImageDto } from '@/lib/images/generated';
 
@@ -456,18 +457,20 @@ export function useChatMessaging({
         }
     };
 
-    // Send message; `context` is the rich chart quote attached above the composer.
-    const handleSend = async (context?: string) => {
+    // Send message; `context` is the rich chart quote attached above the composer, `quotes` the answers the user quoted.
+    const handleSend = async (context?: string, quotes?: MessageQuote[]) => {
         const trimmedInput = [context?.trim(), inputValue.trim()].filter(Boolean).join('\n\n');
+        const messageQuotes = normalizeMessageQuotes(quotes);
         // `/compact` compacts an idle Agent conversation; it is never sent to a model as a question or instruction.
         if (parseAgentCompactCommand(inputValue)) {
             const blocked = agent.mode !== 'agent' ? '压缩上下文用于 Agent 对话'
                 : agent.active ? '任务进行中，结束后再压缩上下文'
                 : !activeConversationId || !messages.length ? '当前对话还没有可压缩的内容'
-                : context?.trim() || mentions.length || attachmentState.file || attachmentState.uploaded?.length ? '压缩上下文时不能附带资料或引用' : null;
+                : context?.trim() || mentions.length || attachmentState.file || attachmentState.uploaded?.length || messageQuotes.length ? '压缩上下文时不能附带资料或引用' : null;
             if (blocked) { showToast('info', blocked); return; }
         }
         if (agent.active && trimmedInput && !isSendingToList) {
+            if (messageQuotes.length) { showToast('info', '任务进行中不能附带引用，请先停止当前任务'); return; }
             const clearSubmittedDraft = state.captureSubmittedDraft(true);
             setIsSendingToList(true);
             try { await agent.sendCommand(trimmedInput); clearSubmittedDraft(); }
@@ -524,6 +527,7 @@ export function useChatMessaging({
             const userMessage: ChatMessage = {
                 id: Date.now().toString(), role: 'user', content: trimmedInput, createdAt: new Date().toISOString(),
                 mentions: messageMentions.length ? [...messageMentions] : undefined,
+                quotes: messageQuotes.length ? messageQuotes : undefined,
                 attachments: (attachmentState.file || attachmentState.uploaded?.length || attachmentState.webSearchEnabled) ? { fileName: attachmentState.file?.name || attachmentState.uploaded?.map(item=>item.name).join('、') || '', ids: attachmentState.uploaded?.map(item=>item.id), webSearchEnabled: attachmentState.webSearchEnabled } : undefined,
                 dreamInfo,
             };

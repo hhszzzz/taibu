@@ -23,6 +23,7 @@ import type { ChatMessage, AttachmentState, Mention, PrivateAttachment } from '@
 import { ChatMessageList } from '@/components/chat/ChatMessageList';
 import { VirtualizedChatMessageList } from '@/components/chat/VirtualizedChatMessageList';
 import { ChatComposer } from '@/components/chat/ChatComposer';
+import { QuoteSelection } from '@/components/chat/QuoteSelection';
 import { ChatHeader } from '@/components/chat/ChatHeader';
 import { MobileChatDrawer } from '@/components/chat/MobileChatDrawer';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
@@ -38,6 +39,7 @@ import { SessionDetailsPanel } from './agent/SessionDetailsPanel';
 import { AgentResultContext, isSameWorkspaceShown, type AgentWorkspaceShown } from './agent/AgentResultContext';
 import { getAgentQuestionAnswers, getAgentWorkspaceAutoOpenEvent } from '@/lib/agent/workspace';
 import { chartQuestion, type ChartAskContext } from '@/lib/agent/chart-interaction';
+import { clampMessageQuoteText, MAX_MESSAGE_QUOTE_CHARS, MAX_MESSAGE_QUOTES, type MessageQuote } from '@/lib/chat/quotes';
 import { AgentQuestionDock } from './agent/AgentQuestionDock';
 import type { ComposerWebControl } from './composer/ComposerToolbar';
 import { useImageModels } from '@/lib/hooks/useAvailableModels';
@@ -88,7 +90,7 @@ interface ChatLayoutProps extends ModelSettingsProps {
     onSwitchVersion: (messageId: string, versionIndex: number) => void;
     onArchiveMessage?: (message: ChatMessage) => void;
     /** Sends the composer; the optional context is the rich chart quote attached above it. */
-    onSend: (context?: string) => Promise<void>;
+    onSend: (context?: string, quotes?: MessageQuote[]) => Promise<void>;
     /** 输入框生图：直接调用生图接口，不经过对话模型。 */
     onImageGenerate?: (options: { prompt: string; size: string; count: number }) => void | Promise<void>;
     onStop: () => void;
@@ -355,6 +357,27 @@ export function ChatLayout(props: ChatLayoutProps) {
         onInputChange(suggestion!);
         focusComposer();
     }, [latestAgentData, inputValue, disabled, onInputChange, focusComposer]);
+    // 引用：选中助手回答中的文字或「引用整条」，进入输入框上方的引用条；发送后随用户消息一起保存。
+    const [quotes, setQuotes] = useState<MessageQuote[]>([]);
+    const quotesRef = useRef(quotes);
+    useEffect(() => { quotesRef.current = quotes; }, [quotes]);
+    // 每个对话（含新建的草稿）各有一份引用条，切换对话时不把上一段对话的引用带过去。
+    const quotesScope = useRef(workspaceKey);
+    useEffect(() => {
+        if (quotesScope.current === workspaceKey) return;
+        quotesScope.current = workspaceKey;
+        setQuotes([]);
+    }, [workspaceKey]);
+    const addQuote = useCallback((quote: MessageQuote) => {
+        const text = clampMessageQuoteText(quote.text);
+        if (!text) return;
+        if (quote.text.trim().length > MAX_MESSAGE_QUOTE_CHARS) showToast('info', `单段引用最多 ${MAX_MESSAGE_QUOTE_CHARS} 字，已截取`);
+        if (quotesRef.current.length >= MAX_MESSAGE_QUOTES) { showToast('info', `最多引用 ${MAX_MESSAGE_QUOTES} 段`); return; }
+        setQuotes(current => current.some(item => item.messageId === quote.messageId && item.text === text)
+            ? current
+            : [...current, { messageId: quote.messageId, text }].slice(0, MAX_MESSAGE_QUOTES));
+    }, [showToast]);
+    const removeQuote = useCallback((index: number) => setQuotes(current => current.filter((_, position) => position !== index)), []);
     // 追问命盘：与提及同一形态——在输入框尾部追加可识别的 chip，可以连续叠加多条。
     const [chartAsks, setChartAsks] = useState<ChartAskContext[]>([]);
     const chartAskToken = (ask: ChartAskContext) => `@${ask.title}${ask.targets.length ? ` · ${ask.targets.map(target => target.label).join('、')}` : ' · 整张命盘'}`;
@@ -376,10 +399,12 @@ export function ChatLayout(props: ChatLayoutProps) {
         if (!isDesktopLayout()) closeWorkspace();
         focusComposer();
     };
-    const sendWithChartAsk = async () => {
+    const sendWithContext = async () => {
         const context = activeChartAsks.length ? activeChartAsks.map(ask => chartQuestion(ask.reference, ask.targets)).join('\n\n') : undefined;
+        const outgoing = quotes;
         setChartAsks([]);
-        await onSend(context);
+        if (outgoing.length) setQuotes([]);
+        await onSend(context, outgoing.length ? outgoing : undefined);
     };
     // “稍后回答” folds the dock for this question only; a new question opens it again.
     const questionKey = waitingQuestion && props.agent?.run ? `${workspaceKey}:${props.agent.run.id}:${waitingQuestion.id}` : null;
@@ -445,6 +470,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         customProviderActive, customProviderLabel,
         userId, membershipType, attachmentState, onAttachmentChange,
         mentions, onMentionsChange, promptKnowledgeBases,
+        quotes, onRemoveQuote: removeQuote,
         chartAsks: chartAskChips,
         dreamContext, dreamContextLoading,
         knowledgeBaseEnabled,
@@ -453,7 +479,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         plainWebAvailable: !!agent?.capabilities.plainWebAvailable,
         webTier: agent?.capabilities.webTier ?? null,
     };
-    const composer = <ChatComposer {...composerProps} onSend={sendWithChartAsk} continuing note={note} noteOptional={isRunningComposerNote(noteState)} header={composerHeader}
+    const composer = <ChatComposer {...composerProps} onSend={sendWithContext} continuing note={note} noteOptional={isRunningComposerNote(noteState)} header={composerHeader}
         queue={currentRun && <AgentQueue key={`${workspaceKey}:${currentRun.id}`} run={currentRun} restoreDraft={message => void restoreDraft(message)} />} />;
     const toggleWorkspace = () => {
         if (workspaceOpen) { closeWorkspace(); return; }
@@ -535,6 +561,7 @@ export function ChatLayout(props: ChatLayoutProps) {
                                     onEditMessage={onEditMessage} onRegenerateResponse={onRegenerateResponse}
                                     onSwitchVersion={onSwitchVersion}
                                     onArchiveMessage={activeConversationId ? onArchiveMessage : undefined}
+                                    onQuoteMessage={addQuote}
                                     disabled={transcriptLocked}
                                 />
                             </div>
@@ -545,6 +572,7 @@ export function ChatLayout(props: ChatLayoutProps) {
                                     onEditMessage={onEditMessage} onRegenerateResponse={onRegenerateResponse}
                                     onSwitchVersion={onSwitchVersion}
                                     onArchiveMessage={activeConversationId ? onArchiveMessage : undefined}
+                                    onQuoteMessage={addQuote}
                                     disabled={transcriptLocked}
                                 />
                             </div>
@@ -567,6 +595,7 @@ export function ChatLayout(props: ChatLayoutProps) {
                     </div>
                     {showSessionDetails && <SessionDetailsPanel data={latestAgentData} run={workspaceRun} onOpen={openWorkspaceResource} />}
                 </div>
+                <QuoteSelection containerRef={contentRef} messages={transcriptMessages} onQuote={addQuote} disabled={transcriptLocked} />
             </div>
             {(workspaceOpen || (hasWorkspace && leavingKey === workspaceKey)) && <AgentWorkspacePanel key={workspaceKey} workspaceKey={workspaceKey} parts={agentParts} artifacts={artifacts} attachmentIds={attachmentIds}
                 entering={enteringKey === workspaceKey} leaving={!workspaceOpen}

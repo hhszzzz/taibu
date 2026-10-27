@@ -208,6 +208,7 @@ export async function buildChatPromptContext(
     chartContext: promptChartContext,
     dreamMode: promptDreamMode,
     sentAt: { at: new Date(), timeZone: resolveUserTimeZone(body.timezone) },
+    quotes: lastUserMessage?.quotes,
     attachments: { file: body.attachment, web },
   }, { budget: mentionBudget, personalityResolution });
 
@@ -230,10 +231,13 @@ export async function buildChatPromptContext(
   };
 
   // Mention tokens are stripped from what the user typed before the document and search results go in front,
-  // since stripping also collapses whitespace and would flatten their paragraphs and table cells.
+  // since stripping also collapses whitespace and would flatten their paragraphs and table cells. The quotes move
+  // into that prefix as well; leaving them on the message would serialize them twice when the Agent rebuilds pi history.
   const sanitizedMessages = body.messages.map((message, index) => {
     if (index === body.messages.length - 1 && message.role === 'user') {
-      return { ...message, content: promptBuild.userMessagePrefix + stripMentionTokens(message.content) };
+      const sanitized = { ...message, content: promptBuild.userMessagePrefix + stripMentionTokens(message.content) };
+      delete sanitized.quotes;
+      return sanitized;
     }
     return message;
   });

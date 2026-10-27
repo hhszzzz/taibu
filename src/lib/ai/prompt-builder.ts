@@ -22,6 +22,7 @@ import {
     buildVisualizationPromptSection,
 } from '@/lib/visualization/prompt';
 import { formatPreviousChartsForPrompt, type ExtractedChart } from '@/lib/visualization/chart-data-extract';
+import { serializeMessageQuotes, type MessageQuote } from '@/lib/chat/quotes';
 import { sentAtLine } from './prompt-time';
 
 type BaziChartInput = BaziPromptInput & {
@@ -53,6 +54,8 @@ export interface PromptContext {
     };
     /** 本条消息的发送时间与用户时区，写在消息开头 */
     sentAt?: { at: Date; timeZone: string };
+    /** 用户从助手回答中引用的片段，写在消息开头（与附件、搜索结果同一位置） */
+    quotes?: MessageQuote[];
     /** 随本条消息发送的文档文字与联网搜索结果，放在用户问题之前 */
     attachments?: {
         file?: ChatAttachment;
@@ -330,6 +333,8 @@ function formatWebSearch(web: ChatWebSearch): string {
 async function formatUserMessagePrefix(context: PromptContext, window: () => Promise<ChatModelWindow>): Promise<string> {
     const { file, web } = context.attachments ?? {};
     const parts: string[] = [];
+    const quotes = serializeMessageQuotes(context.quotes);
+    if (quotes) parts.push(quotes);
     if (file) {
         const { config } = await window();
         const maxTokens = Math.floor((config.maxContext - config.reserveOutput) * ATTACHMENT_CONTEXT_RATIO);

@@ -472,6 +472,15 @@ button.agent-evidence-chip:hover { border-color: var(--accent); color: var(--acc
 /* claude 实测：用户气泡底 = alpha-1（5% 前景色），非页色调；解梦气泡保留自己的紫色调 */
 .chat-user-bubble:not(.is-dream) { background: hsl(from var(--neutral-900) h s l / 5%); }
 .chat-user-bubble > p { font-size: calc(15 / 16 * 1rem); line-height: calc(20 / 16 * 1rem); }
+/* 引用卡：用户消息上方，最多 3 段，长段落折叠为 4 行，悬停看全文。 */
+.chat-message-quotes { display: flex; max-width: 75%; flex-direction: column; align-items: flex-end; gap: 4px; margin-bottom: 6px; }
+.chat-message-quote { display: flex; max-width: 100%; gap: 7px; margin: 0; padding: 7px 10px; border-left: 2px solid var(--accent); border-radius: 0 8px 8px 0; background: var(--fill-field); color: var(--foreground-secondary); font-size: calc(13 / 16 * 1rem); line-height: 1.55; text-align: left; }
+.chat-message-quote > svg { flex-shrink: 0; margin-top: 3px; color: var(--foreground-tertiary); }
+.chat-message-quote > p { display: -webkit-box; margin: 0; overflow: hidden; overflow-wrap: anywhere; white-space: pre-wrap; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
+/* 选中助手回答后的浮动「引用」按钮（portal 到 body，固定定位）。 */
+.chat-quote-select { position: fixed; z-index: 80; display: inline-flex; transform: translate(-50%, -100%); align-items: center; gap: 5px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--chat-raised); color: var(--foreground); box-shadow: 0 4px 16px hsl(from var(--neutral-900) h s l / 18%); font-size: calc(13 / 16 * 1rem); line-height: 1; white-space: nowrap; }
+.chat-quote-select.is-below { transform: translate(-50%, 0); }
+.chat-quote-select:hover { border-color: var(--border-hover); background: var(--fill-ghost-hover); }
 /* claude 内联编辑（B10）：保留气泡外壳 r12 / 12·16，铺满列宽；无边框 textarea 随内容长高；
    取消 = ghost、保存 = 实心，均 24px r6 13px。 */
 .chat-user-edit { display: flex; width: 100%; justify-content: flex-end; }

@@ -11,6 +11,7 @@ import { mentionTypeLabels } from '@/components/chat/mentionStyles';
 import type { PublicConversationShare } from '@/lib/chat/conversation-share.server';
 import type { SharedMessage } from '@/lib/chat/conversation-share';
 import { GeneratedImageGallery } from '@/components/chat/agent/GeneratedImageGallery';
+import { MessageQuoteCards } from '@/components/chat/MessageQuotes';
 import '@/components/chat/chat-workspace.css';
 
 const SHARE_DATE_FORMAT = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Shanghai' });
@@ -25,6 +26,7 @@ function SharedUserMessage({ message }: { message: SharedMessage }) {
     return (
         <div className="flex justify-end">
             <div className="chat-user-column flex flex-col items-end">
+                {message.quotes?.length ? <MessageQuoteCards quotes={message.quotes} /> : null}
                 {labels.length > 0 && <ul className="mb-1 flex flex-wrap justify-end gap-1.5" aria-label="附带资料">
                     {labels.map((label, index) => <li key={`${label}-${index}`} className="inline-flex max-w-full items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-foreground-secondary">
                         <FileText size={12} aria-hidden="true" /><span className="truncate">{label}</span>

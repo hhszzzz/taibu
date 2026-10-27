@@ -10,6 +10,7 @@
 import { useEffect, type MutableRefObject } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { ChatMessage, Mention } from '@/types';
+import type { MessageQuote } from '@/lib/chat/quotes';
 import { ChatMessageItem } from '@/components/chat/ChatMessageItem';
 
 interface VirtualizedChatMessageListProps {
@@ -20,6 +21,7 @@ interface VirtualizedChatMessageListProps {
     onRegenerateResponse?: (messageId: string) => void;
     onSwitchVersion?: (messageId: string, versionIndex: number) => void;
     onArchiveMessage?: (message: ChatMessage) => void;
+    onQuoteMessage?: (quote: MessageQuote) => void;
     disabled?: boolean;
 }
 
@@ -51,6 +53,7 @@ export function VirtualizedChatMessageList({
     onRegenerateResponse,
     onSwitchVersion,
     onArchiveMessage,
+    onQuoteMessage,
     disabled = false,
 }: VirtualizedChatMessageListProps) {
 
@@ -125,6 +128,7 @@ export function VirtualizedChatMessageList({
                                     onRegenerateResponse={onRegenerateResponse}
                                     onSwitchVersion={onSwitchVersion}
                                     onArchiveMessage={onArchiveMessage}
+                                    onQuoteMessage={onQuoteMessage}
                                 />
                             </div>
                         );

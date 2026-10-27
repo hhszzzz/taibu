@@ -1,14 +1,14 @@
 'use client';
 // 需要菜单开关状态与浮层锚点（用户消息的更多操作）
 
-import { BookOpenText, Check, ChevronLeft, ChevronRight, Copy, Pencil, RefreshCw, GitFork, RotateCcw } from 'lucide-react';
+import { BookOpenText, Check, ChevronLeft, ChevronRight, Copy, Pencil, Quote, RefreshCw, GitFork, RotateCcw } from 'lucide-react';
 import type { ChatMessage } from '@/types';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { formatNotificationTime } from '@/lib/notification-view';
 import { useKnowledgeBaseFeatureEnabled } from '@/components/knowledge-base/useKnowledgeBaseFeatureEnabled';
 
 /** One action vocabulary and focus behavior for user and assistant turns. */
-export function MessageActions({ message, disabled = false, copied, onCopy, onEdit, onRetry, onRegenerate, onArchive, onSwitchVersion }: {
+export function MessageActions({ message, disabled = false, copied, onCopy, onEdit, onRetry, onRegenerate, onArchive, onSwitchVersion, onQuote }: {
     message: ChatMessage;
     disabled?: boolean;
     copied: boolean;
@@ -19,6 +19,8 @@ export function MessageActions({ message, disabled = false, copied, onCopy, onEd
     onRegenerate?: (id: string) => void;
     onArchive?: (message: ChatMessage) => void;
     onSwitchVersion?: (id: string, index: number) => void;
+    /** 引用整条助手回答，与选中文字引用进入同一个引用条。 */
+    onQuote?: () => void;
 }) {
     const { knowledgeBaseEnabled } = useKnowledgeBaseFeatureEnabled();
     const isUser = message.role === 'user';
@@ -31,6 +33,7 @@ export function MessageActions({ message, disabled = false, copied, onCopy, onEd
     const actions = [
         ...(!disabled && !readOnly && isUser && onRetry ? [{ label: '退回', icon: RotateCcw, run: onRetry }] : []),
         { label: copied ? '已复制' : '复制消息', icon: copied ? Check : Copy, run: onCopy },
+        ...(!disabled && !isUser && onQuote ? [{ label: '引用整条', icon: Quote, run: onQuote }] : []),
         ...(!disabled && !readOnly && isUser && onEdit ? [{ label: '编辑消息', icon: Pencil, run: onEdit }] : []),
         ...(!disabled && !readOnly && !isUser && onRegenerate ? [{ label: '重新生成', icon: RefreshCw, run: () => onRegenerate(message.id) }] : []),
         // 分叉依赖已保存的回答：生成中不可分叉，仅存在于本地的失败提示也不提供。

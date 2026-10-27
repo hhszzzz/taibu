@@ -28,6 +28,8 @@ import { MentionManager } from '@/components/chat/composer/MentionManager';
 import { AttachmentBar } from '@/components/chat/composer/AttachmentBar';
 import { ComposerToolbar, ComposerSendCluster, type ComposerImageGeneration, type ComposerSendState, type ComposerWebControl } from '@/components/chat/composer/ComposerToolbar';
 import { ComposerStatusBar } from '@/components/chat/composer/ComposerStatusBar';
+import { QuoteBar } from '@/components/chat/composer/QuoteBar';
+import type { MessageQuote } from '@/lib/chat/quotes';
 import type { ChatMode } from '@/lib/chat/use-chat-state';
 import { useComposerCommands } from './composer/ComposerCommands';
 import { usePrivateAttachments } from '@/lib/chat/use-private-attachments';
@@ -102,6 +104,9 @@ interface ChatComposerProps extends ModelSettingsProps {
     onAttachmentChange?: (state: AttachmentState) => void;
     mentions?: Mention[];
     onMentionsChange?: (mentions: Mention[]) => void;
+    /** 从助手回答中引用的片段，显示在输入框上方；发送时随消息一起交给模型。 */
+    quotes?: MessageQuote[];
+    onRemoveQuote?: (index: number) => void;
     /** 追问命盘追加的 chip（与提及同形态，但不在资料列表里）。 */
     chartAsks?: Array<{ token: string; kind: AgentChartKind }>;
     promptKnowledgeBases?: KnowledgeBaseSummary[];
@@ -152,6 +157,8 @@ export function ChatComposer({
     onAttachmentChange,
     mentions = [],
     onMentionsChange,
+    quotes = [],
+    onRemoveQuote,
     chartAsks = [],
     promptKnowledgeBases = [],
     dreamContext,
@@ -667,6 +674,7 @@ export function ChatComposer({
                 {queue}
 
                 <div className="chat-composer-shell">
+                    <QuoteBar quotes={quotes} onRemove={onRemoveQuote} disabled={disabled} />
                     {commands.ui}
                     {contextToken}
                     <PrivateAttachments items={attachmentState?.uploaded} disabled={uploads.uploading} onRemove={id => onAttachmentChange?.({ ...attachmentState, webSearchEnabled: hasWebSearch, uploaded: attachmentState?.uploaded?.filter(item => item.id !== id) })} />

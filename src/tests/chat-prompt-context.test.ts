@@ -255,3 +255,39 @@ test('the last user message is dated in the zone the browser sent; earlier messa
   assert.ok(!result.systemPrompt.includes('发送时间'));
   assert.match((await request('Not/AZone')).sanitizedMessages[2].content, /^【发送时间：[^】]+Asia\/Shanghai（UTC\+08:00）】\n/u);
 });
+
+test('quotes reach the prompt builder and move into the last message instead of staying on it', async (t) => {
+  const promptBuilderModule = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');
+  const appSettingsModule = require('../lib/app-settings') as typeof import('../lib/app-settings');
+  const originalBuildPromptWithSources = promptBuilderModule.buildPromptWithSources;
+  const originalFeatureEnabled = appSettingsModule.isFeatureModuleEnabled;
+  stubSettings(t, { expression_style: 'direct', user_profile: {}, custom_instructions: '', prompt_kb_ids: [], visualization_settings: {} });
+  let capturedQuotes: unknown;
+  t.mock.method(promptBuilderModule, 'calculatePromptBudget', async () => 1024);
+  promptBuilderModule.buildPromptWithSources = (async (context) => {
+    capturedQuotes = context.quotes;
+    return { systemPrompt: '', userMessagePrefix: '【引用块】\n\n', userMessageTokens: 0, sources: [], diagnostics: [], totalTokens: 0, budgetTotal: 0 };
+  }) as typeof promptBuilderModule.buildPromptWithSources;
+  appSettingsModule.isFeatureModuleEnabled = (async () => false) as typeof appSettingsModule.isFeatureModuleEnabled;
+  t.after(() => {
+    promptBuilderModule.buildPromptWithSources = originalBuildPromptWithSources;
+    appSettingsModule.isFeatureModuleEnabled = originalFeatureEnabled;
+    delete require.cache[require.resolve('../lib/server/chat/prompt-context')];
+  });
+  delete require.cache[require.resolve('../lib/server/chat/prompt-context')];
+  const { buildChatPromptContext } = await import('../lib/server/chat/prompt-context');
+  const quotes = [{ messageId: 'a1', text: '庚金带煞' }];
+  const result = await buildChatPromptContext({
+    body: {
+      messages: [
+        { id: 'a1', role: 'assistant', content: '庚金带煞', createdAt: '2026-10-23T01:00:00.000Z' },
+        { id: 'u1', role: 'user', content: '解释一下', createdAt: '2026-10-23T01:00:05.000Z', quotes },
+      ],
+      stream: false,
+    },
+    userId: 'user-1', canSkipCredit: false, requestedModelId: 'deepseek-chat', membershipType: 'free', reasoningEnabled: false, creditDeducted: false,
+  });
+  assert.deepEqual(capturedQuotes, quotes);
+  assert.equal(result.sanitizedMessages[1].content, '【引用块】\n\n解释一下');
+  assert.equal('quotes' in result.sanitizedMessages[1], false, 'the Agent must not serialize the same quotes again from pi history');
+});

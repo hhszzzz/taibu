@@ -9,6 +9,7 @@
 
 import { useMemo } from 'react';
 import type { ChatMessage, Mention } from '@/types';
+import type { MessageQuote } from '@/lib/chat/quotes';
 import { ChatMessageItem } from '@/components/chat/ChatMessageItem';
 
 interface ChatMessageListProps {
@@ -19,6 +20,7 @@ interface ChatMessageListProps {
     onRegenerateResponse?: (messageId: string) => void;
     onSwitchVersion?: (messageId: string, versionIndex: number) => void;
     onArchiveMessage?: (message: ChatMessage) => void;
+    onQuoteMessage?: (quote: MessageQuote) => void;
     disabled?: boolean;
 }
 
@@ -30,6 +32,7 @@ export function ChatMessageList({
     onRegenerateResponse,
     onSwitchVersion,
     onArchiveMessage,
+    onQuoteMessage,
     disabled = false,
 }: ChatMessageListProps) {
     // 找到最后一条正在流式输出的AI消息
@@ -58,6 +61,7 @@ export function ChatMessageList({
                         onRegenerateResponse={onRegenerateResponse}
                         onSwitchVersion={onSwitchVersion}
                         onArchiveMessage={onArchiveMessage}
+                        onQuoteMessage={onQuoteMessage}
                     />
                 </div>
             ))}

@@ -17,7 +17,7 @@ import { ConversationExportDialog } from './ConversationExportDialog';
 import { AgentQueue } from './agent/AgentQueue';
 import { AnalysisMethodPicker } from './agent/AnalysisMethodPicker';
 import Link from 'next/link';
-import { Lock, PanelRight, X } from 'lucide-react';
+import { LayoutDashboard, Lock, X } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import type { ChatMessage, AttachmentState, Mention, PrivateAttachment } from '@/types';
 import { ChatMessageList } from '@/components/chat/ChatMessageList';
@@ -266,21 +266,26 @@ export function ChatLayout(props: ChatLayoutProps) {
     };
     const isAgentMode = props.agent?.mode === 'agent';
     const { conversations } = useConversationList();
-    // 对话 / Agent 的会话不互通：打开另一类会话（含直接访问链接）时退回新建页，
-    // 避免普通对话里出现 Agent 的标题、工具步骤或工作区数据。
     const modeSettled = props.agent?.modeSettled !== false;
+    const opened = conversations.find(conversation => conversation.id === activeConversationId);
+    // 会话自己的方式：打开时以它为准；新建的 Agent 会话在首轮运行前 hasAgentRun 仍是 false，用消息形态区分。
+    const conversationMode: 'agent' | 'plain' | undefined = !activeConversationId || !opened || opened.hasAgentRun === undefined ? undefined
+        : opened.hasAgentRun === true ? 'agent'
+        : messages.length > 0 && messages.every(message => !message.agent) ? 'plain'
+        : undefined;
+    // 每次打开会话只跟随一次；此后用户点切换以用户为准，不然就会把人弹回去、切不动。
+    const followedConversation = useRef<string | null>(null);
     useEffect(() => {
-        // Before the mode is known it reads 对话, which would turn away every Agent conversation opened by link.
-        if (!activeConversationId || !modeSettled) return;
-        const current = conversations.find(conversation => conversation.id === activeConversationId);
-        if (!current || current.hasAgentRun === undefined) return;
-        // 新建的 Agent 会话在首轮运行前 hasAgentRun 仍为 false，用消息形态区分，避免误跳。
-        const kind = current.hasAgentRun === true ? 'agent'
-            : messages.length > 0 && messages.every(message => !message.agent) ? 'plain'
-            : undefined;
-        // 打开别的方式的会话：跟着会话切过去，而不是把这次点击丢掉。
-        if (kind && (kind === 'agent') !== isAgentMode) props.agent?.setMode(kind);
-    }, [isAgentMode, modeSettled, activeConversationId, conversations, messages, props.agent]);
+        if (!activeConversationId || !modeSettled || !conversationMode) return;
+        if (followedConversation.current === activeConversationId) return;
+        followedConversation.current = activeConversationId;
+        if ((conversationMode === 'agent') !== isAgentMode) props.agent?.setMode(conversationMode);
+    }, [activeConversationId, conversationMode, isAgentMode, modeSettled, props.agent]);
+    // 在会话里换到另一种方式：两种内容不混在一段对话里，开一条同方式的新会话。
+    const changeMode = useCallback((next: 'agent' | 'plain') => {
+        props.agent?.setMode(next);
+        if (conversationMode && (conversationMode === 'agent') !== (next === 'agent')) router.push(next === 'agent' ? '/chat?mode=agent' : '/chat');
+    }, [conversationMode, props.agent, router]);
     const waitingQuestion = userId && props.agent?.run?.conversationId === activeConversationId && props.agent.run.status === 'awaiting_input'
         ? [...props.agent.run.message.agent?.parts ?? []].reverse().find((part): part is Extract<AgentPart, { type: 'question' }> => part.type === 'question') : undefined;
     const hasWorkspace = isAgentMode || Boolean(latestAgentData);
@@ -378,7 +383,7 @@ export function ChatLayout(props: ChatLayoutProps) {
     const agent = props.agent;
     const modeControl: ChatModeControl | null = agent ? {
         mode: agent.mode,
-        onChange: agent.setMode,
+        onChange: changeMode,
         agentDisabled: agent.active || (!!userId && !agent.capabilities.ready),
         plainDisabled: agent.active,
     } : null;
@@ -472,7 +477,7 @@ export function ChatLayout(props: ChatLayoutProps) {
                     title={title}
                     conversationId={activeConversationId}
                     workspaceButton={hasWorkspace && showHeader ? <button type="button" ref={workspaceButtonRef} className="chat-workspace-toggle" aria-label="任务工作区" aria-expanded={workspaceOpen} aria-controls="agent-workspace-panel" onClick={toggleWorkspace}>
-                        <PanelRight size={17} strokeWidth={1.8} aria-hidden="true" />
+                        <LayoutDashboard size={17} strokeWidth={1.8} aria-hidden="true" />
                     </button> : undefined}
                     membershipType={membershipType}
                     knowledgeBaseEnabled={knowledgeBaseEnabled}

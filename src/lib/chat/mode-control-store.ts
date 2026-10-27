@@ -63,13 +63,13 @@ export function setChatMode(mode: 'agent' | 'plain'): void {
  */
 const MODE_STORAGE_PREFIX = 'taibu:agent-mode:';
 
-/** 读取「对话方式」的本地偏好（无记录 = agent）。 */
+/** 读取「对话方式」的本地偏好（无记录 = 对话，与 /chat 的默认一致）。 */
 export function readStoredChatMode(userId: string | null | undefined): 'agent' | 'plain' {
-    if (!userId || typeof window === 'undefined') return 'agent';
+    if (!userId || typeof window === 'undefined') return 'plain';
     try {
-        return window.localStorage.getItem(`${MODE_STORAGE_PREFIX}${userId}`) === 'plain' ? 'plain' : 'agent';
+        return window.localStorage.getItem(`${MODE_STORAGE_PREFIX}${userId}`) === 'agent' ? 'agent' : 'plain';
     } catch {
-        return 'agent';
+        return 'plain';
     }
 }
 
@@ -106,5 +106,5 @@ export function useChatModeControl(): ChatModeSnapshot | null {
  * 页内切换会经 store 的 emit 让订阅者重新读取。
  */
 export function useStoredChatMode(userId: string | null | undefined): 'agent' | 'plain' {
-    return useSyncExternalStore(subscribe, () => readStoredChatMode(userId), () => 'agent' as const);
+    return useSyncExternalStore(subscribe, () => readStoredChatMode(userId), () => 'plain' as const);
 }

@@ -20,7 +20,11 @@ export async function generatedImagesDatabaseContracts(t, { sql, asActor, asOwne
 
   await t.test('images are the owner\'s to read and delete, and the backend writes them', async () => {
     const mine = image(owner);
-    assert.equal(await asOwner(mine.sql), mine.id);
+    // The service writes through systemDb(), which runs as the authenticated
+    // role with the system principal's claims; insert as that role, not the owner.
+    assert.equal(await asActor(adminId, mine.sql), mine.id);
+    await assert.rejects(asActor(owner, image(owner, conversation, { id: randomUUID() }).sql), /42501|permission denied/u,
+      'a member cannot insert an image row, not even their own');
     assert.equal(await asActor(owner, `SELECT count(*) FROM public.generated_images WHERE id=${quote(mine.id)};`), '1');
     assert.equal(await asActor(other, `SELECT count(*) FROM public.generated_images WHERE id=${quote(mine.id)};`), '0');
     assert.equal(await asActor(adminId, `SELECT count(*) FROM public.generated_images WHERE id=${quote(mine.id)};`), '1', 'the backend reads every image');

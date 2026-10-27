@@ -598,7 +598,7 @@ GRANT ALL ON FUNCTION public.check_vector_index_exists(p_dim integer) TO authent
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.agent_attachments TO authenticated;
 
-GRANT SELECT,DELETE ON TABLE public.generated_images TO authenticated;
+GRANT SELECT,INSERT,DELETE ON TABLE public.generated_images TO authenticated;
 
 GRANT ALL ON FUNCTION public.claim_agent_attachment_cleanup(p_limit integer) TO authenticated;
 

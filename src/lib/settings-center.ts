@@ -68,7 +68,7 @@ const SETTINGS_CENTER_TAB_META: Record<SettingsCenterTab, Omit<SettingsCenterTab
   'mcp-service': { id: 'mcp-service', label: 'MCP', group: 'extensions', description: '在支持 MCP 的客户端里直接调用太卜的排盘工具。' },
   'admin-announcements': { id: 'admin-announcements', label: '公告', group: 'management', description: '发布和编辑站内公告，支持 Markdown，保存后立即生效。' },
   'admin-features': { id: 'admin-features', label: '功能与激活码', group: 'management', description: '统一管理功能开关与激活码发放。' },
-  'admin-ai-services': { id: 'admin-ai-services', label: 'AI 服务', group: 'management', description: '管理模型配置、来源绑定和网关可用性，查看 Agent 任务的执行过程。' },
+  'admin-ai-services': { id: 'admin-ai-services', label: 'AI 服务', group: 'management', description: '管理模型配置、来源绑定和网关可用性，查看 Agent 任务的执行过程与测评排行。' },
   'admin-agent-extensions': { id: 'admin-agent-extensions', label: 'Agent 扩展', group: 'management', description: '接入平台级 MCP 服务与联网搜索路由，管理所有人可用的技能与智能体角色，决定用户能否添加自己的连接器和技能。' },
 };
 

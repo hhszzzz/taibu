@@ -4,7 +4,7 @@ import { escapeLike, textMatches } from "@/lib/db/sql-helpers";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { Type, type Static, type TSchema } from "@earendil-works/pi-ai";
-import type { DomainTool as AgentTool, DomainToolCaller, DomainToolResult as AgentToolResult } from "./types";
+import type { DomainTool as AgentTool, DomainToolCaller, DomainToolResult as AgentToolResult, AgentAccountProvider, AgentFeatureStateProvider, AgentFeatureState, AgentRunAccess } from "./types";
 import {
   listToolDefinitions,
   executeTool,
@@ -121,51 +121,57 @@ async function archiveCall<T>(call: Promise<T>): Promise<T> {
     throw refusal ? new Error(refusal[1]) : error;
   }
 }
-async function featureEnabled(feature: FeatureModuleId) {
-  const state = await readFeatureModuleStateFresh(feature);
+function accessFeatureState(access: AgentRunAccess) {
+  return access.featureState ?? ((id: string) => readFeatureModuleStateFresh(id as FeatureModuleId));
+}
+function accessAccount(run: AgentRunRow, access: AgentRunAccess): AgentAccountProvider {
+  return access.account ?? (() => getUserCreditInfo(run.user_id, {}));
+}
+async function featureEnabled(feature: FeatureModuleId, access: AgentRunAccess) {
+  const state: AgentFeatureState = await accessFeatureState(access)(feature);
   if (state.status === "unavailable") throw new Error("功能状态暂不可用，请稍后再试");
   return state.status === "enabled";
 }
-async function agentToolScopeEnabled(scope: AgentToolScopeId) {
-  const state = await readFeatureModuleStateFresh(toAgentToolScopeFeatureId(scope));
+async function agentToolScopeEnabled(scope: AgentToolScopeId, access: AgentRunAccess) {
+  const state: AgentFeatureState = await accessFeatureState(access)(toAgentToolScopeFeatureId(scope));
   if (state.status === "unavailable") throw new Error("功能状态暂不可用，请稍后再试");
   return state.status === "enabled";
 }
 /** Tools that reach across tasks only with long-term memory on: the memory itself, the user's other conversations, and events recorded from their words. */
 const MEMORY_TOOLS: ReadonlySet<string> = new Set(['read_user_memory', 'remember_user_fact', 'search_conversations', AGENT_RECORD_EVENT_TOOL]);
 const CROSS_TASK_TOOLS: ReadonlySet<string> = new Set(['read_user_profile', ...MEMORY_TOOLS]);
-export async function assertAgentToolAccess(store: AgentStore, run: AgentRunRow, name: string, args: Record<string, unknown>) {
+export async function assertAgentToolAccess(store: AgentStore, run: AgentRunRow, name: string, args: Record<string, unknown>, access: AgentRunAccess = {}) {
   const feature = ['inspect_chart', 'focus_chart'].includes(name) || getAgentDrilldownBase(name)
     ? await authorizeChartReference(store, run, args.reference)
     : getAgentToolFeatureId(name) ?? name;
-  if (FEATURE_MODULE_IDS.includes(feature as FeatureModuleId) && !(await featureEnabled(feature as FeatureModuleId))) throw new Error('该功能已关闭');
+  if (FEATURE_MODULE_IDS.includes(feature as FeatureModuleId) && !(await featureEnabled(feature as FeatureModuleId, access))) throw new Error('该功能已关闭');
   const scope = getAgentToolScope(name)
     ?? ((AGENT_TOOL_SCOPE_IDS as readonly string[]).includes(feature) ? feature as AgentToolScopeId : null);
-  if (scope && !(await agentToolScopeEnabled(scope))) throw new Error(`Agent 工具范围已关闭：${getAgentToolScopeLabel(scope)}`);
+  if (scope && !(await agentToolScopeEnabled(scope, access))) throw new Error(`Agent 工具范围已关闭：${getAgentToolScopeLabel(scope)}`);
   // 合盘引用的命盘与详查一样，每次执行和重放都核对归属与盘种。
   if (name === 'bazi_hepan') for (const side of AGENT_PAIRING_SIDES) {
     const person = args[side] && typeof args[side] === 'object' ? args[side] as Record<string, unknown> : {};
     if (person.reference !== undefined && await authorizeChartReference(store, run, person.reference) !== 'bazi') throw new Error('合盘只能引用八字命盘');
   }
-  if (name === 'search_knowledge' && (!(await featureEnabled('knowledge-base')) || (await getUserCreditInfo(run.user_id, {})).membership === 'free')) throw new Error('当前会员无法使用知识库检索');
+  if (name === 'search_knowledge' && (!(await featureEnabled('knowledge-base', access)) || (await accessAccount(run, access)()).membership === 'free')) throw new Error('当前会员无法使用知识库检索');
   // Which services may serve the member's tier is checked when the search or the page read is routed.
-  if (AGENT_WEB_TOOLS.has(name) && (!run.input.webEnabled || (await getUserCreditInfo(run.user_id, {})).membership === 'free')) throw new Error('当前任务不能使用联网工具');
+  if (AGENT_WEB_TOOLS.has(name) && (!run.input.webEnabled || (await accessAccount(run, access)()).membership === 'free')) throw new Error('当前任务不能使用联网工具');
   // The server, the member's tier and the tool itself are checked again when an MCP tool runs.
   if (name.startsWith(AGENT_MCP_TOOL_PREFIX) && !run.input.webEnabled) throw new Error('当前任务没有开启联网，不能调用外部工具');
   if (name === 'read_user_data') {
     const dataSourceFeature = getDataSourceFeatureId(args.type as typeof DATA_SOURCE_TYPES[number]);
-    if (!(await featureEnabled(dataSourceFeature))) throw new Error('该资料功能已关闭');
-    if (getAgentToolScope(dataSourceFeature) && !(await agentToolScopeEnabled(dataSourceFeature as AgentToolScopeId)))
+    if (!(await featureEnabled(dataSourceFeature, access))) throw new Error('该资料功能已关闭');
+    if (getAgentToolScope(dataSourceFeature) && !(await agentToolScopeEnabled(dataSourceFeature as AgentToolScopeId, access)))
       throw new Error(`Agent 工具范围已关闭：${getAgentToolScopeLabel(dataSourceFeature as AgentToolScopeId)}`);
   }
-  if (name === 'read_saved_chart' && !(await featureEnabled('bazi'))) throw new Error('命盘功能已关闭');
-  if (name === 'read_user_notes' && !(await featureEnabled('records'))) throw new Error('命理记录功能已关闭');
+  if (name === 'read_saved_chart' && !(await featureEnabled('bazi', access))) throw new Error('命盘功能已关闭');
+  if (name === 'read_user_notes' && !(await featureEnabled('records', access))) throw new Error('命理记录功能已关闭');
   // An archive entry lands in a bazi chart's case notes or in the records.
   if (name === AGENT_RECORD_EVENT_TOOL || name === AGENT_PROPOSE_ARCHIVE_TOOL) {
     const target = args.kind === 'master_review' || (typeof args.reference === 'string' && args.reference.trim().startsWith('bazi_chart:')) ? 'bazi' : 'records';
-    if (!(await featureEnabled(target))) throw new Error(target === 'bazi' ? '命盘功能已关闭' : '命理记录功能已关闭');
+    if (!(await featureEnabled(target, access))) throw new Error(target === 'bazi' ? '命盘功能已关闭' : '命理记录功能已关闭');
   }
-  if (CROSS_TASK_TOOLS.has(name) && !(await featureEnabled('ai-personalization'))) throw new Error('个性化功能已关闭');
+  if (CROSS_TASK_TOOLS.has(name) && !(await featureEnabled('ai-personalization', access))) throw new Error('个性化功能已关闭');
   if (MEMORY_TOOLS.has(name)) {
     const row = await store.db.tx(trx => trx.selectFrom('user_settings').select('chat_preferences')
       .where('user_id', '=', run.user_id).executeTakeFirst());
@@ -271,8 +277,9 @@ export async function createAgentTools(
   store: AgentStore,
   run: AgentRunRow,
   checkpoint: AgentCheckpoint,
-  options: { skills?: AgentSkillsSession } = {},
+  options: { skills?: AgentSkillsSession; account?: AgentAccountProvider; featureState?: AgentFeatureStateProvider } = {},
 ): Promise<AgentTool[]> {
+  const access: AgentRunAccess = { account: options.account, featureState: options.featureState };
   const putPart = (part: AgentPart) => putAgentPart(checkpoint.parts, part);
   // A source part is the link and an excerpt for exports; a page read's full text stays in its tool output.
   const putSources = (
@@ -351,8 +358,7 @@ export async function createAgentTools(
    */
   const boardOf = (name: string, result: Pick<AgentArtifactRow['result'], 'chartSnapshot'>) =>
     result.chartSnapshot?.kind === name && result.chartSnapshot.result ? { board: result.chartSnapshot.result } : {};
-  const checkMember = async () =>
-    getUserCreditInfo(run.user_id, {});
+  const checkMember = () => accessAccount(run, access)();
   const wrap = <T extends TSchema>(
     name: string,
     description: string,
@@ -373,7 +379,7 @@ export async function createAgentTools(
     replay: "safe",
     execute: async (callId, args, signal, caller) => {
       signal?.throwIfAborted();
-      await assertAgentToolAccess(store, run, name, args);
+      await assertAgentToolAccess(store, run, name, args, access);
       const cached = await store.artifact(run, callId);
       if (cached) {
         if (cached.tool_name !== name || !isDeepStrictEqual(cached.args, args))
@@ -503,7 +509,7 @@ export async function createAgentTools(
               : null;
             return {
               type,
-              enabled: await featureEnabled(featureId) && (!scopeId || await agentToolScopeEnabled(scopeId)),
+              enabled: await featureEnabled(featureId, access) && (!scopeId || await agentToolScopeEnabled(scopeId, access)),
             };
           }),
         );

@@ -47,6 +47,62 @@ export interface AgentDurableCommits {
   created_at: Generated<string>;
 }
 
+export interface AgentEvalCases {
+  id: ColumnType<string, string, string>;
+  tool: ColumnType<string, string, string>;
+  guide: ColumnType<string, string, string>;
+  prompt: ColumnType<string, string, string>;
+  assertions: Generated<Json>;
+  arguments: Generated<Json>;
+  chart: ColumnType<Json | null, Json | null | undefined, Json | null | undefined>;
+  visual: Generated<boolean>;
+  builtin: Generated<boolean>;
+  is_enabled: Generated<boolean>;
+  sort_order: Generated<number>;
+  created_at: Generated<string>;
+  updated_at: Generated<string>;
+}
+
+export interface AgentEvalResults {
+  id: Generated<string>;
+  run_id: ColumnType<string, string, string>;
+  case_id: ColumnType<string, string, string>;
+  model_id: ColumnType<string, string, string>;
+  repeat: Generated<number>;
+  hard_passed: ColumnType<boolean, boolean, boolean>;
+  quality_passed: ColumnType<boolean | null, boolean | null | undefined, boolean | null | undefined>;
+  failed_assertions: Generated<Json>;
+  answer: Generated<string>;
+  judge_response: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  tool_trace: Generated<Json>;
+  tool_calls: Generated<number>;
+  duration_ms: Generated<number>;
+  first_token_ms: ColumnType<number | null, number | null | undefined, number | null | undefined>;
+  input_tokens: Generated<number>;
+  output_tokens: Generated<number>;
+  total_tokens: Generated<number>;
+  error: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  created_at: Generated<string>;
+}
+
+export interface AgentEvalRuns {
+  id: Generated<string>;
+  created_by: ColumnType<string, string, string>;
+  models: ColumnType<unknown, unknown, unknown>;
+  judge_model: ColumnType<string, string, string>;
+  case_ids: ColumnType<unknown, unknown, unknown>;
+  repeats: Generated<number>;
+  total_calls: ColumnType<number, number, number>;
+  completed_calls: Generated<number>;
+  status: Generated<string>;
+  cancel_requested: Generated<boolean>;
+  error: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  started_at: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  ended_at: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  created_at: Generated<string>;
+  updated_at: Generated<string>;
+}
+
 export interface AgentMcpServers {
   id: Generated<string>;
   owner_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
@@ -797,6 +853,9 @@ export interface DB {
   "agent_attachment_refs": AgentAttachmentRefs;
   "agent_attachments": AgentAttachments;
   "agent_durable_commits": AgentDurableCommits;
+  "agent_eval_cases": AgentEvalCases;
+  "agent_eval_results": AgentEvalResults;
+  "agent_eval_runs": AgentEvalRuns;
   "agent_mcp_servers": AgentMcpServers;
   "agent_profiles": AgentProfiles;
   "agent_run_artifacts": AgentRunArtifacts;

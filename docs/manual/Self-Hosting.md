@@ -33,7 +33,7 @@ pnpm local:update
 3. `db-init` 应用当前 SQL 定义；
 4. `web` 与 `worker` 启动。
 
-`web` 与 `worker` 共用同一个镜像；`worker` 同时消费 Agent 任务和 BullMQ 的维护、邮件队列。
+`web` 与 `worker` 共用同一个镜像；`worker` 同时消费 Agent 任务和 BullMQ 的维护、邮件与 Agent 测评队列。
 
 根目录 `Dockerfile` 构建这个应用镜像；`deploy/compose.*.yml` 定义镜像与 PostgreSQL、Redis、文件卷等服务如何一起运行。`deploy/deploy.sh` 封装生产备份、更新和健康检查，本地入口仍是 `pnpm local:update`。根目录 `docker-compose.mcp.yml` 用于单独运行 MCP Server，与网站栈分别启动。
 

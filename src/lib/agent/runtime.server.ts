@@ -18,7 +18,7 @@ import { resolveThinkingLevel, thinkingLevelMap } from "@/lib/ai/thinking";
 import { readFeatureModuleStateFresh } from "@/lib/app-settings";
 import { getUserCreditInfo } from "@/lib/user/credits";
 import { AgentStore, type AgentRunRow, type AgentCommandRow } from "./store.server";
-import { agentMessageContent, putAgentPart, type AgentCheckpoint, type DomainTool, type PiStreamFn } from "./types";
+import { agentMessageContent, putAgentPart, type AgentAccountProvider, type AgentCheckpoint, type AgentFeatureStateProvider, type DomainTool, type PiStreamFn } from "./types";
 import { decryptAgentCredential } from "./credentials.server";
 import { AGENT_PUBLIC_STREAM_ERRORS, createPiModelStream } from "./pi-stream.server";
 import { publishAgentTextDelta } from "./tail-bus.server";
@@ -151,7 +151,12 @@ async function latestAssistant(root: Conversation, context: Context) {
 
 export async function executeAgentRun(
   store: AgentStore, run: AgentRunRow, shutdown?: AbortSignal,
-  injected?: { streamFn?: PiStreamFn; config?: AIModelConfig; configs?: AIModelConfig[]; now?: () => number; leaseRenewMs?: number; mcpPool?: McpPool; skills?: AgentSkillsSession; profiles?: AgentProfileView[] },
+  injected?: {
+    streamFn?: PiStreamFn; config?: AIModelConfig; configs?: AIModelConfig[]; now?: () => number; leaseRenewMs?: number;
+    mcpPool?: McpPool; skills?: AgentSkillsSession; profiles?: AgentProfileView[];
+    /** Account and feature switches; an evaluation run supplies fixed ones instead of reading credits and settings. */
+    account?: AgentAccountProvider; featureState?: AgentFeatureStateProvider;
+  },
 ) {
   const checkpoint: AgentCheckpoint = structuredClone(run.checkpoint);
   if (!isCurrentAgentCheckpoint(checkpoint)) throw new Error("AGENT_ENGINE_UNSUPPORTED");
@@ -164,6 +169,10 @@ export async function executeAgentRun(
   });
   const scope = withCancel(BACKGROUND_CONTEXT);
   const context = scope.context;
+  // Real runs read the member's account and the platform switches; an evaluation run provides fixed ones.
+  const accountOf: AgentAccountProvider = injected?.account ?? (() => getUserCreditInfo(run.user_id, {}));
+  const featureStateOf: AgentFeatureStateProvider = injected?.featureState
+    ?? ((id) => readFeatureModuleStateFresh(id as Parameters<typeof readFeatureModuleStateFresh>[0]));
   let interrupted = false, stopping = run.cancel_requested;
   let harness: Harness | undefined, root: Conversation | undefined, watch: ConversationWatch | undefined;
   let storage: AgentDurableStorage | undefined, apiKey: string | undefined;
@@ -299,11 +308,13 @@ export async function executeAgentRun(
     }
     // The skills the prompt lists are fixed when the task opens; every load finds the skill again. A configuration that
     // cannot be read leaves the task without skills rather than failing it. A test or evaluation run brings its own.
-    const skills = injected ? injected.skills : await openAgentSkills(run.user_id, (await getUserCreditInfo(run.user_id, {})).membership).catch(() => {
+    const skills = injected ? injected.skills : await openAgentSkills(run.user_id, (await accountOf()).membership).catch(() => {
       console.warn("[agent-skills]", { runId: run.id, code: "SKILLS_UNAVAILABLE" });
       return undefined;
     });
-    const tools = await createAgentTools(store, run, checkpoint, { skills });
+    const tools = await createAgentTools(store, run, checkpoint, {
+      skills, account: injected?.account, featureState: injected?.featureState,
+    });
     // 进入上下文的技能文本按主模型计数；测试注入的模型不发网络请求。
     const countTokens = (text: string) => injected ? Promise.resolve(estimateTokens(config.modelId || config.id, text)) : countModelTokens(config, text, { apiKey });
     const window = run.input.customProvider ? null : resolveModelWindow(config, run.input.reasoning);
@@ -323,8 +334,8 @@ export async function executeAgentRun(
     const collaborators = parseAgentCollaborators(run.input.collaborators);
     if (run.input.customProvider && collaborators.length) throw new Error('自定义直连模型不能调用平台协作模型');
     const authorizeModel = async (selected: AIModelConfig, reasoning = false) => {
-      const account = await getUserCreditInfo(run.user_id, {});
-      const states = await Promise.all([readFeatureModuleStateFresh("chat"), readFeatureModuleStateFresh("agent")]);
+      const account = await accountOf();
+      const states = await Promise.all([featureStateOf("chat"), featureStateOf("agent")]);
       if (states.some(state => state.status === "unavailable"))
         throw new Error("AGENT_FEATURE_STATE_UNAVAILABLE");
       if (states.some(state => state.status !== "enabled"))
@@ -341,7 +352,7 @@ export async function executeAgentRun(
     }
     // The roles a member may take, fixed when the task opens as its skills are. A catalog that cannot be read leaves
     // the specialist, which members were before roles. A test or evaluation run brings its own, or the built-in ones.
-    const membership = (await getUserCreditInfo(run.user_id, {})).membership;
+    const membership = (await accountOf()).membership;
     const roles = injected ? injected.profiles ?? [...BUILTIN_AGENT_PROFILES] : await availableProfiles(membership).catch(() => {
       console.warn("[agent-profiles]", { runId: run.id, code: "PROFILES_UNAVAILABLE" });
       return BUILTIN_AGENT_PROFILES.filter(profile => profile.name === DEFAULT_AGENT_PROFILE);
@@ -574,7 +585,7 @@ export async function executeAgentRun(
               return { block: '计划尚未批准：请先调用 submit_plan 提交计划，用户批准后再执行这一步。' };
             const block = toolPolicyBlock(call.name, call.arguments);
             if (block) return { block };
-            try { await assertAgentToolAccess(store, run, call.name, call.arguments); }
+            try { await assertAgentToolAccess(store, run, call.name, call.arguments, { account: injected?.account, featureState: injected?.featureState }); }
             catch (error) {
               const message = error instanceof Error && error.message.trim()
                 ? error.message
@@ -714,7 +725,7 @@ export async function executeAgentRun(
         // A message sent into the task may call a skill, expanded as a task's first message is; a skill that cannot be
         // read leaves the message as written.
         const [message] = claimed.mode === 'reply' || !parseSkillCommand(claimed.message.content) ? [claimed.message]
-          : await expandSkillMessages([claimed.message], run.user_id, (await getUserCreditInfo(run.user_id, {})).membership)
+          : await expandSkillMessages([claimed.message], run.user_id, (await accountOf()).membership)
             .catch(() => [claimed.message]);
         await root!.submit({
           type: "input", requestId: `command:${claimed.sequence}`, content: agentInputContent(message, run.input.timezone),

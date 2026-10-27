@@ -83,6 +83,18 @@ CREATE POLICY agent_credentials_admin ON public.agent_run_credentials FOR SELECT
 
 ALTER TABLE public.agent_durable_commits ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE public.agent_eval_cases ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY agent_eval_cases_admin_all ON public.agent_eval_cases TO authenticated USING (( SELECT public.is_admin_user() AS is_admin_user)) WITH CHECK (( SELECT public.is_admin_user() AS is_admin_user));
+
+ALTER TABLE public.agent_eval_results ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY agent_eval_results_admin_all ON public.agent_eval_results TO authenticated USING (( SELECT public.is_admin_user() AS is_admin_user)) WITH CHECK (( SELECT public.is_admin_user() AS is_admin_user));
+
+ALTER TABLE public.agent_eval_runs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY agent_eval_runs_admin_all ON public.agent_eval_runs TO authenticated USING (( SELECT public.is_admin_user() AS is_admin_user)) WITH CHECK (( SELECT public.is_admin_user() AS is_admin_user));
+
 ALTER TABLE public.agent_mcp_servers ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY agent_mcp_servers_admin_platform ON public.agent_mcp_servers TO authenticated USING (((owner_id IS NULL) AND ( SELECT public.is_admin_user() AS is_admin_user))) WITH CHECK (((owner_id IS NULL) AND ( SELECT public.is_admin_user() AS is_admin_user)));
@@ -677,6 +689,12 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.activation_keys TO authenticat
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.activation_keys TO anon;
 
 GRANT SELECT ON TABLE public.agent_attachment_refs TO authenticated;
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.agent_eval_cases TO authenticated;
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.agent_eval_results TO authenticated;
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.agent_eval_runs TO authenticated;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.agent_mcp_servers TO authenticated;
 

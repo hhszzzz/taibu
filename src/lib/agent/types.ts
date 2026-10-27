@@ -138,6 +138,19 @@ export interface AgentCheckpoint {
 }
 
 export type PiStreamFn = (model: Model<Api>, context: TranscriptContext, options?: SimpleStreamOptions) => AssistantMessageEventStream;
+/**
+ * Who a run acts for. Real runs read this from the credits table; an evaluation run supplies a fixed account so it can
+ * exercise every model and tool without charging anyone.
+ */
+export type AgentAccount = { membership: 'free' | 'plus' | 'pro'; credits: number; expiresAt: Date | null };
+export type AgentAccountProvider = () => Promise<AgentAccount>;
+/** The same for feature modules: an evaluation run does not depend on platform switches. */
+export type AgentFeatureState =
+  | { status: 'enabled' }
+  | { status: 'disabled' }
+  | { status: 'unavailable'; error?: string };
+export type AgentFeatureStateProvider = (id: string) => Promise<AgentFeatureState>;
+export type AgentRunAccess = { account?: AgentAccountProvider; featureState?: AgentFeatureStateProvider };
 export interface DomainToolResult<T = unknown> {
   content: Array<{ type: "text"; text: string }>;
   details: T;

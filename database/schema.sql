@@ -207,6 +207,86 @@ CREATE TABLE public.agent_durable_commits (
     CONSTRAINT agent_durable_commits_writes_check CHECK ((jsonb_typeof(writes) = 'array'::text))
 );
 
+CREATE TABLE public.agent_eval_cases (
+    id text NOT NULL,
+    tool text NOT NULL,
+    guide text NOT NULL,
+    prompt text NOT NULL,
+    assertions jsonb DEFAULT '[]'::jsonb NOT NULL,
+    arguments jsonb DEFAULT '{}'::jsonb NOT NULL,
+    chart jsonb,
+    visual boolean DEFAULT false NOT NULL,
+    builtin boolean DEFAULT false NOT NULL,
+    is_enabled boolean DEFAULT true NOT NULL,
+    sort_order integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT agent_eval_cases_arguments_check CHECK ((jsonb_typeof(arguments) = 'object'::text)),
+    CONSTRAINT agent_eval_cases_assertions_check CHECK ((jsonb_typeof(assertions) = 'array'::text)),
+    CONSTRAINT agent_eval_cases_chart_check CHECK (((chart IS NULL) OR (jsonb_typeof(chart) = 'object'::text))),
+    CONSTRAINT agent_eval_cases_guide_check CHECK (((length(btrim(guide)) >= 1) AND (length(guide) <= 64))),
+    CONSTRAINT agent_eval_cases_id_check CHECK ((id ~ '^[a-z0-9][a-z0-9_-]{0,63}$'::text)),
+    CONSTRAINT agent_eval_cases_prompt_check CHECK (((length(btrim(prompt)) >= 1) AND (length(prompt) <= 8000))),
+    CONSTRAINT agent_eval_cases_tool_check CHECK (((length(btrim(tool)) >= 1) AND (length(tool) <= 64)))
+);
+
+CREATE TABLE public.agent_eval_results (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    run_id uuid NOT NULL,
+    case_id text NOT NULL,
+    model_id text NOT NULL,
+    repeat integer DEFAULT 1 NOT NULL,
+    hard_passed boolean NOT NULL,
+    quality_passed boolean,
+    failed_assertions jsonb DEFAULT '[]'::jsonb NOT NULL,
+    answer text DEFAULT ''::text NOT NULL,
+    judge_response text,
+    tool_trace jsonb DEFAULT '[]'::jsonb NOT NULL,
+    tool_calls integer DEFAULT 0 NOT NULL,
+    duration_ms integer DEFAULT 0 NOT NULL,
+    first_token_ms integer,
+    input_tokens bigint DEFAULT 0 NOT NULL,
+    output_tokens bigint DEFAULT 0 NOT NULL,
+    total_tokens bigint DEFAULT 0 NOT NULL,
+    error text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT agent_eval_results_answer_check CHECK ((length(answer) <= 100000)),
+    CONSTRAINT agent_eval_results_assertions_check CHECK ((jsonb_typeof(failed_assertions) = 'array'::text)),
+    CONSTRAINT agent_eval_results_duration_check CHECK (((duration_ms >= 0) AND ((first_token_ms IS NULL) OR (first_token_ms >= 0)) AND (tool_calls >= 0) AND (input_tokens >= 0) AND (output_tokens >= 0) AND (total_tokens >= 0))),
+    CONSTRAINT agent_eval_results_error_check CHECK (((error IS NULL) OR (length(error) <= 2000))),
+    CONSTRAINT agent_eval_results_model_id_check CHECK (((length(model_id) >= 1) AND (length(model_id) <= 200))),
+    CONSTRAINT agent_eval_results_quality_check CHECK (((quality_passed IS NULL) OR hard_passed)),
+    CONSTRAINT agent_eval_results_repeat_check CHECK ((repeat >= 1)),
+    CONSTRAINT agent_eval_results_trace_check CHECK ((jsonb_typeof(tool_trace) = 'array'::text))
+);
+
+CREATE TABLE public.agent_eval_runs (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    created_by uuid NOT NULL,
+    models text[] NOT NULL,
+    judge_model text NOT NULL,
+    case_ids text[] NOT NULL,
+    repeats integer DEFAULT 1 NOT NULL,
+    total_calls integer NOT NULL,
+    completed_calls integer DEFAULT 0 NOT NULL,
+    status text DEFAULT 'queued'::text NOT NULL,
+    cancel_requested boolean DEFAULT false NOT NULL,
+    error text,
+    started_at timestamp with time zone,
+    ended_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT agent_eval_runs_case_ids_check CHECK ((cardinality(case_ids) >= 1)),
+    CONSTRAINT agent_eval_runs_completed_check CHECK (((completed_calls >= 0) AND (completed_calls <= total_calls))),
+    CONSTRAINT agent_eval_runs_error_check CHECK (((error IS NULL) OR (length(error) <= 2000))),
+    CONSTRAINT agent_eval_runs_judge_model_check CHECK (((length(judge_model) >= 1) AND (length(judge_model) <= 200))),
+    CONSTRAINT agent_eval_runs_models_check CHECK ((cardinality(models) >= 1)),
+    CONSTRAINT agent_eval_runs_repeats_check CHECK (((repeats >= 1) AND (repeats <= 5))),
+    CONSTRAINT agent_eval_runs_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'completed'::text, 'failed'::text, 'cancelled'::text]))),
+    CONSTRAINT agent_eval_runs_times_check CHECK (((started_at IS NULL) OR (ended_at IS NULL) OR (ended_at >= started_at))),
+    CONSTRAINT agent_eval_runs_total_calls_check CHECK (((total_calls >= 1) AND (total_calls <= 200)))
+);
+
 CREATE TABLE public.agent_mcp_servers (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     owner_id uuid,
@@ -966,6 +1046,18 @@ ALTER TABLE ONLY public.agent_attachments
 ALTER TABLE ONLY public.agent_durable_commits
     ADD CONSTRAINT agent_durable_commits_pkey PRIMARY KEY (run_id, sequence);
 
+ALTER TABLE ONLY public.agent_eval_cases
+    ADD CONSTRAINT agent_eval_cases_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY public.agent_eval_results
+    ADD CONSTRAINT agent_eval_results_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY public.agent_eval_results
+    ADD CONSTRAINT agent_eval_results_run_id_case_id_model_id_repeat_key UNIQUE (run_id, case_id, model_id, repeat);
+
+ALTER TABLE ONLY public.agent_eval_runs
+    ADD CONSTRAINT agent_eval_runs_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY public.agent_mcp_servers
     ADD CONSTRAINT agent_mcp_servers_owner_id_name_key UNIQUE NULLS NOT DISTINCT (owner_id, name);
 
@@ -1211,6 +1303,12 @@ ALTER TABLE ONLY public.agent_attachments
 
 ALTER TABLE ONLY public.agent_durable_commits
     ADD CONSTRAINT agent_durable_commits_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.agent_runs(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.agent_eval_results
+    ADD CONSTRAINT agent_eval_results_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.agent_eval_runs(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.agent_eval_runs
+    ADD CONSTRAINT agent_eval_runs_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.agent_mcp_servers
     ADD CONSTRAINT agent_mcp_servers_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES public.users(id) ON DELETE CASCADE;

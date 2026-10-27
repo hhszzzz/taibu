@@ -5,12 +5,17 @@ import { EMAIL_QUEUE, closeEmailQueue } from '@/lib/email/queue.server';
 import { sendMail } from '@/lib/email/mailer.server';
 import type { OutgoingMail } from '@/lib/email/mailer.server';
 import { createBullConnection } from '@/lib/redis.server';
+import { executeAgentEvalRun } from '@/lib/agent/eval/worker.server';
 import { runMaintenanceJob } from './maintenance.server';
-import { closeMaintenanceQueue, getMaintenanceQueue, JOB_QUEUE_PREFIX, MAINTENANCE_QUEUE } from './queues.server';
+import {
+  AGENT_EVAL_QUEUE, closeAgentEvalQueue, closeMaintenanceQueue, getMaintenanceQueue, JOB_QUEUE_PREFIX, MAINTENANCE_QUEUE,
+  type AgentEvalJobData,
+} from './queues.server';
 import { upsertMaintenanceSchedulers } from './schedulers.server';
 
 let worker: Worker | null = null;
 let emailWorker: Worker<OutgoingMail> | null = null;
+let agentEvalWorker: Worker<AgentEvalJobData> | null = null;
 let starting: Promise<void> | null = null;
 
 async function start(): Promise<void> {
@@ -46,6 +51,20 @@ async function start(): Promise<void> {
   emailWorker.on('error', () => {
     console.warn('[jobs] email worker error');
   });
+  // One evaluation at a time; user tasks are claimed from the database, so this queue never competes for their slots.
+  agentEvalWorker = new Worker<AgentEvalJobData>(AGENT_EVAL_QUEUE, async (job) => {
+    await executeAgentEvalRun(job.data.runId);
+  }, {
+    connection: createBullConnection(),
+    prefix: JOB_QUEUE_PREFIX,
+    concurrency: 1,
+  });
+  agentEvalWorker.on('failed', (job, error) => {
+    console.warn('[jobs] agent evaluation failed:', job?.data.runId, error.message);
+  });
+  agentEvalWorker.on('error', () => {
+    console.warn('[jobs] agent evaluation worker error');
+  });
 }
 
 /** Idempotent: worker-entry calls this once per process. */
@@ -57,10 +76,13 @@ export function startJobWorkers(): Promise<void> {
 export async function stopJobWorkers(): Promise<void> {
   const current = worker;
   const currentEmail = emailWorker;
+  const currentEval = agentEvalWorker;
   worker = null;
   emailWorker = null;
+  agentEvalWorker = null;
   starting = null;
-  await Promise.all([current?.close(), currentEmail?.close()]);
+  await Promise.all([current?.close(), currentEmail?.close(), currentEval?.close()]);
   await closeMaintenanceQueue();
   await closeEmailQueue();
+  await closeAgentEvalQueue();
 }

@@ -27,6 +27,10 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS agent_conversation_runs ON public.agent_
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS agent_events_cursor ON public.agent_run_events USING btree (run_id, sequence);
 
+CREATE INDEX CONCURRENTLY IF NOT EXISTS agent_eval_results_run_idx ON public.agent_eval_results USING btree (run_id, model_id, case_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS agent_eval_runs_created_idx ON public.agent_eval_runs USING btree (created_at DESC);
+
 CREATE INDEX CONCURRENTLY IF NOT EXISTS agent_run_metrics_model ON public.agent_run_metrics USING btree (model_id, ended_at DESC);
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS agent_run_metrics_retention ON public.agent_run_metrics USING btree (ended_at);

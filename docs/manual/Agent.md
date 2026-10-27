@@ -124,6 +124,17 @@ pi-durable 把成员会话建成主任务的副本，再用 `AgentChange` 收窄
 
 「AI 服务 → Agent 任务 → 性能」按模型给出近 1 / 7 / 30 天的总耗时与首字延迟 P50/P95、工具耗时占比、失败率与挂起率，并列出最近的运行；点开一次运行看它的阶段时间线。数据保留 30 天，由 `agent-retention` 定时任务清理（与事件、提交日志和 worker 心跳同一次执行）。
 
+## Agent 测评
+
+「AI 服务 → Agent 测评」用一套可维护的题库让多个模型各自走真实的 Agent 运行，再自动评分并排行。它复用 CLI 的离线评测和运行器：`scripts/evals/agent-cases.json` 是内置题库，`src/lib/agent/eval/runner.server.ts` 同时供 CLI（`pnpm eval:agent`，保留离线模式与 `--live --config`）和后台使用。
+
+- 题库：内置题在第一次读取时导入 `agent_eval_cases`，之后可在后台修改、停用；自定义题可增删。题目含工具、体系、题面、断言、工具参数与可选的「先排盘」配置，视觉题另有标记。
+- 发起：选择参赛模型、评审模型、题目与重复次数；题目 × 模型 × 重复次数最多 200 次，发起前显示预计调用数（另加最多同数量的质量评审调用）。运行进入独立的 BullMQ `agent-eval` 队列，并发为 1，不参与用户任务的领取，也不占用用户的并发槽。
+- 评分：硬检查调用 `assertAgentEvaluation`，核对是否调对工具，并用 Core 按同一份参数与稳定随机种子逐字段复算计算结果与详查缓存；质量检查把题面、断言、答案和 Core 规范文本交给评审模型，只判断列出的断言与答案实际引用的盘面依据。硬检查未通过或评审不可用的结果不参与质量通过率。
+- 结果：`agent_eval_runs` 记录发起人、模型、评审模型、题目范围、重复次数、进度与状态；`agent_eval_results` 逐题记录硬检查与质量结果、未通过的断言、答案、评审原文、耗时、首字延迟、token、工具调用数与工具轨迹。三张表都只允许管理员读写。
+- 后台页显示进度并可取消（排队中的立即结束，运行中的在下一题前停止）；排行榜按模型给出硬检查通过率、质量通过率、平均与 P95 耗时、首字延迟与平均 token；逐题对比把两个模型的答案并排显示，附未通过的断言和工具轨迹。
+- 隔离：测评使用内存中的 `EvalAgentStore`，不创建 `agent_runs`、不扣积分、不读写用户资料；账户与功能开关由运行器注入（固定为可用的高级会员与全部功能），跑评测不会被平台的会员或功能开关挡住。模型调用仍消耗所选模型来源的额度，请按需控制题量与重复次数。
+
 ## 命盘与保存
 
 工具卡片使用实际返回的结构化产物，复用各占术已有视图。展开、固定或恢复命盘只展示已有结果，不重新排盘或调用模型。数据不完整时降级为规范文本。
@@ -152,6 +163,7 @@ pi-durable 把成员会话建成主任务的副本，再用 `AgentChange` 收窄
 | `src/lib/agent/store.server.ts` | 任务读写 |
 | `src/lib/agent/runtime.server.ts`、`durable-storage.server.ts` | Pi 执行与持久化适配 |
 | `src/lib/agent/telemetry.server.ts`、`admin-metrics.server.ts` | Pi 遥测适配、运行指标聚合与后台性能接口 |
+| `src/lib/agent/eval/` | 测评运行器与隔离存储、内置题库、排行聚合、后台题库/发起/结果接口 |
 | `src/lib/agent/tools.server.ts` | 工具装配与调用 |
 | `src/lib/agent/tool-presentation.ts` | 工具结果展示映射 |
 | `src/lib/agent/mcp/` | MCP 服务的读写、密钥、连接池、工具注册与设置接口；联网搜索与读网页的路由（`web-route.server.ts`）和结果识别（`web-results.ts`） |

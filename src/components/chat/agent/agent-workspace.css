@@ -208,7 +208,7 @@
 .agent-ws-member-positions dd { min-width: 0; color: var(--foreground); font-weight: 500; overflow-wrap: anywhere; }
 /* 协作分析 (AgentCollab board): one card per member with its process and conclusion, then the stance table. */
 .agent-ws-collaboration { gap: 18px; }
-.agent-ws-member { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--background); }
+.agent-ws-member { position: relative; display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--background); }
 .agent-ws-member[data-state="running"] { border-color: var(--accent); box-shadow: 0 0 0 .5px var(--accent); }
 .agent-ws-member-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .agent-ws-member-head > div { flex: 1; min-width: 0; }
@@ -606,9 +606,20 @@ button.agent-ws-row:hover { translate: 0 -1px; box-shadow: 0 4px 14px rgb(0 0 0 
 .agent-todo-progress { animation: motion-fade-up var(--duration-base) var(--ease-out) backwards; }
 /* 上下文分段条：各段宽度随用量平滑变化。 */
 .agent-context-bar-stack > span { transition: flex-basis var(--duration-slow) var(--ease-out), width var(--duration-slow) var(--ease-out); }
-/* 协作成员仍在分析：卡片外圈的强调环缓慢呼吸。 */
-@keyframes agent-member-glow { 50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); } }
-.agent-ws-member[data-state="running"] { animation: agent-member-glow 2.2s ease-in-out infinite; }
+/* 协作成员仍在分析：卡片外圈的强调环缓慢呼吸。
+   呼吸的是叠在卡片外的一圈 ::after 的透明度，而不是卡片自身的 box-shadow：
+   只动合成层的 opacity，不逐帧重绘卡片；伪元素不吃点击。 */
+.agent-ws-member[data-state="running"]::after {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 17px;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+    opacity: 0;
+    pointer-events: none;
+    animation: agent-member-glow 2.2s ease-in-out infinite;
+}
+@keyframes agent-member-glow { 50% { opacity: 1; } }
 /* 手机：抽屉从底边升起（覆盖全站对话框的上浮放大）。 */
 @keyframes agent-sheet-in { from { translate: 0 100%; } }
 @keyframes agent-sheet-out { to { translate: 0 100%; } }
@@ -617,6 +628,6 @@ button.agent-ws-row:hover { translate: 0 -1px; box-shadow: 0 4px 14px rgb(0 0 0 
     .app-modal.agent-workspace-dialog[data-closing] { animation: agent-sheet-out var(--duration-base) var(--ease-out) forwards; }
 }
 @media (prefers-reduced-motion: reduce) {
-    .agent-ws-tab-live, .agent-todo-segments > span[data-state="in_progress"], .agent-ws-member[data-state="running"] { animation: none; }
+    .agent-ws-tab-live, .agent-todo-segments > span[data-state="in_progress"], .agent-ws-member[data-state="running"]::after { animation: none; }
     button.agent-ws-row:hover { translate: none; }
 }

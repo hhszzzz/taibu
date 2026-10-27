@@ -37,7 +37,6 @@ import { AgentResultContext, isSameWorkspaceShown, type AgentWorkspaceShown } fr
 import { getAgentQuestionAnswers, getAgentWorkspaceAutoOpenEvent } from '@/lib/agent/workspace';
 import { chartQuestion, type ChartAskContext } from '@/lib/agent/chart-interaction';
 import { AgentQuestionDock } from './agent/AgentQuestionDock';
-import { useAgentRoundFolds } from './agent/AgentRoundFold';
 import type { ComposerWebControl } from './composer/ComposerToolbar';
 import { publishChatModeControl, clearChatModeControl, type ChatModeControl } from '@/lib/chat/mode-control-store';
 import { composerNote, isRunningComposerNote, type ComposerNoteState } from '@/lib/chat/composer-copy';
@@ -218,9 +217,6 @@ export function ChatLayout(props: ChatLayoutProps) {
         const hidden = new Set(currentRun?.queue?.filter(command => command.state === 'pending' || command.state === 'cancelled').map(command => command.message.id));
         return orderAgentMessagesForDisplay(messages.filter(message => !hidden.has(message.id)), currentRun);
     }, [messages, currentRun]);
-    // Earlier Agent rounds fold to 上一轮 bars; a jump to one of their messages unfolds it first.
-    // 记录视图只影响步骤明细的展开，不改变轮次折叠。
-    const { rounds, reveal: revealMessage } = useAgentRoundFolds(transcriptMessages, workspaceKey);
     // 新消息淡入：按行号记住已出现的行，临时 id 换成正式 id、虚拟列表滚回视野时不再重放。
     // 新对话发出第一条消息后才拿到会话 ID：这一步仍是同一段对话，作用域沿用，第一轮的淡入不被打断。
     const [motionScope, setMotionScope] = useState(workspaceKey);
@@ -230,7 +226,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         if (!(motionKey.endsWith(':new') && transcriptMessages.length > 0)) setMotionScope(workspaceKey);
     }
     useEntranceMotion(contentRef, { selector: '.chat-transcript-row', scope: motionScope, ready: !conversationLoading });
-    const { showJump, jumpToLatest } = useTranscriptScroll({ scrollRef: messageScrollContainerRef, followRef: props.shouldAutoScrollRef, conversationKey: workspaceKey, messages: transcriptMessages, enabled: !conversationLoading && transcriptMessages.length > 0, virtualized: transcriptMessages.length > 20, reveal: revealMessage });
+    const { showJump, jumpToLatest } = useTranscriptScroll({ scrollRef: messageScrollContainerRef, followRef: props.shouldAutoScrollRef, conversationKey: workspaceKey, messages: transcriptMessages, enabled: !conversationLoading && transcriptMessages.length > 0, virtualized: transcriptMessages.length > 20 });
     // Esc 停止生成（菜单、弹窗、行内编辑先消费 Esc）；⌘/ 打开快捷键说明；⌘\ 开关工作区（有工作区按钮时）。
     const [shortcutsOpen, setShortcutsOpen] = useState(false);
     const workspaceShortcut = useRef<(() => void) | null>(null);
@@ -282,8 +278,9 @@ export function ChatLayout(props: ChatLayoutProps) {
         const kind = current.hasAgentRun === true ? 'agent'
             : messages.length > 0 && messages.every(message => !message.agent) ? 'plain'
             : undefined;
-        if (kind && (kind === 'agent') !== isAgentMode) router.push('/chat');
-    }, [isAgentMode, modeSettled, activeConversationId, conversations, messages, router]);
+        // 打开别的方式的会话：跟着会话切过去，而不是把这次点击丢掉。
+        if (kind && (kind === 'agent') !== isAgentMode) props.agent?.setMode(kind);
+    }, [isAgentMode, modeSettled, activeConversationId, conversations, messages, props.agent]);
     const waitingQuestion = userId && props.agent?.run?.conversationId === activeConversationId && props.agent.run.status === 'awaiting_input'
         ? [...props.agent.run.message.agent?.parts ?? []].reverse().find((part): part is Extract<AgentPart, { type: 'question' }> => part.type === 'question') : undefined;
     const hasWorkspace = isAgentMode || Boolean(latestAgentData);
@@ -382,7 +379,7 @@ export function ChatLayout(props: ChatLayoutProps) {
     const modeControl: ChatModeControl | null = agent ? {
         mode: agent.mode,
         onChange: agent.setMode,
-        agentDisabled: !agent.capabilities.ready || agent.active,
+        agentDisabled: agent.active || (!!userId && !agent.capabilities.ready),
         plainDisabled: agent.active,
     } : null;
     // 侧栏品牌行与移动抽屉通过 store 共享这一个控件（全页恰好一个「对话方式」单选组）。
@@ -517,7 +514,6 @@ export function ChatLayout(props: ChatLayoutProps) {
                                     onSwitchVersion={onSwitchVersion}
                                     onArchiveMessage={activeConversationId ? onArchiveMessage : undefined}
                                     disabled={transcriptLocked}
-                                    rounds={rounds}
                                 />
                             </div>
                         ) : (
@@ -528,7 +524,6 @@ export function ChatLayout(props: ChatLayoutProps) {
                                     onSwitchVersion={onSwitchVersion}
                                     onArchiveMessage={activeConversationId ? onArchiveMessage : undefined}
                                     disabled={transcriptLocked}
-                                    rounds={rounds}
                                 />
                             </div>
                         )}

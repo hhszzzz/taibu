@@ -10,8 +10,7 @@ import { getAgentAttachmentRead, getAgentChart, getAgentConversationHits, getAge
 import { useIsDesktopLayout } from '@/lib/hooks/useIsDesktopLayout';
 import { useTranscriptRecordView } from '@/lib/chat/chat-record-view';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
-import { ThinkingBlock } from '../ThinkingBlock';
-import { describeAgentStep, describeOverviewFacts, formatAgentValue, getAgentDataTypeLabel, getAgentLiveLine, getAgentMemberBrief, getAgentScriptCalls, getAgentToolTitle, getParallelMemberState, summarizeAgentActivity, type AgentProcessPart, type AgentTool } from './presentation';
+import { describeAgentStep, describeOverviewFacts, formatAgentValue, getAgentDataTypeLabel, getAgentLiveLine, getAgentMemberBrief, getAgentScriptCalls, getAgentToolTitle, getParallelMemberState, summarizeAgentActivity, summarizeThinkingTime, type AgentProcessPart, type AgentTool } from './presentation';
 import { memberAnswerText, parallelAnalysisResults } from '@/lib/agent/parallel-results';
 import { ModelAvatar } from './ModelAvatar';
 import { getChartFocus, getChartTargets, getAgentChartReference, parseChartReference } from '@/lib/agent/chart-interaction';
@@ -377,16 +376,13 @@ export function AgentActivityGroup({ parts, data, active = false }: { parts: Age
     // 详细记录视图默认展开每一步（参数与结果）。
     const open = disclosed ?? (detailed || (active && wide) || failed > 0);
     // 任务进行中新加的步骤淡入；展开时已有的步骤、重新挂载的步骤不重放。
-    // 只有思考时没有步骤列表；作用域带上「是否已有步骤」，列表出现时重新挂上观察。
     useEntranceMotion(stepsRef, { selector: ':scope > .agent-step', preset: 'fade', scope: `${data.runId}:${tools.length > 0}`, ready: open });
-    // Reasoning alone is not a process: it shows as the thinking line, as in plain chat.
-    if (!tools.length && rows.every(part => part.type === 'reasoning')) return <>
-        {rows.map(part => part.type === 'reasoning' && <ThinkingBlock key={part.id} variant="chat" content={part.text} isStreaming={streaming && data.parts.at(-1)?.id === part.id} />)}
-    </>;
     const live = !open && streaming ? getAgentLiveLine(data) : null;
-    const count = !tools.length ? '向你确认信息'
+    const thinking = summarizeThinkingTime(parts);
+    const count = !tools.length && !questions
+        ? (thinking ?? (streaming ? '思考中' : '已思考'))
         : live ? `· ${completed} / ${tools.length} 完成`
-        : summarizeAgentActivity(done, questions, failed);
+        : `${thinking ? `${thinking} · ` : ''}${summarizeAgentActivity(done, questions, failed)}`;
     return <div className="agent-activity-group">
         <section className={`agent-process${open ? ' is-open' : ''}`} aria-label="任务过程">
             <button type="button" className={`agent-process-heading${live ? ' is-live' : ''}`} aria-expanded={open} aria-controls={id} onClick={() => { setDisclosed(!open); if (!open) setRevealed(true); }}>

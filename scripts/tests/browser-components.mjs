@@ -87,7 +87,6 @@ import { FloatingPanel } from '@/components/ui/FloatingPanel';
 import { setChatWorkspaceOpen } from '@/lib/chat/chat-sidebar';
 import { ChatMessageList } from '@/components/chat/ChatMessageList';
 import { VirtualizedChatMessageList } from '@/components/chat/VirtualizedChatMessageList';
-import { useAgentRoundFolds } from '@/components/chat/agent/AgentRoundFold';
 import { useTranscriptScroll } from '@/lib/chat/use-transcript-scroll';
 import { scrollToMessageId } from '@/lib/chat/message-navigation';
 import { ShareConversationMenu } from '@/components/chat/ShareConversationMenu';
@@ -299,7 +298,7 @@ function ActivityProbe({ id }) {
   return <output data-testid={'activity-' + id}>{markers.size}</output>;
 }
 
-// Two Agent rounds as the AgentResearch board shows them: the earlier one folds to a 上一轮 bar.
+// Two Agent rounds as the transcript shows them: both stay in place.
 const ROUND_START = '2026-10-12T08:00:00.000Z';
 const roundAsk = (id, content) => ({ id, role: 'user', content, createdAt: ROUND_START });
 const roundReply = (id, runId, parts) => ({ id, role: 'assistant', content: '', createdAt: ROUND_START, agent: { version: 1, runId, status: 'completed', parts } });
@@ -321,12 +320,11 @@ function RoundsProbe() {
   const [messages, setMessages] = useState(ROUND_MESSAGES);
   const [virtual, setVirtual] = useState(false);
   window.fixture.rounds = { setVirtual, append: message => setMessages(current => current.concat([message])), locate: id => scrollToMessageId('rounds-fixture', id) };
-  const { rounds, reveal } = useAgentRoundFolds(messages, 'rounds-fixture');
-  useTranscriptScroll({ scrollRef, followRef, conversationKey: 'rounds-fixture', messages, enabled: true, virtualized: virtual, reveal });
+  useTranscriptScroll({ scrollRef, followRef, conversationKey: 'rounds-fixture', messages, enabled: true, virtualized: virtual });
   // The app's layout CSS is not loaded here; the transcript needs a bounded scroller.
   return <section data-testid="rounds"><style>{'[data-testid=rounds] .chat-virtual-scroller, [data-testid=rounds] [data-scroller] { height: 360px; overflow: auto; }'}</style>
-    {virtual ? <VirtualizedChatMessageList scrollContainerRef={scrollRef} messages={messages} isLoading={false} rounds={rounds} />
-      : <div ref={scrollRef} data-scroller="true"><ChatMessageList messages={messages} isLoading={false} messagesEndRef={endRef} rounds={rounds} /></div>}
+    {virtual ? <VirtualizedChatMessageList scrollContainerRef={scrollRef} messages={messages} isLoading={false} />
+      : <div ref={scrollRef} data-scroller="true"><ChatMessageList messages={messages} isLoading={false} messagesEndRef={endRef} /></div>}
   </section>;
 }
 
@@ -2902,6 +2900,13 @@ export async function run(existingPage, bundlePath) {
       await sidebarRow('梦见掉牙').locator('.chat-nav-marker').count() === 0);
     check('On the new-chat page 新聊天 is the current item', await sidebar.getByRole('link', { name: '新聊天' }).getAttribute('aria-current') === 'page' &&
       await sidebar.getByRole('button', { name: '搜索', exact: true }).count() === 1);
+    const modeSwitch = sidebar.getByRole('radiogroup', { name: '对话方式' });
+    await modeSwitch.getByRole('radio', { name: '对话', exact: true }).hover();
+    const plainTip = await modeSwitch.page().getByRole('tooltip').last().innerText().catch(() => '');
+    await modeSwitch.getByRole('radio', { name: 'Agent', exact: true }).hover();
+    const agentTip = await modeSwitch.page().getByRole('tooltip').last().innerText().catch(() => '');
+    check('The 对话 / Agent switch only names itself on hover, with no long description', JSON.stringify([plainTip, agentTip]) === JSON.stringify(['对话', 'Agent']) &&
+      (await modeSwitch.getByRole('radio').evaluateAll(nodes => nodes.every(node => !node.hasAttribute('title')))));
     const activityReads = () => page.evaluate(() => window.fixtureAgentIO.requests.filter(item => item.url === '/api/agent/activity').length);
     const readsBefore = await activityReads();
     await page.evaluate(() => window.dispatchEvent(new Event('taibu:agent-activity')));
@@ -2931,6 +2936,16 @@ export async function run(existingPage, bundlePath) {
     await sidebar.getByRole('button', { name: '搜索', exact: true }).click();
     check('搜索 opens the global conversation search', await page.evaluate(() => window.fixture.sidebarSearch === 1));
     await page.keyboard.press('Escape');
+    await page.evaluate(() => window.fixture.mount.sidebar(false));
+
+    // 侧栏切换点 Agent：进入 /chat 时带 ?mode=agent（夹具里只看 URL 与选中态）。
+    await page.evaluate(() => window.fixture.mount.sidebar(true));
+    await page.addStyleTag({ content: 'aside[class*="lg:flex"] { display: flex !important; }' });
+    const agentSwitch = page.getByRole('complementary').getByRole('radiogroup', { name: '对话方式' });
+    await agentSwitch.getByRole('radio', { name: 'Agent', exact: true }).click();
+    for (let attempt = 0; attempt < 100 && !page.url().includes('mode=agent'); attempt++) await page.waitForTimeout(10);
+    check('Choosing Agent on another page enters /chat with ?mode=agent', page.url().endsWith('/chat?mode=agent') &&
+      await agentSwitch.getByRole('radio', { name: 'Agent', exact: true }).getAttribute('aria-checked') === 'true');
     await page.evaluate(() => window.fixture.mount.sidebar(false));
 
     // Phones: ≡ in the conversation header opens the same sidebar as a drawer in the top layer.
@@ -2994,18 +3009,14 @@ export async function run(existingPage, bundlePath) {
     check('A letter key runs the menu item whose shortcut it shows', await page.evaluate(() => window.fixture.menuShortcut) === 'rename');
     await page.evaluate(() => window.fixture.mount.menu(false));
 
-    // Earlier Agent rounds fold to a 上一轮 bar; a jump to one of their messages unfolds it.
+    // Earlier Agent rounds stay in the transcript: nothing folds a whole exchange into one line.
     await page.evaluate(() => window.fixture.mount.rounds(true));
     const roundsProbe = page.getByTestId('rounds');
-    const roundBar = roundsProbe.getByRole('button', { name: /^上一轮/ });
-    await roundBar.waitFor();
+    await roundsProbe.locator('[data-message-id="round-a1"]').waitFor();
     const roundRows = () => roundsProbe.evaluate(probe => [...probe.querySelectorAll('[data-message-id]')].map(row => row.dataset.messageId).join());
-    check('An earlier Agent round folds to one bar with its question, steps and results', await roundBar.innerText() === '上一轮 · 明年适合换工作吗？ · 2 个步骤已选定 1 份成果' &&
-      await roundBar.getAttribute('aria-expanded') === 'false' && await roundRows() === 'round-u2,round-a2');
-    await roundBar.click();
-    const unfoldedRows = await roundRows();
-    await roundBar.click();
-    check('The bar unfolds the round in place and folds it again', unfoldedRows === 'round-u1,round-a1,round-u2,round-a2' && await roundRows() === 'round-u2,round-a2');
+    check('An earlier Agent round keeps its question, steps and answer in place', await roundsProbe.locator('.agent-round-fold').count() === 0 &&
+      await roundRows() === 'round-u1,round-a1,round-u2,round-a2' &&
+      await roundsProbe.getByText('2027 丁未年适合变动。', { exact: true }).count() === 1);
     const located = async id => {
       const found = await page.evaluate(target => window.fixture.rounds.locate(target), id);
       await page.waitForTimeout(100);
@@ -3015,18 +3026,16 @@ export async function run(existingPage, bundlePath) {
         return Boolean(row && scroller) && Math.abs(row.getBoundingClientRect().top - scroller.getBoundingClientRect().top) < 40;
       }, id);
     };
-    check('Jumping to a message in a folded round unfolds it and scrolls to it', await located('round-a1') && await roundBar.getAttribute('aria-expanded') === 'true');
+    check('Jumping to a message in an earlier round scrolls to it', await located('round-a1'));
     await page.evaluate(() => window.fixture.rounds.setVirtual(true));
-    await roundBar.waitFor();
-    await roundBar.click();
-    check('In the long-conversation list the folded rows stay as hidden rows', await roundBar.getAttribute('aria-expanded') === 'false' &&
-      await roundsProbe.evaluate(probe => [...probe.querySelectorAll('[data-index]')].map(row => row.hidden).join()) === 'false,true,false,false');
-    check('The long-conversation list also unfolds a round to jump into it', await located('round-a1') && await roundRows() === 'round-u1,round-a1,round-u2,round-a2');
+    await until(() => document.querySelectorAll('[data-testid=rounds] [data-index]').length === 4);
+    check('The long-conversation list keeps every round visible', await roundsProbe.evaluate(probe => [...probe.querySelectorAll('[data-index]')].every(row => !row.hidden)) &&
+      await roundsProbe.evaluate(probe => [...probe.querySelectorAll('[data-message-id]')].map(row => row.dataset.messageId).join()) === 'round-u1,round-a1,round-u2,round-a2');
+    check('The long-conversation list also scrolls to an earlier round', await located('round-a1'));
     await page.evaluate(() => window.fixture.rounds.append({ id: 'round-u3', role: 'user', content: '那 2028 年呢？', createdAt: '2026-10-12T09:00:00.000Z' }));
-    await until(() => document.querySelectorAll('[data-testid=rounds] .agent-round-fold').length === 2);
-    const roundBars = roundsProbe.locator('.agent-round-fold');
-    check('A new question folds the round before it and numbers the older one', (await roundBars.allInnerTexts()).join('|') === '第 1 轮 · 明年适合换工作吗？ · 2 个步骤已选定 1 份成果|上一轮 · 你说正官克身是主线，古籍里是怎么讲的？' &&
-      await roundBars.evaluateAll(bars => bars.map(bar => bar.getAttribute('aria-expanded')).join()) === 'true,false' && await roundRows() === 'round-u1,round-a1,round-u3');
+    await until(() => document.querySelectorAll('[data-testid=rounds] [data-index]').length === 5);
+    check('A new question appends to the transcript instead of folding the round before it', await roundsProbe.evaluate(probe => [...probe.querySelectorAll('[data-message-id]')].map(row => row.dataset.messageId).join()) === 'round-u1,round-a1,round-u2,round-a2,round-u3' &&
+      await roundsProbe.locator('.agent-round-fold').count() === 0);
     await page.evaluate(() => window.fixture.mount.rounds(false));
 
     // Chat polish (1.A) on the real message list.

@@ -226,7 +226,7 @@ function SidebarInner() {
                         mode: storedMode,
                         onSelect: (mode) => {
                             persistStoredChatMode(user?.id, mode);
-                            router.push('/chat');
+                            router.push(mode === 'agent' ? '/chat?mode=agent' : '/chat');
                         },
                     }} />
                 </div>

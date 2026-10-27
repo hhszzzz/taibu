@@ -172,6 +172,9 @@ export async function projectDurableConversation(
     parts.forEach(p => attachedIds.add(`${p.type}:${p.id}`));
   };
   const assistantParts = (message: AssistantMessage, id: string, entryId?: string) => {
+    const thinkingMs = message.content.some(part => part.type === "thinking")
+      && typeof message.durationMs === "number" && Number.isFinite(message.durationMs) && message.durationMs >= 0
+      ? message.durationMs : undefined;
     message.content.forEach((part, index) => {
       if (part.type === "text") {
         latestText = part.text;
@@ -179,7 +182,7 @@ export async function projectDurableConversation(
         const visible = splitAgentFollowUps(part.text).text;
         if (visible === part.text || visible) native.push({ type: "text", id: `${id}:${index}`, text: visible });
       }
-      if (part.type === "thinking") native.push({ type: "reasoning", id: `${id}:${index}`, text: part.thinking });
+      if (part.type === "thinking") native.push({ type: "reasoning", id: `${id}:${index}`, text: part.thinking, ...(thinkingMs === undefined ? {} : { durationMs: thinkingMs }) });
       if (part.type === "toolCall" && entryId) {
         const key = agentToolCardId(entryId, part.id);
         const old = previous.get(`tool:${key}`);

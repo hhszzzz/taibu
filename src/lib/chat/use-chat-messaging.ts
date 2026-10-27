@@ -113,7 +113,8 @@ export function useChatMessaging({
     router,
     searchParams,
 }: UseChatMessagingParams) {
-    const agent = useAgentChat(state, userId, refreshViewerState);
+    const initialAgentMode = searchParams.get('mode') === 'agent' ? 'agent' as const : 'plain' as const;
+    const agent = useAgentChat(state, userId, refreshViewerState, initialAgentMode);
     const {
         messages, setMessages,
         inputValue,

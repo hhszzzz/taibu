@@ -13,7 +13,7 @@ export type AgentRunStatus =
   | "failed";
 export type AgentPart =
   | { type: "text"; id: string; text: string }
-  | { type: "reasoning"; id: string; text: string }
+  | { type: "reasoning"; id: string; text: string; durationMs?: number }
   | {
       type: "tool";
       id: string;

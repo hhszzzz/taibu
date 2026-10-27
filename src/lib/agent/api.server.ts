@@ -6,6 +6,7 @@ import { parseAgentMcpServers } from './mcp-client.server';
 import { jsonError, jsonOk, requireUserContext } from "@/lib/api-utils";
 import { systemDb } from "@/lib/db/context.server";
 import { subscribeAgentSignals } from "@/lib/db/listen.server";
+import { subscribeAgentTextDelta } from "./tail-bus.server";
 import { getGlobalAIFeatureGuardResponse } from "@/lib/api/ai-feature-guard";
 import { readFeatureModuleStateFresh } from "@/lib/app-settings";
 import {
@@ -638,8 +639,21 @@ export async function streamAgentTask(request: NextRequest, id: string) {
         return true;
       };
 
+      // 正文增量只是显示加速：挤不进队列就丢掉，浏览器等下一次快照。
+      const sendTail = (frame: string) => {
+        if (closed) return;
+        const bytes = encoder.encode(frame);
+        if (bytes.byteLength > (controller.desiredSize ?? 0)) return;
+        controller.enqueue(bytes);
+      };
       // Subscribed before the first state read: a change that lands while state
       // is read or a snapshot is sent stays queued for the next wait.
+      const tailFrames = { last: 0 };
+      const stopTail = subscribeAgentTextDelta(id, frame => {
+        if (frame.seq <= tailFrames.last) return;
+        tailFrames.last = frame.seq;
+        sendTail(`event: tail\ndata: ${JSON.stringify({ ...frame, runId: id })}\n\n`);
+      });
       const signals = subscribeAgentSignals({ run: id });
       try {
         const initial = await store.getRun(id, auth.user.id);
@@ -683,6 +697,7 @@ export async function streamAgentTask(request: NextRequest, id: string) {
         if (!closed && !request.signal.aborted)
           send('event: error\ndata: {"code":"AGENT_STREAM_INTERRUPTED"}\n\n');
       } finally {
+        stopTail();
         signals.close();
         if (!closed) {
           closed = true;

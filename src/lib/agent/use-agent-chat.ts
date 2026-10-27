@@ -12,6 +12,7 @@ import {
   AgentHttpError,
 } from "./browser-client";
 import { isAgentRunTerminal, type AgentRunView } from "./types";
+import { clearAgentTail, clearAgentTails, pushAgentTail } from "./use-agent-tail";
 import { useNextTaskConfiguration } from '@/lib/chat/use-next-task-configuration';
 import { browserTimeZone } from '@/lib/ai/prompt-time';
 
@@ -35,9 +36,9 @@ export function useAgentChat(
   state: ChatStateReturn,
   userId: string | null,
   refreshViewer: () => Promise<unknown>,
+  initialMode: "agent" | "plain" = "plain",
 ) {
-  const [mode, setModeState] = useState<"agent" | "plain">("plain");
-  // The viewer whose mode is final: their saved choice, else what the first status reply allows.
+  const [mode, setModeState] = useState<"agent" | "plain">(initialMode);
   const [modeOwner, setModeOwner] = useState<string | null>(null);
   const [capabilities, setCapabilities] = useState<AgentCapabilities>(NO_CAPABILITIES);
   const [run, setRun] = useState<AgentRunView | null>(null);
@@ -57,7 +58,6 @@ export function useAgentChat(
   const ownerEpoch = identity.current.epoch;
   const latest = useRef({ state, refreshViewer, userId });
   latest.current = { state, refreshViewer, userId };
-  const explicitMode = useRef(false);
   const completed = useRef(new Set<string>());
   const receivedCursors = useRef(new Map<string, number>());
   const latestRuns = useRef(new Map<string, AgentRunView>());
@@ -84,12 +84,14 @@ export function useAgentChat(
       return;
     latestRuns.current.set(view.conversationId, view);
     receivedCursors.current.set(view.id, view.cursor);
+    setModeState("agent");
     setRun((current) =>
       current?.id === view.id && current.cursor > view.cursor ? current : view,
     );
     latest.current.state.setMessages((messages) =>
       mergeAgentSnapshot(messages, view),
     );
+    if (isAgentRunTerminal(view.status)) clearAgentTail(view.id);
     if (isAgentRunTerminal(view.status) && !completed.current.has(view.id)) {
       completed.current.add(view.id);
       setSyncingRunId(view.id);
@@ -109,15 +111,8 @@ export function useAgentChat(
     if (!userId) return;
     receivedCursors.current.clear();
     latestRuns.current.clear();
+    clearAgentTails();
     completed.current.clear();
-    explicitMode.current = false;
-    try {
-      const saved = localStorage.getItem(`taibu:agent-mode:${userId}`);
-      if (saved === "agent" || saved === "plain") {
-        explicitMode.current = true;
-        setModeState(saved);
-      }
-    } catch {}
     const controller = new AbortController();
     let requestSequence = 0;
     let busy = false;
@@ -132,8 +127,6 @@ export function useAgentChat(
         });
         if (controller.signal.aborted || sequence !== requestSequence) return;
         setCapabilities(value);
-        if (!explicitMode.current)
-          setModeState(value.ready ? "agent" : "plain");
         setModeOwner(userId);
       } catch {
         if (!controller.signal.aborted && sequence === requestSequence) { setCapabilities(NO_CAPABILITIES); setModeOwner(userId); }
@@ -198,7 +191,10 @@ export function useAgentChat(
             epoch = view.epoch;
             if (isCurrent()) adopt(view);
             settled = isAgentRunTerminal(view.status);
-          }, resync => { if (resync.runId === runId) { cursor = resync.cursor; epoch = resync.epoch; } });
+          }, {
+            onResync: resync => { if (resync.runId === runId) { cursor = resync.cursor; epoch = resync.epoch; } },
+            onTail: frame => { if (frame.runId === runId && isCurrent()) pushAgentTail(frame.runId, frame.seq, frame.text); },
+          });
           if (settled) return;
         } catch {
           if (controller.signal.aborted) return;
@@ -215,7 +211,6 @@ export function useAgentChat(
 
   const setMode = useCallback(
     (value: "agent" | "plain") => {
-      explicitMode.current = true;
       setModeState(value);
       setModeOwner(userId);
       if (userId)

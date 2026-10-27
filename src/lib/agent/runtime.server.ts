@@ -21,6 +21,7 @@ import { AgentStore, type AgentRunRow, type AgentCommandRow } from "./store.serv
 import { agentMessageContent, putAgentPart, type AgentCheckpoint, type DomainTool, type PiStreamFn } from "./types";
 import { decryptAgentCredential } from "./credentials.server";
 import { AGENT_PUBLIC_STREAM_ERRORS, createPiModelStream } from "./pi-stream.server";
+import { publishAgentTextDelta } from "./tail-bus.server";
 import { createAgentTools, assertAgentToolAccess } from "./tools.server";
 import { isCurrentAgentCheckpoint } from "./engine";
 import { AgentDurableStorage, agentDurablePersistence } from "./durable-storage.server";
@@ -301,13 +302,22 @@ export async function executeAgentRun(
     // Each model's own window: a member that reasons with a model gets that model's reasoning limits.
     const windows = new Map([...configs.values()].map(selected => [selected.id, selected.id === config.id ? window
       : resolveModelWindow(selected, collaborators.some(member => member.model === selected.id && member.reasoning))]));
+    // 正文增量通道（只用于显示）：模型一吐出文字就推给浏览器，落库仍按快照。
+    const tail = { seq: 0, text: '' };
     const bindings: GuardedAgentModel[] = [...configs.values()].map(selected => {
       const capacity = windows.get(selected.id);
       const model: Model<Api> = selected.id === config.id ? piModel : { ...piModel, id: selected.id, name: selected.name, baseUrl: selected.apiUrl, reasoning: selected.supportsReasoning,
         input: ['text'], thinkingLevelMap: thinkingLevelMap(selected.thinkingLevels), contextWindow: capacity?.maxContext ?? 0, maxTokens: selected.defaultMaxTokens ?? 4096 };
       return { model, authorize: options => authorizeModel(selected, options?.reasoning !== undefined),
         stream: injected?.streamFn ?? createPiModelStream(selected, { reasoning: selected.supportsReasoning, apiKey,
-          ...(selected.id === config.id && selected.supportsVision && !run.input.customProvider ? { resolveImages: (messages: Parameters<typeof resolveAttachmentImages>[3]) => resolveAttachmentImages(store.db,run.user_id,run.conversation_id,messages) } : {}) }) };
+          ...(selected.id === config.id && selected.supportsVision && !run.input.customProvider ? { resolveImages: (messages: Parameters<typeof resolveAttachmentImages>[3]) => resolveAttachmentImages(store.db,run.user_id,run.conversation_id,messages) } : {}),
+          ...(selected.id === config.id ? {
+            onAnswerStart: () => { tail.text = ''; },
+            onAnswerDelta: (delta: string) => {
+              tail.text += delta;
+              void publishAgentTextDelta(run.id, ++tail.seq, tail.text);
+            },
+          } : {}) }) };
     });
     const [primary, ...additional] = bindings;
     const models = createGuardedAgentModels(primary.model, primary.stream, primary.authorize, additional);
@@ -573,7 +583,7 @@ export async function executeAgentRun(
         toolExecution: "sequential", steeringMode: "all", followUpMode: "all",
         // Messages the user queued behind a failed answer start the next answer instead of waiting for another input.
         afterFailedRun: "continue",
-        progress: { partialIntervalMs: 200, outputIntervalMs: 200 },
+        progress: { partialIntervalMs: 80, outputIntervalMs: 200 },
         compaction: {
           enabled: true, ...policies.get(config.id)!,
           modelOverrides: Object.fromEntries([...policies].filter(([id]) => id !== config.id).map(([id, policy]) => [`taibu/${id}`, policy])),

@@ -46,11 +46,11 @@ export function ModeSwitch({ className = 'chat-mode-switch', fallback }: { class
                 select(next);
                 requestAnimationFrame(() => group.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus());
             }}>
-            <button type="button" role="radio" aria-checked={state.mode === 'plain'} aria-label={LABELS.plain} title="普通对话：直接问答，不排盘"
+            <button type="button" role="radio" aria-checked={state.mode === 'plain'} aria-label={LABELS.plain}
                 tabIndex={state.mode === 'plain' ? 0 : -1} disabled={state.plainDisabled && state.mode !== 'plain'} onClick={() => select('plain')}>
                 <Tooltip label="对话" side="bottom"><span className="chat-mode-switch-icon"><MessagesSquare size={16} strokeWidth={1.8} aria-hidden="true" /></span></Tooltip>
             </button>
-            <button type="button" role="radio" aria-checked={state.mode === 'agent'} aria-label={LABELS.agent} title="Agent 会排盘、检索并在工作区展示"
+            <button type="button" role="radio" aria-checked={state.mode === 'agent'} aria-label={LABELS.agent}
                 tabIndex={state.mode === 'agent' ? 0 : -1} disabled={state.agentDisabled && state.mode !== 'agent'} onClick={() => select('agent')}>
                 <Tooltip label="Agent" side="bottom"><span className="chat-mode-switch-icon"><AgentIcon size={16} /></span></Tooltip>
             </button>

@@ -221,6 +221,9 @@ export interface AgentModelStreamSettings {
   /** Replaces attachment references with their images, for a vision model. */
   resolveImages?: (messages: Message[]) => Promise<Message[]>;
   fetch?: typeof globalThis.fetch;
+  /** Live answer text, for the display-only delta channel; never used for durability. */
+  onAnswerStart?: () => void;
+  onAnswerDelta?: (delta: string) => void;
 }
 
 /**
@@ -282,6 +285,8 @@ export function createPiModelStream(config: AIModelConfig, settings: AgentModelS
           const base = message.content.length;
           let shown = false;
           for await (const event of inner) {
+            if (event.type === "text_start") settings.onAnswerStart?.();
+            else if (event.type === "text_delta") settings.onAnswerDelta?.(event.delta);
             if (event.type === "start" || event.type === "done" || event.type === "error") continue;
             message.content.length = base;
             message.content.push(...event.partial.content);
@@ -298,6 +303,7 @@ export function createPiModelStream(config: AIModelConfig, settings: AgentModelS
             requestSignal.throwIfAborted();
             const kind = failureKind(result);
             // Never restart a provider after part of a response was shown, nor a recovery request.
+            settings.onAnswerStart?.();
             if (shown || nudge !== undefined || options?.signal?.aborted || ++failures >= 3) {
               message.content.length = base;
               message.content.push(...result.content);
@@ -312,6 +318,7 @@ export function createPiModelStream(config: AIModelConfig, settings: AgentModelS
           if (callsTools(message) || hasVisibleText(message)) {
             if (nudge === undefined && isProgressOnlyTurn(result)) {
               nudge = PROGRESS_TURN_NUDGE;
+              settings.onAnswerStart?.();
               continue;
             }
             break;

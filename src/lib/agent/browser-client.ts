@@ -44,12 +44,20 @@ export function orderAgentMessagesForDisplay(messages: ChatMessage[], currentRun
   return messages.flatMap((message, index) => moveAfter.has(index) ? []
     : insertAfter.has(index) ? [message, insertAfter.get(index)!] : [message]);
 }
+export type AgentTail = { runId: string; seq: number; text: string };
+
+export type AgentStreamHandlers = {
+  onResync?: (resync: AgentResync) => void;
+  /** 正文增量（只用于显示）；快照永远更权威。 */
+  onTail?: (frame: AgentTail) => void;
+  idleTimeoutMs?: number;
+};
+
 export async function readAgentStream(
   response: Response,
   signal: AbortSignal,
   onRun: (run: AgentRunView) => void,
-  onResync?: (resync: AgentResync) => void,
-  idleTimeoutMs = AGENT_STREAM_IDLE_MS,
+  { onResync, onTail, idleTimeoutMs = AGENT_STREAM_IDLE_MS }: AgentStreamHandlers = {},
 ) {
   if (!response.ok || !response.body) throw new Error("任务连接中断");
   const reader = response.body.getReader(),
@@ -82,6 +90,11 @@ export async function readAgentStream(
         if (!data) continue;
         const event = frame.split(/\r?\n/u).find(line => line.startsWith('event:'))?.slice(6).trim();
         if (event === 'error') throw new Error('AGENT_STREAM_INTERRUPTED');
+        if (event === 'tail') {
+          const tail = JSON.parse(data) as AgentTail;
+          if (typeof tail.runId === 'string' && Number.isSafeInteger(tail.seq) && typeof tail.text === 'string') onTail?.(tail);
+          continue;
+        }
         if (event === 'resync') {
           const resync = JSON.parse(data) as AgentResync;
           if (resync.version === 1 && typeof resync.runId === 'string' && Number.isSafeInteger(resync.cursor) && resync.cursor >= 0 && Number.isSafeInteger(resync.epoch) && resync.epoch >= 0) onResync?.(resync);

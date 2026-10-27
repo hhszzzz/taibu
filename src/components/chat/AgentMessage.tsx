@@ -13,6 +13,7 @@ import { AgentTodoProgress } from './agent/AgentTodoProgress';
 import { AgentEvidenceChip } from './agent/AgentEvidenceChip';
 import { AgentArchiveProposalCard, AgentArchiveReceipt } from './agent/AgentArchiveCards';
 import { useAgentResultWorkspace } from './agent/AgentResultContext';
+import { useAgentTailText } from '@/lib/agent/use-agent-tail';
 import { groupAgentParts } from './agent/presentation';
 
 /**
@@ -50,6 +51,10 @@ export function AgentMessage({ data, actions }: { data: AgentMessageData; action
   const active = ['queued', 'running', 'awaiting_input', 'cancelling'].includes(data.status);
   const summarizing = data.status === 'running' && data.runtime?.model.name && collaborationProgress(data.parts) ? data.runtime.model.name : null;
   const lastText = groups.findLastIndex(group => group.type === 'content' && group.part.type === 'text');
+  const tail = useAgentTailText(data.runId);
+  const lastTextPart = lastText < 0 || groups[lastText].type !== 'content' ? undefined : groups[lastText].part;
+  // 增量只承接已提交的正文：快照还没走到这一块时按快照显示。
+  const liveText = lastTextPart?.type === 'text' && tail.length > lastTextPart.text.length && tail.startsWith(lastTextPart.text) ? tail : undefined;
   const hasSearchStep = data.parts.some(part => part.type === 'tool' && (part.name === 'web_search' || part.name === 'search_knowledge'));
   const archive = useMemo(() => getArchiveEntries(data.parts), [data.parts]);
   return (
@@ -71,7 +76,8 @@ export function AgentMessage({ data, actions }: { data: AgentMessageData; action
         const part = group.part;
         if (part.type === "text") {
           const streaming = data.status === 'running' && index === groups.length - 1 && index === lastText;
-          return <div key={part.id} className={`chat-answer${streaming ? ' is-streaming' : ''}`}><MarkdownContent content={part.text} className="chat-prose" streaming={streaming} citations={citations} /></div>;
+          const text = index === lastText && liveText ? liveText : part.text;
+          return <div key={part.id} className={`chat-answer${streaming ? ' is-streaming' : ''}`}><MarkdownContent content={text} className="chat-prose" streaming={streaming} citations={citations} /></div>;
         }
         if (part.type === "source") {
           // 命中的来源现在列在对应检索调用的框里；只有检索调用不在这条消息里的旧记录才在正文下单独列出。

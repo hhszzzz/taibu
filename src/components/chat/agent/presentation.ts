@@ -1,5 +1,5 @@
 import type { ChatMessage } from '@/types';
-import { isAgentRunTerminal, type AgentMessageData, type AgentPart, type AgentRunStatus, type AgentRuntimeInfo } from '@/lib/agent/types';
+import { type AgentMessageData, type AgentPart, type AgentRunStatus, type AgentRuntimeInfo } from '@/lib/agent/types';
 import { getAgentToolFamily, type AgentToolFamily, AGENT_ARCHIVE_TOOLS, AGENT_BACKGROUND_TOOL, AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_SUBMIT_PLAN_TOOL, AGENT_TOOL_SEARCH_TOOL, isAgentChartTool, isAgentMemberTool } from '@/lib/agent/tool-catalog';
 import { getAgentAttachmentRead, getAgentCalculation, getAgentChart, getAgentConversationHits, getAgentDataResults, getAgentMethod, getAgentNotes, getAgentScript, getAgentSearchResults, getAgentToolArtifactId, getAgentToolQuestions, type AgentChart } from '@/lib/agent/tool-presentation';
 import { AGENT_ARCHIVE_KIND_LABELS, getAgentArchiveProposal, getAgentArchiveRecord } from '@/lib/agent/archive';
@@ -19,16 +19,25 @@ export type AgentArtifact = Extract<AgentPart, { type: 'artifact' }>;
 export type AgentTool = Extract<AgentPart, { type: 'tool' }>;
 export type AgentProcessPart = Extract<AgentPart, { type: 'tool' | 'reasoning' | 'question' }>;
 
-/** Preserve transcript order: narration separates consecutive process groups. */
+/**
+ * 按发生顺序分块：连续的过程步骤（思考、工具、提问）合成一块，中间说的话原样留在块与块之间，
+ * 所以读起来是「说一句 → 调工具 → 再说一句 → 再调工具」。
+ */
 export function groupAgentParts(parts: AgentPart[]) {
     const groups: Array<{ type: 'activity'; id: string; parts: AgentProcessPart[] } | { type: 'content'; id: string; part: Exclude<AgentPart, AgentProcessPart> }> = [];
+    let pending: AgentProcessPart[] = [];
+    const flush = () => {
+        if (pending.length) groups.push({ type: 'activity', id: pending[0].id, parts: pending });
+        pending = [];
+    };
     for (const part of parts) {
-        if (part.type === 'tool' || part.type === 'reasoning' || part.type === 'question') {
-            const last = groups.at(-1);
-            if (last?.type === 'activity') last.parts.push(part);
-            else groups.push({ type: 'activity', id: part.id, parts: [part] });
-        } else groups.push({ type: 'content', id: part.id, part });
+        if (part.type === 'tool' || part.type === 'reasoning' || part.type === 'question') pending.push(part);
+        else {
+            flush();
+            groups.push({ type: 'content', id: part.id, part });
+        }
     }
+    flush();
     return groups;
 }
 
@@ -373,6 +382,17 @@ function collaborationMembers(tool: AgentTool): number {
     return Array.isArray(input.collaborators) ? input.collaborators.length : 0;
 }
 
+/** 思考秒数：只统计「只想不说」的那几次模型调用，显示在过程统计最前面。 */
+export function summarizeThinkingTime(parts: readonly AgentProcessPart[]): string | null {
+    const ms = parts.reduce((total, part) => part.type === 'reasoning' ? total + (part.durationMs ?? 0) : total, 0);
+    if (ms < 1000) return null;
+    const seconds = Math.round(ms / 1000);
+    if (seconds < 60) return `已思考 ${seconds} 秒`;
+    const minutes = Math.floor(seconds / 60);
+    const rest = seconds % 60;
+    return rest ? `已思考 ${minutes} 分 ${rest} 秒` : `已思考 ${minutes} 分`;
+}
+
 export function summarizeAgentActivity(tools: readonly AgentTool[], questionCount: number, failed: number): string {
     const counts = new Map<AgentToolFamily, number>();
     let members = 0;
@@ -491,59 +511,6 @@ export function getAgentTaskDuration(createdAt: string | undefined, data: Pick<A
     const ends = [...data.runtime?.responses ?? [], ...data.parts.flatMap(part => part.type === 'tool' ? [part] : [])]
         .flatMap(timing => typeof timing.endedAt === 'number' && Number.isFinite(timing.endedAt) && timing.endedAt >= started ? [timing.endedAt] : []);
     return ends.length ? Math.max(...ends) - started : null;
-}
-
-/** An ended earlier Agent round as its fold bar shows it: 上一轮 · 问题 · 7 个步骤 · 1 分 46 秒. */
-export interface AgentRoundSummary {
-    /** The run of the reply that ends the round. */
-    id: string;
-    /** 上一轮 just before the latest round, 第 N 轮 further back. */
-    label: string;
-    /** The question that started the round on one line, or empty. */
-    question: string;
-    status: AgentRunStatus;
-    steps: number;
-    durationMs: number | null;
-    /** Results the Agent selected before answering, as 本任务成果 lists them. */
-    results: number;
-}
-export interface AgentRoundFold { round: AgentRoundSummary; /** The round's first row, which carries the bar. */ first: boolean }
-
-const ROUND_QUESTION_LENGTH = 120;
-
-/**
- * Earlier Agent rounds fold to one bar so the latest round reads on its own.
- * A round runs from the message after the previous reply through the reply
- * that ends it. Only rounds an ended Agent reply closes, with a message after
- * them, fold; plain chat rounds still count toward 第 N 轮. Keyed by message id.
- */
-export function getAgentRoundFolds(messages: readonly ChatMessage[]): ReadonlyMap<string, AgentRoundFold> {
-    const rounds: ChatMessage[][] = [];
-    let current: ChatMessage[] = [];
-    for (const message of messages) {
-        current.push(message);
-        if (message.role === 'assistant') { rounds.push(current); current = []; }
-    }
-    if (current.length) rounds.push(current);
-    const folds = new Map<string, AgentRoundFold>();
-    rounds.forEach((round, index) => {
-        const reply = round[round.length - 1];
-        const data = reply.role === 'assistant' ? reply.agent : undefined;
-        // Rows are found by id, so a round with an unsaved row stays open.
-        if (!data || index === rounds.length - 1 || !isAgentRunTerminal(data.status) || round.some(message => !message.id)) return;
-        const question = round.find(message => message.role === 'user')?.content.replace(/\s+/gu, ' ').trim() ?? '';
-        const summary: AgentRoundSummary = {
-            id: data.runId,
-            label: index === rounds.length - 2 ? '上一轮' : `第 ${index + 1} 轮`,
-            question: [...question].slice(0, ROUND_QUESTION_LENGTH).join(''),
-            status: data.status,
-            steps: getAgentSteps(data.parts).length,
-            durationMs: getAgentTaskDuration(reply.createdAt, data),
-            results: data.parts.filter(part => part.type === 'artifact' && getAgentArtifactHref(part) !== null).length,
-        };
-        round.forEach((message, position) => folds.set(message.id, { round: summary, first: position === 0 }));
-    });
-    return folds;
 }
 
 export function formatAgentValue(value: unknown): string {

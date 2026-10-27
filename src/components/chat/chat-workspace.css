@@ -259,17 +259,6 @@
 .agent-compaction summary { cursor: pointer; }
 .agent-compaction[open] summary { margin-bottom: 8px; }
 .agent-activity-group { display: flex; min-width: 0; flex-direction: column; gap: 14px; }
-/* 上一轮: an ended earlier round folded to one line above the latest round. */
-/* 折叠轮次行 = cds TurnStatus：32px 高（h-control）/ 文字 14px·20px / 圆角 8 / hover 5% 底 + 操作显形 */
-.agent-round-fold { display: flex; width: 100%; min-width: 0; align-items: center; gap: 8px; height: 32px; margin: 0 -8px; padding: 0 12px; border: 0; border-radius: 8px; color: var(--foreground-secondary); font-size: calc(14 / 16 * 1rem); line-height: calc(20 / 16 * 1rem); text-align: left; }
-.agent-round-fold:hover { background: var(--fill-field); color: var(--foreground); }
-.agent-round-fold .agent-round-fold-actions { opacity: 0; transition: opacity var(--duration-fast) var(--ease-out); }
-.agent-round-fold:hover .agent-round-fold-actions, .agent-round-fold:focus-within .agent-round-fold-actions { opacity: 1; }
-.agent-round-fold[aria-expanded="true"] { margin-bottom: 20px; }
-.agent-round-fold > svg { flex-shrink: 0; }
-.agent-round-fold-text { min-width: 0; flex: 1; overflow: hidden; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
-.agent-round-fold-results { flex-shrink: 0; padding: 0 5px; border: var(--hairline) solid var(--hairline-color); border-radius: 5px; font-size: calc(11.5 / 16 * 1rem); white-space: nowrap; }
-.agent-round-fold:hover .agent-round-fold-results { border-color: var(--border-hover); }
 /* 任务过程 = claude TurnStatus（本地克隆站 session-view 源码逐值）：
    折叠行 24px（h-6）/ 14px·20px / 右让 52px 操作道 / 行尾 12px 内联 chevron 旋转 90°；
    展开是素净步骤行（20px·14px muted），没有卡片、没有圆标、没有家族标签。 */

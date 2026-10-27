@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ChatMessage } from '../types';
-import type { AgentPart, AgentRunStatus } from '../lib/agent/types';
+import type { AgentPart } from '../lib/agent/types';
 import { randomUUID } from 'node:crypto';
 import { executeTool, buildToolSuccessPayload, listToolDefinitions } from 'taibu-core/mcp';
 import { getAgentChart } from '../lib/agent/tool-presentation';
@@ -10,8 +10,8 @@ import { buildAgentWorkspace } from '../lib/agent/workspace';
 import {
     collectAgentArtifacts, describeAgentCallNote, describeAgentChartRules, describeAgentChartSteps, describeAgentChartSubject, describeAgentStep, formatAgentToolDuration,
     getAgentStepNumbers, getAgentSteps, getAgentScriptCalls, getAgentLiveLine, getAgentArtifactHref, getAgentLocatedPositions, getAgentReadingState, getAgentToolState,
-    getAgentResponseTiming, getAgentRoundFolds, getAgentTaskDuration, getAgentTaskSpan, getDayunWindow, groupAgentParts, getAgentActivityLabel, getAgentEvidenceSummary, stripLeadingTitle,
-    summarizeAgentProcess, summarizeAgentActivity, summarizeAgentTool, formatMemberNames, AGENT_TOOL_FAMILY_LABELS, type AgentArtifact, type AgentTool,
+    getAgentResponseTiming, getAgentTaskDuration, getAgentTaskSpan, getDayunWindow, groupAgentParts, getAgentActivityLabel, getAgentEvidenceSummary, stripLeadingTitle,
+    summarizeAgentProcess, summarizeAgentActivity, summarizeAgentTool, summarizeThinkingTime, formatMemberNames, AGENT_TOOL_FAMILY_LABELS, type AgentArtifact, type AgentTool,
 } from '../components/chat/agent/presentation';
 import { formatAgentElapsed } from '../components/chat/agent/AgentHeaderStatus';
 
@@ -89,6 +89,15 @@ test('response measurements survive JSON history without counting duplicate IDs 
     assert.equal(getAgentTaskSpan({ endedAt: 6500 }), null);
     assert.equal(getAgentTaskSpan({ startedAt: 2000, endedAt: 1000 }), null);
     assert.equal(getAgentTaskSpan({ startedAt: NaN, endedAt: 1000 }), null);
+});
+
+test('a turn splits into per-batch blocks so what is said between calls stays between them', () => {
+    const parts = [{ type: 'reasoning', id: 'think', text: 'thinking', durationMs: 4000 }, { type: 'tool', id: 'tool', name: 'almanac', title: '黄历查询', status: 'completed' }, { type: 'text', id: 'narration', text: '再查一下大运' }, { type: 'reasoning', id: 'think2', text: 'thinking', durationMs: 2000 }, { type: 'tool', id: 'tool2', name: 'bazi_dayun', title: '大运', status: 'completed' }, { type: 'text', id: 'answer', text: '查到了' }] as const;
+    const groups = groupAgentParts([...parts]);
+    assert.deepEqual(groups.map(group => group.type === 'content' ? group.part.id : 'activity:' + group.parts.map(part => part.id).join('+')),
+        ['activity:think+tool', 'narration', 'activity:think2+tool2', 'answer'], '每一批工具一块，中间的句子留在两块之间');
+    const first = groups[0];
+    assert.equal(summarizeThinkingTime(first?.type === 'activity' ? first.parts : []), '已思考 4 秒');
 });
 
 test('Activity grouping preserves narration, question IDs and tool ordering', () => {
@@ -332,52 +341,6 @@ test('a guide shown under its own title drops only a leading heading that repeat
     assert.equal(stripLeadingTitle('正文\n# 八字命理解读指引', '八字命理解读指引'), '正文\n# 八字命理解读指引', 'a later heading stays');
 });
 
-const ROUND_START = '2026-10-12T08:00:00.000Z';
-const ask = (id: string, content: string): ChatMessage => ({ id, role: 'user', content, createdAt: ROUND_START });
-const reply = (id: string, runId: string, status: AgentRunStatus, parts: AgentPart[] = []): ChatMessage => ({ id, role: 'assistant', content: '', createdAt: ROUND_START, agent: { version: 1, runId, status, parts } });
-
-test('an earlier Agent round folds to a 上一轮 bar summarising what its task did', () => {
-    const started = Date.parse(ROUND_START);
-    const parts: AgentPart[] = [
-        { type: 'tool', id: 'plan', name: 'todo_write', title: '计划', status: 'completed' },
-        { type: 'tool', id: 'chart', name: 'bazi', title: '八字排盘', status: 'completed', endedAt: started + 60_000 },
-        { type: 'tool', id: 'luck', name: 'bazi_dayun', title: '大运', status: 'completed', endedAt: started + 106_000 },
-        chart,
-        { type: 'artifact', id: 'unlinked', title: '无处打开', chartType: 'unknown', chartId: 'x' },
-    ];
-    const folds = getAgentRoundFolds([ask('u1', '  明年适合\n换工作吗？ '), reply('a1', 'run-1', 'completed', parts), ask('u2', '古籍里是怎么讲的？'), reply('a2', 'run-2', 'running')]);
-    assert.deepEqual([...folds.keys()], ['u1', 'a1'], 'the latest round stays open');
-    assert.deepEqual(folds.get('u1'), { first: true, round: { id: 'run-1', label: '上一轮', question: '明年适合 换工作吗？', status: 'completed', steps: 2, durationMs: 106_000, results: 1 } },
-        'plan updates are not steps and only results that open somewhere count');
-    assert.equal(folds.get('a1')?.first, false);
-    assert.equal(folds.get('a1')?.round, folds.get('u1')?.round, 'one summary per round');
-});
-
-test('rounds fold only once ended and followed, and number back from the latest', () => {
-    const plain: ChatMessage = { id: 'p0', role: 'assistant', content: '普通回答', createdAt: ROUND_START };
-    const messages = [
-        ask('u0', '你好'), plain,
-        ask('u1', '排盘'), reply('a1', 'run-1', 'failed'),
-        ask('u2', '看大运'), ask('u2b', '补充：公历'), reply('a2', 'run-2', 'cancelled'),
-        ask('u3', '再看流年'),
-    ];
-    const folds = getAgentRoundFolds(messages);
-    assert.deepEqual([...folds].map(([id, fold]) => [id, fold.round.label, fold.first]), [
-        ['u1', '第 2 轮', true], ['a1', '第 2 轮', false],
-        ['u2', '上一轮', true], ['u2b', '上一轮', false], ['a2', '上一轮', false],
-    ], 'a question waiting for its reply is the latest round; plain rounds count but never fold');
-    assert.equal(folds.get('a2')?.round.question, '看大运', 'answers given during the task do not rename it');
-    assert.equal(folds.get('a1')?.round.status, 'failed');
-    assert.equal(folds.get('a1')?.round.durationMs, null, 'nothing measured, no duration');
-
-    assert.equal(getAgentRoundFolds([ask('u1', '排盘'), reply('a1', 'run-1', 'completed')]).size, 0, 'the only round is the latest');
-    assert.equal(getAgentRoundFolds([ask('u1', '排盘'), reply('a1', 'run-1', 'awaiting_input'), ask('u2', '出生时间是早上')]).size, 0, 'a live task never folds');
-    assert.equal(getAgentRoundFolds([ask('', '未保存'), reply('a1', 'run-1', 'completed'), ask('u2', '下一问')]).size, 0, 'rows without an id stay open');
-    const long = getAgentRoundFolds([ask('u1', '😀'.repeat(130)), reply('a1', 'run-1', 'completed'), ask('u2', '下一问')]);
-    assert.equal(long.get('u1')?.round.question, '😀'.repeat(120), 'long questions are cut by characters, not UTF-16 units');
-    assert.equal(getAgentRoundFolds([reply('a1', 'run-1', 'completed'), ask('u2', '下一问')]).get('a1')?.round.question, '', 'a round can start with the reply');
-});
-
 test('the AI-safe liuyao board keeps its body, global shensha and hexagram interplay for the workspace', async () => {
   const input = { question: '本月事业运势如何？', yongShenTargets: ['官鬼'], method: 'select', hexagramName: '天火同人', changedHexagramName: '乾为天', date: '2026-02-10T09:30:00' };
   const rendered = buildToolSuccessPayload('liuyao', await executeTool('liuyao', input), { detailLevel: 'full' });
@@ -403,4 +366,13 @@ test('the workspace board reads the full-detail reading even when the model only
   const strengths = (output: unknown) => { const value = tool(output); return value?.kind === 'liuyao' ? value.chart.六爻.map(line => line.旺衰) : null; };
   assert.ok(strengths({ result: model })?.every(strength => !strength), 'the default level carries no strength');
   assert.ok(strengths({ artifactId: 'a', result: model, board: full })?.every(Boolean), 'the board prefers the full-detail reading');
+});
+
+test('thinking time counts only the calls that thought without answering', () => {
+    const reasoning = (id: string, durationMs?: number) => ({ type: 'reasoning' as const, id, text: '草稿', ...(durationMs === undefined ? {} : { durationMs }) });
+    assert.equal(summarizeThinkingTime([reasoning('a', 4200), reasoning('b', 2600)]), '已思考 7 秒');
+    assert.equal(summarizeThinkingTime([reasoning('a', 65_000)]), '已思考 1 分 5 秒');
+    assert.equal(summarizeThinkingTime([reasoning('a', 120_000)]), '已思考 2 分');
+    assert.equal(summarizeThinkingTime([reasoning('a', 400)]), null, 'under a second is not worth a line');
+    assert.equal(summarizeThinkingTime([reasoning('a')]), null, 'legacy runs recorded no duration');
 });

@@ -413,7 +413,11 @@ export function useChatMessaging({
             }
             if (isNewConversation) {
                 const newId = await createDraftConversation(draftTitle || DEFAULT_CONVERSATION_TITLE, isCurrent);
-                if (!newId) { showToast('error', '创建对话失败，请重试'); return; }
+                if (!newId) {
+                    if (!isCurrent()) return;
+                    showToast('error', '创建对话失败，请重试');
+                    return;
+                }
                 conversationId = newId;
                 isCurrent = agent.captureConversation(newId);
             }
@@ -503,6 +507,9 @@ export function useChatMessaging({
                 if (newId) {
                     conversationId = newId;
                     isCurrent = agent.captureConversation(newId);
+                } else if (!isCurrent()) {
+                    // The conversation was created but the reader switched away while it was being created.
+                    return;
                 }
             }
             if (!conversationId) { showToast('error', '创建对话失败，请重试'); return; }

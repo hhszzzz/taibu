@@ -171,6 +171,13 @@ export function AgentEvalPanel({ active = true }: { active?: boolean }) {
                 '/api/admin/agent-evals/cases', { method: 'GET' }, { fallbackMessage: '读取测评题库失败' },
             );
             setCases(data.cases);
+            // A case disabled or deleted here can no longer be launched; drop it from the selection instead of
+            // leaving an invisible choice the server would refuse.
+            setSelectedCases(current => {
+                const enabled = new Set(data.cases.filter(item => item.enabled !== false).map(item => item.id));
+                const next = current.filter(id => enabled.has(id));
+                return next.length === current.length ? current : next;
+            });
             return data.cases;
         } catch (reason) {
             setError(getErrorMessage(reason, '读取测评题库失败'));
@@ -242,9 +249,11 @@ export function AgentEvalPanel({ active = true }: { active?: boolean }) {
             if (document.hidden) return;
             void loadRun(selectedRunId);
             void loadResults(selectedRunId);
+            // The runs table reads its progress and status from the overview; keep the open run's row in step.
+            void loadOverview();
         }, RUN_REFRESH_MS);
         return () => window.clearInterval(timer);
-    }, [active, loadResults, loadRun, run, selectedRunId]);
+    }, [active, loadOverview, loadResults, loadRun, run, selectedRunId]);
 
     useEffect(() => {
         if (!run) return;
@@ -283,7 +292,8 @@ export function AgentEvalPanel({ active = true }: { active?: boolean }) {
             const data = await requestBrowserData<{ run: AgentEvalRunView }>(
                 `/api/admin/agent-evals/${encodeURIComponent(id)}/cancel`, { method: 'POST' }, { fallbackMessage: '取消测评失败' },
             );
-            setRun(data.run);
+            // Cancelling a row that is not open must not replace the open run's detail.
+            setRun(current => current?.id === id ? data.run : current);
             await loadOverview();
         } catch (reason) {
             setRunError(getErrorMessage(reason, '取消测评失败'));

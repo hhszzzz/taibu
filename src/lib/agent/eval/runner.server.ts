@@ -411,10 +411,11 @@ export async function runAgentEvalCase(options: RunAgentEvalCaseOptions): Promis
   stage = 'quality-judge';
   outcome.stage = stage;
   try {
+    // The judge builds its own stream unless a test injects one: its factory pins the judging temperature.
     const scored = await judgeAgentEvaluation(
       options.judge.config,
       { question: evalCase.prompt, assertions: evalCase.assertions, answer: outcome.answer, core: outcome.core },
-      options.judge.stream ?? createPiModelStream(options.judge.config, { reasoning: false }),
+      options.judge.stream,
       options.signal,
     );
     outcome.quality = scored.quality;

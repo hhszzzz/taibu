@@ -63,7 +63,7 @@ export default function TarotPage() {
     return (
         <>
             <div className="min-h-full bg-background text-foreground">
-                <div className="mx-auto flex w-full max-w-[944px] flex-col gap-6 px-4 pt-2 pb-10 lg:gap-8 lg:px-8 lg:pt-14 lg:pb-16">
+                <div className="mx-auto flex w-full max-w-[944px] flex-col gap-6 px-4 pt-2 pb-10 lg:gap-8 lg:px-8 lg:pt-8 lg:pb-16">
                     {/* 页面标题：移动端由顶栏显示标题，这里只保留副标题 */}
                     <header className="flex flex-col gap-2">
                         <h1 className="hidden font-display text-[2rem] font-normal leading-tight lg:block">塔罗占卜</h1>

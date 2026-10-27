@@ -2640,15 +2640,17 @@ export async function run(existingPage, bundlePath) {
     check('Restoring the default width returns the workspace to its content width',
       await workspacePanel.evaluate(el => Math.round(el.getBoundingClientRect().width)) === widthBeforeDrag);
     await resizer.focus();
-    await page.keyboard.press('ArrowLeft');
+    // 向左键是加宽；默认宽度已经贴近上限时会被夹住，这里用向右键（收窄）验证键盘调整。
+    await page.keyboard.press('ArrowRight');
     await renderBarrier();
-    const widened = await workspacePanel.evaluate(el => Math.round(el.getBoundingClientRect().width));
+    const narrowed = await workspacePanel.evaluate(el => Math.round(el.getBoundingClientRect().width));
     // 热区在夹具里没有尺寸（不加载应用 CSS），直接派发双击。
     await resizer.dispatchEvent('dblclick');
     await renderBarrier();
+    const restoredWidth = await workspacePanel.evaluate(el => Math.round(el.getBoundingClientRect().width));
+    const separatorValue = await resizer.getAttribute('aria-valuenow');
     check('Double-clicking the resizer restores the default width and the separator reports the real width',
-      widened === widthBeforeDrag + 24 && await workspacePanel.evaluate(el => Math.round(el.getBoundingClientRect().width)) === widthBeforeDrag &&
-      await resizer.getAttribute('aria-valuenow') === String(widthBeforeDrag));
+      narrowed === widthBeforeDrag - 24 && restoredWidth === widthBeforeDrag && separatorValue === String(widthBeforeDrag));
     // The desktop layout starts at 1024 (the site sidebar's breakpoint): narrower desktop windows keep the panel docked,
     // and only below it does the workspace become a dialog, which has no room to grow.
     await page.setViewportSize({ width: 1100, height: 1000 });

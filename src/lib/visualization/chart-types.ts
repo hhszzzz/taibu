@@ -326,6 +326,18 @@ export type ChartData =
 
 export type ChartType = ChartData['chartType'];
 
+/** 运行时清单：提示词列出的类型与渲染器认的类型都以此为准。 */
+export const CHART_TYPES = [
+  'life_fortune_trend', 'fortune_radar', 'wuxing_energy', 'life_timeline',
+  'personality_petal', 'fortune_calendar', 'compatibility_gauge', 'divination_verdict',
+  'mbti_spectrum', 'tarot_elements', 'yearly_sparklines', 'physiognomy_annotation',
+  'fortune_comparison', 'cross_system', 'dream_association',
+] as const satisfies readonly ChartType[];
+
+export function isChartType(value: unknown): value is ChartType {
+  return typeof value === 'string' && (CHART_TYPES as readonly string[]).includes(value);
+}
+
 // ─── Source-to-ChartType mapping (single source of truth) ───
 // Used by both the chat prompt-builder (mention-driven) and divination route configs.
 

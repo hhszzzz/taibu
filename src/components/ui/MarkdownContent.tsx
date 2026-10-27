@@ -19,7 +19,7 @@ import { MarkdownBlocks, markdownPlugins, pendingChartFence } from '@/lib/chat/m
 import { remarkCitations } from '@/lib/chat/markdown-citations';
 import { CodeBlock, MarkdownTable } from './MarkdownTools';
 import { markdownLinkProps } from '@/lib/chat/markdown-links';
-import type { ChartData } from '@/lib/visualization/chart-types';
+import { isChartType, type ChartData } from '@/lib/visualization/chart-types';
 
 const ChartRenderer = lazy(() => import('@/components/visualization/ChartRenderer'));
 
@@ -92,6 +92,8 @@ const staticComponents: Partial<Components> = {
         if (!isInline && match?.[1] === 'chart') {
             try {
                 const chartData = JSON.parse(String(children).trim()) as ChartData;
+                // 模型自造的类型（network、bar…）不画，按普通代码块原样显示，别给用户一张「不支持」的卡片。
+                if (!isChartType(chartData.chartType)) return <CodeBlock code={String(children)} language="chart" />;
                 return (
                     <div className="my-4 max-w-full overflow-x-auto">
                         <Suspense fallback={<div className="py-4 text-center text-sm text-foreground-secondary">加载图表...</div>}>

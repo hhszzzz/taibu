@@ -511,7 +511,7 @@ button.agent-evidence-chip:hover { border-color: var(--accent); color: var(--acc
    列为 in-flow、挤压对话列而不盖住内容；任务态默认 320，含原生盘面时与对话列平分，拖拽可在 280–780 间调宽，始终给阅读列留 ≥360px。
    max-width 的保留值必须与 AgentWorkspacePanel 的拖拽上限一致（100% − 360px 阅读列 − 10px 右外边距），否则指针到了面板却停住。
    打开时从右侧滑入；默认宽在 320 与平分之间切换（出现盘面、恢复默认宽、最大化）时宽度平滑过渡，拖动中不过渡。 */
-.agent-workspace-panel { position: relative; display: flex; flex-shrink: 0; flex-direction: column; width: 320px; min-width: 280px; max-width: min(780px, calc(100% - 370px)); margin: 4px 10px 8px 0; border: var(--hairline) solid var(--hairline-color); border-radius: 12px; background: var(--chat-raised); box-shadow: none; transition: width var(--duration-sheet) var(--ease-snap); }
+.agent-workspace-panel { position: relative; display: flex; flex-shrink: 0; flex-direction: column; width: 320px; min-width: 280px; max-width: min(780px, calc(100% - 364px)); margin: 4px 4px 4px 0; border: var(--hairline) solid var(--hairline-color); border-radius: 12px; background: var(--chat-raised); box-shadow: none; transition: width var(--duration-sheet) var(--ease-snap); }
 /* 读者或模型刚打开时滑入（data-entering）；随会话恢复的面板直接出现。关闭时滑出（data-leaving），播完由 ChatLayout 卸载。 */
 @keyframes agent-panel-in { from { opacity: 0; translate: 16px 0; } }
 @keyframes agent-panel-out { to { opacity: 0; translate: 16px 0; } }

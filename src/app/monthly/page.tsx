@@ -30,7 +30,7 @@ import {
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import { useSelectedBaziChart } from '@/lib/hooks/useUserCharts';
 
-const PAGE_CONTAINER_CLASS = 'mx-auto flex w-full max-w-[1104px] flex-col gap-4 px-4 pt-1 pb-5 lg:gap-7 lg:px-8 lg:pt-10 lg:pb-14';
+const PAGE_CONTAINER_CLASS = 'mx-auto flex w-full max-w-[1104px] flex-col gap-4 px-4 pt-1 pb-5 lg:gap-7 lg:px-8 lg:pt-8 lg:pb-14';
 const SKELETON_BLOCK_CLASS = 'animate-pulse bg-background-secondary';
 const MENU_ICON_CLASS = 'size-4';
 /** 月份切换范围（与日运日期选择器、历法库可靠区间一致）。 */

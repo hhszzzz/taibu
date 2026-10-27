@@ -8,11 +8,10 @@
 
 import { useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { BookOpenText, ChevronDown, ChevronRight, Clock3, Ellipsis, Share2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Clock3, Ellipsis, Share2 } from 'lucide-react';
 import { useConversationList } from '@/lib/chat/ConversationListContext';
 import { useConversationExport } from '@/components/chat/ConversationExportDialog';
 import { ShareConversationMenu } from '@/components/chat/ShareConversationMenu';
-import { SettingsCenterLink } from '@/components/settings/SettingsCenterLink';
 import { FloatingPanel } from '@/components/ui/FloatingPanel';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
@@ -194,9 +193,6 @@ export function ChatHeader({
             </FloatingPanel>
 
             <FloatingPanel open={moreMenu} anchorRef={moreRef} onClose={() => setMoreMenu(false)} label="查看选项" role="dialog" align="end" className="chat-header-menu chat-header-more">
-                {canUseKnowledgeBase && <SettingsCenterLink tab="knowledge-base" className="chat-header-menu-link" onClick={() => setMoreMenu(false)}>
-                    <BookOpenText size={16} aria-hidden="true" />知识库
-                </SettingsCenterLink>}
                 <button ref={recordRef} type="button" role="menuitem" aria-haspopup="menu" aria-expanded={recordOpen}
                     onClick={() => { setRecordOpen(value => !value); setExportOpen(false); }}>
                     对话记录视图<span className="chat-header-menu-chevron"><ChevronRight size={14} aria-hidden="true" /></span>

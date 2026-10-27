@@ -7,8 +7,9 @@ test('chat settings entries live in the chat header and reuse shared settings ce
   const headerSource = readFileSync(resolve(process.cwd(), 'src/components/chat/ChatHeader.tsx'), 'utf8');
   const chatPageSource = readFileSync(resolve(process.cwd(), 'src/app/chat/page.tsx'), 'utf8');
 
-  // 右上角菜单只保留知识库与导出/记录视图；新建对话、个性化与列宽设置已移除。
-  assert.match(headerSource, /<SettingsCenterLink tab="knowledge-base"/u);
+  // 右上角菜单只留导出/记录视图；知识库入口只在设置中心，新建对话、个性化与列宽设置已移除。
+  assert.equal(headerSource.includes('tab="knowledge-base"'), false);
+  assert.equal(headerSource.includes('SettingsCenterLink'), false);
   assert.equal(headerSource.includes('tab="personalization"'), false);
   assert.equal(headerSource.includes('新建对话'), false);
   assert.equal(headerSource.includes('阅读列宽'), false);

@@ -1,4 +1,4 @@
-import type { ChartType } from '@/lib/visualization/chart-types';
+import { CHART_TYPES, type ChartType } from '@/lib/visualization/chart-types';
 import type { VisualizationSettings } from '@/lib/visualization/settings';
 import {
     formatChartStyleLabel,
@@ -62,6 +62,7 @@ export function buildVisualizationOutputContractPrompt(allowedChartTypes: ChartT
         lines.push('代码块内部必须是合法 JSON，包含 chartType、title、data 字段。');
     }
 
+    lines.push(`chartType 只能取上面列出的值，不能自造（例如 network、bar）；哪一种都不合适时改用文字说明。${allowedChartTypes.length ? '' : `可用的 chartType：${CHART_TYPES.join('、')}。`}`);
     lines.push('不要输出注释、省略号或无法解析的占位字段。');
     lines.push('优先给出最有价值的 1-2 个图表。');
     return lines.join('\n');

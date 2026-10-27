@@ -77,7 +77,7 @@ export default function DaliurenPage() {
     return (
         <FeatureGate featureId="daliuren">
             <div className="min-h-screen bg-background text-foreground">
-                <div className="mx-auto flex w-full max-w-[1064px] flex-col gap-6 px-4 pb-12 pt-4 lg:gap-7 lg:px-8 lg:pb-16 lg:pt-14">
+                <div className="mx-auto flex w-full max-w-[1064px] flex-col gap-6 px-4 pb-12 pt-4 lg:gap-7 lg:px-8 lg:pb-16 lg:pt-8">
                     {/* 页面标题 - 移动端隐藏（顶栏已显示） */}
                     <header className="hidden flex-col gap-2 lg:flex">
                         <h1 className="font-display text-[2rem] font-normal leading-tight">大六壬</h1>

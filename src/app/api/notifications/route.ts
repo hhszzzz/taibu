@@ -12,6 +12,8 @@ export async function GET(request: NextRequest) {
   if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
 
   const unreadOnly = request.nextUrl.searchParams.get('unread') === '1';
+  // 任务完成/失败的通知只用来弹右下角 Toast；通知中心默认不列，只有通知桥自己带 agent=1 才读。
+  const includeAgent = request.nextUrl.searchParams.get('agent') === '1';
   const countOnly = request.nextUrl.searchParams.get('count') === '1';
   const limit = Math.min(Math.max(Number(request.nextUrl.searchParams.get('limit') || 20), 1), 100);
   const offset = Math.max(Number(request.nextUrl.searchParams.get('offset') || 0), 0);
@@ -24,6 +26,9 @@ export async function GET(request: NextRequest) {
         .select((eb) => eb.fn.countAll<number>().as('count'))
         .where('user_id', '=', auth.user.id)
         .where('created_at', '>=', cutoffIso);
+      if (!includeAgent) {
+        query = query.where((eb) => eb.or([eb('event_key', 'is', null), eb('event_key', 'not like', 'agent:%')]));
+      }
       if (unreadOnly) {
         query = query.where('is_read', '=', false);
       }
@@ -43,6 +48,9 @@ export async function GET(request: NextRequest) {
       .selectAll()
       .where('user_id', '=', auth.user.id)
       .where('created_at', '>=', cutoffIso);
+    if (!includeAgent) {
+      query = query.where((eb) => eb.or([eb('event_key', 'is', null), eb('event_key', 'not like', 'agent:%')]));
+    }
     if (unreadOnly) {
       query = query.where('is_read', '=', false);
     }

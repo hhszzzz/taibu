@@ -69,7 +69,7 @@ export function AgentNotificationBridge({ userId }: { userId: string | null }) {
                 if (controller.signal.aborted || settings.notificationsEnabled === false) return;
                 const desktop = settings.chatPreferences.desktopNotifications && 'Notification' in window && window.Notification.permission === 'granted';
                 if (!shouldPollTaskNotifications({ visible: document.visibilityState === 'visible', desktopNotifications: desktop })) return;
-                const response = await requestBrowserJson<{ notifications: TaskNotification[] }>('/api/notifications?unread=1&limit=40', { signal: controller.signal });
+                const response = await requestBrowserJson<{ notifications: TaskNotification[] }>('/api/notifications?unread=1&limit=40&agent=1', { signal: controller.signal });
                 if (controller.signal.aborted) return;
                 // 读取失败时不能把空列表当成历史基线，否则下一轮会把旧通知全部补弹。
                 if (response.error || !response.data) return;

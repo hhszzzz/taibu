@@ -113,7 +113,7 @@ export default function QimenPage() {
 
     return (
         <div className="min-h-screen bg-background text-foreground">
-            <div className="mx-auto flex w-full max-w-[1064px] flex-col gap-6 px-4 pb-12 pt-4 lg:gap-7 lg:px-8 lg:pb-16 lg:pt-14">
+            <div className="mx-auto flex w-full max-w-[1064px] flex-col gap-6 px-4 pb-12 pt-4 lg:gap-7 lg:px-8 lg:pb-16 lg:pt-8">
                 {/* 页面标题 - 移动端隐藏（顶栏已显示） */}
                 <PageHeader title="奇门遁甲" description="三式之首。以起局时刻排出九宫，看天时、地利与人和。" />
 

@@ -116,7 +116,7 @@ export default function MeihuaPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto flex w-full max-w-[880px] flex-col gap-5 px-4 py-5 sm:gap-7 sm:px-8 sm:py-12">
+      <div className="mx-auto flex w-full max-w-[880px] flex-col gap-5 px-4 py-5 sm:gap-7 sm:px-8 sm:pb-12 sm:pt-8">
         <header className="hidden flex-col gap-2 lg:flex">
           <h1 className="font-display text-[2rem] font-normal leading-tight">梅花易数</h1>
           <p className="text-[15px] text-foreground-secondary">以时间、文字或报数起卦，观察体用生克与卦象流转。</p>

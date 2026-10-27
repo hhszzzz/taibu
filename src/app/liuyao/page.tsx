@@ -125,7 +125,7 @@ export default function LiuyaoPage() {
 
     return (
         <div className="min-h-screen bg-background text-foreground">
-            <div className="mx-auto flex w-full max-w-[944px] flex-col gap-6 px-4 py-5 sm:gap-8 sm:px-8 sm:py-14">
+            <div className="mx-auto flex w-full max-w-[944px] flex-col gap-6 px-4 py-5 sm:gap-8 sm:px-8 sm:pb-14 sm:pt-8">
                 <PageHeader title="六爻占卜" description="源自《易经》。一事一占，先想清楚要问什么。" />
 
                 {/* 问题与分析目标 */}

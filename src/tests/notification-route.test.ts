@@ -41,9 +41,10 @@ test('notifications GET should use a count query for unread badge requests', asy
 
   assert.equal(response.status, 200);
   assert.equal(payload.count, 5);
-  assert.deepEqual(whereCalls.map((item) => item.column), ['user_id', 'created_at', 'is_read']);
+  // 任务完成/失败的通知不进通知中心：默认按 event_key 排除 agent:*（第三个 where 是那个回调）。
+  assert.deepEqual(whereCalls.map((item) => typeof item.column === 'function' ? 'agent-filter' : item.column), ['user_id', 'created_at', 'agent-filter', 'is_read']);
   assert.equal(whereCalls[0]?.value, 'user-1');
-  assert.equal(whereCalls[2]?.value, false);
+  assert.equal(whereCalls[3]?.value, false);
   assert.equal(typeof whereCalls[1]?.value, 'string');
 });
 

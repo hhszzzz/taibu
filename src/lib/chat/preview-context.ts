@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { resolveModelContextConfig } from '@/lib/ai/prompt-builder';
+import { resolveChatModelWindow } from '@/lib/ai/prompt-builder';
 import { countMessageTokens } from '@/lib/token-utils';
 import { normalizeVisualizationSettings } from '@/lib/visualization/settings';
 import { normalizeIdentityUserProfile } from '@/lib/user/settings';
@@ -147,7 +147,7 @@ async function buildSharedPreviewContext({
 
   const previewText = sharedContext.systemPrompt.slice(0, PREVIEW_TEXT_LIMIT);
   const historyTokens = countMessageTokens(chatBody.messages as Array<{ content?: string }>);
-  const contextTotal = resolveModelContextConfig(requestedModelId, reasoningEnabled).maxContext;
+  const contextTotal = (await resolveChatModelWindow(requestedModelId, reasoningEnabled)).config.maxContext;
 
   return {
         diagnostics: sharedContext.metadata.promptDiagnostics.layers as Array<{ id: string; included: boolean; tokens: number; truncated: boolean }>,

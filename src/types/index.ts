@@ -288,22 +288,34 @@ export type AIUsageType = 'chat' | 'vision' | 'embedding' | 'rerank';
 /** AI 来源传输协议 */
 export type AITransport = 'openai_compatible';
 
-/** AI 来源路由模式 */
-export type AIRoutingMode = 'auto' | 'newapi' | 'octopus';
-
 /** AI 推理努力等级 */
 export const AI_REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type AIReasoningEffort = typeof AI_REASONING_EFFORTS[number];
 
-/** AI 推理努力参数序列化方式 */
-export type AIReasoningEffortFormat = 'reasoning_object' | 'reasoning_effort';
+/**
+ * 思考参数在请求体里的写法（与 pi-ai 的 thinkingFormat 同名）：
+ * openai = `reasoning_effort`；deepseek = `thinking: {type}` 加 `reasoning_effort`；openrouter = `reasoning: {effort}`；
+ * qwen = `enable_thinking` 加 `reasoning_effort`；zai = `thinking: {type}`（智谱）；qwen-chat-template = `chat_template_kwargs.enable_thinking`（vLLM / SGLang 部署）。
+ */
+export const AI_THINKING_FORMATS = ['openai', 'deepseek', 'openrouter', 'qwen', 'zai', 'qwen-chat-template'] as const;
+export type AIThinkingFormat = typeof AI_THINKING_FORMATS[number];
+
+/** 网关密钥的密文（AES-256-GCM），只在服务端请求时解开。 */
+export interface AISealedSecret {
+    version: 1;
+    iv: string;
+    tag: string;
+    data: string;
+}
 
 /** AI 模型来源 */
 export interface AIModelSourceConfig {
     sourceKey: string;
     sourceName: string;
+    /** 网关行 ID：密钥密文绑定在这一行上。 */
+    gatewayId?: string;
     apiUrl: string;
-    apiKeyEnvVar: string;
+    apiKeySecret?: AISealedSecret | null;
     modelIdOverride?: string | null;
     reasoningModelId?: string | null;
     transport?: AITransport;
@@ -318,14 +330,19 @@ export interface AIModelConfig {
     name: string;                // 显示名称
     vendor: AIVendor;            // 供应商
     usageType?: AIUsageType;     // 模型用途
-    routingMode?: AIRoutingMode; // 来源路由模式
     modelId: string;             // API 模型 ID
     apiUrl: string;              // API 端点
-    apiKeyEnvVar: string;        // API Key 环境变量名
+    gatewayId?: string;          // 当前来源的网关行 ID
+    apiKeySecret?: AISealedSecret | null; // 当前来源的网关密钥密文
     // 推理模式支持
     supportsReasoning: boolean;  // 是否支持推理模式
     reasoningModelId?: string;   // 推理模式的模型 ID（如果不同）
     isReasoningDefault?: boolean; // 是否默认开启推理（DeepAI）
+    /** 可选的思考等级（按 AI_REASONING_EFFORTS 顺序）；为空表示只能开关思考，不能调档。 */
+    thinkingLevels?: AIReasoningEffort[];
+    thinkingFormat?: AIThinkingFormat;
+    /** 上下文窗口（token）；未填时按已知模型的应用上限处理。 */
+    contextWindow?: number;
     // 视觉模型支持
     supportsVision?: boolean;    // 是否支持图像输入
     // 默认参数
@@ -335,7 +352,6 @@ export interface AIModelConfig {
     defaultFrequencyPenalty?: number;
     defaultMaxTokens?: number;
     defaultReasoningEffort?: AIReasoningEffort;
-    reasoningEffortFormat?: AIReasoningEffortFormat;
     customParameters?: Record<string, unknown> | null;
     // 访问控制（从数据库获取）
     requiredTier?: 'free' | 'plus' | 'pro';  // 基础访问所需等级

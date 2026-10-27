@@ -24,7 +24,6 @@ const model: AIModelConfig = {
   vendor: "other",
   modelId: "fixture",
   apiUrl: "https://model.example/v1",
-  apiKeyEnvVar: "FIXTURE",
   supportsReasoning: true,
   requiredTier: "free",
 };

@@ -13,6 +13,7 @@ import { BACKGROUND_CONTEXT } from '@earendil-works/chord/context';
 import { createGuardedAgentModels } from '../lib/agent/model-registry.server';
 import { generateSummary } from '../lib/agent/summary-usage.server';
 import {
+  AGENT_GATEWAY_KEY_MESSAGE,
   AGENT_OUTPUT_EXHAUSTED_MESSAGE,
   AGENT_PUBLIC_STREAM_ERRORS,
   AGENT_REJECTED_KEY_MESSAGE,
@@ -28,8 +29,8 @@ import {
 } from "../lib/agent/pi-stream.server";
 import { MODEL_REQUEST_USER_AGENT } from '../lib/ai/providers/ai-sdk-provider';
 import type { AIModelConfig } from "../types";
+import { sealedGateway } from './helpers/gateway-key';
 
-process.env.TAIBU_TEST_GATEWAY_KEY = 'gateway-fixture-key';
 const piModel = {
   id: "fixture",
   name: "fixture",
@@ -48,12 +49,12 @@ const config: AIModelConfig = {
   vendor: "other",
   modelId: "fixture-upstream",
   apiUrl: "https://model.example/v1/chat/completions",
-  apiKeyEnvVar: "TAIBU_TEST_GATEWAY_KEY",
   supportsReasoning: true,
+  sources: [{ sourceKey: 'model', sourceName: 'model', apiUrl: "https://model.example/v1/chat/completions", ...sealedGateway('gateway-model'), modelIdOverride: 'fixture-upstream' }],
 };
 const sourced = (...keys: string[]): AIModelConfig => ({
   ...config,
-  sources: keys.map(key => ({ sourceKey: key, sourceName: key, apiUrl: `https://${key}.example/v1/chat/completions`, apiKeyEnvVar: 'TAIBU_TEST_GATEWAY_KEY', modelIdOverride: `${key}-upstream` })),
+  sources: keys.map(key => ({ sourceKey: key, sourceName: key, apiUrl: `https://${key}.example/v1/chat/completions`, ...sealedGateway(`gateway-${key}`), modelIdOverride: `${key}-upstream` })),
 });
 const context = (messages: Message[] = [{ role: "user", content: "query", timestamp: 1 }]) =>
   normalizeContext({
@@ -157,28 +158,47 @@ test('reasoning streams as thinking and goes back with the assistant message, wh
   assert.equal(replayed?.content, '我先排出命盘。');
 });
 
-test('the thinking switch and level follow the model: enable_thinking, reasoning_effort, a reasoning object, or nothing', async () => {
-  const sent = async (model: AIModelConfig, settings: { reasoning?: boolean }, reasoning?: 'high' | 'max' | 'xhigh', native = piModel) => {
+test('the thinking switch and level follow the model\'s thinking format, and an unlisted level moves to the nearest listed one', async () => {
+  const sent = async (model: AIModelConfig, settings: { reasoning?: boolean }, reasoning?: 'medium' | 'high' | 'max' | 'xhigh', native = piModel) => {
     const gw = gateway(reply('ok'));
     await createPiModelStream(model, { ...settings, fetch: gw.fetch })(native, context(), reasoning ? { reasoning } : undefined).result();
-    const { enable_thinking, reasoning_effort, reasoning: object, model: upstream } = gw.requests[0].body;
-    return { enable_thinking, reasoning_effort, reasoning: object, upstream };
+    const { enable_thinking, reasoning_effort, reasoning: object, thinking, model: upstream } = gw.requests[0].body;
+    return { enable_thinking, reasoning_effort, reasoning: object, thinking, upstream };
   };
-  const deepseek = { ...config, vendor: 'deepseek' };
-  assert.deepEqual(await sent(deepseek, {}, 'high'), { enable_thinking: true, reasoning_effort: undefined, reasoning: undefined, upstream: 'fixture-upstream' });
-  assert.deepEqual(await sent({ ...deepseek, reasoningEffortFormat: 'reasoning_effort' }, {}, 'max'), { enable_thinking: true, reasoning_effort: 'max', reasoning: undefined, upstream: 'fixture-upstream' });
-  assert.deepEqual(await sent(deepseek, {}), { enable_thinking: false, reasoning_effort: undefined, reasoning: undefined, upstream: 'fixture-upstream' });
-  assert.deepEqual(await sent(deepseek, { reasoning: false }, 'high'), { enable_thinking: false, reasoning_effort: undefined, reasoning: undefined, upstream: 'fixture-upstream' });
-  assert.deepEqual(await sent({ ...config, reasoningEffortFormat: 'reasoning_effort' }, {}, 'xhigh'), { enable_thinking: undefined, reasoning_effort: 'xhigh', reasoning: undefined, upstream: 'fixture-upstream' });
-  assert.deepEqual(await sent({ ...config, reasoningEffortFormat: 'reasoning_object' }, {}, 'high'), { enable_thinking: undefined, reasoning_effort: undefined, reasoning: { effort: 'high' }, upstream: 'fixture-upstream' });
+  const none = { enable_thinking: undefined, reasoning_effort: undefined, reasoning: undefined, thinking: undefined, upstream: 'fixture-upstream' };
+  // The test gateway's model: DeepSeek format with low / high / max.
+  const deepseek: AIModelConfig = { ...config, thinkingFormat: 'deepseek', thinkingLevels: ['low', 'high', 'max'] };
+  assert.deepEqual(await sent(deepseek, {}, 'high'), { ...none, thinking: { type: 'enabled' }, reasoning_effort: 'high' });
+  assert.deepEqual(await sent(deepseek, {}, 'medium'), { ...none, thinking: { type: 'enabled' }, reasoning_effort: 'high' });
+  assert.deepEqual(await sent(deepseek, {}, 'xhigh'), { ...none, thinking: { type: 'enabled' }, reasoning_effort: 'max' });
+  assert.deepEqual(await sent(deepseek, {}), { ...none, thinking: { type: 'disabled' } });
+  assert.deepEqual(await sent(deepseek, { reasoning: false }, 'high'), { ...none, thinking: { type: 'disabled' } });
+  // A model that lists no levels only switches thinking.
+  assert.deepEqual(await sent({ ...config, thinkingFormat: 'qwen' }, {}, 'high'), { ...none, enable_thinking: true });
+  assert.deepEqual(await sent({ ...config, thinkingFormat: 'qwen' }, {}), { ...none, enable_thinking: false });
+  assert.deepEqual(await sent({ ...config, thinkingLevels: ['low', 'medium', 'high', 'xhigh'] }, {}, 'xhigh'), { ...none, reasoning_effort: 'xhigh' });
+  assert.deepEqual(await sent({ ...config, thinkingFormat: 'openrouter', thinkingLevels: ['high'] }, {}, 'high'), { ...none, reasoning: { effort: 'high' } });
   // A model that cannot think gets no thinking field at all; a separate reasoning model serves the thinking requests.
-  assert.deepEqual(await sent(deepseek, {}, 'high', { ...piModel, reasoning: false }), { enable_thinking: undefined, reasoning_effort: undefined, reasoning: undefined, upstream: 'fixture-upstream' });
-  assert.equal((await sent({ ...config, reasoningModelId: 'fixture-reasoner' }, {}, 'high')).upstream, 'fixture-reasoner');
+  assert.deepEqual(await sent(deepseek, {}, 'high', { ...piModel, reasoning: false }), none);
+  assert.equal((await sent({ ...config, reasoningModelId: 'fixture-reasoner', sources: [{ ...config.sources![0], reasoningModelId: 'fixture-reasoner' }] }, {}, 'high')).upstream, 'fixture-reasoner');
+});
+
+test('a saved key that does not open moves to the next source, and with none left the task says to re-enter it', async () => {
+  const gw = gateway(reply('ok'));
+  const broken = { ...sourced('first', 'second') };
+  broken.sources = [{ ...broken.sources![0], gatewayId: 'gateway-moved' }, broken.sources![1]];
+  const message = await createPiModelStream(broken, { fetch: gw.fetch })(piModel, context()).result();
+  assert.equal(message.stopReason, 'stop');
+  assert.deepEqual(gw.requests.map(request => request.body.model), ['second-upstream']);
+  const none = gateway(reply('ok'));
+  const failed = await createPiModelStream({ ...config, sources: [{ ...config.sources![0], gatewayId: 'gateway-moved' }] }, { fetch: none.fetch })(piModel, context()).result();
+  assert.equal(none.requests.length, 0);
+  assert.equal(failed.errorMessage, AGENT_GATEWAY_KEY_MESSAGE);
 });
 
 test('custom parameters and sampling defaults reach the body, but never replace transport or thinking fields', async () => {
   const gw = gateway(reply('ok'));
-  await createPiModelStream({ ...config, vendor: 'qwen', defaultTopP: 0.9, defaultPresencePenalty: 0.1, customParameters: { top_k: 20, enable_thinking: true, max_tokens: 1, model: 'other' } }, { fetch: gw.fetch })(piModel, context()).result();
+  await createPiModelStream({ ...config, thinkingFormat: 'qwen', defaultTopP: 0.9, defaultPresencePenalty: 0.1, customParameters: { top_k: 20, enable_thinking: true, max_tokens: 1, model: 'other' } }, { fetch: gw.fetch })(piModel, context()).result();
   const { body } = gw.requests[0];
   assert.equal(body.top_k, 20);
   assert.equal(body.top_p, 0.9);

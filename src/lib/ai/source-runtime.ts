@@ -1,18 +1,13 @@
 import type {
   AIModelConfig,
   AIModelSourceConfig,
-  AIRoutingMode,
   AITransport,
   AIUsageType,
 } from '@/types';
 
-export const MANAGED_AI_SOURCE_KEYS = ['newapi', 'octopus'] as const;
-export type ManagedAISourceKey = (typeof MANAGED_AI_SOURCE_KEYS)[number];
 export const DEFAULT_AI_TRANSPORT: AITransport = 'openai_compatible';
-
-export function isManagedSourceKey(sourceKey: string | null | undefined): sourceKey is ManagedAISourceKey {
-  return !!sourceKey && MANAGED_AI_SOURCE_KEYS.includes(sourceKey as ManagedAISourceKey);
-}
+/** Gateway identifiers: lowercase, digits, `-` and `_`, as the database checks them. */
+export const GATEWAY_KEY_PATTERN = /^[a-z0-9][a-z0-9_-]{0,39}$/u;
 
 export function getModelUsageType(model: Pick<AIModelConfig, 'usageType' | 'supportsVision'>): AIUsageType {
   if (model.usageType) {
@@ -76,43 +71,11 @@ export function sortModelSources<T extends AIModelSourceConfig>(sources: T[]): T
   });
 }
 
+/** Enabled sources that can be called (a URL and a saved key), in failover order. */
 export function getOrderedModelSources(model: AIModelConfig): AIModelSourceConfig[] {
-  const routingMode: AIRoutingMode = model.routingMode || 'auto';
-
-  const configuredSources = model.sources || [];
-  let sources = configuredSources
+  return sortModelSources((model.sources || [])
     .filter((source) => source.isEnabled !== false)
-    .filter((source) => !!source.apiUrl && !!source.apiKeyEnvVar);
-
-  if (routingMode === 'newapi' || routingMode === 'octopus') {
-    sources = sources.filter((source) => source.sourceKey === routingMode);
-  }
-
-  if (sources.length > 0) {
-    return sortModelSources(sources);
-  }
-
-  // A configured list is authoritative, even when every binding is filtered out.
-  // Empty lists are also emitted by legacy environment configurations.
-  if (configuredSources.length > 0 || !model.apiUrl || !model.apiKeyEnvVar) {
-    return [];
-  }
-  if ((routingMode === 'newapi' || routingMode === 'octopus') && model.sourceKey !== routingMode) {
-    return [];
-  }
-
-  return [{
-    sourceKey: model.sourceKey || 'default',
-    sourceName: model.sourceKey || 'Default',
-    apiUrl: model.apiUrl,
-    apiKeyEnvVar: model.apiKeyEnvVar,
-    modelIdOverride: model.modelId,
-    reasoningModelId: model.reasoningModelId,
-    transport: model.transport || DEFAULT_AI_TRANSPORT,
-    priority: 1,
-    isActive: true,
-    isEnabled: true,
-  }];
+    .filter((source) => !!source.apiUrl && !!source.apiKeySecret));
 }
 
 export function applySourceToModel(
@@ -124,7 +87,8 @@ export function applySourceToModel(
     modelId: source.modelIdOverride || model.modelId,
     reasoningModelId: source.reasoningModelId || model.reasoningModelId,
     apiUrl: source.apiUrl,
-    apiKeyEnvVar: source.apiKeyEnvVar,
+    gatewayId: source.gatewayId,
+    apiKeySecret: source.apiKeySecret,
     sourceKey: source.sourceKey,
     transport: source.transport || model.transport || DEFAULT_AI_TRANSPORT,
   };

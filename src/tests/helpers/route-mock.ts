@@ -40,21 +40,6 @@ export function captureConsoleErrors() {
     };
 }
 
-/** Standard env vars needed by most route tests. */
-export function ensureRouteTestEnv() {
-    process.env.NEWAPI_API_KEY = process.env.NEWAPI_API_KEY || 'test-key';
-    process.env.NEWAPI_BASE_URL = process.env.NEWAPI_BASE_URL || 'https://newapi.example';
-    process.env.MINGAI_FALLBACK_MODELS_JSON = process.env.MINGAI_FALLBACK_MODELS_JSON || JSON.stringify([
-        {
-            id: 'deepseek-v3.2',
-            name: 'DeepSeek V3.2',
-            vendor: 'deepseek',
-            usageType: 'chat',
-            supportsReasoning: false,
-        },
-    ]);
-}
-
 /**
  * Keeps route tests explicit about the global AI capability state. Production
  * handlers still execute the real fail-closed app-settings read.

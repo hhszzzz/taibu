@@ -6,7 +6,7 @@ import { requestBrowserJson } from '@/lib/browser-api';
 import { registerClientModelNames } from '@/lib/ai/model-name-cache';
 import { useAppBootstrap } from '@/lib/hooks/useAppBootstrap';
 import { queryKeys } from '@/lib/query/keys';
-import type { AIVendor } from '@/types';
+import type { AIReasoningEffort, AIVendor } from '@/types';
 import type { MembershipType } from '@/lib/user/membership';
 
 type AvailableModel = {
@@ -14,7 +14,10 @@ type AvailableModel = {
   name: string;
   vendor: AIVendor;
   supportsReasoning: boolean;
-  reasoningEffortFormat?: 'reasoning_object' | 'reasoning_effort' | null;
+  /** Levels the model can think at; empty when thinking only switches on and off. */
+  thinkingLevels?: AIReasoningEffort[];
+  defaultThinkingLevel?: AIReasoningEffort | null;
+  contextWindow?: number | null;
   isReasoningDefault?: boolean;
   allowed?: boolean;
   /** Lowest membership that can use the model. */

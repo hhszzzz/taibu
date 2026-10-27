@@ -4,11 +4,7 @@ import type { Json } from './schema';
 
 export interface RpcRegistry {
   "activate_key_as_service": { args: { "p_user_id": string | null; "p_key_code": string | null; }; result: { success: boolean; error: string; key_type: string; membership_type: string; credits_amount: number; }[] };
-  "admin_create_ai_model_binding": { args: { "p_model_id": string | null; "p_source_key": string | null; "p_model_id_override"?: string | null; "p_reasoning_model_id"?: string | null; "p_is_enabled"?: boolean | null; "p_priority"?: number | null; "p_notes"?: string | null; }; result: Json };
-  "admin_create_ai_model_with_binding": { args: { "p_model": unknown | null; "p_primary_gateway_key": string | null; }; result: Json };
   "admin_get_auth_user_emails": { args: { "p_user_ids": string[] | null; }; result: { user_id: string; email: string; }[] };
-  "admin_update_ai_model_and_cleanup_bindings": { args: { "p_model_id": string | null; "p_patch": unknown | null; }; result: Json };
-  "admin_update_ai_model_binding": { args: { "p_model_id": string | null; "p_source_id": string | null; "p_patch"?: unknown | null; "p_activate"?: boolean | null; }; result: Json };
   "agent_admin_task_log": { args: { "p_run_id": string | null; "p_after"?: number | null; }; result: Json };
   "agent_cache_tool": { args: { "p_run_id": string | null; "p_worker_id": string | null; "p_fence": number | null; "p_call_id": string | null; "p_tool_name": string | null; "p_kind": string | null; "p_args": unknown | null; "p_result": unknown | null; }; result: Record<string, unknown> };
   "agent_cancel_run": { args: { "p_run_id": string | null; }; result: Record<string, unknown> };
@@ -80,11 +76,7 @@ export type RpcReturnShape = 'void' | 'scalar' | 'row' | 'setof';
 
 export const RPC_SPECS = {
   "activate_key_as_service": { args: [["p_user_id", "uuid", false], ["p_key_code", "text", false]], returns: "setof" },
-  "admin_create_ai_model_binding": { args: [["p_model_id", "text", false], ["p_source_key", "text", false], ["p_model_id_override", "text", true], ["p_reasoning_model_id", "text", true], ["p_is_enabled", "boolean", true], ["p_priority", "integer", true], ["p_notes", "text", true]], returns: "scalar" },
-  "admin_create_ai_model_with_binding": { args: [["p_model", "jsonb", false], ["p_primary_gateway_key", "text", false]], returns: "scalar" },
   "admin_get_auth_user_emails": { args: [["p_user_ids", "uuid[]", false]], returns: "setof" },
-  "admin_update_ai_model_and_cleanup_bindings": { args: [["p_model_id", "text", false], ["p_patch", "jsonb", false]], returns: "scalar" },
-  "admin_update_ai_model_binding": { args: [["p_model_id", "text", false], ["p_source_id", "text", false], ["p_patch", "jsonb", true], ["p_activate", "boolean", true]], returns: "scalar" },
   "agent_admin_task_log": { args: [["p_run_id", "uuid", false], ["p_after", "bigint", true]], returns: "scalar" },
   "agent_cache_tool": { args: [["p_run_id", "uuid", false], ["p_worker_id", "text", false], ["p_fence", "bigint", false], ["p_call_id", "text", false], ["p_tool_name", "text", false], ["p_kind", "text", false], ["p_args", "jsonb", false], ["p_result", "jsonb", false]], returns: "row" },
   "agent_cancel_run": { args: [["p_run_id", "uuid", false]], returns: "row" },

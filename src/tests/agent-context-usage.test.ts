@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { AssistantMessage, Message } from '@earendil-works/pi-ai';
 import { projectAgentContextUsage } from '../lib/agent/context-usage';
-import { resolveKnownModelContextConfig, resolveModelContextConfig } from '../lib/ai/model-context';
+import { resolveKnownModelContextConfig, resolveModelContextConfig, resolveModelWindow } from '../lib/ai/model-context';
 import { shouldRequestChatPreview } from '../lib/chat/chat-preview';
 import { buildContextSegments } from '../lib/agent/context-segments';
 import type { AgentRuntimeInfo } from '../lib/agent/types';
@@ -43,6 +43,16 @@ test('unknown model capacities do not inherit ordinary-chat prompt budgets', () 
     assert.equal(resolveKnownModelContextConfig('deepseek-v3.2')?.maxContext, 32000);
     assert.equal(resolveKnownModelContextConfig('glm-4.7', true)?.promptRatio, 0.35);
     assert.equal(resolveModelContextConfig('unknown').maxContext, 32000, 'ordinary chat retains its bounded prompt policy');
+    assert.equal(resolveModelWindow({ id: 'custom-gpt' }), null);
+});
+
+test('a context window set in the catalog replaces the known limit and reserves the model output limit', () => {
+    const configured = resolveModelWindow({ id: 'custom-gpt', contextWindow: 1_000_000, defaultMaxTokens: 32_768 });
+    assert.deepEqual([configured?.maxContext, configured?.reserveOutput], [1_000_000, 32_768]);
+    // A known model keeps its prompt policy but takes the catalog window.
+    const known = resolveModelWindow({ id: 'glm-4.7', contextWindow: 200_000 }, true);
+    assert.deepEqual([known?.maxContext, known?.promptRatio, known?.reserveOutput], [200_000, 0.35, 4000]);
+    assert.equal(resolveModelContextConfig({ id: 'custom-gpt', contextWindow: 256_000 }).maxContext, 256_000);
 });
 
 test('Agent mode never requests the ordinary-chat prompt preview', () => {

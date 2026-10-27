@@ -1,612 +1,128 @@
 /**
- * AI 模型管理面板
- *
- * 功能：
- * - 查看所有模型及其配置
- * - 启用/禁用模型
- * - 修改模型参数
- * - 切换活跃来源
+ * AI 模型目录：按用途分组的紧凑列表，一行看清上下文、输出上限、思考等级、来源与会员；点开在弹层里编辑。
  */
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import {
-    RefreshCw,
-    ChevronDown,
-    ChevronUp,
-    Zap,
-    Eye,
-    Plus,
-} from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Boxes, Eye, Plus, RefreshCw, Search } from 'lucide-react';
 import { requestBrowserData } from '@/lib/browser-api';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { SettingsSwitch } from '@/components/settings/SettingsControls';
 import { useToast } from '@/components/ui/Toast';
-import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
+import { SettingsSwitch } from '@/components/settings/SettingsControls';
 import { getVendorIcon } from '@/lib/ai/vendor-config';
-import { getVendorName } from '@/lib/ai/vendor-labels';
-import { AIModelCreateForm } from '@/components/admin/AIModelCreateForm';
-import { AIModelSettingsForm } from '@/components/admin/AIModelSettingsForm';
-import { AIModelSources } from '@/components/admin/AIModelSources';
-import {
-    TIER_LABELS, USAGE_TYPE_LABELS, ROUTING_MODE_LABELS, createInitialNewModel,
-    createEditModelDraft, reconcileModelDrafts, createInitialSourceDraft, normalizeSourceModelIdInput,
-    resolveDraftVendor, buildCreateModelPayload, buildEditModelPayload, buildSourcePayload,
-    createRoutingModeUpdate, createPrimaryGatewayUpdate,
-    type AIModel, type ModelSource, type CreateModelDraft, type EditModelDraft,
-    type ManagedGatewayKey, type SourceDraft,
-} from '@/lib/admin/ai-model-editor';
+import { useListMotion } from '@/lib/motion/list';
+import { THINKING_LEVEL_LABELS, USAGE_TYPES, formatTokenCount, type AdminGateway, type AdminModel } from '@/lib/admin/ai-catalog';
+import { AIModelEditor } from './AIModelEditor';
+import './ai-catalog.css';
 
+function ModelMeta({ model, gateways }: { model: AdminModel; gateways: ReadonlyMap<string, AdminGateway> }) {
+    const callable = model.sources.filter(source => source.isEnabled && gateways.get(source.gatewayId)?.isEnabled && gateways.get(source.gatewayId)?.apiKeyHint);
+    const names = model.sources.map(source => gateways.get(source.gatewayId)?.displayName).filter(Boolean);
+    const usage = USAGE_TYPES.find(item => item.value === model.usageType)?.label;
+    return <span className="ai-catalog-row-meta">
+        {model.usageType !== 'chat' && <span>{usage}</span>}
+        {(model.usageType === 'chat' || model.usageType === 'vision') && <span>
+            {model.contextWindow ? `${formatTokenCount(model.contextWindow)} 上下文` : '未设上下文'} · {model.defaultMaxTokens ? `${formatTokenCount(model.defaultMaxTokens)} 输出` : '默认输出'}
+        </span>}
+        {model.supportsReasoning && <span>思考 {model.thinkingLevels.length ? model.thinkingLevels.map(level => THINKING_LEVEL_LABELS[level]).join('/') : '开关'}</span>}
+        {model.supportsVision && <span><Eye size={12} aria-label="支持图片" style={{ display: 'inline', verticalAlign: '-1px' }} /></span>}
+        <span data-tone={callable.length ? undefined : 'warning'}>{names.length ? names.join(' → ') : '没有来源'}{names.length && !callable.length ? '（不可用）' : ''}</span>
+    </span>;
+}
 
 export function AIModelPanel() {
-    const [models, setModels] = useState<AIModel[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [models, setModels] = useState<AdminModel[] | null>(null);
+    const [gateways, setGateways] = useState<AdminGateway[]>([]);
     const [error, setError] = useState<string | null>(null);
-    const [expandedModel, setExpandedModel] = useState<string | null>(null);
+    const [query, setQuery] = useState('');
+    const [editing, setEditing] = useState<{ model: AdminModel | null } | null>(null);
     const [updating, setUpdating] = useState<string | null>(null);
-    const [showCreateForm, setShowCreateForm] = useState(false);
-    const [showCreateAdvanced, setShowCreateAdvanced] = useState(false);
-    const loadedDrafts = useRef<Record<string, EditModelDraft>>({});
-    const mounted = useRef(false);
-    const loadRequest = useRef<AbortController | null>(null);
-    const [modelDrafts, setModelDrafts] = useState<Record<string, EditModelDraft>>({});
-    const [addingToModel, setAddingToModel] = useState<string | null>(null);
-    const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
-    const [editingDraft, setEditingDraft] = useState<SourceDraft | null>(null);
-    const [sourceBaseline, setSourceBaseline] = useState<SourceDraft | null>(null);
-    const [deleteTarget, setDeleteTarget] = useState<{ modelId: string; sourceId: string } | null>(null);
-    const [deleteModelTarget, setDeleteModelTarget] = useState<{ modelId: string; displayName: string } | null>(null);
     const { showToast } = useToast();
-    const [newModel, setNewModel] = useState<CreateModelDraft>(createInitialNewModel);
-    const [newSource, setNewSource] = useState(() => ({
-        sourceKey: 'newapi' as ManagedGatewayKey,
-        ...createInitialSourceDraft(),
-    }));
+    const listRef = useRef<HTMLDivElement>(null);
 
-    const resetNewModel = () => {
-        setNewModel(createInitialNewModel());
-    };
-
-    useUnsavedSettingsGuard(
-        JSON.stringify(newModel) !== JSON.stringify(createInitialNewModel())
-        || JSON.stringify(newSource) !== JSON.stringify({ sourceKey: 'newapi', ...createInitialSourceDraft() })
-        || models.some(model => modelDrafts[model.id] && JSON.stringify(modelDrafts[model.id]) !== JSON.stringify(createEditModelDraft(model)))
-        || !!editingDraft && JSON.stringify(editingDraft) !== JSON.stringify(sourceBaseline),
-    );
-
-    const resetNewSource = () => {
-        setNewSource({
-            sourceKey: 'newapi',
-            ...createInitialSourceDraft(),
-        });
-    };
-
-    // 加载模型列表
-    const loadModels = useCallback(async () => {
-        // A late mutation may request a reload after its account panel unmounted.
-        if (!mounted.current) return;
-        loadRequest.current?.abort();
-        const controller = new AbortController();
-        loadRequest.current = controller;
-        const isCurrent = () => mounted.current
-            && loadRequest.current === controller
-            && !controller.signal.aborted;
-        setLoading(true);
-        setError(null);
-
+    const load = useCallback(async (signal?: AbortSignal) => {
         try {
-            const data = await requestBrowserData<{ models?: AIModel[] }>(
-                '/api/admin/ai-models?includeDisabled=true',
-                { method: 'GET', signal: controller.signal },
-                { fallbackMessage: '获取模型列表失败' },
-            );
-            if (!isCurrent()) return;
-            const loadedModels = data.models || [];
-            setModels(loadedModels);
-            const incoming = Object.fromEntries(loadedModels.map(model => [model.id, createEditModelDraft(model)]));
-            const previous = loadedDrafts.current;
-            loadedDrafts.current = incoming;
-            setModelDrafts(current => reconcileModelDrafts(current, previous, incoming));
+            const [modelData, gatewayData] = await Promise.all([
+                requestBrowserData<{ models: AdminModel[] }>('/api/admin/ai-models', { method: 'GET', signal }, { fallbackMessage: '获取模型列表失败' }),
+                requestBrowserData<{ gateways: AdminGateway[] }>('/api/admin/ai-gateways', { method: 'GET', signal }, { fallbackMessage: '获取网关列表失败' }),
+            ]);
+            if (signal?.aborted) return;
+            setModels(modelData.models);
+            setGateways(gatewayData.gateways);
+            setError(null);
         } catch (e) {
-            if (isCurrent()) setError(e instanceof Error ? e.message : '获取模型列表失败');
-        } finally {
-            if (isCurrent()) setLoading(false);
+            if (!signal?.aborted) setError(e instanceof Error ? e.message : '获取模型列表失败');
         }
     }, []);
-
     useEffect(() => {
-        mounted.current = true;
-        void loadModels();
-        return () => {
-            mounted.current = false;
-            loadRequest.current?.abort();
-        };
-    }, [loadModels]);
+        const controller = new AbortController();
+        queueMicrotask(() => void load(controller.signal));
+        return () => controller.abort();
+    }, [load]);
 
+    const gatewayById = useMemo(() => new Map(gateways.map(gateway => [gateway.id, gateway])), [gateways]);
+    const visible = useMemo(() => {
+        const needle = query.trim().toLowerCase();
+        return (models ?? []).filter(model => !needle || [model.displayName, model.modelKey, model.vendor].some(value => value.toLowerCase().includes(needle)));
+    }, [models, query]);
+    const rows = useListMotion(listRef, visible, model => model.id);
 
-    const updateNewModel = (updates: Partial<CreateModelDraft>) => {
-        setNewModel((current) => ({ ...current, ...updates }));
-    };
-
-    const updateModelDraft = (modelId: string, updates: Partial<EditModelDraft>) => {
-        setModelDrafts((current) => ({
-            ...current,
-            [modelId]: {
-                ...current[modelId],
-                ...updates,
-            },
-        }));
-    };
-
-    const handleCreateRoutingModeChange = (routingMode: AIModel['routingMode']) => {
-        updateNewModel(createRoutingModeUpdate(newModel, routingMode));
-    };
-
-    const handleCreatePrimaryGatewayChange = (primaryGatewayKey: ManagedGatewayKey) => {
-        updateNewModel(createPrimaryGatewayUpdate(newModel, primaryGatewayKey));
-    };
-
-    // 更新模型
-    const updateModel = async (modelId: string, updates: Partial<AIModel>) => {
-        setUpdating(modelId);
-
+    const toggle = async (model: AdminModel) => {
+        setUpdating(model.id);
+        setModels(current => current?.map(item => item.id === model.id ? { ...item, isEnabled: !model.isEnabled } : item) ?? null);
         try {
-            await requestBrowserData(
-                `/api/admin/ai-models/${modelId}`,
-                {
-                    method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(updates),
-                },
-                { fallbackMessage: '更新失败' },
-            );
-
-            // 刷新列表
-            await loadModels();
+            await requestBrowserData(`/api/admin/ai-models/${model.id}`, {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isEnabled: !model.isEnabled }),
+            }, { fallbackMessage: '更新模型失败' });
         } catch (e) {
-            console.error('Update model failed:', e);
-            showToast('error', e instanceof Error ? e.message : '更新失败');
+            setModels(current => current?.map(item => item.id === model.id ? { ...item, isEnabled: model.isEnabled } : item) ?? null);
+            showToast('error', e instanceof Error ? e.message : '更新模型失败');
         } finally {
             setUpdating(null);
         }
     };
-
-    const createModel = async () => {
-        const vendor = resolveDraftVendor(newModel);
-
-        if (!newModel.modelKey.trim() || !newModel.displayName.trim()) {
-            showToast('warning', '请填写模型 ID 和显示名称');
-            return;
-        }
-        if (!vendor) {
-            showToast('warning', '请选择供应商，或填写自定义供应商');
-            return;
-        }
-
-        setUpdating('creating');
-        try {
-
-            await requestBrowserData(
-                '/api/admin/ai-models',
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(buildCreateModelPayload(newModel)),
-                },
-                { fallbackMessage: '创建模型失败' },
-            );
-
-            showToast('success', '模型已创建');
-            setShowCreateForm(false);
-            setShowCreateAdvanced(false);
-            resetNewModel();
-            await loadModels();
-        } catch (e) {
-            showToast('error', e instanceof Error ? e.message : '创建模型失败');
-        } finally {
-            setUpdating(null);
-        }
-    };
-
-    const saveModelSettings = async (modelId: string) => {
-        const draft = modelDrafts[modelId];
-        if (!draft) return;
-
-        const vendor = draft.vendorPreset === '__custom__'
-            ? draft.customVendor.trim()
-            : draft.vendorPreset;
-
-        if (!draft.modelKey.trim() || !draft.displayName.trim()) {
-            showToast('warning', '请填写模型 ID 和显示名称');
-            return;
-        }
-        if (!vendor) {
-            showToast('warning', '请选择供应商，或填写自定义供应商');
-            return;
-        }
-
-        try {
-            await updateModel(modelId, buildEditModelPayload(draft));
-        } catch (error) {
-            showToast('error', error instanceof Error ? error.message : '自定义参数格式错误');
-        }
-    };
-
-    // 切换活跃来源
-    const activateSource = async (modelId: string, sourceId: string) => {
-        setUpdating(modelId);
-
-        try {
-            await requestBrowserData(
-                `/api/admin/ai-models/${modelId}/sources/${sourceId}`,
-                {
-                    method: 'POST',
-                },
-                { fallbackMessage: '切换来源失败' },
-            );
-
-            // 刷新列表
-            await loadModels();
-        } catch (e) {
-            console.error('Activate source failed:', e);
-            showToast('error', e instanceof Error ? e.message : '切换来源失败');
-        } finally {
-            setUpdating(null);
-        }
-    };
-
-    const beginEditSource = (source: ModelSource, modelKey: string) => {
-        setEditingSourceId(source.id);
-        const draft = {
-            modelIdOverride: normalizeSourceModelIdInput(source.modelIdOverride || '', modelKey) || '',
-            reasoningModelId: source.reasoningModelId || '',
-            priority: source.priority,
-            isEnabled: source.isEnabled,
-            notes: source.notes || '',
-        };
-        setEditingDraft(draft);
-        setSourceBaseline(draft);
-    };
-
-    const saveSource = async (modelId: string, sourceId: string, modelKey: string) => {
-        if (!editingDraft) return;
-
-        setUpdating(modelId);
-        try {
-            await requestBrowserData(
-                `/api/admin/ai-models/${modelId}/sources/${sourceId}`,
-                {
-                    method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(buildSourcePayload(editingDraft, modelKey)),
-                },
-                { fallbackMessage: '保存来源失败' },
-            );
-
-            setEditingSourceId(null);
-            setEditingDraft(null);
-            await loadModels();
-            showToast('success', '来源已更新');
-        } catch (e) {
-            showToast('error', e instanceof Error ? e.message : '保存来源失败');
-        } finally {
-            setUpdating(null);
-        }
-    };
-
-    const addSource = async (modelId: string, modelKey: string) => {
-        setUpdating(modelId);
-        try {
-            await requestBrowserData(
-                `/api/admin/ai-models/${modelId}/sources`,
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        sourceKey: newSource.sourceKey,
-                        ...buildSourcePayload(newSource, modelKey),
-                    }),
-                },
-                { fallbackMessage: '添加来源失败' },
-            );
-
-            setAddingToModel(null);
-            resetNewSource();
-            await loadModels();
-            showToast('success', '来源已添加');
-        } catch (e) {
-            showToast('error', e instanceof Error ? e.message : '添加来源失败');
-        } finally {
-            setUpdating(null);
-        }
-    };
-
-    const deleteSource = async (modelId: string, sourceId: string) => {
-        setUpdating(modelId);
-        try {
-            await requestBrowserData(
-                `/api/admin/ai-models/${modelId}/sources/${sourceId}`,
-                {
-                    method: 'DELETE',
-                },
-                { fallbackMessage: '删除来源失败' },
-            );
-
-            await loadModels();
-            setDeleteTarget(null);
-            showToast('success', '来源已删除');
-        } catch (e) {
-            showToast('error', e instanceof Error ? e.message : '删除来源失败');
-        } finally {
-            setUpdating(null);
-        }
-    };
-
-    const deleteModel = async (modelId: string) => {
-        setUpdating(modelId);
-        try {
-            await requestBrowserData(
-                `/api/admin/ai-models/${modelId}`,
-                {
-                    method: 'DELETE',
-                },
-                { fallbackMessage: '删除模型失败' },
-            );
-
-            if (expandedModel === modelId) {
-                setExpandedModel(null);
-            }
-            setDeleteModelTarget(null);
-            await loadModels();
-            showToast('success', '模型已删除');
-        } catch (e) {
-            showToast('error', e instanceof Error ? e.message : '删除模型失败');
-        } finally {
-            setUpdating(null);
-        }
-    };
-
-    // 清除缓存
     const clearCache = async () => {
         try {
-            await requestBrowserData(
-                '/api/admin/ai-models/cache',
-                {
-                    method: 'POST',
-                },
-                { fallbackMessage: '清除缓存失败' },
-            );
-            showToast('success', '缓存已清除');
+            await requestBrowserData('/api/admin/ai-models/cache', { method: 'POST' }, { fallbackMessage: '清除缓存失败' });
+            showToast('success', '模型缓存已清除，修改会立即生效');
         } catch (e) {
-            console.error('Clear cache failed:', e);
+            showToast('error', e instanceof Error ? e.message : '清除缓存失败');
         }
     };
 
-    if (loading) {
-        return <SoundWaveLoader variant="block" />;
-    }
-
-    if (error) {
-        return (
-            <div className="text-center py-12">
-                <p className="text-red-500 mb-4">{error}</p>
-                <button
-                    onClick={loadModels}
-                    className="px-4 py-2 rounded-lg bg-accent text-on-accent hover:bg-accent/90"
-                >
-                    重试
-                </button>
-            </div>
-        );
-    }
-
-    return (
-        <div className="space-y-4">
-            {/* 工具栏 */}
-            <div className="flex items-center justify-between mb-4">
-                <p className="text-sm text-foreground-secondary">
-                    共 {models.length} 个模型
-                </p>
-                <div className="flex gap-2">
-                    <button
-                        onClick={() => setShowCreateForm((value) => !value)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-accent text-on-accent hover:bg-accent/90 transition-colors"
-                    >
-                        <Plus className="w-3.5 h-3.5" />
-                        新增模型
-                    </button>
-                    <button
-                        onClick={clearCache}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-background-secondary hover:bg-background-secondary/80 transition-colors"
-                    >
-                        <RefreshCw className="w-3.5 h-3.5" />
-                        清除缓存
-                    </button>
-                </div>
-            </div>
-
-            {showCreateForm && (
-                <AIModelCreateForm
-                    newModel={newModel}
-                    setNewModel={setNewModel}
-                    updateNewModel={updateNewModel}
-                    showCreateAdvanced={showCreateAdvanced}
-                    setShowCreateAdvanced={setShowCreateAdvanced}
-                    setShowCreateForm={setShowCreateForm}
-                    resetNewModel={resetNewModel}
-                    handleCreateRoutingModeChange={handleCreateRoutingModeChange}
-                    handleCreatePrimaryGatewayChange={handleCreatePrimaryGatewayChange}
-                    createModel={createModel}
-                    updating={updating}
-                />
-            )}
-
-            {/* 模型列表 */}
-            <div className="space-y-3">
-                {models.map(model => {
-                    const isExpanded = expandedModel === model.id;
-                    const isUpdating = updating === model.id;
-                    const activeSource = model.sources.find(s => s.isActive);
-                    const tierInfo = TIER_LABELS[model.requiredTier];
-                    const modelDraft = modelDrafts[model.id] || createEditModelDraft(model);
-                    const isAddingHere = addingToModel === model.id;
-                    const availableGatewayOptions = (['newapi', 'octopus'] as ManagedGatewayKey[]).filter(
-                        (gatewayKey) => !model.sources.some((source) => source.sourceKey === gatewayKey)
-                    );
-
-                    return (
-                        <div
-                            key={model.id}
-                            className="border border-border rounded-xl overflow-hidden"
-                        >
-                            {/* 模型头部 */}
-                            <div
-                                className="flex items-center justify-between p-4 cursor-pointer hover:bg-background-secondary/50 transition-colors"
-                                onClick={() => setExpandedModel(isExpanded ? null : model.id)}
-                            >
-                                <div className="flex items-center gap-3">
-                                    {/* 启用状态；点击开关不展开卡片 */}
-                                    <span className="inline-flex" onClick={(e) => e.stopPropagation()}>
-                                        <SettingsSwitch
-                                            label={`启用 ${model.displayName}`}
-                                            checked={model.isEnabled}
-                                            disabled={isUpdating}
-                                            onToggle={() => updateModel(model.id, { isEnabled: !model.isEnabled })}
-                                        />
-                                    </span>
-
-                                    {/* 模型信息 */}
-                                    <div>
-                                        <div className="flex items-center gap-2">
-                                            {getVendorIcon(model.vendor, 16)}
-                                            <span className="font-medium">{model.displayName}</span>
-                                            <span className="text-xs text-foreground-secondary">
-                                                {getVendorName(model.vendor)}
-                                            </span>
-                                            <span className="text-xs px-2 py-0.5 rounded-full bg-background-secondary text-foreground-secondary">
-                                                {USAGE_TYPE_LABELS[model.usageType] || model.usageType}
-                                            </span>
-                                            <span className={`text-xs px-2 py-0.5 rounded-full ${tierInfo.color}`}>
-                                                {tierInfo.label}
-                                            </span>
-                                            {model.supportsReasoning && (
-                                                <span title="支持推理">
-                                                    <Zap className="w-3.5 h-3.5 text-amber-500" />
-                                                </span>
-                                            )}
-                                            {model.supportsVision && (
-                                                <span title="支持视觉">
-                                                    <Eye className="w-3.5 h-3.5 text-blue-500" />
-                                                </span>
-                                            )}
-                                        </div>
-                                        <p className="text-xs text-foreground-secondary mt-0.5">
-                                            {activeSource?.sourceName || '无活跃来源'}
-                                            {activeSource && !activeSource.hasApiKey && (
-                                                <span className="text-red-500 ml-2">API Key 未配置</span>
-                                            )}
-                                            <span className="ml-2">· {ROUTING_MODE_LABELS[model.routingMode]}</span>
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div className="flex items-center gap-2">
-                                    {isUpdating && <SoundWaveLoader variant="inline" />}
-                                    {/* 整个头部可点击展开；这个按钮给键盘和读屏用户提供同样的入口 */}
-                                    <button
-                                        type="button"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setExpandedModel(isExpanded ? null : model.id);
-                                        }}
-                                        aria-expanded={isExpanded}
-                                        aria-label={`${isExpanded ? '收起' : '展开'} ${model.displayName} 的设置`}
-                                        className="settings-icon-button"
-                                    >
-                                        {isExpanded ? (
-                                            <ChevronUp aria-hidden="true" className="w-5 h-5" />
-                                        ) : (
-                                            <ChevronDown aria-hidden="true" className="w-5 h-5" />
-                                        )}
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* 展开内容 */}
-                            {isExpanded && (
-                                <div className="border-t border-border p-4 bg-background-secondary/30">
-                                    <AIModelSettingsForm
-                                        model={model}
-                                        modelDraft={modelDraft}
-                                        isUpdating={isUpdating}
-                                        updateModelDraft={updateModelDraft}
-                                        saveModelSettings={saveModelSettings}
-                                        setDeleteModelTarget={setDeleteModelTarget}
-                                    />
-
-                                    <AIModelSources
-                                        model={model}
-                                        isUpdating={isUpdating}
-                                        availableGatewayOptions={availableGatewayOptions}
-                                        isAddingHere={isAddingHere}
-                                        setAddingToModel={setAddingToModel}
-                                        newSource={newSource}
-                                        setNewSource={setNewSource}
-                                        editingSourceId={editingSourceId}
-                                        setEditingSourceId={setEditingSourceId}
-                                        editingDraft={editingDraft}
-                                        setEditingDraft={setEditingDraft}
-                                        beginEditSource={beginEditSource}
-                                        saveSource={saveSource}
-                                        activateSource={activateSource}
-                                        setDeleteTarget={setDeleteTarget}
-                                        resetNewSource={resetNewSource}
-                                        addSource={addSource}
-                                    />
-
-                                    {/* 描述 */}
-                                    {model.description && (
-                                        <p className="mt-4 text-xs text-foreground-secondary">
-                                            {model.description}
-                                        </p>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    );
-                })}
-            </div>
-
-            <ConfirmDialog
-                isOpen={!!deleteTarget}
-                onClose={() => setDeleteTarget(null)}
-                onConfirm={() => deleteTarget ? deleteSource(deleteTarget.modelId, deleteTarget.sourceId) : undefined}
-                title="确认删除"
-                description="确定要删除这个来源绑定吗？删除后该模型将不再使用对应网关。"
-                confirmText="确认删除"
-                variant="danger"
-                loading={!!deleteTarget && updating === deleteTarget.modelId}
-            />
-
-            <ConfirmDialog
-                isOpen={!!deleteModelTarget}
-                onClose={() => setDeleteModelTarget(null)}
-                onConfirm={() => deleteModelTarget ? deleteModel(deleteModelTarget.modelId) : undefined}
-                title="确认删除模型"
-                description={`确定要删除 ${deleteModelTarget?.displayName || '该模型'} 吗？对应来源绑定也会一起删除。`}
-                confirmText="确认删除"
-                variant="danger"
-                loading={!!deleteModelTarget && updating === deleteModelTarget.modelId}
-            />
+    if (!models && !error) return <div className="flex min-h-[200px] items-center justify-center"><SoundWaveLoader variant="inline" /></div>;
+    return <div className="ai-catalog">
+        <div className="ai-catalog-toolbar">
+            <input className="settings-input ai-catalog-search" type="search" aria-label="搜索模型" value={query}
+                placeholder={`搜索 ${models?.length ?? 0} 个模型`} onChange={event => setQuery(event.target.value)} />
+            <span style={{ flex: 1 }} />
+            <button type="button" className="settings-button settings-button-compact" onClick={() => void clearCache()} title="保存会自动生效；外部改了数据库时用这个">
+                <RefreshCw size={14} aria-hidden="true" />清除缓存
+            </button>
+            <button type="button" className="settings-button settings-button-compact settings-button-primary" onClick={() => setEditing({ model: null })}>
+                <Plus size={14} aria-hidden="true" />添加模型
+            </button>
         </div>
-    );
+        {error && <div className="settings-alert" role="alert"><span>{error}</span><button type="button" onClick={() => void load()}>重试</button></div>}
+        {models && !visible.length ? <div className="ai-catalog-list"><div className="ai-catalog-empty">
+            {query ? <><Search size={20} aria-hidden="true" /><strong>没有匹配「{query}」的模型</strong></>
+                : <><Boxes size={22} aria-hidden="true" /><strong>还没有模型</strong><span>先在「网关管理」添加网关，再添加模型并选择来源。</span></>}
+        </div></div> : <div className="ai-catalog-list" ref={listRef}>
+            {rows.map(({ key, item: model }) => <div key={key} data-motion-key={key} className="ai-catalog-row" data-disabled={!model.isEnabled || undefined}>
+                <button type="button" className="ai-catalog-row-main" onClick={() => setEditing({ model })} aria-label={`编辑 ${model.displayName}`}>
+                    <span className="ai-catalog-row-icon">{getVendorIcon(model.vendor, 16)}</span>
+                    <span className="ai-catalog-row-text">
+                        <span className="ai-catalog-row-title"><strong>{model.displayName}</strong><span className="ai-catalog-mono">{model.modelKey}</span></span>
+                        <ModelMeta model={model} gateways={gatewayById} />
+                    </span>
+                </button>
+                <span className="ai-catalog-row-side">
+                    <span className="ai-catalog-tier" data-tier={model.requiredTier}>{model.requiredTier === 'free' ? 'Free' : model.requiredTier === 'plus' ? 'Plus' : 'Pro'}</span>
+                    <SettingsSwitch label={`启用 ${model.displayName}`} checked={model.isEnabled} disabled={updating === model.id} onToggle={() => void toggle(model)} />
+                </span>
+            </div>)}
+        </div>}
+        {editing && <AIModelEditor key={editing.model?.id ?? 'new'} model={editing.model} gateways={gateways}
+            onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void load(); }} />}
+    </div>;
 }

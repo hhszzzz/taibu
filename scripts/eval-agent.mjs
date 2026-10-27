@@ -3,6 +3,7 @@ import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mock } from 'node:test';
+import { randomBytes } from 'node:crypto';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 if (process.cwd() !== root) throw new Error('Run eval:agent from the repository root');
@@ -19,18 +20,21 @@ mock.method(features, 'readFeatureModuleStateFresh', async () => ({ status: 'ena
 const argv = process.argv.slice(2), live = argv.includes('--live');
 const vision = argv.includes('--vision');
 const argument = name => { const index = argv.indexOf(name); return index < 0 ? undefined : argv[index + 1]; };
-let config = fixtureConfig, secret;
+let config = fixtureConfig;
 try {
     if (live) {
         const file = argument('--config');
         if (!file) throw new Error('Live evaluation requires --config <private AIModelConfig JSON path>');
-        const input = JSON.parse(await readFile(file, 'utf8'));
-        const { apiKey, ...model } = input;
-        if (!model.id || !model.modelId || !model.vendor || !model.apiUrl || (!apiKey && !process.env[model.apiKeyEnvVar])) throw new Error('Live model config is incomplete');
-        config = { ...model, requiredTier: 'free', supportsVision: !!model.supportsVision, apiKeyEnvVar: apiKey ? 'TAIBU_EVAL_EPHEMERAL_KEY' : model.apiKeyEnvVar };
-        if (apiKey) { secret = apiKey; process.env.TAIBU_EVAL_EPHEMERAL_KEY = apiKey; }
+        const { apiKey, ...model } = JSON.parse(await readFile(file, 'utf8'));
+        if (!model.id || !model.modelId || !model.vendor || !model.apiUrl || !apiKey) throw new Error('Live model config is incomplete');
+        // The key is sealed the way a gateway's saved key is, so the run opens it on the worker's own path.
+        process.env.AGENT_CREDENTIAL_ENCRYPTION_KEY ??= randomBytes(32).toString('base64');
+        const { sealGatewayApiKey } = require('../src/lib/ai/gateway-secrets.server.ts');
+        const gatewayId = 'eval-gateway', { secret: apiKeySecret } = sealGatewayApiKey(gatewayId, apiKey);
+        const source = { sourceKey: 'eval', sourceName: 'eval', gatewayId, apiKeySecret, apiUrl: model.apiUrl, modelIdOverride: model.modelId, priority: 0, isEnabled: true, isActive: true };
+        config = { ...model, requiredTier: 'free', supportsVision: !!model.supportsVision, gatewayId, apiKeySecret, sources: [source] };
     }
-    const { createPiSDKStream } = require('../src/lib/agent/pi-stream.server.ts');
+    const { createPiModelStream } = require('../src/lib/agent/pi-stream.server.ts');
     let visionBytes;
     if (vision) {
         if (!live || !config.supportsVision) throw new Error('--vision requires --live and a vision-enabled private model configuration');
@@ -70,8 +74,7 @@ try {
         // 质量评测依据：排盘成果与详查结果都提供规范文本。
         const coreTexts = () => [...store.drafts.values()].filter(artifact => artifact.kind === 'calculation' || getAgentDrilldownBase(artifact.tool_name)).map(artifact => artifact.result.canonicalText);
         // This private configuration represents an administrator platform model.
-        // Resolve its key through the same environment path as the worker.
-        const streamFn = live ? createPiSDKStream(config, { reasoning: false, ...(item.visual ? { resolveImages: async messages => {
+        const streamFn = live ? createPiModelStream(config, { reasoning: false, ...(item.visual ? { resolveImages: async messages => {
             const lastUser = messages.findLastIndex(message => message.role === 'user');
             return messages.map((message, index) => index === lastUser ? { role: 'user', content: [{ type: 'text', text: typeof message.content === 'string' ? message.content : item.prompt }, { type: 'image', image: visionBytes, mediaType: 'image/png' }] } : message);
         } } : {}) }) : scripted(index => {
@@ -132,5 +135,4 @@ try {
     if (report.cases.some(item => !item.passed)) process.exitCode = 1;
 } finally {
     mock.restoreAll();
-    if (secret) delete process.env.TAIBU_EVAL_EPHEMERAL_KEY;
 }

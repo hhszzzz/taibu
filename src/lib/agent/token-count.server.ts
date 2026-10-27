@@ -1,7 +1,8 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
 import type { AIModelConfig } from '@/types';
-import { getApiKey, isModelAvailable, MODEL_REQUEST_USER_AGENT } from '@/lib/ai/providers/ai-sdk-provider';
+import { isModelAvailable, MODEL_REQUEST_USER_AGENT } from '@/lib/ai/providers/ai-sdk-provider';
+import { sourceApiKeyOrNone } from '@/lib/ai/gateway-secrets.server';
 import { applySourceToModel, getOrderedModelSources } from '@/lib/ai/source-runtime';
 import { estimateTokens } from './token-estimate';
 
@@ -59,7 +60,7 @@ export async function countModelTokens(config: AIModelConfig, text: string, opti
     const estimate = () => estimateTokens(config.modelId || config.id, text);
     if (options.apiKey) return estimate();
     const source = getOrderedModelSources(config).map(item => applySourceToModel(config, item)).find(isModelAvailable);
-    const key = source && getApiKey(source.apiKeyEnvVar);
+    const key = source && sourceApiKeyOrNone(source);
     if (!source || !key) return estimate();
     const url = `${source.apiUrl.replace(/\/+$/u, '')}/messages/count_tokens`;
     if ((unsupported.get(url) ?? 0) > Date.now()) return estimate();

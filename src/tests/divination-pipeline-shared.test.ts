@@ -2,11 +2,9 @@ import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 
-import { ensureRouteTestEnv, mockAIFeatureState } from './helpers/route-mock';
+import { mockAIFeatureState } from './helpers/route-mock';
 import { createMockAuthContext } from './helpers/auth-mock';
 import type { DivinationRouteConfig, InterpretPromptContext } from '../lib/api/divination-pipeline';
-
-ensureRouteTestEnv();
 
 type MutableModule = Record<string, (...args: never[]) => unknown>;
 

@@ -1,8 +1,7 @@
 /**
  * 获取可用的 AI 模型配置
  *
- * 这个 API 在服务端运行，可以访问所有环境变量
- * 优先从数据库获取配置，环境变量作为回退
+ * 模型目录来自数据库（设置中心「AI 服务」维护），只返回界面需要的公开字段
  */
 
 import { NextRequest } from 'next/server';
@@ -66,7 +65,9 @@ export async function GET(request: NextRequest) {
                 name: m.name,
                 vendor: m.vendor,
                 supportsReasoning: m.supportsReasoning,
-                reasoningEffortFormat: m.reasoningEffortFormat ?? null,
+                thinkingLevels: m.supportsReasoning ? m.thinkingLevels ?? [] : [],
+                defaultThinkingLevel: m.supportsReasoning ? m.defaultReasoningEffort ?? null : null,
+                contextWindow: m.contextWindow ?? null,
                 isReasoningDefault: m.isReasoningDefault,
                 allowed: access.allowed,
                 tier: getModelRequiredTier(m),

@@ -112,17 +112,16 @@ const plainConversations = [
 ];
 
 const BAZI_CHART = 'dddddddd-0000-4000-8000-000000000001';
-// Test models for the model menu: free/Plus/Pro tiers, reasoning on and off, both reasoning-effort
-// wire formats and vision. They attach to the newapi gateway; without NEWAPI_API_KEY the menu still
-// shows them (and their effort levels) but sending reports the missing key.
-const TEST_GATEWAY = '99999999-7000-4000-8000-000000000000';
+// Test models for the model menu: free/Plus/Pro tiers, thinking on and off, several thinking formats and level sets,
+// and vision. They attach to the newapi gateway; until an administrator saves a working address and key for it in the
+// settings center, the menu still shows them (and their levels) but sending reports the missing key.
 const TEST_MODELS = [
-  { id: '99999999-7000-4000-8000-000000000001', key: 'deepseek-v3.2', name: 'DeepSeek V3.2', vendor: 'deepseek', tier: 'free', reasoningTier: null, reasoning: false, effortFormat: null, effort: null, vision: false, reasoningDefault: false, sort: 10, description: '免费档；不推理，用于对照。' },
-  { id: '99999999-7000-4000-8000-000000000002', key: 'kimi-k2.5', name: 'Kimi K2.5', vendor: 'moonshot', tier: 'free', reasoningTier: 'free', reasoning: true, effortFormat: 'reasoning_effort', effort: 'medium', vision: false, reasoningDefault: true, sort: 20, description: '免费档的推理模型（reasoning_effort），选中即开启思考。' },
-  { id: '99999999-7000-4000-8000-000000000003', key: 'glm-4.7', name: 'GLM-4.7', vendor: 'glm', tier: 'free', reasoningTier: 'free', reasoning: true, effortFormat: 'reasoning_object', effort: 'high', vision: false, reasoningDefault: false, sort: 30, description: '免费档的推理模型（reasoning 对象），默认高。' },
-  { id: '99999999-7000-4000-8000-000000000004', key: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', vendor: 'anthropic', tier: 'plus', reasoningTier: 'plus', reasoning: true, effortFormat: 'reasoning_effort', effort: 'medium', vision: true, reasoningDefault: false, sort: 40, description: 'Plus 档；支持图片与思考等级，默认中等。' },
-  { id: '99999999-7000-4000-8000-000000000005', key: 'gemini-3', name: 'Gemini 3 Pro', vendor: 'google', tier: 'plus', reasoningTier: 'plus', reasoning: true, effortFormat: 'reasoning_effort', effort: 'high', vision: true, reasoningDefault: false, sort: 50, description: 'Plus 档；支持图片与思考等级，默认高。' },
-  { id: '99999999-7000-4000-8000-000000000006', key: 'gpt-5.1', name: 'GPT-5.1', vendor: 'openai', tier: 'pro', reasoningTier: 'pro', reasoning: true, effortFormat: 'reasoning_object', effort: 'xhigh', vision: true, reasoningDefault: true, sort: 60, description: 'Pro 档；用于检查会员限制，默认超高。' },
+  { id: '99999999-7000-4000-8000-000000000001', key: 'deepseek-v3.2', name: 'DeepSeek V3.2', vendor: 'deepseek', tier: 'free', reasoningTier: null, reasoning: false, format: 'openai', levels: [], effort: null, context: 131072, vision: false, reasoningDefault: false, sort: 10, description: '免费档；不思考，用于对照。' },
+  { id: '99999999-7000-4000-8000-000000000002', key: 'kimi-k2.5', name: 'Kimi K2.5', vendor: 'moonshot', tier: 'free', reasoningTier: 'free', reasoning: true, format: 'openai', levels: ['low', 'medium', 'high'], effort: 'medium', context: 262144, vision: false, reasoningDefault: true, sort: 20, description: '免费档的思考模型（reasoning_effort，低/中/高），选中即开启思考。' },
+  { id: '99999999-7000-4000-8000-000000000003', key: 'glm-4.7', name: 'GLM-4.7', vendor: 'glm', tier: 'free', reasoningTier: 'free', reasoning: true, format: 'zai', levels: [], effort: null, context: 204800, vision: false, reasoningDefault: false, sort: 30, description: '免费档的思考模型（thinking 开关，不分等级）。' },
+  { id: '99999999-7000-4000-8000-000000000004', key: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', vendor: 'anthropic', tier: 'plus', reasoningTier: 'plus', reasoning: true, format: 'openai', levels: ['low', 'medium', 'high'], effort: 'medium', context: 200000, vision: true, reasoningDefault: false, sort: 40, description: 'Plus 档；支持图片与思考等级，默认中等。' },
+  { id: '99999999-7000-4000-8000-000000000005', key: 'gemini-3', name: 'Gemini 3 Pro', vendor: 'google', tier: 'plus', reasoningTier: 'plus', reasoning: true, format: 'openai', levels: ['low', 'high'], effort: 'high', context: 1048576, vision: true, reasoningDefault: false, sort: 50, description: 'Plus 档；支持图片，思考只有低和高两档，默认高。' },
+  { id: '99999999-7000-4000-8000-000000000006', key: 'gpt-5.1', name: 'GPT-5.1', vendor: 'openai', tier: 'pro', reasoningTier: 'pro', reasoning: true, format: 'openrouter', levels: ['minimal', 'low', 'medium', 'high', 'xhigh'], effort: 'xhigh', context: 400000, vision: true, reasoningDefault: true, sort: 60, description: 'Pro 档；用于检查会员限制（reasoning 对象），默认超高。' },
 ];
 const agentDemo = await buildAgentDemo({ root, baziChartId: BAZI_CHART, plainConversations, now });
 // Private attachments are stored as the upload route stores them: `agent-attachments/<user>/<id>` in the file volume.
@@ -159,10 +158,10 @@ delete from public.community_reports where reporter_id = any(${idArray}) or revi
 delete from public.community_posts where user_id = any(${idArray});
 delete from public.activation_keys where used_by = any(${idArray}) or created_by = any(${idArray});
 delete from public.announcements where content like '本地演示环境已就绪%' or content like '社区与命盘记录已放入示例数据%';
--- Test models and their bindings; the gateway row stays when someone configured their own newapi gateway.
-delete from public.ai_model_gateway_bindings where model_id = any(array[${TEST_MODELS.map(model => q(model.id)).join(', ')}]::uuid[]) or gateway_id = ${q(TEST_GATEWAY)};
+-- Test models and their bindings. The gateway row stays, with the address and key an administrator saved for it
+-- and any other models bound to it.
+delete from public.ai_model_gateway_bindings where model_id = any(array[${TEST_MODELS.map(model => q(model.id)).join(', ')}]::uuid[]);
 delete from public.ai_models where id = any(array[${TEST_MODELS.map(model => q(model.id)).join(', ')}]::uuid[]);
-delete from public.ai_gateways where id = ${q(TEST_GATEWAY)};
 -- Memories before runs (clearing their source run is an update the memory guard
 -- only allows the owner), runs before conversations (a waiting task keeps its
 -- conversation from being deleted).
@@ -197,23 +196,22 @@ for (const user of users) {
     on conflict (user_id) do update set custom_instructions = excluded.custom_instructions;`);
 }
 
-// Model menu entries. The gateway keeps whatever base URL a real one already has; ours takes NEWAPI_BASE_URL
-// from the environment (selfhost passes NEWAPI_BASE_URL/NEWAPI_API_KEY through to the stack).
-statements.push(`insert into public.ai_gateways (id, gateway_key, display_name, base_url, api_key_env_var, transport, is_enabled, notes)
-  values (${q(TEST_GATEWAY)}, 'newapi', '本地测试网关', ${q(process.env.NEWAPI_BASE_URL || 'http://newapi.local')}, 'NEWAPI_API_KEY', 'openai_compatible', true,
-    ${q('本地演示用：把 base_url 改成可用的 NewAPI 地址，并在启动环境里提供 NEWAPI_API_KEY 后，测试模型即可真正调用。')})
-  on conflict (gateway_key) do nothing;`);
+// Model menu entries. The test gateway is created once without a key; an existing newapi gateway is left as it is.
+statements.push(`insert into public.ai_gateways (id, gateway_key, display_name, base_url, transport, is_enabled, notes)
+  values (${q(TEST_GATEWAY)}, 'newapi', '本地测试网关', 'http://newapi.local', 'openai_compatible', true,
+    ${q('本地演示用：在设置中心「AI 服务 → 网关管理」把地址改成可用的网关并填写密钥后，测试模型即可真正调用。')})
+  on conflict do nothing;`);
 for (const model of TEST_MODELS) {
   statements.push(`insert into public.ai_models
     (id, model_key, display_name, vendor, is_enabled, sort_order, required_tier, supports_reasoning, reasoning_required_tier,
-     is_reasoning_default, supports_vision, default_temperature, default_max_tokens, description, usage_type, routing_mode,
-     default_reasoning_effort, reasoning_effort_format)
+     is_reasoning_default, supports_vision, default_temperature, default_max_tokens, description, usage_type,
+     default_reasoning_effort, thinking_format, thinking_levels, context_window)
     values (${q(model.id)}, ${q(model.key)}, ${q(model.name)}, ${q(model.vendor)}, true, ${model.sort}, ${q(model.tier)}, ${model.reasoning},
-      ${q(model.reasoningTier)}, ${model.reasoningDefault}, ${model.vision}, 0.7, 8192, ${q(`本地测试模型：${model.description}`)}, 'chat', 'auto',
-      ${q(model.effort)}, ${q(model.effortFormat)});`);
+      ${q(model.reasoningTier)}, ${model.reasoningDefault}, ${model.vision}, 0.7, 8192, ${q(`本地测试模型：${model.description}`)}, 'chat',
+      ${q(model.effort)}, ${q(model.format)}, ${q(`{${model.levels.join(',')}}`)}::text[], ${model.context});`);
 }
 statements.push(`insert into public.ai_model_gateway_bindings (model_id, gateway_id, model_id_override, is_enabled, priority)
-  select model.id, gateway.id, null, true, 1
+  select model.id, gateway.id, null, true, 0
   from public.ai_models model, public.ai_gateways gateway
   where model.id = any(array[${TEST_MODELS.map(model => q(model.id)).join(', ')}]::uuid[]) and gateway.gateway_key = 'newapi'
   on conflict (model_id, gateway_id) do nothing;`);

@@ -1,4 +1,3 @@
-import { getModelName } from '@/lib/ai/ai-config';
 import { PERSONALITY_BASICS, type MBTIType } from '@/lib/divination/mbti';
 
 export const HISTORY_TYPES = [
@@ -180,7 +179,7 @@ export function getHistoryReplayMode(
 function getModelNameFromConversation(row: Record<string, unknown>): string | undefined {
   const sourceData = (row.conversation as { source_data?: Record<string, unknown> } | null)?.source_data;
   const modelId = typeof sourceData?.model_id === 'string' ? sourceData.model_id : null;
-  return modelId ? getModelName(modelId) : undefined;
+  return modelId ?? undefined;
 }
 
 function truncateTitle(title: string) {

@@ -2,6 +2,7 @@ import type { RankedResult, SearchCandidate } from '@/lib/knowledge-base/types';
 import { DEFAULT_RERANK_MODEL_ID } from '@/lib/ai/ai-config';
 import { getModelConfigAsync, getModelsByUsageTypeAsync } from '@/lib/server/ai-config';
 import { applySourceToModel, getOrderedModelSources } from '@/lib/ai/source-runtime';
+import { sourceApiKeyOrNone } from '@/lib/ai/gateway-secrets.server';
 import type { AIModelConfig } from '@/types';
 
 async function resolveRerankerModelConfig(): Promise<AIModelConfig | null> {
@@ -32,7 +33,7 @@ export async function callReranker(
     const sources = getOrderedModelSources(modelConfig);
     for (const source of sources) {
         const runtimeConfig = applySourceToModel(modelConfig, source);
-        const apiKey = process.env[runtimeConfig.apiKeyEnvVar];
+        const apiKey = sourceApiKeyOrNone(runtimeConfig);
         if (!apiKey || !runtimeConfig.apiUrl) {
             continue;
         }

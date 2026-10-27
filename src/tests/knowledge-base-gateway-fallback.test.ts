@@ -1,8 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-process.env.NEWAPI_API_KEY = 'newapi-key';
-process.env.OCTOPUS_API_KEY = 'octopus-key';
+import { sealedGateway } from './helpers/gateway-key';
+
+const NEWAPI_KEY = sealedGateway('gateway-newapi', 'newapi-key');
+const OCTOPUS_KEY = sealedGateway('gateway-octopus', 'octopus-key');
 
 test('generateEmbedding should use unified embedding model sources and fall back to octopus', async (t) => {
   const serverConfigModule = require('../lib/server/ai-config') as any;
@@ -14,6 +16,7 @@ test('generateEmbedding should use unified embedding model sources and fall back
   const originalFetch = global.fetch;
 
   const urls: string[] = [];
+  const auth: Array<string | null> = [];
 
   serverConfigModule.getModelConfigAsync = async (modelId: string) => {
     if (modelId !== 'text-embedding-v4') return undefined;
@@ -24,7 +27,7 @@ test('generateEmbedding should use unified embedding model sources and fall back
       usageType: 'embedding',
       modelId: 'text-embedding-v4',
       apiUrl: 'https://newapi.example/v1/embeddings',
-      apiKeyEnvVar: 'NEWAPI_API_KEY',
+      ...NEWAPI_KEY,
       sourceKey: 'newapi',
       transport: 'openai_compatible',
       supportsReasoning: false,
@@ -34,7 +37,7 @@ test('generateEmbedding should use unified embedding model sources and fall back
           sourceKey: 'newapi',
           sourceName: 'NewAPI',
           apiUrl: 'https://newapi.example/v1/embeddings',
-          apiKeyEnvVar: 'NEWAPI_API_KEY',
+          ...NEWAPI_KEY,
           modelIdOverride: 'text-embedding-v4',
           transport: 'openai_compatible',
           priority: 1,
@@ -45,7 +48,7 @@ test('generateEmbedding should use unified embedding model sources and fall back
           sourceKey: 'octopus',
           sourceName: 'Octopus',
           apiUrl: 'https://octopus.example/v1/embeddings',
-          apiKeyEnvVar: 'OCTOPUS_API_KEY',
+          ...OCTOPUS_KEY,
           modelIdOverride: 'text-embedding-v4',
           transport: 'openai_compatible',
           priority: 2,
@@ -59,8 +62,9 @@ test('generateEmbedding should use unified embedding model sources and fall back
     await serverConfigModule.getModelConfigAsync('text-embedding-v4'),
   ];
 
-  global.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+  global.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     urls.push(String(input));
+    auth.push(new Headers(init?.headers).get('Authorization'));
     if (String(input).includes('newapi')) {
       return new Response('embedding failure', { status: 503 });
     }
@@ -84,6 +88,8 @@ test('generateEmbedding should use unified embedding model sources and fall back
     'https://newapi.example/v1/embeddings',
     'https://octopus.example/v1/embeddings',
   ]);
+  // Each source is called with its own gateway's saved key.
+  assert.deepEqual(auth, ['Bearer newapi-key', 'Bearer octopus-key']);
 });
 
 test('callReranker should use unified rerank model sources and fall back to octopus', async (t) => {
@@ -96,6 +102,7 @@ test('callReranker should use unified rerank model sources and fall back to octo
   const originalFetch = global.fetch;
 
   const urls: string[] = [];
+  const auth: Array<string | null> = [];
 
   serverConfigModule.getModelConfigAsync = async (modelId: string) => {
     if (modelId !== 'qwen3-rerank') return undefined;
@@ -106,7 +113,7 @@ test('callReranker should use unified rerank model sources and fall back to octo
       usageType: 'rerank',
       modelId: 'qwen3-rerank',
       apiUrl: 'https://newapi.example/v1/rerank',
-      apiKeyEnvVar: 'NEWAPI_API_KEY',
+      ...NEWAPI_KEY,
       sourceKey: 'newapi',
       transport: 'openai_compatible',
       supportsReasoning: false,
@@ -116,7 +123,7 @@ test('callReranker should use unified rerank model sources and fall back to octo
           sourceKey: 'newapi',
           sourceName: 'NewAPI',
           apiUrl: 'https://newapi.example/v1/rerank',
-          apiKeyEnvVar: 'NEWAPI_API_KEY',
+          ...NEWAPI_KEY,
           modelIdOverride: 'qwen3-rerank',
           transport: 'openai_compatible',
           priority: 1,
@@ -127,7 +134,7 @@ test('callReranker should use unified rerank model sources and fall back to octo
           sourceKey: 'octopus',
           sourceName: 'Octopus',
           apiUrl: 'https://octopus.example/v1/rerank',
-          apiKeyEnvVar: 'OCTOPUS_API_KEY',
+          ...OCTOPUS_KEY,
           modelIdOverride: 'qwen3-rerank',
           transport: 'openai_compatible',
           priority: 2,
@@ -141,8 +148,9 @@ test('callReranker should use unified rerank model sources and fall back to octo
     await serverConfigModule.getModelConfigAsync('qwen3-rerank'),
   ];
 
-  global.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+  global.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     urls.push(String(input));
+    auth.push(new Headers(init?.headers).get('Authorization'));
     if (String(input).includes('newapi')) {
       return new Response('rerank failure', { status: 500 });
     }
@@ -182,4 +190,5 @@ test('callReranker should use unified rerank model sources and fall back to octo
     'https://newapi.example/v1/rerank',
     'https://octopus.example/v1/rerank',
   ]);
+  assert.deepEqual(auth, ['Bearer newapi-key', 'Bearer octopus-key']);
 });

@@ -1,11 +1,8 @@
 import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
-import { ensureRouteTestEnv } from './helpers/route-mock';
 import { createMockAuthContext } from './helpers/auth-mock';
 import { createMockScopedDb } from './helpers/db-mock';
-
-ensureRouteTestEnv();
 
 function createInsertScope(expectedTable: string, id: string, onInsert: (payload: Record<string, unknown>) => void) {
     return createMockScopedDb({

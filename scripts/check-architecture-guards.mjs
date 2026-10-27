@@ -778,6 +778,7 @@ const SYSTEM_DB_ALLOWED = [
   'src/lib/knowledge-base/ingest.ts',
   'src/app/api/knowledge-base/archive/',
   'src/lib/announcements.server.ts',
+  'src/lib/admin/ai-catalog.server.ts',
 ];
 mustNotMatchInTree(
   'src',

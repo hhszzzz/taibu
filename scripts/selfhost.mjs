@@ -163,9 +163,8 @@ function envFile(entries) {
 }
 
 const PASSTHROUGH = [
-  'NEWAPI_BASE_URL', 'NEWAPI_API_KEY', 'OCTOPUS_BASE_URL', 'OCTOPUS_API_KEY',
   'TAVILY_API_KEY', 'LINUXDO_CLIENT_ID', 'LINUXDO_CLIENT_SECRET',
-  'AMAP_WEB_SERVICE_KEY', 'MINGAI_FALLBACK_MODELS_JSON',
+  'AMAP_WEB_SERVICE_KEY',
 ];
 
 /** Rewrites every env file from config.json. Safe to call before each compose run. */

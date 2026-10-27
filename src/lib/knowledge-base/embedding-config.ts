@@ -2,6 +2,7 @@ import type { ScopedDb } from '@/lib/db/context.server';
 import { DEFAULT_EMBEDDING_MODEL_ID } from '@/lib/ai/ai-config';
 import { getModelConfigAsync, getModelsByUsageTypeAsync } from '@/lib/server/ai-config';
 import { applySourceToModel, getOrderedModelSources } from '@/lib/ai/source-runtime';
+import { sourceApiKeyOrNone } from '@/lib/ai/gateway-secrets.server';
 import type { AIModelConfig } from '@/types';
 
 export const EMBEDDING_MODELS = {
@@ -69,7 +70,7 @@ async function callGatewayEmbedding(text: string, modelConfig: AIModelConfig): P
 
     for (const source of sources) {
         const runtimeConfig = applySourceToModel(modelConfig, source);
-        const apiKey = process.env[runtimeConfig.apiKeyEnvVar];
+        const apiKey = sourceApiKeyOrNone(runtimeConfig);
         if (!apiKey || !runtimeConfig.apiUrl) {
             continue;
         }

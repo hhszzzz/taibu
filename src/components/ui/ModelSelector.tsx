@@ -10,13 +10,14 @@ import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
 import { useAvailableModels } from '@/lib/hooks/useAvailableModels';
 import { CUSTOM_PROVIDER_CHANGED_EVENT, getCustomProvider, getCustomProviderDisplayName } from '@/lib/chat/custom-provider';
 import type { AIVendor, AIReasoningEffort } from '@/types';
+import { resolveThinkingLevel } from '@/lib/ai/thinking';
 import { type ModelSettingsProps, type AgentCollaborator } from '@/lib/chat/model-settings';
 import { useCollaborationPreset } from '@/lib/chat/collaboration-preset';
 import type { MembershipType } from '@/lib/user/membership';
 
 interface ClientModelConfig {
     id: string; name: string; vendor: AIVendor; supportsReasoning: boolean;
-    reasoningEffortFormat?: 'reasoning_object' | 'reasoning_effort' | null;
+    thinkingLevels?: AIReasoningEffort[]; defaultThinkingLevel?: AIReasoningEffort | null;
     isReasoningDefault?: boolean; allowed?: boolean; tier?: 'free' | 'plus' | 'pro' | null; blockedReason?: string | null; reasoningAllowed?: boolean;
 }
 /** 多模型协作的成员上限：0–4 个，主模型不占名额。 */
@@ -32,10 +33,11 @@ interface ModelSelectorProps extends ModelSettingsProps {
     onCustomProvider?: () => void;
 }
 
-/** claude 努力程度档位（实测四档 + 超高/最高扩展）：低 / 中等 / 高 / 超高 / 最高。 */
+/** 努力程度档位（claude 同构）；菜单只列出当前模型支持的档位，「推荐」标在模型的默认档上。 */
 const EFFORT_OPTIONS: Array<{ value: AIReasoningEffort; label: string; badge?: string; tone?: 'warning' }> = [
+    { value: 'minimal', label: '最低' },
     { value: 'low', label: '低' },
-    { value: 'medium', label: '中等', badge: '推荐' },
+    { value: 'medium', label: '中等' },
     { value: 'high', label: '高' },
     { value: 'xhigh', label: '超高' },
     { value: 'max', label: '最高', badge: '3.5× 或更多用量', tone: 'warning' },
@@ -44,15 +46,21 @@ const EFFORT_OPTIONS: Array<{ value: AIReasoningEffort; label: string; badge?: s
 function effortLabel(effort: AIReasoningEffort | null | undefined, enabled: boolean): string {
     if (!enabled) return '关';
     if (!effort) return '默认';
-    return EFFORT_OPTIONS.find(option => option.value === (effort === 'minimal' ? 'low' : effort))?.label ?? '默认';
+    return EFFORT_OPTIONS.find(option => option.value === effort)?.label ?? '默认';
+}
+
+/** The level a chosen effort runs at on this model (the server moves an unlisted one to the nearest listed level). */
+function modelEffort(model: ClientModelConfig | undefined, effort: AIReasoningEffort | null | undefined): AIReasoningEffort | null {
+    if (!effort || !model?.thinkingLevels?.length) return null;
+    return resolveThinkingLevel({ thinkingLevels: model.thinkingLevels, defaultReasoningEffort: model.defaultThinkingLevel ?? undefined }, effort);
 }
 
 /** What the reasoning setting reads as next to the model name, e.g. 高（claude 实测只显示档位，不加「推理」前缀）. */
 function reasoningSummary(model: ClientModelConfig | undefined, enabled: boolean, effort: AIReasoningEffort | null | undefined, levels: boolean): string | null {
     if (!model?.supportsReasoning || model.reasoningAllowed === false) return null;
     if (!enabled) return '关';
-    if (!levels || !model.reasoningEffortFormat) return '开';
-    return effortLabel(effort, enabled);
+    if (!levels || !model.thinkingLevels?.length) return '开';
+    return effortLabel(modelEffort(model, effort), enabled);
 }
 
 export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange, reasoningEnabled = false, onReasoningChange,
@@ -103,8 +111,10 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
     const label = `选择模型：${current?.name ?? '暂无可用模型'}${toolbarStyle && summary ? ` · ${summary}` : ''}`;
     const close = () => { setOpen(false); setEffortOpen(false); setCollabOpen(false); };
     const reasoningSupported = !!current?.supportsReasoning && current.reasoningAllowed !== false;
-    const effortSupported = reasoningSupported && !!current.reasoningEffortFormat && !!onReasoningEffortChange;
-    const effectiveEffort = reasoningEffort === 'minimal' ? 'low' : reasoningEffort;
+    const effortSupported = reasoningSupported && !!current.thinkingLevels?.length && !!onReasoningEffortChange;
+    const effectiveEffort = modelEffort(current, reasoningEffort);
+    const effortOptions = EFFORT_OPTIONS.filter(option => current?.thinkingLevels?.includes(option.value));
+    const recommendedEffort = current?.defaultThinkingLevel ?? (current?.thinkingLevels?.includes('medium') ? 'medium' : null);
     const collaborationEnabled = subCollaborators.length > 0;
     // 协作成员 0–4 个：满员后未选中的模型不可再加入（主模型不占名额）。
     const collaborationFull = subCollaborators.length >= MAX_COLLABORATORS;
@@ -159,7 +169,7 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
             {reasoningSupported && (effortSupported
                 ? <button ref={effortRef} type="button" role="menuitem" className="chat-model-action chat-model-menu-row" aria-haspopup="menu" aria-expanded={effortOpen}
                     onClick={() => setEffortOpen(value => !value)}>
-                    <span>努力程度</span><span className="chat-model-menu-value">{effortLabel(reasoningEffort, reasoningEnabled)}</span><ChevronRight size={14} aria-hidden="true" />
+                    <span>努力程度</span><span className="chat-model-menu-value">{effortLabel(effectiveEffort, reasoningEnabled)}</span><ChevronRight size={14} aria-hidden="true" />
                 </button>
                 : <button type="button" role="menuitemcheckbox" aria-checked={reasoningEnabled} className="chat-model-action chat-model-menu-row" onClick={() => onReasoningChange?.(!reasoningEnabled)}>
                     <span>推理</span>{reasoningEnabled && <Check size={14} aria-hidden="true" />}
@@ -184,10 +194,13 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
             label="努力程度" side="right-start" className="chat-model-menu chat-effort-menu" arrowNavigation>
             <p className="chat-model-note chat-model-effort-note">投入程度越高，回复越详尽，但耗时越长，且会更快消耗您的使用限额。</p>
             <div>
-                {EFFORT_OPTIONS.map(option => <button key={option.value} type="button" role="menuitemradio" aria-checked={reasoningEnabled && effectiveEffort === option.value}
-                    className="chat-model-action chat-model-menu-row" onClick={() => chooseEffort(option.value)}>
-                    <span>{option.label}{option.badge && <span className="chat-model-badge" data-tone={option.tone} aria-hidden="true">{option.badge}</span>}</span>{reasoningEnabled && effectiveEffort === option.value && <Check size={14} aria-hidden="true" />}
-                </button>)}
+                {effortOptions.map(option => {
+                    const badge = option.value === recommendedEffort ? '推荐' : option.badge;
+                    return <button key={option.value} type="button" role="menuitemradio" aria-checked={reasoningEnabled && effectiveEffort === option.value}
+                        className="chat-model-action chat-model-menu-row" onClick={() => chooseEffort(option.value)}>
+                        <span>{option.label}{badge && <span className="chat-model-badge" data-tone={badge === option.badge ? option.tone : undefined} aria-hidden="true">{badge}</span>}</span>{reasoningEnabled && effectiveEffort === option.value && <Check size={14} aria-hidden="true" />}
+                    </button>;
+                })}
                 <button type="button" role="menuitemradio" aria-checked={reasoningEnabled && !reasoningEffort}
                     className="chat-model-action chat-model-menu-row" onClick={() => chooseEffort(null)}>
                     <span>模型默认</span>{reasoningEnabled && !reasoningEffort && <Check size={14} aria-hidden="true" />}

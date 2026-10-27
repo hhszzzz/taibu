@@ -1,13 +1,11 @@
 import { beforeEach, test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
-import { ensureRouteTestEnv, mockAIFeatureState, mockAIRateLimit, mockRouteUserContext, blockRouteNetwork } from './helpers/route-mock';
+import { mockAIFeatureState, mockAIRateLimit, mockRouteUserContext, blockRouteNetwork } from './helpers/route-mock';
 import { createMockAuthContext } from './helpers/auth-mock';
 import { createMockScopedDb } from './helpers/db-mock';
 import { createMockUIMessageResult } from './helpers/ui-message-result';
 import type { CreateAIAnalysisParams } from '../lib/ai/ai-analysis';
-
-ensureRouteTestEnv();
 
 // The CommonJS test loader keeps imported function lookups live; no cache eviction is needed.
 beforeEach((t) => {

@@ -1,13 +1,10 @@
 import "server-only";
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { openSecret, sealSecret, type SealedSecret } from "@/lib/crypto/secret-box.server";
 
-export interface EncryptedAgentCredential {
-  version: 1;
-  iv: string;
-  tag: string;
-  data: string;
-}
-function credentialKey() {
+export type EncryptedAgentCredential = SealedSecret;
+
+/** The deployment's 32-byte master key; other secret families derive their own keys from it. */
+export function agentCredentialKey() {
   const value = process.env.AGENT_CREDENTIAL_ENCRYPTION_KEY;
   const key = Buffer.from(value ?? "", "base64");
   if (!value || key.length !== 32 || key.toString("base64") !== value)
@@ -19,16 +16,7 @@ export function encryptAgentCredential(
   userId: string,
   runId: string,
 ): EncryptedAgentCredential {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", credentialKey(), iv);
-  cipher.setAAD(Buffer.from(`taibu-agent:v1:${userId}:${runId}`));
-  const data = Buffer.concat([cipher.update(secret, "utf8"), cipher.final()]);
-  return {
-    version: 1,
-    iv: iv.toString("base64"),
-    tag: cipher.getAuthTag().toString("base64"),
-    data: data.toString("base64"),
-  };
+  return sealSecret(agentCredentialKey(), secret, `taibu-agent:v1:${userId}:${runId}`);
 }
 export function decryptAgentCredential(
   value: EncryptedAgentCredential,
@@ -37,15 +25,5 @@ export function decryptAgentCredential(
 ) {
   if (value.version !== 1)
     throw new Error("AGENT_CREDENTIAL_VERSION_UNSUPPORTED");
-  const decipher = createDecipheriv(
-    "aes-256-gcm",
-    credentialKey(),
-    Buffer.from(value.iv, "base64"),
-  );
-  decipher.setAAD(Buffer.from(`taibu-agent:v1:${userId}:${runId}`));
-  decipher.setAuthTag(Buffer.from(value.tag, "base64"));
-  return Buffer.concat([
-    decipher.update(Buffer.from(value.data, "base64")),
-    decipher.final(),
-  ]).toString("utf8");
+  return openSecret(agentCredentialKey(), value, `taibu-agent:v1:${userId}:${runId}`);
 }

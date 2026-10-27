@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import type { AIModelConfig } from '../types';
 import { estimateTokens, tokenFamily } from '../lib/agent/token-estimate';
 import { countModelTokens, resetTokenCountCache } from '../lib/agent/token-count.server';
+import { sealedGateway } from './helpers/gateway-key';
 
 test('models fall into the tokenizer families new-api tokenkit uses', () => {
   const cases: Array<[string, ReturnType<typeof tokenFamily>]> = [
@@ -25,7 +26,8 @@ test('estimates match new-api tokenkit for the same text and model', () => {
 
 const model = (overrides: Partial<AIModelConfig> = {}): AIModelConfig => ({
   id: 'deepseek-v3.2', name: 'DeepSeek V3.2', vendor: 'deepseek', modelId: 'deepseek-v3.2',
-  apiUrl: 'http://gateway.test/v1/', apiKeyEnvVar: 'TOKEN_COUNT_TEST_KEY', supportsReasoning: false, ...overrides,
+  apiUrl: 'http://gateway.test/v1/', supportsReasoning: false,
+  sources: [{ sourceKey: 'gateway', sourceName: 'gateway', apiUrl: 'http://gateway.test/v1/', ...sealedGateway('gateway-count', 'sk-test') }], ...overrides,
 });
 
 function gateway(respond: (text: string) => Response) {
@@ -40,7 +42,6 @@ function gateway(respond: (text: string) => Response) {
 
 test('skill text is counted by the gateway, minus the message framing, and the count is reused', async () => {
   resetTokenCountCache();
-  process.env.TOKEN_COUNT_TEST_KEY = 'sk-test';
   const { calls, fetcher } = gateway(text => Response.json({ input_tokens: text === '.' ? 8 : 8 + 120 }));
   assert.equal(await countModelTokens(model(), '方法目录正文', { fetch: fetcher }), 121, 'framing (8 − the dot itself) comes off');
   assert.deepEqual(calls.map(call => [call.url, call.text, call.auth]), [
@@ -53,7 +54,6 @@ test('skill text is counted by the gateway, minus the message framing, and the c
 
 test('without a count endpoint, a bring-your-own model or a key, the tokenkit estimate stands in', async () => {
   resetTokenCountCache();
-  process.env.TOKEN_COUNT_TEST_KEY = 'sk-test';
   const text = '子平八字：先看月令，再看透干。';
   const missing = gateway(() => new Response('not found', { status: 404 }));
   assert.equal(await countModelTokens(model(), text, { fetch: missing.fetcher }), estimateTokens('deepseek-v3.2', text));
@@ -68,7 +68,7 @@ test('without a count endpoint, a bring-your-own model or a key, the tokenkit es
 
   const untouched = gateway(() => Response.json({ input_tokens: 1 }));
   assert.equal(await countModelTokens(model(), text, { apiKey: 'sk-user', fetch: untouched.fetcher }), estimateTokens('deepseek-v3.2', text));
-  delete process.env.TOKEN_COUNT_TEST_KEY;
-  assert.equal(await countModelTokens(model(), text, { fetch: untouched.fetcher }), estimateTokens('deepseek-v3.2', text));
+  const keyless = model({ sources: [{ sourceKey: 'gateway', sourceName: 'gateway', apiUrl: 'http://gateway.test/v1/', gatewayId: 'gateway-count', apiKeySecret: null }] });
+  assert.equal(await countModelTokens(keyless, text, { fetch: untouched.fetcher }), estimateTokens('deepseek-v3.2', text));
   assert.equal(untouched.calls.length, 0, 'no request on behalf of a user’s own provider or without a configured key');
 });

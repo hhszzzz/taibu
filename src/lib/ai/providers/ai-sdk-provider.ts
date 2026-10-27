@@ -11,6 +11,8 @@ import { generateText, streamText, type CoreMessage, type LanguageModel, type Pr
 import type { AIModelConfig } from '@/types';
 import type { ChatMessage, AIReasoningEffort } from '@/types';
 import { normalizeCustomProviderBaseUrl } from '@/lib/ai/custom-provider-url';
+import { resolveSourceApiKey } from '@/lib/ai/gateway-secrets.server';
+import { resolveThinkingLevel, thinkingRequestFields, THINKING_REQUEST_FIELDS } from '@/lib/ai/thinking';
 import packageJson from '../../../../package.json';
 
 // AI 请求只需要最小消息结构，避免强制依赖存储/展示字段。
@@ -26,23 +28,20 @@ export interface AIProviderOptions {
     abortSignal?: AbortSignal;
 }
 
-export function getApiKey(envVar: string): string | undefined {
-    return process.env[envVar];
-}
-
 /**
  * 根据 AIModelConfig 动态创建 AI SDK provider 实例和模型
  *
  * 当 reasoning 为 true 且 config.reasoningModelId 存在时，
  * 使用 reasoningModelId 替代 modelId，确保推理请求命中正确的后端模型。
+ * 没有传入 apiKey 时，使用当前来源网关保存的密钥（请求时才解开）。
  */
 export function createModelFromConfig(
     config: AIModelConfig,
     options?: { reasoning?: boolean; reasoningEffort?: AIReasoningEffort; apiKey?: string; fetch?: typeof globalThis.fetch },
 ): LanguageModel {
-    const apiKey = options?.apiKey ?? getApiKey(config.apiKeyEnvVar);
-    if (!apiKey || apiKey === 'your_api_key_here') {
-        throw new Error(`${config.name || config.id} API key not configured (${config.apiKeyEnvVar})`);
+    const apiKey = options?.apiKey ?? resolveSourceApiKey(config);
+    if (!apiKey) {
+        throw new Error(`${config.name || config.id} 的网关没有保存密钥`);
     }
 
     const baseURL = normalizeBaseUrl(config.apiUrl);
@@ -69,11 +68,10 @@ export function createModelFromConfig(
 }
 
 /**
- * 检查模型配置是否可用（API Key是否配置）
+ * 检查模型配置是否可用：当前来源有地址，且网关保存了密钥
  */
 export function isModelAvailable(config: AIModelConfig): boolean {
-    const key = getApiKey(config.apiKeyEnvVar);
-    return !!key && key !== 'your_api_key_here';
+    return !!config.apiUrl && !!config.gatewayId && !!config.apiKeySecret;
 }
 
 /**
@@ -113,55 +111,22 @@ export function toCoreMessages(
     });
 }
 
-/**
- * 需要 enable_thinking 参数激活推理模式的供应商集合
- */
-const ENABLE_THINKING_VENDORS = new Set(['glm', 'deepseek', 'moonshot', 'qwen', 'qwen-vl']);
-
-/**
- * 构建 vendor-specific 的推理模式参数
- *
- * reasoningEffortFormat 优先（标准 API 字段），
- * 否则走 vendor 特定的 enable_thinking 开关。
- */
-function buildThinkingParams(
-    vendor: string,
-    reasoning?: boolean,
-): Record<string, JSONValue> {
-    if (!reasoning) return {};
-    if (ENABLE_THINKING_VENDORS.has(vendor)) {
-        return { enable_thinking: true };
-    }
-    return {};
-}
-
 // Keep the SDK-generated transcript, tools and output budget authoritative.
 const RESERVED_MODEL_BODY_FIELDS = new Set(['model', 'messages', 'tools', 'tool_choice', 'stream', 'stream_options', 'max_tokens', 'max_completion_tokens', '__proto__', 'constructor', 'prototype']);
 const SDK_BODY_NAMES: Record<string, string> = { reasoningEffort: 'reasoning_effort', logitBias: 'logit_bias', topLogprobs: 'top_logprobs', parallelToolCalls: 'parallel_tool_calls', serviceTier: 'service_tier', maxCompletionTokens: 'max_completion_tokens', maxTokens: 'max_tokens', maxOutputTokens: 'max_completion_tokens' };
 
-/** Compatible gateways accept provider extensions that the OpenAI SDK schema omits. */
+/**
+ * Compatible gateways accept provider extensions that the OpenAI SDK schema omits. Thinking is written by the model's
+ * thinking format (the same fields the Agent sends), never by custom parameters.
+ */
 function buildModelRequestParameters(config: AIModelConfig, options?: Pick<AIProviderOptions, 'reasoning' | 'reasoningEffort'>) {
     const parameters: Record<string, JSONValue> = {};
     for (const [key, value] of Object.entries(config.customParameters ?? {})) {
         const name = Object.hasOwn(SDK_BODY_NAMES, key) ? SDK_BODY_NAMES[key] : key;
-        if (!RESERVED_MODEL_BODY_FIELDS.has(name)) parameters[name] = value as JSONValue;
+        if (!RESERVED_MODEL_BODY_FIELDS.has(name) && !THINKING_REQUEST_FIELDS.has(name)) parameters[name] = value as JSONValue;
     }
-    if (options?.reasoning === false) {
-        delete parameters.reasoning_effort;
-        delete parameters.reasoning;
-        if (parameters.enable_thinking !== undefined || (config.supportsReasoning && ENABLE_THINKING_VENDORS.has(config.vendor))) parameters.enable_thinking = false;
-        const template = parameters.chat_template_kwargs;
-        if (template && typeof template === 'object' && !Array.isArray(template) && Object.hasOwn(template, 'enable_thinking')) parameters.chat_template_kwargs = { ...template, enable_thinking: false };
-        const thinking = parameters.thinking;
-        if (thinking && typeof thinking === 'object' && !Array.isArray(thinking) && thinking.type === 'enabled') parameters.thinking = { type: 'disabled' };
-    }
-    if (options?.reasoning) {
-        const effort = options.reasoningEffort ?? config.defaultReasoningEffort;
-        if (config.reasoningEffortFormat === 'reasoning_effort' && effort) { delete parameters.reasoning; parameters.reasoning_effort = effort; }
-        else if (config.reasoningEffortFormat === 'reasoning_object' && effort) { delete parameters.reasoning_effort; parameters.reasoning = { effort }; }
-        else Object.assign(parameters, buildThinkingParams(config.vendor, true));
-    }
-    return parameters;
+    if (options?.reasoning === undefined) return parameters;
+    return { ...parameters, ...thinkingRequestFields(config, options.reasoning ? resolveThinkingLevel(config, options.reasoningEffort) : null) };
 }
 
 /**

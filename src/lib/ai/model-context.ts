@@ -1,3 +1,5 @@
+import type { AIModelConfig } from '@/types';
+
 /** Application context limits. Unknown model capacities are deliberately absent. */
 export interface ModelContextConfig {
     maxContext: number;
@@ -41,6 +43,21 @@ export function resolveKnownModelContextConfig(modelId: string, reasoningEnabled
 
 /** Ordinary chat still needs a bounded prompt budget when capacity is unknown. */
 const DEFAULT_PROMPT_BUDGET: ModelContextConfig = { maxContext: 32000, promptRatio: 0.25, reserveOutput: 2000, reserveHistory: 4000 };
-export function resolveModelContextConfig(modelId: string, reasoningEnabled?: boolean): ModelContextConfig {
-    return resolveKnownModelContextConfig(modelId, reasoningEnabled) ?? DEFAULT_PROMPT_BUDGET;
+
+type WindowedModel = Pick<AIModelConfig, 'id' | 'contextWindow' | 'defaultMaxTokens'>;
+
+/**
+ * A model's window: the context window set for it in the admin catalog (reserving its output limit), else the known
+ * application limit for its ID; null when neither is known.
+ */
+export function resolveModelWindow(model: WindowedModel, reasoningEnabled?: boolean): ModelContextConfig | null {
+    const known = resolveKnownModelContextConfig(model.id, reasoningEnabled);
+    if (!model.contextWindow) return known;
+    const base = known ?? DEFAULT_PROMPT_BUDGET;
+    return { ...base, maxContext: model.contextWindow, reserveOutput: model.defaultMaxTokens ?? base.reserveOutput };
+}
+
+export function resolveModelContextConfig(model: string | WindowedModel, reasoningEnabled?: boolean): ModelContextConfig {
+    return (typeof model === 'string' ? resolveKnownModelContextConfig(model, reasoningEnabled) : resolveModelWindow(model, reasoningEnabled))
+        ?? DEFAULT_PROMPT_BUDGET;
 }

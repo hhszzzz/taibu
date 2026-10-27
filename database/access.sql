@@ -480,15 +480,7 @@ GRANT ALL ON FUNCTION auth.uid() TO taibu_app;
 
 GRANT ALL ON FUNCTION public.activate_key_as_service(p_user_id uuid, p_key_code text) TO authenticated;
 
-GRANT ALL ON FUNCTION public.admin_create_ai_model_binding(p_model_id text, p_source_key text, p_model_id_override text, p_reasoning_model_id text, p_is_enabled boolean, p_priority integer, p_notes text) TO authenticated;
-
-GRANT ALL ON FUNCTION public.admin_create_ai_model_with_binding(p_model jsonb, p_primary_gateway_key text) TO authenticated;
-
 GRANT ALL ON FUNCTION public.admin_get_auth_user_emails(p_user_ids uuid[]) TO authenticated;
-
-GRANT ALL ON FUNCTION public.admin_update_ai_model_and_cleanup_bindings(p_model_id text, p_patch jsonb) TO authenticated;
-
-GRANT ALL ON FUNCTION public.admin_update_ai_model_binding(p_model_id text, p_source_id text, p_patch jsonb, p_activate boolean) TO authenticated;
 
 GRANT ALL ON FUNCTION public.agent_admin_task_log(p_run_id uuid, p_after bigint) TO authenticated;
 

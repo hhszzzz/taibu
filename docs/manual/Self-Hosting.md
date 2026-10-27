@@ -96,6 +96,12 @@ docker compose \
   -c "set role taibu_owner; update public.users set is_admin = true where id = (select id from identity.users where email = 'you@example.com');"
 ```
 
+### 接入模型
+
+模型目录、网关地址和网关密钥都保存在数据库里，不读取环境变量。设为管理员后，在设置中心「AI 服务」先到「网关管理」添加网关：填写 OpenAI 兼容地址与密钥，可以当场测试连接并读出网关上的模型。再到「模型管理」添加模型：填写上下文窗口和最大输出，勾选模型支持的思考等级并选择思考参数格式，然后按故障转移顺序选择来源网关。
+
+网关密钥用 `AGENT_CREDENTIAL_ENCRYPTION_KEY` 派生的密钥加密，并绑定到所在的网关；界面只显示开头与末尾几位。更换 `AGENT_CREDENTIAL_ENCRYPTION_KEY` 后，已保存的网关密钥无法读取，需要逐个重新填写。
+
 ## 邮件
 
 本地栈用 Mailpit 捕获邮件，不需要任何配置。生产必须接一个真实发信服务，否则注册验证码、验证码登录和找回密码都发不出去。

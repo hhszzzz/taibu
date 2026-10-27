@@ -13,7 +13,8 @@ import type { AIModelConfig, ChatMessage } from "@/types";
 import { getModelConfigAsync } from "@/lib/server/ai-config";
 import { subscribeAgentSignals } from "@/lib/db/listen.server";
 import { isModelAllowedForMembership, isReasoningAllowedForMembership } from "@/lib/ai/ai-access";
-import { resolveKnownModelContextConfig } from "@/lib/ai/model-context";
+import { resolveModelWindow } from "@/lib/ai/model-context";
+import { resolveThinkingLevel, thinkingLevelMap } from "@/lib/ai/thinking";
 import { readFeatureModuleStateFresh } from "@/lib/app-settings";
 import { getUserCreditInfo } from "@/lib/user/credits";
 import { AgentStore, type AgentRunRow, type AgentCommandRow } from "./store.server";
@@ -253,7 +254,7 @@ export async function executeAgentRun(
     const config = injected?.config ?? (run.input.customProvider ? {
       id: run.input.model, name: run.input.model, vendor: "other" as const,
       modelId: run.input.customProvider.modelId, apiUrl: run.input.customProvider.apiUrl,
-      apiKeyEnvVar: "", supportsReasoning: false,
+      supportsReasoning: false,
     } : await getModelConfigAsync(run.input.model));
     if (!config) throw new Error("模型不存在");
     if (run.input.customProvider) {
@@ -264,7 +265,7 @@ export async function executeAgentRun(
     const tools = await createAgentTools(store, run, checkpoint);
     // 进入上下文的技能文本按主模型计数；测试注入的模型不发网络请求。
     const countTokens = (text: string) => injected ? Promise.resolve(estimateTokens(config.modelId || config.id, text)) : countModelTokens(config, text, { apiKey });
-    const window = run.input.customProvider ? null : resolveKnownModelContextConfig(config.id, run.input.reasoning);
+    const window = run.input.customProvider ? null : resolveModelWindow(config, run.input.reasoning);
     checkpoint.runtime = { model: {
       id: config.id, name: config.name, contextWindow: window?.maxContext ?? null,
       limitSource: window ? "configured" : "unknown",
@@ -272,7 +273,7 @@ export async function executeAgentRun(
     const piModel: Model<Api> = {
       id: config.id, name: config.name, api: "openai-completions", provider: "taibu",
       baseUrl: config.apiUrl, reasoning: config.supportsReasoning, input: config.supportsVision && !run.input.customProvider ? ['text','image'] : ['text'],
-      thinkingLevelMap: { xhigh: 'xhigh', max: 'max' },
+      thinkingLevelMap: thinkingLevelMap(config.thinkingLevels),
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       // Pi uses zero for an unknown window: threshold compaction is skipped,
       // while provider overflow recovery remains available.
@@ -299,11 +300,11 @@ export async function executeAgentRun(
     }
     // Each model's own window: a member that reasons with a model gets that model's reasoning limits.
     const windows = new Map([...configs.values()].map(selected => [selected.id, selected.id === config.id ? window
-      : resolveKnownModelContextConfig(selected.id, collaborators.some(member => member.model === selected.id && member.reasoning))]));
+      : resolveModelWindow(selected, collaborators.some(member => member.model === selected.id && member.reasoning))]));
     const bindings: GuardedAgentModel[] = [...configs.values()].map(selected => {
       const capacity = windows.get(selected.id);
       const model: Model<Api> = selected.id === config.id ? piModel : { ...piModel, id: selected.id, name: selected.name, baseUrl: selected.apiUrl, reasoning: selected.supportsReasoning,
-        input: ['text'], contextWindow: capacity?.maxContext ?? 0, maxTokens: selected.defaultMaxTokens ?? 4096 };
+        input: ['text'], thinkingLevelMap: thinkingLevelMap(selected.thinkingLevels), contextWindow: capacity?.maxContext ?? 0, maxTokens: selected.defaultMaxTokens ?? 4096 };
       return { model, authorize: options => authorizeModel(selected, options?.reasoning !== undefined),
         stream: injected?.streamFn ?? createPiModelStream(selected, { reasoning: selected.supportsReasoning, apiKey,
           ...(selected.id === config.id && selected.supportsVision && !run.input.customProvider ? { resolveImages: (messages: Parameters<typeof resolveAttachmentImages>[3]) => resolveAttachmentImages(store.db,run.user_id,run.conversation_id,messages) } : {}) }) };
@@ -587,7 +588,7 @@ export async function executeAgentRun(
     }, context);
     root = await harness.root(context, { agent: {
       model: { provider: "taibu", modelId: config.id },
-      thinkingLevel: run.input.reasoning ? run.input.reasoningEffort ?? config.defaultReasoningEffort ?? 'medium' : 'off',
+      thinkingLevel: run.input.reasoning ? resolveThinkingLevel(config, run.input.reasoningEffort) : 'off',
       instructions: run.input.systemPrompt + AGENT_INSTRUCTIONS + (collaborators.length ? `\n本任务启用多模型协作。信息完整后使用 parallel_analysis，让所有下列成员各分析一次，可使用相同术数体系的不同角度。tasks 必须包含全部成员的 agentId；分配任务时把已确认资料和实际命盘依据传给成员，不让子分析猜测。根据每个成员的证据综合回答，明确分歧与不确定性，不能把任一成员结论当作未经核对的事实。成员分工配置：${JSON.stringify(collaborators.map(({ id, name, focus }) => ({ agentId: id, name, focus })))}` : ''),
     } });
     const enqueued = new Set<number>();

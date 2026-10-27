@@ -2,14 +2,12 @@ import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 
-import { ensureRouteTestEnv, mockAIRateLimit } from './helpers/route-mock';
+import { mockAIRateLimit } from './helpers/route-mock';
 import { createMockAuthContext } from './helpers/auth-mock';
 import { createMockScopedDb } from './helpers/db-mock';
 import { calculateMeihuaBundle } from '../lib/divination/meihua';
 import { calculateXiaoliurenBundle } from '../lib/divination/xiaoliuren';
 import type { FeatureModuleState } from '../lib/app-settings';
-
-ensureRouteTestEnv();
 
 const MEIHUA_ROUTE = '../app/api/meihua/route';
 const XIAOLIUREN_ROUTE = '../app/api/xiaoliuren/route';

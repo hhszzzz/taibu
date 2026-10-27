@@ -1,12 +1,10 @@
 import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
-import { ensureRouteTestEnv, mockAIFeatureState, mockAIRateLimit } from './helpers/route-mock';
+import { mockAIFeatureState, mockAIRateLimit } from './helpers/route-mock';
 import { createMockUIMessageResult } from './helpers/ui-message-result';
 import { createMockAuthContext } from './helpers/auth-mock';
 import type { CreateAIAnalysisParams } from '../lib/ai/ai-analysis';
-
-ensureRouteTestEnv();
 
 type RouteBindingSpec = {
     name: string;

@@ -7,7 +7,6 @@
 export {
     type AIProviderOptions,
     type AIRequestMessage,
-    getApiKey,
     createModelFromConfig,
     isModelAvailable,
     toCoreMessages,

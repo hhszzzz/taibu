@@ -17,11 +17,12 @@ import type { PiStreamFn as StreamFn } from "./types";
 import type { AIModelConfig } from "@/types";
 import {
   gatewayFetch,
-  getApiKey,
   isModelAvailable,
   MODEL_REQUEST_USER_AGENT,
 } from "@/lib/ai/providers/ai-sdk-provider";
 import { normalizeCustomProviderBaseUrl } from "@/lib/ai/custom-provider-url";
+import { resolveSourceApiKey } from "@/lib/ai/gateway-secrets.server";
+import { resolveThinkingLevel, thinkingLevelMap, THINKING_REQUEST_FIELDS } from "@/lib/ai/thinking";
 import {
   applySourceToModel,
   getOrderedModelSources,
@@ -42,10 +43,12 @@ export const AGENT_REJECTED_KEY_MESSAGE = "模型服务拒绝了请求：密钥�
 export const AGENT_UNKNOWN_MODEL_MESSAGE = "模型服务找不到这个模型，请检查上游模型 ID";
 /** One request ran for the whole request time limit (agentModelRequestSignal) without finishing. */
 export const AGENT_TIMEOUT_MESSAGE = "模型超过 5 分钟没有完成这次回复，已中止";
+/** A saved gateway key that no longer opens: sealed under another master key, or altered. */
+export const AGENT_GATEWAY_KEY_MESSAGE = "网关密钥无法读取，请管理员在设置中心「AI 服务 → 网关管理」重新填写";
 /** Stream failures whose text the task shows as is, in place of the generic failure. */
 export const AGENT_PUBLIC_STREAM_ERRORS: ReadonlySet<string> = new Set([
   AGENT_UNSUPPORTED_TOOLS_MESSAGE, AGENT_OUTPUT_EXHAUSTED_MESSAGE, AGENT_SILENT_RESPONSE_MESSAGE,
-  AGENT_REJECTED_KEY_MESSAGE, AGENT_UNKNOWN_MODEL_MESSAGE, AGENT_TIMEOUT_MESSAGE,
+  AGENT_REJECTED_KEY_MESSAGE, AGENT_UNKNOWN_MODEL_MESSAGE, AGENT_TIMEOUT_MESSAGE, AGENT_GATEWAY_KEY_MESSAGE,
 ]);
 const AGENT_OVERFLOW_MESSAGE = "模型上下文超出限制（context_length_exceeded）";
 const AGENT_GENERIC_FAILURE_MESSAGE = "模型调用失败，请确认模型支持工具调用或切换普通对话";
@@ -110,24 +113,20 @@ export function agentModelSources(config: AIModelConfig, apiKey?: string) {
 
 /** Request body fields the transport writes; a model's custom parameters cannot replace them. */
 const TRANSPORT_FIELDS = new Set(["model", "messages", "tools", "tool_choice", "stream", "stream_options", "max_tokens", "max_completion_tokens", "__proto__", "constructor", "prototype"]);
-/** Thinking is set by the model's thinking format and the task's level, never by custom parameters. */
-const THINKING_FIELDS = new Set(["reasoning_effort", "reasoningEffort", "reasoning", "enable_thinking", "thinking", "chat_template_kwargs"]);
-/** Vendors whose thinking switch is `enable_thinking`. */
-const VENDORS_WITH_ENABLE_THINKING = new Set(["glm", "deepseek", "moonshot", "qwen", "qwen-vl"]);
 
 /**
- * How the gateway takes the thinking switch and level. Gateways are OpenAI-compatible proxies, so pi-ai's
- * auto-detection by host does not apply: system prompts stay `system`, the output limit is `max_tokens`, and
- * `store` is not sent.
+ * How the gateway takes the thinking switch and level: the model's configured thinking format, with a level only for
+ * a model that lists levels. Gateways are OpenAI-compatible proxies, so pi-ai's auto-detection by host does not apply:
+ * system prompts stay `system`, the output limit is `max_tokens`, and `store` is not sent.
  */
 export function agentCompletionsCompat(config: AIModelConfig): OpenAICompletionsCompat {
   return {
     supportsStore: false,
     supportsDeveloperRole: false,
-    supportsReasoningEffort: config.reasoningEffortFormat !== undefined,
+    supportsReasoningEffort: !!config.thinkingLevels?.length,
     supportsUsageInStreaming: true,
     maxTokensField: "max_tokens",
-    thinkingFormat: config.reasoningEffortFormat === "reasoning_object" ? "openrouter" : VENDORS_WITH_ENABLE_THINKING.has(config.vendor) ? "qwen" : "openai",
+    thinkingFormat: config.thinkingFormat ?? "openai",
     supportsStrictMode: false,
   };
 }
@@ -136,7 +135,7 @@ export function agentCompletionsCompat(config: AIModelConfig): OpenAICompletions
 function extraBody(source: AIModelConfig): Record<string, unknown> {
   const body: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(source.customParameters ?? {})) {
-    if (!TRANSPORT_FIELDS.has(key) && !THINKING_FIELDS.has(key)) body[key] = value;
+    if (!TRANSPORT_FIELDS.has(key) && !THINKING_REQUEST_FIELDS.has(key)) body[key] = value;
   }
   if (source.defaultTopP !== undefined) body.top_p = source.defaultTopP;
   if (source.defaultPresencePenalty !== undefined) body.presence_penalty = source.defaultPresencePenalty;
@@ -179,6 +178,9 @@ export function isProgressOnlyTurn(message: AssistantMessage) {
   return ANNOUNCED_ACTION.test(text);
 }
 
+/** A source whose saved key does not open; the request goes to the next source. */
+const GATEWAY_KEY_FAILURE = "gateway_key" as const;
+
 /** A failed request, as pi-ai reports it: the raw provider text is only read here, never shown or stored. */
 function failureKind(result: AssistantMessage) {
   const failed = { ...result, stopReason: "error" as const };
@@ -192,7 +194,7 @@ function failureKind(result: AssistantMessage) {
   if (result.rawStopReason === "error" || isRetryableAssistantError(failed)) return "transient";
   return "other";
 }
-type FailureKind = ReturnType<typeof failureKind> | "silent" | "exhausted";
+type FailureKind = ReturnType<typeof failureKind> | typeof GATEWAY_KEY_FAILURE | "silent" | "exhausted";
 class StreamFailure extends Error {
   constructor(readonly kind: FailureKind, readonly transientBeforeOutput = false) { super(kind); }
 }
@@ -206,6 +208,7 @@ function publicFailure(error: unknown) {
     case "unknown_model": return AGENT_UNKNOWN_MODEL_MESSAGE;
     case "silent": return AGENT_SILENT_RESPONSE_MESSAGE;
     case "exhausted": return AGENT_OUTPUT_EXHAUSTED_MESSAGE;
+    case GATEWAY_KEY_FAILURE: return AGENT_GATEWAY_KEY_MESSAGE;
     default: return error.transientBeforeOutput ? AGENT_TRANSIENT_ERROR_MESSAGE : AGENT_GENERIC_FAILURE_MESSAGE;
   }
 }
@@ -238,7 +241,8 @@ export function createPiModelStream(config: AIModelConfig, settings: AgentModelS
       try {
         const sources = agentModelSources(config, settings.apiKey);
         if (!sources.length) throw new Error("模型服务未配置");
-        const effort = settings.reasoning !== false && piModel.reasoning ? options?.reasoning : undefined;
+        // Each model thinks at a level it lists: an unlisted one moves to the nearest that is.
+        const effort = settings.reasoning !== false && piModel.reasoning && options?.reasoning ? resolveThinkingLevel(config, options.reasoning) : undefined;
         const transcript = settings.resolveImages && piModel.input?.includes("image") ? await settings.resolveImages(context.messages) : context.messages;
         const fetcher = settings.fetch ?? (settings.apiKey ? agentSafeFetch : gatewayFetch);
         let nudge: string | undefined;
@@ -249,15 +253,22 @@ export function createPiModelStream(config: AIModelConfig, settings: AgentModelS
           const outputLimits = [source.defaultMaxTokens, piModel.maxTokens, options?.maxTokens].filter((limit): limit is number => limit !== undefined && limit > 0);
           const upstream = (effort && source.reasoningModelId) || source.modelId;
           const body = extraBody(source);
+          let apiKey = settings.apiKey;
+          try { apiKey ??= resolveSourceApiKey(source); }
+          catch {
+            if (++failures >= sources.length) throw new StreamFailure(GATEWAY_KEY_FAILURE);
+            continue;
+          }
           const inner = streamCompletions({
             ...piModel,
             api: "openai-completions",
             baseUrl: normalizeCustomProviderBaseUrl(source.apiUrl),
             compat: agentCompletionsCompat(source),
+            thinkingLevelMap: thinkingLevelMap(config.thinkingLevels),
           }, normalizeContext({
             messages: nudge ? [...transcript, { role: "system", content: nudge, timestamp: Date.now() }] : transcript,
           }), {
-            apiKey: settings.apiKey ?? getApiKey(source.apiKeyEnvVar),
+            apiKey,
             fetch: fetcher,
             signal: requestSignal,
             maxRetries: 0,

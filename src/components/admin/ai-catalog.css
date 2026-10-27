@@ -1,0 +1,108 @@
+/* AI 服务（模型目录与网关）：紧凑列表 + 弹层编辑器，沿用设置页的控件与动效刻度。 */
+.ai-catalog { display: flex; flex-direction: column; gap: 1rem; }
+.ai-catalog-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.ai-catalog-toolbar > p { flex: 1 1 12rem; font-size: .8125rem; line-height: 1.6; color: var(--foreground-secondary); }
+.ai-catalog-search { flex: 1 1 14rem; max-width: 20rem; }
+.ai-catalog-mono { font-family: var(--font-mono); font-size: .75rem; letter-spacing: -.01em; }
+
+.ai-catalog-list { display: flex; flex-direction: column; overflow: hidden; border: var(--hairline) solid var(--hairline-color); border-radius: .75rem; background: var(--surface); }
+.ai-catalog-row { display: flex; align-items: center; gap: .75rem; padding: .625rem .75rem .625rem .5rem; border-top: 1px solid var(--fill-field);
+  transition: background-color var(--duration-snap) var(--ease-out), opacity var(--duration-base) var(--ease-out); }
+.ai-catalog-row:first-child { border-top: 0; }
+.ai-catalog-row:hover { background: var(--fill-field); }
+.ai-catalog-row[data-disabled] .ai-catalog-row-main { opacity: .55; }
+.ai-catalog-row-main { display: flex; flex: 1; min-width: 0; align-items: center; gap: .75rem; padding: .125rem .25rem; border-radius: .5rem; text-align: left; transition: opacity var(--duration-base) var(--ease-out); }
+.ai-catalog-row-main:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ai-catalog-row-icon { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: .5rem; background: var(--fill-field); color: var(--foreground-secondary); }
+.ai-catalog-row-text { display: flex; min-width: 0; flex-direction: column; gap: .125rem; }
+.ai-catalog-row-title { display: flex; min-width: 0; align-items: baseline; gap: .5rem; }
+.ai-catalog-row-title strong { overflow: hidden; font-size: .875rem; font-weight: 500; white-space: nowrap; text-overflow: ellipsis; color: var(--foreground); }
+.ai-catalog-row-title .ai-catalog-mono { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--foreground-tertiary); }
+.ai-catalog-row-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .375rem; font-size: .75rem; line-height: 1.25rem; color: var(--foreground-secondary); }
+.ai-catalog-row-meta > span + span::before { content: '·'; margin-right: .375rem; color: var(--foreground-tertiary); }
+.ai-catalog-row-meta [data-tone=warning] { color: var(--danger); }
+.ai-catalog-row-side { display: flex; flex-shrink: 0; align-items: center; gap: .5rem; }
+.ai-catalog-tier { height: 1.25rem; padding: 0 .5rem; border-radius: 999px; background: var(--fill-field); font-size: .6875rem; line-height: 1.25rem; font-weight: 500; color: var(--foreground-secondary); }
+.ai-catalog-tier[data-tier=plus] { background: hsl(38 92% 50% / .12); color: hsl(32 80% 38%); }
+.ai-catalog-tier[data-tier=pro] { background: hsl(270 70% 60% / .12); color: hsl(270 50% 45%); }
+.dark .ai-catalog-tier[data-tier=plus] { color: hsl(38 90% 65%); }
+.dark .ai-catalog-tier[data-tier=pro] { color: hsl(270 80% 78%); }
+.ai-catalog-empty { display: flex; flex-direction: column; align-items: center; gap: .5rem; padding: 2.5rem 1rem; text-align: center; font-size: .875rem; color: var(--foreground-secondary); }
+.ai-catalog-empty strong { font-weight: 500; color: var(--foreground); }
+
+/* 弹层编辑器：头部、可滚动表单、粘底操作栏。 */
+.app-modal.ai-catalog-dialog { display: flex; width: min(42rem, calc(100vw - 32px)); max-height: min(52rem, calc(100dvh - 32px)); flex-direction: column; overflow: hidden; }
+.ai-catalog-dialog-head { display: flex; align-items: center; gap: .75rem; padding: 1rem 1rem .75rem 1.25rem; border-bottom: 1px solid var(--fill-field); }
+.ai-catalog-dialog-head h2 { flex: 1; min-width: 0; font-size: 1rem; font-weight: 600; }
+.ai-catalog-dialog-head p { font-size: .75rem; color: var(--foreground-tertiary); }
+.ai-catalog-dialog-body { display: flex; flex: 1; min-height: 0; flex-direction: column; gap: 1.5rem; padding: 1.25rem; overflow-y: auto; overscroll-behavior: contain; }
+.ai-catalog-dialog-foot { display: flex; align-items: center; gap: .5rem; padding: .75rem 1rem; border-top: 1px solid var(--fill-field); background: var(--surface); }
+.ai-catalog-dialog-foot > .ai-catalog-spacer { flex: 1; }
+.ai-catalog-dialog-foot .ai-catalog-error { flex: 1; min-width: 0; font-size: .8125rem; color: var(--danger); }
+
+.ai-catalog-section { display: flex; flex-direction: column; gap: .875rem; animation: motion-fade-up var(--duration-base) var(--ease-out) both; }
+.ai-catalog-section > header { display: flex; flex-direction: column; gap: .125rem; }
+.ai-catalog-section h3 { font-size: .8125rem; font-weight: 600; color: var(--foreground); }
+.ai-catalog-section > header p, .ai-catalog-hint { font-size: .75rem; line-height: 1.5; color: var(--foreground-tertiary); }
+.ai-catalog-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .875rem; }
+.ai-catalog-field { display: flex; min-width: 0; flex-direction: column; gap: .375rem; font-size: .8125rem; color: var(--foreground-secondary); }
+.ai-catalog-field > .settings-input, .ai-catalog-field > .settings-select, .ai-catalog-field > .settings-textarea { width: 100%; background: var(--background); }
+.ai-catalog-field .ai-catalog-mono.settings-input { font-size: .8125rem; }
+.ai-catalog-toggle { display: flex; align-items: center; justify-content: space-between; gap: 1rem; font-size: .875rem; color: var(--foreground); }
+.ai-catalog-toggle > span { display: flex; flex-direction: column; gap: .125rem; }
+.ai-catalog-toggle small { font-size: .75rem; color: var(--foreground-tertiary); }
+
+/* 预设阶梯（Pi Desktop 同构）：点选写入数值，输入框仍可手填，与当前值相等的一格高亮。 */
+.ai-catalog-limit { display: flex; flex-wrap: wrap; align-items: center; gap: .375rem; }
+.ai-catalog-limit .settings-input { width: 8rem; background: var(--background); font-variant-numeric: tabular-nums; }
+.ai-catalog-chip { height: 1.75rem; padding: 0 .625rem; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); font-size: .75rem; color: var(--foreground-secondary);
+  transition: background-color var(--duration-snap) var(--ease-out), border-color var(--duration-snap) var(--ease-out), color var(--duration-snap) var(--ease-out), scale var(--duration-snap) var(--ease-out); }
+.ai-catalog-chip:hover:not(:disabled) { border-color: var(--border-hover); color: var(--foreground); }
+.ai-catalog-chip:active:not(:disabled) { scale: .96; }
+.ai-catalog-chip[aria-pressed=true] { border-color: var(--accent); background: var(--accent-light); color: var(--accent-strong); font-weight: 500; }
+.ai-catalog-chip:disabled { cursor: not-allowed; opacity: .45; }
+
+/* 思考设置在打开「支持思考」时展开。 */
+.ai-catalog-reveal { display: grid; grid-template-rows: 1fr; transition: grid-template-rows var(--duration-sheet) var(--ease-snap), opacity var(--duration-base) var(--ease-out); }
+.ai-catalog-reveal[data-open=false] { grid-template-rows: 0fr; opacity: 0; }
+.ai-catalog-reveal > div { display: flex; min-height: 0; flex-direction: column; gap: .875rem; overflow: hidden; }
+
+/* 来源：按顺序故障转移，可上下调整。 */
+.ai-catalog-sources { display: flex; flex-direction: column; gap: .5rem; }
+.ai-catalog-source { display: flex; flex-direction: column; gap: .625rem; padding: .75rem; border: 1px solid var(--border); border-radius: .625rem; background: var(--background);
+  transition: border-color var(--duration-snap) var(--ease-out), opacity var(--duration-base) var(--ease-out); }
+.ai-catalog-source[data-disabled] { opacity: .6; }
+.ai-catalog-source-head { display: flex; align-items: center; gap: .5rem; }
+.ai-catalog-source-order { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 1.25rem; height: 1.25rem; border-radius: 999px; background: var(--fill-control); font-size: .6875rem; font-weight: 600; color: var(--foreground-secondary); font-variant-numeric: tabular-nums; }
+.ai-catalog-source:first-child .ai-catalog-source-order { background: var(--accent); color: var(--on-accent); }
+.ai-catalog-source-head strong { flex: 1; min-width: 0; overflow: hidden; font-size: .8125rem; font-weight: 500; white-space: nowrap; text-overflow: ellipsis; }
+.ai-catalog-source-head small { font-size: .75rem; color: var(--foreground-tertiary); }
+.ai-catalog-source-head small[data-tone=warning] { color: var(--danger); }
+.ai-catalog-icon-button { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 1.75rem; height: 1.75rem; border-radius: .375rem; color: var(--foreground-secondary); transition: background-color var(--duration-snap) var(--ease-out), color var(--duration-snap) var(--ease-out); }
+.ai-catalog-icon-button:hover:not(:disabled) { background: var(--fill-control); color: var(--foreground); }
+.ai-catalog-icon-button[data-danger]:hover:not(:disabled) { color: var(--danger); }
+.ai-catalog-icon-button:disabled { cursor: not-allowed; opacity: .35; }
+
+.ai-catalog-advanced { border-top: 1px solid var(--fill-field); padding-top: 1rem; }
+.ai-catalog-advanced > summary { display: flex; align-items: center; gap: .375rem; cursor: pointer; list-style: none; font-size: .8125rem; font-weight: 600; color: var(--foreground); }
+.ai-catalog-advanced > summary::-webkit-details-marker { display: none; }
+.ai-catalog-advanced > summary svg { transition: rotate var(--duration-base) var(--ease-snap); }
+.ai-catalog-advanced[open] > summary svg { rotate: 90deg; }
+.ai-catalog-advanced > div { display: flex; flex-direction: column; gap: .875rem; margin-top: .875rem; animation: motion-fade-up var(--duration-base) var(--ease-out) both; }
+
+/* 测试连接的结果行。 */
+.ai-catalog-probe { display: flex; align-items: center; gap: .5rem; min-height: 1.5rem; font-size: .8125rem; color: var(--foreground-secondary); animation: motion-fade var(--duration-base) var(--ease-out) both; }
+.ai-catalog-probe[data-ok=true] { color: var(--success); }
+.ai-catalog-probe[data-ok=false] { color: var(--danger); }
+.ai-catalog-key { display: flex; gap: .5rem; }
+.ai-catalog-key .settings-input { flex: 1; min-width: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-catalog-section, .ai-catalog-advanced > div, .ai-catalog-probe { animation: none; }
+  .ai-catalog-reveal { transition: none; }
+}
+@media (max-width: 767px) {
+  .ai-catalog-grid { grid-template-columns: minmax(0, 1fr); }
+  .app-modal.ai-catalog-dialog { width: 100vw; max-height: 100dvh; height: 100dvh; border-radius: 0; }
+  .ai-catalog-row-meta { display: none; }
+}

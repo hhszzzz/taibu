@@ -162,7 +162,7 @@ test('enhancement rejects free users and claims quota before every actual call w
     const ai=require('../lib/ai/ai') as typeof import('../lib/ai/ai');
     t.mock.method(guard,'getGlobalAIFeatureGuardResponse',async()=>null);
     t.mock.method(credits,'getUserAuthInfo',async()=>({effectiveMembership:membership,credits:10,hasCredits:true}));
-    t.mock.method(configs,'getModelConfigAsync',async()=>({id:'fixture',name:'fixture',vendor:'other',apiKeyEnvVar:'KEY',requiredTier:'free'}));
+    t.mock.method(configs,'getModelConfigAsync',async()=>({id:'fixture',name:'fixture',vendor:'other',requiredTier:'free'}));
     t.mock.method(ai,'callAI',async (...args: Parameters<typeof ai.callAI>) => { await args[4]?.beforeModelAttempt?.(); attempts++; return '清晰的问题'; });
     assert.equal((await enhance(request('/api/chat/enhance',{text:'问题',model:'fixture'}))).status,403); assert.equal(attempts,0);
     membership='plus'; f.rpc(true);

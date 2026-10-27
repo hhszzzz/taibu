@@ -3,9 +3,9 @@ import 'server-only';
 import type {
   AIModelConfig,
   AIModelSourceConfig,
+  AISealedSecret,
   AIVendor,
 } from '@/types';
-import { buildModels, clearModelCache as clearSharedModelCache } from '@/lib/ai/ai-config';
 import { createSharedCache } from '@/lib/cache/shared.server';
 import {
   applySourceToModel,
@@ -13,16 +13,17 @@ import {
   DEFAULT_AI_TRANSPORT,
   getModelUsageType,
   getOrderedModelSources,
-  isManagedSourceKey,
   sortModelSources,
 } from '@/lib/ai/source-runtime';
+import { isThinkingFormat, normalizeThinkingLevels } from '@/lib/ai/thinking';
 import { systemDb } from '@/lib/db/context.server';
 
 interface DBGatewayRow {
-  gateway_key: string | null;
+  id: string;
+  gateway_key: string;
   display_name: string | null;
   base_url: string | null;
-  api_key_env_var: string | null;
+  api_key_secret: AISealedSecret | null;
   transport?: string | null;
   is_enabled?: boolean | null;
 }
@@ -33,8 +34,7 @@ interface DBModelGatewayBindingRow {
   reasoning_model_id: string | null;
   is_enabled: boolean;
   priority?: number | null;
-  notes?: string | null;
-  gateway?: DBGatewayRow | DBGatewayRow[] | null;
+  gateway: DBGatewayRow;
 }
 
 interface DBModelRow {
@@ -43,7 +43,6 @@ interface DBModelRow {
   display_name: string;
   vendor: string;
   usage_type?: string;
-  routing_mode?: string;
   supports_reasoning: boolean;
   is_reasoning_default: boolean;
   supports_vision: boolean;
@@ -53,7 +52,9 @@ interface DBModelRow {
   default_frequency_penalty?: number | string | null;
   default_max_tokens: number | null;
   default_reasoning_effort?: AIModelConfig['defaultReasoningEffort'] | null;
-  reasoning_effort_format?: AIModelConfig['reasoningEffortFormat'] | null;
+  thinking_format: string;
+  thinking_levels: string[] | null;
+  context_window: number | null;
   custom_parameters?: Record<string, unknown> | null;
   required_tier?: string;
   reasoning_required_tier?: string | null;
@@ -61,18 +62,14 @@ interface DBModelRow {
 }
 
 const DB_CACHE_TTL_MS = 5 * 60 * 1000;
+// Sources carry the gateway key only as ciphertext, so the shared (Redis) copy never holds a usable key.
 const dbModelsCache = createSharedCache<AIModelConfig[]>({
   name: 'ai-models',
   ttlMs: DB_CACHE_TTL_MS,
 });
-import { IS_NODE_TEST_RUNTIME } from '@/lib/runtime';
 
-function pickGateway(input: DBModelGatewayBindingRow['gateway']): DBGatewayRow | null {
-  if (Array.isArray(input)) {
-    return input[0] ?? null;
-  }
-  return input ?? null;
-}
+const numberOrUndefined = (value: number | string | null | undefined) =>
+  value != null ? Number.parseFloat(String(value)) : undefined;
 
 function buildSourcesForModel(row: DBModelRow): AIModelSourceConfig[] {
   const usageType = getModelUsageType({
@@ -80,28 +77,20 @@ function buildSourcesForModel(row: DBModelRow): AIModelSourceConfig[] {
     supportsVision: row.supports_vision ?? false,
   });
 
-  const mappedSources = (row.bindings || [])
-    .map((binding): AIModelSourceConfig | null => {
-      const gateway = pickGateway(binding.gateway);
-      if (!gateway || !isManagedSourceKey(gateway.gateway_key)) {
-        return null;
-      }
+  const sources = (row.bindings || []).map((binding): AIModelSourceConfig => ({
+    sourceKey: binding.gateway.gateway_key,
+    sourceName: binding.gateway.display_name || binding.gateway.gateway_key,
+    gatewayId: binding.gateway.id,
+    apiUrl: buildManagedApiUrl(binding.gateway.base_url, usageType),
+    apiKeySecret: binding.gateway.api_key_secret,
+    modelIdOverride: binding.model_id_override || row.model_key,
+    reasoningModelId: binding.reasoning_model_id || undefined,
+    transport: (binding.gateway.transport as AIModelConfig['transport']) || DEFAULT_AI_TRANSPORT,
+    priority: binding.priority ?? undefined,
+    isEnabled: binding.is_enabled !== false && binding.gateway.is_enabled !== false,
+  }));
 
-      return {
-        sourceKey: gateway.gateway_key,
-        sourceName: gateway.display_name || gateway.gateway_key,
-        apiUrl: buildManagedApiUrl(gateway.base_url, usageType),
-        apiKeyEnvVar: gateway.api_key_env_var || '',
-        modelIdOverride: binding.model_id_override || row.model_key,
-        reasoningModelId: binding.reasoning_model_id || undefined,
-        transport: (gateway.transport as AIModelConfig['transport']) || DEFAULT_AI_TRANSPORT,
-        priority: binding.priority ?? undefined,
-        isEnabled: binding.is_enabled !== false && gateway.is_enabled !== false,
-      };
-    })
-    .filter((source): source is AIModelSourceConfig => source !== null);
-
-  return sortModelSources(mappedSources).map((source, index) => ({
+  return sortModelSources(sources).map((source, index) => ({
     ...source,
     isActive: index === 0,
   }));
@@ -110,38 +99,27 @@ function buildSourcesForModel(row: DBModelRow): AIModelSourceConfig[] {
 function mapDbModelRows(rows: DBModelRow[]): AIModelConfig[] {
   return rows.map((row) => {
     const sources = buildSourcesForModel(row);
+    const thinkingLevels = normalizeThinkingLevels(row.thinking_levels);
 
     const baseModel: AIModelConfig = {
       id: row.model_key,
       name: row.display_name,
       vendor: row.vendor as AIVendor,
       usageType: row.usage_type as AIModelConfig['usageType'],
-      routingMode: row.routing_mode as AIModelConfig['routingMode'],
       modelId: row.model_key,
       apiUrl: '',
-      apiKeyEnvVar: '',
       supportsReasoning: row.supports_reasoning,
       isReasoningDefault: row.is_reasoning_default,
       supportsVision: row.supports_vision,
-      defaultTemperature:
-        row.default_temperature != null
-          ? Number.parseFloat(String(row.default_temperature))
-          : undefined,
-      defaultTopP:
-        row.default_top_p != null
-          ? Number.parseFloat(String(row.default_top_p))
-          : undefined,
-      defaultPresencePenalty:
-        row.default_presence_penalty != null
-          ? Number.parseFloat(String(row.default_presence_penalty))
-          : undefined,
-      defaultFrequencyPenalty:
-        row.default_frequency_penalty != null
-          ? Number.parseFloat(String(row.default_frequency_penalty))
-          : undefined,
+      thinkingFormat: isThinkingFormat(row.thinking_format) ? row.thinking_format : 'openai',
+      thinkingLevels,
+      ...(row.context_window ? { contextWindow: row.context_window } : {}),
+      defaultTemperature: numberOrUndefined(row.default_temperature),
+      defaultTopP: numberOrUndefined(row.default_top_p),
+      defaultPresencePenalty: numberOrUndefined(row.default_presence_penalty),
+      defaultFrequencyPenalty: numberOrUndefined(row.default_frequency_penalty),
       defaultMaxTokens: row.default_max_tokens ?? undefined,
       defaultReasoningEffort: row.default_reasoning_effort ?? undefined,
-      reasoningEffortFormat: row.reasoning_effort_format ?? undefined,
       customParameters: (row.custom_parameters as Record<string, unknown> | null) ?? null,
       requiredTier: row.required_tier as AIModelConfig['requiredTier'],
       reasoningRequiredTier: row.reasoning_required_tier as AIModelConfig['reasoningRequiredTier'],
@@ -157,26 +135,17 @@ function mapDbModelRows(rows: DBModelRow[]): AIModelConfig[] {
   });
 }
 
-function hasAvailableSource(model: AIModelConfig): boolean {
-  return getOrderedModelSources(model).some((source) => {
-    if (!source.apiUrl || !source.apiKeyEnvVar) {
-      return false;
-    }
-    return !!process.env[source.apiKeyEnvVar];
-  });
-}
-
 async function loadModelsFromDB(): Promise<AIModelConfig[]> {
   const db = systemDb();
   const rows: DBModelRow[] = await db.tx(async (trx) => {
       const models = await trx
         .selectFrom('ai_models')
         .select([
-          'id', 'model_key', 'display_name', 'vendor', 'usage_type', 'routing_mode',
+          'id', 'model_key', 'display_name', 'vendor', 'usage_type',
           'supports_reasoning', 'is_reasoning_default', 'supports_vision',
           'default_temperature', 'default_top_p', 'default_presence_penalty',
           'default_frequency_penalty', 'default_max_tokens', 'default_reasoning_effort',
-          'reasoning_effort_format', 'custom_parameters', 'required_tier',
+          'thinking_format', 'thinking_levels', 'context_window', 'custom_parameters', 'required_tier',
           'reasoning_required_tier',
         ])
         .where('is_enabled', '=', true)
@@ -188,9 +157,9 @@ async function loadModelsFromDB(): Promise<AIModelConfig[]> {
         .innerJoin('ai_gateways as gateway', 'gateway.id', 'binding.gateway_id')
         .select([
           'binding.model_id', 'binding.model_id_override', 'binding.reasoning_model_id',
-          'binding.is_enabled', 'binding.priority', 'binding.notes', 'binding.id',
-          'gateway.gateway_key', 'gateway.display_name', 'gateway.base_url',
-          'gateway.api_key_env_var', 'gateway.transport', 'gateway.is_enabled as gateway_enabled',
+          'binding.is_enabled', 'binding.priority', 'binding.id',
+          'gateway.id as gateway_id', 'gateway.gateway_key', 'gateway.display_name', 'gateway.base_url',
+          'gateway.api_key_secret', 'gateway.transport', 'gateway.is_enabled as gateway_enabled',
         ])
         .where('binding.model_id', 'in', models.map((model) => model.id))
         .orderBy('binding.priority', 'asc')
@@ -204,12 +173,12 @@ async function loadModelsFromDB(): Promise<AIModelConfig[]> {
           reasoning_model_id: binding.reasoning_model_id,
           is_enabled: binding.is_enabled,
           priority: binding.priority,
-          notes: binding.notes,
           gateway: {
+            id: binding.gateway_id,
             gateway_key: binding.gateway_key,
             display_name: binding.display_name,
             base_url: binding.base_url,
-            api_key_env_var: binding.api_key_env_var,
+            api_key_secret: binding.api_key_secret as AISealedSecret | null,
             transport: binding.transport,
             is_enabled: binding.gateway_enabled,
           },
@@ -223,23 +192,8 @@ async function loadModelsFromDB(): Promise<AIModelConfig[]> {
   return mapDbModelRows(rows);
 }
 
-async function fetchModelsFromDB(): Promise<AIModelConfig[] | null> {
-  try {
-    return await dbModelsCache.load(loadModelsFromDB);
-  } catch (error) {
-    if (!IS_NODE_TEST_RUNTIME) {
-      console.warn('[ai-config/server] Database unavailable, fallback to env models:', error);
-    }
-    return null;
-  }
-}
-
 export async function getModelsAsync(): Promise<AIModelConfig[]> {
-  const dbModels = await fetchModelsFromDB();
-  if (dbModels !== null) {
-    return dbModels;
-  }
-  return buildModels();
+  return dbModelsCache.load(loadModelsFromDB);
 }
 
 export async function getModelsByUsageTypeAsync(
@@ -253,7 +207,7 @@ export async function getDefaultModelConfigAsync(
   usageType: NonNullable<AIModelConfig['usageType']> = 'chat'
 ): Promise<AIModelConfig | undefined> {
   const models = await getModelsByUsageTypeAsync(usageType);
-  return models.find((model) => hasAvailableSource(model));
+  return models.find((model) => getOrderedModelSources(model).length > 0);
 }
 
 export async function getModelConfigAsync(
@@ -269,7 +223,6 @@ export async function getModelConfigAsync(
 }
 
 export function clearModelCache(): void {
-  clearSharedModelCache();
   void dbModelsCache.invalidate();
   console.info('[ai-config/server] Model cache cleared');
 }

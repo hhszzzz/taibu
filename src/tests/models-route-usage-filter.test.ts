@@ -24,7 +24,6 @@ test('/api/models should only expose chat and vision models', async (t) => {
       usageType: 'chat',
       modelId: 'deepseek-v3.2',
       apiUrl: '',
-      apiKeyEnvVar: '',
       supportsReasoning: false,
     },
     {
@@ -34,9 +33,12 @@ test('/api/models should only expose chat and vision models', async (t) => {
       usageType: 'vision',
       modelId: 'qwen-vl-plus',
       apiUrl: '',
-      apiKeyEnvVar: '',
       supportsReasoning: true,
-      reasoningEffortFormat: 'reasoning_object',
+      thinkingFormat: 'qwen',
+      thinkingLevels: ['low', 'high'],
+      defaultReasoningEffort: 'high',
+      contextWindow: 131072,
+      apiKeySecret: { version: 1, iv: 'iv', tag: 'tag', data: 'ciphertext' },
       supportsVision: true,
     },
     {
@@ -46,7 +48,6 @@ test('/api/models should only expose chat and vision models', async (t) => {
       usageType: 'embedding',
       modelId: 'text-embedding-v4',
       apiUrl: '',
-      apiKeyEnvVar: '',
       supportsReasoning: false,
     },
     {
@@ -56,7 +57,6 @@ test('/api/models should only expose chat and vision models', async (t) => {
       usageType: 'rerank',
       modelId: 'qwen3-rerank',
       apiUrl: '',
-      apiKeyEnvVar: '',
       supportsReasoning: false,
     },
   ];
@@ -82,8 +82,10 @@ test('/api/models should only expose chat and vision models', async (t) => {
   const body = await response.json();
 
   assert.equal(response.status, 200);
-  assert.equal(body.models[0].reasoningEffortFormat, null);
-  assert.equal(body.models[1].reasoningEffortFormat, 'reasoning_object');
+  // The composer offers only the levels a thinking model lists; a model that does not think offers none.
+  assert.deepEqual([body.models[0].thinkingLevels, body.models[0].defaultThinkingLevel, body.models[0].contextWindow], [[], null, null]);
+  assert.deepEqual([body.models[1].thinkingLevels, body.models[1].defaultThinkingLevel, body.models[1].contextWindow], [['low', 'high'], 'high', 131072]);
+  assert.doesNotMatch(JSON.stringify(body), /ciphertext|thinkingFormat|apiKey/u, 'gateway details stay on the server');
   assert.deepEqual(
     body.models.map((model: { id: string }) => model.id),
     ['deepseek-v3.2', 'qwen-vl-plus'],
@@ -112,7 +114,6 @@ test('/api/models?catalog=byok should expose chat models without membership filt
       usageType: 'chat',
       modelId: 'deepseek-chat',
       apiUrl: '',
-      apiKeyEnvVar: '',
       supportsReasoning: false,
       isReasoningDefault: false,
     },
@@ -123,7 +124,6 @@ test('/api/models?catalog=byok should expose chat models without membership filt
       usageType: 'chat',
       modelId: 'gemini-2.5-pro',
       apiUrl: '',
-      apiKeyEnvVar: '',
       supportsReasoning: true,
       isReasoningDefault: false,
     },
@@ -134,7 +134,6 @@ test('/api/models?catalog=byok should expose chat models without membership filt
       usageType: 'vision',
       modelId: 'qwen-vl-plus',
       apiUrl: '',
-      apiKeyEnvVar: '',
       supportsReasoning: true,
       supportsVision: true,
     },

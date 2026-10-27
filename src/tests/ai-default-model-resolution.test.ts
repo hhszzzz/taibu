@@ -14,7 +14,6 @@ test('resolveModelAccessAsync should use server-configured chat default when mod
     usageType: 'chat',
     modelId: 'chat-online-default',
     apiUrl: '',
-    apiKeyEnvVar: '',
     supportsReasoning: false,
     requiredTier: 'free',
   });
@@ -46,7 +45,6 @@ test('resolveModelAccessAsync should use server-configured vision default when m
       usageType: 'vision',
       modelId: 'vision-online-default',
       apiUrl: '',
-      apiKeyEnvVar: '',
       supportsReasoning: true,
       supportsVision: true,
       requiredTier: 'plus',

@@ -9,6 +9,7 @@ import { emptyPiAssistant } from "../../lib/agent/pi-stream.server";
 import type { AIModelConfig } from "../../types";
 import { countTokens } from "../../lib/token-utils";
 import { AGENT_SUMMARY_PROMPT } from '../../lib/agent/summary-usage.server';
+import { sealedGateway } from './gateway-key';
 
 export function isSummaryTranscript(context: Parameters<StreamFn>[1]) {
   return context.messages.some(message => message.role === 'system' && getSystemMessageText(message) === AGENT_SUMMARY_PROMPT);
@@ -19,9 +20,9 @@ export const config: AIModelConfig = {
   vendor: "other",
   modelId: "fixture",
   apiUrl: "https://model.example/v1",
-  apiKeyEnvVar: "FIXTURE_KEY",
   supportsReasoning: false,
   requiredTier: "free",
+  sources: [{ sourceKey: "fixture", sourceName: "fixture", apiUrl: "https://model.example/v1", ...sealedGateway("gateway-fixture", "fixture-gateway-key") }],
 };
 export const row = (): AgentRunRow => {
   const id = randomUUID();

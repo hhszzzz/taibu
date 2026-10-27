@@ -117,12 +117,13 @@ export interface AiGateways {
   gateway_key: ColumnType<string, string, string>;
   display_name: ColumnType<string, string, string>;
   base_url: Generated<string>;
-  api_key_env_var: ColumnType<string, string, string>;
   transport: Generated<string>;
   is_enabled: Generated<boolean>;
   notes: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   created_at: Generated<string>;
   updated_at: Generated<string>;
+  api_key_secret: ColumnType<Json | null, Json | null | undefined, Json | null | undefined>;
+  api_key_hint: ColumnType<string | null, string | null | undefined, string | null | undefined>;
 }
 
 export interface AiModelGatewayBindings {
@@ -156,13 +157,14 @@ export interface AiModels {
   created_at: Generated<string | null>;
   updated_at: Generated<string | null>;
   usage_type: Generated<string>;
-  routing_mode: Generated<string>;
   default_top_p: Generated<number | null>;
   default_presence_penalty: Generated<number | null>;
   default_frequency_penalty: Generated<number | null>;
   default_reasoning_effort: ColumnType<string | null, string | null | undefined, string | null | undefined>;
-  reasoning_effort_format: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   custom_parameters: ColumnType<Json | null, Json | null | undefined, Json | null | undefined>;
+  context_window: ColumnType<number | null, number | null | undefined, number | null | undefined>;
+  thinking_format: Generated<string>;
+  thinking_levels: Generated<unknown>;
 }
 
 export interface Announcements {

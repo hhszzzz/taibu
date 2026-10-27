@@ -2,9 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { getOrderedModelSources } from '../lib/ai/source-runtime';
 import type { AIModelConfig, AIModelSourceConfig } from '../types';
+import { sealedGateway } from './helpers/gateway-key';
 
-process.env.NEWAPI_API_KEY = 'newapi-key';
-process.env.OCTOPUS_API_KEY = 'octopus-key';
+const NEWAPI_KEY = sealedGateway('gateway-newapi', 'newapi-key');
+const OCTOPUS_KEY = sealedGateway('gateway-octopus', 'octopus-key');
 
 test('callAI should fall back from primary source to backup source', async (t) => {
   const aiModule = require('../lib/ai/ai') as any;
@@ -22,7 +23,6 @@ test('callAI should fall back from primary source to backup source', async (t) =
     usageType: 'chat',
     modelId: 'deepseek-v3.2',
     apiUrl: 'https://newapi.example/v1/chat/completions',
-    apiKeyEnvVar: 'NEWAPI_API_KEY',
     sourceKey: 'newapi',
     transport: 'openai_compatible',
     supportsReasoning: false,
@@ -32,7 +32,7 @@ test('callAI should fall back from primary source to backup source', async (t) =
         sourceKey: 'newapi',
         sourceName: 'NewAPI',
         apiUrl: 'https://newapi.example/v1/chat/completions',
-        apiKeyEnvVar: 'NEWAPI_API_KEY',
+        ...NEWAPI_KEY,
         modelIdOverride: 'deepseek-v3.2',
         transport: 'openai_compatible',
         priority: 1,
@@ -43,7 +43,7 @@ test('callAI should fall back from primary source to backup source', async (t) =
         sourceKey: 'octopus',
         sourceName: 'Octopus',
         apiUrl: 'https://octopus.example/v1/chat/completions',
-        apiKeyEnvVar: 'OCTOPUS_API_KEY',
+        ...OCTOPUS_KEY,
         modelIdOverride: 'deepseek-v3.2',
         transport: 'openai_compatible',
         priority: 2,
@@ -82,7 +82,7 @@ test('callAI should fall back from primary source to backup source', async (t) =
   ]);
 });
 
-test('callAI should honor fixed octopus routing mode', async (t) => {
+test('callAI skips a source whose gateway has no saved key', async (t) => {
   const aiModule = require('../lib/ai/ai') as any;
   const serverConfigModule = require('../lib/server/ai-config') as any;
 
@@ -96,10 +96,8 @@ test('callAI should honor fixed octopus routing mode', async (t) => {
     name: 'DeepSeek V3.2',
     vendor: 'deepseek',
     usageType: 'chat',
-    routingMode: 'octopus',
     modelId: 'deepseek-v3.2',
     apiUrl: 'https://newapi.example/v1/chat/completions',
-    apiKeyEnvVar: 'NEWAPI_API_KEY',
     sourceKey: 'newapi',
     transport: 'openai_compatible',
     supportsReasoning: false,
@@ -109,7 +107,7 @@ test('callAI should honor fixed octopus routing mode', async (t) => {
         sourceKey: 'newapi',
         sourceName: 'NewAPI',
         apiUrl: 'https://newapi.example/v1/chat/completions',
-        apiKeyEnvVar: 'NEWAPI_API_KEY',
+        gatewayId: 'gateway-newapi', apiKeySecret: null,
         modelIdOverride: 'deepseek-v3.2',
         transport: 'openai_compatible',
         priority: 1,
@@ -120,7 +118,7 @@ test('callAI should honor fixed octopus routing mode', async (t) => {
         sourceKey: 'octopus',
         sourceName: 'Octopus',
         apiUrl: 'https://octopus.example/v1/chat/completions',
-        apiKeyEnvVar: 'OCTOPUS_API_KEY',
+        ...OCTOPUS_KEY,
         modelIdOverride: 'deepseek-v3.2',
         transport: 'openai_compatible',
         priority: 2,
@@ -157,7 +155,7 @@ const NEWAPI_SOURCE: AIModelSourceConfig = {
   sourceKey: 'newapi',
   sourceName: 'NewAPI',
   apiUrl: 'https://newapi.example/v1/chat/completions',
-  apiKeyEnvVar: 'NEWAPI_API_KEY',
+  ...NEWAPI_KEY,
   isEnabled: true,
   priority: 1,
 };
@@ -166,7 +164,7 @@ const OCTOPUS_SOURCE: AIModelSourceConfig = {
   sourceKey: 'octopus',
   sourceName: 'Octopus',
   apiUrl: 'https://octopus.example/v1/chat/completions',
-  apiKeyEnvVar: 'OCTOPUS_API_KEY',
+  ...OCTOPUS_KEY,
   priority: 2,
 };
 
@@ -177,7 +175,6 @@ function routingModel(overrides: Partial<AIModelConfig> = {}): AIModelConfig {
     modelId: 'routing-test',
     vendor: 'deepseek',
     apiUrl: NEWAPI_SOURCE.apiUrl,
-    apiKeyEnvVar: NEWAPI_SOURCE.apiKeyEnvVar,
     sourceKey: NEWAPI_SOURCE.sourceKey,
     supportsReasoning: false,
     ...overrides,
@@ -190,19 +187,19 @@ const ROUTING_CASES: Array<{
   expected: string[];
 }> = [
   {
-    name: 'does not revive disabled bindings from projected legacy fields',
+    name: 'does not revive disabled bindings from projected top-level fields',
     overrides: { sources: [{ ...NEWAPI_SOURCE, isEnabled: false }] },
     expected: [],
   },
   {
-    name: 'does not bypass an invalid explicit binding with legacy fields',
+    name: 'skips a binding without an endpoint',
     overrides: { sources: [{ ...NEWAPI_SOURCE, apiUrl: '' }] },
     expected: [],
   },
   {
-    name: 'rejects fixed routing when the selected gateway has no binding',
-    overrides: { routingMode: 'octopus', sources: [NEWAPI_SOURCE] },
-    expected: [],
+    name: 'skips a gateway without a saved key',
+    overrides: { sources: [{ ...NEWAPI_SOURCE, apiKeySecret: null }, OCTOPUS_SOURCE] },
+    expected: ['octopus'],
   },
   {
     name: 'uses an enabled backup while leaving the disabled primary excluded',
@@ -215,28 +212,8 @@ const ROUTING_CASES: Array<{
     expected: ['newapi', 'octopus'],
   },
   {
-    name: 'preserves legacy models without a source list',
+    name: 'has no source without bindings, whatever the top-level fields say',
     overrides: {},
-    expected: ['newapi'],
-  },
-  {
-    name: 'preserves empty-list legacy configurations emitted by the environment adapter',
-    overrides: { sources: [] },
-    expected: ['newapi'],
-  },
-  {
-    name: 'never crosses a fixed gateway when using a legacy configuration',
-    overrides: { routingMode: 'octopus' },
-    expected: [],
-  },
-  {
-    name: 'allows a matching fixed legacy gateway',
-    overrides: { routingMode: 'octopus', sourceKey: 'octopus', apiUrl: OCTOPUS_SOURCE.apiUrl },
-    expected: ['octopus'],
-  },
-  {
-    name: 'does not invent an endpoint for an unconfigured model',
-    overrides: { apiUrl: '' },
     expected: [],
   },
 ];
@@ -252,7 +229,7 @@ for (const { name, overrides, expected } of ROUTING_CASES) {
 
 for (const [name, overrides] of [
   ['disabled bindings', { sources: [{ ...NEWAPI_SOURCE, isEnabled: false }] }],
-  ['missing fixed gateway', { routingMode: 'octopus', sources: [NEWAPI_SOURCE] }],
+  ['keyless gateways', { sources: [{ ...NEWAPI_SOURCE, apiKeySecret: null }] }],
 ] satisfies Array<[string, Partial<AIModelConfig>]>) {
   test(`callAI rejects ${name} without making a provider request`, async (t) => {
     const ai = require('../lib/ai/ai') as typeof import('../lib/ai/ai');

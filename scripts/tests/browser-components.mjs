@@ -725,13 +725,14 @@ export async function build(outputDirectory) {
 
 function initialModel() {
   return {
-    id: 'model-1', modelKey: 'fixture-model', displayName: 'Fixture Model', vendor: 'deepseek',
-    usageType: 'chat', routingMode: 'auto', isEnabled: true, sortOrder: 0, requiredTier: 'free',
-    supportsReasoning: true, reasoningRequiredTier: 'plus', isReasoningDefault: false, supportsVision: false,
+    id: 'model-1', modelKey: 'fixture-model', displayName: 'Fixture Model', vendor: 'deepseek', description: null,
+    usageType: 'chat', isEnabled: true, sortOrder: 0, requiredTier: 'free',
+    supportsVision: false, supportsReasoning: true, isReasoningDefault: false, reasoningRequiredTier: 'plus',
+    thinkingFormat: 'deepseek', thinkingLevels: ['low', 'high', 'max'], defaultReasoningEffort: 'high',
+    contextWindow: 1000000, defaultMaxTokens: 32768,
     defaultTemperature: 0.7, defaultTopP: null, defaultPresencePenalty: null, defaultFrequencyPenalty: null,
-    defaultMaxTokens: null, defaultReasoningEffort: 'high', reasoningEffortFormat: 'reasoning_object',
-    customParameters: null, description: null,
-    sources: [{ id: 'source-1', sourceKey: 'newapi', sourceName: 'NewAPI', apiUrl: 'https://unused.invalid', apiKeyEnvVar: 'FIXTURE_UNUSED', hasApiKey: true, modelIdOverride: null, reasoningModelId: null, isActive: true, isEnabled: true, priority: 0, notes: null }],
+    customParameters: null,
+    sources: [{ gatewayId: '00000000-0000-4000-8000-0000000000a1', modelIdOverride: null, reasoningModelId: null, isEnabled: true }],
   };
 }
 
@@ -872,6 +873,10 @@ export async function run(existingPage, bundlePath) {
     assert.ok(control.intercepted, 'Controlled request intercepted: ' + control.method + ' ' + control.pathname);
   };
   let models = [initialModel()];
+  const gateways = [
+    { id: '00000000-0000-4000-8000-0000000000a1', gatewayKey: 'newapi', displayName: 'NewAPI', baseUrl: 'https://unused.invalid', isEnabled: true, notes: null, apiKeyHint: 'sk-…abcd', modelCount: 1 },
+    { id: '00000000-0000-4000-8000-0000000000a2', gatewayKey: 'octopus', displayName: 'Octopus', baseUrl: 'https://unused-2.invalid', isEnabled: true, notes: null, apiKeyHint: 'sk-…wxyz', modelCount: 0 },
+  ];
   let announcements = [];
   let failAnnouncementWrite = false;
   const activationKey = (id, code, extra) => ({ id, key_code: code, key_type: 'membership', membership_type: 'plus', credits_amount: null,
@@ -967,8 +972,8 @@ export async function run(existingPage, bundlePath) {
       viewerSummary: { userId: await page.evaluate(() => window.fixtureAuth.cookieUser), isAdmin: false, nickname: 'fixture', membership: 'plus', aiChatCount: 20 },
       membership: { type: 'plus', isActive: true }, featureToggles: {}, featureTogglesLoaded: true, unreadCount: 0, unreadCountLoaded: true });
     if (url.pathname === '/api/models' && method === 'GET') return ok({ models: [
-      { id: 'fixture-analysis', name: '分析模型', vendor: 'other', supportsReasoning: true, reasoningEffortFormat: 'reasoning_effort', allowed: true, reasoningAllowed: true },
-      { id: 'fixture-review', name: '复核模型', vendor: 'other', supportsReasoning: true, reasoningEffortFormat: 'reasoning_object', allowed: true, reasoningAllowed: true },
+      { id: 'fixture-analysis', name: '分析模型', vendor: 'other', supportsReasoning: true, thinkingLevels: ['low', 'medium', 'high', 'xhigh', 'max'], defaultThinkingLevel: 'medium', allowed: true, reasoningAllowed: true },
+      { id: 'fixture-review', name: '复核模型', vendor: 'other', supportsReasoning: true, thinkingLevels: ['low', 'medium', 'high', 'xhigh', 'max'], defaultThinkingLevel: 'high', allowed: true, reasoningAllowed: true },
       { id: 'fixture-denied', name: '受限模型', vendor: 'other', supportsReasoning: true, allowed: false, blockedReason: '会员限制', reasoningAllowed: false },
       { id: 'fixture-toggle', name: '仅支持推理开关', vendor: 'other', supportsReasoning: true, allowed: true, reasoningAllowed: true },
     ] });
@@ -1148,19 +1153,12 @@ export async function run(existingPage, bundlePath) {
     if (url.pathname === '/api/admin/agent-runs' && method === 'GET') return ok({ runs: [agentTaskRun] }, true);
     if (url.pathname === `/api/admin/agent-runs/${agentTaskRun.id}` && method === 'GET') return ok({ run: agentTaskRun, tree: agentTaskTree() }, true);
     if (url.pathname === '/api/admin/ai-models/cache') return ok({ cleared: true });
+    if (url.pathname === '/api/admin/ai-gateways' && method === 'GET') return ok({ gateways });
+    if (url.pathname === '/api/admin/ai-gateways/probe' && method === 'POST') return ok({ ok: true, models: ['fixture-model', 'upstream-fixture'], latencyMs: 12 });
     if (url.pathname === '/api/admin/ai-models') {
       if (method === 'GET') return ok({ models });
-      models.push({ ...initialModel(), ...body, id: 'created-model', sources: [] });
-      return ok({ model: models.at(-1) });
-    }
-    const source = url.pathname.match(/^\/api\/admin\/ai-models\/([^/]+)\/sources(?:\/([^/]+))?$/);
-    if (source) {
-      const model = models.find(item => item.id === source[1]);
-      if (!source[2]) model.sources.push({ ...initialModel().sources[0], ...body, id: 'source-2', sourceName: 'Octopus', isActive: false });
-      else if (method === 'PATCH') Object.assign(model.sources.find(item => item.id === source[2]), body);
-      else if (method === 'DELETE') model.sources = model.sources.filter(item => item.id !== source[2]);
-      else model.sources.forEach(item => { item.isActive = item.id === source[2]; });
-      return ok({ saved: true });
+      models.push({ ...body, id: 'created-model' });
+      return ok({ id: 'created-model' });
     }
     const model = url.pathname.match(/^\/api\/admin\/ai-models\/([^/]+)$/);
     if (model) {
@@ -1316,54 +1314,80 @@ export async function run(existingPage, bundlePath) {
     await (await aliceSettings).finished();
     check('Signing back in reloads account panels without remounting the settings host', settingsReads >= readsAfterBob + 2);
     await page.getByRole('button', { name: 'Fixture Models route', exact: true }).click();
-    await page.getByText('Fixture Model', { exact: true }).waitFor();
-    await page.getByRole('button', { name: '新增模型', exact: true }).click();
-    const creation = page.locator('[data-testid="models"] > div > div').filter({ has: page.getByRole('heading', { name: '创建模型', exact: true }) });
-    await page.getByPlaceholder('deepseek-v3.2', { exact: true }).fill('  created-fixture  ');
-    await page.getByPlaceholder('DeepSeek V3.2', { exact: true }).fill('Created Fixture');
-    await page.getByRole('button', { name: '新增模型', exact: true }).click();
-    await page.getByRole('button', { name: '新增模型', exact: true }).click();
-    check('Create draft survives controlled form hide/reopen', await page.getByPlaceholder('deepseek-v3.2', { exact: true }).inputValue() === '  created-fixture  ');
-    await creation.locator('select').nth(2).selectOption('octopus');
-    check('Actual create form couples fixed routing to primary gateway', await creation.locator('select').nth(3).inputValue() === 'octopus');
-    await creation.getByRole('checkbox', { name: '支持推理', exact: true }).check();
-    await creation.getByRole('button', { name: '高级设置', exact: true }).click();
-    await creation.locator('select').filter({ has: page.locator('option[value="max"]') }).selectOption('max');
-    await page.getByRole('button', { name: '创建模型', exact: true }).click();
-    await page.getByText('Created Fixture', { exact: true }).waitFor();
+    const modelPanel = page.getByTestId('models');
+    const fixtureRow = modelPanel.locator('.ai-catalog-row').filter({ hasText: 'Fixture Model' });
+    await fixtureRow.waitFor();
+    check('A model row reads its window, output limit, thinking levels and sources', await fixtureRow.innerText().then(text =>
+      text.includes('1M 上下文 · 32K 输出') && text.includes('思考 低/高/最高') && text.includes('NewAPI')));
+    const modelWrites = () => requests.filter(item => item.pathname.startsWith('/api/admin/ai-models') && item.method !== 'GET').length;
+
+    await modelPanel.getByRole('button', { name: '添加模型', exact: true }).click();
+    let editor = page.locator('dialog.ai-catalog-dialog');
+    await editor.getByRole('heading', { name: '添加模型', exact: true }).waitFor();
+    await editor.getByLabel('显示名称', { exact: true }).fill('Created Fixture');
+    await editor.getByLabel('模型 ID', { exact: true }).fill('  created-fixture  ');
+    check('The model ID drops surrounding spaces as it is typed', await editor.getByLabel('模型 ID', { exact: true }).inputValue() === 'created-fixture');
+    await editor.getByRole('group', { name: '上下文窗口', exact: true }).getByRole('button', { name: '1M', exact: true }).click();
+    await editor.getByRole('group', { name: '最大输出', exact: true }).getByRole('button', { name: '32K', exact: true }).click();
+    check('A window preset writes its number and reads as pressed', await editor.getByRole('spinbutton', { name: /^上下文窗口/ }).inputValue() === '1000000'
+      && await editor.getByRole('group', { name: '上下文窗口', exact: true }).getByRole('button', { name: '1M', exact: true }).getAttribute('aria-pressed') === 'true');
+    await editor.getByRole('switch', { name: '支持思考', exact: true }).click();
+    const levels = editor.getByRole('group', { name: '可选思考等级', exact: true });
+    for (const level of ['最高', '低', '高']) await levels.getByRole('button', { name: level, exact: true }).click();
+    await editor.getByRole('combobox', { name: /^参数格式/ }).selectOption('deepseek');
+    check('The thinking format names the request fields it writes', await editor.getByText('thinking.type + reasoning_effort', { exact: true }).isVisible());
+    await editor.getByRole('combobox', { name: /^默认等级/ }).selectOption('max');
+    check('The default level offers only the ticked levels', (await editor.getByRole('combobox', { name: /^默认等级/ }).locator('option').allTextContents()).join('|') === '低|高|最高');
+    await editor.getByRole('combobox', { name: '添加来源', exact: true }).selectOption('00000000-0000-4000-8000-0000000000a2');
+    await editor.getByRole('button', { name: '添加模型', exact: true }).click();
+    await modelPanel.locator('.ai-catalog-row').filter({ hasText: 'Created Fixture' }).waitFor();
     const created = requests.find(item => item.pathname === '/api/admin/ai-models' && item.method === 'POST');
-    check('Actual create handler submits trimmed identity and preserved defaults', created?.body.modelKey === 'created-fixture' && created.body.primaryGatewayKey === 'octopus' && created.body.defaultTemperature === 0.7 && created.body.defaultTopP === null);
-    check('Actual create form submits the native maximum reasoning level', created.body.defaultReasoningEffort === 'max');
-    await page.getByText('Fixture Model', { exact: true }).click();
-    await page.getByRole('button', { name: '保存模型设置', exact: true }).waitFor();
-    const modelInput = page.locator('[data-testid="models"] input[type="text"]').filter({ visible: true });
-    await modelInput.nth(1).fill('Edited Fixture Model');
-    const effortSelect = page.locator('[data-testid="models"] select').filter({ has: page.locator('option[value="xhigh"]') }).filter({ visible: true });
-    await effortSelect.selectOption('xhigh');
-    await page.getByText('Fixture Model', { exact: true }).click();
-    await page.getByText('Fixture Model', { exact: true }).click();
-    check('Edit draft survives collapsing the controlled model view', await modelInput.nth(1).inputValue() === 'Edited Fixture Model');
-    await page.getByRole('button', { name: '保存模型设置', exact: true }).click();
-    await page.getByText('Edited Fixture Model', { exact: true }).waitFor();
-    check('Actual edit form persists controlled model draft', requests.some(item => item.pathname === '/api/admin/ai-models/model-1' && item.method === 'PATCH' && item.body.displayName === 'Edited Fixture Model'));
-    check('Actual edit form saves and restores extra-high reasoning', requests.some(item => item.pathname === '/api/admin/ai-models/model-1' && item.method === 'PATCH' && item.body.defaultReasoningEffort === 'xhigh') && await effortSelect.inputValue() === 'xhigh');
-    await modelInput.nth(1).fill('Unsaved model while editing source');
-    await page.getByRole('button', { name: '添加备用来源', exact: true }).click();
-    await page.getByPlaceholder('留空则跟随模型 ID（fixture-model）', { exact: true }).fill(' upstream-fixture ');
-    await page.getByRole('button', { name: '保存', exact: true }).click();
-    await page.getByText('Octopus', { exact: true }).waitFor();
-    check('Source reload preserves unsaved model settings', await modelInput.nth(1).inputValue() === 'Unsaved model while editing source');
-    check('Actual source form submits normalized override and remaining gateway', requests.some(item => item.pathname === '/api/admin/ai-models/model-1/sources' && item.body.sourceKey === 'octopus' && item.body.modelIdOverride === 'upstream-fixture'));
-    await page.getByRole('button', { name: '编辑来源', exact: true }).nth(1).click();
-    await page.getByPlaceholder('留空则跟随模型 ID（fixture-model）', { exact: true }).fill('fixture-model');
-    await page.getByRole('button', { name: '保存修改', exact: true }).click();
-    await page.getByText('来源已更新', { exact: true }).waitFor();
-    check('Actual inline source editor normalizes matching model ID to inheritance', requests.some(item => item.pathname === '/api/admin/ai-models/model-1/sources/source-2' && item.method === 'PATCH' && item.body.modelIdOverride === null));
-    const modelWrites = requests.filter(item => item.pathname === '/api/admin/ai-models/model-1' && item.method === 'PATCH').length;
-    await page.locator('[data-testid="models"] textarea').fill('[]');
-    await page.getByRole('button', { name: '保存模型设置', exact: true }).click();
-    await page.getByText('自定义参数必须是 JSON 对象', { exact: true }).waitFor();
-    check('Invalid model JSON is rejected before HTTP mutation', requests.filter(item => item.pathname === '/api/admin/ai-models/model-1' && item.method === 'PATCH').length === modelWrites);
+    check('Creating a model submits the identity, limits and preserved sampling defaults', created?.body.modelKey === 'created-fixture'
+      && created.body.contextWindow === 1000000 && created.body.defaultMaxTokens === 32768 && created.body.defaultTemperature === 0.7 && created.body.defaultTopP === null);
+    check('Creating a model submits the thinking ladder in order with a listed default', JSON.stringify(created?.body.thinkingLevels) === '["low","high","max"]'
+      && created.body.defaultReasoningEffort === 'max' && created.body.thinkingFormat === 'deepseek' && created.body.supportsReasoning === true);
+    check('A new model starts on the first gateway and keeps the added backup in order', created?.body.sources.map(source => source.gatewayId).join(',') === '00000000-0000-4000-8000-0000000000a1,00000000-0000-4000-8000-0000000000a2');
+
+    await fixtureRow.getByRole('button', { name: '编辑 Fixture Model', exact: true }).click();
+    editor = page.locator('dialog.ai-catalog-dialog');
+    await editor.getByRole('heading', { name: 'Fixture Model', exact: true }).waitFor();
+    check('An unchanged model cannot be saved', await editor.getByRole('button', { name: '保存', exact: true }).isDisabled());
+    await editor.getByLabel('显示名称', { exact: true }).fill('Edited Fixture Model');
+    await editor.getByRole('group', { name: '可选思考等级', exact: true }).getByRole('button', { name: '最高', exact: true }).click();
+    check('Unticking a level keeps the default on a listed level', await editor.getByRole('combobox', { name: /^默认等级/ }).inputValue() === 'high');
+    await editor.getByRole('combobox', { name: /^默认等级/ }).selectOption('low');
+    await editor.getByRole('combobox', { name: '添加来源', exact: true }).selectOption('00000000-0000-4000-8000-0000000000a2');
+    const upstream = editor.locator('.ai-catalog-source').getByLabel('上游模型 ID', { exact: true });
+    await upstream.nth(0).fill('fixture-model');
+    await upstream.nth(1).fill(' upstream-fixture ');
+    await editor.locator('.ai-catalog-source').nth(1).getByRole('button', { name: '上移', exact: true }).click();
+    await editor.locator('.ai-catalog-advanced summary').click();
+    await editor.getByRole('textbox', { name: /^自定义请求参数/ }).fill('[]');
+    const writesBeforeInvalid = modelWrites();
+    await editor.getByRole('button', { name: '保存', exact: true }).click();
+    await editor.getByRole('alert').filter({ hasText: 'JSON 对象' }).waitFor();
+    check('Invalid custom parameters are refused before any write', modelWrites() === writesBeforeInvalid);
+    await editor.getByRole('textbox', { name: /^自定义请求参数/ }).fill('{"top_k": 40}');
+    await editor.getByRole('button', { name: '保存', exact: true }).click();
+    await modelPanel.locator('.ai-catalog-row').filter({ hasText: 'Edited Fixture Model' }).waitFor();
+    const saved = requests.findLast(item => item.pathname === '/api/admin/ai-models/model-1' && item.method === 'PUT');
+    check('Saving a model writes the whole edited model', saved?.body.displayName === 'Edited Fixture Model' && JSON.stringify(saved.body.thinkingLevels) === '["low","high"]'
+      && saved.body.defaultReasoningEffort === 'low' && saved.body.customParameters?.top_k === 40);
+    check('Sources save in the shown order with an override equal to the model ID inherited and others trimmed', saved?.body.sources.map(source => source.gatewayId).join(',') === '00000000-0000-4000-8000-0000000000a2,00000000-0000-4000-8000-0000000000a1'
+      && saved.body.sources[0].modelIdOverride === 'upstream-fixture' && saved.body.sources[1].modelIdOverride === null);
+
+    await modelPanel.getByRole('button', { name: '编辑 Edited Fixture Model', exact: true }).click();
+    editor = page.locator('dialog.ai-catalog-dialog');
+    await editor.getByLabel('显示名称', { exact: true }).fill('Discarded name');
+    const writesBeforeDiscard = modelWrites();
+    await editor.getByRole('button', { name: '取消', exact: true }).click();
+    await page.getByRole('button', { name: '放弃修改', exact: true }).click();
+    await editor.waitFor({ state: 'detached' });
+    check('Closing an edited model asks first and writes nothing', modelWrites() === writesBeforeDiscard && await modelPanel.getByText('Discarded name').count() === 0);
+    const toggled = page.waitForResponse(response => response.url().endsWith('/api/admin/ai-models/created-model') && response.request().method() === 'PATCH');
+    await modelPanel.locator('.ai-catalog-row').filter({ hasText: 'Created Fixture' }).getByRole('switch', { name: '启用 Created Fixture', exact: true }).click();
+    await toggled;
+    check('The row switch only toggles the model', requests.some(item => item.pathname === '/api/admin/ai-models/created-model' && item.method === 'PATCH' && JSON.stringify(item.body) === '{"isEnabled":false}'));
     await page.getByRole('button', { name: 'Fixture Announcements route', exact: true }).click();
     const announcementPanel = page.getByTestId('announcements');
     await announcementPanel.getByText('还没有任何公告', { exact: true }).waitFor();

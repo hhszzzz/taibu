@@ -8,6 +8,10 @@ import { useCollaborationPreset, writeCollaborationPreset } from '@/lib/chat/col
 import type { AgentCollaborator } from '@/lib/chat/model-settings';
 import type { MembershipType } from '@/lib/user/membership';
 
+const EFFORT_LABELS: ReadonlyArray<readonly [NonNullable<AgentCollaborator['reasoningEffort']>, string]> = [
+    ['minimal', '最低'], ['low', '低'], ['medium', '中'], ['high', '高'], ['xhigh', '超高'], ['max', '最高'],
+];
+
 /**
  * 多模型协作成员模板（claude 把协作成员配置收进设置；模型菜单只保留勾选开关）。
  * 模板保存在本机（按用户隔离）：每个对话默认不协作，在模型菜单勾选某个模型时才套用它在这里的名称、努力程度与分工。
@@ -64,11 +68,9 @@ export function CollaborationSettings({ userId, membershipType }: { userId: stri
                         }}>
                         <option value="off">关闭推理</option>
                         <option value="default">模型默认</option>
-                        <option value="low">低</option>
-                        <option value="medium">中</option>
-                        <option value="high">高</option>
-                        <option value="xhigh">超高</option>
-                        <option value="max">最高</option>
+                        {/* 只列出所选模型支持的档位；保存过、但模型已不再支持的档位仍显示，运行时按最接近的档位执行。 */}
+                        {EFFORT_LABELS.filter(([level]) => level === item.reasoningEffort || models.find(model => model.id === item.model)?.thinkingLevels?.includes(level))
+                            .map(([level, label]) => <option key={level} value={level}>{label}</option>)}
                     </select>
                 </label>
             </div>

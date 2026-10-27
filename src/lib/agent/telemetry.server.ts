@@ -13,7 +13,7 @@ import type {
 } from "@earendil-works/pi-telemetry";
 import type { AgentRunMetricStatus, AgentRunMetricsRow, AgentRunPhase } from "./admin-metrics";
 
-/** A run keeps its first 500 phases; a long task's timeline shows its beginning instead of an unbounded row. */
+/** A run keeps its newest 500 phases; a long task's timeline stays bounded but still shows how it ended. */
 export const AGENT_RUN_PHASE_LIMIT = 500;
 
 /** The span and event names and the report types Pi Durable's content-free vocabulary defines. */
@@ -190,9 +190,10 @@ export class AgentRunTelemetry implements TelemetryContext, AgentStreamTelemetry
   }
 
   /**
-   * `pi.durable.phase.duration` histograms each phase invocation. A task runs several phases; the ones that do the
-   * work are the model request, the tool execution and the summary call, so those count as one generation, tool call
-   * or compaction and carry the phase time.
+   * `pi.durable.phase.duration` histograms each phase invocation. A generation's model request is its `request`
+   * phase, a compaction's summary call its `summarize` phase. A tool runs inside its task's `call` phase; `execute`
+   * is only the recovery replay after an interruption, which is also a real attempt. Those phases count as one
+   * generation, tool call or compaction and carry the phase time.
    */
   private recordPhaseDuration(value: number, attributes?: SpanAttributes) {
     if (!attributes) return;
@@ -201,7 +202,7 @@ export class AgentRunTelemetry implements TelemetryContext, AgentStreamTelemetry
     if (!task || !phase || !PHASE_TASKS.has(task)) return;
     const duration = milliseconds(value);
     if (task === "pi.generation" && phase === "request") { this.generationCount += 1; this.generationMs += duration; }
-    else if (task === "pi.tool" && phase === "execute") { this.toolCount += 1; this.toolMs += duration; }
+    else if (task === "pi.tool" && (phase === "call" || phase === "execute")) { this.toolCount += 1; this.toolMs += duration; }
     else if (task === "pi.compaction" && phase === "summarize") { this.compactionCount += 1; this.compactionMs += duration; }
   }
 

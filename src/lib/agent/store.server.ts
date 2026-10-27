@@ -1,6 +1,6 @@
 import "server-only";
 import type { ScopedDb } from "@/lib/db/context.server";
-import { jsonPath, jsonPathText } from "@/lib/db/sql-helpers";
+import { json, jsonPath, jsonPathText } from "@/lib/db/sql-helpers";
 import type { ChatMessage, CustomProviderRequest, AIReasoningEffort } from "@/types";
 import type { AgentCollaborator } from '@/lib/chat/model-settings';
 import type { EncryptedAgentCredential } from "./credentials.server";
@@ -8,7 +8,6 @@ import type { AgentCheckpoint, AgentRunStatus, AgentRunView } from "./types";
 import { AGENT_ENGINE } from "./engine";
 import { AGENT_DRILLDOWN_BASES } from "./tool-catalog";
 import type { AgentRunMetricsRow } from "./admin-metrics";
-import type { Json } from "@/lib/db/generated/schema";
 
 export interface AgentRunRow {
   id: string;
@@ -104,7 +103,8 @@ export class AgentStore {
       retries: row.retries, faults: row.faults, hangs: row.hangs,
       input_tokens: row.inputTokens, output_tokens: row.outputTokens,
       cache_read_tokens: row.cacheReadTokens, cache_write_tokens: row.cacheWriteTokens,
-      total_tokens: row.totalTokens, phases: row.phases as unknown as Json,
+      // pg encodes a JS array as a PostgreSQL array literal, so the timeline goes through json() as JSON text.
+      total_tokens: row.totalTokens, phases: json(row.phases) as never,
       started_at: row.startedAt, ended_at: row.endedAt,
     };
     await this.db.tx(trx => trx.insertInto("agent_run_metrics").values(values)

@@ -204,6 +204,37 @@ RESET ROLE;`);
       });
       assert.match(conversationId, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u);
     });
+
+    await t.test('run metrics store their phase timeline through the application path', async () => {
+      const conversation = randomUUID();
+      const run = randomUUID();
+      const checkpoint = { version: 2, durable: { engine: 'pi-durable/1.4.0' }, messages: [], parts: [] };
+      await sql(`insert into public.conversations (id, user_id, title) values
+          (${quote(conversation)}, ${quote(ids.owner)}, 'metrics probe');
+        insert into public.agent_runs (id, user_id, conversation_id, request_id, request_hash, input, checkpoint, public_message, billing, status) values
+          (${quote(run)}, ${quote(ids.owner)}, ${quote(conversation)}, 'metrics-probe', 'metrics-hash', '{}'::jsonb,
+           ${quote(JSON.stringify(checkpoint))}::jsonb, '{}'::jsonb, 'exempt', 'completed');`);
+      const { AgentStore } = require('../../src/lib/agent/store.server.ts');
+      // pg encodes a JS array as a PostgreSQL array literal: an untagged phases array would fail the jsonb insert.
+      const phases = [
+        { name: 'pi.durable.phase', task: 'pi.generation', phase: 'request', status: 'ok', startMs: 0, durationMs: 1200 },
+        { name: 'pi.durable.submit', submissionType: 'input', result: 'done', status: 'ok', startMs: 0, durationMs: 5 },
+      ];
+      const endedAt = Date.now();
+      await new AgentStore(systemDb()).recordRunMetrics({
+        runId: run, modelId: 'fixture-model', status: 'completed', queuedMs: 10, totalMs: 2000, firstTokenMs: 800,
+        generationCount: 1, generationMs: 1200, toolCount: 2, toolMs: 300, compactionCount: 0, compactionMs: 0,
+        retries: 1, faults: 0, hangs: 0, inputTokens: 100, outputTokens: 40, cacheReadTokens: 60, cacheWriteTokens: 0,
+        totalTokens: 200, phases, startedAt: new Date(endedAt - 2000).toISOString(), endedAt: new Date(endedAt).toISOString(),
+      });
+      const stored = await systemDb().tx((trx) => trx.selectFrom('agent_run_metrics')
+        .select(['status', 'tool_count', 'total_ms', 'phases'])
+        .where('run_id', '=', run).executeTakeFirstOrThrow());
+      assert.equal(stored.status, 'completed');
+      assert.equal(stored.tool_count, 2);
+      assert.equal(stored.total_ms, 2000);
+      assert.deepEqual(stored.phases, phases);
+    });
   } finally {
     try {
       await closeDb?.();

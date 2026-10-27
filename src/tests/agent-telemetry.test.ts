@@ -25,9 +25,9 @@ test("the adapter aggregates phases, retries, reports, tokens and the first toke
   const telemetry = new AgentRunTelemetry({ runId: "run-1", modelId: "fixture", startedAt: 1_000, queuedMs: 250, now: () => clock });
   const duration = telemetry.metrics.histogram("pi.durable.phase.duration");
   duration.record(1_000, { task: "pi.generation", phase: "request", outcome: "next=tools" });
-  duration.record(400, { task: "pi.tool", phase: "execute", outcome: "done" });
+  duration.record(400, { task: "pi.tool", phase: "call", outcome: "done" });
   duration.record(50, { task: "pi.compaction", phase: "summarize", outcome: "done" });
-  duration.record(20, { task: "pi.tool", phase: "call", outcome: "next=execute" });
+  duration.record(20, { task: "pi.tool", phase: "execute", outcome: "done" });
   duration.record(900, { task: "taibu.background.anchor", phase: "run", outcome: "done" });
   const reports = telemetry.metrics.counter("pi.durable.reports");
   reports.add(1, { type: "task_faulted" });
@@ -64,7 +64,7 @@ test("the adapter aggregates phases, retries, reports, tokens and the first toke
   assert.equal(metrics.totalMs, 1_820);
   assert.equal(metrics.firstTokenMs, 1_020, "the first content is kept; later calls do not move it");
   assert.deepEqual([metrics.generationCount, metrics.generationMs], [1, 1_000]);
-  assert.deepEqual([metrics.toolCount, metrics.toolMs], [1, 400]);
+  assert.deepEqual([metrics.toolCount, metrics.toolMs], [2, 420], "the call phase runs the tool; execute is its recovery replay");
   assert.deepEqual([metrics.compactionCount, metrics.compactionMs], [1, 50]);
   assert.equal(metrics.retries, 1, "the second attempt of the same generation counts once");
   assert.equal(metrics.faults, 1);

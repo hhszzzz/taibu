@@ -181,6 +181,26 @@ DMARC 已有就保持不动，先留在 `p=none` 观察；等 SPF/DKIM 都验证
 
 BullMQ 的 `taibu-email` 队列失败计数可在 Redis 里查看；连续失败通常是 `SMTP_PASS`（用了 API key 而不是 SMTP 密钥）、`SMTP_USER` 填成了 relay 主机名，或发件域名尚未验证。
 
+## 版本与镜像发布
+
+应用版本号以根目录 `package.json` 为准：x 是重大架构变更，y 是功能新增，z 是问题修复。发布在本地准备、推送标签后由 CI 完成：
+
+```bash
+# 按上一个 v* 标签以来的提交生成 CHANGELOG.md 段落、更新 package.json，再提交并打注释标签；不会推送。
+pnpm release prepare minor --dry-run   # 先预览版本号与更新说明
+pnpm release prepare minor             # 也可以是 major、patch 或 1.0.0-rc.1 这样的明确版本
+# 还没有 v* 标签时（首个版本），用 --from 指定更新说明的起点。
+pnpm release prepare 1.0.0 --from <提交或标签>
+# 核对 CHANGELOG.md 后推送分支与标签。
+git push origin master v0.2.0
+```
+
+推送 `v*` 标签后，`.github/workflows/release.yml` 先确认标签与 `package.json` 的版本一致，再构建 `linux/amd64` 镜像并推送为 `ghcr.io/hhszzzz/taibu:<标签>`，正式版本同时更新 `latest`。镜像的 OCI 标签与索引注解写明标题、带版本号和更新说明链接的描述、源码仓库、许可证与本手册地址，GHCR 包页面据此显示描述并关联仓库。镜像推送成功后，工作流用该版本的 CHANGELOG 段落、拉取命令和镜像摘要创建 GitHub Release，预发布版本标为 Pre-release。
+
+更新说明来自 Conventional Commits：`feat`、`fix`、`perf`、`refactor`、`docs` 各成一栏，`chore`、`build`、`ci` 归入维护，`test`、`style` 不写入。带 `!` 或 `BREAKING CHANGE:` 脚注的提交排在最前面的「升级须知」；需要手动执行 SQL、重新填写配置的变更必须这样标记，并把完整步骤写进提交说明。
+
+其他架构的主机在 Actions 页面手动运行 release 工作流，填写已有标签并选择架构，得到 `v0.2.0-arm64` 这样的镜像，不会移动正式标签和 `latest`。部署时 `compose.env` 的 `TAIBU_IMAGE` 指向 `ghcr.io/hhszzzz/taibu`，再执行 `deploy/deploy.sh <标签>`。
+
 ## 生产部署与备份
 
 生产使用 `deploy/compose.base.yml` + `deploy/compose.prod.yml`，私有配置写入 `/opt/taibu/env/`。`compose.env` 保存项目名、镜像、tag、域名及 `TAIBU_ENV_DIR`；账号口令按 `app.env`、`db.env`、`db-setup.env`、`schema.env`、`backup.env`、`restore.env` 拆分。部署使用 CI 构建好的镜像。

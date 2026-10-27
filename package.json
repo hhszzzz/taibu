@@ -17,6 +17,7 @@
     "local:update": "pnpm selfhost up --project taibu-v2 --build",
     "local:status": "pnpm selfhost status --project taibu-v2",
     "local:logs": "pnpm selfhost logs --project taibu-v2",
+    "release": "node scripts/release.mjs",
     "lint": "pnpm lint:code && pnpm lint:guards",
     "lint:code": "eslint .",
     "lint:guards": "node scripts/check-architecture-guards.mjs",

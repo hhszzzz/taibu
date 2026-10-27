@@ -43,6 +43,7 @@ const FAQ_LIST: FAQItem[] = [
 ];
 
 const SUPPORT_EMAIL = 'support@mingai.fun';
+const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION;
 const PROJECT_REPO_URL = 'https://github.com/hhszzzz/taibu';
 const CONTACT_LINK = 'inline-flex h-10 min-w-0 items-center gap-2 rounded-xl border border-border-hover px-3.5 text-sm text-foreground transition-colors duration-150 hover:bg-background-secondary';
 const FOOTER_LINK = 'text-foreground-secondary underline decoration-border-hover underline-offset-4 transition-colors duration-150 hover:text-foreground';
@@ -101,6 +102,11 @@ export default function HelpPanel() {
       <footer className="flex justify-center gap-6 border-t border-border pt-5 text-[13px]">
         <Link href="/privacy" className={FOOTER_LINK}>隐私政策</Link>
         <Link href="/terms" className={FOOTER_LINK}>服务条款</Link>
+        {APP_VERSION && (
+          <a href={`${PROJECT_REPO_URL}/releases`} target="_blank" rel="noreferrer" className={FOOTER_LINK} aria-label={`版本 ${APP_VERSION}，查看更新记录`}>
+            v{APP_VERSION}
+          </a>
+        )}
       </footer>
     </div>
   );

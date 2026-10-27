@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import packageJson from "./package.json";
 
 // The document routes parse PDF and Office files in worker threads running a bundle that
 // `pnpm build:agent` writes before `next build` (scripts/build-document-worker.mjs). pdf.js
@@ -16,6 +17,8 @@ const nextConfig: NextConfig = {
   // Forces a new client build id per deploy so stale chunks 404 instead of
   // mixing builds behind a rolling restart.
   deploymentId: process.env.GIT_SHA,
+  // The release version shown in settings; `pnpm release prepare` keeps package.json current.
+  env: { NEXT_PUBLIC_APP_VERSION: packageJson.version },
   // Sharp loads platform binaries and libvips at runtime; pnpm keeps these
   // optional packages outside the sharp package's directory.
   outputFileTracingIncludes: {

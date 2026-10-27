@@ -1,46 +1,97 @@
-name: deploy-image
+name: release
 
-# Builds and pushes the production image. Deployment itself stays manual and
-# runs on the host (deploy/deploy.sh <tag>); CI only publishes the image.
+# A v* tag cut by `pnpm release prepare` publishes the image to GHCR, labelled
+# with its version, description, source and license, and then opens the GitHub
+# Release with that version's CHANGELOG section. Deployment stays manual and
+# runs on the host (deploy/deploy.sh <tag>); CI only publishes.
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
     inputs:
       tag:
-        description: Image tag to publish
+        description: Existing release tag to rebuild for another architecture (published as <tag>-<arch>)
         required: true
       platform:
         description: Target architecture of the host
         type: choice
-        default: linux/amd64
+        default: linux/arm64
         options:
           - linux/amd64
           - linux/arm64
 
 permissions:
   contents: read
-  packages: write
 
 concurrency:
-  group: deploy-image-${{ github.ref }}
+  group: release-${{ inputs.tag || github.ref_name }}-${{ inputs.platform || 'linux/amd64' }}
   cancel-in-progress: false
 
 jobs:
-  build:
+  image:
     # ARM runners are native; do not emulate arm64 on x64.
     runs-on: ${{ inputs.platform == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      image: ${{ steps.release.outputs.image }}
+      digest: ${{ steps.build.outputs.digest }}
     steps:
-      - name: Checkout repository
+      - name: Checkout release tag
         uses: actions/checkout@v6
+        with:
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
 
-      - name: Resolve image tag
-        id: meta
+      - name: Check the tag against package.json
+        id: release
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+          PLATFORM: ${{ inputs.platform }}
         run: |
-          tag="${{ inputs.tag || github.ref_name }}"
-          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          version="$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::Tag $TAG does not match package.json version $version. Cut releases with pnpm release prepare." >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          # A rebuild for another architecture never moves the release tag or latest.
+          if [ -n "$PLATFORM" ]; then
+            echo "suffix=-${PLATFORM#linux/}" >> "$GITHUB_OUTPUT"
+            echo "latest=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "suffix=" >> "$GITHUB_OUTPUT"
+            echo "latest=auto" >> "$GITHUB_OUTPUT"
+          fi
+          description="太卜 $TAG：将传统命理文化与 AI 深度融合的自托管应用（Next.js、PostgreSQL、Redis）。更新说明见 $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$TAG"
+          echo "description=$description" >> "$GITHUB_OUTPUT"
+
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        env:
+          # GHCR shows the description from the image index; docker inspect reads the manifest.
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
+        with:
+          images: ${{ steps.release.outputs.image }}
+          flavor: |
+            latest=${{ steps.release.outputs.latest }}
+            suffix=${{ steps.release.outputs.suffix }}
+          tags: |
+            type=semver,pattern={{raw}},value=${{ inputs.tag || github.ref_name }}
+          labels: |
+            org.opencontainers.image.title=太卜
+            org.opencontainers.image.description=${{ steps.release.outputs.description }}
+            org.opencontainers.image.licenses=AGPL-3.0-only
+            org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}/blob/${{ inputs.tag || github.ref_name }}/docs/manual/Self-Hosting.md
+          annotations: |
+            org.opencontainers.image.title=太卜
+            org.opencontainers.image.description=${{ steps.release.outputs.description }}
+            org.opencontainers.image.licenses=AGPL-3.0-only
+            org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}/blob/${{ inputs.tag || github.ref_name }}/docs/manual/Self-Hosting.md
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -53,15 +104,50 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           platforms: ${{ inputs.platform || 'linux/amd64' }}
-          tags: |
-            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
-            ${{ steps.meta.outputs.image }}:latest
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
           build-args: |
             GIT_SHA=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  github-release:
+    needs: image
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.22.1
+
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.image.outputs.version }}
+          IMAGE: ${{ needs.image.outputs.image }}
+          DIGEST: ${{ needs.image.outputs.digest }}
+        run: |
+          notes="$RUNNER_TEMP/notes.md"
+          {
+            node scripts/release.mjs notes "$VERSION"
+            printf '\n### 镜像\n\n```bash\ndocker pull %s:%s\n```\n\n摘要 `%s`；部署：`deploy/deploy.sh %s`。\n' "$IMAGE" "$TAG" "$DIGEST" "$TAG"
+          } > "$notes"
+          prerelease=()
+          case "$VERSION" in *-*) prerelease=(--prerelease) ;; esac
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "太卜 $TAG" --notes-file "$notes" "${prerelease[@]}"

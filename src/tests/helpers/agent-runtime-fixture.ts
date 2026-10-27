@@ -4,6 +4,7 @@ import { createAssistantMessageEventStream, getCurrentTools, getSystemMessageTex
 import type { StorageWrite } from "@earendil-works/pi-durable";
 import type { PiStreamFn as StreamFn } from "../../lib/agent/types";
 import { AgentStore, type AgentRunRow, type AgentArtifactRow, type AgentCommandRow } from "../../lib/agent/store.server";
+import type { AgentRunMetricsRow } from "../../lib/agent/admin-metrics";
 import { getAgentDrilldownBase } from "../../lib/agent/tool-catalog";
 import { emptyPiAssistant } from "../../lib/agent/pi-stream.server";
 import type { AIModelConfig } from "../../types";
@@ -74,6 +75,7 @@ export const row = (): AgentRunRow => {
 export class MemoryStore extends AgentStore {
   readonly drafts = new Map<string, AgentArtifactRow>();
   readonly writes: Array<{ name: string; args: Record<string, unknown> }> = [];
+  readonly metrics: AgentRunMetricsRow[] = [];
   pending: AgentCommandRow[] = [];
   log: Array<{ sequence: number; writes: StorageWrite[] }> = [];
   draft(callId: string) {
@@ -87,6 +89,9 @@ export class MemoryStore extends AgentStore {
   }
   constructor() {
     super({} as never);
+  }
+  override async recordRunMetrics(row: AgentRunMetricsRow) {
+    this.metrics.push(structuredClone(row));
   }
   override async artifact(_run: AgentRunRow, callId: string) {
     return this.drafts.get(callId) ?? null;

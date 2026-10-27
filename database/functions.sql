@@ -808,6 +808,34 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION public.agent_run_metrics_summary(p_days integer DEFAULT 7) RETURNS TABLE(model_id text, runs bigint, p50_total_ms integer, p95_total_ms integer, p50_first_token_ms integer, p95_first_token_ms integer, tool_share double precision, failure_rate double precision, hang_rate double precision)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+begin
+  if not public.is_admin_user() then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+  if p_days < 1 or p_days > 90 then
+    raise exception 'invalid metrics window' using errcode = '22023';
+  end if;
+  return query
+  select m.model_id,
+    count(*)::bigint,
+    coalesce(round(percentile_cont(0.5) within group (order by m.total_ms)), 0)::integer,
+    coalesce(round(percentile_cont(0.95) within group (order by m.total_ms)), 0)::integer,
+    round(percentile_cont(0.5) within group (order by m.first_token_ms))::integer,
+    round(percentile_cont(0.95) within group (order by m.first_token_ms))::integer,
+    coalesce(sum(m.tool_ms)::double precision / nullif(sum(m.total_ms), 0), 0),
+    avg(case when m.status = 'failed' then 1 else 0 end)::double precision,
+    avg(case when m.hangs > 0 then 1 else 0 end)::double precision
+  from public.agent_run_metrics m
+  where m.ended_at >= now() - make_interval(days => p_days)
+  group by m.model_id
+  order by m.model_id;
+end;
+$$;
+
 CREATE OR REPLACE FUNCTION public.agent_save_archive_proposal(p_run_id uuid, p_call_id text) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
@@ -2105,7 +2133,7 @@ END IF;
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.delete_agent_retention(p_event_days integer DEFAULT 30, p_commit_days integer DEFAULT 7, p_worker_hours integer DEFAULT 24, p_limit integer DEFAULT 1000) RETURNS TABLE(events_deleted bigint, commits_deleted bigint, workers_deleted bigint)
+CREATE OR REPLACE FUNCTION public.delete_agent_retention(p_event_days integer DEFAULT 30, p_commit_days integer DEFAULT 7, p_worker_hours integer DEFAULT 24, p_limit integer DEFAULT 1000, p_metric_days integer DEFAULT 30) RETURNS TABLE(events_deleted bigint, commits_deleted bigint, workers_deleted bigint, metrics_deleted bigint)
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
     AS $$
@@ -2113,11 +2141,12 @@ declare
   v_events bigint;
   v_commits bigint;
   v_workers bigint;
+  v_metrics bigint;
 begin
   if not public.is_admin_user() then
     raise exception 'forbidden' using errcode = '42501';
   end if;
-  if p_event_days < 7 or p_commit_days < 1 or p_worker_hours < 1 or p_limit < 1 or p_limit > 10000 then
+  if p_event_days < 7 or p_commit_days < 1 or p_worker_hours < 1 or p_limit < 1 or p_limit > 10000 or p_metric_days < 1 then
     raise exception 'invalid retention bounds' using errcode = '22023';
   end if;
 
@@ -2147,7 +2176,15 @@ begin
   );
   get diagnostics v_workers = row_count;
 
-  return query select v_events, v_commits, v_workers;
+  delete from public.agent_run_metrics
+  where run_id in (
+    select run_id from public.agent_run_metrics
+    where ended_at < now() - make_interval(days => p_metric_days)
+    limit p_limit
+  );
+  get diagnostics v_metrics = row_count;
+
+  return query select v_events, v_commits, v_workers, v_metrics;
 end;
 $$;
 

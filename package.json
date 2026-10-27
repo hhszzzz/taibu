@@ -52,6 +52,7 @@
     "@earendil-works/pi-codemode": "1.4.0",
     "@earendil-works/pi-durable": "1.4.0",
     "@earendil-works/pi-mcp": "1.4.0",
+    "@earendil-works/pi-telemetry": "1.4.0",
     "@lobehub/icons": "^4.0.2",
     "@phosphor-icons/react": "^2.1.10",
     "@tanstack/react-query": "^5.95.2",

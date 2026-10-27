@@ -15,15 +15,22 @@ import { requestBrowserData } from '@/lib/browser-api';
 import { isValidUUID } from '@/lib/validation';
 import { AGENT_ACTIVE_STATUSES, type AgentRunStatus } from '@/lib/agent/types';
 import type { AgentAdminRun, AgentTaskConversation, AgentTaskNode, AgentTaskSubmission, AgentTaskTree } from '@/lib/agent/admin-tasks';
+import { formatAgentDuration } from '@/lib/agent/admin-metrics';
+import { AgentPerformancePanel } from '@/components/admin/AgentPerformancePanel';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 
 type Scope = 'active' | 'recent';
+type View = 'tasks' | 'performance';
 type RunDetail = { run: AgentAdminRun; tree: AgentTaskTree };
 type Tone = { label: string; tone: string };
 
 const SCOPES: Array<{ id: Scope; label: string }> = [
     { id: 'active', label: '进行中' },
     { id: 'recent', label: '最近' },
+];
+const VIEWS: Array<{ id: View; label: string }> = [
+    { id: 'tasks', label: '任务' },
+    { id: 'performance', label: '性能' },
 ];
 const LIST_REFRESH_MS = 5000;
 const TREE_REFRESH_MS = 3000;
@@ -69,13 +76,6 @@ function formatTime(value: string | number | null | undefined) {
     return Number.isNaN(date.getTime()) ? '—' : TIME.format(date);
 }
 
-function formatDuration(ms: number) {
-    if (ms < 1000) return `${Math.max(0, Math.round(ms))} 毫秒`;
-    if (ms < 10_000) return `${(ms / 1000).toFixed(1)} 秒`;
-    const seconds = Math.floor(ms / 1000);
-    return seconds < 60 ? `${seconds} 秒` : `${Math.floor(seconds / 60)} 分 ${String(seconds % 60).padStart(2, '0')} 秒`;
-}
-
 function runModes(run: AgentAdminRun) {
     const modes = [
         run.modes.compact ? '压缩上下文' : null,
@@ -109,7 +109,7 @@ function taskState(task: AgentTaskNode): Tone {
 
 function taskDuration(task: AgentTaskNode, now: number) {
     if (task.startedAt === undefined) return null;
-    return task.endedAt !== undefined ? formatDuration(task.endedAt - task.startedAt) : `已运行 ${formatDuration(now - task.startedAt)}`;
+    return task.endedAt !== undefined ? formatAgentDuration(task.endedAt - task.startedAt) : `已运行 ${formatAgentDuration(now - task.startedAt)}`;
 }
 
 function conversationTitle(conversation: AgentTaskConversation) {
@@ -267,6 +267,7 @@ function RunDetailView({ detail, now, onClose }: { detail: RunDetail; now: numbe
 }
 
 export function AgentTaskPanel({ active = true }: { active?: boolean }) {
+    const [view, setView] = useState<View>('tasks');
     const [scope, setScope] = useState<Scope>('active');
     const [query, setQuery] = useState('');
     const [search, setSearch] = useState('');
@@ -319,28 +320,30 @@ export function AgentTaskPanel({ active = true }: { active?: boolean }) {
         }
     }, []);
 
-    useEffect(() => {
-        if (active) void loadRuns();
-    }, [active, loadRuns]);
+    const tasksActive = active && view === 'tasks';
 
     useEffect(() => {
-        if (active && selectedId) void loadDetail(selectedId);
-    }, [active, selectedId, loadDetail]);
+        if (tasksActive) void loadRuns();
+    }, [tasksActive, loadRuns]);
+
+    useEffect(() => {
+        if (tasksActive && selectedId) void loadDetail(selectedId);
+    }, [tasksActive, selectedId, loadDetail]);
 
     // 面板不可见（切到其他子页或浏览器标签页隐藏）时不轮询。
     useEffect(() => {
-        if (!active || scope !== 'active' || search) return;
+        if (!tasksActive || scope !== 'active' || search) return;
         const timer = window.setInterval(() => { if (!document.hidden) void loadRuns(); }, LIST_REFRESH_MS);
         return () => window.clearInterval(timer);
-    }, [active, scope, search, loadRuns]);
+    }, [tasksActive, scope, search, loadRuns]);
 
     const shown = detail && detail.run.id === selectedId ? detail : null;
     const liveRun = !!shown && AGENT_ACTIVE_STATUSES.includes(shown.run.status);
     useEffect(() => {
-        if (!active || !selectedId || !liveRun) return;
+        if (!tasksActive || !selectedId || !liveRun) return;
         const timer = window.setInterval(() => { if (!document.hidden) void loadDetail(selectedId); }, TREE_REFRESH_MS);
         return () => window.clearInterval(timer);
-    }, [active, selectedId, liveRun, loadDetail]);
+    }, [tasksActive, selectedId, liveRun, loadDetail]);
 
     const select = (id: string | null) => {
         detailSeq.current++;
@@ -368,12 +371,23 @@ export function AgentTaskPanel({ active = true }: { active?: boolean }) {
         if (selectedId) void loadDetail(selectedId);
     };
 
-    if (loading) {
-        return <SoundWaveLoader variant="block" />;
-    }
-
     return (
         <div className="flex flex-col gap-4">
+            <div role="group" aria-label="Agent 视图" className="flex flex-wrap items-center gap-1.5">
+                {VIEWS.map(({ id, label }) => (
+                    <button
+                        key={id}
+                        type="button"
+                        aria-pressed={view === id}
+                        onClick={() => setView(id)}
+                        className="settings-filter"
+                    >
+                        {label}
+                    </button>
+                ))}
+            </div>
+            {view === 'performance' ? <AgentPerformancePanel active={active} /> : loading ? <SoundWaveLoader variant="block" /> : (
+                <>
             <p className="settings-help">
                 查看 Agent 任务的执行过程：任务树按 Pi Durable 提交日志重建，包括模型生成、工具与脚本调用、协作成员与后台子分析，已结束的任务也保留耗时与失败原因。
             </p>
@@ -478,6 +492,8 @@ export function AgentTaskPanel({ active = true }: { active?: boolean }) {
             ) : null}
             {selectedId && !shown && !detailError ? <SoundWaveLoader variant="block" /> : null}
             {shown ? <RunDetailView key={shown.run.id} detail={shown} now={now} onClose={() => select(null)} /> : null}
+                </>
+            )}
         </div>
     );
 }

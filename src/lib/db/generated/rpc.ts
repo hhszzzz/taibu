@@ -18,6 +18,7 @@ export interface RpcRegistry {
   "agent_finish_run": { args: { "p_run_id": string | null; "p_worker_id": string | null; "p_fence": number | null; "p_status": string | null; "p_checkpoint": unknown | null; "p_message": unknown | null; }; result: Record<string, unknown> };
   "agent_record_user_event": { args: { "p_run_id": string | null; "p_worker_id": string | null; "p_fence": number | null; "p_call_id": string | null; "p_chart_type": string | null; "p_chart_id": string | null; "p_event_date": string | null; "p_category": string | null; "p_title": string | null; "p_evidence": string | null; }; result: Json };
   "agent_renew_lease": { args: { "p_run_id": string | null; "p_worker_id": string | null; "p_fence": number | null; }; result: boolean };
+  "agent_run_metrics_summary": { args: { "p_days"?: number | null; }; result: { model_id: string; runs: number; p50_total_ms: number; p95_total_ms: number; p50_first_token_ms: number; p95_first_token_ms: number; tool_share: number; failure_rate: number; hang_rate: number; }[] };
   "agent_save_archive_proposal": { args: { "p_run_id": string | null; "p_call_id": string | null; }; result: Json };
   "agent_search_conversations": { args: { "p_run_id": string | null; "p_worker_id": string | null; "p_fence": number | null; "p_query": string | null; "p_limit": number | null; }; result: Json };
   "agent_search_knowledge": { args: { "p_run_id": string | null; "p_worker_id": string | null; "p_fence": number | null; "p_method": string | null; "p_args": unknown | null; }; result: Json };
@@ -38,7 +39,7 @@ export interface RpcRegistry {
   "create_conversation_with_messages": { args: { "p_user_id": string | null; "p_title": string | null; "p_personality"?: string | null; "p_source_type"?: string | null; "p_source_data"?: unknown | null; "p_messages"?: unknown | null; }; result: string };
   "create_knowledge_base_with_limit": { args: { "p_user_id": string | null; "p_name": string | null; "p_description"?: string | null; "p_weight"?: string | null; "p_limit"?: number | null; }; result: Json };
   "decrement_ai_chat_count": { args: { "user_id": string | null; }; result: number };
-  "delete_agent_retention": { args: { "p_event_days"?: number | null; "p_commit_days"?: number | null; "p_worker_hours"?: number | null; "p_limit"?: number | null; }; result: { events_deleted: number; commits_deleted: number; workers_deleted: number; }[] };
+  "delete_agent_retention": { args: { "p_event_days"?: number | null; "p_commit_days"?: number | null; "p_worker_hours"?: number | null; "p_limit"?: number | null; "p_metric_days"?: number | null; }; result: { events_deleted: number; commits_deleted: number; workers_deleted: number; metrics_deleted: number; }[] };
   "delete_conversation_graph": { args: { "p_conversation_id": string | null; }; result: boolean };
   "delete_history_item_and_conversation": { args: { "p_history_type": string | null; "p_history_id": string | null; }; result: boolean };
   "deliver_daily_briefing_notices": { args: { "p_limit"?: number | null; }; result: number };
@@ -90,6 +91,7 @@ export const RPC_SPECS = {
   "agent_finish_run": { args: [["p_run_id", "uuid", false], ["p_worker_id", "text", false], ["p_fence", "bigint", false], ["p_status", "text", false], ["p_checkpoint", "jsonb", false], ["p_message", "jsonb", false]], returns: "row" },
   "agent_record_user_event": { args: [["p_run_id", "uuid", false], ["p_worker_id", "text", false], ["p_fence", "bigint", false], ["p_call_id", "text", false], ["p_chart_type", "text", false], ["p_chart_id", "uuid", false], ["p_event_date", "date", false], ["p_category", "text", false], ["p_title", "text", false], ["p_evidence", "text", false]], returns: "scalar" },
   "agent_renew_lease": { args: [["p_run_id", "uuid", false], ["p_worker_id", "text", false], ["p_fence", "bigint", false]], returns: "scalar" },
+  "agent_run_metrics_summary": { args: [["p_days", "integer", true]], returns: "setof" },
   "agent_save_archive_proposal": { args: [["p_run_id", "uuid", false], ["p_call_id", "text", false]], returns: "scalar" },
   "agent_search_conversations": { args: [["p_run_id", "uuid", false], ["p_worker_id", "text", false], ["p_fence", "bigint", false], ["p_query", "text", false], ["p_limit", "integer", false]], returns: "scalar" },
   "agent_search_knowledge": { args: [["p_run_id", "uuid", false], ["p_worker_id", "text", false], ["p_fence", "bigint", false], ["p_method", "text", false], ["p_args", "jsonb", false]], returns: "scalar" },
@@ -110,7 +112,7 @@ export const RPC_SPECS = {
   "create_conversation_with_messages": { args: [["p_user_id", "uuid", false], ["p_title", "text", false], ["p_personality", "text", true], ["p_source_type", "text", true], ["p_source_data", "jsonb", true], ["p_messages", "jsonb", true]], returns: "scalar" },
   "create_knowledge_base_with_limit": { args: [["p_user_id", "uuid", false], ["p_name", "text", false], ["p_description", "text", true], ["p_weight", "text", true], ["p_limit", "integer", true]], returns: "scalar" },
   "decrement_ai_chat_count": { args: [["user_id", "uuid", false]], returns: "scalar" },
-  "delete_agent_retention": { args: [["p_event_days", "integer", true], ["p_commit_days", "integer", true], ["p_worker_hours", "integer", true], ["p_limit", "integer", true]], returns: "setof" },
+  "delete_agent_retention": { args: [["p_event_days", "integer", true], ["p_commit_days", "integer", true], ["p_worker_hours", "integer", true], ["p_limit", "integer", true], ["p_metric_days", "integer", true]], returns: "setof" },
   "delete_conversation_graph": { args: [["p_conversation_id", "text", false]], returns: "scalar" },
   "delete_history_item_and_conversation": { args: [["p_history_type", "text", false], ["p_history_id", "text", false]], returns: "scalar" },
   "deliver_daily_briefing_notices": { args: [["p_limit", "integer", true]], returns: "scalar" },

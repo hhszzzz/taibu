@@ -1259,6 +1259,21 @@ export async function run(existingPage, bundlePath) {
     }
     if (url.pathname === '/api/admin/agent-runs' && method === 'GET') return ok({ runs: [agentTaskRun] }, true);
     if (url.pathname === `/api/admin/agent-runs/${agentTaskRun.id}` && method === 'GET') return ok({ run: agentTaskRun, tree: agentTaskTree() }, true);
+    if (url.pathname === '/api/admin/agent-metrics' && method === 'GET') return ok({
+      days: Number(url.searchParams.get('days') ?? 7), since: '2026-10-01T00:00:00Z',
+      models: [{ modelId: 'fixture-model', runs: 4, p50TotalMs: 4000, p95TotalMs: 8000, p50FirstTokenMs: 800, p95FirstTokenMs: 2500, toolShare: 0.25, failureRate: 0.5, hangRate: 0.25 }],
+      runs: [{ runId: agentTaskRun.id, modelId: 'fixture-model', status: 'completed', totalMs: 4000, firstTokenMs: 800, toolMs: 1000, retries: 1, faults: 0, hangs: 0, endedAt: '2026-10-27T03:00:00Z' }],
+    }, true);
+    if (url.pathname === `/api/admin/agent-metrics/${agentTaskRun.id}` && method === 'GET') return ok({ metrics: {
+      runId: agentTaskRun.id, modelId: 'fixture-model', status: 'completed', queuedMs: 100, totalMs: 4000, firstTokenMs: 800,
+      generationCount: 2, generationMs: 3000, toolCount: 1, toolMs: 1000, compactionCount: 0, compactionMs: 0,
+      retries: 1, faults: 0, hangs: 0, inputTokens: 100, outputTokens: 50, cacheReadTokens: 30, cacheWriteTokens: 0, totalTokens: 180,
+      phases: [
+        { name: 'pi.durable.phase', task: 'pi.generation', phase: 'request', status: 'ok', startMs: 0, durationMs: 1200, outcome: 'next=tools' },
+        { name: 'pi.durable.phase', task: 'pi.tool', phase: 'execute', status: 'ok', startMs: 1200, durationMs: 900, outcome: 'done' },
+      ],
+      startedAt: '2026-10-27T02:59:56Z', endedAt: '2026-10-27T03:00:00Z',
+    } }, true);
     if (url.pathname === '/api/admin/ai-models/cache') return ok({ cleared: true });
     if (url.pathname === '/api/admin/ai-gateways' && method === 'GET') return ok({ gateways });
     if (url.pathname === '/api/admin/ai-gateways/probe' && method === 'POST') return ok({ ok: true, models: ['fixture-model', 'upstream-fixture'], latencyMs: 12 });
@@ -1604,6 +1619,23 @@ export async function run(existingPage, bundlePath) {
     await taskPanel.getByLabel('按任务、对话或用户 ID 查找').fill(agentTaskRun.conversationId);
     await taskPanel.getByRole('button', { name: '查找', exact: true }).click();
     check('A full ID searches tasks in every state', await waitForRequest(() => taskListReads().some(item => item.search === `?scope=active&q=${agentTaskRun.conversationId}`)));
+    await taskPanel.getByRole('button', { name: '性能', exact: true }).click();
+    const metricsPanel = taskPanel.getByTestId('agent-metrics');
+    const metricsTable = metricsPanel.getByRole('table', { name: '按模型统计的 Agent 运行指标' });
+    await metricsTable.getByText('fixture-model', { exact: true }).waitFor();
+    check('The performance view shows per-model percentiles, tool share, failure and hang rates',
+      await metricsTable.getByText('4.0 秒 / 8.0 秒', { exact: true }).isVisible()
+      && await metricsTable.getByText('25%', { exact: true }).first().isVisible()
+      && await metricsTable.getByText('50%', { exact: true }).isVisible()
+      && requests.some(item => item.pathname === '/api/admin/agent-metrics' && item.search === '?days=7'));
+    await metricsPanel.getByRole('button', { name: '近 30 天', exact: true }).click();
+    check('Changing the metrics window refetches it', await waitForRequest(() => requests.some(item => item.pathname === '/api/admin/agent-metrics' && item.search === '?days=30')));
+    await metricsPanel.getByRole('button', { name: '7b1d4c3e', exact: true }).click();
+    const timeline = metricsPanel.getByRole('region', { name: '运行阶段时间线' });
+    await timeline.waitFor();
+    check('A single run shows its phase timeline', await timeline.getByText('模型生成 · request', { exact: true }).isVisible()
+      && await timeline.getByText('工具调用 · execute', { exact: true }).isVisible()
+      && await timeline.getByText('1.2 秒', { exact: true }).first().isVisible());
 
     // Agent roles: a built-in one is only switched on or off; a custom one is written in the editor, grants and all.
     await page.getByRole('button', { name: 'Fixture Agent roles route', exact: true }).click();

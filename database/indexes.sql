@@ -27,6 +27,10 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS agent_conversation_runs ON public.agent_
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS agent_events_cursor ON public.agent_run_events USING btree (run_id, sequence);
 
+CREATE INDEX CONCURRENTLY IF NOT EXISTS agent_run_metrics_model ON public.agent_run_metrics USING btree (model_id, ended_at DESC);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS agent_run_metrics_retention ON public.agent_run_metrics USING btree (ended_at);
+
 CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS agent_one_active_conversation ON public.agent_runs USING btree (conversation_id) WHERE (status = ANY (ARRAY['queued'::text, 'running'::text, 'awaiting_input'::text, 'cancelling'::text]));
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS agent_queue ON public.agent_runs USING btree (status, lease_until, created_at);

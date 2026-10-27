@@ -7,6 +7,8 @@ import type { EncryptedAgentCredential } from "./credentials.server";
 import type { AgentCheckpoint, AgentRunStatus, AgentRunView } from "./types";
 import { AGENT_ENGINE } from "./engine";
 import { AGENT_DRILLDOWN_BASES } from "./tool-catalog";
+import type { AgentRunMetricsRow } from "./admin-metrics";
+import type { Json } from "@/lib/db/generated/schema";
 
 export interface AgentRunRow {
   id: string;
@@ -90,6 +92,32 @@ export class AgentStore {
   constructor(readonly db: ScopedDb) {}
   async rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
     return this.db.rpc(name as never, args as never, { timeoutMs: 30_000 }) as Promise<T>;
+  }
+  /** Writes a terminal run's metrics; a takeover that settles the same run again replaces its row. */
+  async recordRunMetrics(row: AgentRunMetricsRow) {
+    const values = {
+      run_id: row.runId, model_id: row.modelId, status: row.status,
+      queued_ms: row.queuedMs, total_ms: row.totalMs, first_token_ms: row.firstTokenMs,
+      generation_count: row.generationCount, generation_ms: row.generationMs,
+      tool_count: row.toolCount, tool_ms: row.toolMs,
+      compaction_count: row.compactionCount, compaction_ms: row.compactionMs,
+      retries: row.retries, faults: row.faults, hangs: row.hangs,
+      input_tokens: row.inputTokens, output_tokens: row.outputTokens,
+      cache_read_tokens: row.cacheReadTokens, cache_write_tokens: row.cacheWriteTokens,
+      total_tokens: row.totalTokens, phases: row.phases as unknown as Json,
+      started_at: row.startedAt, ended_at: row.endedAt,
+    };
+    await this.db.tx(trx => trx.insertInto("agent_run_metrics").values(values)
+      .onConflict(oc => oc.column("run_id").doUpdateSet({
+        model_id: values.model_id, status: values.status, queued_ms: values.queued_ms, total_ms: values.total_ms,
+        first_token_ms: values.first_token_ms, generation_count: values.generation_count, generation_ms: values.generation_ms,
+        tool_count: values.tool_count, tool_ms: values.tool_ms, compaction_count: values.compaction_count,
+        compaction_ms: values.compaction_ms, retries: values.retries, faults: values.faults, hangs: values.hangs,
+        input_tokens: values.input_tokens, output_tokens: values.output_tokens, cache_read_tokens: values.cache_read_tokens,
+        cache_write_tokens: values.cache_write_tokens, total_tokens: values.total_tokens, phases: values.phases,
+        started_at: values.started_at, ended_at: values.ended_at,
+      }))
+      .execute());
   }
   async getRun(id: string, userId?: string) {
     const row = await this.db.tx((trx) => {

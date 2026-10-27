@@ -323,6 +323,22 @@ test('cached input maps to Pi usage without double-counting', async () => {
   assert.deepEqual([usage.input, usage.cacheRead, usage.cacheWrite, usage.output, usage.reasoning, usage.totalTokens], [600, 200, 100, 100, 30, 1000]);
 });
 
+test('the first content and each request usage reach the run telemetry', async () => {
+  const seen = { first: 0, usages: [] as Array<{ input: number; output: number; cacheRead: number; cacheWrite: number; totalTokens: number }> };
+  const telemetry = {
+    firstToken: () => { seen.first += 1; },
+    usage: (usage: { input: number; output: number; cacheRead: number; cacheWrite: number; totalTokens: number }) => { seen.usages.push(usage); },
+  };
+  const gw = gateway(sse([{ delta: { content: 'answer' } }, { finish_reason: 'stop', usage: {
+    prompt_tokens: 900, completion_tokens: 100, prompt_tokens_details: { cached_tokens: 200, cache_write_tokens: 100 },
+  } }]));
+  await createPiModelStream(config, { fetch: gw.fetch, telemetry })(piModel, context()).result();
+  assert.equal(seen.first, 1, 'the first streamed content is timed once per request');
+  assert.equal(seen.usages.length, 1);
+  assert.deepEqual([seen.usages[0]?.input, seen.usages[0]?.cacheRead, seen.usages[0]?.cacheWrite, seen.usages[0]?.output],
+    [600, 200, 100, 100], 'cache-read tokens are kept for the run metrics');
+});
+
 test('a stream that ends without a finish reason fails, keeping the partial text and sending no done event', async () => {
   const gw = gateway(sse([{ delta: { content: 'partial' } }], { done: false }));
   const { events, message } = await drain(createPiModelStream(config, { fetch: gw.fetch })(piModel, context()));

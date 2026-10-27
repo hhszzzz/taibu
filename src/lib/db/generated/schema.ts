@@ -129,6 +129,33 @@ export interface AgentRunEvents {
   created_at: Generated<string>;
 }
 
+export interface AgentRunMetrics {
+  run_id: ColumnType<string, string, string>;
+  model_id: ColumnType<string, string, string>;
+  status: ColumnType<string, string, string>;
+  queued_ms: Generated<number>;
+  total_ms: Generated<number>;
+  first_token_ms: ColumnType<number | null, number | null | undefined, number | null | undefined>;
+  generation_count: Generated<number>;
+  generation_ms: Generated<number>;
+  tool_count: Generated<number>;
+  tool_ms: Generated<number>;
+  compaction_count: Generated<number>;
+  compaction_ms: Generated<number>;
+  retries: Generated<number>;
+  faults: Generated<number>;
+  hangs: Generated<number>;
+  input_tokens: Generated<number>;
+  output_tokens: Generated<number>;
+  cache_read_tokens: Generated<number>;
+  cache_write_tokens: Generated<number>;
+  total_tokens: Generated<number>;
+  phases: Generated<Json>;
+  started_at: ColumnType<string, string, string>;
+  ended_at: ColumnType<string, string, string>;
+  created_at: Generated<string>;
+}
+
 export interface AgentRuns {
   id: ColumnType<string, string, string>;
   user_id: ColumnType<string, string, string>;
@@ -776,6 +803,7 @@ export interface DB {
   "agent_run_commands": AgentRunCommands;
   "agent_run_credentials": AgentRunCredentials;
   "agent_run_events": AgentRunEvents;
+  "agent_run_metrics": AgentRunMetrics;
   "agent_runs": AgentRuns;
   "agent_skill_files": AgentSkillFiles;
   "agent_skills": AgentSkills;

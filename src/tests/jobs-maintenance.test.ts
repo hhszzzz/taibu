@@ -67,11 +67,11 @@ test('attachment cleanup and notification pruning run their owners', async (t) =
 
 test('retention and identity cleanup are dispatched to their owners', async (t) => {
   const retention = require('../lib/jobs/retention.server') as typeof import('../lib/jobs/retention.server');
-  t.mock.method(retention, 'runAgentRetention', async () => ({ events: 3, commits: 1, workers: 0, passes: 1 }));
+  t.mock.method(retention, 'runAgentRetention', async () => ({ events: 3, commits: 1, workers: 0, metrics: 1, passes: 1 }));
   t.mock.method(retention, 'runIdentityCleanup', async () => ({ sessions: 2, verifications: 5 }));
 
   assert.deepEqual((await runMaintenanceJob('agent-retention')).results, [
-    { step: 'agent-retention', value: { events: 3, commits: 1, workers: 0, passes: 1 } },
+    { step: 'agent-retention', value: { events: 3, commits: 1, workers: 0, metrics: 1, passes: 1 } },
   ]);
   assert.deepEqual((await runMaintenanceJob('identity-cleanup')).results, [
     { step: 'identity-cleanup', value: { sessions: 2, verifications: 5 } },

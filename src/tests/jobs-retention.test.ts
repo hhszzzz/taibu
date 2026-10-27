@@ -22,18 +22,19 @@ test('agent retention loops until a pass is under the batch size', async (t) => 
     assert.equal(name, 'delete_agent_retention');
     pass += 1;
     return pass === 1
-      ? [{ events_deleted: 1000, commits_deleted: 1000, workers_deleted: 1000 }]
-      : [{ events_deleted: 10, commits_deleted: 0, workers_deleted: 0 }];
+      ? [{ events_deleted: 1000, commits_deleted: 1000, workers_deleted: 1000, metrics_deleted: 1000 }]
+      : [{ events_deleted: 10, commits_deleted: 0, workers_deleted: 0, metrics_deleted: 0 }];
   });
 
   const { runAgentRetention } = require('../lib/jobs/retention.server') as typeof import('../lib/jobs/retention.server');
   const summary = await runAgentRetention();
 
-  assert.deepEqual(summary, { events: 1010, commits: 1000, workers: 1000, passes: 2 });
+  assert.deepEqual(summary, { events: 1010, commits: 1000, workers: 1000, metrics: 1000, passes: 2 });
   assert.equal(calls.length, 2);
   assert.equal(calls[0]?.args.p_event_days, 30);
   assert.equal(calls[0]?.args.p_commit_days, 7);
   assert.equal(calls[0]?.args.p_limit, 1000);
+  assert.equal(calls[0]?.args.p_metric_days, 30);
 });
 
 test('agent retention clamps an invalid configured horizon', async (t) => {
@@ -43,7 +44,7 @@ test('agent retention clamps an invalid configured horizon', async (t) => {
     if (previous === undefined) delete process.env.AGENT_EVENT_RETENTION_DAYS;
     else process.env.AGENT_EVENT_RETENTION_DAYS = previous;
   });
-  const calls = stubSystemDb(t, () => [{ events_deleted: 0, commits_deleted: 0, workers_deleted: 0 }]);
+  const calls = stubSystemDb(t, () => [{ events_deleted: 0, commits_deleted: 0, workers_deleted: 0, metrics_deleted: 0 }]);
 
   const { runAgentRetention } = require('../lib/jobs/retention.server') as typeof import('../lib/jobs/retention.server');
   await runAgentRetention();

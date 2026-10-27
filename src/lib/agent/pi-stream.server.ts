@@ -28,6 +28,7 @@ import {
   getOrderedModelSources,
 } from "@/lib/ai/source-runtime";
 import { agentSafeFetch } from "./safe-fetch.server";
+import type { AgentStreamTelemetry } from "./telemetry.server";
 
 export const AGENT_UNSUPPORTED_TOOLS_MESSAGE = "当前模型不支持工具调用，请切换普通对话";
 /**
@@ -216,6 +217,8 @@ function publicFailure(error: unknown) {
 export interface AgentModelStreamSettings {
   /** False keeps every request of this stream without thinking, whatever the task's level. */
   reasoning?: boolean;
+  /** The run's metrics: when the first content arrives, and each request's usage. */
+  telemetry?: AgentStreamTelemetry;
   /** The user's own provider key: requests go only to the configured URL, through the public-address guard. */
   apiKey?: string;
   /** Replaces attachment references with their images, for a vision model. */
@@ -292,12 +295,15 @@ export function createPiModelStream(config: AIModelConfig, settings: AgentModelS
             message.content.push(...event.partial.content);
             if (!started) {
               started = true;
+              settings.telemetry?.firstToken();
               output.push({ type: "start", partial: message });
             }
             shown = true;
             output.push({ ...event, contentIndex: base + event.contentIndex, partial: message } as AssistantMessageEvent);
           }
           const result = await inner.result();
+          // 每一轮的用量都计入运行指标：缓存读取单独记，重试与提醒后的再次请求各算一轮。
+          settings.telemetry?.usage(result.usage);
           message.usage = addUsage(message.usage, result.usage);
           if (result.stopReason === "error" || result.stopReason === "aborted") {
             requestSignal.throwIfAborted();

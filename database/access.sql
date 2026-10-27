@@ -95,6 +95,10 @@ ALTER TABLE public.agent_profiles ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY agent_profiles_admin_all ON public.agent_profiles TO authenticated USING (( SELECT public.is_admin_user() AS is_admin_user)) WITH CHECK (( SELECT public.is_admin_user() AS is_admin_user));
 
+ALTER TABLE public.agent_run_metrics ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY agent_run_metrics_admin_all ON public.agent_run_metrics TO authenticated USING (( SELECT public.is_admin_user() AS is_admin_user)) WITH CHECK (( SELECT public.is_admin_user() AS is_admin_user));
+
 ALTER TABLE public.agent_skill_files ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY agent_skill_files_admin_platform ON public.agent_skill_files TO authenticated USING ((( SELECT public.is_admin_user() AS is_admin_user) AND (EXISTS ( SELECT 1
@@ -550,6 +554,8 @@ GRANT ALL ON FUNCTION public.agent_record_user_event(p_run_id uuid, p_worker_id 
 
 GRANT ALL ON FUNCTION public.agent_renew_lease(p_run_id uuid, p_worker_id text, p_fence bigint) TO authenticated;
 
+GRANT ALL ON FUNCTION public.agent_run_metrics_summary(p_days integer) TO authenticated;
+
 GRANT ALL ON FUNCTION public.agent_save_archive_proposal(p_run_id uuid, p_call_id text) TO authenticated;
 
 GRANT ALL ON FUNCTION public.agent_search_conversations(p_run_id uuid, p_worker_id text, p_fence bigint, p_query text, p_limit integer) TO authenticated;
@@ -602,7 +608,7 @@ GRANT ALL ON FUNCTION public.increment_community_post_view_count(post_id uuid) T
 
 GRANT ALL ON FUNCTION public.decrement_ai_chat_count(user_id uuid) TO authenticated;
 
-GRANT ALL ON FUNCTION public.delete_agent_retention(p_event_days integer, p_commit_days integer, p_worker_hours integer, p_limit integer) TO authenticated;
+GRANT ALL ON FUNCTION public.delete_agent_retention(p_event_days integer, p_commit_days integer, p_worker_hours integer, p_limit integer, p_metric_days integer) TO authenticated;
 
 GRANT ALL ON FUNCTION public.delete_conversation_graph(p_conversation_id text) TO authenticated;
 
@@ -679,6 +685,8 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.agent_profiles TO authenticate
 GRANT SELECT ON TABLE public.agent_run_credentials TO authenticated;
 
 GRANT SELECT ON TABLE public.agent_run_events TO authenticated;
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.agent_run_metrics TO authenticated;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.agent_skill_files TO authenticated;
 

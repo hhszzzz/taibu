@@ -54,6 +54,7 @@ import { expandSkillMessages, openAgentSkills, type AgentSkillsSession } from '.
 import { parseSkillCommand } from './skills/config';
 import { projectAgentUsage } from './usage';
 import { splitAgentFollowUps } from './follow-ups';
+import { AgentRunTelemetry } from './telemetry.server';
 
 export const AGENT_INSTRUCTIONS = `\n你是太卜任务助手，使用真实工具逐步完成任务。
 每批工具调用前先用一句话说明这一步要做什么、为什么；耗时较长的任务中途简要说明进展。没有实际执行的工具调用或核对，不能说成已经做过。
@@ -154,6 +155,13 @@ export async function executeAgentRun(
 ) {
   const checkpoint: AgentCheckpoint = structuredClone(run.checkpoint);
   if (!isCurrentAgentCheckpoint(checkpoint)) throw new Error("AGENT_ENGINE_UNSUPPORTED");
+  // Metrics cover this execution segment; queueing is only meaningful for the first claim of a run.
+  const executionStartedAt = Date.now();
+  const createdMs = Date.parse(run.created_at);
+  const telemetry = new AgentRunTelemetry({
+    runId: run.id, modelId: run.input.model, startedAt: executionStartedAt,
+    queuedMs: checkpoint.durable.seeded || !Number.isFinite(createdMs) ? 0 : Math.max(0, executionStartedAt - createdMs),
+  });
   const scope = withCancel(BACKGROUND_CONTEXT);
   const context = scope.context;
   let interrupted = false, stopping = run.cancel_requested;
@@ -230,9 +238,19 @@ export async function executeAgentRun(
     const message = publicMessage();
     if (status === "failed") message.agent!.error = error ?? "任务执行失败，可切换普通对话或重新发起任务";
     try {
-      await store.rpc("agent_finish_run", {
+      const settled = await store.rpc<Record<string, unknown> | null>("agent_finish_run", {
         ...store.lease(run), p_status: status, p_checkpoint: checkpoint, p_message: message,
       });
+      const settledStatus = settled && typeof settled === "object" ? (settled as { status?: unknown }).status : undefined;
+      const finalStatus = typeof settledStatus === "string" ? settledStatus : status;
+      if (finalStatus === "completed" || finalStatus === "failed" || finalStatus === "cancelled") {
+        try {
+          await store.recordRunMetrics(telemetry.snapshot(finalStatus));
+        } catch {
+          // Observability never fails the run; the run itself is already settled.
+          console.warn("[agent-telemetry]", { runId: run.id, code: "METRICS_WRITE_FAILED" });
+        }
+      }
     } catch (error) { interrupt(); throw error; }
   };
   try {
@@ -351,7 +369,7 @@ export async function executeAgentRun(
       const model: Model<Api> = selected.id === config.id ? piModel : { ...piModel, id: selected.id, name: selected.name, baseUrl: selected.apiUrl, reasoning: selected.supportsReasoning,
         input: ['text'], thinkingLevelMap: thinkingLevelMap(selected.thinkingLevels), contextWindow: capacity?.maxContext ?? 0, maxTokens: selected.defaultMaxTokens ?? 4096 };
       return { model, authorize: options => authorizeModel(selected, options?.reasoning !== undefined),
-        stream: injected?.streamFn ?? createPiModelStream(selected, { reasoning: selected.supportsReasoning, apiKey,
+        stream: injected?.streamFn ?? createPiModelStream(selected, { reasoning: selected.supportsReasoning, apiKey, telemetry,
           ...(selected.id === config.id && selected.supportsVision && !run.input.customProvider ? { resolveImages: (messages: Parameters<typeof resolveAttachmentImages>[3]) => resolveAttachmentImages(store.db,run.user_id,run.conversation_id,messages) } : {}),
           ...(selected.id === config.id ? {
             onAnswerStart: () => { tail.text = ''; },
@@ -651,7 +669,7 @@ export async function executeAgentRun(
     // The main model's thresholds apply harness-wide; a collaborator with a smaller or larger window compacts by its own.
     const policies = new Map(bindings.map(binding => [binding.model.id, agentCompactionPolicy(windows.get(binding.model.id) ?? null, binding.model.maxTokens)]));
     harness = await Harness.open(storage, {
-      models, registry,
+      models, registry, telemetry,
       ...(injected?.now ? { now: injected.now } : {}),
       settings: {
         stream: { timeoutMs: 300_000 },

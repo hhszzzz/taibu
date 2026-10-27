@@ -49,7 +49,7 @@ Agent 可以调用排盘、命理拓展、知识库、历史对话、受控联�
 
 管理员可以在设置中心「功能与激活码 → 功能开关」分别关闭用户功能模块和 Agent 工具范围。模块开关会同时阻止对应的 Agent 排盘、详查和资料读取；Agent 工具范围还可以在不关闭用户页面的情况下收紧八字、知识库、联网/MCP、技能、长期记忆、档案写入、协作和代码模式等能力。工具定义会保留在 Agent 上下文中，服务端在每次调用（包括缓存重放和脚本调用）前重新读取策略，关闭时向 Agent 返回可修正的权限错误。模块状态使用 `feature_disabled:<id>` 保存，Agent 范围使用 `agent_tool_disabled:<scope>` 保存，均由管理员 API 写入 `app_settings`。
 
-管理员可在设置中心的 AI 服务中查看「Agent 任务」，按任务、对话或用户 ID 排查。任务树从持久化日志重建，结束后仍可查看；该接口裁剪聊天正文、工具结果和私有文档，只提供排障需要的运行信息。
+管理员可在设置中心的 AI 服务中查看「Agent 任务」，按任务、对话或用户 ID 排查。任务树从持久化日志重建，结束后仍可查看；该接口裁剪聊天正文、工具结果和私有文档，只提供排障需要的运行信息。「性能」子页按模型查看近 1 / 7 / 30 天的运行指标，见「运行性能与遥测」。
 
 ## 外部服务（MCP）
 
@@ -110,6 +110,20 @@ pi-durable 把成员会话建成主任务的副本，再用 `AgentChange` 收窄
 - 存储：自定义角色存于 `agent_profiles`，只有管理员可读写；内置角色的停用记录存于 `app_settings` 的 `agent_builtin_profiles`。两者经共享缓存在 web 与 worker 之间同步，管理员保存后立即失效；任务开始时取定可用的角色，之后的改动从下一个任务起生效。
 - 未做：pi 桌面版已去掉子智能体的轮数上限（`max_turns`），pi-durable 也没有按会话的轮数上限，所以角色不设轮数；成员模型不另设回退，模型请求本身已在各来源之间转移。
 
+## 运行性能与遥测
+
+每个任务结束（完成、失败或停止）时，worker 把这一次运行的指标写进 `agent_run_metrics`，由 `@earendil-works/pi-telemetry` 的 `TelemetryContext` 适配 pi-durable 的无内容遥测；等待用户回答的中间状态不写，恢复后到真正结束时再写。运行指标只收白名单字段：
+
+- 模型、终态、该次执行的开始与结束、排队耗时（首次领取前的等待）与总耗时
+- 首字延迟：从执行开始到模型流出第一段内容；每轮 token（输入、输出、缓存读取、缓存写入、合计）由 `pi-stream.server.ts` 记入
+- 生成、工具、压缩的次数与累计耗时（Pi 的 `pi.durable.phase.duration` 指标）
+- 重试（同一生成任务第 2 次及以后的 attempt）、故障与挂起（Pi 的 `pi.durable.reports`，`task_parked` 记为挂起）
+- 阶段时间线：`pi.durable.phase`、输入提交 `pi.durable.submit` 与提交结算 `pi.durable.submission` 的任务名、阶段、attempt、结果、状态与相对耗时，最多保留 500 条
+
+消息正文、工具参数、工具结果、系统提示与密钥都不读取、不写库。指标只管理员可读；没有遥测的旧任务不显示指标。
+
+「AI 服务 → Agent 任务 → 性能」按模型给出近 1 / 7 / 30 天的总耗时与首字延迟 P50/P95、工具耗时占比、失败率与挂起率，并列出最近的运行；点开一次运行看它的阶段时间线。数据保留 30 天，由 `agent-retention` 定时任务清理（与事件、提交日志和 worker 心跳同一次执行）。
+
 ## 命盘与保存
 
 工具卡片使用实际返回的结构化产物，复用各占术已有视图。展开、固定或恢复命盘只展示已有结果，不重新排盘或调用模型。数据不完整时降级为规范文本。
@@ -137,6 +151,7 @@ pi-durable 把成员会话建成主任务的副本，再用 `AgentChange` 收窄
 | `src/lib/agent/api.server.ts` | API 用例与权限边界 |
 | `src/lib/agent/store.server.ts` | 任务读写 |
 | `src/lib/agent/runtime.server.ts`、`durable-storage.server.ts` | Pi 执行与持久化适配 |
+| `src/lib/agent/telemetry.server.ts`、`admin-metrics.server.ts` | Pi 遥测适配、运行指标聚合与后台性能接口 |
 | `src/lib/agent/tools.server.ts` | 工具装配与调用 |
 | `src/lib/agent/tool-presentation.ts` | 工具结果展示映射 |
 | `src/lib/agent/mcp/` | MCP 服务的读写、密钥、连接池、工具注册与设置接口；联网搜索与读网页的路由（`web-route.server.ts`）和结果识别（`web-results.ts`） |

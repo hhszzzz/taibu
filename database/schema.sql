@@ -304,6 +304,38 @@ ALTER TABLE public.agent_run_events ALTER COLUMN sequence ADD GENERATED ALWAYS A
     CACHE 1
 );
 
+CREATE TABLE public.agent_run_metrics (
+    run_id uuid NOT NULL,
+    model_id text NOT NULL,
+    status text NOT NULL,
+    queued_ms integer DEFAULT 0 NOT NULL,
+    total_ms integer DEFAULT 0 NOT NULL,
+    first_token_ms integer,
+    generation_count integer DEFAULT 0 NOT NULL,
+    generation_ms bigint DEFAULT 0 NOT NULL,
+    tool_count integer DEFAULT 0 NOT NULL,
+    tool_ms bigint DEFAULT 0 NOT NULL,
+    compaction_count integer DEFAULT 0 NOT NULL,
+    compaction_ms bigint DEFAULT 0 NOT NULL,
+    retries integer DEFAULT 0 NOT NULL,
+    faults integer DEFAULT 0 NOT NULL,
+    hangs integer DEFAULT 0 NOT NULL,
+    input_tokens bigint DEFAULT 0 NOT NULL,
+    output_tokens bigint DEFAULT 0 NOT NULL,
+    cache_read_tokens bigint DEFAULT 0 NOT NULL,
+    cache_write_tokens bigint DEFAULT 0 NOT NULL,
+    total_tokens bigint DEFAULT 0 NOT NULL,
+    phases jsonb DEFAULT '[]'::jsonb NOT NULL,
+    started_at timestamp with time zone NOT NULL,
+    ended_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT agent_run_metrics_ended_at_check CHECK ((ended_at >= started_at)),
+    CONSTRAINT agent_run_metrics_model_id_check CHECK (((length(model_id) >= 1) AND (length(model_id) <= 200))),
+    CONSTRAINT agent_run_metrics_phases_check CHECK ((jsonb_typeof(phases) = 'array'::text)),
+    CONSTRAINT agent_run_metrics_status_check CHECK ((status = ANY (ARRAY['completed'::text, 'failed'::text, 'cancelled'::text]))),
+    CONSTRAINT agent_run_metrics_totals_check CHECK (((queued_ms >= 0) AND (total_ms >= 0) AND ((first_token_ms IS NULL) OR (first_token_ms >= 0)) AND (generation_count >= 0) AND (generation_ms >= 0) AND (tool_count >= 0) AND (tool_ms >= 0) AND (compaction_count >= 0) AND (compaction_ms >= 0) AND (retries >= 0) AND (faults >= 0) AND (hangs >= 0) AND (input_tokens >= 0) AND (output_tokens >= 0) AND (cache_read_tokens >= 0) AND (cache_write_tokens >= 0) AND (total_tokens >= 0)))
+);
+
 CREATE TABLE public.agent_skill_files (
     skill_id uuid NOT NULL,
     path text NOT NULL,
@@ -961,6 +993,9 @@ ALTER TABLE ONLY public.agent_run_credentials
 ALTER TABLE ONLY public.agent_run_events
     ADD CONSTRAINT agent_run_events_pkey PRIMARY KEY (sequence);
 
+ALTER TABLE ONLY public.agent_run_metrics
+    ADD CONSTRAINT agent_run_metrics_pkey PRIMARY KEY (run_id);
+
 ALTER TABLE ONLY public.agent_runs
     ADD CONSTRAINT agent_runs_pkey PRIMARY KEY (id);
 
@@ -1191,6 +1226,9 @@ ALTER TABLE ONLY public.agent_run_credentials
 
 ALTER TABLE ONLY public.agent_run_events
     ADD CONSTRAINT agent_run_events_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.agent_runs(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.agent_run_metrics
+    ADD CONSTRAINT agent_run_metrics_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.agent_runs(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.agent_runs
     ADD CONSTRAINT agent_runs_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES public.conversations(id) ON DELETE CASCADE;

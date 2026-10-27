@@ -159,9 +159,11 @@ test('an unverified password sign-in verifies the mailbox instead of sending a s
   // P1-1: Better Auth revokes every account, password included, when a sign-in
   // OTP promotes an unverified user; this flow must use email verification.
   const source = readFileSync(resolve(process.cwd(), 'src/components/auth/AuthModal.tsx'), 'utf8');
-  assert.match(source, /EMAIL_NOT_VERIFIED[\s\S]{0,400}sendOTP\(email, 'signup'\)/u);
-  assert.match(source, /verifyPurpose === 'verify-email'[\s\S]{0,400}verifyOTP\(email, codeToVerify, 'signup'\)/u);
-  assert.match(source, /verifyPurpose === 'verify-email'[\s\S]{0,900}signInWithEmail\(email, password\)/u);
+  // The address is trimmed once (`normalizedEmail`) and every auth call sends that value.
+  assert.match(source, /const normalizedEmail = normalizeAuthEmail\(email\);/u);
+  assert.match(source, /EMAIL_NOT_VERIFIED[\s\S]{0,400}sendOTP\(normalizedEmail, 'signup'\)/u);
+  assert.match(source, /verifyPurpose === 'verify-email'[\s\S]{0,400}verifyOTP\(normalizedEmail, codeToVerify, 'signup'\)/u);
+  assert.match(source, /verifyPurpose === 'verify-email'[\s\S]{0,900}signInWithEmail\(normalizedEmail, password\)/u);
   assert.doesNotMatch(source, /USER_ALREADY_EXISTS/u);
 });
 

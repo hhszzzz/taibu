@@ -4,10 +4,16 @@
  * 'use client' 标记说明：
  * - 使用 React hooks (useRef, useEffect)
  * - 有键盘导航和粘贴交互功能
+ *
+ * 填满后只自动提交一次：onComplete 每次渲染都是新函数，必须记住「这个完整的值已经提交过」，
+ * 否则验证失败后的任何重渲染都会把同一个错码再提交一遍，直到被限流。
+ * 用户改动任意一位（值长度回落）后才会再次触发。
  */
 'use client';
 
-import { useRef, useEffect, KeyboardEvent, ClipboardEvent } from 'react';
+import { useEffect, useRef, type CSSProperties, type ClipboardEvent, type KeyboardEvent } from 'react';
+import { nextCompletedCode } from '@/lib/auth/otp-completion';
+import './auth.css';
 
 interface VerificationCodeInputProps {
     value: string;
@@ -15,6 +21,10 @@ interface VerificationCodeInputProps {
     onComplete?: (value: string) => void;
     length?: number;
     disabled?: boolean;
+    /** 验证失败时轻摇格子。 */
+    invalid?: boolean;
+    /** 挂载后聚焦第一格（模式切换时由弹层重新挂载）。 */
+    autoFocus?: boolean;
 }
 
 export function VerificationCodeInput({
@@ -23,25 +33,36 @@ export function VerificationCodeInput({
     onComplete,
     length = 6,
     disabled = false,
+    invalid = false,
+    autoFocus = false,
 }: VerificationCodeInputProps) {
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+    const completedRef = useRef<string | null>(null);
 
-    // 当值填满时自动触发完成回调
+    // 当值填满时自动触发一次完成回调；同一个完整值只提交一次（见 nextCompletedCode）。
     useEffect(() => {
-        if (value.length === length && onComplete) {
-            onComplete(value);
+        if (value.length < length) {
+            completedRef.current = null;
+            return;
         }
+        const next = nextCompletedCode(completedRef.current, value, length);
+        if (!next || !onComplete) return;
+        completedRef.current = next;
+        onComplete(next);
     }, [value, length, onComplete]);
+
+    useEffect(() => {
+        if (autoFocus) inputRefs.current[0]?.focus();
+    }, [autoFocus]);
 
     const handleChange = (index: number, char: string) => {
         // 只允许数字
-        const digit = char.replace(/\D/g, '').slice(0, 1);
+        const digit = char.replace(/\D/g, '').slice(-1);
         if (!digit && char !== '') return;
 
-        const newValue = value.split('');
-        newValue[index] = digit;
-        const result = newValue.join('').slice(0, length);
-        onChange(result);
+        const chars = Array.from({ length }, (_, slot) => value[slot] ?? '');
+        chars[index] = digit;
+        onChange(chars.join(''));
 
         // 自动跳转到下一个输入框
         if (digit && index < length - 1) {
@@ -53,15 +74,15 @@ export function VerificationCodeInput({
         if (e.key === 'Backspace') {
             if (!value[index] && index > 0) {
                 // 当前格为空，删除上一格并聚焦
-                const newValue = value.split('');
-                newValue[index - 1] = '';
-                onChange(newValue.join(''));
+                const chars = Array.from({ length }, (_, slot) => value[slot] ?? '');
+                chars[index - 1] = '';
+                onChange(chars.join(''));
                 inputRefs.current[index - 1]?.focus();
             } else {
                 // 删除当前格
-                const newValue = value.split('');
-                newValue[index] = '';
-                onChange(newValue.join(''));
+                const chars = Array.from({ length }, (_, slot) => value[slot] ?? '');
+                chars[index] = '';
+                onChange(chars.join(''));
             }
             e.preventDefault();
         } else if (e.key === 'ArrowLeft' && index > 0) {
@@ -88,23 +109,33 @@ export function VerificationCodeInput({
     };
 
     return (
-        <div className="flex gap-2 justify-center">
-            {Array.from({ length }).map((_, index) => (
-                <input
-                    key={index}
-                    ref={(el) => { inputRefs.current[index] = el; }}
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={1}
-                    value={value[index] || ''}
-                    onChange={(e) => handleChange(index, e.target.value)}
-                    onKeyDown={(e) => handleKeyDown(index, e)}
-                    onPaste={handlePaste}
-                    onFocus={() => handleFocus(index)}
-                    disabled={disabled}
-                    className="w-10 h-12 text-center text-xl font-mono rounded-lg bg-background-secondary border border-border focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 transition-all disabled:opacity-50"
-                />
-            ))}
+        <div
+            className="auth-otp"
+            data-invalid={invalid || undefined}
+            style={{ '--otp-length': length } as CSSProperties}
+            role="group"
+            aria-label="验证码"
+        >
+            <div className="auth-otp-cells">
+                {Array.from({ length }).map((_, index) => (
+                    <input
+                        key={index}
+                        ref={(el) => { inputRefs.current[index] = el; }}
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete={index === 0 ? 'one-time-code' : 'off'}
+                        aria-label={`验证码第 ${index + 1} 位`}
+                        maxLength={1}
+                        value={value[index] || ''}
+                        data-filled={value[index] ? '' : undefined}
+                        onChange={(e) => handleChange(index, e.target.value)}
+                        onKeyDown={(e) => handleKeyDown(index, e)}
+                        onPaste={handlePaste}
+                        onFocus={() => handleFocus(index)}
+                        disabled={disabled}
+                    />
+                ))}
+            </div>
         </div>
     );
 }

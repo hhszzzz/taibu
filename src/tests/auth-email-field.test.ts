@@ -2,39 +2,44 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { EmailField, resolveAuthEmail } from '../components/auth/LoginForm';
+import { EmailField } from '../components/auth/LoginForm';
+import { isCompleteEmail, normalizeAuthEmail } from '../lib/auth/email';
 
-for (const [prefix, suffix, expected] of [
-    ['demo@taibu.local', '@qq.com', 'demo@taibu.local'],
-    ['  demo@taibu.local  ', '@gmail.com', 'demo@taibu.local'],
-    ['admin@custom.example', '@qq.com', 'admin@custom.example'],
-    ['alice', '@qq.com', 'alice@qq.com'],
-    ['alice', '@gmail.com', 'alice@gmail.com'],
-    [' alice ', '@qq.com', ' alice @qq.com'],
+for (const [input, expected, complete] of [
+    ['  demo@taibu.local  ', 'demo@taibu.local', true],
+    ['admin@mingai.fun', 'admin@mingai.fun', true],
+    ['alice', 'alice', false],
+    ['alice@qq', 'alice@qq', false],
+    ['alice @qq.com', 'alice @qq.com', false],
+    ['', '', false],
 ] as const) {
-    test(`auth email composition accepts full addresses and preserves shortcuts: ${prefix}`, () => {
-        assert.equal(resolveAuthEmail(prefix, suffix), expected);
+    test(`auth email keeps the typed address and only drops surrounding spaces: ${JSON.stringify(input)}`, () => {
+        assert.equal(normalizeAuthEmail(input), expected);
+        assert.equal(isCompleteEmail(input), complete);
     });
 }
 
-test('shared email field disables suffix selection only for a complete-address input', () => {
-    const render = (emailPrefix: string) => renderToStaticMarkup(createElement(EmailField, {
-        emailPrefix,
-        emailSuffix: '@qq.com',
-        emailSuffixes: ['@qq.com', '@gmail.com'],
-        onEmailPrefixChange: () => {},
-        onEmailSuffixChange: () => {},
+test('the email field is one complete address with a browser-level email check', () => {
+    const markup = renderToStaticMarkup(createElement(EmailField, {
+        email: 'demo@taibu.local',
+        onEmailChange: () => {},
     }));
-    const fullAddress = render('demo@taibu.local');
-    assert.match(fullAddress, /<select[^>]*disabled=""/);
-    assert.match(fullAddress, /完整邮箱/);
-    assert.doesNotMatch(fullAddress, /<option[^>]*value="@qq.com"/);
-    assert.match(fullAddress, /placeholder="邮箱前缀或完整邮箱"/);
-    assert.match(fullAddress, /value="demo@taibu.local"/);
+    assert.match(markup, /type="email"/);
+    assert.match(markup, /placeholder="name@example\.com"/);
+    assert.match(markup, /autoComplete="email"/);
+    assert.match(markup, /value="demo@taibu\.local"/);
+    assert.match(markup, /required=""/);
+    // The old prefix + suffix split is gone.
+    assert.doesNotMatch(markup, /<select/);
+    assert.doesNotMatch(markup, /@qq\.com/);
+});
 
-    const prefixOnly = render('demo');
-    assert.doesNotMatch(prefixOnly, /<select[^>]*disabled=""/);
-    assert.match(prefixOnly, /<option value="@qq.com" selected="">/);
-    assert.match(prefixOnly, /<option value="@gmail.com">/);
-    assert.doesNotMatch(prefixOnly, /完整邮箱<\/option>/);
+test('an address without a host is flagged only after the field is left', () => {
+    // No blur in static markup: the hint must not show up while the user is still typing the first characters.
+    const typing = renderToStaticMarkup(createElement(EmailField, {
+        email: 'demo',
+        onEmailChange: () => {},
+    }));
+    assert.doesNotMatch(typing, /auth-field-error/);
+    assert.doesNotMatch(typing, /aria-invalid/);
 });

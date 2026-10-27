@@ -1,0 +1,185 @@
+/*
+ * 登录与注册弹层（AuthModal）及其表单部件。
+ * - 宽屏（≥900px）左右两栏：左侧品牌面板（先天八卦环绕太极、经文与占术），右侧表单；
+ * - 中等宽度只留表单，顶部放小号徽记；手机（<640px）为从底部升起的面板。
+ * - 动效：徽记的环与太极各自缓慢反向旋转（只动两张 svg 的 rotate，走合成层）；
+ *   切换模式时表单整体淡入上移；出错时提示条轻摇；验证码每格填入时轻弹。
+ *   减少动态效果时由 globals.css 的全局规则全部压成静止。
+ * 密码强度与验证码格子也用于设置页的修改密码，样式不依赖弹层。
+ */
+
+/* ===== 弹层骨架 ===== */
+.app-modal.auth-dialog { width: min(440px, calc(100vw - 32px)); border-radius: 16px; overflow: hidden; }
+.auth-shell { display: flex; max-height: inherit; }
+.auth-pane { position: relative; display: flex; min-width: 0; flex: 1; flex-direction: column; }
+.auth-scroll { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow-y: auto; overscroll-behavior: contain; padding: 52px 32px 24px; }
+.auth-actions { position: absolute; inset: 12px 12px auto; z-index: 1; display: flex; justify-content: space-between; pointer-events: none; }
+.auth-actions > button { pointer-events: auto; }
+.auth-actions > .auth-icon-button:only-child { margin-left: auto; }
+.auth-icon-button { display: inline-flex; width: 32px; height: 32px; align-items: center; justify-content: center; border-radius: 8px; color: var(--foreground-secondary); transition: background-color var(--duration-snap) var(--ease-out), color var(--duration-snap) var(--ease-out); }
+.auth-icon-button:hover { background: var(--fill-ghost-hover); color: var(--foreground); }
+.auth-icon-button > svg { width: 18px; height: 18px; }
+
+/* 模式切换：整块重新挂载时淡入上移。 */
+.auth-body { display: flex; flex-direction: column; margin-block: auto; animation: motion-fade-up var(--duration-sheet) var(--ease-out) backwards; }
+.auth-heading { display: flex; flex-direction: column; gap: 6px; text-align: center; }
+.auth-title { font-family: var(--font-display); font-size: calc(26 / 16 * 1rem); font-weight: 400; line-height: 1.3; letter-spacing: .02em; color: var(--foreground); outline: none; }
+.auth-subtitle { font-size: calc(14 / 16 * 1rem); line-height: 1.6; color: var(--foreground-secondary); overflow-wrap: anywhere; }
+.auth-subtitle strong { font-weight: 500; color: var(--foreground); }
+.auth-form { display: flex; flex-direction: column; gap: 16px; margin-top: 24px; }
+/* 登录方式面板里的字段组；切换登录方式时只增减密码一项。 */
+.auth-fields { display: flex; flex-direction: column; gap: 16px; }
+
+/* 窄屏的品牌行：小号徽记 + 名称，居中放在标题上方。 */
+.auth-compact-brand { display: flex; align-items: center; justify-content: center; gap: 9px; margin-bottom: 18px; font-size: calc(15 / 16 * 1rem); font-weight: 600; letter-spacing: .08em; color: var(--foreground); }
+.auth-compact-mark { display: flex; width: 26px; height: 26px; align-items: center; justify-content: center; border-radius: 7px; background: var(--clay); font-family: var(--font-display); font-size: 1rem; line-height: 1; letter-spacing: 0; color: var(--on-accent); }
+
+@media (min-width: 900px) {
+    .app-modal.auth-dialog { width: min(880px, calc(100vw - 48px)); border-radius: 18px; }
+    .auth-shell { min-height: min(600px, calc(100dvh - 48px)); }
+    .auth-scroll { padding: 56px 48px 28px; }
+    .auth-compact-brand { display: none; }
+    .auth-heading { text-align: left; }
+}
+
+/* 手机：底部面板，顶部留一条把手，底边避开安全区。 */
+.auth-grabber { display: none; }
+@media (max-width: 639px) {
+    .app-modal.auth-dialog { width: 100vw; max-width: 100vw; max-height: calc(100dvh - 12px); margin: auto 0 0; border-radius: 20px 20px 0 0; }
+    .app-modal.auth-dialog[open] { animation: auth-sheet-in var(--duration-sheet) var(--ease-snap) backwards; }
+    .app-modal.auth-dialog[data-closing] { animation: auth-sheet-out var(--duration-base) var(--ease-out) forwards; }
+    .auth-grabber { position: absolute; top: 6px; left: 50%; display: block; width: 36px; height: 4px; border-radius: 2px; background: var(--fill-control); translate: -50% 0; }
+    .auth-scroll { padding: 44px 20px calc(20px + var(--sab)); }
+    .auth-title { font-size: calc(23 / 16 * 1rem); }
+}
+@keyframes auth-sheet-in { from { translate: 0 100%; } }
+@keyframes auth-sheet-out { to { translate: 0 100%; } }
+
+/* ===== 品牌面板（宽屏左栏） ===== */
+.auth-brand { position: relative; display: none; width: 380px; flex-shrink: 0; flex-direction: column; padding: 24px 28px 28px; overflow: hidden; isolation: isolate; border-right: var(--hairline) solid var(--border); background: color-mix(in srgb, var(--clay) 7%, var(--surface)); }
+.auth-brand::before { content: ''; position: absolute; inset: 0; z-index: -1; background: radial-gradient(58% 42% at 50% 44%, color-mix(in srgb, var(--clay) 14%, transparent), transparent 72%); }
+@media (min-width: 900px) { .auth-brand { display: flex; } }
+.auth-brand-logo { display: flex; align-items: center; gap: 10px; font-size: calc(15 / 16 * 1rem); font-weight: 600; letter-spacing: .08em; color: var(--foreground); }
+.auth-brand-logo > span { display: flex; width: 26px; height: 26px; align-items: center; justify-content: center; border-radius: 7px; background: var(--clay); color: var(--on-accent); font-family: var(--font-display); font-size: 1rem; line-height: 1; letter-spacing: 0; }
+.auth-brand-hero { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 30px; text-align: center; }
+.auth-brand-hero > .auth-emblem { animation: auth-emblem-in var(--duration-slow) var(--ease-out) backwards; }
+.auth-brand-quote { animation: motion-fade-up var(--duration-sheet) var(--ease-out) 120ms backwards; }
+.auth-brand-quote p { font-family: var(--font-display); font-size: calc(20 / 16 * 1rem); line-height: 1.5; letter-spacing: .16em; color: var(--foreground); }
+.auth-brand-quote small { display: block; margin-top: 8px; font-size: calc(12 / 16 * 1rem); letter-spacing: .06em; color: var(--foreground-tertiary); }
+.auth-brand-foot { font-size: calc(12 / 16 * 1rem); letter-spacing: .12em; color: var(--foreground-tertiary); text-align: center; animation: motion-fade calc(var(--duration-slow) + 120ms) var(--ease-out) 200ms backwards; }
+@keyframes auth-emblem-in { from { opacity: 0; scale: .88; rotate: -24deg; } }
+
+/* ===== 徽记 ===== */
+.auth-emblem { position: relative; display: inline-block; flex-shrink: 0; }
+.auth-emblem > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.auth-emblem-ring { color: var(--accent); animation: auth-spin 180s linear infinite; }
+.auth-emblem-ring > circle { fill: none; stroke: currentColor; stroke-width: 1.2; opacity: .3; }
+.auth-emblem-lines { stroke: currentColor; stroke-width: 4.6; stroke-linecap: round; }
+.auth-emblem-taiji { animation: auth-spin 48s linear infinite reverse; }
+.auth-emblem-yin { fill: var(--accent); }
+.auth-emblem-yang { fill: color-mix(in srgb, var(--accent) 24%, var(--surface)); }
+.auth-emblem-rim { fill: none; stroke: color-mix(in srgb, var(--accent) 72%, transparent); stroke-width: 1.6; }
+@keyframes auth-spin { to { rotate: 360deg; } }
+
+/* ===== 字段 ===== */
+.auth-field { display: flex; flex-direction: column; gap: 6px; }
+.auth-field-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.auth-label { font-size: calc(13 / 16 * 1rem); font-weight: 500; color: var(--foreground-secondary); }
+.auth-link { font-size: calc(13 / 16 * 1rem); color: var(--accent); transition: color var(--duration-snap) var(--ease-out); }
+.auth-link:hover:not(:disabled) { color: var(--accent-hover); text-decoration: underline; text-underline-offset: 3px; }
+.auth-link:disabled { cursor: default; color: var(--foreground-tertiary); }
+.auth-hint { font-size: calc(12 / 16 * 1rem); line-height: 1.5; color: var(--foreground-tertiary); }
+.auth-control { display: flex; height: 44px; align-items: center; gap: 8px; padding: 0 6px 0 12px; border: 1px solid var(--border-hover); border-radius: 10px; background: var(--surface); transition: border-color var(--duration-snap) var(--ease-out), box-shadow var(--duration-snap) var(--ease-out); }
+.auth-control:hover { border-color: color-mix(in srgb, var(--foreground) 30%, transparent); }
+.auth-control:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); }
+.auth-control[data-invalid] { border-color: var(--danger); }
+.auth-control[data-invalid]:focus-within { box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 16%, transparent); }
+.auth-control > svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--foreground-tertiary); transition: color var(--duration-snap) var(--ease-out); }
+.auth-control:focus-within > svg { color: var(--accent); }
+.auth-control input { min-width: 0; height: 100%; flex: 1; border: 0; background: transparent; font-size: calc(15 / 16 * 1rem); color: var(--foreground); }
+.auth-control input::placeholder { color: var(--foreground-tertiary); }
+.auth-control input:focus-visible { outline: none; }
+.auth-control .auth-icon-button { width: 30px; height: 30px; }
+.auth-field-error { font-size: calc(12 / 16 * 1rem); color: var(--danger); animation: motion-fade var(--duration-base) var(--ease-out) backwards; }
+
+/* 登录方式：分段控件，选中块滑动（lib/motion/tab-indicator）。 */
+.auth-tabs { display: grid; grid-template-columns: 1fr 1fr; padding: 3px; border-radius: 10px; background: var(--fill-field); --tab-radius: 7px; --tab-bg: var(--surface); }
+.auth-tabs > [role=tab] { height: 34px; border-radius: 7px; font-size: calc(14 / 16 * 1rem); color: var(--foreground-secondary); transition: color var(--duration-snap) var(--ease-out); }
+.auth-tabs > [role=tab]:hover { color: var(--foreground); }
+/* 选中块的底色由 .motion-tabs::before 画（滑过去的那一块），标签自身只改字色与字重。 */
+.auth-tabs > [role=tab][aria-selected=true] { font-weight: 500; color: var(--foreground); }
+.auth-password-slot { position: relative; display: flex; flex-direction: column; }
+.auth-password-slot-fields { display: flex; flex-direction: column; transition: opacity var(--duration-snap) var(--ease-out); }
+.auth-password-slot[data-otp] .auth-password-slot-fields { visibility: hidden; opacity: 0; pointer-events: none; transition: opacity var(--duration-snap) var(--ease-out), visibility 0s linear var(--duration-snap); }
+.auth-password-slot-note { position: absolute; inset: 0; display: flex; align-items: center; margin: 0; font-size: calc(12.5 / 16 * 1rem); line-height: 1.6; color: var(--foreground-tertiary); animation: motion-fade var(--duration-base) var(--ease-out) backwards; }
+
+/* ===== 提示、按钮、分隔与页脚 ===== */
+.auth-notice { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border-radius: 10px; font-size: calc(13 / 16 * 1rem); line-height: 1.55; }
+.auth-notice > svg { width: 16px; height: 16px; flex-shrink: 0; margin-top: 2px; }
+.auth-notice[data-tone=error] { background: color-mix(in srgb, var(--danger) 9%, transparent); color: var(--danger); animation: auth-shake .38s var(--ease-out) both; }
+.auth-notice[data-tone=success] { background: color-mix(in srgb, var(--success) 10%, transparent); color: var(--success); animation: motion-fade-up var(--duration-base) var(--ease-out) backwards; }
+@keyframes auth-shake {
+    15% { translate: -5px 0; }
+    35% { translate: 4px 0; }
+    55% { translate: -3px 0; }
+    75% { translate: 2px 0; }
+}
+.auth-submit { display: flex; height: 44px; align-items: center; justify-content: center; gap: 8px; border-radius: 10px; background: var(--accent); font-size: calc(15 / 16 * 1rem); font-weight: 500; color: var(--on-accent); transition: background-color var(--duration-snap) var(--ease-out), opacity var(--duration-snap) var(--ease-out), scale var(--duration-fast) var(--ease-out); }
+.auth-submit:hover:not(:disabled) { background: var(--accent-hover); }
+.auth-submit:active:not(:disabled) { scale: .985; }
+.auth-submit:disabled { cursor: not-allowed; opacity: .55; }
+.auth-submit[aria-busy=true] { cursor: progress; opacity: .8; }
+/* 声音波纹默认是 clay，在 clay 实心按钮上要换成按钮前景色；文字链接里跟随文字色。 */
+.auth-submit .sound-wave-bar { background: var(--on-accent); }
+.auth-link .sound-wave-bar { height: 12px; background: currentColor; }
+.auth-secondary { display: flex; height: 44px; align-items: center; justify-content: center; gap: 10px; border: 1px solid var(--border-hover); border-radius: 10px; background: var(--surface); font-size: calc(14 / 16 * 1rem); font-weight: 500; color: var(--foreground); transition: background-color var(--duration-snap) var(--ease-out), border-color var(--duration-snap) var(--ease-out), scale var(--duration-fast) var(--ease-out); }
+.auth-secondary:hover:not(:disabled) { background: var(--fill-ghost-hover); }
+.auth-secondary:active:not(:disabled) { scale: .985; }
+.auth-secondary:disabled { cursor: not-allowed; opacity: .55; }
+.auth-divider { display: flex; align-items: center; gap: 12px; font-size: calc(12 / 16 * 1rem); color: var(--foreground-tertiary); }
+.auth-divider::before, .auth-divider::after { content: ''; height: 1px; flex: 1; background: var(--border); }
+.auth-switch { font-size: calc(14 / 16 * 1rem); color: var(--foreground-secondary); text-align: center; }
+.auth-switch button { margin-left: 4px; font-weight: 500; color: var(--accent); transition: color var(--duration-snap) var(--ease-out); }
+.auth-switch button:hover { color: var(--accent-hover); text-decoration: underline; text-underline-offset: 3px; }
+.auth-resend { display: inline-flex; align-items: center; justify-content: center; gap: 6px; align-self: center; height: 32px; padding: 0 10px; border-radius: 8px; font-size: calc(13 / 16 * 1rem); color: var(--foreground-secondary); transition: background-color var(--duration-snap) var(--ease-out), color var(--duration-snap) var(--ease-out); }
+.auth-resend:hover:not(:disabled) { background: var(--fill-ghost-hover); color: var(--foreground); }
+.auth-resend:disabled { cursor: default; color: var(--foreground-tertiary); }
+.auth-resend > svg { width: 14px; height: 14px; }
+.auth-resend:not(:disabled):active > svg { rotate: -90deg; transition: rotate var(--duration-base) var(--ease-out); }
+.auth-legal { margin-top: 20px; font-size: calc(12 / 16 * 1rem); line-height: 1.6; color: var(--foreground-tertiary); text-align: center; }
+.auth-legal a { color: var(--foreground-secondary); text-decoration: underline; text-decoration-color: var(--border-hover); text-underline-offset: 3px; transition: color var(--duration-snap) var(--ease-out); }
+.auth-legal a:hover { color: var(--foreground); }
+
+/* ===== 验证码格子 ===== */
+.auth-otp { width: 100%; max-width: 21rem; margin-inline: auto; animation: motion-fade-up var(--duration-base) var(--ease-out) backwards; }
+.auth-otp-cells { display: grid; grid-template-columns: repeat(var(--otp-length, 6), minmax(0, 1fr)); gap: 8px; }
+/* 出错时只摇格子那一层：外层的入场动画不受 data-invalid 增删影响，不会重播。 */
+.auth-otp[data-invalid] .auth-otp-cells { animation: auth-shake .38s var(--ease-out) both; }
+.auth-otp input { width: 100%; height: 52px; padding: 0; border: 1px solid var(--border-hover); border-radius: 10px; background: var(--surface); font-family: var(--font-mono); font-size: calc(22 / 16 * 1rem); font-weight: 500; color: var(--foreground); text-align: center; caret-color: var(--accent); transition: border-color var(--duration-snap) var(--ease-out), box-shadow var(--duration-snap) var(--ease-out), background-color var(--duration-snap) var(--ease-out); }
+.auth-otp input:hover:not(:disabled) { border-color: color-mix(in srgb, var(--foreground) 30%, transparent); }
+.auth-otp input:focus, .auth-otp input:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); outline: none; }
+.auth-otp input[data-filled] { border-color: color-mix(in srgb, var(--accent) 50%, var(--border-hover)); background: color-mix(in srgb, var(--accent) 5%, var(--surface)); animation: auth-digit var(--duration-base) var(--ease-overshoot); }
+.auth-otp input:disabled { opacity: .6; }
+.auth-otp[data-invalid] input { border-color: var(--danger); }
+@keyframes auth-digit { from { scale: .86; } }
+@media (max-width: 380px) { .auth-otp-cells { gap: 6px; } .auth-otp input { height: 48px; } }
+
+/* ===== 密码强度 ===== */
+.auth-strength { display: flex; flex-direction: column; gap: 8px; margin-top: 2px; animation: motion-fade-up var(--duration-base) var(--ease-out) backwards; }
+.auth-strength-meter { display: flex; align-items: center; gap: 10px; }
+.auth-strength-bars { display: grid; flex: 1; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.auth-strength-bars > span { height: 4px; overflow: hidden; border-radius: 2px; background: var(--fill-control); }
+.auth-strength-bars > span > i { display: block; height: 100%; background: var(--strength-color); transform-origin: left center; scale: 0 1; transition: scale var(--duration-sheet) var(--ease-out), background-color var(--duration-sheet) var(--ease-out); }
+.auth-strength-bars > span[data-on] > i { scale: 1 1; }
+.auth-strength-label { min-width: 2.5em; font-size: calc(12 / 16 * 1rem); font-weight: 500; color: var(--strength-color); text-align: right; transition: color var(--duration-sheet) var(--ease-out); }
+.auth-strength[data-score="0"], .auth-strength[data-score="1"] { --strength-color: var(--danger); }
+.auth-strength[data-score="2"] { --strength-color: var(--warning); }
+.auth-strength[data-score="3"] { --strength-color: var(--wx-earth); }
+.auth-strength[data-score="4"] { --strength-color: var(--success); }
+.auth-strength-checks { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; font-size: calc(12 / 16 * 1rem); color: var(--foreground-tertiary); }
+.auth-strength-checks li { display: flex; align-items: center; gap: 6px; transition: color var(--duration-base) var(--ease-out); }
+.auth-strength-checks li::before { content: ''; width: 5px; height: 5px; margin: 0 4.5px; border-radius: 50%; background: currentColor; opacity: .5; }
+.auth-strength-checks li[data-met] { color: var(--success); }
+.auth-strength-checks li[data-met]::before { display: none; }
+.auth-strength-checks li > svg { width: 14px; height: 14px; flex-shrink: 0; }
+.auth-strength-checks li > svg :is(path, polyline) { stroke-dasharray: 24; animation: motion-check-draw .24s var(--ease-out) both; }

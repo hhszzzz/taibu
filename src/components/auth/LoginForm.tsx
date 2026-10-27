@@ -2,167 +2,236 @@
  * 登录表单字段组件
  *
  * 'use client' 标记说明：
- * - 使用交互状态控制密码可见性
+ * - 使用交互状态控制密码可见性与邮箱提示
+ * - 登录方式切换用滑动选中块（lib/motion/tab-indicator）
  */
 'use client';
 
-import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { useId, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
+import { useTabIndicator } from '@/lib/motion/tab-indicator';
+import { isCompleteEmail, normalizeAuthEmail } from '@/lib/auth/email';
 
 type LoginMethod = 'password' | 'otp';
 
 interface LoginFormProps {
     loginMethod: LoginMethod;
     onLoginMethodChange: (method: LoginMethod) => void;
-    emailPrefix: string;
-    onEmailPrefixChange: (value: string) => void;
-    emailSuffix: string;
-    onEmailSuffixChange: (value: string) => void;
-    emailSuffixes: string[];
+    email: string;
+    onEmailChange: (value: string) => void;
     password: string;
     onPasswordChange: (value: string) => void;
     showPassword: boolean;
     onToggleShowPassword: () => void;
     onForgotPassword: () => void;
+    emailRef?: RefObject<HTMLInputElement | null>;
+    passwordRef?: RefObject<HTMLInputElement | null>;
 }
 
 export function LoginForm({
     loginMethod,
     onLoginMethodChange,
-    emailPrefix,
-    onEmailPrefixChange,
-    emailSuffix,
-    onEmailSuffixChange,
-    emailSuffixes,
+    email,
+    onEmailChange,
     password,
     onPasswordChange,
     showPassword,
     onToggleShowPassword,
     onForgotPassword,
+    emailRef,
+    passwordRef,
 }: LoginFormProps) {
+    const tabsRef = useRef<HTMLDivElement>(null);
+    useTabIndicator(tabsRef);
+    const selectMethod = (method: LoginMethod) => {
+        if (method !== loginMethod) onLoginMethodChange(method);
+    };
+
     return (
         <>
-            {/* 登录方式切换 */}
-            <div className="flex gap-2 p-1 bg-background-secondary rounded-xl">
+            {/* 登录方式：选中块随点击滑过去，键盘左右键也能切换 */}
+            <div
+                ref={tabsRef}
+                role="tablist"
+                aria-label="登录方式"
+                className="auth-tabs motion-tabs motion-tabs--pill"
+                onKeyDown={(event) => {
+                    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+                    event.preventDefault();
+                    const next: LoginMethod = loginMethod === 'password' ? 'otp' : 'password';
+                    selectMethod(next);
+                    tabsRef.current?.querySelector<HTMLElement>(`#auth-tab-${next}`)?.focus();
+                }}
+            >
                 <button
                     type="button"
-                    onClick={() => onLoginMethodChange('password')}
-                    className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${loginMethod === 'password'
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-foreground-secondary hover:text-foreground'
-                    }`}
+                    role="tab"
+                    id="auth-tab-password"
+                    aria-selected={loginMethod === 'password'}
+                    aria-controls="auth-method-panel"
+                    tabIndex={loginMethod === 'password' ? 0 : -1}
+                    onClick={() => selectMethod('password')}
                 >
                     密码登录
                 </button>
                 <button
                     type="button"
-                    onClick={() => onLoginMethodChange('otp')}
-                    className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${loginMethod === 'otp'
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-foreground-secondary hover:text-foreground'
-                    }`}
+                    role="tab"
+                    id="auth-tab-otp"
+                    aria-selected={loginMethod === 'otp'}
+                    aria-controls="auth-method-panel"
+                    tabIndex={loginMethod === 'otp' ? 0 : -1}
+                    onClick={() => selectMethod('otp')}
                 >
                     验证码登录
                 </button>
             </div>
 
-            {/* 邮箱 */}
-            <EmailField
-                emailPrefix={emailPrefix}
-                onEmailPrefixChange={onEmailPrefixChange}
-                emailSuffix={emailSuffix}
-                onEmailSuffixChange={onEmailSuffixChange}
-                emailSuffixes={emailSuffixes}
-            />
+            <div id="auth-method-panel" role="tabpanel" aria-labelledby={`auth-tab-${loginMethod}`} className="auth-fields">
+                <EmailField email={email} onEmailChange={onEmailChange} inputRef={emailRef} />
 
-            {/* 密码（仅密码登录） */}
-            {loginMethod === 'password' && (
-                <>
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium text-foreground-secondary">密码</label>
-                        <div className="relative">
-                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-foreground-secondary" />
-                            <input
-                                type={showPassword ? 'text' : 'password'}
-                                value={password}
-                                onChange={(e) => onPasswordChange(e.target.value)}
-                                placeholder="输入密码"
-                                required
-                                minLength={6}
-                                className="w-full pl-10 pr-10 py-3 rounded-xl bg-background-secondary border border-border focus:border-accent focus:outline-none transition-colors"
-                            />
-                            <button
-                                type="button"
-                                onClick={onToggleShowPassword}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-secondary hover:text-foreground transition-colors"
-                            >
-                                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                            </button>
-                        </div>
+                {/* 密码只在密码登录时可用；输入框始终占位，切换登录方式时弹窗高度不变，邮箱不会移动。 */}
+                <div className="auth-password-slot" data-otp={loginMethod === 'otp' || undefined}>
+                    <div className="auth-password-slot-fields" inert={loginMethod === 'otp'} aria-hidden={loginMethod === 'otp' || undefined}>
+                        <PasswordField
+                            id="auth-password"
+                            label="密码"
+                            value={password}
+                            onChange={onPasswordChange}
+                            show={showPassword}
+                            onToggleShow={onToggleShowPassword}
+                            autoComplete="current-password"
+                            minLength={6}
+                            placeholder="输入密码"
+                            required={loginMethod === 'password'}
+                            action={<button type="button" onClick={onForgotPassword} className="auth-link">忘记密码？</button>}
+                            inputRef={passwordRef}
+                        />
                     </div>
-                    <div className="text-right">
-                        <button
-                            type="button"
-                            onClick={onForgotPassword}
-                            className="text-sm text-accent hover:underline"
-                        >
-                            忘记密码？
-                        </button>
-                    </div>
-                </>
-            )}
+                    {loginMethod === 'otp' && (
+                        <p className="auth-password-slot-note">验证码会发送到上面的邮箱，10 分钟内有效。</p>
+                    )}
+                </div>
+            </div>
         </>
     );
 }
 
-/** Preserve suffix shortcuts while accepting a complete address from any domain. */
-export function resolveAuthEmail(prefix: string, suffix: string): string {
-    return prefix.includes('@') ? prefix.trim() : prefix + suffix;
+/**
+ * 邮箱输入字段：一个完整的邮箱地址，失焦后若还不像邮箱就给出例子。
+ * 真正的把关仍交给 type="email" 的浏览器校验与认证服务。
+ */
+export function EmailField({
+    email,
+    onEmailChange,
+    inputRef,
+    label = '邮箱',
+}: {
+    email: string;
+    onEmailChange: (value: string) => void;
+    inputRef?: RefObject<HTMLInputElement | null>;
+    label?: string;
+}) {
+    const id = useId();
+    const [touched, setTouched] = useState(false);
+    const incomplete = normalizeAuthEmail(email).length > 0 && !isCompleteEmail(email);
+    const showError = touched && incomplete;
+    return (
+        <div className="auth-field">
+            <div className="auth-field-head">
+                <label htmlFor={id} className="auth-label">{label}</label>
+            </div>
+            <div className="auth-control" data-invalid={showError || undefined}>
+                <Mail aria-hidden="true" />
+                <input
+                    ref={inputRef}
+                    id={id}
+                    type="email"
+                    value={email}
+                    onChange={(e) => onEmailChange(e.target.value)}
+                    onBlur={() => setTouched(true)}
+                    placeholder="name@example.com"
+                    autoComplete="email"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    inputMode="email"
+                    required
+                    aria-invalid={showError || undefined}
+                    aria-describedby={showError ? `${id}-hint` : undefined}
+                />
+            </div>
+            {showError && (
+                <p className="auth-field-error" id={`${id}-hint`}>邮箱需要完整的地址，例如 name@example.com</p>
+            )}
+        </div>
+    );
 }
 
-/** 共享邮箱输入字段 */
-export function EmailField({
-    emailPrefix,
-    onEmailPrefixChange,
-    emailSuffix,
-    onEmailSuffixChange,
-    emailSuffixes,
+/** 共享密码字段：可见性开关带 aria-label 与 aria-pressed。 */
+export function PasswordField({
+    id,
+    label,
+    value,
+    onChange,
+    show,
+    onToggleShow,
+    autoComplete,
+    minLength,
+    placeholder,
+    required = true,
+    action,
+    error,
+    hint,
+    inputRef,
 }: {
-    emailPrefix: string;
-    onEmailPrefixChange: (value: string) => void;
-    emailSuffix: string;
-    onEmailSuffixChange: (value: string) => void;
-    emailSuffixes: string[];
+    id: string;
+    label: string;
+    value: string;
+    onChange: (value: string) => void;
+    show: boolean;
+    onToggleShow: () => void;
+    autoComplete: 'current-password' | 'new-password';
+    minLength: number;
+    placeholder: string;
+    required?: boolean;
+    action?: ReactNode;
+    error?: string;
+    hint?: ReactNode;
+    inputRef?: RefObject<HTMLInputElement | null>;
 }) {
-    const hasFullEmail = emailPrefix.includes('@');
     return (
-        <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground-secondary">邮箱</label>
-            <div className="flex gap-2">
-                <div className="relative flex-1">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-foreground-secondary" />
-                    <input
-                        type="text"
-                        value={emailPrefix}
-                        onChange={(e) => onEmailPrefixChange(e.target.value)}
-                        placeholder="邮箱前缀或完整邮箱"
-                        aria-label="邮箱"
-                        autoComplete="email"
-                        required
-                        className="w-full pl-10 pr-4 py-3 rounded-xl bg-background-secondary border border-border focus:border-accent focus:outline-none transition-colors"
-                    />
-                </div>
-                <select
-                    value={hasFullEmail ? '' : emailSuffix}
-                    disabled={hasFullEmail}
-                    aria-label="邮箱后缀"
-                    onChange={(e) => onEmailSuffixChange(e.target.value)}
-                    className="px-3 py-3 rounded-xl bg-background-secondary border border-border focus:border-accent focus:outline-none transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    {hasFullEmail ? <option value="">完整邮箱</option> : emailSuffixes.map(suffix => (
-                        <option key={suffix} value={suffix}>{suffix}</option>
-                    ))}
-                </select>
+        <div className="auth-field">
+            <div className="auth-field-head">
+                <label htmlFor={id} className="auth-label">{label}</label>
+                {action}
             </div>
+            <div className="auth-control" data-invalid={error ? true : undefined}>
+                <Lock aria-hidden="true" />
+                <input
+                    ref={inputRef}
+                    id={id}
+                    type={show ? 'text' : 'password'}
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    placeholder={placeholder}
+                    autoComplete={autoComplete}
+                    required={required}
+                    minLength={minLength}
+                    aria-invalid={error ? true : undefined}
+                />
+                <button
+                    type="button"
+                    className="auth-icon-button"
+                    aria-label={show ? '隐藏密码' : '显示密码'}
+                    aria-pressed={show}
+                    onClick={onToggleShow}
+                >
+                    {show ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+                </button>
+            </div>
+            {error && <p className="auth-field-error">{error}</p>}
+            {hint}
         </div>
     );
 }

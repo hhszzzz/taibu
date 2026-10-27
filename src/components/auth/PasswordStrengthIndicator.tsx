@@ -1,12 +1,14 @@
 /**
  * 密码强度指示器组件
- * 
- * 显示密码强度等级和具体要求
+ *
+ * 四条要求（长度、小写、大写、数字）逐条点亮；强度条每格按进度展开，
+ * 满足的要求用勾号描线出现，不满足时是一个灰点。
  */
 'use client';
 
 import { useMemo } from 'react';
-import { Check, X } from 'lucide-react';
+import { Check } from 'lucide-react';
+import './auth.css';
 
 interface PasswordStrengthResult {
     isValid: boolean;
@@ -33,6 +35,14 @@ export function validatePasswordStrength(password: string): PasswordStrengthResu
     return { isValid, score, checks };
 }
 
+const LABELS = ['弱', '弱', '中', '强', '极强'];
+const REQUIREMENTS = [
+    { key: 'minLength', label: '至少 8 个字符' },
+    { key: 'hasLowercase', label: '含小写字母' },
+    { key: 'hasUppercase', label: '含大写字母' },
+    { key: 'hasNumber', label: '含数字' },
+] as const;
+
 interface PasswordStrengthIndicatorProps {
     password: string;
 }
@@ -42,61 +52,28 @@ export function PasswordStrengthIndicator({ password }: PasswordStrengthIndicato
 
     if (!password) return null;
 
-    const strengthLabels = ['弱', '弱', '中', '强', '极强'];
-    const strengthColors = [
-        'bg-red-500',
-        'bg-red-500',
-        'bg-orange-500',
-        'bg-yellow-500',
-        'bg-green-500',
-    ];
-
-    const requirements = [
-        { key: 'minLength', label: '至少8个字符', met: checks.minLength },
-        { key: 'hasLowercase', label: '包含小写字母', met: checks.hasLowercase },
-        { key: 'hasUppercase', label: '包含大写字母', met: checks.hasUppercase },
-        { key: 'hasNumber', label: '包含数字', met: checks.hasNumber },
-    ];
-
     return (
-        <div className="mt-2 space-y-2">
-            {/* 强度条 */}
-            <div className="flex items-center gap-2">
-                <div className="flex-1 flex gap-1">
-                    {[0, 1, 2, 3].map((i) => (
-                        <div
-                            key={i}
-                            className={`h-1 flex-1 rounded-full transition-colors ${i < score ? strengthColors[score] : 'bg-border'
-                                }`}
-                        />
+        <div className="auth-strength" data-score={score} aria-live="polite">
+            <div className="auth-strength-meter">
+                <div className="auth-strength-bars" aria-hidden="true">
+                    {[0, 1, 2, 3].map(index => (
+                        <span key={index} data-on={index < score ? '' : undefined}><i /></span>
                     ))}
                 </div>
-                <span className={`text-xs font-medium ${score <= 1 ? 'text-red-500' :
-                        score === 2 ? 'text-orange-500' :
-                            score === 3 ? 'text-yellow-500' :
-                                'text-green-500'
-                    }`}>
-                    {strengthLabels[score]}
-                </span>
+                <span className="auth-strength-label">{LABELS[score]}</span>
             </div>
-
-            {/* 要求列表 */}
-            <div className="grid grid-cols-2 gap-1 text-xs">
-                {requirements.map((req) => (
-                    <div
-                        key={req.key}
-                        className={`flex items-center gap-1 ${req.met ? 'text-green-500' : 'text-foreground-secondary'
-                            }`}
-                    >
-                        {req.met ? (
-                            <Check className="w-3 h-3" />
-                        ) : (
-                            <X className="w-3 h-3" />
-                        )}
-                        <span>{req.label}</span>
-                    </div>
-                ))}
-            </div>
+            <ul className="auth-strength-checks">
+                {REQUIREMENTS.map((requirement) => {
+                    const met = checks[requirement.key];
+                    return (
+                        <li key={requirement.key} data-met={met ? '' : undefined}>
+                            {met && <Check aria-hidden="true" />}
+                            {requirement.label}
+                            <span className="sr-only">{met ? '已满足' : '未满足'}</span>
+                        </li>
+                    );
+                })}
+            </ul>
         </div>
     );
 }

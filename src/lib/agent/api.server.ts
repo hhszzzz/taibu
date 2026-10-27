@@ -47,6 +47,8 @@ import { readAgentActivity } from './activity.server';
 import { AGENT_COMPACT_INSTRUCTIONS_MAX, parseAgentCompactCommand } from './compaction';
 import { SkillUnavailableError, expandSkillMessages, joinSkillTurn, skillCommandBlock } from './skills/catalog.server';
 import { parseSkillCommand } from './skills/config';
+import { DEFAULT_AGENT_PROFILE } from './profiles/config';
+import { availableProfiles } from './profiles/members.server';
 import { getAgentArchiveProposal } from './archive';
 import { readAgentArchiveStatus } from './archive.server';
 
@@ -390,12 +392,18 @@ export async function createAgentTask(request: NextRequest) {
     throw new AgentApiError("积分不足", 402, "INSUFFICIENT_CREDITS");
   const collaborators = compact ? [] : body.collaborators;
   if (custom && collaborators.length) throw new AgentApiError('多模型协作需要使用平台模型；可在模型菜单中关闭协作');
+  // A member's role must be one this member may give it now: the specialist always is.
+  const roles = collaborators.some(member => (member.profile ?? DEFAULT_AGENT_PROFILE) !== DEFAULT_AGENT_PROFILE)
+    ? await availableProfiles(account.effectiveMembership) : [];
   for (const member of collaborators) {
     const selected = await getModelConfigAsync(member.model);
     if (!selected) throw new AgentApiError(`协作模型不存在：${member.name}`);
     if (!isModelAllowedForMembership(selected, account.effectiveMembership) ||
       (member.reasoning && !isReasoningAllowedForMembership(selected, account.effectiveMembership)))
       throw new AgentApiError(`当前会员不能使用 ${member.name} 的模型或推理配置`, 403, 'MEMBERSHIP_REQUIRED');
+    const role = member.profile ?? DEFAULT_AGENT_PROFILE;
+    if (role !== DEFAULT_AGENT_PROFILE && !roles.some(item => item.name === role && item.modes.includes('parallel')))
+      throw new AgentApiError(`${member.name} 的角色已停用或当前会员不可用，请在「设置 → 个性化 → 多模型协作」里改选`, 400, 'PROFILE_UNAVAILABLE');
   }
   const limit = compact
     ? await checkRateLimit(auth.user.id, "/api/agent/compact", AGENT_COMPACT_RATE_LIMIT)

@@ -4,6 +4,7 @@
 import { useId, useMemo, useState, type CSSProperties } from 'react';
 import { Check, CircleAlert, LoaderCircle } from 'lucide-react';
 import { ModelAvatar } from './ModelAvatar';
+import { MemberRoleBadge } from './MemberRoleBadge';
 import { getAgentChart, getAgentToolText, type AgentToolPart } from '@/lib/agent/tool-presentation';
 import { REASONING_EFFORT_LABELS } from '@/lib/chat/model-settings';
 import { AI_REASONING_EFFORTS, type AIReasoningEffort } from '@/types';
@@ -14,7 +15,7 @@ import { CanonicalChartView } from './CanonicalChartView';
 import { useAgentResultWorkspace } from './AgentResultContext';
 import './agent-results.css';
 import { getChartFocus } from '@/lib/agent/chart-interaction';
-import { memberAnswerText, parallelAnalysisResults, type ParallelAnalysisResult } from '@/lib/agent/parallel-results';
+import { memberAnswerText, parallelAnalysisResults, parallelMemberName, type ParallelAnalysisResult } from '@/lib/agent/parallel-results';
 import type { AgentRunStatus } from '@/lib/agent/types';
 import { getAgentToolState, getParallelMemberState } from './presentation';
 
@@ -46,7 +47,7 @@ function CollaborationCard({ tool, analyses, runStatus }: { tool: AgentToolPart;
         const status = getParallelMemberState(analysis, call);
         const current = status.state === 'running' ? analysis.steps?.findLast(step => step.status === 'running')?.title : undefined;
         const content = <>
-          <strong><ModelAvatar member={analysis} size={13} />{analysis.name ?? analysis.system}</strong>
+          <strong><ModelAvatar member={analysis} size={13} />{parallelMemberName(analysis)}<MemberRoleBadge member={analysis} /></strong>
           <small>{[analysis.modelName ?? analysis.model ?? '主模型', effortLabel(analysis.reasoningEffort)].filter(Boolean).join(' · ')}</small>
           <span className="agent-member-status" data-state={status.state}>
             {status.state === 'completed' ? <Check size={12} strokeWidth={2.6} aria-hidden="true" /> : status.state === 'running' ? <LoaderCircle size={12} strokeWidth={2.6} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <CircleAlert size={12} aria-hidden="true" />}

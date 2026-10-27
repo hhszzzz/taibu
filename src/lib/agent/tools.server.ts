@@ -4,7 +4,7 @@ import { escapeLike, textMatches } from "@/lib/db/sql-helpers";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { Type, type Static, type TSchema } from "@earendil-works/pi-ai";
-import type { DomainTool as AgentTool, DomainToolResult as AgentToolResult } from "./types";
+import type { DomainTool as AgentTool, DomainToolCaller, DomainToolResult as AgentToolResult } from "./types";
 import {
   listToolDefinitions,
   executeTool,
@@ -292,11 +292,13 @@ export async function createAgentTools(
   // Evidence numbers continue the conversation's (evidence.ts) and are stamped on
   // the returned rows, so the model cites what the reader sees. Each call records
   // the last number it used: a replayed result records the same number again.
-  // Runs created before numbering have no base and keep unnumbered results.
+  // Runs created before numbering have no base and keep unnumbered results. A
+  // member's results are not numbered: the answer cites only what the main agent's
+  // own calls returned, and a member names its sources instead.
   const lastCitation = (except?: string) => Math.max(checkpoint.citations?.base ?? 0,
     ...Object.entries(checkpoint.citations?.calls ?? {}).flatMap(([callId, last]) => callId === except ? [] : [last]));
-  const stampCitations = <T extends object>(rows: T[]) => {
-    if (!checkpoint.citations) return rows;
+  const stampCitations = <T extends object>(rows: T[], caller?: DomainToolCaller) => {
+    if (!checkpoint.citations || caller?.member) return rows;
     const first = lastCitation() + 1;
     return rows.map((row, index) => ({ ...row, cite: first + index }));
   };
@@ -339,7 +341,10 @@ export async function createAgentTools(
     ["focus_chart", (details, callId) =>
       recordCitations(callId, [readAgentCite((details as { cite?: unknown }).cite)])],
   ]);
-  const applyResult = (name: string, details: unknown, callId: string) => checkpointEffects.get(name)?.(details, callId);
+  // Sources, numbers and the question or task list belong to the main agent's answer; a member's calls leave them alone.
+  const applyResult = (name: string, details: unknown, callId: string, caller?: DomainToolCaller) => {
+    if (!caller?.member) checkpointEffects.get(name)?.(details, callId);
+  };
   /**
    * The workspace board reads the full-detail reading (the snapshot inspect_chart also uses), so a chart the model never
    * inspected still shows strength, movement and the like; the model keeps reading the default-level content.
@@ -356,6 +361,7 @@ export async function createAgentTools(
       args: Static<T>,
       callId: string,
       signal?: AbortSignal,
+      caller?: DomainToolCaller,
     ) => Promise<AgentToolResult<unknown>>,
     kind: "calculation" | "tool" = "tool",
     title = description,
@@ -365,14 +371,14 @@ export async function createAgentTools(
     label: auxiliaryToolTitles[name] ?? title,
     parameters,
     replay: "safe",
-    execute: async (callId, args, signal) => {
+    execute: async (callId, args, signal, caller) => {
       signal?.throwIfAborted();
       await assertAgentToolAccess(store, run, name, args);
       const cached = await store.artifact(run, callId);
       if (cached) {
         if (cached.tool_name !== name || !isDeepStrictEqual(cached.args, args))
           throw new Error("工具调用标识对应了不同参数");
-        applyResult(name, cached.result.details, callId);
+        applyResult(name, cached.result.details, callId, caller);
         return kind === "calculation"
           ? {
               ...cached.result,
@@ -381,7 +387,7 @@ export async function createAgentTools(
             }
           : cached.result;
       }
-      const executed = await execute(args, callId, signal);
+      const executed = await execute(args, callId, signal, caller);
       // Pi Durable allocates increasing numeric task IDs; tools execute sequentially.
       // Keep the order in cache JSON rather than relying on a nonexistent timestamp column.
       const taskOrder = Number(callId.split(':', 1)[0]);
@@ -397,7 +403,7 @@ export async function createAgentTools(
         p_args: args,
         p_result: result,
       });
-      applyResult(name, result.details, callId);
+      applyResult(name, result.details, callId, caller);
       return kind === "calculation"
         ? {
             ...result,
@@ -625,7 +631,7 @@ export async function createAgentTools(
         query: Type.String({ minLength: 1 }),
         kbIds: Type.Optional(Type.Array(Type.String({ format: "uuid" }))),
       }),
-      async (args) => {
+      async (args, _callId, _signal, caller) => {
         const account = await checkMember();
         const results = await searchKnowledgeWithPersistence(
           args.query,
@@ -641,7 +647,7 @@ export async function createAgentTools(
             topK: 5,
           },
         );
-        return textResult(stampCitations(results));
+        return textResult(stampCitations(results, caller));
       },
     ),
   );
@@ -657,8 +663,8 @@ export async function createAgentTools(
         "web_search",
         "联网检索公开资料，返回可引用来源；仅发送完成检索必要的信息",
         Type.Object({ query: Type.String({ minLength: 1, maxLength: WEB_SEARCH_QUERY_MAX }) }),
-        async (args, _callId, signal) =>
-          textResult(stampCitations(await searchWeb(args.query, { membership: (await checkMember()).membership, signal }))),
+        async (args, _callId, signal, caller) =>
+          textResult(stampCitations(await searchWeb(args.query, { membership: (await checkMember()).membership, signal }), caller)),
       ),
     );
     if (fetchRoute) tools.push(
@@ -666,8 +672,8 @@ export async function createAgentTools(
         "web_fetch",
         "读取一个公开网页的正文，返回可引用来源；用于搜索摘要不够时读原文，或读取用户给出的网址。网址会发给联网服务，不要读取含个人信息或密钥的地址",
         Type.Object({ url: Type.String({ minLength: 1, maxLength: 2048, description: "http(s) 网页地址" }) }),
-        async (args, _callId, signal) =>
-          textResult(stampCitations([await fetchWebPage(args.url, { membership: (await checkMember()).membership, signal })])),
+        async (args, _callId, signal, caller) =>
+          textResult(stampCitations([await fetchWebPage(args.url, { membership: (await checkMember()).membership, signal })], caller)),
       ),
     );
   }

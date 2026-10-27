@@ -222,6 +222,21 @@ export function returnsAgentScriptResult(name: string): boolean {
   return isAgentChartTool(name) || getAgentDrilldownBase(name) !== null || TOOL_FAMILIES.get(name) === 'calculation';
 }
 
+/**
+ * Tools no role grants a collaboration member or background subagent: it cannot ask the user, keep a plan, dispatch
+ * members, write memory or the archive, move the board, load deferred tools or run scripts. The main agent does these.
+ */
+export const AGENT_MEMBER_DENIED_TOOLS: ReadonlySet<string> = new Set([
+  'ask_user', 'todo_write', AGENT_SUBMIT_PLAN_TOOL, 'parallel_analysis', AGENT_BACKGROUND_TOOL,
+  'remember_user_fact', AGENT_ARCHIVE_TOOLS.record, AGENT_ARCHIVE_TOOLS.propose,
+  'inspect_chart', 'focus_chart', AGENT_TOOL_SEARCH_TOOL, AGENT_CODEMODE_TOOL,
+]);
+
+/** Charts, calculations and drilldowns: the tools that compute with Core. */
+export function isAgentCoreTool(name: string): boolean {
+  return !name.startsWith(AGENT_MCP_TOOL_PREFIX) && getAgentToolFeatureId(name) !== null;
+}
+
 const TOOL_FAMILIES: ReadonlyMap<string, AgentToolFamily> = new Map<string, AgentToolFamily>([
   ['inspect_chart', 'chart'],
   ['focus_chart', 'chart'],

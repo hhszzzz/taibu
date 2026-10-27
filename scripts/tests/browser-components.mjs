@@ -9,8 +9,8 @@
  *   const { run } = await import('file:///absolute/repo/scripts/tests/browser-components.mjs');
  *   return run(page, '/tmp/taibu-browser/fixture.js');
  *
- * Actual components: SettingsCenterPage/SettingsCenterHost/GeneralSettingsPanel/ChartsPanel/SharedLinksPanel/ConnectorsPanel/SkillsPanel, ShareConversationMenu,
- * AIModelPanel, AnnouncementManagementPanel, KeyManagementPanel, AgentTaskPanel, ConversationListProvider, ChartPickerModal,
+ * Actual components: SettingsCenterPage/SettingsCenterHost/GeneralSettingsPanel/ChartsPanel/SharedLinksPanel/ConnectorsPanel/SkillsPanel/CollaborationSettings,
+ * ShareConversationMenu, AIModelPanel, AnnouncementManagementPanel, KeyManagementPanel, AgentTaskPanel, AgentProfilesPanel, ConversationListProvider, ChartPickerModal,
  * useSelectedBaziChart, useComposerState, useComposerCommands, HistoryDrawer/HistoryPageTemplate, RecordsPage and useAnalysisSnapshot.
  * Actual root ClientProviders owns the shared Query client and handles synthetic auth I/O.
  * Fixture-only boundaries: auth I/O/profile/feature flags, unrelated lazy panels,
@@ -42,6 +42,7 @@ import { AIModelPanel } from '@/components/admin/AIModelPanel';
 import { AnnouncementManagementPanel } from '@/components/admin/AnnouncementManagementPanel';
 import { KeyManagementPanel } from '@/components/admin/KeyManagementPanel';
 import { AgentTaskPanel } from '@/components/admin/AgentTaskPanel';
+import { AgentProfilesPanel } from '@/components/admin/AgentProfilesPanel';
 import { ConversationListProvider, useConversationList } from '@/lib/chat/ConversationListContext';
 import { useChatState } from '@/lib/chat/use-chat-state';
 import { useChatMessaging } from '@/lib/chat/use-chat-messaging';
@@ -541,6 +542,7 @@ function Shell() {
       <button onClick={() => navigate('/announcements')}>Fixture Announcements route</button>
       <button onClick={() => navigate('/keys')}>Fixture Keys route</button>
       <button onClick={() => navigate('/agent-tasks')}>Fixture Agent tasks route</button>
+      <button onClick={() => navigate('/agent-profiles')}>Fixture Agent roles route</button>
       <button onClick={() => openSettingsCenter('general')}>Open actual settings</button>
       <button onClick={() => setUser('alice')}>Fixture Alice</button>
       <button onClick={() => setUser('bob')}>Fixture Bob</button>
@@ -566,6 +568,7 @@ function Shell() {
     {route === '/announcements' && <section data-testid="announcements"><AnnouncementManagementPanel /></section>}
     {route === '/keys' && <section data-testid="activation-keys"><KeyManagementPanel /></section>}
     {route === '/agent-tasks' && <section data-testid="agent-tasks"><AgentTaskPanel /></section>}
+    {route === '/agent-profiles' && <section data-testid="agent-profiles"><AgentProfilesPanel /></section>}
     {composerMounted && <ComposerProbe />}
     {skillCommandsMounted && <SkillCommandsProbe />}
     {selectedMounted && <SelectedChartProbe />}
@@ -783,6 +786,12 @@ export async function run(existingPage, bundlePath) {
         if (url.pathname === '/api/agent/status') return Response.json({ enabled: true, ready: true, webAvailable: false, customAvailable: true });
         if (url.pathname === '/api/agent/activity') return Response.json(agentIO.activity ?? { runs: [], notices: [] });
         if (url.pathname === '/api/agent/skills') return Response.json({ skills: agentIO.skills ?? [] });
+        // The roles a member may give a collaboration member, as an administrator set them up.
+        if (url.pathname === '/api/agent/profiles') return Response.json({ profiles: [
+          { name: 'specialist', displayName: '体系专家', description: '用所给体系的 Core 工具与方法卡分析。', model: null, modes: ['parallel', 'background'] },
+          { name: 'researcher', displayName: '研究员', description: '联网检索与查知识库。', model: null, modes: ['parallel', 'background'] },
+          { name: 'archivist', displayName: '档案员', description: '整理用户资料。', model: 'fixture-review', modes: ['parallel'] },
+        ] });
         if (url.pathname === '/api/agent/runs' && method === 'GET') return Response.json(agentIO.runs[url.searchParams.get('conversationId')] ?? null);
         const events = url.pathname.match(/^\/api\/agent\/runs\/([^/]+)\/events$/);
         if (events) {
@@ -956,6 +965,12 @@ export async function run(existingPage, bundlePath) {
   const records = [record('record-general', 'General saved record', 'general'), record('record-event', 'Event saved record', 'event')];
   // Public share link of conversation share-fixture, as /api/conversations/[id]/share and /api/shares return it.
   let fixtureShare = null;
+  // Agent roles as /api/admin/agent-profiles lists them: the three built-in ones, then what the administrator adds.
+  const builtinProfile = (name, displayName, sortOrder, allow) => ({ name, builtin: true, displayName, description: `${displayName}的说明`, instructions: '',
+    tools: { inherit: false, allow, deny: [] }, skills: [], model: null, reasoningEffort: null, modes: ['parallel', 'background'], requiredTier: 'free',
+    enabled: true, sortOrder, updatedAt: null });
+  const adminProfiles = [builtinProfile('specialist', '体系专家', -30, ['system']), builtinProfile('researcher', '研究员', -20, ['web', 'knowledge', 'skills']),
+    builtinProfile('verifier', '复核员', -10, ['core', 'data'])];
   // Each account's own MCP connectors (/api/user/connectors): alice may add three, bob's administrator closed them.
   const connectorsByUser = { alice: [], bob: [] };
   // Each account's own skills (/api/user/skills), with the same allowance: alice may add three, bob's are closed.
@@ -1228,6 +1243,19 @@ export async function run(existingPage, bundlePath) {
       }));
       activationKeys = [...created, ...activationKeys];
       return ok({ success: true, keys: created.map(key => key.key_code) }, true);
+    }
+    if (url.pathname.startsWith('/api/admin/agent-profiles')) {
+      const [, , , , name] = url.pathname.split('/');
+      if (!name && method === 'GET') return ok({ profiles: adminProfiles, servers: [{ name: 'notes', displayName: '笔记', enabled: true }],
+        skills: [{ name: 'case-review', description: '复盘一个命理案例', enabled: true }], models: [{ id: 'fixture-analysis', name: '分析模型', supportsReasoning: true, thinkingLevels: ['low', 'medium', 'high'] }] }, true);
+      if (!name && method === 'POST') {
+        const profile = { ...body, builtin: false, updatedAt: '2026-10-27T00:00:00Z' };
+        adminProfiles.push(profile);
+        return ok({ profile }, true);
+      }
+      const profile = adminProfiles.find(item => item.name === name);
+      if (method === 'PATCH') return ok({ profile: Object.assign(profile, body) }, true);
+      if (method === 'DELETE') { adminProfiles.splice(adminProfiles.indexOf(profile), 1); return ok({ deleted: true }, true); }
     }
     if (url.pathname === '/api/admin/agent-runs' && method === 'GET') return ok({ runs: [agentTaskRun] }, true);
     if (url.pathname === `/api/admin/agent-runs/${agentTaskRun.id}` && method === 'GET') return ok({ run: agentTaskRun, tree: agentTaskTree() }, true);
@@ -1576,6 +1604,45 @@ export async function run(existingPage, bundlePath) {
     await taskPanel.getByLabel('按任务、对话或用户 ID 查找').fill(agentTaskRun.conversationId);
     await taskPanel.getByRole('button', { name: '查找', exact: true }).click();
     check('A full ID searches tasks in every state', await waitForRequest(() => taskListReads().some(item => item.search === `?scope=active&q=${agentTaskRun.conversationId}`)));
+
+    // Agent roles: a built-in one is only switched on or off; a custom one is written in the editor, grants and all.
+    await page.getByRole('button', { name: 'Fixture Agent roles route', exact: true }).click();
+    const rolePanel = page.getByTestId('agent-profiles');
+    const roleList = rolePanel.getByRole('list', { name: '智能体角色' });
+    await roleList.getByText('研究员的说明', { exact: true }).waitFor();
+    check('Built-in roles have no edit or delete, and the specialist cannot be switched off',
+      await rolePanel.getByRole('switch', { name: '启用「体系专家」' }).isDisabled() && await rolePanel.getByRole('button', { name: '编辑「研究员」' }).count() === 0
+      && await rolePanel.getByRole('button', { name: '删除「研究员」' }).count() === 0 && await roleList.getByText('允许 联网、知识库、技能', { exact: true }).isVisible());
+    await rolePanel.getByRole('switch', { name: '启用「研究员」' }).click();
+    await roleList.getByText('已停用', { exact: true }).waitFor();
+    check('Switching a built-in role off sends only that',
+      JSON.stringify(requests.filter(entry => entry.pathname === '/api/admin/agent-profiles/researcher' && entry.method === 'PATCH').at(-1)?.body) === '{"enabled":false}');
+    await rolePanel.getByRole('button', { name: '添加角色' }).click();
+    const roleDialog = page.getByRole('dialog', { name: '添加角色' });
+    await roleDialog.getByLabel('标识', { exact: true }).fill('Bad');
+    await roleDialog.getByLabel('名称', { exact: true }).fill('档案员');
+    await roleDialog.getByRole('button', { name: '添加', exact: true }).click();
+    await roleDialog.getByRole('alert').getByText(/标识须以小写字母开头/u).waitFor();
+    check('A malformed role name is refused before any request', !requests.some(entry => entry.pathname === '/api/admin/agent-profiles' && entry.method === 'POST'));
+    await roleDialog.getByLabel('标识', { exact: true }).fill('archivist');
+    await roleDialog.getByLabel('用户资料的授权').selectOption('allow');
+    await roleDialog.getByLabel('MCP：笔记的授权').selectOption('allow');
+    await roleDialog.getByLabel('联网的授权').selectOption('deny');
+    await roleDialog.getByLabel('另外禁止的工具', { exact: true }).fill('read_attachment');
+    await roleDialog.getByRole('checkbox', { name: 'case-review' }).check();
+    await roleDialog.getByLabel('模型', { exact: true }).selectOption('fixture-analysis');
+    await roleDialog.getByRole('checkbox', { name: '后台子分析' }).uncheck();
+    await roleDialog.getByRole('button', { name: '添加', exact: true }).click();
+    await roleDialog.waitFor({ state: 'hidden' });
+    const createdRole = requests.find(entry => entry.pathname === '/api/admin/agent-profiles' && entry.method === 'POST')?.body;
+    check('A custom role is sent with its grants, preloaded skill, model and modes',
+      JSON.stringify([createdRole?.name, createdRole?.tools, createdRole?.skills, createdRole?.model, createdRole?.modes]) === JSON.stringify(
+        ['archivist', { inherit: false, allow: ['data', 'mcp:notes'], deny: ['web', 'read_attachment'] }, ['case-review'], 'fixture-analysis', ['parallel']]));
+    await roleList.getByText('仅协作成员', { exact: true }).waitFor();
+    await rolePanel.getByRole('button', { name: '删除「档案员」' }).click();
+    await page.getByRole('dialog', { name: '删除角色' }).getByRole('button', { name: '删除', exact: true }).click();
+    await until(() => !document.querySelector('[data-testid="agent-profiles"]')?.textContent.includes('档案员'));
+    check('Deleting a custom role confirms first', requests.some(entry => entry.pathname === '/api/admin/agent-profiles/archivist' && entry.method === 'DELETE'));
     // Explicitly remount while a real loadModels receipt is held. React's
     // development effect replay count varies for later conditional mounts.
     const oldModelLoad = holdNext('/api/admin/ai-models', 'GET');
@@ -3296,6 +3363,23 @@ export async function run(existingPage, bundlePath) {
     check('Agent mode\'s slash menu offers the member\'s skills and fills in /skill:名称',
       await page.evaluate(() => window.fixtureAgentIO.requests.filter(request => request.url === '/api/agent/skills').length) === 1);
     await page.evaluate(() => window.fixture.mount.skillCommands(false));
+
+    // Roles: a collaboration member takes one of the roles the administrator offers; the preset keeps it, and a role
+    // with its own model says the member runs on it.
+    await page.evaluate(() => { history.replaceState(null, '', '#settings/personalization'); window.dispatchEvent(new HashChangeEvent('hashchange')); });
+    const roleSettings = page.getByRole('region', { name: '多模型协作设置' });
+    await roleSettings.getByRole('button', { name: '添加成员' }).click();
+    const memberRole = roleSettings.getByLabel('Agent 1 角色', { exact: true });
+    await memberRole.locator('option[value="archivist"]').waitFor({ state: 'attached' });
+    check('A new member starts as the specialist, offered every role the member may give',
+      await memberRole.inputValue() === 'specialist' && (await memberRole.locator('option').allInnerTexts()).join('|') === '体系专家|研究员|档案员');
+    const presetMember = () => page.evaluate(() => JSON.parse(localStorage.getItem('taibu:collaboration-preset:alice') ?? '{}').members?.[0]);
+    await memberRole.selectOption('archivist');
+    await roleSettings.getByText('整理用户资料。 这个角色指定使用 复核模型，会员可用时代替上面的模型。', { exact: true }).waitFor();
+    check('A chosen role is kept in the preset', (await presetMember())?.profile === 'archivist');
+    await memberRole.selectOption('specialist');
+    check('Choosing the specialist again leaves the role out of the preset', !('profile' in (await presetMember() ?? { profile: 'missing' })));
+    await roleSettings.getByRole('button', { name: '移除 Agent 1' }).click();
 
     {
     await page.evaluate(() => { history.replaceState(null, '', '/chat'); window.dispatchEvent(new Event('fixture:navigate')); window.fixture.mount.share(true); });

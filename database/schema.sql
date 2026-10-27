@@ -246,6 +246,33 @@ CREATE TABLE public.agent_mcp_servers (
     CONSTRAINT agent_mcp_servers_user_route_check CHECK (((owner_id IS NULL) OR ((search_tool IS NULL) AND (fetch_tool IS NULL))))
 );
 
+CREATE TABLE public.agent_profiles (
+    name text NOT NULL,
+    display_name text NOT NULL,
+    description text DEFAULT ''::text NOT NULL,
+    instructions text DEFAULT ''::text NOT NULL,
+    tools jsonb DEFAULT '{"deny": [], "allow": [], "inherit": false}'::jsonb NOT NULL,
+    skills text[] DEFAULT '{}'::text[] NOT NULL,
+    model text,
+    reasoning_effort text,
+    modes text[] DEFAULT '{parallel,background}'::text[] NOT NULL,
+    required_tier text DEFAULT 'free'::text NOT NULL,
+    is_enabled boolean DEFAULT true NOT NULL,
+    sort_order integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT agent_profiles_description_check CHECK ((length(description) <= 300)),
+    CONSTRAINT agent_profiles_display_name_check CHECK (((length(btrim(display_name)) >= 1) AND (length(display_name) <= 12))),
+    CONSTRAINT agent_profiles_instructions_check CHECK ((length(instructions) <= 8000)),
+    CONSTRAINT agent_profiles_model_check CHECK (((model IS NULL) OR ((length(model) >= 1) AND (length(model) <= 200)))),
+    CONSTRAINT agent_profiles_modes_check CHECK (((cardinality(modes) >= 1) AND (modes <@ ARRAY['parallel'::text, 'background'::text]))),
+    CONSTRAINT agent_profiles_name_check CHECK (((name ~ '^[a-z][a-z0-9-]{1,31}$'::text) AND (name <> ALL (ARRAY['specialist'::text, 'researcher'::text, 'verifier'::text])))),
+    CONSTRAINT agent_profiles_reasoning_effort_check CHECK (((reasoning_effort IS NULL) OR (reasoning_effort = ANY (ARRAY['off'::text, 'minimal'::text, 'low'::text, 'medium'::text, 'high'::text, 'xhigh'::text, 'max'::text])))),
+    CONSTRAINT agent_profiles_required_tier_check CHECK ((required_tier = ANY (ARRAY['free'::text, 'plus'::text, 'pro'::text]))),
+    CONSTRAINT agent_profiles_skills_check CHECK ((cardinality(skills) <= 4)),
+    CONSTRAINT agent_profiles_tools_check CHECK ((jsonb_typeof(tools) = 'object'::text))
+);
+
 ALTER TABLE public.agent_run_commands ALTER COLUMN sequence ADD GENERATED ALWAYS AS IDENTITY (
     SEQUENCE NAME public.agent_run_commands_sequence_seq
     START WITH 1
@@ -912,6 +939,9 @@ ALTER TABLE ONLY public.agent_mcp_servers
 
 ALTER TABLE ONLY public.agent_mcp_servers
     ADD CONSTRAINT agent_mcp_servers_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY public.agent_profiles
+    ADD CONSTRAINT agent_profiles_pkey PRIMARY KEY (name);
 
 ALTER TABLE ONLY public.agent_run_artifacts
     ADD CONSTRAINT agent_run_artifacts_pkey PRIMARY KEY (id);

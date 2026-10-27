@@ -3,7 +3,7 @@ import { BACKGROUND_CONTEXT, awaitWithContext, withCancel } from "@earendil-work
 import type { Context, JsonValue } from "@earendil-works/chord";
 import {
   CompactionTask, GenerationTask, ToolTask, Harness, createRegistry, defineTool, hook,
-  type CompactionResult, type Conversation, type ConversationWatch, type PromptSection, type ReportInfo, type SettledTask, type StorageWrite,
+  type CompactionResult, type Conversation, type ConversationId, type ConversationWatch, type PromptSection, type ReportInfo, type SettledTask, type StorageWrite,
   type TaskId, type ToolExecutionApi, type ToolExecutionResult, type ToolHookCall, type UserInput,
 } from "@earendil-works/pi-durable";
 import {
@@ -43,7 +43,9 @@ import { commitSummary, generateSummary, readSummary } from './summary-usage.ser
 import { createGuardedAgentModels, type GuardedAgentModel } from './model-registry.server';
 import { parseAgentCollaborators } from '@/lib/chat/model-settings';
 import { createParallelExtension } from './parallel.server';
-import { BACKGROUND_POLL_MS, createBackgroundAgents, pendingBackgroundReports, projectBackgroundAgents, residentBackgroundAgents } from './background.server';
+import { backgroundConversations, createBackgroundAgents, pendingBackgroundReporters, projectBackgroundAgents, residentBackgroundAgents } from './background.server';
+import { BUILTIN_AGENT_PROFILES, DEFAULT_AGENT_PROFILE, type AgentProfileView } from './profiles/config';
+import { availableProfiles, createMemberKit, type MemberModel } from './profiles/members.server';
 import { parallelAnalysisResults } from './parallel-results';
 import { openAgentMcp, type AgentMcpSession } from './mcp/session.server';
 import type { McpConfirm } from './mcp/tools.server';
@@ -64,7 +66,7 @@ search_knowledge、web_search、web_fetch 的每条结果和 focus_chart 的结�
 分析所有占术时先用 inspect_chart 在右侧工作区查看原盘并取得真实定位目标。计算成果引用 artifact:成果ID，已存资料使用 read_user_data 返回的命盘引用。进入新的分析主题前，用 focus_chart 展示当前分析位置并写简短主题：八字的柱位、日支、生克刑害合冲；紫微的宫位星曜；奇门的宫、门、星、神及天地盘干；六爻的本变卦、爻位与伏神；梅花的本互变卦、体用与阶段；大六壬的四课三传、天地盘及天将；小六壬的推演步骤及落宫；塔罗的具体牌位；太乙的观测层、十六宫及星将；占星的星体、宫头与相位；黄历的宜忌、方位和时辰。紫微星曜先按宫名再次 inspect_chart 获取该宫目标，三方四正及其他关联位置用 includeRelated 控制。只引用该盘实际返回的目标 ID，不猜坐标、不修改排盘数据；旧盘缺少字段时说明边界。工具定位与读取不产生新计算成果。
 排盘后需要局部细节时优先用详查工具（如 bazi_relations 查岁运叠加后的刑冲合害，原局关系看命盘的干支关系），传同一个命盘引用与查询参数，不重复传出生信息；详查只给命盘之外的事实，不重复命盘已有内容。只问某柱、某类关系或某几组事实时用该工具的筛选参数（如 pillars、types、sections、focus）只取所需。筛选结果中的同字牵连须与所列关系一并解读；未列出表示另有事实未展开，确需时去掉筛选再查；默认不附判定口径，要向用户说明规则时再传 detailLevel=full。详查返回的事实可作为解读依据，所查位置会在工作区自动标出，无需再 focus_chart。详查也不产生新成果。
 工具执行失败时如实处理，可调整参数或追问。当前用户身份由服务端确定，不能指定其他用户。
-信息完整且需要交叉分析多个体系时可使用 parallel_analysis，由当前任务汇总；给出简短 title，并用 topics 列出需要每位成员表态的关键议题，判断类议题提供 2–4 个互斥 options，便于对照分歧。可与你并行推进、或要在之后的提问中持续跟进的单一体系专项分析，可用 background_agent 交给常驻后台子分析，回报自动送达，不必等待。长期记忆仅在用户已开启时可用，按需读取；只有用户明确表达值得跨任务保留的偏好或事实才可写回，必须附用户原话依据，不能保存推断、敏感凭据或短期任务结果。
+默认由你自己完成任务。只有存在相互独立、能分头处理的子问题时，才用 parallel_analysis 交给成员同时完成，由你核对与汇总：按子问题为每位成员选合适的角色，给出简短 title，并用 topics 列出需要每位成员表态的关键议题，判断类议题提供 2–4 个互斥 options，便于对照分歧。不要让成员互相辩论或反复复核，复核最多一轮；成员之间不传话，需要时由你转述。可与你并行推进、或要在之后的提问中持续跟进的专项任务，可用 background_agent 交给常驻后台子分析，回报自动送达，不必等待。长期记忆仅在用户已开启时可用，按需读取；只有用户明确表达值得跨任务保留的偏好或事实才可写回，必须附用户原话依据，不能保存推断、敏感凭据或短期任务结果。
 需要参考用户以往的资料时，用 list_user_data 按类别、关键词或日期检索，read_user_data 读取时附带八字断事笔记与关联的命理记录。用户讲到自己或命主已经发生的具体经历时，长期记忆已开启则用 record_user_event 按原话记入档案；旺衰、格局、喜用神、分析结论与待验证的预测是你的判断，只能用 propose_archive_entry 生成保存卡片，由用户决定是否保存。
 最终答复的最后另起一行写 <followups>，其后只写一个用户最可能接着问的问题（不超过 20 字，用用户的口吻），最后一行写 </followups>；向用户提问或任务未完成时不写。`;
 export const AGENT_COMPACTION_FAILED_MESSAGE = "上下文过长且压缩失败，可开启新对话或重新发起任务";
@@ -100,10 +102,6 @@ export { piHistory } from "./history.server";
 
 function waitForCancellation(context: Context): Promise<never> {
   return awaitWithContext(new Promise<never>(() => {}), context);
-}
-
-function delay(ms: number) {
-  return new Promise<"tick">(resolve => setTimeout(() => resolve("tick"), ms));
 }
 
 async function latestSubmission(storage: AgentDurableStorage, root: Conversation, context: Context) {
@@ -152,7 +150,7 @@ async function latestAssistant(root: Conversation, context: Context) {
 
 export async function executeAgentRun(
   store: AgentStore, run: AgentRunRow, shutdown?: AbortSignal,
-  injected?: { streamFn?: PiStreamFn; config?: AIModelConfig; configs?: AIModelConfig[]; now?: () => number; leaseRenewMs?: number; mcpPool?: McpPool; skills?: AgentSkillsSession },
+  injected?: { streamFn?: PiStreamFn; config?: AIModelConfig; configs?: AIModelConfig[]; now?: () => number; leaseRenewMs?: number; mcpPool?: McpPool; skills?: AgentSkillsSession; profiles?: AgentProfileView[] },
 ) {
   const checkpoint: AgentCheckpoint = structuredClone(run.checkpoint);
   if (!isCurrentAgentCheckpoint(checkpoint)) throw new Error("AGENT_ENGINE_UNSUPPORTED");
@@ -163,11 +161,22 @@ export async function executeAgentRun(
   let storage: AgentDurableStorage | undefined, apiKey: string | undefined;
   let mcp: AgentMcpSession | undefined;
   let heartbeat: ReturnType<typeof setInterval> | undefined;
-  let backgroundRefresh: ReturnType<typeof setInterval> | undefined;
+  // Subagents work in their own conversations, which the main conversation's watch does not see: each has its own.
+  const subagentWatches = new Map<number, ConversationWatch>();
+  let followingSubagents = true;
+  const stopSubagentWatches = async () => {
+    followingSubagents = false;
+    await Promise.all([...subagentWatches.values()].map(handle => handle.stop()));
+    subagentWatches.clear();
+  };
   let controlInFlight: Promise<void> = Promise.resolve();
   let projectionInFlight: Promise<void> = Promise.resolve();
   let pollCommands: (() => Promise<void>) | undefined;
   const controlAbort = new AbortController();
+  // A wait for subagents' reports also wakes for the user's messages: the control loop calls these whenever it looks
+  // for commands.
+  let commandWaiters: Array<() => void> = [];
+  const commandsChecked = () => new Promise<"command">(resolve => { commandWaiters.push(() => resolve("command")); });
   let signalPause!: () => void;
   const inputPause = new Promise<"input">(resolve => { signalPause = () => resolve("input"); });
   let signalInterrupted!: () => void;
@@ -241,6 +250,9 @@ export async function executeAgentRun(
         while (!interrupted && !controlAbort.signal.aborted) {
           if (!stopping) await pollCommands?.();
           const received = await signals.next(COMMAND_POLL_MS, controlAbort.signal);
+          const waiters = commandWaiters;
+          commandWaiters = [];
+          for (const wake of waiters) wake();
           if (received.some((signal) => signal.t === "run" && signal.cancel)) requestStop();
           // A resync means notifications may have been lost; ask the database.
           else if (received.some((signal) => signal.t === "resync")) await renewLease();
@@ -309,9 +321,29 @@ export async function executeAgentRun(
       await authorizeModel(selected, member.reasoning);
       configs.set(selected.id, selected);
     }
+    // The roles a member may take, fixed when the task opens as its skills are. A catalog that cannot be read leaves
+    // the specialist, which members were before roles. A test or evaluation run brings its own, or the built-in ones.
+    const membership = (await getUserCreditInfo(run.user_id, {})).membership;
+    const roles = injected ? injected.profiles ?? [...BUILTIN_AGENT_PROFILES] : await availableProfiles(membership).catch(() => {
+      console.warn("[agent-profiles]", { runId: run.id, code: "PROFILES_UNAVAILABLE" });
+      return BUILTIN_AGENT_PROFILES.filter(profile => profile.name === DEFAULT_AGENT_PROFILE);
+    });
+    // A role's own model, when the member's tier may use it; otherwise the role's members keep the model they would have.
+    const roleModels = new Map<string, MemberModel>();
+    for (const profile of run.input.customProvider ? [] : roles) {
+      if (!profile.model) continue;
+      const selected = configs.get(profile.model) ?? injected?.configs?.find(item => item.id === profile.model) ?? await getModelConfigAsync(profile.model);
+      if (!selected || !isModelAllowedForMembership(selected, membership)) continue;
+      const wanted = profile.reasoningEffort === null ? selected.isReasoningDefault === true : profile.reasoningEffort !== 'off';
+      const effort = resolveThinkingLevel(selected, profile.reasoningEffort === 'off' ? null : profile.reasoningEffort);
+      roleModels.set(profile.name, { config: selected, thinkingLevel: wanted && selected.supportsReasoning && isReasoningAllowedForMembership(selected, membership) ? effort : 'off' });
+      configs.set(selected.id, selected);
+    }
     // Each model's own window: a member that reasons with a model gets that model's reasoning limits.
+    const reasons = (id: string) => collaborators.some(member => member.model === id && member.reasoning)
+      || [...roleModels.values()].some(model => model.config.id === id && model.thinkingLevel !== 'off');
     const windows = new Map([...configs.values()].map(selected => [selected.id, selected.id === config.id ? window
-      : resolveModelWindow(selected, collaborators.some(member => member.model === selected.id && member.reasoning))]));
+      : resolveModelWindow(selected, reasons(selected.id))]));
     // 正文增量通道（只用于显示）：模型一吐出文字就推给浏览器，落库仍按快照。
     const tail = { seq: 0, text: '' };
     const bindings: GuardedAgentModel[] = [...configs.values()].map(selected => {
@@ -453,7 +485,7 @@ export async function executeAgentRun(
         ...(structured ? { structuredOutputSchema: AGENT_SCRIPT_RESULT_SCHEMA } : {}),
         execute: async (args, api, toolContext) => {
           if (tool.name === "ask_user") return ask(args as Record<string, unknown>, api, toolContext, tool);
-          const output = await tool.execute(`${api.taskId}:${api.callId}`, args, toolContext.abortSignal);
+          const output = await tool.execute(`${api.taskId}:${api.callId}`, args, toolContext.abortSignal, { member: api.conversationId !== root?.id });
           // 方法卡与技能读进上下文的就是这段文本：按模型计数后记在卡上，上下文卡的「技能」直接读它。
           const details = (tool.name === "load_analysis_method" || tool.name === AGENT_SKILL_TOOLS.load) && output.details && typeof output.details === "object"
             ? { ...output.details, tokens: await countTokens(output.content.map(item => item.type === "text" ? item.text : "").join("")) }
@@ -597,18 +629,24 @@ export async function executeAgentRun(
       ],
     });
     const titles = new Map(tools.map(tool => [tool.name, tool.label]));
-    registry.install(createParallelExtension(registrations, () => harness!, collaborators, configs, titles, run.input.timezone));
-    const background = createBackgroundAgents(registrations, run.input.timezone);
-    registry.install(background.extension);
-    mcp = await openAgentMcp({
-      run, membership: (await getUserCreditInfo(run.user_id, {})).membership, confirm: confirmMcp,
+    // MCP opens before the members are defined: a role may grant them its tools.
+    const servers = mcp = await openAgentMcp({
+      run, membership, confirm: confirmMcp,
       main: conversationId => conversationId === root?.id,
       signal: context.abortSignal!, estimate: text => estimateTokens(config.modelId || config.id, text),
       ...(injected?.mcpPool ? { pool: injected.mcpPool } : {}),
     });
-    if (mcp.extension) registry.install(mcp.extension);
-    if (checkpoint.runtime) checkpoint.runtime.mcp = mcp.runtime;
-    registry.install(createAgentToolSearchExtension(new Map([...titles, ...mcp.titles]), new Map([...titles, ...mcp.searchTitles])));
+    const memberTitles = new Map([...titles, ...servers.titles]);
+    const kit = createMemberKit({
+      roles, models: roleModels, skills: skills?.skills, mcpServers: servers.memberTools,
+      tools: [...registrations, ...(servers.extension?.tools ?? []).filter(tool => servers.memberTools.has(tool.name))],
+    });
+    registry.install(createParallelExtension(kit, () => harness!, collaborators, configs, memberTitles, run.input.timezone));
+    const background = createBackgroundAgents(kit, run.input.timezone);
+    registry.install(background.extension);
+    if (servers.extension) registry.install(servers.extension);
+    if (checkpoint.runtime) checkpoint.runtime.mcp = servers.runtime;
+    registry.install(createAgentToolSearchExtension(memberTitles, new Map([...titles, ...servers.searchTitles])));
     if (run.input.codeMode) registry.install(createAgentCodemodeExtension());
     // The main model's thresholds apply harness-wide; a collaborator with a smaller or larger window compacts by its own.
     const policies = new Map(bindings.map(binding => [binding.model.id, agentCompactionPolicy(windows.get(binding.model.id) ?? null, binding.model.maxTokens)]));
@@ -639,7 +677,7 @@ export async function executeAgentRun(
     root = await harness.root(context, { agent: {
       model: { provider: "taibu", modelId: config.id },
       thinkingLevel: run.input.reasoning ? resolveThinkingLevel(config, run.input.reasoningEffort) : 'off',
-      instructions: run.input.systemPrompt + AGENT_INSTRUCTIONS + (collaborators.length ? `\n本任务启用多模型协作。信息完整后使用 parallel_analysis，让所有下列成员各分析一次，可使用相同术数体系的不同角度。tasks 必须包含全部成员的 agentId；分配任务时把已确认资料和实际命盘依据传给成员，不让子分析猜测。根据每个成员的证据综合回答，明确分歧与不确定性，不能把任一成员结论当作未经核对的事实。成员分工配置：${JSON.stringify(collaborators.map(({ id, name, focus }) => ({ agentId: id, name, focus })))}` : ''),
+      instructions: run.input.systemPrompt + AGENT_INSTRUCTIONS + (collaborators.length ? `\n本任务启用多模型协作。信息完整后使用 parallel_analysis，让所有下列成员各分析一次，可使用相同术数体系的不同角度。tasks 必须包含全部成员的 agentId；分配任务时把已确认资料和实际命盘依据传给成员，不让子分析猜测。根据每个成员的证据综合回答，明确分歧与不确定性，不能把任一成员结论当作未经核对的事实。成员分工配置：${JSON.stringify(collaborators.map(({ id, name, focus, profile }) => ({ agentId: id, name, agent: profile ?? DEFAULT_AGENT_PROFILE, focus })))}` : ''),
     } });
     const enqueued = new Set<number>();
     const readCommands = async (safeBoundary = false) => {
@@ -672,35 +710,56 @@ export async function executeAgentRun(
     if (!checkpoint.durable.seeded) {
       const last = checkpoint.messages.at(-1);
       const history = last?.role === "user" ? checkpoint.messages.slice(0, -1) : checkpoint.messages;
+      // The subagents the conversation kept continue with what they remember, in the roles they had.
+      const seedBackground = await background.prepare(checkpoint.background ?? []);
       checkpoint.durable.seeded = true;
       await root.commit(async tx => {
         for (const message of history) if (message.role !== "system")
           await tx.appendEntry(root!.id, { kind: "taibu.history", model: [message] });
-        // The subagents the conversation kept continue with what they remember.
-        await background.seed(tx, root!.id, checkpoint.background ?? []);
+        await seedBackground(tx, root!.id);
       }, context);
     }
-    let backgroundWorking = false, refreshing = false;
+    // At most one projection waits behind the running one for a subagent's change: it reads everything then.
+    let projectionQueued = false;
     const project = async () => {
+      projectionQueued = false;
       await projectDurableConversation(root!, storage!, checkpoint, toolTitle, context);
-      backgroundWorking = await projectBackgroundAgents(harness!, storage!, checkpoint, titles, context);
+      await projectBackgroundAgents(harness!, storage!, checkpoint, memberTitles, context);
       if (checkpoint.runtime) checkpoint.runtime.usage = projectAgentUsage(await harness!.usage(context));
       await persistProjection();
+      await followSubagents();
     };
-    // One projection at a time: the watch and the background refresh share this line.
+    // One projection at a time: the main conversation's watch and the subagents' share this line.
     const reproject = () => (projectionInFlight = projectionInFlight.catch(() => {}).then(project));
+    /** Watches each subagent the conversation keeps; what one says or does reprojects its card. */
+    const followSubagents = async () => {
+      const kept = await backgroundConversations(harness!, root!.id, context);
+      for (const [id, handle] of subagentWatches) if (!kept.includes(id)) {
+        subagentWatches.delete(id);
+        await handle.stop();
+      }
+      for (const id of kept) {
+        if (!followingSubagents || subagentWatches.has(id)) continue;
+        const handle = await (await harness!.conversation(id as ConversationId, context))?.watch(context);
+        if (!handle) continue;
+        subagentWatches.set(id, handle);
+        let seen = "";
+        handle.start(async view => {
+          // Streamed text alone changes no card; a new or finished step, input or answer is a new entry.
+          const key = `${view.entries.length}:${view.entries.at(-1)?.id ?? ""}`;
+          if (key === seen) return;
+          seen = key;
+          if (projectionQueued || interrupted) return;
+          projectionQueued = true;
+          try { await reproject(); } catch { interrupt(); }
+        });
+      }
+    };
     watch = await root.watch(context);
     await project();
     watch.start(async () => {
       try { await reproject(); } catch { interrupt(); }
     });
-    // Subagents work in their own conversations, which the watch does not see: refresh their cards while they do.
-    backgroundRefresh = setInterval(() => {
-      if (!backgroundWorking || refreshing || interrupted) return;
-      refreshing = true;
-      reproject().catch(() => interrupt()).finally(() => { refreshing = false; });
-    }, BACKGROUND_POLL_MS);
-    backgroundRefresh.unref();
     let compacted: Awaited<ReturnType<typeof manualCompactionOutcome>> | undefined;
     if (stopping || parked) {
       await root.abort(context, { background: true });
@@ -730,10 +789,17 @@ export async function executeAgentRun(
         if (await readCommands(true)) { harness.resume(); continue; }
         // Subagents report as new input to the idle main conversation; the task stays open until every report is in,
         // and follow-ups the user sends meanwhile are delivered at once.
-        if (!(await pendingBackgroundReports(harness, storage, root.id, context))) break;
-        const waited = await Promise.race([delay(BACKGROUND_POLL_MS), inputPause, interruption]);
-        if (waited === 'interrupted' || interrupted) return;
-        if (waited === 'input') break;
+        const reporters = await pendingBackgroundReporters(harness, storage, root.id, context);
+        if (!reporters.length) break;
+        const reports = withCancel(context);
+        try {
+          const reported = Promise.race(reporters.map(id => harness!.waitForTask(id, reports.context))).then(() => 'report' as const, () => 'report' as const);
+          const waited = await Promise.race([reported, commandsChecked(), inputPause, interruption]);
+          if (waited === 'interrupted' || interrupted) return;
+          if (waited === 'input') break;
+        } finally {
+          reports.cancel();
+        }
       }
     }
     controlAbort.abort();
@@ -743,8 +809,8 @@ export async function executeAgentRun(
     if (!checkpoint.question && !stopping)
       await Promise.race([harness.waitForIdle(context), inputPause, interruption]);
     if (interrupted) return;
-    clearInterval(backgroundRefresh);
     await watch.stop();
+    await stopSubagentWatches();
     await projectionInFlight;
     await project();
     // The next task that continues this context recreates the subagents with what they remember.
@@ -779,8 +845,8 @@ export async function executeAgentRun(
   } catch (error) {
     if (interrupted || shutdown?.aborted || storage?.isUnavailable) return;
     if (error instanceof Error && /AGENT_LEASE_LOST|AGENT_DURABLE_CONFLICT/.test(error.message)) return;
-    if (backgroundRefresh) clearInterval(backgroundRefresh);
     await watch?.stop();
+    await stopSubagentWatches();
     await harness?.close(BACKGROUND_CONTEXT).catch(() => {});
     harness = undefined;
     await writeLine;
@@ -789,8 +855,8 @@ export async function executeAgentRun(
   } finally {
     controlAbort.abort();
     if (heartbeat) clearInterval(heartbeat);
-    if (backgroundRefresh) clearInterval(backgroundRefresh);
     await watch?.stop();
+    await stopSubagentWatches();
     await harness?.close(BACKGROUND_CONTEXT).catch(() => {});
     scope.cancel();
     shutdown?.removeEventListener("abort", onShutdown);

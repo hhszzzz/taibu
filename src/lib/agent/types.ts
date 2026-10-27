@@ -85,10 +85,14 @@ export interface AgentRuntimeInfo {
   usage?: { models: Record<string, Partial<Pick<Usage, 'input' | 'output' | 'cacheRead' | 'cacheWrite' | 'totalTokens' | 'reasoning'>>>; tools: Record<string, Partial<Pick<Usage, 'input' | 'output' | 'cacheRead' | 'cacheWrite' | 'totalTokens' | 'reasoning'>>>; totalTokens: number };
 }
 
-/** A background subagent carried into the next task: its name, system and condensed transcript. */
+/**
+ * A background subagent carried into the next task: its name, role, the method card it was given and its condensed
+ * transcript. A subagent without a role is a specialist.
+ */
 export interface AgentBackgroundResident {
   name: string;
-  system: string;
+  profile?: string;
+  system?: string;
   messages: Message[];
 }
 
@@ -141,11 +145,14 @@ export interface DomainToolResult<T = unknown> {
   usage?: Usage;
 }
 
+/** Who made a call: a collaboration member or background subagent rather than the main agent. */
+export type DomainToolCaller = { member?: boolean };
+
 /** Business tools have no dependency on an agent loop implementation. */
 export interface DomainTool<T extends TSchema = TSchema, R = unknown> extends Tool<T> {
   label: string;
   replay?: "safe";
-  execute(callId: string, args: Static<T>, signal?: AbortSignal): Promise<DomainToolResult<R>>;
+  execute(callId: string, args: Static<T>, signal?: AbortSignal, caller?: DomainToolCaller): Promise<DomainToolResult<R>>;
 }
 
 export interface AgentRunView {

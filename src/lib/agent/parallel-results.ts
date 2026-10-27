@@ -13,7 +13,11 @@ export type ParallelMemberStep = {
 };
 
 export type ParallelAnalysisResult = {
-  system: string;
+  /** The method card the member was given; a role that reads no chart may have none. */
+  system?: string;
+  /** The member's role (profiles/config.ts) and its name when the member started. */
+  profile?: string;
+  profileName?: string;
   conversationId: number;
   status: 'running' | 'completed' | 'failed';
   agentId?: string;
@@ -49,7 +53,7 @@ export const memberAnswerText = (answer: string) => answer.replace(ARTIFACT_ID_M
 export type ParallelTopic = { title: string; options?: string[] };
 
 export const PARALLEL_TOPIC_LIMIT = 4;
-const OPTIONAL_TEXT = ['agentId', 'name', 'modelName', 'model', 'vendor', 'reasoningEffort', 'focus', 'answer'] as const;
+const OPTIONAL_TEXT = ['system', 'profile', 'profileName', 'agentId', 'name', 'modelName', 'model', 'vendor', 'reasoningEffort', 'focus', 'answer'] as const;
 const STEP_STATES: readonly string[] = ['running', 'completed', 'failed'] satisfies ParallelMemberStep['status'][];
 const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const isCount = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
@@ -63,8 +67,7 @@ export function parallelAnalysisResults(value: unknown): ParallelAnalysisResult[
   if (!isRecord(value)) return [];
   const analyses = value.analyses;
   if (!Array.isArray(analyses) || analyses.length > 4) return [];
-  return analyses.filter((item): item is ParallelAnalysisResult => isRecord(item) &&
-    typeof item.system === 'string' && typeof item.conversationId === 'number' &&
+  return analyses.filter((item): item is ParallelAnalysisResult => isRecord(item) && typeof item.conversationId === 'number' &&
     ['running', 'completed', 'failed'].includes(item.status as string) &&
     OPTIONAL_TEXT.every(key => item[key] === undefined || typeof item[key] === 'string'))
     // Display-only fields are dropped when malformed; the member itself stays.
@@ -75,6 +78,11 @@ export function parallelAnalysisResults(value: unknown): ParallelAnalysisResult[
       ...(isCount(durationMs) ? { durationMs } : {}),
       ...(Array.isArray(steps) && steps.every(isMemberStep) ? { steps } : {}),
     }));
+}
+
+/** What a member is called on its card: the name it was given, else its role, else its method card. */
+export function parallelMemberName(member: Pick<ParallelAnalysisResult, 'name' | 'profileName' | 'system'>): string {
+  return member.name ?? member.profileName ?? member.system ?? '成员';
 }
 
 /** Topics the parent asked members to take a stance on; malformed topics are ignored. */

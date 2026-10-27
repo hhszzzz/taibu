@@ -1,0 +1,13 @@
+/* Agent roles (admin): the list reuses the MCP settings' rules (mcp-settings.css); these are the editor's grant rows
+   and check groups. */
+.profile-name { font-size: .8125rem; font-weight: 400; color: var(--foreground-tertiary); }
+.app-modal.profile-editor { width: min(720px, calc(100vw - 32px)); }
+.profile-grants { display: flex; flex-direction: column; max-height: 20rem; overflow: auto; border: 1px solid var(--border); border-radius: .5rem; }
+.profile-grants li { display: grid; grid-template-columns: minmax(0, 1fr) 7.5rem; align-items: center; gap: .75rem; padding: .5rem .5rem .5rem .75rem; border-top: 1px solid var(--fill-field); }
+.profile-grants li:first-child { border-top: 0; }
+.profile-grants li > span { display: flex; min-width: 0; flex-direction: column; gap: .125rem; }
+.profile-grants strong { font-size: .8125rem; font-weight: 500; color: var(--foreground); }
+.profile-grants small { overflow: hidden; font-size: .75rem; text-overflow: ellipsis; white-space: nowrap; color: var(--foreground-tertiary); }
+.profile-editor .profile-grants .settings-select { height: 2rem; font-size: .8125rem; }
+.profile-checks { display: flex; flex-wrap: wrap; gap: .5rem 1rem; }
+.profile-checks code { font-size: .8125rem; }

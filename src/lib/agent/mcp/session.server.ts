@@ -32,6 +32,11 @@ export type AgentMcpSession = {
   titles: ReadonlyMap<string, string>;
   /** What `tool_search` matches besides the name: the title, the configured keywords and the server's name. */
   searchTitles: ReadonlyMap<string, string>;
+  /**
+   * The tools a role may grant a member, with their platform service's name (null: the user's own connector). A tool
+   * that asks the user first is left out, as a member cannot ask, and so is one only scripts may call.
+   */
+  memberTools: ReadonlyMap<string, string | null>;
   runtime?: AgentMcpRuntime;
   /** Servers left out of this task, with the reason already free of secrets. */
   skipped: Array<{ id: string; name: string; reason: string }>;
@@ -93,7 +98,7 @@ export async function openAgentMcp(options: {
   estimate?: (text: string) => number;
 }): Promise<AgentMcpSession> {
   const { run } = options;
-  const empty: AgentMcpSession = { titles: new Map(), searchTitles: new Map(), skipped: [] };
+  const empty: AgentMcpSession = { titles: new Map(), searchTitles: new Map(), memberTools: new Map(), skipped: [] };
   if (!run.input.webEnabled) return empty;
   if ((await readFeatureModuleStateFresh(toAgentToolScopeFeatureId('web'))).status !== 'enabled') return empty;
   const rows = await availableMcpServers(run.user_id, options.membership, { codeMode: run.input.codeMode === true });
@@ -120,6 +125,7 @@ export async function openAgentMcp(options: {
   const authorize = authorizer(run.user_id);
   const tools: ToolRegistration[] = [], specs: McpToolSpec[] = [];
   const titles = new Map<string, string>(), searchTitles = new Map<string, string>();
+  const memberTools = new Map<string, string | null>();
   const servers: Array<{ row: McpServerRow; prefix: string }> = [];
   const taken = new Set<string>();
   for (const entry of described) {
@@ -147,6 +153,7 @@ export async function openAgentMcp(options: {
       tools.push(defineMcpTool(spec, { pool, authorize, confirm: options.confirm }));
       titles.set(name, title);
       searchTitles.set(name, [title, policy?.keywords, row.display_name].filter(Boolean).join(' '));
+      if (!spec.confirm && exposure !== 'codemode') memberTools.set(name, row.owner_id === null ? row.name : null);
       registered++;
     }
     if (registered) servers.push({ row, prefix });
@@ -166,7 +173,7 @@ export async function openAgentMcp(options: {
   ].join('\n');
   const section: PromptSection = {
     key: 'taibu_mcp_servers',
-    // Members of a parallel analysis keep the extension but have none of these tools, and were never to have them.
+    // A member or subagent reads only the services whose tools its role grants it.
     render: (input) => {
       const names = new Set([...input.agent.tools, ...input.agent.deferred, ...input.agent.callable].map((tool) => tool.name));
       const offered = servers.filter(({ prefix }) => [...names].some((name) => name.startsWith(prefix)));
@@ -177,7 +184,7 @@ export async function openAgentMcp(options: {
   const direct = specs.filter((spec) => spec.exposure === 'direct');
   return {
     extension: { name: 'taibu_mcp', tools, sections: [section] },
-    titles, searchTitles, skipped,
+    titles, searchTitles, memberTools, skipped,
     runtime: {
       servers: servers.length,
       skipped: skipped.length,

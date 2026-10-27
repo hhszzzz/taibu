@@ -17,6 +17,8 @@ import { createAgentTools } from '../lib/agent/tools.server';
 import type { SkillRow } from '../lib/agent/skills/store.server';
 import { createParallelExtension } from '../lib/agent/parallel.server';
 import { createBackgroundAgents } from '../lib/agent/background.server';
+import { BUILTIN_AGENT_PROFILES } from '../lib/agent/profiles/config';
+import { createMemberKit } from '../lib/agent/profiles/members.server';
 import { executeAgentRun } from '../lib/agent/runtime.server';
 import { config, MemoryStore, row, scripted } from './helpers/agent-runtime-fixture';
 
@@ -56,8 +58,9 @@ test('every Core tool and every registered Agent tool belongs to a presentation 
       skills: { skills: [skill], section: { key: 'taibu_skills', render: () => undefined }, sectionText: '' },
     });
     for (const name of Object.values(AGENT_SKILL_TOOLS)) assert.equal(getAgentToolFamily(name), 'skill', name);
-    const parallel = createParallelExtension([], () => { throw new Error('the harness is not opened in this test'); });
-    const background = createBackgroundAgents([]).extension;
+    const kit = createMemberKit({ roles: BUILTIN_AGENT_PROFILES, tools: [] });
+    const parallel = createParallelExtension(kit, () => { throw new Error('the harness is not opened in this test'); });
+    const background = createBackgroundAgents(kit).extension;
     const names = [...tools.map((tool) => tool.name), ...[...parallel.tools ?? [], ...background.tools ?? []].map((tool) => tool.name)];
     assert.ok(names.includes('web_search') && names.includes('remember_user_fact') && names.includes('parallel_analysis') && names.includes(AGENT_BACKGROUND_TOOL));
     assert.ok(names.includes('web_fetch'), 'a page service offers the page read');

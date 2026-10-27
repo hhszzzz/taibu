@@ -14,4 +14,5 @@ export const queryKeys = {
   models: (userId?: string | null, options?: { vision?: boolean; membershipType?: string | null }) => ['models', userId ?? 'visitor', options?.membershipType ?? 'free', options?.vision === true ? 'vision' : 'chat'] as const,
   modelsPrefix: () => ['models'] as const,
   agentArchive: (runId: string, callId: string) => ['agent', 'archive', runId, callId] as const,
+  agentProfiles: (userId?: string | null, membershipType?: string | null) => ['agent', 'profiles', userId ?? 'visitor', membershipType ?? 'free'] as const,
 } as const;

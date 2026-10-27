@@ -20,7 +20,7 @@ import { describeQuestionAnswer, getDraftAnswers } from '@/lib/agent/question-dr
 import { useQuestionDraft } from '@/lib/agent/use-question-draft';
 import { getBranchElement, getElementColor, getStemElement } from '@/lib/divination/display-helpers';
 import {
-    getParallelDivergence, memberAnswerText, parallelAnalysisResults, parallelAnalysisTitle, parallelAnalysisTopics,
+    getParallelDivergence, memberAnswerText, parallelAnalysisResults, parallelAnalysisTitle, parallelAnalysisTopics, parallelMemberName,
     type ParallelAnalysisResult, type ParallelMemberStep, type ParallelTopic,
 } from '@/lib/agent/parallel-results';
 import { REASONING_EFFORT_LABELS } from '@/lib/chat/model-settings';
@@ -37,6 +37,7 @@ import { PrivateAttachmentPreview } from './PrivateAttachments';
 import { ChartMiniPreview } from './chart-preview';
 import { CalculationResult } from './AgentCalculationViews';
 import { ModelAvatar } from './ModelAvatar';
+import { MemberRoleBadge } from './MemberRoleBadge';
 import './agent-workspace.css';
 
 type ToolViewProps = { tool: AgentToolPart; runStatus: AgentRunStatus };
@@ -661,7 +662,7 @@ export function MemberView({ tool, member, runStatus, step }: ToolViewProps & { 
     const id = useId();
     const call = getAgentToolState(tool, runStatus).status;
     const state = getParallelMemberState(member, call);
-    const name = member.name ?? member.system;
+    const name = parallelMemberName(member);
     const answer = member.answer && memberAnswerText(member.answer);
     const positions = Object.entries(member.positions ?? {});
     // A background subagent works on the message the main agent sent it, and reports back when it is done.
@@ -674,7 +675,7 @@ export function MemberView({ tool, member, runStatus, step }: ToolViewProps & { 
             <ModelAvatar member={member} size={22} className="agent-ws-member-hero-icon" />
             <div className="agent-ws-member-hero-text">
                 <p className="agent-ws-kicker">{background ? kickerOf(step, '后台子分析', '在后台独立工作，完成后回报主模型') : kickerOf(step, '协作成员', '独立分析，结论由主模型汇总')}</p>
-                <h2 id={id} className="agent-ws-member-title">{name}</h2>
+                <h2 id={id} className="agent-ws-member-title">{name}<MemberRoleBadge member={member} /></h2>
                 <p className="agent-ws-member-meta">
                     <span>{meta}</span>
                     <span className="agent-ws-member-page-status" data-state={state.state}>
@@ -711,7 +712,7 @@ function DivergenceTable({ topics, members, call }: { topics: ParallelTopic[]; m
         <h3 id={id}>分歧对照 <span>主模型汇总前</span></h3>
         <div className="agent-ws-table-scroll" tabIndex={0} aria-label="各成员对议题的立场">
             <table className="agent-ws-table">
-                <thead><tr><th scope="col">议题</th>{members.map(member => <th key={member.conversationId} scope="col">{member.name ?? member.system}</th>)}</tr></thead>
+                <thead><tr><th scope="col">议题</th>{members.map(member => <th key={member.conversationId} scope="col">{parallelMemberName(member)}</th>)}</tr></thead>
                 <tbody>{rows.map(row => <tr key={row.topic.title} data-divergent={row.divergent || undefined}>
                     <th scope="row">{row.topic.title}{row.divergent && <span className="sr-only">（成员有分歧）</span>}</th>
                     {row.stances.map((stance, index) => <td key={members[index].conversationId} data-empty={stance === null || undefined}>
@@ -740,7 +741,7 @@ export function CollaborationView({ tool, runStatus, step, onOpenMember }: ToolV
         </WorkspaceViewHeading>
         {!members.length ? <WorkspaceToolPending tool={tool} runStatus={runStatus} running="正在分派协作成员…" />
             : members.map(member => {
-                const name = member.name ?? member.system;
+                const name = parallelMemberName(member);
                 const state = getParallelMemberState(member, call);
                 const titled = member.focus && member.focus.length <= FOCUS_IN_TITLE;
                 // 有过程的成员在过程行里报调用次数与用时；旧记录只有计数，仍写在模型一行。
@@ -751,7 +752,7 @@ export function CollaborationView({ tool, runStatus, step, onOpenMember }: ToolV
                     <div className="agent-ws-member-head">
                         <ModelAvatar member={member} size={18} className="agent-ws-member-avatar" />
                         <div>
-                            <h3 id={`${id}-${member.conversationId}`}>{titled ? `${name} · ${member.focus}` : name}</h3>
+                            <h3 id={`${id}-${member.conversationId}`}>{titled ? `${name} · ${member.focus}` : name}<MemberRoleBadge member={member} /></h3>
                             <p>{meta}</p>
                         </div>
                         <span className="agent-member-status" data-state={state.state}>

@@ -1,4 +1,5 @@
 import { AI_REASONING_EFFORTS, type AIReasoningEffort } from '@/types';
+import { AGENT_PROFILE_NAME_PATTERN } from '@/lib/agent/profiles/config';
 
 export const REASONING_EFFORT_LABELS: Record<AIReasoningEffort, string> = {
   minimal: '最低', low: '低', medium: '中', high: '高', xhigh: '很高', max: '最高',
@@ -11,6 +12,8 @@ export interface AgentCollaborator {
   focus: string;
   reasoning: boolean;
   reasoningEffort: AIReasoningEffort | null;
+  /** The member's role (profiles/config.ts); absent: the specialist. */
+  profile?: string;
 }
 
 export interface NextTaskConfiguration {
@@ -48,14 +51,15 @@ export function parseAgentCollaborators(value: unknown): AgentCollaborator[] {
   const ids = new Set<string>();
   return value.map(item => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error('协作 Agent 配置无效');
-    const { id, name, model, focus, reasoning } = item as Record<string, unknown>;
+    const { id, name, model, focus, reasoning, profile } = item as Record<string, unknown>;
     if (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(id) || ids.has(id) ||
       typeof name !== 'string' || !name.trim() || name.length > 60 ||
       typeof model !== 'string' || !model.trim() || model.length > 200 ||
-      typeof focus !== 'string' || focus.length > 1200 || typeof reasoning !== 'boolean') throw new Error('协作 Agent 配置无效');
+      typeof focus !== 'string' || focus.length > 1200 || typeof reasoning !== 'boolean' ||
+      (profile !== undefined && (typeof profile !== 'string' || !AGENT_PROFILE_NAME_PATTERN.test(profile)))) throw new Error('协作 Agent 配置无效');
     ids.add(id);
     return { id, name: name.trim(), model: model.trim(), focus: focus.trim(), reasoning,
-      reasoningEffort: parseReasoningEffort((item as Record<string, unknown>).reasoningEffort) };
+      reasoningEffort: parseReasoningEffort((item as Record<string, unknown>).reasoningEffort), ...(profile === undefined ? {} : { profile }) };
   });
 }
 

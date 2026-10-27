@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { listToolDefinitions } from 'taibu-core/mcp';
 import { ANALYSIS_METHODS, loadAnalysisMethod } from '../lib/agent/methods.server';
-import { PARALLEL_SYSTEMS, memberInstructions, systemTitle } from '../lib/agent/parallel.server';
+import { PARALLEL_SYSTEMS } from '../lib/agent/parallel.server';
+import { memberInstructions, systemTitle } from '../lib/agent/profiles/members.server';
 
 const LIMIT = '\n计算必须调用 Core 工具；方法包不授予工具、联网或会员权限。';
 
@@ -34,5 +35,5 @@ test('collaboration members work with a chart-reading card, a school as well as 
     assert.equal(systemTitle('bazi-mangpai'), '盲派八字');
     assert.equal(systemTitle('unknown'), 'unknown');
     // A school member loads its own card, not the system default.
-    assert.match(memberInstructions('你是盲派专项分析助手。', 'bazi-mangpai'), /加载 bazi-mangpai（盲派八字）方法卡/);
+    assert.match(memberInstructions({ identity: '你是盲派专项分析助手。', profile: { instructions: '' }, system: 'bazi-mangpai', tools: ['bazi', 'load_analysis_method'] }), /加载 bazi-mangpai（盲派八字）方法卡/);
 });

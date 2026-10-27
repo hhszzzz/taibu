@@ -457,6 +457,8 @@ button.agent-step-entity:hover .agent-step-entity-go { color: var(--foreground-s
 .agent-member-status[data-state="completed"] { color: var(--chat-success); }
 .agent-member-status[data-state="running"] { color: var(--accent-hover); }
 .agent-member-status[data-state="failed"] { color: var(--danger); }
+.agent-member-role { display: inline-flex; flex-shrink: 0; align-items: center; height: calc(18 / 16 * 1rem); margin-left: 6px; padding: 0 6px; border-radius: 999px; background: var(--fill-field); font-size: calc(11.5 / 16 * 1rem); font-weight: 400; line-height: 1; color: var(--foreground-secondary); white-space: nowrap; vertical-align: middle; }
+.agent-step-entity-line > .agent-member-role { margin-left: 0; align-self: center; }
 .agent-collaboration-answer { padding: 12px 14px; border-top: 1px solid var(--border); font-size: calc(14 / 16 * 1rem); }
 .agent-error { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--background-secondary); color: var(--danger); font-size: calc(13 / 16 * 1rem); line-height: 1.6; overflow-wrap: anywhere; }
 .agent-error > svg { flex-shrink: 0; margin-top: 3px; }

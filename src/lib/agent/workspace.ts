@@ -16,7 +16,7 @@ import { AGENT_BACKGROUND_TOOL, AGENT_CHART_NAMES, AGENT_SUBMIT_PLAN_TOOL, getAg
 import { getAgentChart, getAgentDataResults, getAgentMethod, getAgentAttachmentRead, type AgentToolPart } from './tool-presentation';
 import { CHART_SOURCE_KINDS, getAgentChartReference, getChartFocus, parseChartReference } from './chart-interaction';
 import { getAgentEvidence, type AgentEvidence } from './evidence';
-import { parallelAnalysisResults, parallelAnalysisTitle } from './parallel-results';
+import { parallelAnalysisResults, parallelAnalysisTitle, parallelMemberName } from './parallel-results';
 
 export type AgentWorkspaceSection = 'results';
 /** 工作区只有「概览」：任务执行过程在聊天转录里（claude TurnStatus），不再占一个标签。 */
@@ -177,14 +177,14 @@ export function buildAgentWorkspace({ parts, artifacts, attachmentIds }: { parts
           // A message to a background subagent is that subagent's page for this message; status and stop have none.
           const [member] = parallelAnalysisResults(tool.output);
           if (member) add('member:' + tool.id + ':' + member.conversationId,
-            { view: 'member', family, title: member.name ?? member.system, member: { toolId: tool.id, conversationId: member.conversationId } }, tool);
+            { view: 'member', family, title: parallelMemberName(member), member: { toolId: tool.id, conversationId: member.conversationId } }, tool);
           else add('tool:' + tool.id, { view: 'tool', family, title: tool.title }, tool);
           break;
         }
         add('tool:' + tool.id, { view: 'collaboration', family, title: parallelAnalysisTitle(tool.output) ?? '协作分析' }, tool);
         // 每位成员单独一页：点成员名直接打开它的分析过程与结论，和命盘页并列。
         for (const member of parallelAnalysisResults(tool.output)) {
-          const name = member.name ?? member.system;
+          const name = parallelMemberName(member);
           add('member:' + tool.id + ':' + member.conversationId,
             { view: 'member', family, title: name, member: { toolId: tool.id, conversationId: member.conversationId } });
         }

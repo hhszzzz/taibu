@@ -1,5 +1,5 @@
 /**
- * 设置中心的管理页：公告、功能与激活码、AI 服务（含 Agent 任务排障）、Agent 扩展（MCP 服务、技能与用户扩展策略）
+ * 设置中心的管理页：公告、功能与激活码、AI 服务（含 Agent 任务排障）、Agent 扩展（MCP 服务、技能、智能体角色与用户扩展策略）
  *
  * 'use client' 标记说明：
  * - 子页跟随路由切换，需要 useState / useEffect 记住访问过的子页并保留其状态
@@ -42,6 +42,9 @@ const LazyAgentMcpPanel = lazy(async () => ({
 const LazyAgentSkillsPanel = lazy(async () => ({
   default: (await import('@/components/admin/AgentSkillsPanel')).AgentSkillsPanel,
 }));
+const LazyAgentProfilesPanel = lazy(async () => ({
+  default: (await import('@/components/admin/AgentProfilesPanel')).AgentProfilesPanel,
+}));
 const LazyAgentExtensionsPolicyPanel = lazy(async () => ({
   default: (await import('@/components/admin/AgentExtensionsPolicyPanel')).AgentExtensionsPolicyPanel,
 }));
@@ -49,7 +52,7 @@ const LazyAgentExtensionsPolicyPanel = lazy(async () => ({
 type AdminSubtabOwner = 'admin-features' | 'admin-ai-services' | 'admin-agent-extensions';
 type AdminFeatureTab = 'toggles' | 'keys';
 type AdminAITab = 'models' | 'gateways' | 'agent-tasks';
-type AdminExtensionsTab = 'mcp' | 'skills' | 'policy';
+type AdminExtensionsTab = 'mcp' | 'skills' | 'profiles' | 'policy';
 
 const FEATURE_TABS: SettingsTabOption<AdminFeatureTab>[] = [
   { id: 'toggles', label: '功能开关' },
@@ -65,6 +68,7 @@ const AI_TABS: SettingsTabOption<AdminAITab>[] = [
 const EXTENSIONS_TABS: SettingsTabOption<AdminExtensionsTab>[] = [
   { id: 'mcp', label: 'MCP 服务' },
   { id: 'skills', label: '技能' },
+  { id: 'profiles', label: '角色' },
   { id: 'policy', label: '用户扩展' },
 ];
 
@@ -85,7 +89,7 @@ function resolveAdminAITab(value: string | null | undefined): AdminAITab {
 }
 
 function resolveAdminExtensionsTab(value: string | null | undefined): AdminExtensionsTab {
-  return value === 'policy' || value === 'skills' ? value : 'mcp';
+  return value === 'policy' || value === 'skills' || value === 'profiles' ? value : 'mcp';
 }
 
 function useResolvedSettingsCenterSubtab<T extends string>(
@@ -164,7 +168,9 @@ const renderAIPanel = (tab: AdminAITab, active: boolean) => (
   tab === 'models' ? <LazyAIModelPanel /> : tab === 'gateways' ? <LazyAIGatewayPanel /> : <LazyAgentTaskPanel active={active} />
 );
 const renderExtensionsPanel = (tab: AdminExtensionsTab) => (
-  tab === 'mcp' ? <LazyAgentMcpPanel /> : tab === 'skills' ? <LazyAgentSkillsPanel /> : <LazyAgentExtensionsPolicyPanel />
+  tab === 'mcp' ? <LazyAgentMcpPanel />
+    : tab === 'skills' ? <LazyAgentSkillsPanel />
+      : tab === 'profiles' ? <LazyAgentProfilesPanel /> : <LazyAgentExtensionsPolicyPanel />
 );
 
 export function AdminAnnouncementsContent() {

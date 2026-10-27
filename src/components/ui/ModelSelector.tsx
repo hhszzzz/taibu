@@ -122,7 +122,7 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
         if (!onCollaboratorsChange) return;
         const existing = collaborators.find(member => member.model === model.id);
         if (!existing && collaborationFull) return;
-        // 个性化里为该模型配置过的名称、努力程度与分工作为模板；勾选只影响当前对话，不改设置。
+        // 个性化里为该模型配置过的名称、角色、努力程度与分工作为模板；勾选只影响当前对话，不改设置。
         const template = collaborationPreset.members.find(member => member.model === model.id);
         const next = existing
             ? collaborators.filter(member => member.model !== model.id)
@@ -133,6 +133,7 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
                 focus: template?.focus ?? '',
                 reasoning: template?.reasoning ?? (!!model.isReasoningDefault && model.reasoningAllowed !== false),
                 reasoningEffort: template?.reasoningEffort ?? null,
+                ...(template?.profile ? { profile: template.profile } : {}),
             } satisfies AgentCollaborator];
         onCollaboratorsChange(next);
     };

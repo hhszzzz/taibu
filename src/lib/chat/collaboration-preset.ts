@@ -1,7 +1,7 @@
 /**
  * 多模型协作预设（claude「多模型协作」放在设置里编辑；模型菜单只保留勾选开关）。
  *
- * 预设按用户存 localStorage：成员名称 / 模型 / 分工 / 推理档位。
+ * 预设按用户存 localStorage：成员名称 / 角色 / 模型 / 分工 / 推理档位。
  * 聊天页的模型菜单读取同一份预设来装载协作成员；设置页负责编辑。
  *
  * 'use client' 标记说明：
@@ -39,6 +39,7 @@ function parse(value: unknown): CollaborationPreset {
             focus: typeof member.focus === 'string' ? member.focus : '',
             reasoning: member.reasoning === true,
             reasoningEffort: typeof member.reasoningEffort === 'string' ? member.reasoningEffort as AgentCollaborator['reasoningEffort'] : null,
+            ...(typeof member.profile === 'string' ? { profile: member.profile } : {}),
         }];
     }).slice(0, 4) : [];
     return { enabled: input.enabled === true, members, updatedAt: typeof input.updatedAt === 'number' && Number.isFinite(input.updatedAt) ? input.updatedAt : 0 };

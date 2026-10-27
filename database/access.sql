@@ -91,6 +91,10 @@ CREATE POLICY agent_mcp_servers_owner ON public.agent_mcp_servers TO authenticat
 
 CREATE POLICY agent_mcp_servers_worker_read ON public.agent_mcp_servers FOR SELECT TO authenticated USING (public.is_admin_user());
 
+ALTER TABLE public.agent_profiles ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY agent_profiles_admin_all ON public.agent_profiles TO authenticated USING (( SELECT public.is_admin_user() AS is_admin_user)) WITH CHECK (( SELECT public.is_admin_user() AS is_admin_user));
+
 ALTER TABLE public.agent_skill_files ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY agent_skill_files_admin_platform ON public.agent_skill_files TO authenticated USING ((( SELECT public.is_admin_user() AS is_admin_user) AND (EXISTS ( SELECT 1
@@ -669,6 +673,8 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.activation_keys TO anon;
 GRANT SELECT ON TABLE public.agent_attachment_refs TO authenticated;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.agent_mcp_servers TO authenticated;
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.agent_profiles TO authenticated;
 
 GRANT SELECT ON TABLE public.agent_run_credentials TO authenticated;
 

@@ -6,7 +6,7 @@ import { AGENT_ARCHIVE_KIND_LABELS, getAgentArchiveProposal, getAgentArchiveReco
 import { getChartFocus, getChartTargets } from '@/lib/agent/chart-interaction';
 import { getSavedChartHref } from '@/lib/agent/chart-save';
 import type { AgentWorkspaceModel } from '@/lib/agent/workspace';
-import { parallelAnalysisResults, type ParallelAnalysisResult } from '@/lib/agent/parallel-results';
+import { parallelAnalysisResults, parallelMemberName, type ParallelAnalysisResult } from '@/lib/agent/parallel-results';
 import { countAgentEvidence, getAgentCitationLabels, getAgentEvidence } from '@/lib/agent/evidence';
 import { getCitedParagraphs } from '@/lib/chat/markdown-citations';
 import { mentionTypeLabels } from '@/components/chat/mentionStyles';
@@ -61,7 +61,7 @@ export function getAgentActivityLabel(data: AgentMessageData) {
 
 /** Members still analysing on member cards, by name, each once. */
 function analysingMembers(tools: readonly AgentTool[]): string[] {
-    return [...new Set(tools.flatMap(tool => parallelAnalysisResults(tool.output).filter(member => member.status === 'running').map(member => member.name ?? member.system)))];
+    return [...new Set(tools.flatMap(tool => parallelAnalysisResults(tool.output).filter(member => member.status === 'running').map(parallelMemberName)))];
 }
 
 /**
@@ -269,7 +269,7 @@ export function summarizeAgentTool(tool: AgentTool): string | null {
     if (tool.name === 'read_user_data') return getAgentDataTypeLabel(args.type);
     if (tool.name === 'parallel_analysis') {
         const members = parallelAnalysisResults(tool.output);
-        const names = members.length ? members.map(member => member.name ?? member.system)
+        const names = members.length ? members.map(parallelMemberName)
             : Array.isArray(args.tasks) ? args.tasks.flatMap(task => task && typeof task === 'object' && typeof (task as { name?: unknown }).name === 'string' ? [(task as { name: string }).name] : []) : [];
         return names.length ? formatMemberNames(names) : null;
     }

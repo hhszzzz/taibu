@@ -74,6 +74,23 @@ export interface AgentMcpServers {
   updated_at: Generated<string>;
 }
 
+export interface AgentProfiles {
+  name: ColumnType<string, string, string>;
+  display_name: ColumnType<string, string, string>;
+  description: Generated<string>;
+  instructions: Generated<string>;
+  tools: Generated<Json>;
+  skills: Generated<unknown>;
+  model: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  reasoning_effort: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  modes: Generated<unknown>;
+  required_tier: Generated<string>;
+  is_enabled: Generated<boolean>;
+  sort_order: Generated<number>;
+  created_at: Generated<string>;
+  updated_at: Generated<string>;
+}
+
 export interface AgentRunArtifacts {
   id: Generated<string>;
   run_id: ColumnType<string, string, string>;
@@ -754,6 +771,7 @@ export interface DB {
   "agent_attachments": AgentAttachments;
   "agent_durable_commits": AgentDurableCommits;
   "agent_mcp_servers": AgentMcpServers;
+  "agent_profiles": AgentProfiles;
   "agent_run_artifacts": AgentRunArtifacts;
   "agent_run_commands": AgentRunCommands;
   "agent_run_credentials": AgentRunCredentials;

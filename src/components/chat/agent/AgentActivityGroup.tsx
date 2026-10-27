@@ -11,8 +11,9 @@ import { useIsDesktopLayout } from '@/lib/hooks/useIsDesktopLayout';
 import { useTranscriptRecordView } from '@/lib/chat/chat-record-view';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { describeAgentStep, describeOverviewFacts, formatAgentValue, getAgentDataTypeLabel, getAgentLiveLine, getAgentMemberBrief, getAgentScriptCalls, getAgentToolTitle, getParallelMemberState, summarizeAgentActivity, summarizeThinkingTime, type AgentProcessPart, type AgentTool } from './presentation';
-import { memberAnswerText, parallelAnalysisResults } from '@/lib/agent/parallel-results';
+import { memberAnswerText, parallelAnalysisResults, parallelMemberName } from '@/lib/agent/parallel-results';
 import { ModelAvatar } from './ModelAvatar';
+import { MemberRoleBadge } from './MemberRoleBadge';
 import { getChartFocus, getChartTargets, getAgentChartReference, parseChartReference } from '@/lib/agent/chart-interaction';
 import { useAgentResultWorkspace } from './AgentResultContext';
 import { ChartMiniPreview } from './chart-preview';
@@ -269,7 +270,7 @@ function AgentStepCall({ tool, runStatus, parts }: { tool: AgentTool; runStatus:
         {members.length > 0 && <ul className="agent-step-entities" aria-label="协作成员">
             {members.map(member => {
                 const status = getParallelMemberState(member, state);
-                const name = member.name ?? member.system;
+                const name = parallelMemberName(member);
                 const brief = getAgentMemberBrief(tool, member);
                 const preview = member.answer ? previewLine(memberAnswerText(member.answer)) : brief && previewLine(brief);
                 const content = <>
@@ -277,6 +278,7 @@ function AgentStepCall({ tool, runStatus, parts }: { tool: AgentTool; runStatus:
                     <span className="agent-step-entity-main">
                         <span className="agent-step-entity-line">
                             <span className="agent-step-entity-name">{name}</span>
+                            <MemberRoleBadge member={member} />
                             <span className="agent-step-entity-meta" data-state={status.state}>{[member.modelName ?? member.model, status.label].filter(Boolean).join(' · ')}</span>
                         </span>
                         {preview && <span className="agent-step-entity-preview">{preview}</span>}

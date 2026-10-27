@@ -184,7 +184,7 @@ export type AgentSkillsSession = {
   sectionText: string;
 };
 
-/** The section renders only for an agent that has `load_skill`: members of a parallel analysis have none. */
+/** The section renders only for an agent that has `load_skill`: a member or subagent only when its role grants skills. */
 export async function openAgentSkills(userId: string, membership: MembershipType): Promise<AgentSkillsSession> {
   const skills = (await skillsScopeEnabled()) ? await availableSkills(userId, membership) : [];
   const directory = renderSkillDirectory(skills);

@@ -500,6 +500,7 @@ CREATE TABLE public.ai_models (
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now(),
     usage_type text DEFAULT 'chat'::text NOT NULL,
+    credit_cost integer DEFAULT 1 NOT NULL,
     default_top_p numeric DEFAULT 1,
     default_presence_penalty numeric DEFAULT 0,
     default_frequency_penalty numeric DEFAULT 0,
@@ -509,13 +510,14 @@ CREATE TABLE public.ai_models (
     thinking_format text DEFAULT 'openai'::text NOT NULL,
     thinking_levels text[] DEFAULT '{}'::text[] NOT NULL,
     CONSTRAINT ai_models_context_window_check CHECK (((context_window IS NULL) OR ((context_window >= 1024) AND (context_window <= 10000000)))),
+    CONSTRAINT ai_models_credit_cost_check CHECK (((credit_cost >= 0) AND (credit_cost <= 1000))),
     CONSTRAINT ai_models_default_reasoning_effort_check CHECK (((default_reasoning_effort IS NULL) OR (default_reasoning_effort = ANY (ARRAY['minimal'::text, 'low'::text, 'medium'::text, 'high'::text, 'xhigh'::text, 'max'::text])))),
     CONSTRAINT ai_models_default_thinking_level_check CHECK (((default_reasoning_effort IS NULL) OR (cardinality(thinking_levels) = 0) OR (default_reasoning_effort = ANY (thinking_levels)))),
     CONSTRAINT ai_models_reasoning_required_tier_check CHECK ((reasoning_required_tier = ANY (ARRAY['free'::text, 'plus'::text, 'pro'::text]))),
     CONSTRAINT ai_models_required_tier_check CHECK ((required_tier = ANY (ARRAY['free'::text, 'plus'::text, 'pro'::text]))),
     CONSTRAINT ai_models_thinking_format_check CHECK ((thinking_format = ANY (ARRAY['openai'::text, 'deepseek'::text, 'openrouter'::text, 'qwen'::text, 'zai'::text, 'qwen-chat-template'::text]))),
     CONSTRAINT ai_models_thinking_levels_check CHECK ((thinking_levels <@ ARRAY['minimal'::text, 'low'::text, 'medium'::text, 'high'::text, 'xhigh'::text, 'max'::text])),
-    CONSTRAINT ai_models_usage_type_check CHECK ((usage_type = ANY (ARRAY['chat'::text, 'vision'::text, 'embedding'::text, 'rerank'::text])))
+    CONSTRAINT ai_models_usage_type_check CHECK ((usage_type = ANY (ARRAY['chat'::text, 'vision'::text, 'embedding'::text, 'rerank'::text, 'image'::text])))
 );
 
 CREATE TABLE public.announcements (
@@ -723,6 +725,27 @@ CREATE TABLE public.face_readings (
     analysis_type text DEFAULT 'full'::text,
     created_at timestamp with time zone DEFAULT now(),
     conversation_id uuid
+);
+
+CREATE TABLE public.generated_images (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    conversation_id uuid,
+    run_id uuid,
+    message_id text,
+    model_id text NOT NULL,
+    prompt text NOT NULL,
+    size text NOT NULL,
+    object_path text NOT NULL,
+    mime_type text NOT NULL,
+    bytes integer NOT NULL,
+    sha256 text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT generated_images_bytes_check CHECK (((bytes > 0) AND (bytes <= 52428800))),
+    CONSTRAINT generated_images_mime_type_check CHECK ((mime_type = ANY (ARRAY['image/png'::text, 'image/jpeg'::text, 'image/webp'::text]))),
+    CONSTRAINT generated_images_prompt_check CHECK (((length(btrim(prompt)) >= 1) AND (length(prompt) <= 4000))),
+    CONSTRAINT generated_images_sha256_check CHECK ((sha256 ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT generated_images_size_check CHECK ((size ~ '^[1-9][0-9]{2,3}x[1-9][0-9]{2,3}$'::text))
 );
 
 CREATE TABLE public.hepan_charts (
@@ -1187,6 +1210,12 @@ ALTER TABLE ONLY public.daliuren_divinations
 ALTER TABLE ONLY public.face_readings
     ADD CONSTRAINT face_readings_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY public.generated_images
+    ADD CONSTRAINT generated_images_object_path_key UNIQUE (object_path);
+
+ALTER TABLE ONLY public.generated_images
+    ADD CONSTRAINT generated_images_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY public.hepan_charts
     ADD CONSTRAINT hepan_charts_pkey PRIMARY KEY (id);
 
@@ -1441,6 +1470,15 @@ ALTER TABLE ONLY public.face_readings
 
 ALTER TABLE ONLY public.hepan_charts
     ADD CONSTRAINT hepan_charts_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES public.conversations(id);
+
+ALTER TABLE ONLY public.generated_images
+    ADD CONSTRAINT generated_images_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES public.conversations(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.generated_images
+    ADD CONSTRAINT generated_images_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.agent_runs(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY public.generated_images
+    ADD CONSTRAINT generated_images_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.hepan_charts
     ADD CONSTRAINT hepan_charts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);

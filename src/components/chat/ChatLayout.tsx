@@ -40,6 +40,8 @@ import { getAgentQuestionAnswers, getAgentWorkspaceAutoOpenEvent } from '@/lib/a
 import { chartQuestion, type ChartAskContext } from '@/lib/agent/chart-interaction';
 import { AgentQuestionDock } from './agent/AgentQuestionDock';
 import type { ComposerWebControl } from './composer/ComposerToolbar';
+import { useImageModels } from '@/lib/hooks/useAvailableModels';
+import { GENERATED_IMAGE_MAX_COUNT as IMAGE_MAX_COUNT, GENERATED_IMAGE_SIZES } from '@/lib/images/generated';
 import { publishChatModeControl, clearChatModeControl, type ChatModeControl } from '@/lib/chat/mode-control-store';
 import { composerNote, isRunningComposerNote, type ComposerNoteState } from '@/lib/chat/composer-copy';
 import { collectAgentArtifacts, getAgentCitedParagraph } from './agent/presentation';
@@ -87,6 +89,8 @@ interface ChatLayoutProps extends ModelSettingsProps {
     onArchiveMessage?: (message: ChatMessage) => void;
     /** Sends the composer; the optional context is the rich chart quote attached above it. */
     onSend: (context?: string) => Promise<void>;
+    /** 输入框生图：直接调用生图接口，不经过对话模型。 */
+    onImageGenerate?: (options: { prompt: string; size: string; count: number }) => void | Promise<void>;
     onStop: () => void;
     onRetryConversationLoad?: () => Promise<void>;
 
@@ -132,7 +136,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         messages, isLoading, isSendingToList,
         messagesEndRef, messageScrollContainerRef, onMessageListScroll,
         onEditMessage, onRegenerateResponse, onSwitchVersion, onArchiveMessage,
-        onSend, onStop, onRetryConversationLoad,
+        onSend, onImageGenerate, onStop, onRetryConversationLoad,
         inputValue, onInputChange, disabled,
         chatMode, onChatModeChange,
         selectedModel, onModelChange, reasoningEnabled, onReasoningChange,
@@ -400,6 +404,15 @@ export function ChatLayout(props: ChatLayoutProps) {
         title: !agent.capabilities.webAvailable ? webSearchUnavailableTitle(agent.capabilities.webTier) : membershipType === 'free' ? '联网搜索需要 Plus 会员' : agent.active ? '下个独立任务使用此配置' : 'Agent 会在需要时搜索网络',
         onToggle: () => agent.setWebEnabled(!agent.webEnabled),
     } : undefined;
+    // 生图入口：当前会员有可用生图模型、且不在解梦模式或任务运行中时才提供。
+    const imageModels = useImageModels(userId, { membershipType, enabled: !!userId });
+    const imageModel = imageModels.data?.models[0];
+    const imageGeneration = imageModel && chatMode !== 'dream' && !agent?.active ? {
+        sizes: imageModels.data?.sizes.length ? imageModels.data.sizes : [...GENERATED_IMAGE_SIZES],
+        creditCost: imageModel.creditCost,
+        maxCount: imageModels.data?.maxCount ?? IMAGE_MAX_COUNT,
+        onGenerate: (options: { prompt: string; size: string; count: number }) => { void onImageGenerate?.(options); },
+    } : undefined;
     const noteState: ComposerNoteState = {
         agentMode: isAgentMode,
         agentUnavailable: !!userId && !!agent && !agent.capabilities.ready,
@@ -436,6 +449,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         dreamContext, dreamContextLoading,
         knowledgeBaseEnabled,
         webControl,
+        imageGeneration,
         plainWebAvailable: !!agent?.capabilities.plainWebAvailable,
         webTier: agent?.capabilities.webTier ?? null,
     };

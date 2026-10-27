@@ -151,6 +151,12 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS selfhost_daliuren_divinations_owner_idx 
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS selfhost_face_readings_owner_idx ON public.face_readings USING btree (user_id);
 
+CREATE INDEX CONCURRENTLY IF NOT EXISTS generated_images_conversation_idx ON public.generated_images USING btree (conversation_id) WHERE (conversation_id IS NOT NULL);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS generated_images_run_idx ON public.generated_images USING btree (run_id) WHERE (run_id IS NOT NULL);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS generated_images_user_idx ON public.generated_images USING btree (user_id, created_at DESC);
+
 CREATE INDEX CONCURRENTLY IF NOT EXISTS selfhost_hepan_charts_owner_idx ON public.hepan_charts USING btree (user_id);
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS selfhost_knowledge_bases_owner_idx ON public.knowledge_bases USING btree (user_id);

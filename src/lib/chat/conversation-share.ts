@@ -10,6 +10,7 @@ import type { AIMessageMetadata, ChatMessage, MentionType } from '@/types';
 import { DATA_SOURCE_TYPES } from '@/lib/data-sources/types';
 import { redactExportValue } from './conversation-transfer';
 import { getVisibleWebSearch } from './feature-normalization';
+import { readGeneratedImageRefs, type GeneratedImageRef } from '@/lib/images/generated';
 
 export const SHARE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 export const SHARE_SNAPSHOT_MAX_BYTES = 1_048_576;
@@ -31,6 +32,8 @@ export type SharedMessage = {
     sources?: SharedSource[];
     /** Chart and tool basis text, present only when the owner opted in. */
     basis?: SharedBasis[];
+    /** Generated images; the bytes are read through /api/images/[id]?share=<token>. */
+    images?: GeneratedImageRef[];
 };
 
 /** Owner-facing state of a conversation's public link. */
@@ -110,9 +113,16 @@ function shareMessage(message: ChatMessage, includeCharts: boolean): SharedMessa
     if (message.role === 'assistant' && Array.isArray(injected) && injected.length) shared.references = injected.length;
     const sources: SharedSource[] = [];
     const basis: SharedBasis[] = [];
+    const images: GeneratedImageRef[] = readGeneratedImageRefs((message.metadata as { generatedImages?: unknown } | undefined)?.generatedImages);
     for (const part of message.agent?.parts ?? []) {
         if (part.type === 'source' && HTTP_URL.test(part.url) && !sources.some(source => source.url === part.url)) {
             sources.push({ title: (part.title || part.url).slice(0, 300), url: part.url });
+        }
+        if (part.type === 'tool' && part.status === 'completed' && part.name === 'generate_image') {
+            const output = part.output as { images?: unknown } | null | undefined;
+            for (const image of readGeneratedImageRefs(output?.images)) {
+                if (!images.some(existing => existing.id === image.id)) images.push(image);
+            }
         }
         if (includeCharts && part.type === 'tool' && part.status === 'completed') {
             const output = part.output as { canonicalText?: unknown } | null | undefined;
@@ -127,7 +137,8 @@ function shareMessage(message: ChatMessage, includeCharts: boolean): SharedMessa
     }
     if (sources.length) shared.sources = sources;
     if (basis.length) shared.basis = basis;
-    if (!shared.content.trim() && !shared.attachments && !shared.sources && !shared.basis) return null;
+    if (images.length) shared.images = images;
+    if (!shared.content.trim() && !shared.attachments && !shared.sources && !shared.basis && !shared.images) return null;
     return shared;
 }
 
@@ -177,6 +188,10 @@ export function parseSharedSnapshot(value: unknown): SharedMessage[] {
                 return url && HTTP_URL.test(url) ? [{ title: stringField(entry?.title, 300) ?? url, url }] : [];
             });
             if (sources.length) message.sources = sources;
+        }
+        if (Array.isArray(raw.images)) {
+            const images = readGeneratedImageRefs(raw.images);
+            if (images.length) message.images = images;
         }
         if (Array.isArray(raw.basis)) {
             const basis = raw.basis.flatMap((entry): SharedBasis[] => {

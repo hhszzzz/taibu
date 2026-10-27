@@ -26,7 +26,7 @@ import type { AgentChartKind } from '@/lib/agent/tool-catalog';
 import { getCurrentUserSettings } from '@/lib/user/settings';
 import { MentionManager } from '@/components/chat/composer/MentionManager';
 import { AttachmentBar } from '@/components/chat/composer/AttachmentBar';
-import { ComposerToolbar, ComposerSendCluster, type ComposerSendState, type ComposerWebControl } from '@/components/chat/composer/ComposerToolbar';
+import { ComposerToolbar, ComposerSendCluster, type ComposerImageGeneration, type ComposerSendState, type ComposerWebControl } from '@/components/chat/composer/ComposerToolbar';
 import { ComposerStatusBar } from '@/components/chat/composer/ComposerStatusBar';
 import type { ChatMode } from '@/lib/chat/use-chat-state';
 import { useComposerCommands } from './composer/ComposerCommands';
@@ -34,6 +34,7 @@ import { usePrivateAttachments } from '@/lib/chat/use-private-attachments';
 import { COMPOSER_FILES_EVENT, documentFileProblem, pickPlainAttachment } from '@/lib/chat/composer-files';
 import { COMPOSER_MAX_HEIGHT, resolveComposerHeight } from '@/lib/chat/composer-height';
 import { PrivateAttachments } from './agent/PrivateAttachments';
+import { GENERATED_IMAGE_SIZE_LABELS } from '@/lib/images/generated';
 import type { ModelSettingsProps } from '@/lib/chat/model-settings';
 import './composer/composer.css';
 
@@ -67,6 +68,8 @@ interface ChatComposerProps extends ModelSettingsProps {
     /** The note repeats the header's task status; phones leave it out. */
     noteOptional?: boolean;
     webControl?: ComposerWebControl;
+    /** 有可用生图模型时提供：输入框直接生图，不经过对话模型。 */
+    imageGeneration?: ComposerImageGeneration;
     /** The server can search the web for plain chat. */
     plainWebAvailable?: boolean;
     /** The lowest membership a search service serves, null when none is set up. */
@@ -118,6 +121,7 @@ export function ChatComposer({
     note,
     noteOptional = false,
     webControl,
+    imageGeneration,
     plainWebAvailable = false,
     webTier = null,
     agentMode = false,
@@ -168,6 +172,13 @@ export function ChatComposer({
     // `+` 菜单按钮：自定义模型弹窗关闭后焦点回到这里。
     const addMenuRef = useRef<HTMLButtonElement>(null);
     const isDreamMode = chatMode === 'dream';
+    // 生图模式：发送走独立接口，不经过对话模型；没有可用模型时按钮不出现。
+    const [imageMode, setImageMode] = useState(false);
+    const [imageSize, setImageSize] = useState<string>('1024x1024');
+    const [imageCount, setImageCount] = useState(1);
+    useEffect(() => { if (!imageGeneration) setImageMode(false); }, [imageGeneration]);
+    // 切换对话（draftKey 变化）时退出上一次的生图模式。
+    useEffect(() => { setImageMode(false); }, [draftKey]);
 
     const state = useComposerState({
         userId, membershipType,
@@ -192,7 +203,18 @@ export function ChatComposer({
     } = state;
     const commands = useComposerCommands({ userId, draftKey, text: inputValue, change: onInputChange, textarea: textareaRef, mentionsOpen: mentionOpen, model: selectedModel, agentMode });
     const uploads = usePrivateAttachments({ scopeKey: draftKey ?? userId ?? 'anonymous', state: attachmentState ?? { webSearchEnabled: false }, change: value => onAttachmentChange?.(value), onError: message => showToast('error', message) });
-    const submit = () => { if (uploads.uploading) return; commands.remember(); onSend(); };
+    const submit = () => {
+        if (uploads.uploading || isLoading || isSendingToList) return;
+        if (imageMode && imageGeneration) {
+            if (!userId) { onAuthRequired?.(); return; }
+            if (!inputValue.trim()) return;
+            commands.remember();
+            imageGeneration.onGenerate({ prompt: inputValue.trim(), size: imageSize, count: imageCount });
+            return;
+        }
+        commands.remember();
+        onSend();
+    };
 
     // 长期记忆开关（与设置中心「任务助手」同一份用户偏好）：+ 菜单可勾选。
     const [memoryEnabled, setMemoryEnabled] = useState<boolean | null>(null);
@@ -567,6 +589,7 @@ export function ChatComposer({
     if (disabled) { inputPlaceholder = '请先获取积分'; inputLabel = agentMode ? '描述你的问题' : '输入消息'; }
     else if (awaitingInput) { inputPlaceholder = '补充信息，继续当前任务…'; inputLabel = '补充任务信息'; }
     else if (running) { inputPlaceholder = '补充信息或调整方向…'; inputLabel = '补充信息或调整方向'; }
+    else if (imageMode) { inputPlaceholder = '描述要生成的图片，例如：水墨风格的山间小筑，晨雾缭绕…'; inputLabel = '描述要生成的图片'; }
     else if (isDreamMode) { inputPlaceholder = '说说你做了什么梦…'; inputLabel = '描述梦境'; }
     else if (hero) {
         inputPlaceholder = agentMode ? '例如：我明年适合换工作吗？' : '问问命盘、运势，或最近困惑的事…';
@@ -587,6 +610,12 @@ export function ChatComposer({
         userId,
         membershipType,
         webControl,
+        image: imageGeneration ? {
+            active: imageMode,
+            title: imageMode ? '退出生图，回到对话' : `生图（直接生成图片，不经过对话模型）${imageGeneration.creditCost > 0 ? ` · 每张 ${imageGeneration.creditCost} 积分` : ''}`,
+            onToggle: () => setImageMode(value => !value),
+        } : undefined,
+        imageMode,
         memory: agentMode ? {
             enabled: memoryEnabled === true,
             disabled: !userId || !memoryFeatureEnabled || memoryEnabled === null,
@@ -711,6 +740,21 @@ export function ChatComposer({
                         : <ComposerSendCluster send={send} agentMode={agentMode} disabled={disabled} onSend={handleButtonClick} onStop={onStop} />}
                 </div>
 
+                {imageMode && imageGeneration && <div className="chat-image-options" role="group" aria-label="生图设置">
+                    <label>尺寸
+                        <select value={imageSize} onChange={event => setImageSize(event.target.value)} disabled={isLoading}>
+                            {imageGeneration.sizes.map(size => <option key={size} value={size}>{GENERATED_IMAGE_SIZE_LABELS[size] ?? size}</option>)}
+                        </select>
+                    </label>
+                    <label>张数
+                        <select value={imageCount} onChange={event => setImageCount(Number(event.target.value))} disabled={isLoading}>
+                            {Array.from({ length: imageGeneration.maxCount }, (_, index) => index + 1)
+                                .map(count => <option key={count} value={count}>{count} 张</option>)}
+                        </select>
+                    </label>
+                    <span className="chat-image-cost">{imageGeneration.creditCost > 0 ? `每张 ${imageGeneration.creditCost} 积分 · 共 ${imageGeneration.creditCost * imageCount} 积分` : '本模型不扣积分'}</span>
+                </div>}
+
                 <ComposerStatusBar
                     agentMode={agentMode}
                     disabled={disabled}
@@ -735,6 +779,14 @@ export function ChatComposer({
                 />
 
                 {note && <p className="chat-composer-note" data-optional={noteOptional || undefined}>{note}</p>}
+                {hero && imageGeneration && !imageMode && !inputValue.trim() && <p className="chat-image-example">
+                    <span>或者试试生图：</span>
+                    <button type="button" onClick={() => {
+                        setImageMode(true);
+                        onInputChange('水墨风格的山间小筑，晨雾缭绕，远山如黛');
+                        textareaRef.current?.focus();
+                    }}>水墨风格的山间小筑，晨雾缭绕</button>
+                </p>}
             </div>
         </div>
     );

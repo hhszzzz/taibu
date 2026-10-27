@@ -770,6 +770,7 @@ const SYSTEM_DB_ALLOWED = [
   'src/app/api/announcements/route.ts',
   'src/lib/chat/chat-context.ts',
   'src/lib/ai/ai-analysis.ts',
+  'src/lib/ai/image-generation.server.ts',
   'src/lib/server/chat/prompt-context.ts',
   'src/lib/mentions.ts',
   'src/lib/annual-report.ts',

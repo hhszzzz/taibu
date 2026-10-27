@@ -133,6 +133,7 @@ export async function listModels(): Promise<AdminModel[]> {
         vendor: row.vendor,
         description: row.description,
         usageType: row.usage_type as AIUsageType,
+        creditCost: row.credit_cost ?? 1,
         isEnabled: row.is_enabled !== false,
         sortOrder: row.sort_order ?? 0,
         requiredTier: row.required_tier as CatalogTier,
@@ -160,7 +161,7 @@ export async function listModels(): Promise<AdminModel[]> {
 function modelColumns(input: AdminModelInput) {
     return {
         model_key: input.modelKey, display_name: input.displayName, vendor: input.vendor, description: input.description,
-        usage_type: input.usageType, is_enabled: input.isEnabled, sort_order: input.sortOrder,
+        usage_type: input.usageType, credit_cost: input.creditCost, is_enabled: input.isEnabled, sort_order: input.sortOrder,
         required_tier: input.requiredTier, supports_vision: input.supportsVision, supports_reasoning: input.supportsReasoning,
         is_reasoning_default: input.isReasoningDefault, reasoning_required_tier: input.reasoningRequiredTier,
         thinking_format: input.thinkingFormat, thinking_levels: arrayValue(input.thinkingLevels),

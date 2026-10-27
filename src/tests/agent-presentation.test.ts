@@ -148,7 +148,9 @@ test('process steps summarize each call from its arguments and stored result onl
     assert.equal(summarizeAgentTool(tool('submit_plan', { input: { plan: '# 计划' }, output: { plan: '# 计划', approved: true } })), '已批准');
     assert.equal(summarizeAgentTool(tool('submit_plan', { input: { plan: '# 计划' }, output: { plan: '# 计划', approved: false } })), '要求修改');
     assert.equal(summarizeAgentTool(tool('submit_plan', { status: 'running', input: { plan: '# 计划' } })), '等待你批准');
-    assert.equal(Object.keys(AGENT_TOOL_FAMILY_LABELS).length, 16, 'every tool family has a step tag');
+    assert.equal(Object.keys(AGENT_TOOL_FAMILY_LABELS).length, 17, 'every tool family has a step tag');
+    assert.equal(summarizeAgentTool(tool('generate_image', { status: 'running', input: { prompt: '水墨山居，晨雾缭绕' } })), '「水墨山居，晨雾缭绕」');
+    assert.equal(summarizeAgentTool(tool('generate_image', { output: { prompt: '水墨山居', images: [{ id: '11111111-1111-4111-8111-111111111111', size: '1024x1024', mimeType: 'image/png' }] } })), '生成 1 张图片');
     // 个人资料检索：条件、笔记、以往对话与档案各写一行。
     assert.equal(summarizeAgentTool(tool('list_user_data', { input: { keyword: '换工作', since: '2026-01-01', until: '2026-03-31' }, output: { items: [], errors: [] } })),
         '「换工作」 · 2026-01-01 至 2026-03-31 · 找到 0 份资料');

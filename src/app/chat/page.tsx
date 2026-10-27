@@ -103,6 +103,7 @@ export default function ChatPage() {
                 onSwitchVersion={messaging.handleSwitchVersion}
                 onArchiveMessage={state.activeConversationId && knowledgeBaseEnabled ? messaging.handleArchiveMessage : undefined}
                 onSend={messaging.handleSend}
+                onImageGenerate={messaging.handleImageGenerate}
                 onStop={messaging.handleStop}
                 agent={messaging.agent}
                 onQueueMessage={messaging.handleQueueMessage}

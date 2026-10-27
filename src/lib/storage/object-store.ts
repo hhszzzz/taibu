@@ -1,11 +1,11 @@
 /**
  * 文件存储抽象：本地卷实现（P3）与将来的 S3 实现共用。
  *
- * bucket 只有两个，key 是不含主机、不含协议的对象路径；
- * 对外 URL 由 /api/files/avatars 路由统一生成。
+ * bucket 固定声明，key 是不含主机、不含协议的对象路径；
+ * 对外 URL 由 /api/files/avatars、/api/agent/attachments/[id] 与 /api/images/[id] 生成。
  */
 
-export const STORAGE_BUCKETS = ['avatars', 'agent-attachments'] as const;
+export const STORAGE_BUCKETS = ['avatars', 'agent-attachments', 'generated-images'] as const;
 
 export type StorageBucket = (typeof STORAGE_BUCKETS)[number];
 

@@ -30,5 +30,5 @@ export default async function SharedConversationPage({ params }: SharePageProps)
     const { token } = await params;
     const share = await loadShare(token);
     if (!share) notFound();
-    return <SharedConversationView share={share} />;
+    return <SharedConversationView share={share} token={token} />;
 }

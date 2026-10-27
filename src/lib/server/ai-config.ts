@@ -43,6 +43,7 @@ interface DBModelRow {
   display_name: string;
   vendor: string;
   usage_type?: string;
+  credit_cost?: number | null;
   supports_reasoning: boolean;
   is_reasoning_default: boolean;
   supports_vision: boolean;
@@ -106,6 +107,7 @@ function mapDbModelRows(rows: DBModelRow[]): AIModelConfig[] {
       name: row.display_name,
       vendor: row.vendor as AIVendor,
       usageType: row.usage_type as AIModelConfig['usageType'],
+      creditCost: row.credit_cost == null ? undefined : Number(row.credit_cost),
       modelId: row.model_key,
       apiUrl: '',
       supportsReasoning: row.supports_reasoning,
@@ -141,7 +143,7 @@ async function loadModelsFromDB(): Promise<AIModelConfig[]> {
       const models = await trx
         .selectFrom('ai_models')
         .select([
-          'id', 'model_key', 'display_name', 'vendor', 'usage_type',
+          'id', 'model_key', 'display_name', 'vendor', 'usage_type', 'credit_cost',
           'supports_reasoning', 'is_reasoning_default', 'supports_vision',
           'default_temperature', 'default_top_p', 'default_presence_penalty',
           'default_frequency_penalty', 'default_max_tokens', 'default_reasoning_effort',

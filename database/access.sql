@@ -329,6 +329,14 @@ CREATE POLICY face_readings_select_access ON public.face_readings FOR SELECT USI
 
 CREATE POLICY face_readings_update_access ON public.face_readings FOR UPDATE USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
 
+ALTER TABLE public.generated_images ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY generated_images_backend_admin ON public.generated_images TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+
+CREATE POLICY generated_images_owner_delete ON public.generated_images FOR DELETE TO authenticated USING ((user_id = auth.uid()));
+
+CREATE POLICY generated_images_owner_read ON public.generated_images FOR SELECT TO authenticated USING ((user_id = auth.uid()));
+
 ALTER TABLE public.hepan_charts ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY hepan_charts_delete_access ON public.hepan_charts FOR DELETE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
@@ -590,6 +598,8 @@ GRANT ALL ON FUNCTION public.check_vector_index_exists(p_dim integer) TO authent
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.agent_attachments TO authenticated;
 
+GRANT SELECT,DELETE ON TABLE public.generated_images TO authenticated;
+
 GRANT ALL ON FUNCTION public.claim_agent_attachment_cleanup(p_limit integer) TO authenticated;
 
 GRANT SELECT ON TABLE public.daily_briefing_jobs TO authenticated;
@@ -632,6 +642,11 @@ GRANT ALL ON FUNCTION public.fork_conversation_snapshot(p_parent uuid, p_through
 
 GRANT ALL ON FUNCTION public.get_conversation_share(p_token text) TO anon;
 GRANT ALL ON FUNCTION public.get_conversation_share(p_token text) TO authenticated;
+
+GRANT ALL ON FUNCTION public.get_shared_generated_image(p_token text, p_image uuid) TO anon;
+GRANT ALL ON FUNCTION public.get_shared_generated_image(p_token text, p_image uuid) TO authenticated;
+
+GRANT ALL ON FUNCTION public.decrement_ai_chat_count_by(user_id uuid, amount integer) TO authenticated;
 
 GRANT ALL ON FUNCTION public.import_ming_records_and_notes(p_records jsonb, p_notes jsonb) TO authenticated;
 

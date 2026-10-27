@@ -6,7 +6,7 @@ import { ChevronDown, ChevronRight, LoaderCircle, PanelRight, Pause } from 'luci
 import type { AgentMessageData, AgentPart } from '@/lib/agent/types';
 import { AGENT_SUBMIT_PLAN_TOOL, AGENT_TOOL_SEARCH_TOOL, AGENT_WEB_TOOLS, getAgentToolFamily, isAgentMemberTool } from '@/lib/agent/tool-catalog';
 import { getAgentToolQuestionIds } from '@/lib/agent/workspace';
-import { getAgentAttachmentRead, getAgentChart, getAgentConversationHits, getAgentDataResults, getAgentMemories, getAgentMethod, getAgentMethodCatalog, getAgentNotes, getAgentPlan, getAgentProfile, getAgentScript, getAgentSearchResults, getAgentToolQuestions, getAgentToolSearchLoaded, getAgentToolText } from '@/lib/agent/tool-presentation';
+import { getAgentAttachmentRead, getAgentChart, getAgentConversationHits, getAgentDataResults, getAgentGeneratedImages, getAgentMemories, getAgentMethod, getAgentMethodCatalog, getAgentNotes, getAgentPlan, getAgentProfile, getAgentScript, getAgentSearchResults, getAgentToolQuestions, getAgentToolSearchLoaded, getAgentToolText } from '@/lib/agent/tool-presentation';
 import { useIsDesktopLayout } from '@/lib/hooks/useIsDesktopLayout';
 import { useTranscriptRecordView } from '@/lib/chat/chat-record-view';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
@@ -20,6 +20,7 @@ import { ChartMiniPreview } from './chart-preview';
 import { CopyButton } from './CopyButton';
 import { JsonCode, ToolCommand } from './ToolCode';
 import { formatStepMarkdown } from '@/lib/agent/tool-display';
+import { GeneratedImageGallery } from './GeneratedImageGallery';
 import { useEntranceMotion } from '@/lib/motion/entrance';
 // 小盘缩略图的样式在工作区样式表里；分享页只加载对话样式，这里一并引入。
 import './agent-workspace.css';
@@ -41,6 +42,14 @@ const previewLine = (text: string) => text.trim().split('\n', 1)[0].replace(/^#+
 /** 把只返回结构化数据的工具读成一句话或几行事实，不再统一写「已返回结构化结果」。 */
 function StepStructured({ tool, parts, workspace }: { tool: AgentTool; parts: AgentPart[]; workspace: ReturnType<typeof useAgentResultWorkspace> }): ReactNode {
     const open = (id: string) => workspace?.openResource(id);
+    if (tool.name === 'generate_image') {
+        const generated = getAgentGeneratedImages(tool);
+        return generated ? <div className="agent-step-structured">
+            <p className="agent-step-structured-fact">生成 {generated.images.length} 张图片</p>
+            <GeneratedImageGallery images={generated.images} label="生成的图片" />
+            {workspace && <button type="button" className="agent-step-structured-open" onClick={() => open(`tool:${tool.id}`)}>查看图片</button>}
+        </div> : null;
+    }
     if (tool.name === 'focus_chart') {
         const focus = getChartFocus(tool);
         if (!focus) return null;

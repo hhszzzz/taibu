@@ -10,6 +10,7 @@ import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { mentionTypeLabels } from '@/components/chat/mentionStyles';
 import type { PublicConversationShare } from '@/lib/chat/conversation-share.server';
 import type { SharedMessage } from '@/lib/chat/conversation-share';
+import { GeneratedImageGallery } from '@/components/chat/agent/GeneratedImageGallery';
 import '@/components/chat/chat-workspace.css';
 
 const SHARE_DATE_FORMAT = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Shanghai' });
@@ -37,10 +38,11 @@ function SharedUserMessage({ message }: { message: SharedMessage }) {
     );
 }
 
-function SharedAssistantMessage({ message }: { message: SharedMessage }) {
+function SharedAssistantMessage({ message, token }: { message: SharedMessage; token: string }) {
     return (
         <div className="min-w-0">
             {message.content && <div className="chat-answer"><MarkdownContent content={message.content} className="chat-prose" /></div>}
+            {message.images && <GeneratedImageGallery images={message.images} shareToken={token} label="生成的图片" />}
             {message.basis?.map((basis, index) => <details key={`${basis.title}-${index}`} className="mt-3 rounded-xl border border-border px-3 py-2 text-sm">
                 <summary className="cursor-pointer text-foreground-secondary">{basis.title} · 命盘依据</summary>
                 <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs leading-relaxed text-foreground-secondary">{basis.text}</pre>
@@ -61,7 +63,7 @@ function SharedAssistantMessage({ message }: { message: SharedMessage }) {
     );
 }
 
-export function SharedConversationView({ share }: { share: PublicConversationShare }) {
+export function SharedConversationView({ share, token }: { share: PublicConversationShare; token: string }) {
     const sharedAt = formatShareDate(share.updatedAt);
     return (
         <div className="min-h-screen bg-background text-foreground">
@@ -79,7 +81,7 @@ export function SharedConversationView({ share }: { share: PublicConversationSha
                 </div>
                 <ol className="pt-2">
                     {share.messages.map((message, index) => <li key={index} className="chat-transcript-row" data-role={message.role}>
-                        {message.role === 'user' ? <SharedUserMessage message={message} /> : <SharedAssistantMessage message={message} />}
+                        {message.role === 'user' ? <SharedUserMessage message={message} /> : <SharedAssistantMessage message={message} token={token} />}
                     </li>)}
                 </ol>
                 <footer className="mt-10 border-t border-border pt-6 text-center text-sm text-foreground-secondary">

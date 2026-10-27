@@ -87,6 +87,27 @@ test('a plain chat answer shares the pages its web search returned, never a non-
     assert.deepEqual(buildShareSnapshot([answer], { includeCharts: false })[0].sources, [{ title: '黄历说明', url: 'https://example.com/almanac' }]);
 });
 
+test('generated images ride along with a share snapshot and are parsed defensively', () => {
+    const image = { id: '11111111-1111-4111-8111-111111111111', size: '1024x1024', mimeType: 'image/png' };
+    const message: ChatMessage = {
+        id: 'a-images', role: 'assistant', content: '已生成 1 张图片。', createdAt: '2026-10-19T00:00:03.000Z',
+        metadata: { sources: [], generatedImages: [image] },
+    };
+    const agentMessage: ChatMessage = {
+        id: 'a-tool-images', role: 'assistant', content: '', createdAt: '2026-10-19T00:00:04.000Z',
+        agent: { version: 1, runId: 'run', status: 'completed', parts: [{
+            id: 'g1', type: 'tool', name: 'generate_image', title: '生成图片', status: 'completed',
+            input: { prompt: '水墨山居' }, output: { prompt: '水墨山居', images: [image] },
+        }] },
+    };
+    const snapshot = buildShareSnapshot([message, agentMessage], { includeCharts: false });
+    assert.deepEqual(snapshot.map(entry => entry.images), [[image], [image]]);
+    assert.deepEqual(parseSharedSnapshot(JSON.parse(JSON.stringify(snapshot))).map(entry => entry.images), [[image], [image]]);
+    assert.deepEqual(parseSharedSnapshot([{ role: 'assistant', content: 'x', images: [{ id: 'not-a-uuid', size: '1024x1024', mimeType: 'image/png' }] }]), [
+        { role: 'assistant', content: 'x' },
+    ], 'an invalid image reference never reaches the renderer');
+});
+
 test('empty turns are dropped and oversized snapshots are rejected before reaching the database', () => {
     const empty: ChatMessage = { id: 'e', role: 'assistant', content: '   ', createdAt: '2026-10-19T00:00:00.000Z' };
     assert.deepEqual(buildShareSnapshot([empty], { includeCharts: false }), []);

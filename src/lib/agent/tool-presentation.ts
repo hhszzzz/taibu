@@ -18,6 +18,7 @@ import { normalizeQuestions, type AgentQuestion } from './questions';
 import type { AgentPart } from './types';
 import { AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_SKILL_TOOLS, AGENT_SUBMIT_PLAN_TOOL, AGENT_WEB_TOOLS, isAgentChartTool, type AgentChartKind } from './tool-catalog';
 import { estimateTokens } from './token-estimate';
+import { readGeneratedImageRefs } from '@/lib/images/generated';
 
 export type AgentToolPart = Extract<AgentPart, { type: 'tool' }>;
 /**
@@ -230,6 +231,15 @@ export function getAgentSearchResults(tool: AgentToolPart): AgentSearchResult[] 
       source: url ? hostname(url) : (file !== title ? file : null) ?? nonEmpty(metadata.category),
     };
   });
+}
+
+/** Images generate_image produced; null for any other call or before it finishes. */
+export function getAgentGeneratedImages(tool: AgentToolPart) {
+  if (tool.status !== 'completed' || tool.name !== 'generate_image') return null;
+  const output = record(tool.output);
+  const images = readGeneratedImageRefs(output.images);
+  if (!images.length) return null;
+  return { prompt: nonEmpty(output.prompt), images };
 }
 
 export function getAgentDataResults(tool: AgentToolPart) {

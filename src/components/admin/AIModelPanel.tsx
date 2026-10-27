@@ -24,6 +24,7 @@ function ModelMeta({ model, gateways }: { model: AdminModel; gateways: ReadonlyM
         {(model.usageType === 'chat' || model.usageType === 'vision') && <span>
             {model.contextWindow ? `${formatTokenCount(model.contextWindow)} 上下文` : '未设上下文'} · {model.defaultMaxTokens ? `${formatTokenCount(model.defaultMaxTokens)} 输出` : '默认输出'}
         </span>}
+        {model.usageType === 'image' && <span>{model.creditCost} 积分 / 张</span>}
         {model.supportsReasoning && <span>思考 {model.thinkingLevels.length ? model.thinkingLevels.map(level => THINKING_LEVEL_LABELS[level]).join('/') : '开关'}</span>}
         {model.supportsVision && <span><Eye size={12} aria-label="支持图片" style={{ display: 'inline', verticalAlign: '-1px' }} /></span>}
         <span data-tone={callable.length ? undefined : 'warning'}>{names.length ? names.join(' → ') : '没有来源'}{names.length && !callable.length ? '（不可用）' : ''}</span>

@@ -1,0 +1,39 @@
+/* 生图结果图集：消息气泡与工具卡片共用，暗色主题跟随主题变量。 */
+.generated-image-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  margin: 10px 0;
+  padding: 0;
+  list-style: none;
+  max-width: 640px;
+}
+
+.generated-image-gallery li {
+  min-width: 0;
+}
+
+.generated-image-gallery a {
+  display: block;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--background-secondary, #f6f6f4);
+}
+
+.generated-image-gallery img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 420px;
+  object-fit: cover;
+}
+
+.generated-image-gallery a:hover,
+.generated-image-gallery a:focus-visible {
+  border-color: var(--accent);
+}
+
+.agent-step-call .generated-image-gallery {
+  margin: 8px 0 0;
+}

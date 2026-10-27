@@ -5,7 +5,7 @@ import { useId, useMemo, useState, type CSSProperties } from 'react';
 import { Check, CircleAlert, LoaderCircle } from 'lucide-react';
 import { ModelAvatar } from './ModelAvatar';
 import { MemberRoleBadge } from './MemberRoleBadge';
-import { getAgentChart, getAgentToolText, type AgentToolPart } from '@/lib/agent/tool-presentation';
+import { getAgentChart, getAgentGeneratedImages, getAgentToolText, type AgentToolPart } from '@/lib/agent/tool-presentation';
 import { REASONING_EFFORT_LABELS } from '@/lib/chat/model-settings';
 import { AI_REASONING_EFFORTS, type AIReasoningEffort } from '@/types';
 import { isAgentChartTool } from '@/lib/agent/tool-catalog';
@@ -18,6 +18,7 @@ import { getChartFocus } from '@/lib/agent/chart-interaction';
 import { memberAnswerText, parallelAnalysisResults, parallelMemberName, type ParallelAnalysisResult } from '@/lib/agent/parallel-results';
 import type { AgentRunStatus } from '@/lib/agent/types';
 import { getAgentToolState, getParallelMemberState } from './presentation';
+import { GeneratedImageGallery } from './GeneratedImageGallery';
 
 function TextFallback({ tool, incomplete = false }: { tool: AgentToolPart; incomplete?: boolean }) {
   const text = getAgentToolText(tool);
@@ -72,6 +73,8 @@ export function AgentToolResult({ tool, runStatus }: { tool: AgentToolPart; runS
   const analyses = tool.name === 'parallel_analysis' ? parallelAnalysisResults(tool.output) : [];
   if (analyses.length) return <CollaborationCard tool={tool} analyses={analyses} runStatus={runStatus} />;
   if (tool.status !== 'completed') return null;
+  const generated = getAgentGeneratedImages(tool);
+  if (generated) return <GeneratedImageGallery images={generated.images} label="生成的图片" />;
   const focus = getChartFocus(tool);
   if (focus) return <p className="agent-focus-receipt"><span>盘面已定位</span>{focus.caption}</p>;
   if (!isAgentChartTool(tool.name) && tool.name !== 'inspect_chart') return null;

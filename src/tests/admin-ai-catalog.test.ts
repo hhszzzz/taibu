@@ -35,6 +35,14 @@ test('model input keeps the thinking ladder in order and only allows a listed de
     assert.match((parseModelInput(model({ customParameters: [1] })) as { error: string }).error, /JSON 对象/u);
     assert.match((parseModelInput(model({ modelKey: 'has space' })) as { error: string }).error, /空格/u);
 
+    // 生图模型按张扣积分：默认 1，可设 0 到 1000 的整数。
+    const image = parseModelInput(model({ usageType: 'image', creditCost: 5, supportsReasoning: false }));
+    assert.ok('value' in image);
+    assert.equal(image.value.creditCost, 5);
+    assert.equal((parseModelInput(model()) as { value: { creditCost: number } }).value.creditCost, 1);
+    assert.match((parseModelInput(model({ usageType: 'image', creditCost: -1 })) as { error: string }).error, /每张图积分/u);
+    assert.match((parseModelInput(model({ usageType: 'image', creditCost: 1.5 })) as { error: string }).error, /每张图积分/u);
+
     // A model without thinking stores no levels and no default.
     const plain = parseModelInput(model({ supportsReasoning: false, isReasoningDefault: true }));
     assert.ok('value' in plain);

@@ -305,6 +305,7 @@ export interface AiModels {
   created_at: Generated<string | null>;
   updated_at: Generated<string | null>;
   usage_type: Generated<string>;
+  credit_cost: Generated<number>;
   default_top_p: Generated<number | null>;
   default_presence_penalty: Generated<number | null>;
   default_frequency_penalty: Generated<number | null>;
@@ -556,6 +557,22 @@ export interface FaceReadings {
   analysis_type: Generated<string | null>;
   created_at: Generated<string | null>;
   conversation_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+}
+
+export interface GeneratedImages {
+  id: Generated<string>;
+  user_id: ColumnType<string, string, string>;
+  conversation_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  run_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  message_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  model_id: ColumnType<string, string, string>;
+  prompt: ColumnType<string, string, string>;
+  size: ColumnType<string, string, string>;
+  object_path: ColumnType<string, string, string>;
+  mime_type: ColumnType<string, string, string>;
+  bytes: ColumnType<number, number, number>;
+  sha256: ColumnType<string, string, string>;
+  created_at: Generated<string>;
 }
 
 export interface HepanCharts {
@@ -890,6 +907,7 @@ export interface DB {
   "daily_checkins": DailyCheckins;
   "daliuren_divinations": DaliurenDivinations;
   "face_readings": FaceReadings;
+  "generated_images": GeneratedImages;
   "hepan_charts": HepanCharts;
   "knowledge_bases": KnowledgeBases;
   "knowledge_entries": KnowledgeEntries;

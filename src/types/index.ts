@@ -230,6 +230,8 @@ export interface AIMessageMetadata extends Record<string, unknown> {
     };
     /** 提示词诊断信息 */
     promptDiagnostics?: PromptDiagnostics;
+    /** 输入框直接生成的图片：只留 id、尺寸与类型，字节由 /api/images/[id] 读取。 */
+    generatedImages?: Array<{ id: string; size: string; mimeType: string }>;
 }
 
 export type { MentionType, Mention, MentionTarget } from '@/types/mentions';
@@ -283,7 +285,7 @@ export type KnownAIVendor =
 export type AIVendor = KnownAIVendor | (string & {});
 
 /** AI 模型用途 */
-export type AIUsageType = 'chat' | 'vision' | 'embedding' | 'rerank';
+export type AIUsageType = 'chat' | 'vision' | 'embedding' | 'rerank' | 'image';
 
 /** AI 来源传输协议 */
 export type AITransport = 'openai_compatible';
@@ -330,6 +332,8 @@ export interface AIModelConfig {
     name: string;                // 显示名称
     vendor: AIVendor;            // 供应商
     usageType?: AIUsageType;     // 模型用途
+    /** 生图模型每张图扣除的积分；其它用途不使用。 */
+    creditCost?: number;
     modelId: string;             // API 模型 ID
     apiUrl: string;              // API 端点
     gatewayId?: string;          // 当前来源的网关行 ID

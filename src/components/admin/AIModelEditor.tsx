@@ -35,7 +35,7 @@ const text = (value: number | null | undefined) => (value === null || value === 
 function draftOf(model: AdminModel | null, gateways: readonly AdminGateway[]): Draft {
     return {
         modelKey: model?.modelKey ?? '', displayName: model?.displayName ?? '', vendor: model?.vendor ?? 'openai',
-        description: model?.description ?? '', usageType: model?.usageType ?? 'chat', isEnabled: model?.isEnabled ?? true,
+        description: model?.description ?? '', usageType: model?.usageType ?? 'chat', creditCost: model?.creditCost ?? 1, isEnabled: model?.isEnabled ?? true,
         sortOrder: text(model?.sortOrder ?? 0), requiredTier: model?.requiredTier ?? 'free',
         supportsVision: model?.supportsVision ?? false, supportsReasoning: model?.supportsReasoning ?? false,
         isReasoningDefault: model?.isReasoningDefault ?? false, reasoningRequiredTier: model?.reasoningRequiredTier ?? 'free',
@@ -143,6 +143,7 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
     const unused = gateways.filter(gateway => !draft.sources.some(source => source.gatewayId === gateway.id));
     const format = THINKING_FORMAT_OPTIONS.find(option => option.value === draft.thinkingFormat);
     const chat = draft.usageType === 'chat' || draft.usageType === 'vision';
+    const image = draft.usageType === 'image';
 
     const toggleLevel = (level: AIReasoningEffort) => {
         const levels = draft.thinkingLevels.includes(level) ? draft.thinkingLevels.filter(item => item !== level) : [...draft.thinkingLevels, level];
@@ -238,6 +239,15 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
                     <input className="settings-input" value={draft.description} maxLength={500} onChange={event => patch({ description: event.target.value })} />
                 </label>
             </section>
+
+            {image && <section className="ai-catalog-section" aria-labelledby={`${titleId}-image`}>
+                <header><h3 id={`${titleId}-image`}>生图</h3><p>输入框的「生图」按钮和 Agent 的 generate_image 工具使用这个模型；按张扣积分。</p></header>
+                <label className="ai-catalog-field"><span>每张图积分</span>
+                    <input className="settings-input" type="number" inputMode="numeric" min={0} max={1000} value={draft.creditCost}
+                        onChange={event => patch({ creditCost: Number(event.target.value) })} />
+                    <span className="ai-catalog-hint">0 表示不扣积分；每次最多生成 4 张。</span>
+                </label>
+            </section>}
 
             {chat && <section className="ai-catalog-section" aria-labelledby={`${titleId}-limits`}>
                 <header><h3 id={`${titleId}-limits`}>上下文与输出</h3><p>Agent 按上下文窗口决定何时压缩对话；最大输出是单次回复（含思考）的上限。</p></header>

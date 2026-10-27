@@ -30,6 +30,8 @@ import { useAgentChat } from '@/lib/agent/use-agent-chat';
 import { parseAgentCompactCommand } from '@/lib/agent/compaction';
 import { browserTimeZone } from '@/lib/ai/prompt-time';
 import { captureCurrentBranch, switchToVersion, withPendingVersion } from '@/lib/chat/message-versions';
+import { requestBrowserJson } from '@/lib/browser-api';
+import type { GeneratedImageDto } from '@/lib/images/generated';
 
 function shouldShowCheckKeyAction(message?: string): boolean {
     if (!message) return false;
@@ -340,6 +342,116 @@ export function useChatMessaging({
         finally { setIsSendingToList(false); }
     };
 
+    /** A new conversation for a draft, with the sidebar, route and caches in step; null when it cannot be created. */
+    const createDraftConversation = async (draftTitle: string, isCurrent: () => boolean) => {
+        if (!userId) return null;
+        setPendingSidebarTitle(draftTitle || DEFAULT_CONVERSATION_TITLE);
+        setHasLoadedConversations(true);
+        const newId = await createConversation({
+            personality: 'general',
+            title: draftTitle || DEFAULT_CONVERSATION_TITLE,
+        });
+        if (!newId) { setPendingSidebarTitle(null); return null; }
+        if (!isCurrent()) return null;
+        state.conversationEpochRef.current += 1;
+        activeConversationIdRef.current = newId;
+        conversationValidatedRef.current = true;
+        state.moveDraft(newId);
+        setActiveConversationId(newId);
+        if (searchParams.get('id') !== newId) router.replace(`/chat?id=${newId}`);
+        setPendingSidebarTitle(null);
+        const nowIso = new Date().toISOString();
+        setConversations(prev => {
+            const nextConversation: ConversationListItem = {
+                id: newId, userId,
+                personality: 'general', title: draftTitle || DEFAULT_CONVERSATION_TITLE,
+                createdAt: nowIso, updatedAt: nowIso, sourceType: 'chat', questionPreview: null,
+                isArchived: false, archivedKbIds: [],
+            };
+            return [nextConversation, ...prev.filter(c => c.id !== newId)];
+        });
+        setHasLoadedConversations(true);
+        return newId;
+    };
+
+    /** Removes a conversation created for a failed send, so the sidebar keeps no empty shell. */
+    const discardDraftConversation = async (conversationId: string) => {
+        await deleteConversation(conversationId);
+        if (activeConversationIdRef.current === conversationId) {
+            activeConversationIdRef.current = null;
+            conversationValidatedRef.current = false;
+            setActiveConversationId(null);
+            setMessages([]);
+            router.replace('/chat');
+        }
+        removeConversationDetail(conversationId);
+        setConversations(prev => prev.filter(conv => conv.id !== conversationId));
+        setPendingSidebarTitle(null);
+        setHasLoadedConversations(true);
+        void refreshConversationList(userId);
+    };
+
+    /**
+     * 输入框直接生图：先建好对话，再调用生图接口，成功后把用户消息和助手消息一起写入。
+     * 失败时不留下空对话，积分由服务端在失败时退还。
+     */
+    const handleImageGenerate = async (options: { prompt: string; size: string; count: number }) => {
+        const prompt = options.prompt.trim();
+        if (!userId || !prompt || isLoading || isSendingToList) return;
+        let isCurrent = agent.captureConversation();
+        const clearSubmittedDraft = state.captureSubmittedDraft(true);
+        setIsSendingToList(true);
+        const isNewConversation = !activeConversationId;
+        const draftTitle = isNewConversation ? buildDraftTitle(prompt) : null;
+        let conversationId = activeConversationId;
+        const assistantId = (Date.now() + 1).toString();
+        const userMessage: ChatMessage = { id: Date.now().toString(), role: 'user', content: prompt, createdAt: new Date().toISOString() };
+        try {
+            if (!isNewConversation && !conversationValidatedRef.current) {
+                showToast('info', '会话加载中，请稍后再试');
+                return;
+            }
+            if (isNewConversation) {
+                const newId = await createDraftConversation(draftTitle || DEFAULT_CONVERSATION_TITLE, isCurrent);
+                if (!newId) { showToast('error', '创建对话失败，请重试'); return; }
+                conversationId = newId;
+                isCurrent = agent.captureConversation(newId);
+            }
+            if (!conversationId) { showToast('error', '创建对话失败，请重试'); return; }
+            const pendingMessage: ChatMessage = {
+                id: assistantId, role: 'assistant', content: '正在生成图片…', createdAt: new Date().toISOString(),
+                metadata: { sources: [], pending: true },
+            };
+            if (isCurrent()) setMessages(prev => [...prev, userMessage, pendingMessage]);
+            const response = await requestBrowserJson<{ images: GeneratedImageDto[]; model: { id: string; name: string } }>('/api/images/generate', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ conversationId, prompt, size: options.size, count: options.count }),
+            });
+            const images = response.data?.images ?? [];
+            if (response.error || !images.length) throw new Error(response.error?.message ?? '生成图片失败，请重试');
+            const assistantMessage: ChatMessage = {
+                id: assistantId, role: 'assistant', createdAt: new Date().toISOString(),
+                content: `已生成 ${images.length} 张图片。`,
+                model: response.data?.model.id,
+                modelName: response.data?.model.name,
+                metadata: { sources: [], generatedImages: images.map(({ id, size, mimeType }) => ({ id, size, mimeType })) },
+            };
+            const nextMessages = [...messages, userMessage, assistantMessage];
+            const saved = await saveMessages(conversationId, nextMessages, isNewConversation ? (draftTitle || undefined) : undefined);
+            if (!saved) throw new Error('保存对话失败，请重试');
+            clearSubmittedDraft();
+            if (isCurrent()) setMessages(nextMessages);
+            void refreshViewerState().catch(() => undefined);
+        } catch (error) {
+            if (isCurrent()) setMessages(prev => prev.filter(message => message.id !== assistantId && message.id !== userMessage.id));
+            if (isNewConversation && conversationId) await discardDraftConversation(conversationId);
+            else if (conversationId === activeConversationIdRef.current) setMessages(messages);
+            showToast('error', error instanceof Error ? error.message : '生成图片失败，请重试');
+        } finally {
+            setIsSendingToList(false);
+        }
+    };
+
     // Send message; `context` is the rich chart quote attached above the composer.
     const handleSend = async (context?: string) => {
         const trimmedInput = [context?.trim(), inputValue.trim()].filter(Boolean).join('\n\n');
@@ -387,36 +499,10 @@ export function useChatMessaging({
                 if (!isCurrent()) return;
             }
             if (isNewConversation && userId) {
-                setPendingSidebarTitle(draftTitle || DEFAULT_CONVERSATION_TITLE);
-                setHasLoadedConversations(true);
-                const newId = await createConversation({
-                    personality: 'general',
-                    title: draftTitle || DEFAULT_CONVERSATION_TITLE,
-                });
+                const newId = await createDraftConversation(draftTitle || DEFAULT_CONVERSATION_TITLE, isCurrent);
                 if (newId) {
                     conversationId = newId;
-                    if (!isCurrent()) return;
-                    state.conversationEpochRef.current += 1;
-                    activeConversationIdRef.current = newId;
-                    conversationValidatedRef.current = true;
-                    state.moveDraft(newId);
-                    setActiveConversationId(newId);
                     isCurrent = agent.captureConversation(newId);
-                    if (searchParams.get('id') !== newId) router.replace(`/chat?id=${newId}`);
-                    setPendingSidebarTitle(null);
-                    const nowIso = new Date().toISOString();
-                    setConversations(prev => {
-                        const nextConversation: ConversationListItem = {
-                            id: newId, userId,
-                            personality: 'general', title: draftTitle || DEFAULT_CONVERSATION_TITLE,
-                            createdAt: nowIso, updatedAt: nowIso, sourceType: 'chat', questionPreview: null,
-                            isArchived: false, archivedKbIds: [],
-                        };
-                        return [nextConversation, ...prev.filter(c => c.id !== newId)];
-                    });
-                    setHasLoadedConversations(true);
-                } else {
-                    setPendingSidebarTitle(null);
                 }
             }
             if (!conversationId) { showToast('error', '创建对话失败，请重试'); return; }
@@ -461,23 +547,8 @@ export function useChatMessaging({
             setMessages(optimisticMessages);
             const saveSucceeded = await saveMessages(conversationId, newMessages, isNewConversation ? (draftTitle || undefined) : undefined);
             if (!saveSucceeded) {
-                if (isNewConversation) {
-                    await deleteConversation(conversationId);
-                    if (activeConversationIdRef.current === conversationId) {
-                        activeConversationIdRef.current = null;
-                        conversationValidatedRef.current = false;
-                        setActiveConversationId(null);
-                        setMessages([]);
-                        router.replace('/chat');
-                    }
-                    removeConversationDetail(conversationId);
-                    setConversations(prev => prev.filter(conv => conv.id !== conversationId));
-                    setPendingSidebarTitle(null);
-                    setHasLoadedConversations(true);
-                    void refreshConversationList(userId);
-                } else if (conversationId === activeConversationIdRef.current) {
-                    setMessages(messages);
-                }
+                if (isNewConversation) await discardDraftConversation(conversationId);
+                else if (conversationId === activeConversationIdRef.current) setMessages(messages);
                 showToast('error', '保存对话失败，请重试');
                 return;
             }
@@ -739,6 +810,7 @@ export function useChatMessaging({
         closeKbModal,
         handleStop,
         handleSend,
+        handleImageGenerate,
         handleEditMessage,
         handleRegenerateResponse,
         handleSwitchVersion,

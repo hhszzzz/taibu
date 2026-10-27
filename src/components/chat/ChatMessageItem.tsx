@@ -26,6 +26,8 @@ import { openSettingsCenter } from '@/lib/settings-center';
 import { MessageActions } from './MessageActions';
 import { useToast } from '@/components/ui/Toast';
 import { PrivateAttachments } from './agent/PrivateAttachments';
+import { GeneratedImageGallery } from './agent/GeneratedImageGallery';
+import { readGeneratedImageRefs } from '@/lib/images/generated';
 
 interface ChatMessageItemProps {
     message: ChatMessage;
@@ -289,6 +291,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
             )}
             {message.agent ? <AgentMessage data={message.agent} actions={assistantActions} />
                 : <div className={`chat-answer${isCurrentStreaming && message.content ? ' is-streaming' : ''}`}><MarkdownContent content={message.content} className="chat-prose" streaming={isCurrentStreaming} /></div>}
+            <GeneratedImageGallery images={readGeneratedImageRefs(message.metadata?.generatedImages)} label="生成的图片" />
             {showCheckKeyAction && !isCurrentStreaming && (
                 <button
                     type="button"

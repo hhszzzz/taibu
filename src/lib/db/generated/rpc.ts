@@ -39,12 +39,14 @@ export interface RpcRegistry {
   "create_conversation_with_messages": { args: { "p_user_id": string | null; "p_title": string | null; "p_personality"?: string | null; "p_source_type"?: string | null; "p_source_data"?: unknown | null; "p_messages"?: unknown | null; }; result: string };
   "create_knowledge_base_with_limit": { args: { "p_user_id": string | null; "p_name": string | null; "p_description"?: string | null; "p_weight"?: string | null; "p_limit"?: number | null; }; result: Json };
   "decrement_ai_chat_count": { args: { "user_id": string | null; }; result: number };
+  "decrement_ai_chat_count_by": { args: { "user_id": string | null; "amount": number | null; }; result: number };
   "delete_agent_retention": { args: { "p_event_days"?: number | null; "p_commit_days"?: number | null; "p_worker_hours"?: number | null; "p_limit"?: number | null; "p_metric_days"?: number | null; }; result: { events_deleted: number; commits_deleted: number; workers_deleted: number; metrics_deleted: number; }[] };
   "delete_conversation_graph": { args: { "p_conversation_id": string | null; }; result: boolean };
   "delete_history_item_and_conversation": { args: { "p_history_type": string | null; "p_history_id": string | null; }; result: boolean };
   "deliver_daily_briefing_notices": { args: { "p_limit"?: number | null; }; result: number };
   "fork_conversation_snapshot": { args: { "p_parent": string | null; "p_through": string | null; "p_source_messages": unknown | null; "p_messages": unknown | null; }; result: string };
   "get_conversation_share": { args: { "p_token": string | null; }; result: { title: string; snapshot: Json; include_charts: boolean; created_at: string; updated_at: string; }[] };
+  "get_shared_generated_image": { args: { "p_token": string | null; "p_image": string | null; }; result: { object_path: string; mime_type: string; bytes: number; sha256: string; }[] };
   "import_ming_records_and_notes": { args: { "p_records": unknown | null; "p_notes": unknown | null; }; result: Json };
   "increment_ai_chat_count": { args: { "user_id": string | null; "amount": number | null; }; result: number };
   "increment_community_post_view_count": { args: { "post_id": string | null; }; result: number };
@@ -112,12 +114,14 @@ export const RPC_SPECS = {
   "create_conversation_with_messages": { args: [["p_user_id", "uuid", false], ["p_title", "text", false], ["p_personality", "text", true], ["p_source_type", "text", true], ["p_source_data", "jsonb", true], ["p_messages", "jsonb", true]], returns: "scalar" },
   "create_knowledge_base_with_limit": { args: [["p_user_id", "uuid", false], ["p_name", "text", false], ["p_description", "text", true], ["p_weight", "text", true], ["p_limit", "integer", true]], returns: "scalar" },
   "decrement_ai_chat_count": { args: [["user_id", "uuid", false]], returns: "scalar" },
+  "decrement_ai_chat_count_by": { args: [["user_id", "uuid", false], ["amount", "integer", false]], returns: "scalar" },
   "delete_agent_retention": { args: [["p_event_days", "integer", true], ["p_commit_days", "integer", true], ["p_worker_hours", "integer", true], ["p_limit", "integer", true], ["p_metric_days", "integer", true]], returns: "setof" },
   "delete_conversation_graph": { args: [["p_conversation_id", "text", false]], returns: "scalar" },
   "delete_history_item_and_conversation": { args: [["p_history_type", "text", false], ["p_history_id", "text", false]], returns: "scalar" },
   "deliver_daily_briefing_notices": { args: [["p_limit", "integer", true]], returns: "scalar" },
   "fork_conversation_snapshot": { args: [["p_parent", "uuid", false], ["p_through", "text", false], ["p_source_messages", "jsonb", false], ["p_messages", "jsonb", false]], returns: "scalar" },
   "get_conversation_share": { args: [["p_token", "text", false]], returns: "setof" },
+  "get_shared_generated_image": { args: [["p_token", "text", false], ["p_image", "uuid", false]], returns: "setof" },
   "import_ming_records_and_notes": { args: [["p_records", "jsonb", false], ["p_notes", "jsonb", false]], returns: "scalar" },
   "increment_ai_chat_count": { args: [["user_id", "uuid", false], ["amount", "integer", false]], returns: "scalar" },
   "increment_community_post_view_count": { args: [["post_id", "uuid", false]], returns: "scalar" },

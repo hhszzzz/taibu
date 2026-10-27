@@ -16,6 +16,8 @@ import { AgentArchiveProposalCard, AgentArchiveReceipt } from './agent/AgentArch
 import { useAgentResultWorkspace } from './agent/AgentResultContext';
 import { useAgentTailText } from '@/lib/agent/use-agent-tail';
 import { groupAgentParts } from './agent/presentation';
+import { GeneratedImageGallery } from './agent/GeneratedImageGallery';
+import { getAgentGeneratedImages } from '@/lib/agent/tool-presentation';
 import { AGENT_WEB_TOOLS } from "@/lib/agent/tool-catalog";
 
 /**
@@ -59,6 +61,12 @@ export function AgentMessage({ data, actions }: { data: AgentMessageData; action
   const liveText = lastTextPart?.type === 'text' && tail.length > lastTextPart.text.length && tail.startsWith(lastTextPart.text) ? tail : undefined;
   const hasSearchStep = data.parts.some(part => part.type === 'tool' && (AGENT_WEB_TOOLS.has(part.name) || part.name === 'search_knowledge'));
   const archive = useMemo(() => getArchiveEntries(data.parts), [data.parts]);
+  // 生图结果在回答下方以图集展示：步骤会折叠，图片是这次任务的成果。
+  const generatedImages = useMemo(() => data.parts.flatMap(part => {
+    if (part.type !== 'tool' || part.parentId) return [];
+    const generated = getAgentGeneratedImages(part);
+    return generated ? [generated.images] : [];
+  }), [data.parts]);
   return (
     <div className="agent-message" data-agent-run-id={data.runId} data-agent-status={data.status}>
       <div className="agent-message-heading">
@@ -94,6 +102,7 @@ export function AgentMessage({ data, actions }: { data: AgentMessageData; action
         }
         return null;
       })}
+      {generatedImages.map((images, index) => <GeneratedImageGallery key={images[0]?.id ?? index} images={images} label="生成的图片" />)}
       {archive.length > 0 && <div className="agent-archive-list">
         {archive.map(entry => entry.kind === 'card' ? <AgentArchiveProposalCard key={entry.id} card={entry.card} /> : <AgentArchiveReceipt key={entry.id} record={entry.record} />)}
       </div>}

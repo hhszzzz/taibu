@@ -1,7 +1,7 @@
 import type { ChatMessage } from '@/types';
 import { isAgentRunTerminal, type AgentMessageData, type AgentPart, type AgentRunStatus, type AgentRuntimeInfo } from '@/lib/agent/types';
 import { getAgentToolFamily, type AgentToolFamily, AGENT_ARCHIVE_TOOLS, AGENT_BACKGROUND_TOOL, AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_SKILL_TOOLS, AGENT_SUBMIT_PLAN_TOOL, AGENT_TOOL_SEARCH_TOOL, isAgentChartTool, isAgentMemberTool } from '@/lib/agent/tool-catalog';
-import { getAgentAttachmentRead, getAgentCalculation, getAgentChart, getAgentConversationHits, getAgentDataResults, getAgentMethod, getAgentNotes, getAgentScript, getAgentSearchResults, getAgentSkillLoad, getAgentToolArtifactId, getAgentToolQuestions, type AgentChart } from '@/lib/agent/tool-presentation';
+import { getAgentAttachmentRead, getAgentCalculation, getAgentChart, getAgentConversationHits, getAgentDataResults, getAgentGeneratedImages, getAgentMethod, getAgentNotes, getAgentScript, getAgentSearchResults, getAgentSkillLoad, getAgentToolArtifactId, getAgentToolQuestions, type AgentChart } from '@/lib/agent/tool-presentation';
 import { AGENT_ARCHIVE_KIND_LABELS, getAgentArchiveProposal, getAgentArchiveRecord } from '@/lib/agent/archive';
 import { getChartFocus, getChartTargets } from '@/lib/agent/chart-interaction';
 import { getSavedChartHref } from '@/lib/agent/chart-save';
@@ -102,6 +102,7 @@ const RAW_TOOL_TITLES: Record<string, string> = {
     read_user_data: '读取资料',
     read_user_notes: '读取每日笔记',
     search_conversations: '检索以往对话',
+    generate_image: '生成图片',
     [AGENT_ARCHIVE_TOOLS.record]: '记入档案',
     [AGENT_ARCHIVE_TOOLS.propose]: '生成保存卡片',
     read_attachment: '读取附件',
@@ -233,6 +234,11 @@ export function summarizeAgentTool(tool: AgentTool): string | null {
         if (!results) return query || null;
         const found = results.length ? web ? `找到 ${results.length} 个公开来源` : `命中 ${results.length} 段` : web ? '没有可引用的公开来源' : '没有匹配的段落';
         return query ? `${query} · ${found}` : found;
+    }
+    if (tool.name === 'generate_image') {
+        const generated = getAgentGeneratedImages(tool);
+        if (generated) return `生成 ${generated.images.length} 张图片`;
+        return typeof args.prompt === 'string' && args.prompt.trim() ? `「${args.prompt.trim().slice(0, 40)}」` : null;
     }
     if (tool.name === 'list_user_data') {
         const data = getAgentDataResults(tool);
@@ -554,7 +560,7 @@ export function formatAgentValue(value: unknown): string {
 /** Short tags shown on process steps, one per tool family. */
 export const AGENT_TOOL_FAMILY_LABELS: Record<AgentToolFamily, string> = {
     chart: '命盘', calculation: '推演', drilldown: '详查', search: '依据', data: '资料', method: '指引', skill: '技能', plan: '计划', todo: '清单',
-    question: '问题', collaboration: '协作', memory: '记忆', archive: '档案', code: '脚本', external: '外部', other: '工具',
+    question: '问题', collaboration: '协作', memory: '记忆', archive: '档案', code: '脚本', external: '外部', image: '生图', other: '工具',
 };
 
 /**

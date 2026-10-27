@@ -50,6 +50,8 @@ export interface AdminModelInput {
     vendor: string;
     description: string | null;
     usageType: AIUsageType;
+    /** 生图模型每张图扣除的积分；仅生图用途使用。 */
+    creditCost: number;
     isEnabled: boolean;
     sortOrder: number;
     requiredTier: CatalogTier;
@@ -87,6 +89,7 @@ export const USAGE_TYPES: ReadonlyArray<{ value: AIUsageType; label: string }> =
     { value: 'vision', label: '视觉' },
     { value: 'embedding', label: '向量' },
     { value: 'rerank', label: '重排' },
+    { value: 'image', label: '生图' },
 ];
 
 export const TIERS: ReadonlyArray<{ value: CatalogTier; label: string }> = [
@@ -208,6 +211,8 @@ export function parseModelInput(body: unknown): Parsed<AdminModelInput> {
     if (!vendor || vendor.length > 40) return { error: '请选择或填写供应商' };
     const usageType = body.usageType ?? 'chat';
     if (!USAGE_TYPES.some(item => item.value === usageType)) return { error: '模型用途无效' };
+    const creditCost = optionalNumber(body.creditCost, 0, 1000, true);
+    if (creditCost === undefined) return { error: '每张图积分需要是 0 到 1000 之间的整数' };
     const requiredTier = tier(body.requiredTier, 'free');
     const reasoningRequiredTier = tier(body.reasoningRequiredTier, 'plus');
     if (!requiredTier || !reasoningRequiredTier) return { error: '会员等级无效' };
@@ -248,6 +253,7 @@ export function parseModelInput(body: unknown): Parsed<AdminModelInput> {
         value: {
             modelKey, displayName, vendor, description,
             usageType: usageType as AIUsageType,
+            creditCost: creditCost ?? 1,
             isEnabled: body.isEnabled !== false,
             sortOrder: sortOrder ?? 0,
             requiredTier, reasoningRequiredTier,

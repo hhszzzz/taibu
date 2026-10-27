@@ -5,13 +5,15 @@
  */
 
 import { NextRequest } from 'next/server';
-import { getModelsAsync } from '@/lib/server/ai-config';
+import { getModelsAsync, getModelsByUsageTypeAsync } from '@/lib/server/ai-config';
 import type { MembershipType } from '@/lib/user/membership';
 import { getEffectiveMembershipType, MembershipResolutionError } from '@/lib/user/membership-server';
-import { getModelAccessForMembershipAsync, getModelRequiredTier } from '@/lib/ai/ai-access';
+import { getModelAccessForMembershipAsync, getModelRequiredTier, isModelAllowedForMembership } from '@/lib/ai/ai-access';
 import { getAuthContext, jsonError, jsonOk } from '@/lib/api-utils';
-import { getModelUsageType, isUserSelectableUsageType } from '@/lib/ai/source-runtime';
+import { getModelUsageType, getOrderedModelSources, isUserSelectableUsageType } from '@/lib/ai/source-runtime';
 import { getGlobalAIFeatureGuardResponse } from '@/lib/api/ai-feature-guard';
+import { imageModelCreditCost } from '@/lib/ai/image-generation.server';
+import { GENERATED_IMAGE_MAX_COUNT, GENERATED_IMAGE_SIZES } from '@/lib/images/generated';
 
 export async function GET(request: NextRequest) {
     try {
@@ -49,6 +51,23 @@ export async function GET(request: NextRequest) {
         const auth = await getAuthContext(request);
         if (auth.authError) {
             return jsonError(auth.authError.message, auth.authError.status);
+        }
+
+        // 生图模型单独给输入框的「生图」入口：只列出当前会员可用、且有可调用来源的模型。
+        if (catalog === 'image') {
+            const membership: MembershipType = auth.user
+                ? await getEffectiveMembershipType(auth.user.id, { db: auth.db })
+                : 'free';
+            const models = (await getModelsByUsageTypeAsync('image'))
+                .filter(model => isModelAllowedForMembership(model, membership) && getOrderedModelSources(model).length > 0)
+                .map(model => ({
+                    id: model.id,
+                    name: model.name,
+                    vendor: model.vendor,
+                    creditCost: imageModelCreditCost(model),
+                    tier: getModelRequiredTier(model),
+                }));
+            return jsonOk({ models, sizes: GENERATED_IMAGE_SIZES, maxCount: GENERATED_IMAGE_MAX_COUNT });
         }
 
         // 从数据库获取模型配置（带缓存）

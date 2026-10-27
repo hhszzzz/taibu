@@ -26,6 +26,9 @@ export function getManagedEndpointPath(usageType: AIUsageType): string {
       return '/v1/embeddings';
     case 'rerank':
       return '/v1/rerank';
+    // Image models append /images/generations to the API base themselves.
+    case 'image':
+      return '/v1';
     case 'chat':
     case 'vision':
     default:
@@ -34,9 +37,14 @@ export function getManagedEndpointPath(usageType: AIUsageType): string {
 }
 
 export function buildManagedApiUrl(baseUrl: string | null | undefined, usageType: AIUsageType): string {
-  const normalizedBaseUrl = trimTrailingSlash((baseUrl || '').trim());
+  let normalizedBaseUrl = trimTrailingSlash((baseUrl || '').trim());
   if (!normalizedBaseUrl) {
     return '';
+  }
+
+  // A pasted full endpoint is the same gateway as its base URL.
+  if (normalizedBaseUrl.endsWith('/images/generations')) {
+    normalizedBaseUrl = trimTrailingSlash(normalizedBaseUrl.slice(0, -'/images/generations'.length));
   }
 
   const endpoint = getManagedEndpointPath(usageType);

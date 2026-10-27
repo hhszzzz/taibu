@@ -77,6 +77,8 @@ import { SessionDetailsPanel } from '@/components/chat/agent/SessionDetailsPanel
 import { AgentResultContext } from '@/components/chat/agent/AgentResultContext';
 import { ChatRecordViewContext } from '@/lib/chat/chat-record-view';
 import { ComposerStatusBar } from '@/components/chat/composer/ComposerStatusBar';
+import { ChatComposer } from '@/components/chat/ChatComposer';
+import { GeneratedImageGallery } from '@/components/chat/agent/GeneratedImageGallery';
 import { useComposerCommands } from '@/components/chat/composer/ComposerCommands';
 import { getAgentChart } from '@/lib/agent/tool-presentation';
 import { getChartTargets, getDrilldownTargets } from '@/lib/agent/chart-interaction';
@@ -93,6 +95,7 @@ import { useTranscriptScroll } from '@/lib/chat/use-transcript-scroll';
 import { scrollToMessageId } from '@/lib/chat/message-navigation';
 import { ShareConversationMenu } from '@/components/chat/ShareConversationMenu';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
+const IMAGE_FIXTURE = { id: '11111111-1111-4111-8111-111111111111', size: '1024x1024', mimeType: 'image/png' };
 const initialToolParts = AGENT_TOOL_FIXTURE_PARTS;
 const BAZI_DRILLDOWN_FIXTURE_PARTS = BAZI_DRILLDOWN_FIXTURE_PARTS_JSON;
 const familyParts = () => [
@@ -425,6 +428,22 @@ function ComposerProbe() {
     <output data-testid="composer-error">{state.mentionLoadError}</output>
   </section>;
 }
+// 输入框「生图」入口：没有可用模型时按钮隐藏，开启后可选尺寸与张数并直接生成。
+function ImageComposerProbe() {
+  const [value, setValue] = useState('');
+  const [available, setAvailable] = useState(false);
+  const [generated, setGenerated] = useState(null);
+  window.fixture.imageComposer = { available: () => available, generated: () => generated };
+  return <section data-testid="image-composer">
+    <button type="button" onClick={() => setAvailable(true)}>Enable image model</button>
+    <ChatComposer draftKey="image-fixture" inputValue={value} onInputChange={setValue} onSend={() => {}} isLoading={false}
+      userId="alice" membershipType="plus" disabled={false}
+      imageGeneration={available ? { sizes: ['1024x1024', '1536x1024'], creditCost: 2, maxCount: 4, onGenerate: options => setGenerated(options) } : undefined} />
+    {generated && <output data-testid="image-generated">{JSON.stringify(generated)}</output>}
+    <GeneratedImageGallery images={[IMAGE_FIXTURE]} />
+  </section>;
+}
+
 // The composer's slash menu in Agent mode: the member's skills join the built-in commands.
 function SkillCommandsProbe() {
   const { user } = useSessionSafe();
@@ -491,6 +510,7 @@ function Shell() {
   const [communityMounted, setCommunityMounted] = useState(false);
   const [postMounted, setPostMounted] = useState(false);
   const [skillCommandsMounted, setSkillCommandsMounted] = useState(false);
+  const [imageComposerMounted, setImageComposerMounted] = useState(false);
   const [castMounted, setCastMounted] = useState(null);
   window.fixture.refreshActivity = refreshAgentActivity;
   window.fixture.seedTarot = () => sessionStorage.setItem('tarot_result', JSON.stringify({
@@ -516,7 +536,7 @@ function Shell() {
   window.fixture.mount = { composer: setComposerMounted, history: setHistoryMounted, drawer: setDrawerMounted,
     records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted, agent: setAgentMounted, question: setQuestionMounted, results: setResultsMounted, sidebar: setSidebarMounted, phoneDrawer: setPhoneDrawerMounted, menu: setMenuMounted, rounds: setRoundsMounted, polish: setPolishMounted,
     snapshot: setSnapshotMounted, share: setShareMounted, tarot: setTarotMounted, qimen: setQimenMounted, activity: setActivityMounted,
-    annual: setAnnualMounted, community: setCommunityMounted, post: setPostMounted, cast: setCastMounted, skillCommands: setSkillCommandsMounted,
+    annual: setAnnualMounted, community: setCommunityMounted, post: setPostMounted, cast: setCastMounted, skillCommands: setSkillCommandsMounted, imageComposer: setImageComposerMounted,
     visualization: setVisualizationMounted };
   window.fixture.chartKey = queryKeys.userCharts;
   window.fixture.chartClient = chartClient;
@@ -581,6 +601,7 @@ function Shell() {
     {route === '/agent-profiles' && <section data-testid="agent-profiles"><AgentProfilesPanel /></section>}
     {composerMounted && <ComposerProbe />}
     {skillCommandsMounted && <SkillCommandsProbe />}
+    {imageComposerMounted && <ImageComposerProbe />}
     {selectedMounted && <SelectedChartProbe />}
     {agentMounted && <AgentChatProbe />}
     {questionMounted && <StructuredQuestionProbe />}
@@ -998,6 +1019,7 @@ export async function run(existingPage, bundlePath) {
     if (url.pathname === '/chat' && method === 'GET') return route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><meta charset="utf-8"><style>[hidden],.hidden{display:none!important}button,input,select,textarea{margin:4px;padding:4px}svg{width:16px;height:16px}.relative{position:relative}body{font-family:sans-serif}</style><div id="root"></div><script src="/fixture.js"></script>' });
     if (url.pathname === '/favicon.ico') return route.fulfill({ status: 204, body: '' });
     if (url.pathname.startsWith('/_next/image') || url.pathname.startsWith('/tarot_cards/')) return route.fulfill({ status: 200, contentType: 'image/png', body: new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,1,0,0,0,1,8,4,0,0,0,181,28,12,2,0,0,0,11,73,68,65,84,120,218,99,252,255,31,0,3,3,2,0,239,154,6,167,0,0,0,0,73,69,78,68,174,66,96,130]) });
+    if (/^\/api\/images\/[0-9a-f-]{36}$/.test(url.pathname) && method === 'GET') return route.fulfill({ status: 200, contentType: 'image/png', headers: { 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' }, body: new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,1,0,0,0,1,8,4,0,0,0,181,28,12,2,0,0,0,11,73,68,65,84,120,218,99,252,255,31,0,3,3,2,0,239,154,6,167,0,0,0,0,73,69,78,68,174,66,96,130]) });
     if (url.pathname === '/api/notifications' && method === 'GET') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { notifications: [] }, error: null }) });
     if (url.pathname === '/api/notifications/popup' && method === 'POST') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { claimed: false }, error: null }) });
     const body = request.postDataJSON();
@@ -1968,6 +1990,30 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => window.fixture.mount.composer(false));
     await page.getByRole('button', { name: 'Fixture Alice', exact: true }).evaluate(button => button.click());
     await until(() => window.fixture.user === 'alice');
+
+    // 生图入口：按钮按可用模型显隐，开启后发送直接生成图片，图集走私有的图片路由。
+    await page.evaluate(() => window.fixture.mount.imageComposer(true));
+    await page.getByTestId('image-composer').waitFor();
+    check('生图 button stays hidden without an available image model', await page.getByRole('button', { name: /^生图/ }).count() === 0);
+    await page.getByRole('button', { name: 'Enable image model', exact: true }).click();
+    const imageButton = page.getByRole('button', { name: /^生图/ });
+    await imageButton.waitFor();
+    check('生图 button appears with the model and starts unpressed', await imageButton.getAttribute('aria-pressed') === 'false');
+    await imageButton.click();
+    const imageOptions = page.getByRole('group', { name: '生图设置' });
+    check('生图 mode shows size, count and the credit cost', await imageOptions.isVisible()
+      && (await imageOptions.innerText()).includes('每张 2 积分 · 共 2 积分'));
+    await page.getByLabel('描述要生成的图片').fill('水墨山居，晨雾缭绕');
+    await page.getByLabel('描述要生成的图片').press('Enter');
+    await page.getByTestId('image-generated').waitFor();
+    const imageRequest = JSON.parse(await page.getByTestId('image-generated').innerText());
+    check('生图 send asks for the image directly with the chosen options',
+      imageRequest.prompt === '水墨山居，晨雾缭绕' && imageRequest.size === '1024x1024' && imageRequest.count === 1);
+    const galleryImage = page.getByTestId('image-composer').locator('img[src="/api/images/11111111-1111-4111-8111-111111111111"]');
+    check('the gallery renders private image URLs with the stored aspect ratio', await galleryImage.count() === 1
+      && (await galleryImage.getAttribute('style') ?? '').includes('aspect-ratio'));
+    await page.evaluate(() => window.fixture.mount.imageComposer(false));
+    await page.getByTestId('image-composer').waitFor({ state: 'detached' });
 
     const openCharts = async () => {
       await page.evaluate(() => { history.replaceState(null, '', '#settings/charts'); window.dispatchEvent(new HashChangeEvent('hashchange')); });

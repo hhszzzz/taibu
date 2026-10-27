@@ -11,7 +11,7 @@
 
 import { useRef, useState } from 'react';
 import { Tooltip } from '@/components/ui/Tooltip';
-import { BookOpenText, Brain, Check, ChevronRight, Globe, Paperclip, Plus, SlidersHorizontal, Square, Undo2, WandSparkles, X } from 'lucide-react';
+import { BookOpenText, Brain, Check, ChevronRight, Globe, ImagePlus, Paperclip, Plus, SlidersHorizontal, Square, Undo2, WandSparkles, X } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import type { MembershipType } from '@/lib/user/membership';
 import type { ChatMode } from '@/lib/chat/use-chat-state';
@@ -39,6 +39,22 @@ export interface ComposerMemoryControl {
     onToggle: () => void;
 }
 
+/** Standalone image generation: the composer talks to /api/images/generate instead of the chat model. */
+export interface ComposerImageGeneration {
+    sizes: readonly string[];
+    /** 每张图扣除的积分；0 表示免费。 */
+    creditCost: number;
+    maxCount: number;
+    onGenerate: (options: { prompt: string; size: string; count: number }) => void;
+}
+
+/** The toolbar's 生图 toggle, shown only when an image model is available. */
+export interface ComposerImageControl {
+    active: boolean;
+    title: string;
+    onToggle: () => void;
+}
+
 /** Ways to finish a draft: send, stop the run, or split into supplement / follow-up while it runs. */
 export type ComposerSendState =
     | { kind: 'send'; disabled: boolean }
@@ -56,6 +72,10 @@ interface ComposerToolbarProps extends ModelSettingsProps {
     membershipType: MembershipType;
     webControl?: ComposerWebControl;
     memory?: ComposerMemoryControl;
+    /** Absent when no image model serves the member; the button stays hidden. */
+    image?: ComposerImageControl;
+    /** Image mode relabels 润色问题 as 优化提示词. */
+    imageMode?: boolean;
     // Attachments
     fileInputRef: React.RefObject<HTMLInputElement | null>;
     hasFile: boolean;
@@ -79,7 +99,7 @@ interface ComposerToolbarProps extends ModelSettingsProps {
 }
 
 export function ComposerToolbar(props: ComposerToolbarProps) {
-    const { agentMode, disabled, userId, webControl, memory, chatMode, onChatModeChange, styles, send, fileInputRef } = props;
+    const { agentMode, disabled, userId, webControl, memory, image, chatMode, onChatModeChange, styles, send, fileInputRef } = props;
     const internalAddRef = useRef<HTMLButtonElement>(null);
     const plusRef = props.addButtonRef ?? internalAddRef;
     const styleRef = useRef<HTMLButtonElement>(null);
@@ -98,6 +118,10 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
                 aria-haspopup="menu" aria-expanded={menu === 'plus'} disabled={disabled} onClick={openMenu}>
                 <Plus size={17} strokeWidth={1.9} aria-hidden="true" />
             </button></Tooltip>
+            {image && <Tooltip label={image.title}><button type="button" className="chat-tool-button is-bordered" aria-label={image.title}
+                aria-pressed={image.active} data-active={image.active || undefined} disabled={disabled} onClick={image.onToggle}>
+                <ImagePlus size={17} strokeWidth={1.9} aria-hidden="true" />
+            </button></Tooltip>}
             <FloatingPanel open={menu === 'plus'} anchorRef={plusRef} onClose={closeMenu} label={addLabel} side="top" className="chat-plus-menu" restoreFocus={false}>
                 <button type="button" role="menuitem" disabled={chatMode === 'dream'} onClick={() => { closeMenu(); fileInputRef.current?.click(); }}>
                     <Paperclip size={16} aria-hidden="true" /><span className="chat-plus-label">上传或添加文件</span><kbd>⌘U</kbd>
@@ -121,7 +145,7 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
                 </button>}
                 <div className="chat-plus-divider" role="separator" />
                 <button type="button" role="menuitem" disabled={!props.polish.available || props.polish.busy} onClick={() => { closeMenu(); props.polish.run(); }}>
-                    <WandSparkles size={16} aria-hidden="true" /><span className="chat-plus-label">{props.polish.busy ? '正在润色…' : '润色问题'}</span>
+                    <WandSparkles size={16} aria-hidden="true" /><span className="chat-plus-label">{props.polish.busy ? '正在润色…' : props.imageMode ? '优化提示词' : '润色问题'}</span>
                 </button>
             </FloatingPanel>
             {/* 二级菜单 = claude 侧边浮层：在「分析风格」行右侧另开一个弹窗，不替换 + 菜单内容。 */}

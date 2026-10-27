@@ -459,3 +459,14 @@ legend.agent-question-title { margin-bottom: 2px; }
 .chat-mention-popover { transform-origin: bottom left; animation: motion-pop-in var(--duration-snap) var(--ease-snap) backwards; }
 .agent-queue { animation: motion-fade-up var(--duration-base) var(--ease-out) backwards; }
 .agent-queue-row { animation: motion-fade var(--duration-base) var(--ease-out) backwards; }
+
+/* ---- 生图：工具栏开关、尺寸与张数、空态示例 ---- */
+.chat-tool-button[data-active] { border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+.chat-image-options { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 8px 4px 0; font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); }
+.chat-image-options label { display: inline-flex; align-items: center; gap: 6px; }
+.chat-image-options select { height: 28px; padding: 0 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--background); color: var(--foreground); font-size: inherit; }
+.chat-image-options select:disabled { opacity: .6; }
+.chat-image-cost { margin-left: auto; color: var(--foreground-tertiary); }
+.chat-image-example { margin: 10px 0 0; text-align: center; font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); }
+.chat-image-example button { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.chat-image-example button:hover { text-decoration-thickness: 2px; }

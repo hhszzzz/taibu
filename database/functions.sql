@@ -2133,6 +2133,49 @@ END IF;
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION public.decrement_ai_chat_count_by(user_id uuid, amount integer) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+DECLARE
+  new_count integer;
+BEGIN
+  IF NOT public.is_admin_user() THEN
+    RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
+  END IF;
+
+  IF amount IS NULL OR amount <= 0 THEN
+    RAISE EXCEPTION 'amount must be greater than zero' USING ERRCODE = '22023';
+  END IF;
+
+  UPDATE public.users
+  SET
+    ai_chat_count = COALESCE(ai_chat_count, 0) - amount,
+    updated_at = now()
+  WHERE id = user_id
+    AND COALESCE(ai_chat_count, 0) >= amount
+  RETURNING ai_chat_count INTO new_count;
+
+  IF new_count IS NULL THEN
+    RETURN NULL;
+  END IF;
+
+  PERFORM public.record_credit_transaction(
+    user_id,
+    -amount,
+    'spend',
+    'ai_usage',
+    new_count,
+    'credit_usage',
+    NULL,
+    'AI 生图消费 ' || amount || ' 积分',
+    '{}'::jsonb
+  );
+
+  RETURN new_count;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.delete_agent_retention(p_event_days integer DEFAULT 30, p_commit_days integer DEFAULT 7, p_worker_hours integer DEFAULT 24, p_limit integer DEFAULT 1000, p_metric_days integer DEFAULT 30) RETURNS TABLE(events_deleted bigint, commits_deleted bigint, workers_deleted bigint, metrics_deleted bigint)
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
@@ -2320,6 +2363,17 @@ CREATE OR REPLACE FUNCTION public.get_conversation_share(p_token text) RETURNS T
  SELECT s.title, s.snapshot, s.include_charts, s.created_at, s.updated_at
    FROM public.conversation_shares s
   WHERE p_token ~ '^[A-Za-z0-9_-]{43}$' AND s.token=p_token AND s.revoked_at IS NULL
+  LIMIT 1
+$_$;
+
+CREATE OR REPLACE FUNCTION public.get_shared_generated_image(p_token text, p_image uuid) RETURNS TABLE(object_path text, mime_type text, bytes integer, sha256 text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $_$
+ SELECT g.object_path, g.mime_type, g.bytes, g.sha256
+   FROM public.generated_images g
+   JOIN public.conversation_shares s ON s.conversation_id = g.conversation_id
+  WHERE p_token ~ '^[A-Za-z0-9_-]{43}$' AND s.token = p_token AND s.revoked_at IS NULL AND g.id = p_image
   LIMIT 1
 $_$;
 

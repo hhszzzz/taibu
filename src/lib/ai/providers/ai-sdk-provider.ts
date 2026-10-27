@@ -7,7 +7,7 @@
 
 import { createOpenAI } from '@ai-sdk/openai';
 // @ts-expect-error TS Cannot find module 'ai' due to Next.js 15 bundler resolution in CLI tsc
-import { generateText, streamText, type CoreMessage, type LanguageModel, type ProviderOptions, type JSONValue } from 'ai';
+import { generateText, streamText, type CoreMessage, type ImageModel, type LanguageModel, type ProviderOptions, type JSONValue } from 'ai';
 import type { AIModelConfig } from '@/types';
 import type { ChatMessage, AIReasoningEffort } from '@/types';
 import { normalizeCustomProviderBaseUrl } from '@/lib/ai/custom-provider-url';
@@ -65,6 +65,26 @@ export function createModelFromConfig(
 
     // For OpenAI-compatible gateways (NewAPI/Octopus), use chat-completions mode.
     return provider.chat(modelId);
+}
+
+/**
+ * 生图模型：同样的网关地址与密钥，`generateImage` 会把 `/images/generations` 拼在 baseURL 后面。
+ * 平台网关与用户自己的模型服务都收到同一个 User-Agent。
+ */
+export function createImageModelFromConfig(
+    config: AIModelConfig,
+    options?: { apiKey?: string; fetch?: typeof globalThis.fetch },
+): ImageModel {
+    const apiKey = options?.apiKey ?? resolveSourceApiKey(config);
+    if (!apiKey) {
+        throw new Error(`${config.name || config.id} 的网关没有保存密钥`);
+    }
+    const provider = createOpenAI({
+        apiKey,
+        baseURL: normalizeBaseUrl(config.apiUrl),
+        fetch: withModelUserAgent(options?.fetch ?? gatewayFetch),
+    });
+    return provider.image(config.modelId);
 }
 
 /**

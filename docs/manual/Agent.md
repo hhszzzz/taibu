@@ -24,6 +24,16 @@ Agent 可以调用排盘、命理拓展、知识库、历史对话、受控联�
 - `` ```visual `` 在 `sandbox="allow-scripts"` 的 srcdoc iframe 中渲染：不给 `allow-same-origin`，内容读不到站点 Cookie 与存储；外壳 CSP 禁止联网与外部资源，`fetch` 与 XHR 都会被拦截。首行可写 `<!-- 标题 -->` 作为卡片标题，正文上限 64 KB；超过上限或围栏没有闭合时只显示说明与源码。
 - 生成过程中只显示占位，消息完成后才渲染，避免执行半截脚本；主题切换会同步到沙箱。导出 HTML 时脚本被禁用，`visual` 导出为静态说明加可折叠源码；Markdown 导出保留原始代码块。
 
+## 生图
+
+「生图」是文生图，只做文字描述生成，不接受参考图编辑。管理员在「AI 服务 → 模型」添加用途为「生图」的模型，沿用现有网关与来源故障转移，并设置每张图扣除的积分（0 表示不扣）；会员等级沿用模型的 `required_tier`。生图模型不出现在对话模型菜单里。
+
+- 输入框：有当前会员可用的生图模型时，工具栏出现「生图」按钮。开启后发送直接生成图片，不经过对话模型；可选尺寸（方形 1024×1024、横向 1536×1024、竖向 1024×1536、宽幅 1792×1024、长幅 1024×1792）与张数（1–4），并显示本次将扣的积分。`+` 菜单的「优化提示词」沿用 `/api/chat/enhance`。生成成功后用户消息与助手消息一起写入当前对话；失败不留下空对话。空对话里有一句生图示例。
+- Agent 工具：`generate_image({ prompt, size?, n? })` 只在配置了生图模型且会员可用时注册，归入「生图」工具范围，可在后台关闭；协作成员与后台子分析永远拿不到。单次任务累计最多生成 4 张，超出的调用被拒绝。用户明确要求图片时才应调用，工具不会主动生图。
+- 计费：每次请求按「张数 × 每张积分」预扣，全部来源失败时整笔退还；某来源只返回部分图片时只退未交付的部分。余额不足返回 `INSUFFICIENT_CREDITS`，不调用模型。
+- 存储与读取：图片写入对象存储桶 `generated-images`（`FILE_STORAGE_ROOT` 下，与附件同卷），元数据记入 `generated_images`，含用户、对话、任务与消息、模型、提示词、尺寸、对象路径、类型、字节数与 SHA-256。读取走 `/api/images/[id]`：仅本人可读；公开分享页在图片地址上带分享令牌，服务端核对令牌所属对话后才返回该对话的图片。每次读取都校验大小与摘要，响应带 `Cache-Control: private, no-store`、`X-Content-Type-Options: nosniff` 与沙箱 CSP。
+- 失败转移：同一模型的来源按顺序尝试；单个来源报错、超时或被中止时换下一个，全部失败才报错。内容安全依赖上游审核。
+
 ## 任务状态与恢复
 
 | 状态 | 行为 |
@@ -107,7 +117,7 @@ pi-durable 把成员会话建成主任务的副本，再用 `AgentChange` 收窄
 - 内置角色：`specialist`（体系专家，用任务 `system` 所指方法卡的 Core 工具，即原来的成员）、`researcher`（研究员：联网、知识库与技能）、`verifier`（复核员：全部 Core 工具、用户资料、读网页与知识库，核对数据与引用，不写入）。内置角色只能启停，体系专家不能停用；要让成员用 MCP 服务，新建自定义角色。
 - 自定义角色：管理员在「Agent 扩展 → 角色」添加。标识以小写字母开头，2–32 个小写字母、数字或连字符，保存后不能改；名称最多 12 字；说明最多 300 字，是主任务挑选成员时读的；指令最多 8000 字，附在固定规则之后，不能放宽它们。另可设工具、预载技能、模型与推理档位、会员等级、用途（协作成员 / 后台子分析）、排序与启用。
 - 工具：不继承时只有「允许」的工具，继承时是主任务的全部工具；「禁止」总是生效。两者可以写工具名，或工具族 `system`（所给体系）、`core`、`core:<体系>`、`data`（用户资料）、`web`（`web_search`、`web_fetch`）、`knowledge`、`skills`、`mcp:<平台服务标识>`。授予 Core 工具时自动带上 `load_analysis_method`，除非禁止。成员一开始就拿到全部工具，没有工具搜索；系统提示只列它拿到工具的 MCP 服务。需征求用户同意的和只供脚本调用的 MCP 工具不给成员；`mcp:` 只指平台服务，用户自己的连接器只随「继承」给出。
-- 固定不给成员：`ask_user`、`todo_write`、`submit_plan`、`parallel_analysis`、`background_agent`、`remember_user_fact`、`record_user_event`、`propose_archive_entry`、`inspect_chart`、`focus_chart`、`tool_search`、`codemode`，管理页拒绝把它们写进「允许」。成员调用没给它的工具时，pi 直接返回该工具不可用，不执行；给了的工具每次调用仍校验会员、联网开关、工具范围与 MCP 服务状态。
+- 固定不给成员：`ask_user`、`todo_write`、`submit_plan`、`parallel_analysis`、`background_agent`、`remember_user_fact`、`record_user_event`、`propose_archive_entry`、`inspect_chart`、`focus_chart`、`tool_search`、`codemode`、`generate_image`，管理页拒绝把它们写进「允许」。成员调用没给它的工具时，pi 直接返回该工具不可用，不执行；给了的工具每次调用仍校验会员、联网开关、工具范围与 MCP 服务状态。
 - 预载技能：最多 4 个平台技能，只载入当前会员可用的，正文随成员指令一起提供，合计不超过 24000 字，超出的不载入；角色同时授予「技能」时一并列出附属文件。
 - 模型：角色指定了模型且用户会员可用时，成员用它，推理档位按角色设置（不填为模型默认）；否则用协作设置里给这位成员选的模型，再否则用主模型。BYOK 任务不用角色模型。
 - 来源：成员检索与外部服务的结果不编号，成员在回报里写明来源标题与网址；编号只属于主任务自己的搜索结果。
@@ -178,6 +188,8 @@ pi-durable 把成员会话建成主任务的副本，再用 `AgentChange` 收窄
 | `src/lib/agent/skills/` | 技能的 SKILL.md 解析、读写、任务内目录与加载、`/skill:` 展开与设置接口 |
 | `src/lib/agent/profiles/` | 角色定义与工具族授予、读写与共享缓存、成员装配（工具、指令、预载技能与模型）与设置接口 |
 | `src/lib/agent/parallel.server.ts`、`background.server.ts` | 协作成员与后台子分析 |
+| `src/lib/ai/image-generation.server.ts` | 文生图：模型解析、积分预扣与退还、来源故障转移、对象存储与 `generated_images` 记录 |
+| `src/lib/images/generated.ts` | 生图结果的共享形状、尺寸与图集地址（浏览器与服务端共用） |
 | `src/lib/agent/engine.ts` | 当前引擎版本 |
 | `database/functions.sql` | 原子命令、租约、产物和结算函数 |
 | `scripts/agent-worker.mjs` | worker 启动入口 |

@@ -416,7 +416,10 @@ test('buildPromptWithSources injects chart contract for mention-driven analysis'
     });
 
     assert.ok(res.systemPrompt.includes('```chart'));
-    assert.ok(res.systemPrompt.includes('chartType、title、data'));
+    assert.ok(res.systemPrompt.includes('{"chartType":"类型","title":"标题","data":{…}}'));
+    // The same section offers the sandboxed HTML fallback.
+    assert.ok(res.systemPrompt.includes('```visual'));
+    assert.ok(res.systemPrompt.includes('64 KB'));
     // Dynamic chart type: tarot mention → tarot_elements hint
     assert.ok(res.systemPrompt.includes('tarot_elements'));
     assert.ok(

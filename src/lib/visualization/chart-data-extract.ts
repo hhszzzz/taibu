@@ -1,8 +1,8 @@
 /**
- * 从 Markdown 文本中提取 ```chart 代码块的 JSON 数据
+ * 从 Markdown 文本中提取可视化代码块
  *
- * AI 回复中的图表数据以 ```chart ... ``` 格式嵌入。
- * 此工具函数提取并解析这些 JSON 块，用于图表数据复用。
+ * AI 回复中的图表数据以 ```chart ... ``` 格式嵌入，沙箱 HTML 以 ```visual ... ``` 嵌入。
+ * 此工具函数提取并解析这些块，用于图表数据复用与可视化渲染。
  */
 
 import type {
@@ -26,6 +26,87 @@ export interface ExtractedChart {
     chartType: ChartType;
     title: string;
     raw: ChartData;
+}
+
+/** ```visual 代码块的上限（UTF-8 字节）；超过时不渲染，只给源码。 */
+export const VISUAL_BLOCK_MAX_BYTES = 64 * 1024;
+
+const VISUAL_FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})[ \t]*visual(?:[ \t].*)?$/u;
+const FENCE_CLOSE = /^ {0,3}(`{3,}|~{3,})[ \t]*$/u;
+const VISUAL_TITLE_LINE = /^\s*<!--\s*(.*?)\s*-->\s*$/u;
+
+export interface VisualBlock {
+    /** 首行 `<!-- 标题 -->` 注释里的标题；没有则为空串。 */
+    title: string;
+    /** 去掉标题注释后的 HTML 片段。 */
+    html: string;
+    /** HTML 片段的 UTF-8 字节数。 */
+    bytes: number;
+    /** 开围栏之后始终没有闭合围栏时为 false。 */
+    complete: boolean;
+    /** 超过 {@link VISUAL_BLOCK_MAX_BYTES}。 */
+    tooLarge: boolean;
+    /** 围栏内的原文，用于和渲染出的代码节点对上。 */
+    raw: string;
+}
+
+/** 解析单个 ```visual 代码块的正文：可选首行标题注释、大小上限。 */
+export function parseVisualSource(source: string): Omit<VisualBlock, 'complete' | 'raw'> {
+    const normalized = source.replace(/\r\n?/gu, '\n');
+    const [firstLine = '', ...rest] = normalized.split('\n');
+    const titleMatch = VISUAL_TITLE_LINE.exec(firstLine);
+    const title = titleMatch?.[1].trim() ?? '';
+    const html = (titleMatch ? rest.join('\n') : normalized).trim();
+    const bytes = utf8Bytes(html);
+    return { title, html, bytes, tooLarge: bytes > VISUAL_BLOCK_MAX_BYTES };
+}
+
+/**
+ * 从 markdown 中取出所有 ```visual 块。没有闭合的块以 complete=false 返回，
+ * 由调用方按「内容不完整」处理；旧的 ```chart 不受影响。
+ */
+export function extractVisualBlocks(markdown: string): VisualBlock[] {
+    const lines = markdown.split(/\r?\n/u);
+    const blocks: VisualBlock[] = [];
+    for (let index = 0; index < lines.length; index++) {
+        const open = VISUAL_FENCE_OPEN.exec(lines[index]);
+        if (!open) continue;
+        const marker = open[1][0];
+        const length = open[1].length;
+        let end = lines.length;
+        let complete = false;
+        for (let cursor = index + 1; cursor < lines.length; cursor++) {
+            const close = FENCE_CLOSE.exec(lines[cursor]);
+            if (close && close[1][0] === marker && close[1].length >= length) {
+                end = cursor;
+                complete = true;
+                break;
+            }
+        }
+        const raw = lines.slice(index + 1, end).join('\n');
+        blocks.push({ ...parseVisualSource(raw), complete, raw });
+        index = end;
+    }
+    return blocks;
+}
+
+/** 把 ```chart 的 JSON 正文解析为 ChartData；不合法时返回 null。 */
+export function parseChartSource(source: string): ChartData | null {
+    const json = source.trim();
+    if (!json) return null;
+    try {
+        const parsed = JSON.parse(json) as ChartData;
+        if (parsed && typeof parsed.chartType === 'string' && typeof parsed.title === 'string') {
+            return normalizeChartData(parsed);
+        }
+    } catch {
+        // Malformed chart JSON falls back to the source view.
+    }
+    return null;
+}
+
+function utf8Bytes(value: string): number {
+    return new TextEncoder().encode(value).length;
 }
 
 /**

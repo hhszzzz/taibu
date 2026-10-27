@@ -18,8 +18,8 @@ import {
 } from '@/lib/visualization/settings';
 import { type ChartType, SOURCE_CHART_TYPE_MAP } from '@/lib/visualization/chart-types';
 import {
-    buildVisualizationOutputContractPrompt,
     buildVisualizationPreferencePrompts,
+    buildVisualizationPromptSection,
 } from '@/lib/visualization/prompt';
 import { formatPreviousChartsForPrompt, type ExtractedChart } from '@/lib/visualization/chart-data-extract';
 import { sentAtLine } from './prompt-time';
@@ -507,7 +507,7 @@ export async function buildPromptWithSources(context: PromptContext, prepared?: 
         tryInject(
             'visualization_output_contract',
             'P1',
-            buildVisualizationOutputContractPrompt(allowedChartTypes),
+            buildVisualizationPromptSection(allowedChartTypes),
         );
     }
 

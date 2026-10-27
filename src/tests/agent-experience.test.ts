@@ -95,3 +95,11 @@ test('a message sent into a running task opens with when the server received it,
     assert.equal(agentInputContent(message,'Asia/Shanghai'),'【发送时间：2026-10-24 23:51 星期六，Asia/Shanghai（UTC+08:00）】\n现在帮我起一卦');
     assert.equal(agentInputContent(message,'America/New_York').split('\n')[0],'【发送时间：2026-10-24 11:51 星期六，America/New_York（UTC-04:00）】');
 });
+
+test('static HTML exports turn a visual block into a note and collapsible source', () => {
+    const html = conversationHtml('导出', '```visual\n<!-- 时间轴 -->\n<div id="x">甲</div>\n<script>alert(1)</script>\n```');
+    assert.match(html, /可视化「时间轴」/);
+    assert.match(html, /<details><summary>查看源码<\/summary>/);
+    assert.ok(!html.includes('<script>alert'));
+    assert.ok(html.includes('&lt;div id=&quot;x&quot;&gt;甲&lt;/div&gt;'));
+});

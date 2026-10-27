@@ -386,7 +386,8 @@ test('bazi analysis route builds prompt from server chart context instead of cli
     assert.match(capturedUserPrompt, /断事笔记/u);
     assert.match(capturedUserPrompt, /岗位晋升|晋升/u);
     assert.match(capturedSystemPrompt, /```chart/u);
-    assert.match(capturedSystemPrompt, /chartType、title、data/u);
+    assert.match(capturedSystemPrompt, /"chartType":"类型","title":"标题","data"/u);
+    assert.match(capturedSystemPrompt, /```visual/u);
     assert.match(capturedSystemPrompt, /事业\/学业/u);
     assert.match(capturedSystemPrompt, /财富/u);
     assert.match(capturedSystemPrompt, /6 个大运周期/u);

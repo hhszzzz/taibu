@@ -51,7 +51,7 @@ import {
 } from '@/lib/server/analysis';
 import type { AIPersonality } from '@/types';
 import type { ChartType } from '@/lib/visualization/chart-types';
-import { buildVisualizationOutputContractPrompt } from '@/lib/visualization/prompt';
+import { buildVisualizationPromptSection } from '@/lib/visualization/prompt';
 import type { ChartTextDetailLevel } from '@/lib/divination/detail-level';
 import { getGlobalAIFeatureGuardResponse } from '@/lib/api/ai-feature-guard';
 import { AI_RATE_LIMIT_CONFIG, checkRateLimit } from '@/lib/rate-limit';
@@ -234,7 +234,7 @@ export interface DivinationRouteConfig<
     requireVision?: boolean;
     membershipDeniedMessage?: string;
   };
-  /** 该路由允许 AI 输出的可视化图表类型。传入后会自动在 system prompt 尾部追加图表输出合约。 */
+  /** 该路由允许 AI 输出的内置图表类型。传入后会追加统一的「可视化」提示段（内置图表 + 沙箱 HTML）。 */
   allowedChartTypes?: ChartType[] | ((input: T, context?: TContext) => ChartType[]);
   /** Empty AI result message. */
   emptyResultMessage?: string;
@@ -277,7 +277,7 @@ async function prepareInterpretAnalysis<T extends InterpretInput, TContext exten
       const chartTypes = typeof config.allowedChartTypes === 'function'
         ? config.allowedChartTypes(input, context)
         : config.allowedChartTypes;
-      return chartTypes?.length ? buildVisualizationOutputContractPrompt(chartTypes) : undefined;
+      return chartTypes?.length ? buildVisualizationPromptSection(chartTypes) : undefined;
     },
   });
 }

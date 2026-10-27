@@ -182,3 +182,62 @@ test('normalizeChartData should coerce and filter malformed radar scores', async
     assert.deepEqual(normalized.data.previousScores, { career: 70 });
     assert.equal(normalized.data.overallScore, 73);
 });
+
+test('extractVisualBlocks reads the first-line title comment and keeps the HTML', async () => {
+    const { extractVisualBlocks, VISUAL_BLOCK_MAX_BYTES } = await import('../lib/visualization/chart-data-extract');
+
+    const html = '<div id="root">甲</div>\n<script>document.getElementById("root").textContent = "乙"</script>';
+    const markdown = `说明文字
+
+\`\`\`visual
+<!-- 交互式时间轴 -->
+${html}
+\`\`\`
+
+\`\`\`chart
+{"chartType":"fortune_radar","title":"运势","data":{}}
+\`\`\``;
+
+    const blocks = extractVisualBlocks(markdown);
+    assert.equal(blocks.length, 1);
+    assert.equal(blocks[0].title, '交互式时间轴');
+    assert.equal(blocks[0].html, html);
+    assert.equal(blocks[0].complete, true);
+    assert.equal(blocks[0].tooLarge, false);
+    assert.equal(blocks[0].bytes, new TextEncoder().encode(html).length);
+    assert.ok(blocks[0].bytes <= VISUAL_BLOCK_MAX_BYTES);
+});
+
+test('extractVisualBlocks accepts a block without a title comment', async () => {
+    const { extractVisualBlocks } = await import('../lib/visualization/chart-data-extract');
+    const [block] = extractVisualBlocks('```visual\n<svg></svg>\n```');
+    assert.equal(block.title, '');
+    assert.equal(block.html, '<svg></svg>');
+});
+
+test('extractVisualBlocks flags a block over 64 KB instead of rendering it', async () => {
+    const { extractVisualBlocks, VISUAL_BLOCK_MAX_BYTES } = await import('../lib/visualization/chart-data-extract');
+    const html = `<p>${'甲'.repeat(22000)}</p>`;
+    const [block] = extractVisualBlocks(`\`\`\`visual\n${html}\n\`\`\``);
+    assert.ok(block.bytes > VISUAL_BLOCK_MAX_BYTES);
+    assert.equal(block.tooLarge, true);
+});
+
+test('extractVisualBlocks treats an unclosed fence as incomplete', async () => {
+    const { extractVisualBlocks } = await import('../lib/visualization/chart-data-extract');
+    const blocks = extractVisualBlocks('前文\n\n```visual\n<!-- 未完成 -->\n<div>一半</div>\n');
+    assert.equal(blocks.length, 1);
+    assert.equal(blocks[0].complete, false);
+    assert.equal(blocks[0].title, '未完成');
+    assert.equal(blocks[0].html, '<div>一半</div>');
+});
+
+test('parseChartSource returns null for malformed JSON and normalizes valid data', async () => {
+    const { parseChartSource } = await import('../lib/visualization/chart-data-extract');
+    assert.equal(parseChartSource('{ invalid }'), null);
+    assert.equal(parseChartSource(''), null);
+    const chart = parseChartSource('{"chartType":"fortune_radar","title":"运势","data":{"scores":{"事业学业":"79.6"},"overallScore":"bad"}}');
+    assert.equal(chart?.chartType, 'fortune_radar');
+    assert.deepEqual((chart as any).data.scores.career.score, 80);
+    assert.equal((chart as any).data.overallScore, 80);
+});

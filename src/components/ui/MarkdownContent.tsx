@@ -2,8 +2,8 @@
  * Markdown 内容渲染组件
  *
  * 'use client' 标记说明：
- * - 使用 React hooks (useMemo)
- * - 动态导入 ChartRenderer 组件
+ * - 使用 React hooks (useMemo / useContext)
+ * - ```chart 与 ```visual 交给 VisualizationBlock（内部再按需加载 ChartRenderer）
  *
  * 性能优化：
  * - 使用 React.memo 避免不必要的重渲染
@@ -12,16 +12,25 @@
  */
 'use client';
 
-import { memo, useMemo, lazy, Suspense, type HTMLAttributes } from 'react';
+import { createContext, memo, useContext, useMemo } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import type { PluggableList } from 'unified';
 import { MarkdownBlocks, markdownPlugins, pendingChartFence } from '@/lib/chat/markdown-blocks';
 import { remarkCitations } from '@/lib/chat/markdown-citations';
+import { extractVisualBlocks } from '@/lib/visualization/chart-data-extract';
+import { VisualizationBlock } from '@/components/visualization/VisualizationBlock';
 import { CodeBlock, MarkdownTable } from './MarkdownTools';
 import { markdownLinkProps } from '@/lib/chat/markdown-links';
-import { isChartType, type ChartData } from '@/lib/visualization/chart-types';
+import { isChartType } from '@/lib/visualization/chart-types';
 
-const ChartRenderer = lazy(() => import('@/components/visualization/ChartRenderer'));
+/** ```chart 与 ```visual 的流式状态：完成前只显示占位，未闭合的块按不完整处理。 */
+interface VisualizationRenderState {
+    live: boolean;
+    pendingChart: boolean;
+    incompleteVisual: string | null;
+}
+
+const VisualizationRenderContext = createContext<VisualizationRenderState>({ live: false, pendingChart: false, incompleteVisual: null });
 
 /** Answer citations: known numbers become badges that open their source. */
 export interface MarkdownCitations {
@@ -38,6 +47,43 @@ interface MarkdownContentProps {
     streaming?: boolean;
     citations?: MarkdownCitations;
 }
+
+/**
+ * A ```chart block whose type is one of the built-in templates. A type the model invented, or JSON that does not
+ * parse, is not a chart: it stays a plain code block instead of an "unsupported" card.
+ */
+function isChartSource(source: string): boolean {
+    try {
+        const parsed = JSON.parse(source.trim()) as { chartType?: unknown };
+        return isChartType(parsed?.chartType);
+    } catch {
+        return false;
+    }
+}
+
+/** ```chart / ```visual 统一交给 VisualizationBlock；其余代码块保持原样。 */
+const MarkdownCode: NonNullable<Components['code']> = ({ className, children }) => {
+    const visualization = useContext(VisualizationRenderContext);
+    const language = /language-(\w+)/.exec(className || '')?.[1];
+    const source = String(children);
+    const isInline = !className && !source.includes('\n');
+
+    if (!isInline && (language === 'chart' || language === 'visual')) {
+        // 模型自造的类型（network、bar…）不画，按普通代码块原样显示，别给用户一张「不支持」的卡片。
+        if (language === 'chart' && !isChartSource(source)) return <CodeBlock code={source} language="chart" />;
+        return <div className="max-w-full overflow-x-auto">
+            <VisualizationBlock
+                kind={language}
+                source={source}
+                streaming={language === 'chart' ? visualization.live && visualization.pendingChart : visualization.live}
+                incomplete={language === 'visual' && visualization.incompleteVisual !== null && source.trim() === visualization.incompleteVisual}
+            />
+        </div>;
+    }
+
+    if (!isInline) return <CodeBlock code={source} language={language ?? ''} />;
+    return <code className="px-1 py-0.5 rounded bg-background-secondary text-xs">{children}</code>;
+};
 
 // 静态组件定义，避免每次渲染重新创建
 const staticComponents: Partial<Components> = {
@@ -85,59 +131,28 @@ const staticComponents: Partial<Components> = {
         <strong className="font-semibold text-foreground">{children}</strong>
     ),
     em: ({ children }) => <em className="italic">{children}</em>,
-    code: ({ className, children }) => {
-        const match = /language-(\w+)/.exec(className || '');
-        const isInline = !className && !String(children).includes('\n');
-
-        if (!isInline && match?.[1] === 'chart') {
-            try {
-                const chartData = JSON.parse(String(children).trim()) as ChartData;
-                // 模型自造的类型（network、bar…）不画，按普通代码块原样显示，别给用户一张「不支持」的卡片。
-                if (!isChartType(chartData.chartType)) return <CodeBlock code={String(children)} language="chart" />;
-                return (
-                    <div className="my-4 max-w-full overflow-x-auto">
-                        <Suspense fallback={<div className="py-4 text-center text-sm text-foreground-secondary">加载图表...</div>}>
-                            <ChartRenderer data={chartData} />
-                        </Suspense>
-                    </div>
-                );
-            } catch {
-                return (
-                    <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-500">
-                        图表数据解析失败
-                    </div>
-                );
-            }
-        }
-
-        if (!isInline) return <CodeBlock code={String(children)} language={match?.[1] ?? ''} />;
-        return (
-            <code
-                className={isInline
-                    ? 'px-1 py-0.5 rounded bg-background-secondary text-xs'
-                    : 'block p-3 rounded-lg bg-background-secondary text-xs overflow-x-auto'}
-            >
-                {children}
-            </code>
-        );
-    },
+    code: MarkdownCode,
 };
 
 // remarkPlugins 数组提取到外部，避免每次渲染创建新数组
 const remarkPlugins = markdownPlugins;
 
-const MarkdownBlock = memo(function MarkdownBlock({ content, className, streaming, citations }: MarkdownContentProps) {
+const MarkdownBlock = memo(function MarkdownBlock({ content, className, messageStreaming = false, citations }: Omit<MarkdownContentProps, 'streaming'> & { messageStreaming?: boolean }) {
     // 使用 useMemo 缓存 textClass，避免每次渲染重新拼接字符串
     const textClass = useMemo(
         () => `leading-relaxed ${className ?? 'text-sm text-foreground'}`,
         [className]
     );
 
+    // 可视化块的流式状态：整条消息完成前 ```visual 只显示占位；未闭合的块按不完整处理。
+    const visualization = useMemo<VisualizationRenderState>(() => ({
+        live: messageStreaming,
+        pendingChart: pendingChartFence(content),
+        incompleteVisual: extractVisualBlocks(content).find(block => !block.complete)?.raw.trim() ?? null,
+    }), [messageStreaming, content]);
+
     // 使用 useMemo 缓存依赖 className 的组件
     const dynamicComponents = useMemo<Partial<Components>>(() => ({
-        ...(streaming && pendingChartFence(content) ? {
-            code: ({ className: codeClass, children }: HTMLAttributes<HTMLElement>) => codeClass === 'language-chart' ? <div className="py-4 text-sm text-foreground-secondary" role="status">图表正在生成…</div> : <code className={codeClass}>{children}</code>,
-        } : {}),
         p: ({ children }) => (
             <p className={`${textClass} whitespace-pre-wrap`}>{children}</p>
         ),
@@ -160,7 +175,7 @@ const MarkdownBlock = memo(function MarkdownBlock({ content, className, streamin
                     aria-label={`依据 ${cite}：${label}`} title={label} onClick={() => open(cite)}>{cite}</button>;
             },
         } satisfies Partial<Components> : {}),
-    }), [textClass, streaming, content, citations]);
+    }), [textClass, citations]);
     const plugins = useMemo<PluggableList>(() => citations ? [...remarkPlugins, [remarkCitations, { isKnown: (cite: number) => citations.labels.has(cite) }]] : remarkPlugins, [citations]);
 
     // 合并静态和动态组件
@@ -170,16 +185,18 @@ const MarkdownBlock = memo(function MarkdownBlock({ content, className, streamin
     );
 
     return (
-        <ReactMarkdown remarkPlugins={plugins} components={components}>
-            {content}
-        </ReactMarkdown>
+        <VisualizationRenderContext.Provider value={visualization}>
+            <ReactMarkdown remarkPlugins={plugins} components={components}>
+                {content}
+            </ReactMarkdown>
+        </VisualizationRenderContext.Provider>
     );
 });
 
 function MarkdownContentInner({ content, className, streaming = false, citations }: MarkdownContentProps) {
     const cache = useMemo(() => new MarkdownBlocks(), []);
     const blocks = useMemo(() => cache.advance(content), [cache, content]);
-    return <>{blocks.map((block, index) => <MarkdownBlock key={index} content={block} className={className} streaming={streaming && index === blocks.length - 1} citations={citations} />)}</>;
+    return <>{blocks.map((block, index) => <MarkdownBlock key={index} content={block} className={className} messageStreaming={streaming} citations={citations} />)}</>;
 }
 
 // 使用 memo 包装，只在 props（content、className、streaming、citations）变化时重渲染

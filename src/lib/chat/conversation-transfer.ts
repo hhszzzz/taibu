@@ -2,6 +2,7 @@ import type { ChatMessage } from '@/types';
 import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
+import { parseVisualSource } from '@/lib/visualization/chart-data-extract';
 
 /** Copy only the selected visible branch. No version trees, run state or credentials. */
 export function forkConversationMessages(messages: ChatMessage[], throughId: string, newId: () => string): ChatMessage[] {
@@ -48,16 +49,21 @@ export function conversationMarkdown(title: string, messages: ChatMessage[], too
 /** Static HTML is escaped and printable, with no scripts, remote styles or raw HTML. */
 export function conversationHtml(title: string, markdown: string): string {
     const tree = unified().use(remarkParse).use(remarkGfm).parse(markdown);
-    return `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:"><title>${escapeHtml(title)}</title><style>body{font-family:system-ui,sans-serif;max-width:760px;margin:40px auto;padding:0 24px;line-height:1.8;color:#222}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f5f5f5;padding:1rem}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:.5rem}img{max-width:100%;max-height:80vh;object-fit:contain}blockquote{border-left:3px solid #ddd;padding-left:1rem}@media print{body{margin:0;max-width:none}pre{orphans:3;widows:3}img,tr{break-inside:avoid}}</style><body>${renderExportNode(tree as ExportNode)}</body></html>`;
+    return `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:"><title>${escapeHtml(title)}</title><style>body{font-family:system-ui,sans-serif;max-width:760px;margin:40px auto;padding:0 24px;line-height:1.8;color:#222}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f5f5f5;padding:1rem}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:.5rem}img{max-width:100%;max-height:80vh;object-fit:contain}blockquote{border-left:3px solid #ddd;padding-left:1rem}.visual-note{margin:1rem 0;padding:.75rem 1rem;border:1px solid #ddd;border-radius:8px;background:#fafafa}summary{cursor:pointer}@media print{body{margin:0;max-width:none}pre{orphans:3;widows:3}img,tr{break-inside:avoid}}</style><body>${renderExportNode(tree as ExportNode)}</body></html>`;
 }
 
-type ExportNode = { type: string; value?: string; children?: ExportNode[]; depth?: number; ordered?: boolean; start?: number; url?: string; alt?: string };
+type ExportNode = { type: string; value?: string; children?: ExportNode[]; depth?: number; ordered?: boolean; start?: number; url?: string; alt?: string; lang?: string | null };
 function safeExportUrl(value = '') { return /^(https?:\/\/|data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$)/i.test(value) ? value : ''; }
 function renderExportNode(node: ExportNode): string {
     const content = (node.children ?? []).map(renderExportNode).join('');
     const tags: Record<string, string> = { paragraph: 'p', emphasis: 'em', strong: 'strong', delete: 'del', blockquote: 'blockquote', listItem: 'li', tableCell: 'td' };
     if (tags[node.type]) return `<${tags[node.type]}>${content}</${tags[node.type]}>`;
     if (node.type === 'heading') { const level = Math.max(1, Math.min(6, node.depth ?? 2)); return `<h${level}>${content}</h${level}>`; }
+    if (node.type === 'code' && node.lang === 'visual') {
+        // 静态导出禁用脚本：```visual 只留说明与可折叠源码。
+        const title = parseVisualSource(node.value ?? '').title;
+        return `<div class="visual-note"><p>${title ? `可视化「${escapeHtml(title)}」` : '可视化图'}未在静态导出中渲染，下面是源码。</p><details><summary>查看源码</summary><pre><code>${escapeHtml(node.value ?? '')}</code></pre></details></div>`;
+    }
     if (node.type === 'code') return `<pre><code>${escapeHtml(node.value ?? '')}</code></pre>`;
     if (node.type === 'inlineCode') return `<code>${escapeHtml(node.value ?? '')}</code>`;
     if (node.type === 'link') { const url = safeExportUrl(node.url); return url ? `<a href="${escapeHtml(url)}" rel="noreferrer">${content}</a>` : content; }

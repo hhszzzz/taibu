@@ -92,6 +92,7 @@ import { VirtualizedChatMessageList } from '@/components/chat/VirtualizedChatMes
 import { useTranscriptScroll } from '@/lib/chat/use-transcript-scroll';
 import { scrollToMessageId } from '@/lib/chat/message-navigation';
 import { ShareConversationMenu } from '@/components/chat/ShareConversationMenu';
+import { MarkdownContent } from '@/components/ui/MarkdownContent';
 const initialToolParts = AGENT_TOOL_FIXTURE_PARTS;
 const BAZI_DRILLDOWN_FIXTURE_PARTS = BAZI_DRILLDOWN_FIXTURE_PARTS_JSON;
 const familyParts = () => [
@@ -351,6 +352,13 @@ function PolishProbe() {
     onEditMessage={async (id, content) => { window.fixture.polish.edits.push([id, content]); }} onRegenerateResponse={() => {}} /></section>;
 }
 
+// Chart and visual cards share one shell; a visual runs in a sandboxed srcdoc iframe.
+function VisualizationProbe() {
+  const [state, setState] = useState({ content: '', streaming: false });
+  window.fixture.visualization = (content, streaming = false) => setState({ content, streaming });
+  return <section data-testid="visualization"><MarkdownContent content={state.content} streaming={state.streaming} /></section>;
+}
+
 import { calculateZiweiChartBundle, getHoroscope } from '@/lib/divination/ziwei';
 function BirthRulesProbe() {
   const [open, setOpen] = useState(false);
@@ -474,6 +482,7 @@ function Shell() {
   const [shareMounted, setShareMounted] = useState(false);
   const [roundsMounted, setRoundsMounted] = useState(false);
   const [polishMounted, setPolishMounted] = useState(false);
+  const [visualizationMounted, setVisualizationMounted] = useState(false);
   const [snapshotMounted, setSnapshotMounted] = useState(false);
   const [tarotMounted, setTarotMounted] = useState(false);
   const [qimenMounted, setQimenMounted] = useState(false);
@@ -507,7 +516,8 @@ function Shell() {
   window.fixture.mount = { composer: setComposerMounted, history: setHistoryMounted, drawer: setDrawerMounted,
     records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted, agent: setAgentMounted, question: setQuestionMounted, results: setResultsMounted, sidebar: setSidebarMounted, phoneDrawer: setPhoneDrawerMounted, menu: setMenuMounted, rounds: setRoundsMounted, polish: setPolishMounted,
     snapshot: setSnapshotMounted, share: setShareMounted, tarot: setTarotMounted, qimen: setQimenMounted, activity: setActivityMounted,
-    annual: setAnnualMounted, community: setCommunityMounted, post: setPostMounted, cast: setCastMounted, skillCommands: setSkillCommandsMounted };
+    annual: setAnnualMounted, community: setCommunityMounted, post: setPostMounted, cast: setCastMounted, skillCommands: setSkillCommandsMounted,
+    visualization: setVisualizationMounted };
   window.fixture.chartKey = queryKeys.userCharts;
   window.fixture.chartClient = chartClient;
   window.fixture.deleteHistory = deleteHistorySummary;
@@ -581,6 +591,7 @@ function Shell() {
     {shareMounted && <ShareProbe />}
     {roundsMounted && <RoundsProbe />}
     {polishMounted && <PolishProbe />}
+    {visualizationMounted && <VisualizationProbe />}
     {historyMounted && <section data-testid="history-page"><HistoryPageTemplate {...historyConfig} /></section>}
     {drawerMounted && <section data-testid="history-drawer"><HistoryDrawer type="tarot" /></section>}
     {recordsMounted && <section data-testid="records"><RecordsPage /></section>}
@@ -941,7 +952,10 @@ export async function run(existingPage, bundlePath) {
     // 会话分类（视图列 has_agent_run）：夹具页面以 Agent 方式运行，列表里的会话按 Agent 会话提供。
     has_agent_run: true,
   }))]));
-  page.on('pageerror', error => browserErrors.push(error.message));
+  // Playwright's service-worker interception reads navigator.serviceWorker in every frame; a
+  // sandboxed srcdoc frame without allow-same-origin throws that by design, not app code.
+  const sandboxServiceWorkerError = message => message.startsWith("Failed to read the 'serviceWorker' property from 'Navigator': Service worker is disabled because the context is sandboxed");
+  page.on('pageerror', error => { if (!sandboxServiceWorkerError(error.message)) browserErrors.push(error.message); });
   page.on('console', message => {
     if (message.text().includes('No queryFn was passed')) queryWarnings.push(message.text());
     // Unfolding a round before a jump flushes React synchronously; misuse is reported as an error.
@@ -1402,6 +1416,81 @@ export async function run(existingPage, bundlePath) {
     const saves = requests.filter(item => item.pathname === '/api/conversations/alice-1' && item.body?.messages);
     check('Stopped partial and regenerated completion each persist exactly once', saves.length === 2 && saves[0].body.messages.at(-1).content === 'partial' && saves[1].body.messages.at(-1).content === 'partial completed');
     check('Parent list and stream rerenders do not reload mounted settings for the same user', settingsReads === readsBeforeClose);
+
+    // 可视化：```visual 在沙箱里渲染，旧 ```chart 仍走内置模板。
+    await page.evaluate(() => {
+      for (const [name, value] of Object.entries({ '--color-background': '#fefefe', '--color-foreground': '#111111', '--color-border': '#dddddd', '--font-sans': 'sans-serif' })) {
+        document.documentElement.style.setProperty(name, value);
+      }
+      window.fixture.mount.visualization(true);
+    });
+    const visualProbe = page.getByTestId('visualization');
+    const visualContent = [
+      '```visual',
+      '<!-- 交互式时间轴 -->',
+      '<div id="state">初始</div><div style="height:220px">占位高度</div>',
+      '<script>document.getElementById("state").textContent = "脚本已运行";</script>',
+      '```',
+    ].join('\n');
+    await page.evaluate(content => window.fixture.visualization(content), visualContent);
+    const visualCard = visualProbe.locator('[data-visualization="visual"]');
+    await visualCard.waitFor();
+    check('A visual card shows its first-line title comment', await visualCard.locator('.visualization-title').innerText() === '交互式时间轴');
+    const iframeLocator = visualCard.locator('iframe');
+    await iframeLocator.waitFor();
+    const sandboxAttribute = await iframeLocator.getAttribute('sandbox');
+    check('The visual iframe is sandboxed with allow-scripts only', sandboxAttribute === 'allow-scripts' && !sandboxAttribute.includes('allow-same-origin'));
+    const visualFrame = await (await iframeLocator.elementHandle()).contentFrame();
+    await visualFrame.waitForFunction(() => document.getElementById('state')?.textContent === '脚本已运行');
+    check('Scripts run inside the visual sandbox', true);
+    check('The visual shell carries the network-blocking CSP',
+      await visualFrame.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content')
+        === "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:");
+    check('Visual scripts cannot fetch external content',
+      await visualFrame.evaluate(async () => { try { await fetch('https://example.com/steal'); return 'allowed'; } catch { return 'blocked'; } }) === 'blocked');
+    check('The visual frame cannot reach the parent page',
+      await visualFrame.evaluate(() => { try { window.parent.document.body; return 'accessible'; } catch { return 'blocked'; } }) === 'blocked');
+    await until(() => parseInt(document.querySelector('[data-testid="visualization"] iframe')?.style.height ?? '0', 10) > 200);
+    check('The parent accepts the height reported by the visual frame', true);
+    const reportedHeight = await iframeLocator.evaluate(frame => frame.style.height);
+    await page.evaluate(() => window.postMessage({ type: 'taibu-visual:height', height: 3900 }, '*'));
+    await renderBarrier();
+    check('A height message from outside the iframe is ignored', await iframeLocator.evaluate(frame => frame.style.height) === reportedHeight);
+    await visualFrame.evaluate(() => { document.body.insertAdjacentHTML('beforeend', '<div style="height:6000px"></div>'); });
+    await until(() => document.querySelector('[data-testid="visualization"] iframe')?.style.height === '4000px');
+    check('Reported heights are clamped to the frame maximum', true);
+    await visualFrame.waitForFunction(() => getComputedStyle(document.documentElement).getPropertyValue('--color-background').trim() === '#fefefe');
+    check('The visual frame receives the parent theme variables',
+      await visualFrame.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--color-background').trim()) === '#fefefe');
+    await page.evaluate(() => { document.documentElement.classList.add('dark'); document.documentElement.style.setProperty('--color-background', '#101010'); });
+    await visualFrame.waitForFunction(() => getComputedStyle(document.documentElement).getPropertyValue('--color-background').trim() === '#101010');
+    check('A dark theme update reaches the sandboxed frame', true);
+
+    await page.evaluate(content => window.fixture.visualization(content, true), visualContent);
+    await visualProbe.getByText('可视化正在生成…').waitFor();
+    check('A streaming message shows a placeholder instead of running the sandbox', await visualProbe.locator('iframe').count() === 0);
+    await page.evaluate(content => window.fixture.visualization(content), visualContent);
+    await visualCard.locator('iframe').waitFor();
+    check('The visual renders after the message completes', await visualProbe.locator('iframe').count() === 1);
+
+    await page.evaluate(content => window.fixture.visualization(content), '```visual\n<!-- 未完成 -->\n<div>一半</div>\n');
+    await visualProbe.getByText(/可视化内容不完整/).waitFor();
+    check('An unclosed visual fence is reported instead of rendered', await visualProbe.locator('iframe').count() === 0);
+
+    const chartContent = '```chart\n' + JSON.stringify({ chartType: 'fortune_radar', title: '当前运势评分',
+      data: { period: '2026', scores: { career: { score: 80, label: '事业', trend: 'stable' } }, overallScore: 80, overallLabel: '良好', topAdvice: '稳健推进' } }) + '\n```';
+    await page.evaluate(content => window.fixture.visualization(content), chartContent);
+    const chartCard = visualProbe.locator('[data-visualization="chart"]');
+    await chartCard.waitFor();
+    await chartCard.locator('.recharts-wrapper').waitFor();
+    check('An old chart block still renders through the chart renderer',
+      await chartCard.locator('.visualization-title').innerText() === '当前运势评分' && await chartCard.locator('.recharts-wrapper').count() > 0);
+    await chartCard.getByRole('button', { name: '查看数据', exact: true }).click();
+    check('A chart card can reveal its data', await chartCard.locator('[data-visualization-source]').count() === 1);
+    await chartCard.getByRole('button', { name: '全屏查看', exact: true }).click();
+    check('A visualization card expands to a fullscreen dialog', await page.locator('dialog.visualization-dialog').isVisible());
+    await page.locator('dialog.visualization-dialog').getByRole('button', { name: '关闭全屏', exact: true }).click();
+    await page.evaluate(() => { document.documentElement.classList.remove('dark'); window.fixture.mount.visualization(false); });
 
     await page.getByRole('button', { name: 'Open actual settings', exact: true }).click();
     await page.getByText('推送通知', { exact: true }).waitFor();

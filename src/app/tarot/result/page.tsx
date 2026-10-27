@@ -442,7 +442,7 @@ function TarotResultContent() {
                             </div>
                             <div className="px-4 py-5 lg:px-6">
                                 {shownReasoning && <ThinkingBlock content={shownReasoning} isStreaming={streaming.isStreaming && !streaming.content} startTime={streaming.reasoningStartTime} duration={streaming.reasoningDuration} />}
-                                <MarkdownContent content={shownInterpretation} className="text-sm leading-relaxed text-foreground" />
+                                <MarkdownContent content={shownInterpretation} className="text-sm leading-relaxed text-foreground" streaming={streaming.isStreaming && !interpretation} />
                             </div>
                         </section>
                     ) : (

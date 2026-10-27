@@ -163,7 +163,7 @@ function MBTIResultContent() {
                             {aiAnalysis || streaming.content ? (
                                 <div>
                                     {(analysisReasoning || streaming.reasoning) && <ThinkingBlock content={analysisReasoning || streaming.reasoning || ''} isStreaming={streaming.isStreaming && !aiAnalysis} />}
-                                    <MarkdownContent content={aiAnalysis || streaming.content || ''} className="text-sm leading-relaxed text-foreground" />
+                                    <MarkdownContent content={aiAnalysis || streaming.content || ''} className="text-sm leading-relaxed text-foreground" streaming={streaming.isStreaming && !aiAnalysis} />
                                 </div>
                             ) : (
                                 <div className="flex flex-col items-center gap-4 py-8 text-center">

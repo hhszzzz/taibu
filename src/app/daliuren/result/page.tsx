@@ -373,7 +373,7 @@ function DaliurenResultContent({ isCurrent }: { isCurrent: () => boolean }) {
                             {hasInterpretation && (
                                 <div className="prose prose-sm max-w-none">
                                     {(interpretationReasoning || streaming.reasoning) && <ThinkingBlock content={interpretationReasoning || streaming.reasoning || ''} isStreaming={streaming.isStreaming && !interpretation} />}
-                                    <MarkdownContent content={interpretation || streaming.content || ''} className="text-sm text-foreground leading-relaxed" />
+                                    <MarkdownContent content={interpretation || streaming.content || ''} className="text-sm text-foreground leading-relaxed" streaming={streaming.isStreaming && !interpretation} />
                                 </div>
                             )}
                         </section>

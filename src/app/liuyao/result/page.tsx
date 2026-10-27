@@ -433,7 +433,7 @@ function LiuyaoResultContent({ isCurrent }: { isCurrent: () => boolean }) {
                     {(interpretation || streaming.isStreaming) ? (
                         <div className="prose prose-sm max-w-none rounded-xl border-[0.5px] border-border bg-surface p-4 prose-p:leading-relaxed prose-headings:text-foreground sm:p-5">
                             {(interpretationReasoning || streaming.reasoning) && <ThinkingBlock content={interpretationReasoning || streaming.reasoning || ''} isStreaming={streaming.isStreaming && !interpretation} startTime={streaming.reasoningStartTime} duration={streaming.reasoningDuration} />}
-                            <MarkdownContent content={interpretation || streaming.content || ''} className="text-sm text-foreground leading-relaxed" />
+                            <MarkdownContent content={interpretation || streaming.content || ''} className="text-sm text-foreground leading-relaxed" streaming={streaming.isStreaming && !interpretation} />
                         </div>
                     ) : (
                         <div className="flex flex-col gap-3">

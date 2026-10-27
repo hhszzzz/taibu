@@ -66,9 +66,11 @@ export function VisualizationBlock({ kind, source, streaming = false, incomplete
 }
 
 function ChartBody({ chart }: { chart: ReturnType<typeof parseChartSource> }) {
-    if (!chart) return <div className="visualization-error">图表数据解析失败，可查看数据。</div>;
+    // 卡片标题栏已经显示标题；运势雷达、大运趋势、运势日历还在图表内部再画一次 h3，这里传空标题避免重复。
+    const body = useMemo(() => chart ? { ...chart, title: '' } : null, [chart]);
+    if (!body) return <div className="visualization-error">图表数据解析失败，可查看数据。</div>;
     return <div className="visualization-body">
-        <Suspense fallback={CHART_LOADING}><ChartRenderer data={chart} /></Suspense>
+        <Suspense fallback={CHART_LOADING}><ChartRenderer data={body} /></Suspense>
     </div>;
 }
 

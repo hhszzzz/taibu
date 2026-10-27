@@ -267,7 +267,7 @@ export function AIAnalysisSection({
                                         startTime={streaming.reasoningStartTime} duration={streaming.reasoningDuration} />
                                 )}
                                 {streaming.content && (
-                                    <MarkdownContent content={streaming.content} className="text-sm text-foreground-secondary" />
+                                    <MarkdownContent content={streaming.content} className="text-sm text-foreground-secondary" streaming={streaming.isStreaming} />
                                 )}
                             </>
                         ) : (

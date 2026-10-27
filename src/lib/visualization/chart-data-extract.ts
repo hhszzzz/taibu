@@ -96,8 +96,9 @@ export function parseChartSource(source: string): ChartData | null {
     if (!json) return null;
     try {
         const parsed = JSON.parse(json) as ChartData;
-        if (parsed && typeof parsed.chartType === 'string' && typeof parsed.title === 'string') {
-            return normalizeChartData(parsed);
+        if (parsed && typeof parsed.chartType === 'string') {
+            // 旧消息可能没写 title；卡片标题栏会用「图表」兜底，不因此判为解析失败。
+            return normalizeChartData({ ...parsed, title: typeof parsed.title === 'string' ? parsed.title : '' });
         }
     } catch {
         // Malformed chart JSON falls back to the source view.

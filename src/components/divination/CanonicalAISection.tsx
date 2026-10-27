@@ -216,7 +216,7 @@ export function CanonicalAIPanel({ ai, title = 'AI 深度解读' }: { ai: Canoni
           {ai.content ? (
             <div className="prose prose-sm max-w-none">
               {ai.reasoning && <ThinkingBlock content={ai.reasoning} isStreaming={ai.isStreaming && !ai.interpretation} />}
-              <MarkdownContent content={ai.content} className="text-sm leading-relaxed text-foreground" />
+              <MarkdownContent content={ai.content} className="text-sm leading-relaxed text-foreground" streaming={ai.isStreaming && !ai.interpretation} />
             </div>
           ) : ai.isStreaming ? (
             <SoundWaveLoader variant="inline" />

@@ -241,3 +241,10 @@ test('parseChartSource returns null for malformed JSON and normalizes valid data
     assert.deepEqual((chart as any).data.scores.career.score, 80);
     assert.equal((chart as any).data.overallScore, 80);
 });
+
+test('parseChartSource keeps a legacy chart block that has no title', async () => {
+    const { parseChartSource } = await import('../lib/visualization/chart-data-extract');
+    const chart = parseChartSource('{"chartType":"fortune_radar","data":{}}');
+    assert.equal(chart?.chartType, 'fortune_radar');
+    assert.equal(chart?.title, '');
+});

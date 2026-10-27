@@ -94,6 +94,8 @@ try {
             createStream,
             account,
             featureState,
+            // Keep the CLI's five-minute cap per case: a stalled provider fails instead of hanging the sweep.
+            signal: AbortSignal.timeout(300000),
             ...(live ? { judge: { config } } : {}),
         });
         const visionFailure = item.visual && !(/红|red/i.test(outcome.answer) && /圆|circle/i.test(outcome.answer)

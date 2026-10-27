@@ -13,6 +13,7 @@ import { LunarYear } from 'lunar-javascript';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import type { BaziFormData, Gender } from '@/types';
 import { TimeInputModal } from '@/components/bazi/form/TimeInputModal';
+import { BirthTimeUnknownHint } from '@/components/bazi/form/BirthTimeUnknownHint';
 import { PlaceInputModal } from '@/components/bazi/form/PlaceInputModal';
 import { YEAR_OPTIONS, MONTH_OPTIONS, LUNAR_MONTH_NAMES } from '@/components/bazi/form/options';
 import { getDayCount } from '@/lib/date-utils';
@@ -23,6 +24,8 @@ type UpdateField = <K extends keyof BaziFormData>(field: K, value: BaziFormData[
 interface UnifiedZiweiFormProps {
     formData: BaziFormData;
     onUpdate: UpdateField;
+    unknownTime: boolean;
+    onToggleUnknownTime: () => void;
     onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
     isSubmitting: boolean;
     onBirthTimeConfirm?: () => void;
@@ -119,6 +122,8 @@ function SuffixSelect({
 export function UnifiedZiweiForm({
     formData,
     onUpdate,
+    unknownTime,
+    onToggleUnknownTime,
     onSubmit,
     isSubmitting,
     onBirthTimeConfirm,
@@ -183,7 +188,10 @@ export function UnifiedZiweiForm({
 
                 {/* 出生日期 + 时间 */}
                 <div className="flex flex-col gap-1.5">
-                    <span className={FIELD_LABEL_CLASS}>出生时间</span>
+                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                        <span className={FIELD_LABEL_CLASS}>出生时间</span>
+                        {unknownTime && <BirthTimeUnknownHint formData={formData} />}
+                    </div>
                     <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                         <SuffixSelect
                             ariaLabel="出生年"
@@ -217,15 +225,15 @@ export function UnifiedZiweiForm({
                                 <option key={day} value={day}>{day}</option>
                             ))}
                         </SuffixSelect>
-                        {/* 出生时间（点击打开模态框）；紫微必须提供时辰 */}
+                        {/* 出生时间（点击打开模态框）；不知道时辰就先空着 */}
                         <button
                             type="button"
                             onClick={() => setTimeModalOpen(true)}
-                            aria-label={`出生时间 ${timeText}`}
+                            aria-label={`出生时间 ${unknownTime ? '未知' : timeText}`}
                             className={`${BOX_CLASS} col-span-3 flex items-center justify-between gap-2 px-3 text-left hover:bg-background-secondary sm:col-span-1`}
                         >
-                            <span className="tabular-nums">{timeText}</span>
-                            <span aria-hidden="true" className="text-[13px] text-foreground-tertiary">{hourBranch}</span>
+                            <span className={unknownTime ? 'text-foreground-tertiary' : 'tabular-nums'}>{unknownTime ? '未知' : timeText}</span>
+                            {!unknownTime && <span aria-hidden="true" className="text-[13px] text-foreground-tertiary">{hourBranch}</span>}
                         </button>
                     </div>
 
@@ -290,10 +298,9 @@ export function UnifiedZiweiForm({
                 isOpen={timeModalOpen}
                 onClose={() => setTimeModalOpen(false)}
                 formData={formData}
-                unknownTime={false}
-                onToggleUnknownTime={() => {}}
+                unknownTime={unknownTime}
+                onToggleUnknownTime={onToggleUnknownTime}
                 onUpdate={onUpdate}
-                allowUnknownTime={false}
                 onConfirm={onBirthTimeConfirm}
             />
 

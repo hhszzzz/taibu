@@ -28,6 +28,8 @@ function ZiweiPageContent() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [formData, setFormData] = useState<BaziFormData>(initialState.formData);
     const [requiresBirthTimeConfirmation, setRequiresBirthTimeConfirmation] = useState(initialState.requiresBirthTimeConfirmation);
+    // 时辰默认未知：用户选了才算知道（与八字一致）。
+    const [unknownTime, setUnknownTime] = useState(!searchParams.get('hour') || searchParams.get('hour') === '-1');
 
     useEffect(() => {
         if (requiresBirthTimeConfirmation) {
@@ -124,6 +126,10 @@ function ZiweiPageContent() {
             showToast('warning', ZIWEI_BIRTH_TIME_REQUIRED_MESSAGE);
             return;
         }
+        if (unknownTime) {
+            showToast('warning', '紫微斗数需要出生时辰：可以先让 Agent 按人生经历反推，再回来排盘');
+            return;
+        }
         setIsSubmitting(true);
 
         try {
@@ -173,7 +179,7 @@ function ZiweiPageContent() {
 
     return (
         <div className="min-h-screen bg-background text-foreground">
-            <div className="mx-auto flex w-full max-w-[608px] flex-col gap-6 px-4 py-6 animate-fade-in sm:gap-7 sm:px-6 lg:py-14">
+            <div className="mx-auto flex w-full max-w-[608px] flex-col gap-6 px-4 py-6 animate-fade-in sm:gap-7 sm:px-6 lg:pb-14 lg:pt-8">
                 <div className="flex flex-col gap-2">
                     <h1 className="font-display text-[1.625rem] font-normal leading-tight lg:text-[2rem]">紫微斗数排盘</h1>
                     <p className="text-sm leading-relaxed text-foreground-secondary lg:text-[15px]">
@@ -184,6 +190,8 @@ function ZiweiPageContent() {
                 <UnifiedZiweiForm
                     formData={formData}
                     onUpdate={updateField}
+                    unknownTime={unknownTime}
+                    onToggleUnknownTime={() => setUnknownTime(value => !value)}
                     onSubmit={handleSubmit}
                     isSubmitting={isSubmitting}
                     onBirthTimeConfirm={() => setRequiresBirthTimeConfirmation(false)}

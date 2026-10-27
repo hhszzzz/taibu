@@ -50,8 +50,8 @@ export function TimeInputModal({
         setLocalMinute(formData.birthMinute);
         setLocalTimezone(formData.timezone ?? DEFAULT_DIVINATION_TIMEZONE);
         setLocalDisambiguation(formData.disambiguation ?? 'reject');
-        // 打开模态框时默认显示"已知时辰"，方便用户直接选择时间
-        setLocalUnknownTime(false);
+        // 打开时保持当前状态：未知就还是未知，选了时间才算知道。
+        setLocalUnknownTime(unknownTime);
     }
     if (isOpen !== lastIsOpen) {
         setLastIsOpen(isOpen);
@@ -82,6 +82,8 @@ export function TimeInputModal({
             const [hours, minutes] = timeValue.split(':').map(Number);
             setLocalHour(hours);
             setLocalMinute(minutes);
+            // 选了时间就是知道了。
+            setLocalUnknownTime(false);
         }
     };
 
@@ -187,6 +189,7 @@ export function TimeInputModal({
                                                 onClick={() => {
                                                     setLocalHour(value);
                                                     setLocalMinute(0);
+                                                    setLocalUnknownTime(false);
                                                 }}
                                                 className={`
                                                     flex flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-2 text-sm transition-colors duration-150

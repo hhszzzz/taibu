@@ -19,6 +19,7 @@ import { PlaceInputModal } from '@/components/bazi/form/PlaceInputModal';
 import { YEAR_OPTIONS, MONTH_OPTIONS, LUNAR_MONTH_NAMES } from '@/components/bazi/form/options';
 import { getDayCount } from '@/lib/date-utils';
 import { getEarthlyBranchByHour } from '@/lib/divination/bazi-form-utils';
+import { BirthTimeUnknownHint } from '@/components/bazi/form/BirthTimeUnknownHint';
 
 type UpdateField = <K extends keyof BaziFormData>(field: K, value: BaziFormData[K]) => void;
 
@@ -157,17 +158,9 @@ export function BaziForm({
                 {/* 条件渲染：出生时间或四柱反推 */}
                 {!isPillarsMode ? (
                     <div className="flex flex-col gap-1.5">
-                        <div className="flex items-center justify-between gap-3">
+                        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                             <span className={FIELD_LABEL_CLASS}>出生时间</span>
-                            <label className="flex cursor-pointer items-center gap-1.5 text-[13px] text-foreground-secondary">
-                                <input
-                                    type="checkbox"
-                                    checked={unknownTime}
-                                    onChange={onToggleUnknownTime}
-                                    className="m-0 h-4 w-4 cursor-pointer"
-                                />
-                                不知时辰
-                            </label>
+                            {unknownTime && <BirthTimeUnknownHint formData={formData} />}
                         </div>
                         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                             <SuffixSelect

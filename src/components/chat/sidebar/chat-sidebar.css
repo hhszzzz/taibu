@@ -72,7 +72,7 @@
 .chat-nav-list::-webkit-scrollbar { display: none; }
 .chat-nav-hint { margin: 14px 8px; font-size: 13px; color: var(--foreground-secondary); }
 .chat-nav-group { display: flex; flex-direction: column; gap: 2px; }
-.chat-nav-group-label { display: flex; align-items: center; justify-content: space-between; margin: 16px 4px 2px; font-size: 13px; font-weight: 400; color: var(--foreground-tertiary); }
+.chat-nav-group-label { display: flex; align-items: center; justify-content: space-between; margin: 10px 4px 2px; font-size: 13px; font-weight: 400; color: var(--foreground-tertiary); }
 .chat-nav-group-pinned { justify-content: flex-start; }
 /* claude Recents 组头：悬停/聚焦才显形的 24px 工具钮（「分组和排序」）；已置顶组标签同形但非 heading */
 .chat-nav-group-tools { display: inline-flex; margin-left: auto; }
@@ -169,7 +169,9 @@
 .chat-recents-head:hover .chat-recents-caret, .chat-recents-head:focus-within .chat-recents-caret { opacity: 1; }
 @media (hover: none) { .chat-recents-caret { opacity: 1; } }
 /* 已置顶 = 与「最近使用」同一种组头（同样 13px / 悬停显形箭头），不吸顶。 */
-.chat-pinned-head { position: static; }
+.chat-pinned-head { position: static; margin-top: 0; }
+/* 已置顶整块吸在列表顶端，「最近使用」的组头从它下面开始吸顶。 */
+.chat-nav-pinned-block { flex-shrink: 0; }
 .chat-recents-tools { display: inline-flex; align-items: center; gap: 2px; opacity: 0; transition: opacity .12s; }
 .chat-recents-head:hover .chat-recents-tools, .chat-recents-head:focus-within .chat-recents-tools { opacity: 1; }
 @media (hover: none) { .chat-recents-tools { opacity: 1; } }

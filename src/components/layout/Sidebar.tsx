@@ -40,7 +40,7 @@ const ASIDE_CLASS = 'relative hidden lg:flex flex-col h-screen sticky top-0 z-20
 const ITEM_BASE = 'group/row flex items-center gap-2 h-8 px-0.5 rounded-lg text-[14px] transition-colors duration-[120ms]';
 const ITEM_IDLE = 'text-foreground-secondary hover:bg-[var(--df-hover)]';
 const ITEM_ACTIVE = 'bg-[var(--df-selected)] text-foreground';
-const SECTION_LABEL = 'px-1.5 pt-4 pb-1.5 text-[13px] font-normal text-foreground-tertiary';
+const SECTION_LABEL = 'px-1.5 pt-2 pb-1.5 text-[13px] font-normal text-foreground-tertiary';
 /** Opens the global conversation search (ConversationSearchHost listens for this event; ⌘K also works). */
 const openConversationSearch = () => window.dispatchEvent(new Event('taibu:search'));
 
@@ -165,6 +165,8 @@ function SidebarInner() {
     const [sidebarWidth, setSidebarWidth] = useSidebarWidth();
     // 全站常驻的「对话方式」：/chat 之外由侧栏回退控件显示本地偏好（页内由 store 接管）。
     const storedMode = useStoredChatMode(user?.id);
+    // /chat 里控件由页面发布；首帧还没发布时按地址里的方式显示，免得切换条先亮 Agent 再滑回来。
+    const routeMode = searchParams.get('mode') === 'agent' ? 'agent' as const : 'plain' as const;
     // ⇧⌘O = 克隆站「新建」行的快捷键：新建会话并回到 /chat。
     useEffect(() => {
         const onKeyDown = (event: KeyboardEvent) => {
@@ -223,7 +225,7 @@ function SidebarInner() {
                 <div className="flex items-center h-11 px-2 gap-2 justify-between flex-shrink-0">
                     <Brand />
                     <ModeSwitch fallback={{
-                        mode: storedMode,
+                        mode: isChatRoute ? routeMode : storedMode,
                         onSelect: (mode) => {
                             persistStoredChatMode(user?.id, mode);
                             router.push(mode === 'agent' ? '/chat?mode=agent' : '/chat');
@@ -315,7 +317,8 @@ function SidebarInner() {
                     </FloatingPanel>
                 </div>
 
-                <nav aria-label="最近对话" className="flex-1 min-h-0 overflow-y-auto px-2">
+                {/* /chat 里只有「最近使用」列表自己滚动（已置顶固定在其上方），其余页面整段滚动。 */}
+                <nav aria-label="最近对话" className={`flex flex-1 min-h-0 flex-col px-2 ${isChatRoute ? 'overflow-hidden' : 'overflow-y-auto'}`}>
                     {chatItem && user ? (
                         isChatRoute ? (
                             /* Chat 侧栏自带「已置顶 / 最近使用」组头（claude 同构图），不再叠加外层组头。 */

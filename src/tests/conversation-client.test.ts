@@ -226,14 +226,20 @@ test('sidebar conversation viewport top-up waits for the first page to finish lo
     sidebarSource,
     /onClick=\{handleInteraction\}/u,
   );
+  // 最近对话按 10 条一页展开：「查看更多」只管翻页，滚到底不再自动加载。
   assert.match(
     sidebarSource,
-    /setHasUserScrolled\(scrollContainer\.scrollTop > 0\);/u,
+    /const \[recentsLimit, setRecentsLimit\] = useState\(RECENT_VISIBLE\);/u,
   );
   assert.match(
     sidebarSource,
-    /!hasUserScrolled[\s\S]*void loadMoreConversations\(\);/u,
+    /setRecentsLimit\(limit => limit \+ RECENT_VISIBLE\);/u,
   );
+  assert.match(
+    sidebarSource,
+    /const hasMoreToShow = hasHiddenRecents \|\| hasMoreConversations;/u,
+  );
+  assert.equal(sidebarSource.includes('IntersectionObserver'), false);
   // The phone drawer shows the sidebar's own panel, so the same top-up rules apply there.
   assert.match(
     chatSidebarSource,

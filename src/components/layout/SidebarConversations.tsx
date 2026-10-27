@@ -11,7 +11,7 @@
 'use client';
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { Check, ChevronDown, ChevronRight, Plus, SlidersHorizontal } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, ChevronUp, Plus, SlidersHorizontal } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { FloatingPanel } from '@/components/ui/FloatingPanel';
@@ -87,6 +87,9 @@ interface SidebarConversationsProps {
     withinModal?: boolean;
 }
 
+/** 最近对话默认列出的条数；其余点「查看更多」展开。 */
+const RECENT_VISIBLE = 10;
+
 export function SidebarConversations({ grouping = 'source', markers, withinModal = false }: SidebarConversationsProps = {}) {
     const pathname = usePathname();
     const searchParams = useSearchParams();
@@ -113,9 +116,8 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
     const [editTitle, setEditTitle] = useState('');
     const [deleteLoading, setDeleteLoading] = useState(false);
     const [sidebarTargetCount, setSidebarTargetCount] = useState<number | null>(null);
-    const [hasUserScrolled, setHasUserScrolled] = useState(false);
     const listViewportRef = useRef<HTMLDivElement | null>(null);
-    const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
+    const pinnedBlockRef = useRef<HTMLDivElement | null>(null);
 
     // Determine active conversation from URL search params
     const activeId = useMemo(() => {
@@ -139,6 +141,8 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
     }, [userId]);
     const [pinnedOpen, setPinnedOpen] = useState(true);
     const [recentsOpen, setRecentsOpen] = useState(true);
+    // 每次「查看更多」再多列 10 条；置顶与当前会话始终在列，不占这 10 个名额。
+    const [recentsLimit, setRecentsLimit] = useState(RECENT_VISIBLE);
 
     const pinnedSet = useMemo(() => new Set(pinnedIds), [pinnedIds]);
     // 会话按类别分栏（claude 的 Claude|Code 两个列表）：跑过 Agent 任务的归「Agent」，其余归「对话」；
@@ -154,9 +158,24 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
             return true;
         });
     }, [conversations, chatMode, activeId, listPreferences.display, pinnedSet, markers]);
+    const shownConversations = useMemo(() => {
+        const kept: ConversationListItem[] = [];
+        let recents = 0;
+        for (const conv of visibleConversations) {
+            if (pinnedSet.has(conv.id) || conv.id === activeId) { kept.push(conv); continue; }
+            if (recents >= recentsLimit) continue;
+            recents += 1;
+            kept.push(conv);
+        }
+        return kept;
+    }, [recentsLimit, visibleConversations, pinnedSet, activeId]);
+    const hasHiddenRecents = shownConversations.length < visibleConversations.length;
+    // 还有没列出来的（本地或服务端）就只给「查看更多」；全都列完了才给「收起」。
+    const hasMoreToShow = hasHiddenRecents || hasMoreConversations;
     // 置顶会话从最近列表里抽出，单独组成最上面的「已置顶」组。
-    const unpinnedConversations = useMemo(() => visibleConversations.filter(conv => !pinnedSet.has(conv.id)), [visibleConversations, pinnedSet]);
-    const pinnedConversations = useMemo(() => pinnedIds.map(id => visibleConversations.find(conv => conv.id === id)).filter((conv): conv is ConversationListItem => Boolean(conv)), [pinnedIds, visibleConversations]);
+    const unpinnedConversations = useMemo(() => shownConversations.filter(conv => !pinnedSet.has(conv.id)), [shownConversations, pinnedSet]);
+    const pinnedConversations = useMemo(() => pinnedIds.map(id => shownConversations.find(conv => conv.id === id)).filter((conv): conv is ConversationListItem => Boolean(conv)), [pinnedIds, shownConversations]);
+
     // 「标题 A→Z」作用于每个日期组内部；「最近活动」保持接口原始顺序。
     const sortGroupItems = useCallback((items: ConversationListItem[]) => listPreferences.sort === 'title'
         ? [...items].sort((a, b) => formatConversationMenuTitle(a).localeCompare(formatConversationMenuTitle(b), 'zh-Hans-CN'))
@@ -170,7 +189,7 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
             meihua: [], xiaoliuren: [],
         };
 
-        visibleConversations.forEach(conv => {
+        shownConversations.forEach(conv => {
             let type = conv.sourceType || 'chat';
             if (type === 'bazi_personality') {
                 type = 'bazi_wuxing';
@@ -183,7 +202,7 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
         });
 
         return groups;
-    }, [visibleConversations]);
+    }, [shownConversations]);
 
     const toggleGroup = useCallback((type: ConversationSourceType) => {
         setCollapsedGroups(prev => {
@@ -344,61 +363,39 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
         triggerConversationListLoad(sidebarTargetCount);
     }, [hasLoadedConversations, shouldAutoTopUp, sidebarTargetCount, triggerConversationListLoad]);
 
-    useEffect(() => {
-        const scrollContainer = getScrollContainer();
-        if (!scrollContainer) {
-            return;
-        }
-
-        const handleScroll = () => {
-            setHasUserScrolled(scrollContainer.scrollTop > 0);
-        };
-
-        scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
-        return () => {
-            scrollContainer.removeEventListener('scroll', handleScroll);
-        };
-    }, [getScrollContainer]);
-
-    useEffect(() => {
-        const scrollContainer = getScrollContainer();
-        if (
-            !hasLoadedConversations
-            || !hasUserScrolled
-            || !hasMoreConversations
-            || loadingMoreConversations
-            || !loadMoreSentinelRef.current
-            || !scrollContainer
-        ) {
-            return;
-        }
-
-        const observer = new IntersectionObserver((entries) => {
-            if (entries.some((entry) => entry.isIntersecting)) {
-                void loadMoreConversations();
-            }
-        }, {
-            root: scrollContainer,
-            rootMargin: '120px 0px',
-        });
-
-        observer.observe(loadMoreSentinelRef.current);
-        return () => observer.disconnect();
-    }, [
-        hasLoadedConversations,
-        hasUserScrolled,
-        hasMoreConversations,
-        getScrollContainer,
-        loadMoreConversations,
-        loadingMoreConversations,
-    ]);
-
     return (
         <>
-            {/* 对话区域 — 紧凑内嵌在 Chat 项下方 */}
-            <div className="mt-1">
-                {/* 最近使用：置顶组 + 单一平铺列表（claude Recents，不再按日期分组） */}
-                <div ref={listViewportRef} className="relative space-y-0.5">
+            {/* 对话区域 — 紧凑内嵌在 Chat 项下方；只有「最近使用」这一段滚动，「已置顶」停在上面。 */}
+            <div className={`mt-1 ${wantsDate ? 'flex min-h-0 flex-1 flex-col' : ''}`}>
+                {wantsDate && pinnedConversations.length > 0 ? (
+                    <div className="chat-nav-pinned-block" ref={pinnedBlockRef}>
+                        <section className="chat-nav-group" aria-label="已置顶">
+                            <div className="chat-recents-head chat-pinned-head">
+                                <button type="button" className="chat-recents-toggle" aria-expanded={pinnedOpen}
+                                    onClick={() => setPinnedOpen(value => !value)}>
+                                    <span>已置顶</span>
+                                    <span className="chat-recents-caret" aria-hidden="true">{pinnedOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</span>
+                                </button>
+                            </div>
+                            {pinnedOpen && pinnedConversations.map(conv => (
+                                <ConversationNavItem
+                                    key={conv.id}
+                                    conv={conv}
+                                    isActive={activeId === conv.id}
+                                    isActionActive={actionConv?.id === conv.id}
+                                    marker={markers?.get(conv.id)}
+                                    onOpenAction={openActionSheet}
+                                    isEditing={editingId === conv.id}
+                                    editTitle={editingId === conv.id ? editTitle : ''}
+                                    onEditTitleChange={editingId === conv.id ? setEditTitle : undefined}
+                                    onSaveRename={editingId === conv.id ? saveRename : undefined}
+                                    onCancelRename={editingId === conv.id ? cancelRename : undefined}
+                                />
+                            ))}
+                        </section>
+                    </div>
+                ) : null}
+                <div ref={listViewportRef} className={`relative space-y-0.5 ${wantsDate ? 'min-h-0 flex-1 overflow-y-auto' : ''}`}>
                     {conversationListError && !hasLoadedConversations && !conversationsLoading ? (
                         <div className="rounded-md border border-[#ead9bf] bg-[#fcf8ee] px-3 py-3 text-xs text-[#946c21]">
                             <div>{conversationListError}</div>
@@ -424,7 +421,7 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
                                 </div>
                             )}
                         </div>
-                    ) : visibleConversations.length === 0 && !pendingSidebarTitle ? (
+                    ) : shownConversations.length === 0 && !pendingSidebarTitle ? (
                         <div className="text-center text-foreground-secondary text-[11px] py-3">
                             暂无对话
                         </div>
@@ -441,33 +438,6 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
                                         重试
                                     </button>
                                 </div>
-                            ) : null}
-                            {wantsDate && pinnedConversations.length > 0 ? (
-                                /* claude Pinned 组：与「最近使用」同一种组头（13px muted + 折叠箭头）。没有置顶会话时不显示这一组。 */
-                                <section className="chat-nav-group" aria-label="已置顶">
-                                    <div className="chat-recents-head chat-pinned-head">
-                                        <button type="button" className="chat-recents-toggle" aria-expanded={pinnedOpen}
-                                            onClick={() => setPinnedOpen(value => !value)}>
-                                            <span>已置顶</span>
-                                            <span className="chat-recents-caret" aria-hidden="true">{pinnedOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</span>
-                                        </button>
-                                    </div>
-                                    {pinnedOpen && pinnedConversations.map(conv => (
-                                        <ConversationNavItem
-                                            key={conv.id}
-                                            conv={conv}
-                                            isActive={activeId === conv.id}
-                                            isActionActive={actionConv?.id === conv.id}
-                                            marker={markers?.get(conv.id)}
-                                            onOpenAction={openActionSheet}
-                                            isEditing={editingId === conv.id}
-                                            editTitle={editingId === conv.id ? editTitle : ''}
-                                            onEditTitleChange={editingId === conv.id ? setEditTitle : undefined}
-                                            onSaveRename={editingId === conv.id ? saveRename : undefined}
-                                            onCancelRename={editingId === conv.id ? cancelRename : undefined}
-                                        />
-                                    ))}
-                                </section>
                             ) : null}
                             {wantsDate ? (
                                 <div className="chat-recents-block">
@@ -536,17 +506,23 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
                             })}
                         </>
                     )}
-                    {hasLoadedConversations && hasMoreConversations && (
-                        <div ref={loadMoreSentinelRef} className="py-2">
-                            {loadingMoreConversations ? (
-                                <div className="flex items-center justify-center gap-2 text-[10px] text-foreground-secondary">
-                                    <SoundWaveLoader variant="inline" />
-                                </div>
-                            ) : (
-                                <div className="text-center text-[10px] text-foreground-secondary">
-                                    下滑加载更多
-                                </div>
-                            )}
+                    {/* 「最近使用」收起时，展开/收起一并隐藏。 */}
+                    {hasLoadedConversations && (!wantsDate || recentsOpen) && hasMoreToShow && (
+                        <div className="mt-1 px-2">
+                            <button type="button" className="flex items-center gap-1 text-[14px] text-foreground-secondary transition-colors hover:text-foreground"
+                                onClick={() => { if (!hasHiddenRecents && hasMoreConversations) void loadMoreConversations(); setRecentsLimit(limit => limit + RECENT_VISIBLE); }}
+                                aria-busy={loadingMoreConversations || undefined}>
+                                查看更多
+                                {loadingMoreConversations ? <SoundWaveLoader variant="inline" /> : <ChevronDown size={15} aria-hidden="true" />}
+                            </button>
+                        </div>
+                    )}
+                    {hasLoadedConversations && (!wantsDate || recentsOpen) && !hasMoreToShow && recentsLimit > RECENT_VISIBLE && (
+                        <div className="mt-1 mb-1 px-2">
+                            <button type="button" className="flex items-center gap-1 text-[14px] text-foreground-secondary transition-colors hover:text-foreground"
+                                onClick={() => { setRecentsLimit(RECENT_VISIBLE); listViewportRef.current?.parentElement?.scrollTo({ top: 0 }); }}>
+                                收起<ChevronUp size={15} aria-hidden="true" />
+                            </button>
                         </div>
                     )}
                 </div>

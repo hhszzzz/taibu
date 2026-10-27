@@ -2092,6 +2092,31 @@ export async function run(existingPage, bundlePath) {
       return !!quote && !!bubble && !!(quote.compareDocumentPosition(bubble) & Node.DOCUMENT_POSITION_FOLLOWING);
     }));
     check('sending clears the quote bar', await quoteProbe.locator('.chat-composer-quotes').count() === 0);
+    // 手机长按选择后点浮出的按钮：React 的 touchstart 监听是被动的，不能靠 preventDefault 保住选区，
+    // 所以触摸路径必须在 touchend 上完成引用。
+    await page.evaluate(() => {
+      const article = document.querySelector('[data-testid="quote-probe"] [data-message-id="quote-a1"]');
+      const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+      let node = null;
+      while (walker.nextNode()) { node = walker.currentNode; if (node.textContent.includes('庚金带煞')) break; }
+      const start = node.textContent.indexOf('庚金带煞');
+      const range = document.createRange();
+      range.setStart(node, start);
+      range.setEnd(node, start + 4);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new Event('selectionchange'));
+    });
+    await page.getByRole('button', { name: '引用所选文字' }).waitFor();
+    await page.evaluate(() => {
+      const button = document.querySelector('.chat-quote-select');
+      button.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true }));
+      button.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true }));
+    });
+    await quoteBar.waitFor();
+    check('a touch tap on the floating button also adds the selected passage',
+      (await quoteBar.innerText()).includes('已引用 1 段'));
     await page.evaluate(() => window.fixture.mount.quote(false));
     await quoteProbe.waitFor({ state: 'detached' });
 

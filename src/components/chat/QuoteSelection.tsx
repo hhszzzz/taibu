@@ -24,6 +24,10 @@ export function QuoteSelection({ containerRef, messages, onQuote, disabled = fal
     disabled?: boolean;
 }) {
     const [target, setTarget] = useState<QuoteTarget | null>(null);
+    /** A touch tap can end with both touchend and click; only the first one quotes. */
+    const accepted = useRef(false);
+    /** When the button itself was pressed: the tap's own selection collapse must not unmount it first. */
+    const pressedAt = useRef(0);
     const roles = useRef(new Map<string, ChatMessage['role']>());
     useEffect(() => { roles.current = new Map(messages.map(message => [message.id, message.role])); }, [messages]);
 
@@ -32,6 +36,9 @@ export function QuoteSelection({ containerRef, messages, onQuote, disabled = fal
         if (disabled) { hide(); return; }
         const selection = typeof window === 'undefined' ? null : window.getSelection();
         const container = containerRef.current;
+        // Tapping the floating button may collapse the selection before touchend/click lands; the
+        // button has to survive that collapse to take the tap, so a recent press mutes it briefly.
+        if (performance.now() - pressedAt.current < 1000 && (!selection || selection.isCollapsed)) return;
         if (!selection || selection.isCollapsed || selection.rangeCount === 0 || !container) { hide(); return; }
         const start = hostElement(selection.anchorNode)?.closest('[data-message-id]');
         const end = hostElement(selection.focusNode)?.closest('[data-message-id]');
@@ -46,6 +53,7 @@ export function QuoteSelection({ containerRef, messages, onQuote, disabled = fal
         const below = rect.top < 64;
         const left = Math.min(Math.max(rect.left + rect.width / 2, 56), window.innerWidth - 56);
         const top = below ? rect.bottom + 10 : rect.top - 10;
+        accepted.current = false;
         setTarget(current => current && current.messageId === messageId && current.text === text
             && current.left === left && current.top === top && current.below === below
             ? current : { messageId, text, left, top, below });
@@ -70,6 +78,8 @@ export function QuoteSelection({ containerRef, messages, onQuote, disabled = fal
 
     if (!target) return null;
     const accept = () => {
+        if (accepted.current) return;
+        accepted.current = true;
         onQuote({ messageId: target.messageId, text: target.text });
         window.getSelection()?.removeAllRanges();
         setTarget(null);
@@ -77,8 +87,11 @@ export function QuoteSelection({ containerRef, messages, onQuote, disabled = fal
     return createPortal(
         <button type="button" className={`chat-quote-select${target.below ? ' is-below' : ''}`}
             style={{ left: target.left, top: target.top }} aria-label="引用所选文字"
+            onPointerDown={() => { pressedAt.current = performance.now(); }}
             onMouseDown={event => event.preventDefault()}
-            onTouchStart={event => event.preventDefault()}
+            // React registers touchstart passively, so it cannot keep the selection; accept the tap on
+            // touchend and let the accepted guard absorb the click that some browsers still deliver.
+            onTouchEnd={accept}
             onClick={accept}>
             <Quote size={13} aria-hidden="true" />引用
         </button>,

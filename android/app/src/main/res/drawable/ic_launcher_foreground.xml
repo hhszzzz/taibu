@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 自适应图标前景：太卜合契符号（白色，108dp 画布内 46dp，四角落在 66dp 安全圆内） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.2421"
+        android:scaleY="0.2421"
+        android:translateX="23.01"
+        android:translateY="23.01">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M33,32 H97 V96 A64,64 0 0 1 33,32 Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M113,32 H163 V224 A50,50 0 0 1 113,174 Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M179,32 A44,44 0 0 1 179,120 Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M179,136 A44,44 0 0 1 179,224 Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M65,159.5 A32.5,32.5 0 1 1 65,224.5 A32.5,32.5 0 1 1 65,159.5 Z" />
+    </group>
+</vector>

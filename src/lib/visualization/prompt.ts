@@ -93,8 +93,8 @@ export function buildVisualizationPromptSection(allowedChartTypes: ChartType[] =
         lines.push(`- ${type}（${hint.label}）：${hint.when}data 需包含 ${hint.data}`);
     }
 
-    lines.push(`chartType 只能取上面列出的值，不能自造（例如 network、bar）；哪一种都不合适时改用下面的 ```visual 或文字说明。${allowedChartTypes.length ? '' : `可用的 chartType：${CHART_TYPES.join('、')}。`}`);
-    lines.push('内置类型表达不了时（例如交互式大运时间轴、关系网络、对比滑块），改用 ```visual 代码块，内容是自包含的 HTML 片段：');
+    lines.push(`chartType 只能取上面列出的值，不能自造（例如 network、bar）；哪一种都不合适时改用下面的 \`\`\`visual 或文字说明。${allowedChartTypes.length ? '' : `可用的 chartType：${CHART_TYPES.join('、')}。`}`);
+    lines.push('内置类型表达不了时（例如交互式大运时间轴、关系网络、对比滑块），改用 \`\`\`visual 代码块，内容是自包含的 HTML 片段：');
     lines.push('- 首行可写 <!-- 标题 --> 作为卡片标题，之后可用内联 CSS、SVG 与内联脚本。');
     lines.push('- 外壳是 sandbox iframe：不能联网，不能访问页面或站点存储，不能加载外部资源。');
     lines.push('- 总大小不超过 64 KB；只放在一个代码块里。');

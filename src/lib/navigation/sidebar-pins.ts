@@ -2,20 +2,16 @@
  * Sidebar pinned divination items — a per-browser display preference.
  *
  * The desktop sidebar lists the methods the user pinned; everything else lives
- * in the "全部占术" panel. 日运 / 月运 start pinned like any other entry and can
- * be unpinned from the same panel. Storage and fallback rules live in
- * `pin-store.ts`.
+ * in the "全部占术" panel. Only 八字 / 紫微 / 塔罗 / 六爻 / 日运 start pinned, and
+ * every entry can be pinned or unpinned from that panel. Storage and fallback
+ * rules live in `pin-store.ts`.
  */
 import { getSidebarNavItems } from '@/lib/navigation/registry';
 import { createPinStore, normalizePinList } from '@/lib/navigation/pin-store';
 
-/**
- * v2: 日运 / 月运 became ordinary pins (they used to be injected on every read).
- * A new key gives existing browsers the new defaults once, after which the
- * stored list — including an unpinned fortune entry — is what the sidebar shows.
- */
-export const SIDEBAR_PINS_STORAGE_KEY = 'taibu.pref.sidebarPinned.v2';
-export const DEFAULT_SIDEBAR_PINS: readonly string[] = Object.freeze(['bazi', 'ziwei', 'tarot', 'liuyao', 'qimen', 'daily', 'monthly']);
+/** Pin list key; shared by every reader of the sidebar preference. */
+export const SIDEBAR_PINS_STORAGE_KEY = 'taibu.pref.sidebarPinned';
+export const DEFAULT_SIDEBAR_PINS: readonly string[] = Object.freeze(['bazi', 'ziwei', 'tarot', 'liuyao', 'daily']);
 
 /**
  * Display order for every sidebar divination entry. It follows the registry

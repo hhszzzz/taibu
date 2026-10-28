@@ -36,15 +36,16 @@ test('toggleSidebarPin appends new pins and removes existing ones without mutati
   assert.deepEqual(pins, ['bazi', 'ziwei']);
 });
 
-test('default pins are frozen and include the fortune entries, which stay toggleable', () => {
+test('default pins are frozen and every entry outside them stays pinnable', () => {
   assert.ok(Object.isFrozen(DEFAULT_SIDEBAR_PINS));
-  assert.deepEqual([...DEFAULT_SIDEBAR_PINS], ['bazi', 'ziwei', 'tarot', 'liuyao', 'qimen', 'daily', 'monthly']);
-  assert.deepEqual(toggleSidebarPin(DEFAULT_SIDEBAR_PINS, 'daily'), ['bazi', 'ziwei', 'tarot', 'liuyao', 'qimen', 'monthly']);
-  assert.deepEqual(toggleSidebarPin(['bazi'], 'monthly'), ['bazi', 'monthly'], 'an unpinned fortune entry can be pinned again');
+  assert.deepEqual([...DEFAULT_SIDEBAR_PINS], ['bazi', 'ziwei', 'tarot', 'liuyao', 'daily']);
+  assert.deepEqual(toggleSidebarPin(DEFAULT_SIDEBAR_PINS, 'daily'), ['bazi', 'ziwei', 'tarot', 'liuyao']);
+  assert.deepEqual(toggleSidebarPin(['bazi'], 'monthly'), ['bazi', 'monthly'], '月运 starts in 全部占术 and can be pinned from there');
+  assert.deepEqual(toggleSidebarPin(['bazi'], 'qimen'), ['bazi', 'qimen'], '奇门 starts in 全部占术 and can be pinned from there');
 });
 
-test('the storage key version gives existing browsers the new defaults once', () => {
-  assert.equal(SIDEBAR_PINS_STORAGE_KEY, 'taibu.pref.sidebarPinned.v2');
+test('the pin list is stored under one plain key', () => {
+  assert.equal(SIDEBAR_PINS_STORAGE_KEY, 'taibu.pref.sidebarPinned');
 });
 
 test('sidebar order follows the registry declaration order, not pin insertion order', () => {

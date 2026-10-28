@@ -202,6 +202,9 @@ export const ICON_MOTIONS: Readonly<Record<string, readonly IconMotion[]>> = {
     // 新聊天：气泡一弹、往上浮一下。
     chat: [{ part: '.ni-bubble', keyframes: spin(12, 12, [['translate(0, 0) scale(1)'], ['translate(0, -1.2px) scale(1.1)', .42], ['translate(0, .2px) scale(1)', .74], ['translate(0, 0) scale(1)']]), options: { duration: 560 } }],
 
+    // 定时任务：表盘不转，指针绕轴走一整圈，像表针扫过一格。
+    schedule: [{ part: '.ni-hand', keyframes: wholeTurn(12, 12, [[0], [360]]), options: { duration: 720 } }],
+
     // 我的：头轻轻点一下。
     profile: [{ part: '.ni-head', keyframes: float('0 1.3px', .36), options: { duration: 520 } }],
 
@@ -268,6 +271,15 @@ export const ICON_MOTIONS: Readonly<Record<string, readonly IconMotion[]>> = {
         },
         { part: '.ni-antenna', keyframes: [{ opacity: 1, offset: 0, easing: MOTION_EASE_OUT }, { opacity: .25, offset: .42, easing: MOTION_EASE_OUT }, { opacity: 1, offset: 1 }], options: { duration: 560 } },
     ],
+
+    // 技能：页面上的火星转半圈闪一下（四芒星转 90° 仍是同一颗星）。
+    skill: [{ part: '.ni-spark', keyframes: spin(12, 13.3, [['rotate(0deg)'], ['rotate(90deg)']]), options: { duration: 640 } }],
+
+    // 连接器：插头往下插一下，像接上。
+    plug: [{ part: '.ni-glyph', keyframes: float('0 1.4px', .4), options: { duration: 520 } }],
+
+    // 扩展：拼图块错开一点再卡回去。
+    puzzle: [{ part: '.ni-glyph', keyframes: spin(8.5, 8.5, [['rotate(0deg)'], ['rotate(-9deg)', .34], ['rotate(0deg)']]), options: { duration: 600 } }],
 
     // MCP：涂鸦顺着笔迹画一遍（pathLength 已归一到 100）。
     scribble: [{

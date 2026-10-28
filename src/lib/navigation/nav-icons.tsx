@@ -281,10 +281,10 @@ export const BellIcon = createNavIcon('bell', <>
     <path className="ni-clapper" d="M10 19a2 2 0 0 0 4 0" />
 </>);
 
-/** 定时任务：表盘与指针，和会话列表里的时钟标记同一形状。 */
+/** 定时任务：表盘与指针，和会话列表里的时钟标记同一形状；悬停时指针走一圈。 */
 export const ScheduleIcon = createNavIcon('schedule', <>
     <circle cx="12" cy="12" r="8.5" />
-    <path d="M12 7.5V12l3 1.8" />
+    <path className="ni-hand" d="M12 7.5V12l3 1.8" />
 </>);
 
 /** 个性化：与侧栏 Agent 入口同一枚 ∞ 标记。 */
@@ -340,19 +340,21 @@ export const BotIcon = createNavIcon('bot', <>
     <circle className="ni-eye" cx="14.8" cy="12.8" r=".6" fill="currentColor" stroke="none" />
 </>);
 
-export const PlugIcon = createNavIcon('plug', <>
+/** 连接器：插头往里插一下。 */
+export const PlugIcon = createNavIcon('plug', <g className="ni-glyph">
     <path d="M9 4v4M15 4v4" />
     <path d="M6.5 8h11v3a5.5 5.5 0 0 1-11 0z" />
     <path d="M12 16.5V20" />
-</>);
+</g>);
 
-export const PuzzleIcon = createNavIcon('puzzle', <path d="M5.5 8.5h3.4a2 2 0 1 1 4 0h3.6v3.4a2 2 0 1 1 0 4v3.6h-11z" />);
+/** 扩展：拼图块错开又卡回原位。 */
+export const PuzzleIcon = createNavIcon('puzzle', <path className="ni-glyph" d="M5.5 8.5h3.4a2 2 0 1 1 4 0h3.6v3.4a2 2 0 1 1 0 4v3.6h-11z" />);
 
 /** A skill: the SKILL.md page with a spark on it. */
 export const SkillIcon = createNavIcon('skill', <>
     <path d="M6.5 4.5h7.2l3.8 3.8v10.7a.5.5 0 0 1-.5.5H7a.5.5 0 0 1-.5-.5z" />
     <path d="M13.5 4.5v4h4" />
-    <path d="M12 11.2l.9 2 2 .9-2 .9-.9 2-.9-2-2-.9 2-.9z" />
+    <path className="ni-spark" d="M12 11.2l.9 2 2 .9-2 .9-.9 2-.9-2-2-.9 2-.9z" />
 </>);
 
 /** MCP：一笔涂鸦，悬停时像刚写上去一样顺着笔迹画出来。 */

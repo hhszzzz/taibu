@@ -34,10 +34,8 @@ next-env.d.ts
 *.swp
 *.swo
 *~
-.trae
 
-# worktrees
-.worktrees
+# release
 .release
 
 # macOS
@@ -48,20 +46,12 @@ next-env.d.ts
 # pnpm cache
 .pnpm-store
 
-# AI
-.claude
-**/CLAUDE.md
-.ace-tool/
-
 # skill eval workspaces
 skills/*-workspace/
 
 # Generated local runtime, deployment and browser artifacts
 .agent/
 .taibu-local/
-.codex-deploy/
-.playwright-mcp/
-.playwright-cli/
 output/playwright/
 /tmp/
 /backups/

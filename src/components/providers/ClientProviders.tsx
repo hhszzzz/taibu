@@ -19,6 +19,7 @@ import { queryKeys } from '@/lib/query/keys';
 import dynamic from 'next/dynamic';
 import { AgentNotificationBridge } from './AgentNotificationBridge';
 import { AgentActivityProvider } from '@/lib/agent/use-agent-activity';
+import { useIconHoverMotion } from '@/lib/motion/icon-hover';
 const ConversationSearchHost = dynamic(() => import('./ConversationSearchHost').then(module => module.ConversationSearchHost), { ssr: false });
 
 interface ClientProvidersProps {
@@ -52,6 +53,7 @@ function AuthCallbackFeedback() {
 
 export function ClientProviders({ children }: ClientProvidersProps) {
     const [queryClient] = useState(() => createAppQueryClient());
+    useIconHoverMotion();
     const [state, setState] = useState<SessionState>({
         session: null,
         user: null,

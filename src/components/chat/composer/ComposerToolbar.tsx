@@ -180,7 +180,7 @@ function SendButton({ send, agentMode, disabled, onSend, onStop }: { send: Compo
     return <button type="button" className="chat-send-button" aria-label="发送" title="发送（Enter）" disabled={disabled || (send.kind === 'send' && send.disabled)} onClick={onSend}>
         {/* claude 实测：发送键字形 = 回车式折角箭头（横杆 + 左箭头 + 右端上折回），不是直上箭头；
             路径取 lucide corner-down-left（ISC）并补顶折回段。 */}
-        <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" data-nav-icon="send">
             <path d="M14 4h6v7a4 4 0 0 1-4 4H4" />
             <path d="m9 10-5 5 5 5" />
         </svg>

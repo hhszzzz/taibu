@@ -161,8 +161,8 @@
 /* 问候 = claude /new 实测：星标与问候语**同一行**（星标内联在 h1 文本前，`me-[0.45em] -translate-y-[0.04em] align-middle`），
    不是星标单独占一行。 */
 .chat-empty-intro { display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 0; text-align: center; }
-/* 星标字形 = cds Spark：与问候语同字号（27.04→32px 随视口）、无底色、clay 品牌色 */
-.chat-empty-symbol { display: inline-flex; align-items: center; justify-content: center; margin-right: .45em; color: var(--accent); font-family: var(--font-display); font-size: clamp(1.69rem, calc(.87vw + 1.26rem), 2rem); font-weight: 360; line-height: 1; transform: translateY(-.04em); }
+/* 空态品牌符号 = 太卜合契：与问候语同字号（27.04→32px 随视口）、无底色、结构跟随前景色 */
+.chat-empty-symbol { display: inline-block; flex-shrink: 0; width: 1em; height: 1em; margin-right: .4em; color: var(--foreground); font-size: clamp(1.69rem, calc(.87vw + 1.26rem), 2rem); vertical-align: -.12em; }
 /* 问候语 = cds 实测：衬线 / 字重 360 / 行高 1.2 / 居中 text-balance；字号随视口 1.69→2rem */
 .chat-empty-intro h1 { font-family: var(--font-display); font-size: clamp(1.69rem, calc(.87vw + 1.26rem), 2rem); font-weight: 360; letter-spacing: 0; line-height: 1.2; text-wrap: balance; }
 /* 会话列 = cds chat-column：外层 gutter 20px（cds px-5），阅读列 768px，正文内缩 16px → 736px */
@@ -246,7 +246,7 @@
 /* ---- Agent message: heading, process, answer, results and footer ---- */
 .agent-message { display: flex; min-width: 0; flex-direction: column; gap: 14px; }
 .agent-message-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: calc(13 / 16 * 1rem); color: var(--foreground-secondary); }
-.agent-avatar { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 7px; background: var(--accent); color: var(--on-accent); font-family: var(--font-display); font-size: calc(13 / 16 * 1rem); font-weight: 700; }
+.agent-avatar { display: block; flex-shrink: 0; width: 24px; height: 24px; color: var(--foreground); }
 .agent-name { font-weight: 600; color: var(--foreground); }
 .agent-response-time { font-variant-numeric: tabular-nums; }
 .agent-status { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; color: var(--foreground-secondary); }
@@ -376,7 +376,7 @@ button.agent-step-entity:hover .agent-step-entity-go { color: var(--foreground-s
 .agent-step-entity-go { flex-shrink: 0; align-self: center; color: var(--foreground-tertiary); transition: color .12s, transform .12s; }
 .agent-step-producers { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 2px; color: var(--foreground-tertiary); font-size: calc(12 / 16 * 1rem); line-height: calc(18 / 16 * 1rem); }
 .agent-step-producer { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
-.agent-avatar.agent-avatar--mini { width: 14px; height: 14px; border-radius: 4px; font-size: calc(9 / 16 * 1rem); }
+.agent-avatar.agent-avatar--mini { width: 14px; height: 14px; }
 .agent-model-avatar { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; }
 /* 规范文本按 Markdown 排版（标题、列表、表格），比正文小一级、限高滚动；步骤里不提供表格的复制 / 导出工具条。 */
 .agent-step-output.agent-step-markdown { max-height: 22rem; padding: 2px 2px 4px; white-space: normal; }
@@ -657,6 +657,7 @@ button.agent-evidence-chip:hover { border-color: var(--accent); color: var(--acc
     .chat-empty-state { padding: calc(32vh + .81875rem) 56px calc(24px + var(--sab)); scrollbar-gutter: stable both-edges; }
     .chat-empty-inner { max-width: min(var(--chat-column), 40rem, 100%); gap: 22px; }
     .chat-empty-intro h1 { font-size: calc(24 / 16 * 1rem); }
+    .chat-empty-symbol { font-size: calc(24 / 16 * 1rem); }
     .chat-empty-intro p { font-size: calc(13.5 / 16 * 1rem); }
     .chat-transcript-list { padding-bottom: 12px; }
     .agent-step-tag { display: none; }

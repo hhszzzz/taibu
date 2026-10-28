@@ -12,6 +12,7 @@ import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { getCalendarAlmanac } from '@/lib/divination/calendar';
 import { useSessionMembership } from '@/lib/hooks/useSessionMembership';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
+import { BrandMark } from '@/components/brand/BrandMark';
 import { buildDailyChatContext, requestDailyChat } from '@/lib/chat/daily-chat';
 import { BrowserDirectProviderError } from '@/lib/ai/browser-direct-provider';
 import { toLocalDateKey } from '@/components/daily/useDailyAlmanacDetail';
@@ -120,9 +121,7 @@ export function DailyAIChat({ date, userId, onRequireLogin, personalFortune = nu
         >
             <div className={`flex items-center justify-between gap-3 ${hasConversation ? '' : 'max-lg:hidden'}`}>
                 <div className="flex min-w-0 items-center gap-2.5">
-                    <span aria-hidden="true" className="flex size-[30px] shrink-0 items-center justify-center rounded-lg bg-clay font-display text-[17px] font-semibold leading-none text-on-accent">
-                        卜
-                    </span>
+                    <BrandMark className="size-[30px] shrink-0 text-foreground" />
                     <h2 id="daily-ai-chat-title" className="font-display text-lg">问问这一天</h2>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">

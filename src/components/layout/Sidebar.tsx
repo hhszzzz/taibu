@@ -14,6 +14,7 @@
 import Link from 'next/link';
 import { usePathname, useSearchParams, useRouter } from 'next/navigation';
 import { AllDivinationsIcon, LoginIcon, PlusIcon, SearchIcon } from '@/lib/navigation/nav-icons';
+import { BrandMark } from '@/components/brand/BrandMark';
 import { useState, useCallback, useEffect, useMemo, useRef, Suspense, useSyncExternalStore } from 'react';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { SidebarUserCard } from '@/components/layout/UserMenu';
@@ -88,7 +89,7 @@ function useSidebarWidth() {
 function Brand() {
     return (
         <Link href="/" aria-label="太卜首页" className="flex items-center gap-2 min-w-0">
-            <span aria-hidden className="w-[26px] h-[26px] rounded-[7px] bg-clay text-[var(--on-accent)] flex items-center justify-center flex-shrink-0 font-display text-base font-semibold leading-none">卜</span>
+            <BrandMark className="h-[26px] w-[26px] flex-shrink-0 text-foreground" />
             <span className="font-display text-[19px] font-medium text-foreground whitespace-nowrap">太卜</span>
         </Link>
     );

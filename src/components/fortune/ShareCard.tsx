@@ -262,12 +262,12 @@ export function ShareCard({ fortune, date, userName, isPersonalized, almanac }: 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
-                            src="/Logo.svg"
+                            src="/favicon.svg"
                             alt="太卜"
                             style={{
                                 width: '24px',
                                 height: '24px',
-                                borderRadius: '8px',
+                                borderRadius: '6px',
                                 objectFit: 'cover',
                             }}
                         />

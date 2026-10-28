@@ -29,6 +29,7 @@ import { normalizeAuthEmail } from '@/lib/auth/email';
 import { RegisterForm } from '@/components/auth/RegisterForm';
 import { OAuthButtons } from '@/components/auth/OAuthButtons';
 import { AuthEmblem } from '@/components/auth/AuthEmblem';
+import { BrandMark } from '@/components/brand/BrandMark';
 import '@/components/auth/auth.css';
 
 type AuthMode = 'login' | 'register' | 'forgot' | 'verify-login' | 'verify-reset' | 'reset-password';
@@ -505,7 +506,7 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
             <div className="auth-shell">
                 {/* 品牌栏：宽屏才显示 */}
                 <aside className="auth-brand" aria-hidden="true">
-                    <div className="auth-brand-logo"><span>卜</span>太卜</div>
+                    <div className="auth-brand-logo"><BrandMark className="auth-brand-mark" />太卜</div>
                     <div className="auth-brand-hero">
                         <AuthEmblem size={236} />
                         <div className="auth-brand-quote">
@@ -530,7 +531,7 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
 
                     <div className="auth-scroll">
                         <div className="auth-body" key={mode}>
-                            <div className="auth-compact-brand"><span className="auth-compact-mark" aria-hidden="true">卜</span>太卜</div>
+                            <div className="auth-compact-brand"><BrandMark className="auth-compact-mark" />太卜</div>
                             <div className="auth-heading">
                                 <h2 id="auth-title" className="auth-title">{title}</h2>
                                 <p className="auth-subtitle">{subtitle}</p>

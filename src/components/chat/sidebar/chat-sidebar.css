@@ -35,8 +35,8 @@
 /* Brand row */
 .chat-nav-brand { display: flex; align-items: center; gap: 4px; padding: 0 0 12px 6px; }
 .chat-nav-home { display: flex; min-width: 0; align-items: center; gap: 10px; margin-right: auto; color: var(--foreground); }
-.chat-nav-logo, .chat-rail-logo { display: flex; flex-shrink: 0; align-items: center; justify-content: center; background: var(--accent); color: var(--on-accent); font-family: var(--font-display); font-weight: 700; }
-.chat-nav-logo { width: 30px; height: 30px; border-radius: 8px; font-size: 16px; }
+.chat-nav-logo, .chat-rail-logo { display: block; flex-shrink: 0; color: var(--foreground); }
+.chat-nav-logo { width: 30px; height: 30px; }
 .chat-nav-name { font-family: var(--font-display); font-size: 19px; font-weight: 600; letter-spacing: .06em; white-space: nowrap; }
 .chat-nav-icon { position: relative; display: flex; flex-shrink: 0; width: 32px; height: 32px; align-items: center; justify-content: center; border-radius: 8px; color: var(--foreground-secondary); }
 .chat-nav-icon:hover { background: var(--fill-ghost-hover); color: var(--foreground); }

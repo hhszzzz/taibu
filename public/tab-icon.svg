@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-labelledby="title">
+  <title id="title">太卜 tab icon</title>
+  <style>
+    .structure { fill: #0B0B0B; }
+    .astral { fill: #D97757; }
+    @media (prefers-color-scheme: dark) {
+      .structure { fill: #F0EFEC; }
+    }
+  </style>
+  <g transform="translate(128 128) scale(0.8767) translate(-128.5 -128)">
+    <path class="structure" d="M19 18H89V88A70 70 0 0 1 19 18Z M111 18H167V238A56 56 0 0 1 111 182Z M189 18A49 49 0 0 1 189 116Z M189 140A49 49 0 0 1 189 238Z"/>
+    <path class="astral" d="M54 166A36 36 0 1 1 54 238A36 36 0 1 1 54 166Z"/>
+  </g>
+</svg>

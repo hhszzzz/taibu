@@ -95,14 +95,14 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       {
-        url: "/Logo.svg",
+        url: "/tab-icon.svg",
         type: "image/svg+xml",
-        media: "(prefers-color-scheme: light)",
       },
+    ],
+    apple: [
       {
-        url: "/Logo-dark.svg",
-        type: "image/svg+xml",
-        media: "(prefers-color-scheme: dark)",
+        url: "/apple-touch-icon.png",
+        sizes: "180x180",
       },
     ],
   },

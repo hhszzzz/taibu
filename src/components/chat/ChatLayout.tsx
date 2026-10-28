@@ -26,6 +26,7 @@ import { ChatComposer } from '@/components/chat/ChatComposer';
 import { ChatHeader } from '@/components/chat/ChatHeader';
 import { MobileChatDrawer } from '@/components/chat/MobileChatDrawer';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { BrandMark } from '@/components/brand/BrandMark';
 import type { ChatBootstrapKnowledgeBase } from '@/lib/chat/bootstrap';
 import type { MembershipType } from '@/lib/user/membership';
 import type { ChatMode } from '@/lib/chat/use-chat-state';
@@ -502,7 +503,7 @@ export function ChatLayout(props: ChatLayoutProps) {
                     <div className="chat-empty-state">
                         <div className="chat-empty-inner">
                             <div className="chat-empty-intro">
-                                <span className="chat-empty-symbol" aria-hidden="true">卜</span>
+                                <BrandMark className="chat-empty-symbol" />
                                 <h1>{displayName ? `${greeting}，${displayName}` : `${greeting}，想问什么？`}</h1>
                             </div>
                             <ChatComposer {...composerProps} variant="hero" header={creditStrip} />

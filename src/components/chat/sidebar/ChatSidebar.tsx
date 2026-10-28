@@ -14,6 +14,7 @@ import { useCallback, useRef, useSyncExternalStore, type MouseEvent, type ReactN
 import { BookOpen, LogIn, MessageSquare, PanelLeft, Plus, Search, X } from 'lucide-react';
 import { AnnouncementBellButton } from '@/components/layout/AnnouncementBellButton';
 import { ModeSwitch } from '@/components/chat/ModeSwitch';
+import { BrandMark } from '@/components/brand/BrandMark';
 import { SidebarConversations } from '@/components/layout/SidebarConversations';
 import { SidebarUserCard } from '@/components/layout/UserMenu';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
@@ -98,7 +99,7 @@ export function ChatSidebarPanel({ markers, onLogin, onClose, heading }: {
         <div className="chat-nav-panel" onClick={closeOnLink}>
             <div className="chat-nav-brand">
                 <Link href="/" className="chat-nav-home" aria-label="太卜首页">
-                    <span className="chat-nav-logo" aria-hidden="true">卜</span>
+                    <BrandMark className="chat-nav-logo" />
                     <span className="chat-nav-name">太卜</span>
                 </Link>
                 {heading}

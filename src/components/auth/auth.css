@@ -32,7 +32,7 @@
 
 /* 窄屏的品牌行：小号徽记 + 名称，居中放在标题上方。 */
 .auth-compact-brand { display: flex; align-items: center; justify-content: center; gap: 9px; margin-bottom: 18px; font-size: calc(15 / 16 * 1rem); font-weight: 600; letter-spacing: .08em; color: var(--foreground); }
-.auth-compact-mark { display: flex; width: 26px; height: 26px; align-items: center; justify-content: center; border-radius: 7px; background: var(--clay); font-family: var(--font-display); font-size: 1rem; line-height: 1; letter-spacing: 0; color: var(--on-accent); }
+.auth-compact-mark { display: block; width: 26px; height: 26px; flex-shrink: 0; }
 
 @media (min-width: 900px) {
     .app-modal.auth-dialog { width: min(880px, calc(100vw - 48px)); border-radius: 18px; }
@@ -60,7 +60,7 @@
 .auth-brand::before { content: ''; position: absolute; inset: 0; z-index: -1; background: radial-gradient(58% 42% at 50% 44%, color-mix(in srgb, var(--clay) 14%, transparent), transparent 72%); }
 @media (min-width: 900px) { .auth-brand { display: flex; } }
 .auth-brand-logo { display: flex; align-items: center; gap: 10px; font-size: calc(15 / 16 * 1rem); font-weight: 600; letter-spacing: .08em; color: var(--foreground); }
-.auth-brand-logo > span { display: flex; width: 26px; height: 26px; align-items: center; justify-content: center; border-radius: 7px; background: var(--clay); color: var(--on-accent); font-family: var(--font-display); font-size: 1rem; line-height: 1; letter-spacing: 0; }
+.auth-brand-logo > .auth-brand-mark { display: block; width: 26px; height: 26px; flex-shrink: 0; }
 .auth-brand-hero { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 30px; text-align: center; }
 .auth-brand-hero > .auth-emblem { animation: auth-emblem-in var(--duration-slow) var(--ease-out) backwards; }
 .auth-brand-quote { animation: motion-fade-up var(--duration-sheet) var(--ease-out) 120ms backwards; }

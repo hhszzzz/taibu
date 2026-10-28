@@ -7,6 +7,7 @@ import { collaborationProgress } from "@/lib/agent/parallel-results";
 import { getAgentCitationLabels } from "@/lib/agent/evidence";
 import { getAgentArchiveProposal, getAgentArchiveRecord, type AgentArchiveCard, type AgentArchiveRecord } from "@/lib/agent/archive";
 import { MarkdownContent, type MarkdownCitations } from "@/components/ui/MarkdownContent";
+import { BrandMark } from "@/components/brand/BrandMark";
 import { AgentStatus } from './agent/AgentStatus';
 import { AgentActivityGroup, AgentActivityIndicator } from './agent/AgentActivityGroup';
 import { AgentTodoProgress } from './agent/AgentTodoProgress';
@@ -60,7 +61,7 @@ export function AgentMessage({ data, actions }: { data: AgentMessageData; action
   return (
     <div className="agent-message" data-agent-run-id={data.runId} data-agent-status={data.status}>
       <div className="agent-message-heading">
-        <span className="agent-avatar" aria-hidden="true">卜</span>
+        <BrandMark className="agent-avatar" compact />
         <span className="agent-name">太卜</span>
         {/* 进行中由底部那一行实时说明，失败由错误提示说明；这里只给没有别处交代的结局：已停止、没有原因的失败。 */}
         {(data.status === 'cancelled' || (data.status === 'failed' && !data.error)) && <AgentStatus status={data.status} />}

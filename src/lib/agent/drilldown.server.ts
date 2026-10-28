@@ -26,6 +26,8 @@ export function drilldownParameters(selector: ToolInputSchema): ToolInputSchema 
     properties: { reference, ...selector.properties },
     required: ['reference', ...(selector.required ?? [])],
     ...(selector.allOf ? { allOf: selector.allOf } : {}),
+    ...(selector.anyOf ? { anyOf: selector.anyOf } : {}),
+    ...(selector.oneOf ? { oneOf: selector.oneOf } : {}),
     additionalProperties: false,
   };
 }

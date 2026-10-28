@@ -9,7 +9,7 @@ export interface AgentEvalCase {
   /** A case that first computes a chart and then drills into it with the reference. */
   chart?: { tool: string; arguments: Record<string, unknown> };
   visual?: boolean;
-  /** Its method card tells the model to ask the user first (推理时柱), so parking the task is the right end. */
+  /** Its method tells the model to ask the user first (推理时柱), so parking the task is the right end. */
   mayAskUser?: boolean;
   builtin?: boolean;
   enabled?: boolean;

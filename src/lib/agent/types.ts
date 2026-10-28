@@ -86,7 +86,7 @@ export interface AgentRuntimeInfo {
 }
 
 /**
- * A background subagent carried into the next task: its name, role, the method card it was given and its condensed
+ * A background subagent carried into the next task: its name, role, the method it was given and its condensed
  * transcript. A subagent without a role is a specialist.
  */
 export interface AgentBackgroundResident {

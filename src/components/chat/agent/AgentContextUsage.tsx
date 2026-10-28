@@ -24,7 +24,7 @@ export function ContextRing({ percent, size }: { percent: number | null; size: n
 
 export function AgentContextOverview({ runtime, working = false, grip, skills, onOpen }: {
     runtime?: AgentRuntimeInfo; working?: boolean; grip?: ReactNode;
-    /** 本任务用过的方法卡与技能；省略时技能一行仍是占位。 */
+    /** 本任务用过的方法与技能；省略时技能一行仍是占位。 */
     skills?: ContextSkills;
     onOpen?: (id: string) => void;
 }) {
@@ -68,14 +68,10 @@ export function AgentContextOverview({ runtime, working = false, grip, skills, o
                 </div>}
             </dl>
             {skills && skillsOpen && <div className="agent-context-skills" aria-label="技能与方法">
-                <button type="button" className="agent-rail-row agent-rail-button agent-rail-result" onClick={() => onOpen?.('methods')}>
-                    <BookOpen size={15} aria-hidden="true" />
-                    <span className="agent-rail-result-text"><span>方法目录</span><small>随系统提示注入 · {compact(runtime.skillsTokens ?? 0)} token{skills.listed ? ' · 本任务查看过' : ''}</small></span>
-                </button>
-                {runtime.skills?.listed ? <div className="agent-rail-row agent-rail-result">
+                <div className="agent-rail-row agent-rail-result">
                     <Sparkles size={15} aria-hidden="true" />
-                    <span className="agent-rail-result-text"><span>技能目录</span><small>随系统提示注入 · {runtime.skills.listed} 个技能 · {compact(runtime.skills.sectionTokens)} token</small></span>
-                </div> : null}
+                    <span className="agent-rail-result-text"><span>技能目录</span><small>方法与技能随系统提示注入 · {runtime.skills?.listed ? `${runtime.skills.listed} 个技能 · ` : ''}{compact(runtime.skills?.sectionTokens ?? runtime.skillsTokens ?? 0)} token</small></span>
+                </div>
                 {skills.cards.map(card => <button key={card.id} type="button" className="agent-rail-row agent-rail-button agent-rail-result" onClick={() => onOpen?.(card.id)}>
                     {card.kind === 'skill' ? <Sparkles size={15} aria-hidden="true" /> : <BookOpen size={15} aria-hidden="true" />}
                     <span className="agent-rail-result-text"><span>{card.title}</span><small>{card.kind === 'skill' ? `技能 ${card.version}` : `版本 ${card.version}`} · {compact(card.tokens ?? 0)} token</small></span>

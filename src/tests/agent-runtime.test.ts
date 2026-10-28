@@ -744,7 +744,7 @@ test("unknown Pi models carry an unknown capacity and expose native context usag
   const store = new MemoryStore();
   let capacity: number | undefined;
   const streamFn: StreamFn = (model, context, options) => {
-    assert.match(JSON.stringify(context.messages), /<taibu_methods>/);
+    assert.match(JSON.stringify(context.messages), /<taibu_skills>/);
     capacity = model.contextWindow;
     return scripted(() => [{ type: "text", text: "chat-only result" }])(model, context, options);
   };

@@ -4,14 +4,14 @@ import { randomUUID } from 'node:crypto';
 import { executeTool, buildToolSuccessPayload, listToolDefinitions } from 'taibu-core/mcp';
 import type { AgentPart } from '../lib/agent/types';
 import type { ChatMessage } from '../types';
-import { getAgentToolFamily, isAgentChartTool } from '../lib/agent/tool-catalog';
+import { AGENT_SKILL_TOOLS, getAgentToolFamily, isAgentChartTool } from '../lib/agent/tool-catalog';
 import { describeOverviewFacts } from '../components/chat/agent/presentation';
-import { getAgentAttachmentRead, getAgentCalculation, getAgentChart, getAgentMemories, getAgentMethod, getAgentMethodCatalog, getAgentToolQuestions, type AgentToolPart } from '../lib/agent/tool-presentation';
+import { getAgentAttachmentRead, getAgentCalculation, getAgentChart, getAgentMemories, getAgentMethod, getAgentToolQuestions, type AgentToolPart } from '../lib/agent/tool-presentation';
 import {
   buildAgentWorkspace, getAgentQuestionAnswers, getAgentToolQuestionIds, getAgentWorkspaceAutoOpenEvent, getAgentWorkspaceFollowTarget, getAgentWorkspaceLocation,
   getAgentWorkspaceSections, isAgentRunWorking, resolveAgentWorkspaceLocation,
 } from '../lib/agent/workspace';
-import { ANALYSIS_METHODS, loadAnalysisMethod } from '../lib/agent/methods.server';
+import { loadAnalysisMethod } from '../lib/agent/methods.server';
 
 const tool = (id: string, name: string, extra: Partial<AgentToolPart> = {}): AgentToolPart => ({ type: 'tool', id, name, title: name, status: 'completed', ...extra });
 const workspace = (parts: AgentPart[], attachmentIds: string[] = []) => buildAgentWorkspace({ parts, artifacts: [], attachmentIds });
@@ -38,7 +38,7 @@ test('notes, earlier conversations and the archive each open one page that keeps
 
 test('every tool family reaches a workspace location, including external and unknown tools', () => {
   const names = [...listToolDefinitions().map(item => item.name), 'inspect_chart', 'web_search', 'search_knowledge', 'list_user_data', 'read_user_data',
-    'read_user_profile', 'read_attachment', 'list_analysis_methods', 'load_analysis_method', 'ask_user', 'parallel_analysis',
+    'read_user_profile', 'read_attachment', 'load_skill', 'read_skill_file', 'ask_user', 'parallel_analysis',
     'read_user_memory', 'remember_user_fact', 'select_final_artifacts', 'codemode', 'mcp__archive__lookup', 'retired_tool'];
   const model = workspace(names.map((name, index) => tool(`call-${index}`, name, { status: 'running', input: name === 'read_attachment' ? { id: randomUUID() } : {} })));
   for (const [index, name] of names.entries()) {
@@ -81,7 +81,10 @@ test('repeated reads of one chart share a tab and focus follows the reading the 
 });
 
 test('searches share the evidence view; records, attachments, methods and memories merge by identity', () => {
-  const record = randomUUID(), attachment = randomUUID();
+  const record = randomUUID(), attachment = randomUUID(), card = loadAnalysisMethod('bazi');
+  const method = (id: string) => tool(id, AGENT_SKILL_TOOLS.load, {
+    input: { name: 'bazi' }, output: { name: 'bazi', version: 0, scope: 'builtin', files: [], method: card },
+  });
   const model = workspace([
     tool('web', 'web_search', { input: { query: '庚金' }, output: [{ title: '来源', url: 'https://example.com', content: '摘要' }] }),
     tool('kb', 'search_knowledge', { input: { query: '月令' }, output: [] }),
@@ -89,8 +92,7 @@ test('searches share the evidence view; records, attachments, methods and memori
     tool('read-1', 'read_user_data', { input: { type: 'bazi_chart', id: record } }),
     tool('read-2', 'read_user_data', { input: { type: 'bazi_chart', id: record } }),
     tool('attachment', 'read_attachment', { input: { id: attachment }, output: { id: attachment, name: '手相说明.txt', kind: 'text', text: '掌纹', offset: 0, total: 2, nextOffset: null } }),
-    tool('method-1', 'load_analysis_method', { input: { id: 'bazi' }, output: loadAnalysisMethod('bazi') }),
-    tool('method-2', 'load_analysis_method', { input: { id: 'bazi' }, status: 'running' }),
+    method('method-1'), method('method-2'),
     tool('memory-read', 'read_user_memory', { output: [] }),
     tool('memory-write', 'remember_user_fact', { status: 'failed' }),
   ], [attachment]);
@@ -197,12 +199,15 @@ test('family parsers read real Core and method results and reject incomplete one
   const legacy = structuredClone(avoiding) as unknown as { output: { result: { 查询: Record<string, unknown> } } };
   legacy.output.result.查询.排除冲煞 = '丑牛（冲未）';
   assert.equal(getAgentCalculation(tool('old', 'almanac_select', legacy)), null);
+  // 方法是内置技能：load_skill 读回的 details.method 让工作区按方法显示，即使没有 canonicalText 也有完整正文。
   const method = loadAnalysisMethod('bazi');
-  const guide = getAgentMethod(tool('m', 'load_analysis_method', { output: method }))!;
+  const guide = getAgentMethod(tool('m', AGENT_SKILL_TOOLS.load, {
+    output: { name: 'bazi', version: 0, scope: 'builtin', files: [], method },
+  }))!;
   assert.deepEqual([guide.title, guide.version], ['子平八字', method.version]);
-  assert.ok(guide.tools.includes('bazi') && guide.instructions.includes('不授予工具'));
-  assert.equal(getAgentMethod(tool('m', 'load_analysis_method', { output: { id: 'bazi' } })), null);
-  assert.equal(getAgentMethodCatalog(tool('l', 'list_analysis_methods', { output: ANALYSIS_METHODS }))?.length, ANALYSIS_METHODS.length);
+  assert.ok(guide.tools.includes('bazi') && guide.instructions.includes('不授予工具'), 'the card body comes from details.method.instructions');
+  assert.ok(!guide.instructions.includes('<skill'));
+  assert.equal(getAgentMethod(tool('m', AGENT_SKILL_TOOLS.load, { output: { name: 'case-review', version: 1, scope: 'user', files: [] } })), null);
   const memories = getAgentMemories(tool('w', 'remember_user_fact', { output: { id: 'm', user_id: 'owner', title: '历法', content: '以后都用公历时间', kind: 'preference' } }));
   assert.deepEqual(memories, [{ id: 'm', title: '历法', content: '以后都用公历时间', kind: 'preference' }]);
   assert.deepEqual(getAgentMemories(tool('r', 'read_user_memory', { output: [{ id: 'bad', title: 1 }] })), []);

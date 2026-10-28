@@ -84,10 +84,10 @@ const SHARED_SAFETY_RULES = `
 - 回答须基于提供的数据与理论依据，不凭空臆断`;
 
 /**
- * 有方法卡的人格取卡中的角色、断法与输出要求（不含工具流程，盘面由对话上下文给出），精简版只留角色与输出要求；
+ * 有方法的人格取方法中的角色、断法与输出要求（不含工具流程，盘面由对话上下文给出），精简版只留角色与输出要求；
  * 完整版附解读通则（证据引用、应期表述、把握度与前后一致）；精简版只留角色与输出规则，给小预算让出盘面空间。
  * 与 Agent、MCP 共用同一来源。
- * 通用、MBTI 与合盘没有方法卡，保留各自的提示词。
+ * 通用、MBTI 与合盘没有方法，保留各自的提示词。
  */
 const READING_PRINCIPLES = `\n\n## 解读通则\n\n${METHOD_PRINCIPLES}`;
 function cardPersonality(personality: AIPersonality, card: string): AIPersonalityConfig {

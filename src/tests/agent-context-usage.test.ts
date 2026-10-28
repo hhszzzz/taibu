@@ -86,10 +86,10 @@ test('measured tool totals win over the share estimate and never overflow the co
 });
 
 test('skills say the method catalog is injected even when no card was read', () => {
-  const skills = (cards: number) => ({ listed: false, cards: Array.from({ length: cards }, (_, index) => ({ id: `c${index}`, title: `卡${index}`, version: '1' })) });
+  const skills = (cards: number) => ({ cards: Array.from({ length: cards }, (_, index) => ({ id: `c${index}`, title: `方法${index}`, version: '1' })) });
   const meta = (value?: ReturnType<typeof skills>) => buildContextSegments(runtimeWith(undefined), seedContext, value).find(segment => segment.key === 'skills');
-  assert.equal(meta(skills(0))?.meta, '方法目录', 'the injected catalog is counted under skills even with no card');
-  assert.equal(meta(skills(2))?.meta, '2 张卡');
+  assert.equal(meta(skills(0))?.meta, '技能目录', 'the injected directory is counted under skills even with no card');
+  assert.equal(meta(skills(2))?.meta, '2 个方法');
   assert.equal(meta()?.deferred, true, 'without skills data the row stays a placeholder');
   assert.equal(meta()?.meta, undefined);
 });
@@ -104,13 +104,13 @@ test('compaction buffer shrinks free space only when the model has room', () => 
 
 test('skill tokens are counted under 技能 and taken out of messages and the system prompt', () => {
   const runtime = { ...runtimeWith(undefined), skillsTokens: 700 };
-  const segments = buildContextSegments(runtime, seedContext, { listed: false, cards: [{ id: 'method:bazi', title: '子平八字', version: '2.1.0', tokens: 300 }] });
+  const segments = buildContextSegments(runtime, seedContext, { cards: [{ id: 'method:bazi', title: '子平八字', version: '2.1.0', tokens: 300 }] });
   const tokens = Object.fromEntries(segments.map(segment => [segment.key, segment.tokens]));
   assert.equal(tokens.skills, 1_000, 'catalog 700 + loaded card 300');
   assert.equal(tokens.system, 1_104 - 700, 'the catalog leaves the system-prompt share');
   assert.equal(tokens.messages, 18_400 - 2_208 - 404 - 1_000);
   assert.equal(tokens.messages + tokens.tools + tokens.system + tokens.skills, seedContext.tokens);
-  assert.deepEqual(segments.find(segment => segment.key === 'skills')?.meta, '1 张卡');
+  assert.deepEqual(segments.find(segment => segment.key === 'skills')?.meta, '1 个方法');
 });
 
 test('MCP tool definitions and the servers section are rows of their own, and unreachable servers are counted', () => {

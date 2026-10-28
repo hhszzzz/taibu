@@ -15,8 +15,8 @@ const TOOL_TITLES = {
   list_user_data: '检索个人资料', read_user_data: '读取命盘与历史', read_user_notes: '读取每日笔记',
   search_conversations: '检索以往对话', record_user_event: '记入档案', propose_archive_entry: '生成保存卡片',
   read_user_profile: '个性化档案', search_knowledge: '知识库检索', web_search: '联网检索', ask_user: '补充必要信息',
-  inspect_chart: '查看命盘', focus_chart: '定位分析位置', todo_write: '更新计划', list_analysis_methods: '列出分析方法',
-  load_analysis_method: '加载分析方法', read_attachment: '读取附件', read_user_memory: '读取长期记忆', remember_user_fact: '记住偏好',
+  inspect_chart: '查看命盘', focus_chart: '定位分析位置', todo_write: '更新计划', load_skill: '加载方法或技能',
+  read_skill_file: '读取技能文件', read_attachment: '读取附件', read_user_memory: '读取长期记忆', remember_user_fact: '记住偏好',
   codemode: '运行脚本', tool_search: '查找工具', submit_plan: '提交计划', background_agent: '后台子分析',
 };
 
@@ -37,7 +37,7 @@ export async function buildAgentDemo({ root, baziChartId, plainConversations, no
   const { getAgentChart } = require('../src/lib/agent/tool-presentation.ts');
   const { normalizeQuestions, formatQuestionAnswers } = require('../src/lib/agent/questions.ts');
   const { normalizeAgentArchiveProposal } = require('../src/lib/agent/archive.ts');
-  const { ANALYSIS_METHODS, loadAnalysisMethod } = require('../src/lib/agent/methods.server.ts');
+  const { loadAnalysisMethod } = require('../src/lib/agent/methods.server.ts');
   const { formatBaziPromptText } = require('../src/lib/bazi-prompt.ts');
   const { agentInputContent } = require('../src/lib/agent/attachment-input.ts');
   // Read from the engine itself: a seeded task must claim the engine the worker actually runs.
@@ -538,9 +538,10 @@ export async function buildAgentDemo({ root, baziChartId, plainConversations, no
       question: '帮我做一份 2027 年的重要节点规划，事业为主，最好能落到具体月份。',
       build: async (t) => {
         t.turn();
-        t.think('计划模式：先查方法卡、确定体系，再提交计划等待批准。');
-        await t.tool('list_analysis_methods', {}, ANALYSIS_METHODS, { ms: 120 });
-        await t.tool('load_analysis_method', { id: 'liuyao' }, loadAnalysisMethod('liuyao'), { ms: 140 });
+        t.think('计划模式：先查方法、确定体系，再提交计划等待批准。');
+        await t.tool('load_skill', { name: 'liuyao' }, {
+          name: 'liuyao', version: 0, scope: 'builtin', files: [], method: loadAnalysisMethod('liuyao'),
+        }, { ms: 140 });
         t.turn();
         await t.plan('## 分析计划\n1. 用六爻起一卦，问 2027 年事业的总体走向，用神取官鬼。\n2. 详查世爻与动爻，看变化落在哪几个月。\n3. 用黄历筛选 2027 年适合启动新项目的日子。', 'revise', '节点要落到季度，并给出可以启动的具体月份');
         t.turn();

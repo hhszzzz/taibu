@@ -6,8 +6,9 @@ import type { ChatMessage } from '@/types';
 import type { AIModelConfig } from '@/types';
 import { AgentStore, type AgentArtifactRow, type AgentRunRow } from '../store.server';
 import { executeAgentRun } from '../runtime.server';
+import { builtinSkillsSession } from '../skills/catalog.server';
 import { assertAgentEvaluation, judgeAgentEvaluation } from '../evaluation.server';
-import { getAgentDrilldownBase } from '../tool-catalog';
+import { AGENT_SKILL_TOOLS, getAgentDrilldownBase } from '../tool-catalog';
 import { createPiModelStream } from '../pi-stream.server';
 import { AGENT_ENGINE } from '../engine';
 import type { AgentStreamTelemetry } from '../telemetry.server';
@@ -138,7 +139,7 @@ export class EvalAgentStore extends AgentStore {
 
   guideLoaded(): boolean {
     return this.nativeEntries().some(entry => entry.model?.some(message =>
-      message.role === 'toolResult' && message.toolName === 'load_analysis_method' && !message.isError));
+      message.role === 'toolResult' && message.toolName === AGENT_SKILL_TOOLS.load && !message.isError));
   }
 
   private toolMessages() {
@@ -351,6 +352,8 @@ export async function runAgentEvalCase(options: RunAgentEvalCaseOptions): Promis
       featureState: options.featureState ?? EVAL_FEATURES,
       // An evaluation compares single models; collaboration members are not part of a case.
       profiles: [],
+      // 方法是内置的，评测不需要数据库：技能目录固定为内置方法，各模型读到同一份断法。
+      skills: builtinSkillsSession(),
     });
   } catch (error) {
     executionError = errorMessage(error);

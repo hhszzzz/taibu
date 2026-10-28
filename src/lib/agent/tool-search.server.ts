@@ -24,6 +24,10 @@ function loadedText(loaded: readonly string[], candidates: readonly ToolSearchCa
 
 /** The user's own material among the deferred tools, named only when this task has it (search needs long-term memory). */
 const DATA_TOOL_NAMES: ReadonlyArray<readonly [string, string]> = [['read_user_notes', '用户的每日笔记与心情'], ['search_conversations', '用户以往对话中的提问与结论']];
+const DATA_TOOL_KEYWORDS: Readonly<Record<string, string>> = {
+  read_user_notes: '读取每日笔记 日记 心情 记录 随笔',
+  search_conversations: '检索以往对话 历史对话 聊天记录 之前对话 上次',
+};
 
 const toolSearchSection: PromptSection = {
   key: 'taibu_tool_search',
@@ -47,6 +51,10 @@ const toolSearchSection: PromptSection = {
  * is what a query matches as the title (an external tool's title with its keywords); `titles` is what the result shows.
  */
 export function createAgentToolSearchExtension(titles: ReadonlyMap<string, string>, searchTitles: ReadonlyMap<string, string> = titles): Extension {
+  const indexedTitles = new Map(searchTitles);
+  for (const [name, keywords] of Object.entries(DATA_TOOL_KEYWORDS)) {
+    indexedTitles.set(name, `${indexedTitles.get(name) ?? ''} ${keywords}`.trim());
+  }
   return {
     name: 'taibu_tool_search',
     tools: [defineTool({
@@ -64,7 +72,7 @@ export function createAgentToolSearchExtension(titles: ReadonlyMap<string, strin
         if (!Number.isInteger(requested) || requested <= 0 || requested > TOOL_SEARCH_MAX_LIMIT)
           throw new Error(`limit 必须是 1–${TOOL_SEARCH_MAX_LIMIT} 的整数`);
         const candidates = (await api.agent(context)).deferred.map(tool => ({ name: tool.name, description: tool.description }));
-        const loaded = rankDeferredTools(query, candidates, searchTitles, requested);
+        const loaded = rankDeferredTools(query, candidates, indexedTitles, requested);
         return {
           output: [{ type: 'text' as const, text: loaded.length ? loadedText(loaded, candidates, titles)
             : '没有匹配的工具。换一个说法，或用工具名再试；常见排盘工具已直接提供，不必检索。' }],

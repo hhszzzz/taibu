@@ -105,7 +105,7 @@ test('a subagent works while the main agent answers, and the task waits for its 
       return respond(model, say('初步判断已给出，八字复核的结论稍后整合。'));
     }
     offers.push(getCurrentTools(context.messages).map(tool => tool.name));
-    if (!results(context.messages, 'load_analysis_method').length) return respond(model, [{ type: 'toolCall', id: 'guide', name: 'load_analysis_method', arguments: { id: 'bazi' } }]);
+    if (!results(context.messages, 'load_skill').length) return respond(model, [{ type: 'toolCall', id: 'guide', name: 'load_skill', arguments: { name: 'bazi' } }]);
     if (!results(context.messages, 'bazi').length) return respond(model, [{ type: 'toolCall', id: 'chart', name: 'bazi', arguments: BAZI }]);
     // Slower than the main agent, so the task waits with nothing but the report to wait for.
     return respond(model, say('八字复核结论：日主庚金，2027 年事业有变动。'), sleep(2500));
@@ -119,7 +119,7 @@ test('a subagent works while the main agent answers, and the task waits for its 
   const [member] = parallelAnalysisResults(card.output);
   assert.deepEqual([member.name, member.system, member.status], ['八字复核', 'bazi', 'completed']);
   assert.match(member.answer ?? '', /八字复核结论/);
-  assert.deepEqual(member.steps?.map(step => step.name), ['load_analysis_method', 'bazi']);
+  assert.deepEqual(member.steps?.map(step => step.name), ['load_skill', 'bazi']);
   assert.equal(member.toolCalls, 2);
   // While only the subagent worked, its card ran and the task said what it waited for.
   assert.ok(store.writes.some(write => {
@@ -130,7 +130,8 @@ test('a subagent works while the main agent answers, and the task waits for its 
   assert.equal(reports(checkpoint.messages).length, 1, 'the report reached the main conversation once');
   assert.deepEqual(checkpoint.background?.map(item => [item.name, item.system, item.messages.map(message => message.role)]), [['八字复核', 'bazi', ['user', 'assistant']]]);
   // A subagent sees its system's tools, deferred drilldowns included, and cannot nest, ask, plan or search.
-  assert.ok(offers.length && offers.every(names => names.includes('bazi') && names.includes('bazi_relations') && names.includes('load_analysis_method')));
+
+  assert.ok(offers.length && offers.every(names => names.includes("bazi") && names.includes("bazi_relations") && names.includes("load_skill")));
   for (const name of ['background_agent', 'parallel_analysis', 'ask_user', 'tool_search', 'todo_write', 'ziwei', 'web_search'])
     assert.ok(offers.every(names => !names.includes(name)), name);
   assert.equal(store.writes.filter(write => /create_run|deduct|charge|credit/.test(write.name)).length, 0, 'one charge covers the task');

@@ -7,6 +7,7 @@ import { toDbError } from '@/lib/db/errors';
 import { getUserCreditInfo } from '@/lib/user/credits';
 import { isValidUUID } from '@/lib/validation';
 import { extensionAllowance, type ExtensionAllowanceView } from '../mcp/config';
+import { BUILTIN_SKILL_NAMES } from './builtin.server';
 import { skillCommands } from './catalog.server';
 import { SkillInputError, parseSkillInput, type SkillFields } from './input.server';
 import {
@@ -52,9 +53,11 @@ async function platformNames(owner: Owner): Promise<ReadonlySet<string> | undefi
   return owner.owner === null ? undefined : new Set((await platformSkills()).map((row) => row.name));
 }
 
-/** A user's skill may not take a platform skill's name: the platform's would keep it out of every task. */
+/** A skill may not take a method's name or, for a user, a platform skill's: the other would keep it out of every task. */
 async function reserveName(owner: Owner, name: string | undefined) {
-  if (owner.owner === null || name === undefined) return;
+  if (name === undefined) return;
+  if (BUILTIN_SKILL_NAMES.has(name)) throw new SkillInputError(`「${name}」是内置方法的名字，请修改 SKILL.md 里的 name`);
+  if (owner.owner === null) return;
   if ((await platformSkills()).some((row) => row.name === name)) throw new SkillInputError(`平台已有名为「${name}」的技能，请修改 SKILL.md 里的 name`);
 }
 

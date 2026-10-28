@@ -64,24 +64,27 @@ test('a plan still waiting for the user says so, and an ended task does not pret
   assert.ok(!ended.includes('等待你批准'));
 });
 
-test('the skills are the method cards this task loaded, listed once each', () => {
-  const catalog = part('c', 'list_analysis_methods', { output: [{ id: 'bazi', title: '子平八字', version: '2.1.0', description: '论八字' }] });
-  const loaded = (id: string, version: string, tokens?: number) => part(`m-${id}-${version}`, 'load_analysis_method', {
-    output: { id, title: id === 'bazi' ? '子平八字' : '紫微斗数', version, instructions: '# 卡', tools: ['bazi'], ...(tokens === undefined ? {} : { tokens }) },
+test('the skills are the methods and skills this task loaded, listed once each', () => {
+  // 方法是内置技能：load_skill 读回的是方法本身，按方法 id 去重，版本取方法自己的。
+  const loaded = (id: string, version: string, tokens?: number) => part(`m-${id}-${version}`, 'load_skill', {
+    output: {
+      name: id, version: 0, scope: 'builtin', files: [],
+      method: { id, title: id === 'bazi' ? '子平八字' : '紫微斗数', kind: 'system', system: id, systems: [id], version, description: '', tools: ['bazi'] },
+      ...(tokens === undefined ? {} : { tokens }),
+    },
   });
   const ziwei = loaded('ziwei', '1.0.0');
-  // A skill counts once by name, its latest load opening its step; one loaded before counting is shown at zero.
+  // A stored skill counts once by name, its latest load opening its step.
   const skill = (id: string, version: number, tokens?: number) => part(id, 'load_skill', {
     output: { name: 'case-review', version, scope: 'user', files: [{ path: 'notes.md', bytes: 12 }], ...(tokens === undefined ? {} : { tokens }) },
   });
-  const skills = getAgentSkills([catalog, loaded('bazi', '2.0.0', 300), skill('s1', 1, 90), loaded('bazi', '2.1.0', 640), ziwei, skill('s2', 2, 120)], 'deepseek-v3.2');
-  assert.equal(skills.listed, true, 'the injected directory was used');
+  const skills = getAgentSkills([loaded('bazi', '2.0.0', 300), skill('s1', 1, 90), loaded('bazi', '2.1.0', 640), ziwei, skill('s2', 2, 120)], 'deepseek-v3.2');
   assert.deepEqual(skills.cards, [
     { id: 'method:bazi', kind: 'method', title: '子平八字', version: '2.1.0', tokens: 640 },
     { id: 'tool:s2', kind: 'skill', title: 'case-review', version: 'v2', tokens: 120 },
     { id: 'method:ziwei', kind: 'method', title: '紫微斗数', version: '1.0.0', tokens: estimateTokens('deepseek-v3.2', JSON.stringify(ziwei.output)) },
   ], 'a reloaded card replaces its earlier version; a card counted at run time keeps its count, an older one is estimated from what the model read');
-  assert.deepEqual(getAgentSkills([]), { listed: false, cards: [] });
+  assert.deepEqual(getAgentSkills([]), { cards: [] });
 });
 
 test('the context card reports skills instead of leaving the row as a placeholder', () => {
@@ -91,20 +94,20 @@ test('the context card reports skills instead of leaving the row as a placeholde
   };
   const render = (props: Parameters<typeof AgentContextOverview>[0]) =>
     renderToStaticMarkup(createElement(AgentContextOverview, props)).replace(/<[^>]+>/gu, ' ').replace(/\s+/gu, ' ');
-  const withSkills = render({ runtime, skills: { listed: true, cards: [{ id: 'method:bazi', title: '子平八字', version: '2.1.0', tokens: 1_200 }] } });
-  assert.match(withSkills, /技能 1 张卡 · 1\.2k/u, 'the row states the card count and the tokens it occupies');
+  const withSkills = render({ runtime, skills: { cards: [{ id: 'method:bazi', title: '子平八字', version: '2.1.0', tokens: 1_200 }] } });
+  assert.match(withSkills, /技能 1 个方法 · 1\.2k/u, 'the row states the method count and the tokens it occupies');
   assert.ok(!withSkills.includes('技能 未启用'), 'a used skill row is not a placeholder');
-  const unusedSkills = render({ runtime, skills: { listed: false, cards: [] } });
-  assert.match(unusedSkills, /技能 方法目录 · /u, 'the injected catalog is counted as skills, not «未加载»');
+  const unusedSkills = render({ runtime, skills: { cards: [] } });
+  assert.match(unusedSkills, /技能 技能目录 · /u, 'the injected directory is counted as skills, not «未加载»');
   assert.ok(!unusedSkills.includes('未加载'));
   assert.match(render({ runtime }), /技能 0 项 未启用/u, 'without skill data the row stays as it was');
-  // The skill directory is counted with the method directory; a loaded skill is named apart from the cards.
-  const listed = { ...runtime, skillsTokens: 500, skills: { listed: 2, sectionTokens: 300 } };
-  assert.match(render({ runtime: listed, skills: { listed: false, cards: [] } }), /技能 方法与技能目录 · 800/u);
-  assert.match(render({ runtime: listed, skills: { listed: false, cards: [
+  // 目录整段记在 runtime.skills 上；读进上下文的方法另计，方法与技能分开命名。
+  const listed = { ...runtime, skills: { listed: 2, sectionTokens: 300 } };
+  assert.match(render({ runtime: listed, skills: { cards: [] } }), /技能 技能目录 · 300/u);
+  assert.match(render({ runtime: listed, skills: { cards: [
     { id: 'method:bazi', kind: 'method', title: '子平八字', version: '2.1.0', tokens: 200 },
     { id: 'tool:s1', kind: 'skill', title: 'case-review', version: 'v2', tokens: 100 },
-  ] } }), /技能 1 张卡 · 1 个技能 · 1\.1k/u);
+  ] } }), /技能 1 个方法 · 1 个技能 · 600/u);
 });
 
 test('a plan is a process step; the task list stays a progress bar', () => {
@@ -118,10 +121,8 @@ test('a plan is a process step; the task list stays a progress bar', () => {
   assert.equal(summarizeAgentActivity([part('todo', 'todo_write')], 0, 0), '任务过程', 'task-list updates do not count as work');
 });
 
-test('the status line counts method cards, not method calls', () => {
-  const load = (id: string, card: string) => part(id, 'load_analysis_method', { input: { id: card } });
-  const catalog = part('c', 'list_analysis_methods');
-  assert.equal(summarizeAgentActivity([catalog, load('m1', 'bazi'), load('m2', 'bazi'), load('m3', 'ziwei')], 0, 0), '已加载 2 套分析方法',
-    'listing the directory loads nothing, and reading a card twice is still one card');
-  assert.equal(summarizeAgentActivity([catalog], 0, 0), '已查看方法目录');
+test('the status line counts methods and skills, not loads', () => {
+  const load = (id: string, name: string) => part(id, 'load_skill', { input: { name } });
+  assert.equal(summarizeAgentActivity([load('m1', 'bazi'), load('m2', 'bazi'), load('m3', 'ziwei'), load('s1', 'case-review')], 0, 0), '已使用 3 个技能',
+    'reading a card twice is still one card; the directory is injected, not counted');
 });

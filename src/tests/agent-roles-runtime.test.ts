@@ -92,7 +92,7 @@ test('members work as the roles the main agent gives them, with only the tools a
   assert.match(textOf(archivist.refused), /not available/, 'pi refuses a tool the member was not offered');
   assert.equal([...store.drafts.values()].filter(draft => draft.tool_name === 'bazi').length, 0, 'the refused call ran nothing');
 
-  assert.deepEqual(specialist.tools.toSorted(), ['load_analysis_method', 'ziwei', 'ziwei_flying_star', 'ziwei_horoscope', 'ziwei_palace']);
+  assert.deepEqual(specialist.tools.toSorted(), ['load_skill', 'ziwei', 'ziwei_flying_star', 'ziwei_horoscope', 'ziwei_palace']);
   assert.equal(specialist.model, config.id);
   assert.ok(researcher.tools.includes('search_knowledge'));
   for (const tools of [archivist.tools, specialist.tools, researcher.tools]) {

@@ -372,31 +372,32 @@ export function getAgentCalculation(tool: AgentToolPart): AgentCalculation | nul
 
 export interface AgentMethodGuide { id: string; title: string; version: string; whenToUse: string | null; tools: string[]; instructions: string }
 
-/** load_analysis_method returns a versioned, read-only guide; it never grants tools or membership. */
-export function getAgentMethod(tool: AgentToolPart): AgentMethodGuide | null {
-  if (tool.status !== 'completed' || tool.name !== 'load_analysis_method') return null;
-  const output = record(tool.output);
-  if (!strings(output, ['id', 'title', 'version', 'instructions'])) return null;
-  return {
-    id: String(output.id), title: String(output.title), version: String(output.version),
-    whenToUse: typeof output.whenToUse === 'string' ? output.whenToUse : null,
-    tools: stringArray(output.tools) ? output.tools as string[] : [],
-    instructions: String(output.instructions),
-  };
+/** The card inside the `<skill>` block load_skill returns, without the wrapper. */
+function skillDocument(text: string): string {
+  const inner = /^<skill name="[^"]*">\n?([\s\S]*?)\n?<\/skill>$/u.exec(text.trim());
+  return (inner?.[1] ?? text).trim();
 }
 
-export function getAgentMethodCatalog(tool: AgentToolPart) {
-  if (tool.status !== 'completed' || tool.name !== 'list_analysis_methods' || !arrayRows(tool.output, ['id', 'title', 'version'])) return null;
-  return (tool.output as unknown[]).map(item => {
-    const row = record(item);
-    return { id: String(row.id), title: String(row.title), version: String(row.version), description: typeof row.description === 'string' ? row.description : typeof row.whenToUse === 'string' ? row.whenToUse : '' };
-  });
+/** 方法是内置技能：`load_skill` 读回的是一个版本化的方法，它规定解读步骤，不增加任何执行权限。 */
+export function getAgentMethod(tool: AgentToolPart): AgentMethodGuide | null {
+  if (tool.status !== 'completed' || tool.name !== AGENT_SKILL_TOOLS.load) return null;
+  const method = record(record(tool.output).method);
+  if (!strings(method, ['id', 'title', 'version'])) return null;
+  const text = typeof method.instructions === 'string' && method.instructions.trim()
+    ? method.instructions
+    : getAgentToolText(tool);
+  return {
+    id: String(method.id), title: String(method.title), version: String(method.version),
+    whenToUse: typeof method.description === 'string' ? method.description : typeof method.whenToUse === 'string' ? method.whenToUse : null,
+    tools: stringArray(method.tools) ? method.tools as string[] : [],
+    instructions: text ? skillDocument(text) : '',
+  };
 }
 
 export interface AgentSkill { id: string; kind: 'method' | 'skill'; title: string; version: string; tokens: number }
 
-/** What load_skill read: the skill's name and version, whose it is and the files beside it. */
-export interface AgentSkillLoad { name: string; version: number; scope: 'platform' | 'user'; files: Array<{ path: string; bytes: number }>; tokens: number | null }
+/** What load_skill read: the skill's name and version, whose it is, the files beside it and, for a method, the card. */
+export interface AgentSkillLoad { name: string; version: number; scope: 'builtin' | 'platform' | 'user'; files: Array<{ path: string; bytes: number }>; tokens: number | null }
 
 export function getAgentSkillLoad(tool: AgentToolPart): AgentSkillLoad | null {
   if (tool.status !== 'completed' || tool.name !== AGENT_SKILL_TOOLS.load) return null;
@@ -407,31 +408,29 @@ export function getAgentSkillLoad(tool: AgentToolPart): AgentSkillLoad | null {
     return typeof file.path === 'string' ? [{ path: file.path, bytes: typeof file.bytes === 'number' ? file.bytes : 0 }] : [];
   }) : [];
   return {
-    name: output.name, version: output.version, scope: output.scope === 'user' ? 'user' : 'platform', files,
+    name: output.name, version: output.version,
+    scope: output.scope === 'user' || output.scope === 'builtin' ? output.scope : 'platform', files,
     tokens: typeof output.tokens === 'number' && output.tokens >= 0 ? output.tokens : null,
   };
 }
 
 /**
- * 技能：本任务用的方法卡与技能。目录随系统提示注入，正文由 load_analysis_method、load_skill 读进上下文；
- * 这里按卡 id、技能名去重（改版重载同一张卡只算一次）。`id` 是它在工作区的页：方法卡的页，技能最近一次加载的步骤。
- * token 读卡上记的模型计数（运行时按网关 count_tokens 计）；早先的任务没有记，按 `model` 的 tokenizer 家族估算
- * 模型当时读到的文本（卡的 JSON）。
+ * 技能：本任务读进上下文的方法与技能。目录随系统提示一次性注入，正文由 load_skill 读进上下文；这里按技能名去重
+ * （同一个方法重载只算一次）。`id` 是它在工作区的页：方法的页，技能最近一次加载的步骤。token 读方法上记的模型计数
+ * （运行时按网关 count_tokens 计）；早先的任务没有记，按 `model` 的 tokenizer 家族估算模型当时读到的文本。
  */
 export function getAgentSkills(tools: readonly AgentToolPart[], model = '') {
   const cards = new Map<string, AgentSkill>();
-  let listed = false;
   for (const tool of tools) {
-    if (getAgentMethodCatalog(tool)) listed = true;
     const skill = getAgentSkillLoad(tool);
-    if (skill) cards.set(`skill:${skill.name}`, { id: `tool:${tool.id}`, kind: 'skill', title: skill.name, version: `v${skill.version}`, tokens: skill.tokens ?? 0 });
+    if (!skill) continue;
     const guide = getAgentMethod(tool);
-    if (!guide) continue;
     const counted = record(tool.output).tokens;
     const tokens = typeof counted === 'number' && counted >= 0 ? counted : estimateTokens(model, JSON.stringify(tool.output));
-    cards.set(guide.id, { id: `method:${guide.id}`, kind: 'method', title: guide.title, version: guide.version, tokens });
+    if (guide) cards.set(`method:${guide.id}`, { id: `method:${guide.id}`, kind: 'method', title: guide.title, version: guide.version, tokens });
+    else cards.set(`skill:${skill.name}`, { id: `tool:${tool.id}`, kind: 'skill', title: skill.name, version: `v${skill.version}`, tokens });
   }
-  return { listed, cards: [...cards.values()] };
+  return { cards: [...cards.values()] };
 }
 
 export interface AgentToolSearchLoaded { names: string[]; labels: string[] }

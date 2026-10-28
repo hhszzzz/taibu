@@ -70,7 +70,7 @@ const builtin = (profile: Pick<AgentProfileView, 'name' | 'displayName' | 'descr
 export const BUILTIN_AGENT_PROFILES: readonly AgentProfileView[] = [
   builtin({
     name: DEFAULT_AGENT_PROFILE, displayName: '体系专家', sortOrder: -30,
-    description: '用所给体系的 Core 工具与方法卡排盘、详查和解读；必须填写 system。',
+    description: '用所给体系的 Core 工具与方法排盘、详查和解读；必须填写 system。',
     instructions: '',
     tools: { inherit: false, allow: ['system'], deny: [] },
   }),
@@ -92,7 +92,7 @@ export const BUILTIN_AGENT_PROFILE_NAMES: ReadonlySet<string> = new Set(BUILTIN_
 
 /** The families `allow` and `deny` name besides single tools; `mcp:<服务名>` names one platform MCP service. */
 export const AGENT_PROFILE_TOOL_FAMILIES: ReadonlyArray<{ token: string; label: string; description: string }> = [
-  { token: 'system', label: '所给体系', description: '任务 system 所指方法卡的 Core 工具；没有给 system 时不提供' },
+  { token: 'system', label: '所给体系', description: '任务 system 所指方法的 Core 工具；没有给 system 时不提供' },
   { token: 'core', label: '全部 Core 工具', description: '各体系的排盘、计算与详查' },
   ...(Object.entries(AGENT_CHART_NAMES) as Array<[AgentChartKind, string]>).map(([kind, title]) => ({
     token: `core:${kind}`, label: title, description: `${title}的排盘、计算与详查`,
@@ -114,7 +114,7 @@ export function profileTokenProblem(token: string, list: 'allow' | 'deny'): stri
   return null;
 }
 
-/** What a grant needs from the task: the tools of the method card it named, and each MCP tool's platform service. */
+/** What a grant needs from the task: the tools of the method it named, and each MCP tool's platform service. */
 export type ProfileGrantContext = { systemTools: ReadonlySet<string>; mcpServer: (tool: string) => string | undefined };
 
 export function profileTokenMatches(token: string, tool: string, context: ProfileGrantContext): boolean {

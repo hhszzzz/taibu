@@ -13,7 +13,7 @@ export type ParallelMemberStep = {
 };
 
 export type ParallelAnalysisResult = {
-  /** The method card the member was given; a role that reads no chart may have none. */
+  /** The method the member was given; a role that reads no chart may have none. */
   system?: string;
   /** The member's role (profiles/config.ts) and its name when the member started. */
   profile?: string;
@@ -80,7 +80,7 @@ export function parallelAnalysisResults(value: unknown): ParallelAnalysisResult[
     }));
 }
 
-/** What a member is called on its card: the name it was given, else its role, else its method card. */
+/** What a member is called on its card: the name it was given, else its role, else its method. */
 export function parallelMemberName(member: Pick<ParallelAnalysisResult, 'name' | 'profileName' | 'system'>): string {
   return member.name ?? member.profileName ?? member.system ?? '成员';
 }

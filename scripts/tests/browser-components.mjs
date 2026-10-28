@@ -107,8 +107,8 @@ const familyParts = () => [
   HOUR_CANDIDATES_FIXTURE_PART,
   { type: 'tool', id: 'family-web', name: 'web_search', title: '联网检索', status: 'completed', input: { query: '庚金 月令' }, output: [{ title: '庚金论', url: 'https://example.com/gengjin', content: '庚金带煞，刚健为最。' }, { title: '无效链接', url: 'javascript:alert(1)', content: '不应成为链接' }] },
   { type: 'tool', id: 'family-kb', name: 'search_knowledge', title: '知识库检索', status: 'completed', input: { query: '不存在的资料' }, output: [] },
-  { type: 'tool', id: 'family-method', name: 'load_analysis_method', title: '加载分析方法', status: 'completed', input: { id: 'bazi' },
-    output: { ...BAZI_METHOD_FIXTURE, tools: ['bazi', 'bazi_dayun'] } },
+  { type: 'tool', id: 'family-method', name: 'load_skill', title: '加载方法或技能', status: 'completed', input: { name: 'bazi' },
+    output: { name: 'bazi', version: 0, scope: 'builtin', files: [], method: { ...BAZI_METHOD_FIXTURE, tools: ['bazi', 'bazi_dayun'] } } },
   { type: 'tool', id: 'family-team', name: 'parallel_analysis', title: '协作分析', status: 'completed', output: { analyses: [
     { system: 'bazi', conversationId: 21, name: '子平', modelName: '分析模型', reasoningEffort: 'high', focus: '格局取用', status: 'completed', answer: '身强取财官。' },
     { system: 'bazi', conversationId: 22, name: '盲派', modelName: '复核模型', reasoningEffort: 'off', status: 'completed', answer: '做功看财星。' },
@@ -856,7 +856,7 @@ export async function run(existingPage, bundlePath) {
         if (url.pathname === '/api/agent/skills') return Response.json({ skills: agentIO.skills ?? [] });
         // The roles a member may give a collaboration member, as an administrator set them up.
         if (url.pathname === '/api/agent/profiles') return Response.json({ profiles: [
-          { name: 'specialist', displayName: '体系专家', description: '用所给体系的 Core 工具与方法卡分析。', model: null, modes: ['parallel', 'background'] },
+          { name: 'specialist', displayName: '体系专家', description: '用所给体系的 Core 工具与方法分析。', model: null, modes: ['parallel', 'background'] },
           { name: 'researcher', displayName: '研究员', description: '联网检索与查知识库。', model: null, modes: ['parallel', 'background'] },
           { name: 'archivist', displayName: '档案员', description: '整理用户资料。', model: 'fixture-review', modes: ['parallel'] },
         ] });
@@ -3156,7 +3156,7 @@ export async function run(existingPage, bundlePath) {
     check('Evidence numbers results, links only HTTP(S) sources and explains an empty search', await evidence.getByRole('link', { name: '庚金论' }).getAttribute('href') === 'https://example.com/gengjin' &&
       await evidence.getByRole('link', { name: '无效链接' }).count() === 0 && await evidence.locator('.agent-ws-source').first().getAttribute('data-evidence') === '1' &&
       await evidence.innerText().then(text => text.includes('知识库没有匹配的段落') && text.includes('检索「不存在的资料」没有找到相关段落')));
-    await openProcessStep('加载分析方法');
+    await openProcessStep('加载方法或技能');
     await workspacePanel.locator('[data-workspace-view="method"]').waitFor();
     check('A process step opens its versioned read-only method guide', await workspacePanel.innerText().then(text => /版本 \d+\.\d+\.\d+/.test(text) && text.includes('不增加任何执行权限') && text.includes('子平八字')));
     await openProcessStep('八字合盘');

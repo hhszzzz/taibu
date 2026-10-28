@@ -36,7 +36,7 @@ test('the offline runner executes a case through the real runtime and hard-check
     case: baziCase,
     config,
     createStream: baziScript(index => index === 0
-      ? [{ type: 'toolCall', id: 'guide', name: 'load_analysis_method', arguments: { id: 'bazi' } }]
+      ? [{ type: 'toolCall', id: 'guide', name: 'load_skill', arguments: { name: 'bazi' } }]
       : index === 1
         ? [{ type: 'toolCall', id: 'compute', name: 'bazi', arguments: baziArguments }]
         : [{ type: 'text', text: '壬水日主，月令申金。' }]),
@@ -47,7 +47,7 @@ test('the offline runner executes a case through the real runtime and hard-check
   assert.equal(outcome.hardPassed, true);
   assert.deepEqual(outcome.failedAssertions, []);
   assert.equal(outcome.guideLoaded, true);
-  assert.deepEqual(outcome.toolTrace.map(call => [call.name, call.status]), [['load_analysis_method', 'ok'], ['bazi', 'ok']]);
+  assert.deepEqual(outcome.toolTrace.map(call => [call.name, call.status]), [['load_skill', 'ok'], ['bazi', 'ok']]);
   assert.match(outcome.answer, /壬水日主/);
   assert.ok(outcome.core.length >= 1, 'Core text is kept for the quality judge');
   assert.ok(outcome.tokens.input > 0);
@@ -73,7 +73,7 @@ test('the quality judge scores the answer against the case assertions', async ()
     case: baziCase,
     config,
     createStream: baziScript(index => index === 0
-      ? [{ type: 'toolCall', id: 'guide', name: 'load_analysis_method', arguments: { id: 'bazi' } }]
+      ? [{ type: 'toolCall', id: 'guide', name: 'load_skill', arguments: { name: 'bazi' } }]
       : index === 1
         ? [{ type: 'toolCall', id: 'compute', name: 'bazi', arguments: baziArguments }]
         : [{ type: 'text', text: '壬水日主，月令申金。' }]),
@@ -102,14 +102,14 @@ test('a case that never calls its Core tool fails the hard check but keeps its t
     case: baziCase,
     config,
     createStream: baziScript(index => index === 0
-      ? [{ type: 'toolCall', id: 'guide', name: 'load_analysis_method', arguments: { id: 'bazi' } }]
+      ? [{ type: 'toolCall', id: 'guide', name: 'load_skill', arguments: { name: 'bazi' } }]
       : [{ type: 'text', text: '没有调用工具。' }]),
   });
   assert.equal(outcome.completed, true);
   assert.equal(outcome.hardPassed, false);
   assert.match(outcome.failedAssertions[0] ?? '', /未调用 bazi/u);
   assert.equal(outcome.stage, 'core-integrity');
-  assert.deepEqual(outcome.toolTrace.map(call => call.name), ['load_analysis_method']);
+  assert.deepEqual(outcome.toolTrace.map(call => call.name), ['load_skill']);
 });
 
 test('the leaderboard aggregates rates, mean and P95 duration, first token and tokens', () => {

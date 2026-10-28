@@ -106,9 +106,7 @@ const RAW_TOOL_TITLES: Record<string, string> = {
     [AGENT_ARCHIVE_TOOLS.record]: '记入档案',
     [AGENT_ARCHIVE_TOOLS.propose]: '生成保存卡片',
     read_attachment: '读取附件',
-    list_analysis_methods: '列出分析方法',
-    load_analysis_method: '加载分析方法',
-    [AGENT_SKILL_TOOLS.load]: '加载技能',
+    [AGENT_SKILL_TOOLS.load]: '加载方法或技能',
     [AGENT_SKILL_TOOLS.read]: '读取技能文件',
     todo_write: '更新计划',
     ask_user: '向你确认信息',
@@ -265,8 +263,9 @@ export function summarizeAgentTool(tool: AgentTool): string | null {
         const subject = card.proposal.kind === 'master_review' ? card.proposal.chart.label : card.proposal.title;
         return `${AGENT_ARCHIVE_KIND_LABELS[card.proposal.kind]} · ${subject}`;
     }
-    if (tool.name === 'load_analysis_method') return getAgentMethod(tool)?.title ?? (typeof args.id === 'string' ? args.id : null);
     if (tool.name === AGENT_SKILL_TOOLS.load) {
+        const method = getAgentMethod(tool);
+        if (method) return `${method.title} · v${method.version}`;
         const skill = getAgentSkillLoad(tool);
         if (skill) return `${skill.name} · v${skill.version}${skill.files.length ? ` · ${skill.files.length} 个附属文件` : ''}`;
         return typeof args.name === 'string' ? args.name : null;
@@ -395,9 +394,7 @@ const FAMILY_PHRASES: Partial<Record<AgentToolFamily, (count: number) => string>
     drilldown: count => `已详查 ${count} 处`,
     search: count => `已搜索 ${count} 次`,
     data: count => `已读取 ${count} 份资料`,
-    // 按读进上下文的方法卡计；只查看过目录时没有卡。
-    method: count => count ? `已加载 ${count} 套分析方法` : '已查看方法目录',
-    // 按技能计：加载和读它的文件都算用了这个技能。
+    // 按技能计：加载和读它的文件都算用了这个技能；方法是内置技能，按方法计。
     skill: count => `已使用 ${count} 个技能`,
     plan: count => `已提交 ${count} 次计划`,
     memory: count => `已记忆 ${count} 条`,
@@ -430,8 +427,7 @@ export function summarizeAgentActivity(tools: readonly AgentTool[], questionCoun
     let members = 0;
     // A background subagent counts once, when it is started; later messages go to the same one.
     const subagents = new Set<string>();
-    // 方法卡按卡计：同一张卡读两次仍是一套，列出目录不算加载。
-    const cards = new Set<string>();
+    // 方法与技能按名计：同一个方法读两次仍是一套。
     const skills = new Set<string>();
     for (const tool of tools) {
         const family = getAgentToolFamily(tool.name);
@@ -442,14 +438,12 @@ export function summarizeAgentActivity(tools: readonly AgentTool[], questionCoun
         }
         if (family === 'collaboration') { members += collaborationMembers(tool); continue; }
         if (family === 'todo') continue;
-        if (family === 'method') {
-            if (tool.name === 'load_analysis_method') cards.add(String(toolArgs(tool).id ?? tool.id));
-            counts.set(family, cards.size);
-            continue;
-        }
         if (family === 'skill') {
-            skills.add(String(toolArgs(tool).name ?? tool.id));
-            counts.set(family, skills.size);
+            if (tool.status !== 'failed') {
+                const resolved = getAgentMethod(tool)?.id ?? getAgentSkillLoad(tool)?.name ?? String(toolArgs(tool).name ?? tool.id);
+                skills.add(resolved);
+                counts.set(family, skills.size);
+            }
             continue;
         }
         counts.set(family, (counts.get(family) ?? 0) + 1);

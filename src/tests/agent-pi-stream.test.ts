@@ -100,9 +100,9 @@ async function drain(stream: ReturnType<ReturnType<typeof createPiModelStream>>)
 test('requests send one system prompt with the latest sections, in the system role, to the source URL', async () => {
   const gw = gateway(reply('answer with guide'));
   const input = normalizeContext({ messages: [
-    { role: 'system', content: '系统约定', timestamp: 1, sections: { taibu_methods: '<taibu_methods>旧目录</taibu_methods>', instructions: '<instructions>先计算后解读</instructions>', obsolete: '已移除权限' } },
+    { role: 'system', content: '系统约定', timestamp: 1, sections: { taibu_skills: '<taibu_skills>旧目录</taibu_skills>', instructions: '<instructions>先计算后解读</instructions>', obsolete: '已移除权限' } },
     { role: 'user', content: 'query', timestamp: 2 },
-    { role: 'system', content: '', timestamp: 3, sections: { taibu_methods: '<taibu_methods>解读前读取八字指引</taibu_methods>', obsolete: null } },
+    { role: 'system', content: '', timestamp: 3, sections: { taibu_skills: '<taibu_skills>解读前读取八字指引</taibu_skills>', obsolete: null } },
   ] });
   const message = await createPiModelStream(config, { fetch: gw.fetch })(piModel, input).result();
   assert.equal(message.stopReason, 'stop');
@@ -114,9 +114,9 @@ test('requests send one system prompt with the latest sections, in the system ro
   assert.equal(request.body.store, undefined);
   assert.deepEqual(request.body.messages.map(item => item.role), ['system', 'user']);
   const prompt = systemText(request);
-  assert.match(prompt, /<taibu_methods>解读前读取八字指引<\/taibu_methods>/);
+  assert.match(prompt, /<taibu_skills>解读前读取八字指引<\/taibu_skills>/);
   assert.doesNotMatch(prompt, /旧目录|已移除权限/);
-  assert.ok(prompt.indexOf('<taibu_methods>') < prompt.indexOf('<instructions>'));
+  assert.ok(prompt.indexOf('<taibu_skills>') < prompt.indexOf('<instructions>'));
   assert.equal(message.model, piModel.id, 'the transcript keeps the task model, not the upstream name');
 });
 

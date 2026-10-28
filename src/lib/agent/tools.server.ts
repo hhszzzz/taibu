@@ -35,7 +35,6 @@ import {
 import { isAgentArchiveChartType, readLinkedRecords, readMasterReview, resolveAgentArchiveChart } from './archive.server';
 import { normalizeQuestions } from './questions';
 import { validateTodos } from './todos';
-import { ANALYSIS_METHODS, loadAnalysisMethod } from './methods.server';
 import { attachmentBytes, attachmentDto, validateAttachmentIds } from './attachments.server';
 import { publicMemory, type AgentMemory } from './memory';
 import { authorizeChartReference, loadAgentChart, loadInspectedChart } from './chart-tools.server';
@@ -196,8 +195,6 @@ const auxiliaryToolTitles: Record<string, string> = {
   focus_chart: "定位分析位置",
   // Without a title here the label falls back to the model-facing description, which becomes the step title.
   todo_write: "更新计划",
-  list_analysis_methods: "列出分析方法",
-  load_analysis_method: "加载分析方法",
   [AGENT_SKILL_TOOLS.load]: "加载技能",
   [AGENT_SKILL_TOOLS.read]: "读取技能文件",
   read_attachment: "读取附件",
@@ -707,13 +704,12 @@ export async function createAgentTools(
     if (args.revision !== (checkpoint.todos?.revision ?? 0)) throw new Error('任务清单版本冲突，请使用当前 revision');
     return textResult({ revision: args.revision + 1, items: validateTodos(args.items) });
   }));
-  tools.push(wrap('list_analysis_methods', '列出全部方法卡（各体系默认卡、流派卡与技法卡）及其适用场景、对应工具与版本', Type.Object({}), async () => textResult(ANALYSIS_METHODS)));
-  tools.push(wrap('load_analysis_method', '加载一张方法卡：id 为卡 ID（如 bazi、bazi-mangpai、birth-hour、dream），给工具名则得到其体系的默认卡；计算仍使用 Core，执行权限会重新核验', Type.Object({ id: Type.String(), version: Type.Optional(Type.String()) }), async args => textResult(loadAnalysisMethod(args.id, args.version))));
   // The skills the task opened with: load_skill when the model may load one itself, read_skill_file when one has files
   // (a skill the user started with /skill: counts too). Each call finds the skill again with the member's tier.
   const skills = options.skills?.skills ?? [];
+  // 方法与技能共用一个入口：技能名或方法 id；给一个 Core 工具名，得到其体系的默认方法。
   if (skills.some(skill => !skill.disable_model_invocation)) tools.push(wrap(AGENT_SKILL_TOOLS.load,
-    '加载一个技能的正文：name 为系统提示 available_skills 所列的技能名。任务与技能描述相符时先加载，再按正文的做法完成任务',
+    '加载一个技能或方法的正文：name 为系统提示所列的方法 id（如 bazi、bazi-mangpai、birth-hour、dream）或技能名，也可填刚调用的 Core 工具名以取该体系的默认方法。每个体系首次解读前先加载方法，再按正文的断法、工具流程与输出要求完成任务',
     Type.Object({ name: Type.String({ minLength: 1, maxLength: SKILL_NAME_MAX }) }),
     async args => {
       const loaded = await loadSkill(run.user_id, (await checkMember()).membership, args.name);

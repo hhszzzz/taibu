@@ -68,7 +68,7 @@ test('parallel children are isolated, all token usage is projected, and interrup
             requests.push({ model: model.id, effort: options?.reasoning });
             childOffers.push(names); assert.ok(!names.includes('ask_user') && !names.includes('parallel_analysis') && !names.includes('background_agent') && !names.some(name => name.startsWith('mcp__')));
             const tool = names.includes('qimen') ? 'qimen' : 'bazi';
-            if (!results.some(message => message.toolName === 'load_analysis_method')) content = [{ type: 'toolCall', id: 'guide', name: 'load_analysis_method', arguments: { id: tool } }];
+            if (!results.some(message => message.toolName === 'load_skill')) content = [{ type: 'toolCall', id: 'guide', name: 'load_skill', arguments: { name: tool } }];
             else if (!results.some(message => message.toolName === tool)) content = [{ type: 'toolCall', id: 'chart', name: tool, arguments: tool === 'bazi' ? bazi : qimen }];
             else if (tool === 'qimen' && interrupt) { interrupt = false; setTimeout(() => abort.abort(), 20); return createAssistantMessageEventStream(); }
             else content = [{ type: 'text', text: `${tool} 依据已计算，结论存在不确定性。` }];

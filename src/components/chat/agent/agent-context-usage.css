@@ -1,4 +1,4 @@
-/* 上下文卡「技能」一行：可展开，展开后以横线分隔列注入的方法目录与已读方法卡。 */
+/* 上下文卡「技能」一行：可展开，展开后以横线分隔列注入的方法目录与已读方法。 */
 .agent-context-legend-toggle { display: inline-flex; align-items: center; gap: 4px; color: var(--foreground); font: inherit; text-align: left; }
 .agent-context-legend-toggle:hover { color: var(--accent-hover); }
 .agent-context-legend-toggle svg { color: var(--foreground-tertiary); transition: transform .15s; }

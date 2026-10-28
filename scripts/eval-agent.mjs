@@ -11,7 +11,7 @@ require('./ts-register.cjs');
 const { config: fixtureConfig, scripted } = require('../src/tests/helpers/agent-runtime-fixture.ts');
 const { runAgentEvalCase } = require('../src/lib/agent/eval/runner.server.ts');
 const { judgeAgentEvaluation } = require('../src/lib/agent/evaluation.server.ts');
-const { AGENT_TOOL_SEARCH_TOOL, isAgentDeferredTool } = require('../src/lib/agent/tool-catalog.ts');
+const { AGENT_SKILL_TOOLS, AGENT_TOOL_SEARCH_TOOL, isAgentDeferredTool } = require('../src/lib/agent/tool-catalog.ts');
 const cases = JSON.parse(await readFile(path.join(root, 'scripts/evals/agent-cases.json'), 'utf8'));
 const argv = process.argv.slice(2), live = argv.includes('--live');
 const vision = argv.includes('--vision');
@@ -78,7 +78,7 @@ try {
             } }) : undefined)
             : ({ store }) => scripted(index => {
                 const steps = [
-                    { id: 'guide', name: 'load_analysis_method', arguments: () => ({ id: item.guide }) },
+                    { id: 'guide', name: AGENT_SKILL_TOOLS.load, arguments: () => ({ name: item.guide }) },
                     ...(item.chart ? [{ id: 'chart', name: item.chart.tool, arguments: () => item.chart.arguments }] : []),
                     ...(isAgentDeferredTool(item.tool) ? [{ id: 'search', name: AGENT_TOOL_SEARCH_TOOL, arguments: () => ({ query: item.tool }) }] : []),
                     { id: 'compute', name: item.tool, arguments: () => {

@@ -14,7 +14,7 @@ import { resolveThinkingLevel } from '@/lib/ai/thinking';
 // At most four children, written in one commit: deltas only.
 const ParallelDoc = defineDoc({ kind: 'taibu.parallel', version: 1, scope: 'task', initial: (): { children: number[] } => ({ children: [] }), checkpointWhen: () => false });
 /**
- * A method card that reads a chart, by id (a system such as bazi, or a school such as bazi-mangpai). A technique
+ * A method that reads a chart, by id (a system such as bazi, or a school such as bazi-mangpai). A technique
  * (birth-hour) only joins a system card, so it is never given on its own.
  */
 export const PARALLEL_SYSTEMS = ANALYSIS_METHODS.filter(method => method.tools.length && method.kind !== 'technique').map(method => method.id);
@@ -31,7 +31,7 @@ export function memberAgentChange(setup: MemberSetup, dispatcher: Extension): Ag
     };
 }
 
-/** What a member is called in the main agent's lists: its role, and the method card it was given. */
+/** What a member is called in the main agent's lists: its role, and the method it was given. */
 export function memberTitle(profile: Pick<AgentProfileView, 'name' | 'displayName'> | undefined, system?: string): string {
     if (!profile || profile.name === DEFAULT_AGENT_PROFILE) return system ? systemTitle(system) : '体系专家';
     return system ? `${profile.displayName}·${systemTitle(system)}` : profile.displayName;
@@ -98,10 +98,10 @@ export function createParallelExtension(kit: MemberKit, session: () => Harness, 
     const roles = kit.roles('parallel');
     const roleOf = (member: AgentCollaborator) => member.profile ?? DEFAULT_AGENT_PROFILE;
     const extension: Extension = { name: 'taibu_parallel', tools: [defineTool({
-        name: 'parallel_analysis', description: `同时交给 1–4 位成员分头处理相互独立的子问题，并等待全部完成。每位成员按角色 agent 工作：${kit.describe('parallel')}。agent 不填即 ${DEFAULT_AGENT_PROFILE}，此时必须填 system（方法卡 id，同一体系可从不同角度或用不同流派的卡分析，如 bazi 与 bazi-mangpai）；其他角色给了 system 时以该方法卡为准。先确认每项必要资料完整；成员只完成所给子问题，由当前任务核对与汇总，整项任务仅计一次费用。${collaborators.length ? `每项必须填写用户配置的 agentId，且包含全部成员：${collaborators.map(member => `${member.id}（${member.name}，角色 ${roleOf(member)}：${member.focus}）`).join('；')}` : ''}`,
+        name: 'parallel_analysis', description: `同时交给 1–4 位成员分头处理相互独立的子问题，并等待全部完成。每位成员按角色 agent 工作：${kit.describe('parallel')}。agent 不填即 ${DEFAULT_AGENT_PROFILE}，此时必须填 system（方法 id，同一体系可从不同角度或用不同流派的方法分析，如 bazi 与 bazi-mangpai）；其他角色给了 system 时以该方法为准。先确认每项必要资料完整；成员只完成所给子问题，由当前任务核对与汇总，整项任务仅计一次费用。${collaborators.length ? `每项必须填写用户配置的 agentId，且包含全部成员：${collaborators.map(member => `${member.id}（${member.name}，角色 ${roleOf(member)}：${member.focus}）`).join('；')}` : ''}`,
         parameters: Type.Object({ tasks: Type.Array(Type.Object({
           agent: Type.Optional(Type.String({ enum: roles.map(role => role.name), description: '成员的角色，默认 specialist' })),
-          system: Type.Optional(Type.String({ enum: PARALLEL_SYSTEMS, description: '方法卡 id；specialist 必填' })),
+          system: Type.Optional(Type.String({ enum: PARALLEL_SYSTEMS, description: '方法 id；specialist 必填' })),
           question: Type.String({ minLength: 1, maxLength: 4000 }),
           agentId: Type.Optional(Type.String(collaborators.length ? { enum: collaborators.map(member => member.id) } : {})),
           name: Type.Optional(Type.String({ ...LABEL, description: '这位成员在本任务里的称呼，如“格局派”“应期复核”；未配置协作成员时按分工起名' })) }), { minItems: 1, maxItems: 4 }),
@@ -121,7 +121,7 @@ export function createParallelExtension(kit: MemberKit, session: () => Harness, 
                 if (member && task.agent !== undefined && task.agent !== roleOf(member)) throw new Error(`成员「${member.name}」的角色由用户设为 ${roleOf(member)}，agent 不填或填写相同角色`);
                 const profile = kit.role(member ? roleOf(member) : task.agent, 'parallel');
                 const identity = profile.name === DEFAULT_AGENT_PROFILE && task.system ? `你是太卜${systemTitle(task.system)}专项分析助手。`
-                    : `你是太卜协作成员，角色是${profile.displayName}${task.system ? `，以 ${task.system}（${systemTitle(task.system)}）方法卡为准` : ''}。`;
+                    : `你是太卜协作成员，角色是${profile.displayName}${task.system ? `，以 ${task.system}（${systemTitle(task.system)}）方法为准` : ''}。`;
                 return { member, setup: await kit.setup({ profile, system: task.system, identity }) };
             }));
             const ids = await api.commit(async tx => {

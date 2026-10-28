@@ -110,7 +110,6 @@ export function getAgentToolScope(name: string): AgentToolScopeId | null {
   const feature = getAgentToolFeatureId(name);
   if (feature && (AGENT_TOOL_SCOPE_IDS as readonly string[]).includes(feature)) return feature;
   if (name.startsWith('mcp__') || AGENT_WEB_TOOLS.has(name)) return 'web';
-  if (name === AGENT_SKILL_TOOLS.load || name === AGENT_SKILL_TOOLS.read) return 'skills';
   if (name === 'search_knowledge') return 'knowledge';
   if (name === 'generate_image') return 'image';
   if (['list_user_data', 'read_user_data', 'read_user_notes', 'read_user_profile', 'read_attachment'].includes(name)) return 'user-data';
@@ -216,7 +215,7 @@ export function getAgentExtensionToolTitle(name: string): string | undefined {
  */
 export const AGENT_MODEL_ONLY_TOOLS: ReadonlySet<string> = new Set([
   'ask_user', 'todo_write', 'inspect_chart', 'focus_chart', 'web_search', 'web_fetch', 'search_knowledge', 'read_attachment',
-  'list_analysis_methods', 'load_analysis_method', AGENT_SKILL_TOOLS.load, AGENT_SKILL_TOOLS.read, 'read_user_memory', 'remember_user_fact', AGENT_SUBMIT_PLAN_TOOL,
+  AGENT_SKILL_TOOLS.load, AGENT_SKILL_TOOLS.read, 'read_user_memory', 'remember_user_fact', AGENT_SUBMIT_PLAN_TOOL,
   AGENT_ARCHIVE_TOOLS.record, AGENT_ARCHIVE_TOOLS.propose, 'parallel_analysis', AGENT_BACKGROUND_TOOL,
 ]);
 
@@ -260,8 +259,6 @@ const TOOL_FAMILIES: ReadonlyMap<string, AgentToolFamily> = new Map<string, Agen
   ['read_user_profile', 'data'],
   ['read_attachment', 'data'],
   ['generate_image', 'image'],
-  ['list_analysis_methods', 'method'],
-  ['load_analysis_method', 'method'],
   [AGENT_SKILL_TOOLS.load, 'skill'],
   [AGENT_SKILL_TOOLS.read, 'skill'],
   ['todo_write', 'todo'],

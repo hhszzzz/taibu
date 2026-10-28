@@ -28,7 +28,7 @@ const RESIDENT_LIMIT = 60000;
 const ACTIONS = ['spawn', 'send', 'stop', 'dismiss', 'status'] as const;
 const LABEL = { minLength: 1, maxLength: 12 };
 
-/** A subagent without a role is a specialist; one given no method card has no system. */
+/** A subagent without a role is a specialist; one given no method has no system. */
 type BackgroundAgent = { name: string; profile?: string; system?: string; conversationId: number; reported: number[] };
 
 /**
@@ -127,7 +127,7 @@ export function createBackgroundAgents(kit: MemberKit, timeZone = DEFAULT_DIVINA
     const roleOf = (agent: Pick<BackgroundAgent, 'profile'>) => roles.find(role => role.name === (agent.profile ?? DEFAULT_AGENT_PROFILE));
     const label = (agent: Pick<BackgroundAgent, 'profile' | 'system'>) => memberTitle(roleOf(agent) ?? { name: agent.profile ?? DEFAULT_AGENT_PROFILE, displayName: agent.profile ?? '' }, agent.system);
     const prepare = (name: string, profile: AgentProfileView, system?: string) => kit.setup({ profile, system,
-        identity: `你是太卜后台子分析「${name}」，${profile.name === DEFAULT_AGENT_PROFILE && system ? `专攻${systemTitle(system)}` : `角色是${profile.displayName}${system ? `，以 ${system}（${systemTitle(system)}）方法卡为准` : ''}`}；主任务会陆续交给你任务，你记得此前的任务与结论。` });
+        identity: `你是太卜后台子分析「${name}」，${profile.name === DEFAULT_AGENT_PROFILE && system ? `专攻${systemTitle(system)}` : `角色是${profile.displayName}${system ? `，以 ${system}（${systemTitle(system)}）方法为准` : ''}`}；主任务会陆续交给你任务，你记得此前的任务与结论。` });
     /** Owned by an anchor of the main conversation, it starts as a copy of the main agent, then takes its role. */
     const createSubagent = async (tx: Tx, mainId: ConversationId, setup: MemberSetup) => {
         const anchor = await tx.createTask(Anchor, null, { ...BACKGROUND, conversationId: mainId });
@@ -156,7 +156,7 @@ export function createBackgroundAgents(kit: MemberKit, timeZone = DEFAULT_DIVINA
             action: Type.String({ enum: [...ACTIONS] }),
             name: Type.Optional(Type.String({ ...LABEL, description: '子分析的称呼，如“紫微复核”“应期推演”；status 不填' })),
             agent: Type.Optional(Type.String({ enum: roles.map(role => role.name), description: 'spawn：它的角色，默认 specialist' })),
-            system: Type.Optional(Type.String({ enum: PARALLEL_SYSTEMS, description: 'spawn：它专攻的方法卡 id（体系或流派，如 bazi-mangpai）；specialist 必填' })),
+            system: Type.Optional(Type.String({ enum: PARALLEL_SYSTEMS, description: 'spawn：它专攻的方法 id（体系或流派，如 bazi-mangpai）；specialist 必填' })),
             message: Type.Optional(Type.String({ minLength: 1, maxLength: 4000, description: 'spawn 与 send 必填：交给它的任务，附上已确认的资料或命盘引用，不让它猜测' })),
             followUp: Type.Optional(Type.Boolean({ description: 'send 时它正在分析：true 排在当前任务之后，默认在它下一步插入' })),
         }),
@@ -227,7 +227,7 @@ export function createBackgroundAgents(kit: MemberKit, timeZone = DEFAULT_DIVINA
         extension,
         /**
          * Reads the roles of the subagents the previous task kept, then recreates them inside the commit that seeds the
-         * main conversation. A subagent whose role is no longer available, or whose method card is not, is not recreated.
+         * main conversation. A subagent whose role is no longer available, or whose method is not, is not recreated.
          */
         prepare: async (residents: readonly AgentBackgroundResident[]) => {
             const setups: Array<{ resident: AgentBackgroundResident; setup: MemberSetup }> = [];

@@ -161,7 +161,7 @@ type CardDrag = { kind: RailCardKind; pointer: number; startY: number; dy: numbe
  */
 export function WorkspaceStatusCards({ data, run, afterContext, skills, onOpen }: {
     data?: AgentMessageData; run?: WorkspaceRunInfo; afterContext?: (grip: ReactNode) => ReactNode;
-    /** 本任务用过的方法卡，列在上下文卡的「技能」一行下。 */
+    /** 本任务用过的方法，列在上下文卡的「技能」一行下。 */
     skills?: ContextSkills;
     onOpen?: (id: string) => void;
 }) {

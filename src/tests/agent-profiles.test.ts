@@ -8,11 +8,11 @@ import {
 import { ProfileInputError, parseBuiltinProfileInput, parseProfileInput } from '../lib/agent/profiles/input.server';
 import { createMemberKit, memberInstructions } from '../lib/agent/profiles/members.server';
 import { AGENT_MEMBER_DENIED_TOOLS } from '../lib/agent/tool-catalog';
-import type { SkillRow } from '../lib/agent/skills/store.server';
+import type { SkillEntry } from '../lib/agent/skills/builtin.server';
 
 /** Every tool a main agent may be offered, as a role's grants read it. */
 const OFFERED = [
-  'bazi', 'bazi_dayun', 'bazi_relations', 'ziwei', 'ziwei_palace', 'liuyao', 'load_analysis_method',
+  'bazi', 'bazi_dayun', 'bazi_relations', 'ziwei', 'ziwei_palace', 'liuyao',
   'read_user_data', 'read_user_profile', 'search_knowledge', 'web_search', 'web_fetch', 'load_skill', 'read_skill_file',
   'read_user_memory', 'mcp__exa__web_search_exa', 'mcp__notes__find', 'mcp__mine_1a2b__lookup',
   ...AGENT_MEMBER_DENIED_TOOLS,
@@ -37,7 +37,7 @@ test('no role grants a tool only the main agent may use, whatever it inherits or
 test('a role\'s families, single tools and denials pick the tools it keeps, in the task\'s order', () => {
   const grants = (tools: AgentProfileView['tools'], systemTools?: string[]) => profileGrants(tools, OFFERED, context(systemTools));
   assert.deepEqual(grants({ inherit: true, allow: [], deny: ['web', 'mcp:exa', 'data', 'read_user_memory'] }), [
-    'bazi', 'bazi_dayun', 'bazi_relations', 'ziwei', 'ziwei_palace', 'liuyao', 'load_analysis_method', 'search_knowledge',
+    'bazi', 'bazi_dayun', 'bazi_relations', 'ziwei', 'ziwei_palace', 'liuyao', 'search_knowledge',
     'load_skill', 'read_skill_file', 'mcp__notes__find', 'mcp__mine_1a2b__lookup',
   ]);
   assert.deepEqual(grants({ inherit: false, allow: ['core:bazi', 'knowledge'], deny: ['bazi_relations'] }), ['bazi', 'bazi_dayun', 'search_knowledge']);
@@ -97,9 +97,9 @@ test('a custom role is parsed in full when added and by what changed when edited
 });
 
 test('a member\'s instructions follow what its tools let it do', () => {
-  const specialist = memberInstructions({ identity: '你是专项分析助手。', profile: { instructions: '' }, system: 'ziwei', tools: ['ziwei', 'load_analysis_method'] });
+  const specialist = memberInstructions({ identity: '你是专项分析助手。', profile: { instructions: '' }, system: 'ziwei', tools: ['ziwei', 'load_skill'] });
   assert.match(specialist, /^你是专项分析助手。只处理所给任务/);
-  assert.match(specialist, /先用 load_analysis_method 加载 ziwei（紫微斗数）方法卡/);
+  assert.match(specialist, /先用 load_skill 加载 ziwei（紫微斗数）方法/);
   assert.match(specialist, /所排命盘的引用（artifact:…）/);
   assert.doesNotMatch(specialist, /\[编号\]/);
 
@@ -124,7 +124,7 @@ test('the main agent chooses among the roles that work in a mode, each with what
   const described = kit.describe('background');
   assert.match(described, /specialist（体系专家：[^）]*；可用所给体系的排盘与计算）/);
   assert.match(described, /researcher（研究员：[^）]*；可用联网、知识库、技能）/);
-  assert.match(described, /verifier（复核员：[^）]*；可用排盘与计算、用户资料、联网、知识库）/);
+  assert.match(described, /verifier（复核员：[^）]*；可用排盘与计算、用户资料、联网、知识库、技能）/);
   assert.match(described, /archivist（档案员：整理资料；可用用户资料）/);
   const silent = createMemberKit({ roles: [custom()], tools: registrations(OFFERED) });
   assert.match(silent.describe('parallel'), /archivist（档案员：整理资料；不调用工具，只做推理）/);
@@ -133,10 +133,10 @@ test('the main agent chooses among the roles that work in a mode, each with what
 test('a member is set up with the tools, instructions and model its role gives it', async (t: TestContext) => {
   const store = require('../lib/agent/skills/store.server') as typeof import('../lib/agent/skills/store.server');
   const read = t.mock.method(store, 'readSkillContent', async (id: string) => id === 'skill-big' ? `---\nname: big\ndescription: 大\n---\n${'长'.repeat(30_000)}` : `---\nname: x\ndescription: x\n---\n按清单复盘。`);
-  const skill = (overrides: Partial<SkillRow>): SkillRow => ({
+  const skill = (overrides: Partial<SkillEntry>): SkillEntry => ({
     id: 'skill-1', owner_id: null, name: 'case-review', description: '复盘', version: 1, required_tier: 'free', is_enabled: true,
     disable_model_invocation: false, sort_order: 0, created_at: '2026-10-27T00:00:00.000Z', updated_at: '2026-10-27T00:00:00.000Z',
-    bytes: 40, files: [{ path: 'refs/terms.md', bytes: 9 }], ...overrides,
+    bytes: 40, files: [{ path: 'refs/terms.md', bytes: 9 }], source: 'platform', ...overrides,
   });
   const archivist = custom({ tools: { inherit: false, allow: ['web', 'mcp:notes', 'core:bazi'], deny: ['bazi_relations'] }, skills: ['case-review', 'own-skill', 'big', 'missing'] });
   const model = { config: { id: 'model-b' } as never, thinkingLevel: 'high' as const };
@@ -145,9 +145,9 @@ test('a member is set up with the tools, instructions and model its role gives i
     skills: [skill({}), skill({ id: 'skill-own', owner_id: 'user-1', name: 'own-skill' }), skill({ id: 'skill-big', name: 'big', files: [] })],
   });
 
-  await assert.rejects(kit.setup({ profile: role('specialist'), identity: '你是成员。' }), /需要填写它专攻的方法卡 system/);
+  await assert.rejects(kit.setup({ profile: role('specialist'), identity: '你是成员。' }), /需要填写它专攻的方法 system/);
   const specialist = await kit.setup({ profile: role('specialist'), system: 'ziwei', identity: '你是紫微专项分析助手。' });
-  assert.deepEqual(specialist.tools.map(tool => tool.name), ['ziwei', 'ziwei_palace', 'load_analysis_method'], 'Core tools bring the method cards along');
+  assert.deepEqual(specialist.tools.map(tool => tool.name), ['ziwei', 'ziwei_palace', 'load_skill'], 'Core tools bring the methods along');
   assert.equal(specialist.system, 'ziwei');
   assert.equal(specialist.model, undefined);
   await assert.rejects(kit.setup({ profile: role('specialist'), system: 'tarot', identity: '你是成员。' }), /该体系当前不可用/);
@@ -156,14 +156,14 @@ test('a member is set up with the tools, instructions and model its role gives i
   assert.deepEqual(researcher.tools.map(tool => tool.name), ['search_knowledge', 'web_search', 'web_fetch', 'load_skill', 'read_skill_file']);
 
   const member = await kit.setup({ profile: archivist, identity: '你是档案员。' });
-  assert.deepEqual(member.tools.map(tool => tool.name), ['bazi', 'bazi_dayun', 'load_analysis_method', 'web_search', 'web_fetch', 'mcp__notes__find']);
+  assert.deepEqual(member.tools.map(tool => tool.name), ['bazi', 'bazi_dayun', 'web_search', 'web_fetch', 'load_skill', 'mcp__notes__find']);
   assert.equal(member.model, model);
   assert.match(member.instructions, /这个角色预先载入了以下技能/);
   assert.match(member.instructions, /<skill name="case-review">\n按清单复盘。\n<\/skill>/, 'without read_skill_file the block names no files');
   assert.doesNotMatch(member.instructions, /own-skill|name="big"/, 'only platform skills are preloaded, within the budget');
   assert.deepEqual(read.mock.calls.map(call => call.arguments[0]), ['skill-1', 'skill-big']);
 
-  const denied = custom({ tools: { inherit: false, allow: ['core:bazi'], deny: ['load_analysis_method'] } });
+  const denied = custom({ tools: { inherit: false, allow: ['core:bazi'], deny: ['load_skill'] } });
   assert.deepEqual((await createMemberKit({ roles: [denied], tools: registrations(OFFERED) }).setup({ profile: denied, identity: '你是成员。' })).tools.map(tool => tool.name),
-    ['bazi', 'bazi_dayun', 'bazi_relations'], 'a role may deny the method cards its Core tools would bring');
+    ['bazi', 'bazi_dayun', 'bazi_relations'], 'a role may deny the methods its Core tools would bring');
 });

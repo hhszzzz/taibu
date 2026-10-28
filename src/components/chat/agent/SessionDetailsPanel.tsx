@@ -33,7 +33,7 @@ export function SessionDetailsPanel({ data, run, onOpen }: {
             return [{ id: tool.id, chart }];
         });
     }, [tools]);
-    // 技能 = 本任务用过的方法卡，列在上下文卡里，点开就是它的页。
+    // 技能 = 本任务用过的方法，列在上下文卡里，点开就是它的页。
     const model = data?.runtime?.model.id;
     const skills = useMemo(() => getAgentSkills(tools, model), [tools, model]);
     // 会话栏固定宽度（280px，见 .agent-session-rail）：不提供拖拽或顶部手柄。

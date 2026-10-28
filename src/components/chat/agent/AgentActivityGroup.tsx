@@ -4,9 +4,9 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight, LoaderCircle, PanelRight, Pause } from 'lucide-react';
 import type { AgentMessageData, AgentPart } from '@/lib/agent/types';
-import { AGENT_SUBMIT_PLAN_TOOL, AGENT_TOOL_SEARCH_TOOL, AGENT_WEB_TOOLS, getAgentToolFamily, isAgentMemberTool } from '@/lib/agent/tool-catalog';
+import { AGENT_SKILL_TOOLS, AGENT_SUBMIT_PLAN_TOOL, AGENT_TOOL_SEARCH_TOOL, AGENT_WEB_TOOLS, getAgentToolFamily, isAgentMemberTool } from '@/lib/agent/tool-catalog';
 import { getAgentToolQuestionIds } from '@/lib/agent/workspace';
-import { getAgentAttachmentRead, getAgentChart, getAgentConversationHits, getAgentDataResults, getAgentGeneratedImages, getAgentMemories, getAgentMethod, getAgentMethodCatalog, getAgentNotes, getAgentPlan, getAgentProfile, getAgentScript, getAgentSearchResults, getAgentToolQuestions, getAgentToolSearchLoaded, getAgentToolText } from '@/lib/agent/tool-presentation';
+import { getAgentAttachmentRead, getAgentChart, getAgentConversationHits, getAgentDataResults, getAgentGeneratedImages, getAgentMemories, getAgentMethod, getAgentNotes, getAgentPlan, getAgentProfile, getAgentScript, getAgentSearchResults, getAgentSkillLoad, getAgentToolQuestions, getAgentToolSearchLoaded, getAgentToolText } from '@/lib/agent/tool-presentation';
 import { useIsDesktopLayout } from '@/lib/hooks/useIsDesktopLayout';
 import { useTranscriptRecordView } from '@/lib/chat/chat-record-view';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
@@ -102,14 +102,6 @@ function StepStructured({ tool, parts, workspace }: { tool: AgentTool; parts: Ag
             {workspace && <button type="button" className="agent-step-structured-open" onClick={() => open(`tool:${tool.id}`)}>查看资料</button>}
         </div> : null;
     }
-    if (tool.name === 'list_analysis_methods') {
-        const catalog = getAgentMethodCatalog(tool);
-        return catalog?.length ? <div className="agent-step-structured">
-            <p className="agent-step-structured-fact">可用的解读方法 {catalog.length} 套</p>
-            <ul className="agent-step-structured-list">{catalog.slice(0, 6).map(item => <li key={item.id}><strong>{item.title}</strong><span>版本 {item.version}</span></li>)}</ul>
-            {workspace && <button type="button" className="agent-step-structured-open" onClick={() => open('methods')}>查看方法</button>}
-        </div> : null;
-    }
     if (tool.name === 'read_user_data') {
         const input = tool.input && typeof tool.input === 'object' ? tool.input as Record<string, unknown> : {};
         return <div className="agent-step-structured">
@@ -117,11 +109,16 @@ function StepStructured({ tool, parts, workspace }: { tool: AgentTool; parts: Ag
             {workspace && <button type="button" className="agent-step-structured-open" onClick={() => open(`tool:${tool.id}`)}>查看资料</button>}
         </div>;
     }
-    if (tool.name === 'load_analysis_method') {
+    if (tool.name === AGENT_SKILL_TOOLS.load) {
+        // 方法是内置技能：读进来的是方法本身，点开看方法；普通技能在过程行里说明版本与附属文件，不另开页。
         const method = getAgentMethod(tool);
-        return method ? <div className="agent-step-structured">
+        if (method) return <div className="agent-step-structured">
             <p className="agent-step-structured-fact">{method.title} · 版本 {method.version}</p>
-            {workspace && <button type="button" className="agent-step-structured-open" onClick={() => open(`tool:${tool.id}`)}>查看指引</button>}
+            {workspace && <button type="button" className="agent-step-structured-open" onClick={() => open(`method:${method.id}`)}>查看方法</button>}
+        </div>;
+        const skill = getAgentSkillLoad(tool);
+        return skill ? <div className="agent-step-structured">
+            <p className="agent-step-structured-fact">{skill.name} · v{skill.version}{skill.files.length ? ` · ${skill.files.length} 个附属文件` : ''}</p>
         </div> : null;
     }
     // 检索的来源直接列在调用框里：标题、编号与站点，点击打开原页；完整摘录在工作区「回答依据」。

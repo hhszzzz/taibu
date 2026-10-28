@@ -7,7 +7,7 @@ import { ArrowUpRight, Check, ChevronRight, CircleAlert, Database, Globe, Loader
 import type { AgentRunStatus } from '@/lib/agent/types';
 import type { AgentQuestionAnswer, AgentWorkspaceModel, AgentWorkspaceResource } from '@/lib/agent/workspace';
 import {
-    getAgentAttachmentRead, getAgentCalculation, getAgentChart, getAgentConversationHits, getAgentDataResults, getAgentMemories, getAgentMethod, getAgentMethodCatalog,
+    getAgentAttachmentRead, getAgentCalculation, getAgentChart, getAgentConversationHits, getAgentDataResults, getAgentMemories, getAgentMethod,
     getAgentNotes, getAgentProfile, getAgentScript, getAgentSearchResults, getAgentToolQuestions, getAgentToolText,
     type AgentConversationHit, type AgentScript, type AgentScriptCall, type AgentSearchMethod, type AgentToolPart,
 } from '@/lib/agent/tool-presentation';
@@ -465,28 +465,17 @@ export function AttachmentView({ id, title, tools }: { id: string; title: string
     </section>;
 }
 
-export function MethodCatalogView({ tool, runStatus, step }: ToolViewProps & { step?: number }) {
-    const id = useId();
-    const methods = getAgentMethodCatalog(tool);
-    return <section className="agent-ws-view" aria-labelledby={id}>
-        <WorkspaceViewHeading id={id} kicker={kickerOf(step, '内置方法', '只读')} title="分析方法">可信、版本化的方法目录；按问题需要加载，不增加执行权限。</WorkspaceViewHeading>
-        {tool.status !== 'completed' ? <WorkspaceToolPending tool={tool} runStatus={runStatus} running="正在读取方法目录…" />
-            : !methods ? <WorkspaceTextFallback tool={tool} note="方法目录格式无法识别，已显示原始返回。" />
-            : <ul className="agent-ws-list">{methods.map(method => <li key={method.id}><strong>{method.title}<code>{method.version}</code></strong><small>{method.description}</small></li>)}</ul>}
-    </section>;
-}
-
-/** 方法卡 (Main board): a built-in, versioned card. It shapes the reading steps and grants no tools or membership. */
+/** 方法 (Main board): a built-in, versioned method. It shapes the reading steps and grants no tools or membership. */
 export function MethodView({ tools, runStatus, step }: { tools: AgentToolPart[]; runStatus: AgentRunStatus; step?: number }) {
     const id = useId();
     const tool = latestCompleted(tools) ?? tools.at(-1)!;
     const guide = getAgentMethod(tool);
     return <section className="agent-ws-view" aria-labelledby={id}>
-        <WorkspaceViewHeading id={id} kicker={kickerOf(step, '内置方法', guide && `版本 ${guide.version}`, '只读')} title={guide?.title ?? inputText(tool, 'id') ?? '方法卡'}>
+        <WorkspaceViewHeading id={id} kicker={kickerOf(step, '内置方法', guide && `版本 ${guide.version}`, '只读')} title={guide?.title ?? inputText(tool, 'name') ?? inputText(tool, 'id') ?? '方法'}>
             方法只规定解读步骤；排盘仍由太卜 Core 计算，不增加任何执行权限。
         </WorkspaceViewHeading>
-        {tool.status !== 'completed' ? <WorkspaceToolPending tool={tool} runStatus={runStatus} running="正在加载方法卡…" />
-            : !guide ? <WorkspaceTextFallback tool={tool} note="方法卡格式无法识别，已显示原始返回。" />
+        {tool.status !== 'completed' ? <WorkspaceToolPending tool={tool} runStatus={runStatus} running="正在加载方法…" />
+            : !guide ? <WorkspaceTextFallback tool={tool} note="方法格式无法识别，已显示原始返回。" />
             : <>
                 {guide.whenToUse && <p className="agent-ws-note">适用：{guide.whenToUse}</p>}
                 {guide.tools.length > 0 && <p className="agent-ws-chips" aria-label="对应工具">{guide.tools.map(name => <code key={name}>{name}</code>)}</p>}

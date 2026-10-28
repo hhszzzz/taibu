@@ -15,6 +15,7 @@ import {
 import { getAgentToolText, type AgentToolPart } from '../lib/agent/tool-presentation';
 import { createAgentTools } from '../lib/agent/tools.server';
 import type { SkillRow } from '../lib/agent/skills/store.server';
+import type { SkillEntry } from '../lib/agent/skills/builtin.server';
 import { createParallelExtension } from '../lib/agent/parallel.server';
 import { createBackgroundAgents } from '../lib/agent/background.server';
 import { BUILTIN_AGENT_PROFILES } from '../lib/agent/profiles/config';
@@ -54,8 +55,9 @@ test('every Core tool and every registered Agent tool belongs to a presentation 
       id: 'skill-1', owner_id: null, name: 'case-review', description: '复盘案例', version: 1, required_tier: 'free', is_enabled: true,
       disable_model_invocation: false, sort_order: 0, created_at: '', updated_at: '', bytes: 40, files: [{ path: 'notes.md', bytes: 5 }],
     };
+    const entry: SkillEntry = { ...skill, source: 'platform' };
     const tools = await createAgentTools(new MemoryStore(), run, run.checkpoint, {
-      skills: { skills: [skill], section: { key: 'taibu_skills', render: () => undefined }, sectionText: '' },
+      skills: { skills: [entry], section: { key: 'taibu_skills', render: () => undefined }, sectionText: () => '' },
     });
     for (const name of Object.values(AGENT_SKILL_TOOLS)) assert.equal(getAgentToolFamily(name), 'skill', name);
     const kit = createMemberKit({ roles: BUILTIN_AGENT_PROFILES, tools: [] });

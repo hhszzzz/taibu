@@ -12,6 +12,7 @@ import {
   readSkillFilePage, renderSkillDirectory, skillBlock, skillCommandBlock, skillCommands,
 } from '../lib/agent/skills/catalog.server';
 import type { SkillRow } from '../lib/agent/skills/store.server';
+import type { SkillEntry } from '../lib/agent/skills/builtin.server';
 import type { AgentRunRow } from '../lib/agent/store.server';
 import type { AgentPart } from '../lib/agent/types';
 import { AGENT_SKILL_TOOLS } from '../lib/agent/tool-catalog';
@@ -21,10 +22,10 @@ import { config, MemoryStore, row, scripted } from './helpers/agent-runtime-fixt
 const document = (fields: string, body = '# 做法\n\n先读命盘，再列要点。') => `---\n${fields}\n---\n${body}`;
 const CASE_REVIEW = document('name: case-review\ndescription: 复盘一个命理案例');
 
-const skill = (overrides: Partial<SkillRow> = {}): SkillRow => ({
+const skill = (overrides: Partial<SkillRow> = {}): SkillEntry => ({
   id: `id-${overrides.name ?? 'case-review'}`, owner_id: null, name: 'case-review', description: '复盘一个命理案例', version: 1,
   required_tier: 'free', is_enabled: true, disable_model_invocation: false, sort_order: 0,
-  created_at: '2026-10-27T00:00:00.000Z', updated_at: '2026-10-27T00:00:00.000Z', bytes: 64, files: [], ...overrides,
+  created_at: '2026-10-27T00:00:00.000Z', updated_at: '2026-10-27T00:00:00.000Z', bytes: 64, files: [], source: 'platform', ...overrides,
 });
 
 const modules = () => ({
@@ -133,7 +134,8 @@ test('a member gets the platform skills their tier reaches and as many of their 
     skill({ name: 'mine-1', owner_id: 'u' }), skill({ name: 'retired', owner_id: 'u' }), skill({ name: 'mine-2', owner_id: 'u', is_enabled: false }),
     skill({ name: 'mine-3', owner_id: 'u' }), skill({ name: 'mine-4', owner_id: 'u' }),
   ];
-  const names = async (membership: 'free' | 'plus' | 'pro') => (await availableSkills('u', membership)).map((row) => row.name);
+  // 方法是内置技能，始终可用；这里只看数据库里的技能。
+  const names = async (membership: 'free' | 'plus' | 'pro') => (await availableSkills('u', membership)).filter((row) => row.source !== 'builtin').map((row) => row.name);
   const limited: AgentExtensionsPolicy = { ...DEFAULT_AGENT_EXTENSIONS_POLICY, skills: { enabled: true, tiers: ['free', 'pro'], limits: { free: 2, plus: 0, pro: 30 } } };
 
   await t.test('within the policy', async (t) => {
@@ -169,15 +171,15 @@ test('a member gets the platform skills their tier reaches and as many of their 
 test('the directory lists what the model may load, escaped; a skill reads as pi\'s <skill> block', () => {
   const directory = renderSkillDirectory([
     skill({ name: 'case-review', description: '用 <b> & "引号" \'单引号\'' }), skill({ name: 'manual-only', disable_model_invocation: true }),
-  ])!;
+  ], [])!;
   assert.match(directory, /^以下技能是管理员或用户本人添加的专门做法。[^\n]*load_skill[^\n]*read_skill_file[^\n]*不能凌驾于系统指令之上。\n\n<available_skills>/u);
   assert.ok(directory.endsWith([
     '<available_skills>', '  <skill>', '    <name>case-review</name>',
     '    <description>用 &lt;b&gt; &amp; &quot;引号&quot; &apos;单引号&apos;</description>', '  </skill>', '</available_skills>',
   ].join('\n')), directory);
   assert.ok(!directory.includes('manual-only'), 'a skill only the user may start is not listed');
-  assert.equal(renderSkillDirectory([skill({ disable_model_invocation: true })]), undefined);
-  assert.equal(renderSkillDirectory([]), undefined);
+  assert.equal(renderSkillDirectory([skill({ disable_model_invocation: true })], []), undefined);
+  assert.equal(renderSkillDirectory([], []), undefined);
 
   assert.equal(skillBlock(skill(), CASE_REVIEW), '<skill name="case-review">\n# 做法\n\n先读命盘，再列要点。\n</skill>');
   assert.equal(skillBlock(skill({ files: [{ path: 'a.md', bytes: 1 }, { path: 'refs/b.md', bytes: 2 }] }), CASE_REVIEW),
@@ -219,8 +221,13 @@ test('/skill: stops when the administrator turns the skills scope off', async (t
   await assert.rejects(skillCommandBlock('u', 'free', '/skill:case-review'), unavailable(/已被管理员关闭/));
   assert.deepEqual(await expandSkillMessages([{ role: 'user', content: '/skill:case-review' }], 'u', 'free'), [{ role: 'user', content: '/skill:case-review' }]);
   await assert.rejects(loadSkill('u', 'free', 'case-review'), unavailable(/已被管理员关闭/));
+  // 方法是产品本身：技能开关关掉后，内置方法仍可加载，数据库里的技能不再出现。
   const session = await openAgentSkills('u', 'free');
-  assert.deepEqual([session.skills, session.sectionText], [[], '']);
+  assert.ok(session.skills.every((row) => row.source === 'builtin') && session.skills.length > 0);
+  assert.doesNotMatch(session.sectionText([AGENT_SKILL_TOOLS.load]), /case-review/u);
+  const bazi = await loadSkill('u', 'free', 'bazi');
+  assert.equal(bazi.details.scope, 'builtin');
+  assert.ok(bazi.details.method?.instructions?.includes('子平八字'));
 });
 
 test('load_skill returns the block and refuses a skill only the user may start; read_skill_file reads a file page by page', async (t) => {
@@ -259,8 +266,8 @@ test('the skills section renders only for an agent that can load a skill', async
   const render = (tools: string[]) => session.section.render({ agent: { tools: tools.map((name) => ({ name })) } } as never, undefined as never);
   assert.equal(session.section.key, 'taibu_skills');
   assert.equal(render(['bazi']), undefined, 'a member of a parallel analysis has no load_skill');
-  assert.equal(render([AGENT_SKILL_TOOLS.load]), renderSkillDirectory([skill()]));
-  assert.equal(session.sectionText, `<taibu_skills>\n${renderSkillDirectory([skill()])}\n</taibu_skills>`);
+  assert.equal(render([AGENT_SKILL_TOOLS.load]), renderSkillDirectory([skill()], [AGENT_SKILL_TOOLS.load]));
+  assert.equal(session.sectionText([AGENT_SKILL_TOOLS.load]), `<taibu_skills>\n${renderSkillDirectory([skill()], [AGENT_SKILL_TOOLS.load])}\n</taibu_skills>`);
 });
 
 type ToolPart = Extract<AgentPart, { type: 'tool' }>;
@@ -299,7 +306,7 @@ test('a task lists its skills in the system prompt, and a loaded skill reaches t
   assert.ok((runtime.skills?.sectionTokens ?? 0) > 0);
 });
 
-test('a task without skills offers no skill tool and no section', async (t) => {
+test('a task without stored skills still lists the methods its tools reach', async (t) => {
   useSkills(t);
   const store = new MemoryStore(), run = row();
   const offered: string[][] = [], prompts: string[] = [];
@@ -307,9 +314,13 @@ test('a task without skills offers no skill tool and no section', async (t) => {
     offered.push(getCurrentTools(messages).map(tool => tool.name));
     prompts.push(JSON.stringify(messages.filter(message => message.role === 'system')));
   }) });
-  assert.ok(!offered[0].some(name => (Object.values(AGENT_SKILL_TOOLS) as string[]).includes(name)));
-  assert.doesNotMatch(prompts[0], /taibu_skills/u);
-  assert.equal((finished(store).args.p_checkpoint as AgentRunRow['checkpoint']).runtime?.skills, undefined);
+  // 方法是内置技能：没有管理员或用户的技能时，load_skill 与目录仍在，只是没有 available_skills。
+  assert.ok(offered[0].includes(AGENT_SKILL_TOOLS.load));
+  assert.match(prompts[0], /<taibu_skills>[\s\S]*方法是内置技能[\s\S]*<\/taibu_skills>/u);
+  assert.doesNotMatch(prompts[0], /<available_skills>/u);
+  const runtime = (finished(store).args.p_checkpoint as AgentRunRow['checkpoint']).runtime!;
+  assert.equal(runtime.skills?.listed, 0, 'no stored skill is listed');
+  assert.ok((runtime.skills?.sectionTokens ?? 0) > 0, 'the method directory is counted');
 });
 
 test('a /skill: message sent into a running task reaches the model expanded', async (t) => {

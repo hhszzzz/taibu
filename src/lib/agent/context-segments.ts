@@ -4,8 +4,8 @@
  *
  * taibu 只有上下文总量（Pi 实测）与工具用量是实测值，其余按固定比例拆分；MCP 两行是接入时的估算；
  * 未接入的分类保留占位行（deferred），不虚构 token。
- * 技能单独一行说明本任务用了哪几张卡和哪些技能：目录随任务注入系统提示，正文由 load_analysis_method、load_skill 读进上下文，
- * 所以「未用卡」不等于「未注入」。
+ * 技能单独一行说明本任务用了哪几个方法和哪些技能：目录随任务注入系统提示，正文由 load_skill 读进上下文，
+ * 所以「未用方法」不等于「未注入」。
  */
 import type { AgentRuntimeInfo } from '@/lib/agent/types';
 
@@ -13,8 +13,8 @@ export type AgentContext = NonNullable<AgentRuntimeInfo['context']>;
 
 export type ContextSegment = { key: string; label: string; tokens: number; tone: string; deferred?: boolean; count?: number; meta?: string };
 
-/** 本任务用的方法卡与技能：目录随系统提示注入，正文由 load_analysis_method、load_skill 读进上下文；tokens 是读进上下文的计数。 */
-export interface ContextSkills { listed: boolean; cards: Array<{ id: string; kind?: 'method' | 'skill'; title: string; version: string; tokens?: number }> }
+/** 本任务用的方法与技能：目录随系统提示注入，正文由 load_skill 读进上下文；tokens 是读进上下文的计数。 */
+export interface ContextSkills { cards: Array<{ id: string; kind?: 'method' | 'skill'; title: string; version: string; tokens?: number }> }
 
 /** Share of the measured context the system prompt is assumed to take. */
 const SYSTEM_SHARE = 0.06;
@@ -26,11 +26,11 @@ function mcpMeta(mcp: NonNullable<AgentRuntimeInfo['mcp']>) {
         .filter(Boolean).join(' · ');
 }
 
-function skillsMeta(runtime: AgentRuntimeInfo, skills: ContextSkills) {
+function skillsMeta(skills: ContextSkills) {
     const loaded = skills.cards.filter(card => card.kind === 'skill').length;
     const cards = skills.cards.length - loaded;
-    const parts = [cards && `${cards} 张卡`, loaded && `${loaded} 个技能`].filter(Boolean);
-    return parts.length ? parts.join(' · ') : runtime.skills?.listed ? '方法与技能目录' : '方法目录';
+    const parts = [cards && `${cards} 个方法`, loaded && `${loaded} 个技能`].filter(Boolean);
+    return parts.length ? parts.join(' · ') : '技能目录';
 }
 
 export function buildContextSegments(runtime: AgentRuntimeInfo, context: AgentContext, skills?: ContextSkills): ContextSegment[] {
@@ -39,7 +39,8 @@ export function buildContextSegments(runtime: AgentRuntimeInfo, context: AgentCo
     // measuredTokens 是整段前缀的实测总量（含系统提示与工具），不是消息本身。
     // 方法目录与技能目录属于系统提示，但按「技能」单独列出：先把它们从系统份额里移出，
     // 再按固定比例留出其余系统提示与工具，最后用剩余量作为消息；四者之和等于 used。
-    const catalog = skills ? Math.max(runtime.skillsTokens ?? 0, 0) + Math.max(runtime.skills?.sectionTokens ?? 0, 0) : 0;
+    // 早先的任务只记了方法目录的 skillsTokens；新任务把整段目录记在 runtime.skills.sectionTokens。
+    const catalog = skills ? Math.max(runtime.skills?.sectionTokens ?? runtime.skillsTokens ?? 0, 0) : 0;
     const skillsTokens = catalog + (skills?.cards ?? []).reduce((sum, card) => sum + Math.max(card.tokens ?? 0, 0), 0);
     // MCP 的常驻工具定义与「外部服务」小节是估算值，同样从系统份额之外的部分里扣出，四类之和仍等于 used。
     const mcp = runtime.mcp;
@@ -60,7 +61,7 @@ export function buildContextSegments(runtime: AgentRuntimeInfo, context: AgentCo
             : { key: 'mcp', label: 'MCP 工具', tokens: 0, tone: 'mcp', deferred: true, count: 0 },
         { key: 'system', label: '系统提示', tokens: system, tone: 'system' },
         skills
-            ? { key: 'skills', label: '技能', tokens: skillsTokens, tone: 'skills', meta: skillsMeta(runtime, skills) }
+            ? { key: 'skills', label: '技能', tokens: skillsTokens, tone: 'skills', meta: skillsMeta(skills) }
             : { key: 'skills', label: '技能', tokens: 0, tone: 'skills', deferred: true, count: 0 },
         { key: 'memory', label: '记忆文件', tokens: 0, tone: 'memory', deferred: true, count: 0 },
         mcp && mcp.servers + mcp.skipped > 0

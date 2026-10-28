@@ -24,7 +24,7 @@ export const AGENT_WORKSPACE_SECTIONS: readonly AgentWorkspaceSection[] = ['resu
 
 export type AgentWorkspaceView =
   | 'chart' | 'saved' | 'calculation' | 'evidence' | 'data' | 'record' | 'profile' | 'attachment' | 'notes' | 'history'
-  | 'methods' | 'method' | 'plan' | 'question' | 'collaboration' | 'member' | 'memory' | 'archive' | 'code' | 'tool';
+  | 'method' | 'plan' | 'question' | 'collaboration' | 'member' | 'memory' | 'archive' | 'code' | 'tool';
 
 export interface AgentWorkspaceResource {
   id: string;
@@ -154,14 +154,13 @@ export function buildAgentWorkspace({ parts, artifacts, attachmentIds }: { parts
           add('record:' + key, { view: 'record', family, title: recordNames.get(key) ?? '资料记录' }, tool);
         }
         break;
-      case 'method':
-        if (tool.name === 'list_analysis_methods') add('methods', { view: 'methods', family, title: '分析方法' }, tool);
-        else {
-          const resource = add('method:' + (inputText(tool, 'id') ?? tool.id), { view: 'method', family, title: '方法卡' }, tool);
-          const guide = getAgentMethod(tool);
-          if (guide) resource.title = guide.title;
-        }
+      case 'skill': {
+        // 方法是内置技能：读进上下文时开它自己的方法页，与同一个方法的多次加载合并；普通技能按步骤开普通页。
+        const guide = getAgentMethod(tool);
+        if (guide) add('method:' + guide.id, { view: 'method', family: 'method', title: guide.title }, tool);
+        else add('tool:' + tool.id, { view: 'tool', family, title: tool.title }, tool);
         break;
+      }
       case 'todo':
         // 任务清单已经以进度条形式显示在聊天里，不单独开工作区标签。
         break;

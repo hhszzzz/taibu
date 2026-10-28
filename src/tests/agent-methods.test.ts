@@ -40,5 +40,5 @@ test('collaboration members work with a chart-reading card, a school as well as 
     assert.equal(systemTitle('bazi-mangpai'), '盲派八字');
     assert.equal(systemTitle('unknown'), 'unknown');
     // A school member loads its own card, not the system default.
-    assert.match(memberInstructions({ identity: '你是盲派专项分析助手。', profile: { instructions: '' }, system: 'bazi-mangpai', tools: ['bazi', 'load_analysis_method'] }), /加载 bazi-mangpai（盲派八字）方法卡/);
+    assert.match(memberInstructions({ identity: '你是盲派专项分析助手。', profile: { instructions: '' }, system: 'bazi-mangpai', tools: ['bazi', 'load_skill'] }), /加载 bazi-mangpai（盲派八字）方法/);
 });

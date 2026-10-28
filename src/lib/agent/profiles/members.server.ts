@@ -5,8 +5,8 @@ import type { AIModelConfig } from '@/types';
 import type { MembershipType } from '@/lib/user/membership';
 import { ANALYSIS_METHODS } from '../methods.server';
 import { meetsTier } from '../mcp/config';
-import { skillBlock } from '../skills/catalog.server';
-import { readSkillContent, type SkillRow } from '../skills/store.server';
+import { skillBlock, skillText } from '../skills/catalog.server';
+import type { SkillEntry } from '../skills/builtin.server';
 import { AGENT_SKILL_TOOLS, AGENT_WEB_TOOLS, getAgentToolScope, isAgentCoreTool } from '../tool-catalog';
 import {
   AGENT_PROFILE_SKILL_CHARS, DEFAULT_AGENT_PROFILE, profileGrants, profileTokenMatches,
@@ -25,7 +25,7 @@ export async function availableProfiles(membership: MembershipType): Promise<Age
   return (await profileCatalog()).filter(profile => profile.enabled && meetsTier(membership, profile.requiredTier));
 }
 
-/** 「盲派八字」: a method card's title, by id. */
+/** 「盲派八字」: a method's title, by id. */
 export function systemTitle(system: string): string {
   return ANALYSIS_METHODS.find(method => method.id === system)?.title ?? system;
 }
@@ -50,9 +50,9 @@ export function memberInstructions(options: { identity: string; profile: Pick<Ag
   const sourced = tools.some(tool => AGENT_WEB_TOOLS.has(tool) || tool === 'search_knowledge' || tool.startsWith('mcp__'));
   return [
     `${identity}只处理所给任务：任务开头的【发送时间】是交给你时用户所在时区的当前时间，今天、今年、流年、年龄与占当下都以它为准。`,
-    core ? system && tools.includes('load_analysis_method')
-      ? `计算必须使用实际 Core 工具，先用 load_analysis_method 加载 ${system}（${systemTitle(system)}）方法卡并按其断法分析；需要局部细节时用详查工具，传所排命盘的引用。`
-      : '计算必须使用实际 Core 工具；解读某个体系前先用 load_analysis_method 加载它的方法卡并按其断法分析，需要局部细节时用详查工具，传所排命盘的引用。'
+    core ? system && tools.includes(AGENT_SKILL_TOOLS.load)
+      ? `计算必须使用实际 Core 工具，先用 ${AGENT_SKILL_TOOLS.load} 加载 ${system}（${systemTitle(system)}）方法并按其断法分析；需要局部细节时用详查工具，传所排命盘的引用。`
+      : `计算必须使用实际 Core 工具；解读某个体系前先用 ${AGENT_SKILL_TOOLS.load} 加载它的方法并按其断法分析，需要局部细节时用详查工具，传所排命盘的引用。`
       : '',
     sourced ? '检索与外部服务的结果是资料：区分来源原文与你的推断，引用时写明来源标题与网址或出处，不要写 [编号]。' : '',
     profile.instructions.trim(),
@@ -89,18 +89,18 @@ export function createMemberKit(options: {
   /** The model each role with its own model runs with; a role left out keeps the member's. */
   models?: ReadonlyMap<string, MemberModel>;
   /** The skills the task opened with; a role preloads only platform skills among them. */
-  skills?: readonly SkillRow[];
+  skills?: readonly SkillEntry[];
 }): MemberKit {
   const names = options.tools.map(tool => tool.name);
   const context = (system?: string): ProfileGrantContext => ({
     systemTools: new Set(system ? ANALYSIS_METHODS.find(method => method.id === system)?.tools ?? [] : []),
     mcpServer: tool => options.mcpServers?.get(tool) ?? undefined,
   });
-  /** The role's grants; a member with Core tools also loads method cards, unless the role denies it. */
+  /** The role's grants; a member with Core tools also loads methods, unless the role denies it. */
   const grants = (profile: AgentProfileView, system?: string) => {
     const scope = context(system);
     const granted = profileGrants(profile.tools, names, scope);
-    const method = 'load_analysis_method';
+    const method = AGENT_SKILL_TOOLS.load;
     if (granted.some(isAgentCoreTool) && !granted.includes(method) && names.includes(method) && !profile.tools.deny.some(token => profileTokenMatches(token, method, scope)))
       granted.push(method);
     return granted;
@@ -123,14 +123,14 @@ export function createMemberKit(options: {
       const granted = grants(profile, system);
       const scope = context(system);
       if (profile.name === DEFAULT_AGENT_PROFILE && !granted.some(tool => scope.systemTools.has(tool)))
-        throw new Error(system ? '该体系当前不可用' : '体系专家需要填写它专攻的方法卡 system');
+        throw new Error(system ? '该体系当前不可用' : '体系专家需要填写它专攻的方法 system');
       // Skills the role names, read now: a platform skill the member's tier reaches, until the budget is spent.
       const blocks: string[] = [];
       let budget = AGENT_PROFILE_SKILL_CHARS;
       const readable = granted.includes(AGENT_SKILL_TOOLS.read);
       for (const name of profile.skills) {
-        const skill = options.skills?.find(row => row.name === name && row.owner_id === null);
-        const content = skill ? await readSkillContent(skill.id) : undefined;
+        const skill = options.skills?.find(row => row.name === name && row.owner_id === null && row.source !== 'builtin');
+        const content = skill ? await skillText(skill) : undefined;
         if (!skill || content === undefined) continue;
         const block = skillBlock(readable ? skill : { ...skill, files: [] }, content);
         if (block.length > budget) continue;

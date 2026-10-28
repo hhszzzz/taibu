@@ -67,14 +67,14 @@ test('display-only fields are validated without dropping the member', () => {
 test('a member reports the calls it made and how long it analysed from its own transcript', () => {
     const messages = [
         { role: 'user', content: '分析', timestamp: 1_000 },
-        { role: 'assistant', content: [{ type: 'toolCall', id: 'a', name: 'bazi', arguments: {} }, { type: 'toolCall', id: 'b', name: 'load_analysis_method', arguments: {} }], timestamp: 2_000, durationMs: 500 },
+        { role: 'assistant', content: [{ type: 'toolCall', id: 'a', name: 'bazi', arguments: {} }, { type: 'toolCall', id: 'b', name: 'load_skill', arguments: {} }], timestamp: 2_000, durationMs: 500 },
         { role: 'toolResult', toolCallId: 'a', toolName: 'bazi', content: [], isError: false, timestamp: 3_000 },
-        { role: 'toolResult', toolCallId: 'b', toolName: 'load_analysis_method', content: [], isError: true, timestamp: 3_500 },
+        { role: 'toolResult', toolCallId: 'b', toolName: 'load_skill', content: [], isError: true, timestamp: 3_500 },
         { role: 'assistant', content: [{ type: 'toolCall', id: 'c', name: 'unknown_tool', arguments: {} }], timestamp: 4_000, durationMs: 1_000 },
     ] as unknown as Message[];
     assert.deepEqual(memberSteps(messages, new Map([['bazi', '八字排盘']])), [
         { name: 'bazi', title: '八字排盘', status: 'completed' },
-        { name: 'load_analysis_method', title: 'load_analysis_method', status: 'failed' },
+        { name: 'load_skill', title: 'load_skill', status: 'failed' },
         { name: 'unknown_tool', title: 'unknown_tool', status: 'running' },
     ]);
     assert.deepEqual(memberStats(messages), { toolCalls: 2, durationMs: 4_000 });

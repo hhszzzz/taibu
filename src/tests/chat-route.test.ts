@@ -831,6 +831,28 @@ test('invalid conversation reasoning levels fail before charging or model execut
     assert.equal(state.aiUiCalls, 0);
 });
 
+test('chat forwards the conversation id so its prompt cache key stays stable, and rejects a malformed one', async t => {
+    const state = setupRouteMocks(t, createUIChunkStream([{ type: 'text-delta', id: 't1', delta: 'ok' }]));
+    const ai = require('../lib/ai/ai') as typeof import('../lib/ai/ai');
+    const original = ai.callAIUIMessageResult;
+    let forwarded: string | undefined;
+    t.mock.method(ai, 'callAIUIMessageResult', async (...args: Parameters<typeof original>) => {
+        forwarded = args[4]?.conversationId;
+        return original(...args);
+    });
+    const { POST } = await import('../app/api/chat/route');
+    const response = await POST(createChatRequest({ conversationId: 'conversation-a' }));
+    await response.text();
+    assert.equal(response.status, 200);
+    assert.equal(forwarded, 'conversation-a');
+
+    for (const conversationId of ['', 'x'.repeat(129), 42]) {
+        const rejected = await POST(createChatRequest({ conversationId }));
+        assert.equal(rejected.status, 400, String(conversationId));
+    }
+    assert.equal(state.useCreditCalls, 1, 'only the accepted request is charged');
+});
+
 
 
 test('chat direct prepare returns 400 for invalid JSON bodies', async (t) => {

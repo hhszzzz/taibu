@@ -1,3 +1,4 @@
+import 'server-only';
 import { createHash } from 'node:crypto';
 import type { AIModelConfig } from '@/types';
 import { isPromptCacheEnabled } from './prompt-cache';

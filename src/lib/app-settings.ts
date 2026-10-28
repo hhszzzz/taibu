@@ -13,6 +13,11 @@ import {
   normalizeAgentExtensionsPolicy,
   type AgentExtensionsPolicy,
 } from "@/lib/agent/mcp/config";
+import {
+  AGENT_SCHEDULE_LIMITS_KEY,
+  normalizeAgentScheduleLimits,
+  type AgentScheduleLimits,
+} from "@/lib/agent/schedules/config";
 
 // ─── 功能模块开关 ───
 
@@ -299,4 +304,33 @@ export async function setAgentExtensionsPolicy(policy: AgentExtensionsPolicy): P
     .onConflict((conflict) => conflict.column('setting_key').doUpdateSet({ setting_value: json(policy) as never, updated_at: updatedAt }))
     .execute());
   await agentExtensionsPolicyCache.invalidate();
+}
+
+// ─── 定时任务额度 ───
+
+/** How many schedules each membership tier may keep; the scheduler also pauses the excess after a downgrade. */
+const agentScheduleLimitsCache = createSharedCache<AgentScheduleLimits>({
+  name: 'agent-schedule-limits',
+  ttlMs: FEATURE_TOGGLE_CACHE_TTL_MS,
+});
+
+export async function getAgentScheduleLimits(): Promise<AgentScheduleLimits> {
+  return agentScheduleLimitsCache.load(async () => {
+    const row = await systemDb().tx((trx) => trx
+      .selectFrom('app_settings')
+      .select('setting_value')
+      .where('setting_key', '=', AGENT_SCHEDULE_LIMITS_KEY)
+      .executeTakeFirst());
+    return normalizeAgentScheduleLimits(row?.setting_value);
+  });
+}
+
+export async function setAgentScheduleLimits(limits: AgentScheduleLimits): Promise<void> {
+  const updatedAt = new Date().toISOString();
+  await systemDb().tx((trx) => trx
+    .insertInto('app_settings')
+    .values({ setting_key: AGENT_SCHEDULE_LIMITS_KEY, setting_value: json(limits) as never, updated_at: updatedAt })
+    .onConflict((conflict) => conflict.column('setting_key').doUpdateSet({ setting_value: json(limits) as never, updated_at: updatedAt }))
+    .execute());
+  await agentScheduleLimitsCache.invalidate();
 }

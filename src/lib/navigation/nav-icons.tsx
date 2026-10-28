@@ -281,6 +281,12 @@ export const BellIcon = createNavIcon('bell', <>
     <path className="ni-clapper" d="M10 19a2 2 0 0 0 4 0" />
 </>);
 
+/** 定时任务：表盘与指针，和会话列表里的时钟标记同一形状。 */
+export const ScheduleIcon = createNavIcon('schedule', <>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M12 7.5V12l3 1.8" />
+</>);
+
 /** 个性化：与侧栏 Agent 入口同一枚 ∞ 标记。 */
 export const PersonalizationIcon = AgentIcon;
 

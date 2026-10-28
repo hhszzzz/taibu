@@ -29,6 +29,7 @@ import {
   PalmIcon,
   QimenIcon,
   RecordsIcon,
+  ScheduleIcon,
   TarotIcon,
   XiaoliurenIcon,
   ZiweiIcon,
@@ -99,6 +100,7 @@ export const NAV_REGISTRY: readonly NavItemDef[] = [
 
   // ── Tools ───────────────────────────────────────────────────────────────
   { id: 'chat', href: '/chat', label: '新聊天', icon: ChatIcon, category: 'tool' },
+  { id: 'scheduled', href: '/scheduled', label: '定时任务', icon: ScheduleIcon, featureId: 'agent', requiresAuth: true, category: 'tool' },
   { id: 'records', href: '/records', label: '命理记录', icon: RecordsIcon, requiresAuth: true, category: 'tool' },
   { id: 'community', href: '/community', label: '社区', icon: CommunityIcon, category: 'tool' },
 
@@ -211,6 +213,7 @@ export function getFeatureModules(): { id: string; label: string }[] {
 /** Label overrides for the admin feature-toggle panel. */
 const adminLabelOverride: Record<string, string> = {
   chat: 'AI 功能',
+  agent: 'Agent 任务',
   community: '社区',
   records: '命理记录',
   daily: '日运',

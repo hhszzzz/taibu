@@ -648,6 +648,348 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION public.agent_local_to_utc(p_local timestamp without time zone, p_timezone text) RETURNS timestamp with time zone
+    LANGUAGE plpgsql STABLE
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE candidate timestamp with time zone; local_value timestamp := p_local; guard integer := 0;
+BEGIN
+  candidate := local_value AT TIME ZONE p_timezone;
+  -- A wall time skipped by spring-forward does not round-trip; move to the first
+  -- minute that exists on that day instead of silently landing in another hour.
+  WHILE (candidate AT TIME ZONE p_timezone) IS DISTINCT FROM local_value AND guard < 4 LOOP
+    local_value := local_value + interval '30 minutes';
+    candidate := local_value AT TIME ZONE p_timezone;
+    guard := guard + 1;
+  END LOOP;
+  RETURN candidate;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.agent_next_run_at(p_cadence jsonb, p_timezone text, p_after timestamp with time zone) RETURNS timestamp with time zone
+    LANGUAGE plpgsql STABLE
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  kind text; zone text; time_text text; hour_part integer; minute_part integer;
+  local_now timestamp; candidate timestamp; day_number integer; last_day integer;
+  hours_step integer; offset_days integer;
+BEGIN
+  IF p_cadence IS NULL OR jsonb_typeof(p_cadence) IS DISTINCT FROM 'object' THEN RAISE EXCEPTION 'AGENT_SCHEDULE_CADENCE_INVALID' USING ERRCODE='22023'; END IF;
+  kind := p_cadence->>'kind';
+  zone := coalesce(nullif(btrim(p_timezone),''),'Asia/Shanghai');
+  IF NOT EXISTS(SELECT 1 FROM pg_timezone_names WHERE name=zone) THEN RAISE EXCEPTION 'AGENT_SCHEDULE_TIMEZONE_INVALID' USING ERRCODE='22023'; END IF;
+  time_text := coalesce(nullif(p_cadence->>'time',''),'08:00');
+  IF time_text !~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' THEN RAISE EXCEPTION 'AGENT_SCHEDULE_TIME_INVALID' USING ERRCODE='22023'; END IF;
+  hour_part := substring(time_text from 1 for 2)::integer;
+  minute_part := substring(time_text from 4 for 2)::integer;
+  local_now := p_after AT TIME ZONE zone;
+  IF kind='daily' THEN
+    candidate := date_trunc('day',local_now) + make_interval(hours=>hour_part,mins=>minute_part);
+    IF public.agent_local_to_utc(candidate,zone) <= p_after THEN candidate := candidate + interval '1 day'; END IF;
+    RETURN public.agent_local_to_utc(candidate,zone);
+  ELSIF kind='weekly' THEN
+    IF jsonb_typeof(p_cadence->'weekdays') IS DISTINCT FROM 'array' OR jsonb_array_length(p_cadence->'weekdays')=0 THEN RAISE EXCEPTION 'AGENT_SCHEDULE_CADENCE_INVALID' USING ERRCODE='22023'; END IF;
+    FOR offset_days IN 0..7 LOOP
+      candidate := date_trunc('day',local_now) + make_interval(days=>offset_days,hours=>hour_part,mins=>minute_part);
+      IF EXISTS(SELECT 1 FROM jsonb_array_elements_text(p_cadence->'weekdays') AS w(value) WHERE w.value::integer=extract(isodow FROM candidate)::integer)
+        AND public.agent_local_to_utc(candidate,zone) > p_after THEN
+        RETURN public.agent_local_to_utc(candidate,zone);
+      END IF;
+    END LOOP;
+    RAISE EXCEPTION 'AGENT_SCHEDULE_CADENCE_INVALID' USING ERRCODE='22023';
+  ELSIF kind='monthly' THEN
+    day_number := coalesce((p_cadence->>'day')::integer,0);
+    IF day_number<1 OR day_number>31 THEN RAISE EXCEPTION 'AGENT_SCHEDULE_CADENCE_INVALID' USING ERRCODE='22023'; END IF;
+    candidate := date_trunc('month',local_now);
+    last_day := extract(day FROM candidate + interval '1 month - 1 day')::integer;
+    candidate := candidate + make_interval(days=>least(day_number,last_day)-1,hours=>hour_part,mins=>minute_part);
+    IF public.agent_local_to_utc(candidate,zone) <= p_after THEN
+      candidate := date_trunc('month',local_now) + interval '1 month';
+      last_day := extract(day FROM candidate + interval '1 month - 1 day')::integer;
+      candidate := candidate + make_interval(days=>least(day_number,last_day)-1,hours=>hour_part,mins=>minute_part);
+    END IF;
+    RETURN public.agent_local_to_utc(candidate,zone);
+  ELSIF kind='interval' THEN
+    hours_step := coalesce((p_cadence->>'hours')::integer,0);
+    IF hours_step<1 OR hours_step>24 THEN RAISE EXCEPTION 'AGENT_SCHEDULE_CADENCE_INVALID' USING ERRCODE='22023'; END IF;
+    candidate := date_trunc('day',local_now) + make_interval(hours=>hour_part,mins=>minute_part);
+    WHILE candidate <= local_now LOOP candidate := candidate + make_interval(hours=>hours_step); END LOOP;
+    RETURN public.agent_local_to_utc(candidate,zone);
+  END IF;
+  RAISE EXCEPTION 'AGENT_SCHEDULE_CADENCE_INVALID' USING ERRCODE='22023';
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.agent_latest_schedule_occurrence(p_cadence jsonb, p_timezone text, p_before timestamp with time zone) RETURNS timestamp with time zone
+    LANGUAGE plpgsql STABLE
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE
+  kind text; zone text; time_text text; hour_part integer; minute_part integer;
+  local_now timestamp; candidate timestamp; day_number integer; last_day integer;
+  hours_step integer; offset_days integer;
+BEGIN
+  IF p_cadence IS NULL OR jsonb_typeof(p_cadence) IS DISTINCT FROM 'object' THEN RETURN NULL; END IF;
+  kind := p_cadence->>'kind';
+  zone := coalesce(nullif(btrim(p_timezone),''),'Asia/Shanghai');
+  IF NOT EXISTS(SELECT 1 FROM pg_timezone_names WHERE name=zone) THEN RETURN NULL; END IF;
+  time_text := coalesce(nullif(p_cadence->>'time',''),'08:00');
+  IF time_text !~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' THEN RETURN NULL; END IF;
+  hour_part := substring(time_text from 1 for 2)::integer;
+  minute_part := substring(time_text from 4 for 2)::integer;
+  local_now := p_before AT TIME ZONE zone;
+  IF kind='daily' THEN
+    candidate := date_trunc('day',local_now) + make_interval(hours=>hour_part,mins=>minute_part);
+    IF public.agent_local_to_utc(candidate,zone) > p_before THEN candidate := candidate - interval '1 day'; END IF;
+    RETURN public.agent_local_to_utc(candidate,zone);
+  ELSIF kind='weekly' THEN
+    IF jsonb_typeof(p_cadence->'weekdays') IS DISTINCT FROM 'array' OR jsonb_array_length(p_cadence->'weekdays')=0 THEN RETURN NULL; END IF;
+    FOR offset_days IN 0..7 LOOP
+      candidate := date_trunc('day',local_now) - make_interval(days=>offset_days) + make_interval(hours=>hour_part,mins=>minute_part);
+      IF EXISTS(SELECT 1 FROM jsonb_array_elements_text(p_cadence->'weekdays') AS w(value) WHERE w.value::integer=extract(isodow FROM candidate)::integer)
+        AND public.agent_local_to_utc(candidate,zone) <= p_before THEN
+        RETURN public.agent_local_to_utc(candidate,zone);
+      END IF;
+    END LOOP;
+    RETURN NULL;
+  ELSIF kind='monthly' THEN
+    day_number := coalesce((p_cadence->>'day')::integer,0);
+    IF day_number<1 OR day_number>31 THEN RETURN NULL; END IF;
+    candidate := date_trunc('month',local_now);
+    last_day := extract(day FROM candidate + interval '1 month - 1 day')::integer;
+    candidate := candidate + make_interval(days=>least(day_number,last_day)-1,hours=>hour_part,mins=>minute_part);
+    IF public.agent_local_to_utc(candidate,zone) > p_before THEN
+      candidate := date_trunc('month',local_now) - interval '1 month';
+      last_day := extract(day FROM candidate + interval '1 month - 1 day')::integer;
+      candidate := candidate + make_interval(days=>least(day_number,last_day)-1,hours=>hour_part,mins=>minute_part);
+    END IF;
+    RETURN public.agent_local_to_utc(candidate,zone);
+  ELSIF kind='interval' THEN
+    hours_step := coalesce((p_cadence->>'hours')::integer,0);
+    IF hours_step<1 OR hours_step>24 THEN RETURN NULL; END IF;
+    candidate := date_trunc('day',local_now) + make_interval(hours=>hour_part,mins=>minute_part);
+    WHILE public.agent_local_to_utc(candidate,zone) > p_before LOOP candidate := candidate - make_interval(hours=>hours_step); END LOOP;
+    RETURN public.agent_local_to_utc(candidate,zone);
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.create_agent_schedule(p_name text, p_template text, p_prompt text, p_cadence jsonb, p_timezone text, p_options jsonb, p_limit integer) RETURNS public.agent_schedules
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE v_user uuid := auth.uid(); v_conversation uuid; v_next timestamp with time zone; v_count integer; s public.agent_schedules;
+BEGIN
+  IF v_user IS NULL THEN RAISE EXCEPTION 'AUTH_REQUIRED' USING ERRCODE='42501'; END IF;
+  IF coalesce(btrim(p_name),'')='' OR length(p_name)>80 THEN RAISE EXCEPTION 'AGENT_SCHEDULE_NAME_INVALID' USING ERRCODE='22023'; END IF;
+  IF coalesce(btrim(p_prompt),'')='' OR length(p_prompt)>4000 THEN RAISE EXCEPTION 'AGENT_SCHEDULE_PROMPT_INVALID' USING ERRCODE='22023'; END IF;
+  IF p_template NOT IN ('custom','daily_briefing') THEN RAISE EXCEPTION 'AGENT_SCHEDULE_TEMPLATE_INVALID' USING ERRCODE='22023'; END IF;
+  IF jsonb_typeof(p_options) IS DISTINCT FROM 'object' THEN RAISE EXCEPTION 'AGENT_SCHEDULE_OPTIONS_INVALID' USING ERRCODE='22023'; END IF;
+  -- Serialize the count and the insert so two tabs cannot exceed the tier's number.
+  PERFORM pg_advisory_xact_lock(hashtextextended(v_user::text,721));
+  SELECT count(*) INTO v_count FROM public.agent_schedules WHERE user_id=v_user;
+  IF v_count >= greatest(p_limit,0) THEN RAISE EXCEPTION 'AGENT_SCHEDULE_LIMIT' USING ERRCODE='23505'; END IF;
+  v_next := public.agent_next_run_at(p_cadence,p_timezone,now());
+  INSERT INTO public.conversations(user_id,title,personality,messages)
+    VALUES(v_user,'定时 · '||left(btrim(p_name),60),'general','[]'::jsonb)
+    RETURNING id INTO v_conversation;
+  INSERT INTO public.agent_schedules(user_id,name,template,prompt,cadence,timezone,conversation_id,options,enabled,next_run_at)
+    VALUES(v_user,btrim(p_name),p_template,p_prompt,p_cadence,coalesce(nullif(btrim(p_timezone),''),'Asia/Shanghai'),v_conversation,p_options,true,v_next)
+    RETURNING * INTO s;
+  RETURN s;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.update_agent_schedule(p_id uuid, p_name text, p_prompt text, p_cadence jsonb, p_timezone text, p_options jsonb, p_enabled boolean) RETURNS public.agent_schedules
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE s public.agent_schedules; v_next timestamp with time zone;
+BEGIN
+  SELECT * INTO s FROM public.agent_schedules WHERE id=p_id FOR UPDATE;
+  IF NOT FOUND OR (s.user_id IS DISTINCT FROM auth.uid() AND NOT public.is_admin_user()) THEN RAISE EXCEPTION 'AGENT_SCHEDULE_NOT_FOUND' USING ERRCODE='42501'; END IF;
+  IF coalesce(btrim(p_name),'')='' OR length(p_name)>80 THEN RAISE EXCEPTION 'AGENT_SCHEDULE_NAME_INVALID' USING ERRCODE='22023'; END IF;
+  IF coalesce(btrim(p_prompt),'')='' OR length(p_prompt)>4000 THEN RAISE EXCEPTION 'AGENT_SCHEDULE_PROMPT_INVALID' USING ERRCODE='22023'; END IF;
+  IF jsonb_typeof(p_options) IS DISTINCT FROM 'object' THEN RAISE EXCEPTION 'AGENT_SCHEDULE_OPTIONS_INVALID' USING ERRCODE='22023'; END IF;
+  IF p_enabled AND s.conversation_id IS NULL THEN RAISE EXCEPTION 'AGENT_SCHEDULE_CONVERSATION_MISSING' USING ERRCODE='23505'; END IF;
+  v_next := CASE WHEN p_enabled THEN public.agent_next_run_at(p_cadence,p_timezone,now()) ELSE NULL END;
+  UPDATE public.agent_schedules SET name=btrim(p_name),prompt=p_prompt,cadence=p_cadence,
+    timezone=coalesce(nullif(btrim(p_timezone),''),'Asia/Shanghai'),options=p_options,enabled=p_enabled,
+    next_run_at=v_next,
+    last_status=CASE WHEN p_enabled AND last_status='paused' THEN NULL ELSE last_status END,
+    consecutive_failures=CASE WHEN p_enabled THEN 0 ELSE consecutive_failures END,
+    updated_at=now()
+  WHERE id=p_id RETURNING * INTO s;
+  RETURN s;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.enforce_agent_schedule_limits(p_limits jsonb) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE paused integer;
+BEGIN
+  PERFORM public.agent_require_admin();
+  IF p_limits IS NULL OR jsonb_typeof(p_limits) IS DISTINCT FROM 'object' THEN RAISE EXCEPTION 'AGENT_SCHEDULE_LIMITS_INVALID' USING ERRCODE='22023'; END IF;
+  WITH ranked AS (
+    SELECT s.id,
+      row_number() OVER (PARTITION BY s.user_id ORDER BY s.created_at, s.id) AS position,
+      CASE WHEN u.membership IN ('plus','pro') AND (u.membership_expires_at IS NULL OR u.membership_expires_at>now())
+        THEN u.membership ELSE 'free' END AS tier
+    FROM public.agent_schedules s JOIN public.users u ON u.id=s.user_id
+    WHERE s.enabled
+  ), paused_rows AS (
+    UPDATE public.agent_schedules s SET enabled=false,next_run_at=NULL,last_status='paused',updated_at=now()
+    FROM ranked r
+    WHERE s.id=r.id AND r.position > coalesce((p_limits->>r.tier)::integer,0)
+    RETURNING s.id
+  )
+  SELECT count(*) INTO paused FROM paused_rows;
+  RETURN paused;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.agent_settle_schedule_run(p_run_id uuid, p_status text, p_agent_run_id uuid DEFAULT NULL::uuid, p_error text DEFAULT NULL::text, p_skip_reason text DEFAULT NULL::text) RETURNS public.agent_schedule_runs
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE r public.agent_schedule_runs; s public.agent_schedules; v_title text; v_content text; notify boolean;
+BEGIN
+  SELECT * INTO r FROM public.agent_schedule_runs WHERE id=p_run_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'AGENT_SCHEDULE_RUN_NOT_FOUND' USING ERRCODE='P0002'; END IF;
+  IF p_status NOT IN ('running','completed','failed','skipped') THEN RAISE EXCEPTION 'AGENT_SCHEDULE_STATUS_INVALID' USING ERRCODE='22023'; END IF;
+  IF r.status IN ('completed','failed','skipped') THEN RETURN r; END IF;
+  IF p_status='running' AND p_agent_run_id IS NULL THEN RAISE EXCEPTION 'AGENT_SCHEDULE_RUN_REQUIRED' USING ERRCODE='22023'; END IF;
+  IF p_status='completed' AND r.status='pending' THEN RAISE EXCEPTION 'AGENT_SCHEDULE_TRANSITION_INVALID' USING ERRCODE='22023'; END IF;
+  UPDATE public.agent_schedule_runs SET status=p_status,
+    agent_run_id=coalesce(p_agent_run_id,agent_run_id),
+    error=left(coalesce(p_error,error),500),
+    skip_reason=coalesce(p_skip_reason,skip_reason),
+    started_at=coalesce(started_at,CASE WHEN p_status IN ('running','completed','failed') THEN now() END),
+    finished_at=CASE WHEN p_status IN ('completed','failed','skipped') THEN now() ELSE finished_at END
+  WHERE id=p_run_id RETURNING * INTO r;
+  SELECT * INTO s FROM public.agent_schedules WHERE id=r.schedule_id FOR UPDATE;
+  IF FOUND THEN
+    UPDATE public.agent_schedules SET
+      last_run_at=CASE WHEN p_status IN ('running','completed','failed') THEN now() ELSE last_run_at END,
+      last_status=p_status,
+      consecutive_failures=CASE WHEN p_status='failed' THEN consecutive_failures+1 ELSE 0 END,
+      enabled=CASE WHEN p_skip_reason='conversation_missing' THEN false ELSE enabled END,
+      next_run_at=CASE WHEN p_skip_reason='conversation_missing' THEN NULL ELSE next_run_at END,
+      updated_at=now()
+    WHERE id=s.id;
+    notify := coalesce((s.options->>'notify')::boolean,true);
+    IF p_status='completed' AND notify THEN
+      v_title:='定时任务「'||s.name||'」已完成';
+      v_content:=to_char(r.scheduled_for AT TIME ZONE s.timezone,'YYYY-MM-DD HH24:MI')||' 的运行已追加到对话。';
+    ELSIF p_status='failed' AND notify THEN
+      v_title:='定时任务「'||s.name||'」未完成';
+      v_content:=coalesce(nullif(btrim(p_error),''),'运行失败，打开对话查看原因。');
+    ELSIF p_status='skipped' AND p_skip_reason IN ('insufficient_credits','model_unavailable','feature_disabled','conversation_missing') THEN
+      v_title:='定时任务「'||s.name||'」已跳过';
+      v_content:=CASE p_skip_reason
+        WHEN 'insufficient_credits' THEN '积分不足，本次运行已跳过。'
+        WHEN 'model_unavailable' THEN '模型不可用或当前会员无权限，本次运行已跳过。'
+        WHEN 'feature_disabled' THEN '功能已关闭，本次运行已跳过。'
+        ELSE '绑定的对话已删除，任务已暂停，请重新创建。' END;
+    END IF;
+    IF v_title IS NOT NULL AND coalesce((SELECT notifications_enabled AND notify_site FROM public.user_settings WHERE user_id=s.user_id),true) THEN
+      INSERT INTO public.notifications(user_id,type,title,content,link,event_key,event_data)
+        VALUES(s.user_id,'system',v_title,left(v_content,500),
+          CASE WHEN s.conversation_id IS NULL THEN '/scheduled' ELSE '/chat?id='||s.conversation_id::text END,
+          'schedule:'||r.id::text,
+          jsonb_build_object('kind','schedule','scheduleId',s.id,'scheduleRunId',r.id,'conversationId',s.conversation_id,'status',CASE WHEN p_status='skipped' THEN 'skipped' ELSE p_status END))
+        ON CONFLICT(user_id,event_key) WHERE event_key IS NOT NULL DO NOTHING;
+    END IF;
+  END IF;
+  RETURN r;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.settle_agent_schedule_run(p_run_id uuid, p_status text, p_agent_run_id uuid DEFAULT NULL::uuid, p_error text DEFAULT NULL::text, p_skip_reason text DEFAULT NULL::text) RETURNS public.agent_schedule_runs
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+BEGIN
+  PERFORM public.agent_require_admin();
+  RETURN public.agent_settle_schedule_run(p_run_id,p_status,p_agent_run_id,p_error,p_skip_reason);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.agent_schedule_run_finished() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE r public.agent_schedule_runs; reason text;
+BEGIN
+  IF NEW.status IS NOT DISTINCT FROM OLD.status OR NEW.status NOT IN ('completed','failed','cancelled') THEN RETURN NEW; END IF;
+  FOR r IN SELECT * FROM public.agent_schedule_runs WHERE agent_run_id=NEW.id AND status='running' FOR UPDATE LOOP
+    reason:=CASE NEW.status WHEN 'completed' THEN NULL WHEN 'cancelled' THEN '已取消' ELSE '任务运行失败，打开对话查看原因。' END;
+    PERFORM public.agent_settle_schedule_run(r.id,CASE WHEN NEW.status='completed' THEN 'completed' ELSE 'failed' END,NEW.id,reason,NULL);
+  END LOOP;
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.claim_agent_schedules(p_limit integer DEFAULT 20) RETURNS SETOF public.agent_schedule_runs
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE s public.agent_schedules; due timestamp with time zone; latest timestamp with time zone;
+  next_at timestamp with time zone; created_run public.agent_schedule_runs;
+BEGIN
+  PERFORM public.agent_require_admin();
+  IF p_limit<1 OR p_limit>100 THEN RAISE EXCEPTION 'AGENT_SCHEDULE_LIMIT_INVALID' USING ERRCODE='22023'; END IF;
+  -- A scheduler that died between claiming a run and submitting it leaves a row
+  -- no completion trigger will ever settle; fail it so the schedule can run again.
+  UPDATE public.agent_schedule_runs r SET status='failed',error='调度未提交',finished_at=now()
+    WHERE r.status IN ('pending','running') AND r.created_at<now()-interval '5 minutes'
+      AND (r.agent_run_id IS NULL OR NOT EXISTS(SELECT 1 FROM public.agent_runs a WHERE a.id=r.agent_run_id));
+  UPDATE public.agent_schedule_runs r SET status=CASE WHEN a.status='completed' THEN 'completed' ELSE 'failed' END,
+      error=CASE WHEN a.status='completed' THEN NULL ELSE '任务运行已结束' END,finished_at=now()
+    FROM public.agent_runs a
+    WHERE a.id=r.agent_run_id AND r.status='running' AND a.status IN ('completed','failed','cancelled');
+  FOR s IN SELECT * FROM public.agent_schedules
+    WHERE enabled AND next_run_at IS NOT NULL AND next_run_at<=now()
+    ORDER BY next_run_at FOR UPDATE SKIP LOCKED LIMIT p_limit
+  LOOP
+    due:=s.next_run_at;
+    latest:=public.agent_latest_schedule_occurrence(s.cadence,s.timezone,now());
+    IF latest IS NOT NULL AND latest>due THEN due:=latest; END IF;
+    next_at:=public.agent_next_run_at(s.cadence,s.timezone,now());
+    UPDATE public.agent_schedules SET next_run_at=next_at,updated_at=now() WHERE id=s.id;
+    IF s.conversation_id IS NULL THEN
+      UPDATE public.agent_schedules SET enabled=false,next_run_at=NULL,last_status='paused',updated_at=now() WHERE id=s.id;
+      INSERT INTO public.agent_schedule_runs(schedule_id,user_id,scheduled_for,status,skip_reason,finished_at)
+        VALUES(s.id,s.user_id,due,'skipped','conversation_missing',now())
+        ON CONFLICT(schedule_id,scheduled_for) DO NOTHING;
+      CONTINUE;
+    END IF;
+    IF EXISTS(SELECT 1 FROM public.agent_schedule_runs WHERE schedule_id=s.id AND status IN ('pending','running')) THEN
+      INSERT INTO public.agent_schedule_runs(schedule_id,user_id,scheduled_for,status,skip_reason,finished_at)
+        VALUES(s.id,s.user_id,due,'skipped','previous_running',now())
+        ON CONFLICT(schedule_id,scheduled_for) DO NOTHING;
+      CONTINUE;
+    END IF;
+    IF due<now()-interval '2 hours' THEN
+      INSERT INTO public.agent_schedule_runs(schedule_id,user_id,scheduled_for,status,skip_reason,finished_at)
+        VALUES(s.id,s.user_id,due,'skipped','missed',now())
+        ON CONFLICT(schedule_id,scheduled_for) DO NOTHING;
+      CONTINUE;
+    END IF;
+    created_run:=NULL;
+    INSERT INTO public.agent_schedule_runs(schedule_id,user_id,scheduled_for,status)
+      VALUES(s.id,s.user_id,due,'pending')
+      ON CONFLICT(schedule_id,scheduled_for) DO NOTHING
+      RETURNING * INTO created_run;
+    IF created_run.id IS NOT NULL THEN RETURN NEXT created_run; END IF;
+  END LOOP;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.agent_memory_guard() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
@@ -710,9 +1052,20 @@ CREATE OR REPLACE FUNCTION public.agent_protect_conversation_delete() RETURNS tr
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
     AS $$
+DECLARE paused integer;
 BEGIN
   IF EXISTS(SELECT 1 FROM public.agent_runs WHERE conversation_id=OLD.id AND status IN ('queued','running','awaiting_input','cancelling')) THEN
     RAISE EXCEPTION 'AGENT_CONVERSATION_BUSY' USING ERRCODE='23505';
+  END IF;
+  -- A schedule runs in one fixed conversation. Deleting that conversation pauses the
+  -- schedule instead of cascading it away, and tells the owner to rebuild it.
+  UPDATE public.agent_schedules SET enabled=false,next_run_at=NULL,last_status='paused',updated_at=now()
+    WHERE conversation_id=OLD.id AND user_id=OLD.user_id AND enabled;
+  GET DIAGNOSTICS paused = ROW_COUNT;
+  IF paused>0 AND coalesce((SELECT notifications_enabled AND notify_site FROM public.user_settings WHERE user_id=OLD.user_id),true) THEN
+    INSERT INTO public.notifications(user_id,type,title,content,link,event_key,event_data)
+      VALUES(OLD.user_id,'system','定时任务已暂停','绑定的对话已删除，请到「定时任务」重新创建任务。','/scheduled','schedule-paused:'||OLD.id::text,jsonb_build_object('kind','schedule','conversationId',OLD.id))
+      ON CONFLICT(user_id,event_key) WHERE event_key IS NOT NULL DO NOTHING;
   END IF;
   RETURN OLD;
 END;
@@ -1025,6 +1378,9 @@ CREATE OR REPLACE FUNCTION public.agent_task_notification() RETURNS trigger
 DECLARE event text; heading text; target_message text;
 BEGIN
   IF NEW.status IS NOT DISTINCT FROM OLD.status OR NEW.status NOT IN ('completed','failed','awaiting_input') THEN RETURN NEW; END IF;
+  -- A scheduled run has its own notice, named after the schedule and honouring
+  -- its owner's notify choice; the generic task notice would duplicate it.
+  IF EXISTS(SELECT 1 FROM public.agent_schedule_runs WHERE agent_run_id=NEW.id) THEN RETURN NEW; END IF;
   IF NOT coalesce((SELECT notifications_enabled AND notify_site FROM public.user_settings WHERE user_id=NEW.user_id),true) THEN RETURN NEW; END IF;
   event:='agent:'||NEW.id::text||':'||NEW.status||CASE WHEN NEW.status='awaiting_input' THEN ':'||coalesce(NEW.checkpoint->>'questionId','legacy') ELSE '' END;
   heading:=CASE NEW.status WHEN 'completed' THEN '太卜任务完成' WHEN 'failed' THEN '太卜任务未完成' ELSE '太卜需要你补充信息' END;
@@ -1445,52 +1801,6 @@ BEGIN
  ) RETURNING *;
 END;
 $$;
-
-CREATE OR REPLACE FUNCTION public.claim_daily_briefings(p_limit integer DEFAULT 2, p_enabled boolean DEFAULT true) RETURNS SETOF public.daily_briefing_jobs
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
-    AS $_$
-DECLARE job public.daily_briefing_jobs; balance integer; local_now timestamp; item record;
-BEGIN
- PERFORM public.agent_require_admin();
- -- Cancel expired or disabled work. Row locks and billing state fence each refund.
- FOR job IN SELECT j.* FROM public.daily_briefing_jobs j WHERE j.status IN ('pending','generating') AND
- (NOT p_enabled OR j.deadline<=now() OR NOT EXISTS(SELECT 1 FROM public.reminder_subscriptions s WHERE s.user_id=j.user_id AND s.reminder_type='daily_briefing' AND s.enabled))
- ORDER BY j.created_at LIMIT 100 FOR UPDATE SKIP LOCKED LOOP
-  IF job.billing='reserved' THEN PERFORM public.increment_ai_chat_count(job.user_id,1); END IF;
-  UPDATE public.daily_briefing_jobs SET status='cancelled',billing=CASE WHEN billing='reserved' THEN 'refunded' ELSE billing END,lease_token=NULL,lease_until=NULL,updated_at=now() WHERE id=job.id;
- END LOOP;
- IF NOT p_enabled THEN RETURN; END IF;
- FOR item IN
-  SELECT s.user_id,coalesce(tz.name,'Asia/Shanghai') AS zone,
-    CASE WHEN u.daily_briefing_settings->>'time' ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' THEN (u.daily_briefing_settings->>'time')::time ELSE time '08:00' END AS delivery_time
-  FROM public.reminder_subscriptions s LEFT JOIN public.user_settings u ON u.user_id=s.user_id
-  LEFT JOIN pg_timezone_names tz ON tz.name=coalesce(u.daily_briefing_settings->>'timezone','Asia/Shanghai')
-  WHERE s.reminder_type='daily_briefing' AND s.enabled AND
-    (now() AT TIME ZONE coalesce(tz.name,'Asia/Shanghai'))::time >= CASE WHEN u.daily_briefing_settings->>'time' ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' THEN (u.daily_briefing_settings->>'time')::time ELSE time '08:00' END
-    AND NOT EXISTS(SELECT 1 FROM public.daily_briefing_jobs j WHERE j.user_id=s.user_id AND j.local_date=(now() AT TIME ZONE coalesce(tz.name,'Asia/Shanghai'))::date)
-  ORDER BY s.user_id LIMIT least(greatest(p_limit,1),10)
- LOOP
-  local_now:=now() AT TIME ZONE item.zone;
-  INSERT INTO public.daily_briefing_jobs(user_id,local_date,timezone,deadline) VALUES(item.user_id,local_now::date,item.zone,((local_now::date+1)::timestamp AT TIME ZONE item.zone)) ON CONFLICT(user_id,local_date) DO NOTHING;
- END LOOP;
- FOR job IN SELECT j.* FROM public.daily_briefing_jobs j WHERE j.deadline>now() AND
- (j.status='pending' OR (j.status='generating' AND j.lease_until<now()))
- ORDER BY j.created_at LIMIT least(greatest(p_limit,1),10) FOR UPDATE SKIP LOCKED LOOP
-  IF job.attempts>=3 THEN
-   IF job.billing='reserved' THEN PERFORM public.increment_ai_chat_count(job.user_id,1); END IF;
-   UPDATE public.daily_briefing_jobs SET status='failed',billing=CASE WHEN billing='reserved' THEN 'refunded' ELSE billing END,lease_token=NULL,lease_until=NULL,error='生成重试耗尽',updated_at=now() WHERE id=job.id;
-   CONTINUE;
-  END IF;
-  IF job.billing='none' THEN
-   balance:=public.decrement_ai_chat_count(job.user_id);
-   IF balance IS NULL THEN UPDATE public.daily_briefing_jobs SET status='skipped',error='余额不足',updated_at=now() WHERE id=job.id; CONTINUE; END IF;
-  END IF;
-  UPDATE public.daily_briefing_jobs SET status='generating',billing='reserved',attempts=attempts+1,lease_token=gen_random_uuid(),lease_until=now()+interval '3 minutes',updated_at=now() WHERE id=job.id RETURNING * INTO job;
-  RETURN NEXT job;
- END LOOP;
-END;
-$_$;
 
 CREATE OR REPLACE FUNCTION public.claim_linuxdo_membership_as_service(p_user_id uuid, p_plan_id text, p_trust_level integer, p_provider_user_id text) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
@@ -2320,26 +2630,6 @@ BEGIN
   RETURN true;
 END;
 $_$;
-
-CREATE OR REPLACE FUNCTION public.deliver_daily_briefing_notices(p_limit integer DEFAULT 50) RETURNS integer
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
-    AS $$
-DECLARE job public.daily_briefing_jobs; count_sent integer:=0;
-BEGIN
- PERFORM public.agent_require_admin();
- FOR job IN SELECT * FROM public.daily_briefing_jobs WHERE status='completed' AND notification_pending ORDER BY created_at LIMIT least(greatest(p_limit,1),100) FOR UPDATE SKIP LOCKED LOOP
-  BEGIN
-   IF NOT EXISTS(SELECT 1 FROM public.user_settings WHERE user_id=job.user_id AND (NOT notifications_enabled OR NOT notify_site)) AND job.result_conversation_id IS NOT NULL THEN
-    INSERT INTO public.notifications(user_id,type,title,content,link,event_key,event_data) VALUES(job.user_id,'system','你的早报已生成',job.local_date::text||' 的早报已送达，消耗 1 积分。','/chat?id='||job.result_conversation_id,'briefing:'||job.id,jsonb_build_object('conversationId',job.result_conversation_id,'briefingId',job.id)) ON CONFLICT(user_id,event_key) WHERE event_key IS NOT NULL DO NOTHING;
-   END IF;
-   UPDATE public.daily_briefing_jobs SET notification_pending=false WHERE id=job.id; count_sent:=count_sent+1;
-  EXCEPTION WHEN OTHERS THEN NULL; -- Retry delivery only; keep the saved result and settled charge.
-  END;
- END LOOP;
- RETURN count_sent;
-END;
-$$;
 
 CREATE OR REPLACE FUNCTION public.fork_conversation_snapshot(p_parent uuid, p_through text, p_source_messages jsonb, p_messages jsonb) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
@@ -3332,30 +3622,6 @@ begin
 end;
 $_$;
 
-CREATE OR REPLACE FUNCTION public.settle_daily_briefing(p_id uuid, p_token uuid, p_content text, p_error text DEFAULT NULL::text) RETURNS boolean
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
-    AS $$
-DECLARE job public.daily_briefing_jobs; conversation uuid;
-BEGIN
- PERFORM public.agent_require_admin();
- SELECT * INTO job FROM public.daily_briefing_jobs WHERE id=p_id FOR UPDATE;
- IF job.id IS NULL OR job.status<>'generating' OR job.lease_token IS DISTINCT FROM p_token OR job.lease_until<=now() THEN RETURN false; END IF;
- IF job.deadline<=now() OR NOT EXISTS(SELECT 1 FROM public.reminder_subscriptions WHERE user_id=job.user_id AND reminder_type='daily_briefing' AND enabled) THEN
-  p_content:=NULL; p_error:='当天截止或订阅已关闭'; job.attempts:=3;
- END IF;
- IF p_error IS NULL AND length(btrim(coalesce(p_content,'')))>=20 AND length(p_content)<=64000 THEN
-  conversation:=public.create_conversation_with_messages(job.user_id,'早报 · '||job.local_date::text,'general',NULL,jsonb_build_object('kind','daily_briefing','jobId',job.id,'localDate',job.local_date,'timezone',job.timezone),
-    jsonb_build_array(jsonb_build_object('id',gen_random_uuid(),'role','assistant','content',p_content,'createdAt',now(),'metadata',jsonb_build_object('dailyBriefingJobId',job.id))));
-  UPDATE public.daily_briefing_jobs SET status='completed',billing='settled',content=p_content,result_conversation_id=conversation,notification_pending=true,lease_token=NULL,lease_until=NULL,error=NULL,updated_at=now() WHERE id=job.id;
- ELSE
-  IF job.attempts>=3 AND job.billing='reserved' THEN PERFORM public.increment_ai_chat_count(job.user_id,1); END IF;
-  UPDATE public.daily_briefing_jobs SET status=CASE WHEN job.attempts>=3 THEN 'failed' ELSE 'pending' END,billing=CASE WHEN job.attempts>=3 AND billing='reserved' THEN 'refunded' ELSE billing END,lease_token=NULL,lease_until=NULL,error=left(coalesce(p_error,'早报内容为空或无效'),500),updated_at=now() WHERE id=job.id;
- END IF;
- RETURN true;
-END;
-$$;
-
 CREATE OR REPLACE FUNCTION public.submit_community_report_and_notify(p_target_type text, p_target_id uuid, p_reason text, p_description text DEFAULT NULL::text) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
@@ -3670,7 +3936,10 @@ CREATE OR REPLACE VIEW public.conversations_with_archive_status WITH (security_i
           WHERE ((a.source_type = 'conversation'::text) AND (a.source_id = (c.id)::text) AND (a.user_id = c.user_id))) AS archived_kb_ids,
     (EXISTS ( SELECT 1
            FROM public.agent_runs r
-          WHERE ((r.conversation_id = c.id) AND (r.user_id = c.user_id)))) AS has_agent_run
+          WHERE ((r.conversation_id = c.id) AND (r.user_id = c.user_id)))) AS has_agent_run,
+    (EXISTS ( SELECT 1
+           FROM public.agent_schedules s
+          WHERE ((s.conversation_id = c.id) AND (s.user_id = c.user_id)))) AS is_scheduled
    FROM public.conversations c;
 
 CREATE OR REPLACE VIEW public.ming_records_with_archive_status WITH (security_invoker='on') AS

@@ -268,6 +268,8 @@ export interface ConversationListItem {
     archivedKbIds?: string[];
     /** 该会话是否跑过 Agent 任务（视图列 has_agent_run）：Agent 会话 / 普通对话的分类依据。 */
     hasAgentRun?: boolean;
+    /** 该会话是否被定时任务绑定（视图列 is_scheduled）：最近列表显示时钟标记。 */
+    isScheduled?: boolean;
 }
 
 // ===== AI 模型相关类型 =====

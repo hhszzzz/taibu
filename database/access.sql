@@ -135,6 +135,18 @@ CREATE POLICY agent_skills_owner ON public.agent_skills TO authenticated USING (
 
 CREATE POLICY agent_skills_worker_read ON public.agent_skills FOR SELECT TO authenticated USING (public.is_admin_user());
 
+ALTER TABLE public.agent_schedule_runs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY agent_schedule_runs_admin_read ON public.agent_schedule_runs FOR SELECT TO authenticated USING (public.is_admin_user());
+
+CREATE POLICY agent_schedule_runs_owner ON public.agent_schedule_runs TO authenticated USING ((user_id = auth.uid())) WITH CHECK ((user_id = auth.uid()));
+
+ALTER TABLE public.agent_schedules ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY agent_schedules_admin_read ON public.agent_schedules FOR SELECT TO authenticated USING (public.is_admin_user());
+
+CREATE POLICY agent_schedules_owner ON public.agent_schedules TO authenticated USING ((user_id = auth.uid())) WITH CHECK ((user_id = auth.uid()));
+
 CREATE POLICY agent_events_read ON public.agent_run_events FOR SELECT TO authenticated USING ((EXISTS ( SELECT 1
    FROM public.agent_runs r
   WHERE (r.id = agent_run_events.run_id))));
@@ -233,10 +245,6 @@ CREATE POLICY bazi_charts_select_access ON public.bazi_charts FOR SELECT USING (
 
 CREATE POLICY bazi_charts_update_access ON public.bazi_charts FOR UPDATE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id))) WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
-CREATE POLICY briefing_backend_read ON public.daily_briefing_jobs FOR SELECT TO authenticated USING (public.is_admin_user());
-
-CREATE POLICY briefing_owner_read ON public.daily_briefing_jobs FOR SELECT TO authenticated USING ((user_id = auth.uid()));
-
 ALTER TABLE public.community_comments ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY community_comments_delete_access ON public.community_comments FOR DELETE USING (public.is_admin_user());
@@ -304,8 +312,6 @@ CREATE POLICY credit_transactions_insert_access ON public.credit_transactions FO
 CREATE POLICY credit_transactions_select_access ON public.credit_transactions FOR SELECT USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
 CREATE POLICY credit_transactions_update_access ON public.credit_transactions FOR UPDATE USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
-
-ALTER TABLE public.daily_briefing_jobs ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE public.daily_checkins ENABLE ROW LEVEL SECURITY;
 
@@ -602,10 +608,6 @@ GRANT SELECT,INSERT,DELETE ON TABLE public.generated_images TO authenticated;
 
 GRANT ALL ON FUNCTION public.claim_agent_attachment_cleanup(p_limit integer) TO authenticated;
 
-GRANT SELECT ON TABLE public.daily_briefing_jobs TO authenticated;
-
-GRANT ALL ON FUNCTION public.claim_daily_briefings(p_limit integer, p_enabled boolean) TO authenticated;
-
 GRANT ALL ON FUNCTION public.claim_linuxdo_membership_as_service(p_user_id uuid, p_plan_id text, p_trust_level integer, p_provider_user_id text) TO authenticated;
 
 GRANT ALL ON FUNCTION public.claim_notification_popup(p_id uuid) TO authenticated;
@@ -635,8 +637,6 @@ GRANT ALL ON FUNCTION public.delete_agent_retention(p_event_days integer, p_comm
 GRANT ALL ON FUNCTION public.delete_conversation_graph(p_conversation_id text) TO authenticated;
 
 GRANT ALL ON FUNCTION public.delete_history_item_and_conversation(p_history_type text, p_history_id text) TO authenticated;
-
-GRANT ALL ON FUNCTION public.deliver_daily_briefing_notices(p_limit integer) TO authenticated;
 
 GRANT ALL ON FUNCTION public.fork_conversation_snapshot(p_parent uuid, p_through text, p_source_messages jsonb, p_messages jsonb) TO authenticated;
 
@@ -677,8 +677,6 @@ GRANT ALL ON FUNCTION public.search_knowledge_fts(p_query text, p_kb_ids uuid[],
 GRANT ALL ON FUNCTION public.search_knowledge_trigram(p_query text, p_kb_ids uuid[], p_limit integer, p_threshold real) TO authenticated;
 
 GRANT ALL ON FUNCTION public.search_knowledge_vector(p_query_vector double precision[], p_kb_ids uuid[], p_limit integer, p_dim integer) TO authenticated;
-
-GRANT ALL ON FUNCTION public.settle_daily_briefing(p_id uuid, p_token uuid, p_content text, p_error text) TO authenticated;
 
 GRANT ALL ON FUNCTION public.submit_community_report_and_notify(p_target_type text, p_target_id uuid, p_reason text, p_description text) TO authenticated;
 
@@ -724,6 +722,26 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.agent_run_metrics TO authentic
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.agent_skill_files TO authenticated;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.agent_skills TO authenticated;
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.agent_schedule_runs TO authenticated;
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.agent_schedules TO authenticated;
+
+GRANT ALL ON FUNCTION public.agent_latest_schedule_occurrence(p_cadence jsonb, p_timezone text, p_before timestamp with time zone) TO authenticated;
+
+GRANT ALL ON FUNCTION public.agent_local_to_utc(p_local timestamp without time zone, p_timezone text) TO authenticated;
+
+GRANT ALL ON FUNCTION public.agent_next_run_at(p_cadence jsonb, p_timezone text, p_after timestamp with time zone) TO authenticated;
+
+GRANT ALL ON FUNCTION public.claim_agent_schedules(p_limit integer) TO authenticated;
+
+GRANT ALL ON FUNCTION public.create_agent_schedule(p_name text, p_template text, p_prompt text, p_cadence jsonb, p_timezone text, p_options jsonb, p_limit integer) TO authenticated;
+
+GRANT ALL ON FUNCTION public.enforce_agent_schedule_limits(p_limits jsonb) TO authenticated;
+
+GRANT ALL ON FUNCTION public.settle_agent_schedule_run(p_run_id uuid, p_status text, p_agent_run_id uuid, p_error text, p_skip_reason text) TO authenticated;
+
+GRANT ALL ON FUNCTION public.update_agent_schedule(p_id uuid, p_name text, p_prompt text, p_cadence jsonb, p_timezone text, p_options jsonb, p_enabled boolean) TO authenticated;
 
 GRANT SELECT ON TABLE public.agent_workers TO authenticated;
 

@@ -1,0 +1,338 @@
+import "server-only";
+import { createHash, randomUUID } from "node:crypto";
+import type { ScopedDb } from "@/lib/db/context.server";
+import { systemDb } from "@/lib/db/context.server";
+import { readFeatureModuleStateFresh } from "@/lib/app-settings";
+import { getDefaultModelConfigAsync, getModelConfigAsync } from "@/lib/server/ai-config";
+import { isModelAllowedForMembership, isReasoningAllowedForMembership } from "@/lib/ai/ai-access";
+import { buildChatPromptContext } from "@/lib/server/chat/prompt-context";
+import { getUserAuthInfo } from "@/lib/user/credits";
+import { AI_RATE_LIMIT_CONFIG, checkRateLimit } from "@/lib/rate-limit";
+import type { ChatMessage, CustomProviderRequest, Mention, ChatAttachment } from "@/types";
+import type { AIReasoningEffort } from "@/types";
+import type { AgentCollaborator } from "@/lib/chat/model-settings";
+import type { MessageQuote } from "@/lib/chat/quotes";
+import { validateCustomProviderInput } from "@/lib/ai/custom-provider-url";
+import { AgentStore, type AgentRunRow } from "./store.server";
+import { encryptAgentCredential } from "./credentials.server";
+import { validateAgentProviderUrl } from "./safe-fetch.server";
+import { AGENT_ENGINE, isCurrentAgentCheckpoint } from "./engine";
+import { piHistory } from "./history.server";
+import { getAgentCitationBase } from "./evidence";
+import { parseAgentCompactCommand } from "./compaction";
+import { SkillUnavailableError, expandSkillMessages, joinSkillTurn, skillCommandBlock } from "./skills/catalog.server";
+import { parseSkillCommand } from "./skills/config";
+import { DEFAULT_AGENT_PROFILE } from "./profiles/config";
+import { availableProfiles } from "./profiles/members.server";
+import { validateAttachmentIds } from "./attachments.server";
+import type { AgentCheckpoint } from "./types";
+
+/** `/compact` is free, so it has its own, stricter bucket instead of the shared chat admission. */
+export const AGENT_COMPACT_RATE_LIMIT = { maxRequests: 10, windowMs: 3_600_000 } as const;
+
+/** An admission failure with an HTTP-shaped status and a stable code. */
+export class AgentApiError extends Error {
+  constructor(
+    message: string,
+    readonly status = 400,
+    readonly code = "AGENT_REQUEST_INVALID",
+  ) {
+    super(message);
+  }
+}
+
+export function hashAgentRequest(value: unknown) {
+  const canonical = (input: unknown): unknown =>
+    Array.isArray(input)
+      ? input.map(canonical)
+      : input && typeof input === "object"
+        ? Object.fromEntries(
+            Object.entries(input)
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([key, value]) => [key, canonical(value)]),
+          )
+        : input;
+  return createHash("sha256")
+    .update(JSON.stringify(canonical(value)))
+    .digest("hex");
+}
+
+/** The request body shape both HTTP admission and the schedule runner produce. */
+export type AgentSubmitBody = {
+  conversationId: string;
+  clientRequestId: string;
+  message: {
+    id: string;
+    content: string;
+    attachments: { ids?: unknown; fileName?: string };
+    quotes: MessageQuote[];
+  };
+  model?: string;
+  replaceFromMessageId?: string;
+  mentions: Mention[];
+  customProvider?: CustomProviderRequest;
+  webEnabled: boolean;
+  codeMode: boolean;
+  planMode: boolean;
+  reasoning: boolean;
+  reasoningEffort: AIReasoningEffort | null;
+  collaborators: AgentCollaborator[];
+  dreamMode: boolean;
+  mangpaiMode: boolean;
+  attachment?: ChatAttachment;
+  timezone: string;
+};
+
+/** The caller's identity and database scope: the signed-in member's own, or the scheduler's system identity. */
+export type AgentSubmitContext = {
+  db: ScopedDb;
+  userId: string;
+  user?: { id: string; email?: string | null; emailVerified?: boolean; name?: string | null; image?: string | null } | null;
+};
+
+/**
+ * The one admission path for an Agent turn. HTTP calls it with the member's
+ * scope; the schedule runner calls it with the system scope and the schedule
+ * owner's id, so both charge, validate and queue identically. `origin` is kept
+ * on the run for the record; `runId` lets the scheduler name the run before it
+ * submits, so a completion that arrives early can still settle its schedule run.
+ */
+export async function submitAgentTask(
+  ctx: AgentSubmitContext,
+  body: AgentSubmitBody,
+  origin: "http" | "schedule",
+  options: { runId?: string } = {},
+): Promise<AgentRunRow> {
+  const chatState = await readFeatureModuleStateFresh("chat");
+  if (chatState.status === "disabled") throw new AgentApiError("AI 功能当前未启用", 403, "FEATURE_DISABLED");
+  if (chatState.status === "unavailable") throw new AgentApiError("AI 功能状态暂时无法确认", 503, "FEATURE_STATE_UNAVAILABLE");
+  if ((await readFeatureModuleStateFresh("agent")).status !== "enabled")
+    throw new AgentApiError("Agent 功能未启用", 403, "FEATURE_DISABLED");
+  const compact = origin === "http" ? parseAgentCompactCommand(body.message.content) : null;
+  const store = new AgentStore(systemDb());
+  const custom: CustomProviderRequest | undefined = body.customProvider
+    ? { apiUrl: body.customProvider.apiUrl, apiKey: body.customProvider.apiKey, modelId: body.customProvider.modelId }
+    : undefined;
+  if (
+    custom &&
+    (!["apiUrl", "apiKey", "modelId"].every((key) => typeof custom[key as keyof CustomProviderRequest] === "string") ||
+      Object.keys(validateCustomProviderInput(custom)).length)
+  )
+    throw new AgentApiError("自定义模型配置无效");
+  if (custom) {
+    try {
+      validateAgentProviderUrl(custom.apiUrl);
+    } catch {
+      throw new AgentApiError("自定义模型必须使用公开 HTTPS 地址");
+    }
+  }
+  const requestHash = hashAgentRequest({
+    origin,
+    conversationId: body.conversationId,
+    messageId: body.message.id,
+    content: body.message.content,
+    attachmentIds: body.message.attachments.ids ?? [],
+    quotes: body.message.quotes,
+    model: body.model ?? null,
+    custom: custom ? { ...custom, apiKey: hashAgentRequest(custom.apiKey) } : null,
+    webEnabled: body.webEnabled !== false,
+    codeMode: body.codeMode,
+    planMode: body.planMode,
+    reasoning: body.reasoning === true,
+    reasoningEffort: body.reasoningEffort,
+    collaborators: body.collaborators,
+    replaceFromMessageId: body.replaceFromMessageId ?? null,
+    mentions: Array.isArray(body.mentions) ? body.mentions : [],
+    attachment: body.attachment ?? null,
+    dreamMode: body.dreamMode === true,
+    mangpaiMode: body.mangpaiMode === true,
+  });
+  const existing = await store.db.tx((trx) => trx
+    .selectFrom("agent_runs")
+    .selectAll()
+    .where("user_id", "=", ctx.userId)
+    .where("request_id", "=", body.clientRequestId)
+    .executeTakeFirst());
+  if (existing) {
+    if (existing.request_hash !== requestHash)
+      throw new AgentApiError("同一请求标识对应了不同内容", 409, "REQUEST_MISMATCH");
+    return existing as unknown as AgentRunRow;
+  }
+  if (!(await store.workerReady()))
+    throw new AgentApiError("后台任务服务未就绪，可切换普通对话", 503, "AGENT_WORKER_UNAVAILABLE");
+  const conversation = await ctx.db.tx((trx) => trx
+    .selectFrom("conversations")
+    .select(["id", "messages", "title"])
+    .where("id", "=", body.conversationId)
+    .where("user_id", "=", ctx.userId)
+    .executeTakeFirst());
+  if (!conversation)
+    throw new AgentApiError("对话不存在", 404, "CONVERSATION_NOT_FOUND");
+  let history = (conversation.messages ?? []) as unknown as ChatMessage[];
+  if (body.replaceFromMessageId) {
+    const index = history.findIndex((m) => m.id === body.replaceFromMessageId && m.role === "user");
+    if (index < 0) throw new AgentApiError("找不到需要编辑的消息");
+    if (history[index].metadata?.forkHistory === true) throw new AgentApiError('分叉历史只读，请发送新问题', 409);
+    history = history.slice(0, index);
+  }
+  if (compact && !history.length) throw new AgentApiError("当前对话还没有可压缩的内容");
+  const account = await getUserAuthInfo(ctx.userId, { db: ctx.db, user: ctx.user ?? undefined });
+  const config = custom
+    ? undefined
+    : body.model
+      ? await getModelConfigAsync(body.model)
+      : await getDefaultModelConfigAsync("chat");
+  if (!custom && !config) throw new AgentApiError("模型不存在");
+  const attachments = await validateAttachmentIds(store.db, ctx.userId, body.message.attachments.ids).catch((error: Error) => {
+    throw new AgentApiError(error.message);
+  });
+  if (attachments.some((item) => item.kind === "image") && (custom || !config?.supportsVision))
+    throw new AgentApiError("图片资料需要平台视觉模型的 Agent 模式", 400);
+  if (config && !isModelAllowedForMembership(config, account.effectiveMembership))
+    throw new AgentApiError("当前会员不能使用该模型", 403, "MEMBERSHIP_REQUIRED");
+  // Compaction is free and has its own rate limit, so it needs no credits; it uses no collaborators either.
+  if (!custom && !compact && !account.hasCredits)
+    throw new AgentApiError("积分不足", 402, "INSUFFICIENT_CREDITS");
+  const collaborators = compact ? [] : body.collaborators;
+  if (custom && collaborators.length) throw new AgentApiError('多模型协作需要使用平台模型；可在模型菜单中关闭协作');
+  // A member's role must be one this member may give it now: the specialist always is.
+  const roles = collaborators.some((member) => (member.profile ?? DEFAULT_AGENT_PROFILE) !== DEFAULT_AGENT_PROFILE)
+    ? await availableProfiles(account.effectiveMembership) : [];
+  for (const member of collaborators) {
+    const selected = await getModelConfigAsync(member.model);
+    if (!selected) throw new AgentApiError(`协作模型不存在：${member.name}`);
+    if (!isModelAllowedForMembership(selected, account.effectiveMembership) ||
+      (member.reasoning && !isReasoningAllowedForMembership(selected, account.effectiveMembership)))
+      throw new AgentApiError(`当前会员不能使用 ${member.name} 的模型或推理配置`, 403, 'MEMBERSHIP_REQUIRED');
+    const role = member.profile ?? DEFAULT_AGENT_PROFILE;
+    if (role !== DEFAULT_AGENT_PROFILE && !roles.some((item) => item.name === role && item.modes.includes('parallel')))
+      throw new AgentApiError(`${member.name} 的角色已停用或当前会员不可用，请在「设置 → 个性化 → 多模型协作」里改选`, 400, 'PROFILE_UNAVAILABLE');
+  }
+  if (origin === "http") {
+    const limit = compact
+      ? await checkRateLimit(ctx.userId, "/api/agent/compact", AGENT_COMPACT_RATE_LIMIT)
+      : await checkRateLimit(ctx.userId, "/api/chat", AI_RATE_LIMIT_CONFIG);
+    if (!limit.allowed)
+      throw new AgentApiError(compact ? "压缩上下文过于频繁，请稍后再试" : "请求过于频繁，请稍后再试", 429, "RATE_LIMITED");
+  }
+  // `/skill:名称 要求` brings the skill into this turn as pi expands it; the conversation keeps what the user typed.
+  let skillTurn: Awaited<ReturnType<typeof skillCommandBlock>> = null;
+  if (!compact && parseSkillCommand(body.message.content)) {
+    try {
+      skillTurn = await skillCommandBlock(ctx.userId, account.effectiveMembership, body.message.content);
+    } catch (error) {
+      if (error instanceof SkillUnavailableError) throw new AgentApiError(error.message, 400, "SKILL_UNAVAILABLE");
+      throw error;
+    }
+  }
+  const modelId = config?.id ?? custom!.modelId;
+  const reasoning =
+    !!config &&
+    isReasoningAllowedForMembership(config, account.effectiveMembership) &&
+    body.reasoning === true;
+  const runId = options.runId ?? randomUUID();
+  const credential = custom ? encryptAgentCredential(custom.apiKey, ctx.userId, runId) : null;
+  const userMessage: ChatMessage = {
+    id: body.message.id,
+    role: "user",
+    content: body.message.content,
+    createdAt: new Date().toISOString(),
+  };
+  if (Array.isArray(body.mentions)) userMessage.mentions = body.mentions;
+  if (body.message.quotes.length) userMessage.quotes = body.message.quotes;
+  if (typeof body.message.attachments.fileName === "string" || attachments.length)
+    userMessage.attachments = {
+      fileName: body.message.attachments.fileName ?? attachments.map((item) => item.name).join('、'),
+      ids: attachments.map((item) => item.id),
+      webSearchEnabled: body.webEnabled !== false,
+    };
+  const prepared = await buildChatPromptContext(
+    {
+      body: {
+        // The prompt is prepared from what the user asked of the skill; the skill joins the turn afterwards.
+        messages: [...history, skillTurn ? { ...userMessage, content: skillTurn.args } : userMessage],
+        model: modelId,
+        reasoning,
+        mangpaiMode: body.mangpaiMode === true,
+        dreamMode: body.dreamMode === true,
+        mentions: body.mentions,
+        attachment: body.attachment,
+        timezone: body.timezone,
+      },
+      userId: ctx.userId,
+      requestedModelId: modelId,
+      membershipType: account.effectiveMembership,
+      reasoningEnabled: reasoning,
+      creditDeducted: false,
+      canSkipCredit: !!custom,
+    },
+    { deferKnowledgeSearch: true },
+  );
+  const previous = body.replaceFromMessageId ? null : await store.currentRun(body.conversationId, ctx.userId);
+  const replay =
+    previous?.status === "completed" && isCurrentAgentCheckpoint(previous.checkpoint) &&
+    history.at(-1)?.id === previous.public_message.id
+      ? previous.checkpoint.messages.filter((m) => m.role !== "system")
+      : null;
+  // The new turn as prepared, so a continued task also reads the document the message carries.
+  const preparedTurn = prepared.sanitizedMessages.at(-1) ?? userMessage;
+  const turn = skillTurn ? { ...preparedTurn, content: joinSkillTurn(skillTurn.block, preparedTurn.content) } : preparedTurn;
+  // A rebuilt context expands the earlier `/skill:` turns again, as they were expanded when sent.
+  const earlier = replay ? [] : await expandSkillMessages(prepared.sanitizedMessages.slice(0, -1), ctx.userId, account.effectiveMembership)
+    .catch(() => prepared.sanitizedMessages.slice(0, -1));
+  const checkpoint: AgentCheckpoint = {
+    version: 2,
+    durable: { engine: AGENT_ENGINE },
+    messages: replay
+      ? [...replay, ...piHistory([{ ...turn, attachments: userMessage.attachments }])]
+      : piHistory([...earlier, turn].map((message) => ({ ...message, attachments: message.id === userMessage.id ? userMessage.attachments : history.find((item) => item.id === message.id)?.attachments }))),
+    parts: [],
+    // Evidence numbers continue across the visible branch, so a new answer never reuses one.
+    citations: { base: getAgentCitationBase(history), calls: {} },
+    // Background subagents continue with the context they belong to; a rebuilt context starts without them.
+    ...(replay && previous?.checkpoint.background?.length ? { background: previous.checkpoint.background } : {}),
+  };
+  const assistant: ChatMessage = {
+    id: `agent:${runId}`,
+    role: "assistant",
+    content: "",
+    createdAt: new Date().toISOString(),
+    model: modelId,
+    modelName: config?.name ?? modelId,
+    agent: { version: 1, runId, status: "queued", parts: [] },
+    metadata: prepared.metadata,
+  };
+  const input = {
+    model: modelId,
+    reasoning,
+    reasoningEffort: reasoning ? body.reasoningEffort : null,
+    collaborators,
+    // A compaction calls no tools: it only summarizes the context.
+    webEnabled: !compact && body.webEnabled !== false,
+    codeMode: !compact && body.codeMode,
+    planMode: !compact && body.planMode,
+    ...(compact ? { compact } : {}),
+    systemPrompt: prepared.systemPrompt,
+    memoryEnabled: prepared.agentMemoryEnabled === true,
+    timezone: body.timezone,
+    knowledgeBaseIds: prepared.promptKnowledgeBases.map((kb) => kb.id),
+    userMessage,
+    title: body.message.content.slice(0, 60),
+    replaceFromMessageId: body.replaceFromMessageId ?? null,
+    origin,
+    ...(custom ? { customProvider: { apiUrl: custom.apiUrl, modelId: custom.modelId } } : {}),
+  };
+  const run = await store.rpc<AgentRunRow>("agent_create_run", {
+    p_id: runId,
+    p_user_id: ctx.userId,
+    p_conversation_id: body.conversationId,
+    p_request_id: body.clientRequestId,
+    p_request_hash: requestHash,
+    p_input: input,
+    p_checkpoint: checkpoint,
+    p_message: assistant,
+    p_credential: credential,
+    p_charge: !custom && !compact,
+  });
+  return run;
+}

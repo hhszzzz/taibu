@@ -51,11 +51,14 @@ const LazyAgentProfilesPanel = lazy(async () => ({
 const LazyAgentExtensionsPolicyPanel = lazy(async () => ({
   default: (await import('@/components/admin/AgentExtensionsPolicyPanel')).AgentExtensionsPolicyPanel,
 }));
+const LazyAgentScheduleLimitsPanel = lazy(async () => ({
+  default: (await import('@/components/admin/AgentScheduleLimitsPanel')).AgentScheduleLimitsPanel,
+}));
 
 type AdminSubtabOwner = 'admin-features' | 'admin-ai-services' | 'admin-agent-extensions';
 type AdminFeatureTab = 'toggles' | 'keys';
 type AdminAITab = 'models' | 'gateways' | 'agent-tasks' | 'agent-evals';
-type AdminExtensionsTab = 'mcp' | 'skills' | 'profiles' | 'policy';
+type AdminExtensionsTab = 'mcp' | 'skills' | 'profiles' | 'policy' | 'schedules';
 
 const FEATURE_TABS: SettingsTabOption<AdminFeatureTab>[] = [
   { id: 'toggles', label: '功能开关' },
@@ -74,6 +77,7 @@ const EXTENSIONS_TABS: SettingsTabOption<AdminExtensionsTab>[] = [
   { id: 'skills', label: '技能' },
   { id: 'profiles', label: '角色' },
   { id: 'policy', label: '用户扩展' },
+  { id: 'schedules', label: '定时任务' },
 ];
 
 function PanelFallback() {
@@ -93,7 +97,7 @@ function resolveAdminAITab(value: string | null | undefined): AdminAITab {
 }
 
 function resolveAdminExtensionsTab(value: string | null | undefined): AdminExtensionsTab {
-  return value === 'policy' || value === 'skills' || value === 'profiles' ? value : 'mcp';
+  return value === 'policy' || value === 'skills' || value === 'profiles' || value === 'schedules' ? value : 'mcp';
 }
 
 function useResolvedSettingsCenterSubtab<T extends string>(
@@ -176,7 +180,8 @@ const renderAIPanel = (tab: AdminAITab, active: boolean) => (
 const renderExtensionsPanel = (tab: AdminExtensionsTab) => (
   tab === 'mcp' ? <LazyAgentMcpPanel />
     : tab === 'skills' ? <LazyAgentSkillsPanel />
-      : tab === 'profiles' ? <LazyAgentProfilesPanel /> : <LazyAgentExtensionsPolicyPanel />
+      : tab === 'profiles' ? <LazyAgentProfilesPanel />
+        : tab === 'schedules' ? <LazyAgentScheduleLimitsPanel /> : <LazyAgentExtensionsPolicyPanel />
 );
 
 export function AdminAnnouncementsContent() {

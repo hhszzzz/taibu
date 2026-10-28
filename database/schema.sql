@@ -90,28 +90,6 @@ CREATE TABLE public.agent_attachments (
     CONSTRAINT agent_attachments_status_check CHECK ((status = ANY (ARRAY['uploading'::text, 'ready'::text, 'deleting'::text])))
 );
 
-CREATE TABLE public.daily_briefing_jobs (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    user_id uuid NOT NULL,
-    local_date date NOT NULL,
-    timezone text NOT NULL,
-    deadline timestamp with time zone NOT NULL,
-    status text DEFAULT 'pending'::text NOT NULL,
-    billing text DEFAULT 'none'::text NOT NULL,
-    attempts integer DEFAULT 0 NOT NULL,
-    lease_token uuid,
-    lease_until timestamp with time zone,
-    result_conversation_id uuid,
-    content text,
-    error text,
-    notification_pending boolean DEFAULT false NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT daily_briefing_jobs_attempts_check CHECK (((attempts >= 0) AND (attempts <= 3))),
-    CONSTRAINT daily_briefing_jobs_billing_check CHECK ((billing = ANY (ARRAY['none'::text, 'reserved'::text, 'settled'::text, 'refunded'::text]))),
-    CONSTRAINT daily_briefing_jobs_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'generating'::text, 'completed'::text, 'failed'::text, 'cancelled'::text, 'skipped'::text])))
-);
-
 CREATE TABLE public.conversation_shares (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     token text NOT NULL,
@@ -443,6 +421,50 @@ CREATE TABLE public.agent_skills (
     CONSTRAINT agent_skills_required_tier_check CHECK ((required_tier = ANY (ARRAY['free'::text, 'plus'::text, 'pro'::text]))),
     CONSTRAINT agent_skills_user_tier_check CHECK (((owner_id IS NULL) OR (required_tier = 'free'::text))),
     CONSTRAINT agent_skills_version_check CHECK ((version >= 1))
+);
+
+CREATE TABLE public.agent_schedules (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    name text NOT NULL,
+    template text DEFAULT 'custom'::text NOT NULL,
+    prompt text NOT NULL,
+    cadence jsonb NOT NULL,
+    timezone text DEFAULT 'Asia/Shanghai'::text NOT NULL,
+    conversation_id uuid,
+    options jsonb DEFAULT '{}'::jsonb NOT NULL,
+    enabled boolean DEFAULT true NOT NULL,
+    next_run_at timestamp with time zone,
+    last_run_at timestamp with time zone,
+    last_status text,
+    consecutive_failures integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT agent_schedules_cadence_check CHECK ((jsonb_typeof(cadence) = 'object'::text)),
+    CONSTRAINT agent_schedules_consecutive_failures_check CHECK ((consecutive_failures >= 0)),
+    CONSTRAINT agent_schedules_last_status_check CHECK (((last_status IS NULL) OR (last_status = ANY (ARRAY['pending'::text, 'running'::text, 'completed'::text, 'failed'::text, 'skipped'::text, 'paused'::text])))),
+    CONSTRAINT agent_schedules_name_check CHECK (((length(btrim(name)) >= 1) AND (length(name) <= 80))),
+    CONSTRAINT agent_schedules_options_check CHECK ((jsonb_typeof(options) = 'object'::text)),
+    CONSTRAINT agent_schedules_prompt_check CHECK (((length(btrim(prompt)) >= 1) AND (length(prompt) <= 4000))),
+    CONSTRAINT agent_schedules_template_check CHECK ((template = ANY (ARRAY['custom'::text, 'daily_briefing'::text]))),
+    CONSTRAINT agent_schedules_timezone_check CHECK (((length(btrim(timezone)) >= 1) AND (length(timezone) <= 100)))
+);
+
+CREATE TABLE public.agent_schedule_runs (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    schedule_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    scheduled_for timestamp with time zone NOT NULL,
+    status text DEFAULT 'pending'::text NOT NULL,
+    skip_reason text,
+    agent_run_id uuid,
+    error text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    started_at timestamp with time zone,
+    finished_at timestamp with time zone,
+    CONSTRAINT agent_schedule_runs_error_check CHECK (((error IS NULL) OR (length(error) <= 500))),
+    CONSTRAINT agent_schedule_runs_skip_reason_check CHECK (((skip_reason IS NULL) OR (length(skip_reason) <= 200))),
+    CONSTRAINT agent_schedule_runs_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'running'::text, 'completed'::text, 'failed'::text, 'skipped'::text])))
 );
 
 CREATE TABLE public.agent_workers (
@@ -922,7 +944,7 @@ CREATE TABLE public.reminder_subscriptions (
     notify_site boolean DEFAULT true,
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now(),
-    CONSTRAINT reminder_subscription_type CHECK ((reminder_type = ANY (ARRAY['solar_term'::text, 'fortune'::text, 'key_date'::text, 'daily_briefing'::text])))
+    CONSTRAINT reminder_subscription_type CHECK ((reminder_type = ANY (ARRAY['solar_term'::text, 'fortune'::text, 'key_date'::text])))
 );
 
 CREATE TABLE public.scheduled_reminders (
@@ -962,7 +984,6 @@ CREATE TABLE public.user_oauth_providers (
 
 CREATE TABLE public.user_settings (
     chat_preferences jsonb DEFAULT '{}'::jsonb NOT NULL,
-    daily_briefing_settings jsonb DEFAULT '{}'::jsonb NOT NULL,
     user_id uuid NOT NULL,
     notifications_enabled boolean DEFAULT true,
     notify_email boolean DEFAULT true,
@@ -1126,6 +1147,15 @@ ALTER TABLE ONLY public.agent_skills
 ALTER TABLE ONLY public.agent_skills
     ADD CONSTRAINT agent_skills_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY public.agent_schedule_runs
+    ADD CONSTRAINT agent_schedule_runs_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY public.agent_schedule_runs
+    ADD CONSTRAINT agent_schedule_runs_schedule_id_scheduled_for_key UNIQUE (schedule_id, scheduled_for);
+
+ALTER TABLE ONLY public.agent_schedules
+    ADD CONSTRAINT agent_schedules_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY public.agent_workers
     ADD CONSTRAINT agent_workers_pkey PRIMARY KEY (id);
 
@@ -1194,12 +1224,6 @@ ALTER TABLE ONLY public.conversations
 
 ALTER TABLE ONLY public.credit_transactions
     ADD CONSTRAINT credit_transactions_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.daily_briefing_jobs
-    ADD CONSTRAINT daily_briefing_jobs_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.daily_briefing_jobs
-    ADD CONSTRAINT daily_briefing_jobs_user_id_local_date_key UNIQUE (user_id, local_date);
 
 ALTER TABLE ONLY public.daily_checkins
     ADD CONSTRAINT daily_checkins_pkey PRIMARY KEY (id);
@@ -1372,6 +1396,21 @@ ALTER TABLE ONLY public.agent_skill_files
 ALTER TABLE ONLY public.agent_skills
     ADD CONSTRAINT agent_skills_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
+ALTER TABLE ONLY public.agent_schedule_runs
+    ADD CONSTRAINT agent_schedule_runs_agent_run_id_fkey FOREIGN KEY (agent_run_id) REFERENCES public.agent_runs(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY public.agent_schedule_runs
+    ADD CONSTRAINT agent_schedule_runs_schedule_id_fkey FOREIGN KEY (schedule_id) REFERENCES public.agent_schedules(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.agent_schedule_runs
+    ADD CONSTRAINT agent_schedule_runs_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.agent_schedules
+    ADD CONSTRAINT agent_schedules_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES public.conversations(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY public.agent_schedules
+    ADD CONSTRAINT agent_schedules_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
 ALTER TABLE ONLY public.ai_model_gateway_bindings
     ADD CONSTRAINT ai_model_gateway_bindings_gateway_id_fkey FOREIGN KEY (gateway_id) REFERENCES public.ai_gateways(id);
 
@@ -1446,12 +1485,6 @@ ALTER TABLE ONLY public.conversations
 
 ALTER TABLE ONLY public.credit_transactions
     ADD CONSTRAINT credit_transactions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
-
-ALTER TABLE ONLY public.daily_briefing_jobs
-    ADD CONSTRAINT daily_briefing_jobs_result_conversation_id_fkey FOREIGN KEY (result_conversation_id) REFERENCES public.conversations(id) ON DELETE SET NULL;
-
-ALTER TABLE ONLY public.daily_briefing_jobs
-    ADD CONSTRAINT daily_briefing_jobs_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.daily_checkins
     ADD CONSTRAINT daily_checkins_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);

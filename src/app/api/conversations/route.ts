@@ -50,6 +50,7 @@ export async function GET(request: NextRequest) {
                 'is_archived',
                 'archived_kb_ids',
                 'has_agent_run',
+                'is_scheduled',
             ])
             .select(jsonFieldText('source_data', 'question').as('question_preview'))
             .where('user_id', '=', auth.user.id)

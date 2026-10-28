@@ -98,6 +98,7 @@ test('loadConversations should map paginated list payloads through the browser a
         isArchived: false,
         archivedKbIds: ['kb-1'],
         hasAgentRun: false,
+        isScheduled: false,
       }],
       pagination: {
         hasMore: true,

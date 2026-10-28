@@ -13,7 +13,7 @@ import { calculateBaziOutputFromStoredFields } from '@/lib/divination/bazi-recor
 
 // ===== 提醒类型 =====
 
-export type ReminderType = 'solar_term' | 'fortune' | 'key_date' | 'daily_briefing';
+export type ReminderType = 'solar_term' | 'fortune' | 'key_date';
 
 export interface ReminderSubscription {
     id: string;

@@ -2,7 +2,6 @@ import type { QueryClient } from '@tanstack/react-query';
 import type { ScopedDb } from '@/lib/db/context.server';
 import { requestBrowserJson, type BrowserApiError } from '@/lib/browser-api';
 import { normalizeChatPreferences, type ChatPreferences } from '@/lib/chat/preferences';
-import { normalizeBriefingPreferences, validBriefingPreferences, type BriefingPreferences } from '@/lib/briefing-preferences';
 import type { MutationEffects } from '@/lib/query/invalidation';
 import { queryKeys } from '@/lib/query/keys';
 import {
@@ -18,7 +17,7 @@ export type UserIdentityProfile = {
 };
 
 export const DEFAULT_TOOL_ORDER = [
-  'chat', 'records', 'community',
+  'chat', 'scheduled', 'records', 'community',
 ] as const;
 
 /** Fixed bottom-bar entries; the pinned divination slot in front of them lives in `mobile-nav-pins.ts`. */
@@ -30,14 +29,13 @@ export const DEFAULT_MOBILE_MAIN_ITEMS = [
 export const DEFAULT_MOBILE_DRAWER_ORDER = [
   'bazi', 'hepan', 'ziwei', 'liuyao', 'meihua', 'xiaoliuren', 'tarot', 'qimen', 'daliuren',
   'face', 'palm', 'mbti', 'daily', 'monthly',
-  'records', 'community',
+  'scheduled', 'records', 'community',
   'settings-profile', 'settings-general', 'settings-upgrade',
   'settings-personalization', 'settings-knowledge-base', 'settings-help',
   'settings-charts',
 ] as const;
 
 type UserSettingsRow = {
-  daily_briefing_settings?: unknown;
   chat_preferences?: unknown;
   expression_style?: unknown;
   custom_instructions?: unknown;
@@ -54,8 +52,6 @@ type UserSettingsRow = {
 };
 
 export type UserSettingsSnapshot = {
-  briefingConfigured?: boolean;
-  briefingPreferences: BriefingPreferences;
   chatPreferences: ChatPreferences;
   expressionStyle: ExpressionStyle;
   customInstructions: string;
@@ -82,7 +78,6 @@ export type DefaultChartIds = {
 };
 
 export type UserSettingsUpdateInput = Partial<{
-  briefingPreferences: BriefingPreferences;
   chatPreferences: Partial<ChatPreferences>;
   expressionStyle: ExpressionStyle;
   customInstructions: string | null;
@@ -97,7 +92,6 @@ export type UserSettingsUpdateInput = Partial<{
 }>;
 
 export const USER_SETTINGS_COLUMNS = [
-  'daily_briefing_settings',
   'chat_preferences',
   'expression_style',
   'custom_instructions',
@@ -127,8 +121,6 @@ export function normalizeIdentityUserProfile(raw: unknown): UserIdentityProfile 
 
 export function normalizeUserSettings(row: UserSettingsRow | null | undefined): UserSettingsSnapshot {
   return {
-    briefingPreferences: normalizeBriefingPreferences(row?.daily_briefing_settings),
-    briefingConfigured: validBriefingPreferences(row?.daily_briefing_settings),
     chatPreferences: normalizeChatPreferences(row?.chat_preferences),
     expressionStyle: row?.expression_style === 'gentle' ? 'gentle' : 'direct',
     customInstructions: typeof row?.custom_instructions === 'string' ? row.custom_instructions : '',
@@ -219,7 +211,6 @@ export function buildUserSettingsUpdatePayload(
     updated_at: new Date().toISOString(),
   };
   if (body.chatPreferences !== undefined) payload.chat_preferences = normalizeChatPreferences(body.chatPreferences);
-  if (body.briefingPreferences !== undefined) payload.daily_briefing_settings = normalizeBriefingPreferences(body.briefingPreferences);
 
   if (body.expressionStyle === 'direct' || body.expressionStyle === 'gentle') {
     payload.expression_style = body.expressionStyle;

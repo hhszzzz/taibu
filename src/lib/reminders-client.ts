@@ -1,7 +1,7 @@
 import type { SettingsRequestScope } from '@/lib/user/settings';
 import { requestBrowserJson, type BrowserApiError } from '@/lib/browser-api';
 
-export type ReminderType = 'solar_term' | 'fortune' | 'key_date' | 'daily_briefing';
+export type ReminderType = 'solar_term' | 'fortune' | 'key_date';
 
 export type ReminderSubscriptionSnapshot = {
   reminderType: ReminderType;

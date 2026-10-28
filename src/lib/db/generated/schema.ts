@@ -233,6 +233,39 @@ export interface AgentRuns {
   updated_at: Generated<string>;
 }
 
+export interface AgentScheduleRuns {
+  id: Generated<string>;
+  schedule_id: ColumnType<string, string, string>;
+  user_id: ColumnType<string, string, string>;
+  scheduled_for: ColumnType<string, string, string>;
+  status: Generated<string>;
+  skip_reason: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  agent_run_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  error: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  created_at: Generated<string>;
+  started_at: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  finished_at: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+}
+
+export interface AgentSchedules {
+  id: Generated<string>;
+  user_id: ColumnType<string, string, string>;
+  name: ColumnType<string, string, string>;
+  template: Generated<string>;
+  prompt: ColumnType<string, string, string>;
+  cadence: ColumnType<Json, Json, Json>;
+  timezone: Generated<string>;
+  conversation_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  options: Generated<Json>;
+  enabled: Generated<boolean>;
+  next_run_at: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  last_run_at: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  last_status: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  consecutive_failures: Generated<number>;
+  created_at: Generated<string>;
+  updated_at: Generated<string>;
+}
+
 export interface AgentSkillFiles {
   skill_id: ColumnType<string, string, string>;
   path: ColumnType<string, string, string>;
@@ -494,6 +527,7 @@ export interface ConversationsWithArchiveStatus {
   is_archived: ColumnType<boolean | null, boolean | null | undefined, boolean | null | undefined>;
   archived_kb_ids: ColumnType<unknown | null, unknown | null | undefined, unknown | null | undefined>;
   has_agent_run: ColumnType<boolean | null, boolean | null | undefined, boolean | null | undefined>;
+  is_scheduled: ColumnType<boolean | null, boolean | null | undefined, boolean | null | undefined>;
 }
 
 export interface CreditTransactions {
@@ -508,25 +542,6 @@ export interface CreditTransactions {
   reference_type: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   reference_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   metadata: Generated<Json>;
-}
-
-export interface DailyBriefingJobs {
-  id: Generated<string>;
-  user_id: ColumnType<string, string, string>;
-  local_date: ColumnType<string, string, string>;
-  timezone: ColumnType<string, string, string>;
-  deadline: ColumnType<string, string, string>;
-  status: Generated<string>;
-  billing: Generated<string>;
-  attempts: Generated<number>;
-  lease_token: ColumnType<string | null, string | null | undefined, string | null | undefined>;
-  lease_until: ColumnType<string | null, string | null | undefined, string | null | undefined>;
-  result_conversation_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
-  content: ColumnType<string | null, string | null | undefined, string | null | undefined>;
-  error: ColumnType<string | null, string | null | undefined, string | null | undefined>;
-  notification_pending: Generated<boolean>;
-  created_at: Generated<string>;
-  updated_at: Generated<string>;
 }
 
 export interface DailyCheckins {
@@ -803,7 +818,6 @@ export interface UserOauthProviders {
 
 export interface UserSettings {
   chat_preferences: Generated<Json>;
-  daily_briefing_settings: Generated<Json>;
   user_id: ColumnType<string, string, string>;
   notifications_enabled: Generated<boolean | null>;
   notify_email: Generated<boolean | null>;
@@ -881,6 +895,8 @@ export interface DB {
   "agent_run_events": AgentRunEvents;
   "agent_run_metrics": AgentRunMetrics;
   "agent_runs": AgentRuns;
+  "agent_schedule_runs": AgentScheduleRuns;
+  "agent_schedules": AgentSchedules;
   "agent_skill_files": AgentSkillFiles;
   "agent_skills": AgentSkills;
   "agent_workers": AgentWorkers;
@@ -903,7 +919,6 @@ export interface DB {
   "conversations": Conversations;
   "conversations_with_archive_status": ConversationsWithArchiveStatus;
   "credit_transactions": CreditTransactions;
-  "daily_briefing_jobs": DailyBriefingJobs;
   "daily_checkins": DailyCheckins;
   "daliuren_divinations": DaliurenDivinations;
   "face_readings": FaceReadings;

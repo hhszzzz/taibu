@@ -47,6 +47,7 @@ type ConversationListApiRow = {
     is_archived?: boolean | null;
     archived_kb_ids?: string[] | null;
     has_agent_run?: boolean | null;
+    is_scheduled?: boolean | null;
 };
 
 type ConversationLoadResult =
@@ -105,6 +106,7 @@ function toConversationListItem(row: ConversationListApiRow): ConversationListIt
         isArchived: row.is_archived ?? false,
         archivedKbIds: row.archived_kb_ids ?? [],
         hasAgentRun: row.has_agent_run === true,
+        isScheduled: row.is_scheduled === true,
     };
 }
 

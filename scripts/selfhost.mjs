@@ -198,7 +198,6 @@ async function writeEnvironment(config) {
     INTERNAL_API_SECRET: config.INTERNAL_API_SECRET,
     AGENT_CREDENTIAL_ENCRYPTION_KEY: config.AGENT_CREDENTIAL_ENCRYPTION_KEY,
     AGENT_WORKER_CONCURRENCY: '2',
-    DAILY_BRIEFING_ENABLED: 'false',
     VECTOR_SEARCH_ENABLED: 'false',
     ...passthrough,
   }));

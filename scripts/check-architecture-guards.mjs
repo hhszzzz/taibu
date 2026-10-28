@@ -759,7 +759,6 @@ const SYSTEM_DB_ALLOWED = [
   'src/lib/agent/',
   'src/app/api/admin/',
   'src/lib/reminders.ts',
-  'src/lib/daily-briefing.server.ts',
   'src/lib/app-settings.ts',
   'src/lib/server/ai-config.ts',
   'src/lib/user/checkin.ts',

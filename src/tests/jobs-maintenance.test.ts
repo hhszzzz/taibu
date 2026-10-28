@@ -30,25 +30,15 @@ test('one failed reminder step does not block the other', async (t) => {
   assert.deepEqual(summary.results[1], { step: 'schedule-user-reminders', value: 7 });
 });
 
-test('daily briefing honors DAILY_BRIEFING_ENABLED=false without touching the database', async (t) => {
-  const briefing = require('../lib/daily-briefing.server') as typeof import('../lib/daily-briefing.server');
-  let calls = 0;
-  t.mock.method(briefing, 'processDailyBriefings', async () => { calls++; return 1; });
-  const previous = process.env.DAILY_BRIEFING_ENABLED;
-  t.after(() => {
-    if (previous === undefined) delete process.env.DAILY_BRIEFING_ENABLED;
-    else process.env.DAILY_BRIEFING_ENABLED = previous;
-  });
+test('the agent schedule tick is dispatched to its runner', async (t) => {
+  const runner = require('../lib/agent/schedules/runner.server') as typeof import('../lib/agent/schedules/runner.server');
+  const calls: number[] = [];
+  t.mock.method(runner, 'processAgentSchedules', async () => { calls.push(1); return { claimed: 2, submitted: 1, skipped: 1, failed: 0 }; });
 
-  process.env.DAILY_BRIEFING_ENABLED = 'false';
-  const skipped = await runMaintenanceJob('daily-briefing');
-  assert.deepEqual(skipped.results, [{ step: 'daily-briefing', value: 'disabled' }]);
-  assert.equal(calls, 0);
-
-  process.env.DAILY_BRIEFING_ENABLED = 'true';
-  const ran = await runMaintenanceJob('daily-briefing');
-  assert.deepEqual(ran.results, [{ step: 'process-daily-briefings', value: 1 }]);
-  assert.equal(calls, 1);
+  assert.deepEqual((await runMaintenanceJob('agent-schedules')).results, [
+    { step: 'process-agent-schedules', value: { claimed: 2, submitted: 1, skipped: 1, failed: 0 } },
+  ]);
+  assert.equal(calls.length, 1);
 });
 
 test('attachment cleanup and notification pruning run their owners', async (t) => {

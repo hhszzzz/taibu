@@ -10,7 +10,7 @@
 import { memo } from 'react';
 import { Tooltip } from '@/components/ui/Tooltip';
 import Link from 'next/link';
-import { Archive, Cloud, Ellipsis, LoaderCircle } from 'lucide-react';
+import { Archive, Clock, Cloud, Ellipsis, LoaderCircle } from 'lucide-react';
 // The shared conversation lists render this row outside the chat page too.
 import './chat-sidebar.css';
 import { formatConversationMenuTitle } from '@/lib/chat/conversation-title-display';
@@ -63,6 +63,7 @@ export const ConversationNavItem = memo(function ConversationNavItem({
             <Link href={`/chat?id=${encodeURIComponent(conv.id)}`} aria-current={isActive ? 'page' : undefined} className="chat-nav-row-link" title={title}>
                 <span className="chat-nav-row-title">{title}</span>
                 <span className="chat-nav-row-badges">
+                    {conv.isScheduled ? <span className="chat-nav-row-cloud" role="img" aria-label="定时任务"><Clock size={13} /></span> : null}
                     {conv.hasAgentRun ? <span className="chat-nav-row-cloud" role="img" aria-label="云端任务"><Cloud size={13} /></span> : null}
                     {conv.isArchived ? <Archive size={13} className="chat-nav-row-archived" role="img" aria-label="已归档到知识库" /> : null}
                     {marker ? <ConversationMarker marker={marker} /> : null}

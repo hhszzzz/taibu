@@ -52,6 +52,7 @@ import { useComposerState } from '@/components/chat/composer/useComposerState';
 import { HistoryDrawer } from '@/components/layout/HistoryDrawer';
 import { HistoryPageTemplate } from '@/components/history/HistoryPageTemplate';
 import RecordsPage from '@/app/records/page';
+import { ScheduledTasksPage } from '@/components/scheduled/ScheduledTasksPage';
 import TarotResultPage from '@/app/tarot/result/page';
 import QimenResultPage from '@/app/qimen/result/page';
 import AnnualReportPage from '@/app/user/annual-report/page';
@@ -543,6 +544,7 @@ function Shell() {
   const [postMounted, setPostMounted] = useState(false);
   const [skillCommandsMounted, setSkillCommandsMounted] = useState(false);
   const [imageComposerMounted, setImageComposerMounted] = useState(false);
+  const [scheduledMounted, setScheduledMounted] = useState(false);
   const [castMounted, setCastMounted] = useState(null);
   window.fixture.refreshActivity = refreshAgentActivity;
   window.fixture.seedTarot = () => sessionStorage.setItem('tarot_result', JSON.stringify({
@@ -568,7 +570,7 @@ function Shell() {
   window.fixture.mount = { composer: setComposerMounted, history: setHistoryMounted, drawer: setDrawerMounted,
     records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted, agent: setAgentMounted, question: setQuestionMounted, results: setResultsMounted, sidebar: setSidebarMounted, phoneDrawer: setPhoneDrawerMounted, menu: setMenuMounted, rounds: setRoundsMounted, polish: setPolishMounted,
     snapshot: setSnapshotMounted, share: setShareMounted, tarot: setTarotMounted, qimen: setQimenMounted, activity: setActivityMounted,
-    annual: setAnnualMounted, community: setCommunityMounted, post: setPostMounted, cast: setCastMounted, skillCommands: setSkillCommandsMounted, imageComposer: setImageComposerMounted,
+    annual: setAnnualMounted, community: setCommunityMounted, post: setPostMounted, cast: setCastMounted, skillCommands: setSkillCommandsMounted, imageComposer: setImageComposerMounted, scheduled: setScheduledMounted,
     visualization: setVisualizationMounted, quote: setQuoteMounted };
   window.fixture.chartKey = queryKeys.userCharts;
   window.fixture.chartClient = chartClient;
@@ -634,6 +636,7 @@ function Shell() {
     {composerMounted && <ComposerProbe />}
     {skillCommandsMounted && <SkillCommandsProbe />}
     {imageComposerMounted && <ImageComposerProbe />}
+    {scheduledMounted && <section data-testid="scheduled-page"><ScheduledTasksPage /></section>}
     {selectedMounted && <SelectedChartProbe />}
     {agentMounted && <AgentChatProbe />}
     {questionMounted && <StructuredQuestionProbe />}
@@ -857,6 +860,39 @@ export async function run(existingPage, bundlePath) {
           { name: 'researcher', displayName: '研究员', description: '联网检索与查知识库。', model: null, modes: ['parallel', 'background'] },
           { name: 'archivist', displayName: '档案员', description: '整理用户资料。', model: 'fixture-review', modes: ['parallel'] },
         ] });
+        // 定时任务：列表、新建、编辑、暂停/恢复、立即运行与运行历史，与真实接口同一形状。
+        const scheduleList = agentIO.schedules ??= [];
+        const allowance = () => ({ tier: 'plus', limit: 5, used: scheduleList.length });
+        if (url.pathname === '/api/agent/schedules' && method === 'GET') return Response.json({ data: { schedules: scheduleList, allowance: allowance() }, error: null });
+        if (url.pathname === '/api/agent/schedules' && method === 'POST') {
+          const schedule = { id: 'schedule-' + (scheduleList.length + 1), userId: 'alice', name: body.name, template: body.template,
+            prompt: body.prompt, cadence: body.cadence, timezone: body.timezone, conversationId: 'schedule-conversation-' + (scheduleList.length + 1),
+            options: body.options, enabled: true, nextRunAt: '2026-10-29T00:00:00Z', lastRunAt: null, lastStatus: null, consecutiveFailures: 0,
+            createdAt: '2026-10-28T00:00:00Z', updatedAt: '2026-10-28T00:00:00Z' };
+          scheduleList.unshift(schedule);
+          return Response.json({ data: { schedule, allowance: allowance() }, error: null });
+        }
+        const scheduledRun = url.pathname.match(/^\/api\/agent\/schedules\/([^/]+)\/run$/);
+        if (scheduledRun && method === 'POST') {
+          const run = { id: 'schedule-run-' + Date.now(), scheduleId: scheduledRun[1], scheduledFor: '2026-10-29T00:00:00Z', status: 'running',
+            skipReason: null, agentRunId: 'schedule-agent', error: null, createdAt: new Date().toISOString(), startedAt: new Date().toISOString(), finishedAt: null };
+          (agentIO.scheduleRuns ??= {})[scheduledRun[1]] = [run, ...((agentIO.scheduleRuns ?? {})[scheduledRun[1]] ?? [])];
+          return Response.json({ data: { run }, error: null });
+        }
+        const scheduledRuns = url.pathname.match(/^\/api\/agent\/schedules\/([^/]+)\/runs$/);
+        if (scheduledRuns && method === 'GET') return Response.json({ data: { runs: (agentIO.scheduleRuns ?? {})[scheduledRuns[1]] ?? [] }, error: null });
+        const scheduledItem = url.pathname.match(/^\/api\/agent\/schedules\/([^/]+)$/);
+        if (scheduledItem) {
+          const index = scheduleList.findIndex(item => item.id === scheduledItem[1]);
+          if (method === 'DELETE') {
+            if (index >= 0) scheduleList.splice(index, 1);
+            return Response.json({ data: { deleted: true }, error: null });
+          }
+          if (method === 'PATCH' && index >= 0) {
+            scheduleList[index] = { ...scheduleList[index], ...body };
+            return Response.json({ data: { schedule: scheduleList[index], allowance: allowance() }, error: null });
+          }
+        }
         if (url.pathname === '/api/agent/runs' && method === 'GET') return Response.json(agentIO.runs[url.searchParams.get('conversationId')] ?? null);
         const events = url.pathname.match(/^\/api\/agent\/runs\/([^/]+)\/events$/);
         if (events) {
@@ -1005,6 +1041,8 @@ export async function run(existingPage, bundlePath) {
     created_at: '2026-01-01', updated_at: '2026-01-01', source_type: 'chat',
     // 会话分类（视图列 has_agent_run）：夹具页面以 Agent 方式运行，列表里的会话按 Agent 会话提供。
     has_agent_run: true,
+    // 第二行绑定了一个定时任务（视图列 is_scheduled），最近列表显示时钟标记。
+    is_scheduled: user === 'alice' && index === 1,
   }))]));
   // Playwright's service-worker interception reads navigator.serviceWorker in every frame; a
   // sandboxed srcdoc frame without allow-same-origin throws that by design, not app code.
@@ -1431,12 +1469,11 @@ export async function run(existingPage, bundlePath) {
     await page.waitForTimeout(50);
     check('Real ClientProviders focus refresh preserves AI dirty draft and does not reload settings', await instructions.inputValue() === 'Dirty same-account draft' && settingsReads === readsBeforeFocus);
     await page.getByRole('button', { name: 'Open actual settings', exact: true }).click();
-    await page.getByLabel('早报投递时间').fill('10:15');
     page.removeAllListeners('dialog');
     let leavePrompts = 0;
     page.on('dialog', dialog => { leavePrompts += 1; return dialog.dismiss(); });
     await page.getByRole('link', { name: '返回太卜', exact: true }).click();
-    check('Cancelling leave keeps drafts from several settings categories', new URL(page.url()).pathname === '/settings/general' && await page.getByLabel('早报投递时间').inputValue() === '10:15' && leavePrompts === 1);
+    check('Cancelling leave keeps the dirty settings draft', new URL(page.url()).pathname === '/settings/general' && await instructions.inputValue() === 'Dirty same-account draft' && leavePrompts === 1);
     await page.evaluate(() => { history.replaceState(null, '', '#settings/personalization'); window.dispatchEvent(new HashChangeEvent('hashchange')); });
     check('AI draft survives switching categories and cancelling leave', await instructions.inputValue() === 'Dirty same-account draft');
     page.removeAllListeners('dialog');
@@ -1444,7 +1481,7 @@ export async function run(existingPage, bundlePath) {
     page.on('dialog', dialog => { leavePrompts += 1; return dialog.accept(); });
     await page.getByRole('link', { name: '返回太卜', exact: true }).click();
     await until(() => location.pathname === '/bazi');
-    check('Several dirty forms produce one confirmation on accepted leave', leavePrompts === 1);
+    check('A dirty settings draft produces one confirmation on accepted leave', leavePrompts === 1);
     readsBeforeClose = settingsReads;
 
     failRename = true;
@@ -3299,7 +3336,7 @@ export async function run(existingPage, bundlePath) {
     rows.alice = [['明年适合换工作吗？', 0], ['我的日主适合什么颜色', 0], ['和女朋友合盘，明年适合结婚吗', 1], ['梦见掉牙是什么意思', 40]].map(([title, days], index) => {
       const at = new Date(Date.now() - days * 86400000).toISOString();
       // has_agent_run：这三条都挂着 Agent 任务，列表在 Agent 方式下要能看见它们。
-      return { id: sidebarIds[index], user_id: 'alice', personality: 'general', title, created_at: at, updated_at: at, source_type: 'chat', has_agent_run: true };
+      return { id: sidebarIds[index], user_id: 'alice', personality: 'general', title, created_at: at, updated_at: at, source_type: 'chat', has_agent_run: true, is_scheduled: index === 1 };
     });
     await page.getByRole('button', { name: 'Refresh actual list' }).click();
     await until(id => window.fixture.list().length === 4 && window.fixture.list()[0].id === id, sidebarIds[0]);
@@ -3320,6 +3357,8 @@ export async function run(existingPage, bundlePath) {
     check('Sidebar rows mark a running task and a waiting question; finished answers only toast', await sidebarRow('明年适合换工作吗？').getByRole('img', { name: 'Agent 正在执行' }).count() === 1 &&
       await sidebarRow('和女朋友合盘').getByText('待回答', { exact: true }).count() === 1 && await sidebarRow('我的日主适合什么颜色').locator('.chat-nav-marker').count() === 0 &&
       await sidebarRow('梦见掉牙').locator('.chat-nav-marker').count() === 0);
+    check('A scheduled conversation carries a clock marker and the sidebar offers 定时任务', await sidebarRow('我的日主适合什么颜色').getByRole('img', { name: '定时任务' }).count() === 1 &&
+      await sidebar.getByRole('link', { name: '定时任务', exact: true }).getAttribute('href') === '/scheduled');
     check('On the new-chat page 新聊天 is the current item', await sidebar.getByRole('link', { name: '新聊天' }).getAttribute('aria-current') === 'page' &&
       await sidebar.getByRole('button', { name: '搜索', exact: true }).count() === 1);
     const modeSwitch = sidebar.getByRole('radiogroup', { name: '对话方式' });
@@ -3369,6 +3408,58 @@ export async function run(existingPage, bundlePath) {
     check('Choosing Agent on another page enters /chat with ?mode=agent', page.url().endsWith('/chat?mode=agent') &&
       await agentSwitch.getByRole('radio', { name: 'Agent', exact: true }).getAttribute('aria-checked') === 'true');
     await page.evaluate(() => window.fixture.mount.sidebar(false));
+
+    // 定时任务：列表、暂停/恢复、编辑与按模板新建，全部走真实页面的 API 形状。
+    await page.evaluate(() => {
+      window.fixtureAgentIO.schedules = [{
+        id: 'schedule-1', userId: 'alice', name: '每日早报', template: 'daily_briefing',
+        prompt: '今天是 {{date}}，先查黄历再给建议。', cadence: { kind: 'daily', time: '08:00' }, timezone: 'Asia/Shanghai',
+        conversationId: 'alice-1', options: { model: null, reasoning: false, reasoningEffort: null, webEnabled: false, knowledgeBaseIds: [], baziChartId: null, collaborators: [], notify: true },
+        enabled: true, nextRunAt: '2026-10-29T00:00:00Z', lastRunAt: null, lastStatus: null, consecutiveFailures: 0,
+        createdAt: '2026-10-28T00:00:00Z', updatedAt: '2026-10-28T00:00:00Z',
+      }];
+      window.fixture.mount.scheduled(true);
+    });
+    const scheduled = page.getByTestId('scheduled-page');
+    await scheduled.getByText('每日早报', { exact: true }).first().waitFor();
+    check('The scheduled page lists cadence, next run and the bound conversation', await scheduled.getByText('每天 08:00 · Asia/Shanghai', { exact: true }).count() === 1 &&
+      await scheduled.getByRole('link', { name: '打开对话' }).getAttribute('href') === '/chat?id=alice-1');
+    await scheduled.getByRole('button', { name: '暂停', exact: true }).click();
+    await until(() => window.fixtureAgentIO.requests.some(item => item.method === 'PATCH' && item.url === '/api/agent/schedules/schedule-1' && item.body?.enabled === false));
+    await scheduled.getByText('已暂停', { exact: true }).first().waitFor();
+    check('Pausing a schedule writes enabled=false and shows 已暂停', await scheduled.getByText('已暂停', { exact: true }).count() >= 1);
+
+    await scheduled.getByRole('button', { name: '编辑', exact: true }).click();
+    const scheduleEditor = page.locator('dialog[open]');
+    await scheduleEditor.getByLabel('执行时间').fill('09:30');
+    await scheduleEditor.getByRole('button', { name: '保存', exact: true }).click();
+    await scheduleEditor.waitFor({ state: 'hidden' });
+    await scheduled.getByText('每天 09:30 · Asia/Shanghai', { exact: true }).waitFor();
+    check('Editing the time saves the daily cadence', await scheduled.getByText('每天 09:30 · Asia/Shanghai', { exact: true }).count() === 1 &&
+      await page.evaluate(() => window.fixtureAgentIO.requests.some(item => item.method === 'PATCH' && item.body?.cadence?.time === '09:30')));
+
+    await scheduled.getByRole('button', { name: '新建定时任务', exact: true }).click();
+    const createEditor = page.locator('dialog[open]');
+    await createEditor.getByLabel('任务名称').fill('周末整理');
+    await createEditor.getByLabel('执行内容').fill('整理本周记录并列出下周重点。');
+    await createEditor.getByLabel('执行频率').selectOption('weekly');
+    await createEditor.getByRole('button', { name: '周一', exact: true }).click();
+    await createEditor.getByRole('button', { name: '周六', exact: true }).click();
+    await createEditor.getByLabel('执行时间').fill('20:00');
+    await createEditor.getByRole('button', { name: '保存', exact: true }).click();
+    await createEditor.waitFor({ state: 'hidden' });
+    await scheduled.getByText('周末整理', { exact: true }).waitFor();
+    check('A custom schedule is created with weekly weekdays', await scheduled.getByText('周末整理', { exact: true }).count() === 1 &&
+      await page.evaluate(() => window.fixtureAgentIO.requests.some(item => item.method === 'POST' && item.url === '/api/agent/schedules' && item.body?.cadence?.kind === 'weekly' && item.body?.cadence?.weekdays?.join() === '6')));
+
+    const weeklyRow = scheduled.locator('[data-schedule-id]').filter({ hasText: '周末整理' });
+    await weeklyRow.getByRole('button', { name: '立即运行', exact: true }).click();
+    await until(() => window.fixtureAgentIO.requests.some(item => item.method === 'POST' && item.url.endsWith('/run')));
+    await weeklyRow.getByRole('button', { name: '运行历史', exact: true }).click();
+    await scheduled.getByText('运行历史 · 周末整理', { exact: true }).waitFor();
+    await scheduled.getByText('运行中', { exact: true }).first().waitFor();
+    check('Run now records history and shows it on the page', await scheduled.getByText('运行中', { exact: true }).count() >= 1);
+    await page.evaluate(() => window.fixture.mount.scheduled(false));
 
     // Phones: ≡ in the conversation header opens the same sidebar as a drawer in the top layer.
     await page.setViewportSize({ width: 390, height: 844 });

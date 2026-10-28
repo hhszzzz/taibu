@@ -37,6 +37,10 @@ CREATE TRIGGER agent_notify_run AFTER INSERT OR UPDATE OF status, cancel_request
 
 CREATE TRIGGER agent_profiles_updated_at BEFORE UPDATE ON public.agent_profiles FOR EACH ROW EXECUTE FUNCTION public.update_ai_model_updated_at();
 
+CREATE TRIGGER agent_schedule_run_finished AFTER UPDATE OF status ON public.agent_runs FOR EACH ROW EXECUTE FUNCTION public.agent_schedule_run_finished();
+
+CREATE TRIGGER agent_schedules_updated_at BEFORE UPDATE ON public.agent_schedules FOR EACH ROW EXECUTE FUNCTION public.update_ai_model_updated_at();
+
 CREATE TRIGGER agent_skills_updated_at BEFORE UPDATE ON public.agent_skills FOR EACH ROW EXECUTE FUNCTION public.update_ai_model_updated_at();
 
 CREATE TRIGGER agent_task_notice AFTER UPDATE OF status ON public.agent_runs FOR EACH ROW EXECUTE FUNCTION public.agent_task_notification();

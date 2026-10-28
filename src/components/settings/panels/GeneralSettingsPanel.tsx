@@ -23,13 +23,10 @@ import {
   getBrowserNotificationAvailability,
   type BrowserNotificationAvailability,
 } from '@/lib/notification';
-import { BriefingSettings } from '../BriefingSettings';
-import { DEFAULT_BRIEFING_PREFERENCES, initialBriefingPreferences, type BriefingPreferences } from '@/lib/briefing-preferences';
 
 interface Settings {
   notifications: boolean;
   language: 'zh' | 'en';
-  briefingPreferences: BriefingPreferences;
 }
 
 type ReminderSettings = Record<ReminderType, boolean>;
@@ -38,7 +35,6 @@ const DEFAULT_REMINDER_SETTINGS: ReminderSettings = {
   solar_term: false,
   fortune: false,
   key_date: false,
-  daily_briefing: false,
 };
 
 const REMINDER_ITEMS: Array<{
@@ -82,7 +78,6 @@ function AccountGeneralSettingsPanel() {
   const [settings, setSettings] = useState<Settings>({
     notifications: true,
     language: 'zh',
-    briefingPreferences: DEFAULT_BRIEFING_PREFERENCES,
   });
   const [reminders, setReminders] = useState<ReminderSettings>(DEFAULT_REMINDER_SETTINGS);
   const [remindersLoading, setRemindersLoading] = useState(true);
@@ -133,12 +128,9 @@ function AccountGeneralSettingsPanel() {
       }
 
       setLoadError(null);
-      let browserTimezone: string | undefined;
-      try { browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { /* Shanghai fallback */ }
       setSettings({
         notifications: settingsResult.value.settings?.notificationsEnabled ?? true,
         language: settingsResult.value.settings?.language ?? 'zh',
-        briefingPreferences: initialBriefingPreferences(settingsResult.value.settings?.briefingPreferences, settingsResult.value.settings?.briefingConfigured ?? false, browserTimezone),
       });
       setDesktopNotifications(settingsResult.value.settings?.chatPreferences?.desktopNotifications ?? false);
 
@@ -413,7 +405,6 @@ function AccountGeneralSettingsPanel() {
           />
         ))}
       </SettingsSection>
-      {!loading && !loadError && <BriefingSettings key={user.id} userId={user.id} initialPreferences={settings.briefingPreferences} initialEnabled={reminders.daily_briefing} />}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { cleanupAgentAttachments } from '@/lib/agent/attachments.server';
-import { processDailyBriefings } from '@/lib/daily-briefing.server';
+import { processAgentSchedules } from '@/lib/agent/schedules/runner.server';
 import { pruneExpiredNotifications } from '@/lib/notification-server';
 import { processScheduledReminders, scheduleAllUsersReminders } from '@/lib/reminders';
 import { runAgentRetention, runIdentityCleanup } from './retention.server';
@@ -38,11 +38,8 @@ export async function runMaintenanceJob(name: string): Promise<MaintenanceRunSum
         { name: 'process-scheduled-reminders', run: processScheduledReminders },
         { name: 'schedule-user-reminders', run: scheduleAllUsersReminders },
       ]);
-    case 'daily-briefing':
-      if (process.env.DAILY_BRIEFING_ENABLED === 'false') {
-        return { job: name, results: [{ step: 'daily-briefing', value: 'disabled' }] };
-      }
-      return runSteps([{ name: 'process-daily-briefings', run: processDailyBriefings }]);
+    case 'agent-schedules':
+      return runSteps([{ name: 'process-agent-schedules', run: processAgentSchedules }]);
     case 'agent-attachments-cleanup':
       return runSteps([{ name: 'cleanup-agent-attachments', run: cleanupAgentAttachments }]);
     case 'notifications-prune':

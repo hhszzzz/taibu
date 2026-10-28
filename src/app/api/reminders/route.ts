@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
         const subscriptions = await getReminderSubscriptions(user.id, { db });
 
         // 确保所有类型都有记录
-        const allTypes: ReminderType[] = ['solar_term', 'fortune', 'key_date', 'daily_briefing'];
+        const allTypes: ReminderType[] = ['solar_term', 'fortune', 'key_date'];
         const result = allTypes.map(type => {
             const existing = subscriptions.find(s => s.reminderType === type);
             return {
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
         const body = await request.json();
         const { reminderType, enabled, notifyEmail, notifySite } = body;
 
-        if (!reminderType || !['solar_term', 'fortune', 'key_date', 'daily_briefing'].includes(reminderType)) {
+        if (!reminderType || !['solar_term', 'fortune', 'key_date'].includes(reminderType)) {
             return jsonError('无效的提醒类型', 400, { success: false });
         }
 

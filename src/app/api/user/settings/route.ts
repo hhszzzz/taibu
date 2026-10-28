@@ -6,7 +6,6 @@ import {
     hasEffectiveUserSettingsUpdate,
     type UserSettingsUpdateInput,
 } from '@/lib/user/settings';
-import { validBriefingPreferences } from '@/lib/briefing-preferences';
 import { validPromptTemplates } from '@/lib/agent/prompt-templates';
 
 async function loadSettings(auth: Exclude<Awaited<ReturnType<typeof requireUserContext>>, { error: unknown }>) {
@@ -46,7 +45,6 @@ export async function PATCH(request: NextRequest) {
   }
 
   if (!body || typeof body !== 'object' || Array.isArray(body)) return jsonError('设置无效', 400);
-  if (body.briefingPreferences !== undefined && !validBriefingPreferences(body.briefingPreferences)) return jsonError('早报时区或时间无效', 400);
   if (body.chatPreferences?.promptTemplates !== undefined && !validPromptTemplates(body.chatPreferences.promptTemplates)) return jsonError('问法模板无效，最多 20 个，每个正文最多 4000 字符', 400);
   if (body.chatPreferences?.memoryEnabled !== undefined && typeof body.chatPreferences.memoryEnabled !== 'boolean') return jsonError('记忆设置无效', 400);
   if (body.chatPreferences !== undefined) {

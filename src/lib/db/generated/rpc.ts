@@ -16,6 +16,9 @@ export interface RpcRegistry {
   "agent_durable_commit": { args: { "p_run_id": string | null; "p_worker_id": string | null; "p_fence": number | null; "p_sequence": number | null; "p_writes": unknown | null; "p_checkpoint": unknown | null; }; result: number };
   "agent_durable_read": { args: { "p_run_id": string | null; "p_worker_id": string | null; "p_fence": number | null; "p_after"?: number | null; }; result: Json };
   "agent_finish_run": { args: { "p_run_id": string | null; "p_worker_id": string | null; "p_fence": number | null; "p_status": string | null; "p_checkpoint": unknown | null; "p_message": unknown | null; }; result: Record<string, unknown> };
+  "agent_latest_schedule_occurrence": { args: { "p_cadence": unknown | null; "p_timezone": string | null; "p_before": string | null; }; result: string };
+  "agent_local_to_utc": { args: { "p_local": string | null; "p_timezone": string | null; }; result: string };
+  "agent_next_run_at": { args: { "p_cadence": unknown | null; "p_timezone": string | null; "p_after": string | null; }; result: string };
   "agent_record_user_event": { args: { "p_run_id": string | null; "p_worker_id": string | null; "p_fence": number | null; "p_call_id": string | null; "p_chart_type": string | null; "p_chart_id": string | null; "p_event_date": string | null; "p_category": string | null; "p_title": string | null; "p_evidence": string | null; }; result: Json };
   "agent_renew_lease": { args: { "p_run_id": string | null; "p_worker_id": string | null; "p_fence": number | null; }; result: boolean };
   "agent_run_metrics_summary": { args: { "p_days"?: number | null; }; result: { model_id: string; runs: number; p50_total_ms: number; p95_total_ms: number; p50_first_token_ms: number; p95_first_token_ms: number; tool_share: number; failure_rate: number; hang_rate: number; }[] };
@@ -29,12 +32,13 @@ export interface RpcRegistry {
   "batch_update_vectors_as_service": { args: { "p_updates": unknown | null; "p_user_id": string | null; "p_expected_dim"?: number | null; "p_force_overwrite"?: boolean | null; }; result: { updated_count: number; skipped_count: number; already_exists_count: number; error_details: Json; }[] };
   "check_vector_index_exists": { args: { "p_dim"?: number | null; }; result: boolean };
   "claim_agent_attachment_cleanup": { args: { "p_limit"?: number | null; }; result: Record<string, unknown>[] };
-  "claim_daily_briefings": { args: { "p_limit"?: number | null; "p_enabled"?: boolean | null; }; result: Record<string, unknown>[] };
+  "claim_agent_schedules": { args: { "p_limit"?: number | null; }; result: Record<string, unknown>[] };
   "claim_linuxdo_membership_as_service": { args: { "p_user_id": string | null; "p_plan_id": string | null; "p_trust_level": number | null; "p_provider_user_id": string | null; }; result: Json };
   "claim_notification_popup": { args: { "p_id": string | null; }; result: boolean };
   "claim_prompt_enhancement": { args: Record<string, never>; result: boolean };
   "cleanup_expired_identity_rows": { args: { "p_limit"?: number | null; }; result: { sessions_deleted: number; verifications_deleted: number; }[] };
   "community_author_profiles": { args: { "p_user_ids": string[] | null; }; result: { user_id: string; nickname: string; avatar_url: string; }[] };
+  "create_agent_schedule": { args: { "p_name": string | null; "p_template": string | null; "p_prompt": string | null; "p_cadence": unknown | null; "p_timezone": string | null; "p_options": unknown | null; "p_limit": number | null; }; result: Record<string, unknown> };
   "create_analysis_conversation_with_history_as_service": { args: { "p_user_id": string | null; "p_source_type": string | null; "p_source_data": unknown | null; "p_title": string | null; "p_personality": string | null; "p_messages": unknown | null; "p_history_type": string | null; "p_history_payload": unknown | null; }; result: string };
   "create_conversation_with_messages": { args: { "p_user_id": string | null; "p_title": string | null; "p_personality"?: string | null; "p_source_type"?: string | null; "p_source_data"?: unknown | null; "p_messages"?: unknown | null; }; result: string };
   "create_knowledge_base_with_limit": { args: { "p_user_id": string | null; "p_name": string | null; "p_description"?: string | null; "p_weight"?: string | null; "p_limit"?: number | null; }; result: Json };
@@ -43,7 +47,7 @@ export interface RpcRegistry {
   "delete_agent_retention": { args: { "p_event_days"?: number | null; "p_commit_days"?: number | null; "p_worker_hours"?: number | null; "p_limit"?: number | null; "p_metric_days"?: number | null; }; result: { events_deleted: number; commits_deleted: number; workers_deleted: number; metrics_deleted: number; }[] };
   "delete_conversation_graph": { args: { "p_conversation_id": string | null; }; result: boolean };
   "delete_history_item_and_conversation": { args: { "p_history_type": string | null; "p_history_id": string | null; }; result: boolean };
-  "deliver_daily_briefing_notices": { args: { "p_limit"?: number | null; }; result: number };
+  "enforce_agent_schedule_limits": { args: { "p_limits": unknown | null; }; result: number };
   "fork_conversation_snapshot": { args: { "p_parent": string | null; "p_through": string | null; "p_source_messages": unknown | null; "p_messages": unknown | null; }; result: string };
   "get_conversation_share": { args: { "p_token": string | null; }; result: { title: string; snapshot: Json; include_charts: boolean; created_at: string; updated_at: string; }[] };
   "get_shared_generated_image": { args: { "p_token": string | null; "p_image": string | null; }; result: { object_path: string; mime_type: string; bytes: number; sha256: string; }[] };
@@ -63,10 +67,11 @@ export interface RpcRegistry {
   "search_knowledge_fts": { args: { "p_query": string | null; "p_kb_ids"?: string[] | null; "p_limit"?: number | null; "p_config"?: string | null; }; result: { id: string; kb_id: string; content: string; metadata: Json; rank: number; }[] };
   "search_knowledge_trigram": { args: { "p_query": string | null; "p_kb_ids"?: string[] | null; "p_limit"?: number | null; "p_threshold"?: number | null; }; result: { id: string; kb_id: string; content: string; metadata: Json; similarity: number; }[] };
   "search_knowledge_vector": { args: { "p_query_vector": number[] | null; "p_kb_ids"?: string[] | null; "p_limit"?: number | null; "p_dim"?: number | null; }; result: { id: string; kb_id: string; content: string; metadata: Json; distance: number; }[] };
-  "settle_daily_briefing": { args: { "p_id": string | null; "p_token": string | null; "p_content": string | null; "p_error"?: string | null; }; result: boolean };
+  "settle_agent_schedule_run": { args: { "p_run_id": string | null; "p_status": string | null; "p_agent_run_id"?: string | null; "p_error"?: string | null; "p_skip_reason"?: string | null; }; result: Record<string, unknown> };
   "submit_community_report_and_notify": { args: { "p_target_type": string | null; "p_target_id": string | null; "p_reason": string | null; "p_description"?: string | null; }; result: Json };
   "toggle_community_vote": { args: { "p_target_type": string | null; "p_target_id": string | null; "p_vote_type": string | null; }; result: Json };
   "toggle_ming_record_pin": { args: { "p_record_id": string | null; }; result: Json };
+  "update_agent_schedule": { args: { "p_id": string | null; "p_name": string | null; "p_prompt": string | null; "p_cadence": unknown | null; "p_timezone": string | null; "p_options": unknown | null; "p_enabled": boolean | null; }; result: Record<string, unknown> };
   "update_conversation_with_messages": { args: { "p_conversation_id": string | null; "p_title"?: string | null; "p_title_present"?: boolean | null; "p_personality"?: string | null; "p_personality_present"?: boolean | null; "p_messages"?: unknown | null; "p_messages_present"?: boolean | null; }; result: Json };
   "upsert_conversation_share": { args: { "p_conversation": string | null; "p_token": string | null; "p_title": string | null; "p_snapshot": unknown | null; "p_include_charts": boolean | null; "p_source_updated_at": string | null; }; result: Record<string, unknown> };
 }
@@ -91,6 +96,9 @@ export const RPC_SPECS = {
   "agent_durable_commit": { args: [["p_run_id", "uuid", false], ["p_worker_id", "text", false], ["p_fence", "bigint", false], ["p_sequence", "bigint", false], ["p_writes", "jsonb", false], ["p_checkpoint", "jsonb", false]], returns: "scalar" },
   "agent_durable_read": { args: [["p_run_id", "uuid", false], ["p_worker_id", "text", false], ["p_fence", "bigint", false], ["p_after", "bigint", true]], returns: "scalar" },
   "agent_finish_run": { args: [["p_run_id", "uuid", false], ["p_worker_id", "text", false], ["p_fence", "bigint", false], ["p_status", "text", false], ["p_checkpoint", "jsonb", false], ["p_message", "jsonb", false]], returns: "row" },
+  "agent_latest_schedule_occurrence": { args: [["p_cadence", "jsonb", false], ["p_timezone", "text", false], ["p_before", "timestamp with time zone", false]], returns: "scalar" },
+  "agent_local_to_utc": { args: [["p_local", "timestamp without time zone", false], ["p_timezone", "text", false]], returns: "scalar" },
+  "agent_next_run_at": { args: [["p_cadence", "jsonb", false], ["p_timezone", "text", false], ["p_after", "timestamp with time zone", false]], returns: "scalar" },
   "agent_record_user_event": { args: [["p_run_id", "uuid", false], ["p_worker_id", "text", false], ["p_fence", "bigint", false], ["p_call_id", "text", false], ["p_chart_type", "text", false], ["p_chart_id", "uuid", false], ["p_event_date", "date", false], ["p_category", "text", false], ["p_title", "text", false], ["p_evidence", "text", false]], returns: "scalar" },
   "agent_renew_lease": { args: [["p_run_id", "uuid", false], ["p_worker_id", "text", false], ["p_fence", "bigint", false]], returns: "scalar" },
   "agent_run_metrics_summary": { args: [["p_days", "integer", true]], returns: "setof" },
@@ -104,12 +112,13 @@ export const RPC_SPECS = {
   "batch_update_vectors_as_service": { args: [["p_updates", "jsonb", false], ["p_user_id", "uuid", false], ["p_expected_dim", "integer", true], ["p_force_overwrite", "boolean", true]], returns: "setof" },
   "check_vector_index_exists": { args: [["p_dim", "integer", true]], returns: "scalar" },
   "claim_agent_attachment_cleanup": { args: [["p_limit", "integer", true]], returns: "setof" },
-  "claim_daily_briefings": { args: [["p_limit", "integer", true], ["p_enabled", "boolean", true]], returns: "setof" },
+  "claim_agent_schedules": { args: [["p_limit", "integer", true]], returns: "setof" },
   "claim_linuxdo_membership_as_service": { args: [["p_user_id", "uuid", false], ["p_plan_id", "text", false], ["p_trust_level", "integer", false], ["p_provider_user_id", "text", false]], returns: "scalar" },
   "claim_notification_popup": { args: [["p_id", "uuid", false]], returns: "scalar" },
   "claim_prompt_enhancement": { args: [], returns: "scalar" },
   "cleanup_expired_identity_rows": { args: [["p_limit", "integer", true]], returns: "setof" },
   "community_author_profiles": { args: [["p_user_ids", "uuid[]", false]], returns: "setof" },
+  "create_agent_schedule": { args: [["p_name", "text", false], ["p_template", "text", false], ["p_prompt", "text", false], ["p_cadence", "jsonb", false], ["p_timezone", "text", false], ["p_options", "jsonb", false], ["p_limit", "integer", false]], returns: "row" },
   "create_analysis_conversation_with_history_as_service": { args: [["p_user_id", "uuid", false], ["p_source_type", "text", false], ["p_source_data", "jsonb", false], ["p_title", "text", false], ["p_personality", "text", false], ["p_messages", "jsonb", false], ["p_history_type", "text", false], ["p_history_payload", "jsonb", false]], returns: "scalar" },
   "create_conversation_with_messages": { args: [["p_user_id", "uuid", false], ["p_title", "text", false], ["p_personality", "text", true], ["p_source_type", "text", true], ["p_source_data", "jsonb", true], ["p_messages", "jsonb", true]], returns: "scalar" },
   "create_knowledge_base_with_limit": { args: [["p_user_id", "uuid", false], ["p_name", "text", false], ["p_description", "text", true], ["p_weight", "text", true], ["p_limit", "integer", true]], returns: "scalar" },
@@ -118,7 +127,7 @@ export const RPC_SPECS = {
   "delete_agent_retention": { args: [["p_event_days", "integer", true], ["p_commit_days", "integer", true], ["p_worker_hours", "integer", true], ["p_limit", "integer", true], ["p_metric_days", "integer", true]], returns: "setof" },
   "delete_conversation_graph": { args: [["p_conversation_id", "text", false]], returns: "scalar" },
   "delete_history_item_and_conversation": { args: [["p_history_type", "text", false], ["p_history_id", "text", false]], returns: "scalar" },
-  "deliver_daily_briefing_notices": { args: [["p_limit", "integer", true]], returns: "scalar" },
+  "enforce_agent_schedule_limits": { args: [["p_limits", "jsonb", false]], returns: "scalar" },
   "fork_conversation_snapshot": { args: [["p_parent", "uuid", false], ["p_through", "text", false], ["p_source_messages", "jsonb", false], ["p_messages", "jsonb", false]], returns: "scalar" },
   "get_conversation_share": { args: [["p_token", "text", false]], returns: "setof" },
   "get_shared_generated_image": { args: [["p_token", "text", false], ["p_image", "uuid", false]], returns: "setof" },
@@ -138,10 +147,11 @@ export const RPC_SPECS = {
   "search_knowledge_fts": { args: [["p_query", "text", false], ["p_kb_ids", "uuid[]", true], ["p_limit", "integer", true], ["p_config", "text", true]], returns: "setof" },
   "search_knowledge_trigram": { args: [["p_query", "text", false], ["p_kb_ids", "uuid[]", true], ["p_limit", "integer", true], ["p_threshold", "real", true]], returns: "setof" },
   "search_knowledge_vector": { args: [["p_query_vector", "double precision[]", false], ["p_kb_ids", "uuid[]", true], ["p_limit", "integer", true], ["p_dim", "integer", true]], returns: "setof" },
-  "settle_daily_briefing": { args: [["p_id", "uuid", false], ["p_token", "uuid", false], ["p_content", "text", false], ["p_error", "text", true]], returns: "scalar" },
+  "settle_agent_schedule_run": { args: [["p_run_id", "uuid", false], ["p_status", "text", false], ["p_agent_run_id", "uuid", true], ["p_error", "text", true], ["p_skip_reason", "text", true]], returns: "row" },
   "submit_community_report_and_notify": { args: [["p_target_type", "text", false], ["p_target_id", "uuid", false], ["p_reason", "text", false], ["p_description", "text", true]], returns: "scalar" },
   "toggle_community_vote": { args: [["p_target_type", "text", false], ["p_target_id", "uuid", false], ["p_vote_type", "text", false]], returns: "scalar" },
   "toggle_ming_record_pin": { args: [["p_record_id", "uuid", false]], returns: "scalar" },
+  "update_agent_schedule": { args: [["p_id", "uuid", false], ["p_name", "text", false], ["p_prompt", "text", false], ["p_cadence", "jsonb", false], ["p_timezone", "text", false], ["p_options", "jsonb", false], ["p_enabled", "boolean", false]], returns: "row" },
   "update_conversation_with_messages": { args: [["p_conversation_id", "uuid", false], ["p_title", "text", true], ["p_title_present", "boolean", true], ["p_personality", "text", true], ["p_personality_present", "boolean", true], ["p_messages", "jsonb", true], ["p_messages_present", "boolean", true]], returns: "scalar" },
   "upsert_conversation_share": { args: [["p_conversation", "uuid", false], ["p_token", "text", false], ["p_title", "text", false], ["p_snapshot", "jsonb", false], ["p_include_charts", "boolean", false], ["p_source_updated_at", "timestamp with time zone", false]], returns: "row" },
 } as const satisfies Record<string, { args: readonly (readonly [string, string, boolean])[]; returns: RpcReturnShape }>;

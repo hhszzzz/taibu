@@ -46,6 +46,6 @@ test('personal-data rows disappear for guests and stay for a signed-in account',
   assert.equal(getNavItemById('records')?.requiresAuth, true, '命理记录 is account data');
   const tools = getSidebarToolItems();
   assert.deepEqual(ids(visibleNavItems(tools, true)), ids(tools), 'signing in keeps every row');
-  assert.deepEqual(ids(visibleNavItems(tools, false)), ids(tools).filter(id => id !== 'records'));
+  assert.deepEqual(ids(visibleNavItems(tools, false)), ids(tools).filter(id => id !== 'records' && id !== 'scheduled'));
   assert.ok(ids(visibleNavItems(NAV_REGISTRY, false)).every(id => !NAV_REGISTRY.find(item => item.id === id)?.requiresAuth));
 });

@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { normalizeQuestions, validateAnswers, formatQuestionAnswers, questionLabel } from '../lib/agent/questions';
 import { validateTodos } from '../lib/agent/todos';
 import { forkConversationMessages, conversationHtml, conversationMarkdown } from '../lib/chat/conversation-transfer';
-import { briefingLocalDate, initialBriefingPreferences, validBriefingPreferences } from '../lib/briefing-preferences';
 import { agentInputContent } from '../lib/agent/attachment-input';
 import type { ChatMessage } from '../types';
 
@@ -65,22 +64,6 @@ test('static HTML exports render GFM tables and block executable HTML, URLs and 
     const message:ChatMessage={id:'a',role:'assistant',content:'结果',createdAt:'now',agent:{version:1,runId:'r',status:'completed',parts:[{type:'tool',id:'t',name:'tool',title:'工具',status:'completed',input:{apiKey:'private',systemPrompt:'hidden',visible:'ok'}}]}};
     const markdown=conversationMarkdown('导出',[message],true);
     assert.ok(!markdown.includes('private')); assert.ok(!markdown.includes('hidden')); assert.ok(markdown.includes('visible'));
-});
-
-test('briefing dates follow local calendar days including DST and invalid zones fail validation', () => {
-    assert.equal(briefingLocalDate(new Date('2026-03-08T04:30:00Z'),'America/New_York'),'2026-03-07');
-    assert.equal(briefingLocalDate(new Date('2026-03-08T08:30:00Z'),'America/New_York'),'2026-03-08');
-    assert.equal(briefingLocalDate(new Date('2026-10-07T20:30:00Z'),'Asia/Shanghai'),'2026-10-08');
-    assert.equal(validBriefingPreferences({timezone:'Fake/Zone',time:'08:00'}),false);
-    assert.equal(validBriefingPreferences({timezone:'Asia/Shanghai',time:'24:00'}),false);
-});
-
-test('briefing initialization uses the browser timezone until the user saves a choice', () => {
-    const saved = { timezone: 'Asia/Shanghai', time: '09:15' };
-    assert.deepEqual(initialBriefingPreferences(saved, false, 'America/New_York'), { timezone: 'America/New_York', time: '08:00' });
-    assert.deepEqual(initialBriefingPreferences(saved, true, 'America/New_York'), saved);
-    assert.deepEqual(initialBriefingPreferences(saved, false, 'Fake/Zone'), { timezone: 'Asia/Shanghai', time: '08:00' });
-    assert.deepEqual(initialBriefingPreferences(saved, false), { timezone: 'Asia/Shanghai', time: '08:00' });
 });
 
 test('private input contains stable attachment IDs without embedding upload data', () => {

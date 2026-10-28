@@ -1081,7 +1081,7 @@ CREATE OR REPLACE FUNCTION public.agent_notify_command() RETURNS trigger
     SET search_path TO 'public', 'pg_temp'
     AS $$
 begin
-  perform pg_notify('taibu_agent', json_build_object(
+  perform pg_notify('taibu-agent', json_build_object(
     't', 'cmd',
     'run', NEW.run_id
   )::text);
@@ -1094,7 +1094,7 @@ CREATE OR REPLACE FUNCTION public.agent_notify_event() RETURNS trigger
     SET search_path TO 'public', 'pg_temp'
     AS $$
 begin
-  perform pg_notify('taibu_agent', json_build_object(
+  perform pg_notify('taibu-agent', json_build_object(
     't', 'event',
     'run', NEW.run_id,
     'seq', NEW.sequence
@@ -1108,14 +1108,14 @@ CREATE OR REPLACE FUNCTION public.agent_notify_run() RETURNS trigger
     SET search_path TO 'public', 'pg_temp'
     AS $$
 begin
-  perform pg_notify('taibu_agent', json_build_object(
+  perform pg_notify('taibu-agent', json_build_object(
     't', 'run',
     'run', NEW.id,
     'status', NEW.status,
     'cancel', coalesce(NEW.cancel_requested, false)
   )::text);
   if NEW.status = 'queued' then
-    perform pg_notify('taibu_agent', json_build_object('t', 'queue')::text);
+    perform pg_notify('taibu-agent', json_build_object('t', 'queue')::text);
   end if;
   return NEW;
 end;

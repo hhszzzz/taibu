@@ -16,7 +16,7 @@ function collector(client) {
   const messages = [];
   const waiters = [];
   client.on('notification', (message) => {
-    if (message.channel !== 'taibu_agent' || !message.payload) return;
+    if (message.channel !== 'taibu-agent' || !message.payload) return;
     const payload = JSON.parse(message.payload);
     messages.push(payload);
     for (const waiter of [...waiters]) waiter(payload);
@@ -45,7 +45,7 @@ test('Agent triggers publish run, queue, event and command payloads', { timeout:
   const writer = new pg.Client({ connectionString: dsn });
   await listener.connect();
   await writer.connect();
-  await listener.query('listen taibu_agent');
+  await listener.query('listen taibu-agent');
   const waitFor = collector(listener);
 
   const userId = randomUUID();

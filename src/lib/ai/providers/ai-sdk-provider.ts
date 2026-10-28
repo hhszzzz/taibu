@@ -245,10 +245,10 @@ export function streamWithAISDK(
 // ─── Internal Helpers ───
 
 /**
- * 太卜发出的模型请求一律以 `taibu_agent/<应用版本>` 自报身份，网关日志里认得出是谁、哪个版本在调用。
+ * 太卜发出的模型请求一律以 `taibu-agent/<应用版本>` 自报身份，网关日志里认得出是谁、哪个版本在调用。
  * 按 User-Agent 拦截的网关（如上游 CDN 拒绝 Node.js 或 Python 的默认值）把它加入白名单即可，不再冒充浏览器。
  */
-export const MODEL_REQUEST_USER_AGENT = `taibu_agent/${packageJson.version}`;
+export const MODEL_REQUEST_USER_AGENT = `taibu-agent/${packageJson.version}`;
 
 function withModelUserAgent(fetcher: typeof globalThis.fetch): typeof globalThis.fetch {
     return (input, init) => {

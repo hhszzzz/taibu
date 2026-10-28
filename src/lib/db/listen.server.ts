@@ -40,7 +40,7 @@ type Subscriber = {
   wake: (() => void) | null;
 };
 
-const CHANNEL = 'taibu_agent';
+const CHANNEL = 'taibu-agent';
 /** A subscriber that falls this far behind collapses its queue into one resync. */
 const QUEUE_LIMIT = 256;
 /** While the listener is down, every wait degrades to this polling interval. */

@@ -8,7 +8,7 @@ import 'server-only';
 
 import type { AIPersonality, AIPersonalityConfig, AIModelConfig } from '@/types';
 import { AI_PERSONALITY_META } from './personality-meta';
-import { renderMethodPersona } from 'taibu-core/mcp';
+import { METHOD_PRINCIPLES, renderMethodPersona } from 'taibu-core/mcp';
 import {
     type AIRequestMessage,
     createModelFromConfig,
@@ -84,13 +84,17 @@ const SHARED_SAFETY_RULES = `
 - 回答须基于提供的数据与理论依据，不凭空臆断`;
 
 /**
- * 有方法卡的人格取卡中的角色、断法与输出要求（不含工具流程，盘面由对话上下文给出），精简版只留角色与输出要求，
- * 与 Agent、MCP 共用同一来源；通用、MBTI 与合盘没有方法卡，保留各自的提示词。
+ * 有方法卡的人格取卡中的角色、断法与输出要求（不含工具流程，盘面由对话上下文给出），精简版只留角色与输出要求；
+ * 完整版附解读通则（证据引用、应期表述、把握度与前后一致）；精简版只留角色与输出规则，给小预算让出盘面空间。
+ * 与 Agent、MCP 共用同一来源。
+ * 通用、MBTI 与合盘没有方法卡，保留各自的提示词。
  */
+const READING_PRINCIPLES = `\n\n## 解读通则\n\n${METHOD_PRINCIPLES}`;
 function cardPersonality(personality: AIPersonality, card: string): AIPersonalityConfig {
     return {
         ...AI_PERSONALITY_META[personality],
-        systemPrompt: renderMethodPersona(card) + SHARED_SAFETY_RULES,
+        systemPrompt: renderMethodPersona(card) + READING_PRINCIPLES + SHARED_SAFETY_RULES,
+        // The brief form exists to leave room for the chart at the smallest budgets, so it stays lean.
         briefPrompt: renderMethodPersona(card, true) + SHARED_SAFETY_RULES,
     };
 }

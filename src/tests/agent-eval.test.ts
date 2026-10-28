@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createAssistantMessageEventStream } from '@earendil-works/pi-ai';
 import { runAgentEvalCase } from '../lib/agent/eval/runner.server';
 import { buildAgentEvalLeaderboard } from '../lib/agent/eval/leaderboard';
@@ -136,8 +137,11 @@ test('the leaderboard aggregates rates, mean and P95 duration, first token and t
 });
 
 test('built-in cases come from the CLI\'s JSON and keep their prompts and assertions', () => {
-  assert.equal(BUILTIN_AGENT_EVAL_CASES.length, 21);
-  assert.equal(new Set(BUILTIN_AGENT_EVAL_CASES.map(item => item.id)).size, 21);
+  // Every case in the CLI's JSON ships as a built-in case, once each: a new card or system adds to this list.
+  const fromJson = JSON.parse(readFileSync('scripts/evals/agent-cases.json', 'utf8')) as Array<{ id: string }>;
+  assert.equal(BUILTIN_AGENT_EVAL_CASES.length, fromJson.length);
+  assert.equal(new Set(BUILTIN_AGENT_EVAL_CASES.map(item => item.id)).size, fromJson.length);
+  assert.ok(BUILTIN_AGENT_EVAL_CASES.some(item => item.id === 'mangpai-career-2026'), 'school cards are covered');
   for (const item of BUILTIN_AGENT_EVAL_CASES) {
     assert.ok(item.prompt.length > 0 && item.assertions.length > 0 && item.tool.length > 0, item.id);
     assert.equal(item.builtin, true);

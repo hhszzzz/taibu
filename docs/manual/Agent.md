@@ -177,6 +177,7 @@ pi-durable 把成员会话建成主任务的副本，再用 `AgentChange` 收窄
 - 评分：硬检查调用 `assertAgentEvaluation`，核对是否调对工具，并用 Core 按同一份参数与稳定随机种子逐字段复算计算结果与详查缓存；质量检查把题面、断言、答案和 Core 规范文本交给评审模型，只判断列出的断言与答案实际引用的盘面依据。硬检查未通过或评审不可用的结果不参与质量通过率。
 - 结果：`agent_eval_runs` 记录发起人、模型、评审模型、题目范围、重复次数、进度与状态；`agent_eval_results` 逐题记录硬检查与质量结果、未通过的断言、答案、评审原文、耗时、首字延迟、token、工具调用数与工具轨迹。三张表都只允许管理员读写。
 - 后台页显示进度并可取消（排队中的立即结束，运行中的在下一题前停止）；排行榜按模型给出硬检查通过率、质量通过率、平均与 P95 耗时、首字延迟与平均 token；逐题对比把两个模型的答案并排显示，附未通过的断言和工具轨迹。
+- 命令行：`pnpm eval:agent` 跑离线层，不调用模型，只核对工具装配与 Core 复算；`node scripts/eval-agent.mjs --live --config <private.json> --output <report.json>` 叠加真实模型作答与评审打分，私人配置含 `apiKey`、`modelId`、`apiUrl`，用完即删。只跑一题加 `--case <id>`，中断后用 `--resume` 续跑（已完成执行的题只重打分），`--timeout` 调单题执行上限、`--judge-timeout` 调评审上限。用例在 `scripts/evals/agent-cases.json`，方法卡侧断言在 `skills/taibu-divination/evals/evals.json`，新增体系或方法卡时一并补。
 - 隔离：测评使用内存中的 `EvalAgentStore`，不创建 `agent_runs`、不扣积分、不读写用户资料；账户与功能开关由运行器注入（固定为可用的高级会员与全部功能），跑评测不会被平台的会员或功能开关挡住。模型调用仍消耗所选模型来源的额度，请按需控制题量与重复次数。
 
 ## 命盘与保存

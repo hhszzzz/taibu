@@ -7,13 +7,18 @@ import { PARALLEL_SYSTEMS } from '../lib/agent/parallel.server';
 import { memberInstructions, systemTitle } from '../lib/agent/profiles/members.server';
 
 const LIMIT = '\n计算必须调用 Core 工具；方法包不授予工具、联网或会员权限。';
+const PRINCIPLES = '\n## 解读通则\n\n';
 
 test('every card loads its own text by id, and every Core tool loads its system default card', () => {
     assert.equal(ANALYSIS_METHODS.length, 15);
     for (const method of ANALYSIS_METHODS) {
         const loaded = loadAnalysisMethod(method.id);
         const source = readFileSync(`skills/taibu-divination/methods/${method.id}.md`, 'utf8');
-        assert.equal(loaded.instructions, source.slice(source.indexOf('---\n\n') + 5) + LIMIT, method.id);
+        // The card body, then the shared reading principles, then the package's limit.
+        const body = source.slice(source.indexOf('---\n\n') + 5);
+        assert.ok(loaded.instructions.startsWith(body + PRINCIPLES), method.id);
+        assert.ok(loaded.instructions.endsWith(LIMIT), method.id);
+        assert.match(loaded.instructions, /断语必须引用盘面证据/, `${method.id} carries the reading principles`);
         assert.deepEqual({ id: loaded.id, version: loaded.version, whenToUse: loaded.whenToUse }, { id: method.id, version: method.version, whenToUse: method.description });
     }
     for (const tool of listToolDefinitions()) {

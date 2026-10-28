@@ -391,5 +391,91 @@
       "引用该宫实际星门神与生克，不捏造盘面",
       "说明不确定性，给出可执行建议，避免绝对化预言"
     ]
+  },
+  {
+    "id": "ziwei-horoscope-2027",
+    "tool": "ziwei_horoscope",
+    "guide": "ziwei",
+    "arguments": { "gender": "female", "birthYear": 1995, "birthMonth": 6, "birthDay": 20, "birthHour": 14, "birthMinute": 20, "targetDate": "2027-06-01" },
+    "prompt": "我 1995 年 6 月 20 日下午两点二十出生，女的。帮我看看 2027 年整体运势怎么样，哪几个月要特别注意？",
+    "assertions": [
+      "命盘由工具计算：四柱乙亥 壬午 壬午 丁未、五行局土五局与 Core 结果一致",
+      "必须调用真实计算工具，以 Core 结果为依据",
+      "2027 年大限与流年依据来自工具实际返回：大限己丑（虚岁25–34）落福德宫、流年丁未落财帛宫",
+      "细化到月份时有流月层结果支撑，不是仅凭流年外推；结论引用宫位与四化，避免绝对化预言"
+    ],
+    "sourceEvalId": 3
+  },
+  {
+    "id": "qimen-signing-2026",
+    "tool": "qimen",
+    "guide": "qimen",
+    "arguments": { "year": 2026, "month": 11, "day": 5, "hour": 14, "minute": 30, "timezone": "Asia/Shanghai", "question": "下周签约顺不顺利" },
+    "prompt": "2026 年 11 月 5 日下午两点半，帮我起一局看看下周签约顺不顺利，宜往哪个方向谈。",
+    "assertions": [
+      "局盘由工具计算：阴遁5局、值符天英星、值使景门与 Core 结果一致",
+      "必须调用真实计算工具，以 Core 结果为依据",
+      "用神取法正确：以日干癸落巽四宫为自身、时干己落震三宫为时机，引用实际落宫",
+      "给出明确的可行性与方位建议；应期用相对条件表述；不把单时刻盘面当作未来数月的盘面"
+    ],
+    "sourceEvalId": 4
+  },
+  {
+    "id": "bazi-dayun-2026",
+    "tool": "bazi_dayun",
+    "guide": "bazi",
+    "arguments": { "gender": "male", "birthYear": 1988, "birthMonth": 2, "birthDay": 8, "birthHour": 10, "birthMinute": 30 },
+    "prompt": "我 1988 年 2 月 8 日上午十点半出生，男的。2026 和 2027 这两年整体运势怎么样？",
+    "assertions": [
+      "四柱干支正确：戊辰 甲寅 癸巳 丁巳（与 Core 对同一生辰的计算一致）",
+      "必须调用真实计算工具，以 Core 结果为依据",
+      "起运与大运依据来自 bazi_dayun 实际返回：9 岁起运（1996 年）、2026 年起走戊午大运",
+      "2026、2027 流年干支（丙午、丁未）正确并说明引动；每条断语落到具体干支，不绝对化"
+    ],
+    "sourceEvalId": 5
+  },
+  {
+    "id": "birth-hour-unknown",
+    "mayAskUser": true,
+    "tool": "bazi_hour_candidates",
+    "guide": "birth-hour",
+    "arguments": { "gender": "male", "birthYear": 1990, "birthMonth": 5, "birthDay": 20 },
+    "prompt": "我是男的，公历 1990 年 5 月 20 日出生。出生时辰不知道，家里人只记得是傍晚前后。帮我看看八字命局。",
+    "assertions": [
+      "没有按假定的时辰直接下结论；先列出候选时辰（如酉、戌时段）及候选之间的区分事实",
+      "必须调用真实计算工具（bazi_hour_candidates），以 Core 结果为依据",
+      "向用户核对六亲与几件前事的年份，把候选收窄后请用户确认，不自行替用户选定时辰",
+      "用户确认前不给出时柱、命宫与小运相关的结论；只按三柱分析时说明未覆盖的部分",
+      "按推理时柱的方法卡先向用户提问并暂停任务，即视为通过"
+    ],
+    "sourceEvalId": 6
+  },
+  {
+    "id": "mangpai-career-2026",
+    "tool": "bazi_dayun",
+    "guide": "bazi-mangpai",
+    "arguments": { "gender": "male", "birthYear": 1990, "birthMonth": 5, "birthDay": 20, "birthHour": 20, "birthMinute": 0 },
+    "prompt": "我是男的，1990 年 5 月 20 日晚上八点出生。请用盲派帮我看事业层次和 2026、2027 两年的应期。",
+    "assertions": [
+      "四柱干支正确：庚午 辛巳 乙酉 丙戌（与 Core 对同一生辰的计算一致）",
+      "必须调用真实计算工具，以 Core 结果为依据",
+      "使用盲派术语与思路（宾主、体用、做功、功神），不与子平的用神喜神忌神混称",
+      "大运依据来自工具实际返回：2025 年起走乙酉大运；应期落到大运与流年并写明引动方式，不绝对化"
+    ],
+    "sourceEvalId": 7
+  },
+  {
+    "id": "astrology-transit-window",
+    "tool": "astrology",
+    "guide": "astrology",
+    "arguments": { "birthYear": 1990, "birthMonth": 1, "birthDay": 1, "birthHour": 12, "birthMinute": 30, "latitude": 40.7128, "longitude": -74.006, "transitDateTime": "2027-09-01T09:30:00" },
+    "prompt": "1990 年 1 月 1 日中午十二点半出生在纽约，男的。帮我看看 2027 年 9 月前后的流运，给个能落地的时间范围。",
+    "assertions": [
+      "本命关键配置正确：太阳摩羯11°02、月亮双鱼6°21、上升金牛2°43（与 Core 计算一致）",
+      "必须调用真实计算工具，以 Core 结果为依据",
+      "流运触发引用实际返回的相位（如海王星四分天王星、天王星对冲火星）与容许度，不捏造",
+      "应期给出时间尺度（年/月）与区间，说明入相位、精确、出相位的判断；避免宿命化预言"
+    ],
+    "sourceEvalId": 8
   }
 ]

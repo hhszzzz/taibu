@@ -579,6 +579,12 @@ test('buildPersonalityPrompt composes single and multi roles', () => {
     assert.ok(multi.includes('【紫微斗数】'));
     // 多人格直接拼接，不再包装额外指令
     assert.ok(!multi.includes('你同时具备以下专业能力'));
+    // 解读通则随人格注入：证据引用与应期表述在普通对话里同样生效
+    for (const prompt of [single, multi]) {
+        assert.ok(prompt.includes('## 解读通则'));
+        assert.ok(prompt.includes('断语必须引用盘面证据'));
+        assert.ok(prompt.includes('应期先以范围与触发条件表述'));
+    }
 });
 
 test('personas fall back to their brief form when the whole prompt would crowd out the chart', async () => {

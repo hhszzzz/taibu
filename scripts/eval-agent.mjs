@@ -16,6 +16,10 @@ const cases = JSON.parse(await readFile(path.join(root, 'scripts/evals/agent-cas
 const argv = process.argv.slice(2), live = argv.includes('--live');
 const vision = argv.includes('--vision');
 const argument = name => { const index = argv.indexOf(name); return index < 0 ? undefined : argv[index + 1]; };
+/** A live model writes long readings; --timeout raises the per-case cap. */
+const runTimeoutMs = Number(argument('--timeout')) || 900000;
+/** The judge reads the whole chart as evidence, so it gets its own ten minutes. */
+const judgeTimeoutMs = Number(argument('--judge-timeout')) || 600000;
 // The CLI evaluates as the same kind of member the admin runner does: no database mocks, fixed account and switches.
 const account = async () => ({ membership: 'plus', credits: 10, expiresAt: null });
 const featureState = async () => ({ status: 'enabled' });
@@ -94,19 +98,28 @@ try {
             createStream,
             account,
             featureState,
-            // Keep the CLI's five-minute cap per case: a stalled provider fails instead of hanging the sweep.
-            signal: AbortSignal.timeout(300000),
-            ...(live ? { judge: { config } } : {}),
+            // A stalled provider still fails instead of hanging the sweep; live readings simply get longer.
+            signal: AbortSignal.timeout(runTimeoutMs),
+            ...(live ? { judge: { config, signal: AbortSignal.timeout(judgeTimeoutMs) } } : {}),
         });
         const visionFailure = item.visual && !(/红|red/i.test(outcome.answer) && /圆|circle/i.test(outcome.answer)
             && /蓝|blue/i.test(outcome.answer) && /方|square/i.test(outcome.answer) && /两个|两种|2|two/i.test(outcome.answer)
             && outcome.answer.search(/红|red/i) <= outcome.answer.search(/蓝|blue/i));
         const guideFailure = !live && outcome.hardPassed && !outcome.guideLoaded;
-        if (outcome.hardPassed && !guideFailure && !visionFailure && (live ? !outcome.judgeError : true)) {
+        // A card that tells the model to ask first (推理时柱) parks the task by design; there is no reading to judge.
+        if (outcome.askedUser && outcome.hardPassed) {
+            report.cases.push({
+                id: item.id, guide: item.guide, tool: item.tool, structural: true, guideLoaded: outcome.guideLoaded,
+                quality: null, passed: true, askedUser: true, usage: outcome.usage,
+                ...(live ? { answer: outcome.answer, core: outcome.core } : {}),
+            });
+            console.log(`PASS ${item.id} (asked the user, as its card requires)`);
+        } else if (outcome.hardPassed && !guideFailure && !visionFailure && (live ? !outcome.judgeError : true)) {
             const quality = outcome.quality ?? null;
             report.cases.push({
                 id: item.id, guide: item.guide, tool: item.tool, structural: true, guideLoaded: outcome.guideLoaded,
                 quality: quality ?? null, passed: live ? quality?.passed === true : true, usage: outcome.usage,
+                ...(outcome.judgeResponse ? { judgeResponse: outcome.judgeResponse } : {}),
                 ...(live ? { answer: outcome.answer, core: outcome.core } : {}),
             });
             console.log(`${report.cases.at(-1).passed ? 'PASS' : 'FAIL'} ${item.id} (${item.tool})${live ? ' structure + model quality judge' : ' structure only'}`);

@@ -9,6 +9,20 @@ import { row, config, MemoryStore } from './helpers/agent-runtime-fixture';
 import type { PiStreamFn } from '../lib/agent/types';
 import { collaborationProgress, parallelAnalysisResults } from '../lib/agent/parallel-results';
 
+test('an evaluation recomputes the chart at the detail level the model asked for', async () => {
+    // A model that asks for the full chart sees 神煞, 纳音 and 气性; recomputing at the default level would fail a correct call.
+    const { executeTool, buildToolSuccessPayload } = await import('taibu-core/mcp');
+    const args = { gender: 'male', birthYear: 1990, birthMonth: 5, birthDay: 20, birthHour: 20, detailLevel: 'full' };
+    const payload = buildToolSuccessPayload('bazi', await executeTool('bazi', args), { detailLevel: 'full' });
+    const artifact = {
+        id: 'a1', call_id: 'c1', tool_name: 'bazi', kind: 'calculation', args,
+        result: { content: payload.content, details: payload.structuredContent, canonicalText: payload.content.map(part => part.text).join('\n') },
+    };
+    const store = new MemoryStore();
+    store.drafts.set(artifact.id, artifact as never);
+    await assertAgentEvaluation(row(), 'bazi', [artifact as never]);
+});
+
 test('templates are bounded and substitute draft text literally', () => {
     const template = { id: 'career', name: '事业', content: '请分析：{{question}}' };
     assert.ok(validPromptTemplates([template]));

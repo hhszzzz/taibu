@@ -125,12 +125,15 @@ export class EvalAgentStore extends AgentStore {
       .map(write => write.value as StoredEntry);
   }
 
-  /** The canonical text of every calculation and drilldown result, the quality judge's Core evidence. */
+  /**
+   * What the model read: each result at the detail level it asked for, plus the full chart snapshot
+   * inspect_chart shows in the workspace (杂曜、神煞 exist only there when the call used the default level).
+   */
   coreTexts(): string[] {
     return this.artifacts()
       .filter(artifact => artifact.kind === 'calculation' || getAgentDrilldownBase(artifact.tool_name))
-      .map(artifact => artifact.result.canonicalText ?? '')
-      .filter(text => text.length > 0);
+      .flatMap(artifact => [artifact.result.canonicalText ?? '', artifact.result.chartSnapshot?.canonicalText ?? ''])
+      .filter((text, index, all) => text.length > 0 && all.indexOf(text) === index);
   }
 
   guideLoaded(): boolean {
@@ -249,6 +252,8 @@ export type AgentEvalStreamFactory = (context: AgentEvalStreamContext) => PiStre
 export interface AgentEvalJudgeOptions {
   config: AIModelConfig;
   stream?: PiStreamFn;
+  /** The judge reads the whole chart as evidence; absent falls back to the case's signal. */
+  signal?: AbortSignal;
 }
 
 export interface RunAgentEvalCaseOptions {
@@ -268,9 +273,11 @@ export interface AgentEvalCaseOutcome {
   stage: 'execution' | 'core-integrity' | 'guide-loading' | 'quality-judge' | 'completed';
   status: AgentRunStatus | undefined;
   error?: string;
-  diagnostic?: { name?: string; statusCode?: number; judgeStatus?: string };
+  diagnostic?: { name?: string; message?: string; statusCode?: number; judgeStatus?: string };
   hardPassed: boolean;
   completed: boolean;
+  /** Its card told the model to ask the user first, so the task parked on purpose. */
+  askedUser?: boolean;
   failedAssertions: string[];
   guideLoaded: boolean;
   answer: string;
@@ -296,9 +303,10 @@ function errorMessage(error: unknown): string {
 }
 
 function diagnosticOf(error: unknown): AgentEvalCaseOutcome['diagnostic'] {
-  const value = error as { name?: unknown; statusCode?: unknown; judgeStatus?: unknown };
+  const value = error as { name?: unknown; statusCode?: unknown; judgeStatus?: unknown; message?: unknown };
   return {
     ...(typeof value?.name === 'string' ? { name: value.name } : {}),
+    ...(typeof value?.message === 'string' && value.message.trim() ? { message: value.message.slice(0, 2000) } : {}),
     ...(Number.isInteger(value?.statusCode) ? { statusCode: value.statusCode as number } : {}),
     ...(typeof value?.judgeStatus === 'string' ? { judgeStatus: value.judgeStatus } : {}),
   };
@@ -366,6 +374,17 @@ export async function runAgentEvalCase(options: RunAgentEvalCaseOptions): Promis
     ...(finished?.checkpoint.runtime?.usage ? { usage: finished.checkpoint.runtime.usage } : {}),
   };
 
+  if (status === 'awaiting_input' && evalCase.mayAskUser) {
+    return {
+      ...base,
+      stage: 'completed',
+      hardPassed: true,
+      completed: false,
+      askedUser: true,
+      failedAssertions: [],
+      quality: null,
+    };
+  }
   if (!completed) {
     const failure = executionError ?? finished?.message.agent?.error;
     return {
@@ -416,7 +435,7 @@ export async function runAgentEvalCase(options: RunAgentEvalCaseOptions): Promis
       options.judge.config,
       { question: evalCase.prompt, assertions: evalCase.assertions, answer: outcome.answer, core: outcome.core },
       options.judge.stream,
-      options.signal,
+      options.judge.signal ?? options.signal,
     );
     outcome.quality = scored.quality;
     outcome.judgeResponse = scored.judgeResponse;

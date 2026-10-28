@@ -3,9 +3,9 @@
  * 构建 taibu-divination skill 的自包含产物（维护工具，最终用户/agent 不需要运行）：
  *   1. 用 esbuild 把 packages/core/dist/mcp 打成单文件 ESM bundle（零安装的来源）
  *   2. 从 bundle 的 listToolDefinitions() 生成 references/<tool>.md
- *   3. 把工具选择表注入 SKILL.md 的 TOOLS 标记之间（最后一列链接该体系的默认方法卡）
+ *   3. 把工具选择表注入 SKILL.md 的 TOOLS 标记之间（最后一列链接该体系的默认方法）
  *
- * 方法卡与 SKILL.md 的方法卡目录由 scripts/build-methods.mjs 生成。
+ * 方法与 SKILL.md 的方法目录由 scripts/build-methods.mjs 生成。
  * 用法：pnpm -C packages/core build && node scripts/build-skill-bundle.mjs
  * 升级 core 版本后重跑本脚本并提交 bundle + references 的变更。
  */
@@ -176,7 +176,7 @@ async function generateDocs() {
   console.log(`references: ${tools.length} files -> ${path.relative(repoRoot, referencesDir)}`);
 
   const tableLines = [
-    '| 工具名 | 名称 | 用途 | 参数文档 | 方法卡 |',
+    '| 工具名 | 名称 | 用途 | 参数文档 | 方法 |',
     '| --- | --- | --- | --- | --- |',
     ...tools.map(
       (tool) =>

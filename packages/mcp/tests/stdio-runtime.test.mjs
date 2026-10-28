@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFERRED_TOOL_NAMES, listAnalysisMethods, listToolDefinitions, renderMethodCard } from 'taibu-core/mcp';
+import { DEFERRED_TOOL_NAMES, listAnalysisMethods, listToolDefinitions, renderMethod } from 'taibu-core/mcp';
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 
@@ -100,11 +100,11 @@ test('stdio runtime serves MCP 2026-07-28 discovery, list, and tool calls', asyn
       jsonrpc: '2.0', id: 2, method: 'tools/list', params: { _meta: modernMeta() },
     });
     assert.equal(listed.result.resultType, 'complete');
-    // Every Core tool, and the tool through which the model loads a method card.
+    // Every Core tool, and the tool through which the model loads a method.
     assert.deepEqual(listed.result.tools.map((tool) => tool.name), [...listToolDefinitions().map((tool) => tool.name), 'load_analysis_method']);
     assert.equal(listed.result.tools.find((tool) => tool.name === 'bazi').title, '八字命盘');
     assert.match(discovered.result.instructions, /load_analysis_method/);
-    assert.ok(discovered.result.capabilities.prompts, 'the method card prompts are advertised');
+    assert.ok(discovered.result.capabilities.prompts, 'the method prompts are advertised');
     assert.doesNotMatch(discovered.result.instructions, /tool_search/);
 
     const called = await runtime.send({
@@ -148,7 +148,7 @@ test('stdio runtime keeps the legacy initialize flow compatible', async () => {
   }
 });
 
-test('stdio runtime offers every method card as a prompt and as a tool the model can call', async () => {
+test('stdio runtime offers every method as a prompt and as a tool the model can call', async () => {
   const runtime = startStdioServer();
   try {
     const listed = await runtime.send({ jsonrpc: '2.0', id: 1, method: 'prompts/list', params: { _meta: modernMeta() } });
@@ -164,14 +164,14 @@ test('stdio runtime offers every method card as a prompt and as a tool the model
     });
     assert.equal(asked.result.resultType, 'complete');
     const text = asked.result.messages[0].content.text;
-    assert.ok(text.includes(renderMethodCard('bazi-mangpai')) && text.endsWith('1990年5月20日8点男，看事业'));
+    assert.ok(text.includes(renderMethod('bazi-mangpai')) && text.endsWith('1990年5月20日8点男，看事业'));
     const unknown = await runtime.send({ jsonrpc: '2.0', id: 3, method: 'prompts/get', params: { _meta: modernMeta(), name: 'fengshui' } });
     assert.ok(unknown.error, 'an unknown prompt is a protocol error');
 
     const loaded = await runtime.send({
       jsonrpc: '2.0', id: 4, method: 'tools/call', params: { _meta: modernMeta(), name: 'load_analysis_method', arguments: { id: 'bazi_dayun' } },
     });
-    assert.equal(loaded.result.content[0].text, renderMethodCard('bazi'), 'a tool name loads its system default card');
+    assert.equal(loaded.result.content[0].text, renderMethod('bazi'), 'a tool name loads its system default card');
     const missing = await runtime.send({
       jsonrpc: '2.0', id: 5, method: 'tools/call', params: { _meta: modernMeta(), name: 'load_analysis_method', arguments: { id: '__proto__' } },
     });

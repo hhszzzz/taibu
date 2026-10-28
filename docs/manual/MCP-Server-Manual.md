@@ -7,7 +7,7 @@ TaiBu 提供两种 MCP 入口：
 - 公共 HTTP Server：`https://mcp.mingai.fun/mcp`
 - 本地 stdio 包：`taibu-mcp`
 
-两种入口复用 `taibu-core` 中同一套工具 manifest、算法、输入输出 schema、规范文本和 canonical JSON，不维护两份术数实现；解读用的方法卡（见第 5 节）也来自 `taibu-core`。
+两种入口复用 `taibu-core` 中同一套工具 manifest、算法、输入输出 schema、规范文本和 canonical JSON，不维护两份术数实现；解读用的方法（见第 5 节）也来自 `taibu-core`。
 
 ## 1. 客户端配置
 
@@ -92,7 +92,7 @@ curl -X POST https://mcp.mingai.fun/mcp \
 
 - `supportedVersions: ["2026-07-28"]`
 - `capabilities.tools`、`capabilities.prompts`
-- `instructions`（提示模型解读前先加载方法卡；`/mcp/core` 另说明低频工具的查找方式）
+- `instructions`（提示模型解读前先加载方法；`/mcp/core` 另说明低频工具的查找方式）
 - `resultType: "complete"`
 - 公共缓存提示
 - `_meta["io.modelcontextprotocol/serverInfo"]`
@@ -189,16 +189,16 @@ curl -X POST https://mcp.mingai.fun/mcp \
 | `daliuren` | 大六壬排盘 | 天地盘、四课、三传、神将与课体 |
 | `xiaoliuren` | 小六壬占测 | 起课信息、推演链与落宫结果 |
 
-工具的完整参数与输出结构以运行时 `tools/list` 为准。此外两种入口都提供 `load_analysis_method`（加载方法卡，见第 5 节）；精简列表另有 `tool_search`、`tool_call`（见第 6 节）。
+工具的完整参数与输出结构以运行时 `tools/list` 为准。此外两种入口都提供 `load_analysis_method`（加载方法，见第 5 节）；精简列表另有 `tool_search`、`tool_call`（见第 6 节）。
 
 8 个详查工具（`bazi_relations`、`bazi_wuxing`、`bazi_liunian_scan`、`ziwei_palace`、`liuyao_line`、`astrology_point`、`qimen_palace`、`daliuren_lessons`）默认文本只列所查事实；传 `detailLevel: "full"` 另附判定口径；`structuredContent` 始终带口径与计算规则，计算规则不写进文本。只问某柱、某类关系或某几组事实时，用 `pillars`、`types`、`sections`、`focus` 等筛选参数只取所需；八字关系类筛选另列「同字牵连」（与所列关系共用同一字，须一并看），并以「未列出」给出筛掉的条数。筛选参数写错时返回 `isError: true`，错误信息写明缺少或应改用的参数。
 
-## 5. 方法卡
+## 5. 方法
 
-太卜的解读方法写成 15 张方法卡：每个体系一张默认卡（子平八字、紫微斗数、六爻、梅花易数、奇门遁甲、大六壬、小六壬、太乙神数、塔罗、西方占星、黄历择日），另有流派卡「盲派八字」（`bazi-mangpai`）、不需排盘的「周公解梦」（`dream`），以及与体系卡同用的技法卡「推理时柱」（`birth-hour`，出生时辰未知时先推时辰、经用户确认再排盘）与「验证前事」（`past-events`，以往事校准拿不准的取舍）。每张卡给出角色、断法、工具流程与输出要求，并附解读通则与工具约定。与太卜站内 Agent、普通对话及 skill 使用同一份来源。
+太卜的解读方法共 15 个：每个体系一个默认方法（子平八字、紫微斗数、六爻、梅花易数、奇门遁甲、大六壬、小六壬、太乙神数、塔罗、西方占星、黄历择日），另有流派方法「盲派八字」（`bazi-mangpai`）、不需排盘的「周公解梦」（`dream`），以及与体系方法同用的技法「推理时柱」（`birth-hour`，出生时辰未知时先推时辰、经用户确认再排盘）与「验证前事」（`past-events`，以往事校准拿不准的取舍）。每个方法给出角色、断法、工具流程与输出要求，并附解读通则与工具约定。与太卜站内 Agent、普通对话及 skill 使用同一份来源。
 
-- 工具 `load_analysis_method`：模型自己加载方法卡。`id` 填方法卡 ID，或填刚调用的工具名（得到该体系的默认卡）；同一体系有多张卡时按用户点名的流派选；技法卡在遇到其所述情形时另行加载，与体系卡同用。未知 ID 返回 `isError: true`。
-- prompts：每张卡一个同名 prompt，可选参数 `question`（要问的事或要解的梦）。`prompts/get` 返回一条用户消息：方法卡全文、解读通则、工具约定与问题；未给问题时请模型先询问。按协议，prompts 由用户选用（客户端通常显示为斜杠命令），模型自己取方法卡用上面的工具。
+- 工具 `load_analysis_method`：模型自己加载方法。`id` 填方法 ID，或填刚调用的工具名（得到该体系的默认方法）；同一体系有多个方法时按用户点名的流派选；技法在遇到其所述情形时另行加载，与体系方法同用。未知 ID 返回 `isError: true`。
+- prompts：每个方法一个同名 prompt，可选参数 `question`（要问的事或要解的梦）。`prompts/get` 返回一条用户消息：方法全文、解读通则、工具约定与问题；未给问题时请模型先询问。按协议，prompts 由用户选用（客户端通常显示为斜杠命令），模型自己取方法用上面的工具。
 
 ## 6. 按需加载的工具
 
@@ -297,7 +297,7 @@ pnpm lint
 pnpm build
 ```
 
-测试覆盖现代 HTTP、旧版无状态 HTTP、现代/旧版 stdio、标准 Header 错误、协议版本错误、结构化结果、订阅并发限制、方法卡 prompts 与工具，以及精简列表的查找、调用与入口隔离。
+测试覆盖现代 HTTP、旧版无状态 HTTP、现代/旧版 stdio、标准 Header 错误、协议版本错误、结构化结果、订阅并发限制、方法 prompts 与工具，以及精简列表的查找、调用与入口隔离。
 
 ## 13. 参考
 

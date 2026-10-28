@@ -8,7 +8,7 @@ export const baziRelationsSelector: ToolInputSchema = {
   type: 'object',
   properties: {
     year: { type: 'integer', minimum: 1, maximum: 9998, description: '流年（公历年份）；给出后自动叠加所在大运' },
-    month: { type: 'integer', minimum: 1, maximum: 12, description: '流月：节气月序号 1–12（1=寅月，自立春起；12=丑月，自小寒起），须同时给出 year' },
+    month: { type: 'integer', minimum: 1, maximum: 12, description: '流月：节气月序号 1–12（1=寅月立春起约公历2月，4=巳月立夏起约公历5月…11=子月大雪起约公历12月，12=丑月小寒起约公历1月；勿直接填公历月份），须同时给出 year' },
     day: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: '流日 YYYY-MM-DD，与 year/month 互斥；自动叠加当日的流年、流月与所在大运' },
     dayun: { type: 'integer', minimum: 1, maximum: 10, description: '大运序号 1–10；省略时按流年自动选取' },
     yunSect: { type: 'integer', enum: [1, 2], default: 1, description: '起运换算法1或2（与 bazi_dayun 一致）' },

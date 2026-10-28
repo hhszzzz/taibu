@@ -29,12 +29,12 @@ export {
   getToolSystem,
   listAnalysisMethods,
   listMethodPrompts,
-  renderMethodCard,
+  renderMethod,
   renderMethodGuide,
   renderMethodPersona,
   renderMethodPrompt,
 } from './methods.js';
-export type { AnalysisMethod, MethodCardKind, MethodCardSource, MethodPrompt, MethodPromptResult } from './methods.js';
+export type { AnalysisMethod, MethodKind, MethodSource, MethodPrompt, MethodPromptResult } from './methods.js';
 export {
   DEFERRED_TOOL_NAMES,
   TOOL_CALL_NAME,

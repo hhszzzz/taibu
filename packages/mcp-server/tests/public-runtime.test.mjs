@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFERRED_TOOL_NAMES, listAnalysisMethods, listToolDefinitions, renderMethodCard } from 'taibu-core/mcp';
+import { DEFERRED_TOOL_NAMES, listAnalysisMethods, listToolDefinitions, renderMethod } from 'taibu-core/mcp';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
@@ -225,7 +225,7 @@ test('public runtime serves MCP 2026-07-28 and stateless legacy clients', async 
   }
 });
 
-test('public runtime serves method cards as prompts and a tool, and a core endpoint with a smaller tool list', async () => {
+test('public runtime serves methods as prompts and a tool, and a core endpoint with a smaller tool list', async () => {
   const port = await getFreePort();
   const { child, getStderr } = startRuntime(port);
 
@@ -242,13 +242,13 @@ test('public runtime serves method cards as prompts and a tool, and a core endpo
       jsonrpc: '2.0', id: 2, method: 'prompts/get', params: { _meta: modernMeta(), name: 'dream', arguments: {} },
     });
     assert.equal(dream.response.status, 200, getStderr());
-    assert.ok(dream.payload.result.messages[0].content.text.includes(renderMethodCard('dream')));
+    assert.ok(dream.payload.result.messages[0].content.text.includes(renderMethod('dream')));
     assert.match(dream.payload.result.messages[0].content.text, /请先问我要问的事/);
 
     const loaded = await rpc(endpoint, {
       jsonrpc: '2.0', id: 3, method: 'tools/call', params: { _meta: modernMeta(), name: 'load_analysis_method', arguments: { id: 'ziwei' } },
     });
-    assert.equal(loaded.payload.result.content[0].text, renderMethodCard('ziwei'));
+    assert.equal(loaded.payload.result.content[0].text, renderMethod('ziwei'));
 
     // A client cannot pick the list with the private header; the endpoint decides.
     const forged = await rpc(endpoint, {

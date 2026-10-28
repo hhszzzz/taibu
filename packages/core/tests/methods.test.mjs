@@ -9,7 +9,7 @@ import {
   listAnalysisMethods,
   listMethodPrompts,
   listToolDefinitions,
-  renderMethodCard,
+  renderMethod,
   renderMethodGuide,
   renderMethodPersona,
   renderMethodPrompt,
@@ -87,7 +87,7 @@ test('MCP prompts: one per card, an optional question, the card with the shared 
   assert.ok(text.endsWith('看看事业'));
   for (const question of [undefined, '', '   ']) assert.match(renderMethodPrompt('dream', question).messages[0].content.text, /请先问我要问的事/);
   // Prompt names are card ids; a tool name or an inherited key is not a prompt.
-  for (const name of ['bazi_dayun', '__proto__']) assert.throws(() => renderMethodPrompt(name), /未知的方法卡/);
+  for (const name of ['bazi_dayun', '__proto__']) assert.throws(() => renderMethodPrompt(name), /未知的方法/);
 });
 
 test('the method tool lets a model load any card by id or tool name; it lists every card and how to choose', () => {
@@ -97,12 +97,12 @@ test('the method tool lets a model load any card by id or tool name; it lists ev
   assert.equal(tool.annotations.readOnlyHint, true);
   for (const method of methods) assert.ok(tool.description.includes(`${method.id}（${method.title}`), method.id);
   assert.ok(tool.description.includes('bazi-mangpai（盲派八字，流派，用户点名时用）'));
-  assert.ok(tool.description.includes('birth-hour（推理时柱，技法，遇到所述情形时与体系卡同用）'));
-  assert.ok(tool.description.includes('技法卡（如出生时辰未知时的推理时柱）在遇到其所述情形时另行加载，与体系卡同用'));
+  assert.ok(tool.description.includes('birth-hour（推理时柱，技法，遇到所述情形时与体系方法同用）'));
+  assert.ok(tool.description.includes('技法（如出生时辰未知时的推理时柱）在遇到其所述情形时另行加载，与体系方法同用'));
   assert.ok(tool.description.includes('dream（周公解梦，无需排盘）'));
   assert.ok(tool.description.includes('bazi（子平八字）、'), 'a default card for a charted system carries no note');
-  const card = renderMethodCard('bazi_dayun');
-  assert.equal(card, renderMethodCard('bazi'));
+  const card = renderMethod('bazi_dayun');
+  assert.equal(card, renderMethod('bazi'));
   assert.ok(card.startsWith(renderMethodGuide('bazi').trimEnd()) && card.includes(METHOD_PRINCIPLES) && card.endsWith(METHOD_CONVENTIONS));
-  assert.throws(() => renderMethodCard('__proto__'), /未知的分析方法/);
+  assert.throws(() => renderMethod('__proto__'), /未知的分析方法/);
 });

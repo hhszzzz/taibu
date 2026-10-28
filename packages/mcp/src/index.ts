@@ -23,7 +23,7 @@ import {
   listToolDefinitions,
   normalizeTransportDetailLevel,
   parseToolListMode,
-  renderMethodCard,
+  renderMethod,
   renderMethodPrompt,
   renderToolSearchResult,
   searchDeferredTools,
@@ -94,7 +94,7 @@ function createMcpServer(): McpServer {
   const methodTool = getMethodToolDefinition();
   server.registerTool(methodTool.name, toolConfig(methodTool), async (args): Promise<CallToolResult> => {
     try {
-      return { content: [{ type: 'text', text: renderMethodCard(String(args.id)) }] };
+      return { content: [{ type: 'text', text: renderMethod(String(args.id)) }] };
     } catch (error) {
       return errorResult(error);
     }

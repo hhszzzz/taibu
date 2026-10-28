@@ -57,12 +57,12 @@ TaiBu 的本地 `stdio` MCP Server，适合直接接入 Claude Desktop、Cursor�
 | `daliuren_lessons` | 大六壬课传详查 |
 | `xiaoliuren` | 小六壬占测 |
 
-## 方法卡
+## 方法
 
-除计算工具外，服务还提供太卜的 13 张方法卡：每个体系一张（断法、工具流程与输出要求），另有「盲派八字」与不需排盘的「周公解梦」。
+除计算工具外，服务还提供太卜的 13 个方法：每个体系一个（断法、工具流程与输出要求），另有「盲派八字」与不需排盘的「周公解梦」。
 
-- 工具 `load_analysis_method`：模型自己加载方法卡，`id` 填方法卡 ID，或填刚调用的工具名（得到该体系的默认卡）。服务说明（`instructions`）提示模型解读前先加载。
-- prompts：每张卡一个同名 prompt（如 `bazi`、`bazi-mangpai`、`dream`），可选参数 `question`。支持 prompts 的客户端可以把它们当作斜杠命令选用。
+- 工具 `load_analysis_method`：模型自己加载方法，`id` 填方法 ID，或填刚调用的工具名（得到该体系的默认方法）。服务说明（`instructions`）提示模型解读前先加载。
+- prompts：每个方法一个同名 prompt（如 `bazi`、`bazi-mangpai`、`dream`），可选参数 `question`。支持 prompts 的客户端可以把它们当作斜杠命令选用。
 
 ## 按需加载的工具
 

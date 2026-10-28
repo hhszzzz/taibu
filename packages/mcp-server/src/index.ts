@@ -29,7 +29,7 @@ import {
   isDeferredTool,
   listMethodPrompts,
   normalizeTransportDetailLevel,
-  renderMethodCard,
+  renderMethod,
   renderMethodPrompt,
   renderToolSearchResult,
   searchDeferredTools,
@@ -176,7 +176,7 @@ function createMcpServer(seedScope: string, mode: ToolListMode): McpServer {
   const methodTool = getMethodToolDefinition();
   server.registerTool(methodTool.name, toolConfig(methodTool), async (args): Promise<CallToolResult> => {
     try {
-      return { content: [{ type: 'text', text: renderMethodCard(String(args.id)) }] };
+      return { content: [{ type: 'text', text: renderMethod(String(args.id)) }] };
     } catch (error) {
       // An unknown card is the caller's mistake; its message names the id and is safe to show.
       return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : String(error)}` }], isError: true };

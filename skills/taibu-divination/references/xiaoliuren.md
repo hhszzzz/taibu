@@ -9,7 +9,7 @@
 | `lunarMonth` | integer | 否 | — | 手工农历月（1-12），与 date 二选一 |
 | `lunarDay` | integer | 否 | — | 手工农历日（1-30） |
 | `hour` | integer | 是 | — | 小时或时辰序号，由 hourType 明确指定 |
-| `hourType` | enum | 否 | — | clock=0-23小时；shichen=子1至亥12；legacy=旧版混合口径。date 输入默认 clock，手工农历默认 legacy。；可选值: `clock` / `shichen` / `legacy` |
+| `hourType` | enum | 否 | — | clock=0-23钟表小时；shichen=子1至亥12时辰序号；legacy=旧版混合口径。date 输入默认 clock，手工农历默认 legacy（手工农历传 1–12 点钟表小时时必须显式传 hourType="clock"）。；可选值: `clock` / `shichen` / `legacy` |
 | `date` | string | 否 | — | 公历日期，与手工农历输入二选一 |
 | `isLeapMonth` | boolean | 否 | `false` | 手工农历是否为闰月 |
 | `leapMonthStrategy` | enum | 否 | `"repeat"` | 闰月沿用同月计数或递进一月计数；可选值: `repeat` / `advance` |

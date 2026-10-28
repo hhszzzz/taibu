@@ -12,7 +12,7 @@
 | Redis | 共享缓存、限流、登录失败锁、会话二级存储、BullMQ | `src/lib/redis.server.ts`、`src/lib/jobs/` |
 | Worker | Agent 执行、文档处理、邮件与维护任务 | `scripts/agent-worker.mjs`、`src/lib/agent/` |
 | 文件卷 | 用户上传的私有文件 | `src/lib/storage/`、`FILE_STORAGE_ROOT` |
-| Core | 占术计算、规范文本和 JSON、工具与方法卡 | `packages/core/` |
+| Core | 占术计算、规范文本和 JSON、工具与方法 | `packages/core/` |
 | MCP | 将 Core 能力提供为 stdio / HTTP 协议 | `packages/mcp/`、`packages/mcp-server/` |
 
 应用直接连接 PostgreSQL、Redis 和 SMTP；本地 Compose 额外提供 Mailpit。部署、连接配置、备份与 SQL 操作见 [自托管手册](Self-Hosting.md)。

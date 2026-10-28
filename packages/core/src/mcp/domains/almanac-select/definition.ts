@@ -8,7 +8,7 @@ export const almanacSelectDefinition: ToolDefinition = {
     properties: {
       startDate: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: '区间起始日（公历 YYYY-MM-DD）' },
       endDate: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: '区间结束日（公历 YYYY-MM-DD）；与起始日跨度不超过 92 天' },
-      activity: { type: 'string', minLength: 1, maxLength: 20, description: '择日事项，如 嫁娶、开市、动土；省略时列出区间内全部日子' },
+      activity: { type: 'string', minLength: 1, maxLength: 20, description: '择日事项，按黄历传统词条匹配（结婚/领证填 嫁娶，订婚填 订盟 或 纳采，搬家填 入宅 或 移徙，开业填 开市，签约填 立券 或 交易，装修填 修造，动工填 动土，远行填 出行）；省略时列出区间内全部日子' },
       excludeClash: {
         type: 'array', minItems: 1, maxItems: 12,
         items: { type: 'string', minLength: 1, maxLength: 2 },

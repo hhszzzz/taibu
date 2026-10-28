@@ -6,7 +6,7 @@ TaiBu 的公共在线 MCP Server，使用 MCP HTTP 传输，任何网络客户�
 
 ## 功能
 
-- 复用 `taibu-core` 的全部公开 MCP 工具，以及 13 张方法卡：模型用 `load_analysis_method` 加载，用户可选用同名 prompt
+- 复用 `taibu-core` 的全部公开 MCP 工具，以及 13 个方法：模型用 `load_analysis_method` 加载，用户可选用同名 prompt
 - 标准入口：`POST /mcp` 列出全部工具；`POST /mcp/core` 只列排盘工具，其余低频工具经 `tool_search`／`tool_call` 使用
 - `content[0].text` 返回规范文本，`structuredContent` 返回 canonical JSON
 - MCP `2026-07-28`：`server/discover`、每请求能力声明、标准 HTTP 头校验与 `subscriptions/listen`

@@ -831,13 +831,15 @@ test('invalid conversation reasoning levels fail before charging or model execut
     assert.equal(state.aiUiCalls, 0);
 });
 
-test('chat forwards the conversation id so its prompt cache key stays stable, and rejects a malformed one', async t => {
+test('chat forwards the conversation id and its owner so the prompt cache key stays stable, and rejects a malformed one', async t => {
     const state = setupRouteMocks(t, createUIChunkStream([{ type: 'text-delta', id: 't1', delta: 'ok' }]));
     const ai = require('../lib/ai/ai') as typeof import('../lib/ai/ai');
     const original = ai.callAIUIMessageResult;
     let forwarded: string | undefined;
+    let forwardedScope: string | undefined;
     t.mock.method(ai, 'callAIUIMessageResult', async (...args: Parameters<typeof original>) => {
         forwarded = args[4]?.conversationId;
+        forwardedScope = args[4]?.cacheScope;
         return original(...args);
     });
     const { POST } = await import('../app/api/chat/route');
@@ -845,6 +847,7 @@ test('chat forwards the conversation id so its prompt cache key stays stable, an
     await response.text();
     assert.equal(response.status, 200);
     assert.equal(forwarded, 'conversation-a');
+    assert.equal(forwardedScope, 'user-1', 'the key is scoped to the member whose request it is');
 
     for (const conversationId of ['', 'x'.repeat(129), 42]) {
         const rejected = await POST(createChatRequest({ conversationId }));

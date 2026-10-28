@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
         fallbackPersonality,
         '',
         requestedModelId,
-        { reasoning: reasoningEnabled, reasoningEffort: reasoningEnabled ? resolvedBody.reasoningEffort : null, systemPromptOverride: systemPrompt, conversationId: resolvedBody.conversationId }
+        { reasoning: reasoningEnabled, reasoningEffort: reasoningEnabled ? resolvedBody.reasoningEffort : null, systemPromptOverride: systemPrompt, conversationId: resolvedBody.conversationId, cacheScope: userId ?? undefined }
       );
 
       const response = streamResult.toUIMessageStreamResponse({
@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
       fallbackPersonality,
       requestedModelId,
       '',
-      { reasoning: reasoningEnabled, reasoningEffort: reasoningEnabled ? resolvedBody.reasoningEffort : null, systemPromptOverride: systemPrompt, conversationId: resolvedBody.conversationId }
+      { reasoning: reasoningEnabled, reasoningEffort: reasoningEnabled ? resolvedBody.reasoningEffort : null, systemPromptOverride: systemPrompt, conversationId: resolvedBody.conversationId, cacheScope: userId ?? undefined }
     );
 
     observation.finish({ generation: content?.trim() ? 'completed' : 'empty' });

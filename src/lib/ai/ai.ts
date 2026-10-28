@@ -190,6 +190,8 @@ export interface AICallOptions {
     systemPromptOverride?: string;
     /** The conversation this call belongs to; its hash becomes prompt_cache_key when the model opts in. */
     conversationId?: string;
+    /** The member this call belongs to; the key covers it, so one member never shares another's partition. */
+    cacheScope?: string;
 }
 
 export interface AICallResult {
@@ -275,7 +277,7 @@ export async function callAI(
             reasoningEffort: options?.reasoningEffort ?? undefined,
             temperature: options?.temperature,
             maxTokens: options?.maxTokens,
-            conversationId: options?.conversationId,
+            conversationId: options?.conversationId, cacheScope: options?.cacheScope,
         });
         return result.text;
     });
@@ -307,7 +309,7 @@ export async function callAIStream(
             reasoningEffort: options?.reasoningEffort ?? undefined,
             temperature: options?.temperature,
             maxTokens: options?.maxTokens,
-            conversationId: options?.conversationId,
+            conversationId: options?.conversationId, cacheScope: options?.cacheScope,
         });
         return fullStreamToSSE(result.fullStream);
     });
@@ -337,7 +339,7 @@ export async function callAIUIMessageResult(
             reasoningEffort: options?.reasoningEffort ?? undefined,
             temperature: options?.temperature,
             maxTokens: options?.maxTokens,
-            conversationId: options?.conversationId,
+            conversationId: options?.conversationId, cacheScope: options?.cacheScope,
         });
         return result;
     });
@@ -368,7 +370,7 @@ export async function callAIVision(
             reasoningEffort: options?.reasoningEffort ?? undefined,
             temperature: options?.temperature,
             maxTokens: options?.maxTokens,
-            conversationId: options?.conversationId,
+            conversationId: options?.conversationId, cacheScope: options?.cacheScope,
         });
         return result.text;
     });

@@ -382,7 +382,7 @@ export async function executeAgentRun(
       const model: Model<Api> = selected.id === config.id ? piModel : { ...piModel, id: selected.id, name: selected.name, baseUrl: selected.apiUrl, reasoning: selected.supportsReasoning,
         input: ['text'], thinkingLevelMap: thinkingLevelMap(selected.thinkingLevels), contextWindow: capacity?.maxContext ?? 0, maxTokens: selected.defaultMaxTokens ?? 4096 };
       return { model, authorize: options => authorizeModel(selected, options?.reasoning !== undefined),
-        stream: injected?.streamFn ?? createPiModelStream(selected, { reasoning: selected.supportsReasoning, apiKey, telemetry, conversationId: run.conversation_id,
+        stream: injected?.streamFn ?? createPiModelStream(selected, { reasoning: selected.supportsReasoning, apiKey, telemetry, conversationId: run.conversation_id, cacheScope: run.user_id,
           ...(selected.id === config.id && selected.supportsVision && !run.input.customProvider ? { resolveImages: (messages: Parameters<typeof resolveAttachmentImages>[3]) => resolveAttachmentImages(store.db,run.user_id,run.conversation_id,messages) } : {}),
           ...(selected.id === config.id ? {
             onAnswerStart: () => { tail.text = ''; },

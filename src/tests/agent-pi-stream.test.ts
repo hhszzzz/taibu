@@ -213,22 +213,31 @@ test('custom parameters and sampling defaults reach the body, but never replace 
 test('agent requests carry this conversation prompt cache key only when the model opts in', async () => {
   const enabled = { ...config, customParameters: { promptCacheKey: true, top_k: 20 } };
   const first = gateway(reply('ok'));
-  await createPiModelStream(enabled, { fetch: first.fetch, conversationId: 'conversation-a' })(piModel, context()).result();
+  await createPiModelStream(enabled, { fetch: first.fetch, conversationId: 'conversation-a', cacheScope: 'member-a' })(piModel, context()).result();
   const [request] = first.requests;
-  assert.equal(request.body.prompt_cache_key, promptCacheKey('conversation-a'));
+  assert.equal(request.body.prompt_cache_key, promptCacheKey('member-a', 'conversation-a'));
   assert.equal(request.body.promptCacheKey, undefined, 'the switch is not a request field');
   assert.equal(request.body.top_k, 20);
 
   const same = gateway(reply('ok'));
-  await createPiModelStream(enabled, { fetch: same.fetch, conversationId: 'conversation-a' })(piModel, context()).result();
+  await createPiModelStream(enabled, { fetch: same.fetch, conversationId: 'conversation-a', cacheScope: 'member-a' })(piModel, context()).result();
   assert.equal(same.requests[0].body.prompt_cache_key, request.body.prompt_cache_key, 'stable within one conversation');
 
   const other = gateway(reply('ok'));
-  await createPiModelStream(enabled, { fetch: other.fetch, conversationId: 'conversation-b' })(piModel, context()).result();
+  await createPiModelStream(enabled, { fetch: other.fetch, conversationId: 'conversation-b', cacheScope: 'member-a' })(piModel, context()).result();
   assert.notEqual(other.requests[0].body.prompt_cache_key, request.body.prompt_cache_key);
 
+  // Two members never share a partition, and a task whose owner is unknown sends no key at all.
+  const otherMember = gateway(reply('ok'));
+  await createPiModelStream(enabled, { fetch: otherMember.fetch, conversationId: 'conversation-a', cacheScope: 'member-b' })(piModel, context()).result();
+  assert.notEqual(otherMember.requests[0].body.prompt_cache_key, request.body.prompt_cache_key);
+
+  const ownerless = gateway(reply('ok'));
+  await createPiModelStream(enabled, { fetch: ownerless.fetch, conversationId: 'conversation-a' })(piModel, context()).result();
+  assert.equal(ownerless.requests[0].body.prompt_cache_key, undefined);
+
   const off = gateway(reply('ok'));
-  await createPiModelStream({ ...config, customParameters: { promptCacheKey: false } }, { fetch: off.fetch, conversationId: 'conversation-a' })(piModel, context()).result();
+  await createPiModelStream({ ...config, customParameters: { promptCacheKey: false } }, { fetch: off.fetch, conversationId: 'conversation-a', cacheScope: 'member-a' })(piModel, context()).result();
   assert.equal(off.requests[0].body.prompt_cache_key, undefined);
   assert.equal(off.requests[0].body.promptCacheKey, undefined);
 });

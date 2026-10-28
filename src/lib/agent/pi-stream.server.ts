@@ -227,6 +227,8 @@ export interface AgentModelStreamSettings {
   resolveImages?: (messages: Message[]) => Promise<Message[]>;
   /** The task's conversation; its hash becomes this model's prompt cache key when the model opts in. */
   conversationId?: string;
+  /** The task owner; the key covers it, so two members' conversations never share a partition. */
+  cacheScope?: string;
   fetch?: typeof globalThis.fetch;
   /** Live answer text, for the display-only delta channel; never used for durability. */
   onAnswerStart?: () => void;
@@ -243,7 +245,7 @@ export interface AgentModelStreamSettings {
  * (as Pi Desktop does); the second response streams into the same message, so the reply reads as one.
  */
 export function createPiModelStream(config: AIModelConfig, settings: AgentModelStreamSettings = {}): StreamFn {
-  const cacheKey = modelPromptCacheKey(config, settings.conversationId);
+  const cacheKey = modelPromptCacheKey(config, settings.conversationId, settings.cacheScope);
   return (piModel, context, options) => {
     const output = createAssistantMessageEventStream();
     void (async () => {

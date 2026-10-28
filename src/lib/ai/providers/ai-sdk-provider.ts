@@ -30,6 +30,8 @@ export interface AIProviderOptions {
     abortSignal?: AbortSignal;
     /** The conversation this request belongs to; its hash becomes the model's prompt cache key. */
     conversationId?: string;
+    /** The member the request belongs to. It is part of the key, so cache partitions never mix members. */
+    cacheScope?: string;
 }
 
 /**
@@ -170,7 +172,7 @@ export function buildProviderOptions(
     if (providerOptions.reasoningEffort === 'max') delete providerOptions.reasoningEffort;
 
     // Off by default: only a model that opts in and a request that names its conversation send the key.
-    const cacheKey = modelPromptCacheKey(config, options?.conversationId);
+    const cacheKey = modelPromptCacheKey(config, options?.conversationId, options?.cacheScope);
     if (cacheKey) providerOptions.promptCacheKey = cacheKey;
 
     if (Object.keys(providerOptions).length === 0) return undefined;

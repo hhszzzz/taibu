@@ -24,9 +24,13 @@ type TaskNotification = SiteNotification & {
     event_data?: { conversationId?: string; kind?: string; status?: string };
 };
 
-/** In-app target of a task notice: its own /chat link, else the conversation it belongs to. */
+/**
+ * In-app target of a task notice: the link the server wrote when it is one of ours, else the conversation it belongs
+ * to. A schedule that lost its conversation links to `/scheduled`, so any root-relative path is followed; anything
+ * absolute (a foreign origin) is never.
+ */
 export function taskNoticeHref(notice: Pick<TaskNotification, 'link' | 'event_data'>) {
-    if (notice.link?.startsWith('/chat?')) return notice.link;
+    if (notice.link?.startsWith('/') && !notice.link.startsWith('//')) return notice.link;
     const id = notice.event_data?.conversationId;
     return id ? `/chat?id=${encodeURIComponent(id)}` : null;
 }

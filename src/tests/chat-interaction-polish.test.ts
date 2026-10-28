@@ -90,7 +90,9 @@ test('menu letter keys pick the item whose <kbd> shows that letter', async () =>
 test('a task completion toast opens its conversation', async () => {
     const { taskNoticeHref } = await import('../components/providers/AgentNotificationBridge');
     assert.equal(taskNoticeHref({ link: '/chat?id=c1&message=m', event_data: { conversationId: 'c1' } }), '/chat?id=c1&message=m');
-    assert.equal(taskNoticeHref({ link: 'https://evil.example/chat?id=c1', event_data: { conversationId: 'c 2' } }), '/chat?id=c%202', 'only in-app chat links are followed');
+    assert.equal(taskNoticeHref({ link: '/scheduled', event_data: undefined }), '/scheduled', 'a schedule that lost its conversation links to its own page');
+    assert.equal(taskNoticeHref({ link: 'https://evil.example/chat?id=c1', event_data: { conversationId: 'c 2' } }), '/chat?id=c%202', 'only in-app links are followed');
+    assert.equal(taskNoticeHref({ link: '//evil.example/chat', event_data: { conversationId: 'c3' } }), '/chat?id=c3', 'a protocol-relative link is not an in-app link');
     assert.equal(taskNoticeHref({ link: null, event_data: undefined }), null);
 });
 

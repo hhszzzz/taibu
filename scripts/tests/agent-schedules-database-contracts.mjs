@@ -21,7 +21,7 @@ export async function agentSchedulesDatabaseContracts(t, { sql, asActor, asOwner
   const latest = async (cadence, timezone, before) => asActor(owner,
     `SELECT to_char((public.agent_latest_schedule_occurrence(${json(cadence)},${quote(timezone)},${quote(before)}) AT TIME ZONE 'UTC'),'YYYY-MM-DD HH24:MI:SS');`);
   const create = async (name, cadence, extra = {}) => JSON.parse(await asActor(owner,
-    `SELECT to_jsonb(public.create_agent_schedule(${quote(name)},${quote(extra.template ?? 'custom')},${quote(extra.prompt ?? '整理今天的重点。')},${json(cadence)},${quote(extra.timezone ?? 'Asia/Shanghai')},${json(extra.options ?? { notify: true })},${extra.limit ?? 5})) s;`));
+    `SELECT to_jsonb(public.create_agent_schedule(${quote(name)},${quote(extra.template ?? 'custom')},${quote(extra.prompt ?? '整理今天的重点。')},${json(cadence)},${quote(extra.timezone ?? 'Asia/Shanghai')},${json(extra.options ?? { notify: true })})) s;`));
   const dueNow = id => asOwner(`UPDATE public.agent_schedules SET next_run_at=now()-interval '1 minute' WHERE id=${quote(id)};`);
   const runs = id => asOwner(`SELECT coalesce(jsonb_agg(to_jsonb(r) ORDER BY r.created_at),'[]') FROM public.agent_schedule_runs r WHERE r.schedule_id=${quote(id)};`);
 
@@ -51,13 +51,27 @@ export async function agentSchedulesDatabaseContracts(t, { sql, asActor, asOwner
     await assert.rejects(asActor(owner, `SELECT public.agent_next_run_at('{"kind":"daily","time":"08:00"}'::jsonb,'Fake/Zone',now());`), /AGENT_SCHEDULE_TIMEZONE_INVALID/);
   });
 
-  await t.test('creating a schedule binds one conversation and the tier limit holds', async () => {
-    const schedule = await create('晨间整理', { kind: 'daily', time: '09:00' }, { limit: 1 });
+  await t.test('creating a schedule binds one conversation and the tier limit comes from the admin setting', async () => {
+    await asOwner(`INSERT INTO public.app_settings(setting_key,setting_value) VALUES('agent_schedule_limits','{"free":1,"plus":1,"pro":3}'::jsonb)
+      ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value;`);
+    const schedule = await create('晨间整理', { kind: 'daily', time: '09:00' });
     assert.ok(schedule.conversation_id);
     assert.equal(schedule.template, 'custom');
     assert.equal(await asActor(owner, `SELECT title FROM public.conversations WHERE id=${quote(schedule.conversation_id)};`), '定时 · 晨间整理');
-    await assert.rejects(create('第二个任务', { kind: 'daily', time: '09:00' }, { limit: 1 }), /AGENT_SCHEDULE_LIMIT/);
-    await asOwner(`DELETE FROM public.agent_schedules WHERE id=${quote(schedule.id)};`);
+    // The number is the function's own: the signature has no quota to pass in.
+    assert.equal(await asOwner(`SELECT public.agent_schedule_limit_for(${quote(owner)});`), '1');
+    await assert.rejects(create('第二个任务', { kind: 'daily', time: '09:00' }), /AGENT_SCHEDULE_LIMIT/);
+    // Raising the administrator's number raises the ceiling; a downgraded tier tightens it again.
+    await asOwner("UPDATE public.app_settings SET setting_value='{\"free\":1,\"plus\":2,\"pro\":3}'::jsonb WHERE setting_key='agent_schedule_limits';");
+    assert.equal(await asOwner(`SELECT public.agent_schedule_limit_for(${quote(owner)});`), '2');
+    const second = await create('第二个任务', { kind: 'daily', time: '09:00' });
+    await asOwner(`UPDATE public.users SET membership='free' WHERE id=${quote(owner)};`);
+    assert.equal(await asOwner(`SELECT public.agent_schedule_limit_for(${quote(owner)});`), '1');
+    await asOwner(`UPDATE public.agent_schedules SET enabled=false WHERE id=${quote(second.id)};`);
+    await assert.rejects(asActor(owner, `SELECT public.update_agent_schedule(${quote(second.id)},'第二个任务','整理今天的重点。','{"kind":"daily","time":"09:00"}'::jsonb,'Asia/Shanghai','{"notify":true}'::jsonb,true);`), /AGENT_SCHEDULE_LIMIT/);
+    await asOwner(`UPDATE public.users SET membership='plus' WHERE id=${quote(owner)};
+      DELETE FROM public.app_settings WHERE setting_key='agent_schedule_limits';
+      DELETE FROM public.agent_schedules WHERE user_id=${quote(owner)};`);
   });
 
   await t.test('a manual occurrence is created once, only for its owner or an administrator', async () => {

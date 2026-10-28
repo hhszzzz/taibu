@@ -793,11 +793,34 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.create_agent_schedule(p_name text, p_template text, p_prompt text, p_cadence jsonb, p_timezone text, p_options jsonb, p_limit integer) RETURNS public.agent_schedules
+-- The number of schedules a member's tier allows. Read inside the definer context, so
+-- the caller cannot argue a quota of its own; the defaults match the application's
+-- (free 1, plus 5, pro 20) and an unknown member gets the strictest one.
+CREATE OR REPLACE FUNCTION public.agent_schedule_limit_for(p_user_id uuid) RETURNS integer
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+  SELECT coalesce(least(greatest(coalesce(configured, t.fallback), 0), 100), 1)
+  FROM (
+    SELECT CASE WHEN u.membership = 'pro' AND (u.membership_expires_at IS NULL OR u.membership_expires_at > now()) THEN 20
+                WHEN u.membership = 'plus' AND (u.membership_expires_at IS NULL OR u.membership_expires_at > now()) THEN 5
+                ELSE 1 END AS fallback,
+           CASE WHEN u.membership IN ('plus','pro') AND (u.membership_expires_at IS NULL OR u.membership_expires_at > now())
+                THEN u.membership ELSE 'free' END AS tier
+      FROM public.users u WHERE u.id = p_user_id
+  ) t
+  LEFT JOIN LATERAL (
+    SELECT CASE WHEN s.setting_value->>t.tier ~ '^[0-9]{1,3}$' THEN (s.setting_value->>t.tier)::integer END AS configured
+      FROM public.app_settings s
+     WHERE s.setting_key = 'agent_schedule_limits' AND jsonb_typeof(s.setting_value) = 'object'
+  ) c ON true;
+$$;
+
+CREATE OR REPLACE FUNCTION public.create_agent_schedule(p_name text, p_template text, p_prompt text, p_cadence jsonb, p_timezone text, p_options jsonb) RETURNS public.agent_schedules
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
     AS $$
-DECLARE v_user uuid := auth.uid(); v_conversation uuid; v_next timestamp with time zone; v_count integer; s public.agent_schedules;
+DECLARE v_user uuid := auth.uid(); v_conversation uuid; v_next timestamp with time zone; v_count integer; v_limit integer; s public.agent_schedules;
 BEGIN
   IF v_user IS NULL THEN RAISE EXCEPTION 'AUTH_REQUIRED' USING ERRCODE='42501'; END IF;
   IF coalesce(btrim(p_name),'')='' OR length(p_name)>80 THEN RAISE EXCEPTION 'AGENT_SCHEDULE_NAME_INVALID' USING ERRCODE='22023'; END IF;
@@ -806,8 +829,10 @@ BEGIN
   IF jsonb_typeof(p_options) IS DISTINCT FROM 'object' THEN RAISE EXCEPTION 'AGENT_SCHEDULE_OPTIONS_INVALID' USING ERRCODE='22023'; END IF;
   -- Serialize the count and the insert so two tabs cannot exceed the tier's number.
   PERFORM pg_advisory_xact_lock(hashtextextended(v_user::text,721));
+  -- The tier's number is read here, never taken from the caller.
+  v_limit := public.agent_schedule_limit_for(v_user);
   SELECT count(*) INTO v_count FROM public.agent_schedules WHERE user_id=v_user;
-  IF v_count >= greatest(p_limit,0) THEN RAISE EXCEPTION 'AGENT_SCHEDULE_LIMIT' USING ERRCODE='23505'; END IF;
+  IF v_count >= v_limit THEN RAISE EXCEPTION 'AGENT_SCHEDULE_LIMIT' USING ERRCODE='23505'; END IF;
   v_next := public.agent_next_run_at(p_cadence,p_timezone,now());
   INSERT INTO public.conversations(user_id,title,personality,messages)
     VALUES(v_user,'定时 · '||left(btrim(p_name),60),'general','[]'::jsonb)
@@ -831,6 +856,11 @@ BEGIN
   IF coalesce(btrim(p_prompt),'')='' OR length(p_prompt)>4000 THEN RAISE EXCEPTION 'AGENT_SCHEDULE_PROMPT_INVALID' USING ERRCODE='22023'; END IF;
   IF jsonb_typeof(p_options) IS DISTINCT FROM 'object' THEN RAISE EXCEPTION 'AGENT_SCHEDULE_OPTIONS_INVALID' USING ERRCODE='22023'; END IF;
   IF p_enabled AND s.conversation_id IS NULL THEN RAISE EXCEPTION 'AGENT_SCHEDULE_CONVERSATION_MISSING' USING ERRCODE='23505'; END IF;
+  -- Switching a paused schedule back on may not push the member past its tier again.
+  IF p_enabled AND NOT s.enabled
+     AND (SELECT count(*) FROM public.agent_schedules WHERE user_id=s.user_id AND enabled) >= public.agent_schedule_limit_for(s.user_id) THEN
+    RAISE EXCEPTION 'AGENT_SCHEDULE_LIMIT' USING ERRCODE='23505';
+  END IF;
   v_next := CASE WHEN p_enabled THEN public.agent_next_run_at(p_cadence,p_timezone,now()) ELSE NULL END;
   UPDATE public.agent_schedules SET name=btrim(p_name),prompt=p_prompt,cadence=p_cadence,
     timezone=coalesce(nullif(btrim(p_timezone),''),'Asia/Shanghai'),options=p_options,enabled=p_enabled,

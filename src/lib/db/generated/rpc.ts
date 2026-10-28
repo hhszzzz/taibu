@@ -38,7 +38,7 @@ export interface RpcRegistry {
   "claim_prompt_enhancement": { args: Record<string, never>; result: boolean };
   "cleanup_expired_identity_rows": { args: { "p_limit"?: number | null; }; result: { sessions_deleted: number; verifications_deleted: number; }[] };
   "community_author_profiles": { args: { "p_user_ids": string[] | null; }; result: { user_id: string; nickname: string; avatar_url: string; }[] };
-  "create_agent_schedule": { args: { "p_name": string | null; "p_template": string | null; "p_prompt": string | null; "p_cadence": unknown | null; "p_timezone": string | null; "p_options": unknown | null; "p_limit": number | null; }; result: Record<string, unknown> };
+  "create_agent_schedule": { args: { "p_name": string | null; "p_template": string | null; "p_prompt": string | null; "p_cadence": unknown | null; "p_timezone": string | null; "p_options": unknown | null; }; result: Record<string, unknown> };
   "create_agent_schedule_run": { args: { "p_schedule_id": string | null; "p_user_id": string | null; }; result: Record<string, unknown> };
   "create_analysis_conversation_with_history_as_service": { args: { "p_user_id": string | null; "p_source_type": string | null; "p_source_data": unknown | null; "p_title": string | null; "p_personality": string | null; "p_messages": unknown | null; "p_history_type": string | null; "p_history_payload": unknown | null; }; result: string };
   "create_conversation_with_messages": { args: { "p_user_id": string | null; "p_title": string | null; "p_personality"?: string | null; "p_source_type"?: string | null; "p_source_data"?: unknown | null; "p_messages"?: unknown | null; }; result: string };
@@ -119,7 +119,7 @@ export const RPC_SPECS = {
   "claim_prompt_enhancement": { args: [], returns: "scalar" },
   "cleanup_expired_identity_rows": { args: [["p_limit", "integer", true]], returns: "setof" },
   "community_author_profiles": { args: [["p_user_ids", "uuid[]", false]], returns: "setof" },
-  "create_agent_schedule": { args: [["p_name", "text", false], ["p_template", "text", false], ["p_prompt", "text", false], ["p_cadence", "jsonb", false], ["p_timezone", "text", false], ["p_options", "jsonb", false], ["p_limit", "integer", false]], returns: "row" },
+  "create_agent_schedule": { args: [["p_name", "text", false], ["p_template", "text", false], ["p_prompt", "text", false], ["p_cadence", "jsonb", false], ["p_timezone", "text", false], ["p_options", "jsonb", false]], returns: "row" },
   "create_agent_schedule_run": { args: [["p_schedule_id", "uuid", false], ["p_user_id", "uuid", false]], returns: "row" },
   "create_analysis_conversation_with_history_as_service": { args: [["p_user_id", "uuid", false], ["p_source_type", "text", false], ["p_source_data", "jsonb", false], ["p_title", "text", false], ["p_personality", "text", false], ["p_messages", "jsonb", false], ["p_history_type", "text", false], ["p_history_payload", "jsonb", false]], returns: "scalar" },
   "create_conversation_with_messages": { args: [["p_user_id", "uuid", false], ["p_title", "text", false], ["p_personality", "text", true], ["p_source_type", "text", true], ["p_source_data", "jsonb", true], ["p_messages", "jsonb", true]], returns: "scalar" },

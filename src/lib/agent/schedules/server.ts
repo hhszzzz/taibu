@@ -124,7 +124,8 @@ export async function createAgentSchedule(db: ScopedDb, userId: string, input: A
   try {
     const row = await db.rpc('create_agent_schedule', {
       p_name: input.name, p_template: input.template, p_prompt: input.prompt,
-      p_cadence: input.cadence, p_timezone: input.timezone, p_options: input.options, p_limit: allowance.limit,
+      // The quota is the function's own business: it reads the admin setting and the member's tier itself.
+      p_cadence: input.cadence, p_timezone: input.timezone, p_options: input.options,
     });
     return toAgentScheduleView(row as unknown as AgentScheduleRow);
   } catch (error) {

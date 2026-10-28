@@ -714,6 +714,17 @@ BEGIN
     hours_step := coalesce((p_cadence->>'hours')::integer,0);
     IF hours_step<1 OR hours_step>24 THEN RAISE EXCEPTION 'AGENT_SCHEDULE_CADENCE_INVALID' USING ERRCODE='22023'; END IF;
     candidate := date_trunc('day',local_now) + make_interval(hours=>hour_part,mins=>minute_part);
+    IF candidate > local_now THEN
+      -- Before today's HH:mm the previous day's chain still steps through the
+      -- hours after midnight; it ends at the first step at or after today's anchor.
+      candidate := candidate - interval '1 day';
+      WHILE candidate + make_interval(hours=>hours_step) <= local_now LOOP candidate := candidate + make_interval(hours=>hours_step); END LOOP;
+      candidate := candidate + make_interval(hours=>hours_step);
+      IF candidate >= date_trunc('day',local_now) + make_interval(hours=>hour_part,mins=>minute_part) THEN
+        candidate := date_trunc('day',local_now) + make_interval(hours=>hour_part,mins=>minute_part);
+      END IF;
+      RETURN public.agent_local_to_utc(candidate,zone);
+    END IF;
     WHILE candidate <= local_now LOOP candidate := candidate + make_interval(hours=>hours_step); END LOOP;
     RETURN public.agent_local_to_utc(candidate,zone);
   END IF;
@@ -768,7 +779,13 @@ BEGIN
   ELSIF kind='interval' THEN
     hours_step := coalesce((p_cadence->>'hours')::integer,0);
     IF hours_step<1 OR hours_step>24 THEN RETURN NULL; END IF;
+    -- Occurrences are the day's HH:mm plus whole steps. Start from today's
+    -- anchor, or from yesterday's when today's has not arrived yet, then walk
+    -- forward to the newest step at or before the instant; a chain truncated by
+    -- midnight still has its last step that fell on the current day.
     candidate := date_trunc('day',local_now) + make_interval(hours=>hour_part,mins=>minute_part);
+    IF candidate > local_now THEN candidate := candidate - interval '1 day'; END IF;
+    WHILE candidate + make_interval(hours=>hours_step) <= local_now LOOP candidate := candidate + make_interval(hours=>hours_step); END LOOP;
     WHILE public.agent_local_to_utc(candidate,zone) > p_before LOOP candidate := candidate - make_interval(hours=>hours_step); END LOOP;
     RETURN public.agent_local_to_utc(candidate,zone);
   END IF;
@@ -826,6 +843,31 @@ BEGIN
 END;
 $$;
 
+-- The manual "run now" occurrence. Table writes stay owner-only under RLS, so the
+-- row is created here: the member's own request, or an administrator acting for
+-- the scheduler. The busy check and the insert share the schedule's row lock.
+CREATE OR REPLACE FUNCTION public.create_agent_schedule_run(p_schedule_id uuid, p_user_id uuid) RETURNS public.agent_schedule_runs
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE s public.agent_schedules; r public.agent_schedule_runs;
+BEGIN
+  IF p_user_id IS NULL OR (p_user_id IS DISTINCT FROM auth.uid() AND NOT public.is_admin_user()) THEN
+    RAISE EXCEPTION 'AGENT_SCHEDULE_NOT_FOUND' USING ERRCODE='42501';
+  END IF;
+  SELECT * INTO s FROM public.agent_schedules WHERE id=p_schedule_id AND user_id=p_user_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'AGENT_SCHEDULE_NOT_FOUND' USING ERRCODE='42501'; END IF;
+  IF s.conversation_id IS NULL THEN RAISE EXCEPTION 'AGENT_SCHEDULE_CONVERSATION_MISSING' USING ERRCODE='23505'; END IF;
+  IF EXISTS(SELECT 1 FROM public.agent_schedule_runs WHERE schedule_id=s.id AND status IN ('pending','running')) THEN
+    RAISE EXCEPTION 'AGENT_SCHEDULE_RUN_BUSY' USING ERRCODE='23505';
+  END IF;
+  INSERT INTO public.agent_schedule_runs(schedule_id,user_id,scheduled_for,status)
+    VALUES(s.id,s.user_id,now(),'pending')
+    RETURNING * INTO r;
+  RETURN r;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.enforce_agent_schedule_limits(p_limits jsonb) RETURNS integer
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
@@ -876,7 +918,8 @@ BEGIN
     UPDATE public.agent_schedules SET
       last_run_at=CASE WHEN p_status IN ('running','completed','failed') THEN now() ELSE last_run_at END,
       last_status=p_status,
-      consecutive_failures=CASE WHEN p_status='failed' THEN consecutive_failures+1 ELSE 0 END,
+      consecutive_failures=CASE WHEN p_status='failed' THEN consecutive_failures+1
+        WHEN p_status IN ('completed','skipped') THEN 0 ELSE consecutive_failures END,
       enabled=CASE WHEN p_skip_reason='conversation_missing' THEN false ELSE enabled END,
       next_run_at=CASE WHEN p_skip_reason='conversation_missing' THEN NULL ELSE next_run_at END,
       updated_at=now()
@@ -1378,9 +1421,11 @@ CREATE OR REPLACE FUNCTION public.agent_task_notification() RETURNS trigger
 DECLARE event text; heading text; target_message text;
 BEGIN
   IF NEW.status IS NOT DISTINCT FROM OLD.status OR NEW.status NOT IN ('completed','failed','awaiting_input') THEN RETURN NEW; END IF;
-  -- A scheduled run has its own notice, named after the schedule and honouring
-  -- its owner's notify choice; the generic task notice would duplicate it.
-  IF EXISTS(SELECT 1 FROM public.agent_schedule_runs WHERE agent_run_id=NEW.id) THEN RETURN NEW; END IF;
+  -- A scheduled run that finished has its own notice, named after the schedule
+  -- and honouring its owner's notify choice; the generic task notice would
+  -- duplicate it. A question still needs the member's attention, so an
+  -- awaiting_input run keeps the generic notice even when it belongs to a schedule.
+  IF NEW.status IN ('completed','failed') AND EXISTS(SELECT 1 FROM public.agent_schedule_runs WHERE agent_run_id=NEW.id) THEN RETURN NEW; END IF;
   IF NOT coalesce((SELECT notifications_enabled AND notify_site FROM public.user_settings WHERE user_id=NEW.user_id),true) THEN RETURN NEW; END IF;
   event:='agent:'||NEW.id::text||':'||NEW.status||CASE WHEN NEW.status='awaiting_input' THEN ':'||coalesce(NEW.checkpoint->>'questionId','legacy') ELSE '' END;
   heading:=CASE NEW.status WHEN 'completed' THEN '太卜任务完成' WHEN 'failed' THEN '太卜任务未完成' ELSE '太卜需要你补充信息' END;

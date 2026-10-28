@@ -30,7 +30,7 @@ async function loadSchedule(db: ScopedDb, id: string): Promise<ScheduleView | nu
 async function settle(
   db: ScopedDb,
   runId: string,
-  status: 'running' | 'skipped' | 'failed',
+  status: 'running' | 'completed' | 'skipped' | 'failed',
   values: { agentRunId?: string; error?: string; skipReason?: SkipReason } = {},
 ): Promise<void> {
   await db.rpc('settle_agent_schedule_run', {
@@ -87,9 +87,11 @@ function failureOutcome(error: unknown): { kind: 'skipped'; reason: SkipReason }
 }
 
 /**
- * Submit one claimed occurrence. The schedule run is marked running with a
- * pre-generated Agent run id before submission, so a completion that the worker
- * reports immediately still finds its schedule run to settle.
+ * Submit one claimed occurrence. `agent_schedule_runs.agent_run_id` references
+ * `agent_runs`, so the Agent run must be committed before the schedule run can
+ * be linked and marked running. A worker may finish it before that link lands;
+ * the completion trigger then has no schedule run to settle, so the link is
+ * followed by one status check that settles an already-finished run.
  */
 async function executeRun(db: ScopedDb, schedule: ScheduleView, run: RunView): Promise<'submitted' | 'skipped' | 'failed'> {
   if (!schedule.conversationId) {
@@ -125,10 +127,20 @@ async function executeRun(db: ScopedDb, schedule: ScheduleView, run: RunView): P
       mangpaiMode: false,
       timezone: schedule.timezone,
     };
-    const agentRunId = randomUUID();
-    await settle(db, run.id, 'running', { agentRunId });
-    const agentRun = await submitAgentTask({ db, userId: schedule.userId }, body, 'schedule', { runId: agentRunId });
-    if (agentRun.id !== agentRunId) await settle(db, run.id, 'running', { agentRunId: agentRun.id });
+    const agentRun = await submitAgentTask({ db, userId: schedule.userId }, body, 'schedule', { runId: randomUUID() });
+    await settle(db, run.id, 'running', { agentRunId: agentRun.id });
+    // The worker can finish the run before the link above commits; the completion
+    // trigger then found no schedule run, so settle once more from the run's own
+    // status (the settle above is a no-op when the trigger already won).
+    const finished = await db.tx((trx) => trx.selectFrom('agent_runs').select('status')
+      .where('id', '=', agentRun.id).executeTakeFirst());
+    if (finished && (finished.status === 'completed' || finished.status === 'failed' || finished.status === 'cancelled')) {
+      await settle(db, run.id, finished.status === 'completed' ? 'completed' : 'failed', {
+        agentRunId: agentRun.id,
+        error: finished.status === 'completed' ? undefined
+          : finished.status === 'cancelled' ? '已取消' : '任务运行失败，打开对话查看原因。',
+      });
+    }
     return 'submitted';
   } catch (error) {
     const outcome = failureOutcome(error);
@@ -173,19 +185,26 @@ export async function processAgentSchedules(options: { limit?: number; db?: Scop
  * checks credits, the model and the feature state, and refuses to stack on a run
  * that has not settled.
  */
-export async function runAgentScheduleNow(userId: string, scheduleId: string): Promise<RunView> {
-  const db = systemDb();
+export async function runAgentScheduleNow(userId: string, scheduleId: string, db: ScopedDb = systemDb()): Promise<RunView> {
   const row = await db.tx((trx) => trx.selectFrom('agent_schedules').selectAll()
     .where('id', '=', scheduleId).where('user_id', '=', userId).executeTakeFirst());
   if (!row) throw new AgentScheduleError('定时任务不存在', 404, 'AGENT_SCHEDULE_NOT_FOUND');
   const schedule = toAgentScheduleView(row);
   if (!schedule.conversationId) throw new AgentScheduleError('绑定的对话已删除，请新建任务', 409, 'AGENT_SCHEDULE_CONVERSATION_MISSING');
-  const active = await db.tx((trx) => trx.selectFrom('agent_schedule_runs').select('id')
-    .where('schedule_id', '=', scheduleId).where('status', 'in', ['pending', 'running']).executeTakeFirst());
-  if (active) throw new AgentScheduleError('上一次运行尚未结束', 409, 'AGENT_SCHEDULE_RUN_BUSY');
-  const created = await db.tx((trx) => trx.insertInto('agent_schedule_runs')
-    .values({ schedule_id: scheduleId, user_id: userId, scheduled_for: new Date().toISOString(), status: 'pending' })
-    .returningAll().executeTakeFirstOrThrow());
+  // The row is written by a definer function: the schedule tables are owner-only
+  // under RLS, and the same lock also refuses an occurrence that would stack.
+  let created: AgentScheduleRunRow;
+  try {
+    created = await db.rpc('create_agent_schedule_run', {
+      p_schedule_id: scheduleId, p_user_id: userId,
+    }) as unknown as AgentScheduleRunRow;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    if (message.includes('AGENT_SCHEDULE_RUN_BUSY')) throw new AgentScheduleError('上一次运行尚未结束', 409, 'AGENT_SCHEDULE_RUN_BUSY');
+    if (message.includes('AGENT_SCHEDULE_CONVERSATION_MISSING')) throw new AgentScheduleError('绑定的对话已删除，请新建任务', 409, 'AGENT_SCHEDULE_CONVERSATION_MISSING');
+    if (message.includes('AGENT_SCHEDULE_NOT_FOUND')) throw new AgentScheduleError('定时任务不存在', 404, 'AGENT_SCHEDULE_NOT_FOUND');
+    throw error;
+  }
   const run = toAgentScheduleRunView(created);
   await executeRun(db, schedule, run);
   const settled = await db.tx((trx) => trx.selectFrom('agent_schedule_runs').selectAll().where('id', '=', run.id).executeTakeFirst());

@@ -143,13 +143,6 @@
 .settings-chart-preview.is-dark { background: #151515; }
 .settings-chart-preview.is-dark > span { background: #f0c674; }
 
-/* Daily briefing (general panel). */
-.settings-briefing-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1.5rem; }
-.settings-briefing-heading h3 { font-family: var(--font-display); font-size: 1.25rem; font-weight: 500; }
-.settings-briefing-heading p { margin-top: .25rem; font-size: .8125rem; line-height: 1.6; color: var(--foreground-secondary); }
-.settings-briefing-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .75rem; margin-top: .875rem; }
-.settings-briefing-form .settings-input, .settings-briefing-form .settings-select { background-color: var(--background); }
-
 /* Account profile card. */
 .settings-profile-card { display: flex; flex-wrap: wrap; align-items: center; gap: 1.25rem; padding: 1.25rem; border-radius: .75rem; }
 .settings-avatar { position: relative; flex-shrink: 0; width: 4.5rem; height: 4.5rem; }

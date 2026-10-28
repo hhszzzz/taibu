@@ -93,7 +93,12 @@ function scheduleFixture(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function mockScheduleDb(schedule: Record<string, unknown>, settled: SettleCall[], claims: Record<string, unknown>[]) {
+function mockScheduleDb(
+  schedule: Record<string, unknown>,
+  settled: SettleCall[],
+  claims: Record<string, unknown>[],
+  options: { agentRunStatus?: string; order?: string[]; createError?: Error } = {},
+) {
   return {
     scope: { kind: 'system' },
     tx: async (work: (trx: unknown) => Promise<unknown>) => work({
@@ -101,7 +106,11 @@ function mockScheduleDb(schedule: Record<string, unknown>, settled: SettleCall[]
         const query: Record<string, unknown> = {
           select() { return query; }, selectAll() { return query; }, where() { return query; },
           orderBy() { return query; }, limit() { return query; },
-          async executeTakeFirst() { return table === 'agent_schedules' ? schedule : undefined; },
+          async executeTakeFirst() {
+            if (table === 'agent_schedules') return schedule;
+            if (table === 'agent_runs' && options.agentRunStatus) return { status: options.agentRunStatus };
+            return undefined;
+          },
           async execute() { return []; },
         };
         return query;
@@ -110,7 +119,13 @@ function mockScheduleDb(schedule: Record<string, unknown>, settled: SettleCall[]
     rpc: async (name: string, args: Record<string, unknown>) => {
       if (name === 'enforce_agent_schedule_limits') return 0;
       if (name === 'claim_agent_schedules') return claims;
+      if (name === 'create_agent_schedule_run') {
+        options.order?.push('create');
+        if (options.createError) throw options.createError;
+        return { ...claimFixture(), id: '66666666-6666-4666-8666-666666666666', schedule_id: args.p_schedule_id, status: 'pending' };
+      }
       if (name === 'settle_agent_schedule_run') {
+        options.order?.push(`settle:${String(args.p_status)}`);
         settled.push({ runId: String(args.p_run_id), status: String(args.p_status), values: args });
         return { id: args.p_run_id, status: args.p_status };
       }
@@ -135,7 +150,11 @@ function claimFixture() {
   };
 }
 
-function mockRuntime(t: TestContext, options: { credits?: number; features?: 'enabled' | 'disabled'; modelAllowed?: boolean; submitError?: Error } = {}) {
+function mockRuntime(
+  t: TestContext,
+  options: { credits?: number; features?: 'enabled' | 'disabled'; modelAllowed?: boolean; submitError?: Error } = {},
+  order?: string[],
+) {
   t.mock.reset();
   const appSettings = require('../lib/app-settings') as typeof import('../lib/app-settings');
   const credits = require('../lib/user/credits') as typeof import('../lib/user/credits');
@@ -148,6 +167,7 @@ function mockRuntime(t: TestContext, options: { credits?: number; features?: 'en
   t.mock.method(aiConfig, 'getModelConfigAsync', async () => options.modelAllowed === false ? null : ({ id: 'fixture', name: 'fixture', requiredTier: 'free' } as never));
   t.mock.method(aiConfig, 'getDefaultModelConfigAsync', async () => ({ id: 'fixture', name: 'fixture', requiredTier: 'free' } as never));
   t.mock.method(submit, 'submitAgentTask', async (_ctx: unknown, body: unknown, origin: string, runtime: { runId?: string } = {}) => {
+    order?.push('submit');
     submitted.push({ body, origin, runId: runtime.runId });
     if (options.submitError) throw options.submitError;
     return { id: runtime.runId } as AgentRunRow;
@@ -157,11 +177,15 @@ function mockRuntime(t: TestContext, options: { credits?: number; features?: 'en
 
 test('a due occurrence submits the expanded prompt into the bound conversation and marks the run running', async (t) => {
   const settled: SettleCall[] = [];
-  const db = mockScheduleDb(scheduleFixture(), settled, [claimFixture()]);
-  const runtime = mockRuntime(t);
+  const order: string[] = [];
+  const db = mockScheduleDb(scheduleFixture(), settled, [claimFixture()], { order });
+  const runtime = mockRuntime(t, {}, order);
   const { processAgentSchedules } = require('../lib/agent/schedules/runner.server') as typeof import('../lib/agent/schedules/runner.server');
   const summary = await processAgentSchedules({ db });
   assert.deepEqual(summary, { claimed: 1, submitted: 1, skipped: 0, failed: 0 });
+  // agent_schedule_runs.agent_run_id references agent_runs, so the run is created
+  // before the occurrence is linked and marked running.
+  assert.deepEqual(order, ['submit', 'settle:running']);
   assert.equal(runtime.submitted.length, 1);
   const call = runtime.submitted[0];
   assert.equal(call.origin, 'schedule');
@@ -173,6 +197,18 @@ test('a due occurrence submits the expanded prompt into the bound conversation a
   assert.equal(body.webEnabled, false);
   assert.equal(call.runId, settled[0].values.p_agent_run_id);
   assert.deepEqual(settled.map(item => item.status), ['running']);
+});
+
+test('a run the worker finishes before the link commits is settled from its status', async (t) => {
+  const settled: SettleCall[] = [];
+  const db = mockScheduleDb(scheduleFixture(), settled, [claimFixture()], { agentRunStatus: 'completed' });
+  const runtime = mockRuntime(t);
+  const { processAgentSchedules } = require('../lib/agent/schedules/runner.server') as typeof import('../lib/agent/schedules/runner.server');
+  assert.deepEqual(await processAgentSchedules({ db }), { claimed: 1, submitted: 1, skipped: 0, failed: 0 });
+  assert.deepEqual(settled.map(item => item.status), ['running', 'completed']);
+  const runId = runtime.submitted[0].runId;
+  assert.deepEqual(settled.map(item => item.values.p_agent_run_id), [runId, runId]);
+  assert.equal(settled[1].values.p_error, null);
 });
 
 test('a member without credits skips the occurrence and writes the reason', async (t) => {
@@ -206,7 +242,33 @@ test('a submit-time credit or permission refusal is classified as a skip', async
     mockRuntime(t, { submitError: new submit.AgentApiError('refused', 403, code) });
     const { processAgentSchedules } = require('../lib/agent/schedules/runner.server') as typeof import('../lib/agent/schedules/runner.server');
     assert.deepEqual(await processAgentSchedules({ db }), { claimed: 1, submitted: 0, skipped: 1, failed: 0 });
-    assert.deepEqual(settled.map(item => item.status), ['running', 'skipped']);
-    assert.equal(settled[1].values.p_skip_reason, reason);
+    // Nothing was linked yet: the refusal settles the pending occurrence directly.
+    assert.deepEqual(settled.map(item => item.status), ['skipped']);
+    assert.equal(settled[0].values.p_skip_reason, reason);
   }
+});
+
+test('manual run creates its occurrence through the SQL function, then submits', async (t) => {
+  const settled: SettleCall[] = [];
+  const order: string[] = [];
+  const db = mockScheduleDb(scheduleFixture(), settled, [], { order });
+  const runtime = mockRuntime(t, {}, order);
+  const { runAgentScheduleNow } = require('../lib/agent/schedules/runner.server') as typeof import('../lib/agent/schedules/runner.server');
+  const run = await runAgentScheduleNow('user-1', '33333333-3333-4333-8333-333333333333', db);
+  // The schedule tables are owner-only under RLS, so the row comes from the definer function.
+  assert.deepEqual(order, ['create', 'submit', 'settle:running']);
+  assert.equal(run.id, '66666666-6666-4666-8666-666666666666');
+  assert.equal(runtime.submitted.length, 1);
+  assert.equal(settled[0].values.p_agent_run_id, runtime.submitted[0].runId);
+});
+
+test('manual run refuses to stack and reports the busy occurrence', async (t) => {
+  const db = mockScheduleDb(scheduleFixture(), [], [], { createError: new Error('AGENT_SCHEDULE_RUN_BUSY') });
+  mockRuntime(t);
+  const { runAgentScheduleNow } = require('../lib/agent/schedules/runner.server') as typeof import('../lib/agent/schedules/runner.server');
+  const { AgentScheduleError } = require('../lib/agent/schedules/server') as typeof import('../lib/agent/schedules/server');
+  await assert.rejects(
+    runAgentScheduleNow('user-1', '33333333-3333-4333-8333-333333333333', db),
+    (error: unknown) => error instanceof AgentScheduleError && error.status === 409 && error.code === 'AGENT_SCHEDULE_RUN_BUSY',
+  );
 });

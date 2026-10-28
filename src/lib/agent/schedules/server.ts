@@ -107,6 +107,7 @@ function failure(error: unknown): never {
   if (message.includes('AGENT_SCHEDULE_LIMIT')) throw new AgentScheduleError('定时任务数量已达当前会员上限', 409, 'AGENT_SCHEDULE_LIMIT');
   if (message.includes('AGENT_SCHEDULE_NOT_FOUND')) throw new AgentScheduleError('定时任务不存在', 404, 'AGENT_SCHEDULE_NOT_FOUND');
   if (message.includes('AGENT_SCHEDULE_CONVERSATION_MISSING')) throw new AgentScheduleError('绑定的对话已删除，请新建任务', 409, 'AGENT_SCHEDULE_CONVERSATION_MISSING');
+  if (message.includes('AGENT_SCHEDULE_RUN_BUSY')) throw new AgentScheduleError('上一次运行尚未结束', 409, 'AGENT_SCHEDULE_RUN_BUSY');
   if (message.includes('AGENT_SCHEDULE_NAME_INVALID')) throw new AgentScheduleError('任务名称无效', 400);
   if (message.includes('AGENT_SCHEDULE_PROMPT_INVALID')) throw new AgentScheduleError('执行内容无效', 400);
   if (message.includes('AGENT_SCHEDULE_CADENCE_INVALID') || message.includes('AGENT_SCHEDULE_TIME_INVALID')) throw new AgentScheduleError('执行频率无效', 400);

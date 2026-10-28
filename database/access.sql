@@ -737,6 +737,8 @@ GRANT ALL ON FUNCTION public.claim_agent_schedules(p_limit integer) TO authentic
 
 GRANT ALL ON FUNCTION public.create_agent_schedule(p_name text, p_template text, p_prompt text, p_cadence jsonb, p_timezone text, p_options jsonb, p_limit integer) TO authenticated;
 
+GRANT ALL ON FUNCTION public.create_agent_schedule_run(p_schedule_id uuid, p_user_id uuid) TO authenticated;
+
 GRANT ALL ON FUNCTION public.enforce_agent_schedule_limits(p_limits jsonb) TO authenticated;
 
 GRANT ALL ON FUNCTION public.settle_agent_schedule_run(p_run_id uuid, p_status text, p_agent_run_id uuid, p_error text, p_skip_reason text) TO authenticated;

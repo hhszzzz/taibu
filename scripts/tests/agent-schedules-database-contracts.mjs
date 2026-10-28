@@ -18,6 +18,8 @@ export async function agentSchedulesDatabaseContracts(t, { sql, asActor, asOwner
   const parsed = async statement => { const value = await admin(statement); return value ? JSON.parse(value) : null; };
   const utc = async (cadence, timezone, after) => asActor(owner,
     `SELECT to_char((public.agent_next_run_at(${json(cadence)},${quote(timezone)},${quote(after)}) AT TIME ZONE 'UTC'),'YYYY-MM-DD HH24:MI:SS');`);
+  const latest = async (cadence, timezone, before) => asActor(owner,
+    `SELECT to_char((public.agent_latest_schedule_occurrence(${json(cadence)},${quote(timezone)},${quote(before)}) AT TIME ZONE 'UTC'),'YYYY-MM-DD HH24:MI:SS');`);
   const create = async (name, cadence, extra = {}) => JSON.parse(await asActor(owner,
     `SELECT to_jsonb(public.create_agent_schedule(${quote(name)},${quote(extra.template ?? 'custom')},${quote(extra.prompt ?? '整理今天的重点。')},${json(cadence)},${quote(extra.timezone ?? 'Asia/Shanghai')},${json(extra.options ?? { notify: true })},${extra.limit ?? 5})) s;`));
   const dueNow = id => asOwner(`UPDATE public.agent_schedules SET next_run_at=now()-interval '1 minute' WHERE id=${quote(id)};`);
@@ -34,6 +36,17 @@ export async function agentSchedulesDatabaseContracts(t, { sql, asActor, asOwner
     assert.equal(await utc({ kind: 'monthly', day: 31, time: '08:00' }, 'Asia/Shanghai', '2026-02-28T01:00:00Z'), '2026-03-31 00:00:00');
     assert.equal(await utc({ kind: 'weekly', weekdays: [1, 3, 5], time: '09:00' }, 'Asia/Shanghai', '2026-10-30T02:00:00Z'), '2026-11-02 01:00:00');
     assert.equal(await utc({ kind: 'interval', hours: 6, time: '08:00' }, 'Asia/Shanghai', '2026-10-29T01:00:00Z'), '2026-10-29 06:00:00');
+    // An hourly chain crosses midnight and keeps stepping until the next day's
+    // HH:mm anchor, instead of jumping from 00:00 straight to 08:00.
+    assert.equal(await utc({ kind: 'interval', hours: 1, time: '08:00' }, 'Asia/Shanghai', '2026-10-28T16:30:00Z'), '2026-10-28 17:00:00');
+    assert.equal(await utc({ kind: 'interval', hours: 5, time: '08:00' }, 'Asia/Shanghai', '2026-10-28T22:00:00Z'), '2026-10-29 00:00:00');
+    // The catch-up helper returns the newest occurrence at or before the instant,
+    // including an interval chain whose last step fell on the current day.
+    assert.equal(await latest({ kind: 'daily', time: '08:00' }, 'Asia/Shanghai', '2026-10-28T23:30:00Z'), '2026-10-28 00:00:00');
+    assert.equal(await latest({ kind: 'interval', hours: 1, time: '08:00' }, 'Asia/Shanghai', '2026-10-28T16:30:00Z'), '2026-10-28 16:00:00');
+    assert.equal(await latest({ kind: 'interval', hours: 1, time: '08:00' }, 'Asia/Shanghai', '2026-10-29T02:30:00Z'), '2026-10-29 02:00:00');
+    assert.equal(await latest({ kind: 'interval', hours: 5, time: '08:00' }, 'Asia/Shanghai', '2026-10-28T23:00:00Z'), '2026-10-28 20:00:00');
+    assert.equal(await latest({ kind: 'monthly', day: 31, time: '08:00' }, 'Asia/Shanghai', '2026-03-01T00:00:00Z'), '2026-02-28 00:00:00');
     await assert.rejects(asActor(owner, `SELECT public.agent_next_run_at('{"kind":"daily","time":"25:00"}'::jsonb,'Asia/Shanghai',now());`), /AGENT_SCHEDULE_TIME_INVALID/);
     await assert.rejects(asActor(owner, `SELECT public.agent_next_run_at('{"kind":"daily","time":"08:00"}'::jsonb,'Fake/Zone',now());`), /AGENT_SCHEDULE_TIMEZONE_INVALID/);
   });
@@ -44,6 +57,21 @@ export async function agentSchedulesDatabaseContracts(t, { sql, asActor, asOwner
     assert.equal(schedule.template, 'custom');
     assert.equal(await asActor(owner, `SELECT title FROM public.conversations WHERE id=${quote(schedule.conversation_id)};`), '定时 · 晨间整理');
     await assert.rejects(create('第二个任务', { kind: 'daily', time: '09:00' }, { limit: 1 }), /AGENT_SCHEDULE_LIMIT/);
+    await asOwner(`DELETE FROM public.agent_schedules WHERE id=${quote(schedule.id)};`);
+  });
+
+  await t.test('a manual occurrence is created once, only for its owner or an administrator', async () => {
+    const schedule = await create('手动运行', { kind: 'daily', time: '08:00' });
+    const first = JSON.parse(await asActor(owner, `SELECT to_jsonb(public.create_agent_schedule_run(${quote(schedule.id)},${quote(owner)}));`));
+    assert.equal(first.status, 'pending');
+    assert.equal(first.user_id, owner);
+    await assert.rejects(asActor(owner, `SELECT public.create_agent_schedule_run(${quote(schedule.id)},${quote(owner)});`), /AGENT_SCHEDULE_RUN_BUSY/);
+    await assert.rejects(asActor(other, `SELECT public.create_agent_schedule_run(${quote(schedule.id)},${quote(owner)});`), /AGENT_SCHEDULE_NOT_FOUND/);
+    await asOwner(`UPDATE public.agent_schedule_runs SET status='skipped' WHERE id=${quote(first.id)};`);
+    const byAdmin = JSON.parse(await admin(`SELECT to_jsonb(public.create_agent_schedule_run(${quote(schedule.id)},${quote(owner)}));`));
+    assert.equal(byAdmin.user_id, owner);
+    await asOwner(`UPDATE public.agent_schedules SET conversation_id=NULL WHERE id=${quote(schedule.id)};`);
+    await assert.rejects(asActor(owner, `SELECT public.create_agent_schedule_run(${quote(schedule.id)},${quote(owner)});`), /AGENT_SCHEDULE_CONVERSATION_MISSING/);
     await asOwner(`DELETE FROM public.agent_schedules WHERE id=${quote(schedule.id)};`);
   });
 
@@ -105,6 +133,33 @@ export async function agentSchedulesDatabaseContracts(t, { sql, asActor, asOwner
     await asOwner(`DELETE FROM public.agent_schedules WHERE id=${quote(schedule.id)};`);
   });
 
+  await t.test('a scheduled run that asks a question still notifies the member', async () => {
+    const schedule = await create('提问通知', { kind: 'daily', time: '08:00' });
+    await dueNow(schedule.id);
+    const [run] = (await parsed('SELECT coalesce(jsonb_agg(to_jsonb(r)),\'[]\') FROM public.claim_agent_schedules(10) r;')).filter(item => item.schedule_id === schedule.id);
+    assert.ok(run);
+    const agentRunId = randomUUID();
+    const checkpoint = { version: 2, messages: [], parts: [], durable: { engine: 'pi-durable/1.4.0' } };
+    const assistant = id => ({ id: `agent:${id}`, role: 'assistant', content: '', createdAt: new Date().toISOString(), agent: { version: 1, runId: id, status: 'queued', parts: [] } });
+    await admin(`SELECT public.agent_create_run(${quote(agentRunId)},${quote(owner)},${quote(schedule.conversation_id)},${quote('ask:' + agentRunId)},'hash',
+      ${json({ model: 'fixture', reasoning: false, webEnabled: false, systemPrompt: 'fixture', userMessage: { id: 'u2', role: 'user', content: '早上好', createdAt: new Date().toISOString() } })},
+      ${json(checkpoint)},${json(assistant(agentRunId))},NULL,false);`);
+    await admin("SELECT public.agent_worker_heartbeat('sched-contracts','pi-durable/1.4.0');");
+    const agentRun = await parsed("SELECT to_jsonb(public.agent_claim_run('sched-contracts'));");
+    await admin(`SELECT public.settle_agent_schedule_run(${quote(run.id)},'running',${quote(agentRunId)},NULL,NULL);`);
+    // The generic task notice is suppressed only for a finished scheduled run; a
+    // question still needs the member's attention, because the schedule's own
+    // notice cannot fire while it waits for an answer.
+    await admin(`SELECT public.agent_finish_run(${quote(agentRunId)},${quote(agentRun.worker_id)},${agentRun.fence},'awaiting_input',${json({ ...checkpoint, questionId: 'schedule-question' })},
+      ${json(assistant(agentRunId))});`);
+    assert.equal(await asOwner(`SELECT status FROM public.agent_schedule_runs WHERE id=${quote(run.id)};`), 'running');
+    assert.equal(await asActor(owner,
+      `SELECT count(*) FROM public.notifications WHERE event_key=${quote('agent:' + agentRunId + ':awaiting_input:schedule-question')} AND title LIKE '%补充信息%';`), '1');
+    // The occurrence stays running while the question waits; the row and its
+    // conversation are left for the disposable container to discard.
+    await asOwner(`DELETE FROM public.agent_schedules WHERE id=${quote(schedule.id)};`);
+  });
+
   await t.test('a skipped run records the reason and notifies the owner', async () => {
     const schedule = await create('跳过通知', { kind: 'daily', time: '08:00' });
     await dueNow(schedule.id);
@@ -112,6 +167,28 @@ export async function agentSchedulesDatabaseContracts(t, { sql, asActor, asOwner
     await admin(`SELECT public.settle_agent_schedule_run(${quote(run.id)},'skipped',NULL,NULL,'insufficient_credits');`);
     assert.equal(await asOwner(`SELECT status||':'||skip_reason FROM public.agent_schedule_runs WHERE id=${quote(run.id)};`), 'skipped:insufficient_credits');
     assert.equal(await asActor(owner, `SELECT count(*) FROM public.notifications WHERE event_key=${quote('schedule:' + run.id)} AND title LIKE '%已跳过%';`), '1');
+    await asOwner(`DELETE FROM public.agent_schedules WHERE id=${quote(schedule.id)};`);
+  });
+
+  await t.test('consecutive failures accumulate across starts and reset on a non-failure', async () => {
+    const schedule = await create('失败计数', { kind: 'daily', time: '08:00' });
+    const nextRun = async () => {
+      await dueNow(schedule.id);
+      return (await parsed('SELECT coalesce(jsonb_agg(to_jsonb(r)),\'[]\') FROM public.claim_agent_schedules(10) r;'))
+        .find(item => item.schedule_id === schedule.id);
+    };
+    const fail = async () => {
+      const run = await nextRun();
+      assert.ok(run);
+      await admin(`SELECT public.settle_agent_schedule_run(${quote(run.id)},'failed',NULL,'boom',NULL);`);
+      return asOwner(`SELECT consecutive_failures FROM public.agent_schedules WHERE id=${quote(schedule.id)};`);
+    };
+    assert.equal(await fail(), '1');
+    assert.equal(await fail(), '2');
+    const skipped = await nextRun();
+    assert.ok(skipped);
+    await admin(`SELECT public.settle_agent_schedule_run(${quote(skipped.id)},'skipped',NULL,NULL,'insufficient_credits');`);
+    assert.equal(await asOwner(`SELECT consecutive_failures FROM public.agent_schedules WHERE id=${quote(schedule.id)};`), '0');
     await asOwner(`DELETE FROM public.agent_schedules WHERE id=${quote(schedule.id)};`);
   });
 

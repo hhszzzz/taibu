@@ -49,6 +49,7 @@ Agent 可以调用排盘、命理拓展、知识库、历史对话、受控联�
 - Agent 工具：`generate_image({ prompt, size?, n? })` 只在配置了生图模型且会员可用时注册，归入「生图」工具范围，可在后台关闭；协作成员与后台子分析永远拿不到。单次任务累计最多生成 4 张，超出的调用被拒绝。用户明确要求图片时才应调用，工具不会主动生图。
 - 计费：每次请求按「张数 × 每张积分」预扣，全部来源失败时整笔退还；某来源只返回部分图片时只退未交付的部分。余额不足返回 `INSUFFICIENT_CREDITS`，不调用模型。
 - 存储与读取：图片写入对象存储桶 `generated-images`（`FILE_STORAGE_ROOT` 下，与附件同卷），元数据记入 `generated_images`，含用户、对话、任务与消息、模型、提示词、尺寸、对象路径、类型、字节数与 SHA-256。读取走 `/api/images/[id]`：仅本人可读；公开分享页在图片地址上带分享令牌，服务端核对令牌所属对话后才返回该对话的图片。每次读取都校验大小与摘要，响应带 `Cache-Control: private, no-store`、`X-Content-Type-Options: nosniff` 与沙箱 CSP。
+- 清理：删除对话或账号会随外键级联删掉图片记录，对象由 `agent-attachments-cleanup` 定时任务清理：把桶里的对象与 `generated_images` 比对，只删除 24 小时前且表里没有对应记录的对象（上传中途失败留下的字节同样由此回收），每次最多 200 个。
 - 失败转移：同一模型的来源按顺序尝试；单个来源报错、超时或被中止时换下一个，全部失败才报错。内容安全依赖上游审核。
 
 ## 任务状态与恢复
@@ -213,8 +214,11 @@ pi-durable 把成员会话建成主任务的副本，再用 `AgentChange` 收窄
 | `src/lib/agent/skills/` | 技能的 SKILL.md 解析、读写、任务内目录与加载、`/skill:` 展开与设置接口 |
 | `src/lib/agent/profiles/` | 角色定义与工具族授予、读写与共享缓存、成员装配（工具、指令、预载技能与模型）与设置接口 |
 | `src/lib/agent/parallel.server.ts`、`background.server.ts` | 协作成员与后台子分析 |
-| `src/lib/ai/image-generation.server.ts` | 文生图：模型解析、积分预扣与退还、来源故障转移、对象存储与 `generated_images` 记录 |
+| `src/lib/ai/image-generation.server.ts` | 文生图：模型解析、积分预扣与退还、来源故障转移、对象存储与 `generated_images` 记录、孤儿对象清理 |
 | `src/lib/images/generated.ts` | 生图结果的共享形状、尺寸与图集地址（浏览器与服务端共用） |
+| `src/lib/agent/schedules/` | 定时任务的配置与校验、读写、到期领取与提交（与 HTTP 共用 `submit.server.ts` 的准入路径） |
+| `src/lib/chat/quotes.ts` | 引用段的共享序列化、上限与引用块格式 |
+| `src/lib/visualization/visual-frame.ts`、`src/components/visualization/` | 可视化卡片外壳与 `visual` 沙箱（CSP、主题、高度上报） |
 | `src/lib/agent/engine.ts` | 当前引擎版本 |
 | `database/functions.sql` | 原子命令、租约、产物和结算函数 |
 | `scripts/agent-worker.mjs` | worker 启动入口 |

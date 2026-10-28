@@ -9,6 +9,7 @@ import type { ObjectStore } from '../lib/storage/object-store';
 import {
   GENERATED_IMAGE_BUCKET,
   ImageGenerationError,
+  cleanupGeneratedImages,
   generateImages,
   type ImageGenerationDeps,
 } from '../lib/ai/image-generation.server';
@@ -213,4 +214,43 @@ test('invalid requests are refused before charging', async (t: TestContext) => {
   }
   assert.equal(db.calls.length, 0);
   t.diagnostic('invalid requests never reach the credit ledger or the model');
+});
+
+test('an image object whose row is gone is removed once it is a day old', async () => {
+  const kept = `${randomUUID()}/kept.png`;
+  const orphaned = `${randomUUID()}/gone.png`;
+  const fresh = `${randomUUID()}/fresh.png`;
+  const old = new Date(Date.now() - 48 * 60 * 60 * 1000);
+  const entries = [
+    { key: kept, size: PNG.length, mtime: old },
+    { key: orphaned, size: PNG.length, mtime: old },
+    { key: fresh, size: PNG.length, mtime: new Date() },
+  ];
+  const deleted: string[] = [];
+  let olderThan: Date | undefined;
+  const store = {
+    async list(_bucket: string, options?: { olderThan?: Date }) {
+      olderThan = options?.olderThan;
+      return entries.filter(entry => !options?.olderThan || entry.mtime < options.olderThan);
+    },
+    async delete(_bucket: string, keys: readonly string[]) { deleted.push(...keys); },
+  } as unknown as ObjectStore;
+  const queried: string[][] = [];
+  const db = {
+    tx: async (work: (trx: unknown) => unknown) => work({
+      selectFrom: () => ({
+        select: () => ({
+          where: (_field: string, _operator: string, values: string[]) => {
+            queried.push(values);
+            return { execute: async () => values.filter(value => value === kept).map(value => ({ object_path: value })) };
+          },
+        }),
+      }),
+    }),
+  } as unknown as ScopedDb;
+
+  assert.equal(await cleanupGeneratedImages({ db, store }), 1);
+  assert.deepEqual(deleted, [orphaned]);
+  assert.deepEqual(queried.flat().sort(), [kept, orphaned].sort(), 'only objects older than a day are compared');
+  assert.ok(olderThan && olderThan.getTime() < Date.now() - 23 * 60 * 60 * 1000, 'young objects are left alone');
 });

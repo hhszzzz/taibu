@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { cleanupAgentAttachments } from '@/lib/agent/attachments.server';
+import { cleanupGeneratedImages } from '@/lib/ai/image-generation.server';
 import { processAgentSchedules } from '@/lib/agent/schedules/runner.server';
 import { pruneExpiredNotifications } from '@/lib/notification-server';
 import { processScheduledReminders, scheduleAllUsersReminders } from '@/lib/reminders';
@@ -41,7 +42,10 @@ export async function runMaintenanceJob(name: string): Promise<MaintenanceRunSum
     case 'agent-schedules':
       return runSteps([{ name: 'process-agent-schedules', run: processAgentSchedules }]);
     case 'agent-attachments-cleanup':
-      return runSteps([{ name: 'cleanup-agent-attachments', run: cleanupAgentAttachments }]);
+      return runSteps([
+        { name: 'cleanup-agent-attachments', run: cleanupAgentAttachments },
+        { name: 'cleanup-generated-images', run: cleanupGeneratedImages },
+      ]);
     case 'notifications-prune':
       return runSteps([{ name: 'prune-expired-notifications', run: pruneExpiredNotifications }]);
     case 'agent-retention':

@@ -43,12 +43,15 @@ test('the agent schedule tick is dispatched to its runner', async (t) => {
 
 test('attachment cleanup and notification pruning run their owners', async (t) => {
   const attachments = require('../lib/agent/attachments.server') as typeof import('../lib/agent/attachments.server');
+  const images = require('../lib/ai/image-generation.server') as typeof import('../lib/ai/image-generation.server');
   const notifications = require('../lib/notification-server') as typeof import('../lib/notification-server');
   t.mock.method(attachments, 'cleanupAgentAttachments', async () => 4);
+  t.mock.method(images, 'cleanupGeneratedImages', async () => 2);
   t.mock.method(notifications, 'pruneExpiredNotifications', async () => 9);
 
   assert.deepEqual((await runMaintenanceJob('agent-attachments-cleanup')).results, [
     { step: 'cleanup-agent-attachments', value: 4 },
+    { step: 'cleanup-generated-images', value: 2 },
   ]);
   assert.deepEqual((await runMaintenanceJob('notifications-prune')).results, [
     { step: 'prune-expired-notifications', value: 9 },

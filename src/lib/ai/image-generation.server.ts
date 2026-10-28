@@ -232,6 +232,39 @@ export async function findGeneratedImageForShare(db: ScopedDb, token: string, im
   return rows[0] ?? null;
 }
 
+/** An object this old whose row is gone is a leftover; younger ones may still be mid-insert. */
+const GENERATED_IMAGE_ORPHAN_AGE_MS = 24 * 60 * 60 * 1000;
+/** One sweep stops after this many objects; the next run continues where it stopped. */
+const GENERATED_IMAGE_CLEANUP_LIMIT = 200;
+const CLEANUP_BATCH = 100;
+
+/**
+ * Deletes image objects no row points at. Deleting a conversation cascades its `generated_images` rows away, and an
+ * insert that fails between the upload and the row leaves bytes behind, so the bucket is compared against the table.
+ * Attachments keep the same guarantee through `claim_agent_attachment_cleanup`; images have no owner-side delete, so
+ * the comparison is what bounds the bucket. Objects younger than a day are left alone: their row may still be coming.
+ */
+export async function cleanupGeneratedImages(
+  options: { limit?: number; db?: ScopedDb; store?: ObjectStore } = {},
+): Promise<number> {
+  const db = options.db ?? systemDb();
+  const store = options.store ?? getObjectStore();
+  const objects = await store.list(GENERATED_IMAGE_BUCKET, { olderThan: new Date(Date.now() - GENERATED_IMAGE_ORPHAN_AGE_MS) });
+  const paths = objects.slice(0, options.limit ?? GENERATED_IMAGE_CLEANUP_LIMIT).map(object => object.key);
+  if (!paths.length) return 0;
+  const known = new Set<string>();
+  for (let index = 0; index < paths.length; index += CLEANUP_BATCH) {
+    const rows = await db.tx(trx => trx.selectFrom('generated_images').select('object_path')
+      .where('object_path', 'in', paths.slice(index, index + CLEANUP_BATCH)).execute());
+    for (const row of rows) known.add(row.object_path);
+  }
+  const orphans = paths.filter(path => !known.has(path));
+  if (!orphans.length) return 0;
+  await store.delete(GENERATED_IMAGE_BUCKET, orphans);
+  console.info('[image-generation] removed generated images without a row', { removed: orphans.length });
+  return orphans.length;
+}
+
 export type GeneratedImageLocation = { object_path: string; mime_type: string; bytes: number; sha256: string };
 
 /** Re-reads an image and checks it against the row's size and digest before serving it. */

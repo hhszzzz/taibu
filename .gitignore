@@ -65,3 +65,6 @@ skills/*-workspace/
 output/playwright/
 /tmp/
 /backups/
+
+# Local logo design process (not committed)
+design/

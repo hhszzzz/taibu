@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Brain } from 'lucide-react';
+import { MbtiIcon } from '@/lib/navigation/nav-icons';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import { QuestionCard } from '@/components/mbti/QuestionCard';
@@ -138,7 +138,7 @@ export function MBTITestFlow() {
             <div className="flex min-h-[60vh] items-center justify-center bg-background px-4">
                 <div className="flex flex-col items-center gap-3 text-center">
                     <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-light text-accent">
-                        <Brain className="h-7 w-7" aria-hidden="true" />
+                        <MbtiIcon size={28} aria-hidden />
                     </span>
                     <h2 className="font-display text-xl font-normal">正在分析你的性格类型</h2>
                     <SoundWaveLoader variant="block" text="请稍候" />

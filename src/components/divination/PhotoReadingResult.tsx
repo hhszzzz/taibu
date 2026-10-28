@@ -10,7 +10,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Brain, ChevronLeft, Lock, MessageCircle, RotateCcw, type LucideIcon } from 'lucide-react';
+import { Brain, ChevronLeft, Lock, MessageCircle, RotateCcw } from 'lucide-react';
+import type { NavIcon } from '@/lib/navigation/registry';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { AddToKnowledgeBaseModal } from '@/components/knowledge-base/AddToKnowledgeBaseModal';
@@ -66,7 +67,7 @@ export function PhotoReadingResult<T extends PhotoReadingSession>({
     entryPath: string;
     /** 元信息行的相学名称，如「面相」 */
     kindLabel: string;
-    icon: LucideIcon;
+    icon: NavIcon;
     loadingText: string;
     emptyActionLabel: string;
     knowledgeBaseSourceType: 'face_reading' | 'palm_reading';

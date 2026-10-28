@@ -6,9 +6,9 @@
  */
 'use client';
 
-import { useState, useEffect, useMemo, useCallback, createElement, type ComponentType } from 'react';
-import { X, Search, Star } from 'lucide-react';
-import { YinYangIcon } from '@phosphor-icons/react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { X, Search } from 'lucide-react';
+import { BaziIcon, ZiweiIcon } from '@/lib/navigation/nav-icons';
 import { useToast } from '@/components/ui/Toast';
 import { useUserCharts } from '@/lib/hooks/useUserCharts';
 import type { UserChartRecord } from '@/lib/user/charts-client';
@@ -36,20 +36,6 @@ export interface ChartPickerModalProps {
     title?: string;
     filterType?: 'bazi' | 'ziwei';  // 只显示某一类型
 }
-
-type PickerIcon = ComponentType<{ className?: string; size?: number | string }>;
-
-function phosphor(Icon: ComponentType<Record<string, unknown>>): PickerIcon {
-    const Wrapped: PickerIcon = (props) =>
-        createElement(Icon, {
-            ...props,
-            style: { transform: 'scale(1.1)' },
-        });
-    Wrapped.displayName = `Phosphor(${Icon.displayName ?? Icon.name})`;
-    return Wrapped;
-}
-
-const PYinYang = phosphor(YinYangIcon);
 
 export function ChartPickerModal({
     isOpen,
@@ -176,9 +162,9 @@ export function ChartPickerModal({
                                     <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${chart.type === 'bazi' ? 'bg-orange-500/10' : 'bg-purple-500/10'
                                         }`}>
                                         {chart.type === 'bazi' ? (
-                                            <PYinYang className="w-4 h-4 text-orange-500" />
+                                            <BaziIcon size={16} className="text-orange-500" />
                                         ) : (
-                                            <Star className="w-4 h-4 text-purple-500" />
+                                            <ZiweiIcon size={16} className="text-purple-500" />
                                         )}
                                     </div>
                                     <div className="flex-1 min-w-0">

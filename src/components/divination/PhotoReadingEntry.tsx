@@ -10,7 +10,8 @@
 import { useId, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, Camera, ChevronDown, ImageIcon, Lock, X, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, Camera, ChevronDown, ImageIcon, Lock, X } from 'lucide-react';
+import type { NavIcon } from '@/lib/navigation/registry';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import { CreditsModal } from '@/components/ui/CreditsModal';
@@ -125,8 +126,8 @@ export function PhotoReadingEntry({
 }: {
     kind: PhotoReadingKind;
     copy: PhotoReadingCopy;
-    /** 移动端上传区图标 */
-    icon: LucideIcon;
+    /** 移动端上传区图标（全站占术图标同一套） */
+    icon: NavIcon;
     /** 桌面端上传区的虚线轮廓插画 */
     illustration: ReactNode;
     /** 移动端「拍照」调用的摄像头：面相用前置，手相用后置 */
@@ -344,7 +345,7 @@ export function PhotoReadingEntry({
                             ) : (
                                 <>
                                     <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-surface text-accent lg:hidden">
-                                        <Icon className="h-7 w-7" strokeWidth={1.7} aria-hidden="true" />
+                                        <Icon className="h-7 w-7" aria-hidden="true" />
                                     </span>
                                     <span className="hidden text-foreground/25 lg:block" aria-hidden="true">{illustration}</span>
                                     <span className="text-[0.9375rem] font-medium lg:font-display lg:text-[1.1875rem] lg:font-normal">

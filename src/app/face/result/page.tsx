@@ -5,7 +5,7 @@
  */
 'use client'; // 需向客户端结果组件传入图标组件与 describe 函数
 
-import { ScanFace } from 'lucide-react';
+import { FaceIcon } from '@/lib/navigation/nav-icons';
 import { PhotoReadingResult, type PhotoReadingSession } from '@/components/divination/PhotoReadingResult';
 import { FACE_ANALYSIS_TYPES } from '@/lib/divination/face';
 
@@ -23,7 +23,7 @@ export default function FaceResultPage() {
             sessionKey="face_result"
             entryPath="/face"
             kindLabel="面相"
-            icon={ScanFace}
+            icon={FaceIcon}
             loadingText="正在解读你的面相"
             emptyActionLabel="开始面相分析"
             knowledgeBaseSourceType="face_reading"

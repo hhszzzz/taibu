@@ -20,6 +20,10 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     ".worktrees/**",
     ".claude/worktrees/**",
+    // Local tooling output: icon preview bundles, Playwright scratch pages and
+    // screenshots. Bundled vendor code, not sources — same scope as .gitignore.
+    ".icon-preview/**",
+    ".playwright-mcp/**",
     // Generated skill artifacts (bundled vendor code) and eval workspaces.
     "skills/*/scripts/vendor/**",
     "skills/*-workspace/**",

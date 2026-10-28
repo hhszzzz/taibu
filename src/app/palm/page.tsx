@@ -7,7 +7,7 @@
 
 import { useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { Hand } from 'lucide-react';
+import { PALM_GLYPH_PATHS, PalmIcon } from '@/lib/navigation/nav-icons';
 import { AIFeatureGate } from '@/components/ai/AIFeatureGate';
 import {
     PhotoOptionRow,
@@ -47,13 +47,13 @@ const HAND_OPTIONS: ReadonlyArray<{ value: HandType; label: string; hint: string
     { value: 'right', label: '右手', hint: '后天发展' },
 ];
 
-/** 桌面端上传区的虚线手掌轮廓：放大的 Hand 图标（与移动端图标一致），线宽与虚线节奏对齐面相轮廓。 */
+/**
+ * 桌面端上传区的虚线手掌轮廓：与导航图标同一份路径（PALM_GLYPH_PATHS），
+ * 只是放大到 120×150 描虚线，虚线节奏对齐面相轮廓。
+ */
 const PALM_OUTLINE = (
-    <svg width="120" height="150" viewBox="-1 -4.25 26 32.5" fill="none" stroke="currentColor" strokeWidth="0.325" strokeDasharray="0.87 1.08" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2" />
-        <path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2" />
-        <path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8" />
-        <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" />
+    <svg width="120" height="150" viewBox="0 -3 24 30" fill="none" stroke="currentColor" strokeWidth="0.3" strokeDasharray="0.8 1" strokeLinecap="round" strokeLinejoin="round">
+        {PALM_GLYPH_PATHS.map(d => <path key={d} d={d} />)}
     </svg>
 );
 
@@ -66,7 +66,7 @@ export default function PalmPage() {
             <PhotoReadingEntry
                 kind="palm"
                 copy={PALM_COPY}
-                icon={Hand}
+                icon={PalmIcon}
                 illustration={PALM_OUTLINE}
                 capture="environment"
                 endpoint="/api/palm"

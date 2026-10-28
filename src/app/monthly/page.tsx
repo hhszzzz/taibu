@@ -8,7 +8,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeftRight, CalendarRange } from 'lucide-react';
+import { ArrowLeftRight } from 'lucide-react';
+import { MonthlyIcon } from '@/lib/navigation/nav-icons';
 
 import { ChartPickerModal, type ChartItem } from '@/components/common/ChartPickerModal';
 import { FortunePeriodNav, PERIOD_NAV_CURRENT_CLASS } from '@/components/fortune/FortunePeriodNav';
@@ -179,7 +180,7 @@ function MonthlyPageContent() {
                     reset={isCurrentMonth ? null : { label: '回到本月', shortLabel: '本月', onClick: goToCurrentMonth }}
                     current={(
                         <span aria-live="polite" className={PERIOD_NAV_CURRENT_CLASS}>
-                            <CalendarRange aria-hidden="true" className="hidden size-[15px] text-foreground-secondary lg:block" />
+                            <MonthlyIcon size={15} className="hidden shrink-0 text-foreground-secondary lg:block" />
                             {year} 年 {month} 月
                         </span>
                     )}

@@ -6,7 +6,7 @@
 'use client'; // 需向客户端上传组件传入图标组件，且历史抽屉用 next/dynamic 关闭 SSR
 
 import dynamic from 'next/dynamic';
-import { ScanFace } from 'lucide-react';
+import { FaceIcon } from '@/lib/navigation/nav-icons';
 import { AIFeatureGate } from '@/components/ai/AIFeatureGate';
 import { PhotoReadingEntry, type PhotoReadingCopy } from '@/components/divination/PhotoReadingEntry';
 import { FACE_ANALYSIS_TYPES, FACE_DISCLAIMER } from '@/lib/divination/face';
@@ -52,7 +52,7 @@ export default function FacePage() {
             <PhotoReadingEntry
                 kind="face"
                 copy={FACE_COPY}
-                icon={ScanFace}
+                icon={FaceIcon}
                 illustration={FACE_OUTLINE}
                 capture="user"
                 endpoint="/api/face"

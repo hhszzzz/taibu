@@ -5,7 +5,7 @@
  */
 'use client'; // 需向客户端结果组件传入图标组件与 describe 函数
 
-import { Hand } from 'lucide-react';
+import { PalmIcon } from '@/lib/navigation/nav-icons';
 import { PhotoReadingResult, type PhotoReadingSession } from '@/components/divination/PhotoReadingResult';
 import { PALM_ANALYSIS_TYPES, getPalmHandLabel } from '@/lib/divination/palm';
 
@@ -31,7 +31,7 @@ export default function PalmResultPage() {
             sessionKey="palm_result"
             entryPath="/palm"
             kindLabel="手相"
-            icon={Hand}
+            icon={PalmIcon}
             loadingText="正在解析你的掌纹"
             emptyActionLabel="开始手相分析"
             knowledgeBaseSourceType="palm_reading"

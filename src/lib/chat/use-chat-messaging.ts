@@ -575,6 +575,7 @@ export function useChatMessaging({
                 requestBody: {
                     messages: newMessages,
                     personality: 'general',
+                    conversationId,
                     stream: true,
                     model: activeCustomProvider ? activeCustomProvider.modelId : selectedModel,
                     mangpaiMode: isMangpaiMode || undefined,
@@ -670,6 +671,7 @@ export function useChatMessaging({
                 requestBody: {
                     messages: newMessages,
                     personality: 'general',
+                    conversationId: targetConversationId,
                     stream: true,
                     model: activeCustomProvider ? activeCustomProvider.modelId : selectedModel,
                     mangpaiMode: isMangpaiMode || undefined,
@@ -775,6 +777,7 @@ export function useChatMessaging({
                 requestBody: {
                     messages: updatedPreviousMessages,
                     personality: 'general',
+                    conversationId: targetConversationId,
                     stream: true,
                     model: activeCustomProvider ? activeCustomProvider.modelId : selectedModel,
                     mangpaiMode: isMangpaiMode || undefined,

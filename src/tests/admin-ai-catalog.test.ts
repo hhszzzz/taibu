@@ -33,6 +33,8 @@ test('model input keeps the thinking ladder in order and only allows a listed de
     assert.match((parseModelInput(model({ contextWindow: 100 })) as { error: string }).error, /上下文窗口/u);
     assert.match((parseModelInput(model({ sources: [{ gatewayId: GATEWAY }, { gatewayId: GATEWAY }] })) as { error: string }).error, /只能添加一次/u);
     assert.match((parseModelInput(model({ customParameters: [1] })) as { error: string }).error, /JSON 对象/u);
+    assert.match((parseModelInput(model({ customParameters: { promptCacheKey: 'yes' } })) as { error: string }).error, /提示缓存开关/u);
+    assert.ok('value' in parseModelInput(model({ customParameters: { promptCacheKey: true } })));
     assert.match((parseModelInput(model({ modelKey: 'has space' })) as { error: string }).error, /空格/u);
 
     // 生图模型按张扣积分：默认 1，可设 0 到 1000 的整数。

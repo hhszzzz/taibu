@@ -13,6 +13,8 @@ import type { ChatMessage, AIReasoningEffort } from '@/types';
 import { normalizeCustomProviderBaseUrl } from '@/lib/ai/custom-provider-url';
 import { resolveSourceApiKey } from '@/lib/ai/gateway-secrets.server';
 import { resolveThinkingLevel, thinkingRequestFields, THINKING_REQUEST_FIELDS } from '@/lib/ai/thinking';
+import { PROMPT_CACHE_SWITCH } from '@/lib/ai/prompt-cache';
+import { modelPromptCacheKey } from '@/lib/ai/prompt-cache.server';
 import packageJson from '../../../../package.json';
 
 // AI 请求只需要最小消息结构，避免强制依赖存储/展示字段。
@@ -26,6 +28,8 @@ export interface AIProviderOptions {
     imageBase64?: string;
     imageMimeType?: string;
     abortSignal?: AbortSignal;
+    /** The conversation this request belongs to; its hash becomes the model's prompt cache key. */
+    conversationId?: string;
 }
 
 /**
@@ -132,7 +136,7 @@ export function toCoreMessages(
 }
 
 // Keep the SDK-generated transcript, tools and output budget authoritative.
-const RESERVED_MODEL_BODY_FIELDS = new Set(['model', 'messages', 'tools', 'tool_choice', 'stream', 'stream_options', 'max_tokens', 'max_completion_tokens', '__proto__', 'constructor', 'prototype']);
+const RESERVED_MODEL_BODY_FIELDS = new Set(['model', 'messages', 'tools', 'tool_choice', 'stream', 'stream_options', 'max_tokens', 'max_completion_tokens', PROMPT_CACHE_SWITCH, '__proto__', 'constructor', 'prototype']);
 const SDK_BODY_NAMES: Record<string, string> = { reasoningEffort: 'reasoning_effort', logitBias: 'logit_bias', topLogprobs: 'top_logprobs', parallelToolCalls: 'parallel_tool_calls', serviceTier: 'service_tier', maxCompletionTokens: 'max_completion_tokens', maxTokens: 'max_tokens', maxOutputTokens: 'max_completion_tokens' };
 
 /**
@@ -164,6 +168,10 @@ export function buildProviderOptions(
     // max is a Pi/provider extension; the Chat Completions SDK only validates through xhigh.
     // The existing model fetch adapter sends the actual value to the compatible gateway.
     if (providerOptions.reasoningEffort === 'max') delete providerOptions.reasoningEffort;
+
+    // Off by default: only a model that opts in and a request that names its conversation send the key.
+    const cacheKey = modelPromptCacheKey(config, options?.conversationId);
+    if (cacheKey) providerOptions.promptCacheKey = cacheKey;
 
     if (Object.keys(providerOptions).length === 0) return undefined;
 

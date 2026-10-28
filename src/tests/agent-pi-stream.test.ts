@@ -28,6 +28,7 @@ import {
   isProgressOnlyTurn,
 } from "../lib/agent/pi-stream.server";
 import { MODEL_REQUEST_USER_AGENT } from '../lib/ai/providers/ai-sdk-provider';
+import { promptCacheKey } from '../lib/ai/prompt-cache.server';
 import type { AIModelConfig } from "../types";
 import { sealedGateway } from './helpers/gateway-key';
 
@@ -207,6 +208,29 @@ test('custom parameters and sampling defaults reach the body, but never replace 
   assert.equal(body.max_tokens, 4096);
   assert.equal(body.model, 'fixture-upstream');
   assert.equal(body.temperature, 0.7);
+});
+
+test('agent requests carry this conversation prompt cache key only when the model opts in', async () => {
+  const enabled = { ...config, customParameters: { promptCacheKey: true, top_k: 20 } };
+  const first = gateway(reply('ok'));
+  await createPiModelStream(enabled, { fetch: first.fetch, conversationId: 'conversation-a' })(piModel, context()).result();
+  const [request] = first.requests;
+  assert.equal(request.body.prompt_cache_key, promptCacheKey('conversation-a'));
+  assert.equal(request.body.promptCacheKey, undefined, 'the switch is not a request field');
+  assert.equal(request.body.top_k, 20);
+
+  const same = gateway(reply('ok'));
+  await createPiModelStream(enabled, { fetch: same.fetch, conversationId: 'conversation-a' })(piModel, context()).result();
+  assert.equal(same.requests[0].body.prompt_cache_key, request.body.prompt_cache_key, 'stable within one conversation');
+
+  const other = gateway(reply('ok'));
+  await createPiModelStream(enabled, { fetch: other.fetch, conversationId: 'conversation-b' })(piModel, context()).result();
+  assert.notEqual(other.requests[0].body.prompt_cache_key, request.body.prompt_cache_key);
+
+  const off = gateway(reply('ok'));
+  await createPiModelStream({ ...config, customParameters: { promptCacheKey: false } }, { fetch: off.fetch, conversationId: 'conversation-a' })(piModel, context()).result();
+  assert.equal(off.requests[0].body.prompt_cache_key, undefined);
+  assert.equal(off.requests[0].body.promptCacheKey, undefined);
 });
 
 test('a response with nothing to show is asked once more with a note, and the answer joins the same message', async () => {

@@ -159,6 +159,14 @@ pi-durable 把成员会话建成主任务的副本，再用 `AgentChange` 收窄
 
 「AI 服务 → Agent 任务 → 性能」按模型给出近 1 / 7 / 30 天的总耗时与首字延迟 P50/P95、工具耗时占比、失败率与挂起率，并列出最近的运行；点开一次运行看它的阶段时间线。数据保留 30 天，由 `agent-retention` 定时任务清理（与事件、提交日志和 worker 心跳同一次执行）。
 
+## 提示缓存亲和
+
+同一对话的多轮请求可以命中模型服务的提示缓存，减少重复计费并降低首字延迟。默认关闭：在「AI 服务」的模型编辑里，把「自定义请求参数（JSON）」设为 `{"promptCacheKey": true}`，该模型才会发送缓存键；网关不认识 `prompt_cache_key` 时不要开启，否则可能返回 400。
+
+- 普通对话取浏览器提交的对话 ID，Agent 任务取任务的对话 ID，计算 SHA-256 摘要后以 `taibu-` 前缀加 40 位十六进制发送为 `prompt_cache_key`；上游拿不到对话 ID 本身。
+- 同一对话的每次请求（包括失败重试和提醒后的再次请求）使用同一个键，不同对话的键不同。
+- 效果在「AI 服务 → Agent 任务 → 性能」的缓存读取 token 中核对：开启后，同一对话的多轮 Agent 运行应出现缓存读取；普通对话的缓存用量由网关侧记录。
+
 ## Agent 测评
 
 「AI 服务 → Agent 测评」用一套可维护的题库让多个模型各自走真实的 Agent 运行，再自动评分并排行。它复用 CLI 的离线评测和运行器：`scripts/evals/agent-cases.json` 是内置题库，`src/lib/agent/eval/runner.server.ts` 同时供 CLI（`pnpm eval:agent`，保留离线模式与 `--live --config`）和后台使用。

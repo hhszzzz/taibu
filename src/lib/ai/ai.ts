@@ -188,6 +188,8 @@ export interface AICallOptions {
     imageMimeType?: string;
     // 覆盖默认人格提示词与时间行（用于各模块自定义系统提示）：对话在用户消息开头写发送时间，系统提示词不随分钟变化
     systemPromptOverride?: string;
+    /** The conversation this call belongs to; its hash becomes prompt_cache_key when the model opts in. */
+    conversationId?: string;
 }
 
 export interface AICallResult {
@@ -273,6 +275,7 @@ export async function callAI(
             reasoningEffort: options?.reasoningEffort ?? undefined,
             temperature: options?.temperature,
             maxTokens: options?.maxTokens,
+            conversationId: options?.conversationId,
         });
         return result.text;
     });
@@ -304,6 +307,7 @@ export async function callAIStream(
             reasoningEffort: options?.reasoningEffort ?? undefined,
             temperature: options?.temperature,
             maxTokens: options?.maxTokens,
+            conversationId: options?.conversationId,
         });
         return fullStreamToSSE(result.fullStream);
     });
@@ -333,6 +337,7 @@ export async function callAIUIMessageResult(
             reasoningEffort: options?.reasoningEffort ?? undefined,
             temperature: options?.temperature,
             maxTokens: options?.maxTokens,
+            conversationId: options?.conversationId,
         });
         return result;
     });
@@ -363,6 +368,7 @@ export async function callAIVision(
             reasoningEffort: options?.reasoningEffort ?? undefined,
             temperature: options?.temperature,
             maxTokens: options?.maxTokens,
+            conversationId: options?.conversationId,
         });
         return result.text;
     });

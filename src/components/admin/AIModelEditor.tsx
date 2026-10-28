@@ -346,7 +346,7 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
                     <label className="ai-catalog-field"><span>自定义请求参数（JSON）</span>
                         <textarea className="settings-textarea ai-catalog-mono" rows={4} spellCheck={false} value={draft.customParameters} placeholder={'{\n  "top_k": 40\n}'}
                             onChange={event => patch({ customParameters: event.target.value })} />
-                        <span className="ai-catalog-hint">合并进请求体；消息、工具、输出上限和思考参数由系统写入，这里不能覆盖。</span>
+                        <span className="ai-catalog-hint">合并进请求体；消息、工具、输出上限和思考参数由系统写入，这里不能覆盖。加入 &quot;promptCacheKey&quot;: true 可按模型开启提示缓存亲和，网关需支持 prompt_cache_key。</span>
                     </label>
                 </div>
             </details>

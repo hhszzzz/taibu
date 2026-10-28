@@ -22,6 +22,8 @@ import {
 } from "@/lib/ai/providers/ai-sdk-provider";
 import { normalizeCustomProviderBaseUrl } from "@/lib/ai/custom-provider-url";
 import { resolveSourceApiKey } from "@/lib/ai/gateway-secrets.server";
+import { PROMPT_CACHE_SWITCH } from "@/lib/ai/prompt-cache";
+import { modelPromptCacheKey } from "@/lib/ai/prompt-cache.server";
 import { resolveThinkingLevel, thinkingLevelMap, THINKING_REQUEST_FIELDS } from "@/lib/ai/thinking";
 import {
   applySourceToModel,
@@ -112,8 +114,8 @@ export function agentModelSources(config: AIModelConfig, apiKey?: string) {
         .filter(isModelAvailable);
 }
 
-/** Request body fields the transport writes; a model's custom parameters cannot replace them. */
-const TRANSPORT_FIELDS = new Set(["model", "messages", "tools", "tool_choice", "stream", "stream_options", "max_tokens", "max_completion_tokens", "__proto__", "constructor", "prototype"]);
+/** Request body fields the transport writes, plus control switches that are never request fields. */
+const TRANSPORT_FIELDS = new Set(["model", "messages", "tools", "tool_choice", "stream", "stream_options", "max_tokens", "max_completion_tokens", PROMPT_CACHE_SWITCH, "__proto__", "constructor", "prototype"]);
 
 /**
  * How the gateway takes the thinking switch and level: the model's configured thinking format, with a level only for
@@ -223,6 +225,8 @@ export interface AgentModelStreamSettings {
   apiKey?: string;
   /** Replaces attachment references with their images, for a vision model. */
   resolveImages?: (messages: Message[]) => Promise<Message[]>;
+  /** The task's conversation; its hash becomes this model's prompt cache key when the model opts in. */
+  conversationId?: string;
   fetch?: typeof globalThis.fetch;
   /** Live answer text, for the display-only delta channel; never used for durability. */
   onAnswerStart?: () => void;
@@ -239,6 +243,7 @@ export interface AgentModelStreamSettings {
  * (as Pi Desktop does); the second response streams into the same message, so the reply reads as one.
  */
 export function createPiModelStream(config: AIModelConfig, settings: AgentModelStreamSettings = {}): StreamFn {
+  const cacheKey = modelPromptCacheKey(config, settings.conversationId);
   return (piModel, context, options) => {
     const output = createAssistantMessageEventStream();
     void (async () => {
@@ -283,7 +288,8 @@ export function createPiModelStream(config: AIModelConfig, settings: AgentModelS
             ...(outputLimits.length ? { maxTokens: Math.min(...outputLimits) } : {}),
             ...(effort ? { reasoningEffort: effort } : {}),
             // The transcript keeps the task's model identity; the gateway is asked for the source's upstream model.
-            onPayload: payload => ({ ...body, ...(payload as Record<string, unknown>), model: upstream }),
+            // Every request of the task carries the same cache key, so a provider can route them to one cache.
+            onPayload: payload => ({ ...body, ...(payload as Record<string, unknown>), model: upstream, ...(cacheKey ? { prompt_cache_key: cacheKey } : {}) }),
           });
           const base = message.content.length;
           let shown = false;

@@ -41,6 +41,8 @@ type ChatAuthUser = NonNullable<AuthContextResult['user']>;
 export interface ChatRequestBody extends ChatPreparationInput {
   skipCreditCheck?: boolean;
   internalSecret?: string;
+  /** The conversation on screen; only its hash reaches the model, as the prompt cache key. */
+  conversationId?: string;
 }
 
 /** Legacy adapter DTO; credentials never enter the transport-independent use case. */
@@ -79,6 +81,9 @@ export async function parseChatRequestBody(request: NextRequest): Promise<ChatRe
   try { body.reasoningEffort = parseReasoningEffort(body.reasoningEffort); } catch { return jsonError('推理档位无效', 400); }
   if (body.attachment !== undefined && !isChatAttachment(body.attachment)) return jsonError('附件内容无效', 400);
   if (body.webSearch !== undefined && typeof body.webSearch !== 'boolean') return jsonError('联网搜索参数无效', 400);
+  if (body.conversationId !== undefined && (typeof body.conversationId !== 'string' || !body.conversationId || body.conversationId.length > 128)) {
+    return jsonError('无效的对话标识', 400);
+  }
   body.userProfile = normalizeIdentityUserProfile(body.userProfile);
   body.visualizationSettings = normalizeVisualizationSettings(body.visualizationSettings);
   return body;

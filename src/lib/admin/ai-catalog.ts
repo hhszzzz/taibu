@@ -8,6 +8,7 @@ import {
     type AIUsageType,
 } from '@/types';
 import { GATEWAY_KEY_PATTERN } from '@/lib/ai/source-runtime';
+import { PROMPT_CACHE_SWITCH } from '@/lib/ai/prompt-cache';
 import { isThinkingFormat, normalizeThinkingLevels } from '@/lib/ai/thinking';
 
 export type CatalogTier = 'free' | 'plus' | 'pro';
@@ -245,6 +246,9 @@ export function parseModelInput(body: unknown): Parsed<AdminModelInput> {
     if (Object.values(sampling).some(value => value === undefined)) return { error: '采样参数超出范围' };
     const customParameters = body.customParameters ?? null;
     if (customParameters !== null && !isRecord(customParameters)) return { error: '自定义参数必须是 JSON 对象' };
+    if (customParameters !== null && PROMPT_CACHE_SWITCH in customParameters && typeof customParameters[PROMPT_CACHE_SWITCH] !== 'boolean') {
+        return { error: '提示缓存开关必须是 true 或 false' };
+    }
     const sources = parseSources(body.sources ?? [], modelKey);
     if ('error' in sources) return sources;
     const description = optionalText(body.description);

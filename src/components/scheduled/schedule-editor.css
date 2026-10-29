@@ -1,0 +1,110 @@
+/* 定时任务编辑器：分组表单、模板卡片、可点变量与设置行，与设置中心同一套控件语言。 */
+
+.app-modal.schedule-editor-dialog {
+    width: min(680px, calc(100vw - 32px));
+    max-height: min(88dvh, 920px);
+    padding: 0;
+    overflow: hidden;
+    border: .5px solid var(--border-hover);
+    border-radius: 16px;
+    background: var(--surface);
+}
+
+.sched-shell { display: flex; flex-direction: column; max-height: min(88dvh, 920px); }
+
+.sched-head { display: flex; align-items: flex-start; gap: 1rem; padding: 1.5rem 1.75rem 1.125rem; border-bottom: 1px solid var(--border); }
+.sched-head-text { flex: 1; min-width: 0; }
+.sched-head h2 { font-family: var(--font-display); font-size: 1.25rem; font-weight: 400; color: var(--foreground); }
+.sched-head p { margin-top: .375rem; font-size: .8125rem; line-height: 1.55; color: var(--foreground-secondary); }
+.sched-close { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: .5rem; color: var(--foreground-secondary); }
+.sched-close:hover:not(:disabled) { background: var(--fill-field); color: var(--foreground); }
+
+.sched-body { display: flex; flex: 1 1 auto; flex-direction: column; gap: 1.75rem; padding: 1.25rem 1.75rem 1.75rem; overflow-y: auto; }
+
+.sched-section { display: flex; flex-direction: column; gap: .75rem; }
+.sched-section-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .375rem .75rem; }
+.sched-section-head h3 { font-size: .8125rem; font-weight: 600; color: var(--foreground); }
+.sched-section-head p { font-size: .75rem; line-height: 1.5; color: var(--foreground-tertiary); }
+
+/* 模板卡片 */
+.sched-templates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .625rem; }
+.sched-template { display: flex; align-items: flex-start; gap: .625rem; padding: .75rem .875rem; border: 1px solid var(--border); border-radius: .75rem; background: var(--background); text-align: left; transition: border-color .15s, background-color .15s; }
+.sched-template:hover:not(:disabled) { border-color: var(--border-hover); }
+.sched-template[aria-checked=true] { border-color: color-mix(in srgb, var(--accent) 55%, transparent); background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.sched-template:disabled { opacity: .6; }
+.sched-template-icon { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 1.75rem; height: 1.75rem; border-radius: .5rem; background: var(--fill-field); color: var(--foreground-secondary); }
+.sched-template[aria-checked=true] .sched-template-icon { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.sched-template-text { display: flex; flex-direction: column; gap: .125rem; min-width: 0; }
+.sched-template-text strong { font-size: .875rem; font-weight: 500; color: var(--foreground); }
+.sched-template-text small { font-size: .75rem; line-height: 1.45; color: var(--foreground-tertiary); }
+
+/* 字段 */
+.sched-field { display: flex; flex-direction: column; gap: .375rem; min-width: 0; }
+.sched-field > span:first-child { font-size: .75rem; font-weight: 500; color: var(--foreground-secondary); }
+.sched-input, .sched-textarea, .sched-select {
+    width: 100%; border: 1px solid var(--border-hover); border-radius: .5rem; background: var(--background);
+    font-size: .875rem; color: var(--foreground);
+}
+.sched-input, .sched-select { height: 2.25rem; padding: 0 .75rem; }
+.sched-textarea { padding: .625rem .75rem; line-height: 1.6; resize: vertical; }
+.sched-input:focus-visible, .sched-textarea:focus-visible, .sched-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.sched-input:disabled, .sched-textarea:disabled, .sched-select:disabled { cursor: not-allowed; opacity: .6; }
+.sched-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem 1rem; }
+.sched-with-unit { position: relative; display: block; }
+.sched-with-unit > span { position: absolute; top: 50%; right: .75rem; transform: translateY(-50%); font-size: .75rem; color: var(--foreground-tertiary); pointer-events: none; }
+.sched-with-unit > .sched-input { padding-right: 2.5rem; }
+
+/* 频率分段 */
+.sched-segmented { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; padding: 2px; border-radius: .75rem; background: var(--background-secondary); }
+.sched-segmented > button { height: 2rem; border-radius: .625rem; font-size: .8125rem; color: var(--foreground-secondary); }
+.sched-segmented > button:hover:not([aria-checked=true]):not(:disabled) { color: var(--foreground); }
+.sched-segmented > button[aria-checked=true] { background: var(--surface); font-weight: 500; color: var(--foreground); box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
+.sched-segmented > button:disabled { opacity: .6; }
+
+/* 星期 */
+.sched-weekdays { display: flex; flex-wrap: wrap; gap: .375rem; }
+.sched-day { min-width: 2.5rem; height: 2rem; padding: 0 .5rem; border: 1px solid var(--border); border-radius: .5rem; font-size: .8125rem; color: var(--foreground-secondary); }
+.sched-day:hover:not(:disabled) { border-color: var(--border-hover); color: var(--foreground); }
+.sched-day[aria-pressed=true] { border-color: transparent; background: var(--accent); color: var(--on-accent); }
+
+/* 变量 */
+.sched-vars { display: flex; flex-wrap: wrap; align-items: center; gap: .375rem; }
+.sched-var { padding: .125rem .375rem; border-radius: .375rem; background: var(--fill-field); font-family: var(--font-mono); font-size: .6875rem; color: var(--foreground-secondary); }
+.sched-var:hover:not(:disabled) { color: var(--foreground); }
+.sched-hint { font-size: .75rem; line-height: 1.5; color: var(--foreground-tertiary); }
+.sched-hint[data-tone=warning] { color: var(--danger); }
+
+/* 运行设置：开关行 */
+.sched-toggles { display: flex; flex-direction: column; }
+.sched-toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .625rem 0; border-bottom: 1px solid var(--fill-field); }
+.sched-toggle-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.sched-toggle-row > div { display: flex; flex-direction: column; gap: .125rem; min-width: 0; }
+.sched-toggle-row span { font-size: .875rem; color: var(--foreground); }
+.sched-toggle-row small { font-size: .75rem; line-height: 1.45; color: var(--foreground-tertiary); }
+.sched-switch { display: inline-flex; flex-shrink: 0; align-items: center; width: 2.25rem; height: 1.25rem; padding: 2px; border-radius: 999px; background: var(--border-hover); transition: background-color .15s; }
+.sched-switch[aria-checked=true] { background: var(--accent); }
+.sched-switch:disabled { cursor: not-allowed; opacity: .5; }
+.sched-switch > span { width: 1rem; height: 1rem; border-radius: 999px; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .2); transition: transform .15s; }
+.sched-switch[aria-checked=true] > span { transform: translateX(1rem); }
+
+.sched-error { padding: .625rem .75rem; border-radius: .5rem; background: color-mix(in srgb, var(--danger) 8%, transparent); font-size: .8125rem; color: var(--danger); }
+
+/* 底部操作 */
+.sched-foot { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .875rem 1.75rem; border-top: 1px solid var(--border); background: var(--surface); }
+.sched-actions { display: flex; gap: .5rem; }
+.sched-button { display: inline-flex; align-items: center; gap: .375rem; height: 2.25rem; padding: 0 .875rem; border: 1px solid var(--border-hover); border-radius: .5rem; font-size: .8125rem; color: var(--foreground); }
+.sched-button:hover:not(:disabled) { background: var(--fill-field); }
+.sched-button.is-primary { border-color: transparent; background: var(--accent); color: var(--on-accent); }
+.sched-button.is-primary:hover:not(:disabled) { background: var(--accent-hover); }
+.sched-button:disabled { cursor: not-allowed; opacity: .55; }
+
+@media (max-width: 639px) {
+    .app-modal.schedule-editor-dialog { width: 100vw; max-height: 100dvh; height: 100dvh; border-radius: 0; }
+    .sched-shell { max-height: 100dvh; height: 100dvh; }
+    .sched-head, .sched-body, .sched-foot { padding-right: 1rem; padding-left: 1rem; }
+    .sched-templates, .sched-grid { grid-template-columns: minmax(0, 1fr); }
+    .sched-segmented { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .sched-foot .sched-hint { display: none; }
+    .sched-actions { width: 100%; }
+    .sched-button { flex: 1; justify-content: center; }
+}

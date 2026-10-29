@@ -1,5 +1,5 @@
 'use client';
-// 需要 useState/useEffect 管理记忆列表与请求生命周期
+// 需要 useState/useEffect 管理任务助手偏好与记忆数量
 import { useEffect, useRef, useState } from 'react';
 import { SettingsRow, SettingsSwitch } from '@/components/settings/SettingsControls';
 import { useToast } from '@/components/ui/Toast';
@@ -9,28 +9,26 @@ import type { ChatPreferences } from '@/lib/chat/preferences';
 import type { AgentMemory } from '@/lib/agent/memory';
 import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 import { CollaborationSettings } from '@/components/settings/CollaborationSettings';
-import { useListMotion } from '@/lib/motion/list';
+import { MemoryManagerDialog } from '@/components/settings/MemoryManagerDialog';
 
 export function AgentPreferencesPanel({ userId }: { userId: string }) {
     const [preferences, setPreferences] = useState<ChatPreferences | null>(null), [memoryEnabled, setMemoryEnabled] = useState(false);
-    const [memories, setMemories] = useState<AgentMemory[]>([]), [busy, setBusy] = useState(false), [error, setError] = useState('');
-    const [title, setTitle] = useState(''), [content, setContent] = useState('');
+    const [memoryCount, setMemoryCount] = useState<number | null>(null), [managerOpen, setManagerOpen] = useState(false);
+    const [busy, setBusy] = useState(false), [error, setError] = useState('');
     const controller = useRef<AbortController | null>(null);
-    // 删掉的一条收起离开，新存的一条上浮进入。
-    const listRef = useRef<HTMLUListElement>(null);
-    const memoryRows = useListMotion(listRef, memories, memory => memory.id);
     const { showToast } = useToast();
-    useUnsavedSettingsGuard(!!preferences && (memoryEnabled !== (preferences.memoryEnabled === true) || !!title || !!content));
-    const request = <T,>(method: string, body?: unknown) => requestBrowserJson<T>('/api/user/agent-memory', { method, headers: { 'Content-Type': 'application/json', 'X-Expected-User-Id': userId }, ...(body ? { body: JSON.stringify(body) } : {}), signal: controller.current?.signal });
+    useUnsavedSettingsGuard(!!preferences && memoryEnabled !== (preferences.memoryEnabled === true));
     useEffect(() => {
         const abort = new AbortController(); controller.current = abort;
-        void Promise.all([getCurrentUserSettings({ expectedUserId: userId, signal: abort.signal }), requestBrowserJson<{ memories: AgentMemory[] }>('/api/user/agent-memory', { headers: { 'X-Expected-User-Id': userId }, signal: abort.signal })]).then(([settings, memory]) => {
+        void Promise.all([
+            getCurrentUserSettings({ expectedUserId: userId, signal: abort.signal }),
+            requestBrowserJson<{ memories: AgentMemory[] }>('/api/user/agent-memory', { headers: { 'X-Expected-User-Id': userId }, signal: abort.signal }),
+        ]).then(([settings, memory]) => {
             if (abort.signal.aborted) return;
             if (settings.error || !settings.settings) { setError('读取任务助手设置失败，请刷新后重试'); return; }
             const prefs = settings.settings.chatPreferences;
             setPreferences(prefs); setMemoryEnabled(prefs.memoryEnabled === true);
-            if (memory.error) setError('读取长期记忆失败，请刷新后重试');
-            else setMemories(memory.data?.memories ?? []);
+            if (!memory.error) setMemoryCount(memory.data?.memories?.length ?? 0);
         }).catch(() => { if (!abort.signal.aborted) setError('读取任务助手设置失败，请刷新后重试'); });
         return () => { abort.abort(); controller.current = null; };
     }, [userId]);
@@ -47,21 +45,6 @@ export function AgentPreferencesPanel({ userId }: { userId: string }) {
         } catch { if (active && !active.signal.aborted) showToast('error', '保存任务助手设置失败'); }
         finally { if (active && !active.signal.aborted) setBusy(false); }
     };
-    const mutateMemory = async (method: 'POST' | 'DELETE', body: unknown) => {
-        const active = controller.current;
-        setBusy(true);
-        try {
-            const result = await request<{ memory?: AgentMemory }>(method, body);
-            if (!active || active.signal.aborted) return;
-            if (result.error) { showToast('error', result.error.message); return; }
-            // 删掉的一条先从列表拿掉，收起与刷新同时进行。
-            if (method === 'DELETE') setMemories(current => current.filter(memory => memory.id !== (body as { id: string }).id));
-            const refreshed = await request<{ memories: AgentMemory[] }>('GET');
-            if (!active.signal.aborted && !refreshed.error) setMemories(refreshed.data?.memories ?? []);
-            if (method === 'POST') { setTitle(''); setContent(''); }
-        } catch { if (active && !active.signal.aborted) showToast('error', '更新长期记忆失败'); }
-        finally { if (active && !active.signal.aborted) setBusy(false); }
-    };
     return <><section className="settings-form-section settings-form-section-divided" aria-label="任务助手设置">
         <div className="settings-form-heading">
             <h3>任务助手</h3>
@@ -74,25 +57,17 @@ export function AgentPreferencesPanel({ userId }: { userId: string }) {
                 description="默认关闭。开启后，助手只依据你明确表达的内容保存长期偏好或事实，可检索你的其他对话，并把你讲述的过往经历按原话记入命理记录或八字断事笔记；关闭不会删除已保存内容，可随时查看和删除。"
                 control={<SettingsSwitch label="允许任务助手使用长期记忆" checked={memoryEnabled} disabled={busy || !preferences} onToggle={() => setMemoryEnabled(enabled => !enabled)} />}
             />
+            <SettingsRow
+                label="已保存记忆"
+                description={memoryCount == null ? '查看、添加或删除助手保存的长期偏好和事实。' : `已保存 ${memoryCount} / 128 条，可查看、添加或删除。`}
+                control={<button type="button" className="settings-button" disabled={!preferences} onClick={() => setManagerOpen(true)}>管理记忆</button>}
+            />
         </div>
         <div className="settings-actions">
             <button type="button" disabled={busy || !preferences} onClick={() => void save()} className="settings-button settings-button-primary">保存任务助手设置</button>
         </div>
-        <div className="settings-field-block">
-            <h4 className="settings-label">已保存记忆 <span className="settings-counter">{memories.length} / 128</span></h4>
-            {memoryRows.length > 0
-                ? <ul ref={listRef} className="settings-list-card">{memoryRows.map(({ key, item: memory }) => <li key={key} data-motion-key={key} className="settings-list-item">
-                    <div className="settings-list-item-text"><strong>{memory.title}</strong><p>{memory.content}</p></div>
-                    <button type="button" disabled={busy} className="settings-text-button-danger" onClick={() => void mutateMemory('DELETE', { id: memory.id })} aria-label={`删除记忆 ${memory.title}`}>删除</button>
-                </li>)}</ul>
-                : <p className="settings-help">尚未保存记忆。</p>}
-            <input disabled={busy} className="settings-input" aria-label="新记忆标题" placeholder="记忆标题" maxLength={80} value={title} onChange={event => setTitle(event.target.value)} />
-            <textarea disabled={busy} className="settings-textarea" aria-label="新记忆正文" placeholder="主动保存希望长期保留的偏好或事实" maxLength={2000} value={content} onChange={event => setContent(event.target.value)} rows={2} />
-            <div className="settings-actions">
-                <button type="button" disabled={busy || !preferences || !title.trim() || !content.trim()} className="settings-button" onClick={() => void mutateMemory('POST', { title, content, kind: 'context' })}>保存这条记忆</button>
-            </div>
-        </div>
     </section>
     <CollaborationSettings userId={userId} />
+    <MemoryManagerDialog open={managerOpen} onClose={() => setManagerOpen(false)} userId={userId} onCountChange={setMemoryCount} />
     </>;
 }

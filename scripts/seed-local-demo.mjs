@@ -112,6 +112,7 @@ const plainConversations = [
 ];
 
 const BAZI_CHART = 'dddddddd-0000-4000-8000-000000000001';
+const TEST_GATEWAY = '99999999-7000-4000-8000-000000000000';
 // Test models for the model menu: free/Plus/Pro tiers, thinking on and off, several thinking formats and level sets,
 // and vision. They attach to the newapi gateway; until an administrator saves a working address and key for it in the
 // settings center, the menu still shows them (and their levels) but sending reports the missing key.

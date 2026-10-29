@@ -1,7 +1,7 @@
 // Model editor dialog: every field of a catalog model, its thinking ladder and its ordered sources.
 'use client';
 
-import { useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, ChevronRight, RefreshCw, Trash2, X } from 'lucide-react';
 import { requestBrowserData } from '@/lib/browser-api';
 import { Modal } from '@/components/ui/Modal';
@@ -19,15 +19,14 @@ import {
     type AdminGateway, type AdminModel, type AdminModelInput, type AdminModelSource, type LimitPreset,
 } from '@/lib/admin/ai-catalog';
 import { probeGateway, probeSummary } from './AIGatewayPanel';
+import type { ModelsDevSuggestion } from '@/lib/admin/models-dev';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 const CUSTOM_VENDOR = '__custom__';
 
 /** Form state: numbers and JSON stay text until saved, so a half-typed value is never lost. */
-type Draft = Omit<AdminModelInput, 'contextWindow' | 'defaultMaxTokens' | 'defaultTemperature' | 'defaultTopP'
-    | 'defaultPresencePenalty' | 'defaultFrequencyPenalty' | 'customParameters' | 'sortOrder' | 'description'> & {
-    description: string; sortOrder: string; contextWindow: string; defaultMaxTokens: string; defaultTemperature: string;
-    defaultTopP: string; defaultPresencePenalty: string; defaultFrequencyPenalty: string; customParameters: string;
+type Draft = Omit<AdminModelInput, 'contextWindow' | 'defaultMaxTokens' | 'customParameters' | 'sortOrder' | 'description'> & {
+    description: string; sortOrder: string; contextWindow: string; defaultMaxTokens: string; customParameters: string;
 };
 
 const text = (value: number | null | undefined) => (value === null || value === undefined ? '' : String(value));
@@ -41,9 +40,7 @@ function draftOf(model: AdminModel | null, gateways: readonly AdminGateway[]): D
         isReasoningDefault: model?.isReasoningDefault ?? false, reasoningRequiredTier: model?.reasoningRequiredTier ?? 'free',
         thinkingFormat: model?.thinkingFormat ?? 'openai', thinkingLevels: model?.thinkingLevels ?? [],
         defaultReasoningEffort: model?.defaultReasoningEffort ?? null,
-        contextWindow: text(model?.contextWindow), defaultMaxTokens: text(model?.defaultMaxTokens ?? 8192),
-        defaultTemperature: text(model?.defaultTemperature ?? 0.7), defaultTopP: text(model?.defaultTopP),
-        defaultPresencePenalty: text(model?.defaultPresencePenalty), defaultFrequencyPenalty: text(model?.defaultFrequencyPenalty),
+        contextWindow: text(model?.contextWindow), defaultMaxTokens: text(model?.defaultMaxTokens),
         customParameters: model?.customParameters ? JSON.stringify(model.customParameters, null, 2) : '',
         // A new model starts on the first enabled gateway; it can be removed before saving.
         sources: model?.sources ?? gateways.filter(gateway => gateway.isEnabled).slice(0, 1)
@@ -135,6 +132,9 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [confirm, setConfirm] = useState<'discard' | 'delete' | null>(null);
+    const [lookup, setLookup] = useState<{ busy: boolean; error: string | null; searched: boolean; models: ModelsDevSuggestion[] }>(
+        { busy: false, error: null, searched: false, models: [] });
+    const lookupSeq = useRef(0);
     const firstField = useRef<HTMLInputElement>(null);
     const dirty = JSON.stringify(draft) !== JSON.stringify(baseline);
     useUnsavedSettingsGuard(dirty);
@@ -144,6 +144,45 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
     const format = THINKING_FORMAT_OPTIONS.find(option => option.value === draft.thinkingFormat);
     const chat = draft.usageType === 'chat' || draft.usageType === 'vision';
     const image = draft.usageType === 'image';
+
+    const lookupModelsDev = useCallback(async (query: string) => {
+        const seq = ++lookupSeq.current;
+        if (query.length < 2) {
+            setLookup({ busy: false, error: null, searched: false, models: [] });
+            return;
+        }
+        setLookup(current => ({ ...current, busy: true, error: null }));
+        try {
+            const result = await requestBrowserData<{ models: ModelsDevSuggestion[] }>(
+                `/api/admin/models-dev?q=${encodeURIComponent(query)}`, undefined, { fallbackMessage: '查询 models.dev 失败' });
+            if (seq !== lookupSeq.current) return;
+            setLookup({ busy: false, error: null, searched: true, models: result.models ?? [] });
+        } catch (e) {
+            if (seq !== lookupSeq.current) return;
+            setLookup({ busy: false, error: e instanceof Error ? e.message : '查询 models.dev 失败', searched: true, models: [] });
+        }
+    }, []);
+
+    // 模型 ID 停下 600ms 后查一次 models.dev；按钮可以立刻重查。查询结果只用于一键填入。
+    useEffect(() => {
+        if (!chat) return;
+        const timer = setTimeout(() => { void lookupModelsDev(draft.modelKey.trim()); }, 600);
+        return () => clearTimeout(timer);
+    }, [chat, draft.modelKey, lookupModelsDev]);
+
+    const applyCatalog = (suggestion: ModelsDevSuggestion) => {
+        const levels = suggestion.reasoning ? suggestion.thinkingLevels : [];
+        patch({
+            ...(suggestion.contextWindow ? { contextWindow: String(suggestion.contextWindow) } : {}),
+            ...(suggestion.maxTokens ? { defaultMaxTokens: String(suggestion.maxTokens) } : {}),
+            ...(draft.displayName ? {} : { displayName: suggestion.name }),
+            supportsReasoning: suggestion.reasoning,
+            thinkingLevels: levels,
+            defaultReasoningEffort: levels.includes('medium') ? 'medium' : levels.at(-1) ?? null,
+            supportsVision: suggestion.vision || draft.usageType === 'vision',
+        });
+        showToast('success', `已填入 ${suggestion.name} 的目录值`);
+    };
 
     const toggleLevel = (level: AIReasoningEffort) => {
         const levels = draft.thinkingLevels.includes(level) ? draft.thinkingLevels.filter(item => item !== level) : [...draft.thinkingLevels, level];
@@ -238,6 +277,31 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
                 <label className="ai-catalog-field"><span>描述（可选）</span>
                     <input className="settings-input" value={draft.description} maxLength={500} onChange={event => patch({ description: event.target.value })} />
                 </label>
+                {chat && <div className="ai-catalog-lookup">
+                    <div className="ai-catalog-lookup-head">
+                        <span>模型目录<small>models.dev 公开的上下文与输出上限，可一键填入</small></span>
+                        <button type="button" className="settings-button settings-button-compact settings-button-ghost"
+                            disabled={lookup.busy || draft.modelKey.trim().length < 2}
+                            onClick={() => void lookupModelsDev(draft.modelKey.trim())}>
+                            {lookup.busy ? <SoundWaveLoader variant="inline" /> : <RefreshCw size={13} aria-hidden="true" />}
+                            {lookup.busy ? '查询中…' : '查询 models.dev'}
+                        </button>
+                    </div>
+                    {lookup.error && <span className="ai-catalog-hint">{lookup.error}</span>}
+                    {!lookup.busy && !lookup.error && lookup.models.length > 0 && <ul className="ai-catalog-lookup-list" aria-label="models.dev 匹配结果">
+                        {lookup.models.slice(0, 5).map(suggestion => <li key={`${suggestion.provider}:${suggestion.id}`}>
+                            <span className="ai-catalog-lookup-name"><strong>{suggestion.name}</strong><small>{suggestion.providerName} · {suggestion.id}</small></span>
+                            <span className="ai-catalog-lookup-meta">
+                                {suggestion.contextWindow ? `${formatTokenCount(suggestion.contextWindow)} 上下文` : '上下文未知'}
+                                {suggestion.maxTokens ? ` · ${formatTokenCount(suggestion.maxTokens)} 输出` : ''}
+                                {suggestion.reasoning ? ' · 思考' : ''}
+                                {suggestion.vision ? ' · 图片' : ''}
+                            </span>
+                            <button type="button" className="settings-button settings-button-compact" onClick={() => applyCatalog(suggestion)}>填入</button>
+                        </li>)}
+                    </ul>}
+                    {!lookup.busy && !lookup.error && lookup.searched && lookup.models.length === 0 && <span className="ai-catalog-hint">models.dev 没有匹配；可以手填。</span>}
+                </div>}
             </section>
 
             {image && <section className="ai-catalog-section" aria-labelledby={`${titleId}-image`}>
@@ -253,8 +317,8 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
                 <header><h3 id={`${titleId}-limits`}>上下文与输出</h3><p>Agent 按上下文窗口决定何时压缩对话；最大输出是单次回复（含思考）的上限。</p></header>
                 <LimitField label="上下文窗口" value={draft.contextWindow} presets={CONTEXT_WINDOW_PRESETS} placeholder="未知"
                     hint="留空时按已知模型的应用上限；都不知道时 Agent 不按阈值压缩。" onChange={contextWindow => patch({ contextWindow })} />
-                <LimitField label="最大输出" value={draft.defaultMaxTokens} presets={MAX_OUTPUT_PRESETS}
-                    hint="思考也计入这个上限；思考等级越高，越需要留足。" onChange={defaultMaxTokens => patch({ defaultMaxTokens })} />
+                <LimitField label="最大输出" value={draft.defaultMaxTokens} presets={MAX_OUTPUT_PRESETS} placeholder="不限"
+                    hint="留空表示不限：请求不带 max_tokens，由上游按模型默认处理。思考也计入输出，思考等级越高越需要留足。" onChange={defaultMaxTokens => patch({ defaultMaxTokens })} />
                 <div className="ai-catalog-toggle">
                     <span>支持图片输入<small>Agent 会把图片附件随消息发给模型</small></span>
                     <SettingsSwitch label="支持图片输入" checked={draft.supportsVision} onToggle={() => patch({ supportsVision: !draft.supportsVision })} />
@@ -333,20 +397,12 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
             </section>
 
             <details className="ai-catalog-advanced">
-                <summary><ChevronRight size={14} aria-hidden="true" />采样与自定义参数</summary>
+                <summary><ChevronRight size={14} aria-hidden="true" />自定义请求参数</summary>
                 <div>
-                    <div className="ai-catalog-grid">
-                        {([['defaultTemperature', 'Temperature', '0–2'], ['defaultTopP', 'Top P', '0–1'],
-                            ['defaultPresencePenalty', 'Presence penalty', '−2–2'], ['defaultFrequencyPenalty', 'Frequency penalty', '−2–2']] as const)
-                            .map(([field, label, range]) => <label key={field} className="ai-catalog-field"><span>{label}</span>
-                                <input className="settings-input" type="number" step="0.05" value={draft[field]} placeholder={`不发送（${range}）`}
-                                    onChange={event => patch({ [field]: event.target.value })} />
-                            </label>)}
-                    </div>
                     <label className="ai-catalog-field"><span>自定义请求参数（JSON）</span>
                         <textarea className="settings-textarea ai-catalog-mono" rows={4} spellCheck={false} value={draft.customParameters} placeholder={'{\n  "top_k": 40\n}'}
                             onChange={event => patch({ customParameters: event.target.value })} />
-                        <span className="ai-catalog-hint">合并进请求体；消息、工具、输出上限和思考参数由系统写入，这里不能覆盖。加入 &quot;promptCacheKey&quot;: true 可按模型开启提示缓存亲和，网关需支持 prompt_cache_key。</span>
+                        <span className="ai-catalog-hint">合并进请求体；消息、工具、输出上限和思考参数由系统写入，这里不能覆盖。提示缓存亲和默认开启；网关不接受 prompt_cache_key 时，设为 <code>{'{"promptCacheKey": false}'}</code> 关闭。</span>
                     </label>
                 </div>
             </details>

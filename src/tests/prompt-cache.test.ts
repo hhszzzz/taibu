@@ -25,17 +25,15 @@ async function sentBody(source: AIModelConfig, conversationId?: string, cacheSco
     return body;
 }
 
-test('the provider option appears only for a model that opts in and a request that names its owner and conversation', () => {
-    const enabled = config({ promptCacheKey: true });
+test('the provider option is on by default, and a model can opt out', () => {
     const key = promptCacheKey('member-a', 'conversation-a');
     assert.ok(key);
-    assert.deepEqual(buildProviderOptions(enabled, { conversationId: 'conversation-a', cacheScope: 'member-a' }), { openai: { promptCacheKey: key } });
-
-    assert.equal(buildProviderOptions(config(), { conversationId: 'conversation-a', cacheScope: 'member-a' }), undefined, 'off by default');
-    assert.equal(buildProviderOptions(config({ promptCacheKey: false }), { conversationId: 'conversation-a', cacheScope: 'member-a' }), undefined, 'an explicit false stays off');
-    assert.equal(buildProviderOptions(config({ promptCacheKey: 'yes' }), { conversationId: 'conversation-a', cacheScope: 'member-a' }), undefined, 'only true enables it');
-    assert.equal(buildProviderOptions(enabled, {}), undefined, 'a request without a conversation has no affinity');
-    assert.equal(buildProviderOptions(enabled, { conversationId: 'conversation-a' }), undefined, 'nor without an owner');
+    assert.deepEqual(buildProviderOptions(config(), { conversationId: 'conversation-a', cacheScope: 'member-a' }), { openai: { promptCacheKey: key } }, 'on by default');
+    assert.deepEqual(buildProviderOptions(config({ promptCacheKey: true }), { conversationId: 'conversation-a', cacheScope: 'member-a' }), { openai: { promptCacheKey: key } });
+    assert.equal(buildProviderOptions(config({ promptCacheKey: false }), { conversationId: 'conversation-a', cacheScope: 'member-a' }), undefined, 'an explicit false turns it off');
+    assert.equal(buildProviderOptions(config({ promptCacheKey: 'yes' }), { conversationId: 'conversation-a', cacheScope: 'member-a' })?.openai?.promptCacheKey, key, 'only false opts out at runtime');
+    assert.equal(buildProviderOptions(config(), {}), undefined, 'a request without a conversation has no affinity');
+    assert.equal(buildProviderOptions(config(), { conversationId: 'conversation-a' }), undefined, 'nor without an owner');
 });
 
 test('the cache key is stable within one member and conversation, and differs across both', () => {
@@ -50,13 +48,13 @@ test('the cache key is stable within one member and conversation, and differs ac
     assert.equal(promptCacheKey('', ''), undefined);
 });
 
-test('a real SDK request sends prompt_cache_key only when enabled, and never the switch itself', async () => {
-    const enabled = await sentBody(config({ promptCacheKey: true, top_k: 20 }), 'conversation-a');
+test('a real SDK request sends prompt_cache_key by default, and never the switch itself', async () => {
+    const enabled = await sentBody(config({ top_k: 20 }), 'conversation-a');
     assert.equal(enabled.prompt_cache_key, promptCacheKey('member-a', 'conversation-a'));
     assert.equal(enabled.promptCacheKey, undefined);
     assert.equal(enabled.top_k, 20, 'other custom parameters still reach the gateway');
 
-    const disabled = await sentBody(config({ promptCacheKey: true }), undefined);
+    const disabled = await sentBody(config(), undefined);
     assert.equal(disabled.prompt_cache_key, undefined);
     assert.equal(disabled.promptCacheKey, undefined);
 

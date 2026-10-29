@@ -17,7 +17,6 @@ export class CatalogError extends Error {
     constructor(message: string, readonly status: number) { super(message); }
 }
 
-const numberOrNull = (value: unknown) => (value === null || value === undefined ? null : Number(value));
 
 export async function listGateways(): Promise<AdminGateway[]> {
     const rows = await systemDb().tx(trx => trx.selectFrom('ai_gateways as gateway')
@@ -146,10 +145,6 @@ export async function listModels(): Promise<AdminModel[]> {
         defaultReasoningEffort: (row.default_reasoning_effort ?? null) as AdminModel['defaultReasoningEffort'],
         contextWindow: row.context_window,
         defaultMaxTokens: row.default_max_tokens,
-        defaultTemperature: numberOrNull(row.default_temperature),
-        defaultTopP: numberOrNull(row.default_top_p),
-        defaultPresencePenalty: numberOrNull(row.default_presence_penalty),
-        defaultFrequencyPenalty: numberOrNull(row.default_frequency_penalty),
         customParameters: (row.custom_parameters ?? null) as Record<string, unknown> | null,
         sources: bindings.filter(binding => binding.model_id === row.id).map(binding => ({
             gatewayId: binding.gateway_id, modelIdOverride: binding.model_id_override,
@@ -166,8 +161,7 @@ function modelColumns(input: AdminModelInput) {
         is_reasoning_default: input.isReasoningDefault, reasoning_required_tier: input.reasoningRequiredTier,
         thinking_format: input.thinkingFormat, thinking_levels: arrayValue(input.thinkingLevels),
         default_reasoning_effort: input.defaultReasoningEffort, context_window: input.contextWindow,
-        default_max_tokens: input.defaultMaxTokens, default_temperature: input.defaultTemperature, default_top_p: input.defaultTopP,
-        default_presence_penalty: input.defaultPresencePenalty, default_frequency_penalty: input.defaultFrequencyPenalty,
+        default_max_tokens: input.defaultMaxTokens,
         custom_parameters: input.customParameters as never,
     };
 }

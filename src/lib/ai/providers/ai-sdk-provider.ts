@@ -196,11 +196,8 @@ export async function callWithAISDK(
         system: systemPrompt,
         messages,
         maxRetries: 0,
-        temperature: options?.temperature ?? config.defaultTemperature ?? 0.7,
+        temperature: options?.temperature ?? 0.7,
         maxOutputTokens: options?.maxTokens ?? config.defaultMaxTokens ?? undefined,
-        topP: config.defaultTopP ?? undefined,
-        presencePenalty: config.defaultPresencePenalty ?? undefined,
-        frequencyPenalty: config.defaultFrequencyPenalty ?? undefined,
         providerOptions: buildProviderOptions(config, options),
     });
 
@@ -231,11 +228,8 @@ export function streamWithAISDK(
         system: systemPrompt,
         messages,
         maxRetries: 0,
-        temperature: options?.temperature ?? config.defaultTemperature ?? 0.7,
+        temperature: options?.temperature ?? 0.7,
         maxOutputTokens: options?.maxTokens ?? config.defaultMaxTokens ?? undefined,
-        topP: config.defaultTopP ?? undefined,
-        presencePenalty: config.defaultPresencePenalty ?? undefined,
-        frequencyPenalty: config.defaultFrequencyPenalty ?? undefined,
         providerOptions: buildProviderOptions(config, options),
     });
 

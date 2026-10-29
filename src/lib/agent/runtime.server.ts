@@ -334,7 +334,7 @@ export async function executeAgentRun(
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       // Pi uses zero for an unknown window: threshold compaction is skipped,
       // while provider overflow recovery remains available.
-      contextWindow: window?.maxContext ?? 0, maxTokens: config.defaultMaxTokens ?? 4096,
+      contextWindow: window?.maxContext ?? 0, maxTokens: config.defaultMaxTokens ?? 0,
     };
     const collaborators = parseAgentCollaborators(run.input.collaborators);
     if (run.input.customProvider && collaborators.length) throw new Error('自定义直连模型不能调用平台协作模型');
@@ -383,7 +383,7 @@ export async function executeAgentRun(
     const bindings: GuardedAgentModel[] = [...configs.values()].map(selected => {
       const capacity = windows.get(selected.id);
       const model: Model<Api> = selected.id === config.id ? piModel : { ...piModel, id: selected.id, name: selected.name, baseUrl: selected.apiUrl, reasoning: selected.supportsReasoning,
-        input: ['text'], thinkingLevelMap: thinkingLevelMap(selected.thinkingLevels), contextWindow: capacity?.maxContext ?? 0, maxTokens: selected.defaultMaxTokens ?? 4096 };
+        input: ['text'], thinkingLevelMap: thinkingLevelMap(selected.thinkingLevels), contextWindow: capacity?.maxContext ?? 0, maxTokens: selected.defaultMaxTokens ?? 0 };
       return { model, authorize: options => authorizeModel(selected, options?.reasoning !== undefined),
         stream: injected?.streamFn ?? createPiModelStream(selected, { reasoning: selected.supportsReasoning, apiKey, telemetry, conversationId: run.conversation_id, cacheScope: run.user_id,
           ...(selected.id === config.id && selected.supportsVision && !run.input.customProvider ? { resolveImages: (messages: Parameters<typeof resolveAttachmentImages>[3]) => resolveAttachmentImages(store.db,run.user_id,run.conversation_id,messages) } : {}),

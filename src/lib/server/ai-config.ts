@@ -47,10 +47,6 @@ interface DBModelRow {
   supports_reasoning: boolean;
   is_reasoning_default: boolean;
   supports_vision: boolean;
-  default_temperature: number | string | null;
-  default_top_p?: number | string | null;
-  default_presence_penalty?: number | string | null;
-  default_frequency_penalty?: number | string | null;
   default_max_tokens: number | null;
   default_reasoning_effort?: AIModelConfig['defaultReasoningEffort'] | null;
   thinking_format: string;
@@ -68,9 +64,6 @@ const dbModelsCache = createSharedCache<AIModelConfig[]>({
   name: 'ai-models',
   ttlMs: DB_CACHE_TTL_MS,
 });
-
-const numberOrUndefined = (value: number | string | null | undefined) =>
-  value != null ? Number.parseFloat(String(value)) : undefined;
 
 function buildSourcesForModel(row: DBModelRow): AIModelSourceConfig[] {
   const usageType = getModelUsageType({
@@ -116,10 +109,6 @@ function mapDbModelRows(rows: DBModelRow[]): AIModelConfig[] {
       thinkingFormat: isThinkingFormat(row.thinking_format) ? row.thinking_format : 'openai',
       thinkingLevels,
       ...(row.context_window ? { contextWindow: row.context_window } : {}),
-      defaultTemperature: numberOrUndefined(row.default_temperature),
-      defaultTopP: numberOrUndefined(row.default_top_p),
-      defaultPresencePenalty: numberOrUndefined(row.default_presence_penalty),
-      defaultFrequencyPenalty: numberOrUndefined(row.default_frequency_penalty),
       defaultMaxTokens: row.default_max_tokens ?? undefined,
       defaultReasoningEffort: row.default_reasoning_effort ?? undefined,
       customParameters: (row.custom_parameters as Record<string, unknown> | null) ?? null,
@@ -145,8 +134,7 @@ async function loadModelsFromDB(): Promise<AIModelConfig[]> {
         .select([
           'id', 'model_key', 'display_name', 'vendor', 'usage_type', 'credit_cost',
           'supports_reasoning', 'is_reasoning_default', 'supports_vision',
-          'default_temperature', 'default_top_p', 'default_presence_penalty',
-          'default_frequency_penalty', 'default_max_tokens', 'default_reasoning_effort',
+          'default_max_tokens', 'default_reasoning_effort',
           'thinking_format', 'thinking_levels', 'context_window', 'custom_parameters', 'required_tier',
           'reasoning_required_tier',
         ])

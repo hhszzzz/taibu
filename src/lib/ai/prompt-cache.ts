@@ -2,15 +2,15 @@
  * Prompt-cache affinity, shared by the AI SDK chat path, the Agent stream and the admin catalog.
  *
  * A provider that understands `prompt_cache_key` routes requests carrying the same key to the same
- * prompt cache. The switch lives in a model's `custom_parameters`, is off by default, and is never
- * forwarded to an upstream as a request field of its own: gateways that reject the key never see it.
+ * prompt cache. Affinity is on by default; a model that cannot take the field opts out with
+ * `{"promptCacheKey": false}` in `custom_parameters`. The switch itself is never forwarded upstream.
  */
 import type { AIModelConfig } from '@/types';
 
-/** Reserved `custom_parameters` entry: `true` enables the affinity for this model, anything else leaves it off. */
+/** Reserved `custom_parameters` entry: only an explicit `false` turns the affinity off for this model. */
 export const PROMPT_CACHE_SWITCH = 'promptCacheKey';
 
-/** Whether the model has prompt-cache affinity switched on. */
+/** Prompt-cache affinity is on unless the model explicitly opts out. */
 export function isPromptCacheEnabled(config: Pick<AIModelConfig, 'customParameters'>): boolean {
-    return config.customParameters?.[PROMPT_CACHE_SWITCH] === true;
+    return config.customParameters?.[PROMPT_CACHE_SWITCH] !== false;
 }

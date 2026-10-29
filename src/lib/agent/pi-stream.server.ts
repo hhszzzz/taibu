@@ -140,9 +140,6 @@ function extraBody(source: AIModelConfig): Record<string, unknown> {
   for (const [key, value] of Object.entries(source.customParameters ?? {})) {
     if (!TRANSPORT_FIELDS.has(key) && !THINKING_REQUEST_FIELDS.has(key)) body[key] = value;
   }
-  if (source.defaultTopP !== undefined) body.top_p = source.defaultTopP;
-  if (source.defaultPresencePenalty !== undefined) body.presence_penalty = source.defaultPresencePenalty;
-  if (source.defaultFrequencyPenalty !== undefined) body.frequency_penalty = source.defaultFrequencyPenalty;
   return body;
 }
 
@@ -225,11 +222,13 @@ export interface AgentModelStreamSettings {
   apiKey?: string;
   /** Replaces attachment references with their images, for a vision model. */
   resolveImages?: (messages: Message[]) => Promise<Message[]>;
-  /** The task's conversation; its hash becomes this model's prompt cache key when the model opts in. */
+  /** The task's conversation; its hash becomes this model's prompt cache key unless the model opts out. */
   conversationId?: string;
   /** The task owner; the key covers it, so two members' conversations never share a partition. */
   cacheScope?: string;
   fetch?: typeof globalThis.fetch;
+  /** Overrides the request temperature; defaults to 0.7 (the evaluator asks for 0.3). */
+  temperature?: number;
   /** Live answer text, for the display-only delta channel; never used for durability. */
   onAnswerStart?: () => void;
   onAnswerDelta?: (delta: string) => void;
@@ -286,7 +285,7 @@ export function createPiModelStream(config: AIModelConfig, settings: AgentModelS
             signal: requestSignal,
             maxRetries: 0,
             identity: { userAgent: { custom: MODEL_REQUEST_USER_AGENT } },
-            temperature: source.defaultTemperature ?? 0.7,
+            temperature: settings.temperature ?? 0.7,
             ...(outputLimits.length ? { maxTokens: Math.min(...outputLimits) } : {}),
             ...(effort ? { reasoningEffort: effort } : {}),
             // The transcript keeps the task's model identity; the gateway is asked for the source's upstream model.

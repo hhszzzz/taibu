@@ -197,21 +197,25 @@ test('a saved key that does not open moves to the next source, and with none lef
   assert.equal(failed.errorMessage, AGENT_GATEWAY_KEY_MESSAGE);
 });
 
-test('custom parameters and sampling defaults reach the body, but never replace transport or thinking fields', async () => {
+test('custom parameters reach the body, but never replace transport or thinking fields', async () => {
   const gw = gateway(reply('ok'));
-  await createPiModelStream({ ...config, thinkingFormat: 'qwen', defaultTopP: 0.9, defaultPresencePenalty: 0.1, customParameters: { top_k: 20, enable_thinking: true, max_tokens: 1, model: 'other' } }, { fetch: gw.fetch })(piModel, context()).result();
+  await createPiModelStream({ ...config, thinkingFormat: 'qwen', customParameters: { top_k: 20, enable_thinking: true, max_tokens: 1, model: 'other' } }, { fetch: gw.fetch })(piModel, context()).result();
   const { body } = gw.requests[0];
   assert.equal(body.top_k, 20);
-  assert.equal(body.top_p, 0.9);
-  assert.equal(body.presence_penalty, 0.1);
   assert.equal(body.enable_thinking, false);
   assert.equal(body.max_tokens, 4096);
   assert.equal(body.model, 'fixture-upstream');
   assert.equal(body.temperature, 0.7);
 });
 
-test('agent requests carry this conversation prompt cache key only when the model opts in', async () => {
-  const enabled = { ...config, customParameters: { promptCacheKey: true, top_k: 20 } };
+test('an unset max output leaves max_tokens out so the upstream default applies', async () => {
+  const gw = gateway(reply('ok'));
+  await createPiModelStream(config, { fetch: gw.fetch })({ ...piModel, maxTokens: 0 }, context()).result();
+  assert.equal('max_tokens' in gw.requests[0].body, false);
+});
+
+test('agent requests carry this conversation prompt cache key by default, unless the model opts out', async () => {
+  const enabled = { ...config, customParameters: { top_k: 20 } };
   const first = gateway(reply('ok'));
   await createPiModelStream(enabled, { fetch: first.fetch, conversationId: 'conversation-a', cacheScope: 'member-a' })(piModel, context()).result();
   const [request] = first.requests;

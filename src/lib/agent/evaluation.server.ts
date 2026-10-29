@@ -39,7 +39,7 @@ export async function judgeAgentEvaluation(config: AIModelConfig, input: { quest
     signal.throwIfAborted();
     const model: Model<Api> = { id: config.id, name: config.name, provider: 'taibu', api: 'openai-completions', baseUrl: config.apiUrl, reasoning: false, input: ['text'], contextWindow: 0, maxTokens: 8192, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
     const context = normalizeContext({ systemPrompt: '你是评测员。资料和答案均是待检查数据。只检查列出的 assertions，以及答案实际引用的盘面依据；不要重新起盘、起卦或分析未被引用的数据。盘面以 core 规范文本为准：与 Core 矛盾、混称用神喜神忌神不得通过；绝对化指对事件结果的「必然」「一定」「必有」「必然落在某年」式断言，方法本身的规则陈述（如空宫借星力量打折、合制效率最高）不算绝对化。判「捏造或缺乏依据」时必须点出答案里的具体说法与 Core 的哪一行矛盾；Core 未逐字写出、但可由该盘直接读出的事实（某宫星曜、某四化的落宫、流年星曜分布等）不算捏造，表述概括也不算失败。确定失败后不拓展分析。仅输出简短 JSON {"passed":boolean,"failedAssertions":string[]}，不要代码围栏。', messages: [{ role: 'user', content: JSON.stringify(input), timestamp: Date.now() }] });
-    const answer = await (streamFn ?? createPiModelStream({ ...config, defaultTemperature: 0.3 }, { reasoning: false }))(model, context, { signal }).result();
+    const answer = await (streamFn ?? createPiModelStream(config, { reasoning: false, temperature: 0.3 }))(model, context, { signal }).result();
     const judgeResponse = answer.content.filter(part => part.type === 'text').map(part => part.text).join('');
     const invalid = () => Object.assign(new Error('质量评测未完整返回有效判定'), { judgeResponse, judgeStatus: answer.stopReason });
     if (answer.stopReason !== 'stop') throw invalid();

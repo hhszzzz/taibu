@@ -65,10 +65,6 @@ export interface AdminModelInput {
     defaultReasoningEffort: AIReasoningEffort | null;
     contextWindow: number | null;
     defaultMaxTokens: number | null;
-    defaultTemperature: number | null;
-    defaultTopP: number | null;
-    defaultPresencePenalty: number | null;
-    defaultFrequencyPenalty: number | null;
     customParameters: Record<string, unknown> | null;
     sources: AdminModelSource[];
 }
@@ -237,13 +233,6 @@ export function parseModelInput(body: unknown): Parsed<AdminModelInput> {
     if (contextWindow && defaultMaxTokens && defaultMaxTokens >= contextWindow) return { error: '最大输出必须小于上下文窗口' };
     const sortOrder = optionalNumber(body.sortOrder, -100_000, 100_000, true);
     if (sortOrder === undefined) return { error: '排序需要是整数' };
-    const sampling = {
-        defaultTemperature: optionalNumber(body.defaultTemperature, 0, 2),
-        defaultTopP: optionalNumber(body.defaultTopP, 0, 1),
-        defaultPresencePenalty: optionalNumber(body.defaultPresencePenalty, -2, 2),
-        defaultFrequencyPenalty: optionalNumber(body.defaultFrequencyPenalty, -2, 2),
-    };
-    if (Object.values(sampling).some(value => value === undefined)) return { error: '采样参数超出范围' };
     const customParameters = body.customParameters ?? null;
     if (customParameters !== null && !isRecord(customParameters)) return { error: '自定义参数必须是 JSON 对象' };
     if (customParameters !== null && PROMPT_CACHE_SWITCH in customParameters && typeof customParameters[PROMPT_CACHE_SWITCH] !== 'boolean') {
@@ -268,10 +257,6 @@ export function parseModelInput(body: unknown): Parsed<AdminModelInput> {
             thinkingLevels,
             defaultReasoningEffort: defaultReasoningEffort as AIReasoningEffort | null,
             contextWindow, defaultMaxTokens,
-            defaultTemperature: sampling.defaultTemperature ?? null,
-            defaultTopP: sampling.defaultTopP ?? null,
-            defaultPresencePenalty: sampling.defaultPresencePenalty ?? null,
-            defaultFrequencyPenalty: sampling.defaultFrequencyPenalty ?? null,
             customParameters: customParameters as Record<string, unknown> | null,
             sources: sources.value,
         },

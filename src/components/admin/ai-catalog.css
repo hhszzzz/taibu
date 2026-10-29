@@ -97,6 +97,20 @@
 .ai-catalog-key { display: flex; gap: .5rem; }
 .ai-catalog-key .settings-input { flex: 1; min-width: 0; }
 
+
+/* models.dev 目录建议：只读参考值，点「填入」才写进表单。 */
+.ai-catalog-lookup { display: flex; flex-direction: column; gap: .5rem; padding: .75rem; border: 1px dashed var(--border); border-radius: .625rem; }
+.ai-catalog-lookup-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; font-size: .8125rem; font-weight: 500; color: var(--foreground); }
+.ai-catalog-lookup-head > span { display: flex; flex-direction: column; gap: .125rem; min-width: 0; }
+.ai-catalog-lookup-head small { font-size: .75rem; font-weight: 400; color: var(--foreground-tertiary); }
+.ai-catalog-lookup-list { display: flex; flex-direction: column; gap: .375rem; max-height: 13rem; overflow-y: auto; }
+.ai-catalog-lookup-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .25rem .75rem; padding: .5rem .625rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--surface); }
+.ai-catalog-lookup-name { display: flex; flex-direction: column; gap: .125rem; min-width: 0; }
+.ai-catalog-lookup-name strong { overflow: hidden; font-size: .8125rem; font-weight: 500; white-space: nowrap; text-overflow: ellipsis; }
+.ai-catalog-lookup-name small { overflow: hidden; font-family: var(--font-mono); font-size: .6875rem; color: var(--foreground-tertiary); white-space: nowrap; text-overflow: ellipsis; }
+.ai-catalog-lookup-meta { grid-column: 1; font-size: .75rem; color: var(--foreground-secondary); }
+.ai-catalog-lookup-list li > .settings-button { grid-row: 1 / span 2; grid-column: 2; }
+
 @media (prefers-reduced-motion: reduce) {
   .ai-catalog-section, .ai-catalog-advanced > div, .ai-catalog-probe { animation: none; }
   .ai-catalog-reveal { transition: none; }

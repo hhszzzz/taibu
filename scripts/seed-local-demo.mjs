@@ -208,7 +208,7 @@ for (const model of TEST_MODELS) {
      is_reasoning_default, supports_vision, default_temperature, default_max_tokens, description, usage_type,
      default_reasoning_effort, thinking_format, thinking_levels, context_window)
     values (${q(model.id)}, ${q(model.key)}, ${q(model.name)}, ${q(model.vendor)}, true, ${model.sort}, ${q(model.tier)}, ${model.reasoning},
-      ${q(model.reasoningTier)}, ${model.reasoningDefault}, ${model.vision}, 0.7, 8192, ${q(`本地测试模型：${model.description}`)}, 'chat',
+      ${q(model.reasoningTier)}, ${model.reasoningDefault}, ${model.vision}, 0.7, null, ${q(`本地测试模型：${model.description}`)}, 'chat',
       ${q(model.effort)}, ${q(model.format)}, ${q(`{${model.levels.join(',')}}`)}::text[], ${model.context});`);
 }
 statements.push(`insert into public.ai_model_gateway_bindings (model_id, gateway_id, model_id_override, is_enabled, priority)

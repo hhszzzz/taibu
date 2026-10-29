@@ -355,10 +355,6 @@ export interface AIModelConfig {
     // 视觉模型支持
     supportsVision?: boolean;    // 是否支持图像输入
     // 默认参数
-    defaultTemperature?: number;
-    defaultTopP?: number;
-    defaultPresencePenalty?: number;
-    defaultFrequencyPenalty?: number;
     defaultMaxTokens?: number;
     defaultReasoningEffort?: AIReasoningEffort;
     customParameters?: Record<string, unknown> | null;

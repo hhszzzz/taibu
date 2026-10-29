@@ -22,7 +22,7 @@ function ModelMeta({ model, gateways }: { model: AdminModel; gateways: ReadonlyM
     return <span className="ai-catalog-row-meta">
         {model.usageType !== 'chat' && <span>{usage}</span>}
         {(model.usageType === 'chat' || model.usageType === 'vision') && <span>
-            {model.contextWindow ? `${formatTokenCount(model.contextWindow)} 上下文` : '未设上下文'} · {model.defaultMaxTokens ? `${formatTokenCount(model.defaultMaxTokens)} 输出` : '默认输出'}
+            {model.contextWindow ? `${formatTokenCount(model.contextWindow)} 上下文` : '未设上下文'} · {model.defaultMaxTokens ? `${formatTokenCount(model.defaultMaxTokens)} 输出` : '不限输出'}
         </span>}
         {model.usageType === 'image' && <span>{model.creditCost} 积分 / 张</span>}
         {model.supportsReasoning && <span>思考 {model.thinkingLevels.length ? model.thinkingLevels.map(level => THINKING_LEVEL_LABELS[level]).join('/') : '开关'}</span>}

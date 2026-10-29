@@ -14,6 +14,7 @@ import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 import { requestBrowserData } from '@/lib/browser-api';
 import { formatShortDate } from '@/lib/short-date';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { SettingsSelect } from '@/components/settings/SettingsSelect';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
 
@@ -266,15 +267,13 @@ export function KeyManagementPanel() {
                 >
                     <label className="settings-field">
                         类型
-                        <select
+                        <SettingsSelect<CreateKeyType>
+                            ariaLabel="类型"
                             value={createType}
-                            onChange={(event) => setCreateType(event.target.value as CreateKeyType)}
-                            className="settings-select settings-input-lg w-full"
-                        >
-                            {CREATE_TYPE_OPTIONS.map(option => (
-                                <option key={option.value} value={option.value}>{option.label}</option>
-                            ))}
-                        </select>
+                            onChange={setCreateType}
+                            options={CREATE_TYPE_OPTIONS.map(option => ({ value: option.value, label: option.label }))}
+                            className="settings-input-lg w-full"
+                        />
                     </label>
                     {createType === 'credits' ? (
                         <label className="settings-field">

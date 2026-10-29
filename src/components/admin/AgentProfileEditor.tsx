@@ -13,6 +13,7 @@ import { useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { SettingsSwitch } from '@/components/settings/SettingsControls';
+import { SettingsSelect } from '@/components/settings/SettingsSelect';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { MEMBERSHIP_TIERS, MEMBERSHIP_TIER_LABELS } from '@/lib/agent/mcp/config';
 import {
@@ -177,12 +178,13 @@ export function AgentProfileEditor({ seed, catalog, onClose, onSubmit }: {
                 {tokens.map(item => (
                   <li key={item.token}>
                     <span><strong>{item.label}</strong><small>{item.hint}</small></span>
-                    <select className="settings-select" aria-label={`${item.label}的授权`} value={draft.grants[item.token] ?? ''}
-                      onChange={event => set({ grants: { ...draft.grants, [item.token]: event.target.value as Grant } })}>
-                      <option value="">{draft.inherit ? '随继承' : '不提供'}</option>
-                      <option value="allow">允许</option>
-                      <option value="deny">禁止</option>
-                    </select>
+                    <SettingsSelect<Grant> ariaLabel={`${item.label}的授权`} value={draft.grants[item.token] ?? ''}
+                      onChange={value => set({ grants: { ...draft.grants, [item.token]: value } })}
+                      options={[
+                        { value: '', label: draft.inherit ? '随继承' : '不提供' },
+                        { value: 'allow', label: '允许' },
+                        { value: 'deny', label: '禁止' },
+                      ]} />
                   </li>
                 ))}
               </ul>
@@ -216,29 +218,33 @@ export function AgentProfileEditor({ seed, catalog, onClose, onSubmit }: {
             <div className="mcp-fields">
               <Field label="模型" hint="不指定时，成员用协作设置里选的模型或主模型。指定的模型当前会员不能用时同样退回。">
                 {props => (
-                  <select {...props} className="settings-select" value={draft.model} onChange={event => set({ model: event.target.value, reasoningEffort: '' })}>
-                    <option value="">不指定</option>
-                    {draft.model && !model ? <option value={draft.model}>{draft.model}（已不可用）</option> : null}
-                    {catalog.models.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-                  </select>
+                  <SettingsSelect ariaLabel="模型" id={props.id} describedBy={props['aria-describedby']} value={draft.model}
+                    onChange={model => set({ model, reasoningEffort: '' })}
+                    options={[
+                      { value: '', label: '不指定' },
+                      ...(draft.model && !model ? [{ value: draft.model, label: `${draft.model}（已不可用）` }] : []),
+                      ...catalog.models.map(item => ({ value: item.id, label: item.name })),
+                    ]} />
                 )}
               </Field>
               <Field label="推理档位" hint="只对指定的模型生效，列出该模型支持的档位。">
                 {props => (
-                  <select {...props} className="settings-select" value={draft.reasoningEffort} disabled={!draft.model || model?.supportsReasoning === false}
-                    onChange={event => set({ reasoningEffort: event.target.value as Draft['reasoningEffort'] })}>
-                    <option value="">模型默认</option>
-                    <option value="off">关闭推理</option>
-                    {AI_REASONING_EFFORTS.filter(effort => effort === draft.reasoningEffort || model?.thinkingLevels.includes(effort))
-                      .map(effort => <option key={effort} value={effort}>{REASONING_EFFORT_LABELS[effort]}</option>)}
-                  </select>
+                  <SettingsSelect<Draft['reasoningEffort']> ariaLabel="推理档位" id={props.id} describedBy={props['aria-describedby']}
+                    value={draft.reasoningEffort} disabled={!draft.model || model?.supportsReasoning === false}
+                    onChange={reasoningEffort => set({ reasoningEffort })}
+                    options={[
+                      { value: '', label: '模型默认' },
+                      { value: 'off', label: '关闭推理' },
+                      ...AI_REASONING_EFFORTS.filter(effort => effort === draft.reasoningEffort || model?.thinkingLevels.includes(effort))
+                        .map(effort => ({ value: effort, label: REASONING_EFFORT_LABELS[effort] })),
+                    ]} />
                 )}
               </Field>
               <Field label="会员等级" hint="达到这一等级的用户才能派出这个角色。">
                 {props => (
-                  <select {...props} className="settings-select" value={draft.requiredTier} onChange={event => set({ requiredTier: event.target.value as MembershipType })}>
-                    {MEMBERSHIP_TIERS.map(tier => <option key={tier} value={tier}>{MEMBERSHIP_TIER_LABELS[tier]} 及以上</option>)}
-                  </select>
+                  <SettingsSelect<MembershipType> ariaLabel="会员等级" id={props.id} describedBy={props['aria-describedby']}
+                    value={draft.requiredTier} onChange={requiredTier => set({ requiredTier })}
+                    options={MEMBERSHIP_TIERS.map(tier => ({ value: tier, label: `${MEMBERSHIP_TIER_LABELS[tier]} 及以上` }))} />
                 )}
               </Field>
               <Field label="排序" hint="小的在前。">

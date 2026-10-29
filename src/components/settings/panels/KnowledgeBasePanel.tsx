@@ -15,6 +15,7 @@ import { useSessionMembership } from '@/lib/hooks/useSessionMembership';
 import { useToast } from '@/components/ui/Toast';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { SettingsLoginRequired } from '@/components/settings/SettingsLoginRequired';
+import { SettingsSelect } from '@/components/settings/SettingsSelect';
 import { KNOWLEDGE_BASE_SYNC_EVENT } from '@/lib/browser-api';
 import { formatShortDate } from '@/lib/short-date';
 import { MING_RECORD_SOURCE_TYPE } from '@/lib/data-sources/types';
@@ -839,20 +840,15 @@ export default function KnowledgeBasePanel() {
                     <div className={`grid gap-4 p-5 sm:grid-cols-2 ${CARD}`}>
                         <label className="settings-field-block">
                             <span className="settings-label">导入到</span>
-                            <select
+                            <SettingsSelect
+                                ariaLabel="导入到"
                                 value={targetUploadKbId ?? ''}
-                                onChange={(event) => setUploadKbId(event.target.value)}
+                                onChange={setUploadKbId}
                                 disabled={kbs.length === 0 || membershipLocked}
-                                className="settings-select w-full"
-                            >
-                                {kbs.length === 0 ? (
-                                    <option value="">暂无知识库</option>
-                                ) : (
-                                    kbs.map(kb => (
-                                        <option key={kb.id} value={kb.id}>{kb.name}</option>
-                                    ))
-                                )}
-                            </select>
+                                placeholder="暂无知识库"
+                                className="w-full"
+                                options={kbs.map(kb => ({ value: kb.id, label: kb.name }))}
+                            />
                         </label>
                         <div className="settings-field-block">
                             <span id="kb-file-label" className="settings-label">文件</span>

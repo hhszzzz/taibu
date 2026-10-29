@@ -10,6 +10,7 @@ import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import { SettingsSwitch } from '@/components/settings/SettingsControls';
 import { SegmentedChoice } from '@/components/settings/SegmentedChoice';
+import { SettingsSelect } from '@/components/settings/SettingsSelect';
 import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 import { getVendorName, VENDOR_PRESETS } from '@/lib/ai/vendor-labels';
 import { AI_REASONING_EFFORTS, type AIReasoningEffort } from '@/types';
@@ -255,13 +256,13 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
                             onChange={event => patch({ modelKey: event.target.value.trim() })} />
                     </label>
                     <label className="ai-catalog-field"><span>供应商</span>
-                        <select className="settings-select" value={vendorMode} onChange={event => {
-                            setVendorMode(event.target.value);
-                            if (event.target.value !== CUSTOM_VENDOR) patch({ vendor: event.target.value });
-                        }}>
-                            {VENDOR_PRESETS.map(vendor => <option key={vendor} value={vendor}>{getVendorName(vendor)}</option>)}
-                            <option value={CUSTOM_VENDOR}>其他…</option>
-                        </select>
+                        <SettingsSelect ariaLabel="供应商" value={vendorMode} onChange={value => {
+                            setVendorMode(value);
+                            if (value !== CUSTOM_VENDOR) patch({ vendor: value });
+                        }} options={[
+                            ...VENDOR_PRESETS.map(vendor => ({ value: vendor, label: getVendorName(vendor) })),
+                            { value: CUSTOM_VENDOR, label: '其他…' },
+                        ]} />
                     </label>
                     {vendorMode === CUSTOM_VENDOR ? <label className="ai-catalog-field"><span>供应商标识</span>
                         <input className="settings-input ai-catalog-mono" value={draft.vendor} maxLength={40} placeholder="mistral" onChange={event => patch({ vendor: event.target.value.trim() })} />
@@ -344,17 +345,17 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
                         </div>
                         <div className="ai-catalog-grid">
                             <label className="ai-catalog-field"><span>参数格式</span>
-                                <select className="settings-select" value={draft.thinkingFormat} onChange={event => patch({ thinkingFormat: event.target.value as Draft['thinkingFormat'] })}>
-                                    {THINKING_FORMAT_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-                                </select>
+                                <SettingsSelect ariaLabel="参数格式" value={draft.thinkingFormat}
+                                    onChange={thinkingFormat => patch({ thinkingFormat })}
+                                    options={THINKING_FORMAT_OPTIONS.map(option => ({ value: option.value, label: option.label }))} />
                                 {format && <span className="ai-catalog-hint ai-catalog-mono">{format.fields}</span>}
                             </label>
                             <label className="ai-catalog-field"><span>默认等级</span>
-                                <select className="settings-select" value={draft.defaultReasoningEffort ?? ''} disabled={!draft.thinkingLevels.length}
-                                    onChange={event => patch({ defaultReasoningEffort: (event.target.value || null) as AIReasoningEffort | null })}>
-                                    {!draft.thinkingLevels.length && <option value="">—</option>}
-                                    {draft.thinkingLevels.map(level => <option key={level} value={level}>{THINKING_LEVEL_LABELS[level]}</option>)}
-                                </select>
+                                <SettingsSelect ariaLabel="默认等级" value={draft.defaultReasoningEffort ?? ''} disabled={!draft.thinkingLevels.length}
+                                    onChange={value => patch({ defaultReasoningEffort: (value || null) as AIReasoningEffort | null })}
+                                    options={draft.thinkingLevels.length
+                                        ? draft.thinkingLevels.map(level => ({ value: level, label: THINKING_LEVEL_LABELS[level] }))
+                                        : [{ value: '', label: '—' }]} />
                             </label>
                         </div>
                         <div className="ai-catalog-toggle">

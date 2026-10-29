@@ -19,13 +19,11 @@ export interface AnnouncementInput {
 }
 
 export interface AnnouncementCenterLocalState {
-    latestAnnouncementKey?: string;
-    latestPublishedAt?: string;
-    dismissedUntil?: string;
+    /** 最近一次真正展示给用户的最新公告身份；同一个身份不再弹第二次。 */
+    seenAnnouncementKey?: string;
 }
 
 export const ANNOUNCEMENT_CENTER_STORAGE_KEY = 'taibu:announcement:center';
-export const LEGACY_ANNOUNCEMENT_CENTER_STORAGE_KEY = 'mingai:announcement:center';
 
 const hasOwn = (value: Record<string, unknown>, key: string) => Object.prototype.hasOwnProperty.call(value, key);
 
@@ -98,58 +96,29 @@ export function getAnnouncementCenterLocalState(raw: unknown): AnnouncementCente
     const parsed = raw as Record<string, unknown>;
     const state: AnnouncementCenterLocalState = {};
 
-    if (typeof parsed.latestAnnouncementKey === 'string' && parsed.latestAnnouncementKey.trim()) {
-        state.latestAnnouncementKey = parsed.latestAnnouncementKey;
-    }
-    if (typeof parsed.latestPublishedAt === 'string' && parsed.latestPublishedAt.trim()) {
-        state.latestPublishedAt = parsed.latestPublishedAt;
-    }
-    if (typeof parsed.dismissedUntil === 'string' && parsed.dismissedUntil.trim()) {
-        state.dismissedUntil = parsed.dismissedUntil;
+    if (typeof parsed.seenAnnouncementKey === 'string' && parsed.seenAnnouncementKey.trim()) {
+        state.seenAnnouncementKey = parsed.seenAnnouncementKey;
     }
 
     return state;
 }
 
-export function getEndOfLocalDayIso(now: Date) {
-    const end = new Date(now);
-    end.setHours(23, 59, 59, 999);
-    return end.toISOString();
-}
-
-export function getAnnouncementPromptIdentity(announcement: Pick<Announcement, 'id' | 'publishedAt' | 'updatedAt'> | null | undefined) {
+/** 公告身份只看发布，不看编辑时间：修改旧公告不会让所有人重新收到弹窗。 */
+export function getAnnouncementPromptIdentity(announcement: Pick<Announcement, 'id' | 'publishedAt'> | null | undefined) {
     if (!announcement?.publishedAt) {
         return null;
     }
-    return `${announcement.id}:${announcement.updatedAt || announcement.publishedAt}`;
+    return `${announcement.id}:${announcement.publishedAt}`;
 }
 
+/** 只有存在一条尚未展示过的最新公告时才弹；展示过就永久记为已看。 */
 export function shouldPromptLatestAnnouncement(input: {
     announcementKey: string | null | undefined;
     state: AnnouncementCenterLocalState | null | undefined;
-    nowIso?: string;
 }) {
     const announcementKey = input.announcementKey ?? null;
     if (!announcementKey) {
         return false;
     }
-
-    const state = input.state ?? {};
-    const previousAnnouncementKey = state.latestAnnouncementKey ?? state.latestPublishedAt ?? null;
-    if (previousAnnouncementKey !== announcementKey) {
-        return true;
-    }
-
-    if (!state.dismissedUntil) {
-        return true;
-    }
-
-    const dismissedUntil = Date.parse(state.dismissedUntil);
-    const now = Date.parse(input.nowIso ?? new Date().toISOString());
-
-    if (Number.isNaN(dismissedUntil) || Number.isNaN(now)) {
-        return true;
-    }
-
-    return dismissedUntil <= now;
+    return (input.state ?? {}).seenAnnouncementKey !== announcementKey;
 }

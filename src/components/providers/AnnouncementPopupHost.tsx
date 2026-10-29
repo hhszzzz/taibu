@@ -6,11 +6,10 @@ import { SidebarAnnouncementCenter } from '@/components/layout/SidebarAnnounceme
 import { useToast } from '@/components/ui/Toast';
 import {
     ANNOUNCEMENT_CENTER_STORAGE_KEY,
-    LEGACY_ANNOUNCEMENT_CENTER_STORAGE_KEY,
     getAnnouncementCenterLocalState,
-    getEndOfLocalDayIso,
     getAnnouncementPromptIdentity,
     shouldPromptLatestAnnouncement,
+    type Announcement,
     type AnnouncementCenterLocalState,
 } from '@/lib/announcement';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
@@ -25,13 +24,9 @@ type OpenAnnouncementCenterOptions = {
     tab?: AnnouncementCenterTab;
 };
 
-type CloseAnnouncementCenterOptions = {
-    dismissAnnouncementForToday?: boolean;
-};
-
 type AnnouncementCenterContextValue = {
     openAnnouncementCenter: (options?: OpenAnnouncementCenterOptions) => void;
-    closeAnnouncementCenter: (options?: CloseAnnouncementCenterOptions) => void;
+    closeAnnouncementCenter: () => void;
     announcementPromptCount: number;
 };
 
@@ -43,7 +38,6 @@ function readAnnouncementCenterLocalState() {
     }
 
     try {
-        window.localStorage.removeItem(LEGACY_ANNOUNCEMENT_CENTER_STORAGE_KEY);
         const raw = window.localStorage.getItem(ANNOUNCEMENT_CENTER_STORAGE_KEY);
         return getAnnouncementCenterLocalState(raw ? JSON.parse(raw) : null);
     } catch {
@@ -57,7 +51,6 @@ function writeAnnouncementCenterLocalState(value: AnnouncementCenterLocalState) 
     }
 
     window.localStorage.setItem(ANNOUNCEMENT_CENTER_STORAGE_KEY, JSON.stringify(value));
-    window.localStorage.removeItem(LEGACY_ANNOUNCEMENT_CENTER_STORAGE_KEY);
 }
 
 export function useAnnouncementCenterSafe() {
@@ -100,18 +93,19 @@ export function AnnouncementPopupHost({
         openRef.current = open;
     }, [open]);
 
-    const closeAnnouncementCenter = useCallback((options: CloseAnnouncementCenterOptions = {}) => {
-        if (options.dismissAnnouncementForToday && latestAnnouncement?.publishedAt) {
-            writeAnnouncementCenterLocalState({
-                latestAnnouncementKey: getAnnouncementPromptIdentity(latestAnnouncement) ?? undefined,
-                latestPublishedAt: latestAnnouncement.publishedAt,
-                dismissedUntil: getEndOfLocalDayIso(new Date()),
-            });
-            setLocalStateVersion((value) => value + 1);
-        }
-
+    const closeAnnouncementCenter = useCallback(() => {
         setOpen(false);
-    }, [latestAnnouncement]);
+    }, []);
+
+    /** 公告真正展示给用户时立即记为已看：自动弹出、点铃铛查看都算，之后刷新或隔天都不再弹。 */
+    const markAnnouncementSeen = useCallback((announcement: Announcement) => {
+        const announcementKey = getAnnouncementPromptIdentity(announcement);
+        if (!announcementKey) return;
+        const current = readAnnouncementCenterLocalState();
+        if (current.seenAnnouncementKey === announcementKey) return;
+        writeAnnouncementCenterLocalState({ ...current, seenAnnouncementKey: announcementKey });
+        setLocalStateVersion((value) => value + 1);
+    }, []);
 
     const openAnnouncementCenter = useCallback((options: OpenAnnouncementCenterOptions = {}) => {
         const wantsNotifications = options.tab === 'notifications' && !!userId && notificationsEnabled;
@@ -208,6 +202,7 @@ export function AnnouncementPopupHost({
                     notificationsEnabled={notificationsEnabled}
                     initialTab={preferredTab}
                     onClose={closeAnnouncementCenter}
+                    onAnnouncementsViewed={markAnnouncementSeen}
                 />
             ) : null}
         </AnnouncementCenterContext.Provider>

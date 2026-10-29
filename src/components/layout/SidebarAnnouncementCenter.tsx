@@ -20,7 +20,7 @@ import {
     type Notification,
 } from '@/lib/notification';
 import { resolveNotificationLink } from '@/lib/notification-view';
-import type { Announcement } from '@/lib/announcement';
+import { getAnnouncementPromptIdentity, type Announcement } from '@/lib/announcement';
 import type { AnnouncementCenterTab } from '@/components/providers/AnnouncementPopupHost';
 
 interface SidebarAnnouncementCenterProps {
@@ -28,7 +28,9 @@ interface SidebarAnnouncementCenterProps {
     userId: string | null;
     notificationsEnabled: boolean;
     initialTab: AnnouncementCenterTab;
-    onClose: (options?: { dismissAnnouncementForToday?: boolean }) => void;
+    onClose: () => void;
+    /** 公告标签成功展示最新一条时通知宿主记为已看。 */
+    onAnnouncementsViewed?: (announcement: Announcement) => void;
 }
 
 const ANNOUNCEMENT_LIMIT = 20;
@@ -66,6 +68,7 @@ export function SidebarAnnouncementCenter({
     notificationsEnabled,
     initialTab,
     onClose,
+    onAnnouncementsViewed,
 }: SidebarAnnouncementCenterProps) {
     const router = useRouter();
     const { showToast } = useToast();
@@ -91,6 +94,7 @@ export function SidebarAnnouncementCenter({
     const announcementSentinelRef = useRef<HTMLDivElement | null>(null);
     const notificationScrollRef = useRef<HTMLDivElement | null>(null);
     const notificationSentinelRef = useRef<HTMLDivElement | null>(null);
+    const viewedAnnouncementKeyRef = useRef<string | null>(null);
 
     useEffect(() => {
         if (!open) {
@@ -98,14 +102,12 @@ export function SidebarAnnouncementCenter({
         }
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') {
-                onClose({
-                    dismissAnnouncementForToday: activeTab === 'announcements',
-                });
+                onClose();
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [activeTab, onClose, open]);
+    }, [onClose, open]);
 
     const loadAnnouncements = useCallback(async (options?: { append?: boolean; offset?: number }) => {
         const append = options?.append === true;
@@ -203,6 +205,15 @@ export function SidebarAnnouncementCenter({
             window.clearTimeout(timer);
         };
     }, [loadAnnouncements, loadNotifications, open]);
+
+    useEffect(() => {
+        if (!open || activeTab !== 'announcements' || announcementLoading) return;
+        const latest = announcements[0];
+        const key = getAnnouncementPromptIdentity(latest);
+        if (!latest || !key || viewedAnnouncementKeyRef.current === key) return;
+        viewedAnnouncementKeyRef.current = key;
+        onAnnouncementsViewed?.(latest);
+    }, [activeTab, announcementLoading, announcements, onAnnouncementsViewed, open]);
 
     useEffect(() => {
         if (
@@ -326,9 +337,7 @@ export function SidebarAnnouncementCenter({
         <div className="fixed inset-0 z-[100] flex items-start justify-center px-4 pt-16 pb-4">
             <div
                 className="absolute inset-0 bg-black/20 backdrop-blur-[2px]"
-                onClick={() => onClose({
-                    dismissAnnouncementForToday: activeTab === 'announcements',
-                })}
+                onClick={onClose}
             />
 
             <aside
@@ -367,9 +376,7 @@ export function SidebarAnnouncementCenter({
                             </button>
                         </div>
                         <button
-                            onClick={() => onClose({
-                                dismissAnnouncementForToday: activeTab === 'announcements',
-                            })}
+                            onClick={onClose}
                             className="p-1.5 rounded-md hover:bg-background-secondary transition-colors text-foreground-secondary hover:text-foreground"
                         >
                             <X className="w-5 h-5" />
@@ -520,18 +527,8 @@ export function SidebarAnnouncementCenter({
                 </div>
 
                 <div className="px-6 py-4 border-t border-border/60 flex justify-end gap-3">
-                    {activeTab === 'announcements' ? (
-                        <button
-                            onClick={() => onClose({ dismissAnnouncementForToday: true })}
-                            className="px-4 py-1.5 text-xs font-bold rounded-md bg-background-secondary text-foreground-secondary hover:bg-background-tertiary transition-colors"
-                        >
-                            今日关闭
-                        </button>
-                    ) : null}
                     <button
-                        onClick={() => onClose({
-                            dismissAnnouncementForToday: activeTab === 'announcements',
-                        })}
+                        onClick={onClose}
                         className="px-4 py-1.5 text-xs font-bold rounded-md bg-background-secondary text-foreground-secondary hover:bg-background-tertiary transition-colors"
                     >
                         关闭

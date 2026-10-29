@@ -94,6 +94,13 @@ export function persistLocalVisualizationSettings(
     storage.setItem(LS_KEY_CHART_STYLE, input.chartStyle);
 }
 
+/** 用户把运势可视化设为「无」时，客户端也不再上报旧偏好。 */
+export function clearLocalVisualizationSettings(storage: Pick<Storage, 'removeItem'>) {
+    storage.removeItem(LS_KEY_DIMENSIONS);
+    storage.removeItem(LS_KEY_DAYUN_PERIODS);
+    storage.removeItem(LS_KEY_CHART_STYLE);
+}
+
 export function formatVisualizationDimensions(dimensions: FortuneDimensionKey[]) {
     return dimensions.map((key) => getDimensionConfig(key).label).join('、');
 }

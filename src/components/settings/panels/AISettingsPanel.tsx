@@ -13,11 +13,12 @@ import {
   CORE_DIMENSIONS,
   type FortuneDimensionKey,
 } from '@/lib/visualization/dimensions';
-import { readLocalVisualizationSettings, type VisualizationChartStyle } from '@/lib/visualization/settings';
+import { clearLocalVisualizationSettings, readLocalVisualizationSettings, type VisualizationChartStyle } from '@/lib/visualization/settings';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { useToast } from '@/components/ui/Toast';
 import { SegmentedChoice } from '@/components/settings/SegmentedChoice';
+import { SettingsSwitch } from '@/components/settings/SettingsControls';
 import { SettingsLoginRequired } from '@/components/settings/SettingsLoginRequired';
 import { getCurrentUserSettings, type UserIdentityProfile, updateCurrentUserSettings } from '@/lib/user/settings';
 import { syncVisualizationPreferencesAfterSave } from '@/lib/user/ai-settings-local-sync';
@@ -32,6 +33,7 @@ type AISettingsDraftSnapshot = {
   expressionStyle: ExpressionStyle;
   chartPromptDetailLevel: ChartTextDetailLevel;
   customInstructions: string;
+  visualizationEnabled: boolean;
   selectedDimensions: FortuneDimensionKey[];
   dayunPeriods: number;
   chartStyle: VisualizationChartStyle;
@@ -70,6 +72,7 @@ function buildDraftSnapshot(input: {
   expressionStyle: ExpressionStyle;
   chartPromptDetailLevel: ChartTextDetailLevel;
   customInstructions: string;
+  visualizationEnabled: boolean;
   selectedDimensions: FortuneDimensionKey[];
   dayunPeriods: number;
   chartStyle: VisualizationChartStyle;
@@ -79,6 +82,7 @@ function buildDraftSnapshot(input: {
     expressionStyle: input.expressionStyle,
     chartPromptDetailLevel: input.chartPromptDetailLevel,
     customInstructions: input.customInstructions,
+    visualizationEnabled: input.visualizationEnabled,
     selectedDimensions: [...input.selectedDimensions],
     dayunPeriods: input.dayunPeriods,
     chartStyle: input.chartStyle,
@@ -103,6 +107,7 @@ function AccountAISettingsPanel() {
   const [expressionStyle, setExpressionStyle] = useState<ExpressionStyle>('direct');
   const [chartPromptDetailLevel, setChartPromptDetailLevel] = useState<ChartTextDetailLevel>('default');
   const [customInstructions, setCustomInstructions] = useState('');
+  const [visualizationEnabled, setVisualizationEnabled] = useState(false);
   const [selectedDimensions, setSelectedDimensions] = useState<FortuneDimensionKey[]>(
     () => CORE_DIMENSIONS.slice(0, 6).map((dimension) => dimension.key),
   );
@@ -116,6 +121,7 @@ function AccountAISettingsPanel() {
     setExpressionStyle(snapshot.expressionStyle);
     setChartPromptDetailLevel(snapshot.chartPromptDetailLevel);
     setCustomInstructions(snapshot.customInstructions);
+    setVisualizationEnabled(snapshot.visualizationEnabled);
     setSelectedDimensions(snapshot.selectedDimensions);
     setDayunPeriods(snapshot.dayunPeriods);
     setChartStyle(snapshot.chartStyle);
@@ -149,6 +155,7 @@ function AccountAISettingsPanel() {
       const nextCustomInstructions = (settings?.customInstructions || '').slice(0, CUSTOM_INSTRUCTIONS_LIMIT);
 
       const visualizationSettings = settings?.visualizationSettings || readLocalVisualizationSettings(localStorage);
+      const nextVisualizationEnabled = Boolean(visualizationSettings);
       let nextSelectedDimensions = CORE_DIMENSIONS.slice(0, 6).map((dimension) => dimension.key);
       if (visualizationSettings?.selectedDimensions?.length) {
         nextSelectedDimensions = visualizationSettings.selectedDimensions;
@@ -170,6 +177,7 @@ function AccountAISettingsPanel() {
         expressionStyle: nextExpressionStyle,
         chartPromptDetailLevel: nextChartPromptDetailLevel,
         customInstructions: nextCustomInstructions,
+        visualizationEnabled: nextVisualizationEnabled,
         selectedDimensions: nextSelectedDimensions,
         dayunPeriods: nextDayunPeriods,
         chartStyle: nextChartStyle,
@@ -199,11 +207,12 @@ function AccountAISettingsPanel() {
     expressionStyle,
     chartPromptDetailLevel,
     customInstructions,
+    visualizationEnabled,
     selectedDimensions,
     dayunPeriods,
     chartStyle,
     userProfile,
-  }), [chartPromptDetailLevel, chartStyle, customInstructions, dayunPeriods, expressionStyle, selectedDimensions, userProfile]);
+  }), [chartPromptDetailLevel, chartStyle, customInstructions, dayunPeriods, expressionStyle, selectedDimensions, userProfile, visualizationEnabled]);
   const isDirty = useMemo(() => (
     savedSnapshot ? JSON.stringify(draftSnapshot) !== JSON.stringify(savedSnapshot) : false
   ), [draftSnapshot, savedSnapshot]);
@@ -246,25 +255,29 @@ function AccountAISettingsPanel() {
       chartPromptDetailLevel: nextSavedSnapshot.chartPromptDetailLevel,
       customInstructions: nextSavedSnapshot.customInstructions || null,
       userProfile: profilePayload,
-      visualizationSettings: {
+      visualizationSettings: nextSavedSnapshot.visualizationEnabled ? {
         selectedDimensions: nextSavedSnapshot.selectedDimensions,
         dayunDisplayCount: nextSavedSnapshot.dayunPeriods,
         chartStyle: nextSavedSnapshot.chartStyle,
-      },
+      } : null,
     }, undefined, { expectedUserId: userId, signal: controller.signal }).catch(() => null);
     if (controller.signal.aborted) return;
 
     setSaving(false);
 
-    const synced = syncVisualizationPreferencesAfterSave(
-      localStorage,
-      {
-        selectedDimensions: nextSavedSnapshot.selectedDimensions,
-        dayunDisplayCount: nextSavedSnapshot.dayunPeriods,
-        chartStyle: nextSavedSnapshot.chartStyle,
-      },
-      saved,
-    );
+    const synced = saved ? (
+      nextSavedSnapshot.visualizationEnabled
+        ? syncVisualizationPreferencesAfterSave(
+          localStorage,
+          {
+            selectedDimensions: nextSavedSnapshot.selectedDimensions,
+            dayunDisplayCount: nextSavedSnapshot.dayunPeriods,
+            chartStyle: nextSavedSnapshot.chartStyle,
+          },
+          saved,
+        )
+        : (clearLocalVisualizationSettings(localStorage), true)
+    ) : false;
 
     if (!synced || !saved) {
       setError('保存失败');
@@ -348,7 +361,7 @@ function AccountAISettingsPanel() {
             />
           </div>
           <p className="settings-help">
-            用于对话中的命盘注入与结果页解读。默认档噪音更少；完整档附带神煞、纳音、格局等字段。扩展档目前只对六爻单独生效，其余占术按完整档处理。
+            用于对话中的命盘注入。默认档附带必要信息；扩展档附带更多信息；完整档附带最详细的信息。
           </p>
         </div>
 
@@ -371,9 +384,19 @@ function AccountAISettingsPanel() {
       <section className="settings-form-section" aria-labelledby="ai-visualization-heading">
         <div className="settings-form-heading">
           <h3 id="ai-visualization-heading">运势可视化</h3>
-          <p>AI 输出运势图表时默认关注的维度、图表风格与大运期数。</p>
+          <p>默认关闭。开启后，AI 输出运势图表时会按你选择的维度、图表风格和大运期数分析。</p>
         </div>
 
+        <div className="settings-inline-row">
+          <span>启用可视化偏好</span>
+          <SettingsSwitch
+            label="启用运势可视化偏好"
+            checked={visualizationEnabled}
+            onToggle={() => setVisualizationEnabled(enabled => !enabled)}
+          />
+        </div>
+
+        {visualizationEnabled ? <>
         <div className="settings-field-block">
           <div className="settings-label-row">
             <span id="ai-dimensions-label">维度</span>
@@ -428,6 +451,7 @@ function AccountAISettingsPanel() {
             ))}
           </div>
         </div>
+        </> : <p className="settings-help">未启用：不向 AI 注入关注维度、大运期数和图表风格偏好。</p>}
       </section>
 
       {isDirty ? (

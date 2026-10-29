@@ -12,16 +12,8 @@ import type { ResolvedChatRequest } from '@/lib/server/chat/request';
 import { isFeatureModuleEnabled } from '@/lib/app-settings';
 import { getUserSettingsSnapshot, type UserIdentityProfile } from '@/lib/user/settings';
 import { normalizeVisualizationSettings, type VisualizationSettings } from '@/lib/visualization/settings';
-import { DEFAULT_DIMENSIONS } from '@/lib/visualization/dimensions';
 import { searchChatWeb } from '@/lib/ai/web-search.server';
 import { resolveUserTimeZone } from '@/lib/ai/prompt-time';
-
-/** 用户未保存可视化设置时的默认配置 */
-const DEFAULT_VISUALIZATION_SETTINGS: VisualizationSettings = {
-  selectedDimensions: DEFAULT_DIMENSIONS,
-  dayunDisplayCount: 5,
-  chartStyle: 'modern',
-};
 
 type UserSettingsContext = {
   memoryEnabled?: boolean;
@@ -72,7 +64,8 @@ async function loadUserSettingsContext(
     userProfile: settings.userProfile,
     customInstructions: settings.customInstructions,
     promptKbIds: settings.promptKbIds,
-    visualizationSettings: normalizeVisualizationSettings(settings.visualizationSettings) ?? DEFAULT_VISUALIZATION_SETTINGS,
+    // 用户没有保存过可视化偏好时就是「无」：不注入维度、大运期数或图表风格。
+    visualizationSettings: normalizeVisualizationSettings(settings.visualizationSettings),
   };
 }
 

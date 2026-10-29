@@ -416,7 +416,7 @@ mustNotMatch(
 );
 mustMatch(
   'src/app/api/qimen/route.ts',
-  /import\s*\{[\s\S]*calculateQimenBundle[\s\S]*generateQimenChartText[\s\S]*\}\s*from ['"]@\/lib\/divination\/qimen['"]/u,
+  /import\s*\{[\s\S]*calculateQimenBundle[\s\S]*\}\s*from ['"]@\/lib\/divination\/qimen['"]/u,
   'qimen route should use the qimen wrapper',
 );
 mustNotMatch(

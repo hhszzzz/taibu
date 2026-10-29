@@ -1,14 +1,14 @@
 /**
  * 奇门遁甲排盘结果页面
  *
- * 'use client'：会话缓存读取、宫位选择状态与 AI 流式解读都依赖浏览器端 hooks。
+ * 'use client'：会话缓存读取与宫位选择状态依赖浏览器端 hooks；解读统一进入 AI 对话。
  */
 'use client';
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { RotateCw, RefreshCw, Copy, Check, ChevronLeft, BookOpenText } from 'lucide-react';
+import { RotateCw, Copy, Check, ChevronLeft, BookOpenText } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { ResultMobileActions } from '@/components/bazi/result/ResultHeader';
 import { ResultHeaderActions } from '@/components/divination/ResultHeaderActions';
@@ -16,25 +16,17 @@ import { QimenGrid } from '@/components/qimen/QimenGrid';
 import { QimenLegend } from '@/components/qimen/QimenLegend';
 import { QimenPalaceDetail } from '@/components/qimen/QimenPalaceDetail';
 import { formatJuLabel } from '@/components/qimen/qimen-display';
-import { MarkdownContent } from '@/components/ui/MarkdownContent';
-import { ModelSelector } from '@/components/ui/ModelSelector';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
-import { ThinkingBlock } from '@/components/chat/ThinkingBlock';
 import { AuthModal } from '@/components/auth/AuthModal';
-import { CreditsModal } from '@/components/ui/CreditsModal';
 import { AddToKnowledgeBaseModal } from '@/components/knowledge-base/AddToKnowledgeBaseModal';
 import { useKnowledgeBaseFeatureEnabled } from '@/components/knowledge-base/useKnowledgeBaseFeatureEnabled';
 import { useHeaderMenu, useHeaderTitle, type HeaderMenuItem } from '@/components/layout/HeaderMenuContext';
-import { useStreamingResponse, isCreditsError } from '@/lib/hooks/useStreamingResponse';
 import { readSessionJSON, scopeResultSession, updateSessionJSON } from '@/lib/cache/session-storage';
 import { useIdentityGuard } from '@/lib/hooks/useIdentityGuard';
-import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
-import { runSharedAnalysisFlow } from '@/lib/ai/analysis-runner';
 import { useSessionMembership } from '@/lib/hooks/useSessionMembership';
-import { useAnalysisSnapshot } from '@/lib/hooks/useAnalysisSnapshot';
+import { openChatWithResult } from '@/lib/chat/result-handoff';
 import { useAdminJsonCopy } from '@/lib/admin/useAdminJsonCopy';
 import { CopyTextModal } from '@/components/divination/CopyTextModal';
-import { AIFeatureGate } from '@/components/ai/AIFeatureGate';
 import type { ChartTextDetailLevel } from '@/lib/divination/detail-level';
 import { saveDivinationAction } from '@/lib/divination/save-client';
 import {
@@ -102,14 +94,7 @@ export default function QimenResultPage() {
     const { knowledgeBaseEnabled } = useKnowledgeBaseFeatureEnabled();
     const { showToast } = useToast();
     const [storedResult, setResult] = useState<QimenSessionData | null>(null);
-    const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL_ID);
-    const [reasoningEnabled, setReasoningEnabled] = useState(false);
-    const [interpretation, setInterpretation] = useState<string | null>(null);
-    const [interpretationReasoning, setInterpretationReasoning] = useState<string | null>(null);
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
     const [showAuthModal, setShowAuthModal] = useState(false);
-    const [showCreditsModal, setShowCreditsModal] = useState(false);
     const [showKbModal, setShowKbModal] = useState(false);
     const [copied, setCopied] = useState(false);
     const [copyDetailLevel, setCopyDetailLevel] = useState<ChartTextDetailLevel>('default');
@@ -117,19 +102,12 @@ export default function QimenResultPage() {
     const [selectedPalace, setSelectedPalace] = useState<number | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const hasSavedRef = useRef<string | null>(null);
-    const aiSectionRef = useRef<HTMLElement>(null);
-    const streaming = useStreamingResponse();
-    const { user, userId, membershipInfo, sessionLoading, membershipLoading, membershipResolved } = useSessionMembership();
+    const { user, userId, sessionLoading } = useSessionMembership();
     const captureIdentity = useIdentityGuard(userId);
     const result = storedResult?.recordOwnerId === userId ? storedResult : null;
-    const streamRef = useRef(streaming);
-    streamRef.current = streaming;
     useEffect(() => {
-        setIsSaving(false); setIsLoading(false); setInterpretation(null); setInterpretationReasoning(null); setError(null);
-        streamRef.current.stop(); streamRef.current.reset();
+        setIsSaving(false);
     }, [userId]);
-    const membershipPending = membershipLoading || !membershipResolved;
-    const membershipType = membershipResolved ? (membershipInfo?.type ?? 'free') : 'free';
     const currentUser = useMemo(() => (user ? { id: user.id } : null), [user]);
     const qimenOutput = result?.output ?? null;
     const canonicalResult = useMemo(
@@ -228,80 +206,6 @@ export default function QimenResultPage() {
     // 移动端顶栏标题：节气 · 阴/阳遁 X 局（桌面端由页内标题承担）
     useHeaderTitle(qimenOutput ? `${qimenOutput.dateInfo.solarTerm} · ${juLabel}` : null);
 
-    useAnalysisSnapshot({
-        conversationId: result?.conversationId,
-        recordId: result?.chartId,
-        divinationType: 'qimen',
-        sessionKey: 'qimen_result',
-        hasExistingAnalysis: !!interpretation,
-        skip: !result?.conversationId && !result?.chartId,
-        callbacks: {
-            onAnalysis: setInterpretation,
-            onReasoning: setInterpretationReasoning,
-            onModelId: setSelectedModel,
-            onReasoningEnabled: setReasoningEnabled,
-            onConversationIdResolved: (resolvedId) => {
-                setResult(prev => prev ? { ...prev, conversationId: resolvedId } : prev);
-                updateSessionJSON('qimen_result', (prev) => ({ ...(prev || {}), conversationId: resolvedId }));
-            },
-        },
-    });
-
-    const handleGetInterpretation = async () => {
-        if (!result || !currentUser) return;
-        const isCurrent = captureIdentity();
-        setIsLoading(true); streaming.reset(); setError(null); setInterpretationReasoning(null); setInterpretation(null);
-        try {
-            const baseBody = {
-                ...buildQimenActionPayload(result),
-                chartId: result.chartId || null,
-            };
-            const analysisResult = await runSharedAnalysisFlow({
-                endpoint: '/api/qimen',
-                streaming,
-                isCreditsError,
-                direct: {
-                    prepareBody: {
-                        action: 'interpret_prepare',
-                        ...baseBody,
-                    },
-                    persistBody: {
-                        action: 'interpret_persist',
-                        ...baseBody,
-                    },
-                },
-                streamBody: {
-                    action: 'interpret',
-                    ...baseBody,
-                    modelId: selectedModel,
-                    reasoning: reasoningEnabled,
-                    stream: true,
-                },
-            });
-            if (!isCurrent()) return;
-            if (analysisResult.requiresCredits) {
-                setShowCreditsModal(true);
-                return;
-            }
-            if (analysisResult.error) {
-                setError(analysisResult.error);
-                return;
-            }
-            if (analysisResult.content) {
-                setInterpretation(analysisResult.content);
-            } else {
-                setInterpretation('解读失败');
-            }
-            if (analysisResult.reasoning) {
-                setInterpretationReasoning(analysisResult.reasoning);
-            }
-            if (analysisResult.conversationId) {
-                setResult((prev) => prev ? { ...prev, conversationId: analysisResult.conversationId || undefined } : prev);
-                updateSessionJSON('qimen_result', (prev) => ({ ...(prev || {}), conversationId: analysisResult.conversationId }));
-            }
-        } catch (err) { if (isCurrent()) setError(err instanceof Error ? err.message : '解读失败'); } finally { if (isCurrent()) setIsLoading(false); }
-    };
-
     const handleConfirmCopy = async (level: ChartTextDetailLevel) => {
         if (!result?.output) return;
         setCopyDetailLevel(level);
@@ -319,15 +223,19 @@ export default function QimenResultPage() {
         setShowCopyModal(false);
     };
 
-    /** 「问太卜断局」：滚动到解读区，并沿用解读区主按钮的同一套前置判断 */
+    /** 「问太卜断局」：带上已保存的盘进入 AI 对话；未保存时只预填问题。 */
     const handleAskTaibu = () => {
-        aiSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        if (sessionLoading || membershipPending || isLoading || interpretation) return;
-        if (!currentUser) {
-            setShowAuthModal(true);
-            return;
-        }
-        void handleGetInterpretation();
+        if (!result) return;
+        const question = result.question?.trim();
+        openChatWithResult(router, {
+            text: `${question ? `我问的是「${question}」。` : ''}请结合这一局奇门遁甲，解读用神、门星神仪的旺衰与格局，并给出应期与行动建议。`,
+            mentions: result.chartId ? [{
+                type: 'qimen_chart',
+                id: result.chartId,
+                name: `奇门遁甲 · ${juLabel}`,
+                preview: question || `${qimenOutput?.dunType === 'yang' ? '阳遁' : '阴遁'}${qimenOutput?.juNumber ?? ''}局`,
+            }] : [],
+        });
     };
 
     /** 「保存」：未登录先登录（登录后页面自动保存），已登录则手动重试保存 */
@@ -440,58 +348,11 @@ export default function QimenResultPage() {
                     />
                 )}
 
-                {/* AI 解读入口与结果 */}
-                <AIFeatureGate>
-                    <section ref={aiSectionRef} aria-label="太卜断局" className="flex scroll-mt-24 flex-col gap-4 rounded-2xl border-[0.5px] border-border bg-panel p-4 lg:px-[22px] lg:py-[18px]">
-                        <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
-                            <div className="flex min-w-0 flex-[1_1_360px] flex-col gap-1">
-                                <h2 className="hidden font-display text-[17px] font-normal lg:block">点宫位查看门星神仪的旺衰与格局</h2>
-                                <p className="text-sm text-foreground-secondary">
-                                    {question ? `也可以直接问太卜：「${question}」` : '也可以直接问太卜这一局的吉凶。'}
-                                </p>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2">
-                                <ModelSelector compact selectedModel={selectedModel} onModelChange={setSelectedModel} reasoningEnabled={reasoningEnabled} onReasoningChange={setReasoningEnabled} userId={currentUser?.id} membershipType={membershipType} disabled={membershipPending} />
-                                {(interpretation || streaming.isStreaming) && (
-                                    <button onClick={handleGetInterpretation} disabled={isLoading} aria-label="重新解读" className="rounded-xl p-2 text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground">
-                                        <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                                    </button>
-                                )}
-                                {!interpretation && (
-                                    sessionLoading || membershipPending ? (
-                                        <SoundWaveLoader variant="inline" />
-                                    ) : (
-                                        <button
-                                            onClick={currentUser ? handleGetInterpretation : () => setShowAuthModal(true)}
-                                            disabled={isLoading || membershipPending}
-                                            className="inline-flex h-10 items-center gap-2 rounded-xl bg-foreground px-4 text-sm text-background transition-opacity hover:opacity-90 disabled:opacity-50"
-                                        >
-                                            {isLoading && <SoundWaveLoader variant="inline" className="[&_.sound-wave-bar]:bg-background" />}
-                                            让太卜断这一局
-                                        </button>
-                                    )
-                                )}
-                            </div>
-                        </div>
-                        {error && (
-                            <div role="alert" className="rounded-xl border-[0.5px] border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
-                                {error}
-                            </div>
-                        )}
-                        {interpretation && (
-                            <div className="prose prose-sm max-w-none rounded-xl border-[0.5px] border-border bg-surface p-4 lg:p-5">
-                                {interpretationReasoning && <ThinkingBlock content={interpretationReasoning} isStreaming={streaming.isStreaming && !interpretation} startTime={streaming.reasoningStartTime} duration={streaming.reasoningDuration} />}
-                                <MarkdownContent content={interpretation} className="text-sm text-foreground leading-relaxed" />
-                            </div>
-                        )}
-                    </section>
-                </AIFeatureGate>
             </div>
 
             <ResultMobileActions saving={isSaving} saved={saved} saveDisabled={sessionLoading} onSave={saveState.onSave} ask={{ label: ASK_LABEL, onClick: handleAskTaibu }} />
 
             <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
-            <CreditsModal isOpen={showCreditsModal} onClose={() => setShowCreditsModal(false)} />
             {knowledgeBaseEnabled && result.chartId && <AddToKnowledgeBaseModal open={showKbModal} onClose={() => setShowKbModal(false)} sourceTitle={result.question || '奇门遁甲排盘'} sourceType="qimen_chart" sourceId={result.chartId} />}
             <CopyTextModal
                 isOpen={showCopyModal}

@@ -1,19 +1,19 @@
 /**
  * 塔罗结果页
  *
- * 牌阵展示（真实牌面、正逆位）、牌义、AI 解读与数秘术
+ * 牌阵展示（真实牌面、正逆位）、牌义与数秘术；解读统一进入 AI 对话
  */
-'use client'; // 需要抽牌请求、翻牌状态、流式 AI 解读与 sessionStorage
+'use client'; // 需要抽牌请求、翻牌状态与 sessionStorage
 
 import { useState, useEffect, useMemo, useCallback, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { RefreshCw, BookOpenText, Copy, Check, ChevronLeft, Save } from 'lucide-react';
+import { BookOpenText, Copy, Check, ChevronLeft, Save } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import Image from 'next/image';
 import { TarotRevealCard } from '@/components/tarot/TarotRevealCard';
 import { TarotMeaningGrid, TarotMeaningList, type TarotMeaningEntry } from '@/components/tarot/TarotSpreadParts';
-import { getTarotInterpretCopy, getTarotSpreadGridClass } from '@/components/tarot/tarot-display';
+import { getTarotSpreadGridClass } from '@/components/tarot/tarot-display';
 import { MobileActionBar, MOBILE_SECONDARY_ACTION_CLASS } from '@/components/bazi/result/ResultHeader';
 import { ResultHeaderActions } from '@/components/divination/ResultHeaderActions';
 import {
@@ -31,23 +31,15 @@ import {
 } from '@/lib/divination/tarot';
 import { readSessionJSON, scopeResultSession, updateSessionJSON, writeSessionJSON } from '@/lib/cache/session-storage';
 import { useIdentityGuard } from '@/lib/hooks/useIdentityGuard';
-import { MarkdownContent } from '@/components/ui/MarkdownContent';
-import { ModelSelector } from '@/components/ui/ModelSelector';
-import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
 import { useSessionMembership } from '@/lib/hooks/useSessionMembership';
-import { ThinkingBlock } from '@/components/chat/ThinkingBlock';
+import { openChatWithResult } from '@/lib/chat/result-handoff';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { AddToKnowledgeBaseModal } from '@/components/knowledge-base/AddToKnowledgeBaseModal';
 import { useKnowledgeBaseFeatureEnabled } from '@/components/knowledge-base/useKnowledgeBaseFeatureEnabled';
 import { useHeaderMenu, useHeaderTitle, type HeaderMenuItem } from '@/components/layout/HeaderMenuContext';
 import { useToast } from '@/components/ui/Toast';
-import { CreditsModal } from '@/components/ui/CreditsModal';
-import { useStreamingResponse, isCreditsError } from '@/lib/hooks/useStreamingResponse';
-import { useAnalysisSnapshot } from '@/lib/hooks/useAnalysisSnapshot';
 import { CopyTextModal } from '@/components/divination/CopyTextModal';
-import { AIFeatureGate } from '@/components/ai/AIFeatureGate';
 import type { ChartTextDetailLevel } from '@/lib/divination/detail-level';
-import { runSharedAnalysisFlow } from '@/lib/ai/analysis-runner';
 import { saveDivinationAction } from '@/lib/divination/save-client';
 
 const MENU_ICON_CLASS = 'h-4 w-4';
@@ -85,45 +77,25 @@ function TarotResultContent() {
     const [birthDate, setBirthDate] = useState(birthDateParam);
     const [numerology, setNumerology] = useState<TarotNumerology | null>(null);
     const [seed, setSeed] = useState<string | null>(null);
-    const [interpretation, setInterpretation] = useState('');
-    const [interpretationReasoning, setInterpretationReasoning] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [isInterpreting, setIsInterpreting] = useState(false);
     const [revealedCards, setRevealedCards] = useState<number[]>([]);
-    const [flippedToInterpretation, setFlippedToInterpretation] = useState<number[]>([]);
     const [storedReadingId, setReadingId] = useState<string | null>(null);
-    const [storedConversationId, setConversationId] = useState<string | null>(null);
     const [historyMissing, setHistoryMissing] = useState(false);
-    const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL_ID);
-    const [reasoningEnabled, setReasoningEnabled] = useState(false);
     const [showAuthModal, setShowAuthModal] = useState(false);
     const [kbModalOpen, setKbModalOpen] = useState(false);
-    const [showCreditsModal, setShowCreditsModal] = useState(false);
     const [copied, setCopied] = useState(false);
     const [copyDetailLevel, setCopyDetailLevel] = useState<ChartTextDetailLevel>('default');
     const [showCopyModal, setShowCopyModal] = useState(false);
     const [saving, setSaving] = useState(false);
-    const aiSectionRef = useRef<HTMLElement>(null);
     /** 本页已抽出牌并换掉了抽牌地址：牌面与翻牌状态都在内存中 */
     const drawnInPageRef = useRef(false);
-    const streaming = useStreamingResponse();
-    const { user, userId, sessionLoading, membershipInfo, membershipLoading, membershipResolved } = useSessionMembership();
+    const { user, userId, sessionLoading } = useSessionMembership();
     const captureIdentity = useIdentityGuard(userId);
     const [resultOwnerId, setResultOwnerId] = useState<string | null | undefined>(undefined);
     const readingId = resultOwnerId === userId ? storedReadingId : null;
-    const conversationId = resultOwnerId === userId ? storedConversationId : null;
-    const streamRef = useRef(streaming);
-    streamRef.current = streaming;
     useEffect(() => {
         setSaving(false);
-        setIsInterpreting(false);
-        setInterpretation('');
-        setInterpretationReasoning(null);
-        streamRef.current.stop();
-        streamRef.current.reset();
     }, [userId]);
-    const membershipPending = membershipLoading || !membershipResolved;
-    const membershipType = membershipResolved ? (membershipInfo?.type ?? 'free') : 'free';
 
     const canonicalReading = useMemo(() => {
         if (!selectedSpread || drawnCards.length === 0) return null;
@@ -150,7 +122,7 @@ function TarotResultContent() {
         if (!spreadId || sessionLoading) return;
         let cancelled = false;
         const drawCards = async () => {
-            setIsLoading(true); setRevealedCards([]); setInterpretation(''); setInterpretationReasoning(null);
+            setIsLoading(true); setRevealedCards([]);
             try {
                 const res = await fetch('/api/tarot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'draw-only', spreadId, allowReversed, birthDate: birthDateParam || undefined }) });
                 const data: TarotDrawResponse = await res.json();
@@ -158,7 +130,7 @@ function TarotResultContent() {
                 const draw = data.data;
                 writeSessionJSON('tarot_result', { ...createTarotDrawSession(draw, { question: questionParam, birthDate: birthDateParam }, new Date().toISOString()), recordOwnerId: userId });
                 setResultOwnerId(userId);
-                setReadingId(null); setConversationId(null);
+                setReadingId(null);
                 drawnInPageRef.current = true;
                 setSelectedSpread(draw.spread); setDrawnCards(draw.cards); setNumerology(draw.numerology || null); setSeed(draw.seed || null);
                 window.history.replaceState(null, '', hrefAfterDraw);
@@ -180,7 +152,7 @@ function TarotResultContent() {
             if (spread) {
                 setSelectedSpread(spread); setDrawnCards(parsed.cards); setQuestion(parsed.question || ''); setBirthDate(parsed.birthDate || '');
                 setNumerology(parsed.numerology || null); setSeed(parsed.seed || null); setRevealedCards(parsed.cards.map((_: DrawnCard, i: number) => i));
-                setReadingId(parsed.readingId || null); setConversationId(parsed.conversationId || null);
+                setReadingId(parsed.readingId || null);
                 setResultOwnerId(userId);
                 setIsLoading(false); return;
             }
@@ -203,10 +175,9 @@ function TarotResultContent() {
             numerology,
             seed,
             readingId,
-            conversationId,
             createdAt: prev?.createdAt || new Date().toISOString(),
         }));
-    }, [birthDate, conversationId, drawnCards, numerology, question, readingId, seed, selectedSpread, sessionLoading, userId, resultOwnerId]);
+    }, [birthDate, drawnCards, numerology, question, readingId, seed, selectedSpread, sessionLoading, userId, resultOwnerId]);
 
     const handleConfirmCopy = useCallback(async (level: ChartTextDetailLevel) => {
         if (!selectedSpread || drawnCards.length === 0) return;
@@ -221,51 +192,7 @@ function TarotResultContent() {
         }
     }, [birthDate, drawnCards, numerology, question, seed, selectedSpread, showToast]);
 
-    const handleInterpret = useCallback(async () => {
-        if (drawnCards.length === 0 || !user) { if (!user) setShowAuthModal(true); return; }
-        const isCurrent = captureIdentity();
-        // 解读覆盖整组牌，先把未翻开的牌全部翻开
-        setRevealedCards(drawnCards.map((_, i) => i));
-        setIsInterpreting(true); streaming.reset(); setInterpretationReasoning(null); setInterpretation('');
-        try {
-            const baseBody = {
-                cards: drawnCards,
-                question: question || undefined,
-                birthDate: birthDate || undefined,
-                numerology: numerology || undefined,
-                seed: seed || undefined,
-                spreadId: selectedSpread?.id,
-                readingId: readingId || undefined,
-            };
-            const result = await runSharedAnalysisFlow({
-                endpoint: '/api/tarot',
-                streaming,
-                isCreditsError,
-                direct: {
-                    prepareBody: { action: 'interpret_prepare', ...baseBody },
-                    persistBody: { action: 'interpret_persist', ...baseBody },
-                },
-                streamBody: {
-                    action: 'interpret',
-                    ...baseBody,
-                    modelId: selectedModel,
-                    reasoning: reasoningEnabled,
-                    stream: true,
-                },
-            });
-            if (!isCurrent()) return;
-            if (result.requiresCredits) setShowCreditsModal(true);
-            else {
-                if (result.error) showToast('error', result.error);
-                if (result.content) setInterpretation(result.content);
-                if (result.reasoning) setInterpretationReasoning(result.reasoning);
-                if (result.conversationId) setConversationId(result.conversationId);
-            }
-        } catch (e) { if (isCurrent()) console.error(e); } finally { if (isCurrent()) setIsInterpreting(false); }
-    }, [birthDate, drawnCards, numerology, question, readingId, reasoningEnabled, seed, selectedModel, selectedSpread?.id, showToast, streaming, user, captureIdentity]);
-
-    // 未解读时抽牌结果只在会话里；解读后会随对话一起入库（历史绑定），此时视为已保存
-    const saved = resultOwnerId === userId && Boolean(readingId || conversationId);
+    const saved = resultOwnerId === userId && Boolean(readingId);
 
     /** 「保存」：未登录先登录；已登录则把本次抽牌写入命理记录 */
     const handleSave = useCallback(async () => {
@@ -291,21 +218,6 @@ function TarotResultContent() {
             if (isCurrent()) setSaving(false);
         }
     }, [birthDate, drawnCards, numerology, question, saved, saving, seed, selectedSpread, sessionLoading, showToast, user, captureIdentity]);
-
-    useAnalysisSnapshot({
-        conversationId: resultOwnerId === userId ? conversationId : null,
-        recordId: resultOwnerId === userId ? readingId : null,
-        divinationType: 'tarot',
-        sessionKey: 'tarot_result',
-        hasExistingAnalysis: !!interpretation,
-        callbacks: {
-            onAnalysis: setInterpretation,
-            onReasoning: setInterpretationReasoning,
-            onModelId: setSelectedModel,
-            onReasoningEnabled: setReasoningEnabled,
-            onConversationIdResolved: setConversationId,
-        },
-    });
 
     // 次要操作：桌面端收进标题区「更多」，移动端进顶栏三点菜单（另加保存；重新洗牌在底栏）
     const resultActions = useMemo((): HeaderMenuItem[] => {
@@ -333,13 +245,20 @@ function TarotResultContent() {
     // 移动端顶栏标题为牌阵名，桌面端由页内标题承担
     useHeaderTitle(selectedSpread?.name ?? null);
 
-    /** 「问太卜解读」：滚动到解读区，尚未解读时直接发起 */
+    /** 「问太卜解读」：先把牌面全部翻开，再带上已保存的牌阵进入 AI 对话。 */
     const handleAskTaibu = () => {
-        aiSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        if (isInterpreting || membershipPending || interpretation || streaming.content) return;
-        void handleInterpret();
+        if (drawnCards.length === 0) return;
+        setRevealedCards(drawnCards.map((_, i) => i));
+        openChatWithResult(router, {
+            text: `${question ? `我问的是「${question}」。` : ''}请结合这个${selectedSpread?.name ?? ''}牌阵与牌义，解读牌面与建议。`,
+            mentions: readingId ? [{
+                type: 'tarot_reading',
+                id: readingId,
+                name: `塔罗 · ${selectedSpread?.name ?? '牌阵'}`,
+                preview: question || '塔罗牌阵',
+            }] : [],
+        });
     };
-
     if (isLoading) return (
         <div className="flex min-h-[60vh] items-center justify-center bg-background">
             <SoundWaveLoader variant="block" text="正在洗牌抽取" className="animate-fade-in" />
@@ -363,17 +282,7 @@ function TarotResultContent() {
     }
 
     const positionsText = selectedSpread.positions.map(position => position.name).join(' / ');
-    const interpretCopy = getTarotInterpretCopy({
-        elements: (canonicalReading?.牌阵展开 ?? []).map(card => card.元素),
-        allRevealed: revealedCards.length >= drawnCards.length,
-        hasQuestion: Boolean(question),
-    });
-    const shownInterpretation = interpretation || streaming.content || '';
-    const shownReasoning = interpretationReasoning || streaming.reasoning || '';
     const saveState = { saving, saved, disabled: saved || saving || sessionLoading, onSave: () => { void handleSave(); } };
-    const modelControls = (
-        <ModelSelector compact selectedModel={selectedModel} onModelChange={setSelectedModel} reasoningEnabled={reasoningEnabled} onReasoningChange={setReasoningEnabled} userId={userId} membershipType={membershipType} disabled={membershipPending} />
-    );
 
     return (
         <div className="min-h-full bg-background text-foreground">
@@ -413,9 +322,9 @@ function TarotResultContent() {
                                     meaning={card.orientation === 'reversed' ? card.card.reversedMeaning : card.card.uprightMeaning}
                                     reversed={(canonicalCard?.状态 || (card.orientation === 'reversed' ? '逆位' : '正位')) === '逆位'}
                                     isRevealed={isRevealed}
-                                    isFlipped={flippedToInterpretation.includes(index)}
+                                    isFlipped={false}
                                     large={drawnCards.length === 1}
-                                    onClick={() => isRevealed ? setFlippedToInterpretation(prev => prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]) : setRevealedCards(prev => [...prev, index])}
+                                    onClick={() => { if (!isRevealed) setRevealedCards(prev => [...prev, index]); }}
                                 />
                             );
                         })}
@@ -429,46 +338,21 @@ function TarotResultContent() {
                 <TarotMeaningGrid entries={revealedMeaningEntries} className="hidden lg:grid" />
                 <TarotMeaningList entries={revealedMeaningEntries} className="lg:hidden" />
 
-                {/* AI 解读：未解读时为入口卡，解读后展示正文 */}
-                <AIFeatureGate>
-                    {shownInterpretation ? (
-                        <section ref={aiSectionRef} aria-label="太卜解读" className="flex scroll-mt-24 flex-col rounded-2xl border-[0.5px] border-border bg-surface">
-                            <div className="flex flex-wrap items-center justify-between gap-3 border-b-[0.5px] border-border px-4 py-3.5 lg:px-6">
-                                <h2 className="font-display text-[17px] font-normal">太卜解读</h2>
-                                <div className="flex items-center gap-2">
-                                    {modelControls}
-                                    <button type="button" onClick={() => { void handleInterpret(); }} disabled={isInterpreting} aria-label="重新解读" className="rounded-md p-1.5 text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${isInterpreting ? 'animate-spin' : ''}`} /></button>
-                                </div>
-                            </div>
-                            <div className="px-4 py-5 lg:px-6">
-                                {shownReasoning && <ThinkingBlock content={shownReasoning} isStreaming={streaming.isStreaming && !streaming.content} startTime={streaming.reasoningStartTime} duration={streaming.reasoningDuration} />}
-                                <MarkdownContent content={shownInterpretation} className="text-sm leading-relaxed text-foreground" streaming={streaming.isStreaming && !interpretation} />
-                            </div>
-                        </section>
-                    ) : (
-                        <section ref={aiSectionRef} aria-label="太卜解读" className="flex scroll-mt-24 flex-wrap items-center gap-x-5 gap-y-3 rounded-2xl border-[0.5px] border-border bg-sidebar px-4 py-4 lg:px-[22px] lg:py-[18px]">
-                            <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-1">
-                                <h2 className="font-display text-[17px] font-normal">{interpretCopy.title}</h2>
-                                <p className="text-sm text-foreground-secondary">{interpretCopy.description}</p>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2">
-                                {modelControls}
-                                {isInterpreting || sessionLoading ? (
-                                    <span className="inline-flex h-10 items-center px-3"><SoundWaveLoader variant="inline" /></span>
-                                ) : (
-                                    <button
-                                        type="button"
-                                        onClick={() => { void handleInterpret(); }}
-                                        disabled={membershipPending}
-                                        className="h-10 rounded-xl bg-accent px-4 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
-                                    >
-                                        {userId ? '开始解读' : '登录后解读'}
-                                    </button>
-                                )}
-                            </div>
-                        </section>
-                    )}
-                </AIFeatureGate>
+                {/* 解读入口：页内不再生成解读，统一进入 AI 对话 */}
+                <section aria-label="太卜解读" className="flex scroll-mt-24 flex-wrap items-center gap-x-5 gap-y-3 rounded-2xl border-[0.5px] border-border bg-sidebar px-4 py-4 lg:px-[22px] lg:py-[18px]">
+                    <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-1">
+                        <h2 className="font-display text-[17px] font-normal">让太卜结合牌阵解读</h2>
+                        <p className="text-sm text-foreground-secondary">带上牌阵与所问之事进入 AI 对话，由太卜在对话里展开解读。</p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={handleAskTaibu}
+                        disabled={drawnCards.length === 0}
+                        className="h-10 rounded-xl bg-accent px-4 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        {ASK_LABEL}
+                    </button>
+                </section>
 
                 {/* 数秘术 */}
                 {(birthDate || numerology) && (
@@ -503,7 +387,6 @@ function TarotResultContent() {
             </MobileActionBar>
 
             <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
-            <CreditsModal isOpen={showCreditsModal} onClose={() => setShowCreditsModal(false)} />
             {knowledgeBaseEnabled && readingId && <AddToKnowledgeBaseModal open={kbModalOpen} onClose={() => setKbModalOpen(false)} sourceTitle={question || selectedSpread?.name || '塔罗占卜'} sourceType="tarot_reading" sourceId={readingId} />}
             <CopyTextModal
                 isOpen={showCopyModal}

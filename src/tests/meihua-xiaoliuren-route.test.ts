@@ -2,12 +2,10 @@ import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 
-import { mockAIRateLimit } from './helpers/route-mock';
 import { createMockAuthContext } from './helpers/auth-mock';
 import { createMockScopedDb } from './helpers/db-mock';
 import { calculateMeihuaBundle } from '../lib/divination/meihua';
 import { calculateXiaoliurenBundle } from '../lib/divination/xiaoliuren';
-import type { FeatureModuleState } from '../lib/app-settings';
 
 const MEIHUA_ROUTE = '../app/api/meihua/route';
 const XIAOLIUREN_ROUTE = '../app/api/xiaoliuren/route';
@@ -188,74 +186,3 @@ test('Meihua and Xiaoliuren save actions reject anonymous users before database 
   assert.deepEqual(responses.map((response) => response.status), [401, 401]);
   assert.equal(authCalls, 2);
 });
-
-function mockAIFailClosedDependencies(
-  t: TestContext,
-  routeModulePath: string,
-  state: FeatureModuleState,
-) {
-  const appSettings = require('../lib/app-settings') as typeof import('../lib/app-settings');
-  const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
-  const credits = require('../lib/user/credits') as typeof import('../lib/user/credits');
-  const aiAccess = require('../lib/ai/ai-access') as typeof import('../lib/ai/ai-access');
-  const ai = require('../lib/ai/ai') as typeof import('../lib/ai/ai');
-  const aiAnalysis = require('../lib/ai/ai-analysis') as typeof import('../lib/ai/ai-analysis');
-  const originalConsoleError = console.error;
-  const originals = {
-    readFeatureModuleStateFresh: appSettings.readFeatureModuleStateFresh,
-    requireUserContext: apiUtils.requireUserContext,
-    getUserAuthInfo: credits.getUserAuthInfo,
-    attemptCreditUse: credits.attemptCreditUse,
-    resolveModelAccessAsync: aiAccess.resolveModelAccessAsync,
-    callAIWithReasoning: ai.callAIWithReasoning,
-    callAIUIMessageResult: ai.callAIUIMessageResult,
-    createAIAnalysisConversation: aiAnalysis.createAIAnalysisConversation,
-  };
-  const calls = { auth: 0, credit: 0, model: 0, rate: 0, ai: 0, persist: 0 };
-  mockAIRateLimit(t, async () => { calls.rate += 1; throw new Error('rate admission must not run'); });
-
-  appSettings.readFeatureModuleStateFresh = async () => state;
-  apiUtils.requireUserContext = async () => { calls.auth += 1; throw new Error('auth must not run'); };
-  credits.getUserAuthInfo = async () => { calls.credit += 1; throw new Error('credit must not run'); };
-  credits.attemptCreditUse = async () => { calls.credit += 1; throw new Error('credit must not run'); };
-  aiAccess.resolveModelAccessAsync = async () => { calls.model += 1; throw new Error('model must not run'); };
-  ai.callAIWithReasoning = async () => { calls.ai += 1; throw new Error('AI must not run'); };
-  ai.callAIUIMessageResult = async () => { calls.ai += 1; throw new Error('AI must not run'); };
-  aiAnalysis.createAIAnalysisConversation = async () => { calls.persist += 1; throw new Error('persist must not run'); };
-  console.error = () => {};
-  clearRouteCaches(routeModulePath);
-
-  t.after(() => {
-    appSettings.readFeatureModuleStateFresh = originals.readFeatureModuleStateFresh;
-    apiUtils.requireUserContext = originals.requireUserContext;
-    credits.getUserAuthInfo = originals.getUserAuthInfo;
-    credits.attemptCreditUse = originals.attemptCreditUse;
-    aiAccess.resolveModelAccessAsync = originals.resolveModelAccessAsync;
-    ai.callAIWithReasoning = originals.callAIWithReasoning;
-    ai.callAIUIMessageResult = originals.callAIUIMessageResult;
-    aiAnalysis.createAIAnalysisConversation = originals.createAIAnalysisConversation;
-    console.error = originalConsoleError;
-    clearRouteCaches(routeModulePath);
-  });
-
-  return calls;
-}
-
-for (const spec of [
-  { name: 'Meihua', route: MEIHUA_ROUTE, url: 'http://localhost/api/meihua', state: { status: 'disabled' } as const, status: 403, code: 'FEATURE_DISABLED' },
-  { name: 'Xiaoliuren', route: XIAOLIUREN_ROUTE, url: 'http://localhost/api/xiaoliuren', state: { status: 'unavailable', error: 'database offline' } as const, status: 503, code: 'FEATURE_STATE_UNAVAILABLE' },
-]) {
-  test(`${spec.name} AI actions fail closed before auth, credit, model, AI, or persistence`, async (t) => {
-    const calls = mockAIFailClosedDependencies(t, spec.route, spec.state);
-    const { POST } = require(spec.route) as { POST: PostHandler };
-
-    for (const action of ['interpret', 'interpret_prepare', 'interpret_persist']) {
-      const response = await post(POST, spec.url, { action });
-      const payload = await response.json();
-      assert.equal(response.status, spec.status);
-      assert.equal(payload.code, spec.code);
-    }
-
-    assert.deepEqual(calls, { auth: 0, credit: 0, model: 0, rate: 0, ai: 0, persist: 0 });
-  });
-}

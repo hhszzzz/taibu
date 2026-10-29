@@ -29,7 +29,6 @@ import { AuthModal } from '@/components/auth/AuthModal';
 import { useToast } from '@/components/ui/Toast';
 import { useHeaderMenu } from '@/components/layout/HeaderMenuContext';
 import { CaseNotesSection } from '@/components/bazi/result/CaseNotesSection';
-import { loadLatestConversationAnalysisSnapshot } from '@/lib/chat/conversation-analysis';
 import { createSavedChart, loadSavedChart, updateSavedChart } from '@/lib/user/charts-client';
 import { useChartMutation } from '@/lib/hooks/useUserCharts';
 import { useSessionMembership } from '@/lib/hooks/useSessionMembership';
@@ -37,6 +36,7 @@ import { parseBirthTimeString, readBirthTimeOptions, resolveBirthTimeOptions, wr
 import { parseNumberParam } from '@/lib/divination/bazi-form-utils';
 import { parseLongitude } from '@/lib/divination/place-resolution';
 import { useAdminJsonCopy } from '@/lib/admin/useAdminJsonCopy';
+import { openChatWithResult } from '@/lib/chat/result-handoff';
 import { CopyTextModal } from '@/components/divination/CopyTextModal';
 import type { ChartTextDetailLevel } from '@/lib/divination/detail-level';
 
@@ -65,21 +65,14 @@ function BaziResultContent() {
     const [notFound, setNotFound] = useState(false);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [chartFromDb, setChartFromDb] = useState<BaziFormData | null>(null);
-    const [savedWuxingAnalysis, setSavedWuxingAnalysis] = useState<string | null>(null);
-    const [savedWuxingReasoning, setSavedWuxingReasoning] = useState<string | null>(null);
-    const [savedWuxingModelId, setSavedWuxingModelId] = useState<string | null>(null);
-    const [savedPersonalityAnalysis, setSavedPersonalityAnalysis] = useState<string | null>(null);
-    const [savedPersonalityReasoning, setSavedPersonalityReasoning] = useState<string | null>(null);
-    const [savedPersonalityModelId, setSavedPersonalityModelId] = useState<string | null>(null);
     const [showAuthModal, setShowAuthModal] = useState(false);
     const [copied, setCopied] = useState(false);
     const [copyDetailLevel, setCopyDetailLevel] = useState<ChartTextDetailLevel>('default');
     const [showCopyModal, setShowCopyModal] = useState(false);
     const { showToast } = useToast();
-    const { userId, sessionLoading, membershipInfo, membershipResolved } = useSessionMembership();
+    const { userId, sessionLoading } = useSessionMembership();
     const { pending: saving, run: runSave } = useChartMutation(userId);
     const [loadedForUserId, setLoadedForUserId] = useState<string | null | undefined>(undefined);
-    const credits = membershipResolved ? (membershipInfo?.aiChatCount ?? null) : null;
 
     type SavedBaziChartRow = BirthTimeResolution & {
         name: string;
@@ -110,12 +103,6 @@ function BaziResultContent() {
             setNotFound(false);
             setLoadError(null);
             setLoading(false);
-            setSavedWuxingAnalysis(null);
-            setSavedWuxingReasoning(null);
-            setSavedWuxingModelId(null);
-            setSavedPersonalityAnalysis(null);
-            setSavedPersonalityReasoning(null);
-            setSavedPersonalityModelId(null);
         }
     }, [hasFormParams]);
 
@@ -139,17 +126,7 @@ function BaziResultContent() {
             setLoadError(null);
 
             try {
-                const [chartData, wuxingAnalysis, personalityAnalysis] = await Promise.all([
-                    loadSavedChart('bazi', chartId, { expectedUserId: userId ?? undefined, signal: controller.signal }),
-                    loadLatestConversationAnalysisSnapshot({
-                        sourceType: 'bazi_wuxing',
-                        chartId,
-                    }),
-                    loadLatestConversationAnalysisSnapshot({
-                        sourceType: 'bazi_personality',
-                        chartId,
-                    }),
-                ]);
+                const chartData = await loadSavedChart('bazi', chartId, { expectedUserId: userId ?? undefined, signal: controller.signal });
 
                 if (cancelled) {
                     return;
@@ -184,14 +161,6 @@ function BaziResultContent() {
                     longitude: parseLongitude(data.longitude),
                     ...resolveBirthTimeOptions(data),
                 });
-
-                setSavedWuxingAnalysis(wuxingAnalysis?.analysis ?? null);
-                setSavedWuxingReasoning(wuxingAnalysis?.reasoning ?? null);
-                setSavedWuxingModelId(wuxingAnalysis?.modelId ?? null);
-
-                setSavedPersonalityAnalysis(personalityAnalysis?.analysis ?? null);
-                setSavedPersonalityReasoning(personalityAnalysis?.reasoning ?? null);
-                setSavedPersonalityModelId(personalityAnalysis?.modelId ?? null);
                 setSaved(true);
             } catch (error) {
                 if (!cancelled) {
@@ -575,6 +544,21 @@ function BaziResultContent() {
 
     const dayMasterDescription = getDayMasterDescription(canonicalBazi.基本信息.日主 as Parameters<typeof getDayMasterDescription>[0]);
 
+    /** 问太卜：带上已保存的命盘进入 AI 对话；未保存时只预填问题。 */
+    const handleAsk = () => {
+        const name = formData.name?.trim() || '未命名';
+        const birth = `${formData.birthYear}-${String(formData.birthMonth).padStart(2, '0')}-${String(formData.birthDay).padStart(2, '0')}`;
+        openChatWithResult(router, {
+            text: '请结合这张八字命盘，分析五行旺衰、格局与用神，并给出可执行的建议。',
+            mentions: chartId ? [{
+                type: 'bazi_chart',
+                id: chartId,
+                name: `${name}的八字命盘`,
+                preview: `${name} · ${birth}`,
+            }] : [],
+        });
+    };
+
     return (
         <div className="min-h-screen bg-background">
             <div className="mx-auto flex w-full max-w-[1104px] flex-col gap-5 px-4 pb-24 pt-4 sm:gap-6 sm:px-6 lg:px-8 lg:pb-0 lg:pt-7 motion-stagger">
@@ -592,6 +576,7 @@ function BaziResultContent() {
                     onCopy={handleCopy}
                     onCopyJson={() => { void copyJson(); }}
                     onShare={handleShare}
+                    ask={{ label: '问太卜', onClick: handleAsk }}
                 >
                     <ProfileSummaryCard
                         meta={baziMeta}
@@ -607,19 +592,6 @@ function BaziResultContent() {
                         <BasicInfoSection
                             canonicalChart={canonicalBazi}
                             dayMasterDescription={dayMasterDescription}
-                            chartId={chartId}
-                            userId={userId}
-                            credits={credits}
-                            savedWuxingAnalysis={savedWuxingAnalysis}
-                            savedWuxingReasoning={savedWuxingReasoning}
-                            savedWuxingModelId={savedWuxingModelId}
-                            savedPersonalityAnalysis={savedPersonalityAnalysis}
-                            savedPersonalityReasoning={savedPersonalityReasoning}
-                            savedPersonalityModelId={savedPersonalityModelId}
-                            hasKnownBirthTime={!isUnknownTime}
-                            onSaveWuxingAnalysis={setSavedWuxingAnalysis}
-                            onSavePersonalityAnalysis={setSavedPersonalityAnalysis}
-                            onLoginRequired={() => setShowAuthModal(true)}
                         />
                     </div>
                 )}
@@ -662,6 +634,7 @@ function BaziResultContent() {
                     saveDisabled={isUnknownTime}
                     saveLabel={isUnknownTime ? '需时辰' : '保存'}
                     onSave={handleSave}
+                    ask={{ label: '问太卜', onClick: handleAsk }}
                 />
             </div>
 

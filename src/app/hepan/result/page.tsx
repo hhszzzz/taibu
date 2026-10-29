@@ -1,22 +1,18 @@
 /**
  * 合盘结果页面
  *
- * 'use client'：结果从 sessionStorage 读取，AI 解读为流式交互
+ * 'use client'：结果从 sessionStorage 读取；解读统一进入 AI 对话
  */
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ChevronLeft, RotateCw, Sparkles, Lightbulb, RefreshCw, Quote } from 'lucide-react';
+import { ChevronLeft, RotateCw, Sparkles, Lightbulb } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { CompatibilityChart } from '@/components/hepan/CompatibilityChart';
 import { ConflictPoints } from '@/components/hepan/ConflictPoints';
 import { CompatibilityTrendChart, type CompatibilityTrendPoint } from '@/components/hepan/CompatibilityTrendChart';
-import { MarkdownContent } from '@/components/ui/MarkdownContent';
-import { ModelSelector } from '@/components/ui/ModelSelector';
-import { AIFeatureGate } from '@/components/ai/AIFeatureGate';
-import { ThinkingBlock } from '@/components/chat/ThinkingBlock';
 import {
     type HepanResult,
     getHepanTypeName,
@@ -24,48 +20,23 @@ import {
     getRelationshipAdvice,
 } from '@/lib/divination/hepan';
 import { readSessionJSON } from '@/lib/cache/session-storage';
-import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
-import { useSessionMembership } from '@/lib/hooks/useSessionMembership';
-import { AuthModal } from '@/components/auth/AuthModal';
 import { AddToKnowledgeBaseModal } from '@/components/knowledge-base/AddToKnowledgeBaseModal';
+import { openChatWithResult } from '@/lib/chat/result-handoff';
 import { useKnowledgeBaseFeatureEnabled } from '@/components/knowledge-base/useKnowledgeBaseFeatureEnabled';
 import { useHeaderMenu } from '@/components/layout/HeaderMenuContext';
-import { CreditsModal } from '@/components/ui/CreditsModal';
-import { useStreamingResponse, isCreditsError } from '@/lib/hooks/useStreamingResponse';
-import { useAnalysisSnapshot } from '@/lib/hooks/useAnalysisSnapshot';
-import { runSharedAnalysisFlow } from '@/lib/ai/analysis-runner';
 export default function HepanResultPage() {
     const router = useRouter();
     const { setMenuItems, clearMenuItems } = useHeaderMenu();
     const { knowledgeBaseEnabled } = useKnowledgeBaseFeatureEnabled();
     const [result, setResult] = useState<HepanResult | null>(null);
-    const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
-    const [analysisReasoning, setAnalysisReasoning] = useState<string | null>(null);
-    const [loadingAI, setLoadingAI] = useState(false);
-    const [error, setError] = useState<string | null>(null);
     const [trendPeriod, setTrendPeriod] = useState<6 | 12>(6);
-    const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL_ID);
-    const [reasoningEnabled, setReasoningEnabled] = useState(false);
-    const errorBanner = error ? (
-        <p data-testid="analysis-error" role="alert" className="mb-4 rounded-xl bg-danger/10 p-3 text-sm text-danger">{error}</p>
-    ) : null;
-    const [conversationId, setConversationId] = useState<string | null>(null);
-    const [showAuthModal, setShowAuthModal] = useState(false);
     const [kbModalOpen, setKbModalOpen] = useState(false);
-    const [showCreditsModal, setShowCreditsModal] = useState(false);
-    // 使用共享的流式响应 hook
-    const streaming = useStreamingResponse();
-    const { user, membershipInfo, membershipLoading, membershipResolved } = useSessionMembership();
-    const membershipPending = membershipLoading || !membershipResolved;
-    const membershipType = membershipResolved ? (membershipInfo?.type ?? 'free') : 'free';
-    const currentUser = user ? { id: user.id } : null;
 
     useEffect(() => {
         // 从 sessionStorage 获取结果
         type HepanSession = Omit<HepanResult, 'createdAt'> & {
             createdAt: string;
             chartId?: string;
-            conversationId?: string | null;
         };
         const parsed = readSessionJSON<HepanSession>('hepan_result');
         if (parsed) {
@@ -74,7 +45,6 @@ export default function HepanResultPage() {
                     ...parsed,
                     createdAt: new Date(parsed.createdAt),
                 });
-                setConversationId(parsed.conversationId || null);
             } catch {
                 router.push('/hepan');
             }
@@ -110,80 +80,22 @@ export default function HepanResultPage() {
         return getRelationshipAdvice(rawTrendData, result.type);
     }, [result, rawTrendData]);
 
-    const handleGetAIAnalysis = async () => {
-        if (!result || !currentUser) return;
-
-        setLoadingAI(true);
-        streaming.reset();
-        setError(null);
-        setAnalysisReasoning(null);
-        setAiAnalysis(null);
-
-        try {
-            const baseBody = {
-                result,
-                chartId: (result as unknown as { chartId?: string }).chartId,
-            };
-            const analysisResult = await runSharedAnalysisFlow({
-                endpoint: '/api/hepan',
-                streaming,
-                isCreditsError,
-                direct: {
-                    prepareBody: { action: 'analyze_prepare', ...baseBody },
-                    persistBody: { action: 'analyze_persist', ...baseBody },
-                },
-                streamBody: {
-                    action: 'analyze',
-                    ...baseBody,
-                    modelId: selectedModel,
-                    reasoning: reasoningEnabled,
-                    stream: true,
-                },
-            });
-            if (analysisResult.requiresCredits) {
-                setShowCreditsModal(true);
-                return;
-            }
-            if (analysisResult.error) {
-                throw new Error(analysisResult.error);
-            }
-            if (analysisResult.content) {
-                setAiAnalysis(analysisResult.content);
-            } else {
-                setAiAnalysis('分析失败，请重试');
-            }
-            if (analysisResult.reasoning) {
-                setAnalysisReasoning(analysisResult.reasoning);
-            }
-            if (analysisResult.conversationId) {
-                setConversationId(analysisResult.conversationId);
-            }
-
-        } catch (err) {
-            setError(err instanceof Error ? err.message : '分析失败');
-        } finally {
-            setLoadingAI(false);
-        }
-    };
-
-    useAnalysisSnapshot({
-        conversationId,
-        recordId: (result as unknown as { chartId?: string })?.chartId,
-        divinationType: 'hepan',
-        sessionKey: 'hepan_result',
-        hasExistingAnalysis: !!aiAnalysis,
-        skip: !result,
-        callbacks: {
-            onAnalysis: setAiAnalysis,
-            onReasoning: setAnalysisReasoning,
-            onModelId: setSelectedModel,
-            onReasoningEnabled: setReasoningEnabled,
-            onConversationIdResolved: setConversationId,
-        },
-    });
-
     // 从 result 中提取 chartId（在 early return 之前）
     const chartId = result ? (result as unknown as { chartId?: string }).chartId : undefined;
+
+    /** 问太卜：带上已保存的合盘进入 AI 对话。 */
+    const handleAsk = () => {
+        if (!result) return;
+        openChatWithResult(router, {
+            text: '请结合这两人的合盘，分析关系优势、冲突点与相处建议。',
+            mentions: chartId ? [{
+                type: 'hepan_chart',
+                id: chartId,
+                name: `合盘 · ${result.person1.name} × ${result.person2.name}`,
+                preview: `${result.person1.name} × ${result.person2.name}`,
+            }] : [],
+        });
+    };
 
     // 设置移动端 Header 菜单项
     useEffect(() => {
@@ -286,110 +198,23 @@ export default function HepanResultPage() {
                 {/* 冲突点 */}
                 <ConflictPoints conflicts={result.conflicts} hepanType={result.type} />
 
-                {/* AI 深度分析 */}
-                <AIFeatureGate><section className="rounded-2xl border-[0.5px] border-border bg-surface p-5 sm:p-6">
-                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                {/* 解读入口：页内不再生成解读，统一进入 AI 对话 */}
+                <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border-[0.5px] border-border bg-surface p-5 sm:p-6">
+                    <div className="flex min-w-0 flex-col gap-1">
                         <h2 className="flex items-center gap-2 font-display text-lg text-foreground sm:text-xl">
                             <Sparkles className="h-[18px] w-[18px] text-clay" />
-                            AI 深度洞察
+                            合盘解读
                         </h2>
-                        <div className="flex items-center gap-2">
-                            <ModelSelector
-                                compact
-                                selectedModel={selectedModel}
-                                onModelChange={setSelectedModel}
-                                reasoningEnabled={reasoningEnabled}
-                                onReasoningChange={setReasoningEnabled}
-                                userId={currentUser?.id}
-                                membershipType={membershipType}
-                                disabled={membershipPending}
-                            />
-                            {aiAnalysis && (
-                                <button
-                                    type="button"
-                                    data-testid="reanalyze-button"
-                                    onClick={handleGetAIAnalysis}
-                                    disabled={loadingAI || membershipPending}
-                                    className="rounded-lg p-2 text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground disabled:opacity-50"
-                                    title="重新分析"
-                                    aria-label="重新分析"
-                                >
-                                    {loadingAI ? (
-                                        <SoundWaveLoader variant="inline" />
-                                    ) : (
-                                        <RefreshCw className="h-4 w-4" />
-                                    )}
-                                </button>
-                            )}
-                        </div>
+                        <p className="text-sm text-foreground-secondary">带上两人的合盘进入 AI 对话，由太卜在对话里展开分析。</p>
                     </div>
-
-                    {aiAnalysis ? (
-                        <div>
-                            {errorBanner}
-                            <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-foreground prose-p:text-foreground-secondary prose-strong:text-foreground prose-strong:font-semibold">
-                                {analysisReasoning && (
-                                    <ThinkingBlock
-                                        content={analysisReasoning}
-                                        isStreaming={streaming.isStreaming && !aiAnalysis}
-                                        startTime={streaming.reasoningStartTime}
-                                        duration={streaming.reasoningDuration}
-                                    />
-                                )}
-                                <div className="rounded-xl bg-panel p-4 sm:p-5">
-                                    <MarkdownContent content={aiAnalysis} className="text-[15px] leading-relaxed text-foreground-secondary" />
-                                </div>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="py-6 text-center">
-                            {errorBanner}
-
-                            {!user ? (
-                                <div className="mx-auto max-w-sm rounded-2xl bg-panel p-6">
-                                    <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-accent-soft text-accent-strong">
-                                        <Quote className="h-6 w-6" />
-                                    </div>
-                                    <h3 className="mb-2 font-display text-lg text-foreground">解锁深度解读</h3>
-                                    <p className="mb-6 text-sm text-foreground-secondary">
-                                        登录后获取 AI 对您关系的深度剖析与个性化建议
-                                    </p>
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowAuthModal(true)}
-                                        className="h-11 w-full rounded-xl bg-accent font-medium text-on-accent transition-colors hover:bg-accent-hover"
-                                    >
-                                        登录 / 注册
-                                    </button>
-                                </div>
-                            ) : membershipPending ? (
-                                <div className="flex justify-center">
-                                    <SoundWaveLoader variant="inline" />
-                                </div>
-                            ) : (
-                                <button
-                                    type="button"
-                                    onClick={handleGetAIAnalysis}
-                                    disabled={loadingAI || membershipPending}
-                                    className="inline-flex h-12 items-center gap-2 rounded-xl bg-foreground px-7 text-base font-medium text-background
-                                        transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                    {loadingAI ? (
-                                        <>
-                                            <SoundWaveLoader variant="inline" />
-                                            正在解读天机...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Sparkles className="h-4 w-4" />
-                                            获取 AI 深度分析
-                                        </>
-                                    )}
-                                </button>
-                            )}
-                        </div>
-                    )}
-                </section></AIFeatureGate>
+                    <button
+                        type="button"
+                        onClick={handleAsk}
+                        className="h-11 rounded-xl bg-accent px-6 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
+                    >
+                        问太卜
+                    </button>
+                </section>
 
                 {/* 操作按钮 */}
                 <div className="flex justify-center pt-2">
@@ -412,16 +237,6 @@ export default function HepanResultPage() {
                     sourceId={chartId}
                 />
             )}
-
-            <AuthModal
-                isOpen={showAuthModal}
-                onClose={() => setShowAuthModal(false)}
-            />
-
-            <CreditsModal
-                isOpen={showCreditsModal}
-                onClose={() => setShowCreditsModal(false)}
-            />
         </div>
     );
 }

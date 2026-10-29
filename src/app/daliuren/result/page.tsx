@@ -1,14 +1,14 @@
 /**
  * 大六壬排盘结果页
  *
- * 'use client'：会话参数读取、起课请求与 AI 流式解读都依赖浏览器端 hooks。
+ * 'use client'：会话参数读取与起课请求依赖浏览器端 hooks；解读统一进入 AI 对话。
  */
 'use client';
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { RotateCcw, RefreshCw, Copy, Check, ChevronLeft } from 'lucide-react';
+import { RotateCcw, Copy, Check, ChevronLeft } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { ResultMobileActions } from '@/components/bazi/result/ResultHeader';
 import { ResultHeaderActions } from '@/components/divination/ResultHeaderActions';
@@ -16,21 +16,13 @@ import { readSessionJSON, scopeResultSession, updateSessionJSON, writeSessionJSO
 import { useResultIdentity } from '@/lib/hooks/useIdentityGuard';
 import { DaliurenChart } from '@/components/daliuren/DaliurenChart';
 import { formatBenMing, formatCastTime, formatKeShiDetail, parseKeShi } from '@/components/daliuren/daliuren-display';
-import { ModelSelector } from '@/components/ui/ModelSelector';
-import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
-import { ThinkingBlock } from '@/components/chat/ThinkingBlock';
-import { useStreamingResponse, isCreditsError } from '@/lib/hooks/useStreamingResponse';
 import { AuthModal } from '@/components/auth/AuthModal';
-import { CreditsModal } from '@/components/ui/CreditsModal';
 import { useHeaderMenu, useHeaderTitle, type HeaderMenuItem } from '@/components/layout/HeaderMenuContext';
-import { useAnalysisSnapshot } from '@/lib/hooks/useAnalysisSnapshot';
 import { useAdminJsonCopy } from '@/lib/admin/useAdminJsonCopy';
-import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
-import { runSharedAnalysisFlow } from '@/lib/ai/analysis-runner';
 import { useSessionMembership } from '@/lib/hooks/useSessionMembership';
+import { openChatWithResult } from '@/lib/chat/result-handoff';
 import { CopyTextModal } from '@/components/divination/CopyTextModal';
-import { AIFeatureGate } from '@/components/ai/AIFeatureGate';
 import type { ChartTextDetailLevel } from '@/lib/divination/detail-level';
 import { saveDivinationAction } from '@/lib/divination/save-client';
 import {
@@ -46,7 +38,6 @@ const ASK_LABEL = '问太卜断课';
 type DaliurenSessionParams = Record<string, unknown> & {
     date?: string;
     divinationId?: string;
-    conversationId?: string;
     recordOwnerId?: string | null;
 };
 
@@ -61,34 +52,23 @@ function DaliurenResultContent({ isCurrent }: { isCurrent: () => boolean }) {
     const { showToast } = useToast();
     const [result, setResult] = useState<DaliurenOutput | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [modelId, setModelId] = useState<string>(DEFAULT_MODEL_ID);
-    const [reasoningEnabled, setReasoningEnabled] = useState(false);
     const [showAuthModal, setShowAuthModal] = useState(false);
-    const [showCreditsModal, setShowCreditsModal] = useState(false);
     const [divinationId, setDivinationId] = useState<string | undefined>();
-    const [conversationId, setConversationId] = useState<string | undefined>();
-    const [interpretation, setInterpretation] = useState<string | null>(null);
-    const [interpretationReasoning, setInterpretationReasoning] = useState<string | null>(null);
-    const [error, setError] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
     const [copyDetailLevel, setCopyDetailLevel] = useState<ChartTextDetailLevel>('default');
     const [showCopyModal, setShowCopyModal] = useState(false);
     const [sessionParams, setSessionParams] = useState<DaliurenSessionParams | null>(null);
     const [saving, setSaving] = useState(false);
     const hasAutoSavedRef = useRef(false);
-    const aiSectionRef = useRef<HTMLElement>(null);
 
-    const streaming = useStreamingResponse();
-    const { userId, membershipInfo, sessionLoading, membershipLoading, membershipResolved } = useSessionMembership();
-    const membershipPending = membershipLoading || !membershipResolved;
-    const membershipType = membershipResolved ? (membershipInfo?.type ?? 'free') : 'free';
+    const { userId, sessionLoading } = useSessionMembership();
     const canonicalResult = useMemo(
         () => (result ? buildDaliurenCanonicalJSON(result) : null),
         [result],
     );
     const { isAdmin, jsonCopied, copyJson } = useAdminJsonCopy(canonicalResult);
 
-    const persistSessionIds = useCallback((next: { divinationId?: string; conversationId?: string; }) => {
+    const persistSessionIds = useCallback((next: { divinationId?: string }) => {
         if (isCurrent()) updateSessionJSON('daliuren_params', (prev) => ({ ...(prev || {}), ...next, recordOwnerId: userId }));
     }, [isCurrent, userId]);
 
@@ -125,7 +105,7 @@ function DaliurenResultContent({ isCurrent }: { isCurrent: () => boolean }) {
                 const payload = await response.json();
                 if (!isCurrent()) return;
                 if (payload?.data) {
-                    setResult(payload.data); setSessionParams(params); if (params.divinationId) setDivinationId(params.divinationId); if (params.conversationId) setConversationId(params.conversationId);
+                    setResult(payload.data); setSessionParams(params); if (params.divinationId) setDivinationId(params.divinationId);
                     if (!params.divinationId && userId && !hasAutoSavedRef.current) { hasAutoSavedRef.current = true; await saveDivinationRecord(params, payload.data); }
                 }
             } catch (e) { if (isCurrent()) console.error(e); } finally { if (isCurrent()) setIsLoading(false); }
@@ -166,72 +146,6 @@ function DaliurenResultContent({ isCurrent }: { isCurrent: () => boolean }) {
     // 移动端顶栏标题为课体（如「重审课」），桌面端由页内标题承担
     useHeaderTitle(canonicalResult ? parseKeShi(canonicalResult.基本信息.课式).title : null);
 
-    useAnalysisSnapshot({
-        conversationId,
-        recordId: divinationId,
-        divinationType: 'daliuren',
-        sessionKey: 'daliuren_params',
-        hasExistingAnalysis: !!interpretation || !!streaming.content,
-        skip: !result || (!conversationId && !divinationId),
-        callbacks: {
-            onAnalysis: setInterpretation,
-            onReasoning: setInterpretationReasoning,
-            onReasoningEnabled: setReasoningEnabled,
-            onModelId: setModelId,
-            onConversationIdResolved: (resolvedConversationId) => {
-                setConversationId(resolvedConversationId);
-                persistSessionIds({ conversationId: resolvedConversationId });
-            },
-        },
-    });
-
-    const handleInterpret = useCallback(async () => {
-        if (!result || !userId) { if (!userId) setShowAuthModal(true); return; }
-        setError(null);
-        setInterpretation(null);
-        setInterpretationReasoning(null);
-        streaming.reset();
-        try {
-            const analysisResult = await runSharedAnalysisFlow({
-                endpoint: '/api/daliuren',
-                streaming,
-                isCreditsError,
-                direct: {
-                    prepareBody: { action: 'interpret_prepare', resultData: result, divinationId },
-                    persistBody: { action: 'interpret_persist', resultData: result, divinationId },
-                },
-                streamBody: {
-                    action: 'interpret',
-                    resultData: result,
-                    divinationId,
-                    modelId,
-                    reasoning: reasoningEnabled,
-                    stream: true,
-                },
-            });
-            if (!isCurrent()) return;
-            if (analysisResult.requiresCredits) {
-                setShowCreditsModal(true);
-            } else {
-                if (analysisResult.error) {
-                    setError(analysisResult.error);
-                }
-                if (analysisResult.content) {
-                    setInterpretation(analysisResult.content);
-                }
-                if (analysisResult.reasoning) {
-                    setInterpretationReasoning(analysisResult.reasoning);
-                }
-                if (analysisResult.conversationId) {
-                    setConversationId(analysisResult.conversationId);
-                    persistSessionIds({ conversationId: analysisResult.conversationId });
-                }
-            }
-        } catch (err) {
-            if (isCurrent()) setError(err instanceof Error ? err.message : '解读失败');
-        }
-    }, [divinationId, modelId, persistSessionIds, reasoningEnabled, result, streaming, userId, isCurrent]);
-
     /** 「保存」：未登录先登录（登录后页面自动保存），已登录则手动重试保存 */
     const handleSave = async () => {
         if (!result || !sessionParams || divinationId || saving || sessionLoading) return;
@@ -245,11 +159,18 @@ function DaliurenResultContent({ isCurrent }: { isCurrent: () => boolean }) {
         showToast(savedId ? 'success' : 'error', savedId ? '已保存到命理记录' : '保存失败，请重试');
     };
 
-    /** 「问太卜断课」：滚动到解读入口，并沿用入口主按钮的同一套前置判断 */
+    /** 「问太卜断课」：带上已保存的课盘进入 AI 对话。 */
     const handleAskTaibu = () => {
-        aiSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        if (sessionLoading || membershipPending || streaming.isStreaming || interpretation || streaming.content) return;
-        void handleInterpret();
+        const question = canonicalResult?.基本信息.占事?.trim();
+        openChatWithResult(router, {
+            text: `${question ? `我问的是「${question}」。` : ''}请结合三传、四课与本命行年，说明这件事的来龙去脉、吉凶与应期。`,
+            mentions: divinationId ? [{
+                type: 'daliuren_divination',
+                id: divinationId,
+                name: `大六壬 · ${canonicalResult?.基本信息.课式 ?? ''}`,
+                preview: question || '大六壬起课',
+            }] : [],
+        });
     };
 
     if (isLoading) return <div className="min-h-screen bg-background flex items-center justify-center"><SoundWaveLoader variant="block" text="正在起课" /></div>;
@@ -276,7 +197,6 @@ function DaliurenResultContent({ isCurrent }: { isCurrent: () => boolean }) {
         { label: '丁马', value: coreInfo.关键状态.丁马 },
         { label: '天马', value: coreInfo.关键状态.天马 },
     ].filter(chip => chip.value);
-    const hasInterpretation = !!(interpretation || streaming.content);
     const saved = Boolean(divinationId);
     const saveState = {
         saving,
@@ -286,31 +206,13 @@ function DaliurenResultContent({ isCurrent }: { isCurrent: () => boolean }) {
     };
 
     const aiEntry = (
-        <AIFeatureGate>
-            <section ref={aiSectionRef} aria-label="太卜推演" className="flex scroll-mt-24 flex-col gap-2.5 rounded-2xl border-[0.5px] border-border bg-panel px-5 py-[18px]">
-                <h2 className="font-display text-[17px] font-normal">让太卜推演事态</h2>
-                <p className="text-sm leading-relaxed text-foreground-secondary">结合三传、四课与本命行年，说明这件事的来龙去脉。</p>
-                <div className="flex flex-wrap items-center gap-2">
-                    <ModelSelector compact selectedModel={modelId} onModelChange={setModelId} reasoningEnabled={reasoningEnabled} onReasoningChange={setReasoningEnabled} userId={userId} membershipType={membershipType} disabled={membershipPending} />
-                    {interpretation && (
-                        <button onClick={handleInterpret} disabled={streaming.isStreaming} aria-label="重新解读" className="rounded-xl p-2 text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground">
-                            <RefreshCw className={`h-4 w-4 ${streaming.isStreaming ? 'animate-spin' : ''}`} />
-                        </button>
-                    )}
-                </div>
-                {!hasInterpretation && (
-                    sessionLoading || membershipPending ? (
-                        <SoundWaveLoader variant="inline" className="self-center py-2" />
-                    ) : !userId ? (
-                        <button onClick={() => setShowAuthModal(true)} className="h-[42px] rounded-xl bg-foreground text-sm text-background transition-opacity hover:opacity-90">登录解锁 AI 解读</button>
-                    ) : (
-                        <button onClick={handleInterpret} disabled={membershipPending} className="inline-flex h-[42px] items-center justify-center rounded-xl bg-foreground text-sm text-background transition-opacity hover:opacity-90 disabled:opacity-50">
-                            开始解读
-                        </button>
-                    )
-                )}
-            </section>
-        </AIFeatureGate>
+        <section aria-label="太卜推演" className="flex scroll-mt-24 flex-col gap-2.5 rounded-2xl border-[0.5px] border-border bg-panel px-5 py-[18px]">
+            <h2 className="font-display text-[17px] font-normal">让太卜推演事态</h2>
+            <p className="text-sm leading-relaxed text-foreground-secondary">结合三传、四课与本命行年，说明这件事的来龙去脉。</p>
+            <button type="button" onClick={handleAskTaibu} className="inline-flex h-[42px] items-center justify-center rounded-xl bg-foreground text-sm text-background transition-opacity hover:opacity-90">
+                {ASK_LABEL}
+            </button>
+        </section>
     );
 
     return (
@@ -360,31 +262,11 @@ function DaliurenResultContent({ isCurrent }: { isCurrent: () => boolean }) {
 
                 <DaliurenChart chart={canonicalResult!} aside={aiEntry} />
 
-                {/* AI 解读内容（入口卡位于三传四课一栏，正文需要整宽阅读） */}
-                <AIFeatureGate>
-                    {(error || hasInterpretation) && (
-                        <section aria-label="太卜解读" className="flex flex-col gap-4 rounded-2xl border-[0.5px] border-border bg-surface p-5 lg:p-6">
-                            <h2 className="font-display text-lg font-normal">太卜解读</h2>
-                            {error && (
-                                <div role="alert" className="rounded-xl border-[0.5px] border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
-                                    {error}
-                                </div>
-                            )}
-                            {hasInterpretation && (
-                                <div className="prose prose-sm max-w-none">
-                                    {(interpretationReasoning || streaming.reasoning) && <ThinkingBlock content={interpretationReasoning || streaming.reasoning || ''} isStreaming={streaming.isStreaming && !interpretation} />}
-                                    <MarkdownContent content={interpretation || streaming.content || ''} className="text-sm text-foreground leading-relaxed" streaming={streaming.isStreaming && !interpretation} />
-                                </div>
-                            )}
-                        </section>
-                    )}
-                </AIFeatureGate>
             </div>
 
             <ResultMobileActions saving={saving} saved={saved} saveDisabled={sessionLoading || !sessionParams} onSave={saveState.onSave} ask={{ label: ASK_LABEL, onClick: handleAskTaibu }} />
 
             <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
-            <CreditsModal isOpen={showCreditsModal} onClose={() => setShowCreditsModal(false)} />
             <CopyTextModal
                 isOpen={showCopyModal}
                 value={copyDetailLevel}

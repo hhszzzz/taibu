@@ -1,15 +1,15 @@
 /**
  * 六爻解卦结果页面
  *
- * 标题区「本卦 之 变卦」+ 保存 / 问太卜解卦，四柱旬空、卦盘、卦辞与盘面要点、用神分析，页内 AI 深度解读。
- * 'use client'：结果来自 sessionStorage，且含 AI 流式解读与多处交互状态。
+ * 标题区「本卦 之 变卦」+ 保存 / 问太卜解卦，四柱旬空、卦盘、卦辞与盘面要点、用神分析；解读统一进入 AI 对话。
+ * 'use client'：结果来自 sessionStorage，且含多处交互状态。
  */
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Sparkles, RotateCw, AlertCircle, BookOpen, RefreshCw, Copy, Check, BookOpenText, X, Album, ChevronLeft } from 'lucide-react';
+import { RotateCw, BookOpen, Copy, Check, BookOpenText, X, Album, ChevronLeft } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { HexagramDisplay } from '@/components/liuyao/HexagramDisplay';
 import { LiuyaoPillars } from '@/components/liuyao/LiuyaoPillars';
@@ -17,10 +17,7 @@ import { LiuyaoResultHeader } from '@/components/liuyao/LiuyaoResultHeader';
 import { TraditionalAnalysis } from '@/components/liuyao/TraditionalAnalysis';
 import { YongShenTargetPicker } from '@/components/liuyao/YongShenTargetPicker';
 import { ResultMobileActions } from '@/components/bazi/result/ResultHeader';
-import { MarkdownContent } from '@/components/ui/MarkdownContent';
-import { ModelSelector } from '@/components/ui/ModelSelector';
 import { useToast } from '@/components/ui/Toast';
-import { ThinkingBlock } from '@/components/chat/ThinkingBlock';
 import {
     buildLiuyaoCanonicalJSON,
     calculateLiuyaoBundle,
@@ -35,28 +32,22 @@ import {
     resolveTraditionalYongShenPositions,
 } from '@/lib/divination/liuyao-result-state';
 import { saveDivinationAction } from '@/lib/divination/save-client';
-import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
 import { useSessionMembership } from '@/lib/hooks/useSessionMembership';
+import { openChatWithResult } from '@/lib/chat/result-handoff';
 import { readSessionJSON, scopeResultSession, updateSessionJSON, writeSessionJSON } from '@/lib/cache/session-storage';
 import { useResultIdentity } from '@/lib/hooks/useIdentityGuard';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { AddToKnowledgeBaseModal } from '@/components/knowledge-base/AddToKnowledgeBaseModal';
 import { useKnowledgeBaseFeatureEnabled } from '@/components/knowledge-base/useKnowledgeBaseFeatureEnabled';
 import { useHeaderMenu, useHeaderTitle, type HeaderMenuItem } from '@/components/layout/HeaderMenuContext';
-import { CreditsModal } from '@/components/ui/CreditsModal';
-import { useStreamingResponse, isCreditsError } from '@/lib/hooks/useStreamingResponse';
-import { useAnalysisSnapshot } from '@/lib/hooks/useAnalysisSnapshot';
 import { LIUYAO_TERM_GROUPS } from '@/lib/divination/liuyao-term-tips';
 import { useAdminJsonCopy } from '@/lib/admin/useAdminJsonCopy';
-import { runSharedAnalysisFlow } from '@/lib/ai/analysis-runner';
 import { CopyTextModal } from '@/components/divination/CopyTextModal';
-import { AIFeatureGate } from '@/components/ai/AIFeatureGate';
 import type { ChartTextDetailLevel } from '@/lib/divination/detail-level';
 
 type LiuyaoResultSession = Omit<DivinationResult, 'createdAt'> & {
     createdAt: string;
     divinationId?: string | null;
-    conversationId?: string | null;
     recordOwnerId?: string | null;
 };
 
@@ -78,30 +69,18 @@ function LiuyaoResultContent({ isCurrent }: { isCurrent: () => boolean }) {
     const { knowledgeBaseEnabled } = useKnowledgeBaseFeatureEnabled();
     const [result, setResult] = useState<DivinationResult | null>(null);
     const [divinationId, setDivinationId] = useState<string | null>(null);
-    const [conversationId, setConversationId] = useState<string | null>(null);
-    const [interpretation, setInterpretation] = useState<string | null>(null);
-    const [interpretationReasoning, setInterpretationReasoning] = useState<string | null>(null);
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
     const [showTraditional, setShowTraditional] = useState(true);
-    const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL_ID);
-    const [reasoningEnabled, setReasoningEnabled] = useState(false);
     const [showAuthModal, setShowAuthModal] = useState(false);
     const [kbModalOpen, setKbModalOpen] = useState(false);
-    const [showCreditsModal, setShowCreditsModal] = useState(false);
     const [showTermsModal, setShowTermsModal] = useState(false);
     const [pendingYongShenTargets, setPendingYongShenTargets] = useState<LiuQin[]>([]);
     const [copyDetailLevel, setCopyDetailLevel] = useState<ChartTextDetailLevel>('default');
     const [showCopyModal, setShowCopyModal] = useState(false);
-    const streaming = useStreamingResponse();
     const [copied, setCopied] = useState(false);
     const [saving, setSaving] = useState(false);
-    const aiSectionRef = useRef<HTMLElement>(null);
     const yongShenPickerRef = useRef<HTMLElement>(null);
     const { showToast } = useToast();
-    const { user, userId, sessionLoading, membershipInfo, membershipLoading, membershipResolved } = useSessionMembership();
-    const membershipPending = membershipLoading || !membershipResolved;
-    const membershipType = membershipResolved ? (membershipInfo?.type ?? 'free') : 'free';
+    const { user, userId, sessionLoading } = useSessionMembership();
 
     const yongShenTargetState = useMemo(() => (
         resolveResultYongShenState(result?.yongShenTargets, pendingYongShenTargets)
@@ -162,7 +141,6 @@ function LiuyaoResultContent({ isCurrent }: { isCurrent: () => boolean }) {
             setResult({ ...parsed, createdAt: new Date(parsed.createdAt), yongShenTargets: normalizedTargets });
             setPendingYongShenTargets(normalizedTargets);
             setDivinationId(parsed.divinationId || null);
-            setConversationId(parsed.conversationId || null);
         } else router.push('/liuyao');
     }, [router, sessionLoading, userId]);
 
@@ -186,71 +164,10 @@ function LiuyaoResultContent({ isCurrent }: { isCurrent: () => boolean }) {
     const hasChangedHexagram = Boolean(result?.changedHexagram && result.changedLines.length > 0);
     useHeaderTitle(result ? `${result.hexagram.name}${hasChangedHexagram && result.changedHexagram ? ` 之 ${result.changedHexagram.name}` : ''}` : null);
 
-    useAnalysisSnapshot({
-        conversationId,
-        recordId: divinationId,
-        divinationType: 'liuyao',
-        sessionKey: 'liuyao_result',
-        hasExistingAnalysis: !!interpretation,
-        skip: !result,
-        callbacks: {
-            onAnalysis: setInterpretation,
-            onReasoning: setInterpretationReasoning,
-            onModelId: setSelectedModel,
-            onReasoningEnabled: setReasoningEnabled,
-            onConversationIdResolved: setConversationId,
-        },
-    });
-
-    const handleGetInterpretation = async () => {
-        if (!result || !user || !canAnalyze) return;
-        setIsLoading(true); streaming.reset(); setError(null); setInterpretationReasoning(null); setInterpretation(null);
-        try {
-            const baseBody = {
-                question: result.question,
-                yongShenTargets: appliedYongShenTargets,
-                hexagram: result.hexagram,
-                changedHexagram: result.changedHexagram,
-                changedLines: result.changedLines,
-                yaos: result.yaos,
-                divinationId,
-            };
-            const analysisResult = await runSharedAnalysisFlow({
-                endpoint: '/api/liuyao',
-                streaming,
-                isCreditsError,
-                direct: {
-                    prepareBody: { action: 'interpret_prepare', ...baseBody },
-                    persistBody: { action: 'interpret_persist', ...baseBody },
-                },
-                streamBody: {
-                    action: 'interpret',
-                    ...baseBody,
-                    modelId: selectedModel,
-                    reasoning: reasoningEnabled,
-                    stream: true,
-                },
-            });
-            if (!isCurrent()) return;
-            if (analysisResult.requiresCredits) {
-                setShowCreditsModal(true);
-                return;
-            }
-            if (analysisResult.error) throw new Error(analysisResult.error);
-            setInterpretation(analysisResult.content || '解读失败');
-            if (analysisResult.reasoning) setInterpretationReasoning(analysisResult.reasoning);
-            if (analysisResult.conversationId) {
-                setConversationId(analysisResult.conversationId);
-                updateSessionJSON('liuyao_result', (prev: LiuyaoResultSession | null) => ({ ...(prev || {}), conversationId: analysisResult.conversationId } as LiuyaoResultSession));
-            }
-        } catch (err) { if (isCurrent()) setError(err instanceof Error ? err.message : '解读失败'); } finally { if (isCurrent()) setIsLoading(false); }
-    };
-
     const handleApplyYongShenTargets = async () => {
         if (!result) return;
         const normalized = normalizeYongShenTargets(pendingYongShenTargets);
-        if (normalized.length === 0) { setError('请至少选择一个分析目标'); return; }
-        setError(null);
+        if (normalized.length === 0) { showToast('error', '请至少选择一个分析目标'); return; }
         setResult(prev => prev ? ({ ...prev, yongShenTargets: normalized }) : null);
         updateSessionJSON('liuyao_result', (prev: LiuyaoResultSession | null) => ({ ...(prev || {}), yongShenTargets: normalized } as LiuyaoResultSession));
         if (divinationId && userId) {
@@ -295,19 +212,25 @@ function LiuyaoResultContent({ isCurrent }: { isCurrent: () => boolean }) {
         }
     };
 
-    /** 问太卜解卦：定位到页内 AI 解读；尚未解读时直接发起（未登录先登录，无问题不可解，缺用神先选目标）。 */
+    /** 问太卜解卦：带上已保存的卦进入 AI 对话；无问题或未选用神时先在页内补齐。 */
     const handleAskTaibu = () => {
         if (sessionLoading) return;
-        if (!user) { setShowAuthModal(true); return; }
         if (!requiresYongShenTargets) { showToast('error', '起卦时未填写所问之事，无法解卦'); return; }
         if (missingYongShenTargets) {
             showToast('error', '请先选择分析目标');
             yongShenPickerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
             return;
         }
-        aiSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        if (interpretation || isLoading || streaming.isStreaming || membershipPending || !canAnalyze) return;
-        void handleGetInterpretation();
+        const question = result?.question?.trim();
+        openChatWithResult(router, {
+            text: `${question ? `我问的是「${question}」。` : ''}请结合这一卦的用神与动变，解读卦象与应期。`,
+            mentions: divinationId ? [{
+                type: 'liuyao_divination',
+                id: divinationId,
+                name: `六爻 · ${result?.hexagram.name ?? ''}${hasChangedHexagram && result?.changedHexagram ? `之${result.changedHexagram.name}` : ''}`,
+                preview: question || '六爻起卦',
+            }] : [],
+        });
     };
 
     if (!result) return (
@@ -340,7 +263,7 @@ function LiuyaoResultContent({ isCurrent }: { isCurrent: () => boolean }) {
         disabled: saving || Boolean(divinationId) || sessionLoading || missingYongShenTargets,
         onSave: () => { void handleSave(); },
     };
-    const askDisabled = sessionLoading || isLoading || streaming.isStreaming;
+    const askDisabled = sessionLoading;
 
     return (
         <div className="min-h-screen bg-background text-foreground">
@@ -401,53 +324,18 @@ function LiuyaoResultContent({ isCurrent }: { isCurrent: () => boolean }) {
                     <TraditionalAnalysis
                         analysis={traditionalCanonical}
                         highlightAction={(
-                            <AIFeatureGate>
-                                <button
-                                    type="button"
-                                    onClick={handleAskTaibu}
-                                    disabled={askDisabled}
-                                    className="mt-auto hidden h-11 w-full items-center justify-center rounded-xl bg-foreground text-sm text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 lg:flex"
-                                >
-                                    让太卜断这一卦
-                                </button>
-                            </AIFeatureGate>
+                            <button
+                                type="button"
+                                onClick={handleAskTaibu}
+                                disabled={askDisabled}
+                                className="mt-auto hidden h-11 w-full items-center justify-center rounded-xl bg-foreground text-sm text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 lg:flex"
+                            >
+                                让太卜断这一卦
+                            </button>
                         )}
                     />
                 )}
 
-                {/* AI 解读 */}
-                <AIFeatureGate><section ref={aiSectionRef} aria-label="AI 深度解读" className="flex scroll-mt-20 flex-col gap-5 rounded-2xl border-[0.5px] border-border bg-panel p-5 sm:p-6">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="flex min-w-0 flex-[1_1_240px] flex-col gap-1">
-                            <h2 className="flex items-center gap-2 font-display text-lg font-normal"><Sparkles className="h-4 w-4 text-accent" />AI 深度解读</h2>
-                            <p className="text-sm text-foreground-secondary">让太卜结合所问、用神与动变断这一卦</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <ModelSelector compact selectedModel={selectedModel} onModelChange={setSelectedModel} reasoningEnabled={reasoningEnabled} onReasoningChange={setReasoningEnabled} userId={userId} membershipType={membershipType} disabled={membershipPending} />
-                            {(interpretation || streaming.isStreaming) && <button type="button" onClick={handleGetInterpretation} disabled={isLoading} aria-label="重新获取 AI 解读" className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-foreground-secondary transition-colors hover:bg-background-secondary"><RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} /></button>}
-                        </div>
-                    </div>
-
-                    {error && <div className="flex items-center gap-2 rounded-xl bg-fire-soft px-3 py-2.5 text-xs text-danger"><AlertCircle className="h-3.5 w-3.5" />{error}</div>}
-
-                    {(interpretation || streaming.isStreaming) ? (
-                        <div className="prose prose-sm max-w-none rounded-xl border-[0.5px] border-border bg-surface p-4 prose-p:leading-relaxed prose-headings:text-foreground sm:p-5">
-                            {(interpretationReasoning || streaming.reasoning) && <ThinkingBlock content={interpretationReasoning || streaming.reasoning || ''} isStreaming={streaming.isStreaming && !interpretation} startTime={streaming.reasoningStartTime} duration={streaming.reasoningDuration} />}
-                            <MarkdownContent content={interpretation || streaming.content || ''} className="text-sm text-foreground leading-relaxed" streaming={streaming.isStreaming && !interpretation} />
-                        </div>
-                    ) : (
-                        <div className="flex flex-col gap-3">
-                            {user === null ? (
-                                <>
-                                    <p className="text-sm text-foreground-secondary">登录后解锁 AI 深度解读卦象天机</p>
-                                    <button type="button" onClick={() => setShowAuthModal(true)} className="inline-flex h-11 w-full items-center justify-center rounded-xl bg-foreground px-6 text-sm font-medium text-background transition-opacity hover:opacity-90 sm:w-auto sm:self-start">立即登录</button>
-                                </>
-                            ) : (
-                                <button type="button" onClick={handleGetInterpretation} disabled={isLoading || !canAnalyze || membershipPending} className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-foreground px-6 text-sm font-medium text-background transition-opacity hover:opacity-90 active:opacity-80 disabled:opacity-50 sm:w-auto sm:self-start"><Sparkles className="h-4 w-4" />获取 AI 解读</button>
-                            )}
-                        </div>
-                    )}
-                </section></AIFeatureGate>
             </div>
 
             {/* 术语弹窗 */}
@@ -484,7 +372,6 @@ function LiuyaoResultContent({ isCurrent }: { isCurrent: () => boolean }) {
             />
 
             <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
-            <CreditsModal isOpen={showCreditsModal} onClose={() => setShowCreditsModal(false)} />
             {knowledgeBaseEnabled && divinationId && <AddToKnowledgeBaseModal open={kbModalOpen} onClose={() => setKbModalOpen(false)} sourceTitle={result.question || '六爻占卜'} sourceType="liuyao_divination" sourceId={divinationId} />}
             <CopyTextModal
                 isOpen={showCopyModal}

@@ -1,36 +1,21 @@
 /**
  * 梅花易数 API 路由
  *
- * action: calculate | save | interpret | interpret_prepare | interpret_persist
+ * action: calculate | save
  */
 import { NextRequest } from 'next/server';
 import { jsonError, jsonOk } from '@/lib/api-utils';
+import { saveUserOwnedDivinationRecord } from '@/lib/api/divination-pipeline';
 import {
-  createDirectInterpretHandlers,
-  createInterpretHandler,
-  type DivinationRouteConfig,
-  type InterpretInput,
-  saveUserOwnedDivinationRecord,
-} from '@/lib/api/divination-pipeline';
-import {
-  buildMeihuaCanonicalText,
   calculateMeihuaBundle,
   type MeihuaInput,
   type MeihuaWebBundle,
 } from '@/lib/divination/meihua';
-import { SOURCE_CHART_TYPE_MAP } from '@/lib/visualization/chart-types';
 
 type MeihuaRequest = {
-  action: 'calculate' | 'save' | 'interpret' | 'interpret_prepare' | 'interpret_persist';
+  action: 'calculate' | 'save';
   input?: MeihuaInput;
   resultData?: MeihuaWebBundle;
-  divinationId?: string;
-  modelId?: string;
-  reasoning?: boolean;
-};
-
-type MeihuaInterpretInput = InterpretInput & {
-  resultData: MeihuaWebBundle;
   divinationId?: string;
 };
 
@@ -57,52 +42,6 @@ function resolveCanonicalMeihuaBundle(input: unknown): MeihuaWebBundle | MeihuaR
     };
   }
 }
-
-function resolveCanonicalMeihuaResultData(value: unknown): MeihuaWebBundle | MeihuaRouteError {
-  if (!value || typeof value !== 'object' || Array.isArray(value) || !('input' in value)) {
-    return { error: '请提供完整的起卦结果', status: 400 };
-  }
-  return resolveCanonicalMeihuaBundle((value as { input?: unknown }).input);
-}
-
-const meihuaInterpretConfig: DivinationRouteConfig<MeihuaInterpretInput> = {
-  sourceType: 'meihua',
-  tag: 'meihua',
-  personality: 'meihua',
-  allowedChartTypes: [...SOURCE_CHART_TYPE_MAP.meihua_divination],
-  parseInput: (body) => {
-    const request = body as MeihuaRequest;
-    const resultData = resolveCanonicalMeihuaResultData(request.resultData);
-    if (isMeihuaRouteError(resultData)) return resultData;
-    return {
-      resultData,
-      divinationId: request.divinationId,
-    };
-  },
-  buildPrompts: (input) => ({
-    systemPrompt: '',
-    userPrompt: `${buildMeihuaCanonicalText(input.resultData.result)}\n\n请围绕所问之事，按体用、生克、动爻与阶段推演给出清晰解读。`,
-  }),
-  buildSourceData: (input, modelId, reasoning) => ({
-    question: input.resultData.input.question,
-    method: input.resultData.result.castMeta.method,
-    main_hexagram: input.resultData.result.mainHexagram.name,
-    changed_hexagram: input.resultData.result.changedHexagram?.name ?? null,
-    moving_line: input.resultData.result.movingLine,
-    model_id: modelId,
-    reasoning,
-  }),
-  generateTitle: (input) => `梅花易数 · ${input.resultData.result.mainHexagram.name}`,
-  buildHistoryBinding: (input) => input.divinationId
-    ? {
-      type: 'meihua',
-      payload: { divination_id: input.divinationId },
-    }
-    : null,
-};
-
-const handleInterpret = createInterpretHandler(meihuaInterpretConfig);
-const { handleDirectPrepare, handleDirectPersist } = createDirectInterpretHandlers(meihuaInterpretConfig);
 
 export async function POST(request: NextRequest) {
   try {
@@ -141,14 +80,6 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      case 'interpret':
-        return handleInterpret(request, body as unknown as Record<string, unknown>);
-
-      case 'interpret_prepare':
-        return handleDirectPrepare(request, body as unknown as Record<string, unknown>);
-
-      case 'interpret_persist':
-        return handleDirectPersist(request, body as unknown as Record<string, unknown>);
 
       default:
         return jsonError(`未知操作: ${String(body.action)}`, 400, { success: false });

@@ -30,6 +30,7 @@ export function ResultHeader({
     onCopy,
     onCopyJson,
     onShare,
+    ask,
     children,
 }: {
     chartId: string | null;
@@ -45,6 +46,8 @@ export function ResultHeader({
     onCopy: () => void;
     onCopyJson?: () => void;
     onShare: () => void;
+    /** 覆盖默认的「问太卜」链接：传入后改为按钮，用于把当前命盘带进 AI 对话。 */
+    ask?: { label: string; onClick: () => void };
     /** 标题区（姓名 + 出生信息），渲染在操作按钮左侧 */
     children?: ReactNode;
 }) {
@@ -111,12 +114,20 @@ export function ResultHeader({
                         )}
                     </button>
                     <AIFeatureGate>
-                        <Link
-                            href={ASK_TAIBU_HREF}
-                            className="inline-flex h-10 items-center rounded-xl bg-accent px-4 text-sm font-medium text-on-accent transition-colors duration-150 hover:bg-accent-hover"
-                        >
-                            问太卜
-                        </Link>
+                        {ask ? (
+                            <button
+                                type="button"
+                                onClick={ask.onClick}
+                                className="inline-flex h-10 items-center rounded-xl bg-accent px-4 text-sm font-medium text-on-accent transition-colors duration-150 hover:bg-accent-hover"
+                            >{ask.label}</button>
+                        ) : (
+                            <Link
+                                href={ASK_TAIBU_HREF}
+                                className="inline-flex h-10 items-center rounded-xl bg-accent px-4 text-sm font-medium text-on-accent transition-colors duration-150 hover:bg-accent-hover"
+                            >
+                                问太卜
+                            </Link>
+                        )}
                     </AIFeatureGate>
                 </div>
             </div>

@@ -2,8 +2,8 @@
  * 梅花易数结果页
  *
  * 标题区以体用关系为题（所问 · 起卦方式 · 时间），桌面端右侧为更多 · 保存 · 问太卜解卦；
- * 干支月令条、本互变三卦、体用推演，底部为解读入口与页内 AI 解读。
- * 'use client'：结果来自 sessionStorage，含自动保存与 AI 流式解读等交互状态。
+ * 干支月令条、本互变三卦、体用推演；解读统一进入 AI 对话。
+ * 'use client'：结果来自 sessionStorage，含自动保存等交互状态。
  */
 'use client';
 
@@ -12,7 +12,6 @@ import Link from 'next/link';
 import { Check, ChevronLeft, Copy, RotateCcw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { ResultMobileActions } from '@/components/bazi/result/ResultHeader';
-import { CanonicalAIEntryCard, CanonicalAIPanel, useCanonicalAI } from '@/components/divination/CanonicalAISection';
 import { ResultHeaderActions } from '@/components/divination/ResultHeaderActions';
 import { useHeaderMenu, useHeaderTitle, type HeaderMenuItem } from '@/components/layout/HeaderMenuContext';
 import { MeihuaChart } from '@/components/meihua/MeihuaChart';
@@ -25,13 +24,14 @@ import { requestBrowserJson } from '@/lib/browser-api';
 import { buildMeihuaCanonicalText, type MeihuaOutput, type MeihuaWebBundle } from '@/lib/divination/meihua';
 import { saveDivinationAction } from '@/lib/divination/save-client';
 import { useSessionMembership } from '@/lib/hooks/useSessionMembership';
+import { AuthModal } from '@/components/auth/AuthModal';
+import { openChatWithResult } from '@/lib/chat/result-handoff';
 
 type MeihuaSession = {
   recordOwnerId?: string | null;
   input?: MeihuaWebBundle['input'];
   resultData?: MeihuaWebBundle;
   divinationId?: string;
-  conversationId?: string;
 };
 
 const MENU_ICON_CLASS = 'h-4 w-4';
@@ -62,35 +62,19 @@ function MeihuaResultContent({ isCurrent }: { isCurrent: () => boolean }) {
   const { userId, sessionLoading } = useSessionMembership();
   const [bundle, setBundle] = useState<MeihuaWebBundle | null>(null);
   const [divinationId, setDivinationId] = useState<string>();
-  const [conversationId, setConversationId] = useState<string>();
   const [isLoading, setIsLoading] = useState(true);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hasAutoSavedRef = useRef(false);
-  const aiAnchorRef = useRef<HTMLDivElement>(null);
 
   const canonicalJson = useMemo(() => bundle?.canonicalJson ?? null, [bundle]);
   const { isAdmin, jsonCopied, copyJson } = useAdminJsonCopy(canonicalJson);
 
-  const persistSessionIds = useCallback((next: { divinationId?: string; conversationId?: string }) => {
+  const persistSessionIds = useCallback((next: { divinationId?: string }) => {
     if (isCurrent()) updateSessionJSON<MeihuaSession>('meihua_result', (previous) => ({ ...(previous || {}), ...next, recordOwnerId: userId }));
   }, [isCurrent, userId]);
-
-  const handleConversationId = useCallback((id: string) => {
-    setConversationId(id);
-    persistSessionIds({ conversationId: id });
-  }, [persistSessionIds]);
-
-  const ai = useCanonicalAI({
-    endpoint: '/api/meihua',
-    resultData: bundle,
-    recordId: divinationId,
-    conversationId,
-    historyType: 'meihua',
-    sessionKey: 'meihua_result',
-    onConversationId: handleConversationId,
-  });
 
   const saveRecord = useCallback(async (nextBundle: MeihuaWebBundle) => {
     setSaving(true);
@@ -138,7 +122,6 @@ function MeihuaResultContent({ isCurrent }: { isCurrent: () => boolean }) {
         if (cancelled || !nextBundle) return;
         setBundle(nextBundle);
         if (session.divinationId) setDivinationId(session.divinationId);
-        if (session.conversationId) setConversationId(session.conversationId);
         // 登录用户自动保存；不阻塞盘面展示，进度体现在「保存」按钮上
         if (!session.divinationId && userId && !hasAutoSavedRef.current) {
           hasAutoSavedRef.current = true;
@@ -188,7 +171,7 @@ function MeihuaResultContent({ isCurrent }: { isCurrent: () => boolean }) {
   const handleSave = async () => {
     if (!bundle || divinationId || saving || sessionLoading) return;
     if (!userId) {
-      ai.requestLogin();
+      setShowAuthModal(true);
       return;
     }
     hasAutoSavedRef.current = true;
@@ -197,11 +180,19 @@ function MeihuaResultContent({ isCurrent }: { isCurrent: () => boolean }) {
     showToast(savedId ? 'success' : 'error', savedId ? '已保存到命理记录' : '保存失败，请重试');
   };
 
-  /** 问太卜解卦：定位到页内解读；尚未解读时直接发起（未登录先登录）。 */
+  /** 问太卜解卦：带上已保存的牌局（如果有）进入 AI 对话，由对话侧接手解读。 */
   const handleAsk = () => {
-    aiAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    if (ai.content || ai.isStreaming) return;
-    ai.start();
+    if (!bundle) return;
+    const question = bundle.result.question?.trim();
+    openChatWithResult(router, {
+      text: `${question ? `我问的是「${question}」。` : ''}请结合这次梅花易数起卦，解读体用关系、外应、方位与应期。`,
+      mentions: divinationId ? [{
+        type: 'meihua_divination',
+        id: divinationId,
+        name: `梅花易数 · ${bundle.canonicalJson.卦盘.本卦.卦名}之${bundle.canonicalJson.卦盘.变卦.卦名}`,
+        preview: question || '梅花易数起卦',
+      }] : [],
+    });
   };
 
   if (isLoading) return <div className="min-h-screen bg-background flex items-center justify-center"><SoundWaveLoader variant="block" text="正在排盘" /></div>;
@@ -219,7 +210,6 @@ function MeihuaResultContent({ isCurrent }: { isCurrent: () => boolean }) {
     disabled: saving || Boolean(divinationId) || sessionLoading,
     onSave: () => { void handleSave(); },
   };
-  const askDisabled = ai.pending || ai.isStreaming;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -238,18 +228,15 @@ function MeihuaResultContent({ isCurrent }: { isCurrent: () => boolean }) {
             <h1 className="hidden font-display text-[1.875rem] font-normal leading-tight lg:block">{relationTitle}</h1>
             <span className={`rounded-md px-2 py-0.5 text-[0.8125rem] lg:hidden ${result.bodyUseRelation.favorable ? 'bg-wood-soft text-success' : 'bg-fire-soft text-danger'}`}>{relationTitle}</span>
           </div>
-          <ResultHeaderActions actions={resultActions} actionsLabel="卦盘操作" save={saveState} ask={{ label: '问太卜解卦', onClick: handleAsk, disabled: askDisabled }} />
+          <ResultHeaderActions actions={resultActions} actionsLabel="卦盘操作" save={saveState} ask={{ label: '问太卜解卦', onClick: handleAsk }} />
         </header>
 
         <MeihuaChart chart={bundle.canonicalJson} showDerived={false} showFacts={false} />
 
-        <div ref={aiAnchorRef} className="flex scroll-mt-20 flex-col empty:hidden">
-          <CanonicalAIEntryCard ai={ai} title="外应、方位与应期线索" description="让太卜结合体用生克与月令旺衰，给出定性判断" actionLabel="开始解读" />
-          <CanonicalAIPanel ai={ai} />
-        </div>
       </div>
 
-      <ResultMobileActions saving={saving} saved={Boolean(divinationId)} saveDisabled={sessionLoading} onSave={saveState.onSave} ask={{ label: '问太卜解卦', onClick: handleAsk, disabled: askDisabled }} />
+      <ResultMobileActions saving={saving} saved={Boolean(divinationId)} saveDisabled={sessionLoading} onSave={saveState.onSave} ask={{ label: '问太卜解卦', onClick: handleAsk }} />
+      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
     </div>
   );
 }

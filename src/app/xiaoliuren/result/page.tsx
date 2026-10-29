@@ -1,9 +1,9 @@
 /**
  * 小六壬结果页
  *
- * 桌面端：标题区（更多操作）+ 起课表单（原地重新起课），左栏掌诀推演，右栏最终落宫、掐数明细与「让太卜结合所问解读」；
- * 移动端：起课摘要卡（重新起课回入口页），保存与解读在底部操作栏。页内 AI 解读位于盘面之后。
- * 'use client'：结果来自 sessionStorage，含自动保存、原地换课与 AI 流式解读等交互状态。
+ * 桌面端：标题区（更多操作）+ 起课表单（原地重新起课），左栏掌诀推演，右栏最终落宫与掐数明细；
+ * 移动端：起课摘要卡（重新起课回入口页），保存与问太卜在底部操作栏；解读统一进入 AI 对话。
+ * 'use client'：结果来自 sessionStorage，含自动保存与原地换课等交互状态。
  */
 'use client';
 
@@ -12,7 +12,6 @@ import { Check, Copy, RotateCcw, Save } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { LUNAR_DAY_NAMES, LUNAR_MONTH_NAMES } from '@/components/bazi/form/options';
 import { ResultMobileActions } from '@/components/bazi/result/ResultHeader';
-import { CanonicalAIPanel, useCanonicalAI } from '@/components/divination/CanonicalAISection';
 import { ResultMoreActions } from '@/components/divination/ResultMoreActions';
 import { useHeaderMenu, type HeaderMenuItem } from '@/components/layout/HeaderMenuContext';
 import { XiaoliurenChart } from '@/components/xiaoliuren/XiaoliurenChart';
@@ -25,8 +24,10 @@ import { useResultIdentity } from '@/lib/hooks/useIdentityGuard';
 import { buildXiaoliurenCanonicalText, type XiaoliurenWebBundle } from '@/lib/divination/xiaoliuren';
 import { saveDivinationAction } from '@/lib/divination/save-client';
 import { useSessionMembership } from '@/lib/hooks/useSessionMembership';
+import { AuthModal } from '@/components/auth/AuthModal';
+import { openChatWithResult } from '@/lib/chat/result-handoff';
 
-type XiaoliurenSession = { resultData?: XiaoliurenWebBundle; divinationId?: string; conversationId?: string; recordOwnerId?: string | null };
+type XiaoliurenSession = { resultData?: XiaoliurenWebBundle; divinationId?: string; recordOwnerId?: string | null };
 type LoadedSession = XiaoliurenSession & { resultData: XiaoliurenWebBundle };
 
 const SESSION_KEY = 'xiaoliuren_result';
@@ -85,38 +86,20 @@ function XiaoliurenResultView({ session: storedSession, onRecalculated, isCurren
   const session = scopeResultSession(storedSession, userId);
   const bundle = session.resultData;
   const [divinationId, setDivinationId] = useState(session.divinationId);
-  const [conversationId, setConversationId] = useState(session.conversationId);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const hasAutoSavedRef = useRef(false);
-  /** 点击解读时面板尚未出现，待其渲染后再滚动定位。 */
-  const scrollToAIPendingRef = useRef(false);
-  const aiAnchorRef = useRef<HTMLDivElement>(null);
   const { isAdmin, jsonCopied, copyJson } = useAdminJsonCopy(bundle.canonicalJson);
 
   /** 只回写仍属于本课的会话：原地换课后，旧课迟到的记录 / 会话 id 不能串到新课上。 */
-  const persistSessionIds = useCallback((next: { divinationId?: string; conversationId?: string }) => {
+  const persistSessionIds = useCallback((next: { divinationId?: string }) => {
     if (!isCurrent()) return;
     updateSessionJSON<XiaoliurenSession>(SESSION_KEY, (previous) => {
       if (previous?.resultData && previous.resultData.canonicalText !== bundle.canonicalText) return previous;
       return { ...scopeResultSession(previous || {}, userId), ...next, recordOwnerId: userId };
     });
   }, [bundle.canonicalText, isCurrent, userId]);
-
-  const handleConversationId = useCallback((id: string) => {
-    setConversationId(id);
-    persistSessionIds({ conversationId: id });
-  }, [persistSessionIds]);
-
-  const ai = useCanonicalAI({
-    endpoint: '/api/xiaoliuren',
-    resultData: bundle,
-    recordId: divinationId,
-    conversationId,
-    historyType: 'xiaoliuren',
-    sessionKey: SESSION_KEY,
-    onConversationId: handleConversationId,
-  });
 
   const saveRecord = useCallback(async () => {
     setSaving(true);
@@ -146,13 +129,6 @@ function XiaoliurenResultView({ session: storedSession, onRecalculated, isCurren
     void run();
   }, [divinationId, saveRecord, sessionLoading, userId]);
 
-  const hasAIOutput = Boolean(ai.content || ai.error || ai.isStreaming);
-  useEffect(() => {
-    if (!scrollToAIPendingRef.current || !hasAIOutput) return;
-    scrollToAIPendingRef.current = false;
-    aiAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [hasAIOutput]);
-
   const handleCopy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(buildXiaoliurenCanonicalText(bundle.result));
@@ -168,7 +144,7 @@ function XiaoliurenResultView({ session: storedSession, onRecalculated, isCurren
   const handleSave = async () => {
     if (divinationId || saving || sessionLoading) return;
     if (!userId) {
-      ai.requestLogin();
+      setShowAuthModal(true);
       return;
     }
     hasAutoSavedRef.current = true;
@@ -177,12 +153,18 @@ function XiaoliurenResultView({ session: storedSession, onRecalculated, isCurren
     showToast(savedId ? 'success' : 'error', savedId ? '已保存到命理记录' : '保存失败，请重试');
   };
 
-  /** 让太卜解读：已有解读则定位过去；否则直接发起（未登录先登录），面板出现后再定位。 */
+  /** 让太卜解读：进入 AI 对话，已保存的课盘会用 mention 一起带过去。 */
   const handleAsk = () => {
-    if (hasAIOutput) aiAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    if (ai.content || ai.isStreaming) return;
-    scrollToAIPendingRef.current = true;
-    ai.start();
+    const question = result.question?.trim();
+    openChatWithResult(router, {
+      text: `${question ? `我问的是「${question}」。` : ''}请结合这次小六壬课盘，解读落宫、掐数过程与应期。`,
+      mentions: divinationId ? [{
+        type: 'xiaoliuren_divination',
+        id: divinationId,
+        name: `小六壬 · ${result.result.name} · ${result.input.shichen}`,
+        preview: question || `${result.result.name}（${result.result.nature}）`,
+      }] : [],
+    });
   };
 
   // 次要操作：桌面端收进标题区「更多」（另含保存，桌面端无底部操作栏），移动端进顶栏三点菜单（另含重新起课）
@@ -205,20 +187,17 @@ function XiaoliurenResultView({ session: storedSession, onRecalculated, isCurren
     return () => clearMenuItems();
   }, [clearMenuItems, copyActions, router, setMenuItems]);
 
-  const askDisabled = ai.pending || ai.isStreaming;
-  const askAction = ai.enabled ? (
+  const askAction = (
     <div className="hidden items-center gap-2 lg:flex">
-      {ai.modelSelector}
       <button
         type="button"
         onClick={handleAsk}
-        disabled={askDisabled}
-        className="h-[46px] min-w-0 flex-1 rounded-xl bg-foreground px-4 text-sm text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+        className="h-[46px] min-w-0 flex-1 rounded-xl bg-foreground px-4 text-sm text-background transition-opacity hover:opacity-90"
       >
         {ASK_LABEL}
       </button>
     </div>
-  ) : null;
+  );
 
   const result = bundle.result;
   return (
@@ -256,9 +235,6 @@ function XiaoliurenResultView({ session: storedSession, onRecalculated, isCurren
 
         <XiaoliurenChart chart={bundle.canonicalJson} action={askAction} />
 
-        <div ref={aiAnchorRef} className="flex scroll-mt-20 flex-col empty:hidden">
-          <CanonicalAIPanel ai={ai} />
-        </div>
       </div>
 
       <ResultMobileActions
@@ -266,8 +242,9 @@ function XiaoliurenResultView({ session: storedSession, onRecalculated, isCurren
         saved={saved}
         saveDisabled={sessionLoading}
         onSave={() => { void handleSave(); }}
-        ask={{ label: ASK_LABEL, onClick: handleAsk, disabled: askDisabled }}
+        ask={{ label: ASK_LABEL, onClick: handleAsk }}
       />
+      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
     </div>
   );
 }

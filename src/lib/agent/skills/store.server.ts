@@ -66,7 +66,7 @@ async function skillRow(trx: Trx, owner: string | null, id: string): Promise<Ski
 
 export async function listSkillRows(db: ScopedDb, owner: string | null): Promise<SkillRow[]> {
   return (await db.tx(async (trx) => withFiles(trx, await skillsOf(trx, owner)
-    .orderBy('sort_order', 'asc').orderBy('created_at', 'asc').execute()))) as unknown as SkillRow[];
+    .orderBy('created_at', 'desc').execute()))) as unknown as SkillRow[];
 }
 
 export async function getSkillDetailRow(db: ScopedDb, owner: string | null, id: string): Promise<(SkillRow & { content: string }) | undefined> {
@@ -100,9 +100,11 @@ export async function readSkillFile(skillId: string, path: string): Promise<stri
     .where('skill_id', '=', skillId).where('path', '=', path).executeTakeFirst()))?.content;
 }
 
+/** Enabled skills only: a retired skill stays stored but does not take an active slot. */
 export async function countSkills(db: ScopedDb, owner: string): Promise<number> {
   const { count } = await db.tx((trx) => trx.selectFrom('agent_skills')
-    .select((eb) => eb.fn.countAll<number>().as('count')).where('owner_id', '=', owner).executeTakeFirstOrThrow());
+    .select((eb) => eb.fn.countAll<number>().as('count'))
+    .where('owner_id', '=', owner).where('is_enabled', '=', true).executeTakeFirstOrThrow());
   return Number(count);
 }
 
@@ -128,9 +130,14 @@ export async function insertSkill(
     return await db.tx(async (trx) => {
       if (owner !== null && options.limit !== undefined) {
         await lockTransactionKey(trx, owner, QUOTA_LOCK);
-        const { count } = await trx.selectFrom('agent_skills').select((eb) => eb.fn.countAll<number>().as('count'))
-          .where('owner_id', '=', owner).executeTakeFirstOrThrow();
-        if (Number(count) >= options.limit) throw new SkillLimitError(`最多添加 ${options.limit} 个技能`);
+        // 额度按启用中的技能计算；新增超出时停用最早添加的技能，让最新的技能生效。
+        const enabled = await trx.selectFrom('agent_skills').select('id')
+          .where('owner_id', '=', owner).where('is_enabled', '=', true)
+          .orderBy('created_at', 'asc').limit(options.limit).execute();
+        if (enabled.length >= options.limit) {
+          const retire = enabled.slice(0, enabled.length - options.limit + 1).map((row) => row.id);
+          await trx.updateTable('agent_skills').set({ is_enabled: false }).where('id', 'in', retire).execute();
+        }
       }
       const { id } = await trx.insertInto('agent_skills').values({
         owner_id: owner, name: fields.document.name, description: fields.document.description, content: fields.document.content,

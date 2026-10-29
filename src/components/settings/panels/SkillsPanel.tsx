@@ -31,17 +31,13 @@ function AllowanceNotice({ allowance }: { allowance?: ExtensionAllowanceView }) 
       </p>
     );
   }
-  if (allowance.used > allowance.limit) {
-    return <p className="mcp-notice">已超出当前会员的数量上限，排序靠后的 {allowance.used - allowance.limit} 个技能暂不会在任务中使用。</p>;
+  if (allowance.limit > 0 && allowance.used >= allowance.limit) {
+    return <p className="mcp-notice">已启用 {allowance.used} / {allowance.limit} 个技能；新增会自动停用最早添加的一个。</p>;
   }
-  return (
-    <p className="mcp-notice">
-      技能按 pi 的 SKILL.md 格式编写：开头写名称和描述，正文写做法，参考资料可以作为附属文件一起上传。Agent 在相关任务中按描述自动加载，也可以在 Agent 模式的输入框用 /skill:名称 直接调用。
-    </p>
-  );
+  return null;
 }
 
-const canAdd = ({ allowance }: SkillListing) => !!allowance && allowance.enabled && allowance.tierAllowed && allowance.used < allowance.limit;
+const canAdd = ({ allowance }: SkillListing) => !!allowance && allowance.enabled && allowance.tierAllowed && allowance.limit > 0;
 
 export default function SkillsPanel() {
   const { user, loading } = useSessionSafe();
@@ -56,7 +52,7 @@ export default function SkillsPanel() {
       userId={user.id}
       canAdd={canAdd}
       notice={listing => <AllowanceNotice allowance={listing.allowance} />}
-      empty={{ title: '还没有技能', detail: '粘贴一份 SKILL.md，或上传包含 SKILL.md 的文件夹。' }}
+      empty={{ title: '还没有技能', detail: '上传一个包含 SKILL.md 的文件夹。' }}
     />
   );
 }

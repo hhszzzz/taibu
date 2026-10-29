@@ -11,13 +11,14 @@
 import { useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Plus, Trash2, Undo2, X } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
-import { SettingsSwitch } from '@/components/settings/SettingsControls';
+import { SettingsSelect } from '@/components/settings/SettingsSelect';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import {
-  MCP_EXPOSURES, MCP_EXPOSURE_HINTS, MCP_EXPOSURE_LABELS, MCP_RESULT_CHARS_RANGE, MCP_TIMEOUT_RANGE,
+  MCP_EXPOSURES, MCP_EXPOSURE_HINTS, MCP_EXPOSURE_LABELS, MCP_RESULT_CHARS_RANGE, MCP_SERVER_NAME_PATTERN, MCP_TIMEOUT_RANGE,
   MEMBERSHIP_TIERS, MEMBERSHIP_TIER_LABELS, USER_MCP_EXPOSURES,
   type McpExposure, type McpServerInput, type McpServerView,
 } from '@/lib/agent/mcp/config';
+import { MCP_PUBLIC_URL } from '@/lib/mcp-service-config';
 import type { McpServerScope } from '@/lib/agent/mcp/client';
 import type { MembershipType } from '@/lib/user/membership';
 
@@ -51,7 +52,7 @@ let rowKey = 0;
 const nextKey = () => ++rowKey;
 const stored = (name: string): Secret => ({ key: nextKey(), name, stored: true, value: '', removed: false });
 
-function draftOf(seed: McpEditorSeed): Draft {
+function draftOf(seed: McpEditorSeed, scope: McpServerScope): Draft {
   if ('server' in seed) {
     const server = seed.server;
     return {
@@ -71,7 +72,10 @@ function draftOf(seed: McpEditorSeed): Draft {
     exposure: input.exposure ?? 'deferred', requiredTier: input.requiredTier ?? 'free',
     searchTool: input.searchTool ?? '', fetchTool: input.fetchTool ?? '',
     routePriority: String(input.routePriority ?? 100), headers: [],
-    secretHeaders: secretHeader ? [{ key: nextKey(), name: secretHeader.name, stored: false, value: '', removed: false, placeholder: secretHeader.placeholder }] : [],
+    // 用户连接器默认给一行空白密钥，填了再保存；平台服务沿用模板。
+    secretHeaders: secretHeader
+      ? [{ key: nextKey(), name: secretHeader.name, stored: false, value: '', removed: false, placeholder: secretHeader.placeholder }]
+      : scope === 'user' ? [{ key: nextKey(), name: '', stored: false, value: '', removed: false }] : [],
     secretQuery: [],
     timeoutSeconds: String(MCP_TIMEOUT_RANGE.default / 1000), maxResultChars: String(MCP_RESULT_CHARS_RANGE.default),
     sortOrder: '0', enabled: input.enabled ?? true,
@@ -102,13 +106,30 @@ function secretChanges(list: Secret[], label: string) {
   return changes;
 }
 
+function autoName(source: string) {
+  const base = source.toLowerCase().replace(/^https?:\/\//u, '').replace(/[^a-z0-9]+/gu, '_').replace(/^_+|_+$/gu, '').slice(0, 24);
+  return `mcp_${base || crypto.randomUUID().slice(0, 6)}`.slice(0, 31);
+}
+
+function isTaibuMcpUrl(value: string) {
+  try {
+    const target = new URL(value.trim());
+    const self = new URL(MCP_PUBLIC_URL);
+    return target.host === self.host && target.pathname.replace(/\/+$/u, '') === self.pathname.replace(/\/+$/u, '');
+  } catch {
+    return false;
+  }
+}
+
 function payloadOf(draft: Draft, scope: McpServerScope): McpServerInput {
   const seconds = Number(draft.timeoutSeconds.trim());
   const timeoutMs = Math.round(seconds * 1000);
   if (!draft.timeoutSeconds.trim() || !Number.isFinite(seconds) || timeoutMs < MCP_TIMEOUT_RANGE.min || timeoutMs > MCP_TIMEOUT_RANGE.max)
     throw new Error(`超时须为 ${MCP_TIMEOUT_RANGE.min / 1000}–${MCP_TIMEOUT_RANGE.max / 1000} 秒`);
+  const name = draft.name.trim() || (scope === 'user' ? autoName(draft.url || draft.displayName) : '');
+  if (!MCP_SERVER_NAME_PATTERN.test(name)) throw new Error('标识须以小写字母开头，只能使用小写字母、数字和下划线');
   return {
-    name: draft.name.trim(), displayName: draft.displayName.trim(), description: draft.description.trim(), url: draft.url.trim(),
+    name, displayName: draft.displayName.trim(), description: draft.description.trim(), url: draft.url.trim(),
     headers: Object.fromEntries(draft.headers.filter(pair => pair.name.trim()).map(pair => [pair.name.trim(), pair.value])),
     secretHeaders: secretChanges(draft.secretHeaders, '密钥请求头'),
     secretQuery: secretChanges(draft.secretQuery, '密钥查询参数'),
@@ -190,13 +211,14 @@ export function McpServerEditor({ scope, seed, onClose, onSubmit }: {
   const [error, setError] = useState<string | null>(null);
   // A new seed (opening the dialog) starts a fresh draft; closing keeps the last one for the exit animation.
   if (seed && seed !== state.seed) {
-    setState({ seed, draft: draftOf(seed) });
+    setState({ seed, draft: draftOf(seed, scope) });
     setError(null);
   }
   const draft = state.draft;
   const editing = state.seed && 'server' in state.seed ? state.seed.server : null;
   const tools = editing?.snapshot?.tools ?? [];
   const exposures: readonly McpExposure[] = scope === 'platform' ? MCP_EXPOSURES : USER_MCP_EXPOSURES;
+  const selfHosted = scope === 'user' && isTaibuMcpUrl(draft?.url ?? '');
   const set = (patch: Partial<Draft>) => setState(current => current.draft ? { ...current, draft: { ...current.draft, ...patch } } : current);
 
   const submit = async (event: FormEvent) => {
@@ -232,40 +254,39 @@ export function McpServerEditor({ scope, seed, onClose, onSubmit }: {
           </div>
           <div className="mcp-editor-body">
             <div className="mcp-fields">
-              <Field label="名称" hint="显示在设置页和工具卡片上。">
+              <Field label="名称" wide hint="显示在设置页和工具卡片上。">
                 {props => <input {...props} ref={firstField} className="settings-input" value={draft.displayName} maxLength={40} required onChange={event => set({ displayName: event.target.value })} />}
               </Field>
-              <Field label="标识" hint={editing ? '用于工具名前缀；修改后工具名随之改变。' : '用于工具名前缀，如 notion、my_search。'}>
-                {props => <input {...props} className="settings-input" value={draft.name} maxLength={31} required spellCheck={false} autoComplete="off"
-                  pattern="[a-z][a-z0-9_]{1,30}" onChange={event => set({ name: event.target.value.toLowerCase() })} />}
-              </Field>
+              {scope === 'platform' ? (
+                <Field label="标识" hint={editing ? '用于工具名前缀；修改后工具名随之改变。' : '用于工具名前缀，如 notion、my_search。'}>
+                  {props => <input {...props} className="settings-input" value={draft.name} maxLength={31} required spellCheck={false} autoComplete="off"
+                    pattern="[a-z][a-z0-9_]{1,30}" onChange={event => set({ name: event.target.value.toLowerCase() })} />}
+                </Field>
+              ) : null}
               <Field label="服务地址" wide hint="Streamable HTTP 的公开 HTTPS 地址；不含密钥的查询参数可以直接写在地址里。">
                 {props => <input {...props} className="settings-input" type="url" inputMode="url" value={draft.url} required spellCheck={false} autoComplete="off"
                   placeholder="https://example.com/mcp" onChange={event => set({ url: event.target.value })} />}
               </Field>
+              {selfHosted ? <p className="mcp-notice is-wide" role="status">太卜已经有这个 MCP 了，不需要重复导入；可以直接在「Taibu MCP」页复制配置。</p> : null}
               <Field label="用途说明" wide hint={scope === 'platform' ? '写给模型看：这个服务能做什么、什么时候用。' : '写给 Agent 看：什么时候该用这个连接器。'}>
                 {props => <textarea {...props} className="settings-textarea" rows={3} maxLength={2000} value={draft.description} onChange={event => set({ description: event.target.value })} />}
               </Field>
-              <Field label="工具提供方式" wide hint={MCP_EXPOSURE_HINTS[draft.exposure]}>
-                {props => (
-                  <select {...props} className="settings-select" value={draft.exposure} onChange={event => set({ exposure: event.target.value as McpExposure })}>
-                    {exposures.map(exposure => <option key={exposure} value={exposure}>{MCP_EXPOSURE_LABELS[exposure]}</option>)}
-                  </select>
-                )}
-              </Field>
               {scope === 'platform' ? (
-                <Field label="会员等级" hint="达到这一等级的用户才能使用。">
+                <Field label="工具提供方式" wide hint={MCP_EXPOSURE_HINTS[draft.exposure]}>
                   {props => (
-                    <select {...props} className="settings-select" value={draft.requiredTier} onChange={event => set({ requiredTier: event.target.value as MembershipType })}>
-                      {MEMBERSHIP_TIERS.map(tier => <option key={tier} value={tier}>{MEMBERSHIP_TIER_LABELS[tier]} 及以上</option>)}
-                    </select>
+                    <SettingsSelect ariaLabel="工具提供方式" id={props.id} value={draft.exposure}
+                      onChange={exposure => set({ exposure })} options={exposures.map(exposure => ({ value: exposure, label: MCP_EXPOSURE_LABELS[exposure] }))} />
                   )}
                 </Field>
               ) : null}
-              <div className="settings-field">
-                <span className="settings-label" aria-hidden="true">启用</span>
-                <SettingsSwitch label={`启用这个${scope === 'platform' ? '服务' : '连接器'}`} checked={draft.enabled} onToggle={() => set({ enabled: !draft.enabled })} />
-              </div>
+              {scope === 'platform' ? (
+                <Field label="会员等级" hint="达到这一等级的用户才能使用。">
+                  {props => (
+                    <SettingsSelect ariaLabel="会员等级" id={props.id} value={draft.requiredTier}
+                      onChange={requiredTier => set({ requiredTier })} options={MEMBERSHIP_TIERS.map(tier => ({ value: tier, label: `${MEMBERSHIP_TIER_LABELS[tier]} 及以上` }))} />
+                  )}
+                </Field>
+              ) : null}
             </div>
 
             {scope === 'platform' ? (
@@ -282,10 +303,14 @@ export function McpServerEditor({ scope, seed, onClose, onSubmit }: {
             ) : null}
 
             <SecretRows label="密钥请求头" kind="header" list={draft.secretHeaders} onChange={secretHeaders => set({ secretHeaders })} />
-            <SecretRows label="密钥查询参数" kind="query" list={draft.secretQuery} onChange={secretQuery => set({ secretQuery })} />
-            <p className="mcp-hint">密钥加密保存，保存后不再显示；调用时才附加到请求上。</p>
+            {scope === 'platform' ? (
+              <>
+                <SecretRows label="密钥查询参数" kind="query" list={draft.secretQuery} onChange={secretQuery => set({ secretQuery })} />
+                <p className="mcp-hint">密钥加密保存，保存后不再显示；调用时才附加到请求上。</p>
+              </>
+            ) : <p className="mcp-hint">密钥加密保存，保存后不再显示。</p>}
 
-            <details className="mcp-advanced">
+            {scope === 'platform' ? <details className="mcp-advanced">
               <summary>高级设置</summary>
               <div className="mcp-advanced-body">
                 <fieldset className="mcp-group">
@@ -308,15 +333,15 @@ export function McpServerEditor({ scope, seed, onClose, onSubmit }: {
                 <div className="mcp-fields">
                   <Field label="超时（秒）">{props => <input {...props} className="settings-input" inputMode="numeric" value={draft.timeoutSeconds} onChange={event => set({ timeoutSeconds: event.target.value })} />}</Field>
                   <Field label="结果字数上限" hint="超出时保留首尾、省略中间。">{props => <input {...props} className="settings-input" inputMode="numeric" value={draft.maxResultChars} onChange={event => set({ maxResultChars: event.target.value })} />}</Field>
-                  <Field label="排序" hint={scope === 'user' ? '小的在前；超出数量上限时，靠后的暂不使用。' : '小的在前。'}>{props => <input {...props} className="settings-input" inputMode="numeric" value={draft.sortOrder} onChange={event => set({ sortOrder: event.target.value })} />}</Field>
+                  <Field label="排序" hint="小的在前。">{props => <input {...props} className="settings-input" inputMode="numeric" value={draft.sortOrder} onChange={event => set({ sortOrder: event.target.value })} />}</Field>
                 </div>
               </div>
-            </details>
+            </details> : null}
           </div>
           <div className="mcp-editor-foot">
             {error ? <p role="alert">{error}</p> : null}
             <button type="button" className="settings-button" disabled={saving} onClick={onClose}>取消</button>
-            <button type="submit" className="settings-button settings-button-primary" disabled={saving}>
+            <button type="submit" className="settings-button settings-button-primary" disabled={saving || selfHosted}>
               {saving ? <SoundWaveLoader variant="inline" /> : null}{editing ? '保存' : '添加并测试'}
             </button>
           </div>

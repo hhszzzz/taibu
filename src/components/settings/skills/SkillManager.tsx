@@ -44,7 +44,6 @@ export function SkillManager({ scope, userId, notice, canAdd = true, empty, onCh
   const [state, setState] = useState<ListState>({ status: 'loading' });
   const [reload, setReload] = useState(0);
   const [editor, setEditor] = useState<SkillEditorSeed | null>(null);
-  const [opening, setOpening] = useState<string | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<SkillView | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -65,18 +64,8 @@ export function SkillManager({ scope, userId, notice, canAdd = true, empty, onCh
     ? { ...current, skills: current.skills.map(item => item.id === skill.id ? skill : item) } : current);
   const counted = (delta: number) => (listing: SkillListing) => listing.allowance
     ? { ...listing.allowance, used: Math.max(listing.allowance.used + delta, 0) } : undefined;
-
-  // The editor needs SKILL.md, which the list leaves out.
-  const edit = async (skill: SkillView) => {
-    setOpening(skill.id);
-    try {
-      setEditor({ skill: await client.detail(skill.id) });
-    } catch (error) {
-      showToast('error', error instanceof Error ? error.message : '读取技能失败');
-    } finally {
-      setOpening(null);
-    }
-  };
+  const adjustAllowance = (delta: number) => setState(current => current.status === 'ready' && current.allowance
+    ? { ...current, allowance: { ...current.allowance, used: Math.max(current.allowance.used + delta, 0) } } : current);
 
   const submit = async (input: SkillInput) => {
     if (editor?.skill) {
@@ -85,9 +74,8 @@ export function SkillManager({ scope, userId, notice, canAdd = true, empty, onCh
       showToast('success', `已保存「${saved.name}」`);
     } else {
       const created = await client.create(input);
-      setState(current => current.status === 'ready'
-        ? { ...current, skills: [...current.skills, created], allowance: counted(1)(current) } : current);
       showToast('success', `已添加「${created.name}」`);
+      setReload(value => value + 1);
     }
     setEditor(null);
     onChanged?.();
@@ -96,7 +84,9 @@ export function SkillManager({ scope, userId, notice, canAdd = true, empty, onCh
   const toggle = async (skill: SkillView) => {
     setToggling(skill.id);
     try {
-      replace(await client.update(skill.id, { enabled: !skill.enabled }));
+      const saved = await client.update(skill.id, { enabled: !skill.enabled });
+      replace(saved);
+      adjustAllowance(saved.enabled ? 1 : -1);
       onChanged?.();
     } catch (error) {
       showToast('error', error instanceof Error ? error.message : '保存失败');
@@ -112,7 +102,7 @@ export function SkillManager({ scope, userId, notice, canAdd = true, empty, onCh
       await client.remove(pendingDelete.id);
       const removed = pendingDelete.id;
       setState(current => current.status === 'ready'
-        ? { ...current, skills: current.skills.filter(skill => skill.id !== removed), allowance: counted(-1)(current) } : current);
+        ? { ...current, skills: current.skills.filter(skill => skill.id !== removed), allowance: counted(pendingDelete.enabled ? -1 : 0)(current) } : current);
       setPendingDelete(null);
       showToast('success', `已删除「${pendingDelete.name}」`);
       onChanged?.();
@@ -140,7 +130,7 @@ export function SkillManager({ scope, userId, notice, canAdd = true, empty, onCh
     <div className="flex flex-col gap-4">
       {notice?.(state)}
       <div className="mcp-toolbar">
-        <p>{scope === 'user' && state.allowance && state.allowance.limit > 0 ? `已添加 ${state.allowance.used} / ${state.allowance.limit} 个技能` : `共 ${skills.length} 个技能`}</p>
+        <p>{scope === 'user' && state.allowance && state.allowance.limit > 0 ? `已启用 ${state.allowance.used} / ${state.allowance.limit} 个技能` : `共 ${skills.length} 个技能`}</p>
         <button type="button" className="settings-button settings-button-primary" disabled={!addable} onClick={() => setEditor({ skill: null })}>
           <Plus size={14} aria-hidden="true" />添加技能
         </button>
@@ -164,9 +154,9 @@ export function SkillManager({ scope, userId, notice, canAdd = true, empty, onCh
                 <div className="mcp-actions">
                   <SettingsSwitch label={`启用「${skill.name}」`} checked={skill.enabled} disabled={toggling === skill.id}
                     onToggle={() => { void toggle(skill); }} />
-                  <button type="button" className="settings-icon-button" aria-label={`编辑「${skill.name}」`} title="编辑"
-                    disabled={opening === skill.id} onClick={() => { void edit(skill); }}>
-                    {opening === skill.id ? <SoundWaveLoader variant="inline" /> : <Pencil size={16} aria-hidden="true" />}
+                  <button type="button" className="settings-icon-button" aria-label={`替换「${skill.name}」`} title="重新上传"
+                    onClick={() => setEditor({ skill })}>
+                    <Pencil size={16} aria-hidden="true" />
                   </button>
                   <button type="button" className="settings-icon-button settings-icon-button-danger" aria-label={`删除「${skill.name}」`} title="删除"
                     disabled={deleting} onClick={() => setPendingDelete(skill)}>

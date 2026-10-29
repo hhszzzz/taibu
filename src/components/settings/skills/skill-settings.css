@@ -3,11 +3,8 @@
 .settings-list-item-text .skill-description { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: .8125rem; line-height: 1.6; color: var(--foreground-secondary); }
 .skill-name { font-family: var(--font-mono); font-size: .875rem; }
 
-.app-modal.skill-editor { width: min(720px, calc(100vw - 32px)); }
-.skill-editor-sources { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
-.skill-editor .settings-textarea.skill-document { min-height: 16rem; font-family: var(--font-mono); font-size: .8125rem; line-height: 1.6; resize: vertical; }
-.skill-files { display: flex; flex-direction: column; max-height: 14rem; overflow: auto; border: 1px solid var(--border); border-radius: .5rem; }
-.skill-files li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: .5rem; padding: .25rem .25rem .25rem .75rem; border-top: 1px solid var(--fill-field); }
-.skill-files li:first-child { border-top: 0; }
-.skill-files code { overflow: hidden; font-size: .8125rem; text-overflow: ellipsis; white-space: nowrap; }
-.skill-files span { font-size: .75rem; color: var(--foreground-tertiary); white-space: nowrap; }
+.app-modal.skill-editor { width: min(560px, calc(100vw - 32px)); }
+.skill-upload { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+.skill-upload-summary { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .5rem 1rem; margin: 0; padding: .875rem 1rem; border: 1px solid var(--border); border-radius: .75rem; background: var(--surface); font-size: .8125rem; line-height: 1.55; }
+.skill-upload-summary dt { color: var(--foreground-tertiary); }
+.skill-upload-summary dd { margin: 0; overflow-wrap: anywhere; color: var(--foreground); }

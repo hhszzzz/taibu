@@ -87,6 +87,8 @@ export function McpServerManager({ scope, userId, notice, canAdd = true, addLabe
     ? { ...current, servers: current.servers.map(item => item.id === server.id ? server : item) } : current);
   const counted = (delta: number) => (listing: McpServerListing) => listing.allowance
     ? { ...listing.allowance, used: Math.max(listing.allowance.used + delta, 0) } : undefined;
+  const adjustAllowance = (delta: number) => setState(current => current.status === 'ready' && current.allowance
+    ? { ...current, allowance: { ...current.allowance, used: Math.max(current.allowance.used + delta, 0) } } : current);
 
   const test = async (server: McpServerView) => {
     setTesting(current => new Set(current).add(server.id));
@@ -114,9 +116,8 @@ export function McpServerManager({ scope, userId, notice, canAdd = true, addLabe
       showToast('success', '已保存');
     } else {
       const created = await client.create(input);
-      setState(current => current.status === 'ready'
-        ? { ...current, servers: [...current.servers, created], allowance: counted(1)(current) } : current);
       setEditor(null);
+      setReload(value => value + 1);
       void test(created);
     }
     onChanged?.();
@@ -125,7 +126,9 @@ export function McpServerManager({ scope, userId, notice, canAdd = true, addLabe
   const toggle = async (server: McpServerView) => {
     setToggling(server.id);
     try {
-      replace(await client.update(server.id, { enabled: !server.enabled }));
+      const saved = await client.update(server.id, { enabled: !server.enabled });
+      replace(saved);
+      adjustAllowance(saved.enabled ? 1 : -1);
       onChanged?.();
     } catch (error) {
       showToast('error', error instanceof Error ? error.message : '保存失败');
@@ -150,7 +153,7 @@ export function McpServerManager({ scope, userId, notice, canAdd = true, addLabe
       await client.remove(pendingDelete.id);
       const removed = pendingDelete.id;
       setState(current => current.status === 'ready'
-        ? { ...current, servers: current.servers.filter(server => server.id !== removed), allowance: counted(-1)(current) } : current);
+        ? { ...current, servers: current.servers.filter(server => server.id !== removed), allowance: counted(pendingDelete.enabled ? -1 : 0)(current) } : current);
       setPendingDelete(null);
       showToast('success', `已删除「${pendingDelete.displayName}」`);
       onChanged?.();
@@ -179,7 +182,7 @@ export function McpServerManager({ scope, userId, notice, canAdd = true, addLabe
     <div className="flex flex-col gap-4">
       {notice?.(state)}
       <div className="mcp-toolbar">
-        <p>{scope === 'platform' ? `共 ${servers.length} 个服务` : state.allowance && state.allowance.limit > 0 ? `已添加 ${state.allowance.used} / ${state.allowance.limit} 个连接器` : `共 ${servers.length} 个连接器`}</p>
+        <p>{scope === 'platform' ? `共 ${servers.length} 个服务` : state.allowance && state.allowance.limit > 0 ? `已启用 ${state.allowance.used} / ${state.allowance.limit} 个连接器` : `共 ${servers.length} 个连接器`}</p>
         <div className="settings-actions">
           {scope === 'platform' ? Object.entries(MCP_SERVER_TEMPLATES).map(([key, template]) => (
             <button key={key} type="button" className="settings-button" disabled={!addable}

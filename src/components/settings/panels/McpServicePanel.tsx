@@ -91,7 +91,7 @@ export default function McpServicePanel() {
           <div role="alert" className="settings-alert">{error}</div>
         ) : null}
 
-        <SettingsTabs label="MCP 接入方式" idPrefix={TAB_ID_PREFIX} tabs={CONNECTION_TABS} value={mode} onChange={setMode} />
+        <SettingsTabs label="Taibu MCP 接入方式" idPrefix={TAB_ID_PREFIX} tabs={CONNECTION_TABS} value={mode} onChange={setMode} />
 
         {mode === 'remote' ? (
           <section id={getSettingsTabPanelId(TAB_ID_PREFIX, 'remote')} role="tabpanel" aria-labelledby={getSettingsTabId(TAB_ID_PREFIX, 'remote')} className="flex flex-col gap-4">

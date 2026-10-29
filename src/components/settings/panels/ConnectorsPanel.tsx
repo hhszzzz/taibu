@@ -31,13 +31,13 @@ function AllowanceNotice({ allowance }: { allowance?: ExtensionAllowanceView }) 
       </p>
     );
   }
-  if (allowance.used > allowance.limit) {
-    return <p className="mcp-notice">已超出当前会员的数量上限，排序靠后的 {allowance.used - allowance.limit} 个连接器暂不会在任务中使用。</p>;
+  if (allowance.limit > 0 && allowance.used >= allowance.limit) {
+    return <p className="mcp-notice">已启用 {allowance.used} / {allowance.limit} 个连接器；新增会自动停用最早添加的一个。</p>;
   }
-  return <p className="mcp-notice">连接器只对你自己生效，在开启联网的 Agent 任务中使用。外部服务返回的内容会作为资料交给 Agent，不会改变它的指令。</p>;
+  return null;
 }
 
-const canAdd = ({ allowance }: McpServerListing) => !!allowance && allowance.enabled && allowance.tierAllowed && allowance.used < allowance.limit;
+const canAdd = ({ allowance }: McpServerListing) => !!allowance && allowance.enabled && allowance.tierAllowed && allowance.limit > 0;
 
 export default function ConnectorsPanel() {
   const { user, loading } = useSessionSafe();

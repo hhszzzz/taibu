@@ -55,7 +55,7 @@ export async function listMcpServerRows(db: ScopedDb, owner: string | null): Pro
   return rows(await db.tx((trx) => {
     const query = trx.selectFrom('agent_mcp_servers').selectAll();
     return (owner === null ? query.where('owner_id', 'is', null) : query.where('owner_id', '=', owner))
-      .orderBy('sort_order', 'asc').orderBy('created_at', 'asc').execute();
+      .orderBy('created_at', 'desc').execute();
   }));
 }
 
@@ -114,9 +114,14 @@ export async function insertMcpServer(
     return (await db.tx(async (trx) => {
       if (owner !== null && options.limit !== undefined) {
         await lockTransactionKey(trx, owner, QUOTA_LOCK);
-        const { count } = await trx.selectFrom('agent_mcp_servers').select((eb) => eb.fn.countAll<number>().as('count'))
-          .where('owner_id', '=', owner).executeTakeFirstOrThrow();
-        if (Number(count) >= options.limit) throw new McpLimitError(`最多添加 ${options.limit} 个连接器`);
+        // 额度按启用中的连接器计算；新增超出时停用最早添加的连接器。
+        const enabled = await trx.selectFrom('agent_mcp_servers').select('id')
+          .where('owner_id', '=', owner).where('is_enabled', '=', true)
+          .orderBy('created_at', 'asc').limit(options.limit).execute();
+        if (enabled.length >= options.limit) {
+          const retire = enabled.slice(0, enabled.length - options.limit + 1).map((row) => row.id);
+          await trx.updateTable('agent_mcp_servers').set({ is_enabled: false }).where('id', 'in', retire).execute();
+        }
       }
       return trx.insertInto('agent_mcp_servers').values({
         id, owner_id: owner, name: fields.name, display_name: fields.displayName, description: fields.description ?? '',
@@ -200,9 +205,11 @@ export async function recordMcpServerCheck(
   })) as unknown as McpServerRow | undefined;
 }
 
+/** Enabled connectors only: a retired connector stays stored but does not take an active slot. */
 export async function countMcpServers(db: ScopedDb, owner: string): Promise<number> {
   const { count } = await db.tx((trx) => trx.selectFrom('agent_mcp_servers')
-    .select((eb) => eb.fn.countAll<number>().as('count')).where('owner_id', '=', owner).executeTakeFirstOrThrow());
+    .select((eb) => eb.fn.countAll<number>().as('count'))
+    .where('owner_id', '=', owner).where('is_enabled', '=', true).executeTakeFirstOrThrow());
   return Number(count);
 }
 

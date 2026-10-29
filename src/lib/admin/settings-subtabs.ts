@@ -1,0 +1,52 @@
+import type { SettingsCenterTab } from '@/lib/settings-center';
+
+/**
+ * 管理端分类的子页。设置页路由、侧栏导航与各管理面板共用这一份定义，
+ * 避免界面新增子页后路由白名单没有跟上而 404。
+ */
+export const ADMIN_SUBTABS = {
+  'admin-features': [
+    { id: 'toggles', label: '功能开关' },
+    { id: 'keys', label: '激活码' },
+  ],
+  'admin-ai-services': [
+    { id: 'models', label: '模型管理' },
+    { id: 'gateways', label: '网关管理' },
+    { id: 'agent-tasks', label: 'Agent 任务' },
+    { id: 'agent-evals', label: 'Agent 测评' },
+  ],
+  'admin-agent-extensions': [
+    { id: 'mcp', label: 'MCP 服务' },
+    { id: 'skills', label: '技能' },
+    { id: 'profiles', label: '角色' },
+    { id: 'policy', label: '用户扩展' },
+    { id: 'schedules', label: '定时任务' },
+  ],
+} as const;
+
+export type AdminSubtabOwner = keyof typeof ADMIN_SUBTABS;
+export type AdminSubTabOption<T extends AdminSubtabOwner> = (typeof ADMIN_SUBTABS)[T][number];
+export type AdminSubTabId<T extends AdminSubtabOwner> = AdminSubTabOption<T>['id'];
+
+const ADMIN_SUBTAB_OWNERS = Object.keys(ADMIN_SUBTABS) as AdminSubtabOwner[];
+
+export function isAdminSubtabOwner(tab: SettingsCenterTab | null | undefined): tab is AdminSubtabOwner {
+  return !!tab && (ADMIN_SUBTAB_OWNERS as string[]).includes(tab);
+}
+
+export function getAdminSubTabs<T extends AdminSubtabOwner>(owner: T): typeof ADMIN_SUBTABS[T] {
+  return ADMIN_SUBTABS[owner];
+}
+
+/** 该子路径是否属于这个管理分类；非管理分类一律 false。 */
+export function isAdminSubTab(tab: SettingsCenterTab | null | undefined, subpath: string | null | undefined): boolean {
+  if (!isAdminSubtabOwner(tab) || !subpath) return false;
+  return (ADMIN_SUBTABS[tab] as readonly { id: string }[]).some(item => item.id === subpath);
+}
+
+/** 路由里缺失或写错子页时回落到第一个子页。 */
+export function resolveAdminSubTab<T extends AdminSubtabOwner>(owner: T, subpath: string | null | undefined): AdminSubTabId<T> {
+  return ((ADMIN_SUBTABS[owner] as readonly { id: string }[]).some(item => item.id === subpath)
+    ? subpath
+    : ADMIN_SUBTABS[owner][0].id) as AdminSubTabId<T>;
+}

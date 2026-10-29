@@ -1,17 +1,17 @@
 import { notFound, redirect } from 'next/navigation';
 import { isSettingsCenterTab } from '@/lib/settings-center';
+import { isAdminSubtabOwner, isAdminSubTab, resolveAdminSubTab } from '@/lib/admin/settings-subtabs';
 
 export default async function SettingsPage({ params }: { params: Promise<{ section?: string[] }> }) {
   const { section } = await params;
   if (!section?.length) redirect('/settings/general');
   const [tab, subpath, ...extra] = section;
-  if (tab === 'admin-features' && !subpath) redirect('/settings/admin-features/toggles');
-  if (tab === 'admin-ai-services' && !subpath) redirect('/settings/admin-ai-services/models');
-  if (tab === 'admin-agent-extensions' && !subpath) redirect('/settings/admin-agent-extensions/mcp');
-  if (!isSettingsCenterTab(tab) || extra.length || (subpath && !(
-    (tab === 'admin-features' && ['toggles', 'keys'].includes(subpath)) ||
-    (tab === 'admin-ai-services' && ['models', 'gateways', 'agent-tasks', 'agent-evals'].includes(subpath)) ||
-    (tab === 'admin-agent-extensions' && ['mcp', 'policy'].includes(subpath))
-  ))) notFound();
+  if (!isSettingsCenterTab(tab) || extra.length) notFound();
+  if (isAdminSubtabOwner(tab)) {
+    if (!subpath) redirect(`/settings/${tab}/${resolveAdminSubTab(tab, null)}`);
+    if (!isAdminSubTab(tab, subpath)) notFound();
+  } else if (subpath) {
+    notFound();
+  }
   return null;
 }

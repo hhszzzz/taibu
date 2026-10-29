@@ -20,6 +20,7 @@ import {
   closeSettingsCenter,
 } from '../lib/settings-center';
 import { DEFAULT_MOBILE_DRAWER_ORDER, DEFAULT_TOOL_ORDER } from '../lib/user/settings';
+import { ADMIN_SUBTABS, isAdminSubTab, isAdminSubtabOwner, resolveAdminSubTab } from '../lib/admin/settings-subtabs';
 
 // These tests exercise real navigation data, not vendor SVG rendering. Isolate
 // Phosphor's browser/ESM entry from the existing CommonJS node:test loader.
@@ -256,4 +257,17 @@ test('header uses canonical settings labels and legal-page back fallback', () =>
   assert.equal(headerSource.includes("isAdminSettingsCenterTab(activeSettingsTab)"), true);
   assert.equal(announcementHostSource.includes("useActiveSettingsCenterTab"), true);
   assert.equal(announcementHostSource.includes("isAdminSettingsCenterTab(activeSettingsTab)"), true);
+});
+
+
+test('every admin subtab the sidebar offers is accepted by the settings route', () => {
+  for (const tab of Object.keys(ADMIN_SUBTABS) as Array<keyof typeof ADMIN_SUBTABS>) {
+    assert.equal(isAdminSubtabOwner(tab), true);
+    for (const option of ADMIN_SUBTABS[tab]) {
+      assert.equal(isAdminSubTab(tab, option.id), true, `${tab}/${option.id} is routable`);
+    }
+    assert.equal(isAdminSubTab(tab, 'not-a-subtab'), false);
+    assert.equal(resolveAdminSubTab(tab, null), ADMIN_SUBTABS[tab][0].id);
+  }
+  assert.equal(isAdminSubTab('general', 'models'), false);
 });

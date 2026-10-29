@@ -1,5 +1,6 @@
 'use client';
 
+import { BetaBadge } from '@/components/ui/BetaBadge';
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import type { ComponentType, ReactElement } from 'react';
 import Link from 'next/link';
@@ -14,7 +15,7 @@ import {
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { useCurrentUserProfile } from '@/lib/hooks/useCurrentUserProfile';
-import { useActiveSettingsCenterTab } from '@/lib/hooks/useSettingsCenterRouteState';
+import { useActiveSettingsCenterTab, useSettingsCenterSubpath } from '@/lib/hooks/useSettingsCenterRouteState';
 import {
   getSettingsCenterDisabledState,
   getSettingsCenterTabs,
@@ -25,11 +26,14 @@ import {
   type SettingsCenterTab,
 } from '@/lib/settings-center';
 import { SettingsLoginRequired } from '@/components/settings/SettingsLoginRequired';
+import { getAdminSubTabs, isAdminSubtabOwner, resolveAdminSubTab } from '@/lib/admin/settings-subtabs';
 import {
   SETTINGS_CENTER_ICON_SIZES,
   SETTINGS_CENTER_TAB_ICONS,
   type SettingsCenterIconProps,
 } from '@/components/settings/settings-center-icons';
+
+/** 侧栏收起状态只保存在本机。 */
 
 const LazyGeneralSettingsContent = lazy(() => import('@/components/settings/panels/GeneralSettingsPanel'));
 const LazyUpgradeContent = lazy(() => import('@/components/settings/panels/UpgradePanel'));
@@ -198,6 +202,7 @@ export function SettingsCenterPage({ children }: { children: React.ReactNode }) 
   const { user } = useSessionSafe();
   const { profile, loading: profileLoading, error: profileError } = useCurrentUserProfile({ enabled: !!activeTab });
   const isAdmin = !!profile?.is_admin;
+  const activeSubpath = useSettingsCenterSubpath();
   const [mobileNavigation, setMobileNavigation] = useState(false);
   const flags = useMemo<SettingsCenterFlags>(() => ({
     upgradeEnabled: !featureTogglesLoaded || isFeatureEnabled('upgrade'),
@@ -224,38 +229,58 @@ export function SettingsCenterPage({ children }: { children: React.ReactNode }) 
   const displayTabState = tabs.find(tab => tab.id === displayTab);
   const activeTabLabel = displayTabState?.label ?? '设置';
   return <section className="settings-page" aria-labelledby="settings-center-heading">
-    <header className="settings-page-header">
-      <Link href="/bazi" className="settings-back"><ArrowLeft size={16} /><span>返回太卜</span></Link>
-      <h1 id="settings-center-heading">设置</h1>
-      <button type="button" className="settings-mobile-menu" aria-label="设置分类" aria-expanded={mobileNavigation} aria-controls="settings-navigation" onClick={() => setMobileNavigation(value => !value)}><Menu size={18} /><span>分类</span></button>
-    </header>
-    <div className="settings-page-body">
-      <aside id="settings-navigation" className={`settings-navigation${mobileNavigation ? ' is-open' : ''}`}>
-        <nav aria-label="设置分类">
-          {(['account', 'extensions', 'management'] as const).map(group => {
-            const items = tabs.filter(tab => tab.group === group);
-            if (!items.length) return null;
-            return <div className="settings-nav-group" key={group}>
-              <h2>{SETTINGS_CENTER_GROUP_LABELS[group]}</h2>
-              <div className="settings-nav-list">
-                {items.map(tab => {
-                  const Icon = tab.icon;
-                  const content = <><Icon size={SETTINGS_CENTER_ICON_SIZES.sidebar} className="shrink-0" /><span>{tab.label}</span>{tab.disabled ? <LockKeyhole size={14} /> : <ChevronRight size={14} className="settings-nav-chevron" />}</>;
-                  return tab.disabled ? <button key={tab.id} type="button" disabled={tab.disabled} aria-disabled={tab.disabled} className="settings-nav-item cursor-not-allowed">{content}</button>
-                    : <Link key={tab.id} href={getSettingsCenterRouteTarget(tab.id)} aria-current={tab.id === displayTab ? 'page' : undefined} className="settings-nav-item" onClick={() => setMobileNavigation(false)}>{content}</Link>;
-                })}
-              </div>
-            </div>;
-          })}
-        </nav>
-      </aside>
-      <div className={`settings-content${mobileNavigation ? ' mobile-hidden' : ''}`}>
-        <div className="settings-content-heading"><h2>{activeTabLabel}</h2>{displayTabState?.description && <p>{displayTabState.description}</p>}</div>
-        {children}
-        {renderedTabs.map(tab => <div key={`${user?.id ?? 'visitor'}:${tab}`} className={tab === resolvedActiveTab ? 'block' : 'hidden'} aria-hidden={tab === resolvedActiveTab ? undefined : true} inert={tab !== resolvedActiveTab}>
-          {renderSettingsCenterPanel(tab, flags, { isLoggedIn: !!user, isAdmin, profileLoading, profileError: !!profileError })}
-        </div>)}
+    <aside id="settings-navigation" className={`settings-sidebar${mobileNavigation ? ' is-open' : ''}`}>
+      <div className="settings-sidebar-head">
+        <h1 id="settings-center-heading" className="settings-sidebar-title">设置</h1>
+        <Link href="/bazi" className="settings-back" aria-label="返回太卜"><ArrowLeft size={16} /><span>返回太卜</span></Link>
       </div>
-    </div>
+      <nav aria-label="设置分类" className="settings-sidebar-nav">
+        {(['account', 'extensions', 'management'] as const).map(group => {
+          const items = tabs.filter(tab => tab.group === group);
+          if (!items.length) return null;
+          return <div className="settings-nav-group" key={group}>
+            <h2>{SETTINGS_CENTER_GROUP_LABELS[group]}</h2>
+            <div className="settings-nav-list">
+              {items.map(tab => {
+                const Icon = tab.icon;
+                const href = isAdminSubtabOwner(tab.id)
+                  ? getSettingsCenterRouteTarget(tab.id, { subpath: resolveAdminSubTab(tab.id, activeSubpath) })
+                  : getSettingsCenterRouteTarget(tab.id);
+                const content = <><Icon size={SETTINGS_CENTER_ICON_SIZES.sidebar} className="shrink-0" /><span className="settings-nav-label">{tab.label}{tab.beta ? <BetaBadge /> : null}</span>{tab.disabled ? <LockKeyhole size={14} /> : <ChevronRight size={14} className="settings-nav-chevron" />}</>;
+                return <div className="settings-nav-entry" key={tab.id}>
+                  {tab.disabled
+                    ? <button type="button" disabled={tab.disabled} aria-disabled={tab.disabled} className="settings-nav-item cursor-not-allowed">{content}</button>
+                    : <Link href={href} aria-current={tab.id === displayTab ? 'page' : undefined} className="settings-nav-item" onClick={() => setMobileNavigation(false)}>{content}</Link>}
+                  {isAdminSubtabOwner(tab.id) && tab.id === displayTab && <div className="settings-nav-sub" role="group" aria-label={`${tab.label}子页`}>
+                    {getAdminSubTabs(tab.id).map(sub => <Link
+                      key={sub.id}
+                      href={getSettingsCenterRouteTarget(tab.id, { subpath: sub.id })}
+                      aria-current={activeSubpath === sub.id ? 'page' : undefined}
+                      className="settings-nav-subitem"
+                      onClick={() => setMobileNavigation(false)}
+                    >{sub.label}</Link>)}
+                  </div>}
+                </div>;
+              })}
+            </div>
+          </div>;
+        })}
+      </nav>
+    </aside>
+    <button type="button" className={`settings-sidebar-scrim${mobileNavigation ? ' is-visible' : ''}`} aria-label="关闭分类" tabIndex={mobileNavigation ? 0 : -1} onClick={() => setMobileNavigation(false)} />
+    <main className="settings-main">
+      <div className="settings-main-inner">
+        <div className="settings-main-head">
+          <button type="button" className="settings-mobile-menu" aria-label="设置分类" aria-expanded={mobileNavigation} aria-controls="settings-navigation" onClick={() => setMobileNavigation(value => !value)}><Menu size={18} /><span>分类</span></button>
+          <div className="settings-content-heading"><h2>{activeTabLabel}</h2>{displayTabState?.description && <p>{displayTabState.description}</p>}</div>
+        </div>
+        <div className="settings-content">
+          {children}
+          {renderedTabs.map(tab => <div key={`${user?.id ?? 'visitor'}:${tab}`} className={tab === resolvedActiveTab ? 'block' : 'hidden'} aria-hidden={tab === resolvedActiveTab ? undefined : true} inert={tab !== resolvedActiveTab}>
+            {renderSettingsCenterPanel(tab, flags, { isLoggedIn: !!user, isAdmin, profileLoading, profileError: !!profileError })}
+          </div>)}
+        </div>
+      </div>
+    </main>
   </section>;
 }

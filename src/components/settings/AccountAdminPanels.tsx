@@ -9,13 +9,11 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useActiveSettingsCenterTab, useSettingsCenterSubpath } from '@/lib/hooks/useSettingsCenterRouteState';
-import { openSettingsCenter } from '@/lib/settings-center';
 import {
-  SettingsTabs,
-  getSettingsTabId,
-  getSettingsTabPanelId,
-  type SettingsTabOption,
-} from '@/components/settings/SettingsControls';
+  resolveAdminSubTab,
+  type AdminSubtabOwner,
+  type AdminSubTabId,
+} from '@/lib/admin/settings-subtabs';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 
 const LazyAnnouncementManagementPanel = lazy(async () => ({
@@ -55,30 +53,9 @@ const LazyAgentScheduleLimitsPanel = lazy(async () => ({
   default: (await import('@/components/admin/AgentScheduleLimitsPanel')).AgentScheduleLimitsPanel,
 }));
 
-type AdminSubtabOwner = 'admin-features' | 'admin-ai-services' | 'admin-agent-extensions';
-type AdminFeatureTab = 'toggles' | 'keys';
-type AdminAITab = 'models' | 'gateways' | 'agent-tasks' | 'agent-evals';
-type AdminExtensionsTab = 'mcp' | 'skills' | 'profiles' | 'policy' | 'schedules';
-
-const FEATURE_TABS: SettingsTabOption<AdminFeatureTab>[] = [
-  { id: 'toggles', label: '功能开关' },
-  { id: 'keys', label: '激活码' },
-];
-
-const AI_TABS: SettingsTabOption<AdminAITab>[] = [
-  { id: 'models', label: '模型管理' },
-  { id: 'gateways', label: '网关管理' },
-  { id: 'agent-tasks', label: 'Agent 任务' },
-  { id: 'agent-evals', label: 'Agent 测评' },
-];
-
-const EXTENSIONS_TABS: SettingsTabOption<AdminExtensionsTab>[] = [
-  { id: 'mcp', label: 'MCP 服务' },
-  { id: 'skills', label: '技能' },
-  { id: 'profiles', label: '角色' },
-  { id: 'policy', label: '用户扩展' },
-  { id: 'schedules', label: '定时任务' },
-];
+type AdminFeatureTab = AdminSubTabId<'admin-features'>;
+type AdminAITab = AdminSubTabId<'admin-ai-services'>;
+type AdminExtensionsTab = AdminSubTabId<'admin-agent-extensions'>;
 
 function PanelFallback() {
   return (
@@ -88,17 +65,12 @@ function PanelFallback() {
   );
 }
 
-function resolveAdminFeatureTab(value: string | null | undefined): AdminFeatureTab {
-  return value === 'keys' ? 'keys' : 'toggles';
-}
-
-function resolveAdminAITab(value: string | null | undefined): AdminAITab {
-  return value === 'gateways' || value === 'agent-tasks' || value === 'agent-evals' ? value : 'models';
-}
-
-function resolveAdminExtensionsTab(value: string | null | undefined): AdminExtensionsTab {
-  return value === 'policy' || value === 'skills' || value === 'profiles' || value === 'schedules' ? value : 'mcp';
-}
+const resolveAdminFeatureTab = (value: string | null | undefined): AdminFeatureTab =>
+  resolveAdminSubTab('admin-features', value);
+const resolveAdminAITab = (value: string | null | undefined): AdminAITab =>
+  resolveAdminSubTab('admin-ai-services', value);
+const resolveAdminExtensionsTab = (value: string | null | undefined): AdminExtensionsTab =>
+  resolveAdminSubTab('admin-agent-extensions', value);
 
 function useResolvedSettingsCenterSubtab<T extends string>(
   owner: AdminSubtabOwner,
@@ -129,14 +101,10 @@ function useVisitedSubtabs<T extends string>(active: T) {
 /** 子页跟随路由切换；访问过的子页保持挂载，切回时不丢失列表与草稿。 */
 function AdminSubtabs<T extends string>({
   owner,
-  label,
-  tabs,
   resolveTab,
   renderPanel,
 }: {
   owner: AdminSubtabOwner;
-  label: string;
-  tabs: readonly SettingsTabOption<T>[];
   resolveTab: (value: string | null | undefined) => T;
   /** `active` is false for a visited tab kept mounted behind the current one. */
   renderPanel: (tab: T, active: boolean) => ReactNode;
@@ -145,29 +113,13 @@ function AdminSubtabs<T extends string>({
   const visited = useVisitedSubtabs(activeTab);
 
   return (
-    <div className="flex flex-col gap-6">
-      <SettingsTabs
-        label={label}
-        idPrefix={owner}
-        tabs={tabs}
-        value={activeTab}
-        onChange={(nextTab) => openSettingsCenter(owner, { subpath: nextTab })}
-      />
-      <Suspense fallback={<PanelFallback />}>
-        {visited.map(tab => (
-          <div
-            key={tab}
-            role="tabpanel"
-            id={getSettingsTabPanelId(owner, tab)}
-            aria-labelledby={getSettingsTabId(owner, tab)}
-            hidden={tab !== activeTab}
-            inert={tab !== activeTab}
-          >
-            {renderPanel(tab, tab === activeTab)}
-          </div>
-        ))}
-      </Suspense>
-    </div>
+    <Suspense fallback={<PanelFallback />}>
+      {visited.map(tab => (
+        <div key={tab} hidden={tab !== activeTab} inert={tab !== activeTab}>
+          {renderPanel(tab, tab === activeTab)}
+        </div>
+      ))}
+    </Suspense>
   );
 }
 
@@ -196,8 +148,6 @@ export function AdminFeaturesContent() {
   return (
     <AdminSubtabs
       owner="admin-features"
-      label="功能与激活码"
-      tabs={FEATURE_TABS}
       resolveTab={resolveAdminFeatureTab}
       renderPanel={renderFeaturePanel}
     />
@@ -208,8 +158,6 @@ export function AdminAIServicesContent() {
   return (
     <AdminSubtabs
       owner="admin-ai-services"
-      label="AI 服务"
-      tabs={AI_TABS}
       resolveTab={resolveAdminAITab}
       renderPanel={renderAIPanel}
     />
@@ -220,8 +168,6 @@ export function AdminAgentExtensionsContent() {
   return (
     <AdminSubtabs
       owner="admin-agent-extensions"
-      label="Agent 扩展"
-      tabs={EXTENSIONS_TABS}
       resolveTab={resolveAdminExtensionsTab}
       renderPanel={renderExtensionsPanel}
     />

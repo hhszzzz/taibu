@@ -1,18 +1,21 @@
-/* Page shell: header, category navigation and content column. */
-.settings-page { min-height: 100dvh; padding-top: var(--sat); background: var(--background); }
-.settings-page-header { display: flex; align-items: center; gap: 2rem; min-height: 4rem; padding: .75rem clamp(1rem, 4vw, 4rem); border-bottom: var(--hairline) solid var(--hairline-color); }
-.settings-page-header h1 { font-family: var(--font-display); font-size: 1.5rem; font-weight: 400; }
-.settings-back { display: inline-flex; align-items: center; gap: .5rem; height: 2.5rem; padding: 0 .65rem; font-size: .875rem; color: var(--foreground-secondary); border-radius: .5rem; }
+/* Page shell: full-height navigation rail + independently scrolling content. */
+.settings-page { display: flex; min-height: 100dvh; padding-top: var(--sat); background: var(--background); }
+.settings-sidebar { position: sticky; top: 0; display: flex; flex-shrink: 0; flex-direction: column; width: var(--sidebar-width); height: 100dvh; padding: 1.5rem .75rem 1rem; overflow-y: auto; border-right: var(--hairline) solid var(--hairline-color); }
+.settings-sidebar-head { flex-shrink: 0; padding: 0 .5rem 1.5rem; }
+.settings-sidebar-title { margin-bottom: .75rem; font-family: var(--font-display); font-size: 1.5rem; font-weight: 400; }
+.settings-back { display: inline-flex; align-items: center; gap: .75rem; height: 2.5rem; margin-left: -.5rem; padding: 0 .5rem; font-size: .875rem; color: var(--foreground-secondary); border-radius: .5rem; }
+.settings-back > svg { flex: 0 0 20px; width: 20px; height: 20px; }
 .settings-back:hover { background: var(--background-secondary); color: var(--foreground); }
-/* 左导航 192px = claude 设置弹层实测（min(1024px, 100vw−32px) 内左栏）。 */
-.settings-page-body { display: grid; grid-template-columns: 12rem minmax(0, 1fr); gap: clamp(2rem, 5vw, 5rem); max-width: 76rem; margin: 0 auto; padding: 2.5rem clamp(1rem, 4vw, 4rem) 4rem; }
-.settings-navigation { position: sticky; top: 2rem; align-self: start; }
+.settings-sidebar-nav { flex: 1 1 auto; }
 .settings-nav-group + .settings-nav-group { margin-top: 1.75rem; }
 /* 导航分组标题 = cds text-caption（12px/17px、muted、8px 侧内距 + 12px 顶距） */
 .settings-nav-group h2 { margin: 0 0 .25rem; padding: 12px 8px 0; font-size: calc(12 / 16 * 1rem); line-height: calc(17 / 16 * 1rem); font-weight: 400; color: var(--foreground-tertiary); }
 .settings-nav-list { display: flex; flex-direction: column; gap: 1px; }
+.settings-nav-entry { display: flex; flex-direction: column; }
 .settings-nav-item { display: flex; align-items: center; gap: .75rem; width: 100%; min-height: 2rem; padding: 0 .5rem; border-radius: .5rem; color: var(--foreground-secondary); font-size: .875rem; text-align: left; }
 .settings-nav-item > span { flex: 1; }
+.settings-nav-item > .settings-nav-label { display: flex; min-width: 0; align-items: center; gap: .375rem; }
+.settings-nav-item > .settings-nav-label > .beta-badge { flex: 0 0 auto; }
 /* 悬停/选中 = cds alpha 阶梯：hover 5%、current 10% + 500 字重 */
 .settings-nav-item:hover { background: var(--fill-field); color: var(--foreground); }
 .settings-nav-item[aria-current=page] { background: var(--fill-control); color: var(--foreground); font-weight: 500; }
@@ -20,12 +23,21 @@
 .settings-nav-item:disabled { opacity: .45; }
 .settings-nav-chevron { opacity: 0; color: var(--foreground-tertiary); }
 .settings-nav-item[aria-current=page] .settings-nav-chevron { opacity: 1; }
-.settings-content { min-width: 0; max-width: 48rem; }
+.settings-nav-sub { display: flex; flex-direction: column; gap: 1px; margin: .125rem 0 .5rem 1.75rem; padding-left: .5rem; border-left: 1px solid var(--border); }
+.settings-nav-subitem { display: flex; min-height: 1.75rem; align-items: center; padding: 0 .5rem; border-radius: .375rem; font-size: .8125rem; color: var(--foreground-secondary); }
+.settings-nav-subitem:hover { background: var(--fill-field); color: var(--foreground); }
+.settings-nav-subitem[aria-current=page] { background: var(--fill-control); color: var(--foreground); font-weight: 500; }
+.settings-main { min-width: 0; flex: 1 1 auto; height: 100dvh; overflow-y: auto; }
+.settings-main-inner { width: 100%; max-width: 56rem; margin: 0 auto; padding: 0 clamp(1rem, 4vw, 4rem); }
+.settings-main-head { display: flex; align-items: flex-start; gap: .75rem; padding-top: 2.5rem; }
+.settings-main-head .settings-content-heading { flex: 1; min-width: 0; }
+.settings-content { min-width: 0; padding: 0 0 4rem; }
 .settings-content-heading { padding-bottom: 1.5rem; margin-bottom: 1.75rem; border-bottom: 1px solid var(--border); }
 .settings-content-heading h2 { font-family: var(--font-display); font-size: 1.5rem; font-weight: 400; }
 .settings-content-heading p { margin-top: .5rem; font-size: .875rem; line-height: 1.6; color: var(--foreground-secondary); }
 .settings-content :where(input:not([type=checkbox]):not([type=radio]):not([type=range]), textarea, select) { border-radius: .5rem; background-color: var(--surface); }
 .settings-mobile-menu { display: none; }
+.settings-sidebar-scrim { display: none; }
 
 /* Grouped rows: sections of hairline-separated rows (cards on phones). */
 .settings-section + .settings-section { margin-top: 2rem; }
@@ -84,6 +96,7 @@
 .settings-form-section .settings-group { border-top: 1px solid var(--border); }
 .settings-form-heading { display: flex; flex-direction: column; gap: .25rem; }
 .settings-form-heading h3 { font-family: var(--font-display); font-size: 1.25rem; font-weight: 500; }
+.settings-form-heading h3 .beta-badge { margin-left: .45rem; }
 .settings-form-heading p { font-size: .8125rem; line-height: 1.6; color: var(--foreground-secondary); }
 .settings-field-block { display: flex; flex-direction: column; gap: .5rem; }
 .settings-label, .settings-label-row { font-size: .875rem; font-weight: 400; color: var(--foreground); }
@@ -156,15 +169,15 @@
 .settings-profile-fields .settings-button { height: 2.75rem; }
 
 @media (max-width: 767px) {
-  .settings-page-header { gap: .25rem; min-height: 3.5rem; padding: 0 .5rem; }
-  .settings-page-header h1 { flex: 1; font-size: 1.25rem; white-space: nowrap; }
-  .settings-back { flex-shrink: 0; justify-content: center; width: 2.75rem; height: 2.75rem; padding: 0; border-radius: 999px; }
-  .settings-back > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-  .settings-page-body { display: block; padding: 1rem 1rem 3rem; }
+  .settings-page { display: block; }
+  .settings-sidebar { position: fixed; inset: 0 auto 0 0; z-index: 60; width: min(18rem, 85vw); height: 100dvh; transform: translateX(-100%); transition: transform .2s; box-shadow: var(--shadow-panel-lg); }
+  .settings-sidebar.is-open { transform: none; }
+  .settings-sidebar-scrim.is-visible { display: block; position: fixed; inset: 0; z-index: 55; background: rgba(0, 0, 0, .4); }
+  .settings-main { height: auto; min-height: 100dvh; overflow: visible; }
+  .settings-main-head { padding-top: 1rem; }
   .settings-mobile-menu { display: inline-flex; flex-shrink: 0; align-items: center; gap: .375rem; height: 2.5rem; padding: 0 .75rem; border-radius: .625rem; font-size: .875rem; white-space: nowrap; color: var(--foreground); }
   .settings-mobile-menu[aria-expanded=true] { background: var(--background-tertiary); }
-  .settings-navigation { display: none; position: static; }
-  .settings-navigation.is-open { display: block; }
+  .settings-content { padding: 0 0 3rem; }
   .settings-nav-group + .settings-nav-group { margin-top: 1.25rem; }
   .settings-nav-group h2 { margin: 0 .25rem .5rem; font-size: .8125rem; font-weight: 500; }
   .settings-nav-list { gap: 0; overflow: hidden; border: 1px solid var(--border); border-radius: .75rem; background: var(--surface); }
@@ -172,7 +185,8 @@
   .settings-nav-item:last-child { border-bottom: 0; }
   .settings-nav-item[aria-current=page] { background: var(--background-secondary); }
   .settings-nav-chevron { opacity: 1; }
-  .settings-content.mobile-hidden { display: none; }
+  .settings-nav-sub { margin: .25rem .5rem .5rem; border-left: 0; }
+  .settings-nav-subitem { min-height: 2.25rem; padding: 0 .75rem; }
   .settings-content-heading { padding-bottom: 0; margin-bottom: 1.25rem; border-bottom: 0; }
   .settings-content-heading h2 { font-size: 1.625rem; }
   .settings-section + .settings-section { margin-top: 1.5rem; }
@@ -197,3 +211,21 @@
 .settings-collab-member legend { padding: 0 .375rem; font-size: .75rem; color: var(--foreground-tertiary); }
 .settings-collab-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
 @media (max-width: 767px) { .settings-collab-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* 记忆管理弹窗：列表独立滚动，新增表单固定在底部。 */
+.app-modal.memory-manager-dialog { display: flex; width: min(600px, calc(100vw - 32px)); max-height: min(760px, calc(100dvh - 32px)); flex-direction: column; overflow: hidden; }
+.memory-manager-head { display: flex; flex-shrink: 0; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1.25rem 1.5rem 1rem; border-bottom: 1px solid var(--border); }
+.memory-manager-head h2 { font-family: var(--font-display); font-size: 1.25rem; font-weight: 500; }
+.memory-manager-head p { margin-top: .25rem; font-size: .8125rem; line-height: 1.6; color: var(--foreground-secondary); }
+.memory-manager-body { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 1rem; overflow-y: auto; padding: 1rem 1.5rem 1.5rem; }
+.memory-manager-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.memory-manager-search { display: flex; flex: 1 1 auto; align-items: center; gap: .5rem; height: 2.25rem; padding: 0 .75rem; border: 1px solid var(--border-hover); border-radius: .5rem; background: var(--surface); color: var(--foreground-secondary); }
+.memory-manager-search input { min-width: 0; flex: 1; border: 0; background: transparent; font-size: .875rem; color: var(--foreground); outline: none; }
+.memory-manager-state { display: flex; min-height: 8rem; flex-direction: column; align-items: center; justify-content: center; gap: .75rem; }
+.memory-manager-empty { padding: 2rem 0; text-align: center; }
+.memory-manager-list { max-height: 22rem; overflow-y: auto; }
+.memory-manager-kind { margin-left: .5rem; font-size: .6875rem; font-weight: 400; color: var(--foreground-tertiary); }
+.memory-manager-confirm { display: inline-flex; flex-shrink: 0; align-items: center; gap: .25rem; }
+.memory-manager-add { display: flex; flex-direction: column; gap: .625rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+.memory-manager-add h3 { font-size: .875rem; font-weight: 500; color: var(--foreground); }
+.memory-manager-add-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; }

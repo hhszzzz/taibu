@@ -14,6 +14,7 @@ import { useCallback, useRef, useSyncExternalStore, type MouseEvent, type ReactN
 import { BookOpen, LogIn, MessageSquare, PanelLeft, Plus, Search, X } from 'lucide-react';
 import { AnnouncementBellButton } from '@/components/layout/AnnouncementBellButton';
 import { ModeSwitch } from '@/components/chat/ModeSwitch';
+import { newChatHref, useChatModeControl } from '@/lib/chat/mode-control-store';
 import { BrandMark } from '@/components/brand/BrandMark';
 import { SidebarConversations } from '@/components/layout/SidebarConversations';
 import { SidebarUserCard } from '@/components/layout/UserMenu';
@@ -50,14 +51,17 @@ function useViewingConversation() {
 function useSidebarActions() {
     const router = useRouter();
     const { handleNewChat } = useConversationList();
+    // 新对话沿用页内当前方式（Agent 里新建仍是 Agent）。
+    const mode = useChatModeControl()?.mode ?? 'plain';
+    const newChat = newChatHref(mode);
     const startNewChat = useCallback((event: MouseEvent<HTMLAnchorElement>) => {
         // Modified clicks open /chat in a new tab as a plain link would.
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
         event.preventDefault();
-        void handleNewChat().then(() => router.push('/chat'));
-    }, [handleNewChat, router]);
+        void handleNewChat().then(() => router.push(newChat));
+    }, [handleNewChat, router, newChat]);
     const openSearch = useCallback(() => { window.dispatchEvent(new Event('taibu:search')); }, []);
-    return { startNewChat, openSearch };
+    return { startNewChat, openSearch, newChat };
 }
 
 function LoginButton({ rail, onLogin }: { rail: boolean; onLogin: () => void }) {
@@ -84,7 +88,7 @@ export function ChatSidebarPanel({ markers, onLogin, onClose, heading }: {
     const { user } = useSessionSafe();
     const { isFeatureEnabled } = useFeatureToggles();
     const { onChat, conversationId } = useViewingConversation();
-    const { startNewChat, openSearch } = useSidebarActions();
+    const { startNewChat, openSearch, newChat } = useSidebarActions();
     const shortcut = useSyncExternalStore(noSubscription, getSearchShortcut, getServerSearchShortcut);
     const listRef = useRef<HTMLDivElement>(null);
     const showConversations = useCallback(() => { listRef.current?.scrollTo({ top: 0, behavior: 'smooth' }); }, []);
@@ -113,7 +117,7 @@ export function ChatSidebarPanel({ markers, onLogin, onClose, heading }: {
             <button type="button" className="chat-nav-link chat-nav-search" onClick={search}>
                 <Search size={16} aria-hidden="true" />搜索对话{onClose ? null : <kbd>{shortcut}</kbd>}
             </button>
-            <Link href="/chat" className="chat-nav-link is-new" aria-current={onChat && !conversationId ? 'page' : undefined} onClick={startNewChat}>
+            <Link href={newChat} className="chat-nav-link is-new" aria-current={onChat && !conversationId ? 'page' : undefined} onClick={startNewChat}>
                 <span className="chat-nav-new-icon" aria-hidden="true"><Plus size={16} strokeWidth={2} /></span>新对话
             </Link>
             <button type="button" className="chat-nav-link" aria-current={conversationId ? 'true' : undefined} onClick={showConversations}>
@@ -128,7 +132,7 @@ export function ChatSidebarPanel({ markers, onLogin, onClose, heading }: {
             <div className="chat-nav-footer">{user ? (
                 <div className="chat-nav-footer-row">
                     <div className="min-w-0 flex-1"><SidebarUserCard user={user} appearance="account" collapsed={false} /></div>
-                    <AnnouncementBellButton className="chat-nav-icon" iconSize={18} />
+                    <AnnouncementBellButton className="chat-nav-icon is-round" iconSize={18} />
                 </div>
             ) : <LoginButton rail={false} onLogin={login} />}</div>
         </div>

@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, typ
 import { Plus, Search, X } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
+import { newChatHref, useCurrentChatMode } from '@/lib/chat/mode-control-store';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import { useActiveSettingsCenterTab } from '@/lib/hooks/useSettingsCenterRouteState';
 import { DEFAULT_MOBILE_MAIN_ITEMS, DEFAULT_MOBILE_DRAWER_ORDER } from '@/lib/user/settings';
@@ -134,6 +135,8 @@ export function MobileNav() {
     const [query, setQuery] = useState('');
     const { isFeatureEnabled, isLoading: featureLoading, loaded: featureLoaded, error: featureError, refresh: refreshFeatures } = useFeatureToggles();
     const { user } = useSessionSafe();
+    // 「新聊天」沿用当前对话方式：Agent 里点它仍进 Agent。
+    const chatHref = newChatHref(useCurrentChatMode(user?.id));
     const activeSettingsTab = useActiveSettingsCenterTab();
     const { pins, togglePin } = useMobileNavPins();
     const { showToast } = useToast();
@@ -222,7 +225,7 @@ export function MobileNav() {
         return (
             <Link
                 key={item.id}
-                href={item.href}
+                href={item.id === 'chat' ? chatHref : item.href}
                 aria-current={isActive ? 'page' : undefined}
                 draggable={false}
                 {...(pinnable ? longPress.bind(item.id) : {})}
@@ -409,7 +412,7 @@ export function MobileNav() {
                         return (
                             <li key={item.id}>
                                 <Link
-                                    href={item.href}
+                                    href={item.id === 'chat' ? chatHref : item.href}
                                     onClick={(event) => {
                                         if (!settingsTab) return;
                                         event.preventDefault();

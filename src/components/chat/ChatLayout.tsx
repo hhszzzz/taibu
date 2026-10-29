@@ -10,6 +10,7 @@
 
 import { useMemo, useRef, useState, useEffect, useCallback, useSyncExternalStore, type ReactNode } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { takeChatHandoff } from '@/lib/chat/result-handoff';
 import { scrollToMessageId } from '@/lib/chat/message-navigation';
 import { requestBrowserJson } from '@/lib/browser-api';
 import { useToast } from '@/components/ui/Toast';
@@ -200,6 +201,17 @@ export function ChatLayout(props: ChatLayoutProps) {
         router.replace('/chat', { scroll: false });
         requestAnimationFrame(() => contentRef.current?.querySelector<HTMLTextAreaElement>('[data-chat-composer] textarea')?.focus());
     }, [draftQuery, onInputChange, router]);
+    // 结果页交接：新对话挂载时把预填问题与已保存命盘的 mention 放回输入框，只应用一次。
+    const appliedHandoff = useRef(false);
+    useEffect(() => {
+        if (appliedHandoff.current || activeConversationId) return;
+        const handoff = takeChatHandoff();
+        if (!handoff) return;
+        appliedHandoff.current = true;
+        onInputChange(handoff.text);
+        if (handoff.mentions?.length) onMentionsChange(handoff.mentions);
+        requestAnimationFrame(() => contentRef.current?.querySelector<HTMLTextAreaElement>('[data-chat-composer] textarea')?.focus());
+    }, [activeConversationId, onInputChange, onMentionsChange]);
     const locatedTarget = useRef('');
     useEffect(() => {
         if (!targetMessageId || conversationLoading || !messages.some(message => message.id === targetMessageId)) return;
@@ -277,7 +289,9 @@ export function ChatLayout(props: ChatLayoutProps) {
     const modeSettled = props.agent?.modeSettled !== false;
     const opened = conversations.find(conversation => conversation.id === activeConversationId);
     // 会话自己的方式：打开时以它为准；新建的 Agent 会话在首轮运行前 hasAgentRun 仍是 false，用消息形态区分。
-    const conversationMode: 'agent' | 'plain' | undefined = !activeConversationId || !opened || opened.hasAgentRun === undefined ? undefined
+    const hasAgentMessages = messages.some(message => Boolean(message.agent));
+    const conversationMode: 'agent' | 'plain' | undefined = activeConversationId && hasAgentMessages ? 'agent'
+        : !activeConversationId || !opened || opened.hasAgentRun === undefined ? undefined
         : opened.hasAgentRun === true ? 'agent'
         : messages.length > 0 && messages.every(message => !message.agent) ? 'plain'
         : undefined;
@@ -290,10 +304,15 @@ export function ChatLayout(props: ChatLayoutProps) {
         if ((conversationMode === 'agent') !== isAgentMode) props.agent?.setMode(conversationMode);
     }, [activeConversationId, conversationMode, isAgentMode, modeSettled, props.agent]);
     // 在会话里换到另一种方式：两种内容不混在一段对话里，开一条同方式的新会话。
+    // 新会话没有会话级方式可跟随：把方式写进地址，刷新后仍停在同一种对话（不动历史记录）。
     const changeMode = useCallback((next: 'agent' | 'plain') => {
         props.agent?.setMode(next);
-        if (conversationMode && (conversationMode === 'agent') !== (next === 'agent')) router.push(next === 'agent' ? '/chat?mode=agent' : '/chat');
-    }, [conversationMode, props.agent, router]);
+        if (conversationMode) {
+            if ((conversationMode === 'agent') !== (next === 'agent')) router.push(next === 'agent' ? '/chat?mode=agent' : '/chat');
+            return;
+        }
+        if ((searchParams.get('mode') === 'agent') !== (next === 'agent')) router.replace(next === 'agent' ? '/chat?mode=agent' : '/chat');
+    }, [conversationMode, props.agent, router, searchParams]);
     const waitingQuestion = userId && props.agent?.run?.conversationId === activeConversationId && props.agent.run.status === 'awaiting_input'
         ? [...props.agent.run.message.agent?.parts ?? []].reverse().find((part): part is Extract<AgentPart, { type: 'question' }> => part.type === 'question') : undefined;
     const hasWorkspace = isAgentMode || Boolean(latestAgentData);
@@ -459,6 +478,11 @@ export function ChatLayout(props: ChatLayoutProps) {
         codeMode: agent?.codeMode, onCodeModeChange: agent?.setCodeMode,
         planMode: agent?.planMode, onPlanModeChange: agent?.setPlanMode,
         agentMode: isAgentMode,
+        onEnableAgent: () => {
+            agent?.setMode('agent');
+            // 新会话没有可跟随的会话方式：地址同步成 Agent，刷新后不会掉回对话。
+            if (!conversationMode && searchParams.get('mode') !== 'agent') router.replace('/chat?mode=agent');
+        },
         credits,
         awaitingInput: props.agent?.run?.status === 'awaiting_input',
         allowDuringRun: props.agent?.active,

@@ -40,13 +40,17 @@
 .chat-nav-name { font-family: var(--font-display); font-size: 19px; font-weight: 600; letter-spacing: .06em; white-space: nowrap; }
 .chat-nav-icon { position: relative; display: flex; flex-shrink: 0; width: 32px; height: 32px; align-items: center; justify-content: center; border-radius: 8px; color: var(--foreground-secondary); }
 .chat-nav-icon:hover { background: var(--fill-ghost-hover); color: var(--foreground); }
+.chat-nav-icon.is-round { width: 30px; height: 30px; border-radius: 999px; }
 
 /* 对话方式（Agent / 对话）：claude 标题栏模式分段控件形态（本地克隆站源码实测）——
    70×28 轨道（radius 7、1px 内衬、5% 底）+ 34×26 滑动白滑块（radius 6、内描边 + 1px 投影）+ 两个 16px 图标段。 */
-.chat-mode-switch { position: relative; display: inline-flex; flex-shrink: 0; width: 70px; height: 28px; align-items: stretch; padding: 1px; border-radius: 7px; background: var(--fill-field); }
-.chat-mode-switch::before { content: ''; position: absolute; top: 1px; bottom: 1px; left: 0; width: 34px; border-radius: 6px; background: var(--chat-raised); box-shadow: inset 0 0 0 1px var(--hairline-color), 0 1px 2px rgb(0 0 0 / 5%); transform: translateX(1px); transition: transform .2s cubic-bezier(.32, .72, 0, 1); pointer-events: none; }
-.chat-mode-switch:has([aria-checked="true"]:nth-of-type(2))::before { transform: translateX(35px); }
-.chat-mode-switch [role="radio"] { position: relative; z-index: 1; display: inline-flex; flex: 1; align-items: center; justify-content: center; border-radius: 5px; color: var(--foreground-secondary); }
+.chat-mode-switch { position: relative; display: inline-flex; flex-shrink: 0; width: 88px; height: 28px; align-items: stretch; padding: 1px; border-radius: 7px; background: var(--fill-field); }
+.chat-mode-switch::before { content: ''; position: absolute; top: 1px; bottom: 1px; left: 0; width: 34px; border-radius: 6px; background: var(--chat-raised); box-shadow: inset 0 0 0 1px var(--hairline-color), 0 1px 2px rgb(0 0 0 / 5%); transform: translateX(1px); transition: transform .2s cubic-bezier(.32, .72, 0, 1), width .2s cubic-bezier(.32, .72, 0, 1); pointer-events: none; }
+.chat-mode-switch:has([aria-checked="true"]:nth-of-type(2))::before { width: 52px; transform: translateX(35px); }
+.chat-mode-switch [role="radio"] { position: relative; z-index: 1; display: inline-flex; gap: 2px; align-items: center; justify-content: center; border-radius: 5px; color: var(--foreground-secondary); }
+.chat-mode-switch [role="radio"]:first-of-type { flex: 0 0 34px; }
+.chat-mode-switch [role="radio"]:last-of-type { flex: 0 0 52px; }
+.chat-mode-switch .beta-badge.is-compact { align-self: flex-end; margin-bottom: 3px; font-size: 8px; letter-spacing: 0; transform: none; }
 .chat-mode-switch [role="radio"]:hover { color: var(--foreground); }
 .chat-mode-switch [role="radio"][aria-checked="true"] { color: var(--foreground); }
 .chat-mode-switch [role="radio"]:disabled { opacity: .5; cursor: not-allowed; }
@@ -72,6 +76,8 @@
 .chat-nav-list::-webkit-scrollbar { display: none; }
 .chat-nav-hint { margin: 14px 8px; font-size: 13px; color: var(--foreground-secondary); }
 .chat-nav-group { display: flex; flex-direction: column; gap: 2px; }
+/* 「最近使用」标题到第一条会话的距离，与「占术」标题到八字一致。 */
+.chat-nav-group[aria-label="最近使用"] { padding-top: 4px; }
 .chat-nav-group-label { display: flex; align-items: center; justify-content: space-between; margin: 10px 4px 2px; font-size: 13px; font-weight: 400; color: var(--foreground-tertiary); }
 .chat-nav-group-pinned { justify-content: flex-start; }
 /* claude Recents 组头：悬停/聚焦才显形的 24px 工具钮（「分组和排序」）；已置顶组标签同形但非 heading */
@@ -120,7 +126,7 @@
 @media (prefers-reduced-motion: reduce) { .chat-nav-marker.is-running { animation: none; } }
 
 /* Account and sign-in */
-.chat-nav-footer { flex-shrink: 0; padding-top: 6px; }
+.chat-nav-footer { flex-shrink: 0; padding-top: 4px; }
 .chat-nav-login { display: flex; width: 100%; min-height: 40px; align-items: center; justify-content: center; gap: 6px; border-radius: 10px; background: var(--accent); color: var(--on-accent); font-size: 14px; font-weight: 500; }
 .chat-nav-login:hover { background: var(--accent-hover); }
 
@@ -160,7 +166,7 @@
 @media (max-width: 1023px) { .sidebar-resizer { display: none; } }
 
 /* 「最近使用」组头 = claude Recents：13px muted 标签 + 悬停显出的 24px 工具钮（查看全部 / 筛选和分组）。 */
-.chat-recents-head { position: sticky; top: 0; z-index: 30; display: flex; height: 24px; align-items: center; justify-content: space-between; gap: 4px; margin-top: 10px; padding: 0; background: var(--sidebar-background); font-size: 13px; font-weight: 400; color: var(--foreground-tertiary); }
+.chat-recents-head { position: sticky; top: 0; z-index: 30; display: flex; height: 24px; align-items: center; justify-content: space-between; gap: 4px; padding: 0 0 0 6px; background: var(--sidebar-background); font-size: 13px; font-weight: 400; color: var(--foreground-tertiary); }
 .chat-recents-toggle { display: inline-flex; flex: 0 1 auto; align-items: center; gap: 2px; padding: 0; border-radius: 6px; color: inherit; font-size: inherit; }
 .chat-recents-toggle:hover { color: var(--foreground-secondary); }
 .chat-recents-toggle > svg { flex-shrink: 0; }

@@ -83,6 +83,18 @@ export function persistStoredChatMode(userId: string | null | undefined, mode: '
     }
 }
 
+/** 新建会话的地址：沿用当前对话方式，Agent 带 `?mode=agent`。 */
+export function newChatHref(mode: 'agent' | 'plain'): string {
+    return mode === 'agent' ? '/chat?mode=agent' : '/chat';
+}
+
+/** /chat 内读页内控件，其它页面读本地偏好：新建会话时据此决定用哪种方式。 */
+export function useCurrentChatMode(userId: string | null | undefined): 'agent' | 'plain' {
+    const control = useChatModeControl();
+    const stored = useStoredChatMode(userId);
+    return control?.mode ?? stored;
+}
+
 /** 离开 /chat 时清空，侧栏的空位随之收起。 */
 export function clearChatModeControl(): void {
     publishChatModeControl(null);

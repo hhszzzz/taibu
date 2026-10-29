@@ -15,6 +15,7 @@ import Link from 'next/link';
 import { usePathname, useSearchParams, useRouter } from 'next/navigation';
 import { AllDivinationsIcon, LoginIcon, PlusIcon, SearchIcon } from '@/lib/navigation/nav-icons';
 import { BrandMark } from '@/components/brand/BrandMark';
+import { BetaBadge } from '@/components/ui/BetaBadge';
 import { useState, useCallback, useEffect, useMemo, useRef, Suspense, useSyncExternalStore } from 'react';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { SidebarUserCard } from '@/components/layout/UserMenu';
@@ -29,6 +30,8 @@ import { AllDivinationsPanel } from '@/components/layout/AllDivinationsPanel';
 import { useConversationList } from '@/lib/chat/ConversationListContext';
 import { ChatSidebarConversations } from '@/components/chat/sidebar/ChatSidebarConversations';
 import { ModeSwitch } from '@/components/chat/ModeSwitch';
+import { newChatHref, useCurrentChatMode } from '@/lib/chat/mode-control-store';
+import { useAgentActivity } from '@/lib/agent/use-agent-activity';
 import { persistStoredChatMode, useStoredChatMode } from '@/lib/chat/mode-control-store';
 
 // Derive from registry once at module level
@@ -103,6 +106,7 @@ function SidebarNavLink({ item, active, title }: { item: NavItemDef; active: boo
                 <Icon className={`w-5 h-5 ${active ? 'text-foreground' : 'text-foreground-secondary'}`} />
             </span>
             <span className="truncate">{item.label}</span>
+            {item.beta ? <BetaBadge /> : null}
         </Link>
     );
 }
@@ -166,6 +170,10 @@ function SidebarInner() {
     const [sidebarWidth, setSidebarWidth] = useSidebarWidth();
     // 全站常驻的「对话方式」：/chat 之外由侧栏回退控件显示本地偏好（页内由 store 接管）。
     const storedMode = useStoredChatMode(user?.id);
+    const currentMode = useCurrentChatMode(user?.id);
+    const newChat = newChatHref(currentMode);
+    // 任务标记在/chat 内外都要显示：非聊天页也订阅同一份活动数据。
+    const markers = useAgentActivity(user?.id ?? null, searchParams.get('id'));
     // /chat 里控件由页面发布；首帧还没发布时按地址里的方式显示，免得切换条先亮 Agent 再滑回来。
     const routeMode = searchParams.get('mode') === 'agent' ? 'agent' as const : 'plain' as const;
     // ⇧⌘O = 克隆站「新建」行的快捷键：新建会话并回到 /chat。
@@ -173,12 +181,12 @@ function SidebarInner() {
         const onKeyDown = (event: KeyboardEvent) => {
             if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'o') {
                 event.preventDefault();
-                handleNewChat().then(() => router.push('/chat'));
+                handleNewChat().then(() => router.push(newChat));
             }
         };
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
-    }, [handleNewChat, router]);
+    }, [handleNewChat, router, newChat]);
     const isNavLoading = featureLoading;
 
     // 当前是否在具体某个对话中
@@ -246,12 +254,12 @@ function SidebarInner() {
                     ) : null}
                     {chatItem ? (
                         <Link
-                            href={chatItem.href}
+                            href={newChat}
                             aria-current={pathname === chatItem.href && !activeConvId ? 'page' : undefined}
                             className={`${ITEM_BASE} chat-nav-new ${pathname === chatItem.href && !activeConvId ? ITEM_ACTIVE : ITEM_IDLE}`}
                             onClick={(event) => {
                                 event.preventDefault();
-                                handleNewChat().then(() => router.push('/chat'));
+                                handleNewChat().then(() => router.push(newChat));
                             }}
                         >
                             {/* claude 实测：新建行 = 前导槽 28px + 22px 空槽（icon 16/2，无圆形底），文字随选中 primary/secondary */}
@@ -269,7 +277,7 @@ function SidebarInner() {
                     ))}
                 </div>
 
-                <div className="flex-shrink-0 px-2 pb-2">
+                <div className="flex-shrink-0 px-2 pb-[7px]">
                     <div className={SECTION_LABEL}>占术</div>
                     <ul className="space-y-0.5">
                         {pinnedNavItems.map((item) => (
@@ -329,18 +337,18 @@ function SidebarInner() {
                                 <RecentsHead userId={user?.id ?? null} recentsOpen={recentsOpen} onToggleRecents={() => setRecentsOpen(value => !value)} />
                                 {recentsOpen && <ul>
                                     <li>
-                                        <SidebarConversations />
+                                        <SidebarConversations markers={markers} />
                                     </li>
                                 </ul>}
                             </div>
                         )
                     ) : null}
                 </nav>
-                <div className="border-t border-border px-2 py-2 flex-shrink-0">
+                <div className="border-t border-border px-2 py-1.5 flex-shrink-0">
                     {user ? (
                         <div className="flex items-center gap-1">
                             <div className="min-w-0 flex-1"><SidebarUserCard user={user} /></div>
-                            <AnnouncementBellButton iconSize={18} className="relative w-8 h-8 flex items-center justify-center rounded-lg flex-shrink-0 text-foreground-secondary transition-colors duration-150 hover:bg-fill-ghost-hover hover:text-foreground" />
+                            <AnnouncementBellButton iconSize={18} className="relative w-7 h-7 flex items-center justify-center rounded-full flex-shrink-0 text-foreground-secondary transition-colors duration-150 hover:bg-fill-ghost-hover hover:text-foreground" />
                         </div>
                     ) : (
                         <button

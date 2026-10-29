@@ -27,13 +27,15 @@ import { formatConversationMenuTitle } from '@/lib/chat/conversation-title-displ
 import { loadPinnedConversations, togglePinnedConversation } from '@/lib/chat/pinned-conversations';
 import { CONVERSATION_DISPLAY_LABELS, CONVERSATION_LIST_DEFAULTS, CONVERSATION_SORT_LABELS, saveConversationListPreferences, useConversationListPreferences } from '@/lib/chat/conversation-list-prefs';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
-import { useStoredChatMode } from '@/lib/chat/mode-control-store';
+import { newChatHref, useCurrentChatMode } from '@/lib/chat/mode-control-store';
 import type { ConversationAgentMarker } from '@/lib/agent/activity';
 
 /** 「最近使用」组头 = claude Recents：24px 行，折叠箭头在名称右侧（悬停/聚焦显形），右侧是工具按钮。 */
 export function RecentsHead({ userId, recentsOpen, onToggleRecents, onToggleBlocked }: { userId: string | null; recentsOpen: boolean; onToggleRecents: () => void; onToggleBlocked?: boolean }) {
     const router = useRouter();
     const { handleNewChat } = useConversationList();
+    // 新建会话沿用当前对话方式：Agent 里点「新建」仍开 Agent。
+    const currentMode = useCurrentChatMode(userId);
     const preferences = useConversationListPreferences(userId);
     const [open, setOpen] = useState(false);
     const anchorRef = useRef<HTMLButtonElement>(null);
@@ -56,7 +58,7 @@ export function RecentsHead({ userId, recentsOpen, onToggleRecents, onToggleBloc
                 <button ref={anchorRef} type="button" className="chat-recents-tool" aria-label="筛选和分组最近对话" title="分组和排序"
                     aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(value => !value)}><SlidersHorizontal size={14} aria-hidden="true" /></button>
                 <button type="button" className="chat-recents-tool" aria-label="新建会话" title="新建会话"
-                    onClick={() => { void handleNewChat(); router.push('/chat'); }}><Plus size={14} aria-hidden="true" /></button>
+                    onClick={() => { void handleNewChat(); router.push(newChatHref(currentMode)); }}><Plus size={14} aria-hidden="true" /></button>
             </div>
         </div>
         <FloatingPanel open={open} anchorRef={anchorRef} onClose={() => setOpen(false)} label="筛选和分组最近对话" className="chat-recents-menu">
@@ -147,17 +149,18 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
     const pinnedSet = useMemo(() => new Set(pinnedIds), [pinnedIds]);
     // 会话按类别分栏（claude 的 Claude|Code 两个列表）：跑过 Agent 任务的归「Agent」，其余归「对话」；
     // 当前打开的会话一律保留，避免新建或跨类会话在列表里凭空消失。
-    const chatMode = useStoredChatMode(userId);
+    // 列表跟随当前对话方式：/chat 内取页内控件，其它页面取本地偏好。
+    const chatMode = useCurrentChatMode(userId);
     const visibleConversations = useMemo(() => {
         const wantsAgent = chatMode === 'agent';
         return conversations.filter(conv => {
-            // 已知类别的会话严格按当前方式过滤；新建会话在 hasAgentRun 回填前仍跟随当前页显示。
-            if (conv.hasAgentRun !== undefined && conv.hasAgentRun !== wantsAgent) return false;
+            // 只在聊天页按当前方式过滤；其它页面展示全部会话（任务标记不因换页消失）。
+            if (wantsDate && conv.hasAgentRun !== undefined && conv.hasAgentRun !== wantsAgent) return false;
             if (listPreferences.display === 'pinned') return pinnedSet.has(conv.id) || conv.id === activeId;
             if (listPreferences.display === 'running') return markers?.get(conv.id) === 'running' || markers?.get(conv.id) === 'awaiting' || conv.id === activeId;
             return true;
         });
-    }, [conversations, chatMode, activeId, listPreferences.display, pinnedSet, markers]);
+    }, [conversations, chatMode, wantsDate, activeId, listPreferences.display, pinnedSet, markers]);
     // 正在跑或等你回答的会话：列表里本来就有标记，这里让它永远在列，并排到最近使用的最上面。
     const needsAttention = useCallback((id: string) => markers?.get(id) === 'running' || markers?.get(id) === 'awaiting', [markers]);
     const shownConversations = useMemo(() => {
@@ -173,7 +176,7 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
     }, [recentsLimit, visibleConversations, pinnedSet, activeId, needsAttention]);
     const hasHiddenRecents = shownConversations.length < visibleConversations.length;
     // 还有没列出来的（本地或服务端）就只给「查看更多」；全都列完了才给「收起」。
-    const hasMoreToShow = hasHiddenRecents || hasMoreConversations;
+    const hasMoreToShow = visibleConversations.length > 0 && (hasHiddenRecents || hasMoreConversations);
     // 置顶会话从最近列表里抽出，单独组成最上面的「已置顶」组。
     const unpinnedConversations = useMemo(() => {
         const recents = shownConversations.filter(conv => !pinnedSet.has(conv.id));
@@ -372,7 +375,7 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
     return (
         <>
             {/* 对话区域 — 紧凑内嵌在 Chat 项下方；只有「最近使用」这一段滚动，「已置顶」停在上面。 */}
-            <div className={`mt-1 ${wantsDate ? 'flex min-h-0 flex-1 flex-col' : ''}`}>
+            <div className={`${wantsDate ? 'flex min-h-0 flex-1 flex-col' : ''}`}>
                 {wantsDate && pinnedConversations.length > 0 ? (
                     <div className="chat-nav-pinned-block" ref={pinnedBlockRef}>
                         <section className="chat-nav-group" aria-label="已置顶">
@@ -399,6 +402,13 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
                                 />
                             ))}
                         </section>
+                    </div>
+                ) : null}
+                {/* 组头固定在列表上方：外面滚动只作用于会话行，箭头与「最近使用」不随列表滑动。 */}
+                {wantsDate && !withinModal ? (
+                    <div className="chat-recents-block">
+                        <RecentsHead userId={userId} recentsOpen={recentsOpen} onToggleRecents={() => setRecentsOpen(value => !value)}
+                            onToggleBlocked={recentsOpen && !!activeId && unpinnedConversations.some(conv => conv.id === activeId) ? true : undefined} />
                     </div>
                 ) : null}
                 <div ref={listViewportRef} className={`relative space-y-0.5 ${wantsDate ? 'min-h-0 flex-1 overflow-y-auto' : ''}`}>
@@ -428,9 +438,15 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
                             )}
                         </div>
                     ) : shownConversations.length === 0 && !pendingSidebarTitle ? (
-                        <div className="text-center text-foreground-secondary text-[11px] py-3">
-                            暂无对话
-                        </div>
+                        wantsDate && !withinModal ? (
+                            <section className="chat-nav-group" aria-label="最近使用">
+                                {recentsOpen && <div className="text-center text-foreground-secondary text-[11px] py-3">暂无对话</div>}
+                            </section>
+                        ) : (
+                            <div className="text-center text-foreground-secondary text-[11px] py-3">
+                                暂无对话
+                            </div>
+                        )
                     ) : (
                         <>
                             {conversationListError ? (
@@ -447,8 +463,6 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
                             ) : null}
                             {wantsDate ? (
                                 <div className="chat-recents-block">
-                                    <RecentsHead userId={userId} recentsOpen={recentsOpen} onToggleRecents={() => setRecentsOpen(value => !value)}
-                                        onToggleBlocked={recentsOpen && !!activeId && unpinnedConversations.some(conv => conv.id === activeId) ? true : undefined} />
                                     <section className="chat-nav-group" aria-label="最近使用">
                                     {recentsOpen && <>
                                     {pendingSidebarTitle ? (
@@ -505,6 +519,7 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
                                             onCancelRename={cancelRename}
                                             pendingTitle={pendingSidebarTitle}
                                             showPendingInGroup={showPendingInGroup}
+                                            markers={markers}
                                             compact
                                         />
                                     </div>
@@ -523,7 +538,7 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
                             </button>
                         </div>
                     )}
-                    {hasLoadedConversations && (!wantsDate || recentsOpen) && !hasMoreToShow && recentsLimit > RECENT_VISIBLE && (
+                    {hasLoadedConversations && visibleConversations.length > 0 && (!wantsDate || recentsOpen) && !hasMoreToShow && recentsLimit > RECENT_VISIBLE && (
                         <div className="mt-1 mb-1 px-2">
                             <button type="button" className="flex items-center gap-1 text-[14px] text-foreground-secondary transition-colors hover:text-foreground"
                                 onClick={() => { setRecentsLimit(RECENT_VISIBLE); listViewportRef.current?.parentElement?.scrollTo({ top: 0 }); }}>

@@ -12,6 +12,7 @@
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { ConversationListItem, ConversationSourceType } from '@/types';
 import { ConversationMarker, ConversationNavItem } from '@/components/chat/sidebar/ConversationNavItem';
+import type { ConversationAgentMarker } from '@/lib/agent/activity';
 
 interface ConversationGroupProps {
     type: ConversationSourceType;
@@ -30,6 +31,7 @@ interface ConversationGroupProps {
     onCancelRename?: () => void;
     pendingTitle?: string | null;
     showPendingInGroup: boolean;
+    markers?: ReadonlyMap<string, ConversationAgentMarker>;
     /** 紧凑模式 — 内嵌侧边栏时使用更小间距 */
     compact?: boolean;
 }
@@ -51,6 +53,7 @@ export function ConversationGroup({
     onCancelRename,
     pendingTitle,
     showPendingInGroup,
+    markers,
     compact = false,
 }: ConversationGroupProps) {
     const displayCount = items.length + (showPendingInGroup ? 1 : 0);
@@ -96,6 +99,7 @@ export function ConversationGroup({
                             conv={conv}
                             isActive={activeId === conv.id}
                             isActionActive={actionConvId === conv.id}
+                            marker={markers?.get(conv.id)}
                             onOpenAction={onOpenAction}
                             isEditing={editingId === conv.id}
                             editTitle={editingId === conv.id ? editTitle : ''}

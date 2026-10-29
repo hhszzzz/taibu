@@ -113,7 +113,7 @@
 .chat-toolbar-spacer { flex: 1; min-width: 0; }
 /* 运行模式按钮（默认 / 计划 / 代码）：24px 高，点开与「+」同款弹窗；只占 chin 行左端一个键。 */
 .chat-run-mode-trigger { height: 24px; border-radius: 6px; padding: 0 8px; }
-.chat-run-mode-trigger > span { font-size: calc(12 / 16 * 1rem); }
+.chat-run-mode-trigger > span { font-size: calc(13 / 16 * 1rem); font-weight: 500; }
 .chat-run-mode-trigger > svg:last-child { margin-left: -2px; opacity: .7; }
 .chat-run-mode-menu { min-width: 148px; }
 .chat-tool-button, .chat-tool-text, .chat-model-trigger, .chat-context-meter { flex-shrink: 0; height: 32px; border-radius: 8px; transition: background-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out); }
@@ -235,9 +235,14 @@
 :is(.floating-panel.chat-plus-menu, .chat-model-options) > button,
 .floating-panel .chat-model-action { display: flex; width: 100%; min-height: 32px; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 8px; font-size: calc(14 / 16 * 1rem); line-height: calc(20 / 16 * 1rem); text-align: left; color: var(--foreground); }
 .floating-panel.chat-plus-menu > button > svg, .floating-panel .chat-model-action > svg { flex-shrink: 0; color: var(--foreground-secondary); }
+.floating-panel.chat-plus-menu > button > svg:first-child { width: 18px; height: 18px; flex: 0 0 18px; }
 .floating-panel.chat-plus-menu > button > small { display: inline-flex; height: 20px; margin-left: auto; align-items: center; padding: 0 4px; border-radius: 4px; background: var(--fill-field); font-size: calc(10 / 16 * 1rem); line-height: calc(13 / 16 * 1rem); font-weight: 500; color: var(--foreground-secondary); }
 /* claude + 菜单：名称占满、尾槽快捷键 / 当前值 / clay 勾；分析风格二级菜单带返回行。 */
-.chat-plus-label { flex: 1; min-width: 0; }
+.chat-plus-label { flex: 0 1 auto; min-width: 0; }
+/* beta 紧随名称；尾槽（勾 / 箭头）由自身外边距贴右，名称不再把整组推走。 */
+.floating-panel.chat-plus-menu > button > svg:last-child:not(:first-child) { margin-left: auto; }
+.floating-panel.chat-plus-menu > button > svg.chat-plus-check { margin-left: auto; }
+.floating-panel.chat-plus-menu > button > svg.chat-plus-check + svg:last-child { margin-left: 0; }
 .chat-plus-value { margin-left: auto; font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-tertiary); }
 .floating-panel.chat-plus-menu > button > kbd { margin-left: auto; font-family: var(--font-sans); font-size: calc(12 / 16 * 1rem); color: var(--foreground-tertiary); }
 .floating-panel.chat-plus-menu > button[aria-checked="true"] > svg { color: var(--accent); }
@@ -270,6 +275,7 @@
 .chat-model-option-tier { flex-shrink: 0; font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); }
 /* claude 模型菜单：单行项（名称 + clay 勾），二级菜单行（努力程度）右侧当前值 + chevron。 */
 .chat-model-menu-row { justify-content: space-between; }
+.chat-model-menu-row .beta-badge { margin-left: 6px; }
 .chat-model-badge { display: inline-flex; height: 18px; margin-left: 6px; align-items: center; padding: 0 6px; border-radius: 4px; background: var(--fill-field); font-size: calc(10 / 16 * 1rem); font-weight: 500; color: var(--foreground-secondary); }
 .chat-model-badge[data-tone="warning"] { background: color-mix(in srgb, var(--warning) 14%, transparent); color: var(--warning); }
 .floating-panel.chat-effort-menu { width: min(320px, calc(100vw - 16px)); }
@@ -479,3 +485,14 @@ legend.agent-question-title { margin-bottom: 2px; }
 .chat-image-example { margin: 10px 0 0; text-align: center; font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); }
 .chat-image-example button { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
 .chat-image-example button:hover { text-decoration-thickness: 2px; }
+
+/* ---- + 菜单：技能与连接器的二级浮层 ---- */
+.floating-panel.chat-extension-menu { min-width: 13rem; max-width: min(20rem, calc(100vw - 16px)); }
+.chat-plus-empty { margin: 0; padding: 8px 10px; font-size: calc(13 / 16 * 1rem); color: var(--foreground-tertiary); }
+.chat-plus-connector-list { display: flex; flex-direction: column; gap: 1px; margin: 0; padding: 0; list-style: none; }
+.chat-plus-connector-list li { display: flex; align-items: center; gap: 10px; min-height: 32px; padding: 0 10px; border-radius: 8px; font-size: calc(14 / 16 * 1rem); color: var(--foreground); }
+.chat-plus-connector-list li > svg { flex-shrink: 0; color: var(--foreground-secondary); }
+.chat-plus-connector-list li > span { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.chat-plus-connector-list li > small { font-size: calc(11 / 16 * 1rem); color: var(--foreground-tertiary); }
+.chat-plus-connector-list li > svg:last-child { color: var(--accent); }
+

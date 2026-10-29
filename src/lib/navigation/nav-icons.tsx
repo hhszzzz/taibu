@@ -311,8 +311,8 @@ export const ChartsIcon = createNavIcon('charts', enlarged(<>
 
 /** 通知：铃身以顶上挂点为中心摇两下，铃舌慢半拍跟着摆。 */
 export const BellIcon = createNavIcon('bell', <>
-    <path className="ni-bell" d="M12 4.5c-2.8 0-5 2.2-5 5v3.5L5.6 16h12.8L17 13V9.5c0-2.8-2.2-5-5-5z" />
-    <path className="ni-clapper" d="M10 19a2 2 0 0 0 4 0" />
+    <path className="ni-bell" d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.41 13.96 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.41 5.96-2.74 7.33" />
+    <path className="ni-clapper" d="M10.27 20a2 2 0 0 0 3.46 0" />
 </>);
 
 /** 定时任务：表盘与指针，和会话列表里的时钟标记同一形状；悬停时指针走一圈。 */
@@ -335,18 +335,12 @@ export const PersonalizationIcon = createNavIcon('personalization', enlarged(<>
     <path className="ni-ink" pathLength={100} d="M12.6 20.4q1.6-1.6 3.2 0t3.2 0" />
 </>, 1.1));
 
-/** 记忆：脑形轮廓——助手记住的偏好与事实；路径取自 lucide Brain（ISC），按侧栏单线风格收进 24 网格。 */
-export const MemoryIcon = createNavIcon('memory', <g className="ni-glyph">
-    <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z" />
-    <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z" />
-    <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4" />
-    <path d="M17.599 6.5a3 3 0 0 0 .399-1.375" />
-    <path d="M6.003 5.125A3 3 0 0 0 6.401 6.5" />
-    <path d="M3.477 10.896a4 4 0 0 1 .585-.396" />
-    <path d="M19.938 10.5a4 4 0 0 1 .585.396" />
-    <path d="M6 18a4 4 0 0 1-1.967-.516" />
-    <path d="M19.967 17.484A4 4 0 0 1 18 18" />
-</g>);
+/** 记忆：回环箭头 + 波浪 + 左上回勾。 */
+export const MemoryIcon = createNavIcon('memory', grid20Glyph(<g className="ni-glyph">
+    <path d="M3 10C3 13.866 6.134 17 10 17C13.866 17 17 13.866 17 10C17 6.134 13.866 3 10 3C7.409 3 5.147 4.408 3.936 6.5" />
+    <path className="ni-memory-wave" d="M6.25 10.75C6.876 10.75 7.428 10.253 7.75 9.5C8.072 10.253 8.624 10.75 9.25 10.75C9.876 10.75 10.428 10.253 10.75 9.5C11.072 10.253 11.624 10.75 12.25 10.75C12.876 10.75 13.428 10.253 13.75 9.5" />
+    <path d="M3.5 3.5L3.5 6.5L6.5 6.5" />
+</g>, 1.2));
 
 /** 知识库：摊开的书，悬停时两页从书脊向外翻一下。 */
 export const KnowledgeIcon = createNavIcon('knowledge', grid20Glyph(<>

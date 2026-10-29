@@ -170,9 +170,9 @@ export function SidebarUserCard({ user, collapsed = false, appearance = 'card' }
           title={collapsed ? '账户与设置' : undefined}
           className={collapsed
             ? `mt-1 flex h-9 w-9 items-center justify-center rounded-full border border-border transition-colors ${isMenuOpen ? 'ring-2 ring-accent/30' : 'hover:border-border-hover'}`
-            : `flex h-10 w-full items-center gap-2.5 rounded-lg px-2 text-left text-foreground transition-colors ${isMenuOpen ? 'bg-fill-field' : 'hover:bg-fill-ghost-hover'}`}
+            : `flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left text-foreground transition-colors ${isMenuOpen ? 'bg-fill-field' : 'hover:bg-fill-ghost-hover'}`}
         >
-          <Avatar src={avatarUrl} alt={displayName} size={collapsed ? 34 : 26} round />
+          <Avatar src={avatarUrl} alt={displayName} size={collapsed ? 34 : 24} round />
           {!collapsed ? (
             <>
               {/* claude 侧栏底账户行实测：头像 24、单行「名 · 计划」+ 12px chevron；整行留出 40px 呼吸。 */}
@@ -190,12 +190,12 @@ export function SidebarUserCard({ user, collapsed = false, appearance = 'card' }
         type="button"
         onClick={toggleMenu}
         className={`flex w-full items-center gap-2.5 rounded-lg px-2 transition-colors duration-150 ${
-          collapsed ? 'justify-center py-1' : 'h-10'
+          collapsed ? 'justify-center py-1' : 'h-9'
         } ${
           isMenuOpen ? 'bg-background-tertiary' : 'hover:bg-fill-ghost-hover'
         }`}
       >
-        <Avatar src={avatarUrl} alt={displayName} size={26} />
+        <Avatar src={avatarUrl} alt={displayName} size={24} />
         {!collapsed ? (
           <>
             <span className="flex min-w-0 flex-1 items-baseline gap-1 text-[14px]">

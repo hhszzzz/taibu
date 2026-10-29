@@ -10,7 +10,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { Check, ChevronDown, SlidersHorizontal } from 'lucide-react';
+import { Check, ChevronDown } from 'lucide-react';
 import { FloatingPanel } from '@/components/ui/FloatingPanel';
 
 export type AgentRunMode = 'default' | 'plan' | 'code';
@@ -40,7 +40,7 @@ export function AgentModeMenu({ planMode, codeMode, disabled, onPlanModeChange, 
         <button ref={anchorRef} type="button" className="chat-tool-text chat-run-mode-trigger"
             aria-label={`运行模式：${current.label}`} aria-haspopup="menu" aria-expanded={open}
             disabled={disabled} onClick={() => setOpen(value => !value)}>
-            <SlidersHorizontal size={14} aria-hidden="true" /><span>{current.label}</span><ChevronDown size={12} aria-hidden="true" />
+            <span>{current.label}</span><ChevronDown size={12} aria-hidden="true" />
         </button>
         <FloatingPanel open={open} anchorRef={anchorRef} onClose={() => setOpen(false)} label="运行模式"
             side="top" align="start" className="chat-plus-menu chat-run-mode-menu" arrowNavigation>

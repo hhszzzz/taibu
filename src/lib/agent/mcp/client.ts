@@ -32,6 +32,14 @@ export function mcpServerClient(scope: McpServerScope, userId?: string) {
 
 export type McpServerClient = ReturnType<typeof mcpServerClient>;
 
+/** A connector the member may use in an Agent task: the platform's or their own. */
+export type AgentConnector = { id: string; name: string; scope: McpServerScope };
+
+/** The connectors an Agent task can call, for the composer's + menu. */
+export async function fetchAgentConnectors(signal?: AbortSignal) {
+  return (await requestBrowserData<{ connectors: AgentConnector[] }>('/api/agent/connectors', { signal }, { fallbackMessage: '读取连接器失败' })).connectors;
+}
+
 export async function fetchAgentExtensionsPolicy(signal?: AbortSignal) {
   return (await requestBrowserData<{ policy: AgentExtensionsPolicy }>('/api/admin/agent-extensions-policy', { signal }, { fallbackMessage: '读取扩展策略失败' })).policy;
 }

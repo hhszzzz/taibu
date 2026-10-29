@@ -77,6 +77,8 @@ interface ChatComposerProps extends ModelSettingsProps {
     /** The lowest membership a search service serves, null when none is set up. */
     webTier?: MembershipType | null;
     agentMode?: boolean;
+    /** 在普通对话里从 + 菜单选技能时，切到 Agent 对话。 */
+    onEnableAgent?: () => void;
     /** The conversation already has messages, so the input continues it. */
     continuing?: boolean;
     awaitingInput?: boolean;
@@ -130,6 +132,7 @@ export function ChatComposer({
     plainWebAvailable = false,
     webTier = null,
     agentMode = false,
+    onEnableAgent,
     continuing = false,
     awaitingInput = false,
     allowDuringRun = false,
@@ -201,7 +204,6 @@ export function ChatComposer({
         mentionDataSources, mentionKnowledgeBases,
         mentionLoadError, mentionDataSourceErrors,
         mentionLoading, mentionDefaultCategory, setMentionDefaultCategory,
-        knowledgeBaseOpen, setKnowledgeBaseOpen,
         knowledgeBaseSavingId,
         canUseWeb, canUseBoth, canUseKnowledgeBase,
         canMentionAnything,
@@ -352,17 +354,6 @@ export function ChatComposer({
         } else {
             onAttachmentChange({ ...attachmentState, webSearchEnabled: newWebSearch });
         }
-    };
-
-    const handleKnowledgeBaseOpen = async () => {
-        if (!canUseKnowledgeBase) {
-            showToast('info', '知识库仅限 Plus 以上会员使用');
-            return;
-        }
-        setKnowledgeBaseOpen(true);
-        state.setMentionLoadError(null);
-        textareaRef.current?.focus();
-        await refreshMentionData(true);
     };
 
     const toggleKnowledgeBaseSearch = useCallback(async (kbId: string) => {
@@ -634,7 +625,19 @@ export function ChatComposer({
         hasFile,
         onFileChange: handleFileChange,
         plainWeb: { active: hasWebSearch, allowed: plainWebAllowed || hasWebSearch, title: plainWebTitle, onToggle: handleWebToggle },
-        knowledgeBase: { enabled: knowledgeBaseEnabled, allowed: canUseKnowledgeBase, onOpen: () => void handleKnowledgeBaseOpen(), selected: promptKnowledgeBases, onRemove: (id: string) => void toggleKnowledgeBaseSearch(id) },
+        knowledgeBase: {
+            enabled: knowledgeBaseEnabled, allowed: canUseKnowledgeBase, selected: promptKnowledgeBases,
+            items: mentionKnowledgeBases, savingId: knowledgeBaseSavingId, loading: mentionLoading,
+            onLoad: () => { state.setMentionLoadError(null); void refreshMentionData(true); },
+            onToggle: (id: string) => void toggleKnowledgeBaseSearch(id),
+            onRemove: (id: string) => void toggleKnowledgeBaseSearch(id),
+        },
+        onEnableAgent,
+        onSkillSelect: (name: string) => {
+            if (!agentMode) onEnableAgent?.();
+            onInputChange(`/skill:${name} `);
+            requestAnimationFrame(() => textareaRef.current?.focus());
+        },
         chatMode,
         onChatModeChange: onChatModeChange && ((mode: ChatMode) => { onChatModeChange(mode); textareaRef.current?.focus(); }),
         styles,
@@ -646,11 +649,10 @@ export function ChatComposer({
     };
 
     return (
-        <div data-chat-composer data-expanded={composerExpanded || undefined} className={`chat-composer-dock${hero ? ' is-hero' : ''}${disabled ? ' is-locked' : ''}`} style={{ zIndex: knowledgeBaseOpen ? 60 : 30, ...dockStyle }}>
+        <div data-chat-composer data-expanded={composerExpanded || undefined} className={`chat-composer-dock${hero ? ' is-hero' : ''}${disabled ? ' is-locked' : ''}`} style={dockStyle}>
             <div className="chat-composer-inner">
                 {header && <div className="chat-composer-header">{header}</div>}
                 <MentionManager
-                    textareaRef={textareaRef}
                     userId={userId}
                     mentionOpen={mentionOpen}
                     setMentionOpen={setMentionOpen}
@@ -665,11 +667,6 @@ export function ChatComposer({
                     setMentionDefaultCategory={setMentionDefaultCategory}
                     canUseKnowledgeBase={canUseKnowledgeBase}
                     handleSelectMention={handleSelectMention}
-                    knowledgeBaseOpen={knowledgeBaseOpen}
-                    setKnowledgeBaseOpen={setKnowledgeBaseOpen}
-                    knowledgeBaseSavingId={knowledgeBaseSavingId}
-                    promptKbIdSet={promptKbIdSet}
-                    toggleKnowledgeBaseSearch={toggleKnowledgeBaseSearch}
                 />
                 {queue}
 

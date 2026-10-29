@@ -2,7 +2,9 @@
 // 'use client'：模型菜单需要弹层、键盘导航与浏览器内的自定义模型状态
 
 import { useMemo, useEffect, useRef, useState, useId, type ReactNode } from 'react';
-import { Check, ChevronDown, ChevronRight, Cpu, KeyRound } from 'lucide-react';
+import { BetaBadge } from '@/components/ui/BetaBadge';
+import { Check, ChevronDown, ChevronRight, Cpu } from 'lucide-react';
+import { KeyIcon } from '@/lib/navigation/nav-icons';
 import { SoundWaveLoader } from './SoundWaveLoader';
 import { FloatingPanel } from './FloatingPanel';
 import { getVendorIcon } from '@/lib/ai/vendor-config';
@@ -181,12 +183,12 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
             {onCollaboratorsChange && <button ref={collabRef} type="button" role="menuitem" className="chat-model-action chat-model-menu-row"
                 aria-haspopup="menu" aria-expanded={collabOpen} disabled={disabled || !available.length}
                 onClick={() => setCollabOpen(value => !value)}>
-                <span>多模型协作</span>{collaborationEnabled && <span className="chat-model-menu-value">{subCollaborators.length}</span>}<ChevronRight size={14} aria-hidden="true" />
+                <span>多模型协作<BetaBadge /></span>{collaborationEnabled && <span className="chat-model-menu-value">{subCollaborators.length}</span>}<ChevronRight size={14} aria-hidden="true" />
             </button>}
             {extra}
             {onCustomProvider && <>
                 <div className="chat-model-separator" aria-hidden="true" />
-                <button type="button" className="chat-model-action" onClick={() => { close(); onCustomProvider(); }}><KeyRound size={15} aria-hidden="true" />使用自己的模型 API</button>
+                <button type="button" className="chat-model-action" onClick={() => { close(); onCustomProvider(); }}><KeyIcon size={16} />使用自己的模型 API</button>
             </>}
             {query.error && <p className="chat-model-note" role="alert">{query.error instanceof Error ? query.error.message : '模型列表加载失败'}</p>}
         </FloatingPanel>

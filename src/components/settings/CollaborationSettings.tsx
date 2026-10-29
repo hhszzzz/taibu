@@ -11,6 +11,7 @@ import { DEFAULT_AGENT_PROFILE } from '@/lib/agent/profiles/config';
 import { fetchProfileOptions } from '@/lib/agent/profiles/client';
 import { queryKeys } from '@/lib/query/keys';
 import type { MembershipType } from '@/lib/user/membership';
+import { BetaBadge } from '@/components/ui/BetaBadge';
 
 const EFFORT_LABELS: ReadonlyArray<readonly [NonNullable<AgentCollaborator['reasoningEffort']>, string]> = [
     ['minimal', '最低'], ['low', '低'], ['medium', '中'], ['high', '高'], ['xhigh', '超高'], ['max', '最高'],
@@ -47,7 +48,7 @@ export function CollaborationSettings({ userId, membershipType }: { userId: stri
     const patchMember = (index: number, change: Partial<AgentCollaborator>) => setMembers(preset.members.map((item, position) => position === index ? { ...item, ...change } : item));
     return <section className="settings-form-section settings-form-section-divided" aria-label="多模型协作设置">
         <div className="settings-form-heading">
-            <h3>多模型协作</h3>
+            <h3>多模型协作<BetaBadge /></h3>
             <p>每个对话默认不协作；在输入框的模型菜单里勾选模型后才会启用。这里为常用模型预设名称、角色、努力程度和分工，勾选时自动套用。主模型不占成员名额，汇总只计一次费用。</p>
         </div>
         {preset.members.map((item, index) => {

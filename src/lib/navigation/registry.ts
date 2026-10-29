@@ -70,6 +70,8 @@ export interface NavItemDef {
   featureId?: string;
   /** Personal data that needs an account: guests do not see the entry at all. */
   requiresAuth?: boolean;
+  /** Agent 新能力：入口旁显示 beta。 */
+  beta?: boolean;
   /** Logical grouping */
   category: NavCategory;
   /** Divination sub-group; required for `category: 'divination'` items. */
@@ -100,7 +102,7 @@ export const NAV_REGISTRY: readonly NavItemDef[] = [
 
   // ── Tools ───────────────────────────────────────────────────────────────
   { id: 'chat', href: '/chat', label: '新聊天', icon: ChatIcon, category: 'tool' },
-  { id: 'scheduled', href: '/scheduled', label: '定时任务', icon: ScheduleIcon, featureId: 'agent', requiresAuth: true, category: 'tool' },
+  { id: 'scheduled', href: '/scheduled', label: '定时任务', icon: ScheduleIcon, featureId: 'agent', requiresAuth: true, beta: true, category: 'tool' },
   { id: 'records', href: '/records', label: '命理记录', icon: RecordsIcon, requiresAuth: true, category: 'tool' },
   { id: 'community', href: '/community', label: '社区', icon: CommunityIcon, category: 'tool' },
 

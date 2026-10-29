@@ -16,6 +16,7 @@
 import { MessagesSquare } from 'lucide-react';
 import { AgentIcon } from '@/lib/navigation/nav-icons';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { BetaBadge } from '@/components/ui/BetaBadge';
 import { setChatMode, useChatModeControl } from '@/lib/chat/mode-control-store';
 
 export interface ModeSwitchFallback {
@@ -52,7 +53,7 @@ export function ModeSwitch({ className = 'chat-mode-switch', fallback }: { class
             </button>
             <button type="button" role="radio" aria-checked={state.mode === 'agent'} aria-label={LABELS.agent}
                 tabIndex={state.mode === 'agent' ? 0 : -1} disabled={state.agentDisabled && state.mode !== 'agent'} onClick={() => select('agent')}>
-                <Tooltip label="Agent" side="bottom"><span className="chat-mode-switch-icon"><AgentIcon size={16} /></span></Tooltip>
+                <Tooltip label="Agent" side="bottom"><span className="chat-mode-switch-icon"><AgentIcon size={18} /></span><BetaBadge className="is-compact" /></Tooltip>
             </button>
         </div>
     );

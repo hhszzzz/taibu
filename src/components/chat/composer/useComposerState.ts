@@ -68,7 +68,6 @@ export function useComposerState(opts: UseComposerStateOptions) {
     const [mentionDefaultCategory, setMentionDefaultCategory] = useState<'knowledge' | 'data' | null>(null);
 
     // --- Knowledge base state ---
-    const [knowledgeBaseOpen, setKnowledgeBaseOpen] = useState(false);
     const [knowledgeBaseSavingId, setKnowledgeBaseSavingId] = useState<string | null>(null);
 
     // --- Derived values ---
@@ -202,7 +201,6 @@ export function useComposerState(opts: UseComposerStateOptions) {
         mentionLoading: mentionsAreCurrent && mentionLoading, setMentionLoading,
         mentionDefaultCategory, setMentionDefaultCategory,
         // Knowledge base
-        knowledgeBaseOpen, setKnowledgeBaseOpen,
         knowledgeBaseSavingId, setKnowledgeBaseSavingId,
         // Derived
         canUseWeb, canUseBoth, canUseKnowledgeBase,

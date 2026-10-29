@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Eye, EyeOff, KeyRound, LockKeyhole, Monitor, PencilLine } from 'lucide-react';
+import { Eye, EyeOff, LockKeyhole, Monitor, PencilLine } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import type { CustomProviderConfig } from '@/types';
 import { getVendorName } from '@/lib/ai/vendor-labels';
@@ -86,7 +86,7 @@ function StorageNotice({ compact }: { compact: boolean }) {
         return (
             <p className="flex items-start gap-2 rounded-xl bg-background-secondary px-3 py-2.5 text-xs leading-relaxed text-foreground-secondary">
                 <LockKeyhole aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
-                <span>Key 只存在当前标签页，普通对话由浏览器直连供应商；Agent 任务会加密临时保存，结束即删除。</span>
+                <span>Key 只存在浏览器，对话直连；Agent 会加密临时保存。</span>
             </p>
         );
     }
@@ -459,10 +459,7 @@ export function CustomProviderPanel({
 
     return (
         <div className="flex flex-col gap-5 rounded-2xl border border-border bg-surface p-5 shadow-[0_10px_30px_rgba(11, 11, 11,0.12)] md:w-[420px]">
-            <div className="flex items-start gap-3 pr-8">
-                <span aria-hidden="true" className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-strong">
-                    <KeyRound className="h-[18px] w-[18px]" />
-                </span>
+            <div className="min-w-0 pr-8">
                 <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                         <h3 id="custom-provider-panel-title" className="font-display text-lg leading-snug text-foreground">自定义模型</h3>

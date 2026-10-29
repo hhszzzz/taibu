@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useSessionSafe } from '@/lib/hooks/session-context';
 import { useAppBootstrap } from '@/lib/hooks/useAppBootstrap';
 import type { UserProfile } from '@/lib/user/profile';
@@ -25,12 +25,13 @@ export function useCurrentUserProfile(options?: { enabled?: boolean }) {
   const enabled = options?.enabled ?? true;
   const { user, loading: sessionLoading } = useSessionSafe();
   const bootstrap = useAppBootstrap({ enabled });
-  const profile = toUserProfile(bootstrap.data);
+  const profile = useMemo(() => toUserProfile(bootstrap.data), [bootstrap.data]);
   const profileResolved = bootstrap.viewerStateResolved;
 
+  const refreshBootstrap = bootstrap.refresh;
   const refresh = useCallback(async () => {
-    await bootstrap.refresh();
-  }, [bootstrap]);
+    await refreshBootstrap();
+  }, [refreshBootstrap]);
 
   return {
     profile: user ? profile : null,

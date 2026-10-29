@@ -19,7 +19,8 @@ export function useAppBootstrap(options?: { enabled?: boolean }) {
   const enabled = options?.enabled ?? true;
   const queryClient = useQueryClient();
   const { user, loading: sessionLoading } = useSessionSafe();
-  const queryKey = queryKeys.appBootstrap(user?.id ?? null);
+  const userId = user?.id ?? null;
+  const queryKey = useMemo(() => queryKeys.appBootstrap(userId), [userId]);
   const cachedData = queryClient.getQueryData<AppBootstrapData>(queryKey);
   const [timedOutViewerKey, setTimedOutViewerKey] = useState<string | null>(null);
 

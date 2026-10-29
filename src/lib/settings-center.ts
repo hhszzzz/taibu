@@ -56,8 +56,8 @@ export const SETTINGS_CENTER_GROUP_LABELS: Record<SettingsCenterTabGroup, string
 };
 
 const SETTINGS_CENTER_TAB_META: Record<SettingsCenterTab, Omit<SettingsCenterTabState, 'disabled'>> = {
-  profile: { id: 'profile', label: '账户', group: 'account' },
-  general: { id: 'general', label: '常规', group: 'account' },
+  profile: { id: 'profile', label: '账户', group: 'account', description: '管理个人资料、会员信息与登录安全。' },
+  general: { id: 'general', label: '常规', group: 'account', description: '调整外观、阅读字号与提醒方式。' },
   upgrade: { id: 'upgrade', label: '订阅', group: 'account' },
   shares: { id: 'shares', label: '分享链接', group: 'account', description: '你公开分享过的对话。删除后原链接立即失效。' },
   help: { id: 'help', label: '帮助', group: 'account', description: '常见问题与联系方式。' },
@@ -65,13 +65,13 @@ const SETTINGS_CENTER_TAB_META: Record<SettingsCenterTab, Omit<SettingsCenterTab
   byok: { id: 'byok', label: '自定义模型', group: 'extensions', description: '用你自己的 API Key 调用模型，不消耗本站积分。' },
   charts: { id: 'charts', label: '命盘', group: 'extensions', description: '保存过的命盘都在这里。默认八字命盘会用于日运、月运和每日早报。' },
   'knowledge-base': { id: 'knowledge-base', label: '知识库', group: 'extensions', description: '把命盘、解读和资料归档到知识库，AI 对话时可以检索引用。' },
-  skills: { id: 'skills', label: '技能', group: 'extensions', beta: true, description: '添加你自己的 Agent 技能：按 SKILL.md 写好做法，Agent 在相关任务中自动加载，也可以在输入框用 /skill:名称 调用。只对你自己生效。' },
-  connectors: { id: 'connectors', label: '连接器', group: 'extensions', beta: true, description: '接入你自己的 MCP 服务，Agent 在开启联网的任务中可以调用它们的工具。只对你自己生效。' },
-  'mcp-service': { id: 'mcp-service', label: 'MCP', group: 'extensions', description: '在支持 MCP 的客户端里直接调用太卜的排盘工具。' },
+  skills: { id: 'skills', label: '技能', group: 'extensions', beta: true, description: '添加自己的 Agent 技能，在相关任务中自动加载，或用 /skill:名称 调用。' },
+  connectors: { id: 'connectors', label: '连接器', group: 'extensions', beta: true, description: '接入自己的 MCP 服务，让 Agent 在联网任务中调用它们的工具。' },
+  'mcp-service': { id: 'mcp-service', label: 'Taibu MCP', group: 'extensions', description: '在支持 MCP 的客户端里直接调用太卜的排盘工具。' },
   'admin-announcements': { id: 'admin-announcements', label: '公告', group: 'management', description: '发布和编辑站内公告，支持 Markdown，保存后立即生效。' },
   'admin-features': { id: 'admin-features', label: '功能与激活码', group: 'management', description: '统一管理功能开关与激活码发放。' },
-  'admin-ai-services': { id: 'admin-ai-services', label: 'AI 服务', group: 'management', description: '管理模型配置、来源绑定和网关可用性，查看 Agent 任务的执行过程与测评排行。' },
-  'admin-agent-extensions': { id: 'admin-agent-extensions', label: 'Agent 扩展', group: 'management', beta: true, description: '接入平台级 MCP 服务与联网搜索路由，管理所有人可用的技能与智能体角色，决定用户能否添加自己的连接器和技能。' },
+  'admin-ai-services': { id: 'admin-ai-services', label: 'AI 服务', group: 'management', description: '管理模型、来源与网关，查看 Agent 任务和测评结果。' },
+  'admin-agent-extensions': { id: 'admin-agent-extensions', label: 'Agent 扩展', group: 'management', beta: true, description: '管理平台 MCP、联网搜索、技能与智能体角色，并设置用户扩展权限。' },
 };
 
 function isSettingsCenterTabDisabled(tab: SettingsCenterTab, flags: SettingsCenterFlags) {

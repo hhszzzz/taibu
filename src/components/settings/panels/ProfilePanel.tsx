@@ -13,7 +13,7 @@ import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { StatusBanner } from '@/components/profile/StatusBanner';
 import { PasswordSection } from '@/components/profile/PasswordSection';
-import { SettingsRow } from '@/components/settings/SettingsControls';
+import { SettingsRow, SettingsSaveBar } from '@/components/settings/SettingsControls';
 import { SettingsLoginRequired } from '@/components/settings/SettingsLoginRequired';
 import { useCurrentUserProfile } from '@/lib/hooks/useCurrentUserProfile';
 import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
@@ -163,18 +163,21 @@ export default function ProfilePanel() {
       <StatusBanner error={error} success={success} />
 
       <section className="settings-section">
-        <h3 className="settings-section-title">个人资料</h3>
-        <div className="settings-card settings-profile-card">
-          <div className="settings-avatar">
-            <Avatar src={avatarUrl} name={nickname || displayEmail} />
-            <button type="button" aria-label="更换头像" onClick={handleAvatarClick} disabled={uploadingAvatar} className="settings-avatar-button">
-              <Camera size={15} aria-hidden="true" />
-            </button>
-            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
-          </div>
-          <div className="settings-profile-fields">
-            <label htmlFor="account-nickname" className="text-[13px] text-foreground-secondary">显示昵称</label>
-            <div className="flex gap-2">
+        <div className="settings-section-heading">
+          <h3 className="settings-section-title">个人资料</h3>
+          <p className="settings-section-description">你在社区与对话中的公开身份。</p>
+        </div>
+        <div className="settings-section-body">
+          <div className="settings-card settings-profile-card">
+            <div className="settings-avatar">
+              <Avatar src={avatarUrl} name={nickname || displayEmail} />
+              <button type="button" aria-label="更换头像" onClick={handleAvatarClick} disabled={uploadingAvatar} className="settings-avatar-button">
+                <Camera size={15} aria-hidden="true" />
+              </button>
+              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+            </div>
+            <div className="settings-profile-fields">
+              <label htmlFor="account-nickname" className="text-[13px] text-foreground-secondary">显示昵称</label>
               <input
                 id="account-nickname"
                 type="text"
@@ -182,32 +185,43 @@ export default function ProfilePanel() {
                 onChange={(event) => setNickname(event.target.value)}
                 className="settings-input min-w-0 flex-1"
               />
-              {hasNicknameChanges ? (
-                <button type="button" onClick={handleSave} disabled={saving || !nickname.trim()} className="settings-button settings-button-primary">
-                  {saving ? '保存中...' : '保存'}
-                </button>
-              ) : null}
+              <span className="text-xs text-foreground-tertiary">{uploadingAvatar ? '头像上传中...' : '社区发帖与评论时显示此昵称'}</span>
             </div>
-            <span className="text-xs text-foreground-tertiary">{uploadingAvatar ? '头像上传中...' : '社区发帖与评论时显示此昵称'}</span>
           </div>
-        </div>
-        <div className="settings-group">
-          <SettingsRow label="电子邮箱" control={<span className="text-sm text-foreground-secondary">{displayEmail}</span>} />
-          <SettingsRow
-            label="会员"
-            control={(
-              <Link href={getSettingsCenterRouteTarget('upgrade')} className="inline-flex items-center gap-1 text-sm text-accent hover:text-accent-hover">
-                {membershipText}<ChevronRight size={15} aria-hidden="true" />
-              </Link>
-            )}
-          />
+          <div className="settings-group">
+            <SettingsRow label="电子邮箱" control={<span className="text-sm text-foreground-secondary">{displayEmail}</span>} />
+            <SettingsRow
+              label="会员"
+              control={(
+                <Link href={getSettingsCenterRouteTarget('upgrade')} className="inline-flex items-center gap-1 text-sm text-accent hover:text-accent-hover">
+                  {membershipText}<ChevronRight size={15} aria-hidden="true" />
+                </Link>
+              )}
+            />
+          </div>
         </div>
       </section>
 
       <section className="settings-section">
-        <h3 className="settings-section-title">安全</h3>
-        <PasswordSection email={user.email || ''} />
+        <div className="settings-section-heading">
+          <h3 className="settings-section-title">安全</h3>
+          <p className="settings-section-description">通过绑定邮箱验证后修改密码。</p>
+        </div>
+        <div className="settings-section-body">
+          <PasswordSection email={user.email || ''} />
+        </div>
       </section>
+
+      {hasNicknameChanges ? (
+        <SettingsSaveBar
+          message="昵称有未保存的更改"
+          saving={saving}
+          saveDisabled={!nickname.trim()}
+          saveLabel="保存昵称"
+          onCancel={() => { setNickname(originalNickname); setError(''); }}
+          onSave={() => void handleSave()}
+        />
+      ) : null}
     </div>
   );
 }

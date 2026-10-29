@@ -62,9 +62,7 @@ const LazyAdminAgentExtensionsContent = lazy(async () => ({
 
 function SettingsPanelFallback() {
   return (
-    <div className="flex min-h-[240px] items-center justify-center rounded-lg border border-border bg-background">
-      <div className="text-sm text-foreground-secondary">加载中...</div>
-    </div>
+    <div className="settings-panel-state" role="status">加载中…</div>
   );
 }
 
@@ -78,7 +76,7 @@ function SettingsTabDisabledState({
   description: string;
 }) {
   return (
-    <div className="rounded-lg border border-border bg-background p-5">
+    <div className="settings-empty-panel">
       <div className="flex items-center gap-3">
         <div className="flex h-9 w-9 items-center justify-center rounded-md text-foreground-secondary">
           <Icon size={SETTINGS_CENTER_ICON_SIZES.disabled} className="shrink-0" />
@@ -98,7 +96,7 @@ function AdminPermissionRequiredState({ loggedIn }: { loggedIn: boolean }) {
   }
 
   return (
-    <div className="rounded-lg border border-border bg-background p-5">
+    <div className="settings-empty-panel">
       <h2 className="text-sm font-semibold text-foreground">无权限访问</h2>
       <p className="mt-1 text-sm text-foreground-secondary">当前账号不在管理员名单中，无法查看该管理面板。</p>
     </div>
@@ -107,7 +105,7 @@ function AdminPermissionRequiredState({ loggedIn }: { loggedIn: boolean }) {
 
 function AdminStateErrorState() {
   return (
-    <div className="rounded-lg border border-border bg-background p-5">
+    <div className="settings-empty-panel">
       <h2 className="text-sm font-semibold text-foreground">管理员状态加载失败</h2>
       <p className="mt-1 text-sm text-foreground-secondary">暂时无法确认当前账号的管理员权限，请稍后重试。</p>
     </div>

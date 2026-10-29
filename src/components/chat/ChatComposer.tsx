@@ -225,7 +225,7 @@ export function ChatComposer({
         onSend();
     };
 
-    // 长期记忆开关（与设置中心「任务助手」同一份用户偏好）：+ 菜单可勾选。
+    // 长期记忆开关（与设置中心「记忆」同一份用户偏好）：+ 菜单可勾选。
     const [memoryEnabled, setMemoryEnabled] = useState<boolean | null>(null);
     const [memoryBusy, setMemoryBusy] = useState(false);
     const memoryFeatureEnabled = isFeatureEnabled('ai-personalization');

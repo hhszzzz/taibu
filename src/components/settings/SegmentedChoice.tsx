@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react';
+import type { CSSProperties, KeyboardEvent } from 'react';
 
 type SegmentedChoiceOption<T extends string> = {
   value: T;
@@ -29,17 +29,30 @@ export function SegmentedChoice<T extends string>({
     width: `calc((100% - 0.5rem) / ${options.length})`,
     transform: `translateX(${activeIndex * 100}%)`,
   };
+  const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    const lastIndex = options.length - 1;
+    const nextIndex = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? (activeIndex + 1) % options.length
+      : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? (activeIndex + lastIndex) % options.length
+        : event.key === 'Home' ? 0
+          : event.key === 'End' ? lastIndex
+            : -1;
+    if (nextIndex < 0) return;
+    event.preventDefault();
+    onChange(options[nextIndex].value);
+    const buttons = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role=radio]');
+    buttons?.[nextIndex]?.focus();
+  };
 
   return (
     <div
       role="radiogroup"
       aria-label={ariaLabel}
-      className="relative grid w-full rounded-xl bg-background-secondary p-1"
+      className="settings-segmented relative grid w-full p-1"
       style={layoutStyle}
     >
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute inset-y-1 left-1 rounded-[7px] bg-surface shadow-sm transition-transform duration-150 dark:bg-background-tertiary"
+        className="settings-segmented-indicator pointer-events-none absolute inset-y-1 left-1"
         style={indicatorStyle}
       />
       {options.map((option) => {
@@ -51,12 +64,10 @@ export function SegmentedChoice<T extends string>({
             type="button"
             role="radio"
             aria-checked={active}
+            tabIndex={active ? 0 : -1}
             onClick={() => onChange(option.value)}
-            className={`relative z-10 h-8 rounded-[7px] px-3 text-[13px] transition-colors duration-150 ${
-              active
-                ? 'font-medium text-foreground'
-                : 'text-foreground-secondary hover:text-foreground'
-            }`}
+            onKeyDown={handleKeyDown}
+            className={`settings-segmented-option relative z-10 px-3 ${active ? 'is-active' : ''}`}
           >
             {option.label}
           </button>

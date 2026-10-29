@@ -1,10 +1,10 @@
 /**
  * 设置中心通用排版：分组、设置行、开关与子页标签。
  *
- * 桌面端设置行以细分隔线排列；手机端同一分组收进白色圆角卡片（见 settings-page.css）。
+ * 宽屏下组标题与内容分栏；窄屏恢复单栏（见 settings-page.css）。
  */
 import { useRef, type KeyboardEvent, type ReactNode } from 'react';
-import type { LucideIcon } from 'lucide-react';
+import { Check, type LucideIcon } from 'lucide-react';
 import { useTabIndicator } from '@/lib/motion/tab-indicator';
 
 export function SettingsSection({
@@ -18,9 +18,11 @@ export function SettingsSection({
 }) {
   return (
     <section className="settings-section">
-      <h3 className="settings-section-title">{title}</h3>
-      {description ? <p className="settings-section-description">{description}</p> : null}
-      <div className="settings-group">{children}</div>
+      <div className="settings-section-heading">
+        <h3 className="settings-section-title">{title}</h3>
+        {description ? <p className="settings-section-description">{description}</p> : null}
+      </div>
+      <div className="settings-section-body"><div className="settings-group">{children}</div></div>
     </section>
   );
 }
@@ -73,6 +75,96 @@ export function SettingsSwitch({
     >
       <span aria-hidden="true" className="settings-switch-thumb" />
     </button>
+  );
+}
+
+export type SettingsChoiceOption<T extends string> = {
+  value: T;
+  label: string;
+  preview: ReactNode;
+};
+
+export function SettingsChoiceCards<T extends string>({
+  ariaLabel,
+  labelledBy,
+  value,
+  onChange,
+  options,
+}: {
+  ariaLabel?: string;
+  labelledBy?: string;
+  value: T;
+  onChange: (next: T) => void;
+  options: readonly SettingsChoiceOption<T>[];
+}) {
+  const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    const lastIndex = options.length - 1;
+    const index = options.findIndex(option => option.value === value);
+    const nextIndex = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? (index + 1) % options.length
+      : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? (index + lastIndex) % options.length
+        : event.key === 'Home' ? 0
+          : event.key === 'End' ? lastIndex
+            : -1;
+    if (nextIndex < 0 || index < 0) return;
+    event.preventDefault();
+    onChange(options[nextIndex].value);
+    const buttons = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role=radio]');
+    buttons?.[nextIndex]?.focus();
+  };
+
+  return (
+    <div role="radiogroup" aria-label={ariaLabel} aria-labelledby={labelledBy} className="settings-choice-cards">
+      {options.map(option => {
+        const selected = option.value === value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            tabIndex={selected ? 0 : -1}
+            onClick={() => onChange(option.value)}
+            onKeyDown={handleKeyDown}
+            className="settings-choice-card"
+          >
+            {option.preview}
+            <span className="settings-choice-check" aria-hidden="true"><Check size={12} strokeWidth={2.5} /></span>
+            <span className="settings-choice-label">{option.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export function SettingsSaveBar({
+  message,
+  saving = false,
+  saveDisabled = false,
+  saveLabel = '保存更改',
+  sticky = true,
+  onCancel,
+  onSave,
+}: {
+  message: string;
+  saving?: boolean;
+  saveDisabled?: boolean;
+  saveLabel?: string;
+  /** 同页有两个保存区时，靠后的那个用 false，避免两条浮动保存条叠在一起。 */
+  sticky?: boolean;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  return (
+    <div className={`settings-save-bar${sticky ? '' : ' is-static'}`}>
+      <p role="status"><span className="settings-save-dot" aria-hidden="true" />{message}</p>
+      <div className="settings-save-actions">
+        <button type="button" onClick={onCancel} disabled={saving} className="settings-button settings-button-ghost">取消</button>
+        <button type="button" onClick={onSave} disabled={saving || saveDisabled} className="settings-button settings-button-primary">
+          {saving ? '保存中…' : saveLabel}
+        </button>
+      </div>
+    </div>
   );
 }
 

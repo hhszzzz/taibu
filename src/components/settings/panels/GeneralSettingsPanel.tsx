@@ -12,7 +12,8 @@ import { useTheme } from '@/components/ui/ThemeProvider';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { SegmentedChoice } from '@/components/settings/SegmentedChoice';
-import { SettingsRow, SettingsSection, SettingsSwitch } from '@/components/settings/SettingsControls';
+import { SettingsSelect } from '@/components/settings/SettingsSelect';
+import { SettingsChoiceCards, SettingsRow, SettingsSection, SettingsSwitch } from '@/components/settings/SettingsControls';
 import { SettingsLoginRequired } from '@/components/settings/SettingsLoginRequired';
 import { loadReminderSubscriptions, type ReminderType, updateReminderSubscriptionClient } from '@/lib/reminders-client';
 import { mutationEffects } from '@/lib/query/invalidation';
@@ -305,23 +306,28 @@ function AccountGeneralSettingsPanel() {
       {loadError ? <div role="alert" className="settings-alert">{loadError}</div> : null}
 
       <section className="settings-section">
-        <h3 className="settings-section-title">外观</h3>
-        <div role="radiogroup" aria-label="外观" className="settings-choice-cards">
-          {THEME_MODE_OPTIONS.map(option => (
-            <button
-              key={option.value}
-              type="button"
-              role="radio"
-              aria-checked={themeMode === option.value}
-              onClick={() => setThemeMode(option.value)}
-              className="settings-choice-card"
-            >
-              <span aria-hidden="true" className="settings-theme-preview">
-                {option.preview.map(part => <span key={part} className={part} />)}
-              </span>
-              <span>{option.label}</span>
-            </button>
-          ))}
+        <div className="settings-section-heading">
+          <h3 className="settings-section-title">外观</h3>
+          <p className="settings-section-description">选择适合阅读环境的界面明暗。</p>
+        </div>
+        <div className="settings-section-body">
+          <SettingsChoiceCards
+            ariaLabel="外观"
+            value={themeMode}
+            onChange={setThemeMode}
+            options={THEME_MODE_OPTIONS.map(option => ({
+              value: option.value,
+              label: option.label,
+              preview: (
+                <span aria-hidden="true" className={`settings-theme-preview is-${option.value}`}>
+                  <span className="settings-theme-preview-bar"><i /><i /><i /></span>
+                  <span className="settings-theme-preview-body">
+                    {option.preview.map(part => <span key={part} className={part} />)}
+                  </span>
+                </span>
+              ),
+            }))}
+          />
         </div>
       </section>
 
@@ -336,16 +342,17 @@ function AccountGeneralSettingsPanel() {
           description="English 即将上线"
           controlId="settings-language"
           control={(
-            <select
+            <SettingsSelect
               id="settings-language"
+              ariaLabel="语言"
               value={settings.language}
-              onChange={(event) => updateSetting('language', event.target.value as 'zh' | 'en')}
+              onChange={(value) => updateSetting('language', value)}
               disabled={Boolean(loadError) || pending.has('language')}
-              className="settings-select"
-            >
-              <option value="zh">简体中文</option>
-              <option value="en" disabled>English (即将上线)</option>
-            </select>
+              options={[
+                { value: 'zh', label: '简体中文' },
+                { value: 'en', label: 'English (即将上线)', disabled: true },
+              ]}
+            />
           )}
         />
       </SettingsSection>

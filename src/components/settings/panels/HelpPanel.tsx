@@ -52,54 +52,64 @@ export default function HelpPanel() {
   const [expandedFAQ, setExpandedFAQ] = useState<number | null>(null);
 
   return (
-    <div className="flex flex-col gap-9">
-      <section aria-labelledby="help-faq-heading" className="flex flex-col gap-3">
-        <h3 id="help-faq-heading" className="text-[13px] font-medium text-foreground-tertiary">常见问题</h3>
-        <div className="overflow-hidden rounded-2xl border border-border bg-surface">
-          {FAQ_LIST.map((faq, index) => {
-            const expanded = expandedFAQ === index;
-            const answerId = `help-faq-answer-${index}`;
-            return (
-              <div key={faq.question} className="[&+div]:border-t [&+div]:border-border">
-                <h4>
-                  <button
-                    type="button"
-                    aria-expanded={expanded}
-                    aria-controls={answerId}
-                    onClick={() => setExpandedFAQ(expanded ? null : index)}
-                    className={`flex min-h-14 w-full items-center justify-between gap-4 px-5 py-3 text-left text-[15px] text-foreground transition-colors duration-150 hover:bg-background-secondary/60 ${expanded ? 'font-medium' : ''}`}
-                  >
-                    {faq.question}
-                    <ChevronDown aria-hidden="true" className={`h-4 w-4 flex-shrink-0 text-foreground-tertiary transition-transform duration-150 ${expanded ? 'rotate-180' : ''}`} />
-                  </button>
-                </h4>
-                <div id={answerId} hidden={!expanded} className="px-5 pb-5 text-sm leading-[1.75] text-foreground-secondary">
-                  {faq.answer}
-                </div>
-              </div>
-            );
-          })}
+    <div>
+      <section aria-labelledby="help-faq-heading" className="settings-section">
+        <div className="settings-section-heading">
+          <h3 id="help-faq-heading" className="settings-section-title">常见问题</h3>
+          <p className="settings-section-description">关于 AI 服务、积分与命盘的常见疑问。</p>
         </div>
-      </section>
-
-      <section aria-labelledby="help-contact-heading" className="flex flex-col gap-3">
-        <h3 id="help-contact-heading" className="text-[13px] font-medium text-foreground-tertiary">联系我们</h3>
-        <div className="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-5">
-          <p className="text-pretty text-sm leading-relaxed text-foreground">没有找到答案？可以发邮件，或在 GitHub 仓库提 Issue。</p>
-          <div className="flex flex-wrap gap-2">
-            <a href={`mailto:${SUPPORT_EMAIL}`} className={CONTACT_LINK}>
-              <Mail aria-hidden="true" className="h-4 w-4 flex-shrink-0 text-foreground-secondary" />
-              <span className="truncate">{SUPPORT_EMAIL}</span>
-            </a>
-            <a href={PROJECT_REPO_URL} target="_blank" rel="noreferrer" className={CONTACT_LINK}>
-              <Github aria-hidden="true" className="h-4 w-4 flex-shrink-0 text-foreground-secondary" />
-              <span className="truncate">github.com/hhszzzz/taibu</span>
-            </a>
+        <div className="settings-section-body">
+          <div className="overflow-hidden rounded-2xl border border-border bg-surface">
+            {FAQ_LIST.map((faq, index) => {
+              const expanded = expandedFAQ === index;
+              const answerId = `help-faq-answer-${index}`;
+              return (
+                <div key={faq.question} className="[&+div]:border-t [&+div]:border-border">
+                  <h4>
+                    <button
+                      type="button"
+                      aria-expanded={expanded}
+                      aria-controls={answerId}
+                      onClick={() => setExpandedFAQ(expanded ? null : index)}
+                      className={`flex min-h-14 w-full items-center justify-between gap-4 px-5 py-3 text-left text-[15px] text-foreground transition-colors duration-150 hover:bg-background-secondary/60 ${expanded ? 'font-medium' : ''}`}
+                    >
+                      {faq.question}
+                      <ChevronDown aria-hidden="true" className={`h-4 w-4 flex-shrink-0 text-foreground-tertiary transition-transform duration-150 ${expanded ? 'rotate-180' : ''}`} />
+                    </button>
+                  </h4>
+                  <div id={answerId} hidden={!expanded} className="px-5 pb-5 text-sm leading-[1.75] text-foreground-secondary">
+                    {faq.answer}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
 
-      <footer className="flex justify-center gap-6 border-t border-border pt-5 text-[13px]">
+      <section aria-labelledby="help-contact-heading" className="settings-section">
+        <div className="settings-section-heading">
+          <h3 id="help-contact-heading" className="settings-section-title">联系我们</h3>
+          <p className="settings-section-description">没有找到答案时，继续向我们反馈。</p>
+        </div>
+        <div className="settings-section-body">
+          <div className="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-5">
+            <p className="text-pretty text-sm leading-relaxed text-foreground">没有找到答案？可以发邮件，或在 GitHub 仓库提 Issue。</p>
+            <div className="flex flex-wrap gap-2">
+              <a href={`mailto:${SUPPORT_EMAIL}`} className={CONTACT_LINK}>
+                <Mail aria-hidden="true" className="h-4 w-4 flex-shrink-0 text-foreground-secondary" />
+                <span className="truncate">{SUPPORT_EMAIL}</span>
+              </a>
+              <a href={PROJECT_REPO_URL} target="_blank" rel="noreferrer" className={CONTACT_LINK}>
+                <Github aria-hidden="true" className="h-4 w-4 flex-shrink-0 text-foreground-secondary" />
+                <span className="truncate">github.com/hhszzzz/taibu</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer className="settings-help-footer">
         <Link href="/privacy" className={FOOTER_LINK}>隐私政策</Link>
         <Link href="/terms" className={FOOTER_LINK}>服务条款</Link>
         {APP_VERSION && (

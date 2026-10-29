@@ -57,7 +57,7 @@ export function AgentPreferencesPanel({ userId }: { userId: string }) {
               <SettingsRow
                   label="长期记忆"
                   description="开启后可检索过往对话，并把值得记忆的经历写入，关闭不会删除已保存内容。"
-                  control={<SettingsSwitch label="允许记忆使用长期记忆" checked={memoryEnabled} disabled={busy || !preferences} onToggle={() => setMemoryEnabled(enabled => !enabled)} />}
+                  control={<SettingsSwitch label="允许太卜使用长期记忆" checked={memoryEnabled} disabled={busy || !preferences} onToggle={() => setMemoryEnabled(enabled => !enabled)} />}
               />
               <SettingsRow
                   label="已保存记忆"

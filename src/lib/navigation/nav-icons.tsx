@@ -248,32 +248,66 @@ export const CommunityIcon = createNavIcon('community', <>
 // ── Shell / settings icons ────────────────────────────────────────────────
 // 与占术图标同一套单线语言（24 网格、1.6 圆头），全站导航与设置中心统一取自这里。
 
+/** 20 网格的图标换到本套 24 网格；`boost` 再整体放大，线宽一起回调。 */
+const GRID20_SCALE = 16 / 15;
+
+function grid20Glyph(body: ReactNode, boost = 1) {
+    const scale = GRID20_SCALE * boost;
+    return (
+        <g transform={`translate(12 12) scale(${scale.toFixed(4)}) translate(-10 -10)`} strokeWidth={(1.6 / scale).toFixed(3)}>
+            {body}
+        </g>
+    );
+}
+
+/** 24 网格的图形绕中心放大，线宽一起回调，放大后仍是同一套笔画粗细。 */
+function enlarged(body: ReactNode, scale: number) {
+    return (
+        <g transform={`translate(12 12) scale(${scale}) translate(-12 -12)`} strokeWidth={(1.6 / scale).toFixed(3)}>
+            {body}
+        </g>
+    );
+}
+
 /** 新聊天：气泡一弹、往上浮一下。 */
 export const ChatIcon = createNavIcon('chat', <path className="ni-bubble" d="M12 4c4.7 0 8.5 3 8.5 6.8S16.7 17.6 12 17.6c-1 0-2-.1-2.9-.4L5 19l1.3-3.3A6.3 6.3 0 0 1 3.5 10.8C3.5 7 7.3 4 12 4z" />);
 
-/** 我的：头轻轻点一下。 */
+/** 我的 / 账户：圈中人像（圆形关键线）——和齿轮、帮助、救生圈同一个大小。 */
 export const ProfileIcon = createNavIcon('profile', <>
-    <circle className="ni-head" cx="12" cy="8" r="3.6" />
-    <path d="M4.5 20a7.5 7.5 0 0 1 15 0" />
+    <circle cx="12" cy="12" r="9" />
+    <circle className="ni-head" cx="12" cy="9.8" r="3.2" />
+    <path d="M6.34 19c1.2-2.4 3.26-3.7 5.66-3.7s4.46 1.3 5.66 3.7" />
 </>);
 
-/** 设置：六齿齿轮——悬停时转过一格（60°，齿对齿，停在原位）。 */
+/**
+ * 设置：八齿齿轮。齿顶、齿根各用一段圆弧相连，轮廓近似一个整圆（圆形关键线 r=9），
+ * 比六齿的轮廓更「圆」。悬停时转过一格 45°，齿对齿，停在原位。
+ */
+const GEAR_OUTLINE =
+    'M10.16 5.35L10.67 3.1A9 9 0 0 1 13.33 3.1L13.84 5.35A6.9 6.9 0 0 1 15.4 5.99L17.35 4.77A9 9 0 0 1 19.23 6.65L18.01 8.6A6.9 6.9 0 0 1 18.65 10.16L20.9 10.67A9 9 0 0 1 20.9 13.33L18.65 13.84A6.9 6.9 0 0 1 18.01 15.4L19.23 17.35A9 9 0 0 1 17.35 19.23L15.4 18.01A6.9 6.9 0 0 1 13.84 18.65L13.33 20.9A9 9 0 0 1 10.67 20.9L10.16 18.65A6.9 6.9 0 0 1 8.6 18.01L6.65 19.23A9 9 0 0 1 4.77 17.35L5.99 15.4A6.9 6.9 0 0 1 5.35 13.84L3.1 13.33A9 9 0 0 1 3.1 10.67L5.35 10.16A6.9 6.9 0 0 1 5.99 8.6L4.77 6.65A9 9 0 0 1 6.65 4.77L8.6 5.99A6.9 6.9 0 0 1 10.16 5.35Z';
+
 export const SettingsIcon = createNavIcon('settings', <g className="ni-glyph">
-    <path d="M10.4 3.6h3.2l.5 2.3 1.6.9 2.2-.7 1.6 2.8-1.7 1.6v1.9l1.7 1.6-1.6 2.8-2.2-.7-1.6.9-.5 2.3h-3.2l-.5-2.3-1.6-.9-2.2.7-1.6-2.8 1.7-1.6v-1.9L4.5 8.9l1.6-2.8 2.2.7 1.6-.9z" />
+    <path d={GEAR_OUTLINE} />
     <circle cx="12" cy="12" r="2.8" />
 </g>);
 
-/** 订阅：五角星闪一下（转 72° 仍是同一颗星）。 */
-export const UpgradeIcon = createNavIcon('upgrade', <>
-    <circle cx="12" cy="12" r="8.5" />
-    <path className="ni-star" d="M12 8.1l1.1 2.2 2.4.3-1.8 1.7.5 2.4-2.2-1.2-2.2 1.2.5-2.4-1.8-1.7 2.4-.3z" />
-</>);
-
-/** 命盘：一叠盘，悬停时像翻卡片一样掀一下。 */
-export const ChartsIcon = createNavIcon('charts', <g className="ni-glyph">
-    <path d="M6 4.5h9.5a2.5 2.5 0 0 1 2.5 2.5v9.5a2.5 2.5 0 0 0 2.5 2.5H8a2.5 2.5 0 0 1-2.5-2.5z" />
-    <path d="M11 8.6h4M11 12.4h4" />
+/** 订阅：一张卡（横向关键线）——会员和积分都落在这一张上；悬停时像抽出卡槽再插回。 */
+export const UpgradeIcon = createNavIcon('upgrade', <g className="ni-card">
+    <rect x="2.6" y="5" width="18.8" height="14" rx="2.2" />
+    <path d="M2.6 9.2h18.8" />
+    <path d="M6 15.2h4.2" />
 </g>);
+
+/**
+ * 命盘：紫微命盘的十二宫格局——外圈十二格、中间留空。
+ * 悬停时中宫亮一下，像落了一颗星（四化归中）。
+ */
+export const ChartsIcon = createNavIcon('charts', enlarged(<>
+    <rect x="4" y="4" width="16" height="16" rx="1.6" />
+    <path d="M8 4v16M16 4v16M4 8h16M4 16h16" />
+    <path d="M12 4v4M12 16v4M4 12h4M16 12h4" />
+    <rect className="ni-palace" x="8" y="8" width="8" height="8" fill="currentColor" stroke="none" opacity={0} />
+</>, 1.125));
 
 /** 通知：铃身以顶上挂点为中心摇两下，铃舌慢半拍跟着摆。 */
 export const BellIcon = createNavIcon('bell', <>
@@ -287,81 +321,118 @@ export const ScheduleIcon = createNavIcon('schedule', <>
     <path className="ni-hand" d="M12 7.5V12l3 1.8" />
 </>);
 
-/** 个性化：与侧栏 Agent 入口同一枚 ∞ 标记。 */
-export const PersonalizationIcon = AgentIcon;
+/**
+ * 个性化：一支斜着的毛笔，下面一道墨痕——「文风与偏好」本义。
+ * （Agent 入口那枚 ∞ 仍归 AgentIcon，两者不再共用。）
+ */
+export const PersonalizationIcon = createNavIcon('personalization', enlarged(<>
+    <g className="ni-brush">
+        <g transform="rotate(45 12 12)">
+            <path d="M12 2.4v8.2" />
+            <path d="M9.6 10.9h4.8c0 4-.8 7.5-2.4 10.6-1.6-3.1-2.4-6.6-2.4-10.6z" />
+        </g>
+    </g>
+    <path className="ni-ink" pathLength={100} d="M12.6 20.4q1.6-1.6 3.2 0t3.2 0" />
+</>, 1.1));
 
-/** 知识库：摊开的书，悬停时两页从书脊向外翻一下。 */
-export const KnowledgeIcon = createNavIcon('knowledge', <>
-    <path className="ni-page-left" d="M12 6.6C10.2 5.2 8.3 4.6 6 4.6v12c2.3 0 4.2.6 6 2z" />
-    <path className="ni-page-right" d="M12 6.6C13.8 5.2 15.7 4.6 18 4.6v12c-2.3 0-4.2.6-6 2z" />
-</>);
-
-/** 帮助：问号歪一下头，像在琢磨。 */
-export const HelpIcon = createNavIcon('help', <g className="ni-glyph">
-    <circle cx="12" cy="12" r="8.5" />
-    <path d="M9.7 9.6a2.4 2.4 0 0 1 4.7.6c0 1.5-2.3 1.7-2.3 3" />
-    <path d="M12.1 16.6h.01" />
+/** 记忆：脑形轮廓——助手记住的偏好与事实；路径取自 lucide Brain（ISC），按侧栏单线风格收进 24 网格。 */
+export const MemoryIcon = createNavIcon('memory', <g className="ni-glyph">
+    <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z" />
+    <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z" />
+    <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4" />
+    <path d="M17.599 6.5a3 3 0 0 0 .399-1.375" />
+    <path d="M6.003 5.125A3 3 0 0 0 6.401 6.5" />
+    <path d="M3.477 10.896a4 4 0 0 1 .585-.396" />
+    <path d="M19.938 10.5a4 4 0 0 1 .585.396" />
+    <path d="M6 18a4 4 0 0 1-1.967-.516" />
+    <path d="M19.967 17.484A4 4 0 0 1 18 18" />
 </g>);
 
-/** 密钥（BYOK）：钥匙绕锁孔转一下。 */
-export const KeyIcon = createNavIcon('key', <g className="ni-key">
-    <circle cx="8" cy="12" r="3.6" />
-    <path d="M11.6 12H20M17 12v2.6M14.2 12v1.8" />
+/** 知识库：摊开的书，悬停时两页从书脊向外翻一下。 */
+export const KnowledgeIcon = createNavIcon('knowledge', grid20Glyph(<>
+    <path className="ni-page-left" d="M3 4.5L7 4.5C8.657 4.5 10 5.843 10 7.5L10 17C9.701 16.104 8.863 15.5 7.919 15.5L3 15.5C2.724 15.5 2.5 15.276 2.5 15L2.5 5C2.5 4.724 2.724 4.5 3 4.5Z" />
+    <path className="ni-page-right" d="M17 4.5L13 4.5C11.343 4.5 10 5.843 10 7.5L10 17C10.299 16.104 11.137 15.5 12.081 15.5L17 15.5C17.276 15.5 17.5 15.276 17.5 15L17.5 5C17.5 4.724 17.276 4.5 17 4.5Z" />
+</>, 1.13));
+
+/** 帮助：救生圈——外圈、内圈与四道辐条；悬停时转过一格（辐条每 90° 一圈）。 */
+export const HelpIcon = createNavIcon('help', <g className="ni-glyph">
+    <circle cx="12" cy="12" r="9" />
+    <circle cx="12" cy="12" r="3.8" />
+    <path d="M5.64 5.64 9.31 9.31M14.69 9.31l3.67-3.67M14.69 14.69l3.67 3.67M9.31 14.69l-3.67 3.67" />
+</g>);
+
+/** 自定义模型（BYOK）：一把斜放的钥匙，齿朝下；悬停时绕中心一拧。 */
+export const KeyIcon = createNavIcon('key', <g className="ni-glyph">
+    <g transform="rotate(45 12 12)">
+        <circle cx="12" cy="6.2" r="4.4" />
+        <circle cx="12" cy="5" r="1.1" />
+        <path d="M12 10.6v10.9" />
+        <path d="M12 17.4h2.5M12 20.2h2.5" />
+    </g>
 </g>);
 
 /** 分享链接：两环向中间靠一下、再拉开，像扣上又松开。 */
-export const ShareLinkIcon = createNavIcon('share-link', <>
+export const ShareLinkIcon = createNavIcon('share-link', enlarged(<>
     <path className="ni-link-a" d="M10.2 13.8a3.6 3.6 0 0 0 5.1 0l3-3a3.6 3.6 0 0 0-5.1-5.1l-1.2 1.2" />
     <path className="ni-link-b" d="M13.8 10.2a3.6 3.6 0 0 0-5.1 0l-3 3a3.6 3.6 0 0 0 5.1 5.1l1.2-1.2" />
-</>);
+</>, 1.26));
 
-/** 公告：喇叭扬起，声波向外一荡。 */
-export const MegaphoneIcon = createNavIcon('megaphone', <>
+/** 公告：喇叭——喇叭口是一段椭圆弧，带握把和一道声波；悬停时扬起、声波一荡。 */
+export const MegaphoneIcon = createNavIcon('megaphone', enlarged(<>
     <g className="ni-horn">
-        <path d="M4.5 10.5l10-4.5v12l-10-4.5z" />
-        <path d="M7 14.2l1.2 4.3a1.6 1.6 0 0 0 2 .8l.6-.2" />
+        <path d="M5.2 10.2 14.6 5.6v12.8L5.2 13.8a1.8 1.8 0 0 1 0-3.6z" />
+        <path d="M14.6 5.6c1.1 0 2 2.9 2 6.4s-.9 6.4-2 6.4" />
+        <path d="M7.6 14.6l1.1 3.8h2.3l-.9-3" />
     </g>
-    <path className="ni-sound" d="M14.5 8.5H19a1.5 1.5 0 0 1 0 7h-1.2" />
-</>);
+    <path className="ni-sound" d="M19.6 9.5a3.4 3.4 0 0 1 0 5" />
+</>, 1.1));
 
-/** 功能开关：开关条往右拨一下。 */
-export const FeatureFlagsIcon = createNavIcon('feature-flags', <>
-    <rect x="4" y="5" width="16" height="14" rx="2.5" />
-    <path d="M4 10h16" />
-    <circle className="ni-dot" cx="8.2" cy="7.5" r=".6" fill="currentColor" stroke="none" />
-    <path className="ni-switch" d="M7.5 15.5h9" />
-</>);
+/** 功能与激活码：一张票券（两侧月牙口、虚线撕口）——激活码就是它；悬停时歪一下。 */
+export const FeatureFlagsIcon = createNavIcon('feature-flags', enlarged(<g className="ni-glyph">
+    <path d="M3 8a1.5 1.5 0 0 1 1.5-1.5h15A1.5 1.5 0 0 1 21 8v1.6a2.4 2.4 0 0 0 0 4.8V16a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 16v-1.6a2.4 2.4 0 0 0 0-4.8z" />
+    <path d="M15 9v.6M15 11.7v.6M15 14.4v.6" />
+</g>, 1.12));
 
-/** AI 服务：机器人眨一下眼，天线亮一下。 */
-export const BotIcon = createNavIcon('bot', <>
-    <rect x="5" y="8" width="14" height="10" rx="3" />
-    <path className="ni-antenna" d="M12 5v3" />
-    <circle className="ni-eye" cx="9.2" cy="12.8" r=".6" fill="currentColor" stroke="none" />
-    <circle className="ni-eye" cx="14.8" cy="12.8" r=".6" fill="currentColor" stroke="none" />
-</>);
+/** AI 服务：两台叠放的机器（网关与模型），各有一枚指示灯；悬停时灯先后亮一下。 */
+export const ServerIcon = createNavIcon('server', enlarged(<>
+    <rect x="4" y="4.5" width="16" height="6.5" rx="2" />
+    <rect x="4" y="13" width="16" height="6.5" rx="2" />
+    <circle className="ni-led" cx="7.6" cy="7.75" r=".7" fill="currentColor" stroke="none" />
+    <circle className="ni-led" cx="7.6" cy="16.25" r=".7" fill="currentColor" stroke="none" />
+</>, 1.125));
 
-/** 连接器：插头往里插一下。 */
-export const PlugIcon = createNavIcon('plug', <g className="ni-glyph">
-    <path d="M9 4v4M15 4v4" />
-    <path d="M6.5 8h11v3a5.5 5.5 0 0 1-11 0z" />
-    <path d="M12 16.5V20" />
-</g>);
+/** 连接器：三块已经接上、一块待接入；悬停时待接那块卡进来。 */
+export const ConnectorsIcon = createNavIcon('connectors', grid20Glyph(<>
+    <path d="M13.5 15.75L13.5 12.25C13.5 11.836 13.164 11.5 12.75 11.5L8.5 11.5L8.5 7.25C8.5 6.836 8.164 6.5 7.75 6.5L4.25 6.5C3.836 6.5 3.5 6.836 3.5 7.25L3.5 11.5L3.5 15.75C3.5 16.164 3.836 16.5 4.25 16.5L8.5 16.5L12.75 16.5C13.164 16.5 13.5 16.164 13.5 15.75ZM8.5 11.5L3.5 11.5M8.5 11.5L8.5 16.5" />
+    <path className="ni-plug" d="M11.5 4.25L11.5 7.75C11.5 8.164 11.836 8.5 12.25 8.5L15.75 8.5C16.164 8.5 16.5 8.164 16.5 7.75L16.5 4.25C16.5 3.836 16.164 3.5 15.75 3.5L12.25 3.5C11.836 3.5 11.5 3.836 11.5 4.25Z" />
+</>, 1.26));
 
-/** 扩展：拼图块错开又卡回原位。 */
-export const PuzzleIcon = createNavIcon('puzzle', <path className="ni-glyph" d="M5.5 8.5h3.4a2 2 0 1 1 4 0h3.6v3.4a2 2 0 1 1 0 4v3.6h-11z" />);
+/** Agent 扩展：一枚带两根引脚的插件；悬停时往里插一下。 */
+export const PluginIcon = createNavIcon('plugin', grid20Glyph(<g className="ni-glyph">
+    <line x1="10.5" y1="6.5" x2="13.5" y2="3.5" />
+    <line x1="13.5" y1="9.5" x2="16.5" y2="6.5" />
+    <line x1="8" y1="4" x2="16" y2="12" />
+    <line x1="6" y1="14" x2="3.5" y2="16.5" />
+    <polyline points="9,5 3,11 9,17 15,11" />
+</g>, 1.22));
 
-/** A skill: the SKILL.md page with a spark on it. */
-export const SkillIcon = createNavIcon('skill', <>
-    <path d="M6.5 4.5h7.2l3.8 3.8v10.7a.5.5 0 0 1-.5.5H7a.5.5 0 0 1-.5-.5z" />
-    <path d="M13.5 4.5v4h4" />
-    <path className="ni-spark" d="M12 11.2l.9 2 2 .9-2 .9-.9 2-.9-2-2-.9 2-.9z" />
-</>);
+/** 技能：一卷写好的卷轴（SKILL.md 就是一卷做法），悬停时字从左往右写出来。 */
+export const SkillIcon = createNavIcon('skill', grid20Glyph(<>
+    <path d="M6.5 3.5C6 3.5 4.828 3.5 4 3.5C3.172 3.5 2.5 4.172 2.5 5C2.5 5.384 2.644 5.735 2.882 6" />
+    <path className="ni-text" pathLength={100} d="M7.5 8.5C8 8.5 8.442 8.103 8.7 7.5C8.958 8.103 9.399 8.5 9.9 8.5C10.401 8.5 10.842 8.103 11.1 7.5C11.358 8.103 11.799 8.5 12.3 8.5C12.801 8.5 13.242 8.103 13.5 7.5" />
+    <path d="M4 3.5L5.5 3.5L5.5 15C5.5 15.828 6.172 16.5 7 16.5L16 16.5C16.828 16.5 17.5 15.828 17.5 15L17.5 13.5L15.5 13.5L8.5 13.5L8.5 15C8.5 15.828 7.828 16.5 7 16.5M15.5 5L15.5 13.5M5.5 3.5L14 3.5C14.828 3.5 15.5 4.172 15.5 5" />
+</>, 1.13));
 
-/** MCP：一笔涂鸦，悬停时像刚写上去一样顺着笔迹画出来。 */
-export const ScribbleIcon = createNavIcon('scribble', <g className="ni-glyph">
-    <path pathLength={100} d="M5 14.5c1-4 2.6-6 4-6s1.6 2 .8 4.4c-.7 2.2-.3 3.4 1 3.4 1.8 0 3.2-2.6 4.4-5.6" />
-    <path d="M15.2 10.2c.9-.6 1.9-.7 2.6-.2" />
-</g>);
+/** MCP：协议标志按中线重画（整体缩到 0.81），悬停时顺着笔画再画一遍。 */
+const MCP_MARK_PATHS = [
+    'M1.85 11.19 11.48 1.75A3.45 3.45 0 0 1 16.29 6.47L9.07 13.55',
+    'M16.53 6.55A3.29 3.29 0 1 1 21.15 11.24L11.65 20.56l2.58 2.54',
+    'M13.88 4.11 6.76 11.1A3.29 3.29 0 1 0 11.58 15.82L18.7 8.83',
+];
+
+export const McpIcon = createNavIcon('mcp', enlarged(<g className="ni-glyph">
+    {MCP_MARK_PATHS.map(d => <path key={d} pathLength={100} d={d} />)}
+</g>, 0.87));
 
 // ── Shell actions ─────────────────────────────────────────────────────────
 // 侧栏搜索 / 新建 / 全部占术 / 登录与占术图标同一套单线语言（不再混用 lucide）。
@@ -383,7 +454,48 @@ export const AllDivinationsIcon = createNavIcon('all-divinations', <>
     <rect className="ni-cell" x="4" y="13.5" width="6.5" height="6.5" rx="1.6" />
 </>);
 
-export const LoginIcon = createNavIcon('login', <>
-    <path d="M13.5 5H7.5A2.5 2.5 0 0 0 5 7.5v9A2.5 2.5 0 0 0 7.5 19h6" />
-    <g className="ni-arrow"><path d="M12 12h8M17 8.8l3.2 3.2-3.2 3.2" /></g>
-</>);
+/**
+ * 登录：门框在右、箭头往里走（进站）。此前这枚画的是「门在左、箭头出去」，
+ * 与账户菜单的「退出登录」同形；两者左右对称，含义才分得开。
+ */
+export const LoginIcon = createNavIcon('login', enlarged(<>
+    <path d="M13.5 5h3A2.5 2.5 0 0 1 19 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-3" />
+    <g className="ni-arrow"><path d="M4.5 12h7.7M9 8.8 12.2 12 9 15.2" /></g>
+</>, 1.17));
+
+// ── Account menu icons ────────────────────────────────────────────────────
+// 用户卡片（账户菜单）也走同一套图标，不再混用 lucide 的 2px 粗线。
+
+/** 用量：半圈表盘加一根指针；悬停时指针扫一道再落回。 */
+export const GaugeIcon = createNavIcon('usage', enlarged(<>
+    <path d="M5.64 18.36A9 9 0 1 1 18.36 18.36" />
+    <path className="ni-needle" d="M12 12 15.8 8.2" />
+    <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
+</>, 1.06));
+
+/** GitHub：品牌标志保持原形，只换成同一线宽。 */
+export const GithubIcon = createNavIcon('github', <g className="ni-glyph">
+    <g transform="translate(1.2 1.2) scale(.9)" strokeWidth={1.778}>
+        <path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4" />
+        <path d="M9 18c-4.51 2-5-2-7-2" />
+    </g>
+</g>);
+
+/** 报告错误 / 需求：气泡里一个感叹号——报错和提需求都装得下；悬停时气泡一弹。 */
+export const FeedbackIcon = createNavIcon('feedback', enlarged(<g className="ni-bubble">
+    <path d="M5.5 5h13A1.5 1.5 0 0 1 20 6.5v9a1.5 1.5 0 0 1-1.5 1.5h-7L7 20.2V17H5.5A1.5 1.5 0 0 1 4 15.5v-9A1.5 1.5 0 0 1 5.5 5z" />
+    <path d="M12 8.3v3.9" />
+    <path d="M12 14.6h.01" />
+</g>, 1.1));
+
+/** 退出登录：门框在左，箭头从门里出去（与「登录」左右对称）。 */
+export const LogoutIcon = createNavIcon('logout', enlarged(<>
+    <path d="M10.5 5h-3A2.5 2.5 0 0 0 5 7.5v9A2.5 2.5 0 0 0 7.5 19h3" />
+    <path className="ni-arrow" d="M11 12h9M16.8 8.8 20 12l-3.2 3.2" />
+</>, 1.15));
+
+/** 没有头像时的占位：半身像，落在圆形头像框里。 */
+export const BustIcon = createNavIcon('bust', enlarged(<>
+    <circle className="ni-head" cx="12" cy="8" r="3.6" />
+    <path d="M4.5 20a7.5 7.5 0 0 1 15 0" />
+</>, 1.13));

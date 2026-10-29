@@ -205,18 +205,33 @@ export const ICON_MOTIONS: Readonly<Record<string, readonly IconMotion[]>> = {
     // 定时任务：表盘不转，指针绕轴走一整圈，像表针扫过一格。
     schedule: [{ part: '.ni-hand', keyframes: wholeTurn(12, 12, [[0], [360]]), options: { duration: 720 } }],
 
-    // 我的：头轻轻点一下。
-    profile: [{ part: '.ni-head', keyframes: float('0 1.3px', .36), options: { duration: 520 } }],
+    // 我的：圈里的人像点一下头。
+    profile: [{ part: '.ni-head', keyframes: float('0 1.2px', .36), options: { duration: 520 } }],
 
-    // 设置：齿轮歪一下再归位，能看见齿在挪（整圈转看不出来：六齿转过一格与原样相同）。
-    settings: [{ part: '.ni-glyph', keyframes: spin(12, 12, [['rotate(0deg)'], ['rotate(-26deg)', .34], ['rotate(8deg)', .7], ['rotate(0deg)']]), options: { duration: 640 } }],
+    // 设置：八齿齿轮转过一格 45°，齿对齿，停在原位。
+    settings: [{ part: '.ni-glyph', keyframes: spin(12, 12, [['rotate(0deg)'], ['rotate(51deg)', .42], ['rotate(43deg)', .7], ['rotate(45deg)']], MOTION_EASE_OUT), options: { duration: 700 } }],
 
-    // 订阅：五角星闪一下、转过一格（72° 仍是同一颗星）。
-    upgrade: [{ part: '.ni-star', keyframes: spin(12, 11.9, [['scale(1) rotate(0deg)'], ['scale(1.35) rotate(36deg)', .45], ['scale(1) rotate(72deg)']]), options: { duration: 640 } }],
+    // 订阅：卡片从卡槽里抽出来又插回去。
+    upgrade: [{ part: '.ni-card', keyframes: float('0 -1.4px', .4), options: { duration: 560 } }],
 
-    // 命理记录 / 命盘：一叠页，像翻卡片一样掀一下。
+    // 命理记录：一叠页，像翻卡片一样掀一下。
     records: PAGE_FLIP,
-    charts: PAGE_FLIP,
+
+    // 命盘：中宫亮一下，像落了一颗星。
+    charts: [{ part: '.ni-palace', keyframes: [{ opacity: 0, offset: 0, easing: MOTION_EASE_OUT }, { opacity: .3, offset: .42, easing: MOTION_EASE_OUT }, { opacity: 0, offset: 1 }], options: { duration: 760 } }],
+
+    // 个性化：笔尖落纸一压，墨痕跟着画出来。
+    personalization: [
+        { part: '.ni-brush', keyframes: spin(12, 12, [['rotate(0deg)'], ['rotate(-7deg)', .34], ['rotate(3deg)', .7], ['rotate(0deg)']]), options: { duration: 620 } },
+        {
+            part: '.ni-ink',
+            keyframes: [
+                { strokeDasharray: '100 100', strokeDashoffset: 100, offset: 0, easing: EASE_IN_OUT },
+                { strokeDasharray: '100 100', strokeDashoffset: 0, offset: 1 },
+            ],
+            options: { duration: 560, delay: 140 },
+        },
+    ],
 
     // 通知：铃身以顶上挂点为中心摇两下，铃舌慢半拍跟着摆。
     bell: [
@@ -224,17 +239,17 @@ export const ICON_MOTIONS: Readonly<Record<string, readonly IconMotion[]>> = {
         { part: '.ni-clapper', keyframes: spin(12, 17, [['rotate(0deg)'], ['rotate(-9deg)', .38], ['rotate(7deg)', .62], ['rotate(0deg)']]), options: { duration: 620, delay: 90 } },
     ],
 
-    // 知识库：两页从书脊向外掀一下，像刚翻开。
+    // 知识库：两页从书底的书脊向外掀一下，像刚翻开（书在 20 网格，绕点也按 20 网格取）。
     knowledge: [
-        { part: '.ni-page-left', keyframes: spin(12, 12, [['rotate(0deg)'], ['rotate(8deg)', .4], ['rotate(0deg)']]), options: { duration: 560 } },
-        { part: '.ni-page-right', keyframes: spin(12, 12, [['rotate(0deg)'], ['rotate(-8deg)', .4], ['rotate(0deg)']]), options: { duration: 560 } },
+        { part: '.ni-page-left', keyframes: spin(10, 16, [['rotate(0deg)'], ['rotate(8deg)', .4], ['rotate(0deg)']]), options: { duration: 560 } },
+        { part: '.ni-page-right', keyframes: spin(10, 16, [['rotate(0deg)'], ['rotate(-8deg)', .4], ['rotate(0deg)']]), options: { duration: 560 } },
     ],
 
-    // 帮助：整枚歪一下头，像在琢磨问题。
-    help: [{ part: '.ni-glyph', keyframes: spin(12, 12, [['rotate(0deg)'], ['rotate(-15deg)', .34], ['rotate(7deg)', .68], ['rotate(0deg)']]), options: { duration: 620 } }],
+    // 帮助：救生圈转过一格（辐条每 90° 一圈）。
+    help: [{ part: '.ni-glyph', keyframes: wholeTurn(12, 12, [[0], [90]]), options: { duration: 760 } }],
 
-    // 密钥：绕锁孔一转，像开锁。
-    key: [{ part: '.ni-key', keyframes: spin(8, 12, [['rotate(0deg)'], ['rotate(-22deg)', .34], ['rotate(6deg)', .7], ['rotate(0deg)']]), options: { duration: 620 } }],
+    // 钥匙：绕中心一拧，像开锁。
+    key: [{ part: '.ni-glyph', keyframes: spin(12, 12, [['rotate(0deg)'], ['rotate(-18deg)', .34], ['rotate(6deg)', .7], ['rotate(0deg)']]), options: { duration: 620 } }],
 
     // 分享链接：两环向中间扣一下再松开。
     'share-link': [
@@ -244,7 +259,7 @@ export const ICON_MOTIONS: Readonly<Record<string, readonly IconMotion[]>> = {
 
     // 公告：喇叭扬起，声波向外一荡。
     megaphone: [
-        { part: '.ni-horn', keyframes: spin(4.5, 12, [['rotate(0deg)'], ['rotate(-8deg)', .34], ['rotate(0deg)']]), options: { duration: 560 } },
+        { part: '.ni-horn', keyframes: spin(5.2, 12, [['rotate(0deg)'], ['rotate(-7deg)', .34], ['rotate(0deg)']]), options: { duration: 560 } },
         {
             part: '.ni-sound',
             keyframes: [
@@ -256,39 +271,46 @@ export const ICON_MOTIONS: Readonly<Record<string, readonly IconMotion[]>> = {
         },
     ],
 
-    // 功能开关：开关拨到另一边再拨回来。
-    'feature-flags': [
-        { part: '.ni-dot', keyframes: float('6.4px 0'), options: { duration: 520 } },
-        { part: '.ni-switch', keyframes: float('-3.6px 0'), options: { duration: 520 } },
-    ],
+    // 功能与激活码：票券歪一下，像撕下来又贴回。
+    'feature-flags': [{ part: '.ni-glyph', keyframes: spin(12, 12, [['rotate(0deg)'], ['rotate(-7deg)', .34], ['rotate(2deg)', .7], ['rotate(0deg)']]), options: { duration: 600 } }],
 
-    // AI 服务：机器人眨一下眼，天线亮一下。
-    bot: [
-        {
-            part: '.ni-eye',
-            keyframes: index => spin([9.2, 14.8][index] ?? 12, 12.8, [['scale(1)'], ['scale(1)', .36], ['scale(.15)', .46], ['scale(1)', .58], ['scale(1)']]),
-            options: { duration: 560 },
-        },
-        { part: '.ni-antenna', keyframes: [{ opacity: 1, offset: 0, easing: MOTION_EASE_OUT }, { opacity: .25, offset: .42, easing: MOTION_EASE_OUT }, { opacity: 1, offset: 1 }], options: { duration: 560 } },
-    ],
+    // AI 服务：两台机器的指示灯先后亮一下。
+    server: [{
+        part: '.ni-led',
+        stagger: 150,
+        keyframes: [
+            { opacity: 1, offset: 0, easing: MOTION_EASE_OUT },
+            { opacity: .15, offset: .32, easing: MOTION_EASE_OUT },
+            { opacity: 1, offset: .68 },
+            { opacity: 1, offset: 1 },
+        ],
+        options: { duration: 460 },
+    }],
 
-    // 技能：页面上的火星转半圈闪一下（四芒星转 90° 仍是同一颗星）。
-    skill: [{ part: '.ni-spark', keyframes: spin(12, 13.3, [['rotate(0deg)'], ['rotate(90deg)']]), options: { duration: 640 } }],
-
-    // 连接器：插头往下插一下，像接上。
-    plug: [{ part: '.ni-glyph', keyframes: float('0 1.4px', .4), options: { duration: 520 } }],
-
-    // 扩展：拼图块错开一点再卡回去。
-    puzzle: [{ part: '.ni-glyph', keyframes: spin(8.5, 8.5, [['rotate(0deg)'], ['rotate(-9deg)', .34], ['rotate(0deg)']]), options: { duration: 600 } }],
-
-    // MCP：涂鸦顺着笔迹画一遍（pathLength 已归一到 100）。
-    scribble: [{
-        part: '.ni-glyph',
+    // 技能：卷轴上的字从左往右写一遍（pathLength 已归一到 100）。
+    skill: [{
+        part: '.ni-text',
         keyframes: [
             { strokeDasharray: '100 100', strokeDashoffset: 100, offset: 0, easing: EASE_IN_OUT },
             { strokeDasharray: '100 100', strokeDashoffset: 0, offset: 1 },
         ],
         options: { duration: 720 },
+    }],
+
+    // 连接器：待接的那一块卡进来（坐标是 20 网格）。
+    connectors: [{ part: '.ni-plug', keyframes: float('-0.9px 0.9px', .42), options: { duration: 620 } }],
+
+    // Agent 扩展：插头往里插一下。
+    plugin: [{ part: '.ni-glyph', keyframes: float('-0.6px 0.6px', .42), options: { duration: 560 } }],
+
+    // MCP：标志顺着笔画再画一遍（pathLength 已归一到 100）。
+    mcp: [{
+        part: '.ni-glyph',
+        keyframes: [
+            { strokeDasharray: '100 100', strokeDashoffset: 100, offset: 0, easing: EASE_IN_OUT },
+            { strokeDasharray: '100 100', strokeDashoffset: 0, offset: 1 },
+        ],
+        options: { duration: 860 },
     }],
 
     // 搜索：镜片扫一下，像探头找东西。
@@ -303,8 +325,24 @@ export const ICON_MOTIONS: Readonly<Record<string, readonly IconMotion[]>> = {
     // 发送（输入框里那个回车箭头不是图标组件，直接标了 data-nav-icon）：往回缩一下再送出去。
     send: [{ part: 'svg', keyframes: [{ transform: 'translate(0, 0)', offset: 0, easing: EASE_IN_OUT }, { transform: 'translate(0, 1.2px)', offset: .3, easing: EASE_IN_OUT }, { transform: 'translate(0, -1px)', offset: .66, easing: EASE_IN_OUT }, { transform: 'translate(0, 0)', offset: 1 }], options: { duration: 520 } }],
 
-    // 登录：箭头往里推一下。
-    login: [{ part: '.ni-arrow', keyframes: float('2.2px 0', .4), options: { duration: 520 } }],
+    // 登录：箭头往门里推一下。
+    login: [{ part: '.ni-arrow', keyframes: float('1.1px 0', .4), options: { duration: 520 } }],
+
+    // ── 账户菜单 ──────────────────────────────────────────────────────────
+    // 用量：指针扫一道再落回。
+    usage: [{ part: '.ni-needle', keyframes: spin(12, 12, [['rotate(0deg)'], ['rotate(-58deg)', .36], ['rotate(22deg)', .64], ['rotate(-5deg)', .84], ['rotate(0deg)']]), options: { duration: 760 } }],
+
+    // GitHub：轻轻一弹。
+    github: [{ part: '.ni-glyph', keyframes: spin(12, 12, [['scale(1)'], ['scale(1.09)', .4], ['scale(1)']], MOTION_EASE_OUT), options: { duration: 460 } }],
+
+    // 报告错误 / 需求：气泡弹一下。
+    feedback: [{ part: '.ni-bubble', keyframes: spin(12, 12, [['translate(0, 0) scale(1)'], ['translate(0, -1px) scale(1.06)', .4], ['translate(0, 0) scale(1)']]), options: { duration: 520 } }],
+
+    // 退出登录：箭头从门里出去。
+    logout: [{ part: '.ni-arrow', keyframes: float('2.4px 0', .4), options: { duration: 520 } }],
+
+    // 无头像：点一下头。
+    bust: [{ part: '.ni-head', keyframes: float('0 1.2px', .36), options: { duration: 520 } }],
 };
 
 /** 悬停多久才开播：扫过侧栏、鼠标路过都不触发。 */

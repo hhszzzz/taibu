@@ -1,17 +1,17 @@
 import type { ComponentType } from 'react';
 import {
-  BotIcon,
   ChartsIcon,
+  ConnectorsIcon,
   FeatureFlagsIcon,
   HelpIcon,
   KeyIcon,
   KnowledgeIcon,
+  McpIcon,
   MegaphoneIcon,
   PersonalizationIcon,
-  PlugIcon,
+  PluginIcon,
   ProfileIcon,
-  PuzzleIcon,
-  ScribbleIcon,
+  ServerIcon,
   SettingsIcon,
   ShareLinkIcon,
   SkillIcon,
@@ -27,7 +27,7 @@ export type SettingsCenterIconProps = {
 };
 
 export const SETTINGS_CENTER_ICON_SIZES = {
-  sidebar: 18,
+  sidebar: 20,
   disabled: 20,
   mobile: 14,
 } as const;
@@ -54,11 +54,11 @@ export const SETTINGS_CENTER_TAB_ICONS: Record<SettingsCenterTab, ComponentType<
   help: withDefaultSize(HelpIcon),
   charts: withDefaultSize(ChartsIcon),
   'knowledge-base': withDefaultSize(KnowledgeIcon),
-  connectors: withDefaultSize(PlugIcon),
+  connectors: withDefaultSize(ConnectorsIcon),
   skills: withDefaultSize(SkillIcon),
-  'mcp-service': withDefaultSize(ScribbleIcon),
+  'mcp-service': withDefaultSize(McpIcon),
   'admin-announcements': withDefaultSize(MegaphoneIcon),
   'admin-features': withDefaultSize(FeatureFlagsIcon),
-  'admin-ai-services': withDefaultSize(BotIcon),
-  'admin-agent-extensions': withDefaultSize(PuzzleIcon),
+  'admin-ai-services': withDefaultSize(ServerIcon),
+  'admin-agent-extensions': withDefaultSize(PluginIcon),
 };

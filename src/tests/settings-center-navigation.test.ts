@@ -155,8 +155,9 @@ test('settings panels retain route boundaries, Linux.do claims and private accou
   assert.equal(upgradePanelSource.includes('const linuxDoClaimDisabled = hasLinuxDoLogin'), true);
   assert.equal(upgradePanelSource.includes("returnTo: getSettingsCenterRouteTargetForPath(pathname, 'upgrade'"), true);
   assert.equal(userMenuSource.includes("`${membershipLabels[membership?.type || 'free']} Plan`"), false);
-  assert.equal(userMenuSource.includes("import { getUserEmailDisplay } from '@/lib/user-email';"), true);
-  assert.equal(userMenuSource.includes('const displayEmail = getUserEmailDisplay(user);'), true);
+  // 账户菜单不再显示邮箱：不引 getUserEmailDisplay，也不渲染 user.email。
+  assert.equal(userMenuSource.includes('getUserEmailDisplay'), false);
+  assert.equal(userMenuSource.includes('displayEmail'), false);
   assert.equal(userMenuSource.includes('{user.email}'), false);
 });
 

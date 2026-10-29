@@ -1,13 +1,13 @@
 'use client';
 
 import { createElement, Fragment, useEffect, useId, useRef, useState } from 'react';
-import { Bug, ChevronRight, ChevronsUpDown, Gauge, Github, LogOut, User } from 'lucide-react';
+import { ChevronRight, ChevronsUpDown } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { BustIcon, FeedbackIcon, GaugeIcon, GithubIcon, LogoutIcon } from '@/lib/navigation/nav-icons';
 import { Modal } from '@/components/ui/Modal';
 import { FloatingPanel } from '@/components/ui/FloatingPanel';
 import { signOut } from '@/lib/auth';
 import { buildMembershipInfo } from '@/lib/user/membership';
-import { getUserEmailDisplay } from '@/lib/user-email';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import type { AuthUser } from '@/lib/auth';
 import { SettingsCenterLink } from '@/components/settings/SettingsCenterLink';
@@ -39,7 +39,7 @@ function Avatar({ src, alt, size = 32, round = false }: { src: string | null; al
       <img src={src} alt="" width={size} height={size} className="flex-shrink-0 rounded-full object-cover" style={{ width: size, height: size }} onError={() => setError(true)} />
     ) : (
       <span aria-hidden="true" className="flex flex-shrink-0 items-center justify-center rounded-full bg-background-tertiary text-foreground-secondary" style={{ width: size, height: size }}>
-        <User size={Math.round(size / 2)} />
+        {createElement(BustIcon, { size: Math.round(size * 0.62) })}
       </span>
     );
   }
@@ -72,7 +72,7 @@ function Avatar({ src, alt, size = 32, round = false }: { src: string | null; al
 const MENU_PANEL_CLASS = 'absolute bottom-full mb-2 z-[100] overflow-visible rounded-[10px] bg-surface p-1 shadow-[var(--shadow-panel-popover)] animate-in fade-in zoom-in-95 duration-100 origin-bottom-left';
 // 菜单项 = claude 账户菜单 comfortable 密度：32px / r8 / 14px / 10px 内衬。
 const MENU_ITEM_CLASS = 'flex h-8 items-center gap-2.5 rounded-[8px] px-2.5 text-[14px] text-foreground transition-colors hover:bg-fill-ghost-hover';
-const MENU_ICON_CLASS = 'h-4 w-4 shrink-0 text-foreground-secondary';
+const MENU_ICON_CLASS = 'h-[18px] w-[18px] shrink-0 text-foreground-secondary';
 const PROJECT_REPO_URL = 'https://github.com/hhszzzz/taibu';
 const PROJECT_ISSUES_URL = 'https://docs.qq.com/smartsheet/DS3JSQ0dHTUdrVWFh';
 
@@ -88,7 +88,7 @@ function UserMenuShortcutLink({
 }: UserMenuShortcut & { onClick: () => void }) {
   return (
     <SettingsCenterLink tab={tab} onClick={onClick} className={MENU_ITEM_CLASS}>
-      {createElement(SETTINGS_CENTER_TAB_ICONS[tab], { size: 16, className: MENU_ICON_CLASS })}
+      {createElement(SETTINGS_CENTER_TAB_ICONS[tab], { size: 18, className: MENU_ICON_CLASS })}
       <span>{label}</span>
     </SettingsCenterLink>
   );
@@ -112,7 +112,6 @@ export function SidebarUserCard({ user, collapsed = false, appearance = 'card' }
   const membership = profileResolved && !profileError ? buildMembershipInfo(profile ?? null) : null;
   const avatarUrl = profile?.avatar_url ?? null;
   const displayName = profile?.nickname || user.email?.split('@')[0] || '用户';
-  const displayEmail = getUserEmailDisplay(user);
   const membershipLabel = profileLoading || !profileResolved
     ? '...'
     : profileError
@@ -212,19 +211,14 @@ export function SidebarUserCard({ user, collapsed = false, appearance = 'card' }
 
       {isMenuOpen ? (
         <div className={`${MENU_PANEL_CLASS} ${collapsed ? 'left-2' : 'left-0'} w-[272px]`}>
-          <div className="flex flex-col">
-            {/* claude 账户菜单实测：头部只留邮箱（12px muted、截断），没有头像块 */}
-            <div className="truncate px-2.5 py-2.5 text-[12.5px] text-foreground-tertiary">{displayEmail}</div>
-
-            <div className="mx-1 my-1 h-px bg-border" />
-
+          <div className="flex flex-col py-1">
             <div className="flex flex-col gap-1">
               {shortcuts.map((item, index) => (
                 <Fragment key={item.tab}>
                   <UserMenuShortcutLink {...item} onClick={() => setIsMenuOpen(false)} />
                   {index === 0 ? (
                     <button type="button" onClick={() => { setIsMenuOpen(false); setIsUsageOpen(true); }} className={`${MENU_ITEM_CLASS} w-full`}>
-                      <Gauge size={16} className={MENU_ICON_CLASS} aria-hidden="true" />
+                      {createElement(GaugeIcon, { size: 18, className: MENU_ICON_CLASS })}
                       <span>用量</span>
                     </button>
                   ) : null}
@@ -248,7 +242,7 @@ export function SidebarUserCard({ user, collapsed = false, appearance = 'card' }
                   className={`${MENU_ITEM_CLASS} w-full justify-between`}
                 >
                   <span className="flex items-center gap-2.5">
-                    {createElement(SETTINGS_CENTER_TAB_ICONS.help, { size: 16, className: MENU_ICON_CLASS })}
+                    {createElement(SETTINGS_CENTER_TAB_ICONS.help, { size: 18, className: MENU_ICON_CLASS })}
                     <span>帮助</span>
                   </span>
                   <ChevronRight
@@ -258,15 +252,15 @@ export function SidebarUserCard({ user, collapsed = false, appearance = 'card' }
                 <FloatingPanel open={isHelpMenuOpen} anchorRef={helpRef} onClose={() => setIsHelpMenuOpen(false)}
                   label="帮助" side="right-start" align="start" className="user-help-menu" arrowNavigation initialFocus="none" restoreFocus={false}>
                   <SettingsCenterLink tab="help" onClick={() => setIsMenuOpen(false)} className={MENU_ITEM_CLASS}>
-                    {createElement(SETTINGS_CENTER_TAB_ICONS.help, { size: 16, className: MENU_ICON_CLASS })}
+                    {createElement(SETTINGS_CENTER_TAB_ICONS.help, { size: 18, className: MENU_ICON_CLASS })}
                     <span>帮助中心</span>
                   </SettingsCenterLink>
                   <a href={PROJECT_REPO_URL} target="_blank" rel="noreferrer" onClick={() => setIsMenuOpen(false)} className={MENU_ITEM_CLASS}>
-                    <Github className={MENU_ICON_CLASS} />
+                    {createElement(GithubIcon, { size: 18, className: MENU_ICON_CLASS })}
                     <span>GitHub</span>
                   </a>
                   <a href={PROJECT_ISSUES_URL} target="_blank" rel="noreferrer" onClick={() => setIsMenuOpen(false)} className={MENU_ITEM_CLASS}>
-                    <Bug className={MENU_ICON_CLASS} />
+                    {createElement(FeedbackIcon, { size: 18, className: MENU_ICON_CLASS })}
                     <span>报告错误/需求</span>
                   </a>
                 </FloatingPanel>
@@ -285,7 +279,7 @@ export function SidebarUserCard({ user, collapsed = false, appearance = 'card' }
                 {signingOut ? (
                   <SoundWaveLoader variant="inline" />
                 ) : (
-                  <LogOut className="h-[18px] w-[18px] shrink-0 text-foreground/42 transition-colors group-hover:text-danger" />
+                  createElement(LogoutIcon, { size: 18, className: 'shrink-0 text-foreground/42 transition-colors group-hover:text-danger' })
                 )}
                 <span>{signingOut ? '退出中...' : '退出登录'}</span>
               </button>

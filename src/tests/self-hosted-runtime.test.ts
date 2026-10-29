@@ -1,6 +1,6 @@
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseConfiguredOrigin, shouldSecureAuthCookies } from '../lib/runtime-env';
+import { parseConfiguredOrigin, shouldSecureAuthCookies, trustedAuthOrigins } from '../lib/runtime-env';
 
 function environment(t: TestContext, overrides: Record<string, string | undefined>) {
     const values: Record<string, string | undefined> = {
@@ -35,6 +35,15 @@ for (const value of [undefined, '', 'mingai.fun', 'file:///tmp', 'https://*.exam
         assert.throws(() => parseConfiguredOrigin(value, 'APP_ORIGIN'));
     });
 }
+
+test('development loopback origins accept either loopback spelling', () => {
+    assert.deepEqual(trustedAuthOrigins(new URL('http://127.0.0.1:3090'), 'development'),
+        ['http://127.0.0.1:3090', 'http://localhost:3090']);
+    assert.deepEqual(trustedAuthOrigins(new URL('http://localhost:3000/'), 'development'),
+        ['http://localhost:3000', 'http://127.0.0.1:3000']);
+    assert.deepEqual(trustedAuthOrigins(new URL('https://mingai.fun'), 'development'), ['https://mingai.fun']);
+    assert.deepEqual(trustedAuthOrigins(new URL('http://127.0.0.1:3090'), 'production'), ['http://127.0.0.1:3090']);
+});
 
 test('secure cookies default on for HTTPS and production', (t) => {
     environment(t, { APP_ORIGIN: 'https://mingai.fun' });

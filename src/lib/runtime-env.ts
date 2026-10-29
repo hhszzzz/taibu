@@ -20,3 +20,20 @@ export function shouldSecureAuthCookies(): boolean {
     }
     return origin.protocol === 'https:' || process.env.NODE_ENV === 'production';
 }
+
+/**
+ * Origins Better Auth may accept in this environment. A development loopback
+ * APP_ORIGIN also accepts the other loopback spelling (localhost ↔ 127.0.0.1)
+ * on the same port, so opening the dev server under either name can sign in.
+ * Production trusts only the configured origin.
+ */
+export function trustedAuthOrigins(origin: URL, nodeEnv = process.env.NODE_ENV): string[] {
+    const origins = [origin.origin];
+    const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname);
+    if (nodeEnv !== 'production' && loopback) {
+        for (const host of ['localhost', '127.0.0.1']) {
+            origins.push(`${origin.protocol}//${host}${origin.port ? `:${origin.port}` : ''}`);
+        }
+    }
+    return [...new Set(origins)];
+}

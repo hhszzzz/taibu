@@ -15,7 +15,7 @@ import {
 import { hashPassword, verifyPassword } from '@/lib/identity/password';
 import { authSecondaryStorage } from '@/lib/identity/secondary-storage.server';
 import { linuxdoPlugin } from '@/lib/identity/linuxdo-plugin.server';
-import { parseConfiguredOrigin, shouldSecureAuthCookies } from '@/lib/runtime-env';
+import { parseConfiguredOrigin, shouldSecureAuthCookies, trustedAuthOrigins } from '@/lib/runtime-env';
 
 const SIGN_IN_PATH = '/sign-in/email';
 
@@ -44,7 +44,7 @@ function buildAuth() {
     baseURL: origin,
     basePath: '/api/auth',
     secret,
-    trustedOrigins: [origin],
+    trustedOrigins: trustedAuthOrigins(new URL(origin)),
     database: createAuthPool(),
     secondaryStorage: authSecondaryStorage,
     user: {

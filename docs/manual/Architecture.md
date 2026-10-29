@@ -36,7 +36,7 @@
 
 ## AI 与 Agent
 
-普通占术解读复用 `src/lib/api/divination-pipeline.ts`：资源归属、会员与模型权限、积分、限流、模型调用、原子持久化及失败补偿按现有用例执行。来源在 `src/lib/source-contracts.ts` 注册，保存复用 `createAIAnalysisConversation`。
+各占术结果页不再在页内生成解读，统一由 AI 对话处理；仍保留的一次性解读（面相/手相照片解读）复用 `src/lib/api/divination-pipeline.ts`：资源归属、会员与模型权限、积分、限流、模型调用、原子持久化及失败补偿按现有用例执行。来源在 `src/lib/source-contracts.ts` 注册，保存复用 `createAIAnalysisConversation`。
 
 Agent 由后台 worker 执行 Pi Durable checkpoint。任务、租约与 fence、命令、工具产物和结算状态保存在 PostgreSQL；恢复执行必须持有有效租约，幂等收据避免重复落库。运行状态、用户主动保存和 BYOK 边界见 [Agent 手册](Agent.md)。
 

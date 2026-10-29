@@ -38,9 +38,17 @@ const DIVINATION = [
 const EXTRA = [
   ['太乙', 'TaiyiIcon'], ['占星', 'AstrologyIcon'], ['Agent', 'AgentIcon'],
   ['新聊天', 'ChatIcon'], ['命理记录', 'RecordsIcon'], ['社区', 'CommunityIcon'],
-  ['我的', 'ProfileIcon'], ['设置', 'SettingsIcon'], ['订阅', 'UpgradeIcon'], ['命盘', 'ChartsIcon'],
-  ['通知', 'BellIcon'], ['知识库', 'KnowledgeIcon'], ['帮助中心', 'HelpIcon'],
-  ['全部占术', 'AllDivinationsIcon'], ['搜索', 'SearchIcon'], ['新建', 'PlusIcon'],
+  ['通知', 'BellIcon'], ['全部占术', 'AllDivinationsIcon'], ['搜索', 'SearchIcon'], ['新建', 'PlusIcon'], ['登录', 'LoginIcon'],
+];
+// 设置中心与账户菜单（与设置侧栏同一顺序）。
+const SETTINGS = [
+  ['账户', 'ProfileIcon'], ['常规', 'SettingsIcon'], ['订阅', 'UpgradeIcon'], ['分享链接', 'ShareLinkIcon'], ['帮助', 'HelpIcon'],
+  ['个性化', 'PersonalizationIcon'], ['自定义模型', 'KeyIcon'], ['命盘', 'ChartsIcon'], ['知识库', 'KnowledgeIcon'],
+  ['技能', 'SkillIcon'], ['连接器', 'ConnectorsIcon'], ['MCP', 'McpIcon'],
+  ['公告', 'MegaphoneIcon'], ['功能与激活码', 'FeatureFlagsIcon'], ['AI 服务', 'ServerIcon'], ['Agent 扩展', 'PluginIcon'],
+];
+const ACCOUNT = [
+  ['用量', 'GaugeIcon'], ['GitHub', 'GithubIcon'], ['报告错误/需求', 'FeedbackIcon'], ['退出登录', 'LogoutIcon'], ['头像兜底', 'BustIcon'],
 ];
 const SIZES = [16, 20, 24];
 
@@ -117,11 +125,15 @@ function App() {
         <SidebarMock items={DIVINATION} />
         <div>
           <div className="group">{DIVINATION.map(([l, n]) => <Row key={n} label={l} name={n} />)}</div>
-          <h2>工具与设置</h2>
+          <h2>工具</h2>
           <div className="group">{EXTRA.map(([l, n]) => <Row key={n} label={l} name={n} />)}</div>
+          <h2>设置中心</h2>
+          <div className="group">{SETTINGS.map(([l, n]) => <Row key={n} label={l} name={n} />)}</div>
+          <h2>账户菜单</h2>
+          <div className="group">{ACCOUNT.map(([l, n]) => <Row key={n} label={l} name={n} />)}</div>
           <h2>悬停动效逐帧（从左到右 {FRAMES} 帧；悬停上面任一行看实时效果）</h2>
           <div className="group">
-            {[...DIVINATION, ...EXTRA, ['太乙', 'TaiyiIcon'], ['占星', 'AstrologyIcon'], ['个性化', 'PersonalizationIcon']].map(([l, n]) => <Filmstrip key={n} label={l} name={n} />)}
+            {[...DIVINATION, ...EXTRA, ...SETTINGS, ...ACCOUNT, ['太乙', 'TaiyiIcon'], ['占星', 'AstrologyIcon']].map(([l, n]) => <Filmstrip key={n} label={l} name={n} />)}
           </div>
         </div>
       </div>

@@ -9,22 +9,17 @@ import { Search, Trash2, X } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
-import { SegmentedChoice } from '@/components/settings/SegmentedChoice';
 import { requestBrowserJson } from '@/lib/browser-api';
 import type { AgentMemory } from '@/lib/agent/memory';
 
-const MEMORY_LIMIT = 128;
-const MEMORY_KIND_OPTIONS = [
-  { value: 'context' as const, label: '背景' },
-  { value: 'preference' as const, label: '偏好' },
-];
-
-type MemoryKind = AgentMemory['kind'];
-
 function memoryMatches(memory: AgentMemory, query: string) {
   const needle = query.trim().toLowerCase();
-  if (!needle) return true;
-  return memory.title.toLowerCase().includes(needle) || memory.content.toLowerCase().includes(needle);
+  return !needle || memory.content.toLowerCase().includes(needle);
+}
+
+// 界面只让用户写正文；存储仍需要标题与类型，标题取正文首行的前 40 个字符。
+function titleOf(content: string) {
+  return content.trim().split('\n')[0].slice(0, 40) || '记忆';
 }
 
 export function MemoryManagerDialog({
@@ -47,9 +42,7 @@ export function MemoryManagerDialog({
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
-  const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [kind, setKind] = useState<MemoryKind>('context');
 
   const request = useCallback(<T,>(method: string, body?: unknown, signal?: AbortSignal) => (
     requestBrowserJson<T>('/api/user/agent-memory', {
@@ -90,7 +83,7 @@ export function MemoryManagerDialog({
   }, [memories, onCountChange]);
 
   const filtered = useMemo(() => memories.filter(memory => memoryMatches(memory, query)), [memories, query]);
-  const canAdd = title.trim().length > 0 && content.trim().length > 0 && !busy;
+  const canAdd = content.trim().length > 0 && !busy;
 
   const remove = async (memory: AgentMemory) => {
     if (busy) return;
@@ -115,16 +108,16 @@ export function MemoryManagerDialog({
     if (!canAdd) return;
     setBusy(true);
     try {
+      const text = content.trim();
       const result = await request<{ memory?: AgentMemory }>('POST', {
-        title: title.trim(),
-        content: content.trim(),
-        kind,
+        title: titleOf(text),
+        content: text,
+        kind: 'context',
       });
       if (result.error) {
         showToast('error', result.error.message || '保存记忆失败');
         return;
       }
-      setTitle('');
       setContent('');
       await load();
       showToast('success', '记忆已保存');
@@ -154,11 +147,11 @@ export function MemoryManagerDialog({
               type="search"
               value={query}
               onChange={event => setQuery(event.target.value)}
-              placeholder="搜索标题或内容"
+              placeholder="搜索记忆"
               aria-label="搜索记忆"
             />
           </label>
-          <span className="settings-counter">{filtered.length} / {memories.length} · 上限 {MEMORY_LIMIT}</span>
+          <span className="settings-counter">{query.trim() ? `${filtered.length} 条匹配` : `共 ${memories.length} 条`}</span>
         </div>
 
         {loading ? (
@@ -175,8 +168,7 @@ export function MemoryManagerDialog({
             {filtered.map(memory => (
               <li key={memory.id} className="settings-list-item">
                 <div className="settings-list-item-text">
-                  <strong>{memory.title}<span className="memory-manager-kind">{memory.kind === 'preference' ? '偏好' : '背景'}</span></strong>
-                  <p>{memory.content}</p>
+                  <p className="memory-manager-content">{memory.content}</p>
                 </div>
                 {confirmingId === memory.id ? (
                   <span className="memory-manager-confirm">
@@ -184,8 +176,9 @@ export function MemoryManagerDialog({
                     <button type="button" className="settings-button settings-button-ghost" disabled={busy} onClick={() => setConfirmingId(null)}>取消</button>
                   </span>
                 ) : (
-                  <button type="button" className="settings-text-button-danger" disabled={busy} aria-label={`删除记忆：${memory.title}`} onClick={() => setConfirmingId(memory.id)}>
-                    <Trash2 size={13} aria-hidden="true" />删除
+                  <button type="button" className="settings-icon-button settings-icon-button-danger" disabled={busy}
+                    aria-label="删除这条记忆" title="删除" onClick={() => setConfirmingId(memory.id)}>
+                    <Trash2 size={15} aria-hidden="true" />
                   </button>
                 )}
               </li>
@@ -195,29 +188,20 @@ export function MemoryManagerDialog({
 
         <section className="memory-manager-add" aria-labelledby={`${titleId}-add`}>
           <h3 id={`${titleId}-add`}>添加记忆</h3>
-          <input
-            className="settings-input"
-            value={title}
-            maxLength={80}
-            placeholder="记忆标题"
-            aria-label="新记忆标题"
-            disabled={busy}
-            onChange={event => setTitle(event.target.value.slice(0, 80))}
-          />
           <textarea
             className="settings-textarea"
             value={content}
             maxLength={2000}
             rows={3}
-            placeholder="主动保存希望长期保留的偏好或事实"
-            aria-label="新记忆正文"
+            placeholder="记下希望长期保留的偏好或事实"
+            aria-label="新记忆"
             disabled={busy}
             onChange={event => setContent(event.target.value.slice(0, 2000))}
           />
           <div className="memory-manager-add-actions">
-            <SegmentedChoice ariaLabel="记忆类型" value={kind} onChange={setKind} options={MEMORY_KIND_OPTIONS} maxWidth={180} />
+            <span className="settings-counter">{content.length} / 2000</span>
             <button type="button" className="settings-button settings-button-primary" disabled={!canAdd} onClick={() => void add()}>
-              {busy ? '保存中…' : '保存这条记忆'}
+              {busy ? '保存中…' : '保存'}
             </button>
           </div>
         </section>

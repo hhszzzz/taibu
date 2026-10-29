@@ -18,7 +18,8 @@ import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { useToast } from '@/components/ui/Toast';
 import { SegmentedChoice } from '@/components/settings/SegmentedChoice';
-import { SettingsSwitch } from '@/components/settings/SettingsControls';
+import { SettingsChoiceCards, SettingsSaveBar, SettingsSwitch } from '@/components/settings/SettingsControls';
+import { SettingsSelect } from '@/components/settings/SettingsSelect';
 import { SettingsLoginRequired } from '@/components/settings/SettingsLoginRequired';
 import { getCurrentUserSettings, type UserIdentityProfile, updateCurrentUserSettings } from '@/lib/user/settings';
 import { syncVisualizationPreferencesAfterSave } from '@/lib/user/ai-settings-local-sync';
@@ -317,158 +318,152 @@ function AccountAISettingsPanel() {
       <section className="settings-form-section" aria-labelledby="ai-style-heading">
         <div className="settings-form-heading">
           <h3 id="ai-style-heading">解读风格</h3>
+          <p>告诉 AI 你是谁，以及希望它怎样表达。</p>
         </div>
 
-        <div className="settings-field-block">
-          <div className="settings-label-row">
-            <label htmlFor="ai-identity">身份</label>
-            <span className="settings-counter">{identityDraft.length} / {USER_PROFILE_LIMIT}</span>
+        <div className="settings-form-body">
+          <div className="settings-field-block">
+            <div className="settings-label-row">
+              <label htmlFor="ai-identity">身份</label>
+              <span className="settings-counter">{identityDraft.length} / {USER_PROFILE_LIMIT}</span>
+            </div>
+            <input
+              id="ai-identity"
+              value={identityDraft}
+              maxLength={USER_PROFILE_LIMIT}
+              onChange={(event) => {
+                // 输入过程中保留空格，保存快照时再统一去除首尾空白。
+                const identity = event.target.value.slice(0, USER_PROFILE_LIMIT);
+                setUserProfile(identity ? { identity } : null);
+              }}
+              className="settings-input settings-input-lg"
+              placeholder="例如：创业者"
+            />
+            <p className="settings-help">会作为「用户身份」提供给 AI，可以是职业、所处阶段或正在做的决定。</p>
           </div>
-          <input
-            id="ai-identity"
-            value={identityDraft}
-            maxLength={USER_PROFILE_LIMIT}
-            onChange={(event) => {
-              // 输入过程中保留空格，保存快照时再统一去除首尾空白。
-              const identity = event.target.value.slice(0, USER_PROFILE_LIMIT);
-              setUserProfile(identity ? { identity } : null);
-            }}
-            className="settings-input settings-input-lg"
-            placeholder="例如：创业者"
-          />
-        </div>
 
-        <div className="settings-inline-row">
-          <span>表达风格</span>
-          <SegmentedChoice
-            ariaLabel="表达风格"
-            value={expressionStyle}
-            onChange={setExpressionStyle}
-            options={EXPRESSION_STYLE_OPTIONS}
-            maxWidth={200}
-          />
-        </div>
-
-        <div className="settings-field-block">
-          <div className="settings-inline-row">
-            <span>命盘注入详细级别</span>
+          <div className="settings-inline-row settings-inline-row-stacked">
+            <span>表达风格</span>
             <SegmentedChoice
-              ariaLabel="命盘注入详细级别"
-              value={chartPromptDetailLevel}
-              onChange={handleChartPromptDetailLevelChange}
-              options={CHART_PROMPT_DETAIL_OPTIONS_UI}
-              maxWidth={216}
+              ariaLabel="表达风格"
+              value={expressionStyle}
+              onChange={setExpressionStyle}
+              options={EXPRESSION_STYLE_OPTIONS}
+              maxWidth={200}
             />
           </div>
-          <p className="settings-help">
-            用于对话中的命盘注入。默认档附带必要信息；扩展档附带更多信息；完整档附带最详细的信息。
-          </p>
-        </div>
 
-        <div className="settings-field-block">
-          <div className="settings-label-row">
-            <label htmlFor="ai-custom-instructions">自定义指令</label>
-            <span className="settings-counter">{customInstructions.length} / {CUSTOM_INSTRUCTIONS_LIMIT}</span>
+          <div className="settings-field-block">
+            <div className="settings-inline-row settings-inline-row-stacked">
+              <span>命盘注入详细级别</span>
+              <SegmentedChoice
+                ariaLabel="命盘注入详细级别"
+                value={chartPromptDetailLevel}
+                onChange={handleChartPromptDetailLevelChange}
+                options={CHART_PROMPT_DETAIL_OPTIONS_UI}
+                maxWidth={216}
+              />
+            </div>
+            <p className="settings-help">
+              控制对话中注入的命盘信息量；完整档包含最多细节。
+            </p>
           </div>
-          <textarea
-            id="ai-custom-instructions"
-            rows={3}
-            value={customInstructions}
-            onChange={(event) => setCustomInstructions(event.target.value.slice(0, CUSTOM_INSTRUCTIONS_LIMIT))}
-            className="settings-textarea"
-            placeholder="例如：先给结论，再给依据；避免空话和术语堆叠。"
-          />
+
+          <div className="settings-field-block">
+            <div className="settings-label-row">
+              <label htmlFor="ai-custom-instructions">自定义指令</label>
+              <span className="settings-counter">{customInstructions.length} / {CUSTOM_INSTRUCTIONS_LIMIT}</span>
+            </div>
+            <textarea
+              id="ai-custom-instructions"
+              rows={3}
+              value={customInstructions}
+              onChange={(event) => setCustomInstructions(event.target.value.slice(0, CUSTOM_INSTRUCTIONS_LIMIT))}
+              className="settings-textarea"
+              placeholder="例如：先给结论，再给依据；避免空话和术语堆叠。"
+            />
+          </div>
         </div>
       </section>
 
       <section className="settings-form-section" aria-labelledby="ai-visualization-heading">
         <div className="settings-form-heading">
           <h3 id="ai-visualization-heading">运势可视化</h3>
-          <p>默认关闭。开启后，AI 输出运势图表时会按你选择的维度、图表风格和大运期数分析。</p>
+          <p>按你选择的维度、图表风格和大运期数生成运势图表。</p>
         </div>
 
-        <div className="settings-inline-row">
-          <span>启用可视化偏好</span>
-          <SettingsSwitch
-            label="启用运势可视化偏好"
-            checked={visualizationEnabled}
-            onToggle={() => setVisualizationEnabled(enabled => !enabled)}
-          />
-        </div>
-
-        {visualizationEnabled ? <>
-        <div className="settings-field-block">
-          <div className="settings-label-row">
-            <span id="ai-dimensions-label">维度</span>
-            <span className="settings-counter">已选 {selectedDimensions.length} · 至少 {MIN_DIMENSIONS}，最多 {MAX_DIMENSIONS}</span>
+        <div className="settings-form-body">
+          <div className="settings-inline-row">
+            <span>启用可视化偏好</span>
+            <SettingsSwitch
+              label="启用运势可视化偏好"
+              checked={visualizationEnabled}
+              onToggle={() => setVisualizationEnabled(enabled => !enabled)}
+            />
           </div>
-          <div role="group" aria-labelledby="ai-dimensions-label" className="settings-chips">
-            {allDimensions.map((dimension) => (
-              <button
-                key={dimension.key}
-                type="button"
-                aria-pressed={selectedDimensions.includes(dimension.key)}
-                onClick={() => handleToggleDimension(dimension.key)}
-                className="settings-chip"
-              >
-                {dimension.label}
-              </button>
-            ))}
-          </div>
-        </div>
 
-        <div className="settings-inline-row">
-          <label htmlFor="ai-dayun-periods">默认展示大运期数</label>
-          <select
-            id="ai-dayun-periods"
-            value={dayunPeriods}
-            onChange={(event) => setDayunPeriods(Number(event.target.value))}
-            className="settings-select settings-select-compact"
-          >
-            {DAYUN_PERIOD_OPTIONS.map((count) => (
-              <option key={count} value={count}>{count} 期</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="settings-field-block">
-          <span id="ai-chart-style-label" className="settings-label">图表风格</span>
-          <div role="radiogroup" aria-labelledby="ai-chart-style-label" className="settings-choice-cards">
-            {CHART_STYLE_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                role="radio"
-                aria-checked={chartStyle === option.value}
-                onClick={() => setChartStyle(option.value)}
-                className="settings-choice-card"
-              >
-                <span aria-hidden="true" className={`settings-chart-preview ${option.previewClass}`}>
-                  {CHART_PREVIEW_BARS.map((height, index) => <span key={index} style={{ height }} />)}
-                </span>
-                <span>{option.label}</span>
-              </button>
-            ))}
+          {visualizationEnabled ? <>
+          <div className="settings-field-block">
+            <div className="settings-label-row">
+              <span id="ai-dimensions-label">维度</span>
+              <span className="settings-counter">已选 {selectedDimensions.length} · 至少 {MIN_DIMENSIONS}，最多 {MAX_DIMENSIONS}</span>
+            </div>
+            <div role="group" aria-labelledby="ai-dimensions-label" className="settings-chips">
+              {allDimensions.map((dimension) => (
+                <button
+                  key={dimension.key}
+                  type="button"
+                  aria-pressed={selectedDimensions.includes(dimension.key)}
+                  onClick={() => handleToggleDimension(dimension.key)}
+                  className="settings-chip"
+                >
+                  {dimension.label}
+                </button>
+              ))}
+            </div>
           </div>
+
+          <div className="settings-inline-row">
+            <label htmlFor="ai-dayun-periods">默认展示大运期数</label>
+            <SettingsSelect
+              id="ai-dayun-periods"
+              ariaLabel="默认展示大运期数"
+              value={dayunPeriods}
+              onChange={setDayunPeriods}
+              options={DAYUN_PERIOD_OPTIONS.map((count) => ({ value: count, label: `${count} 期` }))}
+              className="settings-select-compact"
+            />
+          </div>
+
+          <div className="settings-field-block">
+            <span id="ai-chart-style-label" className="settings-label">图表风格</span>
+            <SettingsChoiceCards
+              labelledBy="ai-chart-style-label"
+              value={chartStyle}
+              onChange={setChartStyle}
+              options={CHART_STYLE_OPTIONS.map(option => ({
+                value: option.value,
+                label: option.label,
+                preview: (
+                  <span aria-hidden="true" className={`settings-chart-preview ${option.previewClass}`}>
+                    {CHART_PREVIEW_BARS.map((height, index) => <span key={index} style={{ height }} />)}
+                  </span>
+                ),
+              }))}
+            />
+          </div>
+          </> : <p className="settings-help">未启用：不向 AI 注入关注维度、大运期数和图表风格偏好。</p>}
         </div>
-        </> : <p className="settings-help">未启用：不向 AI 注入关注维度、大运期数和图表风格偏好。</p>}
       </section>
 
       {isDirty ? (
-        <div className="settings-save-bar">
-          <p>个性化设置已修改，保存后生效。</p>
-          <button type="button" onClick={handleCancel} disabled={saving} className="settings-button">
-            取消
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving || settingsLoadFailed}
-            className="settings-button settings-button-primary"
-          >
-            {saving ? '保存中…' : '保存'}
-          </button>
-        </div>
+        <SettingsSaveBar
+          message="个性化设置有未保存的更改"
+          saving={saving}
+          saveDisabled={settingsLoadFailed}
+          onCancel={handleCancel}
+          onSave={handleSave}
+        />
       ) : null}
     </div>
   );

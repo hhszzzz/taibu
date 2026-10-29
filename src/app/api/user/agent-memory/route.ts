@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
             .executeTakeFirstOrThrow());
     } catch (error) {
         console.error('保存记忆失败:', error);
-        return jsonError('保存记忆失败或已达到 128 条上限', 409);
+        return jsonError('保存记忆失败，记忆容量已满', 409);
     }
     return jsonOk({ memory });
 }

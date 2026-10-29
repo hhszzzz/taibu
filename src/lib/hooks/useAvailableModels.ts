@@ -10,7 +10,7 @@ import type { AIReasoningEffort, AIVendor } from '@/types';
 import type { MembershipType } from '@/lib/user/membership';
 import type { GeneratedImageSize } from '@/lib/images/generated';
 
-type AvailableModel = {
+export type AvailableModel = {
   id: string;
   name: string;
   vendor: AIVendor;

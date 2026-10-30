@@ -6,15 +6,8 @@
 'use client';
 
 import { useCallback, useId, type ReactNode } from 'react';
+import { Button } from '@/components/ui/Button';
 import { Modal } from './Modal';
-import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
-
-// 危险/警告色在深色主题下是浅色，用背景色作文字才能保证两种主题的对比度。
-const CONFIRM_BUTTON_CLASS = {
-    danger: 'bg-danger text-background hover:bg-danger/90',
-    warning: 'bg-warning text-background hover:bg-warning/90',
-    default: 'bg-accent text-on-accent hover:bg-accent/90',
-} as const;
 
 interface ConfirmDialogProps {
     isOpen: boolean;
@@ -50,8 +43,6 @@ export function ConfirmDialog({
         await onConfirm();
     }, [onConfirm]);
 
-    if (!isOpen) return null;
-
     return (
         <Modal open={isOpen} onClose={onClose} busy={loading} labelledBy={`${id}-title`} describedBy={`${id}-description`} className="max-w-sm">
             <div className="p-6">
@@ -66,23 +57,18 @@ export function ConfirmDialog({
 
                 {showActions ? (
                     <div className="mt-6 flex justify-end gap-2.5">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            disabled={loading}
-                            className="h-10 rounded-xl border-[0.5px] border-border-hover bg-transparent px-4 text-sm text-foreground transition-colors hover:bg-background-secondary disabled:opacity-50"
-                        >
+                        <Button variant="secondary" size="lg" onClick={onClose} disabled={loading}>
                             {cancelText}
-                        </button>
-                        <button
-                            type="button"
+                        </Button>
+                        <Button
+                            size="lg"
+                            variant={variant === 'danger' ? 'danger' : 'primary'}
+                            className={variant === 'warning' ? 'bg-warning text-background hover:bg-warning/90' : undefined}
                             onClick={handleConfirm}
-                            disabled={loading}
-                            className={`inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-sm font-medium transition-colors disabled:opacity-50 ${CONFIRM_BUTTON_CLASS[variant]}`}
+                            loading={loading}
                         >
-                            {loading && <SoundWaveLoader variant="inline" />}
                             {confirmText}
-                        </button>
+                        </Button>
                     </div>
                 ) : null}
             </div>

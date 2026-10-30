@@ -1,9 +1,11 @@
 'use client';
 
 import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Check, Copy, Download, Expand, X } from 'lucide-react';
+import { Check, Copy, Download, Expand } from 'lucide-react';
 import type { ThemedToken } from 'shiki';
-import { Modal } from './Modal';
+import { Dialog } from './Dialog';
+import { Button } from './Button';
+import { IconButton } from './IconButton';
 import { useTheme } from './ThemeProvider';
 import { useToast } from './Toast';
 import { tableCsv } from '@/lib/chat/markdown-blocks';
@@ -58,9 +60,9 @@ export function CodeBlock({ code, language }: { code: string; language: string }
     return <div className="markdown-code-frame">
         <div className="markdown-code-head">
             <span>{language || '代码'}</span>
-            <button type="button" onClick={() => void copy()} aria-label={copied ? '已复制代码' : '复制代码'}>
-                {copied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
-            </button>
+            <IconButton label={copied ? '已复制代码' : '复制代码'} size="sm" expand="none" onClick={() => void copy()}>
+                {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+            </IconButton>
         </div>
         <HighlightedCode code={code} language={language} />
     </div>;
@@ -78,8 +80,10 @@ export function MarkdownTable({ children }: { children: ReactNode }) {
         setTimeout(() => URL.revokeObjectURL(url), 1000);
     };
     return <div className="markdown-table-container">
-        <div className="markdown-table-toolbar"><button type="button" onClick={() => void copy()} aria-label="复制表格"><Copy size={14} />复制</button><button type="button" onClick={csv}><Download size={14} />CSV</button><button type="button" onClick={() => setOpen(true)} aria-label="放大表格"><Expand size={14} /></button></div>
+        <div className="markdown-table-toolbar"><Button variant="ghost" size="xs" onClick={() => void copy()}><Copy aria-hidden="true" />复制</Button><Button variant="ghost" size="xs" onClick={csv}><Download aria-hidden="true" />CSV</Button><IconButton label="放大表格" size="xs" expand="none" onClick={() => setOpen(true)}><Expand aria-hidden="true" /></IconButton></div>
         <div className="overflow-x-auto"><table ref={ref} className="w-full border-collapse">{children}</table></div>
-        <Modal open={open} onClose={() => setOpen(false)} labelledBy="table-preview-title" className="markdown-table-dialog"><div className="flex justify-between p-4"><h2 id="table-preview-title">表格预览</h2><button type="button" aria-label="关闭表格预览" onClick={() => setOpen(false)}><X size={18} /></button></div><div className="overflow-auto p-4"><table className="w-full border-collapse">{children}</table></div></Modal>
+        <Dialog open={open} onOpenChange={setOpen} title="表格预览" className="markdown-table-dialog">
+            <div className="overflow-auto"><table className="w-full border-collapse">{children}</table></div>
+        </Dialog>
     </div>;
 }

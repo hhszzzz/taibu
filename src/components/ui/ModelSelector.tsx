@@ -1,12 +1,12 @@
 'use client';
 // 'use client'：模型菜单需要弹层、键盘导航与浏览器内的自定义模型状态
 
-import { useMemo, useEffect, useRef, useState, useId, type ReactNode } from 'react';
+import { useMemo, useEffect, useState, type ReactNode } from 'react';
 import { BetaBadge } from '@/components/ui/BetaBadge';
-import { Check, ChevronDown, ChevronRight, Cpu } from 'lucide-react';
+import { ChevronDown, Cpu } from 'lucide-react';
 import { KeyIcon } from '@/lib/navigation/nav-icons';
 import { SoundWaveLoader } from './SoundWaveLoader';
-import { FloatingPanel } from './FloatingPanel';
+import { Menu, MenuCheckboxItem, MenuContent, MenuItem, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from './Menu';
 import { getVendorIcon } from '@/lib/ai/vendor-config';
 import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
 import { useAvailableModels } from '@/lib/hooks/useAvailableModels';
@@ -69,12 +69,6 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
     reasoningEffort, onReasoningEffortChange, collaborators = [], onCollaboratorsChange, extra, onCustomProvider,
     userId, membershipType = 'free', disabled = false, compact = false, toolbarStyle = false }: ModelSelectorProps) {
     const [open, setOpen] = useState(false);
-    const [effortOpen, setEffortOpen] = useState(false);
-    const [collabOpen, setCollabOpen] = useState(false);
-    const anchorRef = useRef<HTMLButtonElement>(null);
-    const effortRef = useRef<HTMLButtonElement>(null);
-    const collabRef = useRef<HTMLButtonElement>(null);
-    const menuId = useId();
     const query = useAvailableModels(userId ?? null, { enabled: !!onModelChange, membershipType });
     const models = useMemo(() => (query.data ?? []) as ClientModelConfig[], [query.data]);
     const collaborationPreset = useCollaborationPreset(userId ?? null);
@@ -111,7 +105,7 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
     const available = models.filter(model => model.allowed !== false);
     const summary = reasoningSummary(current, reasoningEnabled, reasoningEffort, !!onReasoningEffortChange);
     const label = `选择模型：${current?.name ?? '暂无可用模型'}${toolbarStyle && summary ? ` · ${summary}` : ''}`;
-    const close = () => { setOpen(false); setEffortOpen(false); setCollabOpen(false); };
+    const close = () => setOpen(false);
     const reasoningSupported = !!current?.supportsReasoning && current.reasoningAllowed !== false;
     const effortSupported = reasoningSupported && !!current.thinkingLevels?.length && !!onReasoningEffortChange;
     const effectiveEffort = modelEffort(current, reasoningEffort);
@@ -139,101 +133,91 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
             } satisfies AgentCollaborator];
         onCollaboratorsChange(next);
     };
+    const effortChoice = !reasoningEnabled ? 'off' : effectiveEffort ?? 'default';
     const chooseEffort = (effort: AIReasoningEffort | null) => {
         onReasoningChange?.(true);
         onReasoningEffortChange?.(effort);
         close();
     };
     return <div className={`flex items-center ${toolbarStyle ? 'chat-model-selector' : ''}`}>
-        {toolbarStyle ? <button ref={anchorRef} type="button" onClick={() => setOpen(value => !value)} disabled={locked} className="chat-model-trigger" data-model-trigger
-            aria-label={label} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? menuId : undefined}>
-            {query.isLoading ? <SoundWaveLoader variant="inline" /> : null}
-            <span className="chat-model-name">{current?.name ?? (query.isLoading ? '正在加载模型' : '暂无可用模型')}</span>
-            {summary && <span className="chat-model-hint">{summary}</span>}
-            <ChevronDown size={14} aria-hidden="true" />
-        </button> : <button ref={anchorRef} type="button" onClick={() => setOpen(value => !value)} disabled={locked} data-model-trigger
-            className={`chat-model-picker flex items-center gap-1.5 rounded-xl px-2 transition-colors ${compact ? 'py-1 text-xs' : 'h-9 text-sm'} ${locked ? 'cursor-not-allowed opacity-50' : 'text-foreground-secondary hover:text-foreground'}`}
-            aria-label={label} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? menuId : undefined}>
-            {query.isLoading ? <SoundWaveLoader variant="inline" /> : current ? getVendorIcon(current.vendor) : <Cpu size={16} />}
-            <span className={`chat-model-name truncate ${compact ? 'max-w-[104px]' : 'max-w-[125px]'}`}>{current?.name ?? '暂无可用模型'}</span>
-            <ChevronDown size={16} className={open ? 'rotate-180' : undefined} />
-        </button>}
-        <FloatingPanel open={open && !locked} anchorRef={anchorRef} onClose={close} id={menuId}
-            role="dialog" label="模型与分析设置" side="top" align={toolbarStyle ? 'end' : 'start'} className="chat-model-menu" arrowNavigation>
-            <div className="chat-model-options" role="menu" aria-label="选择模型">
-                {models.map(model => <button key={model.id} type="button" role="menuitemradio" aria-checked={selectedModel === model.id}
-                    disabled={model.allowed === false} onClick={() => { onModelChange?.(model.id); anchorRef.current?.focus(); close(); }}>
-                    <span className="chat-model-option-name">{model.name}</span>
-                    {selectedModel === model.id && <Check size={14} aria-hidden="true" />}
-                </button>)}
+        <Menu open={open} onOpenChange={setOpen}>
+            {toolbarStyle ? <MenuTrigger disabled={locked} className="chat-model-trigger" data-model-trigger
+                aria-label={label}>
+                {query.isLoading ? <SoundWaveLoader variant="inline" /> : null}
+                <span className="chat-model-name">{current?.name ?? (query.isLoading ? '正在加载模型' : '暂无可用模型')}</span>
+                {summary && <span className="chat-model-hint">{summary}</span>}
+                <ChevronDown size={14} aria-hidden="true" />
+            </MenuTrigger> : <MenuTrigger disabled={locked} data-model-trigger
+                className={`chat-model-picker flex items-center gap-1.5 rounded-xl px-2 transition-colors ${compact ? 'py-1 text-xs' : 'h-9 text-sm'} ${locked ? 'cursor-not-allowed opacity-50' : 'text-foreground-secondary hover:text-foreground'}`}
+                aria-label={label}>
+                {query.isLoading ? <SoundWaveLoader variant="inline" /> : current ? getVendorIcon(current.vendor) : <Cpu size={16} />}
+                <span className={`chat-model-name truncate ${compact ? 'max-w-[104px]' : 'max-w-[125px]'}`}>{current?.name ?? '暂无可用模型'}</span>
+                <ChevronDown size={16} className={open ? 'rotate-180' : undefined} />
+            </MenuTrigger>}
+            <MenuContent side="top" align={toolbarStyle ? 'end' : 'start'} sideOffset={6} className="chat-model-menu" aria-label="模型与分析设置">
+                <MenuRadioGroup className="chat-model-options" aria-label="选择模型" value={selectedModel ?? ''} onValueChange={value => onModelChange?.(value)}>
+                    {models.map(model => <MenuRadioItem key={model.id} value={model.id} disabled={model.allowed === false} closeOnClick>
+                        <span className="chat-model-option-name">{model.name}</span>
+                    </MenuRadioItem>)}
+                </MenuRadioGroup>
                 {!models.length && !query.isLoading && <p className="chat-model-note">暂无可用模型。</p>}
-            </div>
-            {reasoningSupported && <div className="chat-model-separator" aria-hidden="true" />}
-            {reasoningSupported && (effortSupported
-                ? <button ref={effortRef} type="button" role="menuitem" className="chat-model-action chat-model-menu-row" aria-haspopup="menu" aria-expanded={effortOpen}
-                    onClick={() => setEffortOpen(value => !value)}>
-                    <span>努力程度</span><span className="chat-model-menu-value">{effortLabel(effectiveEffort, reasoningEnabled)}</span><ChevronRight size={14} aria-hidden="true" />
-                </button>
-                : <button type="button" role="menuitemcheckbox" aria-checked={reasoningEnabled} className="chat-model-action chat-model-menu-row" onClick={() => onReasoningChange?.(!reasoningEnabled)}>
-                    <span>推理</span>{reasoningEnabled && <Check size={14} aria-hidden="true" />}
-                </button>)}
-            {!reasoningSupported && onReasoningEffortChange && <button type="button" role="menuitem" className="chat-model-action chat-model-menu-row" disabled>
-                <span>努力程度</span><span className="chat-model-menu-value">不支持</span>
-            </button>}
-            {onCollaboratorsChange && <button ref={collabRef} type="button" role="menuitem" className="chat-model-action chat-model-menu-row"
-                aria-haspopup="menu" aria-expanded={collabOpen} disabled={disabled || !available.length}
-                onClick={() => setCollabOpen(value => !value)}>
-                <span>多模型协作<BetaBadge /></span>{collaborationEnabled && <span className="chat-model-menu-value">{subCollaborators.length}</span>}<ChevronRight size={14} aria-hidden="true" />
-            </button>}
-            {extra}
-            {onCustomProvider && <>
-                <div className="chat-model-separator" aria-hidden="true" />
-                <button type="button" className="chat-model-action" onClick={() => { close(); onCustomProvider(); }}><KeyIcon size={16} />使用自己的模型 API</button>
-            </>}
-            {query.error && <p className="chat-model-note" role="alert">{query.error instanceof Error ? query.error.message : '模型列表加载失败'}</p>}
-        </FloatingPanel>
-        {/* 努力程度 = 模型菜单右侧的二级浮层（claude 同构），不替换主菜单内容。 */}
-        {effortSupported && <FloatingPanel open={effortOpen && open && !locked} anchorRef={effortRef} onClose={() => setEffortOpen(false)}
-            label="努力程度" side="right-start" className="chat-model-menu chat-effort-menu" arrowNavigation>
-            <p className="chat-model-note chat-model-effort-note">投入程度越高，回复越详尽，但耗时越长，且会更快消耗您的使用限额。</p>
-            <div>
-                {effortOptions.map(option => {
-                    const badge = option.value === recommendedEffort ? '推荐' : option.badge;
-                    return <button key={option.value} type="button" role="menuitemradio" aria-checked={reasoningEnabled && effectiveEffort === option.value}
-                        className="chat-model-action chat-model-menu-row" onClick={() => chooseEffort(option.value)}>
-                        <span>{option.label}{badge && <span className="chat-model-badge" data-tone={badge === option.badge ? option.tone : undefined} aria-hidden="true">{badge}</span>}</span>{reasoningEnabled && effectiveEffort === option.value && <Check size={14} aria-hidden="true" />}
-                    </button>;
-                })}
-                <button type="button" role="menuitemradio" aria-checked={reasoningEnabled && !reasoningEffort}
-                    className="chat-model-action chat-model-menu-row" onClick={() => chooseEffort(null)}>
-                    <span>模型默认</span>{reasoningEnabled && !reasoningEffort && <Check size={14} aria-hidden="true" />}
-                </button>
-                {!current?.isReasoningDefault && <button type="button" role="menuitemradio" aria-checked={!reasoningEnabled}
-                    className="chat-model-action chat-model-menu-row" onClick={() => { onReasoningChange?.(false); close(); }}>
-                    <span>关闭推理</span>{!reasoningEnabled && <Check size={14} aria-hidden="true" />}
-                </button>}
-            </div>
-        </FloatingPanel>}
-        {/* 多模型协作 = 二级浮层：勾选参与协作的模型，不因点击而关闭主菜单。 */}
-        {onCollaboratorsChange && <FloatingPanel open={collabOpen && open && !locked} anchorRef={collabRef} onClose={() => setCollabOpen(false)}
-            label="多模型协作" side="right-start" className="chat-model-menu chat-collab-menu" arrowNavigation>
-            <p className="chat-collab-note">子模型可在个性化设置努力程度</p>
-            <div className="chat-collab-list" role="group" aria-label="协作成员">
-                {available.filter(model => model.id !== current?.id).map(model => {
-                    const checked = collaborators.some(member => member.model === model.id);
-                    // 右侧 = 个性化里为该模型注册的名称（如「专项分析」），未注册时不显示。
-                    const registered = collaborationPreset.members.find(member => member.model === model.id)?.name ?? '';
-                    const full = collaborationFull && !checked;
-                    return <button key={model.id} type="button" role="menuitemcheckbox" aria-checked={checked}
-                        aria-disabled={full || undefined} disabled={full}
-                        className="chat-model-action chat-collab-row" onClick={() => toggleCollaborator(model)}>
-                        <span className="chat-collab-name">{model.name}</span>
-                        {registered && <span className="chat-collab-registered" aria-hidden="true">{registered}</span>}
-                        <span className="chat-model-check" aria-hidden="true">{checked ? <Check size={14} strokeWidth={2.6} /> : null}</span>
-                    </button>;
-                })}
-            </div>
-            {subCollaborators.length > 0 && <p className="chat-collab-foot">已选 {subCollaborators.length} 个协作模型</p>}
-        </FloatingPanel>}
+                {reasoningSupported && <MenuSeparator className="chat-model-separator" />}
+                {reasoningSupported && (effortSupported
+                    ? <MenuSub>
+                        <MenuSubTrigger className="chat-model-action chat-model-menu-row">
+                            <span>努力程度</span><span className="chat-model-menu-value">{effortLabel(effectiveEffort, reasoningEnabled)}</span>
+                        </MenuSubTrigger>
+                        <MenuSubContent className="chat-model-menu chat-effort-menu" aria-label="努力程度">
+                            <p className="chat-model-note chat-model-effort-note">投入程度越高，回复越详尽，但耗时越长，且会更快消耗您的使用限额。</p>
+                            <MenuRadioGroup value={effortChoice} onValueChange={value => {
+                                if (value === 'off') { onReasoningChange?.(false); close(); return; }
+                                chooseEffort(value === 'default' ? null : value as AIReasoningEffort);
+                            }}>
+                                {effortOptions.map(option => {
+                                    const badge = option.value === recommendedEffort ? '推荐' : option.badge;
+                                    return <MenuRadioItem key={option.value} value={option.value} className="chat-model-action chat-model-menu-row" closeOnClick>
+                                        <span>{option.label}{badge && <span className="chat-model-badge" data-tone={badge === option.badge ? option.tone : undefined} aria-hidden="true">{badge}</span>}</span>
+                                    </MenuRadioItem>;
+                                })}
+                                <MenuRadioItem value="default" className="chat-model-action chat-model-menu-row" closeOnClick><span>模型默认</span></MenuRadioItem>
+                                {!current?.isReasoningDefault && <MenuRadioItem value="off" className="chat-model-action chat-model-menu-row" closeOnClick><span>关闭推理</span></MenuRadioItem>}
+                            </MenuRadioGroup>
+                        </MenuSubContent>
+                    </MenuSub>
+                    : <MenuCheckboxItem checked={reasoningEnabled} className="chat-model-action chat-model-menu-row"
+                        onCheckedChange={() => onReasoningChange?.(!reasoningEnabled)}>
+                        <span>推理</span>
+                    </MenuCheckboxItem>)}
+                {!reasoningSupported && onReasoningEffortChange && <MenuItem className="chat-model-action chat-model-menu-row" disabled>
+                    <span>努力程度</span><span className="chat-model-menu-value">不支持</span>
+                </MenuItem>}
+                {onCollaboratorsChange && <MenuSub>
+                    <MenuSubTrigger className="chat-model-action chat-model-menu-row" disabled={disabled || !available.length}>
+                        <span>多模型协作<BetaBadge /></span>{collaborationEnabled && <span className="chat-model-menu-value">{subCollaborators.length}</span>}
+                    </MenuSubTrigger>
+                    <MenuSubContent className="chat-model-menu chat-collab-menu" aria-label="多模型协作">
+                        <p className="chat-collab-note">子模型可在个性化设置努力程度</p>
+                        {available.filter(model => model.id !== current?.id).map(model => {
+                            const checked = collaborators.some(member => member.model === model.id);
+                            // 右侧 = 个性化里为该模型注册的名称（如「专项分析」），未注册时不显示。
+                            const registered = collaborationPreset.members.find(member => member.model === model.id)?.name ?? '';
+                            const full = collaborationFull && !checked;
+                            return <MenuCheckboxItem key={model.id} checked={checked} closeOnClick={false} disabled={full}
+                                className="chat-model-action chat-collab-row" onCheckedChange={() => toggleCollaborator(model)}>
+                                <span className="chat-collab-name">{model.name}</span>
+                                {registered && <span className="chat-collab-registered" aria-hidden="true">{registered}</span>}
+                            </MenuCheckboxItem>;
+                        })}
+                        {subCollaborators.length > 0 && <p className="chat-collab-foot">已选 {subCollaborators.length} 个协作模型</p>}
+                    </MenuSubContent>
+                </MenuSub>}
+                {extra}
+                {onCustomProvider && <>
+                    <MenuSeparator className="chat-model-separator" />
+                    <MenuItem className="chat-model-action" onClick={() => { close(); onCustomProvider(); }}><KeyIcon size={16} />使用自己的模型 API</MenuItem>
+                </>}
+                {query.error && <p className="chat-model-note" role="alert">{query.error instanceof Error ? query.error.message : '模型列表加载失败'}</p>}
+            </MenuContent>
+        </Menu>
     </div>;
 }

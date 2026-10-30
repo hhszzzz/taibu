@@ -8,6 +8,7 @@
 
 import { Moon, Sun } from 'lucide-react';
 import { useTheme } from '@/components/ui/ThemeProvider';
+import { IconButton } from '@/components/ui/IconButton';
 
 /**
  * ThemeToggle 组件
@@ -17,16 +18,9 @@ export function ThemeToggle() {
     const { toggleTheme } = useTheme();
 
     return (
-        <button
-            onClick={toggleTheme}
-            className="p-2 rounded-lg transition-all duration-200
-                 hover:bg-background-secondary
-                 focus:outline-none focus:ring-2 focus:ring-accent/50"
-            aria-label="切换主题"
-            title="切换主题"
-        >
-            <Sun className="hidden dark:block w-5 h-5 text-foreground-secondary hover:text-accent transition-colors" />
-            <Moon className="block dark:hidden w-5 h-5 text-foreground-secondary hover:text-accent transition-colors" />
-        </button>
+        <IconButton label="切换主题" title="切换主题" className="p-2" onClick={toggleTheme}>
+            <Sun className="hidden dark:block h-5 w-5 text-foreground-secondary hover:text-accent transition-colors" aria-hidden="true" />
+            <Moon className="block dark:hidden h-5 w-5 text-foreground-secondary hover:text-accent transition-colors" aria-hidden="true" />
+        </IconButton>
     );
 }

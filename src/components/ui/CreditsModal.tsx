@@ -6,8 +6,10 @@
 'use client';
 
 import { useCallback, useId } from 'react';
-import { Modal } from './Modal';
-import { X, Coins, Crown } from 'lucide-react';
+import { Dialog } from './Dialog';
+import { Button } from './Button';
+import { IconButton } from './IconButton';
+import { Coins, Crown, X } from 'lucide-react';
 import { openSettingsCenter } from '@/lib/settings-center';
 
 interface CreditsModalProps {
@@ -26,20 +28,14 @@ export function CreditsModal({ isOpen, onClose, message }: CreditsModalProps) {
     if (!isOpen) return null;
 
     return (
-        <Modal open={isOpen} onClose={onClose} labelledBy={id} className="max-w-sm">
+        <Dialog bare open={isOpen} onClose={onClose} labelledBy={id} className="max-w-sm">
                 {/* 关闭按钮 */}
-                <button
-                    onClick={onClose}
-                    aria-label="关闭积分提示"
-                    className="absolute top-4 right-4 p-1 rounded-full hover:bg-background-secondary transition-colors"
-                >
-                    <X className="w-5 h-5 text-foreground-secondary" />
-                </button>
+                <IconButton label="关闭积分提示" expand="none" className="absolute top-4 right-4" onClick={onClose}><X aria-hidden="true" /></IconButton>
 
                 {/* 图标 */}
                 <div className="pt-8 pb-4 flex justify-center">
-                    <div className="w-16 h-16 rounded-full bg-amber-500/10 flex items-center justify-center">
-                        <Coins className="w-8 h-8 text-amber-500" />
+                    <div className="w-16 h-16 rounded-full bg-warning/10 flex items-center justify-center">
+                        <Coins className="w-8 h-8 text-warning" />
                     </div>
                 </div>
 
@@ -55,20 +51,11 @@ export function CreditsModal({ isOpen, onClose, message }: CreditsModalProps) {
 
                 {/* 按钮 */}
                 <div className="px-6 pb-6 space-y-3">
-                    <button
-                        onClick={handleGoToUpgrade}
-                        className="w-full py-3 bg-accent hover:bg-accent/90 text-on-accent rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
-                    >
-                        <Crown className="w-5 h-5" />
-                        前往订阅
-                    </button>
-                    <button
-                        onClick={onClose}
-                        className="w-full py-3 bg-background-secondary hover:bg-background-tertiary text-foreground rounded-xl font-medium transition-colors"
-                    >
-                        稍后再说
-                    </button>
+                    <Button size="lg" className="w-full" onClick={handleGoToUpgrade}>
+                        <Crown className="h-5 w-5" aria-hidden="true" />前往订阅
+                    </Button>
+                    <Button variant="secondary" size="lg" className="w-full" onClick={onClose}>稍后再说</Button>
                 </div>
-        </Modal>
+        </Dialog>
     );
 }

@@ -7,6 +7,8 @@
 
 import { useState, createContext, useContext, useCallback, useLayoutEffect, useRef, ReactNode } from 'react';
 import { CheckCircle2, AlertCircle, Info, X, BotMessageSquare, TriangleAlert } from 'lucide-react';
+import { Button } from './Button';
+import { IconButton } from './IconButton';
 import { prefersReducedMotion } from '@/lib/motion/entrance';
 import { slide } from '@/lib/motion/list';
 
@@ -79,7 +81,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
     const showToast = useCallback((type: ToastType, message: string, durationOrOptions?: number | ToastOptions) => {
         const normalized = normalizeToastOptions(durationOrOptions);
-        const duration = normalized.duration ?? 3000;
+        // 错误需要被读到并处理，默认不自动消失；带操作的提示留出操作时间。
+        const duration = normalized.duration ?? (type === 'error' ? 0 : normalized.action ? 6000 : type === 'warning' ? 5000 : 3000);
         const id = `${Date.now()}-${Math.random()}`;
         // 同屏最多保留 4 条：新提示从底部进入，旧提示按各自真实高度依次上移。
         setToasts(prev => [...prev, { id, type, message, duration, action: normalized.action }].slice(-4));
@@ -116,7 +119,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <div
                 ref={stackRef}
                 aria-live="polite"
-                className="app-toast-stack fixed bottom-4 right-4 z-[100] flex w-[360px] max-w-[calc(100vw-2rem)] flex-col items-stretch gap-2 pointer-events-none"
+                style={{ bottom: 'calc(1rem + var(--sab))' }}
+                className="app-toast-stack fixed right-4 z-[var(--z-toast)] flex w-[360px] max-w-[calc(100vw-2rem)] flex-col items-stretch gap-2 pointer-events-none"
             >
                 {toasts.map(toast => (
                     <ToastItem key={toast.id} toast={toast} onRemove={removeToast} onLeft={dropToast} />
@@ -143,30 +147,23 @@ function ToastItem({ toast, onRemove, onLeft }: { toast: Toast; onRemove: (id: s
             data-toast-id={toast.id}
             data-leaving={toast.leaving ? '' : undefined}
             onAnimationEnd={event => { if (toast.leaving && event.target === event.currentTarget) onLeft(toast.id); }}
-            className="toast-item pointer-events-auto flex w-full min-h-11 items-start gap-2.5 rounded-xl border-[0.5px] border-border bg-surface py-2 pr-2 pl-3.5 shadow-[0_8px_28px_rgba(11, 11, 11,0.12)] dark:shadow-[0_8px_28px_rgba(0,0,0,0.45)]"
+            className="toast-item pointer-events-auto flex w-full min-h-11 items-start gap-2.5 rounded-xl border-[0.5px] border-border bg-surface py-2 pr-2 pl-3.5 shadow-[var(--shadow-panel-popover)]"
         >
             <Icon className={`mt-px h-[18px] w-[18px] shrink-0 ${iconClassName}`} aria-hidden="true" />
             <span className="min-w-0 flex-1 break-words text-sm leading-snug text-foreground">{toast.message}</span>
             {toast.action && (
-                <button
-                    type="button"
+                <Button variant="ghost" size="sm" className="mt-px ml-1 text-accent hover:bg-accent-soft hover:text-accent"
                     onClick={() => {
                         toast.action?.onClick();
                         onRemove(toast.id);
-                    }}
-                    className="mt-px ml-1 h-7 shrink-0 rounded-md px-2 text-[13px] font-medium text-accent transition-colors hover:bg-accent-soft"
-                >
+                    }}>
                     {toast.action.label}
-                </button>
+                </Button>
             )}
-            <button
-                type="button"
-                onClick={() => onRemove(toast.id)}
-                aria-label="关闭提示"
-                className="-mt-px flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-foreground-tertiary transition-colors hover:bg-background-secondary hover:text-foreground"
-            >
-                <X className="h-4 w-4" aria-hidden="true" />
-            </button>
+            <IconButton label="关闭提示" size="sm" expand="none" className="-mt-px text-foreground-tertiary"
+                onClick={() => onRemove(toast.id)}>
+                <X aria-hidden="true" />
+            </IconButton>
         </div>
     );
 }

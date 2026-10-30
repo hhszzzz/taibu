@@ -6,6 +6,10 @@
 
 编写任何代码时，都需要先查找是否存在相关已经实现的组件，流程，接口，不可引起重复实现代码
 
+## 规范索引
+
+详细工程与设计规范统一维护在 [docs/engineering/README.md](docs/engineering/README.md)。`src/components/ui` 之外不再有原生按钮、文本输入或 textarea；盘面、认证与实测过的聊天几何保留领域样式，但交互统一走共享 Button/Input/SegmentedControl。可用 API 与例外以 `docs/engineering/components.md` 和 `src/components/ui` 当前源码为准。
+
 ## 常用命令
 
 ```bash
@@ -90,13 +94,3 @@ pnpm release prepare <major|minor|patch>  # 本地生成版本提交、CHANGELOG
 - [ ] 错误路径可观测（错误码/错误信息一致）。
 - [ ] 测试、lint 与 build 已通过，或已明确说明未执行原因。
 - [ ] 文档已同步（如涉及接口、配置、迁移、行为变化）。
-
-<!-- BEGIN:nextjs-agent-rules -->
-
-## This is NOT the Next.js you know
-
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
-
-This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
-
-<!-- END:nextjs-agent-rules -->

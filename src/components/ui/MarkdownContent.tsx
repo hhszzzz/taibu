@@ -13,6 +13,7 @@
 'use client';
 
 import { createContext, memo, useContext, useMemo } from 'react';
+import { Button } from '@/components/ui/Button';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import type { PluggableList } from 'unified';
 import { MarkdownBlocks, markdownPlugins, pendingChartFence } from '@/lib/chat/markdown-blocks';
@@ -171,8 +172,8 @@ const MarkdownBlock = memo(function MarkdownBlock({ content, className, messageS
                 const open = citations.onOpen;
                 // Without a workspace to open the source in, the badge only names it.
                 if (!open) return <sup className="md-cite" data-cite={cite} title={label}>{cite}</sup>;
-                return <button type="button" className="md-cite" data-cite={cite} data-active={citations.active === cite || undefined}
-                    aria-label={`依据 ${cite}：${label}`} title={label} onClick={() => open(cite)}>{cite}</button>;
+                return <Button unstyled className="md-cite" data-cite={cite} data-active={citations.active === cite || undefined}
+                    aria-label={`依据 ${cite}：${label}`} title={label} onClick={() => open(cite)}>{cite}</Button>;
             },
         } satisfies Partial<Components> : {}),
     }), [textClass, citations]);

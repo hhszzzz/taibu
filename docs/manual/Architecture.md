@@ -1,5 +1,7 @@
 # 项目架构
 
+研发约束与验收规范见 [工程与设计规范](../engineering/README.md)；本文只描述当前架构和运行边界。
+
 ## 运行组成
 
 应用使用 Next.js 模块化单体，生产以 standalone 镜像运行。Web 与后台 worker 使用同一镜像，通过 PostgreSQL 和 Redis 协作。

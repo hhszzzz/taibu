@@ -12,7 +12,7 @@ import './overlays.css';
  * at once.
  */
 export function Modal({ open, onClose, children, labelledBy, describedBy, className = '',
-    busy = false, initialFocusRef, returnFocusRef, keepMounted = false, id,
+    busy = false, initialFocusRef, returnFocusRef, keepMounted = false, id, role,
 }: {
     open: boolean;
     onClose: () => void;
@@ -25,6 +25,7 @@ export function Modal({ open, onClose, children, labelledBy, describedBy, classN
     returnFocusRef?: RefObject<HTMLElement | null>;
     keepMounted?: boolean;
     id?: string;
+    role?: 'dialog' | 'alertdialog';
 }) {
     const ref = useRef<HTMLDialogElement>(null);
     // Still shown while the exit animation plays after `open` turned false.
@@ -61,7 +62,7 @@ export function Modal({ open, onClose, children, labelledBy, describedBy, classN
         };
     }, [present, initialFocusRef, returnFocusRef]);
     if ((!present && !keepMounted) || typeof document === 'undefined') return null;
-    return createPortal(<dialog ref={ref} id={id} tabIndex={-1} aria-labelledby={labelledBy} aria-describedby={describedBy}
+    return createPortal(<dialog ref={ref} id={id} role={role} tabIndex={-1} aria-labelledby={labelledBy} aria-describedby={describedBy}
         aria-busy={busy || undefined} className={`app-modal ${className}`} inert={!open || undefined}
         onKeyDown={event => {
             if (event.key !== 'Tab' || event.defaultPrevented) return;

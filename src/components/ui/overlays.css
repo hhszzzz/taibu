@@ -1,25 +1,5 @@
-.floating-panel {
-    position: fixed;
-    z-index: 1100;
-    width: max-content;
-    max-width: calc(100vw - 16px);
-    max-height: min(560px, calc(100dvh - 24px));
-    overflow: auto;
-    overscroll-behavior: contain;
-    padding: 4px;
-    border: 0;
-    border-radius: 10px;
-    background: var(--surface);
-    color: var(--foreground);
-    box-shadow: var(--shadow-panel-popover);
-}
-.floating-panel :where(button, input, a):focus-visible, .app-modal :where(button, textarea, input, a, [tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.floating-panel [role^="menuitem"] { border-radius: 8px; }
-/* compact 菜单（标题/行菜单）= 克隆 ui/menu 的 rounded-xs（6px）；composer 菜单保持 8px。 */
-.floating-panel.chat-header-menu > [role^="menuitem"], .floating-panel.conversation-menu > [role^="menuitem"] { border-radius: 6px; }
-.floating-panel [role^="menuitem"]:focus { background: var(--fill-ghost-hover); }
-/* 选中项 = 克隆站 ui/menu：只以 clay 勾标记，行底不常亮（悬停/聚焦才显底）。 */
-.floating-panel [role^="menuitem"][aria-checked="true"] { color: var(--foreground); }
+/* 弹层自身被 showModal 聚焦时不画全局焦点框（claude 弹层没有外框）。 */
+.app-modal :where(button, textarea, input, a, [tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .app-modal {
     position: fixed;
     inset: 0;
@@ -40,6 +20,15 @@
 /* 弹层自身被 showModal 聚焦时不画全局焦点框（claude 弹层没有外框）。 */
 .app-modal:focus, .app-modal:focus-visible { outline: none; }
 .app-modal:not([open]) { display: none; }
+/* Bare dialogs: the caller's own shell supplies surface, radius and shadow. */
+.app-modal.dialog-plain { background: transparent; box-shadow: none; }
+.app-modal.dialog-sm { width: min(24rem, calc(100vw - 32px)); }
+.app-modal.dialog-md { width: min(28rem, calc(100vw - 32px)); }
+.app-modal.dialog-lg { width: min(42rem, calc(100vw - 32px)); }
+/* Mobile sheets sit on the bottom edge instead of centering. */
+@media (max-width: 639px) {
+    .app-modal.dialog-sheet { width: 100vw; max-width: 100vw; margin-top: auto; margin-bottom: 0; }
+}
 /* 搜索弹层 = cds Search palette：672px / radius 20（= composer 14 + 6）/ 0.5px 20% 描边；结果行 32px + 5% 悬停 */
 /* claude ⌘K 弹层实测（B11）：672×≤582 / r20 / 0.5px 20% 描边 / shadow-2xl；
    头部 20px 图标 + 无边框输入；结果项 r8 gap 12；底部快捷键提示行（keycap h18 r4） */
@@ -82,7 +71,7 @@
 /* 大弹层 = cds Dialog(size lg)：上限 1024×800、圆角 12、四周 16px 边距（实测 settings_modal）*/
 .settings-center-dialog { width: min(1024px, calc(100vw - 32px)); height: min(800px, calc(100dvh - 32px)); border-radius: 12px; overflow: hidden; }
 @media (max-width: 767px) { .settings-center-dialog { width: 100vw; height: 100dvh; max-height: 100dvh; border: 0; border-radius: 0; } }
-.app-modal, .floating-panel {
+.app-modal, .chat-header-menu, .chat-plus-menu, .chat-model-menu, .conversation-menu, .chat-recents-menu, .chat-context-panel {
     --background: var(--chat-background);
     --background-secondary: var(--chat-secondary);
     --background-tertiary: var(--chat-tertiary);
@@ -92,12 +81,12 @@
 }
 /* Sidebar "全部占术" flyout: the panel body owns its own spacing and scroll regions. */
 /* 全部占术浮层：贴住侧栏右缘（锚点按钮距边缘 8px，定位再 +2px，故补 6px）。 */
-.floating-panel.all-divinations-panel { margin-left: 6px; padding: 0; max-height: min(720px, calc(100dvh - 16px)); overflow: hidden; border-radius: 10px; box-shadow: var(--shadow-panel-popover); }
+.all-divinations-panel { display: flex; flex-direction: column; padding: 0; max-height: min(720px, var(--available-height, calc(100dvh - 16px))); overflow: hidden; border-radius: 10px; box-shadow: var(--shadow-panel-popover); }
 /* 账户菜单「帮助」二级：与一级菜单保持间距的独立浮层。 */
-.floating-panel.user-help-menu { min-width: 12rem; max-width: min(16rem, calc(100vw - 2rem)); }
-.floating-panel.all-divinations-panel input:focus-visible { outline: none; }
+.user-help-menu { min-width: 12rem; max-width: min(16rem, calc(100vw - 2rem)); }
+.all-divinations-panel input:focus-visible { outline: none; }
 /* 全部占术 = claude 菜单族：32px 行 / 28px 前导槽 / 13px 分组标签 / 搜索行白 50% */
-.all-divinations { display: flex; width: min(20rem, calc(100vw - 2rem)); flex-direction: column; }
+.all-divinations { display: flex; width: min(20rem, calc(100vw - 2rem)); min-height: 0; flex: 1; flex-direction: column; }
 .all-divinations-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 10px 4px; }
 .all-divinations-head h2 { font-size: 13px; line-height: 17px; font-weight: 400; color: var(--foreground-tertiary); }
 .all-divinations-head span { font-size: 12px; line-height: 17px; color: var(--foreground-tertiary); }
@@ -105,7 +94,7 @@
 .dark .all-divinations-search { background: rgb(255 255 255 / .05); }
 .all-divinations-search input { min-width: 0; flex: 1; border: 0; background: transparent; font-size: 14px; line-height: 21px; color: var(--foreground); outline: none; }
 .all-divinations-search input::placeholder { color: var(--foreground-tertiary); }
-.all-divinations-scroll { max-height: min(520px, calc(100dvh - 200px)); overflow-y: auto; padding: 0 4px 6px; }
+.all-divinations-scroll { min-height: 0; flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 0 4px 6px; }
 .all-divinations-group-label { padding: 8px 8px 2px; font-size: 12px; line-height: 17px; font-weight: 400; color: var(--foreground-tertiary); }
 .all-divinations-row { position: relative; }
 .all-divinations-item { display: flex; width: 100%; height: 32px; align-items: center; gap: 8px; padding: 0 2px; border-radius: 8px; font-size: 14px; line-height: 21px; color: var(--foreground-secondary); transition: background-color .12s, color .12s; }

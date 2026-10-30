@@ -82,6 +82,12 @@
   --shadow-panel-lg: inset 0 0 0 var(--ring-inner) var(--ring-color), 0 0 0 var(--ring-outer) var(--ring-color), var(--shadow-lg);
   --shadow-panel-popover: inset 0 0 0 var(--ring-inner) var(--ring-color), 0 0 0 var(--ring-outer) var(--ring-color), var(--shadow-popover);
 
+  /* 浮层层级：共享组件按语义取值，不写散落的 z-index */
+  --z-toast: 100;
+  --z-tooltip: 130;
+  --z-popup: 1100;
+  --z-dialog: 1200;
+
   /* 侧边栏宽度与底色；收起后为图标导轨 */
   --sidebar-width: 288px;
   --sidebar-rail-width: 60px;
@@ -491,11 +497,6 @@ html {
 @keyframes motion-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
 
 /* 浮层：定位完成（data-placed）才开始播放，变换原点贴着锚点一侧。 */
-.floating-panel[data-placed] { transform-origin: top left; animation: motion-pop-in var(--duration-snap) var(--ease-snap) backwards; }
-.floating-panel[data-side="bottom"][data-align="end"] { transform-origin: top right; }
-.floating-panel[data-side="top"] { transform-origin: bottom left; }
-.floating-panel[data-side="top"][data-align="end"] { transform-origin: bottom right; }
-.floating-panel:is([data-side="right"], [data-side="right-start"]) { transform-origin: left top; }
 .app-modal[open] { animation: motion-dialog-in var(--duration-base) var(--ease-out) backwards; }
 .app-modal[open]::backdrop { animation: motion-fade var(--duration-base) var(--ease-out) backwards; }
 /* 关闭：Modal 先挂 data-closing 播放退场，播完才离开顶层（Modal.tsx）。 */

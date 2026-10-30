@@ -45,7 +45,7 @@ test('Agent triggers publish run, queue, event and command payloads', { timeout:
   const writer = new pg.Client({ connectionString: dsn });
   await listener.connect();
   await writer.connect();
-  await listener.query('listen taibu-agent');
+  await listener.query('listen "taibu-agent"');
   const waitFor = collector(listener);
 
   const userId = randomUUID();

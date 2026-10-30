@@ -9,6 +9,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, ChevronRight, Loader } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 import { useToast } from '@/components/ui/Toast';
 import { divine, yaosTpCode, findHexagram, calculateChangedHexagram, type LiuQin } from '@/lib/divination/liuyao';
 import { HistoryDrawer } from '@/components/layout/HistoryDrawer';
@@ -134,7 +136,7 @@ export default function LiuyaoPage() {
                         <label htmlFor="liuyao-question" className="text-sm font-medium">
                             所问之事 <span className="font-normal text-foreground-secondary">选填</span>
                         </label>
-                        <input
+                        <Input
                             id="liuyao-question"
                             type="text"
                             value={question}
@@ -155,7 +157,7 @@ export default function LiuyaoPage() {
                 <section className="flex flex-col gap-3">
                     <h2 className="font-display text-[22px] font-medium">选择起卦方式</h2>
                     <div className="grid gap-3 md:grid-cols-3">
-                        <button type="button" onClick={handleCoinDivine} className={METHOD_CARD_CLASS}>
+                        <Button unstyled type="button" onClick={handleCoinDivine} className={METHOD_CARD_CLASS}>
                             <span className="flex h-10 items-center gap-1.5" aria-hidden="true">
                                 {COIN_ICON_KEYS.map((key) => (
                                     <span key={key} className="flex h-[30px] w-[30px] items-center justify-center rounded-full border-[1.5px] border-accent">
@@ -166,18 +168,18 @@ export default function LiuyaoPage() {
                             <span className="font-display text-[19px]">铜钱起卦</span>
                             <span className="text-sm leading-relaxed text-foreground-secondary">三枚铜钱抛掷六次，亲手感应卦象，保留古法的仪式感。</span>
                             <span className="mt-auto inline-flex items-center gap-1 pt-1 text-sm text-accent">开始抛掷 <ArrowRight className="h-3.5 w-3.5" /></span>
-                        </button>
+                        </Button>
 
-                        <button type="button" onClick={handleQuickDivine} disabled={isQuickLoading} className={`${METHOD_CARD_CLASS} disabled:cursor-not-allowed disabled:opacity-70`}>
+                        <Button unstyled type="button" onClick={handleQuickDivine} disabled={isQuickLoading} className={`${METHOD_CARD_CLASS} disabled:cursor-not-allowed disabled:opacity-70`}>
                             <span className="flex h-10 items-center text-accent" aria-hidden="true">
                                 {isQuickLoading ? <SoundWaveLoader variant="inline" /> : <Loader className="h-8 w-8" strokeWidth={1.5} />}
                             </span>
                             <span className="font-display text-[19px]">{isQuickLoading ? '正在起卦...' : '快速起卦'}</span>
                             <span className="text-sm leading-relaxed text-foreground-secondary">随机生成卦象，适合不方便手动起卦或想马上得到指引时。</span>
                             <span className="mt-auto inline-flex items-center gap-1 pt-1 text-sm text-accent">立即生成 <ArrowRight className="h-3.5 w-3.5" /></span>
-                        </button>
+                        </Button>
 
-                        <button type="button" onClick={handleSelectDivine} className={METHOD_CARD_CLASS}>
+                        <Button unstyled type="button" onClick={handleSelectDivine} className={METHOD_CARD_CLASS}>
                             <span className="flex h-10 w-10 flex-col justify-center gap-1" aria-hidden="true">
                                 {HEXAGRAM_ICON_LINES.map((yang, index) => (
                                     yang
@@ -188,7 +190,7 @@ export default function LiuyaoPage() {
                             <span className="font-display text-[19px]">选卦起卦</span>
                             <span className="text-sm leading-relaxed text-foreground-secondary">已有卦象时，手动选择本卦与动爻，直接排盘分析。</span>
                             <span className="mt-auto inline-flex items-center gap-1 pt-1 text-sm text-accent">选择卦象 <ArrowRight className="h-3.5 w-3.5" /></span>
-                        </button>
+                        </Button>
                     </div>
                 </section>
 

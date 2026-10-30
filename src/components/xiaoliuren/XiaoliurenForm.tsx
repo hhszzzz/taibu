@@ -3,7 +3,9 @@
 
 import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
+import { Input } from '@/components/ui/Input';
 import { requestBrowserJson } from '@/lib/browser-api';
 import { toDateTimeLocalValue } from '@/lib/date-utils';
 import type { XiaoliurenWebBundle } from '@/lib/divination/xiaoliuren';
@@ -69,7 +71,7 @@ export function XiaoliurenForm({ initialQuestion = '', initialDate, submitLabel,
     >
       <div className="flex min-w-0 flex-[999_1_320px] flex-col gap-1.5">
         <label htmlFor={`${fieldId}-question`} className="text-sm font-medium">占问事项</label>
-        <input
+        <Input
           id={`${fieldId}-question`}
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
@@ -79,7 +81,7 @@ export function XiaoliurenForm({ initialQuestion = '', initialDate, submitLabel,
       </div>
       <div className="flex min-w-0 flex-[1_1_220px] flex-col gap-1.5">
         <label htmlFor={`${fieldId}-date`} className="text-sm font-medium">起课时间</label>
-        <input
+        <Input
           id={`${fieldId}-date`}
           type="datetime-local"
           value={date}
@@ -87,13 +89,13 @@ export function XiaoliurenForm({ initialQuestion = '', initialDate, submitLabel,
           className={INPUT_CLASS}
         />
       </div>
-      <button
+      <Button unstyled
         type="submit"
         disabled={isSubmitting}
         className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-accent px-[22px] text-[15px] font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:opacity-50 sm:w-auto"
       >
         {isSubmitting ? <><SoundWaveLoader variant="inline" /><span>正在起课</span></> : <>{submitIcon}{submitLabel}</>}
-      </button>
+      </Button>
       <span className="basis-full text-xs text-foreground-secondary">按本地墙上时间换算农历；闰月会在结果中明确标注。</span>
     </form>
   );

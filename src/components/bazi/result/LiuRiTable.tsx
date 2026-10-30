@@ -1,4 +1,5 @@
 import type { LiuRiInfo } from '@/lib/divination/bazi';
+import { Button } from '@/components/ui/Button';
 import { ganZhiTextClass } from '@/components/bazi/element-classes';
 
 export function LiuRiTable({
@@ -18,7 +19,7 @@ export function LiuRiTable({
                     const [, month, day] = ri.date.split('-');
 
                     return (
-                        <button
+                        <Button unstyled
                             key={ri.date}
                             type="button"
                             aria-pressed={isSelected}
@@ -36,7 +37,7 @@ export function LiuRiTable({
                                 <span className={ganZhiTextClass(ri.gan)}>{ri.gan}</span>
                                 <span className={ganZhiTextClass(ri.zhi)}>{ri.zhi}</span>
                             </span>
-                        </button>
+                        </Button>
                     );
                 })}
             </div>

@@ -9,6 +9,7 @@
 'use client';
 
 import type { QimenCanonicalJSON, QimenPalaceJSON } from 'taibu-core/qimen';
+import { Button } from '@/components/ui/Button';
 import { ChartTarget, isChartTargetSelected, type ChartInteraction } from '@/components/visualization/ChartTarget';
 import { BoardFacts, FactChips } from '@/components/visualization/BoardFacts';
 import {
@@ -215,7 +216,7 @@ export function QimenGrid({ palaces, monthPhaseMap, ju, interaction, zhiShi, sel
 
                     if (selectable) {
                         return (
-                            <button
+                            <Button unstyled
                                 key={num}
                                 type="button"
                                 aria-pressed={highlighted}
@@ -224,7 +225,7 @@ export function QimenGrid({ palaces, monthPhaseMap, ju, interaction, zhiShi, sel
                                 className={`${CELL_BASE} ${tone} focus-visible:outline-offset-[-3px] ${highlighted ? '' : 'hover:bg-background-secondary'}`}
                             >
                                 {content}
-                            </button>
+                            </Button>
                         );
                     }
 

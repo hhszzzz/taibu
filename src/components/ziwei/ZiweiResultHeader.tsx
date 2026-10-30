@@ -6,6 +6,7 @@
 'use client';
 
 import { useRef, type KeyboardEvent, type ReactNode } from 'react';
+import { Button } from '@/components/ui/Button';
 import Link from 'next/link';
 import { AIFeatureGate } from '@/components/ai/AIFeatureGate';
 import { useTabIndicator } from '@/lib/motion/tab-indicator';
@@ -68,7 +69,7 @@ function ModeTabs({ mode, onModeChange }: { mode: ZiweiChartMode; onModeChange: 
             {ZIWEI_CHART_MODES.map((item, index) => {
                 const selected = item.id === mode;
                 return (
-                    <button
+                    <Button unstyled
                         key={item.id}
                         ref={(node) => { tabRefs.current[index] = node; }}
                         id={ziweiModeTabId(item.id)}
@@ -79,11 +80,11 @@ function ModeTabs({ mode, onModeChange }: { mode: ZiweiChartMode; onModeChange: 
                         tabIndex={selected ? 0 : -1}
                         onClick={() => onModeChange(item.id)}
                         className={`rounded-[7px] text-sm transition-colors lg:px-3.5 ${selected
-                            ? 'bg-surface text-foreground shadow-[0_1px_2px_rgba(11,11,11,0.08)]'
+                            ? 'bg-surface text-foreground shadow-[var(--shadow-sm)]'
                             : 'text-foreground-secondary hover:text-foreground'}`}
                     >
                         {item.label}
-                    </button>
+                    </Button>
                 );
             })}
         </div>

@@ -1,3 +1,4 @@
+import { Button } from '@/components/ui/Button';
 /**
  * Chart Empty State
  *
@@ -16,13 +17,13 @@ export default function ChartEmpty({ message = '暂无数据', action }: ChartEm
       <div className="text-3xl mb-2 opacity-40">📊</div>
       <p className="text-sm text-[var(--color-foreground-secondary)]">{message}</p>
       {action && (
-        <button
+        <Button unstyled
           type="button"
           onClick={action.onClick}
           className="mt-3 text-xs text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] transition-colors"
         >
           {action.label}
-        </button>
+        </Button>
       )}
     </div>
   );

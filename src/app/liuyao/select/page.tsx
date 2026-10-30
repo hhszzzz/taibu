@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronLeft, Sparkles, Grid3X3, Layers } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { HexagramSelector } from '@/components/liuyao/HexagramSelector';
 import { TrigramSelector } from '@/components/liuyao/TrigramSelector';
@@ -225,7 +226,7 @@ export default function SelectHexagramPage() {
                 {/* 选择方式切换 */}
                 <div className="flex gap-1 rounded-xl bg-background-secondary p-1" role="group" aria-label="选卦方式">
                     {SELECT_MODES.map(({ mode, label, Icon }) => (
-                        <button
+                        <Button unstyled
                             key={mode}
                             type="button"
                             onClick={() => handleModeChange(mode)}
@@ -238,7 +239,7 @@ export default function SelectHexagramPage() {
                         >
                             <Icon className="h-4 w-4" />
                             {label}
-                        </button>
+                        </Button>
                     ))}
                 </div>
                 <p className="px-1 text-xs text-foreground-secondary">
@@ -303,11 +304,10 @@ export default function SelectHexagramPage() {
                 </section>
 
                 {/* 生成按钮 */}
-                <button
-                    type="button"
+                <Button
                     onClick={handleGenerate}
                     disabled={!effectiveCode || isLoading}
-                    className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-accent font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+                    className="h-12 w-full rounded-xl"
                 >
                     {isLoading ? (
                         <>
@@ -320,7 +320,7 @@ export default function SelectHexagramPage() {
                             生成卦象
                         </>
                     )}
-                </button>
+                </Button>
 
                 {/* 提示 */}
                 <p className="text-center text-xs text-foreground-secondary">

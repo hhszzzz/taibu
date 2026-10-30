@@ -2,7 +2,8 @@
 
 import { lazy, Suspense, useId, useMemo, useState } from 'react';
 import { Maximize2, X } from 'lucide-react';
-import { Modal } from '@/components/ui/Modal';
+import { Dialog } from '@/components/ui/Dialog';
+import { Button } from '@/components/ui/Button';
 import { parseChartSource, parseVisualSource, VISUAL_BLOCK_MAX_BYTES } from '@/lib/visualization/chart-data-extract';
 import VisualFrame from './VisualFrame';
 import './visualization.css';
@@ -45,23 +46,23 @@ export function VisualizationBlock({ kind, source, streaming = false, incomplete
         <header className="visualization-head">
             <p className="visualization-title" title={title}>{title}</p>
             {!streaming && <div className="visualization-actions">
-                <button type="button" className="visualization-action" aria-pressed={showSource}
-                    onClick={() => setShowSource(current => !current)}>{sourceLabel}</button>
-                <button type="button" className="visualization-action visualization-expand" aria-label="全屏查看"
-                    onClick={() => setExpanded(true)}><Maximize2 size={14} aria-hidden="true" /></button>
+                <Button unstyled type="button" className="visualization-action" aria-pressed={showSource}
+                    onClick={() => setShowSource(current => !current)}>{sourceLabel}</Button>
+                <Button unstyled type="button" className="visualization-action visualization-expand" aria-label="全屏查看"
+                    onClick={() => setExpanded(true)}><Maximize2 size={14} aria-hidden="true" /></Button>
             </div>}
         </header>
         {body}
         {showSource && !streaming && <pre className="visualization-source" data-visualization-source="">{source}</pre>}
-        <Modal open={expanded} onClose={() => setExpanded(false)} labelledBy={titleId} className="visualization-dialog">
+        <Dialog bare open={expanded} onClose={() => setExpanded(false)} labelledBy={titleId} className="visualization-dialog">
             <div className="visualization-dialog-head">
                 <h2 id={titleId}>{title}</h2>
-                <button type="button" className="visualization-action" aria-label="关闭全屏" onClick={() => setExpanded(false)}><X size={16} aria-hidden="true" /></button>
+                <Button unstyled type="button" className="visualization-action" aria-label="关闭全屏" onClick={() => setExpanded(false)}><X size={16} aria-hidden="true" /></Button>
             </div>
             <div className="visualization-dialog-body">
                 {kind === 'chart' ? <ChartBody chart={chart} /> : <VisualBody visual={visual} incomplete={incomplete} title={title} minHeight={320} />}
             </div>
-        </Modal>
+        </Dialog>
     </section>;
 }
 

@@ -7,7 +7,11 @@
  */
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { Select } from '@/components/ui/Select';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { Checkbox } from '@/components/ui/Checkbox';
+import { useState } from 'react';
 import { MapPin } from 'lucide-react';
 import { LunarYear } from 'lunar-javascript';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
@@ -52,26 +56,26 @@ function SuffixSelect({
     suffix,
     value,
     onChange,
-    children,
+    options,
 }: {
     ariaLabel: string;
     suffix?: string;
     value: number;
     onChange: (value: number) => void;
-    children: ReactNode;
+    options: ReadonlyArray<{ value: number; label: string }>;
 }) {
     return (
         <div className="relative min-w-0">
-            <select
-                aria-label={ariaLabel}
+            <Select
+                ariaLabel={ariaLabel}
                 value={value}
-                onChange={(e) => onChange(Number(e.target.value))}
-                className={`${BOX_CLASS} cursor-pointer appearance-none pl-3 ${suffix ? 'pr-8' : 'pr-3'}`}
-            >
-                {children}
-            </select>
+                onChange={onChange}
+                options={options}
+                hideIcon={Boolean(suffix)}
+                className={`${BOX_CLASS} px-3 ${suffix ? 'pr-9' : 'pr-3'}`}
+            />
             {suffix && (
-                <span aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[13px] text-foreground-tertiary">
+                <span aria-hidden="true" className="pointer-events-none absolute right-9 top-1/2 -translate-y-1/2 text-[13px] text-foreground-tertiary">
                     {suffix}
                 </span>
             )}
@@ -124,13 +128,13 @@ export function BaziForm({
                         <label htmlFor="bazi-form-name" className={FIELD_LABEL_CLASS}>
                             姓名 <span className="font-normal text-foreground-tertiary">选填</span>
                         </label>
-                        <input
+                        <Input
                             id="bazi-form-name"
                             type="text"
                             value={formData.name}
                             onChange={(e) => onUpdate('name', e.target.value)}
                             placeholder="请输入姓名"
-                            className={`${BOX_CLASS} px-3.5 placeholder:text-foreground-tertiary`}
+                            className={`${BOX_CLASS} px-3.5`}
                         />
                     </div>
                     <div className="flex flex-col gap-1.5">
@@ -168,35 +172,24 @@ export function BaziForm({
                                 suffix="年"
                                 value={formData.birthYear}
                                 onChange={(year) => onUpdate('birthYear', year)}
-                            >
-                                {YEAR_OPTIONS.map((year) => (
-                                    <option key={year} value={year}>{year}</option>
-                                ))}
-                            </SuffixSelect>
+                                options={YEAR_OPTIONS.map(year => ({ value: year, label: String(year) }))}
+                            />
                             <SuffixSelect
                                 ariaLabel="出生月"
                                 suffix={isLunar ? undefined : '月'}
                                 value={formData.birthMonth}
                                 onChange={(month) => onUpdate('birthMonth', month)}
-                            >
-                                {MONTH_OPTIONS.map((month) => (
-                                    <option key={month} value={month}>
-                                        {isLunar ? LUNAR_MONTH_NAMES[month] : month}
-                                    </option>
-                                ))}
-                            </SuffixSelect>
+                                options={MONTH_OPTIONS.map(month => ({ value: month, label: String(isLunar ? LUNAR_MONTH_NAMES[month] : month) }))}
+                            />
                             <SuffixSelect
                                 ariaLabel="出生日"
                                 suffix="日"
                                 value={formData.birthDay}
                                 onChange={(day) => onUpdate('birthDay', day)}
-                            >
-                                {dayOptions.map((day) => (
-                                    <option key={day} value={day}>{day}</option>
-                                ))}
-                            </SuffixSelect>
+                                options={dayOptions.map(day => ({ value: day, label: String(day) }))}
+                            />
                             {/* 出生时间（点击打开模态框） */}
-                            <button
+                            <Button unstyled
                                 type="button"
                                 onClick={() => setTimeModalOpen(true)}
                                 aria-label={`出生时间 ${timeSummary}`}
@@ -208,17 +201,15 @@ export function BaziForm({
                                 {!unknownTime && (
                                     <span aria-hidden="true" className="text-[13px] text-foreground-tertiary">{hourBranch}</span>
                                 )}
-                            </button>
+                            </Button>
                         </div>
 
                         {/* 闰月开关（仅农历） */}
                         {isLunar && hasLeapMonth && (
                             <label className="mt-1 flex w-fit cursor-pointer items-center gap-2 text-[13px] text-foreground-secondary">
-                                <input
-                                    type="checkbox"
+                                <Checkbox
                                     checked={formData.isLeapMonth}
-                                    onChange={(e) => onUpdate('isLeapMonth', e.target.checked)}
-                                    className="m-0 h-4 w-4 cursor-pointer"
+                                    onCheckedChange={checked => onUpdate('isLeapMonth', checked)}
                                 />
                                 闰月
                             </label>
@@ -253,7 +244,7 @@ export function BaziForm({
                 {/* 出生地点（点击打开模态框） */}
                 <div className="flex flex-col gap-1.5">
                     <span className={FIELD_LABEL_CLASS}>出生地点</span>
-                    <button
+                    <Button unstyled
                         type="button"
                         onClick={() => setPlaceModalOpen(true)}
                         aria-label={`出生地点 ${placeSummary}`}
@@ -270,11 +261,11 @@ export function BaziForm({
                                 <span className="shrink-0 rounded-md bg-background-secondary px-2 py-0.5 text-xs text-foreground-secondary">提交时解析</span>
                             )
                         )}
-                    </button>
+                    </Button>
                 </div>
 
                 {/* 提交按钮 */}
-                <button
+                <Button unstyled
                     type="submit"
                     disabled={isSubmitting}
                     className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-accent text-base font-medium text-on-accent
@@ -289,7 +280,7 @@ export function BaziForm({
                     ) : (
                         '开始排盘'
                     )}
-                </button>
+                </Button>
 
                 {/* 免责声明 */}
                 <p className="-mt-1 text-center text-xs text-foreground-tertiary">

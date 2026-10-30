@@ -11,6 +11,9 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { RotateCw, BookOpen, Copy, Check, BookOpenText, X, Album, ChevronLeft } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
+import { Dialog } from '@/components/ui/Dialog';
 import { HexagramDisplay } from '@/components/liuyao/HexagramDisplay';
 import { LiuyaoPillars } from '@/components/liuyao/LiuyaoPillars';
 import { LiuyaoResultHeader } from '@/components/liuyao/LiuyaoResultHeader';
@@ -291,7 +294,7 @@ function LiuyaoResultContent({ isCurrent }: { isCurrent: () => boolean }) {
                         </div>
                         <YongShenTargetPicker value={pendingYongShenTargets} onChange={setPendingYongShenTargets} variant="block" />
                         <div className="flex justify-end">
-                            <button type="button" onClick={handleApplyYongShenTargets} disabled={pendingYongShenTargets.length === 0} className="h-10 rounded-xl bg-accent px-5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:opacity-50">确认</button>
+                            <Button className="h-10 rounded-xl px-5" onClick={handleApplyYongShenTargets} disabled={pendingYongShenTargets.length === 0}>确认</Button>
                         </div>
                     </section>
                 )}
@@ -324,14 +327,14 @@ function LiuyaoResultContent({ isCurrent }: { isCurrent: () => boolean }) {
                     <TraditionalAnalysis
                         analysis={traditionalCanonical}
                         highlightAction={(
-                            <button
+                            <Button unstyled
                                 type="button"
                                 onClick={handleAskTaibu}
                                 disabled={askDisabled}
                                 className="mt-auto hidden h-11 w-full items-center justify-center rounded-xl bg-foreground text-sm text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 lg:flex"
                             >
                                 让太卜断这一卦
-                            </button>
+                            </Button>
                         )}
                     />
                 )}
@@ -340,12 +343,11 @@ function LiuyaoResultContent({ isCurrent }: { isCurrent: () => boolean }) {
 
             {/* 术语弹窗 */}
             {showTermsModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-foreground/20" onClick={() => setShowTermsModal(false)} />
-                    <div role="dialog" aria-modal="true" aria-label="术语参考" className="relative w-full max-w-2xl overflow-hidden rounded-2xl border-[0.5px] border-border bg-surface shadow-[var(--shadow-lg)] animate-in zoom-in-95 duration-200">
+                <Dialog bare open onClose={() => setShowTermsModal(false)} labelledBy="liuyao-terms-title" className="dialog-plain dialog-lg">
+                    <div className="relative w-full overflow-hidden rounded-2xl border-[0.5px] border-border bg-surface shadow-[var(--shadow-lg)] animate-in zoom-in-95 duration-200">
                         <div className="flex items-center justify-between border-b-[0.5px] border-border px-5 py-3.5">
-                            <div className="font-display text-lg">术语参考</div>
-                            <button type="button" onClick={() => setShowTermsModal(false)} aria-label="关闭" className="rounded-lg p-1.5 text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground"><X className="h-4 w-4" /></button>
+                            <div id="liuyao-terms-title" className="font-display text-lg">术语参考</div>
+                            <IconButton label="关闭" size="sm" expand="none" onClick={() => setShowTermsModal(false)}><X aria-hidden="true" /></IconButton>
                         </div>
                         <div className="max-h-[60vh] overflow-y-auto p-6 space-y-8">
                             {LIUYAO_TERM_GROUPS.map(group => (
@@ -360,7 +362,7 @@ function LiuyaoResultContent({ isCurrent }: { isCurrent: () => boolean }) {
                             ))}
                         </div>
                     </div>
-                </div>
+                </Dialog>
             )}
 
             <ResultMobileActions

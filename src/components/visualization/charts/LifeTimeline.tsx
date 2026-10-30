@@ -4,6 +4,7 @@
 // Pure CSS layout (flexbox + pseudo-elements), responsive mobile-first
 
 import { memo, useMemo, useState, useCallback } from 'react';
+import { Button } from '@/components/ui/Button';
 import { useChartEntrance, CHART_ENTRANCE_BASE, CHART_ENTRANCE_ACTIVE } from '@/components/visualization/shared/useChartEntrance';
 import ChartEmpty from '@/components/visualization/shared/ChartEmpty';
 import type { LifeTimelineData, LifeTimelineMilestone } from '@/lib/visualization/chart-types';
@@ -98,7 +99,7 @@ function MilestoneCard({ milestone, isFuture, isExpanded, onToggle }: MilestoneC
   const hasDetail = milestone.detail !== null && milestone.detail !== '';
 
   return (
-    <button
+    <Button unstyled
       type="button"
       className="text-left w-full rounded-xl border px-3 py-2.5 transition-all"
       style={{
@@ -160,7 +161,7 @@ function MilestoneCard({ milestone, isFuture, isExpanded, onToggle }: MilestoneC
           点击展开详情
         </div>
       )}
-    </button>
+    </Button>
   );
 }
 

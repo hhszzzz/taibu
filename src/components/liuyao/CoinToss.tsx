@@ -9,6 +9,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Coins, RotateCw, Smartphone } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Button } from '@/components/ui/Button';
 import { tossThreeCoins, type CoinTossResult, type Yao } from '@/lib/divination/liuyao';
 
 interface CoinTossProps {
@@ -346,7 +347,7 @@ export function CoinToss({ onComplete, disabled = false }: CoinTossProps) {
                         </div>
                     ) : results.length > currentLine ? (
                         // 已摇完当前爸，显示“继续摇卦”按钮
-                        <button
+                        <Button unstyled
                             onClick={goToNextAndToss}
                             disabled={isAnimating}
                             data-shake-next
@@ -354,10 +355,10 @@ export function CoinToss({ onComplete, disabled = false }: CoinTossProps) {
                         >
                             <Coins className="w-5 h-5" />
                             继续摇卦
-                        </button>
+                        </Button>
                     ) : (
                         // 未摇当前爸，显示“抛掷铜钱”按钮
-                        <button
+                        <Button unstyled
                             onClick={toss}
                             disabled={isAnimating || disabled}
                             data-shake-toss
@@ -365,16 +366,16 @@ export function CoinToss({ onComplete, disabled = false }: CoinTossProps) {
                         >
                             <Coins className={`w-5 h-5 ${isAnimating ? 'animate-bounce' : ''}`} />
                             {isAnimating ? '抛掷中...' : '抛掷铜钱'}
-                        </button>
+                        </Button>
                     )
                 ) : (
-                    <button
+                    <Button unstyled
                         onClick={reset}
                         className="flex h-12 items-center gap-2 rounded-xl border-[0.5px] border-border-hover bg-surface px-6 text-foreground transition-colors hover:bg-background-secondary"
                     >
                         <RotateCw className="w-5 h-5" />
                         重新起卦
-                    </button>
+                    </Button>
                 )}
             </div>
 
@@ -387,13 +388,13 @@ export function CoinToss({ onComplete, disabled = false }: CoinTossProps) {
                             <span className="text-success">摇动摇卦已启用</span>
                         </>
                     ) : (
-                        <button
+                        <Button unstyled
                             onClick={enableShakeDetection}
                             className="flex items-center gap-[6px] rounded-lg px-3 py-1.5 text-xs text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground"
                         >
                             <Smartphone className="w-3 h-3" />
                             点击启用摇动
-                        </button>
+                        </Button>
                     )}
                 </div>
             )}

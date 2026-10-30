@@ -6,6 +6,8 @@
 'use client';
 
 import { useState } from 'react';
+import { Input } from '@/components/ui/Input';
+import { Button } from '@/components/ui/Button';
 import { Search } from 'lucide-react';
 import { HEXAGRAMS, formatHexagramPalace } from '@/lib/divination/liuyao';
 
@@ -33,7 +35,7 @@ export function HexagramSelector({ value, onChange }: HexagramSelectorProps) {
             {/* 搜索框 */}
             <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-secondary" />
-                <input
+                <Input
                     type="text"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
@@ -56,7 +58,7 @@ export function HexagramSelector({ value, onChange }: HexagramSelectorProps) {
             {/* 卦列表网格 */}
             <div className="grid grid-cols-4 md:grid-cols-8 gap-1.5 max-h-[300px] overflow-y-auto pr-1">
                 {filtered.map(h => (
-                    <button
+                    <Button unstyled
                         key={h.code}
                         type="button"
                         onClick={() => onChange(h.code)}
@@ -68,7 +70,7 @@ export function HexagramSelector({ value, onChange }: HexagramSelectorProps) {
                             }`}
                     >
                         {h.name}
-                    </button>
+                    </Button>
                 ))}
             </div>
 

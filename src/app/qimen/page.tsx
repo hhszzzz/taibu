@@ -10,6 +10,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/components/ui/Toast';
+import { Input } from '@/components/ui/Input';
 import { HistoryDrawer } from '@/components/layout/HistoryDrawer';
 import { QimenFormPreview } from '@/components/qimen/QimenFormPreview';
 import {
@@ -120,7 +121,7 @@ export default function QimenPage() {
                 <div className="flex flex-wrap items-start gap-6">
                     <SanshiFormCard className="flex-[999_1_480px]">
                         <SanshiField label="占问事项" htmlFor="qimen-question">
-                            <input
+                            <Input
                                 id="qimen-question"
                                 type="text"
                                 value={question}

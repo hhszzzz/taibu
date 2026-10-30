@@ -2,6 +2,7 @@
 // 需要测量字形位置（ResizeObserver）并保存悬停状态，才能把干支关系画在表上
 
 import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Button } from '@/components/ui/Button';
 import {
     placeBadges, relationLegSlots, relationSpotlight,
     type BadgePlacement, type BadgeSegment, type RelationEdge, type RelationHover, type RelationLayout, type RelationTone,
@@ -252,9 +253,9 @@ export function GanzhiRelationOverlay({ layout, located, locatedCells = NO_CELLS
             };
             // 能追问时是按钮；只读的柱位条里是带说明的标记，悬停仍会突出这条线。
             return onSelect
-                ? <button key={edge.id} type="button" {...props} data-chart-target={edge.id.startsWith('bazi-relation-') ? edge.id : undefined}
+                ? <Button unstyled key={edge.id} type="button" {...props} data-chart-target={edge.id.startsWith('bazi-relation-') ? edge.id : undefined}
                     aria-pressed={located.has(edge.id)} aria-label={`${edge.type}：${edge.description}`}
-                    onFocus={() => setHover({ kind: 'edge', id: edge.id })} onBlur={() => setHover(null)} onClick={() => onSelect(edge)}>{edge.mark}</button>
+                    onFocus={() => setHover({ kind: 'edge', id: edge.id })} onBlur={() => setHover(null)} onClick={() => onSelect(edge)}>{edge.mark}</Button>
                 : <span key={edge.id} {...props} role="img" aria-label={`${edge.type}：${edge.description}`}>{edge.mark}</span>;
         })}
     </div>;

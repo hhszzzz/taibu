@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { Button } from '@/components/ui/Button';
 
 export interface ChartInteraction {
   selectedIds: readonly string[];
@@ -24,6 +25,6 @@ export function ChartTarget({ interaction, id, children, className = '' }: {
   interaction?: ChartInteraction; id: string; children: ReactNode; className?: string;
 }) {
   if (!interaction) return <span className={className}>{children}</span>;
-  return <button type="button" className={'chart-target-control ' + className} data-chart-target={id}
-    aria-pressed={interaction.selectedIds.includes(id)} onClick={() => interaction.onSelect(id)}>{children}</button>;
+  return <Button unstyled type="button" className={'chart-target-control ' + className} data-chart-target={id}
+    aria-pressed={interaction.selectedIds.includes(id)} onClick={() => interaction.onSelect(id)}>{children}</Button>;
 }

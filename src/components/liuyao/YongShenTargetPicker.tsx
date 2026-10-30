@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
 import { Check, ChevronDown, X } from 'lucide-react';
-import { createPortal } from 'react-dom';
 import type { LiuQin } from '@/lib/divination/liuyao';
 
 export const YONG_SHEN_TARGET_OPTIONS: Array<{
@@ -42,7 +43,6 @@ export function YongShenTargetPicker({
     className = '',
 }: YongShenTargetPickerProps) {
     const [isOpen, setIsOpen] = useState(false);
-    const canUseDOM = typeof document !== 'undefined';
     const selectedLabels = useMemo(
         () => YONG_SHEN_TARGET_OPTIONS.filter((item) => value.includes(item.value)).map((item) => item.label),
         [value]
@@ -58,24 +58,13 @@ export function YongShenTargetPicker({
         }
     };
 
-    useEffect(() => {
-        if (!isOpen) return;
-        const onKeydown = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') {
-                setIsOpen(false);
-            }
-        };
-        window.addEventListener('keydown', onKeydown);
-        return () => window.removeEventListener('keydown', onKeydown);
-    }, [isOpen]);
-
     if (variant === 'chips') {
         return (
             <div className={`flex flex-wrap gap-2 ${className}`} role="group" aria-label="分析目标">
                 {YONG_SHEN_TARGET_OPTIONS.map((item) => {
                     const checked = value.includes(item.value);
                     return (
-                        <button
+                        <Button unstyled
                             key={item.value}
                             type="button"
                             aria-pressed={checked}
@@ -89,7 +78,7 @@ export function YongShenTargetPicker({
                         >
                             {checked && <Check className="h-3.5 w-3.5" />}
                             {item.value} · {item.label}
-                        </button>
+                        </Button>
                     );
                 })}
             </div>
@@ -104,7 +93,7 @@ export function YongShenTargetPicker({
                     {YONG_SHEN_TARGET_OPTIONS.map((item) => {
                         const checked = value.includes(item.value);
                         return (
-                            <button
+                            <Button unstyled
                                 key={item.value}
                                 type="button"
                                 aria-pressed={checked}
@@ -123,7 +112,7 @@ export function YongShenTargetPicker({
                                     {checked && <Check className="h-4 w-4" />}
                                 </div>
                                 <div className="mt-1 text-xs opacity-75">{item.description}</div>
-                            </button>
+                            </Button>
                         );
                     })}
                 </div>
@@ -136,7 +125,7 @@ export function YongShenTargetPicker({
 
     return (
         <div className={`relative ${className}`}>
-            <button
+            <Button unstyled
                 type="button"
                 onClick={() => setIsOpen((prev) => !prev)}
                 className={`inline-flex h-9 items-center gap-1.5 rounded-xl px-2.5 text-xs transition-colors ${
@@ -149,34 +138,22 @@ export function YongShenTargetPicker({
                     {selectedLabels.length > 0 ? `分析目标 ${selectedLabels.length} 项` : '选择分析目标'}
                 </span>
                 <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-            </button>
+            </Button>
 
-            {isOpen && canUseDOM && createPortal(
-                <>
-                    <button
-                        type="button"
-                        aria-label="关闭分析目标弹窗"
-                        onClick={() => setIsOpen(false)}
-                        className="fixed inset-0 z-[70] bg-foreground/30 backdrop-blur-[1px]"
-                    />
-                    <div className="fixed inset-0 z-[71] flex items-center justify-center p-4 pointer-events-none">
-                        <div
-                            role="dialog"
-                            aria-modal="true"
-                            className="pointer-events-auto w-full max-w-[460px] overflow-hidden rounded-2xl border-[0.5px] border-border bg-surface shadow-[var(--shadow-lg)]"
-                        >
+            <Dialog bare open={isOpen} onClose={() => setIsOpen(false)} labelledBy="yong-shen-picker-title" className="dialog-plain dialog-md">
+                        <div className="w-full overflow-hidden rounded-2xl border-[0.5px] border-border bg-surface shadow-[var(--shadow-lg)]">
                             <div className="flex items-center justify-between border-b-[0.5px] border-border px-4 py-3">
                                 <div>
-                                    <div className="text-sm font-semibold text-foreground">选择六亲</div>
+                                    <div id="yong-shen-picker-title" className="text-sm font-semibold text-foreground">选择六亲</div>
                                 </div>
-                                <button
+                                <Button unstyled
                                     type="button"
                                     onClick={() => setIsOpen(false)}
                                     aria-label="关闭"
                                     className="rounded-lg p-1 text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground"
                                 >
                                     <X className="h-4 w-4" />
-                                </button>
+                                </Button>
                             </div>
 
                             <div className="max-h-[52vh] overflow-y-auto p-3">
@@ -184,7 +161,7 @@ export function YongShenTargetPicker({
                                     {YONG_SHEN_TARGET_OPTIONS.map((item) => {
                                         const checked = value.includes(item.value);
                                         return (
-                                            <button
+                                            <Button unstyled
                                                 key={item.value}
                                                 type="button"
                                                 onClick={() => toggleTarget(item.value)}
@@ -203,7 +180,7 @@ export function YongShenTargetPicker({
                                                     {checked && <Check className="h-4 w-4" />}
                                                 </div>
                                                 <div className="mt-1 text-xs opacity-70">{item.description}</div>
-                                            </button>
+                                            </Button>
                                         );
                                     })}
                                 </div>
@@ -214,27 +191,24 @@ export function YongShenTargetPicker({
                                     {renderTargetHint(selectedLabels)}
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <button
+                                    <Button unstyled
                                         type="button"
                                         onClick={() => onChange([])}
                                         className="h-8 rounded-lg border-[0.5px] border-border-hover bg-surface px-3 text-xs text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground"
                                     >
                                         清空
-                                    </button>
-                                    <button
+                                    </Button>
+                                    <Button unstyled
                                         type="button"
                                         onClick={() => setIsOpen(false)}
                                         className="h-8 rounded-lg bg-accent px-3 text-xs font-medium text-on-accent transition-colors hover:bg-accent-hover"
                                     >
                                         确认
-                                    </button>
+                                    </Button>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                </>,
-                document.body
-            )}
+            </Dialog>
         </div>
     );
 }

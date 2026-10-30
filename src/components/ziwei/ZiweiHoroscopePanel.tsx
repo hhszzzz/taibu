@@ -8,6 +8,7 @@
 'use client';
 
 import { useReducer, useMemo, useEffect, useCallback, type ReactNode } from 'react';
+import { Button } from '@/components/ui/Button';
 import type { ZiweiCanonicalJSON, ZiweiOutput as CoreZiweiOutput } from 'taibu-core/ziwei';
 import type { ZiweiHoroscopeCanonicalJSON } from 'taibu-core/ziwei-horoscope';
 import type { Astrolabe, DecadalInfo } from '@/lib/divination/ziwei';
@@ -487,7 +488,7 @@ interface PeriodChipProps {
 
 function PeriodChip({ selected, onClick, top, stem, branch, bottom, note, compact = false }: PeriodChipProps) {
     return (
-        <button
+        <Button unstyled
             type="button"
             onClick={onClick}
             aria-pressed={selected}
@@ -503,6 +504,6 @@ function PeriodChip({ selected, onClick, top, stem, branch, bottom, note, compac
             </span>
             {bottom && <span className="text-[11px] text-foreground-secondary">{bottom}</span>}
             {note && <span className="text-[10px] text-foreground-tertiary">{note}</span>}
-        </button>
+        </Button>
     );
 }

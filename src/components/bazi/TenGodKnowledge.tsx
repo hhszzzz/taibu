@@ -8,6 +8,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Button } from '@/components/ui/Button';
 import { ChevronDown, ChevronRight, BookOpen, Info } from 'lucide-react';
 import type { TenGod } from '@/types';
 
@@ -165,7 +166,7 @@ export function TenGodKnowledge({ highlightedTenGods = [] }: TenGodKnowledgeProp
                     return (
                         <div key={god}>
                             {/* 标题行 */}
-                            <button
+                            <Button unstyled
                                 type="button"
                                 aria-expanded={isExpanded}
                                 onClick={() => setExpandedGod(isExpanded ? null : god)}
@@ -193,7 +194,7 @@ export function TenGodKnowledge({ highlightedTenGods = [] }: TenGodKnowledgeProp
                                         <ChevronRight className="w-4 h-4 text-foreground-secondary" />
                                     )}
                                 </div>
-                            </button>
+                            </Button>
 
                             {/* 展开详情 */}
                             {isExpanded && (

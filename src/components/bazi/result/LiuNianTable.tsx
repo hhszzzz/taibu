@@ -1,4 +1,5 @@
 import type { LiuNianInfo } from '@/lib/divination/bazi';
+import { Button } from '@/components/ui/Button';
 import { ganZhiTextClass } from '@/components/bazi/element-classes';
 
 /**
@@ -21,7 +22,7 @@ export function LiuNianTable({
                     const isSelected = selectedYear === ln.year;
                     const isThisYear = ln.year === thisYear;
                     return (
-                        <button
+                        <Button unstyled
                             key={index}
                             type="button"
                             aria-pressed={isSelected}
@@ -41,7 +42,7 @@ export function LiuNianTable({
                                 {ln.tenGod}
                                 <span className={`ml-1 ${isSelected ? 'text-background/60' : 'text-foreground-tertiary'}`}>{ln.age}岁</span>
                             </span>
-                        </button>
+                        </Button>
                     );
                 })}
             </div>

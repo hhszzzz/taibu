@@ -1,6 +1,7 @@
 'use client';
 
 import { memo, useState } from 'react';
+import { Button } from '@/components/ui/Button';
 import type { PhysiognomyAnnotationData } from '@/lib/visualization/chart-types';
 import { useChartEntrance, CHART_ENTRANCE_BASE, CHART_ENTRANCE_ACTIVE } from '@/components/visualization/shared/useChartEntrance';
 import ChartEmpty from '@/components/visualization/shared/ChartEmpty';
@@ -50,7 +51,7 @@ function PhysiognomyAnnotationInner({ data, compact = false, className = '' }: P
       {!compact && (
         <div className="space-y-2">
           {annotations.map((ann, idx) => (
-            <button
+            <Button unstyled
               key={idx}
               type="button"
               className="w-full text-left p-2.5 rounded-lg border transition-all"
@@ -63,7 +64,7 @@ function PhysiognomyAnnotationInner({ data, compact = false, className = '' }: P
             >
               <div className="text-sm font-medium text-foreground">{ann.label}</div>
               <div className="text-xs text-foreground-secondary mt-1">{ann.detail}</div>
-            </button>
+            </Button>
           ))}
         </div>
       )}

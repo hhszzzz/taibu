@@ -1,4 +1,5 @@
 import type { ZiweiPalaceJSON } from 'taibu-core/ziwei';
+import { Button } from '@/components/ui/Button';
 import { StarBadge } from '@/components/ziwei/StarBadge';
 import {
     MUTAGEN_BADGE_CLASS,
@@ -142,7 +143,7 @@ export function PalaceCard({
         }
         const groupIndex = STAR_GROUP_ORDER.indexOf(group);
         return (
-            <button
+            <Button unstyled
                 key={group + index}
                 type="button"
                 className={`chart-star-button ${extraClass || 'inline-flex'}`}
@@ -152,7 +153,7 @@ export function PalaceCard({
                 onClick={(event) => { event.stopPropagation(); onStarSelect(group, index); }}
             >
                 {badge}
-            </button>
+            </Button>
         );
     };
 
@@ -228,7 +229,7 @@ export function PalaceCard({
                 )}
                 <span className={`min-w-0 truncate text-xs font-medium @2xl/ziwei:col-start-2 @2xl/ziwei:row-start-2 @2xl/ziwei:text-center @2xl/ziwei:font-display @2xl/ziwei:text-base ${isLifePalace ? 'text-accent-strong @2xl/ziwei:font-semibold' : 'text-foreground @2xl/ziwei:font-normal'}`}>
                     {onStarSelect ? (
-                        <button
+                        <Button unstyled
                             type="button"
                             data-chart-target={'ziwei:palace:' + palace.宫位索引}
                             aria-label={'查看' + palace.宫位}
@@ -237,7 +238,7 @@ export function PalaceCard({
                             onClick={(event) => { event.stopPropagation(); onClick?.(); }}
                         >
                             {palace.宫位}
-                        </button>
+                        </Button>
                     ) : palace.宫位}
                 </span>
                 <span className={`text-right text-[9.5px] @2xl/ziwei:col-start-3 @2xl/ziwei:row-start-1 @2xl/ziwei:self-end @2xl/ziwei:font-display @2xl/ziwei:text-sm ${isLifePalace ? 'text-accent-strong' : 'text-foreground-tertiary @2xl/ziwei:text-foreground'}`}>

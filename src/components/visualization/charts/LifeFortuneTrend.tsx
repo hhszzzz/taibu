@@ -9,6 +9,7 @@
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
+import { Button } from '@/components/ui/Button';
 import { useChartEntrance, CHART_ENTRANCE_BASE, CHART_ENTRANCE_ACTIVE } from '@/components/visualization/shared/useChartEntrance';
 import ChartEmpty from '@/components/visualization/shared/ChartEmpty';
 import {
@@ -361,7 +362,7 @@ function LifeFortuneTrendInner({
         {getDimensionsByKeys(availableDimensions).map((dim) => {
           const isActive = renderDimensions.includes(dim.key);
           return (
-            <button
+            <Button unstyled
               key={dim.key}
               onClick={() => toggleDimension(dim.key)}
               className={`px-2.5 py-1 text-xs font-medium rounded-full transition-all duration-200 ${
@@ -379,7 +380,7 @@ function LifeFortuneTrendInner({
               }
             >
               {dim.label}
-            </button>
+            </Button>
           );
         })}
       </div>

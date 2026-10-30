@@ -9,6 +9,7 @@
 'use client';
 
 import { useMemo, useState, type ReactNode } from 'react';
+import { Button } from '@/components/ui/Button';
 import type { LiuyaoYaoJSON } from 'taibu-core/liuyao';
 import {
     type Yao,
@@ -310,13 +311,13 @@ export function HexagramDisplay({
                                                 <div className="flex items-center gap-1.5">
                                                     <span className="leading-4">{isShenShaExpanded ? shenSha.join('、') : shenSha[0]}</span>
                                                     {shenSha.length > 1 && (
-                                                        <button
+                                                        <Button unstyled
                                                             type="button"
                                                             onClick={() => toggleShenShaRow(yao.position)}
                                                             className="shrink-0 rounded border-[0.5px] border-border-hover px-1 py-px text-[10px] text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground"
                                                         >
                                                             {isShenShaExpanded ? '收起' : `+${shenSha.length - 1}`}
-                                                        </button>
+                                                        </Button>
                                                     )}
                                                 </div>
                                             ) : <span className="text-foreground-tertiary">—</span>}

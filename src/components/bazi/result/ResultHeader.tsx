@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, Edit3, Save, Check, Share2, Copy } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Button } from '@/components/ui/Button';
 import { AIFeatureGate } from '@/components/ai/AIFeatureGate';
 
 const BUTTON_BASE_CLASS = 'inline-flex h-8 items-center gap-1.5 rounded-md border-[0.5px] border-border-hover bg-surface px-3 text-sm transition-colors duration-150 hover:bg-background-secondary active:bg-background-tertiary disabled:cursor-not-allowed';
@@ -64,7 +65,7 @@ export function ResultHeader({
             <div className="flex flex-wrap items-end justify-between gap-4">
                 <div className="min-w-0 flex-1">{children}</div>
                 <div className="hidden flex-wrap items-center justify-end gap-2 lg:flex">
-                    <button
+                    <Button unstyled
                         type="button"
                         onClick={onEdit}
                         disabled={saving}
@@ -72,34 +73,34 @@ export function ResultHeader({
                     >
                         <Edit3 className="h-3.5 w-3.5" />
                         修改
-                    </button>
-                    <button
+                    </Button>
+                    <Button unstyled
                         type="button"
                         onClick={onShare}
                         className={SECONDARY_BUTTON_CLASS}
                     >
                         <Share2 className="h-3.5 w-3.5" />
                         分享
-                    </button>
-                    <button
+                    </Button>
+                    <Button unstyled
                         type="button"
                         onClick={onCopy}
                         className={SECONDARY_BUTTON_CLASS}
                     >
                         {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
                         {copied ? '已复制' : '复制'}
-                    </button>
+                    </Button>
                     {showJsonCopy && onCopyJson && (
-                        <button
+                        <Button unstyled
                             type="button"
                             onClick={onCopyJson}
                             className={SECONDARY_BUTTON_CLASS}
                         >
                             {jsonCopied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
                             {jsonCopied ? 'JSON 已复制' : '复制 JSON'}
-                        </button>
+                        </Button>
                     )}
-                    <button
+                    <Button unstyled
                         type="button"
                         onClick={onSave}
                         disabled={saving || saved || saveDisabled}
@@ -112,14 +113,14 @@ export function ResultHeader({
                         ) : (
                             <><Save className="h-3.5 w-3.5" />{saveLabel}</>
                         )}
-                    </button>
+                    </Button>
                     <AIFeatureGate>
                         {ask ? (
-                            <button
+                            <Button unstyled
                                 type="button"
                                 onClick={ask.onClick}
                                 className="inline-flex h-10 items-center rounded-xl bg-accent px-4 text-sm font-medium text-on-accent transition-colors duration-150 hover:bg-accent-hover"
-                            >{ask.label}</button>
+                            >{ask.label}</Button>
                         ) : (
                             <Link
                                 href={ASK_TAIBU_HREF}
@@ -149,14 +150,14 @@ export function MobileActionBar({ children, ask }: {
             {children}
             <AIFeatureGate>
                 {ask ? (
-                    <button
+                    <Button unstyled
                         type="button"
                         onClick={ask.onClick}
                         disabled={ask.disabled}
                         className={`${MOBILE_ASK_CLASS} disabled:cursor-not-allowed disabled:opacity-60`}
                     >
                         {ask.label}
-                    </button>
+                    </Button>
                 ) : (
                     <Link href={ASK_TAIBU_HREF} className={MOBILE_ASK_CLASS}>
                         问太卜
@@ -185,14 +186,14 @@ export function ResultMobileActions({
 }) {
     return (
         <MobileActionBar ask={ask}>
-            <button
+            <Button unstyled
                 type="button"
                 onClick={onSave}
                 disabled={saving || saved || saveDisabled}
                 className={`${MOBILE_SECONDARY_ACTION_CLASS} disabled:cursor-not-allowed ${saved ? 'text-success' : 'text-foreground disabled:opacity-50'}`}
             >
                 {saved ? '已保存' : saving ? '保存中' : saveLabel}
-            </button>
+            </Button>
         </MobileActionBar>
     );
 }

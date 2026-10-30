@@ -1,9 +1,11 @@
+'use client';
+
+import { Button } from '@/components/ui/Button';
 /**
  * 变爻选择器
  *
  * 选择哪些爻位是变爻
  */
-'use client';
 
 interface ChangingLinesSelectorProps {
     hexagramCode: string;
@@ -48,7 +50,7 @@ export function ChangingLinesSelector({ hexagramCode, value, onChange }: Changin
                 {yaosReversed.map(({ position, isYang }) => {
                     const isChanging = value.includes(position);
                     return (
-                        <button
+                        <Button unstyled
                             key={position}
                             type="button"
                             onClick={() => toggle(position)}
@@ -95,7 +97,7 @@ export function ChangingLinesSelector({ hexagramCode, value, onChange }: Changin
                             {isChanging && (
                                 <span className="text-xs font-medium text-accent">变</span>
                             )}
-                        </button>
+                        </Button>
                     );
                 })}
             </div>

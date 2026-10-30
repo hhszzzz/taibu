@@ -11,6 +11,7 @@
 'use client';
 
 import { useState, type CSSProperties, type ReactNode } from 'react';
+import { Button } from '@/components/ui/Button';
 import type { BaziCanonicalJSON, BaziCellJSON } from 'taibu-core/bazi';
 import { getDiShi, getKongWang } from 'taibu-core/utils';
 import {
@@ -241,9 +242,9 @@ export function ProfessionalTable({
         if (!onCellSelect) return <span className={`${GLYPH_CLASS} ${colorClass}`} data-relation-cell={col.label + ':' + part}>{char}</span>;
         const cell: BaziCellJSON = { 柱: col.label as BaziCellJSON['柱'], 部位: part, 字: char };
         const highlighted = highlightedCells?.some(item => item.柱 === cell.柱 && item.部位 === cell.部位 && item.字 === char) ?? false;
-        return <button type="button" className={`chart-cell-button ${GLYPH_CLASS} ${colorClass}`}
+        return <Button unstyled type="button" className={`chart-cell-button ${GLYPH_CLASS} ${colorClass}`}
             data-chart-target={'bazi:cell:' + index + ':' + (part === '天干' ? 0 : 1)} data-relation-cell={col.label + ':' + part}
-            aria-label={col.label + part + char} aria-pressed={highlighted} onClick={() => onCellSelect(cell)}>{char}</button>;
+            aria-label={col.label + part + char} aria-pressed={highlighted} onClick={() => onCellSelect(cell)}>{char}</Button>;
     };
 
     /** 一整行：标签 + 运势列 + 本命列 */
@@ -380,7 +381,7 @@ export function ProfessionalTable({
                         {hasShenSha && renderRow({
                             key: 'shenSha',
                             label: (
-                                <button
+                                <Button unstyled
                                     type="button"
                                     onClick={() => setShenShaExpanded(!shenShaExpanded)}
                                     aria-expanded={shenShaExpanded}
@@ -390,7 +391,7 @@ export function ProfessionalTable({
                                     {shenShaExpanded
                                         ? <ChevronUp className="hidden h-3 w-3 text-foreground-tertiary @lg:block" />
                                         : <ChevronDown className="hidden h-3 w-3 text-foreground-tertiary @lg:block" />}
-                                </button>
+                                </Button>
                             ),
                             className: ROW_DIVIDER_CLASS,
                             cellClass: 'px-1 py-1.5 align-top @lg:py-3',

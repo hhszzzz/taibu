@@ -32,7 +32,11 @@ import {
 } from '@/lib/bazi-case-profile';
 import { loadBaziCaseProfile, saveBaziCaseProfile } from '@/lib/bazi-case-profile-client';
 import { useToast } from '@/components/ui/Toast';
+import { Button } from '@/components/ui/Button';
+import { Textarea } from '@/components/ui/Textarea';
+import { Input } from '@/components/ui/Input';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Select } from '@/components/ui/Select';
 
 type NotesTab = 'owner' | 'master';
 type GodKey = 'yongShen' | 'xiShen' | 'jiShen' | 'xianShen';
@@ -117,14 +121,12 @@ function PropertyRow<T extends string>({
                 {label}
             </div>
             <div className="flex-1 relative">
-                <select
+                <Select<T | ''>
                     value={value ?? ''}
-                    onChange={(e) => onChange((e.target.value || null) as T | null)}
-                    className="w-full appearance-none bg-transparent text-sm text-foreground/80 outline-none cursor-pointer hover:bg-background-secondary px-2 py-0.5 rounded transition-colors"
-                >
-                    <option value="">未设置</option>
-                    {options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-                </select>
+                    onChange={(next) => onChange((next || null) as T | null)}
+                    options={[{ value: '', label: '未设置' }, ...options.map(opt => ({ value: opt, label: opt }))]}
+                    className="h-auto min-w-0 w-full gap-1 rounded border-0 bg-transparent px-2 py-0.5 text-sm text-foreground/80 hover:bg-background-secondary [&_svg]:h-3 [&_svg]:w-3"
+                />
             </div>
         </div>
     );
@@ -172,7 +174,7 @@ function PropertyTags<T extends string>({
             </div>
             <div className="flex flex-wrap items-center gap-1.5 px-1">
                 {values.map((value) => (
-                    <button
+                    <Button unstyled
                         key={value}
                         type="button"
                         onClick={() => onChange(values.filter((item) => item !== value))}
@@ -181,29 +183,23 @@ function PropertyTags<T extends string>({
                     >
                         {value}
                         <span className="opacity-50 text-[8px]">×</span>
-                    </button>
+                    </Button>
                 ))}
 
                 {availableOptions.length > 0 ? (
-                    <select
-                        value=""
-                        onChange={(e) => {
-                            const nextValue = e.target.value as T;
-                            if (nextValue && !values.includes(nextValue)) {
-                                onChange([...values, nextValue]);
-                            }
+                    <Select
+                        value={null}
+                        placeholder="+ 选择"
+                        onChange={(nextValue) => {
+                            if (nextValue && !values.includes(nextValue)) onChange([...values, nextValue]);
                         }}
-                        className="appearance-none bg-transparent border border-dashed border-border text-foreground-secondary text-[10px] px-2 py-0.5 rounded cursor-pointer outline-none hover:bg-background-secondary hover:text-foreground transition-colors"
-                    >
-                        <option value="" disabled>+ 选择</option>
-                        {availableOptions.map((option) => (
-                            <option key={option} value={option}>{option}</option>
-                        ))}
-                    </select>
+                        options={availableOptions.map(option => ({ value: option, label: option }))}
+                        className="h-auto min-w-0 gap-1 rounded border border-dashed border-border bg-transparent px-2 py-0.5 text-[10px] text-foreground-secondary hover:bg-background-secondary hover:text-foreground [&_svg]:h-2.5 [&_svg]:w-2.5"
+                    />
                 ) : null}
 
                 {allowCustom ? (
-                    <input
+                    <Input
                         value={draft}
                         onChange={(e) => setDraft(e.target.value)}
                         onKeyDown={(e) => {
@@ -318,27 +314,26 @@ function ElementsPreferences({ profile, setProfile }: { profile: BaziCaseProfile
                      return (
                          <div key={el} className="flex flex-col gap-2 p-2 rounded-md hover:bg-background-secondary/50 transition-colors border border-transparent hover:border-border/60">
                              <span className="text-xs font-bold text-center text-foreground/80">{el}</span>
-                             <select 
-                                 value={role} 
-                                 onChange={(e) => setRole(el, e.target.value)}
+                             <Select
+                                 value={role}
+                                 onChange={(next) => setRole(el, next)}
+                                 options={GOD_ROLES}
+                                 ariaLabel={`${el}用神角色`}
                                  className={cx(
-                                     "w-full appearance-none text-center text-[10px] py-0.5 rounded cursor-pointer outline-none transition-colors",
+                                     "h-auto min-w-0 w-full justify-center gap-0.5 rounded border-0 px-0.5 py-0.5 text-[10px] [&_svg]:h-2.5 [&_svg]:w-2.5",
                                      role === 'yongShen' ? 'bg-success/10 text-success font-bold' :
                                      role === 'xiShen' ? 'bg-accent/10 text-accent font-bold' :
                                      role === 'jiShen' ? 'bg-danger/10 text-danger font-bold' :
                                      role === 'xianShen' ? 'bg-warning/10 text-warning font-bold' :
                                      'bg-transparent text-foreground-secondary hover:bg-background-secondary'
                                  )}
-                                 style={{ textAlignLast: 'center' }}
-                             >
-                                 {GOD_ROLES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-                             </select>
+                             />
                              {role ? (
                                  <>
                                      {selectedOptions.length > 0 ? (
                                          <div className="min-h-8 flex flex-wrap justify-center gap-1">
                                              {selectedOptions.map((option) => (
-                                                 <button
+                                                 <Button unstyled
                                                      key={`${el}-${option.label}`}
                                                      type="button"
                                                      onClick={() => setAdvancedOption(el, option, true)}
@@ -352,34 +347,27 @@ function ElementsPreferences({ profile, setProfile }: { profile: BaziCaseProfile
                                                      title="点击移除字项"
                                                  >
                                                      {option.label}
-                                                 </button>
+                                                 </Button>
                                              ))}
                                          </div>
                                      ) : null}
-                                     <select
-                                         value=""
+                                     <Select
+                                         value={null}
                                          disabled={availableOptions.length === 0}
-                                         onChange={(e) => {
-                                             const nextOption = ELEMENT_ADVANCED_OPTIONS[el].find((option) => option.label === e.target.value);
-                                             if (nextOption) {
-                                                 setAdvancedOption(el, nextOption, false);
-                                             }
+                                         placeholder={availableOptions.length === 0 ? '已选完' : '+ 添加字项'}
+                                         onChange={(nextLabel) => {
+                                             const nextOption = ELEMENT_ADVANCED_OPTIONS[el].find((option) => option.label === nextLabel);
+                                             if (nextOption) setAdvancedOption(el, nextOption, false);
                                          }}
+                                         options={availableOptions.map(option => ({ value: option.label, label: option.label }))}
+                                         ariaLabel={`${el}添加字项`}
                                          className={cx(
-                                             "w-full appearance-none rounded border border-dashed px-1 py-0.5 text-center text-[10px] outline-none transition-colors",
+                                             "h-auto min-w-0 w-full justify-center gap-0.5 rounded border border-dashed px-1 py-0.5 text-[10px] [&_svg]:h-2.5 [&_svg]:w-2.5",
                                              availableOptions.length > 0
                                                  ? 'border-border text-foreground-secondary hover:bg-background-secondary'
                                                  : 'cursor-not-allowed border-border text-foreground-tertiary'
                                          )}
-                                         style={{ textAlignLast: 'center' }}
-                                     >
-                                         <option value="" disabled>
-                                             {availableOptions.length === 0 ? '已选完' : '+ 添加字项'}
-                                         </option>
-                                         {availableOptions.map((option) => (
-                                             <option key={`${el}-${option.label}-option`} value={option.label}>{option.label}</option>
-                                         ))}
-                                     </select>
+                                     />
                                  </>
                              ) : null}
                          </div>
@@ -443,7 +431,7 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
                         { id: 'owner', label: '命主真实反馈' },
                         { id: 'master', label: '师傅专业点评' },
                     ].map((tab) => (
-                        <button
+                        <Button unstyled
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id as NotesTab)}
                             className={cx(
@@ -452,17 +440,17 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
                             )}
                         >
                             {tab.label}
-                        </button>
+                        </Button>
                     ))}
                 </div>
-                <button
+                <Button unstyled
                     onClick={handleSave}
                     disabled={saving}
                     className="flex h-9 items-center gap-1.5 rounded-xl bg-accent px-3.5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:opacity-50"
                 >
                     {saving ? <SoundWaveLoader variant="inline" /> : <Save className="w-3.5 h-3.5" />}
                     保存
-                </button>
+                </Button>
             </div>
 
             <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -474,7 +462,7 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
                                 <CalendarDays className="w-4 h-4" />
                                 <span className="text-xs font-bold uppercase tracking-[0.2em]">关键事件</span>
                             </div>
-                            <button
+                            <Button unstyled
                                 onClick={() => setProfile(prev => ({
                                     ...prev,
                                     events: [{ eventDate: new Date().toISOString().slice(0, 10), category: '其他', title: '', detail: '' }, ...prev.events]
@@ -482,7 +470,7 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
                                 className="p-1 hover:bg-background-secondary rounded text-accent transition-colors"
                             >
                                 <Plus className="w-4 h-4" />
-                            </button>
+                            </Button>
                         </div>
 
                         <div className="space-y-3">
@@ -491,7 +479,7 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
                             ) : profile.events.map((ev, idx) => (
                                 <div key={idx} className="group rounded-md border border-border/60 px-3 py-3 hover:bg-background-secondary/40 transition-colors">
                                     <div className="flex items-start gap-4">
-                                        <input
+                                        <Input
                                             type="date"
                                             value={ev.eventDate}
                                             onChange={(e) => setProfile(prev => ({
@@ -502,19 +490,17 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
                                         />
                                         <div className="flex-1 space-y-2">
                                             <div className="flex items-center gap-3">
-                                                <select
+                                                <Select
                                                     value={ev.category}
-                                                    onChange={(e) => setProfile(prev => ({
+                                                    onChange={(next) => setProfile(prev => ({
                                                         ...prev,
-                                                        events: prev.events.map((item, i) => i === idx ? { ...item, category: e.target.value as BaziCaseEvent['category'] } : item)
+                                                        events: prev.events.map((item, i) => i === idx ? { ...item, category: next as BaziCaseEvent['category'] } : item)
                                                     }))}
-                                                    className="bg-transparent text-[11px] font-bold text-foreground-secondary uppercase outline-none cursor-pointer hover:bg-background rounded px-1 transition-colors"
-                                                >
-                                                    {BAZI_CASE_EVENT_CATEGORY_OPTIONS.map((option) => (
-                                                        <option key={option} value={option}>{option}</option>
-                                                    ))}
-                                                </select>
-                                                <input
+                                                    options={BAZI_CASE_EVENT_CATEGORY_OPTIONS.map(option => ({ value: option, label: option }))}
+                                                    ariaLabel="事件分类"
+                                                    className="h-auto min-w-0 gap-1 rounded border-0 bg-transparent px-1 py-0 text-[11px] font-bold text-foreground-secondary hover:bg-background [&_svg]:h-2.5 [&_svg]:w-2.5"
+                                                />
+                                                <Input
                                                     value={ev.title}
                                                     onChange={(e) => setProfile(prev => ({
                                                         ...prev,
@@ -525,7 +511,7 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
                                                 />
                                                 {ev.source && <AgentSourceBadge source={ev.source} label="Agent 记录" title="由 Agent 在对话中记入，打开那次对话；改动后不再标记" />}
                                             </div>
-                                            <textarea
+                                            <Textarea
                                                 value={ev.detail}
                                                 onChange={(e) => setProfile(prev => ({
                                                     ...prev,
@@ -533,15 +519,15 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
                                                 }))}
                                                 placeholder="补充详情..."
                                                 rows={2}
-                                                className="w-full bg-transparent text-xs leading-6 text-foreground-secondary outline-none resize-none overflow-hidden placeholder:text-foreground/15"
+                                                className="min-h-0 w-full resize-none overflow-hidden rounded-none border-0 bg-transparent p-0 text-xs leading-6 text-foreground-secondary outline-none placeholder:text-foreground/15"
                                             />
                                         </div>
-                                        <button
+                                        <Button unstyled
                                             onClick={() => setProfile(prev => ({ ...prev, events: prev.events.filter((_, i) => i !== idx) }))}
                                             className="opacity-0 group-hover:opacity-100 p-1.5 rounded text-foreground-tertiary hover:text-danger hover:bg-danger/10 transition-all"
                                         >
                                             <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
+                                        </Button>
                                     </div>
                                 </div>
                             ))}

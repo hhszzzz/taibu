@@ -7,10 +7,12 @@
  */
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
+import { Button } from '@/components/ui/Button';
 import { MapPin, X } from 'lucide-react';
 import type { BaziFormData } from '@/types';
 import { RegionPicker } from '@/components/bazi/form/RegionPicker';
+import { Dialog } from '@/components/ui/Dialog';
 
 interface PlaceInputModalProps {
     isOpen: boolean;
@@ -25,6 +27,7 @@ export function PlaceInputModal({
     formData,
     onUpdate,
 }: PlaceInputModalProps) {
+    const titleId = useId();
     // 使用 isOpen 作为 key 的一部分，每次打开时重新初始化状态
     const [localPlace, setLocalPlace] = useState(formData.birthPlace || '');
 
@@ -46,29 +49,23 @@ export function PlaceInputModal({
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4 animate-fade-in">
-            {/* 遮罩层 */}
-            <div
-                className="absolute inset-0 bg-foreground/20 backdrop-blur-[2px]"
-                onClick={onClose}
-            />
-
+        <Dialog bare open={isOpen} onClose={onClose} labelledBy={titleId} className="dialog-plain dialog-lg dialog-sheet">
             {/* 模态框内容 */}
-            <div className="relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl border-[0.5px] border-border bg-surface text-foreground shadow-lg sm:rounded-2xl">
+            <div className="flex max-h-[90vh] w-full flex-col overflow-hidden rounded-t-2xl border-[0.5px] border-border bg-surface text-foreground shadow-lg sm:rounded-2xl">
                 {/* 头部 */}
                 <div className="flex items-center justify-between border-b-[0.5px] border-border px-5 py-4 sm:px-6">
-                    <h2 className="flex items-center gap-2 font-display text-lg">
+                    <h2 id={titleId} className="flex items-center gap-2 font-display text-lg">
                         <MapPin className="h-[18px] w-[18px] text-clay" />
                         出生地点
                     </h2>
-                    <button
+                    <Button unstyled
                         type="button"
                         onClick={onClose}
                         aria-label="关闭"
                         className="rounded-lg p-1.5 text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-foreground"
                     >
                         <X className="h-5 w-5" />
-                    </button>
+                    </Button>
                 </div>
 
                 {/* 内容 */}
@@ -90,24 +87,24 @@ export function PlaceInputModal({
 
                 {/* 底部按钮 */}
                 <div className="flex gap-3 border-t-[0.5px] border-border bg-surface px-5 py-4 pb-[calc(1rem+var(--sab))] sm:px-6 sm:pb-4">
-                    <button
+                    <Button unstyled
                         type="button"
                         onClick={onClose}
                         className="h-11 flex-1 rounded-xl border-[0.5px] border-border-hover bg-surface text-sm font-medium text-foreground
                             transition-colors duration-150 hover:bg-background-secondary active:bg-background-tertiary"
                     >
                         取消
-                    </button>
-                    <button
+                    </Button>
+                    <Button unstyled
                         type="button"
                         onClick={handleConfirm}
                         className="h-11 flex-1 rounded-xl bg-accent text-sm font-medium text-on-accent
                             transition-colors duration-150 hover:bg-accent-hover"
                     >
                         确定
-                    </button>
+                    </Button>
                 </div>
             </div>
-        </div>
+        </Dialog>
     );
 }

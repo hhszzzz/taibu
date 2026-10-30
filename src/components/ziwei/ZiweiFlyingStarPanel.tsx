@@ -1,5 +1,6 @@
 import type { ZiweiPalaceFlight, ZiweiPalaceFlights } from '@/lib/divination/ziwei';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Button } from '@/components/ui/Button';
 import { MUTAGEN_BADGE_CLASS, MUTAGEN_ORDER, MUTAGEN_TEXT_CLASS } from '@/components/ziwei/ziwei-display';
 
 interface ZiweiFlyingStarPanelProps {
@@ -84,7 +85,7 @@ export function ZiweiFlyingStarPanel({ palaces, failed = false, selectedPalace, 
                         const isSelected = entry.palace === selectedPalace;
                         return (
                             <li key={entry.palace}>
-                                <button
+                                <Button unstyled
                                     type="button"
                                     aria-pressed={isSelected}
                                     aria-label={`${entry.palace}（${entry.ganZhi}）：${MUTAGEN_ORDER.map((mutagen) => describeFlight(entry.palace, flightOf(entry, mutagen), mutagen)).join('，')}`}
@@ -105,7 +106,7 @@ export function ZiweiFlyingStarPanel({ palaces, failed = false, selectedPalace, 
                                             </span>
                                         );
                                     })}
-                                </button>
+                                </Button>
                             </li>
                         );
                     })}

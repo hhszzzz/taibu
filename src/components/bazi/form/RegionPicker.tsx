@@ -7,8 +7,8 @@
  */
 'use client';
 
+import { Select } from '@/components/ui/Select';
 import { useState, useMemo, useEffect } from 'react';
-import { ChevronDown } from 'lucide-react';
 
 interface Region {
     name: string;
@@ -33,10 +33,9 @@ async function loadRegions(): Promise<Region[]> {
 
 export function RegionPicker({ value, onChange }: RegionPickerProps) {
     const [regions, setRegions] = useState<Region[]>([]);
-    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        loadRegions().then(setRegions).finally(() => setLoading(false));
+        void loadRegions().then(setRegions);
     }, []);
     // 解析当前值为省/市/区
     const parseValue = (val: string): [string, string, string] => {
@@ -106,63 +105,42 @@ export function RegionPicker({ value, onChange }: RegionPickerProps) {
             {/* 省份选择 */}
             <div>
                 <label className="mb-1.5 block text-[13px] text-foreground-secondary">省/直辖市</label>
-                <div className="relative">
-                    <select
-                        value={selectedProvince}
-                        onChange={(e) => handleProvinceChange(e.target.value)}
-                        className="h-11 w-full cursor-pointer appearance-none rounded-xl border-[0.5px] border-border-hover bg-surface pl-2.5 pr-7 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15"
-                    >
-                        <option value="">省份</option>
-                        {!loading && regions.map((region) => (
-                            <option key={region.name} value={region.name}>
-                                {region.name}
-                            </option>
-                        ))}
-                    </select>
-                    <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground-tertiary" />
-                </div>
+                <Select
+                    ariaLabel="省/直辖市"
+                    placeholder="省份"
+                    value={selectedProvince || null}
+                    onChange={handleProvinceChange}
+                    options={regions.map(region => ({ value: region.name, label: region.name }))}
+                    className="h-11 text-sm"
+                />
             </div>
 
             {/* 城市选择 */}
             <div>
                 <label className="mb-1.5 block text-[13px] text-foreground-secondary">市/区</label>
-                <div className="relative">
-                    <select
-                        value={selectedCity}
-                        onChange={(e) => handleCityChange(e.target.value)}
-                        disabled={cities.length === 0}
-                        className="h-11 w-full cursor-pointer appearance-none rounded-xl border-[0.5px] border-border-hover bg-surface pl-2.5 pr-7 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        <option value="">城市</option>
-                        {cities.map((city) => (
-                            <option key={city.name} value={city.name}>
-                                {city.name}
-                            </option>
-                        ))}
-                    </select>
-                    <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground-tertiary" />
-                </div>
+                <Select
+                    ariaLabel="市/区"
+                    placeholder="城市"
+                    value={selectedCity || null}
+                    onChange={handleCityChange}
+                    disabled={cities.length === 0}
+                    options={cities.map(city => ({ value: city.name, label: city.name }))}
+                    className="h-11 text-sm"
+                />
             </div>
 
             {/* 区县选择 */}
             <div>
                 <label className="mb-1.5 block text-[13px] text-foreground-secondary">区/县</label>
-                <div className="relative">
-                    <select
-                        value={selectedDistrict}
-                        onChange={(e) => handleDistrictChange(e.target.value)}
-                        disabled={districts.length === 0}
-                        className="h-11 w-full cursor-pointer appearance-none rounded-xl border-[0.5px] border-border-hover bg-surface pl-2.5 pr-7 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        <option value="">区县</option>
-                        {districts.map((dist) => (
-                            <option key={dist.name} value={dist.name}>
-                                {dist.name}
-                            </option>
-                        ))}
-                    </select>
-                    <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground-tertiary" />
-                </div>
+                <Select
+                    ariaLabel="区/县"
+                    placeholder="区县"
+                    value={selectedDistrict || null}
+                    onChange={handleDistrictChange}
+                    disabled={districts.length === 0}
+                    options={districts.map(district => ({ value: district.name, label: district.name }))}
+                    className="h-11 text-sm"
+                />
             </div>
         </div>
     );

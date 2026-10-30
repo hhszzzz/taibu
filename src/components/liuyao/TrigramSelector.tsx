@@ -1,9 +1,11 @@
+'use client';
+
+import { Button } from '@/components/ui/Button';
 /**
  * 八卦选择器
  *
  * 显示8个经卦，用于上卦/下卦选择
  */
-'use client';
 
 interface TrigramSelectorProps {
     label: string;
@@ -37,7 +39,7 @@ export function TrigramSelector({ label, value, onChange }: TrigramSelectorProps
             </div>
             <div className="grid grid-cols-4 gap-2">
                 {TRIGRAMS_LIST.map(t => (
-                    <button
+                    <Button unstyled
                         key={t.code}
                         type="button"
                         onClick={() => onChange(t.code)}
@@ -51,7 +53,7 @@ export function TrigramSelector({ label, value, onChange }: TrigramSelectorProps
                         <span className="text-xl">{t.symbol}</span>
                         <span className="font-display text-sm">{t.name}</span>
                         <span className="text-[10px] text-foreground-secondary">{t.element}</span>
-                    </button>
+                    </Button>
                 ))}
             </div>
         </div>

@@ -11,6 +11,7 @@ import Link from 'next/link';
 import { SettingsCenterLink } from '@/components/settings/SettingsCenterLink';
 import { Share2, Edit3, Save, Check, Copy, Eye, EyeOff, Plus, Minus, RotateCcw } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Button } from '@/components/ui/Button';
 import {
     buildZiweiCanonicalJSON,
     calculateZiweiChartBundle,
@@ -413,13 +414,13 @@ function ZiweiResultContent() {
     const hourStatus = hourOffset !== 0 && (
         <span className="text-accent-strong">
             {' · '}时辰已{hourOffset > 0 ? '推后' : '提前'} {Math.abs(hourOffset)} 小时
-            <button
+            <Button unstyled
                 type="button"
                 onClick={() => changeHourOffset(0)}
                 className="ml-1.5 underline decoration-accent/40 underline-offset-2 transition-colors hover:text-accent"
             >
                 复原
-            </button>
+            </Button>
         </span>
     );
 
@@ -475,12 +476,12 @@ function ZiweiResultContent() {
                                     </AIFeatureGate>
                                 </div>
                                 <div className="flex shrink-0 gap-2">
-                                    <button type="button" onClick={toggleLifePalaceDetail} aria-pressed={lifePalaceDetailOpen} className={HINT_BUTTON_CLASS}>
+                                    <Button unstyled type="button" onClick={toggleLifePalaceDetail} aria-pressed={lifePalaceDetailOpen} className={HINT_BUTTON_CLASS}>
                                         命宫解读
-                                    </button>
-                                    <button type="button" onClick={() => setMode('horoscope')} className={HINT_BUTTON_CLASS}>
+                                    </Button>
+                                    <Button unstyled type="button" onClick={() => setMode('horoscope')} className={HINT_BUTTON_CLASS}>
                                         本大限运势
-                                    </button>
+                                    </Button>
                                 </div>
                             </section>
                             <p className="text-center text-xs text-foreground-secondary lg:hidden">点任意宫位查看详情，三方四正连线随之切换</p>

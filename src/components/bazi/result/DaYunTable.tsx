@@ -1,4 +1,5 @@
 import type { DaYunInfo } from '@/lib/divination/bazi';
+import { Button } from '@/components/ui/Button';
 import { ganZhiTextClass } from '@/components/bazi/element-classes';
 
 /**
@@ -32,7 +33,7 @@ export function DaYunTable({
                     const metaClass = isSelected || isCurrent ? 'text-accent-strong' : 'text-foreground-secondary';
 
                     return (
-                        <button
+                        <Button unstyled
                             key={index}
                             type="button"
                             aria-pressed={isSelected}
@@ -49,7 +50,7 @@ export function DaYunTable({
                                 <span className={ganZhiTextClass(dy.zhi)}>{dy.zhi}</span>
                             </span>
                             <span className={`text-xs ${metaClass}`}>{dy.tenGod || ' '}</span>
-                        </button>
+                        </Button>
                     );
                 })}
             </div>

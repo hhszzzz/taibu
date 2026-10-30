@@ -7,12 +7,16 @@
  */
 'use client';
 
-import { useState } from 'react';
+import { Select } from '@/components/ui/Select';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { useId, useState } from 'react';
 import { Clock, X } from 'lucide-react';
 import type { BaziFormData } from '@/types';
 import { HOUR_OPTIONS } from '@/components/bazi/form/options';
 import { useToast } from '@/components/ui/Toast';
 import { resolveBirthTimeOptions } from '@/lib/divination/birth-time';
+import { Dialog } from '@/components/ui/Dialog';
 import { DEFAULT_DIVINATION_TIMEZONE } from 'taibu-core/timezone-utils';
 
 interface TimeInputModalProps {
@@ -36,6 +40,7 @@ export function TimeInputModal({
     allowUnknownTime = true,
     onConfirm,
 }: TimeInputModalProps) {
+    const titleId = useId();
     const [localHour, setLocalHour] = useState(formData.birthHour);
     const [localMinute, setLocalMinute] = useState(formData.birthMinute);
     const [localUnknownTime, setLocalUnknownTime] = useState(unknownTime);
@@ -99,29 +104,23 @@ export function TimeInputModal({
     const knowTime = allowUnknownTime ? !localUnknownTime : true;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4 animate-fade-in">
-            {/* 遮罩层 */}
-            <div
-                className="absolute inset-0 bg-foreground/20 backdrop-blur-[2px]"
-                onClick={onClose}
-            />
-
+        <Dialog bare open={isOpen} onClose={onClose} labelledBy={titleId} className="dialog-plain dialog-lg dialog-sheet">
             {/* 模态框内容 */}
-            <div className="relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl border-[0.5px] border-border bg-surface text-foreground shadow-lg sm:rounded-2xl">
+            <div className="flex max-h-[90vh] w-full flex-col overflow-hidden rounded-t-2xl border-[0.5px] border-border bg-surface text-foreground shadow-lg sm:rounded-2xl">
                 {/* 头部 */}
                 <div className="flex items-center justify-between border-b-[0.5px] border-border px-5 py-4 sm:px-6">
-                    <h2 className="flex items-center gap-2 font-display text-lg">
+                    <h2 id={titleId} className="flex items-center gap-2 font-display text-lg">
                         <Clock className="h-[18px] w-[18px] text-clay" />
                         出生时辰
                     </h2>
-                    <button
+                    <Button unstyled
                         type="button"
                         onClick={onClose}
                         aria-label="关闭"
                         className="rounded-lg p-1.5 text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-foreground"
                     >
                         <X className="h-5 w-5" />
-                    </button>
+                    </Button>
                 </div>
 
                 {/* 内容 */}
@@ -158,7 +157,7 @@ export function TimeInputModal({
                                 <label className="whitespace-nowrap text-[13px] text-foreground-secondary">
                                     精确时间
                                 </label>
-                                <input
+                                <Input
                                     type="time"
                                     value={formatTimeValue()}
                                     onChange={handleTimeChange}
@@ -182,7 +181,7 @@ export function TimeInputModal({
                                     {HOUR_OPTIONS.map(({ value, name, time }) => {
                                         const isSelected = localHour === value && (localMinute || 0) === 0;
                                         return (
-                                            <button
+                                            <Button unstyled
                                                 key={value}
                                                 type="button"
                                                 aria-pressed={isSelected}
@@ -205,7 +204,7 @@ export function TimeInputModal({
                                                 <span className={`text-[11px] ${isSelected ? 'text-accent-strong/80' : 'text-foreground-tertiary'}`}>
                                                     {time}
                                                 </span>
-                                            </button>
+                                            </Button>
                                         );
                                     })}
                                 </div>
@@ -215,27 +214,29 @@ export function TimeInputModal({
                     <div className="space-y-4 border-t-[0.5px] border-border pt-5">
                         <label className="block text-[13px] font-medium text-foreground">
                             出生地时区（IANA）
-                            <input
+                            <Input
                                 type="text"
                                 value={localTimezone}
                                 onChange={event => setLocalTimezone(event.target.value)}
                                 placeholder="Asia/Shanghai"
                                 maxLength={100}
-                                className="mt-2 h-11 w-full rounded-xl border-[0.5px] border-border-hover bg-surface px-3 text-sm font-normal text-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15"
+                                className="mt-2 h-11 border-border-hover"
                             />
                         </label>
                         <label className="block text-[13px] font-medium text-foreground">
                             夏令时重复／缺失时间
-                            <select
+                            <Select
                                 value={localDisambiguation}
-                                onChange={event => setLocalDisambiguation(event.target.value)}
-                                className="mt-2 h-11 w-full rounded-xl border-[0.5px] border-border-hover bg-surface px-3 text-sm font-normal text-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15"
-                            >
-                                <option value="reject">遇到歧义时提示错误（默认）</option>
-                                <option value="earlier">选择较早的瞬间</option>
-                                <option value="later">选择较晚的瞬间</option>
-                                <option value="compatible">兼容模式：重复取早，缺失取晚</option>
-                            </select>
+                                onChange={setLocalDisambiguation}
+                                ariaLabel="夏令时重复／缺失时间"
+                                options={[
+                                    { value: 'reject', label: '遇到歧义时提示错误（默认）' },
+                                    { value: 'earlier', label: '选择较早的瞬间' },
+                                    { value: 'later', label: '选择较晚的瞬间' },
+                                    { value: 'compatible', label: '兼容模式：重复取早，缺失取晚' },
+                                ]}
+                                className="mt-2 h-11 text-sm font-normal"
+                            />
                         </label>
                         <p className="text-xs leading-relaxed text-foreground-tertiary">输入出生地当时的民用钟表时间。时区规则包含历史夏令时；只有确知取舍时才调整默认策略。</p>
                     </div>
@@ -243,24 +244,24 @@ export function TimeInputModal({
 
                 {/* 底部按钮 */}
                 <div className="flex gap-3 border-t-[0.5px] border-border bg-surface px-5 py-4 pb-[calc(1rem+var(--sab))] sm:px-6 sm:pb-4">
-                    <button
+                    <Button unstyled
                         type="button"
                         onClick={onClose}
                         className="h-11 flex-1 rounded-xl border-[0.5px] border-border-hover bg-surface text-sm font-medium text-foreground
                             transition-colors duration-150 hover:bg-background-secondary active:bg-background-tertiary"
                     >
                         取消
-                    </button>
-                    <button
+                    </Button>
+                    <Button unstyled
                         type="button"
                         onClick={handleConfirm}
                         className="h-11 flex-1 rounded-xl bg-accent text-sm font-medium text-on-accent
                             transition-colors duration-150 hover:bg-accent-hover"
                     >
                         确定
-                    </button>
+                    </Button>
                 </div>
             </div>
-        </div>
+        </Dialog>
     );
 }

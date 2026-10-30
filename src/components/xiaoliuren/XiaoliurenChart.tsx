@@ -2,6 +2,7 @@
 // 'use client'：对话命盘中的 ChartTarget 需要点击交互，掌诀 SVG 依赖 useId。
 
 import { useMemo, useState, type ReactNode } from 'react';
+import { Button } from '@/components/ui/Button';
 import type { XiaoliurenCanonicalJSON } from 'taibu-core/xiaoliuren';
 import { LUNAR_DAY_NAMES, LUNAR_MONTH_NAMES } from '@/components/bazi/form/options';
 import { wuxingChipClass } from '@/components/liuyao/wuxing-tone';
@@ -81,7 +82,7 @@ export function XiaoliurenChart({ chart, interaction, action }: {
           </span>
           <div role="group" aria-label="盘面样式" className="flex shrink-0 rounded-lg bg-background-secondary p-0.5 sm:rounded-[9px]">
             {BOARD_VIEWS.map((option) => (
-              <button
+              <Button unstyled
                 key={option.id}
                 type="button"
                 aria-pressed={view === option.id}
@@ -89,7 +90,7 @@ export function XiaoliurenChart({ chart, interaction, action }: {
                 className={`h-6 rounded-md px-2.5 text-xs transition-colors sm:h-7 sm:rounded-[7px] sm:px-3 sm:text-[0.8125rem] ${view === option.id ? 'bg-surface text-foreground shadow-sm' : 'text-foreground-secondary hover:text-foreground'}`}
               >
                 {option.label}
-              </button>
+              </Button>
             ))}
           </div>
         </div>

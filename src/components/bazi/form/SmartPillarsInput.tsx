@@ -9,12 +9,13 @@
  */
 'use client';
 
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useId, useState, useMemo, useRef, useEffect } from 'react';
 import { X, Calendar, Trash2 } from 'lucide-react';
 import type { HeavenlyStem, EarthlyBranch, PillarData } from '@/types';
 import { reversePillars, type ReversedDateTime } from '@/lib/divination/pillars-reverse';
 import type { BirthTimeResolution } from '@/lib/divination/birth-time';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Button } from '@/components/ui/Button';
 import {
     calculateMonthPillars,
     calculateHourPillars,
@@ -22,6 +23,7 @@ import {
 } from '@/lib/divination/pillars-calculator';
 import { useToast } from '@/components/ui/Toast';
 import { ganZhiSoftClass } from '@/components/bazi/element-classes';
+import { Dialog } from '@/components/ui/Dialog';
 
 // 天干选项
 const HEAVENLY_STEMS: HeavenlyStem[] = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸'];
@@ -76,6 +78,7 @@ const EMPTY_PILLARS: {
 };
 
 export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions }: SmartPillarsInputProps) {
+    const dateSelectorTitleId = useId();
     const [possibleDates, setPossibleDates] = useState<ReversedDateTime[]>([]);
     const [showDateSelector, setShowDateSelector] = useState(false);
     const [searching, setSearching] = useState(false);
@@ -310,7 +313,7 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
     const renderStemButtons = (onSelect: (stem: HeavenlyStem) => void) => (
         <div className="grid grid-cols-5 gap-2">
             {HEAVENLY_STEMS.map((stem) => (
-                <button
+                <Button unstyled
                     key={stem}
                     type="button"
                     onClick={() => onSelect(stem)}
@@ -322,7 +325,7 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
                     `}
                 >
                     {stem}
-                </button>
+                </Button>
             ))}
         </div>
     );
@@ -331,7 +334,7 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
     const renderBranchButtons = (branches: EarthlyBranch[], onSelect: (branch: EarthlyBranch) => void) => (
         <div className="grid grid-cols-6 gap-2">
             {branches.map((branch) => (
-                <button
+                <Button unstyled
                     key={branch}
                     type="button"
                     onClick={() => onSelect(branch)}
@@ -343,7 +346,7 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
                     `}
                 >
                     {branch}
-                </button>
+                </Button>
             ))}
         </div>
     );
@@ -355,7 +358,7 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
     ) => (
         <div className="grid grid-cols-4 gap-2">
             {options.map((p, index) => (
-                <button
+                <Button unstyled
                     key={`${p.stem}${p.branch}-${index}`}
                     type="button"
                     onClick={() => onSelect(p)}
@@ -367,7 +370,7 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
                     `}
                 >
                     {p.stem}{p.branch}
-                </button>
+                </Button>
             ))}
         </div>
     );
@@ -401,7 +404,7 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
                                 </div>
                                 <div className="space-y-1">
                                     {/* 天干 */}
-                                    <button
+                                    <Button unstyled
                                         type="button"
                                         onClick={() => canClickStem && handleClickToEdit(pillarType, 'stem')}
                                         disabled={!canClickStem}
@@ -418,9 +421,9 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
                                         `}
                                     >
                                         {pillar.stem || ''}
-                                    </button>
+                                    </Button>
                                     {/* 地支 */}
-                                    <button
+                                    <Button unstyled
                                         type="button"
                                         onClick={() => canClickBranch && handleClickToEdit(pillarType, 'branch')}
                                         disabled={!canClickBranch}
@@ -437,7 +440,7 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
                                         `}
                                     >
                                         {pillar.branch || ''}
-                                    </button>
+                                    </Button>
                                 </div>
                             </div>
                         );
@@ -447,14 +450,14 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
                 {/* 查找范围和清除按钮 */}
                 <div className="flex items-center justify-between text-xs text-foreground-secondary">
                     <span>查找范围：1900-2100年</span>
-                    <button
+                    <Button unstyled
                         type="button"
                         onClick={handleClear}
                         className="flex items-center gap-1 text-foreground-secondary transition-colors hover:text-danger"
                     >
                         <Trash2 className="w-3.5 h-3.5" />
                         清除
-                    </button>
+                    </Button>
                 </div>
 
                 {/* 选择区域 */}
@@ -494,23 +497,21 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
 
             {/* 时间选择模态框 */}
             {showDateSelector && possibleDates.length > 0 && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
-                    <div className="absolute inset-0 bg-foreground/20 backdrop-blur-[2px]" onClick={() => setShowDateSelector(false)} />
-
-                    <div className="relative max-h-[80vh] w-full max-w-2xl overflow-y-auto rounded-2xl border-[0.5px] border-border bg-surface shadow-lg">
+                <Dialog bare open onClose={() => setShowDateSelector(false)} labelledBy={dateSelectorTitleId} className="dialog-plain dialog-lg">
+                    <div className="max-h-[80vh] w-full overflow-y-auto rounded-2xl border-[0.5px] border-border bg-surface shadow-lg">
                         <div className="sticky top-0 flex items-center justify-between border-b-[0.5px] border-border bg-surface px-6 py-4">
-                            <h2 className="flex items-center gap-2 font-display text-lg">
+                            <h2 id={dateSelectorTitleId} className="flex items-center gap-2 font-display text-lg">
                                 <Calendar className="h-[18px] w-[18px] text-clay" />
                                 选择具体时间
                             </h2>
-                            <button
+                            <Button unstyled
                                 type="button"
                                 onClick={() => setShowDateSelector(false)}
                                 aria-label="关闭"
                                 className="rounded-lg p-1.5 text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground"
                             >
                                 <X className="w-5 h-5" />
-                            </button>
+                            </Button>
                         </div>
 
                         <div className="p-6 space-y-3">
@@ -518,7 +519,7 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
                                 找到 {possibleDates.length} 个可能的时间，请选择您的出生时间：
                             </p>
                             {possibleDates.map((date, index) => (
-                                <button
+                                <Button unstyled
                                     key={index}
                                     type="button"
                                     onClick={() => handleDateSelect(date)}
@@ -526,11 +527,11 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
                                 >
                                     <div className="font-medium">{date.solarDate}</div>
                                     <div className="text-sm text-foreground-secondary mt-1">{date.lunarDate}</div>
-                                </button>
+                                </Button>
                             ))}
                         </div>
                     </div>
-                </div>
+                </Dialog>
             )}
         </>
     );

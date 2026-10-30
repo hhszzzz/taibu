@@ -1,4 +1,5 @@
 import type { LiuYueInfo } from '@/lib/divination/bazi';
+import { Button } from '@/components/ui/Button';
 import { ganZhiTextClass } from '@/components/bazi/element-classes';
 
 export function LiuYueTable({
@@ -18,7 +19,7 @@ export function LiuYueTable({
                     const [, startMonth, startDay] = ly.startDate.split('-');
 
                     return (
-                        <button
+                        <Button unstyled
                             key={index}
                             type="button"
                             aria-pressed={isSelected}
@@ -37,7 +38,7 @@ export function LiuYueTable({
                                 <span className={ganZhiTextClass(ly.gan)}>{ly.gan}</span>
                                 <span className={ganZhiTextClass(ly.zhi)}>{ly.zhi}</span>
                             </span>
-                        </button>
+                        </Button>
                     );
                 })}
             </div>

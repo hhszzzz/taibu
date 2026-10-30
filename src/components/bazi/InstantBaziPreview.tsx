@@ -8,6 +8,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { Button } from '@/components/ui/Button';
 import { Solar } from 'lunar-javascript';
 import { baziPillarEntries, calculateBazi } from 'taibu-core/bazi';
 import type { BaziFormData } from '@/types';
@@ -122,14 +123,14 @@ export function InstantBaziPreview({ onUseInstant }: InstantBaziPreviewProps) {
                     </span>
                 ))}
             </div>
-            <button
+            <Button unstyled
                 type="button"
                 onClick={onUseInstant}
                 className="h-10 rounded-xl border-[0.5px] border-border-hover bg-surface px-4 text-sm text-foreground
                     transition-colors duration-150 hover:bg-background-secondary active:bg-background-tertiary"
             >
                 即时排盘
-            </button>
+            </Button>
         </section>
     );
 }

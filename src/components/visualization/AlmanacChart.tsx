@@ -3,6 +3,7 @@
 // 数据全部来自已保存的 canonical JSON，不在 Web 端重新排历。
 
 import { useState, type KeyboardEvent } from 'react';
+import { Button } from '@/components/ui/Button';
 import type { AlmanacCanonicalJSON } from 'taibu-core/almanac';
 import type { ChartInteraction } from './ChartTarget';
 
@@ -133,7 +134,7 @@ export function AlmanacChart({ chart, interaction }: { chart: AlmanacCanonicalJS
         {hours.length > 0 && <section className="almanac-card almanac-hours-card" aria-label="时辰吉凶">
             <div className="almanac-hours-head"><h3>时辰吉凶</h3>{!activeHour && <span>点时辰查看宜忌与冲煞</span>}</div>
             <div className="almanac-hours">
-                {hours.map((item, index) => <button key={`${item.时辰}-${index}`} type="button" className="almanac-hour" data-kind={HOUR_LUCK(item.天神吉凶) ? 'yi' : 'ji'}
+                {hours.map((item, index) => <Button unstyled key={`${item.时辰}-${index}`} type="button" className="almanac-hour" data-kind={HOUR_LUCK(item.天神吉凶) ? 'yi' : 'ji'}
                     {...targetProps(interaction, `almanac:hour:${index}`)}
                     aria-pressed={shownHour === index || (interaction?.selectedIds.includes(`almanac:hour:${index}`) ?? false)}
                     onClick={() => { interaction?.onSelect(`almanac:hour:${index}`); setHour(index); }}>
@@ -141,7 +142,7 @@ export function AlmanacChart({ chart, interaction }: { chart: AlmanacCanonicalJS
                     <strong>{item.时辰}</strong>
                     <span>{item.天神 ?? ''}</span>
                     <em>{item.天神吉凶 ?? DASH}</em>
-                </button>)}
+                </Button>)}
             </div>
             {activeHour && <dl className="almanac-hour-detail" aria-live="polite" data-kind={HOUR_LUCK(activeHour.天神吉凶) ? 'yi' : 'ji'}>
                 <div className="almanac-hour-detail-head">

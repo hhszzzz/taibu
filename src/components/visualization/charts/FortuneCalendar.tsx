@@ -9,6 +9,7 @@
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
+import { Button } from '@/components/ui/Button';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import type { FortuneCalendarData } from '@/lib/visualization/chart-types';
 import { getScoreColor } from '@/lib/visualization/chart-theme';
@@ -81,12 +82,12 @@ function DayDetailPopup({
         <span className="text-sm font-bold text-[var(--color-foreground)]">
           {year}年{month}月{day.date}日
         </span>
-        <button
+        <Button unstyled
           onClick={onClose}
           className="p-0.5 rounded hover:bg-[var(--color-background-secondary)] text-[var(--color-foreground-secondary)]"
         >
           <X className="w-3.5 h-3.5" />
-        </button>
+        </Button>
       </div>
 
       {/* Fortune Level Badge */}
@@ -251,21 +252,21 @@ function FortuneCalendarInner({
 
         {onMonthChange && (
           <div className="flex items-center gap-1">
-            <button
+            <Button unstyled
               onClick={handlePrevMonth}
               className="p-1 rounded-md hover:bg-[var(--color-background-secondary)] text-[var(--color-foreground-secondary)] transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />
-            </button>
+            </Button>
             <span className="text-sm font-medium text-[var(--color-foreground)] min-w-[90px] text-center">
               {year}年{month}月
             </span>
-            <button
+            <Button unstyled
               onClick={handleNextMonth}
               className="p-1 rounded-md hover:bg-[var(--color-background-secondary)] text-[var(--color-foreground-secondary)] transition-colors"
             >
               <ChevronRight className="w-4 h-4" />
-            </button>
+            </Button>
           </div>
         )}
 
@@ -306,7 +307,7 @@ function FortuneCalendarInner({
 
               return (
                 <div key={cell.date} className="relative">
-                  <button
+                  <Button unstyled
                     onClick={() => handleDayClick(cell.date)}
                     className={`
                       ${cellSize} rounded-lg flex flex-col items-center justify-center
@@ -327,7 +328,7 @@ function FortuneCalendarInner({
                     {hasHighlight && (
                       <div className="w-1 h-1 rounded-full bg-background/80 mt-0.5" />
                     )}
-                  </button>
+                  </Button>
 
                   {/* Day Detail Popup */}
                   {isSelected && !compact && (

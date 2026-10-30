@@ -17,6 +17,7 @@ import { useHeaderMenu, type HeaderMenuItem } from '@/components/layout/HeaderMe
 import { XiaoliurenChart } from '@/components/xiaoliuren/XiaoliurenChart';
 import { XiaoliurenForm } from '@/components/xiaoliuren/XiaoliurenForm';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { useAdminJsonCopy } from '@/lib/admin/useAdminJsonCopy';
 import { readSessionJSON, scopeResultSession, updateSessionJSON, writeSessionJSON } from '@/lib/cache/session-storage';
@@ -189,13 +190,13 @@ function XiaoliurenResultView({ session: storedSession, onRecalculated, isCurren
 
   const askAction = (
     <div className="hidden items-center gap-2 lg:flex">
-      <button
+      <Button unstyled
         type="button"
         onClick={handleAsk}
         className="h-[46px] min-w-0 flex-1 rounded-xl bg-foreground px-4 text-sm text-background transition-opacity hover:opacity-90"
       >
         {ASK_LABEL}
-      </button>
+      </Button>
     </div>
   );
 
@@ -224,13 +225,13 @@ function XiaoliurenResultView({ session: storedSession, onRecalculated, isCurren
             <h2 className="truncate text-sm font-normal">{result.question || '未填写占问'}</h2>
             <p className="text-xs text-foreground-secondary">{formatWallClock(bundle.solarDateTime)} · {formatLunarDate(bundle)} {result.input.shichen}</p>
           </div>
-          <button
+          <Button unstyled
             type="button"
             onClick={() => router.push('/xiaoliuren')}
             className="h-[34px] shrink-0 rounded-[9px] border-[0.5px] border-border-hover bg-surface px-3 text-[13px] text-foreground transition-colors hover:bg-background-secondary"
           >
             重新起课
-          </button>
+          </Button>
         </section>
 
         <XiaoliurenChart chart={bundle.canonicalJson} action={askAction} />

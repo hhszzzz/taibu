@@ -30,10 +30,13 @@ test('user menu uses registry icons and removes heavy account shortcuts', () => 
   assert.equal(source.includes('tab="upgrade"'), false);
   assert.equal(source.includes('tab="profile"'), false);
   assert.equal(source.includes('tab="admin-announcements"'), false);
-  // 菜单面板 = 克隆站 ui/menu 实测：r10 + shadow-panel（0.5px 边框由阴影环替代）。
+  // 账户菜单 = 共享 Menu：一级面板 r10，帮助走 MenuSub，不再手写 FloatingPanel 与点击外关闭。
   assert.equal(source.includes('rounded-2xl'), false);
-  assert.equal(source.includes("overflow-visible rounded-[10px] bg-surface p-1 shadow-[var(--shadow-panel-popover)]"), true);
-  // 帮助二级菜单 = 独立 FloatingPanel（与一级留间距、可键盘关闭）。
+  assert.equal(source.includes("from '@/components/ui/Menu'"), true);
+  assert.equal(source.includes('<MenuSub>'), true);
+  assert.equal(source.includes('<MenuSubTrigger'), true);
+  assert.equal(source.includes('data-popup-open:bg-fill-field'), true);
+  assert.equal(source.includes('FloatingPanel'), false);
+  assert.equal(source.includes('document.addEventListener(\'mousedown\''), false);
   assert.equal(source.includes('user-help-menu'), true);
-  assert.equal(source.includes('HELP_SUBMENU_CLASS'), false);
 });

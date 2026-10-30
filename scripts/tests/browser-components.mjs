@@ -2,6 +2,7 @@
  * Browser component acceptance with synthetic API and model fixtures.
  * Run: pnpm test:browser (uses the pinned Playwright Chromium runtime).
  * Build only: node scripts/tests/browser-components.mjs /tmp/taibu-browser
+ * Isolated shared UI checks: TAIBU_UI_PRIMITIVES_ONLY=1 node scripts/tests/browser-components.mjs
  * Build + run with an already-installed Playwright module (never installs):
  *   node scripts/tests/browser-components.mjs /tmp/taibu-browser /absolute/path/to/playwright/index.mjs
  * Or pass generated acceptance.playwright.js as MCP browser_run_code_unsafe.filename.
@@ -88,7 +89,17 @@ import { agentMessageContent } from '@/lib/agent/types';
 import { getAgentCitedParagraph } from '@/components/chat/agent/presentation';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { MobileChatDrawer } from '@/components/chat/MobileChatDrawer';
-import { FloatingPanel } from '@/components/ui/FloatingPanel';
+import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
+import { Field } from '@/components/ui/Field';
+import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
+import { Switch } from '@/components/ui/Switch';
+import { Checkbox } from '@/components/ui/Checkbox';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
+import { Menu, MenuCheckboxItem, MenuContent, MenuItem, MenuShortcut, MenuTrigger } from '@/components/ui/Menu';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { setChatWorkspaceOpen } from '@/lib/chat/chat-sidebar';
 import { ChatMessageList } from '@/components/chat/ChatMessageList';
 import { QuoteSelection } from '@/components/chat/QuoteSelection';
@@ -272,31 +283,33 @@ function AgentResultsProbe() {
 
 // A menu with an item hidden at this width, as the + menu's web switch is above phone widths.
 function MenuProbe() {
-  const anchorRef = useRef(null);
   const [open, setOpen] = useState(false);
   return <section data-testid="menu-probe">
-    <button ref={anchorRef} type="button" onClick={() => setOpen(true)}>Open fixture menu</button>
-    <FloatingPanel open={open} anchorRef={anchorRef} onClose={() => setOpen(false)} label="Fixture menu">
-      <button type="button" role="menuitem">Visible first</button>
-      <button type="button" role="menuitemcheckbox" aria-checked="true" style={{ display: 'none' }}>Hidden checked</button>
-      <button type="button" role="menuitem">Visible last</button>
-      <button type="button" role="menuitem" onClick={() => { window.fixture.menuShortcut = 'rename'; setOpen(false); }}>Rename<kbd>R</kbd></button>
-    </FloatingPanel>
+    <Menu open={open} onOpenChange={setOpen}>
+      <MenuTrigger>Open fixture menu</MenuTrigger>
+      <MenuContent letterShortcuts aria-label="Fixture menu">
+        <MenuItem>Visible first</MenuItem>
+        <MenuCheckboxItem checked style={{ display: 'none' }}>Hidden checked</MenuCheckboxItem>
+        <MenuItem>Visible last</MenuItem>
+        <MenuItem onClick={() => { window.fixture.menuShortcut = 'rename'; }}>Rename<MenuShortcut>R</MenuShortcut></MenuItem>
+      </MenuContent>
+    </Menu>
   </section>;
 }
 
 // Header share menu for one saved conversation; a running task locks link writes.
 function ShareProbe() {
-  const anchorRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [conversationId, setConversationId] = useState('share-fixture');
   window.fixture.shareBusy = setBusy;
   window.fixture.shareConversation = setConversationId;
   return <section data-testid="share-probe">
-    <button ref={anchorRef} type="button">Share fixture anchor</button>
-    <FloatingPanel open anchorRef={anchorRef} onClose={() => {}} label="分享">
-      <ShareConversationMenu conversationId={conversationId} taskActive={busy} exportBusy={null} onExport={format => { window.fixture.shareExport = format; }} onClose={() => {}} />
-    </FloatingPanel>
+    <Menu open onOpenChange={() => {}}>
+      <MenuTrigger>Share fixture anchor</MenuTrigger>
+      <MenuContent aria-label="分享">
+        <ShareConversationMenu conversationId={conversationId} taskActive={busy} exportBusy={null} onExport={format => { window.fixture.shareExport = format; }} onClose={() => {}} />
+      </MenuContent>
+    </Menu>
   </section>;
 }
 
@@ -498,6 +511,54 @@ const historyConfig = { sourceType: 'tarot', title: 'Fixture actual history',
   renderCard: (item, actions) => <article data-history-id={item.id}>
     <span>{item.title}</span><button onClick={actions.onDelete}>Delete history {item.id}</button>
   </article> };
+function UiPrimitivesProbe() {
+  const [detail, setDetail] = useState('standard');
+  const [enabled, setEnabled] = useState(false);
+  const [tab, setTab] = useState('general');
+  const [segment, setSegment] = useState('brief');
+  const [subscribed, setSubscribed] = useState(false);
+  const [menuAction, setMenuAction] = useState('');
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [clicks, setClicks] = useState(0);
+  const nameRef = useRef(null);
+  const options = [{ value: 'brief', label: '简洁' }, { value: 'standard', label: '标准' }, { value: 'full', label: '完整' }];
+  return <section data-testid="ui-primitives" aria-label="共享组件探针">
+    <Button loading loadingText="保存中" onClick={() => setClicks(value => value + 1)}>保存更改</Button>
+    <output data-testid="ui-button-clicks">{clicks}</output>
+    <Field label="解读详细度"><Select value={detail} onChange={setDetail} options={options} /></Field>
+    <output data-testid="ui-detail">{detail}</output>
+    <SegmentedControl ariaLabel="分段探针" value={segment} onChange={setSegment}
+      options={[{ value: 'brief', label: '简洁' }, { value: 'standard', label: '标准' }, { value: 'full', label: '完整' }]} />
+    <output data-testid="ui-segment">{segment}</output>
+    <Checkbox aria-label="订阅提醒" checked={subscribed} onCheckedChange={setSubscribed} />
+    <Switch aria-label="任务助手记忆" checked={enabled} onCheckedChange={setEnabled} />
+    <Tabs value={tab} onValueChange={setTab}>
+      <TabsList aria-label="组件设置标签">
+        <TabsTrigger value="general">常规</TabsTrigger><TabsTrigger value="personal">个性化</TabsTrigger>
+      </TabsList>
+      <TabsContent value="general">常规面板</TabsContent><TabsContent value="personal">个性化面板</TabsContent>
+    </Tabs>
+    <Menu><MenuTrigger render={<Button variant="secondary">打开组件菜单</Button>} /><MenuContent>
+      <MenuItem onClick={() => setMenuAction('renamed')}>重命名</MenuItem><MenuItem onClick={() => setMenuAction('shared')}>分享</MenuItem>
+    </MenuContent></Menu>
+    <output data-testid="ui-menu-action">{menuAction}</output>
+    <Tooltip label="复制回答"><button type="button" aria-label="复制回答">复制</button></Tooltip>
+    <Button variant="secondary" onClick={() => setDialogOpen(true)}>打开组件对话框</Button>
+    <Dialog open={dialogOpen} onOpenChange={setDialogOpen} title="编辑技能" description="修改共享组件的嵌套行为" busy={busy}
+      initialFocusRef={nameRef} footer={<>
+        <Button size="sm" onClick={() => setBusy(true)}>开始保存</Button>
+        <Button size="sm" variant="secondary" onClick={() => setBusy(false)}>完成保存</Button>
+      </>}>
+      <Field label="技能名称"><Input ref={nameRef} defaultValue="八字格局分析" /></Field>
+      <Field label="弹层内详细度"><Select value={detail} onChange={setDetail} options={options} /></Field>
+      <Tooltip label="弹层内提示"><button type="button" aria-label="弹层内提示按钮">提示</button></Tooltip>
+      <Menu><MenuTrigger render={<Button variant="secondary" size="sm">弹层内菜单</Button>} /><MenuContent>
+        <MenuItem>内层项</MenuItem>
+      </MenuContent></Menu>
+    </Dialog>
+  </section>;
+}
 let client;
 const manager = new ChatStreamManager();
 const invalidations = [];
@@ -546,6 +607,7 @@ function Shell() {
   const [imageComposerMounted, setImageComposerMounted] = useState(false);
   const [scheduledMounted, setScheduledMounted] = useState(false);
   const [castMounted, setCastMounted] = useState(null);
+  const [uiPrimitivesMounted, setUiPrimitivesMounted] = useState(false);
   window.fixture.refreshActivity = refreshAgentActivity;
   window.fixture.seedTarot = () => sessionStorage.setItem('tarot_result', JSON.stringify({
     ...createTarotDrawSession({ spread: TAROT_SPREADS[0], cards: [{ card: TAROT_CARDS[0], orientation: 'upright' }], seed: 'review' }, { question: 'review', birthDate: '' }, '2026-10-23T00:00:00Z'), recordOwnerId: user?.id ?? null,
@@ -571,7 +633,7 @@ function Shell() {
     records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted, agent: setAgentMounted, question: setQuestionMounted, results: setResultsMounted, sidebar: setSidebarMounted, phoneDrawer: setPhoneDrawerMounted, menu: setMenuMounted, rounds: setRoundsMounted, polish: setPolishMounted,
     snapshot: setSnapshotMounted, share: setShareMounted, tarot: setTarotMounted, qimen: setQimenMounted, activity: setActivityMounted,
     annual: setAnnualMounted, community: setCommunityMounted, post: setPostMounted, cast: setCastMounted, skillCommands: setSkillCommandsMounted, imageComposer: setImageComposerMounted, scheduled: setScheduledMounted,
-    visualization: setVisualizationMounted, quote: setQuoteMounted };
+    visualization: setVisualizationMounted, quote: setQuoteMounted, uiPrimitives: setUiPrimitivesMounted };
   window.fixture.chartKey = queryKeys.userCharts;
   window.fixture.chartClient = chartClient;
   window.fixture.deleteHistory = deleteHistorySummary;
@@ -644,6 +706,7 @@ function Shell() {
     {sidebarMounted && <Sidebar />}
     {phoneDrawerMounted && <MobileChatDrawer />}
     {menuMounted && <MenuProbe />}
+    {uiPrimitivesMounted && <UiPrimitivesProbe />}
     {shareMounted && <ShareProbe />}
     {roundsMounted && <RoundsProbe />}
     {polishMounted && <PolishProbe />}
@@ -1382,6 +1445,7 @@ export async function run(existingPage, bundlePath) {
       startedAt: '2026-10-27T02:59:56Z', endedAt: '2026-10-27T03:00:00Z',
     } }, true);
     if (url.pathname === '/api/admin/ai-models/cache') return ok({ cleared: true });
+    if (url.pathname === '/api/admin/models-dev') return ok({ models: [] });
     if (url.pathname === '/api/admin/ai-gateways' && method === 'GET') return ok({ gateways });
     if (url.pathname === '/api/admin/ai-gateways/probe' && method === 'POST') return ok({ ok: true, models: ['fixture-model', 'upstream-fixture'], latencyMs: 12 });
     if (url.pathname === '/api/admin/ai-models') {
@@ -1401,6 +1465,10 @@ export async function run(existingPage, bundlePath) {
   const check = (name, condition) => { assert.ok(condition, name); checks.push(name); };
   const until = async (predicate, argument) => page.waitForFunction(predicate, argument, { timeout: 10000 });
   const renderBarrier = () => page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
+  const chooseSelect = async (scope, label, option) => {
+    await scope.getByRole('combobox', { name: label, exact: true }).click();
+    await page.getByRole('option', { name: option, exact: true }).click({ force: true });
+  };
   const release = async control => {
     control.release();
     await until(id => ['done', 'failed'].includes(window.fixtureNetwork.requests[id]?.phase), control.requestId);
@@ -1412,26 +1480,28 @@ export async function run(existingPage, bundlePath) {
   };
   try {
     await page.goto(origin + '/chat');
+    if (process.env.TAIBU_UI_PRIMITIVES_ONLY !== '1') {
     await until(() => window.fixture?.list?.().length === 7);
     const birthProbe = page.getByTestId('birth-rules');
+    const birthDialog = page.getByRole('dialog', { name: '出生时辰' });
     await birthProbe.getByRole('button', { name: 'Open birth time rules' }).click();
-    await birthProbe.getByLabel('出生地时区（IANA）').fill('America/New_York');
-    await birthProbe.getByLabel('夏令时重复／缺失时间').selectOption('later');
-    await birthProbe.locator('input[type=time]').fill('03:15');
-    await birthProbe.getByRole('button', { name: '取消', exact: true }).click();
+    await birthDialog.getByLabel('出生地时区（IANA）').fill('America/New_York');
+    await chooseSelect(birthDialog, '夏令时重复／缺失时间', '选择较晚的瞬间');
+    await birthDialog.locator('input[type=time]').fill('03:15');
+    await birthDialog.getByRole('button', { name: '取消', exact: true }).click();
     check('Cancelling birth-time draft preserves all original fields', await page.evaluate(() => window.fixture.birthForm.timezone === 'Asia/Shanghai' && window.fixture.birthForm.disambiguation === 'reject' && window.fixture.birthForm.birthHour === 2 && window.fixture.birthForm.birthMinute === 30));
     await birthProbe.getByRole('button', { name: 'Open birth time rules' }).click();
-    await birthProbe.getByLabel('出生地时区（IANA）').fill('invalid/timezone');
-    await birthProbe.getByRole('button', { name: '确定', exact: true }).click();
-    check('Invalid IANA zone keeps the time editor open and does not commit', await birthProbe.getByLabel('出生地时区（IANA）').isVisible() && await page.evaluate(() => window.fixture.birthForm.timezone === 'Asia/Shanghai'));
-    await birthProbe.getByLabel('出生地时区（IANA）').fill('America/New_York');
-    await birthProbe.getByRole('button', { name: '确定', exact: true }).click();
+    await birthDialog.getByLabel('出生地时区（IANA）').fill('invalid/timezone');
+    await birthDialog.getByRole('button', { name: '确定', exact: true }).click();
+    check('Invalid IANA zone keeps the time editor open and does not commit', await birthDialog.getByLabel('出生地时区（IANA）').isVisible() && await page.evaluate(() => window.fixture.birthForm.timezone === 'Asia/Shanghai'));
+    await birthDialog.getByLabel('出生地时区（IANA）').fill('America/New_York');
+    await birthDialog.getByRole('button', { name: '确定', exact: true }).click();
     await birthProbe.getByRole('button', { name: 'Calculate actual Ziwei' }).click();
     await until(() => Boolean(window.fixture.birthResult?.error));
     checks.push('Actual browser Ziwei rejects nonexistent birth time without explicit resolution');
     await birthProbe.getByRole('button', { name: 'Open birth time rules' }).click();
-    await birthProbe.getByLabel('夏令时重复／缺失时间').selectOption('later');
-    await birthProbe.getByRole('button', { name: '确定', exact: true }).click();
+    await chooseSelect(birthDialog, '夏令时重复／缺失时间', '选择较晚的瞬间');
+    await birthDialog.getByRole('button', { name: '确定', exact: true }).click();
     await birthProbe.getByRole('button', { name: 'Calculate actual Ziwei' }).click();
     await until(() => window.fixture.birthResult?.options?.disambiguation === 'later');
     check('Actual browser Ziwei preserves birth timezone into lazy flow calculation', await page.evaluate(() => window.fixture.birthResult.options.timezone === 'America/New_York' && window.fixture.birthResult.day === '2024-05-31'));
@@ -1637,16 +1707,23 @@ export async function run(existingPage, bundlePath) {
     await editor.getByRole('switch', { name: '支持思考', exact: true }).click();
     const levels = editor.getByRole('group', { name: '可选思考等级', exact: true });
     for (const level of ['最高', '低', '高']) await levels.getByRole('button', { name: level, exact: true }).click();
-    await editor.getByRole('combobox', { name: /^参数格式/ }).selectOption('deepseek');
+    await editor.getByRole('combobox', { name: /^参数格式/ }).click();
+    await page.getByRole('listbox').waitFor();
+    await page.getByRole('option', { name: 'DeepSeek', exact: true }).click({ force: true });
+    await editor.getByRole('combobox', { name: /^参数格式/ }).filter({ hasText: 'DeepSeek' }).waitFor();
     check('The thinking format names the request fields it writes', await editor.getByText('thinking.type + reasoning_effort', { exact: true }).isVisible());
-    await editor.getByRole('combobox', { name: /^默认等级/ }).selectOption('max');
-    check('The default level offers only the ticked levels', (await editor.getByRole('combobox', { name: /^默认等级/ }).locator('option').allTextContents()).join('|') === '低|高|最高');
-    await editor.getByRole('combobox', { name: '添加来源', exact: true }).selectOption('00000000-0000-4000-8000-0000000000a2');
+    await editor.getByRole('combobox', { name: /^默认等级/ }).click();
+    await page.getByRole('listbox').waitFor();
+    await page.getByRole('option', { name: '最高', exact: true }).click({ force: true });
+    check('The default level offers only the ticked levels', (await editor.getByRole('combobox', { name: /^默认等级/ }).textContent()) === '最高');
+    await editor.getByRole('combobox', { name: '添加来源', exact: true }).click();
+    await page.getByRole('listbox').waitFor();
+    await page.getByRole('option', { name: 'Octopus', exact: true }).click({ force: true });
     await editor.getByRole('button', { name: '添加模型', exact: true }).click();
     await modelPanel.locator('.ai-catalog-row').filter({ hasText: 'Created Fixture' }).waitFor();
     const created = requests.find(item => item.pathname === '/api/admin/ai-models' && item.method === 'POST');
-    check('Creating a model submits the identity, limits and preserved sampling defaults', created?.body.modelKey === 'created-fixture'
-      && created.body.contextWindow === 1000000 && created.body.defaultMaxTokens === 32768 && created.body.defaultTemperature === 0.7 && created.body.defaultTopP === null);
+    check('Creating a model submits the identity and limits', created?.body.modelKey === 'created-fixture'
+      && created.body.contextWindow === 1000000 && created.body.defaultMaxTokens === 32768);
     check('Creating a model submits the thinking ladder in order with a listed default', JSON.stringify(created?.body.thinkingLevels) === '["low","high","max"]'
       && created.body.defaultReasoningEffort === 'max' && created.body.thinkingFormat === 'deepseek' && created.body.supportsReasoning === true);
     check('A new model starts on the first gateway and keeps the added backup in order', created?.body.sources.map(source => source.gatewayId).join(',') === '00000000-0000-4000-8000-0000000000a1,00000000-0000-4000-8000-0000000000a2');
@@ -1657,9 +1734,13 @@ export async function run(existingPage, bundlePath) {
     check('An unchanged model cannot be saved', await editor.getByRole('button', { name: '保存', exact: true }).isDisabled());
     await editor.getByLabel('显示名称', { exact: true }).fill('Edited Fixture Model');
     await editor.getByRole('group', { name: '可选思考等级', exact: true }).getByRole('button', { name: '最高', exact: true }).click();
-    check('Unticking a level keeps the default on a listed level', await editor.getByRole('combobox', { name: /^默认等级/ }).inputValue() === 'high');
-    await editor.getByRole('combobox', { name: /^默认等级/ }).selectOption('low');
-    await editor.getByRole('combobox', { name: '添加来源', exact: true }).selectOption('00000000-0000-4000-8000-0000000000a2');
+    check('Unticking a level keeps the default on a listed level', await editor.getByRole('combobox', { name: /^默认等级/ }).textContent() === '高');
+    await editor.getByRole('combobox', { name: /^默认等级/ }).click();
+    await page.getByRole('listbox').waitFor();
+    await page.getByRole('option', { name: '低', exact: true }).click({ force: true });
+    await editor.getByRole('combobox', { name: '添加来源', exact: true }).click();
+    await page.getByRole('listbox').waitFor();
+    await page.getByRole('option', { name: 'Octopus', exact: true }).click({ force: true });
     const upstream = editor.locator('.ai-catalog-source').getByLabel('上游模型 ID', { exact: true });
     await upstream.nth(0).fill('fixture-model');
     await upstream.nth(1).fill(' upstream-fixture ');
@@ -1743,7 +1824,7 @@ export async function run(existingPage, bundlePath) {
     check('Activation key filters narrow the loaded list without refetching', await keyPanel.getByText('sk-fixtureunused001', { exact: true }).count() === 0
       && await keyPanel.getByRole('button', { name: '已使用 1', exact: true }).getAttribute('aria-pressed') === 'true' && keyReads() === readsBeforeFilter);
     await keyPanel.getByRole('button', { name: '批量创建', exact: true }).click();
-    await keyPanel.getByLabel('类型').selectOption('credits');
+    await chooseSelect(keyPanel, '类型', '积分发放');
     await keyPanel.getByLabel('每个积分数量').fill('30');
     await keyPanel.getByLabel('生成数量').fill('1.5');
     check('Activation key form blocks fractional counts', await keyPanel.getByRole('button', { name: '生成', exact: true }).isDisabled());
@@ -1838,12 +1919,12 @@ export async function run(existingPage, bundlePath) {
     await roleDialog.getByRole('alert').getByText(/标识须以小写字母开头/u).waitFor();
     check('A malformed role name is refused before any request', !requests.some(entry => entry.pathname === '/api/admin/agent-profiles' && entry.method === 'POST'));
     await roleDialog.getByLabel('标识', { exact: true }).fill('archivist');
-    await roleDialog.getByLabel('用户资料的授权').selectOption('allow');
-    await roleDialog.getByLabel('MCP：笔记的授权').selectOption('allow');
-    await roleDialog.getByLabel('联网的授权').selectOption('deny');
+    await chooseSelect(roleDialog, '用户资料的授权', '允许');
+    await chooseSelect(roleDialog, 'MCP：笔记的授权', '允许');
+    await chooseSelect(roleDialog, '联网的授权', '禁止');
     await roleDialog.getByLabel('另外禁止的工具', { exact: true }).fill('read_attachment');
     await roleDialog.getByRole('checkbox', { name: 'case-review' }).check();
-    await roleDialog.getByLabel('模型', { exact: true }).selectOption('fixture-analysis');
+    await chooseSelect(roleDialog, '模型', '分析模型');
     await roleDialog.getByRole('checkbox', { name: '后台子分析' }).uncheck();
     await roleDialog.getByRole('button', { name: '添加', exact: true }).click();
     await roleDialog.waitFor({ state: 'hidden' });
@@ -1875,15 +1956,15 @@ export async function run(existingPage, bundlePath) {
     await aiDraft.waitFor();
     await aiDraft.fill('Submitted snapshot');
     const saveDuringEdit = holdNext('/api/user/settings', 'PATCH');
-    await page.getByRole('button', { name: '保存', exact: true }).click();
+    await page.getByRole('button', { name: '保存更改', exact: true }).click();
     await intercepted(saveDuringEdit);
     await aiDraft.fill('Edited while save pending');
     saveDuringEdit.release();
-    await until(() => [...document.querySelectorAll('button')].some(button => button.textContent.trim() === '保存' && !button.disabled));
+    await until(() => [...document.querySelectorAll('button')].some(button => button.textContent.trim() === '保存更改' && !button.disabled));
     check('AI save response advances baseline without replacing later edits', await aiDraft.inputValue() === 'Edited while save pending');
     check('Settings clients send expected account header for reads and writes', requests.filter(item => item.pathname === '/api/user/settings').every(item => item.expectedUserId === 'alice' || item.expectedUserId === 'bob'));
     await page.evaluate(() => { window.fixtureAuth.cookieUser = 'bob'; });
-    await page.getByRole('button', { name: '保存', exact: true }).click();
+    await page.getByRole('button', { name: '保存更改', exact: true }).click();
     await page.getByText('保存失败', { exact: true }).first().waitFor();
     check('Cookie change before Provider sync rejects old account draft', settingsByUser.bob.customInstructions === 'Bob preferences' && await aiDraft.inputValue() === 'Edited while save pending');
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
@@ -1909,8 +1990,8 @@ export async function run(existingPage, bundlePath) {
     await page.waitForTimeout(30);
     check('Late old-account settings GET cannot overwrite current draft', await aiDraft.inputValue() === 'Fresh Alice draft');
     const staleSave = holdNext('/api/user/settings', 'PATCH');
-    await page.getByRole('radio', { name: '暗色高对比', exact: true }).click();
-    await page.getByRole('button', { name: '保存', exact: true }).click();
+    await aiDraft.fill('Fresh Alice draft 2');
+    await page.getByRole('button', { name: '保存更改', exact: true }).click();
     await intercepted(staleSave);
     await page.evaluate(() => window.fixtureAuth.change(null));
     await until(() => window.fixture.user === null);
@@ -2175,30 +2256,39 @@ export async function run(existingPage, bundlePath) {
     check('Hidden actual ChartsPanel receives real createSavedChart and reopens on the same DOM',
       await chartRow('chart-alice').getAttribute('data-fixture-identity') === 'preserved-chart-node');
     await page.evaluate(() => { window.fixture.mount.selected(true); window.fixture.mount.picker(true); });
-    const picker = page.getByTestId('chart-picker');
+    const picker = page.getByRole('dialog', { name: '选择命盘' });
+    const setPicker = async open => {
+      await page.evaluate(value => window.fixture.mount.picker(value), open);
+      await (open ? picker.waitFor() : picker.waitFor({ state: 'detached' }));
+    };
     await picker.getByText('Created without reload', { exact: true }).waitFor();
     await page.getByTestId('selected-chart').getByText('Alice confirmed chart', { exact: true }).waitFor();
     const rawChart = await page.evaluate(() => window.fixture.chartClient.loadSavedChart('bazi', 'chart-created', { expectedUserId: 'alice' }));
     check('Raw saved-chart facade retains non-summary edit fields', rawChart?.fixtureRaw === 'retained raw field');
+    await setPicker(false);
     await page.evaluate(() => window.fixture.chartClient.updateSavedChart('bazi', 'chart-created', { name: 'Edited without reload' }, { expectedUserId: 'alice' }));
-    await chartRow('chart-created').getByText('Edited without reload', { exact: true }).waitFor();
-    await picker.getByText('Edited without reload', { exact: true }).waitFor();
-    check('Actual chart edit facade synchronizes mounted panel and open picker',
+    await chartRow('chart-created').getByText('Edited without reload').waitFor();
+    await setPicker(true);
+    await picker.getByText('Edited without reload').waitFor();
+    check('Actual chart edit facade synchronizes mounted panel and a reopened picker',
       requests.some(item => item.pathname === '/api/bazi/charts/update' && item.body?.chartId === 'chart-created' && item.body.payload?.name === 'Edited without reload'));
+    await setPicker(false);
 
     const defaultFailure = holdNext('/api/user/charts', 'PATCH', true);
-    await chartRow('chart-created').getByTitle('设为默认', { exact: true }).click();
+    await chartRow('chart-created').getByRole('button', { name: /设为默认$/ }).click();
     await intercepted(defaultFailure);
     check('Pending default mutation keeps the confirmed default marker', await chartRow('chart-alice').getByText('默认', { exact: true }).count() === 1);
     await release(defaultFailure);
     await page.getByText('设置默认命盘失败', { exact: true }).last().waitFor();
     check('Failed default mutation preserves confirmed marker and selected-chart helper',
       await chartRow('chart-alice').getByText('默认', { exact: true }).count() === 1 && await page.getByTestId('selected-chart').innerText() === 'Alice confirmed chart');
-    await chartRow('chart-created').getByTitle('设为默认', { exact: true }).click();
+    await chartRow('chart-created').getByRole('button', { name: /设为默认$/ }).click();
     await chartRow('chart-created').getByText('默认', { exact: true }).waitFor();
-    await page.getByTestId('selected-chart').getByText('Edited without reload', { exact: true }).waitFor();
-    check('Confirmed default change propagates without reopening picker or selected-chart consumer',
-      await picker.getByText('Edited without reload', { exact: true }).isVisible());
+    await page.getByTestId('selected-chart').getByText('Edited without reload').waitFor();
+    await setPicker(true);
+    check('Confirmed default change propagates to a reopened picker and selected-chart consumer',
+      await picker.getByText('Edited without reload').isVisible());
+    await setPicker(false);
     await page.evaluate(() => window.fixture.selectedChart.selectChart('chart-alice'));
     await page.getByTestId('selected-chart').getByText('Alice confirmed chart', { exact: true }).waitFor();
     for (const id of ['chart-alice', 'chart-created']) {
@@ -2210,15 +2300,17 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => window.fixture.chartClient.updateSavedChart('bazi', 'chart-alice', { name: 'Selected chart edited' }, { expectedUserId: 'alice' }));
     await page.getByTestId('selected-chart').getByText('Selected chart edited', { exact: true }).waitFor();
     check('Explicit selected ID resolves refreshed fields rather than retaining a copied chart',
-      await chartRow('chart-alice').getByRole('heading', { name: 'Selected chart edited', exact: true }).isVisible());
+      await chartRow('chart-alice').getByText('Selected chart edited').isVisible());
     await page.evaluate(() => window.fixture.chartClient.updateSavedChart('bazi', 'chart-alice', { name: 'Alice confirmed chart' }, { expectedUserId: 'alice' }));
     await page.getByTestId('selected-chart').getByText('Alice confirmed chart', { exact: true }).waitFor();
-    await chartRow('chart-created').getByTitle('删除命盘', { exact: true }).click();
+    await chartRow('chart-created').getByRole('button', { name: /^删除命盘/ }).click();
     await page.getByRole('button', { name: '确认删除', exact: true }).click();
     await chartRow('chart-created').waitFor({ state: 'detached' });
-    await picker.getByText('Edited without reload', { exact: true }).waitFor({ state: 'detached' });
+    await setPicker(true);
+    await picker.getByText('Edited without reload').waitFor({ state: 'detached' });
+    await setPicker(false);
     await page.getByTestId('selected-chart').getByText('Alice confirmed chart', { exact: true }).waitFor();
-    check('Delete removes the chart from panel, open picker and selected-chart helper',
+    check('Delete removes the chart from panel, a reopened picker and selected-chart helper',
       !await page.evaluate(() => window.fixture.selectedChart.data?.baziCharts.some(item => item.id === 'chart-created')));
 
     await page.getByRole('button', { name: 'Fixture Bob', exact: true }).evaluate(button => button.click());
@@ -2233,8 +2325,10 @@ export async function run(existingPage, bundlePath) {
     await createChart('chart-first', 'First chart after empty load');
     await chartRow('chart-first').waitFor();
     await releaseReads('/api/user/charts', emptyChartStart);
+    await setPicker(true);
     check('Creation cancels an initial empty Query read so its old response cannot erase fresh data',
       await chartRow('chart-first').isVisible() && await picker.getByText('First chart after empty load', { exact: true }).isVisible());
+    await setPicker(false);
     const previousChartLoad = holdNext('/api/user/charts', 'GET');
     await page.evaluate(() => { void window.fixture.client.invalidateQueries({ queryKey: window.fixture.chartKey('alice') }); });
     await intercepted(previousChartLoad);
@@ -2248,11 +2342,12 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => { void window.fixture.client.invalidateQueries({ queryKey: window.fixture.chartKey('alice') }); });
     await intercepted(aliceChartLoad);
     const aliceChartMutation = holdNext('/api/user/charts', 'PATCH');
-    await chartRow('chart-second').getByTitle('设为默认', { exact: true }).click();
+    await chartRow('chart-second').getByRole('button', { name: /设为默认$/ }).click();
     await intercepted(aliceChartMutation);
     const bobChartLoad = holdNext('/api/user/charts', 'GET');
     await page.getByRole('button', { name: 'Fixture Bob', exact: true }).evaluate(button => button.click());
     await intercepted(bobChartLoad);
+    await setPicker(true);
     // Bob was visited above; his own cached chart may remain visible during revalidation.
     // Only Alice's rows/selection are forbidden, not a valid same-account cache hit.
     const pendingSelection = await page.getByTestId('selected-chart').innerText();
@@ -2276,8 +2371,9 @@ export async function run(existingPage, bundlePath) {
     check('Chart reads and writes carry expected-user fences through real facades',
       requests.filter(item => item.pathname === '/api/user/charts' || /^\/api\/bazi\/charts/.test(item.pathname))
         .every(item => item.expectedUserId === 'alice' || item.expectedUserId === 'bob'));
+    await setPicker(false);
     await page.getByRole('link', { name: '返回太卜', exact: true }).click();
-    await page.evaluate(() => { window.fixture.mount.picker(false); window.fixture.mount.selected(false); });
+    await page.evaluate(() => { window.fixture.mount.selected(false); });
     await page.getByRole('button', { name: 'Fixture Alice', exact: true }).evaluate(button => button.click());
     await until(() => window.fixture.user === 'alice');
 
@@ -2477,6 +2573,7 @@ export async function run(existingPage, bundlePath) {
     check('Run mode opens a popup with the three exclusive choices', JSON.stringify(await modeMenu.getByRole('menuitemradio').allInnerTexts()) === JSON.stringify(['默认', '计划', '代码']) &&
       await modeMenu.getByRole('menuitemradio', { name: '默认', exact: true }).getAttribute('aria-checked') === 'true');
     await modeMenu.getByRole('menuitemradio', { name: '代码', exact: true }).click();
+    await modeMenu.waitFor({ state: 'hidden' });
     await until(() => window.fixture.agentChat.codeMode === true && window.fixture.agentChat.planMode === false);
     check('Choosing a run mode closes the popup and clears the other one', await modeMenu.count() === 0 &&
       await modeTrigger.getAttribute('aria-label') === '运行模式：代码');
@@ -2485,21 +2582,23 @@ export async function run(existingPage, bundlePath) {
     await until(() => window.fixture.agentChat.codeMode === false);
     const settingsTrigger = page.locator('[data-testid="agent-chat"]').getByRole('button', { name: /^选择模型：/ });
     await settingsTrigger.click();
-    const modelSettings = page.getByRole('dialog', { name: '模型与分析设置', exact: true });
+    const modelSettings = page.getByRole('menu', { name: '模型与分析设置', exact: true });
     await modelSettings.waitFor();
     check('Model settings retain disabled membership choices', await modelSettings.getByRole('menuitemradio', { name: /受限模型/ }).isDisabled());
     await modelSettings.getByRole('menuitemradio', { name: '分析模型', exact: true }).focus();
     await page.keyboard.press('End');
-    check('Model keyboard navigation skips disabled models', await modelSettings.getByRole('button', { name: '使用自己的模型 API', exact: true }).evaluate(button => button === document.activeElement)
+    check('Model keyboard navigation skips disabled models', await modelSettings.getByRole('menuitem', { name: '使用自己的模型 API', exact: true }).evaluate(item => item === document.activeElement)
       && await modelSettings.getByRole('menuitemradio', { name: /受限模型/ }).evaluate(button => button !== document.activeElement));
     await modelSettings.getByRole('menuitemradio', { name: '仅支持推理开关', exact: true }).click();
     await settingsTrigger.click();
+    await modelSettings.waitFor();
     check('Models with only a reasoning switch do not offer unsupported effort levels', await modelSettings.getByRole('menuitemcheckbox', { name: '推理', exact: true }).count() === 1 &&
       await modelSettings.getByRole('menuitem', { name: '努力程度', exact: true }).count() === 0);
     await modelSettings.getByRole('menuitemcheckbox', { name: '推理', exact: true }).click();
     check('The reasoning switch turns on from the model menu', await modelSettings.getByRole('menuitemcheckbox', { name: '推理', exact: true }).getAttribute('aria-checked') === 'true');
     await modelSettings.getByRole('menuitemradio', { name: '分析模型', exact: true }).click();
     await settingsTrigger.click();
+    await modelSettings.waitFor();
     await modelSettings.getByRole('menuitem', { name: /^努力程度/ }).click();
     const effortMenu = page.getByRole('menu', { name: '努力程度', exact: true });
     await effortMenu.waitFor();
@@ -2512,10 +2611,12 @@ export async function run(existingPage, bundlePath) {
     await effortMenu.getByRole('menuitemradio', { name: '最高', exact: true }).click();
     await until(() => window.fixture.agentChat.state.reasoningEffort === 'max');
     await settingsTrigger.click();
+    await modelSettings.waitFor();
     check('The chosen effort level reads on the model menu row', await modelSettings.getByRole('menuitem', { name: /^努力程度/ }).innerText().then(text => text.includes('最高')));
     // 主模型不参与协作成员：切到第三个模型，再勾选分析/复核两个子模型。
     await modelSettings.getByRole('menuitemradio', { name: '仅支持推理开关', exact: true }).click();
     await settingsTrigger.click();
+    await modelSettings.waitFor();
     await modelSettings.getByRole('menuitem', { name: /多模型协作/ }).click();
     const collabMenu = page.getByRole('menu', { name: '多模型协作', exact: true });
     await collabMenu.waitFor();
@@ -2526,6 +2627,7 @@ export async function run(existingPage, bundlePath) {
       await collabMenu.getByRole('menuitemcheckbox', { name: '复核模型', exact: true }).getAttribute('aria-checked') === 'true');
     await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
+    await modelSettings.waitFor({ state: 'hidden' });
     check('Closing the model menu restores model trigger focus', await settingsTrigger.evaluate(button => button === document.activeElement));
     // 成员配置在设置页编辑（验收走设置界面）；这里通过公开状态写入并验证会话配置持久化。
     const settingsSaved = page.waitForResponse(response => response.request().method() === 'PATCH' && new URL(response.url()).pathname === '/api/conversations/agent-settings/configuration' && response.request().postDataJSON()?.collaborators?.[1]?.reasoningEffort === 'xhigh');
@@ -2545,6 +2647,7 @@ export async function run(existingPage, bundlePath) {
     check('The usage ring opens the remaining platform credits', await usageRing.getAttribute('aria-expanded') === 'true' &&
       await usagePanel.innerText().then(text => text.includes('剩余积分') && text.includes('20 / 20') && text.includes('每次平台模型对话消耗 1 积分')));
     await page.keyboard.press('Escape');
+    await usagePanel.waitFor({ state: 'hidden' });
     check('Closing the usage panel restores the ring focus', await usagePanel.count() === 0 && await usageRing.evaluate(button => button === document.activeElement));
     await until(() => window.fixture.agentChat.state.collaborators[1]?.reasoningEffort === 'xhigh');
     assert.ok((await settingsSaved).ok());
@@ -2574,6 +2677,7 @@ export async function run(existingPage, bundlePath) {
     await selectAgentConversation('agent-settings');
     await until(() => window.fixture.agentChat.state.collaborators.length === 2);
     await settingsTrigger.click();
+    await modelSettings.waitFor();
     await modelSettings.getByRole('menuitem', { name: /多模型协作/ }).click();
     const restoredCollab = page.getByRole('menu', { name: '多模型协作', exact: true });
     await restoredCollab.waitFor();
@@ -3391,8 +3495,7 @@ export async function run(existingPage, bundlePath) {
     check('占术路由下侧栏改用类型分组，行与 /chat 完全同款', await sidebar.locator('.chat-nav-row').count() === 4 &&
       await sidebarRow('明年适合换工作吗？').locator('.chat-nav-row-link').count() === 1 &&
       await sidebarRow('明年适合换工作吗？').getByRole('link').getAttribute('href') === '/chat?id=' + sidebarIds[0] &&
-      await sidebar.locator('.chat-nav-row[data-active]').count() === 0 &&
-      await sidebar.locator('.chat-nav-marker').count() === 0);
+      await sidebar.locator('.chat-nav-row[data-active]').count() === 0);
     await page.evaluate(() => { window.fixture.sidebarSearch = 0; window.addEventListener('taibu:search', () => { window.fixture.sidebarSearch++; }); });
     await sidebar.getByRole('button', { name: '搜索', exact: true }).click();
     check('搜索 opens the global conversation search', await page.evaluate(() => window.fixture.sidebarSearch === 1));
@@ -3442,11 +3545,11 @@ export async function run(existingPage, bundlePath) {
     const createEditor = page.locator('dialog[open]');
     await createEditor.getByLabel('任务名称').fill('周末整理');
     await createEditor.getByLabel('执行内容').fill('整理本周记录并列出下周重点。');
-    await createEditor.getByLabel('执行频率').selectOption('weekly');
+    await createEditor.getByRole('radio', { name: '每周', exact: true }).click();
     await createEditor.getByRole('button', { name: '周一', exact: true }).click();
     await createEditor.getByRole('button', { name: '周六', exact: true }).click();
     await createEditor.getByLabel('执行时间').fill('20:00');
-    await createEditor.getByRole('button', { name: '保存', exact: true }).click();
+    await createEditor.getByRole('button', { name: '创建任务', exact: true }).click();
     await createEditor.waitFor({ state: 'hidden' });
     await scheduled.getByText('周末整理', { exact: true }).waitFor();
     check('A custom schedule is created with weekly weekdays', await scheduled.getByText('周末整理', { exact: true }).count() === 1 &&
@@ -3480,43 +3583,45 @@ export async function run(existingPage, bundlePath) {
     await page.keyboard.press('Escape');
     await drawerMenu.waitFor({ state: 'hidden' });
     check('The first Escape closes only the row menu', await phoneDrawer.isVisible() && await drawerRowMore.evaluate(element => element === document.activeElement));
+    await page.mouse.move(0, 0);
     await page.keyboard.press('Escape');
     await phoneDrawer.waitFor({ state: 'hidden' });
     check('Closing the drawer returns focus to ≡', await drawerTrigger.evaluate(element => element === document.activeElement));
     await drawerTrigger.click();
     await phoneDrawer.locator('[data-conversation-row]').filter({ hasText: '梦见掉牙' }).getByRole('link').click();
+    await renderBarrier();
     await phoneDrawer.waitFor({ state: 'hidden' });
     check('Choosing a conversation navigates and closes the drawer', await page.evaluate(id => new URLSearchParams(location.search).get('id') === id, sidebarIds[3]));
     await page.evaluate(() => window.fixture.mount.phoneDrawer(false));
     await page.setViewportSize({ width: 1200, height: 1000 });
 
-    // Focus and arrow keys pass over menu items that are not laid out at this width.
+    // Arrow keys pass over menu items that are not laid out at this width; the list keeps real focus.
     await page.evaluate(() => window.fixture.mount.menu(true));
+    const fixtureMenu = page.getByRole('menu', { name: 'Fixture menu', exact: true });
+    const highlightedItem = () => page.evaluate(() => document.querySelector('[role="menu"][aria-label="Fixture menu"] [data-highlighted]')?.textContent ?? '');
     await page.getByRole('button', { name: 'Open fixture menu', exact: true }).click();
-    await page.getByRole('menu', { name: 'Fixture menu', exact: true }).waitFor();
-    await until(() => document.activeElement?.textContent === 'Visible first');
+    await fixtureMenu.waitFor();
+    await until(() => document.activeElement?.getAttribute('role') === 'menu' || document.activeElement?.closest('[role="menu"]') !== null);
     await page.keyboard.press('ArrowDown');
-    const belowFirst = await page.evaluate(() => document.activeElement?.textContent);
+    const firstDown = await highlightedItem();
+    await page.keyboard.press('ArrowDown');
+    const belowFirst = await highlightedItem();
     await page.keyboard.press('ArrowUp');
-    check('Menus skip items hidden at this width for the first focus and arrow keys', belowFirst === 'Visible last' &&
-      await page.evaluate(() => document.activeElement?.textContent) === 'Visible first');
+    check('Menus skip items hidden at this width for the first focus and arrow keys', firstDown === 'Visible first' && belowFirst === 'Visible last' &&
+      await highlightedItem() === 'Visible first');
     await page.keyboard.press('Escape');
-    // A reopened menu is laid out at once: focus moved into it before its first frame is not taken back.
-    check('Focus moved into a reopened menu before its first frame stays there', await page.evaluate(async () => {
-      document.querySelector('[data-testid="menu-probe"] > button').click();
-      const menu = () => document.querySelector('[role="menu"][aria-label="Fixture menu"]');
-      for (let turn = 0; turn < 20 && !menu(); turn++) await Promise.resolve();
-      const last = [...menu().querySelectorAll('button')].find(button => button.textContent === 'Visible last');
-      last.focus();
-      const moved = document.activeElement === last;
-      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      return moved && document.activeElement === last;
-    }));
+    await fixtureMenu.waitFor({ state: 'hidden' });
+    // A reopened menu puts focus back in its list, not on the page behind it.
+    await page.getByRole('button', { name: 'Open fixture menu', exact: true }).click();
+    await fixtureMenu.waitFor();
+    await until(() => document.activeElement?.getAttribute('role') === 'menu' || document.activeElement?.closest('[role="menu"]') !== null);
+    check('A reopened menu restores focus inside it', await page.evaluate(() => document.activeElement?.getAttribute('role') === 'menu' || document.activeElement?.closest('[role="menu"]') !== null));
     await page.keyboard.press('Escape');
+    await fixtureMenu.waitFor({ state: 'hidden' });
     // claude 菜单字母键：菜单项 <kbd> 标注的字母直接执行该项。
     await page.getByRole('button', { name: 'Open fixture menu', exact: true }).click();
-    await page.getByRole('menu', { name: 'Fixture menu', exact: true }).waitFor();
-    await until(() => document.activeElement?.textContent === 'Visible first');
+    await fixtureMenu.waitFor();
+    await until(() => document.activeElement?.getAttribute('role') === 'menu' || document.activeElement?.closest('[role="menu"]') !== null);
     await page.keyboard.press('r');
     await page.getByRole('menu', { name: 'Fixture menu', exact: true }).waitFor({ state: 'hidden' });
     check('A letter key runs the menu item whose shortcut it shows', await page.evaluate(() => window.fixture.menuShortcut) === 'rename');
@@ -3608,7 +3713,7 @@ export async function run(existingPage, bundlePath) {
     await shareMenu.getByRole('menuitem', { name: '创建公开链接' }).waitFor();
     check('Without a link the share menu offers creation above the export actions',
       (await shareMenu.getByRole('menuitem').allInnerTexts()).map(text => text.trim()).join('|') === '创建公开链接|导出 Markdown|导出 HTML');
-    await shareMenu.getByLabel('包含命盘与工具结果').check();
+    await shareMenu.getByRole('menuitemcheckbox', { name: '包含命盘与工具结果' }).click();
     await shareMenu.getByRole('menuitem', { name: '创建公开链接' }).click();
     await shareMenu.getByRole('menuitem', { name: '复制公开链接' }).waitFor();
     check('Creating posts the chart opt-in once and switches to link management',
@@ -3637,13 +3742,11 @@ export async function run(existingPage, bundlePath) {
     // Connectors: a member's own MCP servers. A secret goes out once and never comes back; the policy can close them.
     await page.evaluate(() => window.fixtureAuth.change('alice')); await renderBarrier();
     await page.evaluate(() => { history.replaceState(null, '', '#settings/connectors'); window.dispatchEvent(new HashChangeEvent('hashchange')); });
-    await page.getByText('已添加 0 / 3 个连接器', { exact: true }).waitFor();
+    await page.getByText(/^已启用 0 \/ 3 个连接器/).waitFor();
     await page.getByRole('button', { name: '添加连接器' }).click();
     const connectorDialog = page.getByRole('dialog', { name: '添加连接器' });
     await connectorDialog.getByLabel('名称', { exact: true }).fill('我的笔记');
-    await connectorDialog.getByLabel('标识', { exact: true }).fill('notes');
     await connectorDialog.getByLabel('服务地址', { exact: true }).fill('https://notes.example.com/mcp');
-    await connectorDialog.getByRole('button', { name: '添加密钥请求头' }).click();
     await connectorDialog.getByLabel('密钥请求头名称').fill('x-api-key');
     await connectorDialog.getByLabel('密钥请求头「x-api-key」的值').fill('fixture-secret');
     await connectorDialog.getByRole('button', { name: '添加并测试' }).click();
@@ -3676,41 +3779,50 @@ export async function run(existingPage, bundlePath) {
       requests.filter(entry => entry.pathname === '/api/user/connectors' && entry.method === 'GET').at(-1)?.expectedUserId === 'bob');
     await page.evaluate(() => window.fixtureAuth.change('alice')); await renderBarrier();
 
-    // Skills: a member's own SKILL.md with the files beside it, sent once; an edit that changes neither sends neither.
+    // Skills: a member uploads a folder holding SKILL.md and the files beside it; the folder itself is the skill.
     await page.evaluate(() => { history.replaceState(null, '', '#settings/skills'); window.dispatchEvent(new HashChangeEvent('hashchange')); });
-    await page.getByText('已添加 0 / 3 个技能', { exact: true }).waitFor();
+    await page.getByText('已启用 0 / 3 个技能', { exact: true }).waitFor();
+    const skillFolders = await mkdtemp(resolve(tmpdir(), 'taibu-skills-'));
+    const skillFolder = resolve(skillFolders, 'case-review');
+    await mkdir(skillFolder, { recursive: true });
+    await writeFile(resolve(skillFolder, 'SKILL.md'), '---\nname: case-review\ndescription: 复盘一个命理案例\n---\n\n先读命盘，再列要点。');
+    await writeFile(resolve(skillFolder, 'terms.md'), '术语表');
+    const badSkillFolder = resolve(skillFolders, 'no-frontmatter');
+    await mkdir(badSkillFolder, { recursive: true });
+    await writeFile(resolve(badSkillFolder, 'SKILL.md'), '# 没有 frontmatter');
     await page.getByRole('button', { name: '添加技能' }).click();
-    const skillDialog = page.getByRole('dialog', { name: '添加技能' });
-    check('A new skill starts from a SKILL.md template with its name and description',
-      (await skillDialog.getByLabel('SKILL.md', { exact: true }).inputValue()).startsWith('---\nname: my-skill\ndescription: '));
-    await skillDialog.getByLabel('SKILL.md', { exact: true }).fill('---\nname: case-review\ndescription: 复盘一个命理案例\n---\n\n先读命盘，再列要点。');
-    const skillChooser = page.waitForEvent('filechooser');
-    await skillDialog.getByRole('button', { name: '添加文件' }).click();
-    await (await skillChooser).setFiles([{ name: 'terms.md', mimeType: 'text/markdown', buffer: Buffer.from('术语表') }]);
-    await skillDialog.getByText('已读取 1 个附属文件', { exact: true }).waitFor();
-    await skillDialog.getByRole('button', { name: '添加', exact: true }).click();
+    const skillDialog = page.getByRole('dialog', { name: '上传技能' });
+    await skillDialog.locator('input[type=file]').setInputFiles(skillFolder);
+    await skillDialog.getByText('case-review', { exact: true }).waitFor();
+    check('A picked folder is summarised by the name and description in its SKILL.md',
+      await skillDialog.getByText('复盘一个命理案例', { exact: true }).isVisible() &&
+      await skillDialog.getByText('SKILL.md 与 1 个附属文件', { exact: false }).isVisible());
+    await skillDialog.getByRole('button', { name: '保存', exact: true }).click();
     await skillDialog.waitFor({ state: 'hidden' });
     const createdSkill = requests.find(entry => entry.pathname === '/api/user/skills' && entry.method === 'POST');
-    check('A skill is saved for the signed-in account with its SKILL.md and the picked file',
+    check('A skill is saved for the signed-in account with its SKILL.md and the file beside it',
       createdSkill?.expectedUserId === 'alice' && createdSkill.body.content.startsWith('---\nname: case-review\n') &&
       JSON.stringify(createdSkill.body.files) === JSON.stringify([{ path: 'terms.md', content: '术语表' }]));
-    await page.getByText('已添加 1 / 3 个技能', { exact: true }).waitFor();
+    await page.getByText('已启用 1 / 3 个技能', { exact: true }).waitFor();
     check('The list names the skill with its version, file count and size',
       await page.getByRole('list', { name: '我的技能' }).getByText(/^v1 · 1 个附属文件 · /u).isVisible());
-    await page.getByRole('button', { name: '编辑「case-review」' }).click();
-    const skillEditor = page.getByRole('dialog', { name: '编辑技能「case-review」' });
-    await skillEditor.getByText('terms.md', { exact: true }).waitFor();
-    await skillEditor.getByRole('button', { name: '保存', exact: true }).click();
+    await page.getByRole('button', { name: '替换「case-review」' }).click();
+    const skillEditor = page.getByRole('dialog', { name: '替换技能「case-review」' });
+    await skillEditor.locator('input[type=file]').setInputFiles(skillFolder);
+    await skillEditor.getByText('case-review', { exact: true }).waitFor();
+    await skillEditor.getByRole('button', { name: '替换', exact: true }).click();
     await skillEditor.waitFor({ state: 'hidden' });
     const skillPatch = requests.filter(entry => entry.pathname === '/api/user/skills/skill-1' && entry.method === 'PATCH').at(-1);
-    check('Saving an unchanged skill sends neither SKILL.md nor its files again', !!skillPatch && !('content' in skillPatch.body) && !('files' in skillPatch.body));
+    check('Replacing a skill sends the new folder contents', !!skillPatch && skillPatch.body.content.startsWith('---\nname: case-review\n') &&
+      JSON.stringify(skillPatch.body.files) === JSON.stringify([{ path: 'terms.md', content: '术语表' }]));
     await page.getByRole('button', { name: '添加技能' }).click();
-    await skillDialog.getByLabel('SKILL.md', { exact: true }).fill('# 没有 frontmatter');
-    await skillDialog.getByRole('button', { name: '添加', exact: true }).click();
+    await skillDialog.locator('input[type=file]').setInputFiles(badSkillFolder);
+    await skillDialog.getByRole('button', { name: '保存', exact: true }).click();
     await skillDialog.getByRole('alert').getByText(/frontmatter/u).waitFor();
     check('A SKILL.md the server refuses keeps the dialog open with the reason', await skillDialog.isVisible() && skillsByUser.alice.length === 1);
     await skillDialog.getByRole('button', { name: '取消', exact: true }).click();
     await skillDialog.waitFor({ state: 'hidden' });
+    await rm(skillFolders, { recursive: true, force: true });
     await page.evaluate(() => window.fixtureAuth.change('bob')); await renderBarrier();
     await page.getByText('管理员已关闭个人技能。', { exact: true }).waitFor();
     check('A closed skills policy says so and offers no way to add', await page.getByRole('button', { name: '添加技能' }).isDisabled());
@@ -3720,7 +3832,7 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => { history.replaceState(null, '', '/chat'); window.dispatchEvent(new Event('fixture:navigate')); window.fixture.mount.skillCommands(true); });
     const commandInput = page.getByLabel('命令输入夹具');
     await commandInput.fill('/skill');
-    await page.getByRole('option', { name: /\/skill:case-review/u }).waitFor();
+    await page.getByRole('button', { name: /\/skill:case-review/u }).waitFor();
     await commandInput.press('Enter');
     await until(() => document.querySelector('[aria-label="命令输入夹具"]')?.value === '/skill:case-review ');
     check('Agent mode\'s slash menu offers the member\'s skills and fills in /skill:名称',
@@ -3732,15 +3844,20 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => { history.replaceState(null, '', '#settings/personalization'); window.dispatchEvent(new HashChangeEvent('hashchange')); });
     const roleSettings = page.getByRole('region', { name: '多模型协作设置' });
     await roleSettings.getByRole('button', { name: '添加成员' }).click();
-    const memberRole = roleSettings.getByLabel('Agent 1 角色', { exact: true });
-    await memberRole.locator('option[value="archivist"]').waitFor({ state: 'attached' });
-    check('A new member starts as the specialist, offered every role the member may give',
-      await memberRole.inputValue() === 'specialist' && (await memberRole.locator('option').allInnerTexts()).join('|') === '体系专家|研究员|档案员');
+    const memberDialog = page.getByRole('dialog', { name: '添加成员' });
+    const memberRole = memberDialog.getByRole('combobox', { name: '角色', exact: true });
+    check('A new member starts as the specialist', (await memberRole.textContent())?.trim() === '体系专家');
     const presetMember = () => page.evaluate(() => JSON.parse(localStorage.getItem('taibu:collaboration-preset:alice') ?? '{}').members?.[0]);
-    await memberRole.selectOption('archivist');
-    await roleSettings.getByText('整理用户资料。 这个角色指定使用 复核模型，会员可用时代替上面的模型。', { exact: true }).waitFor();
+    await chooseSelect(memberDialog, '角色', '档案员');
+    await memberDialog.getByText('整理用户资料。 这个角色指定使用 复核模型，会员可用时代替上面的模型。', { exact: true }).waitFor();
+    await memberDialog.getByRole('button', { name: '保存' }).click();
+    await memberDialog.waitFor({ state: 'hidden' });
     check('A chosen role is kept in the preset', (await presetMember())?.profile === 'archivist');
-    await memberRole.selectOption('specialist');
+    await roleSettings.getByRole('button', { name: '编辑 Agent 1' }).click();
+    const editMemberDialog = page.getByRole('dialog', { name: '编辑成员' });
+    await chooseSelect(editMemberDialog, '角色', '体系专家');
+    await editMemberDialog.getByRole('button', { name: '保存' }).click();
+    await editMemberDialog.waitFor({ state: 'hidden' });
     check('Choosing the specialist again leaves the role out of the preset', !('profile' in (await presetMember() ?? { profile: 'missing' })));
     await roleSettings.getByRole('button', { name: '移除 Agent 1' }).click();
 
@@ -3809,7 +3926,8 @@ export async function run(existingPage, bundlePath) {
     check('An old account’s annual report cannot replace the current account’s report', await annual.getByText(String(11111 + new Date().getFullYear()), { exact: true }).count() === 0);
     const oldYear = holdNext('/api/annual-report', 'GET');
     await annual.getByRole('button', { name: '刷新年度报告' }).click(); await intercepted(oldYear);
-    await annual.locator('select').last().selectOption('2024');
+    await annual.getByRole('combobox', { name: '年份', exact: true }).last().click();
+    await page.getByRole('option', { name: '2024年', exact: true }).click({ force: true });
     await annual.getByText(String(22222 + 2024), { exact: true }).waitFor();
     oldYear.release(); await renderBarrier();
     check('A slower annual report response cannot overwrite a newer selected year', await annual.getByText(String(22222 + new Date().getFullYear()), { exact: true }).count() === 0);
@@ -3862,6 +3980,87 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => window.fixture.mount.cast(null));
 
     }
+
+    }
+
+    await page.evaluate(() => window.fixture.mount.uiPrimitives(true));
+    const primitives = page.getByTestId('ui-primitives');
+    await primitives.getByRole('button', { name: '打开组件对话框', exact: true }).waitFor();
+    await primitives.getByRole('button', { name: '保存中', exact: true }).click({ force: true });
+    check('Button loading prevents repeated activation and exposes busy state', await primitives.getByTestId('ui-button-clicks').textContent() === '0'
+      && await primitives.getByRole('button', { name: '保存中', exact: true }).getAttribute('aria-busy') === 'true');
+    const detail = primitives.getByRole('combobox', { name: '解读详细度', exact: true });
+    await detail.focus(); await page.keyboard.press('ArrowDown');
+    const detailPopup = page.getByRole('listbox');
+    await detailPopup.waitFor();
+    await page.waitForFunction(() => document.activeElement?.closest('[role="listbox"]') !== null, undefined, { timeout: 5000 }).catch(() => {});
+    await page.keyboard.press('End'); await page.keyboard.press('Enter');
+    await until(() => document.querySelector('[data-testid="ui-detail"]')?.textContent === 'full');
+    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '解读详细度', undefined, { timeout: 5000 }).catch(() => {});
+    check('Select supports keyboard navigation, selection and focus return', await primitives.getByTestId('ui-detail').textContent() === 'full'
+      && await detail.evaluate(element => element === document.activeElement));
+    const memorySwitch = primitives.getByRole('switch', { name: '任务助手记忆' });
+    await memorySwitch.focus(); await page.keyboard.press('Space');
+    check('Switch toggles from the keyboard', await memorySwitch.getAttribute('aria-checked') === 'true');
+    const generalTab = primitives.getByRole('tab', { name: '常规', exact: true });
+    await generalTab.focus(); await page.keyboard.press('ArrowRight');
+    check('Tabs use roving focus and automatic panel activation', await primitives.getByRole('tab', { name: '个性化', exact: true }).getAttribute('aria-selected') === 'true'
+      && await primitives.getByText('个性化面板', { exact: true }).isVisible());
+    const segmentGroup = primitives.getByRole('radiogroup', { name: '分段探针', exact: true });
+    await segmentGroup.getByRole('radio', { name: '简洁', exact: true }).focus();
+    await page.keyboard.press('ArrowRight');
+    check('SegmentedControl moves selection and focus with the arrow keys',
+      await segmentGroup.getByRole('radio', { name: '标准', exact: true }).getAttribute('aria-checked') === 'true'
+      && await segmentGroup.getByRole('radio', { name: '标准', exact: true }).evaluate(element => element === document.activeElement)
+      && await primitives.getByTestId('ui-segment').textContent() === 'standard');
+    const subscribeBox = primitives.getByRole('checkbox', { name: '订阅提醒', exact: true });
+    await subscribeBox.click();
+    check('Checkbox toggles through its shared role', await subscribeBox.getAttribute('aria-checked') === 'true');
+    await primitives.getByRole('button', { name: '打开组件菜单', exact: true }).click();
+    await page.getByRole('menu').waitFor(); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
+    check('Menu commands work from the keyboard', await primitives.getByTestId('ui-menu-action').textContent() === 'renamed');
+    await primitives.getByRole('button', { name: '复制回答', exact: true }).focus();
+    await page.getByRole('tooltip').filter({ hasText: '复制回答' }).waitFor();
+    await page.keyboard.press('Escape');
+    await page.getByRole('tooltip').waitFor({ state: 'detached' });
+    check('Tooltip opens on hover and dismisses with Escape', await page.getByRole('tooltip').count() === 0);
+    const dialogTrigger = primitives.getByRole('button', { name: '打开组件对话框', exact: true });
+    await dialogTrigger.click();
+    const componentDialog = page.getByRole('dialog', { name: '编辑技能', exact: true });
+    await componentDialog.waitFor();
+    await page.waitForFunction(() => document.activeElement?.closest('dialog')?.textContent?.includes('编辑技能') === true, undefined, { timeout: 5000 }).catch(() => {});
+    check('Dialog moves initial focus to the named field', await componentDialog.getByLabel('技能名称', { exact: true }).evaluate(element => element === document.activeElement));
+    await componentDialog.getByRole('combobox', { name: '弹层内详细度', exact: true }).click();
+    const nestedListbox = page.getByRole('listbox');
+    await nestedListbox.waitFor();
+    check('A select inside a dialog keeps its list in the dialog', await nestedListbox.evaluate(element => element.closest('dialog, [role="dialog"]') !== null));
+    await page.keyboard.press('Escape');
+    await nestedListbox.waitFor({ state: 'detached' });
+    check('Escape closes only a select nested inside a dialog', await componentDialog.isVisible() && await page.getByRole('listbox').count() === 0);
+    const dialogTooltipTrigger = componentDialog.getByRole('button', { name: '弹层内提示按钮', exact: true });
+    await dialogTooltipTrigger.focus();
+    const dialogTooltip = page.getByRole('tooltip').filter({ hasText: '弹层内提示' });
+    await dialogTooltip.waitFor();
+    check('A tooltip inside a dialog renders in the dialog, not behind its top layer',
+      await dialogTooltip.evaluate(element => element.closest('dialog, [role="dialog"]') !== null));
+    await page.keyboard.press('Escape');
+    await dialogTooltip.waitFor({ state: 'detached' });
+    await componentDialog.getByRole('button', { name: '弹层内菜单', exact: true }).click();
+    const nestedMenu = page.getByRole('menu');
+    await nestedMenu.waitFor();
+    check('A menu inside a dialog renders in the dialog, not behind its top layer',
+      await nestedMenu.evaluate(element => element.closest('dialog, [role="dialog"]') !== null));
+    await page.keyboard.press('Escape');
+    await nestedMenu.waitFor({ state: 'detached' });
+    check('Escape closes only the nested menu', await componentDialog.isVisible());
+    await componentDialog.getByRole('button', { name: '开始保存', exact: true }).click();
+    await page.keyboard.press('Escape');
+    check('Dialog remains open while a busy operation is pending', await componentDialog.isVisible());
+    await componentDialog.getByRole('button', { name: '完成保存', exact: true }).click();
+    await page.keyboard.press('Escape');
+    await componentDialog.waitFor({ state: 'detached' });
+    check('Dialog closes after busy and restores trigger focus', await dialogTrigger.evaluate(element => element === document.activeElement));
+    await page.evaluate(() => window.fixture.mount.uiPrimitives(false));
 
     check('No unhandled network requests escaped fixtures', blocked.length === 0);
     check('No browser runtime exceptions', browserErrors.length === 0);

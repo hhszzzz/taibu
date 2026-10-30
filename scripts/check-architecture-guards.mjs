@@ -749,6 +749,116 @@ mustNotMatchInTree(
   'only src/lib/db may import pg or kysely',
   (file) => /\.(ts|tsx)$/u.test(file) && !file.startsWith('src/lib/db/') && !file.startsWith('src/tests/'),
 );
+mustNotMatchInTree(
+  'src',
+  /from\s*['"]@base-ui\//u,
+  'business code should use the shared wrappers in src/components/ui, not Base UI directly',
+  (file) => /\.(ts|tsx)$/u.test(file) && !file.startsWith('src/components/ui/'),
+);
+mustNotMatchInTree(
+  'src',
+  /shadcn\/tailwind\.css|@\/styles\/shadcn/u,
+  'the shadcn default theme must not be imported; taibu semantic tokens stay the visual source',
+  (file) => /\.(ts|tsx|css)$/u.test(file),
+);
+mustNotMatchInTree(
+  'src',
+  /<select[\s>]/u,
+  'forms use the shared Select, not a native select',
+  (file) => /\.tsx$/u.test(file) && !file.startsWith('src/components/ui/'),
+);
+mustNotMatchInTree(
+  'src',
+  /<button[\s>]/u,
+  'buttons use the shared Button/IconButton/FilterChip, not a native button element',
+  (file) => /\.tsx$/u.test(file) && !file.startsWith('src/components/ui/'),
+);
+mustNotMatchInTree(
+  'src',
+  /<textarea[\s>]/u,
+  'multi-line fields use the shared Textarea, not a native textarea',
+  (file) => /\.tsx$/u.test(file) && !file.startsWith('src/components/ui/'),
+);
+mustNotMatchInTree(
+  'src',
+  /<input\b[^>]*type="(?:text|search|email|password|url|tel|number|date|time|datetime-local|month|week)"/u,
+  'form fields use the shared Input; only hidden file pickers keep a native input',
+  (file) => /\.tsx$/u.test(file) && !file.startsWith('src/components/ui/'),
+);
+mustNotMatchInTree(
+  'src',
+  /<input\b[^>]*type="(?:checkbox|radio)"/u,
+  'checkboxes and radios use the shared Checkbox/RadioGroup/FilterChip',
+  (file) => /\.tsx$/u.test(file) && !file.startsWith('src/components/ui/'),
+);
+mustNotMatchInTree(
+  'src',
+  /<Input\b[^>]*type="(?:checkbox|radio)"/u,
+  'checkboxes and radios use the shared Checkbox/RadioGroup/FilterChip, not Input',
+  (file) => /\.tsx$/u.test(file) && !file.startsWith('src/components/ui/'),
+);
+mustNotMatchInTree(
+  'src',
+  /from ['"]@\/components\/ui\/Modal['"]/u,
+  'business dialogs use the shared Dialog; Modal is its internal surface',
+  (file) => /\.tsx$/u.test(file) && !file.startsWith('src/components/ui/'),
+);
+// 原生弹层角色只由共享组件产生；MobileNav 是带焦点圈定的底部导航抽屉。
+const OVERLAY_ROLE_EXEMPT = new Set(['src/components/layout/MobileNav.tsx']);
+mustNotMatchInTree(
+  'src',
+  /role="(?:listbox|option)"/u,
+  'overlays use Dialog, Menu, Select or Popover instead of hand-rolled ARIA roles',
+  (file) => /\.tsx$/u.test(file) && !file.startsWith('src/components/ui/'),
+);
+mustNotMatchInTree(
+  'src',
+  /<(?:div|section|article|aside|form|main)\b[^>]*\brole="(?:dialog|alertdialog)"/u,
+  'overlays use Dialog, Menu, Select or Popover instead of hand-rolled ARIA roles',
+  (file) => /\.tsx$/u.test(file) && !file.startsWith('src/components/ui/') && !OVERLAY_ROLE_EXEMPT.has(file),
+);
+mustNotMatchInTree(
+  'src',
+  /settings-button|settings-icon-button/u,
+  'the retired settings button classes must not return; use Button or IconButton',
+  (file) => /\.(ts|tsx|css)$/u.test(file),
+);
+mustNotMatchInTree(
+  'src/components/ui',
+  /#[0-9a-fA-F]{3,8}\b|rgba?\(/u,
+  'shared components use semantic tokens, not literal colors',
+  (file) => /\.tsx$/u.test(file) && file !== 'src/components/ui/ThemeProvider.tsx',
+);
+// 图表、分享卡、品牌图标与浏览器主题色需要固定颜色，其余 TSX 一律使用语义令牌。
+const COLOR_EXEMPT = (file) => file.startsWith('src/components/visualization/')
+  || [
+    'src/components/fortune/ShareCard.tsx',
+    'src/components/auth/OAuthButtons.tsx',
+    'src/app/layout.tsx',
+    'src/components/ui/ThemeProvider.tsx',
+  ].includes(file);
+mustNotMatchInTree(
+  'src',
+  /(?:amber|yellow|orange|red|green|emerald|purple|indigo|blue|sky|teal|rose|pink|violet|fuchsia|lime|cyan)-(?:[3-9]\d{2}|\d{3})\b|#[0-9a-fA-F]{6}\b/u,
+  'general UI uses semantic tokens, not the Tailwind palette or literal hex colors',
+  (file) => /\.tsx$/u.test(file) && !COLOR_EXEMPT(file),
+);
+mustNotMatchInTree(
+  'src',
+  /rgba?\(/u,
+  'general UI uses shadow tokens, not literal rgb/rgba colors',
+  (file) => /\.tsx$/u.test(file) && !COLOR_EXEMPT(file),
+);
+const PORTAL_ALLOWED = new Set([
+  'src/components/ui/Modal.tsx',
+  'src/components/chat/QuoteSelection.tsx',
+]);
+mustNotMatchInTree(
+  'src',
+  /createPortal\s*\(/u,
+  'overlays use Dialog/Select/Menu/Popover/Tooltip; direct portals need a reviewed exception',
+  (file) => /\.(ts|tsx)$/u.test(file) && !PORTAL_ALLOWED.has(file),
+);
 for (const file of walk('src/lib/db')) {
   if (!file.endsWith('.server.ts')) continue;
   mustMatch(file, /^\s*import\s+['"]server-only['"];?/u, 'db server modules must import server-only first');

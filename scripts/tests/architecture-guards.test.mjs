@@ -34,6 +34,23 @@ test('extracted use-case and browser DTO dependencies fail closed', (t) => {
     ['src/lib/server/chat/use-case.ts', "const client = require('@/lib/api-utils');"],
     ['src/lib/data-sources/types.ts', "import type { SupabaseClient } from '@supabase/supabase-js';"],
     ['src/lib/knowledge-base/search.ts', 'getSystemAdminClient();'],
+    ['src/components/admin/DirectPrimitive.tsx', "import { Select } from '@base-ui/react/select';"],
+    ['src/app/bad-theme.css', "@import 'shadcn/tailwind.css';"],
+    ['src/components/settings/BadSelect.tsx', 'export const Bad = () => <select />;'],
+    ['src/components/chat/BadSelect.tsx', 'export const Bad = () => <select aria-label="x" />;'],
+    ['src/components/chat/BadButton.tsx', 'export const Bad = () => <button type="button">x</button>;'],
+    ['src/components/chat/BadTextarea.tsx', 'export const Bad = () => <textarea />;'],
+    ['src/components/chat/BadTextInput.tsx', 'export const Bad = () => <input type="text" />;'],
+    ['src/components/chat/BadCheckbox.tsx', 'export const Bad = () => <input type="checkbox" />;'],
+    ['src/components/chat/BadRgba.tsx', 'export const Bad = () => <div className="shadow-[0_1px_2px_rgba(0,0,0,0.2)]" />;'],
+    ['src/components/chat/BadInputCheckbox.tsx', 'export const Bad = () => <Input type="checkbox" />;'],
+    ['src/components/chat/BadListbox.tsx', 'export const Bad = () => <div role="listbox" aria-label="x" />;'],
+    ['src/components/chat/BadModal.tsx', "import { Modal } from '@/components/ui/Modal'; export const Bad = () => <Modal open onClose={() => {}} labelledBy=\"x\">x</Modal>;"],
+    ['src/components/chat/BadPortal.tsx', "import { createPortal } from 'react-dom'; export const Bad = () => createPortal(null, document.body);"],
+    ['src/components/ui/BadColor.tsx', 'export const Bad = () => <div className="bg-[#123456]" />;'],
+    ['src/components/community/BadColor.tsx', 'export const Bad = () => <div className="text-purple-500" />;'],
+    ['src/components/checkin/BadColor.tsx', 'export const Bad = () => <div className="text-amber-500" />;'],
+    ['src/components/checkin/BadHex.tsx', 'export const Bad = () => <div className="bg-[#abcdef]" />;'],
   ];
   for (const [relativePath, source] of cases) {
     const target = path.join(fixture, relativePath);
@@ -54,6 +71,20 @@ test('extracted use-case and browser DTO dependencies fail closed', (t) => {
   assert.match(result.stderr, /extracted use cases must keep HTTP/);
   assert.match(result.stderr, /browser-safe data contracts/);
   assert.match(result.stderr, /knowledge search must retain the caller identity/);
+  assert.match(result.stderr, /business code should use the shared wrappers/);
+  assert.match(result.stderr, /shadcn default theme must not be imported/);
+  assert.match(result.stderr, /forms use the shared Select/);
+  assert.match(result.stderr, /buttons use the shared Button/);
+  assert.match(result.stderr, /multi-line fields use the shared Textarea/);
+  assert.match(result.stderr, /form fields use the shared Input/);
+  assert.match(result.stderr, /checkboxes and radios use the shared/);
+  assert.match(result.stderr, /business dialogs use the shared Dialog/);
+  assert.match(result.stderr, /instead of hand-rolled ARIA roles/);
+  assert.match(result.stderr, /not Input/);
+  assert.match(result.stderr, /direct portals need a reviewed exception/);
+  assert.match(result.stderr, /shared components use semantic tokens/);
+  assert.match(result.stderr, /general UI uses semantic tokens/);
+  assert.match(result.stderr, /general UI uses shadow tokens/);
 });
 
 function runBoundaryFixture(t, files) {

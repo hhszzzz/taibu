@@ -41,5 +41,5 @@ test('an address without a host is flagged only after the field is left', () => 
         onEmailChange: () => {},
     }));
     assert.doesNotMatch(typing, /auth-field-error/);
-    assert.doesNotMatch(typing, /aria-invalid/);
+    assert.doesNotMatch(typing, /aria-invalid="/);
 });

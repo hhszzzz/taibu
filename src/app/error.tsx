@@ -5,6 +5,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { Button } from '@/components/ui/Button';
 
 export default function GlobalError({
     error,
@@ -20,19 +21,14 @@ export default function GlobalError({
     return (
         <div className="flex min-h-[60vh] items-center justify-center bg-background px-4">
             <div className="max-w-sm w-full text-center">
-                <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-red-500/10 flex items-center justify-center">
-                    <span className="text-2xl text-red-500">!</span>
+                <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-danger/10 flex items-center justify-center">
+                    <span className="text-2xl text-danger">!</span>
                 </div>
                 <h2 className="text-lg font-semibold mb-2">出了点问题</h2>
                 <p className="text-sm text-foreground-secondary mb-6">
                     {error.message || '页面加载时发生了意外错误'}
                 </p>
-                <button
-                    onClick={reset}
-                    className="px-6 py-2.5 rounded-xl bg-accent text-on-accent text-sm font-medium hover:bg-accent/90 transition-colors"
-                >
-                    重试
-                </button>
+                <Button size="lg" className="px-6" onClick={reset}>重试</Button>
             </div>
         </div>
     );

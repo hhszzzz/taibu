@@ -13,6 +13,9 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
 import { Plus, Search, X } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { IconButton } from '@/components/ui/IconButton';
 import { useToast } from '@/components/ui/Toast';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { newChatHref, useCurrentChatMode } from '@/lib/chat/mode-control-store';
@@ -141,6 +144,7 @@ export function MobileNav() {
     const { pins, togglePin } = useMobileNavPins();
     const { showToast } = useToast();
     const closeButtonRef = useRef<HTMLButtonElement>(null);
+    const drawerRef = useRef<HTMLDivElement>(null);
     const moreButtonRef = useRef<HTMLButtonElement>(null);
 
     const pinnedItem = useMemo(
@@ -199,6 +203,16 @@ export function MobileNav() {
         closeButtonRef.current?.focus({ preventScroll: true });
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') closeDrawer();
+            if (event.key !== 'Tab') return;
+            const focusable = [...(drawerRef.current?.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]') ?? [])]
+                .filter(element => element.tabIndex >= 0 && !element.matches(':disabled') && element.getClientRects().length > 0);
+            const first = focusable[0];
+            const last = focusable.at(-1);
+            if (!first) return;
+            if (!focusable.includes(document.activeElement as HTMLElement) || (event.shiftKey ? document.activeElement === first : document.activeElement === last)) {
+                event.preventDefault();
+                (event.shiftKey ? last : first)?.focus();
+            }
         };
         document.addEventListener('keydown', handleKeyDown);
         const moreButton = moreButtonRef.current;
@@ -263,13 +277,7 @@ export function MobileNav() {
             <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-background/95 backdrop-blur-md lg:hidden">
                 <div className="flex items-center justify-between px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
                     <span className="text-xs text-foreground-secondary">导航状态加载失败</span>
-                    <button
-                        type="button"
-                        onClick={() => { void refreshFeatures(); }}
-                        className="rounded-md bg-foreground px-3 py-1.5 text-xs text-background"
-                    >
-                        重试
-                    </button>
+                    <Button size="xs" onClick={() => { void refreshFeatures(); }}>重试</Button>
                 </div>
             </nav>
         );
@@ -301,12 +309,13 @@ export function MobileNav() {
 
             {/* 全部占术抽屉：visibility 只在收起时随动画延后切换，展开时立即可见以便聚焦 */}
             <div
+                ref={drawerRef}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="mobile-all-divinations-title"
                 aria-hidden={!isDrawerOpen}
                 inert={!isDrawerOpen}
-                className={`fixed inset-x-0 bottom-0 top-[calc(var(--mobile-header-height)+1.5rem)] z-50 mx-auto flex max-w-[640px] flex-col overflow-hidden rounded-t-[22px] bg-surface shadow-[0_-8px_30px_rgba(11, 11, 11,0.12)] duration-300 ease-out lg:hidden ${isDrawerOpen ? 'visible translate-y-0 transition-transform' : 'invisible translate-y-full transition-[transform,visibility]'}`}
+                className={`fixed inset-x-0 bottom-0 top-[calc(var(--mobile-header-height)+1.5rem)] z-50 mx-auto flex max-w-[640px] flex-col overflow-hidden rounded-t-[22px] bg-surface shadow-[var(--shadow-lg)] duration-300 ease-out lg:hidden ${isDrawerOpen ? 'visible translate-y-0 transition-transform' : 'invisible translate-y-full transition-[transform,visibility]'}`}
             >
                 <span aria-hidden className="mt-2 h-1 w-9 shrink-0 self-center rounded-full bg-foreground/15" />
                 <div className="flex shrink-0 items-center justify-between pl-5 pr-2 pt-2">
@@ -318,22 +327,21 @@ export function MobileNav() {
                             已固定
                         </p>
                     </div>
-                    <button
+                    <IconButton
                         ref={closeButtonRef}
-                        type="button"
+                        label="关闭"
                         onClick={closeDrawer}
-                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-foreground/80 transition-colors hover:bg-background-secondary"
-                        aria-label="关闭"
+                        className="h-11 w-11 rounded-xl text-foreground/80"
                     >
                         <X className="h-5 w-5" strokeWidth={1.7} />
-                    </button>
+                    </IconButton>
                 </div>
 
                 <div className="mx-4 mt-3 flex h-10 shrink-0 items-center rounded-xl bg-background-secondary pl-3 pr-1 text-foreground-tertiary focus-within:ring-2 focus-within:ring-accent/40">
                     <label className="flex h-full min-w-0 flex-1 items-center gap-2">
                         <Search className="h-[18px] w-[18px] shrink-0" strokeWidth={1.7} aria-hidden />
                         <span className="sr-only">搜索占术</span>
-                        <input
+                        <Input
                             type="search"
                             value={query}
                             onChange={event => setQuery(event.target.value)}
@@ -344,14 +352,13 @@ export function MobileNav() {
                         />
                     </label>
                     {isSearching && (
-                        <button
-                            type="button"
+                        <IconButton
+                            label="清除搜索"
                             onClick={() => setQuery('')}
-                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full hover:text-foreground"
-                            aria-label="清除搜索"
+                            className="shrink-0"
                         >
                             <X className="h-4 w-4" strokeWidth={1.7} />
-                        </button>
+                        </IconButton>
                     )}
                 </div>
 
@@ -430,7 +437,7 @@ export function MobileNav() {
 
                     {/* 更多按钮 */}
                     <li>
-                        <button
+                        <Button unstyled
                             ref={moreButtonRef}
                             type="button"
                             onClick={() => setIsDrawerOpen(true)}
@@ -441,7 +448,7 @@ export function MobileNav() {
                         >
                             <Plus className="h-5 w-5" />
                             <span className="mt-1 text-[10px] font-medium">更多</span>
-                        </button>
+                        </Button>
                     </li>
                 </ul>
             </nav>

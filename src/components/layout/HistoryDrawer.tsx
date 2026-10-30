@@ -13,6 +13,7 @@ import Link from 'next/link';
 import { History, ChevronLeft, Calendar, X } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
+import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { HISTORY_SUMMARY_DELETED_EVENT } from '@/lib/browser-api';
 import { applyHistoryRestorePayload, loadHistoryRestore } from '@/lib/history/client';
@@ -162,7 +163,7 @@ export function HistoryDrawer({ type, className = '' }: HistoryDrawerProps) {
                 `}
                 style={{
                     transform: isOpen ? 'translateX(0)' : `translateX(${PANEL_WIDTH}px)`,
-                    filter: 'drop-shadow(-4px 0 8px rgba(0,0,0,0.05))'
+                    filter: 'drop-shadow(-4px 0 8px var(--shadow-color))'
                 }}
             >
                 {/* 
@@ -179,7 +180,7 @@ export function HistoryDrawer({ type, className = '' }: HistoryDrawerProps) {
                     </svg>
 
                     {/* 按钮主体 */}
-                    <button
+                    <Button unstyled
                         className={`
                             relative
                             flex items-center justify-center
@@ -201,7 +202,7 @@ export function HistoryDrawer({ type, className = '' }: HistoryDrawerProps) {
                                 <History className="w-5 h-5" />
                             )}
                         </div>
-                    </button>
+                    </Button>
 
                     {/* 下方反向圆角 */}
                     <svg width="16" height="16" className="relative -mt-[1px] z-30 pointer-events-none">
@@ -253,15 +254,9 @@ export function HistoryDrawer({ type, className = '' }: HistoryDrawerProps) {
                                 ))}
                             </div>
                         ) : errorMessage && items.length === 0 ? (
-                            <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-md border border-red-200 bg-red-50 px-4 text-center text-sm text-red-600">
+                            <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-md border border-danger/30 bg-danger/5 px-4 text-center text-sm text-danger">
                                 <span>{errorMessage}</span>
-                                <button
-                                    type="button"
-                                    onClick={() => { void loadHistory(); }}
-                                    className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-on-accent transition-colors hover:bg-accent/90"
-                                >
-                                    重试
-                                </button>
+                                <Button size="xs" onClick={() => { void loadHistory(); }}>重试</Button>
                             </div>
                         ) : items.length === 0 ? (
                             <div className="flex flex-col items-center justify-center h-64 text-foreground-secondary gap-3">
@@ -271,7 +266,7 @@ export function HistoryDrawer({ type, className = '' }: HistoryDrawerProps) {
                         ) : (
                             <div className="space-y-1.5">
                                 {errorMessage && (
-                                    <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
+                                    <div className="rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-xs text-danger">
                                         {errorMessage}
                                     </div>
                                 )}
@@ -300,9 +295,9 @@ export function HistoryDrawer({ type, className = '' }: HistoryDrawerProps) {
                                                     {item.subType && (
                                                         <span className={`
                                                             text-[10px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-tight
-                                                            ${item.subType === '情侣' ? 'bg-rose-50 text-rose-600' :
-                                                                item.subType === '商业' ? 'bg-blue-50 text-blue-600' :
-                                                                    item.subType === '亲子' ? 'bg-amber-50 text-amber-600' :
+                                                            ${item.subType === '情侣' ? 'bg-fire-soft text-fire' :
+                                                                item.subType === '商业' ? 'bg-water-soft text-water' :
+                                                                    item.subType === '亲子' ? 'bg-earth-soft text-earth' :
                                                                         'bg-background-secondary text-foreground-secondary'}
                                                         `}>
                                                             {item.subType}
@@ -337,13 +332,9 @@ export function HistoryDrawer({ type, className = '' }: HistoryDrawerProps) {
                                                 <SoundWaveLoader variant="inline" />
                                             </div>
                                         ) : appendError ? (
-                                            <button
-                                                type="button"
-                                                onClick={() => { void loadHistory({ append: true, offset: nextOffset ?? 0 }); }}
-                                                className="rounded-md border border-border px-3 py-1.5 text-xs text-foreground-secondary transition-colors hover:bg-background-secondary"
-                                            >
+                                            <Button variant="secondary" size="xs" onClick={() => { void loadHistory({ append: true, offset: nextOffset ?? 0 }); }}>
                                                 重试加载更多
-                                            </button>
+                                            </Button>
                                         ) : (
                                             <div className="text-xs text-foreground-secondary">
                                                 继续下滑加载更多

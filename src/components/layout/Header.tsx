@@ -8,7 +8,7 @@
  */
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import {
     User,
@@ -19,6 +19,9 @@ import {
     Sun,
     Megaphone,
 } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
+import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/ui/Menu';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { useTheme } from '@/components/ui/ThemeProvider';
 import { AuthModal } from '@/components/auth/AuthModal';
@@ -129,8 +132,6 @@ export function Header() {
     const router = useRouter();
     const { theme, toggleTheme } = useTheme();
     const [showAuthModal, setShowAuthModal] = useState(false);
-    const [menuOpen, setMenuOpen] = useState(false);
-    const menuRef = useRef<HTMLDivElement>(null);
     const { user } = useSessionSafe();
     const { openAnnouncementCenter } = useAnnouncementCenterSafe();
     const headerMenuContext = useHeaderMenuSafe();
@@ -175,19 +176,6 @@ export function Header() {
         router.back();
     };
 
-    // 点击外部关闭菜单
-    useEffect(() => {
-        const handleClickOutside = (e: MouseEvent) => {
-            if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-                setMenuOpen(false);
-            }
-        };
-        if (menuOpen) {
-            document.addEventListener('mousedown', handleClickOutside);
-        }
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [menuOpen]);
-
     return (
         <>
             <header
@@ -201,14 +189,13 @@ export function Header() {
             >
                 {/* 移动端：返回键(子页面) + 居中标题 + 三点菜单 */}
                 {isSubPage ? (
-                    <button
+                    <IconButton
+                        label="返回上一页"
                         onClick={handleBack}
-                        className="flex h-11 w-11 items-center justify-center rounded-full text-foreground transition-colors hover:bg-background-secondary lg:hidden"
-                        type="button"
-                        aria-label="返回上一页"
+                        className="h-11 w-11 rounded-full text-foreground lg:hidden"
                     >
-                        <ChevronLeft className="h-[22px] w-[22px]" strokeWidth={1.8} />
-                    </button>
+                        <ChevronLeft className="h-[22px] w-[22px]" strokeWidth={1.8} aria-hidden="true" />
+                    </IconButton>
                 ) : (
                     <div className="w-11 lg:hidden" />
                 )}
@@ -217,77 +204,32 @@ export function Header() {
                     {pageTitle}
                 </h1>
 
-                <div className="relative lg:hidden" ref={menuRef}>
-                    <button
-                        onClick={() => setMenuOpen(!menuOpen)}
-                        className="flex h-11 w-11 items-center justify-center rounded-full text-foreground transition-colors hover:bg-background-secondary"
-                        type="button"
-                        aria-label="打开菜单"
-                        aria-expanded={menuOpen}
-                    >
-                        <MoreHorizontal className="h-[22px] w-[22px]" strokeWidth={1.8} />
-                    </button>
-
-                    {menuOpen && (
-                        <div className="absolute right-0 top-full mt-1 w-44 bg-background border border-border rounded-xl shadow-lg py-1 z-50">
-                            {!isAdminContext && (
-                                <>
-                                    <button
-                                        onClick={() => {
-                                            openAnnouncementCenter({
-                                                tab: user ? 'notifications' : 'announcements',
-                                            });
-                                            setMenuOpen(false);
-                                        }}
-                                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-background-secondary transition-colors"
-                                    >
-                                        <Megaphone className="w-4 h-4" />
-                                        {announcementMenuLabel}
-                                    </button>
-                                    <div className="my-1 border-t border-border" />
-                                </>
-                            )}
+                <div className="lg:hidden">
+                    <Menu>
+                        <MenuTrigger className="inline-flex h-11 w-11 items-center justify-center rounded-full text-foreground" aria-label="打开菜单">
+                            <MoreHorizontal className="h-[22px] w-[22px]" strokeWidth={1.8} aria-hidden="true" />
+                        </MenuTrigger>
+                        <MenuContent align="end" className="w-44">
+                            {!isAdminContext && <>
+                                <MenuItem className="gap-3 px-4 py-2.5" onClick={() => openAnnouncementCenter({ tab: user ? 'notifications' : 'announcements' })}>
+                                    <Megaphone className="w-4 h-4" aria-hidden="true" />
+                                    {announcementMenuLabel}
+                                </MenuItem>
+                                <MenuSeparator />
+                            </>}
                             {/* 页面自定义菜单项 */}
                             {customMenuItems.map((item) => (
-                                <button
-                                    key={item.id}
-                                    onClick={() => {
-                                        item.onClick();
-                                        setMenuOpen(false);
-                                    }}
-                                    disabled={item.disabled}
-                                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-background-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
+                                <MenuItem key={item.id} disabled={item.disabled} className="gap-3 px-4 py-2.5" onClick={item.onClick}>
                                     {item.icon}
                                     {item.label}
-                                </button>
+                                </MenuItem>
                             ))}
-                            {/* 分隔线 */}
-                            {customMenuItems.length > 0 && (
-                                <div className="my-1 border-t border-border" />
-                            )}
-                            {/* 主题切换 */}
-                            <button
-                                onClick={() => {
-                                    toggleTheme();
-                                    setMenuOpen(false);
-                                }}
-                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-background-secondary transition-colors"
-                            >
-                                {theme === 'dark' ? (
-                                    <>
-                                        <Sun className="w-4 h-4" />
-                                        切换到浅色
-                                    </>
-                                ) : (
-                                    <>
-                                        <Moon className="w-4 h-4" />
-                                        切换到深色
-                                    </>
-                                )}
-                            </button>
-                        </div>
-                    )}
+                            {customMenuItems.length > 0 && <MenuSeparator />}
+                            <MenuItem className="gap-3 px-4 py-2.5" onClick={toggleTheme}>
+                                {theme === 'dark' ? <><Sun className="w-4 h-4" aria-hidden="true" />切换到浅色</> : <><Moon className="w-4 h-4" aria-hidden="true" />切换到深色</>}
+                            </MenuItem>
+                        </MenuContent>
+                    </Menu>
                 </div>
 
                 {/* 桌面端占位 */}
@@ -315,19 +257,10 @@ export function Header() {
                         </SettingsCenterLink>
                     ) : (
                         // 未登录：显示登录按钮
-                        <button
-                            onClick={() => setShowAuthModal(true)}
-                            className="
-                                flex items-center gap-1.5 px-3 py-1.5 rounded-lg
-                                text-sm font-medium
-                                bg-accent text-on-accent
-                                hover:bg-accent/90
-                                transition-all duration-200
-                            "
-                        >
-                            <LogIn className="w-4 h-4" />
+                        <Button size="sm" onClick={() => setShowAuthModal(true)}>
+                            <LogIn className="w-4 h-4" aria-hidden="true" />
                             <span className="hidden sm:inline">登录</span>
-                        </button>
+                        </Button>
                     )}
                 </div>
             </header>

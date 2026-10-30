@@ -11,17 +11,19 @@
 'use client';
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { Check, ChevronDown, ChevronRight, ChevronUp, Plus, SlidersHorizontal } from 'lucide-react';
+import { ChevronDown, ChevronRight, ChevronUp, Plus, SlidersHorizontal } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
-import { FloatingPanel } from '@/components/ui/FloatingPanel';
+import { Button } from '@/components/ui/Button';
 import type { ConversationListItem, ConversationSourceType } from '@/types';
 import { useConversationList } from '@/lib/chat/ConversationListContext';
 import { ConversationGroup } from '@/components/chat/sidebar/ConversationGroup';
 import '@/components/chat/sidebar/chat-sidebar.css';
 import { SOURCE_TYPE_CONFIG, SOURCE_TYPE_ORDER } from '@/lib/chat/conversation-groups';
 import { resolveConversationRemainingTargetCount } from '@/lib/chat/conversation-list-window';
-import { ConversationActions } from '@/components/chat/sidebar/ConversationActions';
+import { ConversationMenu } from '@/components/chat/sidebar/ConversationActions';
+import { Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger, createMenuHandle, type MenuHandle } from '@/components/ui/Menu';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { ConversationMarker, ConversationNavItem } from '@/components/chat/sidebar/ConversationNavItem';
 import { formatConversationMenuTitle } from '@/lib/chat/conversation-title-display';
 import { loadPinnedConversations, togglePinnedConversation } from '@/lib/chat/pinned-conversations';
@@ -40,44 +42,49 @@ export function RecentsHead({ userId, recentsOpen, onToggleRecents, onToggleBloc
     const [open, setOpen] = useState(false);
     const anchorRef = useRef<HTMLButtonElement>(null);
     const update = (patch: Partial<typeof preferences>) => saveConversationListPreferences(userId, { ...preferences, ...patch });
-    const item = (label: string, checked: boolean, onClick: () => void) => (
-        <button key={label} type="button" role="menuitemradio" aria-checked={checked} className="chat-recents-menu-item" onClick={onClick}>
-            <span>{label}</span>{checked && <Check size={14} aria-hidden="true" />}
-        </button>
+    const item = (label: string, value: string) => (
+        <MenuRadioItem key={value} value={value} className="chat-recents-menu-item"><span>{label}</span></MenuRadioItem>
     );
     return <>
         <div className="chat-recents-head">
             {/* claude 组头：名称本身就是折叠开关，箭头在名称左侧；右侧是「分组和排序」与「新建会话」。 */}
-            <button type="button" className="chat-recents-toggle" aria-expanded={recentsOpen}
+            <Button unstyled type="button" className="chat-recents-toggle" aria-expanded={recentsOpen}
                 title={onToggleBlocked ? '当前会话在列表中，先收起会隐藏它' : undefined}
                 onClick={() => { if (onToggleBlocked) return; onToggleRecents(); }}>
                 <span>最近使用</span>
                 <span className="chat-recents-caret" aria-hidden="true">{recentsOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</span>
-            </button>
+            </Button>
             <div className="chat-recents-tools">
-                <button ref={anchorRef} type="button" className="chat-recents-tool" aria-label="筛选和分组最近对话" title="分组和排序"
-                    aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(value => !value)}><SlidersHorizontal size={14} aria-hidden="true" /></button>
-                <button type="button" className="chat-recents-tool" aria-label="新建会话" title="新建会话"
-                    onClick={() => { void handleNewChat(); router.push(newChatHref(currentMode)); }}><Plus size={14} aria-hidden="true" /></button>
+                <Menu open={open} onOpenChange={setOpen}>
+                    <MenuTrigger ref={anchorRef} className="chat-recents-tool" aria-label="筛选和分组最近对话" title="分组和排序">
+                        <SlidersHorizontal size={14} aria-hidden="true" />
+                    </MenuTrigger>
+                    <MenuContent align="end" className="chat-recents-menu">
+                        <MenuGroup>
+                            <MenuLabel>排序方式</MenuLabel>
+                            <MenuRadioGroup value={preferences.sort} onValueChange={value => update({ sort: value as typeof preferences.sort })}>
+                                {item(CONVERSATION_SORT_LABELS.recent, 'recent')}
+                                {item(CONVERSATION_SORT_LABELS.title, 'title')}
+                            </MenuRadioGroup>
+                        </MenuGroup>
+                        <MenuGroup>
+                            <MenuLabel>显示</MenuLabel>
+                            <MenuRadioGroup value={preferences.display} onValueChange={value => update({ display: value as typeof preferences.display })}>
+                                {item(CONVERSATION_DISPLAY_LABELS.all, 'all')}
+                                {item(CONVERSATION_DISPLAY_LABELS.pinned, 'pinned')}
+                                {item(CONVERSATION_DISPLAY_LABELS.running, 'running')}
+                            </MenuRadioGroup>
+                        </MenuGroup>
+                        <MenuSeparator />
+                        <MenuItem className="chat-recents-menu-item" onClick={() => saveConversationListPreferences(userId, CONVERSATION_LIST_DEFAULTS)}>
+                            <span>恢复默认设置</span>
+                        </MenuItem>
+                    </MenuContent>
+                </Menu>
+                <Button unstyled type="button" className="chat-recents-tool" aria-label="新建会话" title="新建会话"
+                    onClick={() => { void handleNewChat(); router.push(newChatHref(currentMode)); }}><Plus size={14} aria-hidden="true" /></Button>
             </div>
         </div>
-        <FloatingPanel open={open} anchorRef={anchorRef} onClose={() => setOpen(false)} label="筛选和分组最近对话" className="chat-recents-menu">
-            <div className="chat-recents-menu-section">
-                <p>排序方式</p>
-                {item(CONVERSATION_SORT_LABELS.recent, preferences.sort === 'recent', () => update({ sort: 'recent' }))}
-                {item(CONVERSATION_SORT_LABELS.title, preferences.sort === 'title', () => update({ sort: 'title' }))}
-            </div>
-            <div className="chat-recents-menu-section">
-                <p>显示</p>
-                {item(CONVERSATION_DISPLAY_LABELS.all, preferences.display === 'all', () => update({ display: 'all' }))}
-                {item(CONVERSATION_DISPLAY_LABELS.pinned, preferences.display === 'pinned', () => update({ display: 'pinned' }))}
-                {item(CONVERSATION_DISPLAY_LABELS.running, preferences.display === 'running', () => update({ display: 'running' }))}
-            </div>
-            <div className="chat-recents-menu-divider" role="separator" />
-            <button type="button" role="menuitem" className="chat-recents-menu-item" onClick={() => saveConversationListPreferences(userId, CONVERSATION_LIST_DEFAULTS)}>
-                <span>恢复默认设置</span>
-            </button>
-        </FloatingPanel>
     </>;
 }
 
@@ -111,9 +118,8 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
     } = useConversationList();
 
     const [collapsedGroups, setCollapsedGroups] = useState<Set<ConversationSourceType>>(new Set());
-    const [actionConv, setActionConv] = useState<ConversationListItem | null>(null);
-    const [actionView, setActionView] = useState<'menu' | 'rename' | 'delete'>('menu');
-    const actionAnchorRef = useRef<HTMLElement>(null);
+    const [conversationMenu] = useState<MenuHandle<ConversationListItem>>(() => createMenuHandle<ConversationListItem>());
+    const [pendingDelete, setPendingDelete] = useState<ConversationListItem | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editTitle, setEditTitle] = useState('');
     const [deleteLoading, setDeleteLoading] = useState(false);
@@ -223,23 +229,11 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
     }, []);
 
     // Action menu helpers
-    const closeActionSheet = useCallback(() => {
-        setActionConv(null);
-        setActionView('menu');
+    const startInlineRename = useCallback((conv: ConversationListItem) => {
+        if (conv.sourceType !== 'chat') return;
+        setEditingId(conv.id);
+        setEditTitle(conv.title);
     }, []);
-
-    const openActionSheet = useCallback((conv: ConversationListItem, e: React.MouseEvent) => {
-        actionAnchorRef.current = e.currentTarget as HTMLElement;
-        setActionConv(conv);
-        setActionView('menu');
-    }, []);
-
-    const startInlineRename = useCallback(() => {
-        if (!actionConv || actionConv.sourceType !== 'chat') return;
-        setEditingId(actionConv.id);
-        setEditTitle(actionConv.title);
-        closeActionSheet();
-    }, [actionConv, closeActionSheet]);
 
     const saveRename = useCallback(() => {
         if (editingId && editTitle.trim()) {
@@ -255,14 +249,14 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
     }, []);
 
     const confirmDelete = useCallback(() => {
-        if (!actionConv) return Promise.resolve();
+        if (!pendingDelete) return Promise.resolve();
 
         setDeleteLoading(true);
-        return handleDeleteConversation(actionConv.id).finally(() => {
+        return handleDeleteConversation(pendingDelete.id).finally(() => {
             setDeleteLoading(false);
-            closeActionSheet();
+            setPendingDelete(null);
         });
-    }, [actionConv, closeActionSheet, handleDeleteConversation]);
+    }, [pendingDelete, handleDeleteConversation]);
 
     const getScrollContainer = useCallback(() => {
         const listViewport = listViewportRef.current;
@@ -380,20 +374,19 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
                     <div className="chat-nav-pinned-block" ref={pinnedBlockRef}>
                         <section className="chat-nav-group" aria-label="已置顶">
                             <div className="chat-recents-head chat-pinned-head">
-                                <button type="button" className="chat-recents-toggle" aria-expanded={pinnedOpen}
+                                <Button unstyled type="button" className="chat-recents-toggle" aria-expanded={pinnedOpen}
                                     onClick={() => setPinnedOpen(value => !value)}>
                                     <span>已置顶</span>
                                     <span className="chat-recents-caret" aria-hidden="true">{pinnedOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</span>
-                                </button>
+                                </Button>
                             </div>
                             {pinnedOpen && pinnedConversations.map(conv => (
                                 <ConversationNavItem
                                     key={conv.id}
                                     conv={conv}
                                     isActive={activeId === conv.id}
-                                    isActionActive={actionConv?.id === conv.id}
                                     marker={markers?.get(conv.id)}
-                                    onOpenAction={openActionSheet}
+                                    menu={conversationMenu}
                                     isEditing={editingId === conv.id}
                                     editTitle={editingId === conv.id ? editTitle : ''}
                                     onEditTitleChange={editingId === conv.id ? setEditTitle : undefined}
@@ -413,15 +406,12 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
                 ) : null}
                 <div ref={listViewportRef} className={`relative space-y-0.5 ${wantsDate ? 'min-h-0 flex-1 overflow-y-auto' : ''}`}>
                     {conversationListError && !hasLoadedConversations && !conversationsLoading ? (
-                        <div className="rounded-md border border-[#ead9bf] bg-[#fcf8ee] px-3 py-3 text-xs text-[#946c21]">
+                        <div className="rounded-md border border-warning/30 bg-warning/5 px-3 py-3 text-xs text-warning">
                             <div>{conversationListError}</div>
-                            <button
-                                type="button"
-                                onClick={() => { void retryConversationListLoad(); }}
-                                className="mt-2 rounded-md px-2 py-1 font-medium text-[#7c5f1c] transition-colors hover:bg-[#f4ead3]"
-                            >
+                            <Button variant="ghost" size="xs" className="mt-2 text-warning hover:bg-warning/10 hover:text-warning"
+                                onClick={() => { void retryConversationListLoad(); }}>
                                 重试
-                            </button>
+                            </Button>
                         </div>
                     ) : !hasLoadedConversations || conversationsLoading ? (
                         <div className="flex flex-col items-center justify-center text-foreground-secondary text-xs py-3 gap-1">
@@ -450,15 +440,12 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
                     ) : (
                         <>
                             {conversationListError ? (
-                                <div className="mb-2 flex items-center justify-between gap-3 rounded-md border border-[#ead9bf] bg-[#fcf8ee] px-3 py-2 text-xs text-[#946c21]">
+                                <div className="mb-2 flex items-center justify-between gap-3 rounded-md border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-warning">
                                     <span className="min-w-0 flex-1">{conversationListError}</span>
-                                    <button
-                                        type="button"
-                                        onClick={() => { void retryConversationListLoad(); }}
-                                        className="shrink-0 rounded-md px-2 py-1 font-medium text-[#7c5f1c] transition-colors hover:bg-[#f4ead3]"
-                                    >
+                                    <Button variant="ghost" size="xs" className="shrink-0 text-warning hover:bg-warning/10 hover:text-warning"
+                                        onClick={() => { void retryConversationListLoad(); }}>
                                         重试
-                                    </button>
+                                    </Button>
                                 </div>
                             ) : null}
                             {wantsDate ? (
@@ -479,9 +466,8 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
                                             key={conv.id}
                                             conv={conv}
                                             isActive={activeId === conv.id}
-                                            isActionActive={actionConv?.id === conv.id}
                                             marker={markers?.get(conv.id)}
-                                            onOpenAction={openActionSheet}
+                                            menu={conversationMenu}
                                             isEditing={editingId === conv.id}
                                             editTitle={editingId === conv.id ? editTitle : ''}
                                             onEditTitleChange={editingId === conv.id ? setEditTitle : undefined}
@@ -510,8 +496,7 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
                                             isGroupCollapsed={isGroupCollapsed}
                                             onToggleGroup={toggleGroup}
                                             activeId={activeId}
-                                            actionConvId={actionConv?.id}
-                                            onOpenAction={openActionSheet}
+                                            menu={conversationMenu}
                                             editingId={editingId}
                                             editTitle={editTitle}
                                             onEditTitleChange={setEditTitle}
@@ -530,27 +515,30 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
                     {/* 「最近使用」收起时，展开/收起一并隐藏。 */}
                     {hasLoadedConversations && (!wantsDate || recentsOpen) && hasMoreToShow && (
                         <div className="mt-1 px-2">
-                            <button type="button" className="flex items-center gap-1 text-[14px] text-foreground-secondary transition-colors hover:text-foreground"
+                            <Button unstyled type="button" className="flex items-center gap-1 text-[14px] text-foreground-secondary transition-colors hover:text-foreground"
                                 onClick={() => { if (!hasHiddenRecents && hasMoreConversations) void loadMoreConversations(); setRecentsLimit(limit => limit + RECENT_VISIBLE); }}
                                 aria-busy={loadingMoreConversations || undefined}>
                                 查看更多
                                 {loadingMoreConversations ? <SoundWaveLoader variant="inline" /> : <ChevronDown size={15} aria-hidden="true" />}
-                            </button>
+                            </Button>
                         </div>
                     )}
                     {hasLoadedConversations && visibleConversations.length > 0 && (!wantsDate || recentsOpen) && !hasMoreToShow && recentsLimit > RECENT_VISIBLE && (
                         <div className="mt-1 mb-1 px-2">
-                            <button type="button" className="flex items-center gap-1 text-[14px] text-foreground-secondary transition-colors hover:text-foreground"
+                            <Button unstyled type="button" className="flex items-center gap-1 text-[14px] text-foreground-secondary transition-colors hover:text-foreground"
                                 onClick={() => { setRecentsLimit(RECENT_VISIBLE); listViewportRef.current?.parentElement?.scrollTo({ top: 0 }); }}>
                                 收起<ChevronUp size={15} aria-hidden="true" />
-                            </button>
+                            </Button>
                         </div>
                     )}
                 </div>
             </div>
 
-            <ConversationActions conversation={actionConv} anchorRef={actionAnchorRef} view={actionView} onViewChange={setActionView} onClose={closeActionSheet} onRename={startInlineRename} onDelete={confirmDelete} deleting={deleteLoading} withinModal={withinModal}
-                pinned={actionConv ? pinnedSet.has(actionConv.id) : false} onPin={() => { if (actionConv) togglePin(actionConv); closeActionSheet(); }} />
+            <ConversationMenu menu={conversationMenu} onRename={startInlineRename} onDelete={setPendingDelete}
+                onPin={togglePin} pinned={conv => pinnedSet.has(conv.id)} />
+            <ConfirmDialog isOpen={pendingDelete !== null} onClose={() => { if (!deleteLoading) setPendingDelete(null); }}
+                onConfirm={async () => { await confirmDelete(); }} loading={deleteLoading} title="删除此聊天"
+                description={`删除“${pendingDelete ? formatConversationMenuTitle(pendingDelete) : ''}”后无法恢复。`} confirmText="确认删除" />
         </>
     );
 }

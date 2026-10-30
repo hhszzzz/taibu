@@ -10,8 +10,11 @@ import {
     X,
 } from 'lucide-react';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
+import { Dialog } from '@/components/ui/Dialog';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 import { requestBrowserJson } from '@/lib/browser-api';
 import {
     getNotificationsPage,
@@ -334,24 +337,15 @@ export function SidebarAnnouncementCenter({
     }
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-start justify-center px-4 pt-16 pb-4">
-            <div
-                className="absolute inset-0 bg-black/20 backdrop-blur-[2px]"
-                onClick={onClose}
-            />
-
-            <aside
-                className="relative w-full max-w-2xl max-h-[85vh] bg-background border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200"
-                role="dialog"
-                aria-modal="true"
-            >
+        <Dialog bare open={open} onClose={onClose} labelledBy="announcement-center-title" className="dialog-plain dialog-lg">
+            <aside className="w-full max-h-[85vh] bg-background border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col">
                 <div className="flex items-center justify-between px-6 py-2 border-b border-border/60 bg-background/80">
-                    <h2 className="text-xl font-bold text-foreground">通知 / 公告</h2>
+                    <h2 id="announcement-center-title" className="text-xl font-bold text-foreground">通知 / 公告</h2>
 
                     <div className="flex items-center gap-3">
                         <div className="flex items-center p-1 bg-background-secondary rounded-md">
                             {supportsNotifications ? (
-                                <button
+                                <Button unstyled
                                     onClick={() => setActiveTab('notifications')}
                                     className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded transition-all ${
                                         activeTab === 'notifications'
@@ -361,9 +355,9 @@ export function SidebarAnnouncementCenter({
                                 >
                                     <Bell className="w-3.5 h-3.5" />
                                     通知
-                                </button>
+                                </Button>
                             ) : null}
-                            <button
+                            <Button unstyled
                                 onClick={() => setActiveTab('announcements')}
                                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded transition-all ${
                                     activeTab === 'announcements'
@@ -373,14 +367,11 @@ export function SidebarAnnouncementCenter({
                             >
                                 <Megaphone className="w-3.5 h-3.5" />
                                 公告
-                            </button>
+                            </Button>
                         </div>
-                        <button
-                            onClick={onClose}
-                            className="p-1.5 rounded-md hover:bg-background-secondary transition-colors text-foreground-secondary hover:text-foreground"
-                        >
-                            <X className="w-5 h-5" />
-                        </button>
+                        <IconButton label="关闭公告中心" expand="none" onClick={onClose} className="p-1.5">
+                            <X className="w-5 h-5" aria-hidden="true" />
+                        </IconButton>
                     </div>
                 </div>
 
@@ -395,8 +386,8 @@ export function SidebarAnnouncementCenter({
                             </div>
                         ) : notificationError ? (
                             <div className="text-center py-20">
-                                <div className="text-sm font-semibold text-[#b42318] mb-2">通知加载失败</div>
-                                <p className="text-xs text-[#7a271a]">{notificationError}</p>
+                                <div className="text-sm font-semibold text-danger mb-2">通知加载失败</div>
+                                <p className="text-xs text-danger">{notificationError}</p>
                             </div>
                         ) : notifications.length === 0 ? (
                             <div className="text-center py-20">
@@ -409,25 +400,21 @@ export function SidebarAnnouncementCenter({
                                     <div className="text-xs text-foreground-secondary">
                                         最近 3 天通知
                                     </div>
-                                    <button
-                                        onClick={handleMarkAllRead}
-                                        disabled={notificationProcessing || unreadCount <= 0}
-                                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-bold bg-background-secondary text-foreground/70 hover:bg-background-tertiary transition-colors disabled:opacity-40"
-                                    >
-                                        <CheckCheck className="w-3.5 h-3.5" />
+                                    <Button variant="secondary" size="sm" onClick={handleMarkAllRead} disabled={notificationProcessing || unreadCount <= 0} className="text-xs">
+                                        <CheckCheck className="w-3.5 h-3.5" aria-hidden="true" />
                                         一键已读
-                                    </button>
+                                    </Button>
                                 </div>
 
                                 <div className="space-y-3">
                                     {notifications.map((notification) => (
-                                        <button
+                                        <Button unstyled
                                             key={notification.id}
                                             onClick={() => void handleNotificationClick(notification)}
                                             className={`relative w-full rounded-xl border px-4 py-3 text-left transition-colors flex flex-col gap-1.5 ${
                                                 notification.is_read
                                                     ? 'bg-background border-border hover:bg-background-secondary'
-                                                    : 'bg-blue-50/20 border-blue-100 hover:bg-blue-50/30'
+                                                    : 'bg-accent/10 border-accent/20 hover:bg-accent/15'
                                             }`}
                                         >
                                             <div className="flex items-center justify-between gap-3 w-full">
@@ -465,7 +452,7 @@ export function SidebarAnnouncementCenter({
                                                     ) : null}
                                                 </div>
                                             )}
-                                        </button>
+                                        </Button>
                                     ))}
                                     {notificationHasMore && (
                                         <div ref={notificationSentinelRef} className="py-3 flex justify-center">
@@ -527,14 +514,9 @@ export function SidebarAnnouncementCenter({
                 </div>
 
                 <div className="px-6 py-4 border-t border-border/60 flex justify-end gap-3">
-                    <button
-                        onClick={onClose}
-                        className="px-4 py-1.5 text-xs font-bold rounded-md bg-background-secondary text-foreground-secondary hover:bg-background-tertiary transition-colors"
-                    >
-                        关闭
-                    </button>
+                    <Button variant="secondary" size="sm" onClick={onClose}>关闭</Button>
                 </div>
             </aside>
-        </div>
+        </Dialog>
     );
 }

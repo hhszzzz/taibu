@@ -16,7 +16,8 @@ import { usePathname, useSearchParams, useRouter } from 'next/navigation';
 import { AllDivinationsIcon, LoginIcon, PlusIcon, SearchIcon } from '@/lib/navigation/nav-icons';
 import { BrandMark } from '@/components/brand/BrandMark';
 import { BetaBadge } from '@/components/ui/BetaBadge';
-import { useState, useCallback, useEffect, useMemo, useRef, Suspense, useSyncExternalStore } from 'react';
+import { Button } from '@/components/ui/Button';
+import { useState, useCallback, useEffect, useMemo, Suspense, useSyncExternalStore } from 'react';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { SidebarUserCard } from '@/components/layout/UserMenu';
 import { RecentsHead, SidebarConversations } from '@/components/layout/SidebarConversations';
@@ -25,7 +26,7 @@ import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import { getSidebarNavItems, getSidebarToolItems, visibleNavItems, type NavItemDef } from '@/lib/navigation/registry';
 import { resolveSidebarPinnedIds, useSidebarPins } from '@/lib/navigation/sidebar-pins';
-import { FloatingPanel } from '@/components/ui/FloatingPanel';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/Popover';
 import { AllDivinationsPanel } from '@/components/layout/AllDivinationsPanel';
 import { useConversationList } from '@/lib/chat/ConversationListContext';
 import { ChatSidebarConversations } from '@/components/chat/sidebar/ChatSidebarConversations';
@@ -40,7 +41,7 @@ const toolItems = getSidebarToolItems();
 
 const ASIDE_CLASS = 'relative hidden lg:flex flex-col h-screen sticky top-0 z-20 bg-sidebar border-r-[0.5px] border-border w-[var(--sidebar-width)]';
 // 侧栏行 = 克隆站 shell/sidebar 的 Row 逐值：h-8 / px-0.5 / gap-2 / rounded-8 / 14px / 120ms；
-// 前导槽固定 28px（Leading w-7）；悬停 #f0efec、选中 #edece8（克隆站 --df-hover/--df-selected 实色）+ primary（不加字重）。
+// 前导槽固定 28px（Leading w-7）；悬停与选中使用克隆站实测实色（对应 --df-hover/--df-selected）+ primary（不加字重）。
 const ITEM_BASE = 'group/row flex items-center gap-2 h-8 px-0.5 rounded-lg text-[14px] transition-colors duration-[120ms]';
 const ITEM_IDLE = 'text-foreground-secondary hover:bg-[var(--df-hover)]';
 const ITEM_ACTIVE = 'bg-[var(--df-selected)] text-foreground';
@@ -143,13 +144,7 @@ function SidebarLoadError({ onRetry }: { onRetry: () => void }) {
             </div>
             <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
                 <p className="text-sm text-foreground-secondary dark:text-foreground-secondary">导航状态加载失败</p>
-                <button
-                    type="button"
-                    onClick={onRetry}
-                    className="rounded-lg bg-accent px-3 py-2 text-sm text-on-accent transition-colors hover:bg-accent-hover"
-                >
-                    重试
-                </button>
+                <Button size="sm" onClick={onRetry}>重试</Button>
             </div>
         </aside>
     );
@@ -165,7 +160,6 @@ function SidebarInner() {
     const [showAuthModal, setShowAuthModal] = useState(false);
     const [allOpen, setAllOpen] = useState(false);
     const [recentsOpen, setRecentsOpen] = useState(true);
-    const allButtonRef = useRef<HTMLButtonElement>(null);
     const { pins, togglePin } = useSidebarPins();
     const [sidebarWidth, setSidebarWidth] = useSidebarWidth();
     // 全站常驻的「对话方式」：/chat 之外由侧栏回退控件显示本地偏好（页内由 store 接管）。
@@ -244,13 +238,13 @@ function SidebarInner() {
 
                 <div className="flex-shrink-0 px-2 pt-2 space-y-0.5">
                     {chatItem ? (
-                        <button type="button" onClick={openConversationSearch} className={`${ITEM_BASE} chat-nav-search w-full`}>
+                        <Button unstyled type="button" onClick={openConversationSearch} className={`${ITEM_BASE} chat-nav-search w-full`}>
                             <span className="flex w-7 flex-shrink-0 items-center justify-center">
                                 <SearchIcon size={16} aria-hidden="true" />
                             </span>
                             <span>搜索</span>
                             <kbd className="chat-nav-keycap" aria-hidden="true">⌘K</kbd>
-                        </button>
+                        </Button>
                     ) : null}
                     {chatItem ? (
                         <Link
@@ -291,39 +285,25 @@ function SidebarInner() {
                             </li>
                         ) : null}
                         <li>
-                            <button
-                                ref={allButtonRef}
-                                type="button"
-                                onClick={() => setAllOpen((open) => !open)}
-                                aria-expanded={allOpen}
-                                aria-haspopup="dialog"
-                                className={`${ITEM_BASE} w-full ${allOpen ? 'bg-[var(--df-selected)] text-foreground' : 'text-foreground-secondary hover:bg-[var(--df-hover)]'}`}
-                            >
-                                <span className="flex w-7 flex-shrink-0 items-center justify-center">
-                                    <AllDivinationsIcon size={20} className={allActive ? 'text-foreground' : ''} />
-                                </span>
-                                <span>全部占术</span>
-                            </button>
+                            <Popover open={allOpen} onOpenChange={setAllOpen}>
+                                <PopoverTrigger className={`${ITEM_BASE} w-full ${allOpen ? 'bg-[var(--df-selected)] text-foreground' : 'text-foreground-secondary hover:bg-[var(--df-hover)]'}`}>
+                                    <span className="flex w-7 flex-shrink-0 items-center justify-center">
+                                        <AllDivinationsIcon size={20} className={allActive ? 'text-foreground' : ''} />
+                                    </span>
+                                    <span>全部占术</span>
+                                </PopoverTrigger>
+                                <PopoverContent side="right" align="start" sideOffset={6} className="all-divinations-panel" aria-label="全部占术">
+                                    <AllDivinationsPanel
+                                        items={filteredNavItems}
+                                        pins={pins}
+                                        pathname={pathname}
+                                        onTogglePin={togglePin}
+                                        onNavigate={closeAll}
+                                    />
+                                </PopoverContent>
+                            </Popover>
                         </li>
                     </ul>
-                    <FloatingPanel
-                        open={allOpen}
-                        anchorRef={allButtonRef}
-                        onClose={closeAll}
-                        label="全部占术"
-                        role="dialog"
-                        side="right"
-                        initialFocus="first"
-                        className="all-divinations-panel"
-                    >
-                        <AllDivinationsPanel
-                            items={filteredNavItems}
-                            pins={pins}
-                            pathname={pathname}
-                            onTogglePin={togglePin}
-                            onNavigate={closeAll}
-                        />
-                    </FloatingPanel>
                 </div>
 
                 {/* /chat 里只有「最近使用」列表自己滚动（已置顶固定在其上方），其余页面整段滚动。 */}
@@ -351,19 +331,10 @@ function SidebarInner() {
                             <AnnouncementBellButton iconSize={18} className="relative w-7 h-7 flex items-center justify-center rounded-full flex-shrink-0 text-foreground-secondary transition-colors duration-150 hover:bg-fill-ghost-hover hover:text-foreground" />
                         </div>
                     ) : (
-                        <button
-                            onClick={() => setShowAuthModal(true)}
-                            className="
-                                flex items-center gap-1.5 px-3 h-8 justify-center rounded-lg w-full
-                                text-[13.5px] font-medium
-                                bg-accent text-on-accent
-                                hover:bg-accent-hover
-                                transition-colors duration-150
-                            "
-                        >
+                        <Button size="sm" className="w-full" onClick={() => setShowAuthModal(true)}>
                             <LoginIcon size={16} className="flex-shrink-0" />
                             <span>登录</span>
-                        </button>
+                        </Button>
                     )}
                 </div>
                 {/* 宽度拖拽 = 克隆站侧栏右缘热区：12px 热区 + 3px 胶囊，悬停/聚焦显现 */}

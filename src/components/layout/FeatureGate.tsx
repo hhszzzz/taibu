@@ -12,6 +12,7 @@ import Link from 'next/link';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import { getFeatureLabel } from '@/lib/navigation/registry';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Button } from '@/components/ui/Button';
 import { StatePanel, STATE_SECONDARY_ACTION_CLASS } from '@/components/ui/StatePanel';
 
 interface FeatureGateProps {
@@ -45,9 +46,9 @@ export function FeatureGate({ featureId, children }: FeatureGateProps) {
                 description="暂时无法确认该功能是否开放，请稍后重试。"
                 action={(
                     <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
-                        <button type="button" onClick={() => void refresh()} className={STATE_SECONDARY_ACTION_CLASS}>
+                        <Button unstyled type="button" onClick={() => void refresh()} className={STATE_SECONDARY_ACTION_CLASS}>
                             重试
-                        </button>
+                        </Button>
                         {/* Pages such as /chat show no site navigation on phones. */}
                         <Link href="/" className="text-sm text-foreground-secondary transition-colors hover:text-foreground">
                             返回首页

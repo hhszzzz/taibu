@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { Pin, Search } from 'lucide-react';
 import { filterNavItems, groupDivinationItems, type NavItemDef } from '@/lib/navigation/registry';
+import { IconButton } from '@/components/ui/IconButton';
+import { Input } from '@/components/ui/Input';
 
 const isActiveHref = (pathname: string | null, href: string) => pathname === href || !!pathname?.startsWith(`${href}/`);
 
@@ -36,7 +38,7 @@ export function AllDivinationsPanel({ items, pins, pathname, onTogglePin, onNavi
             <label className="all-divinations-search">
                 <Search size={16} aria-hidden />
                 <span className="sr-only">搜索占术</span>
-                <input
+                <Input
                     type="search"
                     value={query}
                     onChange={event => setQuery(event.target.value)}
@@ -66,16 +68,16 @@ export function AllDivinationsPanel({ items, pins, pathname, onTogglePin, onNavi
                                             <span className="all-divinations-icon"><Icon size={18} aria-hidden="true" /></span>
                                             <span className="truncate">{item.label}</span>
                                         </Link>
-                                        <button
-                                            type="button"
+                                        <IconButton
                                             onClick={() => onTogglePin(item.id)}
                                             aria-pressed={pinned}
-                                            aria-label={pinned ? `取消固定${item.label}` : `固定${item.label}到侧栏`}
+                                            label={pinned ? `取消固定${item.label}` : `固定${item.label}到侧栏`}
                                             className="all-divinations-pin"
+                                            expand="none"
                                             data-pinned={pinned || undefined}
                                         >
                                             <Pin size={13} fill={pinned ? 'currentColor' : 'none'} aria-hidden />
-                                        </button>
+                                        </IconButton>
                                     </li>
                                 );
                             })}
@@ -101,16 +103,16 @@ export function AllDivinationsPanel({ items, pins, pathname, onTogglePin, onNavi
                                     <span className="all-divinations-icon"><Icon size={18} aria-hidden="true" /></span>
                                     <span>{item.description ?? item.label}</span>
                                 </Link>
-                                <button
-                                    type="button"
+                                <IconButton
                                     onClick={() => onTogglePin(item.id)}
                                     aria-pressed={pinned}
-                                    aria-label={pinned ? `取消固定${item.label}` : `固定${item.label}到侧栏`}
+                                    label={pinned ? `取消固定${item.label}` : `固定${item.label}到侧栏`}
                                     className="all-divinations-pin"
+                                    expand="none"
                                     data-pinned={pinned || undefined}
                                 >
                                     <Pin size={13} fill={pinned ? 'currentColor' : 'none'} aria-hidden />
-                                </button>
+                                </IconButton>
                             </div>
                         );
                     })}

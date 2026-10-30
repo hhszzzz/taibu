@@ -8,6 +8,8 @@
 'use client';
 
 import { useId, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { Input } from '@/components/ui/Input';
+import { Button } from '@/components/ui/Button';
 import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
 import { useTabIndicator } from '@/lib/motion/tab-indicator';
 import { isCompleteEmail, normalizeAuthEmail } from '@/lib/auth/email';
@@ -63,7 +65,7 @@ export function LoginForm({
                     tabsRef.current?.querySelector<HTMLElement>(`#auth-tab-${next}`)?.focus();
                 }}
             >
-                <button
+                <Button unstyled
                     type="button"
                     role="tab"
                     id="auth-tab-password"
@@ -73,8 +75,8 @@ export function LoginForm({
                     onClick={() => selectMethod('password')}
                 >
                     密码登录
-                </button>
-                <button
+                </Button>
+                <Button unstyled
                     type="button"
                     role="tab"
                     id="auth-tab-otp"
@@ -84,7 +86,7 @@ export function LoginForm({
                     onClick={() => selectMethod('otp')}
                 >
                     验证码登录
-                </button>
+                </Button>
             </div>
 
             <div id="auth-method-panel" role="tabpanel" aria-labelledby={`auth-tab-${loginMethod}`} className="auth-fields">
@@ -104,7 +106,7 @@ export function LoginForm({
                             minLength={6}
                             placeholder="输入密码"
                             required={loginMethod === 'password'}
-                            action={<button type="button" onClick={onForgotPassword} className="auth-link">忘记密码？</button>}
+                            action={<Button unstyled type="button" onClick={onForgotPassword} className="auth-link">忘记密码？</Button>}
                             inputRef={passwordRef}
                         />
                     </div>
@@ -143,7 +145,7 @@ export function EmailField({
             </div>
             <div className="auth-control" data-invalid={showError || undefined}>
                 <Mail aria-hidden="true" />
-                <input
+                <Input
                     ref={inputRef}
                     id={id}
                     type="email"
@@ -208,7 +210,7 @@ export function PasswordField({
             </div>
             <div className="auth-control" data-invalid={error ? true : undefined}>
                 <Lock aria-hidden="true" />
-                <input
+                <Input
                     ref={inputRef}
                     id={id}
                     type={show ? 'text' : 'password'}
@@ -220,7 +222,7 @@ export function PasswordField({
                     minLength={minLength}
                     aria-invalid={error ? true : undefined}
                 />
-                <button
+                <Button unstyled
                     type="button"
                     className="auth-icon-button"
                     aria-label={show ? '隐藏密码' : '显示密码'}
@@ -228,7 +230,7 @@ export function PasswordField({
                     onClick={onToggleShow}
                 >
                     {show ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
-                </button>
+                </Button>
             </div>
             {error && <p className="auth-field-error">{error}</p>}
             {hint}

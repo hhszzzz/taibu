@@ -13,7 +13,8 @@ import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, CircleAlert, CircleCheck, RefreshCw, X } from 'lucide-react';
-import { Modal } from '@/components/ui/Modal';
+import { Dialog } from '@/components/ui/Dialog';
+import { Button } from '@/components/ui/Button';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import {
     signInWithEmail,
@@ -495,7 +496,7 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
     const handleBack = () => switchMode('login');
 
     return (
-        <Modal
+        <Dialog bare
             open={isOpen}
             onClose={onClose}
             labelledBy="auth-title"
@@ -520,13 +521,13 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
                 <div className="auth-pane">
                     <div className="auth-actions">
                         {showBackButton && (
-                            <button type="button" className="auth-icon-button" aria-label="返回登录" onClick={handleBack}>
+                            <Button unstyled type="button" className="auth-icon-button" aria-label="返回登录" onClick={handleBack}>
                                 <ArrowLeft aria-hidden="true" />
-                            </button>
+                            </Button>
                         )}
-                        <button type="button" className="auth-icon-button" aria-label="关闭" onClick={onClose}>
+                        <Button unstyled type="button" className="auth-icon-button" aria-label="关闭" onClick={onClose}>
                             <X aria-hidden="true" />
-                        </button>
+                        </Button>
                     </div>
 
                     <div className="auth-scroll">
@@ -582,7 +583,7 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
                                             invalid={Boolean(error)}
                                             autoFocus
                                         />
-                                        <button
+                                        <Button unstyled
                                             type="button"
                                             onClick={handleResendOTP}
                                             disabled={countdown > 0 || loading}
@@ -590,7 +591,7 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
                                         >
                                             <RefreshCw aria-hidden="true" />
                                             {countdown > 0 ? `${countdown} 秒后可重新发送` : '重新发送验证码'}
-                                        </button>
+                                        </Button>
                                     </>
                                 )}
 
@@ -656,7 +657,7 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
                                     />
                                 )}
 
-                                <button
+                                <Button unstyled
                                     type="submit"
                                     disabled={loading}
                                     aria-busy={loading || undefined}
@@ -664,26 +665,26 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
                                 >
                                     {loading && <SoundWaveLoader variant="inline" />}
                                     {submitText}
-                                </button>
+                                </Button>
 
                                 {(mode === 'login' || mode === 'register') && <OAuthButtons />}
 
                                 {(mode === 'login' || mode === 'register') && (
                                     <p className="auth-switch">
                                         {mode === 'login' ? '还没有账号？' : '已有账号？'}
-                                        <button
+                                        <Button unstyled
                                             type="button"
                                             onClick={() => switchMode(mode === 'login' ? 'register' : 'login')}
                                         >
                                             {mode === 'login' ? '立即注册' : '立即登录'}
-                                        </button>
+                                        </Button>
                                     </p>
                                 )}
 
                                 {isVerifyMode && (
                                     <p className="auth-switch">
                                         邮箱填错了？
-                                        <button type="button" onClick={handleBack}>返回重新填写</button>
+                                        <Button unstyled type="button" onClick={handleBack}>返回重新填写</Button>
                                     </p>
                                 )}
                             </form>
@@ -698,6 +699,6 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
                     </div>
                 </div>
             </div>
-        </Modal>
+        </Dialog>
     );
 }

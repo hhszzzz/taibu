@@ -12,6 +12,8 @@ import { User } from 'lucide-react';
 import { PasswordStrengthIndicator } from '@/components/auth/PasswordStrengthIndicator';
 import { VerificationCodeInput } from '@/components/auth/VerificationCodeInput';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 import { EmailField, PasswordField } from '@/components/auth/LoginForm';
 import type { RefObject } from 'react';
 
@@ -67,7 +69,7 @@ export function RegisterForm({
                 </div>
                 <div className="auth-control">
                     <User aria-hidden="true" />
-                    <input
+                    <Input
                         id={nicknameId}
                         type="text"
                         value={nickname}
@@ -111,7 +113,7 @@ export function RegisterForm({
             <div className="auth-field">
                 <div className="auth-field-head">
                     <span className="auth-label" id="register-code-label">邮箱验证码</span>
-                    <button
+                    <Button unstyled
                         type="button"
                         onClick={onSendCode}
                         disabled={sendingCode || countdown > 0}
@@ -119,7 +121,7 @@ export function RegisterForm({
                         aria-describedby="register-code-label"
                     >
                         {sendingCode ? <SoundWaveLoader variant="inline" /> : countdown > 0 ? `${countdown} 秒后重新发送` : '发送验证码'}
-                    </button>
+                    </Button>
                 </div>
                 <VerificationCodeInput
                     value={verificationCode}

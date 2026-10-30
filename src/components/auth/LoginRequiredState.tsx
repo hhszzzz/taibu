@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { Lock } from 'lucide-react';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { StatePanel, STATE_PRIMARY_ACTION_CLASS, type StatePanelProps } from '@/components/ui/StatePanel';
+import { Button } from '@/components/ui/Button';
 
 interface LoginRequiredStateProps {
     title?: string;
@@ -34,9 +35,9 @@ export function LoginRequiredState({
                 title={title}
                 description={description}
                 action={(
-                    <button type="button" onClick={() => setShowAuthModal(true)} className={STATE_PRIMARY_ACTION_CLASS}>
+                    <Button unstyled type="button" onClick={() => setShowAuthModal(true)} className={STATE_PRIMARY_ACTION_CLASS}>
                         登录
-                    </button>
+                    </Button>
                 )}
             />
             <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />

@@ -12,6 +12,7 @@
 'use client';
 
 import { useEffect, useRef, type CSSProperties, type ClipboardEvent, type KeyboardEvent } from 'react';
+import { Input } from '@/components/ui/Input';
 import { nextCompletedCode } from '@/lib/auth/otp-completion';
 import './auth.css';
 
@@ -118,7 +119,7 @@ export function VerificationCodeInput({
         >
             <div className="auth-otp-cells">
                 {Array.from({ length }).map((_, index) => (
-                    <input
+                    <Input
                         key={index}
                         ref={(el) => { inputRefs.current[index] = el; }}
                         type="text"

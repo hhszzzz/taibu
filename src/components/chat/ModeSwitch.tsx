@@ -16,6 +16,7 @@
 import { MessagesSquare } from 'lucide-react';
 import { AgentIcon } from '@/lib/navigation/nav-icons';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { Button } from '@/components/ui/Button';
 import { BetaBadge } from '@/components/ui/BetaBadge';
 import { setChatMode, useChatModeControl } from '@/lib/chat/mode-control-store';
 
@@ -47,14 +48,14 @@ export function ModeSwitch({ className = 'chat-mode-switch', fallback }: { class
                 select(next);
                 requestAnimationFrame(() => group.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus());
             }}>
-            <button type="button" role="radio" aria-checked={state.mode === 'plain'} aria-label={LABELS.plain}
+            <Button unstyled type="button" role="radio" aria-checked={state.mode === 'plain'} aria-label={LABELS.plain}
                 tabIndex={state.mode === 'plain' ? 0 : -1} disabled={state.plainDisabled && state.mode !== 'plain'} onClick={() => select('plain')}>
                 <Tooltip label="对话" side="bottom"><span className="chat-mode-switch-icon"><MessagesSquare size={16} strokeWidth={1.8} aria-hidden="true" /></span></Tooltip>
-            </button>
-            <button type="button" role="radio" aria-checked={state.mode === 'agent'} aria-label={LABELS.agent}
+            </Button>
+            <Button unstyled type="button" role="radio" aria-checked={state.mode === 'agent'} aria-label={LABELS.agent}
                 tabIndex={state.mode === 'agent' ? 0 : -1} disabled={state.agentDisabled && state.mode !== 'agent'} onClick={() => select('agent')}>
                 <Tooltip label="Agent" side="bottom"><span className="chat-mode-switch-icon"><AgentIcon size={18} /></span><BetaBadge className="is-compact" /></Tooltip>
-            </button>
+            </Button>
         </div>
     );
 }

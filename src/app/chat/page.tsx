@@ -11,6 +11,7 @@ import { RefreshCw } from 'lucide-react';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useToast } from '@/components/ui/Toast';
+import { Button } from '@/components/ui/Button';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { useAppBootstrap } from '@/lib/hooks/useAppBootstrap';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
@@ -76,10 +77,10 @@ export default function ChatPage() {
                 <StatePanel layout="page" titleAs="h2" tone="danger" icon={RefreshCw} className="flex-1"
                     title="加载对话上下文失败"
                     description={bootstrapErrorMessage}
-                    action={<button type="button" className={STATE_SECONDARY_ACTION_CLASS}
+                    action={<Button unstyled type="button" className={STATE_SECONDARY_ACTION_CLASS}
                         onClick={() => void Promise.all([refreshBootstrap(), appBootstrap.refresh()])}>
                         <RefreshCw className="h-4 w-4" aria-hidden="true" />重新加载
-                    </button>} />
+                    </Button>} />
             </div>
         );
     }

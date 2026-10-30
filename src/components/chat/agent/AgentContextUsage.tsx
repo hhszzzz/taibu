@@ -2,6 +2,7 @@
 // 'use client'：上下文用量弹层需要开关状态
 
 import { useState, type ReactNode } from 'react';
+import { Button } from '@/components/ui/Button';
 import { BookOpen, ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
 import type { AgentRuntimeInfo } from '@/lib/agent/types';
 import { buildContextSegments, type ContextSkills } from '@/lib/agent/context-segments';
@@ -40,10 +41,10 @@ export function AgentContextOverview({ runtime, working = false, grip, skills, o
     const approximate = context.source !== 'usage';
     return <section className="agent-ws-status-card agent-context-card" aria-label="上下文" data-context-source={context.source}>
         <div className="agent-ws-status-head">
-            <button type="button" className="agent-ws-status-toggle" aria-expanded={open} onClick={() => setOpen(value => !value)}>
+            <Button unstyled type="button" className="agent-ws-status-toggle" aria-expanded={open} onClick={() => setOpen(value => !value)}>
                 <span>上下文</span>
                 {open ? <ChevronDown size={12} aria-hidden="true" /> : <ChevronRight size={12} aria-hidden="true" />}
-            </button>
+            </Button>
             {grip}
             <span className="agent-ws-status-value">{compact(context.tokens)}</span>
         </div>
@@ -55,9 +56,9 @@ export function AgentContextOverview({ runtime, working = false, grip, skills, o
                 {segments.filter(segment => segment.key !== 'free').map(segment => <div key={segment.key} className="agent-context-legend-row" data-deferred={segment.deferred || undefined}>
                     <span className="agent-context-dot" data-tone={segment.tone} aria-hidden="true" />
                     <dt>{segment.key === 'skills' && skills
-                        ? <button type="button" className="agent-context-legend-toggle" aria-expanded={skillsOpen} onClick={() => setSkillsOpen(value => !value)}>
+                        ? <Button unstyled type="button" className="agent-context-legend-toggle" aria-expanded={skillsOpen} onClick={() => setSkillsOpen(value => !value)}>
                             {segment.label}<ChevronDown size={11} aria-hidden="true" className={skillsOpen ? 'is-open' : undefined} />
-                        </button>
+                        </Button>
                         : <>{segment.label}{segment.count !== undefined ? <small>{segment.count} 项</small> : null}</>}</dt>
                     <dd>{segment.deferred ? '未启用' : <>{segment.meta ? <>{segment.meta} · </> : null}{compact(segment.tokens)}{capacity ? <em>{Math.round(segment.tokens / capacity * 100)}%</em> : null}</>}</dd>
                 </div>)}
@@ -72,10 +73,10 @@ export function AgentContextOverview({ runtime, working = false, grip, skills, o
                     <Sparkles size={15} aria-hidden="true" />
                     <span className="agent-rail-result-text"><span>技能目录</span><small>方法与技能随系统提示注入 · {runtime.skills?.listed ? `${runtime.skills.listed} 个技能 · ` : ''}{compact(runtime.skills?.sectionTokens ?? runtime.skillsTokens ?? 0)} token</small></span>
                 </div>
-                {skills.cards.map(card => <button key={card.id} type="button" className="agent-rail-row agent-rail-button agent-rail-result" onClick={() => onOpen?.(card.id)}>
+                {skills.cards.map(card => <Button unstyled key={card.id} type="button" className="agent-rail-row agent-rail-button agent-rail-result" onClick={() => onOpen?.(card.id)}>
                     {card.kind === 'skill' ? <Sparkles size={15} aria-hidden="true" /> : <BookOpen size={15} aria-hidden="true" />}
                     <span className="agent-rail-result-text"><span>{card.title}</span><small>{card.kind === 'skill' ? `技能 ${card.version}` : `版本 ${card.version}`} · {compact(card.tokens ?? 0)} token</small></span>
-                </button>)}
+                </Button>)}
             </div>}
             <p className="agent-context-foot">{approximate ? '数值为估算；' : ''}{working ? '随任务实时更新。' : '发送消息以刷新。'}自动压缩缓冲在接近窗口上限时启用。</p>
         </div>}

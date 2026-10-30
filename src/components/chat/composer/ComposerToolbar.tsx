@@ -12,14 +12,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Tooltip } from '@/components/ui/Tooltip';
-import { Check, ChevronRight, ImagePlus, Paperclip, Plus, Settings2, SlidersHorizontal, Square, Undo2, WandSparkles, X } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
+import { Check, ImagePlus, Paperclip, Plus, Settings2, SlidersHorizontal, Square, Undo2, WandSparkles, X } from 'lucide-react';
 import { ConnectorsIcon, KnowledgeIcon, MemoryIcon, SearchIcon, SkillIcon } from '@/lib/navigation/nav-icons';
 import { BetaBadge } from '@/components/ui/BetaBadge';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import type { MembershipType } from '@/lib/user/membership';
 import type { ChatMode } from '@/lib/chat/use-chat-state';
 import type { ModelSettingsProps } from '@/lib/chat/model-settings';
-import { FloatingPanel } from '@/components/ui/FloatingPanel';
+import { Menu, MenuCheckboxItem, MenuContent, MenuItem, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '@/components/ui/Menu';
 import { DOCUMENT_ACCEPT } from '@/lib/ai/document-formats';
 import { PRIVATE_ATTACHMENT_ACCEPT } from '@/lib/chat/composer-files';
 import type { KnowledgeBaseSummary } from './useComposerState';
@@ -116,18 +118,11 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
     const { agentMode, disabled, userId, webControl, memory, image, chatMode, onChatModeChange, styles, send, fileInputRef } = props;
     const internalAddRef = useRef<HTMLButtonElement>(null);
     const plusRef = props.addButtonRef ?? internalAddRef;
-    const styleRef = useRef<HTMLButtonElement>(null);
     const router = useRouter();
     const [menu, setMenu] = useState<'plus' | null>(null);
-    const [submenu, setSubmenu] = useState<'style' | 'skills' | 'connectors' | 'knowledge' | null>(null);
     const [extensions, setExtensions] = useState<{ skills: SkillCommand[]; connectors: AgentConnector[]; loaded: boolean }>(
         { skills: [], connectors: [], loaded: false });
-    const skillsRef = useRef<HTMLButtonElement>(null);
-    const connectorsRef = useRef<HTMLButtonElement>(null);
-    const knowledgeRef = useRef<HTMLButtonElement>(null);
     const addLabel = agentMode ? '添加图片或文本资料' : '添加附件';
-    const closeMenu = () => { setMenu(null); setSubmenu(null); };
-    const openMenu = () => { setMenu(value => value === 'plus' ? null : 'plus'); setSubmenu(null); };
     // 每次打开 + 菜单重读技能与连接器：设置里刚添加的条目马上可见。
     useEffect(() => {
         if (menu !== 'plus' || !userId) return;
@@ -146,116 +141,113 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
     const knowledgeChecked = props.knowledgeBase.selected.length > 0;
     return (
         <div className="chat-composer-actions">
-            <Tooltip label={addLabel}><button ref={plusRef} type="button" className="chat-tool-button is-bordered chat-plus-trigger" aria-label={addLabel}
-                aria-haspopup="menu" aria-expanded={menu === 'plus'} disabled={disabled} onClick={openMenu}>
-                <Plus size={17} strokeWidth={1.9} aria-hidden="true" />
-            </button></Tooltip>
-            {image && <Tooltip label={image.title}><button type="button" className="chat-tool-button is-bordered" aria-label={image.title}
+            <Menu open={menu === 'plus'} onOpenChange={open => setMenu(open ? 'plus' : null)}>
+                <Tooltip label={addLabel}>
+                    <MenuTrigger ref={plusRef} className="chat-tool-button is-bordered chat-plus-trigger" aria-label={addLabel} disabled={disabled}>
+                        <Plus size={17} strokeWidth={1.9} aria-hidden="true" />
+                    </MenuTrigger>
+                </Tooltip>
+                <MenuContent side="top" sideOffset={6} className="chat-plus-menu" aria-label={addLabel}>
+                    <MenuItem disabled={chatMode === 'dream'} onClick={() => fileInputRef.current?.click()}>
+                        <Paperclip size={16} aria-hidden="true" /><span className="chat-plus-label">上传或添加文件</span><kbd>⌘U</kbd>
+                    </MenuItem>
+                    <MenuSeparator className="chat-plus-divider" />
+                    {!!userId && <MenuSub>
+                        <MenuSubTrigger><SkillIcon size={18} /><span className="chat-plus-label">技能</span><BetaBadge /></MenuSubTrigger>
+                        <MenuSubContent className="chat-plus-menu chat-extension-menu" aria-label="技能">
+                            {extensions.skills.length > 0 ? extensions.skills.map(skill => (
+                                <MenuItem key={skill.name} title={skill.description}
+                                    onClick={() => { if (!agentMode) props.onEnableAgent?.(); props.onSkillSelect?.(skill.name); }}>
+                                    <SkillIcon size={18} /><span className="chat-plus-label">{skill.name}</span>
+                                    <small>{skill.scope === 'platform' ? '平台' : '我的'}</small>
+                                </MenuItem>
+                            )) : <p className="chat-plus-empty">{extensions.loaded ? '还没有可用技能' : '正在读取…'}</p>}
+                            <MenuSeparator className="chat-plus-divider" />
+                            <MenuItem onClick={() => router.push('/settings/skills')}>
+                                <Settings2 size={16} aria-hidden="true" /><span className="chat-plus-label">管理技能</span>
+                            </MenuItem>
+                        </MenuSubContent>
+                    </MenuSub>}
+                    {!!userId && <MenuSub>
+                        <MenuSubTrigger><ConnectorsIcon size={18} /><span className="chat-plus-label">连接器</span><BetaBadge /></MenuSubTrigger>
+                        <MenuSubContent className="chat-plus-menu chat-extension-menu" aria-label="连接器">
+                            {extensions.connectors.length > 0
+                                ? <ul className="chat-plus-connector-list" aria-label="可用连接器">
+                                    {extensions.connectors.map(connector => <li key={connector.id}>
+                                        <ConnectorsIcon size={16} /><span>{connector.name}</span>
+                                        <small>{connector.scope === 'platform' ? '平台' : '我的'}</small><Check size={14} aria-hidden="true" />
+                                    </li>)}
+                                </ul>
+                                : <p className="chat-plus-empty">{extensions.loaded ? '还没有可用连接器' : '正在读取…'}</p>}
+                            <MenuSeparator className="chat-plus-divider" />
+                            <MenuItem onClick={() => router.push('/settings/connectors')}>
+                                <Settings2 size={16} aria-hidden="true" /><span className="chat-plus-label">管理连接器</span>
+                            </MenuItem>
+                        </MenuSubContent>
+                    </MenuSub>}
+                    {!!userId && props.knowledgeBase.enabled && <MenuSub onOpenChange={open => { if (open) props.knowledgeBase.onLoad(); }}>
+                        <MenuSubTrigger disabled={!props.knowledgeBase.allowed}>
+                            <KnowledgeIcon size={18} /><span className="chat-plus-label">知识库</span>
+                            {knowledgeChecked && <Check size={14} className="chat-plus-check" aria-hidden="true" />}
+                        </MenuSubTrigger>
+                        <MenuSubContent className="chat-plus-menu chat-extension-menu" aria-label="知识库">
+                            {props.knowledgeBase.items.length > 0 ? props.knowledgeBase.items.map(base => {
+                                const enabled = props.knowledgeBase.selected.some(item => item.id === base.id);
+                                const saving = props.knowledgeBase.savingId === base.id;
+                                return <MenuCheckboxItem key={base.id} checked={enabled} closeOnClick={false} disabled={saving}
+                                    title={base.description || base.name} onCheckedChange={() => props.knowledgeBase.onToggle(base.id)}>
+                                    <KnowledgeIcon size={18} /><span className="chat-plus-label">{base.name}</span>
+                                    {saving ? <SoundWaveLoader variant="inline" /> : enabled && <Check size={14} aria-hidden="true" />}
+                                </MenuCheckboxItem>;
+                            }) : <p className="chat-plus-empty">{props.knowledgeBase.loading ? '正在读取…' : '还没有知识库'}</p>}
+                            <MenuSeparator className="chat-plus-divider" />
+                            <MenuItem onClick={() => router.push('/settings/knowledge-base')}>
+                                <Settings2 size={16} aria-hidden="true" /><span className="chat-plus-label">管理知识库</span>
+                            </MenuItem>
+                        </MenuSubContent>
+                    </MenuSub>}
+                    {!!onChatModeChange && styles.length > 1 && <MenuSub>
+                        <MenuSubTrigger>
+                            <SlidersHorizontal size={16} aria-hidden="true" /><span className="chat-plus-label">分析风格</span>
+                            <span className="chat-plus-value">{STYLE_LABELS[chatMode]}</span>
+                        </MenuSubTrigger>
+                        <MenuSubContent className="chat-plus-menu chat-style-menu" aria-label="分析风格">
+                            <MenuRadioGroup value={chatMode} onValueChange={value => onChatModeChange?.(value as ChatMode)}>
+                                {styles.map(style => <MenuRadioItem key={style} value={style} closeOnClick>
+                                    <span className="chat-plus-label">{STYLE_MENU_LABELS[style]}</span>
+                                </MenuRadioItem>)}
+                            </MenuRadioGroup>
+                        </MenuSubContent>
+                    </MenuSub>}
+                    <MenuSeparator className="chat-plus-divider" />
+                    {memory && <MenuCheckboxItem checked={memory.enabled} closeOnClick disabled={memory.disabled || memory.busy} title={memory.title}
+                        onCheckedChange={() => memory.onToggle()}>
+                        <MemoryIcon size={18} /><span className="chat-plus-label">记忆</span><BetaBadge />
+                    </MenuCheckboxItem>}
+                    <MenuCheckboxItem checked={searchToggle.active} closeOnClick disabled={searchToggle.disabled} title={searchToggle.title}
+                        onCheckedChange={() => searchToggle.onToggle()}>
+                        <SearchIcon size={18} /><span className="chat-plus-label">搜索</span>
+                    </MenuCheckboxItem>
+                    <MenuSeparator className="chat-plus-divider" />
+                    <MenuItem disabled={!props.polish.available || props.polish.busy} onClick={() => props.polish.run()}>
+                        <WandSparkles size={16} aria-hidden="true" /><span className="chat-plus-label">{props.polish.busy ? '正在润色…' : props.imageMode ? '优化提示词' : '润色问题'}</span>
+                    </MenuItem>
+                </MenuContent>
+            </Menu>
+            {image && <Tooltip label={image.title}><IconButton label={image.title} className="chat-tool-button is-bordered" expand="none"
                 aria-pressed={image.active} data-active={image.active || undefined} disabled={disabled} onClick={image.onToggle}>
                 <ImagePlus size={17} strokeWidth={1.9} aria-hidden="true" />
-            </button></Tooltip>}
-            <FloatingPanel open={menu === 'plus'} anchorRef={plusRef} onClose={closeMenu} label={addLabel} side="top" className="chat-plus-menu" restoreFocus={false}>
-                <button type="button" role="menuitem" disabled={chatMode === 'dream'} onClick={() => { closeMenu(); fileInputRef.current?.click(); }}>
-                    <Paperclip size={16} aria-hidden="true" /><span className="chat-plus-label">上传或添加文件</span><kbd>⌘U</kbd>
-                </button>
-                <div className="chat-plus-divider" role="separator" />
-                {!!userId && <button ref={skillsRef} type="button" role="menuitem" aria-haspopup="menu" aria-expanded={submenu === 'skills'}
-                    onClick={() => setSubmenu(value => value === 'skills' ? null : 'skills')}>
-                    <SkillIcon size={18} /><span className="chat-plus-label">技能</span><BetaBadge /><ChevronRight size={14} aria-hidden="true" />
-                </button>}
-                {!!userId && <button ref={connectorsRef} type="button" role="menuitem" aria-haspopup="menu" aria-expanded={submenu === 'connectors'}
-                    onClick={() => setSubmenu(value => value === 'connectors' ? null : 'connectors')}>
-                    <ConnectorsIcon size={18} /><span className="chat-plus-label">连接器</span><BetaBadge /><ChevronRight size={14} aria-hidden="true" />
-                </button>}
-                {!!userId && props.knowledgeBase.enabled && <button ref={knowledgeRef} type="button" role="menuitem" aria-haspopup="menu" aria-expanded={submenu === 'knowledge'}
-                    disabled={!props.knowledgeBase.allowed} onClick={() => {
-                        if (submenu === 'knowledge') { setSubmenu(null); return; }
-                        setSubmenu('knowledge');
-                        props.knowledgeBase.onLoad();
-                    }}>
-                    <KnowledgeIcon size={18} /><span className="chat-plus-label">知识库</span>{knowledgeChecked && <Check size={14} className="chat-plus-check" aria-hidden="true" />}<ChevronRight size={14} aria-hidden="true" />
-                </button>}
-                {!!onChatModeChange && styles.length > 1 && <button ref={styleRef} type="button" role="menuitem" aria-haspopup="menu" aria-expanded={submenu === 'style'}
-                    onClick={() => setSubmenu(value => value === 'style' ? null : 'style')}>
-                    <SlidersHorizontal size={16} aria-hidden="true" /><span className="chat-plus-label">分析风格</span><span className="chat-plus-value">{STYLE_LABELS[chatMode]}</span><ChevronRight size={14} aria-hidden="true" />
-                </button>}
-                <div className="chat-plus-divider" role="separator" />
-                {memory && <button type="button" role="menuitemcheckbox" aria-checked={memory.enabled} disabled={memory.disabled || memory.busy} title={memory.title}
-                    onClick={() => { memory.onToggle(); closeMenu(); }}>
-                    <MemoryIcon size={18} /><span className="chat-plus-label">记忆</span><BetaBadge />{memory.enabled && <Check size={14} aria-hidden="true" />}
-                </button>}
-                <button type="button" role="menuitemcheckbox" aria-checked={searchToggle.active} disabled={searchToggle.disabled} title={searchToggle.title}
-                    onClick={() => { searchToggle.onToggle(); closeMenu(); }}>
-                    <SearchIcon size={18} /><span className="chat-plus-label">搜索</span>{searchToggle.active && <Check size={14} aria-hidden="true" />}
-                </button>
-                <div className="chat-plus-divider" role="separator" />
-                <button type="button" role="menuitem" disabled={!props.polish.available || props.polish.busy} onClick={() => { closeMenu(); props.polish.run(); }}>
-                    <WandSparkles size={16} aria-hidden="true" /><span className="chat-plus-label">{props.polish.busy ? '正在润色…' : props.imageMode ? '优化提示词' : '润色问题'}</span>
-                </button>
-            </FloatingPanel>
-            {!!userId && <FloatingPanel open={submenu === 'skills' && menu === 'plus'} anchorRef={skillsRef}
-                onClose={() => setSubmenu(null)} label="技能" side="right-start" className="chat-plus-menu chat-extension-menu" restoreFocus={false}>
-                {extensions.skills.length > 0 ? extensions.skills.map(skill => <button key={skill.name} type="button" role="menuitem" title={skill.description}
-                    onClick={() => { if (!agentMode) props.onEnableAgent?.(); closeMenu(); props.onSkillSelect?.(skill.name); }}>
-                    <SkillIcon size={18} /><span className="chat-plus-label">{skill.name}</span>
-                    <small>{skill.scope === 'platform' ? '平台' : '我的'}</small>
-                </button>) : <p className="chat-plus-empty">{extensions.loaded ? '还没有可用技能' : '正在读取…'}</p>}
-                <div className="chat-plus-divider" role="separator" />
-                <button type="button" role="menuitem" onClick={() => { closeMenu(); router.push('/settings/skills'); }}>
-                    <Settings2 size={16} aria-hidden="true" /><span className="chat-plus-label">管理技能</span>
-                </button>
-            </FloatingPanel>}
-            {!!userId && <FloatingPanel open={submenu === 'connectors' && menu === 'plus'} anchorRef={connectorsRef}
-                onClose={() => setSubmenu(null)} label="连接器" side="right-start" className="chat-plus-menu chat-extension-menu" restoreFocus={false}>
-                {extensions.connectors.length > 0
-                    ? <ul className="chat-plus-connector-list" aria-label="可用连接器">
-                        {extensions.connectors.map(connector => <li key={connector.id}>
-                            <ConnectorsIcon size={16} /><span>{connector.name}</span>
-                            <small>{connector.scope === 'platform' ? '平台' : '我的'}</small><Check size={14} aria-hidden="true" />
-                        </li>)}
-                    </ul>
-                    : <p className="chat-plus-empty">{extensions.loaded ? '还没有可用连接器' : '正在读取…'}</p>}
-                <div className="chat-plus-divider" role="separator" />
-                <button type="button" role="menuitem" onClick={() => { closeMenu(); router.push('/settings/connectors'); }}>
-                    <Settings2 size={16} aria-hidden="true" /><span className="chat-plus-label">管理连接器</span>
-                </button>
-            </FloatingPanel>}
-            {!!userId && props.knowledgeBase.enabled && <FloatingPanel open={submenu === 'knowledge' && menu === 'plus'} anchorRef={knowledgeRef}
-                onClose={() => setSubmenu(null)} label="知识库" side="right-start" className="chat-plus-menu chat-extension-menu" restoreFocus={false}>
-                {props.knowledgeBase.items.length > 0 ? props.knowledgeBase.items.map(base => {
-                    const enabled = props.knowledgeBase.selected.some(item => item.id === base.id);
-                    const saving = props.knowledgeBase.savingId === base.id;
-                    return <button key={base.id} type="button" role="menuitemcheckbox" aria-checked={enabled} disabled={saving}
-                        title={base.description || base.name} onClick={() => props.knowledgeBase.onToggle(base.id)}>
-                        <KnowledgeIcon size={18} /><span className="chat-plus-label">{base.name}</span>
-                        {saving ? <SoundWaveLoader variant="inline" /> : enabled && <Check size={14} aria-hidden="true" />}
-                    </button>;
-                }) : <p className="chat-plus-empty">{props.knowledgeBase.loading ? '正在读取…' : '还没有知识库'}</p>}
-                <div className="chat-plus-divider" role="separator" />
-                <button type="button" role="menuitem" onClick={() => { closeMenu(); router.push('/settings/knowledge-base'); }}>
-                    <Settings2 size={16} aria-hidden="true" /><span className="chat-plus-label">管理知识库</span>
-                </button>
-            </FloatingPanel>}
-            {/* 二级菜单 = claude 侧边浮层：在「分析风格」行右侧另开一个弹窗，不替换 + 菜单内容。 */}
-            {!!onChatModeChange && styles.length > 1 && <FloatingPanel open={submenu === 'style' && menu === 'plus'} anchorRef={styleRef}
-                onClose={() => setSubmenu(null)} label="分析风格" side="right-start" className="chat-plus-menu chat-style-menu" restoreFocus={false}>
-                <div>
-                    {styles.map(style => <button key={style} type="button" role="menuitemradio" aria-checked={chatMode === style}
-                        onClick={() => { onChatModeChange?.(style); closeMenu(); }}>
-                        <span className="chat-plus-label">{STYLE_MENU_LABELS[style]}</span>{chatMode === style && <Check size={14} aria-hidden="true" />}
-                    </button>)}
-                </div>
-            </FloatingPanel>}
+            </IconButton></Tooltip>}
             <input ref={fileInputRef} type="file" className="hidden" tabIndex={-1} aria-hidden="true"
                 accept={agentMode ? PRIVATE_ATTACHMENT_ACCEPT : DOCUMENT_ACCEPT}
                 multiple={agentMode} onChange={props.onFileChange} />
 
             {props.knowledgeBase.allowed && props.knowledgeBase.selected.map(base => <span key={base.id} className="chat-kb-chip" title={base.description || base.name}>
                 <span>@ {base.name}</span>
-                <button type="button" aria-label={`移除知识库引用：${base.name}`} disabled={disabled} onClick={() => props.knowledgeBase.onRemove(base.id)}><X size={12} aria-hidden="true" /></button>
+                <Button unstyled type="button" aria-label={`移除知识库引用：${base.name}`} disabled={disabled} onClick={() => props.knowledgeBase.onRemove(base.id)}><X size={12} aria-hidden="true" /></Button>
             </span>)}
 
-            {props.polish.undo && <button type="button" className="chat-tool-text is-muted" onClick={props.polish.undo}><Undo2 size={15} aria-hidden="true" />撤销润色</button>}
+            {props.polish.undo && <Button unstyled type="button" className="chat-tool-text is-muted" onClick={props.polish.undo}><Undo2 size={15} aria-hidden="true" />撤销润色</Button>}
 
             {props.showSend !== false && <>
                 <div className="chat-toolbar-spacer" />
@@ -270,31 +262,31 @@ export function ComposerSendCluster({ send, agentMode, disabled, onSend, onStop 
     return (
         <div className="chat-composer-send-group">
             {send.kind === 'split' ? <>
-                {send.onFollowUp && <button type="button" className="chat-run-secondary" disabled={send.disabled} onClick={send.onFollowUp}>结束后续问</button>}
-                <button type="button" className="chat-run-primary" disabled={send.disabled} onClick={send.onSupplement}>补充到当前任务</button>
-                {send.onStop && <button type="button" className="chat-stop-button is-small" aria-label="停止任务" title="停止任务" onClick={send.onStop}>
+                {send.onFollowUp && <Button unstyled type="button" className="chat-run-secondary" disabled={send.disabled} onClick={send.onFollowUp}>结束后续问</Button>}
+                <Button unstyled type="button" className="chat-run-primary" disabled={send.disabled} onClick={send.onSupplement}>补充到当前任务</Button>
+                {send.onStop && <Button unstyled type="button" className="chat-stop-button is-small" aria-label="停止任务" title="停止任务" onClick={send.onStop}>
                     <Square size={11} fill="currentColor" strokeWidth={0} aria-hidden="true" />
-                </button>}
+                </Button>}
             </> : <SendButton send={send} agentMode={agentMode} disabled={disabled} onSend={onSend} onStop={onStop} />}
         </div>
     );
 }
 
 function SendButton({ send, agentMode, disabled, onSend, onStop }: { send: ComposerSendState; agentMode: boolean; disabled: boolean; onSend: () => void; onStop?: () => void }) {
-    if (send.kind === 'sending') return <button type="button" className="chat-send-button" aria-label="正在发送" disabled><SoundWaveLoader variant="inline" /></button>;
+    if (send.kind === 'sending') return <Button unstyled type="button" className="chat-send-button" aria-label="正在发送" disabled><SoundWaveLoader variant="inline" /></Button>;
     if (send.kind === 'stop') {
         const label = agentMode ? '停止任务' : '停止生成';
-        return <button type="button" className="chat-stop-button" aria-label={label} title={label} disabled={!onStop} onClick={onStop}>
+        return <Button unstyled type="button" className="chat-stop-button" aria-label={label} title={label} disabled={!onStop} onClick={onStop}>
             <Square size={12} fill="currentColor" strokeWidth={0} aria-hidden="true" />
-        </button>;
+        </Button>;
     }
     // claude 克隆站实测：发送键恒为幽灵态（透明底 + 黑箭头），禁用只是降透明度，从不填充。
-    return <button type="button" className="chat-send-button" aria-label="发送" title="发送（Enter）" disabled={disabled || (send.kind === 'send' && send.disabled)} onClick={onSend}>
+    return <Button unstyled type="button" className="chat-send-button" aria-label="发送" title="发送（Enter）" disabled={disabled || (send.kind === 'send' && send.disabled)} onClick={onSend}>
         {/* claude 实测：发送键字形 = 回车式折角箭头（横杆 + 左箭头 + 右端上折回），不是直上箭头；
             路径取 lucide corner-down-left（ISC）并补顶折回段。 */}
         <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" data-nav-icon="send">
             <path d="M14 4h6v7a4 4 0 0 1-4 4H4" />
             <path d="m9 10-5 5 5 5" />
         </svg>
-    </button>;
+    </Button>;
 }

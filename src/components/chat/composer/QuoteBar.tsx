@@ -1,4 +1,5 @@
 import { Quote, X } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
 import type { MessageQuote } from '@/lib/chat/quotes';
 
 /** 输入框上方的引用条：每段可单独移除，条数与字数上限由调用方保证。 */
@@ -13,9 +14,9 @@ export function QuoteBar({ quotes, onRemove, disabled = false }: {
         <ul className="chat-composer-quotes-list">
             {quotes.map((quote, index) => <li key={`${quote.messageId}:${index}`} className="chat-composer-quote">
                 <p title={quote.text}>{quote.text}</p>
-                <button type="button" aria-label={`移除第 ${index + 1} 段引用`} title="移除引用" disabled={disabled} onClick={() => onRemove?.(index)}>
+                <Button unstyled type="button" aria-label={`移除第 ${index + 1} 段引用`} title="移除引用" disabled={disabled} onClick={() => onRemove?.(index)}>
                     <X size={12} aria-hidden="true" />
-                </button>
+                </Button>
             </li>)}
         </ul>
     </div>;

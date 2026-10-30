@@ -3,6 +3,9 @@
 
 import { useEffect, useId, useMemo, useRef, useState, lazy, Suspense, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { IconButton } from '@/components/ui/IconButton';
 import { useIsDesktopLayout } from '@/lib/hooks/useIsDesktopLayout';
 import { useEntranceMotion } from '@/lib/motion/entrance';
 import { Ellipsis, LayoutGrid, LocateFixed, Maximize2, Minimize2, Search, X } from 'lucide-react';
@@ -20,8 +23,8 @@ import {
 } from '@/lib/agent/workspace';
 import { questionDraftKey } from '@/lib/agent/question-drafts';
 import { ChartErrorBoundary } from '@/components/visualization/ChartRenderer';
-import { FloatingPanel } from '@/components/ui/FloatingPanel';
-import { Modal } from '@/components/ui/Modal';
+import { Menu, MenuContent, MenuItem, MenuTrigger } from '@/components/ui/Menu';
+import { Dialog } from '@/components/ui/Dialog';
 import { AgentToolCard } from './AgentToolCard';
 import { describeAgentChartSubject, getAgentStepNumbers, getAgentToolState, type AgentArtifact } from './presentation';
 import type { AgentWorkspaceShown } from './AgentResultContext';
@@ -207,9 +210,7 @@ export function AgentWorkspacePanel({ parts, artifacts, data, attachmentIds, ans
     const mountedAt = useRef(0);
     useEffect(() => { mountedAt.current = performance.now(); }, []);
     const scrollRef = useRef<HTMLDivElement>(null);
-    const moreRef = useRef<HTMLButtonElement>(null);
     const ids = useId();
-    const [moreOpen, setMoreOpen] = useState(false);
     const [searchOpen, setSearchOpen] = useState(false);
     const [search, setSearch] = useState('');
     const [maximized, setMaximized] = useState(false);
@@ -433,11 +434,11 @@ export function AgentWorkspacePanel({ parts, artifacts, data, attachmentIds, ans
         open(tabOrder[next]);
         event.currentTarget.closest('[role=tablist]')?.querySelectorAll<HTMLElement>('[role=tab]')[next]?.focus();
     };
-    const tab = (id: string, label: ReactNode, extra?: { live?: keyof typeof LIVE_LABELS | null; icon?: ReactNode }) => <button key={id} type="button" role="tab" id={tabId(id)}
+    const tab = (id: string, label: ReactNode, extra?: { live?: keyof typeof LIVE_LABELS | null; icon?: ReactNode }) => <Button unstyled key={id} type="button" role="tab" id={tabId(id)}
         aria-selected={selectedTab === id} aria-controls={`${ids}-panel`} tabIndex={selectedTab === id ? 0 : -1} aria-describedby={extra?.live ? `${ids}-${extra.live}` : undefined}
         onClick={() => open(id)} onKeyDown={event => onTabKey(event, id)}>
         {extra?.icon}{label}{extra?.live && <span className="agent-ws-tab-live" data-state={extra.live} aria-hidden="true" />}
-    </button>;
+    </Button>;
     // 命盘标签统一用注册表图标（每种占术一个），与右栏成果行同源。
     const chartIcon = (resource: AgentWorkspaceResource) => {
         if (resource.view === 'member') {
@@ -459,8 +460,8 @@ export function AgentWorkspacePanel({ parts, artifacts, data, attachmentIds, ans
             {searchOpen
                 ? <label className="agent-ws-search agent-ws-search-header">
                     <Search size={14} aria-hidden="true" />
-                    <input autoFocus value={search} onChange={event => setSearch(event.target.value)} placeholder="搜索标签" aria-label="搜索工作区标签" />
-                    <button type="button" aria-label="关闭搜索" onClick={() => { setSearch(''); setSearchOpen(false); }}><X size={13} aria-hidden="true" /></button>
+                    <Input autoFocus value={search} onChange={event => setSearch(event.target.value)} placeholder="搜索标签" aria-label="搜索工作区标签" />
+                    <Button unstyled type="button" aria-label="关闭搜索" onClick={() => { setSearch(''); setSearchOpen(false); }}><X size={13} aria-hidden="true" /></Button>
                 </label>
                 : <div ref={tabsRef} className="agent-ws-tabs" role="tablist" aria-label="工作区资源">
                     {sections.map(id => tab(id, SECTION_LABELS[id], { icon: <LayoutGrid size={15} aria-hidden="true" /> }))}
@@ -468,39 +469,40 @@ export function AgentWorkspacePanel({ parts, artifacts, data, attachmentIds, ans
                     {filteredTabs.map((resource, index) => <div key={resource.id} role="presentation" className="agent-ws-resource-tab" data-motion-key={resource.id} data-selected={activeResource?.id === resource.id || undefined}>
                         {tab(resource.id, resource.title, { live: liveState(resource), icon: chartIcon(resource) })}
                         {/* Only the open tab's close button is in the Tab order; Delete closes the focused tab. */}
-                        <button type="button" className="agent-ws-tab-close" aria-label={`关闭${resource.title}标签`} title="关闭标签（Delete）" tabIndex={activeResource?.id === resource.id ? 0 : -1}
-                            onClick={() => closeTab(resource, index)}><X size={12} aria-hidden="true" /></button>
+                        <Button unstyled type="button" className="agent-ws-tab-close" aria-label={`关闭${resource.title}标签`} title="关闭标签（Delete）" tabIndex={activeResource?.id === resource.id ? 0 : -1}
+                            onClick={() => closeTab(resource, index)}><X size={12} aria-hidden="true" /></Button>
                     </div>)}
                     {Object.entries(LIVE_LABELS).map(([key, text]) => <span key={key} id={`${ids}-${key}`} hidden>{text}</span>)}
                 </div>}
             <div className="agent-ws-header-actions">
-                {working && <button type="button" className="agent-follow-chart" aria-pressed={followModel} disabled={!followTarget} title={followModel ? '跟随中：显示模型最新调用的工具' : '已暂停跟随'} onClick={() => {
+                {working && <Button unstyled type="button" className="agent-follow-chart" aria-pressed={followModel} disabled={!followTarget} title={followModel ? '跟随中：显示模型最新调用的工具' : '已暂停跟随'} onClick={() => {
                     if (followModel) setSelected(location);
                     setFollowModel(!followModel);
-                }}><LocateFixed size={15} aria-hidden="true" /><span>跟随模型</span></button>}
-                {!searchOpen && <Tooltip label="搜索会话内容" side="bottom"><button type="button" className="agent-icon-button" aria-label="搜索会话内容"
-                    onClick={() => setSearchOpen(true)}><Search size={16} aria-hidden="true" /></button></Tooltip>}
-                <Tooltip label="视图选项" side="bottom"><button ref={moreRef} type="button" className="agent-icon-button" aria-label="视图选项" aria-haspopup="menu" aria-expanded={moreOpen}
-                    onClick={() => setMoreOpen(value => !value)}><Ellipsis size={18} aria-hidden="true" /></button></Tooltip>
+                }}><LocateFixed size={15} aria-hidden="true" /><span>跟随模型</span></Button>}
+                {!searchOpen && <Tooltip label="搜索会话内容" side="bottom"><IconButton label="搜索会话内容" className="agent-icon-button" expand="none"
+                    onClick={() => setSearchOpen(true)}><Search size={16} aria-hidden="true" /></IconButton></Tooltip>}
+                <Menu>
+                    <Tooltip label="视图选项" side="bottom"><MenuTrigger className="agent-icon-button" aria-label="视图选项"><Ellipsis size={18} aria-hidden="true" /></MenuTrigger></Tooltip>
+                    <MenuContent align="end" className="chat-header-menu" aria-label="视图选项">
+                        <MenuItem className="chat-header-menu-item" disabled={!visibleTabs.length} onClick={() => { setFollowModel(false); setTabs([]); setSelected(sections[0]); }}>关闭全部标签</MenuItem>
+                        {desktop && <MenuItem className="chat-header-menu-item" disabled={customWidth === null} onClick={() => setCustomWidth(null)}>恢复默认宽度</MenuItem>}
+                    </MenuContent>
+                </Menu>
                 {/* Only the docked panel can grow; the dialog and the phone sheet already take their full size. */}
-                {desktop && <Tooltip label={maximized ? '还原工作区' : '最大化工作区'} side="bottom"><button type="button" className="agent-icon-button" aria-label={maximized ? '还原工作区' : '最大化工作区'}
-                    aria-pressed={maximized} onClick={() => setMaximized(value => !value)}>{maximized ? <Minimize2 size={16} aria-hidden="true" /> : <Maximize2 size={16} aria-hidden="true" />}</button></Tooltip>}
-                <Tooltip label="关闭工作区" side="bottom"><button type="button" onClick={onClose} aria-label="关闭工作区" className="agent-icon-button"><X size={18} aria-hidden="true" /></button></Tooltip>
+                {desktop && <Tooltip label={maximized ? '还原工作区' : '最大化工作区'} side="bottom"><IconButton label={maximized ? '还原工作区' : '最大化工作区'} className="agent-icon-button" expand="none"
+                    aria-pressed={maximized} onClick={() => setMaximized(value => !value)}>{maximized ? <Minimize2 size={16} aria-hidden="true" /> : <Maximize2 size={16} aria-hidden="true" />}</IconButton></Tooltip>}
+                <Tooltip label="关闭工作区" side="bottom"><IconButton label="关闭工作区" onClick={onClose} className="agent-icon-button" expand="none"><X size={18} aria-hidden="true" /></IconButton></Tooltip>
             </div>
         </div>
-        <FloatingPanel open={moreOpen} anchorRef={moreRef} onClose={() => setMoreOpen(false)} label="视图选项" align="end" className="chat-header-menu">
-            <button type="button" role="menuitem" disabled={!visibleTabs.length} onClick={() => { setMoreOpen(false); setFollowModel(false); setTabs([]); setSelected(sections[0]); }}>关闭全部标签</button>
-            {desktop && <button type="button" role="menuitem" disabled={customWidth === null} onClick={() => { setMoreOpen(false); setCustomWidth(null); }}>恢复默认宽度</button>}
-        </FloatingPanel>
         {searchOpen
-            ? <div className="agent-ws-search-results" role="listbox" aria-label="匹配的标签">
+            ? <ul className="agent-ws-search-results" aria-label="匹配的标签">
                 {filteredTabs.length
-                    ? filteredTabs.map(resource => <button key={resource.id} type="button" role="option" aria-selected={activeResource?.id === resource.id}
+                    ? filteredTabs.map(resource => <li key={resource.id}><Button unstyled type="button" aria-current={activeResource?.id === resource.id ? 'true' : undefined}
                         onClick={() => { open(resource.id); setSearch(''); setSearchOpen(false); }}>
                         {chartIcon(resource)}<span>{resource.title}</span>
-                    </button>)
-                    : <p className="agent-ws-note">没有匹配的标签。</p>}
-            </div>
+                    </Button></li>)
+                    : <li className="agent-ws-note">没有匹配的标签。</li>}
+            </ul>
             : <div ref={scrollRef} id={`${ids}-panel`} className="agent-panel-scroll" role="tabpanel" aria-labelledby={tabId(selectedTab)} data-workspace-view={activeResource?.view ?? section}>
                 {/* 按资源建视图：换一个标签就是换一页，入场动效（.agent-panel-scroll > *）随之重放。 */}
                 {activeResource
@@ -516,5 +518,5 @@ export function AgentWorkspacePanel({ parts, artifacts, data, attachmentIds, ans
             onDoubleClick={() => setCustomWidth(null)} onPointerDown={startResize} onPointerMove={moveResize} onPointerUp={endResize} onPointerCancel={endResize} onLostPointerCapture={endResize}
             onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); adjustWidth((panelRef.current?.getBoundingClientRect().width ?? FALLBACK_WIDTH) + (event.key === 'ArrowLeft' ? 24 : -24)); } }} />
         {content}</aside>
-        : <Modal open={!leaving} id="agent-workspace-panel" onClose={onClose} className="agent-workspace-dialog" labelledBy="agent-workspace-heading">{content}</Modal>;
+        : <Dialog bare open={!leaving} id="agent-workspace-panel" onClose={onClose} className="agent-workspace-dialog" labelledBy="agent-workspace-heading">{content}</Dialog>;
 }

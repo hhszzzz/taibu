@@ -8,6 +8,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { Button } from '@/components/ui/Button';
 import { ChevronRight } from 'lucide-react';
 import type { Mention } from '@/types';
 import type {
@@ -136,7 +137,7 @@ export function MentionItemList({
                 </div>
             ) : (
                 view.items.map((item, idx) => (
-                    <button
+                    <Button unstyled
                         key={item.key}
                         type="button"
                         disabled={item.disabled}
@@ -151,7 +152,7 @@ export function MentionItemList({
                             {!!item.hint && <span className="chat-mention-item-hint">{item.hint}</span>}
                         </span>
                         {(activeLevel === 'category' || activeLevel === 'subcategory') && <ChevronRight className="w-4 h-4 chat-mention-item-tail" />}
-                    </button>
+                    </Button>
                 ))
             )}
         </div>

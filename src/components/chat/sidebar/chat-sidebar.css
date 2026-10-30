@@ -99,9 +99,8 @@
 .chat-nav-pin-drop { display: flex; min-height: 32px; align-items: center; padding: 0 8px; border: 1px dashed var(--border-hover); border-radius: 8px; font-size: 13px; color: var(--foreground-tertiary); }
 .chat-nav-group[data-drop-active] > .chat-nav-pin-drop { border-color: var(--accent); color: var(--accent-hover); }
 .chat-nav-group[data-drop-active] { border-radius: 8px; background: var(--fill-field); }
-.conversation-menu-check { margin-left: auto; color: var(--accent); }
 .chat-nav-row { position: relative; display: flex; min-height: var(--row-h); align-items: center; border-radius: 8px; color: var(--foreground-secondary); font-size: 14px; }
-.chat-nav-row:hover, .chat-nav-row[data-menu-open] { background: var(--df-hover); }
+.chat-nav-row:hover, .chat-nav-row:has([data-popup-open]) { background: var(--df-hover); }
 /* 选中 = 克隆站 Row：--df-selected 实色 #edece8 + primary，不加字重 */
 .chat-nav-row[data-active] { background: var(--df-selected); color: var(--foreground); }
 
@@ -111,11 +110,11 @@
 /* 行尾标记（云端/归档/任务）与行尾「更多」互斥显示：悬停时让位给按钮。 */
 .chat-nav-row-badges { display: inline-flex; flex-shrink: 0; align-items: center; gap: 4px; }
 .chat-nav-row-cloud { display: inline-flex; color: var(--foreground-tertiary); }
-.chat-nav-row:hover .chat-nav-row-badges, .chat-nav-row:focus-within .chat-nav-row-badges, .chat-nav-row[data-menu-open] .chat-nav-row-badges { visibility: hidden; }
+.chat-nav-row:hover .chat-nav-row-badges, .chat-nav-row:focus-within .chat-nav-row-badges, .chat-nav-row:has([data-popup-open]) .chat-nav-row-badges { visibility: hidden; }
 /* Row actions sit over the marker and appear on hover, focus or while their menu is open. */
 .chat-nav-row-more { position: absolute; top: 50%; right: 4px; display: flex; width: 24px; height: 24px; align-items: center; justify-content: center; border-radius: 6px; background: var(--df-selected); color: var(--foreground-secondary); opacity: 0; transform: translateY(-50%); }
-.chat-nav-row:hover .chat-nav-row-more, .chat-nav-row:focus-within .chat-nav-row-more, .chat-nav-row[data-menu-open] .chat-nav-row-more { opacity: 1; }
-.chat-nav-row-more:hover, .chat-nav-row-more[aria-expanded="true"] { background: var(--fill-ghost-hover); color: var(--foreground); }
+.chat-nav-row:hover .chat-nav-row-more, .chat-nav-row:focus-within .chat-nav-row-more, .chat-nav-row:has([data-popup-open]) .chat-nav-row-more { opacity: 1; }
+.chat-nav-row-more:hover, .chat-nav-row-more[data-popup-open] { background: var(--fill-ghost-hover); color: var(--foreground); }
 @media (hover: none) { .chat-nav-row-more { position: static; opacity: 1; background: transparent; transform: none; } }
 
 /* Task markers */
@@ -150,14 +149,12 @@
 
 /* 会话行菜单 = cds Menu 实测：项 32px / 内距 6·10 / 圆角 8 / 14px·20px / 右侧快捷键提示 / 分组分隔线 */
 /* 会话行菜单 = 克隆站 ui/menu 实测：项 24px / 内距 2·8 / r6 / 13px；分隔线左右 8px。 */
-.floating-panel.conversation-menu { min-width: 8rem; max-width: 14rem; }
-.conversation-menu-title { margin: 0 0 4px; padding: 6px 10px; border-bottom: var(--hairline) solid var(--hairline-color); overflow: hidden; font-size: calc(12 / 16 * 1rem); line-height: calc(17 / 16 * 1rem); color: var(--foreground-secondary); text-overflow: ellipsis; white-space: nowrap; }
+.conversation-menu { min-width: 8rem; max-width: 14rem; padding: 4px; border-radius: 10px; }
 .conversation-menu-item { display: flex; width: 100%; min-height: 24px; align-items: center; gap: 8px; padding: 2px 8px; border-radius: 6px; font-size: calc(13 / 16 * 1rem); line-height: calc(20 / 16 * 1rem); text-align: left; color: var(--foreground); }
 .conversation-menu-item > svg { flex-shrink: 0; color: var(--foreground-secondary); }
-.conversation-menu-item:hover { background: var(--fill-ghost-hover); }
+.conversation-menu-item[data-highlighted] { background: var(--fill-ghost-hover); }
 .conversation-menu-item > kbd { margin-left: auto; font-family: var(--font-sans); font-size: calc(12 / 16 * 1rem); color: var(--foreground-tertiary); }
 .conversation-menu-item.is-danger, .conversation-menu-item.is-danger > svg { color: var(--danger); }
-.conversation-menu-divider { height: 1px; margin: 4px 8px; background: color-mix(in srgb, var(--neutral-900) 10%, transparent); }
 
 /* 侧栏宽度拖拽 = 克隆站侧栏右缘：12px 热区、居中 3px 胶囊、悬停/聚焦显现。 */
 .sidebar-resizer { position: absolute; top: 50%; right: -1px; z-index: 30; display: flex; width: 12px; height: 48px; align-items: center; justify-content: center; transform: translateY(-50%); cursor: col-resize; outline: none; }
@@ -183,14 +180,10 @@
 @media (hover: none) { .chat-recents-tools { opacity: 1; } }
 .chat-recents-tool { display: inline-flex; width: 24px; height: 24px; align-items: center; justify-content: center; border-radius: 6px; color: var(--foreground-tertiary); }
 .chat-recents-tool:hover, .chat-recents-tool[aria-expanded="true"] { background: var(--fill-ghost-hover); color: var(--foreground); }
-.chat-recents-menu { min-width: 13rem; max-width: min(16rem, calc(100vw - 2rem)); }
-.chat-recents-menu-section { padding: 2px 0; }
-.chat-recents-menu-section + .chat-recents-menu-section { margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--fill-field); }
-.chat-recents-menu-section > p { margin: 0; padding: 4px 8px 2px; font-size: 12px; line-height: 17px; color: var(--foreground-tertiary); }
+.chat-recents-menu { min-width: 13rem; max-width: min(16rem, calc(100vw - 2rem)); padding: 4px; border-radius: 10px; }
 .chat-recents-menu-item { display: flex; width: 100%; min-height: 28px; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 8px; border-radius: 6px; font-size: 13px; line-height: 20px; text-align: left; color: var(--foreground); }
-.chat-recents-menu-item:hover { background: var(--fill-ghost-hover); }
+.chat-recents-menu-item[data-highlighted] { background: var(--fill-ghost-hover); }
 .chat-recents-menu-item > svg { flex-shrink: 0; color: var(--accent); }
-.chat-recents-menu-divider { height: 1px; margin: 4px 8px; background: var(--fill-field); }
 
 /* 动效：行底色过渡。会话行会随列表刷新重新挂载，不加入场动画，否则每次刷新整列闪一遍。 */
 .chat-nav-row { transition: background-color var(--duration-snap) var(--ease-out), color var(--duration-snap) var(--ease-out); }

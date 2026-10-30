@@ -11,6 +11,7 @@ import { AI_REASONING_EFFORTS, type AIReasoningEffort } from '@/types';
 import { isAgentChartTool } from '@/lib/agent/tool-catalog';
 import { ChartErrorBoundary } from '@/components/visualization/ChartRenderer';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
+import { Button } from '@/components/ui/Button';
 import { CanonicalChartView } from './CanonicalChartView';
 import { useAgentResultWorkspace } from './AgentResultContext';
 import './agent-results.css';
@@ -41,7 +42,7 @@ function CollaborationCard({ tool, analyses, runStatus }: { tool: AgentToolPart;
     <header>
       <h3 id={id}>协作分析</h3>
       <p>各成员独立分析，主模型汇总分歧</p>
-      {workspace && <button type="button" onClick={() => workspace.openResource(`tool:${tool.id}`)}>在工作区比较</button>}
+      {workspace && <Button unstyled type="button" onClick={() => workspace.openResource(`tool:${tool.id}`)}>在工作区比较</Button>}
     </header>
     <ul>
       {analyses.map(analysis => {
@@ -57,8 +58,8 @@ function CollaborationCard({ tool, analyses, runStatus }: { tool: AgentToolPart;
         </>;
         // With a workspace the comparison lives there; otherwise a member discloses its own answer here.
         return <li key={analysis.conversationId} data-state={status.state}>
-          {workspace ? <button type="button" onClick={() => workspace.openResource(`member:${tool.id}:${analysis.conversationId}`)}>{content}</button>
-            : analysis.answer ? <button type="button" aria-expanded={opened === analysis.conversationId} onClick={() => setOpened(opened === analysis.conversationId ? null : analysis.conversationId)}>{content}</button>
+          {workspace ? <Button unstyled type="button" onClick={() => workspace.openResource(`member:${tool.id}:${analysis.conversationId}`)}>{content}</Button>
+            : analysis.answer ? <Button unstyled type="button" aria-expanded={opened === analysis.conversationId} onClick={() => setOpened(opened === analysis.conversationId ? null : analysis.conversationId)}>{content}</Button>
             : <div>{content}</div>}
         </li>;
       })}

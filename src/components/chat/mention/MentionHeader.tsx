@@ -7,6 +7,7 @@
 'use client';
 
 import { ArrowLeft } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
 import type { Level, DataSourceLoadError } from '@/components/chat/mention/mention-constants';
 
 interface MentionHeaderProps {
@@ -22,14 +23,14 @@ export function MentionHeader({ title, activeLevel, loadError, dataSourceErrors,
         <>
             <div className="chat-mention-head">
                 {activeLevel !== 'category' && activeLevel !== 'search' && (
-                    <button
+                    <Button unstyled
                         type="button"
                         onClick={onGoBack}
                         className="chat-mention-back"
                         aria-label="返回"
                     >
                         <ArrowLeft className="w-4 h-4" />
-                    </button>
+                    </Button>
                 )}
                 <div className="chat-mention-head-title">{title}</div>
             </div>

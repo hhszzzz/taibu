@@ -9,6 +9,7 @@ import { findSavedAgentChart, getAgentChartSave, getSavedChartHref } from '@/lib
 import { useChartMutation, useUserCharts } from '@/lib/hooks/useUserCharts';
 import { createSavedChart } from '@/lib/user/charts-client';
 import { useToast } from '@/components/ui/Toast';
+import { Button } from '@/components/ui/Button';
 
 /**
  * 盘面工具栏的「保存命盘」：和八字、紫微结果页一样由用户决定是否存入命盘库。已在库里的同一张盘（无论在哪一页保存）
@@ -25,12 +26,12 @@ export function AgentChartSave({ tool, userId }: { tool: AgentToolPart; userId: 
     const savedId = findSavedAgentChart(library.data, save)?.id ?? (library.isFetching ? created : null);
     if (savedId) return <Link className="agent-board-tool is-saved" href={getSavedChartHref(save.type, savedId)}
         aria-label="已保存到我的命盘，打开命盘页" title="已保存到我的命盘，打开命盘页"><BookmarkCheck size={14} aria-hidden="true" /></Link>;
-    return <button type="button" className="agent-board-tool" aria-label="保存命盘" title="保存到我的命盘"
+    return <Button unstyled type="button" className="agent-board-tool" aria-label="保存命盘" title="保存到我的命盘"
         disabled={mutation.pending || library.isPending}
         onClick={() => void mutation.run(scope => createSavedChart(save.type, save.payload, scope), id => {
             setCreated(id);
             showToast('success', '已保存到我的命盘');
         }, error => showToast('error', error instanceof Error ? error.message : '保存命盘失败'))}>
         <BookmarkPlus size={14} aria-hidden="true" />
-    </button>;
+    </Button>;
 }

@@ -8,6 +8,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { Button } from '@/components/ui/Button';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { WorkspaceStatusCards, type WorkspaceRunInfo } from './AgentWorkspaceSections';
 import { getAgentChart, getAgentSkills } from '@/lib/agent/tool-presentation';
@@ -44,14 +45,14 @@ export function SessionDetailsPanel({ data, run, onOpen }: {
             <div className="agent-rail-body">
                 {(showAll ? charts : charts.slice(0, 4)).map(({ id, chart }) => {
                     const Icon = getChartKindMeta(chart.kind).icon;
-                    return <button key={id} type="button" className="agent-rail-row agent-rail-button agent-rail-result" onClick={() => onOpen?.(`tool:${id}`)}>
+                    return <Button unstyled key={id} type="button" className="agent-rail-row agent-rail-button agent-rail-result" onClick={() => onOpen?.(`tool:${id}`)}>
                         <Icon size={16} aria-hidden="true" />
                         <span className="agent-rail-result-text"><span>{chart.title}</span><small>{chart.summary}</small></span>
-                    </button>;
+                    </Button>;
                 })}
-                {charts.length > 4 && <button type="button" className="agent-rail-more" aria-expanded={showAll} onClick={() => setShowAll(value => !value)}>
+                {charts.length > 4 && <Button unstyled type="button" className="agent-rail-more" aria-expanded={showAll} onClick={() => setShowAll(value => !value)}>
                     {showAll ? '收起' : '显示更多'}{showAll ? <ChevronUp size={13} aria-hidden="true" /> : <ChevronDown size={13} aria-hidden="true" />}
-                </button>}
+                </Button>}
             </div>
         </section>) : undefined} />
     </aside>;

@@ -12,10 +12,11 @@
 import { useRef, useState } from 'react';
 import { ChevronDown, KeyRound, X } from 'lucide-react';
 import { ModelSelector } from '@/components/ui/ModelSelector';
+import { Button } from '@/components/ui/Button';
 import { AgentModeMenu } from '@/components/chat/composer/AgentModeMenu';
 import { CustomProviderPanel } from '@/components/chat/CustomProviderPanel';
-import { Modal } from '@/components/ui/Modal';
-import { FloatingPanel } from '@/components/ui/FloatingPanel';
+import { Dialog } from '@/components/ui/Dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/Popover';
 import { ContextRing } from '@/components/chat/agent/AgentContextUsage';
 import { pricingPlans } from '@/lib/user/membership';
 import type { MembershipType } from '@/lib/user/membership';
@@ -28,7 +29,6 @@ export interface ComposerUsage {
 
 /** claude /code 实测：chin 行尾 = 模型键 + 24px 用量环；环打开 312px 用量浮层。 */
 function UsageRing({ usage }: { usage: ComposerUsage }) {
-    const anchor = useRef<HTMLButtonElement>(null);
     const [open, setOpen] = useState(false);
     const planLimit = pricingPlans.find(plan => plan.id === usage.membershipType)?.creditLimit ?? 10;
     // 奖励积分可以超过套餐上限；分母取两者较大值，避免出现 52 / 10 这类读数。
@@ -36,21 +36,22 @@ function UsageRing({ usage }: { usage: ComposerUsage }) {
     // 环显示「已用额度」占比（claude 用量环同义）；剩余值写在 aria-label 与浮层里。
     const used = Math.max(0, limit - usage.credits);
     const percent = limit > 0 ? Math.min(100, Math.round(used / limit * 100)) : 0;
-    return <>
-        <button ref={anchor} type="button" className="chat-context-meter" aria-label={`用量：剩余 ${usage.credits} / ${limit} 积分`}
-            aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(value => !value)}>
-            <ContextRing percent={percent} size={18} />
-        </button>
-        <FloatingPanel open={open} anchorRef={anchor} onClose={() => setOpen(false)} label="用量" role="dialog" side="top" align="end" className="chat-context-panel">
-            <header className="chat-context-head"><strong>用量</strong><span>积分 · {usage.membershipType === 'free' ? 'Free' : usage.membershipType === 'plus' ? 'Plus' : 'Pro'}</span></header>
-            <div className="chat-context-divider" />
-            <dl className="chat-context-section">
-                <div className="chat-context-row"><dt>剩余积分</dt><dd>{usage.credits} / {limit}</dd></div>
-            </dl>
-            <div className="chat-context-bar" aria-hidden="true"><span style={{ width: `${percent}%` }} /></div>
-            <p className="chat-model-note">每次平台模型对话消耗 1 积分；签到与升级可补充。</p>
-        </FloatingPanel>
-    </>;
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger className="chat-context-meter" aria-label={`用量：剩余 ${usage.credits} / ${limit} 积分`}>
+                <ContextRing percent={percent} size={18} />
+            </PopoverTrigger>
+            <PopoverContent side="top" align="end" sideOffset={6} className="chat-context-panel" aria-label="用量">
+                <header className="chat-context-head"><strong>用量</strong><span>积分 · {usage.membershipType === 'free' ? 'Free' : usage.membershipType === 'plus' ? 'Plus' : 'Pro'}</span></header>
+                <div className="chat-context-divider" />
+                <dl className="chat-context-section">
+                    <div className="chat-context-row"><dt>剩余积分</dt><dd>{usage.credits} / {limit}</dd></div>
+                </dl>
+                <div className="chat-context-bar" aria-hidden="true"><span style={{ width: `${percent}%` }} /></div>
+                <p className="chat-model-note">每次平台模型对话消耗 1 积分；签到与升级可补充。</p>
+            </PopoverContent>
+        </Popover>
+    );
 }
 
 export interface ComposerStatusBarProps extends ModelSettingsProps {
@@ -92,10 +93,10 @@ export function ComposerStatusBar(props: ComposerStatusBarProps) {
             {!agentMode && <span className="chat-composer-disclaimer">理性看待玄学</span>}
             <span className="chat-toolbar-spacer" />
             {props.customProviderActive ? (
-                <button ref={providerReturnRef} type="button" className="chat-model-trigger" aria-label={`自定义模型：${props.customProviderLabel || '未命名'}`}
+                <Button unstyled ref={providerReturnRef} type="button" className="chat-model-trigger" aria-label={`自定义模型：${props.customProviderLabel || '未命名'}`}
                     aria-haspopup="dialog" aria-expanded={providerOpen} onClick={() => setProviderOpen(true)}>
                     <KeyRound size={15} aria-hidden="true" /><span className="chat-model-name">{props.customProviderLabel || '自定义模型'}</span><span className="chat-model-hint">自定义</span><ChevronDown size={14} aria-hidden="true" />
-                </button>
+                </Button>
             ) : (
                 <ModelSelector selectedModel={props.selectedModel} onModelChange={props.onModelChange}
                     reasoningEnabled={props.reasoningEnabled} onReasoningChange={props.onReasoningChange}
@@ -109,10 +110,10 @@ export function ComposerStatusBar(props: ComposerStatusBarProps) {
             {/* 用量环排在模型键之后（claude /code 实测：模型 → 环收尾在行尾） */}
             {props.usage && <UsageRing usage={props.usage} />}
 
-            <Modal open={providerOpen} onClose={() => setProviderOpen(false)} returnFocusRef={props.customProviderActive ? providerReturnRef : (props.providerReturnRef ?? undefined)} labelledBy="custom-provider-panel-title" className="chat-provider-dialog">
-                <button type="button" onClick={() => setProviderOpen(false)} aria-label="关闭自定义模型" className="agent-icon-button absolute right-3 top-3 z-10"><X size={17} /></button>
+            <Dialog bare open={providerOpen} onClose={() => setProviderOpen(false)} returnFocusRef={props.customProviderActive ? providerReturnRef : (props.providerReturnRef ?? undefined)} labelledBy="custom-provider-panel-title" className="chat-provider-dialog">
+                <Button unstyled type="button" onClick={() => setProviderOpen(false)} aria-label="关闭自定义模型" className="agent-icon-button absolute right-3 top-3 z-10"><X size={17} /></Button>
                 <CustomProviderPanel onClose={() => setProviderOpen(false)} />
-            </Modal>
+            </Dialog>
         </div>
     );
 }

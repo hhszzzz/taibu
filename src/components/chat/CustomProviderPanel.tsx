@@ -4,6 +4,9 @@ import { useEffect, useId, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Eye, EyeOff, LockKeyhole, Monitor, PencilLine } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
+import { Input } from '@/components/ui/Input';
 import type { CustomProviderConfig } from '@/types';
 import { getVendorName } from '@/lib/ai/vendor-labels';
 import { matchModelVendor } from '@/lib/ai/vendor-match';
@@ -258,12 +261,8 @@ export function CustomProviderPanel({
     const compact = !embedded;
     const fieldClass = fieldControlClass(compact);
     const monoFieldClass = `${fieldClass} font-mono placeholder:font-sans`;
-    const secondaryButtonClass = `inline-flex items-center justify-center gap-1.5 rounded-xl border border-border-hover bg-surface font-medium text-foreground transition-colors duration-150 hover:bg-background-secondary ${
-        compact ? 'h-10 px-3.5 text-sm' : 'h-10 px-4 text-sm'
-    }`;
-    const primaryButtonClass = `inline-flex items-center justify-center rounded-xl bg-accent font-medium text-on-accent transition-colors duration-150 hover:bg-accent-hover ${
-        compact ? 'h-10 flex-1 px-4 text-sm' : 'h-11 px-5 text-sm'
-    }`;
+    const secondaryButtonClass = compact ? 'px-3.5' : 'px-4';
+    const primaryButtonClass = compact ? 'flex-1 px-4' : 'px-5';
     const sectionTitleClass = embedded ? 'text-[13px] font-medium text-foreground-tertiary' : 'sr-only';
     const apiKeyToggleLabel = showApiKey ? '隐藏 API Key' : '显示 API Key';
     const apiKeyError = submitted ? errors.apiKey : undefined;
@@ -272,15 +271,15 @@ export function CustomProviderPanel({
     const modelNameError = submitted ? errors.modelName : undefined;
 
     const apiKeyToggle = (
-        <button
-            type="button"
-            onClick={() => setShowApiKey((prev) => !prev)}
-            aria-label={apiKeyToggleLabel}
+        <IconButton
+            label={apiKeyToggleLabel}
             title={apiKeyToggleLabel}
-            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-foreground"
+            expand="none"
+            onClick={() => setShowApiKey((prev) => !prev)}
+            className="h-8 w-8 rounded-lg"
         >
             {showApiKey ? <EyeOff aria-hidden="true" className="h-4 w-4" /> : <Eye aria-hidden="true" className="h-4 w-4" />}
-        </button>
+        </IconButton>
     );
 
     const summary = activeConfig ? (
@@ -318,17 +317,13 @@ export function CustomProviderPanel({
                     </div>
                 </dl>
                 <div className={`flex items-center justify-between gap-2 border-t border-border bg-background ${compact ? 'px-4 py-3' : 'px-5 py-3.5'}`}>
-                    <button
-                        type="button"
-                        onClick={handleDeactivate}
-                        className="inline-flex h-10 items-center justify-center rounded-xl px-3 text-sm text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-danger"
-                    >
+                    <Button variant="ghost" size="lg" onClick={handleDeactivate} className="px-3 hover:text-danger">
                         停用
-                    </button>
-                    <button type="button" onClick={handleStartEdit} className={secondaryButtonClass}>
+                    </Button>
+                    <Button variant="secondary" size="lg" onClick={handleStartEdit} className={secondaryButtonClass}>
                         <PencilLine aria-hidden="true" className="h-3.5 w-3.5" />
                         编辑配置
-                    </button>
+                    </Button>
                 </div>
             </div>
         </section>
@@ -343,7 +338,7 @@ export function CustomProviderPanel({
             }>
                 <div className="flex flex-col gap-2">
                     <FieldLabel htmlFor={`${fieldId}-api-url`}>API URL</FieldLabel>
-                    <input
+                    <Input
                         id={`${fieldId}-api-url`}
                         value={draft.apiUrl}
                         onChange={(event) => handleFieldChange('apiUrl', event.target.value)}
@@ -368,7 +363,7 @@ export function CustomProviderPanel({
                 <div className="flex flex-col gap-2">
                     <FieldLabel htmlFor={`${fieldId}-api-key`}>API Key</FieldLabel>
                     <div className="relative">
-                        <input
+                        <Input
                             id={`${fieldId}-api-key`}
                             value={draft.apiKey}
                             onChange={(event) => handleFieldChange('apiKey', event.target.value)}
@@ -389,7 +384,7 @@ export function CustomProviderPanel({
                     <div className="flex flex-col gap-2">
                         <FieldLabel htmlFor={`${fieldId}-model-id`}>实际请求模型</FieldLabel>
                         <div className="relative">
-                            <input
+                            <Input
                                 id={`${fieldId}-model-id`}
                                 value={draft.modelId}
                                 onChange={(event) => handleModelIdChange(event.target.value)}
@@ -414,7 +409,7 @@ export function CustomProviderPanel({
                     </div>
                     <div className="flex flex-col gap-2">
                         <FieldLabel htmlFor={`${fieldId}-model-name`}>显示名称</FieldLabel>
-                        <input
+                        <Input
                             id={`${fieldId}-model-name`}
                             value={draft.modelName}
                             onChange={(event) => handleFieldChange('modelName', event.target.value)}
@@ -429,17 +424,17 @@ export function CustomProviderPanel({
                 </div>
 
                 <div className="flex flex-wrap gap-2 pt-1">
-                    <button type="button" onClick={handleActivate} className={primaryButtonClass}>
+                    <Button size="lg" onClick={handleActivate} className={primaryButtonClass}>
                         {activeConfig ? '保存并启用' : '启用服务'}
-                    </button>
+                    </Button>
                     {activeConfig ? (
-                        <button type="button" onClick={handleCancelEdit} className={secondaryButtonClass}>
+                        <Button variant="secondary" size="lg" onClick={handleCancelEdit} className={secondaryButtonClass}>
                             取消
-                        </button>
+                        </Button>
                     ) : lastConfig ? (
-                        <button type="button" onClick={handleReactivateLastConfig} className={secondaryButtonClass}>
+                        <Button variant="secondary" size="lg" onClick={handleReactivateLastConfig} className={secondaryButtonClass}>
                             恢复上次配置
-                        </button>
+                        </Button>
                     ) : null}
                 </div>
             </div>
@@ -458,7 +453,7 @@ export function CustomProviderPanel({
     }
 
     return (
-        <div className="flex flex-col gap-5 rounded-2xl border border-border bg-surface p-5 shadow-[0_10px_30px_rgba(11, 11, 11,0.12)] md:w-[420px]">
+        <div className="flex flex-col gap-5 rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-lg)] md:w-[420px]">
             <div className="min-w-0 pr-8">
                 <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">

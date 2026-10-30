@@ -9,6 +9,7 @@
 'use client';
 
 import Link from 'next/link';
+import { Button } from '@/components/ui/Button';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useRef, useSyncExternalStore, type MouseEvent, type ReactNode } from 'react';
 import { BookOpen, LogIn, MessageSquare, PanelLeft, Plus, Search, X } from 'lucide-react';
@@ -66,9 +67,9 @@ function useSidebarActions() {
 
 function LoginButton({ rail, onLogin }: { rail: boolean; onLogin: () => void }) {
     return (
-        <button type="button" className={rail ? 'chat-rail-button' : 'chat-nav-login'} aria-label={rail ? '登录' : undefined} title={rail ? '登录' : undefined} onClick={onLogin}>
+        <Button unstyled type="button" className={rail ? 'chat-rail-button' : 'chat-nav-login'} aria-label={rail ? '登录' : undefined} title={rail ? '登录' : undefined} onClick={onLogin}>
             <LogIn size={rail ? 19 : 16} aria-hidden="true" />{rail ? null : <span>登录</span>}
-        </button>
+        </Button>
     );
 }
 
@@ -94,13 +95,16 @@ export function ChatSidebarPanel({ markers, onLogin, onClose, heading }: {
     const showConversations = useCallback(() => { listRef.current?.scrollTo({ top: 0, behavior: 'smooth' }); }, []);
     const search = useCallback(() => { onClose?.(); openSearch(); }, [onClose, openSearch]);
     const login = useCallback(() => { onClose?.(); onLogin(); }, [onClose, onLogin]);
-    // Links navigate away from what the drawer covers; buttons (menus, the list) keep it open.
-    const closeOnLink = onClose && ((event: MouseEvent<HTMLDivElement>) => {
-        if (event.target instanceof Element && event.target.closest('a[href]')) onClose();
+    // Links navigate away from what the drawer covers; buttons (menus, the list) keep it open. A link's own
+    // navigation handler can stop the bubble, so the capture pass schedules the close after the click finishes.
+    const linkInPanel = (event: MouseEvent<HTMLDivElement>) => event.target instanceof Element && Boolean(event.target.closest('a[href]'));
+    const closeOnLink = onClose && ((event: MouseEvent<HTMLDivElement>) => { if (linkInPanel(event)) onClose(); });
+    const closeOnLinkCapture = onClose && ((event: MouseEvent<HTMLDivElement>) => {
+        if (linkInPanel(event)) window.setTimeout(onClose, 0);
     });
 
     return (
-        <div className="chat-nav-panel" onClick={closeOnLink}>
+        <div className="chat-nav-panel" onClick={closeOnLink} onClickCapture={closeOnLinkCapture}>
             <div className="chat-nav-brand">
                 <Link href="/" className="chat-nav-home" aria-label="太卜首页">
                     <BrandMark className="chat-nav-logo" />
@@ -108,21 +112,21 @@ export function ChatSidebarPanel({ markers, onLogin, onClose, heading }: {
                 </Link>
                 {heading}
                 <ModeSwitch />
-                {onClose ? <button type="button" className="chat-nav-icon" aria-label="关闭聊天列表" title="关闭" onClick={onClose}>
+                {onClose ? <Button unstyled type="button" className="chat-nav-icon" aria-label="关闭聊天列表" title="关闭" onClick={onClose}>
                     <X size={18} aria-hidden="true" />
-                </button> : <button type="button" className="chat-nav-icon" aria-label="收起侧栏" title="收起侧栏" onClick={collapseChatSidebar}>
+                </Button> : <Button unstyled type="button" className="chat-nav-icon" aria-label="收起侧栏" title="收起侧栏" onClick={collapseChatSidebar}>
                     <PanelLeft size={18} aria-hidden="true" />
-                </button>}
+                </Button>}
             </div>
-            <button type="button" className="chat-nav-link chat-nav-search" onClick={search}>
+            <Button unstyled type="button" className="chat-nav-link chat-nav-search" onClick={search}>
                 <Search size={16} aria-hidden="true" />搜索对话{onClose ? null : <kbd>{shortcut}</kbd>}
-            </button>
+            </Button>
             <Link href={newChat} className="chat-nav-link is-new" aria-current={onChat && !conversationId ? 'page' : undefined} onClick={startNewChat}>
                 <span className="chat-nav-new-icon" aria-hidden="true"><Plus size={16} strokeWidth={2} /></span>新对话
             </Link>
-            <button type="button" className="chat-nav-link" aria-current={conversationId ? 'true' : undefined} onClick={showConversations}>
+            <Button unstyled type="button" className="chat-nav-link" aria-current={conversationId ? 'true' : undefined} onClick={showConversations}>
                 <MessageSquare size={18} aria-hidden="true" />对话
-            </button>
+            </Button>
             {isFeatureEnabled('charts') ? <Link href={CHARTS_HREF} className="chat-nav-link"><ChartIcon size={18} />命盘</Link> : null}
             {isFeatureEnabled('records') ? <Link href="/records" className="chat-nav-link"><BookOpen size={18} aria-hidden="true" />命理记录</Link> : null}
             {user ? <div className="chat-recents-head"><span>最近使用</span></div> : null}

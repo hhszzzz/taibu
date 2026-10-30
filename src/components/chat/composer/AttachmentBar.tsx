@@ -7,6 +7,7 @@
 'use client';
 
 import { Moon, X } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
 import type { AttachmentState } from '@/types';
 
 interface AttachmentBarProps {
@@ -42,10 +43,10 @@ export function AttachmentBar({
             {file && <span className="chat-attachment-chip">
                 <span className="chat-attachment-type" aria-hidden="true">{fileType(file.name)}</span>
                 <span className="chat-attachment-name" title={file.name}>{file.name}</span>
-                {!disabled && <button type="button" aria-label={`移除附件 ${file.name}`}
+                {!disabled && <Button unstyled type="button" aria-label={`移除附件 ${file.name}`}
                     onClick={() => onAttachmentChange?.({ ...attachmentState, file: undefined, webSearchEnabled: attachmentState?.webSearchEnabled ?? false })}>
                     <X size={14} aria-hidden="true" />
-                </button>}
+                </Button>}
             </span>}
             {dreamItems.map(item => <span key={item} className="chat-context-chip"><Moon size={13} aria-hidden="true" />{item}</span>)}
         </div>

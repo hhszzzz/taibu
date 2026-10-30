@@ -2,6 +2,7 @@
 // 需要按钮事件（定位到盘面）与 details 展开交互
 
 import { LocateFixed } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
 import type { BaziRelationsCanonicalJSON } from 'taibu-core/bazi';
 import type { AgentRunStatus } from '@/lib/agent/types';
 import type { AgentToolPart } from '@/lib/agent/tool-presentation';
@@ -168,9 +169,9 @@ export function DrilldownList({ tools, runStatus, onLocate }: {
                     <strong>{getAgentToolTitle(tool)}</strong>
                     <span>{describeDrilldownSelection(input)}</span>
                 </summary>
-                {focus && focus.targetIds.length > 0 && onLocate && <button type="button" className="agent-secondary-button agent-ws-drilldown-locate" onClick={() => onLocate(tool)}>
+                {focus && focus.targetIds.length > 0 && onLocate && <Button unstyled type="button" className="agent-secondary-button agent-ws-drilldown-locate" onClick={() => onLocate(tool)}>
                     <LocateFixed size={13} aria-hidden="true" />在盘面定位 {focus.targetIds.length} 处
-                </button>}
+                </Button>}
                 {tool.status === 'completed'
                     ? <DrilldownResult result={output.result ?? null} name={tool.name} />
                     : <WorkspaceToolPending tool={tool} runStatus={runStatus} running="正在详查…" />}

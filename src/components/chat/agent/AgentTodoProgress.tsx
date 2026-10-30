@@ -2,6 +2,7 @@
 // 需要读取工作区上下文，在工作区打开“过程”
 
 import { ChevronRight, ListChecks } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
 import type { AgentTodo } from '@/lib/agent/todos';
 import { useAgentResultWorkspace } from './AgentResultContext';
 
@@ -24,7 +25,7 @@ export function AgentTodoProgress({ items }: { items: AgentTodo[] }) {
             <span className="agent-todo-count">{done} / {items.length}</span>
             <span className="agent-todo-segments" aria-hidden="true">{items.slice(0, 12).map(item => <span key={item.id} data-state={item.status} />)}</span>
             <span className="agent-todo-current">{current ? `正在：${current.title}` : done === items.length ? '全部完成' : next ? `下一步：${next.title}` : ''}</span>
-            {workspace && <button type="button" className="agent-todo-open" onClick={() => workspace.openResource('process')}>查看<ChevronRight size={13} aria-hidden="true" /></button>}
+            {workspace && <Button unstyled type="button" className="agent-todo-open" onClick={() => workspace.openResource('process')}>查看<ChevronRight size={13} aria-hidden="true" /></Button>}
         </div>
         {!workspace && <details><summary>展开清单</summary>{list}</details>}
     </section>;

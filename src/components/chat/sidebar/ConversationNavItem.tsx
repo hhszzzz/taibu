@@ -9,6 +9,7 @@
 
 import { memo } from 'react';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { MenuTrigger, type MenuHandle } from '@/components/ui/Menu';
 import Link from 'next/link';
 import { Archive, Clock, Cloud, Ellipsis, LoaderCircle } from 'lucide-react';
 // The shared conversation lists render this row outside the chat page too.
@@ -21,9 +22,8 @@ import { ConversationItem } from './ConversationItem';
 interface ConversationNavItemProps {
     conv: ConversationListItem;
     isActive: boolean;
-    isActionActive: boolean;
     marker?: ConversationAgentMarker;
-    onOpenAction: (conv: ConversationListItem, e: React.MouseEvent) => void;
+    menu: MenuHandle<ConversationListItem>;
     isEditing?: boolean;
     editTitle?: string;
     onEditTitleChange?: (value: string) => void;
@@ -41,9 +41,8 @@ export function ConversationMarker({ marker }: { marker: ConversationAgentMarker
 export const ConversationNavItem = memo(function ConversationNavItem({
     conv,
     isActive,
-    isActionActive,
     marker,
-    onOpenAction,
+    menu,
     isEditing = false,
     editTitle = '',
     onEditTitleChange,
@@ -52,14 +51,14 @@ export const ConversationNavItem = memo(function ConversationNavItem({
 }: ConversationNavItemProps) {
     if (isEditing) {
         return (
-            <ConversationItem conv={conv} compact isEditing isActive={isActive} isActionActive={isActionActive} isSidebarCollapsed={false}
-                onSelect={ignoreSelect} onOpenAction={onOpenAction} editTitle={editTitle} onEditTitleChange={onEditTitleChange}
+            <ConversationItem conv={conv} compact isEditing isActive={isActive} isSidebarCollapsed={false}
+                onSelect={ignoreSelect} menu={menu} editTitle={editTitle} onEditTitleChange={onEditTitleChange}
                 onSaveRename={onSaveRename} onCancelRename={onCancelRename} />
         );
     }
     const title = formatConversationMenuTitle(conv);
     return (
-        <div data-conversation-row="true" className="chat-nav-row" data-active={isActive || undefined} data-menu-open={isActionActive || undefined}>
+        <div data-conversation-row="true" className="chat-nav-row" data-active={isActive || undefined}>
             <Link href={`/chat?id=${encodeURIComponent(conv.id)}`} aria-current={isActive ? 'page' : undefined} className="chat-nav-row-link" title={title}>
                 <span className="chat-nav-row-title">{title}</span>
                 <span className="chat-nav-row-badges">
@@ -70,19 +69,15 @@ export const ConversationNavItem = memo(function ConversationNavItem({
                 </span>
             </Link>
             <Tooltip label="更多">
-                <button
-                    type="button"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onOpenAction(conv, e);
-                    }}
+                <MenuTrigger
+                    handle={menu}
+                    payload={conv}
+                    onClick={(e) => e.stopPropagation()}
                     className="chat-nav-row-more"
                     aria-label="更多操作"
-                    aria-haspopup="menu"
-                    aria-expanded={isActionActive}
                 >
                     <Ellipsis size={16} aria-hidden="true" />
-                </button>
+                </MenuTrigger>
             </Tooltip>
         </div>
     );

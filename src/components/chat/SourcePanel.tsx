@@ -8,6 +8,7 @@
 'use client';
 
 import { memo } from 'react';
+import { Button } from '@/components/ui/Button';
 import { ChevronDown } from 'lucide-react';
 import type { InjectedSource } from '@/types';
 import { SourceBadge } from '@/components/chat/SourceBadge';
@@ -24,14 +25,14 @@ export const SourcePanel = memo(function SourcePanel({ sources, isExpanded, onTo
 
     return (
         <div className="mt-2 border-t border-border/50 pt-2 px-2">
-            <button
+            <Button unstyled
                 onClick={onToggle}
                 className="flex items-center gap-1 text-xs text-foreground-secondary hover:text-foreground transition-colors"
                 type="button"
             >
                 <span>参考了 {sources.length} 个来源</span>
                 <ChevronDown className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-            </button>
+            </Button>
 
             {isExpanded && (
                 <div className="mt-2 flex flex-wrap gap-1">

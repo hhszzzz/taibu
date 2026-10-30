@@ -8,16 +8,19 @@
 
 import { memo, useRef } from 'react';
 import { Archive, Check, Ellipsis, X } from 'lucide-react';
+import { MenuTrigger, type MenuHandle } from '@/components/ui/Menu';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 import { getConversationDisplayParts } from '@/lib/chat/conversation-title-display';
 import type { ConversationListItem } from '@/types';
 
 interface ConversationItemProps {
     conv: ConversationListItem;
     isActive: boolean;
-    isActionActive: boolean;
     isSidebarCollapsed: boolean;
     onSelect: (id: string) => void;
-    onOpenAction: (conv: ConversationListItem, e: React.MouseEvent) => void;
+    /** Row menus are detached triggers of one root in the list. */
+    menu: MenuHandle<ConversationListItem>;
     isEditing?: boolean;
     editTitle?: string;
     onEditTitleChange?: (value: string) => void;
@@ -30,10 +33,9 @@ interface ConversationItemProps {
 export const ConversationItem = memo(function ConversationItem({
     conv,
     isActive,
-    isActionActive,
     isSidebarCollapsed,
     onSelect,
-    onOpenAction,
+    menu,
     isEditing = false,
     editTitle = '',
     onEditTitleChange,
@@ -75,7 +77,7 @@ export const ConversationItem = memo(function ConversationItem({
                     className="flex items-center gap-1.5 px-0.5 py-0.5 rounded-md bg-background-secondary border border-border"
                     onClick={(e) => e.stopPropagation()}
                 >
-                    <input
+                    <Input
                         type="text"
                         value={editTitle}
                         onChange={(e) => onEditTitleChange?.(e.target.value)}
@@ -86,7 +88,7 @@ export const ConversationItem = memo(function ConversationItem({
                         autoFocus
                         className="min-w-0 flex-1 rounded-md bg-background border border-border px-2 py-1.5 text-[13px] text-foreground focus:outline-none focus:ring-2 focus:ring-accent/10 focus:border-accent"
                     />
-                    <button
+                    <Button unstyled
                         type="button"
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={(e) => {
@@ -97,8 +99,8 @@ export const ConversationItem = memo(function ConversationItem({
                         aria-label="取消重命名"
                     >
                         <X className="w-4.5 h-4.5" />
-                    </button>
-                    <button
+                    </Button>
+                    <Button unstyled
                         type="button"
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={(e) => {
@@ -110,7 +112,7 @@ export const ConversationItem = memo(function ConversationItem({
                         aria-label="确认重命名"
                     >
                         <Check className="w-4.5 h-4.5" />
-                    </button>
+                    </Button>
                 </div>
             );
         }
@@ -121,10 +123,10 @@ export const ConversationItem = memo(function ConversationItem({
                 className={`
                     group flex items-center gap-2 px-3 py-1 rounded-md cursor-pointer
                     transition-colors duration-150 text-[14px]
-                    ${(isActive || isActionActive) ? 'bg-background-secondary text-foreground' : 'text-foreground hover:bg-background-secondary'}
+                    ${isActive ? 'bg-background-secondary text-foreground' : 'text-foreground hover:bg-background-secondary has-[[data-popup-open]]:bg-background-secondary'}
                 `}
             >
-                <button type="button" onClick={() => onSelect(conv.id)} aria-current={isActive ? 'page' : undefined} className="flex-1 min-w-0 text-left flex flex-col focus-visible:outline-2 focus-visible:outline-accent rounded">
+                <Button unstyled type="button" onClick={() => onSelect(conv.id)} aria-current={isActive ? 'page' : undefined} className="flex-1 min-w-0 text-left flex flex-col focus-visible:outline-2 focus-visible:outline-accent rounded">
                     <span className="truncate font-medium flex items-center gap-1">
                         <span className="truncate">{mainTitle}</span>
                         {changedTitle && (
@@ -139,24 +141,20 @@ export const ConversationItem = memo(function ConversationItem({
                             {subTitle}
                         </span>
                     )}
-                </button>
+                </Button>
                 {conv.isArchived && (
                     <Archive className="w-3.5 h-3.5 text-foreground-secondary flex-shrink-0" />
                 )}
-                <div className={`flex-shrink-0 transition-opacity ${isActionActive ? 'opacity-100' : 'opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100'}`}>
-                    <button
-                        type="button"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onOpenAction(conv, e);
-                        }}
-                        className="p-1 hover:bg-background-tertiary rounded text-foreground-secondary hover:text-foreground"
+                <div className="flex-shrink-0 transition-opacity opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100 has-[[data-popup-open]]:opacity-100">
+                    <MenuTrigger
+                        handle={menu}
+                        payload={conv}
+                        onClick={(e) => e.stopPropagation()}
+                        className="rounded p-1 text-foreground-secondary hover:bg-background-tertiary hover:text-foreground data-popup-open:bg-background-tertiary data-popup-open:text-foreground"
                         aria-label="更多操作"
-                        aria-haspopup="menu"
-                        aria-expanded={isActionActive}
                     >
                         <Ellipsis className="w-4 h-4" />
-                    </button>
+                    </MenuTrigger>
                 </div>
             </div>
         );
@@ -169,7 +167,7 @@ export const ConversationItem = memo(function ConversationItem({
                 className="flex items-center gap-2 px-3 py-2 rounded-lg bg-background-secondary border border-border"
                 onClick={(e) => e.stopPropagation()}
             >
-                <input
+                <Input
                     type="text"
                     value={editTitle}
                     onChange={(e) => onEditTitleChange?.(e.target.value)}
@@ -180,7 +178,7 @@ export const ConversationItem = memo(function ConversationItem({
                     autoFocus
                     className="min-w-0 flex-1 rounded-md bg-background border border-border px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent/10 focus:border-accent"
                 />
-                <button
+                <Button unstyled
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={(e) => {
@@ -191,8 +189,8 @@ export const ConversationItem = memo(function ConversationItem({
                     aria-label="取消重命名"
                 >
                     <X className="w-4 h-4" />
-                </button>
-                <button
+                </Button>
+                <Button unstyled
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={(e) => {
@@ -204,7 +202,7 @@ export const ConversationItem = memo(function ConversationItem({
                     aria-label="确认重命名"
                 >
                     <Check className="w-4 h-4" />
-                </button>
+                </Button>
             </div>
         );
     }
@@ -215,10 +213,10 @@ export const ConversationItem = memo(function ConversationItem({
             className={`
                 group flex ${subTitle ? 'items-start' : 'items-center'} gap-3 px-4 py-2 rounded-lg cursor-pointer
                 transition-colors text-sm
-                ${(isActive || isActionActive) ? 'bg-background-secondary' : 'hover:bg-background-secondary'}
+                ${isActive ? 'bg-background-secondary' : 'hover:bg-background-secondary has-[[data-popup-open]]:bg-background-secondary'}
             `}
         >
-            <button type="button" onClick={() => onSelect(conv.id)} aria-current={isActive ? 'page' : undefined} className="flex-1 min-w-0 text-left focus-visible:outline-2 focus-visible:outline-accent rounded">
+            <Button unstyled type="button" onClick={() => onSelect(conv.id)} aria-current={isActive ? 'page' : undefined} className="flex-1 min-w-0 text-left focus-visible:outline-2 focus-visible:outline-accent rounded">
                 <span className="text-sm truncate flex items-center gap-1">
                     <span className="truncate">{mainTitle}</span>
                     {changedTitle && (
@@ -233,7 +231,7 @@ export const ConversationItem = memo(function ConversationItem({
                         {subTitle}
                     </p>
                 )}
-            </button>
+            </Button>
             {conv.isArchived && (
                 <span
                     className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border border-border bg-background-tertiary text-[10px] text-foreground-secondary flex-shrink-0 ${subTitle ? 'mt-0.5' : ''}`}
@@ -247,20 +245,16 @@ export const ConversationItem = memo(function ConversationItem({
                     {!isSidebarCollapsed && <span>归档</span>}
                 </span>
             )}
-            <div className={`flex items-center flex-shrink-0 transition-opacity ${subTitle ? 'mt-0.5' : ''} ${isActionActive ? 'opacity-100' : 'opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100'}`}>
-                <button
-                    type="button"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onOpenAction(conv, e);
-                    }}
-                    className="p-1.5 hover:bg-background-tertiary rounded text-foreground-secondary hover:text-foreground"
+            <div className={`flex items-center flex-shrink-0 transition-opacity has-[[data-popup-open]]:opacity-100 ${subTitle ? 'mt-0.5' : ''} opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100`}>
+                <MenuTrigger
+                    handle={menu}
+                    payload={conv}
+                    onClick={(e) => e.stopPropagation()}
+                    className="rounded p-1.5 text-foreground-secondary hover:bg-background-tertiary hover:text-foreground data-popup-open:bg-background-tertiary data-popup-open:text-foreground"
                     aria-label="更多操作"
-                    aria-haspopup="menu"
-                    aria-expanded={isActionActive}
                 >
                     <Ellipsis className="w-4 h-4" />
-                </button>
+                </MenuTrigger>
             </div>
         </div>
     );

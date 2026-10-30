@@ -2,6 +2,10 @@
 // 'use client'：问题面板需要分步状态、本地草稿与附件上传
 
 import { useId, useMemo, useRef, useState, type FormEvent } from 'react';
+import { Checkbox } from '@/components/ui/Checkbox';
+import { RadioGroup } from '@/components/ui/RadioGroup';
+import { Button } from '@/components/ui/Button';
+import { Textarea } from '@/components/ui/Textarea';
 import { CircleHelp, LoaderCircle, Paperclip } from 'lucide-react';
 import { normalizeQuestions, validateAnswers, formatQuestionAnswers, questionLabel, type AgentAnswers, type AgentQuestion } from '@/lib/agent/questions';
 import { describeQuestionAnswer, getDraftAnswers, questionDraftKey } from '@/lib/agent/question-drafts';
@@ -60,8 +64,8 @@ export function AgentQuestionDock({ question, questions: supplied, questionId, s
     if (collapsed) return <div className="agent-question-strip" role="group" aria-label="等待回答">
         <CircleHelp size={15} aria-hidden="true" />
         <span>回答 {questions.length} 个问题后继续任务</span>
-        <button type="button" className="agent-question-strip-stop" disabled={disabled} onClick={onStop}>停止任务</button>
-        <button ref={expandRef} type="button" className="agent-question-strip-answer" onClick={expand}>回答问题</button>
+        <Button unstyled type="button" className="agent-question-strip-stop" disabled={disabled} onClick={onStop}>停止任务</Button>
+        <Button unstyled ref={expandRef} type="button" className="agent-question-strip-answer" onClick={expand}>回答问题</Button>
     </div>;
 
     const [title, ...hintLines] = current?.question.split('\n') ?? [];
@@ -69,7 +73,7 @@ export function AgentQuestionDock({ question, questions: supplied, questionId, s
     const custom = current && <>
         {current.allowCustom && <div className="agent-question-custom">
             {!!current.options?.length && <label htmlFor={`${id}-answer`}>自行填写</label>}
-            <textarea id={`${id}-answer`} rows={1} value={draft.custom[current.id] ?? ''} maxLength={8000} disabled={sending || disabled}
+            <Textarea id={`${id}-answer`} rows={1} value={draft.custom[current.id] ?? ''} maxLength={8000} disabled={sending || disabled}
                 aria-label={current.options?.length ? undefined : title}
                 placeholder={current.options?.length ? '其他情况，可直接写' : '填写你的回答'}
                 onChange={event => update({ answers: { ...draft.answers, [current.id]: current.multiple ? draft.answers[current.id] ?? [] : [] }, custom: { ...draft.custom, [current.id]: event.target.value } })} />
@@ -83,15 +87,15 @@ export function AgentQuestionDock({ question, questions: supplied, questionId, s
                 <h2 id={`${id}-title`}>太卜需要补充 {questions.length} 项信息</h2>
                 <p>回答后继续同一任务 · 关闭页面也会保留问题和草稿</p>
             </div>
-            <button ref={laterRef} type="button" className="agent-question-later" disabled={sending} onClick={collapse}>稍后回答</button>
+            <Button unstyled ref={laterRef} type="button" className="agent-question-later" disabled={sending} onClick={collapse}>稍后回答</Button>
         </div>
         <nav className="agent-question-steps" aria-label="问题导航">
-            {questions.map((q, index) => <button key={q.id} type="button" aria-current={step === index ? 'step' : undefined} data-answered={answered(q)} onClick={() => setStep(index)}>
+            {questions.map((q, index) => <Button unstyled key={q.id} type="button" aria-current={step === index ? 'step' : undefined} data-answered={answered(q)} onClick={() => setStep(index)}>
                 <span aria-hidden="true">{effective[q.id] === null ? '–' : answered(q) ? '✓' : index + 1}</span>{questionLabel(q)}
-            </button>)}
-            <button type="button" aria-current={summary ? 'step' : undefined} data-answered={ready} onClick={() => setStep(questions.length)}>
+            </Button>)}
+            <Button unstyled type="button" aria-current={summary ? 'step' : undefined} data-answered={ready} onClick={() => setStep(questions.length)}>
                 <span aria-hidden="true">✓</span>检查
-            </button>
+            </Button>
         </nav>
         <form onSubmit={submit}>
             <div className="agent-question-body">
@@ -101,16 +105,23 @@ export function AgentQuestionDock({ question, questions: supplied, questionId, s
                 </div> : current.options?.length ? <fieldset>
                     <legend className="agent-question-title">{title}{(current.multiple || current.allowSkip) && <small>{[current.multiple && '可多选', current.allowSkip && '可跳过'].filter(Boolean).join(' · ')}</small>}</legend>
                     {hint && <p className="agent-question-hint">{hint}</p>}
-                    <div className={`agent-question-options${gridOptions(current) ? ' is-grid' : ''}`}>
+                    {current.multiple ? <div className={`agent-question-options${gridOptions(current) ? ' is-grid' : ''}`}>
                         {current.options.map(option => <label key={option.id} className="agent-question-option">
-                            <input type={current.multiple ? 'checkbox' : 'radio'} name={`${id}-${current.id}`} checked={draft.answers[current.id]?.includes(option.id) ?? false} disabled={sending || disabled}
-                                onChange={() => {
+                            <Checkbox checked={draft.answers[current.id]?.includes(option.id) ?? false} disabled={sending || disabled}
+                                onCheckedChange={() => {
                                     const previous = draft.answers[current.id] ?? [];
-                                    const next = current.multiple ? previous.includes(option.id) ? previous.filter(value => value !== option.id) : [...previous, option.id] : [option.id];
-                                    update({ answers: { ...draft.answers, [current.id]: next }, custom: current.multiple ? draft.custom : { ...draft.custom, [current.id]: '' } });
+                                    const next = previous.includes(option.id) ? previous.filter(value => value !== option.id) : [...previous, option.id];
+                                    update({ answers: { ...draft.answers, [current.id]: next }, custom: draft.custom });
                                 }} />{option.label}
                         </label>)}
-                    </div>
+                    </div> : <RadioGroup
+                        aria-label={title}
+                        value={draft.answers[current.id]?.[0] ?? ''}
+                        onChange={optionId => update({ answers: { ...draft.answers, [current.id]: [optionId] }, custom: { ...draft.custom, [current.id]: '' } })}
+                        options={current.options.map(option => ({ value: option.id, label: option.label }))}
+                        className={`agent-question-options${gridOptions(current) ? ' is-grid' : ''}`}
+                        optionClassName="agent-question-option"
+                    />}
                     {custom}
                 </fieldset> : <div className="agent-question-field">
                     <label htmlFor={`${id}-answer`} className="agent-question-title">{title}{current.allowSkip && <small>可跳过</small>}</label>
@@ -118,22 +129,22 @@ export function AgentQuestionDock({ question, questions: supplied, questionId, s
                     {custom}
                 </div>}
                 <PrivateAttachments items={attachmentState.uploaded} disabled={uploads.uploading || sending} onRemove={removed => onAttachmentChange({ ...attachmentState, uploaded: attachmentState.uploaded?.filter(item => item.id !== removed) })} />
-                <button type="button" className="agent-question-attach" disabled={sending || uploads.uploading || disabled} onClick={() => fileRef.current?.click()}>
+                <Button unstyled type="button" className="agent-question-attach" disabled={sending || uploads.uploading || disabled} onClick={() => fileRef.current?.click()}>
                     <Paperclip size={14} aria-hidden="true" />{uploads.uploading ? '正在保存资料…' : '添加图片或文本资料'}
-                </button>
+                </Button>
                 <input ref={fileRef} type="file" className="hidden" tabIndex={-1} aria-hidden="true" multiple accept={PRIVATE_ATTACHMENT_ACCEPT}
                     onChange={event => { void uploads.upload(Array.from(event.target.files ?? [])); event.target.value = ''; }} />
                 {error && <p className="agent-error" role="alert">{error}</p>}
             </div>
             <div className="agent-question-footer">
                 <span>{summary ? ready ? '已全部回答，可以提交' : '还有问题未回答' : `第 ${step + 1} / ${questions.length} 题`}</span>
-                {!summary && current.allowSkip && <button type="button" className="agent-question-skip" disabled={sending || disabled}
-                    onClick={() => { update({ answers: { ...draft.answers, [current.id]: null }, custom: { ...draft.custom, [current.id]: '' } }); setStep(step + 1); }}>跳过此题</button>}
-                <button type="button" className="agent-question-previous" disabled={sending || step === 0} onClick={() => setStep(step - 1)}>上一题</button>
-                <button type="submit" className="agent-question-next" disabled={sending || disabled || (summary && !ready)}>
+                {!summary && current.allowSkip && <Button unstyled type="button" className="agent-question-skip" disabled={sending || disabled}
+                    onClick={() => { update({ answers: { ...draft.answers, [current.id]: null }, custom: { ...draft.custom, [current.id]: '' } }); setStep(step + 1); }}>跳过此题</Button>}
+                <Button unstyled type="button" className="agent-question-previous" disabled={sending || step === 0} onClick={() => setStep(step - 1)}>上一题</Button>
+                <Button unstyled type="submit" className="agent-question-next" disabled={sending || disabled || (summary && !ready)}>
                     {sending && <LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}
                     {sending ? '正在发送' : summary ? '提交并继续' : step === questions.length - 1 ? '检查回答' : '下一题'}
-                </button>
+                </Button>
             </div>
         </form>
     </section>;

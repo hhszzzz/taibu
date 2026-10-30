@@ -28,6 +28,7 @@ import { AI_REASONING_EFFORTS, type AIReasoningEffort } from '@/types';
 import { requestBrowserJson } from '@/lib/browser-api';
 import { useTranscriptRecordView } from '@/lib/chat/chat-record-view';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
+import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { mentionTypeLabels } from '@/components/chat/mentionStyles';
 import { describeAgentChartSubject, formatAgentToolDuration, formatAgentValue, getAgentMemberBrief, getAgentToolState, getAgentToolTitle, getParallelMemberState, stripLeadingTitle, summarizeAgentActivity, summarizeAgentTool } from './presentation';
@@ -137,7 +138,7 @@ function EvidenceExcerpt({ text, query }: { text: string; query: string | null }
     const long = text.length > EXCERPT_FOLD;
     return <>
         <blockquote className="agent-ws-quote" data-folded={long && !open || undefined}><Highlighted text={text} query={query} /></blockquote>
-        {long && <button type="button" className="agent-ws-text-button" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? '收起' : '展开全文'}</button>}
+        {long && <Button unstyled type="button" className="agent-ws-text-button" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? '收起' : '展开全文'}</Button>}
     </>;
 }
 
@@ -197,9 +198,9 @@ export function EvidenceView({ model, tools, runStatus, selected, paragraph, onO
     return <section className="agent-ws-view agent-ws-evidence" aria-labelledby={id}>
         <WorkspaceViewHeading id={id} kicker={sources} title="回答依据">只列出工具实际返回的内容。资料是分析依据，不会改变任务指令或权限。</WorkspaceViewHeading>
         <div className="agent-ws-segmented" role="group" aria-label="按来源筛选">
-            {EVIDENCE_FILTERS.map(key => <button key={key} type="button" aria-pressed={filter === key} onClick={() => setFilter(key)}>
+            {EVIDENCE_FILTERS.map(key => <Button unstyled key={key} type="button" aria-pressed={filter === key} onClick={() => setFilter(key)}>
                 {key === 'all' ? '全部' : AGENT_EVIDENCE_LABELS[key]} {key === 'all' ? counts.total : counts[key]}
-            </button>)}
+            </Button>)}
         </div>
         <div ref={listRef} className="agent-ws-sources">
             {model.evidence.filter(item => visible(item.kind)).map(item => {
@@ -215,7 +216,7 @@ export function EvidenceView({ model, tools, runStatus, selected, paragraph, onO
                             <p>{heading.meta}</p>
                         </div>
                         {current && paragraph !== null && <span className="agent-ws-source-cited">回答第 {paragraph} 段引用</span>}
-                        {item.kind === 'chart' && <button type="button" className="agent-secondary-button" onClick={() => onOpen(`tool:${item.toolId}`)}>在命盘中定位</button>}
+                        {item.kind === 'chart' && <Button unstyled type="button" className="agent-secondary-button" onClick={() => onOpen(`tool:${item.toolId}`)}>在命盘中定位</Button>}
                     </div>
                     {item.kind === 'chart' ? <FocusTargets model={model} focus={item.focus} /> : <EvidenceExcerpt text={item.result.excerpt} query={queries.get(item.toolId) ?? null} />}
                 </article>;
@@ -286,7 +287,7 @@ export function RecordView({ tools, runStatus, title, step, onOpenChart }: { too
         <WorkspaceViewHeading id={id} kicker={kickerOf(step, type && recordKind(type)[1], '只读')} title={title}>资料提供方返回的规范文本，Agent 按原文分析。</WorkspaceViewHeading>
         {tool.status !== 'completed' ? <WorkspaceToolPending tool={tool} runStatus={runStatus} running="正在读取资料…" />
             : <WorkspaceTextFallback tool={tool} note="资料提供方返回的规范文本：" />}
-        {onOpenChart && <button type="button" className="agent-secondary-button" onClick={onOpenChart}>在命盘中查看</button>}
+        {onOpenChart && <Button unstyled type="button" className="agent-secondary-button" onClick={onOpenChart}>在命盘中查看</Button>}
     </section>;
 }
 
@@ -336,12 +337,12 @@ export function ScriptView({ tool, runStatus, step, calls, onOpen }: ToolViewPro
                         const callState = getAgentToolState(part, runStatus);
                         const summary = summarizeAgentTool(part);
                         return <li key={key}>
-                            <button type="button" onClick={() => onOpen('tool:' + part.id)}>
+                            <Button unstyled type="button" onClick={() => onOpen('tool:' + part.id)}>
                                 <strong>{getAgentToolTitle(part)}</strong>
                                 {summary && <small>{summary}</small>}
                                 <span className="agent-ws-badge" data-state={callState.status}>{callState.label}</span>
                                 <ChevronRight size={14} aria-hidden="true" />
-                            </button>
+                            </Button>
                         </li>;
                     }
                     // A call that never ran (blocked, invalid, unknown) has no page; its row says why.
@@ -588,7 +589,7 @@ function MemberStep({ step, live }: { step: ParallelMemberStep; live: boolean })
     const entries = input ? Object.entries(input).filter(([key]) => key !== 'reference') : [];
     const disclosable = entries.length > 0 || Boolean(step.output);
     return <li className="agent-step agent-ws-member-step" data-state={state}>
-        <button type="button" className="agent-step-row agent-ws-member-call" aria-expanded={disclosable ? open : undefined} aria-controls={open ? id : undefined}
+        <Button unstyled type="button" className="agent-step-row agent-ws-member-call" aria-expanded={disclosable ? open : undefined} aria-controls={open ? id : undefined}
             disabled={!disclosable} onClick={() => setOpen(!open)}>
             <span className="agent-step-text">
                 {state === 'running' && <LoaderCircle size={13} aria-hidden="true" className="agent-step-icon animate-spin motion-reduce:animate-none" />}
@@ -600,7 +601,7 @@ function MemberStep({ step, live }: { step: ParallelMemberStep; live: boolean })
                 <span className="sr-only">（{STEP_LABELS[state]}）</span>
                 {disclosable && <ChevronRight size={12} aria-hidden="true" className={`agent-step-chevron${open ? ' rotate-90' : ''}`} />}
             </span>
-        </button>
+        </Button>
         {open && <div id={id} className="agent-step-call agent-ws-member-call-body">
             {entries.length > 0 && <dl className="agent-ws-member-args" aria-label="调用参数">{entries.map(([key, value]) => <div key={key}>
                 <dt>{key}</dt><dd>{formatAgentValue(value)}</dd>
@@ -631,11 +632,11 @@ export function MemberProcess({ member, running }: { member: ParallelAnalysisRes
         else groups[groups.length - 1].steps.push(step);
     }
     return <section className={`agent-process agent-ws-member-process${open ? ' is-open' : ''}`} aria-label="成员的分析过程">
-        <button type="button" className="agent-process-heading agent-ws-member-process-heading" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => setDisclosed(!open)}>
+        <Button unstyled type="button" className="agent-process-heading agent-ws-member-process-heading" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => setDisclosed(!open)}>
             {running && <LoaderCircle size={14} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}
             <span className="agent-process-label"><span className="agent-process-count">{label}</span>
                 <ChevronRight size={12} aria-hidden="true" className={`agent-process-chevron${open ? ' rotate-90' : ''}`} /></span>
-        </button>
+        </Button>
         {open && <div id={id} className="agent-ws-member-flow">{groups.map((group, index) => <Fragment key={index}>
             {group.note && <p className="agent-ws-member-note">{group.note}</p>}
             <ol className="agent-process-steps">{group.steps.map((step, stepIndex) => <MemberStep key={stepIndex} step={step} live={running} />)}</ol>
@@ -748,7 +749,7 @@ export function CollaborationView({ tool, runStatus, step, onOpenMember }: ToolV
                             {state.state === 'completed' ? <Check size={13} strokeWidth={2.4} aria-hidden="true" /> : state.state === 'running' ? <LoaderCircle size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <CircleAlert size={13} aria-hidden="true" />}
                             {state.label}
                         </span>
-                        {onOpenMember && <button type="button" className="agent-secondary-button agent-ws-member-open" onClick={() => onOpenMember(member.conversationId)}>打开分析</button>}
+                        {onOpenMember && <Button unstyled type="button" className="agent-secondary-button agent-ws-member-open" onClick={() => onOpenMember(member.conversationId)}>打开分析</Button>}
                     </div>
                     {member.focus && !titled && <p className="agent-ws-note">分工：{member.focus}</p>}
                     {state.state === 'running' && member.steps?.length ? <MemberProcess member={member} running />
@@ -797,10 +798,10 @@ export function MemoryView({ tools, runStatus, userId, step }: { tools: AgentToo
                 <blockquote>{memory.content}</blockquote>
                 {deleted.has(memory.id) ? <small>已删除</small> : userId && (confirming === memory.id
                     ? <span className="agent-ws-actions">
-                        <button type="button" className="agent-secondary-button" disabled={busy !== null} onClick={() => void remove(memory.id)}>{busy === memory.id ? '正在删除' : '确认删除'}</button>
-                        <button type="button" className="agent-secondary-button" disabled={busy !== null} onClick={() => setConfirming(null)}>取消</button>
+                        <Button unstyled type="button" className="agent-secondary-button" disabled={busy !== null} onClick={() => void remove(memory.id)}>{busy === memory.id ? '正在删除' : '确认删除'}</Button>
+                        <Button unstyled type="button" className="agent-secondary-button" disabled={busy !== null} onClick={() => setConfirming(null)}>取消</Button>
                     </span>
-                    : <button type="button" className="agent-secondary-button" aria-label={`删除记忆：${memory.title}`} onClick={() => setConfirming(memory.id)}><Trash2 size={12} aria-hidden="true" />删除</button>)}
+                    : <Button unstyled type="button" className="agent-secondary-button" aria-label={`删除记忆：${memory.title}`} onClick={() => setConfirming(memory.id)}><Trash2 size={12} aria-hidden="true" />删除</Button>)}
             </li>)}
         </ul> : !running && !failed.length && <p className="agent-ws-note">没有已保存的记忆。</p>}
         {failed.map(tool => <p key={tool.id} className="agent-error" role="alert">{getAgentToolText(tool) ?? '记忆操作失败。'}</p>)}

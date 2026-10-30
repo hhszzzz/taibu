@@ -12,6 +12,7 @@ import {
 } from '@/lib/agent/archive';
 import { queryKeys } from '@/lib/query/keys';
 import { useToast } from '@/components/ui/Toast';
+import { Button } from '@/components/ui/Button';
 import './agent-results.css';
 
 const archiveUrl = (runId: string) => `/api/agent/runs/${encodeURIComponent(runId)}/archive`;
@@ -85,9 +86,9 @@ export function AgentArchiveProposalCard({ card }: { card: AgentArchiveCard }) {
                     ? <span className="agent-archive-status">这些项已经填写{state.href && <> · <Link href={state.href}>查看断事笔记</Link></>}</span>
                     : state?.state === 'unavailable'
                         ? <span className="agent-archive-status" role="note"><CircleAlert size={14} aria-hidden="true" />{state.message}</span>
-                        : <button type="button" className="agent-archive-action" disabled={saving || status.isPending} onClick={() => void save()}>
+                        : <Button unstyled type="button" className="agent-archive-action" disabled={saving || status.isPending} onClick={() => void save()}>
                             <BookmarkPlus size={14} aria-hidden="true" />{saving ? '正在保存' : '保存'}
-                        </button>}
+                        </Button>}
             {status.isError && !state && <span className="agent-archive-status" role="alert">暂时读不到保存状态，仍可保存</span>}
         </footer>
     </section>;

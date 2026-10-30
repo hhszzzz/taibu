@@ -2,6 +2,7 @@
 // 需要点击事件在工作区内切换标签，并在概览中直接导出对话
 
 import { useId, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { Button } from '@/components/ui/Button';
 import Link from 'next/link';
 import { ArrowUpRight, BookOpen, BookmarkPlus, Calculator, ChevronDown, ChevronRight, CircleHelp, Database, Files, FileCode2, FileText, Globe, GripVertical, ImagePlus, ListChecks, ScanSearch, Search, Sigma, Sparkles, Users, Wrench, type LucideIcon } from 'lucide-react';
 import { type AgentMessageData, type AgentRunView } from '@/lib/agent/types';
@@ -120,7 +121,7 @@ function OverviewRow({ thumb, icon: Icon, title, badge, facts, tags, onOpen, lab
         </span>
     </>;
     return onOpen
-        ? <button type="button" className="agent-ws-row" onClick={onOpen} aria-label={label} {...data}>{body}</button>
+        ? <Button unstyled type="button" className="agent-ws-row" onClick={onOpen} aria-label={label} {...data}>{body}</Button>
         : <div className="agent-ws-row" {...data}>{body}</div>;
 }
 
@@ -132,10 +133,10 @@ function ModelsCard({ data, run, grip }: { data?: AgentMessageData; run?: Worksp
     if (members.length === 0) return null;
     return <section className="agent-ws-status-card" aria-label="多模型协作">
         <div className="agent-ws-status-head">
-            <button type="button" className="agent-ws-status-toggle" aria-expanded={open} onClick={() => setOpen(value => !value)}>
+            <Button unstyled type="button" className="agent-ws-status-toggle" aria-expanded={open} onClick={() => setOpen(value => !value)}>
                 <span>多模型协作</span>
                 {open ? <ChevronDown size={12} aria-hidden="true" /> : <ChevronRight size={12} aria-hidden="true" />}
-            </button>
+            </Button>
             {grip}
             <span className="agent-ws-status-count">{members.length}</span>
         </div>
@@ -214,13 +215,13 @@ export function WorkspaceStatusCards({ data, run, afterContext, skills, onOpen }
         return 0;
     };
     // 拖动把手 = claude tile 头行的「移动」钮：紧跟标题、悬停显形。
-    const grip = (kind: RailCardKind) => <button type="button" className="agent-rail-card-grip" aria-label={`移动${RAIL_CARD_LABELS[kind]}卡片`}
+    const grip = (kind: RailCardKind) => <Button unstyled type="button" className="agent-rail-card-grip" aria-label={`移动${RAIL_CARD_LABELS[kind]}卡片`}
         onPointerDown={event => start(kind, event)} onPointerMove={move} onPointerUp={end} onPointerCancel={() => setDrag(null)}
         onKeyDown={event => {
             if (!event.altKey || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return;
             event.preventDefault();
             nudge(kind, event.key === 'ArrowUp' ? -1 : 1);
-        }}><GripVertical size={12} aria-hidden="true" /></button>;
+        }}><GripVertical size={12} aria-hidden="true" /></Button>;
     return <div className="agent-ws-status-cards" data-dragging={drag ? 'true' : undefined}>
         {available.map((kind, index) => <div key={kind} ref={node => { if (node) cards.current.set(kind, node); else cards.current.delete(kind); }}
             className="agent-rail-card" data-dragged={drag?.kind === kind || undefined}
@@ -270,9 +271,9 @@ export function WorkspaceOverview({ model, artifacts, saved, onOpen }: {
         </header>
         {plan && <section className="agent-ws-overview-links" aria-label="分析计划">
             <h3>分析计划{planState && <span> {planState}</span>}</h3>
-            <div className="agent-ws-links"><button type="button" className="agent-secondary-button" onClick={() => onOpen(plan.id)}>
+            <div className="agent-ws-links"><Button unstyled type="button" className="agent-secondary-button" onClick={() => onOpen(plan.id)}>
                 {PlanIcon && <PlanIcon size={12} aria-hidden="true" />}{planPreview ?? '查看计划'}
-            </button></div>
+            </Button></div>
         </section>}
         {count === 0 ? <p className="agent-ws-overview-empty"><Files size={16} aria-hidden="true" />Agent 排盘、计算或检索后，成果会汇总在这里。</p>
             : <div className="agent-ws-rows">
@@ -296,13 +297,13 @@ export function WorkspaceOverview({ model, artifacts, saved, onOpen }: {
                 {savedOnly.map(artifact => <OverviewRow key={artifact.id} data-overview-result="saved" icon={Files} thumb={null}
                     title={artifact.title} badge={{ text: '已保存', state: 'saved' }} facts={artifact.recordId ? '分析记录' : '命盘'}
                     tags={<>
-                        {!artifact.recordId && <button type="button" onClick={() => onOpen(`chart:${artifact.id}`)}>预览命盘</button>}
+                        {!artifact.recordId && <Button unstyled type="button" onClick={() => onOpen(`chart:${artifact.id}`)}>预览命盘</Button>}
                         <Link href={getAgentArtifactHref(artifact)!}>打开<ArrowUpRight size={12} aria-hidden="true" /></Link>
                     </>} />)}
             </div>}
         {attachments.length > 0 && <section className="agent-ws-overview-links" aria-label="对话资料">
             <h3>对话资料 <span>{attachments.length}</span></h3>
-            <div className="agent-ws-links">{attachments.map(resource => <button key={resource.id} type="button" className="agent-secondary-button" onClick={() => onOpen(resource.id)}><FileText size={12} aria-hidden="true" />{resource.title}</button>)}</div>
+            <div className="agent-ws-links">{attachments.map(resource => <Button unstyled key={resource.id} type="button" className="agent-secondary-button" onClick={() => onOpen(resource.id)}><FileText size={12} aria-hidden="true" />{resource.title}</Button>)}</div>
         </section>}
     </section>;
 }

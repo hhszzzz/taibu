@@ -19,11 +19,11 @@
 /* 顶部搜索：替换标签行，占满头部剩余宽度（claude 讨论串搜索框同款）。 */
 .agent-panel-header .agent-ws-search-header { flex: 1 1 auto; min-width: 0; height: 32px; margin: 0; padding: 0 10px; border: 1px solid var(--accent); border-radius: 9px; background: var(--background); }
 .agent-panel-header .agent-ws-search-header input { font-size: calc(13.5 / 16 * 1rem); }
-.agent-ws-search-results { display: flex; flex: 1; min-height: 0; flex-direction: column; gap: 2px; padding: 8px; overflow-y: auto; }
-.agent-ws-search-results > button { display: flex; width: 100%; min-width: 0; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; font-size: calc(13.5 / 16 * 1rem); text-align: left; color: var(--foreground); }
-.agent-ws-search-results > button:hover { color: var(--accent-hover); }
-.agent-ws-search-results > button > svg { flex-shrink: 0; color: var(--foreground-tertiary); }
-.agent-ws-search-results > button > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-ws-search-results { display: flex; flex: 1; min-height: 0; flex-direction: column; gap: 2px; margin: 0; padding: 8px; list-style: none; overflow-y: auto; }
+.agent-ws-search-results > li > button { display: flex; width: 100%; min-width: 0; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; font-size: calc(13.5 / 16 * 1rem); text-align: left; color: var(--foreground); }
+.agent-ws-search-results > li > button:hover { color: var(--accent-hover); }
+.agent-ws-search-results > li > button > svg { flex-shrink: 0; color: var(--foreground-tertiary); }
+.agent-ws-search-results > li > button > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent-ws-tabs [role="tab"]:focus-visible, .agent-ws-tab-close:focus-visible { outline-offset: -3px; }
 .agent-ws-tab-separator { flex-shrink: 0; align-self: center; width: 1px; height: 18px; margin: 0 4px; background: var(--border); }
 .agent-ws-tab-live { flex-shrink: 0; width: 6px; height: 6px; border-radius: 999px; background: var(--accent); }
@@ -365,7 +365,6 @@ button.agent-ws-row:hover { border-color: color-mix(in srgb, var(--accent) 45%, 
 .agent-ws-overview-summary dd { min-width: 0; overflow-wrap: anywhere; }
 .agent-ws-overview-export { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--background); }
 .agent-ws-overview-export > label { display: flex; align-items: center; gap: 8px; font-size: calc(13 / 16 * 1rem); color: var(--foreground-secondary); }
-.agent-ws-overview-export input { width: 16px; height: 16px; accent-color: var(--accent); }
 .agent-ws-overview-export > div { display: flex; flex-wrap: wrap; gap: 8px; }
 .agent-ws-overview-export .agent-secondary-button { display: inline-flex; align-items: center; gap: 5px; height: 36px; padding: 0 14px; border-color: var(--border-hover); border-radius: 10px; background: var(--chat-raised); font-size: calc(13 / 16 * 1rem); color: var(--foreground); }
 .agent-ws-links { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -595,8 +594,8 @@ button.agent-ws-status-head:disabled { cursor: default; }
 .agent-ws-tab-live[data-state="waiting"] { animation-duration: 2.4s; }
 .agent-follow-chart { transition: background-color var(--duration-base) var(--ease-out), border-color var(--duration-base) var(--ease-out), color var(--duration-base) var(--ease-out); }
 .agent-ws-search-header { animation: motion-fade var(--duration-snap) var(--ease-out) backwards; }
-.agent-ws-search-results > button { transition: color var(--duration-snap) var(--ease-out), background-color var(--duration-snap) var(--ease-out); }
-.agent-ws-search-results > button:hover { background: var(--fill-ghost-hover); }
+.agent-ws-search-results > li > button { transition: color var(--duration-snap) var(--ease-out), background-color var(--duration-snap) var(--ease-out); }
+.agent-ws-search-results > li > button:hover { background: var(--fill-ghost-hover); }
 /* 概览卡片与成果行：悬停时轻微抬起。 */
 .agent-ws-row { transition: border-color var(--duration-snap) var(--ease-out), box-shadow var(--duration-base) var(--ease-out), translate var(--duration-base) var(--ease-out); }
 button.agent-ws-row:hover { translate: 0 -1px; box-shadow: 0 4px 14px rgb(0 0 0 / .06); }

@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link2, RefreshCw, Trash2 } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
+import { MenuCheckboxItem, MenuItem, MenuSeparator } from '@/components/ui/Menu';
 import { copyShareUrl, deleteConversationShare, fetchConversationShare, saveConversationShare } from '@/lib/chat/conversation-share-client';
 import type { ConversationShareState } from '@/lib/chat/conversation-share';
 import type { ConversationExportFormat } from '@/lib/chat/conversation-export';
@@ -111,36 +112,36 @@ export function ShareConversationMenu({ conversationId, taskActive, exportBusy, 
         {status === 'loading' && <p className="chat-header-menu-note">正在读取分享状态…</p>}
         {status === 'error' && <>
             <p className="chat-header-menu-note">读取分享状态失败。</p>
-            <button type="button" role="menuitem" onClick={() => { void load(conversationId); }}>
+            <MenuItem className="chat-header-menu-item" onClick={() => { void load(conversationId); }}>
                 <RefreshCw size={15} aria-hidden="true" />重试
-            </button>
+            </MenuItem>
         </>}
         {status === 'ready' && <>
             <p className="chat-header-menu-note">
                 {taskActive ? '任务进行中，完成后可以分享。'
                     : share ? '持有链接的任何人都能查看这份只读快照；之后的新消息需「更新链接」才会出现。'
-                        : '创建只读快照链接，持有链接的任何人都能查看。'}
+                        : '创建只读快照链接，持有链接的任何人都可以查看。'}
             </p>
             {share ? <>
-                <button type="button" role="menuitem" disabled={busy !== null} onClick={() => { void copy(); }}>
+                <MenuItem className="chat-header-menu-item" closeOnClick={false} disabled={busy !== null} onClick={() => { void copy(); }}>
                     <Link2 size={15} aria-hidden="true" />复制公开链接
-                </button>
-                <button type="button" role="menuitem" disabled={locked} onClick={() => { void save(); }}>
+                </MenuItem>
+                <MenuItem className="chat-header-menu-item" closeOnClick={false} disabled={locked} onClick={() => { void save(); }}>
                     <RefreshCw size={15} aria-hidden="true" />{busy === 'save' ? '正在更新…' : '更新链接'}
-                </button>
-                <button type="button" role="menuitem" className="is-danger" disabled={busy !== null} onClick={() => { void remove(); }}>
+                </MenuItem>
+                <MenuItem tone="danger" className="chat-header-menu-item" closeOnClick={false} disabled={busy !== null} onClick={() => { void remove(); }}>
                     <Trash2 size={15} aria-hidden="true" />{busy === 'delete' ? '正在删除…' : confirmDelete ? '确认删除链接' : '删除链接'}
-                </button>
-            </> : <button type="button" role="menuitem" disabled={locked} onClick={() => { void save(); }}>
+                </MenuItem>
+            </> : <MenuItem className="chat-header-menu-item" closeOnClick={false} disabled={locked} onClick={() => { void save(); }}>
                 <Link2 size={15} aria-hidden="true" />{busy === 'save' ? '正在创建…' : '创建公开链接'}
-            </button>}
-            <label className="chat-header-menu-check-row">
-                <input type="checkbox" checked={includeCharts} disabled={locked} onChange={event => setIncludeCharts(event.target.checked)} />
+            </MenuItem>}
+            <MenuCheckboxItem className="chat-header-menu-item" checked={includeCharts} closeOnClick={false}
+                disabled={locked} onCheckedChange={setIncludeCharts}>
                 包含命盘与工具结果
-            </label>
+            </MenuCheckboxItem>
         </>}
-        <div className="chat-header-menu-divider" role="separator" />
-        <button type="button" role="menuitem" disabled={exportBusy !== null} onClick={() => { onClose(); onExport('md'); }}>导出 Markdown</button>
-        <button type="button" role="menuitem" disabled={exportBusy !== null} onClick={() => { onClose(); onExport('html'); }}>导出 HTML</button>
+        <MenuSeparator />
+        <MenuItem className="chat-header-menu-item" disabled={exportBusy !== null} onClick={() => { onClose(); onExport('md'); }}>导出 Markdown</MenuItem>
+        <MenuItem className="chat-header-menu-item" disabled={exportBusy !== null} onClick={() => { onClose(); onExport('html'); }}>导出 HTML</MenuItem>
     </>;
 }

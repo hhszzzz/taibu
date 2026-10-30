@@ -19,7 +19,9 @@ import { AgentQueue } from './agent/AgentQueue';
 import { AnalysisMethodPicker } from './agent/AnalysisMethodPicker';
 import Link from 'next/link';
 import { LayoutDashboard, Lock, X } from 'lucide-react';
-import { Modal } from '@/components/ui/Modal';
+import { Dialog } from '@/components/ui/Dialog';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 import type { ChatMessage, AttachmentState, Mention, PrivateAttachment } from '@/types';
 import { ChatMessageList } from '@/components/chat/ChatMessageList';
 import { VirtualizedChatMessageList } from '@/components/chat/VirtualizedChatMessageList';
@@ -543,9 +545,9 @@ export function ChatLayout(props: ChatLayoutProps) {
                     empty={!showHeader}
                     title={title}
                     conversationId={activeConversationId}
-                    workspaceButton={hasWorkspace && showHeader ? <button type="button" ref={workspaceButtonRef} className="chat-workspace-toggle" aria-label="任务工作区" aria-expanded={workspaceOpen} aria-controls="agent-workspace-panel" onClick={toggleWorkspace}>
+                    workspaceButton={hasWorkspace && showHeader ? <Button ref={workspaceButtonRef} variant="ghost" className="chat-workspace-toggle" aria-label="任务工作区" aria-expanded={workspaceOpen} aria-controls="agent-workspace-panel" onClick={toggleWorkspace}>
                         <LayoutDashboard size={17} strokeWidth={1.8} aria-hidden="true" /><span className="chat-workspace-toggle-label">工作区</span>
-                    </button> : undefined}
+                    </Button> : undefined}
                     membershipType={membershipType}
                     knowledgeBaseEnabled={knowledgeBaseEnabled}
                     userId={userId}
@@ -558,7 +560,7 @@ export function ChatLayout(props: ChatLayoutProps) {
                 {conversationError ? (
                     <div className="chat-load-error" role="alert">
                         <span>{conversationError}</span>
-                        {onRetryConversationLoad ? <button type="button" onClick={() => void onRetryConversationLoad()}>重试</button> : null}
+                        {onRetryConversationLoad ? <Button variant="ghost" size="xs" onClick={() => void onRetryConversationLoad()}>重试</Button> : null}
                     </div>
                 ) : null}
 
@@ -648,10 +650,10 @@ function useGreeting() {
 function ShortcutSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
     const titleId = 'chat-shortcuts-title';
     const mod = open ? modifierLabel(navigator.platform) : '⌘';
-    return <Modal open={open} onClose={onClose} labelledBy={titleId} className="chat-shortcuts-dialog">
+    return <Dialog bare open={open} onClose={onClose} labelledBy={titleId} className="chat-shortcuts-dialog">
         <div className="chat-dialog-heading">
             <h2 id={titleId}>键盘快捷键</h2>
-            <button type="button" className="chat-header-icon" aria-label="关闭快捷键说明" onClick={onClose}><X size={17} /></button>
+            <IconButton label="关闭快捷键说明" className="chat-header-icon" expand="none" onClick={onClose}><X size={17} aria-hidden="true" /></IconButton>
         </div>
         <dl className="chat-shortcuts-list">
             {CHAT_SHORTCUTS.map(item => <div key={item.label}>
@@ -659,7 +661,7 @@ function ShortcutSheet({ open, onClose }: { open: boolean; onClose: () => void }
                 <dd>{item.keys(mod).map(key => <kbd key={key}>{key}</kbd>)}</dd>
             </div>)}
         </dl>
-    </Modal>;
+    </Dialog>;
 }
 
 /** Platform credits ran out: hosted models lock, a custom model still works. */

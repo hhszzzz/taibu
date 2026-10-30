@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useRef, useState, type RefObject, type KeyboardEvent } from 'react';
 import { X } from 'lucide-react';
-import { Modal } from '@/components/ui/Modal';
+import { Dialog } from '@/components/ui/Dialog';
+import { Button } from '@/components/ui/Button';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { useToast } from '@/components/ui/Toast';
 import { requestBrowserJson } from '@/lib/browser-api';
@@ -96,8 +97,8 @@ export function useComposerCommands({ userId, draftKey, text, change, textarea, 
     };
     useEffect(() => { historyCursor.current = -1; setPreview(null); setUndo(null); }, [userId, draftKey]);
     const ui = <>
-        {open && <div role="listbox" aria-label="输入命令" className="composer-commands">{matches.map((command, index) => <button type="button" role="option" aria-selected={selected === index} key={command.id} onMouseDown={event => event.preventDefault()} onClick={() => execute(command)}><code>/{command.id}</code><span>{command.label}</span></button>)}</div>}
-        <Modal open={Boolean(preview && preview.owner === userId && preview.draftKey === draftKey)} onClose={() => setPreview(null)} labelledBy="polish-title" className="agent-question-dialog"><div className="flex justify-between"><h2 id="polish-title">润色预览</h2><button type="button" aria-label="关闭润色预览" onClick={() => setPreview(null)}><X size={18} /></button></div><div className="my-4 max-h-[50dvh] overflow-auto"><MarkdownContent content={preview?.after ?? ''} /></div><button type="button" className="agent-answer-button" disabled={preview?.before !== text} onClick={() => { if (!preview || preview.before !== text) return; change(preview.after); setUndo({ owner: preview.owner, draftKey: preview.draftKey, before: preview.before, after: preview.after }); setPreview(null); }}>替换输入</button>{preview?.before !== text && <p className="text-sm">草稿已改变，请重新润色。</p>}</Modal>
+        {open && <ul aria-label="输入命令" className="composer-commands">{matches.map((command, index) => <li key={command.id}><Button unstyled type="button" data-selected={selected === index || undefined} onMouseDown={event => event.preventDefault()} onClick={() => execute(command)}><code>/{command.id}</code><span>{command.label}</span></Button></li>)}</ul>}
+        <Dialog bare open={Boolean(preview && preview.owner === userId && preview.draftKey === draftKey)} onClose={() => setPreview(null)} labelledBy="polish-title" className="agent-question-dialog"><div className="flex justify-between"><h2 id="polish-title">润色预览</h2><Button unstyled type="button" aria-label="关闭润色预览" onClick={() => setPreview(null)}><X size={18} /></Button></div><div className="my-4 max-h-[50dvh] overflow-auto"><MarkdownContent content={preview?.after ?? ''} /></div><Button unstyled type="button" className="agent-answer-button" disabled={preview?.before !== text} onClick={() => { if (!preview || preview.before !== text) return; change(preview.after); setUndo({ owner: preview.owner, draftKey: preview.draftKey, before: preview.before, after: preview.after }); setPreview(null); }}>替换输入</Button>{preview?.before !== text && <p className="text-sm">草稿已改变，请重新润色。</p>}</Dialog>
     </>;
     // The toolbar's add menu runs polishing; undo stays available until the polished draft is edited.
     const polish = {

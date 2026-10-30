@@ -5,13 +5,12 @@
  * 不在 chin 行并排铺三个分段控件。放在 chin 行左端，原「+」的位置。
  *
  * 'use client' 标记说明：
- * - 弹窗需要开关状态与焦点管理
+ * - 菜单键盘路径与焦点返回由共享 Menu 负责
  */
 'use client';
 
-import { useRef, useState } from 'react';
-import { Check, ChevronDown } from 'lucide-react';
-import { FloatingPanel } from '@/components/ui/FloatingPanel';
+import { ChevronDown } from 'lucide-react';
+import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from '@/components/ui/Menu';
 
 export type AgentRunMode = 'default' | 'plan' | 'code';
 
@@ -28,26 +27,23 @@ export function AgentModeMenu({ planMode, codeMode, disabled, onPlanModeChange, 
     onPlanModeChange: (value: boolean) => void;
     onCodeModeChange: (value: boolean) => void;
 }) {
-    const anchorRef = useRef<HTMLButtonElement>(null);
-    const [open, setOpen] = useState(false);
     const current = MODES.find(mode => mode.id === (codeMode ? 'code' : planMode ? 'plan' : 'default'))!;
     const select = (mode: AgentRunMode) => {
         onPlanModeChange(mode === 'plan');
         onCodeModeChange(mode === 'code');
-        setOpen(false);
     };
-    return <>
-        <button ref={anchorRef} type="button" className="chat-tool-text chat-run-mode-trigger"
-            aria-label={`运行模式：${current.label}`} aria-haspopup="menu" aria-expanded={open}
-            disabled={disabled} onClick={() => setOpen(value => !value)}>
-            <span>{current.label}</span><ChevronDown size={12} aria-hidden="true" />
-        </button>
-        <FloatingPanel open={open} anchorRef={anchorRef} onClose={() => setOpen(false)} label="运行模式"
-            side="top" align="start" className="chat-plus-menu chat-run-mode-menu" arrowNavigation>
-            {MODES.map(mode => <button key={mode.id} type="button" role="menuitemradio" aria-checked={current.id === mode.id}
-                title={mode.description} onClick={() => select(mode.id)}>
-                <span className="chat-plus-label">{mode.label}</span>{current.id === mode.id && <Check size={14} aria-hidden="true" />}
-            </button>)}
-        </FloatingPanel>
-    </>;
+    return (
+        <Menu>
+            <MenuTrigger className="chat-tool-text chat-run-mode-trigger" aria-label={`运行模式：${current.label}`} disabled={disabled}>
+                <span>{current.label}</span><ChevronDown size={12} aria-hidden="true" />
+            </MenuTrigger>
+            <MenuContent side="top" sideOffset={6} className="chat-plus-menu chat-run-mode-menu" aria-label="运行模式">
+                <MenuRadioGroup value={current.id} onValueChange={value => select(value as AgentRunMode)}>
+                    {MODES.map(mode => <MenuRadioItem key={mode.id} value={mode.id} title={mode.description} closeOnClick>
+                        <span className="chat-plus-label">{mode.label}</span>
+                    </MenuRadioItem>)}
+                </MenuRadioGroup>
+            </MenuContent>
+        </Menu>
+    );
 }

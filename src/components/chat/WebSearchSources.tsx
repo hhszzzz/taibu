@@ -6,6 +6,7 @@
 'use client';
 
 import { memo, useId, useState } from 'react';
+import { Button } from '@/components/ui/Button';
 import { ChevronDown, Globe } from 'lucide-react';
 import type { VisibleWebSearch } from '@/lib/chat/feature-normalization';
 import { markdownLinkProps } from '@/lib/chat/markdown-links';
@@ -28,7 +29,7 @@ export const WebSearchSources = memo(function WebSearchSources({ search }: { sea
     }
     return (
         <div className="mt-2 border-t border-border/50 pt-2 px-2">
-            <button
+            <Button unstyled
                 type="button"
                 onClick={() => setExpanded(open => !open)}
                 aria-expanded={expanded}
@@ -38,7 +39,7 @@ export const WebSearchSources = memo(function WebSearchSources({ search }: { sea
                 <Globe className="w-3 h-3" aria-hidden="true" />
                 <span>联网搜索参考了 {search.sources.length} 个网页</span>
                 <ChevronDown className={`w-3 h-3 transition-transform ${expanded ? 'rotate-180' : ''}`} aria-hidden="true" />
-            </button>
+            </Button>
             {expanded && (
                 <ol id={listId} className="mt-2 flex flex-col gap-1">
                     {search.sources.map(source => (

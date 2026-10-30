@@ -4,6 +4,7 @@
 import { BookOpenText, Check, ChevronLeft, ChevronRight, Copy, Pencil, Quote, RefreshCw, GitFork, RotateCcw } from 'lucide-react';
 import type { ChatMessage } from '@/types';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { IconButton } from '@/components/ui/IconButton';
 import { formatNotificationTime } from '@/lib/notification-view';
 import { useKnowledgeBaseFeatureEnabled } from '@/components/knowledge-base/useKnowledgeBaseFeatureEnabled';
 
@@ -45,12 +46,12 @@ export function MessageActions({ message, disabled = false, copied, onCopy, onEd
     return <div className={`chat-message-actions${isUser ? ' is-user' : ''}`} role="group" aria-label={isUser ? '用户消息操作' : '助手消息操作'}>
         {/* cds RelativeTime：用户行时间戳在操作键最前，助手行在最后（claude 实测 ps-sm/pe-sm first/last 归零） */}
         {isUser && message.createdAt ? <time className="chat-message-time" dateTime={message.createdAt}>{formatNotificationTime(message.createdAt)}</time> : null}
-        {direct.map(action => <Tooltip key={action.label} label={action.label === '重新生成' && model ? `${action.label} · ${model}` : action.label}><button type="button" className="chat-message-action" onClick={action.run} aria-label={action.label}><action.icon size={15} aria-hidden="true" /></button></Tooltip>)}
+        {direct.map(action => <Tooltip key={action.label} label={action.label === '重新生成' && model ? `${action.label} · ${model}` : action.label}><IconButton label={action.label} className="chat-message-action" expand="none" onClick={action.run}><action.icon size={15} aria-hidden="true" /></IconButton></Tooltip>)}
         {!isUser && message.createdAt ? <time className="chat-message-time" dateTime={message.createdAt}>{formatNotificationTime(message.createdAt)}</time> : null}
         {isUser && message.versions && message.versions.length > 1 && onSwitchVersion && <div className="chat-message-versions" role="group" aria-label="消息版本">
-            <Tooltip label="上一版本"><button type="button" className="chat-message-action" aria-label="上一版本" disabled={versionLocked || index === 0} onClick={() => onSwitchVersion(message.id, index - 1)}><ChevronLeft size={14} /></button></Tooltip>
+            <Tooltip label="上一版本"><IconButton label="上一版本" className="chat-message-action" expand="none" disabled={versionLocked || index === 0} onClick={() => onSwitchVersion(message.id, index - 1)}><ChevronLeft size={14} aria-hidden="true" /></IconButton></Tooltip>
             <span aria-live="polite">{index + 1} / {message.versions.length}</span>
-            <Tooltip label="下一版本"><button type="button" className="chat-message-action" aria-label="下一版本" disabled={versionLocked || index === message.versions.length - 1} onClick={() => onSwitchVersion(message.id, index + 1)}><ChevronRight size={14} /></button></Tooltip>
+            <Tooltip label="下一版本"><IconButton label="下一版本" className="chat-message-action" expand="none" disabled={versionLocked || index === message.versions.length - 1} onClick={() => onSwitchVersion(message.id, index + 1)}><ChevronRight size={14} aria-hidden="true" /></IconButton></Tooltip>
         </div>}
         {!isUser && !message.agent && model && <span className="chat-message-model">{model}</span>}
         {!isUser && (message.chartInfo?.baziName || message.chartInfo?.ziweiName) && <span className="chat-message-chart-label">{[message.chartInfo.baziName, message.chartInfo.ziweiName].filter(Boolean).join(' · ')}</span>}

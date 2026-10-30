@@ -6,18 +6,24 @@
  */
 'use client';
 
-import { useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, Ellipsis, Share2 } from 'lucide-react';
+import { useState } from 'react';
+import { ChevronDown, Ellipsis, Share2 } from 'lucide-react';
 import { useConversationList } from '@/lib/chat/ConversationListContext';
 import { useConversationExport } from '@/components/chat/ConversationExportDialog';
 import { ShareConversationMenu } from '@/components/chat/ShareConversationMenu';
-import { FloatingPanel } from '@/components/ui/FloatingPanel';
+import {
+    Menu, MenuCheckboxItem, MenuContent, MenuItem, MenuRadioGroup, MenuRadioItem,
+    MenuSeparator, MenuShortcut, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger,
+} from '@/components/ui/Menu';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { Input } from '@/components/ui/Input';
+import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { AddToKnowledgeBaseModal } from '@/components/knowledge-base/AddToKnowledgeBaseModal';
 import { useAgentActivity } from '@/lib/agent/use-agent-activity';
 import { CHAT_RECORD_VIEW_LABELS, CHAT_RECORD_VIEWS, useChatRecordView, useChatRecordViewDefault, writeChatRecordView, writeChatRecordViewDefault } from '@/lib/chat/chat-record-view';
 import type { ReactNode } from 'react';
+import type { ChatRecordView } from '@/lib/chat/chat-record-view';
 
 interface ChatHeaderProps {
     /** Opens the navigation drawer where the page has no sidebar (phones and tablets). */
@@ -34,6 +40,31 @@ interface ChatHeaderProps {
     userId?: string | null;
 }
 
+/** 「对话记录视图 ▸」：标题菜单与查看选项共用同一组普通/详细与本机默认。 */
+function RecordViewSubmenu({ recordView, defaultRecordView, onSelect, onSetDefault }: {
+    recordView: ChatRecordView;
+    defaultRecordView: ChatRecordView;
+    onSelect: (view: ChatRecordView) => void;
+    onSetDefault: () => void;
+}) {
+    return (
+        <MenuSub>
+            <MenuSubTrigger>对话记录视图</MenuSubTrigger>
+            <MenuSubContent className="chat-header-submenu">
+                <MenuRadioGroup value={recordView} onValueChange={view => onSelect(view as ChatRecordView)}>
+                    {CHAT_RECORD_VIEWS.map(view => (
+                        <MenuRadioItem key={view} value={view} closeOnClick>{CHAT_RECORD_VIEW_LABELS[view]}</MenuRadioItem>
+                    ))}
+                </MenuRadioGroup>
+                {recordView !== defaultRecordView ? <>
+                    <MenuSeparator />
+                    <MenuItem onClick={onSetDefault}>将 {CHAT_RECORD_VIEW_LABELS[recordView]} 设为默认</MenuItem>
+                </> : null}
+            </MenuSubContent>
+        </MenuSub>
+    );
+}
+
 export function ChatHeader({
     navigation,
     empty = false,
@@ -46,15 +77,7 @@ export function ChatHeader({
 }: ChatHeaderProps) {
     const { handleRenameConversation, handleDeleteConversation } = useConversationList();
     const { showToast } = useToast();
-    const titleRef = useRef<HTMLButtonElement>(null);
-    const moreRef = useRef<HTMLButtonElement>(null);
-    const shareRef = useRef<HTMLButtonElement>(null);
-    const recordRef = useRef<HTMLButtonElement>(null);
-    const exportRef = useRef<HTMLButtonElement>(null);
-    const renameInput = useRef<HTMLInputElement>(null);
     const [titleMenu, setTitleMenu] = useState(false);
-    const [recordOpen, setRecordOpen] = useState(false);
-    const [exportOpen, setExportOpen] = useState(false);
     const [moreMenu, setMoreMenu] = useState(false);
     const [shareMenu, setShareMenu] = useState(false);
     const [kbOpen, setKbOpen] = useState(false);
@@ -92,6 +115,8 @@ export function ChatHeader({
     };
 
     const canUseKnowledgeBase = membershipType !== 'free' && knowledgeBaseEnabled;
+    const selectRecordView = (view: ChatRecordView) => writeChatRecordView(userId, view, conversationId);
+    const makeRecordViewDefault = () => writeChatRecordViewDefault(userId, recordView);
 
     return (
         <header className={`chat-session-header${empty ? ' is-empty' : ''}`}>
@@ -99,7 +124,7 @@ export function ChatHeader({
             <h1 className="chat-session-title">
                 {conversationId ? renaming !== null ? (
                     /* 内联重命名 = 克隆站 TopBar：输入框直接替换标题（h-7 / r7 / 5% 底），Enter 保存、Esc 取消、失焦提交。 */
-                    <input ref={renameInput} className="chat-rename-inline" aria-label="重命名" autoFocus
+                    <Input className="chat-rename-inline" aria-label="重命名" autoFocus
                         value={renaming} maxLength={120} disabled={renameBusy}
                         onChange={event => setRenaming(event.target.value)}
                         onBlur={() => { if (!renaming?.trim()) setRenaming(null); else void saveRename(); }}
@@ -107,76 +132,66 @@ export function ChatHeader({
                             if (event.key === 'Enter') { event.preventDefault(); void saveRename(); }
                             else if (event.key === 'Escape') { event.preventDefault(); setRenaming(null); }
                         }} />
-                ) : <button ref={titleRef} type="button" className="chat-title-button" aria-haspopup="menu" aria-expanded={titleMenu}
-                    onClick={() => setTitleMenu(open => !open)} title={title}>
-                    <span>{title}</span><ChevronDown size={16} aria-hidden="true" />
-                </button> : <span className="chat-title-text" title={title}>{title}</span>}
+                ) : (
+                    <Menu open={titleMenu} onOpenChange={setTitleMenu}>
+                        <MenuTrigger className="chat-title-button" title={title}>
+                            <span>{title}</span><ChevronDown size={16} aria-hidden="true" />
+                        </MenuTrigger>
+                        {/* 会话标题菜单 = claude 词表：重命名 R / 复制链接 C / 加入知识库 A / 对话记录视图 ▸ / 删除对话 D */}
+                        <MenuContent letterShortcuts className="chat-header-menu">
+                            <MenuItem className="chat-header-menu-item" onClick={() => setRenaming(title)}>重命名<MenuShortcut>R</MenuShortcut></MenuItem>
+                            <MenuItem className="chat-header-menu-item" onClick={() => { void copyConversationLink(); }}>复制链接<MenuShortcut>C</MenuShortcut></MenuItem>
+                            {canUseKnowledgeBase && <MenuItem className="chat-header-menu-item" onClick={() => setKbOpen(true)}>加入知识库<MenuShortcut>A</MenuShortcut></MenuItem>}
+                            <MenuSeparator />
+                            <RecordViewSubmenu recordView={recordView} defaultRecordView={defaultRecordView}
+                                onSelect={selectRecordView} onSetDefault={makeRecordViewDefault} />
+                            <MenuSeparator />
+                            <MenuItem tone="danger" className="chat-header-menu-item" onClick={() => setDeleting(true)}>删除对话<MenuShortcut>D</MenuShortcut></MenuItem>
+                        </MenuContent>
+                    </Menu>
+                ) : <span className="chat-title-text" title={title}>{title}</span>}
             </h1>
             <div className="chat-session-actions">
                 {workspaceButton}
-                <button ref={shareRef} type="button" className="chat-header-share" aria-label="分享" aria-haspopup="menu" aria-expanded={shareMenu}
-                    onClick={() => setShareMenu(open => !open)}>
-                    <Share2 size={15} aria-hidden="true" /><span>分享</span>
-                </button>
-                <button ref={moreRef} type="button" className="chat-header-icon" aria-label="查看选项" title="查看选项"
-                    aria-haspopup="dialog" aria-expanded={moreMenu} onClick={() => setMoreMenu(open => !open)}>
-                    <Ellipsis size={18} aria-hidden="true" />
-                </button>
+                {conversationId ? (
+                    <Menu open={shareMenu} onOpenChange={setShareMenu}>
+                        <MenuTrigger className="chat-header-share">
+                            <Share2 size={15} aria-hidden="true" /><span>分享</span>
+                        </MenuTrigger>
+                        <MenuContent sideOffset={6} align="end" className="chat-header-menu w-[min(20rem,calc(100vw-2rem))]" aria-label="分享">
+                            <ShareConversationMenu conversationId={conversationId} taskActive={markers.get(conversationId) === 'running' || markers.get(conversationId) === 'awaiting'}
+                                exportBusy={exportBusy} onExport={format => { void downloadExport(format); }} onClose={() => setShareMenu(false)} />
+                        </MenuContent>
+                    </Menu>
+                ) : (
+                    <Button variant="ghost" className="chat-header-share" disabled>
+                        <Share2 size={15} aria-hidden="true" /><span>分享</span>
+                    </Button>
+                )}
+                <Menu open={moreMenu} onOpenChange={setMoreMenu}>
+                    <MenuTrigger className="chat-header-icon" aria-label="查看选项" title="查看选项">
+                        <Ellipsis size={18} aria-hidden="true" />
+                    </MenuTrigger>
+                    <MenuContent sideOffset={6} align="end" className="chat-header-menu chat-header-more">
+                        <RecordViewSubmenu recordView={recordView} defaultRecordView={defaultRecordView}
+                            onSelect={selectRecordView} onSetDefault={makeRecordViewDefault} />
+                        {conversationId ? (
+                            <MenuSub>
+                                <MenuSubTrigger>导出选项</MenuSubTrigger>
+                                <MenuSubContent className="chat-header-submenu">
+                                    <MenuItem disabled={exportBusy !== null} onClick={() => { void downloadExport('md'); }}>{exportBusy === 'md' ? '正在导出…' : 'Markdown'}</MenuItem>
+                                    <MenuItem disabled={exportBusy !== null} onClick={() => { void downloadExport('html'); }}>{exportBusy === 'html' ? '正在导出…' : 'HTML'}</MenuItem>
+                                    <MenuSeparator />
+                                    <MenuCheckboxItem checked={exportTools} closeOnClick={false}
+                                        disabled={exportBusy !== null} onCheckedChange={setExportTools}>
+                                        包含工具调用参数与原始结果
+                                    </MenuCheckboxItem>
+                                </MenuSubContent>
+                            </MenuSub>
+                        ) : null}
+                    </MenuContent>
+                </Menu>
             </div>
-
-            {/* 会话标题菜单 = claude 词表：重命名 R / 复制链接 C / 加入知识库 A / 对话记录视图 ▸ / 删除对话 D（字母键由 FloatingPanel 接线）；导出在「查看选项」里 */}
-            <FloatingPanel open={titleMenu} anchorRef={titleRef} onClose={() => { setTitleMenu(false); setRecordOpen(false); setExportOpen(false); }} label="对话操作" className="chat-header-menu">
-                <button type="button" role="menuitem" onClick={() => { setTitleMenu(false); setRenaming(title); }}>重命名<kbd>R</kbd></button>
-                <button type="button" role="menuitem" onClick={() => { setTitleMenu(false); void copyConversationLink(); }}>复制链接<kbd>C</kbd></button>
-                {conversationId && canUseKnowledgeBase && <button type="button" role="menuitem" onClick={() => { setTitleMenu(false); setKbOpen(true); }}>加入知识库<kbd>A</kbd></button>}
-                <div className="chat-header-menu-divider" role="separator" />
-                {/* claude 标题菜单的「对话记录视图 ▸」：二级浮层选普通 / 详细。 */}
-                <button ref={recordRef} type="button" role="menuitem" aria-haspopup="menu" aria-expanded={recordOpen}
-                    onClick={() => { setRecordOpen(value => !value); setExportOpen(false); }}>
-                    对话记录视图<span className="chat-header-menu-chevron"><ChevronRight size={14} aria-hidden="true" /></span>
-                </button>
-                <div className="chat-header-menu-divider" role="separator" />
-                <button type="button" role="menuitem" className="is-danger" onClick={() => { setTitleMenu(false); setDeleting(true); }}>删除对话<kbd>D</kbd></button>
-            </FloatingPanel>
-
-            {/* 对话记录视图 = 标题菜单右侧二级浮层（claude 子菜单同构）。 */}
-            <FloatingPanel open={(titleMenu || moreMenu) && recordOpen} anchorRef={recordRef} onClose={() => setRecordOpen(false)} label="对话记录视图" side="right-start" className="chat-header-menu chat-header-submenu">
-                {CHAT_RECORD_VIEWS.map(view => <button key={view} type="button" role="menuitemradio" aria-checked={recordView === view}
-                    onClick={() => { writeChatRecordView(userId, view, conversationId); setRecordOpen(false); setTitleMenu(false); setMoreMenu(false); }}>
-                    {CHAT_RECORD_VIEW_LABELS[view]}{recordView === view && <span className="chat-header-menu-check" aria-hidden="true">✓</span>}
-                </button>)}
-                {/* claude：当前视图偏离默认时才出现「将 X 设为默认」。 */}
-                {recordView !== defaultRecordView && <>
-                    <div className="chat-header-menu-divider" role="separator" />
-                    <button type="button" role="menuitem"
-                        onClick={() => { writeChatRecordViewDefault(userId, recordView); setRecordOpen(false); setTitleMenu(false); setMoreMenu(false); }}>
-                        将 {CHAT_RECORD_VIEW_LABELS[recordView]} 设为默认
-                    </button>
-                </>}
-            </FloatingPanel>
-
-            {/* 导出对话 = 标题菜单右侧二级浮层：格式 + 是否包含工具参数。 */}
-            {conversationId && <FloatingPanel open={(titleMenu || moreMenu) && exportOpen} anchorRef={exportRef} onClose={() => setExportOpen(false)} label="导出对话" side="right-start" className="chat-header-menu chat-header-submenu">
-                <button type="button" role="menuitem" disabled={exportBusy !== null} onClick={() => { void downloadExport('md'); }}>{exportBusy === 'md' ? '正在导出…' : 'Markdown'}</button>
-                <button type="button" role="menuitem" disabled={exportBusy !== null} onClick={() => { void downloadExport('html'); }}>{exportBusy === 'html' ? '正在导出…' : 'HTML'}</button>
-                <label className="chat-header-menu-check-row"><input type="checkbox" checked={exportTools} disabled={exportBusy !== null} onChange={event => setExportTools(event.target.checked)} />包含工具调用参数与原始结果</label>
-            </FloatingPanel>}
-
-            <FloatingPanel open={shareMenu} anchorRef={shareRef} onClose={() => setShareMenu(false)} label="分享" className="chat-header-menu" align="end">
-                <ShareConversationMenu conversationId={conversationId} taskActive={!!conversationId && (markers.get(conversationId) === 'running' || markers.get(conversationId) === 'awaiting')}
-                    exportBusy={exportBusy} onExport={format => { void downloadExport(format); }} onClose={() => setShareMenu(false)} />
-            </FloatingPanel>
-
-            <FloatingPanel open={moreMenu} anchorRef={moreRef} onClose={() => setMoreMenu(false)} label="查看选项" role="dialog" align="end" className="chat-header-menu chat-header-more">
-                <button ref={recordRef} type="button" role="menuitem" aria-haspopup="menu" aria-expanded={recordOpen}
-                    onClick={() => { setRecordOpen(value => !value); setExportOpen(false); }}>
-                    对话记录视图<span className="chat-header-menu-chevron"><ChevronRight size={14} aria-hidden="true" /></span>
-                </button>
-                {conversationId && <button ref={exportRef} type="button" role="menuitem" aria-haspopup="menu" aria-expanded={exportOpen}
-                    onClick={() => { setExportOpen(value => !value); setRecordOpen(false); }}>
-                    导出选项<span className="chat-header-menu-chevron"><ChevronRight size={14} aria-hidden="true" /></span>
-                </button>}
-            </FloatingPanel>
 
             {conversationId && canUseKnowledgeBase && <AddToKnowledgeBaseModal
                 open={kbOpen}

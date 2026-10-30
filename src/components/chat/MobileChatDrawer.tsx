@@ -7,11 +7,12 @@
  */
 'use client';
 
-import { Suspense, useCallback, useId, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Menu } from 'lucide-react';
-import { useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { AuthModal } from '@/components/auth/AuthModal';
-import { Modal } from '@/components/ui/Modal';
+import { Dialog } from '@/components/ui/Dialog';
+import { Button } from '@/components/ui/Button';
 import { ChatSidebarPanel } from '@/components/chat/sidebar/ChatSidebar';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { useConversationList } from '@/lib/chat/ConversationListContext';
@@ -28,15 +29,15 @@ export function MobileChatDrawer() {
 
     return (
         <>
-            <button ref={triggerRef} type="button" className="chat-nav-trigger" aria-label="打开聊天列表" aria-haspopup="dialog" aria-expanded={open}
+            <Button unstyled ref={triggerRef} type="button" className="chat-nav-trigger" aria-label="打开聊天列表" aria-haspopup="dialog" aria-expanded={open}
                 onClick={() => { setOpen(true); triggerConversationListLoad(); }}>
                 <Menu size={20} aria-hidden="true" />
-            </button>
-            <Modal open={open} onClose={close} returnFocusRef={triggerRef} labelledBy={titleId} className="chat-conversation-drawer">
+            </Button>
+            <Dialog bare open={open} onClose={close} returnFocusRef={triggerRef} labelledBy={titleId} className="chat-conversation-drawer">
                 <Suspense fallback={null}>
                     <DrawerPanel titleId={titleId} onClose={close} onLogin={login} />
                 </Suspense>
-            </Modal>
+            </Dialog>
             <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
         </>
     );
@@ -45,7 +46,17 @@ export function MobileChatDrawer() {
 /** Mounted only while the drawer is open, so task markers are read only then. */
 function DrawerPanel({ titleId, onClose, onLogin }: { titleId: string; onClose: () => void; onLogin: () => void }) {
     const { user } = useSessionSafe();
-    const conversationId = useSearchParams().get('id');
+    const pathname = usePathname();
+    const params = useSearchParams();
+    const conversationId = params.get('id');
     const markers = useAgentActivity(user?.id ?? null, conversationId);
+    // A link inside the drawer may stop the click before it reaches the panel; the committed route still closes it.
+    const routeKey = `${pathname}?${params.toString()}`;
+    const previousRoute = useRef(routeKey);
+    useEffect(() => {
+        if (previousRoute.current === routeKey) return;
+        previousRoute.current = routeKey;
+        onClose();
+    }, [onClose, routeKey]);
     return <ChatSidebarPanel markers={markers} onClose={onClose} onLogin={onLogin} heading={<h2 id={titleId} className="sr-only">聊天列表</h2>} />;
 }

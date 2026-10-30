@@ -12,7 +12,9 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { MessageSquare, NotebookText, Plus, Search } from 'lucide-react';
-import { Modal } from '@/components/ui/Modal';
+import { Dialog } from '@/components/ui/Dialog';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 import { requestBrowserJson } from '@/lib/browser-api';
 import { RECORD_CATEGORIES, type RecordCategory } from '@/lib/records';
 import { getChartKindMeta } from '@/components/chat/agent/chart-registry';
@@ -157,17 +159,31 @@ export function ConversationSearchHost({ userId }: { userId: string | null }) {
     const empty = !loading && !error && !recentOnly && entries.length === 0 && result?.query === query;
 
     return (
-        <Modal open={open} onClose={() => setOpen(false)} initialFocusRef={input} labelledBy="search-title" className="search-palette">
+        <Dialog bare open={open} onClose={() => setOpen(false)} initialFocusRef={input} labelledBy="search-title" className="search-palette">
             <h2 id="search-title" className="sr-only">搜索对话</h2>
             <div className="search-palette-head">
                 <Search size={20} aria-hidden="true" />
-                <input ref={input} value={query} maxLength={200} aria-label="搜索对话内容" placeholder="搜索"
+                <Input ref={input} value={query} maxLength={200} aria-label="搜索对话内容" placeholder="搜索"
                     onChange={event => { setQuery(event.target.value); setActive(0); }} />
-                <button type="button" className="search-palette-close" aria-label="关闭" onClick={() => setOpen(false)}>×</button>
+                <Button unstyled type="button" className="search-palette-close" aria-label="关闭" onClick={() => setOpen(false)}>×</Button>
             </div>
-            <div className="search-palette-tabs" role="tablist" aria-label="搜索范围">
-                {FILTERS.map(item => <button key={item.value} type="button" role="tab" aria-selected={filter === item.value}
-                    className="search-palette-tab" onClick={() => { setFilter(item.value); setActive(0); }}>{item.label}</button>)}
+            <div className="search-palette-tabs" role="tablist" aria-label="搜索范围" onKeyDown={event => {
+                if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                const tabs = [...event.currentTarget.querySelectorAll<HTMLElement>('[role=tab]')];
+                const current = tabs.indexOf(document.activeElement as HTMLElement);
+                if (current < 0) return;
+                const next = event.key === 'Home' ? 0
+                    : event.key === 'End' ? tabs.length - 1
+                        : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+                event.preventDefault();
+                event.stopPropagation();
+                setFilter(FILTERS[next].value);
+                setActive(0);
+                tabs[next]?.focus();
+            }}>
+                {FILTERS.map(item => <Button unstyled key={item.value} type="button" role="tab" aria-selected={filter === item.value}
+                    tabIndex={filter === item.value ? 0 : -1}
+                    className="search-palette-tab" onClick={() => { setFilter(item.value); setActive(0); }}>{item.label}</Button>)}
             </div>
             <div ref={body} className="search-palette-body">
                 {!userId ? <p className="search-palette-state">登录后搜索自己的对话。</p>
@@ -183,7 +199,7 @@ export function ConversationSearchHost({ userId }: { userId: string | null }) {
                                 const isActive = index === active;
                                 const Icon = entry.kind === 'conversation' ? MessageSquare : entry.kind === 'record' ? NotebookText : getChartKindMeta(entry.item.kind).icon;
                                 return <div key={entry.key} className="search-palette-row" data-active={isActive || undefined} onMouseEnter={() => setActive(index)}>
-                                    <button type="button" className="search-palette-item" onClick={() => openEntry(entry)}>
+                                    <Button unstyled type="button" className="search-palette-item" onClick={() => openEntry(entry)}>
                                         <Icon size={18} aria-hidden="true" />
                                         <span className="search-palette-item-main">
                                             {/* strong 是验收脚本定位结果项的锚点；字重由 CSS 压回常规 */}
@@ -192,7 +208,7 @@ export function ConversationSearchHost({ userId }: { userId: string | null }) {
                                             </strong>
                                             {entry.preview && <span className="search-palette-item-preview">{entry.preview}</span>}
                                         </span>
-                                    </button>
+                                    </Button>
                                     {isActive && <span className="search-palette-actions" aria-hidden="true">
                                         <span className="search-palette-action">↵</span>
                                     </span>}
@@ -202,11 +218,11 @@ export function ConversationSearchHost({ userId }: { userId: string | null }) {
                         {!recentOnly && <div className="search-palette-group-block">
                             <p className="search-palette-group">操作</p>
                             <div className="search-palette-row">
-                                <button type="button" className="search-palette-item" onClick={compose}>
+                                <Button unstyled type="button" className="search-palette-item" onClick={compose}>
                                     <Plus size={18} aria-hidden="true" />
                                     <span className="search-palette-item-main"><strong className="search-palette-item-title">新建对话</strong>
                                         <span className="search-palette-item-preview">用「{query.trim()}」开始新对话</span></span>
-                                </button>
+                                </Button>
                             </div>
                         </div>}
                     </>}
@@ -218,6 +234,6 @@ export function ConversationSearchHost({ userId }: { userId: string | null }) {
                 <span className="search-palette-hint">打开<kbd>↵</kbd></span>
                 <span className="search-palette-hint is-end">撰写<kbd>Tab</kbd></span>
             </div>
-        </Modal>
+        </Dialog>
     );
 }

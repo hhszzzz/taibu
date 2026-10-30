@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { Check, Copy } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
+import { Button } from '@/components/ui/Button';
 
 /** Copies `text`; an icon-only button is named by `label` and confirms with a check mark for two seconds, as code blocks do. */
 export function CopyButton({ text, label, name, iconOnly = false, className = 'agent-tool-copy' }: { text: string; label: string; name?: string; iconOnly?: boolean; className?: string }) {
@@ -15,7 +16,7 @@ export function CopyButton({ text, label, name, iconOnly = false, className = 'a
         return () => clearTimeout(timer);
     }, [copied]);
     const size = iconOnly ? 16 : 12;
-    return <button type="button" className={className} aria-label={name ?? (iconOnly ? label : undefined)} title={iconOnly ? label : undefined} onClick={async () => {
+    return <Button unstyled type="button" className={className} aria-label={name ?? (iconOnly ? label : undefined)} title={iconOnly ? label : undefined} onClick={async () => {
         try {
             await navigator.clipboard.writeText(text);
             setCopied(true);
@@ -25,5 +26,5 @@ export function CopyButton({ text, label, name, iconOnly = false, className = 'a
     }}>
         {copied ? <Check size={size} aria-hidden="true" /> : <Copy size={size} aria-hidden="true" />}
         {!iconOnly && (copied ? '已复制' : label)}
-    </button>;
+    </Button>;
 }

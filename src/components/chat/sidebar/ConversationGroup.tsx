@@ -13,6 +13,8 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { ConversationListItem, ConversationSourceType } from '@/types';
 import { ConversationMarker, ConversationNavItem } from '@/components/chat/sidebar/ConversationNavItem';
 import type { ConversationAgentMarker } from '@/lib/agent/activity';
+import type { MenuHandle } from '@/components/ui/Menu';
+import { Button } from '@/components/ui/Button';
 
 interface ConversationGroupProps {
     type: ConversationSourceType;
@@ -22,8 +24,7 @@ interface ConversationGroupProps {
     isGroupCollapsed: boolean;
     onToggleGroup: (type: ConversationSourceType) => void;
     activeId?: string;
-    actionConvId?: string;
-    onOpenAction: (conv: ConversationListItem, e: React.MouseEvent) => void;
+    menu: MenuHandle<ConversationListItem>;
     editingId?: string | null;
     editTitle?: string;
     onEditTitleChange?: (value: string) => void;
@@ -44,8 +45,7 @@ export function ConversationGroup({
     isGroupCollapsed,
     onToggleGroup,
     activeId,
-    actionConvId,
-    onOpenAction,
+    menu,
     editingId,
     editTitle,
     onEditTitleChange,
@@ -63,7 +63,7 @@ export function ConversationGroup({
         <div className={compact ? 'mb-1' : 'mb-2'}>
             {/* 分组标题 */}
             {showLabel && (
-                <button
+                <Button unstyled
                     onClick={(e) => {
                         e.stopPropagation();
                         onToggleGroup(type);
@@ -79,7 +79,7 @@ export function ConversationGroup({
                     <span className="ml-auto font-mono opacity-50">
                         {displayCount}
                     </span>
-                </button>
+                </Button>
             )}
 
             {/* 分组内容 */}
@@ -98,9 +98,8 @@ export function ConversationGroup({
                             key={conv.id}
                             conv={conv}
                             isActive={activeId === conv.id}
-                            isActionActive={actionConvId === conv.id}
                             marker={markers?.get(conv.id)}
-                            onOpenAction={onOpenAction}
+                            menu={menu}
                             isEditing={editingId === conv.id}
                             editTitle={editingId === conv.id ? editTitle : ''}
                             onEditTitleChange={editingId === conv.id ? onEditTitleChange : undefined}

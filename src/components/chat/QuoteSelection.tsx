@@ -7,6 +7,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Button } from '@/components/ui/Button';
 import { createPortal } from 'react-dom';
 import { Quote } from 'lucide-react';
 import type { ChatMessage } from '@/types';
@@ -85,7 +86,7 @@ export function QuoteSelection({ containerRef, messages, onQuote, disabled = fal
         setTarget(null);
     };
     return createPortal(
-        <button type="button" className={`chat-quote-select${target.below ? ' is-below' : ''}`}
+        <Button unstyled type="button" className={`chat-quote-select${target.below ? ' is-below' : ''}`}
             style={{ left: target.left, top: target.top }} aria-label="引用所选文字"
             onPointerDown={() => { pressedAt.current = performance.now(); }}
             onMouseDown={event => event.preventDefault()}
@@ -94,7 +95,7 @@ export function QuoteSelection({ containerRef, messages, onQuote, disabled = fal
             onTouchEnd={accept}
             onClick={accept}>
             <Quote size={13} aria-hidden="true" />引用
-        </button>,
+        </Button>,
         document.body,
     );
 }

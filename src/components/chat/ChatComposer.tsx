@@ -14,6 +14,8 @@ import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
 import type { MembershipType } from '@/lib/user/membership';
 import { webSearchUnavailableTitle } from '@/lib/ai/web-search-access';
 import { useToast } from '@/components/ui/Toast';
+import { Button } from '@/components/ui/Button';
+import { Textarea } from '@/components/ui/Textarea';
 import { buildMentionHighlightedParts } from '@/components/chat/mentionHighlight';
 import { MentionIcon } from '@/components/chat/mention/MentionIcon';
 import { buildMentionToken, extractMentionTokens, filterMentionsByTokens, removeMentionsByTokens, type MentionToken } from '@/lib/mention-tokens';
@@ -37,6 +39,7 @@ import { COMPOSER_FILES_EVENT, documentFileProblem, pickPlainAttachment } from '
 import { COMPOSER_MAX_HEIGHT, resolveComposerHeight } from '@/lib/chat/composer-height';
 import { PrivateAttachments } from './agent/PrivateAttachments';
 import { GENERATED_IMAGE_SIZE_LABELS } from '@/lib/images/generated';
+import { Select } from '@/components/ui/Select';
 import type { ModelSettingsProps } from '@/lib/chat/model-settings';
 import './composer/composer.css';
 
@@ -690,7 +693,7 @@ export function ChatComposer({
 
                     <div className={`chat-composer-field${composerExpandable ? ' has-expand' : ''}`}>
                         {composerExpandable && (
-                            <button
+                            <Button unstyled
                                 type="button"
                                 className="chat-composer-expand"
                                 aria-expanded={composerExpanded}
@@ -699,7 +702,7 @@ export function ChatComposer({
                                 onClick={() => { setComposerExpanded(value => !value); textareaRef.current?.focus(); }}
                             >
                                 {composerExpanded ? <Minimize2 size={14} aria-hidden="true" /> : <Maximize2 size={14} aria-hidden="true" />}
-                            </button>
+                            </Button>
                         )}
                         <div ref={overlayRef} className="chat-composer-input chat-composer-overlay" aria-hidden="true">
                             {inputValue ? highlightedInput.map((part, index) => part.kind === 'mention'
@@ -712,7 +715,7 @@ export function ChatComposer({
                                     </span>
                                     : <span key={`text-${index}`}>{part.value}</span>) : <span className="chat-composer-placeholder">{inputPlaceholder}</span>}
                         </div>
-                        <textarea
+                        <Textarea
                             aria-label={inputLabel}
                             ref={textareaRef}
                             value={inputValue}
@@ -747,15 +750,24 @@ export function ChatComposer({
 
                 {imageMode && imageGeneration && <div className="chat-image-options" role="group" aria-label="生图设置">
                     <label>尺寸
-                        <select value={imageSize} onChange={event => setImageSize(event.target.value)} disabled={isLoading}>
-                            {imageGeneration.sizes.map(size => <option key={size} value={size}>{GENERATED_IMAGE_SIZE_LABELS[size] ?? size}</option>)}
-                        </select>
+                        <Select
+                            ariaLabel="尺寸"
+                            className="h-7 w-auto min-w-0 rounded-lg bg-background px-2 text-xs"
+                            value={imageSize}
+                            onChange={setImageSize}
+                            disabled={isLoading}
+                            options={imageGeneration.sizes.map(size => ({ value: size, label: GENERATED_IMAGE_SIZE_LABELS[size] ?? size }))}
+                        />
                     </label>
                     <label>张数
-                        <select value={imageCount} onChange={event => setImageCount(Number(event.target.value))} disabled={isLoading}>
-                            {Array.from({ length: imageGeneration.maxCount }, (_, index) => index + 1)
-                                .map(count => <option key={count} value={count}>{count} 张</option>)}
-                        </select>
+                        <Select
+                            ariaLabel="张数"
+                            className="h-7 w-auto min-w-0 rounded-lg bg-background px-2 text-xs"
+                            value={imageCount}
+                            onChange={setImageCount}
+                            disabled={isLoading}
+                            options={Array.from({ length: imageGeneration.maxCount }, (_, index) => ({ value: index + 1, label: `${index + 1} 张` }))}
+                        />
                     </label>
                     <span className="chat-image-cost">{imageGeneration.creditCost > 0 ? `每张 ${imageGeneration.creditCost} 积分 · 共 ${imageGeneration.creditCost * imageCount} 积分` : '本模型不扣积分'}</span>
                 </div>}
@@ -786,11 +798,11 @@ export function ChatComposer({
                 {note && <p className="chat-composer-note" data-optional={noteOptional || undefined}>{note}</p>}
                 {hero && imageGeneration && !imageMode && !inputValue.trim() && <p className="chat-image-example">
                     <span>或者试试生图：</span>
-                    <button type="button" onClick={() => {
+                    <Button unstyled type="button" onClick={() => {
                         setImageMode(true);
                         onInputChange('水墨风格的山间小筑，晨雾缭绕，远山如黛');
                         textareaRef.current?.focus();
-                    }}>水墨风格的山间小筑，晨雾缭绕</button>
+                    }}>水墨风格的山间小筑，晨雾缭绕</Button>
                 </p>}
             </div>
         </div>

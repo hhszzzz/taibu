@@ -16,6 +16,8 @@ import { getVisibleSourcePanelState, getVisibleWebSearch } from '@/lib/chat/feat
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import { extractMentionTokens, filterMentionsByTokens, removeMentionsByTokens } from '@/lib/mention-tokens';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
+import { Textarea } from '@/components/ui/Textarea';
+import { Button } from '@/components/ui/Button';
 import { ThinkingBlock } from '@/components/chat/ThinkingBlock';
 import { AgentMessage } from '@/components/chat/AgentMessage';
 import { SourcePanel } from '@/components/chat/SourcePanel';
@@ -191,7 +193,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                                     {/* 末尾换行需要一个占位字符才能撑出新行，与 textarea 对齐 */}
                                     {'\u200b'}
                                 </div>
-                                <textarea
+                                <Textarea
                                     ref={editTextareaRef}
                                     value={editContent}
                                     onChange={(e) => handleEditInputChange(e.target.value)}
@@ -210,10 +212,10 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                             </div>
                             <div className="chat-user-edit-actions">
                                 {editError && <p className="chat-user-edit-error" role="alert">{editError}</p>}
-                                <button type="button" className="chat-user-edit-cancel" onClick={handleCancelEdit} disabled={editSaving}>取消</button>
-                                <button type="button" className="chat-user-edit-save" onClick={() => void handleSaveEdit()} disabled={editSaving || !editContent.trim()}>
+                                <Button variant="ghost" size="xs" className="chat-user-edit-cancel" onClick={handleCancelEdit} disabled={editSaving}>取消</Button>
+                                <Button size="xs" className="chat-user-edit-save" onClick={() => void handleSaveEdit()} disabled={editSaving || !editContent.trim()}>
                                     {editSaving ? '正在保存' : '保存'}
-                                </button>
+                                </Button>
                             </div>
                         </div>
                     </div>
@@ -236,7 +238,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                         )}
                         {message.quotes?.length ? <MessageQuoteCards quotes={message.quotes} /> : null}
                         <div className={`chat-user-bubble text-foreground ${message.dreamInfo
-                            ? 'is-dream bg-purple-500/10 dark:bg-purple-500/15 border border-purple-500/20'
+                            ? 'is-dream bg-hua-quan/10 border border-hua-quan/20'
                             : ''
                         }`}>
                             <p className="whitespace-pre-wrap text-base leading-relaxed">
@@ -300,14 +302,15 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                 : <div className={`chat-answer${isCurrentStreaming && message.content ? ' is-streaming' : ''}`}><MarkdownContent content={message.content} className="chat-prose" streaming={isCurrentStreaming} /></div>}
             <GeneratedImageGallery images={readGeneratedImageRefs(message.metadata?.generatedImages)} label="生成的图片" />
             {showCheckKeyAction && !isCurrentStreaming && (
-                <button
-                    type="button"
+                <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={() => openSettingsCenter('personalization')}
-                    className="mt-3 inline-flex items-center gap-2 rounded-lg border border-amber-300/60 bg-amber-500/5 px-3 py-1.5 text-sm text-amber-700 transition-colors hover:bg-amber-500/10 dark:border-amber-400/30 dark:text-amber-200"
+                    className="mt-3 gap-2 border-warning/40 bg-warning/5 text-warning hover:bg-warning/10"
                 >
-                    <KeyRound className="h-4 w-4" />
+                    <KeyRound className="h-4 w-4" aria-hidden="true" />
                     检查 Key
-                </button>
+                </Button>
             )}
             {isCurrentStreaming && !message.content && !message.agent && (
                 <div className="mt-3 inline-flex items-center gap-[3px] h-4">

@@ -1,36 +1,36 @@
 'use client';
 
-import type { RefObject } from 'react';
 import { Pin, PinOff, SquarePen, Trash2 } from 'lucide-react';
 import type { ConversationListItem } from '@/types';
-import { formatConversationMenuTitle } from '@/lib/chat/conversation-title-display';
-import { FloatingPanel } from '@/components/ui/FloatingPanel';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { Menu, MenuContent, MenuItem, MenuSeparator, MenuShortcut, type MenuHandle } from '@/components/ui/Menu';
 
-/** Desktop sidebar and mobile drawer share the same action/confirmation surface. */
-export function ConversationActions({ conversation, anchorRef, view, onViewChange, onClose, onRename, onDelete, deleting, withinModal = false, pinned = false, onPin }: {
-    conversation: ConversationListItem | null;
-    anchorRef: RefObject<HTMLElement | null>;
-    view: 'menu' | 'rename' | 'delete';
-    onViewChange: (view: 'menu' | 'rename' | 'delete') => void;
-    onClose: () => void;
-    onRename: () => void;
-    onDelete: () => Promise<unknown>;
-    deleting: boolean;
-    withinModal?: boolean;
-    /** claude 行菜单的 Pin：纯前端置顶（localStorage），置顶项排进「已置顶」组 */
-    pinned?: boolean;
-    onPin?: () => void;
+/** Desktop sidebar and mobile drawer share the same row menu; each row opens it with its conversation payload. */
+export function ConversationMenu({ menu, onRename, onDelete, onPin, pinned }: {
+    menu: MenuHandle<ConversationListItem>;
+    onRename: (conversation: ConversationListItem) => void;
+    onDelete: (conversation: ConversationListItem) => void;
+    onPin: (conversation: ConversationListItem) => void;
+    pinned: (conversation: ConversationListItem) => boolean;
 }) {
-    return <>
-        <FloatingPanel open={Boolean(conversation) && view === 'menu'} anchorRef={anchorRef} onClose={onClose} label="会话操作" className="conversation-menu" portaled={!withinModal}>
-            {conversation && <>
-                {onPin && <button type="button" role="menuitem" onClick={onPin} className="conversation-menu-item">{pinned ? <PinOff size={15} aria-hidden="true" /> : <Pin size={15} aria-hidden="true" />}{pinned ? '取消置顶' : '置顶'}<kbd>P</kbd></button>}
-                {conversation.sourceType === 'chat' && <button type="button" role="menuitem" onClick={onRename} className="conversation-menu-item"><SquarePen size={15} aria-hidden="true" />重命名<kbd>R</kbd></button>}
-                <div className="conversation-menu-divider" role="separator" />
-                <button type="button" role="menuitem" onClick={() => onViewChange('delete')} className="conversation-menu-item is-danger"><Trash2 size={15} aria-hidden="true" />删除<kbd>D</kbd></button>
-            </>}
-        </FloatingPanel>
-        <ConfirmDialog isOpen={Boolean(conversation) && view === 'delete'} onClose={onClose} onConfirm={async () => { await onDelete(); }} loading={deleting} title="删除此聊天" description={`删除“${conversation ? formatConversationMenuTitle(conversation) : ''}”后无法恢复。`} confirmText="确认删除" />
-    </>;
+    return (
+        <Menu handle={menu}>
+            {({ payload }) => payload ? (
+                <MenuContent letterShortcuts className="conversation-menu" aria-label="会话操作">
+                    <MenuItem className="conversation-menu-item" onClick={() => onPin(payload)}>
+                        {pinned(payload) ? <PinOff size={15} aria-hidden="true" /> : <Pin size={15} aria-hidden="true" />}
+                        {pinned(payload) ? '取消置顶' : '置顶'}<MenuShortcut>P</MenuShortcut>
+                    </MenuItem>
+                    {payload.sourceType === 'chat' && (
+                        <MenuItem className="conversation-menu-item" onClick={() => onRename(payload)}>
+                            <SquarePen size={15} aria-hidden="true" />重命名<MenuShortcut>R</MenuShortcut>
+                        </MenuItem>
+                    )}
+                    <MenuSeparator />
+                    <MenuItem tone="danger" className="conversation-menu-item" onClick={() => onDelete(payload)}>
+                        <Trash2 size={15} aria-hidden="true" />删除<MenuShortcut>D</MenuShortcut>
+                    </MenuItem>
+                </MenuContent>
+            ) : null}
+        </Menu>
+    );
 }

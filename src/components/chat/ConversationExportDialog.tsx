@@ -3,7 +3,10 @@
 
 import { useEffect, useId, useState } from 'react';
 import { FileCode2, FileText, X } from 'lucide-react';
-import { Modal } from '@/components/ui/Modal';
+import { Dialog } from '@/components/ui/Dialog';
+import { Button } from '@/components/ui/Button';
+import { Checkbox } from '@/components/ui/Checkbox';
+import { IconButton } from '@/components/ui/IconButton';
 import { useToast } from '@/components/ui/Toast';
 import { CONVERSATION_EXPORT_EVENT, downloadConversationExport, type ConversationExportFormat } from '@/lib/chat/conversation-export';
 
@@ -37,20 +40,20 @@ export function ConversationExportDialog({ conversationId }: { conversationId: s
         return () => window.removeEventListener(CONVERSATION_EXPORT_EVENT, show);
     }, []);
     const download = async (format: ConversationExportFormat) => { if (await save(format)) setOpen(false); };
-    return <Modal open={open} onClose={() => setOpen(false)} busy={busy !== null} labelledBy={titleId} className="chat-export-dialog">
+    return <Dialog bare open={open} onClose={() => setOpen(false)} busy={busy !== null} labelledBy={titleId} className="chat-export-dialog">
         <div className="chat-dialog-heading">
             <h2 id={titleId}>导出对话</h2>
-            <button type="button" className="chat-header-icon" aria-label="关闭导出" disabled={busy !== null} onClick={() => setOpen(false)}><X size={17} /></button>
+            <IconButton label="关闭导出" className="chat-header-icon" expand="none" disabled={busy !== null} onClick={() => setOpen(false)}><X size={17} aria-hidden="true" /></IconButton>
         </div>
         <p className="chat-dialog-description">包含当前分支的正文、命盘依据和来源。HTML 可在浏览器中打印为 PDF。</p>
         <div className="chat-export-options">
-            <button type="button" disabled={busy !== null} onClick={() => void download('md')}>
+            <Button unstyled type="button" disabled={busy !== null} onClick={() => void download('md')}>
                 <FileText size={18} aria-hidden="true" /><span><strong>Markdown</strong><small>{busy === 'md' ? '正在导出…' : '适合继续编辑或存档'}</small></span>
-            </button>
-            <button type="button" disabled={busy !== null} onClick={() => void download('html')}>
+            </Button>
+            <Button unstyled type="button" disabled={busy !== null} onClick={() => void download('html')}>
                 <FileCode2 size={18} aria-hidden="true" /><span><strong>可打印 HTML</strong><small>{busy === 'html' ? '正在导出…' : '排版与工作区一致，可打印'}</small></span>
-            </button>
+            </Button>
         </div>
-        <label className="chat-export-tools"><input type="checkbox" checked={tools} disabled={busy !== null} onChange={event => setTools(event.target.checked)} />包含工具调用参数与原始结果</label>
-    </Modal>;
+        <label className="chat-export-tools"><Checkbox checked={tools} disabled={busy !== null} onCheckedChange={setTools} />包含工具调用参数与原始结果</label>
+    </Dialog>;
 }

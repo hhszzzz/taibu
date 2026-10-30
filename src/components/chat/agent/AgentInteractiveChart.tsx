@@ -2,6 +2,7 @@
 // 需要盘面选择状态、跟随定位滚动与全屏弹窗
 
 import { useEffect, useId, useMemo, useRef, type ReactNode } from 'react';
+import { Button } from '@/components/ui/Button';
 import { LocateFixed, MessageCircleQuestion } from 'lucide-react';
 import type { BaziWuxingCanonicalJSON } from 'taibu-core/bazi';
 import type { AgentChart, AgentToolPart } from '@/lib/agent/tool-presentation';
@@ -115,8 +116,8 @@ export function AgentInteractiveChart({ value, tool, reference, focus, followMod
       <div className="agent-board-tools">
         {model && <span className="agent-board-tool is-viewing" role="img" title={live && followModel ? '太卜正在查看这里' : '太卜查看的位置'}
           aria-label={live && followModel ? '太卜正在查看这里' : '太卜查看的位置'}><LocateFixed size={14} aria-hidden="true" /></span>}
-        {reference && onAsk && <button type="button" className="agent-board-tool" aria-label={selected.length ? '追问这里' : '追问这张命盘'}
-          title={selected.length ? '追问这里' : '追问这张命盘'} onClick={() => ask(selected)}><MessageCircleQuestion size={14} aria-hidden="true" /></button>}
+        {reference && onAsk && <Button unstyled type="button" className="agent-board-tool" aria-label={selected.length ? '追问这里' : '追问这张命盘'}
+          title={selected.length ? '追问这里' : '追问这张命盘'} onClick={() => ask(selected)}><MessageCircleQuestion size={14} aria-hidden="true" /></Button>}
         {text && <CopyButton text={text} label="复制规范文本" iconOnly className="agent-board-tool" />}
         {actions}
       </div>

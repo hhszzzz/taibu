@@ -8,6 +8,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { Button } from '@/components/ui/Button';
 import { ChevronRight, ChevronDown, Brain, Clock3, LoaderCircle } from 'lucide-react';
 
 interface ThinkingBlockProps {
@@ -86,13 +87,13 @@ export function ThinkingBlock({ content, duration, isStreaming = false, startTim
         const timed = displayDuration !== undefined && displayDuration > 0 ? ` ${formatDuration(displayDuration)}` : '';
         return (
             <div className={`chat-thinking${isStreaming ? ' is-streaming' : ''}${className ? ` ${className}` : ''}`}>
-                <button type="button" className="chat-thinking-toggle" aria-expanded={isExpanded} onClick={() => setIsExpanded(!isExpanded)}>
+                <Button unstyled type="button" className="chat-thinking-toggle" aria-expanded={isExpanded} onClick={() => setIsExpanded(!isExpanded)}>
                     {isStreaming
                         ? <LoaderCircle size={13} strokeWidth={2.4} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
                         : <Clock3 size={14} aria-hidden="true" />}
                     <span>{isStreaming ? `正在思考…${timed}` : `已思考${timed}`}</span>
                     <ChevronRight size={14} aria-hidden="true" className={isExpanded ? 'rotate-90' : undefined} />
-                </button>
+                </Button>
                 {isExpanded && <p className="chat-thinking-text">{content}</p>}
             </div>
         );
@@ -101,7 +102,7 @@ export function ThinkingBlock({ content, duration, isStreaming = false, startTim
     return (
         <div className="mb-3">
             {/* 头部 - 可点击展开/折叠 */}
-            <button
+            <Button unstyled
                 type="button"
                 onClick={() => setIsExpanded(!isExpanded)}
                 className="flex items-center gap-1.5 text-accent hover:text-accent/80 transition-colors"
@@ -122,7 +123,7 @@ export function ThinkingBlock({ content, duration, isStreaming = false, startTim
                 ) : (
                     <ChevronRight className="w-4 h-4" />
                 )}
-            </button>
+            </Button>
 
             {/* 内容区域 - 仅展开时显示 */}
             {isExpanded && (

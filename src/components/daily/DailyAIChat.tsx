@@ -8,6 +8,9 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef, type FormEvent } from 'react';
 import { ArrowUp, RefreshCw } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { IconButton } from '@/components/ui/IconButton';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { getCalendarAlmanac } from '@/lib/divination/calendar';
 import { useSessionMembership } from '@/lib/hooks/useSessionMembership';
@@ -131,15 +134,14 @@ export function DailyAIChat({ date, userId, onRequireLogin, personalFortune = nu
                         </span>
                     )}
                     {messages.length > 0 && !isLoading && (
-                        <button
-                            type="button"
-                            onClick={() => setSession({ key: dateKey, messages: [], error: null })}
-                            className="rounded-lg p-1.5 text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground"
+                        <IconButton
+                            label="清空对话"
                             title="清空对话"
-                            aria-label="清空对话"
+                            size="sm"
+                            onClick={() => setSession({ key: dateKey, messages: [], error: null })}
                         >
                             <RefreshCw className="size-4" />
-                        </button>
+                        </IconButton>
                     )}
                 </div>
             </div>
@@ -171,7 +173,7 @@ export function DailyAIChat({ date, userId, onRequireLogin, personalFortune = nu
             {messages.length === 0 && (
                 <div className="flex flex-col gap-3 max-lg:hidden">
                     {SUGGESTED_QUESTIONS.map((question) => (
-                        <button
+                        <Button unstyled
                             key={question}
                             type="button"
                             onClick={() => { void sendMessage(question); }}
@@ -179,7 +181,7 @@ export function DailyAIChat({ date, userId, onRequireLogin, personalFortune = nu
                             className="flex min-h-10 items-center rounded-xl border-[0.5px] border-border-hover bg-surface px-3 py-1.5 text-left text-sm transition-colors hover:bg-background-secondary disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             {question}
-                        </button>
+                        </Button>
                     ))}
                 </div>
             )}
@@ -188,7 +190,7 @@ export function DailyAIChat({ date, userId, onRequireLogin, personalFortune = nu
             <div className="fixed inset-x-0 bottom-[calc(4rem+var(--sab))] z-30 border-t-[0.5px] border-border bg-background px-4 py-2.5 sm:px-6 lg:static lg:z-auto lg:border-0 lg:bg-transparent lg:p-0">
                 {userId ? (
                     <form onSubmit={handleSubmit} className="flex h-12 items-center gap-2 rounded-2xl border-[0.5px] border-border-hover bg-surface pr-1.5 pl-3.5 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/15 lg:h-11 lg:rounded-xl lg:pl-3">
-                        <input
+                        <Input
                             type="text"
                             value={inputValue}
                             onChange={(event) => setInputValue(event.target.value)}
@@ -198,17 +200,18 @@ export function DailyAIChat({ date, userId, onRequireLogin, personalFortune = nu
                             enterKeyHint="send"
                             className="h-full min-w-0 flex-1 bg-transparent text-sm placeholder:text-foreground-tertiary focus:outline-none disabled:opacity-60"
                         />
-                        <button
+                        <Button
                             type="submit"
                             aria-label="发送"
+                            className="size-9 shrink-0 rounded-xl lg:size-8 lg:rounded-lg"
                             disabled={!inputValue.trim() || isLoading}
-                            className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-accent text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 lg:size-8 lg:rounded-lg"
+                            loading={isLoading}
                         >
-                            <ArrowUp className="size-[18px]" strokeWidth={2} />
-                        </button>
+                            {isLoading ? null : <ArrowUp className="size-[18px]" strokeWidth={2} aria-hidden="true" />}
+                        </Button>
                     </form>
                 ) : (
-                    <button
+                    <Button unstyled
                         type="button"
                         onClick={onRequireLogin}
                         className="flex h-12 w-full items-center justify-between rounded-2xl border-[0.5px] border-border-hover bg-surface pr-1.5 pl-3.5 text-left text-sm text-foreground-tertiary transition-colors hover:bg-background-secondary lg:h-11 lg:rounded-xl lg:pl-3"
@@ -217,7 +220,7 @@ export function DailyAIChat({ date, userId, onRequireLogin, personalFortune = nu
                         <span aria-hidden="true" className="flex size-9 items-center justify-center rounded-xl bg-accent text-on-accent lg:size-8 lg:rounded-lg">
                             <ArrowUp className="size-[18px]" strokeWidth={2} />
                         </span>
-                    </button>
+                    </Button>
                 )}
             </div>
 

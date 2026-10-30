@@ -1,6 +1,7 @@
 'use client';
 
 import { CHART_TEXT_DETAIL_OPTIONS, type ChartTextDetailLevel } from '@/lib/divination/detail-level';
+import { Button } from '@/components/ui/Button';
 
 export function TextDetailLevelPicker({
   label = '复制级别',
@@ -26,7 +27,7 @@ export function TextDetailLevelPicker({
         {CHART_TEXT_DETAIL_OPTIONS.map((option) => {
           const active = value === option.value;
           return (
-            <button
+            <Button unstyled
               key={option.value}
               type="button"
               onClick={() => {
@@ -40,7 +41,7 @@ export function TextDetailLevelPicker({
               }`}
             >
               {option.label}
-            </button>
+            </Button>
           );
         })}
       </div>

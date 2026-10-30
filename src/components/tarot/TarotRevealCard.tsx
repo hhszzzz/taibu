@@ -7,6 +7,7 @@
 'use client'; // 由客户端结果页渲染，onClick 回调来自页面状态
 
 import { Sparkles } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
 import { TarotCardFace } from '@/components/tarot/TarotCardFace';
 import { TarotOrientationChip, TarotPositionLabel } from '@/components/tarot/TarotSpreadParts';
 
@@ -14,7 +15,7 @@ const FACE_STYLE = { backfaceVisibility: 'hidden' } as const;
 const BACK_FACE_STYLE = { backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' } as const;
 
 /** 牌框：窄屏 10px 圆角 + 轻阴影，宽屏 14px 圆角 + 更深的投影（设计稿 TarotResult / MobileTarot）。 */
-const CARD_FRAME_CLASS = 'absolute inset-0 overflow-hidden rounded-xl border-[0.5px] border-foreground/20 bg-surface shadow-[0_4px_14px_rgba(11, 11, 11,0.08)] @2xl:rounded-2xl @2xl:shadow-[0_10px_30px_rgba(11, 11, 11,0.08)]';
+const CARD_FRAME_CLASS = 'absolute inset-0 overflow-hidden rounded-xl border-[0.5px] border-foreground/20 bg-surface shadow-[var(--shadow-md)] @2xl:rounded-2xl @2xl:shadow-[var(--shadow-lg)]';
 
 export function TarotRevealCard({ index, positionName, name, image, meaning, reversed, isRevealed, isFlipped, onClick, large = false }: {
     index: number;
@@ -37,7 +38,7 @@ export function TarotRevealCard({ index, positionName, name, image, meaning, rev
         <div className="flex w-full min-w-0 flex-col items-center gap-2 @2xl:gap-3.5">
             <TarotPositionLabel index={index} className="@2xl:text-[0.8125rem]">{positionName}</TarotPositionLabel>
             <div className={`w-full ${large ? 'max-w-[140px] @2xl:max-w-[200px]' : 'max-w-[100px] @md:max-w-[140px] @2xl:max-w-[180px]'}`} style={{ perspective: '1000px' }}>
-                <button
+                <Button unstyled
                     type="button"
                     onClick={onClick}
                     aria-label={actionLabel}
@@ -60,7 +61,7 @@ export function TarotRevealCard({ index, positionName, name, image, meaning, rev
                             {meaning}
                         </span>
                     </span>
-                </button>
+                </Button>
             </div>
             <div className={`flex flex-col items-center gap-2 text-center transition-opacity ${isRevealed ? 'opacity-100' : 'opacity-0'}`} aria-hidden={!isRevealed}>
                 <span className="text-[0.8125rem] @2xl:font-display @2xl:text-[0.9375rem]">{name}</span>

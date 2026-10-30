@@ -8,6 +8,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Button } from '@/components/ui/Button';
 import { AlertTriangle, AlertCircle, Info, ChevronDown, MessageCircle, Shield, Lightbulb, CheckCircle2 } from 'lucide-react';
 import { type ConflictPoint, type HepanType } from '@/lib/divination/hepan';
 import { getCommunicationTemplate, getSeverityAdvice, type CommunicationTemplate } from '@/lib/communication-templates';
@@ -111,9 +112,9 @@ export function ConflictPoints({ conflicts, hepanType }: ConflictPointsProps) {
                                 </div>
 
                                 {conflict.triggerFactors && conflict.triggerFactors.length > 0 && (
-                                    <button type="button" aria-expanded={isExpanded} aria-label={isExpanded ? '收起详情' : '展开详情'} className="p-1 text-foreground-secondary transition-colors hover:text-foreground">
+                                    <Button unstyled type="button" aria-expanded={isExpanded} aria-label={isExpanded ? '收起详情' : '展开详情'} className="p-1 text-foreground-secondary transition-colors hover:text-foreground">
                                         <ChevronDown className={`w-5 h-5 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
-                                    </button>
+                                    </Button>
                                 )}
                             </div>
                         </div>
@@ -157,7 +158,7 @@ export function ConflictPoints({ conflicts, hepanType }: ConflictPointsProps) {
 
                                 {/* Communication Template */}
                                 <div>
-                                    <button
+                                    <Button unstyled
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             setShowTemplate(showTemplate === index ? null : index);
@@ -174,7 +175,7 @@ export function ConflictPoints({ conflicts, hepanType }: ConflictPointsProps) {
                                             沟通建议与话术模板
                                         </span>
                                         <ChevronDown className={`w-4 h-4 text-foreground-secondary transition-transform duration-300 ${showTemplate === index ? 'rotate-180' : ''}`} />
-                                    </button>
+                                    </Button>
 
                                     {showTemplate === index && (
                                         <div className="mt-3 animate-fade-in">

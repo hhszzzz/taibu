@@ -1,4 +1,5 @@
 import { ChevronDown } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
 
 interface FortuneChartOwnerProps {
     chartName: string;
@@ -15,7 +16,7 @@ export function FortuneChartOwner({ chartName, onChartSelect }: FortuneChartOwne
         <span className="hidden items-center gap-x-1 lg:inline-flex">
             <span aria-hidden="true">·</span>
             {onChartSelect ? (
-                <button
+                <Button unstyled
                     type="button"
                     onClick={onChartSelect}
                     aria-label={`切换命盘，当前 ${chartName}`}
@@ -23,7 +24,7 @@ export function FortuneChartOwner({ chartName, onChartSelect }: FortuneChartOwne
                 >
                     <span className="truncate">{chartName}</span>
                     <ChevronDown className="size-3 shrink-0" />
-                </button>
+                </Button>
             ) : (
                 <span className="max-w-[9rem] truncate">{chartName}</span>
             )}

@@ -7,6 +7,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { Button } from '@/components/ui/Button';
 import {
     LineChart,
     Line,
@@ -258,7 +259,7 @@ export function FortuneTrendChart({
                 {/* 维度选择器 - defaultOverallOnly 模式下也显示，允许用户切换 */}
                 <div className="flex items-center gap-2 flex-wrap">
                     {(Object.keys(DIMENSION_CONFIG) as FortuneDimension[]).map((dim) => (
-                        <button
+                        <Button unstyled
                             key={dim}
                             type="button"
                             aria-pressed={activeDimensions.includes(dim)}
@@ -274,7 +275,7 @@ export function FortuneTrendChart({
                             }}
                         >
                             {DIMENSION_CONFIG[dim].label}
-                        </button>
+                        </Button>
                     ))}
                 </div>
             </div>
@@ -344,7 +345,7 @@ export function FortuneTrendChart({
                                     fill={dotColor}
                                     stroke="var(--color-background)"
                                     strokeWidth={2}
-                                    style={{ filter: 'drop-shadow(0px 1px 2px rgba(0,0,0,0.1))' }}
+                                    style={{ filter: 'drop-shadow(0px 1px 2px var(--shadow-color))' }}
                                 />
                             );
                         })}
@@ -356,7 +357,7 @@ export function FortuneTrendChart({
                                 fill={DIMENSION_CONFIG.overall.color}
                                 stroke="var(--color-background)"
                                 strokeWidth={3}
-                                style={{ filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.1))' }}
+                                style={{ filter: 'drop-shadow(0px 2px 4px var(--shadow-color))' }}
                             />
                         )}
                     </LineChart>

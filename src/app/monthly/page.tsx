@@ -8,6 +8,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Button } from '@/components/ui/Button';
 import { ArrowLeftRight } from 'lucide-react';
 import { MonthlyIcon } from '@/lib/navigation/nav-icons';
 
@@ -150,20 +151,20 @@ function MonthlyPageContent() {
                                 </p>
                             </div>
                             <div className="flex items-center gap-2">
-                                <button
+                                <Button unstyled
                                     type="button"
                                     onClick={() => { void chartsQuery.refetch(); }}
                                     className={`${FORTUNE_SECONDARY_BUTTON_CLASS} h-9 px-3 font-medium`}
                                 >
                                     重试
-                                </button>
-                                <button
+                                </Button>
+                                <Button unstyled
                                     type="button"
                                     onClick={openChartSelector}
                                     className="h-9 rounded-xl bg-accent px-3 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
                                 >
                                     重新选择命盘
-                                </button>
+                                </Button>
                             </div>
                         </div>
                     </section>

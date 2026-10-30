@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Button } from '@/components/ui/Button';
 import { Share2 } from 'lucide-react';
 import { FortuneTrendChart, type FortuneTrendDataPoint } from '@/components/fortune/FortuneTrendChart';
 import { InterpretationModeToggle, type InterpretationMode } from '@/components/fortune/InterpretationModeToggle';
@@ -93,10 +94,10 @@ export function DailyFortuneInsights({
         <section aria-labelledby="daily-insights-title" className={`${FORTUNE_CARD_CLASS} flex flex-col gap-5 p-[18px] lg:p-6`}>
             <div className="flex items-center justify-between gap-3">
                 <h2 id="daily-insights-title" className="font-display text-[1.0625rem] lg:text-lg">运势详解</h2>
-                <button type="button" onClick={onShare} className={`${FORTUNE_SECONDARY_BUTTON_CLASS} h-8 px-2.5 text-xs`}>
+                <Button unstyled type="button" onClick={onShare} className={`${FORTUNE_SECONDARY_BUTTON_CLASS} h-8 px-2.5 text-xs`}>
                     <Share2 className="size-3.5" />
                     分享运势
-                </button>
+                </Button>
             </div>
 
             <div className={`grid gap-6 ${hasTrend ? 'lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:gap-8' : ''}`}>

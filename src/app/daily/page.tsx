@@ -22,6 +22,9 @@ import { FORTUNE_SECONDARY_BUTTON_CLASS } from '@/components/fortune/fortune-dis
 import { ShareCard } from '@/components/fortune/ShareCard';
 import { FeatureGate } from '@/components/layout/FeatureGate';
 import { useHeaderMenu, type HeaderMenuItem } from '@/components/layout/HeaderMenuContext';
+import { IconButton } from '@/components/ui/IconButton';
+import { Dialog } from '@/components/ui/Dialog';
+import { Button } from '@/components/ui/Button';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { getCalendarAlmanac } from '@/lib/divination/calendar';
 import { calculateDailyFortune, calculateGenericDailyFortune, calculateWeeklyTrend, type DailyFortune } from '@/lib/divination/fortune';
@@ -193,20 +196,20 @@ function DailyPageContent() {
                                 </p>
                             </div>
                             <div className="flex items-center gap-2">
-                                <button
+                                <Button unstyled
                                     type="button"
                                     onClick={() => { void chartsQuery.refetch(); }}
                                     className={`${FORTUNE_SECONDARY_BUTTON_CLASS} h-9 px-3 font-medium`}
                                 >
                                     重试
-                                </button>
-                                <button
+                                </Button>
+                                <Button unstyled
                                     type="button"
                                     onClick={openChartSelector}
                                     className="h-9 rounded-xl bg-accent px-3 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
                                 >
                                     重新选择命盘
-                                </button>
+                                </Button>
                             </div>
                         </div>
                     </section>
@@ -225,21 +228,16 @@ function DailyPageContent() {
 
                 {/* 分享卡片弹窗（遮罩与 .app-modal::backdrop 一致，深浅色通用） */}
                 {showShareCard && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0006] p-4 backdrop-blur-[3px]">
-                        <div role="dialog" aria-modal="true" aria-labelledby="daily-share-title" className="w-full max-w-md rounded-2xl border-[0.5px] border-border bg-surface p-5 shadow-md">
+                    <Dialog bare open onClose={() => setShowShareCard(false)} labelledBy="daily-share-title" className="dialog-plain dialog-md">
+                        <div className="w-full rounded-2xl border-[0.5px] border-border bg-surface p-5 shadow-md">
                             <div className="mb-5 flex items-center justify-between">
                                 <h2 id="daily-share-title" className="flex items-center gap-2 font-display text-lg">
                                     <Share2 className="h-4 w-4 text-accent" />
                                     分享运势
                                 </h2>
-                                <button
-                                    type="button"
-                                    aria-label="关闭"
-                                    onClick={() => setShowShareCard(false)}
-                                    className="rounded-lg p-1.5 text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground"
-                                >
-                                    <X className="h-4 w-4" />
-                                </button>
+                                <IconButton label="关闭" size="sm" expand="none" onClick={() => setShowShareCard(false)}>
+                                    <X aria-hidden="true" />
+                                </IconButton>
                             </div>
                             <ShareCard
                                 fortune={fortune}
@@ -249,7 +247,7 @@ function DailyPageContent() {
                                 almanac={almanac}
                             />
                         </div>
-                    </div>
+                    </Dialog>
                 )}
 
                 <CalendarAlmanac

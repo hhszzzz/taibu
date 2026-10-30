@@ -8,6 +8,8 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 
 export interface TimeFieldsValue {
     year: number;
@@ -78,7 +80,7 @@ export function SanshiTimeFields({
         <div className="flex flex-col gap-2" role="group" aria-label={label}>
             <div className="flex items-center justify-between gap-3">
                 <span className="text-sm font-medium text-foreground">{label}</span>
-                <button
+                <Button unstyled
                     type="button"
                     onClick={onUseNow}
                     aria-pressed={isNow}
@@ -89,7 +91,7 @@ export function SanshiTimeFields({
                     }`}
                 >
                     用此刻
-                </button>
+                </Button>
             </div>
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
                 {TIME_FIELDS.map(field => (
@@ -97,7 +99,7 @@ export function SanshiTimeFields({
                         key={field.key}
                         className="flex h-11 min-w-0 items-center gap-1 rounded-xl border-[0.5px] border-border-hover bg-surface px-3 transition-colors focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/10"
                     >
-                        <input
+                        <Input
                             type="number"
                             inputMode="numeric"
                             min={field.min}
@@ -190,7 +192,7 @@ export function SanshiSegmented<T extends string>({
             {options.map(option => {
                 const active = option.value === value;
                 return (
-                    <button
+                    <Button unstyled
                         key={option.value}
                         type="button"
                         aria-pressed={active}
@@ -205,7 +207,7 @@ export function SanshiSegmented<T extends string>({
                         }`}
                     >
                         {option.label}
-                    </button>
+                    </Button>
                 );
             })}
         </div>
@@ -236,7 +238,7 @@ export function SanshiSubmitButton({ onClick, loading, label, loadingLabel }: {
     loadingLabel: string;
 }) {
     return (
-        <button
+        <Button unstyled
             type="button"
             onClick={onClick}
             disabled={loading}
@@ -248,7 +250,7 @@ export function SanshiSubmitButton({ onClick, loading, label, loadingLabel }: {
                     <span>{loadingLabel}</span>
                 </>
             ) : label}
-        </button>
+        </Button>
     );
 }
 

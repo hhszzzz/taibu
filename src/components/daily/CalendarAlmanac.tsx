@@ -10,6 +10,8 @@
 'use client';
 
 import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { Input } from '@/components/ui/Input';
+import { Button } from '@/components/ui/Button';
 import { Calendar } from 'lucide-react';
 import { getCalendarAlmanac, getZhiShenDesc, isBlackDay, type CalendarAlmanacData } from '@/lib/divination/calendar';
 import { DailyDirectionGrid } from '@/components/daily/DailyDirectionGrid';
@@ -101,14 +103,14 @@ function LuckBadge({ favorable, children }: { favorable: boolean; children: Reac
 
 function CollapseToggle({ kind, hidden, expanded, onToggle }: { kind: 'yi' | 'ji'; hidden: number; expanded: boolean; onToggle: () => void }) {
     return (
-        <button
+        <Button unstyled
             type="button"
             onClick={onToggle}
             aria-expanded={expanded}
             className={`text-[13px] underline-offset-2 hover:underline ${kind === 'yi' ? 'text-wood' : 'text-fire'}`}
         >
             {expanded ? '收起' : `还有 ${hidden} 项`}
-        </button>
+        </Button>
     );
 }
 
@@ -204,7 +206,7 @@ function DateNav({ date, isToday, onDateChange, onDatePick, onGoToday }: Pick<Ca
             reset={isToday ? null : { label: '回到今天', shortLabel: '今天', onClick: onGoToday }}
             current={(
                 <span className="relative">
-                    <button
+                    <Button unstyled
                         type="button"
                         onClick={openPicker}
                         aria-label={`选择日期，当前 ${dateKey}`}
@@ -212,8 +214,8 @@ function DateNav({ date, isToday, onDateChange, onDatePick, onGoToday }: Pick<Ca
                     >
                         <Calendar className="hidden size-[15px] text-foreground-secondary lg:block" />
                         {dateKey}
-                    </button>
-                    <input
+                    </Button>
+                    <Input
                         ref={inputRef}
                         type="date"
                         tabIndex={-1}

@@ -7,6 +7,8 @@
 'use client';
 
 import { BookOpen, GraduationCap, ScrollText } from 'lucide-react';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import { Button } from '@/components/ui/Button';
 
 export type InterpretationMode = 'colloquial' | 'professional' | 'technical';
 
@@ -54,31 +56,21 @@ export function InterpretationModeToggle({
 
     if (compact) {
         return (
-            <div role="group" aria-label="解读模式" className="flex items-center gap-0.5 rounded-xl bg-background-secondary p-1">
-                {modes.map((m) => {
-                    const config = MODE_CONFIG[m];
-                    const isActive = mode === m;
-                    const Icon = config.icon;
-
-                    return (
-                        <button
-                            key={m}
-                            type="button"
-                            aria-pressed={isActive}
-                            onClick={() => onModeChange(m)}
-                            className={`flex items-center gap-1 rounded-[7px] px-2 py-1 text-xs transition-colors ${
-                                isActive
-                                    ? 'bg-surface text-foreground shadow-sm'
-                                    : 'text-foreground-secondary hover:text-foreground'
-                            }`}
-                            title={config.description}
-                        >
-                            <Icon className="w-3 h-3" />
-                            <span>{config.shortLabel}</span>
-                        </button>
-                    );
-                })}
-            </div>
+            <SegmentedControl
+                ariaLabel="解读模式"
+                mode="toggle"
+                indicator={false}
+                value={mode}
+                onChange={onModeChange}
+                className="flex items-center gap-0.5 rounded-xl bg-background-secondary p-1"
+                optionClassName="gap-1 rounded-[7px] px-2 py-1 text-xs aria-pressed:bg-surface aria-pressed:text-foreground aria-pressed:shadow-sm"
+                options={modes.map(m => ({
+                    value: m,
+                    label: MODE_CONFIG[m].shortLabel,
+                    icon: MODE_CONFIG[m].icon,
+                    title: MODE_CONFIG[m].description,
+                }))}
+            />
         );
     }
 
@@ -92,7 +84,7 @@ export function InterpretationModeToggle({
                     const Icon = config.icon;
 
                     return (
-                        <button
+                        <Button unstyled
                             key={m}
                             type="button"
                             aria-pressed={isActive}
@@ -110,7 +102,7 @@ export function InterpretationModeToggle({
                                     {config.description}
                                 </div>
                             </div>
-                        </button>
+                        </Button>
                     );
                 })}
             </div>

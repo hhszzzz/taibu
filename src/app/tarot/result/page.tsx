@@ -10,6 +10,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { BookOpenText, Copy, Check, ChevronLeft, Save } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Button } from '@/components/ui/Button';
 import Image from 'next/image';
 import { TarotRevealCard } from '@/components/tarot/TarotRevealCard';
 import { TarotMeaningGrid, TarotMeaningList, type TarotMeaningEntry } from '@/components/tarot/TarotSpreadParts';
@@ -330,7 +331,7 @@ function TarotResultContent() {
                         })}
                     </div>
                     {revealedCards.length < drawnCards.length && (
-                        <button type="button" onClick={() => setRevealedCards(drawnCards.map((_, i) => i))} className="h-11 rounded-xl bg-accent px-6 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover">翻开所有牌面</button>
+                        <Button unstyled type="button" onClick={() => setRevealedCards(drawnCards.map((_, i) => i))} className="h-11 rounded-xl bg-accent px-6 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover">翻开所有牌面</Button>
                     )}
                 </section>
 
@@ -344,14 +345,14 @@ function TarotResultContent() {
                         <h2 className="font-display text-[17px] font-normal">让太卜结合牌阵解读</h2>
                         <p className="text-sm text-foreground-secondary">带上牌阵与所问之事进入 AI 对话，由太卜在对话里展开解读。</p>
                     </div>
-                    <button
+                    <Button unstyled
                         type="button"
                         onClick={handleAskTaibu}
                         disabled={drawnCards.length === 0}
                         className="h-10 rounded-xl bg-accent px-4 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         {ASK_LABEL}
-                    </button>
+                    </Button>
                 </section>
 
                 {/* 数秘术 */}
@@ -365,7 +366,7 @@ function TarotResultContent() {
                                 return (
                                     <div key={key} className="flex flex-col items-center gap-2.5 text-center">
                                         <span className="text-xs text-foreground-secondary">{label}</span>
-                                        <div className="relative aspect-[4/7] w-full max-w-[100px] overflow-hidden rounded-xl border-[0.5px] border-foreground/20 bg-panel shadow-[0_4px_14px_rgba(11, 11, 11,0.08)]">
+                                        <div className="relative aspect-[4/7] w-full max-w-[100px] overflow-hidden rounded-xl border-[0.5px] border-foreground/20 bg-panel shadow-[var(--shadow-md)]">
                                             {cardImage && card ? (
                                                 <Image src={cardImage} alt={card.nameChinese} fill sizes="100px" className="object-cover" />
                                             ) : null}

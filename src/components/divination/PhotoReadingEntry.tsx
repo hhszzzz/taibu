@@ -7,15 +7,18 @@
  */
 'use client'; // 需要文件选择/拖拽、表单状态、弹窗与路由跳转
 
+import { Select } from '@/components/ui/Select';
+import { Button } from '@/components/ui/Button';
+import { Textarea } from '@/components/ui/Textarea';
 import { useId, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, Camera, ChevronDown, ImageIcon, Lock, X } from 'lucide-react';
+import { AlertTriangle, Camera, ImageIcon, Lock, X } from 'lucide-react';
 import type { NavIcon } from '@/lib/navigation/registry';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import { CreditsModal } from '@/components/ui/CreditsModal';
-import { Modal } from '@/components/ui/Modal';
+import { Dialog } from '@/components/ui/Dialog';
 import { VisionModelSelector } from '@/components/ui/VisionModelSelector';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { writeSessionJSON } from '@/lib/cache/session-storage';
@@ -94,16 +97,16 @@ export function PhotoOptionSegmented<T extends string>({ options, value, onChang
             {options.map(option => {
                 const active = option.value === value;
                 return (
-                    <button
+                    <Button unstyled
                         key={option.value}
                         type="button"
                         aria-pressed={active}
                         onClick={() => onChange(option.value)}
-                        className={`flex items-center justify-center gap-1.5 rounded-[7px] px-3 text-sm transition-colors lg:rounded-md lg:px-2.5 lg:text-[0.8125rem] ${active ? 'bg-surface text-foreground shadow-[0_1px_2px_rgba(11, 11, 11,0.08)]' : 'text-foreground-secondary hover:text-foreground'}`}
+                        className={`flex items-center justify-center gap-1.5 rounded-[7px] px-3 text-sm transition-colors lg:rounded-md lg:px-2.5 lg:text-[0.8125rem] ${active ? 'bg-surface text-foreground shadow-[var(--shadow-sm)]' : 'text-foreground-secondary hover:text-foreground'}`}
                     >
                         {option.label}
                         {option.hint && <span className="text-xs text-foreground-tertiary">{option.hint}</span>}
-                    </button>
+                    </Button>
                 );
             })}
         </div>
@@ -302,7 +305,7 @@ export function PhotoReadingEntry({
                                     key={tab.kind}
                                     href={tab.href}
                                     aria-current={tab.kind === kind ? 'page' : undefined}
-                                    className={`flex items-center justify-center rounded-[7px] px-4 transition-colors ${tab.kind === kind ? 'bg-surface text-foreground shadow-[0_1px_2px_rgba(11, 11, 11,0.08)]' : 'text-foreground-secondary hover:text-foreground'}`}
+                                    className={`flex items-center justify-center rounded-[7px] px-4 transition-colors ${tab.kind === kind ? 'bg-surface text-foreground shadow-[var(--shadow-sm)]' : 'text-foreground-secondary hover:text-foreground'}`}
                                 >
                                     {tab.label}
                                 </Link>
@@ -329,10 +332,10 @@ export function PhotoReadingEntry({
                                         alt={copy.previewAlt}
                                         className="max-h-60 max-w-full rounded-xl border-[0.5px] border-border object-contain lg:max-h-80"
                                     />
-                                    <button type="button" onClick={() => albumInputRef.current?.click()} disabled={isAnalyzing} className={`${OUTLINE_BUTTON_CLASS} disabled:cursor-not-allowed disabled:opacity-50`}>
+                                    <Button unstyled type="button" onClick={() => albumInputRef.current?.click()} disabled={isAnalyzing} className={`${OUTLINE_BUTTON_CLASS} disabled:cursor-not-allowed disabled:opacity-50`}>
                                         <ImageIcon className="h-4 w-4" aria-hidden="true" />更换照片
-                                    </button>
-                                    <button
+                                    </Button>
+                                    <Button unstyled
                                         type="button"
                                         onClick={handleRemovePhoto}
                                         disabled={isAnalyzing}
@@ -340,7 +343,7 @@ export function PhotoReadingEntry({
                                         className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-lg text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                                     >
                                         <X className="h-4 w-4" aria-hidden="true" />
-                                    </button>
+                                    </Button>
                                 </>
                             ) : (
                                 <>
@@ -353,28 +356,28 @@ export function PhotoReadingEntry({
                                         <span className="hidden lg:inline">{copy.uploadTitle}</span>
                                     </span>
                                     <span className="text-xs text-foreground-secondary lg:text-[0.8125rem]">{copy.uploadHint}</span>
-                                    <button
+                                    <Button unstyled
                                         type="button"
                                         onClick={(event) => { event.stopPropagation(); albumInputRef.current?.click(); }}
                                         className="hidden h-10 items-center rounded-xl bg-background-secondary px-4 text-sm text-foreground transition-colors hover:bg-background-tertiary lg:inline-flex"
                                     >
                                         选择照片
-                                    </button>
+                                    </Button>
                                     <div className="mt-1.5 grid w-full grid-cols-2 gap-2 lg:hidden">
-                                        <button
+                                        <Button unstyled
                                             type="button"
                                             onClick={(event) => { event.stopPropagation(); cameraInputRef.current?.click(); }}
                                             className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl bg-accent text-sm text-on-accent transition-colors hover:bg-accent-hover"
                                         >
                                             <Camera className="h-[18px] w-[18px]" strokeWidth={1.7} aria-hidden="true" />拍照
-                                        </button>
-                                        <button
+                                        </Button>
+                                        <Button unstyled
                                             type="button"
                                             onClick={(event) => { event.stopPropagation(); albumInputRef.current?.click(); }}
                                             className={OUTLINE_BUTTON_CLASS}
                                         >
                                             <ImageIcon className="h-[18px] w-[18px]" strokeWidth={1.7} aria-hidden="true" />从相册选择
-                                        </button>
+                                        </Button>
                                     </div>
                                 </>
                             )}
@@ -416,13 +419,13 @@ export function PhotoReadingEntry({
                                 <label htmlFor={questionId} className="text-[0.8125rem] font-medium lg:text-sm">
                                     想问的问题 <span className="font-normal text-foreground-tertiary lg:text-foreground-secondary">选填</span>
                                 </label>
-                                <textarea
+                                <Textarea
                                     id={questionId}
                                     rows={2}
                                     value={question}
                                     onChange={(event) => setQuestion(event.target.value)}
                                     placeholder={copy.questionPlaceholder}
-                                    className="min-h-[84px] w-full resize-none rounded-xl border-[0.5px] border-border-hover bg-surface p-3 text-[0.9375rem] leading-normal text-foreground placeholder:text-foreground-tertiary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15 lg:min-h-[66px] lg:px-3 lg:py-2.5 lg:text-sm lg:leading-relaxed"
+                                    className="min-h-[84px] resize-none border-border-hover p-3 text-[0.9375rem] leading-normal lg:min-h-[66px] lg:px-3 lg:py-2.5 lg:text-sm lg:leading-relaxed"
                                 />
                             </section>
 
@@ -430,20 +433,14 @@ export function PhotoReadingEntry({
                             <div className="flex flex-col gap-3.5 lg:gap-0 lg:divide-y-[0.5px] lg:divide-border lg:rounded-xl lg:border-[0.5px] lg:border-border lg:bg-surface">
                                 {extraOptions}
                                 <PhotoOptionRow label="分析重点">
-                                    <div className="relative w-full lg:w-auto">
-                                        <select
-                                            aria-label="分析重点"
-                                            value={analysisType}
-                                            onChange={(event) => setAnalysisType(event.target.value)}
-                                            title={analysisInfo?.description}
-                                            className={OPTION_SELECT_CLASS}
-                                        >
-                                            {analysisTypes.map(type => (
-                                                <option key={type.id} value={type.id}>{type.name}</option>
-                                            ))}
-                                        </select>
-                                        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground-tertiary lg:right-2 lg:h-3.5 lg:w-3.5" aria-hidden="true" />
-                                    </div>
+                                    <Select
+                                        ariaLabel="分析重点"
+                                        value={analysisType}
+                                        onChange={setAnalysisType}
+                                        title={analysisInfo?.description}
+                                        options={analysisTypes.map(type => ({ value: type.id, label: type.name }))}
+                                        className={OPTION_SELECT_CLASS}
+                                    />
                                 </PhotoOptionRow>
                                 <PhotoOptionRow label="视觉模型">
                                     <VisionModelSelector
@@ -460,7 +457,7 @@ export function PhotoReadingEntry({
                                 {!photo && !isAnalyzing && (
                                     <p className="text-center text-xs text-foreground-secondary lg:hidden">先选择一张照片</p>
                                 )}
-                                <button
+                                <Button unstyled
                                     type="button"
                                     onClick={() => { void handleAnalyze(); }}
                                     disabled={!photo || preparing || isAnalyzing}
@@ -472,7 +469,7 @@ export function PhotoReadingEntry({
                                             <span>正在分析，请稍候</span>
                                         </>
                                     ) : copy.submitLabel}
-                                </button>
+                                </Button>
                             </div>
                         </div>
                     </div>
@@ -489,7 +486,7 @@ export function PhotoReadingEntry({
             </div>
 
             {consent && (
-                <Modal open={showConsent} onClose={() => setShowConsent(false)} labelledBy={consentTitleId} describedBy={consentBodyId}>
+                <Dialog bare open={showConsent} onClose={() => setShowConsent(false)} labelledBy={consentTitleId} describedBy={consentBodyId}>
                     <div className="flex flex-col gap-5 p-6">
                         <div className="flex items-start justify-between gap-3">
                             <div className="flex items-center gap-3">
@@ -498,27 +495,27 @@ export function PhotoReadingEntry({
                                 </span>
                                 <h3 id={consentTitleId} className="font-display text-lg">{consent.title}</h3>
                             </div>
-                            <button
+                            <Button unstyled
                                 type="button"
                                 onClick={() => setShowConsent(false)}
                                 aria-label="关闭"
                                 className="rounded-lg p-1 text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground"
                             >
                                 <X className="h-5 w-5" aria-hidden="true" />
-                            </button>
+                            </Button>
                         </div>
                         <p id={consentBodyId} className="whitespace-pre-line rounded-xl bg-panel p-4 text-sm leading-relaxed text-foreground-secondary">
                             {consent.body}
                         </p>
                         <div className="flex gap-3">
-                            <button
+                            <Button unstyled
                                 type="button"
                                 onClick={() => setShowConsent(false)}
                                 className="h-11 flex-1 rounded-xl border-[0.5px] border-border-hover bg-surface text-sm font-medium transition-colors hover:bg-background-secondary"
                             >
                                 取消
-                            </button>
-                            <button
+                            </Button>
+                            <Button unstyled
                                 type="button"
                                 onClick={() => {
                                     setConsentAccepted(true);
@@ -527,10 +524,10 @@ export function PhotoReadingEntry({
                                 className="h-11 flex-1 rounded-xl bg-accent text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
                             >
                                 我已了解
-                            </button>
+                            </Button>
                         </div>
                     </div>
-                </Modal>
+                </Dialog>
             )}
             <CreditsModal isOpen={showCreditsModal} onClose={() => setShowCreditsModal(false)} />
         </>

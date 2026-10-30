@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Button } from '@/components/ui/Button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface FortunePeriodNavProps {
@@ -32,23 +33,23 @@ export function FortunePeriodNav({ title, current, prevLabel, nextLabel, onPrev,
             <h1 className="hidden font-display text-[32px] font-normal leading-tight lg:block">{title}</h1>
             <span aria-hidden="true" className="lg:hidden" />
             <div className="flex items-center gap-1 lg:gap-2">
-                <button type="button" aria-label={prevLabel} onClick={onPrev} disabled={prevDisabled} className={NAV_BUTTON_CLASS}>
+                <Button unstyled type="button" aria-label={prevLabel} onClick={onPrev} disabled={prevDisabled} className={NAV_BUTTON_CLASS}>
                     <ChevronLeft className="size-4" />
-                </button>
+                </Button>
                 {current}
-                <button type="button" aria-label={nextLabel} onClick={onNext} disabled={nextDisabled} className={NAV_BUTTON_CLASS}>
+                <Button unstyled type="button" aria-label={nextLabel} onClick={onNext} disabled={nextDisabled} className={NAV_BUTTON_CLASS}>
                     <ChevronRight className="size-4" />
-                </button>
+                </Button>
                 {reset && (
-                    <button type="button" onClick={reset.onClick} className={`hidden lg:block ${RESET_BUTTON_CLASS}`}>
+                    <Button unstyled type="button" onClick={reset.onClick} className={`hidden lg:block ${RESET_BUTTON_CLASS}`}>
                         {reset.label}
-                    </button>
+                    </Button>
                 )}
             </div>
             {reset && (
-                <button type="button" onClick={reset.onClick} className={`justify-self-end lg:hidden ${RESET_BUTTON_CLASS}`}>
+                <Button unstyled type="button" onClick={reset.onClick} className={`justify-self-end lg:hidden ${RESET_BUTTON_CLASS}`}>
                     {reset.shortLabel}
-                </button>
+                </Button>
             )}
         </header>
     );

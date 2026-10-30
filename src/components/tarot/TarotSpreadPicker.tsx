@@ -5,6 +5,7 @@
  * 选中态为陶土色描边。点选只改变选择，抽牌由页面的「开始洗牌」发起。
  */
 import type { TarotSpread } from '@/lib/divination/tarot';
+import { Button } from '@/components/ui/Button';
 
 /** 卡片上的一句话用途，比牌阵说明更短；未登记的牌阵退回牌阵说明。 */
 const SPREAD_TAGLINES: Record<string, string> = {
@@ -76,7 +77,7 @@ export function TarotSpreadPicker({ spreads, selectedId, onSelect, labelledBy }:
             {spreads.map((spread) => {
                 const selected = spread.id === selectedId;
                 return (
-                    <button
+                    <Button unstyled
                         key={spread.id}
                         type="button"
                         aria-pressed={selected}
@@ -93,7 +94,7 @@ export function TarotSpreadPicker({ spreads, selectedId, onSelect, labelledBy }:
                             <span className={`text-[13px] ${selected ? 'text-accent-strong' : 'text-foreground-secondary'}`}>{spread.cardCount} 张</span>
                         </span>
                         <span className="text-[13px] leading-relaxed text-foreground-secondary">{SPREAD_TAGLINES[spread.id] ?? spread.description}</span>
-                    </button>
+                    </Button>
                 );
             })}
         </div>

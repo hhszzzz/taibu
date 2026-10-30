@@ -8,7 +8,8 @@
 
 import { useId } from 'react';
 import { X } from 'lucide-react';
-import { Modal } from '@/components/ui/Modal';
+import { Dialog } from '@/components/ui/Dialog';
+import { Button } from '@/components/ui/Button';
 import { TarotCardFace } from '@/components/tarot/TarotCardFace';
 import { TarotOrientationChip } from '@/components/tarot/TarotSpreadParts';
 import type { DrawnCard } from '@/lib/divination/tarot';
@@ -24,22 +25,22 @@ export function TarotDailyCardDialog({ open, onClose, dailyCard, unavailable }: 
     const reversed = dailyCard?.orientation === 'reversed';
 
     return (
-        <Modal open={open} onClose={onClose} labelledBy={titleId}>
+        <Dialog bare open={open} onClose={onClose} labelledBy={titleId}>
             <div className="flex flex-col gap-4 p-5">
                 <div className="flex items-center justify-between gap-3">
                     <h2 id={titleId} className="font-display text-lg font-medium">每日一牌 · 今日指引</h2>
-                    <button
+                    <Button unstyled
                         type="button"
                         onClick={onClose}
                         aria-label="关闭"
                         className="flex h-8 w-8 items-center justify-center rounded-lg text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground"
                     >
                         <X className="h-4 w-4" aria-hidden="true" />
-                    </button>
+                    </Button>
                 </div>
                 {dailyCard ? (
                     <div className="flex items-start gap-4">
-                        <div className="relative aspect-[4/7] w-24 shrink-0 overflow-hidden rounded-xl border-[0.5px] border-foreground/20 bg-surface shadow-[0_4px_14px_rgba(11, 11, 11,0.08)]">
+                        <div className="relative aspect-[4/7] w-24 shrink-0 overflow-hidden rounded-xl border-[0.5px] border-foreground/20 bg-surface shadow-[var(--shadow-md)]">
                             <TarotCardFace image={dailyCard.card.image} name={dailyCard.card.nameChinese} reversed={reversed} />
                         </div>
                         <div className="flex min-w-0 flex-col gap-2">
@@ -59,6 +60,6 @@ export function TarotDailyCardDialog({ open, onClose, dailyCard, unavailable }: 
                     </p>
                 )}
             </div>
-        </Modal>
+        </Dialog>
     );
 }

@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { RotateCcw, Copy, Check, ChevronLeft } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
+import { Button } from '@/components/ui/Button';
 import { ResultMobileActions } from '@/components/bazi/result/ResultHeader';
 import { ResultHeaderActions } from '@/components/divination/ResultHeaderActions';
 import { readSessionJSON, scopeResultSession, updateSessionJSON, writeSessionJSON } from '@/lib/cache/session-storage';
@@ -177,7 +178,7 @@ function DaliurenResultContent({ isCurrent }: { isCurrent: () => boolean }) {
     if (!result) return (
         <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-6 p-4 text-center">
             <p className="text-sm text-foreground-secondary">排盘失败</p>
-            <button onClick={() => router.back()} className="h-10 rounded-xl bg-accent px-4 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover">返回重试</button>
+            <Button unstyled onClick={() => router.back()} className="h-10 rounded-xl bg-accent px-4 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover">返回重试</Button>
         </div>
     );
 
@@ -209,9 +210,9 @@ function DaliurenResultContent({ isCurrent }: { isCurrent: () => boolean }) {
         <section aria-label="太卜推演" className="flex scroll-mt-24 flex-col gap-2.5 rounded-2xl border-[0.5px] border-border bg-panel px-5 py-[18px]">
             <h2 className="font-display text-[17px] font-normal">让太卜推演事态</h2>
             <p className="text-sm leading-relaxed text-foreground-secondary">结合三传、四课与本命行年，说明这件事的来龙去脉。</p>
-            <button type="button" onClick={handleAskTaibu} className="inline-flex h-[42px] items-center justify-center rounded-xl bg-foreground text-sm text-background transition-opacity hover:opacity-90">
+            <Button unstyled type="button" onClick={handleAskTaibu} className="inline-flex h-[42px] items-center justify-center rounded-xl bg-foreground text-sm text-background transition-opacity hover:opacity-90">
                 {ASK_LABEL}
-            </button>
+            </Button>
         </section>
     );
 

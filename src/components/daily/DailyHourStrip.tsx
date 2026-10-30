@@ -7,6 +7,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { Button } from '@/components/ui/Button';
 import type { DailyHourFortune } from '@/components/daily/useDailyAlmanacDetail';
 
 interface DailyHourStripProps {
@@ -76,7 +77,7 @@ export function DailyHourStrip({ hours, isToday }: DailyHourStripProps) {
                             const auspicious = isAuspicious(hour);
                             const range = formatHourRange(hour.startTime, hour.endTime);
                             return (
-                                <button
+                                <Button unstyled
                                     key={`${hour.ganZhi}-${index}`}
                                     type="button"
                                     data-hour-slot
@@ -104,7 +105,7 @@ export function DailyHourStrip({ hours, isToday }: DailyHourStripProps) {
                                     >
                                         {hour.tianShenLuck || '—'}
                                     </span>
-                                </button>
+                                </Button>
                             );
                         })}
                     </div>

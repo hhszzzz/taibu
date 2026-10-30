@@ -8,8 +8,10 @@
  */
 'use client';
 
-import { useMemo, type ReactNode } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { Select } from '@/components/ui/Select';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { useMemo } from 'react';
 import { calculateBaZi, type BirthInfo } from '@/lib/divination/hepan';
 import { getEarthlyBranchByHour } from '@/lib/divination/bazi-form-utils';
 import { YEAR_OPTIONS, MONTH_OPTIONS, DAY_OPTIONS } from '@/components/bazi/form/options';
@@ -36,29 +38,24 @@ function SelectField({
     value,
     placeholder,
     onChange,
-    children,
+    options,
 }: {
     id?: string;
     ariaLabel?: string;
     value: number | undefined;
     placeholder: string;
     onChange: (value: number | undefined) => void;
-    children: ReactNode;
+    options: ReadonlyArray<{ value: number; label: string }>;
 }) {
     return (
-        <div className="relative min-w-0">
-            <select
-                id={id}
-                aria-label={ariaLabel}
-                value={value ?? ''}
-                onChange={(e) => onChange(e.target.value === '' ? undefined : parseInt(e.target.value, 10))}
-                className={`${CONTROL_CLASS} cursor-pointer appearance-none pl-3 pr-8 ${value === undefined ? 'text-foreground-tertiary' : 'text-foreground'}`}
-            >
-                <option value="">{placeholder}</option>
-                {children}
-            </select>
-            <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground-tertiary" />
-        </div>
+        <Select
+            id={id}
+            ariaLabel={ariaLabel}
+            value={value ?? -1}
+            onChange={(next) => onChange(next === -1 ? undefined : next)}
+            options={[{ value: -1, label: placeholder }, ...options]}
+            className={`${CONTROL_CLASS} ${value === undefined ? 'text-foreground-tertiary' : 'text-foreground'}`}
+        />
     );
 }
 
@@ -98,13 +95,13 @@ function PersonSummary({ value, onEdit }: { value: Partial<BirthInfo>; onEdit: (
                 <span className="truncate text-[15px] font-medium text-foreground">{name}{genderText}</span>
                 {detail && <span className="text-xs text-foreground-secondary">{detail}</span>}
             </span>
-            <button
+            <Button unstyled
                 type="button"
                 onClick={onEdit}
                 className="shrink-0 rounded-md px-2 py-1 text-xs text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground"
             >
                 修改
-            </button>
+            </Button>
         </div>
     );
 }
@@ -140,13 +137,13 @@ export function HepanPersonCard({
             <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xs text-foreground-secondary sm:font-display sm:text-[19px] sm:text-foreground">{label}</h2>
                 {onPick && (
-                    <button
+                    <Button unstyled
                         type="button"
                         onClick={onPick}
                         className="text-[0.8125rem] text-accent transition-colors hover:text-accent-strong sm:h-[30px] sm:rounded-[7px] sm:bg-background-secondary sm:px-2.5 sm:text-xs sm:text-foreground sm:hover:bg-background-tertiary sm:hover:text-foreground"
                     >
                         从命盘选择
-                    </button>
+                    </Button>
                 )}
             </div>
 
@@ -158,13 +155,13 @@ export function HepanPersonCard({
                     <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-[minmax(0,1fr)_112px] sm:gap-2.5">
                         <div className="flex min-w-0 flex-col gap-1.5">
                             <label htmlFor={`${idPrefix}-name`} className={FIELD_LABEL_CLASS}>称呼</label>
-                            <input
+                            <Input
                                 id={`${idPrefix}-name`}
                                 type="text"
                                 value={value.name || ''}
                                 onChange={(e) => onChange({ ...value, name: e.target.value })}
                                 placeholder={`${label}的称呼`}
-                                className={`${CONTROL_CLASS} px-3 text-foreground placeholder:text-foreground-tertiary`}
+                                className={`${CONTROL_CLASS} px-3`}
                             />
                         </div>
                         <div className="flex flex-col gap-1.5">
@@ -173,7 +170,7 @@ export function HepanPersonCard({
                                 {GENDER_CHOICES.map((choice) => {
                                     const active = value.gender === choice.value;
                                     return (
-                                        <button
+                                        <Button unstyled
                                             key={choice.value}
                                             type="button"
                                             aria-pressed={active}
@@ -185,7 +182,7 @@ export function HepanPersonCard({
                                                 }`}
                                         >
                                             {choice.label}
-                                        </button>
+                                        </Button>
                                     );
                                 })}
                             </div>
@@ -203,25 +200,22 @@ export function HepanPersonCard({
                                 value={value.year}
                                 placeholder="年"
                                 onChange={(year) => onChange({ ...value, year })}
-                            >
-                                {YEAR_OPTIONS.map((year) => <option key={year} value={year}>{year}</option>)}
-                            </SelectField>
+                                options={YEAR_OPTIONS.map(year => ({ value: year, label: String(year) }))}
+                            />
                             <SelectField
                                 ariaLabel={`${label}出生月`}
                                 value={value.month}
                                 placeholder="月"
                                 onChange={(month) => onChange({ ...value, month })}
-                            >
-                                {MONTH_OPTIONS.map((month) => <option key={month} value={month}>{month}月</option>)}
-                            </SelectField>
+                                options={MONTH_OPTIONS.map(month => ({ value: month, label: `${month}月` }))}
+                            />
                             <SelectField
                                 ariaLabel={`${label}出生日`}
                                 value={value.day}
                                 placeholder="日"
                                 onChange={(day) => onChange({ ...value, day })}
-                            >
-                                {DAY_OPTIONS.map((day) => <option key={day} value={day}>{day}日</option>)}
-                            </SelectField>
+                                options={DAY_OPTIONS.map(day => ({ value: day, label: `${day}日` }))}
+                            />
                         </div>
                     </div>
 
@@ -233,14 +227,13 @@ export function HepanPersonCard({
                             value={value.hour}
                             placeholder="请选择时辰（不清楚可不填）"
                             onChange={(hour) => onChange({ ...value, hour, minute: 0 })}
-                        >
-                            {value.hour !== undefined && value.hour % 2 !== 0 && (
-                                <option value={value.hour}>已导入 {pad2(value.hour)}:{pad2(value.minute ?? 0)}</option>
-                            )}
-                            {HEPAN_HOUR_OPTIONS.map((option) => (
-                                <option key={option.value} value={option.value}>{option.label}</option>
-                            ))}
-                        </SelectField>
+                            options={[
+                                ...(value.hour !== undefined && value.hour % 2 !== 0
+                                    ? [{ value: value.hour, label: `已导入 ${pad2(value.hour)}:${pad2(value.minute ?? 0)}` }]
+                                    : []),
+                                ...HEPAN_HOUR_OPTIONS,
+                            ]}
+                        />
                     </div>
                 </div>
             )}

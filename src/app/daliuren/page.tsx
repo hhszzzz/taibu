@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/components/ui/Toast';
+import { Input } from '@/components/ui/Input';
 import { HistoryDrawer } from '@/components/layout/HistoryDrawer';
 import { FeatureGate } from '@/components/layout/FeatureGate';
 import { DaliurenFormPreview } from '@/components/daliuren/DaliurenFormPreview';
@@ -87,7 +88,7 @@ export default function DaliurenPage() {
                     <div className="flex flex-wrap items-start gap-6">
                         <SanshiFormCard className="flex-[999_1_480px]">
                             <SanshiField label="占问事项" htmlFor="daliuren-question">
-                                <input
+                                <Input
                                     id="daliuren-question"
                                     type="text"
                                     value={question}
@@ -111,14 +112,14 @@ export default function DaliurenPage() {
                                     {
                                         label: '出生年份',
                                         control: (
-                                            <input
+                                            <Input
                                                 type="number"
                                                 inputMode="numeric"
                                                 value={birthYear}
                                                 onChange={e => setBirthYear(e.target.value)}
                                                 placeholder="如 1990"
                                                 aria-label="出生年份"
-                                                className="h-10 w-full max-w-[320px] rounded-xl border-[0.5px] border-border-hover bg-surface px-3 text-sm text-foreground placeholder:text-foreground-tertiary transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/10"
+                                                className="h-10 max-w-[320px] border-border-hover"
                                             />
                                         ),
                                     },

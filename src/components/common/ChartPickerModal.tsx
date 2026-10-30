@@ -6,13 +6,16 @@
  */
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useId, useState, useEffect, useMemo, useCallback } from 'react';
 import { X, Search } from 'lucide-react';
 import { BaziIcon, ZiweiIcon } from '@/lib/navigation/nav-icons';
 import { useToast } from '@/components/ui/Toast';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 import { useUserCharts } from '@/lib/hooks/useUserCharts';
 import type { UserChartRecord } from '@/lib/user/charts-client';
 import { parseBirthTimeString } from '@/lib/divination/birth-time';
+import { Dialog } from '@/components/ui/Dialog';
 
 export interface ChartItem extends Pick<UserChartRecord, 'timezone' | 'disambiguation' | 'longitude' | 'calendar_type' | 'is_leap_month'> {
     id: string;
@@ -45,6 +48,7 @@ export function ChartPickerModal({
     title = '选择命盘',
     filterType,
 }: ChartPickerModalProps) {
+    const titleId = useId();
     const query = useUserCharts(userId, { enabled: isOpen });
     const loading = query.isLoading;
     const loadError = query.error?.message ?? null;
@@ -98,29 +102,30 @@ export function ChartPickerModal({
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-
-            <div className="relative bg-background rounded-xl border border-border shadow-xl w-full max-w-md flex flex-col" style={{ maxHeight: '480px' }}>
+        <Dialog bare open={isOpen} onClose={onClose} labelledBy={titleId} className="dialog-plain dialog-md">
+            <div className="flex w-full flex-col rounded-xl border border-border bg-background shadow-xl" style={{ maxHeight: '480px' }}>
                 {/* 头部 */}
-                <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
-                    <h3 className="text-lg font-semibold">{title}</h3>
-                    <button
+                <div className="flex items-center justify-between border-b border-border p-4 flex-shrink-0">
+                    <h3 id={titleId} className="text-lg font-semibold">{title}</h3>
+                    <Button unstyled
+                        type="button"
                         onClick={onClose}
+                        aria-label="关闭"
                         className="p-2 rounded-lg hover:bg-background-secondary transition-colors"
                     >
                         <X className="w-4 h-4" />
-                    </button>
+                    </Button>
                 </div>
 
                 {/* 搜索框 */}
                 <div className="p-3 border-b border-border flex-shrink-0">
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-secondary" />
-                        <input
+                        <Input
                             type="text"
                             value={searchQuery}
                             onChange={e => setSearch({ userId, query: e.target.value })}
+                            aria-label="搜索命盘"
                             placeholder="搜索命盘..."
                             className="w-full pl-9 pr-4 py-2 text-sm rounded-lg bg-background-secondary border border-border focus:outline-none focus:ring-2 focus:ring-accent/30"
                             autoFocus
@@ -144,7 +149,7 @@ export function ChartPickerModal({
                             ))}
                         </div>
                     ) : loadError ? (
-                        <div className="text-center py-8 text-sm text-[#b42318]">
+                        <div className="text-center py-8 text-sm text-danger">
                             {loadError}
                         </div>
                     ) : filteredCharts.length === 0 ? (
@@ -154,17 +159,17 @@ export function ChartPickerModal({
                     ) : (
                         <div className="space-y-1">
                             {filteredCharts.map(chart => (
-                                <button
+                                <Button unstyled
                                     key={`${chart.type}-${chart.id}`}
                                     onClick={() => handleSelect(chart)}
                                     className="w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left hover:bg-background-secondary"
                                 >
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${chart.type === 'bazi' ? 'bg-orange-500/10' : 'bg-purple-500/10'
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${chart.type === 'bazi' ? 'bg-earth-soft' : 'bg-hua-quan/10'
                                         }`}>
                                         {chart.type === 'bazi' ? (
-                                            <BaziIcon size={16} className="text-orange-500" />
+                                            <BaziIcon size={16} className="text-earth" />
                                         ) : (
-                                            <ZiweiIcon size={16} className="text-purple-500" />
+                                            <ZiweiIcon size={16} className="text-hua-quan" />
                                         )}
                                     </div>
                                     <div className="flex-1 min-w-0">
@@ -173,7 +178,7 @@ export function ChartPickerModal({
                                             {formatInfo(chart)}
                                         </div>
                                     </div>
-                                </button>
+                                </Button>
                             ))}
                         </div>
                     )}
@@ -184,6 +189,6 @@ export function ChartPickerModal({
                     选择命盘后将自动填充出生信息
                 </div>
             </div>
-        </div>
+        </Dialog>
     );
 }

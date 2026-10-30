@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronLeft, RotateCw, Sparkles, Lightbulb } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Button } from '@/components/ui/Button';
 import { CompatibilityChart } from '@/components/hepan/CompatibilityChart';
 import { ConflictPoints } from '@/components/hepan/ConflictPoints';
 import { CompatibilityTrendChart, type CompatibilityTrendPoint } from '@/components/hepan/CompatibilityTrendChart';
@@ -139,13 +140,13 @@ export default function HepanResultPage() {
                         返回列表
                     </Link>
                     {knowledgeBaseEnabled && !!chartId && (
-                        <button
+                        <Button unstyled
                             type="button"
                             onClick={() => setKbModalOpen(true)}
                             className="inline-flex h-10 items-center rounded-xl border-[0.5px] border-border-hover bg-surface px-3.5 text-sm text-foreground transition-colors hover:bg-background-secondary"
                         >
                             加入知识库
-                        </button>
+                        </Button>
                     )}
                 </div>
 
@@ -207,13 +208,13 @@ export default function HepanResultPage() {
                         </h2>
                         <p className="text-sm text-foreground-secondary">带上两人的合盘进入 AI 对话，由太卜在对话里展开分析。</p>
                     </div>
-                    <button
+                    <Button unstyled
                         type="button"
                         onClick={handleAsk}
                         className="h-11 rounded-xl bg-accent px-6 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
                     >
                         问太卜
-                    </button>
+                    </Button>
                 </section>
 
                 {/* 操作按钮 */}

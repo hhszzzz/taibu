@@ -11,9 +11,11 @@ import { useState, useEffect } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowRight, X, AlertCircle } from 'lucide-react';
-import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 import { type HepanType, type BirthInfo, analyzeCompatibility } from '@/lib/divination/hepan';
 import { ChartPickerModal, type ChartItem } from '@/components/common/ChartPickerModal';
+import { Dialog } from '@/components/ui/Dialog';
 import { SegmentedControl } from '@/components/bazi/SegmentedControl';
 import { HepanPersonCard } from '@/components/hepan/HepanPersonCard';
 import { HepanPrinciples } from '@/components/hepan/HepanPrinciples';
@@ -196,23 +198,17 @@ export function HepanCreateView() {
 
                 {/* 提交按钮：桌面端居中，移动端固定在底部导航上方 */}
                 <div className="fixed inset-x-0 bottom-[calc(4rem+var(--sab))] z-30 border-t-[0.5px] border-border bg-background px-4 py-3 sm:px-6 lg:static lg:flex lg:justify-center lg:border-0 lg:bg-transparent lg:p-0">
-                    <button
+                    <Button
                         type="button"
+                        size="lg"
+                        className="h-12 w-full gap-2 text-base lg:w-[320px]"
                         onClick={handleSubmit}
+                        loading={loading}
+                        loadingText="正在深度分析…"
                         disabled={loading}
-                        className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-accent text-base font-medium text-on-accent
-                            transition-colors duration-150 hover:bg-accent-hover
-                            disabled:cursor-not-allowed disabled:opacity-50 lg:w-[320px]"
                     >
-                        {loading ? (
-                            <>
-                                <SoundWaveLoader variant="inline" />
-                                正在深度分析...
-                            </>
-                        ) : (
-                            '开始分析'
-                        )}
-                    </button>
+                        开始分析
+                    </Button>
                 </div>
 
                 <HepanPrinciples />
@@ -231,19 +227,15 @@ export function HepanCreateView() {
 
             {/* 验证错误弹窗 */}
             {validationError && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                    <div
-                        className="absolute inset-0 bg-foreground/20 backdrop-blur-[2px]"
-                        onClick={() => setValidationError(null)}
-                    />
-                    <div role="alertdialog" aria-labelledby="hepan-validation-title" className="relative w-full max-w-sm rounded-2xl border-[0.5px] border-border bg-surface p-6 shadow-lg animate-zoom-in">
-                        <button
+                <Dialog bare open role="alertdialog" onClose={() => setValidationError(null)} labelledBy="hepan-validation-title" className="dialog-plain dialog-sm">
+                    <div className="w-full rounded-2xl border-[0.5px] border-border bg-surface p-6 shadow-lg animate-zoom-in">
+                        <IconButton
+                            label="关闭"
                             onClick={() => setValidationError(null)}
-                            aria-label="关闭"
-                            className="absolute top-4 right-4 p-1 rounded-lg hover:bg-background-secondary transition-colors"
+                            className="absolute top-4 right-4 text-foreground-secondary"
                         >
-                            <X className="w-5 h-5 text-foreground-secondary" />
-                        </button>
+                            <X className="w-5 h-5" aria-hidden="true" />
+                        </IconButton>
                         <div className="flex flex-col items-center text-center gap-4">
                             <div className="rounded-full bg-warning/10 p-3 text-warning">
                                 <AlertCircle className="w-8 h-8" />
@@ -252,15 +244,12 @@ export function HepanCreateView() {
                                 <h3 id="hepan-validation-title" className="mb-1 font-display text-lg text-foreground">请检查输入</h3>
                                 <p className="text-foreground-secondary">{validationError}</p>
                             </div>
-                            <button
-                                onClick={() => setValidationError(null)}
-                                className="h-11 w-full rounded-xl bg-background-secondary font-medium text-foreground transition-colors hover:bg-background-tertiary"
-                            >
+                            <Button variant="secondary" size="lg" className="w-full" onClick={() => setValidationError(null)}>
                                 知道了
-                            </button>
+                            </Button>
                         </div>
                     </div>
-                </div>
+                </Dialog>
             )}
         </div>
     );

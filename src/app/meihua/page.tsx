@@ -5,6 +5,9 @@ import { CalendarClock, Play } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { HistoryDrawer } from '@/components/layout/HistoryDrawer';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { Textarea } from '@/components/ui/Textarea';
 import { useToast } from '@/components/ui/Toast';
 import { writeSessionJSON } from '@/lib/cache/session-storage';
 import { requestBrowserJson } from '@/lib/browser-api';
@@ -126,7 +129,7 @@ export default function MeihuaPage() {
           <div className="flex flex-wrap gap-4">
             <div className="flex min-w-0 flex-[999_1_320px] flex-col gap-1.5">
               <label htmlFor="meihua-question" className="text-sm font-medium">占问事项</label>
-              <input
+              <Input
                 id="meihua-question"
                 value={question}
                 onChange={(event) => setQuestion(event.target.value)}
@@ -138,7 +141,7 @@ export default function MeihuaPage() {
               <label htmlFor="meihua-date" className="text-sm font-medium">起卦时间</label>
               <div className="relative">
                 <CalendarClock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground-secondary" />
-                <input
+                <Input
                   id="meihua-date"
                   type="datetime-local"
                   value={date}
@@ -155,7 +158,7 @@ export default function MeihuaPage() {
               {METHOD_OPTIONS.map((option) => {
                 const active = method === option.id;
                 return (
-                  <button
+                  <Button unstyled
                     key={option.id}
                     type="button"
                     onClick={() => setMethod(option.id)}
@@ -164,7 +167,7 @@ export default function MeihuaPage() {
                   >
                     <span className={`block font-display text-[15px] ${active ? 'text-accent-strong' : ''}`}>{option.label}</span>
                     <span className="mt-1 block text-xs text-foreground-secondary">{option.hint}</span>
-                  </button>
+                  </Button>
                 );
               })}
             </div>
@@ -174,13 +177,13 @@ export default function MeihuaPage() {
             <div className="flex flex-col gap-4 border-t-[0.5px] border-border pt-5">
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="meihua-text" className="text-sm font-medium">取卦文字</label>
-                <textarea
+                <Textarea
                   id="meihua-text"
                   value={text}
                   onChange={(event) => setText(event.target.value)}
                   rows={3}
                   placeholder="输入一个字、两句文字或一段来意"
-                  className="w-full resize-y rounded-xl border-[0.5px] border-border-hover bg-surface px-3.5 py-3 text-[15px] leading-relaxed text-foreground placeholder:text-foreground-tertiary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+                  className="min-h-0 resize-y rounded-xl border-border-hover px-3.5 py-3 text-[15px] leading-relaxed"
                 />
               </div>
               {isSingleCharacter && (
@@ -188,7 +191,7 @@ export default function MeihuaPage() {
                   {[['left-stroke', '左半部笔画', leftStrokeCount, setLeftStrokeCount], ['right-stroke', '右半部笔画', rightStrokeCount, setRightStrokeCount]].map(([id, label, value, setter]) => (
                     <label key={id as string} htmlFor={id as string} className="flex flex-col gap-1.5 text-[13px] text-foreground-secondary">
                       <span className="font-medium">{label as string}</span>
-                      <input id={id as string} type="number" min={1} value={value as string} onChange={(event) => (setter as (value: string) => void)(event.target.value)} className={INPUT_CLASS} />
+                      <Input id={id as string} type="number" min={1} value={value as string} onChange={(event) => (setter as (value: string) => void)(event.target.value)} className={INPUT_CLASS} />
                     </label>
                   ))}
                 </div>
@@ -198,9 +201,9 @@ export default function MeihuaPage() {
                   <div className="text-[13px] font-medium text-foreground-secondary">多句取用</div>
                   <div className="inline-flex w-fit rounded-xl bg-background-secondary p-1" role="group" aria-label="多句取用方式">
                     {(['first', 'last'] as const).map((value) => (
-                      <button key={value} type="button" aria-pressed={multiSentenceStrategy === value} onClick={() => setMultiSentenceStrategy(value)} className={`h-8 rounded-lg px-3.5 text-[13px] transition-colors ${multiSentenceStrategy === value ? 'bg-surface text-foreground shadow-sm' : 'text-foreground-secondary hover:text-foreground'}`}>
+                      <Button unstyled key={value} type="button" aria-pressed={multiSentenceStrategy === value} onClick={() => setMultiSentenceStrategy(value)} className={`h-8 rounded-lg px-3.5 text-[13px] transition-colors ${multiSentenceStrategy === value ? 'bg-surface text-foreground shadow-sm' : 'text-foreground-secondary hover:text-foreground'}`}>
                         {value === 'first' ? '取首句' : '取末句'}
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 </div>
@@ -215,16 +218,16 @@ export default function MeihuaPage() {
                 {numbers.slice(0, method === 'number_pair' ? 2 : 3).map((value, index) => (
                   <label key={index} htmlFor={`meihua-number-${index}`} className="flex flex-col gap-1.5 text-[13px] text-foreground-secondary">
                     <span className="font-medium">{index === 0 ? '上卦' : index === 1 ? '下卦' : '动爻'}</span>
-                    <input id={`meihua-number-${index}`} type="number" min={1} value={value} onChange={(event) => updateNumber(index, event.target.value)} className={INPUT_CLASS} />
+                    <Input id={`meihua-number-${index}`} type="number" min={1} value={value} onChange={(event) => updateNumber(index, event.target.value)} className={INPUT_CLASS} />
                   </label>
                 ))}
               </div>
             </div>
           )}
 
-          <button type="button" onClick={() => void handleCalculate()} disabled={isLoading} className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-accent px-5 text-[15px] font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:opacity-50">
+          <Button unstyled type="button" onClick={() => void handleCalculate()} disabled={isLoading} className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-accent px-5 text-[15px] font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:opacity-50">
             {isLoading ? <><SoundWaveLoader variant="inline" /><span>正在起卦</span></> : <><Play className="h-4 w-4" />开始起卦</>}
-          </button>
+          </Button>
         </section>
       </div>
       <HistoryDrawer type="meihua" />

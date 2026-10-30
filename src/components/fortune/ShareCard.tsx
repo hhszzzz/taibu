@@ -24,6 +24,7 @@ import {
     Users,
 } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Button } from '@/components/ui/Button';
 import { downloadShareCard, shareCard } from '@/lib/share-card';
 import type { DailyFortune, FortuneLevels, FortuneChartScores } from '@/lib/divination/fortune';
 import { fortuneLevelToChartValue, isLevelFavorable } from '@/lib/divination/fortune';
@@ -137,7 +138,7 @@ export function ShareCard({ fortune, date, userName, isPersonalized, almanac }: 
         <div className="space-y-4">
             {/* 操作按钮 */}
             <div className="flex items-center justify-end gap-2">
-                <button
+                <Button unstyled
                     onClick={handleDownload}
                     disabled={isGenerating}
                     className="flex h-10 items-center gap-2 rounded-xl border-[0.5px] border-border-hover bg-surface px-4 transition-colors hover:bg-background-secondary disabled:opacity-50"
@@ -148,8 +149,8 @@ export function ShareCard({ fortune, date, userName, isPersonalized, almanac }: 
                         <Download className="w-4 h-4" />
                     )}
                     <span className="text-sm">保存图片</span>
-                </button>
-                <button
+                </Button>
+                <Button unstyled
                     onClick={handleShare}
                     disabled={isGenerating}
                     className="flex h-10 items-center gap-2 rounded-xl bg-accent px-4 text-on-accent transition-colors hover:bg-accent-hover disabled:opacity-50"
@@ -162,7 +163,7 @@ export function ShareCard({ fortune, date, userName, isPersonalized, almanac }: 
                         <Share2 className="w-4 h-4" />
                     )}
                     <span className="text-sm">{shareSuccess ? '已分享' : '分享'}</span>
-                </button>
+                </Button>
             </div>
 
             {/* 可截图的卡片区域 - 使用内联样式确保 html2canvas 兼容 */}

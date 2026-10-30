@@ -9,6 +9,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import { SettingsSwitch } from '@/components/settings/SettingsControls';
@@ -120,7 +122,7 @@ export function SkillManager({ scope, userId, notice, canAdd = true, empty, onCh
     return (
       <div role="alert" className="settings-alert">
         <span className="min-w-0 flex-1">{state.message}</span>
-        <button type="button" onClick={() => { setState({ status: 'loading' }); setReload(value => value + 1); }}>重试</button>
+        <Button variant="ghost" size="xs" onClick={() => { setState({ status: 'loading' }); setReload(value => value + 1); }}>重试</Button>
       </div>
     );
   }
@@ -131,9 +133,9 @@ export function SkillManager({ scope, userId, notice, canAdd = true, empty, onCh
       {notice?.(state)}
       <div className="mcp-toolbar">
         <p>{scope === 'user' && state.allowance && state.allowance.limit > 0 ? `已启用 ${state.allowance.used} / ${state.allowance.limit} 个技能` : `共 ${skills.length} 个技能`}</p>
-        <button type="button" className="settings-button settings-button-primary" disabled={!addable} onClick={() => setEditor({ skill: null })}>
+        <Button disabled={!addable} onClick={() => setEditor({ skill: null })}>
           <Plus size={14} aria-hidden="true" />添加技能
-        </button>
+        </Button>
       </div>
       {rows.length ? (
         <ul ref={listRef} className="settings-list-card" aria-label={scope === 'platform' ? '平台技能' : '我的技能'}>
@@ -154,14 +156,13 @@ export function SkillManager({ scope, userId, notice, canAdd = true, empty, onCh
                 <div className="mcp-actions">
                   <SettingsSwitch label={`启用「${skill.name}」`} checked={skill.enabled} disabled={toggling === skill.id}
                     onToggle={() => { void toggle(skill); }} />
-                  <button type="button" className="settings-icon-button" aria-label={`替换「${skill.name}」`} title="重新上传"
-                    onClick={() => setEditor({ skill })}>
+                  <IconButton label={`替换「${skill.name}」`} size="sm" title="重新上传" onClick={() => setEditor({ skill })}>
                     <Pencil size={16} aria-hidden="true" />
-                  </button>
-                  <button type="button" className="settings-icon-button settings-icon-button-danger" aria-label={`删除「${skill.name}」`} title="删除"
+                  </IconButton>
+                  <IconButton label={`删除「${skill.name}」`} tone="danger" size="sm" title="删除"
                     disabled={deleting} onClick={() => setPendingDelete(skill)}>
                     <Trash2 size={16} aria-hidden="true" />
-                  </button>
+                  </IconButton>
                 </div>
               </div>
             </li>

@@ -9,10 +9,12 @@
 
 import { useEffect, useState } from 'react';
 import { SettingsRow, SettingsSection } from '@/components/settings/SettingsControls';
+import { Button } from '@/components/ui/Button';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 import { fetchAgentScheduleLimits, saveAgentScheduleLimits } from '@/lib/agent/schedules/client';
+import { Input } from '@/components/ui/Input';
 import {
   AGENT_SCHEDULE_LIMIT_MAX, AGENT_SCHEDULE_MEMBERSHIP_LABELS, AGENT_SCHEDULE_MEMBERSHIP_TIERS,
   type AgentScheduleLimits,
@@ -47,7 +49,7 @@ export function AgentScheduleLimitsPanel() {
     return (
       <div role="alert" className="settings-alert">
         <span className="min-w-0 flex-1">{state.message}</span>
-        <button type="button" onClick={() => { setState({ status: 'loading' }); setReload(value => value + 1); }}>重试</button>
+        <Button variant="ghost" size="xs" onClick={() => { setState({ status: 'loading' }); setReload(value => value + 1); }}>重试</Button>
       </div>
     );
   }
@@ -83,7 +85,7 @@ export function AgentScheduleLimitsPanel() {
             {AGENT_SCHEDULE_MEMBERSHIP_TIERS.map(tier => (
               <label key={tier} className="settings-field">
                 <span>{AGENT_SCHEDULE_MEMBERSHIP_LABELS[tier]}</span>
-                <input className="settings-input w-16" inputMode="numeric" aria-label={`定时任务的 ${AGENT_SCHEDULE_MEMBERSHIP_LABELS[tier]} 上限`}
+                <Input className="w-16"  inputMode="numeric" aria-label={`定时任务的 ${AGENT_SCHEDULE_MEMBERSHIP_LABELS[tier]} 上限`}
                   disabled={saving} value={state.draft[tier]}
                   onChange={event => setState(current => current.status === 'ready'
                     ? { ...current, draft: { ...current.draft, [tier]: event.target.value } } : current)} />
@@ -93,11 +95,9 @@ export function AgentScheduleLimitsPanel() {
         )} />
       </SettingsSection>
       <div className="settings-actions mt-4">
-        <button type="button" className="settings-button settings-button-primary" disabled={!dirty || saving} onClick={() => { void save(); }}>
-          {saving ? <SoundWaveLoader variant="inline" /> : null}保存
-        </button>
-        <button type="button" className="settings-button settings-button-ghost" disabled={!dirty || saving}
-          onClick={() => setState(current => current.status === 'ready' ? { ...current, draft: current.saved } : current)}>还原</button>
+        <Button loading={saving} disabled={saving || !dirty} onClick={() => { void save(); }}>保存</Button>
+        <Button variant="ghost" disabled={!dirty || saving}
+          onClick={() => setState(current => current.status === 'ready' ? { ...current, draft: current.saved } : current)}>还原</Button>
       </div>
     </div>
   );

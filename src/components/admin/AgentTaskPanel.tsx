@@ -17,7 +17,12 @@ import { AGENT_ACTIVE_STATUSES, type AgentRunStatus } from '@/lib/agent/types';
 import type { AgentAdminRun, AgentTaskConversation, AgentTaskNode, AgentTaskSubmission, AgentTaskTree } from '@/lib/agent/admin-tasks';
 import { formatAgentDuration } from '@/lib/agent/admin-metrics';
 import { AgentPerformancePanel } from '@/components/admin/AgentPerformancePanel';
+import { Button } from '@/components/ui/Button';
+import { FilterChip } from '@/components/ui/FilterChip';
+import { Checkbox } from '@/components/ui/Checkbox';
+import { IconButton } from '@/components/ui/IconButton';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Input } from '@/components/ui/Input';
 
 type Scope = 'active' | 'recent';
 type View = 'tasks' | 'performance';
@@ -228,9 +233,9 @@ function RunDetailView({ detail, now, onClose }: { detail: RunDetail; now: numbe
                 </div>
                 <div className="flex items-center gap-1">
                     <RunStatus status={run.status} />
-                    <button type="button" onClick={onClose} aria-label="关闭任务详情" className="settings-icon-button">
+                    <IconButton label="关闭任务详情" size="sm" onClick={onClose}>
                         <X aria-hidden="true" className="h-4 w-4" />
-                    </button>
+                    </IconButton>
                 </div>
             </header>
             <dl className="grid grid-cols-[repeat(auto-fit,minmax(13rem,1fr))] gap-x-6 gap-y-3 text-[13px]">
@@ -251,7 +256,7 @@ function RunDetailView({ detail, now, onClose }: { detail: RunDetail; now: numbe
                     {tree.truncated ? ' · 日志较长，只显示前 10000 次提交' : ''}
                 </p>
                 <label className="flex items-center gap-2 text-[13px] text-foreground-secondary">
-                    <input type="checkbox" checked={liveOnly} onChange={event => setLiveOnly(event.target.checked)} />
+                    <Checkbox checked={liveOnly} onCheckedChange={setLiveOnly} />
                     只看未结束
                 </label>
             </div>
@@ -375,15 +380,7 @@ export function AgentTaskPanel({ active = true }: { active?: boolean }) {
         <div className="flex flex-col gap-4">
             <div role="group" aria-label="Agent 视图" className="flex flex-wrap items-center gap-1.5">
                 {VIEWS.map(({ id, label }) => (
-                    <button
-                        key={id}
-                        type="button"
-                        aria-pressed={view === id}
-                        onClick={() => setView(id)}
-                        className="settings-filter"
-                    >
-                        {label}
-                    </button>
+                    <FilterChip key={id} pressed={view === id} onClick={() => setView(id)} className="settings-filter">{label}</FilterChip>
                 ))}
             </div>
             {view === 'performance' ? <AgentPerformancePanel active={active} /> : loading ? <SoundWaveLoader variant="block" /> : (
@@ -395,47 +392,38 @@ export function AgentTaskPanel({ active = true }: { active?: boolean }) {
             {listError ? (
                 <div role="alert" className="settings-alert">
                     {listError}
-                    <button type="button" onClick={refresh}>重试</button>
+                    <Button variant="ghost" size="xs" onClick={refresh}>重试</Button>
                 </div>
             ) : null}
 
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div role="group" aria-label="任务范围" className="flex flex-wrap items-center gap-1.5">
                     {SCOPES.map(({ id, label }) => (
-                        <button
-                            key={id}
-                            type="button"
-                            aria-pressed={!search && scope === id}
-                            onClick={() => { clearSearch(); setScope(id); }}
-                            className="settings-filter"
-                        >
-                            {label}
-                        </button>
+                        <FilterChip key={id} pressed={!search && scope === id} onClick={() => { clearSearch(); setScope(id); }} className="settings-filter">{label}</FilterChip>
                     ))}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                     <form role="search" onSubmit={submitSearch} className="flex items-center gap-1.5">
-                        <input
+                        <Input
                             type="search"
                             value={query}
                             onChange={(event) => setQuery(event.target.value)}
                             placeholder="任务、对话或用户 ID"
                             aria-label="按任务、对话或用户 ID 查找"
-                            className="settings-input w-[19rem] max-w-full font-mono text-xs"
-                        />
-                        <button type="submit" aria-label="查找" className="settings-icon-button">
+                            className="w-[19rem] max-w-full font-mono text-xs"/>
+                        <IconButton type="submit" label="查找" size="sm">
                             <Search aria-hidden="true" className="h-4 w-4" />
-                        </button>
+                        </IconButton>
                         {search ? (
-                            <button type="button" onClick={clearSearch} aria-label="清除查找" className="settings-icon-button">
+                            <IconButton label="清除查找" size="sm" onClick={clearSearch}>
                                 <X aria-hidden="true" className="h-4 w-4" />
-                            </button>
+                            </IconButton>
                         ) : null}
                     </form>
-                    <button type="button" onClick={refresh} className="settings-button settings-button-compact">
+                    <Button variant="secondary" size="sm" onClick={refresh}>
                         <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />
                         刷新
-                    </button>
+                    </Button>
                 </div>
             </div>
 
@@ -456,7 +444,7 @@ export function AgentTaskPanel({ active = true }: { active?: boolean }) {
                             {runs.map(run => (
                                 <tr key={run.id} className={`border-b border-border last:border-b-0 ${run.id === selectedId ? 'bg-background-secondary/60' : ''}`}>
                                     <th scope="row" className="max-w-[18rem] py-2.5 pl-5 pr-3 text-left font-normal">
-                                        <button
+                                        <Button unstyled
                                             type="button"
                                             onClick={() => select(run.id === selectedId ? null : run.id)}
                                             aria-pressed={run.id === selectedId}
@@ -464,7 +452,7 @@ export function AgentTaskPanel({ active = true }: { active?: boolean }) {
                                         >
                                             <span className="max-w-full truncate text-sm text-foreground">{run.title || '（无标题）'}</span>
                                             <span className="font-mono text-xs text-foreground-tertiary">{run.id.slice(0, 8)}</span>
-                                        </button>
+                                        </Button>
                                     </th>
                                     <td className="px-3 py-2.5"><RunStatus status={run.status} /></td>
                                     <td className="whitespace-nowrap px-3 py-2.5 text-[13px] text-foreground-secondary">{run.model || '—'}</td>
@@ -487,7 +475,7 @@ export function AgentTaskPanel({ active = true }: { active?: boolean }) {
             {selectedId && detailError ? (
                 <div role="alert" className="settings-alert">
                     {detailError}
-                    <button type="button" onClick={() => { void loadDetail(selectedId); }}>重试</button>
+                    <Button variant="ghost" size="xs" onClick={() => { void loadDetail(selectedId); }}>重试</Button>
                 </div>
             ) : null}
             {selectedId && !shown && !detailError ? <SoundWaveLoader variant="block" /> : null}

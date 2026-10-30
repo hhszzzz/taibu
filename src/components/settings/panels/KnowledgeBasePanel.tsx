@@ -13,9 +13,11 @@ import { ChevronDown, FileText, PencilLine, Plus, Search, Trash2, Unlink2, Uploa
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useSessionMembership } from '@/lib/hooks/useSessionMembership';
 import { useToast } from '@/components/ui/Toast';
+import { Button, buttonVariants } from '@/components/ui/Button';
+import { Select } from '@/components/ui/Select';
+import { IconButton } from '@/components/ui/IconButton';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { SettingsLoginRequired } from '@/components/settings/SettingsLoginRequired';
-import { SettingsSelect } from '@/components/settings/SettingsSelect';
 import { KNOWLEDGE_BASE_SYNC_EVENT } from '@/lib/browser-api';
 import { formatShortDate } from '@/lib/short-date';
 import { MING_RECORD_SOURCE_TYPE } from '@/lib/data-sources/types';
@@ -34,6 +36,8 @@ import type { KnowledgeBaseWeight } from '@/lib/knowledge-base/types';
 import { KNOWLEDGE_FILE_ACCEPT, KNOWLEDGE_FILE_HINT, validateKnowledgeFile } from '@/lib/knowledge-base/upload-policy';
 import { getCurrentUserSettings, updateCurrentUserSettings } from '@/lib/user/settings';
 import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
+import { Input } from '@/components/ui/Input';
+import { Textarea } from '@/components/ui/Textarea';
 
 type KnowledgeBase = KnowledgeBaseSummary & {
     weight: KnowledgeBaseWeight;
@@ -549,9 +553,7 @@ export default function KnowledgeBasePanel() {
             return (
                 <div role="alert" className="flex items-center justify-between gap-3 py-4 text-sm text-danger">
                     <span>{archiveState.error}</span>
-                    <button type="button" onClick={() => { void loadArchives(kb.id); }} className="flex-shrink-0 font-medium text-foreground">
-                        重试
-                    </button>
+                    <Button variant="ghost" size="xs" onClick={() => { void loadArchives(kb.id); }}>重试</Button>
                 </div>
             );
         }
@@ -577,16 +579,17 @@ export default function KnowledgeBasePanel() {
                                 </span>
                                 <span className="min-w-0 flex-1 truncate text-sm text-foreground" title={title}>{title}</span>
                                 <span className="flex-shrink-0 text-xs tabular-nums text-foreground-tertiary">{formatShortDate(archive.created_at)}</span>
-                                <button
-                                    type="button"
+                                <IconButton
+                                    label={`移出知识库：${title}`}
+                                    title="移出知识库"
+                                    size="sm"
+                                    tone="danger"
+                                    className="-mr-2"
                                     onClick={() => removeArchive(archive)}
                                     disabled={removingArchiveId === archive.id}
-                                    className="settings-icon-button settings-icon-button-danger -mr-2"
-                                    aria-label={`移出知识库：${title}`}
-                                    title="移出知识库"
                                 >
-                                    {removingArchiveId === archive.id ? <SoundWaveLoader variant="inline" /> : <Unlink2 aria-hidden="true" className="h-4 w-4" />}
-                                </button>
+                                    {removingArchiveId === archive.id ? <SoundWaveLoader variant="inline" /> : <Unlink2 aria-hidden="true" />}
+                                </IconButton>
                             </li>
                         );
                     })}
@@ -597,9 +600,7 @@ export default function KnowledgeBasePanel() {
                 {archiveState.appendError ? (
                     <div role="alert" className="flex items-center justify-between gap-3 pt-2 text-xs text-danger">
                         <span>{archiveState.appendError}</span>
-                        <button type="button" onClick={retryAppend} className="flex-shrink-0 font-medium text-foreground">
-                            重试加载更多
-                        </button>
+                        <Button variant="ghost" size="xs" onClick={retryAppend}>重试加载更多</Button>
                     </div>
                 ) : null}
                 {archiveState.hasMore && !archiveState.appendError ? (
@@ -624,28 +625,22 @@ export default function KnowledgeBasePanel() {
                 <div className="flex flex-wrap items-center gap-x-1.5 gap-y-3 py-4 pl-5 pr-3">
                     {editing ? (
                         <form onSubmit={saveDraft} className="order-1 flex min-w-0 basis-full flex-col gap-2 sm:mr-3.5 sm:flex-[1_1_280px]" aria-label={`编辑知识库 ${kb.name}`}>
-                            <input
+                            <Input
                                 value={editing.name}
                                 onChange={(event) => setDraft({ ...editing, name: event.target.value })}
-                                className="settings-input"
+                                
                                 aria-label="知识库名称"
-                                placeholder="知识库名称"
-                            />
-                            <textarea
+                                placeholder="知识库名称"/>
+                            <Textarea
                                 value={editing.description}
                                 onChange={(event) => setDraft({ ...editing, description: event.target.value })}
-                                className="settings-textarea"
+                                
                                 rows={2}
                                 aria-label="用途说明"
-                                placeholder="用途说明（可选）"
-                            />
+                                placeholder="用途说明（可选）"/>
                             <div className="flex gap-2">
-                                <button type="submit" disabled={saving || !editing.name.trim() || !draftDirty} className="settings-button settings-button-primary">
-                                    {saving ? '保存中…' : '保存'}
-                                </button>
-                                <button type="button" disabled={saving} onClick={() => setDraft(null)} className="settings-button">
-                                    取消
-                                </button>
+                                <Button type="submit" loading={saving} loadingText="保存中…" disabled={saving || !editing.name.trim() || !draftDirty}>保存</Button>
+                                <Button type="button" variant="secondary" disabled={saving} onClick={() => setDraft(null)}>取消</Button>
                             </div>
                         </form>
                     ) : (
@@ -658,21 +653,15 @@ export default function KnowledgeBasePanel() {
                     )}
 
                     <div className="order-3 flex w-full flex-wrap items-center gap-1.5 sm:order-2 sm:w-auto">
-                        <span className="relative">
-                            <select
-                                value={kb.weight}
-                                onChange={(event) => { void changeWeight(kb, event.target.value as KnowledgeBaseWeight); }}
-                                disabled={saving}
-                                aria-label={`${kb.name} 的检索优先级`}
-                                className="h-8 cursor-pointer appearance-none rounded-full border border-border-hover bg-surface pl-3 pr-8 text-[13px] text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                                {WEIGHT_OPTIONS.map(option => (
-                                    <option key={option.value} value={option.value}>{option.label}</option>
-                                ))}
-                            </select>
-                            <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-foreground-tertiary" />
-                        </span>
-                        <button
+                        <Select
+                            value={kb.weight}
+                            onChange={(weight) => { void changeWeight(kb, weight); }}
+                            disabled={saving}
+                            ariaLabel={`${kb.name} 的检索优先级`}
+                            options={WEIGHT_OPTIONS}
+                            className="h-8 w-auto min-w-0 rounded-full pl-3 pr-8 text-[13px] text-foreground-secondary"
+                        />
+                        <Button unstyled
                             type="button"
                             aria-pressed={searchEnabled}
                             onClick={() => togglePromptKb(kb.id)}
@@ -682,41 +671,39 @@ export default function KnowledgeBasePanel() {
                         >
                             <Search aria-hidden="true" className="h-3.5 w-3.5" />
                             {searchEnabled ? '已启用检索' : '启用检索'}
-                        </button>
+                        </Button>
                     </div>
                     <div className="order-2 flex items-center gap-1.5 sm:order-3">
                         <span aria-hidden="true" className="mx-1 hidden h-5 w-px bg-border sm:block" />
-                        <button
-                            type="button"
+                        <IconButton
+                            label={`编辑 ${kb.name} 的名称与说明`}
+                            title="编辑名称与说明"
+                            size="sm"
                             onClick={() => setDraft({ id: kb.id, name: kb.name, description: kb.description ?? '' })}
                             disabled={!!editing}
-                            className="settings-icon-button"
-                            aria-label={`编辑 ${kb.name} 的名称与说明`}
-                            title="编辑名称与说明"
                         >
-                            <PencilLine aria-hidden="true" className="h-4 w-4" />
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => toggleExpand(kb.id)}
-                            className="settings-icon-button"
+                            <PencilLine aria-hidden="true" />
+                        </IconButton>
+                        <IconButton
+                            label={`查看 ${kb.name} 的归档`}
+                            title={expanded ? '收起归档' : '查看归档'}
+                            size="sm"
                             aria-expanded={expanded}
                             aria-controls={archivesId}
-                            aria-label={`查看 ${kb.name} 的归档`}
-                            title={expanded ? '收起归档' : '查看归档'}
+                            onClick={() => toggleExpand(kb.id)}
                         >
-                            <ChevronDown aria-hidden="true" className={`h-4 w-4 transition-transform duration-150 ${expanded ? 'rotate-180' : ''}`} />
-                        </button>
-                        <button
-                            type="button"
+                            <ChevronDown aria-hidden="true" className={`transition-transform duration-150 ${expanded ? 'rotate-180' : ''}`} />
+                        </IconButton>
+                        <IconButton
+                            label={`删除知识库 ${kb.name}`}
+                            title="删除知识库"
+                            size="sm"
+                            tone="danger"
                             onClick={() => setPendingDeleteKbId(kb.id)}
                             disabled={deletingKbId === kb.id}
-                            className="settings-icon-button settings-icon-button-danger"
-                            aria-label={`删除知识库 ${kb.name}`}
-                            title="删除知识库"
                         >
-                            {deletingKbId === kb.id ? <SoundWaveLoader variant="inline" /> : <Trash2 aria-hidden="true" className="h-4 w-4" />}
-                        </button>
+                            {deletingKbId === kb.id ? <SoundWaveLoader variant="inline" /> : <Trash2 aria-hidden="true" />}
+                        </IconButton>
                     </div>
                 </div>
 
@@ -739,7 +726,7 @@ export default function KnowledgeBasePanel() {
                         <p className="min-w-0 flex-[1_1_16rem] text-sm leading-relaxed text-foreground-secondary">
                             知识库需要 Plus 及以上会员。升级后可以新建知识库、导入资料，并在对话中检索引用。
                         </p>
-                        <Link href="/settings/upgrade" className="settings-button">查看订阅</Link>
+                        <Link href="/settings/upgrade" className={buttonVariants({ variant: 'secondary' })}>查看订阅</Link>
                     </div>
                 ) : null}
 
@@ -750,15 +737,10 @@ export default function KnowledgeBasePanel() {
                             {!loading ? <span className="ml-1.5 font-normal">{kbs.length}</span> : null}
                         </h3>
                         {!createOpen ? (
-                            <button
-                                type="button"
-                                onClick={() => setCreateOpen(true)}
-                                disabled={membershipLocked}
-                                className="settings-button settings-button-primary"
-                            >
+                            <Button onClick={() => setCreateOpen(true)} disabled={membershipLocked}>
                                 <Plus aria-hidden="true" className="h-4 w-4" />
                                 新建知识库
-                            </button>
+                            </Button>
                         ) : null}
                     </div>
 
@@ -766,32 +748,26 @@ export default function KnowledgeBasePanel() {
                         <form onSubmit={createKb} className={`flex flex-col gap-4 p-5 ${CARD}`} aria-label="新建知识库">
                             <label className="settings-field-block">
                                 <span className="settings-label">名称</span>
-                                <input
+                                <Input
                                     ref={createNameRef}
                                     value={newName}
                                     onChange={(event) => setNewName(event.target.value)}
-                                    className="settings-input settings-input-lg"
-                                    placeholder="例如：家人命盘"
-                                />
+                                    size="lg"
+                                    placeholder="例如：家人命盘"/>
                             </label>
                             <label className="settings-field-block">
                                 <span className="settings-label">用途说明（可选）</span>
-                                <textarea
+                                <Textarea
                                     value={newDescription}
                                     onChange={(event) => setNewDescription(event.target.value)}
-                                    className="settings-textarea"
+                                    
                                     rows={2}
-                                    placeholder="收录哪些内容，AI 检索时会参考这段说明"
-                                />
+                                    placeholder="收录哪些内容，AI 检索时会参考这段说明"/>
                             </label>
                             {createError ? <p role="alert" className="text-sm text-danger">{createError}</p> : null}
                             <div className="flex gap-2">
-                                <button type="submit" disabled={creating || !newName.trim()} className="settings-button settings-button-primary">
-                                    {creating ? '创建中…' : '创建'}
-                                </button>
-                                <button type="button" disabled={creating} onClick={closeCreateForm} className="settings-button settings-button-ghost">
-                                    取消
-                                </button>
+                                <Button type="submit" loading={creating} loadingText="创建中…" disabled={creating || !newName.trim()}>创建</Button>
+                                <Button type="button" variant="ghost" disabled={creating} onClick={closeCreateForm}>取消</Button>
                             </div>
                         </form>
                     ) : null}
@@ -799,7 +775,7 @@ export default function KnowledgeBasePanel() {
                     {listError ? (
                         <div role="alert" className="settings-alert">
                             <span className="min-w-0 flex-1">{listError}</span>
-                            <button type="button" onClick={() => { void loadKnowledgeBases(); }}>重试</button>
+                            <Button variant="ghost" size="xs" onClick={() => { void loadKnowledgeBases(); }}>重试</Button>
                         </div>
                     ) : null}
 
@@ -840,7 +816,7 @@ export default function KnowledgeBasePanel() {
                     <div className={`grid gap-4 p-5 sm:grid-cols-2 ${CARD}`}>
                         <label className="settings-field-block">
                             <span className="settings-label">导入到</span>
-                            <SettingsSelect
+                            <Select
                                 ariaLabel="导入到"
                                 value={targetUploadKbId ?? ''}
                                 onChange={setUploadKbId}
@@ -875,15 +851,16 @@ export default function KnowledgeBasePanel() {
                         </div>
                         <div className="flex flex-wrap items-center justify-between gap-3 sm:col-span-2">
                             <p id="kb-file-hint" className="text-xs text-foreground-tertiary">{KNOWLEDGE_FILE_HINT}</p>
-                            <button
-                                type="button"
+                            <Button
+                                variant="secondary"
                                 onClick={uploadKnowledgeFile}
+                                loading={uploading}
+                                loadingText="上传中…"
                                 disabled={uploading || !targetUploadKbId || !uploadFile || membershipLocked}
-                                className="settings-button"
                             >
                                 <Upload aria-hidden="true" className="h-4 w-4" />
-                                {uploading ? '上传中…' : '开始上传'}
-                            </button>
+                                开始上传
+                            </Button>
                         </div>
                         {uploadError ? <p role="alert" className="text-sm text-danger sm:col-span-2">{uploadError}</p> : null}
                         {uploadSuccess ? <p role="status" className="text-sm text-success sm:col-span-2">{uploadSuccess}</p> : null}

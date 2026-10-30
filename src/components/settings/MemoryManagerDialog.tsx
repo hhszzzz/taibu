@@ -6,11 +6,15 @@
  */
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Search, Trash2, X } from 'lucide-react';
-import { Modal } from '@/components/ui/Modal';
+import { Dialog } from '@/components/ui/Dialog';
+import { Input } from '@/components/ui/Input';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 import { requestBrowserJson } from '@/lib/browser-api';
 import type { AgentMemory } from '@/lib/agent/memory';
+import { Textarea } from '@/components/ui/Textarea';
 
 function memoryMatches(memory: AgentMemory, query: string) {
   const needle = query.trim().toLowerCase();
@@ -129,20 +133,20 @@ export function MemoryManagerDialog({
   };
 
   return (
-    <Modal open={open} onClose={onClose} labelledBy={titleId} busy={busy} className="memory-manager-dialog" initialFocusRef={searchRef}>
+    <Dialog bare open={open} onClose={onClose} labelledBy={titleId} busy={busy} className="memory-manager-dialog" initialFocusRef={searchRef}>
       <header className="memory-manager-head">
         <div>
           <h2 id={titleId}>管理记忆</h2>
           <p>助手只保存你明确说过的偏好或事实；删除后，之后的任务不会再读取它。</p>
         </div>
-        <button type="button" className="settings-icon-button" aria-label="关闭" onClick={onClose}><X size={16} /></button>
+        <IconButton label="关闭" size="sm" onClick={onClose}><X size={16} /></IconButton>
       </header>
 
       <div className="memory-manager-body">
         <div className="memory-manager-toolbar">
           <label className="memory-manager-search">
             <Search size={14} aria-hidden="true" />
-            <input
+            <Input
               ref={searchRef}
               type="search"
               value={query}
@@ -159,7 +163,7 @@ export function MemoryManagerDialog({
         ) : error ? (
           <div className="memory-manager-state" role="alert">
             <p className="settings-alert">{error}</p>
-            <button type="button" className="settings-button" onClick={() => void load()}>重新读取</button>
+            <Button variant="secondary" size="md" onClick={() => void load()}>重新读取</Button>
           </div>
         ) : filtered.length === 0 ? (
           <p className="settings-help memory-manager-empty">{memories.length === 0 ? '还没有保存任何记忆。' : '没有匹配的记忆。'}</p>
@@ -172,14 +176,13 @@ export function MemoryManagerDialog({
                 </div>
                 {confirmingId === memory.id ? (
                   <span className="memory-manager-confirm">
-                    <button type="button" className="settings-text-button-danger" disabled={busy} onClick={() => void remove(memory)}>确认删除</button>
-                    <button type="button" className="settings-button settings-button-ghost" disabled={busy} onClick={() => setConfirmingId(null)}>取消</button>
+                    <Button variant="danger" size="sm" disabled={busy} onClick={() => void remove(memory)}>确认删除</Button>
+                    <Button variant="ghost" size="sm" disabled={busy} onClick={() => setConfirmingId(null)}>取消</Button>
                   </span>
                 ) : (
-                  <button type="button" className="settings-icon-button settings-icon-button-danger" disabled={busy}
-                    aria-label="删除这条记忆" title="删除" onClick={() => setConfirmingId(memory.id)}>
+                  <IconButton label="删除这条记忆" tone="danger" size="sm" disabled={busy} title="删除" onClick={() => setConfirmingId(memory.id)}>
                     <Trash2 size={15} aria-hidden="true" />
-                  </button>
+                  </IconButton>
                 )}
               </li>
             ))}
@@ -188,8 +191,8 @@ export function MemoryManagerDialog({
 
         <section className="memory-manager-add" aria-labelledby={`${titleId}-add`}>
           <h3 id={`${titleId}-add`}>添加记忆</h3>
-          <textarea
-            className="settings-textarea"
+          <Textarea
+            
             value={content}
             maxLength={2000}
             rows={3}
@@ -200,12 +203,10 @@ export function MemoryManagerDialog({
           />
           <div className="memory-manager-add-actions">
             <span className="settings-counter">{content.length} / 2000</span>
-            <button type="button" className="settings-button settings-button-primary" disabled={!canAdd} onClick={() => void add()}>
-              {busy ? '保存中…' : '保存'}
-            </button>
+            <Button disabled={busy || !canAdd} loading={busy} loadingText="保存中…" onClick={() => void add()}>保存</Button>
           </div>
         </section>
       </div>
-    </Modal>
+    </Dialog>
   );
 }

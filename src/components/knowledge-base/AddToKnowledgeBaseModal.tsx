@@ -8,7 +8,11 @@
 'use client';
 
 import { useCallback, useEffect, useId, useState } from 'react';
-import { Modal } from '@/components/ui/Modal';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
+import { Dialog } from '@/components/ui/Dialog';
+import { Input } from '@/components/ui/Input';
+import { RadioGroup } from '@/components/ui/RadioGroup';
 import { X } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
@@ -118,21 +122,19 @@ export function AddToKnowledgeBaseModal({
     if (!open || !knowledgeBaseEnabled) return null;
 
     return (
-        <Modal open={open} onClose={onClose} busy={kbSaving} labelledBy={id}>
+        <Dialog bare open={open} onClose={onClose} busy={kbSaving} labelledBy={id}>
                 <div className="p-4 sm:p-6 border-b border-border/50 flex items-center justify-between">
                     <div className="min-w-0">
                         <h2 id={id} className="text-base font-semibold truncate">加入知识库</h2>
                         <div className="text-xs text-foreground-secondary truncate">{sourceTitle}</div>
                     </div>
-                    <button
-                        type="button"
+                    <IconButton
+                        label="关闭"
                         onClick={onClose}
                         disabled={kbSaving}
-                        className="p-2 rounded-lg hover:bg-background-secondary transition-colors"
-                        aria-label="关闭"
                     >
-                        <X className="w-4 h-4" />
-                    </button>
+                        <X className="w-4 h-4" aria-hidden="true" />
+                    </IconButton>
                 </div>
 
                 <div className="p-4 sm:p-6 space-y-4">
@@ -145,26 +147,14 @@ export function AddToKnowledgeBaseModal({
                             {kbList.length === 0 ? (
                                 <div className="text-sm text-foreground-secondary">你还没有知识库，先创建一个。</div>
                             ) : (
-                                <div className="space-y-2 max-h-56 overflow-auto pr-1">
-                                    {kbList.map(kb => (
-                                        <label
-                                            key={kb.id}
-                                            className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${kbSelectedId === kb.id ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-border hover:bg-background-secondary'}`}
-                                        >
-                                            <input
-                                                type="radio"
-                                                name="kb"
-                                                className="mt-1"
-                                                checked={kbSelectedId === kb.id}
-                                                onChange={() => setKbSelectedId(kb.id)}
-                                            />
-                                            <div className="min-w-0">
-                                                <div className="text-sm font-medium truncate">{kb.name}</div>
-                                                <div className="text-xs text-foreground-secondary truncate">{kb.description || '知识库'}</div>
-                                            </div>
-                                        </label>
-                                    ))}
-                                </div>
+                                <RadioGroup
+                                    aria-label="选择知识库"
+                                    value={kbSelectedId ?? ''}
+                                    onChange={setKbSelectedId}
+                                    options={kbList.map(kb => ({ value: kb.id, label: kb.name, description: kb.description || '知识库' }))}
+                                    className="max-h-56 space-y-2 overflow-auto pr-1"
+                                    optionClassName={(_, checked) => `items-start rounded-xl border p-3 ${checked ? 'border-success/40 bg-success/5' : 'border-border hover:bg-background-secondary'}`}
+                                />
                             )}
                         </div>
                     )}
@@ -173,54 +163,41 @@ export function AddToKnowledgeBaseModal({
                         <div className="border-t border-border/50 pt-4 space-y-2">
                             <div className="text-sm font-medium">创建新知识库</div>
                             <div className="flex items-center gap-2">
-                                <input
+                                <Input
                                     value={kbNewName}
                                     onChange={(e) => setKbNewName(e.target.value)}
-                                    className="flex-1 bg-background border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500/30"
+                                    className="flex-1"
                                     placeholder="例如：我的命理笔记"
                                 />
-                                <button
-                                    type="button"
+                                <Button
+                                    variant="secondary"
                                     onClick={handleCreateKnowledgeBase}
                                     disabled={kbSaving || !kbNewName.trim()}
-                                    className="px-3 py-2 text-sm rounded-xl bg-background border border-border hover:border-emerald-500/40 hover:text-emerald-500 disabled:opacity-50 transition-colors"
                                 >
                                     创建
-                                </button>
+                                </Button>
                             </div>
                         </div>
                     )}
 
                     {kbError && (
-                        <div role="alert" className="text-sm text-red-500">{kbError}</div>
+                        <div role="alert" className="text-sm text-danger">{kbError}</div>
                     )}
                 </div>
 
                 <div className="p-4 sm:p-6 border-t border-border/50 flex items-center justify-end gap-2">
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        disabled={kbSaving}
-                        className="px-4 py-2 text-sm rounded-xl bg-background border border-border hover:bg-background-secondary transition-colors"
-                    >
+                    <Button variant="secondary" onClick={onClose} disabled={kbSaving}>
                         取消
-                    </button>
-                    <button
-                        type="button"
+                    </Button>
+                    <Button
                         onClick={handleIngest}
-                        disabled={kbSaving || kbLoading || !kbSelectedId}
-                        className="px-4 py-2 text-sm rounded-xl bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-50 transition-colors"
+                        loading={kbSaving}
+                        loadingText="加入中"
+                        disabled={kbLoading || !kbSelectedId}
                     >
-                        {kbSaving ? (
-                            <span className="inline-flex items-center gap-2">
-                                <SoundWaveLoader variant="inline" />
-                                加入中
-                            </span>
-                        ) : (
-                            '加入'
-                        )}
-                    </button>
+                        加入
+                    </Button>
                 </div>
-        </Modal>
+        </Dialog>
     );
 }

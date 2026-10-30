@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { requestBrowserData } from '@/lib/browser-api';
+import { Button } from '@/components/ui/Button';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { SettingsSwitch } from '@/components/settings/SettingsControls';
 import { useFeatureToggles } from "@/lib/hooks/useFeatureToggles";
@@ -111,7 +112,7 @@ export function FeatureTogglePanel() {
         return (
             <div role="alert" className="settings-alert">
                 {loadError?.message || '功能状态加载失败'}
-                <button type="button" onClick={() => { void refresh(); }}>重试</button>
+                <Button variant="ghost" size="xs" onClick={() => { void refresh(); }}>重试</Button>
             </div>
         );
     }
@@ -154,7 +155,7 @@ export function FeatureTogglePanel() {
                 {scopeState.error ? (
                     <div role="alert" className="settings-alert">
                         {scopeState.error}
-                        <button type="button" onClick={() => { void loadScopes(); }}>重试</button>
+                        <Button variant="ghost" size="xs" onClick={() => { void loadScopes(); }}>重试</Button>
                     </div>
                 ) : null}
                 <ul className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] overflow-hidden rounded-2xl border border-border bg-surface">

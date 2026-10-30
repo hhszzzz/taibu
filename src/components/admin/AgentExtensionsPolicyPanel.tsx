@@ -8,6 +8,8 @@
 
 import { useEffect, useState } from 'react';
 import { SettingsRow, SettingsSection, SettingsSwitch } from '@/components/settings/SettingsControls';
+import { Button } from '@/components/ui/Button';
+import { FilterChip } from '@/components/ui/FilterChip';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
@@ -16,6 +18,7 @@ import {
   EXTENSION_LIMIT_MAX, MEMBERSHIP_TIERS, MEMBERSHIP_TIER_LABELS, type AgentExtensionsPolicy, type ExtensionGate,
 } from '@/lib/agent/mcp/config';
 import type { MembershipType } from '@/lib/user/membership';
+import { Input } from '@/components/ui/Input';
 
 type Kind = keyof AgentExtensionsPolicy;
 type GateDraft = Omit<ExtensionGate, 'limits'> & { limits: Record<MembershipType, string> };
@@ -75,7 +78,7 @@ export function AgentExtensionsPolicyPanel() {
     return (
       <div role="alert" className="settings-alert">
         <span className="min-w-0 flex-1">{state.message}</span>
-        <button type="button" onClick={() => { setState({ status: 'loading' }); setReload(value => value + 1); }}>重试</button>
+        <Button variant="ghost" size="xs" onClick={() => { setState({ status: 'loading' }); setReload(value => value + 1); }}>重试</Button>
       </div>
     );
   }
@@ -115,10 +118,10 @@ export function AgentExtensionsPolicyPanel() {
                 {MEMBERSHIP_TIERS.map(tier => {
                   const on = gate.tiers.includes(tier);
                   return (
-                    <button key={tier} type="button" className="settings-chip" aria-pressed={on} disabled={saving || !gate.enabled}
+                    <FilterChip key={tier} className="settings-chip" pressed={on} disabled={saving || !gate.enabled}
                       onClick={() => change(kind, { tiers: on ? gate.tiers.filter(item => item !== tier) : [...gate.tiers, tier] })}>
                       {MEMBERSHIP_TIER_LABELS[tier]}
-                    </button>
+                    </FilterChip>
                   );
                 })}
               </div>
@@ -128,7 +131,7 @@ export function AgentExtensionsPolicyPanel() {
                 {MEMBERSHIP_TIERS.map(tier => (
                   <label key={tier} className="settings-field">
                     <span>{MEMBERSHIP_TIER_LABELS[tier]}</span>
-                    <input className="settings-input w-16" inputMode="numeric" aria-label={`${title}的 ${MEMBERSHIP_TIER_LABELS[tier]} 上限`}
+                    <Input className="w-16"  inputMode="numeric" aria-label={`${title}的 ${MEMBERSHIP_TIER_LABELS[tier]} 上限`}
                       disabled={saving || !gate.enabled} value={gate.limits[tier]}
                       onChange={event => change(kind, { limits: { ...gate.limits, [tier]: event.target.value } })} />
                   </label>
@@ -139,11 +142,9 @@ export function AgentExtensionsPolicyPanel() {
         );
       })}
       <div className="settings-actions mt-4">
-        <button type="button" className="settings-button settings-button-primary" disabled={!dirty || saving} onClick={() => { void save(); }}>
-          {saving ? <SoundWaveLoader variant="inline" /> : null}保存
-        </button>
-        <button type="button" className="settings-button settings-button-ghost" disabled={!dirty || saving}
-          onClick={() => setState(current => current.status === 'ready' ? { ...current, draft: current.saved } : current)}>还原</button>
+        <Button loading={saving} disabled={saving || !dirty} onClick={() => { void save(); }}>保存</Button>
+        <Button variant="ghost" disabled={!dirty || saving}
+          onClick={() => setState(current => current.status === 'ready' ? { ...current, draft: current.saved } : current)}>还原</Button>
       </div>
     </div>
   );

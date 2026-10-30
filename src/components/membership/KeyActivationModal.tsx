@@ -7,6 +7,10 @@
 
 import { useState } from 'react';
 import { X, CheckCircle, AlertCircle } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { IconButton } from '@/components/ui/IconButton';
+import { Dialog } from '@/components/ui/Dialog';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { dispatchApiWriteEvents } from '@/lib/browser-api';
@@ -130,29 +134,20 @@ export function KeyActivationModal({
     };
 
     return (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
-            {/* 背景遮罩 */}
-            <div
-                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-                onClick={handleClose}
-            />
-
+        <Dialog bare open={isOpen} onClose={handleClose} labelledBy="key-activation-title" className="dialog-plain dialog-md">
             {/* 弹窗内容 */}
-            <div className="relative w-full max-w-md bg-background rounded-2xl border border-border shadow-2xl animate-fade-in">
+            <div className="relative w-full bg-background rounded-2xl border border-border shadow-2xl animate-fade-in">
                 {/* 头部 */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-border">
                     <div className="flex items-center gap-3">
-                        <h2 className="text-xl font-bold">
+                        <h2 id="key-activation-title" className="text-xl font-bold">
                             {step === 'success' ? '激活成功' : step === 'error' ? '激活失败' : '激活会员'}
                         </h2>
                     </div>
                     {step !== 'processing' && (
-                        <button
-                            onClick={handleClose}
-                            className="p-2 rounded-lg hover:bg-background-secondary transition-colors"
-                        >
-                            <X className="w-5 h-5" />
-                        </button>
+                        <IconButton label="关闭" onClick={handleClose}>
+                            <X aria-hidden="true" />
+                        </IconButton>
                     )}
                 </div>
 
@@ -160,8 +155,8 @@ export function KeyActivationModal({
                     {/* 成功状态 */}
                     {step === 'success' && (
                         <div className="text-center py-8">
-                            <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-4">
-                                <CheckCircle className="w-8 h-8 text-green-500" />
+                            <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-4">
+                                <CheckCircle className="w-8 h-8 text-success" />
                             </div>
                             <h3 className="text-xl font-bold mb-2">激活成功！</h3>
                             <p className="text-foreground-secondary">
@@ -184,17 +179,12 @@ export function KeyActivationModal({
                     {/* 错误状态 */}
                     {step === 'error' && (
                         <div className="text-center py-6">
-                            <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-4">
-                                <AlertCircle className="w-8 h-8 text-red-500" />
+                            <div className="w-16 h-16 rounded-full bg-danger/10 flex items-center justify-center mx-auto mb-4">
+                                <AlertCircle className="w-8 h-8 text-danger" />
                             </div>
                             <h3 className="text-xl font-bold mb-2">激活失败</h3>
-                            <p className="text-red-500 mb-6">{error}</p>
-                            <button
-                                onClick={handleRetry}
-                                className="px-6 py-2.5 rounded-xl bg-accent text-on-accent font-medium hover:bg-accent/90 transition-colors"
-                            >
-                                重新输入
-                            </button>
+                            <p className="text-danger mb-6">{error}</p>
+                            <Button size="lg" onClick={handleRetry}>重新输入</Button>
                         </div>
                     )}
 
@@ -203,7 +193,7 @@ export function KeyActivationModal({
                         <>
                             {/* 错误提示 */}
                             {error && (
-                                <div className="p-3 rounded-lg bg-red-500/10 text-red-500 text-sm mb-4">
+                                <div className="p-3 rounded-lg bg-danger/10 text-danger text-sm mb-4">
                                     {error}
                                 </div>
                             )}
@@ -213,28 +203,22 @@ export function KeyActivationModal({
                                 <label className="block text-sm font-medium text-foreground-secondary mb-2">
                                     激活码
                                 </label>
-                                <input
+                                <Input
                                     type="text"
                                     value={keyCode}
                                     onChange={(e) => setKeyCode(e.target.value)}
                                     placeholder="sk-xxxxxxxxxxxxxxxx"
-                                    className="w-full px-4 py-3 rounded-xl border border-border bg-background-secondary focus:border-accent focus:ring-2 focus:ring-accent/20 outline-none transition-all font-mono"
+                                    className="h-11 bg-background-secondary font-mono"
                                     autoFocus
                                 />
                             </div>
 
                             {/* 激活按钮 */}
-                            <button
-                                onClick={handleActivate}
-                                disabled={!keyCode.trim()}
-                                className="w-full py-3.5 rounded-xl bg-accent text-on-accent text-base font-medium hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                激活
-                            </button>
+                            <Button size="lg" className="w-full" onClick={handleActivate} disabled={!keyCode.trim()}>激活</Button>
                         </>
                     )}
                 </div>
             </div>
-        </div>
+        </Dialog>
     );
 }

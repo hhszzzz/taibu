@@ -4,11 +4,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 import { ArrowLeft, Eye, EyeOff, PencilLine, Plus, Trash2 } from 'lucide-react';
 import { requestBrowserData } from '@/lib/browser-api';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import { getAnnouncementExcerpt, type Announcement } from '@/lib/announcement';
+import { Textarea } from '@/components/ui/Textarea';
 
 type PanelView = 'history' | 'editor';
 
@@ -203,10 +206,10 @@ export function AnnouncementManagementPanel() {
           <h3 className="text-[13px] font-medium text-foreground-tertiary">
             公告历史{loading || error ? null : <span className="ml-1.5 font-normal tabular-nums">{announcements.length}</span>}
           </h3>
-          <button type="button" onClick={startCreateAnnouncement} className="settings-button settings-button-primary">
+          <Button onClick={startCreateAnnouncement}>
             <Plus aria-hidden="true" className="h-4 w-4" />
             新建公告
-          </button>
+          </Button>
         </div>
 
         {loading ? (
@@ -216,7 +219,7 @@ export function AnnouncementManagementPanel() {
         ) : error ? (
           <div role="alert" className="settings-alert">
             {error}
-            <button type="button" onClick={() => { void loadAnnouncements(); }}>重试</button>
+            <Button variant="ghost" size="xs" onClick={() => { void loadAnnouncements(); }}>重试</Button>
           </div>
         ) : announcements.length === 0 ? (
           <div className={`px-6 py-12 text-center text-[15px] text-foreground ${CARD}`}>还没有任何公告</div>
@@ -235,25 +238,27 @@ export function AnnouncementManagementPanel() {
                   </p>
                 </div>
                 <div className="flex flex-shrink-0 items-center gap-0.5">
-                  <button
-                    type="button"
+                  <IconButton
                     onClick={() => selectAnnouncement(announcement)}
-                    aria-label={`编辑公告（${formatPublishedAt(announcement.publishedAt)}）`}
+                    label={`编辑公告（${formatPublishedAt(announcement.publishedAt)}）`}
                     title="编辑"
-                    className="settings-icon-button after:absolute after:inset-0 after:content-['']"
+                    size="sm"
+                    expand="none"
+                    className="after:absolute after:inset-0 after:content-['']"
                   >
-                    <PencilLine aria-hidden="true" className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
+                    <PencilLine aria-hidden="true" />
+                  </IconButton>
+                  <IconButton
                     onClick={() => setDeleteTarget(announcement)}
                     disabled={deletingId === announcement.id}
-                    aria-label={`删除公告（${formatPublishedAt(announcement.publishedAt)}）`}
+                    label={`删除公告（${formatPublishedAt(announcement.publishedAt)}）`}
                     title="删除"
-                    className="settings-icon-button settings-icon-button-danger relative z-10"
+                    size="sm"
+                    tone="danger"
+                    className="z-10"
                   >
-                    <Trash2 aria-hidden="true" className="h-4 w-4" />
-                  </button>
+                    <Trash2 aria-hidden="true" />
+                  </IconButton>
                 </div>
               </li>
             ))}
@@ -277,18 +282,13 @@ export function AnnouncementManagementPanel() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <button type="button" onClick={resetToHistory} className="settings-button settings-button-ghost -ml-3">
+        <Button variant="ghost" onClick={resetToHistory} className="-ml-3">
           <ArrowLeft aria-hidden="true" className="h-4 w-4" />
           返回历史
-        </button>
-        <button
-          type="button"
-          onClick={() => void saveAnnouncement()}
-          disabled={saving}
-          className="settings-button settings-button-primary"
-        >
-          {saving ? '保存中...' : mode === 'create' ? '发布公告' : '保存修改'}
-        </button>
+        </Button>
+        <Button onClick={() => void saveAnnouncement()} loading={saving} loadingText="保存中…" disabled={saving}>
+          {mode === 'create' ? '发布公告' : '保存修改'}
+        </Button>
       </div>
 
       <section className="flex flex-col gap-5" aria-labelledby="announcement-editor-heading">
@@ -305,12 +305,12 @@ export function AnnouncementManagementPanel() {
 
         <div className="flex flex-col gap-2">
           <label htmlFor="announcement-content" className="settings-label">公告内容</label>
-          <textarea
+          <Textarea
             id="announcement-content"
             aria-describedby="announcement-content-hint"
             value={form.content}
             onChange={(event) => setForm((current) => ({ ...current, content: event.target.value }))}
-            className="settings-textarea min-h-[220px]"
+            className="min-h-[220px]" 
             placeholder="输入公告内容，支持多段文本..."
           />
           <p id="announcement-content-hint" className="settings-help">支持 Markdown，建议用标题、列表、加粗、链接等基础语法。</p>
@@ -319,16 +319,16 @@ export function AnnouncementManagementPanel() {
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h4 className="settings-label">Markdown 预览</h4>
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => setPreviewOpen((current) => !current)}
               aria-expanded={previewOpen}
               aria-controls="announcement-preview"
-              className="settings-button settings-button-compact"
             >
               {previewOpen ? <EyeOff aria-hidden="true" className="h-4 w-4" /> : <Eye aria-hidden="true" className="h-4 w-4" />}
               {previewOpen ? '收起预览' : '展开预览'}
-            </button>
+            </Button>
           </div>
 
           <div id="announcement-preview" hidden={!previewOpen} className={`px-5 py-4 ${CARD}`}>

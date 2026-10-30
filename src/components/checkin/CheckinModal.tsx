@@ -5,6 +5,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { CalendarCheck, X } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
+import { Dialog } from '@/components/ui/Dialog';
 import { CheckinCalendarPanel } from '@/components/checkin/CheckinCalendarPanel';
 import {
   fetchCheckinStatus,
@@ -14,13 +17,11 @@ import {
 interface CheckinModalProps {
   isOpen: boolean;
   onClose: () => void;
-  stackLevel?: 'page' | 'settings';
 }
 
 export function CheckinModal({
   isOpen,
   onClose,
-  stackLevel = 'page',
 }: CheckinModalProps) {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<CheckinStatus | null>(null);
@@ -52,20 +53,7 @@ export function CheckinModal({
     void loadStatus();
   }, [isOpen, loadStatus]);
 
-  useEffect(() => {
-    const handleEsc = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && isOpen) {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleEsc);
-    return () => window.removeEventListener('keydown', handleEsc);
-  }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
-
   const rewardRangeText = status ? `${status.rewardRange[0]}-${status.rewardRange[1]} 积分` : '--';
-  const modalLayerClass = stackLevel === 'settings' ? 'z-[100]' : 'z-[60]';
   const statusText = status?.todayCheckedIn
     ? '今天已签到'
     : status?.blockedReason === 'credit_cap_reached'
@@ -73,26 +61,16 @@ export function CheckinModal({
       : `今日奖励 ${rewardRangeText}`;
 
   return (
-    <div className={`fixed inset-0 flex items-center justify-center p-4 ${modalLayerClass}`}>
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={onClose}
-      />
-
-      <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-border bg-background shadow-xl animate-fade-in">
+    <Dialog bare open={isOpen} onClose={onClose} labelledBy="checkin-title" className="dialog-plain dialog-md">
+      <div className="relative w-full overflow-hidden rounded-2xl border border-border bg-background shadow-xl animate-fade-in">
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
-          <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
-            <CalendarCheck className="h-4 w-4 text-amber-500" />
+          <h2 id="checkin-title" className="flex items-center gap-2 text-base font-semibold text-foreground">
+            <CalendarCheck className="h-4 w-4 text-warning" />
             每日签到
           </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-1.5 transition-colors hover:bg-background-secondary"
-            aria-label="关闭"
-          >
-            <X className="h-4 w-4 text-foreground-secondary" />
-          </button>
+          <IconButton label="关闭" size="sm" expand="none" onClick={onClose}>
+            <X aria-hidden="true" />
+          </IconButton>
         </div>
 
         <div className="space-y-4 px-5 py-5">
@@ -104,18 +82,15 @@ export function CheckinModal({
           ) : (
             <>
               {statusError ? (
-                <div className="flex items-center justify-between gap-3 rounded-lg border border-[#ead9bf] bg-[#fcf8ee] px-4 py-3 text-sm text-[#946c21]">
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning/5 px-4 py-3 text-sm text-warning">
                   <span className="min-w-0 flex-1">{statusError}</span>
-                  <button
-                    type="button"
+                  <Button variant="ghost" size="xs" className="shrink-0 text-warning hover:bg-warning/10 hover:text-warning"
                     onClick={() => {
                       setLoading(true);
                       void loadStatus();
-                    }}
-                    className="shrink-0 rounded-md px-2 py-1 font-medium text-[#7c5f1c] transition-colors hover:bg-[#f4ead3]"
-                  >
+                    }}>
                     重试
-                  </button>
+                  </Button>
                 </div>
               ) : null}
 
@@ -130,6 +105,6 @@ export function CheckinModal({
           )}
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }

@@ -10,6 +10,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Copy, ExternalLink, Trash2 } from 'lucide-react';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
+import { Button } from '@/components/ui/Button';
+import { iconButtonVariants, IconButton } from '@/components/ui/IconButton';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
@@ -89,7 +91,7 @@ export default function SharedLinksPanel() {
         return (
             <div role="alert" className="settings-alert">
                 <span className="min-w-0 flex-1">读取分享链接失败。</span>
-                <button type="button" onClick={retry}>重试</button>
+                <Button variant="ghost" size="xs" onClick={retry}>重试</Button>
             </div>
         );
     }
@@ -107,15 +109,17 @@ export default function SharedLinksPanel() {
                                 <p>更新于 {formatDate(share.updatedAt)}{share.includeCharts ? ' · 含命盘与工具结果' : ''}</p>
                             </div>
                             <div className="flex flex-shrink-0 items-center gap-1">
-                                <button type="button" className="settings-icon-button" aria-label={`复制「${share.title}」的公开链接`} title="复制链接" onClick={() => { void copy(share); }}>
+                                <IconButton label={`复制「${share.title}」的公开链接`} title="复制链接" size="sm" onClick={() => { void copy(share); }}>
                                     <Copy size={16} aria-hidden="true" />
-                                </button>
-                                <a href={share.path} target="_blank" rel="noopener noreferrer" className="settings-icon-button" aria-label={`打开「${share.title}」的公开页面`} title="打开">
+                                </IconButton>
+                                <a href={share.path} target="_blank" rel="noopener noreferrer" title="打开"
+                                    aria-label={`打开「${share.title}」的公开页面`} className={iconButtonVariants({ size: 'sm' })}>
                                     <ExternalLink size={16} aria-hidden="true" />
                                 </a>
-                                <button type="button" className="settings-icon-button settings-icon-button-danger" aria-label={`删除「${share.title}」的公开链接`} title="删除链接" disabled={deleting} onClick={() => setPendingDelete(share)}>
+                                <IconButton label={`删除「${share.title}」的公开链接`} title="删除链接" size="sm" tone="danger"
+                                    disabled={deleting} onClick={() => setPendingDelete(share)}>
                                     <Trash2 size={16} aria-hidden="true" />
-                                </button>
+                                </IconButton>
                             </div>
                         </li>
                     ))}

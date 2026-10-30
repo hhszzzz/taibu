@@ -28,6 +28,7 @@ import { CreditTransactionsPanel } from '@/components/membership/CreditTransacti
 import { KeyActivationModal } from '@/components/membership/KeyActivationModal';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { useToast } from '@/components/ui/Toast';
+import { Button, buttonVariants } from '@/components/ui/Button';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import { getSettingsCenterRouteTargetForPath } from '@/lib/settings-center';
 import { describePricingPlan, getMembershipInfo, pricingPlans, type MembershipInfo } from '@/lib/user/membership';
@@ -143,9 +144,6 @@ function ActionCard({
   );
 }
 
-const CARD_BUTTON = 'settings-button settings-button-compact';
-const CARD_PRIMARY_BUTTON = `${CARD_BUTTON} settings-button-primary`;
-const CARD_LINK_BUTTON = 'inline-flex h-9 items-center px-0.5 text-[13px] text-accent transition-colors hover:text-accent-hover';
 
 export default function UpgradePanel() {
   const pathname = usePathname();
@@ -484,42 +482,43 @@ export default function UpgradePanel() {
         title: '每日签到',
         description: '登录后每天可签到领取积分',
         tone: 'neutral',
-        action: <button type="button" onClick={handleCheckinClick} className={CARD_PRIMARY_BUTTON}>登录后签到</button>,
+        action: <Button size="xs" onClick={handleCheckinClick}>登录后签到</Button>,
       }
     : checkinError && !checkinStatus
       ? {
           title: '每日签到',
           description: checkinError,
           tone: 'neutral',
-          action: <button type="button" onClick={() => void refreshCheckinStatus()} disabled={checkinLoading} className={CARD_BUTTON}><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />重试</button>,
+          action: <Button variant="secondary" size="xs" onClick={() => void refreshCheckinStatus()} loading={checkinLoading}>重试</Button>,
         }
       : checkinStatus?.todayCheckedIn
         ? {
             title: '今日已签到',
             description: `明天签到可再得 ${rewardText} 积分`,
             tone: 'success',
-            action: <button type="button" onClick={() => setShowCheckinModal(true)} className={CARD_LINK_BUTTON}>查看签到日历</button>,
+            action: <Button variant="ghost" size="xs" onClick={() => setShowCheckinModal(true)}>查看签到日历</Button>,
           }
         : checkinStatus?.blockedReason === 'credit_cap_reached'
           ? {
               title: '每日签到',
               description: '积分已达上限，消耗后再来签到',
               tone: 'neutral',
-              action: <button type="button" disabled className={CARD_BUTTON}><Lock className="h-3.5 w-3.5" aria-hidden="true" />已封顶</button>,
+              action: <Button variant="secondary" size="xs" disabled><Lock className="h-3.5 w-3.5" aria-hidden="true" />已封顶</Button>,
             }
           : {
               title: '每日签到',
               description: checkinStatus ? `签到可得 ${rewardText} 积分` : '正在读取签到状态…',
               tone: 'neutral',
               action: (
-                <button
-                  type="button"
+                <Button
+                  size="xs"
                   onClick={handleCheckinClick}
+                  loading={checkinSubmitting}
+                  loadingText="签到中"
                   disabled={checkinSubmitting || checkinLoading || !checkinStatus?.canCheckin}
-                  className={CARD_PRIMARY_BUTTON}
                 >
-                  {checkinSubmitting ? '签到中' : '立即签到'}
-                </button>
+                  立即签到
+                </Button>
               ),
             };
 
@@ -539,7 +538,7 @@ export default function UpgradePanel() {
       {user && membershipError && !membership ? (
         <div role="alert" className="settings-alert">
           <span className="min-w-0 flex-1">{membershipError}</span>
-          <button type="button" onClick={() => void refreshMembership(user.id)}>重试</button>
+          <Button variant="ghost" size="xs" onClick={() => void refreshMembership(user.id)}>重试</Button>
         </div>
       ) : (
         <CreditProgressBar
@@ -564,8 +563,9 @@ export default function UpgradePanel() {
           title="激活码"
           description="兑换会员时长或积分"
           action={(
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size="xs"
               onClick={() => {
                 if (!user) {
                   setShowAuthModal(true);
@@ -573,10 +573,9 @@ export default function UpgradePanel() {
                 }
                 setShowKeyModal(true);
               }}
-              className={CARD_BUTTON}
             >
               输入激活码
-            </button>
+            </Button>
           )}
         />
         {hasLinuxDoLogin ? (
@@ -585,9 +584,9 @@ export default function UpgradePanel() {
             title="Linux.do 月领"
             description="按 Linux.do 等级每月领取一次会员"
             action={linuxDoClaimDisabled ? (
-              <button type="button" disabled title="本月已领取 LinuxDo 会员" className={CARD_BUTTON}>{linuxDoClaimLabel}</button>
+              <Button variant="secondary" size="xs" disabled title="本月已领取 LinuxDo 会员">{linuxDoClaimLabel}</Button>
             ) : (
-              <a href={linuxdoClaimUrl} title="领取本月 LinuxDo 会员" className={CARD_PRIMARY_BUTTON}>{linuxDoClaimLabel}</a>
+              <a href={linuxdoClaimUrl} title="领取本月 LinuxDo 会员" className={buttonVariants({ size: 'xs' })}>{linuxDoClaimLabel}</a>
             )}
           />
         ) : null}
@@ -635,7 +634,6 @@ export default function UpgradePanel() {
       <CheckinModal
         isOpen={showCheckinModal}
         onClose={() => setShowCheckinModal(false)}
-        stackLevel="settings"
       />
     </div>
   );

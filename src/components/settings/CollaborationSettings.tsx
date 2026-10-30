@@ -4,8 +4,10 @@
 import { useId, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Pencil, Plus, Trash2, X } from 'lucide-react';
-import { Modal } from '@/components/ui/Modal';
-import { SettingsSelect } from '@/components/settings/SettingsSelect';
+import { Dialog } from '@/components/ui/Dialog';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
+import { Select } from '@/components/ui/Select';
 import { useAvailableModels, type AvailableModel } from '@/lib/hooks/useAvailableModels';
 import { useCollaborationPreset, writeCollaborationPreset } from '@/lib/chat/collaboration-preset';
 import type { AgentCollaborator } from '@/lib/chat/model-settings';
@@ -15,6 +17,8 @@ import { queryKeys } from '@/lib/query/keys';
 import type { AgentProfileOption } from '@/lib/agent/profiles/config';
 import type { MembershipType } from '@/lib/user/membership';
 import { BetaBadge } from '@/components/ui/BetaBadge';
+import { Input } from '@/components/ui/Input';
+import { Textarea } from '@/components/ui/Textarea';
 
 const EFFORT_LABELS: ReadonlyArray<readonly [NonNullable<AgentCollaborator['reasoningEffort']>, string]> = [
     ['minimal', '最低'], ['low', '低'], ['medium', '中'], ['high', '高'], ['xhigh', '超高'], ['max', '最高'],
@@ -67,10 +71,10 @@ export function CollaborationSettings({ userId, membershipType }: { userId: stri
         <div className="settings-form-body">
           <div className="settings-inline-row settings-inline-row-top">
             <p className="settings-help">每个对话默认不协作；在输入框的模型菜单里勾选模型后才会启用，这里的预设会在勾选时自动套用。主模型不占成员名额，汇总只计一次费用。</p>
-            <button type="button" className="settings-button" disabled={preset.members.length >= MAX_MEMBERS}
+            <Button variant="secondary" size="lg" disabled={preset.members.length >= MAX_MEMBERS}
                 onClick={() => setEditor({ index: null, member: member(preset.members.length) })}>
                 <Plus size={14} aria-hidden="true" />添加成员
-            </button>
+            </Button>
           </div>
           {preset.members.length ? (
             <ul className="settings-list-card" aria-label="协作成员">
@@ -86,14 +90,14 @@ export function CollaborationSettings({ userId, membershipType }: { userId: stri
                     <p>{[model?.name ?? (item.model || '未选择模型'), role?.displayName ?? '体系专家', effort].filter(Boolean).join(' · ')}</p>
                   </div>
                   <div className="settings-actions">
-                    <button type="button" className="settings-icon-button" aria-label={`编辑 Agent ${index + 1}`} title="编辑"
+                    <IconButton label={`编辑 Agent ${index + 1}`} size="sm" title="编辑"
                       onClick={() => setEditor({ index, member: { ...item } })}>
                       <Pencil size={16} aria-hidden="true" />
-                    </button>
-                    <button type="button" className="settings-icon-button settings-icon-button-danger" aria-label={`移除 Agent ${index + 1}`} title="移除"
+                    </IconButton>
+                    <IconButton label={`移除 Agent ${index + 1}`} tone="danger" size="sm" title="移除"
                       onClick={() => setMembers(preset.members.filter((_, position) => position !== index))}>
                       <Trash2 size={16} aria-hidden="true" />
-                    </button>
+                    </IconButton>
                   </div>
                 </li>;
               })}
@@ -138,21 +142,21 @@ function CollaboratorDialog({ member, editing, models, roles, rolesLoading, onCl
             .map(([level, label]) => ({ value: level, label })),
     ];
 
-    return <Modal open onClose={onClose} labelledBy={titleId} className="collab-dialog">
+    return <Dialog bare open onClose={onClose} labelledBy={titleId} className="collab-dialog">
         <div className="collab-dialog-head">
             <h2 id={titleId}>{editing ? '编辑成员' : '添加成员'}</h2>
-            <button type="button" className="settings-icon-button" aria-label="关闭" onClick={onClose}><X size={17} aria-hidden="true" /></button>
+            <IconButton label="关闭" size="sm" onClick={onClose}><X size={17} aria-hidden="true" /></IconButton>
         </div>
         <div className="collab-dialog-body">
             <label className="settings-field">
                 <span>名称</span>
-                <input className="settings-input" maxLength={60} value={draft.name} autoFocus
+                <Input  maxLength={60} value={draft.name} autoFocus
                     onChange={event => setDraft({ ...draft, name: event.target.value })} />
             </label>
             <div className="collab-dialog-grid">
                 <div className="settings-field">
                     <span>角色</span>
-                    <SettingsSelect
+                    <Select
                         ariaLabel="角色"
                         value={roleName}
                         onChange={value => {
@@ -168,7 +172,7 @@ function CollaboratorDialog({ member, editing, models, roles, rolesLoading, onCl
                 </div>
                 <div className="settings-field">
                     <span>模型</span>
-                    <SettingsSelect
+                    <Select
                         ariaLabel="模型"
                         value={draft.model}
                         onChange={value => {
@@ -189,7 +193,7 @@ function CollaboratorDialog({ member, editing, models, roles, rolesLoading, onCl
                 </div>
                 <div className="settings-field">
                     <span>努力程度</span>
-                    <SettingsSelect
+                    <Select
                         ariaLabel="努力程度"
                         value={effort}
                         onChange={value => setDraft(value === 'off'
@@ -201,7 +205,7 @@ function CollaboratorDialog({ member, editing, models, roles, rolesLoading, onCl
             </div>
             <label className="settings-field">
                 <span>分工</span>
-                <textarea className="settings-textarea" rows={3} maxLength={1200} value={draft.focus}
+                <Textarea  rows={3} maxLength={1200} value={draft.focus}
                     placeholder="分析角度或复核重点"
                     onChange={event => setDraft({ ...draft, focus: event.target.value })} />
             </label>
@@ -210,10 +214,8 @@ function CollaboratorDialog({ member, editing, models, roles, rolesLoading, onCl
             </p> : null}
         </div>
         <div className="collab-dialog-foot">
-            <button type="button" className="settings-button" onClick={onClose}>取消</button>
-            <button type="button" className="settings-button settings-button-primary" disabled={!draft.name.trim()} onClick={() => onSave(draft)}>
-                保存
-            </button>
+            <Button variant="ghost" size="lg" onClick={onClose}>取消</Button>
+            <Button size="lg" disabled={!draft.name.trim()} onClick={() => onSave(draft)}>保存</Button>
         </div>
-    </Modal>;
+    </Dialog>;
 }

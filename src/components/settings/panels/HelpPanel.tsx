@@ -7,6 +7,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Button } from '@/components/ui/Button';
 import Link from 'next/link';
 import { ChevronDown, Github, Mail } from 'lucide-react';
 
@@ -66,7 +67,7 @@ export default function HelpPanel() {
               return (
                 <div key={faq.question} className="[&+div]:border-t [&+div]:border-border">
                   <h4>
-                    <button
+                    <Button unstyled
                       type="button"
                       aria-expanded={expanded}
                       aria-controls={answerId}
@@ -75,7 +76,7 @@ export default function HelpPanel() {
                     >
                       {faq.question}
                       <ChevronDown aria-hidden="true" className={`h-4 w-4 flex-shrink-0 text-foreground-tertiary transition-transform duration-150 ${expanded ? 'rotate-180' : ''}`} />
-                    </button>
+                    </Button>
                   </h4>
                   <div id={answerId} hidden={!expanded} className="px-5 pb-5 text-sm leading-[1.75] text-foreground-secondary">
                     {faq.answer}

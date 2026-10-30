@@ -14,9 +14,13 @@ import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 import { requestBrowserData } from '@/lib/browser-api';
 import { formatShortDate } from '@/lib/short-date';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
-import { SettingsSelect } from '@/components/settings/SettingsSelect';
+import { Select } from '@/components/ui/Select';
+import { Button } from '@/components/ui/Button';
+import { FilterChip } from '@/components/ui/FilterChip';
+import { IconButton } from '@/components/ui/IconButton';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
+import { Input } from '@/components/ui/Input';
 
 interface ActivationKey {
     id: string;
@@ -233,29 +237,23 @@ export function KeyManagementPanel() {
             {loadError ? (
                 <div role="alert" className="settings-alert">
                     {loadError}
-                    <button type="button" onClick={retryLoad}>重试</button>
+                    <Button variant="ghost" size="xs" onClick={retryLoad}>重试</Button>
                 </div>
             ) : null}
 
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div role="group" aria-label="按状态筛选" className="flex flex-wrap items-center gap-1.5">
                     {FILTERS.map(({ id, label }) => (
-                        <button
-                            key={id}
-                            type="button"
-                            aria-pressed={filter === id}
-                            onClick={() => setFilter(id)}
-                            className="settings-filter"
-                        >
+                        <FilterChip key={id} pressed={filter === id} onClick={() => setFilter(id)} className="settings-filter">
                             {label} <span className="tabular-nums">{counts[id]}</span>
-                        </button>
+                        </FilterChip>
                     ))}
                 </div>
                 {formOpen ? null : (
-                    <button type="button" onClick={() => setFormOpen(true)} className="settings-button settings-button-primary">
+                    <Button onClick={() => setFormOpen(true)}>
                         <Plus aria-hidden="true" className="h-4 w-4" />
                         批量创建
-                    </button>
+                    </Button>
                 )}
             </div>
 
@@ -267,18 +265,18 @@ export function KeyManagementPanel() {
                 >
                     <label className="settings-field">
                         类型
-                        <SettingsSelect<CreateKeyType>
+                        <Select<CreateKeyType>
                             ariaLabel="类型"
                             value={createType}
                             onChange={setCreateType}
                             options={CREATE_TYPE_OPTIONS.map(option => ({ value: option.value, label: option.label }))}
-                            className="settings-input-lg w-full"
+                            className="h-[2.625rem] w-full"
                         />
                     </label>
                     {createType === 'credits' ? (
                         <label className="settings-field">
                             每个积分数量
-                            <input
+                            <Input
                                 type="number"
                                 inputMode="numeric"
                                 min={1}
@@ -287,13 +285,12 @@ export function KeyManagementPanel() {
                                 value={creditsInput}
                                 onChange={(event) => setCreditsInput(event.target.value)}
                                 aria-invalid={credits === null}
-                                className="settings-input settings-input-lg w-full"
-                            />
+                                className="w-full" size="lg"/>
                         </label>
                     ) : null}
                     <label className="settings-field">
                         生成数量
-                        <input
+                        <Input
                             type="number"
                             inputMode="numeric"
                             min={1}
@@ -302,8 +299,7 @@ export function KeyManagementPanel() {
                             value={countInput}
                             onChange={(event) => setCountInput(event.target.value)}
                             aria-invalid={count === null}
-                            className="settings-input settings-input-lg w-full"
-                        />
+                            className="w-full" size="lg"/>
                     </label>
                     <div className="col-span-full flex flex-wrap items-center justify-between gap-2">
                         <p className="settings-help">
@@ -312,10 +308,10 @@ export function KeyManagementPanel() {
                                 : `单次最多 ${MAX_COUNT} 个。`}
                         </p>
                         <div className="flex gap-2">
-                            <button type="button" onClick={closeForm} disabled={creating} className="settings-button settings-button-ghost">取消</button>
-                            <button type="submit" disabled={!formValid || creating} className="settings-button settings-button-primary">
-                                {creating ? '生成中…' : '生成'}
-                            </button>
+                            <Button variant="ghost" onClick={closeForm} disabled={creating}>取消</Button>
+                            <Button type="submit" loading={creating} loadingText="生成中…" disabled={creating || !formValid}>
+                                生成
+                            </Button>
                         </div>
                     </div>
                 </form>
@@ -325,13 +321,13 @@ export function KeyManagementPanel() {
                 <div role="status" className={`flex flex-wrap items-center justify-between gap-2 py-2.5 pl-5 pr-2.5 ${CARD}`}>
                     <span className="text-sm text-foreground">已生成 {createdCodes.length} 个激活码</span>
                     <div className="flex items-center gap-1">
-                        <button type="button" onClick={() => { void copyCreatedCodes(); }} className="settings-button settings-button-compact">
+                        <Button variant="secondary" size="sm" onClick={() => { void copyCreatedCodes(); }}>
                             <Copy aria-hidden="true" className="h-4 w-4" />
                             复制全部
-                        </button>
-                        <button type="button" onClick={() => setCreatedCodes(null)} aria-label="关闭提示" className="settings-icon-button">
+                        </Button>
+                        <IconButton label="关闭提示" size="sm" onClick={() => setCreatedCodes(null)}>
                             <X aria-hidden="true" className="h-4 w-4" />
-                        </button>
+                        </IconButton>
                     </div>
                 </div>
             ) : null}
@@ -371,25 +367,25 @@ export function KeyManagementPanel() {
                                         <td className="py-1.5 pr-3">
                                             <div className="flex justify-end gap-0.5">
                                                 {key.is_used ? null : (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => { void copyText(key.key_code, key.id, '复制失败，请手动选择激活码'); }}
-                                                        aria-label={`复制激活码 ${key.key_code}`}
+                                                    <IconButton
+                                                        label={`复制激活码 ${key.key_code}`}
                                                         title={copied ? '已复制' : '复制'}
-                                                        className={`settings-icon-button ${copied ? 'text-success' : ''}`}
+                                                        size="sm"
+                                                        className={copied ? 'text-success' : undefined}
+                                                        onClick={() => { void copyText(key.key_code, key.id, '复制失败，请手动选择激活码'); }}
                                                     >
                                                         {copied ? <Check aria-hidden="true" className="h-4 w-4" /> : <Copy aria-hidden="true" className="h-4 w-4" />}
-                                                    </button>
+                                                    </IconButton>
                                                 )}
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setDeleteTarget(key)}
-                                                    aria-label={`删除激活码 ${key.key_code}`}
+                                                <IconButton
+                                                    label={`删除激活码 ${key.key_code}`}
                                                     title="删除"
-                                                    className="settings-icon-button settings-icon-button-danger"
+                                                    size="sm"
+                                                    tone="danger"
+                                                    onClick={() => setDeleteTarget(key)}
                                                 >
                                                     <Trash2 aria-hidden="true" className="h-4 w-4" />
-                                                </button>
+                                                </IconButton>
                                             </div>
                                         </td>
                                     </tr>

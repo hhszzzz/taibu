@@ -5,6 +5,9 @@
  */
 import { useRef, type KeyboardEvent, type ReactNode } from 'react';
 import { Check, type LucideIcon } from 'lucide-react';
+import { Switch } from '@/components/ui/Switch';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
+import { Button } from '@/components/ui/Button';
 import { useTabIndicator } from '@/lib/motion/tab-indicator';
 
 export function SettingsSection({
@@ -64,17 +67,12 @@ export function SettingsSwitch({
   disabled?: boolean;
 }) {
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
+    <Switch
       aria-label={label}
+      checked={checked}
       disabled={disabled}
-      onClick={onToggle}
-      className="settings-switch"
-    >
-      <span aria-hidden="true" className="settings-switch-thumb" />
-    </button>
+      onCheckedChange={onToggle}
+    />
   );
 }
 
@@ -117,7 +115,7 @@ export function SettingsChoiceCards<T extends string>({
       {options.map(option => {
         const selected = option.value === value;
         return (
-          <button
+          <Button unstyled
             key={option.value}
             type="button"
             role="radio"
@@ -130,7 +128,7 @@ export function SettingsChoiceCards<T extends string>({
             {option.preview}
             <span className="settings-choice-check" aria-hidden="true"><Check size={12} strokeWidth={2.5} /></span>
             <span className="settings-choice-label">{option.label}</span>
-          </button>
+          </Button>
         );
       })}
     </div>
@@ -159,10 +157,8 @@ export function SettingsSaveBar({
     <div className={`settings-save-bar${sticky ? '' : ' is-static'}`}>
       <p role="status"><span className="settings-save-dot" aria-hidden="true" />{message}</p>
       <div className="settings-save-actions">
-        <button type="button" onClick={onCancel} disabled={saving} className="settings-button settings-button-ghost">取消</button>
-        <button type="button" onClick={onSave} disabled={saving || saveDisabled} className="settings-button settings-button-primary">
-          {saving ? '保存中…' : saveLabel}
-        </button>
+        <Button variant="ghost" size="lg" onClick={onCancel} disabled={saving}>取消</Button>
+        <Button size="lg" onClick={onSave} loading={saving} loadingText="保存中…" disabled={saving || saveDisabled}>{saveLabel}</Button>
       </div>
     </div>
   );
@@ -201,44 +197,22 @@ export function SettingsTabs<T extends string>({
 }) {
   const listRef = useRef<HTMLDivElement>(null);
   useTabIndicator(listRef);
-  const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
-    const lastIndex = tabs.length - 1;
-    const index = tabs.findIndex((tab) => tab.id === value);
-    const nextIndex = event.key === 'ArrowRight' ? (index + 1) % tabs.length
-      : event.key === 'ArrowLeft' ? (index + lastIndex) % tabs.length
-        : event.key === 'Home' ? 0
-          : event.key === 'End' ? lastIndex
-            : -1;
-    if (nextIndex < 0 || index < 0) return;
-    event.preventDefault();
-    const next = tabs[nextIndex].id;
-    if (next !== value) onChange(next);
-    document.getElementById(getSettingsTabId(idPrefix, next))?.focus();
-  };
-
   return (
-    <div ref={listRef} role="tablist" aria-label={label} className="settings-tabs motion-tabs motion-tabs--pill">
-      {tabs.map(({ id, label: tabLabel, icon: Icon }) => {
-        const selected = id === value;
-        return (
-          <button
+    <Tabs value={value} onValueChange={(next) => { if (next !== value) onChange(next as T); }}>
+      <TabsList ref={listRef} indicator={false} aria-label={label} className="settings-tabs motion-tabs motion-tabs--pill">
+        {tabs.map(({ id, label: tabLabel, icon: Icon }) => (
+          <TabsTrigger
             key={id}
-            type="button"
-            role="tab"
+            value={id}
             id={getSettingsTabId(idPrefix, id)}
-            aria-selected={selected}
-            // 未选中的面板可能还没渲染，只让当前标签指向面板，避免引用不存在的 id。
-            aria-controls={selected ? getSettingsTabPanelId(idPrefix, id) : undefined}
-            tabIndex={selected ? 0 : -1}
-            onClick={() => { if (!selected) onChange(id); }}
-            onKeyDown={handleKeyDown}
+            aria-controls={id === value ? getSettingsTabPanelId(idPrefix, id) : undefined}
             className="settings-tab"
           >
             {Icon ? <Icon aria-hidden="true" className="h-4 w-4" /> : null}
             {tabLabel}
-          </button>
-        );
-      })}
-    </div>
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
   );
 }

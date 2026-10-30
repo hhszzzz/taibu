@@ -11,8 +11,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTheme } from '@/components/ui/ThemeProvider';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Button } from '@/components/ui/Button';
 import { SegmentedChoice } from '@/components/settings/SegmentedChoice';
-import { SettingsSelect } from '@/components/settings/SettingsSelect';
+import { Select } from '@/components/ui/Select';
 import { SettingsChoiceCards, SettingsRow, SettingsSection, SettingsSwitch } from '@/components/settings/SettingsControls';
 import { SettingsLoginRequired } from '@/components/settings/SettingsLoginRequired';
 import { loadReminderSubscriptions, type ReminderType, updateReminderSubscriptionClient } from '@/lib/reminders-client';
@@ -342,7 +343,7 @@ function AccountGeneralSettingsPanel() {
           description="English 即将上线"
           controlId="settings-language"
           control={(
-            <SettingsSelect
+            <Select
               id="settings-language"
               ariaLabel="语言"
               value={settings.language}
@@ -361,7 +362,7 @@ function AccountGeneralSettingsPanel() {
         {reminderLoadError ? (
           <div role="alert" className="settings-alert">
             <span className="min-w-0 flex-1">{reminderLoadError}</span>
-            <button type="button" disabled={pending.size > 0} onClick={() => void load()}>重试</button>
+            <Button variant="ghost" size="xs" disabled={pending.size > 0} onClick={() => void load()}>重试</Button>
           </div>
         ) : null}
         <SettingsRow

@@ -72,7 +72,6 @@
 .settings-row-description { max-width: 58ch; font-size: .8125rem; line-height: 1.55; color: var(--foreground-secondary); }
 .settings-row > :last-child:not(.settings-row-text) { flex-shrink: 0; max-width: 100%; }
 .settings-field-block { display: flex; flex-direction: column; gap: .625rem; }
-.settings-field-block > :where(.settings-input, .settings-textarea) { width: 100%; }
 .settings-label, .settings-label-row { font-size: .875rem; font-weight: 500; color: var(--foreground); }
 .settings-label-row { display: flex; align-items: baseline; justify-content: space-between; gap: .75rem; }
 .settings-counter { flex-shrink: 0; font-size: .75rem; color: var(--foreground-tertiary); font-variant-numeric: tabular-nums; }
@@ -83,34 +82,6 @@
 .settings-field { display: flex; flex-direction: column; gap: .375rem; font-size: .8125rem; color: var(--foreground-secondary); }
 
 /* Shared controls. */
-.settings-switch { display: inline-flex; flex-shrink: 0; align-items: center; width: 2.5rem; height: 1.375rem; padding: 2px; border-radius: 999px; background: var(--border-hover); transition: background-color .15s; }
-.settings-switch[aria-checked=true] { background: var(--accent); }
-.settings-switch:disabled { cursor: not-allowed; opacity: .5; }
-.settings-switch-thumb { width: 1.125rem; height: 1.125rem; border-radius: 999px; background: #fff; box-shadow: 0 1px 2px hsl(from var(--neutral-900) h s l / 20%); transition: transform .15s; }
-.settings-switch[aria-checked=true] .settings-switch-thumb { transform: translateX(1.125rem); }
-.settings-select { height: 2.375rem; min-width: 10rem; padding: 0 .75rem; border: var(--hairline) solid var(--border); border-radius: .625rem; font-size: .875rem; color: var(--foreground); }
-.settings-select-compact { min-width: 7.5rem; }
-.settings-input { height: 2.375rem; padding: 0 .75rem; border: var(--hairline) solid var(--border); border-radius: .625rem; font-size: .875rem; color: var(--foreground); }
-.settings-input-lg { height: 2.625rem; padding: 0 .875rem; font-size: .9375rem; }
-.settings-textarea { width: 100%; min-height: 6rem; padding: .75rem .875rem; border: var(--hairline) solid var(--border); border-radius: .625rem; font-size: .875rem; line-height: 1.65; color: var(--foreground); resize: vertical; }
-.settings-input::placeholder, .settings-textarea::placeholder { color: var(--foreground-tertiary); }
-.settings-input:disabled, .settings-select:disabled, .settings-textarea:disabled { cursor: not-allowed; opacity: .6; }
-.settings-input[aria-invalid=true], .settings-textarea[aria-invalid=true] { border-color: var(--danger); }
-.settings-input-with-action { padding-right: 2.75rem; }
-.settings-button { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; gap: .375rem; min-height: 2.375rem; padding: 0 .875rem; border: var(--hairline) solid var(--border); border-radius: .625rem; background: var(--surface); font-size: .8125rem; font-weight: 500; color: var(--foreground); transition: background-color .15s, border-color .15s, color .15s; }
-.settings-button:hover:not(:disabled) { border-color: var(--border-hover); background: var(--background-secondary); }
-.settings-button-primary { border-color: transparent; background: var(--accent); color: var(--on-accent); }
-.settings-button-primary:hover:not(:disabled) { border-color: transparent; background: var(--accent-hover); }
-.settings-button-ghost { border-color: transparent; background: transparent; color: var(--foreground-secondary); }
-.settings-button-ghost:hover:not(:disabled) { border-color: transparent; color: var(--foreground); }
-.settings-button-compact { min-height: 2rem; padding: 0 .75rem; font-size: .8125rem; }
-.settings-button:disabled { cursor: not-allowed; opacity: .5; }
-.settings-icon-button { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 2.25rem; height: 2.25rem; border-radius: .625rem; color: var(--foreground-secondary); transition: background-color .15s, color .15s; }
-.settings-icon-button:hover:not(:disabled), .settings-icon-button[aria-expanded=true] { background: var(--background-secondary); color: var(--foreground); }
-.settings-icon-button-danger:hover:not(:disabled) { color: var(--danger); }
-.settings-icon-button:disabled, .settings-text-button-danger:disabled { cursor: not-allowed; opacity: .5; }
-.settings-text-button-danger { flex-shrink: 0; height: 2.25rem; padding: 0 .625rem; border-radius: .625rem; font-size: .8125rem; color: var(--danger); }
-.settings-text-button-danger:hover:not(:disabled) { background: var(--background-secondary); }
 .settings-card { padding: 1rem; border: var(--hairline) solid var(--border); border-radius: .875rem; background: var(--surface); }
 .settings-alert { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-bottom: 1rem; padding: .75rem 1rem; border: 1px solid color-mix(in srgb, var(--danger) 20%, transparent); border-radius: .75rem; background: color-mix(in srgb, var(--danger) 4%, var(--surface)); font-size: .8125rem; line-height: 1.55; color: var(--danger); }
 .settings-alert button { flex-shrink: 0; font-weight: 500; color: var(--foreground); }
@@ -192,7 +163,6 @@
 .settings-avatar-button { position: absolute; right: -4px; bottom: -4px; display: flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border: 2px solid var(--background); border-radius: 999px; background: var(--background-secondary); color: var(--foreground-secondary); }
 .settings-avatar-button:hover:not(:disabled) { color: var(--foreground); }
 .settings-profile-fields { display: flex; flex: 1 1 17.5rem; flex-direction: column; gap: .5rem; }
-.settings-profile-fields .settings-input { height: 2.625rem; font-size: .9375rem; }
 
 @media (min-width: 1100px) {
   .settings-section, .settings-form-section { display: grid; grid-template-columns: 11rem minmax(0, 1fr); column-gap: 2.5rem; }
@@ -247,7 +217,6 @@
   .settings-profile-fields { flex-basis: 12rem; }
   .settings-save-bar { bottom: calc(var(--sab) + .75rem); margin-top: 1.25rem; padding: .625rem; }
   .settings-save-bar p { flex-basis: 8rem; }
-  .settings-button { min-height: 2.5rem; }
 }
 
 /* Collaboration members. */

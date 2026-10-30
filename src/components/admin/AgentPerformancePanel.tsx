@@ -20,6 +20,8 @@ import {
     type AgentRunMetricsRow,
     type AgentRunPhase,
 } from '@/lib/agent/admin-metrics';
+import { Button } from '@/components/ui/Button';
+import { FilterChip } from '@/components/ui/FilterChip';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 
 const CARD = 'rounded-2xl border border-border bg-surface';
@@ -189,28 +191,20 @@ export function AgentPerformancePanel({ active = true }: { active?: boolean }) {
             {error ? (
                 <div role="alert" className="settings-alert">
                     {error}
-                    <button type="button" onClick={() => { void loadReport(); }}>重试</button>
+                    <Button variant="ghost" size="xs" onClick={() => { void loadReport(); }}>重试</Button>
                 </div>
             ) : null}
 
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div role="group" aria-label="统计范围" className="flex flex-wrap items-center gap-1.5">
                     {AGENT_METRICS_DAYS.map(value => (
-                        <button
-                            key={value}
-                            type="button"
-                            aria-pressed={days === value}
-                            onClick={() => { setDays(value); setLoading(true); }}
-                            className="settings-filter"
-                        >
-                            {RANGE_LABEL[value]}
-                        </button>
+                        <FilterChip key={value} pressed={days === value} onClick={() => { setDays(value); setLoading(true); }} className="settings-filter">{RANGE_LABEL[value]}</FilterChip>
                     ))}
                 </div>
-                <button type="button" onClick={() => { void loadReport(); }} className="settings-button settings-button-compact">
+                <Button variant="secondary" size="sm" onClick={() => { void loadReport(); }}>
                     <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />
                     刷新
-                </button>
+                </Button>
             </div>
 
             {loading && !report ? <SoundWaveLoader variant="block" /> : null}
@@ -273,14 +267,14 @@ export function AgentPerformancePanel({ active = true }: { active?: boolean }) {
                             {report.runs.map(run => (
                                 <tr key={run.runId} className={`border-b border-border last:border-b-0 ${run.runId === selectedId ? 'bg-background-secondary/60' : ''}`}>
                                     <th scope="row" className="max-w-[14rem] py-2.5 pl-5 pr-3 text-left font-normal">
-                                        <button
+                                        <Button unstyled
                                             type="button"
                                             onClick={() => select(run.runId === selectedId ? null : run.runId)}
                                             aria-pressed={run.runId === selectedId}
                                             className="font-mono text-xs text-foreground-secondary underline-offset-2 hover:underline"
                                         >
                                             {run.runId.slice(0, 8)}
-                                        </button>
+                                        </Button>
                                     </th>
                                     <td className={`whitespace-nowrap px-3 py-2.5 text-[13px] ${STATUS[run.status].tone}`}>{STATUS[run.status].label}</td>
                                     <td className="max-w-[12rem] truncate px-3 py-2.5 text-[13px] text-foreground-secondary">{run.modelId}</td>
@@ -298,7 +292,7 @@ export function AgentPerformancePanel({ active = true }: { active?: boolean }) {
             {selectedId && detailError ? (
                 <div role="alert" className="settings-alert">
                     {detailError}
-                    <button type="button" onClick={() => { void loadMetrics(selectedId); }}>重试</button>
+                    <Button variant="ghost" size="xs" onClick={() => { void loadMetrics(selectedId); }}>重试</Button>
                 </div>
             ) : null}
             {selectedId && !shown && !detailError ? <SoundWaveLoader variant="block" /> : null}

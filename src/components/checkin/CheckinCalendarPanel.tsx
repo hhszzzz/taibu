@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
 import { CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { IconButton } from '@/components/ui/IconButton';
+import { Button } from '@/components/ui/Button';
 import { requestBrowserJson } from '@/lib/browser-api';
 
 interface CheckinCalendarPanelProps {
@@ -95,9 +97,9 @@ export function CheckinCalendarPanel({ active = true }: CheckinCalendarPanelProp
           key={day}
           className={`flex h-9 items-center justify-center rounded-lg text-sm transition-colors ${
             isCheckedIn
-              ? 'bg-amber-500 text-white'
+              ? 'bg-warning text-background'
               : isToday
-                ? 'border border-amber-500/50 bg-amber-500/10 font-semibold text-amber-600'
+                ? 'border border-warning/50 bg-warning/10 font-semibold text-warning'
                 : 'bg-background text-foreground-secondary'
           }`}
         >
@@ -118,25 +120,15 @@ export function CheckinCalendarPanel({ active = true }: CheckinCalendarPanelProp
     <div className="rounded-lg border border-border bg-surface p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={prevMonth}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-foreground"
-            aria-label="查看上个月"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
+          <IconButton label="查看上个月" size="sm" onClick={prevMonth}>
+            <ChevronLeft aria-hidden="true" />
+          </IconButton>
           <div className="text-sm font-medium text-foreground">
             {currentMonth.year} 年 {currentMonth.month} 月
           </div>
-          <button
-            type="button"
-            onClick={nextMonth}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-foreground"
-            aria-label="查看下个月"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
+          <IconButton label="查看下个月" size="sm" onClick={nextMonth}>
+            <ChevronRight aria-hidden="true" />
+          </IconButton>
         </div>
         <div className="text-xs text-foreground-secondary">
           本月 {checkedInThisMonth} 天
@@ -144,18 +136,15 @@ export function CheckinCalendarPanel({ active = true }: CheckinCalendarPanelProp
       </div>
 
       {calendarError ? (
-        <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-[#ead9bf] bg-[#fcf8ee] px-3 py-2 text-xs text-[#946c21]">
+        <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-warning">
           <span className="min-w-0 flex-1">{calendarError}</span>
-          <button
-            type="button"
+          <Button variant="ghost" size="xs" className="shrink-0 text-warning hover:bg-warning/10 hover:text-warning"
             onClick={() => {
               setLoading(true);
               void fetchCalendar();
-            }}
-            className="shrink-0 rounded-md px-2 py-1 font-medium text-[#7c5f1c] transition-colors hover:bg-[#f4ead3]"
-          >
+            }}>
             重试
-          </button>
+          </Button>
         </div>
       ) : null}
 

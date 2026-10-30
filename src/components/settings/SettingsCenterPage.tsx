@@ -1,6 +1,7 @@
 'use client';
 
 import { BetaBadge } from '@/components/ui/BetaBadge';
+import { Button } from '@/components/ui/Button';
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import type { ComponentType, ReactElement } from 'react';
 import Link from 'next/link';
@@ -247,7 +248,7 @@ export function SettingsCenterPage({ children }: { children: React.ReactNode }) 
                 const content = <><Icon size={SETTINGS_CENTER_ICON_SIZES.sidebar} className="shrink-0" /><span className="settings-nav-label">{tab.label}{tab.beta ? <BetaBadge /> : null}</span>{tab.disabled ? <LockKeyhole size={14} /> : <ChevronRight size={14} className="settings-nav-chevron" />}</>;
                 return <div className="settings-nav-entry" key={tab.id}>
                   {tab.disabled
-                    ? <button type="button" disabled={tab.disabled} aria-disabled={tab.disabled} className="settings-nav-item cursor-not-allowed">{content}</button>
+                    ? <Button unstyled type="button" disabled={tab.disabled} aria-disabled={tab.disabled} className="settings-nav-item cursor-not-allowed">{content}</Button>
                     : <Link href={href} aria-current={tab.id === displayTab ? 'page' : undefined} className="settings-nav-item" onClick={() => setMobileNavigation(false)}>{content}</Link>}
                   {isAdminSubtabOwner(tab.id) && tab.id === displayTab && <div className="settings-nav-sub" role="group" aria-label={`${tab.label}子页`}>
                     {getAdminSubTabs(tab.id).map(sub => <Link
@@ -265,11 +266,11 @@ export function SettingsCenterPage({ children }: { children: React.ReactNode }) 
         })}
       </nav>
     </aside>
-    <button type="button" className={`settings-sidebar-scrim${mobileNavigation ? ' is-visible' : ''}`} aria-label="关闭分类" tabIndex={mobileNavigation ? 0 : -1} onClick={() => setMobileNavigation(false)} />
+    <Button unstyled type="button" className={`settings-sidebar-scrim${mobileNavigation ? ' is-visible' : ''}`} aria-label="关闭分类" tabIndex={mobileNavigation ? 0 : -1} onClick={() => setMobileNavigation(false)} />
     <main className="settings-main">
       <div className="settings-main-inner">
         <div className="settings-main-head">
-          <button type="button" className="settings-mobile-menu" aria-label="设置分类" aria-expanded={mobileNavigation} aria-controls="settings-navigation" onClick={() => setMobileNavigation(value => !value)}><Menu size={18} /><span>分类</span></button>
+          <Button variant="ghost" size="md" className="settings-mobile-menu" aria-label="设置分类" aria-expanded={mobileNavigation} aria-controls="settings-navigation" onClick={() => setMobileNavigation(value => !value)}><Menu size={18} aria-hidden="true" /><span>分类</span></Button>
           <div className="settings-content-heading"><h2>{activeTabLabel}</h2>{displayTabState?.description && <p>{displayTabState.description}</p>}</div>
         </div>
         <div className="settings-content">

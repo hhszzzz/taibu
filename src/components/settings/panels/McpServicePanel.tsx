@@ -8,6 +8,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Check, Cloud, Copy, Terminal } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
 import {
   SettingsTabs,
   getSettingsTabId,
@@ -48,14 +49,11 @@ function ConfigBlock({
     <div className={`overflow-hidden ${CARD}`}>
       <div className="flex items-center justify-between gap-3 border-b border-border py-2 pl-5 pr-2.5">
         <span className="text-[13px] text-foreground-secondary">客户端配置</span>
-        <button
-          type="button"
-          onClick={onCopy}
-          className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-[13px] transition-colors duration-150 hover:bg-background-secondary ${copied ? 'text-success' : 'text-foreground-secondary hover:text-foreground'}`}
-        >
+        <Button variant="ghost" className={`h-9 rounded-lg px-3 text-[13px] ${copied ? 'text-success hover:text-success' : 'text-foreground-secondary hover:text-foreground'}`}
+          onClick={onCopy}>
           {copied ? <Check aria-hidden="true" className="h-4 w-4" /> : <Copy aria-hidden="true" className="h-4 w-4" />}
           {copied ? '已复制' : '复制'}
-        </button>
+        </Button>
       </div>
       <pre className="max-w-full overflow-x-auto bg-background-secondary/60 px-5 py-4 font-mono text-[13px] leading-relaxed text-foreground">{snippet}</pre>
     </div>

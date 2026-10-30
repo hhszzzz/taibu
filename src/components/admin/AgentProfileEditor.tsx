@@ -11,10 +11,11 @@
 
 import { useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { X } from 'lucide-react';
-import { Modal } from '@/components/ui/Modal';
+import { Dialog } from '@/components/ui/Dialog';
 import { SettingsSwitch } from '@/components/settings/SettingsControls';
-import { SettingsSelect } from '@/components/settings/SettingsSelect';
-import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Select } from '@/components/ui/Select';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 import { MEMBERSHIP_TIERS, MEMBERSHIP_TIER_LABELS } from '@/lib/agent/mcp/config';
 import {
   AGENT_PROFILE_LIMITS, AGENT_PROFILE_MODES, AGENT_PROFILE_MODE_LABELS, AGENT_PROFILE_NAME_PATTERN, AGENT_PROFILE_TOOL_FAMILIES,
@@ -25,6 +26,10 @@ import { REASONING_EFFORT_LABELS } from '@/lib/chat/model-settings';
 import { estimateTokens } from '@/lib/agent/token-estimate';
 import { AI_REASONING_EFFORTS } from '@/types';
 import type { MembershipType } from '@/lib/user/membership';
+import { Field as FieldBase } from '@/components/ui/Field';
+import { Input } from '@/components/ui/Input';
+import { Checkbox } from '@/components/ui/Checkbox';
+import { Textarea } from '@/components/ui/Textarea';
 
 /** What the editor starts from: a custom role, or nothing for a new one. */
 export type ProfileEditorSeed = { profile: AgentProfileView | null };
@@ -84,14 +89,10 @@ function payloadOf(draft: Draft, creating: boolean): AgentProfileInput {
 type ControlProps = { id: string; 'aria-describedby'?: string };
 
 function Field({ label, hint, wide, children }: { label: string; hint?: ReactNode; wide?: boolean; children: (props: ControlProps) => ReactNode }) {
-  const id = useId();
-  const hintId = `${id}-hint`;
   return (
-    <div className={`settings-field${wide ? ' is-wide' : ''}`}>
-      <label htmlFor={id} className="settings-label">{label}</label>
-      {children(hint ? { id, 'aria-describedby': hintId } : { id })}
-      {hint ? <span id={hintId} className="mcp-hint">{hint}</span> : null}
-    </div>
+    <FieldBase label={label} description={hint} className={wide ? 'is-wide' : undefined}>
+      {props => children({ id: props.id, 'aria-describedby': props['aria-describedby'] })}
+    </FieldBase>
   );
 }
 
@@ -141,36 +142,36 @@ export function AgentProfileEditor({ seed, catalog, onClose, onSubmit }: {
 
   const model = catalog.models.find(item => item.id === draft?.model);
   return (
-    <Modal open={seed !== null} onClose={() => { if (!saving) onClose(); }} labelledBy={titleId} busy={saving} className="mcp-editor profile-editor" initialFocusRef={firstRef}>
+    <Dialog bare open={seed !== null} onClose={() => { if (!saving) onClose(); }} labelledBy={titleId} busy={saving} className="mcp-editor profile-editor" initialFocusRef={firstRef}>
       {draft ? (
         <form onSubmit={event => { void submit(event); }} noValidate>
           <div className="mcp-editor-head">
             <h2 id={titleId}>{editing ? `编辑角色「${editing.displayName}」` : '添加角色'}</h2>
-            <button type="button" className="settings-icon-button" aria-label="关闭" disabled={saving} onClick={onClose}><X size={17} aria-hidden="true" /></button>
+            <IconButton label="关闭" size="sm" disabled={saving} onClick={onClose}><X size={17} aria-hidden="true" /></IconButton>
           </div>
           <div className="mcp-editor-body">
             <div className="mcp-fields">
               <Field label="标识" hint={editing ? '保存后不能修改：协作预设与常驻子分析按标识找到角色。' : '小写字母开头，可含数字与连字符，如 case-reviewer。'}>
-                {props => <input {...props} ref={firstRef} className="settings-input" value={draft.name} disabled={!!editing} maxLength={32} spellCheck={false}
+                {props => <Input {...props} ref={firstRef}  value={draft.name} disabled={!!editing} maxLength={32} spellCheck={false}
                   onChange={event => set({ name: event.target.value.trim() })} />}
               </Field>
               <Field label="名称" hint={`成员卡片上的角色名，最多 ${AGENT_PROFILE_LIMITS.displayName} 个字。`}>
-                {props => <input {...props} className="settings-input" value={draft.displayName} maxLength={AGENT_PROFILE_LIMITS.displayName}
+                {props => <Input {...props}  value={draft.displayName} maxLength={AGENT_PROFILE_LIMITS.displayName}
                   onChange={event => set({ displayName: event.target.value })} />}
               </Field>
               <Field label="说明" wide hint="主任务挑选成员时读到的说明：这个角色擅长什么、什么时候用。">
-                {props => <textarea {...props} className="settings-textarea" rows={2} maxLength={AGENT_PROFILE_LIMITS.description} value={draft.description}
+                {props => <Textarea {...props}  rows={2} maxLength={AGENT_PROFILE_LIMITS.description} value={draft.description}
                   onChange={event => set({ description: event.target.value })} />}
               </Field>
               <Field label="指令" wide hint={<>写给成员的做法，附在固定规则之后，不能放宽固定规则。约 {estimateTokens('', draft.instructions).toLocaleString('en-US')} token。</>}>
-                {props => <textarea {...props} className="settings-textarea" rows={6} maxLength={AGENT_PROFILE_LIMITS.instructions} value={draft.instructions}
+                {props => <Textarea {...props}  rows={6} maxLength={AGENT_PROFILE_LIMITS.instructions} value={draft.instructions}
                   onChange={event => set({ instructions: event.target.value })} />}
               </Field>
             </div>
             <fieldset className="mcp-group">
               <legend>工具</legend>
               <label className="mcp-check">
-                <input type="checkbox" checked={draft.inherit} onChange={event => set({ inherit: event.target.checked })} />
+                <Checkbox checked={draft.inherit} onCheckedChange={checked => set({ inherit: checked })} />
                 继承主任务的全部工具
               </label>
               <p className="mcp-hint">不继承时只有「允许」的工具；「禁止」总是生效。追问用户、任务清单、提交计划、派生成员、写记忆与档案、盘面定位、工具检索与脚本只属于主任务，不会给成员。</p>
@@ -178,7 +179,7 @@ export function AgentProfileEditor({ seed, catalog, onClose, onSubmit }: {
                 {tokens.map(item => (
                   <li key={item.token}>
                     <span><strong>{item.label}</strong><small>{item.hint}</small></span>
-                    <SettingsSelect<Grant> ariaLabel={`${item.label}的授权`} value={draft.grants[item.token] ?? ''}
+                    <Select<Grant> ariaLabel={`${item.label}的授权`} value={draft.grants[item.token] ?? ''}
                       onChange={value => set({ grants: { ...draft.grants, [item.token]: value } })}
                       options={[
                         { value: '', label: draft.inherit ? '随继承' : '不提供' },
@@ -190,10 +191,10 @@ export function AgentProfileEditor({ seed, catalog, onClose, onSubmit }: {
               </ul>
               <div className="mcp-fields">
                 <Field label="另外允许的工具" hint="工具名，空格分隔，如 read_attachment。">
-                  {props => <input {...props} className="settings-input" value={draft.extraAllow} spellCheck={false} onChange={event => set({ extraAllow: event.target.value })} />}
+                  {props => <Input {...props}  value={draft.extraAllow} spellCheck={false} onChange={event => set({ extraAllow: event.target.value })} />}
                 </Field>
                 <Field label="另外禁止的工具" hint="工具名，空格分隔，如 bazi_liunian_scan。">
-                  {props => <input {...props} className="settings-input" value={draft.extraDeny} spellCheck={false} onChange={event => set({ extraDeny: event.target.value })} />}
+                  {props => <Input {...props}  value={draft.extraDeny} spellCheck={false} onChange={event => set({ extraDeny: event.target.value })} />}
                 </Field>
               </div>
             </fieldset>
@@ -205,8 +206,8 @@ export function AgentProfileEditor({ seed, catalog, onClose, onSubmit }: {
                     const checked = draft.skills.includes(skill.name);
                     return (
                       <label key={skill.name} className="mcp-check" title={skill.description}>
-                        <input type="checkbox" checked={checked} disabled={!checked && draft.skills.length >= AGENT_PROFILE_LIMITS.skills}
-                          onChange={() => set({ skills: checked ? draft.skills.filter(name => name !== skill.name) : [...draft.skills, skill.name] })} />
+                        <Checkbox checked={checked} disabled={!checked && draft.skills.length >= AGENT_PROFILE_LIMITS.skills}
+                          onCheckedChange={() => set({ skills: checked ? draft.skills.filter(name => name !== skill.name) : [...draft.skills, skill.name] })} />
                         <code>{skill.name}</code>{skill.enabled ? null : '（已停用）'}
                       </label>
                     );
@@ -218,7 +219,7 @@ export function AgentProfileEditor({ seed, catalog, onClose, onSubmit }: {
             <div className="mcp-fields">
               <Field label="模型" hint="不指定时，成员用协作设置里选的模型或主模型。指定的模型当前会员不能用时同样退回。">
                 {props => (
-                  <SettingsSelect ariaLabel="模型" id={props.id} describedBy={props['aria-describedby']} value={draft.model}
+                  <Select ariaLabel="模型" id={props.id} aria-describedby={props['aria-describedby']} value={draft.model}
                     onChange={model => set({ model, reasoningEffort: '' })}
                     options={[
                       { value: '', label: '不指定' },
@@ -229,7 +230,7 @@ export function AgentProfileEditor({ seed, catalog, onClose, onSubmit }: {
               </Field>
               <Field label="推理档位" hint="只对指定的模型生效，列出该模型支持的档位。">
                 {props => (
-                  <SettingsSelect<Draft['reasoningEffort']> ariaLabel="推理档位" id={props.id} describedBy={props['aria-describedby']}
+                  <Select<Draft['reasoningEffort']> ariaLabel="推理档位" id={props.id} aria-describedby={props['aria-describedby']}
                     value={draft.reasoningEffort} disabled={!draft.model || model?.supportsReasoning === false}
                     onChange={reasoningEffort => set({ reasoningEffort })}
                     options={[
@@ -242,21 +243,21 @@ export function AgentProfileEditor({ seed, catalog, onClose, onSubmit }: {
               </Field>
               <Field label="会员等级" hint="达到这一等级的用户才能派出这个角色。">
                 {props => (
-                  <SettingsSelect<MembershipType> ariaLabel="会员等级" id={props.id} describedBy={props['aria-describedby']}
+                  <Select<MembershipType> ariaLabel="会员等级" id={props.id} aria-describedby={props['aria-describedby']}
                     value={draft.requiredTier} onChange={requiredTier => set({ requiredTier })}
                     options={MEMBERSHIP_TIERS.map(tier => ({ value: tier, label: `${MEMBERSHIP_TIER_LABELS[tier]} 及以上` }))} />
                 )}
               </Field>
               <Field label="排序" hint="小的在前。">
-                {props => <input {...props} className="settings-input" inputMode="numeric" value={draft.sortOrder} onChange={event => set({ sortOrder: event.target.value })} />}
+                {props => <Input {...props}  inputMode="numeric" value={draft.sortOrder} onChange={event => set({ sortOrder: event.target.value })} />}
               </Field>
               <fieldset className="mcp-group">
                 <legend>用途</legend>
                 <div className="profile-checks">
                   {AGENT_PROFILE_MODES.map(mode => (
                     <label key={mode} className="mcp-check">
-                      <input type="checkbox" checked={draft.modes.includes(mode)}
-                        onChange={event => set({ modes: AGENT_PROFILE_MODES.filter(item => item === mode ? event.target.checked : draft.modes.includes(item)) })} />
+                      <Checkbox checked={draft.modes.includes(mode)}
+                        onCheckedChange={next => set({ modes: AGENT_PROFILE_MODES.filter(item => item === mode ? next : draft.modes.includes(item)) })} />
                       {AGENT_PROFILE_MODE_LABELS[mode]}
                     </label>
                   ))}
@@ -270,13 +271,11 @@ export function AgentProfileEditor({ seed, catalog, onClose, onSubmit }: {
           </div>
           <div className="mcp-editor-foot">
             {error ? <p role="alert">{error}</p> : null}
-            <button type="button" className="settings-button" disabled={saving} onClick={onClose}>取消</button>
-            <button type="submit" className="settings-button settings-button-primary" disabled={saving}>
-              {saving ? <SoundWaveLoader variant="inline" /> : null}{editing ? '保存' : '添加'}
-            </button>
+            <Button variant="secondary" disabled={saving} onClick={onClose}>取消</Button>
+            <Button type="submit" loading={saving} disabled={saving}>{editing ? '保存' : '添加'}</Button>
           </div>
         </form>
       ) : null}
-    </Modal>
+    </Dialog>
   );
 }

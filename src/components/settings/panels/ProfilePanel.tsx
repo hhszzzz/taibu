@@ -11,6 +11,9 @@ import { getUserEmailDisplay } from '@/lib/user-email';
 import { getSettingsCenterRouteTarget } from '@/lib/settings-center';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Field } from '@/components/ui/Field';
+import { Input } from '@/components/ui/Input';
+import { IconButton } from '@/components/ui/IconButton';
 import { StatusBanner } from '@/components/profile/StatusBanner';
 import { PasswordSection } from '@/components/profile/PasswordSection';
 import { SettingsRow, SettingsSaveBar } from '@/components/settings/SettingsControls';
@@ -171,21 +174,25 @@ export default function ProfilePanel() {
           <div className="settings-card settings-profile-card">
             <div className="settings-avatar">
               <Avatar src={avatarUrl} name={nickname || displayEmail} />
-              <button type="button" aria-label="更换头像" onClick={handleAvatarClick} disabled={uploadingAvatar} className="settings-avatar-button">
+              <IconButton label="更换头像" size="xs" variant="secondary" onClick={handleAvatarClick} disabled={uploadingAvatar} className="settings-avatar-button">
                 <Camera size={15} aria-hidden="true" />
-              </button>
+              </IconButton>
               <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
             </div>
             <div className="settings-profile-fields">
-              <label htmlFor="account-nickname" className="text-[13px] text-foreground-secondary">显示昵称</label>
-              <input
-                id="account-nickname"
-                type="text"
-                value={nickname}
-                onChange={(event) => setNickname(event.target.value)}
-                className="settings-input min-w-0 flex-1"
-              />
-              <span className="text-xs text-foreground-tertiary">{uploadingAvatar ? '头像上传中...' : '社区发帖与评论时显示此昵称'}</span>
+              <Field
+                label="显示昵称"
+                controlId="account-nickname"
+                description={uploadingAvatar ? '头像上传中…' : '社区发帖与评论时显示此昵称'}
+                className="min-w-0 flex-1"
+              >
+                <Input
+                  id="account-nickname"
+                  type="text"
+                  value={nickname}
+                  onChange={(event) => setNickname(event.target.value)}
+                />
+              </Field>
             </div>
           </div>
           <div className="settings-group">

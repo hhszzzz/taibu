@@ -9,6 +9,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
@@ -107,7 +109,7 @@ export function AgentProfilesPanel() {
     return (
       <div role="alert" className="settings-alert">
         <span className="min-w-0 flex-1">{state.message}</span>
-        <button type="button" onClick={() => { setState({ status: 'loading' }); setReload(value => value + 1); }}>重试</button>
+        <Button variant="ghost" size="xs" onClick={() => { setState({ status: 'loading' }); setReload(value => value + 1); }}>重试</Button>
       </div>
     );
   }
@@ -121,9 +123,9 @@ export function AgentProfilesPanel() {
       </p>
       <div className="mcp-toolbar">
         <p>共 {profiles.length} 个角色</p>
-        <button type="button" className="settings-button settings-button-primary" onClick={() => setEditor({ profile: null })}>
+        <Button onClick={() => setEditor({ profile: null })}>
           <Plus size={14} aria-hidden="true" />添加角色
-        </button>
+        </Button>
       </div>
       <ul ref={listRef} className="settings-list-card" aria-label="智能体角色">
         {rows.map(({ key, item: profile }) => (
@@ -148,13 +150,13 @@ export function AgentProfilesPanel() {
                 <SettingsSwitch label={`启用「${profile.displayName}」`} checked={profile.enabled}
                   disabled={toggling === profile.name || profile.name === DEFAULT_AGENT_PROFILE} onToggle={() => { void toggle(profile); }} />
                 {profile.builtin ? null : <>
-                  <button type="button" className="settings-icon-button" aria-label={`编辑「${profile.displayName}」`} title="编辑" onClick={() => setEditor({ profile })}>
+                  <IconButton label={`编辑「${profile.displayName}」`} size="sm" title="编辑" onClick={() => setEditor({ profile })}>
                     <Pencil size={16} aria-hidden="true" />
-                  </button>
-                  <button type="button" className="settings-icon-button settings-icon-button-danger" aria-label={`删除「${profile.displayName}」`} title="删除"
+                  </IconButton>
+                  <IconButton label={`删除「${profile.displayName}」`} tone="danger" size="sm" title="删除"
                     disabled={deleting} onClick={() => setPendingDelete(profile)}>
                     <Trash2 size={16} aria-hidden="true" />
-                  </button>
+                  </IconButton>
                 </>}
               </div>
             </div>

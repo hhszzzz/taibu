@@ -13,6 +13,7 @@ import { useRouter } from 'next/navigation';
 import { Calendar, MapPin, Plus } from 'lucide-react';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { Button, buttonVariants } from '@/components/ui/Button';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import { SettingsLoginRequired } from '@/components/settings/SettingsLoginRequired';
@@ -91,21 +92,21 @@ function ChartCard({
       </Link>
       <div className="chart-card-actions">
         {!chart.is_default ? (
-          <button
+          <Button unstyled
             type="button"
             disabled={pending}
             onClick={() => onSetDefault(chart.id, chart.type)}
             className="chart-card-action"
             aria-label={`将 ${chart.name} 设为默认`}
-          >设为默认</button>
+          >设为默认</Button>
         ) : null}
-        <button
+        <Button unstyled
           type="button"
           disabled={pending}
           onClick={() => onDelete(chart.id, chart.type)}
           className="chart-card-action is-danger"
           aria-label={`删除命盘 ${chart.name}`}
-        >删除</button>
+        >删除</Button>
       </div>
     </li>
   );
@@ -135,7 +136,7 @@ function ChartSection({
     <section aria-labelledby={headingId} className="charts-group">
       <div className="charts-group-head">
         <h3 id={headingId}>{title}<span className="settings-section-count">{list.length}</span></h3>
-        <Link href={createHref} className="settings-button settings-button-compact settings-button-ghost">
+        <Link href={createHref} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
           <Plus aria-hidden="true" className="h-3.5 w-3.5" />
           新建{title}
         </Link>
@@ -156,7 +157,7 @@ function ChartSection({
       ) : (
         <div className="charts-empty">
           <p>还没有保存{title}</p>
-          <Link href={createHref} className="settings-button settings-button-compact">去排{title}</Link>
+          <Link href={createHref} className={buttonVariants({ variant: 'secondary', size: 'sm' })}>去排{title}</Link>
         </div>
       )}
     </section>
@@ -225,7 +226,7 @@ export default function ChartsPanel() {
       {chartsQuery.error ? (
         <div role="alert" className="settings-alert">
           <span className="min-w-0 flex-1">加载命盘失败，已显示的命盘未改变。</span>
-          <button type="button" onClick={() => { void chartsQuery.refetch(); }}>重试</button>
+          <Button variant="ghost" size="xs" onClick={() => { void chartsQuery.refetch(); }}>重试</Button>
         </div>
       ) : null}
 

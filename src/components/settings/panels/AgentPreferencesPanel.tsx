@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { SettingsRow, SettingsSaveBar, SettingsSwitch } from '@/components/settings/SettingsControls';
 import { useToast } from '@/components/ui/Toast';
+import { Button } from '@/components/ui/Button';
 import { getCurrentUserSettings, updateCurrentUserSettings } from '@/lib/user/settings';
 import { requestBrowserJson } from '@/lib/browser-api';
 import type { ChatPreferences } from '@/lib/chat/preferences';
@@ -62,7 +63,7 @@ export function AgentPreferencesPanel({ userId }: { userId: string }) {
               <SettingsRow
                   label="已保存记忆"
                   description={memoryCount == null ? '查看、添加或删除记忆。' : `已保存 ${memoryCount} 条。`}
-                  control={<button type="button" className="settings-button" disabled={!preferences} onClick={() => setManagerOpen(true)}>管理记忆</button>}
+                  control={<Button variant="secondary" size="lg" disabled={!preferences} onClick={() => setManagerOpen(true)}>管理记忆</Button>}
               />
           </div>
           {dirty ? <SettingsSaveBar

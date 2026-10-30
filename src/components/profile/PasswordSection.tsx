@@ -3,7 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 import { Eye, EyeOff } from 'lucide-react';
-import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
+import { Input } from '@/components/ui/Input';
 import { resetPasswordWithOTP, sendOTP, verifyOTP } from '@/lib/auth';
 import { PasswordStrengthIndicator, validatePasswordStrength } from '@/components/auth/PasswordStrengthIndicator';
 import { VerificationCodeInput } from '@/components/auth/VerificationCodeInput';
@@ -151,10 +153,9 @@ export function PasswordSection({
                 label="修改密码"
                 description="先向绑定邮箱发送 6 位验证码，验证后设置新密码"
                 control={(
-                    <button type="button" onClick={handleSendCode} disabled={loading || sent} className="settings-button">
-                        {loading && !sent ? <SoundWaveLoader variant="inline" /> : null}
+                    <Button variant="secondary" loading={loading && !sent} disabled={sent} onClick={handleSendCode}>
                         {sent ? '已发送' : '发送验证码'}
-                    </button>
+                    </Button>
                 )}
             />
             {step === 'idle' && error ? <div className="pt-2">{message}</div> : null}
@@ -173,26 +174,20 @@ export function PasswordSection({
                     />
                     {message}
                     <div className="flex flex-wrap items-center gap-3">
-                        <button
-                            type="button"
-                            onClick={handleVerifyCode}
-                            disabled={loading || verificationCode.length !== 6}
-                            className="settings-button settings-button-primary"
-                        >
-                            {loading && <SoundWaveLoader variant="inline" />}
+                        <Button onClick={handleVerifyCode} loading={loading} disabled={verificationCode.length !== 6}>
                             验证
-                        </button>
-                        <button
-                            type="button"
+                        </Button>
+                        <Button
+                            variant="ghost"
                             onClick={handleResendCode}
                             disabled={countdown > 0 || loading}
-                            className="h-10 px-1 text-[13px] text-accent disabled:cursor-not-allowed disabled:text-foreground-tertiary"
+                            className="text-accent"
                         >
                             {countdown > 0 ? `重新发送（${countdown} 秒）` : '重新发送验证码'}
-                        </button>
-                        <button type="button" onClick={resetForm} className="ml-auto h-10 rounded-xl px-3 text-sm text-foreground-secondary hover:bg-background-secondary">
+                        </Button>
+                        <Button variant="ghost" onClick={resetForm} className="ml-auto">
                             取消
-                        </button>
+                        </Button>
                     </div>
                 </div>
             )}
@@ -204,22 +199,22 @@ export function PasswordSection({
                     <div className="space-y-2">
                         <label htmlFor="settings-new-password" className="text-[13px] text-foreground-secondary">新密码</label>
                         <div className="relative">
-                            <input
+                            <Input
                                 id="settings-new-password"
                                 type={showNewPassword ? 'text' : 'password'}
                                 value={newPassword}
                                 onChange={(e) => setNewPassword(e.target.value)}
                                 placeholder="设置新密码"
-                                className="settings-input settings-input-with-action w-full"
+                                className="pr-11"
                             />
-                            <button
-                                type="button"
-                                aria-label={showNewPassword ? '隐藏密码' : '显示密码'}
+                            <IconButton
+                                label={showNewPassword ? '隐藏密码' : '显示密码'}
+                                size="sm"
+                                className="absolute right-2 top-1/2 -translate-y-1/2"
                                 onClick={() => setShowNewPassword(!showNewPassword)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-secondary transition-colors hover:text-foreground"
                             >
-                                {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                            </button>
+                                {showNewPassword ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+                            </IconButton>
                         </div>
                         <PasswordStrengthIndicator password={newPassword} />
                     </div>
@@ -227,23 +222,23 @@ export function PasswordSection({
                     <div className="space-y-2">
                         <label htmlFor="settings-confirm-password" className="text-[13px] text-foreground-secondary">确认新密码</label>
                         <div className="relative">
-                            <input
+                            <Input
                                 id="settings-confirm-password"
                                 type={showConfirmPassword ? 'text' : 'password'}
                                 value={confirmPassword}
                                 onChange={(e) => setConfirmPassword(e.target.value)}
                                 placeholder="再次输入新密码"
                                 aria-invalid={!!confirmPassword && newPassword !== confirmPassword}
-                                className="settings-input settings-input-with-action w-full"
+                                className="pr-11"
                             />
-                            <button
-                                type="button"
-                                aria-label={showConfirmPassword ? '隐藏密码' : '显示密码'}
+                            <IconButton
+                                label={showConfirmPassword ? '隐藏密码' : '显示密码'}
+                                size="sm"
+                                className="absolute right-2 top-1/2 -translate-y-1/2"
                                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-secondary transition-colors hover:text-foreground"
                             >
-                                {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                            </button>
+                                {showConfirmPassword ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+                            </IconButton>
                         </div>
                         {confirmPassword && newPassword !== confirmPassword && (
                             <p className="text-xs text-danger">两次输入的密码不一致</p>
@@ -253,18 +248,12 @@ export function PasswordSection({
                     {message}
 
                     <div className="flex flex-wrap items-center gap-3">
-                        <button
-                            type="button"
-                            onClick={handleChangePassword}
-                            disabled={loading || !newPassword || !confirmPassword}
-                            className="settings-button settings-button-primary"
-                        >
-                            {loading && <SoundWaveLoader variant="inline" />}
+                        <Button onClick={handleChangePassword} loading={loading} disabled={!newPassword || !confirmPassword}>
                             确认修改
-                        </button>
-                        <button type="button" onClick={resetForm} className="ml-auto h-10 rounded-xl px-3 text-sm text-foreground-secondary hover:bg-background-secondary">
+                        </Button>
+                        <Button variant="ghost" onClick={resetForm} className="ml-auto">
                             取消
-                        </button>
+                        </Button>
                     </div>
                 </div>
             )}

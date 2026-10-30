@@ -10,9 +10,13 @@
 
 import { useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Plus, Trash2, Undo2, X } from 'lucide-react';
-import { Modal } from '@/components/ui/Modal';
-import { SettingsSelect } from '@/components/settings/SettingsSelect';
-import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Dialog } from '@/components/ui/Dialog';
+import { Button } from '@/components/ui/Button';
+import { Field as FieldBase } from '@/components/ui/Field';
+import { Input } from '@/components/ui/Input';
+import { Textarea } from '@/components/ui/Textarea';
+import { IconButton } from '@/components/ui/IconButton';
+import { Select } from '@/components/ui/Select';
 import {
   MCP_EXPOSURES, MCP_EXPOSURE_HINTS, MCP_EXPOSURE_LABELS, MCP_RESULT_CHARS_RANGE, MCP_SERVER_NAME_PATTERN, MCP_TIMEOUT_RANGE,
   MEMBERSHIP_TIERS, MEMBERSHIP_TIER_LABELS, USER_MCP_EXPOSURES,
@@ -148,14 +152,10 @@ type ControlProps = { id: string; 'aria-describedby'?: string };
 
 /** A labelled control whose hint is its description, not part of its name. */
 function Field({ label, hint, wide, children }: { label: string; hint?: ReactNode; wide?: boolean; children: (props: ControlProps) => ReactNode }) {
-  const id = useId();
-  const hintId = `${id}-hint`;
   return (
-    <div className={`settings-field${wide ? ' is-wide' : ''}`}>
-      <label htmlFor={id} className="settings-label">{label}</label>
-      {children(hint ? { id, 'aria-describedby': hintId } : { id })}
-      {hint ? <span id={hintId} className="mcp-hint">{hint}</span> : null}
-    </div>
+    <FieldBase label={label} description={hint} className={wide ? 'is-wide' : undefined}>
+      {props => children({ id: props.id, 'aria-describedby': props['aria-describedby'] })}
+    </FieldBase>
   );
 }
 
@@ -173,24 +173,24 @@ function SecretRows({ label, kind, list, onChange }: {
         <div key={secret.key} className="mcp-pair">
           {secret.stored
             ? <span className="mcp-secret-state"><code>{secret.name}</code>{secret.removed ? ' · 保存后删除' : ' · 已设置'}</span>
-            : <input className="settings-input" aria-label={`${label}名称`} placeholder={kind === 'header' ? '如 x-api-key' : '如 apiKey'}
+            : <Input aria-label={`${label}名称`} placeholder={kind === 'header' ? '如 x-api-key' : '如 apiKey'}
               value={secret.name} spellCheck={false} autoComplete="off" onChange={event => update(secret.key, { name: event.target.value })} />}
-          <input className="settings-input" type="password" aria-label={`${label}「${secret.name || '新密钥'}」的值`} autoComplete="new-password"
+          <Input type="password" aria-label={`${label}「${secret.name || '新密钥'}」的值`} autoComplete="new-password"
             spellCheck={false} disabled={secret.removed} value={secret.value}
             placeholder={secret.stored ? '留空则保持不变' : secret.placeholder ?? '密钥值'}
             onChange={event => update(secret.key, { value: event.target.value })} />
           {secret.stored && secret.removed
-            ? <button type="button" className="settings-icon-button" aria-label={`保留「${secret.name}」`} title="撤销删除" onClick={() => update(secret.key, { removed: false })}><Undo2 size={16} aria-hidden="true" /></button>
-            : <button type="button" className="settings-icon-button settings-icon-button-danger" aria-label={`删除「${secret.name || '新密钥'}」`} title="删除"
+            ? <IconButton label={`保留「${secret.name}」`} size="sm" title="撤销删除" onClick={() => update(secret.key, { removed: false })}><Undo2 size={16} aria-hidden="true" /></IconButton>
+            : <IconButton label={`删除「${secret.name || '新密钥'}」`} tone="danger" size="sm" title="删除"
               onClick={() => secret.stored ? update(secret.key, { removed: true, value: '' }) : onChange(list.filter(item => item.key !== secret.key))}>
               <Trash2 size={16} aria-hidden="true" />
-            </button>}
+            </IconButton>}
         </div>
       ))}
-      <button type="button" className="settings-button settings-button-ghost mcp-add"
+      <Button variant="ghost" size="sm" className="mcp-add"
         onClick={() => onChange([...list, { key: nextKey(), name: '', stored: false, value: '', removed: false }])}>
         <Plus size={14} aria-hidden="true" />添加{kind === 'header' ? '密钥请求头' : '密钥查询参数'}
-      </button>
+      </Button>
     </fieldset>
   );
 }
@@ -245,36 +245,36 @@ export function McpServerEditor({ scope, seed, onClose, onSubmit }: {
   // A space sets the Latin acronym off from the verb before it.
   const noun = scope === 'platform' ? ' MCP 服务' : '连接器';
   return (
-    <Modal open={seed !== null} onClose={() => { if (!saving) onClose(); }} labelledBy={titleId} busy={saving} className="mcp-editor" initialFocusRef={firstField}>
+    <Dialog bare open={seed !== null} onClose={() => { if (!saving) onClose(); }} labelledBy={titleId} busy={saving} className="mcp-editor" initialFocusRef={firstField}>
       {draft ? (
         <form onSubmit={event => { void submit(event); }} noValidate>
           <div className="mcp-editor-head">
             <h2 id={titleId}>{editing ? `编辑${noun}` : `添加${noun}`}</h2>
-            <button type="button" className="settings-icon-button" aria-label="关闭" disabled={saving} onClick={onClose}><X size={17} aria-hidden="true" /></button>
+            <IconButton label="关闭" size="sm" disabled={saving} onClick={onClose}><X size={17} aria-hidden="true" /></IconButton>
           </div>
           <div className="mcp-editor-body">
             <div className="mcp-fields">
               <Field label="名称" wide hint="显示在设置页和工具卡片上。">
-                {props => <input {...props} ref={firstField} className="settings-input" value={draft.displayName} maxLength={40} required onChange={event => set({ displayName: event.target.value })} />}
+                {props => <Input {...props} ref={firstField} value={draft.displayName} maxLength={40} required onChange={event => set({ displayName: event.target.value })} />}
               </Field>
               {scope === 'platform' ? (
                 <Field label="标识" hint={editing ? '用于工具名前缀；修改后工具名随之改变。' : '用于工具名前缀，如 notion、my_search。'}>
-                  {props => <input {...props} className="settings-input" value={draft.name} maxLength={31} required spellCheck={false} autoComplete="off"
+                  {props => <Input {...props} value={draft.name} maxLength={31} required spellCheck={false} autoComplete="off"
                     pattern="[a-z][a-z0-9_]{1,30}" onChange={event => set({ name: event.target.value.toLowerCase() })} />}
                 </Field>
               ) : null}
               <Field label="服务地址" wide hint="Streamable HTTP 的公开 HTTPS 地址；不含密钥的查询参数可以直接写在地址里。">
-                {props => <input {...props} className="settings-input" type="url" inputMode="url" value={draft.url} required spellCheck={false} autoComplete="off"
+                {props => <Input {...props} type="url" inputMode="url" value={draft.url} required spellCheck={false} autoComplete="off"
                   placeholder="https://example.com/mcp" onChange={event => set({ url: event.target.value })} />}
               </Field>
               {selfHosted ? <p className="mcp-notice is-wide" role="status">太卜已经有这个 MCP 了，不需要重复导入；可以直接在「Taibu MCP」页复制配置。</p> : null}
               <Field label="用途说明" wide hint={scope === 'platform' ? '写给模型看：这个服务能做什么、什么时候用。' : '写给 Agent 看：什么时候该用这个连接器。'}>
-                {props => <textarea {...props} className="settings-textarea" rows={3} maxLength={2000} value={draft.description} onChange={event => set({ description: event.target.value })} />}
+                {props => <Textarea {...props} rows={3} maxLength={2000} value={draft.description} onChange={event => set({ description: event.target.value })} />}
               </Field>
               {scope === 'platform' ? (
                 <Field label="工具提供方式" wide hint={MCP_EXPOSURE_HINTS[draft.exposure]}>
                   {props => (
-                    <SettingsSelect ariaLabel="工具提供方式" id={props.id} value={draft.exposure}
+                    <Select ariaLabel="工具提供方式" id={props.id} value={draft.exposure}
                       onChange={exposure => set({ exposure })} options={exposures.map(exposure => ({ value: exposure, label: MCP_EXPOSURE_LABELS[exposure] }))} />
                   )}
                 </Field>
@@ -282,7 +282,7 @@ export function McpServerEditor({ scope, seed, onClose, onSubmit }: {
               {scope === 'platform' ? (
                 <Field label="会员等级" hint="达到这一等级的用户才能使用。">
                   {props => (
-                    <SettingsSelect ariaLabel="会员等级" id={props.id} value={draft.requiredTier}
+                    <Select ariaLabel="会员等级" id={props.id} value={draft.requiredTier}
                       onChange={requiredTier => set({ requiredTier })} options={MEMBERSHIP_TIERS.map(tier => ({ value: tier, label: `${MEMBERSHIP_TIER_LABELS[tier]} 及以上` }))} />
                   )}
                 </Field>
@@ -294,9 +294,9 @@ export function McpServerEditor({ scope, seed, onClose, onSubmit }: {
                 <legend>联网路由</legend>
                 <p className="mcp-hint">填了搜索或读网页工具，这个服务就会承担 Agent 的 web_search / web_fetch 与普通对话的联网搜索：按优先级数字从小到大尝试，出错、超时或没有结果时转下一个，连续失败 3 次的服务暂停 1 分钟。工具名以测试连接列出的为准，返回内容自动识别。</p>
                 <div className="mcp-fields">
-                  <Field label="搜索工具">{props => <input {...props} className="settings-input" list={toolsId} value={draft.searchTool} spellCheck={false} onChange={event => set({ searchTool: event.target.value })} />}</Field>
-                  <Field label="读网页工具">{props => <input {...props} className="settings-input" list={toolsId} value={draft.fetchTool} spellCheck={false} onChange={event => set({ fetchTool: event.target.value })} />}</Field>
-                  <Field label="路由优先级">{props => <input {...props} className="settings-input" inputMode="numeric" value={draft.routePriority} onChange={event => set({ routePriority: event.target.value })} />}</Field>
+                  <Field label="搜索工具">{props => <Input {...props} list={toolsId} value={draft.searchTool} spellCheck={false} onChange={event => set({ searchTool: event.target.value })} />}</Field>
+                  <Field label="读网页工具">{props => <Input {...props} list={toolsId} value={draft.fetchTool} spellCheck={false} onChange={event => set({ fetchTool: event.target.value })} />}</Field>
+                  <Field label="路由优先级">{props => <Input {...props} inputMode="numeric" value={draft.routePriority} onChange={event => set({ routePriority: event.target.value })} />}</Field>
                 </div>
                 <datalist id={toolsId}>{tools.map(tool => <option key={tool.name} value={tool.name} />)}</datalist>
               </fieldset>
@@ -317,36 +317,34 @@ export function McpServerEditor({ scope, seed, onClose, onSubmit }: {
                   <legend>普通请求头</legend>
                   {draft.headers.map(pair => (
                     <div key={pair.key} className="mcp-pair">
-                      <input className="settings-input" aria-label="请求头名称" placeholder="名称" spellCheck={false} value={pair.name}
+                      <Input aria-label="请求头名称" placeholder="名称" spellCheck={false} value={pair.name}
                         onChange={event => set({ headers: draft.headers.map(item => item.key === pair.key ? { ...item, name: event.target.value } : item) })} />
-                      <input className="settings-input" aria-label={`请求头「${pair.name || '新请求头'}」的值`} placeholder="值" spellCheck={false} value={pair.value}
+                      <Input aria-label={`请求头「${pair.name || '新请求头'}」的值`} placeholder="值" spellCheck={false} value={pair.value}
                         onChange={event => set({ headers: draft.headers.map(item => item.key === pair.key ? { ...item, value: event.target.value } : item) })} />
-                      <button type="button" className="settings-icon-button settings-icon-button-danger" aria-label={`删除请求头「${pair.name || '新请求头'}」`}
-                        onClick={() => set({ headers: draft.headers.filter(item => item.key !== pair.key) })}><Trash2 size={16} aria-hidden="true" /></button>
+                      <IconButton label={`删除请求头「${pair.name || '新请求头'}」`} tone="danger" size="sm"
+                        onClick={() => set({ headers: draft.headers.filter(item => item.key !== pair.key) })}><Trash2 size={16} aria-hidden="true" /></IconButton>
                     </div>
                   ))}
-                  <button type="button" className="settings-button settings-button-ghost mcp-add" onClick={() => set({ headers: [...draft.headers, { key: nextKey(), name: '', value: '' }] })}>
+                  <Button variant="ghost" size="sm" className="mcp-add" onClick={() => set({ headers: [...draft.headers, { key: nextKey(), name: '', value: '' }] })}>
                     <Plus size={14} aria-hidden="true" />添加请求头
-                  </button>
+                  </Button>
                   <p className="mcp-hint">不能放密钥：名称像 key、token、auth 的请求头请填到密钥请求头。</p>
                 </fieldset>
                 <div className="mcp-fields">
-                  <Field label="超时（秒）">{props => <input {...props} className="settings-input" inputMode="numeric" value={draft.timeoutSeconds} onChange={event => set({ timeoutSeconds: event.target.value })} />}</Field>
-                  <Field label="结果字数上限" hint="超出时保留首尾、省略中间。">{props => <input {...props} className="settings-input" inputMode="numeric" value={draft.maxResultChars} onChange={event => set({ maxResultChars: event.target.value })} />}</Field>
-                  <Field label="排序" hint="小的在前。">{props => <input {...props} className="settings-input" inputMode="numeric" value={draft.sortOrder} onChange={event => set({ sortOrder: event.target.value })} />}</Field>
+                  <Field label="超时（秒）">{props => <Input {...props} inputMode="numeric" value={draft.timeoutSeconds} onChange={event => set({ timeoutSeconds: event.target.value })} />}</Field>
+                  <Field label="结果字数上限" hint="超出时保留首尾、省略中间。">{props => <Input {...props} inputMode="numeric" value={draft.maxResultChars} onChange={event => set({ maxResultChars: event.target.value })} />}</Field>
+                  <Field label="排序" hint="小的在前。">{props => <Input {...props} inputMode="numeric" value={draft.sortOrder} onChange={event => set({ sortOrder: event.target.value })} />}</Field>
                 </div>
               </div>
             </details> : null}
           </div>
           <div className="mcp-editor-foot">
             {error ? <p role="alert">{error}</p> : null}
-            <button type="button" className="settings-button" disabled={saving} onClick={onClose}>取消</button>
-            <button type="submit" className="settings-button settings-button-primary" disabled={saving || selfHosted}>
-              {saving ? <SoundWaveLoader variant="inline" /> : null}{editing ? '保存' : '添加并测试'}
-            </button>
+            <Button type="button" variant="ghost" size="lg" disabled={saving} onClick={onClose}>取消</Button>
+            <Button type="submit" size="lg" loading={saving} disabled={saving || selfHosted}>{editing ? '保存' : '添加并测试'}</Button>
           </div>
         </form>
       ) : null}
-    </Modal>
+    </Dialog>
   );
 }

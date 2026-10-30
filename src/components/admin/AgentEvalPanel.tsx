@@ -19,7 +19,14 @@ import type {
     AgentEvalRunResults, AgentEvalRunStatus, AgentEvalRunView, AgentEvalToolCall,
 } from '@/lib/agent/eval/types';
 import { AGENT_EVAL_CALL_LIMIT, AGENT_EVAL_REPEAT_LIMIT } from '@/lib/agent/eval/types';
+import { Button } from '@/components/ui/Button';
+import { FilterChip } from '@/components/ui/FilterChip';
+import { Checkbox } from '@/components/ui/Checkbox';
+import { Dialog } from '@/components/ui/Dialog';
+import { Select } from '@/components/ui/Select';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Input } from '@/components/ui/Input';
+import { Textarea } from '@/components/ui/Textarea';
 
 type View = 'launch' | 'cases' | 'runs';
 
@@ -357,20 +364,18 @@ export function AgentEvalPanel({ active = true }: { active?: boolean }) {
             {error ? (
                 <div role="alert" className="settings-alert">
                     {error}
-                    <button type="button" onClick={() => { void loadOverview(); void loadCases(); }}>重试</button>
+                    <Button variant="ghost" size="xs" onClick={() => { void loadOverview(); void loadCases(); }}>重试</Button>
                 </div>
             ) : null}
 
             <div role="group" aria-label="测评视图" className="flex flex-wrap items-center gap-1.5">
                 {VIEWS.map(({ id, label }) => (
-                    <button key={id} type="button" aria-pressed={view === id} onClick={() => setView(id)} className="settings-filter">
-                        {label}
-                    </button>
+                    <FilterChip key={id} pressed={view === id} onClick={() => setView(id)} className="settings-filter">{label}</FilterChip>
                 ))}
-                <button type="button" onClick={() => { void loadOverview(); void loadCases(); void (selectedRunId ? loadRun(selectedRunId) : Promise.resolve()); }} className="settings-button settings-button-compact ml-auto">
+                <Button variant="secondary" size="sm" className="ml-auto" onClick={() => { void loadOverview(); void loadCases(); void (selectedRunId ? loadRun(selectedRunId) : Promise.resolve()); }}>
                     <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />
                     刷新
-                </button>
+                </Button>
             </div>
 
             {loading && !overview ? <SoundWaveLoader variant="block" /> : null}
@@ -382,7 +387,7 @@ export function AgentEvalPanel({ active = true }: { active?: boolean }) {
                         <div className="grid gap-1.5 sm:grid-cols-2">
                             {(overview?.models ?? []).map(model => (
                                 <label key={model.id} className="flex items-center gap-2 text-[13px] text-foreground-secondary">
-                                    <input type="checkbox" checked={selectedModels.includes(model.id)} onChange={() => toggleModel(model.id)} />
+                                    <Checkbox checked={selectedModels.includes(model.id)} onCheckedChange={() => toggleModel(model.id)} />
                                     <span className="truncate">{model.name}</span>
                                     <span className="truncate font-mono text-xs text-foreground-tertiary">{model.id}</span>
                                 </label>
@@ -394,32 +399,34 @@ export function AgentEvalPanel({ active = true }: { active?: boolean }) {
                     <section aria-label="评审与重复" className={`grid gap-4 p-4 sm:grid-cols-2 ${CARD}`}>
                         <label className="flex flex-col gap-1 text-[13px] text-foreground-secondary">
                             评审模型
-                            <select value={judgeModel} onChange={event => setJudgeModel(event.target.value)} className="settings-input">
-                                <option value="">请选择</option>
-                                {(overview?.models ?? []).map(model => <option key={model.id} value={model.id}>{model.name}</option>)}
-                            </select>
+                            <Select
+                                value={judgeModel || null}
+                                onChange={setJudgeModel}
+                                placeholder="请选择"
+                                options={(overview?.models ?? []).map(model => ({ value: model.id, label: model.name }))}
+                                className="w-full"
+                            />
                         </label>
                         <label className="flex flex-col gap-1 text-[13px] text-foreground-secondary">
                             每题重复次数（1–{AGENT_EVAL_REPEAT_LIMIT}）
-                            <input
+                            <Input
                                 type="number" min={1} max={AGENT_EVAL_REPEAT_LIMIT} value={repeats}
                                 onChange={event => setRepeats(Math.max(1, Math.min(AGENT_EVAL_REPEAT_LIMIT, Number(event.target.value) || 1)))}
-                                className="settings-input"
-                            />
+                                className="w-20" />
                         </label>
                     </section>
 
                     <section aria-label="选择题目" className={`flex flex-col gap-2 p-4 ${CARD}`}>
                         <div className="flex items-center justify-between gap-3">
                             <h3 className="text-sm font-medium text-foreground">题目</h3>
-                            <button type="button" className="settings-button settings-button-compact" onClick={() => setSelectedCases(enabledCases.map(item => item.id))}>
+                            <Button variant="secondary" size="sm" onClick={() => setSelectedCases(enabledCases.map(item => item.id))}>
                                 全选启用题目
-                            </button>
+                            </Button>
                         </div>
                         <div className="grid gap-1.5">
                             {enabledCases.map(item => (
                                 <label key={item.id} className="flex items-start gap-2 text-[13px] text-foreground-secondary">
-                                    <input type="checkbox" className="mt-0.5" checked={selectedCases.includes(item.id)} onChange={() => toggleCase(item.id)} />
+                                    <Checkbox className="mt-0.5" checked={selectedCases.includes(item.id)} onCheckedChange={() => toggleCase(item.id)} />
                                     <span>
                                         <span className="font-mono text-xs text-foreground">{item.id}</span>
                                         <span className="ml-2 text-foreground-tertiary">{item.tool} · {item.guide}</span>
@@ -433,14 +440,14 @@ export function AgentEvalPanel({ active = true }: { active?: boolean }) {
                     {launchError ? <div role="alert" className="settings-alert">{launchError}</div> : null}
 
                     <div className="flex flex-wrap items-center gap-3">
-                        <button
-                            type="button"
-                            className="settings-button"
-                            disabled={launching || !selectedModels.length || !judgeModel || !selectedCases.length || tooMany}
+                        <Button
+                            loading={launching}
+                            loadingText="正在发起…"
+                            disabled={!selectedModels.length || !judgeModel || !selectedCases.length || tooMany}
                             onClick={() => { void launch(); }}
                         >
-                            {launching ? '正在发起…' : '开始测评'}
-                        </button>
+                            开始测评
+                        </Button>
                         <p className={tooMany ? 'text-[13px] text-danger' : 'text-[13px] text-foreground-secondary'}>
                             预计 {calls} 次 Agent 运行{tooMany ? `，超过上限 ${AGENT_EVAL_CALL_LIMIT}` : ''}，另加最多 {calls} 次质量评审调用。
                         </p>
@@ -452,9 +459,9 @@ export function AgentEvalPanel({ active = true }: { active?: boolean }) {
                 <div className="flex flex-col gap-3">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                         <p className="settings-help">内置题来自 `scripts/evals/agent-cases.json`，首次读取时导入；可修改或停用，内置题不能删除。</p>
-                        <button type="button" className="settings-button settings-button-compact" onClick={() => { setDraft(draftOf()); setDraftError(null); }}>
+                        <Button variant="secondary" size="sm" onClick={() => { setDraft(draftOf()); setDraftError(null); }}>
                             添加题目
-                        </button>
+                        </Button>
                     </div>
                     <div className={`relative overflow-x-auto ${CARD}`}>
                         <table className="w-full min-w-[46rem] border-collapse" aria-label="测评题库">
@@ -480,11 +487,11 @@ export function AgentEvalPanel({ active = true }: { active?: boolean }) {
                                             {item.builtin ? '内置' : '自定义'} · {item.enabled === false ? '已停用' : '启用'}
                                         </td>
                                         <td className="whitespace-nowrap py-2.5 pl-3 pr-5 text-[13px]">
-                                            <button type="button" className="settings-link" onClick={() => { setDraft(draftOf(item)); setDraftError(null); }}>编辑</button>
+                                            <Button unstyled type="button" className="settings-link" onClick={() => { setDraft(draftOf(item)); setDraftError(null); }}>编辑</Button>
                                             {!item.builtin ? (
-                                                <button type="button" className="settings-link ml-3" aria-label={`删除题目 ${item.id}`} onClick={() => { void removeCase(item); }}>
+                                                <Button unstyled type="button" className="settings-link ml-3" aria-label={`删除题目 ${item.id}`} onClick={() => { void removeCase(item); }}>
                                                     <Trash2 aria-hidden="true" className="inline h-3.5 w-3.5" />
-                                                </button>
+                                                </Button>
                                             ) : null}
                                         </td>
                                     </tr>
@@ -521,9 +528,9 @@ export function AgentEvalPanel({ active = true }: { active?: boolean }) {
                                             <td className="whitespace-nowrap px-3 py-2.5 text-[13px] tabular-nums text-foreground-secondary">{item.completedCalls} / {item.totalCalls}</td>
                                             <td className={`whitespace-nowrap px-3 py-2.5 text-[13px] ${status.tone}`}>{status.label}</td>
                                             <td className="whitespace-nowrap py-2.5 pl-3 pr-5 text-[13px]">
-                                                <button type="button" className="settings-link" onClick={() => setSelectedRunId(item.id)}>查看</button>
+                                                <Button unstyled type="button" className="settings-link" onClick={() => setSelectedRunId(item.id)}>查看</Button>
                                                 {item.status === 'queued' || item.status === 'running' ? (
-                                                    <button type="button" className="settings-link ml-3" onClick={() => { void cancelRun(item.id); }}>取消</button>
+                                                    <Button unstyled type="button" className="settings-link ml-3" onClick={() => { void cancelRun(item.id); }}>取消</Button>
                                                 ) : null}
                                             </td>
                                         </tr>
@@ -554,7 +561,7 @@ export function AgentEvalPanel({ active = true }: { active?: boolean }) {
                                 </p>
                                 {selectedRun.error ? <p className="text-[13px] text-danger">{selectedRun.error}</p> : null}
                                 {selectedRun.status === 'queued' || selectedRun.status === 'running' ? (
-                                    <div><button type="button" className="settings-button settings-button-compact" onClick={() => { void cancelRun(selectedRun.id); }}>取消测评</button></div>
+                                    <div><Button variant="secondary" size="sm" onClick={() => { void cancelRun(selectedRun.id); }}>取消测评</Button></div>
                                 ) : null}
                             </section>
 
@@ -597,21 +604,30 @@ export function AgentEvalPanel({ active = true }: { active?: boolean }) {
                                     <div className="flex flex-wrap items-end gap-3">
                                         <label className="flex flex-col gap-1 text-[13px] text-foreground-secondary">
                                             题目
-                                            <select value={compareCase} onChange={event => setCompareCase(event.target.value)} className="settings-input">
-                                                {shownCases.map(id => <option key={id} value={id}>{id}</option>)}
-                                            </select>
+                                            <Select
+                                                value={compareCase}
+                                                onChange={setCompareCase}
+                                                options={shownCases.map(id => ({ value: id, label: id }))}
+                                                className="w-auto min-w-40"
+                                            />
                                         </label>
                                         <label className="flex flex-col gap-1 text-[13px] text-foreground-secondary">
                                             左侧模型
-                                            <select value={leftModel} onChange={event => setLeftModel(event.target.value)} className="settings-input">
-                                                {selectedRun.models.map(id => <option key={id} value={id}>{id}</option>)}
-                                            </select>
+                                            <Select
+                                                value={leftModel}
+                                                onChange={setLeftModel}
+                                                options={selectedRun.models.map(id => ({ value: id, label: id }))}
+                                                className="w-auto min-w-40"
+                                            />
                                         </label>
                                         <label className="flex flex-col gap-1 text-[13px] text-foreground-secondary">
                                             右侧模型
-                                            <select value={rightModel} onChange={event => setRightModel(event.target.value)} className="settings-input">
-                                                {selectedRun.models.map(id => <option key={id} value={id}>{id}</option>)}
-                                            </select>
+                                            <Select
+                                                value={rightModel}
+                                                onChange={setRightModel}
+                                                options={selectedRun.models.map(id => ({ value: id, label: id }))}
+                                                className="w-auto min-w-40"
+                                            />
                                         </label>
                                     </div>
                                     <div className="grid gap-3 lg:grid-cols-2">
@@ -659,54 +675,54 @@ export function AgentEvalPanel({ active = true }: { active?: boolean }) {
             ) : null}
 
             {draft ? (
-                <div role="dialog" aria-modal="true" aria-label={draft.mode === 'new' ? '添加题目' : `编辑题目 ${draft.originalId}`} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-                    <div className={`max-h-[90vh] w-full max-w-2xl overflow-auto p-5 ${CARD}`}>
-                        <h2 className="text-base font-medium text-foreground">{draft.mode === 'new' ? '添加题目' : `编辑题目 ${draft.originalId}`}</h2>
+                <Dialog bare open onClose={() => { if (!savingCase) setDraft(null); }} labelledBy="agent-eval-draft-title" className="dialog-plain dialog-lg">
+                    <div className={`max-h-[90vh] w-full overflow-auto p-5 ${CARD}`}>
+                        <h2 id="agent-eval-draft-title" className="text-base font-medium text-foreground">{draft.mode === 'new' ? '添加题目' : `编辑题目 ${draft.originalId}`}</h2>
                         <div className="mt-3 flex flex-col gap-3">
                             <label className="flex flex-col gap-1 text-[13px] text-foreground-secondary">
                                 标识（小写字母、数字、下划线、连字符）
-                                <input value={draft.id} disabled={draft.mode === 'edit'} onChange={event => setDraft({ ...draft, id: event.target.value })} className="settings-input font-mono text-xs" />
+                                <Input value={draft.id} disabled={draft.mode === 'edit'} onChange={event => setDraft({ ...draft, id: event.target.value })} className="font-mono text-xs"/>
                             </label>
                             <div className="grid gap-3 sm:grid-cols-2">
                                 <label className="flex flex-col gap-1 text-[13px] text-foreground-secondary">
                                     工具
-                                    <input value={draft.tool} onChange={event => setDraft({ ...draft, tool: event.target.value })} className="settings-input font-mono text-xs" />
+                                    <Input value={draft.tool} onChange={event => setDraft({ ...draft, tool: event.target.value })} className="font-mono text-xs"/>
                                 </label>
                                 <label className="flex flex-col gap-1 text-[13px] text-foreground-secondary">
                                     体系
-                                    <input value={draft.guide} onChange={event => setDraft({ ...draft, guide: event.target.value })} className="settings-input font-mono text-xs" />
+                                    <Input value={draft.guide} onChange={event => setDraft({ ...draft, guide: event.target.value })} className="font-mono text-xs"/>
                                 </label>
                             </div>
                             <label className="flex flex-col gap-1 text-[13px] text-foreground-secondary">
                                 题目
-                                <textarea value={draft.prompt} rows={4} onChange={event => setDraft({ ...draft, prompt: event.target.value })} className="settings-input" />
+                                <Textarea value={draft.prompt} rows={4} onChange={event => setDraft({ ...draft, prompt: event.target.value })} />
                             </label>
                             <label className="flex flex-col gap-1 text-[13px] text-foreground-secondary">
                                 断言（每行一条）
-                                <textarea value={draft.assertions} rows={4} onChange={event => setDraft({ ...draft, assertions: event.target.value })} className="settings-input" />
+                                <Textarea value={draft.assertions} rows={4} onChange={event => setDraft({ ...draft, assertions: event.target.value })} />
                             </label>
                             <label className="flex flex-col gap-1 text-[13px] text-foreground-secondary">
                                 工具参数（JSON）
-                                <textarea value={draft.argumentsText} rows={4} onChange={event => setDraft({ ...draft, argumentsText: event.target.value })} className="settings-input font-mono text-xs" />
+                                <Textarea value={draft.argumentsText} rows={4} onChange={event => setDraft({ ...draft, argumentsText: event.target.value })} className="font-mono text-xs"/>
                             </label>
                             <label className="flex flex-col gap-1 text-[13px] text-foreground-secondary">
                                 先排盘的配置（JSON，可留空）
-                                <textarea value={draft.chartText} rows={3} onChange={event => setDraft({ ...draft, chartText: event.target.value })} className="settings-input font-mono text-xs" />
+                                <Textarea value={draft.chartText} rows={3} onChange={event => setDraft({ ...draft, chartText: event.target.value })} className="font-mono text-xs"/>
                             </label>
                             <div className="flex flex-wrap items-center gap-4 text-[13px] text-foreground-secondary">
-                                <label className="flex items-center gap-2"><input type="checkbox" checked={draft.visual} onChange={event => setDraft({ ...draft, visual: event.target.checked })} />视觉题</label>
-                                <label className="flex items-center gap-2"><input type="checkbox" checked={draft.enabled} onChange={event => setDraft({ ...draft, enabled: event.target.checked })} />启用</label>
+                                <label className="flex items-center gap-2"><Checkbox checked={draft.visual} onCheckedChange={checked => setDraft({ ...draft, visual: checked })} />视觉题</label>
+                                <label className="flex items-center gap-2"><Checkbox checked={draft.enabled} onCheckedChange={checked => setDraft({ ...draft, enabled: checked })} />启用</label>
                             </div>
                             {draftError ? <div role="alert" className="settings-alert">{draftError}</div> : null}
                             <div className="flex justify-end gap-2">
-                                <button type="button" className="settings-button settings-button-compact" onClick={() => setDraft(null)}>取消</button>
-                                <button type="button" className="settings-button settings-button-compact" disabled={savingCase} onClick={() => { void saveCase(); }}>
-                                    {savingCase ? '保存中…' : '保存'}
-                                </button>
+                                <Button variant="secondary" size="sm" onClick={() => setDraft(null)}>取消</Button>
+                                <Button size="sm" loading={savingCase} loadingText="保存中…" disabled={savingCase} onClick={() => { void saveCase(); }}>
+                                    保存
+                                </Button>
                             </div>
                         </div>
                     </div>
-                </div>
+                </Dialog>
             ) : null}
         </div>
     );

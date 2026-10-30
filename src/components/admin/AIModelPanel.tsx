@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Boxes, Eye, Plus, RefreshCw, Search } from 'lucide-react';
 import { requestBrowserData } from '@/lib/browser-api';
+import { Button } from '@/components/ui/Button';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import { SettingsSwitch } from '@/components/settings/SettingsControls';
@@ -14,6 +15,7 @@ import { useListMotion } from '@/lib/motion/list';
 import { THINKING_LEVEL_LABELS, USAGE_TYPES, formatTokenCount, type AdminGateway, type AdminModel } from '@/lib/admin/ai-catalog';
 import { AIModelEditor } from './AIModelEditor';
 import './ai-catalog.css';
+import { Input } from '@/components/ui/Input';
 
 function ModelMeta({ model, gateways }: { model: AdminModel; gateways: ReadonlyMap<string, AdminGateway> }) {
     const callable = model.sources.filter(source => source.isEnabled && gateways.get(source.gatewayId)?.isEnabled && gateways.get(source.gatewayId)?.apiKeyHint);
@@ -94,29 +96,29 @@ export function AIModelPanel() {
     if (!models && !error) return <div className="flex min-h-[200px] items-center justify-center"><SoundWaveLoader variant="inline" /></div>;
     return <div className="ai-catalog">
         <div className="ai-catalog-toolbar">
-            <input className="settings-input ai-catalog-search" type="search" aria-label="搜索模型" value={query}
+            <Input className="ai-catalog-search"  type="search" aria-label="搜索模型" value={query}
                 placeholder={`搜索 ${models?.length ?? 0} 个模型`} onChange={event => setQuery(event.target.value)} />
             <span style={{ flex: 1 }} />
-            <button type="button" className="settings-button settings-button-compact" onClick={() => void clearCache()} title="保存会自动生效；外部改了数据库时用这个">
+            <Button variant="secondary" size="sm" onClick={() => void clearCache()} title="保存会自动生效；外部改了数据库时用这个">
                 <RefreshCw size={14} aria-hidden="true" />清除缓存
-            </button>
-            <button type="button" className="settings-button settings-button-compact settings-button-primary" onClick={() => setEditing({ model: null })}>
+            </Button>
+            <Button size="sm" onClick={() => setEditing({ model: null })}>
                 <Plus size={14} aria-hidden="true" />添加模型
-            </button>
+            </Button>
         </div>
-        {error && <div className="settings-alert" role="alert"><span>{error}</span><button type="button" onClick={() => void load()}>重试</button></div>}
+        {error && <div className="settings-alert" role="alert"><span>{error}</span><Button variant="ghost" size="xs" onClick={() => void load()}>重试</Button></div>}
         {models && !visible.length ? <div className="ai-catalog-list"><div className="ai-catalog-empty">
             {query ? <><Search size={20} aria-hidden="true" /><strong>没有匹配「{query}」的模型</strong></>
                 : <><Boxes size={22} aria-hidden="true" /><strong>还没有模型</strong><span>先在「网关管理」添加网关，再添加模型并选择来源。</span></>}
         </div></div> : <div className="ai-catalog-list" ref={listRef}>
             {rows.map(({ key, item: model }) => <div key={key} data-motion-key={key} className="ai-catalog-row" data-disabled={!model.isEnabled || undefined}>
-                <button type="button" className="ai-catalog-row-main" onClick={() => setEditing({ model })} aria-label={`编辑 ${model.displayName}`}>
+                <Button unstyled type="button" className="ai-catalog-row-main" onClick={() => setEditing({ model })} aria-label={`编辑 ${model.displayName}`}>
                     <span className="ai-catalog-row-icon">{getVendorIcon(model.vendor, 16)}</span>
                     <span className="ai-catalog-row-text">
                         <span className="ai-catalog-row-title"><strong>{model.displayName}</strong><span className="ai-catalog-mono">{model.modelKey}</span></span>
                         <ModelMeta model={model} gateways={gatewayById} />
                     </span>
-                </button>
+                </Button>
                 <span className="ai-catalog-row-side">
                     <span className="ai-catalog-tier" data-tier={model.requiredTier}>{model.requiredTier === 'free' ? 'Free' : model.requiredTier === 'plus' ? 'Plus' : 'Pro'}</span>
                     <SettingsSwitch label={`启用 ${model.displayName}`} checked={model.isEnabled} disabled={updating === model.id} onToggle={() => void toggle(model)} />

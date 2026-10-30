@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { Button } from '@/components/ui/Button';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { revalidateBrowserSession } from '@/lib/auth';
 import { requestBrowserJson } from '@/lib/browser-api';
@@ -149,13 +150,13 @@ export function CreditTransactionsPanel({ pageSize = 5, refreshKey = 0 }: Credit
               </article>
             ))}
             {hasMore ? (
-              <button
+              <Button unstyled
                 type="button"
                 onClick={() => setVisibleCount((count) => count + pageSize)}
                 className="h-12 w-full border-t border-border text-sm text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-foreground"
               >
                 查看更多
-              </button>
+              </Button>
             ) : null}
           </>
         ) : (

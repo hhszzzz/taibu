@@ -6,7 +6,9 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Check, Eye, EyeOff, Plus, RefreshCw, Server, X } from 'lucide-react';
 import { requestBrowserData } from '@/lib/browser-api';
-import { Modal } from '@/components/ui/Modal';
+import { Dialog } from '@/components/ui/Dialog';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
@@ -15,6 +17,7 @@ import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 import { useListMotion } from '@/lib/motion/list';
 import { parseGatewayInput, type AdminGateway, type AdminGatewayInput, type GatewayProbeResult } from '@/lib/admin/ai-catalog';
 import './ai-catalog.css';
+import { Input } from '@/components/ui/Input';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
@@ -99,48 +102,48 @@ function GatewayEditor({ gateway, onClose, onSaved }: { gateway: AdminGateway | 
     };
     const close = () => (dirty ? setConfirm('discard') : onClose());
 
-    return <Modal open onClose={close} busy={saving} labelledBy={titleId} initialFocusRef={firstField} className="ai-catalog-dialog">
+    return <Dialog bare open onClose={close} busy={saving} labelledBy={titleId} initialFocusRef={firstField} className="ai-catalog-dialog">
         <header className="ai-catalog-dialog-head">
             <div style={{ flex: 1, minWidth: 0 }}>
                 <h2 id={titleId}>{gateway ? gateway.displayName : '添加网关'}</h2>
                 <p>OpenAI 兼容的网关（NewAPI、OneAPI、OpenRouter 或供应商官方接口）</p>
             </div>
-            <button type="button" className="ai-catalog-icon-button" aria-label="关闭" onClick={close}><X size={16} /></button>
+            <IconButton label="关闭" size="sm" onClick={close}><X size={16} aria-hidden="true" /></IconButton>
         </header>
         <div className="ai-catalog-dialog-body">
             <section className="ai-catalog-section">
                 <div className="ai-catalog-grid">
                     <label className="ai-catalog-field"><span>名称</span>
-                        <input ref={firstField} className="settings-input" value={draft.displayName} maxLength={60} placeholder="例如：主网关"
+                        <Input ref={firstField}  value={draft.displayName} maxLength={60} placeholder="例如：主网关"
                             onChange={event => patch({ displayName: event.target.value })} />
                     </label>
                     <label className="ai-catalog-field"><span>标识</span>
-                        <input className="settings-input ai-catalog-mono" value={draft.gatewayKey} maxLength={40} placeholder="main" disabled={!!gateway}
+                        <Input className="ai-catalog-mono"  value={draft.gatewayKey} maxLength={40} placeholder="main" disabled={!!gateway}
                             spellCheck={false} autoCapitalize="off" onChange={event => patch({ gatewayKey: event.target.value.toLowerCase() })} />
                     </label>
                 </div>
                 <label className="ai-catalog-field"><span>地址</span>
-                    <input className="settings-input ai-catalog-mono" type="url" inputMode="url" value={draft.baseUrl} placeholder="https://api.example.com"
+                    <Input className="ai-catalog-mono"  type="url" inputMode="url" value={draft.baseUrl} placeholder="https://api.example.com"
                         spellCheck={false} onChange={event => { patch({ baseUrl: event.target.value }); setProbe({ busy: false }); }} />
                     <span className="ai-catalog-hint">填根地址即可，对话、向量、重排的路径（/v1/chat/completions 等）会自动补上。</span>
                 </label>
                 <label className="ai-catalog-field"><span>密钥</span>
                     <span className="ai-catalog-key">
-                        <input className="settings-input ai-catalog-mono" type={showKey ? 'text' : 'password'} autoComplete="off" spellCheck={false}
+                        <Input className="ai-catalog-mono"  type={showKey ? 'text' : 'password'} autoComplete="off" spellCheck={false}
                             value={draft.apiKey} placeholder={hasKey ? `已保存 ${gateway!.apiKeyHint}，留空保持不变` : 'sk-…'}
                             onChange={event => { patch({ apiKey: event.target.value, clearKey: false }); setProbe({ busy: false }); }} />
-                        <button type="button" className="settings-icon-button" aria-label={showKey ? '隐藏密钥' : '显示密钥'} onClick={() => setShowKey(value => !value)}>
-                            {showKey ? <EyeOff size={15} /> : <Eye size={15} />}
-                        </button>
-                        {hasKey && !draft.apiKey && <button type="button" className="settings-text-button-danger" onClick={() => patch({ clearKey: true })}>清除</button>}
+                        <IconButton label={showKey ? '隐藏密钥' : '显示密钥'} size="sm" onClick={() => setShowKey(value => !value)}>
+                            {showKey ? <EyeOff size={15} aria-hidden="true" /> : <Eye size={15} aria-hidden="true" />}
+                        </IconButton>
+                        {hasKey && !draft.apiKey && <Button variant="ghost" size="xs" className="text-danger hover:text-danger" onClick={() => patch({ clearKey: true })}>清除</Button>}
                     </span>
                     <span className="ai-catalog-hint">{draft.clearKey ? '保存后清除已保存的密钥，经这个网关的模型将不可用。'
                         : '加密保存在数据库，只在发起请求时解开；页面不会再显示完整密钥。'}</span>
                 </label>
                 <div className="ai-catalog-limit">
-                    <button type="button" className="settings-button settings-button-compact" disabled={probe.busy || !draft.baseUrl.trim()} onClick={() => void test()}>
-                        {probe.busy ? <SoundWaveLoader variant="inline" /> : <RefreshCw size={14} aria-hidden="true" />}测试连接
-                    </button>
+                    <Button variant="secondary" size="sm" loading={probe.busy} disabled={!draft.baseUrl.trim()} onClick={() => void test()}>
+                        {probe.busy ? null : <RefreshCw size={14} aria-hidden="true" />}测试连接
+                    </Button>
                     {probe.result && <span className="ai-catalog-probe" data-ok={probe.result.ok} role="status">
                         {probe.result.ok && <Check size={14} aria-hidden="true" />}{probeSummary(probe.result)}
                     </span>}
@@ -148,7 +151,7 @@ function GatewayEditor({ gateway, onClose, onSaved }: { gateway: AdminGateway | 
             </section>
             <section className="ai-catalog-section">
                 <label className="ai-catalog-field"><span>备注</span>
-                    <input className="settings-input" value={draft.notes} maxLength={500} placeholder="可选" onChange={event => patch({ notes: event.target.value })} />
+                    <Input  value={draft.notes} maxLength={500} placeholder="可选" onChange={event => patch({ notes: event.target.value })} />
                 </label>
                 <div className="ai-catalog-toggle">
                     <span>启用<small>停用后，经这个网关的来源会被跳过</small></span>
@@ -157,20 +160,20 @@ function GatewayEditor({ gateway, onClose, onSaved }: { gateway: AdminGateway | 
             </section>
         </div>
         <footer className="ai-catalog-dialog-foot">
-            {gateway && <button type="button" className="settings-text-button-danger" disabled={saving || gateway.modelCount > 0}
-                title={gateway.modelCount ? `还有 ${gateway.modelCount} 个模型在用` : undefined} onClick={() => setConfirm('delete')}>删除网关</button>}
+            {gateway && <Button variant="ghost" className="text-danger hover:text-danger" disabled={saving || gateway.modelCount > 0}
+                title={gateway.modelCount ? `还有 ${gateway.modelCount} 个模型在用` : undefined} onClick={() => setConfirm('delete')}>删除网关</Button>}
             {error ? <p className="ai-catalog-error" role="alert">{error}</p> : <span className="ai-catalog-spacer" />}
-            <button type="button" className="settings-button" disabled={saving} onClick={close}>取消</button>
-            <button type="button" className="settings-button settings-button-primary" disabled={saving || (!!gateway && !dirty)} onClick={() => void save()}>
-                {saving ? '正在保存…' : gateway ? '保存' : '添加网关'}
-            </button>
+            <Button variant="secondary" disabled={saving} onClick={close}>取消</Button>
+            <Button loading={saving} loadingText="正在保存…" disabled={saving || (!!gateway && !dirty)} onClick={() => void save()}>
+                {gateway ? '保存' : '添加网关'}
+            </Button>
         </footer>
         <ConfirmDialog isOpen={confirm !== null} onClose={() => setConfirm(null)} loading={saving}
             title={confirm === 'delete' ? '删除这个网关？' : '放弃未保存的修改？'}
             description={confirm === 'delete' ? '删除后无法恢复，保存的密钥一并清除。' : '关闭后，这次填写的内容不会保存。'}
             confirmText={confirm === 'delete' ? '删除' : '放弃修改'}
             onConfirm={() => (confirm === 'delete' ? remove() : onClose())} />
-    </Modal>;
+    </Dialog>;
 }
 
 export function AIGatewayPanel() {
@@ -224,19 +227,19 @@ export function AIGatewayPanel() {
     return <div className="ai-catalog">
         <div className="ai-catalog-toolbar">
             <p>模型通过网关调用；一个模型可以排列多个网关做故障转移。</p>
-            <button type="button" className="settings-button settings-button-compact" onClick={() => void load()}><RefreshCw size={14} aria-hidden="true" />刷新</button>
-            <button type="button" className="settings-button settings-button-compact settings-button-primary" onClick={() => setEditing({ gateway: null })}>
+            <Button variant="secondary" size="sm" onClick={() => void load()}><RefreshCw size={14} aria-hidden="true" />刷新</Button>
+            <Button size="sm" onClick={() => setEditing({ gateway: null })}>
                 <Plus size={14} aria-hidden="true" />添加网关
-            </button>
+            </Button>
         </div>
-        {error && <div className="settings-alert" role="alert"><span>{error}</span><button type="button" onClick={() => void load()}>重试</button></div>}
+        {error && <div className="settings-alert" role="alert"><span>{error}</span><Button variant="ghost" size="xs" onClick={() => void load()}>重试</Button></div>}
         {gateways && !gateways.length ? <div className="ai-catalog-list"><div className="ai-catalog-empty">
             <Server size={22} aria-hidden="true" /><strong>还没有网关</strong><span>添加一个网关并填写密钥，再到「模型管理」为模型选择来源。</span>
         </div></div> : <div className="ai-catalog-list" ref={listRef}>
             {rows.map(({ key, item: gateway }) => {
                 const probe = probes[gateway.id];
                 return <div key={key} data-motion-key={key} className="ai-catalog-row" data-disabled={!gateway.isEnabled || undefined}>
-                    <button type="button" className="ai-catalog-row-main" onClick={() => setEditing({ gateway })} aria-label={`编辑网关 ${gateway.displayName}`}>
+                    <Button unstyled type="button" className="ai-catalog-row-main" onClick={() => setEditing({ gateway })} aria-label={`编辑网关 ${gateway.displayName}`}>
                         <span className="ai-catalog-row-icon"><Server size={16} aria-hidden="true" /></span>
                         <span className="ai-catalog-row-text">
                             <span className="ai-catalog-row-title"><strong>{gateway.displayName}</strong><span className="ai-catalog-mono">{gateway.gatewayKey}</span></span>
@@ -247,10 +250,10 @@ export function AIGatewayPanel() {
                                 {probe?.result && <span data-tone={probe.result.ok ? undefined : 'warning'}>{probeSummary(probe.result)}</span>}
                             </span>
                         </span>
-                    </button>
+                    </Button>
                     <span className="ai-catalog-row-side">
-                        <button type="button" className="settings-button settings-button-compact settings-button-ghost" disabled={probe?.busy || !gateway.apiKeyHint}
-                            onClick={() => void test(gateway)}>{probe?.busy ? <SoundWaveLoader variant="inline" /> : '测试'}</button>
+                        <Button variant="ghost" size="xs" loading={probe?.busy} disabled={!gateway.apiKeyHint}
+                            onClick={() => void test(gateway)}>测试</Button>
                         <SettingsSwitch label={`启用 ${gateway.displayName}`} checked={gateway.isEnabled} disabled={updating === gateway.id} onToggle={() => void toggle(gateway)} />
                     </span>
                 </div>;

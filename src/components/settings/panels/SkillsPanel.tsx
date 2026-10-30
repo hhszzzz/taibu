@@ -12,6 +12,7 @@ import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { SettingsLoginRequired } from '@/components/settings/SettingsLoginRequired';
 import { SkillManager } from '@/components/settings/skills/SkillManager';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Button } from '@/components/ui/Button';
 import { MEMBERSHIP_TIER_LABELS, type ExtensionAllowanceView } from '@/lib/agent/mcp/config';
 import type { SkillListing } from '@/lib/agent/skills/client';
 import { openSettingsCenter } from '@/lib/settings-center';
@@ -27,7 +28,7 @@ function AllowanceNotice({ allowance }: { allowance?: ExtensionAllowanceView }) 
       <p className="mcp-notice">
         <strong>{tiers.length ? `个人技能向 ${tiers.join(' / ')} 会员开放。` : '个人技能暂未开放。'}</strong>
         已添加的技能会保留，但暂不会在任务中使用。
-        {tiers.length ? <> <button type="button" className="underline underline-offset-2" onClick={() => openSettingsCenter('upgrade')}>查看订阅</button></> : null}
+        {tiers.length ? <> <Button unstyled type="button" className="underline underline-offset-2" onClick={() => openSettingsCenter('upgrade')}>查看订阅</Button></> : null}
       </p>
     );
   }

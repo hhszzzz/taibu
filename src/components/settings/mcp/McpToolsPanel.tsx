@@ -10,9 +10,11 @@
 
 import { useState } from 'react';
 import { SettingsSwitch } from '@/components/settings/SettingsControls';
-import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Button } from '@/components/ui/Button';
 import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 import type { McpServerView, McpToolPolicy, McpToolSnapshot } from '@/lib/agent/mcp/config';
+import { Input } from '@/components/ui/Input';
+import { Checkbox } from '@/components/ui/Checkbox';
 
 const ANNOTATIONS: Array<[keyof NonNullable<McpToolSnapshot['annotations']>, string]> = [
   ['readOnlyHint', '只读'], ['destructiveHint', '可能修改数据'], ['idempotentHint', '可重复调用'], ['openWorldHint', '访问外部'],
@@ -73,9 +75,9 @@ export function McpToolsPanel({ id, server, testing, onTest, onSave }: {
             ? `${snapshot.server ? `${snapshot.server.title ?? snapshot.server.name} ${snapshot.server.version} · ` : ''}${tools.length} 个工具，启用 ${enabledCount} 个${snapshot.truncated ? '（服务提供的工具更多，只取了前面的）' : ''}`
             : '还没有测试连接。测试后会列出这个服务提供的工具。'}
         </span>
-        <button type="button" className="settings-button settings-button-compact" disabled={testing} onClick={onTest}>
-          {testing ? <SoundWaveLoader variant="inline" /> : null}{snapshot ? '重新测试' : '测试连接'}
-        </button>
+        <Button variant="secondary" size="sm" loading={testing} onClick={onTest}>
+          {snapshot ? '重新测试' : '测试连接'}
+        </Button>
       </div>
       {snapshot?.instructions ? (
         <details className="mcp-instructions">
@@ -102,14 +104,14 @@ export function McpToolsPanel({ id, server, testing, onTest, onSave }: {
                 <SettingsSwitch label={`启用工具 ${tool.name}`} checked={policy.enabled !== false} disabled={saving}
                   onToggle={() => update(tool.name, { enabled: policy.enabled === false })} />
                 <div className="mcp-tool-fields">
-                  <input className="settings-input" aria-label={`工具 ${tool.name} 的中文标题`} maxLength={40} disabled={saving}
+                  <Input  aria-label={`工具 ${tool.name} 的中文标题`} maxLength={40} disabled={saving}
                     placeholder={tool.title ? `标题（默认：${tool.title}）` : '中文标题，显示在工具卡片上'} value={policy.title ?? ''}
                     onChange={event => update(tool.name, { title: event.target.value })} />
-                  <input className="settings-input" aria-label={`工具 ${tool.name} 的检索关键词`} maxLength={200} disabled={saving}
+                  <Input  aria-label={`工具 ${tool.name} 的检索关键词`} maxLength={200} disabled={saving}
                     placeholder="检索关键词，空格分隔" value={policy.keywords ?? ''}
                     onChange={event => update(tool.name, { keywords: event.target.value })} />
                   <label className="mcp-check">
-                    <input type="checkbox" checked={policy.confirm === true} disabled={saving} onChange={event => update(tool.name, { confirm: event.target.checked })} />
+                    <Checkbox checked={policy.confirm === true} disabled={saving} onCheckedChange={checked => update(tool.name, { confirm: checked })} />
                     每次调用前征求用户同意
                   </label>
                 </div>
@@ -121,10 +123,8 @@ export function McpToolsPanel({ id, server, testing, onTest, onSave }: {
       {tools.length ? <p className="mcp-hint">标注来自服务自己的声明，仅供参考。会写入或删除数据的工具建议开启「征求同意」。</p> : null}
       {dirty ? (
         <div className="settings-actions">
-          <button type="button" className="settings-button settings-button-primary" disabled={saving} onClick={() => { void save(); }}>
-            {saving ? <SoundWaveLoader variant="inline" /> : null}保存工具设置
-          </button>
-          <button type="button" className="settings-button settings-button-ghost" disabled={saving} onClick={() => setDraft(base)}>还原</button>
+          <Button loading={saving} disabled={saving} onClick={() => { void save(); }}>保存工具设置</Button>
+          <Button variant="ghost" disabled={saving} onClick={() => setDraft(base)}>还原</Button>
         </div>
       ) : null}
     </div>

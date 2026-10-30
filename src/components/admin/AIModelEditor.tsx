@@ -4,13 +4,17 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, ChevronRight, RefreshCw, Trash2, X } from 'lucide-react';
 import { requestBrowserData } from '@/lib/browser-api';
-import { Modal } from '@/components/ui/Modal';
+import { Dialog } from '@/components/ui/Dialog';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import { SettingsSwitch } from '@/components/settings/SettingsControls';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { FilterChip } from '@/components/ui/FilterChip';
+import { Textarea } from '@/components/ui/Textarea';
+import { IconButton } from '@/components/ui/IconButton';
+import { Select } from '@/components/ui/Select';
 import { SegmentedChoice } from '@/components/settings/SegmentedChoice';
-import { SettingsSelect } from '@/components/settings/SettingsSelect';
 import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 import { getVendorName, VENDOR_PRESETS } from '@/lib/ai/vendor-labels';
 import { AI_REASONING_EFFORTS, type AIReasoningEffort } from '@/types';
@@ -66,9 +70,9 @@ function LimitField({ label, hint, value, presets, placeholder, onChange }: {
     return <div className="ai-catalog-field">
         <label htmlFor={id}>{label}{value ? <span className="ai-catalog-hint"> · {formatTokenCount(Number(value))}</span> : null}</label>
         <div className="ai-catalog-limit" role="group" aria-label={label}>
-            {presets.map(preset => <button key={preset.label} type="button" className="ai-catalog-chip" aria-pressed={Number(value) === preset.tokens}
-                onClick={() => onChange(String(preset.tokens))}>{preset.label}</button>)}
-            <input id={id} className="settings-input" type="number" inputMode="numeric" min={1} value={value} placeholder={placeholder}
+            {presets.map(preset => <FilterChip key={preset.label} className="ai-catalog-chip" pressed={Number(value) === preset.tokens}
+                onClick={() => onChange(String(preset.tokens))}>{preset.label}</FilterChip>)}
+            <Input id={id} type="number" inputMode="numeric" min={1} value={value} placeholder={placeholder}
                 onChange={event => onChange(event.target.value)} />
         </div>
         <span className="ai-catalog-hint">{hint}</span>
@@ -97,26 +101,26 @@ function SourceRow({ source, index, count, gateway, modelKey, supportsReasoning,
             <span className="ai-catalog-source-order" aria-hidden="true">{index + 1}</span>
             <strong>{gateway?.displayName ?? '未知网关'}</strong>
             {warning && <small data-tone="warning">{warning}</small>}
-            <button type="button" className="ai-catalog-icon-button" aria-label="上移" disabled={index === 0} onClick={() => onMove(-1)}><ArrowUp size={14} /></button>
-            <button type="button" className="ai-catalog-icon-button" aria-label="下移" disabled={index === count - 1} onClick={() => onMove(1)}><ArrowDown size={14} /></button>
+            <IconButton label="上移" size="xs" disabled={index === 0} onClick={() => onMove(-1)}><ArrowUp size={14} aria-hidden="true" /></IconButton>
+            <IconButton label="下移" size="xs" disabled={index === count - 1} onClick={() => onMove(1)}><ArrowDown size={14} aria-hidden="true" /></IconButton>
             <SettingsSwitch label={`启用来源 ${gateway?.displayName ?? ''}`} checked={source.isEnabled} onToggle={() => onChange({ isEnabled: !source.isEnabled })} />
-            <button type="button" className="ai-catalog-icon-button" data-danger aria-label="移除来源" onClick={onRemove}><Trash2 size={14} /></button>
+            <IconButton label="移除来源" tone="danger" size="xs" onClick={onRemove}><Trash2 size={14} aria-hidden="true" /></IconButton>
         </div>
         <div className="ai-catalog-grid">
             <label className="ai-catalog-field"><span>上游模型 ID</span>
-                <input className="settings-input ai-catalog-mono" list={listId} spellCheck={false} value={source.modelIdOverride ?? ''} placeholder={modelKey || '与模型 ID 相同'}
+                <Input className="ai-catalog-mono" list={listId} spellCheck={false} value={source.modelIdOverride ?? ''} placeholder={modelKey || '与模型 ID 相同'}
                     onChange={event => onChange({ modelIdOverride: event.target.value || null })} />
             </label>
             {supportsReasoning && <label className="ai-catalog-field"><span>思考时改用（可选）</span>
-                <input className="settings-input ai-catalog-mono" list={listId} spellCheck={false} value={source.reasoningModelId ?? ''} placeholder="同上游模型"
+                <Input className="ai-catalog-mono" list={listId} spellCheck={false} value={source.reasoningModelId ?? ''} placeholder="同上游模型"
                     onChange={event => onChange({ reasoningModelId: event.target.value || null })} />
             </label>}
         </div>
         <datalist id={listId}>{probe.models.map(model => <option key={model} value={model} />)}</datalist>
         {gateway?.apiKeyHint && <div className="ai-catalog-limit">
-            <button type="button" className="settings-button settings-button-compact settings-button-ghost" disabled={probe.busy} onClick={() => void load()}>
-                {probe.busy ? <SoundWaveLoader variant="inline" /> : <RefreshCw size={13} aria-hidden="true" />}读取网关的模型列表
-            </button>
+            <Button variant="ghost" size="sm" loading={probe.busy} loadingText={<><RefreshCw size={13} aria-hidden="true" />读取网关的模型列表</>} disabled={probe.busy} onClick={() => void load()}>
+                {!probe.busy && <RefreshCw size={13} aria-hidden="true" />}读取网关的模型列表
+            </Button>
             {probe.message && <span className="ai-catalog-probe">{probe.message}</span>}
         </div>}
     </div>;
@@ -235,28 +239,28 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
     };
     const close = () => (dirty ? setConfirm('discard') : onClose());
 
-    return <Modal open onClose={close} busy={saving} labelledBy={titleId} initialFocusRef={firstField} className="ai-catalog-dialog">
+    return <Dialog bare open onClose={close} busy={saving} labelledBy={titleId} initialFocusRef={firstField} className="ai-catalog-dialog">
         <header className="ai-catalog-dialog-head">
             <div style={{ flex: 1, minWidth: 0 }}>
                 <h2 id={titleId}>{model ? model.displayName : '添加模型'}</h2>
                 {model && <p className="ai-catalog-mono">{model.modelKey}</p>}
             </div>
-            <button type="button" className="ai-catalog-icon-button" aria-label="关闭" onClick={close}><X size={16} /></button>
+            <IconButton label="关闭" size="sm" onClick={close}><X size={16} aria-hidden="true" /></IconButton>
         </header>
         <div className="ai-catalog-dialog-body">
             <section className="ai-catalog-section" aria-labelledby={`${titleId}-basic`}>
                 <header><h3 id={`${titleId}-basic`}>基本信息</h3></header>
                 <div className="ai-catalog-grid">
                     <label className="ai-catalog-field"><span>显示名称</span>
-                        <input ref={firstField} className="settings-input" value={draft.displayName} maxLength={80} placeholder="DeepSeek V4"
+                        <Input ref={firstField} value={draft.displayName} maxLength={80} placeholder="DeepSeek V4"
                             onChange={event => patch({ displayName: event.target.value })} />
                     </label>
                     <label className="ai-catalog-field"><span>模型 ID</span>
-                        <input className="settings-input ai-catalog-mono" value={draft.modelKey} maxLength={200} spellCheck={false} autoCapitalize="off" placeholder="deepseek-v4"
+                        <Input className="ai-catalog-mono" value={draft.modelKey} maxLength={200} spellCheck={false} autoCapitalize="off" placeholder="deepseek-v4"
                             onChange={event => patch({ modelKey: event.target.value.trim() })} />
                     </label>
                     <label className="ai-catalog-field"><span>供应商</span>
-                        <SettingsSelect ariaLabel="供应商" value={vendorMode} onChange={value => {
+                        <Select ariaLabel="供应商" value={vendorMode} onChange={value => {
                             setVendorMode(value);
                             if (value !== CUSTOM_VENDOR) patch({ vendor: value });
                         }} options={[
@@ -265,7 +269,7 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
                         ]} />
                     </label>
                     {vendorMode === CUSTOM_VENDOR ? <label className="ai-catalog-field"><span>供应商标识</span>
-                        <input className="settings-input ai-catalog-mono" value={draft.vendor} maxLength={40} placeholder="mistral" onChange={event => patch({ vendor: event.target.value.trim() })} />
+                        <Input className="ai-catalog-mono" value={draft.vendor} maxLength={40} placeholder="mistral" onChange={event => patch({ vendor: event.target.value.trim() })} />
                     </label> : <div className="ai-catalog-field"><span>用途</span>
                         <SegmentedChoice ariaLabel="模型用途" value={draft.usageType} options={USAGE_TYPES} maxWidth={320}
                             onChange={usageType => patch({ usageType, supportsVision: usageType === 'vision' || draft.supportsVision })} />
@@ -276,17 +280,16 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
                         onChange={usageType => patch({ usageType, supportsVision: usageType === 'vision' || draft.supportsVision })} />
                 </div>}
                 <label className="ai-catalog-field"><span>描述（可选）</span>
-                    <input className="settings-input" value={draft.description} maxLength={500} onChange={event => patch({ description: event.target.value })} />
+                    <Input value={draft.description} maxLength={500} onChange={event => patch({ description: event.target.value })} />
                 </label>
                 {chat && <div className="ai-catalog-lookup">
                     <div className="ai-catalog-lookup-head">
                         <span>模型目录<small>models.dev 公开的上下文与输出上限，可一键填入</small></span>
-                        <button type="button" className="settings-button settings-button-compact settings-button-ghost"
-                            disabled={lookup.busy || draft.modelKey.trim().length < 2}
+                        <Button variant="ghost" size="sm" loading={lookup.busy} loadingText="查询中…"
+                            disabled={draft.modelKey.trim().length < 2}
                             onClick={() => void lookupModelsDev(draft.modelKey.trim())}>
-                            {lookup.busy ? <SoundWaveLoader variant="inline" /> : <RefreshCw size={13} aria-hidden="true" />}
-                            {lookup.busy ? '查询中…' : '查询 models.dev'}
-                        </button>
+                            {!lookup.busy && <RefreshCw size={13} aria-hidden="true" />}查询 models.dev
+                        </Button>
                     </div>
                     {lookup.error && <span className="ai-catalog-hint">{lookup.error}</span>}
                     {!lookup.busy && !lookup.error && lookup.models.length > 0 && <ul className="ai-catalog-lookup-list" aria-label="models.dev 匹配结果">
@@ -298,7 +301,7 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
                                 {suggestion.reasoning ? ' · 思考' : ''}
                                 {suggestion.vision ? ' · 图片' : ''}
                             </span>
-                            <button type="button" className="settings-button settings-button-compact" onClick={() => applyCatalog(suggestion)}>填入</button>
+                            <Button variant="secondary" size="xs" onClick={() => applyCatalog(suggestion)}>填入</Button>
                         </li>)}
                     </ul>}
                     {!lookup.busy && !lookup.error && lookup.searched && lookup.models.length === 0 && <span className="ai-catalog-hint">models.dev 没有匹配；可以手填。</span>}
@@ -308,7 +311,7 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
             {image && <section className="ai-catalog-section" aria-labelledby={`${titleId}-image`}>
                 <header><h3 id={`${titleId}-image`}>生图</h3><p>输入框的「生图」按钮和 Agent 的 generate_image 工具使用这个模型；按张扣积分。</p></header>
                 <label className="ai-catalog-field"><span>每张图积分</span>
-                    <input className="settings-input" type="number" inputMode="numeric" min={0} max={1000} value={draft.creditCost}
+                    <Input type="number" inputMode="numeric" min={0} max={1000} value={draft.creditCost}
                         onChange={event => patch({ creditCost: Number(event.target.value) })} />
                     <span className="ai-catalog-hint">0 表示不扣积分；每次最多生成 4 张。</span>
                 </label>
@@ -338,20 +341,20 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
                         <div className="ai-catalog-field">
                             <span>可选等级</span>
                             <div className="ai-catalog-limit" role="group" aria-label="可选思考等级">
-                                {AI_REASONING_EFFORTS.map(level => <button key={level} type="button" className="ai-catalog-chip"
-                                    aria-pressed={draft.thinkingLevels.includes(level)} onClick={() => toggleLevel(level)}>{THINKING_LEVEL_LABELS[level]}</button>)}
+                                {AI_REASONING_EFFORTS.map(level => <FilterChip key={level} className="ai-catalog-chip"
+                                    pressed={draft.thinkingLevels.includes(level)} onClick={() => toggleLevel(level)}>{THINKING_LEVEL_LABELS[level]}</FilterChip>)}
                             </div>
                             <span className="ai-catalog-hint">输入框的「努力程度」只列出这里勾选的等级；都不勾选时只能开关思考。</span>
                         </div>
                         <div className="ai-catalog-grid">
                             <label className="ai-catalog-field"><span>参数格式</span>
-                                <SettingsSelect ariaLabel="参数格式" value={draft.thinkingFormat}
+                                <Select ariaLabel="参数格式" value={draft.thinkingFormat}
                                     onChange={thinkingFormat => patch({ thinkingFormat })}
                                     options={THINKING_FORMAT_OPTIONS.map(option => ({ value: option.value, label: option.label }))} />
                                 {format && <span className="ai-catalog-hint ai-catalog-mono">{format.fields}</span>}
                             </label>
                             <label className="ai-catalog-field"><span>默认等级</span>
-                                <SettingsSelect ariaLabel="默认等级" value={draft.defaultReasoningEffort ?? ''} disabled={!draft.thinkingLevels.length}
+                                <Select ariaLabel="默认等级" value={draft.defaultReasoningEffort ?? ''} disabled={!draft.thinkingLevels.length}
                                     onChange={value => patch({ defaultReasoningEffort: (value || null) as AIReasoningEffort | null })}
                                     options={draft.thinkingLevels.length
                                         ? draft.thinkingLevels.map(level => ({ value: level, label: THINKING_LEVEL_LABELS[level] }))
@@ -377,11 +380,14 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
                         onChange={change => setSource(index, change)} onMove={offset => moveSource(index, offset)}
                         onRemove={() => patch({ sources: draft.sources.filter((_, position) => position !== index) })} />)}
                 </div> : <p className="ai-catalog-hint">没有来源的模型不会出现在用户的模型菜单里。</p>}
-                {unused.length > 0 && <select className="settings-select" value="" aria-label="添加来源"
-                    onChange={event => event.target.value && patch({ sources: [...draft.sources, { gatewayId: event.target.value, modelIdOverride: null, reasoningModelId: null, isEnabled: true }] })}>
-                    <option value="">添加来源网关…</option>
-                    {unused.map(gateway => <option key={gateway.id} value={gateway.id}>{gateway.displayName}</option>)}
-                </select>}
+                {unused.length > 0 && <Select
+                    value={null}
+                    placeholder="添加来源网关…"
+                    ariaLabel="添加来源"
+                    options={unused.map(gateway => ({ value: gateway.id, label: gateway.displayName }))}
+                    onChange={gatewayId => patch({ sources: [...draft.sources, { gatewayId, modelIdOverride: null, reasoningModelId: null, isEnabled: true }] })}
+                    className="w-auto min-w-40"
+                />}
             </section>
 
             <section className="ai-catalog-section" aria-labelledby={`${titleId}-access`}>
@@ -391,7 +397,7 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
                         <SegmentedChoice ariaLabel="所需会员" value={draft.requiredTier} options={TIERS} onChange={requiredTier => patch({ requiredTier })} />
                     </div>
                     <label className="ai-catalog-field"><span>排序</span>
-                        <input className="settings-input" type="number" value={draft.sortOrder} onChange={event => patch({ sortOrder: event.target.value })} />
+                        <Input type="number" value={draft.sortOrder} onChange={event => patch({ sortOrder: event.target.value })} />
                         <span className="ai-catalog-hint">数值越小越靠前，第一个可用的对话模型是默认模型。</span>
                     </label>
                 </div>
@@ -401,7 +407,7 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
                 <summary><ChevronRight size={14} aria-hidden="true" />自定义请求参数</summary>
                 <div>
                     <label className="ai-catalog-field"><span>自定义请求参数（JSON）</span>
-                        <textarea className="settings-textarea ai-catalog-mono" rows={4} spellCheck={false} value={draft.customParameters} placeholder={'{\n  "top_k": 40\n}'}
+                        <Textarea className="ai-catalog-mono" rows={4} spellCheck={false} value={draft.customParameters} placeholder={'{\n  "top_k": 40\n}'}
                             onChange={event => patch({ customParameters: event.target.value })} />
                         <span className="ai-catalog-hint">合并进请求体；消息、工具、输出上限和思考参数由系统写入，这里不能覆盖。提示缓存亲和默认开启；网关不接受 prompt_cache_key 时，设为 <code>{'{"promptCacheKey": false}'}</code> 关闭。</span>
                     </label>
@@ -409,17 +415,15 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
             </details>
         </div>
         <footer className="ai-catalog-dialog-foot">
-            {model && <button type="button" className="settings-text-button-danger" disabled={saving} onClick={() => setConfirm('delete')}>删除模型</button>}
+            {model && <Button variant="danger" size="sm" disabled={saving} onClick={() => setConfirm('delete')}>删除模型</Button>}
             {error ? <p className="ai-catalog-error" role="alert">{error}</p> : <span className="ai-catalog-spacer" />}
-            <button type="button" className="settings-button" disabled={saving} onClick={close}>取消</button>
-            <button type="button" className="settings-button settings-button-primary" disabled={saving || (!!model && !dirty)} onClick={() => void save()}>
-                {saving ? '正在保存…' : model ? '保存' : '添加模型'}
-            </button>
+            <Button variant="ghost" size="lg" disabled={saving} onClick={close}>取消</Button>
+            <Button size="lg" loading={saving} loadingText="正在保存…" disabled={saving || (!!model && !dirty)} onClick={() => void save()}>{model ? '保存' : '添加模型'}</Button>
         </footer>
         <ConfirmDialog isOpen={confirm !== null} onClose={() => setConfirm(null)} loading={saving}
             title={confirm === 'delete' ? `删除 ${model?.displayName ?? '模型'}？` : '放弃未保存的修改？'}
             description={confirm === 'delete' ? '用户的模型菜单里不再出现它；进行中的任务会失败。' : '关闭后，这次填写的内容不会保存。'}
             confirmText={confirm === 'delete' ? '删除' : '放弃修改'}
             onConfirm={() => (confirm === 'delete' ? remove() : onClose())} />
-    </Modal>;
+    </Dialog>;
 }

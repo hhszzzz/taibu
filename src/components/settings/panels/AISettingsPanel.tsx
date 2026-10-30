@@ -19,13 +19,16 @@ import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { useToast } from '@/components/ui/Toast';
 import { SegmentedChoice } from '@/components/settings/SegmentedChoice';
 import { SettingsChoiceCards, SettingsSaveBar, SettingsSwitch } from '@/components/settings/SettingsControls';
-import { SettingsSelect } from '@/components/settings/SettingsSelect';
+import { Select } from '@/components/ui/Select';
+import { FilterChip } from '@/components/ui/FilterChip';
 import { SettingsLoginRequired } from '@/components/settings/SettingsLoginRequired';
 import { getCurrentUserSettings, type UserIdentityProfile, updateCurrentUserSettings } from '@/lib/user/settings';
 import { syncVisualizationPreferencesAfterSave } from '@/lib/user/ai-settings-local-sync';
 import { CHART_TEXT_DETAIL_OPTIONS, type ChartTextDetailLevel } from '@/lib/divination/detail-level';
 import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 import { AgentPreferencesPanel } from './AgentPreferencesPanel';
+import { Input } from '@/components/ui/Input';
+import { Textarea } from '@/components/ui/Textarea';
 
 type ExpressionStyle = 'direct' | 'gentle';
 type UserProfileDraft = UserIdentityProfile | null;
@@ -327,7 +330,7 @@ function AccountAISettingsPanel() {
               <label htmlFor="ai-identity">身份</label>
               <span className="settings-counter">{identityDraft.length} / {USER_PROFILE_LIMIT}</span>
             </div>
-            <input
+            <Input
               id="ai-identity"
               value={identityDraft}
               maxLength={USER_PROFILE_LIMIT}
@@ -336,9 +339,8 @@ function AccountAISettingsPanel() {
                 const identity = event.target.value.slice(0, USER_PROFILE_LIMIT);
                 setUserProfile(identity ? { identity } : null);
               }}
-              className="settings-input settings-input-lg"
-              placeholder="例如：创业者"
-            />
+              size="lg"
+              placeholder="例如：创业者"/>
             <p className="settings-help">会作为「用户身份」提供给 AI，可以是职业、所处阶段或正在做的决定。</p>
           </div>
 
@@ -374,14 +376,13 @@ function AccountAISettingsPanel() {
               <label htmlFor="ai-custom-instructions">自定义指令</label>
               <span className="settings-counter">{customInstructions.length} / {CUSTOM_INSTRUCTIONS_LIMIT}</span>
             </div>
-            <textarea
+            <Textarea
               id="ai-custom-instructions"
               rows={3}
               value={customInstructions}
               onChange={(event) => setCustomInstructions(event.target.value.slice(0, CUSTOM_INSTRUCTIONS_LIMIT))}
-              className="settings-textarea"
-              placeholder="例如：先给结论，再给依据；避免空话和术语堆叠。"
-            />
+              
+              placeholder="例如：先给结论，再给依据；避免空话和术语堆叠。"/>
           </div>
         </div>
       </section>
@@ -410,28 +411,23 @@ function AccountAISettingsPanel() {
             </div>
             <div role="group" aria-labelledby="ai-dimensions-label" className="settings-chips">
               {allDimensions.map((dimension) => (
-                <button
-                  key={dimension.key}
-                  type="button"
-                  aria-pressed={selectedDimensions.includes(dimension.key)}
-                  onClick={() => handleToggleDimension(dimension.key)}
-                  className="settings-chip"
-                >
+                <FilterChip key={dimension.key} pressed={selectedDimensions.includes(dimension.key)}
+                  onClick={() => handleToggleDimension(dimension.key)} className="settings-chip">
                   {dimension.label}
-                </button>
+                </FilterChip>
               ))}
             </div>
           </div>
 
           <div className="settings-inline-row">
             <label htmlFor="ai-dayun-periods">默认展示大运期数</label>
-            <SettingsSelect
+            <Select
               id="ai-dayun-periods"
               ariaLabel="默认展示大运期数"
               value={dayunPeriods}
               onChange={setDayunPeriods}
               options={DAYUN_PERIOD_OPTIONS.map((count) => ({ value: count, label: `${count} 期` }))}
-              className="settings-select-compact"
+              className="min-w-[7.5rem]"
             />
           </div>
 

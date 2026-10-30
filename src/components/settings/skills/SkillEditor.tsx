@@ -9,8 +9,10 @@
 
 import { useId, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { FolderUp, X } from 'lucide-react';
-import { Modal } from '@/components/ui/Modal';
-import { SettingsSelect } from '@/components/settings/SettingsSelect';
+import { Dialog } from '@/components/ui/Dialog';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
+import { Select } from '@/components/ui/Select';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { MEMBERSHIP_TIERS, MEMBERSHIP_TIER_LABELS } from '@/lib/agent/mcp/config';
 import {
@@ -112,20 +114,20 @@ export function SkillEditor({ scope, seed, onClose, onSubmit }: {
   const name = picked ? frontmatterValue(picked.content, 'name') : '';
   const description = picked ? frontmatterValue(picked.content, 'description') : '';
   return (
-    <Modal open={seed !== null} onClose={() => { if (!busy) onClose(); }} labelledBy={titleId} busy={busy}
+    <Dialog bare open={seed !== null} onClose={() => { if (!busy) onClose(); }} labelledBy={titleId} busy={busy}
       className="mcp-editor skill-editor" initialFocusRef={uploadRef}>
       {state.seed ? (
         <form onSubmit={event => { void submit(event); }} noValidate>
           <div className="mcp-editor-head">
             <h2 id={titleId}>{editing ? `替换技能「${editing.name}」` : '上传技能'}</h2>
-            <button type="button" className="settings-icon-button" aria-label="关闭" disabled={busy} onClick={onClose}><X size={17} aria-hidden="true" /></button>
+            <IconButton label="关闭" size="sm" disabled={busy} onClick={onClose}><X size={17} aria-hidden="true" /></IconButton>
           </div>
           <div className="mcp-editor-body">
             <p className="mcp-hint">选择一个包含 {SKILL_DOCUMENT} 的文件夹；正文与附属文件都取自该文件夹。</p>
             <div className="skill-upload">
-              <button ref={uploadRef} type="button" className="settings-button" disabled={busy} onClick={() => folderRef.current?.click()}>
+              <Button ref={uploadRef} variant="secondary" disabled={busy} onClick={() => folderRef.current?.click()}>
                 <FolderUp size={14} aria-hidden="true" />上传技能
-              </button>
+              </Button>
               {reading ? <SoundWaveLoader variant="inline" /> : null}
               <input ref={element => { folderRef.current = element; element?.setAttribute('webkitdirectory', ''); }} type="file" multiple hidden
                 aria-hidden="true" tabIndex={-1} onChange={event => { void pick(event); }} />
@@ -141,7 +143,7 @@ export function SkillEditor({ scope, seed, onClose, onSubmit }: {
             {scope === 'platform' ? (
               <div className="settings-field">
                 <span>会员等级</span>
-                <SettingsSelect
+                <Select
                   ariaLabel="会员等级"
                   value={state.tier}
                   onChange={tier => setState(current => ({ ...current, tier }))}
@@ -152,13 +154,11 @@ export function SkillEditor({ scope, seed, onClose, onSubmit }: {
           </div>
           <div className="mcp-editor-foot">
             {error ? <p role="alert">{error}</p> : null}
-            <button type="button" className="settings-button" disabled={busy} onClick={onClose}>取消</button>
-            <button type="submit" className="settings-button settings-button-primary" disabled={busy || !picked}>
-              {saving ? <SoundWaveLoader variant="inline" /> : null}{editing ? '替换' : '保存'}
-            </button>
+            <Button type="button" variant="ghost" size="lg" disabled={busy} onClick={onClose}>取消</Button>
+            <Button type="submit" size="lg" loading={saving} disabled={busy || !picked}>{editing ? '替换' : '保存'}</Button>
           </div>
         </form>
       ) : null}
-    </Modal>
+    </Dialog>
   );
 }

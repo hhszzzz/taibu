@@ -9,6 +9,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Pencil, PlugZap, Plus, Trash2, Wrench } from 'lucide-react';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import { SettingsSwitch } from '@/components/settings/SettingsControls';
@@ -171,7 +173,7 @@ export function McpServerManager({ scope, userId, notice, canAdd = true, addLabe
     return (
       <div role="alert" className="settings-alert">
         <span className="min-w-0 flex-1">{state.message}</span>
-        <button type="button" onClick={() => { setState({ status: 'loading' }); setReload(value => value + 1); }}>重试</button>
+        <Button variant="ghost" size="xs" onClick={() => { setState({ status: 'loading' }); setReload(value => value + 1); }}>重试</Button>
       </div>
     );
   }
@@ -185,14 +187,14 @@ export function McpServerManager({ scope, userId, notice, canAdd = true, addLabe
         <p>{scope === 'platform' ? `共 ${servers.length} 个服务` : state.allowance && state.allowance.limit > 0 ? `已启用 ${state.allowance.used} / ${state.allowance.limit} 个连接器` : `共 ${servers.length} 个连接器`}</p>
         <div className="settings-actions">
           {scope === 'platform' ? Object.entries(MCP_SERVER_TEMPLATES).map(([key, template]) => (
-            <button key={key} type="button" className="settings-button" disabled={!addable}
+            <Button key={key} variant="secondary" size="sm" disabled={!addable}
               onClick={() => setEditor({ input: template.input, secretHeader: template.secretHeader })}>
               <Plus size={14} aria-hidden="true" />{template.label}
-            </button>
+            </Button>
           )) : null}
-          <button type="button" className="settings-button settings-button-primary" disabled={!addable} onClick={() => setEditor({ input: BLANK })}>
+          <Button disabled={!addable} onClick={() => setEditor({ input: BLANK })}>
             <Plus size={14} aria-hidden="true" />{addLabel}
-          </button>
+          </Button>
         </div>
       </div>
       {rows.length ? (
@@ -220,21 +222,21 @@ export function McpServerManager({ scope, userId, notice, canAdd = true, addLabe
                   <div className="mcp-actions">
                     <SettingsSwitch label={`启用「${server.displayName}」`} checked={server.enabled} disabled={toggling === server.id}
                       onToggle={() => { void toggle(server); }} />
-                    <button type="button" className="settings-icon-button" aria-label={`测试「${server.displayName}」的连接`} title="测试连接"
+                    <IconButton label={`测试「${server.displayName}」的连接`} size="sm" title="测试连接"
                       disabled={busy} onClick={() => { void test(server); }}>
                       {busy ? <SoundWaveLoader variant="inline" /> : <PlugZap size={16} aria-hidden="true" />}
-                    </button>
-                    <button type="button" className="settings-icon-button" aria-label={`「${server.displayName}」的工具`} title="工具"
+                    </IconButton>
+                    <IconButton label={`「${server.displayName}」的工具`} size="sm" title="工具"
                       aria-expanded={open} aria-controls={open ? panelId : undefined} onClick={() => setExpanded(open ? null : server.id)}>
                       <Wrench size={16} aria-hidden="true" />
-                    </button>
-                    <button type="button" className="settings-icon-button" aria-label={`编辑「${server.displayName}」`} title="编辑" onClick={() => setEditor({ server })}>
+                    </IconButton>
+                    <IconButton label={`编辑「${server.displayName}」`} size="sm" title="编辑" onClick={() => setEditor({ server })}>
                       <Pencil size={16} aria-hidden="true" />
-                    </button>
-                    <button type="button" className="settings-icon-button settings-icon-button-danger" aria-label={`删除「${server.displayName}」`} title="删除"
+                    </IconButton>
+                    <IconButton label={`删除「${server.displayName}」`} tone="danger" size="sm" title="删除"
                       disabled={deleting} onClick={() => setPendingDelete(server)}>
                       <Trash2 size={16} aria-hidden="true" />
-                    </button>
+                    </IconButton>
                   </div>
                 </div>
                 {open ? (
